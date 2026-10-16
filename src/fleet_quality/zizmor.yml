@@ -1,0 +1,3 @@
+# The one zizmor configuration, owned by the tool: an adopter's own config and ignore comments never reach it.
+# Deliberately empty: every audit, including self-repository, stays on fleet-wide.
+rules: {}

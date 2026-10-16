@@ -1,0 +1,8 @@
+# The one actionlint configuration, owned by the tool: an adopter's .github/actionlint.yaml never reaches it.
+# No runner labels. The one ignore matches only actionlint's false error for GitHub's `uses: $/…` form of a workflow
+# in the same repository (rhysd/actionlint#711, open); zizmor's self-repository audit asks for exactly that form.
+# Remove it when actionlint understands `$/`.
+paths:
+  "**/*.{yml,yaml}":
+    ignore:
+      - 'reusable workflow call "\$/[^"]*" at "uses" is not following the format'

@@ -43,4 +43,4 @@ jobs:
     permissions:
       contents: read
       actions: read
-    uses: ./.github/workflows/gate.yml
+    uses: $/.github/workflows/gate.yml
