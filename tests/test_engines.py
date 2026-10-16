@@ -264,3 +264,33 @@ def test_secret_removed_in_a_later_commit_still_fails(build_repo, installed_engi
 def test_installed_binary_reports_the_pinned_version(build_repo, installed_engines):
     """#13 rule 2: the installed real gitleaks passes the version check against the pin."""
     assert engines.scan_secrets(build_repo({}), installed_engines, engines.read_pins()) == []
+
+
+@pytest.fixture
+def escaping_engine_dir(tmp_path) -> tuple[Path, Path]:
+    """An engine directory whose gitleaks is a symlink to a script outside it."""
+    outside = tmp_path / "outside" / "gitleaks"
+    outside.parent.mkdir()
+    outside.write_text(f"#!/bin/sh\ntouch {tmp_path / 'executed'}\necho {PINNED}\n")
+    outside.chmod(0o755)
+    engine_dir = tmp_path / "engines"
+    engine_dir.mkdir()
+    (engine_dir / "gitleaks").symlink_to(outside)
+    return engine_dir, outside
+
+
+def test_install_refuses_an_engine_symlinked_outside_the_directory(escaping_engine_dir, tmp_path, capsys):
+    """#13 rule 1: install never writes through a symlink that leaves the engine directory."""
+    engine_dir, outside = escaping_engine_dir
+    before = outside.read_bytes()
+    pin = local_pin(tmp_path, archive_with("x"))
+    assert cli.main(["engines", "install", str(engine_dir)], read_pins=lambda: {"gitleaks": pin}) == 2
+    assert "not a plain file name" in capsys.readouterr().err
+    assert outside.read_bytes() == before
+
+
+def test_scan_never_runs_an_engine_symlinked_outside_the_directory(escaping_engine_dir, tmp_path, build_repo, capsys):
+    """#13 rule 2: hygiene refuses a symlinked engine and never executes its target."""
+    engine_dir, _ = escaping_engine_dir
+    assert "not a plain file name" in hygiene_exit_2(build_repo({}), engine_dir, capsys)
+    assert not (tmp_path / "executed").exists()
