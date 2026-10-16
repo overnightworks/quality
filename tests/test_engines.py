@@ -155,6 +155,55 @@ def test_unreachable_download_is_exit_2(tmp_path, capsys):
     assert "cannot download" in capsys.readouterr().err
 
 
+VERSIONED_BINARY = "#!/bin/sh\necho 1.2.3\n"
+
+
+def install_versioned_gitleaks(tmp_path: Path) -> tuple[Path, dict[str, Pin]]:
+    pins = {"gitleaks": local_pin(tmp_path, archive_with(VERSIONED_BINARY))}
+    return tmp_path / "bin", pins
+
+
+def test_a_second_install_downloads_nothing_even_when_the_url_is_gone(tmp_path, capsys):
+    """#25 rule 3: an engine that reports its pinned version is not downloaded again."""
+    directory, pins = install_versioned_gitleaks(tmp_path)
+    assert cli.main(["engines", "install", str(directory)], read_pins=lambda: pins) == 0
+    assert capsys.readouterr().out.strip() == "gitleaks 1.2.3 installed"
+    unreachable = {"gitleaks": Pin("1.2.3", (tmp_path / "gone.tar.gz").as_uri(), "0" * 64)}
+    assert cli.main(["engines", "install", str(directory)], read_pins=lambda: unreachable) == 0
+    assert capsys.readouterr().out.strip() == "gitleaks 1.2.3 already installed"
+
+
+@pytest.mark.parametrize("damage", ["deleted", "wrong-version"])
+def test_install_reinstalls_a_missing_or_wrong_binary(tmp_path, damage):
+    """#25 rule 3: a deleted binary or one at another version is installed again."""
+    directory, pins = install_versioned_gitleaks(tmp_path)
+    engines.install(directory, pins)
+    binary = directory / "gitleaks"
+    if damage == "deleted":
+        binary.unlink()
+    else:
+        binary.write_text("#!/bin/sh\necho 9.9.9\n")
+    assert engines.install(directory, pins) == {"gitleaks": True}
+    assert binary.read_text() == VERSIONED_BINARY
+
+
+def test_verify_is_exit_0_when_every_engine_reports_its_pin(tmp_path, capsys):
+    """#25 rule 2: a match is exit 0."""
+    directory, pins = install_versioned_gitleaks(tmp_path)
+    engines.install(directory, pins)
+    assert cli.main(["engines", "verify", str(directory)], read_pins=lambda: pins) == 0
+
+
+def test_verify_is_exit_2_naming_both_versions_on_a_mismatch(tmp_path, capsys):
+    """#25 rule 2: gitleaks 8.30.0 where 8.30.1 is pinned is exit 2, one line, both versions."""
+    pins = {"gitleaks": Pin("8.30.1", "unused", "0" * 64)}
+    directory = fake_gitleaks(tmp_path / "fake", "8.30.0")
+    assert cli.main(["engines", "verify", str(directory)], read_pins=lambda: pins) == 2
+    lines = capsys.readouterr().err.strip().splitlines()
+    assert len(lines) == 1
+    assert "'8.30.0'" in lines[0] and "'8.30.1'" in lines[0]
+
+
 def test_scan_refuses_an_installed_binary_at_another_version(tmp_path, build_repo, capsys):
     """#13 rule 2: a binary at another version is exit 2 naming both versions."""
     err = hygiene_exit_2(build_repo({}), fake_gitleaks(tmp_path / "fake", "9.9.9"), capsys)

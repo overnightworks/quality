@@ -40,7 +40,10 @@ def main(
     engine_commands = commands.add_parser("engines", help="manage the pinned engines").add_subparsers(
         dest="engines_command", required=True
     )
-    engine_commands.add_parser("install", help="download, verify and unpack the pinned engines").add_argument(
+    engine_commands.add_parser("install", help="download, verify and unpack the pinned engines that are not yet right").add_argument(
+        "directory", type=Path
+    )
+    engine_commands.add_parser("verify", help="check that every pinned engine reports its pinned version").add_argument(
         "directory", type=Path
     )
     verdict = commands.add_parser("verdict", help="judge the mandatory jobs of the running workflow run")
@@ -58,7 +61,8 @@ def main(
     if arguments.command == "sonar":
         return run_sonar_findings(arguments.task_file, transport, sleep)
     if arguments.command == "engines":
-        return run_engines_install(arguments.directory, read_pins)
+        run_engines = run_engines_install if arguments.engines_command == "install" else run_engines_verify
+        return run_engines(arguments.directory, read_pins)
     try:
         result = run_hygiene(arguments.path, arguments.engines)
     except CannotJudge as error:
@@ -91,12 +95,23 @@ def coverage_note(engine_dir: Path | None) -> str:
 
 
 def run_engines_install(directory: Path, read_pins: Callable[[], dict[str, engines.Pin]]) -> int:
+    pins = read_pins()
     try:
-        engines.install(directory, read_pins())
+        downloaded = engines.install(directory, pins)
     except engines.EngineError as error:
         print(f"engines: cannot install - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
-    print(f"engines: installed into {directory}")
+    for name, pin in pins.items():
+        print(f"{name} {pin.version} {'installed' if downloaded[name] else 'already installed'}")
+    return EXIT_CLEAN
+
+
+def run_engines_verify(directory: Path, read_pins: Callable[[], dict[str, engines.Pin]]) -> int:
+    problems = engines.verification_problems(directory, read_pins())
+    if problems:
+        print("\n".join(f"engines: {problem}" for problem in problems), file=sys.stderr)
+        return EXIT_CANNOT_JUDGE
+    print(f"engines: every pinned engine in {directory} is at its pinned version")
     return EXIT_CLEAN
 
 
