@@ -118,19 +118,27 @@ def test_the_allow_list_is_the_one_of_the_staged_tree(build_repo, installed_engi
 
 @pytest.mark.engine
 @pytest.mark.parametrize(
-    ("staged_change", "exit_code"),
+    ("staged_change", "exit_code", "expected_line"),
     [
-        (f"# one\n# two\nrenamed_key = {FAKE_KEY}\n", 0),
-        (f"aws_access_key_id = {OTHER_KEY}\n", 1),
+        (
+            f"# one\n# two\nrenamed_key = {FAKE_KEY}\n",
+            0,
+            "allowed config.txt:3 - gitleaks rule aws-access-token allowed: test key",
+        ),
+        (f"aws_access_key_id = {OTHER_KEY}\n", 1, None),
     ],
     ids=["allowed value moved to another line of its file", "allowed value replaced by another key"],
 )
-def test_an_allowance_follows_the_value_in_the_staged_scan(build_repo, installed_engines, staged_change, exit_code):
+def test_an_allowance_follows_the_value_in_the_staged_scan(
+    build_repo, installed_engines, capsys, staged_change, exit_code, expected_line
+):
     """#25 rule 1.4, #24 rule 1: the staged diff matches by rule, file and value hash, not by line."""
     config = allow_config(("aws-access-token", "config.txt", FAKE_KEY, "test key"))
     repo = build_repo({"config.txt": KEY_LINE, "quality/config.toml": config})
     stage(repo, {"config.txt": staged_change})
     assert scan_staged(repo, installed_engines) == exit_code
+    if expected_line is not None:
+        assert expected_line in capsys.readouterr().out
 
 
 @pytest.fixture
