@@ -3,7 +3,6 @@ import http.server
 import io
 import os
 import re
-import shutil
 import subprocess
 import tarfile
 import threading
@@ -263,12 +262,13 @@ def test_secret_removed_in_a_later_commit_still_fails(build_repo, installed_engi
 
 @pytest.mark.engine
 def test_a_relative_repository_path_starting_with_a_dash_is_scanned_as_that_repository(
-    build_repo, installed_engines, tmp_path_factory, monkeypatch
+    build_repo, installed_engines, tmp_path, monkeypatch
 ):
     """#13 rule 4: a repository path beginning with '-' is a path, never an option to gitleaks."""
     repo = build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
-    workdir = tmp_path_factory.mktemp("cwd")
-    shutil.copytree(repo, workdir / "-repo")
+    workdir = tmp_path / "cwd"
+    workdir.mkdir()
+    subprocess.run(["git", "clone", "-q", str(repo), "--", str(workdir / "-repo")], check=True)
     monkeypatch.chdir(workdir)
     findings = engines.scan_secrets(Path("-repo"), installed_engines, engines.read_pins())
     assert [(finding.path, finding.line) for finding in findings] == [("config.txt", 1)]
