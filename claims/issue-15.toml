@@ -1,0 +1,8 @@
+claim_id = "c6d66d7089164d9fa9caba8d66782332"
+agent = "Claude fe12493e-3d52-442e-b01b-4ee4336de2f0"
+role = "builder"
+base = "2d877e383f95643f2e7bdbe85a92b5cbda373971"
+branch = "claude/issue-15-q1a-4-actionlint-zizmor"
+scope = [".github/workflows", "src/fleet_quality", "tests"]
+opened_commit = "7d601dc07a78f170740c3a73d89ce96727ac5df8"
+whole_reason = "Two engine adapters, their pin entries, the skipped-engine notice and the redirect test share the engine path and its tests."
