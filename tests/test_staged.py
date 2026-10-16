@@ -231,6 +231,22 @@ def test_a_missing_engine_is_exit_2(build_repo, tmp_path, capsys):
 
 
 @pytest.mark.engine
+@pytest.mark.parametrize(
+    ("staged_config", "exit_code"),
+    [
+        ('[gate]\nlegacy = "fail"\nwhatever = 1\n[future]\nkey = 1\n', 0),
+        ('[secrets]\nallow = [{ rule = "r" }]\n[gate]\nlegacy = "fail"\n', 2),
+    ],
+    ids=["unknown gate keys and tables are ignored", "a malformed allowance is still refused"],
+)
+def test_the_staged_scan_reads_only_the_secrets_table(build_repo, installed_engines, staged_config, exit_code):
+    """#40 rule 1: only [secrets] of the staged config is validated."""
+    repo = build_repo({"README": "hello\n"})
+    stage(repo, {"quality/config.toml": staged_config})
+    assert scan_staged(repo, installed_engines) == exit_code
+
+
+@pytest.mark.engine
 def test_an_unreadable_allow_list_is_exit_2(build_repo, installed_engines, capsys):
     """#25 rule 4: a staged allow list that cannot be read is exit 2."""
     repo = build_repo({"README": "hello\n"})

@@ -41,6 +41,12 @@ def _table(document: dict, name: str, example: str) -> dict:
     return table
 
 
+def _refuse_unknown_secrets_keys(secrets: dict) -> None:
+    unknown = set(secrets) - SECRETS_KEYS
+    if unknown:
+        raise ConfigError(f"{CONFIG_PATH} has unknown key(s) {sorted(unknown)} in [secrets] - only allow exists")
+
+
 def _refuse_unknown_keys(document: dict, gate: dict, secrets: dict) -> None:
     unknown = (set(document) - {"gate", "secrets"}) | (set(gate) - GATE_KEYS) | (set(secrets) - SECRETS_KEYS)
     if unknown:
@@ -74,12 +80,16 @@ def read_mandatory_jobs(repo: Path) -> tuple[str, ...]:
 
 
 def load_secret_allowances(text: str | None) -> dict[Allowance, str]:
-    """Allowance -> reason of every finding the repository allows; a missing config allows nothing."""
+    """Allowance -> reason of every finding the repository allows; a missing config allows nothing.
+
+    Reads only [secrets]: every other table and key belongs to the gate, which a newer quality may have grown, and
+    must not stop the commit hook of an older one.
+    """
     if text is None:
         return {}
     document = _parse(text, ALLOWANCE_EXAMPLE)
     secrets = _table(document, "secrets", ALLOWANCE_EXAMPLE)
-    _refuse_unknown_keys(document, _table(document, "gate", EXAMPLE), secrets)
+    _refuse_unknown_secrets_keys(secrets)
     entries = secrets.get("allow", [])
     if not isinstance(entries, list):
         raise ConfigError(f"{CONFIG_PATH} needs [secrets] allow as a list, like:\n{ALLOWANCE_EXAMPLE}")
