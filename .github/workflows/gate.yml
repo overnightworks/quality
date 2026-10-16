@@ -13,6 +13,8 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+    env:
+      TOOL_DIR: ${{ github.repository == 'overnightworks/quality' && '.' || '.gate-tool' }}
     steps:
       - name: Check out the caller with its full history for the secret scan
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -36,13 +38,9 @@ jobs:
           python-version: '3.12'
 
       - name: Install the pinned engines
-        env:
-          TOOL_DIR: ${{ github.repository == 'overnightworks/quality' && '.' || '.gate-tool' }}
         run: uv run --locked --project "$TOOL_DIR" fleet-quality engines install "$RUNNER_TEMP/engines"
 
       - name: Hygiene
-        env:
-          TOOL_DIR: ${{ github.repository == 'overnightworks/quality' && '.' || '.gate-tool' }}
         run: uv run --locked --project "$TOOL_DIR" fleet-quality hygiene --engines "$RUNNER_TEMP/engines" .
 
   verdict:
