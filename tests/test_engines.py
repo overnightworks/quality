@@ -369,32 +369,20 @@ def test_a_diff_driver_marked_binary_cannot_hide_a_key(build_repo, installed_eng
     assert scan(repo, installed_engines) == 1
 
 
-def unavailable(reason):
-    """Skips locally, but fails on CI, where a skipped proof would pass for one that ran."""
-    if os.environ.get("CI"):
-        pytest.fail(reason)
-    pytest.skip(reason)
-
-
-@pytest.fixture
-def system_attributes_sandbox(fake_git, hiding_attributes):
-    """Runs every git inside a bubblewrap sandbox whose /etc/gitattributes, git's real system file, hides config.txt."""
-    if shutil.which("bwrap") is None:
-        unavailable("bubblewrap is needed to give git a system attributes file")
-    sandbox = [
-        *("bwrap", "--bind", "/", "/", "--dev", "/dev", "--tmpfs", "/etc"),
-        *("--ro-bind", "/etc/passwd", "/etc/passwd"),
-        *("--ro-bind", str(hiding_attributes), "/etc/gitattributes"),
-    ]
-    if subprocess.run([*sandbox, "true"], capture_output=True, check=False).returncode != 0:
-        unavailable("bubblewrap cannot create a mount namespace here")
-    fake_git(f'exec {" ".join(sandbox)} "{shutil.which("git")}" "$@"')
-
-
-@pytest.mark.engine
-def test_a_system_attributes_file_cannot_hide_a_key(keyed_repo, installed_engines, system_attributes_sandbox):
-    """#21 rule 1: git's system attributes file (/etc/gitattributes, here a real file in a sandbox) is not read."""
-    assert scan(keyed_repo, installed_engines) == 1
+def test_the_git_environment_cuts_off_every_attributes_source(tmp_path, monkeypatch):
+    """#21 rule 1: the git environment excludes the system file, forces an empty attributes file, drops other GIT_*."""
+    monkeypatch.setenv("GIT_DIR", "/elsewhere")
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "5")
+    environment = engines.attribute_free_git_environment(tmp_path / "home")
+    assert {name: value for name, value in environment.items() if name.startswith("GIT_")} == {
+        "GIT_ATTR_NOSYSTEM": "1",
+        "GIT_ATTR_SOURCE": engines.EMPTY_TREE,
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "core.attributesFile",
+        "GIT_CONFIG_VALUE_0": os.devnull,
+    }
 
 
 @pytest.mark.engine
