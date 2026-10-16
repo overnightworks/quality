@@ -7,7 +7,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from quality.config import CONFIG_PATH, LegacyMode, load_legacy_mode, load_mandatory_jobs
+from quality.config import CONFIG_PATH, GateSettings, LegacyMode, load_gate_settings
 from quality.hygiene import CannotJudge
 
 JOBS_URL = "https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs?filter=all&per_page=100"
@@ -16,14 +16,6 @@ NEXT_LINK = re.compile(r'<([^>]+)>;\s*rel="next"')
 SUCCESS = "success"
 
 PageFetcher = Callable[[str], tuple[str, str | None]]
-
-
-@dataclass(frozen=True)
-class GateSettings:
-    """The part of quality/config.toml a pull request must not loosen."""
-
-    mandatory_jobs: tuple[str, ...]
-    legacy: LegacyMode
 
 
 NO_BASE_SETTINGS = GateSettings((), LegacyMode.REPORT)
@@ -148,4 +140,4 @@ def read_base_settings(repo: Path, base_sha: str) -> GateSettings:
     shown = subprocess.run([*git, "show", f"{base_sha}:{CONFIG_PATH}"], capture_output=True, text=True, check=False)
     if shown.returncode != 0:
         raise CannotJudge(f"cannot read {CONFIG_PATH} at the base commit {base_sha}: {shown.stderr.strip()}")
-    return GateSettings(load_mandatory_jobs(shown.stdout), load_legacy_mode(shown.stdout))
+    return load_gate_settings(shown.stdout)

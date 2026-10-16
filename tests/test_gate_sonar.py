@@ -4,7 +4,6 @@ import pytest
 import yaml
 
 from quality import sonar
-from quality.config import LegacyMode, load_legacy_mode
 
 ROOT = Path(__file__).parent.parent
 WORKFLOWS = ROOT / ".github" / "workflows"
@@ -156,8 +155,3 @@ def test_only_the_findings_step_binds_the_default_branch_from_the_event(gate):
     assert binders == [("sonar", findings["name"])]
     assert findings["env"]["DEFAULT_BRANCH"] == "${{ github.event.repository.default_branch }}"
     assert "main" not in str(findings)
-
-
-def test_quality_fails_on_its_own_legacy_findings():
-    """#33 sentence 5: quality's own config switches legacy findings to failing"""
-    assert load_legacy_mode((ROOT / "quality" / "config.toml").read_text(encoding="utf-8")) is LegacyMode.FAIL

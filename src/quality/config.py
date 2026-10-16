@@ -1,5 +1,6 @@
 import re
 import tomllib
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import NamedTuple
@@ -22,6 +23,14 @@ class LegacyMode(Enum):
 
     REPORT = "report"
     FAIL = "fail"
+
+
+@dataclass(frozen=True)
+class GateSettings:
+    """The part of quality/config.toml a pull request must not loosen."""
+
+    mandatory_jobs: tuple[str, ...]
+    legacy: LegacyMode
 
 
 class Allowance(NamedTuple):
@@ -87,12 +96,16 @@ def load_legacy_mode(text: str | None) -> LegacyMode:
         raise ConfigError(f"{CONFIG_PATH} has [gate] legacy = {value!r}; it must be {modes}, like:\n{LEGACY_EXAMPLE}") from None
 
 
-def read_mandatory_jobs(repo: Path) -> tuple[str, ...]:
+def load_gate_settings(text: str | None) -> GateSettings:
+    return GateSettings(load_mandatory_jobs(text), load_legacy_mode(text))
+
+
+def read_gate_settings(repo: Path) -> GateSettings:
     path = repo / CONFIG_PATH
     try:
-        return load_mandatory_jobs(path.read_text(encoding="utf-8"))
+        return load_gate_settings(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        return load_mandatory_jobs(None)
+        return load_gate_settings(None)
     except (OSError, UnicodeDecodeError) as error:
         raise ConfigError(f"{CONFIG_PATH} cannot be read ({error})") from error
 
@@ -147,12 +160,3 @@ def read_secret_allowances(repo: Path) -> dict[Allowance, str]:
     except (OSError, UnicodeDecodeError) as error:
         raise ConfigError(f"{CONFIG_PATH} cannot be read ({error})") from error
 
-
-def read_legacy_mode(repo: Path) -> LegacyMode:
-    path = repo / CONFIG_PATH
-    try:
-        return load_legacy_mode(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return load_legacy_mode(None)
-    except (OSError, UnicodeDecodeError) as error:
-        raise ConfigError(f"{CONFIG_PATH} cannot be read ({error})") from error

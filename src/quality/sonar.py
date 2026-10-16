@@ -10,6 +10,7 @@ import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 
 from quality.config import LegacyMode
@@ -143,6 +144,18 @@ class Project:
     key: str
 
 
+class RunKind(Enum):
+    """What the run is: the one answer to which findings fail it and whether legacy can be judged."""
+
+    PULL_REQUEST = "pull request"
+    DEFAULT_BRANCH = "default branch"
+    OTHER_BRANCH = "other branch"
+
+    @property
+    def judges_legacy(self) -> bool:
+        return self is not RunKind.OTHER_BRANCH
+
+
 @dataclass(frozen=True)
 class Analysis:
     project: Project
@@ -152,8 +165,10 @@ class Analysis:
     default_branch: str
 
     @property
-    def judges_legacy(self) -> bool:
-        return self.scope.is_pull_request or self.scope.is_branch(self.default_branch)
+    def kind(self) -> RunKind:
+        if self.scope.is_pull_request:
+            return RunKind.PULL_REQUEST
+        return RunKind.DEFAULT_BRANCH if self.scope.is_branch(self.default_branch) else RunKind.OTHER_BRANCH
 
 
 @dataclass(frozen=True)
@@ -173,32 +188,35 @@ def legacy_unknown(default_branch: str) -> str:
 
 @dataclass(frozen=True)
 class SonarResult:
-    """`legacy` is the open count of the default branch; None when that branch was never analysed."""
+    """`legacy` is the open count of the default branch, asked for on pull requests only."""
 
-    scope: Scope
-    project: Project
+    analysis: Analysis
     findings: OpenFindings
-    default_branch: str
     legacy_mode: LegacyMode
+    default_analysed: bool
     legacy: int | None
 
     @property
     def fails_the_run(self) -> bool:
-        if self.scope.is_pull_request:
+        if self.analysis.kind is RunKind.PULL_REQUEST:
             return self.findings.count > 0 or (self.legacy_mode is LegacyMode.FAIL and bool(self.legacy))
-        return self.scope.is_branch(self.default_branch) and self.findings.count > 0
+        return self.analysis.kind is RunKind.DEFAULT_BRANCH and self.findings.count > 0
 
     def summary(self) -> str:
         count = self.findings.count
-        if self.scope.is_pull_request:
-            if self.legacy is None:
-                return f"{RULE}: new {count} · {legacy_unknown(self.default_branch)}"
-            return f"{RULE}: new {count} · legacy {self.legacy} ({self.project.key}, {self.default_branch})"
+        scope, key, default_branch = self.analysis.scope, self.analysis.project.key, self.analysis.default_branch
+        unknown = self.analysis.kind.judges_legacy and not self.default_analysed
+        if self.analysis.kind is RunKind.PULL_REQUEST:
+            if unknown:
+                return f"{RULE}: new {count} · {legacy_unknown(default_branch)}"
+            return f"{RULE}: new {count} · legacy {self.legacy} ({key}, {default_branch})"
         if count == 0:
-            return f"{RULE}: clean for {self.project.key!r} ({self.scope.label}): 0 open finding(s)"
-        if self.fails_the_run:
-            return f"{RULE}: {count} open on {self.scope.value}"
-        return f"{RULE}: {count} open on {self.scope.value} (report only)"
+            line = f"{RULE}: clean for {key!r} ({scope.label}): 0 open finding(s)"
+        elif self.fails_the_run:
+            line = f"{RULE}: {count} open on {scope.value}"
+        else:
+            line = f"{RULE}: {count} open on {scope.value} (report only)"
+        return f"{line} · {legacy_unknown(default_branch)}" if unknown else line
 
 
 def preflight(root: Path, environment: Mapping[str, str]) -> None:
@@ -319,15 +337,15 @@ def analyse(
     analysis = read_analysis(environment)
     wait_for_own_task(analysis, transport, sleep)
     require_resolved(analysis, transport)
-    default_analysed = analysis.judges_legacy and default_branch_analysed(analysis, transport)
-    judges_pull_request = analysis.scope.is_pull_request
-    if judges_pull_request and not default_analysed and legacy_mode is LegacyMode.FAIL:
+    kind = analysis.kind
+    default_analysed = kind.judges_legacy and default_branch_analysed(analysis, transport)
+    if kind.judges_legacy and not default_analysed and legacy_mode is LegacyMode.FAIL:
         raise CannotJudge(legacy_unknown(analysis.default_branch))
     findings = open_findings(analysis, transport)
     legacy = None
-    if judges_pull_request and default_analysed:
+    if kind is RunKind.PULL_REQUEST and default_analysed:
         legacy = open_total(analysis, Scope("branch", analysis.default_branch), transport)
-    return SonarResult(analysis.scope, analysis.project, findings, analysis.default_branch, legacy_mode, legacy)
+    return SonarResult(analysis, findings, legacy_mode, default_analysed, legacy)
 
 
 def read_analysis(environment: Mapping[str, str]) -> Analysis:
@@ -438,12 +456,12 @@ def default_branch_analysed(analysis: Analysis, transport: Transport) -> bool:
         branches = [branch for branch in answer["branches"] if branch["name"] == analysis.default_branch]
     except (KeyError, TypeError) as error:
         raise CannotJudge(f"SonarCloud answered {url.partition('?')[0]} with an unreadable body") from error
-    if not branches or not branches[0].get("analysisDate"):
+    if not branches:
         return False
     if branches[0].get("isMain") is not True:
         # A non-main branch counts only its changed code, so a legacy count would be silently too low.
         raise CannotJudge(f"{analysis.default_branch} is not SonarCloud's main branch: set SonarCloud's main branch to {analysis.default_branch}")
-    return True
+    return bool(branches[0].get("analysisDate"))
 
 
 def issues_search_url(analysis: Analysis, scope: Scope, page: int, page_size: int) -> str:

@@ -7,13 +7,12 @@ from collections.abc import Callable
 from pathlib import Path
 
 from quality import __version__, engines, staged
-from quality.config import Allowance, ConfigError, read_legacy_mode, read_mandatory_jobs
+from quality.config import Allowance, ConfigError, read_gate_settings
 from quality.hygiene import CannotJudge, active_rules, run_hygiene, skipped_rules
 from quality.report import Finding, render
 from quality.sonar import TASK_FILE, Sleep, Transport, analyse, fetch_json, preflight
 from quality.verdict import (
     NO_BASE_SETTINGS,
-    GateSettings,
     PageFetcher,
     github_fetcher,
     judge,
@@ -151,7 +150,7 @@ def run_sonar_preflight(path: Path) -> int:
 
 def run_sonar_findings(transport: Transport, sleep: Sleep) -> int:
     try:
-        result = analyse(os.environ, read_legacy_mode(Path(".")), transport, sleep)
+        result = analyse(os.environ, read_gate_settings(Path(".")).legacy, transport, sleep)
     except (CannotJudge, ConfigError) as error:
         print(f"sonar: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
@@ -163,7 +162,7 @@ def run_sonar_findings(transport: Transport, sleep: Sleep) -> int:
 
 def run_verdict(path: Path, fetcher_for: Callable[[str], PageFetcher]) -> int:
     try:
-        settings = GateSettings(read_mandatory_jobs(path), read_legacy_mode(path))
+        settings = read_gate_settings(path)
         base_sha = os.environ.get("GATE_BASE_SHA", "")
         base_settings = read_base_settings(path, base_sha) if base_sha else NO_BASE_SETTINGS
         jobs = read_jobs(
