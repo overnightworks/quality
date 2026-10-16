@@ -1,6 +1,7 @@
 import pytest
 
 from quality.config import (
+    Allowance,
     ConfigError,
     load_mandatory_jobs,
     load_secret_allowances,
@@ -63,43 +64,67 @@ def test_a_config_directory_that_cannot_be_entered_is_refused(tmp_path):
         config_dir.chmod(0o700)
 
 
-def test_reads_every_allowed_fingerprint_with_its_reason():
-    """#16: [secrets] allow maps each fingerprint to its reason, and the gate keys still load beside it."""
-    text = (
-        '[gate]\nmandatory_jobs = ["checks"]\n'
-        '[secrets]\nallow = [{ fingerprint = "a:b:c:1", reason = "enum value, not a key" }]'
-    )
-    assert load_secret_allowances(text) == {"a:b:c:1": "enum value, not a key"}
+HASH = "a" * 64
+ENTRY = f'{{ rule = "aws-access-token", file = "tests/fixture.py", secret_sha256 = "{HASH}", reason = "fixture value" }}'
+
+
+def allow_entry(**changes: str) -> str:
+    fields = {"rule": "aws-access-token", "file": "tests/fixture.py", "secret_sha256": HASH, "reason": "fixture value"}
+    return "{ " + ", ".join(f'{key} = "{value}"' for key, value in (fields | changes).items()) + " }"
+
+
+def test_reads_every_allowed_value_with_its_reason():
+    """#24 rule 1: [secrets] allow maps each rule, file and value hash to its reason, beside the gate keys."""
+    text = f'[gate]\nmandatory_jobs = ["checks"]\n[secrets]\nallow = [{ENTRY}]'
+    assert load_secret_allowances(text) == {Allowance("aws-access-token", "tests/fixture.py", HASH): "fixture value"}
     assert load_mandatory_jobs(text) == ("checks",)
 
 
 @pytest.mark.parametrize("text", [None, '[gate]\nmandatory_jobs = ["checks"]'])
 def test_a_config_without_allowances_allows_nothing(text):
-    """#16: an absent allow list allows nothing."""
+    """#24 rule 3: an absent allow list allows nothing."""
     assert load_secret_allowances(text) == {}
 
 
 @pytest.mark.parametrize(
     "text",
     [
-        "[secrets]\nallow = [\"a:b:c:1\"]",
-        "[secrets]\nallow = [{ fingerprint = \"a:b:c:1\" }]",
-        "[secrets]\nallow = [{ fingerprint = \"a:b:c:1\", reason = \"\" }]",
-        "[secrets]\nallow = [{ fingerprint = \"\", reason = \"r\" }]",
-        "[secrets]\nallow = [{ fingerprint = \"a\", reason = \"r\", extra = 1 }]",
-        "[secrets]\nallow = [{ fingerprint = \"a\", reason = \"two\\nlines\" }]",
-        "[secrets]\nallow = \"a:b:c:1\"",
+        f"[secrets]\nallow = [\"{HASH}\"]",
+        '[secrets]\nallow = [{ fingerprint = "a:b:c:1", reason = "old form" }]',
+        f"[secrets]\nallow = [{allow_entry(reason='')}]",
+        f"[secrets]\nallow = [{allow_entry(reason='  ')}]",
+        f"[secrets]\nallow = [{allow_entry(reason='two\\nlines')}]",
+        f"[secrets]\nallow = [{allow_entry(rule='')}]",
+        f"[secrets]\nallow = [{allow_entry(file='')}]",
+        f"[secrets]\nallow = [{allow_entry(secret_sha256='a' * 63)}]",
+        f"[secrets]\nallow = [{allow_entry(secret_sha256='A' * 64)}]",
+        f"[secrets]\nallow = [{allow_entry(secret_sha256='g' * 64)}]",
+        f"[secrets]\nallow = [{ENTRY[:-2]}, extra = 1 }}]",
+        f"[secrets]\nallow = [{{ rule = \"r\", file = \"f\", secret_sha256 = \"{HASH}\" }}]",
+        f"[secrets]\nallow = [{ENTRY}, {allow_entry(reason='again')}]",
+        '[secrets]\nallow = "x"',
         "[secrets]\nignore = []",
         "secrets = 1",
         "not toml [",
     ],
+    ids=[
+        "bare-string", "fingerprint-form", "empty-reason", "blank-reason", "two-line-reason", "empty-rule",
+        "empty-file", "short-hash", "uppercase-hash", "non-hex-hash", "extra-key", "no-reason", "duplicate",
+        "allow-not-a-list", "unknown-key", "secrets-not-a-table", "not-toml",
+    ],
 )
-def test_refuses_an_allowance_that_is_not_a_fingerprint_with_a_reason(text):
-    """#16: an allow entry without a fingerprint and a one-line reason is refused."""
+def test_refuses_an_allowance_that_is_not_a_rule_file_hash_and_reason(text):
+    """#24 rule 2: an invalid allow entry cannot be judged."""
     with pytest.raises(ConfigError, match="quality/config.toml"):
         load_secret_allowances(text)
 
 
+def test_the_old_fingerprint_form_is_refused_with_the_new_form_shown():
+    """#24 rule 2: the message of a fingerprint entry shows the content-bound form."""
+    with pytest.raises(ConfigError, match="secret_sha256"):
+        load_secret_allowances('[secrets]\nallow = [{ fingerprint = "a:b:c:1", reason = "old form" }]')
+
+
 def test_a_repository_without_the_file_allows_nothing(tmp_path):
-    """#16: a missing quality/config.toml allows nothing."""
+    """#24 rule 3: a missing quality/config.toml allows nothing."""
     assert read_secret_allowances(tmp_path) == {}

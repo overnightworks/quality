@@ -11,21 +11,39 @@
 - `env-file`: no tracked `.env`, `.env.*` or `*.env` file (names ending in `.example` are templates and pass).
 - `compose-port`: every published port in a tracked `compose*.y{a,}ml` or `docker-compose*.y{a,}ml` binds `127.0.0.1`.
 
-With `--engines DIR` the `secret` rule also scans the whole history with gitleaks, always with quality's own config
+With `--engines DIR` the `secret` rule also scans the whole history reachable from `HEAD` with gitleaks (a key removed later is still found; other branches the checkout fetched are not scanned), always with quality's own config
 (`src/quality/gitleaks.toml`): the repository's `.gitleaks.toml`, `.gitleaksignore` and `gitleaks:allow`
-comments have no effect. A known false positive is allowed only by its gitleaks fingerprint
-(`commit:file:rule:line`) and a reason in the repository's `quality/config.toml`:
+comments have no effect. A known false positive is allowed by the value, not the place: the repository's
+`quality/config.toml` names the gitleaks rule, the file and the SHA-256 of the finding's secret (UTF-8, lowercase hex)
+with a reason:
 
     [secrets]
-    allow = [{ fingerprint = "<commit>:src/x.py:generic-api-key:139", reason = "enum value, not a key" }]
+    allow = [{ rule = "aws-access-token", file = "tests/fixture.py", secret_sha256 = "<64 hex>", reason = "fixture value" }]
+
+One entry allows that value in that file at any line and in every commit that holds it. Another value in the same
+place is red, and the same value in another file is red. A red finding prints its hash
+(`secret src/a.py:3 - gitleaks rule aws-access-token matched at 76ec522b (sha256 <64 hex>, value not shown).`), so
+the entry is copied from the output. An entry without a reason, a hash that is not 64 lowercase hex, a duplicate
+`(rule, file, secret_sha256)` and the old `fingerprint` form are exit `2`.
+
+A missing `quality/config.toml` means no allowances: the scan still runs and its findings are red. Only a file that
+exists and cannot be read or parsed is exit `2`.
+
+Secret handling: quality runs gitleaks without `--redact` so the report carries each `Secret` to be hashed. gitleaks
+writes that report to a `tempfile` scratch directory (mode 0700); quality reads it, keeps only the hash, and deletes
+the directory on every exit path (success, gitleaks failure, parse error). The value reaches no stdout,
+stderr, log, exception text or retained file; gitleaks runs without `-v`. While the scan runs, the value exists in
+that report file and in quality's process memory. The boundary is the deletion and the absence of any other sink,
+not memory-only handling. The hash is safe to print: it appears only where the history already shows the content,
+and a real secret must be rotated anyway.
 
 The scan runs git without any attributes (not the repository's `.gitattributes`, not `info/attributes`, not the
 system or global file), so a `-diff` or `binary` line cannot hide a key. That needs git 2.41 or newer; an older git
 is exit `2`. The system file is excluded by `GIT_ATTR_NOSYSTEM`, git's documented switch; that is pinned as an
 environment contract, not by a root-only real-file test.
 
-Every allowed finding is printed (`secret: 1 allowed (src/x.py:139)`). The same key in a new commit has a new
-fingerprint and is red until it is added. An entry without a reason is exit `2`.
+Every allowed finding is printed with the entry's reason (`secret: 1 allowed (src/x.py:139)`, then
+  `allowed src/x.py:139 - gitleaks rule generic-api-key allowed: enum value, not a key`).
 
 Each finding names the rule, the file, a reason and a fix. Exit `0` is clean, `1` means findings,
 `2` means the repository could not be judged (never clean).

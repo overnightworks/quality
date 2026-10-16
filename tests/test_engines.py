@@ -6,6 +6,7 @@ import re
 import shutil
 import subprocess
 import tarfile
+import tempfile
 import threading
 import urllib.request
 from pathlib import Path
@@ -17,6 +18,7 @@ from quality.engines import EngineError, Pin
 
 OUTPUTS = Path(__file__).parent / "fixtures" / "engine-outputs"
 FAKE_KEY = "AKIA" + "QYLPMTYX3QZ5ABCD"  # assembled so quality's own scan stays green
+OTHER_KEY = "AKIA" + "QYLPMTYX3QZ5WXYZ"  # a second assembled key, to prove another value stays red
 
 
 def recorded(name: str) -> str:
@@ -265,14 +267,14 @@ def test_secret_removed_in_a_later_commit_still_fails(build_repo, installed_engi
 
 
 @pytest.mark.engine
-def test_secret_reachable_only_from_a_ref_outside_head_still_fails(build_repo, installed_engines):
-    """#13 rule 5: the whole history includes branches fetched as remote-tracking refs, not only HEAD's ancestry."""
+def test_secret_reachable_only_from_another_branch_is_not_this_verdicts(build_repo, installed_engines):
+    """#24 head ruling: the verdict judges the history reachable from HEAD, not every branch the checkout fetched."""
     repo = build_repo({"notes.txt": "nothing here\n"})
     (repo / "config.txt").write_text(f"aws_access_key_id = {FAKE_KEY}\n")
     commit(repo, "commit the key")
     subprocess.run(["git", "-C", str(repo), "update-ref", "refs/remotes/origin/side", "HEAD"], check=True)
     subprocess.run(["git", "-C", str(repo), "reset", "-q", "--hard", "HEAD~1"], check=True)
-    assert scan(repo, installed_engines) == 1
+    assert scan(repo, installed_engines) == 0
 
 
 @pytest.mark.engine
@@ -419,7 +421,10 @@ def test_a_template_directory_cannot_put_attributes_into_the_mirror(
 def test_a_git_older_than_2_41_is_exit_2_naming_the_version(
     installed_engines, build_repo, fake_git, capsys, git_version
 ):
-    """#21 rule 2: below the floor the scan cannot hide attributes, so it is exit 2 with one line, never clean."""
+    """#21 rule 2: below the floor the scan cannot hide attributes, so it is exit 2 with one line, never clean.
+
+    The git floor is checked right after gitleaks' version and before any scan, so the fake git alone decides this test.
+    """
     fake_git(f'[ "$1" = "--version" ] && echo "git version {git_version}" && exit 0')
     err = hygiene_exit_2(build_repo({}), installed_engines, capsys)
     assert err.strip() == (
@@ -694,11 +699,21 @@ def test_a_redirected_pinned_release_asset_is_decided_by_its_checksum_alone(
     assert (tmp_path / "bin" / "zizmor").exists() is (exit_code == 0)
 
 
-RECORDED_FINGERPRINT = "76ec522bf40edf7e4031672b4893cded508a6559:deploy/config.txt:aws-access-token:3"
+RECORDED_SECRET = "PLACEHOLDER-SECRET-VALUE"  # the Secret in the recorded gitleaks-finding.json
+RECORDED_RULE = "aws-access-token"
+RECORDED_FILE = "deploy/config.txt"
 
 
-def allow_config(*entries: tuple[str, str]) -> str:
-    rows = ", ".join(f'{{ fingerprint = "{fingerprint}", reason = "{reason}" }}' for fingerprint, reason in entries)
+def sha256_of(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def allow_config(*entries: tuple[str, str, str, str]) -> str:
+    """Entries are (rule, file, secret, reason); the config holds the secret's hash only."""
+    rows = ", ".join(
+        f'{{ rule = "{rule}", file = "{file}", secret_sha256 = "{sha256_of(secret)}", reason = "{reason}" }}'
+        for rule, file, secret, reason in entries
+    )
     return f"[gate]\nmandatory_jobs = [\"checks\"]\n[secrets]\nallow = [{rows}]\n"
 
 
@@ -713,40 +728,66 @@ def run_with_recorded_leak(build_repo, tmp_path, capsys, config: str | None) -> 
     ("config", "code", "printed", "not_printed"),
     [
         (None, 1, "secret deploy/config.txt:3", "allowed"),
-        (allow_config(("some:other:finding:1", "unrelated")), 1, "secret deploy/config.txt:3", "allowed"),
-        (allow_config((RECORDED_FINGERPRINT.replace("76ec522", "1111111"), "other commit")), 1,
+        (allow_config((RECORDED_RULE, RECORDED_FILE, "another value", "other value")), 1,
          "secret deploy/config.txt:3", "allowed"),
-        (allow_config((RECORDED_FINGERPRINT, "test data")), 0,
+        (allow_config((RECORDED_RULE, "src/app.py", RECORDED_SECRET, "other file")), 1,
+         "secret deploy/config.txt:3", "allowed"),
+        (allow_config(("generic-api-key", RECORDED_FILE, RECORDED_SECRET, "other rule")), 1,
+         "secret deploy/config.txt:3", "allowed"),
+        (allow_config((RECORDED_RULE, RECORDED_FILE, RECORDED_SECRET, "test data")), 0,
          "secret: 1 allowed (deploy/config.txt:3)", "hygiene: 1 finding"),
     ],
     ids=[
-        "unknown-finding-is-red",
-        "other-fingerprint-is-red",
-        "same-finding-in-another-commit-is-red",
-        "allowed-fingerprint-is-green-and-printed",
+        "no-config-is-red-not-exit-2",
+        "another-value-at-the-same-place-is-red",
+        "the-value-in-another-file-is-red",
+        "the-value-under-another-rule-is-red",
+        "allowed-value-is-green-and-printed",
     ],
 )
-def test_a_secret_finding_is_allowed_only_by_its_fingerprint(
+def test_a_secret_finding_is_allowed_only_by_rule_file_and_value(
     build_repo, tmp_path, capsys, config, code, printed, not_printed
 ):
-    """#16: an unknown finding is red; an allowed fingerprint is green and printed by file and rule."""
+    """#24 rule 1: a finding is allowed only when rule, file and the hash of its value match one entry."""
     exit_code, out = run_with_recorded_leak(build_repo, tmp_path, capsys, config)
-    assert exit_code == code
+    assert exit_code == code, out
     assert printed in out
     assert not_printed not in out
+    assert RECORDED_SECRET not in out
     if code == 0:
-        assert "aws-access-token" in out
+        assert RECORDED_RULE in out
+        assert "test data" in out  # the entry's reason
+
+
+def test_a_red_secret_finding_prints_the_hash_to_allow_and_not_the_value(build_repo, tmp_path, capsys):
+    """#24 rule 4: the output names the hash a reviewer would put into the allowance, never the value."""
+    _, out = run_with_recorded_leak(build_repo, tmp_path, capsys, None)
+    assert f"sha256 {sha256_of(RECORDED_SECRET)}, value not shown" in out
+    assert "allow this rule, file and sha256 with a reason in quality/config.toml" in out
+    assert RECORDED_SECRET not in out
 
 
 @pytest.mark.parametrize(
-    "entry", ['""', "{ fingerprint = \"x\" }", '{ fingerprint = "x", reason = "  " }', '"x"'],
-    ids=["empty", "no-reason", "blank-reason", "bare-fingerprint"],
+    "entry", ['""', "{ fingerprint = \"x\" }", '{ fingerprint = "x", reason = "reason" }', '"x"'],
+    ids=["empty", "no-reason", "old-fingerprint-form", "bare-string"],
 )
-def test_an_allow_entry_without_a_reason_is_exit_2(build_repo, tmp_path, capsys, entry):
-    """#16: an allow entry that is not a fingerprint with a reason cannot be judged."""
+def test_an_invalid_allow_entry_is_exit_2(build_repo, tmp_path, capsys, entry):
+    """#24 rule 2: an allow entry that is not rule, file, hash and reason cannot be judged."""
     config = f'[gate]\nmandatory_jobs = ["checks"]\n[secrets]\nallow = [{entry}]\n'
     engine_dir = fake_gitleaks(tmp_path / "fake")
     assert "[secrets] allow entry" in hygiene_exit_2(build_repo({"quality/config.toml": config}), engine_dir, capsys)
+
+
+@pytest.mark.parametrize(
+    "report",
+    ['[{"File": "a", "StartLine": 1, "RuleID": "r", "Commit": "c"}]',
+     '[{"File": "a", "StartLine": 1, "RuleID": "r", "Commit": "c", "Secret": 5}]'],
+    ids=["no-secret", "secret-not-a-string"],
+)
+def test_a_report_entry_without_a_string_secret_is_exit_2(build_repo, tmp_path, capsys, report):
+    """#24 rule 5: a finding whose value cannot be hashed is never clean."""
+    engine_dir = fake_gitleaks(tmp_path / "fake", on_scan=f"echo '{report}' > \"$report\"; exit 7")
+    hygiene_exit_2(build_repo({}), engine_dir, capsys)
 
 
 def test_the_scan_passes_the_gates_own_config(build_repo, tmp_path):
@@ -763,27 +804,94 @@ def test_a_repository_config_and_ignore_file_do_not_silence_the_scan(build_repo,
     """#16: a committed .gitleaks.toml, a .gitleaksignore holding the real fingerprint and gitleaks:allow
     have no effect."""
     repo = build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}  # gitleaks:allow\n"})
-    [leak] = engines.scan_secrets(repo, installed_engines, engines.read_pins(), {}).findings
+    first_commit = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+    ).stdout.strip()
     (repo / ".gitleaks.toml").write_text('[extend]\nuseDefault = true\n[allowlist]\npaths = [\'\'\'config.txt\'\'\']\n')
-    (repo / ".gitleaksignore").write_text(f"{leak.fingerprint}\n")
+    (repo / ".gitleaksignore").write_text(f"{first_commit}:config.txt:aws-access-token:1\n")
     commit(repo, "try to silence the scan")
     assert scan(repo, installed_engines) == 1
 
 
-@pytest.mark.engine
-def test_a_real_finding_is_green_once_its_fingerprint_is_allowed_and_red_in_a_new_commit(
-    build_repo, installed_engines, capsys
-):
-    """#16: the real fingerprint allows exactly that commit's finding; the same key in a new commit is red."""
-    repo = build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
-    [leak] = engines.scan_secrets(repo, installed_engines, engines.read_pins(), {}).findings
-    (repo / "quality").mkdir()
-    (repo / "quality" / "config.toml").write_text(allow_config((leak.fingerprint, "test key")))
+def allow_fake_key(repo: Path, file: str = "config.txt") -> None:
+    (repo / "quality").mkdir(exist_ok=True)
+    (repo / "quality" / "config.toml").write_text(allow_config(("aws-access-token", file, FAKE_KEY, "test key")))
     commit(repo, "allow the fixture key")
-    assert scan(repo, installed_engines) == 0
-    assert "secret: 1 allowed (config.txt:1)" in capsys.readouterr().out
-    (repo / "config.txt").unlink()
+
+
+@pytest.mark.engine
+def test_an_allowed_value_stays_green_at_a_shifted_line_and_across_commits(build_repo, installed_engines, capsys):
+    """#24 rule 1: one entry covers the value at line 1, at a later line and in every commit that holds it."""
+    repo = build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
+    (repo / "config.txt").write_text("removed\n")
     commit(repo, "remove the key")
-    (repo / "config.txt").write_text(f"aws_access_key_id = {FAKE_KEY}\n")
-    commit(repo, "same key again, same file and line")
+    (repo / "config.txt").write_text(f"# one\n# two\n# three\naws_access_key_id = {FAKE_KEY}\n")
+    commit(repo, "key again, three lines further down")
+    allow_fake_key(repo)
+    assert scan(repo, installed_engines) == 0
+    summary = next(line for line in capsys.readouterr().out.splitlines() if line.startswith("secret: 2 allowed ("))
+    assert set(summary.removeprefix("secret: 2 allowed (").removesuffix(")").split(", ")) == {"config.txt:1", "config.txt:4"}
+
+
+@pytest.mark.engine
+@pytest.mark.parametrize(
+    ("write", "placed"),
+    [
+        (lambda repo: (repo / "config.txt").write_text("aws_access_key_id = " + OTHER_KEY + "\n"), "config.txt:1"),
+        (lambda repo: (repo / "src.txt").write_text(f"aws_access_key_id = {FAKE_KEY}\n"), "src.txt:1"),
+    ],
+    ids=["another-value-at-the-same-place", "the-value-in-another-file"],
+)
+def test_an_allowance_never_spreads_to_another_value_or_file(build_repo, installed_engines, capsys, write, placed):
+    """#24 rule 1: the allowed value stays allowed only in its file; any other value or file is red."""
+    repo = build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
+    allow_fake_key(repo)
+    write(repo)
+    commit(repo, "a second leak")
     assert scan(repo, installed_engines) == 1
+    assert f"secret {placed}" in capsys.readouterr().out
+
+
+@pytest.mark.engine
+def test_a_key_on_an_allowance_line_of_the_config_stays_red(build_repo, installed_engines, capsys):
+    """#24 rule 1: only the hash of an allowance is exempt; a real key on the same line is still found."""
+    line = f'# {FAKE_KEY} secret_sha256 = "{sha256_of(FAKE_KEY)}"\n'
+    repo = build_repo({"quality/config.toml": allow_config() + line})
+    assert scan(repo, installed_engines) == 1
+    assert "secret quality/config.toml:" in capsys.readouterr().out
+
+
+@pytest.mark.engine
+def test_a_repository_without_quality_config_is_scanned_and_its_key_is_red(build_repo, installed_engines, capsys):
+    """#24 rule 3: no quality/config.toml means no allowances, and the scan still judges."""
+    repo = build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
+    assert not (repo / "quality").exists()
+    assert scan(repo, installed_engines) == 1
+    assert "secret config.txt:1" in capsys.readouterr().out
+
+
+FAILING_REPORTS = {
+    "gitleaks-fails": f'printf \'[{{"Secret":"{FAKE_KEY}"}}]\' > "$report"; exit 1',
+    "gitleaks-stalls": f'printf \'[{{"Secret":"{FAKE_KEY}"}}]\' > "$report"; exec sleep 30',
+    "parsing-raises": f'printf \'[{{"Secret":"{FAKE_KEY}"}}]\' > "$report"; exit 7',
+    "report-not-utf8": f'printf \'[{{"Secret":"{FAKE_KEY}"}}]\\342\\202\' > "$report"; exit 7',
+}
+
+
+@pytest.mark.engine
+@pytest.mark.parametrize("failure", ["none", *FAILING_REPORTS])
+def test_the_key_reaches_no_output_and_no_file_and_the_scratch_directory_is_gone(
+    keyed_repo, installed_engines, tmp_path, monkeypatch, capsys, failure
+):
+    """#24 rule 4: after a normal run, a gitleaks failure, a stall and a parse error nothing holds the key."""
+    scratch_parent = tmp_path / "scratch-parent"
+    scratch_parent.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(scratch_parent))
+    if failure == "gitleaks-stalls":
+        monkeypatch.setattr(engines, "SECRET_SCAN_TIMEOUT_SECONDS", 1)
+    engine_dir = installed_engines if failure == "none" else fake_gitleaks(tmp_path / "failing", on_scan=FAILING_REPORTS[failure])
+    exit_code = scan(keyed_repo, engine_dir)
+    assert exit_code == (1 if failure == "none" else 2)
+    heard = capsys.readouterr()
+    assert FAKE_KEY not in heard.out + heard.err
+    assert list(scratch_parent.iterdir()) == []

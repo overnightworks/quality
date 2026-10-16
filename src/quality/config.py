@@ -1,14 +1,26 @@
+import re
 import tomllib
 from pathlib import Path
+from typing import NamedTuple
 
 CONFIG_PATH = "quality/config.toml"
 GATE_KEYS = {"mandatory_jobs"}
 SECRETS_KEYS = {"allow"}
-ALLOWANCE_KEYS = {"fingerprint", "reason"}
+ALLOWANCE_KEYS = {"rule", "file", "secret_sha256", "reason"}
+SHA256_HEX = re.compile(r"[0-9a-f]{64}")
 EXAMPLE = '[gate]\nmandatory_jobs = ["checks"]'
 ALLOWANCE_EXAMPLE = (
-    '[secrets]\nallow = [{ fingerprint = "<commit>:<file>:<rule>:<line>", reason = "enum value, not a key" }]'
+    '[secrets]\nallow = [{ rule = "aws-access-token", file = "tests/fixture.py", '
+    'secret_sha256 = "<64 lowercase hex>", reason = "fixture value, not a key" }]'
 )
+
+
+class Allowance(NamedTuple):
+    """A secret value in a file, as one rule sees it; the value itself is never stored, only its hash."""
+
+    rule: str
+    file: str
+    secret_sha256: str
 
 
 class ConfigError(Exception):
@@ -61,8 +73,8 @@ def read_mandatory_jobs(repo: Path) -> tuple[str, ...]:
         raise ConfigError(f"{CONFIG_PATH} cannot be read ({error})") from error
 
 
-def load_secret_allowances(text: str | None) -> dict[str, str]:
-    """Fingerprint -> reason of every finding the repository allows; a missing config allows nothing."""
+def load_secret_allowances(text: str | None) -> dict[Allowance, str]:
+    """Allowance -> reason of every finding the repository allows; a missing config allows nothing."""
     if text is None:
         return {}
     document = _parse(text, ALLOWANCE_EXAMPLE)
@@ -71,27 +83,38 @@ def load_secret_allowances(text: str | None) -> dict[str, str]:
     entries = secrets.get("allow", [])
     if not isinstance(entries, list):
         raise ConfigError(f"{CONFIG_PATH} needs [secrets] allow as a list, like:\n{ALLOWANCE_EXAMPLE}")
-    return dict(_read_allowance(entry) for entry in entries)
+    allowances: dict[Allowance, str] = {}
+    for entry in entries:
+        allowance, reason = _read_allowance(entry)
+        if allowance in allowances:
+            raise ConfigError(f"{CONFIG_PATH} [secrets] allow lists {allowance.rule} in {allowance.file} twice for one value")
+        allowances[allowance] = reason
+    return allowances
 
 
-def _read_allowance(entry: object) -> tuple[str, str]:
+def _read_allowance(entry: object) -> tuple[Allowance, str]:
     if not isinstance(entry, dict) or set(entry) != ALLOWANCE_KEYS:
         raise ConfigError(
-            f"{CONFIG_PATH} [secrets] allow entry {entry!r} needs exactly a fingerprint and a reason, like:\n"
+            f"{CONFIG_PATH} [secrets] allow entry {entry!r} needs exactly a rule, a file, a secret_sha256 and a "
+            f"reason (the old fingerprint form is gone), like:\n{ALLOWANCE_EXAMPLE}"
+        )
+    rule, file, secret_sha256, reason = (entry[key] for key in ("rule", "file", "secret_sha256", "reason"))
+    if not all(isinstance(value, str) and value.strip() for value in (rule, file, reason)):
+        raise ConfigError(
+            f"{CONFIG_PATH} [secrets] allow entry {entry!r} needs a non-empty rule, file and reason, like:\n"
             f"{ALLOWANCE_EXAMPLE}"
         )
-    fingerprint, reason = entry["fingerprint"], entry["reason"]
-    if not (isinstance(fingerprint, str) and fingerprint.strip() and isinstance(reason, str) and reason.strip()):
+    if not (isinstance(secret_sha256, str) and SHA256_HEX.fullmatch(secret_sha256)):
         raise ConfigError(
-            f"{CONFIG_PATH} [secrets] allow entry {entry!r} needs a non-empty fingerprint and a reason, like:\n"
+            f"{CONFIG_PATH} [secrets] allow entry {entry!r} needs secret_sha256 as 64 lowercase hex digits, like:\n"
             f"{ALLOWANCE_EXAMPLE}"
         )
     if "\n" in reason or "\r" in reason:
         raise ConfigError(f"{CONFIG_PATH} [secrets] allow entry {entry!r} needs a one-line reason")
-    return fingerprint, reason
+    return Allowance(rule, file, secret_sha256), reason
 
 
-def read_secret_allowances(repo: Path) -> dict[str, str]:
+def read_secret_allowances(repo: Path) -> dict[Allowance, str]:
     path = repo / CONFIG_PATH
     try:
         return load_secret_allowances(path.read_text(encoding="utf-8"))
