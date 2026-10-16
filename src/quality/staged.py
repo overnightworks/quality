@@ -3,7 +3,7 @@ import subprocess
 from pathlib import Path
 
 from quality import engines
-from quality.config import CONFIG_PATH, Allowance, ConfigError, load_secret_allowances
+from quality.config import CONFIG_PATH, Allowance, ConfigError, load_staged_secret_allowances
 from quality.engines import EngineError, Pin, SecretScan, run, stderr_tail
 
 INDEX_VARIABLE = "GIT_INDEX_FILE"
@@ -91,8 +91,8 @@ def _allowances_of(source: Path, staged_tree: str, git_environment: dict[str, st
     if listed.returncode != 0:
         raise EngineError(f"cannot look for {CONFIG_PATH} in the staged tree{stderr_tail(listed.stderr)}")
     if not listed.stdout.strip():
-        return load_secret_allowances(None)
+        return load_staged_secret_allowances(None)
     read = run(["git", "-C", str(source), "cat-file", "blob", f"{staged_tree}:{CONFIG_PATH}"], env=git_environment)
     if read.returncode != 0:
         raise ConfigError(f"{CONFIG_PATH} cannot be read from the staged tree{stderr_tail(read.stderr)}")
-    return load_secret_allowances(read.stdout)
+    return load_staged_secret_allowances(read.stdout)

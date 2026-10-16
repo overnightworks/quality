@@ -71,7 +71,9 @@ repository inside a 0700 scratch directory. The scratch repository borrows the o
 has an empty work tree and none of the live repository's config or `info/attributes`, so a staged `.gitleaksignore`,
 `.gitleaks.toml`, `.gitattributes` with `-diff`, or a `gitleaks:allow` comment changes nothing. gitleaks runs in the same
 attribute-free environment as `hygiene`, with quality's config. The allow list is the staged tree's own
-`quality/config.toml` (none staged: no allowances). Output and secret handling are `hygiene`'s:
+`quality/config.toml` (none staged: no allowances). `scan-staged` validates only the `[secrets]` table of that config and ignores other tables
+and keys, while `hygiene` and `verdict` stay strict, so schema growth never blocks a commit. Output and secret handling
+are `hygiene`'s:
 `secret src/a.py:3 - gitleaks rule aws-access-token matched in the staged change (sha256 <64 hex>, value not shown).`
 
 gitleaks' staged mode sees only added and changed lines, so a known false positive blocks only the commits that touch

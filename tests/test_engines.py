@@ -14,7 +14,7 @@ import urllib.request
 from pathlib import Path
 
 import pytest
-from conftest import FAKE_KEY, OTHER_KEY, allow_config, sha256_of
+from conftest import FAKE_KEY, GIT_IDENTITY, OTHER_KEY, UNKNOWN_KEY_CONFIGS, allow_config, sha256_of
 
 from quality import cli, engines
 from quality.engines import EngineError, Pin
@@ -279,8 +279,16 @@ def scan(repo: Path, installed_engines: Path) -> int:
     return cli.main(["hygiene", "--engines", str(installed_engines), str(repo)])
 
 
+@pytest.mark.engine
+@UNKNOWN_KEY_CONFIGS
+def test_hygiene_refuses_a_config_with_unknown_keys(build_repo, installed_engines, capsys, config):
+    """#40 rule 2: hygiene keeps refusing unknown keys of quality/config.toml."""
+    assert scan(build_repo({"quality/config.toml": config}), installed_engines) == 2
+    assert "unknown key" in capsys.readouterr().err
+
+
 def commit(repo: Path, message: str) -> None:
-    git = ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.invalid"]
+    git = ["git", "-C", str(repo), *GIT_IDENTITY]
     subprocess.run([*git, "add", "-A"], check=True)
     subprocess.run([*git, "commit", "-q", "-m", message], check=True)
 
