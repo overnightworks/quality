@@ -7,8 +7,8 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from fleet_quality.config import CONFIG_PATH, load_mandatory_jobs
-from fleet_quality.hygiene import CannotJudge
+from quality.config import CONFIG_PATH, load_mandatory_jobs
+from quality.hygiene import CannotJudge
 
 JOBS_URL = "https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs?filter=all&per_page=100"
 MAX_PAGES = 10

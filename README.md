@@ -1,8 +1,8 @@
 # quality
 
-`fleet-quality` is the one door for fleet quality checks.
+`quality` is the one door for fleet quality checks.
 
-    fleet-quality hygiene [PATH]
+    quality hygiene [PATH]
 
 `hygiene` reads git's view of the repository at `PATH` (default `.`) and applies two rules:
 
@@ -10,7 +10,7 @@
 - `compose-port`: every published port in a tracked `compose*.y{a,}ml` or `docker-compose*.y{a,}ml` binds `127.0.0.1`.
 
 With `--engines DIR` the `secret` rule also scans the whole history with gitleaks, always with quality's own config
-(`src/fleet_quality/gitleaks.toml`): the repository's `.gitleaks.toml`, `.gitleaksignore` and `gitleaks:allow`
+(`src/quality/gitleaks.toml`): the repository's `.gitleaks.toml`, `.gitleaksignore` and `gitleaks:allow`
 comments have no effect. A known false positive is allowed only by its gitleaks fingerprint
 (`commit:file:rule:line`) and a reason in the repository's `quality/config.toml`:
 

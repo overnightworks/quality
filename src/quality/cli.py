@@ -5,11 +5,11 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from fleet_quality import __version__, engines
-from fleet_quality.config import ConfigError, read_mandatory_jobs
-from fleet_quality.hygiene import CannotJudge, active_rules, run_hygiene, skipped_rules
-from fleet_quality.report import Finding, render
-from fleet_quality.verdict import (
+from quality import __version__, engines
+from quality.config import ConfigError, read_mandatory_jobs
+from quality.hygiene import CannotJudge, active_rules, run_hygiene, skipped_rules
+from quality.report import Finding, render
+from quality.verdict import (
     PageFetcher,
     github_fetcher,
     judge,
@@ -27,7 +27,7 @@ def main(
     fetcher_for: Callable[[str], PageFetcher] = github_fetcher,
     read_pins: Callable[[], dict[str, engines.Pin]] = engines.read_pins,
 ) -> int:
-    parser = argparse.ArgumentParser(prog="fleet-quality")
+    parser = argparse.ArgumentParser(prog="quality")
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
     hygiene = commands.add_parser("hygiene", help="check a git repository for fleet hygiene")

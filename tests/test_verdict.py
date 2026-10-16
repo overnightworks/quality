@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from fleet_quality import cli
-from fleet_quality.hygiene import CannotJudge
-from fleet_quality.verdict import Job, judge, read_base_mandatory_jobs, read_jobs
+from quality import cli
+from quality.hygiene import CannotJudge
+from quality.verdict import Job, judge, read_base_mandatory_jobs, read_jobs
 
 FIXTURES = Path(__file__).parent / "fixtures"
 GREEN_GATE = {"hygiene": "success"}

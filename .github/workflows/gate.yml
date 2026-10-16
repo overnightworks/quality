@@ -38,10 +38,10 @@ jobs:
           python-version: '3.12'
 
       - name: Install the pinned engines
-        run: uv run --locked --project "$TOOL_DIR" fleet-quality engines install "$RUNNER_TEMP/engines"
+        run: uv run --locked --project "$TOOL_DIR" quality engines install "$RUNNER_TEMP/engines"
 
       - name: Hygiene
-        run: uv run --locked --project "$TOOL_DIR" fleet-quality hygiene --engines "$RUNNER_TEMP/engines" .
+        run: uv run --locked --project "$TOOL_DIR" quality hygiene --engines "$RUNNER_TEMP/engines" .
 
   verdict:
     needs: [hygiene]
@@ -79,4 +79,4 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           GATE_NEEDS: ${{ toJSON(needs) }}
           GATE_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
-        run: uv run --locked --project "$TOOL_DIR" fleet-quality verdict .
+        run: uv run --locked --project "$TOOL_DIR" quality verdict .

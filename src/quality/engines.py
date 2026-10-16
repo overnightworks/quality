@@ -10,7 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from fleet_quality.report import Finding
+from quality.report import Finding
 
 SECRET = "secret"
 GITLEAKS = "gitleaks"

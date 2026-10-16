@@ -12,7 +12,7 @@ wheels = [
 ]
 
 [[package]]
-name = "fleet-quality"
+name = "overnightworks-quality"
 source = { editable = "." }
 dependencies = [
     { name = "pyyaml" },

@@ -1,6 +1,6 @@
 import pytest
 
-from fleet_quality.config import (
+from quality.config import (
     ConfigError,
     load_mandatory_jobs,
     load_secret_allowances,

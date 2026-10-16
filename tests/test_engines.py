@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from fleet_quality import cli, engines
-from fleet_quality.engines import EngineError, Pin
+from quality import cli, engines
+from quality.engines import EngineError, Pin
 
 OUTPUTS = Path(__file__).parent / "fixtures" / "engine-outputs"
 FAKE_KEY = "AKIA" + "QYLPMTYX3QZ5ABCD"  # assembled so quality's own scan stays green

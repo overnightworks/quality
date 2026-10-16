@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from fleet_quality import cli
+from quality import cli
 
 EDGE_STACK = (Path(__file__).parent / "data" / "edge_stack.yml").read_text(encoding="utf-8")
 

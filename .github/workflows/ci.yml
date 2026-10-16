@@ -35,7 +35,7 @@ jobs:
         run: uv run --locked pytest
 
       - name: Hygiene on itself
-        run: uv run --locked fleet-quality hygiene .
+        run: uv run --locked quality hygiene .
 
   quality:
     if: always()

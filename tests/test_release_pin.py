@@ -1,7 +1,7 @@
 import re
 from pathlib import Path
 
-from fleet_quality import __version__
+from quality import __version__
 
 GATE = Path(__file__).parent.parent / ".github" / "workflows" / "gate.yml"
 
