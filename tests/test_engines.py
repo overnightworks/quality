@@ -267,14 +267,14 @@ def test_secret_removed_in_a_later_commit_still_fails(build_repo, installed_engi
 
 
 @pytest.mark.engine
-def test_secret_reachable_only_from_a_ref_outside_head_still_fails(build_repo, installed_engines):
-    """#13 rule 5: the whole history includes branches fetched as remote-tracking refs, not only HEAD's ancestry."""
+def test_secret_reachable_only_from_another_branch_is_not_this_verdicts(build_repo, installed_engines):
+    """#24 head ruling: the verdict judges the history reachable from HEAD, not every branch the checkout fetched."""
     repo = build_repo({"notes.txt": "nothing here\n"})
     (repo / "config.txt").write_text(f"aws_access_key_id = {FAKE_KEY}\n")
     commit(repo, "commit the key")
     subprocess.run(["git", "-C", str(repo), "update-ref", "refs/remotes/origin/side", "HEAD"], check=True)
     subprocess.run(["git", "-C", str(repo), "reset", "-q", "--hard", "HEAD~1"], check=True)
-    assert scan(repo, installed_engines) == 1
+    assert scan(repo, installed_engines) == 0
 
 
 @pytest.mark.engine

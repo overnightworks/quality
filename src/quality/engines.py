@@ -118,11 +118,13 @@ def scan_secrets(root: Path, engine_dir: Path, pins: dict[str, Pin], allowances:
         report = Path(scratch) / "report.json"
         # The gate's own config, and no ignore file or inline "gitleaks:allow" from the scanned repository:
         # only an allowance in quality/config.toml allows a finding. gitleaks also reads <source>/.gitleaksignore,
-        # so it scans a mirror clone (bare, every ref kept), which has no work tree to read it from.
+        # so it scans a mirror clone (bare), which has no work tree to read it from. The verdict judges the
+        # history reachable from the scanned HEAD only: the mirror also brings other branches, which are not this verdict's.
         # No --redact: the report must carry Secret to be hashed. It lives only in this 0700 scratch directory.
         source = _mirror_clone(root, Path(scratch) / "source", git_environment)
+        head = _head_commit(source, git_environment)
         command = [
-            str(binary), "git", "--no-banner", "--no-color",
+            str(binary), "git", "--no-banner", "--no-color", f"--log-opts={head}",
             "--config", str(GITLEAKS_CONFIG), "--gitleaks-ignore-path", scratch, "--ignore-gitleaks-allow",
             "--exit-code", str(GITLEAKS_LEAKS_FOUND),
             "--report-format", "json", "--report-path", str(report), "--", str(source),
@@ -190,6 +192,13 @@ def _require_git_floor() -> None:
         raise EngineError(
             f"git {found[0]} cannot hide .gitattributes from the {GITLEAKS} scan, it needs git {required}"
         )
+
+
+def _head_commit(repository: Path, git_environment: dict[str, str]) -> str:
+    resolved = _run(["git", "-C", str(repository), "rev-parse", "--verify", "HEAD^{commit}"], env=git_environment)
+    if resolved.returncode != 0:
+        raise EngineError(f"cannot resolve HEAD of {repository} for the {GITLEAKS} scan{_stderr_tail(resolved.stderr)}")
+    return resolved.stdout.strip()
 
 
 def _mirror_clone(root: Path, destination: Path, git_environment: dict[str, str]) -> Path:
