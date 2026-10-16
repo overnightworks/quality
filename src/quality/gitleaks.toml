@@ -1,4 +1,12 @@
 # The one gitleaks config of the fleet gate: the scanned repository's own .gitleaks.toml is never read.
-# A known false positive is allowed only by its fingerprint in quality/config.toml [secrets] allow.
+# A known false positive is allowed only by its rule, file and secret hash in quality/config.toml [secrets] allow.
 [extend]
 useDefault = true
+
+# The allowance's own hash is a 64-hex string that generic-api-key reads as a key; only that line, only in that file.
+[[allowlists]]
+description = "secret_sha256 lines of quality/config.toml"
+condition = "AND"
+paths = ['''^quality/config\.toml$''']
+regexTarget = "line"
+regexes = ['''^\s*(allow = \[)?\{? ?.*secret_sha256 = "[0-9a-f]{64}"''']

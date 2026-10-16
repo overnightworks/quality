@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+from quality.config import Allowance
+
 
 @dataclass(frozen=True)
 class Finding:
@@ -8,7 +10,7 @@ class Finding:
     line: int | None
     reason: str
     fix: str
-    fingerprint: str | None = None
+    allowance: Allowance | None = None
 
     @property
     def location(self) -> str:
