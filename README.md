@@ -41,7 +41,8 @@ system or global file), so a `-diff` or `binary` line cannot hide a key. That ne
 is exit `2`. The system file is excluded by `GIT_ATTR_NOSYSTEM`, git's documented switch; that is pinned as an
 environment contract, not by a root-only real-file test.
 
-Every allowed finding is printed (`secret: 1 allowed (src/x.py:139)`).
+Every allowed finding is printed with the entry's reason (`secret: 1 allowed (src/x.py:139)`, then
+`allowed src/x.py:139 - gitleaks rule generic-api-key allowed: enum value, not a key`).
 
 Each finding names the rule, the file, a reason and a fix. Exit `0` is clean, `1` means findings,
 `2` means the repository could not be judged (never clean).

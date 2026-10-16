@@ -756,6 +756,7 @@ def test_a_secret_finding_is_allowed_only_by_rule_file_and_value(
     assert RECORDED_SECRET not in out
     if code == 0:
         assert RECORDED_RULE in out
+        assert "test data" in out  # the entry's reason
 
 
 def test_a_red_secret_finding_prints_the_hash_to_allow_and_not_the_value(build_repo, tmp_path, capsys):
@@ -869,22 +870,25 @@ def test_a_repository_without_quality_config_is_scanned_and_its_key_is_red(build
     assert "secret config.txt:1" in capsys.readouterr().out
 
 
+FAILING_REPORTS = {
+    "gitleaks-fails": f'printf \'[{{"Secret":"{FAKE_KEY}"}}]\' > "$report"; exit 1',
+    "gitleaks-stalls": f'printf \'[{{"Secret":"{FAKE_KEY}"}}]\' > "$report"; exec sleep 30',
+    "parsing-raises": f'printf \'[{{"Secret":"{FAKE_KEY}"}}]\' > "$report"; exit 7',
+    "report-not-utf8": f'printf \'[{{"Secret":"{FAKE_KEY}"}}]\\342\\202\' > "$report"; exit 7',
+}
+
+
 @pytest.mark.engine
-@pytest.mark.parametrize("failure", ["none", "gitleaks-fails", "parsing-raises"])
+@pytest.mark.parametrize("failure", ["none", *FAILING_REPORTS])
 def test_the_key_reaches_no_output_and_no_file_and_the_scratch_directory_is_gone(
     keyed_repo, installed_engines, tmp_path, monkeypatch, capsys, failure
 ):
-    """#24 rule 4: after a normal run, a gitleaks failure and a parse error nothing holds the key."""
+    """#24 rule 4: after a normal run, a gitleaks failure, a stall and a parse error nothing holds the key."""
     scratch_parent = tmp_path / "scratch-parent"
     scratch_parent.mkdir()
     monkeypatch.setattr(tempfile, "tempdir", str(scratch_parent))
-    engine_dir = installed_engines
-    if failure == "gitleaks-fails":
-        engine_dir = fake_gitleaks(
-            tmp_path / "failing", on_scan=f'printf \'[{{"Secret":"{FAKE_KEY}"}}]\' > "$report"; exit 1'
-        )
-    if failure == "parsing-raises":
-        monkeypatch.setattr(engines, "secret_findings", lambda *_: (_ for _ in ()).throw(EngineError("parse error")))
+    monkeypatch.setattr(engines, "SECRET_SCAN_TIMEOUT_SECONDS", 1)
+    engine_dir = installed_engines if failure == "none" else fake_gitleaks(tmp_path / "failing", on_scan=FAILING_REPORTS[failure])
     exit_code = scan(keyed_repo, engine_dir)
     assert exit_code == (1 if failure == "none" else 2)
     heard = capsys.readouterr()

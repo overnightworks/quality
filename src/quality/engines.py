@@ -9,7 +9,7 @@ import tempfile
 import tomllib
 import urllib.request
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from quality.config import Allowance
@@ -20,6 +20,7 @@ GITLEAKS = "gitleaks"
 CLEAN_EXIT = 0
 GITLEAKS_LEAKS_FOUND = 7  # gitleaks exits 1 on its own errors too, so leaks get a code of their own
 DOWNLOAD_TIMEOUT_SECONDS = 120
+SECRET_SCAN_TIMEOUT_SECONDS = 1800  # a stalled gitleaks must not keep its unredacted report on disk
 STDERR_TAIL_LINES = 5
 LEAK_FIELDS = ("File", "StartLine", "RuleID", "Commit", "Secret")
 WORKFLOW_LINT = "workflow-lint"
@@ -126,20 +127,33 @@ def scan_secrets(root: Path, engine_dir: Path, pins: dict[str, Pin], allowances:
             "--exit-code", str(GITLEAKS_LEAKS_FOUND),
             "--report-format", "json", "--report-path", str(report), "--", str(source),
         ]
-        scan = _run(command, env=git_environment)
+        scan = _run(command, env=git_environment, timeout=SECRET_SCAN_TIMEOUT_SECONDS)
         if not report.is_file():
             raise EngineError(
                 f"{GITLEAKS} exited {scan.returncode} without writing its report{_stderr_tail(scan.stderr)}"
             )
-        try:
-            report_text = report.read_text(encoding="utf-8")
-        except (OSError, ValueError) as error:
-            raise EngineError(f"cannot read the {GITLEAKS} report: {error!r}") from error
-        leaks = secret_findings(report_text, scan.returncode, scan.stderr)
-        return SecretScan(
-            findings=[leak for leak in leaks if leak.allowance not in allowances],
-            allowed=[leak for leak in leaks if leak.allowance in allowances],
-        )
+        leaks = secret_findings(_read_report(report), scan.returncode, scan.stderr)
+        return _split_by_allowance(leaks, allowances)
+
+
+def _read_report(report: Path) -> str:
+    # Never format the caught error: a decode error carries the unredacted bytes.
+    try:
+        return report.read_bytes().decode("utf-8")
+    except OSError as error:
+        raise EngineError(f"cannot read the {GITLEAKS} report: {type(error).__name__}") from None
+    except UnicodeDecodeError as error:
+        raise EngineError(f"cannot read the {GITLEAKS} report: not UTF-8 at byte {error.start}") from None
+
+
+def _split_by_allowance(leaks: list[Finding], allowances: dict[Allowance, str]) -> SecretScan:
+    return SecretScan(
+        findings=[leak for leak in leaks if leak.allowance not in allowances],
+        allowed=[
+            replace(leak, reason=f"{GITLEAKS} rule {leak.allowance.rule} allowed: {allowances[leak.allowance]}")
+            for leak in leaks if leak.allowance in allowances
+        ],
+    )
 
 
 def attribute_free_git_environment(empty_home: Path) -> dict[str, str]:
@@ -196,10 +210,12 @@ def _verify_version(binary: Path, engine_name: str, pinned: str) -> None:
 
 
 def _run(
-    command: list[str], cwd: Path | None = None, env: dict[str, str] | None = None
+    command: list[str], cwd: Path | None = None, env: dict[str, str] | None = None, timeout: float | None = None
 ) -> subprocess.CompletedProcess[str]:
     try:
-        return subprocess.run(command, capture_output=True, text=True, check=False, cwd=cwd, env=env)
+        return subprocess.run(command, capture_output=True, text=True, check=False, cwd=cwd, env=env, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise EngineError(f"{command[0]} did not finish within {timeout} seconds") from None
     except (OSError, ValueError) as error:  # ValueError: output that is not text
         raise EngineError(f"cannot run {command[0]}: {error}") from error
 
