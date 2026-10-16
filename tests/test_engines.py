@@ -369,18 +369,25 @@ def test_a_diff_driver_marked_binary_cannot_hide_a_key(build_repo, installed_eng
     assert scan(repo, installed_engines) == 1
 
 
+def unavailable(reason):
+    """Skips locally, but fails on CI, where a skipped proof would pass for one that ran."""
+    if os.environ.get("CI"):
+        pytest.fail(reason)
+    pytest.skip(reason)
+
+
 @pytest.fixture
 def system_attributes_sandbox(fake_git, hiding_attributes):
     """Runs every git inside a bubblewrap sandbox whose /etc/gitattributes, git's real system file, hides config.txt."""
     if shutil.which("bwrap") is None:
-        pytest.skip("bubblewrap is needed to give git a system attributes file")
+        unavailable("bubblewrap is needed to give git a system attributes file")
     sandbox = [
         *("bwrap", "--bind", "/", "/", "--dev", "/dev", "--tmpfs", "/etc"),
         *("--ro-bind", "/etc/passwd", "/etc/passwd"),
         *("--ro-bind", str(hiding_attributes), "/etc/gitattributes"),
     ]
     if subprocess.run([*sandbox, "true"], capture_output=True, check=False).returncode != 0:
-        pytest.skip("bubblewrap cannot create a mount namespace here")
+        unavailable("bubblewrap cannot create a mount namespace here")
     fake_git(f'exec {" ".join(sandbox)} "{shutil.which("git")}" "$@"')
 
 
