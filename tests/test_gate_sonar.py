@@ -30,7 +30,7 @@ def step_named(steps: list[dict], fragment: str) -> dict:
 
 
 def test_the_sonar_job_runs_its_steps_in_the_required_order(sonar_steps):
-    """#26 rule 1: checkout, tool checkout, uv, preflight, scan, findings in this order"""
+    """#26 rule 1: checkout, tool checkout, coverage, uv, preflight, scan, findings in this order"""
     kinds = [
         step["uses"].split("@")[0] if "uses" in step else step["run"].partition(" quality ")[2].split(" --")[0]
         for step in sonar_steps
@@ -38,6 +38,7 @@ def test_the_sonar_job_runs_its_steps_in_the_required_order(sonar_steps):
     assert kinds == [
         "actions/checkout",
         "actions/checkout",
+        "actions/download-artifact",
         "astral-sh/setup-uv",
         "sonar preflight .",
         "SonarSource/sonarqube-scan-action",
@@ -70,7 +71,7 @@ def test_the_token_reaches_only_preflight_scan_and_findings(gate):
         for step in job["steps"]
         if TOKEN_REFERENCE in str(step.get("env", {}))
     ]
-    assert [name for _, name in holders] == [step["name"] for step in gate["jobs"]["sonar"]["steps"][3:]]
+    assert [name for _, name in holders] == [step["name"] for step in gate["jobs"]["sonar"]["steps"][4:]]
     assert {job for job, _ in holders} == {"sonar"}
 
 
@@ -111,3 +112,11 @@ def test_quality_wires_the_secret_by_name_into_the_gate():
 def test_quality_binds_its_own_scan_to_its_own_project():
     """#26 rule 5: quality's own sonar-project.properties passes its own preflight"""
     sonar.preflight(ROOT, {"GITHUB_REPOSITORY": "overnightworks/quality", sonar.TOKEN_VARIABLE: "t"})
+
+
+def test_the_coverage_the_tests_upload_is_the_report_the_scan_reads():
+    """#26: SonarCloud's coverage gate sees the report ci.yml uploads and gate.yml downloads"""
+    uploads = [s for s in load("ci.yml")["jobs"]["tests"]["steps"] if s.get("uses", "").startswith("actions/upload-artifact")]
+    downloads = [s for s in load("gate.yml")["jobs"]["sonar"]["steps"] if s.get("uses", "").startswith("actions/download-artifact")]
+    assert [u["with"]["name"] for u in uploads] == [d["with"]["name"] for d in downloads] == ["coverage"]
+    assert f"sonar.python.coverage.reportPaths={uploads[0]['with']['path']}" in (ROOT / "sonar-project.properties").read_text().splitlines()
