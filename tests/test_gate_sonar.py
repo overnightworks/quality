@@ -30,14 +30,14 @@ def step_named(steps: list[dict], fragment: str) -> dict:
 
 
 def test_the_sonar_job_runs_its_steps_in_the_required_order(sonar_steps):
-    """#26 rule 1: checkout, tool checkout, uv, preflight, scan, findings in this order (the coverage download is outside rule 1)"""
+    """#26 rule 1, #34 rule 1: caller checkout, coverage download, tool checkout, uv, preflight, scan, findings in this order"""
     kinds = [
         step["uses"].split("@")[0] if "uses" in step else step["run"].partition(" quality ")[2].split(" --")[0]
         for step in sonar_steps
-        if not step.get("uses", "").startswith("actions/download-artifact")
     ]
     assert kinds == [
         "actions/checkout",
+        "actions/download-artifact",
         "actions/checkout",
         "astral-sh/setup-uv",
         "sonar preflight .",
@@ -109,15 +109,35 @@ def test_quality_wires_the_secret_by_name_into_the_gate():
     assert caller["uses"].endswith("/.github/workflows/gate.yml")
 
 
-def test_quality_binds_its_own_scan_to_its_own_project():
-    """#26 rule 5: quality's own sonar-project.properties passes its own preflight"""
-    sonar.preflight(ROOT, {"GITHUB_REPOSITORY": "overnightworks/quality", sonar.TOKEN_VARIABLE: "t"})
+def test_quality_binds_its_own_scan_to_its_own_project(build_repo):
+    """#26 rule 5, #34 rule 2: quality's own sonar-project.properties passes its own preflight once the tests job's report is there"""
+    checkout = build_repo({sonar.PROPERTIES_FILE: (ROOT / sonar.PROPERTIES_FILE).read_text(encoding="utf-8"), "coverage.xml": "<coverage/>"})
+    sonar.preflight(checkout, {"GITHUB_REPOSITORY": "overnightworks/quality", sonar.TOKEN_VARIABLE: "t"})
+
+
+def test_a_missing_coverage_artifact_fails_the_download_the_job_and_so_the_verdict(gate):
+    """#34 rule 2: a named artifact the run does not have fails the download, the sonar job and the verdict, so no step or job may continue on error"""
+    download = next(s for s in gate["jobs"]["sonar"]["steps"] if s.get("uses", "").startswith("actions/download-artifact"))
+    assert "continue-on-error" not in download
+    assert "continue-on-error" not in gate["jobs"]["sonar"]
+
+
+def test_the_gate_takes_an_optional_coverage_artifact_and_quality_passes_it_the_same_way_as_any_caller(gate):
+    """#34 rule 1: a string input defaulting to empty; the download runs only when set, reads the name through with: and has no repository special case"""
+    declared = gate[True]["workflow_call"]["inputs"]["coverage-artifact"]
+    assert (declared["type"], declared["required"], declared["default"]) == ("string", False, "")
+    download = next(s for s in gate["jobs"]["sonar"]["steps"] if s.get("uses", "").startswith("actions/download-artifact"))
+    assert download["if"] == "inputs.coverage-artifact != ''"
+    assert download["with"] == {"name": "${{ inputs.coverage-artifact }}"}
+    assert "overnightworks/quality" not in str(download)
+    assert not any("inputs." in step.get("run", "") for job in gate["jobs"].values() for step in job["steps"])
+    assert load("ci.yml")["jobs"]["quality"]["with"] == {"coverage-artifact": "coverage"}
 
 
 def test_the_coverage_the_tests_upload_is_the_report_the_scan_reads():
-    """#26 done-when (SonarCloud coverage gate), defect:#26 finding 1: the report ci.yml uploads is the one gate.yml downloads and the scan reads"""
-    uploads = [s for s in load("ci.yml")["jobs"]["tests"]["steps"] if s.get("uses", "").startswith("actions/upload-artifact")]
-    downloads = [s for s in load("gate.yml")["jobs"]["sonar"]["steps"] if s.get("uses", "").startswith("actions/download-artifact")]
-    assert [d["if"] for d in downloads] == ["github.repository == 'overnightworks/quality'"]
-    assert [u["with"]["name"] for u in uploads] == [d["with"]["name"] for d in downloads] == ["coverage"]
+    """#34 rule 1: the artifact ci.yml uploads is the one it hands the gate, and the properties name the file inside it"""
+    ci = load("ci.yml")
+    uploads = [s for s in ci["jobs"]["tests"]["steps"] if s.get("uses", "").startswith("actions/upload-artifact")]
+    assert [u["with"]["name"] for u in uploads] == [ci["jobs"]["quality"]["with"]["coverage-artifact"]] == ["coverage"]
+    assert "tests" in ci["jobs"]["quality"]["needs"]
     assert f"sonar.python.coverage.reportPaths={uploads[0]['with']['path']}" in (ROOT / "sonar-project.properties").read_text().splitlines()

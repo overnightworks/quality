@@ -43,6 +43,10 @@ PROPERTIES_FILE = "sonar-project.properties"
 SCANNER_WORK_DIRECTORY = ".scannerwork"
 # The scanner writes it here, relative to the working directory; no caller chooses another path.
 TASK_FILE = Path(SCANNER_WORK_DIRECTORY, "report-task.txt")
+COVERAGE_REPORT_KEYS = ("sonar.python.coverage.reportPaths", "sonar.javascript.lcov.reportPaths")
+GLOB_CHARACTERS = "*?"
+# Ant-style `dir/**` means the files beneath; pathlib's `dir/**` yields directories only.
+ANT_TRAILING_ANY = "**"
 # Grows only through a quality release. Anything that can steer the scanner's endpoint, proxy, working
 # directory or issue handling stays out, because the token travels with every authenticated request.
 ALLOWED_PROPERTIES = frozenset(
@@ -60,8 +64,7 @@ ALLOWED_PROPERTIES = frozenset(
         "sonar.cpd.exclusions",
         "sonar.sourceEncoding",
         "sonar.python.version",
-        "sonar.python.coverage.reportPaths",
-        "sonar.javascript.lcov.reportPaths",
+        *COVERAGE_REPORT_KEYS,
     }
 )
 # The scanner expands ${env.NAME} and ${sonar.token} in any value.
@@ -188,6 +191,29 @@ def preflight(root: Path, environment: Mapping[str, str]) -> None:
     for key, expected in (("sonar.organization", project.owner), ("sonar.projectKey", project.key)):
         if chosen.get(key) != expected:
             raise CannotJudge(f"{PROPERTIES_FILE} sets {key!r} to {chosen.get(key)!r}, not {expected!r}")
+    for key in COVERAGE_REPORT_KEYS:
+        for entry in report_entries(chosen.get(key, "")):
+            require_report_exists(root, key, entry)
+
+
+def report_entries(value: str) -> list[str]:
+    return [entry for entry in (part.strip() for part in value.split(",")) if entry]
+
+
+def require_report_exists(root: Path, key: str, entry: str) -> None:
+    """A named report that is absent when the scan starts would be a silent 0.0% coverage."""
+    path = Path(entry)
+    if path.is_absolute() or ".." in path.parts:
+        raise CannotJudge(f"{PROPERTIES_FILE} sets {key!r} to {entry!r}, which lies outside the checkout")
+    if any(character in entry for character in GLOB_CHARACTERS):
+        if any(ANT_TRAILING_ANY in part and part != ANT_TRAILING_ANY for part in path.parts):
+            raise CannotJudge(f"{PROPERTIES_FILE} sets {key!r} to {entry!r}, where {ANT_TRAILING_ANY!r} is not a whole path segment")
+        pattern = f"{entry}/*" if path.name == ANT_TRAILING_ANY else entry
+        found = any(match.is_file() for match in root.glob(pattern))
+    else:
+        found = (root / path).is_file()
+    if not found:
+        raise CannotJudge(f"{PROPERTIES_FILE} sets {key!r} to {entry!r}, but no such report file exists (did the tests job upload it, and does the caller pass coverage-artifact?)")
 
 
 def require_token(environment: Mapping[str, str]) -> None:

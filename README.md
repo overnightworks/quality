@@ -94,6 +94,29 @@ an action, because quality publishes none. A caller passes the Actions secret by
 `sonar-project.properties`. A missing or empty token is red (`sonar: cannot judge - SONAR_TOKEN is empty`), never
 skipped; Dependabot runs resolve the Dependabot secret of the same name.
 
+### Coverage on new code
+
+The scan only sees a coverage report that is in the checkout when it starts. `gate.yml` never runs a caller's tests; the
+caller hands over the report its tests job wrote, in four steps:
+
+1. Upload the report from the tests job: `actions/upload-artifact` with `name: coverage` and `path: coverage.xml`.
+2. Give the gate job `needs: [tests]` (the tests job's id), so the artifact exists when the gate downloads it.
+3. Pass the artifact's name to the gate: `with: coverage-artifact: coverage`.
+4. Name the report in `sonar-project.properties`, for example `sonar.python.coverage.reportPaths=coverage.xml`
+   (or `sonar.javascript.lcov.reportPaths`). The path is relative to the upload's common directory, which is where the
+   download puts it.
+
+The sonar job downloads the artifact right after the caller checkout and before the gate's own tool checkout, so a
+`.gate-tool/` path inside the artifact does not stand in for the pinned tool: the tool checkout re-creates it at the
+pinned ref. This is defence in depth, not a guarantee. An artifact that plants `.gate-tool/.git/` still reaches git
+through the checkout, and the caller's own tests job is arbitrary code anyway.
+
+Preflight exits `2` naming the key and the entry when a listed report does not exist: each comma-separated entry is
+judged on its own, a glob (`*`, `?`, `**`) must match at least one file and `**` must be a whole path segment, a plain
+entry must be a file, and an absolute entry or one with `..` is refused. So a key whose report is missing, for instance
+because no `coverage-artifact` was passed, is red, not a silent `0.0%`. A
+caller that names no coverage key and passes no input scans as before.
+
 `quality sonar preflight [PATH]` runs before the scan and refuses (exit `2`, naming the key) any property outside an
 allowlist (`sonar.organization`, `sonar.projectKey`, `sonar.projectName`, `sonar.sources`, `sonar.tests`, the
 inclusion/exclusion keys, `sonar.sourceEncoding`, `sonar.python.version` and the two coverage report path keys), any
