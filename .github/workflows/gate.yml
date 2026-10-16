@@ -20,7 +20,6 @@ jobs:
           persist-credentials: false
 
       - name: Check out the gate's own tool
-        if: github.repository != 'overnightworks/quality'
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: overnightworks/quality
@@ -36,7 +35,7 @@ jobs:
 
       - name: Hygiene
         env:
-          TOOL_DIR: ${{ github.repository == 'overnightworks/quality' && '.' || '.gate-tool' }}
+          TOOL_DIR: .gate-tool
         run: uv run --locked --project "$TOOL_DIR" fleet-quality hygiene .
 
   verdict:
@@ -55,7 +54,6 @@ jobs:
           persist-credentials: false
 
       - name: Check out the gate's own tool
-        if: github.repository != 'overnightworks/quality'
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: overnightworks/quality
@@ -71,7 +69,7 @@ jobs:
 
       - name: Verdict
         env:
-          TOOL_DIR: ${{ github.repository == 'overnightworks/quality' && '.' || '.gate-tool' }}
+          TOOL_DIR: .gate-tool
           GITHUB_TOKEN: ${{ github.token }}
           GATE_NEEDS: ${{ toJSON(needs) }}
           GATE_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
