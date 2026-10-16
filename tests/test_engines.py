@@ -417,7 +417,7 @@ def test_a_template_directory_cannot_put_attributes_into_the_mirror(
 
 
 @pytest.mark.engine
-@pytest.mark.parametrize("git_version", ["2.40.1", "1.9.0", "2.40", "2.9.5"])
+@pytest.mark.parametrize("git_version", ["2.40.1", "1.9.0"])
 def test_a_git_older_than_2_41_is_exit_2_naming_the_version(
     installed_engines, build_repo, fake_git, capsys, git_version
 ):
@@ -431,6 +431,26 @@ def test_a_git_older_than_2_41_is_exit_2_naming_the_version(
         f"hygiene: cannot judge - git {git_version} cannot hide .gitattributes from the gitleaks scan, "
         "it needs git 2.41"
     )
+
+
+@pytest.mark.parametrize(
+    ("version_output", "expected"),
+    [
+        ("git version 2.39.3 (Apple Git-146)", "2.39.3"),
+        ("git version 2.41.0.windows.1", "2.41.0"),
+        ("git version 2.40", "2.40"),
+        ("git version 2.9.5", "2.9.5"),
+        ("git version 2.53.0", "2.53.0"),
+        ("git version 2.0000041", "2.0000041"),
+        ("git version 12345.6", "12345.6"),
+        ("git version unknown", None),
+        ("", None),
+        ("9" * 50_000, None),
+    ],
+)
+def test_the_git_version_is_the_first_dotted_number_in_the_output(version_output, expected):
+    """#31 rule 2 (S8786): the linear pattern matches what the old one matched, on any digit length."""
+    assert engines.parse_git_version(version_output) == expected
 
 
 @pytest.mark.engine

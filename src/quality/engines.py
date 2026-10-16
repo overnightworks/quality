@@ -182,15 +182,24 @@ def attribute_free_git_environment(empty_home: Path) -> dict[str, str]:
     }
 
 
+GIT_VERSION = re.compile(r"(?<!\d)\d++\.\d++(?:\.\d++)?")
+
+
+def parse_git_version(version_output: str) -> str | None:
+    """The first dotted version in `git --version` output; the lookbehind and possessive digits keep it linear."""
+    found = GIT_VERSION.search(version_output)
+    return found[0] if found else None
+
+
 def _require_git_floor() -> None:
     asked = _run(["git", "--version"])
-    found = re.search(r"\d{1,6}\.\d{1,6}(?:\.\d{1,6})?", asked.stdout)
-    if asked.returncode != 0 or found is None:
+    version = parse_git_version(asked.stdout)
+    if asked.returncode != 0 or version is None:
         raise EngineError(f"cannot read the git version{_stderr_tail(asked.stderr)}")
-    if tuple(int(part) for part in found[0].split("."))[:2] < GIT_FLOOR:
+    if tuple(int(part) for part in version.split("."))[:2] < GIT_FLOOR:
         required = ".".join(map(str, GIT_FLOOR))
         raise EngineError(
-            f"git {found[0]} cannot hide .gitattributes from the {GITLEAKS} scan, it needs git {required}"
+            f"git {version} cannot hide .gitattributes from the {GITLEAKS} scan, it needs git {required}"
         )
 
 
