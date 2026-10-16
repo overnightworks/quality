@@ -22,6 +22,8 @@ RULE = "sonar"
 # A SonarCloud that accepts the connection and then stops answering must not hang the job.
 REQUEST_TIMEOUT_SECONDS = 30
 # 5 s x 120 stays below the job timeout the workflow gives this step.
+# The scanner writes it here, relative to the working directory; no caller chooses another path.
+TASK_FILE = Path(".scannerwork/report-task.txt")
 TASK_POLL_INTERVAL_SECONDS = 5
 TASK_POLL_ATTEMPTS = 120
 FINISHED_TASK_STATUS = "SUCCESS"
@@ -256,26 +258,26 @@ def decode_property_text(line: str, position: int, stop_at: str = "") -> tuple[s
 
 
 def analyse(
-    task_file: Path, environment: Mapping[str, str], transport: Transport = fetch_json, sleep: Sleep = time.sleep
+    environment: Mapping[str, str], transport: Transport = fetch_json, sleep: Sleep = time.sleep
 ) -> SonarResult:
     """Every check that can refuse runs before the token is sent anywhere."""
-    analysis = read_analysis(task_file, environment)
+    analysis = read_analysis(environment)
     wait_for_own_task(analysis, transport, sleep)
     require_resolved(analysis, transport)
     return SonarResult(analysis.scope, analysis.project, open_findings(analysis, transport))
 
 
-def read_analysis(task_file: Path, environment: Mapping[str, str]) -> Analysis:
+def read_analysis(environment: Mapping[str, str]) -> Analysis:
     project = project_of(environment)
-    settings = read_task_file(task_file)
+    settings = read_task_file()
     if settings.get("projectKey") != project.key:
-        raise CannotJudge(f"{task_file.name} names project {settings.get('projectKey')!r}, not {project.key!r}")
+        raise CannotJudge(f"{TASK_FILE.name} names project {settings.get('projectKey')!r}, not {project.key!r}")
     if settings.get("organization") != project.owner:
-        raise CannotJudge(f"{task_file.name} names organization {settings.get('organization')!r}, not {project.owner!r}")
+        raise CannotJudge(f"{TASK_FILE.name} names organization {settings.get('organization')!r}, not {project.owner!r}")
     if settings.get("serverUrl") != SONAR_ORIGIN:
-        raise CannotJudge(f"{task_file.name} names server {settings.get('serverUrl')!r}, not {SONAR_ORIGIN}")
+        raise CannotJudge(f"{TASK_FILE.name} names server {settings.get('serverUrl')!r}, not {SONAR_ORIGIN}")
     if not settings.get("ceTaskId"):
-        raise CannotJudge(f"{task_file.name} names no ceTaskId")
+        raise CannotJudge(f"{TASK_FILE.name} names no ceTaskId")
     require_token(environment)
     return Analysis(project, scope_of(environment), settings["ceTaskId"], basic_authorization(environment[TOKEN_VARIABLE]))
 
@@ -296,13 +298,11 @@ def scope_of(environment: Mapping[str, str]) -> Scope:
         raise CannotJudge(f"{error.args[0]} is not set") from error
 
 
-def read_task_file(task_file: Path) -> dict[str, str]:
-    if not task_file.resolve().is_relative_to(Path.cwd().resolve()):
-        raise CannotJudge(f"{task_file} is outside the working directory")
+def read_task_file() -> dict[str, str]:
     try:
-        lines = task_file.read_text(encoding="utf-8").splitlines()
+        lines = TASK_FILE.read_text(encoding="utf-8").splitlines()
     except (OSError, UnicodeDecodeError) as error:
-        raise CannotJudge(f"cannot read {task_file}: {error.__class__.__name__}") from error
+        raise CannotJudge(f"cannot read {TASK_FILE}: {error.__class__.__name__}") from error
     pairs = (line.partition("=") for line in lines)
     return {name.strip(): value.strip() for name, separator, value in pairs if separator}
 

@@ -106,7 +106,7 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
-        run: uv run --locked --project "$TOOL_DIR" quality sonar findings --task-file .scannerwork/report-task.txt
+        run: uv run --locked --project "$TOOL_DIR" quality sonar findings
 
   verdict:
     needs: [hygiene, sonar]

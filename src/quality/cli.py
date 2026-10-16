@@ -51,9 +51,7 @@ def main(
     sonar.add_parser("preflight", help="refuse a token or properties file that could steer the scan").add_argument(
         "path", nargs="?", type=Path, default=Path(".")
     )
-    sonar.add_parser("findings", help="wait for this run's analysis, then count its open findings").add_argument(
-        "--task-file", type=Path, required=True, help="the scanner's report-task.txt"
-    )
+    sonar.add_parser("findings", help="wait for this run's analysis (.scannerwork/report-task.txt), then count its open findings")
     arguments = parser.parse_args(argv)
 
     if arguments.command == "verdict":
@@ -61,7 +59,7 @@ def main(
     if arguments.command == "sonar":
         if arguments.sonar_command == "preflight":
             return run_sonar_preflight(arguments.path)
-        return run_sonar_findings(arguments.task_file, transport, sleep)
+        return run_sonar_findings(transport, sleep)
     if arguments.command == "engines":
         return run_engines_install(arguments.directory, read_pins)
     try:
@@ -115,9 +113,9 @@ def run_sonar_preflight(path: Path) -> int:
     return EXIT_CLEAN
 
 
-def run_sonar_findings(task_file: Path, transport: Transport, sleep: Sleep) -> int:
+def run_sonar_findings(transport: Transport, sleep: Sleep) -> int:
     try:
-        result = analyse(task_file, os.environ, transport, sleep)
+        result = analyse(os.environ, transport, sleep)
     except CannotJudge as error:
         print(f"sonar: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE

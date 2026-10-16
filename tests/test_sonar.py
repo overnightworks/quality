@@ -80,17 +80,20 @@ def set_environment(monkeypatch, environment) -> None:
         monkeypatch.setenv(name, value)
 
 
+@pytest.fixture(autouse=True)
+def scratch_working_directory(monkeypatch, tmp_path):
+    """The task file is read relative to the working directory, so every test works in its own."""
+    monkeypatch.chdir(tmp_path)
+
+
 def run_cli(
-    monkeypatch, capsys, fake: FakeSonar, environment=PULL_REQUEST_ENVIRONMENT, task_text: str | None = None, tmp_path=None
+    monkeypatch, capsys, fake: FakeSonar, environment=PULL_REQUEST_ENVIRONMENT, task_text: str | None = None
 ):
     set_environment(monkeypatch, environment)
-    task_file = TASK_FIXTURE
-    if task_text is not None:
-        task_file = tmp_path / "report-task.txt"
-        task_file.write_text(task_text)
-    monkeypatch.chdir(task_file.parent)
+    sonar.TASK_FILE.parent.mkdir()
+    sonar.TASK_FILE.write_text(TASK_FIXTURE.read_text() if task_text is None else task_text)
     sleeps: list[float] = []
-    code = cli.main(["sonar", "findings", "--task-file", str(task_file)], transport=fake, sleep=sleeps.append)
+    code = cli.main(["sonar", "findings"], transport=fake, sleep=sleeps.append)
     captured = capsys.readouterr()
     assert TOKEN not in captured.out + captured.err
     return code, captured.out, captured.err, sleeps
@@ -215,51 +218,42 @@ def test_does_not_read_findings_when_the_scope_does_not_resolve(monkeypatch, cap
     ids=["foreign server", "foreign project", "foreign organization", "missing project", "missing task id"],
 )
 def test_a_task_file_naming_something_foreign_is_refused_before_any_request(
-    monkeypatch, capsys, tmp_path, edit, reason
+    monkeypatch, capsys, edit, reason
 ):
     """#22: a task file naming a foreign server, project, organization or none is exit 2 before any request"""
     fake = sonar_answering()
     text = TASK_FIXTURE.read_text().replace(*edit)
-    code, _, err, _ = run_cli(monkeypatch, capsys, fake, task_text=text, tmp_path=tmp_path)
+    code, _, err, _ = run_cli(monkeypatch, capsys, fake, task_text=text)
     assert (code, fake.requests) == (2, [])
     assert reason in err
 
 
-def test_a_task_file_that_cannot_be_read_is_refused_before_any_request(monkeypatch, capsys, tmp_path):
+@pytest.mark.parametrize("breakage", ["absent", "symlink loop"])
+def test_a_task_file_that_cannot_be_read_is_refused_before_any_request(monkeypatch, capsys, breakage):
     """#22 kept row: an unreadable task file is exit 2 before any request"""
     fake = sonar_answering()
     set_environment(monkeypatch, PULL_REQUEST_ENVIRONMENT)
-    monkeypatch.chdir(tmp_path)
-    code = cli.main(["sonar", "findings", "--task-file", str(tmp_path / "absent.txt")], transport=fake)
+    if breakage == "symlink loop":
+        sonar.TASK_FILE.parent.mkdir()
+        sonar.TASK_FILE.symlink_to(Path.cwd() / sonar.TASK_FILE)
+    code = cli.main(["sonar", "findings"], transport=fake)
     assert (code, fake.requests) == (2, [])
-    assert "absent.txt" in capsys.readouterr().err
+    assert "report-task.txt" in capsys.readouterr().err
 
 
-def test_a_task_file_outside_the_working_directory_is_refused_before_any_request(monkeypatch, capsys, tmp_path):
-    """#26 finding 1: a task file that does not resolve under the working directory is exit 2 before any request"""
-    fake = sonar_answering()
-    set_environment(monkeypatch, PULL_REQUEST_ENVIRONMENT)
-    workdir = tmp_path / "work"
-    workdir.mkdir()
-    monkeypatch.chdir(workdir)
-    code = cli.main(["sonar", "findings", "--task-file", str(TASK_FIXTURE)], transport=fake)
-    assert (code, fake.requests) == (2, [])
-    assert "outside the working directory" in capsys.readouterr().err
-
-
-def test_never_requests_the_urls_the_task_file_names(monkeypatch, capsys, tmp_path):
+def test_never_requests_the_urls_the_task_file_names(monkeypatch, capsys):
     """#22 kept row: only sonarcloud.io is requested, whatever URLs the task file names"""
     fake = sonar_answering()
     text = TASK_FIXTURE.read_text().replace("https://sonarcloud.io/api/ce", "https://evil.example/api/ce")
-    run_cli(monkeypatch, capsys, fake, task_text=text, tmp_path=tmp_path)
+    run_cli(monkeypatch, capsys, fake, task_text=text)
     assert all(url.startswith("https://sonarcloud.io/api/") for url, _ in fake.requests)
 
 
-def test_a_task_id_with_an_ampersand_stays_one_query_value(monkeypatch, capsys, tmp_path):
+def test_a_task_id_with_an_ampersand_stays_one_query_value(monkeypatch, capsys):
     """#22 kept row: a task id with an ampersand stays one query value"""
     fake = sonar_answering()
     text = TASK_FIXTURE.read_text().replace("ceTaskId=AXtask-1", "ceTaskId=a&b=c")
-    run_cli(monkeypatch, capsys, fake, task_text=text, tmp_path=tmp_path)
+    run_cli(monkeypatch, capsys, fake, task_text=text)
     assert parse_qs(urlparse(fake.urls_to("ce/task")[0]).query) == {"id": ["a&b=c"]}
 
 
@@ -494,7 +488,7 @@ def test_preflight_refuses_what_could_steer_the_token_naming_it(monkeypatch, cap
 
 def test_preflight_drops_a_final_unpaired_backslash_like_java_properties(monkeypatch, capsys, build_repo):
     """#26 rule 3: a last line ending in a backslash without a newline is read as java.util.Properties reads it"""
-    properties = CLEAN_PROPERTIES + "sonar.projectName=quality\\"
+    properties = "sonar.projectKey=overnightworks_quality\nsonar.organization=overnightworks\\"
     assert run_preflight(monkeypatch, capsys, build_repo, properties)[0] == 0
 
 
