@@ -488,7 +488,8 @@ def test_preflight_requires_every_named_coverage_report_to_exist(monkeypatch, ca
     result = run_preflight(monkeypatch, capsys, build_repo, properties, extra_files={name: "<coverage/>" for name in files})
     assert result[0] == code
     if named:
-        assert key in result[2] and named in result[2]
+        assert key in result[2]
+        assert named in result[2]
 
 
 @pytest.mark.parametrize(
