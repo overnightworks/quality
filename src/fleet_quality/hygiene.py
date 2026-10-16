@@ -159,6 +159,6 @@ def skipped_rules(engine_dir: Path | None) -> tuple[str, ...]:
 def run_hygiene(root: Path, engine_dir: Path | None = None) -> list[Finding]:
     tracked = tracked_files(root)
     findings = check_env_files(tracked) + check_compose_ports(root, tracked)
-    if engines.SECRET not in active_rules(engine_dir):
+    if engine_dir is None:
         return findings
     return findings + check_secrets(root, engine_dir) + check_workflows(root, engine_dir, tracked)

@@ -388,7 +388,7 @@ def test_a_workflow_engine_without_a_usable_report_is_exit_2(tmp_path, build_rep
 def test_an_engine_that_is_a_symlink_inside_the_directory_is_still_judged_by_its_name(
     tmp_path, build_repo, capsys, engine
 ):
-    """#15: a pinned engine reached through a symlink to a versioned file in the directory is not a crash."""
+    """#15 rule 2: a pinned engine reached through a symlink to a versioned file in the directory is not a crash."""
     engine_dir = fake_workflow_engines(tmp_path, 'echo "[]"; exit 0')
     versioned = engine_dir / f"{engine}-{engines.read_pins()[engine].version}"
     (engine_dir / engine).rename(versioned)
@@ -514,12 +514,14 @@ def pinned_zizmor_asset() -> bytes:
 @pytest.mark.engine
 @pytest.mark.parametrize(("tamper", "exit_code"), [(False, 0), (True, 2)], ids=["pinned-bytes", "one-byte-changed"])
 def test_a_redirected_pinned_release_asset_is_decided_by_its_checksum_alone(
-    tmp_path, serve, capsys, pinned_zizmor_asset, tamper, exit_code
+    tmp_path, serve, pinned_zizmor_asset, tamper, exit_code
 ):
     """#15 rule 6, #5 finding 24: the pinned asset served through a redirect installs; a changed byte is exit 2."""
     served = bytearray(pinned_zizmor_asset)
-    served[-1] ^= tamper
+    if tamper:
+        served[-1] = (served[-1] + 1) % 256
     release = serve(redirect_to=url_of(serve(body=bytes(served))))
-    pin = Pin(engines.read_pins()["zizmor"].version, url_of(release), engines.read_pins()["zizmor"].sha256)
+    pinned = engines.read_pins()["zizmor"]
+    pin = Pin(pinned.version, url_of(release), pinned.sha256)
     assert cli.main(["engines", "install", str(tmp_path / "bin")], read_pins=lambda: {"zizmor": pin}) == exit_code
     assert (tmp_path / "bin" / "zizmor").exists() is (exit_code == 0)
