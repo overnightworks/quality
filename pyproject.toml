@@ -1,0 +1,29 @@
+[project]
+name = "fleet-quality"
+dynamic = ["version"]
+description = "One door for fleet quality checks."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["PyYAML>=6"]
+
+[project.scripts]
+fleet-quality = "fleet_quality.cli:main"
+
+[dependency-groups]
+dev = ["ruff", "pytest"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/fleet_quality/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fleet_quality"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
