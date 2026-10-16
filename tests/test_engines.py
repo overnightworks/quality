@@ -49,6 +49,7 @@ def fake_gitleaks(tmp_path: Path, version: str = PINNED, on_scan: str = "exit 0"
     binary.write_text(
         "#!/bin/sh\n"
         f'if [ "$1" = version ]; then echo {version}; exit {version_exit}; fi\n'
+        'printf "%s\\n" "$@" > "$0.arguments"\n'
         'while [ $# -gt 0 ]; do [ "$1" = --report-path ] && report=$2; shift; done\n'
         f"{on_scan}\n"
     )
@@ -272,14 +273,14 @@ def test_a_relative_repository_path_starting_with_a_dash_is_scanned_as_that_repo
     workdir.mkdir()
     subprocess.run(["git", "clone", "-q", str(repo), "--", str(workdir / "-repo")], check=True)
     monkeypatch.chdir(workdir)
-    findings = engines.scan_secrets(Path("-repo"), installed_engines, engines.read_pins())
+    findings = engines.scan_secrets(Path("-repo"), installed_engines, engines.read_pins(), {}).findings
     assert [(finding.path, finding.line) for finding in findings] == [("config.txt", 1)]
 
 
 @pytest.mark.engine
 def test_installed_binary_reports_the_pinned_version(build_repo, installed_engines):
     """#13 rule 2: the installed real gitleaks passes the version check against the pin."""
-    assert engines.scan_secrets(build_repo({}), installed_engines, engines.read_pins()) == []
+    assert engines.scan_secrets(build_repo({}), installed_engines, engines.read_pins(), {}).findings == []
 
 
 @pytest.fixture
@@ -540,3 +541,90 @@ def test_a_redirected_pinned_release_asset_is_decided_by_its_checksum_alone(
     pin = Pin(pinned.version, url_of(release), pinned.sha256)
     assert cli.main(["engines", "install", str(tmp_path / "bin")], read_pins=lambda: {"zizmor": pin}) == exit_code
     assert (tmp_path / "bin" / "zizmor").exists() is (exit_code == 0)
+
+
+RECORDED_FINGERPRINT = "76ec522bf40edf7e4031672b4893cded508a6559:deploy/config.txt:aws-access-token:3"
+
+
+def allow_config(*entries: tuple[str, str]) -> str:
+    rows = ", ".join(f'{{ fingerprint = "{fingerprint}", reason = "{reason}" }}' for fingerprint, reason in entries)
+    return f"[gate]\nmandatory_jobs = [\"checks\"]\n[secrets]\nallow = [{rows}]\n"
+
+
+def run_with_recorded_leak(build_repo, tmp_path, capsys, config: str | None) -> tuple[int, str]:
+    files = {"quality/config.toml": config} if config is not None else {}
+    engine_dir = fake_gitleaks(tmp_path / "fake", on_scan=f'cp {OUTPUTS / "gitleaks-finding.json"} "$report"; exit 7')
+    code = cli.main(["hygiene", "--engines", str(engine_dir), str(build_repo(files))])
+    return code, capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("config", "code", "printed", "not_printed"),
+    [
+        (None, 1, "secret deploy/config.txt:3", "allowed"),
+        (allow_config(("some:other:finding:1", "unrelated")), 1, "secret deploy/config.txt:3", "allowed"),
+        (allow_config((RECORDED_FINGERPRINT, "test data")), 0,
+         "secret: 1 allowed (deploy/config.txt:3)", "hygiene: 1 finding"),
+    ],
+    ids=["unknown-finding-is-red", "other-fingerprint-is-red", "allowed-fingerprint-is-green-and-printed"],
+)
+def test_a_secret_finding_is_allowed_only_by_its_fingerprint(
+    build_repo, tmp_path, capsys, config, code, printed, not_printed
+):
+    """#16: an unknown finding is red; an allowed fingerprint is green and printed by file and rule."""
+    exit_code, out = run_with_recorded_leak(build_repo, tmp_path, capsys, config)
+    assert exit_code == code
+    assert printed in out
+    assert not_printed not in out
+    if code == 0:
+        assert "aws-access-token" in out
+
+
+@pytest.mark.parametrize(
+    "entry", ['""', "{ fingerprint = \"x\" }", '{ fingerprint = "x", reason = "  " }', '"x"'],
+    ids=["empty", "no-reason", "blank-reason", "bare-fingerprint"],
+)
+def test_an_allow_entry_without_a_reason_is_exit_2(build_repo, tmp_path, capsys, entry):
+    """#16: an allow entry that is not a fingerprint with a reason cannot be judged."""
+    config = f'[gate]\nmandatory_jobs = ["checks"]\n[secrets]\nallow = [{entry}]\n'
+    engine_dir = fake_gitleaks(tmp_path / "fake")
+    assert "[secrets] allow entry" in hygiene_exit_2(build_repo({"quality/config.toml": config}), engine_dir, capsys)
+
+
+def test_the_scan_passes_the_gates_own_config_and_no_repository_ignore_file(build_repo, tmp_path):
+    """#16: gitleaks is told to use quality's config and to look for ignore files outside the repository."""
+    engine_dir = fake_gitleaks(tmp_path / "fake", on_scan='echo "[]" > "$report"; exit 0')
+    repo = build_repo({".gitleaks.toml": "[allowlist]\n", ".gitleaksignore": "x\n"})
+    engines.scan_secrets(repo, engine_dir, engines.read_pins(), {})
+    given = (engine_dir / "gitleaks.arguments").read_text().split()
+    assert given[given.index("--config") + 1] == str(engines.GITLEAKS_CONFIG)
+    assert str(repo) not in given[given.index("--gitleaks-ignore-path") + 1]
+    assert "--ignore-gitleaks-allow" in given
+
+
+@pytest.mark.engine
+def test_a_repository_config_and_ignore_file_do_not_silence_the_scan(build_repo, installed_engines):
+    """#16: a committed .gitleaks.toml, .gitleaksignore and gitleaks:allow comment have no effect."""
+    repo = build_repo({
+        "config.txt": f"aws_access_key_id = {FAKE_KEY}  # gitleaks:allow\n",
+        ".gitleaks.toml": '[extend]\nuseDefault = true\n[allowlist]\npaths = [\'\'\'config.txt\'\'\']\n',
+        ".gitleaksignore": "*\n",
+    })
+    assert scan(repo, installed_engines) == 1
+
+
+@pytest.mark.engine
+def test_a_real_finding_is_green_once_its_fingerprint_is_allowed_and_red_in_a_new_commit(
+    build_repo, installed_engines, capsys
+):
+    """#16: the real fingerprint allows exactly that commit's finding; the same key in a new commit is red."""
+    repo = build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
+    [leak] = engines.scan_secrets(repo, installed_engines, engines.read_pins(), {}).findings
+    (repo / "quality").mkdir()
+    (repo / "quality" / "config.toml").write_text(allow_config((leak.fingerprint, "test key")))
+    commit(repo, "allow the fixture key")
+    assert scan(repo, installed_engines) == 0
+    assert "secret: 1 allowed (config.txt:1)" in capsys.readouterr().out
+    (repo / "copy.txt").write_text(f"aws_access_key_id = {FAKE_KEY}\n")
+    commit(repo, "same key again")
+    assert scan(repo, installed_engines) == 1

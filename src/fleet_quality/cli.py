@@ -8,7 +8,7 @@ from pathlib import Path
 from fleet_quality import __version__, engines
 from fleet_quality.config import ConfigError, read_mandatory_jobs
 from fleet_quality.hygiene import CannotJudge, active_rules, run_hygiene, skipped_rules
-from fleet_quality.report import render
+from fleet_quality.report import Finding, render
 from fleet_quality.verdict import (
     PageFetcher,
     github_fetcher,
@@ -48,10 +48,12 @@ def main(
     if arguments.command == "engines":
         return run_engines_install(arguments.directory, read_pins)
     try:
-        findings = run_hygiene(arguments.path, arguments.engines)
+        result = run_hygiene(arguments.path, arguments.engines)
     except CannotJudge as error:
         print(f"hygiene: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
+    findings = result.findings
+    print_allowed_secrets(result.allowed_secrets)
     if not findings:
         print(f"hygiene: clean ({len(active_rules(arguments.engines))} rules){coverage_note(arguments.engines)}")
         return EXIT_CLEAN
@@ -59,6 +61,14 @@ def main(
         print(render(finding))
     print(f"hygiene: {len(findings)} finding(s){coverage_note(arguments.engines)}")
     return EXIT_FINDINGS
+
+
+def print_allowed_secrets(allowed: list[Finding]) -> None:
+    if not allowed:
+        return
+    print(f"{engines.SECRET}: {len(allowed)} allowed ({', '.join(finding.location for finding in allowed)})")
+    for finding in allowed:
+        print(f"  allowed {finding.location} - {finding.reason}")
 
 
 def coverage_note(engine_dir: Path | None) -> str:

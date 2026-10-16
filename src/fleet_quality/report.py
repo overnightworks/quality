@@ -8,6 +8,7 @@ class Finding:
     line: int | None
     reason: str
     fix: str
+    fingerprint: str | None = None
 
     @property
     def location(self) -> str:
