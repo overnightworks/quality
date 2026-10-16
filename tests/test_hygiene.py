@@ -55,7 +55,7 @@ def test_exit_code_tells_clean_from_cannot_judge(build_repo, tmp_path, capsys, a
 
 
 def test_compose_specific_tags_are_judged_not_refused(build_repo, capsys):
-    """#3 rule 2: valid Compose YAML tags are read, and their ports still checked."""
+    """#3 rule 1/4: valid Compose YAML tags are read, and their ports still checked."""
     body = "services:\n  web:\n    image: x\n    ports: !override\n      - \"127.0.0.1:80:80\"\n    profiles: !reset []\n"
     code, output = run(capsys, build_repo({"compose.yaml": body}))
     assert (code, "hygiene: clean (2 rules)" in output) == (0, True)
@@ -63,7 +63,7 @@ def test_compose_specific_tags_are_judged_not_refused(build_repo, capsys):
 
 @pytest.mark.parametrize("tagged", ["!reset null", "!reset []"], ids=["null", "empty-list"])
 def test_reset_clears_ports_and_is_clean(build_repo, capsys, tagged):
-    """#3 rule 2: `ports: !reset null` is valid Compose that clears the ports, so it is clean."""
+    """#3 rule 1/4: `ports: !reset null` is valid Compose that clears the ports, so it is clean."""
     code, _ = run(capsys, build_repo({"compose.yaml": f"services:\n  web:\n    image: x\n    ports: {tagged}\n"}))
     assert code == 0
 
@@ -130,6 +130,13 @@ def test_compose_ports_must_bind_loopback(build_repo, capsys, files, refused_pat
     assert code == (0 if refused_path is None else 1)
     if refused_path:
         assert_refusal(output, "compose-port", refused_path)
+
+
+def test_quoted_tagged_port_is_read_as_the_string_it_wraps(build_repo, capsys):
+    """#3 rule 4: `!override "22:22"` is the string 22:22, not a sexagesimal number."""
+    code, output = run(capsys, build_repo(compose('- !override "22:22"')))
+    assert code == 1
+    assert "port 22:22 " in output
 
 
 def test_quality_tracks_no_env_or_compose_file():

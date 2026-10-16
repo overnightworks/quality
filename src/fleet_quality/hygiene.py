@@ -26,7 +26,8 @@ def _construct_tagged(loader: ComposeLoader, node: yaml.Node) -> object:
         return loader.construct_mapping(node, deep=True)
     if isinstance(node, yaml.SequenceNode):
         return loader.construct_sequence(node, deep=True)
-    implicit_tag = loader.resolve(yaml.ScalarNode, node.value, (True, False))
+    is_plain = node.style is None
+    implicit_tag = loader.resolve(yaml.ScalarNode, node.value, (is_plain, not is_plain))
     return loader.construct_object(yaml.ScalarNode(implicit_tag, node.value, node.start_mark, node.end_mark))
 
 
