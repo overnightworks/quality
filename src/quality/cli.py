@@ -6,7 +6,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from quality import __version__, engines
+from quality import __version__, engines, staged
 from quality.config import ConfigError, read_mandatory_jobs
 from quality.hygiene import CannotJudge, active_rules, run_hygiene, skipped_rules
 from quality.report import Finding, render
@@ -37,6 +37,9 @@ def main(
     hygiene = commands.add_parser("hygiene", help="check a git repository for fleet hygiene")
     hygiene.add_argument("path", nargs="?", type=Path, default=Path("."))
     hygiene.add_argument("--engines", type=Path, help="directory holding the installed engines; enables the secret and workflow scans")
+    scan_staged = commands.add_parser("scan-staged", help="scan the staged change of a repository for secrets")
+    scan_staged.add_argument("path", nargs="?", type=Path, default=Path("."))
+    scan_staged.add_argument("--engines", type=Path, required=True, help="directory holding the installed engines")
     engine_commands = commands.add_parser("engines", help="manage the pinned engines").add_subparsers(
         dest="engines_command", required=True
     )
@@ -58,6 +61,8 @@ def main(
 
     if arguments.command == "verdict":
         return run_verdict(arguments.path, fetcher_for)
+    if arguments.command == "scan-staged":
+        return run_scan_staged(arguments.path, arguments.engines, read_pins)
     if arguments.command == "sonar":
         return run_sonar_findings(arguments.task_file, transport, sleep)
     if arguments.command == "engines":
@@ -92,6 +97,19 @@ def coverage_note(engine_dir: Path | None) -> str:
     if skipped:
         return f"; skipped without --engines: {', '.join(skipped)}"
     return f"; {engines.WORKFLOW_SECURITY} runs offline, so zizmor's online-only audits do not run"
+
+
+def run_scan_staged(path: Path, engine_dir: Path, read_pins: Callable[[], dict[str, engines.Pin]]) -> int:
+    try:
+        result = staged.scan_staged(path, engine_dir, read_pins())
+    except (engines.EngineError, ConfigError) as error:
+        print(f"scan-staged: cannot judge - {error}", file=sys.stderr)
+        return EXIT_CANNOT_JUDGE
+    print_allowed_secrets(result.allowed)
+    for finding in result.findings:
+        print(render(finding))
+    print(f"scan-staged: {len(result.findings)} finding(s)" if result.findings else "scan-staged: clean")
+    return EXIT_FINDINGS if result.findings else EXIT_CLEAN
 
 
 def run_engines_install(directory: Path, read_pins: Callable[[], dict[str, engines.Pin]]) -> int:

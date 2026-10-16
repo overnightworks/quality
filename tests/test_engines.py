@@ -3,7 +3,6 @@ import http.server
 import io
 import os
 import re
-import shutil
 import subprocess
 import tarfile
 import tempfile
@@ -12,12 +11,12 @@ import urllib.request
 from pathlib import Path
 
 import pytest
+from conftest import FAKE_KEY
 
 from quality import cli, engines
 from quality.engines import EngineError, Pin
 
 OUTPUTS = Path(__file__).parent / "fixtures" / "engine-outputs"
-FAKE_KEY = "AKIA" + "QYLPMTYX3QZ5ABCD"  # assembled so quality's own scan stays green
 OTHER_KEY = "AKIA" + "QYLPMTYX3QZ5WXYZ"  # a second assembled key, to prove another value stays red
 
 
@@ -273,13 +272,6 @@ def test_unreadable_or_inconsistent_gitleaks_result_cannot_be_judged(report, exi
         engines.secret_findings(text, exit_code)
 
 
-@pytest.fixture(scope="session")
-def installed_engines(tmp_path_factory) -> Path:
-    directory = tmp_path_factory.mktemp("engines")
-    assert cli.main(["engines", "install", str(directory)]) == 0
-    return directory
-
-
 def scan(repo: Path, installed_engines: Path) -> int:
     return cli.main(["hygiene", "--engines", str(installed_engines), str(repo)])
 
@@ -338,21 +330,6 @@ def test_a_relative_repository_path_starting_with_a_dash_is_scanned_as_that_repo
     monkeypatch.chdir(workdir)
     findings = engines.scan_secrets(Path("-repo"), installed_engines, engines.read_pins(), {}).findings
     assert [(finding.path, finding.line) for finding in findings] == [("config.txt", 1)]
-
-
-@pytest.fixture
-def fake_git(tmp_path, monkeypatch):
-    """Puts a `git` first on PATH that runs `preamble` (shell) and then the real git."""
-    real_git = shutil.which("git")
-
-    def install(preamble: str) -> None:
-        fake_bin = tmp_path / "fake-git"
-        fake_bin.mkdir()
-        (fake_bin / "git").write_text(f'#!/bin/sh\n{preamble}\nexec {real_git} "$@"\n')
-        (fake_bin / "git").chmod(0o755)
-        monkeypatch.setenv("PATH", f"{fake_bin}:{os.environ['PATH']}")
-
-    return install
 
 
 @pytest.mark.engine
@@ -466,18 +443,19 @@ def test_a_template_directory_cannot_put_attributes_into_the_mirror(
 
 
 @pytest.mark.engine
+@pytest.mark.parametrize("command", ["hygiene", "scan-staged"])
 @pytest.mark.parametrize("git_version", ["2.40.1", "1.9.0"])
 def test_a_git_older_than_2_41_is_exit_2_naming_the_version(
-    installed_engines, build_repo, fake_git, capsys, git_version
+    installed_engines, build_repo, fake_git, capsys, git_version, command
 ):
-    """#21 rule 2: below the floor the scan cannot hide attributes, so it is exit 2 with one line, never clean.
+    """#21 rule 2, #25 rule 4: below the floor the scan cannot hide attributes, so it is exit 2 with one line.
 
     The git floor is checked right after gitleaks' version and before any scan, so the fake git alone decides this test.
     """
     fake_git(f'[ "$1" = "--version" ] && echo "git version {git_version}" && exit 0')
-    err = hygiene_exit_2(build_repo({}), installed_engines, capsys)
-    assert err.strip() == (
-        f"hygiene: cannot judge - git {git_version} cannot hide .gitattributes from the gitleaks scan, "
+    assert cli.main([command, "--engines", str(installed_engines), str(build_repo({}))]) == 2
+    assert capsys.readouterr().err.strip() == (
+        f"{command}: cannot judge - git {git_version} cannot hide .gitattributes from the gitleaks scan, "
         "it needs git 2.41"
     )
 
