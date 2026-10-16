@@ -2,20 +2,21 @@ import hashlib
 import io
 import json
 import os
-import re
+import signal
 import subprocess
 import tarfile
 import tempfile
 import tomllib
 import urllib.request
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
 
 from quality.config import Allowance
 from quality.report import Finding
 
-SECRET = "secret"
+LEAK_RULE = "secret"
 GITLEAKS = "gitleaks"
 CLEAN_EXIT = 0
 GITLEAKS_LEAKS_FOUND = 7  # gitleaks exits 1 on its own errors too, so leaks get a code of their own
@@ -54,17 +55,40 @@ def read_pins(pin_file: Path = PIN_FILE) -> dict[str, Pin]:
         return {name: Pin(**fields) for name, fields in tomllib.load(handle).items()}
 
 
-def install(directory: Path, pins: dict[str, Pin]) -> None:
+def install(directory: Path, pins: dict[str, Pin]) -> dict[str, bool]:
+    """Engine name -> whether it was downloaded; an engine that already reports its pinned version is left alone."""
     # The operator picks the install directory on purpose, so Sonar's path-traversal taint is accepted here.
     directory.mkdir(parents=True, exist_ok=True)  # NOSONAR(S8707)
+    downloaded = {}
     for name, pin in pins.items():
-        target = _engine_path(directory, name)
-        archive = _download_verified(name, pin)
-        target.write_bytes(_unpack_binary(name, archive))
-        target.chmod(0o755)
+        target = engine_path(directory, name)
+        downloaded[name] = not _is_installed(target, name, pin)
+        if downloaded[name]:
+            target.write_bytes(_unpack_binary(name, _download_verified(name, pin)))
+            target.chmod(0o755)
+    return downloaded
 
 
-def _engine_path(directory: Path, name: str) -> Path:
+def verification_problems(directory: Path, pins: dict[str, Pin]) -> list[str]:
+    """One line per pinned engine in `directory` that is missing or not at its pinned version."""
+    problems = []
+    for name, pin in pins.items():
+        try:
+            verify_version(engine_path(directory, name), name, pin.version)
+        except EngineError as error:
+            problems.append(str(error))
+    return problems
+
+
+def _is_installed(binary: Path, name: str, pin: Pin) -> bool:
+    try:
+        verify_version(binary, name, pin.version)
+    except EngineError:
+        return False
+    return True
+
+
+def engine_path(directory: Path, name: str) -> Path:
     root = directory.resolve()
     path = (root / name).resolve()
     if path.parent != root:
@@ -107,35 +131,65 @@ class _Engine:
 class SecretScan:
     findings: list[Finding]
     allowed: list[Finding]
+    unused_allowances: dict[Allowance, str]  # entries of quality/config.toml that no finding used, with their reasons
+
+
+def prepare_gitleaks(engine_dir: Path, pins: dict[str, Pin]) -> Path:
+    """The pinned gitleaks binary, once it and the git floor are known to hold."""
+    binary = engine_path(engine_dir, GITLEAKS)
+    verify_version(binary, GITLEAKS, pins[GITLEAKS].version)
+    require_git_floor()
+    return binary
 
 
 def scan_secrets(root: Path, engine_dir: Path, pins: dict[str, Pin], allowances: dict[Allowance, str]) -> SecretScan:
-    binary = _engine_path(engine_dir, GITLEAKS)
-    _verify_version(binary, GITLEAKS, pins[GITLEAKS].version)
-    _require_git_floor()
-    with tempfile.TemporaryDirectory() as scratch:
-        git_environment = attribute_free_git_environment(Path(scratch) / "home")
-        report = Path(scratch) / "report.json"
-        # The gate's own config, and no ignore file or inline "gitleaks:allow" from the scanned repository:
-        # only an allowance in quality/config.toml allows a finding. gitleaks also reads <source>/.gitleaksignore,
-        # so it scans a mirror clone (bare), which has no work tree to read it from. The verdict judges the
-        # history reachable from the scanned HEAD only: the mirror also brings other branches, which are not this verdict's.
-        # No --redact: the report must carry Secret to be hashed. It lives only in this 0700 scratch directory.
-        source = _mirror_clone(root, Path(scratch) / "source", git_environment)
-        head = _head_commit(source, git_environment)
-        command = [
-            str(binary), "git", "--no-banner", "--no-color", f"--log-opts={head}",
-            "--config", str(GITLEAKS_CONFIG), "--gitleaks-ignore-path", scratch, "--ignore-gitleaks-allow",
-            "--exit-code", str(GITLEAKS_LEAKS_FOUND),
-            "--report-format", "json", "--report-path", str(report), "--", str(source),
-        ]
-        scan = _run(command, env=git_environment, timeout=SECRET_SCAN_TIMEOUT_SECONDS)
-        if not report.is_file():
-            raise EngineError(
-                f"{GITLEAKS} exited {scan.returncode} without writing its report{_stderr_tail(scan.stderr)}"
-            )
-        leaks = secret_findings(_read_report(report), scan.returncode, scan.stderr)
-        return _split_by_allowance(leaks, allowances)
+    binary = prepare_gitleaks(engine_dir, pins)
+    with scratch_directory() as scratch:
+        git_environment = attribute_free_git_environment(scratch / "home")
+        # gitleaks also reads <source>/.gitleaksignore, so it scans a mirror clone (bare), which has no work tree to
+        # read it from. The verdict judges the history reachable from the scanned HEAD only: the mirror also brings
+        # other branches, which are not this verdict's.
+        source = _mirror_clone(root, scratch / "source", git_environment)
+        head = head_commit(source, git_environment)
+        return run_gitleaks(binary, scratch, git_environment, source, [f"--log-opts={head}"], allowances)
+
+
+@contextmanager
+def scratch_directory() -> Iterator[Path]:
+    """A 0700 directory removed on every exit path, SIGTERM included (a hook runner or `timeout` sends it).
+
+    The signal raises, so subprocess.run kills its child and the directory goes with the unredacted report in it.
+    """
+    def unwind(signal_number: int, _frame: object) -> None:
+        raise SystemExit(128 + signal_number)
+
+    previous = signal.signal(signal.SIGTERM, unwind)
+    try:
+        with tempfile.TemporaryDirectory() as scratch:
+            yield Path(scratch)
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+
+
+def run_gitleaks(
+    binary: Path, scratch: Path, git_environment: dict[str, str], source: Path, scope: list[str],
+    allowances: dict[Allowance, str],
+) -> SecretScan:
+    # The gate's own config, and no ignore file or inline "gitleaks:allow" from the scanned repository:
+    # only an allowance in quality/config.toml allows a finding.
+    # No --redact: the report must carry Secret to be hashed. It lives only in the 0700 scratch directory.
+    report = scratch / "report.json"
+    command = [
+        str(binary), "git", "--no-banner", "--no-color", *scope,
+        "--config", str(GITLEAKS_CONFIG), "--gitleaks-ignore-path", str(scratch), "--ignore-gitleaks-allow",
+        "--exit-code", str(GITLEAKS_LEAKS_FOUND),
+        "--report-format", "json", "--report-path", str(report), "--", str(source),
+    ]
+    scan = run(command, env=git_environment, timeout=SECRET_SCAN_TIMEOUT_SECONDS)
+    if not report.is_file():
+        raise EngineError(f"{GITLEAKS} exited {scan.returncode} without writing its report{stderr_tail(scan.stderr)}")
+    leaks = secret_findings(_read_report(report), scan.returncode, scan.stderr)
+    return _split_by_allowance(leaks, allowances)
 
 
 def _read_report(report: Path) -> str:
@@ -149,12 +203,14 @@ def _read_report(report: Path) -> str:
 
 
 def _split_by_allowance(leaks: list[Finding], allowances: dict[Allowance, str]) -> SecretScan:
+    used = {leak.allowance for leak in leaks}
     return SecretScan(
         findings=[leak for leak in leaks if leak.allowance not in allowances],
         allowed=[
             replace(leak, reason=f"{GITLEAKS} rule {leak.allowance.rule} allowed: {allowances[leak.allowance]}")
             for leak in leaks if leak.allowance in allowances
         ],
+        unused_allowances={entry: reason for entry, reason in allowances.items() if entry not in used},
     )
 
 
@@ -182,20 +238,28 @@ def attribute_free_git_environment(empty_home: Path) -> dict[str, str]:
     }
 
 
-GIT_VERSION = re.compile(r"(?<!\d)\d++\.\d++(?:\.\d++)?")
+def _is_ascii_number(text: str) -> bool:
+    return text.isascii() and text.isdigit()
 
 
 def parse_git_version(version_output: str) -> str | None:
-    """The first dotted version in `git --version` output; the lookbehind and possessive digits keep it linear."""
-    found = GIT_VERSION.search(version_output)
-    return found[0] if found else None
+    """The first dotted version in `git --version` output, found by splitting, so it cannot backtrack."""
+    for word in version_output.split():
+        numbers = []
+        for part in word.split(".")[:3]:
+            if not _is_ascii_number(part):
+                break
+            numbers.append(part)
+        if len(numbers) >= 2:
+            return ".".join(numbers)
+    return None
 
 
-def _require_git_floor() -> None:
-    asked = _run(["git", "--version"])
+def require_git_floor() -> None:
+    asked = run(["git", "--version"])
     version = parse_git_version(asked.stdout)
     if asked.returncode != 0 or version is None:
-        raise EngineError(f"cannot read the git version{_stderr_tail(asked.stderr)}")
+        raise EngineError(f"cannot read the git version{stderr_tail(asked.stderr)}")
     if tuple(int(part) for part in version.split("."))[:2] < GIT_FLOOR:
         required = ".".join(map(str, GIT_FLOOR))
         raise EngineError(
@@ -203,31 +267,42 @@ def _require_git_floor() -> None:
         )
 
 
-def _head_commit(repository: Path, git_environment: dict[str, str]) -> str:
-    resolved = _run(["git", "-C", str(repository), "rev-parse", "--verify", "HEAD^{commit}"], env=git_environment)
+def head_commit(repository: Path, git_environment: dict[str, str]) -> str:
+    """The commit HEAD names."""
+    head = unborn_aware_head_commit(repository, git_environment)
+    if head is None:
+        raise EngineError(f"cannot resolve HEAD of {repository}: it has no commit")
+    return head
+
+
+def unborn_aware_head_commit(repository: Path, git_environment: dict[str, str]) -> str | None:
+    """The commit HEAD names; None when the repository has no commit yet."""
+    resolved = run(["git", "-C", str(repository), "rev-parse", "--verify", "--quiet", "HEAD^{commit}"], env=git_environment)
+    if resolved.returncode == 1 and not resolved.stderr.strip():  # --quiet: no commit is a silent exit 1
+        return None
     if resolved.returncode != 0:
-        raise EngineError(f"cannot resolve HEAD of {repository} for the {GITLEAKS} scan{_stderr_tail(resolved.stderr)}")
+        raise EngineError(f"cannot resolve HEAD of {repository}{stderr_tail(resolved.stderr)}")
     return resolved.stdout.strip()
 
 
 def _mirror_clone(root: Path, destination: Path, git_environment: dict[str, str]) -> Path:
     command = ["git", "clone", "--mirror", "--quiet", "--template=", str(root.resolve()), str(destination)]
-    cloned = _run(command, env=git_environment)
+    cloned = run(command, env=git_environment)
     if cloned.returncode != 0:
-        raise EngineError(f"cannot clone {root} for the {GITLEAKS} scan{_stderr_tail(cloned.stderr)}")
+        raise EngineError(f"cannot clone {root} for the {GITLEAKS} scan{stderr_tail(cloned.stderr)}")
     return destination
 
 
-def _verify_version(binary: Path, engine_name: str, pinned: str) -> None:
-    asked = _run([str(binary), *VERSION_ARGUMENTS[engine_name]])
+def verify_version(binary: Path, engine_name: str, pinned: str) -> None:
+    asked = run([str(binary), *VERSION_ARGUMENTS[engine_name]])
     if asked.returncode != 0:
-        raise EngineError(f"{binary} version exited {asked.returncode}{_stderr_tail(asked.stderr)}")
+        raise EngineError(f"{binary} version exited {asked.returncode}{stderr_tail(asked.stderr)}")
     reported = (asked.stdout.strip().splitlines() or [""])[0].split(" ")[-1]  # "zizmor 1.2.3", or just "1.2.3"
     if reported != pinned:
         raise EngineError(f"{binary} is version {reported!r}, the pin says {pinned!r}")
 
 
-def _run(
+def run(
     command: list[str], cwd: Path | None = None, env: dict[str, str] | None = None, timeout: float | None = None
 ) -> subprocess.CompletedProcess[str]:
     try:
@@ -238,7 +313,7 @@ def _run(
         raise EngineError(f"cannot run {command[0]}: {error}") from error
 
 
-def _stderr_tail(stderr: str) -> str:
+def stderr_tail(stderr: str) -> str:
     tail = "\n".join(stderr.strip().splitlines()[-STDERR_TAIL_LINES:])
     return f": {tail}" if tail else ""
 
@@ -262,8 +337,8 @@ def _leak_finding(entry: object) -> Finding:
     path, line, rule, commit, secret = _read_leak(entry)
     secret_sha256 = hashlib.sha256(secret.encode("utf-8")).hexdigest()
     return Finding(
-        SECRET, path, line,
-        f"{GITLEAKS} rule {rule} matched at {commit[:8]} (sha256 {secret_sha256}, value not shown).",
+        LEAK_RULE, path, line,
+        f"{GITLEAKS} rule {rule} matched {f'at {commit[:8]}' if commit else 'in the staged change'} (sha256 {secret_sha256}, value not shown).",
         "rotate the secret; for a false positive, allow this rule, file and sha256 with a reason in quality/config.toml.",
         Allowance(rule, path, secret_sha256),
     )
@@ -277,16 +352,16 @@ def scan_workflows(root: Path, engine_dir: Path, pins: dict[str, Pin], workflows
         return []
     findings = []
     for engine in WORKFLOW_ENGINES.values():
-        binary = _engine_path(engine_dir, engine.name)
-        _verify_version(binary, engine.name, pins[engine.name].version)
-        scan = _run([str(binary), *engine.arguments, *workflows], cwd=root)
+        binary = engine_path(engine_dir, engine.name)
+        verify_version(binary, engine.name, pins[engine.name].version)
+        scan = run([str(binary), *engine.arguments, *workflows], cwd=root)
         findings += engine_findings(engine, scan.stdout, scan.returncode, scan.stderr)
     return findings
 
 
 def engine_findings(engine: _Engine, report_text: str, exit_code: int, stderr: str) -> list[Finding]:
     if exit_code != CLEAN_EXIT and exit_code not in engine.finding_exits:
-        raise EngineError(f"{engine.name} exited {exit_code}, neither 'clean' nor 'findings'{_stderr_tail(stderr)}")
+        raise EngineError(f"{engine.name} exited {exit_code}, neither 'clean' nor 'findings'{stderr_tail(stderr)}")
     try:
         entries = json.loads(report_text)
     except ValueError as error:
