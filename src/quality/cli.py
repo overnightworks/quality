@@ -10,7 +10,7 @@ from quality import __version__, engines
 from quality.config import ConfigError, read_mandatory_jobs
 from quality.hygiene import CannotJudge, active_rules, run_hygiene, skipped_rules
 from quality.report import Finding, render
-from quality.sonar import Sleep, Transport, analyse, fetch_json
+from quality.sonar import Sleep, Transport, analyse, fetch_json, preflight
 from quality.verdict import (
     PageFetcher,
     github_fetcher,
@@ -48,6 +48,9 @@ def main(
     sonar = commands.add_parser("sonar", help="check SonarCloud for open findings").add_subparsers(
         dest="sonar_command", required=True
     )
+    sonar.add_parser("preflight", help="refuse a token or properties file that could steer the scan").add_argument(
+        "path", nargs="?", type=Path, default=Path(".")
+    )
     sonar.add_parser("findings", help="wait for this run's analysis, then count its open findings").add_argument(
         "--task-file", type=Path, required=True, help="the scanner's report-task.txt"
     )
@@ -56,6 +59,8 @@ def main(
     if arguments.command == "verdict":
         return run_verdict(arguments.path, fetcher_for)
     if arguments.command == "sonar":
+        if arguments.sonar_command == "preflight":
+            return run_sonar_preflight(arguments.path)
         return run_sonar_findings(arguments.task_file, transport, sleep)
     if arguments.command == "engines":
         return run_engines_install(arguments.directory, read_pins)
@@ -97,6 +102,16 @@ def run_engines_install(directory: Path, read_pins: Callable[[], dict[str, engin
         print(f"engines: cannot install - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     print(f"engines: installed into {directory}")
+    return EXIT_CLEAN
+
+
+def run_sonar_preflight(path: Path) -> int:
+    try:
+        preflight(path, os.environ)
+    except CannotJudge as error:
+        print(f"sonar: cannot judge - {error}", file=sys.stderr)
+        return EXIT_CANNOT_JUDGE
+    print("sonar: preflight clean")
     return EXIT_CLEAN
 
 

@@ -3,6 +3,7 @@
 import base64
 import http.client
 import json
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -11,7 +12,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from quality.hygiene import CannotJudge
+from quality.hygiene import CannotJudge, tracked_files
 from quality.report import Finding
 
 SONAR_ORIGIN = "https://sonarcloud.io"
@@ -37,6 +38,36 @@ OPEN_ISSUE_STATUSES = "OPEN,CONFIRMED,ACCEPTED,FALSE_POSITIVE"
 
 PULL_REQUEST_EVENT = "pull_request"
 TOKEN_VARIABLE = "SONAR_TOKEN"
+
+PROPERTIES_FILE = "sonar-project.properties"
+SCANNER_WORK_DIRECTORY = ".scannerwork"
+# Grows only through a quality release. Anything that can steer the scanner's endpoint, proxy, working
+# directory or issue handling stays out, because the token travels with every authenticated request.
+ALLOWED_PROPERTIES = frozenset(
+    {
+        "sonar.organization",
+        "sonar.projectKey",
+        "sonar.projectName",
+        "sonar.sources",
+        "sonar.tests",
+        "sonar.inclusions",
+        "sonar.exclusions",
+        "sonar.test.inclusions",
+        "sonar.test.exclusions",
+        "sonar.coverage.exclusions",
+        "sonar.cpd.exclusions",
+        "sonar.sourceEncoding",
+        "sonar.python.version",
+        "sonar.python.coverage.reportPaths",
+        "sonar.javascript.lcov.reportPaths",
+    }
+)
+# The scanner expands ${env.NAME} and ${sonar.token} in any value.
+SUBSTITUTION_MARKER = "${"
+PROPERTY_WHITESPACE = " \t\f"
+# Not str.splitlines(): java.util.Properties breaks lines on these three alone.
+PROPERTY_LINE_BREAK = re.compile(r"\r\n|\r|\n")
+PROPERTY_ESCAPES = {"t": "\t", "n": "\n", "r": "\r", "f": "\f"}
 
 Transport = Callable[[str, str], object]
 Sleep = Callable[[float], None]
@@ -139,6 +170,93 @@ class SonarResult:
         return f"{RULE}: {count} open on {self.scope.value} (report only until baseline)"
 
 
+def preflight(root: Path, environment: Mapping[str, str]) -> None:
+    """Bind the scan to the caller's own project before the token is handed to the scanner."""
+    require_token(environment)
+    project = project_of(environment)
+    if any(Path(name).parts[0] == SCANNER_WORK_DIRECTORY for name in tracked_files(root)):
+        raise CannotJudge(f"{SCANNER_WORK_DIRECTORY}/ is tracked: a committed report-task.txt would stand in for this run's analysis")
+    properties = read_properties(root / PROPERTIES_FILE)
+    for key, value in properties:
+        if key not in ALLOWED_PROPERTIES:
+            raise CannotJudge(f"{PROPERTIES_FILE} sets {key!r}, which is not allowed")
+        if SUBSTITUTION_MARKER in value:
+            raise CannotJudge(f"{PROPERTIES_FILE} sets {key!r} to a value with a {SUBSTITUTION_MARKER}...}} substitution")
+    chosen = dict(properties)
+    for key, expected in (("sonar.organization", project.owner), ("sonar.projectKey", project.key)):
+        if chosen.get(key) != expected:
+            raise CannotJudge(f"{PROPERTIES_FILE} sets {key!r} to {chosen.get(key)!r}, not {expected!r}")
+
+
+def require_token(environment: Mapping[str, str]) -> None:
+    if not environment.get(TOKEN_VARIABLE):
+        raise CannotJudge(f"{TOKEN_VARIABLE} is empty: an anonymous reader is told zero findings")
+
+
+def read_properties(path: Path) -> list[tuple[str, str]]:
+    """The java.util.Properties grammar: separators, continuations and escapes in keys and values."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        raise CannotJudge(f"cannot read {path.name}: {error.__class__.__name__}") from error
+    return [parse_property(line) for line in logical_property_lines(text)]
+
+
+def logical_property_lines(text: str) -> list[str]:
+    logical: list[str] = []
+    pending: str | None = None
+    for physical in PROPERTY_LINE_BREAK.split(text):
+        line = physical.lstrip(PROPERTY_WHITESPACE)
+        if pending is None and (not line or line[0] in "#!"):
+            continue
+        joined = (pending or "") + line
+        trailing_backslashes = len(joined) - len(joined.rstrip("\\"))
+        pending = joined[:-1] if trailing_backslashes % 2 else None
+        if pending is None:
+            logical.append(joined)
+    if pending is not None:
+        raise CannotJudge(f"{PROPERTIES_FILE} ends in a line continuation")
+    return logical
+
+
+def parse_property(line: str) -> tuple[str, str]:
+    key, position = decode_property_text(line, 0, stop_at=PROPERTY_WHITESPACE + "=:")
+    position = skip_property_whitespace(line, position)
+    if line[position : position + 1] in ("=", ":"):
+        position = skip_property_whitespace(line, position + 1)
+    value, _ = decode_property_text(line, position)
+    return key, value
+
+
+def skip_property_whitespace(line: str, position: int) -> int:
+    while line[position : position + 1] and line[position] in PROPERTY_WHITESPACE:
+        position += 1
+    return position
+
+
+def decode_property_text(line: str, position: int, stop_at: str = "") -> tuple[str, int]:
+    decoded: list[str] = []
+    while position < len(line) and line[position] not in stop_at:
+        character = line[position]
+        position += 1
+        if character != "\\":
+            decoded.append(character)
+            continue
+        if position >= len(line):
+            raise CannotJudge(f"{PROPERTIES_FILE} has a dangling backslash in {line!r}")
+        escaped = line[position]
+        position += 1
+        if escaped == "u":
+            digits = line[position : position + 4]
+            if len(digits) < 4 or any(digit not in "0123456789abcdefABCDEF" for digit in digits):
+                raise CannotJudge(f"{PROPERTIES_FILE} has a malformed unicode escape in {line!r}")
+            decoded.append(chr(int(digits, 16)))
+            position += 4
+        else:
+            decoded.append(PROPERTY_ESCAPES.get(escaped, escaped))
+    return "".join(decoded), position
+
+
 def analyse(
     task_file: Path, environment: Mapping[str, str], transport: Transport = fetch_json, sleep: Sleep = time.sleep
 ) -> SonarResult:
@@ -160,10 +278,8 @@ def read_analysis(task_file: Path, environment: Mapping[str, str]) -> Analysis:
         raise CannotJudge(f"{task_file.name} names server {settings.get('serverUrl')!r}, not {SONAR_ORIGIN}")
     if not settings.get("ceTaskId"):
         raise CannotJudge(f"{task_file.name} names no ceTaskId")
-    token = environment.get(TOKEN_VARIABLE, "")
-    if not token:
-        raise CannotJudge(f"{TOKEN_VARIABLE} is empty or unset: an anonymous reader is told zero findings")
-    return Analysis(project, scope_of(environment), settings["ceTaskId"], basic_authorization(token))
+    require_token(environment)
+    return Analysis(project, scope_of(environment), settings["ceTaskId"], basic_authorization(environment[TOKEN_VARIABLE]))
 
 
 def project_of(environment: Mapping[str, str]) -> Project:
