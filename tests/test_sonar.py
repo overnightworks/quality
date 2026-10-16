@@ -80,16 +80,20 @@ def set_environment(monkeypatch, environment) -> None:
         monkeypatch.setenv(name, value)
 
 
+@pytest.fixture(autouse=True)
+def scratch_working_directory(monkeypatch, tmp_path):
+    """The task file is read relative to the working directory, so every test works in its own."""
+    monkeypatch.chdir(tmp_path)
+
+
 def run_cli(
-    monkeypatch, capsys, fake: FakeSonar, environment=PULL_REQUEST_ENVIRONMENT, task_text: str | None = None, tmp_path=None
+    monkeypatch, capsys, fake: FakeSonar, environment=PULL_REQUEST_ENVIRONMENT, task_text: str | None = None
 ):
     set_environment(monkeypatch, environment)
-    task_file = TASK_FIXTURE
-    if task_text is not None:
-        task_file = tmp_path / "report-task.txt"
-        task_file.write_text(task_text)
+    sonar.TASK_FILE.parent.mkdir()
+    sonar.TASK_FILE.write_text(TASK_FIXTURE.read_text() if task_text is None else task_text)
     sleeps: list[float] = []
-    code = cli.main(["sonar", "findings", "--task-file", str(task_file)], transport=fake, sleep=sleeps.append)
+    code = cli.main(["sonar", "findings"], transport=fake, sleep=sleeps.append)
     captured = capsys.readouterr()
     assert TOKEN not in captured.out + captured.err
     return code, captured.out, captured.err, sleeps
@@ -105,7 +109,8 @@ def test_known_fail_fixture_lists_every_open_finding_and_exits_one(monkeypatch, 
     """#22 kept row: known-fail fixture lists every open finding and exits 1"""
     code, out, err, _ = run_cli(monkeypatch, capsys, sonar_answering(issues=issues_page(2, 1, 2)))
     assert code == 1
-    assert "sonar src/a1.py:1 - python:S1: m" in out and "sonar src/a2.py:2 - python:S1: m" in out
+    assert "sonar src/a1.py:1 - python:S1: m" in out
+    assert "sonar src/a2.py:2 - python:S1: m" in out
     assert "2 open finding(s) in pullRequest=7" in err
 
 
@@ -138,7 +143,8 @@ def test_asks_for_statuses_a_person_may_have_accepted_and_encodes_the_scope(monk
     query = parse_qs(urlparse(fake.urls_to("issues/search")[0]).query)
     assert code == 0
     assert query["issueStatuses"] == ["OPEN,CONFIRMED,ACCEPTED,FALSE_POSITIVE"]
-    assert query["branch"] == ["feat/a&b#c%d"] and "statuses" not in query
+    assert query["branch"] == ["feat/a&b#c%d"]
+    assert "statuses" not in query
     assert query["componentKeys"] == [KEY]
 
 
@@ -177,6 +183,21 @@ def test_an_unreadable_answer_is_exit_two_and_never_clean(monkeypatch, capsys, f
     assert err.startswith("sonar: cannot judge - ")
 
 
+@pytest.mark.parametrize(
+    ("issues", "reason"),
+    [
+        ({"total": 0, "issues": {}}, "issues that are not a list"),
+        ({"total": 1, "issues": [{**issue(1), "component": None}]}, "is not a string"),
+    ],
+    ids=["issues not a list", "component not a string"],
+)
+def test_a_malformed_issues_answer_names_what_is_wrong(monkeypatch, capsys, issues, reason):
+    """defect:#5 finding 40: the issues check and finding_from_issue refuse with CannotJudge, naming the shape"""
+    code, _, err, _ = run_cli(monkeypatch, capsys, sonar_answering(issues=issues))
+    assert code == 2
+    assert reason in err
+
+
 def test_does_not_read_findings_when_the_scope_does_not_resolve(monkeypatch, capsys):
     """#22 kept row: an unresolved scope is exit 2 before findings are read"""
     fake = sonar_answering()
@@ -197,38 +218,52 @@ def test_does_not_read_findings_when_the_scope_does_not_resolve(monkeypatch, cap
     ids=["foreign server", "foreign project", "foreign organization", "missing project", "missing task id"],
 )
 def test_a_task_file_naming_something_foreign_is_refused_before_any_request(
-    monkeypatch, capsys, tmp_path, edit, reason
+    monkeypatch, capsys, edit, reason
 ):
     """#22: a task file naming a foreign server, project, organization or none is exit 2 before any request"""
     fake = sonar_answering()
     text = TASK_FIXTURE.read_text().replace(*edit)
-    code, _, err, _ = run_cli(monkeypatch, capsys, fake, task_text=text, tmp_path=tmp_path)
+    code, _, err, _ = run_cli(monkeypatch, capsys, fake, task_text=text)
     assert (code, fake.requests) == (2, [])
     assert reason in err
 
 
-def test_a_task_file_that_cannot_be_read_is_refused_before_any_request(monkeypatch, capsys, tmp_path):
+def test_findings_reads_only_the_literal_scannerwork_report_task_file(monkeypatch, capsys):
+    """#26 rule: findings reads only .scannerwork/report-task.txt"""
+    set_environment(monkeypatch, PULL_REQUEST_ENVIRONMENT)
+    Path(".scannerwork").mkdir()
+    Path(".scannerwork/report-task.txt").write_text(TASK_FIXTURE.read_text())
+    code = cli.main(["sonar", "findings"], transport=sonar_answering(), sleep=lambda _: None)
+    assert code == 0
+    assert "clean" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("breakage", ["absent", "symlink loop"])
+def test_a_task_file_that_cannot_be_read_is_refused_before_any_request(monkeypatch, capsys, breakage):
     """#22 kept row: an unreadable task file is exit 2 before any request"""
     fake = sonar_answering()
     set_environment(monkeypatch, PULL_REQUEST_ENVIRONMENT)
-    code = cli.main(["sonar", "findings", "--task-file", str(tmp_path / "absent.txt")], transport=fake)
+    if breakage == "symlink loop":
+        sonar.TASK_FILE.parent.mkdir()
+        sonar.TASK_FILE.symlink_to(Path.cwd() / sonar.TASK_FILE)
+    code = cli.main(["sonar", "findings"], transport=fake)
     assert (code, fake.requests) == (2, [])
-    assert "absent.txt" in capsys.readouterr().err
+    assert "report-task.txt" in capsys.readouterr().err
 
 
-def test_never_requests_the_urls_the_task_file_names(monkeypatch, capsys, tmp_path):
+def test_never_requests_the_urls_the_task_file_names(monkeypatch, capsys):
     """#22 kept row: only sonarcloud.io is requested, whatever URLs the task file names"""
     fake = sonar_answering()
     text = TASK_FIXTURE.read_text().replace("https://sonarcloud.io/api/ce", "https://evil.example/api/ce")
-    run_cli(monkeypatch, capsys, fake, task_text=text, tmp_path=tmp_path)
+    run_cli(monkeypatch, capsys, fake, task_text=text)
     assert all(url.startswith("https://sonarcloud.io/api/") for url, _ in fake.requests)
 
 
-def test_a_task_id_with_an_ampersand_stays_one_query_value(monkeypatch, capsys, tmp_path):
+def test_a_task_id_with_an_ampersand_stays_one_query_value(monkeypatch, capsys):
     """#22 kept row: a task id with an ampersand stays one query value"""
     fake = sonar_answering()
     text = TASK_FIXTURE.read_text().replace("ceTaskId=AXtask-1", "ceTaskId=a&b=c")
-    run_cli(monkeypatch, capsys, fake, task_text=text, tmp_path=tmp_path)
+    run_cli(monkeypatch, capsys, fake, task_text=text)
     assert parse_qs(urlparse(fake.urls_to("ce/task")[0]).query) == {"id": ["a&b=c"]}
 
 
@@ -397,3 +432,107 @@ def test_the_real_transport_reports_an_unreachable_server():
     """#22 kept row: an unreachable server is cannot judge"""
     with pytest.raises(CannotJudge, match="could not be reached"):
         sonar.fetch_json("http://127.0.0.1:1/x", "Basic x")
+
+
+CLEAN_PROPERTIES = (
+    "sonar.organization=overnightworks\nsonar.projectKey=overnightworks_quality\nsonar.sources=src\nsonar.tests=tests\n"
+)
+
+
+def run_preflight(monkeypatch, capsys, build_repo, properties: str | None = CLEAN_PROPERTIES, environment=PULL_REQUEST_ENVIRONMENT, extra_files=None):
+    set_environment(monkeypatch, environment)
+    files = dict(extra_files or {})
+    if properties is not None:
+        files["sonar-project.properties"] = properties
+    code = cli.main(["sonar", "preflight", str(build_repo(files))])
+    captured = capsys.readouterr()
+    assert TOKEN not in captured.out + captured.err
+    return code, captured.out, captured.err
+
+
+def test_preflight_passes_the_callers_own_clean_properties(monkeypatch, capsys, build_repo):
+    """#26 rule 3: the caller's own organization, key and allowlisted settings pass"""
+    assert run_preflight(monkeypatch, capsys, build_repo)[0] == 0
+
+
+@pytest.mark.parametrize(
+    ("properties", "named"),
+    [
+        ("sonar.scanner.sonarcloudUrl=https://evil.example\nsonar.scanner.apiBaseUrl=https://evil.example", "sonar.scanner.sonarcloudUrl"),
+        ("sonar.host.url=https://evil.example", "sonar.host.url"),
+        ("sonar.host.url : https://evil.example", "sonar.host.url"),
+        ("sonar.host.url https://evil.example", "sonar.host.url"),
+        ("sonar\\u002ehost.url=https://evil.example", "sonar.host.url"),
+        ("sonar.host\\.url=https://evil.example", "sonar.host.url"),
+        ("sonar.host.\\\nurl=https://evil.example", "sonar.host.url"),
+        ("sonar.region=us", "sonar.region"),
+        ("sonar.scanner.proxyHost=evil.example", "sonar.scanner.proxyHost"),
+        ("sonar.modules=a", "sonar.modules"),
+        ("sonar.projectBaseDir=/", "sonar.projectBaseDir"),
+        ("sonar.working.directory=/tmp", "sonar.working.directory"),
+        ("sonar.issue.ignore.multicriteria=e1", "sonar.issue.ignore.multicriteria"),
+        ("sonar.qualitygate.wait=true", "sonar.qualitygate.wait"),
+        ("sonar.projectName=${env.SONAR_TOKEN}", "sonar.projectName"),
+        ("sonar.projectName=${sonar.token}", "sonar.projectName"),
+        ("sonar.projectName=\\u0024{env.SONAR_TOKEN}", "sonar.projectName"),
+        ("sonar.projectName=\\$\\{env.SONAR_TOKEN}", "sonar.projectName"),
+        ("sonar.projectName=$\\\n{env.SONAR_TOKEN}", "sonar.projectName"),
+        ("sonar.sources=${env.HOME}", "sonar.sources"),
+        ("sonar.organization=someone-else", "sonar.organization"),
+        ("sonar.projectKey=other_project", "sonar.projectKey"),
+        ("sonar.projectName=bad\\uZZZZ", "malformed unicode escape"),
+    ],
+    ids=[
+        "endpoint pair", "host url", "colon separator", "whitespace separator", "unicode escaped key", "backslash escaped key",
+        "continuation split key", "region", "proxy", "modules", "base dir", "working directory", "ignore rules", "gate wait",
+        "env substitution", "token substitution", "unicode escaped substitution", "backslash escaped substitution",
+        "continuation split substitution", "substitution in a path key", "foreign organization", "foreign key", "malformed escape",
+    ],
+)
+def test_preflight_refuses_what_could_steer_the_token_naming_it(monkeypatch, capsys, build_repo, properties, named):
+    """#26 rule 3: a foreign key, endpoint family or ${...} substitution in any decoded value is exit 2, naming the key"""
+    code, _, err = run_preflight(monkeypatch, capsys, build_repo, CLEAN_PROPERTIES + properties + "\n")
+    assert code == 2
+    assert named in err
+
+
+def test_preflight_drops_a_final_unpaired_backslash_like_java_properties(monkeypatch, capsys, build_repo):
+    """#26 rule 3: a last line ending in a backslash without a newline is read as java.util.Properties reads it"""
+    properties = "sonar.projectKey=overnightworks_quality\nsonar.organization=overnightworks\\"
+    assert run_preflight(monkeypatch, capsys, build_repo, properties)[0] == 0
+
+
+def test_preflight_refuses_a_properties_file_without_the_callers_key(monkeypatch, capsys, build_repo):
+    """#26 rule 3: a file that does not name the caller's project key is exit 2"""
+    code, _, err = run_preflight(monkeypatch, capsys, build_repo, "sonar.organization=overnightworks\n")
+    assert (code, "sonar.projectKey" in err) == (2, True)
+
+
+def test_preflight_lets_a_lone_dollar_a_brace_and_comments_pass(monkeypatch, capsys, build_repo):
+    """#26 rule 3: a lone dollar or a brace without a dollar is not a substitution; comments are skipped"""
+    properties = CLEAN_PROPERTIES + "# sonar.host.url=https://evil.example\n! sonar.region=us\nsonar.projectName=cost $ {x}\n"
+    assert run_preflight(monkeypatch, capsys, build_repo, properties)[0] == 0
+
+
+@pytest.mark.parametrize(
+    "environment",
+    [{**PULL_REQUEST_ENVIRONMENT, "SONAR_TOKEN": ""}, {k: v for k, v in PULL_REQUEST_ENVIRONMENT.items() if k != "SONAR_TOKEN"}],
+    ids=["empty token", "unset token"],
+)
+def test_preflight_refuses_a_missing_token_and_never_skips(monkeypatch, capsys, build_repo, environment):
+    """#26 rule 2: an empty or unset token is exit 2 naming SONAR_TOKEN"""
+    code, _, err = run_preflight(monkeypatch, capsys, build_repo, environment=environment)
+    assert (code, "SONAR_TOKEN is empty" in err) == (2, True)
+
+
+def test_preflight_refuses_a_tracked_scanner_work_directory(monkeypatch, capsys, build_repo):
+    """#26 rule 3: a committed .scannerwork/report-task.txt is exit 2"""
+    files = {".scannerwork/report-task.txt": "ceTaskId=x\n"}
+    code, _, err = run_preflight(monkeypatch, capsys, build_repo, extra_files=files)
+    assert (code, ".scannerwork" in err) == (2, True)
+
+
+def test_preflight_refuses_a_repository_without_properties(monkeypatch, capsys, build_repo):
+    """#26 rule 3: no sonar-project.properties is exit 2"""
+    code, _, err = run_preflight(monkeypatch, capsys, build_repo, properties=None)
+    assert (code, "sonar-project.properties" in err) == (2, True)

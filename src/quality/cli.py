@@ -10,7 +10,7 @@ from quality import __version__, engines, staged
 from quality.config import ConfigError, read_mandatory_jobs
 from quality.hygiene import CannotJudge, active_rules, run_hygiene, skipped_rules
 from quality.report import Finding, render
-from quality.sonar import Sleep, Transport, analyse, fetch_json
+from quality.sonar import TASK_FILE, Sleep, Transport, analyse, fetch_json, preflight
 from quality.verdict import (
     PageFetcher,
     github_fetcher,
@@ -54,9 +54,10 @@ def main(
     sonar = commands.add_parser("sonar", help="check SonarCloud for open findings").add_subparsers(
         dest="sonar_command", required=True
     )
-    sonar.add_parser("findings", help="wait for this run's analysis, then count its open findings").add_argument(
-        "--task-file", type=Path, required=True, help="the scanner's report-task.txt"
+    sonar.add_parser("preflight", help="refuse a token or properties file that could steer the scan").add_argument(
+        "path", nargs="?", type=Path, default=Path(".")
     )
+    sonar.add_parser("findings", help=f"wait for this run's analysis ({TASK_FILE}), then count its open findings")
     arguments = parser.parse_args(argv)
 
     if arguments.command == "verdict":
@@ -64,7 +65,9 @@ def main(
     if arguments.command == "scan-staged":
         return run_scan_staged(arguments.path, arguments.engines, read_pins)
     if arguments.command == "sonar":
-        return run_sonar_findings(arguments.task_file, transport, sleep)
+        if arguments.sonar_command == "preflight":
+            return run_sonar_preflight(arguments.path)
+        return run_sonar_findings(transport, sleep)
     if arguments.command == "engines":
         run_engines = run_engines_install if arguments.engines_command == "install" else run_engines_verify
         return run_engines(arguments.directory, read_pins)
@@ -133,9 +136,19 @@ def run_engines_verify(directory: Path, read_pins: Callable[[], dict[str, engine
     return EXIT_CLEAN
 
 
-def run_sonar_findings(task_file: Path, transport: Transport, sleep: Sleep) -> int:
+def run_sonar_preflight(path: Path) -> int:
     try:
-        result = analyse(task_file, os.environ, transport, sleep)
+        preflight(path, os.environ)
+    except CannotJudge as error:
+        print(f"sonar: cannot judge - {error}", file=sys.stderr)
+        return EXIT_CANNOT_JUDGE
+    print("sonar: preflight clean")
+    return EXIT_CLEAN
+
+
+def run_sonar_findings(transport: Transport, sleep: Sleep) -> int:
+    try:
+        result = analyse(os.environ, transport, sleep)
     except CannotJudge as error:
         print(f"sonar: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
