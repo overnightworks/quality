@@ -1,5 +1,3 @@
-import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -111,12 +109,17 @@ def test_quality_wires_the_secret_by_name_into_the_gate():
     assert caller["uses"].endswith("/.github/workflows/gate.yml")
 
 
-def test_quality_binds_its_own_scan_to_its_own_project(tmp_path):
+def test_quality_binds_its_own_scan_to_its_own_project(build_repo):
     """#26 rule 5, #34 rule 2: quality's own sonar-project.properties passes its own preflight once the tests job's report is there"""
-    shutil.copy(ROOT / sonar.PROPERTIES_FILE, tmp_path / sonar.PROPERTIES_FILE)
-    (tmp_path / "coverage.xml").write_text("<coverage/>", encoding="utf-8")
-    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
-    sonar.preflight(tmp_path, {"GITHUB_REPOSITORY": "overnightworks/quality", sonar.TOKEN_VARIABLE: "t"})
+    checkout = build_repo({sonar.PROPERTIES_FILE: (ROOT / sonar.PROPERTIES_FILE).read_text(encoding="utf-8"), "coverage.xml": "<coverage/>"})
+    sonar.preflight(checkout, {"GITHUB_REPOSITORY": "overnightworks/quality", sonar.TOKEN_VARIABLE: "t"})
+
+
+def test_a_missing_coverage_artifact_fails_the_download_the_job_and_so_the_verdict(gate):
+    """#34 rule 2: a named artifact the run does not have fails the download, the sonar job and the verdict, so no step or job may continue on error"""
+    download = next(s for s in gate["jobs"]["sonar"]["steps"] if s.get("uses", "").startswith("actions/download-artifact"))
+    assert "continue-on-error" not in download
+    assert "continue-on-error" not in gate["jobs"]["sonar"]
 
 
 def test_the_gate_takes_an_optional_coverage_artifact_and_quality_passes_it_the_same_way_as_any_caller(gate):
