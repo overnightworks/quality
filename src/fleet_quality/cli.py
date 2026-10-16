@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from fleet_quality import __version__
@@ -9,6 +10,7 @@ from fleet_quality.config import ConfigError, read_mandatory_jobs
 from fleet_quality.hygiene import RULE_IDS, CannotJudge, run_hygiene
 from fleet_quality.report import render
 from fleet_quality.verdict import (
+    PageFetcher,
     github_fetcher,
     judge,
     read_base_mandatory_jobs,
@@ -20,7 +22,7 @@ EXIT_FINDINGS = 1
 EXIT_CANNOT_JUDGE = 2
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, fetcher_for: Callable[[str], PageFetcher] = github_fetcher) -> int:
     parser = argparse.ArgumentParser(prog="fleet-quality")
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -31,7 +33,7 @@ def main(argv: list[str] | None = None) -> int:
     arguments = parser.parse_args(argv)
 
     if arguments.command == "verdict":
-        return run_verdict(arguments.path)
+        return run_verdict(arguments.path, fetcher_for)
     try:
         findings = run_hygiene(arguments.path)
     except CannotJudge as error:
@@ -46,17 +48,17 @@ def main(argv: list[str] | None = None) -> int:
     return EXIT_FINDINGS
 
 
-def run_verdict(path: Path) -> int:
+def run_verdict(path: Path, fetcher_for: Callable[[str], PageFetcher]) -> int:
     try:
         mandatory = read_mandatory_jobs(path)
         base_sha = os.environ.get("GATE_BASE_SHA", "")
         base_mandatory = read_base_mandatory_jobs(path, base_sha) if base_sha else ()
         jobs = read_jobs(
-            os.environ["GITHUB_REPOSITORY"], os.environ["GITHUB_RUN_ID"], github_fetcher(os.environ["GITHUB_TOKEN"])
+            os.environ["GITHUB_REPOSITORY"], os.environ["GITHUB_RUN_ID"], fetcher_for(os.environ["GITHUB_TOKEN"])
         )
         gate_results = {name: need["result"] for name, need in json.loads(os.environ["GATE_NEEDS"]).items()}
         result = judge(mandatory, base_mandatory, jobs, gate_results, int(os.environ["GITHUB_RUN_ATTEMPT"]))
-    except (ConfigError, CannotJudge, KeyError) as error:
+    except (ConfigError, CannotJudge, KeyError, ValueError) as error:
         report = f"verdict: cannot judge - {error}"
         code = EXIT_CANNOT_JUDGE
     else:

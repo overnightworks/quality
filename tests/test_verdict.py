@@ -43,23 +43,43 @@ def problems(jobs, mandatory=("checks",), base=(), gate=GREEN_GATE, attempt=1):
         ([job(name="other", conclusion="failure"), job()], 1, ()),
         ([job(name="checks (3.12)")], 1, ('mandatory job "checks" is missing from the run',)),
     ],
-    ids=lambda value: value if isinstance(value, int) else "",
+    ids=[
+        "success",
+        "missing",
+        "in_progress",
+        "queued",
+        "failure",
+        "skipped",
+        "cancelled",
+        "newer-failure-beats-older-success",
+        "newer-success-beats-older-failure",
+        "attempt-below-current-counts",
+        "attempt-above-current-ignored",
+        "duplicate-entries-one-failing",
+        "duplicate-entries-all-success",
+        "other-job-failing-ignored",
+        "name-must-match-exactly",
+    ],
 )
 def test_judges_the_effective_result_of_each_mandatory_job(jobs, attempt, expected):
+    """#6 rule 2: the newest attempt up to the current one decides each mandatory job."""
     assert problems(jobs, attempt=attempt) == expected
 
 
 def test_a_gate_job_that_did_not_succeed_is_red():
+    """#6 rule 4: a gate job that did not succeed makes the verdict red."""
     assert problems([job()], gate={"hygiene": "failure"}) == ('gate job "hygiene" result failure',)
 
 
 def test_a_job_dropped_against_the_base_is_loosened_and_red():
+    """#6 rule 3: a mandatory job dropped against the base is loosened and red."""
     found = problems([job("tests-lite")], mandatory=("tests-lite",), base=("tests",))
     assert 'loosened: mandatory job "tests" removed' in found
     assert 'mandatory job "tests" is missing from the run' in found
 
 
 def test_a_base_job_kept_by_the_head_is_green():
+    """#6 rule 3: a base job the head keeps is not loosened."""
     assert problems([job()], mandatory=("checks",), base=("checks",)) == ()
 
 
@@ -71,27 +91,33 @@ def fetch_from_fixtures(*names):
 
 
 def test_reads_the_mandatory_job_that_only_sits_on_page_two():
+    """#6 rule 2: jobs on later pages are read from recorded responses."""
     jobs = read_jobs("o/r", "1", fetch_from_fixtures("jobs-page1.json", "jobs-page2.json"))
-    assert problems(jobs) == ('mandatory job "checks" (attempt 1) concluded failure',)
+    assert problems(jobs, mandatory=("quality / verdict",)) == ()
+    assert problems(jobs, mandatory=("checks",)) == ('mandatory job "checks" is missing from the run',)
 
 
 def test_a_missing_second_page_cannot_be_judged():
+    """#6 rule 2: jobs read disagreeing with total_count cannot be judged."""
     with pytest.raises(CannotJudge, match="read 2 jobs but the run has 3"):
         read_jobs("o/r", "1", fetch_from_fixtures("jobs-page1.json"))
 
 
 def test_more_pages_than_the_cap_cannot_be_judged():
+    """#6 rule 2: past the page cap the run cannot be judged."""
     page = (FIXTURES / "jobs-page1.json").read_text(encoding="utf-8")
     with pytest.raises(CannotJudge, match="more than 10 pages"):
         read_jobs("o/r", "1", lambda url: (page, '<https://api.example/next>; rel="next"'))
 
 
 def test_base_config_is_read_from_the_base_commit(build_repo):
+    """#6 rule 3: the base config is read from the base commit."""
     repo = build_repo({"quality/config.toml": '[gate]\nmandatory_jobs = ["tests"]\n'})
     assert read_base_mandatory_jobs(repo, _head(repo)) == ("tests",)
 
 
 def test_a_base_without_the_config_contributes_nothing(build_repo):
+    """#6 rule 3: a base without the config adds no mandatory jobs."""
     repo = build_repo({"README.md": "x"})
     assert read_base_mandatory_jobs(repo, _head(repo)) == ()
 
@@ -120,7 +146,8 @@ def run_env(monkeypatch, build_repo, tmp_path):
 
 
 @pytest.mark.parametrize(("conclusion", "code"), [("success", 0), ("failure", 1)])
-def test_verdict_exit_code_and_summary_follow_the_run(monkeypatch, capsys, run_env, conclusion, code):
+def test_verdict_exit_code_and_summary_follow_the_run(capsys, run_env, conclusion, code):
+    """#6 rule 4: exit code and step summary follow the run."""
     repo, summary = run_env
     page = json.dumps(
         {
@@ -128,18 +155,45 @@ def test_verdict_exit_code_and_summary_follow_the_run(monkeypatch, capsys, run_e
             "jobs": [{"name": "checks", "run_attempt": 1, "status": "completed", "conclusion": conclusion}],
         }
     )
-    monkeypatch.setattr(cli, "github_fetcher", lambda token: lambda url: (page, None))
-    assert cli.main(["verdict", str(repo)]) == code
+    assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (page, None)) == code
     assert capsys.readouterr().out.strip().endswith("green" if code == 0 else "red")
     assert summary.read_text().strip().endswith("green" if code == 0 else "red")
 
 
-def test_verdict_that_cannot_read_the_run_exits_two(monkeypatch, capsys, run_env):
+def test_verdict_that_cannot_read_the_run_exits_two(capsys, run_env):
+    """#6 rule 2: a page error exits 2 with the reason."""
     repo, _ = run_env
 
     def refuse(url):
         raise CannotJudge("403 (does the caller grant actions: read?)")
 
-    monkeypatch.setattr(cli, "github_fetcher", lambda token: refuse)
-    assert cli.main(["verdict", str(repo)]) == 2
+    assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: refuse) == 2
     assert "actions: read" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "body",
+    ["not json", "[]", '{"total_count": 1, "jobs": [1]}', '{"jobs": []}'],
+    ids=["not-json", "not-an-object", "job-not-an-object", "no-total-count"],
+)
+def test_a_page_of_the_wrong_shape_cannot_be_judged(body):
+    """defect:#6 finding 3: decoding and shape errors of a page are cannot-judge, not a traceback."""
+    with pytest.raises(CannotJudge, match="expected jobs page"):
+        read_jobs("o/r", "1", lambda url: (body, None))
+
+
+def test_a_base_config_that_git_cannot_show_cannot_be_judged(build_repo):
+    """defect:#6 finding 3: a failing git show of the base config is cannot-judge."""
+    repo = build_repo({"quality/config.toml": '[gate]\nmandatory_jobs = ["tests"]\n'})
+    unknown_commit = "0" * 40
+    with pytest.raises(CannotJudge, match="base commit"):
+        read_base_mandatory_jobs(repo, unknown_commit)
+
+
+def test_a_non_numeric_run_attempt_exits_two(monkeypatch, capsys, run_env):
+    """defect:#6 finding 3: a non-numeric GITHUB_RUN_ATTEMPT exits 2 and reaches the step summary."""
+    repo, summary = run_env
+    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "first")
+    page = json.dumps({"total_count": 0, "jobs": []})
+    assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (page, None)) == 2
+    assert "cannot judge" in summary.read_text()

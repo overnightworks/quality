@@ -44,7 +44,8 @@ def tracked_files(root: Path) -> list[str]:
     try:
         listing = subprocess.run(
             ["git", "-C", str(root), "ls-files", "-z"],
-            capture_output=True, check=True,
+            capture_output=True,
+            check=True,
         )
     except (OSError, subprocess.CalledProcessError) as error:
         raise CannotJudge(f"{root} is not a readable git repository: {error}") from error
@@ -54,7 +55,9 @@ def tracked_files(root: Path) -> list[str]:
 def check_env_files(tracked: list[str]) -> list[Finding]:
     return [
         Finding(
-            ENV_FILE, name, None,
+            ENV_FILE,
+            name,
+            None,
             "a tracked env file publishes configuration and often secrets.",
             f"git rm --cached {name} and add it to .gitignore.",
         )
@@ -91,14 +94,24 @@ def _compose_file_findings(root: Path, name: str) -> list[Finding]:
             continue
         ports = service.get("ports") or []
         if not isinstance(ports, list):
-            findings.append(Finding(COMPOSE_PORT, name, None,
-                                    f"service {service_name} has ports that are not a list (unreadable).",
-                                    "write ports as a list so each one can be checked."))
+            findings.append(
+                Finding(
+                    COMPOSE_PORT,
+                    name,
+                    None,
+                    f"service {service_name} has ports that are not a list (unreadable).",
+                    "write ports as a list so each one can be checked.",
+                )
+            )
             continue
         findings.extend(
-            Finding(COMPOSE_PORT, name, None,
-                    f"service {service_name} publishes port {_describe(port)} beyond loopback.",
-                    f"bind it explicitly, for example \"{LOOPBACK}:HOST:CONTAINER\".")
+            Finding(
+                COMPOSE_PORT,
+                name,
+                None,
+                f"service {service_name} publishes port {_describe(port)} beyond loopback.",
+                f'bind it explicitly, for example "{LOOPBACK}:HOST:CONTAINER".',
+            )
             for port in ports
             if not _binds_loopback(port)
         )

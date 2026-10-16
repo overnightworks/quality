@@ -71,9 +71,12 @@ def read_jobs(repo: str, run_id: str, fetch: PageFetcher) -> list[Job]:
     total = None
     for _ in range(MAX_PAGES):
         body, link = fetch(url)
-        page = json.loads(body)
-        total = page["total_count"]
-        jobs += [Job(j["name"], j["run_attempt"], j["status"], j["conclusion"]) for j in page["jobs"]]
+        try:
+            page = json.loads(body)
+            total = page["total_count"]
+            jobs += [Job(j["name"], j["run_attempt"], j["status"], j["conclusion"]) for j in page["jobs"]]
+        except (ValueError, KeyError, TypeError) as error:
+            raise CannotJudge(f"{url} did not return the expected jobs page: {error!r}") from error
         match = NEXT_LINK.search(link or "")
         if not match:
             if len(jobs) != total:
@@ -104,5 +107,7 @@ def read_base_mandatory_jobs(repo: Path, base_sha: str) -> tuple[str, ...]:
         raise CannotJudge(f"cannot read the base commit {base_sha}: {listed.stderr.strip()}")
     if not listed.stdout.strip():
         return ()
-    shown = subprocess.run([*git, "show", f"{base_sha}:{CONFIG_PATH}"], capture_output=True, text=True, check=True)
+    shown = subprocess.run([*git, "show", f"{base_sha}:{CONFIG_PATH}"], capture_output=True, text=True, check=False)
+    if shown.returncode != 0:
+        raise CannotJudge(f"cannot read {CONFIG_PATH} at the base commit {base_sha}: {shown.stderr.strip()}")
     return load_mandatory_jobs(shown.stdout)
