@@ -15,6 +15,21 @@ ENV_TEMPLATE_SUFFIX = ".example"
 COMPOSE_PATTERNS = ("compose*.yml", "compose*.yaml", "docker-compose*.yml", "docker-compose*.yaml")
 
 
+class ComposeLoader(yaml.SafeLoader):
+    """Reads Compose's own YAML tags (!override, !reset) as the plain value they wrap."""
+
+
+def _construct_tagged(loader: ComposeLoader, tag_suffix: str, node: yaml.Node) -> object:
+    if isinstance(node, yaml.MappingNode):
+        return loader.construct_mapping(node, deep=True)
+    if isinstance(node, yaml.SequenceNode):
+        return loader.construct_sequence(node, deep=True)
+    return loader.construct_scalar(node)
+
+
+ComposeLoader.add_multi_constructor("!", _construct_tagged)
+
+
 class CannotJudge(Exception):
     """The repository cannot be examined; this is never a clean result."""
 
@@ -58,11 +73,8 @@ def check_compose_ports(root: Path, tracked: list[str]) -> list[Finding]:
 
 def _compose_file_findings(root: Path, name: str) -> list[Finding]:
     try:
-        document = yaml.safe_load((root / name).read_text(encoding="utf-8"))
-    except (yaml.YAMLError, UnicodeDecodeError) as error:
-        return [Finding(COMPOSE_PORT, name, None, f"the compose file is unreadable ({error.__class__.__name__}).",
-                        "make it valid UTF-8 YAML so its ports can be checked.")]
-    except OSError as error:
+        document = yaml.load((root / name).read_text(encoding="utf-8"), Loader=ComposeLoader)
+    except (yaml.YAMLError, UnicodeDecodeError, OSError) as error:
         raise CannotJudge(f"cannot read {name}: {error}") from error
     services = document.get("services") if isinstance(document, dict) else None
     if not isinstance(services, dict):

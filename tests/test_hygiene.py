@@ -26,6 +26,10 @@ def unreadable_compose_repo(build_repo, tmp_path):
     return repo
 
 
+def truncated_compose_repo(build_repo, tmp_path):
+    return build_repo({"compose.yaml": "services: [\n"})
+
+
 def non_utf8_filename_repo(build_repo, tmp_path):
     return build_repo({"\udcff.txt": "x\n"})
 
@@ -36,15 +40,25 @@ def non_utf8_filename_repo(build_repo, tmp_path):
         (lambda build_repo, tmp_path: build_repo({}), 0, "hygiene: clean (2 rules)"),
         (non_utf8_filename_repo, 0, "hygiene: clean (2 rules)"),
         (lambda build_repo, tmp_path: tmp_path, 2, "cannot judge"),
+        (lambda build_repo, tmp_path: build_repo({".env": "A=1\n"}), 1, "finding(s)"),
         (unreadable_compose_repo, 2, "cannot judge"),
+        (truncated_compose_repo, 2, "cannot judge"),
     ],
-    ids=["empty-repository", "non-utf8-filename", "not-a-git-repository", "unreadable-compose"],
+    ids=["empty-repository", "non-utf8-filename", "not-a-git-repository", "tracked-env-file",
+         "unreadable-compose", "malformed-compose-yaml"],
 )
 def test_exit_code_tells_clean_from_cannot_judge(build_repo, tmp_path, capsys, arrange, expected_code, expected_text):
-    """#3 rule 1: exit 0 for clean, 2 when the repository cannot be judged."""
+    """#3 rule 1: exit 0 clean, 1 findings, 2 cannot judge."""
     code, output = run(capsys, arrange(build_repo, tmp_path))
     assert code == expected_code
     assert expected_text in output
+
+
+def test_compose_specific_tags_are_judged_not_refused(build_repo, capsys):
+    """#3 rule 2: valid Compose YAML tags are read, and their ports still checked."""
+    body = "services:\n  web:\n    image: x\n    ports: !override\n      - \"127.0.0.1:80:80\"\n    profiles: !reset []\n"
+    code, output = run(capsys, build_repo({"compose.yaml": body}))
+    assert (code, "hygiene: clean (2 rules)" in output) == (0, True)
 
 
 def assert_refusal(output: str, rule: str, path: str) -> None:
@@ -86,7 +100,6 @@ def test_untracked_ignored_env_file_is_not_a_finding(build_repo, capsys):
         (compose('- "0.0.0.0:8080:80"'), "compose.yaml"),
         (compose("- target: 80", "  published: 8080"), "compose.yaml"),
         (compose("- target: 80", "  host_ip: 0.0.0.0"), "compose.yaml"),
-        ({"compose.yaml": "services: [unclosed"}, "compose.yaml"),
         ({"compose.yaml": "services:\n  a:\n    ports: 8080\n"}, "compose.yaml"),
         ({"deploy/docker-compose.prod.yml": "services:\n  a:\n    ports: ['80:80']\n"}, "deploy/docker-compose.prod.yml"),
         (compose('- "127.0.0.1:8080:80"'), None),
