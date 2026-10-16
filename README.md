@@ -113,7 +113,7 @@ through the checkout, and the caller's own tests job is arbitrary code anyway.
 
 Preflight exits `2` naming the key and the entry when a listed report does not exist: each comma-separated entry is
 judged on its own, a glob (`*`, `?`, `**`) must match at least one file, a plain entry must be a file, and an absolute
-entry or one with `..` is refused. So a key set without `coverage-artifact` passed is red, not a silent `0.0%`. A
+entry or one with `..` is refused. So a key whose report is missing, for instance because no `coverage-artifact` was passed, is red, not a silent `0.0%`. A
 caller that names no coverage key and passes no input scans as before.
 
 `quality sonar preflight [PATH]` runs before the scan and refuses (exit `2`, naming the key) any property outside an
