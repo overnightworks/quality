@@ -852,6 +852,15 @@ def test_an_allowance_never_spreads_to_another_value_or_file(build_repo, install
 
 
 @pytest.mark.engine
+def test_a_key_on_an_allowance_line_of_the_config_stays_red(build_repo, installed_engines, capsys):
+    """#24 rule 1: only the hash of an allowance is exempt; a real key on the same line is still found."""
+    line = f'# {FAKE_KEY} secret_sha256 = "{sha256_of(FAKE_KEY)}"\n'
+    repo = build_repo({"quality/config.toml": allow_config() + line})
+    assert scan(repo, installed_engines) == 1
+    assert "secret quality/config.toml:" in capsys.readouterr().out
+
+
+@pytest.mark.engine
 def test_a_repository_without_quality_config_is_scanned_and_its_key_is_red(build_repo, installed_engines, capsys):
     """#24 rule 3: no quality/config.toml means no allowances, and the scan still judges."""
     repo = build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
