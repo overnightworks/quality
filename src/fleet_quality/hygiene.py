@@ -1,3 +1,4 @@
+import os
 import subprocess
 from pathlib import Path, PurePosixPath
 
@@ -22,11 +23,11 @@ def tracked_files(root: Path) -> list[str]:
     try:
         listing = subprocess.run(
             ["git", "-C", str(root), "ls-files", "-z"],
-            capture_output=True, text=True, check=True,
+            capture_output=True, check=True,
         )
     except (OSError, subprocess.CalledProcessError) as error:
         raise CannotJudge(f"{root} is not a readable git repository: {error}") from error
-    return [name for name in listing.stdout.split("\0") if name]
+    return [os.fsdecode(name) for name in listing.stdout.split(b"\0") if name]
 
 
 def check_env_files(tracked: list[str]) -> list[Finding]:
@@ -66,15 +67,24 @@ def _compose_file_findings(root: Path, name: str) -> list[Finding]:
     services = document.get("services") if isinstance(document, dict) else None
     if not isinstance(services, dict):
         return []
-    return [
-        Finding(COMPOSE_PORT, name, None,
-                f"service {service_name} publishes port {_describe(port)} beyond loopback.",
-                f"bind it explicitly, for example \"{LOOPBACK}:HOST:CONTAINER\".")
-        for service_name, service in services.items()
-        if isinstance(service, dict)
-        for port in service.get("ports") or []
-        if not _binds_loopback(port)
-    ]
+    findings = []
+    for service_name, service in services.items():
+        if not isinstance(service, dict):
+            continue
+        ports = service.get("ports") or []
+        if not isinstance(ports, list):
+            findings.append(Finding(COMPOSE_PORT, name, None,
+                                    f"service {service_name} has ports that are not a list (unreadable).",
+                                    "write ports as a list so each one can be checked."))
+            continue
+        findings.extend(
+            Finding(COMPOSE_PORT, name, None,
+                    f"service {service_name} publishes port {_describe(port)} beyond loopback.",
+                    f"bind it explicitly, for example \"{LOOPBACK}:HOST:CONTAINER\".")
+            for port in ports
+            if not _binds_loopback(port)
+        )
+    return findings
 
 
 def _binds_loopback(port: object) -> bool:
