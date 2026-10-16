@@ -135,12 +135,11 @@ def test_a_repository_without_the_file_allows_nothing(tmp_path):
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
-        (None, LegacyMode.REPORT),
         ('[gate]\nmandatory_jobs = ["checks"]', LegacyMode.REPORT),
         ('[gate]\nmandatory_jobs = ["checks"]\nlegacy = "report"', LegacyMode.REPORT),
         ('[gate]\nmandatory_jobs = ["checks"]\nlegacy = "fail"', LegacyMode.FAIL),
     ],
-    ids=["no config", "key absent", "report", "fail"],
+    ids=["key absent", "report", "fail"],
 )
 def test_legacy_findings_only_fail_when_the_repository_switched_them_on(text, expected):
     """#33 sentence 3: [gate] legacy is "report" unless the config says "fail"."""

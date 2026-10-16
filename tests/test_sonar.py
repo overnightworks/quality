@@ -116,10 +116,13 @@ def run_cli(
     fake: FakeSonar,
     environment=PULL_REQUEST_ENVIRONMENT,
     task_text: str | None = None,
-    config_text: str = legacy_config_absent,
+    config_text: str | None = legacy_config_absent,
 ):
     set_environment(monkeypatch, environment)
-    Path("quality/config.toml").write_text(config_text)
+    if config_text is None:
+        Path("quality/config.toml").unlink()
+    else:
+        Path("quality/config.toml").write_text(config_text)
     sonar.TASK_FILE.parent.mkdir()
     sonar.TASK_FILE.write_text(TASK_FIXTURE.read_text() if task_text is None else task_text)
     sleeps: list[float] = []
@@ -414,7 +417,6 @@ def test_a_legacy_value_other_than_report_or_fail_is_exit_two_before_any_request
     code, _, err, _ = run_cli(monkeypatch, capsys, fake, config_text=legacy_config(value))
     assert (code, fake.requests) == (2, [])
     assert "legacy" in err
-
 
 
 def test_another_branch_never_reads_the_branch_list(monkeypatch, capsys):
@@ -745,10 +747,6 @@ def test_quality_with_its_own_config_fails_a_pull_request_on_legacy_findings(mon
 def test_a_repository_without_a_config_is_refused_before_any_request(monkeypatch, capsys):
     """#33 sentence 3: the config is read and validated before the first SonarCloud request"""
     fake = sonar_answering()
-    Path("quality/config.toml").unlink()
-    set_environment(monkeypatch, PULL_REQUEST_ENVIRONMENT)
-    sonar.TASK_FILE.parent.mkdir()
-    sonar.TASK_FILE.write_text(TASK_FIXTURE.read_text())
-    code = cli.main(["sonar", "findings"], transport=fake, sleep=lambda _: None)
+    code, _, err, _ = run_cli(monkeypatch, capsys, fake, config_text=None)
     assert (code, fake.requests) == (2, [])
-    assert "quality/config.toml is missing" in capsys.readouterr().err
+    assert "quality/config.toml is missing" in err

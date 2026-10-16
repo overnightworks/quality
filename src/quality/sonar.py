@@ -193,7 +193,7 @@ class SonarResult:
     analysis: Analysis
     findings: OpenFindings
     legacy_mode: LegacyMode
-    default_analysed: bool
+    legacy_unknown: bool
     legacy: int | None
 
     @property
@@ -205,9 +205,8 @@ class SonarResult:
     def summary(self) -> str:
         count = self.findings.count
         scope, key, default_branch = self.analysis.scope, self.analysis.project.key, self.analysis.default_branch
-        unknown = self.analysis.kind.judges_legacy and not self.default_analysed
         if self.analysis.kind is RunKind.PULL_REQUEST:
-            if unknown:
+            if self.legacy_unknown:
                 return f"{RULE}: new {count} · {legacy_unknown(default_branch)}"
             return f"{RULE}: new {count} · legacy {self.legacy} ({key}, {default_branch})"
         if count == 0:
@@ -216,7 +215,7 @@ class SonarResult:
             line = f"{RULE}: {count} open on {scope.value}"
         else:
             line = f"{RULE}: {count} open on {scope.value} (report only)"
-        return f"{line} · {legacy_unknown(default_branch)}" if unknown else line
+        return f"{line} · {legacy_unknown(default_branch)}" if self.legacy_unknown else line
 
 
 def preflight(root: Path, environment: Mapping[str, str]) -> None:
@@ -339,13 +338,14 @@ def analyse(
     require_resolved(analysis, transport)
     kind = analysis.kind
     default_analysed = kind.judges_legacy and default_branch_analysed(analysis, transport)
-    if kind.judges_legacy and not default_analysed and legacy_mode is LegacyMode.FAIL:
+    unknown = kind.judges_legacy and not default_analysed
+    if unknown and legacy_mode is LegacyMode.FAIL:
         raise CannotJudge(legacy_unknown(analysis.default_branch))
     findings = open_findings(analysis, transport)
     legacy = None
     if kind is RunKind.PULL_REQUEST and default_analysed:
         legacy = open_total(analysis, Scope("branch", analysis.default_branch), transport)
-    return SonarResult(analysis, findings, legacy_mode, default_analysed, legacy)
+    return SonarResult(analysis, findings, legacy_mode, unknown, legacy)
 
 
 def read_analysis(environment: Mapping[str, str]) -> Analysis:

@@ -81,10 +81,8 @@ def load_mandatory_jobs(text: str | None) -> tuple[str, ...]:
     return tuple(names)
 
 
-def load_legacy_mode(text: str | None) -> LegacyMode:
-    """A missing config or key reports; the verdict is what insists on a config."""
-    if text is None:
-        return LegacyMode.REPORT
+def load_legacy_mode(text: str) -> LegacyMode:
+    """A missing `legacy` key reports; load_gate_settings is what insists on a config."""
     document = _parse(text, LEGACY_EXAMPLE)
     gate = _table(document, "gate", LEGACY_EXAMPLE)
     _refuse_unknown_keys(document, gate, _table(document, "secrets", ALLOWANCE_EXAMPLE))
@@ -159,4 +157,3 @@ def read_secret_allowances(repo: Path) -> dict[Allowance, str]:
         return load_secret_allowances(None)
     except (OSError, UnicodeDecodeError) as error:
         raise ConfigError(f"{CONFIG_PATH} cannot be read ({error})") from error
-

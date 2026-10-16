@@ -155,7 +155,8 @@ counted by the same `issues/search` with the same open statuses, and only counte
   `sonar: N open on <default>`.
 - **Any other branch:** report only, exit `0`: `sonar: N open on <branch> (report only)`.
 
-`[gate] legacy` in `quality/config.toml` decides whether legacy findings fail a pull request:
+`[gate] legacy` in `quality/config.toml` decides whether legacy findings fail a pull request. `quality sonar findings`
+reads that file like the verdict does: a missing file, or one without `[gate] mandatory_jobs`, is exit `2` before any request.
 
 ```toml
 [gate]
