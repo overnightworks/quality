@@ -887,7 +887,8 @@ def test_the_key_reaches_no_output_and_no_file_and_the_scratch_directory_is_gone
     scratch_parent = tmp_path / "scratch-parent"
     scratch_parent.mkdir()
     monkeypatch.setattr(tempfile, "tempdir", str(scratch_parent))
-    monkeypatch.setattr(engines, "SECRET_SCAN_TIMEOUT_SECONDS", 1)
+    if failure == "gitleaks-stalls":
+        monkeypatch.setattr(engines, "SECRET_SCAN_TIMEOUT_SECONDS", 1)
     engine_dir = installed_engines if failure == "none" else fake_gitleaks(tmp_path / "failing", on_scan=FAILING_REPORTS[failure])
     exit_code = scan(keyed_repo, engine_dir)
     assert exit_code == (1 if failure == "none" else 2)

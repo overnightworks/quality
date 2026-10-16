@@ -10,7 +10,7 @@
 - `env-file`: no tracked `.env`, `.env.*` or `*.env` file (names ending in `.example` are templates and pass).
 - `compose-port`: every published port in a tracked `compose*.y{a,}ml` or `docker-compose*.y{a,}ml` binds `127.0.0.1`.
 
-With `--engines DIR` the `secret` rule also scans the whole history with gitleaks, always with quality's own config
+With `--engines DIR` the `secret` rule also scans the whole history reachable from `HEAD` with gitleaks (a key removed later is still found; other branches the checkout fetched are not scanned), always with quality's own config
 (`src/quality/gitleaks.toml`): the repository's `.gitleaks.toml`, `.gitleaksignore` and `gitleaks:allow`
 comments have no effect. A known false positive is allowed by the value, not the place: the repository's
 `quality/config.toml` names the gitleaks rule, the file and the SHA-256 of the finding's secret (UTF-8, lowercase hex)
@@ -42,7 +42,7 @@ is exit `2`. The system file is excluded by `GIT_ATTR_NOSYSTEM`, git's documente
 environment contract, not by a root-only real-file test.
 
 Every allowed finding is printed with the entry's reason (`secret: 1 allowed (src/x.py:139)`, then
-`allowed src/x.py:139 - gitleaks rule generic-api-key allowed: enum value, not a key`).
+  `allowed src/x.py:139 - gitleaks rule generic-api-key allowed: enum value, not a key`).
 
 Each finding names the rule, the file, a reason and a fix. Exit `0` is clean, `1` means findings,
 `2` means the repository could not be judged (never clean).
