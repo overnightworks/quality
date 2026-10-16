@@ -1,0 +1,8 @@
+claim_id = "f40ee58e4f1646219d70be6b773cba7d"
+agent = "Claude fe12493e-3d52-442e-b01b-4ee4336de2f0"
+role = "builder"
+base = "b04cb3fbefc3419fe3f44bd1ca96a215f1cc33b4"
+branch = "claude/issue-21-attr-isolation"
+scope = ["README.md", "src/quality/engines.py", "tests/test_engines.py"]
+opened_commit = "58593638823f0aafd95834f880b944b6c35b5b47"
+whole_reason = "One scrubbed git environment for the secret scan, its real-engine tests and the README floor."
