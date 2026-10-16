@@ -1,8 +1,0 @@
-claim_id = "4069037f625b4d49b8ca6d08bdfdecdf"
-agent = "Claude fe12493e-3d52-442e-b01b-4ee4336de2f0"
-role = "builder"
-base = "7b98bec49945c24a811177c8cfa0753550528785"
-branch = "claude/issue-34-coverage-artifact"
-scope = [".github/workflows/ci.yml", ".github/workflows/gate.yml", "README.md", "src/quality/__init__.py", "src/quality/sonar.py", "tests/test_gate_sonar.py", "tests/test_sonar.py"]
-opened_commit = "c44e9a563f16570675679bf910ffe70c49da980e"
-whole_reason = "One public workflow input, its preflight check, the tool-ref bump and their tests are one released contract; split, the tag would ship half of it."
