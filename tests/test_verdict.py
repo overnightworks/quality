@@ -183,11 +183,14 @@ def test_a_page_of_the_wrong_shape_cannot_be_judged(body):
 
 
 def test_a_base_config_that_git_cannot_show_cannot_be_judged(build_repo):
-    """defect:#6 finding 3: a failing git show of the base config is cannot-judge."""
+    """defect:#6 finding 3: the base config is listed but git cannot show it - cannot-judge, not a traceback."""
     repo = build_repo({"quality/config.toml": '[gate]\nmandatory_jobs = ["tests"]\n'})
-    unknown_commit = "0" * 40
-    with pytest.raises(CannotJudge, match="base commit"):
-        read_base_mandatory_jobs(repo, unknown_commit)
+    git = ["git", "-C", str(repo)]
+    blob = subprocess.run([*git, "rev-parse", "HEAD:quality/config.toml"], capture_output=True, text=True, check=True)
+    (repo / ".git" / "objects" / blob.stdout[:2] / blob.stdout.strip()[2:]).unlink()
+    base = subprocess.run([*git, "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
+    with pytest.raises(CannotJudge, match="at the base commit"):
+        read_base_mandatory_jobs(repo, base)
 
 
 def test_a_non_numeric_run_attempt_exits_two(monkeypatch, capsys, run_env):
