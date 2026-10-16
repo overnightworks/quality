@@ -30,15 +30,15 @@ def step_named(steps: list[dict], fragment: str) -> dict:
 
 
 def test_the_sonar_job_runs_its_steps_in_the_required_order(sonar_steps):
-    """#26 rule 1: checkout, tool checkout, coverage, uv, preflight, scan, findings in this order"""
+    """#26 rule 1: checkout, tool checkout, uv, preflight, scan, findings in this order (the coverage download is outside rule 1)"""
     kinds = [
         step["uses"].split("@")[0] if "uses" in step else step["run"].partition(" quality ")[2].split(" --")[0]
         for step in sonar_steps
+        if not step.get("uses", "").startswith("actions/download-artifact")
     ]
     assert kinds == [
         "actions/checkout",
         "actions/checkout",
-        "actions/download-artifact",
         "astral-sh/setup-uv",
         "sonar preflight .",
         "SonarSource/sonarqube-scan-action",
@@ -118,5 +118,6 @@ def test_the_coverage_the_tests_upload_is_the_report_the_scan_reads():
     """#26 done-when (SonarCloud coverage gate), defect:#26 finding 1: the report ci.yml uploads is the one gate.yml downloads and the scan reads"""
     uploads = [s for s in load("ci.yml")["jobs"]["tests"]["steps"] if s.get("uses", "").startswith("actions/upload-artifact")]
     downloads = [s for s in load("gate.yml")["jobs"]["sonar"]["steps"] if s.get("uses", "").startswith("actions/download-artifact")]
+    assert [d["if"] for d in downloads] == ["github.repository == 'overnightworks/quality'"]
     assert [u["with"]["name"] for u in uploads] == [d["with"]["name"] for d in downloads] == ["coverage"]
     assert f"sonar.python.coverage.reportPaths={uploads[0]['with']['path']}" in (ROOT / "sonar-project.properties").read_text().splitlines()
