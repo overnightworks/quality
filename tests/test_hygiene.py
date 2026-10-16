@@ -160,3 +160,33 @@ def test_quality_tracks_no_env_or_compose_file():
     assert cli.main(["hygiene", str(root)]) == 0
     assert "compose" not in tracked
     assert ".env" not in tracked
+
+
+def not_a_directory(tmp_path):
+    target = tmp_path / "a-file"
+    target.write_text("x")
+    return target
+
+
+@pytest.mark.parametrize(
+    "bad_path",
+    [not_a_directory, lambda tmp_path: tmp_path / "missing", lambda tmp_path: tmp_path / "."],
+    ids=["regular-file", "missing-path", "directory-without-git-repository"],
+)
+def test_a_path_that_is_no_repository_is_exit_2(tmp_path, capsys, bad_path):
+    """#31 rule 1 (S8705): a path that is not a readable git repository is exit 2, never clean."""
+    code, output = run(capsys, bad_path(tmp_path))
+    assert code == 2
+    assert "cannot judge" in output
+
+
+def test_a_tracked_compose_symlink_leaving_the_repository_is_exit_2(build_repo, tmp_path_factory, capsys):
+    """#31 rule 1 (S8705): a tracked compose file that resolves outside the repository is exit 2, never read."""
+    repo = build_repo({})
+    outside = tmp_path_factory.mktemp("outside") / "elsewhere.yml"
+    outside.write_text("services:\n  web:\n    image: x\n    ports:\n      - '8080:80'\n")
+    (repo / "compose.yaml").symlink_to(outside)
+    subprocess.run(["git", "-C", str(repo), "add", "compose.yaml"], check=True)
+    code, output = run(capsys, repo)
+    assert code == 2
+    assert "outside the repository" in output
