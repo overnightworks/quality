@@ -61,6 +61,20 @@ def test_compose_specific_tags_are_judged_not_refused(build_repo, capsys):
     assert (code, "hygiene: clean (2 rules)" in output) == (0, True)
 
 
+@pytest.mark.parametrize("tagged", ["!reset null", "!reset []"], ids=["null", "empty-list"])
+def test_reset_clears_ports_and_is_clean(build_repo, capsys, tagged):
+    """#3 rule 2: `ports: !reset null` is valid Compose that clears the ports, so it is clean."""
+    code, _ = run(capsys, build_repo({"compose.yaml": f"services:\n  web:\n    image: x\n    ports: {tagged}\n"}))
+    assert code == 0
+
+
+def test_unknown_yaml_tag_cannot_be_judged(build_repo, capsys):
+    """#3 rule 1: a tag Compose does not define is not read as a plain value."""
+    code, output = run(capsys, build_repo({"compose.yaml": "services:\n  web:\n    image: !foo x\n"}))
+    assert code == 2
+    assert "cannot judge" in output
+
+
 def assert_refusal(output: str, rule: str, path: str) -> None:
     assert re.search(rf"^{rule} {re.escape(path)} - \S.*\n  Fix: \S", output, re.MULTILINE), output
 
@@ -98,6 +112,7 @@ def test_untracked_ignored_env_file_is_not_a_finding(build_repo, capsys):
         (compose('- "80"'), "compose.yaml"),
         (compose("- 80"), "compose.yaml"),
         (compose('- "0.0.0.0:8080:80"'), "compose.yaml"),
+        ({"compose.yaml": 'services:\n  a:\n    ports: !override\n      - "0.0.0.0:8080:80"\n'}, "compose.yaml"),
         (compose("- target: 80", "  published: 8080"), "compose.yaml"),
         (compose("- target: 80", "  host_ip: 0.0.0.0"), "compose.yaml"),
         ({"compose.yaml": "services:\n  a:\n    ports: 8080\n"}, "compose.yaml"),

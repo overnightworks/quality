@@ -21,15 +21,17 @@ class ComposeLoader(yaml.SafeLoader):
     """Reads Compose's own YAML tags (!override, !reset) as the plain value they wrap."""
 
 
-def _construct_tagged(loader: ComposeLoader, tag_suffix: str, node: yaml.Node) -> object:
+def _construct_tagged(loader: ComposeLoader, node: yaml.Node) -> object:
     if isinstance(node, yaml.MappingNode):
         return loader.construct_mapping(node, deep=True)
     if isinstance(node, yaml.SequenceNode):
         return loader.construct_sequence(node, deep=True)
-    return loader.construct_scalar(node)
+    implicit_tag = loader.resolve(yaml.ScalarNode, node.value, (True, False))
+    return loader.construct_object(yaml.ScalarNode(implicit_tag, node.value, node.start_mark, node.end_mark))
 
 
-ComposeLoader.add_multi_constructor("!", _construct_tagged)
+for compose_tag in ("!override", "!reset"):
+    ComposeLoader.add_constructor(compose_tag, _construct_tagged)
 
 
 class CannotJudge(Exception):
