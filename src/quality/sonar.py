@@ -1,6 +1,7 @@
 """The SonarCloud zero-findings rule: wait for this run's own analysis, then count its open findings."""
 
 import base64
+import http.client
 import json
 import time
 import urllib.error
@@ -53,20 +54,21 @@ class RedirectRefusingHandler(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def fetch_json(url: str, authorization: str) -> object:
+def fetch_json(url: str, authorization: str, timeout: float = REQUEST_TIMEOUT_SECONDS) -> object:
     opener = urllib.request.build_opener(RedirectRefusingHandler())
     request = urllib.request.Request(url, headers={"Authorization": authorization})
     where = url.partition("?")[0]
     try:
-        with opener.open(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+        with opener.open(request, timeout=timeout) as response:
             return json.load(response)
     except urllib.error.HTTPError as error:
         raise SonarHttpError(error.code, url) from error
     except OSError as error:
         if timed_out(error):
-            raise CannotJudge(f"SonarCloud did not answer {where} within {REQUEST_TIMEOUT_SECONDS}s") from error
+            raise CannotJudge(f"SonarCloud did not answer {where} within {timeout}s") from error
         raise CannotJudge(f"SonarCloud could not be reached at {where}: {error}") from error
-    except json.JSONDecodeError as error:
+    except (http.client.HTTPException, ValueError) as error:
+        # JSONDecodeError and UnicodeDecodeError are ValueErrors; a truncated body is an HTTPException.
         raise CannotJudge(f"SonarCloud answered {where} with a body that is not JSON") from error
 
 
@@ -152,6 +154,8 @@ def read_analysis(task_file: Path, environment: Mapping[str, str]) -> Analysis:
     settings = read_task_file(task_file)
     if settings.get("projectKey") != project.key:
         raise CannotJudge(f"{task_file.name} names project {settings.get('projectKey')!r}, not {project.key!r}")
+    if settings.get("organization") != project.owner:
+        raise CannotJudge(f"{task_file.name} names organization {settings.get('organization')!r}, not {project.owner!r}")
     if settings.get("serverUrl") != SONAR_ORIGIN:
         raise CannotJudge(f"{task_file.name} names server {settings.get('serverUrl')!r}, not {SONAR_ORIGIN}")
     if not settings.get("ceTaskId"):
@@ -258,6 +262,8 @@ def open_findings(analysis: Analysis, transport: Transport) -> OpenFindings:
         try:
             total = int(report["total"])
             issues = report["issues"]
+            if not isinstance(issues, list):
+                raise TypeError("issues is not a list")
             listed.extend(finding_from_issue(issue) for issue in issues)
         except (KeyError, TypeError, ValueError) as error:
             raise CannotJudge(f"SonarCloud answered {url.partition('?')[0]} with an unreadable body") from error
@@ -274,6 +280,8 @@ def answer_object(answer: object, key: str | None, url: str) -> dict:
 
 
 def finding_from_issue(issue: dict) -> Finding:
+    if not isinstance(issue["component"], str):
+        raise TypeError("component is not a string")
     _, separator, file_path = issue["component"].partition(":")
     if not separator:
         raise CannotJudge(f"SonarCloud reported a finding whose component {issue['component']!r} carries no file path")

@@ -1,3 +1,4 @@
+import base64
 import http.server
 import threading
 import urllib.error
@@ -72,10 +73,17 @@ def sonar_answering(task=FINISHED_FOR_PR_7, issues=None, measures=None) -> FakeS
     )
 
 
+def set_environment(monkeypatch, environment) -> None:
+    for name in PULL_REQUEST_ENVIRONMENT:
+        monkeypatch.delenv(name, raising=False)
+    for name, value in environment.items():
+        monkeypatch.setenv(name, value)
+
+
 def run_cli(
     monkeypatch, capsys, fake: FakeSonar, environment=PULL_REQUEST_ENVIRONMENT, task_text: str | None = None, tmp_path=None
 ):
-    monkeypatch.setattr("os.environ", dict(environment))
+    set_environment(monkeypatch, environment)
     task_file = TASK_FIXTURE
     if task_text is not None:
         task_file = tmp_path / "report-task.txt"
@@ -88,11 +96,13 @@ def run_cli(
 
 
 def test_known_pass_fixture_is_clean_and_prints_the_proof(monkeypatch, capsys):
+    """#22 kept row: known-pass fixture is clean and prints the proof line"""
     code, out, _, _ = run_cli(monkeypatch, capsys, sonar_answering())
     assert (code, out) == (0, f"sonar: clean for '{KEY}' (pullRequest=7): 0 open finding(s)\n")
 
 
 def test_known_fail_fixture_lists_every_open_finding_and_exits_one(monkeypatch, capsys):
+    """#22 kept row: known-fail fixture lists every open finding and exits 1"""
     code, out, err, _ = run_cli(monkeypatch, capsys, sonar_answering(issues=issues_page(2, 1, 2)))
     assert code == 1
     assert "sonar src/a1.py:1 - python:S1: m" in out and "sonar src/a2.py:2 - python:S1: m" in out
@@ -110,6 +120,7 @@ def test_known_fail_fixture_lists_every_open_finding_and_exits_one(monkeypatch, 
     ids=["every page read", "empty page ends paging", "listed beats a zero total", "page limit bounds paging"],
 )
 def test_counts_findings_across_pages(monkeypatch, capsys, pages, expected_count, expected_requests):
+    """#22 kept row: findings are counted across pages, bounded by the search limit and never by the claimed total"""
     fake = sonar_answering()
     fake.answers["issues/search"] = pages
     code, _, err, _ = run_cli(monkeypatch, capsys, fake)
@@ -118,6 +129,7 @@ def test_counts_findings_across_pages(monkeypatch, capsys, pages, expected_count
 
 
 def test_asks_for_statuses_a_person_may_have_accepted_and_encodes_the_scope(monkeypatch, capsys):
+    """#22 kept row: asks for issueStatuses a person may have accepted and url-encodes the scope"""
     fake = sonar_answering(
         task={**FINISHED_FOR_PR_7, "pullRequest": None, "branch": "feat/a&b#c%d"}, issues=issues_page(0)
     )
@@ -131,9 +143,13 @@ def test_asks_for_statuses_a_person_may_have_accepted_and_encodes_the_scope(monk
 
 
 def test_sends_the_token_in_the_header_only(monkeypatch, capsys):
+    """#22 kept row: the token travels as Basic '<token>:' in the header, never in a URL"""
     fake = sonar_answering()
     run_cli(monkeypatch, capsys, fake)
-    assert {authorization for _, authorization in fake.requests} == {sonar.basic_authorization(TOKEN)}
+    sent = {authorization for _, authorization in fake.requests}
+    assert len(sent) == 1
+    scheme, _, encoded = sent.pop().partition(" ")
+    assert (scheme, base64.b64decode(encoded).decode()) == ("Basic", f"{TOKEN}:")
     assert all(TOKEN not in url and url.startswith("https://sonarcloud.io/api/") for url, _ in fake.requests)
 
 
@@ -146,16 +162,23 @@ def test_sends_the_token_in_the_header_only(monkeypatch, capsys):
         sonar_answering(issues={"total": 1, "issues": [issue(1, "no-file-path")]}),
         sonar_answering(issues=["not", "an", "object"]),
         sonar_answering(issues={"total": "many", "issues": []}),
+        sonar_answering(issues={"total": 0, "issues": {}}),
+        sonar_answering(issues={"total": 1, "issues": [{**issue(1), "component": None}]}),
     ],
-    ids=["scope unresolved", "measures unreachable", "no total", "component without file", "wrong shape", "bad total"],
+    ids=[
+        "scope unresolved", "measures unreachable", "no total", "component without file", "wrong shape", "bad total",
+        "issues not a list", "component not a string",
+    ],
 )
 def test_an_unreadable_answer_is_exit_two_and_never_clean(monkeypatch, capsys, fake):
+    """#22: anything unreadable is exit 2 with no findings printed, never a clean zero"""
     code, out, err, _ = run_cli(monkeypatch, capsys, fake)
     assert (code, out) == (2, "")
     assert err.startswith("sonar: cannot judge - ")
 
 
 def test_does_not_read_findings_when_the_scope_does_not_resolve(monkeypatch, capsys):
+    """#22 kept row: an unresolved scope is exit 2 before findings are read"""
     fake = sonar_answering()
     fake.answers["measures/component"] = [sonar.SonarHttpError(404, "u")]
     code, *_ = run_cli(monkeypatch, capsys, fake)
@@ -167,14 +190,16 @@ def test_does_not_read_findings_when_the_scope_does_not_resolve(monkeypatch, cap
     [
         (("serverUrl=https://sonarcloud.io", "serverUrl=https://evil.example"), "evil.example"),
         (("projectKey=overnightworks_quality", "projectKey=other_project"), "other_project"),
+        (("organization=overnightworks", "organization=someone-else"), "someone-else"),
         (("projectKey=overnightworks_quality\n", ""), "None"),
         (("ceTaskId=AXtask-1\n", ""), "ceTaskId"),
     ],
-    ids=["foreign server", "foreign project", "missing project", "missing task id"],
+    ids=["foreign server", "foreign project", "foreign organization", "missing project", "missing task id"],
 )
 def test_a_task_file_naming_something_foreign_is_refused_before_any_request(
     monkeypatch, capsys, tmp_path, edit, reason
 ):
+    """#22: a task file naming a foreign server, project, organization or none is exit 2 before any request"""
     fake = sonar_answering()
     text = TASK_FIXTURE.read_text().replace(*edit)
     code, _, err, _ = run_cli(monkeypatch, capsys, fake, task_text=text, tmp_path=tmp_path)
@@ -183,14 +208,16 @@ def test_a_task_file_naming_something_foreign_is_refused_before_any_request(
 
 
 def test_a_task_file_that_cannot_be_read_is_refused_before_any_request(monkeypatch, capsys, tmp_path):
+    """#22 kept row: an unreadable task file is exit 2 before any request"""
     fake = sonar_answering()
-    monkeypatch.setattr("os.environ", dict(PULL_REQUEST_ENVIRONMENT))
+    set_environment(monkeypatch, PULL_REQUEST_ENVIRONMENT)
     code = cli.main(["sonar", "findings", "--task-file", str(tmp_path / "absent.txt")], transport=fake)
     assert (code, fake.requests) == (2, [])
     assert "absent.txt" in capsys.readouterr().err
 
 
 def test_never_requests_the_urls_the_task_file_names(monkeypatch, capsys, tmp_path):
+    """#22 kept row: only sonarcloud.io is requested, whatever URLs the task file names"""
     fake = sonar_answering()
     text = TASK_FIXTURE.read_text().replace("https://sonarcloud.io/api/ce", "https://evil.example/api/ce")
     run_cli(monkeypatch, capsys, fake, task_text=text, tmp_path=tmp_path)
@@ -198,6 +225,7 @@ def test_never_requests_the_urls_the_task_file_names(monkeypatch, capsys, tmp_pa
 
 
 def test_a_task_id_with_an_ampersand_stays_one_query_value(monkeypatch, capsys, tmp_path):
+    """#22 kept row: a task id with an ampersand stays one query value"""
     fake = sonar_answering()
     text = TASK_FIXTURE.read_text().replace("ceTaskId=AXtask-1", "ceTaskId=a&b=c")
     run_cli(monkeypatch, capsys, fake, task_text=text, tmp_path=tmp_path)
@@ -215,6 +243,7 @@ def test_a_task_id_with_an_ampersand_stays_one_query_value(monkeypatch, capsys, 
     ids=["empty token", "unset token", "bad repository", "no pull request number"],
 )
 def test_an_unusable_environment_is_refused_before_any_request(monkeypatch, capsys, environment):
+    """#22 kept row: a missing token, bad repository or missing pull request number is exit 2 before any request"""
     fake = sonar_answering()
     code, *_ = run_cli(monkeypatch, capsys, fake, environment)
     assert (code, fake.requests) == (2, [])
@@ -231,6 +260,7 @@ def test_an_unusable_environment_is_refused_before_any_request(monkeypatch, caps
     ids=["waits until success", "failed", "canceled", "pending past the limit"],
 )
 def test_waits_for_its_own_task_before_reading_findings(monkeypatch, capsys, statuses, code, polls, sleeps):
+    """#22 kept row: waits for the analysis task, bounded polling, no findings read unless it succeeded"""
     fake = sonar_answering()
     fake.answers["ce/task"] = [{"task": FINISHED_FOR_PR_7 | {"status": status}} for status in statuses]
     result = run_cli(monkeypatch, capsys, fake)
@@ -252,6 +282,7 @@ def test_waits_for_its_own_task_before_reading_findings(monkeypatch, capsys, sta
     ids=["other pull request", "no pull request", "other component", "other organization", "no organization", "branch only"],
 )
 def test_a_finished_task_that_is_not_this_runs_is_refused(monkeypatch, capsys, task):
+    """#22 kept row: a finished task of another pull request, component or organization is exit 2"""
     fake = sonar_answering(task=task)
     code, _, err, _ = run_cli(monkeypatch, capsys, fake)
     assert (code, fake.urls_to("issues/search")) == (2, [])
@@ -269,6 +300,7 @@ def test_a_finished_task_that_is_not_this_runs_is_refused(monkeypatch, capsys, t
     ids=["pull request with a finding", "branch with findings", "clean branch", "push ignores a pull request number"],
 )
 def test_findings_fail_a_pull_request_and_only_report_on_a_branch(monkeypatch, capsys, environment, task, findings, code, line):
+    """#22 kept row: findings fail a pull request and only report on a branch"""
     fake = sonar_answering(task=task)
     fake.answers["issues/search"] = [issues_page(findings, *range(1, min(findings, 100) + 1)), issues_page(findings)]
     result = run_cli(monkeypatch, capsys, fake, environment)
@@ -286,6 +318,7 @@ def test_findings_fail_a_pull_request_and_only_report_on_a_branch(monkeypatch, c
     ],
 )
 def test_recognises_which_transport_failures_ran_out_of_time(error, expected):
+    """#22 kept row: a transport failure is told apart as a timeout"""
     assert sonar.timed_out(error) is expected
 
 
@@ -317,8 +350,9 @@ def loopback():
 def reply(status: int, body: bytes, **headers: str) -> Responder:
     def respond(handler):
         handler.send_response(status)
-        for name, value in {"Content-Length": str(len(body)), **headers}.items():
-            handler.send_header(name.replace("_", "-"), value)
+        sent = {"Content-Length": str(len(body))} | {name.replace("_", "-"): value for name, value in headers.items()}
+        for name, value in sent.items():
+            handler.send_header(name, value)
         handler.end_headers()
         handler.wfile.write(body)
 
@@ -326,6 +360,7 @@ def reply(status: int, body: bytes, **headers: str) -> Responder:
 
 
 def test_the_real_transport_returns_json(loopback):
+    """#22 kept row: the real transport returns the JSON body"""
     responder, _, url = loopback
     responder.append(reply(200, b'{"a": 1}'))
     assert sonar.fetch_json(url, "Basic x") == {"a": 1}
@@ -337,24 +372,28 @@ def test_the_real_transport_returns_json(loopback):
         (reply(200, b"<html>"), "not JSON"),
         (reply(302, b"", Location="http://127.0.0.1:1/stolen"), "HTTP 302"),
         (reply(404, b"{}"), "HTTP 404"),
+        (reply(200, b'{"a":"\xff\xfe\xfd"}'), "not JSON"),
+        (reply(200, b"abcd", Content_Length="100"), "not JSON"),
     ],
-    ids=["non-JSON", "redirect refused", "http error"],
+    ids=["non-JSON", "redirect refused", "http error", "non-UTF-8 body", "truncated body"],
 )
 def test_the_real_transport_refuses_what_it_cannot_trust(loopback, responder, message):
+    """#22: the real transport maps non-JSON, redirect, HTTP error, non-UTF-8 and truncated bodies to cannot judge"""
     set_responder, _, url = loopback
     set_responder.append(responder)
     with pytest.raises(CannotJudge, match=message):
         sonar.fetch_json(url, "Basic x")
 
 
-def test_the_real_transport_gives_up_on_a_server_that_never_answers(loopback, monkeypatch):
+def test_the_real_transport_gives_up_on_a_server_that_never_answers(loopback):
+    """#22 kept row: a server that never answers is cannot judge after the timeout"""
     responder, release, url = loopback
     responder.append(lambda handler: release.wait(30))
-    monkeypatch.setattr(sonar, "REQUEST_TIMEOUT_SECONDS", 0.25)
     with pytest.raises(CannotJudge, match="did not answer"):
-        sonar.fetch_json(url, "Basic x")
+        sonar.fetch_json(url, "Basic x", timeout=0.25)
 
 
 def test_the_real_transport_reports_an_unreachable_server():
+    """#22 kept row: an unreachable server is cannot judge"""
     with pytest.raises(CannotJudge, match="could not be reached"):
         sonar.fetch_json("http://127.0.0.1:1/x", "Basic x")
