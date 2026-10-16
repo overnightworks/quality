@@ -3,6 +3,7 @@
 `quality` is the one door for fleet quality checks.
 
     quality hygiene [PATH]
+    quality sonar preflight [PATH]
     quality sonar findings --task-file PATH
 
 `hygiene` reads git's view of the repository at `PATH` (default `.`) and applies two rules:
@@ -26,8 +27,31 @@ Each finding names the rule, the file, a reason and a fix. Exit `0` is clean, `1
 
 ## `quality sonar findings`
 
-`quality sonar findings --task-file report-task.txt` is the SonarCloud zero-findings rule. It is not wired into any
-workflow yet (that is Q1a-5b); callers use `gate.yml`, never an action, because quality publishes none.
+`gate.yml` runs SonarCloud's scanner in its `sonar` job and judges it through `verdict`; callers use `gate.yml`, never
+an action, because quality publishes none. A caller passes the Actions secret by name
+(`secrets: SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}`), has automatic analysis off in SonarCloud, and commits a root
+`sonar-project.properties`. A missing or empty token is red (`sonar: cannot judge - SONAR_TOKEN is empty`), never
+skipped; Dependabot runs resolve the Dependabot secret of the same name.
+
+`quality sonar preflight [PATH]` runs before the scan and refuses (exit `2`, naming the key) any property outside an
+allowlist (`sonar.organization`, `sonar.projectKey`, `sonar.projectName`, `sonar.sources`, `sonar.tests`, the
+inclusion/exclusion keys, `sonar.sourceEncoding`, `sonar.python.version` and the two coverage report path keys), any
+value containing a `${...}` substitution after decoding (the scanner would expand `${env.SONAR_TOKEN}`), a
+`sonar.organization` or `sonar.projectKey` other than `<owner>` and `<owner>_<repo>`, a tracked `.scannerwork/`, and
+an empty token. The file is read with the `java.util.Properties` grammar (`=`, `:` or whitespace separators, `\`
+continuation, `\uXXXX` and `\` escapes).
+
+The scanner's transport, verified at sonar-scanner-java-library 4.1.1.1633 (the library of sonar-scanner-cli
+8.1.0.6389, which `gate.yml` pins through `scannerVersion`):
+
+- The bootstrap's authenticated requests reach only `sonarcloud.io` and `api.sonarcloud.io`. This holds only with the
+  pinned `-Dsonar.host.url=https://sonarcloud.io` argument and a properties file that passed preflight.
+- Residual limit: a redirect issued by SonarCloud itself carries the token to the host it names.
+- The engine is downloaded from SonarCloud and is not pinned by the CLI pin. SonarSource's server-side code is an
+  accepted trust boundary: the token's only purpose is to authenticate to SonarCloud.
+- Re-verify all of this on any bump of the scan action or `scannerVersion`.
+
+`quality sonar findings --task-file report-task.txt` is the SonarCloud zero-findings rule.
 
 The project is the caller's repository: `GITHUB_REPOSITORY` gives the key `<owner>_<repo>` and the organization
 `<owner>`. The task file must name that `projectKey` and `serverUrl=https://sonarcloud.io`; the URLs inside it are never
