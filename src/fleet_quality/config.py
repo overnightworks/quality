@@ -86,6 +86,8 @@ def _read_allowance(entry: object) -> tuple[str, str]:
             f"{CONFIG_PATH} [secrets] allow entry {entry!r} needs a non-empty fingerprint and a reason, like:\n"
             f"{ALLOWANCE_EXAMPLE}"
         )
+    if "\n" in reason or "\r" in reason:
+        raise ConfigError(f"{CONFIG_PATH} [secrets] allow entry {entry!r} needs a one-line reason")
     return fingerprint, reason
 
 

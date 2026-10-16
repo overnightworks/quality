@@ -75,6 +75,7 @@ def test_reads_every_allowed_fingerprint_with_its_reason():
 
 @pytest.mark.parametrize("text", [None, '[gate]\nmandatory_jobs = ["checks"]'])
 def test_a_config_without_allowances_allows_nothing(text):
+    """#16: an absent allow list allows nothing."""
     assert load_secret_allowances(text) == {}
 
 
@@ -86,6 +87,7 @@ def test_a_config_without_allowances_allows_nothing(text):
         "[secrets]\nallow = [{ fingerprint = \"a:b:c:1\", reason = \"\" }]",
         "[secrets]\nallow = [{ fingerprint = \"\", reason = \"r\" }]",
         "[secrets]\nallow = [{ fingerprint = \"a\", reason = \"r\", extra = 1 }]",
+        "[secrets]\nallow = [{ fingerprint = \"a\", reason = \"two\\nlines\" }]",
         "[secrets]\nallow = \"a:b:c:1\"",
         "[secrets]\nignore = []",
         "secrets = 1",
@@ -93,9 +95,11 @@ def test_a_config_without_allowances_allows_nothing(text):
     ],
 )
 def test_refuses_an_allowance_that_is_not_a_fingerprint_with_a_reason(text):
+    """#16: an allow entry without a fingerprint and a one-line reason is refused."""
     with pytest.raises(ConfigError, match="quality/config.toml"):
         load_secret_allowances(text)
 
 
 def test_a_repository_without_the_file_allows_nothing(tmp_path):
+    """#16: a missing quality/config.toml allows nothing."""
     assert read_secret_allowances(tmp_path) == {}
