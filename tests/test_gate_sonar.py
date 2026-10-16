@@ -4,6 +4,7 @@ import pytest
 import yaml
 
 from quality import sonar
+from quality.config import LegacyMode, load_legacy_mode
 
 ROOT = Path(__file__).parent.parent
 WORKFLOWS = ROOT / ".github" / "workflows"
@@ -141,3 +142,22 @@ def test_the_coverage_the_tests_upload_is_the_report_the_scan_reads():
     assert [u["with"]["name"] for u in uploads] == [ci["jobs"]["quality"]["with"]["coverage-artifact"]] == ["coverage"]
     assert "tests" in ci["jobs"]["quality"]["needs"]
     assert f"sonar.python.coverage.reportPaths={uploads[0]['with']['path']}" in (ROOT / "sonar-project.properties").read_text().splitlines()
+
+
+def test_only_the_findings_step_binds_the_default_branch_from_the_event(gate):
+    """#33 sentence 7: the findings step reads the default branch name from the event, never assumes main, and no other step sees it"""
+    binders = [
+        (job_name, step["name"])
+        for job_name, job in gate["jobs"].items()
+        for step in job["steps"]
+        if "DEFAULT_BRANCH" in step.get("env", {})
+    ]
+    findings = step_named(gate["jobs"]["sonar"]["steps"], "Findings")
+    assert binders == [("sonar", findings["name"])]
+    assert findings["env"]["DEFAULT_BRANCH"] == "${{ github.event.repository.default_branch }}"
+    assert "main" not in str(findings)
+
+
+def test_quality_fails_on_its_own_legacy_findings():
+    """#33 sentence 5: quality's own config switches legacy findings to failing"""
+    assert load_legacy_mode((ROOT / "quality" / "config.toml").read_text(encoding="utf-8")) is LegacyMode.FAIL

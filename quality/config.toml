@@ -1,5 +1,6 @@
 [gate]
 mandatory_jobs = ["quality"]
+legacy = "fail"
 
 [secrets]
 allow = [
