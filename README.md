@@ -3,7 +3,16 @@
 `quality` is the one door for fleet quality checks.
 
     quality hygiene [PATH]
+    quality scan-staged [PATH] --engines DIR
+    quality engines install DIR
+    quality engines verify DIR
     quality sonar findings --task-file PATH
+
+Install it with
+
+    uv tool install "overnightworks-quality @ git+https://github.com/overnightworks/quality@<commit sha>"
+
+(no tag exists yet, so the line names a commit). It needs git 2.41 or newer; an older git is exit `2`.
 
 `hygiene` reads git's view of the repository at `PATH` (default `.`) and applies two rules:
 
@@ -46,6 +55,33 @@ Every allowed finding is printed with the entry's reason (`secret: 1 allowed (sr
 
 Each finding names the rule, the file, a reason and a fix. Exit `0` is clean, `1` means findings,
 `2` means the repository could not be judged (never clean).
+
+## `quality scan-staged`
+
+`quality scan-staged [PATH] --engines DIR` scans exactly what the next commit records: the effective index of the
+repository at `PATH` (default `.`) compared with `HEAD`. It is meant for a pre-commit hook, which runs it in the
+work-tree top. A relative `GIT_INDEX_FILE` is resolved against the working directory, as git does, so `git commit -a`,
+`git commit <path>` and a linked worktree scan the index git is committing.
+
+The index is written as a tree (`git write-tree`, only tree objects a commit writes anyway) and read into a scratch
+repository inside a 0700 scratch directory. The scratch repository borrows the objects (`objects/info/alternates`),
+has an empty work tree and none of the live repository's config or `info/attributes`, so a staged `.gitleaksignore`,
+`.gitleaks.toml`, `.gitattributes` with `-diff`, or a `gitleaks:allow` comment changes nothing. gitleaks runs in the same
+attribute-free environment as `hygiene`, with quality's config. The allow list is the staged tree's own
+`quality/config.toml` (none staged: no allowances). Output and secret handling are `hygiene`'s:
+`secret src/a.py:3 - gitleaks rule aws-access-token matched in the staged change (sha256 <64 hex>, value not shown).`
+
+gitleaks' staged mode sees only added and changed lines, so a known false positive blocks only the commits that touch
+its line, and then needs its allowance, as in CI. A key only in the work tree or only in `HEAD` is clean. Exit `2` (never
+clean): an engine missing or at the wrong version, git older than 2.41, an unreadable allow list, an index with unmerged
+entries, a path that is not a repository, or a gitleaks run without a report.
+
+## `quality engines`
+
+`quality engines install DIR` verifies each pinned engine first and downloads only one that is missing or does not report
+its pinned version, so a second run downloads nothing (`gitleaks 8.30.1 already installed`; otherwise `... installed`).
+`quality engines verify DIR` is exit `0` when every pinned engine in `DIR` reports exactly its pinned version, otherwise
+exit `2` with one line per engine.
 
 ## `quality sonar findings`
 
