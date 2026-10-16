@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -9,6 +10,7 @@ from quality import __version__, engines
 from quality.config import ConfigError, read_mandatory_jobs
 from quality.hygiene import CannotJudge, active_rules, run_hygiene, skipped_rules
 from quality.report import Finding, render
+from quality.sonar import Sleep, Transport, analyse, fetch_json
 from quality.verdict import (
     PageFetcher,
     github_fetcher,
@@ -26,6 +28,8 @@ def main(
     argv: list[str] | None = None,
     fetcher_for: Callable[[str], PageFetcher] = github_fetcher,
     read_pins: Callable[[], dict[str, engines.Pin]] = engines.read_pins,
+    transport: Transport = fetch_json,
+    sleep: Sleep = time.sleep,
 ) -> int:
     parser = argparse.ArgumentParser(prog="quality")
     parser.add_argument("--version", action="version", version=__version__)
@@ -41,10 +45,18 @@ def main(
     )
     verdict = commands.add_parser("verdict", help="judge the mandatory jobs of the running workflow run")
     verdict.add_argument("path", nargs="?", type=Path, default=Path("."))
+    sonar = commands.add_parser("sonar", help="check SonarCloud for open findings").add_subparsers(
+        dest="sonar_command", required=True
+    )
+    sonar.add_parser("findings", help="wait for this run's analysis, then count its open findings").add_argument(
+        "--task-file", type=Path, required=True, help="the scanner's report-task.txt"
+    )
     arguments = parser.parse_args(argv)
 
     if arguments.command == "verdict":
         return run_verdict(arguments.path, fetcher_for)
+    if arguments.command == "sonar":
+        return run_sonar_findings(arguments.task_file, transport, sleep)
     if arguments.command == "engines":
         return run_engines_install(arguments.directory, read_pins)
     try:
@@ -86,6 +98,18 @@ def run_engines_install(directory: Path, read_pins: Callable[[], dict[str, engin
         return EXIT_CANNOT_JUDGE
     print(f"engines: installed into {directory}")
     return EXIT_CLEAN
+
+
+def run_sonar_findings(task_file: Path, transport: Transport, sleep: Sleep) -> int:
+    try:
+        result = analyse(task_file, os.environ, transport, sleep)
+    except CannotJudge as error:
+        print(f"sonar: cannot judge - {error}", file=sys.stderr)
+        return EXIT_CANNOT_JUDGE
+    for finding in result.findings.listed:
+        print(render(finding))
+    print(result.summary(), file=sys.stderr if result.fails_the_run else sys.stdout)
+    return EXIT_FINDINGS if result.fails_the_run else EXIT_CLEAN
 
 
 def run_verdict(path: Path, fetcher_for: Callable[[str], PageFetcher]) -> int:

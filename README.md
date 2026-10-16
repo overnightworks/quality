@@ -3,6 +3,7 @@
 `quality` is the one door for fleet quality checks.
 
     quality hygiene [PATH]
+    quality sonar findings --task-file PATH
 
 `hygiene` reads git's view of the repository at `PATH` (default `.`) and applies two rules:
 
@@ -26,3 +27,15 @@ fingerprint and is red until it is added. An entry without a reason is exit `2`.
 
 Each finding names the rule, the file, a reason and a fix. Exit `0` is clean, `1` means findings,
 `2` means the repository could not be judged (never clean).
+
+## `quality sonar findings`
+
+`quality sonar findings --task-file report-task.txt` is the SonarCloud zero-findings rule. It is not wired into any
+workflow yet (that is Q1a-5b); callers use `gate.yml`, never an action, because quality publishes none.
+
+The project is the caller's repository: `GITHUB_REPOSITORY` gives the key `<owner>_<repo>` and the organization
+`<owner>`. The task file must name that `projectKey` and `serverUrl=https://sonarcloud.io`; the URLs inside it are never
+requested. The command polls `api/ce/task` until its own analysis is `SUCCESS` and bound to this component, organization
+and pull request (or branch), then reads the open findings with `SONAR_TOKEN` (header only, never printed). On
+`pull_request` any open finding is exit `1`; on any other event the count is reported and the exit is `0` until the
+baseline exists. Anything unreadable is exit `2`.
