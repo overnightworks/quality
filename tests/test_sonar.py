@@ -473,11 +473,13 @@ LCOV_REPORT_KEY = "sonar.javascript.lcov.reportPaths"
         (LCOV_REPORT_KEY, "coverage/lcov.info", ["coverage/lcov.info"], 0, None),
         (PYTHON_REPORT_KEY, "/etc/hostname", [], 2, "/etc/hostname"),
         (PYTHON_REPORT_KEY, "../coverage.xml", [], 2, "../coverage.xml"),
+        (PYTHON_REPORT_KEY, "sub/../coverage.xml", ["coverage.xml", "sub/other.xml"], 2, "sub/../coverage.xml"),
+        (PYTHON_REPORT_KEY, "reports/**.xml", ["reports/a.xml"], 2, "reports/**.xml"),
     ],
     ids=[
         "typo beside a valid sibling", "glob that matches", "glob that matches nothing", "trailing dir/** over a file below",
         "space after the comma", "directory instead of a file", "empty value", "missing lcov report", "present lcov report",
-        "absolute entry", "entry with a parent segment",
+        "absolute entry", "entry with a parent segment", "parent segment over an existing report", "** inside a path segment",
     ],
 )
 def test_preflight_requires_every_named_coverage_report_to_exist(monkeypatch, capsys, build_repo, key, value, files, code, named):
