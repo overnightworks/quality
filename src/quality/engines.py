@@ -184,7 +184,7 @@ def attribute_free_git_environment(empty_home: Path) -> dict[str, str]:
 
 def _require_git_floor() -> None:
     asked = _run(["git", "--version"])
-    found = re.search(r"\d+\.\d+(?:\.\d+)?", asked.stdout)
+    found = re.search(r"\d{1,6}\.\d{1,6}(?:\.\d{1,6})?", asked.stdout)
     if asked.returncode != 0 or found is None:
         raise EngineError(f"cannot read the git version{_stderr_tail(asked.stderr)}")
     if tuple(int(part) for part in found[0].split("."))[:2] < GIT_FLOOR:

@@ -100,8 +100,17 @@ def github_fetcher(token: str) -> PageFetcher:
     return fetch
 
 
+SAFE_REF = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_./@-]*")
+
+
+def _require_safe_ref(ref: str) -> None:
+    if not SAFE_REF.fullmatch(ref) or ".." in ref or ref.endswith((".", ".lock", "/")):
+        raise CannotJudge(f"{ref!r} is not a commit reference git would accept as a plain name")
+
+
 def read_base_mandatory_jobs(repo: Path, base_sha: str) -> tuple[str, ...]:
-    git = ["git", "-C", str(repo)]
+    _require_safe_ref(base_sha)
+    git = ["git", "-C", str(repo.resolve())]
     listed = subprocess.run([*git, "ls-tree", base_sha, "--", CONFIG_PATH], capture_output=True, text=True, check=False)
     if listed.returncode != 0:
         raise CannotJudge(f"cannot read the base commit {base_sha}: {listed.stderr.strip()}")

@@ -99,8 +99,9 @@ def test_reads_the_mandatory_job_that_only_sits_on_page_two():
 
 def test_a_missing_second_page_cannot_be_judged():
     """#6 rule 2: jobs read disagreeing with total_count cannot be judged."""
+    fetch = fetch_from_fixtures("jobs-page1.json")
     with pytest.raises(CannotJudge, match="read 2 jobs but the run has 3"):
-        read_jobs("o/r", "1", fetch_from_fixtures("jobs-page1.json"))
+        read_jobs("o/r", "1", fetch)
 
 
 def test_more_pages_than_the_cap_cannot_be_judged():
@@ -200,3 +201,18 @@ def test_a_non_numeric_run_attempt_exits_two(monkeypatch, capsys, run_env):
     page = json.dumps({"total_count": 0, "jobs": []})
     assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (page, None)) == 2
     assert "cannot judge" in summary.read_text()
+
+
+@pytest.mark.parametrize("ref", ["--upload-pack=x", "-n", "a..b", "main.lock", "a b", "x:y"])
+def test_a_base_ref_that_git_could_read_as_an_option_is_refused(build_repo, ref):
+    """#31 rule 1 (S8705): an unsafe base ref is refused before any git call."""
+    repo = build_repo({})
+    with pytest.raises(CannotJudge, match="not a commit reference"):
+        read_base_mandatory_jobs(repo, ref)
+
+
+def test_a_plain_branch_name_is_still_a_readable_base(build_repo):
+    """#31 rule 1 (S8705): a plain ref such as a branch name still works."""
+    repo = build_repo({"quality/config.toml": '[gate]\nmandatory_jobs = ["tests"]\n'})
+    branch = subprocess.run(["git", "-C", str(repo), "branch", "--show-current"], capture_output=True, text=True, check=True).stdout.strip()
+    assert read_base_mandatory_jobs(repo, branch) == ("tests",)

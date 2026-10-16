@@ -417,7 +417,7 @@ def test_a_template_directory_cannot_put_attributes_into_the_mirror(
 
 
 @pytest.mark.engine
-@pytest.mark.parametrize("git_version", ["2.40.1", "1.9.0"])
+@pytest.mark.parametrize("git_version", ["2.40.1", "1.9.0", "2.40", "2.9.5"])
 def test_a_git_older_than_2_41_is_exit_2_naming_the_version(
     installed_engines, build_repo, fake_git, capsys, git_version
 ):

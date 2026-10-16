@@ -158,4 +158,5 @@ def test_quality_tracks_no_env_or_compose_file():
     root = Path(__file__).resolve().parents[1]
     tracked = subprocess.run(["git", "-C", str(root), "ls-files"], capture_output=True, text=True, check=True).stdout
     assert cli.main(["hygiene", str(root)]) == 0
-    assert "compose" not in tracked and ".env" not in tracked
+    assert "compose" not in tracked
+    assert ".env" not in tracked
