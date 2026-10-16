@@ -14,7 +14,7 @@ import urllib.request
 from pathlib import Path
 
 import pytest
-from conftest import FAKE_KEY, OTHER_KEY, allow_config, sha256_of
+from conftest import FAKE_KEY, OTHER_KEY, UNKNOWN_KEY_CONFIGS, allow_config, sha256_of
 
 from quality import cli, engines
 from quality.engines import EngineError, Pin
@@ -277,6 +277,14 @@ def test_unreadable_or_inconsistent_gitleaks_result_cannot_be_judged(report, exi
 
 def scan(repo: Path, installed_engines: Path) -> int:
     return cli.main(["hygiene", "--engines", str(installed_engines), str(repo)])
+
+
+@pytest.mark.engine
+@UNKNOWN_KEY_CONFIGS
+def test_hygiene_refuses_a_config_with_unknown_keys(build_repo, installed_engines, capsys, config):
+    """#40 rule 2: hygiene keeps refusing unknown keys of quality/config.toml."""
+    assert scan(build_repo({"quality/config.toml": config}), installed_engines) == 2
+    assert "unknown key" in capsys.readouterr().err
 
 
 def commit(repo: Path, message: str) -> None:

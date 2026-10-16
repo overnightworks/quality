@@ -11,6 +11,14 @@ from quality import cli
 
 FAKE_KEY = "AKIA" + "QYLPMTYX3QZ5ABCD"  # assembled so quality's own scan stays green
 OTHER_KEY = "AKIA" + "QYLPMTYX3QZ5WXYZ"  # a second assembled key, to prove another value stays red
+UNKNOWN_KEY_CONFIGS = pytest.mark.parametrize(
+    "config",
+    [
+        '[gate]\nmandatory_jobs = ["checks"]\nwhatever = 1\n',
+        '[gate]\nmandatory_jobs = ["checks"]\n[future]\nkey = 1\n',
+    ],
+    ids=["unknown gate key", "unknown table"],
+)
 RepoBuilder = Callable[[dict[str, str]], Path]
 
 
@@ -25,6 +33,13 @@ def allow_config(*entries: tuple[str, str, str, str]) -> str:
         for rule, file, secret, reason in entries
     )
     return f"[gate]\nmandatory_jobs = [\"checks\"]\n[secrets]\nallow = [{rows}]\n"
+
+
+@pytest.fixture(autouse=True)
+def isolated_git_config(monkeypatch):
+    """Fixture repositories never see the developer's global git config, hooks included."""
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
 
 
 @pytest.fixture
