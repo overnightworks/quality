@@ -1,0 +1,8 @@
+claim_id = "c008ae598bf543fab0252f0ae84ba000"
+agent = "Claude fe12493e-3d52-442e-b01b-4ee4336de2f0"
+role = "builder"
+base = "b04cb3fbefc3419fe3f44bd1ca96a215f1cc33b4"
+branch = "claude/issue-22-q1a-5a-sonar-findings"
+scope = ["AGENTS.md", "README.md", "src/quality/cli.py", "src/quality/sonar.py", "tests/fixtures/sonar", "tests/test_sonar.py"]
+opened_commit = "a2a4265c6d3dece9bae5f56f637b37460058596e"
+whole_reason = "The harvested findings command, its table tests and fixtures, and its docs are one check."
