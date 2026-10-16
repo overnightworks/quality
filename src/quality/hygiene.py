@@ -7,13 +7,13 @@ from pathlib import Path, PurePosixPath
 import yaml
 
 from quality import engines
-from quality.config import ConfigError, read_secret_allowances
+from quality.config import Allowance, ConfigError, read_secret_allowances
 from quality.report import Finding
 
 ENV_FILE = "env-file"
 COMPOSE_PORT = "compose-port"
 FILE_RULE_IDS = (ENV_FILE, COMPOSE_PORT)
-ENGINE_RULE_IDS = (engines.SECRET, engines.WORKFLOW_LINT, engines.WORKFLOW_SECURITY)
+ENGINE_RULE_IDS = (engines.LEAK_RULE, engines.WORKFLOW_LINT, engines.WORKFLOW_SECURITY)
 WORKFLOW_DIRECTORY = PurePosixPath(".github/workflows")
 WORKFLOW_SUFFIXES = (".yml", ".yaml")
 
@@ -162,13 +162,14 @@ def skipped_rules(engine_dir: Path | None) -> tuple[str, ...]:
 class HygieneResult:
     findings: list[Finding]
     allowed_secrets: list[Finding]
+    unused_allowances: dict[Allowance, str]
 
 
 def run_hygiene(root: Path, engine_dir: Path | None = None) -> HygieneResult:
     tracked = tracked_files(root)
     findings = check_env_files(tracked) + check_compose_ports(root, tracked)
     if engine_dir is None:
-        return HygieneResult(findings, [])
+        return HygieneResult(findings, [], {})
     secrets = check_secrets(root, engine_dir)
     findings += secrets.findings + check_workflows(root, engine_dir, tracked)
-    return HygieneResult(findings, secrets.allowed)
+    return HygieneResult(findings, secrets.allowed, secrets.unused_allowances)

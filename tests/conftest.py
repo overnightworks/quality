@@ -1,10 +1,30 @@
+import hashlib
+import os
+import shutil
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
+from quality import cli
+
+FAKE_KEY = "AKIA" + "QYLPMTYX3QZ5ABCD"  # assembled so quality's own scan stays green
+OTHER_KEY = "AKIA" + "QYLPMTYX3QZ5WXYZ"  # a second assembled key, to prove another value stays red
 RepoBuilder = Callable[[dict[str, str]], Path]
+
+
+def sha256_of(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def allow_config(*entries: tuple[str, str, str, str]) -> str:
+    """Entries are (rule, file, secret, reason); the config holds the secret's hash only."""
+    rows = ", ".join(
+        f'{{ rule = "{rule}", file = "{file}", secret_sha256 = "{sha256_of(secret)}", reason = "{reason}" }}'
+        for rule, file, secret, reason in entries
+    )
+    return f"[gate]\nmandatory_jobs = [\"checks\"]\n[secrets]\nallow = [{rows}]\n"
 
 
 @pytest.fixture
@@ -21,3 +41,25 @@ def build_repo(tmp_path: Path) -> RepoBuilder:
         return tmp_path
 
     return build
+
+
+@pytest.fixture(scope="session")
+def installed_engines(tmp_path_factory) -> Path:
+    directory = tmp_path_factory.mktemp("engines")
+    assert cli.main(["engines", "install", str(directory)]) == 0
+    return directory
+
+
+@pytest.fixture
+def fake_git(tmp_path, monkeypatch):
+    """Puts a `git` first on PATH that runs `preamble` (shell) and then the real git."""
+    real_git = shutil.which("git")
+
+    def install(preamble: str) -> None:
+        fake_bin = tmp_path / "fake-git"
+        fake_bin.mkdir()
+        (fake_bin / "git").write_text(f'#!/bin/sh\n{preamble}\nexec {real_git} "$@"\n')
+        (fake_bin / "git").chmod(0o755)
+        monkeypatch.setenv("PATH", f"{fake_bin}:{os.environ['PATH']}")
+
+    return install

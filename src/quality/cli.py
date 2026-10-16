@@ -6,8 +6,8 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from quality import __version__, engines
-from quality.config import ConfigError, read_mandatory_jobs
+from quality import __version__, engines, staged
+from quality.config import Allowance, ConfigError, read_mandatory_jobs
 from quality.hygiene import CannotJudge, active_rules, run_hygiene, skipped_rules
 from quality.report import Finding, render
 from quality.sonar import TASK_FILE, Sleep, Transport, analyse, fetch_json, preflight
@@ -37,10 +37,16 @@ def main(
     hygiene = commands.add_parser("hygiene", help="check a git repository for fleet hygiene")
     hygiene.add_argument("path", nargs="?", type=Path, default=Path("."))
     hygiene.add_argument("--engines", type=Path, help="directory holding the installed engines; enables the secret and workflow scans")
+    scan_staged = commands.add_parser("scan-staged", help="scan the staged change of a repository for secrets")
+    scan_staged.add_argument("path", nargs="?", type=Path, default=Path("."))
+    scan_staged.add_argument("--engines", type=Path, required=True, help="directory holding the installed engines")
     engine_commands = commands.add_parser("engines", help="manage the pinned engines").add_subparsers(
         dest="engines_command", required=True
     )
-    engine_commands.add_parser("install", help="download, verify and unpack the pinned engines").add_argument(
+    engine_commands.add_parser("install", help="download, verify and unpack the pinned engines that are not yet right").add_argument(
+        "directory", type=Path
+    )
+    engine_commands.add_parser("verify", help="check that every pinned engine reports its pinned version").add_argument(
         "directory", type=Path
     )
     verdict = commands.add_parser("verdict", help="judge the mandatory jobs of the running workflow run")
@@ -56,19 +62,22 @@ def main(
 
     if arguments.command == "verdict":
         return run_verdict(arguments.path, fetcher_for)
+    if arguments.command == "scan-staged":
+        return run_scan_staged(arguments.path, arguments.engines, read_pins)
     if arguments.command == "sonar":
         if arguments.sonar_command == "preflight":
             return run_sonar_preflight(arguments.path)
         return run_sonar_findings(transport, sleep)
     if arguments.command == "engines":
-        return run_engines_install(arguments.directory, read_pins)
+        run_engines = run_engines_install if arguments.engines_command == "install" else run_engines_verify
+        return run_engines(arguments.directory, read_pins)
     try:
         result = run_hygiene(arguments.path, arguments.engines)
     except CannotJudge as error:
         print(f"hygiene: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     findings = result.findings
-    print_allowed_secrets(result.allowed_secrets)
+    print_secret_allowances(result.allowed_secrets, result.unused_allowances)
     if not findings:
         print(f"hygiene: clean ({len(active_rules(arguments.engines))} rules){coverage_note(arguments.engines)}")
         return EXIT_CLEAN
@@ -78,12 +87,13 @@ def main(
     return EXIT_FINDINGS
 
 
-def print_allowed_secrets(allowed: list[Finding]) -> None:
-    if not allowed:
-        return
-    print(f"{engines.SECRET}: {len(allowed)} allowed ({', '.join(finding.location for finding in allowed)})")
-    for finding in allowed:
-        print(f"  allowed {finding.location} - {finding.reason}")
+def print_secret_allowances(allowed: list[Finding], unused: dict[Allowance, str]) -> None:
+    if allowed:
+        print(f"{engines.LEAK_RULE}: {len(allowed)} allowed ({', '.join(finding.location for finding in allowed)})")
+        for finding in allowed:
+            print(f"  allowed {finding.location} - {finding.reason}")
+    for entry, reason in unused.items():
+        print(f"{engines.LEAK_RULE}: unused allowance {entry.rule} in {entry.file} (sha256 {entry.secret_sha256}) - {reason}")
 
 
 def coverage_note(engine_dir: Path | None) -> str:
@@ -93,13 +103,37 @@ def coverage_note(engine_dir: Path | None) -> str:
     return f"; {engines.WORKFLOW_SECURITY} runs offline, so zizmor's online-only audits do not run"
 
 
-def run_engines_install(directory: Path, read_pins: Callable[[], dict[str, engines.Pin]]) -> int:
+def run_scan_staged(path: Path, engine_dir: Path, read_pins: Callable[[], dict[str, engines.Pin]]) -> int:
     try:
-        engines.install(directory, read_pins())
+        result = staged.scan_staged(path, engine_dir, read_pins())
+    except (engines.EngineError, ConfigError) as error:
+        print(f"scan-staged: cannot judge - {error}", file=sys.stderr)
+        return EXIT_CANNOT_JUDGE
+    print_secret_allowances(result.allowed, result.unused_allowances)
+    for finding in result.findings:
+        print(render(finding))
+    print(f"scan-staged: {len(result.findings)} finding(s)" if result.findings else "scan-staged: clean")
+    return EXIT_FINDINGS if result.findings else EXIT_CLEAN
+
+
+def run_engines_install(directory: Path, read_pins: Callable[[], dict[str, engines.Pin]]) -> int:
+    pins = read_pins()
+    try:
+        downloaded = engines.install(directory, pins)
     except engines.EngineError as error:
         print(f"engines: cannot install - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
-    print(f"engines: installed into {directory}")
+    for name, pin in pins.items():
+        print(f"{name} {pin.version} {'installed' if downloaded[name] else 'already installed'}")
+    return EXIT_CLEAN
+
+
+def run_engines_verify(directory: Path, read_pins: Callable[[], dict[str, engines.Pin]]) -> int:
+    problems = engines.verification_problems(directory, read_pins())
+    if problems:
+        print("\n".join(f"engines: {problem}" for problem in problems), file=sys.stderr)
+        return EXIT_CANNOT_JUDGE
+    print(f"engines: every pinned engine in {directory} is at its pinned version")
     return EXIT_CLEAN
 
 
