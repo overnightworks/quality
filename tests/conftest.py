@@ -11,6 +11,7 @@ from quality import cli
 
 FAKE_KEY = "AKIA" + "QYLPMTYX3QZ5ABCD"  # assembled so quality's own scan stays green
 OTHER_KEY = "AKIA" + "QYLPMTYX3QZ5WXYZ"  # a second assembled key, to prove another value stays red
+GIT_IDENTITY = ["-c", "user.name=t", "-c", "user.email=t@example.invalid"]
 UNKNOWN_KEY_CONFIGS = pytest.mark.parametrize(
     "config",
     [
@@ -45,7 +46,7 @@ def isolated_git_config(monkeypatch):
 @pytest.fixture
 def build_repo(tmp_path: Path) -> RepoBuilder:
     def build(files: dict[str, str]) -> Path:
-        git = ["git", "-C", str(tmp_path), "-c", "user.name=t", "-c", "user.email=t@example.invalid"]
+        git = ["git", "-C", str(tmp_path), *GIT_IDENTITY]
         subprocess.run([*git, "init", "-q"], check=True)
         for name, content in files.items():
             target = tmp_path / name

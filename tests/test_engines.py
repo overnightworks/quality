@@ -14,7 +14,7 @@ import urllib.request
 from pathlib import Path
 
 import pytest
-from conftest import FAKE_KEY, OTHER_KEY, UNKNOWN_KEY_CONFIGS, allow_config, sha256_of
+from conftest import FAKE_KEY, GIT_IDENTITY, OTHER_KEY, UNKNOWN_KEY_CONFIGS, allow_config, sha256_of
 
 from quality import cli, engines
 from quality.engines import EngineError, Pin
@@ -288,7 +288,7 @@ def test_hygiene_refuses_a_config_with_unknown_keys(build_repo, installed_engine
 
 
 def commit(repo: Path, message: str) -> None:
-    git = ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.invalid"]
+    git = ["git", "-C", str(repo), *GIT_IDENTITY]
     subprocess.run([*git, "add", "-A"], check=True)
     subprocess.run([*git, "commit", "-q", "-m", message], check=True)
 

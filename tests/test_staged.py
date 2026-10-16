@@ -3,16 +3,15 @@ import sys
 from pathlib import Path
 
 import pytest
-from conftest import FAKE_KEY, OTHER_KEY, allow_config
+from conftest import FAKE_KEY, GIT_IDENTITY, OTHER_KEY, allow_config
 
 from quality import cli
 
 KEY_LINE = f"aws_access_key_id = {FAKE_KEY}\n"
-IDENTITY = ["-c", "user.name=t", "-c", "user.email=t@example.invalid"]
 
 
 def git(repo: Path, *arguments: str, check: bool = True) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["git", "-C", str(repo), *IDENTITY, *arguments], check=check, capture_output=True, text=True)
+    return subprocess.run(["git", "-C", str(repo), *GIT_IDENTITY, *arguments], check=check, capture_output=True, text=True)
 
 
 def stage(repo: Path, files: dict[str, str]) -> None:
