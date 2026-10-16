@@ -1,8 +1,0 @@
-claim_id = "64ccfcaea25346669efaff11e291f496"
-agent = "Claude fe12493e-3d52-442e-b01b-4ee4336de2f0"
-role = "builder"
-base = "891c49eba123fbc567456a5d7a29b13bfc5a6840"
-branch = "claude/issue-25-staged-scan"
-scope = ["README.md", "src/quality", "tests"]
-opened_commit = "78899643c607d79bcb71a263cbf599db3ce15e8b"
-whole_reason = "The staged scan, engine verification, the idempotent install and their real-engine tests are one hook-facing scan."
