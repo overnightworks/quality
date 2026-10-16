@@ -43,3 +43,15 @@ def test_a_config_file_that_cannot_be_decoded_is_refused(tmp_path):
     (tmp_path / "quality" / "config.toml").write_bytes(b"\xff\xfe")
     with pytest.raises(ConfigError, match="cannot be read"):
         read_mandatory_jobs(tmp_path)
+
+
+def test_a_config_directory_that_cannot_be_entered_is_refused(tmp_path):
+    """defect:#6 finding 5: permission denied while looking for the config is a ConfigError, not a traceback."""
+    config_dir = tmp_path / "quality"
+    config_dir.mkdir()
+    config_dir.chmod(0)
+    try:
+        with pytest.raises(ConfigError, match="cannot be read"):
+            read_mandatory_jobs(tmp_path)
+    finally:
+        config_dir.chmod(0o700)

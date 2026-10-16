@@ -33,9 +33,9 @@ def load_mandatory_jobs(text: str | None) -> tuple[str, ...]:
 
 def read_mandatory_jobs(repo: Path) -> tuple[str, ...]:
     path = repo / CONFIG_PATH
-    if not path.is_file():
-        return load_mandatory_jobs(None)
     try:
         return load_mandatory_jobs(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return load_mandatory_jobs(None)
     except (OSError, UnicodeDecodeError) as error:
         raise ConfigError(f"{CONFIG_PATH} cannot be read ({error})") from error
