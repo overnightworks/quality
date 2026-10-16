@@ -1,0 +1,21 @@
+{
+  "total_count": 3,
+  "jobs": [
+    {
+      "id": 1,
+      "name": "quality / hygiene",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "workflow_name": "CI"
+    },
+    {
+      "id": 2,
+      "name": "quality / verdict",
+      "run_attempt": 1,
+      "status": "in_progress",
+      "conclusion": null,
+      "workflow_name": "CI"
+    }
+  ]
+}

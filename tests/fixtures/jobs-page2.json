@@ -1,0 +1,13 @@
+{
+  "total_count": 3,
+  "jobs": [
+    {
+      "id": 3,
+      "name": "checks",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "failure",
+      "workflow_name": "CI"
+    }
+  ]
+}
