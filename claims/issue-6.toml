@@ -1,0 +1,8 @@
+claim_id = "c52b846a022148a98738dcb24913c5ce"
+agent = "Claude fe12493e-3d52-442e-b01b-4ee4336de2f0"
+role = "builder"
+base = "315a390ffb15c70268ff75409aa386ed1ee27ffb"
+branch = "claude/issue-6-q1a-2-die-schranke-gate-yml-mit-fail-clo"
+scope = [".github/workflows", "quality/config.toml", "src/fleet_quality", "tests"]
+opened_commit = "1036da7c58cb83f3217b4259cd8ca9c93d14ce13"
+whole_reason = "gate.yml, the verdict, its config and tests are one fail-closed gate."
