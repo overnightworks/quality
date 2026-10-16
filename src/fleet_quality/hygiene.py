@@ -51,12 +51,16 @@ def tracked_files(root: Path) -> list[str]:
     return [os.fsdecode(name) for name in listing.stdout.split(b"\0") if name]
 
 
+def _printable(name: str) -> str:
+    return name.encode("utf-8", "backslashreplace").decode("utf-8")
+
+
 def check_env_files(tracked: list[str]) -> list[Finding]:
     return [
         Finding(
-            ENV_FILE, name, None,
+            ENV_FILE, _printable(name), None,
             "a tracked env file publishes configuration and often secrets.",
-            f"git rm --cached {name} and add it to .gitignore.",
+            f"git rm --cached {_printable(name)} and add it to .gitignore.",
         )
         for name in tracked
         if _is_env_file(PurePosixPath(name).name)

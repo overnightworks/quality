@@ -1,0 +1,78 @@
+name: gate
+
+on:
+  workflow_call:
+    secrets: {}
+
+permissions:
+  contents: read
+
+jobs:
+  hygiene:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the caller
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Check out the gate's own tool
+        if: github.repository != 'overnightworks/quality'
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: overnightworks/quality
+          ref: v0.1.0
+          path: .gate-tool
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: '0.12.4'
+          python-version: '3.12'
+
+      - name: Hygiene
+        env:
+          TOOL_DIR: ${{ github.repository == 'overnightworks/quality' && '.' || '.gate-tool' }}
+        run: uv run --locked --project "$TOOL_DIR" fleet-quality hygiene .
+
+  verdict:
+    needs: [hygiene]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Check out the caller with history for the base config
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check out the gate's own tool
+        if: github.repository != 'overnightworks/quality'
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: overnightworks/quality
+          ref: v0.1.0
+          path: .gate-tool
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: '0.12.4'
+          python-version: '3.12'
+
+      - name: Verdict
+        env:
+          TOOL_DIR: ${{ github.repository == 'overnightworks/quality' && '.' || '.gate-tool' }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GATE_NEEDS: ${{ toJSON(needs) }}
+          GATE_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+        run: uv run --locked --project "$TOOL_DIR" fleet-quality verdict .
