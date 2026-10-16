@@ -1,8 +1,0 @@
-claim_id = "49bd59f2fb284c3a95bd79f9ddf3493c"
-agent = "Claude fe12493e-3d52-442e-b01b-4ee4336de2f0"
-role = "builder"
-base = "a431ed36370f5b8408f9251035439402a4999fc9"
-branch = "claude/issue-3-q1a-1-eine-t-r-fleet-quality-hygiene-ver"
-scope = [".github/workflows/ci.yml", ".gitignore", "AGENTS.md", "CLAUDE.md", "README.md", "pyproject.toml", "src", "tests", "uv.lock"]
-opened_commit = "84ea57797436250c260894fc35d594eabf2606a2"
-whole_reason = "Repository skeleton: the package, its CI and its agent guidance are created together because none exists yet."
