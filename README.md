@@ -17,6 +17,10 @@ comments have no effect. A known false positive is allowed only by its gitleaks 
     [secrets]
     allow = [{ fingerprint = "<commit>:src/x.py:generic-api-key:139", reason = "enum value, not a key" }]
 
+The scan runs git without any attributes (not the repository's `.gitattributes`, not `info/attributes`, not the
+system or global file), so a `-diff` or `binary` line cannot hide a key. That needs git 2.41 or newer; an older git
+is exit `2`.
+
 Every allowed finding is printed (`secret: 1 allowed (src/x.py:139)`). The same key in a new commit has a new
 fingerprint and is red until it is added. An entry without a reason is exit `2`.
 

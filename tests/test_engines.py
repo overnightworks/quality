@@ -3,6 +3,7 @@ import http.server
 import io
 import os
 import re
+import shutil
 import subprocess
 import tarfile
 import threading
@@ -172,6 +173,20 @@ def test_a_version_command_that_fails_is_exit_2_even_when_it_prints_the_pin(tmp_
     assert "version exited 3" in hygiene_exit_2(build_repo({}), engine_dir, capsys)
 
 
+@pytest.mark.parametrize("git_version", ["2.40.1", "1.9.0"])
+def test_a_git_older_than_2_41_is_exit_2_naming_the_version(tmp_path, build_repo, monkeypatch, capsys, git_version):
+    """#21 rule 2: below the floor the scan cannot hide attributes, so it is exit 2, never clean."""
+    repo = build_repo({})
+    fake_bin = tmp_path / "fake-git"
+    fake_bin.mkdir()
+    real_git = shutil.which("git")
+    script = f'#!/bin/sh\n[ "$1" = "--version" ] && echo "git version {git_version}" && exit 0\nexec {real_git} "$@"\n'
+    (fake_bin / "git").write_text(script)
+    (fake_bin / "git").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{fake_bin}:{os.environ['PATH']}")
+    assert f"git {git_version}" in hygiene_exit_2(repo, fake_gitleaks(tmp_path / "fake"), capsys)
+
+
 @pytest.mark.parametrize(
     ("on_scan", "expected"),
     [
@@ -286,6 +301,26 @@ def test_a_relative_repository_path_starting_with_a_dash_is_scanned_as_that_repo
     monkeypatch.chdir(workdir)
     findings = engines.scan_secrets(Path("-repo"), installed_engines, engines.read_pins(), {}).findings
     assert [(finding.path, finding.line) for finding in findings] == [("config.txt", 1)]
+
+
+@pytest.mark.engine
+@pytest.mark.parametrize("attribute_line", ["config.txt -diff", "config.txt binary", "* -diff -text"])
+def test_a_committed_attribute_line_cannot_hide_a_key(build_repo, installed_engines, attribute_line):
+    """#21 rule 1: a .gitattributes in the repository that makes git print "Binary files differ" is still red."""
+    repo = build_repo({".gitattributes": f"{attribute_line}\n", "config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
+    assert scan(repo, installed_engines) == 1
+
+
+@pytest.mark.engine
+def test_a_global_attributes_file_cannot_hide_a_key(build_repo, installed_engines, tmp_path, monkeypatch):
+    """#21 rule 1: attributes from the user's global file are not read either."""
+    config_home = tmp_path / "config-home"
+    (config_home / "git").mkdir(parents=True)
+    (config_home / "git" / "attributes").write_text("config.txt -diff\n")
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
+    repo = build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
+    assert scan(repo, installed_engines) == 1
 
 
 @pytest.mark.engine
