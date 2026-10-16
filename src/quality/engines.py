@@ -144,10 +144,11 @@ def attribute_free_git_environment(empty_home: Path) -> dict[str, str]:
     """The environment git runs in so that no .gitattributes line can turn a diff into "Binary files differ".
 
     This cuts off the repository and tree attributes, the system file, the user's global file
-    (`$XDG_CONFIG_HOME/git/attributes`) and a `core.attributesFile` set through config or inherited `GIT_*` variables.
-    It does not cut off `$GIT_DIR/info/attributes`: git reads that from disk whatever `GIT_ATTR_SOURCE` says. The
-    hygiene scan stays clear of it by scanning a fresh template-less mirror; a caller that runs git in the real
-    repository must deal with `info/attributes` itself.
+    (`$XDG_CONFIG_HOME/git/attributes`) and a `core.attributesFile` from global and system config or from inherited
+    `GIT_*` variables. It does not cut off `$GIT_DIR/info/attributes` or a `core.attributesFile` in the repository's own
+    `$GIT_DIR/config`: git reads both from disk whatever the environment says. The hygiene scan stays clear of them by
+    scanning a fresh template-less mirror, which copies neither; a caller that runs git in the real repository must
+    deal with both itself.
     """
     empty_home.mkdir(parents=True)
     inherited = {name: value for name, value in os.environ.items() if not name.startswith("GIT_")}

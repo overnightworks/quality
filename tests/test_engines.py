@@ -370,6 +370,29 @@ def test_a_diff_driver_marked_binary_cannot_hide_a_key(build_repo, installed_eng
 
 
 @pytest.mark.engine
+def test_a_system_attributes_file_cannot_hide_a_key(keyed_repo, installed_engines, fake_git, hiding_attributes):
+    """#21 rule 1: the system attributes file is not read.
+
+    The real file lives under git's install prefix, which a test cannot write, so the git on PATH reads the hiding
+    file as its system attributes exactly when `GIT_ATTR_NOSYSTEM` is not set.
+    """
+    fake_git(
+        '[ -n "$GIT_ATTR_NOSYSTEM" ] || { export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.attributesFile '
+        f'GIT_CONFIG_VALUE_0="{hiding_attributes}"; }}'
+    )
+    assert scan(keyed_repo, installed_engines) == 1
+
+
+@pytest.mark.engine
+def test_a_core_attributes_file_in_the_repository_config_cannot_hide_a_key(
+    keyed_repo, installed_engines, hiding_attributes
+):
+    """#21 rule 1: a core.attributesFile in the scanned repository's own config does not reach the mirror."""
+    subprocess.run(["git", "-C", str(keyed_repo), "config", "core.attributesFile", str(hiding_attributes)], check=True)
+    assert scan(keyed_repo, installed_engines) == 1
+
+
+@pytest.mark.engine
 def test_the_repositorys_info_attributes_cannot_hide_a_key(keyed_repo, installed_engines):
     """#21 rule 1: the scanned repository's .git/info/attributes is not read."""
     (keyed_repo / ".git" / "info").mkdir(exist_ok=True)
@@ -397,7 +420,10 @@ def test_a_git_older_than_2_41_is_exit_2_naming_the_version(
     """#21 rule 2: below the floor the scan cannot hide attributes, so it is exit 2 with one line, never clean."""
     fake_git(f'[ "$1" = "--version" ] && echo "git version {git_version}" && exit 0')
     err = hygiene_exit_2(build_repo({}), installed_engines, capsys)
-    assert err.strip() == f"hygiene: cannot judge - git {git_version} cannot hide .gitattributes from the gitleaks scan, it needs git 2.41"
+    assert err.strip() == (
+        f"hygiene: cannot judge - git {git_version} cannot hide .gitattributes from the gitleaks scan, "
+        "it needs git 2.41"
+    )
 
 
 @pytest.mark.engine
