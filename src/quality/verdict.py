@@ -100,8 +100,29 @@ def github_fetcher(token: str) -> PageFetcher:
     return fetch
 
 
+FORBIDDEN_REF_CHARACTERS = re.compile(r"[\x00-\x20\x7f~^:?*\[\\]")
+
+
+def _is_git_ref_name(ref: str) -> bool:
+    """git-check-ref-format's rules, plus no leading '-' so a ref can never read as an option."""
+    broken_name = (
+        ref.startswith("-") or ref == "@" or ref.endswith(".")
+        or ".." in ref or "@{" in ref or FORBIDDEN_REF_CHARACTERS.search(ref)
+    )
+    broken_component = any(
+        part == "" or part.startswith(".") or part.endswith(".lock") for part in ref.split("/")
+    )
+    return not (broken_name or broken_component)
+
+
+def _require_safe_ref(ref: str) -> None:
+    if not _is_git_ref_name(ref):
+        raise CannotJudge(f"{ref!r} is not a ref name git accepts")
+
+
 def read_base_mandatory_jobs(repo: Path, base_sha: str) -> tuple[str, ...]:
-    git = ["git", "-C", str(repo)]
+    _require_safe_ref(base_sha)
+    git = ["git", "-C", str(repo.resolve())]
     listed = subprocess.run([*git, "ls-tree", base_sha, "--", CONFIG_PATH], capture_output=True, text=True, check=False)
     if listed.returncode != 0:
         raise CannotJudge(f"cannot read the base commit {base_sha}: {listed.stderr.strip()}")
