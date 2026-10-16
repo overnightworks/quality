@@ -6,8 +6,8 @@
   "EndLine": 3,
   "StartColumn": 21,
   "EndColumn": 40,
-  "Match": "REDACTED",
-  "Secret": "REDACTED",
+  "Match": "key = PLACEHOLDER-SECRET-VALUE",
+  "Secret": "PLACEHOLDER-SECRET-VALUE",
   "File": "deploy/config.txt",
   "Commit": "76ec522bf40edf7e4031672b4893cded508a6559",
   "Fingerprint": "76ec522bf40edf7e4031672b4893cded508a6559:deploy/config.txt:aws-access-token:3"

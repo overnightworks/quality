@@ -9,9 +9,10 @@ import tempfile
 import tomllib
 import urllib.request
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
+from quality.config import Allowance
 from quality.report import Finding
 
 SECRET = "secret"
@@ -19,8 +20,9 @@ GITLEAKS = "gitleaks"
 CLEAN_EXIT = 0
 GITLEAKS_LEAKS_FOUND = 7  # gitleaks exits 1 on its own errors too, so leaks get a code of their own
 DOWNLOAD_TIMEOUT_SECONDS = 120
+SECRET_SCAN_TIMEOUT_SECONDS = 1800  # bounds the scan so the scratch directory and its mirror are always deleted
 STDERR_TAIL_LINES = 5
-LEAK_FIELDS = ("File", "StartLine", "RuleID", "Commit", "Fingerprint")
+LEAK_FIELDS = ("File", "StartLine", "RuleID", "Commit", "Secret")
 WORKFLOW_LINT = "workflow-lint"
 WORKFLOW_SECURITY = "workflow-security"
 ACTIONLINT = "actionlint"
@@ -107,7 +109,7 @@ class SecretScan:
     allowed: list[Finding]
 
 
-def scan_secrets(root: Path, engine_dir: Path, pins: dict[str, Pin], allowances: dict[str, str]) -> SecretScan:
+def scan_secrets(root: Path, engine_dir: Path, pins: dict[str, Pin], allowances: dict[Allowance, str]) -> SecretScan:
     binary = _engine_path(engine_dir, GITLEAKS)
     _verify_version(binary, GITLEAKS, pins[GITLEAKS].version)
     _require_git_floor()
@@ -115,29 +117,45 @@ def scan_secrets(root: Path, engine_dir: Path, pins: dict[str, Pin], allowances:
         git_environment = attribute_free_git_environment(Path(scratch) / "home")
         report = Path(scratch) / "report.json"
         # The gate's own config, and no ignore file or inline "gitleaks:allow" from the scanned repository:
-        # only a fingerprint in quality/config.toml allows a finding. gitleaks also reads <source>/.gitleaksignore,
-        # so it scans a mirror clone (bare, every ref kept), which has no work tree to read it from.
+        # only an allowance in quality/config.toml allows a finding. gitleaks also reads <source>/.gitleaksignore,
+        # so it scans a mirror clone (bare), which has no work tree to read it from. The verdict judges the
+        # history reachable from the scanned HEAD only: the mirror also brings other branches, which are not this verdict's.
+        # No --redact: the report must carry Secret to be hashed. It lives only in this 0700 scratch directory.
         source = _mirror_clone(root, Path(scratch) / "source", git_environment)
+        head = _head_commit(source, git_environment)
         command = [
-            str(binary), "git", "--redact", "--no-banner", "--no-color",
+            str(binary), "git", "--no-banner", "--no-color", f"--log-opts={head}",
             "--config", str(GITLEAKS_CONFIG), "--gitleaks-ignore-path", scratch, "--ignore-gitleaks-allow",
             "--exit-code", str(GITLEAKS_LEAKS_FOUND),
             "--report-format", "json", "--report-path", str(report), "--", str(source),
         ]
-        scan = _run(command, env=git_environment)
+        scan = _run(command, env=git_environment, timeout=SECRET_SCAN_TIMEOUT_SECONDS)
         if not report.is_file():
             raise EngineError(
                 f"{GITLEAKS} exited {scan.returncode} without writing its report{_stderr_tail(scan.stderr)}"
             )
-        try:
-            report_text = report.read_text(encoding="utf-8")
-        except (OSError, ValueError) as error:
-            raise EngineError(f"cannot read the {GITLEAKS} report: {error!r}") from error
-        leaks = secret_findings(report_text, scan.returncode, scan.stderr)
-        return SecretScan(
-            findings=[leak for leak in leaks if leak.fingerprint not in allowances],
-            allowed=[leak for leak in leaks if leak.fingerprint in allowances],
-        )
+        leaks = secret_findings(_read_report(report), scan.returncode, scan.stderr)
+        return _split_by_allowance(leaks, allowances)
+
+
+def _read_report(report: Path) -> str:
+    # Never format the caught error: a decode error carries the unredacted bytes.
+    try:
+        return report.read_bytes().decode("utf-8")
+    except OSError as error:
+        raise EngineError(f"cannot read the {GITLEAKS} report: {type(error).__name__}") from None
+    except UnicodeDecodeError as error:
+        raise EngineError(f"cannot read the {GITLEAKS} report: not UTF-8 at byte {error.start}") from None
+
+
+def _split_by_allowance(leaks: list[Finding], allowances: dict[Allowance, str]) -> SecretScan:
+    return SecretScan(
+        findings=[leak for leak in leaks if leak.allowance not in allowances],
+        allowed=[
+            replace(leak, reason=f"{GITLEAKS} rule {leak.allowance.rule} allowed: {allowances[leak.allowance]}")
+            for leak in leaks if leak.allowance in allowances
+        ],
+    )
 
 
 def attribute_free_git_environment(empty_home: Path) -> dict[str, str]:
@@ -176,6 +194,13 @@ def _require_git_floor() -> None:
         )
 
 
+def _head_commit(repository: Path, git_environment: dict[str, str]) -> str:
+    resolved = _run(["git", "-C", str(repository), "rev-parse", "--verify", "HEAD^{commit}"], env=git_environment)
+    if resolved.returncode != 0:
+        raise EngineError(f"cannot resolve HEAD of {repository} for the {GITLEAKS} scan{_stderr_tail(resolved.stderr)}")
+    return resolved.stdout.strip()
+
+
 def _mirror_clone(root: Path, destination: Path, git_environment: dict[str, str]) -> Path:
     command = ["git", "clone", "--mirror", "--quiet", "--template=", str(root.resolve()), str(destination)]
     cloned = _run(command, env=git_environment)
@@ -194,10 +219,12 @@ def _verify_version(binary: Path, engine_name: str, pinned: str) -> None:
 
 
 def _run(
-    command: list[str], cwd: Path | None = None, env: dict[str, str] | None = None
+    command: list[str], cwd: Path | None = None, env: dict[str, str] | None = None, timeout: float | None = None
 ) -> subprocess.CompletedProcess[str]:
     try:
-        return subprocess.run(command, capture_output=True, text=True, check=False, cwd=cwd, env=env)
+        return subprocess.run(command, capture_output=True, text=True, check=False, cwd=cwd, env=env, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise EngineError(f"{command[0]} did not finish within {timeout} seconds") from None
     except (OSError, ValueError) as error:  # ValueError: output that is not text
         raise EngineError(f"cannot run {command[0]}: {error}") from error
 
@@ -213,22 +240,23 @@ def secret_findings(report_text: str, exit_code: int, stderr: str = "") -> list[
 
 def _read_leak(entry: object) -> tuple[str, int, str, str, str]:
     try:
-        path, line, rule, commit, fingerprint = (entry[key] for key in LEAK_FIELDS)
+        path, line, rule, commit, secret = (entry[key] for key in LEAK_FIELDS)
     except (KeyError, TypeError) as error:
         raise EngineError(f"cannot read the {GITLEAKS} report: {error!r}") from error
     if not (isinstance(path, str) and isinstance(line, int) and isinstance(rule, str) and isinstance(commit, str)
-            and isinstance(fingerprint, str)):
+            and isinstance(secret, str)):
         raise EngineError(f"a {GITLEAKS} leak has fields of the wrong type")
-    return path, line, rule, commit, fingerprint
+    return path, line, rule, commit, secret
 
 
 def _leak_finding(entry: object) -> Finding:
-    path, line, rule, commit, fingerprint = _read_leak(entry)
+    path, line, rule, commit, secret = _read_leak(entry)
+    secret_sha256 = hashlib.sha256(secret.encode("utf-8")).hexdigest()
     return Finding(
         SECRET, path, line,
-        f"{GITLEAKS} rule {rule} matched in commit {commit[:8]} (secret redacted).",
-        "rotate the secret; deleting it from the tree leaves it in history.",
-        fingerprint,
+        f"{GITLEAKS} rule {rule} matched at {commit[:8]} (sha256 {secret_sha256}, value not shown).",
+        "rotate the secret; for a false positive, allow this rule, file and sha256 with a reason in quality/config.toml.",
+        Allowance(rule, path, secret_sha256),
     )
 
 
