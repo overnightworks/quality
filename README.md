@@ -141,6 +141,51 @@ The scanner's transport, verified at sonar-scanner-java-library 4.1.1.1633 (the 
 The project is the caller's repository: `GITHUB_REPOSITORY` gives the key `<owner>_<repo>` and the organization
 `<owner>`. The task file must name that `projectKey`, `organization=<owner>` and `serverUrl=https://sonarcloud.io`; the URLs inside it are never
 requested. The command polls `api/ce/task` until its own analysis is `SUCCESS` and bound to this component, organization
-and pull request (or branch), then reads the open findings with `SONAR_TOKEN` (header only, never printed). On
-`pull_request` any open finding is exit `1`; on any other event the count is reported and the exit is `0` until the
-baseline exists. Anything unreadable is exit `2`.
+and pull request (or branch), then reads the open findings with `SONAR_TOKEN` (header only, never printed). Anything
+unreadable is exit `2`.
+
+### New and legacy findings
+
+`gate.yml` passes the repository's default branch (`github.event.repository.default_branch`) as `DEFAULT_BRANCH`; it is
+never assumed to be `main`, and a missing or empty value is exit `2`. "Legacy" means the open findings of that branch,
+counted by the same `issues/search` with the same open statuses, and only counted, never listed.
+- **Pull request:** new findings are listed and make the run exit `1`. Both counts always print, for example
+  `sonar: new 0 · legacy 17 (overnightworks_webauth, main)`.
+- **Default branch:** a run on the default branch exits `1` on any open finding, lists them and prints
+  `sonar: N open on main`.
+- **Any other branch:** report only, exit `0`: `sonar: N open on <branch> (report only)`.
+
+`[gate] legacy` in `quality/config.toml` decides whether legacy findings fail a pull request:
+
+```toml
+[gate]
+mandatory_jobs = ["quality"]
+legacy = "fail"
+```
+
+- `"report"` (the default when the key is absent): legacy findings are printed and never fail a pull request.
+- `"fail"`: a pull request fails while the default branch has any open finding, even when it adds none.
+- Any other value is a config error (exit `2`), read before the first SonarCloud request.
+- A pull request whose base config says `legacy = "fail"` and whose head config says anything else is red in the verdict
+  (`loosened: legacy fail → report`; an absent key counts as `report`), like a removed mandatory job.
+
+On pull requests and default-branch runs `quality sonar findings` reads `api/project_branches/list` once before the counts.
+- The default branch has no entry, or one without `analysisDate` (a repository's first adoption pull request): the summary
+  prints `legacy unknown (main not analysed yet)`. With `"report"` the run exits `0`; with `"fail"` it is exit `2`
+  (`sonar: cannot judge - legacy unknown (main not analysed yet)`).
+- The default branch is not SonarCloud's main branch: exit `2` in both modes, with the fix `set SonarCloud's main branch
+  to <default>`. A non-main SonarCloud branch counts only changed code, so the legacy count would be too low.
+
+### The way back to green under `legacy = "fail"`
+
+Main can gain a finding without any pull request introducing it (a taint finding on an unchanged line, a SonarCloud
+rule-profile update). Then every pull request is red, including the fixing one, and switching `legacy` back is red too.
+The way out is the operator's emergency door; a single command for it is planned in
+[quality#37](https://github.com/overnightworks/quality/issues/37). Until then, by hand, each step only on the operator's
+spoken yes, every time:
+1. The operator sets that repository's `quality_gate` property to `false`. This removes ruleset 25227067 for it.
+2. He merges the fixing pull request by hand (`gh pr merge`); `aco land` refuses any non-green check and has no override.
+3. The head releases the claim with `aco release <n> --merged <pr>`.
+4. The operator sets the property back to `true`.
+
+Each switch is logged in the fixing pull request's body.
