@@ -2,20 +2,58 @@
   "total_count": 3,
   "jobs": [
     {
-      "id": 1,
-      "name": "quality / hygiene",
+      "id": 116873279981,
+      "run_id": 38870528208,
+      "workflow_name": "CI",
+      "head_branch": "claude/issue-6-q1a-2-die-schranke-gate-yml-mit-fail-clo",
+      "run_url": "https://api.github.com/repos/overnightworks/quality/actions/runs/38870528208",
       "run_attempt": 1,
+      "node_id": "CR_kwDOVL6Wdc8AAAAbNjC57Q",
+      "head_sha": "c461f5c902ea681dbb1af0209dbf85fe15ff1fec",
+      "url": "https://api.github.com/repos/overnightworks/quality/actions/jobs/116873279981",
+      "html_url": "https://github.com/overnightworks/quality/actions/runs/38870528208/job/116873279981",
       "status": "completed",
       "conclusion": "success",
-      "workflow_name": "CI"
+      "created_at": "2026-10-16T07:57:44Z",
+      "started_at": "2026-10-16T07:57:46Z",
+      "completed_at": "2026-10-16T07:57:53Z",
+      "name": "quality",
+      "steps": [],
+      "check_run_url": "https://api.github.com/repos/overnightworks/quality/check-runs/116873279981",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000039446,
+      "runner_name": "GitHub Actions 1000039446",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
     },
     {
-      "id": 2,
-      "name": "quality / verdict",
+      "id": 116873331207,
+      "run_id": 38870528208,
+      "workflow_name": "CI",
+      "head_branch": "claude/issue-6-q1a-2-die-schranke-gate-yml-mit-fail-clo",
+      "run_url": "https://api.github.com/repos/overnightworks/quality/actions/runs/38870528208",
       "run_attempt": 1,
-      "status": "in_progress",
-      "conclusion": null,
-      "workflow_name": "CI"
+      "node_id": "CR_kwDOVL6Wdc8AAAAbNjGCBw",
+      "head_sha": "c461f5c902ea681dbb1af0209dbf85fe15ff1fec",
+      "url": "https://api.github.com/repos/overnightworks/quality/actions/jobs/116873331207",
+      "html_url": "https://github.com/overnightworks/quality/actions/runs/38870528208/job/116873331207",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-10-16T07:57:53Z",
+      "started_at": "2026-10-16T07:57:55Z",
+      "completed_at": "2026-10-16T07:58:03Z",
+      "name": "quality / hygiene",
+      "steps": [],
+      "check_run_url": "https://api.github.com/repos/overnightworks/quality/check-runs/116873331207",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000039447,
+      "runner_name": "GitHub Actions 1000039447",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
     }
   ]
 }

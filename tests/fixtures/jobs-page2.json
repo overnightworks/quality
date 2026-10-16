@@ -2,12 +2,31 @@
   "total_count": 3,
   "jobs": [
     {
-      "id": 3,
-      "name": "checks",
+      "id": 116873386769,
+      "run_id": 38870528208,
+      "workflow_name": "CI",
+      "head_branch": "claude/issue-6-q1a-2-die-schranke-gate-yml-mit-fail-clo",
+      "run_url": "https://api.github.com/repos/overnightworks/quality/actions/runs/38870528208",
       "run_attempt": 1,
+      "node_id": "CR_kwDOVL6Wdc8AAAAbNjJbEQ",
+      "head_sha": "c461f5c902ea681dbb1af0209dbf85fe15ff1fec",
+      "url": "https://api.github.com/repos/overnightworks/quality/actions/jobs/116873386769",
+      "html_url": "https://github.com/overnightworks/quality/actions/runs/38870528208/job/116873386769",
       "status": "completed",
-      "conclusion": "failure",
-      "workflow_name": "CI"
+      "conclusion": "success",
+      "created_at": "2026-10-16T07:58:03Z",
+      "started_at": "2026-10-16T07:58:05Z",
+      "completed_at": "2026-10-16T07:58:12Z",
+      "name": "quality / verdict",
+      "steps": [],
+      "check_run_url": "https://api.github.com/repos/overnightworks/quality/check-runs/116873386769",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000039448,
+      "runner_name": "GitHub Actions 1000039448",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
     }
   ]
 }
