@@ -18,6 +18,7 @@ from quality.engines import EngineError, Pin
 
 OUTPUTS = Path(__file__).parent / "fixtures" / "engine-outputs"
 FAKE_KEY = "AKIA" + "QYLPMTYX3QZ5ABCD"  # assembled so quality's own scan stays green
+OTHER_KEY = "AKIA" + "QYLPMTYX3QZ5WXYZ"  # a second assembled key, to prove another value stays red
 
 
 def recorded(name: str) -> str:
@@ -831,7 +832,7 @@ def test_an_allowed_value_stays_green_at_a_shifted_line_and_across_commits(build
 @pytest.mark.parametrize(
     ("write", "placed"),
     [
-        (lambda repo: (repo / "config.txt").write_text("aws_access_key_id = AKIAQYLPMTYX3QZ5WXYZ\n"), "config.txt:1"),
+        (lambda repo: (repo / "config.txt").write_text("aws_access_key_id = " + OTHER_KEY + "\n"), "config.txt:1"),
         (lambda repo: (repo / "src.txt").write_text(f"aws_access_key_id = {FAKE_KEY}\n"), "src.txt:1"),
     ],
     ids=["another-value-at-the-same-place", "the-value-in-another-file"],
