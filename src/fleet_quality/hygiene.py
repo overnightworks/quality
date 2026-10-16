@@ -5,6 +5,7 @@ from pathlib import Path, PurePosixPath
 
 import yaml
 
+from fleet_quality import engines
 from fleet_quality.report import Finding
 
 ENV_FILE = "env-file"
@@ -125,6 +126,14 @@ def _describe(port: object) -> str:
     return str(port) if not isinstance(port, dict) else str(port.get("published", port.get("target", port)))
 
 
-def run_hygiene(root: Path) -> list[Finding]:
+def check_secrets(root: Path, engine_dir: Path) -> list[Finding]:
+    try:
+        return engines.scan_secrets(root, engine_dir, engines.read_pins())
+    except engines.EngineError as error:
+        raise CannotJudge(str(error)) from error
+
+
+def run_hygiene(root: Path, engine_dir: Path | None = None) -> list[Finding]:
     tracked = tracked_files(root)
-    return check_env_files(tracked) + check_compose_ports(root, tracked)
+    findings = check_env_files(tracked) + check_compose_ports(root, tracked)
+    return findings if engine_dir is None else findings + check_secrets(root, engine_dir)

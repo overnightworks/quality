@@ -1,0 +1,15 @@
+[
+ {
+  "RuleID": "aws-access-token",
+  "Description": "Identified a pattern that may indicate AWS credentials.",
+  "StartLine": 3,
+  "EndLine": 3,
+  "StartColumn": 21,
+  "EndColumn": 40,
+  "Match": "REDACTED",
+  "Secret": "REDACTED",
+  "File": "deploy/config.txt",
+  "Commit": "76ec522bf40edf7e4031672b4893cded508a6559",
+  "Fingerprint": "76ec522bf40edf7e4031672b4893cded508a6559:deploy/config.txt:aws-access-token:3"
+ }
+]

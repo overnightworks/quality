@@ -5,7 +5,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from fleet_quality import __version__
+from fleet_quality import __version__, engines
 from fleet_quality.config import ConfigError, read_mandatory_jobs
 from fleet_quality.hygiene import RULE_IDS, CannotJudge, run_hygiene
 from fleet_quality.report import render
@@ -28,24 +28,43 @@ def main(argv: list[str] | None = None, fetcher_for: Callable[[str], PageFetcher
     commands = parser.add_subparsers(dest="command", required=True)
     hygiene = commands.add_parser("hygiene", help="check a git repository for fleet hygiene")
     hygiene.add_argument("path", nargs="?", type=Path, default=Path("."))
+    hygiene.add_argument("--engines", type=Path, help="directory holding the installed engines; enables the secret scan")
+    engine_commands = commands.add_parser("engines", help="manage the pinned engines").add_subparsers(
+        dest="engines_command", required=True
+    )
+    engine_commands.add_parser("install", help="download, verify and unpack the pinned engines").add_argument(
+        "directory", type=Path
+    )
     verdict = commands.add_parser("verdict", help="judge the mandatory jobs of the running workflow run")
     verdict.add_argument("path", nargs="?", type=Path, default=Path("."))
     arguments = parser.parse_args(argv)
 
     if arguments.command == "verdict":
         return run_verdict(arguments.path, fetcher_for)
+    if arguments.command == "engines":
+        return run_engines_install(arguments.directory)
     try:
-        findings = run_hygiene(arguments.path)
+        findings = run_hygiene(arguments.path, arguments.engines)
     except CannotJudge as error:
         print(f"hygiene: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     if not findings:
-        print(f"hygiene: clean ({len(RULE_IDS)} rules)")
+        print(f"hygiene: clean ({len(RULE_IDS) + (arguments.engines is not None)} rules)")
         return EXIT_CLEAN
     for finding in findings:
         print(render(finding))
     print(f"hygiene: {len(findings)} finding(s)")
     return EXIT_FINDINGS
+
+
+def run_engines_install(directory: Path) -> int:
+    try:
+        engines.install(directory, engines.read_pins())
+    except engines.EngineError as error:
+        print(f"engines: cannot install - {error}", file=sys.stderr)
+        return EXIT_CANNOT_JUDGE
+    print(f"engines: installed into {directory}")
+    return EXIT_CLEAN
 
 
 def run_verdict(path: Path, fetcher_for: Callable[[str], PageFetcher]) -> int:

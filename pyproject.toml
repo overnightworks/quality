@@ -27,3 +27,4 @@ line-length = 120
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["engine: runs a real downloaded engine process (needs network; CI runs it)"]
