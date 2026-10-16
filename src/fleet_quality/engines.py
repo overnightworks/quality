@@ -38,7 +38,7 @@ def read_pins(pin_file: Path = PIN_FILE) -> dict[str, Pin]:
 
 
 def install(directory: Path, pins: dict[str, Pin]) -> None:
-    directory.mkdir(parents=True, exist_ok=True)
+    directory.mkdir(parents=True, exist_ok=True)  # NOSONAR(pythonsecurity:S8707) the operator picks the install directory on purpose
     for name, pin in pins.items():
         target = _engine_path(directory, name)
         archive = _download_verified(name, pin)
@@ -85,7 +85,7 @@ def scan_secrets(root: Path, engine_dir: Path, pins: dict[str, Pin]) -> list[Fin
         command = [
             str(binary), "git", "--redact", "--no-banner", "--no-color",
             "--exit-code", str(GITLEAKS_LEAKS_FOUND),
-            "--report-format", "json", "--report-path", str(report), str(root),
+            "--report-format", "json", "--report-path", str(report), "--", str(root.resolve()),
         ]
         scan = _run(command)
         if not report.is_file():
