@@ -1,0 +1,8 @@
+claim_id = "1378d932080c42e3aee2ab28aab6bbb2"
+agent = "Claude fe12493e-3d52-442e-b01b-4ee4336de2f0"
+role = "builder"
+base = "75467b7888ab8158dda370c770d3323dfc1f594e"
+branch = "claude/issue-33-legacy-switch"
+scope = [".github/workflows/gate.yml", "README.md", "quality/config.toml", "src/quality/__init__.py", "src/quality/cli.py", "src/quality/config.py", "src/quality/sonar.py", "src/quality/verdict.py", "tests/test_config.py", "tests/test_gate_sonar.py", "tests/test_sonar.py", "tests/test_verdict.py"]
+opened_commit = "8f21af75570c5fb702aa1c8e424a489197e35569"
+whole_reason = "The legacy count, the default-branch decision, the switch, its loosening check and the release are one gate behaviour; split, the tag would ship half of it."
