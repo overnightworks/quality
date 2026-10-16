@@ -43,13 +43,6 @@ def build_repo(tmp_path: Path) -> RepoBuilder:
     return build
 
 
-@pytest.fixture(autouse=True)
-def isolated_git_config(monkeypatch):
-    """No fixture git command reads the developer's global config (its core.hooksPath would run another quality)."""
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
-    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
-
-
 @pytest.fixture(scope="session")
 def installed_engines(tmp_path_factory) -> Path:
     directory = tmp_path_factory.mktemp("engines")
