@@ -369,17 +369,24 @@ def test_a_diff_driver_marked_binary_cannot_hide_a_key(build_repo, installed_eng
     assert scan(repo, installed_engines) == 1
 
 
-@pytest.mark.engine
-def test_a_system_attributes_file_cannot_hide_a_key(keyed_repo, installed_engines, fake_git, hiding_attributes):
-    """#21 rule 1: the system attributes file is not read.
+@pytest.fixture
+def system_attributes_sandbox(fake_git, hiding_attributes):
+    """Runs every git inside a bubblewrap sandbox whose /etc/gitattributes, git's real system file, hides config.txt."""
+    if shutil.which("bwrap") is None:
+        pytest.skip("bubblewrap is needed to give git a system attributes file")
+    sandbox = [
+        *("bwrap", "--bind", "/", "/", "--dev", "/dev", "--tmpfs", "/etc"),
+        *("--ro-bind", "/etc/passwd", "/etc/passwd"),
+        *("--ro-bind", str(hiding_attributes), "/etc/gitattributes"),
+    ]
+    if subprocess.run([*sandbox, "true"], capture_output=True, check=False).returncode != 0:
+        pytest.skip("bubblewrap cannot create a mount namespace here")
+    fake_git(f'exec {" ".join(sandbox)} "{shutil.which("git")}" "$@"')
 
-    The real file lives under git's install prefix, which a test cannot write, so the git on PATH reads the hiding
-    file as its system attributes exactly when `GIT_ATTR_NOSYSTEM` is not set.
-    """
-    fake_git(
-        '[ -n "$GIT_ATTR_NOSYSTEM" ] || { export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.attributesFile '
-        f'GIT_CONFIG_VALUE_0="{hiding_attributes}"; }}'
-    )
+
+@pytest.mark.engine
+def test_a_system_attributes_file_cannot_hide_a_key(keyed_repo, installed_engines, system_attributes_sandbox):
+    """#21 rule 1: git's system attributes file (/etc/gitattributes, here a real file in a sandbox) is not read."""
     assert scan(keyed_repo, installed_engines) == 1
 
 

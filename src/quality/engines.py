@@ -169,7 +169,9 @@ def _require_git_floor() -> None:
         raise EngineError(f"cannot read the git version{_stderr_tail(asked.stderr)}")
     if tuple(int(part) for part in found[0].split("."))[:2] < GIT_FLOOR:
         required = ".".join(map(str, GIT_FLOOR))
-        raise EngineError(f"git {found[0]} cannot hide .gitattributes from the {GITLEAKS} scan, it needs git {required}")
+        raise EngineError(
+            f"git {found[0]} cannot hide .gitattributes from the {GITLEAKS} scan, it needs git {required}"
+        )
 
 
 def _mirror_clone(root: Path, destination: Path, git_environment: dict[str, str]) -> Path:
