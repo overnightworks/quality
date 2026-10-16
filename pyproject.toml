@@ -10,7 +10,7 @@ dependencies = ["PyYAML>=6"]
 quality = "quality.cli:main"
 
 [dependency-groups]
-dev = ["ruff", "pytest"]
+dev = ["ruff", "pytest", "pytest-cov"]
 
 [build-system]
 requires = ["hatchling"]
@@ -28,3 +28,7 @@ line-length = 120
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = ["engine: runs a real downloaded engine process (needs network; CI runs it)"]
+
+[tool.coverage.run]
+source_pkgs = ["quality"]
+relative_files = true
