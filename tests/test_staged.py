@@ -237,3 +237,25 @@ def test_an_unreadable_allow_list_is_exit_2(build_repo, installed_engines, capsy
     stage(repo, {"quality/config.toml": "not [valid toml"})
     assert scan_staged(repo, installed_engines) == 2
     assert "quality/config.toml" in capsys.readouterr().err
+
+
+@pytest.mark.engine
+@pytest.mark.parametrize("kind", ["a missing path", "a regular file"])
+def test_a_path_that_is_not_a_directory_is_exit_2_and_named(kind, tmp_path, installed_engines, capsys):
+    """#25 rule 4: a path that is no directory is exit 2 and the message names the path as given."""
+    path = tmp_path / "not-a-directory"
+    if kind == "a regular file":
+        path.write_text("content\n")
+    assert scan_staged(path, installed_engines) == 2
+    assert str(path) in capsys.readouterr().err
+
+
+@pytest.mark.engine
+def test_a_repository_path_that_starts_with_a_dash_is_scanned_as_a_path(
+    tmp_path, installed_engines, monkeypatch, capsys
+):
+    """#25 rule 4: `-C` reached by a relative path is a repository, never a git option, so its staged key is red."""
+    git(tmp_path, "init", "-q", "--", "-C")
+    stage(tmp_path / "-C", {"config.txt": KEY_LINE})
+    monkeypatch.chdir(tmp_path)
+    assert cli.main(["scan-staged", "--engines", str(installed_engines), "--", "-C"]) == 1
