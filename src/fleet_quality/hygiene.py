@@ -10,7 +10,7 @@ from fleet_quality.report import Finding
 
 ENV_FILE = "env-file"
 COMPOSE_PORT = "compose-port"
-RULE_IDS = (ENV_FILE, COMPOSE_PORT)
+FILE_RULE_IDS = (ENV_FILE, COMPOSE_PORT)
 
 LOOPBACK = "127.0.0.1"
 LOOPBACK_HOSTS = (LOOPBACK, "::1")
@@ -133,7 +133,11 @@ def check_secrets(root: Path, engine_dir: Path) -> list[Finding]:
         raise CannotJudge(str(error)) from error
 
 
+def active_rules(engine_dir: Path | None) -> tuple[str, ...]:
+    return FILE_RULE_IDS if engine_dir is None else (*FILE_RULE_IDS, engines.SECRET)
+
+
 def run_hygiene(root: Path, engine_dir: Path | None = None) -> list[Finding]:
     tracked = tracked_files(root)
     findings = check_env_files(tracked) + check_compose_ports(root, tracked)
-    return findings if engine_dir is None else findings + check_secrets(root, engine_dir)
+    return findings + check_secrets(root, engine_dir) if engines.SECRET in active_rules(engine_dir) else findings

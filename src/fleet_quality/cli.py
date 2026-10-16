@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fleet_quality import __version__, engines
 from fleet_quality.config import ConfigError, read_mandatory_jobs
-from fleet_quality.hygiene import RULE_IDS, CannotJudge, run_hygiene
+from fleet_quality.hygiene import CannotJudge, active_rules, run_hygiene
 from fleet_quality.report import render
 from fleet_quality.verdict import (
     PageFetcher,
@@ -22,7 +22,11 @@ EXIT_FINDINGS = 1
 EXIT_CANNOT_JUDGE = 2
 
 
-def main(argv: list[str] | None = None, fetcher_for: Callable[[str], PageFetcher] = github_fetcher) -> int:
+def main(
+    argv: list[str] | None = None,
+    fetcher_for: Callable[[str], PageFetcher] = github_fetcher,
+    read_pins: Callable[[], dict[str, engines.Pin]] = engines.read_pins,
+) -> int:
     parser = argparse.ArgumentParser(prog="fleet-quality")
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -42,14 +46,14 @@ def main(argv: list[str] | None = None, fetcher_for: Callable[[str], PageFetcher
     if arguments.command == "verdict":
         return run_verdict(arguments.path, fetcher_for)
     if arguments.command == "engines":
-        return run_engines_install(arguments.directory)
+        return run_engines_install(arguments.directory, read_pins)
     try:
         findings = run_hygiene(arguments.path, arguments.engines)
     except CannotJudge as error:
         print(f"hygiene: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     if not findings:
-        print(f"hygiene: clean ({len(RULE_IDS) + (arguments.engines is not None)} rules)")
+        print(f"hygiene: clean ({len(active_rules(arguments.engines))} rules)")
         return EXIT_CLEAN
     for finding in findings:
         print(render(finding))
@@ -57,9 +61,9 @@ def main(argv: list[str] | None = None, fetcher_for: Callable[[str], PageFetcher
     return EXIT_FINDINGS
 
 
-def run_engines_install(directory: Path) -> int:
+def run_engines_install(directory: Path, read_pins: Callable[[], dict[str, engines.Pin]]) -> int:
     try:
-        engines.install(directory, engines.read_pins())
+        engines.install(directory, read_pins())
     except engines.EngineError as error:
         print(f"engines: cannot install - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
