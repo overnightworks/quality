@@ -180,10 +180,10 @@ def test_a_path_that_is_no_repository_is_exit_2(tmp_path, capsys, bad_path):
     assert "cannot judge" in output
 
 
-def test_a_tracked_compose_symlink_leaving_the_repository_is_exit_2(build_repo, tmp_path_factory, capsys):
+def test_a_tracked_compose_symlink_leaving_the_repository_is_exit_2(build_repo, tmp_path, capsys):
     """#31 rule 1 (S8705): a tracked compose file that resolves outside the repository is exit 2, never read."""
     repo = build_repo({})
-    outside = tmp_path_factory.mktemp("outside") / "elsewhere.yml"
+    outside = tmp_path.parent / f"{tmp_path.name}-elsewhere.yml"
     outside.write_text("services:\n  web:\n    image: x\n    ports:\n      - '8080:80'\n")
     (repo / "compose.yaml").symlink_to(outside)
     subprocess.run(["git", "-C", str(repo), "add", "compose.yaml"], check=True)
