@@ -3,21 +3,23 @@ import http.server
 import io
 import os
 import re
+import signal
 import subprocess
+import sys
 import tarfile
 import tempfile
 import threading
+import time
 import urllib.request
 from pathlib import Path
 
 import pytest
-from conftest import FAKE_KEY
+from conftest import FAKE_KEY, OTHER_KEY, allow_config, sha256_of
 
 from quality import cli, engines
 from quality.engines import EngineError, Pin
 
 OUTPUTS = Path(__file__).parent / "fixtures" / "engine-outputs"
-OTHER_KEY = "AKIA" + "QYLPMTYX3QZ5WXYZ"  # a second assembled key, to prove another value stays red
 
 
 def recorded(name: str) -> str:
@@ -186,7 +188,7 @@ def test_install_reinstalls_a_missing_or_wrong_binary(tmp_path, damage):
     assert binary.read_text() == VERSIONED_BINARY
 
 
-def test_verify_is_exit_0_when_every_engine_reports_its_pin(tmp_path, capsys):
+def test_verify_is_exit_0_when_every_engine_reports_its_pin(tmp_path):
     """#25 rule 2: a match is exit 0."""
     directory, pins = install_versioned_gitleaks(tmp_path)
     engines.install(directory, pins)
@@ -731,19 +733,6 @@ RECORDED_RULE = "aws-access-token"
 RECORDED_FILE = "deploy/config.txt"
 
 
-def sha256_of(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
-
-
-def allow_config(*entries: tuple[str, str, str, str]) -> str:
-    """Entries are (rule, file, secret, reason); the config holds the secret's hash only."""
-    rows = ", ".join(
-        f'{{ rule = "{rule}", file = "{file}", secret_sha256 = "{sha256_of(secret)}", reason = "{reason}" }}'
-        for rule, file, secret, reason in entries
-    )
-    return f"[gate]\nmandatory_jobs = [\"checks\"]\n[secrets]\nallow = [{rows}]\n"
-
-
 def run_with_recorded_leak(build_repo, tmp_path, capsys, config: str | None) -> tuple[int, str]:
     files = {"quality/config.toml": config} if config is not None else {}
     engine_dir = fake_gitleaks(tmp_path / "fake", on_scan=f'cp {OUTPUTS / "gitleaks-finding.json"} "$report"; exit 7')
@@ -905,20 +894,67 @@ FAILING_REPORTS = {
 }
 
 
+def secret_command(command: str, repo: Path, engine_dir: Path) -> list[str]:
+    """The argv of a command that scans `repo` for secrets; scan-staged gets a staged copy of the key to find."""
+    if command == "scan-staged":
+        (repo / "staged.txt").write_text(f"aws_access_key_id = {FAKE_KEY}\n")
+        subprocess.run(["git", "-C", str(repo), "add", "staged.txt"], check=True)
+    return [command, "--engines", str(engine_dir), str(repo)]
+
+
+SECRET_COMMANDS = ["hygiene", "scan-staged"]
+
+
 @pytest.mark.engine
+@pytest.mark.parametrize("command", SECRET_COMMANDS)
 @pytest.mark.parametrize("failure", ["none", *FAILING_REPORTS])
 def test_the_key_reaches_no_output_and_no_file_and_the_scratch_directory_is_gone(
-    keyed_repo, installed_engines, tmp_path, monkeypatch, capsys, failure
+    keyed_repo, installed_engines, tmp_path, monkeypatch, capsys, failure, command
 ):
-    """#24 rule 4: after a normal run, a gitleaks failure, a stall and a parse error nothing holds the key."""
+    """#24 rule 4, #25 rule 1: after a normal run, a gitleaks failure, a stall and a parse error nothing holds the key."""
     scratch_parent = tmp_path / "scratch-parent"
     scratch_parent.mkdir()
     monkeypatch.setattr(tempfile, "tempdir", str(scratch_parent))
     if failure == "gitleaks-stalls":
         monkeypatch.setattr(engines, "SECRET_SCAN_TIMEOUT_SECONDS", 1)
     engine_dir = installed_engines if failure == "none" else fake_gitleaks(tmp_path / "failing", on_scan=FAILING_REPORTS[failure])
-    exit_code = scan(keyed_repo, engine_dir)
+    exit_code = cli.main(secret_command(command, keyed_repo, engine_dir))
     assert exit_code == (1 if failure == "none" else 2)
     heard = capsys.readouterr()
     assert FAKE_KEY not in heard.out + heard.err
     assert list(scratch_parent.iterdir()) == []
+
+
+@pytest.mark.engine
+@pytest.mark.parametrize("command", SECRET_COMMANDS)
+def test_a_sigterm_mid_scan_leaves_no_scratch_directory(keyed_repo, tmp_path, command):
+    """#25 rule 1, quality#5 finding 44: a SIGTERM while gitleaks holds the unredacted report deletes the scratch directory."""
+    scratch_parent = tmp_path / "scratch-parent"
+    scratch_parent.mkdir()
+    engine_dir = fake_gitleaks(tmp_path / "stalling", on_scan=FAILING_REPORTS["gitleaks-stalls"])
+    argv = [sys.executable, "-m", "quality.cli", *secret_command(command, keyed_repo, engine_dir)]
+    scanner = subprocess.Popen(argv, env=os.environ | {"TMPDIR": str(scratch_parent)}, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        deadline = time.monotonic() + 30
+        while not list(scratch_parent.glob("*/report.json")):
+            assert time.monotonic() < deadline, "gitleaks never wrote its report"
+            time.sleep(0.05)
+        scanner.terminate()
+        assert scanner.wait(timeout=30) == 128 + signal.SIGTERM
+    finally:
+        scanner.kill()
+        scanner.communicate()
+    assert list(scratch_parent.iterdir()) == []
+
+
+@pytest.mark.engine
+@pytest.mark.parametrize("command", SECRET_COMMANDS)
+def test_an_allowance_no_finding_used_is_printed(build_repo, installed_engines, capsys, command):
+    """#25 rule 1, quality#5 finding 34: a quality/config.toml entry that matches nothing is named, not silent."""
+    repo = build_repo({"quality/config.toml": allow_config(("aws-access-token", "nothere.txt", FAKE_KEY, "stale entry"))})
+    code = cli.main([command, "--engines", str(installed_engines), str(repo)])
+    assert code == 0
+    assert (
+        f"secret: unused allowance aws-access-token in nothere.txt (sha256 {sha256_of(FAKE_KEY)}) - stale entry"
+        in capsys.readouterr().out
+    )

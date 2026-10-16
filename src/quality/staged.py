@@ -1,6 +1,5 @@
 import os
 import subprocess
-import tempfile
 from pathlib import Path
 
 from quality import engines
@@ -19,22 +18,26 @@ def scan_staged(path: Path, engine_dir: Path, pins: dict[str, Pin]) -> SecretSca
     """
     binary = engines.prepare_gitleaks(engine_dir, pins)
     staged_tree = _write_tree(path)
-    head = _head_commit(path)
+    head = engines.head_commit(path, _caller_git_environment(), allow_unborn=True)
     object_store = _object_store(path)
-    with tempfile.TemporaryDirectory() as scratch:
-        git_environment = engines.attribute_free_git_environment(Path(scratch) / "home")
-        source = _scratch_repository(Path(scratch) / "source", object_store, head, staged_tree, git_environment)
+    with engines.scratch_directory() as scratch:
+        git_environment = engines.attribute_free_git_environment(scratch / "home")
+        source = _scratch_repository(scratch / "source", object_store, head, staged_tree, git_environment)
         allowances = _allowances_of(source, staged_tree, git_environment)
-        return engines.run_gitleaks(binary, Path(scratch), git_environment, source, ["--pre-commit", "--staged"], allowances)
+        return engines.run_gitleaks(binary, scratch, git_environment, source, ["--pre-commit", "--staged"], allowances)
 
 
-def _git_in(path: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
+def _caller_git_environment() -> dict[str, str]:
     # The inherited environment on purpose: it is how git finds the index a commit in progress is using.
-    # A relative index path means "relative to where the caller stands", not to `path`.
+    # A relative index path means "relative to where the caller stands", not to the repository path.
     environment = dict(os.environ)
     if INDEX_VARIABLE in environment:
         environment[INDEX_VARIABLE] = str(Path(environment[INDEX_VARIABLE]).absolute())
-    return run(["git", "-C", str(path), *arguments], env=environment)
+    return environment
+
+
+def _git_in(path: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
+    return run(["git", "-C", str(path), *arguments], env=_caller_git_environment())
 
 
 def _git_output(path: Path, *arguments: str) -> str:
@@ -46,16 +49,6 @@ def _git_output(path: Path, *arguments: str) -> str:
 
 def _write_tree(path: Path) -> str:
     return _git_output(path, "write-tree")
-
-
-def _head_commit(path: Path) -> str | None:
-    """The commit HEAD names, or None when the repository has no commit yet."""
-    asked = _git_in(path, "rev-parse", "--verify", "--quiet", "HEAD^{commit}")
-    if asked.returncode == 1 and not asked.stderr.strip():  # --quiet: a HEAD without a commit is a silent exit 1
-        return None
-    if asked.returncode != 0:
-        raise EngineError(f"cannot resolve HEAD in {path}{stderr_tail(asked.stderr)}")
-    return asked.stdout.strip()
 
 
 def _object_store(path: Path) -> Path:

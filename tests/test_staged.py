@@ -3,8 +3,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from conftest import FAKE_KEY
-from test_engines import allow_config
+from conftest import FAKE_KEY, OTHER_KEY, allow_config
 
 from quality import cli
 
@@ -86,6 +85,7 @@ def test_a_staged_ignore_attribute_or_config_file_changes_nothing(build_repo, in
 
 @pytest.mark.engine
 def test_a_gitleaks_allow_comment_changes_nothing(build_repo, installed_engines):
+    """#25 rule 1: an inline gitleaks:allow comment is ignored, the staged key is still red."""
     repo = build_repo({"README": "hello\n"})
     stage(repo, {"config.txt": f"aws_access_key_id = {FAKE_KEY}  # gitleaks:allow\n"})
     assert scan_staged(repo, installed_engines) == 1
@@ -93,7 +93,7 @@ def test_a_gitleaks_allow_comment_changes_nothing(build_repo, installed_engines)
 
 @pytest.mark.engine
 def test_the_live_repositorys_info_attributes_cannot_hide_a_staged_key(build_repo, installed_engines):
-    """#21 follow-up: git reads $GIT_DIR/info/attributes whatever the environment says; the scratch repository has none."""
+    """#25 rule 1 (quality#21 follow-up): git reads $GIT_DIR/info/attributes whatever the environment says; the scratch repository has none."""
     repo = build_repo({"README": "hello\n"})
     (repo / ".git" / "info").mkdir(exist_ok=True)
     (repo / ".git" / "info" / "attributes").write_text("k.txt -diff\n")
@@ -114,6 +114,23 @@ def test_the_allow_list_is_the_one_of_the_staged_tree(build_repo, installed_engi
         (repo / "quality").mkdir()
         (repo / "quality" / "config.toml").write_text(config)
     assert scan_staged(repo, installed_engines) == (0 if staged_config else 1)
+
+
+@pytest.mark.engine
+@pytest.mark.parametrize(
+    ("staged_change", "exit_code"),
+    [
+        (f"# one\n# two\nrenamed_key = {FAKE_KEY}\n", 0),
+        (f"aws_access_key_id = {OTHER_KEY}\n", 1),
+    ],
+    ids=["allowed value moved to another line of its file", "allowed value replaced by another key"],
+)
+def test_an_allowance_follows_the_value_in_the_staged_scan(build_repo, installed_engines, staged_change, exit_code):
+    """#25 rule 1.4, #24 rule 1: the staged diff matches by rule, file and value hash, not by line."""
+    config = allow_config(("aws-access-token", "config.txt", FAKE_KEY, "test key"))
+    repo = build_repo({"config.txt": KEY_LINE, "quality/config.toml": config})
+    stage(repo, {"config.txt": staged_change})
+    assert scan_staged(repo, installed_engines) == exit_code
 
 
 @pytest.fixture
@@ -161,12 +178,14 @@ def test_a_commit_from_a_linked_worktree_is_refused_through_the_hook(refusing_ho
 
 @pytest.mark.engine
 def test_a_clean_commit_goes_through_the_hook(refusing_hook):
+    """#25 rule 1: a commit with nothing to find passes the hook."""
     stage(refusing_hook, {"tracked.txt": "still clean\n"})
     assert git(refusing_hook, "commit", "-q", "-m", "x", check=False).returncode == 0
 
 
 @pytest.mark.engine
 def test_scan_staged_leaves_the_repository_as_it_found_it(build_repo, installed_engines):
+    """#25 rule 1.1: write-tree only writes tree objects, so status is unchanged by the scan."""
     repo = build_repo({"README": "hello\n"})
     stage(repo, {"config.txt": KEY_LINE})
     before = git(repo, "status", "--porcelain=v2", "--branch").stdout
@@ -176,6 +195,7 @@ def test_scan_staged_leaves_the_repository_as_it_found_it(build_repo, installed_
 
 @pytest.mark.engine
 def test_an_unmerged_index_is_exit_2(build_repo, installed_engines, capsys):
+    """#25 rule 4: an index with unmerged entries is exit 2, never clean."""
     repo = build_repo({"f.txt": "base\n"})
     git(repo, "checkout", "-q", "-b", "other")
     stage(repo, {"f.txt": "other\n"})
@@ -190,18 +210,21 @@ def test_an_unmerged_index_is_exit_2(build_repo, installed_engines, capsys):
 
 @pytest.mark.engine
 def test_a_path_that_is_not_a_repository_is_exit_2(tmp_path, installed_engines, capsys):
+    """#25 rule 4: a path that is not a repository is exit 2."""
     assert scan_staged(tmp_path, installed_engines) == 2
     assert capsys.readouterr().err.startswith("scan-staged: cannot judge - ")
 
 
 @pytest.mark.engine
 def test_a_missing_engine_is_exit_2(build_repo, tmp_path, capsys):
+    """#25 rule 4: a missing engine is exit 2."""
     assert scan_staged(build_repo({}), tmp_path / "no-engines") == 2
     assert capsys.readouterr().err.startswith("scan-staged: cannot judge - ")
 
 
 @pytest.mark.engine
 def test_an_unreadable_allow_list_is_exit_2(build_repo, installed_engines, capsys):
+    """#25 rule 4: a staged allow list that cannot be read is exit 2."""
     repo = build_repo({"README": "hello\n"})
     stage(repo, {"quality/config.toml": "not [valid toml"})
     assert scan_staged(repo, installed_engines) == 2

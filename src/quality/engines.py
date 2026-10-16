@@ -3,12 +3,14 @@ import io
 import json
 import os
 import re
+import signal
 import subprocess
 import tarfile
 import tempfile
 import tomllib
 import urllib.request
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -130,6 +132,7 @@ class _Engine:
 class SecretScan:
     findings: list[Finding]
     allowed: list[Finding]
+    unused_allowances: dict[Allowance, str]  # entries of quality/config.toml that no finding used, with their reasons
 
 
 def prepare_gitleaks(engine_dir: Path, pins: dict[str, Pin]) -> Path:
@@ -142,14 +145,31 @@ def prepare_gitleaks(engine_dir: Path, pins: dict[str, Pin]) -> Path:
 
 def scan_secrets(root: Path, engine_dir: Path, pins: dict[str, Pin], allowances: dict[Allowance, str]) -> SecretScan:
     binary = prepare_gitleaks(engine_dir, pins)
-    with tempfile.TemporaryDirectory() as scratch:
-        git_environment = attribute_free_git_environment(Path(scratch) / "home")
+    with scratch_directory() as scratch:
+        git_environment = attribute_free_git_environment(scratch / "home")
         # gitleaks also reads <source>/.gitleaksignore, so it scans a mirror clone (bare), which has no work tree to
         # read it from. The verdict judges the history reachable from the scanned HEAD only: the mirror also brings
         # other branches, which are not this verdict's.
-        source = _mirror_clone(root, Path(scratch) / "source", git_environment)
-        head = _head_commit(source, git_environment)
-        return run_gitleaks(binary, Path(scratch), git_environment, source, [f"--log-opts={head}"], allowances)
+        source = _mirror_clone(root, scratch / "source", git_environment)
+        head = head_commit(source, git_environment)
+        return run_gitleaks(binary, scratch, git_environment, source, [f"--log-opts={head}"], allowances)
+
+
+@contextmanager
+def scratch_directory() -> Iterator[Path]:
+    """A 0700 directory removed on every exit path, SIGTERM included (a hook runner or `timeout` sends it).
+
+    The signal raises, so subprocess.run kills its child and the directory goes with the unredacted report in it.
+    """
+    def unwind(signal_number: int, _frame: object) -> None:
+        raise SystemExit(128 + signal_number)
+
+    previous = signal.signal(signal.SIGTERM, unwind)
+    try:
+        with tempfile.TemporaryDirectory() as scratch:
+            yield Path(scratch)
+    finally:
+        signal.signal(signal.SIGTERM, previous)
 
 
 def run_gitleaks(
@@ -184,12 +204,14 @@ def _read_report(report: Path) -> str:
 
 
 def _split_by_allowance(leaks: list[Finding], allowances: dict[Allowance, str]) -> SecretScan:
+    used = {leak.allowance for leak in leaks}
     return SecretScan(
         findings=[leak for leak in leaks if leak.allowance not in allowances],
         allowed=[
             replace(leak, reason=f"{GITLEAKS} rule {leak.allowance.rule} allowed: {allowances[leak.allowance]}")
             for leak in leaks if leak.allowance in allowances
         ],
+        unused_allowances={entry: reason for entry, reason in allowances.items() if entry not in used},
     )
 
 
@@ -229,10 +251,14 @@ def require_git_floor() -> None:
         )
 
 
-def _head_commit(repository: Path, git_environment: dict[str, str]) -> str:
-    resolved = run(["git", "-C", str(repository), "rev-parse", "--verify", "HEAD^{commit}"], env=git_environment)
+def head_commit(repository: Path, git_environment: dict[str, str], allow_unborn: bool = False) -> str | None:
+    """The commit HEAD names; None only when `allow_unborn` and the repository has no commit yet."""
+    quiet = ["--quiet"] if allow_unborn else []
+    resolved = run(["git", "-C", str(repository), "rev-parse", "--verify", *quiet, "HEAD^{commit}"], env=git_environment)
+    if allow_unborn and resolved.returncode == 1 and not resolved.stderr.strip():  # --quiet: no commit is a silent exit 1
+        return None
     if resolved.returncode != 0:
-        raise EngineError(f"cannot resolve HEAD of {repository} for the {GITLEAKS} scan{stderr_tail(resolved.stderr)}")
+        raise EngineError(f"cannot resolve HEAD of {repository}{stderr_tail(resolved.stderr)}")
     return resolved.stdout.strip()
 
 

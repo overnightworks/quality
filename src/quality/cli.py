@@ -7,7 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from quality import __version__, engines, staged
-from quality.config import ConfigError, read_mandatory_jobs
+from quality.config import Allowance, ConfigError, read_mandatory_jobs
 from quality.hygiene import CannotJudge, active_rules, run_hygiene, skipped_rules
 from quality.report import Finding, render
 from quality.sonar import TASK_FILE, Sleep, Transport, analyse, fetch_json, preflight
@@ -77,7 +77,7 @@ def main(
         print(f"hygiene: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     findings = result.findings
-    print_allowed_secrets(result.allowed_secrets)
+    print_secret_allowances(result.allowed_secrets, result.unused_allowances)
     if not findings:
         print(f"hygiene: clean ({len(active_rules(arguments.engines))} rules){coverage_note(arguments.engines)}")
         return EXIT_CLEAN
@@ -87,12 +87,13 @@ def main(
     return EXIT_FINDINGS
 
 
-def print_allowed_secrets(allowed: list[Finding]) -> None:
-    if not allowed:
-        return
-    print(f"{engines.SECRET}: {len(allowed)} allowed ({', '.join(finding.location for finding in allowed)})")
-    for finding in allowed:
-        print(f"  allowed {finding.location} - {finding.reason}")
+def print_secret_allowances(allowed: list[Finding], unused: dict[Allowance, str]) -> None:
+    if allowed:
+        print(f"{engines.SECRET}: {len(allowed)} allowed ({', '.join(finding.location for finding in allowed)})")
+        for finding in allowed:
+            print(f"  allowed {finding.location} - {finding.reason}")
+    for entry, reason in unused.items():
+        print(f"{engines.SECRET}: unused allowance {entry.rule} in {entry.file} (sha256 {entry.secret_sha256}) - {reason}")
 
 
 def coverage_note(engine_dir: Path | None) -> str:
@@ -108,7 +109,7 @@ def run_scan_staged(path: Path, engine_dir: Path, read_pins: Callable[[], dict[s
     except (engines.EngineError, ConfigError) as error:
         print(f"scan-staged: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
-    print_allowed_secrets(result.allowed)
+    print_secret_allowances(result.allowed, result.unused_allowances)
     for finding in result.findings:
         print(render(finding))
     print(f"scan-staged: {len(result.findings)} finding(s)" if result.findings else "scan-staged: clean")
