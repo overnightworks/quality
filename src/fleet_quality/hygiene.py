@@ -11,6 +11,9 @@ from fleet_quality.report import Finding
 ENV_FILE = "env-file"
 COMPOSE_PORT = "compose-port"
 FILE_RULE_IDS = (ENV_FILE, COMPOSE_PORT)
+ENGINE_RULE_IDS = (engines.SECRET, engines.WORKFLOW_LINT, engines.WORKFLOW_SECURITY)
+WORKFLOW_DIRECTORY = PurePosixPath(".github/workflows")
+WORKFLOW_SUFFIXES = (".yml", ".yaml")
 
 LOOPBACK = "127.0.0.1"
 LOOPBACK_HOSTS = (LOOPBACK, "::1")
@@ -133,11 +136,29 @@ def check_secrets(root: Path, engine_dir: Path) -> list[Finding]:
         raise CannotJudge(str(error)) from error
 
 
+def check_workflows(root: Path, engine_dir: Path, tracked: list[str]) -> list[Finding]:
+    workflows = [name for name in tracked if _is_workflow(PurePosixPath(name))]
+    try:
+        return engines.scan_workflows(root, engine_dir, engines.read_pins(), workflows)
+    except engines.EngineError as error:
+        raise CannotJudge(str(error)) from error
+
+
+def _is_workflow(path: PurePosixPath) -> bool:
+    return path.parent == WORKFLOW_DIRECTORY and path.suffix in WORKFLOW_SUFFIXES
+
+
 def active_rules(engine_dir: Path | None) -> tuple[str, ...]:
-    return FILE_RULE_IDS if engine_dir is None else (*FILE_RULE_IDS, engines.SECRET)
+    return FILE_RULE_IDS if engine_dir is None else (*FILE_RULE_IDS, *ENGINE_RULE_IDS)
+
+
+def skipped_rules(engine_dir: Path | None) -> tuple[str, ...]:
+    return ENGINE_RULE_IDS if engine_dir is None else ()
 
 
 def run_hygiene(root: Path, engine_dir: Path | None = None) -> list[Finding]:
     tracked = tracked_files(root)
     findings = check_env_files(tracked) + check_compose_ports(root, tracked)
-    return findings + check_secrets(root, engine_dir) if engines.SECRET in active_rules(engine_dir) else findings
+    if engine_dir is None:
+        return findings
+    return findings + check_secrets(root, engine_dir) + check_workflows(root, engine_dir, tracked)

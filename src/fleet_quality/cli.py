@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fleet_quality import __version__, engines
 from fleet_quality.config import ConfigError, read_mandatory_jobs
-from fleet_quality.hygiene import CannotJudge, active_rules, run_hygiene
+from fleet_quality.hygiene import CannotJudge, active_rules, run_hygiene, skipped_rules
 from fleet_quality.report import render
 from fleet_quality.verdict import (
     PageFetcher,
@@ -32,7 +32,7 @@ def main(
     commands = parser.add_subparsers(dest="command", required=True)
     hygiene = commands.add_parser("hygiene", help="check a git repository for fleet hygiene")
     hygiene.add_argument("path", nargs="?", type=Path, default=Path("."))
-    hygiene.add_argument("--engines", type=Path, help="directory holding the installed engines; enables the secret scan")
+    hygiene.add_argument("--engines", type=Path, help="directory holding the installed engines; enables the secret and workflow scans")
     engine_commands = commands.add_parser("engines", help="manage the pinned engines").add_subparsers(
         dest="engines_command", required=True
     )
@@ -53,12 +53,19 @@ def main(
         print(f"hygiene: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     if not findings:
-        print(f"hygiene: clean ({len(active_rules(arguments.engines))} rules)")
+        print(f"hygiene: clean ({len(active_rules(arguments.engines))} rules){coverage_note(arguments.engines)}")
         return EXIT_CLEAN
     for finding in findings:
         print(render(finding))
-    print(f"hygiene: {len(findings)} finding(s)")
+    print(f"hygiene: {len(findings)} finding(s){coverage_note(arguments.engines)}")
     return EXIT_FINDINGS
+
+
+def coverage_note(engine_dir: Path | None) -> str:
+    skipped = skipped_rules(engine_dir)
+    if skipped:
+        return f"; skipped without --engines: {', '.join(skipped)}"
+    return f"; {engines.WORKFLOW_SECURITY} ran offline, so zizmor's online-only audits did not run"
 
 
 def run_engines_install(directory: Path, read_pins: Callable[[], dict[str, engines.Pin]]) -> int:

@@ -43,4 +43,5 @@ jobs:
     permissions:
       contents: read
       actions: read
-    uses: ./.github/workflows/gate.yml
+    # actionlint 1.7.12 rejects the `$/` form that zizmor's self-repository audit asks for; the two cannot both be met.
+    uses: ./.github/workflows/gate.yml # zizmor: ignore[self-repository]
