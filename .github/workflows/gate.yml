@@ -17,6 +17,12 @@ name: gate
 
 on:
   workflow_call:
+    inputs:
+      coverage-artifact:
+        description: Name of an artifact the caller's tests job uploaded in this run; the sonar job downloads it into the checkout
+        type: string
+        required: false
+        default: ''
     secrets:
       SONAR_TOKEN:
         required: true
@@ -44,7 +50,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: overnightworks/quality
-          ref: v0.1.0
+          ref: v0.1.1
           path: .gate-tool
           persist-credentials: false
 
@@ -74,20 +80,20 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Fetch the coverage report this run's tests wrote
+        if: inputs.coverage-artifact != ''
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ inputs.coverage-artifact }}
+
       - name: Check out the gate's own tool
         if: github.repository != 'overnightworks/quality'
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: overnightworks/quality
-          ref: v0.1.0
+          ref: v0.1.1
           path: .gate-tool
           persist-credentials: false
-
-      - name: Fetch the coverage report this run's tests wrote
-        if: github.repository == 'overnightworks/quality'
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: coverage
 
       - name: Set up uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
@@ -134,7 +140,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: overnightworks/quality
-          ref: v0.1.0
+          ref: v0.1.1
           path: .gate-tool
           persist-credentials: false
 
