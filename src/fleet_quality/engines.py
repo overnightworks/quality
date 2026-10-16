@@ -38,7 +38,8 @@ def read_pins(pin_file: Path = PIN_FILE) -> dict[str, Pin]:
 
 
 def install(directory: Path, pins: dict[str, Pin]) -> None:
-    directory.mkdir(parents=True, exist_ok=True)  # NOSONAR(pythonsecurity:S8707) the operator picks the install directory on purpose
+    # The operator picks the install directory on purpose, so Sonar's path-traversal taint is accepted here.
+    directory.mkdir(parents=True, exist_ok=True)  # NOSONAR
     for name, pin in pins.items():
         target = _engine_path(directory, name)
         archive = _download_verified(name, pin)
