@@ -115,7 +115,7 @@ def test_quality_binds_its_own_scan_to_its_own_project():
 
 
 def test_the_coverage_the_tests_upload_is_the_report_the_scan_reads():
-    """#26: SonarCloud's coverage gate sees the report ci.yml uploads and gate.yml downloads"""
+    """#26 done-when (SonarCloud coverage gate), defect:#26 finding 1: the report ci.yml uploads is the one gate.yml downloads and the scan reads"""
     uploads = [s for s in load("ci.yml")["jobs"]["tests"]["steps"] if s.get("uses", "").startswith("actions/upload-artifact")]
     downloads = [s for s in load("gate.yml")["jobs"]["sonar"]["steps"] if s.get("uses", "").startswith("actions/download-artifact")]
     assert [u["with"]["name"] for u in uploads] == [d["with"]["name"] for d in downloads] == ["coverage"]
