@@ -17,6 +17,7 @@ def scan_staged(path: Path, engine_dir: Path, pins: dict[str, Pin]) -> SecretSca
     caller's environment points at) can change what is found.
     """
     binary = engines.prepare_gitleaks(engine_dir, pins)
+    path = _existing_directory(path)
     staged_tree = _write_tree(path)
     head = engines.unborn_aware_head_commit(path, _caller_git_environment())
     object_store = _object_store(path)
@@ -25,6 +26,14 @@ def scan_staged(path: Path, engine_dir: Path, pins: dict[str, Pin]) -> SecretSca
         source = _scratch_repository(scratch / "source", object_store, head, staged_tree, git_environment)
         allowances = _allowances_of(source, staged_tree, git_environment)
         return engines.run_gitleaks(binary, scratch, git_environment, source, ["--pre-commit", "--staged"], allowances)
+
+
+def _existing_directory(path: Path) -> Path:
+    """The absolute path of the repository, so a path that starts with `-` can never read as a git option."""
+    resolved = path.resolve()
+    if not resolved.is_dir():
+        raise EngineError(f"{path} is not a directory")
+    return resolved
 
 
 def _caller_git_environment() -> dict[str, str]:
