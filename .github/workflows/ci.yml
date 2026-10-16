@@ -42,5 +42,4 @@ jobs:
     needs: [tests]
     permissions:
       contents: read
-      actions: read
     uses: ./.github/workflows/gate.yml
