@@ -228,6 +228,16 @@ def test_a_task_file_naming_something_foreign_is_refused_before_any_request(
     assert reason in err
 
 
+def test_findings_reads_only_the_literal_scannerwork_report_task_file(monkeypatch, capsys):
+    """#26 rule: findings reads only .scannerwork/report-task.txt"""
+    set_environment(monkeypatch, PULL_REQUEST_ENVIRONMENT)
+    Path(".scannerwork").mkdir()
+    Path(".scannerwork/report-task.txt").write_text(TASK_FIXTURE.read_text())
+    code = cli.main(["sonar", "findings"], transport=sonar_answering(), sleep=lambda _: None)
+    assert code == 0
+    assert "clean" in capsys.readouterr().out
+
+
 @pytest.mark.parametrize("breakage", ["absent", "symlink loop"])
 def test_a_task_file_that_cannot_be_read_is_refused_before_any_request(monkeypatch, capsys, breakage):
     """#22 kept row: an unreadable task file is exit 2 before any request"""
