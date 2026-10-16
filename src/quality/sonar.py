@@ -12,6 +12,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from quality.config import LegacyMode
 from quality.hygiene import CannotJudge, tracked_files
 from quality.report import Finding
 
@@ -38,6 +39,8 @@ OPEN_ISSUE_STATUSES = "OPEN,CONFIRMED,ACCEPTED,FALSE_POSITIVE"
 
 PULL_REQUEST_EVENT = "pull_request"
 TOKEN_VARIABLE = "SONAR_TOKEN"
+# gate.yml passes github.event.repository.default_branch; an absent expression renders as an empty string.
+DEFAULT_BRANCH_VARIABLE = "DEFAULT_BRANCH"
 
 PROPERTIES_FILE = "sonar-project.properties"
 SCANNER_WORK_DIRECTORY = ".scannerwork"
@@ -130,6 +133,9 @@ class Scope:
     def is_pull_request(self) -> bool:
         return self.parameter == "pullRequest"
 
+    def is_branch(self, name: str) -> bool:
+        return self.parameter == "branch" and self.value == name
+
 
 @dataclass(frozen=True)
 class Project:
@@ -143,6 +149,11 @@ class Analysis:
     scope: Scope
     task_id: str
     authorization: str
+    default_branch: str
+
+    @property
+    def judges_legacy(self) -> bool:
+        return self.scope.is_pull_request or self.scope.is_branch(self.default_branch)
 
 
 @dataclass(frozen=True)
@@ -156,23 +167,38 @@ class OpenFindings:
         return max(self.total, len(self.listed))
 
 
+def legacy_unknown(default_branch: str) -> str:
+    return f"legacy unknown ({default_branch} not analysed yet)"
+
+
 @dataclass(frozen=True)
 class SonarResult:
+    """`legacy` is the open count of the default branch; None when that branch was never analysed."""
+
     scope: Scope
     project: Project
     findings: OpenFindings
+    default_branch: str
+    legacy_mode: LegacyMode
+    legacy: int | None
 
     @property
     def fails_the_run(self) -> bool:
-        return self.scope.is_pull_request and self.findings.count > 0
+        if self.scope.is_pull_request:
+            return self.findings.count > 0 or (self.legacy_mode is LegacyMode.FAIL and bool(self.legacy))
+        return self.scope.is_branch(self.default_branch) and self.findings.count > 0
 
     def summary(self) -> str:
         count = self.findings.count
+        if self.scope.is_pull_request:
+            if self.legacy is None:
+                return f"{RULE}: new {count} · {legacy_unknown(self.default_branch)}"
+            return f"{RULE}: new {count} · legacy {self.legacy} ({self.project.key}, {self.default_branch})"
         if count == 0:
             return f"{RULE}: clean for {self.project.key!r} ({self.scope.label}): 0 open finding(s)"
-        if self.scope.is_pull_request:
-            return f"{RULE}: {count} open finding(s) in {self.scope.label}"
-        return f"{RULE}: {count} open on {self.scope.value} (report only until baseline)"
+        if self.fails_the_run:
+            return f"{RULE}: {count} open on {self.scope.value}"
+        return f"{RULE}: {count} open on {self.scope.value} (report only)"
 
 
 def preflight(root: Path, environment: Mapping[str, str]) -> None:
@@ -284,13 +310,24 @@ def decode_property_text(line: str, position: int, stop_at: str = "") -> tuple[s
 
 
 def analyse(
-    environment: Mapping[str, str], transport: Transport = fetch_json, sleep: Sleep = time.sleep
+    environment: Mapping[str, str],
+    legacy_mode: LegacyMode,
+    transport: Transport = fetch_json,
+    sleep: Sleep = time.sleep,
 ) -> SonarResult:
     """Every check that can refuse runs before the token is sent anywhere."""
     analysis = read_analysis(environment)
     wait_for_own_task(analysis, transport, sleep)
     require_resolved(analysis, transport)
-    return SonarResult(analysis.scope, analysis.project, open_findings(analysis, transport))
+    default_analysed = analysis.judges_legacy and default_branch_analysed(analysis, transport)
+    judges_pull_request = analysis.scope.is_pull_request
+    if judges_pull_request and not default_analysed and legacy_mode is LegacyMode.FAIL:
+        raise CannotJudge(legacy_unknown(analysis.default_branch))
+    findings = open_findings(analysis, transport)
+    legacy = None
+    if judges_pull_request and default_analysed:
+        legacy = open_total(analysis, Scope("branch", analysis.default_branch), transport)
+    return SonarResult(analysis.scope, analysis.project, findings, analysis.default_branch, legacy_mode, legacy)
 
 
 def read_analysis(environment: Mapping[str, str]) -> Analysis:
@@ -305,7 +342,12 @@ def read_analysis(environment: Mapping[str, str]) -> Analysis:
     if not settings.get("ceTaskId"):
         raise CannotJudge(f"{TASK_FILE.name} names no ceTaskId")
     require_token(environment)
-    return Analysis(project, scope_of(environment), settings["ceTaskId"], basic_authorization(environment[TOKEN_VARIABLE]))
+    default_branch = environment.get(DEFAULT_BRANCH_VARIABLE, "")
+    if not default_branch:
+        raise CannotJudge(f"{DEFAULT_BRANCH_VARIABLE} is empty: the gate passes github.event.repository.default_branch")
+    return Analysis(
+        project, scope_of(environment), settings["ceTaskId"], basic_authorization(environment[TOKEN_VARIABLE]), default_branch
+    )
 
 
 def project_of(environment: Mapping[str, str]) -> Project:
@@ -377,29 +419,58 @@ def require_resolved(analysis: Analysis, transport: Transport) -> None:
     # An unauthenticated, misspelled or never-analysed scope answers the issue search with zero
     # findings and no error, so read the measures of this exact scope first: it is 404 when the
     # credential, the key or the scope does not resolve.
-    url = api_url("measures/component", component=analysis.project.key, metricKeys="ncloc", **scope_query(analysis))
+    url = api_url("measures/component", component=analysis.project.key, metricKeys="ncloc", **scope_query(analysis.scope))
     try:
         transport(url, analysis.authorization)
     except SonarHttpError as error:
         raise CannotJudge(f"SonarCloud did not resolve {analysis.project.key} in {analysis.scope.label} (HTTP {error.status})") from error
 
 
-def scope_query(analysis: Analysis) -> dict[str, str]:
-    return {analysis.scope.parameter: analysis.scope.value}
+def scope_query(scope: Scope) -> dict[str, str]:
+    return {scope.parameter: scope.value}
+
+
+def default_branch_analysed(analysis: Analysis, transport: Transport) -> bool:
+    """False when the default branch was never analysed; refuses one that SonarCloud does not treat as its main branch."""
+    url = api_url("project_branches/list", project=analysis.project.key)
+    answer = answer_object(transport(url, analysis.authorization), None, url)
+    try:
+        branches = [branch for branch in answer["branches"] if branch["name"] == analysis.default_branch]
+    except (KeyError, TypeError) as error:
+        raise CannotJudge(f"SonarCloud answered {url.partition('?')[0]} with an unreadable body") from error
+    if not branches or not branches[0].get("analysisDate"):
+        return False
+    if branches[0].get("isMain") is not True:
+        # A non-main branch counts only its changed code, so a legacy count would be silently too low.
+        raise CannotJudge(f"{analysis.default_branch} is not SonarCloud's main branch: set SonarCloud's main branch to {analysis.default_branch}")
+    return True
+
+
+def issues_search_url(analysis: Analysis, scope: Scope, page: int, page_size: int) -> str:
+    return api_url(
+        "issues/search",
+        componentKeys=analysis.project.key,
+        issueStatuses=OPEN_ISSUE_STATUSES,
+        ps=page_size,
+        p=page,
+        **scope_query(scope),
+    )
+
+
+def open_total(analysis: Analysis, scope: Scope, transport: Transport) -> int:
+    """The answer's total alone: findings counted, never listed."""
+    url = issues_search_url(analysis, scope, 1, 1)
+    try:
+        return int(answer_object(transport(url, analysis.authorization), None, url)["total"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise CannotJudge(f"SonarCloud answered {url.partition('?')[0]} with an unreadable body") from error
 
 
 def open_findings(analysis: Analysis, transport: Transport) -> OpenFindings:
     listed: list[Finding] = []
     total = 0
     for page in range(1, MAXIMUM_FINDINGS_PAGES + 1):
-        url = api_url(
-            "issues/search",
-            componentKeys=analysis.project.key,
-            issueStatuses=OPEN_ISSUE_STATUSES,
-            ps=FINDINGS_PAGE_SIZE,
-            p=page,
-            **scope_query(analysis),
-        )
+        url = issues_search_url(analysis, analysis.scope, page, FINDINGS_PAGE_SIZE)
         report = answer_object(transport(url, analysis.authorization), None, url)
         try:
             total = int(report["total"])

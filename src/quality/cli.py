@@ -7,7 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from quality import __version__, engines, staged
-from quality.config import Allowance, ConfigError, read_mandatory_jobs
+from quality.config import Allowance, ConfigError, read_legacy_mode, read_mandatory_jobs
 from quality.hygiene import CannotJudge, active_rules, run_hygiene, skipped_rules
 from quality.report import Finding, render
 from quality.sonar import TASK_FILE, Sleep, Transport, analyse, fetch_json, preflight
@@ -149,8 +149,8 @@ def run_sonar_preflight(path: Path) -> int:
 
 def run_sonar_findings(transport: Transport, sleep: Sleep) -> int:
     try:
-        result = analyse(os.environ, transport, sleep)
-    except CannotJudge as error:
+        result = analyse(os.environ, read_legacy_mode(Path(".")), transport, sleep)
+    except (CannotJudge, ConfigError) as error:
         print(f"sonar: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     for finding in result.findings.listed:
