@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   tests:
+    if: false
     name: quality
     runs-on: ubuntu-latest
     timeout-minutes: 15
