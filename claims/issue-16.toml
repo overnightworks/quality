@@ -1,0 +1,8 @@
+claim_id = "85a61c74c206484eb26961fe94e12c6e"
+agent = "Claude fe12493e-3d52-442e-b01b-4ee4336de2f0"
+role = "builder"
+base = "5a55e5046ce534df55c4162da31881bba8aec128"
+branch = "claude/issue-16-q1a-4b-secret-allowlist"
+scope = ["README.md", "src/fleet_quality", "tests"]
+opened_commit = "47aa6f09e87c2165ff81d0c01ad1172adcda9d76"
+whole_reason = "The gate's own gitleaks config, the fingerprint allow list in quality/config.toml, its report lines and their tests are one secret-scan policy."
