@@ -110,8 +110,8 @@ def scan_secrets(root: Path, engine_dir: Path, pins: dict[str, Pin], allowances:
         report = Path(scratch) / "report.json"
         # The gate's own config, and no ignore file or inline "gitleaks:allow" from the scanned repository:
         # only a fingerprint in quality/config.toml allows a finding. gitleaks also reads <source>/.gitleaksignore,
-        # so it scans a bare clone, which has no work tree to read it from.
-        source = _bare_clone(root, Path(scratch) / "source")
+        # so it scans a mirror clone (bare, every ref kept), which has no work tree to read it from.
+        source = _mirror_clone(root, Path(scratch) / "source")
         command = [
             str(binary), "git", "--redact", "--no-banner", "--no-color",
             "--config", str(GITLEAKS_CONFIG), "--gitleaks-ignore-path", scratch, "--ignore-gitleaks-allow",
@@ -134,8 +134,8 @@ def scan_secrets(root: Path, engine_dir: Path, pins: dict[str, Pin], allowances:
         )
 
 
-def _bare_clone(root: Path, destination: Path) -> Path:
-    cloned = _run(["git", "clone", "--bare", "--quiet", str(root.resolve()), str(destination)])
+def _mirror_clone(root: Path, destination: Path) -> Path:
+    cloned = _run(["git", "clone", "--mirror", "--quiet", str(root.resolve()), str(destination)])
     if cloned.returncode != 0:
         raise EngineError(f"cannot clone {root} for the {GITLEAKS} scan{_stderr_tail(cloned.stderr)}")
     return destination

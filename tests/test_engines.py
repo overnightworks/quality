@@ -264,6 +264,17 @@ def test_secret_removed_in_a_later_commit_still_fails(build_repo, installed_engi
 
 
 @pytest.mark.engine
+def test_secret_reachable_only_from_a_ref_outside_head_still_fails(build_repo, installed_engines):
+    """#13 rule 5: the whole history includes branches fetched as remote-tracking refs, not only HEAD's ancestry."""
+    repo = build_repo({"notes.txt": "nothing here\n"})
+    (repo / "config.txt").write_text(f"aws_access_key_id = {FAKE_KEY}\n")
+    commit(repo, "commit the key")
+    subprocess.run(["git", "-C", str(repo), "update-ref", "refs/remotes/origin/side", "HEAD"], check=True)
+    subprocess.run(["git", "-C", str(repo), "reset", "-q", "--hard", "HEAD~1"], check=True)
+    assert scan(repo, installed_engines) == 1
+
+
+@pytest.mark.engine
 def test_a_relative_repository_path_starting_with_a_dash_is_scanned_as_that_repository(
     build_repo, installed_engines, tmp_path, monkeypatch
 ):
@@ -568,7 +579,12 @@ def run_with_recorded_leak(build_repo, tmp_path, capsys, config: str | None) -> 
         (allow_config((RECORDED_FINGERPRINT, "test data")), 0,
          "secret: 1 allowed (deploy/config.txt:3)", "hygiene: 1 finding"),
     ],
-    ids=["unknown-finding-is-red", "other-fingerprint-is-red", "same-finding-in-another-commit-is-red", "allowed-fingerprint-is-green-and-printed"],
+    ids=[
+        "unknown-finding-is-red",
+        "other-fingerprint-is-red",
+        "same-finding-in-another-commit-is-red",
+        "allowed-fingerprint-is-green-and-printed",
+    ],
 )
 def test_a_secret_finding_is_allowed_only_by_its_fingerprint(
     build_repo, tmp_path, capsys, config, code, printed, not_printed
@@ -604,7 +620,8 @@ def test_the_scan_passes_the_gates_own_config(build_repo, tmp_path):
 
 @pytest.mark.engine
 def test_a_repository_config_and_ignore_file_do_not_silence_the_scan(build_repo, installed_engines):
-    """#16: a committed .gitleaks.toml, .gitleaksignore holding the real fingerprint and gitleaks:allow have no effect."""
+    """#16: a committed .gitleaks.toml, a .gitleaksignore holding the real fingerprint and gitleaks:allow
+    have no effect."""
     repo = build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}  # gitleaks:allow\n"})
     [leak] = engines.scan_secrets(repo, installed_engines, engines.read_pins(), {}).findings
     (repo / ".gitleaks.toml").write_text('[extend]\nuseDefault = true\n[allowlist]\npaths = [\'\'\'config.txt\'\'\']\n')
