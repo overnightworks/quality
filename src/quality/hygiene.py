@@ -90,12 +90,13 @@ def check_compose_ports(root: Path, tracked: list[str]) -> list[Finding]:
 
 
 def _compose_file_findings(root: Path, name: str) -> list[Finding]:
-    path = root.resolve() / name
-    if not path.resolve().is_relative_to(root.resolve()):
-        raise CannotJudge(f"{name} resolves outside the repository")
+    repository = root.resolve()
+    path = repository / name
     try:
+        if not path.resolve().is_relative_to(repository):
+            raise CannotJudge(f"{name} resolves outside the repository")
         document = yaml.load(path.read_text(encoding="utf-8"), Loader=ComposeLoader)
-    except (yaml.YAMLError, UnicodeDecodeError, OSError) as error:
+    except (yaml.YAMLError, UnicodeDecodeError, OSError, RuntimeError) as error:
         raise CannotJudge(f"cannot read {name}: {error}") from error
     services = document.get("services") if isinstance(document, dict) else None
     if not isinstance(services, dict):

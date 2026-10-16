@@ -190,3 +190,13 @@ def test_a_tracked_compose_symlink_leaving_the_repository_is_exit_2(build_repo, 
     code, output = run(capsys, repo)
     assert code == 2
     assert "outside the repository" in output
+
+
+def test_a_tracked_compose_symlink_loop_is_exit_2(build_repo, capsys):
+    """#31 rule 1 (S8705): a tracked compose file that loops through symlinks is exit 2, never a traceback."""
+    repo = build_repo({})
+    (repo / "compose.yaml").symlink_to("compose.yaml")
+    subprocess.run(["git", "-C", str(repo), "add", "compose.yaml"], check=True)
+    code, output = run(capsys, repo)
+    assert code == 2
+    assert "cannot read compose.yaml" in output
