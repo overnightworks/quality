@@ -239,15 +239,31 @@ def attribute_free_git_environment(empty_home: Path) -> dict[str, str]:
     }
 
 
+def parse_git_version(version_output: str) -> str | None:
+    """The first `major.minor[.patch]` number in `git --version` output, wherever it sits in a word.
+
+    Digit runs and the text between them are tokenised once, so a long run of digits cannot backtrack.
+    """
+    tokens = re.findall(r"\d+|\D+", version_output)
+    for start in range(len(tokens) - 2):
+        major, dot, minor = tokens[start : start + 3]
+        if major.isdigit() and dot == "." and minor.isdigit():
+            patch = tokens[start + 3 : start + 5]
+            if len(patch) == 2 and patch[0] == "." and patch[1].isdigit():
+                return f"{major}.{minor}.{patch[1]}"
+            return f"{major}.{minor}"
+    return None
+
+
 def require_git_floor() -> None:
     asked = run(["git", "--version"])
-    found = re.search(r"\d+\.\d+(?:\.\d+)?", asked.stdout)
-    if asked.returncode != 0 or found is None:
+    version = parse_git_version(asked.stdout)
+    if asked.returncode != 0 or version is None:
         raise EngineError(f"cannot read the git version{stderr_tail(asked.stderr)}")
-    if tuple(int(part) for part in found[0].split("."))[:2] < GIT_FLOOR:
+    if tuple(int(part) for part in version.split("."))[:2] < GIT_FLOOR:
         required = ".".join(map(str, GIT_FLOOR))
         raise EngineError(
-            f"git {found[0]} cannot hide .gitattributes from the {GITLEAKS} scan, it needs git {required}"
+            f"git {version} cannot hide .gitattributes from the {GITLEAKS} scan, it needs git {required}"
         )
 
 

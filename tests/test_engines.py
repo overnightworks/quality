@@ -463,6 +463,31 @@ def test_a_git_older_than_2_41_is_exit_2_naming_the_version(
     )
 
 
+@pytest.mark.parametrize(
+    ("version_output", "expected"),
+    [
+        ("git version 2.39.3 (Apple Git-146)", "2.39.3"),
+        ("git version 2.41.0.windows.1", "2.41.0"),
+        ("git version 2.40", "2.40"),
+        ("git version 2.9.5", "2.9.5"),
+        ("git version 2.53.0", "2.53.0"),
+        ("git version 2.0000041", "2.0000041"),
+        ("git version 12345.6", "12345.6"),
+        ("git version 2.41.0-rc0", "2.41.0"),
+        ("git version v2.41.0", "2.41.0"),
+        ("git version 2.43.0-rc1", "2.43.0"),
+        ("git version 2.41.0.dirty", "2.41.0"),
+        ("git version 2.41.x", "2.41"),
+        ("git version unknown", None),
+        ("", None),
+        ("9" * 50_000, None),
+    ],
+)
+def test_the_git_version_is_the_first_dotted_number_in_the_output(version_output, expected):
+    """#31 rule 2 (S8786): the version is found as the old pattern found it, in any word, and on any digit length."""
+    assert engines.parse_git_version(version_output) == expected
+
+
 @pytest.mark.engine
 def test_installed_binary_reports_the_pinned_version(build_repo, installed_engines):
     """#13 rule 2: the installed real gitleaks passes the version check against the pin."""
