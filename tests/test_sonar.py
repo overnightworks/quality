@@ -88,6 +88,7 @@ def run_cli(
     if task_text is not None:
         task_file = tmp_path / "report-task.txt"
         task_file.write_text(task_text)
+    monkeypatch.chdir(task_file.parent)
     sleeps: list[float] = []
     code = cli.main(["sonar", "findings", "--task-file", str(task_file)], transport=fake, sleep=sleeps.append)
     captured = capsys.readouterr()
@@ -105,7 +106,8 @@ def test_known_fail_fixture_lists_every_open_finding_and_exits_one(monkeypatch, 
     """#22 kept row: known-fail fixture lists every open finding and exits 1"""
     code, out, err, _ = run_cli(monkeypatch, capsys, sonar_answering(issues=issues_page(2, 1, 2)))
     assert code == 1
-    assert "sonar src/a1.py:1 - python:S1: m" in out and "sonar src/a2.py:2 - python:S1: m" in out
+    assert "sonar src/a1.py:1 - python:S1: m" in out
+    assert "sonar src/a2.py:2 - python:S1: m" in out
     assert "2 open finding(s) in pullRequest=7" in err
 
 
@@ -138,7 +140,8 @@ def test_asks_for_statuses_a_person_may_have_accepted_and_encodes_the_scope(monk
     query = parse_qs(urlparse(fake.urls_to("issues/search")[0]).query)
     assert code == 0
     assert query["issueStatuses"] == ["OPEN,CONFIRMED,ACCEPTED,FALSE_POSITIVE"]
-    assert query["branch"] == ["feat/a&b#c%d"] and "statuses" not in query
+    assert query["branch"] == ["feat/a&b#c%d"]
+    assert "statuses" not in query
     assert query["componentKeys"] == [KEY]
 
 
@@ -177,6 +180,21 @@ def test_an_unreadable_answer_is_exit_two_and_never_clean(monkeypatch, capsys, f
     assert err.startswith("sonar: cannot judge - ")
 
 
+@pytest.mark.parametrize(
+    ("issues", "reason"),
+    [
+        ({"total": 0, "issues": {}}, "issues that are not a list"),
+        ({"total": 1, "issues": [{**issue(1), "component": None}]}, "is not a string"),
+    ],
+    ids=["issues not a list", "component not a string"],
+)
+def test_a_malformed_issues_answer_names_what_is_wrong(monkeypatch, capsys, issues, reason):
+    """defect:#5 finding 40: the issues check and finding_from_issue refuse with CannotJudge, naming the shape"""
+    code, _, err, _ = run_cli(monkeypatch, capsys, sonar_answering(issues=issues))
+    assert code == 2
+    assert reason in err
+
+
 def test_does_not_read_findings_when_the_scope_does_not_resolve(monkeypatch, capsys):
     """#22 kept row: an unresolved scope is exit 2 before findings are read"""
     fake = sonar_answering()
@@ -211,9 +229,22 @@ def test_a_task_file_that_cannot_be_read_is_refused_before_any_request(monkeypat
     """#22 kept row: an unreadable task file is exit 2 before any request"""
     fake = sonar_answering()
     set_environment(monkeypatch, PULL_REQUEST_ENVIRONMENT)
+    monkeypatch.chdir(tmp_path)
     code = cli.main(["sonar", "findings", "--task-file", str(tmp_path / "absent.txt")], transport=fake)
     assert (code, fake.requests) == (2, [])
     assert "absent.txt" in capsys.readouterr().err
+
+
+def test_a_task_file_outside_the_working_directory_is_refused_before_any_request(monkeypatch, capsys, tmp_path):
+    """#26 finding 1: a task file that does not resolve under the working directory is exit 2 before any request"""
+    fake = sonar_answering()
+    set_environment(monkeypatch, PULL_REQUEST_ENVIRONMENT)
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+    code = cli.main(["sonar", "findings", "--task-file", str(TASK_FIXTURE)], transport=fake)
+    assert (code, fake.requests) == (2, [])
+    assert "outside the working directory" in capsys.readouterr().err
 
 
 def test_never_requests_the_urls_the_task_file_names(monkeypatch, capsys, tmp_path):
@@ -459,6 +490,12 @@ def test_preflight_refuses_what_could_steer_the_token_naming_it(monkeypatch, cap
     code, _, err = run_preflight(monkeypatch, capsys, build_repo, CLEAN_PROPERTIES + properties + "\n")
     assert code == 2
     assert named in err
+
+
+def test_preflight_drops_a_final_unpaired_backslash_like_java_properties(monkeypatch, capsys, build_repo):
+    """#26 rule 3: a last line ending in a backslash without a newline is read as java.util.Properties reads it"""
+    properties = CLEAN_PROPERTIES + "sonar.projectName=quality\\"
+    assert run_preflight(monkeypatch, capsys, build_repo, properties)[0] == 0
 
 
 def test_preflight_refuses_a_properties_file_without_the_callers_key(monkeypatch, capsys, build_repo):

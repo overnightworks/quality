@@ -215,7 +215,7 @@ def logical_property_lines(text: str) -> list[str]:
         if pending is None:
             logical.append(joined)
     if pending is not None:
-        raise CannotJudge(f"{PROPERTIES_FILE} ends in a line continuation")
+        logical.append(pending)  # java.util.Properties drops a final unpaired backslash
     return logical
 
 
@@ -242,8 +242,6 @@ def decode_property_text(line: str, position: int, stop_at: str = "") -> tuple[s
         if character != "\\":
             decoded.append(character)
             continue
-        if position >= len(line):
-            raise CannotJudge(f"{PROPERTIES_FILE} has a dangling backslash in {line!r}")
         escaped = line[position]
         position += 1
         if escaped == "u":
@@ -299,6 +297,8 @@ def scope_of(environment: Mapping[str, str]) -> Scope:
 
 
 def read_task_file(task_file: Path) -> dict[str, str]:
+    if not task_file.resolve().is_relative_to(Path.cwd().resolve()):
+        raise CannotJudge(f"{task_file} is outside the working directory")
     try:
         lines = task_file.read_text(encoding="utf-8").splitlines()
     except (OSError, UnicodeDecodeError) as error:
@@ -379,7 +379,7 @@ def open_findings(analysis: Analysis, transport: Transport) -> OpenFindings:
             total = int(report["total"])
             issues = report["issues"]
             if not isinstance(issues, list):
-                raise TypeError("issues is not a list")
+                raise CannotJudge(f"SonarCloud answered {url.partition('?')[0]} with issues that are not a list")
             listed.extend(finding_from_issue(issue) for issue in issues)
         except (KeyError, TypeError, ValueError) as error:
             raise CannotJudge(f"SonarCloud answered {url.partition('?')[0]} with an unreadable body") from error
@@ -397,7 +397,7 @@ def answer_object(answer: object, key: str | None, url: str) -> dict:
 
 def finding_from_issue(issue: dict) -> Finding:
     if not isinstance(issue["component"], str):
-        raise TypeError("component is not a string")
+        raise CannotJudge(f"SonarCloud reported a finding whose component {issue['component']!r} is not a string")
     _, separator, file_path = issue["component"].partition(":")
     if not separator:
         raise CannotJudge(f"SonarCloud reported a finding whose component {issue['component']!r} carries no file path")
