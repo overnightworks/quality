@@ -1,5 +1,6 @@
 import pytest
 
+from quality import cli
 from quality.config import (
     Allowance,
     ConfigError,
@@ -9,6 +10,11 @@ from quality.config import (
     read_mandatory_jobs,
     read_secret_allowances,
 )
+
+UNKNOWN_KEY_CONFIGS = [
+    '[gate]\nmandatory_jobs = ["checks"]\nwhatever = 1\n',
+    '[gate]\nmandatory_jobs = ["checks"]\n[future]\nkey = 1\n',
+]
 
 
 def test_reads_the_mandatory_job_names():
@@ -136,6 +142,15 @@ def test_the_staged_allow_list_ignores_everything_outside_secrets(extra):
     assert load_staged_secret_allowances(f"{extra}\n[secrets]\nallow = [{ENTRY}]") == load_secret_allowances(
         f"[secrets]\nallow = [{ENTRY}]"
     )
+
+
+@pytest.mark.parametrize("config", UNKNOWN_KEY_CONFIGS, ids=["unknown gate key", "unknown table"])
+def test_verdict_keeps_refusing_unknown_keys(tmp_path, capsys, config):
+    """#40 rule 2: the verdict stays strict about quality/config.toml."""
+    (tmp_path / "quality").mkdir()
+    (tmp_path / "quality/config.toml").write_text(config)
+    assert cli.main(["verdict", str(tmp_path)]) == 2
+    assert "unknown key" in capsys.readouterr().err
 
 
 def test_a_repository_without_the_file_allows_nothing(tmp_path):
