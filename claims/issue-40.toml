@@ -1,8 +1,0 @@
-claim_id = "33edf29da1c845bb9791bc46a593f79a"
-agent = "Claude fe12493e-3d52-442e-b01b-4ee4336de2f0"
-role = "builder"
-base = "75467b7888ab8158dda370c770d3323dfc1f594e"
-branch = "claude/issue-40-commit-hook-darf-nicht-brechen-wenn-die"
-scope = ["README.md", "src/quality/config.py", "src/quality/staged.py", "tests/conftest.py", "tests/test_config.py", "tests/test_engines.py", "tests/test_staged.py", "tests/test_verdict.py"]
-opened_commit = "c31d356bc9c5de16a9a4368ce53e2dcdddf74688"
-whole_reason = "scan-staged's narrower config read, its isolation fixture, the strict-entry tests and the README sentence are one behaviour."
