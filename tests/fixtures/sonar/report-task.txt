@@ -1,0 +1,7 @@
+organization=overnightworks
+projectKey=overnightworks_quality
+serverUrl=https://sonarcloud.io
+serverVersion=8.0.0.0
+dashboardUrl=https://sonarcloud.io/dashboard?id=overnightworks_quality&pullRequest=7
+ceTaskId=AXtask-1
+ceTaskUrl=https://sonarcloud.io/api/ce/task?id=AXtask-1
