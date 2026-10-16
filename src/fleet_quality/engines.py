@@ -109,12 +109,14 @@ def scan_secrets(root: Path, engine_dir: Path, pins: dict[str, Pin], allowances:
     with tempfile.TemporaryDirectory() as scratch:
         report = Path(scratch) / "report.json"
         # The gate's own config, and no ignore file or inline "gitleaks:allow" from the scanned repository:
-        # only a fingerprint in quality/config.toml allows a finding.
+        # only a fingerprint in quality/config.toml allows a finding. gitleaks also reads <source>/.gitleaksignore,
+        # so it scans a bare clone, which has no work tree to read it from.
+        source = _bare_clone(root, Path(scratch) / "source")
         command = [
             str(binary), "git", "--redact", "--no-banner", "--no-color",
             "--config", str(GITLEAKS_CONFIG), "--gitleaks-ignore-path", scratch, "--ignore-gitleaks-allow",
             "--exit-code", str(GITLEAKS_LEAKS_FOUND),
-            "--report-format", "json", "--report-path", str(report), "--", str(root.resolve()),
+            "--report-format", "json", "--report-path", str(report), "--", str(source),
         ]
         scan = _run(command)
         if not report.is_file():
@@ -130,6 +132,13 @@ def scan_secrets(root: Path, engine_dir: Path, pins: dict[str, Pin], allowances:
             findings=[leak for leak in leaks if leak.fingerprint not in allowances],
             allowed=[leak for leak in leaks if leak.fingerprint in allowances],
         )
+
+
+def _bare_clone(root: Path, destination: Path) -> Path:
+    cloned = _run(["git", "clone", "--bare", "--quiet", str(root.resolve()), str(destination)])
+    if cloned.returncode != 0:
+        raise EngineError(f"cannot clone {root} for the {GITLEAKS} scan{_stderr_tail(cloned.stderr)}")
+    return destination
 
 
 def _verify_version(binary: Path, engine_name: str, pinned: str) -> None:

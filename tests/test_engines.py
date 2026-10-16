@@ -563,10 +563,12 @@ def run_with_recorded_leak(build_repo, tmp_path, capsys, config: str | None) -> 
     [
         (None, 1, "secret deploy/config.txt:3", "allowed"),
         (allow_config(("some:other:finding:1", "unrelated")), 1, "secret deploy/config.txt:3", "allowed"),
+        (allow_config((RECORDED_FINGERPRINT.replace("76ec522", "1111111"), "other commit")), 1,
+         "secret deploy/config.txt:3", "allowed"),
         (allow_config((RECORDED_FINGERPRINT, "test data")), 0,
          "secret: 1 allowed (deploy/config.txt:3)", "hygiene: 1 finding"),
     ],
-    ids=["unknown-finding-is-red", "other-fingerprint-is-red", "allowed-fingerprint-is-green-and-printed"],
+    ids=["unknown-finding-is-red", "other-fingerprint-is-red", "same-finding-in-another-commit-is-red", "allowed-fingerprint-is-green-and-printed"],
 )
 def test_a_secret_finding_is_allowed_only_by_its_fingerprint(
     build_repo, tmp_path, capsys, config, code, printed, not_printed
@@ -591,25 +593,23 @@ def test_an_allow_entry_without_a_reason_is_exit_2(build_repo, tmp_path, capsys,
     assert "[secrets] allow entry" in hygiene_exit_2(build_repo({"quality/config.toml": config}), engine_dir, capsys)
 
 
-def test_the_scan_passes_the_gates_own_config_and_no_repository_ignore_file(build_repo, tmp_path):
-    """#16: gitleaks is told to use quality's config and to look for ignore files outside the repository."""
+def test_the_scan_passes_the_gates_own_config(build_repo, tmp_path):
+    """#16: gitleaks is told to use quality's config, not the repository's."""
     engine_dir = fake_gitleaks(tmp_path / "fake", on_scan='echo "[]" > "$report"; exit 0')
-    repo = build_repo({".gitleaks.toml": "[allowlist]\n", ".gitleaksignore": "x\n"})
+    repo = build_repo({".gitleaks.toml": "[allowlist]\n"})
     engines.scan_secrets(repo, engine_dir, engines.read_pins(), {})
     given = (engine_dir / "gitleaks.arguments").read_text().split()
     assert given[given.index("--config") + 1] == str(engines.GITLEAKS_CONFIG)
-    assert str(repo) not in given[given.index("--gitleaks-ignore-path") + 1]
-    assert "--ignore-gitleaks-allow" in given
 
 
 @pytest.mark.engine
 def test_a_repository_config_and_ignore_file_do_not_silence_the_scan(build_repo, installed_engines):
-    """#16: a committed .gitleaks.toml, .gitleaksignore and gitleaks:allow comment have no effect."""
-    repo = build_repo({
-        "config.txt": f"aws_access_key_id = {FAKE_KEY}  # gitleaks:allow\n",
-        ".gitleaks.toml": '[extend]\nuseDefault = true\n[allowlist]\npaths = [\'\'\'config.txt\'\'\']\n',
-        ".gitleaksignore": "*\n",
-    })
+    """#16: a committed .gitleaks.toml, .gitleaksignore holding the real fingerprint and gitleaks:allow have no effect."""
+    repo = build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}  # gitleaks:allow\n"})
+    [leak] = engines.scan_secrets(repo, installed_engines, engines.read_pins(), {}).findings
+    (repo / ".gitleaks.toml").write_text('[extend]\nuseDefault = true\n[allowlist]\npaths = [\'\'\'config.txt\'\'\']\n')
+    (repo / ".gitleaksignore").write_text(f"{leak.fingerprint}\n")
+    commit(repo, "try to silence the scan")
     assert scan(repo, installed_engines) == 1
 
 
@@ -625,6 +625,8 @@ def test_a_real_finding_is_green_once_its_fingerprint_is_allowed_and_red_in_a_ne
     commit(repo, "allow the fixture key")
     assert scan(repo, installed_engines) == 0
     assert "secret: 1 allowed (config.txt:1)" in capsys.readouterr().out
-    (repo / "copy.txt").write_text(f"aws_access_key_id = {FAKE_KEY}\n")
-    commit(repo, "same key again")
+    (repo / "config.txt").unlink()
+    commit(repo, "remove the key")
+    (repo / "config.txt").write_text(f"aws_access_key_id = {FAKE_KEY}\n")
+    commit(repo, "same key again, same file and line")
     assert scan(repo, installed_engines) == 1
