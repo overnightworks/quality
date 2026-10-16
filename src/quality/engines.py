@@ -1,6 +1,8 @@
 import hashlib
 import io
 import json
+import os
+import re
 import subprocess
 import tarfile
 import tempfile
@@ -26,6 +28,8 @@ ZIZMOR = "zizmor"
 ACTIONLINT_FINDINGS = 1
 ZIZMOR_FINDINGS = range(10, 15)  # zizmor encodes the worst severity in 10..14
 VERSION_ARGUMENTS = {GITLEAKS: ["version"], ACTIONLINT: ["-version"], ZIZMOR: ["--version"]}
+GIT_FLOOR = (2, 41)  # GIT_ATTR_SOURCE, which hides the repository's attributes from the scan, arrived in 2.41
+EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 PIN_FILE = Path(__file__).with_name("engines.toml")
 ACTIONLINT_CONFIG = Path(__file__).with_name("actionlint.yaml")
 ZIZMOR_CONFIG = Path(__file__).with_name("zizmor.yml")
@@ -106,19 +110,21 @@ class SecretScan:
 def scan_secrets(root: Path, engine_dir: Path, pins: dict[str, Pin], allowances: dict[str, str]) -> SecretScan:
     binary = _engine_path(engine_dir, GITLEAKS)
     _verify_version(binary, GITLEAKS, pins[GITLEAKS].version)
+    _require_git_floor()
     with tempfile.TemporaryDirectory() as scratch:
+        git_environment = attribute_free_git_environment(Path(scratch) / "home")
         report = Path(scratch) / "report.json"
         # The gate's own config, and no ignore file or inline "gitleaks:allow" from the scanned repository:
         # only a fingerprint in quality/config.toml allows a finding. gitleaks also reads <source>/.gitleaksignore,
         # so it scans a mirror clone (bare, every ref kept), which has no work tree to read it from.
-        source = _mirror_clone(root, Path(scratch) / "source")
+        source = _mirror_clone(root, Path(scratch) / "source", git_environment)
         command = [
             str(binary), "git", "--redact", "--no-banner", "--no-color",
             "--config", str(GITLEAKS_CONFIG), "--gitleaks-ignore-path", scratch, "--ignore-gitleaks-allow",
             "--exit-code", str(GITLEAKS_LEAKS_FOUND),
             "--report-format", "json", "--report-path", str(report), "--", str(source),
         ]
-        scan = _run(command)
+        scan = _run(command, env=git_environment)
         if not report.is_file():
             raise EngineError(
                 f"{GITLEAKS} exited {scan.returncode} without writing its report{_stderr_tail(scan.stderr)}"
@@ -134,8 +140,45 @@ def scan_secrets(root: Path, engine_dir: Path, pins: dict[str, Pin], allowances:
         )
 
 
-def _mirror_clone(root: Path, destination: Path) -> Path:
-    cloned = _run(["git", "clone", "--mirror", "--quiet", str(root.resolve()), str(destination)])
+def attribute_free_git_environment(empty_home: Path) -> dict[str, str]:
+    """The environment git runs in so that no .gitattributes line can turn a diff into "Binary files differ".
+
+    This cuts off the repository and tree attributes, the system file, the user's global file
+    (`$XDG_CONFIG_HOME/git/attributes`) and any `core.attributesFile`, the repository's own config included, since
+    the forced command-line value wins. It does not cut off `$GIT_DIR/info/attributes`: git reads it from disk whatever
+    the environment says. The hygiene scan stays clear of it by scanning a fresh template-less mirror, which copies
+    none; a caller that runs git in the real repository must deal with it itself.
+    """
+    empty_home.mkdir(parents=True)
+    inherited = {name: value for name, value in os.environ.items() if not name.startswith("GIT_")}
+    return inherited | {
+        "GIT_ATTR_SOURCE": EMPTY_TREE,
+        "GIT_ATTR_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "core.attributesFile",
+        "GIT_CONFIG_VALUE_0": os.devnull,
+        "HOME": str(empty_home),
+        "XDG_CONFIG_HOME": str(empty_home),
+    }
+
+
+def _require_git_floor() -> None:
+    asked = _run(["git", "--version"])
+    found = re.search(r"\d+\.\d+(?:\.\d+)?", asked.stdout)
+    if asked.returncode != 0 or found is None:
+        raise EngineError(f"cannot read the git version{_stderr_tail(asked.stderr)}")
+    if tuple(int(part) for part in found[0].split("."))[:2] < GIT_FLOOR:
+        required = ".".join(map(str, GIT_FLOOR))
+        raise EngineError(
+            f"git {found[0]} cannot hide .gitattributes from the {GITLEAKS} scan, it needs git {required}"
+        )
+
+
+def _mirror_clone(root: Path, destination: Path, git_environment: dict[str, str]) -> Path:
+    command = ["git", "clone", "--mirror", "--quiet", "--template=", str(root.resolve()), str(destination)]
+    cloned = _run(command, env=git_environment)
     if cloned.returncode != 0:
         raise EngineError(f"cannot clone {root} for the {GITLEAKS} scan{_stderr_tail(cloned.stderr)}")
     return destination
@@ -150,9 +193,11 @@ def _verify_version(binary: Path, engine_name: str, pinned: str) -> None:
         raise EngineError(f"{binary} is version {reported!r}, the pin says {pinned!r}")
 
 
-def _run(command: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+def _run(
+    command: list[str], cwd: Path | None = None, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
     try:
-        return subprocess.run(command, capture_output=True, text=True, check=False, cwd=cwd)
+        return subprocess.run(command, capture_output=True, text=True, check=False, cwd=cwd, env=env)
     except (OSError, ValueError) as error:  # ValueError: output that is not text
         raise EngineError(f"cannot run {command[0]}: {error}") from error
 
