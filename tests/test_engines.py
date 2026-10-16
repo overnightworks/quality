@@ -421,7 +421,10 @@ def test_a_template_directory_cannot_put_attributes_into_the_mirror(
 def test_a_git_older_than_2_41_is_exit_2_naming_the_version(
     installed_engines, build_repo, fake_git, capsys, git_version
 ):
-    """#21 rule 2: below the floor the scan cannot hide attributes, so it is exit 2 with one line, never clean."""
+    """#21 rule 2: below the floor the scan cannot hide attributes, so it is exit 2 with one line, never clean.
+
+    The git floor is checked right after gitleaks' version and before any scan, so the fake git alone decides this test.
+    """
     fake_git(f'[ "$1" = "--version" ] && echo "git version {git_version}" && exit 0')
     err = hygiene_exit_2(build_repo({}), installed_engines, capsys)
     assert err.strip() == (
@@ -825,7 +828,8 @@ def test_an_allowed_value_stays_green_at_a_shifted_line_and_across_commits(build
     commit(repo, "key again, three lines further down")
     allow_fake_key(repo)
     assert scan(repo, installed_engines) == 0
-    assert "secret: 2 allowed (config.txt:1, config.txt:4)" in capsys.readouterr().out
+    summary = next(line for line in capsys.readouterr().out.splitlines() if line.startswith("secret: 2 allowed ("))
+    assert set(summary.removeprefix("secret: 2 allowed (").removesuffix(")").split(", ")) == {"config.txt:1", "config.txt:4"}
 
 
 @pytest.mark.engine
