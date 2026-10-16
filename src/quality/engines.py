@@ -2,6 +2,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import signal
 import subprocess
 import tarfile
@@ -238,20 +239,19 @@ def attribute_free_git_environment(empty_home: Path) -> dict[str, str]:
     }
 
 
-def _is_ascii_number(text: str) -> bool:
-    return text.isascii() and text.isdigit()
-
-
 def parse_git_version(version_output: str) -> str | None:
-    """The first dotted version in `git --version` output, found by splitting, so it cannot backtrack."""
-    for word in version_output.split():
-        numbers = []
-        for part in word.split(".")[:3]:
-            if not _is_ascii_number(part):
-                break
-            numbers.append(part)
-        if len(numbers) >= 2:
-            return ".".join(numbers)
+    """The first `major.minor[.patch]` number in `git --version` output, wherever it sits in a word.
+
+    Digit runs and the text between them are tokenised once, so a long run of digits cannot backtrack.
+    """
+    tokens = re.findall(r"[0-9]+|[^0-9]+", version_output)
+    for start in range(len(tokens) - 2):
+        major, dot, minor = tokens[start : start + 3]
+        if major.isdigit() and dot == "." and minor.isdigit():
+            patch = tokens[start + 3 : start + 5]
+            if len(patch) == 2 and patch[0] == "." and patch[1].isdigit():
+                return f"{major}.{minor}.{patch[1]}"
+            return f"{major}.{minor}"
     return None
 
 
