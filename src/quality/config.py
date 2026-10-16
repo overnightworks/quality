@@ -47,8 +47,8 @@ def _refuse_unknown_secrets_keys(secrets: dict) -> None:
         raise ConfigError(f"{CONFIG_PATH} has unknown key(s) {sorted(unknown)} in [secrets] - only allow exists")
 
 
-def _refuse_unknown_keys(document: dict, gate: dict, secrets: dict) -> None:
-    unknown = (set(document) - {"gate", "secrets"}) | (set(gate) - GATE_KEYS) | (set(secrets) - SECRETS_KEYS)
+def _refuse_unknown_keys(document: dict, gate: dict) -> None:
+    unknown = (set(document) - {"gate", "secrets"}) | (set(gate) - GATE_KEYS)
     if unknown:
         raise ConfigError(
             f"{CONFIG_PATH} has unknown key(s) {sorted(unknown)} - only [gate] mandatory_jobs and [secrets] allow exist"
@@ -60,7 +60,8 @@ def load_mandatory_jobs(text: str | None) -> tuple[str, ...]:
         raise ConfigError(f"{CONFIG_PATH} is missing - create it with:\n{EXAMPLE}")
     document = _parse(text, EXAMPLE)
     gate = _table(document, "gate", EXAMPLE)
-    _refuse_unknown_keys(document, gate, _table(document, "secrets", ALLOWANCE_EXAMPLE))
+    _refuse_unknown_keys(document, gate)
+    _refuse_unknown_secrets_keys(_table(document, "secrets", ALLOWANCE_EXAMPLE))
     names = gate.get("mandatory_jobs")
     if not isinstance(names, list) or not names or not all(isinstance(name, str) and name for name in names):
         raise ConfigError(
@@ -82,13 +83,27 @@ def read_mandatory_jobs(repo: Path) -> tuple[str, ...]:
 def load_secret_allowances(text: str | None) -> dict[Allowance, str]:
     """Allowance -> reason of every finding the repository allows; a missing config allows nothing.
 
-    Reads only [secrets]: every other table and key belongs to the gate, which a newer quality may have grown, and
-    must not stop the commit hook of an older one.
+    The whole document is validated, as the gate does: hygiene and the verdict refuse what they do not know.
     """
     if text is None:
         return {}
     document = _parse(text, ALLOWANCE_EXAMPLE)
-    secrets = _table(document, "secrets", ALLOWANCE_EXAMPLE)
+    _refuse_unknown_keys(document, _table(document, "gate", EXAMPLE))
+    return _parse_allowances(_table(document, "secrets", ALLOWANCE_EXAMPLE))
+
+
+def load_staged_secret_allowances(text: str | None) -> dict[Allowance, str]:
+    """The allow list as the commit hook reads it: only [secrets].
+
+    Every other table and key belongs to the gate, which a newer quality may have grown, and must not stop the
+    commit hook of an older one.
+    """
+    if text is None:
+        return {}
+    return _parse_allowances(_table(_parse(text, ALLOWANCE_EXAMPLE), "secrets", ALLOWANCE_EXAMPLE))
+
+
+def _parse_allowances(secrets: dict) -> dict[Allowance, str]:
     _refuse_unknown_secrets_keys(secrets)
     entries = secrets.get("allow", [])
     if not isinstance(entries, list):

@@ -5,6 +5,7 @@ from quality.config import (
     ConfigError,
     load_mandatory_jobs,
     load_secret_allowances,
+    load_staged_secret_allowances,
     read_mandatory_jobs,
     read_secret_allowances,
 )
@@ -130,9 +131,9 @@ def test_the_old_fingerprint_form_is_refused_with_the_new_form_shown():
     ['[gate]\nlegacy = "fail"', "[gate]\nwhatever = 1", "[future]\nkey = 1", 'extra = "top-level"'],
     ids=["gate-key", "other-gate-key", "unknown-table", "top-level-key"],
 )
-def test_the_allow_list_ignores_everything_outside_secrets(extra):
+def test_the_staged_allow_list_ignores_everything_outside_secrets(extra):
     """#40 rule 1: a newer gate schema cannot stop the staged scan of an older quality."""
-    assert load_secret_allowances(f"{extra}\n[secrets]\nallow = [{ENTRY}]") == load_secret_allowances(
+    assert load_staged_secret_allowances(f"{extra}\n[secrets]\nallow = [{ENTRY}]") == load_secret_allowances(
         f"[secrets]\nallow = [{ENTRY}]"
     )
 
