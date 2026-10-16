@@ -10,7 +10,7 @@ from quality import __version__, engines
 from quality.config import ConfigError, read_mandatory_jobs
 from quality.hygiene import CannotJudge, active_rules, run_hygiene, skipped_rules
 from quality.report import Finding, render
-from quality.sonar import Sleep, Transport, analyse, fetch_json, preflight
+from quality.sonar import TASK_FILE, Sleep, Transport, analyse, fetch_json, preflight
 from quality.verdict import (
     PageFetcher,
     github_fetcher,
@@ -51,7 +51,7 @@ def main(
     sonar.add_parser("preflight", help="refuse a token or properties file that could steer the scan").add_argument(
         "path", nargs="?", type=Path, default=Path(".")
     )
-    sonar.add_parser("findings", help="wait for this run's analysis (.scannerwork/report-task.txt), then count its open findings")
+    sonar.add_parser("findings", help=f"wait for this run's analysis ({TASK_FILE}), then count its open findings")
     arguments = parser.parse_args(argv)
 
     if arguments.command == "verdict":
