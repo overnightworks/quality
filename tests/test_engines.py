@@ -419,6 +419,14 @@ def workflow_repo(build_repo):
 UNPINNED_WITHOUT_PERMISSIONS = (
     "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n"
 )
+
+def local_reusable_call(prefix: str) -> str:
+    return (
+        "on: push\npermissions: {}\njobs:\n  j:\n    permissions:\n      contents: read\n"
+        f"    uses: {prefix}/.github/workflows/w.yml\n"
+    )
+
+
 INVALID_RUNS_ON = "on: push\npermissions: {}\njobs:\n  j:\n    runs-on: ${{ foo( }}\n    steps:\n      - run: 'true'\n"
 
 
@@ -428,8 +436,9 @@ INVALID_RUNS_ON = "on: push\npermissions: {}\njobs:\n  j:\n    runs-on: ${{ foo(
     [
         (UNPINNED_WITHOUT_PERMISSIONS, "workflow-security .github/workflows/w.yml:6"),
         (INVALID_RUNS_ON, "workflow-lint .github/workflows/w.yml:5"),
+        (local_reusable_call("."), "workflow-security .github/workflows/w.yml:7"),
     ],
-    ids=["unpinned-action-without-permissions", "invalid-runs-on-expression"],
+    ids=["unpinned-action-without-permissions", "invalid-runs-on-expression", "local-reusable-call-with-dot-slash"],
 )
 def test_a_known_bad_workflow_fails(workflow_repo, installed_engines, capsys, workflow, expected):
     """#15 rule 3: the real engines fail a known bad workflow at file:line."""
@@ -443,6 +452,12 @@ def test_quality_own_workflows_pass_both_engines(build_repo, installed_engines):
     own = Path(__file__).parent.parent / ".github" / "workflows"
     repo = build_repo({f".github/workflows/{file.name}": file.read_text() for file in own.glob("*.yml")})
     assert scan(repo, installed_engines) == 0
+
+
+@pytest.mark.engine
+def test_a_local_reusable_call_in_the_dollar_slash_form_passes_both_engines(workflow_repo, installed_engines):
+    """#15 rule 4: `uses: $/…` satisfies zizmor's self-repository audit and actionlint's false error is ignored."""
+    assert scan(workflow_repo(local_reusable_call("$")), installed_engines) == 0
 
 
 ONLY_AN_ONLINE_AUDIT_FLAGS_THIS = (
