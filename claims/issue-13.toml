@@ -1,8 +1,0 @@
-claim_id = "6a1c0f83278e4c87880062e22b75ca09"
-agent = "Claude fe12493e-3d52-442e-b01b-4ee4336de2f0"
-role = "builder"
-base = "b89dfea30be78a2a80eb8c90d6499d17050cad4e"
-branch = "claude/issue-13-q1a-3-engine-installer-gitleaks"
-scope = [".github/workflows", "pyproject.toml", "src/fleet_quality", "tests"]
-opened_commit = "fee74527de39027d8107f236d15f11d7d8a26d4b"
-whole_reason = "The pin file, installer, gitleaks adapter, the gate's hygiene job and their tests are one verified engine path."
