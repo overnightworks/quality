@@ -177,7 +177,7 @@ def preflight(root: Path, environment: Mapping[str, str]) -> None:
     require_token(environment)
     project = project_of(environment)
     if any(Path(name).parts[0] == SCANNER_WORK_DIRECTORY for name in tracked_files(root)):
-        raise CannotJudge(f"{SCANNER_WORK_DIRECTORY}/ is tracked: a committed report-task.txt would stand in for this run's analysis")
+        raise CannotJudge(f"{SCANNER_WORK_DIRECTORY}/ is tracked: a committed {TASK_FILE.name} would stand in for this run's analysis")
     properties = read_properties(root / PROPERTIES_FILE)
     for key, value in properties:
         if key not in ALLOWED_PROPERTIES:
