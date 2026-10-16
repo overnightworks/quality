@@ -1,8 +1,0 @@
-claim_id = "8ca8ad65e0ea419e8be66d4c25625ab7"
-agent = "Claude fe12493e-3d52-442e-b01b-4ee4336de2f0"
-role = "builder"
-base = "bab8770b89be8114a206c174b6380653d391e2a0"
-branch = "claude/issue-31-main-zero-sonar"
-scope = ["src/quality/engines.py", "src/quality/hygiene.py", "src/quality/verdict.py", "tests/test_engines.py", "tests/test_hygiene.py", "tests/test_verdict.py"]
-opened_commit = "93dc52a6149cb2133771afffe45cdcdde7cd3f37"
-whole_reason = "Six Sonar findings on main fixed in code with their tests in one cut."
