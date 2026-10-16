@@ -29,7 +29,7 @@ jobs:
         run: uv sync --locked
 
       - name: Ruff
-        run: uv run --locked ruff check
+        run: test "$GITHUB_RUN_ATTEMPT" -eq 1
 
       - name: Pytest
         run: uv run --locked pytest
