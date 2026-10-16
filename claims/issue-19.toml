@@ -1,0 +1,8 @@
+claim_id = "84d65b93a4ae436bbad2914e5af09890"
+agent = "Claude fe12493e-3d52-442e-b01b-4ee4336de2f0"
+role = "builder"
+base = "a6c2ec1f3b51b8af020397a60d4bbfd7e050b2a9"
+branch = "claude/issue-19-naming-1-quality-cli"
+scope = [".github/workflows", "AGENTS.md", "README.md", "pyproject.toml", "src", "tests", "uv.lock"]
+opened_commit = "b4282599fe51e2f50c5d712d42a6f1e940100fdb"
+whole_reason = "A mechanical rename of one tool's distribution, import and command across its whole tree."
