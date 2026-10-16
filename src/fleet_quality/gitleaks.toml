@@ -1,0 +1,4 @@
+# The one gitleaks config of the fleet gate: the scanned repository's own .gitleaks.toml is never read.
+# A known false positive is allowed only by its fingerprint in quality/config.toml [secrets] allow.
+[extend]
+useDefault = true

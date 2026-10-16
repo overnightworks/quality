@@ -1,11 +1,13 @@
 import os
 import re
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 import yaml
 
 from fleet_quality import engines
+from fleet_quality.config import ConfigError, read_secret_allowances
 from fleet_quality.report import Finding
 
 ENV_FILE = "env-file"
@@ -129,10 +131,10 @@ def _describe(port: object) -> str:
     return str(port) if not isinstance(port, dict) else str(port.get("published", port.get("target", port)))
 
 
-def check_secrets(root: Path, engine_dir: Path) -> list[Finding]:
+def check_secrets(root: Path, engine_dir: Path) -> engines.SecretScan:
     try:
-        return engines.scan_secrets(root, engine_dir, engines.read_pins())
-    except engines.EngineError as error:
+        return engines.scan_secrets(root, engine_dir, engines.read_pins(), read_secret_allowances(root))
+    except (engines.EngineError, ConfigError) as error:
         raise CannotJudge(str(error)) from error
 
 
@@ -156,9 +158,17 @@ def skipped_rules(engine_dir: Path | None) -> tuple[str, ...]:
     return tuple(rule for rule in ENGINE_RULE_IDS if rule not in active_rules(engine_dir))
 
 
-def run_hygiene(root: Path, engine_dir: Path | None = None) -> list[Finding]:
+@dataclass(frozen=True)
+class HygieneResult:
+    findings: list[Finding]
+    allowed_secrets: list[Finding]
+
+
+def run_hygiene(root: Path, engine_dir: Path | None = None) -> HygieneResult:
     tracked = tracked_files(root)
     findings = check_env_files(tracked) + check_compose_ports(root, tracked)
     if engine_dir is None:
-        return findings
-    return findings + check_secrets(root, engine_dir) + check_workflows(root, engine_dir, tracked)
+        return HygieneResult(findings, [])
+    secrets = check_secrets(root, engine_dir)
+    findings += secrets.findings + check_workflows(root, engine_dir, tracked)
+    return HygieneResult(findings, secrets.allowed)

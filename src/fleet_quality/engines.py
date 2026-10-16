@@ -18,7 +18,7 @@ CLEAN_EXIT = 0
 GITLEAKS_LEAKS_FOUND = 7  # gitleaks exits 1 on its own errors too, so leaks get a code of their own
 DOWNLOAD_TIMEOUT_SECONDS = 120
 STDERR_TAIL_LINES = 5
-LEAK_FIELDS = ("File", "StartLine", "RuleID", "Commit")
+LEAK_FIELDS = ("File", "StartLine", "RuleID", "Commit", "Fingerprint")
 WORKFLOW_LINT = "workflow-lint"
 WORKFLOW_SECURITY = "workflow-security"
 ACTIONLINT = "actionlint"
@@ -29,6 +29,7 @@ VERSION_ARGUMENTS = {GITLEAKS: ["version"], ACTIONLINT: ["-version"], ZIZMOR: ["
 PIN_FILE = Path(__file__).with_name("engines.toml")
 ACTIONLINT_CONFIG = Path(__file__).with_name("actionlint.yaml")
 ZIZMOR_CONFIG = Path(__file__).with_name("zizmor.yml")
+GITLEAKS_CONFIG = Path(__file__).with_name("gitleaks.toml")
 
 
 class EngineError(Exception):
@@ -96,15 +97,26 @@ class _Engine:
     arguments: tuple[str, ...] = ()
 
 
-def scan_secrets(root: Path, engine_dir: Path, pins: dict[str, Pin]) -> list[Finding]:
+@dataclass(frozen=True)
+class SecretScan:
+    findings: list[Finding]
+    allowed: list[Finding]
+
+
+def scan_secrets(root: Path, engine_dir: Path, pins: dict[str, Pin], allowances: dict[str, str]) -> SecretScan:
     binary = _engine_path(engine_dir, GITLEAKS)
     _verify_version(binary, GITLEAKS, pins[GITLEAKS].version)
     with tempfile.TemporaryDirectory() as scratch:
         report = Path(scratch) / "report.json"
+        # The gate's own config, and no ignore file or inline "gitleaks:allow" from the scanned repository:
+        # only a fingerprint in quality/config.toml allows a finding. gitleaks also reads <source>/.gitleaksignore,
+        # so it scans a mirror clone (bare, every ref kept), which has no work tree to read it from.
+        source = _mirror_clone(root, Path(scratch) / "source")
         command = [
             str(binary), "git", "--redact", "--no-banner", "--no-color",
+            "--config", str(GITLEAKS_CONFIG), "--gitleaks-ignore-path", scratch, "--ignore-gitleaks-allow",
             "--exit-code", str(GITLEAKS_LEAKS_FOUND),
-            "--report-format", "json", "--report-path", str(report), "--", str(root.resolve()),
+            "--report-format", "json", "--report-path", str(report), "--", str(source),
         ]
         scan = _run(command)
         if not report.is_file():
@@ -115,7 +127,18 @@ def scan_secrets(root: Path, engine_dir: Path, pins: dict[str, Pin]) -> list[Fin
             report_text = report.read_text(encoding="utf-8")
         except (OSError, ValueError) as error:
             raise EngineError(f"cannot read the {GITLEAKS} report: {error!r}") from error
-        return secret_findings(report_text, scan.returncode, scan.stderr)
+        leaks = secret_findings(report_text, scan.returncode, scan.stderr)
+        return SecretScan(
+            findings=[leak for leak in leaks if leak.fingerprint not in allowances],
+            allowed=[leak for leak in leaks if leak.fingerprint in allowances],
+        )
+
+
+def _mirror_clone(root: Path, destination: Path) -> Path:
+    cloned = _run(["git", "clone", "--mirror", "--quiet", str(root.resolve()), str(destination)])
+    if cloned.returncode != 0:
+        raise EngineError(f"cannot clone {root} for the {GITLEAKS} scan{_stderr_tail(cloned.stderr)}")
+    return destination
 
 
 def _verify_version(binary: Path, engine_name: str, pinned: str) -> None:
@@ -143,22 +166,24 @@ def secret_findings(report_text: str, exit_code: int, stderr: str = "") -> list[
     return engine_findings(GITLEAKS_ENGINE, report_text, exit_code, stderr)
 
 
-def _read_leak(entry: object) -> tuple[str, int, str, str]:
+def _read_leak(entry: object) -> tuple[str, int, str, str, str]:
     try:
-        path, line, rule, commit = (entry[key] for key in LEAK_FIELDS)
+        path, line, rule, commit, fingerprint = (entry[key] for key in LEAK_FIELDS)
     except (KeyError, TypeError) as error:
         raise EngineError(f"cannot read the {GITLEAKS} report: {error!r}") from error
-    if not (isinstance(path, str) and isinstance(line, int) and isinstance(rule, str) and isinstance(commit, str)):
+    if not (isinstance(path, str) and isinstance(line, int) and isinstance(rule, str) and isinstance(commit, str)
+            and isinstance(fingerprint, str)):
         raise EngineError(f"a {GITLEAKS} leak has fields of the wrong type")
-    return path, line, rule, commit
+    return path, line, rule, commit, fingerprint
 
 
 def _leak_finding(entry: object) -> Finding:
-    path, line, rule, commit = _read_leak(entry)
+    path, line, rule, commit, fingerprint = _read_leak(entry)
     return Finding(
         SECRET, path, line,
         f"{GITLEAKS} rule {rule} matched in commit {commit[:8]} (secret redacted).",
         "rotate the secret; deleting it from the tree leaves it in history.",
+        fingerprint,
     )
 
 

@@ -1,6 +1,12 @@
 import pytest
 
-from fleet_quality.config import ConfigError, load_mandatory_jobs, read_mandatory_jobs
+from fleet_quality.config import (
+    ConfigError,
+    load_mandatory_jobs,
+    load_secret_allowances,
+    read_mandatory_jobs,
+    read_secret_allowances,
+)
 
 
 def test_reads_the_mandatory_job_names():
@@ -55,3 +61,45 @@ def test_a_config_directory_that_cannot_be_entered_is_refused(tmp_path):
             read_mandatory_jobs(tmp_path)
     finally:
         config_dir.chmod(0o700)
+
+
+def test_reads_every_allowed_fingerprint_with_its_reason():
+    """#16: [secrets] allow maps each fingerprint to its reason, and the gate keys still load beside it."""
+    text = (
+        '[gate]\nmandatory_jobs = ["checks"]\n'
+        '[secrets]\nallow = [{ fingerprint = "a:b:c:1", reason = "enum value, not a key" }]'
+    )
+    assert load_secret_allowances(text) == {"a:b:c:1": "enum value, not a key"}
+    assert load_mandatory_jobs(text) == ("checks",)
+
+
+@pytest.mark.parametrize("text", [None, '[gate]\nmandatory_jobs = ["checks"]'])
+def test_a_config_without_allowances_allows_nothing(text):
+    """#16: an absent allow list allows nothing."""
+    assert load_secret_allowances(text) == {}
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "[secrets]\nallow = [\"a:b:c:1\"]",
+        "[secrets]\nallow = [{ fingerprint = \"a:b:c:1\" }]",
+        "[secrets]\nallow = [{ fingerprint = \"a:b:c:1\", reason = \"\" }]",
+        "[secrets]\nallow = [{ fingerprint = \"\", reason = \"r\" }]",
+        "[secrets]\nallow = [{ fingerprint = \"a\", reason = \"r\", extra = 1 }]",
+        "[secrets]\nallow = [{ fingerprint = \"a\", reason = \"two\\nlines\" }]",
+        "[secrets]\nallow = \"a:b:c:1\"",
+        "[secrets]\nignore = []",
+        "secrets = 1",
+        "not toml [",
+    ],
+)
+def test_refuses_an_allowance_that_is_not_a_fingerprint_with_a_reason(text):
+    """#16: an allow entry without a fingerprint and a one-line reason is refused."""
+    with pytest.raises(ConfigError, match="quality/config.toml"):
+        load_secret_allowances(text)
+
+
+def test_a_repository_without_the_file_allows_nothing(tmp_path):
+    """#16: a missing quality/config.toml allows nothing."""
+    assert read_secret_allowances(tmp_path) == {}
