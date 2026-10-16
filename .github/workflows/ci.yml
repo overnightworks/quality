@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   tests:
-    name: quality
+    name: quality-lite
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
