@@ -13,7 +13,7 @@ from quality.report import Finding
 ENV_FILE = "env-file"
 COMPOSE_PORT = "compose-port"
 FILE_RULE_IDS = (ENV_FILE, COMPOSE_PORT)
-ENGINE_RULE_IDS = (engines.SECRET, engines.WORKFLOW_LINT, engines.WORKFLOW_SECURITY)
+ENGINE_RULE_IDS = (engines.LEAK_RULE, engines.WORKFLOW_LINT, engines.WORKFLOW_SECURITY)
 WORKFLOW_DIRECTORY = PurePosixPath(".github/workflows")
 WORKFLOW_SUFFIXES = (".yml", ".yaml")
 

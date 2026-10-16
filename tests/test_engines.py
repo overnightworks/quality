@@ -202,7 +202,8 @@ def test_verify_is_exit_2_naming_both_versions_on_a_mismatch(tmp_path, capsys):
     assert cli.main(["engines", "verify", str(directory)], read_pins=lambda: pins) == 2
     lines = capsys.readouterr().err.strip().splitlines()
     assert len(lines) == 1
-    assert "'8.30.0'" in lines[0] and "'8.30.1'" in lines[0]
+    assert "'8.30.0'" in lines[0]
+    assert "'8.30.1'" in lines[0]
 
 
 def test_scan_refuses_an_installed_binary_at_another_version(tmp_path, build_repo, capsys):
@@ -894,7 +895,7 @@ FAILING_REPORTS = {
 }
 
 
-def secret_command(command: str, repo: Path, engine_dir: Path) -> list[str]:
+def leak_scan_command(command: str, repo: Path, engine_dir: Path) -> list[str]:
     """The argv of a command that scans `repo` for secrets; scan-staged gets a staged copy of the key to find."""
     if command == "scan-staged":
         (repo / "staged.txt").write_text(f"aws_access_key_id = {FAKE_KEY}\n")
@@ -918,7 +919,7 @@ def test_the_key_reaches_no_output_and_no_file_and_the_scratch_directory_is_gone
     if failure == "gitleaks-stalls":
         monkeypatch.setattr(engines, "SECRET_SCAN_TIMEOUT_SECONDS", 1)
     engine_dir = installed_engines if failure == "none" else fake_gitleaks(tmp_path / "failing", on_scan=FAILING_REPORTS[failure])
-    exit_code = cli.main(secret_command(command, keyed_repo, engine_dir))
+    exit_code = cli.main(leak_scan_command(command, keyed_repo, engine_dir))
     assert exit_code == (1 if failure == "none" else 2)
     heard = capsys.readouterr()
     assert FAKE_KEY not in heard.out + heard.err
@@ -932,7 +933,7 @@ def test_a_sigterm_mid_scan_leaves_no_scratch_directory(keyed_repo, tmp_path, co
     scratch_parent = tmp_path / "scratch-parent"
     scratch_parent.mkdir()
     engine_dir = fake_gitleaks(tmp_path / "stalling", on_scan=FAILING_REPORTS["gitleaks-stalls"])
-    argv = [sys.executable, "-m", "quality.cli", *secret_command(command, keyed_repo, engine_dir)]
+    argv = [sys.executable, "-m", "quality.cli", *leak_scan_command(command, keyed_repo, engine_dir)]
     scanner = subprocess.Popen(argv, env=os.environ | {"TMPDIR": str(scratch_parent)}, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
         deadline = time.monotonic() + 30

@@ -89,11 +89,11 @@ def main(
 
 def print_secret_allowances(allowed: list[Finding], unused: dict[Allowance, str]) -> None:
     if allowed:
-        print(f"{engines.SECRET}: {len(allowed)} allowed ({', '.join(finding.location for finding in allowed)})")
+        print(f"{engines.LEAK_RULE}: {len(allowed)} allowed ({', '.join(finding.location for finding in allowed)})")
         for finding in allowed:
             print(f"  allowed {finding.location} - {finding.reason}")
     for entry, reason in unused.items():
-        print(f"{engines.SECRET}: unused allowance {entry.rule} in {entry.file} (sha256 {entry.secret_sha256}) - {reason}")
+        print(f"{engines.LEAK_RULE}: unused allowance {entry.rule} in {entry.file} (sha256 {entry.secret_sha256}) - {reason}")
 
 
 def coverage_note(engine_dir: Path | None) -> str:

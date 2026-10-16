@@ -18,7 +18,7 @@ def scan_staged(path: Path, engine_dir: Path, pins: dict[str, Pin]) -> SecretSca
     """
     binary = engines.prepare_gitleaks(engine_dir, pins)
     staged_tree = _write_tree(path)
-    head = engines.head_commit(path, _caller_git_environment(), allow_unborn=True)
+    head = engines.unborn_aware_head_commit(path, _caller_git_environment())
     object_store = _object_store(path)
     with engines.scratch_directory() as scratch:
         git_environment = engines.attribute_free_git_environment(scratch / "home")

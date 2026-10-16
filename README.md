@@ -52,7 +52,9 @@ is exit `2`. The system file is excluded by `GIT_ATTR_NOSYSTEM`, git's documente
 environment contract, not by a root-only real-file test.
 
 Every allowed finding is printed with the entry's reason (`secret: 1 allowed (src/x.py:139)`, then
-  `allowed src/x.py:139 - gitleaks rule generic-api-key allowed: enum value, not a key`).
+  `allowed src/x.py:139 - gitleaks rule generic-api-key allowed: enum value, not a key`). An allowance that matched
+nothing is printed too, so a stale entry can be deleted: `secret: unused allowance <rule> in <file> (sha256 <hex>) - <reason>`;
+`scan-staged` prints both kinds of line as well.
 
 Each finding names the rule, the file, a reason and a fix. Exit `0` is clean, `1` means findings,
 `2` means the repository could not be judged (never clean).

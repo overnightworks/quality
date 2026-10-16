@@ -17,7 +17,7 @@ from pathlib import Path
 from quality.config import Allowance
 from quality.report import Finding
 
-SECRET = "secret"
+LEAK_RULE = "secret"
 GITLEAKS = "gitleaks"
 CLEAN_EXIT = 0
 GITLEAKS_LEAKS_FOUND = 7  # gitleaks exits 1 on its own errors too, so leaks get a code of their own
@@ -251,11 +251,18 @@ def require_git_floor() -> None:
         )
 
 
-def head_commit(repository: Path, git_environment: dict[str, str], allow_unborn: bool = False) -> str | None:
-    """The commit HEAD names; None only when `allow_unborn` and the repository has no commit yet."""
-    quiet = ["--quiet"] if allow_unborn else []
-    resolved = run(["git", "-C", str(repository), "rev-parse", "--verify", *quiet, "HEAD^{commit}"], env=git_environment)
-    if allow_unborn and resolved.returncode == 1 and not resolved.stderr.strip():  # --quiet: no commit is a silent exit 1
+def head_commit(repository: Path, git_environment: dict[str, str]) -> str:
+    """The commit HEAD names."""
+    head = unborn_aware_head_commit(repository, git_environment)
+    if head is None:
+        raise EngineError(f"cannot resolve HEAD of {repository}: it has no commit")
+    return head
+
+
+def unborn_aware_head_commit(repository: Path, git_environment: dict[str, str]) -> str | None:
+    """The commit HEAD names; None when the repository has no commit yet."""
+    resolved = run(["git", "-C", str(repository), "rev-parse", "--verify", "--quiet", "HEAD^{commit}"], env=git_environment)
+    if resolved.returncode == 1 and not resolved.stderr.strip():  # --quiet: no commit is a silent exit 1
         return None
     if resolved.returncode != 0:
         raise EngineError(f"cannot resolve HEAD of {repository}{stderr_tail(resolved.stderr)}")
@@ -314,7 +321,7 @@ def _leak_finding(entry: object) -> Finding:
     path, line, rule, commit, secret = _read_leak(entry)
     secret_sha256 = hashlib.sha256(secret.encode("utf-8")).hexdigest()
     return Finding(
-        SECRET, path, line,
+        LEAK_RULE, path, line,
         f"{GITLEAKS} rule {rule} matched {f'at {commit[:8]}' if commit else 'in the staged change'} (sha256 {secret_sha256}, value not shown).",
         "rotate the secret; for a false positive, allow this rule, file and sha256 with a reason in quality/config.toml.",
         Allowance(rule, path, secret_sha256),
