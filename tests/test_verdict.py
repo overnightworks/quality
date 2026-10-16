@@ -214,9 +214,16 @@ def test_a_base_ref_git_would_reject_is_refused(build_repo, ref):
         read_base_mandatory_jobs(repo, ref)
 
 
-@pytest.mark.parametrize("ref", ["main", "release+hotfix", "origin/main"])
-def test_a_valid_ref_name_is_still_a_readable_base(build_repo, ref):
+@pytest.mark.parametrize(
+    ("ref", "full_ref"),
+    [
+        ("main", "refs/heads/main"),
+        ("release+hotfix", "refs/heads/release+hotfix"),
+        ("origin/main", "refs/remotes/origin/main"),
+    ],
+)
+def test_a_valid_ref_name_is_still_a_readable_base(build_repo, ref, full_ref):
     """#31 rule 1 (S8705): valid ref names, with a slash or a plus, still work."""
     repo = build_repo({"quality/config.toml": '[gate]\nmandatory_jobs = ["tests"]\n'})
-    subprocess.run(["git", "-C", str(repo), "update-ref", f"refs/heads/{ref}" if "/" not in ref else f"refs/remotes/{ref}", _head(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "update-ref", full_ref, _head(repo)], check=True)
     assert read_base_mandatory_jobs(repo, ref) == ("tests",)
