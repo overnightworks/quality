@@ -14,7 +14,7 @@ from fleet_quality.report import Finding
 
 SECRET = "secret"
 GITLEAKS = "gitleaks"
-GITLEAKS_NO_LEAKS = 0
+CLEAN_EXIT = 0
 GITLEAKS_LEAKS_FOUND = 7  # gitleaks exits 1 on its own errors too, so leaks get a code of their own
 DOWNLOAD_TIMEOUT_SECONDS = 120
 STDERR_TAIL_LINES = 5
@@ -27,6 +27,8 @@ ACTIONLINT_FINDINGS = 1
 ZIZMOR_FINDINGS = range(10, 15)  # zizmor encodes the worst severity in 10..14
 VERSION_ARGUMENTS = {GITLEAKS: ["version"], ACTIONLINT: ["-version"], ZIZMOR: ["--version"]}
 PIN_FILE = Path(__file__).with_name("engines.toml")
+ACTIONLINT_CONFIG = Path(__file__).with_name("actionlint.yaml")
+ZIZMOR_CONFIG = Path(__file__).with_name("zizmor.yml")
 
 
 class EngineError(Exception):
@@ -86,9 +88,17 @@ def _unpack_binary(name: str, archive: bytes) -> bytes:
         raise EngineError(f"cannot unpack {name}: {error}") from error
 
 
+@dataclass(frozen=True)
+class _Engine:
+    name: str
+    finding_exits: range | tuple[int, ...]
+    read_finding: Callable[[object], Finding]
+    arguments: tuple[str, ...] = ()
+
+
 def scan_secrets(root: Path, engine_dir: Path, pins: dict[str, Pin]) -> list[Finding]:
     binary = _engine_path(engine_dir, GITLEAKS)
-    _verify_version(binary, pins[GITLEAKS].version)
+    _verify_version(binary, GITLEAKS, pins[GITLEAKS].version)
     with tempfile.TemporaryDirectory() as scratch:
         report = Path(scratch) / "report.json"
         command = [
@@ -108,8 +118,8 @@ def scan_secrets(root: Path, engine_dir: Path, pins: dict[str, Pin]) -> list[Fin
         return secret_findings(report_text, scan.returncode, scan.stderr)
 
 
-def _verify_version(binary: Path, pinned: str) -> None:
-    asked = _run([str(binary), *VERSION_ARGUMENTS[binary.name]])
+def _verify_version(binary: Path, engine_name: str, pinned: str) -> None:
+    asked = _run([str(binary), *VERSION_ARGUMENTS[engine_name]])
     if asked.returncode != 0:
         raise EngineError(f"{binary} version exited {asked.returncode}{_stderr_tail(asked.stderr)}")
     reported = (asked.stdout.strip().splitlines() or [""])[0].split(" ")[-1]  # "zizmor 1.2.3", or just "1.2.3"
@@ -120,7 +130,7 @@ def _verify_version(binary: Path, pinned: str) -> None:
 def _run(command: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     try:
         return subprocess.run(command, capture_output=True, text=True, check=False, cwd=cwd)
-    except OSError as error:
+    except (OSError, ValueError) as error:  # ValueError: output that is not text
         raise EngineError(f"cannot run {command[0]}: {error}") from error
 
 
@@ -130,25 +140,7 @@ def _stderr_tail(stderr: str) -> str:
 
 
 def secret_findings(report_text: str, exit_code: int, stderr: str = "") -> list[Finding]:
-    if exit_code not in (GITLEAKS_NO_LEAKS, GITLEAKS_LEAKS_FOUND):
-        raise EngineError(f"{GITLEAKS} exited {exit_code}, neither 'no leaks' nor 'leaks found'{_stderr_tail(stderr)}")
-    try:
-        entries = json.loads(report_text)
-    except ValueError as error:
-        raise EngineError(f"cannot read the {GITLEAKS} report: {error!r}") from error
-    if not isinstance(entries, list):
-        raise EngineError(f"the {GITLEAKS} report is not a list of leaks")
-    leaks = [_read_leak(entry) for entry in entries]
-    if bool(leaks) != (exit_code == GITLEAKS_LEAKS_FOUND):
-        raise EngineError(f"{GITLEAKS} exited {exit_code} but its report holds {len(leaks)} leak(s)")
-    return [
-        Finding(
-            SECRET, path, line,
-            f"{GITLEAKS} rule {rule} matched in commit {commit[:8]} (secret redacted).",
-            "rotate the secret; deleting it from the tree leaves it in history.",
-        )
-        for path, line, rule, commit in leaks
-    ]
+    return engine_findings(GITLEAKS_ENGINE, report_text, exit_code, stderr)
 
 
 def _read_leak(entry: object) -> tuple[str, int, str, str]:
@@ -161,13 +153,16 @@ def _read_leak(entry: object) -> tuple[str, int, str, str]:
     return path, line, rule, commit
 
 
-@dataclass(frozen=True)
-class _WorkflowEngine:
-    name: str
-    rule: str
-    arguments: tuple[str, ...]
-    finding_exits: range | tuple[int, ...]
-    read_finding: Callable[[object], Finding]
+def _leak_finding(entry: object) -> Finding:
+    path, line, rule, commit = _read_leak(entry)
+    return Finding(
+        SECRET, path, line,
+        f"{GITLEAKS} rule {rule} matched in commit {commit[:8]} (secret redacted).",
+        "rotate the secret; deleting it from the tree leaves it in history.",
+    )
+
+
+GITLEAKS_ENGINE = _Engine(GITLEAKS, (GITLEAKS_LEAKS_FOUND,), _leak_finding)
 
 
 def scan_workflows(root: Path, engine_dir: Path, pins: dict[str, Pin], workflows: list[str]) -> list[Finding]:
@@ -176,14 +171,14 @@ def scan_workflows(root: Path, engine_dir: Path, pins: dict[str, Pin], workflows
     findings = []
     for engine in WORKFLOW_ENGINES.values():
         binary = _engine_path(engine_dir, engine.name)
-        _verify_version(binary, pins[engine.name].version)
+        _verify_version(binary, engine.name, pins[engine.name].version)
         scan = _run([str(binary), *engine.arguments, *workflows], cwd=root)
-        findings += workflow_findings(engine, scan.stdout, scan.returncode, scan.stderr)
+        findings += engine_findings(engine, scan.stdout, scan.returncode, scan.stderr)
     return findings
 
 
-def workflow_findings(engine: _WorkflowEngine, report_text: str, exit_code: int, stderr: str) -> list[Finding]:
-    if exit_code != 0 and exit_code not in engine.finding_exits:
+def engine_findings(engine: _Engine, report_text: str, exit_code: int, stderr: str) -> list[Finding]:
+    if exit_code != CLEAN_EXIT and exit_code not in engine.finding_exits:
         raise EngineError(f"{engine.name} exited {exit_code}, neither 'clean' nor 'findings'{_stderr_tail(stderr)}")
     try:
         entries = json.loads(report_text)
@@ -191,7 +186,7 @@ def workflow_findings(engine: _WorkflowEngine, report_text: str, exit_code: int,
         raise EngineError(f"cannot read the {engine.name} report: {error!r}") from error
     if not isinstance(entries, list):
         raise EngineError(f"the {engine.name} report is not a list of findings")
-    if bool(entries) != (exit_code != 0):
+    if bool(entries) != (exit_code != CLEAN_EXIT):
         raise EngineError(f"{engine.name} exited {exit_code} but its report holds {len(entries)} finding(s)")
     return [engine.read_finding(entry) for entry in entries]
 
@@ -221,11 +216,17 @@ def zizmor_finding(entry: object) -> Finding:
 
 
 WORKFLOW_ENGINES = {
-    ACTIONLINT: _WorkflowEngine(
-        ACTIONLINT, WORKFLOW_LINT, ("-format", "{{json .}}"), (ACTIONLINT_FINDINGS,), actionlint_finding
+    # No shellcheck or pyflakes: actionlint would run whichever it finds on PATH, an unpinned engine in the verdict.
+    ACTIONLINT: _Engine(
+        name=ACTIONLINT, finding_exits=(ACTIONLINT_FINDINGS,), read_finding=actionlint_finding,
+        arguments=("-config-file", str(ACTIONLINT_CONFIG), "-shellcheck=", "-pyflakes=", "-format", "{{json .}}"),
     ),
-    ZIZMOR: _WorkflowEngine(
-        ZIZMOR, WORKFLOW_SECURITY, ("--format", "json", "--offline", "--strict-collection", "--no-progress"),
-        ZIZMOR_FINDINGS, zizmor_finding,
+    # The tool's config and no ignore comments: what the scanned repository says never silences a finding.
+    ZIZMOR: _Engine(
+        name=ZIZMOR, finding_exits=ZIZMOR_FINDINGS, read_finding=zizmor_finding,
+        arguments=(
+            "--config", str(ZIZMOR_CONFIG), "--no-ignores",
+            "--format", "json", "--offline", "--strict-collection", "--no-progress",
+        ),
     ),
 }

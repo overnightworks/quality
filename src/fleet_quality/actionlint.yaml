@@ -1,0 +1,3 @@
+# The one actionlint configuration, owned by the tool: an adopter's .github/actionlint.yaml never reaches it.
+# Deliberately no `ignore:` and no runner labels.
+paths: {}

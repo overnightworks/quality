@@ -1,0 +1,5 @@
+# The one zizmor configuration, owned by the tool: an adopter's own config and ignore comments never reach it.
+rules:
+  # actionlint rejects the `$/` form this audit asks for, so no workflow can satisfy both engines.
+  self-repository:
+    disable: true

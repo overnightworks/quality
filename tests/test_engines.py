@@ -6,6 +6,7 @@ import re
 import subprocess
 import tarfile
 import threading
+import urllib.request
 from pathlib import Path
 
 import pytest
@@ -143,19 +144,6 @@ def test_wrong_checksum_is_exit_2_and_installs_nothing(tmp_path, capsys):
     assert not (tmp_path / "bin" / "gitleaks").exists()
 
 
-def test_a_redirected_asset_is_decided_by_its_checksum_alone(tmp_path, serve, capsys):
-    """#15 rule 6: through a redirect to a second host a matching asset installs and any other is exit 2."""
-    archive = archive_with("#!/bin/sh\n")
-    release = serve(redirect_to=url_of(serve(body=archive)))
-    pin = Pin("1.2.3", url_of(release), hashlib.sha256(archive).hexdigest())
-    wrong = Pin("1.2.3", url_of(release), "0" * 64)
-    assert cli.main(["engines", "install", str(tmp_path / "good")], read_pins=lambda: {"gitleaks": pin}) == 0
-    assert cli.main(["engines", "install", str(tmp_path / "bad")], read_pins=lambda: {"gitleaks": wrong}) == 2
-    assert "sha256" in capsys.readouterr().err
-    assert os.access(tmp_path / "good" / "gitleaks", os.X_OK)
-    assert not (tmp_path / "bad" / "gitleaks").exists()
-
-
 def test_unreachable_download_is_exit_2(tmp_path, capsys):
     """#13 rule 1: a download that cannot be fetched is exit 2."""
     pin = Pin("1.2.3", (tmp_path / "missing.tar.gz").as_uri(), "0" * 64)
@@ -188,7 +176,7 @@ def test_a_version_command_that_fails_is_exit_2_even_when_it_prints_the_pin(tmp_
     [
         ("echo boom >&2; exit 3", "exited 3 without writing its report: boom"),
         ("exit 0", "exited 0 without writing its report"),
-        ('echo "[]" > "$report"; echo boom >&2; exit 3', "exited 3, neither 'no leaks' nor 'leaks found': boom"),
+        ('echo "[]" > "$report"; echo boom >&2; exit 3', "exited 3, neither 'clean' nor 'findings': boom"),
         ('printf "\\377\\376" > "$report"; exit 0', "cannot read the gitleaks report"),
     ],
 )
@@ -328,7 +316,7 @@ FINDING_EXIT = {"actionlint": 1, "zizmor": 12}
 
 
 def workflow_findings(engine: str, report_text: str, exit_code: int) -> list:
-    return engines.workflow_findings(engines.WORKFLOW_ENGINES[engine], report_text, exit_code, "")
+    return engines.engine_findings(engines.WORKFLOW_ENGINES[engine], report_text, exit_code, "")
 
 
 @pytest.mark.parametrize(
@@ -386,13 +374,27 @@ def fake_workflow_engines(tmp_path: Path, on_scan: str) -> Path:
         ("exit 0", "cannot read the actionlint report"),
         ("echo boom >&2; exit 3", "actionlint exited 3, neither 'clean' nor 'findings': boom"),
         ('printf "[" ; exit 0', "cannot read the actionlint report"),
+        ('printf "\\377\\376"; exit 0', "cannot run"),
     ],
-    ids=["exit-0-without-report", "error-exit", "cut-off-report"],
+    ids=["exit-0-without-report", "error-exit", "cut-off-report", "undecodable-report"],
 )
 def test_a_workflow_engine_without_a_usable_report_is_exit_2(tmp_path, build_repo, capsys, on_scan, expected):
     """#15 rule 2: an engine that exits 0 with no report, or errors out, is exit 2 and never clean."""
     repo = build_repo({".github/workflows/w.yml": "on: push\n"})
     assert expected in hygiene_exit_2(repo, fake_workflow_engines(tmp_path, on_scan), capsys)
+
+
+@pytest.mark.parametrize("engine", ["gitleaks", "actionlint", "zizmor"])
+def test_an_engine_that_is_a_symlink_inside_the_directory_is_still_judged_by_its_name(
+    tmp_path, build_repo, capsys, engine
+):
+    """#15: a pinned engine reached through a symlink to a versioned file in the directory is not a crash."""
+    engine_dir = fake_workflow_engines(tmp_path, 'echo "[]"; exit 0')
+    versioned = engine_dir / f"{engine}-{engines.read_pins()[engine].version}"
+    (engine_dir / engine).rename(versioned)
+    (engine_dir / engine).symlink_to(versioned)
+    repo = build_repo({".github/workflows/w.yml": "on: push\n"})
+    assert cli.main(["hygiene", "--engines", str(engine_dir), str(repo)]) == 0
 
 
 def test_no_workflow_engine_runs_when_the_repository_has_no_workflow(tmp_path):
@@ -443,10 +445,81 @@ def test_quality_own_workflows_pass_both_engines(build_repo, installed_engines):
     assert scan(repo, installed_engines) == 0
 
 
+ONLY_AN_ONLINE_AUDIT_FLAGS_THIS = (
+    "on: push\npermissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n"
+    "      - uses: actions/checkout@0000000000000000000000000000000000000000\n"
+    "        with:\n          persist-credentials: false\n"
+)
+
+
 @pytest.mark.engine
-def test_a_run_with_engines_names_no_skipped_scan_and_says_zizmor_ran_offline(build_repo, installed_engines, capsys):
-    """#15 rule 5: the gate's run names no skipped scan and says that online-only audits did not run."""
-    assert scan(build_repo({}), installed_engines) == 0
+def test_a_run_with_engines_names_no_skipped_scan_and_discloses_that_online_audits_do_not_run(
+    workflow_repo, installed_engines, capsys
+):
+    """#15 rule 5: a workflow only zizmor's online audit (impostor-commit) would flag passes, and the run says so."""
+    assert scan(workflow_repo(ONLY_AN_ONLINE_AUDIT_FLAGS_THIS), installed_engines) == 0
     out = capsys.readouterr().out
     assert "skipped" not in out
-    assert "ran offline" in out
+    assert "online-only audits do not run" in out
+
+
+CALLER_SILENCES = {
+    ".github/zizmor.yml": "rules:\n  unpinned-uses:\n    disable: true\n  excessive-permissions:\n    disable: true\n",
+    ".github/actionlint.yaml": "paths:\n  '.github/workflows/w.yml':\n    ignore:\n      - '.*'\n",
+}
+INLINE_IGNORE = UNPINNED_WITHOUT_PERMISSIONS.replace(
+    "actions/checkout@v4", "actions/checkout@v4 # zizmor: ignore[unpinned-uses,artipacked]"
+)
+
+
+@pytest.mark.engine
+@pytest.mark.parametrize(
+    ("workflow", "caller_files", "expected"),
+    [
+        (UNPINNED_WITHOUT_PERMISSIONS, {".github/zizmor.yml": CALLER_SILENCES[".github/zizmor.yml"]}, "unpinned-uses"),
+        (INLINE_IGNORE, {}, "unpinned-uses"),
+        (INVALID_RUNS_ON, {".github/actionlint.yaml": CALLER_SILENCES[".github/actionlint.yaml"]}, "workflow-lint"),
+    ],
+    ids=["caller-zizmor-config", "inline-zizmor-ignore", "caller-actionlint-config"],
+)
+def test_what_the_scanned_repository_says_never_silences_a_workflow_finding(
+    build_repo, installed_engines, capsys, workflow, caller_files, expected
+):
+    """#15 material risk: a caller's engine config or ignore comment cannot turn a failing workflow green."""
+    repo = build_repo({".github/workflows/w.yml": workflow, **caller_files})
+    assert scan(repo, installed_engines) == 1
+    assert expected in capsys.readouterr().out
+
+
+@pytest.mark.engine
+def test_a_shellcheck_on_path_never_runs_during_workflow_lint(build_repo, installed_engines, tmp_path, monkeypatch):
+    """#15 rule 1: actionlint judges without whichever shellcheck PATH offers."""
+    planted = tmp_path / "planted"
+    planted.mkdir()
+    marker = tmp_path / "shellcheck-ran"
+    (planted / "shellcheck").write_text(f"#!/bin/sh\ntouch {marker}\necho '[]'\n")
+    (planted / "shellcheck").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{planted}:{os.environ['PATH']}")
+    workflow = "on: push\npermissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo $FOO\n"
+    scan(build_repo({".github/workflows/w.yml": workflow}), installed_engines)
+    assert not marker.exists()
+
+
+@pytest.fixture(scope="module")
+def pinned_zizmor_asset() -> bytes:
+    with urllib.request.urlopen(engines.read_pins()["zizmor"].url, timeout=engines.DOWNLOAD_TIMEOUT_SECONDS) as asset:
+        return asset.read()
+
+
+@pytest.mark.engine
+@pytest.mark.parametrize(("tamper", "exit_code"), [(False, 0), (True, 2)], ids=["pinned-bytes", "one-byte-changed"])
+def test_a_redirected_pinned_release_asset_is_decided_by_its_checksum_alone(
+    tmp_path, serve, capsys, pinned_zizmor_asset, tamper, exit_code
+):
+    """#15 rule 6, #5 finding 24: the pinned asset served through a redirect installs; a changed byte is exit 2."""
+    served = bytearray(pinned_zizmor_asset)
+    served[-1] ^= tamper
+    release = serve(redirect_to=url_of(serve(body=bytes(served))))
+    pin = Pin(engines.read_pins()["zizmor"].version, url_of(release), engines.read_pins()["zizmor"].sha256)
+    assert cli.main(["engines", "install", str(tmp_path / "bin")], read_pins=lambda: {"zizmor": pin}) == exit_code
+    assert (tmp_path / "bin" / "zizmor").exists() is (exit_code == 0)

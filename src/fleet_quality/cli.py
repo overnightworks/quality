@@ -65,7 +65,7 @@ def coverage_note(engine_dir: Path | None) -> str:
     skipped = skipped_rules(engine_dir)
     if skipped:
         return f"; skipped without --engines: {', '.join(skipped)}"
-    return f"; {engines.WORKFLOW_SECURITY} ran offline, so zizmor's online-only audits did not run"
+    return f"; {engines.WORKFLOW_SECURITY} runs offline, so zizmor's online-only audits do not run"
 
 
 def run_engines_install(directory: Path, read_pins: Callable[[], dict[str, engines.Pin]]) -> int:
