@@ -244,7 +244,7 @@ def parse_git_version(version_output: str) -> str | None:
 
     Digit runs and the text between them are tokenised once, so a long run of digits cannot backtrack.
     """
-    tokens = re.findall(r"[0-9]+|[^0-9]+", version_output)
+    tokens = re.findall(r"\d+|\D+", version_output)
     for start in range(len(tokens) - 2):
         major, dot, minor = tokens[start : start + 3]
         if major.isdigit() and dot == "." and minor.isdigit():
