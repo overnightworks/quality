@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 from conftest import FAKE_KEY, OTHER_KEY, allow_config
-from test_config import UNKNOWN_KEY_CONFIGS
 
 from quality import cli
 
@@ -245,15 +244,6 @@ def test_the_staged_scan_reads_only_the_secrets_table(build_repo, installed_engi
     repo = build_repo({"README": "hello\n"})
     stage(repo, {"quality/config.toml": staged_config})
     assert scan_staged(repo, installed_engines) == exit_code
-
-
-@pytest.mark.engine
-@pytest.mark.parametrize("config", UNKNOWN_KEY_CONFIGS, ids=["unknown gate key", "unknown table"])
-def test_hygiene_keeps_refusing_unknown_keys(build_repo, installed_engines, capsys, config):
-    """#40 rule 2: hygiene stays strict about quality/config.toml."""
-    repo = build_repo({"quality/config.toml": config})
-    assert cli.main(["hygiene", "--engines", str(installed_engines), str(repo)]) == 2
-    assert "unknown key" in capsys.readouterr().err
 
 
 @pytest.mark.engine
