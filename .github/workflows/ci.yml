@@ -9,8 +9,10 @@ permissions:
   contents: read
 
 jobs:
-  quality:
+  tests:
+    name: quality
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Check out
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -34,3 +36,11 @@ jobs:
 
       - name: Hygiene on itself
         run: uv run --locked fleet-quality hygiene .
+
+  quality:
+    if: always()
+    needs: [tests]
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/gate.yml
