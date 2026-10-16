@@ -152,7 +152,7 @@ counted by the same `issues/search` with the same open statuses, and only counte
 - **Pull request:** new findings are listed and make the run exit `1`. Both counts always print, for example
   `sonar: new 0 · legacy 17 (overnightworks_webauth, main)`.
 - **Default branch:** a run on the default branch exits `1` on any open finding, lists them and prints
-  `sonar: N open on main`.
+  `sonar: N open on <default>`.
 - **Any other branch:** report only, exit `0`: `sonar: N open on <branch> (report only)`.
 
 `[gate] legacy` in `quality/config.toml` decides whether legacy findings fail a pull request:
@@ -171,8 +171,8 @@ legacy = "fail"
 
 On pull requests and default-branch runs `quality sonar findings` reads `api/project_branches/list` once before the counts.
 - The default branch has no entry, or one without `analysisDate` (a repository's first adoption pull request): the summary
-  prints `legacy unknown (main not analysed yet)`. With `"report"` the run exits `0`; with `"fail"` it is exit `2`
-  (`sonar: cannot judge - legacy unknown (main not analysed yet)`).
+  prints `legacy unknown (<default> not analysed yet)`. With `"report"` the run exits `0`; with `"fail"` it is exit `2`
+  (`sonar: cannot judge - legacy unknown (<default> not analysed yet)`).
 - The default branch is not SonarCloud's main branch: exit `2` in both modes, with the fix `set SonarCloud's main branch
   to <default>`. A non-main SonarCloud branch counts only changed code, so the legacy count would be too low.
 
