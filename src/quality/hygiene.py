@@ -6,9 +6,9 @@ from pathlib import Path, PurePosixPath
 
 import yaml
 
-from fleet_quality import engines
-from fleet_quality.config import ConfigError, read_secret_allowances
-from fleet_quality.report import Finding
+from quality import engines
+from quality.config import ConfigError, read_secret_allowances
+from quality.report import Finding
 
 ENV_FILE = "env-file"
 COMPOSE_PORT = "compose-port"
