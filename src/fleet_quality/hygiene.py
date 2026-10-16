@@ -1,4 +1,5 @@
 import os
+import re
 import subprocess
 from pathlib import Path, PurePosixPath
 
@@ -12,6 +13,7 @@ RULE_IDS = (ENV_FILE, COMPOSE_PORT)
 
 LOOPBACK = "127.0.0.1"
 ENV_TEMPLATE_SUFFIX = ".example"
+INTERPOLATION = re.compile(r"\$\{[^}]*\}")
 COMPOSE_PATTERNS = ("compose*.yml", "compose*.yaml", "docker-compose*.yml", "docker-compose*.yaml")
 
 
@@ -102,7 +104,7 @@ def _compose_file_findings(root: Path, name: str) -> list[Finding]:
 def _binds_loopback(port: object) -> bool:
     if isinstance(port, dict):
         return port.get("host_ip") == LOOPBACK
-    parts = str(port).split(":")
+    parts = INTERPOLATION.sub("-", str(port)).split(":")
     return len(parts) == 3 and parts[0] == LOOPBACK
 
 
