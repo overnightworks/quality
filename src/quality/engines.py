@@ -143,8 +143,11 @@ def scan_secrets(root: Path, engine_dir: Path, pins: dict[str, Pin], allowances:
 def attribute_free_git_environment(empty_home: Path) -> dict[str, str]:
     """The environment git runs in so that no .gitattributes line can turn a diff into "Binary files differ".
 
-    Git reads attributes from the repository, `info/attributes`, the system file and the user's global file
-    (`$XDG_CONFIG_HOME/git/attributes`, independent of any config), so each source is cut off here.
+    This cuts off the repository and tree attributes, the system file, the user's global file
+    (`$XDG_CONFIG_HOME/git/attributes`) and a `core.attributesFile` set through config or inherited `GIT_*` variables.
+    It does not cut off `$GIT_DIR/info/attributes`: git reads that from disk whatever `GIT_ATTR_SOURCE` says. The
+    hygiene scan stays clear of it by scanning a fresh template-less mirror; a caller that runs git in the real
+    repository must deal with `info/attributes` itself.
     """
     empty_home.mkdir(parents=True)
     inherited = {name: value for name, value in os.environ.items() if not name.startswith("GIT_")}
@@ -169,7 +172,8 @@ def _require_git_floor() -> None:
 
 
 def _mirror_clone(root: Path, destination: Path, git_environment: dict[str, str]) -> Path:
-    cloned = _run(["git", "clone", "--mirror", "--quiet", str(root.resolve()), str(destination)], env=git_environment)
+    command = ["git", "clone", "--mirror", "--quiet", "--template=", str(root.resolve()), str(destination)]
+    cloned = _run(command, env=git_environment)
     if cloned.returncode != 0:
         raise EngineError(f"cannot clone {root} for the {GITLEAKS} scan{_stderr_tail(cloned.stderr)}")
     return destination

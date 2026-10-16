@@ -173,20 +173,6 @@ def test_a_version_command_that_fails_is_exit_2_even_when_it_prints_the_pin(tmp_
     assert "version exited 3" in hygiene_exit_2(build_repo({}), engine_dir, capsys)
 
 
-@pytest.mark.parametrize("git_version", ["2.40.1", "1.9.0"])
-def test_a_git_older_than_2_41_is_exit_2_naming_the_version(tmp_path, build_repo, monkeypatch, capsys, git_version):
-    """#21 rule 2: below the floor the scan cannot hide attributes, so it is exit 2, never clean."""
-    repo = build_repo({})
-    fake_bin = tmp_path / "fake-git"
-    fake_bin.mkdir()
-    real_git = shutil.which("git")
-    script = f'#!/bin/sh\n[ "$1" = "--version" ] && echo "git version {git_version}" && exit 0\nexec {real_git} "$@"\n'
-    (fake_bin / "git").write_text(script)
-    (fake_bin / "git").chmod(0o755)
-    monkeypatch.setenv("PATH", f"{fake_bin}:{os.environ['PATH']}")
-    assert f"git {git_version}" in hygiene_exit_2(repo, fake_gitleaks(tmp_path / "fake"), capsys)
-
-
 @pytest.mark.parametrize(
     ("on_scan", "expected"),
     [
@@ -303,6 +289,21 @@ def test_a_relative_repository_path_starting_with_a_dash_is_scanned_as_that_repo
     assert [(finding.path, finding.line) for finding in findings] == [("config.txt", 1)]
 
 
+@pytest.fixture
+def fake_git(tmp_path, monkeypatch):
+    """Puts a `git` first on PATH that runs `preamble` (shell) and then the real git."""
+    real_git = shutil.which("git")
+
+    def install(preamble: str) -> None:
+        fake_bin = tmp_path / "fake-git"
+        fake_bin.mkdir()
+        (fake_bin / "git").write_text(f'#!/bin/sh\n{preamble}\nexec {real_git} "$@"\n')
+        (fake_bin / "git").chmod(0o755)
+        monkeypatch.setenv("PATH", f"{fake_bin}:{os.environ['PATH']}")
+
+    return install
+
+
 @pytest.mark.engine
 @pytest.mark.parametrize("attribute_line", ["config.txt -diff", "config.txt binary", "* -diff -text"])
 def test_a_committed_attribute_line_cannot_hide_a_key(build_repo, installed_engines, attribute_line):
@@ -311,16 +312,92 @@ def test_a_committed_attribute_line_cannot_hide_a_key(build_repo, installed_engi
     assert scan(repo, installed_engines) == 1
 
 
+@pytest.fixture
+def keyed_repo(build_repo) -> Path:
+    return build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
+
+
+@pytest.fixture
+def hiding_attributes(tmp_path) -> Path:
+    path = tmp_path / "hiding-attributes"
+    path.write_text("config.txt -diff\n")
+    return path
+
+
 @pytest.mark.engine
-def test_a_global_attributes_file_cannot_hide_a_key(build_repo, installed_engines, tmp_path, monkeypatch):
+def test_a_global_attributes_file_cannot_hide_a_key(keyed_repo, installed_engines, tmp_path, monkeypatch):
     """#21 rule 1: attributes from the user's global file are not read either."""
     config_home = tmp_path / "config-home"
     (config_home / "git").mkdir(parents=True)
     (config_home / "git" / "attributes").write_text("config.txt -diff\n")
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
-    repo = build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
+    assert scan(keyed_repo, installed_engines) == 1
+
+
+@pytest.mark.engine
+def test_a_configured_core_attributes_file_cannot_hide_a_key(
+    keyed_repo, installed_engines, tmp_path, monkeypatch, hiding_attributes
+):
+    """#21 rule 1: a core.attributesFile in the user's own git config is not read."""
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / ".gitconfig").write_text(f"[core]\n\tattributesFile = {hiding_attributes}\n")
+    monkeypatch.setenv("HOME", str(home))
+    assert scan(keyed_repo, installed_engines) == 1
+
+
+@pytest.mark.engine
+def test_an_inherited_git_config_variable_cannot_bring_an_attributes_file_back(
+    keyed_repo, installed_engines, monkeypatch, hiding_attributes
+):
+    """#21 rule 1: every other inherited GIT_* variable is removed, GIT_CONFIG_COUNT included."""
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", "core.attributesFile")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_0", str(hiding_attributes))
+    assert scan(keyed_repo, installed_engines) == 1
+
+
+@pytest.mark.engine
+def test_a_diff_driver_marked_binary_cannot_hide_a_key(build_repo, installed_engines, tmp_path, monkeypatch):
+    """#21 rule 1: a diff=<driver> attribute whose configured driver is binary does not hide the key."""
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / ".gitconfig").write_text('[diff "hidden"]\n\tbinary = true\n')
+    monkeypatch.setenv("HOME", str(home))
+    repo = build_repo({".gitattributes": "config.txt diff=hidden\n", "config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
     assert scan(repo, installed_engines) == 1
+
+
+@pytest.mark.engine
+def test_the_repositorys_info_attributes_cannot_hide_a_key(keyed_repo, installed_engines):
+    """#21 rule 1: the scanned repository's .git/info/attributes is not read."""
+    (keyed_repo / ".git" / "info").mkdir(exist_ok=True)
+    (keyed_repo / ".git" / "info" / "attributes").write_text("config.txt -diff\n")
+    assert scan(keyed_repo, installed_engines) == 1
+
+
+@pytest.mark.engine
+def test_a_template_directory_cannot_put_attributes_into_the_mirror(
+    keyed_repo, installed_engines, tmp_path, fake_git
+):
+    """#21 rule 1: attributes shipped by git's default template directory do not reach the mirror."""
+    template = tmp_path / "template" / "info"
+    template.mkdir(parents=True)
+    (template / "attributes").write_text("* -diff\n")
+    fake_git(f'export GIT_TEMPLATE_DIR="{template.parent}"')
+    assert scan(keyed_repo, installed_engines) == 1
+
+
+@pytest.mark.engine
+@pytest.mark.parametrize("git_version", ["2.40.1", "1.9.0"])
+def test_a_git_older_than_2_41_is_exit_2_naming_the_version(
+    installed_engines, build_repo, fake_git, capsys, git_version
+):
+    """#21 rule 2: below the floor the scan cannot hide attributes, so it is exit 2 with one line, never clean."""
+    fake_git(f'[ "$1" = "--version" ] && echo "git version {git_version}" && exit 0')
+    err = hygiene_exit_2(build_repo({}), installed_engines, capsys)
+    assert err.strip() == f"hygiene: cannot judge - git {git_version} cannot hide .gitattributes from the gitleaks scan, it needs git 2.41"
 
 
 @pytest.mark.engine
