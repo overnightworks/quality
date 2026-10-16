@@ -1,18 +1,27 @@
 import re
 import tomllib
+from enum import Enum
 from pathlib import Path
 from typing import NamedTuple
 
 CONFIG_PATH = "quality/config.toml"
-GATE_KEYS = {"mandatory_jobs"}
+GATE_KEYS = {"mandatory_jobs", "legacy"}
 SECRETS_KEYS = {"allow"}
 ALLOWANCE_KEYS = {"rule", "file", "secret_sha256", "reason"}
 SHA256_HEX = re.compile(r"[0-9a-f]{64}")
 EXAMPLE = '[gate]\nmandatory_jobs = ["checks"]'
+LEGACY_EXAMPLE = '[gate]\nlegacy = "fail"'
 ALLOWANCE_EXAMPLE = (
     '[secrets]\nallow = [{ rule = "aws-access-token", file = "tests/fixture.py", '
     'secret_sha256 = "<64 lowercase hex>", reason = "fixture value, not a key" }]'
 )
+
+
+class LegacyMode(Enum):
+    """What the repository's open findings on its default branch do to a pull request."""
+
+    REPORT = "report"
+    FAIL = "fail"
 
 
 class Allowance(NamedTuple):
@@ -45,7 +54,7 @@ def _refuse_unknown_keys(document: dict, gate: dict, secrets: dict) -> None:
     unknown = (set(document) - {"gate", "secrets"}) | (set(gate) - GATE_KEYS) | (set(secrets) - SECRETS_KEYS)
     if unknown:
         raise ConfigError(
-            f"{CONFIG_PATH} has unknown key(s) {sorted(unknown)} - only [gate] mandatory_jobs and [secrets] allow exist"
+            f"{CONFIG_PATH} has unknown key(s) {sorted(unknown)} - only [gate] mandatory_jobs, [gate] legacy and [secrets] allow exist"
         )
 
 
@@ -61,6 +70,21 @@ def load_mandatory_jobs(text: str | None) -> tuple[str, ...]:
             f"{CONFIG_PATH} needs [gate] mandatory_jobs as a non-empty list of job names, like:\n{EXAMPLE}"
         )
     return tuple(names)
+
+
+def load_legacy_mode(text: str | None) -> LegacyMode:
+    """A missing config or key reports; the verdict is what insists on a config."""
+    if text is None:
+        return LegacyMode.REPORT
+    document = _parse(text, LEGACY_EXAMPLE)
+    gate = _table(document, "gate", LEGACY_EXAMPLE)
+    _refuse_unknown_keys(document, gate, _table(document, "secrets", ALLOWANCE_EXAMPLE))
+    value = gate.get("legacy", LegacyMode.REPORT.value)
+    try:
+        return LegacyMode(value)
+    except ValueError:
+        modes = " or ".join(f'"{mode.value}"' for mode in LegacyMode)
+        raise ConfigError(f"{CONFIG_PATH} has [gate] legacy = {value!r}; it must be {modes}, like:\n{LEGACY_EXAMPLE}") from None
 
 
 def read_mandatory_jobs(repo: Path) -> tuple[str, ...]:
@@ -120,5 +144,15 @@ def read_secret_allowances(repo: Path) -> dict[Allowance, str]:
         return load_secret_allowances(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         return load_secret_allowances(None)
+    except (OSError, UnicodeDecodeError) as error:
+        raise ConfigError(f"{CONFIG_PATH} cannot be read ({error})") from error
+
+
+def read_legacy_mode(repo: Path) -> LegacyMode:
+    path = repo / CONFIG_PATH
+    try:
+        return load_legacy_mode(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return load_legacy_mode(None)
     except (OSError, UnicodeDecodeError) as error:
         raise ConfigError(f"{CONFIG_PATH} cannot be read ({error})") from error

@@ -3,8 +3,11 @@ import pytest
 from quality.config import (
     Allowance,
     ConfigError,
+    LegacyMode,
+    load_legacy_mode,
     load_mandatory_jobs,
     load_secret_allowances,
+    read_legacy_mode,
     read_mandatory_jobs,
     read_secret_allowances,
 )
@@ -128,3 +131,35 @@ def test_the_old_fingerprint_form_is_refused_with_the_new_form_shown():
 def test_a_repository_without_the_file_allows_nothing(tmp_path):
     """#24 rule 3: a missing quality/config.toml allows nothing."""
     assert read_secret_allowances(tmp_path) == {}
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (None, LegacyMode.REPORT),
+        ('[gate]\nmandatory_jobs = ["checks"]', LegacyMode.REPORT),
+        ('[gate]\nmandatory_jobs = ["checks"]\nlegacy = "report"', LegacyMode.REPORT),
+        ('[gate]\nmandatory_jobs = ["checks"]\nlegacy = "fail"', LegacyMode.FAIL),
+    ],
+    ids=["no config", "key absent", "report", "fail"],
+)
+def test_legacy_findings_only_fail_when_the_repository_switched_them_on(text, expected):
+    """#33 sentence 3: [gate] legacy is "report" unless the config says "fail"."""
+    assert load_legacy_mode(text) is expected
+
+
+@pytest.mark.parametrize("value", ['"warn"', '"FAIL"', '""', "true", "1"])
+def test_any_other_legacy_value_is_a_config_error(value):
+    """#33 sentence 3: any value but "report" or "fail" is refused, naming the fix."""
+    with pytest.raises(ConfigError, match='legacy.*"report" or "fail"'):
+        load_legacy_mode(f'[gate]\nmandatory_jobs = ["checks"]\nlegacy = {value}')
+
+
+def test_the_legacy_key_is_known_to_the_mandatory_jobs_reader():
+    """#33 sentence 3: adding legacy does not make the rest of the config unknown."""
+    assert load_mandatory_jobs('[gate]\nmandatory_jobs = ["checks"]\nlegacy = "fail"') == ("checks",)
+
+
+def test_a_repository_without_the_file_reports_legacy_findings(tmp_path):
+    """#33 sentence 3: a missing quality/config.toml leaves legacy at "report"."""
+    assert read_legacy_mode(tmp_path) is LegacyMode.REPORT
