@@ -203,16 +203,20 @@ def test_a_non_numeric_run_attempt_exits_two(monkeypatch, capsys, run_env):
     assert "cannot judge" in summary.read_text()
 
 
-@pytest.mark.parametrize("ref", ["--upload-pack=x", "-n", "a..b", "main.lock", "a b", "x:y"])
-def test_a_base_ref_that_git_could_read_as_an_option_is_refused(build_repo, ref):
-    """#31 rule 1 (S8705): an unsafe base ref is refused before any git call."""
+@pytest.mark.parametrize(
+    "ref",
+    ["--upload-pack=x", "-n", "a..b", "main.lock", "a b", "x:y", "a//b", "a/.hidden", "a.lock/b", "a/", "@", "a@{1}", "a~1"],
+)
+def test_a_base_ref_git_would_reject_is_refused(build_repo, ref):
+    """#31 rule 1 (S8705): a base ref that is no valid git ref name, or reads as an option, is refused."""
     repo = build_repo({})
-    with pytest.raises(CannotJudge, match="not a commit reference"):
+    with pytest.raises(CannotJudge, match="not a ref name git accepts"):
         read_base_mandatory_jobs(repo, ref)
 
 
-def test_a_plain_branch_name_is_still_a_readable_base(build_repo):
-    """#31 rule 1 (S8705): a plain ref such as a branch name still works."""
+@pytest.mark.parametrize("ref", ["main", "release+hotfix", "origin/main"])
+def test_a_valid_ref_name_is_still_a_readable_base(build_repo, ref):
+    """#31 rule 1 (S8705): valid ref names, with a slash or a plus, still work."""
     repo = build_repo({"quality/config.toml": '[gate]\nmandatory_jobs = ["tests"]\n'})
-    branch = subprocess.run(["git", "-C", str(repo), "branch", "--show-current"], capture_output=True, text=True, check=True).stdout.strip()
-    assert read_base_mandatory_jobs(repo, branch) == ("tests",)
+    subprocess.run(["git", "-C", str(repo), "update-ref", f"refs/heads/{ref}" if "/" not in ref else f"refs/remotes/{ref}", _head(repo)], check=True)
+    assert read_base_mandatory_jobs(repo, ref) == ("tests",)
