@@ -22,8 +22,6 @@ RULE = "sonar"
 # A SonarCloud that accepts the connection and then stops answering must not hang the job.
 REQUEST_TIMEOUT_SECONDS = 30
 # 5 s x 120 stays below the job timeout the workflow gives this step.
-# The scanner writes it here, relative to the working directory; no caller chooses another path.
-TASK_FILE = Path(".scannerwork/report-task.txt")
 TASK_POLL_INTERVAL_SECONDS = 5
 TASK_POLL_ATTEMPTS = 120
 FINISHED_TASK_STATUS = "SUCCESS"
@@ -43,6 +41,8 @@ TOKEN_VARIABLE = "SONAR_TOKEN"
 
 PROPERTIES_FILE = "sonar-project.properties"
 SCANNER_WORK_DIRECTORY = ".scannerwork"
+# The scanner writes it here, relative to the working directory; no caller chooses another path.
+TASK_FILE = Path(SCANNER_WORK_DIRECTORY, "report-task.txt")
 # Grows only through a quality release. Anything that can steer the scanner's endpoint, proxy, working
 # directory or issue handling stays out, because the token travels with every authenticated request.
 ALLOWED_PROPERTIES = frozenset(
