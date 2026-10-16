@@ -5,8 +5,9 @@ from pathlib import Path
 import pytest
 
 from quality import cli
+from quality.config import LegacyMode
 from quality.hygiene import CannotJudge
-from quality.verdict import Job, judge, read_base_mandatory_jobs, read_jobs
+from quality.verdict import NO_BASE_SETTINGS, GateSettings, Job, judge, read_base_settings, read_jobs
 
 FIXTURES = Path(__file__).parent / "fixtures"
 GREEN_GATE = {"hygiene": "success"}
@@ -16,8 +17,8 @@ def job(name="checks", attempt=1, status="completed", conclusion="success"):
     return Job(name, attempt, status, conclusion)
 
 
-def problems(jobs, mandatory=("checks",), base=(), gate=GREEN_GATE, attempt=1):
-    return judge(mandatory, base, jobs, gate, attempt).problems
+def problems(jobs, mandatory=("checks",), base=(), gate=GREEN_GATE, attempt=1, legacy=LegacyMode.REPORT, base_legacy=LegacyMode.REPORT):
+    return judge(GateSettings(mandatory, legacy), GateSettings(base, base_legacy), jobs, gate, attempt).problems
 
 
 @pytest.mark.parametrize(
@@ -114,13 +115,37 @@ def test_more_pages_than_the_cap_cannot_be_judged():
 def test_base_config_is_read_from_the_base_commit(build_repo):
     """#6 rule 3: the base config is read from the base commit."""
     repo = build_repo({"quality/config.toml": '[gate]\nmandatory_jobs = ["tests"]\n'})
-    assert read_base_mandatory_jobs(repo, _head(repo)) == ("tests",)
+    assert read_base_settings(repo, _head(repo)) == GateSettings(("tests",), LegacyMode.REPORT)
+
+
+def test_the_legacy_mode_is_read_from_the_base_commit(build_repo):
+    """#33 sentence 4: the base config's legacy mode is read from the base commit."""
+    repo = build_repo({"quality/config.toml": '[gate]\nmandatory_jobs = ["tests"]\nlegacy = "fail"\n'})
+    assert read_base_settings(repo, _head(repo)) == GateSettings(("tests",), LegacyMode.FAIL)
+
+
+@pytest.mark.parametrize(
+    ("base_legacy", "legacy", "expected"),
+    [
+        (LegacyMode.FAIL, LegacyMode.REPORT, ("loosened: legacy fail → report",)),
+        (LegacyMode.FAIL, LegacyMode.FAIL, ()),
+        (LegacyMode.REPORT, LegacyMode.FAIL, ()),
+        (LegacyMode.REPORT, LegacyMode.REPORT, ()),
+    ],
+    ids=["fail to report", "fail kept", "report to fail", "report kept"],
+)
+def test_switching_legacy_back_from_fail_is_a_loosening(base_legacy, legacy, expected):
+    """#33 sentence 4: a head config that is not "fail" under a base config that is shows as loosened and is red"""
+    result = judge(
+        GateSettings(("checks",), legacy), GateSettings(("checks",), base_legacy), [job()], GREEN_GATE, 1
+    )
+    assert (result.problems, result.green) == (expected, not expected)
 
 
 def test_a_base_without_the_config_contributes_nothing(build_repo):
     """#6 rule 3: a base without the config adds no mandatory jobs."""
     repo = build_repo({"README.md": "x"})
-    assert read_base_mandatory_jobs(repo, _head(repo)) == ()
+    assert read_base_settings(repo, _head(repo)) == NO_BASE_SETTINGS
 
 
 def _head(repo):
@@ -191,7 +216,7 @@ def test_a_base_config_that_git_cannot_show_cannot_be_judged(build_repo):
     (repo / ".git" / "objects" / blob.stdout[:2] / blob.stdout.strip()[2:]).unlink()
     base = subprocess.run([*git, "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
     with pytest.raises(CannotJudge, match="at the base commit"):
-        read_base_mandatory_jobs(repo, base)
+        read_base_settings(repo, base)
 
 
 def test_a_non_numeric_run_attempt_exits_two(monkeypatch, capsys, run_env):
@@ -211,7 +236,7 @@ def test_a_base_ref_git_would_reject_is_refused(build_repo, ref):
     """#31 rule 1 (S8705): a base ref that is no valid git ref name, or reads as an option, is refused."""
     repo = build_repo({})
     with pytest.raises(CannotJudge, match="not a ref name git accepts"):
-        read_base_mandatory_jobs(repo, ref)
+        read_base_settings(repo, ref)
 
 
 @pytest.mark.parametrize(
@@ -226,4 +251,20 @@ def test_a_valid_ref_name_is_still_a_readable_base(build_repo, ref, full_ref):
     """#31 rule 1 (S8705): valid ref names, with a slash or a plus, still work."""
     repo = build_repo({"quality/config.toml": '[gate]\nmandatory_jobs = ["tests"]\n'})
     subprocess.run(["git", "-C", str(repo), "update-ref", full_ref, _head(repo)], check=True)
-    assert read_base_mandatory_jobs(repo, ref) == ("tests",)
+    assert read_base_settings(repo, ref) == GateSettings(("tests",), LegacyMode.REPORT)
+
+
+def test_a_pull_request_that_removes_legacy_fail_is_red_in_the_verdict(monkeypatch, capsys, run_env):
+    """#33 sentence 4: at the real entry, a head config without legacy under a base that fails is red, naming the loosening."""
+    repo, _ = run_env
+    config = repo / "quality" / "config.toml"
+    config.write_text('[gate]\nmandatory_jobs = ["checks"]\nlegacy = "fail"\n')
+    git = ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.invalid"]
+    subprocess.run([*git, "commit", "-qam", "base switches legacy on"], check=True)
+    monkeypatch.setenv("GATE_BASE_SHA", _head(repo))
+    config.write_text('[gate]\nmandatory_jobs = ["checks"]\n')
+    page = json.dumps(
+        {"total_count": 1, "jobs": [{"name": "checks", "run_attempt": 1, "status": "completed", "conclusion": "success"}]}
+    )
+    assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (page, None)) == 1
+    assert "loosened: legacy fail → report" in capsys.readouterr().out

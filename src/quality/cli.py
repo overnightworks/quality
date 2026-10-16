@@ -12,10 +12,12 @@ from quality.hygiene import CannotJudge, active_rules, run_hygiene, skipped_rule
 from quality.report import Finding, render
 from quality.sonar import TASK_FILE, Sleep, Transport, analyse, fetch_json, preflight
 from quality.verdict import (
+    NO_BASE_SETTINGS,
+    GateSettings,
     PageFetcher,
     github_fetcher,
     judge,
-    read_base_mandatory_jobs,
+    read_base_settings,
     read_jobs,
 )
 
@@ -161,14 +163,14 @@ def run_sonar_findings(transport: Transport, sleep: Sleep) -> int:
 
 def run_verdict(path: Path, fetcher_for: Callable[[str], PageFetcher]) -> int:
     try:
-        mandatory = read_mandatory_jobs(path)
+        settings = GateSettings(read_mandatory_jobs(path), read_legacy_mode(path))
         base_sha = os.environ.get("GATE_BASE_SHA", "")
-        base_mandatory = read_base_mandatory_jobs(path, base_sha) if base_sha else ()
+        base_settings = read_base_settings(path, base_sha) if base_sha else NO_BASE_SETTINGS
         jobs = read_jobs(
             os.environ["GITHUB_REPOSITORY"], os.environ["GITHUB_RUN_ID"], fetcher_for(os.environ["GITHUB_TOKEN"])
         )
         gate_results = {name: need["result"] for name, need in json.loads(os.environ["GATE_NEEDS"]).items()}
-        result = judge(mandatory, base_mandatory, jobs, gate_results, int(os.environ["GITHUB_RUN_ATTEMPT"]))
+        result = judge(settings, base_settings, jobs, gate_results, int(os.environ["GITHUB_RUN_ATTEMPT"]))
     except (ConfigError, CannotJudge, KeyError, ValueError) as error:
         report = f"verdict: cannot judge - {error}"
         code = EXIT_CANNOT_JUDGE

@@ -7,7 +7,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from quality.config import CONFIG_PATH, load_mandatory_jobs
+from quality.config import CONFIG_PATH, LegacyMode, load_legacy_mode, load_mandatory_jobs
 from quality.hygiene import CannotJudge
 
 JOBS_URL = "https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs?filter=all&per_page=100"
@@ -16,6 +16,17 @@ NEXT_LINK = re.compile(r'<([^>]+)>;\s*rel="next"')
 SUCCESS = "success"
 
 PageFetcher = Callable[[str], tuple[str, str | None]]
+
+
+@dataclass(frozen=True)
+class GateSettings:
+    """The part of quality/config.toml a pull request must not loosen."""
+
+    mandatory_jobs: tuple[str, ...]
+    legacy: LegacyMode
+
+
+NO_BASE_SETTINGS = GateSettings((), LegacyMode.REPORT)
 
 
 @dataclass(frozen=True)
@@ -40,15 +51,21 @@ class Verdict:
 
 
 def judge(
-    mandatory: tuple[str, ...],
-    base_mandatory: tuple[str, ...],
+    settings: GateSettings,
+    base_settings: GateSettings,
     jobs: list[Job],
     gate_results: Mapping[str, str],
     current_attempt: int,
 ) -> Verdict:
     problems = [f'gate job "{name}" result {result}' for name, result in gate_results.items() if result != SUCCESS]
-    problems += [f'loosened: mandatory job "{name}" removed' for name in base_mandatory if name not in mandatory]
-    for name in dict.fromkeys((*base_mandatory, *mandatory)):
+    problems += [
+        f'loosened: mandatory job "{name}" removed'
+        for name in base_settings.mandatory_jobs
+        if name not in settings.mandatory_jobs
+    ]
+    if base_settings.legacy is LegacyMode.FAIL and settings.legacy is not LegacyMode.FAIL:
+        problems.append(f"loosened: legacy {base_settings.legacy.value} → {settings.legacy.value}")
+    for name in dict.fromkeys((*base_settings.mandatory_jobs, *settings.mandatory_jobs)):
         problems += _problems_of_job(name, jobs, current_attempt)
     return Verdict(tuple(problems))
 
@@ -120,15 +137,15 @@ def _require_safe_ref(ref: str) -> None:
         raise CannotJudge(f"{ref!r} is not a ref name git accepts")
 
 
-def read_base_mandatory_jobs(repo: Path, base_sha: str) -> tuple[str, ...]:
+def read_base_settings(repo: Path, base_sha: str) -> GateSettings:
     _require_safe_ref(base_sha)
     git = ["git", "-C", str(repo.resolve())]
     listed = subprocess.run([*git, "ls-tree", base_sha, "--", CONFIG_PATH], capture_output=True, text=True, check=False)
     if listed.returncode != 0:
         raise CannotJudge(f"cannot read the base commit {base_sha}: {listed.stderr.strip()}")
     if not listed.stdout.strip():
-        return ()
+        return NO_BASE_SETTINGS
     shown = subprocess.run([*git, "show", f"{base_sha}:{CONFIG_PATH}"], capture_output=True, text=True, check=False)
     if shown.returncode != 0:
         raise CannotJudge(f"cannot read {CONFIG_PATH} at the base commit {base_sha}: {shown.stderr.strip()}")
-    return load_mandatory_jobs(shown.stdout)
+    return GateSettings(load_mandatory_jobs(shown.stdout), load_legacy_mode(shown.stdout))
