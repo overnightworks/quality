@@ -14,7 +14,6 @@ from quality.hygiene import (
     CannotJudge,
     active_rules,
     measure_size,
-    read_baseline,
     run_hygiene,
     skipped_rules,
     tracked_files,
@@ -25,10 +24,10 @@ from quality.sonar import TASK_FILE, Sleep, Transport, analyse, fetch_json, pref
 from quality.verdict import (
     NO_BASE,
     PageFetcher,
-    Side,
     github_fetcher,
     judge,
     read_base,
+    read_head,
     read_jobs,
 )
 
@@ -226,7 +225,7 @@ def run_sonar_findings(transport: Transport, sleep: Sleep) -> int:
 
 def run_verdict(path: Path, fetcher_for: Callable[[str], PageFetcher]) -> int:
     try:
-        head = Side(read_gate_settings(path), read_baseline(path))
+        head = read_head(path)
         base_sha = os.environ.get("GATE_BASE_SHA", "")
         base = read_base(path, base_sha) if base_sha else NO_BASE
         jobs = read_jobs(

@@ -338,7 +338,7 @@ def verdict_of(repo: Path, capsys) -> tuple[int, str]:
         (main_lines(82) + NEW_CCN_KEY, main_lines(82), 0, "verdict: green"),
         (None, None, 0, "verdict: green"),
         ("[ccn", main_lines(82), 2, f"{BASELINE_PATH} at the base commit {{base}}: {BASELINE_PATH} is not valid TOML"),
-        (main_lines(82), "[ccn", 2, f"cannot judge - {BASELINE_PATH} is not valid TOML"),
+        (main_lines(82), "[ccn", 2, f"cannot judge - {BASELINE_PATH} at the head: {BASELINE_PATH} is not valid TOML"),
     ],
     ids=[
         "cell 1 growth", "cell 2 lowering", "cell 3 equal", "cell 4 adoption", "cell 5 base file deleted",
@@ -363,7 +363,8 @@ def test_a_head_baseline_that_links_out_of_the_repository_cannot_be_judged(capsy
     (repo / BASELINE_PATH).unlink()
     (repo / BASELINE_PATH).symlink_to(outside)
     code, output = verdict_of(repo, capsys)
-    assert (code, "resolves outside the repository" in output, "Traceback" in output) == (2, True, False)
+    expected = f"cannot judge - {BASELINE_PATH} at the head: {BASELINE_PATH} resolves outside the repository"
+    assert (code, expected in output, "Traceback" in output) == (2, True, False)
 
 
 def test_without_a_base_the_base_is_never_read(capsys, monkeypatch, pull_request, fake_git, tmp_path):

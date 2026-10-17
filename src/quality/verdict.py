@@ -7,8 +7,8 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from quality.config import CONFIG_PATH, GateSettings, LegacyMode, load_gate_settings
-from quality.hygiene import CannotJudge
+from quality.config import CONFIG_PATH, GateSettings, LegacyMode, load_gate_settings, read_gate_settings
+from quality.hygiene import CannotJudge, read_baseline
 from quality.ratchet import BASELINE_PATH, Baseline, RaisedEntry, SizeError, load_baseline, raised_entries
 
 JOBS_URL = "https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs?filter=all&per_page=100"
@@ -151,6 +151,15 @@ def _is_git_ref_name(ref: str) -> bool:
 def _require_safe_ref(ref: str) -> None:
     if not _is_git_ref_name(ref):
         raise CannotJudge(f"the base {ref!r} is not a ref name or a SHA")
+
+
+def read_head(repo: Path) -> Side:
+    """The gate's settings and size baseline in the checked-out tree; an unreadable baseline names the head."""
+    settings = read_gate_settings(repo)
+    try:
+        return Side(settings, read_baseline(repo))
+    except (SizeError, CannotJudge) as error:
+        raise CannotJudge(f"{BASELINE_PATH} at the head: {error}") from error
 
 
 def read_base(repo: Path, base_sha: str) -> Side:
