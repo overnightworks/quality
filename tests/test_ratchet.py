@@ -235,7 +235,9 @@ def test_a_tracked_file_the_filesystem_refuses_to_reach_cannot_be_judged(build_r
         (repo / "locked").chmod(0o755)
     assert code == 2
     expected = (
-        "hygiene: cannot judge - cannot reach locked/b.py" if command == "hygiene" else "cannot reach locked/b.py"
+        "hygiene: cannot judge - cannot reach locked/b.py"
+        if command == "hygiene"
+        else "baseline: not written - cannot reach locked/b.py"
     )
     assert expected in capsys.readouterr().err
 
