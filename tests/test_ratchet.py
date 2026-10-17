@@ -234,7 +234,10 @@ def test_a_tracked_file_the_filesystem_refuses_to_reach_cannot_be_judged(build_r
     finally:
         (repo / "locked").chmod(0o755)
     assert code == 2
-    assert "cannot reach locked/b.py" in capsys.readouterr().err
+    expected = (
+        "hygiene: cannot judge - cannot reach locked/b.py" if command == "hygiene" else "cannot reach locked/b.py"
+    )
+    assert expected in capsys.readouterr().err
 
 
 def property_pair(lines: int) -> str:
