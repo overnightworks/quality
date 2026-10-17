@@ -47,6 +47,14 @@ for compose_tag in ("!override", "!reset"):
 class CannotJudge(Exception):
     """The repository cannot be examined; this is never a clean result."""
 
+    status = "cannot judge"
+
+
+class Unparsable(CannotJudge):
+    """A tracked file Python cannot decode or parse; only an operating-system read error is `cannot judge`."""
+
+    status = "unparsable"
+
 
 def tracked_files(root: Path) -> list[str]:
     if not root.is_dir():
@@ -203,6 +211,8 @@ def check_size(root: Path, tracked: list[str]) -> SizeResult:
     try:
         baseline = ratchet.load_baseline(read_repository_text(root, ratchet.BASELINE_PATH))
         measurements = tree.complete()
+    except ratchet.UnparsableSource as error:
+        raise Unparsable(str(error)) from error
     except ratchet.SizeError as error:
         raise CannotJudge(str(error)) from error
     return SizeResult(ratchet.compare(measurements, baseline), None)

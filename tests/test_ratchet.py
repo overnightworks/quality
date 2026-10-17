@@ -119,12 +119,12 @@ def test_without_a_baseline_a_file_python_cannot_read_is_reported_and_the_exit_u
 
 
 @NOT_PYTHON
-def test_against_a_baseline_a_file_python_cannot_read_cannot_be_judged(build_repo, capsys, source):
-    """#46 rule 4: a baseline is held against every function, so an unmeasurable file is exit 2, never clean."""
+def test_against_a_baseline_a_file_python_cannot_read_is_unparsable(build_repo, capsys, source):
+    """#46 rule 4: a baseline is held against every function, so an unmeasurable file is unparsable, exit 2."""
     repo = build_repo_with_source(build_repo, {BASELINE_PATH: EMPTY_BASELINE}, SOURCE_NAME, source)
     code, output = hygiene(capsys, repo)
     assert code == 2
-    assert f"{SOURCE_NAME} is not valid Python" in output
+    assert f"hygiene: unparsable - {SOURCE_NAME} is not valid Python" in output
 
 
 @NOT_PYTHON

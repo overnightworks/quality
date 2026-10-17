@@ -123,7 +123,7 @@ def run_hygiene_check(path: Path, engine_dir: Path | None) -> int:
     try:
         result = run_hygiene(path, engine_dir)
     except CannotJudge as error:
-        print(f"hygiene: cannot judge - {error}", file=sys.stderr)
+        print(f"hygiene: {error.status} - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     findings = result.findings
     print_secret_allowances(result.allowed_secrets, result.unused_allowances)

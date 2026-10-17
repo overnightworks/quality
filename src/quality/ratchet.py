@@ -89,6 +89,10 @@ class SizeError(Exception):
     """The tree or the baseline cannot be measured; the message carries the reason."""
 
 
+class UnparsableSource(SizeError):
+    """A tracked file Python cannot decode or parse, so its functions cannot be measured."""
+
+
 def is_python(name: str) -> bool:
     return PurePosixPath(name).suffix == PYTHON_SUFFIX
 
@@ -115,7 +119,7 @@ class TreeMeasurement:
         """Holding or writing a baseline needs every function measured, so an unparsable file cannot be judged."""
         if self.unparsable:
             path = min(self.unparsable)
-            raise SizeError(f"{path} is not valid Python ({self.unparsable[path]})")
+            raise UnparsableSource(f"{path} is not valid Python ({self.unparsable[path]})")
         return self.measurements
 
 
