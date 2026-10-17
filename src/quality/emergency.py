@@ -8,9 +8,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 
-from quality.config import CONFIG_PATH, ConfigError, GateSettings, LegacyMode, load_gate_settings
+from quality.config import CONFIG_PATH, GateSettings, LegacyMode
 from quality.hygiene import CannotJudge
-from quality.ratchet import BASELINE_PATH, SizeError, load_baseline
+from quality.ratchet import BASELINE_PATH
 from quality.report import render
 from quality.sonar import (
     Analysis,
@@ -25,7 +25,7 @@ from quality.sonar import (
     project_of,
     require_resolved,
 )
-from quality.verdict import NO_BASE_SETTINGS, SUCCESS, Job, Side, judge
+from quality.verdict import SUCCESS, Job, Side, judge, side_of
 
 EXIT_MERGED = 0
 EXIT_REFUSED = 1
@@ -150,14 +150,7 @@ def read_side_at(gh: GhRunner, repository: str, sha: str) -> Side:
     """The gate's settings and size baseline at one commit, as the verdict reads them; a 404 reads as absent."""
     config = _read_file_at(gh, repository, CONFIG_PATH, sha)
     baseline = _read_file_at(gh, repository, BASELINE_PATH, sha)
-    try:
-        settings = NO_BASE_SETTINGS if config is None else load_gate_settings(config)
-    except ConfigError as error:
-        raise CannotJudge(f"{CONFIG_PATH} at {sha}: {error}") from error
-    try:
-        return Side(settings, None if baseline is None else load_baseline(baseline))
-    except SizeError as error:
-        raise CannotJudge(f"{BASELINE_PATH} at {sha}: {error}") from error
+    return side_of(config, baseline, sha)
 
 
 def _read_file_at(gh: GhRunner, repository: str, path: str, sha: str) -> str | None:

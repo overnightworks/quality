@@ -7,7 +7,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from quality.config import CONFIG_PATH, GateSettings, LegacyMode, load_gate_settings, read_gate_settings
+from quality.config import CONFIG_PATH, ConfigError, GateSettings, LegacyMode, load_gate_settings, read_gate_settings
 from quality.hygiene import CannotJudge, read_baseline
 from quality.ratchet import BASELINE_PATH, Baseline, RaisedEntry, SizeError, load_baseline, raised_entries
 
@@ -80,10 +80,9 @@ def _baseline_loosenings(base: Baseline | None, head: Baseline | None) -> list[s
 
 
 def _describe_raise(entry: RaisedEntry) -> str:
-    entry_name = " ".join(part for part in (entry.key.metric.value, entry.key.path, entry.key.symbol) if part)
     if entry.base is None:
-        return f"loosened: size baseline adds {entry_name} {entry.head}"
-    return f"loosened: size baseline raises {entry_name} {entry.base} -> {entry.head}"
+        return f"loosened: size baseline adds {entry.key.label} {entry.head}"
+    return f"loosened: size baseline raises {entry.key.label} {entry.base} -> {entry.head}"
 
 
 def _problems_of_job(name: str, jobs: list[Job], current_attempt: int) -> list[str]:
@@ -167,13 +166,19 @@ def read_base(repo: Path, base_sha: str) -> Side:
     _require_safe_ref(base_sha)
     config = _read_base_file(repo, base_sha, CONFIG_PATH)
     baseline = _read_base_file(repo, base_sha, BASELINE_PATH)
+    return side_of(config, baseline, f"the base commit {base_sha}")
+
+
+def side_of(config: str | None, baseline: str | None, where: str) -> Side:
+    """One side from its file texts, None where the side lacks the file; an unreadable file names `where`."""
     try:
-        return Side(
-            NO_BASE_SETTINGS if config is None else load_gate_settings(config),
-            None if baseline is None else load_baseline(baseline),
-        )
+        settings = NO_BASE_SETTINGS if config is None else load_gate_settings(config)
+    except ConfigError as error:
+        raise CannotJudge(f"{CONFIG_PATH} at {where}: {error}") from error
+    try:
+        return Side(settings, None if baseline is None else load_baseline(baseline))
     except SizeError as error:
-        raise CannotJudge(f"{BASELINE_PATH} at the base commit {base_sha}: {error}") from error
+        raise CannotJudge(f"{BASELINE_PATH} at {where}: {error}") from error
 
 
 def _read_base_file(repo: Path, base_sha: str, path: str) -> str | None:

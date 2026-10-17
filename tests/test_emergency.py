@@ -406,6 +406,14 @@ def test_the_door_refuses_a_baseline_loosening_next_to_legacy_red(base_baseline,
     assert (gh.merge_calls == []) == (code == 1)
 
 
+def test_a_malformed_config_at_the_merge_commit_names_the_commit(capsys):
+    """#48 review: the door names the side of a malformed config.toml, as the verdict does, and changes nothing."""
+    gh = FakeGh(merge_config="[gate")
+    assert drive(gh)[0] == 2
+    assert f"{CONFIG_PATH} at {MERGE_SHA}: {CONFIG_PATH} is not valid TOML" in capsys.readouterr().out
+    changed_nothing(gh)
+
+
 def test_a_malformed_baseline_at_the_merge_commit_cannot_be_judged(capsys):
     """#48 rule 4: the door names the commit whose baseline it cannot read, and changes nothing."""
     gh = FakeGh(base_baseline=BASELINE_82, merge_baseline="[ccn")

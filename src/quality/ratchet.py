@@ -74,6 +74,11 @@ class Key(NamedTuple):
     path: str
     symbol: str = ""
 
+    @property
+    def label(self) -> str:
+        """The entry as a person reads it: metric, path and, for a function, its symbol."""
+        return " ".join(part for part in (self.metric.value, self.path, self.symbol) if part)
+
 
 @dataclass(frozen=True)
 class Measured:

@@ -6,7 +6,7 @@ import pytest
 from conftest import UNKNOWN_KEY_CONFIGS
 
 from quality import cli
-from quality.config import LegacyMode
+from quality.config import CONFIG_PATH, LegacyMode
 from quality.hygiene import CannotJudge
 from quality.ratchet import BASELINE_PATH
 from quality.verdict import NO_BASE, GateSettings, Job, Side, judge, read_base, read_jobs
@@ -227,6 +227,14 @@ def test_a_base_config_that_git_cannot_show_cannot_be_judged(build_repo):
     (repo / ".git" / "objects" / blob.stdout[:2] / blob.stdout.strip()[2:]).unlink()
     base = subprocess.run([*git, "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
     with pytest.raises(CannotJudge, match="at the base commit"):
+        read_base(repo, base)
+
+
+def test_a_malformed_base_config_names_the_base_commit(build_repo):
+    """#48 review: the verdict names the side of a malformed config.toml, as the door does."""
+    repo = build_repo({CONFIG_PATH: "[gate"})
+    base = _head(repo)
+    with pytest.raises(CannotJudge, match=f"^{CONFIG_PATH} at the base commit {base}: {CONFIG_PATH} is not valid TOML"):
         read_base(repo, base)
 
 
