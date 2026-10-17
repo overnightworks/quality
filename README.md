@@ -183,12 +183,21 @@ On pull requests and default-branch runs `quality sonar findings` reads `api/pro
 
 Main can gain a finding without any pull request introducing it (a taint finding on an unchanged line, a SonarCloud
 rule-profile update). Then every pull request is red, including the fixing one, and switching `legacy` back is red too.
-The way out is the operator's emergency door; a single command for it is planned in
-[quality#37](https://github.com/overnightworks/quality/issues/37). Until then, by hand, each step only on the operator's
-spoken yes, every time:
-1. The operator sets that repository's `quality_gate` property to `false`. This removes ruleset 25227067 for it.
-2. He merges the fixing pull request by hand (`gh pr merge`); `aco land` refuses any non-green check and has no override.
-3. The head releases the claim with `aco release <n> --merged <pr>`.
-4. The operator sets the property back to `true`.
+The way out is the operator's emergency door, one command (quality#37):
 
-Each switch is logged in the fixing pull request's body.
+```
+quality emergency-merge <owner/repo> <pr>
+```
+
+- **Operator only.** It runs under the operator's own `gh` login, which needs the `admin:org` scope (checked first: exit `2`,
+  nothing changed, the missing right named). Agents never run it; it refuses when stdin is not a terminal.
+- **It refuses unless the door is the only way** (exit `1`): the pull request adds no finding of its own (the findings are
+  named otherwise), the default branch has legacy findings, the only red checks are `quality / sonar` and
+  `quality / verdict`, and every other check is green. `SONAR_TOKEN` is read from the environment when the project needs one.
+- **It shows, then asks:** repository, pull request, head SHA and legacy count, then the typed word `ja`. Anything else
+  changes nothing.
+- **Off, merge, on:** it sets the repository's `quality_gate` property to `false` (this removes ruleset 25227067 for it),
+  runs `gh pr merge <pr> --merge --match-head-commit <sha>`, and sets the property back to `true` in every case: merged,
+  merge failed, Ctrl-C. A property that cannot be restored is exit `2` with one line naming what to set by hand.
+- **Logged:** one comment on the pull request (who, when, legacy count, `quality_gate off → merge → on`). The command
+  prints `aco release <n> --merged <pr>` for the head, because `aco land` refuses any non-green check.
