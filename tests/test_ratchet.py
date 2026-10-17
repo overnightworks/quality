@@ -192,3 +192,29 @@ def test_baseline_write_that_the_filesystem_refuses_cannot_be_judged(build_repo,
     repo = build_repo({"src/a.py": long_function(62), **blocker})
     assert cli.main(["baseline", "write", str(repo)]) == 2
     assert "baseline: cannot judge - cannot write quality/baseline.toml" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["src/\U0001f600.py", "src/café.py", "src/del\x7f.py", 'src/quote"back\\slash.py'],
+    ids=["outside-the-bmp", "accented", "del-character", "quote-and-backslash"],
+)
+def test_a_written_baseline_holds_any_utf8_path(build_repo, capsys, path):
+    """#46 rule 5: whatever the path, the written baseline is TOML that hygiene then holds."""
+    repo = build_repo({path: long_file(810) + long_function(62)})
+    assert cli.main(["baseline", "write", str(repo)]) == 0
+    assert tomllib.loads((repo / BASELINE_PATH).read_text(encoding="utf-8")) == {
+        "file_lines": {path: 810 + 62},
+        "function_lines": {path: {"long_one": 62}},
+    }
+    capsys.readouterr()
+    code, output = hygiene(capsys, repo)
+    assert (code, "hygiene: clean (3 rules)" in output) == (0, True), output
+
+
+def test_a_path_that_is_not_utf8_cannot_be_written_into_the_baseline(build_repo, capsys):
+    """TOML holds only Unicode, so a non-UTF-8 file name is exit 2, never a baseline hygiene cannot read."""
+    repo = build_repo({"src/latin\udce9.py": long_file(810)})
+    assert cli.main(["baseline", "write", str(repo)]) == 2
+    assert "baseline: cannot judge - src/latin\\udce9.py is not valid UTF-8" in capsys.readouterr().err
+    assert not (repo / BASELINE_PATH).exists()

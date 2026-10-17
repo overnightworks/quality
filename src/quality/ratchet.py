@@ -192,9 +192,19 @@ def render_baseline(entries: Baseline) -> str:
         if key.metric is Metric.FILE_LINES:
             header, name = f"[{key.metric.value}]", key.path
         else:
-            header, name = f"[{key.metric.value}.{json.dumps(key.path)}]", key.symbol
-        sections.setdefault(header, []).append(f"{json.dumps(name)} = {entries[key]}")
+            header, name = f"[{key.metric.value}.{_toml_string(key.path)}]", key.symbol
+        sections.setdefault(header, []).append(f"{_toml_string(name)} = {entries[key]}")
     return BASELINE_HEADER + "".join(f"\n{header}\n" + "\n".join(lines) + "\n" for header, lines in sections.items())
+
+
+def _toml_string(name: str) -> str:
+    """JSON's string escapes are TOML's, except that TOML has no surrogate pairs and escapes DEL as well."""
+    try:
+        name.encode("utf-8")
+    except UnicodeEncodeError:
+        printable = name.encode("utf-8", "backslashreplace").decode("utf-8")
+        raise SizeError(f"{printable} is not valid UTF-8, so {BASELINE_PATH} cannot hold it") from None
+    return json.dumps(name, ensure_ascii=False).replace("\x7f", "\\u007f")
 
 
 def load_baseline(text: str) -> Baseline:

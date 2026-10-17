@@ -154,7 +154,7 @@ def run_baseline_write(path: Path) -> int:
     try:
         entries = ratchet.debt(measure_size(path, tracked_files(path)))
         write_repository_text(path, ratchet.BASELINE_PATH, ratchet.render_baseline(entries))
-    except CannotJudge as error:
+    except (CannotJudge, ratchet.SizeError) as error:
         print(f"baseline: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     print(f"baseline: wrote {len(entries)} entries to {path / ratchet.BASELINE_PATH}")
