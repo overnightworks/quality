@@ -185,9 +185,11 @@ def _read_base_file(repo: Path, base_sha: str, path: str) -> str | None:
         raise CannotJudge(f"cannot read the base commit {base_sha}: {listed.stderr.strip()}")
     if not listed.stdout.strip():
         return None
-    shown = subprocess.run(
-        [*git, "show", "--end-of-options", f"{base_sha}:{path}"], capture_output=True, text=True, check=False
-    )
+    shown = subprocess.run([*git, "show", "--end-of-options", f"{base_sha}:{path}"], capture_output=True, check=False)
+    unreadable = f"cannot read {path} at the base commit {base_sha}"
     if shown.returncode != 0:
-        raise CannotJudge(f"cannot read {path} at the base commit {base_sha}: {shown.stderr.strip()}")
-    return shown.stdout
+        raise CannotJudge(f"{unreadable}: {shown.stderr.decode(errors='replace').strip()}")
+    try:
+        return shown.stdout.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise CannotJudge(f"{unreadable}: {error}") from error

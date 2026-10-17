@@ -292,13 +292,13 @@ def main_lines(count: int) -> str:
     return f'[function_lines."src/quality/cli.py"]\n"main" = {count}\n'
 
 
-def put(path: Path, text: str | None) -> None:
-    """Writes `text` to `path`, or removes the file when `text` is None."""
-    if text is None:
+def put(path: Path, content: str | bytes | None) -> None:
+    """Writes `content` to `path`, or removes the file when `content` is None."""
+    if content is None:
         path.unlink(missing_ok=True)
     else:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text)
+        path.write_bytes(content if isinstance(content, bytes) else content.encode())
 
 
 @pytest.fixture
@@ -306,7 +306,7 @@ def pull_request(monkeypatch, run_env):
     """Commits `base` as the pull request's base baseline and points GATE_BASE_SHA at that commit."""
     repo, _ = run_env
 
-    def commit_base(base: str | None, config: str | None = None) -> str:
+    def commit_base(base: str | bytes | None, config: str | None = None) -> str:
         put(repo / BASELINE_PATH, base)
         if config is not None:
             put(repo / "quality" / "config.toml", config)
@@ -339,10 +339,12 @@ def verdict_of(repo: Path, capsys) -> tuple[int, str]:
         (None, None, 0, "verdict: green"),
         ("[ccn", main_lines(82), 2, f"{BASELINE_PATH} at the base commit {{base}}: {BASELINE_PATH} is not valid TOML"),
         (main_lines(82), "[ccn", 2, f"cannot judge - {BASELINE_PATH} at the head: {BASELINE_PATH} is not valid TOML"),
+        (b"\xff", main_lines(82), 2, f"cannot read {BASELINE_PATH} at the base commit {{base}}: 'utf-8' codec"),
     ],
     ids=[
         "cell 1 growth", "cell 2 lowering", "cell 3 equal", "cell 4 adoption", "cell 5 base file deleted",
         "cell 6 new key", "cell 7 key dropped", "cell 8 both absent", "cell 9 base malformed", "cell 10 head malformed",
+        "cell 9 base not UTF-8",
     ],
 )
 def test_the_size_baseline_only_falls_against_the_base(capsys, pull_request, base, head, code, expected):
