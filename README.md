@@ -202,7 +202,7 @@ quality emergency-merge <owner/repo> <pr>
   changes nothing.
 - **Off, merge, on:** it sets the repository's `quality_gate` property to `false` (this removes ruleset 25227067 for it),
   runs `gh pr merge <pr> --merge --match-head-commit <sha>`, and sets the property back to `true` in every case: merged,
-  merge failed, Ctrl-C. A property that cannot be restored is exit `2` with one line naming what to set by hand. A merge whose
+  merge failed, Ctrl-C. A property that cannot be restored is exit `2` with one line naming what to set by hand and the merge outcome. A merge whose
   outcome GitHub does not confirm (Ctrl-C, a lost answer) is re-read from the pull request; if that does not settle it, exit `2`
   with `merge state unknown`.
 - **Logged:** one comment on the pull request (who, when, legacy count, `quality_gate off → <outcome> → on`), also when the

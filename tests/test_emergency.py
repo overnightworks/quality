@@ -205,6 +205,15 @@ def test_refuses_unless_the_door_is_the_only_way(gh_kwargs, sonar_kwargs, messag
     assert answers == []
 
 
+def test_cannot_judge_when_sonar_is_unreachable_under_legacy_fail(capsys):
+    """#37 rule 2."""
+    gh = FakeGh()
+    code, _ = drive(gh, sonar(unreachable=True))
+    assert code == 2
+    assert "cannot judge" in capsys.readouterr().out
+    changed_nothing(gh)
+
+
 def test_cannot_judge_without_the_merge_commit_the_jobs_ran_on(capsys):
     """#37 rule 2: the config the jobs ran on is unknown, so exit 2 and nothing changed."""
     gh = FakeGh(merge_sha=None)
