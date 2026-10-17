@@ -10,7 +10,15 @@ from pathlib import Path
 from quality import __version__, engines, ratchet, staged
 from quality.config import Allowance, ConfigError, read_gate_settings
 from quality.emergency import Ask, GhRunner, run_emergency_merge, run_gh
-from quality.hygiene import CannotJudge, active_rules, measure_size, run_hygiene, skipped_rules, tracked_files
+from quality.hygiene import (
+    CannotJudge,
+    active_rules,
+    measure_size,
+    run_hygiene,
+    skipped_rules,
+    tracked_files,
+    write_repository_text,
+)
 from quality.report import Finding, render
 from quality.sonar import TASK_FILE, Sleep, Transport, analyse, fetch_json, preflight
 from quality.verdict import (
@@ -145,13 +153,11 @@ def coverage_note(engine_dir: Path | None) -> str:
 def run_baseline_write(path: Path) -> int:
     try:
         entries = ratchet.debt(measure_size(path, tracked_files(path)))
+        write_repository_text(path, ratchet.BASELINE_PATH, ratchet.render_baseline(entries))
     except CannotJudge as error:
         print(f"baseline: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
-    target = path / ratchet.BASELINE_PATH
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(ratchet.render_baseline(entries), encoding="utf-8")
-    print(f"baseline: wrote {len(entries)} entries to {target}")
+    print(f"baseline: wrote {len(entries)} entries to {path / ratchet.BASELINE_PATH}")
     return EXIT_CLEAN
 
 

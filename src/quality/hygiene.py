@@ -101,6 +101,16 @@ def read_repository_text(root: Path, name: str) -> str:
         raise CannotJudge(f"cannot read {name}: {error}") from error
 
 
+def write_repository_text(root: Path, name: str, text: str) -> None:
+    """Writes a file of the repository, only where `name` itself lies: a symlink on the way would redirect the write."""
+    path = root.resolve() / name
+    resolved = path.resolve()
+    if resolved != path:
+        raise CannotJudge(f"{name} resolves to {resolved}, not to the repository's own {name}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
 def _compose_file_findings(root: Path, name: str) -> list[Finding]:
     text = read_repository_text(root, name)
     try:

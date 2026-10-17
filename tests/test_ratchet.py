@@ -154,3 +154,29 @@ def test_an_unreadable_baseline_cannot_be_judged(build_repo, capsys, baseline):
     code, output = hygiene(capsys, build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: baseline}))
     assert code == 2
     assert "cannot judge" in output
+
+
+def link_the_baseline_outside(repo: Path, outside: Path) -> None:
+    (repo / BASELINE_PATH).parent.mkdir(exist_ok=True)
+    (repo / BASELINE_PATH).symlink_to(outside / "victim.toml")
+
+
+def link_the_quality_directory_outside(repo: Path, outside: Path) -> None:
+    (repo / BASELINE_PATH).parent.symlink_to(outside)
+
+
+@pytest.mark.parametrize(
+    "arrange",
+    [link_the_baseline_outside, link_the_quality_directory_outside],
+    ids=["baseline-symlink-outside", "quality-directory-symlink-outside"],
+)
+def test_baseline_write_to_a_destination_it_cannot_own_cannot_be_judged(build_repo, tmp_path_factory, capsys, arrange):
+    """#46 rule 5: the baseline is written to the repository's own quality/baseline.toml, never through a symlink."""
+    outside = tmp_path_factory.mktemp("outside")
+    (outside / "victim.toml").write_text("kept\n")
+    repo = build_repo({"src/a.py": long_function(62)})
+    arrange(repo, outside)
+    assert cli.main(["baseline", "write", str(repo)]) == 2
+    assert "cannot judge" in capsys.readouterr().err
+    assert sorted(path.name for path in outside.iterdir()) == ["victim.toml"]
+    assert (outside / "victim.toml").read_text() == "kept\n"
