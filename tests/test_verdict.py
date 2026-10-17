@@ -3,6 +3,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from conftest import UNKNOWN_KEY_CONFIGS
 
 from quality import cli
 from quality.config import LegacyMode
@@ -184,6 +185,15 @@ def test_verdict_exit_code_and_summary_follow_the_run(capsys, run_env, conclusio
     assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (page, None)) == code
     assert capsys.readouterr().out.strip().endswith("green" if code == 0 else "red")
     assert summary.read_text().strip().endswith("green" if code == 0 else "red")
+
+
+@UNKNOWN_KEY_CONFIGS
+def test_verdict_refuses_a_config_with_unknown_keys(capsys, run_env, config):
+    """#40 rule 2: the verdict keeps refusing unknown keys of quality/config.toml."""
+    repo, _ = run_env
+    (repo / "quality/config.toml").write_text(config)
+    assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: ({"jobs": []}, None)) == 2
+    assert "unknown key" in capsys.readouterr().err
 
 
 def test_verdict_that_cannot_read_the_run_exits_two(capsys, run_env):

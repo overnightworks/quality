@@ -3,16 +3,15 @@ import sys
 from pathlib import Path
 
 import pytest
-from conftest import FAKE_KEY, OTHER_KEY, allow_config
+from conftest import FAKE_KEY, GIT_IDENTITY, OTHER_KEY, allow_config
 
 from quality import cli
 
 KEY_LINE = f"aws_access_key_id = {FAKE_KEY}\n"
-IDENTITY = ["-c", "user.name=t", "-c", "user.email=t@example.invalid"]
 
 
 def git(repo: Path, *arguments: str, check: bool = True) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["git", "-C", str(repo), *IDENTITY, *arguments], check=check, capture_output=True, text=True)
+    return subprocess.run(["git", "-C", str(repo), *GIT_IDENTITY, *arguments], check=check, capture_output=True, text=True)
 
 
 def stage(repo: Path, files: dict[str, str]) -> None:
@@ -228,6 +227,22 @@ def test_a_missing_engine_is_exit_2(build_repo, tmp_path, capsys):
     """#25 rule 4: a missing engine is exit 2."""
     assert scan_staged(build_repo({}), tmp_path / "no-engines") == 2
     assert capsys.readouterr().err.startswith("scan-staged: cannot judge - ")
+
+
+@pytest.mark.engine
+@pytest.mark.parametrize(
+    ("staged_config", "exit_code"),
+    [
+        ('[gate]\nlegacy = "fail"\nwhatever = 1\n[future]\nkey = 1\n', 0),
+        ('[secrets]\nallow = [{ rule = "r" }]\n[gate]\nlegacy = "fail"\n', 2),
+    ],
+    ids=["unknown gate keys and tables are ignored", "a malformed allowance is still refused"],
+)
+def test_the_staged_scan_reads_only_the_secrets_table(build_repo, installed_engines, staged_config, exit_code):
+    """#40 rule 1: only [secrets] of the staged config is validated."""
+    repo = build_repo({"README": "hello\n"})
+    stage(repo, {"quality/config.toml": staged_config})
+    assert scan_staged(repo, installed_engines) == exit_code
 
 
 @pytest.mark.engine
