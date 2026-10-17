@@ -8,7 +8,7 @@
 - 14 per-repo assessments;
 - the operator rulings in overnightworks/marketplace#80, including 15.10's "sichtbar besser und kleiner".
 
-**Status:** ruled and anchored (D1 to D3 ruled, D7 and D8 at the head default). It moved here from the body of overnightworks/marketplace#80 on 17.10.2026 (quality#43), which stays the fleet epic and links to this file. The operator's rulings it rests on are in [rulings.md](rulings.md).
+**Status:** draft for the operator's ruling; D1 to D3 ruled, D7 and D8 at the head default, D4 to D6 open. It moved here from the body of overnightworks/marketplace#80 on 17.10.2026 (quality#43), which stays the fleet epic and links to this file. The operator's rulings it rests on are in [rulings.md](rulings.md).
 
 **Landed since the v3 draft** (the sentences below are copied from the draft and brought current only where a landing made them false):
 - quality v0.1.0 (bab8770) and v0.1.1 (75467b7) are tagged.
