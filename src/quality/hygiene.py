@@ -163,7 +163,9 @@ def _describe(port: object) -> str:
 
 
 def measure_size(root: Path, tracked: list[str]) -> ratchet.Measurements:
-    sources = {name: read_repository_text(root, name) for name in tracked if ratchet.is_python(name)}
+    """Measures the tree on disk: a tracked file absent from it (deleted, sparse, a dangling link) is gone."""
+    on_disk = [name for name in tracked if ratchet.is_python(name) and (root / name).exists()]
+    sources = {name: read_repository_text(root, name) for name in on_disk}
     try:
         return ratchet.measure(sources)
     except ratchet.SizeError as error:

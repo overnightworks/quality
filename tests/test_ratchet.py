@@ -112,6 +112,31 @@ def test_below_the_thresholds_or_with_a_fixed_entry_gone_is_clean(build_repo, ca
     assert "hygiene: clean (3 rules)" in output
 
 
+def delete_from_disk(path: Path) -> None:
+    path.unlink()
+
+
+def replace_with_a_dangling_symlink(path: Path) -> None:
+    path.unlink()
+    path.symlink_to(path.with_name("missing.py"))
+
+
+@pytest.mark.parametrize("remove", [delete_from_disk, replace_with_a_dangling_symlink], ids=["deleted", "dangling"])
+@pytest.mark.parametrize(
+    "baseline",
+    [None, '[function_lines."src/b.py"]\nlong_one = 62\n'],
+    ids=["no-baseline", "baseline-holds-the-gone-file"],
+)
+def test_a_tracked_file_missing_from_disk_is_gone_not_unjudgeable(build_repo, capsys, remove, baseline):
+    """#46 rule 3/4: the rule judges the tree on disk; a tracked file absent from it is gone, which is fine."""
+    files = {"src/a.py": "x = 1\n", "src/b.py": long_function(62)}
+    repo = build_repo(files if baseline is None else {**files, BASELINE_PATH: baseline})
+    remove(repo / "src/b.py")
+    code, output = hygiene(capsys, repo)
+    assert code == 0, output
+    assert "hygiene: clean (3 rules)" in output
+
+
 def test_baseline_write_records_the_measured_debt_sorted_and_hygiene_then_holds_it(build_repo, capsys):
     """#46 rule 5: `quality baseline write` writes sorted TOML keyed by path and qualified symbol."""
     repo = build_repo(
