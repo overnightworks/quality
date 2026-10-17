@@ -364,11 +364,11 @@ def test_the_size_baseline_only_falls_against_the_base(capsys, pull_request, bas
     assert (actual_code, expected.format(base=base_sha) in output, "Traceback" in output) == (code, True, False)
 
 
-def test_a_head_baseline_that_links_out_of_the_repository_cannot_be_judged(capsys, pull_request, tmp_path_factory):
+def test_a_head_baseline_that_links_out_of_the_repository_cannot_be_judged(capsys, pull_request, tmp_path):
     """#48 rule 4, cell 11: a head baseline symlinked out of the repository is exit 2, no traceback."""
     repo, commit_base = pull_request
     commit_base(main_lines(82))
-    outside = tmp_path_factory.mktemp("outside") / "baseline.toml"
+    outside = tmp_path.parent / f"{tmp_path.name}-outside-baseline.toml"
     outside.write_text(main_lines(82))
     (repo / BASELINE_PATH).unlink()
     (repo / BASELINE_PATH).symlink_to(outside)
