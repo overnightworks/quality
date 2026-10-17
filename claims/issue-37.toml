@@ -1,0 +1,8 @@
+claim_id = "e93afa4d309842788abc65da05a6dc80"
+agent = "Claude fe12493e-3d52-442e-b01b-4ee4336de2f0"
+role = "builder"
+base = "b16b5255e00adcb45bd1f52b3439b018d63d0364"
+branch = "claude/issue-37-emergency-merge"
+scope = ["README.md", "src/quality/cli.py", "src/quality/emergency.py", "tests/test_emergency.py"]
+opened_commit = "2b25733b020084feebad0b93d9b52375850bd15c"
+whole_reason = "The command, its CLI entry, its tests and the README section that replaces the manual steps are one door."
