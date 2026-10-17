@@ -268,6 +268,53 @@ def confirmed(ask: Ask) -> bool:
         return False
 
 
+def judge_pull_request(
+    repository: str, pull_request: int, gh: GhRunner, transport: Transport, environment: Mapping[str, str]
+) -> tuple[Door, str]:
+    repository_facts = json.loads(gh(["api", f"repos/{repository}"], None))
+    require_admin_permission(repository_facts, repository)
+    pull = json.loads(gh(["api", f"repos/{repository}/pulls/{pull_request}"], None))
+    if pull["state"] != "open":
+        raise Refused(f"the pull request is {pull['state']}")
+    head_sha = pull["head"]["sha"]
+    check_runs = read_check_runs(gh, repository, head_sha)
+    refusal = refusal_of_checks([*check_runs, *read_statuses(gh, repository, head_sha)])
+    if refusal:
+        raise Refused(refusal)
+    merge_commit_sha = pull["merge_commit_sha"]
+    if not merge_commit_sha:
+        raise CannotJudge("GitHub has no merge commit for the pull request yet, so the config the jobs ran on is unknown")
+    settings = read_gate_settings_at(gh, repository, merge_commit_sha)
+    refusal = refusal_of_verdict(settings, read_gate_settings_at(gh, repository, pull["base"]["sha"]), check_runs)
+    if refusal:
+        raise Refused(refusal)
+    legacy_refusal = refusal_of_legacy_mode(settings)
+    try:
+        legacy = judge_sonar(
+            repository, pull_request, head_sha, repository_facts["default_branch"], transport, environment.get("SONAR_TOKEN", "")
+        )
+    except CannotJudge:
+        if legacy_refusal:
+            raise Refused(legacy_refusal) from None
+        raise
+    if legacy_refusal:
+        raise Refused(legacy_refusal)
+    login = gh(["api", "user", "--jq", ".login"], None).strip()
+    return Door(repository, pull_request, head_sha, legacy), login
+
+
+def report_attempt(attempt: Attempt, pull_request: int, report: Callable[[str], None]) -> int:
+    gate_state = "is on again" if attempt.restore_error is None else "may still be off"
+    if attempt.outcome is Outcome.UNKNOWN:
+        report(f"emergency-merge: merge state unknown ({attempt.detail or 'no answer'}) - check #{pull_request} on GitHub; {GATE_PROPERTY} {gate_state}")
+        return EXIT_NOT_RESTORED
+    if attempt.outcome is Outcome.NOT_MERGED:
+        report(f"emergency-merge: not merged - {attempt.detail}; {GATE_PROPERTY} {gate_state}")
+        return EXIT_NOT_RESTORED if attempt.restore_error else EXIT_REFUSED
+    report(f"merged. For the head: aco release <n> --merged {pull_request}")
+    return EXIT_NOT_RESTORED if attempt.restore_error else EXIT_MERGED
+
+
 def run_emergency_merge(
     repository: str,
     pull_request: int,
@@ -287,42 +334,13 @@ def run_emergency_merge(
         report("emergency-merge: refused - this is the operator's command, it needs a terminal on stdin")
         return EXIT_REFUSED
     try:
-        repository_facts = json.loads(gh(["api", f"repos/{repository}"], None))
-        require_admin_permission(repository_facts, repository)
-        pull = json.loads(gh(["api", f"repos/{repository}/pulls/{pull_request}"], None))
-        if pull["state"] != "open":
-            raise Refused(f"the pull request is {pull['state']}")
-        head_sha = pull["head"]["sha"]
-        check_runs = read_check_runs(gh, repository, head_sha)
-        refusal = refusal_of_checks([*check_runs, *read_statuses(gh, repository, head_sha)])
-        if refusal:
-            raise Refused(refusal)
-        merge_commit_sha = pull["merge_commit_sha"]
-        if not merge_commit_sha:
-            raise CannotJudge("GitHub has no merge commit for the pull request yet, so the config the jobs ran on is unknown")
-        settings = read_gate_settings_at(gh, repository, merge_commit_sha)
-        refusal = refusal_of_verdict(settings, read_gate_settings_at(gh, repository, pull["base"]["sha"]), check_runs)
-        if refusal:
-            raise Refused(refusal)
-        legacy_refusal = refusal_of_legacy_mode(settings)
-        try:
-            legacy = judge_sonar(
-                repository, pull_request, head_sha, repository_facts["default_branch"], transport, environment.get("SONAR_TOKEN", "")
-            )
-        except CannotJudge:
-            if legacy_refusal:
-                raise Refused(legacy_refusal) from None
-            raise
-        if legacy_refusal:
-            raise Refused(legacy_refusal)
-        login = gh(["api", "user", "--jq", ".login"], None).strip()
+        door, login = judge_pull_request(repository, pull_request, gh, transport, environment)
     except Refused as refusal_error:
         report(f"emergency-merge: refused - {refusal_error}")
         return EXIT_REFUSED
     except (CannotJudge, GhFailed, KeyError, ValueError) as error:
         report(f"emergency-merge: cannot judge - {error}; nothing was changed")
         return EXIT_NOT_RESTORED
-    door = Door(repository, pull_request, head_sha, legacy)
     report(f"{door.repository} #{door.pull_request} head {door.head_sha}: {door.legacy} legacy finding(s)")
     if not confirmed(ask):
         report("emergency-merge: not confirmed, nothing was changed")
@@ -332,12 +350,4 @@ def run_emergency_merge(
         gh(["api", "-X", "POST", f"repos/{repository}/issues/{pull_request}/comments", "-f", f"body={log_comment(login, now(), door, attempt)}"], None)
     except (GhFailed, KeyboardInterrupt) as error:
         report(f"emergency-merge: the log comment on #{pull_request} was not posted, add it by hand ({error})")
-    gate_state = "is on again" if attempt.restore_error is None else "may still be off"
-    if attempt.outcome is Outcome.UNKNOWN:
-        report(f"emergency-merge: merge state unknown ({attempt.detail or 'no answer'}) - check #{pull_request} on GitHub; {GATE_PROPERTY} {gate_state}")
-        return EXIT_NOT_RESTORED
-    if attempt.outcome is Outcome.NOT_MERGED:
-        report(f"emergency-merge: not merged - {attempt.detail}; {GATE_PROPERTY} {gate_state}")
-        return EXIT_NOT_RESTORED if attempt.restore_error else EXIT_REFUSED
-    report(f"merged. For the head: aco release <n> --merged {pull_request}")
-    return EXIT_NOT_RESTORED if attempt.restore_error else EXIT_MERGED
+    return report_attempt(attempt, pull_request, report)
