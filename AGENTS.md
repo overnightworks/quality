@@ -5,7 +5,9 @@ Exit 0 clean, 1 findings, 2 cannot judge.
 
 Door commands:
 
-- `quality hygiene [PATH]` (`hygiene.py`): `.env` files, compose ports, and with `--engines` the secret and workflow scans.
+- `quality hygiene [PATH]` (`hygiene.py`): `.env` files, compose ports, the `size` ratchet (`ratchet.py`), and with
+  `--engines` the secret and workflow scans.
+- `quality baseline write [PATH]` (`ratchet.py`): writes the measured size debt to `quality/baseline.toml`.
 - `quality verdict [PATH]` (`verdict.py`): judges the mandatory jobs of the running workflow run; the fail-closed `quality / verdict`.
 - `quality scan-staged [PATH] --engines DIR` (`staged.py`): secret scan of the staged change.
 - `quality engines install|verify DIR` (`engines.py`): the pinned engines.
