@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from quality import cli
-from quality.ratchet import BASELINE_PATH
+from quality.ratchet import BASELINE_PATH, Key, Metric, RaisedEntry, load_baseline, raised_entries, render_baseline
 
 EMPTY_BASELINE = ""
 
@@ -377,3 +377,38 @@ def test_a_path_that_is_not_utf8_cannot_be_written_into_the_baseline(build_repo,
     assert cli.main(["baseline", "write", str(repo)]) == 2
     assert "baseline: not written - src/latin\\udce9.py is not valid UTF-8" in capsys.readouterr().err
     assert not (repo / BASELINE_PATH).exists()
+
+
+QUOTED_PATH = 'src/straße "q".py'
+
+
+@pytest.mark.parametrize(
+    ("base", "head", "expected"),
+    [
+        (
+            {Key(Metric.CCN, "a.py", "f"): 16, Key(Metric.FUNCTION_LINES, "a.py", "f"): 70},
+            {Key(Metric.CCN, "a.py", "f"): 18, Key(Metric.FUNCTION_LINES, "a.py", "f"): 65},
+            [RaisedEntry(Key(Metric.CCN, "a.py", "f"), 16, 18)],
+        ),
+        ({Key(Metric.FILE_LINES, "a.py"): 900}, {Key(Metric.FILE_LINES, "a.py"): 900}, []),
+        ({Key(Metric.FILE_LINES, "a.py"): 900}, {}, []),
+        ({}, {Key(Metric.FILE_LINES, "b.py"): 800}, [RaisedEntry(Key(Metric.FILE_LINES, "b.py"), None, 800)]),
+        (
+            {Key(Metric.CCN, "a.py", "f"): 16},
+            {Key(Metric.CCN, "b.py", "f"): 16},
+            [RaisedEntry(Key(Metric.CCN, "b.py", "f"), None, 16)],
+        ),
+    ],
+    ids=["ccn raised while lines fell", "equal", "entry removed", "entry added", "entry moved"],
+)
+def test_only_a_raised_or_added_entry_loosens_the_baseline(base, head, expected):
+    """#48 rule 2, cell 18: growth and a new (moved) key loosen; lowering, equality and a removed key do not."""
+    assert raised_entries(base, head) == expected
+
+
+def test_a_key_with_quotes_or_unicode_matches_itself_exactly():
+    """#48 cell 19: the same quoted or unicode key on both sides is no raise, and a raise on it is found."""
+    key = Key(Metric.CCN, QUOTED_PATH, 'Holder."méthode"')
+    base = load_baseline(render_baseline({key: 16}))
+    assert raised_entries(base, load_baseline(render_baseline({key: 16}))) == []
+    assert raised_entries(base, load_baseline(render_baseline({key: 17}))) == [RaisedEntry(key, 16, 17)]

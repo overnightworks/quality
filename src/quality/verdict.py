@@ -9,6 +9,7 @@ from pathlib import Path
 
 from quality.config import CONFIG_PATH, GateSettings, LegacyMode, load_gate_settings
 from quality.hygiene import CannotJudge
+from quality.ratchet import BASELINE_PATH, Baseline, RaisedEntry, SizeError, load_baseline, raised_entries
 
 JOBS_URL = "https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs?filter=all&per_page=100"
 MAX_PAGES = 10
@@ -19,6 +20,17 @@ PageFetcher = Callable[[str], tuple[str, str | None]]
 
 
 NO_BASE_SETTINGS = GateSettings((), LegacyMode.REPORT)
+
+
+@dataclass(frozen=True)
+class Side:
+    """What the gate holds at one side of a pull request: its settings and its size baseline, None without one."""
+
+    settings: GateSettings
+    baseline: Baseline | None
+
+
+NO_BASE = Side(NO_BASE_SETTINGS, None)
 
 
 @dataclass(frozen=True)
@@ -42,13 +54,8 @@ class Verdict:
         return not self.problems
 
 
-def judge(
-    settings: GateSettings,
-    base_settings: GateSettings,
-    jobs: list[Job],
-    gate_results: Mapping[str, str],
-    current_attempt: int,
-) -> Verdict:
+def judge(head: Side, base: Side, jobs: list[Job], gate_results: Mapping[str, str], current_attempt: int) -> Verdict:
+    settings, base_settings = head.settings, base.settings
     problems = [f'gate job "{name}" result {result}' for name, result in gate_results.items() if result != SUCCESS]
     problems += [
         f'loosened: mandatory job "{name}" removed'
@@ -57,9 +64,26 @@ def judge(
     ]
     if base_settings.legacy is LegacyMode.FAIL and settings.legacy is not LegacyMode.FAIL:
         problems.append(f"loosened: legacy {base_settings.legacy.value} → {settings.legacy.value}")
+    problems += _baseline_loosenings(base.baseline, head.baseline)
     for name in dict.fromkeys((*base_settings.mandatory_jobs, *settings.mandatory_jobs)):
         problems += _problems_of_job(name, jobs, current_attempt)
     return Verdict(tuple(problems))
+
+
+def _baseline_loosenings(base: Baseline | None, head: Baseline | None) -> list[str]:
+    """Without a base baseline any head one is adoption; with one, the head may only lower or drop entries."""
+    if base is None:
+        return []
+    if head is None:
+        return [f"loosened: {BASELINE_PATH} removed"]
+    return [_describe_raise(entry) for entry in raised_entries(base, head)]
+
+
+def _describe_raise(entry: RaisedEntry) -> str:
+    entry_name = " ".join(part for part in (entry.key.metric.value, entry.key.path, entry.key.symbol) if part)
+    if entry.base is None:
+        return f"loosened: size baseline adds {entry_name} {entry.head}"
+    return f"loosened: size baseline raises {entry_name} {entry.base} -> {entry.head}"
 
 
 def _problems_of_job(name: str, jobs: list[Job], current_attempt: int) -> list[str]:
@@ -126,18 +150,35 @@ def _is_git_ref_name(ref: str) -> bool:
 
 def _require_safe_ref(ref: str) -> None:
     if not _is_git_ref_name(ref):
-        raise CannotJudge(f"{ref!r} is not a ref name git accepts")
+        raise CannotJudge(f"the base {ref!r} is not a ref name or a SHA")
 
 
-def read_base_settings(repo: Path, base_sha: str) -> GateSettings:
+def read_base(repo: Path, base_sha: str) -> Side:
+    """The gate's settings and size baseline at the base commit; a file the base lacks reads as absent."""
     _require_safe_ref(base_sha)
+    config = _read_base_file(repo, base_sha, CONFIG_PATH)
+    baseline = _read_base_file(repo, base_sha, BASELINE_PATH)
+    try:
+        return Side(
+            NO_BASE_SETTINGS if config is None else load_gate_settings(config),
+            None if baseline is None else load_baseline(baseline),
+        )
+    except SizeError as error:
+        raise CannotJudge(f"{BASELINE_PATH} at the base commit {base_sha}: {error}") from error
+
+
+def _read_base_file(repo: Path, base_sha: str, path: str) -> str | None:
     git = ["git", "-C", str(repo.resolve())]
-    listed = subprocess.run([*git, "ls-tree", base_sha, "--", CONFIG_PATH], capture_output=True, text=True, check=False)
+    listed = subprocess.run(
+        [*git, "ls-tree", "--end-of-options", base_sha, "--", path], capture_output=True, text=True, check=False
+    )
     if listed.returncode != 0:
         raise CannotJudge(f"cannot read the base commit {base_sha}: {listed.stderr.strip()}")
     if not listed.stdout.strip():
-        return NO_BASE_SETTINGS
-    shown = subprocess.run([*git, "show", f"{base_sha}:{CONFIG_PATH}"], capture_output=True, text=True, check=False)
+        return None
+    shown = subprocess.run(
+        [*git, "show", "--end-of-options", f"{base_sha}:{path}"], capture_output=True, text=True, check=False
+    )
     if shown.returncode != 0:
-        raise CannotJudge(f"cannot read {CONFIG_PATH} at the base commit {base_sha}: {shown.stderr.strip()}")
-    return load_gate_settings(shown.stdout)
+        raise CannotJudge(f"cannot read {path} at the base commit {base_sha}: {shown.stderr.strip()}")
+    return shown.stdout

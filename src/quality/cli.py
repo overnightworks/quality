@@ -14,6 +14,7 @@ from quality.hygiene import (
     CannotJudge,
     active_rules,
     measure_size,
+    read_baseline,
     run_hygiene,
     skipped_rules,
     tracked_files,
@@ -22,11 +23,12 @@ from quality.hygiene import (
 from quality.report import Finding, render
 from quality.sonar import TASK_FILE, Sleep, Transport, analyse, fetch_json, preflight
 from quality.verdict import (
-    NO_BASE_SETTINGS,
+    NO_BASE,
     PageFetcher,
+    Side,
     github_fetcher,
     judge,
-    read_base_settings,
+    read_base,
     read_jobs,
 )
 
@@ -224,15 +226,15 @@ def run_sonar_findings(transport: Transport, sleep: Sleep) -> int:
 
 def run_verdict(path: Path, fetcher_for: Callable[[str], PageFetcher]) -> int:
     try:
-        settings = read_gate_settings(path)
+        head = Side(read_gate_settings(path), read_baseline(path))
         base_sha = os.environ.get("GATE_BASE_SHA", "")
-        base_settings = read_base_settings(path, base_sha) if base_sha else NO_BASE_SETTINGS
+        base = read_base(path, base_sha) if base_sha else NO_BASE
         jobs = read_jobs(
             os.environ["GITHUB_REPOSITORY"], os.environ["GITHUB_RUN_ID"], fetcher_for(os.environ["GITHUB_TOKEN"])
         )
         gate_results = {name: need["result"] for name, need in json.loads(os.environ["GATE_NEEDS"]).items()}
-        result = judge(settings, base_settings, jobs, gate_results, int(os.environ["GITHUB_RUN_ATTEMPT"]))
-    except (ConfigError, CannotJudge, KeyError, ValueError) as error:
+        result = judge(head, base, jobs, gate_results, int(os.environ["GITHUB_RUN_ATTEMPT"]))
+    except (ConfigError, CannotJudge, ratchet.SizeError, KeyError, ValueError) as error:
         report = f"verdict: cannot judge - {error}"
         code = EXIT_CANNOT_JUDGE
     else:

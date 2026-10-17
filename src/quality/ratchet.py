@@ -223,6 +223,24 @@ def compare(measurements: Measurements, baseline: Baseline) -> list[Finding]:
     return findings
 
 
+@dataclass(frozen=True)
+class RaisedEntry:
+    """A baseline entry the head holds higher than the base; `base` is None when the head adds the entry."""
+
+    key: Key
+    base: int | None
+    head: int
+
+
+def raised_entries(base: Baseline, head: Baseline) -> list[RaisedEntry]:
+    """One baseline against another: an entry may fall or go, never rise or appear (a moved entry is a new one)."""
+    return [
+        RaisedEntry(key, base.get(key), head[key])
+        for key in sorted(head, key=_order)
+        if key not in base or head[key] > base[key]
+    ]
+
+
 def _finding(key: Key, measured: Measured, verdict: str, fix: str) -> Finding:
     subject = "file" if key.metric is Metric.FILE_LINES else f"function {key.symbol}"
     return Finding(

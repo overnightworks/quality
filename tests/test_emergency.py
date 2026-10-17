@@ -4,8 +4,10 @@ from datetime import UTC, datetime
 import pytest
 
 from quality import cli
+from quality.config import CONFIG_PATH
 from quality.emergency import GhFailed
 from quality.hygiene import CannotJudge
+from quality.ratchet import BASELINE_PATH
 
 REPO = "acme/widgets"
 SHA = "a" * 40
@@ -15,6 +17,8 @@ GATE_CONFIG = '[gate]\nmandatory_jobs = ["checks"]\nlegacy = "fail"\n'
 REPORT_CONFIG = GATE_CONFIG.replace("fail", "report")
 LEGACY_RED = {"quality / sonar": "failure", "quality / verdict": "failure"}
 FIXED_NOW = datetime(2026, 10, 17, 12, 0, tzinfo=UTC)
+BASELINE_82 = '[function_lines."src/quality/cli.py"]\n"main" = 82\n'
+BASELINE_90 = BASELINE_82.replace("82", "90")
 
 
 class FakeGh:
@@ -23,11 +27,18 @@ class FakeGh:
     def __init__(
         self, admin=True, checks=None, statuses=None, state="open", fail_on=(), interrupt_on=(), merge_lands=False,
         head_config=GATE_CONFIG, base_config=GATE_CONFIG, merge_config=None, merge_sha=MERGE_SHA,
+        base_baseline=None, merge_baseline=None,
     ):
         self.admin, self.state, self.fail_on, self.merge_lands = admin, state, set(fail_on), merge_lands
         self.interrupt_on = list(interrupt_on)
         self.merge_sha = merge_sha
-        self.configs = {SHA: head_config, BASE_SHA: base_config, MERGE_SHA: head_config if merge_config is None else merge_config}
+        self.files = {
+            (CONFIG_PATH, SHA): head_config,
+            (CONFIG_PATH, BASE_SHA): base_config,
+            (CONFIG_PATH, MERGE_SHA): head_config if merge_config is None else merge_config,
+            (BASELINE_PATH, BASE_SHA): base_baseline,
+            (BASELINE_PATH, MERGE_SHA): merge_baseline,
+        }
         self.checks = {"checks": "success", **(LEGACY_RED if checks is None else checks)}
         self.statuses = statuses or {}
         self.merged = False
@@ -58,6 +69,12 @@ class FakeGh:
                 return step
         return "repository"
 
+    @staticmethod
+    def file_of(arguments):
+        """The (path, sha) a contents call asks for; a file the fake does not hold answers 404."""
+        path, _, sha = arguments[-1].partition("/contents/")[2].partition("?ref=")
+        return path, sha
+
     def answer(self, step, arguments, stdin):
         if step == "pull":
             return json.dumps({"state": self.state, "merged": self.merged, "head": {"sha": SHA}, "base": {"sha": BASE_SHA}, "merge_commit_sha": self.merge_sha})
@@ -69,9 +86,10 @@ class FakeGh:
         if step == "statuses":
             return "\n".join(json.dumps({"context": context, "state": state}) for context, state in self.statuses.items())
         if step == "config":
-            if self.configs[arguments[-1].rpartition("ref=")[2]] is None:
+            content = self.files.get(self.file_of(arguments))
+            if content is None:
                 raise GhFailed("gh api failed: HTTP 404")
-            return self.configs[arguments[-1].rpartition("ref=")[2]]
+            return content
         if step == "repository":
             return json.dumps({"default_branch": "main", "permissions": {"admin": self.admin}})
         if step == "login":
@@ -368,3 +386,29 @@ def test_ctrl_c_while_posting_the_log_comment_is_reported(restore_fails, capsys)
     output = capsys.readouterr().out
     assert "log comment on #7 was not posted" in output
     assert ("MAY STILL BE OFF" in output) is restore_fails
+
+
+@pytest.mark.parametrize(
+    ("base_baseline", "merge_baseline", "code", "message"),
+    [
+        (BASELINE_82, BASELINE_90, 1, "loosened: size baseline raises function_lines src/quality/cli.py main 82 -> 90"),
+        (BASELINE_82, BASELINE_82, 0, "merged."),
+        (BASELINE_82, None, 1, "loosened: quality/baseline.toml removed"),
+        (None, None, 0, "merged."),
+    ],
+    ids=["cell 20 raised", "cell 21 equal", "cell 22 removed at the merge commit", "cell 23 absent at both"],
+)
+def test_the_door_refuses_a_baseline_loosening_next_to_legacy_red(base_baseline, merge_baseline, code, message, capsys):
+    """#48 rule 6, cells 20-23: the door judges the baseline at the merge commit against base, as the verdict does."""
+    gh = FakeGh(base_baseline=base_baseline, merge_baseline=merge_baseline)
+    assert drive(gh)[0] == code
+    assert message in capsys.readouterr().out
+    assert (gh.merge_calls == []) == (code == 1)
+
+
+def test_a_malformed_baseline_at_the_merge_commit_cannot_be_judged(capsys):
+    """#48 rule 4: the door names the commit whose baseline it cannot read, and changes nothing."""
+    gh = FakeGh(base_baseline=BASELINE_82, merge_baseline="[ccn")
+    assert drive(gh)[0] == 2
+    assert f"{BASELINE_PATH} at {MERGE_SHA}" in capsys.readouterr().out
+    changed_nothing(gh)
