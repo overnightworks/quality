@@ -1,0 +1,8 @@
+claim_id = "b7c2aa73965c42aa80b6efc850fa3853"
+agent = "claude"
+role = "builder"
+base = "c9dd95f1d6ca0eeb96afd40cf340e76b87c394d4"
+branch = "claude/issue-48-baseline-falls"
+scope = ["AGENTS.md", "README.md", "quality/baseline.toml", "src/quality/cli.py", "src/quality/emergency.py", "src/quality/hygiene.py", "src/quality/ratchet.py", "src/quality/verdict.py", "tests/test_emergency.py", "tests/test_gate_sonar.py", "tests/test_ratchet.py", "tests/test_verdict.py"]
+opened_commit = "7f453f5a39befbf00eb122e19433cb240b668ddb"
+whole_reason = "The verdict and the door must judge loosenings with the same decider: landed apart, the door would open on a PR the verdict calls loosened, and README:218-221 would be false between landings."
