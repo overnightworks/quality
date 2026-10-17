@@ -5,6 +5,7 @@ import pytest
 
 from quality import cli
 from quality.emergency import GhFailed
+from quality.hygiene import CannotJudge
 
 REPO = "acme/widgets"
 SHA = "a" * 40
@@ -91,8 +92,10 @@ class FakeGh:
         return [call for call in self.calls if call[:2] == ("pr", "merge")]
 
 
-def sonar(new=0, legacy=4, main_analysed=True, analysed=SHA):
+def sonar(new=0, legacy=4, main_analysed=True, analysed=SHA, unreachable=False):
     def transport(url, authorization):
+        if unreachable:
+            raise CannotJudge("SonarCloud is down")
         if "project_branches" in url:
             return {"branches": [{"name": "main", "isMain": True, **({"analysisDate": "x"} if main_analysed else {})}]}
         if "project_pull_requests" in url:
@@ -175,9 +178,10 @@ def test_anything_but_ja_changes_nothing(typed, capsys):
         ({"checks": {"quality / sonar": "timed_out", "quality / verdict": "failure"}}, {}, "quality / sonar must have failed"),
         ({"checks": {"quality / sonar": "failure"}}, {}, "quality / verdict must have failed"),
         ({"head_config": GATE_CONFIG.replace("fail", "report")}, {}, "loosened: legacy fail"),
-        ({"head_config": REPORT_CONFIG, "base_config": REPORT_CONFIG}, {}, "legacy = report at the merge commit"),
-        ({"head_config": GATE_CONFIG, "base_config": REPORT_CONFIG, "merge_config": REPORT_CONFIG}, {}, "legacy = report at the merge commit"),
-        ({"head_config": None, "base_config": None}, {}, "legacy = report at the merge commit"),
+        ({"head_config": REPORT_CONFIG, "base_config": REPORT_CONFIG}, {}, "legacy = report at the pull request's current merge commit"),
+        ({"head_config": GATE_CONFIG, "base_config": REPORT_CONFIG, "merge_config": REPORT_CONFIG}, {}, "legacy = report at the pull request's current merge commit"),
+        ({"head_config": REPORT_CONFIG, "base_config": REPORT_CONFIG}, {"unreachable": True}, "legacy = report"),
+        ({"head_config": None, "base_config": None}, {}, "legacy = report at the pull request's current merge commit"),
         ({"head_config": REPORT_CONFIG, "base_config": REPORT_CONFIG}, {"new": 1}, "adds findings"),
         ({"head_config": '[gate]\nmandatory_jobs = ["other"]\nlegacy = "fail"\n'}, {}, 'mandatory job "checks" removed'),
         ({"state": "closed"}, {}, "pull request is closed"),
@@ -187,7 +191,7 @@ def test_anything_but_ja_changes_nothing(typed, capsys):
     ],
     ids=[
         "new finding", "other red check", "other skipped check", "pending check", "failing status", "pending status",
-        "nothing red", "sonar green", "sonar timed out", "verdict green", "loosened legacy", "report on both sides", "head fail but merge commit report", "no config at either sha", "report mode and a new finding", "removed mandatory job",
+        "nothing red", "sonar green", "sonar timed out", "verdict green", "loosened legacy", "report on both sides", "report and Sonar unreachable", "head fail but merge commit report", "no config at either sha", "report mode and a new finding", "removed mandatory job",
         "closed", "no legacy", "legacy unknown", "stale analysis",
     ],
 )
@@ -296,6 +300,33 @@ def test_exit_2_loud_line_and_log_when_the_gate_cannot_be_restored(restore_failu
     assert drive(cannot_restore)[0] == 2
     assert f"quality_gate MAY STILL BE OFF for {REPO}" in capsys.readouterr().out
     assert "NOT restored" in gh.comments[0]
+
+
+@pytest.mark.parametrize(
+    ("gh_kwargs", "read_back_fails", "expected"),
+    [
+        ({"merge_lands": True}, False, "aco release <n> --merged 7"),
+        ({"fail_on": ["merge"]}, True, ") - check #7 on GitHub"),
+        ({"fail_on": ["merge"]}, False, "not merged"),
+    ],
+    ids=["merged", "unknown", "not merged"],
+)
+def test_names_the_merge_outcome_when_the_gate_cannot_be_restored(gh_kwargs, read_back_fails, expected, capsys):
+    """#37 rule 4: the operator learns both manual checks, the gate and the pull request."""
+    gh = FakeGh(**gh_kwargs)
+    original = gh.__call__
+
+    def cannot_restore(arguments, stdin=None):
+        if stdin and json.loads(stdin)["properties"][0]["value"] == "true":
+            raise GhFailed("denied")
+        if read_back_fails and gh.merge_calls and FakeGh.step_of(arguments) == "pull":
+            raise GhFailed("pull broke")
+        return original(arguments, stdin)
+
+    assert drive(cannot_restore)[0] == 2
+    output = capsys.readouterr().out
+    assert "MAY STILL BE OFF" in output
+    assert expected in output
 
 
 def test_ctrl_c_while_reading_back_the_merge_state_is_exit_2_with_the_gate_on(capsys):

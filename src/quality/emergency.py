@@ -128,7 +128,7 @@ def refusal_of_verdict(settings: GateSettings, base_settings: GateSettings, chec
 
 def refusal_of_legacy_mode(settings: GateSettings) -> str | None:
     if settings.legacy is not LegacyMode.FAIL:
-        return f"legacy = {settings.legacy.value} at the merge commit the jobs ran on: {SONAR_CHECK} cannot be red on legacy findings"
+        return f"legacy = {settings.legacy.value} at the pull request's current merge commit: {SONAR_CHECK} cannot be red on legacy findings"
     return None
 
 
@@ -304,12 +304,17 @@ def run_emergency_merge(
         refusal = refusal_of_verdict(settings, read_gate_settings_at(gh, repository, pull["base"]["sha"]), check_runs)
         if refusal:
             raise Refused(refusal)
-        legacy = judge_sonar(
-            repository, pull_request, head_sha, repository_facts["default_branch"], transport, environment.get("SONAR_TOKEN", "")
-        )
-        refusal = refusal_of_legacy_mode(settings)
-        if refusal:
-            raise Refused(refusal)
+        legacy_refusal = refusal_of_legacy_mode(settings)
+        try:
+            legacy = judge_sonar(
+                repository, pull_request, head_sha, repository_facts["default_branch"], transport, environment.get("SONAR_TOKEN", "")
+            )
+        except CannotJudge:
+            if legacy_refusal:
+                raise Refused(legacy_refusal) from None
+            raise
+        if legacy_refusal:
+            raise Refused(legacy_refusal)
         login = gh(["api", "user", "--jq", ".login"], None).strip()
     except Refused as refusal_error:
         report(f"emergency-merge: refused - {refusal_error}")
@@ -327,13 +332,12 @@ def run_emergency_merge(
         gh(["api", "-X", "POST", f"repos/{repository}/issues/{pull_request}/comments", "-f", f"body={log_comment(login, now(), door, attempt)}"], None)
     except (GhFailed, KeyboardInterrupt) as error:
         report(f"emergency-merge: the log comment on #{pull_request} was not posted, add it by hand ({error})")
-    if attempt.restore_error:
-        return EXIT_NOT_RESTORED
+    gate_state = "is on again" if attempt.restore_error is None else "may still be off"
     if attempt.outcome is Outcome.UNKNOWN:
-        report(f"emergency-merge: merge state unknown ({attempt.detail or 'no answer'}) - check #{pull_request} on GitHub; {GATE_PROPERTY} is on again")
+        report(f"emergency-merge: merge state unknown ({attempt.detail or 'no answer'}) - check #{pull_request} on GitHub; {GATE_PROPERTY} {gate_state}")
         return EXIT_NOT_RESTORED
     if attempt.outcome is Outcome.NOT_MERGED:
-        report(f"emergency-merge: not merged - {attempt.detail}; {GATE_PROPERTY} is on again")
-        return EXIT_REFUSED
+        report(f"emergency-merge: not merged - {attempt.detail}; {GATE_PROPERTY} {gate_state}")
+        return EXIT_NOT_RESTORED if attempt.restore_error else EXIT_REFUSED
     report(f"merged. For the head: aco release <n> --merged {pull_request}")
-    return EXIT_MERGED
+    return EXIT_NOT_RESTORED if attempt.restore_error else EXIT_MERGED
