@@ -3,10 +3,12 @@ import pytest
 from quality.config import (
     Allowance,
     ConfigError,
+    LegacyMode,
+    load_legacy_mode,
     load_mandatory_jobs,
     load_secret_allowances,
     load_staged_secret_allowances,
-    read_mandatory_jobs,
+    read_gate_settings,
     read_secret_allowances,
 )
 
@@ -42,7 +44,7 @@ def test_refuses_a_config_that_does_not_name_mandatory_jobs(text):
 def test_a_repository_without_the_file_is_refused(tmp_path):
     """#6 rule 1: a repository without quality/config.toml is refused."""
     with pytest.raises(ConfigError, match="missing"):
-        read_mandatory_jobs(tmp_path)
+        read_gate_settings(tmp_path)
 
 
 def test_a_config_file_that_cannot_be_decoded_is_refused(tmp_path):
@@ -50,7 +52,7 @@ def test_a_config_file_that_cannot_be_decoded_is_refused(tmp_path):
     (tmp_path / "quality").mkdir()
     (tmp_path / "quality" / "config.toml").write_bytes(b"\xff\xfe")
     with pytest.raises(ConfigError, match="cannot be read"):
-        read_mandatory_jobs(tmp_path)
+        read_gate_settings(tmp_path)
 
 
 def test_a_config_directory_that_cannot_be_entered_is_refused(tmp_path):
@@ -60,9 +62,28 @@ def test_a_config_directory_that_cannot_be_entered_is_refused(tmp_path):
     config_dir.chmod(0)
     try:
         with pytest.raises(ConfigError, match="cannot be read"):
-            read_mandatory_jobs(tmp_path)
+            read_gate_settings(tmp_path)
     finally:
         config_dir.chmod(0o700)
+
+
+def test_a_config_symlink_leaving_the_repository_is_refused(tmp_path):
+    """#33 S8707: a config file that resolves outside the repository is a ConfigError, never read."""
+    repo = tmp_path / "repo"
+    (repo / "quality").mkdir(parents=True)
+    outside = tmp_path / "outside.toml"
+    outside.write_text('[gate]\nmandatory_jobs = ["checks"]\nlegacy = "fail"\n')
+    (repo / "quality" / "config.toml").symlink_to(outside)
+    with pytest.raises(ConfigError, match="outside the repository"):
+        read_gate_settings(repo)
+
+
+def test_a_config_symlink_loop_is_refused(tmp_path):
+    """defect:#33 review: a self-referencing config symlink is a ConfigError (exit 2), not a RuntimeError traceback."""
+    (tmp_path / "quality").mkdir()
+    (tmp_path / "quality" / "config.toml").symlink_to("config.toml")
+    with pytest.raises(ConfigError, match="cannot be read"):
+        read_gate_settings(tmp_path)
 
 
 HASH = "a" * 64
@@ -141,3 +162,37 @@ def test_the_staged_allow_list_ignores_everything_outside_secrets(extra):
 def test_a_repository_without_the_file_allows_nothing(tmp_path):
     """#24 rule 3: a missing quality/config.toml allows nothing."""
     assert read_secret_allowances(tmp_path) == {}
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ('[gate]\nmandatory_jobs = ["checks"]', LegacyMode.REPORT),
+        ('[gate]\nmandatory_jobs = ["checks"]\nlegacy = "report"', LegacyMode.REPORT),
+        ('[gate]\nmandatory_jobs = ["checks"]\nlegacy = "fail"', LegacyMode.FAIL),
+    ],
+    ids=["key absent", "report", "fail"],
+)
+def test_legacy_findings_only_fail_when_the_repository_switched_them_on(text, expected):
+    """#33 sentence 3: [gate] legacy is "report" unless the config says "fail"."""
+    assert load_legacy_mode(text) is expected
+
+
+@pytest.mark.parametrize("value", ['"warn"', '"FAIL"', '""', "true", "1"])
+def test_any_other_legacy_value_is_a_config_error(value):
+    """#33 sentence 3: any value but "report" or "fail" is refused, naming the fix."""
+    with pytest.raises(ConfigError, match='legacy.*"report" or "fail"'):
+        load_legacy_mode(f'[gate]\nmandatory_jobs = ["checks"]\nlegacy = {value}')
+
+
+def test_the_legacy_key_is_known_to_the_mandatory_jobs_reader():
+    """#33 sentence 3: adding legacy does not make the rest of the config unknown."""
+    assert load_mandatory_jobs('[gate]\nmandatory_jobs = ["checks"]\nlegacy = "fail"') == ("checks",)
+
+
+def test_one_read_of_the_config_gives_the_mandatory_jobs_and_the_legacy_mode(tmp_path):
+    """#33 sentence 3: the gate settings of a repository come from its quality/config.toml in one read."""
+    (tmp_path / "quality").mkdir()
+    (tmp_path / "quality" / "config.toml").write_text('[gate]\nmandatory_jobs = ["checks"]\nlegacy = "fail"\n')
+    settings = read_gate_settings(tmp_path)
+    assert (settings.mandatory_jobs, settings.legacy) == (("checks",), LegacyMode.FAIL)

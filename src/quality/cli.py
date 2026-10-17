@@ -7,15 +7,16 @@ from collections.abc import Callable
 from pathlib import Path
 
 from quality import __version__, engines, staged
-from quality.config import Allowance, ConfigError, read_mandatory_jobs
+from quality.config import Allowance, ConfigError, read_gate_settings
 from quality.hygiene import CannotJudge, active_rules, run_hygiene, skipped_rules
 from quality.report import Finding, render
 from quality.sonar import TASK_FILE, Sleep, Transport, analyse, fetch_json, preflight
 from quality.verdict import (
+    NO_BASE_SETTINGS,
     PageFetcher,
     github_fetcher,
     judge,
-    read_base_mandatory_jobs,
+    read_base_settings,
     read_jobs,
 )
 
@@ -57,7 +58,13 @@ def main(
     sonar.add_parser("preflight", help="refuse a token or properties file that could steer the scan").add_argument(
         "path", nargs="?", type=Path, default=Path(".")
     )
-    sonar.add_parser("findings", help=f"wait for this run's analysis ({TASK_FILE}), then count its open findings")
+    sonar.add_parser(
+        "findings",
+        help=(
+            f"wait for this run's analysis ({TASK_FILE}), then count its open findings; "
+            "needs quality/config.toml with [gate] mandatory_jobs, else exit 2"
+        ),
+    )
     arguments = parser.parse_args(argv)
 
     if arguments.command == "verdict":
@@ -149,8 +156,8 @@ def run_sonar_preflight(path: Path) -> int:
 
 def run_sonar_findings(transport: Transport, sleep: Sleep) -> int:
     try:
-        result = analyse(os.environ, transport, sleep)
-    except CannotJudge as error:
+        result = analyse(os.environ, read_gate_settings(Path(".")).legacy, transport, sleep)
+    except (CannotJudge, ConfigError) as error:
         print(f"sonar: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     for finding in result.findings.listed:
@@ -161,14 +168,14 @@ def run_sonar_findings(transport: Transport, sleep: Sleep) -> int:
 
 def run_verdict(path: Path, fetcher_for: Callable[[str], PageFetcher]) -> int:
     try:
-        mandatory = read_mandatory_jobs(path)
+        settings = read_gate_settings(path)
         base_sha = os.environ.get("GATE_BASE_SHA", "")
-        base_mandatory = read_base_mandatory_jobs(path, base_sha) if base_sha else ()
+        base_settings = read_base_settings(path, base_sha) if base_sha else NO_BASE_SETTINGS
         jobs = read_jobs(
             os.environ["GITHUB_REPOSITORY"], os.environ["GITHUB_RUN_ID"], fetcher_for(os.environ["GITHUB_TOKEN"])
         )
         gate_results = {name: need["result"] for name, need in json.loads(os.environ["GATE_NEEDS"]).items()}
-        result = judge(mandatory, base_mandatory, jobs, gate_results, int(os.environ["GITHUB_RUN_ATTEMPT"]))
+        result = judge(settings, base_settings, jobs, gate_results, int(os.environ["GITHUB_RUN_ATTEMPT"]))
     except (ConfigError, CannotJudge, KeyError, ValueError) as error:
         report = f"verdict: cannot judge - {error}"
         code = EXIT_CANNOT_JUDGE

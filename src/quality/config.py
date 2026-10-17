@@ -1,18 +1,36 @@
 import re
 import tomllib
+from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import NamedTuple
 
 CONFIG_PATH = "quality/config.toml"
-GATE_KEYS = {"mandatory_jobs"}
+GATE_KEYS = {"mandatory_jobs", "legacy"}
 SECRETS_KEYS = {"allow"}
 ALLOWANCE_KEYS = {"rule", "file", "secret_sha256", "reason"}
 SHA256_HEX = re.compile(r"[0-9a-f]{64}")
 EXAMPLE = '[gate]\nmandatory_jobs = ["checks"]'
+LEGACY_EXAMPLE = '[gate]\nlegacy = "fail"'
 ALLOWANCE_EXAMPLE = (
     '[secrets]\nallow = [{ rule = "aws-access-token", file = "tests/fixture.py", '
     'secret_sha256 = "<64 lowercase hex>", reason = "fixture value, not a key" }]'
 )
+
+
+class LegacyMode(Enum):
+    """What the repository's open findings on its default branch do to a pull request."""
+
+    REPORT = "report"
+    FAIL = "fail"
+
+
+@dataclass(frozen=True)
+class GateSettings:
+    """The part of quality/config.toml a pull request must not loosen."""
+
+    mandatory_jobs: tuple[str, ...]
+    legacy: LegacyMode
 
 
 class Allowance(NamedTuple):
@@ -51,7 +69,7 @@ def _refuse_unknown_keys(document: dict, gate: dict) -> None:
     unknown = (set(document) - {"gate", "secrets"}) | (set(gate) - GATE_KEYS)
     if unknown:
         raise ConfigError(
-            f"{CONFIG_PATH} has unknown key(s) {sorted(unknown)} - only [gate] mandatory_jobs and [secrets] allow exist"
+            f"{CONFIG_PATH} has unknown key(s) {sorted(unknown)} - only [gate] mandatory_jobs, [gate] legacy and [secrets] allow exist"
         )
 
 
@@ -70,13 +88,34 @@ def load_mandatory_jobs(text: str | None) -> tuple[str, ...]:
     return tuple(names)
 
 
-def read_mandatory_jobs(repo: Path) -> tuple[str, ...]:
-    path = repo / CONFIG_PATH
+def load_legacy_mode(text: str) -> LegacyMode:
+    """A missing `legacy` key reports; load_gate_settings is what insists on a config."""
+    document = _parse(text, LEGACY_EXAMPLE)
+    gate = _table(document, "gate", LEGACY_EXAMPLE)
+    _refuse_unknown_keys(document, gate)
+    _refuse_unknown_secrets_keys(_table(document, "secrets", ALLOWANCE_EXAMPLE))
+    value = gate.get("legacy", LegacyMode.REPORT.value)
     try:
-        return load_mandatory_jobs(path.read_text(encoding="utf-8"))
+        return LegacyMode(value)
+    except ValueError:
+        modes = " or ".join(f'"{mode.value}"' for mode in LegacyMode)
+        raise ConfigError(f"{CONFIG_PATH} has [gate] legacy = {value!r}; it must be {modes}, like:\n{LEGACY_EXAMPLE}") from None
+
+
+def load_gate_settings(text: str | None) -> GateSettings:
+    return GateSettings(load_mandatory_jobs(text), load_legacy_mode(text))
+
+
+def read_gate_settings(repo: Path) -> GateSettings:
+    root = repo.resolve()
+    try:
+        path = (root / CONFIG_PATH).resolve()
+        if not path.is_relative_to(root):
+            raise ConfigError(f"{CONFIG_PATH} resolves outside the repository ({path})")
+        return load_gate_settings(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        return load_mandatory_jobs(None)
-    except (OSError, UnicodeDecodeError) as error:
+        return load_gate_settings(None)
+    except (OSError, RuntimeError, UnicodeDecodeError) as error:
         raise ConfigError(f"{CONFIG_PATH} cannot be read ({error})") from error
 
 

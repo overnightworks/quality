@@ -50,7 +50,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: overnightworks/quality
-          ref: v0.1.1
+          ref: v0.2.0
           path: .gate-tool
           persist-credentials: false
 
@@ -91,7 +91,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: overnightworks/quality
-          ref: v0.1.1
+          ref: v0.2.0
           path: .gate-tool
           persist-credentials: false
 
@@ -118,6 +118,7 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: uv run --locked --project "$TOOL_DIR" quality sonar findings
 
   verdict:
@@ -140,7 +141,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: overnightworks/quality
-          ref: v0.1.1
+          ref: v0.2.0
           path: .gate-tool
           persist-credentials: false
 
