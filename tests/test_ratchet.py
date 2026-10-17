@@ -180,3 +180,15 @@ def test_baseline_write_to_a_destination_it_cannot_own_cannot_be_judged(build_re
     assert "cannot judge" in capsys.readouterr().err
     assert sorted(path.name for path in outside.iterdir()) == ["victim.toml"]
     assert (outside / "victim.toml").read_text() == "kept\n"
+
+
+@pytest.mark.parametrize(
+    "blocker",
+    [{"quality": "a file\n"}, {f"{BASELINE_PATH}/inside.txt": "a directory\n"}],
+    ids=["quality-is-a-file", "baseline-is-a-directory"],
+)
+def test_baseline_write_that_the_filesystem_refuses_cannot_be_judged(build_repo, capsys, blocker):
+    """Exit 2, not a traceback: a baseline that cannot be written is never a clean result."""
+    repo = build_repo({"src/a.py": long_function(62), **blocker})
+    assert cli.main(["baseline", "write", str(repo)]) == 2
+    assert "baseline: cannot judge - cannot write quality/baseline.toml" in capsys.readouterr().err
