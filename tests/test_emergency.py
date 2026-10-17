@@ -282,3 +282,55 @@ def test_exit_2_loud_line_and_log_when_the_gate_cannot_be_restored(restore_failu
     assert drive(cannot_restore)[0] == 2
     assert f"quality_gate MAY STILL BE OFF for {REPO}" in capsys.readouterr().out
     assert "NOT restored" in gh.comments[0]
+
+
+def test_gate_is_back_on_even_when_ctrl_c_hits_while_the_merge_failure_is_handled():
+    """#37 rule 4: the restore is unconditional, whatever interrupts the handling of the failure."""
+
+    class InterruptedWhenDescribed(GhFailed):
+        def __str__(self):
+            raise KeyboardInterrupt
+
+    gh = FakeGh()
+    original = gh.__call__
+
+    def merge_breaks(arguments, stdin=None):
+        if arguments[:2] == ["pr", "merge"]:
+            raise InterruptedWhenDescribed
+        return original(arguments, stdin)
+
+    with pytest.raises(KeyboardInterrupt):
+        drive(merge_breaks)
+    assert gh.gate_values == ["false", "true"]
+
+
+def test_ctrl_c_while_reading_back_the_merge_state_is_exit_2_with_the_gate_on(capsys):
+    """#37 rule 4: an interruption after the restore is still an outcome line and exit 2, not a traceback."""
+    gh = FakeGh(fail_on=["merge"])
+    original = gh.__call__
+
+    def interrupted_reading_back(arguments, stdin=None):
+        if gh.merge_calls and FakeGh.step_of(arguments) == "pull":
+            raise KeyboardInterrupt
+        return original(arguments, stdin)
+
+    assert drive(interrupted_reading_back)[0] == 2
+    assert gh.gate_values == ["false", "true"]
+    assert "merge state unknown" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("restore_fails", [False, True], ids=["gate on", "gate not restored"])
+def test_ctrl_c_while_posting_the_log_comment_is_reported(restore_fails, capsys):
+    """#37 rule 4: a Ctrl-C on the log comment keeps the exit code and, when the gate is off, the loud line."""
+    gh = FakeGh(interrupt_on=["comment"])
+    original = gh.__call__
+
+    def cannot_restore(arguments, stdin=None):
+        if restore_fails and stdin and json.loads(stdin)["properties"][0]["value"] == "true":
+            raise GhFailed("denied")
+        return original(arguments, stdin)
+
+    assert drive(cannot_restore)[0] == (2 if restore_fails else 0)
+    output = capsys.readouterr().out
+    assert "log comment on #7 was not posted" in output
+    assert ("MAY STILL BE OFF" in output) is restore_fails

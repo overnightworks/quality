@@ -204,7 +204,7 @@ def merged_on_github(gh: GhRunner, door: Door) -> bool | None:
     """What GitHub says now; None when it cannot be read."""
     try:
         return json.loads(gh(["api", f"repos/{door.repository}/pulls/{door.pull_request}"], None))["merged"] is True
-    except (GhFailed, KeyError, ValueError):
+    except (GhFailed, KeyError, ValueError, KeyboardInterrupt):
         return None
 
 
@@ -219,8 +219,12 @@ def restore_gate(gh: GhRunner, repository: str) -> str | None:
     return None
 
 
-def switch_off_merge_switch_on(gh: GhRunner, door: Door) -> Attempt:
-    outcome, detail, merge_started = Outcome.MERGED, None, False
+def not_restored_warning(door: Door, reason: str) -> str:
+    return f"emergency-merge: {GATE_PROPERTY} MAY STILL BE OFF for {door.repository} - set it to true by hand now ({reason})"
+
+
+def switch_off_merge_switch_on(gh: GhRunner, door: Door, report: Callable[[str], None]) -> Attempt:
+    outcome, detail, merge_started, interrupted = Outcome.MERGED, None, False, False
     try:
         set_gate(gh, door.repository, False)
         merge_started = True
@@ -228,17 +232,19 @@ def switch_off_merge_switch_on(gh: GhRunner, door: Door) -> Attempt:
             ["pr", "merge", str(door.pull_request), "--repo", door.repository, "--merge", "--match-head-commit", door.head_sha],
             None,
         )
-    except GhFailed as failure:
-        outcome, detail = Outcome.NOT_MERGED, str(failure)
-    except KeyboardInterrupt:
-        outcome, detail = Outcome.NOT_MERGED, "interrupted"
-    restore_error = restore_gate(gh, door.repository)
+    except (GhFailed, KeyboardInterrupt) as stop:
+        outcome, interrupted = Outcome.NOT_MERGED, isinstance(stop, KeyboardInterrupt)
+        detail = "interrupted" if interrupted else str(stop)
+    finally:
+        restore_error = restore_gate(gh, door.repository)
+        if restore_error:
+            report(not_restored_warning(door, restore_error))
     if merge_started and outcome is not Outcome.MERGED:
         # A lost answer or Ctrl-C leaves it open whether GitHub merged.
         landed = merged_on_github(gh, door)
         if landed:
             outcome, detail = Outcome.MERGED, None
-        elif landed is None or detail == "interrupted":
+        elif landed is None or interrupted:
             outcome = Outcome.UNKNOWN
     return Attempt(outcome, detail, restore_error)
 
@@ -307,13 +313,12 @@ def run_emergency_merge(
     if not confirmed(ask):
         report("emergency-merge: not confirmed, nothing was changed")
         return EXIT_REFUSED
-    attempt = switch_off_merge_switch_on(gh, door)
+    attempt = switch_off_merge_switch_on(gh, door, report)
     try:
         gh(["api", "-X", "POST", f"repos/{repository}/issues/{pull_request}/comments", "-f", f"body={log_comment(login, now(), door, attempt)}"], None)
-    except GhFailed as error:
+    except (GhFailed, KeyboardInterrupt) as error:
         report(f"emergency-merge: the log comment on #{pull_request} was not posted, add it by hand ({error})")
     if attempt.restore_error:
-        report(f"emergency-merge: {GATE_PROPERTY} MAY STILL BE OFF for {repository} - set it to true by hand now ({attempt.restore_error})")
         return EXIT_NOT_RESTORED
     if attempt.outcome is Outcome.UNKNOWN:
         report(f"emergency-merge: merge state unknown ({attempt.detail or 'no answer'}) - check #{pull_request} on GitHub; {GATE_PROPERTY} is on again")
