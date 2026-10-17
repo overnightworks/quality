@@ -8,6 +8,10 @@
     quality engines verify DIR
     quality sonar preflight [PATH]
     quality sonar findings
+    quality verdict [PATH]
+    quality emergency-merge OWNER/REPO PR
+
+Where the fleet is going and why: [docs/roadmap.md](docs/roadmap.md) (target state, waves, per repository) and [docs/rulings.md](docs/rulings.md) (the operator's rulings, verbatim and dated).
 
 Install it with
 
