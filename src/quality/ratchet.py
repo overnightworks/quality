@@ -1,11 +1,13 @@
 """The `size` rule: lines per file, lines and CCN per function of every tracked Python file, held by a baseline.
 
 lizard measures; Python's own `ast` only names each function by its qualified symbol (`Class.method`), which
-lizard leaves unqualified.
+lizard leaves unqualified. Both read the same text, decoded from the file's bytes the way Python reads source.
 """
 
 import ast
+import io
 import json
+import tokenize
 import tomllib
 from collections import Counter
 from collections.abc import Iterator
@@ -119,18 +121,26 @@ class TreeMeasurement:
         return self.measurements
 
 
-def measure(sources: dict[str, str]) -> TreeMeasurement:
+def measure(sources: dict[str, bytes]) -> TreeMeasurement:
+    """A file's lines are counted in its bytes, so a file Python cannot decode still has them."""
     measurements: Measurements = {}
     unparsable: dict[str, str] = {}
-    for path, text in sources.items():
-        measurements[Key(Metric.FILE_LINES, path)] = Measured(len(text.splitlines()), None)
+    for path, source in sources.items():
+        measurements[Key(Metric.FILE_LINES, path)] = Measured(len(source.splitlines()), None)
         try:
+            text = _python_text(source)
             tree = ast.parse(text, filename=path)
         except (SyntaxError, ValueError) as error:
             unparsable[path] = str(error)
             continue
         measurements.update(_function_measurements(path, text, tree))
     return TreeMeasurement(measurements, unparsable)
+
+
+def _python_text(source: bytes) -> str:
+    """Python's own source decoding: a PEP 263 cookie or a UTF-8 BOM names the encoding, UTF-8 otherwise."""
+    encoding, _ = tokenize.detect_encoding(io.BytesIO(source).readline)
+    return source.decode(encoding)
 
 
 def _function_measurements(path: str, text: str, tree: ast.Module) -> Iterator[tuple[Key, Measured]]:

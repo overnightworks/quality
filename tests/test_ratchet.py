@@ -49,22 +49,62 @@ def test_without_a_baseline_the_rule_only_counts_production_and_tests(build_repo
     ) in output
 
 
-PYTHON_2_FIXTURE = {"ok.py": "x = 1\n", "tests/fixtures/legacy.py": 'print "py2"\n'}
+def build_repo_with_source(build_repo, files: dict[str, str], name: str, source: bytes) -> Path:
+    """A repository tracking `name` with exactly these bytes, which a text fixture cannot carry."""
+    repo = build_repo({**files, name: ""})
+    (repo / name).write_bytes(source)
+    return repo
 
 
-def test_without_a_baseline_a_file_python_cannot_parse_is_reported_and_the_exit_unchanged(build_repo, capsys):
-    """#46 rule 3: a tracked Python 2 fixture keeps a clean repository at exit 0 and is named in the report."""
-    code, output = hygiene(capsys, build_repo(PYTHON_2_FIXTURE))
+SOURCE_NAME = "src/source.py"
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        b"# -*- coding: latin-1 -*-\n# \xe9\n" + long_function(60).encode(),
+        b"\xef\xbb\xbf" + long_function(60).encode(),
+        "# \u00e9\n".encode() + long_function(60).encode(),
+    ],
+    ids=["pep263-latin-1", "utf-8-bom", "plain-utf-8"],
+)
+def test_a_file_python_can_read_is_measured_in_its_declared_encoding(build_repo, capsys, source):
+    """#46 rule 1: every tracked Python file Python itself reads is measured, whatever encoding it declares."""
+    code, output = hygiene(capsys, build_repo_with_source(build_repo, {}, SOURCE_NAME, source))
+    assert code == 0, output
+    assert "production: 0 file(s) >= 800 lines, 1 function(s) >= 60 lines" in output
+    assert "not valid Python" not in output
+
+
+NOT_PYTHON = pytest.mark.parametrize(
+    "source",
+    [
+        b"# \xe9\nx = 1\n",
+        b"# -*- coding: utf-8 -*-\nx = 1\n# \xe9\n",
+        b"# -*- coding: klingon -*-\nx = 1\n",
+        b"x = 1\x00\n",
+        b'print "py2"\n',
+    ],
+    ids=["undecodable-utf-8", "invalid-for-its-cookie", "unknown-codec", "null-byte", "python-2"],
+)
+
+
+@NOT_PYTHON
+def test_without_a_baseline_a_file_python_cannot_read_is_reported_and_the_exit_unchanged(build_repo, capsys, source):
+    """#46 rule 3: a tracked file Python cannot read keeps a clean repository at exit 0 and is named in the report."""
+    code, output = hygiene(capsys, build_repo_with_source(build_repo, {"ok.py": "x = 1\n"}, SOURCE_NAME, source))
     assert code == 0, output
     assert "cannot judge" not in output
-    assert "1 file(s) not valid Python, functions unmeasured: tests/fixtures/legacy.py" in output
+    assert f"1 file(s) not valid Python, functions unmeasured: {SOURCE_NAME}" in output
 
 
-def test_against_a_baseline_a_file_python_cannot_parse_cannot_be_judged(build_repo, capsys):
+@NOT_PYTHON
+def test_against_a_baseline_a_file_python_cannot_read_cannot_be_judged(build_repo, capsys, source):
     """#46 rule 4: a baseline is held against every function, so an unmeasurable file is exit 2, never clean."""
-    code, output = hygiene(capsys, build_repo({**PYTHON_2_FIXTURE, BASELINE_PATH: EMPTY_BASELINE}))
+    repo = build_repo_with_source(build_repo, {BASELINE_PATH: EMPTY_BASELINE}, SOURCE_NAME, source)
+    code, output = hygiene(capsys, repo)
     assert code == 2
-    assert "tests/fixtures/legacy.py is not valid Python" in output
+    assert f"{SOURCE_NAME} is not valid Python" in output
 
 
 @pytest.mark.parametrize(

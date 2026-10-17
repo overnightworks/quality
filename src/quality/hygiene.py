@@ -91,15 +91,23 @@ def check_compose_ports(root: Path, tracked: list[str]) -> list[Finding]:
     return findings
 
 
-def read_repository_text(root: Path, name: str) -> str:
-    """A file of the repository as text; one that resolves outside it, or cannot be read, cannot be judged."""
+def read_repository_bytes(root: Path, name: str) -> bytes:
+    """A file of the repository; one that resolves outside it, or cannot be read, cannot be judged."""
     repository = root.resolve()
     path = repository / name
     try:
         if not path.resolve().is_relative_to(repository):
             raise CannotJudge(f"{name} resolves outside the repository")
-        return path.read_text(encoding="utf-8")
-    except (UnicodeDecodeError, OSError, RuntimeError) as error:
+        return path.read_bytes()
+    except (OSError, RuntimeError) as error:
+        raise CannotJudge(f"cannot read {name}: {error}") from error
+
+
+def read_repository_text(root: Path, name: str) -> str:
+    """A file of the repository as UTF-8 text; one that is not UTF-8 cannot be judged."""
+    try:
+        return read_repository_bytes(root, name).decode("utf-8")
+    except UnicodeDecodeError as error:
         raise CannotJudge(f"cannot read {name}: {error}") from error
 
 
@@ -167,7 +175,7 @@ def _describe(port: object) -> str:
 def measure_size(root: Path, tracked: list[str]) -> ratchet.TreeMeasurement:
     """Measures the tree on disk: a tracked file absent from it (deleted, sparse, a dangling link) is gone."""
     on_disk = [name for name in tracked if ratchet.is_python(name) and _is_on_disk(root, name)]
-    return ratchet.measure({name: read_repository_text(root, name) for name in on_disk})
+    return ratchet.measure({name: read_repository_bytes(root, name) for name in on_disk})
 
 
 def _is_on_disk(root: Path, name: str) -> bool:
