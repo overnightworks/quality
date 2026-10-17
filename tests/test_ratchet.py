@@ -85,8 +85,17 @@ NOT_PYTHON = pytest.mark.parametrize(
         b"x = 1\x00\n",
         b'print "py2"\n',
         b"# coding: rot13\nx = 1\n",
+        b"# coding: base64_codec\nx = 1\n",
     ],
-    ids=["undecodable-utf-8", "invalid-for-its-cookie", "unknown-codec", "null-byte", "python-2", "non-text-codec"],
+    ids=[
+        "undecodable-utf-8",
+        "invalid-for-its-cookie",
+        "unknown-codec",
+        "null-byte",
+        "python-2",
+        "non-text-codec",
+        "registered-binary-codec",
+    ],
 )
 
 
