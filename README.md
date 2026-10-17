@@ -34,9 +34,10 @@ Install it with
   Python cannot decode or parse is named as not valid Python: without a baseline the count notes it (`1 file(s) not
   valid Python, functions unmeasured: bad.py`) and the exit is unchanged; with a baseline it is `hygiene: unparsable -
   bad.py is not valid Python (...)`, and `quality baseline write` refuses with `baseline: not written - bad.py is not
-  valid Python (...)`; both exit `2`. A tracked file the operating system refuses to read (for example a directory
-  without permission) is `hygiene: cannot judge - cannot reach ...` with or without a baseline, and `quality baseline
-  write` refuses with `baseline: not written - cannot reach ...`; both exit `2`. A tracked file missing from disk
+  valid Python (...)`; both exit `2`. A tracked file the operating system refuses to read is `hygiene: cannot judge - ...`
+  with or without a baseline, and `quality baseline write` refuses with `baseline: not written - ...`; both exit `2`.
+  The reason names the case: a file without read permission is `cannot read locked.py: [Errno 13] ...`, a file behind
+  a directory without permission is `cannot reach pkg/m.py: [Errno 13] ...`. A tracked file missing from disk
   (deleted, or a dangling symlink) is skipped.
   With it, the tree on disk must hold the baseline: a new violation, an entry that grew and an entry above its measured
   value (stale: lower it with `quality baseline write`) are findings; an entry whose file or function is gone is fine.
