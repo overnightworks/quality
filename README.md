@@ -29,7 +29,13 @@ Install it with
   (a path under `test/` or `tests/`, `conftest.py`, `test_*.py`, `*_test.py`). Functions are named by their qualified
   symbol (`Class.method`); a second one of the same name, such as a property setter, is `Class.method#2`. Without
   `quality/baseline.toml` the rule only prints the counts (`size: report only (no quality/baseline.toml) - production:
-  1 file(s) >= 800 lines, ...`) and the exit is unchanged.
+  1 file(s) >= 800 lines, ...`) and the size debt leaves the exit unchanged.
+  Files are read the way Python reads source (a PEP 263 coding cookie or a UTF-8 BOM decides the encoding). A file
+  Python cannot decode or parse is named as not valid Python: without a baseline the count notes it (`1 file(s) not
+  valid Python, functions unmeasured: bad.py`) and the exit is unchanged; with a baseline and on `baseline write` it is
+  `unparsable - bad.py is not valid Python (...)`, exit `2`. A tracked file the operating system refuses to read (for
+  example a directory without permission) is `cannot judge - cannot reach ...`, exit `2`, with or without a baseline. A
+  tracked file missing from disk (deleted, or a dangling symlink) is skipped.
   With it, the tree on disk must hold the baseline: a new violation, an entry that grew and an entry above its measured
   value (stale: lower it with `quality baseline write`) are findings; an entry whose file or function is gone is fine.
   `quality baseline write [PATH]` writes the measured debt to `PATH/quality/baseline.toml` as sorted TOML, one table
