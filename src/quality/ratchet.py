@@ -39,21 +39,19 @@ class Metric(Enum):
     FILE_LINES = "file_lines"
     FUNCTION_LINES = "function_lines"
 
+    @property
+    def debt_from(self) -> int:
+        return {
+            Metric.CCN: CCN_ABOVE + 1,
+            Metric.FILE_LINES: FILE_LINES_FROM,
+            Metric.FUNCTION_LINES: FUNCTION_LINES_FROM,
+        }[self]
+
     def is_debt(self, value: int) -> bool:
-        if self is Metric.CCN:
-            return value > CCN_ABOVE
-        return value >= (FILE_LINES_FROM if self is Metric.FILE_LINES else FUNCTION_LINES_FROM)
+        return value >= self.debt_from
 
     def describe(self, value: int) -> str:
         return f"CCN {value}" if self is Metric.CCN else f"{value} lines"
-
-    @property
-    def threshold(self) -> str:
-        return {
-            Metric.CCN: f"above {CCN_ABOVE}",
-            Metric.FILE_LINES: str(FILE_LINES_FROM),
-            Metric.FUNCTION_LINES: str(FUNCTION_LINES_FROM),
-        }[self]
 
     @property
     def fix(self) -> str:
@@ -205,9 +203,8 @@ def compare(measurements: Measurements, baseline: Baseline) -> list[Finding]:
     for key in sorted(measurements, key=_order):
         measured, held = measurements[key], baseline.get(key)
         if held is None and key.metric.is_debt(measured.value):
-            findings.append(
-                _finding(key, measured, f"the threshold is {key.metric.threshold} (new debt)", key.metric.fix)
-            )
+            starts = key.metric.describe(key.metric.debt_from)
+            findings.append(_finding(key, measured, f"debt starts at {starts} (new debt)", key.metric.fix))
         elif held is not None and measured.value > held:
             findings.append(
                 _finding(key, measured, f"the baseline holds {held} (it grew)", f"bring it back to {held} or below")

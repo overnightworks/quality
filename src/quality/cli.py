@@ -55,7 +55,7 @@ def main(
         dest="baseline_command", required=True
     )
     baseline.add_parser("write", help=f"write the measured size debt to {ratchet.BASELINE_PATH}").add_argument(
-        "path", nargs="?", type=Path, default=Path(".")
+        "path", nargs="?", type=Path, default=Path("."), help="the git repository to measure (default: the current one)"
     )
     scan_staged = commands.add_parser("scan-staged", help="scan the staged change of a repository for secrets")
     scan_staged.add_argument("path", nargs="?", type=Path, default=Path("."))
@@ -116,8 +116,12 @@ def main(
     if arguments.command == "engines":
         run_engines = run_engines_install if arguments.engines_command == "install" else run_engines_verify
         return run_engines(arguments.directory, read_pins)
+    return run_hygiene_check(arguments.path, arguments.engines)
+
+
+def run_hygiene_check(path: Path, engine_dir: Path | None) -> int:
     try:
-        result = run_hygiene(arguments.path, arguments.engines)
+        result = run_hygiene(path, engine_dir)
     except CannotJudge as error:
         print(f"hygiene: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
@@ -126,11 +130,11 @@ def main(
     if result.size_report:
         print(result.size_report)
     if not findings:
-        print(f"hygiene: clean ({len(active_rules(arguments.engines))} rules){coverage_note(arguments.engines)}")
+        print(f"hygiene: clean ({len(active_rules(engine_dir))} rules){coverage_note(engine_dir)}")
         return EXIT_CLEAN
     for finding in findings:
         print(render(finding))
-    print(f"hygiene: {len(findings)} finding(s){coverage_note(arguments.engines)}")
+    print(f"hygiene: {len(findings)} finding(s){coverage_note(engine_dir)}")
     return EXIT_FINDINGS
 
 
@@ -155,9 +159,10 @@ def run_baseline_write(path: Path) -> int:
         entries = ratchet.debt(measure_size(path, tracked_files(path)).complete())
         write_repository_text(path, ratchet.BASELINE_PATH, ratchet.render_baseline(entries))
     except (CannotJudge, ratchet.SizeError) as error:
-        print(f"baseline: cannot judge - {error}", file=sys.stderr)
+        print(f"baseline: not written - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
-    print(f"baseline: wrote {len(entries)} entries to {path / ratchet.BASELINE_PATH}")
+    count = "1 entry" if len(entries) == 1 else f"{len(entries)} entries"
+    print(f"baseline: wrote {count} to {path / ratchet.BASELINE_PATH}")
     return EXIT_CLEAN
 
 

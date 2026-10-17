@@ -107,23 +107,32 @@ def test_against_a_baseline_a_file_python_cannot_read_cannot_be_judged(build_rep
     assert f"{SOURCE_NAME} is not valid Python" in output
 
 
+@NOT_PYTHON
+def test_baseline_write_refuses_a_file_python_cannot_read(build_repo, capsys, source):
+    """#46 rule 5: a baseline holds every function, so one written with a file unmeasured would hide its debt."""
+    repo = build_repo_with_source(build_repo, {}, SOURCE_NAME, source)
+    assert cli.main(["baseline", "write", str(repo)]) == 2
+    assert f"baseline: not written - {SOURCE_NAME} is not valid Python" in capsys.readouterr().err
+    assert not (repo / BASELINE_PATH).exists()
+
+
 @pytest.mark.parametrize(
     ("files", "baseline", "expected"),
     [
         (
             {"src/big.py": long_file(800)},
             EMPTY_BASELINE,
-            "size src/big.py - file has 800 lines; the threshold is 800 (new debt).",
+            "size src/big.py - file has 800 lines; debt starts at 800 lines (new debt).",
         ),
         (
             {"src/a.py": method(60)},
             EMPTY_BASELINE,
-            "size src/a.py:2 - function Holder.long_one has 60 lines; the threshold is 60 (new debt).",
+            "size src/a.py:2 - function Holder.long_one has 60 lines; debt starts at 60 lines (new debt).",
         ),
         (
             {"src/a.py": branchy_function(16)},
             EMPTY_BASELINE,
-            "size src/a.py:1 - function branchy has CCN 16; the threshold is above 15 (new debt).",
+            "size src/a.py:1 - function branchy has CCN 16; debt starts at CCN 16 (new debt).",
         ),
         (
             {"src/a.py": long_function(71)},
@@ -205,7 +214,7 @@ def test_a_tracked_file_the_filesystem_refuses_to_reach_cannot_be_judged(build_r
     finally:
         (repo / "locked").chmod(0o755)
     assert code == 2
-    assert "cannot judge - cannot reach locked/b.py" in capsys.readouterr().err
+    assert "cannot reach locked/b.py" in capsys.readouterr().err
 
 
 def property_pair(lines: int) -> str:
@@ -302,7 +311,7 @@ def test_baseline_write_to_a_destination_it_cannot_own_cannot_be_judged(build_re
     (elsewhere / "victim.toml").write_text("kept\n")
     arrange(repo, elsewhere)
     assert cli.main(["baseline", "write", str(repo)]) == 2
-    assert "cannot judge" in capsys.readouterr().err
+    assert "baseline: not written" in capsys.readouterr().err
     assert sorted(path.name for path in elsewhere.iterdir()) == ["victim.toml"]
     assert (elsewhere / "victim.toml").read_text() == "kept\n"
 
@@ -316,7 +325,7 @@ def test_baseline_write_that_the_filesystem_refuses_cannot_be_judged(build_repo,
     """#46 rule 5: exit 2, not a traceback: a baseline that cannot be written is never a clean result."""
     repo = build_repo({"src/a.py": long_function(62), **blocker})
     assert cli.main(["baseline", "write", str(repo)]) == 2
-    assert "baseline: cannot judge - cannot write quality/baseline.toml" in capsys.readouterr().err
+    assert "baseline: not written - cannot write quality/baseline.toml" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(
@@ -341,5 +350,5 @@ def test_a_path_that_is_not_utf8_cannot_be_written_into_the_baseline(build_repo,
     """#46 rule 5: TOML holds only Unicode, so a non-UTF-8 file name is exit 2, never a baseline hygiene cannot read."""
     repo = build_repo({"src/latin\udce9.py": long_file(810)})
     assert cli.main(["baseline", "write", str(repo)]) == 2
-    assert "baseline: cannot judge - src/latin\\udce9.py is not valid UTF-8" in capsys.readouterr().err
+    assert "baseline: not written - src/latin\\udce9.py is not valid UTF-8" in capsys.readouterr().err
     assert not (repo / BASELINE_PATH).exists()

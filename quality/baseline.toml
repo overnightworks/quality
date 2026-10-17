@@ -7,4 +7,4 @@
 "tests/test_engines.py" = 994
 
 [function_lines."src/quality/cli.py"]
-"main" = 97
+"main" = 82
