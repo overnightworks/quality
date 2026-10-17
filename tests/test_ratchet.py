@@ -188,7 +188,7 @@ def test_baseline_write_to_a_destination_it_cannot_own_cannot_be_judged(build_re
     ids=["quality-is-a-file", "baseline-is-a-directory"],
 )
 def test_baseline_write_that_the_filesystem_refuses_cannot_be_judged(build_repo, capsys, blocker):
-    """Exit 2, not a traceback: a baseline that cannot be written is never a clean result."""
+    """#46 rule 5: exit 2, not a traceback: a baseline that cannot be written is never a clean result."""
     repo = build_repo({"src/a.py": long_function(62), **blocker})
     assert cli.main(["baseline", "write", str(repo)]) == 2
     assert "baseline: cannot judge - cannot write quality/baseline.toml" in capsys.readouterr().err
@@ -213,7 +213,7 @@ def test_a_written_baseline_holds_any_utf8_path(build_repo, capsys, path):
 
 
 def test_a_path_that_is_not_utf8_cannot_be_written_into_the_baseline(build_repo, capsys):
-    """TOML holds only Unicode, so a non-UTF-8 file name is exit 2, never a baseline hygiene cannot read."""
+    """#46 rule 5: TOML holds only Unicode, so a non-UTF-8 file name is exit 2, never a baseline hygiene cannot read."""
     repo = build_repo({"src/latin\udce9.py": long_file(810)})
     assert cli.main(["baseline", "write", str(repo)]) == 2
     assert "baseline: cannot judge - src/latin\\udce9.py is not valid UTF-8" in capsys.readouterr().err
