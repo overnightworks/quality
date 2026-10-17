@@ -104,16 +104,37 @@ def area_of(path: str) -> Area:
     return Area.TESTS if is_test else Area.PRODUCTION
 
 
-def measure(sources: dict[str, str]) -> Measurements:
+@dataclass(frozen=True)
+class TreeMeasurement:
+    """Every file's lines, and the functions of every file Python can parse; `unparsable` maps the rest to why."""
+
+    measurements: Measurements
+    unparsable: dict[str, str]
+
+    def complete(self) -> Measurements:
+        """Holding or writing a baseline needs every function measured, so an unparsable file cannot be judged."""
+        if self.unparsable:
+            path = min(self.unparsable)
+            raise SizeError(f"{path} is not valid Python ({self.unparsable[path]})")
+        return self.measurements
+
+
+def measure(sources: dict[str, str]) -> TreeMeasurement:
     measurements: Measurements = {}
+    unparsable: dict[str, str] = {}
     for path, text in sources.items():
         measurements[Key(Metric.FILE_LINES, path)] = Measured(len(text.splitlines()), None)
-        measurements.update(_function_measurements(path, text))
-    return measurements
+        try:
+            tree = ast.parse(text, filename=path)
+        except (SyntaxError, ValueError) as error:
+            unparsable[path] = str(error)
+            continue
+        measurements.update(_function_measurements(path, text, tree))
+    return TreeMeasurement(measurements, unparsable)
 
 
-def _function_measurements(path: str, text: str) -> Iterator[tuple[Key, Measured]]:
-    symbols = _qualified_symbols(path, text)
+def _function_measurements(path: str, text: str, tree: ast.Module) -> Iterator[tuple[Key, Measured]]:
+    symbols = _qualified_symbols(tree)
     functions = sorted(lizard.analyze_file.analyze_source_code(path, text).function_list, key=attrgetter("start_line"))
     occurrences: Counter[str] = Counter()
     for function in functions:
@@ -130,11 +151,7 @@ def _nth(symbol: str, occurrence: int) -> str:
     return symbol if occurrence == 1 else f"{symbol}{OCCURRENCE_MARK}{occurrence}"
 
 
-def _qualified_symbols(path: str, text: str) -> dict[int, str]:
-    try:
-        tree = ast.parse(text, filename=path)
-    except (SyntaxError, ValueError) as error:
-        raise SizeError(f"{path} is not valid Python ({error})") from error
+def _qualified_symbols(tree: ast.Module) -> dict[int, str]:
     symbols: dict[int, str] = {}
 
     def visit(node: ast.AST, prefix: str) -> None:
@@ -153,9 +170,9 @@ def debt(measurements: Measurements) -> Baseline:
     return {key: measured.value for key, measured in measurements.items() if key.metric.is_debt(measured.value)}
 
 
-def report_counts(measurements: Measurements) -> str:
+def report_counts(tree: TreeMeasurement) -> str:
     counts = {(area, metric): 0 for area in Area for metric in Metric}
-    for key in debt(measurements):
+    for key in debt(tree.measurements):
         counts[area_of(key.path), key.metric] += 1
     areas = "; ".join(
         f"{area.value}: {counts[area, Metric.FILE_LINES]} file(s) >= {FILE_LINES_FROM} lines, "
@@ -163,7 +180,13 @@ def report_counts(measurements: Measurements) -> str:
         f"{counts[area, Metric.CCN]} function(s) CCN > {CCN_ABOVE}"
         for area in Area
     )
-    return f"{SIZE}: report only (no {BASELINE_PATH}) - {areas}"
+    return f"{SIZE}: report only (no {BASELINE_PATH}) - {areas}{_unparsable_note(tree.unparsable)}"
+
+
+def _unparsable_note(unparsable: dict[str, str]) -> str:
+    if not unparsable:
+        return ""
+    return f"; {len(unparsable)} file(s) not valid Python, functions unmeasured: {', '.join(sorted(unparsable))}"
 
 
 def compare(measurements: Measurements, baseline: Baseline) -> list[Finding]:

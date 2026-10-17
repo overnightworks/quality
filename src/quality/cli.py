@@ -152,7 +152,7 @@ def coverage_note(engine_dir: Path | None) -> str:
 
 def run_baseline_write(path: Path) -> int:
     try:
-        entries = ratchet.debt(measure_size(path, tracked_files(path)))
+        entries = ratchet.debt(measure_size(path, tracked_files(path)).complete())
         write_repository_text(path, ratchet.BASELINE_PATH, ratchet.render_baseline(entries))
     except (CannotJudge, ratchet.SizeError) as error:
         print(f"baseline: cannot judge - {error}", file=sys.stderr)

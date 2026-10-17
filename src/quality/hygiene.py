@@ -164,14 +164,10 @@ def _describe(port: object) -> str:
     return str(port) if not isinstance(port, dict) else str(port.get("published", port.get("target", port)))
 
 
-def measure_size(root: Path, tracked: list[str]) -> ratchet.Measurements:
+def measure_size(root: Path, tracked: list[str]) -> ratchet.TreeMeasurement:
     """Measures the tree on disk: a tracked file absent from it (deleted, sparse, a dangling link) is gone."""
     on_disk = [name for name in tracked if ratchet.is_python(name) and _is_on_disk(root, name)]
-    sources = {name: read_repository_text(root, name) for name in on_disk}
-    try:
-        return ratchet.measure(sources)
-    except ratchet.SizeError as error:
-        raise CannotJudge(str(error)) from error
+    return ratchet.measure({name: read_repository_text(root, name) for name in on_disk})
 
 
 def _is_on_disk(root: Path, name: str) -> bool:
@@ -193,11 +189,12 @@ class SizeResult:
 
 def check_size(root: Path, tracked: list[str]) -> SizeResult:
     """Report-only without a baseline; with one, the tree on disk must hold it."""
-    measurements = measure_size(root, tracked)
+    tree = measure_size(root, tracked)
     if not (root / ratchet.BASELINE_PATH).exists(follow_symlinks=False):
-        return SizeResult([], ratchet.report_counts(measurements))
+        return SizeResult([], ratchet.report_counts(tree))
     try:
         baseline = ratchet.load_baseline(read_repository_text(root, ratchet.BASELINE_PATH))
+        measurements = tree.complete()
     except ratchet.SizeError as error:
         raise CannotJudge(str(error)) from error
     return SizeResult(ratchet.compare(measurements, baseline), None)

@@ -49,6 +49,24 @@ def test_without_a_baseline_the_rule_only_counts_production_and_tests(build_repo
     ) in output
 
 
+PYTHON_2_FIXTURE = {"ok.py": "x = 1\n", "tests/fixtures/legacy.py": 'print "py2"\n'}
+
+
+def test_without_a_baseline_a_file_python_cannot_parse_is_reported_and_the_exit_unchanged(build_repo, capsys):
+    """#46 rule 3: a tracked Python 2 fixture keeps a clean repository at exit 0 and is named in the report."""
+    code, output = hygiene(capsys, build_repo(PYTHON_2_FIXTURE))
+    assert code == 0, output
+    assert "cannot judge" not in output
+    assert "1 file(s) not valid Python, functions unmeasured: tests/fixtures/legacy.py" in output
+
+
+def test_against_a_baseline_a_file_python_cannot_parse_cannot_be_judged(build_repo, capsys):
+    """#46 rule 4: a baseline is held against every function, so an unmeasurable file is exit 2, never clean."""
+    code, output = hygiene(capsys, build_repo({**PYTHON_2_FIXTURE, BASELINE_PATH: EMPTY_BASELINE}))
+    assert code == 2
+    assert "tests/fixtures/legacy.py is not valid Python" in output
+
+
 @pytest.mark.parametrize(
     ("files", "baseline", "expected"),
     [
