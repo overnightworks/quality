@@ -66,8 +66,17 @@ SOURCE_NAME = "src/source.py"
         b"\xef\xbb\xbf" + long_function(60).encode(),
         "# \u00e9\n".encode() + long_function(60).encode(),
         b"# header\r" + long_function(60).encode().replace(b"\n", b"\r"),
+        (b"# header\r" + long_function(60).encode() + b"    return b''.decode(encoding=enc)\n").replace(b"\n", b"\r"),
+        b"\r# -*- coding: latin-1 -*-\r# \xe9\r" + long_function(60).encode().replace(b"\n", b"\r"),
     ],
-    ids=["pep263-latin-1", "utf-8-bom", "plain-utf-8", "cr-only-newlines"],
+    ids=[
+        "pep263-latin-1",
+        "utf-8-bom",
+        "plain-utf-8",
+        "cr-only-newlines",
+        "cr-only-cookie-lookalike-in-code",
+        "cr-only-cookie-on-line-2",
+    ],
 )
 def test_a_file_python_can_read_is_measured_in_its_declared_encoding(build_repo, capsys, source):
     """#46 rule 1: every tracked Python file Python itself reads is measured, whatever encoding it declares."""
