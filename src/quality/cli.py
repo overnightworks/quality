@@ -4,10 +4,12 @@ import os
 import sys
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 
 from quality import __version__, engines, staged
 from quality.config import Allowance, ConfigError, read_gate_settings
+from quality.emergency import Ask, GhRunner, run_emergency_merge, run_gh
 from quality.hygiene import CannotJudge, active_rules, run_hygiene, skipped_rules
 from quality.report import Finding, render
 from quality.sonar import TASK_FILE, Sleep, Transport, analyse, fetch_json, preflight
@@ -31,6 +33,9 @@ def main(
     read_pins: Callable[[], dict[str, engines.Pin]] = engines.read_pins,
     transport: Transport = fetch_json,
     sleep: Sleep = time.sleep,
+    gh: GhRunner = run_gh,
+    ask: Ask = input,
+    is_terminal: Callable[[], bool] = lambda: sys.stdin.isatty(),
 ) -> int:
     parser = argparse.ArgumentParser(prog="quality")
     parser.add_argument("--version", action="version", version=__version__)
@@ -65,8 +70,25 @@ def main(
             "needs quality/config.toml with [gate] mandatory_jobs, else exit 2"
         ),
     )
+    emergency = commands.add_parser(
+        "emergency-merge",
+        help="operator only: switch a repository's quality_gate off, merge one pull request with its head pinned, switch it on",
+    )
+    emergency.add_argument("repository", help="<owner>/<repo>")
+    emergency.add_argument("pull_request", type=int)
     arguments = parser.parse_args(argv)
 
+    if arguments.command == "emergency-merge":
+        return run_emergency_merge(
+            arguments.repository,
+            arguments.pull_request,
+            gh=gh,
+            transport=transport,
+            ask=ask,
+            is_terminal=is_terminal(),
+            now=lambda: datetime.now(UTC),
+            environment=os.environ,
+        )
     if arguments.command == "verdict":
         return run_verdict(arguments.path, fetcher_for)
     if arguments.command == "scan-staged":
