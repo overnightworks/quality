@@ -156,30 +156,31 @@ def test_an_unreadable_baseline_cannot_be_judged(build_repo, capsys, baseline):
     assert "cannot judge" in output
 
 
-def link_the_baseline_outside(repo: Path, outside: Path) -> None:
+def link_the_baseline_elsewhere(repo: Path, elsewhere: Path) -> None:
     (repo / BASELINE_PATH).parent.mkdir(exist_ok=True)
-    (repo / BASELINE_PATH).symlink_to(outside / "victim.toml")
+    (repo / BASELINE_PATH).symlink_to(elsewhere / "victim.toml")
 
 
-def link_the_quality_directory_outside(repo: Path, outside: Path) -> None:
-    (repo / BASELINE_PATH).parent.symlink_to(outside)
+def link_the_quality_directory_elsewhere(repo: Path, elsewhere: Path) -> None:
+    (repo / BASELINE_PATH).parent.symlink_to(elsewhere)
 
 
 @pytest.mark.parametrize(
     "arrange",
-    [link_the_baseline_outside, link_the_quality_directory_outside],
-    ids=["baseline-symlink-outside", "quality-directory-symlink-outside"],
+    [link_the_baseline_elsewhere, link_the_quality_directory_elsewhere],
+    ids=["baseline-symlink", "quality-directory-symlink"],
 )
-def test_baseline_write_to_a_destination_it_cannot_own_cannot_be_judged(build_repo, tmp_path_factory, capsys, arrange):
+def test_baseline_write_to_a_destination_it_cannot_own_cannot_be_judged(build_repo, capsys, arrange):
     """#46 rule 5: the baseline is written to the repository's own quality/baseline.toml, never through a symlink."""
-    outside = tmp_path_factory.mktemp("outside")
-    (outside / "victim.toml").write_text("kept\n")
     repo = build_repo({"src/a.py": long_function(62)})
-    arrange(repo, outside)
+    elsewhere = repo / "untracked-elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "victim.toml").write_text("kept\n")
+    arrange(repo, elsewhere)
     assert cli.main(["baseline", "write", str(repo)]) == 2
     assert "cannot judge" in capsys.readouterr().err
-    assert sorted(path.name for path in outside.iterdir()) == ["victim.toml"]
-    assert (outside / "victim.toml").read_text() == "kept\n"
+    assert sorted(path.name for path in elsewhere.iterdir()) == ["victim.toml"]
+    assert (elsewhere / "victim.toml").read_text() == "kept\n"
 
 
 @pytest.mark.parametrize(
