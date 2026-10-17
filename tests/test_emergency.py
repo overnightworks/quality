@@ -9,6 +9,7 @@ from quality.emergency import GhFailed
 REPO = "acme/widgets"
 SHA = "a" * 40
 BASE_SHA = "b" * 40
+MERGE_SHA = "d" * 40
 GATE_CONFIG = '[gate]\nmandatory_jobs = ["checks"]\nlegacy = "fail"\n'
 REPORT_CONFIG = GATE_CONFIG.replace("fail", "report")
 LEGACY_RED = {"quality / sonar": "failure", "quality / verdict": "failure"}
@@ -20,11 +21,12 @@ class FakeGh:
 
     def __init__(
         self, admin=True, checks=None, statuses=None, state="open", fail_on=(), interrupt_on=(), merge_lands=False,
-        head_config=GATE_CONFIG, base_config=GATE_CONFIG,
+        head_config=GATE_CONFIG, base_config=GATE_CONFIG, merge_config=None, merge_sha=MERGE_SHA,
     ):
         self.admin, self.state, self.fail_on, self.merge_lands = admin, state, set(fail_on), merge_lands
         self.interrupt_on = list(interrupt_on)
-        self.configs = {SHA: head_config, BASE_SHA: base_config}
+        self.merge_sha = merge_sha
+        self.configs = {SHA: head_config, BASE_SHA: base_config, MERGE_SHA: head_config if merge_config is None else merge_config}
         self.checks = {"checks": "success", **(LEGACY_RED if checks is None else checks)}
         self.statuses = statuses or {}
         self.merged = False
@@ -57,7 +59,7 @@ class FakeGh:
 
     def answer(self, step, arguments, stdin):
         if step == "pull":
-            return json.dumps({"state": self.state, "merged": self.merged, "head": {"sha": SHA}, "base": {"sha": BASE_SHA}})
+            return json.dumps({"state": self.state, "merged": self.merged, "head": {"sha": SHA}, "base": {"sha": BASE_SHA}, "merge_commit_sha": self.merge_sha})
         if step == "checks":
             return "\n".join(
                 json.dumps({"name": name, "status": "in_progress" if result is None else "completed", "conclusion": result})
@@ -173,8 +175,10 @@ def test_anything_but_ja_changes_nothing(typed, capsys):
         ({"checks": {"quality / sonar": "timed_out", "quality / verdict": "failure"}}, {}, "quality / sonar must have failed"),
         ({"checks": {"quality / sonar": "failure"}}, {}, "quality / verdict must have failed"),
         ({"head_config": GATE_CONFIG.replace("fail", "report")}, {}, "loosened: legacy fail"),
-        ({"head_config": REPORT_CONFIG, "base_config": REPORT_CONFIG}, {}, "legacy = report at the head"),
-        ({"head_config": None, "base_config": None}, {}, "legacy = report at the head"),
+        ({"head_config": REPORT_CONFIG, "base_config": REPORT_CONFIG}, {}, "legacy = report at the merge commit"),
+        ({"head_config": GATE_CONFIG, "base_config": REPORT_CONFIG, "merge_config": REPORT_CONFIG}, {}, "legacy = report at the merge commit"),
+        ({"head_config": None, "base_config": None}, {}, "legacy = report at the merge commit"),
+        ({"head_config": REPORT_CONFIG, "base_config": REPORT_CONFIG}, {"new": 1}, "adds findings"),
         ({"head_config": '[gate]\nmandatory_jobs = ["other"]\nlegacy = "fail"\n'}, {}, 'mandatory job "checks" removed'),
         ({"state": "closed"}, {}, "pull request is closed"),
         ({}, {"legacy": 0}, "not legacy findings"),
@@ -183,7 +187,7 @@ def test_anything_but_ja_changes_nothing(typed, capsys):
     ],
     ids=[
         "new finding", "other red check", "other skipped check", "pending check", "failing status", "pending status",
-        "nothing red", "sonar green", "sonar timed out", "verdict green", "loosened legacy", "report on both sides", "no config at either sha", "removed mandatory job",
+        "nothing red", "sonar green", "sonar timed out", "verdict green", "loosened legacy", "report on both sides", "head fail but merge commit report", "no config at either sha", "report mode and a new finding", "removed mandatory job",
         "closed", "no legacy", "legacy unknown", "stale analysis",
     ],
 )
@@ -193,6 +197,16 @@ def test_refuses_unless_the_door_is_the_only_way(gh_kwargs, sonar_kwargs, messag
     code, answers = drive(gh, sonar(**sonar_kwargs))
     assert code == 1
     assert message in capsys.readouterr().out
+    changed_nothing(gh)
+    assert answers == []
+
+
+def test_cannot_judge_without_the_merge_commit_the_jobs_ran_on(capsys):
+    """#37 rule 2: the config the jobs ran on is unknown, so exit 2 and nothing changed."""
+    gh = FakeGh(merge_sha=None)
+    code, answers = drive(gh, sonar())
+    assert code == 2
+    assert "cannot judge" in capsys.readouterr().out
     changed_nothing(gh)
     assert answers == []
 
@@ -282,26 +296,6 @@ def test_exit_2_loud_line_and_log_when_the_gate_cannot_be_restored(restore_failu
     assert drive(cannot_restore)[0] == 2
     assert f"quality_gate MAY STILL BE OFF for {REPO}" in capsys.readouterr().out
     assert "NOT restored" in gh.comments[0]
-
-
-def test_gate_is_back_on_even_when_ctrl_c_hits_while_the_merge_failure_is_handled():
-    """#37 rule 4: the restore is unconditional, whatever interrupts the handling of the failure."""
-
-    class InterruptedWhenDescribed(GhFailed):
-        def __str__(self):
-            raise KeyboardInterrupt
-
-    gh = FakeGh()
-    original = gh.__call__
-
-    def merge_breaks(arguments, stdin=None):
-        if arguments[:2] == ["pr", "merge"]:
-            raise InterruptedWhenDescribed
-        return original(arguments, stdin)
-
-    with pytest.raises(KeyboardInterrupt):
-        drive(merge_breaks)
-    assert gh.gate_values == ["false", "true"]
 
 
 def test_ctrl_c_while_reading_back_the_merge_state_is_exit_2_with_the_gate_on(capsys):

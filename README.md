@@ -194,7 +194,7 @@ quality emergency-merge <owner/repo> <pr>
 - **It refuses unless the door is the only way** (exit `1`): `quality / sonar` and `quality / verdict` have failed, every
   other check run and commit status is green, the verdict is red for the Sonar gate alone (the verdict's own judgment,
   re-derived with the Sonar job assumed green, finds no other problem, so a loosened gate or a missing mandatory job is
-  refused), the head's `[gate] legacy` is `fail` (under `report` the Sonar job cannot be red on legacy findings, and a
+  refused), `[gate] legacy` is `fail` at the merge commit the jobs ran on (under `report` the Sonar job cannot be red on legacy findings, and a
   missing config reads as `report`), SonarCloud's analysis of the pull request is of the head being merged and adds no finding (the findings are
   named otherwise), and the default branch has legacy findings. `SONAR_TOKEN` is read from the environment when the project
   needs one.

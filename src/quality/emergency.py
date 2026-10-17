@@ -123,8 +123,12 @@ def refusal_of_verdict(settings: GateSettings, base_settings: GateSettings, chec
     problems = judge(settings, base_settings, jobs, {"sonar": SUCCESS}, 1).problems
     if problems:
         return f"{VERDICT_CHECK} is red for more than legacy findings: {'; '.join(problems)}"
+    return None
+
+
+def refusal_of_legacy_mode(settings: GateSettings) -> str | None:
     if settings.legacy is not LegacyMode.FAIL:
-        return f"legacy = {settings.legacy.value} at the head: {SONAR_CHECK} cannot be red on legacy findings"
+        return f"legacy = {settings.legacy.value} at the merge commit the jobs ran on: {SONAR_CHECK} cannot be red on legacy findings"
     return None
 
 
@@ -293,14 +297,19 @@ def run_emergency_merge(
         refusal = refusal_of_checks([*check_runs, *read_statuses(gh, repository, head_sha)])
         if refusal:
             raise Refused(refusal)
-        refusal = refusal_of_verdict(
-            read_gate_settings_at(gh, repository, head_sha), read_gate_settings_at(gh, repository, pull["base"]["sha"]), check_runs
-        )
+        merge_commit_sha = pull["merge_commit_sha"]
+        if not merge_commit_sha:
+            raise CannotJudge("GitHub has no merge commit for the pull request yet, so the config the jobs ran on is unknown")
+        settings = read_gate_settings_at(gh, repository, merge_commit_sha)
+        refusal = refusal_of_verdict(settings, read_gate_settings_at(gh, repository, pull["base"]["sha"]), check_runs)
         if refusal:
             raise Refused(refusal)
         legacy = judge_sonar(
             repository, pull_request, head_sha, repository_facts["default_branch"], transport, environment.get("SONAR_TOKEN", "")
         )
+        refusal = refusal_of_legacy_mode(settings)
+        if refusal:
+            raise Refused(refusal)
         login = gh(["api", "user", "--jq", ".login"], None).strip()
     except Refused as refusal_error:
         report(f"emergency-merge: refused - {refusal_error}")
