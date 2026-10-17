@@ -15,12 +15,13 @@ from quality.sonar import (
     Analysis,
     Scope,
     Transport,
-    analysed_pull_request_commit,
+    answer_object,
+    api_url,
     basic_authorization,
     default_branch_analysed,
     open_findings,
     open_total,
-    project_named,
+    project_of,
     require_resolved,
 )
 from quality.verdict import NO_BASE_SETTINGS, SUCCESS, Job, judge
@@ -157,11 +158,24 @@ def require_admin_permission(repository_facts: Mapping[str, object], repository:
         raise CannotJudge(f"the gh login has no admin permission on {repository}, which switching {GATE_PROPERTY} needs")
 
 
+def analysed_pull_request_commit(analysis: Analysis, transport: Transport) -> str | None:
+    """The commit of the latest analysis SonarCloud holds for the analysis's pull request, None when it has none."""
+    url = api_url("project_pull_requests/list", project=analysis.project.key)
+    answer = answer_object(transport(url, analysis.authorization), None, url)
+    try:
+        for pull_request in answer["pullRequests"]:
+            if str(pull_request["key"]) == analysis.scope.value:
+                return pull_request["commit"]["sha"]
+    except (KeyError, TypeError) as error:
+        raise CannotJudge(f"SonarCloud answered {url.partition('?')[0]} with an unreadable body") from error
+    return None
+
+
 def judge_sonar(
     repository: str, pull_request: int, head_sha: str, default_branch: str, transport: Transport, sonar_token: str
 ) -> int:
     """The legacy count, once the pull request's own scope at this head is proven free of findings."""
-    project = project_named(repository)
+    project = project_of({"GITHUB_REPOSITORY": repository})
     pull_scope = Scope("pullRequest", str(pull_request))
     analysis = Analysis(project, pull_scope, "", basic_authorization(sonar_token), default_branch)
     require_resolved(analysis, transport)
