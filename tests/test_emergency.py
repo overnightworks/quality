@@ -10,6 +10,7 @@ REPO = "acme/widgets"
 SHA = "a" * 40
 BASE_SHA = "b" * 40
 GATE_CONFIG = '[gate]\nmandatory_jobs = ["checks"]\nlegacy = "fail"\n'
+REPORT_CONFIG = GATE_CONFIG.replace("fail", "report")
 LEGACY_RED = {"quality / sonar": "failure", "quality / verdict": "failure"}
 FIXED_NOW = datetime(2026, 10, 17, 12, 0, tzinfo=UTC)
 
@@ -65,6 +66,8 @@ class FakeGh:
         if step == "statuses":
             return "\n".join(json.dumps({"context": context, "state": state}) for context, state in self.statuses.items())
         if step == "config":
+            if self.configs[arguments[-1].rpartition("ref=")[2]] is None:
+                raise GhFailed("gh api failed: HTTP 404")
             return self.configs[arguments[-1].rpartition("ref=")[2]]
         if step == "repository":
             return json.dumps({"default_branch": "main", "permissions": {"admin": self.admin}})
@@ -170,6 +173,8 @@ def test_anything_but_ja_changes_nothing(typed, capsys):
         ({"checks": {"quality / sonar": "timed_out", "quality / verdict": "failure"}}, {}, "quality / sonar must have failed"),
         ({"checks": {"quality / sonar": "failure"}}, {}, "quality / verdict must have failed"),
         ({"head_config": GATE_CONFIG.replace("fail", "report")}, {}, "loosened: legacy fail"),
+        ({"head_config": REPORT_CONFIG, "base_config": REPORT_CONFIG}, {}, "legacy = report at the head"),
+        ({"head_config": None, "base_config": None}, {}, "legacy = report at the head"),
         ({"head_config": '[gate]\nmandatory_jobs = ["other"]\nlegacy = "fail"\n'}, {}, 'mandatory job "checks" removed'),
         ({"state": "closed"}, {}, "pull request is closed"),
         ({}, {"legacy": 0}, "not legacy findings"),
@@ -178,7 +183,7 @@ def test_anything_but_ja_changes_nothing(typed, capsys):
     ],
     ids=[
         "new finding", "other red check", "other skipped check", "pending check", "failing status", "pending status",
-        "nothing red", "sonar green", "sonar timed out", "verdict green", "loosened legacy", "removed mandatory job",
+        "nothing red", "sonar green", "sonar timed out", "verdict green", "loosened legacy", "report on both sides", "no config at either sha", "removed mandatory job",
         "closed", "no legacy", "legacy unknown", "stale analysis",
     ],
 )

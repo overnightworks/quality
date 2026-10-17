@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 
-from quality.config import CONFIG_PATH, ConfigError, GateSettings, load_gate_settings
+from quality.config import CONFIG_PATH, ConfigError, GateSettings, LegacyMode, load_gate_settings
 from quality.hygiene import CannotJudge
 from quality.report import render
 from quality.sonar import (
@@ -118,11 +118,13 @@ def refusal_of_checks(checks: Sequence[Check]) -> str | None:
 
 
 def refusal_of_verdict(settings: GateSettings, base_settings: GateSettings, check_runs: Sequence[Check]) -> str | None:
-    """Judged by the verdict's own decider: the verdict must be red for the Sonar gate alone."""
+    """Judged by the verdict's own decider: the verdict must be red for the Sonar gate alone, which only legacy = fail can cause."""
     jobs = [Job(run.name, 1, run.status, SUCCESS if run.name == SONAR_CHECK else run.conclusion) for run in check_runs]
     problems = judge(settings, base_settings, jobs, {"sonar": SUCCESS}, 1).problems
     if problems:
         return f"{VERDICT_CHECK} is red for more than legacy findings: {'; '.join(problems)}"
+    if settings.legacy is not LegacyMode.FAIL:
+        return f"legacy = {settings.legacy.value} at the head: {SONAR_CHECK} cannot be red on legacy findings"
     return None
 
 
