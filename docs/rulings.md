@@ -171,4 +171,5 @@ These rulings are quoted verbatim in [roadmap.md](roadmap.md), where they act; t
 - D2, 15.10.2026, ~22:45: „ja a“, then „am besten Dienst löschen und Repo lokal löschen“ (atelier-2 archived, roadmap section E).
 - D3, 15.10.2026, ~22:55: „die Grenzen sind Fantasiewerte von mir! nichts ist zwingend, neue Teststrategie wins“ (coverage floors, roadmap section 0, row 7).
 - 16.10.2026: „0 Findings Toleranz für alle Repos“; „sollte das da nicht mit rein?“ (SonarCloud in the minimum profile, roadmap section A, point 1).
-- 16.10.2026, "alles ja": the organization rulesets, and GitHub Team replacing the earlier „kein github team“ of 15.10.2026, ~22:02 (roadmap section A, point 1).
+- 16.10.2026, "alles ja": the organization rulesets (roadmap section A, point 1).
+- 16.10.2026: GitHub Team replacing the earlier „kein github team“ of 15.10.2026, ~22:02 (roadmap section A, point 1); #80 holds no verbatim quote for this ruling.

@@ -118,7 +118,7 @@ Some steps grow code on purpose (the Postgres test DB, security fixes, specs); t
 - **Q2 and Q4:** each repo's quality epic.
 - **The wave as a whole:** #80.
 
-The head dispatches and reports, and each wave's exit proof is linked from #80.
+The head dispatches and reports, and each wave's exit proof is linked from marketplace#80.
 
 **Rollback:**
 - A wave or area that runs past 2× its lane estimate stops. Its freeze lifts, its open slices return to the epic body, and its baseline stays as the floor.
