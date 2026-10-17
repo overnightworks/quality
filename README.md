@@ -27,8 +27,9 @@ Install it with
 - `size`: every tracked `*.py` file is measured with [lizard](https://github.com/terryyin/lizard): a file from 800
   lines, a function from 60 lines and a function with a CCN above 15 are debt, counted apart for production and tests
   (a path under `test/` or `tests/`, `conftest.py`, `test_*.py`, `*_test.py`). Functions are named by their qualified
-  symbol (`Class.method`). Without `quality/baseline.toml` the rule only prints the counts
-  (`size: report only (no quality/baseline.toml) - production: 1 file(s) >= 800 lines, ...`) and the exit is unchanged.
+  symbol (`Class.method`); a second one of the same name, such as a property setter, is `Class.method#2`. Without
+  `quality/baseline.toml` the rule only prints the counts (`size: report only (no quality/baseline.toml) - production:
+  1 file(s) >= 800 lines, ...`) and the exit is unchanged.
   With it, the tree on disk must hold the baseline: a new violation, an entry that grew and an entry above its measured
   value (stale: lower it with `quality baseline write`) are findings; an entry whose file or function is gone is fine.
   `quality baseline write [PATH]` writes the measured debt to `PATH/quality/baseline.toml` as sorted TOML, one table

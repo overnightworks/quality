@@ -7,9 +7,11 @@ lizard leaves unqualified.
 import ast
 import json
 import tomllib
+from collections import Counter
 from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import Enum
+from operator import attrgetter
 from pathlib import PurePosixPath
 from typing import NamedTuple
 
@@ -21,6 +23,7 @@ SIZE = "size"
 BASELINE_PATH = "quality/baseline.toml"
 WRITE_COMMAND = "quality baseline write"
 PYTHON_SUFFIX = ".py"
+OCCURRENCE_MARK = "#"
 TEST_DIRECTORIES = frozenset({"test", "tests"})
 BASELINE_HEADER = f"# Measured by `{WRITE_COMMAND}`. Entries only ever go down.\n"
 
@@ -105,18 +108,26 @@ def measure(sources: dict[str, str]) -> Measurements:
     measurements: Measurements = {}
     for path, text in sources.items():
         measurements[Key(Metric.FILE_LINES, path)] = Measured(len(text.splitlines()), None)
-        for key, measured in _function_measurements(path, text):
-            if key not in measurements or measured.value > measurements[key].value:
-                measurements[key] = measured
+        measurements.update(_function_measurements(path, text))
     return measurements
 
 
 def _function_measurements(path: str, text: str) -> Iterator[tuple[Key, Measured]]:
     symbols = _qualified_symbols(path, text)
-    for function in lizard.analyze_file.analyze_source_code(path, text).function_list:
-        symbol = symbols.get(function.start_line, function.name)
+    functions = sorted(lizard.analyze_file.analyze_source_code(path, text).function_list, key=attrgetter("start_line"))
+    occurrences: Counter[str] = Counter()
+    for function in functions:
+        qualified = symbols.get(function.start_line, function.name)
+        occurrences[qualified] += 1
+        symbol = _nth(qualified, occurrences[qualified])
         yield Key(Metric.FUNCTION_LINES, path, symbol), Measured(function.length, function.start_line)
         yield Key(Metric.CCN, path, symbol), Measured(function.cyclomatic_complexity, function.start_line)
+
+
+def _nth(symbol: str, occurrence: int) -> str:
+    """A property's getter and setter, or a conditionally redefined function, share one qualified symbol; each
+    keeps its own entry, numbered in source order, so the longer one cannot hide the shorter one growing."""
+    return symbol if occurrence == 1 else f"{symbol}{OCCURRENCE_MARK}{occurrence}"
 
 
 def _qualified_symbols(path: str, text: str) -> dict[int, str]:

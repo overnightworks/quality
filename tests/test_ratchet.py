@@ -137,6 +137,34 @@ def test_a_tracked_file_missing_from_disk_is_gone_not_unjudgeable(build_repo, ca
     assert "hygiene: clean (3 rules)" in output
 
 
+def property_pair(lines: int) -> str:
+    getter = long_function(lines).replace("long_one():", "long_one(self):")
+    setter = long_function(lines).replace("long_one():", "long_one(self, value):")
+    decorated = f"@property\n{getter}@long_one.setter\n{setter}"
+    return "class Holder:\n" + "".join(f"    {line}\n" for line in decorated.splitlines())
+
+
+@pytest.mark.parametrize(
+    "source",
+    [long_function(62) + long_function(70), property_pair(61)],
+    ids=["redefined-function", "property-getter-and-setter"],
+)
+def test_two_functions_sharing_a_qualified_name_count_as_two(build_repo, capsys, source):
+    """#46 rule 3: the counts per class count every function, also two that share one qualified symbol."""
+    _, output = hygiene(capsys, build_repo({"src/a.py": source}))
+    assert "production: 0 file(s) >= 800 lines, 2 function(s) >= 60 lines" in output
+
+
+def test_the_shorter_of_two_same_named_functions_cannot_grow_under_the_baseline(build_repo, capsys):
+    """#46 rule 4: each function keeps its own entry, so the shorter twin growing is red, not hidden by the longer."""
+    repo = build_repo({"src/a.py": long_function(62) + long_function(70)})
+    assert cli.main(["baseline", "write", str(repo)]) == 0
+    (repo / "src/a.py").write_text(long_function(65) + long_function(70))
+    code, output = hygiene(capsys, repo)
+    assert code == 1, output
+    assert "has 65 lines; the baseline holds 62 (it grew)." in output
+
+
 def test_baseline_write_records_the_measured_debt_sorted_and_hygiene_then_holds_it(build_repo, capsys):
     """#46 rule 5: `quality baseline write` writes sorted TOML keyed by path and qualified symbol."""
     repo = build_repo(
