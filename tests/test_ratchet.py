@@ -137,6 +137,19 @@ def test_a_tracked_file_missing_from_disk_is_gone_not_unjudgeable(build_repo, ca
     assert "hygiene: clean (3 rules)" in output
 
 
+@pytest.mark.parametrize("command", ["hygiene", "baseline write"])
+def test_a_tracked_file_the_filesystem_refuses_to_reach_cannot_be_judged(build_repo, capsys, command):
+    """#46 rule 3/5: a tracked file behind a directory the rule may not enter is exit 2, never gone and never a traceback."""
+    repo = build_repo({"src/a.py": "x = 1\n", "locked/b.py": long_function(62)})
+    (repo / "locked").chmod(0)
+    try:
+        code = cli.main([*command.split(), str(repo)])
+    finally:
+        (repo / "locked").chmod(0o755)
+    assert code == 2
+    assert "cannot judge - cannot reach locked/b.py" in capsys.readouterr().err
+
+
 def property_pair(lines: int) -> str:
     getter = long_function(lines).replace("long_one():", "long_one(self):")
     setter = long_function(lines).replace("long_one():", "long_one(self, value):")

@@ -1,3 +1,4 @@
+import errno
 import os
 import re
 import subprocess
@@ -16,6 +17,7 @@ FILE_RULE_IDS = (ENV_FILE, COMPOSE_PORT, ratchet.SIZE)
 ENGINE_RULE_IDS = (engines.LEAK_RULE, engines.WORKFLOW_LINT, engines.WORKFLOW_SECURITY)
 WORKFLOW_DIRECTORY = PurePosixPath(".github/workflows")
 WORKFLOW_SUFFIXES = (".yml", ".yaml")
+GONE_ERRNOS = frozenset({errno.ENOENT, errno.ENOTDIR, errno.ELOOP})
 
 LOOPBACK = "127.0.0.1"
 LOOPBACK_HOSTS = (LOOPBACK, "::1")
@@ -164,12 +166,23 @@ def _describe(port: object) -> str:
 
 def measure_size(root: Path, tracked: list[str]) -> ratchet.Measurements:
     """Measures the tree on disk: a tracked file absent from it (deleted, sparse, a dangling link) is gone."""
-    on_disk = [name for name in tracked if ratchet.is_python(name) and (root / name).exists()]
+    on_disk = [name for name in tracked if ratchet.is_python(name) and _is_on_disk(root, name)]
     sources = {name: read_repository_text(root, name) for name in on_disk}
     try:
         return ratchet.measure(sources)
     except ratchet.SizeError as error:
         raise CannotJudge(str(error)) from error
+
+
+def _is_on_disk(root: Path, name: str) -> bool:
+    """A path that leads nowhere is gone; one the filesystem refuses to reach cannot be judged."""
+    try:
+        (root / name).stat()
+    except OSError as error:
+        if error.errno in GONE_ERRNOS:
+            return False
+        raise CannotJudge(f"cannot reach {name}: {error}") from error
+    return True
 
 
 @dataclass(frozen=True)
