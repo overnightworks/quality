@@ -66,6 +66,17 @@ def test_a_config_directory_that_cannot_be_entered_is_refused(tmp_path):
         config_dir.chmod(0o700)
 
 
+def test_a_config_symlink_leaving_the_repository_is_refused(tmp_path):
+    """#33 S8707: a config file that resolves outside the repository is a ConfigError, never read."""
+    repo = tmp_path / "repo"
+    (repo / "quality").mkdir(parents=True)
+    outside = tmp_path / "outside.toml"
+    outside.write_text('[gate]\nmandatory_jobs = ["checks"]\nlegacy = "fail"\n')
+    (repo / "quality" / "config.toml").symlink_to(outside)
+    with pytest.raises(ConfigError, match="outside the repository"):
+        read_gate_settings(repo)
+
+
 HASH = "a" * 64
 ENTRY = f'{{ rule = "aws-access-token", file = "tests/fixture.py", secret_sha256 = "{HASH}", reason = "fixture value" }}'
 

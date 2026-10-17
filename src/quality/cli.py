@@ -58,7 +58,13 @@ def main(
     sonar.add_parser("preflight", help="refuse a token or properties file that could steer the scan").add_argument(
         "path", nargs="?", type=Path, default=Path(".")
     )
-    sonar.add_parser("findings", help=f"wait for this run's analysis ({TASK_FILE}), then count its open findings; needs quality/config.toml with [gate] mandatory_jobs, else exit 2")
+    sonar.add_parser(
+        "findings",
+        help=(
+            f"wait for this run's analysis ({TASK_FILE}), then count its open findings; "
+            "needs quality/config.toml with [gate] mandatory_jobs, else exit 2"
+        ),
+    )
     arguments = parser.parse_args(argv)
 
     if arguments.command == "verdict":
