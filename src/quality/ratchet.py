@@ -136,9 +136,10 @@ def measure(sources: dict[str, bytes]) -> TreeMeasurement:
 
 
 def _python_text(source: bytes) -> str:
-    """Python's own source decoding: a PEP 263 cookie or a UTF-8 BOM names the encoding, UTF-8 otherwise."""
+    """Python's own source reading: a PEP 263 cookie or a UTF-8 BOM names the encoding, UTF-8 otherwise, and
+    universal newlines, so a CR-only file reaches lizard as the lines Python sees."""
     encoding, _ = tokenize.detect_encoding(io.BytesIO(source).readline)
-    return source.decode(encoding)
+    return io.TextIOWrapper(io.BytesIO(source), encoding=encoding, newline=None).read()
 
 
 def _function_measurements(path: str, text: str, tree: ast.Module) -> Iterator[tuple[Key, Measured]]:
