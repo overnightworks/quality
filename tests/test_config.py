@@ -78,6 +78,14 @@ def test_a_config_symlink_leaving_the_repository_is_refused(tmp_path):
         read_gate_settings(repo)
 
 
+def test_a_config_symlink_loop_is_refused(tmp_path):
+    """defect:#33 review: a self-referencing config symlink is a ConfigError (exit 2), not a RuntimeError traceback."""
+    (tmp_path / "quality").mkdir()
+    (tmp_path / "quality" / "config.toml").symlink_to("config.toml")
+    with pytest.raises(ConfigError, match="cannot be read"):
+        read_gate_settings(tmp_path)
+
+
 HASH = "a" * 64
 ENTRY = f'{{ rule = "aws-access-token", file = "tests/fixture.py", secret_sha256 = "{HASH}", reason = "fixture value" }}'
 

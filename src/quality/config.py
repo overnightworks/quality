@@ -108,14 +108,14 @@ def load_gate_settings(text: str | None) -> GateSettings:
 
 def read_gate_settings(repo: Path) -> GateSettings:
     root = repo.resolve()
-    path = (root / CONFIG_PATH).resolve()
-    if not path.is_relative_to(root):
-        raise ConfigError(f"{CONFIG_PATH} resolves outside the repository ({path})")
     try:
+        path = (root / CONFIG_PATH).resolve()
+        if not path.is_relative_to(root):
+            raise ConfigError(f"{CONFIG_PATH} resolves outside the repository ({path})")
         return load_gate_settings(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         return load_gate_settings(None)
-    except (OSError, UnicodeDecodeError) as error:
+    except (OSError, RuntimeError, UnicodeDecodeError) as error:
         raise ConfigError(f"{CONFIG_PATH} cannot be read ({error})") from error
 
 
