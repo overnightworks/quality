@@ -158,7 +158,7 @@ def read_head(repo: Path) -> Side:
     try:
         return Side(settings, read_baseline(repo))
     except (SizeError, CannotJudge) as error:
-        raise CannotJudge(f"{BASELINE_PATH} at the head: {error}") from error
+        raise _baseline_unreadable("the head", error) from error
 
 
 def read_base(repo: Path, base_sha: str) -> Side:
@@ -178,7 +178,11 @@ def side_of(config: str | None, baseline: str | None, where: str) -> Side:
     try:
         return Side(settings, None if baseline is None else load_baseline(baseline))
     except SizeError as error:
-        raise CannotJudge(f"{BASELINE_PATH} at {where}: {error}") from error
+        raise _baseline_unreadable(where, error) from error
+
+
+def _baseline_unreadable(where: str, error: Exception) -> CannotJudge:
+    return CannotJudge(f"{BASELINE_PATH} at {where}: {error}")
 
 
 def _read_base_file(repo: Path, base_sha: str, path: str) -> str | None:
