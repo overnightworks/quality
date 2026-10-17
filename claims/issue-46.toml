@@ -1,0 +1,8 @@
+claim_id = "eec25e27b784485fb0e024848c622caa"
+agent = "claude"
+role = "builder"
+base = "182aab770ee776219ffefe98522be656e107130c"
+branch = "claude/issue-46-size-ratchet"
+scope = ["AGENTS.md", "README.md", "pyproject.toml", "quality/baseline.toml", "src/quality/cli.py", "src/quality/hygiene.py", "src/quality/ratchet.py", "tests/test_hygiene.py", "tests/test_ratchet.py", "uv.lock"]
+opened_commit = "1a605c74ee1ef07fbfebfa62fdcf395eea9f3752"
+whole_reason = "One rule needs its measurement, its CLI writer, its registration, its dependency and the repository's own baseline together; split, the gate would go red or the rule would be unreachable."
