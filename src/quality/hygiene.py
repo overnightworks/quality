@@ -1,3 +1,4 @@
+import errno
 import os
 import re
 import subprocess
@@ -6,16 +7,17 @@ from pathlib import Path, PurePosixPath
 
 import yaml
 
-from quality import engines
+from quality import engines, ratchet
 from quality.config import Allowance, ConfigError, read_secret_allowances
 from quality.report import Finding
 
 ENV_FILE = "env-file"
 COMPOSE_PORT = "compose-port"
-FILE_RULE_IDS = (ENV_FILE, COMPOSE_PORT)
+FILE_RULE_IDS = (ENV_FILE, COMPOSE_PORT, ratchet.SIZE)
 ENGINE_RULE_IDS = (engines.LEAK_RULE, engines.WORKFLOW_LINT, engines.WORKFLOW_SECURITY)
 WORKFLOW_DIRECTORY = PurePosixPath(".github/workflows")
 WORKFLOW_SUFFIXES = (".yml", ".yaml")
+GONE_ERRNOS = frozenset({errno.ENOENT, errno.ENOTDIR, errno.ELOOP})
 
 LOOPBACK = "127.0.0.1"
 LOOPBACK_HOSTS = (LOOPBACK, "::1")
@@ -44,6 +46,14 @@ for compose_tag in ("!override", "!reset"):
 
 class CannotJudge(Exception):
     """The repository cannot be examined; this is never a clean result."""
+
+    status = "cannot judge"
+
+
+class Unparsable(CannotJudge):
+    """A tracked file Python cannot decode or parse; only an operating-system read error is `cannot judge`."""
+
+    status = "unparsable"
 
 
 def tracked_files(root: Path) -> list[str]:
@@ -89,14 +99,47 @@ def check_compose_ports(root: Path, tracked: list[str]) -> list[Finding]:
     return findings
 
 
-def _compose_file_findings(root: Path, name: str) -> list[Finding]:
+def read_repository_bytes(root: Path, name: str) -> bytes:
+    """A file of the repository; one that resolves outside it, or cannot be read, cannot be judged."""
     repository = root.resolve()
     path = repository / name
     try:
         if not path.resolve().is_relative_to(repository):
             raise CannotJudge(f"{name} resolves outside the repository")
-        document = yaml.load(path.read_text(encoding="utf-8"), Loader=ComposeLoader)
-    except (yaml.YAMLError, UnicodeDecodeError, OSError, RuntimeError) as error:
+        return path.read_bytes()
+    except (OSError, RuntimeError) as error:
+        raise CannotJudge(f"cannot read {name}: {error}") from error
+
+
+def read_repository_text(root: Path, name: str) -> str:
+    """A file of the repository as UTF-8 text; one that is not UTF-8 cannot be judged."""
+    try:
+        return read_repository_bytes(root, name).decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise CannotJudge(f"cannot read {name}: {error}") from error
+
+
+def write_repository_text(root: Path, name: str, text: str) -> None:
+    """Writes a file of the repository, only where `name` itself lies; one it cannot write cannot be judged.
+
+    A symlink on the way would redirect the write, possibly onto a file outside the repository.
+    """
+    path = root.resolve() / name
+    try:
+        resolved = path.resolve()
+        if resolved != path:
+            raise CannotJudge(f"{name} resolves to {resolved}, not to the repository's own {name}")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+    except (OSError, RuntimeError) as error:
+        raise CannotJudge(f"cannot write {name}: {error}") from error
+
+
+def _compose_file_findings(root: Path, name: str) -> list[Finding]:
+    text = read_repository_text(root, name)
+    try:
+        document = yaml.load(text, Loader=ComposeLoader)
+    except yaml.YAMLError as error:
         raise CannotJudge(f"cannot read {name}: {error}") from error
     services = document.get("services") if isinstance(document, dict) else None
     if not isinstance(services, dict):
@@ -137,6 +180,44 @@ def _describe(port: object) -> str:
     return str(port) if not isinstance(port, dict) else str(port.get("published", port.get("target", port)))
 
 
+def measure_size(root: Path, tracked: list[str]) -> ratchet.TreeMeasurement:
+    """Measures the tree on disk: a tracked file absent from it (deleted, sparse, a dangling link) is gone."""
+    on_disk = [name for name in tracked if ratchet.is_python(name) and _is_on_disk(root, name)]
+    return ratchet.measure({name: read_repository_bytes(root, name) for name in on_disk})
+
+
+def _is_on_disk(root: Path, name: str) -> bool:
+    """A path that leads nowhere is gone; one the filesystem refuses to reach cannot be judged."""
+    try:
+        (root / name).stat()
+    except OSError as error:
+        if error.errno in GONE_ERRNOS:
+            return False
+        raise CannotJudge(f"cannot reach {name}: {error}") from error
+    return True
+
+
+@dataclass(frozen=True)
+class SizeResult:
+    findings: list[Finding]
+    report: str | None
+
+
+def check_size(root: Path, tracked: list[str]) -> SizeResult:
+    """Report-only without a baseline; with one, the tree on disk must hold it."""
+    tree = measure_size(root, tracked)
+    if not (root / ratchet.BASELINE_PATH).exists(follow_symlinks=False):
+        return SizeResult([], ratchet.report_counts(tree))
+    try:
+        baseline = ratchet.load_baseline(read_repository_text(root, ratchet.BASELINE_PATH))
+        measurements = tree.complete()
+    except ratchet.UnparsableSource as error:
+        raise Unparsable(str(error)) from error
+    except ratchet.SizeError as error:
+        raise CannotJudge(str(error)) from error
+    return SizeResult(ratchet.compare(measurements, baseline), None)
+
+
 def check_secrets(root: Path, engine_dir: Path) -> engines.SecretScan:
     try:
         return engines.scan_secrets(root, engine_dir, engines.read_pins(), read_secret_allowances(root))
@@ -167,15 +248,17 @@ def skipped_rules(engine_dir: Path | None) -> tuple[str, ...]:
 @dataclass(frozen=True)
 class HygieneResult:
     findings: list[Finding]
+    size_report: str | None
     allowed_secrets: list[Finding]
     unused_allowances: dict[Allowance, str]
 
 
 def run_hygiene(root: Path, engine_dir: Path | None = None) -> HygieneResult:
     tracked = tracked_files(root)
-    findings = check_env_files(tracked) + check_compose_ports(root, tracked)
+    size = check_size(root, tracked)
+    findings = check_env_files(tracked) + check_compose_ports(root, tracked) + size.findings
     if engine_dir is None:
-        return HygieneResult(findings, [], {})
+        return HygieneResult(findings, size.report, [], {})
     secrets = check_secrets(root, engine_dir)
     findings += secrets.findings + check_workflows(root, engine_dir, tracked)
-    return HygieneResult(findings, secrets.allowed, secrets.unused_allowances)
+    return HygieneResult(findings, size.report, secrets.allowed, secrets.unused_allowances)

@@ -37,8 +37,8 @@ def non_utf8_filename_repo(build_repo, tmp_path):
 @pytest.mark.parametrize(
     ("arrange", "expected_code", "expected_text"),
     [
-        (lambda build_repo, tmp_path: build_repo({}), 0, "hygiene: clean (2 rules)"),
-        (non_utf8_filename_repo, 0, "hygiene: clean (2 rules)"),
+        (lambda build_repo, tmp_path: build_repo({}), 0, "hygiene: clean (3 rules)"),
+        (non_utf8_filename_repo, 0, "hygiene: clean (3 rules)"),
         (lambda build_repo, tmp_path: tmp_path, 2, "cannot judge"),
         (lambda build_repo, tmp_path: build_repo({".env": "A=1\n"}), 1, "finding(s)"),
         (lambda build_repo, tmp_path: build_repo({"\udcff.env": "A=1\n"}), 1, "env-file \\udcff.env"),
@@ -66,7 +66,7 @@ def test_compose_specific_tags_are_judged_not_refused(build_repo, capsys):
     """#3 rule 1/4: valid Compose YAML tags are read, and their ports still checked."""
     body = 'services:\n  web:\n    image: x\n    ports: !override\n      - "127.0.0.1:80:80"\n    profiles: !reset []\n'
     code, output = run(capsys, build_repo({"compose.yaml": body}))
-    assert (code, "hygiene: clean (2 rules)" in output) == (0, True)
+    assert (code, "hygiene: clean (3 rules)" in output) == (0, True)
 
 
 @pytest.mark.parametrize("tagged", ["!reset null", "!reset []"], ids=["null", "empty-list"])

@@ -3,6 +3,7 @@
 `quality` is the one door for fleet quality checks.
 
     quality hygiene [PATH]
+    quality baseline write [PATH]
     quality scan-staged [PATH] --engines DIR
     quality engines install DIR
     quality engines verify DIR
@@ -19,10 +20,29 @@ Install it with
 
 (no tag exists yet, so the line names a commit). The gitleaks paths (`hygiene --engines`, `scan-staged`) need git 2.41 or newer; with an older git they exit `2`.
 
-`hygiene` reads git's view of the repository at `PATH` (default `.`) and applies two rules:
+`hygiene` reads git's view of the repository at `PATH` (default `.`) and applies three rules:
 
 - `env-file`: no tracked `.env`, `.env.*` or `*.env` file (names ending in `.example` are templates and pass).
 - `compose-port`: every published port in a tracked `compose*.y{a,}ml` or `docker-compose*.y{a,}ml` binds `127.0.0.1`.
+- `size`: every tracked `*.py` file is measured with [lizard](https://github.com/terryyin/lizard): a file from 800
+  lines, a function from 60 lines and a function with a CCN above 15 are debt, counted apart for production and tests
+  (a path under `test/` or `tests/`, `conftest.py`, `test_*.py`, `*_test.py`). Functions are named by their qualified
+  symbol (`Class.method`); a second one of the same name, such as a property setter, is `Class.method#2`. Without
+  `quality/baseline.toml` the rule only prints the counts (`size: report only (no quality/baseline.toml) - production:
+  1 file(s) >= 800 lines, ...`) and the size debt leaves the exit unchanged.
+  Files are read the way Python reads source (a PEP 263 coding cookie or a UTF-8 BOM decides the encoding). A file
+  Python cannot decode or parse is named as not valid Python: without a baseline the count notes it (`1 file(s) not
+  valid Python, functions unmeasured: bad.py`) and the exit is unchanged; with a baseline it is `hygiene: unparsable -
+  bad.py is not valid Python (...)`, and `quality baseline write` refuses with `baseline: not written - bad.py is not
+  valid Python (...)`; both exit `2`. A tracked file the operating system refuses to read is `hygiene: cannot judge - ...`
+  with or without a baseline, and `quality baseline write` refuses with `baseline: not written - ...`; both exit `2`.
+  The reason names the case: a file without read permission is `cannot read locked.py: [Errno 13] ...`, a file behind
+  a directory without permission is `cannot reach pkg/m.py: [Errno 13] ...`. A tracked file missing from disk
+  (deleted, or a dangling symlink) is skipped.
+  With it, the tree on disk must hold the baseline: a new violation, an entry that grew and an entry above its measured
+  value (stale: lower it with `quality baseline write`) are findings; an entry whose file or function is gone is fine.
+  `quality baseline write [PATH]` writes the measured debt to `PATH/quality/baseline.toml` as sorted TOML, one table
+  per metric (`ccn`, `file_lines`, `function_lines`) keyed by path and qualified symbol.
 
 With `--engines DIR` the `secret` rule also scans the whole history reachable from `HEAD` with gitleaks (a key removed later is still found; other branches the checkout fetched are not scanned), always with quality's own config
 (`src/quality/gitleaks.toml`): the repository's `.gitleaks.toml`, `.gitleaksignore` and `gitleaks:allow`

@@ -7,10 +7,18 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from quality import __version__, engines, staged
+from quality import __version__, engines, ratchet, staged
 from quality.config import Allowance, ConfigError, read_gate_settings
 from quality.emergency import Ask, GhRunner, run_emergency_merge, run_gh
-from quality.hygiene import CannotJudge, active_rules, run_hygiene, skipped_rules
+from quality.hygiene import (
+    CannotJudge,
+    active_rules,
+    measure_size,
+    run_hygiene,
+    skipped_rules,
+    tracked_files,
+    write_repository_text,
+)
 from quality.report import Finding, render
 from quality.sonar import TASK_FILE, Sleep, Transport, analyse, fetch_json, preflight
 from quality.verdict import (
@@ -43,6 +51,12 @@ def main(
     hygiene = commands.add_parser("hygiene", help="check a git repository for fleet hygiene")
     hygiene.add_argument("path", nargs="?", type=Path, default=Path("."))
     hygiene.add_argument("--engines", type=Path, help="directory holding the installed engines; enables the secret and workflow scans")
+    baseline = commands.add_parser("baseline", help="manage the size baseline").add_subparsers(
+        dest="baseline_command", required=True
+    )
+    baseline.add_parser("write", help=f"write the measured size debt to {ratchet.BASELINE_PATH}").add_argument(
+        "path", nargs="?", type=Path, default=Path("."), help="the git repository to measure (default: the current one)"
+    )
     scan_staged = commands.add_parser("scan-staged", help="scan the staged change of a repository for secrets")
     scan_staged.add_argument("path", nargs="?", type=Path, default=Path("."))
     scan_staged.add_argument("--engines", type=Path, required=True, help="directory holding the installed engines")
@@ -91,6 +105,8 @@ def main(
         )
     if arguments.command == "verdict":
         return run_verdict(arguments.path, fetcher_for)
+    if arguments.command == "baseline":
+        return run_baseline_write(arguments.path)
     if arguments.command == "scan-staged":
         return run_scan_staged(arguments.path, arguments.engines, read_pins)
     if arguments.command == "sonar":
@@ -100,19 +116,25 @@ def main(
     if arguments.command == "engines":
         run_engines = run_engines_install if arguments.engines_command == "install" else run_engines_verify
         return run_engines(arguments.directory, read_pins)
+    return run_hygiene_check(arguments.path, arguments.engines)
+
+
+def run_hygiene_check(path: Path, engine_dir: Path | None) -> int:
     try:
-        result = run_hygiene(arguments.path, arguments.engines)
+        result = run_hygiene(path, engine_dir)
     except CannotJudge as error:
-        print(f"hygiene: cannot judge - {error}", file=sys.stderr)
+        print(f"hygiene: {error.status} - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     findings = result.findings
     print_secret_allowances(result.allowed_secrets, result.unused_allowances)
+    if result.size_report:
+        print(result.size_report)
     if not findings:
-        print(f"hygiene: clean ({len(active_rules(arguments.engines))} rules){coverage_note(arguments.engines)}")
+        print(f"hygiene: clean ({len(active_rules(engine_dir))} rules){coverage_note(engine_dir)}")
         return EXIT_CLEAN
     for finding in findings:
         print(render(finding))
-    print(f"hygiene: {len(findings)} finding(s){coverage_note(arguments.engines)}")
+    print(f"hygiene: {len(findings)} finding(s){coverage_note(engine_dir)}")
     return EXIT_FINDINGS
 
 
@@ -130,6 +152,18 @@ def coverage_note(engine_dir: Path | None) -> str:
     if skipped:
         return f"; skipped without --engines: {', '.join(skipped)}"
     return f"; {engines.WORKFLOW_SECURITY} runs offline, so zizmor's online-only audits do not run"
+
+
+def run_baseline_write(path: Path) -> int:
+    try:
+        entries = ratchet.debt(measure_size(path, tracked_files(path)).complete())
+        write_repository_text(path, ratchet.BASELINE_PATH, ratchet.render_baseline(entries))
+    except (CannotJudge, ratchet.SizeError) as error:
+        print(f"baseline: not written - {error}", file=sys.stderr)
+        return EXIT_CANNOT_JUDGE
+    count = "1 entry" if len(entries) == 1 else f"{len(entries)} entries"
+    print(f"baseline: wrote {count} to {path / ratchet.BASELINE_PATH}")
+    return EXIT_CLEAN
 
 
 def run_scan_staged(path: Path, engine_dir: Path, read_pins: Callable[[], dict[str, engines.Pin]]) -> int:
