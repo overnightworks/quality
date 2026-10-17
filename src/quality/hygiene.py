@@ -203,18 +203,26 @@ class SizeResult:
     report: str | None
 
 
+def read_baseline(root: Path) -> ratchet.Baseline | None:
+    """The repository's size baseline on disk, None when it has none; an unreadable one raises SizeError."""
+    if not (root / ratchet.BASELINE_PATH).exists(follow_symlinks=False):
+        return None
+    return ratchet.load_baseline(read_repository_text(root, ratchet.BASELINE_PATH))
+
+
 def check_size(root: Path, tracked: list[str]) -> SizeResult:
     """Report-only without a baseline; with one, the tree on disk must hold it."""
     tree = measure_size(root, tracked)
-    if not (root / ratchet.BASELINE_PATH).exists(follow_symlinks=False):
+    try:
+        baseline = read_baseline(root)
+    except ratchet.SizeError as error:
+        raise CannotJudge(str(error)) from error
+    if baseline is None:
         return SizeResult([], ratchet.report_counts(tree))
     try:
-        baseline = ratchet.load_baseline(read_repository_text(root, ratchet.BASELINE_PATH))
         measurements = tree.complete()
     except ratchet.UnparsableSource as error:
         raise Unparsable(str(error)) from error
-    except ratchet.SizeError as error:
-        raise CannotJudge(str(error)) from error
     return SizeResult(ratchet.compare(measurements, baseline), None)
 
 

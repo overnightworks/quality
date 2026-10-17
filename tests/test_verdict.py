@@ -6,9 +6,10 @@ import pytest
 from conftest import UNKNOWN_KEY_CONFIGS
 
 from quality import cli
-from quality.config import LegacyMode
+from quality.config import CONFIG_PATH, LegacyMode
 from quality.hygiene import CannotJudge
-from quality.verdict import NO_BASE_SETTINGS, GateSettings, Job, judge, read_base_settings, read_jobs
+from quality.ratchet import BASELINE_PATH
+from quality.verdict import NO_BASE, GateSettings, Job, Side, judge, read_base, read_jobs
 
 FIXTURES = Path(__file__).parent / "fixtures"
 GREEN_GATE = {"hygiene": "success"}
@@ -19,7 +20,8 @@ def job(name="checks", attempt=1, status="completed", conclusion="success"):
 
 
 def problems(jobs, mandatory=("checks",), base=(), gate=GREEN_GATE, attempt=1, legacy=LegacyMode.REPORT, base_legacy=LegacyMode.REPORT):
-    return judge(GateSettings(mandatory, legacy), GateSettings(base, base_legacy), jobs, gate, attempt).problems
+    head, base_side = Side(GateSettings(mandatory, legacy), None), Side(GateSettings(base, base_legacy), None)
+    return judge(head, base_side, jobs, gate, attempt).problems
 
 
 @pytest.mark.parametrize(
@@ -116,13 +118,13 @@ def test_more_pages_than_the_cap_cannot_be_judged():
 def test_base_config_is_read_from_the_base_commit(build_repo):
     """#6 rule 3: the base config is read from the base commit."""
     repo = build_repo({"quality/config.toml": '[gate]\nmandatory_jobs = ["tests"]\n'})
-    assert read_base_settings(repo, _head(repo)) == GateSettings(("tests",), LegacyMode.REPORT)
+    assert read_base(repo, _head(repo)).settings == GateSettings(("tests",), LegacyMode.REPORT)
 
 
 def test_the_legacy_mode_is_read_from_the_base_commit(build_repo):
     """#33 sentence 4: the base config's legacy mode is read from the base commit."""
     repo = build_repo({"quality/config.toml": '[gate]\nmandatory_jobs = ["tests"]\nlegacy = "fail"\n'})
-    assert read_base_settings(repo, _head(repo)) == GateSettings(("tests",), LegacyMode.FAIL)
+    assert read_base(repo, _head(repo)).settings == GateSettings(("tests",), LegacyMode.FAIL)
 
 
 @pytest.mark.parametrize(
@@ -137,16 +139,15 @@ def test_the_legacy_mode_is_read_from_the_base_commit(build_repo):
 )
 def test_switching_legacy_back_from_fail_is_a_loosening(base_legacy, legacy, expected):
     """#33 sentence 4: a head config that is not "fail" under a base config that is shows as loosened and is red"""
-    result = judge(
-        GateSettings(("checks",), legacy), GateSettings(("checks",), base_legacy), [job()], GREEN_GATE, 1
-    )
+    head, base = Side(GateSettings(("checks",), legacy), None), Side(GateSettings(("checks",), base_legacy), None)
+    result = judge(head, base, [job()], GREEN_GATE, 1)
     assert (result.problems, result.green) == (expected, not expected)
 
 
 def test_a_base_without_the_config_contributes_nothing(build_repo):
     """#6 rule 3: a base without the config adds no mandatory jobs."""
     repo = build_repo({"README.md": "x"})
-    assert read_base_settings(repo, _head(repo)) == NO_BASE_SETTINGS
+    assert read_base(repo, _head(repo)) == NO_BASE
 
 
 def _head(repo):
@@ -226,7 +227,15 @@ def test_a_base_config_that_git_cannot_show_cannot_be_judged(build_repo):
     (repo / ".git" / "objects" / blob.stdout[:2] / blob.stdout.strip()[2:]).unlink()
     base = subprocess.run([*git, "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
     with pytest.raises(CannotJudge, match="at the base commit"):
-        read_base_settings(repo, base)
+        read_base(repo, base)
+
+
+def test_a_malformed_base_config_names_the_base_commit(build_repo):
+    """#48 rule 4: the verdict names the side of a malformed config.toml, as the door does."""
+    repo = build_repo({CONFIG_PATH: "[gate"})
+    base = _head(repo)
+    with pytest.raises(CannotJudge, match=f"^{CONFIG_PATH} at the base commit {base}: {CONFIG_PATH} is not valid TOML"):
+        read_base(repo, base)
 
 
 def test_a_non_numeric_run_attempt_exits_two(monkeypatch, capsys, run_env):
@@ -245,8 +254,8 @@ def test_a_non_numeric_run_attempt_exits_two(monkeypatch, capsys, run_env):
 def test_a_base_ref_git_would_reject_is_refused(build_repo, ref):
     """#31 rule 1 (S8705): a base ref that is no valid git ref name, or reads as an option, is refused."""
     repo = build_repo({})
-    with pytest.raises(CannotJudge, match="not a ref name git accepts"):
-        read_base_settings(repo, ref)
+    with pytest.raises(CannotJudge, match="a ref name or a SHA"):
+        read_base(repo, ref)
 
 
 @pytest.mark.parametrize(
@@ -261,7 +270,7 @@ def test_a_valid_ref_name_is_still_a_readable_base(build_repo, ref, full_ref):
     """#31 rule 1 (S8705): valid ref names, with a slash or a plus, still work."""
     repo = build_repo({"quality/config.toml": '[gate]\nmandatory_jobs = ["tests"]\n'})
     subprocess.run(["git", "-C", str(repo), "update-ref", full_ref, _head(repo)], check=True)
-    assert read_base_settings(repo, ref) == GateSettings(("tests",), LegacyMode.REPORT)
+    assert read_base(repo, ref).settings == GateSettings(("tests",), LegacyMode.REPORT)
 
 
 def test_a_pull_request_that_removes_legacy_fail_is_red_in_the_verdict(monkeypatch, capsys, run_env):
@@ -278,3 +287,138 @@ def test_a_pull_request_that_removes_legacy_fail_is_red_in_the_verdict(monkeypat
     )
     assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (page, None)) == 1
     assert "loosened: legacy fail → report" in capsys.readouterr().out
+
+
+CHECKS_GREEN = json.dumps(
+    {"total_count": 1, "jobs": [{"name": "checks", "run_attempt": 1, "status": "completed", "conclusion": "success"}]}
+)
+LEGACY_FAIL_CONFIG = '[gate]\nmandatory_jobs = ["checks"]\nlegacy = "fail"\n'
+NEW_CCN_KEY = '[ccn."src/a.py"]\n"f" = 16\n'
+
+
+def main_lines(count: int) -> str:
+    return f'[function_lines."src/quality/cli.py"]\n"main" = {count}\n'
+
+
+def put(path: Path, content: str | bytes | None) -> None:
+    """Writes `content` to `path`, or removes the file when `content` is None."""
+    if content is None:
+        path.unlink(missing_ok=True)
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content if isinstance(content, bytes) else content.encode())
+
+
+@pytest.fixture
+def pull_request(monkeypatch, run_env):
+    """Commits `base` as the pull request's base baseline and points GATE_BASE_SHA at that commit."""
+    repo, _ = run_env
+
+    def commit_base(base: str | bytes | None, config: str | None = None) -> str:
+        put(repo / BASELINE_PATH, base)
+        if config is not None:
+            put(repo / "quality" / "config.toml", config)
+        git = ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.invalid"]
+        subprocess.run([*git, "add", "-A"], check=True)
+        subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "base"], check=True)
+        sha = _head(repo)
+        monkeypatch.setenv("GATE_BASE_SHA", sha)
+        return sha
+
+    return repo, commit_base
+
+
+def verdict_of(repo: Path, capsys) -> tuple[int, str]:
+    code = cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (CHECKS_GREEN, None))
+    captured = capsys.readouterr()
+    return code, captured.out + captured.err
+
+
+@pytest.mark.parametrize(
+    ("base", "head", "code", "expected"),
+    [
+        (main_lines(82), main_lines(90), 1, "loosened: size baseline raises function_lines src/quality/cli.py main 82 -> 90"),
+        (main_lines(82), main_lines(70), 0, "verdict: green"),
+        (main_lines(82), main_lines(82), 0, "verdict: green"),
+        (None, main_lines(82), 0, "verdict: green"),
+        (main_lines(82), None, 1, "loosened: quality/baseline.toml removed"),
+        (main_lines(82), main_lines(82) + NEW_CCN_KEY, 1, "loosened: size baseline adds ccn src/a.py f 16"),
+        (main_lines(82) + NEW_CCN_KEY, main_lines(82), 0, "verdict: green"),
+        (None, None, 0, "verdict: green"),
+        ("[ccn", main_lines(82), 2, f"{BASELINE_PATH} at the base commit {{base}}: {BASELINE_PATH} is not valid TOML"),
+        (main_lines(82), "[ccn", 2, f"cannot judge - {BASELINE_PATH} at the head: {BASELINE_PATH} is not valid TOML"),
+        (b"\xff", main_lines(82), 2, f"cannot read {BASELINE_PATH} at the base commit {{base}}: 'utf-8' codec"),
+    ],
+    ids=[
+        "cell 1 growth", "cell 2 lowering", "cell 3 equal", "cell 4 adoption", "cell 5 base file deleted",
+        "cell 6 new key", "cell 7 key dropped", "cell 8 both absent", "cell 9 base malformed", "cell 10 head malformed",
+        "cell 9 base not UTF-8",
+    ],
+)
+def test_the_size_baseline_only_falls_against_the_base(capsys, pull_request, base, head, code, expected):
+    """#48 rules 2 and 3, cells 1-10: growth, a new key and a deleted base file are red in the ruled literal."""
+    repo, commit_base = pull_request
+    base_sha = commit_base(base)
+    put(repo / BASELINE_PATH, head)
+    actual_code, output = verdict_of(repo, capsys)
+    assert (actual_code, expected.format(base=base_sha) in output, "Traceback" in output) == (code, True, False)
+
+
+def test_a_head_baseline_that_links_out_of_the_repository_cannot_be_judged(capsys, pull_request, tmp_path):
+    """#48 rule 4, cell 11: a head baseline symlinked out of the repository is exit 2, no traceback."""
+    repo, commit_base = pull_request
+    commit_base(main_lines(82))
+    outside = tmp_path.parent / f"{tmp_path.name}-outside-baseline.toml"
+    outside.write_text(main_lines(82))
+    (repo / BASELINE_PATH).unlink()
+    (repo / BASELINE_PATH).symlink_to(outside)
+    code, output = verdict_of(repo, capsys)
+    expected = f"cannot judge - {BASELINE_PATH} at the head: {BASELINE_PATH} resolves outside the repository"
+    assert (code, expected in output, "Traceback" in output) == (2, True, False)
+
+
+def test_without_a_base_the_base_is_never_read(capsys, monkeypatch, pull_request, fake_git, tmp_path):
+    """#48 rule 5, cell 12: on push GATE_BASE_SHA is empty, a raise against the previous commit stays green, git unread."""
+    repo, commit_base = pull_request
+    commit_base(main_lines(82))
+    monkeypatch.setenv("GATE_BASE_SHA", "")
+    put(repo / BASELINE_PATH, main_lines(90))
+    calls = tmp_path.parent / f"{tmp_path.name}-git-calls"
+    fake_git(f'echo "$@" >> "{calls}"')
+    assert verdict_of(repo, capsys) == (0, "verdict: green\n")
+    assert not calls.exists()
+
+
+@pytest.mark.parametrize(
+    ("base_sha", "expected"),
+    [
+        ("HEAD~1", "'HEAD~1' is not a ref name or a SHA"),
+        ("f" * 40, f"cannot read the base commit {'f' * 40}"),
+        ("-x", "'-x' is not a ref name or a SHA"),
+    ],
+    ids=["cell 14 a revision expression", "cell 15 a SHA not in the clone", "cell 16 an option"],
+)
+def test_a_base_that_is_no_ref_name_or_sha_in_the_clone_cannot_be_judged(
+    capsys, monkeypatch, pull_request, fake_git, tmp_path, base_sha, expected
+):
+    """#48 rule 4, cells 14-16 (#5 finding 57): exit 2 naming the base; a ref git would read as an option never reaches git."""
+    repo, commit_base = pull_request
+    commit_base(main_lines(82))
+    monkeypatch.setenv("GATE_BASE_SHA", base_sha)
+    calls = tmp_path.parent / f"{tmp_path.name}-git-calls"
+    fake_git(f'echo "$@" >> "{calls}"')
+    code, output = verdict_of(repo, capsys)
+    assert (code, expected in output, "Traceback" in output) == (2, True, False)
+    assert calls.exists() == (base_sha == "f" * 40)
+
+
+def test_a_raised_baseline_and_a_dropped_legacy_fail_are_both_listed(capsys, pull_request):
+    """#48 rule 1, cell 17: the baseline loosening stands next to the legacy loosening, and the verdict is red."""
+    repo, commit_base = pull_request
+    commit_base(main_lines(82), config=LEGACY_FAIL_CONFIG)
+    put(repo / "quality" / "config.toml", '[gate]\nmandatory_jobs = ["checks"]\n')
+    put(repo / BASELINE_PATH, main_lines(90))
+    code, output = verdict_of(repo, capsys)
+    assert code == 1
+    assert "loosened: legacy fail → report" in output
+    assert "loosened: size baseline raises function_lines src/quality/cli.py main 82 -> 90" in output

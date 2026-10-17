@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import pytest
@@ -155,3 +156,23 @@ def test_only_the_findings_step_binds_the_default_branch_from_the_event(gate):
     assert binders == [("sonar", findings["name"])]
     assert findings["env"]["DEFAULT_BRANCH"] == "${{ github.event.repository.default_branch }}"
     assert "main" not in str(findings)
+
+
+BASE_SHA_EXPRESSION = re.compile(r"\$\{\{ github\.event_name == '(?P<event>\w+)' && (?P<value>[\w.]+) \|\| '' \}\}")
+
+
+@pytest.mark.parametrize(
+    ("event", "expected"),
+    [
+        ("pull_request", "github.event.pull_request.base.sha"),
+        ("push", ""),
+        ("merge_group", ""),
+        ("workflow_dispatch", ""),
+    ],
+)
+def test_the_verdict_sees_a_base_only_on_a_pull_request(gate, event, expected):
+    """#48 rule 5, cell 13 (#5 finding 13): GATE_BASE_SHA yields '' outside pull_request, so the base is never read."""
+    verdict_step = step_named(gate["jobs"]["verdict"]["steps"], "Verdict")
+    expression = BASE_SHA_EXPRESSION.fullmatch(verdict_step["env"]["GATE_BASE_SHA"])
+    assert expression is not None
+    assert (expression["value"] if event == expression["event"] else "") == expected

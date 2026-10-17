@@ -39,10 +39,25 @@ Install it with
   The reason names the case: a file without read permission is `cannot read locked.py: [Errno 13] ...`, a file behind
   a directory without permission is `cannot reach pkg/m.py: [Errno 13] ...`. A tracked file missing from disk
   (deleted, or a dangling symlink) is skipped.
-  With it, the tree on disk must hold the baseline: a new violation, an entry that grew and an entry above its measured
-  value (stale: lower it with `quality baseline write`) are findings; an entry whose file or function is gone is fine.
+  With `quality/baseline.toml`, the tree on disk must hold the baseline: a new violation, an entry that grew and an
+  entry above its measured value (stale: lower it with `quality baseline write`) are findings; an entry whose file or
+  function is gone is fine.
   `quality baseline write [PATH]` writes the measured debt to `PATH/quality/baseline.toml` as sorted TOML, one table
   per metric (`ccn`, `file_lines`, `function_lines`) keyed by path and qualified symbol.
+- The baseline only falls: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the
+  base commit's, so growing a function and rewriting the baseline stays red. Each loosening is one line, named with the
+  baseline's own metric, path and symbol (a file entry has no symbol):
+  - an entry raised: `loosened: size baseline raises function_lines src/quality/cli.py main 82 -> 90`;
+  - an entry the base does not hold, a moved or renamed one included: `loosened: size baseline adds ccn src/a.py f 16`;
+  - the base's file deleted: `loosened: quality/baseline.toml removed`.
+
+  A lowered, equal or removed entry is green, and so is adopting a baseline (the base has none) or having none on
+  either side. A malformed baseline on either side, one that links out of the repository, or a base commit the clone
+  lacks is exit `2`, naming the side (`quality/baseline.toml at the base commit <sha>: ...`). The base must be a ref
+  name or a SHA: `HEAD~1` or `-x` is exit `2` (`... is not a ref name or a SHA`) before git runs. Outside a pull
+  request (push, `merge_group`, `workflow_dispatch`) `gate.yml` passes no base, so the base is never read and only
+  `hygiene` holds the tree. A lizard update that measures a function higher therefore turns the pull request that
+  takes it red until the baseline may declare that loosening.
 
 With `--engines DIR` the `secret` rule also scans the whole history reachable from `HEAD` with gitleaks (a key removed later is still found; other branches the checkout fetched are not scanned), always with quality's own config
 (`src/quality/gitleaks.toml`): the repository's `.gitleaks.toml`, `.gitleaksignore` and `gitleaks:allow`
@@ -217,8 +232,8 @@ quality emergency-merge <owner/repo> <pr>
   first: exit `2`, nothing changed, the missing right named). Agents never run it; it refuses when stdin is not a terminal.
 - **It refuses unless the door is the only way** (exit `1`): `quality / sonar` and `quality / verdict` have failed, every
   other check run and commit status is green, the verdict is red for the Sonar gate alone (the verdict's own judgment,
-  re-derived with the Sonar job assumed green, finds no other problem, so a loosened gate or a missing mandatory job is
-  refused), `[gate] legacy` is `fail` at the pull request's current merge commit (under `report` the Sonar job cannot be red on legacy findings, and a
+  re-derived with the Sonar job assumed green, finds no other problem, so a loosened gate, a raised or removed size
+  baseline (read at the merge commit and at base) or a missing mandatory job is refused), `[gate] legacy` is `fail` at the pull request's current merge commit (under `report` the Sonar job cannot be red on legacy findings, and a
   missing config reads as `report`), SonarCloud's analysis of the pull request is of the head being merged and adds no finding (the findings are
   named otherwise), and the default branch has legacy findings. `SONAR_TOKEN` is read from the environment when the project
   needs one.

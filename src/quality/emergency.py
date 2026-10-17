@@ -8,8 +8,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 
-from quality.config import CONFIG_PATH, ConfigError, GateSettings, LegacyMode, load_gate_settings
+from quality.config import CONFIG_PATH, GateSettings, LegacyMode
 from quality.hygiene import CannotJudge
+from quality.ratchet import BASELINE_PATH
 from quality.report import render
 from quality.sonar import (
     Analysis,
@@ -24,7 +25,7 @@ from quality.sonar import (
     project_of,
     require_resolved,
 )
-from quality.verdict import NO_BASE_SETTINGS, SUCCESS, Job, judge
+from quality.verdict import SUCCESS, Job, Side, judge, side_of
 
 EXIT_MERGED = 0
 EXIT_REFUSED = 1
@@ -117,10 +118,10 @@ def refusal_of_checks(checks: Sequence[Check]) -> str | None:
     return None
 
 
-def refusal_of_verdict(settings: GateSettings, base_settings: GateSettings, check_runs: Sequence[Check]) -> str | None:
+def refusal_of_verdict(head: Side, base: Side, check_runs: Sequence[Check]) -> str | None:
     """Judged by the verdict's own decider: the verdict must be red for the Sonar gate alone, which only legacy = fail can cause."""
     jobs = [Job(run.name, 1, run.status, SUCCESS if run.name == SONAR_CHECK else run.conclusion) for run in check_runs]
-    problems = judge(settings, base_settings, jobs, {"sonar": SUCCESS}, 1).problems
+    problems = judge(head, base, jobs, {"sonar": SUCCESS}, 1).problems
     if problems:
         return f"{VERDICT_CHECK} is red for more than legacy findings: {'; '.join(problems)}"
     return None
@@ -145,17 +146,20 @@ def read_statuses(gh: GhRunner, repository: str, head_sha: str) -> list[Check]:
     return [Check(status["context"], "queued" if status["state"] == PENDING_STATUS else COMPLETED, status["state"]) for status in statuses]
 
 
-def read_gate_settings_at(gh: GhRunner, repository: str, sha: str) -> GateSettings:
+def read_side_at(gh: GhRunner, repository: str, sha: str) -> Side:
+    """The gate's settings and size baseline at one commit, as the verdict reads them; a 404 reads as absent."""
+    config = _read_file_at(gh, repository, CONFIG_PATH, sha)
+    baseline = _read_file_at(gh, repository, BASELINE_PATH, sha)
+    return side_of(config, baseline, sha)
+
+
+def _read_file_at(gh: GhRunner, repository: str, path: str, sha: str) -> str | None:
     try:
-        text = gh(["api", "-H", "Accept: application/vnd.github.raw", f"repos/{repository}/contents/{CONFIG_PATH}?ref={sha}"], None)
+        return gh(["api", "-H", "Accept: application/vnd.github.raw", f"repos/{repository}/contents/{path}?ref={sha}"], None)
     except GhFailed as error:
         if NOT_FOUND in str(error):
-            return NO_BASE_SETTINGS
+            return None
         raise
-    try:
-        return load_gate_settings(text)
-    except ConfigError as error:
-        raise CannotJudge(f"{CONFIG_PATH} at {sha}: {error}") from error
 
 
 def require_admin_permission(repository_facts: Mapping[str, object], repository: str) -> None:
@@ -284,11 +288,11 @@ def judge_pull_request(
     merge_commit_sha = pull["merge_commit_sha"]
     if not merge_commit_sha:
         raise CannotJudge("GitHub has no merge commit for the pull request yet, so the config the jobs ran on is unknown")
-    settings = read_gate_settings_at(gh, repository, merge_commit_sha)
-    refusal = refusal_of_verdict(settings, read_gate_settings_at(gh, repository, pull["base"]["sha"]), check_runs)
+    head = read_side_at(gh, repository, merge_commit_sha)
+    refusal = refusal_of_verdict(head, read_side_at(gh, repository, pull["base"]["sha"]), check_runs)
     if refusal:
         raise Refused(refusal)
-    legacy_refusal = refusal_of_legacy_mode(settings)
+    legacy_refusal = refusal_of_legacy_mode(head.settings)
     try:
         legacy = judge_sonar(
             repository, pull_request, head_sha, repository_facts["default_branch"], transport, environment.get("SONAR_TOKEN", "")

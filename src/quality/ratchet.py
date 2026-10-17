@@ -74,6 +74,11 @@ class Key(NamedTuple):
     path: str
     symbol: str = ""
 
+    @property
+    def label(self) -> str:
+        """The entry as a person reads it: metric, path and, for a function, its symbol."""
+        return " ".join(part for part in (self.metric.value, self.path, self.symbol) if part)
+
 
 @dataclass(frozen=True)
 class Measured:
@@ -221,6 +226,24 @@ def compare(measurements: Measurements, baseline: Baseline) -> list[Finding]:
                 _finding(key, measured, f"the baseline holds {held} (stale)", f"lower it with `{WRITE_COMMAND}`")
             )
     return findings
+
+
+@dataclass(frozen=True)
+class RaisedEntry:
+    """A baseline entry the head holds higher than the base; `base` is None when the head adds the entry."""
+
+    key: Key
+    base: int | None
+    head: int
+
+
+def raised_entries(base: Baseline, head: Baseline) -> list[RaisedEntry]:
+    """One baseline against another: an entry may fall or go, never rise or appear (a moved entry is a new one)."""
+    return [
+        RaisedEntry(key, base.get(key), head[key])
+        for key in sorted(head, key=_order)
+        if key not in base or head[key] > base[key]
+    ]
 
 
 def _finding(key: Key, measured: Measured, verdict: str, fix: str) -> Finding:
