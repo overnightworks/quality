@@ -189,15 +189,21 @@ The way out is the operator's emergency door, one command (quality#37):
 quality emergency-merge <owner/repo> <pr>
 ```
 
-- **Operator only.** It runs under the operator's own `gh` login, which needs the `admin:org` scope (checked first: exit `2`,
-  nothing changed, the missing right named). Agents never run it; it refuses when stdin is not a terminal.
-- **It refuses unless the door is the only way** (exit `1`): the pull request adds no finding of its own (the findings are
-  named otherwise), the default branch has legacy findings, the only red checks are `quality / sonar` and
-  `quality / verdict`, and every other check is green. `SONAR_TOKEN` is read from the environment when the project needs one.
+- **Operator only.** It runs under the operator's own `gh` login, which needs admin permission on the repository (checked
+  first: exit `2`, nothing changed, the missing right named). Agents never run it; it refuses when stdin is not a terminal.
+- **It refuses unless the door is the only way** (exit `1`): `quality / sonar` and `quality / verdict` have failed, every
+  other check run and commit status is green, the verdict is red for the Sonar gate alone (the verdict's own judgment,
+  re-derived with the Sonar job assumed green, finds no other problem, so a loosened gate or a missing mandatory job is
+  refused), SonarCloud's analysis of the pull request is of the head being merged and adds no finding (the findings are
+  named otherwise), and the default branch has legacy findings. `SONAR_TOKEN` is read from the environment when the project
+  needs one.
 - **It shows, then asks:** repository, pull request, head SHA and legacy count, then the typed word `ja`. Anything else
   changes nothing.
 - **Off, merge, on:** it sets the repository's `quality_gate` property to `false` (this removes ruleset 25227067 for it),
   runs `gh pr merge <pr> --merge --match-head-commit <sha>`, and sets the property back to `true` in every case: merged,
-  merge failed, Ctrl-C. A property that cannot be restored is exit `2` with one line naming what to set by hand.
-- **Logged:** one comment on the pull request (who, when, legacy count, `quality_gate off → merge → on`). The command
+  merge failed, Ctrl-C. A property that cannot be restored is exit `2` with one line naming what to set by hand. A merge whose
+  outcome GitHub does not confirm (Ctrl-C, a lost answer) is re-read from the pull request; if that does not settle it, exit `2`
+  with `merge state unknown`.
+- **Logged:** one comment on the pull request (who, when, legacy count, `quality_gate off → <outcome> → on`), also when the
+  restore failed. The command
   prints `aco release <n> --merged <pr>` for the head, because `aco land` refuses any non-green check.

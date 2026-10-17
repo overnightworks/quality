@@ -369,10 +369,15 @@ def read_analysis(environment: Mapping[str, str]) -> Analysis:
 
 
 def project_of(environment: Mapping[str, str]) -> Project:
-    owner, separator, repository = environment.get("GITHUB_REPOSITORY", "").partition("/")
-    if not (owner and separator and repository):
+    return project_named(environment.get("GITHUB_REPOSITORY", ""))
+
+
+def project_named(repository: str) -> Project:
+    """The SonarCloud project of an `<owner>/<repo>` name."""
+    owner, separator, name = repository.partition("/")
+    if not (owner and separator and name):
         raise CannotJudge("GITHUB_REPOSITORY is not <owner>/<repo>")
-    return Project(owner, f"{owner}_{repository}")
+    return Project(owner, f"{owner}_{name}")
 
 
 def scope_of(environment: Mapping[str, str]) -> Scope:
@@ -462,6 +467,19 @@ def default_branch_analysed(analysis: Analysis, transport: Transport) -> bool:
         # A non-main branch counts only its changed code, so a legacy count would be silently too low.
         raise CannotJudge(f"{analysis.default_branch} is not SonarCloud's main branch: set SonarCloud's main branch to {analysis.default_branch}")
     return bool(branches[0].get("analysisDate"))
+
+
+def analysed_pull_request_commit(analysis: Analysis, transport: Transport) -> str | None:
+    """The commit of the latest analysis SonarCloud holds for the analysis's pull request, None when it has none."""
+    url = api_url("project_pull_requests/list", project=analysis.project.key)
+    answer = answer_object(transport(url, analysis.authorization), None, url)
+    try:
+        for pull_request in answer["pullRequests"]:
+            if str(pull_request["key"]) == analysis.scope.value:
+                return pull_request["commit"]["sha"]
+    except (KeyError, TypeError) as error:
+        raise CannotJudge(f"SonarCloud answered {url.partition('?')[0]} with an unreadable body") from error
+    return None
 
 
 def issues_search_url(analysis: Analysis, scope: Scope, page: int, page_size: int) -> str:
