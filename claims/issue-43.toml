@@ -1,0 +1,8 @@
+claim_id = "92b93533635544179677fae048dcb734"
+agent = "Claude fe12493e-3d52-442e-b01b-4ee4336de2f0"
+role = "builder"
+base = "b38045d2b72d3d9c850a6315f50f85d9dc3113d3"
+branch = "claude/issue-43-roadmap-docs"
+scope = ["AGENTS.md", "README.md", "docs/roadmap.md", "docs/rulings.md"]
+opened_commit = "6d4d1d72de887cdbd830a70d4c1146572278e9df"
+whole_reason = "The two documents, the README links and the AGENTS.md door list are one harvest of #80's body; landing them apart leaves the roadmap with two homes."
