@@ -13,13 +13,13 @@ Door commands:
   transport, polling through an injected sleep, so tests need no network.
 - `quality emergency-merge <owner/repo> <pr>` (`emergency.py`): the operator's door, it needs a terminal on stdin.
 
-Roadmap and the operator's rulings: `docs/roadmap.md`, `docs/rulings.md`. A change that contradicts them needs a new ruling first.
+Roadmap and the operator's rulings: `docs/roadmap.md`, `docs/rulings.md`.
 
 Checks (all targeted, run from the repo root):
 
 - `uv sync --locked`
 - `uv run ruff check`
-- `uv run pytest tests/test_hygiene.py tests/test_sonar.py tests/test_verdict.py tests/test_staged.py tests/test_emergency.py` (name the module you changed; never the whole suite locally, CI runs it)
+- `uv run pytest tests/test_<module>.py` (the module you changed; never the whole suite locally, CI runs it)
 - `uv run quality hygiene .`
 
 Tests build their git fixtures in `tmp_path`; never commit a `.env` or compose fail file.
