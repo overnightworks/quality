@@ -128,7 +128,7 @@ def measure(sources: dict[str, bytes]) -> TreeMeasurement:
         try:
             text = _python_text(source)
             tree = ast.parse(text, filename=path)
-        except (SyntaxError, ValueError) as error:
+        except (SyntaxError, ValueError, LookupError) as error:
             unparsable[path] = str(error)
             continue
         measurements.update(_function_measurements(path, text, tree))
