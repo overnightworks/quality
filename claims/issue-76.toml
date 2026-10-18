@@ -1,0 +1,8 @@
+claim_id = "ece23b4639c24336a74aa50388f9277c"
+agent = "claude"
+role = "builder"
+base = "cb6c26466c6c57fbbd72fe19088875fd09cfa1a4"
+branch = "claude/issue-76-hygiene-git-top"
+scope = ["README.md", "src/quality/cli.py", "src/quality/hygiene.py", "tests/test_architecture.py", "tests/test_hygiene.py", "tests/test_ratchet.py", "tests/test_verdict.py"]
+opened_commit = "37593fe551cc1b93ff26ca27878564b7a83b865b"
+whole_reason = "Which repository a run judges and which of its tracked files count is one decision; its two callers in cli, the README sentences that state it and the tests it flips move together."
