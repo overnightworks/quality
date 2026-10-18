@@ -51,8 +51,8 @@ class Pin:
     sha256: str
 
 
-def read_pins(pin_file: Path = PIN_FILE) -> dict[str, Pin]:
-    with pin_file.open("rb") as handle:
+def read_pins() -> dict[str, Pin]:
+    with PIN_FILE.open("rb") as handle:
         return {name: Pin(**fields) for name, fields in tomllib.load(handle).items()}
 
 
@@ -63,7 +63,7 @@ def install(directory: Path, pins: dict[str, Pin]) -> dict[str, bool]:
     downloaded = {}
     for name, pin in pins.items():
         target = engine_path(directory, name)
-        downloaded[name] = not _is_installed(target, name, pin)
+        downloaded[name] = _version_problem(directory, name, pin) is not None
         if downloaded[name]:
             target.write_bytes(_unpack_binary(name, _download_verified(name, pin)))
             target.chmod(0o755)
@@ -72,21 +72,15 @@ def install(directory: Path, pins: dict[str, Pin]) -> dict[str, bool]:
 
 def verification_problems(directory: Path, pins: dict[str, Pin]) -> list[str]:
     """One line per pinned engine in `directory` that is missing or not at its pinned version."""
-    problems = []
-    for name, pin in pins.items():
-        try:
-            verify_version(engine_path(directory, name), name, pin.version)
-        except EngineError as error:
-            problems.append(str(error))
-    return problems
+    return [problem for name, pin in pins.items() if (problem := _version_problem(directory, name, pin))]
 
 
-def _is_installed(binary: Path, name: str, pin: Pin) -> bool:
+def _version_problem(directory: Path, name: str, pin: Pin) -> str | None:
     try:
-        verify_version(binary, name, pin.version)
-    except EngineError:
-        return False
-    return True
+        verify_version(engine_path(directory, name), name, pin.version)
+    except EngineError as error:
+        return str(error)
+    return None
 
 
 def engine_path(directory: Path, name: str) -> Path:
@@ -150,8 +144,12 @@ def scan_secrets(root: Path, engine_dir: Path, pins: dict[str, Pin], allowances:
         # gitleaks also reads <source>/.gitleaksignore, so it scans a mirror clone (bare), which has no work tree to
         # read it from. The verdict judges the history reachable from the scanned HEAD only: the mirror also brings
         # other branches, which are not this verdict's.
-        source = _mirror_clone(root, scratch / "source", git_environment)
-        head = head_commit(source, git_environment)
+        source = scratch / "source"
+        git(["clone", "--mirror", "--quiet", "--template=", str(root.resolve()), str(source)],
+            f"cannot clone {root} for the {GITLEAKS} scan", git_environment)
+        head = unborn_aware_head_commit(source, git_environment)
+        if head is None:
+            raise EngineError(f"cannot resolve HEAD of {source}: it has no commit")
         return run_gitleaks(binary, scratch, git_environment, source, [f"--log-opts={head}"], allowances)
 
 
@@ -189,7 +187,7 @@ def run_gitleaks(
     scan = run(command, env=git_environment, timeout=SECRET_SCAN_TIMEOUT_SECONDS)
     if not report.is_file():
         raise EngineError(f"{GITLEAKS} exited {scan.returncode} without writing its report{stderr_tail(scan.stderr)}")
-    leaks = secret_findings(_read_report(report), scan.returncode, scan.stderr)
+    leaks = engine_findings(GITLEAKS_ENGINE, _read_report(report), scan.returncode, scan.stderr)
     return _split_by_allowance(leaks, allowances)
 
 
@@ -256,10 +254,10 @@ def parse_git_version(version_output: str) -> str | None:
 
 
 def require_git_floor() -> None:
-    asked = run(["git", "--version"])
-    version = parse_git_version(asked.stdout)
-    if asked.returncode != 0 or version is None:
-        raise EngineError(f"cannot read the git version{stderr_tail(asked.stderr)}")
+    unreadable = "cannot read the git version"
+    version = parse_git_version(git(["--version"], unreadable))
+    if version is None:
+        raise EngineError(unreadable)
     if tuple(int(part) for part in version.split("."))[:2] < GIT_FLOOR:
         required = ".".join(map(str, GIT_FLOOR))
         raise EngineError(
@@ -267,30 +265,39 @@ def require_git_floor() -> None:
         )
 
 
-def head_commit(repository: Path, git_environment: dict[str, str]) -> str:
-    """The commit HEAD names."""
-    head = unborn_aware_head_commit(repository, git_environment)
-    if head is None:
-        raise EngineError(f"cannot resolve HEAD of {repository}: it has no commit")
-    return head
-
-
 def unborn_aware_head_commit(repository: Path, git_environment: dict[str, str]) -> str | None:
     """The commit HEAD names; None when the repository has no commit yet."""
-    resolved = run(["git", "-C", str(repository), "rev-parse", "--verify", "--quiet", "HEAD^{commit}"], env=git_environment)
-    if resolved.returncode == 1 and not resolved.stderr.strip():  # --quiet: no commit is a silent exit 1
+    # --ignore-missing: a HEAD without a commit lists nothing and exits 0, where rev-parse would fail.
+    listed = git(["-C", str(repository.resolve()), "rev-list", "--no-walk", "--ignore-missing", "HEAD", "--"],
+                 f"cannot resolve HEAD of {repository}", git_environment)
+    return listed.strip() or None
+
+
+def git(arguments: list[str], failure: str, env: dict[str, str] | None = None) -> str:
+    """git's output; a git that fails is an EngineError of `failure` and git's own words."""
+    done = run(["git", *arguments], env=env)
+    if done.returncode != 0:
+        raise EngineError(f"{failure}{stderr_tail(done.stderr)}")
+    return done.stdout
+
+
+def read_blob(
+    repository: Path, revision: str, path: str, unlisted: str, unreadable: str, env: dict[str, str] | None = None
+) -> str | None:
+    """The UTF-8 text of `path` at `revision`, None when the tree there lacks it.
+
+    Each caller words its own failures: `unlisted` when the tree cannot be listed, `unreadable` when the file cannot.
+    """
+    in_repository = ["-C", str(repository.resolve())]
+    if not git([*in_repository, "ls-tree", "--end-of-options", revision, "--", path], unlisted, env).strip():
         return None
-    if resolved.returncode != 0:
-        raise EngineError(f"cannot resolve HEAD of {repository}{stderr_tail(resolved.stderr)}")
-    return resolved.stdout.strip()
-
-
-def _mirror_clone(root: Path, destination: Path, git_environment: dict[str, str]) -> Path:
-    command = ["git", "clone", "--mirror", "--quiet", "--template=", str(root.resolve()), str(destination)]
-    cloned = run(command, env=git_environment)
-    if cloned.returncode != 0:
-        raise EngineError(f"cannot clone {root} for the {GITLEAKS} scan{stderr_tail(cloned.stderr)}")
-    return destination
+    shown = run(["git", *in_repository, "show", "--end-of-options", f"{revision}:{path}"], env=env, encoding=None)
+    if shown.returncode != 0:
+        raise EngineError(f"{unreadable}{stderr_tail(shown.stderr.decode(errors='replace'))}")
+    try:
+        return shown.stdout.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise EngineError(f"{unreadable}: {error}") from error
 
 
 def verify_version(binary: Path, engine_name: str, pinned: str) -> None:
@@ -303,10 +310,14 @@ def verify_version(binary: Path, engine_name: str, pinned: str) -> None:
 
 
 def run(
-    command: list[str], cwd: Path | None = None, env: dict[str, str] | None = None, timeout: float | None = None
-) -> subprocess.CompletedProcess[str]:
+    command: list[str], cwd: Path | None = None, env: dict[str, str] | None = None, timeout: float | None = None,
+    encoding: str | None = "utf-8",
+) -> subprocess.CompletedProcess:
+    """`command`'s exit and output, decoded as UTF-8 whatever the locale; `encoding=None` keeps the bytes."""
     try:
-        return subprocess.run(command, capture_output=True, text=True, check=False, cwd=cwd, env=env, timeout=timeout)
+        return subprocess.run(
+            command, capture_output=True, encoding=encoding, check=False, cwd=cwd, env=env, timeout=timeout
+        )
     except subprocess.TimeoutExpired:
         raise EngineError(f"{command[0]} did not finish within {timeout} seconds") from None
     except (OSError, ValueError) as error:  # ValueError: output that is not text
@@ -316,10 +327,6 @@ def run(
 def stderr_tail(stderr: str) -> str:
     tail = "\n".join(stderr.strip().splitlines()[-STDERR_TAIL_LINES:])
     return f": {tail}" if tail else ""
-
-
-def secret_findings(report_text: str, exit_code: int, stderr: str = "") -> list[Finding]:
-    return engine_findings(GITLEAKS_ENGINE, report_text, exit_code, stderr)
 
 
 def _read_leak(entry: object) -> tuple[str, int, str, str, str]:

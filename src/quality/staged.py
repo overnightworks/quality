@@ -1,10 +1,9 @@
 import os
-import subprocess
 from pathlib import Path
 
 from quality import engines
-from quality.config import CONFIG_PATH, Allowance, ConfigError, load_staged_secret_allowances
-from quality.engines import EngineError, Pin, SecretScan, run, stderr_tail
+from quality.config import CONFIG_PATH, load_staged_secret_allowances
+from quality.engines import Pin, SecretScan
 
 INDEX_VARIABLE = "GIT_INDEX_FILE"
 
@@ -17,23 +16,20 @@ def scan_staged(path: Path, engine_dir: Path, pins: dict[str, Pin]) -> SecretSca
     caller's environment points at) can change what is found.
     """
     binary = engines.prepare_gitleaks(engine_dir, pins)
-    path = _existing_directory(path)
-    staged_tree = _write_tree(path)
+    path = path.resolve()  # absolute, so a path that starts with `-` can never read as a git option
+    staged_tree = _git_output(path, "write-tree")
     head = engines.unborn_aware_head_commit(path, _caller_git_environment())
-    object_store = _object_store(path)
+    object_store = Path(_git_output(path, "rev-parse", "--path-format=absolute", "--git-path", "objects"))
     with engines.scratch_directory() as scratch:
         git_environment = engines.attribute_free_git_environment(scratch / "home")
         source = _scratch_repository(scratch / "source", object_store, head, staged_tree, git_environment)
-        allowances = _allowances_of(source, staged_tree, git_environment)
+        # A tree without quality/config.toml allows nothing.
+        staged_config = engines.read_blob(
+            source, staged_tree, CONFIG_PATH, f"cannot look for {CONFIG_PATH} in the staged tree",
+            f"{CONFIG_PATH} cannot be read from the staged tree", git_environment,
+        )
+        allowances = load_staged_secret_allowances(staged_config)
         return engines.run_gitleaks(binary, scratch, git_environment, source, ["--pre-commit", "--staged"], allowances)
-
-
-def _existing_directory(path: Path) -> Path:
-    """The absolute path of the repository, so a path that starts with `-` can never read as a git option."""
-    resolved = path.resolve()
-    if not resolved.is_dir():
-        raise EngineError(f"{path} is not a directory")
-    return resolved
 
 
 def _caller_git_environment() -> dict[str, str]:
@@ -45,37 +41,17 @@ def _caller_git_environment() -> dict[str, str]:
     return environment
 
 
-def _git_in(path: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
-    return run(["git", "-C", str(path), *arguments], env=_caller_git_environment())
-
-
 def _git_output(path: Path, *arguments: str) -> str:
-    asked = _git_in(path, *arguments)
-    if asked.returncode != 0:
-        raise EngineError(f"git {arguments[0]} failed in {path}{stderr_tail(asked.stderr)}")
-    return asked.stdout.strip()
-
-
-def _write_tree(path: Path) -> str:
-    return _git_output(path, "write-tree")
-
-
-def _object_store(path: Path) -> Path:
-    return Path(_git_output(path, "rev-parse", "--path-format=absolute", "--git-path", "objects"))
+    return engines.git(["-C", str(path), *arguments], f"git {arguments[0]} failed in {path}", _caller_git_environment()).strip()
 
 
 def _scratch_repository(
     destination: Path, object_store: Path, head: str | None, staged_tree: str, git_environment: dict[str, str]
 ) -> Path:
-    def git(*arguments: str) -> str:
-        done = run(["git", "-C", str(destination), *arguments], env=git_environment)
-        if done.returncode != 0:
-            raise EngineError(f"git {arguments[0]} failed in the scratch repository{stderr_tail(done.stderr)}")
-        return done.stdout
+    def git(*arguments: str) -> None:
+        engines.git(["-C", str(destination), *arguments], f"git {arguments[0]} failed in the scratch repository", git_environment)
 
-    init = run(["git", "init", "--quiet", "--template=", str(destination)], env=git_environment)
-    if init.returncode != 0:
-        raise EngineError(f"cannot create the scratch repository{stderr_tail(init.stderr)}")
+    engines.git(["init", "--quiet", "--template=", str(destination)], "cannot create the scratch repository", git_environment)
     alternates = destination / ".git" / "objects" / "info" / "alternates"
     alternates.parent.mkdir(parents=True, exist_ok=True)
     alternates.write_text(f"{object_store}\n", encoding="utf-8")
@@ -83,16 +59,3 @@ def _scratch_repository(
         git("update-ref", "HEAD", head)
     git("read-tree", staged_tree)
     return destination
-
-
-def _allowances_of(source: Path, staged_tree: str, git_environment: dict[str, str]) -> dict[Allowance, str]:
-    """The allow list of the tree being scanned; a tree without quality/config.toml allows nothing."""
-    listed = run(["git", "-C", str(source), "ls-tree", staged_tree, "--", CONFIG_PATH], env=git_environment)
-    if listed.returncode != 0:
-        raise EngineError(f"cannot look for {CONFIG_PATH} in the staged tree{stderr_tail(listed.stderr)}")
-    if not listed.stdout.strip():
-        return load_staged_secret_allowances(None)
-    read = run(["git", "-C", str(source), "cat-file", "blob", f"{staged_tree}:{CONFIG_PATH}"], env=git_environment)
-    if read.returncode != 0:
-        raise ConfigError(f"{CONFIG_PATH} cannot be read from the staged tree{stderr_tail(read.stderr)}")
-    return load_staged_secret_allowances(read.stdout)

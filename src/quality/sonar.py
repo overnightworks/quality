@@ -4,12 +4,12 @@ import base64
 import http.client
 import json
 import re
-import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from email.message import Message
 from enum import Enum
 from pathlib import Path
 
@@ -94,22 +94,35 @@ class RedirectRefusingHandler(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def fetch_json(url: str, authorization: str, timeout: float = REQUEST_TIMEOUT_SECONDS) -> object:
+def fetch(
+    url: str, headers: Mapping[str, str], unreadable: Callable[[Exception], CannotJudge],
+    timeout: float = REQUEST_TIMEOUT_SECONDS,
+) -> tuple[bytes, Message]:
+    """The body and headers answered at `url`, never following a redirect; any other answer is `unreadable(error)`."""
     opener = urllib.request.build_opener(RedirectRefusingHandler())
-    request = urllib.request.Request(url, headers={"Authorization": authorization})
-    where = url.partition("?")[0]
     try:
-        with opener.open(request, timeout=timeout) as response:
-            return json.load(response)
-    except urllib.error.HTTPError as error:
-        raise SonarHttpError(error.code, url) from error
-    except OSError as error:
-        if timed_out(error):
-            raise CannotJudge(f"SonarCloud did not answer {where} within {timeout}s") from error
-        raise CannotJudge(f"SonarCloud could not be reached at {where}: {error}") from error
-    except (http.client.HTTPException, ValueError) as error:
-        # JSONDecodeError and UnicodeDecodeError are ValueErrors; a truncated body is an HTTPException.
-        raise CannotJudge(f"SonarCloud answered {where} with a body that is not JSON") from error
+        with opener.open(urllib.request.Request(url, headers=dict(headers)), timeout=timeout) as response:
+            return response.read(), response.headers
+    except (OSError, http.client.HTTPException) as error:  # a truncated body is an HTTPException
+        raise unreadable(error) from error
+
+
+def fetch_json(url: str, authorization: str, timeout: float = REQUEST_TIMEOUT_SECONDS) -> object:
+    def unreadable(error: Exception) -> CannotJudge:
+        where = url.partition("?")[0]
+        if isinstance(error, urllib.error.HTTPError):
+            return SonarHttpError(error.code, url)
+        if isinstance(error, OSError):
+            if timed_out(error):
+                return CannotJudge(f"SonarCloud did not answer {where} within {timeout}s")
+            return CannotJudge(f"SonarCloud could not be reached at {where}: {error}")
+        return CannotJudge(f"SonarCloud answered {where} with a body that is not JSON")
+
+    body, _ = fetch(url, {"Authorization": authorization}, unreadable, timeout)
+    try:
+        return json.loads(body)
+    except ValueError as error:  # JSONDecodeError and UnicodeDecodeError
+        raise unreadable(error) from error
 
 
 def timed_out(error: OSError) -> bool:
@@ -326,12 +339,7 @@ def decode_property_text(line: str, position: int, stop_at: str = "") -> tuple[s
     return "".join(decoded), position
 
 
-def analyse(
-    environment: Mapping[str, str],
-    legacy_mode: LegacyMode,
-    transport: Transport = fetch_json,
-    sleep: Sleep = time.sleep,
-) -> SonarResult:
+def analyse(environment: Mapping[str, str], legacy_mode: LegacyMode, transport: Transport, sleep: Sleep) -> SonarResult:
     """Every check that can refuse runs before the token is sent anywhere."""
     analysis = read_analysis(environment)
     wait_for_own_task(analysis, transport, sleep)
@@ -501,6 +509,19 @@ def open_findings(analysis: Analysis, transport: Transport) -> OpenFindings:
         if not issues or len(listed) >= total:
             break
     return OpenFindings(total, tuple(listed))
+
+
+def analysed_pull_request_commit(analysis: Analysis, transport: Transport) -> str | None:
+    """The commit of the latest analysis SonarCloud holds for the analysis's pull request, None when it has none."""
+    url = api_url("project_pull_requests/list", project=analysis.project.key)
+    answer = answer_object(transport(url, analysis.authorization), None, url)
+    try:
+        for pull_request in answer["pullRequests"]:
+            if str(pull_request["key"]) == analysis.scope.value:
+                return pull_request["commit"]["sha"]
+    except (KeyError, TypeError) as error:
+        raise CannotJudge(f"SonarCloud answered {url.partition('?')[0]} with an unreadable body") from error
+    return None
 
 
 def answer_object(answer: object, key: str | None, url: str) -> dict:

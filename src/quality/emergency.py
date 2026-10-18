@@ -16,10 +16,10 @@ from quality.sonar import (
     Analysis,
     Scope,
     Transport,
-    answer_object,
-    api_url,
+    analysed_pull_request_commit,
     basic_authorization,
     default_branch_analysed,
+    legacy_unknown,
     open_findings,
     open_total,
     project_of,
@@ -168,19 +168,6 @@ def require_admin_permission(repository_facts: Mapping[str, object], repository:
         raise CannotJudge(f"the gh login has no admin permission on {repository}, which switching {GATE_PROPERTY} needs")
 
 
-def analysed_pull_request_commit(analysis: Analysis, transport: Transport) -> str | None:
-    """The commit of the latest analysis SonarCloud holds for the analysis's pull request, None when it has none."""
-    url = api_url("project_pull_requests/list", project=analysis.project.key)
-    answer = answer_object(transport(url, analysis.authorization), None, url)
-    try:
-        for pull_request in answer["pullRequests"]:
-            if str(pull_request["key"]) == analysis.scope.value:
-                return pull_request["commit"]["sha"]
-    except (KeyError, TypeError) as error:
-        raise CannotJudge(f"SonarCloud answered {url.partition('?')[0]} with an unreadable body") from error
-    return None
-
-
 def judge_sonar(
     repository: str, pull_request: int, head_sha: str, default_branch: str, transport: Transport, sonar_token: str
 ) -> int:
@@ -196,7 +183,7 @@ def judge_sonar(
     if findings.count:
         raise Refused("the pull request adds findings:\n" + "\n".join(render(finding) for finding in findings.listed))
     if not default_branch_analysed(analysis, transport):
-        raise Refused(f"legacy unknown ({default_branch} not analysed yet)")
+        raise Refused(legacy_unknown(default_branch))
     legacy = open_total(analysis, Scope("branch", default_branch), transport)
     if not legacy:
         raise Refused(f"{default_branch} has no open finding: the red checks are not legacy findings")
@@ -329,29 +316,28 @@ def run_emergency_merge(
     is_terminal: bool,
     now: Callable[[], datetime],
     environment: Mapping[str, str],
-    report: Callable[[str], None] = print,
 ) -> int:
     if not REPOSITORY_NAME.fullmatch(repository):
-        report(f"emergency-merge: {repository!r} is not <owner>/<repo>")
+        print(f"emergency-merge: {repository!r} is not <owner>/<repo>")
         return EXIT_REFUSED
     if not is_terminal:
-        report("emergency-merge: refused - this is the operator's command, it needs a terminal on stdin")
+        print("emergency-merge: refused - this is the operator's command, it needs a terminal on stdin")
         return EXIT_REFUSED
     try:
         door, login = judge_pull_request(repository, pull_request, gh, transport, environment)
     except Refused as refusal_error:
-        report(f"emergency-merge: refused - {refusal_error}")
+        print(f"emergency-merge: refused - {refusal_error}")
         return EXIT_REFUSED
     except (CannotJudge, GhFailed, KeyError, ValueError) as error:
-        report(f"emergency-merge: cannot judge - {error}; nothing was changed")
+        print(f"emergency-merge: cannot judge - {error}; nothing was changed")
         return EXIT_NOT_RESTORED
-    report(f"{door.repository} #{door.pull_request} head {door.head_sha}: {door.legacy} legacy finding(s)")
+    print(f"{door.repository} #{door.pull_request} head {door.head_sha}: {door.legacy} legacy finding(s)")
     if not confirmed(ask):
-        report("emergency-merge: not confirmed, nothing was changed")
+        print("emergency-merge: not confirmed, nothing was changed")
         return EXIT_REFUSED
-    attempt = switch_off_merge_switch_on(gh, door, report)
+    attempt = switch_off_merge_switch_on(gh, door, print)
     try:
         gh(["api", "-X", "POST", f"repos/{repository}/issues/{pull_request}/comments", "-f", f"body={log_comment(login, now(), door, attempt)}"], None)
     except (GhFailed, KeyboardInterrupt) as error:
-        report(f"emergency-merge: the log comment on #{pull_request} was not posted, add it by hand ({error})")
-    return report_attempt(attempt, pull_request, report)
+        print(f"emergency-merge: the log comment on #{pull_request} was not posted, add it by hand ({error})")
+    return report_attempt(attempt, pull_request, print)
