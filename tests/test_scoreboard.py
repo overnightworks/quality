@@ -313,10 +313,11 @@ def test_no_configured_credential_reaches_a_private_host(scoreboard, public, pri
          "mixed IPv6 hosts", "bad IPv6 host private", "option", "option private"],
 )
 def test_a_url_git_could_misread_or_authenticate_with_cannot_be_judged(scoreboard, public, list_name, url, name, reason):
-    """Rules 3 to 5 and #63 rule 3, written through the fleet file: only a valid anonymous URL that cannot read as a git option is cloned or listed; any other
-    is a cannot-judge row, the rest still show."""
+    """Rules 3 to 5 and #63 rule 3, written through the fleet file: only a valid anonymous URL that cannot read as a
+    git option is cloned or listed; any other is a cannot-judge row, the rest still show."""
     open_repo = public("open", {"a.py": "a = 1\n"})
-    code, output = scoreboard(open_repo, *[url] * (list_name == "public"), private=[url] * (list_name == "private"))
+    listed = {"public": ([url], []), "private": ([], [url])}[list_name]
+    code, output = scoreboard(open_repo, *listed[0], private=listed[1])
     assert code == 2, output
     assert row(output, name)[1:3] == ["—", f"cannot judge: {reason}"]
     assert "secret" not in output
@@ -425,12 +426,31 @@ def test_without_a_step_summary_nothing_is_written(scoreboard, public, tmp_path,
     assert [path for path in sorted(tmp_path.rglob("*")) if path not in before and not {"remotes", "fleet"} & set(path.parts)] == []
 
 
-def test_a_url_argument_is_a_usage_error(capsys):
-    """#63 rule 1: the fleet list is the file's; a URL on the command line is refused, not measured."""
+def test_a_url_given_as_the_path_is_a_missing_fleet_file_like_any_other_path(capsys):
+    """#63 rule 1: a URL is read as a PATH, so no URL reaches git."""
+    assert cli.main(["scoreboard", "https://github.com/o/r"]) == 2
+    assert "quality/fleet.toml is missing" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [["https://github.com/o/r", "--private", "https://github.com/o/p"], ["--private", "https://github.com/o/p"],
+     ["checkout", "https://github.com/o/r"]],
+    ids=["URL and --private", "--private", "second positional"],
+)
+def test_a_fleet_given_on_the_command_line_is_a_usage_error(capsys, arguments):
+    """#63 rule 1: `--private` and a second positional are argparse usage errors."""
     with pytest.raises(SystemExit) as stopped:
-        cli.main(["scoreboard", "https://github.com/o/r", "--private", "https://github.com/o/p"])
+        cli.main(["scoreboard", *arguments])
     assert stopped.value.code == 2
     assert "scoreboard" in capsys.readouterr().err
+
+
+def test_a_private_only_fleet_is_measured(scoreboard, missing):
+    """#63 rule 2: an empty public list is fine; the private row stands alone."""
+    code, output = scoreboard(private=[missing])
+    assert code == 0, output
+    assert row(output, "gone")[1:3] == ["—", "not measured: private"]
 
 
 def test_the_fleet_file_is_read_from_the_working_directory_by_default(capsys, public, tmp_path, monkeypatch):
@@ -457,8 +477,8 @@ def test_public_rows_come_first_then_private_ones_each_in_file_order(scoreboard,
         ('public = "https://x/a"\nprivate = []\n', "needs public as a list of strings"),
         ('public = [1]\nprivate = []\n', "needs public as a list of strings"),
         ('public = ["https://x/a"]\n', "needs private as a list of strings"),
-        ('public = ["https://x/a", "https://x/a"]\nprivate = []\n', "more than once"),
-        ('public = ["https://x/a"]\nprivate = ["https://x/a"]\n', "more than once"),
+        ('public = ["https://x/a", "https://x/a"]\nprivate = []\n', "public[1] repeats public[0]"),
+        ('public = ["https://x/a"]\nprivate = ["https://x/b", "https://x/a"]\n', "private[1] repeats public[0]"),
         ("public = []\nprivate = []\n", "lists no URL"),
     ],
     ids=["missing file", "invalid TOML", "unknown key", "not a list", "not a string", "missing key", "duplicate",
@@ -516,3 +536,14 @@ def test_the_workflow_reads_only_and_pins_what_ci_pins():
     used = pinned_actions(scoreboard_workflow)
     assert used <= pinned_actions(workflow("ci.yml"))
     assert {action.split("@")[0] for action in used} == {"actions/checkout", "astral-sh/setup-uv"}
+
+
+def test_a_repeated_credentialed_url_is_named_by_its_place_never_its_text(capsys, tmp_path):
+    """#63 rule 2 and the secrets rule: the duplicate report must not print a password embedded in the URL."""
+    url = "https://user:secret@example.invalid/o/r"
+    fleet = write_fleet(tmp_path / "fleet", [url, url], [url])
+    assert cli.main(["scoreboard", str(fleet)]) == 2
+    captured = capsys.readouterr()
+    assert "public[1] repeats public[0]" in captured.err
+    assert "private[0] repeats public[0]" in captured.err
+    assert "secret" not in captured.out + captured.err

@@ -138,10 +138,10 @@ entries, a path that is not a repository, or a gitleaks run without a report.
 ## `quality scoreboard`
 
 `quality scoreboard [PATH]` prints one markdown table of the Python size of every repository `quality/fleet.toml` lists
-(`public = [...]` and `private = [...]`, each a list of URLs, each listed once), under a heading with the date, the quality version and the languages measured (`Python only` for now). With
-`GITHUB_STEP_SUMMARY` set, the same text is appended there. The fleet list lives once, in
-`quality/fleet.toml`; `.github/workflows/scoreboard.yml` runs it every Monday at 05:17 UTC and on dispatch; the table stands in that
-run's summary. The run only reports: it writes to no repository and needs no secret. A missing, malformed or
+(`public = [...]` and `private = [...]`, each a list of URLs, each listed once), under a heading with the date, the
+quality version and the languages measured (`Python only` for now). With `GITHUB_STEP_SUMMARY` set, the same text is
+appended there. The fleet list lives once, in `quality/fleet.toml`; `.github/workflows/scoreboard.yml` runs it every
+Monday at 05:17 UTC and on dispatch; the table stands in that run's summary. The run only reports: it writes to no repository and needs no secret. A missing, malformed or
 duplicating `quality/fleet.toml` is `cannot judge`, exit `2`.
 
 - A `public` URL is cloned with `git -c credential.helper= clone --depth 1 --no-tags`, `GIT_TERMINAL_PROMPT=0` and no

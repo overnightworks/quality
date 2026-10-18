@@ -102,10 +102,26 @@ def parse_fleet(text: str) -> Fleet:
     urls = [*fleet.public, *fleet.private]
     if not urls:
         raise FleetError(f"{FLEET_PATH} lists no URL - list at least one, like:\n{FLEET_EXAMPLE}")
-    repeated = sorted({url for url in urls if urls.count(url) > 1})
-    if repeated:
-        raise FleetError(f"{FLEET_PATH} lists {repeated} more than once (in one list or both) - list each URL once, like:\n{FLEET_EXAMPLE}")
+    repeats = _repeats(fleet)
+    if repeats:
+        raise FleetError(
+            f"{FLEET_PATH} lists a URL more than once ({'; '.join(repeats)}) - list each URL once, like:\n{FLEET_EXAMPLE}"
+        )
     return fleet
+
+
+def _repeats(fleet: Fleet) -> list[str]:
+    """Each repeated entry named by its place, never its text: a URL may embed credentials."""
+    first_place: dict[str, str] = {}
+    repeats = []
+    for list_name, urls in (("public", fleet.public), ("private", fleet.private)):
+        for index, url in enumerate(urls):
+            place = f"{list_name}[{index}]"
+            if url in first_place:
+                repeats.append(f"{place} repeats {first_place[url]}")
+            else:
+                first_place[url] = place
+    return repeats
 
 
 def _url_list(document: dict, key: str) -> tuple[str, ...]:
