@@ -76,7 +76,10 @@ def anonymous_environment(scratch: Path) -> dict[str, str]:
 
 def refusal(url: str) -> str | None:
     """Why git must not be pointed at `url`, or None when it is anonymous."""
-    parts = urlsplit(url)
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return "not a valid URL"
     if parts.scheme not in ANONYMOUS_SCHEMES:
         return "not an http, https or file URL"
     if parts.username is not None or parts.password is not None:
@@ -90,7 +93,10 @@ def cannot_judge(rows: list[Row]) -> bool:
 
 def repository_name(url: str) -> str:
     """The URL's last path segment, else its host: never the URL itself, which may carry credentials."""
-    parts = urlsplit(url)
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return UNNAMED
     return PurePosixPath(parts.path).name.removesuffix(".git") or parts.hostname or UNNAMED
 
 
