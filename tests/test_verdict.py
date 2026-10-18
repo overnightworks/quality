@@ -1,11 +1,16 @@
+import http.server
 import json
+import os
 import subprocess
+import sys
+import threading
 from pathlib import Path
 
 import pytest
-from conftest import UNKNOWN_KEY_CONFIGS
+from conftest import GIT_IDENTITY, UNKNOWN_KEY_CONFIGS
+from test_sonar import Responder, reply
 
-from quality import cli
+from quality import cli, verdict
 from quality.config import CONFIG_PATH, LegacyMode
 from quality.hygiene import CannotJudge
 from quality.ratchet import BASELINE_PATH
@@ -450,3 +455,96 @@ def test_a_raised_baseline_and_a_dropped_legacy_fail_are_both_listed(capsys, pul
     assert code == 1
     assert "loosened: legacy fail → report" in output
     assert "loosened: size baseline raises function_lines src/quality/cli.py main 82 -> 90" in output
+
+
+def test_a_verdict_without_git_on_the_path_cannot_judge(capsys, monkeypatch, pull_request, elsewhere):
+    """#58 cell 1 (#5 finding 92): with no git to read the base commit the verdict is exit 2, never a traceback."""
+    repo, commit_base = pull_request
+    commit_base(main_lines(82))
+    monkeypatch.setenv("PATH", str(elsewhere))
+    code, output = verdict_of(repo, capsys)
+    assert (code, "verdict: cannot judge - cannot run git" in output, "Traceback" in output) == (2, True, False)
+
+
+@pytest.fixture
+def stub_server():
+    """`serve(responder)` starts a loopback server and returns its origin and the headers of each request it got."""
+    servers = []
+
+    def serve(responder: Responder) -> tuple[str, list[dict[str, str]]]:
+        heard: list[dict[str, str]] = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                heard.append(dict(self.headers))
+                responder(self)
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        servers.append(server)
+        return f"http://127.0.0.1:{server.server_address[1]}", heard
+
+    yield serve
+    for server in servers:
+        server.shutdown()
+        server.server_close()
+
+
+@pytest.fixture
+def jobs_served(monkeypatch, run_env, stub_server):
+    """Points the verdict's jobs page at a stub answering with `responder`; returns the stub's heard requests."""
+
+    def serve_jobs(responder: Responder) -> list[dict[str, str]]:
+        origin, heard = stub_server(responder)
+        monkeypatch.setattr(verdict, "JOBS_URL", origin + "/repos/{repo}/actions/runs/{run_id}/jobs")
+        return heard
+
+    return serve_jobs
+
+
+@pytest.mark.parametrize(
+    ("answer", "code", "expected"),
+    [
+        (reply(200, CHECKS_GREEN.encode()), 0, "verdict: green"),
+        (reply(200, b"abcd", Content_Length="100"), 2, "verdict: cannot judge - "),
+    ],
+    ids=["cell 4 the jobs page", "cell 2 IncompleteRead"],
+)
+def test_the_github_fetcher_reads_the_jobs_page_and_cannot_judge_a_truncated_one(
+    capsys, run_env, jobs_served, answer, code, expected
+):
+    """#58 cells 2 and 4 (#5 findings 92, 95): the real fetcher sends the token; a truncated body is exit 2."""
+    repo, _ = run_env
+    heard = jobs_served(answer)
+    actual_code = cli.main(["verdict", str(repo)])
+    captured = capsys.readouterr()
+    output = captured.out + captured.err
+    assert (actual_code, expected in output, "Traceback" in output) == (code, True, False)
+    assert heard[0]["Authorization"] == "Bearer t"
+
+
+def test_the_github_token_never_follows_a_redirect(capsys, run_env, jobs_served, stub_server):
+    """#58 cell 3 (#5 finding 93): a 302 to another host is refused, and that host never sees the token."""
+    repo, _ = run_env
+    other_origin, other_heard = stub_server(reply(200, CHECKS_GREEN.encode()))
+    jobs_served(reply(302, b"", Location=other_origin.replace("127.0.0.1", "localhost") + "/stolen"))
+    code = cli.main(["verdict", str(repo)])
+    assert (code, "HTTP 302" in capsys.readouterr().err, other_heard) == (2, True, [])
+
+
+def test_git_output_is_decoded_as_utf_8_whatever_the_locale(build_repo):
+    """#58 cell 8 (#5 finding 94): under LANG=C a commit subject in UTF-8 still reads, it does not fail to decode."""
+    repo = build_repo({})
+    subprocess.run(["git", "-C", str(repo), *GIT_IDENTITY, "commit", "-q", "--allow-empty", "-m", "Grüße"], check=True)
+    program = (
+        "import sys; from quality import engines; "
+        "print(ascii(engines.run(['git', '-C', sys.argv[1], 'log', '-1', '--format=%s']).stdout.strip()))"
+    )
+    ascii_locale = {**os.environ, "LC_ALL": "C", "LANG": "C", "PYTHONUTF8": "0", "PYTHONCOERCECLOCALE": "0"}
+    read = subprocess.run(
+        [sys.executable, "-c", program, str(repo)], capture_output=True, text=True, env=ascii_locale, check=False
+    )
+    assert (read.returncode, read.stdout.strip()) == (0, ascii("Grüße")), read.stderr

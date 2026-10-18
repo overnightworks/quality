@@ -150,8 +150,12 @@ def scan_secrets(root: Path, engine_dir: Path, pins: dict[str, Pin], allowances:
         # gitleaks also reads <source>/.gitleaksignore, so it scans a mirror clone (bare), which has no work tree to
         # read it from. The verdict judges the history reachable from the scanned HEAD only: the mirror also brings
         # other branches, which are not this verdict's.
-        source = _mirror_clone(root, scratch / "source", git_environment)
-        head = head_commit(source, git_environment)
+        source = scratch / "source"
+        git(["clone", "--mirror", "--quiet", "--template=", str(root.resolve()), str(source)],
+            f"cannot clone {root} for the {GITLEAKS} scan", git_environment)
+        head = unborn_aware_head_commit(source, git_environment)
+        if head is None:
+            raise EngineError(f"cannot resolve HEAD of {source}: it has no commit")
         return run_gitleaks(binary, scratch, git_environment, source, [f"--log-opts={head}"], allowances)
 
 
@@ -256,23 +260,15 @@ def parse_git_version(version_output: str) -> str | None:
 
 
 def require_git_floor() -> None:
-    asked = run(["git", "--version"])
-    version = parse_git_version(asked.stdout)
-    if asked.returncode != 0 or version is None:
-        raise EngineError(f"cannot read the git version{stderr_tail(asked.stderr)}")
+    unreadable = "cannot read the git version"
+    version = parse_git_version(git(["--version"], unreadable))
+    if version is None:
+        raise EngineError(unreadable)
     if tuple(int(part) for part in version.split("."))[:2] < GIT_FLOOR:
         required = ".".join(map(str, GIT_FLOOR))
         raise EngineError(
             f"git {version} cannot hide .gitattributes from the {GITLEAKS} scan, it needs git {required}"
         )
-
-
-def head_commit(repository: Path, git_environment: dict[str, str]) -> str:
-    """The commit HEAD names."""
-    head = unborn_aware_head_commit(repository, git_environment)
-    if head is None:
-        raise EngineError(f"cannot resolve HEAD of {repository}: it has no commit")
-    return head
 
 
 def unborn_aware_head_commit(repository: Path, git_environment: dict[str, str]) -> str | None:
@@ -285,12 +281,29 @@ def unborn_aware_head_commit(repository: Path, git_environment: dict[str, str]) 
     return resolved.stdout.strip()
 
 
-def _mirror_clone(root: Path, destination: Path, git_environment: dict[str, str]) -> Path:
-    command = ["git", "clone", "--mirror", "--quiet", "--template=", str(root.resolve()), str(destination)]
-    cloned = run(command, env=git_environment)
-    if cloned.returncode != 0:
-        raise EngineError(f"cannot clone {root} for the {GITLEAKS} scan{stderr_tail(cloned.stderr)}")
-    return destination
+def git(arguments: list[str], failure: str, env: dict[str, str] | None = None) -> str:
+    """git's output; a git that fails is an EngineError of `failure` and git's own words."""
+    done = run(["git", *arguments], env=env)
+    if done.returncode != 0:
+        raise EngineError(f"{failure}{stderr_tail(done.stderr)}")
+    return done.stdout
+
+
+def read_blob(
+    repository: Path, revision: str, path: str, where: str, env: dict[str, str] | None = None
+) -> str | None:
+    """The UTF-8 text of `path` at `revision`, None when the tree there lacks it; `where` names the revision."""
+    in_repository = ["-C", str(repository.resolve())]
+    if not git([*in_repository, "ls-tree", "--end-of-options", revision, "--", path], f"cannot read {where}", env).strip():
+        return None
+    unreadable = f"cannot read {path} at {where}"
+    shown = run(["git", *in_repository, "show", "--end-of-options", f"{revision}:{path}"], env=env, encoding=None)
+    if shown.returncode != 0:
+        raise EngineError(f"{unreadable}{stderr_tail(shown.stderr.decode(errors='replace'))}")
+    try:
+        return shown.stdout.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise EngineError(f"{unreadable}: {error}") from error
 
 
 def verify_version(binary: Path, engine_name: str, pinned: str) -> None:
@@ -303,10 +316,14 @@ def verify_version(binary: Path, engine_name: str, pinned: str) -> None:
 
 
 def run(
-    command: list[str], cwd: Path | None = None, env: dict[str, str] | None = None, timeout: float | None = None
-) -> subprocess.CompletedProcess[str]:
+    command: list[str], cwd: Path | None = None, env: dict[str, str] | None = None, timeout: float | None = None,
+    encoding: str | None = "utf-8",
+) -> subprocess.CompletedProcess:
+    """`command`'s exit and output, decoded as UTF-8 whatever the locale; `encoding=None` keeps the bytes."""
     try:
-        return subprocess.run(command, capture_output=True, text=True, check=False, cwd=cwd, env=env, timeout=timeout)
+        return subprocess.run(
+            command, capture_output=True, encoding=encoding, check=False, cwd=cwd, env=env, timeout=timeout
+        )
     except subprocess.TimeoutExpired:
         raise EngineError(f"{command[0]} did not finish within {timeout} seconds") from None
     except (OSError, ValueError) as error:  # ValueError: output that is not text

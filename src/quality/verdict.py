@@ -1,12 +1,12 @@
 import json
 import re
-import subprocess
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from quality import engines
 from quality.config import CONFIG_PATH, ConfigError, GateSettings, LegacyMode, load_gate_settings, read_gate_settings
 from quality.hygiene import CannotJudge, read_baseline
 from quality.ratchet import BASELINE_PATH, REWRITE_HINT, Baseline, SizeError, load_baseline, raised_entries
@@ -167,9 +167,12 @@ def read_head(repo: Path) -> Side:
 def read_base(repo: Path, base_sha: str) -> Side:
     """The gate's settings and size baseline at the base commit; a file the base lacks reads as absent."""
     _require_safe_ref(base_sha)
-    config = _read_base_file(repo, base_sha, CONFIG_PATH)
-    baseline = _read_base_file(repo, base_sha, BASELINE_PATH)
-    return side_of(config, baseline, f"the base commit {base_sha}")
+    where = f"the base commit {base_sha}"
+    try:
+        config, baseline = (engines.read_blob(repo, base_sha, path, where) for path in (CONFIG_PATH, BASELINE_PATH))
+    except engines.EngineError as error:
+        raise CannotJudge(str(error)) from error
+    return side_of(config, baseline, where)
 
 
 def side_of(config: str | None, baseline: str | None, where: str) -> Side:
@@ -186,22 +189,3 @@ def side_of(config: str | None, baseline: str | None, where: str) -> Side:
 
 def _unusable(name: str, where: str, reason: object) -> CannotJudge:
     return CannotJudge(f"{name} at {where}: {reason}")
-
-
-def _read_base_file(repo: Path, base_sha: str, path: str) -> str | None:
-    git = ["git", "-C", str(repo.resolve())]
-    listed = subprocess.run(
-        [*git, "ls-tree", "--end-of-options", base_sha, "--", path], capture_output=True, text=True, check=False
-    )
-    if listed.returncode != 0:
-        raise CannotJudge(f"cannot read the base commit {base_sha}: {listed.stderr.strip()}")
-    if not listed.stdout.strip():
-        return None
-    shown = subprocess.run([*git, "show", "--end-of-options", f"{base_sha}:{path}"], capture_output=True, check=False)
-    unreadable = f"cannot read {path} at the base commit {base_sha}"
-    if shown.returncode != 0:
-        raise CannotJudge(f"{unreadable}: {shown.stderr.decode(errors='replace').strip()}")
-    try:
-        return shown.stdout.decode("utf-8")
-    except UnicodeDecodeError as error:
-        raise CannotJudge(f"{unreadable}: {error}") from error
