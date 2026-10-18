@@ -290,7 +290,7 @@ def test_no_configured_credential_reaches_a_private_host(capsys, public, private
          "option", "option private"],
 )
 def test_a_url_git_could_misread_or_authenticate_with_cannot_be_judged(capsys, public, option, url, name, reason):
-    """Rules 3 to 5 and #63: only a valid anonymous URL that cannot read as a git option is cloned or listed; any other
+    """Rules 3 to 5 and #63 rule 3: only a valid anonymous URL that cannot read as a git option is cloned or listed; any other
     is a cannot-judge row, the rest still show."""
     code, output = scoreboard(capsys, public("open", {"a.py": "a = 1\n"}), *option, url)
     assert code == 2, output
