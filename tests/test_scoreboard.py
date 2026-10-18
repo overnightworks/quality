@@ -20,6 +20,7 @@ from conftest import GIT_IDENTITY, make_repo
 from test_ratchet import branchy_function, long_file, long_function
 
 from quality import __version__, cli
+from quality.scoreboard import require_anonymous
 
 WORKFLOWS = Path(__file__).parent.parent / ".github" / "workflows"
 HEADER = (
@@ -282,12 +283,20 @@ def test_no_configured_credential_reaches_a_private_host(capsys, public, private
         ([], "https://user:secret@example.invalid/", "example.invalid", "cannot clone (the URL carries credentials)"),
         ([], "https://[broken/repo", "unnamed URL", "cannot clone (not a valid URL)"),
         (["--private"], "https://[broken/edge", "unnamed URL", "cannot check that it is private (not a valid URL)"),
+        ([], "HTTPS://example.invalid/org/repo", "repo", "cannot clone (not an http, https or file URL)"),
+        ([], "https:example.invalid/org/repo", "repo", "cannot clone (not an http, https or file URL)"),
+        ([], "file:/tmp/org/repo", "repo", "cannot clone (not an http, https or file URL)"),
+        ([], "https://example.invalid/org/repo\n", "repo", "cannot clone (not an http, https or file URL)"),
+        ([], "https://[dead]/repo", "unnamed URL", "cannot clone (not a valid URL)"),
+        ([], "https://[::1]x[::2]/repo", "unnamed URL", "cannot clone (not a valid URL)"),
+        (["--private"], "https://[dead]/edge", "unnamed URL", "cannot check that it is private (not a valid URL)"),
         (["--"], "--upload-pack=touch pwned", "--upload-pack=touch pwned", "cannot clone (reads as a git option)"),
         ([], "--private=--upload-pack=touch pwned", "--upload-pack=touch pwned",
          "cannot check that it is private (reads as a git option)"),
     ],
     ids=["ssh", "scp-like", "credentials in the URL", "credentials and no path", "invalid", "invalid private",
-         "option", "option private"],
+         "uppercase scheme", "scheme without slashes", "file without slashes", "trailing line break", "bad IPv6 host",
+         "mixed IPv6 hosts", "bad IPv6 host private", "option", "option private"],
 )
 def test_a_url_git_could_misread_or_authenticate_with_cannot_be_judged(capsys, public, option, url, name, reason):
     """Rules 3 to 5 and #63 rule 3: only a valid anonymous URL that cannot read as a git option is cloned or listed; any other
@@ -297,6 +306,22 @@ def test_a_url_git_could_misread_or_authenticate_with_cannot_be_judged(capsys, p
     assert row(output, name)[1:3] == ["—", f"cannot judge: {reason}"]
     assert "secret" not in output
     assert row(output, "open")[2] == "1 / 0"
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://github.com/overnightworks/quality",
+        "file:///tmp/org/repo",
+        "file:///tmp/org/my repo",
+        "http://127.0.0.1:8080/o/r",
+        "http://[::1]:8080/o/r",
+        "https://[fe80::1%25eth0]/repo",
+    ],
+)
+def test_an_anonymous_url_is_let_through(url):
+    """#63 rule 2: an http, https or file URL with `//`, no credentials and no line break is not refused."""
+    require_anonymous(url)
 
 
 def test_only_the_default_branch_tip_is_measured(capsys, public):

@@ -7,6 +7,7 @@ directory, so no checkout's own config reaches it either. A repository declared 
 is published in a public run summary.
 """
 
+import re
 import subprocess
 from dataclasses import dataclass
 from datetime import date
@@ -24,6 +25,9 @@ UNNAMED = "unnamed URL"
 ANONYMOUS_GIT = ("git", "-c", "credential.helper=", "-c", "core.askPass=")
 # ssh authenticates with the user's keys and agent whatever HOME says, so only these transports are anonymous.
 ANONYMOUS_SCHEMES = frozenset({"file", "http", "https"})
+# scheme and "//" then the rest of the line (a space stays, git takes the URL as one argument); git reads "https:host/x"
+# as scp-style ssh and an uppercase scheme as a missing remote helper
+ANONYMOUS_URL = re.compile(rf"(?:{'|'.join(sorted(ANONYMOUS_SCHEMES))})://.*")
 COLUMNS = (
     "Repo",
     "Commit",
@@ -90,6 +94,8 @@ def require_anonymous(url: str) -> None:
         raise Refused("not an http, https or file URL")
     if parts.username is not None or parts.password is not None:
         raise Refused("the URL carries credentials")
+    if not ANONYMOUS_URL.fullmatch(url):
+        raise Refused("not an http, https or file URL")
 
 
 def cannot_judge(rows: list[Row]) -> bool:
