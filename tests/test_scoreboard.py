@@ -306,9 +306,9 @@ def test_no_temporary_clone_outlives_the_run(capsys, public, missing, scratch, o
     assert list(scratch.iterdir()) == []
 
 
-@pytest.mark.parametrize("stop", [signal.SIGINT], ids=["Ctrl-C"])
+@pytest.mark.parametrize("stop", [signal.SIGINT, signal.SIGTERM], ids=["Ctrl-C", "SIGTERM"])
 def test_no_temporary_clone_outlives_a_stopped_run(public, scratch, tmp_path, stop):
-    """Cell 16, rule 3: the temporary directory goes when the run is stopped while the clone is on disk."""
+    """Cell 16, rule 3: the temporary directory goes when Ctrl-C, a cancelled job or `timeout` stops the run."""
     url = public("cleaned", {"a.py": "a = 1\n"})
     status = scoreboard_signalled(url, scratch, git_that_signals(tmp_path / "bin", stop.name.removeprefix("SIG")))
     assert status in {-stop, 128 + stop}

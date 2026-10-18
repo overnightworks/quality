@@ -7,12 +7,10 @@ the table is published in a public run summary.
 """
 
 import subprocess
-from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path, PurePosixPath
-from tempfile import TemporaryDirectory
 from urllib.parse import urlsplit
 
 from quality import __version__, engines, hygiene, ratchet
@@ -83,16 +81,9 @@ def repository_name(url: str) -> str:
     return PurePosixPath(urlsplit(url).path).name.removesuffix(".git") or url
 
 
-@contextmanager
-def scratch_directory() -> Iterator[Path]:
-    """Removed on every exit, Ctrl-C included."""
-    with TemporaryDirectory(prefix="quality-scoreboard-") as directory:
-        yield Path(directory)
-
-
 def measure_public(url: str, environment: dict[str, str]) -> Row:
     name = repository_name(url)
-    with scratch_directory() as scratch:
+    with engines.scratch_directory() as scratch:
         clone = scratch / "clone"
         try:
             cloned = git(["clone", "--depth", "1", "--no-tags", "--quiet", "--", url, str(clone)], scratch, environment,
@@ -114,7 +105,7 @@ def measure_public(url: str, environment: dict[str, str]) -> Row:
 
 def judge_private(url: str, environment: dict[str, str]) -> Row:
     name = repository_name(url)
-    with scratch_directory() as scratch:
+    with engines.scratch_directory() as scratch:
         try:
             listed = git(["ls-remote", "--", url], scratch, environment, LS_REMOTE_TIMEOUT_SECONDS)
         except engines.EngineError as error:
