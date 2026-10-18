@@ -126,7 +126,7 @@ def test_against_a_baseline_a_file_python_cannot_read_is_unparsable(build_repo, 
     repo = build_repo_with_source(build_repo, {BASELINE_PATH: EMPTY_BASELINE}, SOURCE_NAME, source)
     code, output = hygiene(capsys, repo)
     assert code == 2
-    assert f"hygiene: unparsable - {SOURCE_NAME} is not valid Python" in output
+    assert f"hygiene: size unparsable - {SOURCE_NAME} is not valid Python" in output
 
 
 @NOT_PYTHON
@@ -198,7 +198,7 @@ def test_below_the_thresholds_or_with_a_fixed_entry_gone_is_clean(build_repo, ca
     baseline = '[file_lines]\n"src/gone.py" = 900\n'
     code, output = hygiene(capsys, build_repo({**files, BASELINE_PATH: baseline}))
     assert code == 0, output
-    assert "hygiene: clean (3 rules)" in output
+    assert "hygiene: clean (env-file, compose-port, size)" in output
 
 
 @pytest.fixture(params=["deleted", "dangling", "cell 18 dangling out of the repository"])
@@ -231,7 +231,7 @@ def test_a_tracked_file_missing_from_disk_is_gone_not_unjudgeable(build_repo, ca
     remove(repo / "src/b.py")
     code, output = hygiene(capsys, repo)
     assert code == 0, output
-    assert "hygiene: clean (3 rules)" in output
+    assert "hygiene: clean (env-file, compose-port, size)" in output
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-0 path, so no permission is refused")
@@ -254,7 +254,7 @@ def test_a_tracked_file_the_filesystem_refuses_to_reach_cannot_be_judged(build_r
     finally:
         (repo / locked).chmod(0o755)
     assert code == 2
-    prefix = "hygiene: cannot judge - " if command == "hygiene" else "baseline: not written - "
+    prefix = "hygiene: size cannot judge - " if command == "hygiene" else "baseline: not written - "
     err = capsys.readouterr().err
     assert (prefix + reason in err, str(repo) in err) == (True, False), err
 
@@ -307,7 +307,7 @@ def test_baseline_write_records_the_measured_debt_sorted_and_hygiene_then_holds_
     assert written.index('[function_lines."src/a.py"]') < written.index('[function_lines."src/b.py"]')
     capsys.readouterr()
     code, output = hygiene(capsys, repo)
-    assert (code, "hygiene: clean (3 rules)" in output) == (0, True), output
+    assert (code, "hygiene: clean (env-file, compose-port, size)" in output) == (0, True), output
 
 
 def test_writing_the_baseline_twice_yields_the_same_file(build_repo):
@@ -443,7 +443,7 @@ def test_a_written_baseline_holds_any_utf8_path(build_repo, capsys, path):
     }
     capsys.readouterr()
     code, output = hygiene(capsys, repo)
-    assert (code, "hygiene: clean (3 rules)" in output) == (0, True), output
+    assert (code, "hygiene: clean (env-file, compose-port, size)" in output) == (0, True), output
 
 
 def test_a_path_that_is_not_utf8_cannot_be_written_into_the_baseline(build_repo, capsys):

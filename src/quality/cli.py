@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import time
+from collections import Counter
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -12,14 +13,15 @@ from quality.config import Allowance, ConfigError, read_gate_settings
 from quality.emergency import Ask, GhRunner, run_emergency_merge, run_gh
 from quality.hygiene import (
     CannotJudge,
-    active_rules,
+    HygieneResult,
+    Outcome,
     measure_size,
     read_baseline,
     run_hygiene,
     skipped_rules,
     tracked_files,
 )
-from quality.report import Finding, render
+from quality.report import Finding, printable, render
 from quality.sonar import TASK_FILE, Sleep, Transport, analyse, fetch_json, preflight
 from quality.verdict import (
     NO_BASE,
@@ -126,17 +128,27 @@ def run_hygiene_check(path: Path, engine_dir: Path | None) -> int:
     except CannotJudge as error:
         print(f"hygiene: {error.label} - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
-    findings = result.findings
     print_secret_allowances(result.allowed_secrets, result.unused_allowances)
     if result.size_report:
-        print(result.size_report)
-    if not findings:
-        print(f"hygiene: clean ({len(active_rules(engine_dir))} rules){coverage_note(engine_dir)}")
-        return EXIT_CLEAN
-    for finding in findings:
-        print(render(finding))
-    print(f"hygiene: {len(findings)} finding(s){coverage_note(engine_dir)}")
-    return EXIT_FINDINGS
+        print(printable(result.size_report))
+    for verdict in result.verdicts:
+        for finding in verdict.findings:
+            print(render(finding))
+        if verdict.refusal is not None:
+            print(f"hygiene: {verdict.rule} {verdict.refusal.label} - {verdict.refusal}", file=sys.stderr)
+    print(f"hygiene: {hygiene_summary(result)}{coverage_note(engine_dir)}")
+    if result.refusals:
+        return EXIT_CANNOT_JUDGE
+    return EXIT_FINDINGS if result.findings else EXIT_CLEAN
+
+
+def hygiene_summary(result: HygieneResult) -> str:
+    """The clean line names the rules it judged; any other line counts the findings and the rules per verdict."""
+    if not (result.findings or result.refusals):
+        return f"clean ({', '.join(verdict.rule for verdict in result.verdicts)})"
+    outcomes = Counter(verdict.outcome for verdict in result.verdicts)
+    counts = ", ".join(f"{outcomes[outcome]} {outcome.value}" for outcome in Outcome if outcomes[outcome])
+    return f"{len(result.findings)} finding(s); verdicts: {counts}"
 
 
 def print_secret_allowances(allowed: list[Finding], unused: dict[Allowance, str]) -> None:

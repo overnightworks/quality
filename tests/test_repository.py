@@ -232,7 +232,7 @@ def run_command(command: str, repo: Path, scratch: Path, monkeypatch, capsys) ->
 
 
 PREFIXES = {
-    "hygiene --engines": "hygiene: cannot judge - ",
+    "hygiene --engines": "hygiene: secret cannot judge - ",
     "verdict": f"verdict: cannot judge - {NAME} at the head: ",
     "sonar findings": "sonar: cannot judge - ",
 }
@@ -258,7 +258,7 @@ def test_an_unusable_config_is_exit_2_with_one_reason_in_every_command(
 @pytest.mark.parametrize(
     ("command", "refusal"),
     [
-        ("hygiene", "hygiene: cannot judge - cannot read quality/baseline.toml: [Errno 13] Permission denied"),
+        ("hygiene", "hygiene: size cannot judge - cannot read quality/baseline.toml: [Errno 13] Permission denied"),
         ("baseline write", "baseline: not written - cannot write quality/baseline.toml: [Errno 13] Permission denied"),
         ("verdict", f"verdict: cannot judge - {NAME} at the head: {DENIED}"),
         ("sonar findings", f"sonar: cannot judge - {DENIED}"),

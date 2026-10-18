@@ -4,9 +4,10 @@ from pathlib import Path
 
 import pytest
 
-from quality import cli
+from quality import cli, engines
 
 EDGE_STACK = (Path(__file__).parent / "data" / "edge_stack.yml").read_text(encoding="utf-8")
+CLEAN_FILE_RULES = "hygiene: clean (env-file, compose-port, size)"
 
 
 def compose(*port_lines: str) -> dict[str, str]:
@@ -37,11 +38,11 @@ def non_utf8_filename_repo(build_repo, tmp_path):
 @pytest.mark.parametrize(
     ("arrange", "expected_code", "expected_text"),
     [
-        (lambda build_repo, tmp_path: build_repo({}), 0, "hygiene: clean (3 rules)"),
-        (non_utf8_filename_repo, 0, "hygiene: clean (3 rules)"),
+        (lambda build_repo, tmp_path: build_repo({}), 0, CLEAN_FILE_RULES),
+        (non_utf8_filename_repo, 0, CLEAN_FILE_RULES),
         (lambda build_repo, tmp_path: tmp_path, 2, "cannot judge"),
         (lambda build_repo, tmp_path: build_repo({".env": "A=1\n"}), 1, "finding(s)"),
-        (lambda build_repo, tmp_path: build_repo({"\udcff.env": "A=1\n"}), 1, "env-file \\udcff.env"),
+        (lambda build_repo, tmp_path: build_repo({"\udcff.env": "A=1\n"}), 1, "env-file \\udcff.env - "),
         (unreadable_compose_repo, 2, "cannot judge"),
         (truncated_compose_repo, 2, "cannot judge"),
     ],
@@ -50,7 +51,7 @@ def non_utf8_filename_repo(build_repo, tmp_path):
         "non-utf8-filename",
         "not-a-git-repository",
         "tracked-env-file",
-        "non-utf8-env-filename-rendered-safely",
+        "cell 9 non-utf8-env-filename-rendered-safely",
         "unreadable-compose",
         "malformed-compose-yaml",
     ],
@@ -66,7 +67,7 @@ def test_compose_specific_tags_are_judged_not_refused(build_repo, capsys):
     """#3 rule 1/4: valid Compose YAML tags are read, and their ports still checked."""
     body = 'services:\n  web:\n    image: x\n    ports: !override\n      - "127.0.0.1:80:80"\n    profiles: !reset []\n'
     code, output = run(capsys, build_repo({"compose.yaml": body}))
-    assert (code, "hygiene: clean (3 rules)" in output) == (0, True)
+    assert (code, CLEAN_FILE_RULES in output) == (0, True)
 
 
 @pytest.mark.parametrize("tagged", ["!reset null", "!reset []"], ids=["null", "empty-list"])
@@ -210,3 +211,82 @@ def test_a_tracked_compose_symlink_loop_is_exit_2(build_repo, capsys):
     assert code == 2
     assert "cannot read compose.yaml" in output
     assert str(repo) not in output
+
+
+BASELINE = {"quality/baseline.toml": ""}
+NEW_DEBT = "def long_one():\n" + "    x = 1\n" * 61
+ENV_FINDING = "env-file .env - "
+
+
+@pytest.fixture
+def clean_engines(tmp_path_factory) -> Path:
+    """A gitleaks that reports its pin and no leak; with no workflow tracked, no other engine runs."""
+    directory = tmp_path_factory.mktemp("engines")
+    gitleaks = directory / "gitleaks"
+    gitleaks.write_text(
+        f'#!/bin/sh\nif [ "$1" = version ]; then echo {engines.read_pins()["gitleaks"].version}; exit 0; fi\n'
+        'while [ $# -gt 0 ]; do [ "$1" = --report-path ] && report=$2; shift; done\necho "[]" > "$report"\n'
+    )
+    gitleaks.chmod(0o755)
+    return directory
+
+
+def config_linked_out_of_the_repository(build_repo, elsewhere):
+    repo = build_repo({".env": "A=1\n"})
+    (elsewhere / "config.toml").write_text('[gate]\nmandatory_jobs = ["checks"]\n')
+    (repo / "quality").mkdir()
+    (repo / "quality/config.toml").symlink_to(elsewhere / "config.toml")
+    subprocess.run(["git", "-C", str(repo), "add", "quality/config.toml"], check=True)
+    return repo
+
+
+def files(tracked: dict[str, str]):
+    return lambda build_repo, elsewhere: build_repo(tracked)
+
+
+@pytest.mark.parametrize(
+    ("arrange", "with_engines", "expected_code", "expected_lines"),
+    [
+        (files({**BASELINE, ".env": "A=1\n", "bad.py": "def broken(:\n"}), False, 2,
+         [ENV_FINDING, "hygiene: size unparsable - bad.py is not valid Python",
+          "hygiene: 1 finding(s); verdicts: 1 clean, 1 findings, 1 unparsable"]),
+        (config_linked_out_of_the_repository, True, 2,
+         [ENV_FINDING, "hygiene: secret cannot judge - quality/config.toml resolves outside the repository",
+          "hygiene: 1 finding(s); verdicts: 4 clean, 1 findings, 1 cannot judge"]),
+        (files({**BASELINE, "compose.yaml": "services: [\n", "src/a.py": NEW_DEBT}), False, 2,
+         ["hygiene: compose-port cannot judge - cannot read compose.yaml", "size src/a.py:1 - function long_one"]),
+        (files({".env": "A=1\n", **compose('- "8080:80"')}), False, 1,
+         [ENV_FINDING, "compose-port compose.yaml - ", "hygiene: 2 finding(s); verdicts: 1 clean, 2 findings"]),
+        (files({}), False, 0,
+         [f"{CLEAN_FILE_RULES}; skipped without --engines: secret, workflow-lint, workflow-security"]),
+        (files({}), True, 0,
+         ["hygiene: clean (env-file, compose-port, size, secret, workflow-lint, workflow-security);"]),
+        (files({"compose\udcff.yaml": compose('- "8080:80"')["compose.yaml"]}), False, 1,
+         ["compose-port compose\\udcff.yaml - service web publishes port 8080:80"]),
+        (files({**BASELINE, "src/\udcff.py": NEW_DEBT}), False, 1, ["size src/\\udcff.py:1 - function long_one"]),
+        (files({"src/\udcff.py": "def broken(:\n"}), False, 0, ["functions unmeasured: src/\\udcff.py"]),
+    ],
+    ids=[
+        "cell 1 unparsable size hides no env-file finding",
+        "cell 2 secret cannot judge hides no env-file finding",
+        "cell 3 unreadable compose hides no size finding",
+        "cell 4 findings in two rules",
+        "cell 5 clean names the file rules",
+        "cell 6 clean with engines names all six rules",
+        "cell 7 non-utf8 compose name",
+        "cell 8 non-utf8 python name",
+        "rule 4 non-utf8 python name in the size report",
+    ],
+)
+def test_every_rule_is_judged_and_the_exit_is_the_worst(
+    build_repo, elsewhere, clean_engines, capsys, arrange, with_engines, expected_code, expected_lines
+):
+    """#55 rules 1-4, cells 1-8 (cell 9 is the exit-code table's non-utf8 env case): each rule prints its own
+    verdict, one rule's refusal hides no other rule's, the exit is the worst verdict's, the clean line names the
+    rules, and every path prints backslash-escaped."""
+    engine_arguments = ["--engines", str(clean_engines)] if with_engines else []
+    code = cli.main(["hygiene", *engine_arguments, str(arrange(build_repo, elsewhere))])
+    captured = capsys.readouterr()
+    output = captured.out + captured.err
+    assert code == expected_code, output
+    assert [line for line in expected_lines if line not in output] == [], output

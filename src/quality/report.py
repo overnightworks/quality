@@ -14,7 +14,13 @@ class Finding:
 
     @property
     def location(self) -> str:
-        return self.path if self.line is None else f"{self.path}:{self.line}"
+        path = printable(self.path)
+        return path if self.line is None else f"{path}:{self.line}"
+
+
+def printable(path: str) -> str:
+    """The one rendering of a path: a name that is not valid UTF-8 prints backslash-escaped, never as a crash."""
+    return path.encode("utf-8", "backslashreplace").decode("utf-8")
 
 
 def render(finding: Finding) -> str:
