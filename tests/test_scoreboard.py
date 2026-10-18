@@ -286,7 +286,7 @@ def test_no_configured_credential_reaches_a_private_host(capsys, public, private
         ([], "HTTPS://example.invalid/org/repo", "repo", "cannot clone (not an http, https or file URL)"),
         ([], "https:example.invalid/org/repo", "repo", "cannot clone (not an http, https or file URL)"),
         ([], "file:/tmp/org/repo", "repo", "cannot clone (not an http, https or file URL)"),
-        ([], "https://example.invalid/org/my repo", "my repo", "cannot clone (not an http, https or file URL)"),
+        ([], "https://example.invalid/org/repo\n", "repo", "cannot clone (not an http, https or file URL)"),
         ([], "https://[dead]/repo", "unnamed URL", "cannot clone (not a valid URL)"),
         ([], "https://[::1]x[::2]/repo", "unnamed URL", "cannot clone (not a valid URL)"),
         (["--private"], "https://[dead]/edge", "unnamed URL", "cannot check that it is private (not a valid URL)"),
@@ -295,7 +295,7 @@ def test_no_configured_credential_reaches_a_private_host(capsys, public, private
          "cannot check that it is private (reads as a git option)"),
     ],
     ids=["ssh", "scp-like", "credentials in the URL", "credentials and no path", "invalid", "invalid private",
-         "uppercase scheme", "scheme without slashes", "file without slashes", "space", "bad IPv6 host",
+         "uppercase scheme", "scheme without slashes", "file without slashes", "trailing line break", "bad IPv6 host",
          "mixed IPv6 hosts", "bad IPv6 host private", "option", "option private"],
 )
 def test_a_url_git_could_misread_or_authenticate_with_cannot_be_judged(capsys, public, option, url, name, reason):
@@ -313,13 +313,14 @@ def test_a_url_git_could_misread_or_authenticate_with_cannot_be_judged(capsys, p
     [
         "https://github.com/overnightworks/quality",
         "file:///tmp/org/repo",
+        "file:///tmp/org/my repo",
         "http://127.0.0.1:8080/o/r",
         "http://[::1]:8080/o/r",
         "https://[fe80::1%25eth0]/repo",
     ],
 )
 def test_an_anonymous_url_is_let_through(url):
-    """#63 rule 2: an http, https or file URL with `//`, no credentials and no whitespace is not refused."""
+    """#63 rule 2: an http, https or file URL with `//`, no credentials and no line break is not refused."""
     require_anonymous(url)
 
 

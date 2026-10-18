@@ -25,9 +25,9 @@ UNNAMED = "unnamed URL"
 ANONYMOUS_GIT = ("git", "-c", "credential.helper=", "-c", "core.askPass=")
 # ssh authenticates with the user's keys and agent whatever HOME says, so only these transports are anonymous.
 ANONYMOUS_SCHEMES = frozenset({"file", "http", "https"})
-# scheme and "//" then the rest without whitespace; git reads "https:host/x" as scp-style ssh and an uppercase scheme as a
-# missing remote helper
-ANONYMOUS_URL = re.compile(rf"(?:{'|'.join(sorted(ANONYMOUS_SCHEMES))})://\S*")
+# scheme and "//" then the rest of the line (a space stays, git takes the URL as one argument); git reads "https:host/x"
+# as scp-style ssh and an uppercase scheme as a missing remote helper
+ANONYMOUS_URL = re.compile(rf"(?:{'|'.join(sorted(ANONYMOUS_SCHEMES))})://.*")
 COLUMNS = (
     "Repo",
     "Commit",
