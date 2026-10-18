@@ -145,21 +145,28 @@ def collision(name: str, directory: str, other_place: str) -> str:
 
 
 @pytest.mark.parametrize(
-    ("files", "expected"),
+    ("files", "untracked", "expected"),
     [
         ({"yaml/__init__.py": "", ".importlinter": ini({"type": "independence", "modules": ["yaml.a"]}, roots=("yaml",))},
-         collision("yaml", "", "outside the repository at site-packages/yaml/__init__.py")),
+         None, collision("yaml", "", "outside the repository at site-packages/yaml/__init__.py")),
         ({"src/quality/__init__.py": "",
           ".importlinter": ini({"type": "independence", "modules": ["quality.a"]}, roots=("quality",))},
-         collision("quality", "src/", "outside the repository at src/quality/__init__.py")),
+         None, collision("quality", "src/", "outside the repository at src/quality/__init__.py")),
+        ({"src/a/__init__.py": "", "b/__init__.py": "",
+          ".importlinter": ini({"type": "independence", "modules": ["a", "b"]}, roots=("a", "b"))},
+         "src/b/__init__.py", collision("b", "", "at src/b/__init__.py")),
     ],
-    ids=["cell 20 a root package quality already imported", "cell 20 quality from a second checkout"],
+    ids=["cell 20 a root package quality already imported", "cell 20 quality from a second checkout",
+         "cell 20 an untracked copy inside the repository found first"],
 )
 def test_a_root_package_python_finds_elsewhere_names_both_places_without_a_local_path(
-        build_repo, capsys, files, expected):
+        build_repo, capsys, files, untracked, expected):
     """#61 rules 4 and 6, cell 20: the collision names the tracked place repository-relative and the other place
     repository-relative inside or from its sys.path entry outside, never by a local path, and builds no graph."""
     repo = build_repo(files)
+    if untracked:
+        (repo / untracked).parent.mkdir(parents=True, exist_ok=True)
+        (repo / untracked).write_text("")
     code, output = run(capsys, repo)
     assert code == 2, output
     assert expected in output, output
