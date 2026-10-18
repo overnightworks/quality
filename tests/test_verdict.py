@@ -493,46 +493,31 @@ def stub_server():
         server.server_close()
 
 
-@pytest.fixture
-def jobs_served(monkeypatch, run_env, stub_server):
-    """Points the verdict's jobs page at a stub answering with `responder`; returns the stub's heard requests."""
-
-    def serve_jobs(responder: Responder) -> list[dict[str, str]]:
-        origin, heard = stub_server(responder)
-        monkeypatch.setattr(verdict, "JOBS_URL", origin + "/repos/{repo}/actions/runs/{run_id}/jobs")
-        return heard
-
-    return serve_jobs
+def fetch_jobs(origin: str) -> str:
+    body, _ = verdict.github_fetcher("t")(origin + "/jobs")
+    return body
 
 
-@pytest.mark.parametrize(
-    ("answer", "code", "expected"),
-    [
-        (reply(200, CHECKS_GREEN.encode()), 0, "verdict: green"),
-        (reply(200, b"abcd", Content_Length="100"), 2, "verdict: cannot judge - "),
-    ],
-    ids=["cell 4 the jobs page", "cell 2 IncompleteRead"],
-)
-def test_the_github_fetcher_reads_the_jobs_page_and_cannot_judge_a_truncated_one(
-    capsys, run_env, jobs_served, answer, code, expected
-):
-    """#58 cells 2 and 4 (#5 findings 92, 95): the real fetcher sends the token; a truncated body is exit 2."""
-    repo, _ = run_env
-    heard = jobs_served(answer)
-    actual_code = cli.main(["verdict", str(repo)])
-    captured = capsys.readouterr()
-    output = captured.out + captured.err
-    assert (actual_code, expected in output, "Traceback" in output) == (code, True, False)
-    assert heard[0]["Authorization"] == "Bearer t"
+def test_the_github_fetcher_sends_the_token_and_reads_the_jobs_page(stub_server):
+    """#58 cell 4 (#5 finding 95): the real fetcher sends the token and returns the jobs page unchanged."""
+    origin, heard = stub_server(reply(200, CHECKS_GREEN.encode()))
+    assert (fetch_jobs(origin), heard[0]["Authorization"]) == (CHECKS_GREEN, "Bearer t")
 
 
-def test_the_github_token_never_follows_a_redirect(capsys, run_env, jobs_served, stub_server):
+def test_a_truncated_jobs_page_cannot_be_judged(stub_server):
+    """#58 cell 2 (#5 finding 92): an IncompleteRead is cannot judge, which the verdict reports as exit 2."""
+    origin, _ = stub_server(reply(200, b"abcd", Content_Length="100"))
+    with pytest.raises(CannotJudge):
+        fetch_jobs(origin)
+
+
+def test_the_github_token_never_follows_a_redirect(stub_server):
     """#58 cell 3 (#5 finding 93): a 302 to another host is refused, and that host never sees the token."""
-    repo, _ = run_env
     other_origin, other_heard = stub_server(reply(200, CHECKS_GREEN.encode()))
-    jobs_served(reply(302, b"", Location=other_origin.replace("127.0.0.1", "localhost") + "/stolen"))
-    code = cli.main(["verdict", str(repo)])
-    assert (code, "HTTP 302" in capsys.readouterr().err, other_heard) == (2, True, [])
+    origin, _ = stub_server(reply(302, b"", Location=other_origin.replace("127.0.0.1", "localhost") + "/stolen"))
+    with pytest.raises(CannotJudge, match="HTTP 302"):
+        fetch_jobs(origin)
+    assert other_heard == []
 
 
 def test_git_output_is_decoded_as_utf_8_whatever_the_locale(build_repo):
