@@ -1,8 +1,0 @@
-claim_id = "04e0f76244d14b67bad016a86f566641"
-agent = "claude"
-role = "builder"
-base = "d567eac4fef6b66d28e03b316984af4bb665c1c1"
-branch = "claude/issue-63-sonar-s8705"
-scope = [".github/workflows/scoreboard.yml", "AGENTS.md", "README.md", "quality/fleet.toml", "src/quality/cli.py", "src/quality/scoreboard.py", "tests/test_scoreboard.py"]
-opened_commit = "aa919fe77da3f7216f4b6ca9dec778d7f6780fcd"
-whole_reason = "The file, its reader, the command line, the workflow that calls it and the two documents that name it are one vertical: splitting them leaves the list in two homes."
