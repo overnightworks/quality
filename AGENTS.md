@@ -5,8 +5,9 @@ Exit 0 clean, 1 findings, 2 cannot judge.
 
 Door commands:
 
-- `quality hygiene [PATH]` (`hygiene.py`): `.env` files, compose ports, the `size` ratchet (`ratchet.py`), and with
-  `--engines` the secret and workflow scans.
+- `quality hygiene [PATH]` (`hygiene.py`): `.env` files, compose ports, the `size` ratchet (`ratchet.py`), the
+  `import-contract` rule (`architecture.py`, import-linter as a library), and with `--engines` the secret and workflow
+  scans.
 - `quality baseline write [PATH]` (`ratchet.py`): writes the measured size debt to `quality/baseline.toml`,
   naming each entry it raises or adds.
 - `quality verdict [PATH]` (`verdict.py`): judges the mandatory jobs of the running workflow run and, on a pull request, holds the head's config and size baseline against the base commit's (a baseline only falls); the fail-closed `quality / verdict`.
@@ -17,6 +18,9 @@ Door commands:
 - `quality sonar preflight [PATH]` and `quality sonar findings` (`sonar.py`): HTTP goes through an injected
   transport, polling through an injected sleep, so tests need no network.
 - `quality emergency-merge <owner/repo> <pr>` (`emergency.py`): the operator's door, it needs a terminal on stdin.
+
+quality's own layers are an import-linter contract in `pyproject.toml` (`[tool.importlinter]`); `quality hygiene .`
+enforces it, so a module imports only from the layers below its own.
 
 Config, hygiene and the verdict read the checkout's own files only through `repository.py`, which keeps each read
 inside the repository and names the file repository-relative in every error.

@@ -96,7 +96,7 @@ Head proposal, pending the operator's yes:
 These points are agreed after the head's second round of pushback:
 - **One door.** Our own `fleet-quality` is the only command, with one config per repo and one report that names the rule, the reason and the fix for every finding.
 - **Build logic and process ourselves; never build specialist engines** (language linters and test runners, gitleaks, osv-scanner, mutation engines). They run underneath the door.
-- **Hard size budget.** The tool may grow to at most about 3,000 lines and must pass its own gate from day one.
+- **No line cap** (operator ruling 18.10.2026, replacing the hard size budget of about 3,000 lines): „wenn es mehr braucht braucht es eben mehr, aber natürlich soll der code gut sein!“ The tool still passes its own gate: its size baseline only falls, and every new function stays under the size and CCN thresholds.
 - **No copier and no own write-all-repos token.** The quality repo carries plain `vX.Y.Z` tags, and Dependabot, already built into GitHub, opens the bump PRs. For that reason the head now prefers a **dedicated `overnightworks/quality` repo** over marketplace; the counter-check is to settle it.
 - **Phases.** Phase 0 is enforcement plus hygiene in one day: a required check, a secret scan and `.env` everywhere. Phase 1 is the specs and trace pilot in kiln and webauth. Phase 2 is the fleet.
 - **The success measure is fixed before building.** Findings and review rounds per lane, and defects found after landing, are taken from the lane journals as the baseline.
