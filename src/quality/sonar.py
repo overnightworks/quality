@@ -20,7 +20,6 @@ from quality.report import Finding
 SONAR_ORIGIN = "https://sonarcloud.io"
 SONAR_API_ROOT = f"{SONAR_ORIGIN}/api"
 RULE = "sonar"
-SONARCLOUD = "SonarCloud"
 
 # A SonarCloud that accepts the connection and then stops answering must not hang the job.
 REQUEST_TIMEOUT_SECONDS = 30
@@ -84,8 +83,8 @@ Sleep = Callable[[float], None]
 
 
 class SonarHttpError(CannotJudge):
-    def __init__(self, status: int, url: str, service: str = SONARCLOUD) -> None:
-        super().__init__(f"{service} answered HTTP {status} for {url.partition('?')[0]}")
+    def __init__(self, status: int, url: str) -> None:
+        super().__init__(f"SonarCloud answered HTTP {status} for {url.partition('?')[0]}")
         self.status = status
 
 
@@ -96,30 +95,34 @@ class RedirectRefusingHandler(urllib.request.HTTPRedirectHandler):
 
 
 def fetch(
-    url: str, headers: Mapping[str, str], service: str, timeout: float = REQUEST_TIMEOUT_SECONDS
+    url: str, headers: Mapping[str, str], unreadable: Callable[[Exception], CannotJudge],
+    timeout: float = REQUEST_TIMEOUT_SECONDS,
 ) -> tuple[bytes, Message]:
-    """The body and headers `service` answers at `url`; any answer but a whole 2xx body is cannot judge."""
+    """The body and headers answered at `url`, never following a redirect; any other answer is `unreadable(error)`."""
     opener = urllib.request.build_opener(RedirectRefusingHandler())
-    where = url.partition("?")[0]
     try:
         with opener.open(urllib.request.Request(url, headers=dict(headers)), timeout=timeout) as response:
             return response.read(), response.headers
-    except urllib.error.HTTPError as error:
-        raise SonarHttpError(error.code, url, service) from error
-    except OSError as error:
-        if timed_out(error):
-            raise CannotJudge(f"{service} did not answer {where} within {timeout}s") from error
-        raise CannotJudge(f"{service} could not be reached at {where}: {error}") from error
-    except http.client.HTTPException as error:  # a truncated body
-        raise CannotJudge(f"{service} answered {where} with a body that is not JSON") from error
+    except (OSError, http.client.HTTPException) as error:  # a truncated body is an HTTPException
+        raise unreadable(error) from error
 
 
 def fetch_json(url: str, authorization: str, timeout: float = REQUEST_TIMEOUT_SECONDS) -> object:
-    body, _ = fetch(url, {"Authorization": authorization}, SONARCLOUD, timeout)
+    def unreadable(error: Exception) -> CannotJudge:
+        where = url.partition("?")[0]
+        if isinstance(error, urllib.error.HTTPError):
+            return SonarHttpError(error.code, url)
+        if isinstance(error, OSError):
+            if timed_out(error):
+                return CannotJudge(f"SonarCloud did not answer {where} within {timeout}s")
+            return CannotJudge(f"SonarCloud could not be reached at {where}: {error}")
+        return CannotJudge(f"SonarCloud answered {where} with a body that is not JSON")
+
+    body, _ = fetch(url, {"Authorization": authorization}, unreadable, timeout)
     try:
         return json.loads(body)
     except ValueError as error:  # JSONDecodeError and UnicodeDecodeError
-        raise CannotJudge(f"{SONARCLOUD} answered {url.partition('?')[0]} with a body that is not JSON") from error
+        raise unreadable(error) from error
 
 
 def timed_out(error: OSError) -> bool:

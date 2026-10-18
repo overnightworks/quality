@@ -13,7 +13,6 @@ JOBS_URL = "https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs?filte
 MAX_PAGES = 10
 NEXT_LINK = re.compile(r'<([^>]+)>;\s*rel="next"')
 SUCCESS = "success"
-GITHUB = "GitHub"
 
 PageFetcher = Callable[[str], tuple[str, str | None]]
 
@@ -114,11 +113,11 @@ def read_jobs(repo: str, run_id: str, fetch: PageFetcher) -> list[Job]:
 
 def github_fetcher(token: str) -> PageFetcher:
     def fetch(url: str) -> tuple[str, str | None]:
+        def unreadable(error: Exception) -> CannotJudge:
+            return CannotJudge(f"cannot read {url}: {error} (does the caller grant actions: read?)")
+
         headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
-        try:
-            body, answer_headers = sonar.fetch(url, headers, GITHUB)
-        except CannotJudge as error:
-            raise CannotJudge(f"{error} (does the caller grant actions: read?)") from error
+        body, answer_headers = sonar.fetch(url, headers, unreadable)
         return body.decode("utf-8"), answer_headers.get("Link")
 
     return fetch

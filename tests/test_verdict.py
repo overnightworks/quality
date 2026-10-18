@@ -515,9 +515,19 @@ def test_the_github_token_never_follows_a_redirect(stub_server):
     """#58 cell 3 (#5 finding 93): a 302 to another host is refused, and that host never sees the token."""
     other_origin, other_heard = stub_server(reply(200, CHECKS_GREEN.encode()))
     origin, _ = stub_server(reply(302, b"", Location=other_origin.replace("127.0.0.1", "localhost") + "/stolen"))
-    with pytest.raises(CannotJudge, match="HTTP 302"):
+    with pytest.raises(CannotJudge, match="HTTP Error 302"):
         fetch_jobs(origin)
     assert other_heard == []
+
+
+def test_a_refused_jobs_page_keeps_the_verdicts_wording(stub_server):
+    """#58 rule 4: a GitHub that refuses reads as before, the URL asked and urllib's words, with the actions hint."""
+    origin, _ = stub_server(reply(403, b""))
+    with pytest.raises(CannotJudge) as refused:
+        fetch_jobs(origin)
+    assert str(refused.value) == (
+        f"cannot read {origin}/jobs: HTTP Error 403: Forbidden (does the caller grant actions: read?)"
+    )
 
 
 def test_git_output_is_decoded_as_utf_8_whatever_the_locale(build_repo):
