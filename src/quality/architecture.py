@@ -163,8 +163,9 @@ def _build_graph(repository: str, roots: Mapping[str, str], options: UserOptions
                 cache_dir=None,
             )
         except BaseException as error:
-            # grimp's Rust scanner panics on a source file it cannot decode; the panic type derives from
-            # BaseException and lives in `pyo3_runtime`, which cannot be imported, and its message names an absolute path
+            # last resort: _refuse_unreadable_source stops the known triggers. The panic type derives from
+            # BaseException and lives in `pyo3_runtime`, which cannot be imported; the Rust panic hook has already
+            # written its native diagnostic (with an absolute path) to fd 2 and redirecting fds would hide grimp's own output
             if type(error).__module__ != PANIC_MODULE:
                 raise
             raise ContractError("grimp panicked while reading the root packages;"
@@ -176,7 +177,7 @@ def _refuse_links_out(repository: str, package_directory: str) -> None:
     file that resolves outside the repository, and any loop, before grimp reads anything."""
     real_directories: dict[str, str] = {}
     def refuse_unexaminable(error: OSError) -> None:
-        raise _cannot_be_examined(repository, error.filename, error) from error
+        raise _cannot_be_examined(repository, error.filename, error.strerror) from error
 
     for parent, directories, files in os.walk(package_directory, followlinks=True, onerror=refuse_unexaminable):
         real_parent = os.path.realpath(parent)
@@ -205,20 +206,22 @@ def _refuse_file_loop(repository: str, path: str) -> None:
                                 " a dangling link cannot be judged") from error
         # a file that vanished mid-walk (a race, no link) is grimp's to report
         if error.errno != errno.ENOENT:
-            raise _cannot_be_examined(repository, path, error) from error
+            raise _cannot_be_examined(repository, path, error.strerror) from error
 
 
 def _refuse_unreadable_source(repository: str, path: str) -> None:
-    """grimp reads every .py file it finds, and a stat succeeds on a file whose mode forbids the read."""
+    """grimp reads and decodes every .py file it finds, and a stat succeeds on a file whose mode forbids the read;
+    grimp panics on a file it cannot decode, so both refusals come here first."""
     if not path.endswith(".py"):
         return
     try:
-        with open(path, "rb"):
-            pass
+        Path(path).read_bytes().decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise _cannot_be_examined(repository, path, "not valid UTF-8") from error
     except FileNotFoundError:
         pass  # vanished mid-walk: grimp's to report, as in _refuse_file_loop
     except OSError as error:
-        raise _cannot_be_examined(repository, path, error) from error
+        raise _cannot_be_examined(repository, path, error.strerror) from error
 
 
 def _real_ancestors(real_directories: Mapping[str, str], package_directory: str, directory: str) -> set[str]:
@@ -230,8 +233,8 @@ def _real_ancestors(real_directories: Mapping[str, str], package_directory: str,
     return ancestors
 
 
-def _cannot_be_examined(repository: str, path: str, error: OSError) -> ContractError:
-    return ContractError(f"{os.path.relpath(path, repository)} cannot be examined: {error.strerror}")
+def _cannot_be_examined(repository: str, path: str, reason: str) -> ContractError:
+    return ContractError(f"{os.path.relpath(path, repository)} cannot be examined: {reason}")
 
 
 class _CollectedWarnings(logging.Handler):

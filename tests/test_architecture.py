@@ -326,33 +326,37 @@ def _empty_unreadable_directory(root):
     return root / "data", 0o000, "src/shop/data"
 
 
+def assert_no_native_or_local_noise(output: str, repo: Path) -> None:
+    """#61 rule 4: no repository path, Rust panic text or config blame on either descriptor."""
+    for noise in (str(repo), "panicked", "RUST_BACKTRACE", "the config", "PermissionError"):
+        assert noise not in output
+
+
 @pytest.mark.skipif(os.geteuid() == 0, reason="root reads a 0o444 directory, so nothing blocks the read")
 @pytest.mark.parametrize("arrange", [_unreadable_file, _unreadable_python_file, _unreadable_directory_with_a_file,
                                      _empty_unreadable_directory])
-def test_a_place_that_cannot_be_examined_is_cannot_judge_naming_it(build_repo, capsys, arrange):
+def test_a_place_that_cannot_be_examined_is_cannot_judge_naming_it(build_repo, capfd, arrange):
     """#61 rule 4: a read failure other than a loop or a dangling link is exit 2 naming the place, not the config."""
     repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
     sealed, mode, named = arrange(repo / "src" / "shop")
     sealed.chmod(mode)
     try:
-        code, output = run(capsys, repo)
+        code, output = run(capfd, repo)
     finally:
         sealed.chmod(0o755)
     assert code == 2, output
     assert f"{REFUSED}{named} cannot be examined: Permission denied" in output
-    assert "the config" not in output
-    assert "PermissionError" not in output
-    assert str(repo) not in output
+    assert_no_native_or_local_noise(output, repo)
 
 
-def test_a_source_file_grimp_panics_on_is_cannot_judge_without_a_path(build_repo, capsys):
-    """#61 rule 4: grimp's Rust panic on a non-UTF-8 module is exit 2, not a crash, and names no absolute path."""
+def test_a_non_utf8_source_file_is_refused_before_grimp_can_panic(build_repo, capfd):
+    """#61 rule 4: a module grimp cannot decode is exit 2 naming it, with no Rust panic text and no absolute path."""
     repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
     (repo / "src" / "shop" / "latin.py").write_bytes(b"\xff\xfe")
-    code, output = run(capsys, repo)
+    code, output = run(capfd, repo)
     assert code == 2, output
-    assert f"{REFUSED}grimp panicked while reading the root packages" in output
-    assert str(repo) not in output
+    assert f"{REFUSED}src/shop/latin.py cannot be examined: not valid UTF-8" in output
+    assert_no_native_or_local_noise(output, repo)
 
 
 def test_a_config_tracked_but_missing_on_disk_cannot_be_judged(build_repo, capsys):
