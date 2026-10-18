@@ -176,7 +176,7 @@ def test_an_unreadable_private_repo_is_not_measured(capsys, public, missing):
     """Cell 10, rule 4: a declared private repo that anonymous git cannot read shows only its label."""
     code, output = scoreboard(capsys, public("open", {"a.py": "a = 1\n"}), "--private", missing)
     assert code == 0, output
-    assert row(output, "gone")[1:] == ["not measured: private", "", "", "", "", "", ""]
+    assert row(output, "gone")[1:] == ["—", "not measured: private", "", "", "", "", ""]
 
 
 def test_a_private_repo_readable_anonymously_cannot_be_judged(capsys, public):
@@ -185,7 +185,7 @@ def test_a_private_repo_readable_anonymously_cannot_be_judged(capsys, public):
     leaky = public("leaky", {"src/inside.py": "a = 1\n"})
     code, output = scoreboard(capsys, good, "--private", leaky)
     assert code == 2, output
-    assert row(output, "leaky")[1:] == ["cannot judge: declared private but readable", "", "", "", "", "", ""]
+    assert row(output, "leaky")[1:] == ["—", "cannot judge: declared private but readable", "", "", "", "", ""]
     assert "inside" not in output
     assert row(output, "open")[2] == "1 / 0"
 
@@ -194,7 +194,7 @@ def test_a_repo_that_cannot_be_cloned_names_git_exit_and_no_local_path(capsys, p
     """Cell 12, rule 5: the reason carries git's exit code only, never a local absolute path."""
     code, output = scoreboard(capsys, missing)
     assert code == 2, output
-    assert row(output, "gone")[1] == "cannot judge: cannot clone (git exited 128)"
+    assert row(output, "gone")[1:3] == ["—", "cannot judge: cannot clone (git exited 128)"]
     assert str(tmp_path) not in output
 
 
@@ -254,7 +254,7 @@ def test_a_configured_credential_helper_is_never_asked(capsys, public, private_h
     monkeypatch.setenv("GIT_ASKPASS", str(askpass))
     code, output = scoreboard(capsys, public("open", {"a.py": "a = 1\n"}), "--private", private_host)
     assert code == 0, output
-    assert row(output, "edge")[1] == "not measured: private"
+    assert row(output, "edge")[1:3] == ["—", "not measured: private"]
     assert AskingForCredentials.requests >= 1
     assert sorted(path.name for path in tmp_path.iterdir() if path.name.startswith("asked")) == []
 

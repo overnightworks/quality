@@ -19,6 +19,7 @@ LANGUAGES = "Python only"
 CLONE_TIMEOUT_SECONDS = 300
 LS_REMOTE_TIMEOUT_SECONDS = 60
 SHORT_COMMIT = 7
+NO_COMMIT = "—"
 ANONYMOUS_GIT = ("git", "-c", "credential.helper=", "-c", "core.askPass=")
 # An askpass named in the environment outranks core.askPass, so it is dropped rather than overridden.
 ASKPASS_VARIABLES = frozenset({"GIT_ASKPASS", "SSH_ASKPASS"})
@@ -135,7 +136,7 @@ def cells(row: Row) -> tuple[str, ...]:
     if isinstance(row, Measured):
         return measured_cells(row)
     label = "not measured: private" if isinstance(row, Private) else f"cannot judge: {row.reason}"
-    return (row.name, label, *("",) * (len(COLUMNS) - 2))
+    return (row.name, NO_COMMIT, label, *("",) * (len(COLUMNS) - 3))
 
 
 def measured_cells(row: Measured) -> tuple[str, ...]:
