@@ -299,3 +299,22 @@ def test_a_finding_under_a_rule_its_check_does_not_judge_fails_loud(build_repo, 
     monkeypatch.setattr(hygiene, "check_env_files", lambda tracked: [foreign])
     with pytest.raises(ValueError, match="workflow-other"):
         cli.main(["hygiene", str(build_repo({}))])
+
+
+def test_a_refusing_workflow_engine_stops_no_other_workflow_rule(build_repo, clean_engines, capsys):
+    """#55 rule 1: actionlint cannot judge, yet zizmor still runs and its finding prints under its own rule."""
+    pins = engines.read_pins()
+    zizmor_report = Path(__file__).parent / "fixtures" / "engine-outputs" / "zizmor-finding.json"
+    for name, version_flag, on_scan in (
+        ("actionlint", "-version", "echo boom >&2; exit 3"),
+        ("zizmor", "--version", f"cat '{zizmor_report}'; exit 12"),
+    ):
+        binary = clean_engines / name
+        binary.write_text(f'#!/bin/sh\nif [ "$1" = {version_flag} ]; then echo {pins[name].version}; exit 0; fi\n{on_scan}\n')
+        binary.chmod(0o755)
+    repo = build_repo({".github/workflows/w.yml": "on: push\n"})
+    code = cli.main(["hygiene", "--engines", str(clean_engines), str(repo)])
+    captured = capsys.readouterr()
+    assert code == 2
+    assert "hygiene: workflow-lint cannot judge - actionlint exited 3" in captured.err
+    assert "workflow-security .github/workflows/w.yml:7 - zizmor unpinned-uses" in captured.out

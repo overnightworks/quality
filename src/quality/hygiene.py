@@ -4,6 +4,7 @@ import subprocess
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import Enum
+from functools import partial
 from pathlib import Path, PurePosixPath
 
 import yaml
@@ -14,7 +15,7 @@ from quality.report import Finding, printable
 
 ENV_FILE = "env-file"
 COMPOSE_PORT = "compose-port"
-WORKFLOW_RULE_IDS = (engines.WORKFLOW_LINT, engines.WORKFLOW_SECURITY)
+WORKFLOW_RULE_IDS = tuple(engines.WORKFLOW_ENGINES)
 ENGINE_RULE_IDS = (engines.LEAK_RULE, *WORKFLOW_RULE_IDS)
 WORKFLOW_DIRECTORY = PurePosixPath(".github/workflows")
 WORKFLOW_SUFFIXES = (".yml", ".yaml")
@@ -203,10 +204,10 @@ def check_secrets(root: Path, engine_dir: Path) -> engines.SecretScan:
         raise CannotJudge(str(error)) from error
 
 
-def check_workflows(root: Path, engine_dir: Path, tracked: list[str]) -> list[Finding]:
+def check_workflows(root: Path, engine_dir: Path, rule: str, tracked: list[str]) -> list[Finding]:
     workflows = [name for name in tracked if _is_workflow(PurePosixPath(name))]
     try:
-        return engines.scan_workflows(root, engine_dir, engines.read_pins(), workflows)
+        return engines.scan_workflows(root, engine_dir, engines.read_pins(), rule, workflows)
     except engines.EngineError as error:
         raise CannotJudge(str(error)) from error
 
@@ -289,6 +290,7 @@ def run_hygiene(root: Path, engine_dir: Path | None = None) -> HygieneResult:
         return HygieneResult(tuple(verdicts), size_report, [], {})
     secrets = _attempt(lambda: check_secrets(root, engine_dir))
     verdicts += _verdicts([engines.LEAK_RULE], secrets if isinstance(secrets, CannotJudge) else secrets.findings)
-    verdicts += _verdicts(WORKFLOW_RULE_IDS, _attempt(lambda: check_workflows(root, engine_dir, tracked)))
+    for rule in WORKFLOW_RULE_IDS:
+        verdicts += _verdicts([rule], _attempt(partial(check_workflows, root, engine_dir, rule, tracked)))
     allowed, unused = ([], {}) if isinstance(secrets, CannotJudge) else (secrets.allowed, secrets.unused_allowances)
     return HygieneResult(tuple(verdicts), size_report, allowed, unused)

@@ -347,16 +347,15 @@ def _leak_finding(entry: object) -> Finding:
 GITLEAKS_ENGINE = _Engine(GITLEAKS, (GITLEAKS_LEAKS_FOUND,), _leak_finding)
 
 
-def scan_workflows(root: Path, engine_dir: Path, pins: dict[str, Pin], workflows: list[str]) -> list[Finding]:
+def scan_workflows(root: Path, engine_dir: Path, pins: dict[str, Pin], rule: str, workflows: list[str]) -> list[Finding]:
+    """The findings of the one engine that judges `rule`; nothing to scan needs no engine."""
     if not workflows:
         return []
-    findings = []
-    for engine in WORKFLOW_ENGINES.values():
-        binary = engine_path(engine_dir, engine.name)
-        verify_version(binary, engine.name, pins[engine.name].version)
-        scan = run([str(binary), *engine.arguments, *workflows], cwd=root)
-        findings += engine_findings(engine, scan.stdout, scan.returncode, scan.stderr)
-    return findings
+    engine = WORKFLOW_ENGINES[rule]
+    binary = engine_path(engine_dir, engine.name)
+    verify_version(binary, engine.name, pins[engine.name].version)
+    scan = run([str(binary), *engine.arguments, *workflows], cwd=root)
+    return engine_findings(engine, scan.stdout, scan.returncode, scan.stderr)
 
 
 def engine_findings(engine: _Engine, report_text: str, exit_code: int, stderr: str) -> list[Finding]:
@@ -399,12 +398,12 @@ def zizmor_finding(entry: object) -> Finding:
 
 WORKFLOW_ENGINES = {
     # No shellcheck or pyflakes: actionlint would run whichever it finds on PATH, an unpinned engine in the verdict.
-    ACTIONLINT: _Engine(
+    WORKFLOW_LINT: _Engine(
         name=ACTIONLINT, finding_exits=(ACTIONLINT_FINDINGS,), read_finding=actionlint_finding,
         arguments=("-config-file", str(ACTIONLINT_CONFIG), "-shellcheck=", "-pyflakes=", "-format", "{{json .}}"),
     ),
     # The tool's config and no ignore comments: what the scanned repository says never silences a finding.
-    ZIZMOR: _Engine(
+    WORKFLOW_SECURITY: _Engine(
         name=ZIZMOR, finding_exits=ZIZMOR_FINDINGS, read_finding=zizmor_finding,
         arguments=(
             "--config", str(ZIZMOR_CONFIG), "--no-ignores",
