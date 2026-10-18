@@ -7,6 +7,7 @@ directory, so no checkout's own config reaches it either. A repository declared 
 is published in a public run summary.
 """
 
+import re
 import subprocess
 from dataclasses import dataclass
 from datetime import date
@@ -24,6 +25,9 @@ UNNAMED = "unnamed URL"
 ANONYMOUS_GIT = ("git", "-c", "credential.helper=", "-c", "core.askPass=")
 # ssh authenticates with the user's keys and agent whatever HOME says, so only these transports are anonymous.
 ANONYMOUS_SCHEMES = frozenset({"file", "http", "https"})
+# scheme, then a host (a bracketed IPv6 literal or plain characters) without userinfo, then an optional path, query
+# and fragment
+ANONYMOUS_URL = re.compile(r"(?:file|https?)://(?:\[[\da-fA-F:.]+\]|[^@/?#\s\[\]])*(?:[/?#]\S*)?")
 COLUMNS = (
     "Repo",
     "Commit",
@@ -79,17 +83,23 @@ class Refused(Exception):
 
 
 def require_anonymous(url: str) -> None:
-    """Refuses a URL git could read as an option or authenticate with; any other is anonymous."""
+    """Lets through only an http, https or file URL without credentials; any other is refused with the reason."""
+    if not ANONYMOUS_URL.fullmatch(url):
+        raise Refused(why_not_anonymous(url))
+
+
+def why_not_anonymous(url: str) -> str:
     if url.startswith("-"):
-        raise Refused("reads as a git option")
+        return "reads as a git option"
     try:
         parts = urlsplit(url)
     except ValueError:
-        raise Refused("not a valid URL") from None
+        return "not a valid URL"
     if parts.scheme not in ANONYMOUS_SCHEMES:
-        raise Refused("not an http, https or file URL")
+        return "not an http, https or file URL"
     if parts.username is not None or parts.password is not None:
-        raise Refused("the URL carries credentials")
+        return "the URL carries credentials"
+    return "not a valid URL"
 
 
 def cannot_judge(rows: list[Row]) -> bool:
