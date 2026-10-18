@@ -1,7 +1,11 @@
 """`quality scoreboard` (#56): cells name the item's scenario matrix, rules its numbered rules."""
 
+import os
 import re
+import shutil
+import signal
 import subprocess
+import sys
 import tempfile
 import threading
 from collections.abc import Callable, Iterator
@@ -15,7 +19,6 @@ from conftest import GIT_IDENTITY, make_repo
 from test_ratchet import branchy_function, long_file, long_function
 
 from quality import __version__, cli
-from quality import scoreboard as scoreboard_module
 
 WORKFLOWS = Path(__file__).parent.parent / ".github" / "workflows"
 HEADER = (
@@ -272,20 +275,43 @@ def test_only_the_default_branch_tip_is_measured(capsys, public):
     assert row(output, "branches")[1:3] == [tip[:7], "1 / 0"]
 
 
-def interrupt(*_: object) -> None:
-    raise KeyboardInterrupt
+def git_that_signals(directory: Path, signal_name: str) -> Path:
+    """A directory whose `git` runs the real one, but first sends `signal_name` to its caller on `rev-parse`.
+
+    The scoreboard runs `rev-parse` once the clone exists, so the signal arrives while the clone is on disk.
+    """
+    directory.mkdir()
+    fake = directory / "git"
+    fake.write_text(
+        f'#!/bin/sh\ncase " $* " in *" rev-parse "*) kill -{signal_name} $PPID;; esac\nexec {shutil.which("git")} "$@"\n'
+    )
+    fake.chmod(0o755)
+    return directory
 
 
-@pytest.mark.parametrize("outcome", ["measured", "cannot judge", "interrupted"])
-def test_no_temporary_clone_outlives_the_run(capsys, public, missing, scratch, monkeypatch, outcome):
-    """Cell 16, rule 3: the temporary directory goes after success, after cannot judge and after Ctrl-C."""
-    url = missing if outcome == "cannot judge" else public("cleaned", {"a.py": "a = 1\n"})
-    if outcome == "interrupted":
-        monkeypatch.setattr(scoreboard_module.hygiene, "measure_size", interrupt)
-        with pytest.raises(KeyboardInterrupt):
-            cli.main(["scoreboard", url])
-    else:
-        scoreboard(capsys, url)
+def scoreboard_signalled(url: str, scratch: Path, fake_git: Path) -> int:
+    """The exit status of `quality scoreboard url` in its own process, its temporary directories made in `scratch`."""
+    environment = {**os.environ, "PATH": f"{fake_git}{os.pathsep}{os.environ['PATH']}", "TMPDIR": str(scratch)}
+    program = "import sys; from quality import cli; sys.exit(cli.main(sys.argv[1:]))"
+    return subprocess.run(
+        [sys.executable, "-c", program, "scoreboard", url],
+        env=environment, capture_output=True, check=False, timeout=60,
+    ).returncode
+
+
+@pytest.mark.parametrize("outcome", ["measured", "cannot judge"])
+def test_no_temporary_clone_outlives_the_run(capsys, public, missing, scratch, outcome):
+    """Cell 16, rule 3: the temporary directory goes after success and after cannot judge."""
+    scoreboard(capsys, missing if outcome == "cannot judge" else public("cleaned", {"a.py": "a = 1\n"}))
+    assert list(scratch.iterdir()) == []
+
+
+@pytest.mark.parametrize("stop", [signal.SIGINT], ids=["Ctrl-C"])
+def test_no_temporary_clone_outlives_a_stopped_run(public, scratch, tmp_path, stop):
+    """Cell 16, rule 3: the temporary directory goes when the run is stopped while the clone is on disk."""
+    url = public("cleaned", {"a.py": "a = 1\n"})
+    status = scoreboard_signalled(url, scratch, git_that_signals(tmp_path / "bin", stop.name.removeprefix("SIG")))
+    assert status in {-stop, 128 + stop}
     assert list(scratch.iterdir()) == []
 
 
