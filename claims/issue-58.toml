@@ -1,8 +1,0 @@
-claim_id = "b1fcc41601c34eb19b9304bce3d27c28"
-agent = "claude"
-role = "builder"
-base = "a8085b9697976c439839e7ff1bc6c2cf1bd79829"
-branch = "claude/issue-58-one-git-one-http"
-scope = ["quality/baseline.toml", "src/quality/cli.py", "src/quality/emergency.py", "src/quality/engines.py", "src/quality/hygiene.py", "src/quality/ratchet.py", "src/quality/sonar.py", "src/quality/staged.py", "src/quality/verdict.py", "tests/test_engines.py", "tests/test_staged.py", "tests/test_verdict.py"]
-opened_commit = "19cf8a97ce9c3dec0ae4ba56c78942d05400c7b1"
-whole_reason = "One git runner and one HTTP owner replace copies spread over seven modules; split, each half leaves a second owner of the same decision."
