@@ -14,6 +14,7 @@ from quality.hygiene import (
     CannotJudge,
     active_rules,
     measure_size,
+    read_baseline,
     run_hygiene,
     skipped_rules,
     tracked_files,
@@ -158,13 +159,30 @@ def coverage_note(engine_dir: Path | None) -> str:
 def run_baseline_write(path: Path) -> int:
     try:
         entries = ratchet.debt(measure_size(path, tracked_files(path)).complete())
+        loosenings = describe_loosenings(path, entries)
         write_repository_text(path, ratchet.BASELINE_PATH, ratchet.render_baseline(entries))
     except (CannotJudge, ratchet.SizeError) as error:
         print(f"baseline: not written - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
+    for loosening in loosenings:
+        print(f"baseline: {loosening}")
     count = "1 entry" if len(entries) == 1 else f"{len(entries)} entries"
     print(f"baseline: wrote {count} to {path / ratchet.BASELINE_PATH}")
     return EXIT_CLEAN
+
+
+def describe_loosenings(path: Path, entries: ratchet.Baseline) -> list[str]:
+    """Each entry the write raises or adds against the previous baseline; an adoption has none to name.
+
+    An unreadable previous baseline is overwritten, so the write can only say it cannot name the raises.
+    """
+    try:
+        previous = read_baseline(path)
+    except (CannotJudge, ratchet.SizeError) as error:
+        return [f"the previous {ratchet.BASELINE_PATH} could not be read ({error}), so raises cannot be named"]
+    if previous is None:
+        return []
+    return [entry.describe() for entry in ratchet.raised_entries(previous, entries)]
 
 
 def run_scan_staged(path: Path, engine_dir: Path, read_pins: Callable[[], dict[str, engines.Pin]]) -> int:

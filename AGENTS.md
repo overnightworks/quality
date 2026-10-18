@@ -7,7 +7,8 @@ Door commands:
 
 - `quality hygiene [PATH]` (`hygiene.py`): `.env` files, compose ports, the `size` ratchet (`ratchet.py`), and with
   `--engines` the secret and workflow scans.
-- `quality baseline write [PATH]` (`ratchet.py`): writes the measured size debt to `quality/baseline.toml`.
+- `quality baseline write [PATH]` (`ratchet.py`): writes the measured size debt to `quality/baseline.toml`,
+  naming each entry it raises or adds.
 - `quality verdict [PATH]` (`verdict.py`): judges the mandatory jobs of the running workflow run and, on a pull request, holds the head's config and size baseline against the base commit's (a baseline only falls); the fail-closed `quality / verdict`.
 - `quality scan-staged [PATH] --engines DIR` (`staged.py`): secret scan of the staged change.
 - `quality engines install|verify DIR` (`engines.py`): the pinned engines.

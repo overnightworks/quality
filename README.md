@@ -43,7 +43,12 @@ Install it with
   entry above its measured value (stale: lower it with `quality baseline write`) are findings; an entry whose file or
   function is gone is fine.
   `quality baseline write [PATH]` writes the measured debt to `PATH/quality/baseline.toml` as sorted TOML, one table
-  per metric (`ccn`, `file_lines`, `function_lines`) keyed by path and qualified symbol.
+  per metric (`ccn`, `file_lines`, `function_lines`) keyed by path and qualified symbol. Before its `baseline: wrote N
+  entries ...` line it names, in the verdict's wording, each entry it raises or adds against the previous file
+  (`baseline: raises function_lines src/quality/cli.py main 82 -> 90`, `baseline: adds ccn src/a.py f 16`); a lowered
+  or removed entry is not named, and without a previous file only the count prints. A previous file it cannot read is
+  overwritten with `baseline: the previous quality/baseline.toml could not be read (...), so raises cannot be named`.
+  The write exits `0` with raises too: the verdict is the gate.
 - The baseline only falls: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the
   base commit's, so growing a function and rewriting the baseline stays red. Each loosening is one line, named with the
   baseline's own metric, path and symbol (a file entry has no symbol):

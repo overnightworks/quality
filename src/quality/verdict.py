@@ -9,7 +9,7 @@ from pathlib import Path
 
 from quality.config import CONFIG_PATH, ConfigError, GateSettings, LegacyMode, load_gate_settings, read_gate_settings
 from quality.hygiene import CannotJudge, read_baseline
-from quality.ratchet import BASELINE_PATH, Baseline, RaisedEntry, SizeError, load_baseline, raised_entries
+from quality.ratchet import BASELINE_PATH, Baseline, SizeError, load_baseline, raised_entries
 
 JOBS_URL = "https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs?filter=all&per_page=100"
 MAX_PAGES = 10
@@ -76,13 +76,7 @@ def _baseline_loosenings(base: Baseline | None, head: Baseline | None) -> list[s
         return []
     if head is None:
         return [f"loosened: {BASELINE_PATH} removed"]
-    return [_describe_raise(entry) for entry in raised_entries(base, head)]
-
-
-def _describe_raise(entry: RaisedEntry) -> str:
-    if entry.base is None:
-        return f"loosened: size baseline adds {entry.key.label} {entry.head}"
-    return f"loosened: size baseline raises {entry.key.label} {entry.base} -> {entry.head}"
+    return [f"loosened: size baseline {entry.describe()}" for entry in raised_entries(base, head)]
 
 
 def _problems_of_job(name: str, jobs: list[Job], current_attempt: int) -> list[str]:
