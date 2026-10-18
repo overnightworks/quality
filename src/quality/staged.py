@@ -16,6 +16,7 @@ def scan_staged(path: Path, engine_dir: Path, pins: dict[str, Pin]) -> SecretSca
     caller's environment points at) can change what is found.
     """
     binary = engines.prepare_gitleaks(engine_dir, pins)
+    path = path.resolve()  # absolute, so a path that starts with `-` can never read as a git option
     staged_tree = _git_output(path, "write-tree")
     head = engines.unborn_aware_head_commit(path, _caller_git_environment())
     object_store = Path(_git_output(path, "rev-parse", "--path-format=absolute", "--git-path", "objects"))
