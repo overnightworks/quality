@@ -9,6 +9,7 @@ pinned by the exact version in pyproject.toml.
 """
 
 import copy
+import errno
 import importlib.util
 import logging
 import os
@@ -171,9 +172,21 @@ def _refuse_links_out(repository: str, package_directory: str) -> None:
             raise ContractError(f"{os.path.relpath(parent, repository)} links back into"
                                 f" {os.path.relpath(real_parent, repository)}; a symlink loop cannot be judged")
         real_directories[parent] = real_parent
+        for name in files:
+            _refuse_file_loop(repository, os.path.join(parent, name))
         for path in (parent, *(os.path.join(parent, name) for name in (*directories, *files))):
             if not Path(os.path.realpath(path)).is_relative_to(repository):
                 raise ContractError(f"{os.path.relpath(path, repository)} links outside the repository")
+
+
+def _refuse_file_loop(repository: str, path: str) -> None:
+    try:
+        os.stat(path)
+    except OSError as error:
+        if error.errno == errno.ELOOP:
+            raise ContractError(f"{os.path.relpath(path, repository)} links back into"
+                                f" {os.path.relpath(os.path.realpath(path), repository)};"
+                                " a symlink loop cannot be judged") from error
 
 
 def _real_ancestors(real_directories: Mapping[str, str], package_directory: str, directory: str) -> set[str]:

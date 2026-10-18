@@ -266,13 +266,20 @@ def test_a_symlink_out_of_a_root_package_is_refused_before_grimp_reads(build_rep
     assert (graphs_built, "leak" in output, str(elsewhere) in output) == ([], False, False)
 
 
-def test_a_symlink_loop_under_a_root_package_cannot_be_judged(build_repo, capsys):
+@pytest.mark.parametrize(
+    ("link", "target", "expected"),
+    [("again", ".", "src/shop/again links back into src/shop"),
+     ("loop.py", "loop.py", "src/shop/loop.py links back into src/shop/loop.py")],
+    ids=["a directory loop", "a file loop"],
+)
+def test_a_symlink_loop_under_a_root_package_cannot_be_judged(build_repo, capsys, link, target, expected):
     """#61 rule 4: grimp would walk a symlink loop without end, so the loop is refused, named repository-relative."""
     repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
-    (repo / "src" / "shop" / "again").symlink_to(".")
+    (repo / "src" / "shop" / link).symlink_to(target)
     code, output = run(capsys, repo)
     assert code == 2, output
-    assert f"{REFUSED}src/shop/again links back into src/shop; a symlink loop cannot be judged" in output
+    assert f"{REFUSED}{expected}; a symlink loop cannot be judged" in output
+    assert "OSError" not in output
 
 
 def test_a_config_tracked_but_missing_on_disk_cannot_be_judged(build_repo, capsys):
