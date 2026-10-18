@@ -304,21 +304,38 @@ def test_a_dangling_file_link_under_a_root_package_is_named_not_blamed_on_the_co
     assert "the config" not in output
 
 
+def _unreadable_file(root):
+    (root / "sealed").mkdir()
+    (root / "sealed" / "inner.py").write_text("")
+    return root / "sealed", 0o444, "src/shop/sealed/inner.py"
+
+
+def _unreadable_directory_with_a_file(root):
+    (root / "data").mkdir()
+    (root / "data" / "f.txt").write_text("")
+    return root / "data", 0o000, "src/shop/data"
+
+
+def _empty_unreadable_directory(root):
+    (root / "data").mkdir()
+    return root / "data", 0o000, "src/shop/data"
+
+
 @pytest.mark.skipif(os.geteuid() == 0, reason="root reads a 0o444 directory, so nothing blocks the read")
-def test_a_file_that_cannot_be_examined_is_cannot_judge_naming_it(build_repo, capsys):
-    """#61 rule 4: a read failure other than a loop or a dangling link is exit 2 naming the file, not the config."""
+@pytest.mark.parametrize("arrange", [_unreadable_file, _unreadable_directory_with_a_file, _empty_unreadable_directory])
+def test_a_place_that_cannot_be_examined_is_cannot_judge_naming_it(build_repo, capsys, arrange):
+    """#61 rule 4: a read failure other than a loop or a dangling link is exit 2 naming the place, not the config."""
     repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
-    sealed = repo / "src" / "shop" / "sealed"
-    sealed.mkdir()
-    (sealed / "inner.py").write_text("")
-    sealed.chmod(0o444)
+    sealed, mode, named = arrange(repo / "src" / "shop")
+    sealed.chmod(mode)
     try:
         code, output = run(capsys, repo)
     finally:
         sealed.chmod(0o755)
     assert code == 2, output
-    assert f"{REFUSED}src/shop/sealed/inner.py cannot be examined: Permission denied" in output
+    assert f"{REFUSED}{named} cannot be examined: Permission denied" in output
     assert "the config" not in output
+    assert "PermissionError" not in output
     assert str(repo) not in output
 
 

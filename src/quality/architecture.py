@@ -166,7 +166,10 @@ def _refuse_links_out(repository: str, package_directory: str) -> None:
     """grimp walks a root package following symlinks, so this walks it the same way and refuses any directory or
     file that resolves outside the repository, and any loop, before grimp reads anything."""
     real_directories: dict[str, str] = {}
-    for parent, directories, files in os.walk(package_directory, followlinks=True, onerror=_raise):
+    def refuse_unexaminable(error: OSError) -> None:
+        raise _cannot_be_examined(repository, error.filename, error) from error
+
+    for parent, directories, files in os.walk(package_directory, followlinks=True, onerror=refuse_unexaminable):
         real_parent = os.path.realpath(parent)
         if real_parent in _real_ancestors(real_directories, package_directory, parent):
             raise ContractError(f"{os.path.relpath(parent, repository)} links back into"
@@ -192,7 +195,7 @@ def _refuse_file_loop(repository: str, path: str) -> None:
                                 " a dangling link cannot be judged") from error
         # a file that vanished mid-walk (a race, no link) is grimp's to report
         if error.errno != errno.ENOENT:
-            raise ContractError(f"{os.path.relpath(path, repository)} cannot be examined: {error.strerror}") from error
+            raise _cannot_be_examined(repository, path, error) from error
 
 
 def _real_ancestors(real_directories: Mapping[str, str], package_directory: str, directory: str) -> set[str]:
@@ -204,8 +207,8 @@ def _real_ancestors(real_directories: Mapping[str, str], package_directory: str,
     return ancestors
 
 
-def _raise(error: OSError) -> None:
-    raise error
+def _cannot_be_examined(repository: str, path: str, error: OSError) -> ContractError:
+    return ContractError(f"{os.path.relpath(path, repository)} cannot be examined: {error.strerror}")
 
 
 class _CollectedWarnings(logging.Handler):
