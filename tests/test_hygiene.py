@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from quality import cli, engines
+from quality import cli, engines, hygiene
+from quality.report import Finding
 
 EDGE_STACK = (Path(__file__).parent / "data" / "edge_stack.yml").read_text(encoding="utf-8")
 CLEAN_FILE_RULES = "hygiene: clean (env-file, compose-port, size)"
@@ -290,3 +291,11 @@ def test_every_rule_is_judged_and_the_exit_is_the_worst(
     output = captured.out + captured.err
     assert code == expected_code, output
     assert [line for line in expected_lines if line not in output] == [], output
+
+
+def test_a_finding_under_a_rule_its_check_does_not_judge_fails_loud(build_repo, monkeypatch):
+    """#55 rule 2: a finding under a rule the check was not given is never dropped into a clean exit."""
+    foreign = Finding("workflow-other", ".env", None, "an unlisted rule", "none")
+    monkeypatch.setattr(hygiene, "check_env_files", lambda tracked: [foreign])
+    with pytest.raises(ValueError, match="workflow-other"):
+        cli.main(["hygiene", str(build_repo({}))])

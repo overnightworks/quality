@@ -14,7 +14,8 @@ from quality.report import Finding, printable
 
 ENV_FILE = "env-file"
 COMPOSE_PORT = "compose-port"
-ENGINE_RULE_IDS = (engines.LEAK_RULE, engines.WORKFLOW_LINT, engines.WORKFLOW_SECURITY)
+WORKFLOW_RULE_IDS = (engines.WORKFLOW_LINT, engines.WORKFLOW_SECURITY)
+ENGINE_RULE_IDS = (engines.LEAK_RULE, *WORKFLOW_RULE_IDS)
 WORKFLOW_DIRECTORY = PurePosixPath(".github/workflows")
 WORKFLOW_SUFFIXES = (".yml", ".yaml")
 
@@ -268,6 +269,9 @@ def _verdicts(rules: Sequence[str], outcome: Sequence[Finding] | CannotJudge) ->
     """One verdict per rule a check judges; a check that cannot judge leaves each of its rules unjudged."""
     if isinstance(outcome, CannotJudge):
         return [RuleVerdict(rule, refusal=outcome) for rule in rules]
+    foreign = sorted({finding.rule for finding in outcome} - set(rules))
+    if foreign:
+        raise ValueError(f"a check judging {', '.join(rules)} returned findings under {', '.join(foreign)}")
     return [RuleVerdict(rule, tuple(finding for finding in outcome if finding.rule == rule)) for rule in rules]
 
 
@@ -285,8 +289,6 @@ def run_hygiene(root: Path, engine_dir: Path | None = None) -> HygieneResult:
         return HygieneResult(tuple(verdicts), size_report, [], {})
     secrets = _attempt(lambda: check_secrets(root, engine_dir))
     verdicts += _verdicts([engines.LEAK_RULE], secrets if isinstance(secrets, CannotJudge) else secrets.findings)
-    verdicts += _verdicts(
-        [engines.WORKFLOW_LINT, engines.WORKFLOW_SECURITY], _attempt(lambda: check_workflows(root, engine_dir, tracked))
-    )
+    verdicts += _verdicts(WORKFLOW_RULE_IDS, _attempt(lambda: check_workflows(root, engine_dir, tracked)))
     allowed, unused = ([], {}) if isinstance(secrets, CannotJudge) else (secrets.allowed, secrets.unused_allowances)
     return HygieneResult(tuple(verdicts), size_report, allowed, unused)
