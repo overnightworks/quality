@@ -19,4 +19,4 @@ jobs:
       actions: read
     uses: $/.github/workflows/codeql.yml
     with:
-      languages: '[]'
+      languages: '["cobol"]'
