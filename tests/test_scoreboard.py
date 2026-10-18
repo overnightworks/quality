@@ -282,12 +282,16 @@ def test_no_configured_credential_reaches_a_private_host(capsys, public, private
         ([], "https://user:secret@example.invalid/", "example.invalid", "cannot clone (the URL carries credentials)"),
         ([], "https://[broken/repo", "unnamed URL", "cannot clone (not a valid URL)"),
         (["--private"], "https://[broken/edge", "unnamed URL", "cannot check that it is private (not a valid URL)"),
+        (["--"], "--upload-pack=touch pwned", "--upload-pack=touch pwned", "cannot clone (reads as a git option)"),
+        ([], "--private=--upload-pack=touch pwned", "--upload-pack=touch pwned",
+         "cannot check that it is private (reads as a git option)"),
     ],
-    ids=["ssh", "scp-like", "credentials in the URL", "credentials and no path", "invalid", "invalid private"],
+    ids=["ssh", "scp-like", "credentials in the URL", "credentials and no path", "invalid", "invalid private",
+         "option", "option private"],
 )
-def test_a_url_git_could_authenticate_with_cannot_be_judged(capsys, public, option, url, name, reason):
-    """Rules 3 to 5: only a valid anonymous URL is cloned or listed; any other is a cannot-judge row, the rest still
-    show."""
+def test_a_url_git_could_misread_or_authenticate_with_cannot_be_judged(capsys, public, option, url, name, reason):
+    """Rules 3 to 5 and #63: only a valid anonymous URL that cannot read as a git option is cloned or listed; any other
+    is a cannot-judge row, the rest still show."""
     code, output = scoreboard(capsys, public("open", {"a.py": "a = 1\n"}), *option, url)
     assert code == 2, output
     assert row(output, name)[1:3] == ["—", f"cannot judge: {reason}"]

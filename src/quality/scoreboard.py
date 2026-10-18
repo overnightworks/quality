@@ -74,17 +74,22 @@ def anonymous_environment(scratch: Path) -> dict[str, str]:
     return {**{name: value for name, value in isolated.items() if name != "SSH_ASKPASS"}, "GIT_TERMINAL_PROMPT": "0"}
 
 
-def refusal(url: str) -> str | None:
-    """Why git must not be pointed at `url`, or None when it is anonymous."""
+class Refused(Exception):
+    """Why git must not be pointed at a URL."""
+
+
+def require_anonymous(url: str) -> None:
+    """Refuses a URL git could read as an option or authenticate with; any other is anonymous."""
+    if url.startswith("-"):
+        raise Refused("reads as a git option")
     try:
         parts = urlsplit(url)
     except ValueError:
-        return "not a valid URL"
+        raise Refused("not a valid URL") from None
     if parts.scheme not in ANONYMOUS_SCHEMES:
-        return "not an http, https or file URL"
+        raise Refused("not an http, https or file URL")
     if parts.username is not None or parts.password is not None:
-        return "the URL carries credentials"
-    return None
+        raise Refused("the URL carries credentials")
 
 
 def cannot_judge(rows: list[Row]) -> bool:
@@ -102,7 +107,9 @@ def repository_name(url: str) -> str:
 
 def measure_public(url: str) -> Row:
     name = repository_name(url)
-    if refused := refusal(url):
+    try:
+        require_anonymous(url)
+    except Refused as refused:
         return Unjudged(name, f"cannot clone ({refused})")
     with engines.scratch_directory() as scratch:
         environment = anonymous_environment(scratch)
@@ -127,7 +134,9 @@ def measure_public(url: str) -> Row:
 
 def judge_private(url: str) -> Row:
     name = repository_name(url)
-    if refused := refusal(url):
+    try:
+        require_anonymous(url)
+    except Refused as refused:
         return Unjudged(name, f"cannot check that it is private ({refused})")
     with engines.scratch_directory() as scratch:
         try:
