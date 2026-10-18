@@ -32,10 +32,10 @@ Install it with
   1 file(s) >= 800 lines, ...`) and the size debt leaves the exit unchanged.
   Files are read the way Python reads source (a PEP 263 coding cookie or a UTF-8 BOM decides the encoding). A file
   Python cannot decode or parse is named as not valid Python: without a baseline the count notes it (`1 file(s) not
-  valid Python, functions unmeasured: bad.py`) and the exit is unchanged; with a baseline it is `hygiene: unparsable -
-  bad.py is not valid Python (...)`, and `quality baseline write` refuses with `baseline: not written - bad.py is not
-  valid Python (...)`; both exit `2`. A tracked file the operating system refuses to read is `hygiene: cannot judge - ...`
-  with or without a baseline, and `quality baseline write` refuses with `baseline: not written - ...`; both exit `2`.
+  valid Python, functions unmeasured: bad.py`) and the exit is unchanged; with a baseline it is `hygiene: size
+  unparsable - bad.py is not valid Python (...)`, and `quality baseline write` refuses with `baseline: not written -
+  bad.py is not valid Python (...)`; both exit `2`. A tracked file the operating system refuses to read is `hygiene:
+  size cannot judge - ...` with or without a baseline, and `quality baseline write` refuses with `baseline: not written - ...`; both exit `2`.
   The reason names the case: a file without read permission is `cannot read locked.py: [Errno 13] ...`, a file behind
   a directory without permission is `cannot reach pkg/m.py: [Errno 13] ...`. A tracked file missing from disk
   (deleted, or a dangling symlink) is skipped.
@@ -103,8 +103,14 @@ Every allowed finding is printed with the entry's reason (`secret: 1 allowed (sr
 nothing is printed too, so a stale entry can be deleted: `secret: unused allowance <rule> in <file> (sha256 <hex>) - <reason>`;
 `scan-staged` prints both kinds of line as well.
 
-Each finding names the rule, the file, a reason and a fix. Exit `0` is clean, `1` means findings,
-`2` means the repository could not be judged (never clean).
+Every rule is judged, even when another cannot be, and gives one verdict: clean, findings, unparsable, or cannot judge.
+Each finding names the rule, the file, a reason and a fix; a file name that is not valid UTF-8 prints
+backslash-escaped. A rule that cannot judge prints its verdict and reason under its rule id (`hygiene: secret cannot
+judge - ...`). A clean run names its rules in run order (`hygiene: clean (env-file, compose-port, size); skipped without
+--engines: ...`); any other run ends with the findings and the verdicts counted (`hygiene: 1 finding(s); verdicts: 1
+clean, 1 findings, 1 unparsable`). The exit is the worst verdict's: `2` if any rule is unparsable or cannot judge
+(never clean), otherwise `1` if any rule has findings, otherwise `0`. A path that is not a readable git repository is
+`hygiene: cannot judge - ...` and exit `2` before any rule runs.
 
 ## `quality scan-staged`
 
