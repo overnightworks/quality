@@ -200,6 +200,12 @@ def test_below_the_thresholds_or_with_a_fixed_entry_gone_is_clean(build_repo, ca
     assert "hygiene: clean (3 rules)" in output
 
 
+@pytest.fixture
+def elsewhere(tmp_path_factory) -> Path:
+    """A scratch directory outside the repository, which build_repo builds in tmp_path."""
+    return tmp_path_factory.mktemp("elsewhere")
+
+
 def delete_from_disk(path: Path, elsewhere: Path) -> None:
     path.unlink()
 
@@ -224,14 +230,12 @@ def replace_with_a_dangling_symlink_out_of_the_repository(path: Path, elsewhere:
     [None, '[function_lines."src/b.py"]\nlong_one = 62\n'],
     ids=["no-baseline", "baseline-holds-the-gone-file"],
 )
-def test_a_tracked_file_missing_from_disk_is_gone_not_unjudgeable(
-    build_repo, tmp_path_factory, capsys, remove, baseline
-):
+def test_a_tracked_file_missing_from_disk_is_gone_not_unjudgeable(build_repo, elsewhere, capsys, remove, baseline):
     """#46 rule 3/4 and #52 cell 18: the rule judges the tree on disk; a tracked file absent from it is gone, which
     is fine, wherever a dangling link points."""
     files = {"src/a.py": "x = 1\n", "src/b.py": long_function(62)}
     repo = build_repo(files if baseline is None else {**files, BASELINE_PATH: baseline})
-    remove(repo / "src/b.py", tmp_path_factory.mktemp("elsewhere"))
+    remove(repo / "src/b.py", elsewhere)
     code, output = hygiene(capsys, repo)
     assert code == 0, output
     assert "hygiene: clean (3 rules)" in output

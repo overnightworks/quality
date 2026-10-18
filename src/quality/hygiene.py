@@ -59,7 +59,7 @@ def tracked_files(root: Path) -> list[str]:
     if not root.is_dir():
         raise CannotJudge(f"{root} is not a directory")
     try:
-        listing = subprocess.run(["git", "-C", str(root), "ls-files", "-z", "--"], capture_output=True, check=False)
+        listing = subprocess.run(["git", "-C", str(root.resolve()), "ls-files", "-z", "--"], capture_output=True, check=False)
     except OSError as error:
         raise CannotJudge(f"{root} is not a readable git repository: git did not run ([Errno {error.errno}] {error.strerror})") from error
     if listing.returncode != 0:

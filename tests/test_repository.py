@@ -140,8 +140,9 @@ def test_a_name_the_tree_does_not_hold_reads_as_absent(arranged, arrange):
 )
 def test_an_unusable_file_is_one_repository_relative_error(arranged, repo, elsewhere, arrange, reason):
     """#52 rules 1, 3 and 5: an unusable name is an error that names it as given, never a resolved path."""
+    repo_with_the_file = arranged(arrange)
     with pytest.raises(RepositoryFileError) as raised:
-        repository.read_text(arranged(arrange), NAME)
+        repository.read_text(repo_with_the_file, NAME)
     message = str(raised.value)
     assert (message.startswith(reason), str(repo) in message, str(elsewhere) in message) == (True, False, False)
 
@@ -171,8 +172,9 @@ def test_a_name_that_leads_nowhere_is_not_on_disk(arranged, arrange, on_disk):
 @NEEDS_PERMISSIONS
 def test_a_name_the_filesystem_refuses_to_reach_is_an_error(arranged, repo):
     """#52 rules 1 and 5: a name behind a directory without permission cannot be reached, named without a path."""
+    locked_repo = arranged(directory_without_permission)
     with pytest.raises(RepositoryFileError) as raised:
-        repository.is_on_disk(arranged(directory_without_permission), NAME)
+        repository.is_on_disk(locked_repo, NAME)
     assert str(raised.value) == f"cannot reach {NAME}: [Errno 13] Permission denied"
 
 

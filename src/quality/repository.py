@@ -48,7 +48,9 @@ def read_bytes(root: Path, name: str) -> bytes | None:
         raise RepositoryFileError(f"cannot read {name}: {_reason(error)}") from error
     path = resolve_file(root, name)
     try:
-        return path.read_bytes()
+        # resolve_file has just contained the path in the repository. Sonar does not follow that check across the call,
+        # and repeating it here would be a second containment decider, so the path-traversal taint is accepted.
+        return path.read_bytes()  # NOSONAR(S8707)
     except OSError as error:
         raise RepositoryFileError(f"cannot read {name}: {_reason(error)}") from error
 

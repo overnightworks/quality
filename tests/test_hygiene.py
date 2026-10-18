@@ -180,11 +180,17 @@ def test_a_path_that_is_no_repository_is_exit_2(tmp_path, capsys, bad_path):
     assert "cannot judge" in output
 
 
-def test_a_tracked_compose_symlink_leaving_the_repository_is_exit_2(build_repo, tmp_path_factory, capsys):
+@pytest.fixture
+def elsewhere(tmp_path_factory) -> Path:
+    """A scratch directory outside the repository, which build_repo builds in tmp_path."""
+    return tmp_path_factory.mktemp("elsewhere")
+
+
+def test_a_tracked_compose_symlink_leaving_the_repository_is_exit_2(build_repo, elsewhere, capsys):
     """#31 rule 1 (S8705) and #52 rule 5, cell 19: a tracked compose file that resolves outside the repository is
     exit 2, never read, and the refusal names no absolute path."""
     repo = build_repo({})
-    outside = tmp_path_factory.mktemp("elsewhere") / "compose.yml"
+    outside = elsewhere / "compose.yml"
     outside.write_text("services:\n  web:\n    image: x\n    ports:\n      - '8080:80'\n")
     (repo / "compose.yaml").symlink_to(outside)
     subprocess.run(["git", "-C", str(repo), "add", "compose.yaml"], check=True)
