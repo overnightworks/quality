@@ -4,14 +4,17 @@ Every cell runs through `cli.main(["hygiene", ...])`; the cell numbers are the i
 """
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 import grimp
 import pytest
+import yaml
 from importlinter.contracts.forbidden import ForbiddenContract
 
+import quality
 from quality import cli
 
 QUALITY_ROOT = Path(__file__).resolve().parents[1]
@@ -104,11 +107,6 @@ ALPHA_NEVER_REACHES_GAMMA = {"type": "forbidden", "source_modules": ["alpha"], "
         ({**SHOP, "src/shop/db.py": "import sqlalchemy\n",
           ".importlinter": ini({**FORBIDDEN, "forbidden_modules": ["sqlalchemy"]}, include_external_packages="True")}, 1,
          [BROKEN, "shop.db -> sqlalchemy (l.1)"]),
-        ({"yaml/__init__.py": "", ".importlinter": ini({"type": "independence", "modules": ["yaml.a"]}, roots=("yaml",))},
-         2, [f"{REFUSED}root package yaml is yaml/__init__.py, but Python finds it outside the repository"]),
-        ({"src/quality/__init__.py": "",
-          ".importlinter": ini({"type": "independence", "modules": ["quality.a"]}, roots=("quality",))},
-         2, [f"{REFUSED}root package quality is src/quality/__init__.py, but Python finds it outside the repository"]),
     ],
     ids=[
         "cell 1 no config is report only",
@@ -129,8 +127,6 @@ ALPHA_NEVER_REACHES_GAMMA = {"type": "forbidden", "source_modules": ["alpha"], "
         "cell 15 a required field missing",
         "cell 16 a stale ignore_imports entry",
         "cell 21 an external forbidden module that is not installed",
-        "cell 20 a root package quality already imported",
-        "cell 20 quality from a second checkout",
     ],
 )
 def test_the_import_contract_rule_judges_the_contracts(build_repo, capsys, files, expected_code, expected_lines):
@@ -141,6 +137,25 @@ def test_the_import_contract_rule_judges_the_contracts(build_repo, capsys, files
     assert code == expected_code, output
     assert [line for line in expected_lines if line not in output] == [], output
     assert str(repo) not in output
+
+
+@pytest.mark.parametrize(
+    ("package", "directory"),
+    [(yaml, ""), (quality, "src/")],
+    ids=["cell 20 a root package quality already imported", "cell 20 quality from a second checkout"],
+)
+def test_a_root_package_python_finds_elsewhere_names_both_places(build_repo, capsys, package, directory):
+    """#61 rules 4 and 6, cell 20: the collision is named with both places repository-relative, and no graph is
+    built from the wrong package."""
+    name = package.__name__
+    repo = build_repo({f"{directory}{name}/__init__.py": "",
+                       ".importlinter": ini({"type": "independence", "modules": [f"{name}.a"]}, roots=(name,))})
+    found = os.path.relpath(os.path.realpath(package.__file__), os.path.realpath(repo))
+    code, output = run(capsys, repo)
+    assert code == 2, output
+    assert (f"{REFUSED}root package {name} is {directory}{name}/__init__.py, but Python finds it at {found};"
+            " judging it would read the wrong package") in output
+    assert (found.startswith("../"), str(repo) in output) == (True, False)
 
 
 @pytest.mark.parametrize(
