@@ -3,6 +3,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from conftest import fake_engine
 
 from quality import cli, engines, hygiene
 from quality.report import Finding
@@ -303,15 +304,9 @@ def test_a_finding_under_a_rule_its_check_does_not_judge_fails_loud(build_repo, 
 
 def test_a_refusing_workflow_engine_stops_no_other_workflow_rule(build_repo, clean_engines, capsys):
     """#55 rule 1: actionlint cannot judge, yet zizmor still runs and its finding prints under its own rule."""
-    pins = engines.read_pins()
     zizmor_report = Path(__file__).parent / "fixtures" / "engine-outputs" / "zizmor-finding.json"
-    for name, version_flag, on_scan in (
-        ("actionlint", "-version", "echo boom >&2; exit 3"),
-        ("zizmor", "--version", f"cat '{zizmor_report}'; exit 12"),
-    ):
-        binary = clean_engines / name
-        binary.write_text(f'#!/bin/sh\nif [ "$1" = {version_flag} ]; then echo {pins[name].version}; exit 0; fi\n{on_scan}\n')
-        binary.chmod(0o755)
+    fake_engine(clean_engines, "actionlint", on_scan="echo boom >&2; exit 3")
+    fake_engine(clean_engines, "zizmor", on_scan=f"cat '{zizmor_report}'; exit 12")
     repo = build_repo({".github/workflows/w.yml": "on: push\n"})
     code = cli.main(["hygiene", "--engines", str(clean_engines), str(repo)])
     captured = capsys.readouterr()

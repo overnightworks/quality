@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import cli
+from quality import cli, engines
 
 FAKE_KEY = "AKIA" + "QYLPMTYX3QZ5ABCD"  # assembled so quality's own scan stays green
 OTHER_KEY = "AKIA" + "QYLPMTYX3QZ5WXYZ"  # a second assembled key, to prove another value stays red
@@ -34,6 +34,16 @@ def allow_config(*entries: tuple[str, str, str, str]) -> str:
         for rule, file, secret, reason in entries
     )
     return f"[gate]\nmandatory_jobs = [\"checks\"]\n[secrets]\nallow = [{rows}]\n"
+
+
+def fake_engine(directory: Path, name: str, on_scan: str) -> Path:
+    """Writes a fake `name` engine that prints its pinned version and runs `on_scan` (shell) for any other call."""
+    version_argument = " ".join(engines.VERSION_ARGUMENTS[name])
+    pinned = engines.read_pins()[name].version
+    binary = directory / name
+    binary.write_text(f'#!/bin/sh\nif [ "$1" = {version_argument} ]; then echo {pinned}; exit 0; fi\n{on_scan}\n')
+    binary.chmod(0o755)
+    return binary
 
 
 @pytest.fixture(autouse=True)
