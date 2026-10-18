@@ -70,7 +70,7 @@ def main(
     if arguments.command == "verdict":
         return run_verdict(arguments.path, fetcher_for)
     if arguments.command == "scoreboard":
-        return run_scoreboard(arguments.public, arguments.private)
+        return run_scoreboard(arguments.path)
     if arguments.command == "baseline":
         return run_baseline_write(arguments.path)
     if arguments.command == "scan-staged":
@@ -131,10 +131,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     emergency.add_argument("repository", help="<owner>/<repo>")
     emergency.add_argument("pull_request", type=int)
-    fleet = commands.add_parser("scoreboard", help="measure the Python size of public git repositories into one markdown table")
-    fleet.add_argument("public", nargs="+", metavar="URL", help="a public repository to clone and measure")
-    fleet.add_argument("--private", nargs="+", action="extend", default=[], metavar="URL",
-                       help="a repository declared private: never measured, only checked to be unreadable anonymously")
+    fleet = commands.add_parser(
+        "scoreboard", help="measure the Python size of the repositories in quality/fleet.toml into one markdown table"
+    )
+    fleet.add_argument("path", nargs="?", type=Path, default=Path("."))
     return parser
 
 
@@ -287,8 +287,13 @@ def run_verdict(path: Path, fetcher_for: Callable[[str], PageFetcher]) -> int:
     return code
 
 
-def run_scoreboard(public: list[str], private: list[str]) -> int:
-    rows = scoreboard.measure_fleet(public, private)
+def run_scoreboard(path: Path) -> int:
+    try:
+        fleet = scoreboard.read_fleet(path)
+    except scoreboard.FleetError as error:
+        print(f"scoreboard: cannot judge - {error}", file=sys.stderr)
+        return EXIT_CANNOT_JUDGE
+    rows = scoreboard.measure_fleet(fleet)
     report = scoreboard.render(rows, datetime.now(UTC).date())
     print(report)
     append_step_summary(report)

@@ -10,7 +10,7 @@
     quality sonar preflight [PATH]
     quality sonar findings
     quality verdict [PATH]
-    quality scoreboard URL... [--private URL...]
+    quality scoreboard [PATH]
     quality emergency-merge OWNER/REPO PR
 
 Where the fleet is going and why: [docs/roadmap.md](docs/roadmap.md) (target state, waves, per repository) and [docs/rulings.md](docs/rulings.md) (the operator's rulings, verbatim and dated).
@@ -137,13 +137,14 @@ entries, a path that is not a repository, or a gitleaks run without a report.
 
 ## `quality scoreboard`
 
-`quality scoreboard URL... [--private URL...]` prints one markdown table of the Python size of every repository it is
-given, under a heading with the date, the quality version and the languages measured (`Python only` for now). With
-`GITHUB_STEP_SUMMARY` set, the same text is appended there. The fleet list lives once, in
-`.github/workflows/scoreboard.yml`, which runs it every Monday at 05:17 UTC and on dispatch; the table stands in that
-run's summary. The run only reports: it writes to no repository and needs no secret.
+`quality scoreboard [PATH]` prints one markdown table of the Python size of every repository `quality/fleet.toml` lists
+(`public = [...]` and `private = [...]`, each a list of URLs, each listed once), under a heading with the date, the
+quality version and the languages measured (`Python only` for now). With `GITHUB_STEP_SUMMARY` set, the same text is
+appended there. The fleet list lives once, in `quality/fleet.toml`; `.github/workflows/scoreboard.yml` runs it every
+Monday at 05:17 UTC and on dispatch; the table stands in that run's summary. The run only reports: it writes to no repository and needs no secret. A missing, malformed or
+duplicating `quality/fleet.toml` is `cannot judge`, exit `2`.
 
-- A public `URL` is cloned with `git -c credential.helper= clone --depth 1 --no-tags`, `GIT_TERMINAL_PROMPT=0` and no
+- A `public` URL is cloned with `git -c credential.helper= clone --depth 1 --no-tags`, `GIT_TERMINAL_PROMPT=0` and no
   askpass, into a temporary directory that is removed on every exit, and its default branch tip is measured.
 - git runs anonymously: without system, global or `GIT_CONFIG_*` config and with an empty `HOME`, so no configured
   header, helper or `~/.netrc` reaches the host. Only `http`, `https` and `file` URLs without credentials in them are
@@ -153,7 +154,7 @@ run's summary. The run only reports: it writes to no repository and needs no sec
   counts as test. `test:prod` is test lines divided by production lines with two decimals, `—` without production
   lines. The debt columns count files from 800 lines, functions from 60 lines and functions with a CCN above 15.
 - A file Python cannot parse still has its lines counted; the row's note says how many such files there are, never which.
-- A `--private` repository is never measured, because the table is published: it shows `not measured: private`. It is
+- A `private` repository is never measured, because the table is published: it shows `not measured: private`. It is
   checked once with an anonymous `git ls-remote`; if anyone can read it, the row is `cannot judge: declared private
   but readable`.
 - A repository that cannot be cloned or measured shows `cannot judge: <reason>` (for example `cannot clone (git exited

@@ -1,5 +1,6 @@
 """`quality scoreboard` (#56): cells name the item's scenario matrix, rules its numbered rules."""
 
+import json
 import os
 import re
 import shutil
@@ -8,7 +9,7 @@ import subprocess
 import sys
 import tempfile
 import threading
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -20,7 +21,7 @@ from conftest import GIT_IDENTITY, make_repo
 from test_ratchet import branchy_function, long_file, long_function
 
 from quality import __version__, cli
-from quality.scoreboard import require_anonymous
+from quality.scoreboard import read_fleet, require_anonymous
 
 WORKFLOWS = Path(__file__).parent.parent / ".github" / "workflows"
 HEADER = (
@@ -30,9 +31,22 @@ HEADER = (
 PublicRepo = Callable[[str, dict[str, str]], str]
 
 
-def scoreboard(capsys, *arguments: str) -> tuple[int, str]:
-    code = cli.main(["scoreboard", *arguments])
-    return code, capsys.readouterr().out
+def write_fleet(directory: Path, public: Sequence[str] = (), private: Sequence[str] = ()) -> Path:
+    """A repository whose quality/fleet.toml lists these URLs; json.dumps writes a TOML array of basic strings."""
+    (directory / "quality").mkdir(parents=True)
+    (directory / "quality" / "fleet.toml").write_text(f"public = {json.dumps(public)}\nprivate = {json.dumps(private)}\n")
+    return directory
+
+
+@pytest.fixture
+def scoreboard(capsys, tmp_path) -> Callable[..., tuple[int, str]]:
+    """Runs `quality scoreboard` on a fleet file listing the given URLs (#63 rule 1)."""
+
+    def run(*public: str, private: Sequence[str] = ()) -> tuple[int, str]:
+        code = cli.main(["scoreboard", str(write_fleet(tmp_path / "fleet", public, private))])
+        return code, capsys.readouterr().out
+
+    return run
 
 
 def row(output: str, name: str) -> list[str]:
@@ -74,17 +88,17 @@ def missing(tmp_path) -> str:
     return (tmp_path / "remotes" / "gone").as_uri()
 
 
-def test_a_public_repo_is_one_row_of_commit_lines_ratio_and_debt(capsys, public):
+def test_a_public_repo_is_one_row_of_commit_lines_ratio_and_debt(scoreboard, public):
     """Cell 1, rule 2: commit, physical lines prod / test, test:prod with two decimals and the debt counts."""
     url = public("alpha", {"src/app.py": "a = 1\nb = 2\nc = 3\n", "tests/test_app.py": "x = 1\n" * 5})
-    code, output = scoreboard(capsys, url)
+    code, output = scoreboard(url)
     assert code == 0, output
     assert row(output, "alpha") == [
         "alpha", head_of(url)[:7], "3 / 5", "1.67", "0 / 0", "0 / 0", "0 / 0", ""
     ]
 
 
-def test_debt_is_counted_from_the_size_rules_thresholds(capsys, public):
+def test_debt_is_counted_from_the_size_rules_thresholds(scoreboard, public):
     """Cell 2, rule 2: 800 file lines, 60 function lines and CCN 16 are debt; 799, 59 and CCN 15 are not."""
     url = public(
         "edges",
@@ -98,7 +112,7 @@ def test_debt_is_counted_from_the_size_rules_thresholds(capsys, public):
             "tests/test_big.py": long_file(800),
         },
     )
-    code, output = scoreboard(capsys, url)
+    code, output = scoreboard(url)
     assert code == 0, output
     assert row(output, "edges")[4:7] == ["1 / 1", "1 / 0", "1 / 0"]
 
@@ -115,9 +129,9 @@ def test_debt_is_counted_from_the_size_rules_thresholds(capsys, public):
         ("src/testing.py", "1 / 0"),
     ],
 )
-def test_the_file_name_decides_production_or_test(capsys, public, path, lines):
+def test_the_file_name_decides_production_or_test(scoreboard, public, path, lines):
     """Cell 3, rule 2: production versus test is ratchet.area_of's name rule."""
-    code, output = scoreboard(capsys, public("named", {path: "x = 1\n"}))
+    code, output = scoreboard(public("named", {path: "x = 1\n"}))
     assert code == 0, output
     assert row(output, "named")[2] == lines
 
@@ -125,20 +139,20 @@ def test_the_file_name_decides_production_or_test(capsys, public, path, lines):
 @pytest.mark.parametrize(
     "source", ["a = 1\n\n# note\n", "a = 1\r\n\r\n# note\r\n", "a = 1\r\r# note\r"], ids=["LF", "CRLF", "CR"]
 )
-def test_blank_and_comment_lines_count_whatever_the_line_ending(capsys, public, source):
+def test_blank_and_comment_lines_count_whatever_the_line_ending(scoreboard, public, source):
     """Cell 4, rule 2: physical lines, as the 800-line rule counts them."""
-    code, output = scoreboard(capsys, public("endings", {"src/a.py": source}))
+    code, output = scoreboard(public("endings", {"src/a.py": source}))
     assert code == 0, output
     assert row(output, "endings")[2] == "3 / 0"
 
 
-def test_untracked_files_are_not_counted(capsys, public):
+def test_untracked_files_are_not_counted(scoreboard, public):
     """Cell 5, rule 2: only tracked Python files count."""
     url = public("tracked", {"src/a.py": "a = 1\n", ".gitignore": "ignored.py\n"})
     directory = Path(url.removeprefix("file://"))
     (directory / "untracked.py").write_text("u = 1\n" * 10)
     (directory / "ignored.py").write_text("i = 1\n" * 10)
-    code, output = scoreboard(capsys, url)
+    code, output = scoreboard(url)
     assert code == 0, output
     assert row(output, "tracked")[2] == "1 / 0"
 
@@ -151,60 +165,60 @@ def test_untracked_files_are_not_counted(capsys, public):
     ],
     ids=["tests only", "no Python"],
 )
-def test_without_production_lines_the_ratio_is_a_dash(capsys, public, files, cells):
+def test_without_production_lines_the_ratio_is_a_dash(scoreboard, public, files, cells):
     """Cells 6 and 7, rule 2: no production lines gives "—"; a repository without Python is a row of zeros."""
-    code, output = scoreboard(capsys, public("sparse", files))
+    code, output = scoreboard(public("sparse", files))
     assert code == 0, output
     assert row(output, "sparse")[2:7] == cells
 
 
-def test_an_unparsable_file_is_counted_but_never_named(capsys, public):
+def test_an_unparsable_file_is_counted_but_never_named(scoreboard, public):
     """Cell 8, rule 6: its lines count, the row says how many files are not valid Python, the name stays out."""
-    code, output = scoreboard(capsys, public("broken", {"src/secret_name.py": "def (:\n", "src/ok.py": "a = 1\n"}))
+    code, output = scoreboard(public("broken", {"src/secret_name.py": "def (:\n", "src/ok.py": "a = 1\n"}))
     assert code == 0, output
     assert row(output, "broken")[2] == "2 / 0"
     assert row(output, "broken")[7] == "1 file not valid Python"
     assert "secret_name" not in output
 
 
-def test_a_file_name_that_is_not_utf8_is_measured(capsys, public):
+def test_a_file_name_that_is_not_utf8_is_measured(scoreboard, public):
     """Cell 9: a tracked .py whose name is not UTF-8 does not crash the row."""
-    code, output = scoreboard(capsys, public("bytes", {"caf\udce9.py": "a = 1\n"}))
+    code, output = scoreboard(public("bytes", {"caf\udce9.py": "a = 1\n"}))
     assert code == 0, output
     assert row(output, "bytes")[2] == "1 / 0"
 
 
-def test_an_unreadable_private_repo_is_not_measured(capsys, public, missing):
+def test_an_unreadable_private_repo_is_not_measured(scoreboard, public, missing):
     """Cell 10, rule 4: a declared private repo that anonymous git cannot read shows only its label."""
-    code, output = scoreboard(capsys, public("open", {"a.py": "a = 1\n"}), "--private", missing)
+    code, output = scoreboard(public("open", {"a.py": "a = 1\n"}), private=[missing])
     assert code == 0, output
     assert row(output, "gone")[1:] == ["—", "not measured: private", "", "", "", "", ""]
 
 
-def test_a_private_repo_readable_anonymously_cannot_be_judged(capsys, public):
+def test_a_private_repo_readable_anonymously_cannot_be_judged(scoreboard, public):
     """Cell 11, rule 4: a declared private repo anyone can read is never measured, and the run is red."""
     good = public("open", {"a.py": "a = 1\n"})
     leaky = public("leaky", {"src/inside.py": "a = 1\n"})
-    code, output = scoreboard(capsys, good, "--private", leaky)
+    code, output = scoreboard(good, private=[leaky])
     assert code == 2, output
     assert row(output, "leaky")[1:] == ["—", "cannot judge: declared private but readable", "", "", "", "", ""]
     assert "inside" not in output
     assert row(output, "open")[2] == "1 / 0"
 
 
-def test_a_repo_that_cannot_be_cloned_names_git_exit_and_no_local_path(capsys, public, missing, tmp_path):
+def test_a_repo_that_cannot_be_cloned_names_git_exit_and_no_local_path(scoreboard, public, missing, tmp_path):
     """Cell 12, rule 5: the reason carries git's exit code only, never a local absolute path."""
-    code, output = scoreboard(capsys, missing)
+    code, output = scoreboard(missing)
     assert code == 2, output
     assert row(output, "gone")[1:3] == ["—", "cannot judge: cannot clone (git exited 128)"]
     assert str(tmp_path) not in output
 
 
-def test_one_failing_repo_leaves_every_other_row_complete(capsys, public, missing):
+def test_one_failing_repo_leaves_every_other_row_complete(scoreboard, public, missing):
     """Cell 13, rule 5: the other rows still show in full, and the run exits 2."""
     first = public("first", {"a.py": "a = 1\n"})
     last = public("last", {"tests/test_a.py": "a = 1\n"})
-    code, output = scoreboard(capsys, first, missing, last)
+    code, output = scoreboard(first, missing, last)
     assert code == 2, output
     assert [row(output, name)[2] for name in ("first", "last")] == ["1 / 0", "0 / 1"]
     assert output.index("| first |") < output.index("| gone |") < output.index("| last |")
@@ -244,7 +258,7 @@ def private_host() -> Iterator[str]:
         thread.join()
 
 
-def test_no_configured_credential_reaches_a_private_host(capsys, public, private_host, tmp_path, monkeypatch):
+def test_no_configured_credential_reaches_a_private_host(scoreboard, public, private_host, tmp_path, monkeypatch):
     """Cell 14, rules 3 and 4: a helper, an askpass and an Authorization header in system, global or environment
     config are never used, and the private repo stays unmeasured."""
     home = tmp_path / "home"
@@ -265,7 +279,7 @@ def test_no_configured_credential_reaches_a_private_host(capsys, public, private
     monkeypatch.setenv("GIT_CONFIG_KEY_0", "http.extraHeader")
     monkeypatch.setenv("GIT_CONFIG_VALUE_0", "Authorization: Basic environment")
     monkeypatch.setenv("GIT_ASKPASS", str(askpass))
-    code, output = scoreboard(capsys, public("open", {"a.py": "a = 1\n"}), "--private", private_host)
+    code, output = scoreboard(public("open", {"a.py": "a = 1\n"}), private=[private_host])
     assert code == 0, output
     assert row(output, "edge")[1:3] == ["—", "not measured: private"]
     assert AskingForCredentials.requests >= 1
@@ -274,34 +288,36 @@ def test_no_configured_credential_reaches_a_private_host(capsys, public, private
 
 
 @pytest.mark.parametrize(
-    ("option", "url", "name", "reason"),
+    ("list_name", "url", "name", "reason"),
     [
-        ([], "ssh://git@example.invalid/org/repo.git", "repo", "cannot clone (not an http, https or file URL)"),
-        ([], "git@example.invalid:org/repo.git", "repo", "cannot clone (not an http, https or file URL)"),
-        (["--private"], "https://user:secret@example.invalid/org/edge", "edge",
+        ("public", "ssh://git@example.invalid/org/repo.git", "repo", "cannot clone (not an http, https or file URL)"),
+        ("public", "git@example.invalid:org/repo.git", "repo", "cannot clone (not an http, https or file URL)"),
+        ("private", "https://user:secret@example.invalid/org/edge", "edge",
          "cannot check that it is private (the URL carries credentials)"),
-        ([], "https://user:secret@example.invalid/", "example.invalid", "cannot clone (the URL carries credentials)"),
-        ([], "https://[broken/repo", "unnamed URL", "cannot clone (not a valid URL)"),
-        (["--private"], "https://[broken/edge", "unnamed URL", "cannot check that it is private (not a valid URL)"),
-        ([], "HTTPS://example.invalid/org/repo", "repo", "cannot clone (not an http, https or file URL)"),
-        ([], "https:example.invalid/org/repo", "repo", "cannot clone (not an http, https or file URL)"),
-        ([], "file:/tmp/org/repo", "repo", "cannot clone (not an http, https or file URL)"),
-        ([], "https://example.invalid/org/repo\n", "repo", "cannot clone (not an http, https or file URL)"),
-        ([], "https://[dead]/repo", "unnamed URL", "cannot clone (not a valid URL)"),
-        ([], "https://[::1]x[::2]/repo", "unnamed URL", "cannot clone (not a valid URL)"),
-        (["--private"], "https://[dead]/edge", "unnamed URL", "cannot check that it is private (not a valid URL)"),
-        (["--"], "--upload-pack=touch pwned", "--upload-pack=touch pwned", "cannot clone (reads as a git option)"),
-        ([], "--private=--upload-pack=touch pwned", "--upload-pack=touch pwned",
+        ("public", "https://user:secret@example.invalid/", "example.invalid", "cannot clone (the URL carries credentials)"),
+        ("public", "https://[broken/repo", "unnamed URL", "cannot clone (not a valid URL)"),
+        ("private", "https://[broken/edge", "unnamed URL", "cannot check that it is private (not a valid URL)"),
+        ("public", "HTTPS://example.invalid/org/repo", "repo", "cannot clone (not an http, https or file URL)"),
+        ("public", "https:example.invalid/org/repo", "repo", "cannot clone (not an http, https or file URL)"),
+        ("public", "file:/tmp/org/repo", "repo", "cannot clone (not an http, https or file URL)"),
+        ("public", "https://example.invalid/org/repo\n", "repo", "cannot clone (not an http, https or file URL)"),
+        ("public", "https://[dead]/repo", "unnamed URL", "cannot clone (not a valid URL)"),
+        ("public", "https://[::1]x[::2]/repo", "unnamed URL", "cannot clone (not a valid URL)"),
+        ("private", "https://[dead]/edge", "unnamed URL", "cannot check that it is private (not a valid URL)"),
+        ("public", "--upload-pack=touch pwned", "--upload-pack=touch pwned", "cannot clone (reads as a git option)"),
+        ("private", "--upload-pack=touch pwned", "--upload-pack=touch pwned",
          "cannot check that it is private (reads as a git option)"),
     ],
     ids=["ssh", "scp-like", "credentials in the URL", "credentials and no path", "invalid", "invalid private",
          "uppercase scheme", "scheme without slashes", "file without slashes", "trailing line break", "bad IPv6 host",
          "mixed IPv6 hosts", "bad IPv6 host private", "option", "option private"],
 )
-def test_a_url_git_could_misread_or_authenticate_with_cannot_be_judged(capsys, public, option, url, name, reason):
-    """Rules 3 to 5 and #63 rule 3: only a valid anonymous URL that cannot read as a git option is cloned or listed; any other
-    is a cannot-judge row, the rest still show."""
-    code, output = scoreboard(capsys, public("open", {"a.py": "a = 1\n"}), *option, url)
+def test_a_url_git_could_misread_or_authenticate_with_cannot_be_judged(scoreboard, public, list_name, url, name, reason):
+    """Rules 3 to 5 and #63 rule 3, written through the fleet file: only a valid anonymous URL that cannot read as a
+    git option is cloned or listed; any other is a cannot-judge row, the rest still show."""
+    open_repo = public("open", {"a.py": "a = 1\n"})
+    listed = {"public": ([url], []), "private": ([], [url])}[list_name]
+    code, output = scoreboard(open_repo, *listed[0], private=listed[1])
     assert code == 2, output
     assert row(output, name)[1:3] == ["—", f"cannot judge: {reason}"]
     assert "secret" not in output
@@ -324,7 +340,7 @@ def test_an_anonymous_url_is_let_through(url):
     require_anonymous(url)
 
 
-def test_only_the_default_branch_tip_is_measured(capsys, public):
+def test_only_the_default_branch_tip_is_measured(scoreboard, public):
     """Cell 15, rule 3: a shallow clone of the default branch; another branch's files do not count."""
     url = public("branches", {"a.py": "a = 1\n"})
     directory = url.removeprefix("file://")
@@ -335,7 +351,7 @@ def test_only_the_default_branch_tip_is_measured(capsys, public):
     subprocess.run([*git, "add", "b.py"], check=True)
     subprocess.run([*git, "commit", "-q", "-m", "other"], check=True)
     subprocess.run([*git, "checkout", "-q", "-"], check=True)
-    code, output = scoreboard(capsys, url)
+    code, output = scoreboard(url)
     assert code == 0, output
     assert row(output, "branches")[1:3] == [tip[:7], "1 / 0"]
 
@@ -354,20 +370,20 @@ def git_that_signals(directory: Path, signal_name: str) -> Path:
     return directory
 
 
-def scoreboard_signalled(url: str, scratch: Path, fake_git: Path) -> int:
-    """The exit status of `quality scoreboard url` in its own process, its temporary directories made in `scratch`."""
+def scoreboard_signalled(fleet: Path, scratch: Path, fake_git: Path) -> int:
+    """The exit status of `quality scoreboard` on `fleet` in its own process, its temporary directories made in `scratch`."""
     environment = {**os.environ, "PATH": f"{fake_git}{os.pathsep}{os.environ['PATH']}", "TMPDIR": str(scratch)}
     program = "import sys; from quality import cli; sys.exit(cli.main(sys.argv[1:]))"
     return subprocess.run(
-        [sys.executable, "-c", program, "scoreboard", url],
+        [sys.executable, "-c", program, "scoreboard", str(fleet)],
         env=environment, capture_output=True, check=False, timeout=60,
     ).returncode
 
 
 @pytest.mark.parametrize("outcome", ["measured", "cannot judge"])
-def test_no_temporary_clone_outlives_the_run(capsys, public, missing, scratch, outcome):
+def test_no_temporary_clone_outlives_the_run(scoreboard, public, missing, scratch, outcome):
     """Cell 16, rule 3: the temporary directory goes after success and after cannot judge."""
-    scoreboard(capsys, missing if outcome == "cannot judge" else public("cleaned", {"a.py": "a = 1\n"}))
+    scoreboard(missing if outcome == "cannot judge" else public("cleaned", {"a.py": "a = 1\n"}))
     assert list(scratch.iterdir()) == []
 
 
@@ -375,15 +391,15 @@ def test_no_temporary_clone_outlives_the_run(capsys, public, missing, scratch, o
 def test_no_temporary_clone_outlives_a_stopped_run(public, scratch, tmp_path, stop):
     """Cell 16, rule 3: the temporary directory goes when Ctrl-C, a cancelled job or `timeout` stops the run."""
     url = public("cleaned", {"a.py": "a = 1\n"})
-    status = scoreboard_signalled(url, scratch, git_that_signals(tmp_path / "bin", stop.name.removeprefix("SIG")))
+    status = scoreboard_signalled(write_fleet(tmp_path / "fleet", [url]), scratch, git_that_signals(tmp_path / "bin", stop.name.removeprefix("SIG")))
     assert status in {-stop, 128 + stop}
     assert list(scratch.iterdir()) == []
 
 
-def test_the_heading_names_date_version_and_languages(capsys, public):
+def test_the_heading_names_date_version_and_languages(scoreboard, public):
     """Cell 17, rule 6: the date of the run, the quality version and "Python only"."""
     before = datetime.now(UTC).date()
-    _, output = scoreboard(capsys, public("dated", {}))
+    _, output = scoreboard(public("dated", {}))
     after = datetime.now(UTC).date()
     heading, blank, header, separator, *_ = output.splitlines()
     match = re.fullmatch(rf"\*\*Fleet scoreboard, (\S+), quality {re.escape(__version__)} — Python only\*\*", heading)
@@ -392,31 +408,100 @@ def test_the_heading_names_date_version_and_languages(capsys, public):
     assert (blank, header, separator) == ("", HEADER, "|---" * 8 + "|")
 
 
-def test_the_table_goes_to_stdout_and_identically_to_the_step_summary(capsys, public, tmp_path, monkeypatch):
+def test_the_table_goes_to_stdout_and_identically_to_the_step_summary(scoreboard, public, tmp_path, monkeypatch):
     """Cell 18, rule 6: with GITHUB_STEP_SUMMARY the same text is appended there."""
     summary = tmp_path / "summary.md"
     summary.write_text("earlier step\n")
     monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
-    _, output = scoreboard(capsys, public("summed", {"a.py": "a = 1\n"}))
+    _, output = scoreboard(public("summed", {"a.py": "a = 1\n"}))
     assert summary.read_text() == "earlier step\n" + output
 
 
-def test_without_a_step_summary_nothing_is_written(capsys, public, tmp_path, monkeypatch):
+def test_without_a_step_summary_nothing_is_written(scoreboard, public, tmp_path, monkeypatch):
     """Cell 18, rule 6: without GITHUB_STEP_SUMMARY only stdout carries the table."""
     monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
     before = sorted(tmp_path.rglob("*"))
-    _, output = scoreboard(capsys, public("quiet", {}))
+    _, output = scoreboard(public("quiet", {}))
     assert "| quiet |" in output
-    assert [path for path in sorted(tmp_path.rglob("*")) if path not in before and "remotes" not in path.parts] == []
+    assert [path for path in sorted(tmp_path.rglob("*")) if path not in before and not {"remotes", "fleet"} & set(path.parts)] == []
 
 
-@pytest.mark.parametrize("arguments", [[], ["--private", "file:///x"]], ids=["nothing", "only private"])
-def test_without_a_public_repo_the_command_is_a_usage_error(capsys, arguments):
-    """Cell 20, rule 1: `quality scoreboard URL... --private URL...` needs at least one public URL."""
+def test_a_url_given_as_the_path_is_a_missing_fleet_file_like_any_other_path(capsys):
+    """#63 rule 1: a URL is read as a PATH, so no URL reaches git."""
+    assert cli.main(["scoreboard", "https://github.com/o/r"]) == 2
+    assert "quality/fleet.toml is missing" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [["https://github.com/o/r", "--private", "https://github.com/o/p"], ["--private", "https://github.com/o/p"],
+     ["checkout", "https://github.com/o/r"]],
+    ids=["URL and --private", "--private", "second positional"],
+)
+def test_a_fleet_given_on_the_command_line_is_a_usage_error(capsys, arguments):
+    """#63 rule 1: `--private` and a second positional are argparse usage errors."""
     with pytest.raises(SystemExit) as stopped:
         cli.main(["scoreboard", *arguments])
     assert stopped.value.code == 2
     assert "scoreboard" in capsys.readouterr().err
+
+
+def test_a_private_only_fleet_is_measured(scoreboard, missing):
+    """#63 rule 2: an empty public list is fine; the private row stands alone."""
+    code, output = scoreboard(private=[missing])
+    assert code == 0, output
+    assert row(output, "gone")[1:3] == ["—", "not measured: private"]
+
+
+def test_the_fleet_file_is_read_from_the_working_directory_by_default(capsys, public, tmp_path, monkeypatch):
+    """#63 rule 1: `quality scoreboard` without PATH reads ./quality/fleet.toml."""
+    monkeypatch.chdir(write_fleet(tmp_path / "checkout", [public("here", {"a.py": "a = 1\n"})]))
+    assert cli.main(["scoreboard"]) == 0
+    assert row(capsys.readouterr().out, "here")[2] == "1 / 0"
+
+
+def test_public_rows_come_first_then_private_ones_each_in_file_order(scoreboard, public, missing):
+    """#63 rule 4: the file's order is the table's order within each list."""
+    second = public("second", {"a.py": "a = 1\n"})
+    first = public("first", {"a.py": "a = 1\n"})
+    _, output = scoreboard(second, first, private=[missing])
+    assert output.index("| second |") < output.index("| first |") < output.index("| gone |")
+
+
+@pytest.mark.parametrize(
+    ("content", "problem"),
+    [
+        (None, "is missing"),
+        ('public = ["https://x/a"', "is not valid TOML"),
+        ('public = ["https://x/a"]\nprivate = []\nextra = 1\n', "unknown key(s) ['extra']"),
+        ('public = "https://x/a"\nprivate = []\n', "needs public as a list of strings"),
+        ('public = [1]\nprivate = []\n', "needs public as a list of strings"),
+        ('public = ["https://x/a"]\n', "needs private as a list of strings"),
+        ('public = ["https://x/a", "https://x/a"]\nprivate = []\n', "public[1] repeats public[0]"),
+        ('public = ["https://x/a"]\nprivate = ["https://x/b", "https://x/a"]\n', "private[1] repeats public[0]"),
+        ("public = []\nprivate = []\n", "lists no URL"),
+    ],
+    ids=["missing file", "invalid TOML", "unknown key", "not a list", "not a string", "missing key", "duplicate",
+         "in both lists", "no URL"],
+)
+def test_a_fleet_file_that_cannot_be_used_cannot_be_judged(capsys, tmp_path, content, problem):
+    """#63 rule 2: exit 2, naming quality/fleet.toml, the problem and the right shape, and no table."""
+    (tmp_path / "quality").mkdir()
+    if content is not None:
+        (tmp_path / "quality" / "fleet.toml").write_text(content)
+    assert cli.main(["scoreboard", str(tmp_path)]) == 2
+    captured = capsys.readouterr()
+    assert "quality/fleet.toml" in captured.err
+    assert problem in captured.err
+    assert 'public = ["https://github.com/o/open"]' in captured.err
+    assert captured.out == ""
+
+
+def test_the_fleet_file_lists_the_fleet_the_workflow_reports():
+    """#63 rule 5: nine public and five private repositories, and the workflow carries no URL."""
+    fleet = read_fleet(Path(__file__).parent.parent)
+    assert (len(fleet.public), len(fleet.private)) == (9, 5)
+    assert "github.com/overnightworks" not in (WORKFLOWS / "scoreboard.yml").read_text()
 
 
 def test_help_lists_the_scoreboard(capsys):
@@ -451,3 +536,14 @@ def test_the_workflow_reads_only_and_pins_what_ci_pins():
     used = pinned_actions(scoreboard_workflow)
     assert used <= pinned_actions(workflow("ci.yml"))
     assert {action.split("@")[0] for action in used} == {"actions/checkout", "astral-sh/setup-uv"}
+
+
+def test_a_repeated_credentialed_url_is_named_by_its_place_never_its_text(capsys, tmp_path):
+    """#63 rule 2 and the secrets rule: the duplicate report must not print a password embedded in the URL."""
+    url = "https://user:secret@example.invalid/o/r"
+    fleet = write_fleet(tmp_path / "fleet", [url, url], [url])
+    assert cli.main(["scoreboard", str(fleet)]) == 2
+    captured = capsys.readouterr()
+    assert "public[1] repeats public[0]" in captured.err
+    assert "private[0] repeats public[0]" in captured.err
+    assert "secret" not in captured.out + captured.err

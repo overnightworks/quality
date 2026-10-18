@@ -33,22 +33,6 @@ jobs:
       - name: Sync
         run: uv sync --locked
 
-      # The fleet list lives here and only here. A private repository is never measured: this run is public.
+      # The fleet list lives in quality/fleet.toml. A private repository is never measured: this run is public.
       - name: Measure the fleet
-        run: >-
-          uv run --locked quality scoreboard
-          https://github.com/overnightworks/quality
-          https://github.com/overnightworks/agent-coordination
-          https://github.com/overnightworks/songmaker
-          https://github.com/overnightworks/agent-presentator
-          https://github.com/overnightworks/agent-providers
-          https://github.com/overnightworks/webauth
-          https://github.com/overnightworks/marketplace
-          https://github.com/overnightworks/hopin
-          https://github.com/overnightworks/ui-console
-          --private
-          https://github.com/overnightworks/edge
-          https://github.com/overnightworks/kiln
-          https://github.com/overnightworks/gmail-cleanup
-          https://github.com/overnightworks/claudebot
-          https://github.com/overnightworks/home-tools
+        run: uv run --locked quality scoreboard
