@@ -12,6 +12,7 @@ from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 import yaml
@@ -212,9 +213,12 @@ class AskingForCredentials(BaseHTTPRequestHandler):
     """A git host that answers every request as a private repository does: credentials, please."""
 
     requests = 0
+    authorizations: ClassVar[list[str]] = []
 
     def do_GET(self) -> None:
         type(self).requests += 1
+        if authorization := self.headers.get("Authorization"):
+            type(self).authorizations.append(authorization)
         self.send_response(401)
         self.send_header("WWW-Authenticate", 'Basic realm="private"')
         self.send_header("Content-Length", "0")
@@ -227,6 +231,7 @@ class AskingForCredentials(BaseHTTPRequestHandler):
 @pytest.fixture
 def private_host() -> Iterator[str]:
     AskingForCredentials.requests = 0
+    AskingForCredentials.authorizations = []
     server = ThreadingHTTPServer(("127.0.0.1", 0), AskingForCredentials)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -238,8 +243,9 @@ def private_host() -> Iterator[str]:
         thread.join()
 
 
-def test_a_configured_credential_helper_is_never_asked(capsys, public, private_host, tmp_path, monkeypatch):
-    """Cell 14, rules 3 and 4: with a helper and an askpass in a throwaway HOME, the private repo stays unmeasured."""
+def test_no_configured_credential_reaches_a_private_host(capsys, public, private_host, tmp_path, monkeypatch):
+    """Cell 14, rules 3 and 4: a helper, an askpass and an Authorization header in system, global or environment
+    config are never used, and the private repo stays unmeasured."""
     home = tmp_path / "home"
     home.mkdir()
     asked = tmp_path / "asked"
@@ -248,15 +254,41 @@ def test_a_configured_credential_helper_is_never_asked(capsys, public, private_h
     askpass.chmod(0o755)
     (home / ".gitconfig").write_text(
         f"[credential]\n\thelper = \"!f() {{ touch {asked}-helper; echo username=u; echo password=p; }}; f\"\n"
+        "[http]\n\textraHeader = Authorization: Basic global\n"
     )
+    (home / "system.gitconfig").write_text("[http]\n\textraHeader = Authorization: Basic system\n")
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(home / ".gitconfig"))
+    monkeypatch.setenv("GIT_CONFIG_SYSTEM", str(home / "system.gitconfig"))
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", "http.extraHeader")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_0", "Authorization: Basic environment")
     monkeypatch.setenv("GIT_ASKPASS", str(askpass))
     code, output = scoreboard(capsys, public("open", {"a.py": "a = 1\n"}), "--private", private_host)
     assert code == 0, output
     assert row(output, "edge")[1:3] == ["—", "not measured: private"]
     assert AskingForCredentials.requests >= 1
+    assert AskingForCredentials.authorizations == []
     assert sorted(path.name for path in tmp_path.iterdir() if path.name.startswith("asked")) == []
+
+
+@pytest.mark.parametrize(
+    ("option", "url", "name", "reason"),
+    [
+        ([], "ssh://git@example.invalid/org/repo.git", "repo", "cannot clone (not an http, https or file URL)"),
+        ([], "git@example.invalid:org/repo.git", "repo", "cannot clone (not an http, https or file URL)"),
+        (["--private"], "https://user:secret@example.invalid/org/edge", "edge",
+         "cannot check that it is private (the URL carries credentials)"),
+    ],
+    ids=["ssh", "scp-like", "credentials in the URL"],
+)
+def test_a_url_git_could_authenticate_with_cannot_be_judged(capsys, public, option, url, name, reason):
+    """Rules 3 to 5: only an anonymous URL is cloned or listed; any other is a cannot-judge row, the rest still show."""
+    code, output = scoreboard(capsys, public("open", {"a.py": "a = 1\n"}), *option, url)
+    assert code == 2, output
+    assert row(output, name)[1:3] == ["—", f"cannot judge: {reason}"]
+    assert "secret" not in output
+    assert row(output, "open")[2] == "1 / 0"
 
 
 def test_only_the_default_branch_tip_is_measured(capsys, public):

@@ -1,13 +1,13 @@
 """`quality scoreboard`: every fleet repository's Python size in one markdown table.
 
 Lines and the production/test split are the `size` rule's own (`ratchet.summarise`), measured on a shallow clone of
-the default branch tip. git runs anonymously: no credential helper, no askpass, no terminal prompt, and from a
-temporary directory, so no checkout's own config reaches it either. A repository declared private is never cloned:
-the table is published in a public run summary.
+the default branch tip. git runs anonymously: only an http, https or file URL without credentials, no credential
+helper, no askpass, no terminal prompt, no system, global or environment config and an empty HOME, from a temporary
+directory, so no checkout's own config reaches it either. A repository declared private is never cloned: the table
+is published in a public run summary.
 """
 
 import subprocess
-from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path, PurePosixPath
@@ -21,8 +21,8 @@ LS_REMOTE_TIMEOUT_SECONDS = 60
 SHORT_COMMIT = 7
 NO_COMMIT = "—"
 ANONYMOUS_GIT = ("git", "-c", "credential.helper=", "-c", "core.askPass=")
-# An askpass named in the environment outranks core.askPass, so it is dropped rather than overridden.
-ASKPASS_VARIABLES = frozenset({"GIT_ASKPASS", "SSH_ASKPASS"})
+# ssh authenticates with the user's keys and agent whatever HOME says, so only these transports are anonymous.
+ANONYMOUS_SCHEMES = frozenset({"file", "http", "https"})
 COLUMNS = (
     "Repo",
     "Commit",
@@ -60,18 +60,27 @@ class Unjudged:
 Row = Measured | Private | Unjudged
 
 
-def measure_fleet(public: list[str], private: list[str], environment: Mapping[str, str]) -> list[Row]:
+def measure_fleet(public: list[str], private: list[str]) -> list[Row]:
     """One row per URL, public ones first, each in the order given; one row that fails never stops the others."""
-    git_environment = anonymous_environment(environment)
-    return [
-        *(measure_public(url, git_environment) for url in public),
-        *(judge_private(url, git_environment) for url in private),
-    ]
+    return [*(measure_public(url) for url in public), *(judge_private(url) for url in private)]
 
 
-def anonymous_environment(environment: Mapping[str, str]) -> dict[str, str]:
-    kept = {name: value for name, value in environment.items() if name not in ASKPASS_VARIABLES}
-    return {**kept, "GIT_TERMINAL_PROMPT": "0"}
+def anonymous_environment(scratch: Path) -> dict[str, str]:
+    """No configuration git could authenticate from: the engines' isolation drops every GIT_* variable and the system
+    and global config, and points HOME at an empty directory, so no ~/.netrc either."""
+    isolated = engines.attribute_free_git_environment(scratch / "home")
+    # git falls back to SSH_ASKPASS for an http password too.
+    return {**{name: value for name, value in isolated.items() if name != "SSH_ASKPASS"}, "GIT_TERMINAL_PROMPT": "0"}
+
+
+def refusal(url: str) -> str | None:
+    """Why git must not be pointed at `url`, or None when it is anonymous."""
+    parts = urlsplit(url)
+    if parts.scheme not in ANONYMOUS_SCHEMES:
+        return "not an http, https or file URL"
+    if parts.username is not None or parts.password is not None:
+        return "the URL carries credentials"
+    return None
 
 
 def cannot_judge(rows: list[Row]) -> bool:
@@ -82,9 +91,12 @@ def repository_name(url: str) -> str:
     return PurePosixPath(urlsplit(url).path).name.removesuffix(".git") or url
 
 
-def measure_public(url: str, environment: dict[str, str]) -> Row:
+def measure_public(url: str) -> Row:
     name = repository_name(url)
+    if refused := refusal(url):
+        return Unjudged(name, f"cannot clone ({refused})")
     with engines.scratch_directory() as scratch:
+        environment = anonymous_environment(scratch)
         clone = scratch / "clone"
         try:
             cloned = git(["clone", "--depth", "1", "--no-tags", "--quiet", "--", url, str(clone)], scratch, environment,
@@ -104,11 +116,13 @@ def measure_public(url: str, environment: dict[str, str]) -> Row:
     return Measured(name, head.stdout.strip()[:SHORT_COMMIT], ratchet.summarise(tree), len(tree.unparsable))
 
 
-def judge_private(url: str, environment: dict[str, str]) -> Row:
+def judge_private(url: str) -> Row:
     name = repository_name(url)
+    if refused := refusal(url):
+        return Unjudged(name, f"cannot check that it is private ({refused})")
     with engines.scratch_directory() as scratch:
         try:
-            listed = git(["ls-remote", "--", url], scratch, environment, LS_REMOTE_TIMEOUT_SECONDS)
+            listed = git(["ls-remote", "--", url], scratch, anonymous_environment(scratch), LS_REMOTE_TIMEOUT_SECONDS)
         except engines.EngineError as error:
             return Unjudged(name, f"cannot check that it is private ({error})")
     if listed.returncode == 0:

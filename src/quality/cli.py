@@ -288,7 +288,7 @@ def run_verdict(path: Path, fetcher_for: Callable[[str], PageFetcher]) -> int:
 
 
 def run_scoreboard(public: list[str], private: list[str]) -> int:
-    rows = scoreboard.measure_fleet(public, private, os.environ)
+    rows = scoreboard.measure_fleet(public, private)
     report = scoreboard.render(rows, datetime.now(UTC).date())
     print(report)
     append_step_summary(report)

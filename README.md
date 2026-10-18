@@ -145,6 +145,9 @@ run's summary. The run only reports: it writes to no repository and needs no sec
 
 - A public `URL` is cloned with `git -c credential.helper= clone --depth 1 --no-tags`, `GIT_TERMINAL_PROMPT=0` and no
   askpass, into a temporary directory that is removed on every exit, and its default branch tip is measured.
+- git runs anonymously: without system, global or `GIT_CONFIG_*` config and with an empty `HOME`, so no configured
+  header, helper or `~/.netrc` reaches the host. Only `http`, `https` and `file` URLs without credentials in them are
+  used; any other URL is `cannot judge`.
 - Lines are the physical lines of the tracked `*.py` files, the count the `size` rule's 800-line limit uses (blank and
   comment lines included). Production versus test is the `size` rule's file-name rule, so `scripts/test_inventory.py`
   counts as test. `test:prod` is test lines divided by production lines with two decimals, `—` without production
