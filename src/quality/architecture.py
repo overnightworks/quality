@@ -187,8 +187,12 @@ def _refuse_file_loop(repository: str, path: str) -> None:
             raise ContractError(f"{os.path.relpath(path, repository)} links back into"
                                 f" {os.path.relpath(os.path.realpath(path), repository)};"
                                 " a symlink loop cannot be judged") from error
-        if error.errno != errno.ENOENT:  # a dangling link is grimp's to report; any other failure is cannot judge
-            raise
+        if error.errno == errno.ENOENT and os.path.islink(path):
+            raise ContractError(f"{os.path.relpath(path, repository)} links to nothing;"
+                                " a dangling link cannot be judged") from error
+        # a file that vanished mid-walk (a race, no link) is grimp's to report
+        if error.errno != errno.ENOENT:
+            raise ContractError(f"{os.path.relpath(path, repository)} cannot be examined: {error.strerror}") from error
 
 
 def _real_ancestors(real_directories: Mapping[str, str], package_directory: str, directory: str) -> set[str]:
