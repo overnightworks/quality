@@ -236,6 +236,12 @@ class RaisedEntry:
     base: int | None
     head: int
 
+    def describe(self) -> str:
+        """The raise as a person reads it, one wording for the write and the verdict."""
+        if self.base is None:
+            return f"adds {self.key.label} {self.head}"
+        return f"raises {self.key.label} {self.base} -> {self.head}"
+
 
 def raised_entries(base: Baseline, head: Baseline) -> list[RaisedEntry]:
     """One baseline against another: an entry may fall or go, never rise or appear (a moved entry is a new one)."""

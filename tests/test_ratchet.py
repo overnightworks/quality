@@ -302,6 +302,59 @@ def test_writing_the_baseline_twice_yields_the_same_file(build_repo):
     assert (repo / BASELINE_PATH).read_text(encoding="utf-8") == first
 
 
+def baseline_write(capsys: pytest.CaptureFixture[str], repo: Path) -> tuple[int, list[str]]:
+    code = cli.main(["baseline", "write", str(repo)])
+    captured = capsys.readouterr()
+    return code, (captured.out + captured.err).splitlines()
+
+
+def wrote_line(repo: Path, count: str) -> str:
+    return f"baseline: wrote {count} to {repo / BASELINE_PATH}"
+
+
+@pytest.mark.parametrize(
+    ("previous", "named"),
+    [
+        (
+            '[function_lines."src/a.py"]\nlong_one = 62\n',
+            ["baseline: raises function_lines src/a.py long_one 62 -> 70"],
+        ),
+        (EMPTY_BASELINE, ["baseline: adds function_lines src/a.py long_one 70"]),
+        ('[function_lines."src/a.py"]\nlong_one = 82\n', []),
+        ('[function_lines."src/a.py"]\nlong_one = 70\n[file_lines]\n"src/gone.py" = 900\n', []),
+        (None, []),
+    ],
+    ids=["cell-1-raised", "cell-2-added", "cell-3-lowered", "cell-4-file-gone", "cell-5-adoption"],
+)
+def test_baseline_write_names_each_raised_or_added_entry_before_the_count(build_repo, capsys, previous, named):
+    """#50 rules 1-3 and 5, cells 1-5: raises and adds are named in the verdict's wording; a fall, a gone entry
+    and an adoption name nothing; the write still happens and exits 0."""
+    files = {"src/a.py": long_function(70)}
+    repo = build_repo(files if previous is None else {**files, BASELINE_PATH: previous})
+    assert baseline_write(capsys, repo) == (0, [*named, wrote_line(repo, "1 entry")])
+    assert load_baseline((repo / BASELINE_PATH).read_text(encoding="utf-8")) == {
+        Key(Metric.FUNCTION_LINES, "src/a.py", "long_one"): 70
+    }
+
+
+@pytest.mark.parametrize(
+    "previous",
+    ["[file_lines\n", '[unknown]\n"src/a.py" = 1\n', '[file_lines]\n"src/a.py" = "many"\n'],
+    ids=["not-toml", "unknown-metric", "not-a-count"],
+)
+def test_baseline_write_overwrites_an_unreadable_previous_baseline_with_a_note(build_repo, capsys, previous):
+    """#50 rules 4 and 5, cell 6: an unreadable previous baseline is overwritten, the write says raises cannot be
+    named, and it exits 0."""
+    repo = build_repo({"src/a.py": long_function(70), BASELINE_PATH: previous})
+    code, (note, wrote) = baseline_write(capsys, repo)
+    assert (code, wrote) == (0, wrote_line(repo, "1 entry"))
+    assert note.startswith(f"baseline: the previous {BASELINE_PATH} could not be read (")
+    assert note.endswith("), so raises cannot be named")
+    assert load_baseline((repo / BASELINE_PATH).read_text(encoding="utf-8")) == {
+        Key(Metric.FUNCTION_LINES, "src/a.py", "long_one"): 70
+    }
+
+
 @pytest.mark.parametrize(
     "baseline",
     ["[file_lines\n", '[unknown]\n"src/a.py" = 1\n', '[file_lines]\n"src/a.py" = "many"\n'],
@@ -329,14 +382,15 @@ def link_the_quality_directory_elsewhere(repo: Path, elsewhere: Path) -> None:
     ids=["baseline-symlink", "quality-directory-symlink"],
 )
 def test_baseline_write_to_a_destination_it_cannot_own_cannot_be_judged(build_repo, capsys, arrange):
-    """#46 rule 5: the baseline is written to the repository's own quality/baseline.toml, never through a symlink."""
+    """#46 rule 5 and #50 rule 4, cell 7: the baseline is written to the repository's own quality/baseline.toml,
+    never through a symlink, and a refused write names nothing but the refusal."""
     repo = build_repo({"src/a.py": long_function(62)})
     elsewhere = repo / "untracked-elsewhere"
     elsewhere.mkdir()
     (elsewhere / "victim.toml").write_text("kept\n")
     arrange(repo, elsewhere)
-    assert cli.main(["baseline", "write", str(repo)]) == 2
-    assert "baseline: not written" in capsys.readouterr().err
+    code, (refusal,) = baseline_write(capsys, repo)
+    assert (code, refusal.startswith("baseline: not written - ")) == (2, True), refusal
     assert sorted(path.name for path in elsewhere.iterdir()) == ["victim.toml"]
     assert (elsewhere / "victim.toml").read_text() == "kept\n"
 
