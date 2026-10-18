@@ -454,10 +454,10 @@ def test_a_template_directory_cannot_put_attributes_into_the_mirror(
 
 
 @pytest.mark.engine
-@pytest.mark.parametrize("command", ["hygiene", "scan-staged"])
+@pytest.mark.parametrize(("command", "refusal"), [("hygiene", "hygiene: secret"), ("scan-staged", "scan-staged:")])
 @pytest.mark.parametrize("git_version", ["2.40.1", "1.9.0"])
 def test_a_git_older_than_2_41_is_exit_2_naming_the_version(
-    installed_engines, build_repo, fake_git, capsys, git_version, command
+    installed_engines, build_repo, fake_git, capsys, git_version, command, refusal
 ):
     """#21 rule 2, #25 rule 4: below the floor the scan cannot hide attributes, so it is exit 2 with one line.
 
@@ -466,7 +466,7 @@ def test_a_git_older_than_2_41_is_exit_2_naming_the_version(
     fake_git(f'[ "$1" = "--version" ] && echo "git version {git_version}" && exit 0')
     assert cli.main([command, "--engines", str(installed_engines), str(build_repo({}))]) == 2
     assert capsys.readouterr().err.strip() == (
-        f"{command}: cannot judge - git {git_version} cannot hide .gitattributes from the gitleaks scan, "
+        f"{refusal} cannot judge - git {git_version} cannot hide .gitattributes from the gitleaks scan, "
         "it needs git 2.41"
     )
 
