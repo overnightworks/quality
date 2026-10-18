@@ -1,0 +1,8 @@
+claim_id = "fb6f630159b245b9abf600cd6b960b6a"
+agent = "claude"
+role = "builder"
+base = "f615c41eed5b2f835bacff235fd5675a0ace5b02"
+branch = "claude/issue-56-scoreboard"
+scope = [".github/workflows/ci.yml", ".github/workflows/scoreboard.yml", "AGENTS.md", "README.md", "docs/roadmap.md", "quality/baseline.toml", "src/quality/cli.py", "src/quality/ratchet.py", "src/quality/scoreboard.py", "tests/conftest.py", "tests/test_scoreboard.py"]
+opened_commit = "8821cf05cdfd7e82382f517ead6fc53137e77946"
+whole_reason = "The command, its one output helper and the workflow that runs it are one vertical: without the workflow nobody sees the table, without the command the workflow has nothing to run."
