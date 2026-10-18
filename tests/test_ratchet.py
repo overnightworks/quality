@@ -1,5 +1,6 @@
 import os
 import tomllib
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -200,42 +201,34 @@ def test_below_the_thresholds_or_with_a_fixed_entry_gone_is_clean(build_repo, ca
     assert "hygiene: clean (3 rules)" in output
 
 
-@pytest.fixture
-def elsewhere(tmp_path_factory) -> Path:
-    """A scratch directory outside the repository, which build_repo builds in tmp_path."""
-    return tmp_path_factory.mktemp("elsewhere")
+@pytest.fixture(params=["deleted", "dangling", "cell 18 dangling out of the repository"])
+def remove(request, tmp_path_factory) -> Callable[[Path], None]:
+    """Takes a tracked file off the disk: deleted, or replaced by a link to nowhere inside or outside the repository."""
+    link_target = {
+        "deleted": None,
+        "dangling": Path("missing.py"),
+        "cell 18 dangling out of the repository": tmp_path_factory.mktemp("elsewhere") / "missing.py",
+    }[request.param]
+
+    def take_off_the_disk(path: Path) -> None:
+        path.unlink()
+        if link_target is not None:
+            path.symlink_to(link_target)
+
+    return take_off_the_disk
 
 
-def delete_from_disk(path: Path, elsewhere: Path) -> None:
-    path.unlink()
-
-
-def replace_with_a_dangling_symlink(path: Path, elsewhere: Path) -> None:
-    path.unlink()
-    path.symlink_to(path.with_name("missing.py"))
-
-
-def replace_with_a_dangling_symlink_out_of_the_repository(path: Path, elsewhere: Path) -> None:
-    path.unlink()
-    path.symlink_to(elsewhere / "missing.py")
-
-
-@pytest.mark.parametrize(
-    "remove",
-    [delete_from_disk, replace_with_a_dangling_symlink, replace_with_a_dangling_symlink_out_of_the_repository],
-    ids=["deleted", "dangling", "cell 18 dangling out of the repository"],
-)
 @pytest.mark.parametrize(
     "baseline",
     [None, '[function_lines."src/b.py"]\nlong_one = 62\n'],
     ids=["no-baseline", "baseline-holds-the-gone-file"],
 )
-def test_a_tracked_file_missing_from_disk_is_gone_not_unjudgeable(build_repo, elsewhere, capsys, remove, baseline):
+def test_a_tracked_file_missing_from_disk_is_gone_not_unjudgeable(build_repo, capsys, remove, baseline):
     """#46 rule 3/4 and #52 cell 18: the rule judges the tree on disk; a tracked file absent from it is gone, which
     is fine, wherever a dangling link points."""
     files = {"src/a.py": "x = 1\n", "src/b.py": long_function(62)}
     repo = build_repo(files if baseline is None else {**files, BASELINE_PATH: baseline})
-    remove(repo / "src/b.py", elsewhere)
+    remove(repo / "src/b.py")
     code, output = hygiene(capsys, repo)
     assert code == 0, output
     assert "hygiene: clean (3 rules)" in output

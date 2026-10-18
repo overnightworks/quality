@@ -19,7 +19,8 @@ class RepositoryFileError(Exception):
     """A file of the repository cannot be used; the message names it repository-relative."""
 
 
-def _reason(error: OSError) -> str:
+def os_error_reason(error: OSError) -> str:
+    """An OSError as `[Errno N] strerror`, without the filename, which may be a resolved path."""
     return f"[Errno {error.errno}] {error.strerror}"
 
 
@@ -32,7 +33,7 @@ def resolve_file(root: Path, name: str) -> Path:
             raise RepositoryFileError(f"{name} resolves outside the repository")
         mode = os.stat(target).st_mode
     except OSError as error:
-        raise RepositoryFileError(f"cannot read {name}: {_reason(error)}") from error
+        raise RepositoryFileError(f"cannot read {name}: {os_error_reason(error)}") from error
     if not stat.S_ISREG(mode):
         raise RepositoryFileError(f"{name} is not a file")
     return target
@@ -45,14 +46,14 @@ def read_bytes(root: Path, name: str) -> bytes | None:
     except OSError as error:
         if error.errno in ABSENT_ERRNOS:
             return None
-        raise RepositoryFileError(f"cannot read {name}: {_reason(error)}") from error
+        raise RepositoryFileError(f"cannot read {name}: {os_error_reason(error)}") from error
     path = resolve_file(root, name)
     try:
         # resolve_file has just contained the path in the repository. Sonar does not follow that check across the call,
         # and repeating it here would be a second containment decider, so the path-traversal taint is accepted.
         return path.read_bytes()  # NOSONAR(S8707)
     except OSError as error:
-        raise RepositoryFileError(f"cannot read {name}: {_reason(error)}") from error
+        raise RepositoryFileError(f"cannot read {name}: {os_error_reason(error)}") from error
 
 
 def read_text(root: Path, name: str) -> str | None:
@@ -73,7 +74,7 @@ def is_on_disk(root: Path, name: str) -> bool:
     except OSError as error:
         if error.errno in GONE_ERRNOS:
             return False
-        raise RepositoryFileError(f"cannot reach {name}: {_reason(error)}") from error
+        raise RepositoryFileError(f"cannot reach {name}: {os_error_reason(error)}") from error
     return True
 
 
@@ -87,4 +88,4 @@ def write_text(root: Path, name: str, text: str) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
     except OSError as error:
-        raise RepositoryFileError(f"cannot write {name}: {_reason(error)}") from error
+        raise RepositoryFileError(f"cannot write {name}: {os_error_reason(error)}") from error

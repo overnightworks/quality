@@ -61,7 +61,7 @@ def tracked_files(root: Path) -> list[str]:
     try:
         listing = subprocess.run(["git", "-C", str(root.resolve()), "ls-files", "-z", "--"], capture_output=True, check=False)
     except OSError as error:
-        raise CannotJudge(f"{root} is not a readable git repository: git did not run ([Errno {error.errno}] {error.strerror})") from error
+        raise CannotJudge(f"{root} is not a readable git repository: git did not run ({repository.os_error_reason(error)})") from error
     if listing.returncode != 0:
         # git's own words name the checkout it resolved, so only the exit code is printed and git is asked again.
         raise CannotJudge(
