@@ -25,9 +25,9 @@ UNNAMED = "unnamed URL"
 ANONYMOUS_GIT = ("git", "-c", "credential.helper=", "-c", "core.askPass=")
 # ssh authenticates with the user's keys and agent whatever HOME says, so only these transports are anonymous.
 ANONYMOUS_SCHEMES = frozenset({"file", "http", "https"})
-# scheme, then a host (a bracketed IPv6 literal or plain characters) without userinfo, then an optional path, query
-# and fragment
-ANONYMOUS_URL = re.compile(r"(?:file|https?)://(?:\[[\da-fA-F:.]+\]|[^@/?#\s\[\]])*(?:[/?#]\S*)?")
+# scheme and "//" then the rest without whitespace; git reads "https:host/x" as scp-style ssh and an uppercase scheme as a
+# missing remote helper
+ANONYMOUS_URL = re.compile(rf"(?:{'|'.join(sorted(ANONYMOUS_SCHEMES))})://\S*")
 COLUMNS = (
     "Repo",
     "Commit",
@@ -83,23 +83,19 @@ class Refused(Exception):
 
 
 def require_anonymous(url: str) -> None:
-    """Lets through only an http, https or file URL without credentials; any other is refused with the reason."""
-    if not ANONYMOUS_URL.fullmatch(url):
-        raise Refused(why_not_anonymous(url))
-
-
-def why_not_anonymous(url: str) -> str:
+    """Refuses a URL git could read as an option or authenticate with; any other is anonymous."""
     if url.startswith("-"):
-        return "reads as a git option"
+        raise Refused("reads as a git option")
     try:
         parts = urlsplit(url)
     except ValueError:
-        return "not a valid URL"
+        raise Refused("not a valid URL") from None
     if parts.scheme not in ANONYMOUS_SCHEMES:
-        return "not an http, https or file URL"
+        raise Refused("not an http, https or file URL")
     if parts.username is not None or parts.password is not None:
-        return "the URL carries credentials"
-    return "not a valid URL"
+        raise Refused("the URL carries credentials")
+    if not ANONYMOUS_URL.fullmatch(url):
+        raise Refused("not an http, https or file URL")
 
 
 def cannot_judge(rows: list[Row]) -> bool:
