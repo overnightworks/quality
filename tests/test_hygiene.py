@@ -221,10 +221,10 @@ ENV_FINDING = "env-file .env - "
 
 def fake_engine(directory: Path, name: str, on_scan: str) -> Path:
     """Writes a fake `name` engine that prints its pinned version and runs `on_scan` (shell) for any other call."""
-    version_argument = " ".join(engines.VERSION_ARGUMENTS[name])
+    version_arguments = " ".join(engines.VERSION_ARGUMENTS[name])
     pinned = engines.read_pins()[name].version
     binary = directory / name
-    binary.write_text(f'#!/bin/sh\nif [ "$1" = {version_argument} ]; then echo {pinned}; exit 0; fi\n{on_scan}\n')
+    binary.write_text(f'#!/bin/sh\nif [ "$*" = "{version_arguments}" ]; then echo {pinned}; exit 0; fi\n{on_scan}\n')
     binary.chmod(0o755)
     return binary
 
