@@ -5,6 +5,7 @@ Every cell runs through `cli.main(["hygiene", ...])`; the cell numbers are the i
 
 import json
 import os
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -349,14 +350,69 @@ def test_a_place_that_cannot_be_examined_is_cannot_judge_naming_it(build_repo, c
     assert_no_native_or_local_noise(output, repo)
 
 
-def test_a_non_utf8_source_file_is_refused_before_grimp_can_panic(build_repo, capfd):
-    """#61 rule 4: a module grimp cannot decode is exit 2 naming it, with no Rust panic text and no absolute path."""
+@pytest.fixture
+def bounded():
+    """A walk that opens a FIFO blocks forever, so the test fails after a few seconds instead of hanging."""
+    def give_up(*_):
+        raise TimeoutError("the walk opened a file it should have refused")
+    previous = signal.signal(signal.SIGALRM, give_up)
+    signal.alarm(10)
+    yield
+    signal.alarm(0)
+    signal.signal(signal.SIGALRM, previous)
+
+
+def _fifo_named_py(package):
+    os.mkfifo(package / "pipe.py")
+    return "src/shop/pipe.py", "not a regular file"
+
+
+def _non_utf8_content(package):
+    (package / "latin.py").write_bytes(b"\xff\xfe")
+    return "src/shop/latin.py", "not valid UTF-8"
+
+
+def _unknown_coding_cookie(package):
+    (package / "cookie.py").write_text("# coding: nonsense-xx\nx = 1\n")
+    return "src/shop/cookie.py", "unknown encoding"
+
+
+def _latin1_coding_cookie(package):
+    (package / "cookie.py").write_text("# coding: latin-1\nx = 1\n")
+    return "src/shop/cookie.py", "declares iso-8859-1; grimp reads UTF-8 only"
+
+
+def _non_utf8_file_name(package):
+    try:
+        (package / os.fsdecode(b"\xffz.py")).write_text("")
+    except OSError:
+        pytest.skip("this filesystem refuses a file name that is not UTF-8")
+    return "src/shop/\\udcffz.py", "file name is not valid UTF-8"
+
+
+@pytest.mark.parametrize("arrange", [_fifo_named_py, _non_utf8_content, _unknown_coding_cookie,
+                                     _latin1_coding_cookie, _non_utf8_file_name])
+def test_a_source_grimp_cannot_take_is_refused_before_grimp_can_panic(build_repo, capfd, bounded, arrange):
+    """#61 rule 4: a .py file that is no regular file, has a name or content grimp cannot decode, or declares an
+    encoding other than UTF-8 is exit 2 naming it, with no Rust panic text, no absolute path and no hang."""
     repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
-    (repo / "src" / "shop" / "latin.py").write_bytes(b"\xff\xfe")
+    named, reason = arrange(repo / "src" / "shop")
     code, output = run(capfd, repo)
     assert code == 2, output
-    assert f"{REFUSED}src/shop/latin.py cannot be examined: not valid UTF-8" in output
+    assert f"{REFUSED}{named} cannot be examined: {reason}" in output
     assert_no_native_or_local_noise(output, repo)
+
+
+@pytest.mark.parametrize("source, echoed", [("x = 1\0y = 2\n", "x = 1\\x00y = 2"),
+                                            ("x = 1 +" + "+" * 400 + "(\n", "…")])
+def test_the_source_text_a_syntax_error_echoes_is_escaped_and_cut(build_repo, capfd, source, echoed):
+    """#61 rule 4: a control character in the echoed source is escaped and a long line is cut."""
+    repo = build_repo({**SHOP, "src/shop/bad.py": source, ".importlinter": ini(FORBIDDEN)})
+    code, output = run(capfd, repo)
+    assert code == 2, output
+    assert echoed in output
+    assert "\0" not in output
+    assert all(len(line) < 400 for line in output.splitlines())
 
 
 def test_a_config_tracked_but_missing_on_disk_cannot_be_judged(build_repo, capsys):

@@ -8,14 +8,18 @@ grimp reads anything. Every message names paths repository-relative. The private
 pinned by the exact version in pyproject.toml.
 """
 
+import codecs
 import copy
 import errno
 import importlib.util
+import io
 import logging
 import os
 import re
+import stat
 import sys
 import tempfile
+import tokenize
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -52,6 +56,9 @@ ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 BROKEN_FIX = "change the import or the contract."
 STALE_IGNORE_FIX = "delete the entry."
 PANIC_MODULE = "pyo3_runtime"
+CONTROL_CHARACTER = re.compile(r"[\x00-\x1f\x7f]")
+MAX_ECHOED_SOURCE = 200
+UTF8_ENCODINGS = frozenset({"utf-8", "utf-8-sig"})
 
 
 class ContractError(Exception):
@@ -189,13 +196,15 @@ def _refuse_links_out(repository: str, package_directory: str) -> None:
             if not Path(os.path.realpath(path)).is_relative_to(repository):
                 raise ContractError(f"{os.path.relpath(path, repository)} links outside the repository")
         for name in files:
-            _refuse_file_loop(repository, os.path.join(parent, name))
-            _refuse_unreadable_source(repository, os.path.join(parent, name))
+            path = os.path.join(parent, name)
+            file_status = _stat_refusing_links(repository, path)
+            if file_status is not None:
+                _refuse_unreadable_source(repository, path, file_status)
 
 
-def _refuse_file_loop(repository: str, path: str) -> None:
+def _stat_refusing_links(repository: str, path: str) -> os.stat_result | None:
     try:
-        os.stat(path)
+        return os.stat(path)
     except OSError as error:
         if error.errno == errno.ELOOP:
             raise ContractError(f"{os.path.relpath(path, repository)} links back into"
@@ -207,21 +216,42 @@ def _refuse_file_loop(repository: str, path: str) -> None:
         # a file that vanished mid-walk (a race, no link) is grimp's to report
         if error.errno != errno.ENOENT:
             raise _cannot_be_examined(repository, path, error.strerror) from error
+    return None
 
 
-def _refuse_unreadable_source(repository: str, path: str) -> None:
-    """grimp reads and decodes every .py file it finds, and a stat succeeds on a file whose mode forbids the read;
-    grimp panics on a file it cannot decode, so both refusals come here first."""
+def _refuse_unreadable_source(repository: str, path: str, file_status: os.stat_result) -> None:
+    """grimp opens and decodes every .py file it finds and panics on a name or content it cannot take, and a stat
+    succeeds on a file whose mode forbids the read or that blocks an open (a FIFO), so all refusals come here first,
+    in that order: file type, name, content. grimp reads UTF-8 only, even when a coding cookie declares another."""
     if not path.endswith(".py"):
         return
+    if not stat.S_ISREG(file_status.st_mode):
+        raise _cannot_be_examined(repository, path, "not a regular file")
     try:
-        Path(path).read_bytes().decode("utf-8")
+        path.encode("utf-8")
+    except UnicodeEncodeError as error:
+        raise _cannot_be_examined(repository, path, "file name is not valid UTF-8") from error
+    try:
+        source = Path(path).read_bytes()
+        source.decode("utf-8")
+        _refuse_declared_encoding(repository, path, source)
     except UnicodeDecodeError as error:
         raise _cannot_be_examined(repository, path, "not valid UTF-8") from error
     except FileNotFoundError:
-        pass  # vanished mid-walk: grimp's to report, as in _refuse_file_loop
+        pass  # vanished mid-walk: grimp's to report, as in _stat_refusing_links
     except OSError as error:
         raise _cannot_be_examined(repository, path, error.strerror) from error
+
+
+def _refuse_declared_encoding(repository: str, path: str, source: bytes) -> None:
+    try:
+        encoding, _ = tokenize.detect_encoding(io.BytesIO(source).readline)
+    except SyntaxError as error:
+        if b"\0" in source:
+            return  # not a cookie problem: grimp's own syntax error names a NUL
+        raise _cannot_be_examined(repository, path, "unknown encoding") from error
+    if codecs.lookup(encoding).name not in UTF8_ENCODINGS:
+        raise _cannot_be_examined(repository, path, f"declares {encoding}; grimp reads UTF-8 only")
 
 
 def _real_ancestors(real_directories: Mapping[str, str], package_directory: str, directory: str) -> set[str]:
@@ -234,7 +264,8 @@ def _real_ancestors(real_directories: Mapping[str, str], package_directory: str,
 
 
 def _cannot_be_examined(repository: str, path: str, reason: str) -> ContractError:
-    return ContractError(f"{os.path.relpath(path, repository)} cannot be examined: {reason}")
+    name = os.path.relpath(path, repository).encode("utf-8", "backslashreplace").decode("utf-8")
+    return ContractError(f"{name} cannot be examined: {reason}")
 
 
 class _CollectedWarnings(logging.Handler):
@@ -344,9 +375,16 @@ def _judging(subject: str, place: str) -> Iterator[None]:
     except ContractError:
         raise
     except SourceSyntaxError as error:
-        raise UnparsableModule(_relative(str(error), place)) from error
+        raise UnparsableModule(_echoable(_relative(str(error), place))) from error
     except Exception as error:  # every error import-linter or grimp raises is caller-facing: none may escape as a crash
         raise ContractError(f"{subject} cannot be judged: {type(error).__name__}: {_relative(str(error), place)}") from error
+
+
+def _echoable(message: str) -> str:
+    """The source text a syntax error echoes is repository content: no control character reaches the terminal and a
+    long line is cut."""
+    escaped = CONTROL_CHARACTER.sub(lambda match: f"\\x{ord(match.group()):02x}", message)
+    return escaped if len(escaped) <= MAX_ECHOED_SOURCE else escaped[:MAX_ECHOED_SOURCE] + "…"
 
 
 def _relative(message: str, place: str) -> str:
