@@ -249,23 +249,15 @@ def _refuse_unreadable_source(repository: str, path: str, file_status: os.stat_r
 
 
 def _refuse_declared_encoding(repository: str, path: str, source: bytes) -> None:
-    examined_lines: list[bytes] = []
-    source_lines = io.BytesIO(source).readline
-
-    def read_line() -> bytes:
-        examined_lines.append(line := source_lines())
-        return line
-
+    """detect_encoding decides whether the cookie is an error; grimp's own rule decides which cookie it can read: a
+    cookie on either of the first two lines, even after code, where PEP 263 would ignore it."""
     try:
-        tokenize.detect_encoding(read_line)
+        tokenize.detect_encoding(io.BytesIO(source).readline)
     except SyntaxError as error:
-        if error.msg == NUL_IN_SOURCE:
-            return  # not a cookie problem: grimp's own syntax error names the NUL
-        raise _cannot_be_examined(repository, path, error.msg) from error
-    if any(b"\0" in line for line in examined_lines):
-        return  # Python 3.12 and 3.13 do not raise for a NUL there, 3.14 does: the answer stays the same
-    for line in examined_lines:
-        cookie = CODING_COOKIE.match(line.removeprefix(codecs.BOM_UTF8).decode("utf-8"))
+        if error.msg != NUL_IN_SOURCE:  # a NUL is grimp's own syntax error to name
+            raise _cannot_be_examined(repository, path, error.msg) from error
+    for line in source.removeprefix(codecs.BOM_UTF8).splitlines()[:2]:
+        cookie = CODING_COOKIE.match(line.decode("utf-8"))
         if cookie:
             _refuse_cookie_grimp_cannot_read(repository, path, cookie.group(1))
             return

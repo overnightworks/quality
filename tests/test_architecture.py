@@ -387,6 +387,16 @@ def _unknown_coding_cookie_in_a_source_with_a_nul(package):
     return "src/shop/cookie.py", "unknown encoding: nonsense-xx"
 
 
+def _coding_cookie_after_code(package):
+    (package / "cookie.py").write_text("x = 1\n# coding: latin-1\nimport a\n")
+    return "src/shop/cookie.py", "declares latin-1; grimp reads only"
+
+
+def _unknown_coding_cookie_after_a_nul(package):
+    (package / "cookie.py").write_bytes(b"\x00\n# coding: bogus\n")
+    return "src/shop/cookie.py", "declares bogus; grimp reads only"
+
+
 def _bom_conflicting_with_a_coding_cookie(package):
     (package / "cookie.py").write_bytes(b"\xef\xbb\xbf# coding: latin-1\nx = 1\n")
     return "src/shop/cookie.py", "encoding problem: utf-8"
@@ -410,7 +420,8 @@ def _non_utf8_file_name(package):
 @pytest.mark.parametrize("arrange", [_fifo_named_py, _non_utf8_content, _unknown_coding_cookie,
                                      _latin1_coding_cookie, _non_utf8_file_name,
                                      _unknown_coding_cookie_in_a_source_with_a_nul,
-                                     _bom_conflicting_with_a_coding_cookie,
+                                     _bom_conflicting_with_a_coding_cookie, _coding_cookie_after_code,
+                                     _unknown_coding_cookie_after_a_nul,
                                      *map(_python_alias_of_utf8, ["utf_8", "UTF_8", "utf-8-sig", "U8", "cp65001",
                                                                   "UTF-8-unix"])])
 def test_a_source_grimp_cannot_take_is_refused_before_grimp_can_panic(build_repo, capfd, bounded, arrange):
@@ -424,14 +435,16 @@ def test_a_source_grimp_cannot_take_is_refused_before_grimp_can_panic(build_repo
     assert_no_native_or_local_noise(output, repo)
 
 
-@pytest.mark.parametrize("spelling", ["utf-8", "utf8", "UTF8", "Utf-8", "ascii", "US-ASCII"])
-def test_a_coding_cookie_grimp_reads_is_judged_normally(build_repo, capfd, spelling):
+@pytest.mark.parametrize("cookie_line, import_line", [(f"# coding: {spelling}\n", 2) for spelling in
+                                                      ["utf-8", "utf8", "UTF8", "Utf-8", "ascii", "US-ASCII"]]
+                         + [("x = 1\n# coding: utf-8\n", 3)])
+def test_a_coding_cookie_grimp_reads_is_judged_normally(build_repo, capfd, cookie_line, import_line):
     """#61 rule 4: a cookie spelling grimp accepts does not stop the judgement of the forbidden import."""
-    repo = build_repo({**SHOP_DB_IMPORTS_WEB, "src/shop/db.py": f"# coding: {spelling}\nimport shop.web\n",
+    repo = build_repo({**SHOP_DB_IMPORTS_WEB, "src/shop/db.py": f"{cookie_line}import shop.web\n",
                        ".importlinter": ini(FORBIDDEN)})
     code, output = run(capfd, repo)
     assert code == 1, output
-    assert "shop.db -> shop.web (l.2)" in output
+    assert f"shop.db -> shop.web (l.{import_line})" in output
 
 
 @pytest.mark.parametrize("source, echoed", [("x = 1\0y = 2\n", "x = 1\\x00y = 2"),
