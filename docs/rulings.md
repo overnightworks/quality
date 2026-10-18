@@ -173,4 +173,7 @@ These rulings are quoted verbatim in [roadmap.md](roadmap.md), where they act; t
 - 16.10.2026: „0 Findings Toleranz für alle Repos“; „sollte das da nicht mit rein?“ (SonarCloud in the minimum profile, roadmap section A, point 1).
 - 16.10.2026, "alles ja": the organization rulesets (roadmap section A, point 1).
 - 16.10.2026: GitHub Team replacing the earlier „kein github team“ of 15.10.2026, ~22:02 (roadmap section A, point 1); #80 holds no verbatim quote for this ruling.
-- 18.10.2026: „b macht sinn“ (one shared CodeQL workflow in quality instead of a copy per repository, #64).
+
+## Operator ruling (18.10.2026): one shared CodeQL workflow
+
+„b macht sinn“ (one shared CodeQL workflow in quality instead of a copy per repository, #64).

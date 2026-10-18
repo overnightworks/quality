@@ -18,7 +18,8 @@ Door commands:
 - `quality sonar preflight [PATH]` and `quality sonar findings` (`sonar.py`): HTTP goes through an injected
   transport, polling through an injected sleep, so tests need no network.
 - `quality emergency-merge <owner/repo> <pr>` (`emergency.py`): the operator's door, it needs a terminal on stdin.
-- `.github/workflows/codeql.yml` is the reusable CodeQL workflow (input `languages`); `code-scanning.yml` is quality's own caller of it.
+
+`.github/workflows/codeql.yml` is the reusable CodeQL workflow (input `languages`); `code-scanning.yml` is quality's own caller of it.
 
 quality's own layers are an import-linter contract in `pyproject.toml` (`[tool.importlinter]`); `quality hygiene .`
 enforces it, so a module imports only from the layers below its own.
