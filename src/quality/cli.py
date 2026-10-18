@@ -7,7 +7,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from quality import __version__, engines, ratchet, staged
+from quality import __version__, engines, ratchet, repository, staged
 from quality.config import Allowance, ConfigError, read_gate_settings
 from quality.emergency import Ask, GhRunner, run_emergency_merge, run_gh
 from quality.hygiene import (
@@ -18,7 +18,6 @@ from quality.hygiene import (
     run_hygiene,
     skipped_rules,
     tracked_files,
-    write_repository_text,
 )
 from quality.report import Finding, render
 from quality.sonar import TASK_FILE, Sleep, Transport, analyse, fetch_json, preflight
@@ -125,7 +124,7 @@ def run_hygiene_check(path: Path, engine_dir: Path | None) -> int:
     try:
         result = run_hygiene(path, engine_dir)
     except CannotJudge as error:
-        print(f"hygiene: {error.status} - {error}", file=sys.stderr)
+        print(f"hygiene: {error.label} - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     findings = result.findings
     print_secret_allowances(result.allowed_secrets, result.unused_allowances)
@@ -160,8 +159,8 @@ def run_baseline_write(path: Path) -> int:
     try:
         entries = ratchet.debt(measure_size(path, tracked_files(path)).complete())
         loosenings = describe_loosenings(path, entries)
-        write_repository_text(path, ratchet.BASELINE_PATH, ratchet.render_baseline(entries))
-    except (CannotJudge, ratchet.SizeError) as error:
+        repository.write_text(path, ratchet.BASELINE_PATH, ratchet.render_baseline(entries))
+    except (CannotJudge, repository.RepositoryFileError, ratchet.SizeError) as error:
         print(f"baseline: not written - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     for loosening in loosenings:
@@ -251,7 +250,7 @@ def run_verdict(path: Path, fetcher_for: Callable[[str], PageFetcher]) -> int:
         )
         gate_results = {name: need["result"] for name, need in json.loads(os.environ["GATE_NEEDS"]).items()}
         result = judge(head, base, jobs, gate_results, int(os.environ["GITHUB_RUN_ATTEMPT"]))
-    except (ConfigError, CannotJudge, ratchet.SizeError, KeyError, ValueError) as error:
+    except (CannotJudge, KeyError, ValueError) as error:
         report = f"verdict: cannot judge - {error}"
         code = EXIT_CANNOT_JUDGE
     else:

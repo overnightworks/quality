@@ -197,6 +197,14 @@ def test_verdict_refuses_a_config_with_unknown_keys(capsys, run_env, config):
     assert "unknown key" in capsys.readouterr().err
 
 
+def test_a_head_without_a_config_is_missing_at_the_head(capsys, run_env):
+    """#6 rule 1 and #52 rules 3 and 4, cell 10: an absent head config is still "missing", now named at the head."""
+    repo, _ = run_env
+    (repo / CONFIG_PATH).unlink()
+    assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: ({"jobs": []}, None)) == 2
+    assert f"verdict: cannot judge - {CONFIG_PATH} at the head: {CONFIG_PATH} is missing" in capsys.readouterr().err
+
+
 def test_verdict_that_cannot_read_the_run_exits_two(capsys, run_env):
     """#6 rule 2: a page error exits 2 with the reason."""
     repo, _ = run_env
@@ -364,11 +372,31 @@ def test_the_size_baseline_only_falls_against_the_base(capsys, pull_request, bas
     assert (actual_code, expected.format(base=base_sha) in output, "Traceback" in output) == (code, True, False)
 
 
-def test_a_head_baseline_that_links_out_of_the_repository_cannot_be_judged(capsys, pull_request, tmp_path):
+@pytest.mark.parametrize(
+    ("base", "head", "hints"),
+    [("[ccn", main_lines(82), 0), (main_lines(82), "[ccn", 1)],
+    ids=["cell 16 base malformed", "cell 16 head malformed"],
+)
+def test_only_the_head_baseline_is_told_to_rewrite_itself(capsys, pull_request, base, head, hints):
+    """#52 rule 7, cell 16: a pull request cannot rewrite its base, so only a malformed head baseline gets the hint."""
+    repo, commit_base = pull_request
+    commit_base(base)
+    put(repo / BASELINE_PATH, head)
+    code, output = verdict_of(repo, capsys)
+    assert (code, output.count("rewrite it with `quality baseline write`")) == (2, hints), output
+
+
+@pytest.fixture
+def elsewhere(tmp_path_factory) -> Path:
+    """A scratch directory outside the pull request's repository."""
+    return tmp_path_factory.mktemp("elsewhere")
+
+
+def test_a_head_baseline_that_links_out_of_the_repository_cannot_be_judged(capsys, pull_request, elsewhere):
     """#48 rule 4, cell 11: a head baseline symlinked out of the repository is exit 2, no traceback."""
     repo, commit_base = pull_request
     commit_base(main_lines(82))
-    outside = tmp_path.parent / f"{tmp_path.name}-outside-baseline.toml"
+    outside = elsewhere / "baseline.toml"
     outside.write_text(main_lines(82))
     (repo / BASELINE_PATH).unlink()
     (repo / BASELINE_PATH).symlink_to(outside)
@@ -377,13 +405,13 @@ def test_a_head_baseline_that_links_out_of_the_repository_cannot_be_judged(capsy
     assert (code, expected in output, "Traceback" in output) == (2, True, False)
 
 
-def test_without_a_base_the_base_is_never_read(capsys, monkeypatch, pull_request, fake_git, tmp_path):
+def test_without_a_base_the_base_is_never_read(capsys, monkeypatch, pull_request, fake_git, elsewhere):
     """#48 rule 5, cell 12: on push GATE_BASE_SHA is empty, a raise against the previous commit stays green, git unread."""
     repo, commit_base = pull_request
     commit_base(main_lines(82))
     monkeypatch.setenv("GATE_BASE_SHA", "")
     put(repo / BASELINE_PATH, main_lines(90))
-    calls = tmp_path.parent / f"{tmp_path.name}-git-calls"
+    calls = elsewhere / "git-calls"
     fake_git(f'echo "$@" >> "{calls}"')
     assert verdict_of(repo, capsys) == (0, "verdict: green\n")
     assert not calls.exists()
@@ -399,13 +427,13 @@ def test_without_a_base_the_base_is_never_read(capsys, monkeypatch, pull_request
     ids=["cell 14 a revision expression", "cell 15 a SHA not in the clone", "cell 16 an option"],
 )
 def test_a_base_that_is_no_ref_name_or_sha_in_the_clone_cannot_be_judged(
-    capsys, monkeypatch, pull_request, fake_git, tmp_path, base_sha, expected
+    capsys, monkeypatch, pull_request, fake_git, elsewhere, base_sha, expected
 ):
     """#48 rule 4, cells 14-16 (#5 finding 57): exit 2 naming the base; a ref git would read as an option never reaches git."""
     repo, commit_base = pull_request
     commit_base(main_lines(82))
     monkeypatch.setenv("GATE_BASE_SHA", base_sha)
-    calls = tmp_path.parent / f"{tmp_path.name}-git-calls"
+    calls = elsewhere / "git-calls"
     fake_git(f'echo "$@" >> "{calls}"')
     code, output = verdict_of(repo, capsys)
     assert (code, expected in output, "Traceback" in output) == (2, True, False)

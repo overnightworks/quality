@@ -9,7 +9,7 @@ from pathlib import Path
 
 from quality.config import CONFIG_PATH, ConfigError, GateSettings, LegacyMode, load_gate_settings, read_gate_settings
 from quality.hygiene import CannotJudge, read_baseline
-from quality.ratchet import BASELINE_PATH, Baseline, SizeError, load_baseline, raised_entries
+from quality.ratchet import BASELINE_PATH, REWRITE_HINT, Baseline, SizeError, load_baseline, raised_entries
 
 JOBS_URL = "https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs?filter=all&per_page=100"
 MAX_PAGES = 10
@@ -20,6 +20,7 @@ PageFetcher = Callable[[str], tuple[str, str | None]]
 
 
 NO_BASE_SETTINGS = GateSettings((), LegacyMode.REPORT)
+HEAD = "the head"
 
 
 @dataclass(frozen=True)
@@ -147,12 +148,20 @@ def _require_safe_ref(ref: str) -> None:
 
 
 def read_head(repo: Path) -> Side:
-    """The gate's settings and size baseline in the checked-out tree; an unreadable baseline names the head."""
-    settings = read_gate_settings(repo)
+    """The gate's settings and size baseline in the checked-out tree; an unusable file names the head.
+
+    Only the head's malformed baseline says how to rewrite it: the pull request cannot rewrite its base.
+    """
+    try:
+        settings = read_gate_settings(repo)
+    except ConfigError as error:
+        raise _unusable(CONFIG_PATH, HEAD, error) from error
     try:
         return Side(settings, read_baseline(repo))
-    except (SizeError, CannotJudge) as error:
-        raise _baseline_unreadable("the head", error) from error
+    except SizeError as error:
+        raise _unusable(BASELINE_PATH, HEAD, f"{error}; {REWRITE_HINT}") from error
+    except CannotJudge as error:
+        raise _unusable(BASELINE_PATH, HEAD, error) from error
 
 
 def read_base(repo: Path, base_sha: str) -> Side:
@@ -168,15 +177,15 @@ def side_of(config: str | None, baseline: str | None, where: str) -> Side:
     try:
         settings = NO_BASE_SETTINGS if config is None else load_gate_settings(config)
     except ConfigError as error:
-        raise CannotJudge(f"{CONFIG_PATH} at {where}: {error}") from error
+        raise _unusable(CONFIG_PATH, where, error) from error
     try:
         return Side(settings, None if baseline is None else load_baseline(baseline))
     except SizeError as error:
-        raise _baseline_unreadable(where, error) from error
+        raise _unusable(BASELINE_PATH, where, error) from error
 
 
-def _baseline_unreadable(where: str, error: Exception) -> CannotJudge:
-    return CannotJudge(f"{BASELINE_PATH} at {where}: {error}")
+def _unusable(name: str, where: str, reason: object) -> CannotJudge:
+    return CannotJudge(f"{name} at {where}: {reason}")
 
 
 def _read_base_file(repo: Path, base_sha: str, path: str) -> str | None:
