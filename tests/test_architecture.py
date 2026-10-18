@@ -204,6 +204,16 @@ def test_a_syntax_error_is_unparsable_and_hides_no_other_rule(build_repo, capsys
     assert str(repo) not in output
 
 
+def test_a_library_warning_is_a_repository_relative_note(build_repo, capsys):
+    """#61 rule 4: grimp warns about a module it skips with an absolute path; the rule prints it as its own note."""
+    repo = build_repo({**SHOP, "src/shop/some.module.py": "", ".importlinter": ini(FORBIDDEN)})
+    code, output = run(capsys, repo)
+    assert code == 0, output
+    assert ("import-contract: note - Warning: skipping module with too many dots in the name:"
+            " src/shop/some.module.py") in output
+    assert str(repo) not in output
+
+
 def test_a_config_linked_out_of_the_repository_cannot_be_judged(build_repo, elsewhere, capsys):
     """#61 rule 3, cell 18: the config is read through repository.read_text, which keeps it inside."""
     repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})

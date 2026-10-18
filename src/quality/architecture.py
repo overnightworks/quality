@@ -10,6 +10,7 @@ pinned by the exact version in pyproject.toml.
 
 import copy
 import importlib.util
+import logging
 import os
 import re
 import sys
@@ -87,10 +88,11 @@ def check_contracts(root: Path, tracked: Sequence[str], configs: Mapping[str, st
         contracts = [_contract(config, index, options, repository)
                      for index, options in enumerate(config.options.contracts_options, 1)]
         roots = {package: _source_root(tracked, package) for package in config.options.session_options["root_packages"]}
-        graph = _build_graph(repository, roots, config.options)
+        with _library_warnings(repository) as graph_notes:
+            graph = _build_graph(repository, roots, config.options)
     verdicts = [_check(contract, graph, config.name, repository) for contract in contracts]
     return ContractsVerdict([finding for verdict in verdicts for finding in verdict.findings],
-                            [note for verdict in verdicts for note in verdict.notes])
+                            graph_notes + [note for verdict in verdicts for note in verdict.notes])
 
 
 def find_config(configs: Mapping[str, str]) -> Config | None:
@@ -185,6 +187,33 @@ def _real_ancestors(real_directories: Mapping[str, str], package_directory: str,
 
 def _raise(error: OSError) -> None:
     raise error
+
+
+class _CollectedWarnings(logging.Handler):
+    def __init__(self) -> None:
+        super().__init__(logging.WARNING)
+        self.messages: list[str] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.messages.append(record.getMessage())
+
+
+@contextmanager
+def _library_warnings(repository: str) -> Iterator[list[str]]:
+    """grimp warns through logging with absolute paths; its warnings become the rule's notes, repository-relative,
+    instead of reaching the terminal."""
+    logger = logging.getLogger(grimp.__name__)
+    collected = _CollectedWarnings()
+    propagates = logger.propagate
+    logger.addHandler(collected)
+    logger.propagate = False
+    notes: list[str] = []
+    try:
+        yield notes
+        notes += [f"{RULE}: note - {_relative(message, repository)}" for message in collected.messages]
+    finally:
+        logger.removeHandler(collected)
+        logger.propagate = propagates
 
 
 @contextmanager
