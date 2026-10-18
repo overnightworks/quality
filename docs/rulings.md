@@ -177,3 +177,5 @@ These rulings are quoted verbatim in [roadmap.md](roadmap.md), where they act; t
 ## Operator ruling (18.10.2026): one shared CodeQL workflow
 
 „b macht sinn“ (one shared CodeQL workflow in quality instead of a copy per repository, #64).
+
+Scratch proof for #68 cells 8-11; this sentence never lands.
