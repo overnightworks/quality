@@ -1,5 +1,6 @@
 import os
 import re
+import shlex
 import subprocess
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -57,19 +58,34 @@ class Unparsable(CannotJudge):
     label = "unparsable"
 
 
-def tracked_files(root: Path) -> list[str]:
-    if not root.is_dir():
-        raise CannotJudge(f"{root} is not a directory")
+def _refusal(path: Path, because: str) -> CannotJudge:
+    return CannotJudge(f"{path} is not a readable git repository: {because} (`git -C {shlex.quote(str(path))} status` says why)")
+
+
+def _git_listing(path: Path, command: list[str]) -> subprocess.CompletedProcess:
+    """git's answer for the repository at `path`; one that refuses, or does not run, is a repository git cannot read."""
     try:
-        listing = subprocess.run(["git", "-C", str(root.resolve()), "ls-files", "-z", "--"], capture_output=True, check=False)
-    except OSError as error:
-        raise CannotJudge(f"{root} is not a readable git repository: git did not run ({repository.os_error_reason(error)})") from error
-    if listing.returncode != 0:
+        done = engines.run(["git", "-C", str(path.absolute()), *command], encoding=None)
+    except engines.EngineError as error:
+        reason = repository.os_error_reason(error.__cause__) if isinstance(error.__cause__, OSError) else error
+        raise CannotJudge(f"{path} is not a readable git repository: git did not run ({reason})") from error
+    if done.returncode != 0:
         # git's own words name the checkout it resolved, so only the exit code is printed and git is asked again.
-        raise CannotJudge(
-            f"{root} is not a readable git repository: git ls-files exited {listing.returncode}"
-            f" (`git -C {root} status` says why)"
-        )
+        raise _refusal(path, f"git {command[0]} exited {done.returncode}")
+    return done
+
+
+def work_tree_top(path: Path) -> Path:
+    """The top of the work tree `path` lies in, as `path` reaches it; `--show-cdup` never prints where the checkout lies."""
+    answer = _git_listing(path, ["rev-parse", "--is-inside-work-tree", "--show-cdup"]).stdout
+    inside, _, cdup = os.fsdecode(answer).strip().partition("\n")
+    if inside != "true":
+        raise _refusal(path, "it lies outside any work tree")
+    return path / cdup
+
+
+def tracked_files(root: Path) -> list[str]:
+    listing = _git_listing(root, ["ls-files", "-z", "--"])
     return [os.fsdecode(name) for name in listing.stdout.split(b"\0") if name]
 
 
@@ -92,10 +108,10 @@ def _is_env_file(name: str) -> bool:
 
 
 def check_compose_ports(root: Path, tracked: list[str]) -> list[Finding]:
+    composes = [name for name in tracked if any(PurePosixPath(name).match(pattern) for pattern in COMPOSE_PATTERNS)]
     findings = []
-    for name in tracked:
-        if any(PurePosixPath(name).match(pattern) for pattern in COMPOSE_PATTERNS):
-            findings.extend(_compose_file_findings(root, name))
+    for name, text in _read_existing(repository.read_text, root, _on_disk(root, composes)).items():
+        findings.extend(_compose_file_findings(name, text))
     return findings
 
 
@@ -107,16 +123,17 @@ def _judged[T](ask: Callable[[Path, str], T], root: Path, name: str) -> T:
         raise CannotJudge(str(error)) from error
 
 
-def _read_tracked[T](read: Callable[[Path, str], T | None], root: Path, name: str) -> T:
-    """A tracked file's content; until every rule asks is_on_disk (Q1b-3d), one the tree lacks cannot be judged."""
-    content = _judged(read, root, name)
-    if content is None:
-        raise CannotJudge(f"{name} is tracked but not on disk")
-    return content
+def _on_disk(root: Path, names: Sequence[str]) -> list[str]:
+    """The tracked names the tree holds: a file deleted, sparse or linked to nowhere is gone, one the filesystem refuses is not."""
+    return [name for name in names if _judged(repository.is_on_disk, root, name)]
 
 
-def _compose_file_findings(root: Path, name: str) -> list[Finding]:
-    text = _read_tracked(repository.read_text, root, name)
+def _read_existing[T](read: Callable[[Path, str], T | None], root: Path, names: Sequence[str]) -> dict[str, T]:
+    """The content of each name the tree holds; a name that vanished since it was listed is gone."""
+    return {name: content for name in names if (content := _judged(read, root, name)) is not None}
+
+
+def _compose_file_findings(name: str, text: str) -> list[Finding]:
     try:
         document = yaml.load(text, Loader=ComposeLoader)
     except yaml.YAMLError as error:
@@ -162,8 +179,8 @@ def _describe(port: object) -> str:
 
 def measure_size(root: Path, tracked: list[str]) -> ratchet.TreeMeasurement:
     """Measures the tree on disk: a tracked file absent from it (deleted, sparse, a dangling link) is gone."""
-    on_disk = [name for name in tracked if ratchet.is_python(name) and _judged(repository.is_on_disk, root, name)]
-    return ratchet.measure({name: _read_tracked(repository.read_bytes, root, name) for name in on_disk})
+    sources = _on_disk(root, [name for name in tracked if ratchet.is_python(name)])
+    return ratchet.measure(_read_existing(repository.read_bytes, root, sources))
 
 
 @dataclass(frozen=True)
@@ -177,8 +194,13 @@ def read_baseline(root: Path) -> ratchet.Baseline | None:
 
     A file that cannot be read cannot be judged; a malformed one raises SizeError.
     """
-    text = _judged(repository.read_text, root, ratchet.BASELINE_PATH)
-    return None if text is None else ratchet.load_baseline(text)
+    content = _judged(repository.read_bytes, root, ratchet.BASELINE_PATH)
+    if content is None:
+        return None
+    try:
+        return ratchet.load_baseline(content.decode("utf-8"))
+    except UnicodeDecodeError as error:
+        raise ratchet.SizeError(f"{ratchet.BASELINE_PATH} is not valid UTF-8 ({error})") from error
 
 
 def check_size(root: Path, tracked: list[str]) -> SizeResult:
@@ -198,8 +220,11 @@ def check_size(root: Path, tracked: list[str]) -> SizeResult:
 
 
 def check_import_contract(root: Path, tracked: list[str]) -> architecture.ContractsVerdict:
-    """Report-only without a tracked import-linter config at the top; with one, its contracts must be kept."""
-    configs = {name: _read_tracked(repository.read_text, root, name) for name in tracked if name in architecture.CONFIG_FILES}
+    """Report-only without an import-linter config at the top; with one, its contracts must be kept.
+
+    A config counts when its name exists, so a tracked one deleted from the tree is none and a link to nowhere cannot be read.
+    """
+    configs = _read_existing(repository.read_text, root, [name for name in tracked if name in architecture.CONFIG_FILES])
     try:
         return architecture.check_contracts(root, tracked, configs)
     except architecture.UnparsableModule as error:
@@ -216,7 +241,7 @@ def check_secrets(root: Path, engine_dir: Path) -> engines.SecretScan:
 
 
 def check_workflows(root: Path, engine_dir: Path, rule: str, tracked: list[str]) -> list[Finding]:
-    workflows = [name for name in tracked if _is_workflow(PurePosixPath(name))]
+    workflows = _on_disk(root, [name for name in tracked if _is_workflow(PurePosixPath(name))])
     try:
         return engines.scan_workflows(root, engine_dir, engines.read_pins(), rule, workflows)
     except engines.EngineError as error:
@@ -289,7 +314,8 @@ def _verdict(rule: str, outcome: Sequence[Finding] | CannotJudge) -> RuleVerdict
 
 
 def run_hygiene(root: Path, engine_dir: Path | None = None) -> HygieneResult:
-    """Judges every active rule, in run order; only a repository git cannot list stops the run."""
+    """Judges every active rule, in run order, over the repository `root` lies in; only one git cannot list stops the run."""
+    root = work_tree_top(root)
     tracked = tracked_files(root)
     size = _attempt(lambda: check_size(root, tracked))
     contracts = _attempt(lambda: check_import_contract(root, tracked))

@@ -21,10 +21,14 @@ Install it with
 
 (no tag exists yet, so the line names a commit). The gitleaks paths (`hygiene --engines`, `scan-staged`) need git 2.41 or newer; with an older git they exit `2`.
 
-`hygiene` reads git's view of the repository at `PATH` (default `.`) and applies four rules:
+`hygiene` reads git's view of the repository `PATH` (default `.`) lies in, from its top level, so a run from `src` judges
+the same files and the same `quality/baseline.toml` as one at the top, and names every file relative to the top (`size
+src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree's own top. It applies four rules:
 
 - `env-file`: no tracked `.env`, `.env.*` or `*.env` file (names ending in `.example` are templates and pass).
-- `compose-port`: every published port in a tracked `compose*.y{a,}ml` or `docker-compose*.y{a,}ml` binds `127.0.0.1`.
+- `compose-port`: every published port in a tracked `compose*.y{a,}ml` or `docker-compose*.y{a,}ml` binds `127.0.0.1`. A
+  tracked file missing from disk (deleted, or a symlink to nowhere or in a loop) is skipped; one the filesystem refuses to
+  read is `hygiene: compose-port cannot judge - ...`.
 - `size`: every tracked `*.py` file is measured with [lizard](https://github.com/terryyin/lizard): a file from 800
   lines, a function from 60 lines and a function with a CCN above 15 are debt, counted apart for production and tests
   (a path under `test/` or `tests/`, `conftest.py`, `test_*.py`, `*_test.py`). Functions are named by their qualified
@@ -39,11 +43,14 @@ Install it with
   size cannot judge - ...` with or without a baseline, and `quality baseline write` refuses with `baseline: not written - ...`; both exit `2`.
   The reason names the case: a file without read permission is `cannot read locked.py: [Errno 13] ...`, a file behind
   a directory without permission is `cannot reach pkg/m.py: [Errno 13] ...`. A tracked file missing from disk
-  (deleted, or a dangling symlink) is skipped.
+  (deleted, or a dangling symlink) is skipped. A `quality/baseline.toml` that is not UTF-8 is malformed like invalid
+  TOML and says to rewrite it with `quality baseline write`.
   With `quality/baseline.toml`, the tree on disk must hold the baseline: a new violation, an entry that grew and an
   entry above its measured value (stale: lower it with `quality baseline write`) are findings; an entry whose file or
   function is gone is fine.
-  `quality baseline write [PATH]` writes the measured debt to `PATH/quality/baseline.toml` as sorted TOML, one table
+  `quality baseline write [PATH]` writes the measured debt to `quality/baseline.toml` at the top of the repository `PATH`
+  lies in (from `src`: `baseline: wrote 2 entries to ../quality/baseline.toml`; a stray `src/quality/baseline.toml` is
+  neither read nor removed) as sorted TOML, one table
   per metric (`ccn`, `file_lines`, `function_lines`) keyed by path and qualified symbol. Before its `baseline: wrote N
   entries ...` line it names, in the verdict's wording, each entry it raises or adds against the previous file
   (`baseline: raises function_lines src/quality/cli.py main 82 -> 90`, `baseline: adds ccn src/a.py f 16`); a lowered
@@ -52,7 +59,8 @@ Install it with
   The write exits `0` with raises too: the verdict is the gate.
 - `import-contract`: the repository's [import-linter](https://github.com/seddonym/import-linter) contracts must be
   kept. The config is the tracked `.importlinter` or `setup.cfg` (`[importlinter]`) or `pyproject.toml`
-  (`[tool.importlinter]`); without one the rule prints `import-contract: report only (no import-linter config)` and
+  (`[tool.importlinter]`), counted once its name exists in the tree: a tracked one deleted from disk is none, a symlink to
+  nowhere cannot be read (exit `2`); without one the rule prints `import-contract: report only (no import-linter config)` and
   leaves the exit unchanged. import-linter 2.15 runs inside quality as a library, never its CLI, and writes nothing to
   the checkout (no `.import_linter_cache`). A broken contract is one finding on the config file, naming the contract
   and the chain as import-linter renders it (`shop.db -> shop.web (l.1)`), exit `1`. An `ignore_imports` entry no
@@ -128,8 +136,9 @@ backslash-escaped. A rule that cannot judge prints its verdict and reason under 
 judge - ...`). A clean run names its rules in run order (`hygiene: clean (env-file, compose-port, size, import-contract); skipped without
 --engines: ...`); any other run ends with the findings and the verdicts counted (`hygiene: 1 finding(s); verdicts: 1
 clean, 1 findings, 1 unparsable`). The exit is the worst verdict's: `2` if any rule is unparsable or cannot judge
-(never clean), otherwise `1` if any rule has findings, otherwise `0`. A path that is not a readable git repository is
-`hygiene: cannot judge - ...` and exit `2` before any rule runs.
+(never clean), otherwise `1` if any rule has findings, otherwise `0`. A path git cannot read as a work tree (a file, a missing path, a
+folder without permission, a bare repository, the inside of `.git`) is `hygiene: cannot judge - <PATH as given> is not a
+readable git repository: ... (`git -C '<PATH>' status` says why)` and exit `2` before any rule runs.
 
 ## `quality scan-staged`
 

@@ -361,11 +361,12 @@ def verdict_of(repo: Path, capsys) -> tuple[int, str]:
         ("[ccn", main_lines(82), 2, f"{BASELINE_PATH} at the base commit {{base}}: {BASELINE_PATH} is not valid TOML"),
         (main_lines(82), "[ccn", 2, f"cannot judge - {BASELINE_PATH} at the head: {BASELINE_PATH} is not valid TOML"),
         (b"\xff", main_lines(82), 2, f"cannot read {BASELINE_PATH} at the base commit {{base}}: 'utf-8' codec"),
+        (main_lines(82), b"\xff", 2, f"cannot judge - {BASELINE_PATH} at the head: {BASELINE_PATH} is not valid UTF-8 ("),
     ],
     ids=[
         "cell 1 growth", "cell 2 lowering", "cell 3 equal", "cell 4 adoption", "cell 5 base file deleted",
         "cell 6 new key", "cell 7 key dropped", "cell 8 both absent", "cell 9 base malformed", "cell 10 head malformed",
-        "cell 9 base not UTF-8",
+        "cell 9 base not UTF-8", "#76 cell 18 head not UTF-8",
     ],
 )
 def test_the_size_baseline_only_falls_against_the_base(capsys, pull_request, base, head, code, expected):

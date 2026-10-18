@@ -20,6 +20,7 @@ from quality.hygiene import (
     run_hygiene,
     skipped_rules,
     tracked_files,
+    work_tree_top,
 )
 from quality.report import Finding, printable, render
 from quality.sonar import TASK_FILE, Sleep, Transport, analyse, fetch_json, preflight
@@ -96,7 +97,7 @@ def build_parser() -> argparse.ArgumentParser:
         dest="baseline_command", required=True
     )
     baseline.add_parser("write", help=f"write the measured size debt to {ratchet.BASELINE_PATH}").add_argument(
-        "path", nargs="?", type=Path, default=Path("."), help="the git repository to measure (default: the current one)"
+        "path", nargs="?", type=Path, default=Path("."), help="a folder of the git repository to measure; its top level is measured (default: the current one)"
     )
     scan_staged = commands.add_parser("scan-staged", help="scan the staged change of a repository for secrets")
     scan_staged.add_argument("path", nargs="?", type=Path, default=Path("."))
@@ -183,16 +184,17 @@ def coverage_note(engine_dir: Path | None) -> str:
 
 def run_baseline_write(path: Path) -> int:
     try:
-        entries = ratchet.debt(measure_size(path, tracked_files(path)).complete())
-        loosenings = describe_loosenings(path, entries)
-        repository.write_text(path, ratchet.BASELINE_PATH, ratchet.render_baseline(entries))
+        top = work_tree_top(path)
+        entries = ratchet.debt(measure_size(top, tracked_files(top)).complete())
+        loosenings = describe_loosenings(top, entries)
+        repository.write_text(top, ratchet.BASELINE_PATH, ratchet.render_baseline(entries))
     except (CannotJudge, repository.RepositoryFileError, ratchet.SizeError) as error:
         print(f"baseline: not written - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     for loosening in loosenings:
         print(f"baseline: {loosening}")
     count = "1 entry" if len(entries) == 1 else f"{len(entries)} entries"
-    print(f"baseline: wrote {count} to {path / ratchet.BASELINE_PATH}")
+    print(f"baseline: wrote {count} to {top / ratchet.BASELINE_PATH}")
     return EXIT_CLEAN
 
 
