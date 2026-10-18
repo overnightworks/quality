@@ -139,23 +139,32 @@ def test_the_import_contract_rule_judges_the_contracts(build_repo, capsys, files
     assert str(repo) not in output
 
 
+def collision(name: str, directory: str, other_place: str) -> str:
+    return (f"{REFUSED}root package {name} is {directory}{name}/__init__.py, but Python finds it {other_place};"
+            " judging it would read the wrong package")
+
+
 @pytest.mark.parametrize(
-    ("package", "directory"),
-    [(yaml, ""), (quality, "src/")],
+    ("files", "expected"),
+    [
+        ({"yaml/__init__.py": "", ".importlinter": ini({"type": "independence", "modules": ["yaml.a"]}, roots=("yaml",))},
+         collision("yaml", "", "outside the repository at site-packages/yaml/__init__.py")),
+        ({"src/quality/__init__.py": "",
+          ".importlinter": ini({"type": "independence", "modules": ["quality.a"]}, roots=("quality",))},
+         collision("quality", "src/", "outside the repository at src/quality/__init__.py")),
+    ],
     ids=["cell 20 a root package quality already imported", "cell 20 quality from a second checkout"],
 )
-def test_a_root_package_python_finds_elsewhere_is_named_without_a_local_path(build_repo, capsys, package, directory):
-    """#61 rules 4 and 6, cell 20: the collision names the tracked place repository-relative and the other place only
-    as outside the repository, never by a local path, and no graph is built from the wrong package."""
-    name = package.__name__
-    repo = build_repo({f"{directory}{name}/__init__.py": "",
-                       ".importlinter": ini({"type": "independence", "modules": [f"{name}.a"]}, roots=(name,))})
-    found_at = Path(os.path.realpath(package.__file__))
+def test_a_root_package_python_finds_elsewhere_names_both_places_without_a_local_path(
+        build_repo, capsys, files, expected):
+    """#61 rules 4 and 6, cell 20: the collision names the tracked place repository-relative and the other place
+    repository-relative inside or from its sys.path entry outside, never by a local path, and builds no graph."""
+    repo = build_repo(files)
     code, output = run(capsys, repo)
     assert code == 2, output
-    assert (f"{REFUSED}root package {name} is {directory}{name}/__init__.py, but Python finds it outside the"
-            " repository; judging it would read the wrong package") in output
-    assert [place for place in (str(found_at.parent.parent), str(repo), "../") if place in output] == [], output
+    assert expected in output, output
+    local_places = (str(Path(os.path.realpath(module.__file__)).parent.parent) for module in (yaml, quality))
+    assert [place for place in (*local_places, str(repo), "../") if place in output] == [], output
 
 
 @pytest.mark.parametrize(

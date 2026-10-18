@@ -240,12 +240,23 @@ def _refuse_foreign_location(repository: str, package: str, directory: str) -> N
 
 
 def _place(found: str | None, repository: str) -> str:
-    """Where Python found a root package, named repository-relative; a place outside is never spelled out (rule 4)."""
+    """Where Python found a root package: inside, repository-relative; outside, from the sys.path entry it lies under,
+    so the place is named without an absolute local path (rule 4)."""
     if found is None:
         return "without a source file"
-    if not Path(found).is_relative_to(repository):
+    if Path(found).is_relative_to(repository):
+        return f"at {os.path.relpath(found, repository)}"
+    entry = _path_entry_holding(found)
+    if entry is None:
         return "outside the repository"
-    return f"at {os.path.relpath(found, repository)}"
+    return f"outside the repository at {os.path.relpath(found, entry.parent)}"
+
+
+def _path_entry_holding(found: str) -> Path | None:
+    """The deepest sys.path entry a file lies under, which is the one its package was found in."""
+    entries = [Path(os.path.realpath(entry)) for entry in sys.path if entry]
+    holding = [entry for entry in entries if Path(found).is_relative_to(entry)]
+    return max(holding, key=lambda entry: len(entry.parts), default=None)
 
 
 def _check(contract: Contract, graph: grimp.ImportGraph, config_name: str, repository: str) -> ContractsVerdict:

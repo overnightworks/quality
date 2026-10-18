@@ -63,11 +63,11 @@ Install it with
   (plugins would be imported), a type other than forbidden, layers, independence, protected and acyclic_siblings,
   invalid contract options, a config value of the wrong type (`... in pyproject.toml cannot be judged: ...`), a
   dotted root package, a root package with no or several such directories, one Python finds in another place (`root
-  package yaml is src/yaml/__init__.py, but Python finds it outside the repository`; a place inside is named
-  repository-relative), a symlink under a root package that leaves the repository, directly or through a link that
-  stays inside, and a symlink loop. A module grimp cannot parse is `hygiene: import-contract unparsable - ...`; a
-  warning grimp gives while building the graph is one `import-contract: note - ...` line. No message names an absolute
-  local path.
+  package yaml is src/yaml/__init__.py, but Python finds it outside the repository at site-packages/yaml/__init__.py`, a
+  place outside named from the `sys.path` entry it lies under; a place inside is named repository-relative), a symlink
+  under a root package that leaves the repository, directly or through a link that stays inside, and a symlink loop. A
+  module grimp cannot parse is `hygiene: import-contract unparsable - ...`; a warning grimp gives while building the
+  graph is one `import-contract: note - ...` line. No message names an absolute local path.
 - The baseline only falls: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the
   base commit's, so growing a function and rewriting the baseline stays red. Each loosening is one line, named with the
   baseline's own metric, path and symbol (a file entry has no symbol):
