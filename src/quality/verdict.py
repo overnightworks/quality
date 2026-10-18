@@ -1,12 +1,10 @@
 import json
 import re
-import urllib.error
-import urllib.request
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from quality import engines
+from quality import engines, sonar
 from quality.config import CONFIG_PATH, ConfigError, GateSettings, LegacyMode, load_gate_settings, read_gate_settings
 from quality.hygiene import CannotJudge, read_baseline
 from quality.ratchet import BASELINE_PATH, REWRITE_HINT, Baseline, SizeError, load_baseline, raised_entries
@@ -15,6 +13,7 @@ JOBS_URL = "https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs?filte
 MAX_PAGES = 10
 NEXT_LINK = re.compile(r'<([^>]+)>;\s*rel="next"')
 SUCCESS = "success"
+GITHUB = "GitHub"
 
 PageFetcher = Callable[[str], tuple[str, str | None]]
 
@@ -115,14 +114,12 @@ def read_jobs(repo: str, run_id: str, fetch: PageFetcher) -> list[Job]:
 
 def github_fetcher(token: str) -> PageFetcher:
     def fetch(url: str) -> tuple[str, str | None]:
-        request = urllib.request.Request(
-            url, headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
-        )
+        headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
         try:
-            with urllib.request.urlopen(request, timeout=30) as response:
-                return response.read().decode("utf-8"), response.headers.get("Link")
-        except (urllib.error.URLError, TimeoutError) as error:
-            raise CannotJudge(f"cannot read {url}: {error} (does the caller grant actions: read?)") from error
+            body, answer_headers = sonar.fetch(url, headers, GITHUB)
+        except CannotJudge as error:
+            raise CannotJudge(f"{error} (does the caller grant actions: read?)") from error
+        return body.decode("utf-8"), answer_headers.get("Link")
 
     return fetch
 
