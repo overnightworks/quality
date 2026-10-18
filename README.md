@@ -10,6 +10,7 @@
     quality sonar preflight [PATH]
     quality sonar findings
     quality verdict [PATH]
+    quality scoreboard URL... [--private URL...]
     quality emergency-merge OWNER/REPO PR
 
 Where the fleet is going and why: [docs/roadmap.md](docs/roadmap.md) (target state, waves, per repository) and [docs/rulings.md](docs/rulings.md) (the operator's rulings, verbatim and dated).
@@ -133,6 +134,30 @@ gitleaks' staged mode sees only added and changed lines, so a known false positi
 its line, and then needs its allowance, as in CI. A key only in the work tree or only in `HEAD` is clean. Exit `2` (never
 clean): an engine missing or at the wrong version, git older than 2.41, an unreadable allow list, an index with unmerged
 entries, a path that is not a repository, or a gitleaks run without a report.
+
+## `quality scoreboard`
+
+`quality scoreboard URL... [--private URL...]` prints one markdown table of the Python size of every repository it is
+given, under a heading with the date, the quality version and the languages measured (`Python only` for now). With
+`GITHUB_STEP_SUMMARY` set, the same text is appended there. The fleet list lives once, in
+`.github/workflows/scoreboard.yml`, which runs it every Monday at 05:17 UTC and on dispatch; the table stands in that
+run's summary. The run only reports: it writes to no repository and needs no secret.
+
+- A public `URL` is cloned with `git -c credential.helper= clone --depth 1 --no-tags`, `GIT_TERMINAL_PROMPT=0` and no
+  askpass, into a temporary directory that is removed on every exit, and its default branch tip is measured.
+- git runs anonymously: without system, global or `GIT_CONFIG_*` config and with an empty `HOME`, so no configured
+  header, helper or `~/.netrc` reaches the host. Only `http`, `https` and `file` URLs without credentials in them are
+  used; any other URL is `cannot judge`.
+- Lines are the physical lines of the tracked `*.py` files, the count the `size` rule's 800-line limit uses (blank and
+  comment lines included). Production versus test is the `size` rule's file-name rule, so `scripts/test_inventory.py`
+  counts as test. `test:prod` is test lines divided by production lines with two decimals, `—` without production
+  lines. The debt columns count files from 800 lines, functions from 60 lines and functions with a CCN above 15.
+- A file Python cannot parse still has its lines counted; the row's note says how many such files there are, never which.
+- A `--private` repository is never measured, because the table is published: it shows `not measured: private`. It is
+  checked once with an anonymous `git ls-remote`; if anyone can read it, the row is `cannot judge: declared private
+  but readable`.
+- A repository that cannot be cloned or measured shows `cannot judge: <reason>` (for example `cannot clone (git exited
+  128)`), with no local path; every other row still shows, and the exit is `2`. Otherwise the exit is `0`.
 
 ## `quality engines`
 

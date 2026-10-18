@@ -5,6 +5,3 @@
 
 [file_lines]
 "tests/test_engines.py" = 994
-
-[function_lines."src/quality/cli.py"]
-"main" = 82
