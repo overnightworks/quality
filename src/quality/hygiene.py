@@ -267,14 +267,14 @@ def _attempt[T](check: Callable[[], T]) -> T | CannotJudge:
         return refusal
 
 
-def _verdicts(rules: Sequence[str], outcome: Sequence[Finding] | CannotJudge) -> list[RuleVerdict]:
-    """One verdict per rule a check judges; a check that cannot judge leaves each of its rules unjudged."""
+def _verdict(rule: str, outcome: Sequence[Finding] | CannotJudge) -> RuleVerdict:
+    """The verdict of the rule a check judges; a check that cannot judge leaves its rule unjudged."""
     if isinstance(outcome, CannotJudge):
-        return [RuleVerdict(rule, refusal=outcome) for rule in rules]
-    foreign = sorted({finding.rule for finding in outcome} - set(rules))
+        return RuleVerdict(rule, refusal=outcome)
+    foreign = sorted({finding.rule for finding in outcome} - {rule})
     if foreign:
-        raise ValueError(f"a check judging {', '.join(rules)} returned findings under {', '.join(foreign)}")
-    return [RuleVerdict(rule, tuple(finding for finding in outcome if finding.rule == rule)) for rule in rules]
+        raise ValueError(f"a check judging {rule} returned findings under {', '.join(foreign)}")
+    return RuleVerdict(rule, tuple(outcome))
 
 
 def run_hygiene(root: Path, engine_dir: Path | None = None) -> HygieneResult:
@@ -282,16 +282,15 @@ def run_hygiene(root: Path, engine_dir: Path | None = None) -> HygieneResult:
     tracked = tracked_files(root)
     size = _attempt(lambda: check_size(root, tracked))
     verdicts = [
-        *_verdicts([ENV_FILE], check_env_files(tracked)),
-        *_verdicts([COMPOSE_PORT], _attempt(lambda: check_compose_ports(root, tracked))),
-        *_verdicts([ratchet.SIZE], size if isinstance(size, CannotJudge) else size.findings),
+        _verdict(ENV_FILE, check_env_files(tracked)),
+        _verdict(COMPOSE_PORT, _attempt(lambda: check_compose_ports(root, tracked))),
+        _verdict(ratchet.SIZE, size if isinstance(size, CannotJudge) else size.findings),
     ]
     size_report = None if isinstance(size, CannotJudge) else size.report
     if engine_dir is None:
         return HygieneResult(tuple(verdicts), size_report, [], {})
     secrets = _attempt(lambda: check_secrets(root, engine_dir))
-    verdicts += _verdicts([engines.LEAK_RULE], secrets if isinstance(secrets, CannotJudge) else secrets.findings)
-    for rule in WORKFLOW_RULE_IDS:
-        verdicts += _verdicts([rule], _attempt(partial(check_workflows, root, engine_dir, rule, tracked)))
+    verdicts.append(_verdict(engines.LEAK_RULE, secrets if isinstance(secrets, CannotJudge) else secrets.findings))
+    verdicts += [_verdict(rule, _attempt(partial(check_workflows, root, engine_dir, rule, tracked))) for rule in WORKFLOW_RULE_IDS]
     allowed, unused = ([], {}) if isinstance(secrets, CannotJudge) else (secrets.allowed, secrets.unused_allowances)
     return HygieneResult(tuple(verdicts), size_report, allowed, unused)

@@ -51,8 +51,8 @@ class Pin:
     sha256: str
 
 
-def read_pins(pin_file: Path = PIN_FILE) -> dict[str, Pin]:
-    with pin_file.open("rb") as handle:
+def read_pins() -> dict[str, Pin]:
+    with PIN_FILE.open("rb") as handle:
         return {name: Pin(**fields) for name, fields in tomllib.load(handle).items()}
 
 
@@ -63,7 +63,7 @@ def install(directory: Path, pins: dict[str, Pin]) -> dict[str, bool]:
     downloaded = {}
     for name, pin in pins.items():
         target = engine_path(directory, name)
-        downloaded[name] = not _is_installed(target, name, pin)
+        downloaded[name] = _version_problem(directory, name, pin) is not None
         if downloaded[name]:
             target.write_bytes(_unpack_binary(name, _download_verified(name, pin)))
             target.chmod(0o755)
@@ -72,21 +72,15 @@ def install(directory: Path, pins: dict[str, Pin]) -> dict[str, bool]:
 
 def verification_problems(directory: Path, pins: dict[str, Pin]) -> list[str]:
     """One line per pinned engine in `directory` that is missing or not at its pinned version."""
-    problems = []
-    for name, pin in pins.items():
-        try:
-            verify_version(engine_path(directory, name), name, pin.version)
-        except EngineError as error:
-            problems.append(str(error))
-    return problems
+    return [problem for name, pin in pins.items() if (problem := _version_problem(directory, name, pin))]
 
 
-def _is_installed(binary: Path, name: str, pin: Pin) -> bool:
+def _version_problem(directory: Path, name: str, pin: Pin) -> str | None:
     try:
-        verify_version(binary, name, pin.version)
-    except EngineError:
-        return False
-    return True
+        verify_version(engine_path(directory, name), name, pin.version)
+    except EngineError as error:
+        return str(error)
+    return None
 
 
 def engine_path(directory: Path, name: str) -> Path:
@@ -193,7 +187,7 @@ def run_gitleaks(
     scan = run(command, env=git_environment, timeout=SECRET_SCAN_TIMEOUT_SECONDS)
     if not report.is_file():
         raise EngineError(f"{GITLEAKS} exited {scan.returncode} without writing its report{stderr_tail(scan.stderr)}")
-    leaks = secret_findings(_read_report(report), scan.returncode, scan.stderr)
+    leaks = engine_findings(GITLEAKS_ENGINE, _read_report(report), scan.returncode, scan.stderr)
     return _split_by_allowance(leaks, allowances)
 
 
@@ -289,9 +283,7 @@ def git(arguments: list[str], failure: str, env: dict[str, str] | None = None) -
     return done.stdout
 
 
-def read_blob(
-    repository: Path, revision: str, path: str, where: str, env: dict[str, str] | None = None
-) -> str | None:
+def read_blob(repository: Path, revision: str, path: str, where: str, env: dict[str, str] | None = None) -> str | None:
     """The UTF-8 text of `path` at `revision`, None when the tree there lacks it; `where` names the revision."""
     in_repository = ["-C", str(repository.resolve())]
     if not git([*in_repository, "ls-tree", "--end-of-options", revision, "--", path], f"cannot read {where}", env).strip():
@@ -333,10 +325,6 @@ def run(
 def stderr_tail(stderr: str) -> str:
     tail = "\n".join(stderr.strip().splitlines()[-STDERR_TAIL_LINES:])
     return f": {tail}" if tail else ""
-
-
-def secret_findings(report_text: str, exit_code: int, stderr: str = "") -> list[Finding]:
-    return engine_findings(GITLEAKS_ENGINE, report_text, exit_code, stderr)
 
 
 def _read_leak(entry: object) -> tuple[str, int, str, str, str]:

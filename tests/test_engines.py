@@ -249,7 +249,7 @@ def test_an_engine_that_crashes_or_leaves_no_usable_report_is_exit_2(tmp_path, b
 )
 def test_report_becomes_findings(report, exit_code, expected):
     """#13 rule 3: each leak in a recorded report becomes a secret finding at file:line."""
-    findings = engines.secret_findings(recorded(report), exit_code)
+    findings = engines.engine_findings(engines.GITLEAKS_ENGINE, recorded(report), exit_code, "")
     assert [f"{f.rule} {f.location}" for f in findings] == expected
 
 
@@ -272,7 +272,7 @@ def test_unreadable_or_inconsistent_gitleaks_result_cannot_be_judged(report, exi
     """#13 rule 3: a garbled, mis-shaped or inconsistent result is an EngineError, never clean."""
     text = recorded(report) if report.endswith(".json") else report
     with pytest.raises(EngineError):
-        engines.secret_findings(text, exit_code)
+        engines.engine_findings(engines.GITLEAKS_ENGINE, text, exit_code, "")
 
 
 def scan(repo: Path, installed_engines: Path) -> int:

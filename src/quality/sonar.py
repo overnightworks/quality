@@ -4,7 +4,6 @@ import base64
 import http.client
 import json
 import re
-import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -337,12 +336,7 @@ def decode_property_text(line: str, position: int, stop_at: str = "") -> tuple[s
     return "".join(decoded), position
 
 
-def analyse(
-    environment: Mapping[str, str],
-    legacy_mode: LegacyMode,
-    transport: Transport = fetch_json,
-    sleep: Sleep = time.sleep,
-) -> SonarResult:
+def analyse(environment: Mapping[str, str], legacy_mode: LegacyMode, transport: Transport, sleep: Sleep) -> SonarResult:
     """Every check that can refuse runs before the token is sent anywhere."""
     analysis = read_analysis(environment)
     wait_for_own_task(analysis, transport, sleep)
@@ -512,6 +506,19 @@ def open_findings(analysis: Analysis, transport: Transport) -> OpenFindings:
         if not issues or len(listed) >= total:
             break
     return OpenFindings(total, tuple(listed))
+
+
+def analysed_pull_request_commit(analysis: Analysis, transport: Transport) -> str | None:
+    """The commit of the latest analysis SonarCloud holds for the analysis's pull request, None when it has none."""
+    url = api_url("project_pull_requests/list", project=analysis.project.key)
+    answer = answer_object(transport(url, analysis.authorization), None, url)
+    try:
+        for pull_request in answer["pullRequests"]:
+            if str(pull_request["key"]) == analysis.scope.value:
+                return pull_request["commit"]["sha"]
+    except (KeyError, TypeError) as error:
+        raise CannotJudge(f"SonarCloud answered {url.partition('?')[0]} with an unreadable body") from error
+    return None
 
 
 def answer_object(answer: object, key: str | None, url: str) -> dict:
