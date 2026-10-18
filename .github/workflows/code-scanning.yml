@@ -18,4 +18,4 @@ jobs:
       actions: read
     uses: $/.github/workflows/codeql.yml
     with:
-      languages: '["actions", "python"]'
+      languages: 'python'
