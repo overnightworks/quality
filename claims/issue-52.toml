@@ -1,8 +1,0 @@
-claim_id = "f5f7156a20b447d38b388665a24776fc"
-agent = "claude"
-role = "builder"
-base = "41de7ff91ea212170f36ebaad638928332905de4"
-branch = "claude/issue-52-one-repository-reader"
-scope = ["AGENTS.md", "README.md", "quality/baseline.toml", "src/quality/cli.py", "src/quality/config.py", "src/quality/hygiene.py", "src/quality/ratchet.py", "src/quality/repository.py", "src/quality/verdict.py", "tests/test_config.py", "tests/test_hygiene.py", "tests/test_ratchet.py", "tests/test_repository.py", "tests/test_verdict.py"]
-opened_commit = "24c13b79307c27718856ddd1b5be35a3b003e196"
-whole_reason = "One reader with one containment rule for config, hygiene and the verdict: split, two readers would decide containment differently, which is finding 61 itself."
