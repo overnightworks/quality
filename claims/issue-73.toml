@@ -1,8 +1,0 @@
-claim_id = "eb3255faf06b4fd8abf8e3805243d44b"
-agent = "claude"
-role = "builder"
-base = "c1c409f938aa8bbb6eafc930bfb772daab36cec8"
-branch = "claude/issue-73-door-anonymous-read"
-scope = ["README.md", "src/quality/emergency.py", "src/quality/sonar.py", "tests/test_emergency.py", "tests/test_sonar.py"]
-opened_commit = "95f2c09f6fdeece733eb33639a1b10bd231087d6"
-whole_reason = "The anonymous read, the private-project refusal and the closing line are the door's one run; the shared HTTP owner and its tests move together."
