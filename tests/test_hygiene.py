@@ -1,6 +1,5 @@
 import os
 import re
-import shlex
 import subprocess
 from pathlib import Path
 
@@ -414,7 +413,36 @@ def test_the_hint_for_a_path_git_refuses_quotes_it(tmp_path, monkeypatch, capsys
     monkeypatch.chdir(tmp_path)
     code = cli.main(["hygiene", "a b"])
     err = capsys.readouterr().err
-    assert (code, f"a b is not a readable git repository: git rev-parse exited 128 (`git -C {shlex.quote('a b')} status` says why)" in err) == (2, True), err
+    assert (code, "a b is not a readable git repository: git rev-parse exited 128 (`git -C 'a b' status` says why)" in err) == (2, True), err
+
+
+def test_a_working_directory_that_was_removed_is_cannot_judge_not_a_traceback(tmp_path, monkeypatch, capsys):
+    """#76 E8, rule 2: a relative PATH cannot be resolved without a working directory."""
+    gone = tmp_path / "gone"
+    gone.mkdir()
+    monkeypatch.chdir(gone)
+    gone.rmdir()
+    results = [(command, cli.main(command), capsys.readouterr().err) for command in (["hygiene", "."], ["baseline", "write", "."])]
+    assert [(code, ". is not a readable git repository: the working directory cannot be read ([Errno 2]" in err, "Traceback" in err) for _, code, err in results] == [(2, True, False)] * 2, results
+
+
+def test_a_machine_without_git_is_cannot_judge_not_a_traceback(tmp_path, monkeypatch, capsys):
+    """#76 rule 2: git missing from the PATH names that git did not run."""
+    repo = make_repo(tmp_path, {"src/a.py": "x = 1\n"})
+    nowhere = tmp_path / "empty-bin"
+    nowhere.mkdir()
+    monkeypatch.setenv("PATH", str(nowhere))
+    code = cli.main(["hygiene", str(repo)])
+    err = capsys.readouterr().err
+    assert (code, f"{repo} is not a readable git repository: git did not run ([Errno 2]" in err, "Traceback" in err) == (2, True, False), err
+
+
+def test_compose_files_are_read_and_parsed_one_at_a_time(tmp_path):
+    """#76 E6, rule 1, cell 4: the first file's YAML error is reported although a later file cannot be decoded."""
+    repo = make_repo(tmp_path, {"compose-a.yaml": "a: [\n", "compose-b.yaml": "x"})
+    (repo / "compose-b.yaml").write_bytes(b"\xff")
+    with pytest.raises(hygiene.CannotJudge, match="cannot read compose-a.yaml"):
+        hygiene.check_compose_ports(repo, ["compose-a.yaml", "compose-b.yaml"])
 
 
 def make_submodule_path(tmp_path: Path) -> tuple[Path, Path]:

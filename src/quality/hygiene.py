@@ -62,13 +62,19 @@ def _refusal(path: Path, because: str) -> CannotJudge:
     return CannotJudge(f"{path} is not a readable git repository: {because} (`git -C {shlex.quote(str(path))} status` says why)")
 
 
+def _refusal_without_git(path: Path, what: str, reason: object) -> CannotJudge:
+    return CannotJudge(f"{path} is not a readable git repository: {what} ({reason})")
+
+
 def _git_listing(path: Path, command: list[str]) -> subprocess.CompletedProcess:
     """git's answer for the repository at `path`; one that refuses, or does not run, is a repository git cannot read."""
     try:
         done = engines.run(["git", "-C", str(path.absolute()), *command], encoding=None)
+    except OSError as error:
+        raise _refusal_without_git(path, "the working directory cannot be read", repository.os_error_reason(error)) from error
     except engines.EngineError as error:
         reason = repository.os_error_reason(error.__cause__) if isinstance(error.__cause__, OSError) else error
-        raise CannotJudge(f"{path} is not a readable git repository: git did not run ({reason})") from error
+        raise _refusal_without_git(path, "git did not run", reason) from error
     if done.returncode != 0:
         # git's own words name the checkout it resolved, so only the exit code is printed and git is asked again.
         raise _refusal(path, f"git {command[0]} exited {done.returncode}")
@@ -110,8 +116,9 @@ def _is_env_file(name: str) -> bool:
 def check_compose_ports(root: Path, tracked: list[str]) -> list[Finding]:
     composes = [name for name in tracked if any(PurePosixPath(name).match(pattern) for pattern in COMPOSE_PATTERNS)]
     findings = []
-    for name, text in _read_existing(repository.read_text, root, _on_disk(root, composes)).items():
-        findings.extend(_compose_file_findings(name, text))
+    for name in composes:
+        if _judged(repository.is_on_disk, root, name) and (text := _judged(repository.read_text, root, name)) is not None:
+            findings.extend(_compose_file_findings(name, text))
     return findings
 
 

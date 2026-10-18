@@ -380,8 +380,8 @@ def test_the_size_baseline_only_falls_against_the_base(capsys, pull_request, bas
 
 @pytest.mark.parametrize(
     ("base", "head", "hints"),
-    [("[ccn", main_lines(82), 0), (main_lines(82), "[ccn", 1)],
-    ids=["cell 16 base malformed", "cell 16 head malformed"],
+    [("[ccn", main_lines(82), 0), (main_lines(82), "[ccn", 1), (b"\xff", main_lines(82), 0), (main_lines(82), b"\xff", 1)],
+    ids=["cell 16 base malformed", "cell 16 head malformed", "#76 cell 18 base not UTF-8", "#76 cell 18 head not UTF-8"],
 )
 def test_only_the_head_baseline_is_told_to_rewrite_itself(capsys, pull_request, base, head, hints):
     """#52 rule 7, cell 16: a pull request cannot rewrite its base, so only a malformed head baseline gets the hint."""
