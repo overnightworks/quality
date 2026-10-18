@@ -21,7 +21,7 @@ Install it with
 
 (no tag exists yet, so the line names a commit). The gitleaks paths (`hygiene --engines`, `scan-staged`) need git 2.41 or newer; with an older git they exit `2`.
 
-`hygiene` reads git's view of the repository at `PATH` (default `.`) and applies three rules:
+`hygiene` reads git's view of the repository at `PATH` (default `.`) and applies four rules:
 
 - `env-file`: no tracked `.env`, `.env.*` or `*.env` file (names ending in `.example` are templates and pass).
 - `compose-port`: every published port in a tracked `compose*.y{a,}ml` or `docker-compose*.y{a,}ml` binds `127.0.0.1`.
@@ -50,6 +50,20 @@ Install it with
   or removed entry is not named, and without a previous file only the count prints. A previous file it cannot read is
   overwritten with `baseline: the previous quality/baseline.toml could not be read (...), so raises cannot be named`.
   The write exits `0` with raises too: the verdict is the gate.
+- `import-contract`: the repository's [import-linter](https://github.com/seddonym/import-linter) contracts must be
+  kept. The config is the tracked `.importlinter` or `setup.cfg` (`[importlinter]`) or `pyproject.toml`
+  (`[tool.importlinter]`); without one the rule prints `import-contract: report only (no import-linter config)` and
+  leaves the exit unchanged. import-linter 2.15 runs inside quality as a library, never its CLI, and writes nothing to
+  the checkout (no `.import_linter_cache`). A broken contract is one finding on the config file, naming the contract
+  and the chain as import-linter renders it (`shop.db -> shop.web (l.1)`), exit `1`. An `ignore_imports` entry no
+  import matches follows the contract's `unmatched_ignore_imports_alerting`: `error` (the default) is a finding (`...
+  ignores a -> b, which no import matches`), `warn` one `import-contract: note - ...` line, `none` nothing. Each root
+  package is the one tracked `<dir>/<name>/__init__.py` outside the tests. The rule cannot judge (exit `2`, before any
+  caller code runs or any file outside is read) two configs that each hold a section, a `contract_types` option
+  (plugins would be imported), a type other than forbidden, layers, independence, protected and acyclic_siblings,
+  invalid contract options, a dotted root package, a root package with no or several such directories, one Python
+  finds outside the repository (a name the interpreter already imported, such as `yaml`), and a symlink under a root
+  package that leaves the repository. A module grimp cannot parse is `hygiene: import-contract unparsable - ...`.
 - The baseline only falls: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the
   base commit's, so growing a function and rewriting the baseline stays red. Each loosening is one line, named with the
   baseline's own metric, path and symbol (a file entry has no symbol):
@@ -107,7 +121,7 @@ nothing is printed too, so a stale entry can be deleted: `secret: unused allowan
 Every rule is judged, even when another cannot be, and gives one verdict: clean, findings, unparsable, or cannot judge.
 Each finding names the rule, the file, a reason and a fix; a file name that is not valid UTF-8 prints
 backslash-escaped. A rule that cannot judge prints its verdict and reason under its rule id (`hygiene: secret cannot
-judge - ...`). A clean run names its rules in run order (`hygiene: clean (env-file, compose-port, size); skipped without
+judge - ...`). A clean run names its rules in run order (`hygiene: clean (env-file, compose-port, size, import-contract); skipped without
 --engines: ...`); any other run ends with the findings and the verdicts counted (`hygiene: 1 finding(s); verdicts: 1
 clean, 1 findings, 1 unparsable`). The exit is the worst verdict's: `2` if any rule is unparsable or cannot judge
 (never clean), otherwise `1` if any rule has findings, otherwise `0`. A path that is not a readable git repository is
