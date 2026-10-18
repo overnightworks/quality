@@ -1,8 +1,0 @@
-claim_id = "c30bc28e66bb48e388de570ffee25a62"
-agent = "claude"
-role = "builder"
-base = "c1c409f938aa8bbb6eafc930bfb772daab36cec8"
-branch = "claude/issue-71-v0-2-1"
-scope = [".github/workflows/codeql.yml", ".github/workflows/gate.yml", "README.md", "src/quality/__init__.py", "tests/test_codeql_workflow.py"]
-opened_commit = "8b4069773111d57e16e29a4128be32930d240fbb"
-whole_reason = "The release branch, its one pull request and the tag are one irreversible release; the caller proof and the fleet notice are what make it usable."
