@@ -275,3 +275,42 @@ def test_a_quality_directory_without_search_permission_is_exit_2_in_every_comman
     code, output = run_command(command, repo, scratch, monkeypatch, capsys)
     assert (code, refusal in output, "Traceback" in output) == (2, True, False), output
     assert not any(path in output for path in checkout_paths(repo)), output
+
+
+def assume_a_foreign_owner(repo: Path, monkeypatch) -> None:
+    monkeypatch.setenv("GIT_TEST_ASSUME_DIFFERENT_OWNER", "1")
+
+
+def point_git_dir_at_a_file(repo: Path, monkeypatch) -> None:
+    monkeypatch.setenv("GIT_DIR", str(repo / "README.md"))
+
+
+@pytest.mark.parametrize(
+    "git_refusal",
+    [assume_a_foreign_owner, point_git_dir_at_a_file],
+    ids=["dubious ownership", "invalid gitfile"],
+)
+@pytest.mark.parametrize(
+    ("argv", "prefix"),
+    [
+        (["hygiene", "."], "hygiene: cannot judge - "),
+        (["baseline", "write", "."], "baseline: not written - "),
+        (["sonar", "preflight", "."], "sonar: cannot judge - "),
+    ],
+    ids=["hygiene", "baseline write", "sonar preflight"],
+)
+def test_a_git_refusal_names_the_path_as_given_and_never_the_checkout(
+    git_repo, monkeypatch, capsys, git_refusal, argv, prefix
+):
+    """#52 rule 5: when git refuses to list the files, every command that asks it says so with the PATH as given;
+    git's own words, which carry the resolved checkout path, are not printed."""
+    repo, _ = git_repo
+    monkeypatch.setenv("SONAR_TOKEN", "a-token")
+    monkeypatch.setenv("GITHUB_REPOSITORY", "overnightworks/quality")
+    monkeypatch.chdir(repo)
+    git_refusal(repo, monkeypatch)
+    code = cli.main(argv)
+    captured = capsys.readouterr()
+    output = captured.out + captured.err
+    assert (code, f"{prefix}. is not a readable git repository" in output, "Traceback" in output) == (2, True, False), output
+    assert not any(path in output for path in checkout_paths(repo)), output

@@ -63,8 +63,11 @@ def tracked_files(root: Path) -> list[str]:
     except OSError as error:
         raise CannotJudge(f"{root} is not a readable git repository: git did not run ([Errno {error.errno}] {error.strerror})") from error
     if listing.returncode != 0:
-        reason = listing.stderr.decode(errors="replace").strip() or f"git exited {listing.returncode}"
-        raise CannotJudge(f"{root} is not a readable git repository: {reason}")
+        # git's own words name the checkout it resolved, so only the exit code is printed and git is asked again.
+        raise CannotJudge(
+            f"{root} is not a readable git repository: git ls-files exited {listing.returncode}"
+            f" (`git -C {root} status` says why)"
+        )
     return [os.fsdecode(name) for name in listing.stdout.split(b"\0") if name]
 
 
