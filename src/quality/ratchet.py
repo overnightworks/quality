@@ -191,15 +191,33 @@ def debt(measurements: Measurements) -> Baseline:
     return {key: measured.value for key, measured in measurements.items() if key.metric.is_debt(measured.value)}
 
 
+@dataclass(frozen=True)
+class AreaSummary:
+    """One area's physical lines and, per metric, how many files or functions are debt."""
+
+    lines: int
+    debt: dict[Metric, int]
+
+
+def summarise(tree: TreeMeasurement) -> dict[Area, AreaSummary]:
+    lines: Counter[Area] = Counter()
+    debts: Counter[tuple[Area, Metric]] = Counter()
+    for key, measured in tree.measurements.items():
+        area = area_of(key.path)
+        if key.metric is Metric.FILE_LINES:
+            lines[area] += measured.value
+        if key.metric.is_debt(measured.value):
+            debts[area, key.metric] += 1
+    return {area: AreaSummary(lines[area], {metric: debts[area, metric] for metric in Metric}) for area in Area}
+
+
 def report_counts(tree: TreeMeasurement) -> str:
-    counts = {(area, metric): 0 for area in Area for metric in Metric}
-    for key in debt(tree.measurements):
-        counts[area_of(key.path), key.metric] += 1
+    summaries = summarise(tree)
     areas = "; ".join(
-        f"{area.value}: {counts[area, Metric.FILE_LINES]} file(s) >= {FILE_LINES_FROM} lines, "
-        f"{counts[area, Metric.FUNCTION_LINES]} function(s) >= {FUNCTION_LINES_FROM} lines, "
-        f"{counts[area, Metric.CCN]} function(s) CCN > {CCN_ABOVE}"
-        for area in Area
+        f"{area.value}: {summary.debt[Metric.FILE_LINES]} file(s) >= {FILE_LINES_FROM} lines, "
+        f"{summary.debt[Metric.FUNCTION_LINES]} function(s) >= {FUNCTION_LINES_FROM} lines, "
+        f"{summary.debt[Metric.CCN]} function(s) CCN > {CCN_ABOVE}"
+        for area, summary in summaries.items()
     )
     return f"{SIZE}: report only (no {BASELINE_PATH}) - {areas}{_unparsable_note(tree.unparsable)}"
 

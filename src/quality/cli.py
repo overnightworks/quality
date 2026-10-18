@@ -8,7 +8,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from quality import __version__, engines, ratchet, repository, staged
+from quality import __version__, engines, ratchet, repository, scoreboard, staged
 from quality.config import Allowance, ConfigError, read_gate_settings
 from quality.emergency import Ask, GhRunner, run_emergency_merge, run_gh
 from quality.hygiene import (
@@ -54,6 +54,38 @@ def main(
     ask: Ask = input,
     is_terminal: Callable[[], bool] = lambda: sys.stdin.isatty(),
 ) -> int:
+    arguments = build_parser().parse_args(argv)
+
+    if arguments.command == "emergency-merge":
+        return run_emergency_merge(
+            arguments.repository,
+            arguments.pull_request,
+            gh=gh,
+            transport=transport,
+            ask=ask,
+            is_terminal=is_terminal(),
+            now=lambda: datetime.now(UTC),
+            environment=os.environ,
+        )
+    if arguments.command == "verdict":
+        return run_verdict(arguments.path, fetcher_for)
+    if arguments.command == "scoreboard":
+        return run_scoreboard(arguments.public, arguments.private)
+    if arguments.command == "baseline":
+        return run_baseline_write(arguments.path)
+    if arguments.command == "scan-staged":
+        return run_scan_staged(arguments.path, arguments.engines, read_pins)
+    if arguments.command == "sonar":
+        if arguments.sonar_command == "preflight":
+            return run_sonar_preflight(arguments.path)
+        return run_sonar_findings(transport, sleep)
+    if arguments.command == "engines":
+        run_engines = run_engines_install if arguments.engines_command == "install" else run_engines_verify
+        return run_engines(arguments.directory, read_pins)
+    return run_hygiene_check(arguments.path, arguments.engines)
+
+
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="quality")
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -99,33 +131,11 @@ def main(
     )
     emergency.add_argument("repository", help="<owner>/<repo>")
     emergency.add_argument("pull_request", type=int)
-    arguments = parser.parse_args(argv)
-
-    if arguments.command == "emergency-merge":
-        return run_emergency_merge(
-            arguments.repository,
-            arguments.pull_request,
-            gh=gh,
-            transport=transport,
-            ask=ask,
-            is_terminal=is_terminal(),
-            now=lambda: datetime.now(UTC),
-            environment=os.environ,
-        )
-    if arguments.command == "verdict":
-        return run_verdict(arguments.path, fetcher_for)
-    if arguments.command == "baseline":
-        return run_baseline_write(arguments.path)
-    if arguments.command == "scan-staged":
-        return run_scan_staged(arguments.path, arguments.engines, read_pins)
-    if arguments.command == "sonar":
-        if arguments.sonar_command == "preflight":
-            return run_sonar_preflight(arguments.path)
-        return run_sonar_findings(transport, sleep)
-    if arguments.command == "engines":
-        run_engines = run_engines_install if arguments.engines_command == "install" else run_engines_verify
-        return run_engines(arguments.directory, read_pins)
-    return run_hygiene_check(arguments.path, arguments.engines)
+    fleet = commands.add_parser("scoreboard", help="measure the Python size of public git repositories into one markdown table")
+    fleet.add_argument("public", nargs="+", metavar="URL", help="a public repository to clone and measure")
+    fleet.add_argument("--private", nargs="+", action="extend", default=[], metavar="URL",
+                       help="a repository declared private: never measured, only checked to be unreadable anonymously")
+    return parser
 
 
 def run_hygiene_check(path: Path, engine_dir: Path | None) -> int:
@@ -273,11 +283,24 @@ def run_verdict(path: Path, fetcher_for: Callable[[str], PageFetcher]) -> int:
         report = "verdict: green" if result.green else "\n".join((*result.problems, "verdict: red"))
         code = EXIT_CLEAN if result.green else EXIT_FINDINGS
     print(report, file=sys.stderr if code == EXIT_CANNOT_JUDGE else sys.stdout)
+    append_step_summary(report)
+    return code
+
+
+def run_scoreboard(public: list[str], private: list[str]) -> int:
+    rows = scoreboard.measure_fleet(public, private, os.environ)
+    report = scoreboard.render(rows, datetime.now(UTC).date())
+    print(report)
+    append_step_summary(report)
+    return EXIT_CANNOT_JUDGE if scoreboard.cannot_judge(rows) else EXIT_CLEAN
+
+
+def append_step_summary(report: str) -> None:
+    """In a GitHub Actions step, the run summary gets the same text as the log."""
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
         with open(summary, "a", encoding="utf-8") as handle:
             handle.write(report + "\n")
-    return code
 
 
 if __name__ == "__main__":
