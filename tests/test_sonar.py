@@ -58,7 +58,7 @@ class FakeSonar:
     answers: dict[str, list[object]]
     requests: list[tuple[str, str]] = field(default_factory=list)
 
-    def __call__(self, url: str, authorization: str) -> object:
+    def __call__(self, url: str, authorization: str | None) -> object:
         self.requests.append((url, authorization))
         queue = self.answers[self.endpoint_of(url)]
         answer = queue.pop(0) if len(queue) > 1 else queue[0]
@@ -311,7 +311,7 @@ def test_a_task_id_with_an_ampersand_stays_one_query_value(monkeypatch, capsys):
     ids=["empty token", "unset token", "bad repository", "no pull request number"],
 )
 def test_an_unusable_environment_is_refused_before_any_request(monkeypatch, capsys, environment):
-    """#22 kept row: a missing token, bad repository or missing pull request number is exit 2 before any request"""
+    """#22 kept row, #73 rule 1: a missing or empty token (the gate never goes anonymous), bad repository or missing pull request number is exit 2 before any request"""
     fake = sonar_answering()
     code, *_ = run_cli(monkeypatch, capsys, fake, environment)
     assert (code, fake.requests) == (2, [])
@@ -562,6 +562,21 @@ def test_the_real_transport_returns_json(loopback):
     assert sonar.fetch_json(url, "Basic x") == {"a": 1}
 
 
+def test_the_real_transport_sends_no_authorization_without_a_credential(loopback):
+    """#73 rule 1: an anonymous request carries no Authorization header at all, not even an empty Basic one"""
+    responder, _, url = loopback
+    received = []
+
+    def answer(handler):
+        received.append(handler.headers.get("Authorization"))
+        reply(200, b"{}")(handler)
+
+    responder.append(answer)
+    sonar.fetch_json(url, None)
+    sonar.fetch_json(url, "Basic x")
+    assert received == [None, "Basic x"]
+
+
 @pytest.mark.parametrize(
     ("responder", "message"),
     [
@@ -574,7 +589,7 @@ def test_the_real_transport_returns_json(loopback):
     ids=["non-JSON", "redirect refused", "http error", "non-UTF-8 body", "truncated body"],
 )
 def test_the_real_transport_refuses_what_it_cannot_trust(loopback, responder, message):
-    """#22: the real transport maps non-JSON, redirect, HTTP error, non-UTF-8 and truncated bodies to cannot judge"""
+    """#22, #73 rule 3: the real transport maps non-JSON, redirect (a credentialed request is not forwarded), HTTP error, non-UTF-8 and truncated bodies to cannot judge"""
     set_responder, _, url = loopback
     set_responder.append(responder)
     with pytest.raises(CannotJudge, match=message):

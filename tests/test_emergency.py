@@ -8,6 +8,7 @@ from quality.config import CONFIG_PATH
 from quality.emergency import GhFailed
 from quality.hygiene import CannotJudge
 from quality.ratchet import BASELINE_PATH
+from quality.sonar import SonarHttpError, basic_authorization
 
 REPO = "acme/widgets"
 SHA = "a" * 40
@@ -128,6 +129,26 @@ def sonar(new=0, legacy=4, main_analysed=True, analysed=SHA, unreachable=False):
     return transport
 
 
+def recording(transport):
+    sent = []
+
+    def record(url, authorization):
+        sent.append(authorization)
+        return transport(url, authorization)
+
+    record.sent = sent
+    return record
+
+
+def refusing_anonymous_read(status):
+    def transport(url, authorization):
+        if authorization is None:
+            raise SonarHttpError(status, url)
+        return sonar()(url, authorization)
+
+    return transport
+
+
 def drive(gh, transport=None, typed="ja", terminal=True, repo=REPO):
     answers = []
 
@@ -148,13 +169,64 @@ def changed_nothing(gh):
     assert gh.merge_calls == []
 
 
+@pytest.mark.parametrize("unset", [True, False], ids=["unset", "empty"])
+def test_an_empty_token_reads_sonar_anonymously(unset, monkeypatch):
+    """#73 rule 1: no token means the transport is asked for no Authorization at all."""
+    if unset:
+        monkeypatch.delenv("SONAR_TOKEN", raising=False)
+    else:
+        monkeypatch.setenv("SONAR_TOKEN", "")
+    transport = recording(sonar())
+    assert drive(FakeGh(), transport)[0] == 0
+    assert transport.sent
+    assert set(transport.sent) == {None}
+
+
+def test_a_set_token_still_sends_basic_authorization(monkeypatch, capsys):
+    """#73 rule 5: a set token is sent as Basic auth and never printed."""
+    monkeypatch.setenv("SONAR_TOKEN", "s3cret-token")
+    transport = recording(sonar())
+    assert drive(FakeGh(), transport)[0] == 0
+    assert set(transport.sent) == {basic_authorization("s3cret-token")}
+    output = capsys.readouterr().out
+    assert "s3cret-token" not in output
+    assert basic_authorization("s3cret-token").split()[1] not in output
+
+
+@pytest.mark.parametrize("status", [401, 403, 404])
+def test_a_refused_anonymous_read_is_cannot_judge_naming_the_token(status, monkeypatch, capsys):
+    """#73 rule 2: an anonymous refusal names the missing SONAR_TOKEN and changes nothing."""
+    monkeypatch.setenv("SONAR_TOKEN", "")
+    gh = FakeGh()
+    assert drive(gh, refusing_anonymous_read(status))[0] == 2
+    out = capsys.readouterr().out
+    assert f"did not resolve acme_widgets in pullRequest=7 anonymously (HTTP {status}); a private project needs SONAR_TOKEN" in out
+    changed_nothing(gh)
+
+
+def test_the_token_never_appears_when_sonar_refuses_it(monkeypatch, capsys):
+    """#73 rule 2, rule 3: a rejected token is said so, and a refused credentialed read does not echo the token or its base64 form."""
+    monkeypatch.setenv("SONAR_TOKEN", "s3cret-token")
+
+    def rejecting(url, authorization):
+        raise SonarHttpError(401, url)
+
+    gh = FakeGh()
+    assert drive(gh, rejecting)[0] == 2
+    output = capsys.readouterr().out
+    assert "rejected the token" in output
+    assert "s3cret-token" not in output
+    assert basic_authorization("s3cret-token").split()[1] not in output
+    changed_nothing(gh)
+
+
 def test_gate_goes_off_then_merge_then_on_then_log(capsys):
-    """#37 rule 4: off, merge, on, in this order."""
+    """#37 rule 4, #73 rule 4: off, merge, on, in this order, and the closing line names the release that works."""
     gh = FakeGh()
     assert drive(gh)[0] == 0
     assert gh.sequence == ["gate false", "merge", "gate true", "comment"]
     assert gh.merge_calls == [("pr", "merge", "7", "--repo", REPO, "--merge", "--match-head-commit", SHA)]
-    assert "aco release <n> --merged 7" in capsys.readouterr().out
+    assert 'aco release <n> --abandoned "landed as PR #7 by emergency-merge"' in capsys.readouterr().out
 
 
 def test_logs_who_and_the_legacy_count_on_the_pull_request():
@@ -332,7 +404,7 @@ def test_exit_2_loud_line_and_log_when_the_gate_cannot_be_restored(restore_failu
 @pytest.mark.parametrize(
     ("gh_kwargs", "read_back_fails", "expected"),
     [
-        ({"merge_lands": True}, False, "aco release <n> --merged 7"),
+        ({"merge_lands": True}, False, 'aco release <n> --abandoned "landed as PR #7 by emergency-merge"'),
         ({"fail_on": ["merge"]}, True, ") - check #7 on GitHub"),
         ({"fail_on": ["merge"]}, False, "not merged"),
     ],
