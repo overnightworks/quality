@@ -1,7 +1,0 @@
-claim_id = "309c7fe4b54949299dfad99d46724912"
-agent = "claude"
-role = "builder"
-base = "e3cc022a0ff1ef16ac971008379546cb116caadf"
-branch = "docs/roadmap-and-codeql-caller"
-scope = ["README.md", "docs/roadmap.md"]
-opened_commit = "07d3dde42586646c3e240b67842e7e6cf6e339bc"
