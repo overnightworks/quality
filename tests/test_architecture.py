@@ -144,18 +144,18 @@ def test_the_import_contract_rule_judges_the_contracts(build_repo, capsys, files
     [(yaml, ""), (quality, "src/")],
     ids=["cell 20 a root package quality already imported", "cell 20 quality from a second checkout"],
 )
-def test_a_root_package_python_finds_elsewhere_names_both_places(build_repo, capsys, package, directory):
-    """#61 rules 4 and 6, cell 20: the collision is named with both places repository-relative, and no graph is
-    built from the wrong package."""
+def test_a_root_package_python_finds_elsewhere_is_named_without_a_local_path(build_repo, capsys, package, directory):
+    """#61 rules 4 and 6, cell 20: the collision names the tracked place repository-relative and the other place only
+    as outside the repository, never by a local path, and no graph is built from the wrong package."""
     name = package.__name__
     repo = build_repo({f"{directory}{name}/__init__.py": "",
                        ".importlinter": ini({"type": "independence", "modules": [f"{name}.a"]}, roots=(name,))})
-    found = os.path.relpath(os.path.realpath(package.__file__), os.path.realpath(repo))
+    found_at = Path(os.path.realpath(package.__file__))
     code, output = run(capsys, repo)
     assert code == 2, output
-    assert (f"{REFUSED}root package {name} is {directory}{name}/__init__.py, but Python finds it at {found};"
-            " judging it would read the wrong package") in output
-    assert (found.startswith("../"), str(repo) in output) == (True, False)
+    assert (f"{REFUSED}root package {name} is {directory}{name}/__init__.py, but Python finds it outside the"
+            " repository; judging it would read the wrong package") in output
+    assert [place for place in (str(found_at.parent.parent), str(repo), "../") if place in output] == [], output
 
 
 @pytest.mark.parametrize(

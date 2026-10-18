@@ -235,9 +235,17 @@ def _refuse_foreign_location(repository: str, package: str, directory: str) -> N
     spec = importlib.util.find_spec(package)
     found = os.path.realpath(spec.origin) if spec is not None and spec.origin and os.path.isabs(spec.origin) else None
     if found != os.path.join(repository, expected):
-        place = f"at {os.path.relpath(found, repository)}" if found else "without a source file"
-        raise ContractError(f"root package {package} is {expected}, but Python finds it {place};"
+        raise ContractError(f"root package {package} is {expected}, but Python finds it {_place(found, repository)};"
                             " judging it would read the wrong package")
+
+
+def _place(found: str | None, repository: str) -> str:
+    """Where Python found a root package, named repository-relative; a place outside is never spelled out (rule 4)."""
+    if found is None:
+        return "without a source file"
+    if not Path(found).is_relative_to(repository):
+        return "outside the repository"
+    return f"at {os.path.relpath(found, repository)}"
 
 
 def _check(contract: Contract, graph: grimp.ImportGraph, config_name: str, repository: str) -> ContractsVerdict:
