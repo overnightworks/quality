@@ -174,7 +174,7 @@ def judge_sonar(
     """The legacy count, once the pull request's own scope at this head is proven free of findings."""
     project = project_of({"GITHUB_REPOSITORY": repository})
     pull_scope = Scope("pullRequest", str(pull_request))
-    analysis = Analysis(project, pull_scope, "", basic_authorization(sonar_token), default_branch)
+    analysis = Analysis(project, pull_scope, "", basic_authorization(sonar_token) if sonar_token else None, default_branch)
     require_resolved(analysis, transport)
     analysed = analysed_pull_request_commit(analysis, transport)
     if analysed != head_sha:
@@ -302,7 +302,7 @@ def report_attempt(attempt: Attempt, pull_request: int, report: Callable[[str], 
     if attempt.outcome is Outcome.NOT_MERGED:
         report(f"emergency-merge: not merged - {attempt.detail}; {GATE_PROPERTY} {gate_state}")
         return EXIT_NOT_RESTORED if attempt.restore_error else EXIT_REFUSED
-    report(f"merged. For the head: aco release <n> --merged {pull_request}")
+    report(f"merged. For the head: aco release <n> --abandoned \"landed as PR #{pull_request} by emergency-merge\"")
     return EXIT_NOT_RESTORED if attempt.restore_error else EXIT_MERGED
 
 

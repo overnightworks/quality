@@ -78,8 +78,10 @@ PROPERTY_WHITESPACE = " \t\f"
 PROPERTY_LINE_BREAK = re.compile(r"\r\n|\r|\n")
 PROPERTY_ESCAPES = {"t": "\t", "n": "\n", "r": "\r", "f": "\f"}
 
-Transport = Callable[[str, str], object]
+# The second argument is the Authorization header value; None sends the request anonymously.
+Transport = Callable[[str, str | None], object]
 Sleep = Callable[[float], None]
+ANONYMOUS_REFUSALS = frozenset({401, 403})
 
 
 class SonarHttpError(CannotJudge):
@@ -107,7 +109,7 @@ def fetch(
         raise unreadable(error) from error
 
 
-def fetch_json(url: str, authorization: str, timeout: float = REQUEST_TIMEOUT_SECONDS) -> object:
+def fetch_json(url: str, authorization: str | None, timeout: float = REQUEST_TIMEOUT_SECONDS) -> object:
     def unreadable(error: Exception) -> CannotJudge:
         where = url.partition("?")[0]
         if isinstance(error, urllib.error.HTTPError):
@@ -118,7 +120,8 @@ def fetch_json(url: str, authorization: str, timeout: float = REQUEST_TIMEOUT_SE
             return CannotJudge(f"SonarCloud could not be reached at {where}: {error}")
         return CannotJudge(f"SonarCloud answered {where} with a body that is not JSON")
 
-    body, _ = fetch(url, {"Authorization": authorization}, unreadable, timeout)
+    headers = {} if authorization is None else {"Authorization": authorization}
+    body, _ = fetch(url, headers, unreadable, timeout)
     try:
         return json.loads(body)
     except ValueError as error:  # JSONDecodeError and UnicodeDecodeError
@@ -174,7 +177,7 @@ class Analysis:
     project: Project
     scope: Scope
     task_id: str
-    authorization: str
+    authorization: str | None
     default_branch: str
 
     @property
@@ -449,6 +452,10 @@ def require_resolved(analysis: Analysis, transport: Transport) -> None:
     try:
         transport(url, analysis.authorization)
     except SonarHttpError as error:
+        if analysis.authorization is None and error.status in ANONYMOUS_REFUSALS:
+            raise CannotJudge(
+                f"SonarCloud refused an anonymous read of {analysis.project.key} (HTTP {error.status}); set {TOKEN_VARIABLE}"
+            ) from error
         raise CannotJudge(f"SonarCloud did not resolve {analysis.project.key} in {analysis.scope.label} (HTTP {error.status})") from error
 
 

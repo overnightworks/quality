@@ -311,7 +311,7 @@ def test_a_task_id_with_an_ampersand_stays_one_query_value(monkeypatch, capsys):
     ids=["empty token", "unset token", "bad repository", "no pull request number"],
 )
 def test_an_unusable_environment_is_refused_before_any_request(monkeypatch, capsys, environment):
-    """#22 kept row: a missing token, bad repository or missing pull request number is exit 2 before any request"""
+    """#22 kept row, #73 rule 1: a missing or empty token (the gate never goes anonymous), bad repository or missing pull request number is exit 2 before any request"""
     fake = sonar_answering()
     code, *_ = run_cli(monkeypatch, capsys, fake, environment)
     assert (code, fake.requests) == (2, [])
@@ -560,6 +560,29 @@ def test_the_real_transport_returns_json(loopback):
     responder, _, url = loopback
     responder.append(reply(200, b'{"a": 1}'))
     assert sonar.fetch_json(url, "Basic x") == {"a": 1}
+
+
+def test_the_real_transport_sends_no_authorization_without_a_credential(loopback):
+    """#73 rule 1: an anonymous request carries no Authorization header at all, not even an empty Basic one"""
+    responder, _, url = loopback
+    received = []
+
+    def answer(handler):
+        received.append(handler.headers.get("Authorization"))
+        reply(200, b"{}")(handler)
+
+    responder.append(answer)
+    sonar.fetch_json(url, None)
+    sonar.fetch_json(url, "Basic x")
+    assert received == [None, "Basic x"]
+
+
+def test_the_real_transport_still_refuses_a_redirect_for_a_credentialed_request(loopback):
+    """#73 rule 3: a credentialed request is not forwarded by a redirect"""
+    responder, _, url = loopback
+    responder.append(reply(302, b"", Location="http://127.0.0.1:1/stolen"))
+    with pytest.raises(CannotJudge, match="HTTP 302"):
+        sonar.fetch_json(url, "Basic x")
 
 
 @pytest.mark.parametrize(
