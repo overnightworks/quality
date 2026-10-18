@@ -192,3 +192,43 @@ spoken yes, every time:
 4. The operator sets the property back to `true`.
 
 Each switch is logged in the fixing pull request's body.
+
+## `codeql.yml`
+
+A reusable workflow that runs CodeQL for the languages a caller names, with `build-mode: none` and CodeQL's default
+query suite and threat model. It uploads under the category `/language:<language>`, the Default Setup's category, so
+alerts carry over when a repository switches.
+
+A caller (`.github/workflows/code-scanning.yml`, workflow `name: CodeQL`):
+
+```yaml
+name: CodeQL
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 4 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  codeql:
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+    uses: overnightworks/quality/.github/workflows/codeql.yml@<tag>
+    with:
+      languages: '["actions", "python"]'
+```
+
+- **`languages`:** the one input, required, a string holding a JSON list; `'python'` or `'[]'` fails the run.
+- **Permissions:** the caller grants `security-events: write`, `contents: read` and `actions: read`, and the workflow
+  asks for no more. A caller without `security-events: write` is refused at startup.
+- **Updates:** pin `<tag>` to a release; Dependabot's `github-actions` ecosystem bumps it.
+- **Switching a repository:** the Default Setup goes off first, in the order of
+  [agent-coordination#138](https://github.com/overnightworks/agent-coordination/issues/138).
