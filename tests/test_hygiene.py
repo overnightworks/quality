@@ -306,8 +306,9 @@ def test_a_finding_under_a_rule_its_check_does_not_judge_fails_loud(build_repo, 
     """#55 rule 2: a finding under a rule the check was not given is never dropped into a clean exit."""
     foreign = Finding("workflow-other", ".env", None, "an unlisted rule", "none")
     monkeypatch.setattr(hygiene, "check_env_files", lambda tracked: [foreign])
+    arguments = ["hygiene", str(build_repo({}))]
     with pytest.raises(ValueError, match="workflow-other"):
-        cli.main(["hygiene", str(build_repo({}))])
+        cli.main(arguments)
 
 
 def test_a_refusing_workflow_engine_stops_no_other_workflow_rule(build_repo, clean_engines, capsys):
