@@ -9,13 +9,16 @@ is published in a public run summary.
 
 import re
 import subprocess
+import tomllib
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlsplit
 
-from quality import __version__, engines, hygiene, ratchet
+from quality import __version__, engines, hygiene, ratchet, repository
 
+FLEET_PATH = "quality/fleet.toml"
+FLEET_EXAMPLE = 'public = ["https://github.com/o/open"]\nprivate = ["https://github.com/o/closed"]'
 LANGUAGES = "Python only"
 CLONE_TIMEOUT_SECONDS = 300
 LS_REMOTE_TIMEOUT_SECONDS = 60
@@ -65,9 +68,56 @@ class Unjudged:
 Row = Measured | Private | Unjudged
 
 
-def measure_fleet(public: list[str], private: list[str]) -> list[Row]:
-    """One row per URL, public ones first, each in the order given; one row that fails never stops the others."""
-    return [*(measure_public(url) for url in public), *(judge_private(url) for url in private)]
+@dataclass(frozen=True)
+class Fleet:
+    """The repositories to report: URLs in file order, each listed once."""
+
+    public: tuple[str, ...]
+    private: tuple[str, ...]
+
+
+class FleetError(Exception):
+    """The fleet file cannot be used; the message names it and shows the right shape."""
+
+
+def read_fleet(root: Path) -> Fleet:
+    try:
+        text = repository.read_text(root, FLEET_PATH)
+    except repository.RepositoryFileError as error:
+        raise FleetError(str(error)) from error
+    if text is None:
+        raise FleetError(f"{FLEET_PATH} is missing - create it with:\n{FLEET_EXAMPLE}")
+    return parse_fleet(text)
+
+
+def parse_fleet(text: str) -> Fleet:
+    try:
+        document = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as error:
+        raise FleetError(f"{FLEET_PATH} is not valid TOML ({error}) - write it like:\n{FLEET_EXAMPLE}") from error
+    unknown = sorted(set(document) - {"public", "private"})
+    if unknown:
+        raise FleetError(f"{FLEET_PATH} has unknown key(s) {unknown} - only public and private exist, like:\n{FLEET_EXAMPLE}")
+    fleet = Fleet(_url_list(document, "public"), _url_list(document, "private"))
+    urls = [*fleet.public, *fleet.private]
+    if not urls:
+        raise FleetError(f"{FLEET_PATH} lists no URL - list at least one, like:\n{FLEET_EXAMPLE}")
+    repeated = sorted({url for url in urls if urls.count(url) > 1})
+    if repeated:
+        raise FleetError(f"{FLEET_PATH} lists {repeated} more than once (in one list or both) - list each URL once, like:\n{FLEET_EXAMPLE}")
+    return fleet
+
+
+def _url_list(document: dict, key: str) -> tuple[str, ...]:
+    urls = document.get(key)
+    if not isinstance(urls, list) or not all(isinstance(url, str) for url in urls):
+        raise FleetError(f"{FLEET_PATH} needs {key} as a list of strings, like:\n{FLEET_EXAMPLE}")
+    return tuple(urls)
+
+
+def measure_fleet(fleet: Fleet) -> list[Row]:
+    """One row per URL, public ones first, each in file order; one row that fails never stops the others."""
+    return [*(measure_public(url) for url in fleet.public), *(judge_private(url) for url in fleet.private)]
 
 
 def anonymous_environment(scratch: Path) -> dict[str, str]:

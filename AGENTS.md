@@ -10,8 +10,8 @@ Door commands:
 - `quality baseline write [PATH]` (`ratchet.py`): writes the measured size debt to `quality/baseline.toml`,
   naming each entry it raises or adds.
 - `quality verdict [PATH]` (`verdict.py`): judges the mandatory jobs of the running workflow run and, on a pull request, holds the head's config and size baseline against the base commit's (a baseline only falls); the fail-closed `quality / verdict`.
-- `quality scoreboard URL... [--private URL...]` (`scoreboard.py`): the fleet's Python size in one markdown table,
-  from anonymous shallow clones; a private repository is never measured. The fleet list is `.github/workflows/scoreboard.yml`.
+- `quality scoreboard [PATH]` (`scoreboard.py`): the fleet's Python size in one markdown table, from anonymous shallow
+  clones; a private repository is never measured. The fleet list is `quality/fleet.toml` (`public` and `private`).
 - `quality scan-staged [PATH] --engines DIR` (`staged.py`): secret scan of the staged change.
 - `quality engines install|verify DIR` (`engines.py`): the pinned engines.
 - `quality sonar preflight [PATH]` and `quality sonar findings` (`sonar.py`): HTTP goes through an injected
