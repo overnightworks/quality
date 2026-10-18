@@ -437,12 +437,12 @@ def test_a_machine_without_git_is_cannot_judge_not_a_traceback(tmp_path, monkeyp
     assert (code, f"{repo} is not a readable git repository: git did not run ([Errno 2]" in err, "Traceback" in err) == (2, True, False), err
 
 
-def test_compose_files_are_read_and_parsed_one_at_a_time(tmp_path):
+def test_compose_files_are_read_and_parsed_one_at_a_time(tmp_path, capsys):
     """#76 E6, rule 1, cell 4: the first file's YAML error is reported although a later file cannot be decoded."""
     repo = make_repo(tmp_path, {"compose-a.yaml": "a: [\n", "compose-b.yaml": "x"})
     (repo / "compose-b.yaml").write_bytes(b"\xff")
-    with pytest.raises(hygiene.CannotJudge, match="cannot read compose-a.yaml"):
-        hygiene.check_compose_ports(repo, ["compose-a.yaml", "compose-b.yaml"])
+    code, output = run(capsys, repo)
+    assert (code, "compose-port cannot judge - cannot read compose-a.yaml" in output, "compose-b.yaml" in output) == (2, True, False), output
 
 
 def make_submodule_path(tmp_path: Path) -> tuple[Path, Path]:
