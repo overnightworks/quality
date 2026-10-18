@@ -1,20 +1,22 @@
 import os
 import re
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from enum import Enum
+from functools import partial
 from pathlib import Path, PurePosixPath
 
 import yaml
 
 from quality import engines, ratchet, repository
 from quality.config import Allowance, ConfigError, read_secret_allowances
-from quality.report import Finding
+from quality.report import Finding, printable
 
 ENV_FILE = "env-file"
 COMPOSE_PORT = "compose-port"
-FILE_RULE_IDS = (ENV_FILE, COMPOSE_PORT, ratchet.SIZE)
-ENGINE_RULE_IDS = (engines.LEAK_RULE, engines.WORKFLOW_LINT, engines.WORKFLOW_SECURITY)
+WORKFLOW_RULE_IDS = tuple(engines.WORKFLOW_ENGINES)
+ENGINE_RULE_IDS = (engines.LEAK_RULE, *WORKFLOW_RULE_IDS)
 WORKFLOW_DIRECTORY = PurePosixPath(".github/workflows")
 WORKFLOW_SUFFIXES = (".yml", ".yaml")
 
@@ -71,16 +73,12 @@ def tracked_files(root: Path) -> list[str]:
     return [os.fsdecode(name) for name in listing.stdout.split(b"\0") if name]
 
 
-def _printable(name: str) -> str:
-    return name.encode("utf-8", "backslashreplace").decode("utf-8")
-
-
 def check_env_files(tracked: list[str]) -> list[Finding]:
     return [
         Finding(
-            ENV_FILE, _printable(name), None,
+            ENV_FILE, name, None,
             "a tracked env file publishes configuration and often secrets.",
-            f"git rm --cached {_printable(name)} and add it to .gitignore.",
+            f"git rm --cached {printable(name)} and add it to .gitignore.",
         )
         for name in tracked
         if _is_env_file(PurePosixPath(name).name)
@@ -206,10 +204,10 @@ def check_secrets(root: Path, engine_dir: Path) -> engines.SecretScan:
         raise CannotJudge(str(error)) from error
 
 
-def check_workflows(root: Path, engine_dir: Path, tracked: list[str]) -> list[Finding]:
+def check_workflows(root: Path, engine_dir: Path, rule: str, tracked: list[str]) -> list[Finding]:
     workflows = [name for name in tracked if _is_workflow(PurePosixPath(name))]
     try:
-        return engines.scan_workflows(root, engine_dir, engines.read_pins(), workflows)
+        return engines.scan_workflows(root, engine_dir, engines.read_pins(), rule, workflows)
     except engines.EngineError as error:
         raise CannotJudge(str(error)) from error
 
@@ -218,28 +216,82 @@ def _is_workflow(path: PurePosixPath) -> bool:
     return path.parent == WORKFLOW_DIRECTORY and path.suffix in WORKFLOW_SUFFIXES
 
 
-def active_rules(engine_dir: Path | None) -> tuple[str, ...]:
-    return FILE_RULE_IDS if engine_dir is None else (*FILE_RULE_IDS, *ENGINE_RULE_IDS)
-
-
 def skipped_rules(engine_dir: Path | None) -> tuple[str, ...]:
-    return tuple(rule for rule in ENGINE_RULE_IDS if rule not in active_rules(engine_dir))
+    return ENGINE_RULE_IDS if engine_dir is None else ()
+
+
+class Outcome(Enum):
+    """A rule's verdict, mildest first: the worst verdict of a run decides its exit."""
+
+    CLEAN = "clean"
+    FINDINGS = "findings"
+    UNPARSABLE = Unparsable.label
+    CANNOT_JUDGE = CannotJudge.label
+
+
+@dataclass(frozen=True)
+class RuleVerdict:
+    rule: str
+    findings: tuple[Finding, ...] = ()
+    refusal: CannotJudge | None = None
+
+    @property
+    def outcome(self) -> Outcome:
+        if self.refusal is not None:
+            return Outcome(self.refusal.label)
+        return Outcome.FINDINGS if self.findings else Outcome.CLEAN
 
 
 @dataclass(frozen=True)
 class HygieneResult:
-    findings: list[Finding]
+    verdicts: tuple[RuleVerdict, ...]
     size_report: str | None
     allowed_secrets: list[Finding]
     unused_allowances: dict[Allowance, str]
 
+    @property
+    def findings(self) -> list[Finding]:
+        return [finding for verdict in self.verdicts for finding in verdict.findings]
+
+    @property
+    def worst(self) -> Outcome:
+        severity = list(Outcome)
+        return max((verdict.outcome for verdict in self.verdicts), key=severity.index, default=Outcome.CLEAN)
+
+
+def _attempt[T](check: Callable[[], T]) -> T | CannotJudge:
+    """The check's result, or the reason it cannot judge, so one rule's refusal never stops the others."""
+    try:
+        return check()
+    except CannotJudge as refusal:
+        return refusal
+
+
+def _verdicts(rules: Sequence[str], outcome: Sequence[Finding] | CannotJudge) -> list[RuleVerdict]:
+    """One verdict per rule a check judges; a check that cannot judge leaves each of its rules unjudged."""
+    if isinstance(outcome, CannotJudge):
+        return [RuleVerdict(rule, refusal=outcome) for rule in rules]
+    foreign = sorted({finding.rule for finding in outcome} - set(rules))
+    if foreign:
+        raise ValueError(f"a check judging {', '.join(rules)} returned findings under {', '.join(foreign)}")
+    return [RuleVerdict(rule, tuple(finding for finding in outcome if finding.rule == rule)) for rule in rules]
+
 
 def run_hygiene(root: Path, engine_dir: Path | None = None) -> HygieneResult:
+    """Judges every active rule, in run order; only a repository git cannot list stops the run."""
     tracked = tracked_files(root)
-    size = check_size(root, tracked)
-    findings = check_env_files(tracked) + check_compose_ports(root, tracked) + size.findings
+    size = _attempt(lambda: check_size(root, tracked))
+    verdicts = [
+        *_verdicts([ENV_FILE], check_env_files(tracked)),
+        *_verdicts([COMPOSE_PORT], _attempt(lambda: check_compose_ports(root, tracked))),
+        *_verdicts([ratchet.SIZE], size if isinstance(size, CannotJudge) else size.findings),
+    ]
+    size_report = None if isinstance(size, CannotJudge) else size.report
     if engine_dir is None:
-        return HygieneResult(findings, size.report, [], {})
-    secrets = check_secrets(root, engine_dir)
-    findings += secrets.findings + check_workflows(root, engine_dir, tracked)
-    return HygieneResult(findings, size.report, secrets.allowed, secrets.unused_allowances)
+        return HygieneResult(tuple(verdicts), size_report, [], {})
+    secrets = _attempt(lambda: check_secrets(root, engine_dir))
+    verdicts += _verdicts([engines.LEAK_RULE], secrets if isinstance(secrets, CannotJudge) else secrets.findings)
+    for rule in WORKFLOW_RULE_IDS:
+        verdicts += _verdicts([rule], _attempt(partial(check_workflows, root, engine_dir, rule, tracked)))
+    allowed, unused = ([], {}) if isinstance(secrets, CannotJudge) else (secrets.allowed, secrets.unused_allowances)
+    return HygieneResult(tuple(verdicts), size_report, allowed, unused)

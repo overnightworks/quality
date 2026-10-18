@@ -454,10 +454,10 @@ def test_a_template_directory_cannot_put_attributes_into_the_mirror(
 
 
 @pytest.mark.engine
-@pytest.mark.parametrize("command", ["hygiene", "scan-staged"])
+@pytest.mark.parametrize(("command", "refusal"), [("hygiene", "hygiene: secret"), ("scan-staged", "scan-staged:")])
 @pytest.mark.parametrize("git_version", ["2.40.1", "1.9.0"])
 def test_a_git_older_than_2_41_is_exit_2_naming_the_version(
-    installed_engines, build_repo, fake_git, capsys, git_version, command
+    installed_engines, build_repo, fake_git, capsys, git_version, command, refusal
 ):
     """#21 rule 2, #25 rule 4: below the floor the scan cannot hide attributes, so it is exit 2 with one line.
 
@@ -466,7 +466,7 @@ def test_a_git_older_than_2_41_is_exit_2_naming_the_version(
     fake_git(f'[ "$1" = "--version" ] && echo "git version {git_version}" && exit 0')
     assert cli.main([command, "--engines", str(installed_engines), str(build_repo({}))]) == 2
     assert capsys.readouterr().err.strip() == (
-        f"{command}: cannot judge - git {git_version} cannot hide .gitattributes from the gitleaks scan, "
+        f"{refusal} cannot judge - git {git_version} cannot hide .gitattributes from the gitleaks scan, "
         "it needs git 2.41"
     )
 
@@ -536,7 +536,7 @@ FINDING_EXIT = {"actionlint": 1, "zizmor": 12}
 
 
 def workflow_findings(engine: str, report_text: str, exit_code: int) -> list:
-    return engines.engine_findings(engines.WORKFLOW_ENGINES[engine], report_text, exit_code, "")
+    return engines.engine_findings(next(judge for judge in engines.WORKFLOW_ENGINES.values() if judge.name == engine), report_text, exit_code, "")
 
 
 @pytest.mark.parametrize(
@@ -619,7 +619,7 @@ def test_an_engine_that_is_a_symlink_inside_the_directory_is_still_judged_by_its
 
 def test_no_workflow_engine_runs_when_the_repository_has_no_workflow(tmp_path):
     """#15 rule 2: without a `.github/workflows/*.y{a,}ml` there is nothing to lint, so no engine is needed."""
-    assert engines.scan_workflows(tmp_path, tmp_path / "no-engines", engines.read_pins(), []) == []
+    assert engines.scan_workflows(tmp_path, tmp_path / "no-engines", engines.read_pins(), engines.WORKFLOW_LINT, []) == []
 
 
 def test_a_run_without_engines_names_the_skipped_scans(build_repo, capsys):
