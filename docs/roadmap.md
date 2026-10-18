@@ -8,7 +8,7 @@
 - 14 per-repo assessments;
 - the operator rulings in overnightworks/marketplace#80, including 15.10's "sichtbar besser und kleiner".
 
-**Status:** draft for the operator's ruling; D1 to D3 ruled, D7 and D8 at the head default, D4 to D6 open. It moved here from the body of overnightworks/marketplace#80 on 17.10.2026 (quality#43), which stays the fleet epic and links to this file. The operator's rulings it rests on are in [rulings.md](rulings.md).
+**Status:** draft for the operator's ruling; D1 to D3 ruled, D7 and D8 at the head default, D4 to D6 open. It moved here from the body of overnightworks/marketplace#80 on 17.10.2026 (quality#43), which was the fleet epic until it was closed into quality#2 on 18.10.2026. The operator's rulings it rests on are in [rulings.md](rulings.md).
 
 **Landed since the v3 draft** (the sentences below are copied from the draft and brought current only where a landing made them false):
 - quality v0.1.0 (bab8770) and v0.1.1 (75467b7) are tagged.
@@ -116,9 +116,9 @@ Some steps grow code on purpose (the Postgres test DB, security fixes, specs); t
 - **Q0:** each fix's own item.
 - **Q1a, Q1b and Q3's v0.3:** the quality epic in `overnightworks/quality`.
 - **Q2 and Q4:** each repo's quality epic.
-- **The wave as a whole:** #80.
+- **The wave as a whole:** quality#2 (Done-when 8). marketplace#80 was closed into it on 18.10.2026.
 
-The head dispatches and reports, and each wave's exit proof is linked from marketplace#80.
+The head dispatches and reports, and each wave's exit proof is linked from quality#2 and from this roadmap.
 
 **Rollback:**
 - A wave or area that runs past 2× its lane estimate stops. Its freeze lifts, its open slices return to the epic body, and its baseline stays as the floor.
@@ -150,7 +150,7 @@ The head dispatches and reports, and each wave's exit proof is linked from marke
 - Real bottlenecks: `/tmp/probe-stack.lock`, one heavy mutation job at a time, and the operator's ruling queue.
 
 ## F. Coordination: recorded once, executable by agents
-- **Fleet epic: marketplace#80.** Its body links here instead of repeating. This roadmap is `docs/roadmap.md` in `overnightworks/quality`; the parity protocol is planned as `docs/parity.md` and the area cycle as `docs/area-cycle.md` (until they exist, section B above holds the cycle).
+- **Fleet epic: quality#2** (marketplace#80 was closed into it on 18.10.2026). Its body links here instead of repeating. This roadmap is `docs/roadmap.md` in `overnightworks/quality`; the parity protocol is planned as `docs/parity.md` and the area cycle as `docs/area-cycle.md` (until they exist, section B above holds the cycle).
 - **One epic per active repo** ("Quality: <repo>"), opened only when that repo enters Q2 (no item without a caller).
   - Its body is the per-repo roadmap: area order with paths, spec file, parity proof, target contract, freeze window and done-when.
   - Each area becomes its own item only at dispatch, and is cut by the breakdown workflow first.

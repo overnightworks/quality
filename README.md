@@ -340,9 +340,16 @@ jobs:
       languages: '["actions", "python"]'
 ```
 
-- **`languages`:** the one input, required, a string holding a JSON list; `'python'` or `'[]'` fails the run.
+- **`languages`:** the one input, required, a string holding a JSON list; `'python'` or `'[]'` fails the run. List
+  every category the repository already analyses (agent-coordination also has `javascript-typescript`, which the
+  template would drop).
 - **Permissions:** the caller grants `security-events: write`, `contents: read` and `actions: read`, and the workflow
   asks for no more. A caller without `security-events: write` is refused at startup.
 - **Updates:** pin `<tag>` to a release; Dependabot's `github-actions` ecosystem bumps it.
+- **Caller path:** a reusable call records the `analysis_key` `<caller file>:analyze` (measured in quality#68), so keep
+  the existing caller file's path and the key carries over.
+- **Switch PR:** a caller that fails at startup adds no check to its PR (measured in quality#68: callers on
+  scratch PR #70 ended `startup_failure`/`failure` with no check-run), so the switch PR must show its
+  `codeql / Analyze (…)` checks.
 - **Switching a repository:** the Default Setup goes off first, in the order of
   [agent-coordination#138](https://github.com/overnightworks/agent-coordination/issues/138).
