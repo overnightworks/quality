@@ -250,7 +250,7 @@ def _place(found: str | None, repository: str) -> str:
 
 def _check(contract: Contract, graph: grimp.ImportGraph, config_name: str, repository: str) -> ContractsVerdict:
     """Checks one contract on its own copy of the graph, as import-linter does."""
-    with _judging(f"contract {contract.name}", repository):
+    with _judging(f"contract {contract.name} in {config_name}", repository):
         try:
             check = contract.check(copy.deepcopy(graph), verbose=False)
         except MissingImport as stale:

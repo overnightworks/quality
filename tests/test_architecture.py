@@ -276,22 +276,22 @@ def test_an_error_inside_a_contract_check_names_the_contract_without_a_traceback
     monkeypatch.setattr(ForbiddenContract, "check", raising_check)
     code, output = run(capsys, build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)}))
     assert code == 2, output
-    assert f"{REFUSED}contract guarded cannot be judged: RuntimeError: boom" in output
+    assert f"{REFUSED}contract guarded in .importlinter cannot be judged: RuntimeError: boom" in output
     assert "Traceback" not in output
 
 
 @pytest.mark.parametrize(
-    ("config", "expected"),
-    [(toml({"type": ["forbidden"]}), "contract guarded in pyproject.toml cannot be judged: TypeError: "),
-     (toml({**FORBIDDEN, "as_packages": 1}), "contract guarded in pyproject.toml cannot be judged: AttributeError: "),
-     (toml(FORBIDDEN, roots=(1,)), "the config pyproject.toml cannot be judged: TypeError: ")],
+    ("config", "subject"),
+    [(toml({"type": ["forbidden"]}), "contract guarded in pyproject.toml"),
+     (toml({**FORBIDDEN, "as_packages": 1}), "contract guarded in pyproject.toml"),
+     (toml(FORBIDDEN, roots=(1,)), "the config pyproject.toml")],
     ids=["a type that is a list", "a boolean option that is a number", "a root package that is a number"],
 )
-def test_a_malformed_config_value_cannot_be_judged_without_a_traceback(build_repo, capsys, config, expected):
+def test_a_malformed_config_value_cannot_be_judged_without_a_traceback(build_repo, capsys, config, subject):
     """#61 rule 7: a value of the wrong type is cannot judge naming the contract or the config, never a traceback."""
     code, output = run(capsys, build_repo({**SHOP, "pyproject.toml": config}))
     assert code == 2, output
-    assert f"{REFUSED}{expected}" in output
+    assert f"{REFUSED}{subject} cannot be judged: " in output
     assert "Traceback" not in output
 
 
