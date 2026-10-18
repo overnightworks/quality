@@ -282,6 +282,44 @@ def test_a_symlink_loop_under_a_root_package_cannot_be_judged(build_repo, capsys
     assert "OSError" not in output
 
 
+def test_a_file_link_into_a_loop_outside_the_repository_is_refused_as_leaving_it(build_repo, elsewhere, capsys):
+    """#61 rule 4, cell 18b: a link that leaves the repository is named as such, even where the place it reaches loops."""
+    repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
+    (elsewhere / "p").symlink_to("q")
+    (elsewhere / "q").symlink_to("p")
+    (repo / "src" / "shop" / "x.py").symlink_to(elsewhere / "p")
+    code, output = run(capsys, repo)
+    assert code == 2, output
+    assert f"{REFUSED}src/shop/x.py links outside the repository" in output
+    assert "../" not in output
+
+
+def test_a_dangling_file_link_under_a_root_package_is_cannot_judge_by_grimp(build_repo, capsys):
+    """#61 rule 4: a dangling link is no loop and stays inside; grimp's own error is reported, as before the loop check."""
+    repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
+    (repo / "src" / "shop" / "dangling.py").symlink_to("missing.py")
+    code, output = run(capsys, repo)
+    assert code == 2, output
+    assert f"{REFUSED}the config .importlinter cannot be judged: FileNotFoundError" in output
+    assert "src/shop/dangling.py" in output
+
+
+def test_a_file_that_cannot_be_examined_is_cannot_judge_naming_it(build_repo, capsys):
+    """#61 rule 4: a read failure other than a loop or a dangling link surfaces as exit 2, named repository-relative."""
+    repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
+    sealed = repo / "src" / "shop" / "sealed"
+    sealed.mkdir()
+    (sealed / "inner.py").write_text("")
+    sealed.chmod(0o444)
+    try:
+        code, output = run(capsys, repo)
+    finally:
+        sealed.chmod(0o755)
+    assert code == 2, output
+    assert "src/shop/sealed/inner.py" in output
+    assert str(repo) not in output
+
+
 def test_a_config_tracked_but_missing_on_disk_cannot_be_judged(build_repo, capsys):
     """#61 rule 3, cell 19 (until Q1b-3d)."""
     repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})

@@ -172,11 +172,11 @@ def _refuse_links_out(repository: str, package_directory: str) -> None:
             raise ContractError(f"{os.path.relpath(parent, repository)} links back into"
                                 f" {os.path.relpath(real_parent, repository)}; a symlink loop cannot be judged")
         real_directories[parent] = real_parent
-        for name in files:
-            _refuse_file_loop(repository, os.path.join(parent, name))
         for path in (parent, *(os.path.join(parent, name) for name in (*directories, *files))):
             if not Path(os.path.realpath(path)).is_relative_to(repository):
                 raise ContractError(f"{os.path.relpath(path, repository)} links outside the repository")
+        for name in files:
+            _refuse_file_loop(repository, os.path.join(parent, name))
 
 
 def _refuse_file_loop(repository: str, path: str) -> None:
@@ -187,6 +187,8 @@ def _refuse_file_loop(repository: str, path: str) -> None:
             raise ContractError(f"{os.path.relpath(path, repository)} links back into"
                                 f" {os.path.relpath(os.path.realpath(path), repository)};"
                                 " a symlink loop cannot be judged") from error
+        if error.errno != errno.ENOENT:  # a dangling link is grimp's to report; any other failure is cannot judge
+            raise
 
 
 def _real_ancestors(real_directories: Mapping[str, str], package_directory: str, directory: str) -> set[str]:
