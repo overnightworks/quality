@@ -63,6 +63,7 @@ MAX_ECHOED_SOURCE = 200
 GRIMP_ACCEPTED_COOKIES = frozenset({"utf-8", "utf8", "unicode-1-1-utf-8", "unicode11utf8", "x-unicode20utf8",
                                     "ascii", "us-ascii", "ansi_x3.4-1968"})
 NUL_IN_SOURCE = "source code cannot contain null bytes"
+CODING_COOKIE = re.compile(r"^[ \t\f]*#.*?coding[:=][ \t]*([-\w.]+)", re.ASCII)  # PEP 263
 
 
 class ContractError(Exception):
@@ -261,10 +262,12 @@ def _refuse_declared_encoding(repository: str, path: str, source: bytes) -> None
         if error.msg == NUL_IN_SOURCE:
             return  # not a cookie problem: grimp's own syntax error names the NUL
         raise _cannot_be_examined(repository, path, error.msg) from error
+    if any(b"\0" in line for line in examined_lines):
+        return  # Python 3.12 and 3.13 do not raise for a NUL there, 3.14 does: the answer stays the same
     for line in examined_lines:
-        cookie = tokenize.cookie_re.match(line.removeprefix(codecs.BOM_UTF8))
+        cookie = CODING_COOKIE.match(line.removeprefix(codecs.BOM_UTF8).decode("utf-8"))
         if cookie:
-            _refuse_cookie_grimp_cannot_read(repository, path, cookie.group(1).decode("ascii"))
+            _refuse_cookie_grimp_cannot_read(repository, path, cookie.group(1))
             return
 
 
