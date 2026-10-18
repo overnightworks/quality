@@ -24,6 +24,7 @@ from quality.report import Finding
 SIZE = "size"
 BASELINE_PATH = "quality/baseline.toml"
 WRITE_COMMAND = "quality baseline write"
+REWRITE_HINT = f"rewrite it with `{WRITE_COMMAND}`"
 PYTHON_SUFFIX = ".py"
 OCCURRENCE_MARK = "#"
 TEST_DIRECTORIES = frozenset({"test", "tests"})
@@ -288,7 +289,7 @@ def load_baseline(text: str) -> Baseline:
     try:
         document = tomllib.loads(text)
     except tomllib.TOMLDecodeError as error:
-        raise SizeError(f"{BASELINE_PATH} is not valid TOML ({error}); rewrite it with `{WRITE_COMMAND}`") from error
+        raise SizeError(f"{BASELINE_PATH} is not valid TOML ({error})") from error
     baseline: Baseline = {}
     for metric_name, table in document.items():
         metric = _metric_named(metric_name)
@@ -311,7 +312,7 @@ def _metric_named(name: str) -> Metric:
 
 def _table(where: str, value: object) -> dict:
     if not isinstance(value, dict):
-        raise SizeError(f"{BASELINE_PATH} needs {where} as a table; rewrite it with `{WRITE_COMMAND}`")
+        raise SizeError(f"{BASELINE_PATH} needs {where} as a table")
     return value
 
 

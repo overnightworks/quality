@@ -1,13 +1,13 @@
-import errno
 import os
 import re
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 import yaml
 
-from quality import engines, ratchet
+from quality import engines, ratchet, repository
 from quality.config import Allowance, ConfigError, read_secret_allowances
 from quality.report import Finding
 
@@ -17,7 +17,6 @@ FILE_RULE_IDS = (ENV_FILE, COMPOSE_PORT, ratchet.SIZE)
 ENGINE_RULE_IDS = (engines.LEAK_RULE, engines.WORKFLOW_LINT, engines.WORKFLOW_SECURITY)
 WORKFLOW_DIRECTORY = PurePosixPath(".github/workflows")
 WORKFLOW_SUFFIXES = (".yml", ".yaml")
-GONE_ERRNOS = frozenset({errno.ENOENT, errno.ENOTDIR, errno.ELOOP})
 
 LOOPBACK = "127.0.0.1"
 LOOPBACK_HOSTS = (LOOPBACK, "::1")
@@ -47,25 +46,25 @@ for compose_tag in ("!override", "!reset"):
 class CannotJudge(Exception):
     """The repository cannot be examined; this is never a clean result."""
 
-    status = "cannot judge"
+    label = "cannot judge"
 
 
 class Unparsable(CannotJudge):
     """A tracked file Python cannot decode or parse; only an operating-system read error is `cannot judge`."""
 
-    status = "unparsable"
+    label = "unparsable"
 
 
 def tracked_files(root: Path) -> list[str]:
     if not root.is_dir():
         raise CannotJudge(f"{root} is not a directory")
     try:
-        listing = subprocess.run(
-            ["git", "-C", str(root.resolve()), "ls-files", "-z", "--"],
-            capture_output=True, check=True,
-        )
-    except (OSError, subprocess.CalledProcessError) as error:
-        raise CannotJudge(f"{root} is not a readable git repository: {error}") from error
+        listing = subprocess.run(["git", "-C", str(root), "ls-files", "-z", "--"], capture_output=True, check=False)
+    except OSError as error:
+        raise CannotJudge(f"{root} is not a readable git repository: git did not run ([Errno {error.errno}] {error.strerror})") from error
+    if listing.returncode != 0:
+        reason = listing.stderr.decode(errors="replace").strip() or f"git exited {listing.returncode}"
+        raise CannotJudge(f"{root} is not a readable git repository: {reason}")
     return [os.fsdecode(name) for name in listing.stdout.split(b"\0") if name]
 
 
@@ -99,44 +98,24 @@ def check_compose_ports(root: Path, tracked: list[str]) -> list[Finding]:
     return findings
 
 
-def read_repository_bytes(root: Path, name: str) -> bytes:
-    """A file of the repository; one that resolves outside it, or cannot be read, cannot be judged."""
-    repository = root.resolve()
-    path = repository / name
+def _judged[T](ask: Callable[[Path, str], T], root: Path, name: str) -> T:
+    """Asks the repository reader; a file it cannot use cannot be judged."""
     try:
-        if not path.resolve().is_relative_to(repository):
-            raise CannotJudge(f"{name} resolves outside the repository")
-        return path.read_bytes()
-    except (OSError, RuntimeError) as error:
-        raise CannotJudge(f"cannot read {name}: {error}") from error
+        return ask(root, name)
+    except repository.RepositoryFileError as error:
+        raise CannotJudge(str(error)) from error
 
 
-def read_repository_text(root: Path, name: str) -> str:
-    """A file of the repository as UTF-8 text; one that is not UTF-8 cannot be judged."""
-    try:
-        return read_repository_bytes(root, name).decode("utf-8")
-    except UnicodeDecodeError as error:
-        raise CannotJudge(f"cannot read {name}: {error}") from error
-
-
-def write_repository_text(root: Path, name: str, text: str) -> None:
-    """Writes a file of the repository, only where `name` itself lies; one it cannot write cannot be judged.
-
-    A symlink on the way would redirect the write, possibly onto a file outside the repository.
-    """
-    path = root.resolve() / name
-    try:
-        resolved = path.resolve()
-        if resolved != path:
-            raise CannotJudge(f"{name} resolves to {resolved}, not to the repository's own {name}")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text, encoding="utf-8")
-    except (OSError, RuntimeError) as error:
-        raise CannotJudge(f"cannot write {name}: {error}") from error
+def _read_tracked[T](read: Callable[[Path, str], T | None], root: Path, name: str) -> T:
+    """A tracked file's content; until every rule asks is_on_disk (Q1b-3d), one the tree lacks cannot be judged."""
+    content = _judged(read, root, name)
+    if content is None:
+        raise CannotJudge(f"{name} is tracked but not on disk")
+    return content
 
 
 def _compose_file_findings(root: Path, name: str) -> list[Finding]:
-    text = read_repository_text(root, name)
+    text = _read_tracked(repository.read_text, root, name)
     try:
         document = yaml.load(text, Loader=ComposeLoader)
     except yaml.YAMLError as error:
@@ -182,19 +161,8 @@ def _describe(port: object) -> str:
 
 def measure_size(root: Path, tracked: list[str]) -> ratchet.TreeMeasurement:
     """Measures the tree on disk: a tracked file absent from it (deleted, sparse, a dangling link) is gone."""
-    on_disk = [name for name in tracked if ratchet.is_python(name) and _is_on_disk(root, name)]
-    return ratchet.measure({name: read_repository_bytes(root, name) for name in on_disk})
-
-
-def _is_on_disk(root: Path, name: str) -> bool:
-    """A path that leads nowhere is gone; one the filesystem refuses to reach cannot be judged."""
-    try:
-        (root / name).stat()
-    except OSError as error:
-        if error.errno in GONE_ERRNOS:
-            return False
-        raise CannotJudge(f"cannot reach {name}: {error}") from error
-    return True
+    on_disk = [name for name in tracked if ratchet.is_python(name) and _judged(repository.is_on_disk, root, name)]
+    return ratchet.measure({name: _read_tracked(repository.read_bytes, root, name) for name in on_disk})
 
 
 @dataclass(frozen=True)
@@ -204,10 +172,12 @@ class SizeResult:
 
 
 def read_baseline(root: Path) -> ratchet.Baseline | None:
-    """The repository's size baseline on disk, None when it has none; an unreadable one raises SizeError."""
-    if not (root / ratchet.BASELINE_PATH).exists(follow_symlinks=False):
-        return None
-    return ratchet.load_baseline(read_repository_text(root, ratchet.BASELINE_PATH))
+    """The repository's size baseline on disk, None when it has none.
+
+    A file that cannot be read cannot be judged; a malformed one raises SizeError.
+    """
+    text = _judged(repository.read_text, root, ratchet.BASELINE_PATH)
+    return None if text is None else ratchet.load_baseline(text)
 
 
 def check_size(root: Path, tracked: list[str]) -> SizeResult:
@@ -216,7 +186,7 @@ def check_size(root: Path, tracked: list[str]) -> SizeResult:
     try:
         baseline = read_baseline(root)
     except ratchet.SizeError as error:
-        raise CannotJudge(str(error)) from error
+        raise CannotJudge(f"{error}; {ratchet.REWRITE_HINT}") from error
     if baseline is None:
         return SizeResult([], ratchet.report_counts(tree))
     try:

@@ -1,3 +1,5 @@
+import re
+
 import pytest
 
 from quality.config import (
@@ -51,7 +53,7 @@ def test_a_config_file_that_cannot_be_decoded_is_refused(tmp_path):
     """defect:#6 finding 5: an unreadable config file is a ConfigError, not a traceback."""
     (tmp_path / "quality").mkdir()
     (tmp_path / "quality" / "config.toml").write_bytes(b"\xff\xfe")
-    with pytest.raises(ConfigError, match="cannot be read"):
+    with pytest.raises(ConfigError, match="^cannot read quality/config.toml: 'utf-8' codec"):
         read_gate_settings(tmp_path)
 
 
@@ -61,7 +63,7 @@ def test_a_config_directory_that_cannot_be_entered_is_refused(tmp_path):
     config_dir.mkdir()
     config_dir.chmod(0)
     try:
-        with pytest.raises(ConfigError, match="cannot be read"):
+        with pytest.raises(ConfigError, match=re.escape("cannot read quality/config.toml: [Errno 13] Permission denied")):
             read_gate_settings(tmp_path)
     finally:
         config_dir.chmod(0o700)
@@ -82,7 +84,7 @@ def test_a_config_symlink_loop_is_refused(tmp_path):
     """defect:#33 review: a self-referencing config symlink is a ConfigError (exit 2), not a RuntimeError traceback."""
     (tmp_path / "quality").mkdir()
     (tmp_path / "quality" / "config.toml").symlink_to("config.toml")
-    with pytest.raises(ConfigError, match="cannot be read"):
+    with pytest.raises(ConfigError, match="^cannot read quality/config.toml: \\[Errno 40\\]"):
         read_gate_settings(tmp_path)
 
 
@@ -183,11 +185,6 @@ def test_any_other_legacy_value_is_a_config_error(value):
     """#33 sentence 3: any value but "report" or "fail" is refused, naming the fix."""
     with pytest.raises(ConfigError, match='legacy.*"report" or "fail"'):
         load_legacy_mode(f'[gate]\nmandatory_jobs = ["checks"]\nlegacy = {value}')
-
-
-def test_the_legacy_key_is_known_to_the_mandatory_jobs_reader():
-    """#33 sentence 3: adding legacy does not make the rest of the config unknown."""
-    assert load_mandatory_jobs('[gate]\nmandatory_jobs = ["checks"]\nlegacy = "fail"') == ("checks",)
 
 
 def test_one_read_of_the_config_gives_the_mandatory_jobs_and_the_legacy_mode(tmp_path):

@@ -1,3 +1,4 @@
+import os
 import tomllib
 from pathlib import Path
 
@@ -199,47 +200,66 @@ def test_below_the_thresholds_or_with_a_fixed_entry_gone_is_clean(build_repo, ca
     assert "hygiene: clean (3 rules)" in output
 
 
-def delete_from_disk(path: Path) -> None:
+def delete_from_disk(path: Path, elsewhere: Path) -> None:
     path.unlink()
 
 
-def replace_with_a_dangling_symlink(path: Path) -> None:
+def replace_with_a_dangling_symlink(path: Path, elsewhere: Path) -> None:
     path.unlink()
     path.symlink_to(path.with_name("missing.py"))
 
 
-@pytest.mark.parametrize("remove", [delete_from_disk, replace_with_a_dangling_symlink], ids=["deleted", "dangling"])
+def replace_with_a_dangling_symlink_out_of_the_repository(path: Path, elsewhere: Path) -> None:
+    path.unlink()
+    path.symlink_to(elsewhere / "missing.py")
+
+
+@pytest.mark.parametrize(
+    "remove",
+    [delete_from_disk, replace_with_a_dangling_symlink, replace_with_a_dangling_symlink_out_of_the_repository],
+    ids=["deleted", "dangling", "cell 18 dangling out of the repository"],
+)
 @pytest.mark.parametrize(
     "baseline",
     [None, '[function_lines."src/b.py"]\nlong_one = 62\n'],
     ids=["no-baseline", "baseline-holds-the-gone-file"],
 )
-def test_a_tracked_file_missing_from_disk_is_gone_not_unjudgeable(build_repo, capsys, remove, baseline):
-    """#46 rule 3/4: the rule judges the tree on disk; a tracked file absent from it is gone, which is fine."""
+def test_a_tracked_file_missing_from_disk_is_gone_not_unjudgeable(
+    build_repo, tmp_path_factory, capsys, remove, baseline
+):
+    """#46 rule 3/4 and #52 cell 18: the rule judges the tree on disk; a tracked file absent from it is gone, which
+    is fine, wherever a dangling link points."""
     files = {"src/a.py": "x = 1\n", "src/b.py": long_function(62)}
     repo = build_repo(files if baseline is None else {**files, BASELINE_PATH: baseline})
-    remove(repo / "src/b.py")
+    remove(repo / "src/b.py", tmp_path_factory.mktemp("elsewhere"))
     code, output = hygiene(capsys, repo)
     assert code == 0, output
     assert "hygiene: clean (3 rules)" in output
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-0 path, so no permission is refused")
+@pytest.mark.parametrize(
+    ("locked", "reason"),
+    [
+        ("locked", "cannot reach locked/b.py: [Errno 13] Permission denied"),
+        ("locked/b.py", "cannot read locked/b.py: [Errno 13] Permission denied"),
+    ],
+    ids=["directory", "cell 17 file"],
+)
 @pytest.mark.parametrize("command", ["hygiene", "baseline write"])
-def test_a_tracked_file_the_filesystem_refuses_to_reach_cannot_be_judged(build_repo, capsys, command):
-    """#46 rule 3/5: a tracked file behind a directory the rule may not enter is exit 2, never gone and never a traceback."""
+def test_a_tracked_file_the_filesystem_refuses_to_reach_cannot_be_judged(build_repo, capsys, command, locked, reason):
+    """#46 rule 3/5 and #52 rule 5, cell 17: a tracked file the rule may not reach or read is exit 2, never gone,
+    never a traceback, and its reason names no checkout path."""
     repo = build_repo({"src/a.py": "x = 1\n", "locked/b.py": long_function(62)})
-    (repo / "locked").chmod(0)
+    (repo / locked).chmod(0)
     try:
         code = cli.main([*command.split(), str(repo)])
     finally:
-        (repo / "locked").chmod(0o755)
+        (repo / locked).chmod(0o755)
     assert code == 2
-    expected = (
-        "hygiene: cannot judge - cannot reach locked/b.py"
-        if command == "hygiene"
-        else "baseline: not written - cannot reach locked/b.py"
-    )
-    assert expected in capsys.readouterr().err
+    prefix = "hygiene: cannot judge - " if command == "hygiene" else "baseline: not written - "
+    err = capsys.readouterr().err
+    assert (prefix + reason in err, str(repo) in err) == (True, False), err
 
 
 def property_pair(lines: int) -> str:
@@ -350,6 +370,7 @@ def test_baseline_write_overwrites_an_unreadable_previous_baseline_with_a_note(b
     assert (code, wrote) == (0, wrote_line(repo, "1 entry"))
     assert note.startswith(f"baseline: the previous {BASELINE_PATH} could not be read (")
     assert note.endswith("), so raises cannot be named")
+    assert "rewrite it" not in note, "#52 rule 7, cell 15: the write is the rewrite, so its note carries no hint"
     assert load_baseline((repo / BASELINE_PATH).read_text(encoding="utf-8")) == {
         Key(Metric.FUNCTION_LINES, "src/a.py", "long_one"): 70
     }
@@ -361,10 +382,12 @@ def test_baseline_write_overwrites_an_unreadable_previous_baseline_with_a_note(b
     ids=["not-toml", "unknown-metric", "not-a-count"],
 )
 def test_an_unreadable_baseline_cannot_be_judged(build_repo, capsys, baseline):
-    """#46 rule 4: a baseline the rule cannot read is exit 2, never clean."""
+    """#46 rule 4 and #52 rule 7, cell 14: a baseline the rule cannot read is exit 2, never clean, and says once how
+    to rewrite it."""
     code, output = hygiene(capsys, build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: baseline}))
     assert code == 2
     assert "cannot judge" in output
+    assert output.count("rewrite it with `quality baseline write`") == 1, output
 
 
 def link_the_baseline_elsewhere(repo: Path, elsewhere: Path) -> None:
@@ -391,6 +414,7 @@ def test_baseline_write_to_a_destination_it_cannot_own_cannot_be_judged(build_re
     arrange(repo, elsewhere)
     code, (refusal,) = baseline_write(capsys, repo)
     assert (code, refusal.startswith("baseline: not written - ")) == (2, True), refusal
+    assert str(repo) not in refusal, "#52 rule 5, cell 20: the refusal names no resolved path"
     assert sorted(path.name for path in elsewhere.iterdir()) == ["victim.toml"]
     assert (elsewhere / "victim.toml").read_text() == "kept\n"
 

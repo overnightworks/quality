@@ -5,6 +5,8 @@ from enum import Enum
 from pathlib import Path
 from typing import NamedTuple
 
+from quality import repository
+
 CONFIG_PATH = "quality/config.toml"
 GATE_KEYS = {"mandatory_jobs", "legacy"}
 SECRETS_KEYS = {"allow"}
@@ -73,13 +75,18 @@ def _refuse_unknown_keys(document: dict, gate: dict) -> None:
         )
 
 
-def load_mandatory_jobs(text: str | None) -> tuple[str, ...]:
+def _gate_table(text: str | None, example: str) -> dict:
+    """The validated [gate] table: one parse, one table fetch and one unknown-key check for every gate key."""
     if text is None:
         raise ConfigError(f"{CONFIG_PATH} is missing - create it with:\n{EXAMPLE}")
-    document = _parse(text, EXAMPLE)
-    gate = _table(document, "gate", EXAMPLE)
+    document = _parse(text, example)
+    gate = _table(document, "gate", example)
     _refuse_unknown_keys(document, gate)
     _refuse_unknown_secrets_keys(_table(document, "secrets", ALLOWANCE_EXAMPLE))
+    return gate
+
+
+def _mandatory_jobs(gate: dict) -> tuple[str, ...]:
     names = gate.get("mandatory_jobs")
     if not isinstance(names, list) or not names or not all(isinstance(name, str) and name for name in names):
         raise ConfigError(
@@ -88,12 +95,8 @@ def load_mandatory_jobs(text: str | None) -> tuple[str, ...]:
     return tuple(names)
 
 
-def load_legacy_mode(text: str) -> LegacyMode:
-    """A missing `legacy` key reports; load_gate_settings is what insists on a config."""
-    document = _parse(text, LEGACY_EXAMPLE)
-    gate = _table(document, "gate", LEGACY_EXAMPLE)
-    _refuse_unknown_keys(document, gate)
-    _refuse_unknown_secrets_keys(_table(document, "secrets", ALLOWANCE_EXAMPLE))
+def _legacy_mode(gate: dict) -> LegacyMode:
+    """A missing `legacy` key reports."""
     value = gate.get("legacy", LegacyMode.REPORT.value)
     try:
         return LegacyMode(value)
@@ -102,21 +105,30 @@ def load_legacy_mode(text: str) -> LegacyMode:
         raise ConfigError(f"{CONFIG_PATH} has [gate] legacy = {value!r}; it must be {modes}, like:\n{LEGACY_EXAMPLE}") from None
 
 
+def load_mandatory_jobs(text: str | None) -> tuple[str, ...]:
+    return _mandatory_jobs(_gate_table(text, EXAMPLE))
+
+
+def load_legacy_mode(text: str) -> LegacyMode:
+    return _legacy_mode(_gate_table(text, LEGACY_EXAMPLE))
+
+
 def load_gate_settings(text: str | None) -> GateSettings:
-    return GateSettings(load_mandatory_jobs(text), load_legacy_mode(text))
+    """mandatory_jobs is judged before legacy, so a config wrong in both is refused for mandatory_jobs."""
+    gate = _gate_table(text, EXAMPLE)
+    return GateSettings(_mandatory_jobs(gate), _legacy_mode(gate))
+
+
+def _read_config_text(repo: Path) -> str | None:
+    """The repository's own config text, None when it has none; the one reader of quality/config.toml on disk."""
+    try:
+        return repository.read_text(repo, CONFIG_PATH)
+    except repository.RepositoryFileError as error:
+        raise ConfigError(str(error)) from error
 
 
 def read_gate_settings(repo: Path) -> GateSettings:
-    root = repo.resolve()
-    try:
-        path = (root / CONFIG_PATH).resolve()
-        if not path.is_relative_to(root):
-            raise ConfigError(f"{CONFIG_PATH} resolves outside the repository ({path})")
-        return load_gate_settings(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return load_gate_settings(None)
-    except (OSError, RuntimeError, UnicodeDecodeError) as error:
-        raise ConfigError(f"{CONFIG_PATH} cannot be read ({error})") from error
+    return load_gate_settings(_read_config_text(repo))
 
 
 def load_secret_allowances(text: str | None) -> dict[Allowance, str]:
@@ -179,10 +191,4 @@ def _read_allowance(entry: object) -> tuple[Allowance, str]:
 
 
 def read_secret_allowances(repo: Path) -> dict[Allowance, str]:
-    path = repo / CONFIG_PATH
-    try:
-        return load_secret_allowances(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return load_secret_allowances(None)
-    except (OSError, UnicodeDecodeError) as error:
-        raise ConfigError(f"{CONFIG_PATH} cannot be read ({error})") from error
+    return load_secret_allowances(_read_config_text(repo))
