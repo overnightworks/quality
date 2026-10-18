@@ -267,12 +267,10 @@ def require_git_floor() -> None:
 
 def unborn_aware_head_commit(repository: Path, git_environment: dict[str, str]) -> str | None:
     """The commit HEAD names; None when the repository has no commit yet."""
-    resolved = run(["git", "-C", str(repository), "rev-parse", "--verify", "--quiet", "HEAD^{commit}"], env=git_environment)
-    if resolved.returncode == 1 and not resolved.stderr.strip():  # --quiet: no commit is a silent exit 1
-        return None
-    if resolved.returncode != 0:
-        raise EngineError(f"cannot resolve HEAD of {repository}{stderr_tail(resolved.stderr)}")
-    return resolved.stdout.strip()
+    # --ignore-missing: a HEAD without a commit lists nothing and exits 0, where rev-parse would fail.
+    listed = git(["-C", str(repository.resolve()), "rev-list", "--no-walk", "--ignore-missing", "HEAD", "--"],
+                 f"cannot resolve HEAD of {repository}", git_environment)
+    return listed.strip() or None
 
 
 def git(arguments: list[str], failure: str, env: dict[str, str] | None = None) -> str:
