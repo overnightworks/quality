@@ -75,12 +75,12 @@ def _refuse_unknown_keys(document: dict, gate: dict) -> None:
         )
 
 
-def _gate_table(text: str | None, example: str) -> dict:
+def _gate_table(text: str | None) -> dict:
     """The validated [gate] table: one parse, one table fetch and one unknown-key check for every gate key."""
     if text is None:
         raise ConfigError(f"{CONFIG_PATH} is missing - create it with:\n{EXAMPLE}")
-    document = _parse(text, example)
-    gate = _table(document, "gate", example)
+    document = _parse(text, EXAMPLE)
+    gate = _table(document, "gate", EXAMPLE)
     _refuse_unknown_keys(document, gate)
     _refuse_unknown_secrets_keys(_table(document, "secrets", ALLOWANCE_EXAMPLE))
     return gate
@@ -105,17 +105,9 @@ def _legacy_mode(gate: dict) -> LegacyMode:
         raise ConfigError(f"{CONFIG_PATH} has [gate] legacy = {value!r}; it must be {modes}, like:\n{LEGACY_EXAMPLE}") from None
 
 
-def load_mandatory_jobs(text: str | None) -> tuple[str, ...]:
-    return _mandatory_jobs(_gate_table(text, EXAMPLE))
-
-
-def load_legacy_mode(text: str) -> LegacyMode:
-    return _legacy_mode(_gate_table(text, LEGACY_EXAMPLE))
-
-
 def load_gate_settings(text: str | None) -> GateSettings:
     """mandatory_jobs is judged before legacy, so a config wrong in both is refused for mandatory_jobs."""
-    gate = _gate_table(text, EXAMPLE)
+    gate = _gate_table(text)
     return GateSettings(_mandatory_jobs(gate), _legacy_mode(gate))
 
 
