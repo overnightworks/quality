@@ -71,7 +71,7 @@
 **Good suites (D1, ruled by the operator 15.10.2026, ~22:40: „ja a“):** kiln, webauth, edge, gmail-cleanup and the core of presentator already test through entry points. Their tests are tagged with criterion IDs, the ones that kill no mutant are deleted, and steps 2–4 are skipped. This amends the 22:05 ruling ("tests are rewritten, not kept") for these suites.
 
 ## C. Scoreboard: how "better and smaller" becomes visible
-**T0 is the fleet audit of 15.10.2026.** It is provisional; the exact T0 per repo is captured by that repo's Q2 adoption lane at its base SHA, and is the ratchet baseline itself. It is re-measured at every wave exit and weekly by `fleet-quality scoreboard`, a Q1b deliverable harvested from the audit scripts. The table stands in this file and is re-measured by the scoreboard: **T0 → now → target**.
+**T0 is the fleet audit of 15.10.2026.** It is provisional; the exact T0 per repo is captured by that repo's Q2 adoption lane at its base SHA, and is the ratchet baseline itself. It is re-measured at every wave exit and weekly by `quality scoreboard`, a Q1b deliverable harvested from the audit scripts; it runs in the `scoreboard` workflow of overnightworks/quality (Monday 05:17 UTC and on dispatch), whose run summary holds the table. The table stands in this file and is re-measured by the scoreboard: **T0 → now → target**.
 
 | What | Metric (per repo) | Direction |
 |---|---|---|
