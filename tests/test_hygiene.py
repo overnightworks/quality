@@ -3,7 +3,6 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from conftest import fake_engine
 
 from quality import cli, engines, hygiene
 from quality.report import Finding
@@ -220,16 +219,25 @@ NEW_DEBT = "def long_one():\n" + "    x = 1\n" * 61
 ENV_FINDING = "env-file .env - "
 
 
+def fake_engine(directory: Path, name: str, on_scan: str) -> Path:
+    """Writes a fake `name` engine that prints its pinned version and runs `on_scan` (shell) for any other call."""
+    version_argument = " ".join(engines.VERSION_ARGUMENTS[name])
+    pinned = engines.read_pins()[name].version
+    binary = directory / name
+    binary.write_text(f'#!/bin/sh\nif [ "$1" = {version_argument} ]; then echo {pinned}; exit 0; fi\n{on_scan}\n')
+    binary.chmod(0o755)
+    return binary
+
+
 @pytest.fixture
 def clean_engines(tmp_path_factory) -> Path:
     """A gitleaks that reports its pin and no leak; with no workflow tracked, no other engine runs."""
     directory = tmp_path_factory.mktemp("engines")
-    gitleaks = directory / "gitleaks"
-    gitleaks.write_text(
-        f'#!/bin/sh\nif [ "$1" = version ]; then echo {engines.read_pins()["gitleaks"].version}; exit 0; fi\n'
-        'while [ $# -gt 0 ]; do [ "$1" = --report-path ] && report=$2; shift; done\necho "[]" > "$report"\n'
+    fake_engine(
+        directory,
+        "gitleaks",
+        on_scan='while [ $# -gt 0 ]; do [ "$1" = --report-path ] && report=$2; shift; done\necho "[]" > "$report"',
     )
-    gitleaks.chmod(0o755)
     return directory
 
 
