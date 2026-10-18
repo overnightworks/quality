@@ -1,8 +1,0 @@
-claim_id = "952f8ff83dc44cb2a6484febb20a2f37"
-agent = "claude"
-role = "builder"
-base = "97b5fae540dbefda1a03d74f5e289b86be30ac03"
-branch = "claude/issue-50-write-names-raises"
-scope = ["AGENTS.md", "README.md", "src/quality/cli.py", "src/quality/ratchet.py", "src/quality/verdict.py", "tests/test_ratchet.py"]
-opened_commit = "5247aab86afef0e463da181263b295f174a18cf6"
-whole_reason = "One wording owner (RaisedEntry.describe) for the write and the verdict: split, the two literals could drift apart before Q1b-7 matches them."
