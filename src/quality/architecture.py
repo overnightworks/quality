@@ -3,8 +3,9 @@
 import-linter's own reader parses the config from a private temporary copy, grimp builds the graph with the
 repository's source roots first on sys.path only while it runs and without a cache, so nothing is written to the
 checkout. Caller code never runs: a plugin contract type, a dotted root package, a root package Python would find
-elsewhere and a symlink out of the repository are refused before grimp reads anything. Every message names paths
-repository-relative. The private import-linter helpers used here are pinned by the exact version in pyproject.toml.
+elsewhere, a symlink out of the repository (also through a link inside it) and a symlink loop are refused before
+grimp reads anything. Every message names paths repository-relative. The private import-linter helpers used here are
+pinned by the exact version in pyproject.toml.
 """
 
 import copy
@@ -157,12 +158,27 @@ def _build_graph(repository: str, roots: Mapping[str, str], options: UserOptions
 
 
 def _refuse_links_out(repository: str, package_directory: str) -> None:
-    """grimp follows symlinks, so a link under a root package must not lead out of the repository."""
-    for parent, directories, files in os.walk(package_directory, onerror=_raise):
-        for entry in (*directories, *files):
-            path = os.path.join(parent, entry)
-            if os.path.islink(path) and not Path(os.path.realpath(path)).is_relative_to(repository):
+    """grimp walks a root package following symlinks, so this walks it the same way and refuses any directory or
+    file that resolves outside the repository, and any loop, before grimp reads anything."""
+    real_directories: dict[str, str] = {}
+    for parent, directories, files in os.walk(package_directory, followlinks=True, onerror=_raise):
+        real_parent = os.path.realpath(parent)
+        if real_parent in _real_ancestors(real_directories, package_directory, parent):
+            raise ContractError(f"{os.path.relpath(parent, repository)} links back into"
+                                f" {os.path.relpath(real_parent, repository)}; a symlink loop cannot be judged")
+        real_directories[parent] = real_parent
+        for path in (parent, *(os.path.join(parent, name) for name in (*directories, *files))):
+            if not Path(os.path.realpath(path)).is_relative_to(repository):
                 raise ContractError(f"{os.path.relpath(path, repository)} links outside the repository")
+
+
+def _real_ancestors(real_directories: Mapping[str, str], package_directory: str, directory: str) -> set[str]:
+    """The resolved places of the directories os.walk passed through on its way down to `directory`."""
+    ancestors = set()
+    while directory != package_directory:
+        directory = os.path.dirname(directory)
+        ancestors.add(real_directories[directory])
+    return ancestors
 
 
 def _raise(error: OSError) -> None:

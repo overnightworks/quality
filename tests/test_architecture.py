@@ -201,19 +201,37 @@ def test_a_config_linked_out_of_the_repository_cannot_be_judged(build_repo, else
     assert str(elsewhere) not in output
 
 
-def test_a_symlink_out_of_a_root_package_is_refused_before_grimp_reads(build_repo, elsewhere, capsys, monkeypatch):
-    """#61 rule 4, cell 18b: grimp follows symlinks, so a link leaving the repository is refused and no graph is built."""
-    (elsewhere / "ext").mkdir()
-    (elsewhere / "ext" / "__init__.py").write_text("")
-    (elsewhere / "ext" / "leak.py").write_text("import shop.web\n")
-    repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
-    (repo / "src" / "shop" / "ext").symlink_to(elsewhere / "ext")
+@pytest.mark.parametrize(
+    ("link", "target", "refused"),
+    [("src/shop/ext", "{elsewhere}", "src/shop/ext"),
+     ("src/shop/ext", "../../vendor", "src/shop/ext/out")],
+    ids=["a direct link", "a chain through a link inside the repository"],
+)
+def test_a_symlink_out_of_a_root_package_is_refused_before_grimp_reads(build_repo, elsewhere, capsys, monkeypatch,
+                                                                       link, target, refused):
+    """#61 rule 4, cell 18b: grimp follows symlinks, so a link leaving the repository, directly or through a link
+    that stays inside, is refused and no graph is built; the outside module would break the contract if read."""
+    (elsewhere / "__init__.py").write_text("")
+    (elsewhere / "leak.py").write_text("import shop.web\n")
+    repo = build_repo({**SHOP, "vendor/__init__.py": "",
+                       ".importlinter": ini({**FORBIDDEN, "source_modules": ["shop.ext"]})})
+    (repo / "vendor" / "out").symlink_to(elsewhere)
+    (repo / link).symlink_to(target.format(elsewhere=elsewhere))
     graphs_built = []
     monkeypatch.setattr(grimp, "build_graph", lambda *roots, **options: graphs_built.append(roots))
     code, output = run(capsys, repo)
     assert code == 2, output
-    assert f"{REFUSED}src/shop/ext links outside the repository" in output
-    assert (graphs_built, str(elsewhere) in output) == ([], False)
+    assert f"{REFUSED}{refused} links outside the repository" in output
+    assert (graphs_built, "leak" in output, str(elsewhere) in output) == ([], False, False)
+
+
+def test_a_symlink_loop_under_a_root_package_cannot_be_judged(build_repo, capsys):
+    """#61 rule 4: grimp would walk a symlink loop without end, so the loop is refused, named repository-relative."""
+    repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
+    (repo / "src" / "shop" / "again").symlink_to(".")
+    code, output = run(capsys, repo)
+    assert code == 2, output
+    assert f"{REFUSED}src/shop/again links back into src/shop; a symlink loop cannot be judged" in output
 
 
 def test_a_config_tracked_but_missing_on_disk_cannot_be_judged(build_repo, capsys):
