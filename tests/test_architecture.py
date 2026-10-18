@@ -255,6 +255,21 @@ def test_an_error_inside_a_contract_check_names_the_contract_without_a_traceback
     assert "Traceback" not in output
 
 
+@pytest.mark.parametrize(
+    ("config", "expected"),
+    [(toml({"type": ["forbidden"]}), "contract guarded in pyproject.toml cannot be judged: TypeError: "),
+     (toml({**FORBIDDEN, "as_packages": 1}), "contract guarded in pyproject.toml cannot be judged: AttributeError: "),
+     (toml(FORBIDDEN, roots=(1,)), "the config pyproject.toml cannot be judged: TypeError: ")],
+    ids=["a type that is a list", "a boolean option that is a number", "a root package that is a number"],
+)
+def test_a_malformed_config_value_cannot_be_judged_without_a_traceback(build_repo, capsys, config, expected):
+    """#61 rule 7: a value of the wrong type is cannot judge naming the contract or the config, never a traceback."""
+    code, output = run(capsys, build_repo({**SHOP, "pyproject.toml": config}))
+    assert code == 2, output
+    assert f"{REFUSED}{expected}" in output
+    assert "Traceback" not in output
+
+
 @pytest.mark.parametrize("files", [SHOP, SHOP_DB_IMPORTS_WEB], ids=["kept", "broken"])
 def test_a_run_writes_nothing_and_restores_sys_path(build_repo, capsys, files):
     """#61 rules 1 and 6, cell 22: no cache, no change to the checkout, and sys.path as it was."""

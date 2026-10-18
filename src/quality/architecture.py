@@ -82,10 +82,11 @@ def check_contracts(root: Path, tracked: Sequence[str], configs: Mapping[str, st
     if "contract_types" in config.options.session_options:
         raise ContractError(f"{config.name} sets contract_types, whose plugin modules would be imported;"
                             " only the built-in contract types are judged")
-    contracts = [_contract(config, index, options) for index, options in enumerate(config.options.contracts_options, 1)]
-    roots = {package: _source_root(tracked, package) for package in config.options.session_options["root_packages"]}
     repository = os.path.realpath(root)
     with _judging(f"the config {config.name}", repository):
+        contracts = [_contract(config, index, options, repository)
+                     for index, options in enumerate(config.options.contracts_options, 1)]
+        roots = {package: _source_root(tracked, package) for package in config.options.session_options["root_packages"]}
         graph = _build_graph(repository, roots, config.options)
     verdicts = [_check(contract, graph, config.name, repository) for contract in contracts]
     return ContractsVerdict([finding for verdict in verdicts for finding in verdict.findings],
@@ -113,19 +114,20 @@ def _read_config(name: str, text: str) -> Config | None:
                 return None
 
 
-def _contract(config: Config, index: int, options: dict) -> Contract:
+def _contract(config: Config, index: int, options: dict, repository: str) -> Contract:
     if "name" not in options:
         raise ContractError(f"contract {index} in {config.name} has no name")
     name = options["name"]
-    contract_class = BUILT_IN_CONTRACT_TYPES.get(options.get("type"))
-    if contract_class is None:
-        raise ContractError(f"contract {name} in {config.name} has type {options.get('type')}; only the built-in"
-                            f" types are judged ({', '.join(BUILT_IN_CONTRACT_TYPES)})")
-    try:
-        return contract_class(name=name, session_options=config.options.session_options, contract_options=options)
-    except InvalidContractOptions as error:
-        fields = "; ".join(f"{field}: {reason}" for field, reason in error.errors.items())
-        raise ContractError(f"contract {name} in {config.name} has invalid options ({fields})") from error
+    with _judging(f"contract {name} in {config.name}", repository):
+        contract_class = BUILT_IN_CONTRACT_TYPES.get(options.get("type"))
+        if contract_class is None:
+            raise ContractError(f"contract {name} in {config.name} has type {options.get('type')}; only the built-in"
+                                f" types are judged ({', '.join(BUILT_IN_CONTRACT_TYPES)})")
+        try:
+            return contract_class(name=name, session_options=config.options.session_options, contract_options=options)
+        except InvalidContractOptions as error:
+            fields = "; ".join(f"{field}: {reason}" for field, reason in error.errors.items())
+            raise ContractError(f"contract {name} in {config.name} has invalid options ({fields})") from error
 
 
 def _source_root(tracked: Sequence[str], package: str) -> str:
