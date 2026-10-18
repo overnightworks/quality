@@ -20,6 +20,7 @@ CLONE_TIMEOUT_SECONDS = 300
 LS_REMOTE_TIMEOUT_SECONDS = 60
 SHORT_COMMIT = 7
 NO_COMMIT = "—"
+UNNAMED = "unnamed URL"
 ANONYMOUS_GIT = ("git", "-c", "credential.helper=", "-c", "core.askPass=")
 # ssh authenticates with the user's keys and agent whatever HOME says, so only these transports are anonymous.
 ANONYMOUS_SCHEMES = frozenset({"file", "http", "https"})
@@ -88,7 +89,9 @@ def cannot_judge(rows: list[Row]) -> bool:
 
 
 def repository_name(url: str) -> str:
-    return PurePosixPath(urlsplit(url).path).name.removesuffix(".git") or url
+    """The URL's last path segment, else its host: never the URL itself, which may carry credentials."""
+    parts = urlsplit(url)
+    return PurePosixPath(parts.path).name.removesuffix(".git") or parts.hostname or UNNAMED
 
 
 def measure_public(url: str) -> Row:

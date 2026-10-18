@@ -279,8 +279,9 @@ def test_no_configured_credential_reaches_a_private_host(capsys, public, private
         ([], "git@example.invalid:org/repo.git", "repo", "cannot clone (not an http, https or file URL)"),
         (["--private"], "https://user:secret@example.invalid/org/edge", "edge",
          "cannot check that it is private (the URL carries credentials)"),
+        ([], "https://user:secret@example.invalid/", "example.invalid", "cannot clone (the URL carries credentials)"),
     ],
-    ids=["ssh", "scp-like", "credentials in the URL"],
+    ids=["ssh", "scp-like", "credentials in the URL", "credentials and no path"],
 )
 def test_a_url_git_could_authenticate_with_cannot_be_judged(capsys, public, option, url, name, reason):
     """Rules 3 to 5: only an anonymous URL is cloned or listed; any other is a cannot-judge row, the rest still show."""
