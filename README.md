@@ -57,8 +57,10 @@ Install it with
   - the base's file deleted: `loosened: quality/baseline.toml removed`.
 
   A lowered, equal or removed entry is green, and so is adopting a baseline (the base has none) or having none on
-  either side. A malformed baseline on either side, one that links out of the repository, or a base commit the clone
-  lacks is exit `2`, naming the side (`quality/baseline.toml at the base commit <sha>: ...`). The base must be a ref
+  either side. A malformed baseline on either side, a head config or baseline that cannot be read or links out of the
+  repository, or a base commit the clone lacks is exit `2`, naming the side (`quality/baseline.toml at the base commit
+  <sha>: ...`, `quality/config.toml at the head: ...`). Only the head's malformed baseline adds ``rewrite it with
+  `quality baseline write` ``: a pull request cannot rewrite its base. The base must be a ref
   name or a SHA: `HEAD~1` or `-x` is exit `2` (`... is not a ref name or a SHA`) before git runs. Outside a pull
   request (push, `merge_group`, `workflow_dispatch`) `gate.yml` passes no base, so the base is never read and only
   `hygiene` holds the tree. A lizard update that measures a function higher therefore turns the pull request that
@@ -80,7 +82,8 @@ the entry is copied from the output. An entry without a reason, a hash that is n
 `(rule, file, secret_sha256)` and the old `fingerprint` form are exit `2`.
 
 A missing `quality/config.toml` means no allowances: the scan still runs and its findings are red. Only a file that
-exists and cannot be read or parsed is exit `2`.
+exists and cannot be read or parsed, or links out of the repository, is exit `2`; a link that leads nowhere or loops
+exists, so it is exit `2` too.
 
 Secret handling: quality runs gitleaks without `--redact` so the report carries each `Secret` to be hashed. gitleaks
 writes that report to a `tempfile` scratch directory (mode 0700); quality reads it, keeps only the hash, and deletes

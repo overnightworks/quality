@@ -16,6 +16,9 @@ Door commands:
   transport, polling through an injected sleep, so tests need no network.
 - `quality emergency-merge <owner/repo> <pr>` (`emergency.py`): the operator's door, it needs a terminal on stdin.
 
+Config, hygiene and the verdict read the checkout's own files only through `repository.py`, which keeps each read
+inside the repository and names the file repository-relative in every error.
+
 Roadmap and the operator's rulings: `docs/roadmap.md`, `docs/rulings.md`.
 
 Checks (all targeted, run from the repo root):
