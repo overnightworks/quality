@@ -58,7 +58,11 @@ STALE_IGNORE_FIX = "delete the entry."
 PANIC_MODULE = "pyo3_runtime"
 CONTROL_CHARACTER = re.compile(r"[\x00-\x1f\x7f]")
 MAX_ECHOED_SOURCE = 200
-UTF8_ENCODINGS = frozenset({"utf-8", "utf-8-sig"})
+# Probed on grimp 3.17, whose Rust reader (not readable from Python) takes the raw lower-cased spelling of a coding
+# cookie: Python's own aliases such as utf_8, U8, cp65001 or utf-8-sig make it panic.
+GRIMP_ACCEPTED_COOKIES = frozenset({"utf-8", "utf8", "unicode-1-1-utf-8", "unicode11utf8", "x-unicode20utf8",
+                                    "ascii", "us-ascii", "ansi_x3.4-1968"})
+NUL_IN_SOURCE = "source code cannot contain null bytes"
 
 
 class ContractError(Exception):
@@ -244,14 +248,30 @@ def _refuse_unreadable_source(repository: str, path: str, file_status: os.stat_r
 
 
 def _refuse_declared_encoding(repository: str, path: str, source: bytes) -> None:
+    examined_lines: list[bytes] = []
+    source_lines = io.BytesIO(source).readline
+
+    def read_line() -> bytes:
+        examined_lines.append(line := source_lines())
+        return line
+
     try:
-        encoding, _ = tokenize.detect_encoding(io.BytesIO(source).readline)
+        tokenize.detect_encoding(read_line)
     except SyntaxError as error:
-        if b"\0" in source:
-            return  # not a cookie problem: grimp's own syntax error names a NUL
-        raise _cannot_be_examined(repository, path, "unknown encoding") from error
-    if codecs.lookup(encoding).name not in UTF8_ENCODINGS:
-        raise _cannot_be_examined(repository, path, f"declares {encoding}; grimp reads UTF-8 only")
+        if error.msg == NUL_IN_SOURCE:
+            return  # not a cookie problem: grimp's own syntax error names the NUL
+        raise _cannot_be_examined(repository, path, error.msg) from error
+    for line in examined_lines:
+        cookie = tokenize.cookie_re.match(line.removeprefix(codecs.BOM_UTF8))
+        if cookie:
+            _refuse_cookie_grimp_cannot_read(repository, path, cookie.group(1).decode("ascii"))
+            return
+
+
+def _refuse_cookie_grimp_cannot_read(repository: str, path: str, spelling: str) -> None:
+    if spelling.lower() not in GRIMP_ACCEPTED_COOKIES:
+        accepted = ", ".join(sorted(GRIMP_ACCEPTED_COOKIES))
+        raise _cannot_be_examined(repository, path, f"declares {spelling}; grimp reads only {accepted}")
 
 
 def _real_ancestors(real_directories: Mapping[str, str], package_directory: str, directory: str) -> set[str]:
@@ -264,7 +284,7 @@ def _real_ancestors(real_directories: Mapping[str, str], package_directory: str,
 
 
 def _cannot_be_examined(repository: str, path: str, reason: str) -> ContractError:
-    name = os.path.relpath(path, repository).encode("utf-8", "backslashreplace").decode("utf-8")
+    name = os.path.relpath(path, repository).encode("utf-8", "surrogateescape").decode("utf-8", "backslashreplace")
     return ContractError(f"{name} cannot be examined: {reason}")
 
 

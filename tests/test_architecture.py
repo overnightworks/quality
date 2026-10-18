@@ -374,12 +374,29 @@ def _non_utf8_content(package):
 
 def _unknown_coding_cookie(package):
     (package / "cookie.py").write_text("# coding: nonsense-xx\nx = 1\n")
-    return "src/shop/cookie.py", "unknown encoding"
+    return "src/shop/cookie.py", "unknown encoding: nonsense-xx"
 
 
 def _latin1_coding_cookie(package):
     (package / "cookie.py").write_text("# coding: latin-1\nx = 1\n")
-    return "src/shop/cookie.py", "declares iso-8859-1; grimp reads UTF-8 only"
+    return "src/shop/cookie.py", "declares latin-1; grimp reads only"
+
+
+def _unknown_coding_cookie_in_a_source_with_a_nul(package):
+    (package / "cookie.py").write_bytes(b"# coding: nonsense-xx\nx = 1\x00\n")
+    return "src/shop/cookie.py", "unknown encoding: nonsense-xx"
+
+
+def _bom_conflicting_with_a_coding_cookie(package):
+    (package / "cookie.py").write_bytes(b"\xef\xbb\xbf# coding: latin-1\nx = 1\n")
+    return "src/shop/cookie.py", "encoding problem: utf-8"
+
+
+def _python_alias_of_utf8(spelling):
+    def arrange(package):
+        (package / "cookie.py").write_text(f"# coding: {spelling}\nx = 1\n")
+        return "src/shop/cookie.py", f"declares {spelling}; grimp reads only"
+    return arrange
 
 
 def _non_utf8_file_name(package):
@@ -387,11 +404,15 @@ def _non_utf8_file_name(package):
         (package / os.fsdecode(b"\xffz.py")).write_text("")
     except OSError:
         pytest.skip("this filesystem refuses a file name that is not UTF-8")
-    return "src/shop/\\udcffz.py", "file name is not valid UTF-8"
+    return "src/shop/\\xffz.py", "file name is not valid UTF-8"
 
 
 @pytest.mark.parametrize("arrange", [_fifo_named_py, _non_utf8_content, _unknown_coding_cookie,
-                                     _latin1_coding_cookie, _non_utf8_file_name])
+                                     _latin1_coding_cookie, _non_utf8_file_name,
+                                     _unknown_coding_cookie_in_a_source_with_a_nul,
+                                     _bom_conflicting_with_a_coding_cookie,
+                                     *map(_python_alias_of_utf8, ["utf_8", "UTF_8", "utf-8-sig", "U8", "cp65001",
+                                                                  "UTF-8-unix"])])
 def test_a_source_grimp_cannot_take_is_refused_before_grimp_can_panic(build_repo, capfd, bounded, arrange):
     """#61 rule 4: a .py file that is no regular file, has a name or content grimp cannot decode, or declares an
     encoding other than UTF-8 is exit 2 naming it, with no Rust panic text, no absolute path and no hang."""
@@ -401,6 +422,16 @@ def test_a_source_grimp_cannot_take_is_refused_before_grimp_can_panic(build_repo
     assert code == 2, output
     assert f"{REFUSED}{named} cannot be examined: {reason}" in output
     assert_no_native_or_local_noise(output, repo)
+
+
+@pytest.mark.parametrize("spelling", ["utf-8", "utf8", "UTF8", "Utf-8", "ascii", "US-ASCII"])
+def test_a_coding_cookie_grimp_reads_is_judged_normally(build_repo, capfd, spelling):
+    """#61 rule 4: a cookie spelling grimp accepts does not stop the judgement of the forbidden import."""
+    repo = build_repo({**SHOP_DB_IMPORTS_WEB, "src/shop/db.py": f"# coding: {spelling}\nimport shop.web\n",
+                       ".importlinter": ini(FORBIDDEN)})
+    code, output = run(capfd, repo)
+    assert code == 1, output
+    assert "shop.db -> shop.web (l.2)" in output
 
 
 @pytest.mark.parametrize("source, echoed", [("x = 1\0y = 2\n", "x = 1\\x00y = 2"),
