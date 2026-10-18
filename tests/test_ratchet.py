@@ -487,3 +487,64 @@ def test_a_key_with_quotes_or_unicode_matches_itself_exactly():
     base = load_baseline(render_baseline({key: 16}))
     assert raised_entries(base, load_baseline(render_baseline({key: 16}))) == []
     assert raised_entries(base, load_baseline(render_baseline({key: 17}))) == [RaisedEntry(key, 16, 17)]
+
+
+@pytest.fixture
+def repo_with_debt_below_src(build_repo, monkeypatch) -> Path:
+    """A repository whose root baseline holds nothing, with a 900-line file in src, entered at src."""
+    repo = build_repo({BASELINE_PATH: EMPTY_BASELINE, "src/big.py": long_file(900)})
+    monkeypatch.chdir(repo / "src")
+    return repo
+
+
+@pytest.mark.parametrize("path_argument", [[], ["."]], ids=["default path", "explicit path"])
+def test_hygiene_from_a_subfolder_judges_the_whole_repository_by_its_root_baseline(
+    repo_with_debt_below_src, capsys, path_argument
+):
+    """#76 rule 1, cells 1-2, 20: the size debt is found from src, named from the top, and no line names the checkout."""
+    code = cli.main(["hygiene", *path_argument])
+    output = (captured := capsys.readouterr()).out + captured.err
+    assert (code, "size src/big.py - file has 900 lines" in output, str(repo_with_debt_below_src) in output) == (1, True, False), output
+
+
+def test_hygiene_given_a_subfolder_by_name_judges_the_repository_from_its_top(build_repo, monkeypatch, capsys):
+    """#76 rule 1, cell 2 (E1): `quality hygiene src` from the top is the run from src."""
+    repo = build_repo({BASELINE_PATH: EMPTY_BASELINE, "src/big.py": long_file(900)})
+    monkeypatch.chdir(repo)
+    code = cli.main(["hygiene", "src"])
+    assert (code, "size src/big.py - file has 900 lines" in capsys.readouterr().out) == (1, True)
+
+
+def test_baseline_write_from_a_subfolder_writes_the_root_baseline(repo_with_debt_below_src, capsys):
+    """#76 rule 1, cell 3 (E2, E11): the root file is written and named from where the command ran; a stray
+    src/quality/baseline.toml is neither read nor touched."""
+    stray = repo_with_debt_below_src / "src/quality/baseline.toml"
+    stray.parent.mkdir()
+    stray.write_text("# stray\n")
+    assert cli.main(["baseline", "write"]) == 0
+    assert "baseline: wrote 1 entry to ../quality/baseline.toml" in capsys.readouterr().out
+    assert ("src/big.py" in (repo_with_debt_below_src / BASELINE_PATH).read_text(), stray.read_text()) == (True, "# stray\n")
+
+
+NOT_UTF8 = b"\xff"
+
+
+def not_utf8_baseline_repo(build_repo) -> Path:
+    repo = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: ""})
+    (repo / BASELINE_PATH).write_bytes(NOT_UTF8)
+    return repo
+
+
+def test_a_baseline_that_is_not_utf8_is_malformed_and_says_once_how_to_rewrite_it(build_repo, capsys):
+    """#76 rule 6, cell 18: hygiene's size rule names the invalid encoding and the rewrite once."""
+    code, output = hygiene(capsys, not_utf8_baseline_repo(build_repo))
+    assert code == 2
+    assert f"{BASELINE_PATH} is not valid UTF-8" in output
+    assert output.count("rewrite it with `quality baseline write`") == 1, output
+
+
+def test_baseline_write_overwrites_a_baseline_that_is_not_utf8_without_a_rewrite_hint(build_repo, capsys):
+    """#76 rule 6, cell 18: the write is the rewrite, so its note carries no hint."""
+    code, lines = baseline_write(capsys, not_utf8_baseline_repo(build_repo))
+    note = next(line for line in lines if "could not be read" in line)
+    assert (code, "is not valid UTF-8" in note, "rewrite it" in note) == (0, True, False), lines

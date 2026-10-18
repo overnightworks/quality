@@ -1,8 +1,10 @@
+import os
 import re
 import subprocess
 from pathlib import Path
 
 import pytest
+from conftest import make_repo
 
 from quality import cli, engines, hygiene
 from quality.report import Finding
@@ -22,8 +24,8 @@ def run(capsys: pytest.CaptureFixture[str], path: Path) -> tuple[int, str]:
     return code, captured.out + captured.err
 
 
-def unreadable_compose_repo(build_repo, tmp_path):
-    repo = build_repo(compose('- "127.0.0.1:8080:80"'))
+def deleted_compose_repo(build_repo, tmp_path):
+    repo = build_repo(compose('- "8080:80"'))
     (repo / "compose.yaml").unlink()
     return repo
 
@@ -44,7 +46,7 @@ def non_utf8_filename_repo(build_repo, tmp_path):
         (lambda build_repo, tmp_path: tmp_path, 2, "cannot judge"),
         (lambda build_repo, tmp_path: build_repo({".env": "A=1\n"}), 1, "finding(s)"),
         (lambda build_repo, tmp_path: build_repo({"\udcff.env": "A=1\n"}), 1, "env-file \\udcff.env - "),
-        (unreadable_compose_repo, 2, "cannot judge"),
+        (deleted_compose_repo, 0, CLEAN_FILE_RULES),
         (truncated_compose_repo, 2, "cannot judge"),
     ],
     ids=[
@@ -53,7 +55,7 @@ def non_utf8_filename_repo(build_repo, tmp_path):
         "not-a-git-repository",
         "tracked-env-file",
         "cell 9 non-utf8-env-filename-rendered-safely",
-        "unreadable-compose",
+        "#76 cell 5 compose deleted from disk is gone",
         "malformed-compose-yaml",
     ],
 )
@@ -202,16 +204,58 @@ def test_a_tracked_compose_symlink_leaving_the_repository_is_exit_2(build_repo, 
     assert (str(repo) in output, str(outside.parent) in output) == (False, False)
 
 
-def test_a_tracked_compose_symlink_loop_is_exit_2(build_repo, capsys):
-    """#31 rule 1 (S8705) and #52 rule 5, cell 19: a tracked compose file that loops through symlinks is exit 2,
-    never a traceback, and the reason names no absolute path."""
-    repo = build_repo({})
+def link_to_nowhere_inside(repo: Path, elsewhere: Path) -> None:
+    (repo / "compose.yaml").symlink_to("missing.yaml")
+
+
+def link_to_nowhere_outside(repo: Path, elsewhere: Path) -> None:
+    (repo / "compose.yaml").symlink_to(elsewhere / "missing.yaml")
+
+
+def link_to_itself(repo: Path, elsewhere: Path) -> None:
     (repo / "compose.yaml").symlink_to("compose.yaml")
-    subprocess.run(["git", "-C", str(repo), "add", "compose.yaml"], check=True)
+
+
+@pytest.mark.parametrize(
+    "link",
+    [link_to_nowhere_inside, link_to_nowhere_outside, link_to_itself],
+    ids=["#76 cell 6 inside", "#76 cell 6 outside", "#76 cell 7 loop (flips #52 cell 19)"],
+)
+def test_a_tracked_compose_linked_to_nowhere_is_gone_not_unjudgeable(build_repo, elsewhere, capsys, link):
+    """#76 rule 3: a tracked compose file that leads to nothing is skipped like a missing .py, never a traceback,
+    and nothing prints the checkout."""
+    repo = build_repo({"compose.yaml": "services: [\n"})
+    (repo / "compose.yaml").unlink()
+    link(repo, elsewhere)
     code, output = run(capsys, repo)
-    assert code == 2
-    assert "cannot read compose.yaml" in output
-    assert str(repo) not in output
+    assert (code, CLEAN_FILE_RULES in output, str(repo) in output) == (0, True, False), output
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-0 file, so no permission is refused")
+def test_a_tracked_compose_the_filesystem_refuses_to_read_is_exit_2(build_repo, capsys):
+    """#76 rule 3, cell 9 (E10): a compose file without read permission is never gone."""
+    repo = build_repo(compose('- "127.0.0.1:8080:80"'))
+    (repo / "compose.yaml").chmod(0)
+    code, output = run(capsys, repo)
+    assert (code, "cannot read compose.yaml" in output, str(repo) in output) == (2, True, False), output
+
+
+def test_a_tracked_workflow_missing_from_disk_is_never_handed_to_an_engine(build_repo, clean_engines, capsys):
+    """#76 rule 3, cell 10: no workflow engine is installed, so any name passed on would be cannot judge."""
+    repo = build_repo({".github/workflows/w.yml": "on: push\n"})
+    (repo / ".github/workflows/w.yml").unlink()
+    code = cli.main(["hygiene", "--engines", str(clean_engines), str(repo)])
+    captured = capsys.readouterr()
+    assert (code, "hygiene: clean (" in captured.out) == (0, True), captured.err
+
+
+def test_a_tracked_env_file_deleted_from_disk_is_still_a_finding(build_repo, capsys):
+    """#76 rule 5, cell 14 (E5): the rule judges the index's names, so only `git rm --cached` clears it."""
+    repo = build_repo({".env": "A=1\n"})
+    (repo / ".env").unlink()
+    code, output = run(capsys, repo)
+    assert code == 1
+    assert_refusal(output, "env-file", ".env")
 
 
 BASELINE = {"quality/baseline.toml": ""}
@@ -322,3 +366,106 @@ def test_a_refusing_workflow_engine_stops_no_other_workflow_rule(build_repo, cle
     assert code == 2
     assert "hygiene: workflow-lint cannot judge - actionlint exited 3" in captured.err
     assert "workflow-security .github/workflows/w.yml:7 - zizmor unpinned-uses" in captured.out
+
+
+def locked_parent(build_repo, tmp_path):
+    (tmp_path / "locked" / "repo").mkdir(parents=True)
+    (tmp_path / "locked").chmod(0)
+    return tmp_path / "locked" / "repo"
+
+
+def bare_repository(build_repo, tmp_path):
+    subprocess.run(["git", "init", "-q", "--bare", str(tmp_path / "bare.git")], check=True)
+    return tmp_path / "bare.git"
+
+
+def git_directory(build_repo, tmp_path):
+    return build_repo({}) / ".git"
+
+
+@pytest.mark.parametrize(
+    "arrange",
+    [
+        pytest.param(locked_parent, marks=pytest.mark.skipif(os.geteuid() == 0, reason="root passes a mode-0 parent")),
+        bare_repository,
+        git_directory,
+    ],
+    ids=["parent without permission", "bare repository", "inside .git"],
+)
+@pytest.mark.parametrize("command", [["hygiene"], ["baseline", "write"]])
+def test_a_path_git_cannot_read_names_the_path_as_given_and_never_a_traceback(
+    build_repo, tmp_path, capsys, arrange, command
+):
+    """#76 rule 2, cell 15: git's refusal, whichever its cause, is exit 2 naming the PATH."""
+    path = arrange(build_repo, tmp_path)
+    try:
+        code = cli.main([*command, str(path)])
+    finally:
+        if (tmp_path / "locked").exists():
+            (tmp_path / "locked").chmod(0o755)
+    err = capsys.readouterr().err
+    assert (code, f"{path} is not a readable git repository" in err, "Traceback" in err) == (2, True, False), err
+
+
+def test_the_hint_for_a_path_git_refuses_quotes_it(tmp_path, monkeypatch, capsys):
+    """#76 rule 2, cell 16: the command the message advises runs as printed, whatever the PATH holds."""
+    (tmp_path / "a b").write_text("x")
+    monkeypatch.chdir(tmp_path)
+    code = cli.main(["hygiene", "a b"])
+    err = capsys.readouterr().err
+    assert (code, "a b is not a readable git repository: git rev-parse exited 128 (`git -C 'a b' status` says why)" in err) == (2, True), err
+
+
+def test_a_working_directory_that_was_removed_is_cannot_judge_not_a_traceback(tmp_path, monkeypatch, capsys):
+    """#76 E8, rule 2: a relative PATH cannot be resolved without a working directory."""
+    gone = tmp_path / "gone"
+    gone.mkdir()
+    monkeypatch.chdir(gone)
+    gone.rmdir()
+    results = [(command, cli.main(command), capsys.readouterr().err) for command in (["hygiene", "."], ["baseline", "write", "."])]
+    assert [(code, ". is not a readable git repository: the working directory cannot be read ([Errno 2]" in err, "Traceback" in err) for _, code, err in results] == [(2, True, False)] * 2, results
+
+
+def test_a_machine_without_git_is_cannot_judge_not_a_traceback(tmp_path, monkeypatch, capsys):
+    """#76 rule 2: git missing from the PATH names that git did not run."""
+    repo = make_repo(tmp_path, {"src/a.py": "x = 1\n"})
+    nowhere = tmp_path / "empty-bin"
+    nowhere.mkdir()
+    monkeypatch.setenv("PATH", str(nowhere))
+    code = cli.main(["hygiene", str(repo)])
+    err = capsys.readouterr().err
+    assert (code, f"{repo} is not a readable git repository: git did not run ([Errno 2]" in err, "Traceback" in err) == (2, True, False), err
+
+
+def test_compose_files_are_read_and_parsed_one_at_a_time(tmp_path, capsys):
+    """#76 E6, rule 1, cell 4: the first file's YAML error is reported although a later file cannot be decoded."""
+    repo = make_repo(tmp_path, {"compose-a.yaml": "a: [\n", "compose-b.yaml": "x"})
+    (repo / "compose-b.yaml").write_bytes(b"\xff")
+    code, output = run(capsys, repo)
+    assert (code, "compose-port cannot judge - cannot read compose-a.yaml" in output, "compose-b.yaml" in output) == (2, True, False), output
+
+
+def make_submodule_path(tmp_path: Path) -> tuple[Path, Path]:
+    (tmp_path / "inner").mkdir()
+    (tmp_path / "outer").mkdir()
+    inner = make_repo(tmp_path / "inner", {"src/a.py": "x = 1\n"})
+    outer = make_repo(tmp_path / "outer", {})
+    subprocess.run(["git", "-C", str(outer), "-c", "protocol.file.allow=always", "submodule", "add", "-q", str(inner), "sub"], check=True)
+    return outer, outer / "sub"
+
+
+def make_linked_worktree_path(tmp_path: Path) -> tuple[Path, Path]:
+    (tmp_path / "main").mkdir()
+    main = make_repo(tmp_path / "main", {"src/a.py": "x = 1\n"})
+    linked = tmp_path / "linked"
+    subprocess.run(["git", "-C", str(main), "worktree", "add", "-q", str(linked)], check=True)
+    return main, linked
+
+
+@pytest.mark.parametrize("make", [make_submodule_path, make_linked_worktree_path], ids=["submodule", "linked worktree"])
+def test_a_path_in_a_submodule_or_linked_worktree_means_its_own_top(tmp_path, capsys, make):
+    """#76 rule 1, cell 19 (E7): the write lands in the work tree the PATH lies in, not in the superproject or main checkout."""
+    superproject, own_top = make(tmp_path)
+    assert cli.main(["baseline", "write", str(own_top / "src")]) == 0
+    capsys.readouterr()
+    assert ((own_top / "quality/baseline.toml").is_file(), (superproject / "quality").exists()) == (True, False)

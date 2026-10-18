@@ -459,13 +459,29 @@ def test_the_source_text_a_syntax_error_echoes_is_escaped_and_cut(build_repo, ca
     assert all(len(line) < 400 for line in output.splitlines())
 
 
-def test_a_config_tracked_but_missing_on_disk_cannot_be_judged(build_repo, capsys):
-    """#61 rule 3, cell 19 (until Q1b-3d)."""
+def test_a_config_tracked_but_deleted_from_disk_is_none(build_repo, capsys):
+    """#76 rule 4, cell 11 (flips #61 cell 19): a config counts when its name exists."""
     repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
     (repo / ".importlinter").unlink()
     code, output = run(capsys, repo)
-    assert code == 2, output
-    assert f"{REFUSED}.importlinter is tracked but not on disk" in output
+    assert (code, "import-contract: report only (no import-linter config)" in output) == (0, True), output
+
+
+def test_a_config_linked_to_nowhere_cannot_be_judged(build_repo, capsys):
+    """#76 rule 4, cell 12: a name that exists but leads nowhere is a file git has and the rule cannot read."""
+    repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
+    (repo / ".importlinter").unlink()
+    (repo / ".importlinter").symlink_to("missing.ini")
+    code, output = run(capsys, repo)
+    assert (code, f"{REFUSED}cannot read .importlinter" in output) == (2, True), output
+
+
+def test_a_tracked_package_init_deleted_from_disk_cannot_be_judged_without_a_traceback(build_repo, capsys):
+    """#76 cell 13: architecture.py is untouched, and the tree it cannot build is exit 2."""
+    repo = build_repo({**SHOP_DB_IMPORTS_WEB, ".importlinter": ini(FORBIDDEN)})
+    (repo / "src/shop/__init__.py").unlink()
+    code, output = run(capsys, repo)
+    assert (code, REFUSED in output, "Traceback" in output) == (2, True, False), output
 
 
 def test_an_error_inside_a_contract_check_names_the_contract_without_a_traceback(build_repo, capsys, monkeypatch):
