@@ -145,8 +145,8 @@ def run_hygiene_check(path: Path, engine_dir: Path | None) -> int:
         print(f"hygiene: {error.label} - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     print_secret_allowances(result.allowed_secrets, result.unused_allowances)
-    if result.size_report:
-        print(printable(result.size_report))
+    for report in result.reports:
+        print(printable(report))
     for verdict in result.verdicts:
         for finding in verdict.findings:
             print(render(finding))

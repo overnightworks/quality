@@ -9,7 +9,7 @@ from pathlib import Path, PurePosixPath
 
 import yaml
 
-from quality import engines, ratchet, repository
+from quality import architecture, engines, ratchet, repository
 from quality.config import Allowance, ConfigError, read_secret_allowances
 from quality.report import Finding, printable
 
@@ -197,6 +197,17 @@ def check_size(root: Path, tracked: list[str]) -> SizeResult:
     return SizeResult(ratchet.compare(measurements, baseline), None)
 
 
+def check_import_contract(root: Path, tracked: list[str]) -> architecture.ContractsVerdict:
+    """Report-only without a tracked import-linter config at the top; with one, its contracts must be kept."""
+    configs = {name: _read_tracked(repository.read_text, root, name) for name in tracked if name in architecture.CONFIG_FILES}
+    try:
+        return architecture.check_contracts(root, tracked, configs)
+    except architecture.UnparsableModule as error:
+        raise Unparsable(str(error)) from error
+    except architecture.ContractError as error:
+        raise CannotJudge(str(error)) from error
+
+
 def check_secrets(root: Path, engine_dir: Path) -> engines.SecretScan:
     try:
         return engines.scan_secrets(root, engine_dir, engines.read_pins(), read_secret_allowances(root))
@@ -245,7 +256,7 @@ class RuleVerdict:
 @dataclass(frozen=True)
 class HygieneResult:
     verdicts: tuple[RuleVerdict, ...]
-    size_report: str | None
+    reports: tuple[str, ...]
     allowed_secrets: list[Finding]
     unused_allowances: dict[Allowance, str]
 
@@ -281,16 +292,24 @@ def run_hygiene(root: Path, engine_dir: Path | None = None) -> HygieneResult:
     """Judges every active rule, in run order; only a repository git cannot list stops the run."""
     tracked = tracked_files(root)
     size = _attempt(lambda: check_size(root, tracked))
+    contracts = _attempt(lambda: check_import_contract(root, tracked))
     verdicts = [
         _verdict(ENV_FILE, check_env_files(tracked)),
         _verdict(COMPOSE_PORT, _attempt(lambda: check_compose_ports(root, tracked))),
         _verdict(ratchet.SIZE, size if isinstance(size, CannotJudge) else size.findings),
+        _verdict(architecture.RULE, contracts if isinstance(contracts, CannotJudge) else contracts.findings),
     ]
-    size_report = None if isinstance(size, CannotJudge) else size.report
+    reports = _reports(size, contracts)
     if engine_dir is None:
-        return HygieneResult(tuple(verdicts), size_report, [], {})
+        return HygieneResult(tuple(verdicts), reports, [], {})
     secrets = _attempt(lambda: check_secrets(root, engine_dir))
     verdicts.append(_verdict(engines.LEAK_RULE, secrets if isinstance(secrets, CannotJudge) else secrets.findings))
     verdicts += [_verdict(rule, _attempt(partial(check_workflows, root, engine_dir, rule, tracked))) for rule in WORKFLOW_RULE_IDS]
     allowed, unused = ([], {}) if isinstance(secrets, CannotJudge) else (secrets.allowed, secrets.unused_allowances)
-    return HygieneResult(tuple(verdicts), size_report, allowed, unused)
+    return HygieneResult(tuple(verdicts), reports, allowed, unused)
+
+
+def _reports(size: SizeResult | CannotJudge, contracts: architecture.ContractsVerdict | CannotJudge) -> tuple[str, ...]:
+    """The report lines of the rules that judged: the size counts without a baseline, the import-contract notes."""
+    size_reports = [] if isinstance(size, CannotJudge) or size.report is None else [size.report]
+    return (*size_reports, *([] if isinstance(contracts, CannotJudge) else contracts.notes))

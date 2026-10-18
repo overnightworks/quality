@@ -4,7 +4,11 @@ dynamic = ["version"]
 description = "One door for fleet quality checks."
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["PyYAML>=6", "lizard>=1.24.1,<1.25"]
+dependencies = [
+    "PyYAML>=6",
+    "import-linter==2.15",
+    "lizard>=1.24.1,<1.25",
+]
 
 [project.scripts]
 quality = "quality.cli:main"
@@ -32,3 +36,24 @@ markers = ["engine: runs a real downloaded engine process (needs network; CI run
 [tool.coverage.run]
 source_pkgs = ["quality"]
 relative_files = true
+
+[tool.importlinter]
+root_packages = ["quality"]
+
+[[tool.importlinter.contracts]]
+name = "quality's layers, top to bottom"
+type = "layers"
+containers = ["quality"]
+exhaustive = true
+layers = [
+    "cli",
+    "emergency",
+    "verdict",
+    "sonar | scoreboard",
+    "hygiene | staged",
+    "architecture | engines",
+    "ratchet",
+    "report",
+    "config",
+    "repository",
+]
