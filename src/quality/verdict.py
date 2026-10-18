@@ -166,7 +166,10 @@ def read_base(repo: Path, base_sha: str) -> Side:
     _require_safe_ref(base_sha)
     where = f"the base commit {base_sha}"
     try:
-        config, baseline = (engines.read_blob(repo, base_sha, path, where) for path in (CONFIG_PATH, BASELINE_PATH))
+        config, baseline = (
+            engines.read_blob(repo, base_sha, path, f"cannot read {where}", f"cannot read {path} at {where}")
+            for path in (CONFIG_PATH, BASELINE_PATH)
+        )
     except engines.EngineError as error:
         raise CannotJudge(str(error)) from error
     return side_of(config, baseline, where)

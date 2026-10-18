@@ -281,12 +281,16 @@ def git(arguments: list[str], failure: str, env: dict[str, str] | None = None) -
     return done.stdout
 
 
-def read_blob(repository: Path, revision: str, path: str, where: str, env: dict[str, str] | None = None) -> str | None:
-    """The UTF-8 text of `path` at `revision`, None when the tree there lacks it; `where` names the revision."""
+def read_blob(
+    repository: Path, revision: str, path: str, unlisted: str, unreadable: str, env: dict[str, str] | None = None
+) -> str | None:
+    """The UTF-8 text of `path` at `revision`, None when the tree there lacks it.
+
+    Each caller words its own failures: `unlisted` when the tree cannot be listed, `unreadable` when the file cannot.
+    """
     in_repository = ["-C", str(repository.resolve())]
-    if not git([*in_repository, "ls-tree", "--end-of-options", revision, "--", path], f"cannot read {where}", env).strip():
+    if not git([*in_repository, "ls-tree", "--end-of-options", revision, "--", path], unlisted, env).strip():
         return None
-    unreadable = f"cannot read {path} at {where}"
     shown = run(["git", *in_repository, "show", "--end-of-options", f"{revision}:{path}"], env=env, encoding=None)
     if shown.returncode != 0:
         raise EngineError(f"{unreadable}{stderr_tail(shown.stderr.decode(errors='replace'))}")

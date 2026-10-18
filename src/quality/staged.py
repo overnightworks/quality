@@ -24,7 +24,10 @@ def scan_staged(path: Path, engine_dir: Path, pins: dict[str, Pin]) -> SecretSca
         git_environment = engines.attribute_free_git_environment(scratch / "home")
         source = _scratch_repository(scratch / "source", object_store, head, staged_tree, git_environment)
         # A tree without quality/config.toml allows nothing.
-        staged_config = engines.read_blob(source, staged_tree, CONFIG_PATH, "the staged tree", git_environment)
+        staged_config = engines.read_blob(
+            source, staged_tree, CONFIG_PATH, f"cannot look for {CONFIG_PATH} in the staged tree",
+            f"{CONFIG_PATH} cannot be read from the staged tree", git_environment,
+        )
         allowances = load_staged_secret_allowances(staged_config)
         return engines.run_gitleaks(binary, scratch, git_environment, source, ["--pre-commit", "--staged"], allowances)
 

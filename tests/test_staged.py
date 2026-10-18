@@ -255,6 +255,25 @@ def test_an_unreadable_allow_list_is_exit_2(build_repo, installed_engines, capsy
 
 
 @pytest.mark.engine
+@pytest.mark.parametrize(
+    ("failing", "expected"),
+    [
+        ("ls-tree", "cannot look for quality/config.toml in the staged tree"),
+        ("show", "quality/config.toml cannot be read from the staged tree"),
+    ],
+)
+def test_git_failing_on_the_staged_allow_list_is_exit_2_in_its_words(
+    build_repo, installed_engines, fake_git, capsys, failing, expected
+):
+    """#25 rule 4: git that cannot read the staged allow list is exit 2, and the message says which read failed."""
+    repo = build_repo({"README": "hello\n"})
+    stage(repo, {"quality/config.toml": "[secrets]\n"})
+    fake_git(f'case " $* " in *" {failing} "*) echo "{failing} broke" >&2; exit 1;; esac')
+    assert scan_staged(repo, installed_engines) == 2
+    assert f"scan-staged: cannot judge - {expected}: {failing} broke" in capsys.readouterr().err
+
+
+@pytest.mark.engine
 @pytest.mark.parametrize("kind", ["a missing path", "a regular file"])
 def test_a_path_that_is_not_a_directory_is_exit_2_and_named(kind, tmp_path, installed_engines, capsys):
     """#25 rule 4: a path that is no directory is exit 2 and the message names the path as given."""
