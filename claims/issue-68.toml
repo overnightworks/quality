@@ -1,0 +1,8 @@
+claim_id = "c65701cebc044405815f1b16b190f00a"
+agent = "claude"
+role = "builder"
+base = "a7658c480449169b68f5f893f0ef3bd6deb34c20"
+branch = "claude/issue-68-codeql-workflow"
+scope = [".github/workflows/code-scanning.yml", ".github/workflows/codeql.yml", "AGENTS.md", "README.md", "docs/rulings.md", "tests/test_codeql_workflow.py"]
+opened_commit = "8dc91fb312923e9dc48478dd838e8cce909ddf7b"
+whole_reason = "The workflow is only proven by a caller, and quality's caller only goes green once the Default Setup is off: the three land as one handover."
