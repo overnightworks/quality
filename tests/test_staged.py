@@ -276,7 +276,7 @@ def test_git_failing_on_the_staged_allow_list_is_exit_2_in_its_words(
 @pytest.mark.engine
 @pytest.mark.parametrize("kind", ["a missing path", "a regular file"])
 def test_a_path_that_is_not_a_directory_is_exit_2_and_named(kind, tmp_path, installed_engines, capsys):
-    """#25 rule 4: a path that is no directory is exit 2 and the message names the path as given."""
+    """#25 rule 4: a path that is no directory is exit 2, and git's own error names the path (#58 rule 3)."""
     path = tmp_path / "not-a-directory"
     if kind == "a regular file":
         path.write_text("content\n")
