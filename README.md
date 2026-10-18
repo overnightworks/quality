@@ -294,8 +294,8 @@ quality emergency-merge <owner/repo> <pr>
   baseline (read at the merge commit and at base) or a missing mandatory job is refused), `[gate] legacy` is `fail` at the pull request's current merge commit (under `report` the Sonar job cannot be red on legacy findings, and a
   missing config reads as `report`), SonarCloud's analysis of the pull request is of the head being merged and adds no finding (the findings are
   named otherwise), and the default branch has legacy findings. `SONAR_TOKEN` is read from the environment when the project
-  needs one: without it the door reads a public project anonymously, with no Authorization header, and a private project
-  that refuses the anonymous read is exit `2`, naming the missing `SONAR_TOKEN`.
+  needs one: without it the door reads a public project anonymously, with no Authorization header, and an anonymous read
+  that SonarCloud refuses (a private project answers 404) is exit `2`, naming `SONAR_TOKEN`; with a token, a 401 or 403 says the token was rejected.
 - **It shows, then asks:** repository, pull request, head SHA and legacy count, then the typed word `ja`. Anything else
   changes nothing.
 - **Off, merge, on:** it sets the repository's `quality_gate` property to `false` (this removes ruleset 25227067 for it),

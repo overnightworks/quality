@@ -58,7 +58,7 @@ class FakeSonar:
     answers: dict[str, list[object]]
     requests: list[tuple[str, str]] = field(default_factory=list)
 
-    def __call__(self, url: str, authorization: str) -> object:
+    def __call__(self, url: str, authorization: str | None) -> object:
         self.requests.append((url, authorization))
         queue = self.answers[self.endpoint_of(url)]
         answer = queue.pop(0) if len(queue) > 1 else queue[0]
@@ -577,14 +577,6 @@ def test_the_real_transport_sends_no_authorization_without_a_credential(loopback
     assert received == [None, "Basic x"]
 
 
-def test_the_real_transport_still_refuses_a_redirect_for_a_credentialed_request(loopback):
-    """#73 rule 3: a credentialed request is not forwarded by a redirect"""
-    responder, _, url = loopback
-    responder.append(reply(302, b"", Location="http://127.0.0.1:1/stolen"))
-    with pytest.raises(CannotJudge, match="HTTP 302"):
-        sonar.fetch_json(url, "Basic x")
-
-
 @pytest.mark.parametrize(
     ("responder", "message"),
     [
@@ -597,7 +589,7 @@ def test_the_real_transport_still_refuses_a_redirect_for_a_credentialed_request(
     ids=["non-JSON", "redirect refused", "http error", "non-UTF-8 body", "truncated body"],
 )
 def test_the_real_transport_refuses_what_it_cannot_trust(loopback, responder, message):
-    """#22: the real transport maps non-JSON, redirect, HTTP error, non-UTF-8 and truncated bodies to cannot judge"""
+    """#22, #73 rule 3: the real transport maps non-JSON, redirect (a credentialed request is not forwarded), HTTP error, non-UTF-8 and truncated bodies to cannot judge"""
     set_responder, _, url = loopback
     set_responder.append(responder)
     with pytest.raises(CannotJudge, match=message):

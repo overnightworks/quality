@@ -81,7 +81,7 @@ PROPERTY_ESCAPES = {"t": "\t", "n": "\n", "r": "\r", "f": "\f"}
 # The second argument is the Authorization header value; None sends the request anonymously.
 Transport = Callable[[str, str | None], object]
 Sleep = Callable[[float], None]
-ANONYMOUS_REFUSALS = frozenset({401, 403})
+TOKEN_REFUSALS = frozenset({401, 403})
 
 
 class SonarHttpError(CannotJudge):
@@ -452,11 +452,14 @@ def require_resolved(analysis: Analysis, transport: Transport) -> None:
     try:
         transport(url, analysis.authorization)
     except SonarHttpError as error:
-        if analysis.authorization is None and error.status in ANONYMOUS_REFUSALS:
+        where = f"{analysis.project.key} in {analysis.scope.label}"
+        if analysis.authorization is None:
             raise CannotJudge(
-                f"SonarCloud refused an anonymous read of {analysis.project.key} (HTTP {error.status}); set {TOKEN_VARIABLE}"
+                f"SonarCloud did not resolve {where} anonymously (HTTP {error.status}); a private project needs {TOKEN_VARIABLE}"
             ) from error
-        raise CannotJudge(f"SonarCloud did not resolve {analysis.project.key} in {analysis.scope.label} (HTTP {error.status})") from error
+        if error.status in TOKEN_REFUSALS:
+            raise CannotJudge(f"SonarCloud rejected the token for {where} (HTTP {error.status})") from error
+        raise CannotJudge(f"SonarCloud did not resolve {where} (HTTP {error.status})") from error
 
 
 def scope_query(scope: Scope) -> dict[str, str]:
