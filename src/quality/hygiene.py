@@ -221,7 +221,7 @@ def skipped_rules(engine_dir: Path | None) -> tuple[str, ...]:
 
 
 class Outcome(Enum):
-    """A rule's verdict, in the order the summary counts them; the exit code is run_hygiene_check's alone."""
+    """A rule's verdict, mildest first: the worst verdict of a run decides its exit."""
 
     CLEAN = "clean"
     FINDINGS = "findings"
@@ -254,8 +254,9 @@ class HygieneResult:
         return [finding for verdict in self.verdicts for finding in verdict.findings]
 
     @property
-    def refusals(self) -> list[RuleVerdict]:
-        return [verdict for verdict in self.verdicts if verdict.refusal is not None]
+    def worst(self) -> Outcome:
+        severity = list(Outcome)
+        return max((verdict.outcome for verdict in self.verdicts), key=severity.index, default=Outcome.CLEAN)
 
 
 def _attempt[T](check: Callable[[], T]) -> T | CannotJudge:

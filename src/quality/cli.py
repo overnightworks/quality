@@ -36,6 +36,12 @@ from quality.verdict import (
 EXIT_CLEAN = 0
 EXIT_FINDINGS = 1
 EXIT_CANNOT_JUDGE = 2
+HYGIENE_EXIT = {
+    Outcome.CLEAN: EXIT_CLEAN,
+    Outcome.FINDINGS: EXIT_FINDINGS,
+    Outcome.UNPARSABLE: EXIT_CANNOT_JUDGE,
+    Outcome.CANNOT_JUDGE: EXIT_CANNOT_JUDGE,
+}
 
 
 def main(
@@ -137,14 +143,12 @@ def run_hygiene_check(path: Path, engine_dir: Path | None) -> int:
         if verdict.refusal is not None:
             print(f"hygiene: {verdict.rule} {verdict.refusal.label} - {verdict.refusal}", file=sys.stderr)
     print(f"hygiene: {hygiene_summary(result)}{coverage_note(engine_dir)}")
-    if result.refusals:
-        return EXIT_CANNOT_JUDGE
-    return EXIT_FINDINGS if result.findings else EXIT_CLEAN
+    return HYGIENE_EXIT[result.worst]
 
 
 def hygiene_summary(result: HygieneResult) -> str:
     """The clean line names the rules it judged; any other line counts the findings and the rules per verdict."""
-    if not (result.findings or result.refusals):
+    if result.worst is Outcome.CLEAN:
         return f"clean ({', '.join(verdict.rule for verdict in result.verdicts)})"
     outcomes = Counter(verdict.outcome for verdict in result.verdicts)
     counts = ", ".join(f"{outcomes[outcome]} {outcome.value}" for outcome in Outcome if outcomes[outcome])
