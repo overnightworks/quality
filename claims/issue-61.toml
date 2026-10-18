@@ -1,8 +1,0 @@
-claim_id = "29f95aafca504461bf593af609854099"
-agent = "claude"
-role = "builder"
-base = "d567eac4fef6b66d28e03b316984af4bb665c1c1"
-branch = "claude/issue-61-import-contract"
-scope = ["AGENTS.md", "README.md", "docs/rulings.md", "pyproject.toml", "quality/baseline.toml", "src/quality/architecture.py", "src/quality/cli.py", "src/quality/hygiene.py", "tests/test_architecture.py", "tests/test_hygiene.py", "tests/test_ratchet.py", "uv.lock"]
-opened_commit = "f079de0f45d6e167c8dbfc6cc0594c0e0fee44c2"
-whole_reason = "The rule, its adapter and the contract that proves it are one vertical: without quality's own contract the rule has no caller in quality's gate."
