@@ -220,7 +220,7 @@ def skipped_rules(engine_dir: Path | None) -> tuple[str, ...]:
 
 
 class Outcome(Enum):
-    """A rule's verdict, mildest first."""
+    """A rule's verdict, in the order the summary counts them; the exit code is run_hygiene_check's alone."""
 
     CLEAN = "clean"
     FINDINGS = "findings"
