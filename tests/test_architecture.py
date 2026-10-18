@@ -310,6 +310,11 @@ def _unreadable_file(root):
     return root / "sealed", 0o444, "src/shop/sealed/inner.py"
 
 
+def _unreadable_python_file(root):
+    (root / "locked.py").write_text("")
+    return root / "locked.py", 0o000, "src/shop/locked.py"
+
+
 def _unreadable_directory_with_a_file(root):
     (root / "data").mkdir()
     (root / "data" / "f.txt").write_text("")
@@ -322,7 +327,8 @@ def _empty_unreadable_directory(root):
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root reads a 0o444 directory, so nothing blocks the read")
-@pytest.mark.parametrize("arrange", [_unreadable_file, _unreadable_directory_with_a_file, _empty_unreadable_directory])
+@pytest.mark.parametrize("arrange", [_unreadable_file, _unreadable_python_file, _unreadable_directory_with_a_file,
+                                     _empty_unreadable_directory])
 def test_a_place_that_cannot_be_examined_is_cannot_judge_naming_it(build_repo, capsys, arrange):
     """#61 rule 4: a read failure other than a loop or a dangling link is exit 2 naming the place, not the config."""
     repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
@@ -336,6 +342,16 @@ def test_a_place_that_cannot_be_examined_is_cannot_judge_naming_it(build_repo, c
     assert f"{REFUSED}{named} cannot be examined: Permission denied" in output
     assert "the config" not in output
     assert "PermissionError" not in output
+    assert str(repo) not in output
+
+
+def test_a_source_file_grimp_panics_on_is_cannot_judge_without_a_path(build_repo, capsys):
+    """#61 rule 4: grimp's Rust panic on a non-UTF-8 module is exit 2, not a crash, and names no absolute path."""
+    repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
+    (repo / "src" / "shop" / "latin.py").write_bytes(b"\xff\xfe")
+    code, output = run(capsys, repo)
+    assert code == 2, output
+    assert f"{REFUSED}grimp panicked while reading the root packages" in output
     assert str(repo) not in output
 
 

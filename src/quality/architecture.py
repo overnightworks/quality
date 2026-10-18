@@ -51,6 +51,7 @@ UNMATCHED_IGNORE = re.compile(r"No matches for ignored import (?P<expression>.+)
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 BROKEN_FIX = "change the import or the contract."
 STALE_IGNORE_FIX = "delete the entry."
+PANIC_MODULE = "pyo3_runtime"
 
 
 class ContractError(Exception):
@@ -154,12 +155,20 @@ def _build_graph(repository: str, roots: Mapping[str, str], options: UserOptions
     with _first_on_path([os.path.join(repository, directory) for directory in dict.fromkeys(roots.values())]):
         for package, directory in roots.items():
             _refuse_foreign_location(repository, package, directory)
-        return grimp.build_graph(
-            *roots,
-            include_external_packages=bool(use_cases._get_include_external_packages(options)),
-            exclude_type_checking_imports=use_cases._get_exclude_type_checking_imports(options),
-            cache_dir=None,
-        )
+        try:
+            return grimp.build_graph(
+                *roots,
+                include_external_packages=bool(use_cases._get_include_external_packages(options)),
+                exclude_type_checking_imports=use_cases._get_exclude_type_checking_imports(options),
+                cache_dir=None,
+            )
+        except BaseException as error:
+            # grimp's Rust scanner panics on a source file it cannot decode; the panic type derives from
+            # BaseException and lives in `pyo3_runtime`, which cannot be imported, and its message names an absolute path
+            if type(error).__module__ != PANIC_MODULE:
+                raise
+            raise ContractError("grimp panicked while reading the root packages;"
+                                " a source file it cannot read or decode cannot be judged") from error
 
 
 def _refuse_links_out(repository: str, package_directory: str) -> None:
@@ -180,6 +189,7 @@ def _refuse_links_out(repository: str, package_directory: str) -> None:
                 raise ContractError(f"{os.path.relpath(path, repository)} links outside the repository")
         for name in files:
             _refuse_file_loop(repository, os.path.join(parent, name))
+            _refuse_unreadable_source(repository, os.path.join(parent, name))
 
 
 def _refuse_file_loop(repository: str, path: str) -> None:
@@ -196,6 +206,19 @@ def _refuse_file_loop(repository: str, path: str) -> None:
         # a file that vanished mid-walk (a race, no link) is grimp's to report
         if error.errno != errno.ENOENT:
             raise _cannot_be_examined(repository, path, error) from error
+
+
+def _refuse_unreadable_source(repository: str, path: str) -> None:
+    """grimp reads every .py file it finds, and a stat succeeds on a file whose mode forbids the read."""
+    if not path.endswith(".py"):
+        return
+    try:
+        with open(path, "rb"):
+            pass
+    except FileNotFoundError:
+        pass  # vanished mid-walk: grimp's to report, as in _refuse_file_loop
+    except OSError as error:
+        raise _cannot_be_examined(repository, path, error) from error
 
 
 def _real_ancestors(real_directories: Mapping[str, str], package_directory: str, directory: str) -> set[str]:
