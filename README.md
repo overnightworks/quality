@@ -26,9 +26,16 @@ the same files and the same `quality/baseline.toml` as one at the top, and names
 src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree's own top. It applies four rules:
 
 - `env-file`: no tracked `.env`, `.env.*` or `*.env` file (names ending in `.example` are templates and pass).
-- `compose-port`: every published port in a tracked `compose*.y{a,}ml` or `docker-compose*.y{a,}ml` binds `127.0.0.1`. A
-  tracked file missing from disk (deleted, or a symlink to nowhere or in a loop) is skipped; one the filesystem refuses to
-  read is `hygiene: compose-port cannot judge - ...`.
+- `compose-port`: every published port in a tracked compose file binds loopback, `127.0.0.1` or `::1` (`"[::1]:HOST:CONTAINER"`,
+  `host_ip: ::1`); `[::]` and `0.0.0.0` are findings. A compose file is a `.yml` or `.yaml` file whose name holds the
+  word `compose` between `.`, `-` or `_`, in any case: `docker-compose.ci.yml` and `keycloak/bootstrap.compose.yaml` are
+  judged, `composer.yml`, `compose2.yaml` and `compose.yaml.example` are not. Only tracked files count: an untracked
+  `compose.yaml` is never judged, one added with `git add` is. A tracked file missing from disk (deleted, or a symlink
+  to nowhere or in a loop) is skipped; one the filesystem refuses to read is `hygiene: compose-port cannot judge - ...`.
+  A file is read as Compose reads it: `- 22:22` is the text `22:22`, and `!override` and `!reset` are read as the value
+  they wrap; any other tag (`!foo`) and any YAML error is `cannot judge`, in one line with its line and column. A port
+  that is neither text, a number nor a mapping is a finding. A service with `network_mode: host` publishes whatever its
+  process binds, and this rule does not check that yet (an allowlist follows in Q1b-3g).
 - `size`: every tracked `*.py` file is measured with [lizard](https://github.com/terryyin/lizard): a file from 800
   lines, a function from 60 lines and a function with a CCN above 15 are debt, counted apart for production and tests
   (a path under `test/` or `tests/`, `conftest.py`, `test_*.py`, `*_test.py`). Functions are named by their qualified

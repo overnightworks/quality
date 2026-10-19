@@ -25,7 +25,10 @@ LOOPBACK = "127.0.0.1"
 LOOPBACK_HOSTS = (LOOPBACK, "::1")
 ENV_TEMPLATE_SUFFIX = ".example"
 INTERPOLATION = re.compile(r"\$\{[^}]*\}")
-COMPOSE_PATTERNS = ("compose*.yml", "compose*.yaml", "docker-compose*.yml", "docker-compose*.yaml")
+COMPOSE_SUFFIXES = (".yml", ".yaml")
+COMPOSE_TOKEN = "compose"
+NAME_SEPARATORS = re.compile(r"[._-]")
+YAML_NUMBER_TAGS = ("tag:yaml.org,2002:int", "tag:yaml.org,2002:float")
 
 
 class ComposeLoader(yaml.SafeLoader):
@@ -44,6 +47,17 @@ def _construct_tagged(loader: ComposeLoader, node: yaml.Node) -> object:
 
 for compose_tag in ("!override", "!reset"):
     ComposeLoader.add_constructor(compose_tag, _construct_tagged)
+
+
+def _number_constructor(construct_number: Callable[[yaml.SafeLoader, yaml.Node], object]):
+    """Compose reads YAML 1.2, where `22:22` is text; only YAML 1.1 makes it a base-60 number."""
+    def construct(loader: ComposeLoader, node: yaml.Node) -> object:
+        return node.value if ":" in node.value else construct_number(loader, node)
+    return construct
+
+
+for number_tag in YAML_NUMBER_TAGS:
+    ComposeLoader.add_constructor(number_tag, _number_constructor(yaml.SafeLoader.yaml_constructors[number_tag]))
 
 
 class CannotJudge(Exception):
@@ -113,8 +127,14 @@ def _is_env_file(name: str) -> bool:
     return name == ".env" or name.startswith(".env.") or name.endswith(".env")
 
 
+def is_compose_file(name: str) -> bool:
+    """A YAML file whose name holds the word `compose` between `.`, `-` or `_`: `docker-compose.ci.yml`, not `composer.yml`."""
+    path = PurePosixPath(name)
+    return path.suffix.lower() in COMPOSE_SUFFIXES and COMPOSE_TOKEN in NAME_SEPARATORS.split(path.stem.casefold())
+
+
 def check_compose_ports(root: Path, tracked: list[str]) -> list[Finding]:
-    composes = [name for name in tracked if any(PurePosixPath(name).match(pattern) for pattern in COMPOSE_PATTERNS)]
+    composes = [name for name in tracked if is_compose_file(name)]
     findings = []
     for name in composes:
         if _judged(repository.is_on_disk, root, name) and (text := _judged(repository.read_text, root, name)) is not None:
@@ -143,8 +163,8 @@ def _read_existing[T](read: Callable[[Path, str], T | None], root: Path, names: 
 def _compose_file_findings(name: str, text: str) -> list[Finding]:
     try:
         document = yaml.load(text, Loader=ComposeLoader)
-    except yaml.YAMLError as error:
-        raise CannotJudge(f"cannot read {name}: {error}") from error
+    except (yaml.YAMLError, RecursionError) as error:
+        raise CannotJudge(f"cannot read {name}: {_yaml_error_reason(error)}") from error
     services = document.get("services") if isinstance(document, dict) else None
     if not isinstance(services, dict):
         return []
@@ -158,13 +178,35 @@ def _compose_file_findings(name: str, text: str) -> list[Finding]:
                                     f"service {service_name} has ports that are not a list (unreadable).",
                                     "write ports as a list so each one can be checked."))
             continue
-        findings.extend(
-            Finding(COMPOSE_PORT, name, None,
-                    f"service {service_name} publishes port {_describe(port)} beyond loopback.",
-                    f"bind it explicitly, for example \"{LOOPBACK}:HOST:CONTAINER\".")
-            for port in ports
-            if not _binds_loopback(port)
-        )
+        findings.extend(_port_findings(name, service_name, ports))
+    return findings
+
+
+def _yaml_error_reason(error: Exception) -> str:
+    """One line: PyYAML's own message quotes the source and names `<unicode string>`."""
+    if isinstance(error, RecursionError):
+        return "nested too deeply"
+    if isinstance(error, yaml.reader.ReaderError):
+        return f"position {error.position}: {error.reason}"
+    if isinstance(error, yaml.MarkedYAMLError) and error.problem_mark:
+        mark = error.problem_mark
+        said = ", ".join(part for part in (error.context, error.problem) if part)
+        return f"line {mark.line + 1}, column {mark.column + 1}: {said}"
+    return "not valid YAML"
+
+
+def _port_findings(name: str, service_name: object, ports: list) -> list[Finding]:
+    findings = []
+    for port in ports:
+        description = _describe(port)
+        if description is None:
+            findings.append(Finding(COMPOSE_PORT, name, None,
+                                    f"service {service_name} has a port that is not a string or a mapping (unreadable).",
+                                    "write each port as a string, a number or a mapping."))
+        elif not _binds_loopback(port):
+            findings.append(Finding(COMPOSE_PORT, name, None,
+                                    f"service {service_name} publishes port {description} beyond loopback.",
+                                    f"bind it explicitly, for example \"{LOOPBACK}:HOST:CONTAINER\"."))
     return findings
 
 
@@ -180,8 +222,11 @@ def _binds_loopback(port: object) -> bool:
     return len(parts) == 3 and parts[0] in LOOPBACK_HOSTS
 
 
-def _describe(port: object) -> str:
-    return str(port) if not isinstance(port, dict) else str(port.get("published", port.get("target", port)))
+def _describe(port: object) -> str | None:
+    """The port as written, or None when it is not text, a number or a mapping of one; a container is never printed."""
+    if isinstance(port, dict):
+        port = port.get("published", port.get("target"))
+    return str(port) if isinstance(port, (str, int, float)) else None
 
 
 def measure_size(root: Path, tracked: list[str]) -> ratchet.TreeMeasurement:
