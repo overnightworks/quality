@@ -19,13 +19,12 @@ COMPOSE_PORT = "compose-port"
 WORKFLOW_RULE_IDS = tuple(engines.WORKFLOW_ENGINES)
 ENGINE_RULE_IDS = (engines.LEAK_RULE, *WORKFLOW_RULE_IDS)
 WORKFLOW_DIRECTORY = PurePosixPath(".github/workflows")
-WORKFLOW_SUFFIXES = (".yml", ".yaml")
+YAML_SUFFIXES = (".yml", ".yaml")
 
 LOOPBACK = "127.0.0.1"
 LOOPBACK_HOSTS = (LOOPBACK, "::1")
 ENV_TEMPLATE_SUFFIX = ".example"
 INTERPOLATION = re.compile(r"\$\{[^}]*\}")
-COMPOSE_SUFFIXES = (".yml", ".yaml")
 COMPOSE_TOKEN = "compose"
 NAME_SEPARATORS = re.compile(r"[._-]")
 YAML_NUMBER_TAGS = ("tag:yaml.org,2002:int", "tag:yaml.org,2002:float")
@@ -130,7 +129,7 @@ def _is_env_file(name: str) -> bool:
 def is_compose_file(name: str) -> bool:
     """A YAML file whose name holds the word `compose` between `.`, `-` or `_`: `docker-compose.ci.yml`, not `composer.yml`."""
     path = PurePosixPath(name)
-    return path.suffix.lower() in COMPOSE_SUFFIXES and COMPOSE_TOKEN in NAME_SEPARATORS.split(path.stem.casefold())
+    return path.suffix.lower() in YAML_SUFFIXES and COMPOSE_TOKEN in NAME_SEPARATORS.split(path.stem.casefold())
 
 
 def check_compose_ports(root: Path, tracked: list[str]) -> list[Finding]:
@@ -163,7 +162,7 @@ def _read_existing[T](read: Callable[[Path, str], T | None], root: Path, names: 
 def _compose_file_findings(name: str, text: str) -> list[Finding]:
     try:
         document = yaml.load(text, Loader=ComposeLoader)
-    except (yaml.YAMLError, RecursionError) as error:
+    except (yaml.YAMLError, RecursionError, ValueError, KeyError, IndexError) as error:
         raise CannotJudge(f"cannot read {name}: {_yaml_error_reason(error)}") from error
     services = document.get("services") if isinstance(document, dict) else None
     if not isinstance(services, dict):
@@ -192,6 +191,8 @@ def _yaml_error_reason(error: Exception) -> str:
         mark = error.problem_mark
         said = ", ".join(part for part in (error.context, error.problem) if part)
         return f"line {mark.line + 1}, column {mark.column + 1}: {said}"
+    if isinstance(error, (ValueError, KeyError, IndexError)):
+        return "a value does not fit its tag"
     return "not valid YAML"
 
 
@@ -201,8 +202,8 @@ def _port_findings(name: str, service_name: object, ports: list) -> list[Finding
         description = _describe(port)
         if description is None:
             findings.append(Finding(COMPOSE_PORT, name, None,
-                                    f"service {service_name} has a port that is not a string or a mapping (unreadable).",
-                                    "write each port as a string, a number or a mapping."))
+                                    f"service {service_name} has a port that is not a string, a number or a mapping with a scalar target (unreadable).",
+                                    "write each port as a string, a number or a mapping with a scalar target."))
         elif not _binds_loopback(port):
             findings.append(Finding(COMPOSE_PORT, name, None,
                                     f"service {service_name} publishes port {description} beyond loopback.",
@@ -301,7 +302,7 @@ def check_workflows(root: Path, engine_dir: Path, rule: str, tracked: list[str])
 
 
 def _is_workflow(path: PurePosixPath) -> bool:
-    return path.parent == WORKFLOW_DIRECTORY and path.suffix in WORKFLOW_SUFFIXES
+    return path.parent == WORKFLOW_DIRECTORY and path.suffix in YAML_SUFFIXES
 
 
 def skipped_rules(engine_dir: Path | None) -> tuple[str, ...]:

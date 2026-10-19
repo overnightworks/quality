@@ -121,7 +121,6 @@ def test_untracked_ignored_env_file_is_not_a_finding(build_repo, capsys):
     ("files", "refused_path"),
     [
         (compose('- "8080:80"'), "compose.yaml"),
-        (compose("- 22:22"), "compose.yaml"),
         (compose('- "80"'), "compose.yaml"),
         (compose("- 80"), "compose.yaml"),
         (compose('- "0.0.0.0:8080:80"'), "compose.yaml"),
@@ -144,7 +143,7 @@ def test_untracked_ignored_env_file_is_not_a_finding(build_repo, capsys):
     ],
 )
 def test_compose_ports_must_bind_loopback(build_repo, capsys, files, refused_path):
-    """#3 rule 2/4: a compose port beyond loopback is refused with rule id, path, reason and fix; edge's real file passes."""
+    """#3 rule 2/4: a compose port beyond loopback is refused with rule id, path, reason and fix; edge's real file passes (#78 cell 15)."""
     code, output = run(capsys, build_repo(files))
     assert code == (0 if refused_path is None else 1)
     if refused_path:
@@ -165,9 +164,10 @@ def test_quoted_tagged_port_is_read_as_the_string_it_wraps(build_repo, capsys):
         ("- 2222:22", "2222:22"),
         ("- !override 22:22", "22:22"),
         ("- 22", "22"),
+        ("- 22:22.5", "22:22.5"),
         ('- "8080:80"', "8080:80"),
     ],
-    ids=["cell 1", "cell 2 plain", "cell 2 override", "cell 3 bare", "cell 3 quoted"],
+    ids=["cell 1", "cell 2 plain", "cell 2 override", "cell 3 bare", "rule 2 base-60 float", "cell 3 quoted"],
 )
 def test_a_port_is_described_as_compose_reads_it(build_repo, capsys, port_line, described):
     """#78 rule 2, cells 1-3: `22:22` is text, not the base-60 number 1342."""
@@ -219,6 +219,12 @@ UNREADABLE_YAML = [
     ("a: 1\n---\nb: 2\n", "but found another document"),
     ("a: \x07\n", "position 3: special characters are not allowed"),
     ("services:\n  web:\n    image: !foo x\n", "could not determine a constructor for the tag '!foo'"),
+    ("a: !!int xyz\n", "a value does not fit its tag"),
+    ("a: !!float xyz\n", "a value does not fit its tag"),
+    ("a: !!timestamp 2001-13-45\n", "a value does not fit its tag"),
+    ("a: !!bool xyz\n", "a value does not fit its tag"),
+    ("a: !!int\n", "a value does not fit its tag"),
+    ("a: 2001-99-99\n", "a value does not fit its tag"),
     ("[" * 3000 + "]" * 3000, "nested too deeply"),
 ]
 
@@ -227,14 +233,18 @@ UNREADABLE_YAML = [
     ("text", "reason"),
     UNREADABLE_YAML,
     ids=["cell 6 open bracket", "cell 7 bad indent", "cell 8 alias", "cell 8 two documents", "cell 9 control character",
-         "cell 10 unknown tag", "cell 11 deep nesting"],
+         "cell 10 unknown tag", "rule 3 bad int", "rule 3 bad float",
+         "rule 3 bad timestamp tag", "rule 3 bad bool", "rule 3 empty int", "rule 3 bad implicit timestamp",
+         "cell 11 deep nesting"],
 )
 def test_a_yaml_error_is_one_short_line(build_repo, capsys, text, reason):
     """#78 rule 3, cells 6-11 and 18: exit 2, one line, no caret, source line, stream name or traceback."""
-    code, output = run(capsys, build_repo({"compose.yaml": text}))
+    repo = build_repo({"compose.yaml": text})
+    code, output = run(capsys, repo)
     line = next(line for line in output.splitlines() if "cannot read compose.yaml" in line)
     assert (code, reason in line, len(line) < 200) == (2, True, True), output
     assert not any(leaked in output for leaked in ("<unicode string>", "^", "Traceback", "in \"", "services: ["))
+    assert str(repo) not in output
 
 
 ALIAS_BOMB = "a0: &a0 [x, x, x]\n" + "".join(f"a{n}: &a{n} [*a{n - 1}, *a{n - 1}, *a{n - 1}]\n" for n in range(1, 6))
@@ -249,7 +259,7 @@ def test_a_port_that_is_a_container_is_one_short_finding(build_repo, capsys, ser
     """#78 rule 4, cell 12: an aliased container is never printed."""
     repo = build_repo({"compose.yaml": f"x-bomb:\n  {ALIAS_BOMB.replace(chr(10), chr(10) + '  ')}\nservices:\n  web:\n{service}"})
     code, output = run(capsys, repo)
-    assert (code, "has a port that is not a string or a mapping (unreadable)" in output, len(output) < 600) == (1, True, True), output
+    assert (code, "has a port that is not a string, a number or a mapping with a scalar target (unreadable)" in output, len(output) < 800) == (1, True, True), output
 
 
 def test_an_untracked_compose_file_is_not_judged_until_it_is_added(build_repo, capsys):
@@ -262,14 +272,9 @@ def test_an_untracked_compose_file_is_not_judged_until_it_is_added(build_repo, c
 
 
 def test_webauth_suite_compose_is_clean(build_repo, capsys):
-    """#78 cell 16: a long-syntax `127.0.0.1::8080` port binds loopback."""
+    """#78 cell 16: a short-syntax `127.0.0.1::8080` port (empty host port) binds loopback."""
     files = {"e2e/oidc/suite-compose.yaml": compose('- "127.0.0.1::8080"')["compose.yaml"]}
     assert run(capsys, build_repo(files))[0] == 0
-
-
-def test_the_edge_stack_fixture_is_judged_as_a_compose_file(build_repo, capsys):
-    """#78 rule 6, cell 15: edge's live file at 29376a9 is clean under the name rule."""
-    assert run(capsys, build_repo({"compose.yaml": EDGE_STACK}))[0] == 0
 
 
 def test_quality_tracks_no_env_or_compose_file():
