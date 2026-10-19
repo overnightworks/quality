@@ -103,7 +103,7 @@ def url_of(server: http.server.HTTPServer) -> str:
     return f"http://127.0.0.1:{server.server_port}/gitleaks.tar.gz"
 
 
-@pytest.mark.parametrize("engine", ["gitleaks", "actionlint", "zizmor"])
+@pytest.mark.parametrize("engine", ["gitleaks", "actionlint", "zizmor", "osv-scanner"])
 def test_pin_file_names_every_engine_with_a_full_checksum(engine):
     """#13 rule 1, #15 rule 1: the pin file names the version, a download of that version, and a sha256."""
     pin = engines.read_pins()[engine]
@@ -625,7 +625,7 @@ def test_no_workflow_engine_runs_when_the_repository_has_no_workflow(tmp_path):
 def test_a_run_without_engines_names_the_skipped_scans(build_repo, capsys):
     """#15 rule 5: a local run without --engines says which scans it skipped."""
     assert cli.main(["hygiene", str(build_repo({}))]) == 0
-    assert "skipped without --engines: secret, workflow-lint, workflow-security" in capsys.readouterr().out
+    assert "skipped without --engines: secret, workflow-lint, workflow-security, advisory" in capsys.readouterr().out
 
 
 @pytest.fixture

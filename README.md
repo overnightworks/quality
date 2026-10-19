@@ -139,6 +139,30 @@ Every allowed finding is printed with the entry's reason (`secret: 1 allowed (sr
 nothing is printed too, so a stale entry can be deleted: `secret: unused allowance <rule> in <file> (sha256 <hex>) - <reason>`;
 `scan-staged` prints both kinds of line as well.
 
+The `advisory` rule judges every tracked `uv.lock`, root and nested, with osv-scanner against the OSV advisory
+database (dev dependencies count). It is part of `--engines`, so it is skipped without it (nothing is downloaded),
+and a repository with no tracked `uv.lock` needs no osv-scanner. A lock that is tracked but missing on disk is skipped;
+one that links out of the repository or is not a regular file is exit `2`. A lock listed in `.gitignore` is still judged.
+A finding is one per advisory group, package and lock file, named by the tracked relative path:
+`advisory uv.lock - osv-scanner GHSA-8q59-q68h-6hv4 (CVE-2020-14343, PYSEC-2021-142): PyPI pyyaml 5.3.1 is affected.`
+with `Fix: upgrade pyyaml to >= 5.4 (uv lock --upgrade-package pyyaml)`. For a nested lock the command names its
+directory (`in speech/: uv lock --upgrade-package ...`); several fixed versions are listed; an advisory with no fixed
+version says `osv lists no fixed version: remove or replace <package>; see https://osv.dev/vulnerability/<id>`. A
+repository's own `osv-scanner.toml` (ignored advisories, package overrides) and `.gitignore` change nothing: the gate
+passes its own empty `src/quality/osv-scanner.toml` and each tracked lock explicitly. A per-repository allowance
+waits for declared loosening in `quality/config.toml`.
+
+quality downloads the PyPI database itself on every run (about 36 MB, `https://osv-vulnerabilities.storage.googleapis.com/PyPI/all.zip`)
+into the scan's own 0700 scratch directory and runs osv-scanner `--offline` on it, so osv-scanner makes no network call
+and reads no cache of its own. A database that cannot be downloaded within its time limit, is not a valid zip, or holds
+no advisory is exit `2`, never clean; so are an osv-scanner that is missing, at another version, exits other than `0`
+or `1`, runs past its time limit, or writes a report that is not the expected JSON, disagrees with its exit, or names
+a lock file quality did not pass. Trust boundary: the database is an unsigned zip fetched over TLS from the same source
+osv-scanner itself uses; there is deliberately no cache, because a doctored cached database would silence every pull
+request. Records the pinned osv-scanner cannot read are dropped by it silently; the live-database test for
+`pyyaml 5.3.1` on every quality pull request is the canary. osv-scanner judges the lock as written; the caller's own
+`uv sync --locked` guards against a hand-edited lock.
+
 Every rule is judged, even when another cannot be, and gives one verdict: clean, findings, unparsable, or cannot judge.
 Each finding names the rule, the file, a reason and a fix; a file name that is not valid UTF-8 prints
 backslash-escaped. A rule that cannot judge prints its verdict and reason under its rule id (`hygiene: secret cannot
@@ -199,7 +223,8 @@ duplicating `quality/fleet.toml` is `cannot judge`, exit `2`.
 ## `quality engines`
 
 `quality engines install DIR` verifies each pinned engine first and downloads only one that is missing or does not report
-its pinned version, so a second run downloads nothing (`gitleaks 8.30.1 already installed`; otherwise `... installed`).
+its pinned version, so a second run downloads nothing (`gitleaks 8.30.1 already installed`; otherwise `... installed`). Every engine is a `tar.gz` release asset unless
+its pin sets `format = "binary"` (osv-scanner, a bare executable), which is installed as downloaded after its sha256 check.
 `quality engines verify DIR` is exit `0` when every pinned engine in `DIR` reports exactly its pinned version, otherwise
 exit `2` with one line per engine.
 

@@ -10,14 +10,14 @@ from pathlib import Path, PurePosixPath
 
 import yaml
 
-from quality import architecture, engines, ratchet, repository
+from quality import advisories, architecture, engines, ratchet, repository
 from quality.config import Allowance, ConfigError, read_secret_allowances
 from quality.report import Finding, printable
 
 ENV_FILE = "env-file"
 COMPOSE_PORT = "compose-port"
 WORKFLOW_RULE_IDS = tuple(engines.WORKFLOW_ENGINES)
-ENGINE_RULE_IDS = (engines.LEAK_RULE, *WORKFLOW_RULE_IDS)
+ENGINE_RULE_IDS = (engines.LEAK_RULE, *WORKFLOW_RULE_IDS, advisories.RULE)
 WORKFLOW_DIRECTORY = PurePosixPath(".github/workflows")
 YAML_SUFFIXES = (".yml", ".yaml")
 
@@ -301,6 +301,14 @@ def check_workflows(root: Path, engine_dir: Path, rule: str, tracked: list[str])
         raise CannotJudge(str(error)) from error
 
 
+def check_advisories(root: Path, engine_dir: Path, tracked: list[str]) -> list[Finding]:
+    locks = {name: _judged(repository.resolve_file, root, name) for name in _on_disk(root, [n for n in tracked if advisories.is_lock(n)])}
+    try:
+        return advisories.scan(engine_dir, engines.read_pins(), locks)
+    except engines.EngineError as error:
+        raise CannotJudge(str(error)) from error
+
+
 def _is_workflow(path: PurePosixPath) -> bool:
     return path.parent == WORKFLOW_DIRECTORY and path.suffix in YAML_SUFFIXES
 
@@ -384,6 +392,7 @@ def run_hygiene(root: Path, engine_dir: Path | None = None) -> HygieneResult:
     secrets = _attempt(lambda: check_secrets(root, engine_dir))
     verdicts.append(_verdict(engines.LEAK_RULE, secrets if isinstance(secrets, CannotJudge) else secrets.findings))
     verdicts += [_verdict(rule, _attempt(partial(check_workflows, root, engine_dir, rule, tracked))) for rule in WORKFLOW_RULE_IDS]
+    verdicts.append(_verdict(advisories.RULE, _attempt(partial(check_advisories, root, engine_dir, tracked))))
     allowed, unused = ([], {}) if isinstance(secrets, CannotJudge) else (secrets.allowed, secrets.unused_allowances)
     return HygieneResult(tuple(verdicts), reports, allowed, unused)
 

@@ -1,0 +1,391 @@
+import hashlib
+import io
+import json
+import shlex
+import zipfile
+from pathlib import Path
+
+import pytest
+from test_hygiene import clean_engines, fake_engine  # noqa: F401 (a fixture is used by import)
+
+from quality import advisories, cli, engines
+
+OUTPUTS = Path(__file__).parent / "fixtures" / "engine-outputs"
+OSV = engines.OSV_SCANNER
+ADVISORY_ID = "GHSA-aaaa-bbbb-cccc"
+AFFECTED_LINE = f"osv-scanner {ADVISORY_ID} (CVE-2020-1): PyPI pyyaml 5.3.1 is affected."
+UPGRADE_LINE = "Fix: upgrade pyyaml to >= 5.4 (uv lock --upgrade-package pyyaml)"
+VULNERABLE = (("pyyaml", "5.3.1"),)
+SAFE = (("pyyaml", "6.0.2"),)
+
+
+def uv_lock(packages=VULNERABLE) -> str:
+    registry = "".join(
+        f'\n[[package]]\nname = "{name}"\nversion = "{version}"\nsource = {{ registry = "https://pypi.org/simple" }}\n'
+        for name, version in packages
+    )
+    root = '[[package]]\nname = "demo"\nversion = "0.1.0"\nsource = { editable = "." }\n'
+    return f'version = 1\nrequires-python = ">=3.12"\n\n{root}{registry}'
+
+
+VIRTUAL_ROOT_ONLY = 'version = 1\n\n[[package]]\nname = "demo"\nversion = "0.1.0"\nsource = { virtual = "." }\n'
+
+
+def advisory(identifier=ADVISORY_ID, *, fixed=("5.4",), aliases=("CVE-2020-1",), also_affected=()) -> dict:
+    ranges = [{"type": "ECOSYSTEM", "events": [{"introduced": "0"}, {"fixed": version}]} for version in fixed]
+    ranges = ranges or [{"type": "ECOSYSTEM", "events": [{"introduced": "0"}]}]
+    return {
+        "schema_version": "1.9.0", "id": identifier, "modified": "2026-01-01T00:00:00Z", "aliases": list(aliases),
+        "affected": [{"package": {"name": "pyyaml", "ecosystem": "PyPI"}, "ranges": ranges}, *also_affected],
+    }
+
+
+def zipped(entries: dict[str, str]) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        for name, text in entries.items():
+            archive.writestr(name, text)
+    return buffer.getvalue()
+
+
+@pytest.fixture
+def publish_database(tmp_path_factory, monkeypatch):
+    """Points the gate at a file:// advisory database root and publishes the PyPI archive there."""
+    root = tmp_path_factory.mktemp("osv-database")
+    monkeypatch.setattr(advisories, "DATABASE_ROOT", root.as_uri())
+
+    def publish(records=None, archive: bytes | None = None) -> None:
+        records = [advisory()] if records is None else records
+        archive = zipped({f"{record['id']}.json": json.dumps(record) for record in records}) if archive is None else archive
+        (root / "PyPI").mkdir(exist_ok=True)
+        (root / "PyPI" / "all.zip").write_bytes(archive)
+
+    return publish
+
+
+@pytest.fixture
+def run_gate(capsys):
+    """Runs the gate over a repository and returns (exit code, all output); no output names the checkout (#53 cell 21)."""
+    def run(repo: Path, engine_dir: Path) -> tuple[int, str]:
+        code = cli.main(["hygiene", "--engines", str(engine_dir), str(repo)])
+        captured = capsys.readouterr()
+        assert str(repo) not in captured.out + captured.err
+        return code, captured.out + captured.err
+    return run
+
+
+def reporting(report: Path, exit_code: int, stderr: str = "") -> str:
+    """Shell for a fake osv-scanner that prints `report` (@LOCK@ read as the last lock passed) and exits."""
+    return (
+        f'for argument; do lock="${{argument#--lockfile=uv.lock:}}"; done\n'
+        f'sed "s|@LOCK@|$lock|" {shlex.quote(str(report))}\necho {shlex.quote(stderr)} >&2\nexit {exit_code}'
+    )
+
+
+def edited_report(tmp_path: Path, fixture: str, edit) -> Path:
+    report = json.loads((OUTPUTS / fixture).read_text())
+    edit(report)
+    path = tmp_path / "report.json"
+    path.write_text(json.dumps(report))
+    return path
+
+
+def tracked_lock_repo(build_repo, text: str = uv_lock()) -> Path:
+    return build_repo({"uv.lock": text})
+
+
+# ---- the real osv-scanner against a fake file:// database (CI runs these; they download the binary) ----
+
+@pytest.mark.engine
+def test_an_affected_lock_is_red_and_names_the_advisory_and_the_fix(build_repo, publish_database, installed_engines, run_gate):
+    """#53 rule 2, rule 3, cells 3 and 21."""
+    publish_database()
+    code, output = run_gate(tracked_lock_repo(build_repo), installed_engines)
+    assert code == 1, output
+    assert f"advisory uv.lock - {AFFECTED_LINE}\n  {UPGRADE_LINE}" in output
+
+
+@pytest.mark.engine
+@pytest.mark.parametrize(
+    ("records", "expected"),
+    [
+        ([advisory(fixed=("5.4", "6.0"))], "Fix: upgrade pyyaml to a fixed version: 5.4, 6.0"),
+        ([advisory(fixed=())], f"Fix: osv lists no fixed version: remove or replace pyyaml; see https://osv.dev/vulnerability/{ADVISORY_ID}"),
+        ([advisory(also_affected=[{"package": {"name": "x", "ecosystem": "Zorkland"}, "ranges": [{"type": "ECOSYSTEM", "events": [{"introduced": "0"}, {"fixed": "1"}]}]}])], UPGRADE_LINE),
+    ],
+    ids=["rule 2 several fixed versions", "cell 5 no fixed event", "cell 26 an unknown ecosystem beside PyPI"],
+)
+def test_the_fix_follows_what_osv_lists(build_repo, publish_database, installed_engines, run_gate, records, expected):
+    publish_database(records)
+    code, output = run_gate(tracked_lock_repo(build_repo), installed_engines)
+    assert code == 1, output
+    assert expected in output
+
+
+@pytest.mark.engine
+def test_two_advisories_that_alias_each_other_are_one_finding(build_repo, publish_database, installed_engines, run_gate):
+    """#53 rule 2, cell 6: one finding per alias group, the other ids named as aliases."""
+    publish_database([advisory("GHSA-aaaa-bbbb-cccc", aliases=("PYSEC-1",)), advisory("PYSEC-1", aliases=("GHSA-aaaa-bbbb-cccc",))])
+    code, output = run_gate(tracked_lock_repo(build_repo), installed_engines)
+    assert code == 1
+    assert "hygiene: 1 finding(s)" in output
+    assert "GHSA-aaaa-bbbb-cccc (PYSEC-1)" in output or "PYSEC-1 (GHSA-aaaa-bbbb-cccc)" in output
+
+
+@pytest.mark.engine
+def test_every_tracked_lock_is_judged_with_its_relative_name(build_repo, publish_database, installed_engines, run_gate, tmp_path):
+    """#53 rule 1, rule 2, cells 7, 8, 22, 30: nested, odd-named and gitignored locks are scanned, an untracked one is not."""
+    repo = build_repo({
+        "uv.lock": uv_lock(), "speech/uv.lock": uv_lock(), "a:b/uv.lock": uv_lock(), "-dash/uv.lock": uv_lock(),
+        ".gitignore": "uv.lock\n",
+    })
+    (repo / "extra").mkdir()
+    (repo / "extra/uv.lock").write_text(uv_lock())
+    publish_database()
+    code, output = run_gate(repo, installed_engines)
+    assert code == 1
+    for name in ("uv.lock", "speech/uv.lock", "a:b/uv.lock", "-dash/uv.lock"):
+        assert f"advisory {name} - " in output
+    assert "extra/uv.lock" not in output
+    assert "(in speech/: uv lock --upgrade-package pyyaml)" in output
+
+
+@pytest.mark.engine
+@pytest.mark.parametrize(
+    "repository_config",
+    ['[[IgnoredVulns]]\nid = "GHSA-aaaa-bbbb-cccc"\n', '[[PackageOverrides]]\nname = "pyyaml"\necosystem = "PyPI"\nignore = true\n'],
+    ids=["cell 11 IgnoredVulns", "cell 12 PackageOverrides ignore"],
+)
+def test_a_repository_osv_scanner_config_changes_nothing(build_repo, publish_database, installed_engines, run_gate, repository_config):
+    """#53 head decision: the caller's osv-scanner.toml is never honoured."""
+    publish_database()
+    repo = build_repo({"uv.lock": uv_lock(), "osv-scanner.toml": repository_config})
+    assert run_gate(repo, installed_engines)[0] == 1
+
+
+@pytest.mark.engine
+@pytest.mark.parametrize(
+    "lock", [uv_lock(SAFE), VIRTUAL_ROOT_ONLY], ids=["cell 2 a clean lock", "cell 29 only a virtual root"]
+)
+def test_a_lock_no_advisory_affects_is_clean(build_repo, publish_database, installed_engines, run_gate, lock):
+    """#53 rule 3: clean is exit 0, a lock without registry packages included."""
+    publish_database()
+    code, output = run_gate(tracked_lock_repo(build_repo, lock), installed_engines)
+    assert code == 0, output
+    assert "hygiene: clean (" in output
+    assert "advisory" in output
+
+
+@pytest.mark.engine
+def test_the_live_database_condemns_pyyaml_5_3_1(build_repo, installed_engines, run_gate):
+    """#53 cell 4: the real world, over the network."""
+    code, output = run_gate(tracked_lock_repo(build_repo), installed_engines)
+    assert code == 1, output
+    assert "GHSA-8q59-q68h-6hv4" in output
+    assert "upgrade pyyaml to >= 5.4" in output
+
+
+# ---- no network, no real osv-scanner ----
+
+def osv_engines(clean_engines, on_scan):  # noqa: F811
+    fake_engine(clean_engines, OSV, on_scan)
+    return clean_engines
+
+
+def test_without_a_tracked_lock_nothing_is_downloaded_and_no_osv_binary_is_needed(
+    build_repo, clean_engines, run_gate, monkeypatch  # noqa: F811
+):
+    """#53 rule 1, cell 1."""
+    monkeypatch.setattr(advisories, "DATABASE_ROOT", "file:///no/such/root")
+    code, output = run_gate(build_repo({"README.md": "x\n"}), clean_engines)
+    assert code == 0, output
+
+
+@pytest.mark.parametrize("tracked_only", ["missing", "symlink to a directory", "symlink out"])
+def test_a_lock_the_tree_cannot_hand_over_is_skipped_or_refused(
+    build_repo, clean_engines, run_gate, publish_database, tmp_path, tracked_only  # noqa: F811
+):
+    """#53 rule 1, cells 9, 10 and 31."""
+    publish_database()
+    repo = build_repo({"uv.lock": uv_lock(), "inside/x": "x\n"})
+    (repo / "uv.lock").unlink()
+    if tracked_only == "symlink to a directory":
+        (repo / "uv.lock").symlink_to("inside")
+    if tracked_only == "symlink out":
+        outside = tmp_path.parent / f"{tmp_path.name}-outside.lock"
+        outside.write_text(uv_lock())
+        (repo / "uv.lock").symlink_to(outside)
+    code, output = run_gate(repo, osv_engines(clean_engines, "exit 99"))
+    expected_code, expected_text = {
+        "missing": (0, "hygiene: clean"), "symlink to a directory": (2, "uv.lock is not a file"),
+        "symlink out": (2, "uv.lock resolves outside the repository"),
+    }[tracked_only]
+    assert (code, expected_text in output) == (expected_code, True), output
+
+
+def test_a_gate_run_without_engines_names_advisory_as_skipped_and_downloads_nothing(build_repo, capsys, monkeypatch):
+    """#53 rule 4, cell 23."""
+    monkeypatch.setattr(advisories, "DATABASE_ROOT", "file:///no/such/root")
+    assert cli.main(["hygiene", str(tracked_lock_repo(build_repo))]) == 0
+    assert "skipped without --engines: secret, workflow-lint, workflow-security, advisory" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("archive", "expected"),
+    [
+        (None, "cannot download the PyPI advisory database"),
+        (b"not a zip", "is not a valid zip"),
+        (zipped({"a.json": "{}"})[:-30], "is not a valid zip"),
+        (zipped({"readme.txt": "x"}), "holds no advisory"),
+    ],
+    ids=["cell 13 unreachable", "cell 14 not a zip", "cell 14 truncated", "cell 28 no json entry"],
+)
+def test_a_database_that_cannot_be_used_is_cannot_judge(
+    build_repo, clean_engines, run_gate, publish_database, archive, expected  # noqa: F811
+):
+    """#53 rule 3: never clean, never a fallback."""
+    if archive is not None:  # None: nothing is published at the root
+        publish_database(archive=archive)
+    code, output = run_gate(tracked_lock_repo(build_repo), osv_engines(clean_engines, "exit 99"))
+    assert (code, expected in output) == (2, True), output
+
+
+def test_a_download_past_its_deadline_is_cannot_judge(
+    build_repo, clean_engines, run_gate, publish_database, monkeypatch  # noqa: F811
+):
+    """#53 rule 3: the download has a total time limit."""
+    publish_database()
+    monkeypatch.setattr(advisories, "DATABASE_DOWNLOAD_DEADLINE_SECONDS", -1)
+    code, output = run_gate(tracked_lock_repo(build_repo), osv_engines(clean_engines, "exit 99"))
+    assert (code, "download exceeded" in output) == (2, True), output
+
+
+def test_a_missing_osv_binary_is_cannot_judge(build_repo, clean_engines, run_gate, publish_database):  # noqa: F811
+    """#53 rule 3, cell 15."""
+    publish_database()
+    code, output = run_gate(tracked_lock_repo(build_repo), clean_engines)
+    assert (code, "cannot run" in output) == (2, True), output
+
+
+def test_an_osv_binary_at_the_wrong_version_names_both_versions(
+    build_repo, clean_engines, run_gate, publish_database  # noqa: F811
+):
+    """#53 rule 3, cell 16."""
+    publish_database()
+    (clean_engines / OSV).write_text('#!/bin/sh\necho "osv-scanner version: 9.9.9"\n')
+    (clean_engines / OSV).chmod(0o755)
+    code, output = run_gate(tracked_lock_repo(build_repo), clean_engines)
+    assert (code, "'9.9.9'" in output, engines.read_pins()[OSV].version in output) == (2, True, True), output
+
+
+@pytest.mark.parametrize("exit_code", [2, 127, 128])
+def test_an_unexpected_osv_exit_is_cannot_judge_with_the_code_and_stderr(
+    build_repo, clean_engines, run_gate, publish_database, tmp_path, exit_code  # noqa: F811
+):
+    """#53 rule 3, cell 17 (127 is the missing database, cell 27)."""
+    publish_database()
+    engine_dir = osv_engines(clean_engines, f'echo "boom reason" >&2\nexit {exit_code}')
+    code, output = run_gate(tracked_lock_repo(build_repo), engine_dir)
+    assert code == 2
+    assert f"exited {exit_code}" in output
+    assert "boom reason" in output
+
+
+@pytest.mark.parametrize(
+    ("fixture", "edit", "exit_code", "expected"),
+    [
+        ("osv-scanner-finding.json", lambda report: None, 0, "exited 0 but its report holds 1 finding(s)"),
+        ("osv-scanner-clean.json", lambda report: None, 1, "exited 1 but its report holds 0 finding(s)"),
+        ("osv-scanner-garbled.json", lambda report: None, 0, "cannot read the osv-scanner report"),
+        ("osv-scanner-clean.json", lambda report: report.update(results=5), 0, "cannot read the osv-scanner report"),
+        ("osv-scanner-finding.json", lambda report: report["results"][0]["source"].update(path="/elsewhere/uv.lock"), 1,
+         "names a lock file quality did not pass"),
+    ],
+    ids=["cell 18 exit 0 with vulnerabilities", "cell 18 exit 1 without", "cell 19 not JSON", "cell 19 wrong shape",
+         "cell 20 a source quality did not pass"],
+)
+def test_a_report_that_disagrees_with_the_exit_is_cannot_judge(
+    build_repo, clean_engines, run_gate, publish_database, tmp_path, fixture, edit, exit_code, expected  # noqa: F811
+):
+    """#53 rule 3."""
+    publish_database()
+    if fixture.endswith("garbled.json"):
+        report = OUTPUTS / fixture
+    else:
+        report = edited_report(tmp_path, fixture, edit)
+    code, output = run_gate(tracked_lock_repo(build_repo), osv_engines(clean_engines, reporting(report, exit_code)))
+    assert (code, expected in output) == (2, True), output
+
+
+def test_a_package_osv_cannot_match_to_the_advisory_gets_only_the_advisory_link(
+    build_repo, clean_engines, run_gate, publish_database, tmp_path  # noqa: F811
+):
+    """#53 rule 2: with no `affected` entry for the package, quality never claims that no fix exists."""
+    publish_database()
+    def rename_affected(report):
+        for vulnerability in report["results"][0]["packages"][0]["vulnerabilities"]:
+            vulnerability["affected"][0]["package"]["name"] = "something-else"
+    report = edited_report(tmp_path, "osv-scanner-finding.json", rename_affected)
+    code, output = run_gate(tracked_lock_repo(build_repo), osv_engines(clean_engines, reporting(report, 1)))
+    assert code == 1
+    assert f"Fix: see https://osv.dev/vulnerability/{ADVISORY_ID}" in output
+
+
+def test_a_hanging_osv_is_cannot_judge_within_its_time_limit(
+    build_repo, clean_engines, run_gate, publish_database, monkeypatch  # noqa: F811
+):
+    """#53 rule 3, cell 32."""
+    publish_database()
+    monkeypatch.setattr(advisories, "ADVISORY_SCAN_TIMEOUT_SECONDS", 0.5)
+    code, output = run_gate(tracked_lock_repo(build_repo), osv_engines(clean_engines, "exec sleep 30"))
+    assert (code, "did not finish within 0.5 seconds" in output) == (2, True), output
+
+
+def test_a_fake_osv_clean_report_for_a_tracked_lock_is_clean(build_repo, clean_engines, run_gate, publish_database, tmp_path):  # noqa: F811
+    """#53 cell 2 without the real binary."""
+    publish_database()
+    engine_dir = osv_engines(clean_engines, reporting(OUTPUTS / "osv-scanner-clean.json", 0))
+    code, output = run_gate(tracked_lock_repo(build_repo, uv_lock(SAFE)), engine_dir)
+    assert code == 0, output
+
+
+# ---- engines install: the bare binary (rule 5, cell 24) ----
+
+@pytest.fixture
+def bare_binary_pin(tmp_path, monkeypatch):
+    """A pin file with one `format = "binary"` engine whose download is a local script; returns (download, pin(sha256))."""
+    version = engines.read_pins()[OSV].version
+    download = tmp_path / "osv-download"
+    download.write_text(f'#!/bin/sh\necho "osv-scanner version: {version}"\n')
+    pin_file = tmp_path / "pins.toml"
+
+    def pin(sha256: str) -> None:
+        pin_file.write_text(
+            f'[{OSV}]\nversion = "{version}"\nurl = "{download.as_uri()}"\n'
+            f'sha256 = "{sha256}"\nformat = "binary"\n'
+        )
+
+    monkeypatch.setattr(engines, "PIN_FILE", pin_file)
+    return download, pin
+
+
+def test_install_puts_a_verified_bare_binary_in_place_and_leaves_it_alone_the_second_time(bare_binary_pin, tmp_path, capsys):
+    """#53 rule 5, cell 24."""
+    download, pin = bare_binary_pin
+    pin(hashlib.sha256(download.read_bytes()).hexdigest())
+    target = tmp_path / "engines"
+    assert cli.main(["engines", "install", str(target)]) == 0
+    assert (target / OSV).read_bytes() == download.read_bytes()
+    assert (target / OSV).stat().st_mode & 0o111
+    assert cli.main(["engines", "install", str(target)]) == 0
+    assert f"{OSV} {engines.read_pins()[OSV].version} already installed" in capsys.readouterr().out
+
+
+def test_install_refuses_a_bare_binary_with_the_wrong_checksum_and_installs_nothing(bare_binary_pin, tmp_path, capsys):
+    """#53 rule 5, cell 24."""
+    _, pin = bare_binary_pin
+    pin("0" * 64)
+    target = tmp_path / "engines"
+    assert cli.main(["engines", "install", str(target)]) == 2
+    assert not (target / OSV).exists()
+    assert "the pin says" in capsys.readouterr().err
