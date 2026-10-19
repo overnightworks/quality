@@ -2,6 +2,7 @@
 # gitleaks and actionlint: sha256 is the release's own *_checksums.txt line for this asset.
 # zizmor publishes no checksums file; its sha256 is the digest the v1.31.1 release itself lists for that asset
 # (GitHub release API, assets[].digest).
+# osv-scanner: a bare binary (format = "binary"); sha256 is the release's own osv-scanner_SHA256SUMS line, equal to the API digest.
 [gitleaks]
 version = "8.30.1"
 url = "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz"
@@ -16,3 +17,9 @@ sha256 = "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
 version = "1.31.1"
 url = "https://github.com/zizmorcore/zizmor/releases/download/v1.31.1/zizmor-x86_64-unknown-linux-gnu.tar.gz"
 sha256 = "d185f726bdaf92df78273217dfdd24ebcd6b0ef48cf3ce776ff5762b6e138c99"
+
+[osv-scanner]
+version = "2.7.0"
+url = "https://github.com/google/osv-scanner/releases/download/v2.7.0/osv-scanner_linux_amd64"
+sha256 = "160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b"
+format = "binary"

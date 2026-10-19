@@ -51,6 +51,7 @@ layers = [
     "verdict",
     "sonar | scoreboard",
     "hygiene | staged",
+    "advisories",
     "architecture | engines",
     "ratchet",
     "report",

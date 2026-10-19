@@ -1,0 +1,4 @@
+# The gate's own osv-scanner configuration, deliberately empty.
+# osv-scanner reads an osv-scanner.toml next to the lock file it scans (ignored advisories, package overrides) unless
+# --config is given. The gate always gives this file, so no repository can silence an advisory by what it commits;
+# an allowance waits for quality/config.toml's declared loosening.

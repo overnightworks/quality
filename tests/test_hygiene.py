@@ -4,9 +4,9 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from conftest import make_repo
+from conftest import fake_engine, make_repo
 
-from quality import cli, engines, hygiene
+from quality import cli, hygiene
 from quality.report import Finding
 
 EDGE_STACK = (Path(__file__).parent / "data" / "edge_stack.yml").read_text(encoding="utf-8")
@@ -383,28 +383,6 @@ NEW_DEBT = "def long_one():\n" + "    x = 1\n" * 61
 ENV_FINDING = "env-file .env - "
 
 
-def fake_engine(directory: Path, name: str, on_scan: str) -> Path:
-    """Writes a fake `name` engine that prints its pinned version and runs `on_scan` (shell) for any other call."""
-    version_arguments = " ".join(engines.VERSION_ARGUMENTS[name])
-    pinned = engines.read_pins()[name].version
-    binary = directory / name
-    binary.write_text(f'#!/bin/sh\nif [ "$*" = "{version_arguments}" ]; then echo {pinned}; exit 0; fi\n{on_scan}\n')
-    binary.chmod(0o755)
-    return binary
-
-
-@pytest.fixture
-def clean_engines(tmp_path_factory) -> Path:
-    """A gitleaks that reports its pin and no leak; with no workflow tracked, no other engine runs."""
-    directory = tmp_path_factory.mktemp("engines")
-    fake_engine(
-        directory,
-        "gitleaks",
-        on_scan='while [ $# -gt 0 ]; do [ "$1" = --report-path ] && report=$2; shift; done\necho "[]" > "$report"',
-    )
-    return directory
-
-
 def config_linked_out_of_the_repository(build_repo, elsewhere):
     repo = build_repo({".env": "A=1\n"})
     (elsewhere / "config.toml").write_text('[gate]\nmandatory_jobs = ["checks"]\n')
@@ -426,15 +404,15 @@ def files(tracked: dict[str, str]):
           "hygiene: 1 finding(s); verdicts: 2 clean, 1 findings, 1 unparsable"]),
         (config_linked_out_of_the_repository, True, 2,
          [ENV_FINDING, "hygiene: secret cannot judge - quality/config.toml resolves outside the repository",
-          "hygiene: 1 finding(s); verdicts: 5 clean, 1 findings, 1 cannot judge"]),
+          "hygiene: 1 finding(s); verdicts: 6 clean, 1 findings, 1 cannot judge"]),
         (files({**BASELINE, "compose.yaml": "services: [\n", "src/a.py": NEW_DEBT}), False, 2,
          ["hygiene: compose-port cannot judge - cannot read compose.yaml", "size src/a.py:1 - function long_one"]),
         (files({".env": "A=1\n", **compose('- "8080:80"')}), False, 1,
          [ENV_FINDING, "compose-port compose.yaml - ", "hygiene: 2 finding(s); verdicts: 2 clean, 2 findings"]),
         (files({}), False, 0,
-         [f"{CLEAN_FILE_RULES}; skipped without --engines: secret, workflow-lint, workflow-security"]),
+         [f"{CLEAN_FILE_RULES}; skipped without --engines: secret, workflow-lint, workflow-security, advisory"]),
         (files({}), True, 0,
-         ["hygiene: clean (env-file, compose-port, size, import-contract, secret, workflow-lint, workflow-security);"]),
+         ["hygiene: clean (env-file, compose-port, size, import-contract, secret, workflow-lint, workflow-security, advisory);"]),
         (files({"compose-\udcff.yaml": compose('- "8080:80"')["compose.yaml"]}), False, 1,
          ["compose-port compose-\\udcff.yaml - service web publishes port 8080:80"]),
         (files({**BASELINE, "src/\udcff.py": NEW_DEBT}), False, 1, ["size src/\\udcff.py:1 - function long_one"]),
@@ -446,7 +424,7 @@ def files(tracked: dict[str, str]):
         "cell 3 unreadable compose hides no size finding",
         "cell 4 findings in two rules",
         "cell 5 clean names the file rules",
-        "cell 6 clean with engines names all six rules",
+        "cell 6 clean with engines names all seven rules",
         "cell 7 non-utf8 compose name",
         "cell 8 non-utf8 python name",
         "rule 4 non-utf8 python name in the size report",

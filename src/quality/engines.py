@@ -29,9 +29,12 @@ WORKFLOW_LINT = "workflow-lint"
 WORKFLOW_SECURITY = "workflow-security"
 ACTIONLINT = "actionlint"
 ZIZMOR = "zizmor"
+OSV_SCANNER = "osv-scanner"
+TARBALL = "tar.gz"
+BINARY = "binary"
 ACTIONLINT_FINDINGS = 1
 ZIZMOR_FINDINGS = range(10, 15)  # zizmor encodes the worst severity in 10..14
-VERSION_ARGUMENTS = {GITLEAKS: ["version"], ACTIONLINT: ["-version"], ZIZMOR: ["--version"]}
+VERSION_ARGUMENTS = {GITLEAKS: ["version"], ACTIONLINT: ["-version"], ZIZMOR: ["--version"], OSV_SCANNER: ["--version"]}
 GIT_FLOOR = (2, 41)  # GIT_ATTR_SOURCE, which hides the repository's attributes from the scan, arrived in 2.41
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 PIN_FILE = Path(__file__).with_name("engines.toml")
@@ -49,11 +52,16 @@ class Pin:
     version: str
     url: str
     sha256: str
+    format: str = TARBALL  # "binary" for a release asset that is the executable itself
 
 
 def read_pins() -> dict[str, Pin]:
     with PIN_FILE.open("rb") as handle:
-        return {name: Pin(**fields) for name, fields in tomllib.load(handle).items()}
+        pins = {name: Pin(**fields) for name, fields in tomllib.load(handle).items()}
+    for name, pin in pins.items():
+        if pin.format not in (TARBALL, BINARY):
+            raise EngineError(f"the {name} pin has format {pin.format!r}, neither {TARBALL!r} nor {BINARY!r}")
+    return pins
 
 
 def install(directory: Path, pins: dict[str, Pin]) -> dict[str, bool]:
@@ -65,7 +73,7 @@ def install(directory: Path, pins: dict[str, Pin]) -> dict[str, bool]:
         target = engine_path(directory, name)
         downloaded[name] = _version_problem(directory, name, pin) is not None
         if downloaded[name]:
-            target.write_bytes(_unpack_binary(name, _download_verified(name, pin)))
+            target.write_bytes(_executable_from(name, pin, _download_verified(name, pin)))
             target.chmod(0o755)
     return downloaded
 
@@ -101,6 +109,10 @@ def _download_verified(name: str, pin: Pin) -> bytes:
     if actual != pin.sha256:
         raise EngineError(f"{name} download has sha256 {actual}, the pin says {pin.sha256}")
     return archive
+
+
+def _executable_from(name: str, pin: Pin, download: bytes) -> bytes:
+    return download if pin.format == BINARY else _unpack_binary(name, download)
 
 
 def _unpack_binary(name: str, archive: bytes) -> bytes:
