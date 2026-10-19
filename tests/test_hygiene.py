@@ -1,6 +1,9 @@
 import os
 import re
+import shutil
 import subprocess
+import sys
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -561,3 +564,143 @@ def test_a_path_in_a_submodule_or_linked_worktree_means_its_own_top(tmp_path, ca
     assert cli.main(["baseline", "write", str(own_top / "src")]) == 0
     capsys.readouterr()
     assert ((own_top / "quality/baseline.toml").is_file(), (superproject / "quality").exists()) == (True, False)
+
+
+UNPRINTABLE_NAME_HINT = "remove it from the index by its bytes (git ls-files -z shows them), then add it to .gitignore."
+FIX_SUFFIX = " and add it to .gitignore."
+SHELLS = ["dash", "bash"]
+
+
+def printed_fix(output: str, shown_name: str) -> str:
+    """The command the `env-file` finding for `shown_name` prints after `Fix: `, without the closing sentence."""
+    fix = re.search(rf"^env-file {re.escape(shown_name)} - .*\n  Fix: (.*)$", output, re.MULTILINE)
+    assert fix, output
+    return fix.group(1).removesuffix(FIX_SUFFIX)
+
+
+def tracked_names(repo: Path) -> set[bytes]:
+    listing = subprocess.run(["git", "-C", str(repo), "ls-files", "-z"], check=True, capture_output=True).stdout
+    return {name for name in listing.split(b"\0") if name}
+
+
+@pytest.mark.parametrize("shell", SHELLS)
+@pytest.mark.parametrize(
+    ("target", "neighbours", "printed_word"),
+    [
+        (".env", [], ".env"),
+        ("config/prod.env", [], "config/prod.env"),
+        ("my file.env", [], "'my file.env'"),
+        ("sub dir/.env.prod", [], "'sub dir/.env.prod'"),
+        ("it's.env", [], "'it'\"'\"'s.env'"),
+        ("grün.env", [], "'grün.env'"),
+        ("-x.env", [], "-x.env"),
+        (":x.env", ["x.env"], ":x.env"),
+        ("*.env", ["a.env"], "'*.env'"),
+        ("[x].env", ["x.env"], "'[x].env'"),
+        ("100%.env", [], "100%.env"),
+        ("back\\slash.env", [], "'back\\slash.env'"),
+        ("=x.env", [], "'=x.env'"),
+    ],
+    ids=[
+        "#86 cell 1 bare name", "#86 cell 1 nested name", "#86 cell 2 space", "#86 cell 2 space in directory",
+        "#86 cell 2 apostrophe", "#86 cell 2 umlaut", "#86 cell 3 leading dash", "#86 cell 4 colon beside the plain name",
+        "#86 cell 4 star beside a.env", "#86 cell 4 brackets beside x.env", "#86 cell 5 percent", "#86 cell 5 backslash",
+        "#86 cell 6 leading equals",
+    ],
+)
+def test_the_printed_env_fix_untracks_exactly_the_named_file_in_every_shell(
+    build_repo, capsys, shell, target, neighbours, printed_word
+):
+    """#86 rule 2, E1-E3 and E5: the command as printed, run from the top, untracks that file and leaves it on disk."""
+    shell_path = shutil.which(shell)
+    if shell_path is None:
+        pytest.skip(f"{shell} is not installed")
+    repo = build_repo({name: "A=1\n" for name in [target, *neighbours]})
+    before = tracked_names(repo)
+    _, output = run(capsys, repo)
+    fix = printed_fix(output, target)
+    assert fix == f"git --literal-pathspecs rm --cached -- {printed_word}"
+    subprocess.run([shell_path, "-c", fix], cwd=repo, check=True, capture_output=True)
+    assert tracked_names(repo) == before - {os.fsencode(target)}
+    assert (repo / target).exists()
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["lat\udce9.env", "line\nfeed.env", "esc\x1bape.env", "c1\x85.env"],
+    ids=["#86 cell 7 invalid UTF-8", "#86 cell 8 line feed", "#86 cell 8 escape", "#86 cell 8 C1 control"],
+)
+def test_an_unprintable_env_name_gets_a_hint_and_never_a_command(build_repo, capsys, name):
+    """#86 rule 2, E4: one hint line; the finding line itself keeps printing the name as before."""
+    _, output = run(capsys, build_repo({name: "A=1\n"}))
+    assert f"\n  Fix: {UNPRINTABLE_NAME_HINT}\n" in output
+    assert "rm --cached" not in output
+
+
+def test_an_invalid_utf8_env_name_stays_escaped_in_the_finding_line(build_repo, capsys):
+    """#86 cell 7: the hint replaces the command only; the finding line is unchanged."""
+    _, output = run(capsys, build_repo({"lat\udce9.env": "A=1\n"}))
+    assert output.count("env-file lat\\udce9.env - ") == 1
+
+
+def test_the_hint_for_a_path_git_refuses_has_no_command_when_the_path_is_unprintable(tmp_path, monkeypatch, capsys):
+    """#86 rule 1, cell 9: a PATH holding a line feed gets the hint without a `git -C` command."""
+    (tmp_path / "a\nb").write_text("x")
+    monkeypatch.chdir(tmp_path)
+    cli.main(["hygiene", "a\nb"])
+    err = capsys.readouterr().err
+    assert "(`git status` run inside it says why)" in err
+    assert "git -C" not in err
+
+
+def quality_door(*arguments: str, cwd: Path, **streams) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, "-m", "quality.cli", *arguments], cwd=cwd, text=True, check=False, **streams
+    )
+
+
+@pytest.fixture
+def env_and_broken_compose(build_repo) -> Path:
+    return build_repo({".env": "A=1\n", "compose.yaml": "services: [\n"})
+
+
+def test_a_merged_pipe_shows_the_hygiene_lines_in_run_order(env_and_broken_compose):
+    """#86 rule 3, cell 10: reports, the finding with its fix, `cannot judge`, then the summary."""
+    done = quality_door("hygiene", ".", cwd=env_and_broken_compose, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    prefixes = ["size: ", "import-contract: ", "env-file .env - ", "  Fix: ", "hygiene: compose-port cannot judge - ", "hygiene: 1 finding(s)"]
+    lines = done.stdout.splitlines()
+    assert all(line.startswith(prefix) for line, prefix in zip(lines, prefixes, strict=True)), done.stdout
+
+
+def test_discarding_stderr_hides_exactly_the_cannot_judge_line(env_and_broken_compose):
+    """#86 rule 3, cell 11: no line changes its stream; the exit stays 2."""
+    done = quality_door("hygiene", ".", cwd=env_and_broken_compose, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    assert (done.returncode, "compose-port cannot judge" in done.stdout, "env-file .env" in done.stdout) == (2, False, True)
+
+
+SONAR_FINDINGS_SCRIPT = """
+import sys
+sys.path.insert(0, {tests_directory!r})
+from test_sonar import issues_page, sonar_answering
+from quality import cli
+sys.exit(cli.main(["sonar", "findings"], transport=sonar_answering(issues=issues_page(2, 1, 2)), sleep=lambda seconds: None))
+"""
+
+
+def test_a_merged_pipe_lists_the_sonar_findings_before_the_red_summary(tmp_path):
+    """#86 rule 3, cell 12: the findings precede the summary through `2>&1`."""
+    from test_sonar import PULL_REQUEST_ENVIRONMENT, TASK_FIXTURE, legacy_config_absent
+
+    (tmp_path / "quality").mkdir()
+    (tmp_path / "quality" / "config.toml").write_text(legacy_config_absent)
+    (tmp_path / ".scannerwork").mkdir()
+    (tmp_path / ".scannerwork" / "report-task.txt").write_text(TASK_FIXTURE.read_text())
+    script = tmp_path / "findings.py"
+    script.write_text(textwrap.dedent(SONAR_FINDINGS_SCRIPT).format(tests_directory=str(Path(__file__).parent)))
+    done = subprocess.run(
+        [sys.executable, str(script)], cwd=tmp_path, text=True, check=False, env={**os.environ, **PULL_REQUEST_ENVIRONMENT},
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+    )
+    prefixes = ["sonar src/a1.py:1 - ", "  Fix: ", "sonar src/a2.py:2 - ", "  Fix: ", "sonar: new 2"]
+    lines = done.stdout.splitlines()
+    assert (done.returncode, all(line.startswith(prefix) for line, prefix in zip(lines, prefixes, strict=True))) == (1, True), done.stdout

@@ -55,6 +55,8 @@ def main(
     ask: Ask = input,
     is_terminal: Callable[[], bool] = lambda: sys.stdin.isatty(),
 ) -> int:
+    # stderr is line-buffered since Python 3.9, but a pipe makes stdout block-buffered, so `2>&1` showed stderr first.
+    sys.stdout.reconfigure(line_buffering=True)
     arguments = build_parser().parse_args(argv)
 
     if arguments.command == "emergency-merge":
