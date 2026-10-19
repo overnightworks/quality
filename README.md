@@ -176,7 +176,7 @@ clean, 1 findings, 1 unparsable`). The lines come in run order, also through a p
 (`2>&1 | tee log`); each stays on its own stream. The exit is the worst verdict's: `2` if any rule is unparsable or cannot judge
 (never clean), otherwise `1` if any rule has findings, otherwise `0`. A path git cannot read as a work tree (a file, a missing path, a
 folder without permission, a bare repository, the inside of `.git`) is `hygiene: cannot judge - <PATH as given> is not a
-readable git repository: ... (`git -C '<PATH>' status` says why)` and exit `2` before any rule runs.
+readable git repository: ... (`git -C '<PATH>' status` says why; a PATH with an unprintable character gets `git status` run inside it instead)` and exit `2` before any rule runs.
 
 ## `quality scan-staged`
 

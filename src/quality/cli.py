@@ -1,4 +1,5 @@
 import argparse
+import io
 import json
 import os
 import sys
@@ -56,7 +57,9 @@ def main(
     is_terminal: Callable[[], bool] = lambda: sys.stdin.isatty(),
 ) -> int:
     # stderr is line-buffered since Python 3.9, but a pipe makes stdout block-buffered, so `2>&1` showed stderr first.
-    sys.stdout.reconfigure(line_buffering=True)
+    # Only a real text stream can be reconfigured: a captured or closed stdout must not turn into a crash.
+    if isinstance(sys.stdout, io.TextIOWrapper):
+        sys.stdout.reconfigure(line_buffering=True)
     arguments = build_parser().parse_args(argv)
 
     if arguments.command == "emergency-merge":

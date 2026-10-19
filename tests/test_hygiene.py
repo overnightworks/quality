@@ -1,3 +1,5 @@
+import contextlib
+import io
 import os
 import re
 import shutil
@@ -9,7 +11,7 @@ from pathlib import Path
 import pytest
 from conftest import fake_engine, make_repo
 
-from quality import cli, hygiene
+from quality import cli, hygiene, sonar
 from quality.report import Finding
 
 EDGE_STACK = (Path(__file__).parent / "data" / "edge_stack.yml").read_text(encoding="utf-8")
@@ -57,7 +59,7 @@ def non_utf8_filename_repo(build_repo, tmp_path):
         "non-utf8-filename",
         "not-a-git-repository",
         "tracked-env-file",
-        "cell 9 non-utf8-env-filename-rendered-safely",
+        "cell 9 and #86 cell 7 non-utf8-env-filename-rendered-safely",
         "#76 cell 5 compose deleted from disk is gone",
         "malformed-compose-yaml",
     ],
@@ -575,6 +577,7 @@ def printed_fix(output: str, shown_name: str) -> str:
     """The command the `env-file` finding for `shown_name` prints after `Fix: `, without the closing sentence."""
     fix = re.search(rf"^env-file {re.escape(shown_name)} - .*\n  Fix: (.*)$", output, re.MULTILINE)
     assert fix, output
+    assert fix.group(1).endswith(FIX_SUFFIX), output
     return fix.group(1).removesuffix(FIX_SUFFIX)
 
 
@@ -627,8 +630,8 @@ def test_the_printed_env_fix_untracks_exactly_the_named_file_in_every_shell(
 
 @pytest.mark.parametrize(
     "name",
-    ["lat\udce9.env", "line\nfeed.env", "esc\x1bape.env", "c1\x85.env"],
-    ids=["#86 cell 7 invalid UTF-8", "#86 cell 8 line feed", "#86 cell 8 escape", "#86 cell 8 C1 control"],
+    ["lat\udce9.env", "line\nfeed.env", "esc\x1bape.env", "c1\x85.env", "del\x7f.env"],
+    ids=["#86 cell 7 invalid UTF-8", "#86 cell 8 line feed", "#86 cell 8 escape", "#86 cell 8 C1 control", "#86 cell 8 DEL"],
 )
 def test_an_unprintable_env_name_gets_a_hint_and_never_a_command(build_repo, capsys, name):
     """#86 rule 2, E4: one hint line; the finding line itself keeps printing the name as before."""
@@ -637,18 +640,13 @@ def test_an_unprintable_env_name_gets_a_hint_and_never_a_command(build_repo, cap
     assert "rm --cached" not in output
 
 
-def test_an_invalid_utf8_env_name_stays_escaped_in_the_finding_line(build_repo, capsys):
-    """#86 cell 7: the hint replaces the command only; the finding line is unchanged."""
-    _, output = run(capsys, build_repo({"lat\udce9.env": "A=1\n"}))
-    assert output.count("env-file lat\\udce9.env - ") == 1
-
-
 def test_the_hint_for_a_path_git_refuses_has_no_command_when_the_path_is_unprintable(tmp_path, monkeypatch, capsys):
     """#86 rule 1, cell 9: a PATH holding a line feed gets the hint without a `git -C` command."""
     (tmp_path / "a\nb").write_text("x")
     monkeypatch.chdir(tmp_path)
-    cli.main(["hygiene", "a\nb"])
+    code = cli.main(["hygiene", "a\nb"])
     err = capsys.readouterr().err
+    assert code == 2
     assert "(`git status` run inside it says why)" in err
     assert "git -C" not in err
 
@@ -693,8 +691,8 @@ def test_a_merged_pipe_lists_the_sonar_findings_before_the_red_summary(tmp_path)
 
     (tmp_path / "quality").mkdir()
     (tmp_path / "quality" / "config.toml").write_text(legacy_config_absent)
-    (tmp_path / ".scannerwork").mkdir()
-    (tmp_path / ".scannerwork" / "report-task.txt").write_text(TASK_FIXTURE.read_text())
+    (tmp_path / sonar.TASK_FILE).parent.mkdir()
+    (tmp_path / sonar.TASK_FILE).write_text(TASK_FIXTURE.read_text())
     script = tmp_path / "findings.py"
     script.write_text(textwrap.dedent(SONAR_FINDINGS_SCRIPT).format(tests_directory=str(Path(__file__).parent)))
     done = subprocess.run(
@@ -704,3 +702,21 @@ def test_a_merged_pipe_lists_the_sonar_findings_before_the_red_summary(tmp_path)
     prefixes = ["sonar src/a1.py:1 - ", "  Fix: ", "sonar src/a2.py:2 - ", "  Fix: ", "sonar: new 2"]
     lines = done.stdout.splitlines()
     assert (done.returncode, all(line.startswith(prefix) for line, prefix in zip(lines, prefixes, strict=True))) == (1, True), done.stdout
+
+
+def test_a_replaced_stdout_still_prints_the_help():
+    """#86 rule 3: the door reconfigures only a real text stream, so a captured stdout works."""
+    captured = io.StringIO()
+    with contextlib.redirect_stdout(captured), pytest.raises(SystemExit) as stopped:
+        cli.main(["--help"])
+    assert (stopped.value.code, "hygiene" in captured.getvalue()) == (0, True)
+
+
+def test_a_closed_stdout_is_cannot_judge_and_never_a_crash(tmp_path):
+    """#86 rule 3: with fd 1 closed the door still exits 2 with its cannot-judge line."""
+    done = subprocess.run(
+        ["bash", "-c", '"$PY" -m quality.cli hygiene "$MISSING" >&-'],
+        env={**os.environ, "PY": sys.executable, "MISSING": str(tmp_path / "missing")},
+        text=True, check=False, stderr=subprocess.PIPE,
+    )
+    assert (done.returncode, "hygiene: cannot judge" in done.stderr) == (2, True), done.stderr
