@@ -1,8 +1,0 @@
-claim_id = "87751f1d59a14113bfd7e95fe882e70b"
-agent = "claude"
-role = "builder"
-base = "344792ca4465884903470b8be1cda4d80e986459"
-branch = "claude/issue-78-compose-reads-like-compose"
-scope = ["README.md", "src/quality/hygiene.py", "tests/data/edge_stack.yml", "tests/test_hygiene.py"]
-opened_commit = "ae18b4810f04516335fe9474f0a61d9f9bb783bc"
-whole_reason = "Which files the compose rule reads, how it reads their YAML and how it reports what it cannot read is one decision; its README sentences and the tests pinning it move together."
