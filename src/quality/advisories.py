@@ -96,7 +96,9 @@ def _place_database(scratch: Path, ecosystem: str) -> None:
 def _download_database(url: str, ecosystem: str) -> bytes:
     """The archive at `url`; a worker does the download so that the deadline holds whatever the server sends or withholds.
 
-    A daemon worker, because a server that stalls in its headers cannot be interrupted and must not keep the process alive."""
+    A daemon worker, because a server that stalls in its headers cannot be interrupted and must not keep the process alive.
+    The caller judges by the worker's lifetime: still running at the deadline is the deadline; ended without an outcome
+    means an unexpected error (its traceback is on stderr); a download failure, a socket timeout included, is the worker's outcome."""
     download: Future[bytes] = Future()
 
     def fetch() -> None:
@@ -106,11 +108,15 @@ def _download_database(url: str, ecosystem: str) -> bytes:
         except DOWNLOAD_FAILURES as error:
             download.set_exception(error)
 
-    threading.Thread(target=fetch, daemon=True).start()
+    worker = threading.Thread(target=fetch, daemon=True)
+    worker.start()
+    worker.join(DATABASE_DOWNLOAD_DEADLINE_SECONDS)
+    if worker.is_alive():
+        raise EngineError(f"the {ecosystem} advisory database download exceeded {DATABASE_DOWNLOAD_DEADLINE_SECONDS} seconds")
+    if not download.done():
+        raise EngineError(f"the {ecosystem} advisory database download stopped on an unexpected error")
     try:
-        return download.result(timeout=DATABASE_DOWNLOAD_DEADLINE_SECONDS)
-    except TimeoutError:  # before OSError, which it is a subclass of
-        raise EngineError(f"the {ecosystem} advisory database download exceeded {DATABASE_DOWNLOAD_DEADLINE_SECONDS} seconds") from None
+        return download.result()
     except DOWNLOAD_FAILURES as error:
         raise EngineError(f"cannot download the {ecosystem} advisory database from {url}: {error}") from error
 

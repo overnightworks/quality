@@ -2,13 +2,12 @@ import contextlib
 import hashlib
 import io
 import json
-import os
 import shlex
 import socketserver
 import subprocess
-import sys
 import threading
 import time
+import urllib.request
 import zipfile
 from pathlib import Path
 
@@ -267,62 +266,116 @@ def test_a_database_that_cannot_be_used_is_cannot_judge(
 
 
 class Stalling(socketserver.StreamRequestHandler):
-    """Sends `opening`, then one byte at a time until the test ends."""
+    """Sends `opening`, then one byte at a time (or nothing more) until the test ends or `lifetime` passes, then hangs up."""
     opening = b""
+    trickles = False
+    lifetime = 5  # seconds: a broken downloader fails the test on its elapsed time instead of stalling the CI job
     finished = threading.Event()
 
     def handle(self):
-        self.wfile.write(self.opening)
+        expires = time.monotonic() + self.lifetime
         try:
-            while not self.finished.wait(0.05):
-                self.wfile.write(b"x")
+            self.wfile.write(self.opening)
+            while not self.finished.wait(0.05) and time.monotonic() < expires:
+                if self.trickles:
+                    self.wfile.write(b"x")
                 self.wfile.flush()
         except OSError:
             pass  # the client gave up, which is what the tests expect
 
 
-@pytest.mark.parametrize(
-    "opening",
-    [b"HTTP/1.1 200 OK\r\nContent-Length: 100000\r\n\r\n", b"HTTP/1.1 200 OK\r\nX-Slow: "],
-    ids=["body trickles", "header trickles"],
-)
-def test_a_server_that_trickles_bytes_hits_the_download_deadline(build_repo, clean_engines, run_gate, monkeypatch, opening):
-    """#53 rule 3: the download has a total time limit, whatever part of the response the server drags out."""
-    handler = type("Stall", (Stalling,), {"opening": opening, "finished": threading.Event()})
-    server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), handler)
-    server.daemon_threads = True
-    serving = threading.Thread(target=server.serve_forever)
-    serving.start()
-    try:
+@pytest.fixture
+def serve_stalling(monkeypatch):
+    """Serves a Stalling handler and points the gate's database root at it; the server is stopped at teardown."""
+    stopping = []
+
+    def serve(opening: bytes, *, trickles: bool) -> None:
+        handler = type("Stall", (Stalling,), {"opening": opening, "trickles": trickles, "finished": threading.Event()})
+        server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), handler)
+        server.daemon_threads = True
+        serving = threading.Thread(target=server.serve_forever)
+        serving.start()
+        stopping.append((handler, server, serving))
         monkeypatch.setattr(advisories, "DATABASE_ROOT", f"http://127.0.0.1:{server.server_address[1]}")
-        monkeypatch.setattr(advisories, "DATABASE_DOWNLOAD_DEADLINE_SECONDS", 0.5)
-        started = time.monotonic()
-        code, output = run_gate(tracked_lock_repo(build_repo), osv_engines(clean_engines, "exit 99"))
-        elapsed = time.monotonic() - started
-    finally:
+
+    yield serve
+    for handler, server, serving in stopping:
         handler.finished.set()
         server.shutdown()
         serving.join()
         server.server_close()
+
+
+@pytest.fixture
+def timed_gate(build_repo, clean_engines, run_gate):
+    """Runs the gate over a lock whose database download is the subject; returns (exit code, output, seconds it took)."""
+    def run() -> tuple[int, str, float]:
+        started = time.monotonic()
+        code, output = run_gate(tracked_lock_repo(build_repo), osv_engines(clean_engines, "exit 99"))
+        return code, output, time.monotonic() - started
+    return run
+
+
+BODY_BEGUN = b"HTTP/1.1 200 OK\r\nContent-Length: 100000\r\n\r\n"
+
+
+@pytest.mark.parametrize(
+    ("opening", "trickles"),
+    [(BODY_BEGUN, True), (b"HTTP/1.1 200 OK\r\nX-Slow: ", True)],
+    ids=["body trickles", "header trickles"],
+)
+def test_a_server_that_trickles_bytes_hits_the_download_deadline(serve_stalling, timed_gate, monkeypatch, opening, trickles):
+    """#53 rule 3: the download has a total time limit, whatever part of the response the server drags out."""
+    serve_stalling(opening, trickles=trickles)
+    monkeypatch.setattr(advisories, "DATABASE_DOWNLOAD_DEADLINE_SECONDS", 0.5)
+    code, output, elapsed = timed_gate()
     assert (code, "download exceeded" in output, elapsed < 3) == (2, True, True), output
 
 
-@pytest.mark.skipif(os.geteuid() == 0, reason="root writes into a read-only directory")
+def test_a_server_that_goes_silent_is_a_timeout_not_the_total_deadline(serve_stalling, timed_gate, monkeypatch):
+    """#53 rule 3: a stalled receive is named a timeout; the total deadline is named only when it is the cause."""
+    serve_stalling(BODY_BEGUN + b"xx", trickles=False)
+    monkeypatch.setattr(engines, "DOWNLOAD_TIMEOUT_SECONDS", 0.3)
+    monkeypatch.setattr(advisories, "DATABASE_DOWNLOAD_DEADLINE_SECONDS", 10)
+    code, output, elapsed = timed_gate()
+    assert (code, "timed out" in output, "exceeded" in output, elapsed < 3) == (2, True, False, True), output
+
+
+@pytest.fixture
+def failing_opener():
+    """Makes every `boom://` open raise an error the downloader does not expect, through urllib's public opener API."""
+    class Boom(urllib.request.BaseHandler):
+        def boom_open(self, request):
+            raise RuntimeError("boom")
+
+    urllib.request.install_opener(urllib.request.build_opener(Boom()))
+    yield "boom://database"
+    urllib.request.install_opener(None)
+
+
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")  # the worker's traceback on stderr is the loud signal
+def test_an_unexpected_download_error_is_cannot_judge_at_once(failing_opener, timed_gate, monkeypatch):
+    """#53 rule 3: an error nobody anticipated is a refusal that says so, not a wait for the total deadline."""
+    monkeypatch.setattr(advisories, "DATABASE_ROOT", failing_opener)
+    monkeypatch.setattr(advisories, "DATABASE_DOWNLOAD_DEADLINE_SECONDS", 10)
+    code, output, elapsed = timed_gate()
+    assert (code, "stopped on an unexpected error" in output, "exceeded" in output, elapsed < 3) == (2, True, False, True), output
+
+
 def test_a_scratch_directory_that_cannot_be_written_is_cannot_judge(build_repo, clean_engines, run_gate, publish_database, monkeypatch):
     """#53 rule 3: a full or read-only scratch is a refusal, not a traceback."""
     publish_database()
     scratch_directory = engines.scratch_directory
 
     @contextlib.contextmanager
-    def read_only_for_advisories():  # the secret scan shares engines.scratch_directory and needs its scratch writable
+    def scratch_without_room_for_a_database():  # a file where the database directory belongs; the secret scan never uses that name
         with scratch_directory() as scratch:
-            if sys._getframe(2).f_globals["__name__"] == advisories.__name__:
-                scratch.chmod(0o500)
+            (scratch / "osv-scalibr").touch()
             yield scratch
 
-    monkeypatch.setattr(engines, "scratch_directory", read_only_for_advisories)
+    monkeypatch.setattr(engines, "scratch_directory", scratch_without_room_for_a_database)
     code, output = run_gate(tracked_lock_repo(build_repo), osv_engines(clean_engines, "exit 99"))
-    assert (code, "cannot place the PyPI advisory database in the scratch directory" in output, "<scratch>" in output) == (2, True, True), output
+    assert (code, "cannot place the PyPI advisory database in the scratch directory" in output, "<scratch>" in output, "secret cannot judge" in output) == (2, True, True, False), output
 
 
 @pytest.mark.engine
