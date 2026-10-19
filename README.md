@@ -32,11 +32,12 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   judged, `composer.yml`, `compose2.yaml` and `compose.yaml.example` are not. Only tracked files count: an untracked
   `compose.yaml` is never judged, one added with `git add` is. A tracked file missing from disk (deleted, or a symlink
   to nowhere or in a loop) is skipped; one the filesystem refuses to read is `hygiene: compose-port cannot judge - ...`.
-  A file is read as Compose reads it: `- 22:22` is the text `22:22`, and `!override` and `!reset` are read as the value
-  they wrap; any other tag (`!foo`) and any YAML error is `cannot judge`, in one line with its line and column (or its
-  position for a character YAML refuses, or `nested too deeply`). A port that is neither text, a number nor a mapping
-  with a scalar target is a finding. A service with `network_mode: host` publishes whatever its
-  process binds, and this rule does not check that yet (an allowlist follows in Q1b-3g).
+  A file is read as Compose reads it: `- 22:22` is the text `22:22`, and `!override` and `!reset` are read as the
+  value they wrap; any other tag (`!foo`) and any YAML error is `cannot judge`, in one line with its line and column
+  (or its position for a character YAML refuses, `nested too deeply`, `a value does not fit its tag`, or `not valid
+  YAML`). A port that is neither text, a number nor a mapping whose `published` (or, without one, `target`) is text or
+  a number is a finding. A service with `network_mode: host` publishes whatever its process binds, and this rule does
+  not check that yet (an allowlist follows in Q1b-3g).
 - `size`: every tracked `*.py` file is measured with [lizard](https://github.com/terryyin/lizard): a file from 800
   lines, a function from 60 lines and a function with a CCN above 15 are debt, counted apart for production and tests
   (a path under `test/` or `tests/`, `conftest.py`, `test_*.py`, `*_test.py`). Functions are named by their qualified

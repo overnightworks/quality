@@ -202,8 +202,8 @@ def _port_findings(name: str, service_name: object, ports: list) -> list[Finding
         description = _describe(port)
         if description is None:
             findings.append(Finding(COMPOSE_PORT, name, None,
-                                    f"service {service_name} has a port that is not a string, a number or a mapping with a scalar target (unreadable).",
-                                    "write each port as a string, a number or a mapping with a scalar target."))
+                                    f"service {service_name} has a port that is not a string, a number or a mapping whose published (or, without one, target) is text or a number (unreadable).",
+                                    "write each port as a string, a number or a mapping whose published (or, without one, target) is text or a number."))
         elif not _binds_loopback(port):
             findings.append(Finding(COMPOSE_PORT, name, None,
                                     f"service {service_name} publishes port {description} beyond loopback.",

@@ -259,7 +259,7 @@ def test_a_port_that_is_a_container_is_one_short_finding(build_repo, capsys, ser
     """#78 rule 4, cell 12: an aliased container is never printed."""
     repo = build_repo({"compose.yaml": f"x-bomb:\n  {ALIAS_BOMB.replace(chr(10), chr(10) + '  ')}\nservices:\n  web:\n{service}"})
     code, output = run(capsys, repo)
-    assert (code, "has a port that is not a string, a number or a mapping with a scalar target (unreadable)" in output, len(output) < 800) == (1, True, True), output
+    assert (code, "has a port that is not a string, a number or a mapping whose published (or, without one, target) is text or a number (unreadable)" in output, len(output) < 800) == (1, True, True), output
 
 
 def test_an_untracked_compose_file_is_not_judged_until_it_is_added(build_repo, capsys):
