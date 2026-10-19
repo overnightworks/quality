@@ -1,0 +1,8 @@
+claim_id = "0cd18bf85b1143499cb2e3538ff58427"
+agent = "claude"
+role = "builder"
+base = "ca88ab51e15210d99bebe6cf44bb39f388ff5297"
+branch = "claude/issue-82-gate-caller-contract"
+scope = [".github/workflows/gate.yml", "AGENTS.md", "README.md", "tests/conftest.py", "tests/test_architecture.py", "tests/test_hygiene.py", "tests/test_ratchet.py", "tests/test_repository.py", "tests/test_verdict.py"]
+opened_commit = "38a9f1a847d6111611da20d0d751db50caf3157b"
+whole_reason = "The gate caller's contract is one text in two places (README section and gate.yml header) that must say the same; the fixture refactor rides along as a no-behaviour card."
