@@ -237,7 +237,7 @@ it from one job of its own workflow:
 ```yaml
   quality:
     if: always()
-    needs: [tests]
+    needs: [checks]
     permissions:
       contents: read
       actions: read
@@ -250,35 +250,38 @@ it from one job of its own workflow:
 
 Each line has a reason:
 
-- **The job id is `quality`.** The gate's checks then read `quality / hygiene`, `quality / sonar` and `quality / verdict`,
-  and `quality emergency-merge` looks for `quality / sonar` and `quality / verdict` by those names.
+- **The caller job is `quality`,** by its id or, if it sets one, by its `name:`. The gate's checks then read
+  `quality / hygiene`, `quality / sonar` and `quality / verdict`. Three things look for them by those names: a ruleset
+  that requires `quality / verdict` (the fleet's org ruleset does), `aco land`, which refuses without a green
+  `quality / verdict`, and `quality emergency-merge`, which looks for `quality / sonar` and `quality / verdict`.
 - **`needs:` lists the id of every job that a `mandatory_jobs` name belongs to.** The verdict then judges finished jobs.
   Without it, a job still running is red: `mandatory job "checks" (attempt 1) concluded in_progress`.
 - **`if: always()` runs the gate when a needed job failed,** so the verdict names the failure. Without it, a failed needed
   job skips the gate and no verdict judges the run.
 - **`permissions:` grants `contents: read` and `actions: read`.** The verdict reads the run's jobs through the API. A job in
   a reusable workflow gets no more than its caller job grants (see
-  [GitHub's reusable-workflow documentation](https://docs.github.com/en/actions/using-workflows/reusing-workflows)),
-  so without `actions: read` the run fails at startup, adds no `quality / verdict` check, and the pull request cannot merge.
+  [GitHub's reusable-workflow documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations)),
+  so without `actions: read` the run fails at startup and adds no `quality / verdict` check. Where a ruleset or `aco land`
+  requires that check, the pull request cannot merge; where nothing requires it, it merges unjudged.
 - **`secrets: SONAR_TOKEN`** and the optional **`with: coverage-artifact`** are described under
   [`quality sonar findings`](#quality-sonar-findings) and [Coverage on new code](#coverage-on-new-code).
-- **`uses:` pins a commit** (`@<commit sha> # v<tag>`), and Dependabot's `github-actions` ecosystem bumps it.
+- **`uses:` pins a commit** (`@<commit sha> # v<tag>`), and Dependabot bumps it where the repository's `.github/dependabot.yml` enables the `github-actions` ecosystem.
 
 The verdict judges the jobs named in `quality/config.toml`:
 
 ```toml
 [gate]
-mandatory_jobs = ["tests"]
+mandatory_jobs = ["checks"]
 ```
 
 - `mandatory_jobs` is a non-empty list of job names as the run lists them: the job's `name:`, else its id, and a matrix
   leg as `check (3.12)`. A missing file or key is exit `2`, and the message shows this example.
-- Each job must conclude `success` in the run's latest attempt. A job that is missing from the run is
+- Each job must conclude `success` in its newest attempt up to the verdict's own. A job that is missing from the run is
   `mandatory job "x" is missing from the run`; one that failed, was skipped or cancelled, or is still running is red.
 - On a pull request, removing a job the base config holds is `loosened: mandatory job "x" removed`, and the base's job is
   still judged.
 - The gate's own jobs are judged through `needs` (`gate job "sonar" result failure`) and need no entry.
-- `[gate] legacy` is described under [`quality sonar findings`](#quality-sonar-findings).
+- `[gate] legacy` is described under [New and legacy findings](#new-and-legacy-findings).
 
 The verdict prints `verdict: green` (exit `0`); each problem, then `verdict: red` (exit `1`); or
 `verdict: cannot judge - ...` (exit `2`). The same text goes to the run's step summary.
