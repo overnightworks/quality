@@ -17,9 +17,9 @@ Where the fleet is going and why: [docs/roadmap.md](docs/roadmap.md) (target sta
 
 Install it with
 
-    uv tool install "overnightworks-quality @ git+https://github.com/overnightworks/quality@<commit sha>"
+    uv tool install "overnightworks-quality @ git+https://github.com/overnightworks/quality@<tag or commit sha>"
 
-(no tag exists yet, so the line names a commit). The gitleaks paths (`hygiene --engines`, `scan-staged`) need git 2.41 or newer; with an older git they exit `2`.
+The gitleaks paths (`hygiene --engines`, `scan-staged`) need git 2.41 or newer; with an older git they exit `2`.
 
 `hygiene` reads git's view of the repository `PATH` (default `.`) lies in, from its top level, so a run from `src` judges
 the same files and the same `quality/baseline.toml` as one at the top, and names every file relative to the top (`size
@@ -229,6 +229,65 @@ its pin sets `format = "binary"` (osv-scanner, a bare executable), which is inst
 `quality engines verify DIR` is exit `0` when every pinned engine in `DIR` reports exactly its pinned version, otherwise
 exit `2` with one line per engine.
 
+## `gate.yml`
+
+`.github/workflows/gate.yml` is the reusable gate: a `hygiene` job, a `sonar` job and a `verdict` job. A repository calls
+it from one job of its own workflow:
+
+```yaml
+  quality:
+    if: always()
+    needs: [checks]
+    permissions:
+      contents: read
+      actions: read
+    uses: overnightworks/quality/.github/workflows/gate.yml@<commit sha> # v<tag>
+    with:
+      coverage-artifact: coverage
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+```
+
+Each line has a reason:
+
+- **The caller job is `quality`,** by its id or, if it sets one, by its `name:`. The gate's checks then read
+  `quality / hygiene`, `quality / sonar` and `quality / verdict`. Three things look for them by those names: a ruleset
+  that requires `quality / verdict` (the fleet's org ruleset does, on the default branch of every repository whose
+  custom property `quality_gate` is `true`), `aco land`, which, once the default branch holds `quality/config.toml`,
+  refuses without a green `quality / verdict`, and `quality emergency-merge`, which looks for `quality / sonar` and
+  `quality / verdict`.
+- **`needs:` lists the id of every job that a `mandatory_jobs` name belongs to.** The verdict then judges finished jobs.
+  Without it, a job still running is red: `mandatory job "checks" (attempt 1) concluded in_progress`.
+- **`if: always()` runs the gate when a needed job failed,** so the verdict names the failure. Without it, a failed needed
+  job skips the gate and no verdict judges the run.
+- **`permissions:` grants `contents: read` and `actions: read`.** The verdict reads the run's jobs through the API. A job in
+  a reusable workflow gets no more than its caller job grants (see
+  [GitHub's reusable-workflow documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations)),
+  so without `actions: read` the run fails at startup and adds no `quality / verdict` check. Where a ruleset or `aco land`
+  requires that check, the pull request cannot merge; where nothing requires it, it merges unjudged.
+- **`secrets: SONAR_TOKEN`** and the optional **`with: coverage-artifact`** are described under
+  [`quality sonar findings`](#quality-sonar-findings) and [Coverage on new code](#coverage-on-new-code).
+- **`uses:` pins a commit** (`@<commit sha> # v<tag>`), and Dependabot bumps it where the repository's `.github/dependabot.yml` enables the `github-actions` ecosystem.
+
+The verdict judges the jobs named in `quality/config.toml`:
+
+```toml
+[gate]
+mandatory_jobs = ["checks"]
+```
+
+- `mandatory_jobs` is a non-empty list of job names as the run lists them: the job's `name:`, else its id, and a matrix
+  leg as `check (3.12)`. A missing file or key is exit `2`, and the message shows this example.
+- Each job must conclude `success` in its newest attempt up to the verdict's own. A job that is missing from the run is
+  `mandatory job "x" is missing from the run`; one that failed, was skipped or cancelled, or is still running is red.
+- On a pull request, removing a job the base config holds is `loosened: mandatory job "x" removed`, and the base's job is
+  still judged.
+- The gate's own jobs are judged through `needs` (`gate job "sonar" result failure`) and need no entry.
+- `[gate] legacy` is described under [New and legacy findings](#new-and-legacy-findings).
+
+The verdict prints `verdict: green` (exit `0`); each problem, then `verdict: red` (exit `1`); or
+`verdict: cannot judge - ...` (exit `2`). The same text goes to the run's step summary.
+
 ## `quality sonar findings`
 
 `gate.yml` runs SonarCloud's scanner in its `sonar` job and judges it through `verdict`; callers use `gate.yml`, never
@@ -240,10 +299,10 @@ skipped; Dependabot runs resolve the Dependabot secret of the same name.
 ### Coverage on new code
 
 The scan only sees a coverage report that is in the checkout when it starts. `gate.yml` never runs a caller's tests; the
-caller hands over the report its tests job wrote, in four steps:
+caller hands over the report its checks job wrote, in four steps:
 
-1. Upload the report from the tests job: `actions/upload-artifact` with `name: coverage` and `path: coverage.xml`.
-2. Give the gate job `needs: [tests]` (the tests job's id), so the artifact exists when the gate downloads it.
+1. Upload the report from the checks job: `actions/upload-artifact` with `name: coverage` and `path: coverage.xml`.
+2. Give the gate job `needs: [checks]` (the checks job's id), so the artifact exists when the gate downloads it.
 3. Pass the artifact's name to the gate: `with: coverage-artifact: coverage`.
 4. Name the report in `sonar-project.properties`, for example `sonar.python.coverage.reportPaths=coverage.xml`
    (or `sonar.javascript.lcov.reportPaths`). The path is relative to the upload's common directory, which is where the
@@ -252,7 +311,7 @@ caller hands over the report its tests job wrote, in four steps:
 The sonar job downloads the artifact right after the caller checkout and before the gate's own tool checkout, so a
 `.gate-tool/` path inside the artifact does not stand in for the pinned tool: the tool checkout re-creates it at the
 pinned ref. This is defence in depth, not a guarantee. An artifact that plants `.gate-tool/.git/` still reaches git
-through the checkout, and the caller's own tests job is arbitrary code anyway.
+through the checkout, and the caller's own checks job is arbitrary code anyway.
 
 Preflight exits `2` naming the key and the entry when a listed report does not exist: each comma-separated entry is
 judged on its own, a glob (`*`, `?`, `**`) must match at least one file and `**` must be a whole path segment, a plain

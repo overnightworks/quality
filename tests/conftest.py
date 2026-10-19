@@ -61,6 +61,12 @@ def build_repo(tmp_path: Path) -> RepoBuilder:
     return lambda files: make_repo(tmp_path, files)
 
 
+@pytest.fixture
+def elsewhere(tmp_path_factory) -> Path:
+    """A scratch directory outside every fixture repository."""
+    return tmp_path_factory.mktemp("elsewhere")
+
+
 @pytest.fixture(scope="session")
 def installed_engines(tmp_path_factory) -> Path:
     directory = tmp_path_factory.mktemp("engines")

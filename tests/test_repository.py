@@ -96,13 +96,6 @@ def repo(tmp_path: Path) -> Path:
     return path
 
 
-@pytest.fixture
-def elsewhere(tmp_path: Path) -> Path:
-    path = tmp_path / "elsewhere"
-    path.mkdir()
-    return path
-
-
 def restore_permissions(repo: Path) -> None:
     """Gives the arranged paths their permission back, so tmp_path can be removed."""
     for path in (repo / "quality", repo / NAME):

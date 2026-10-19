@@ -202,12 +202,12 @@ def test_below_the_thresholds_or_with_a_fixed_entry_gone_is_clean(build_repo, ca
 
 
 @pytest.fixture(params=["deleted", "dangling", "cell 18 dangling out of the repository"])
-def remove(request, tmp_path_factory) -> Callable[[Path], None]:
+def remove(request, elsewhere) -> Callable[[Path], None]:
     """Takes a tracked file off the disk: deleted, or replaced by a link to nowhere inside or outside the repository."""
     link_target = {
         "deleted": None,
         "dangling": Path("missing.py"),
-        "cell 18 dangling out of the repository": tmp_path_factory.mktemp("elsewhere") / "missing.py",
+        "cell 18 dangling out of the repository": elsewhere / "missing.py",
     }[request.param]
 
     def take_off_the_disk(path: Path) -> None:

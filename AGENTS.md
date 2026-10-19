@@ -22,6 +22,8 @@ Door commands:
 
 `.github/workflows/codeql.yml` is the reusable CodeQL workflow (input `languages`); `code-scanning.yml` is quality's own caller of it.
 
+`.github/workflows/gate.yml` is the reusable gate; its caller contract stands in the README's `gate.yml` section and in the file's header.
+
 quality's own layers are an import-linter contract in `pyproject.toml` (`[tool.importlinter]`); `quality hygiene .`
 enforces it, so a module imports only from the layers below its own.
 

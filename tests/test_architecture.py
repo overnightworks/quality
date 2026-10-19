@@ -60,12 +60,6 @@ def run(capsys: pytest.CaptureFixture[str], path: Path) -> tuple[int, str]:
     return code, captured.out + captured.err
 
 
-@pytest.fixture
-def elsewhere(tmp_path_factory) -> Path:
-    """A scratch directory outside the repository, which build_repo builds in tmp_path."""
-    return tmp_path_factory.mktemp("elsewhere")
-
-
 THREE_ROOTS = {
     "src/alpha/__init__.py": "", "src/alpha/top.py": "import beta.mid\n",
     "libs/beta/__init__.py": "", "libs/beta/mid.py": "import gamma.low\n",
