@@ -254,8 +254,8 @@ Each line has a reason:
   `quality / hygiene`, `quality / sonar` and `quality / verdict`. Three things look for them by those names: a ruleset
   that requires `quality / verdict` (the fleet's org ruleset does, on the default branch of every repository whose
   custom property `quality_gate` is `true`), `aco land`, which, once the default branch holds `quality/config.toml`,
-  refuses without a green
-  `quality / verdict`, and `quality emergency-merge`, which looks for `quality / sonar` and `quality / verdict`.
+  refuses without a green `quality / verdict`, and `quality emergency-merge`, which looks for `quality / sonar` and
+  `quality / verdict`.
 - **`needs:` lists the id of every job that a `mandatory_jobs` name belongs to.** The verdict then judges finished jobs.
   Without it, a job still running is red: `mandatory job "checks" (attempt 1) concluded in_progress`.
 - **`if: always()` runs the gate when a needed job failed,** so the verdict names the failure. Without it, a failed needed
