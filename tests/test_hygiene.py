@@ -4,9 +4,9 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from conftest import make_repo
+from conftest import fake_engine, make_repo
 
-from quality import cli, engines, hygiene
+from quality import cli, hygiene
 from quality.report import Finding
 
 EDGE_STACK = (Path(__file__).parent / "data" / "edge_stack.yml").read_text(encoding="utf-8")
@@ -381,28 +381,6 @@ def test_a_tracked_env_file_deleted_from_disk_is_still_a_finding(build_repo, cap
 BASELINE = {"quality/baseline.toml": ""}
 NEW_DEBT = "def long_one():\n" + "    x = 1\n" * 61
 ENV_FINDING = "env-file .env - "
-
-
-def fake_engine(directory: Path, name: str, on_scan: str) -> Path:
-    """Writes a fake `name` engine that prints its pinned version and runs `on_scan` (shell) for any other call."""
-    version_arguments = " ".join(engines.VERSION_ARGUMENTS[name])
-    pinned = engines.read_pins()[name].version
-    binary = directory / name
-    binary.write_text(f'#!/bin/sh\nif [ "$*" = "{version_arguments}" ]; then echo {pinned}; exit 0; fi\n{on_scan}\n')
-    binary.chmod(0o755)
-    return binary
-
-
-@pytest.fixture
-def clean_engines(tmp_path_factory) -> Path:
-    """A gitleaks that reports its pin and no leak; with no workflow tracked, no other engine runs."""
-    directory = tmp_path_factory.mktemp("engines")
-    fake_engine(
-        directory,
-        "gitleaks",
-        on_scan='while [ $# -gt 0 ]; do [ "$1" = --report-path ] && report=$2; shift; done\necho "[]" > "$report"',
-    )
-    return directory
 
 
 def config_linked_out_of_the_repository(build_repo, elsewhere):

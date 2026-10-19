@@ -304,7 +304,7 @@ def check_workflows(root: Path, engine_dir: Path, rule: str, tracked: list[str])
 def check_advisories(root: Path, engine_dir: Path, tracked: list[str]) -> list[Finding]:
     locks = {name: _judged(repository.resolve_file, root, name) for name in _on_disk(root, [n for n in tracked if advisories.is_lock(n)])}
     try:
-        return advisories.scan(engine_dir, engines.read_pins(), locks)
+        return advisories.scan(engine_dir, engines.read_pins(), locks, root)
     except engines.EngineError as error:
         raise CannotJudge(str(error)) from error
 

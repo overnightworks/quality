@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import cli
+from quality import cli, engines
 
 FAKE_KEY = "AKIA" + "QYLPMTYX3QZ5ABCD"  # assembled so quality's own scan stays green
 OTHER_KEY = "AKIA" + "QYLPMTYX3QZ5WXYZ"  # a second assembled key, to prove another value stays red
@@ -65,6 +65,28 @@ def build_repo(tmp_path: Path) -> RepoBuilder:
 def installed_engines(tmp_path_factory) -> Path:
     directory = tmp_path_factory.mktemp("engines")
     assert cli.main(["engines", "install", str(directory)]) == 0
+    return directory
+
+
+def fake_engine(directory: Path, name: str, on_scan: str) -> Path:
+    """Writes a fake `name` engine that prints its pinned version and runs `on_scan` (shell) for any other call."""
+    version_arguments = " ".join(engines.VERSION_ARGUMENTS[name])
+    pinned = engines.read_pins()[name].version
+    binary = directory / name
+    binary.write_text(f'#!/bin/sh\nif [ "$*" = "{version_arguments}" ]; then echo {pinned}; exit 0; fi\n{on_scan}\n')
+    binary.chmod(0o755)
+    return binary
+
+
+@pytest.fixture
+def clean_engines(tmp_path_factory) -> Path:
+    """A gitleaks that reports its pin and no leak; with no workflow tracked, no other engine runs."""
+    directory = tmp_path_factory.mktemp("engines")
+    fake_engine(
+        directory,
+        "gitleaks",
+        on_scan='while [ $# -gt 0 ]; do [ "$1" = --report-path ] && report=$2; shift; done\necho "[]" > "$report"',
+    )
     return directory
 
 

@@ -226,8 +226,8 @@ def run_scan_staged(path: Path, engine_dir: Path, read_pins: Callable[[], dict[s
 
 
 def run_engines_install(directory: Path, read_pins: Callable[[], dict[str, engines.Pin]]) -> int:
-    pins = read_pins()
     try:
+        pins = read_pins()
         downloaded = engines.install(directory, pins)
     except engines.EngineError as error:
         print(f"engines: cannot install - {error}", file=sys.stderr)
@@ -238,7 +238,10 @@ def run_engines_install(directory: Path, read_pins: Callable[[], dict[str, engin
 
 
 def run_engines_verify(directory: Path, read_pins: Callable[[], dict[str, engines.Pin]]) -> int:
-    problems = engines.verification_problems(directory, read_pins())
+    try:
+        problems = engines.verification_problems(directory, read_pins())
+    except engines.EngineError as error:
+        problems = [str(error)]
     if problems:
         print("\n".join(f"engines: {problem}" for problem in problems), file=sys.stderr)
         return EXIT_CANNOT_JUDGE

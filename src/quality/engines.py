@@ -57,7 +57,11 @@ class Pin:
 
 def read_pins() -> dict[str, Pin]:
     with PIN_FILE.open("rb") as handle:
-        return {name: Pin(**fields) for name, fields in tomllib.load(handle).items()}
+        pins = {name: Pin(**fields) for name, fields in tomllib.load(handle).items()}
+    for name, pin in pins.items():
+        if pin.format not in (TARBALL, BINARY):
+            raise EngineError(f"the {name} pin has format {pin.format!r}, neither {TARBALL!r} nor {BINARY!r}")
+    return pins
 
 
 def install(directory: Path, pins: dict[str, Pin]) -> dict[str, bool]:
