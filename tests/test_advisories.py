@@ -353,13 +353,15 @@ def failing_opener():
     urllib.request.install_opener(None)
 
 
-@pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")  # the worker's traceback on stderr is the loud signal
 def test_an_unexpected_download_error_is_cannot_judge_at_once(failing_opener, timed_gate, monkeypatch):
-    """#53 rule 3: an error nobody anticipated is a refusal that says so, not a wait for the total deadline."""
+    """#53 rule 3: an error nobody anticipated is a refusal that names its cause, not a wait for the total deadline."""
     monkeypatch.setattr(advisories, "DATABASE_ROOT", failing_opener)
     monkeypatch.setattr(advisories, "DATABASE_DOWNLOAD_DEADLINE_SECONDS", 10)
-    code, output, elapsed = timed_gate()
-    assert (code, "stopped on an unexpected error" in output, "exceeded" in output, elapsed < 3) == (2, True, False, True), output
+    with monkeypatch.context() as production_hook:  # pytest replaces the hook that prints the worker's traceback
+        production_hook.setattr(threading, "excepthook", threading.__excepthook__)
+        code, output, elapsed = timed_gate()
+    assert (code, "stopped on an unexpected error" in output, "RuntimeError: boom" in output, "exceeded" in output, elapsed < 3) == (
+        2, True, True, False, True), output
 
 
 def test_a_scratch_directory_that_cannot_be_written_is_cannot_judge(build_repo, clean_engines, run_gate, publish_database, monkeypatch):
