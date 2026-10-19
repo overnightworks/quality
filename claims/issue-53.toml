@@ -3,6 +3,6 @@ agent = "claude"
 role = "builder"
 base = "c67a6d766f4553dac20ce94f1a1fd1405b1e2012"
 branch = "claude/issue-53-osv-advisories"
-scope = ["AGENTS.md", "README.md", "pyproject.toml", "quality/baseline.toml", "src/quality/advisories.py", "src/quality/engines.py", "src/quality/engines.toml", "src/quality/hygiene.py", "src/quality/osv-scanner.toml", "tests/fixtures/engine-outputs", "tests/test_advisories.py", "tests/test_engines.py", "tests/test_hygiene.py", "uv.lock"]
+scope = ["AGENTS.md", "README.md", "pyproject.toml", "quality/baseline.toml", "src/quality/advisories.py", "src/quality/engines.py", "src/quality/engines.toml", "src/quality/hygiene.py", "src/quality/osv-scanner.toml", "tests/conftest.py", "tests/fixtures/engine-outputs", "tests/test_advisories.py", "tests/test_engines.py", "tests/test_hygiene.py", "uv.lock"]
 opened_commit = "7ac50cae937017185eaa7f7a1c31e99d8e8102c8"
 whole_reason = "The engine pin, the database fetch and the rule are one vertical: without the fetch the rule cannot judge, and without the rule the pin has no caller."
