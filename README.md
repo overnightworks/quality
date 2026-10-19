@@ -154,7 +154,8 @@ waits for declared loosening in `quality/config.toml`.
 
 quality downloads the PyPI database itself on every run (about 36 MB, `https://osv-vulnerabilities.storage.googleapis.com/PyPI/all.zip`)
 into the scan's own 0700 scratch directory and runs osv-scanner `--offline` on it, so osv-scanner makes no network call
-and reads no cache of its own. A database that cannot be downloaded within its time limit, is not a valid zip, or holds
+and reads no cache of its own. A database that cannot be downloaded within 300 seconds in total (connect, headers and body, however the
+server drags them out), cannot be placed in the scratch directory, is not a valid zip, or holds
 no advisory is exit `2`, never clean; so are an osv-scanner that is missing, at another version, exits other than `0`
 or `1`, runs past its time limit, or writes a report that is not the expected JSON, disagrees with its exit, or names
 a lock file quality did not pass. Trust boundary: the database is an unsigned zip fetched over TLS from the same source

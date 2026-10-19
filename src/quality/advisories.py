@@ -1,10 +1,12 @@
+import http.client
 import io
 import json
 import re
-import time
+import threading
 import urllib.request
 import zipfile
 from collections.abc import Mapping
+from concurrent.futures import Future
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
@@ -15,12 +17,12 @@ from quality.report import Finding
 RULE = "advisory"
 DATABASE_ROOT = "https://osv-vulnerabilities.storage.googleapis.com"  # read at call time; tests point it at a file:// root
 DATABASE_ARCHIVE = "all.zip"
-DATABASE_DOWNLOAD_DEADLINE_SECONDS = 300  # the whole download, where DOWNLOAD_TIMEOUT_SECONDS bounds each wait
-DATABASE_CHUNK_BYTES = 1 << 20
+DATABASE_DOWNLOAD_DEADLINE_SECONDS = 300  # connect, headers and body together, enforced from outside the HTTP machinery; DOWNLOAD_TIMEOUT_SECONDS bounds each socket wait
 ADVISORY_SCAN_TIMEOUT_SECONDS = 600
 OSV_CONFIG = Path(__file__).with_name("osv-scanner.toml")
 OSV_FINDINGS_FOUND = 1
 RANGE_TYPES_WITH_VERSIONS = ("ECOSYSTEM", "SEMVER")  # a GIT range's `fixed` is a commit, not a version
+DOWNLOAD_FAILURES = (OSError, ValueError, http.client.HTTPException)
 OSV_URL = "https://osv.dev/vulnerability/"
 
 
@@ -84,26 +86,33 @@ def _place_database(scratch: Path, ecosystem: str) -> None:
     if not has_advisories:
         raise EngineError(f"the {ecosystem} advisory database holds no advisory")
     destination = scratch / "osv-scalibr" / ecosystem
-    destination.mkdir(parents=True)
-    (destination / DATABASE_ARCHIVE).write_bytes(archive)
+    try:
+        destination.mkdir(parents=True)
+        (destination / DATABASE_ARCHIVE).write_bytes(archive)
+    except OSError as error:
+        raise EngineError(f"cannot place the {ecosystem} advisory database in the scratch directory: {error}") from error
 
 
 def _download_database(url: str, ecosystem: str) -> bytes:
-    deadline = time.monotonic() + DATABASE_DOWNLOAD_DEADLINE_SECONDS
-    chunks = []
+    """The archive at `url`; a worker does the download so that the deadline holds whatever the server sends or withholds.
+
+    A daemon worker, because a server that stalls in its headers cannot be interrupted and must not keep the process alive."""
+    download: Future[bytes] = Future()
+
+    def fetch() -> None:
+        try:
+            with urllib.request.urlopen(url, timeout=min(engines.DOWNLOAD_TIMEOUT_SECONDS, DATABASE_DOWNLOAD_DEADLINE_SECONDS)) as response:
+                download.set_result(response.read())
+        except DOWNLOAD_FAILURES as error:
+            download.set_exception(error)
+
+    threading.Thread(target=fetch, daemon=True).start()
     try:
-        timeout = min(engines.DOWNLOAD_TIMEOUT_SECONDS, DATABASE_DOWNLOAD_DEADLINE_SECONDS)
-        with urllib.request.urlopen(url, timeout=timeout) as response:
-            # read1 returns what one receive brings, so a trickle reaches the deadline check; read(n) waits for all n bytes.
-            while chunk := response.read1(DATABASE_CHUNK_BYTES):
-                chunks.append(chunk)
-                if time.monotonic() > deadline:
-                    raise EngineError(
-                        f"the {ecosystem} advisory database download exceeded {DATABASE_DOWNLOAD_DEADLINE_SECONDS} seconds"
-                    )
-    except (OSError, ValueError) as error:
+        return download.result(timeout=DATABASE_DOWNLOAD_DEADLINE_SECONDS)
+    except TimeoutError:  # before OSError, which it is a subclass of
+        raise EngineError(f"the {ecosystem} advisory database download exceeded {DATABASE_DOWNLOAD_DEADLINE_SECONDS} seconds") from None
+    except DOWNLOAD_FAILURES as error:
         raise EngineError(f"cannot download the {ecosystem} advisory database from {url}: {error}") from error
-    return b"".join(chunks)
 
 
 def _without_paths(text: str, names_by_path: Mapping[str, list[str]], directories: list[tuple[Path, str]]) -> str:
@@ -130,11 +139,11 @@ def _findings(exit_code: int, report_text: str, stderr: str, names_by_path: Mapp
 def _read_report(report_text: str, names_by_path: Mapping[str, list[str]]) -> list[Finding]:
     try:
         findings = []
-        for result in _list(json.loads(report_text)["results"]):
-            source = result["source"]["path"]
+        for result in _dicts(json.loads(report_text)["results"]):
+            source = _typed(_typed(result["source"], dict)["path"], str)
             if source not in names_by_path:
                 raise EngineError(f"the {engines.OSV_SCANNER} report names a lock file quality did not pass")
-            packages = _list(result["packages"])
+            packages = _dicts(result["packages"])
             findings += [
                 finding for name in names_by_path[source] for package in packages for finding in _package_findings(name, package)
             ]
@@ -143,20 +152,25 @@ def _read_report(report_text: str, names_by_path: Mapping[str, list[str]]) -> li
         raise EngineError(f"cannot read the {engines.OSV_SCANNER} report: {error!r}") from error
 
 
-def _list(value: object) -> list:
-    if not isinstance(value, list):
-        raise TypeError(f"expected a list, got {type(value).__name__}")
+def _typed[T](value: object, kind: type[T]) -> T:
+    """`value` if it is a `kind`: every field the reader consumes passes here, so a malformed one is never read as clean."""
+    if not isinstance(value, kind):
+        raise TypeError(f"expected a {kind.__name__}, got {type(value).__name__}")
     return value
 
 
+def _strings(value: object) -> list[str]:
+    return [_typed(item, str) for item in _typed(value, list)]
+
+
 def _package_findings(lock: str, package: dict) -> list[Finding]:
-    affected = package["package"]
-    name, version, ecosystem = affected["name"], affected["version"], affected["ecosystem"]
-    records = {record["id"]: record for record in _list(package["vulnerabilities"])}
+    affected = _typed(package["package"], dict)
+    name, version, ecosystem = (_typed(affected[field], str) for field in ("name", "version", "ecosystem"))
+    records = {_typed(record["id"], str): record for record in _dicts(package["vulnerabilities"])}
     findings = []
-    for group in _list(package["groups"]):
-        named, *others = _list(group["ids"])
-        aliases = sorted({*others, *_list(group["aliases"])} - {named})
+    for group in _dicts(package["groups"]):
+        named, *others = _strings(group["ids"])
+        aliases = sorted({*others, *_strings(group["aliases"])} - {named})
         records_of_group = [records[identifier] for identifier in [named, *others] if identifier in records]
         listed = f" ({', '.join(aliases)})" if aliases else ""
         findings.append(Finding(
@@ -167,7 +181,10 @@ def _package_findings(lock: str, package: dict) -> list[Finding]:
 
 
 def _fix(lock: str, package: str, advisory: str, ecosystem: str, records: list[dict]) -> str:
-    entries = [entry for record in records for entry in record.get("affected", []) if _names_package(entry, package, ecosystem)]
+    entries = [
+        entry for record in records for entry in _dicts(record.get("affected", []))
+        if _names_package(entry, package, ecosystem)
+    ]
     if not entries:
         return f"see {OSV_URL}{advisory}"
     fixed = list(dict.fromkeys(version for entry in entries for version in _fixed_versions(entry)))
@@ -181,9 +198,13 @@ def _fix(lock: str, package: str, advisory: str, ecosystem: str, records: list[d
     return f"upgrade {package} to >= {fixed[0]} ({where}{command})"
 
 
+def _dicts(value: object) -> list[dict]:
+    return [_typed(item, dict) for item in _typed(value, list)]
+
+
 def _names_package(entry: dict, package: str, ecosystem: str) -> bool:
-    named = entry.get("package", {})
-    return named.get("ecosystem") == ecosystem and _normalized(named.get("name", "")) == _normalized(package)
+    named = _typed(entry.get("package", {}), dict)
+    return _typed(named.get("ecosystem", ""), str) == ecosystem and _normalized(_typed(named.get("name", ""), str)) == _normalized(package)
 
 
 def _normalized(name: str) -> str:
@@ -191,7 +212,8 @@ def _normalized(name: str) -> str:
 
 
 def _fixed_versions(entry: dict) -> list[str]:
-    return [
-        event["fixed"] for versions in entry.get("ranges", []) if versions.get("type") in RANGE_TYPES_WITH_VERSIONS
-        for event in versions.get("events", []) if "fixed" in event
+    events = [
+        event for versions in _dicts(entry.get("ranges", [])) if _typed(versions.get("type", ""), str) in RANGE_TYPES_WITH_VERSIONS
+        for event in _dicts(versions.get("events", []))
     ]
+    return [_typed(event["fixed"], str) for event in events if "fixed" in event]

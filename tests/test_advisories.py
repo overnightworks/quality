@@ -1,12 +1,15 @@
+import contextlib
 import hashlib
 import io
 import json
+import os
 import shlex
+import socketserver
 import subprocess
+import sys
 import threading
 import time
 import zipfile
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
@@ -263,47 +266,63 @@ def test_a_database_that_cannot_be_used_is_cannot_judge(
     assert (code, expected in output) == (2, True), output
 
 
-def test_a_download_past_its_deadline_is_cannot_judge(
-    build_repo, clean_engines, run_gate, publish_database, monkeypatch
-):
-    """#53 rule 3: the download has a total time limit."""
-    publish_database()
-    monkeypatch.setattr(advisories, "DATABASE_DOWNLOAD_DEADLINE_SECONDS", -1)
-    code, output = run_gate(tracked_lock_repo(build_repo), osv_engines(clean_engines, "exit 99"))
-    assert (code, "download exceeded" in output) == (2, True), output
+class Stalling(socketserver.StreamRequestHandler):
+    """Sends `opening`, then one byte at a time until the test ends."""
+    opening = b""
+    finished = threading.Event()
 
-
-class Trickle(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-Length", "1000")
-        self.end_headers()
+    def handle(self):
+        self.wfile.write(self.opening)
         try:
-            for _ in range(1000):
+            while not self.finished.wait(0.05):
                 self.wfile.write(b"x")
                 self.wfile.flush()
-                time.sleep(0.05)
         except OSError:
-            pass  # the client gave up, which is what the test expects
-
-    def log_message(self, *arguments):
-        pass
+            pass  # the client gave up, which is what the tests expect
 
 
-def test_a_server_that_trickles_bytes_hits_the_download_deadline(build_repo, clean_engines, run_gate, monkeypatch):
-    """#53 rule 3: one byte per receive must not keep the download alive past its total time limit."""
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Trickle)
+@pytest.mark.parametrize(
+    "opening",
+    [b"HTTP/1.1 200 OK\r\nContent-Length: 100000\r\n\r\n", b"HTTP/1.1 200 OK\r\nX-Slow: "],
+    ids=["body trickles", "header trickles"],
+)
+def test_a_server_that_trickles_bytes_hits_the_download_deadline(build_repo, clean_engines, run_gate, monkeypatch, opening):
+    """#53 rule 3: the download has a total time limit, whatever part of the response the server drags out."""
+    handler = type("Stall", (Stalling,), {"opening": opening, "finished": threading.Event()})
+    server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), handler)
+    server.daemon_threads = True
     serving = threading.Thread(target=server.serve_forever)
     serving.start()
     try:
-        monkeypatch.setattr(advisories, "DATABASE_ROOT", f"http://127.0.0.1:{server.server_port}")
+        monkeypatch.setattr(advisories, "DATABASE_ROOT", f"http://127.0.0.1:{server.server_address[1]}")
         monkeypatch.setattr(advisories, "DATABASE_DOWNLOAD_DEADLINE_SECONDS", 0.5)
+        started = time.monotonic()
         code, output = run_gate(tracked_lock_repo(build_repo), osv_engines(clean_engines, "exit 99"))
+        elapsed = time.monotonic() - started
     finally:
+        handler.finished.set()
         server.shutdown()
         serving.join()
         server.server_close()
-    assert (code, "download exceeded" in output) == (2, True), output
+    assert (code, "download exceeded" in output, elapsed < 3) == (2, True, True), output
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root writes into a read-only directory")
+def test_a_scratch_directory_that_cannot_be_written_is_cannot_judge(build_repo, clean_engines, run_gate, publish_database, monkeypatch):
+    """#53 rule 3: a full or read-only scratch is a refusal, not a traceback."""
+    publish_database()
+    scratch_directory = engines.scratch_directory
+
+    @contextlib.contextmanager
+    def read_only_for_advisories():  # the secret scan shares engines.scratch_directory and needs its scratch writable
+        with scratch_directory() as scratch:
+            if sys._getframe(2).f_globals["__name__"] == advisories.__name__:
+                scratch.chmod(0o500)
+            yield scratch
+
+    monkeypatch.setattr(engines, "scratch_directory", read_only_for_advisories)
+    code, output = run_gate(tracked_lock_repo(build_repo), osv_engines(clean_engines, "exit 99"))
+    assert (code, "cannot place the PyPI advisory database in the scratch directory" in output, "<scratch>" in output) == (2, True, True), output
 
 
 @pytest.mark.engine
@@ -375,6 +394,10 @@ def test_an_unexpected_osv_exit_is_cannot_judge_with_the_code_and_stderr(
     assert "boom reason" in output
 
 
+def package_of(report: dict) -> dict:
+    return report["results"][0]["packages"][0]
+
+
 @pytest.mark.parametrize(
     ("fixture", "edit", "exit_code", "expected"),
     [
@@ -389,11 +412,28 @@ def test_an_unexpected_osv_exit_is_cannot_judge_with_the_code_and_stderr(
          "cannot read the osv-scanner report"),
         ("osv-scanner-finding.json", lambda report: report["results"][0]["source"].update(path="/elsewhere/uv.lock"), 1,
          "names a lock file quality did not pass"),
+        ("osv-scanner-finding.json", lambda report: package_of(report)["package"].update(version={}) or
+         package_of(report).update(groups=[], vulnerabilities=[]), 0, "cannot read the osv-scanner report"),
+        ("osv-scanner-finding.json", lambda report: package_of(report)["package"].update(ecosystem=7), 1,
+         "cannot read the osv-scanner report"),
+        ("osv-scanner-finding.json", lambda report: package_of(report)["groups"][0].update(ids=["a", 7]), 1,
+         "cannot read the osv-scanner report"),
+        ("osv-scanner-finding.json", lambda report: package_of(report)["vulnerabilities"][0].update(affected="x"), 1,
+         "cannot read the osv-scanner report"),
+        ("osv-scanner-finding.json", lambda report: package_of(report)["vulnerabilities"][0]["affected"][0].update(ranges={}), 1,
+         "cannot read the osv-scanner report"),
+        ("osv-scanner-finding.json", lambda report: package_of(report)["vulnerabilities"][0]["affected"][0]["ranges"][0].update(events="x"),
+         1, "cannot read the osv-scanner report"),
+        ("osv-scanner-finding.json",
+         lambda report: package_of(report)["vulnerabilities"][0]["affected"][0]["ranges"][0]["events"][1].update(fixed=5), 1,
+         "cannot read the osv-scanner report"),
     ],
     ids=["cell 18 exit 0 with vulnerabilities", "cell 18 exit 1 without", "cell 19 not JSON", "cell 19 wrong shape",
          "rule 3 results is an empty object", "rule 3 results is an empty string", "rule 3 packages is an object",
          "rule 3 groups is a string",
-         "cell 20 a source quality did not pass"],
+         "cell 20 a source quality did not pass", "rule 3 version is an object", "rule 3 ecosystem is a number",
+         "rule 3 an id is a number", "rule 3 affected is a string", "rule 3 ranges is an object", "rule 3 events is a string",
+         "rule 3 fixed is a number"],
 )
 def test_a_report_that_disagrees_with_the_exit_is_cannot_judge(
     build_repo, clean_engines, run_gate, publish_database, edited_report, fixture, edit, exit_code, expected
@@ -473,7 +513,7 @@ def test_install_puts_a_verified_bare_binary_in_place_and_leaves_it_alone_the_se
 
 
 def test_a_pin_with_an_unknown_format_is_refused_naming_the_pin_and_the_value(bare_binary_pin, tmp_path, capsys):
-    """A typo in a pin's format fails where it is written."""
+    """#53 rule 5: a typo in a pin's format fails where it is written."""
     download, pin = bare_binary_pin
     pin(hashlib.sha256(download.read_bytes()).hexdigest())
     engines.PIN_FILE.write_text(engines.PIN_FILE.read_text().replace('"binary"', '"bianry"'))
