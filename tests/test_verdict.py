@@ -392,12 +392,6 @@ def test_only_the_head_baseline_is_told_to_rewrite_itself(capsys, pull_request, 
     assert (code, output.count("rewrite it with `quality baseline write`")) == (2, hints), output
 
 
-@pytest.fixture
-def elsewhere(tmp_path_factory) -> Path:
-    """A scratch directory outside the pull request's repository."""
-    return tmp_path_factory.mktemp("elsewhere")
-
-
 def test_a_head_baseline_that_links_out_of_the_repository_cannot_be_judged(capsys, pull_request, elsewhere):
     """#48 rule 4, cell 11: a head baseline symlinked out of the repository is exit 2, no traceback."""
     repo, commit_base = pull_request

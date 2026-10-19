@@ -1,3 +1,6 @@
+# Caller contract: the caller job's id is `quality`, with `needs:` naming the jobs of `quality/config.toml`
+# `[gate] mandatory_jobs`, `if: always()`, `permissions: contents: read, actions: read` (without `actions: read` the run
+# fails at startup and no verdict exists) and `secrets: SONAR_TOKEN`. See README.md, section gate.yml.
 # SonarCloud scan transport (SonarSource/sonarqube-scan-action v8.2.1 with sonar-scanner-cli 8.1.0.6389, which
 # bundles sonar-scanner-java-library 4.1.1.1633). What is verified and what is trusted:
 #  - The bootstrap's authenticated requests reach only sonarcloud.io and api.sonarcloud.io. That holds only with the
