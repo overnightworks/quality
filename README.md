@@ -252,7 +252,9 @@ Each line has a reason:
 
 - **The caller job is `quality`,** by its id or, if it sets one, by its `name:`. The gate's checks then read
   `quality / hygiene`, `quality / sonar` and `quality / verdict`. Three things look for them by those names: a ruleset
-  that requires `quality / verdict` (the fleet's org ruleset does), `aco land`, which refuses without a green
+  that requires `quality / verdict` (the fleet's org ruleset does, on the default branch of every repository whose
+  custom property `quality_gate` is `true`), `aco land`, which, once the default branch holds `quality/config.toml`,
+  refuses without a green
   `quality / verdict`, and `quality emergency-merge`, which looks for `quality / sonar` and `quality / verdict`.
 - **`needs:` lists the id of every job that a `mandatory_jobs` name belongs to.** The verdict then judges finished jobs.
   Without it, a job still running is red: `mandatory job "checks" (attempt 1) concluded in_progress`.
@@ -297,10 +299,10 @@ skipped; Dependabot runs resolve the Dependabot secret of the same name.
 ### Coverage on new code
 
 The scan only sees a coverage report that is in the checkout when it starts. `gate.yml` never runs a caller's tests; the
-caller hands over the report its tests job wrote, in four steps:
+caller hands over the report its checks job wrote, in four steps:
 
-1. Upload the report from the tests job: `actions/upload-artifact` with `name: coverage` and `path: coverage.xml`.
-2. Give the gate job `needs: [tests]` (the tests job's id), so the artifact exists when the gate downloads it.
+1. Upload the report from the checks job: `actions/upload-artifact` with `name: coverage` and `path: coverage.xml`.
+2. Give the gate job `needs: [checks]` (the checks job's id), so the artifact exists when the gate downloads it.
 3. Pass the artifact's name to the gate: `with: coverage-artifact: coverage`.
 4. Name the report in `sonar-project.properties`, for example `sonar.python.coverage.reportPaths=coverage.xml`
    (or `sonar.javascript.lcov.reportPaths`). The path is relative to the upload's common directory, which is where the
@@ -309,7 +311,7 @@ caller hands over the report its tests job wrote, in four steps:
 The sonar job downloads the artifact right after the caller checkout and before the gate's own tool checkout, so a
 `.gate-tool/` path inside the artifact does not stand in for the pinned tool: the tool checkout re-creates it at the
 pinned ref. This is defence in depth, not a guarantee. An artifact that plants `.gate-tool/.git/` still reaches git
-through the checkout, and the caller's own tests job is arbitrary code anyway.
+through the checkout, and the caller's own checks job is arbitrary code anyway.
 
 Preflight exits `2` naming the key and the entry when a listed report does not exist: each comma-separated entry is
 judged on its own, a glob (`*`, `?`, `**`) must match at least one file and `**` must be a whole path segment, a plain
