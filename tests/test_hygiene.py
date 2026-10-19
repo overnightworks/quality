@@ -651,10 +651,12 @@ def test_the_hint_for_a_path_git_refuses_has_no_command_when_the_path_is_unprint
     assert "git -C" not in err
 
 
-def quality_door(*arguments: str, cwd: Path, **streams) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [sys.executable, "-m", "quality.cli", *arguments], cwd=cwd, text=True, check=False, **streams
-    )
+MODULE_DOOR = [sys.executable, "-m", "quality.cli"]
+CONSOLE_SCRIPT_DOOR = [str(Path(sys.executable).parent / "quality")]
+
+
+def quality_door(*arguments: str, cwd: Path, door: list[str] = MODULE_DOOR, **streams) -> subprocess.CompletedProcess[str]:
+    return subprocess.run([*door, *arguments], cwd=cwd, text=True, check=False, **streams)
 
 
 @pytest.fixture
@@ -662,9 +664,12 @@ def env_and_broken_compose(build_repo) -> Path:
     return build_repo({".env": "A=1\n", "compose.yaml": "services: [\n"})
 
 
-def test_a_merged_pipe_shows_the_hygiene_lines_in_run_order(env_and_broken_compose):
-    """#86 rule 3, cell 10: reports, the finding with its fix, `cannot judge`, then the summary."""
-    done = quality_door("hygiene", ".", cwd=env_and_broken_compose, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+@pytest.mark.parametrize("door", [MODULE_DOOR, CONSOLE_SCRIPT_DOOR], ids=["module", "console script"])
+def test_a_merged_pipe_shows_the_hygiene_lines_in_run_order(env_and_broken_compose, door):
+    """#86 rule 3, cells 10 and 12a: reports, the finding with its fix, `cannot judge`, then the summary."""
+    done = quality_door(
+        "hygiene", ".", cwd=env_and_broken_compose, door=door, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+    )
     prefixes = ["size: ", "import-contract: ", "env-file .env - ", "  Fix: ", "hygiene: compose-port cannot judge - ", "hygiene: 1 finding(s)"]
     lines = done.stdout.splitlines()
     assert all(line.startswith(prefix) for line, prefix in zip(lines, prefixes, strict=True)), done.stdout
@@ -681,7 +686,7 @@ import sys
 sys.path.insert(0, {tests_directory!r})
 from test_sonar import issues_page, sonar_answering
 from quality import cli
-sys.exit(cli.main(["sonar", "findings"], transport=sonar_answering(issues=issues_page(2, 1, 2)), sleep=lambda seconds: None))
+cli.run(lambda: cli.main(["sonar", "findings"], transport=sonar_answering(issues=issues_page(2, 1, 2)), sleep=lambda seconds: None))
 """
 
 
@@ -705,11 +710,21 @@ def test_a_merged_pipe_lists_the_sonar_findings_before_the_red_summary(tmp_path)
 
 
 def test_a_replaced_stdout_still_prints_the_help():
-    """#86 rule 3: the door reconfigures only a real text stream, so a captured stdout works."""
+    """#86 rule 3: `main` leaves the process's streams alone, so a captured stdout works."""
     captured = io.StringIO()
     with contextlib.redirect_stdout(captured), pytest.raises(SystemExit) as stopped:
         cli.main(["--help"])
     assert (stopped.value.code, "hygiene" in captured.getvalue()) == (0, True)
+
+
+def test_a_closed_stdout_stream_is_cannot_judge_with_its_diagnostic(tmp_path, capsys, monkeypatch):
+    """#86 rule 3: a closed stdout object never crashes `main`; the diagnostic reaches stderr."""
+    monkeypatch.setenv("NO_COLOR", "1")  # Python 3.14's argparse otherwise probes the closed stdout for colour
+    closed = io.TextIOWrapper(io.BytesIO())
+    closed.close()
+    with contextlib.redirect_stdout(closed):
+        code = cli.main(["hygiene", str(tmp_path / "missing")])
+    assert (code, "hygiene: cannot judge" in capsys.readouterr().err) == (2, True)
 
 
 def test_a_closed_stdout_is_cannot_judge_and_never_a_crash(tmp_path):

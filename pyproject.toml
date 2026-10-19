@@ -11,7 +11,7 @@ dependencies = [
 ]
 
 [project.scripts]
-quality = "quality.cli:main"
+quality = "quality.cli:run"
 
 [dependency-groups]
 dev = ["ruff", "pytest", "pytest-cov"]
