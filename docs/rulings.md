@@ -177,3 +177,13 @@ These rulings are quoted verbatim in [roadmap.md](roadmap.md), where they act; t
 ## Operator ruling (18.10.2026): one shared CodeQL workflow
 
 „b macht sinn“ (one shared CodeQL workflow in quality instead of a copy per repository, #64).
+
+## Operator ruling (19.10.2026): the env-file fix runs exactly as printed
+
+„Immer exakt (empfohlen)“ (the env-file fix, [#86](https://github.com/overnightworks/quality/issues/86)).
+
+It chose the fix `git --literal-pathspecs rm --cached -- <shlex-quoted name>`, a hint instead of a command for a name that is not printable UTF-8, no home-made encoder, and, for the run order of the door's lines, option (c): `cli.main` makes stdout line-buffered; the head's confirmation that this is the cleanest drew no objection.
+
+## Operator ruling (19.10.2026): document first, then an allowlist
+
+„Erst Doku, dann Erlaubnisliste (empfohlen)“ (`network_mode: host` in compose files, [#78](https://github.com/overnightworks/quality/issues/78)).

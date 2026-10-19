@@ -1,6 +1,5 @@
 import os
 import re
-import shlex
 import subprocess
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -12,7 +11,7 @@ import yaml
 
 from quality import advisories, architecture, engines, ratchet, repository
 from quality.config import Allowance, ConfigError, read_secret_allowances
-from quality.report import Finding, printable
+from quality.report import Finding, shell_word
 
 ENV_FILE = "env-file"
 COMPOSE_PORT = "compose-port"
@@ -72,7 +71,9 @@ class Unparsable(CannotJudge):
 
 
 def _refusal(path: Path, because: str) -> CannotJudge:
-    return CannotJudge(f"{path} is not a readable git repository: {because} (`git -C {shlex.quote(str(path))} status` says why)")
+    word = shell_word(str(path))
+    says_why = f"`git -C {word} status` says why" if word else "`git status` run inside it says why"
+    return CannotJudge(f"{path} is not a readable git repository: {because} ({says_why})")
 
 
 def _refusal_without_git(path: Path, what: str, reason: object) -> CannotJudge:
@@ -108,12 +109,19 @@ def tracked_files(root: Path) -> list[str]:
     return [os.fsdecode(name) for name in listing.stdout.split(b"\0") if name]
 
 
+def _untrack_fix(name: str) -> str:
+    word = shell_word(name)
+    if word is None:
+        return "remove it from the index by its bytes (git ls-files -z shows them), then add it to .gitignore."
+    return f"git --literal-pathspecs rm --cached -- {word} and add it to .gitignore."
+
+
 def check_env_files(tracked: list[str]) -> list[Finding]:
     return [
         Finding(
             ENV_FILE, name, None,
             "a tracked env file publishes configuration and often secrets.",
-            f"git rm --cached {printable(name)} and add it to .gitignore.",
+            _untrack_fix(name),
         )
         for name in tracked
         if _is_env_file(PurePosixPath(name).name)

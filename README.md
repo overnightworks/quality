@@ -26,6 +26,9 @@ the same files and the same `quality/baseline.toml` as one at the top, and names
 src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree's own top. It applies four rules:
 
 - `env-file`: no tracked `.env`, `.env.*` or `*.env` file (names ending in `.example` are templates and pass).
+  The fix is `git --literal-pathspecs rm --cached -- <name>`, the name quoted for the shell, so a copy untracks
+  exactly that file; a name that is not printable UTF-8 gets the hint to remove it by its bytes (`git ls-files -z`
+  shows them) instead of a command.
 - `compose-port`: every published port in a tracked compose file binds loopback, `127.0.0.1` or `::1` (`"[::1]:HOST:CONTAINER"`,
   `host_ip: ::1`); `[::]` and `0.0.0.0` are findings. A compose file is a `.yml` or `.yaml` file whose name holds the
   word `compose` between `.`, `-` or `_`, in any case: `docker-compose.ci.yml` and `keycloak/bootstrap.compose.yaml` are
@@ -169,10 +172,11 @@ Each finding names the rule, the file, a reason and a fix; a file name that is n
 backslash-escaped. A rule that cannot judge prints its verdict and reason under its rule id (`hygiene: secret cannot
 judge - ...`). A clean run names its rules in run order (`hygiene: clean (env-file, compose-port, size, import-contract); skipped without
 --engines: ...`); any other run ends with the findings and the verdicts counted (`hygiene: 1 finding(s); verdicts: 1
-clean, 1 findings, 1 unparsable`). The exit is the worst verdict's: `2` if any rule is unparsable or cannot judge
+clean, 1 findings, 1 unparsable`). The lines come in run order, also through a pipe that merges stdout and stderr
+(`2>&1 | tee log`); each stays on its own stream. The exit is the worst verdict's: `2` if any rule is unparsable or cannot judge
 (never clean), otherwise `1` if any rule has findings, otherwise `0`. A path git cannot read as a work tree (a file, a missing path, a
 folder without permission, a bare repository, the inside of `.git`) is `hygiene: cannot judge - <PATH as given> is not a
-readable git repository: ... (`git -C '<PATH>' status` says why)` and exit `2` before any rule runs.
+readable git repository: ... (`git -C '<PATH>' status` says why; a PATH with an unprintable character gets `git status` run inside it instead)` and exit `2` before any rule runs.
 
 ## `quality scan-staged`
 

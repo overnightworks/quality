@@ -1,12 +1,17 @@
+import contextlib
+import io
 import os
 import re
+import shutil
 import subprocess
+import sys
+import textwrap
 from pathlib import Path
 
 import pytest
 from conftest import fake_engine, make_repo
 
-from quality import cli, hygiene
+from quality import cli, hygiene, sonar
 from quality.report import Finding
 
 EDGE_STACK = (Path(__file__).parent / "data" / "edge_stack.yml").read_text(encoding="utf-8")
@@ -54,7 +59,7 @@ def non_utf8_filename_repo(build_repo, tmp_path):
         "non-utf8-filename",
         "not-a-git-repository",
         "tracked-env-file",
-        "cell 9 non-utf8-env-filename-rendered-safely",
+        "cell 9 and #86 cell 7 non-utf8-env-filename-rendered-safely",
         "#76 cell 5 compose deleted from disk is gone",
         "malformed-compose-yaml",
     ],
@@ -561,3 +566,172 @@ def test_a_path_in_a_submodule_or_linked_worktree_means_its_own_top(tmp_path, ca
     assert cli.main(["baseline", "write", str(own_top / "src")]) == 0
     capsys.readouterr()
     assert ((own_top / "quality/baseline.toml").is_file(), (superproject / "quality").exists()) == (True, False)
+
+
+UNPRINTABLE_NAME_HINT = "remove it from the index by its bytes (git ls-files -z shows them), then add it to .gitignore."
+FIX_SUFFIX = " and add it to .gitignore."
+SHELLS = ["dash", "bash"]
+
+
+def printed_fix(output: str, shown_name: str) -> str:
+    """The command the `env-file` finding for `shown_name` prints after `Fix: `, without the closing sentence."""
+    fix = re.search(rf"^env-file {re.escape(shown_name)} - .*\n  Fix: (.*)$", output, re.MULTILINE)
+    assert fix, output
+    assert fix.group(1).endswith(FIX_SUFFIX), output
+    return fix.group(1).removesuffix(FIX_SUFFIX)
+
+
+def tracked_names(repo: Path) -> set[bytes]:
+    listing = subprocess.run(["git", "-C", str(repo), "ls-files", "-z"], check=True, capture_output=True).stdout
+    return {name for name in listing.split(b"\0") if name}
+
+
+@pytest.mark.parametrize("shell", SHELLS)
+@pytest.mark.parametrize(
+    ("target", "neighbours", "printed_word"),
+    [
+        (".env", [], ".env"),
+        ("config/prod.env", [], "config/prod.env"),
+        ("my file.env", [], "'my file.env'"),
+        ("sub dir/.env.prod", [], "'sub dir/.env.prod'"),
+        ("it's.env", [], "'it'\"'\"'s.env'"),
+        ("grün.env", [], "'grün.env'"),
+        ("-x.env", [], "-x.env"),
+        (":x.env", ["x.env"], ":x.env"),
+        ("*.env", ["a.env"], "'*.env'"),
+        ("[x].env", ["x.env"], "'[x].env'"),
+        ("100%.env", [], "100%.env"),
+        ("back\\slash.env", [], "'back\\slash.env'"),
+        ("=x.env", [], "'=x.env'"),
+    ],
+    ids=[
+        "#86 cell 1 bare name", "#86 cell 1 nested name", "#86 cell 2 space", "#86 cell 2 space in directory",
+        "#86 cell 2 apostrophe", "#86 cell 2 umlaut", "#86 cell 3 leading dash", "#86 cell 4 colon beside the plain name",
+        "#86 cell 4 star beside a.env", "#86 cell 4 brackets beside x.env", "#86 cell 5 percent", "#86 cell 5 backslash",
+        "#86 cell 6 leading equals",
+    ],
+)
+def test_the_printed_env_fix_untracks_exactly_the_named_file_in_every_shell(
+    build_repo, capsys, shell, target, neighbours, printed_word
+):
+    """#86 rule 2, E1-E3 and E5: the command as printed, run from the top, untracks that file and leaves it on disk."""
+    shell_path = shutil.which(shell)
+    if shell_path is None:
+        pytest.skip(f"{shell} is not installed")
+    repo = build_repo({name: "A=1\n" for name in [target, *neighbours]})
+    before = tracked_names(repo)
+    _, output = run(capsys, repo)
+    fix = printed_fix(output, target)
+    assert fix == f"git --literal-pathspecs rm --cached -- {printed_word}"
+    subprocess.run([shell_path, "-c", fix], cwd=repo, check=True, capture_output=True)
+    assert tracked_names(repo) == before - {os.fsencode(target)}
+    assert (repo / target).exists()
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["lat\udce9.env", "line\nfeed.env", "esc\x1bape.env", "c1\x85.env", "del\x7f.env"],
+    ids=["#86 cell 7 invalid UTF-8", "#86 cell 8 line feed", "#86 cell 8 escape", "#86 cell 8 C1 control", "#86 cell 8 DEL"],
+)
+def test_an_unprintable_env_name_gets_a_hint_and_never_a_command(build_repo, capsys, name):
+    """#86 rule 2, E4: one hint line; the finding line itself keeps printing the name as before."""
+    _, output = run(capsys, build_repo({name: "A=1\n"}))
+    assert f"\n  Fix: {UNPRINTABLE_NAME_HINT}\n" in output
+    assert "rm --cached" not in output
+
+
+def test_the_hint_for_a_path_git_refuses_has_no_command_when_the_path_is_unprintable(tmp_path, monkeypatch, capsys):
+    """#86 rule 1, cell 9: a PATH holding a line feed gets the hint without a `git -C` command."""
+    (tmp_path / "a\nb").write_text("x")
+    monkeypatch.chdir(tmp_path)
+    code = cli.main(["hygiene", "a\nb"])
+    err = capsys.readouterr().err
+    assert code == 2
+    assert "(`git status` run inside it says why)" in err
+    assert "git -C" not in err
+
+
+MODULE_DOOR = [sys.executable, "-m", "quality.cli"]
+CONSOLE_SCRIPT_DOOR = [str(Path(sys.executable).parent / "quality")]
+
+
+def quality_door(*arguments: str, cwd: Path, door: list[str] = MODULE_DOOR, **streams) -> subprocess.CompletedProcess[str]:
+    return subprocess.run([*door, *arguments], cwd=cwd, text=True, check=False, **streams)
+
+
+@pytest.fixture
+def env_and_broken_compose(build_repo) -> Path:
+    return build_repo({".env": "A=1\n", "compose.yaml": "services: [\n"})
+
+
+@pytest.mark.parametrize("door", [MODULE_DOOR, CONSOLE_SCRIPT_DOOR], ids=["module", "console script"])
+def test_a_merged_pipe_shows_the_hygiene_lines_in_run_order(env_and_broken_compose, door):
+    """#86 rule 3, cells 10 and 12a: reports, the finding with its fix, `cannot judge`, then the summary."""
+    done = quality_door(
+        "hygiene", ".", cwd=env_and_broken_compose, door=door, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+    )
+    prefixes = ["size: ", "import-contract: ", "env-file .env - ", "  Fix: ", "hygiene: compose-port cannot judge - ", "hygiene: 1 finding(s)"]
+    lines = done.stdout.splitlines()
+    assert all(line.startswith(prefix) for line, prefix in zip(lines, prefixes, strict=True)), done.stdout
+
+
+def test_discarding_stderr_hides_exactly_the_cannot_judge_line(env_and_broken_compose):
+    """#86 rule 3, cell 11: no line changes its stream; the exit stays 2."""
+    done = quality_door("hygiene", ".", cwd=env_and_broken_compose, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    assert (done.returncode, "compose-port cannot judge" in done.stdout, "env-file .env" in done.stdout) == (2, False, True)
+
+
+SONAR_FINDINGS_SCRIPT = """
+import sys
+sys.path.insert(0, {tests_directory!r})
+from test_sonar import issues_page, sonar_answering
+from quality import cli
+cli.run(lambda: cli.main(["sonar", "findings"], transport=sonar_answering(issues=issues_page(2, 1, 2)), sleep=lambda seconds: None))
+"""
+
+
+def test_a_merged_pipe_lists_the_sonar_findings_before_the_red_summary(tmp_path):
+    """#86 rule 3, cell 12: the findings precede the summary through `2>&1`."""
+    from test_sonar import PULL_REQUEST_ENVIRONMENT, TASK_FIXTURE, legacy_config_absent
+
+    (tmp_path / "quality").mkdir()
+    (tmp_path / "quality" / "config.toml").write_text(legacy_config_absent)
+    (tmp_path / sonar.TASK_FILE).parent.mkdir()
+    (tmp_path / sonar.TASK_FILE).write_text(TASK_FIXTURE.read_text())
+    script = tmp_path / "findings.py"
+    script.write_text(textwrap.dedent(SONAR_FINDINGS_SCRIPT).format(tests_directory=str(Path(__file__).parent)))
+    done = subprocess.run(
+        [sys.executable, str(script)], cwd=tmp_path, text=True, check=False, env={**os.environ, **PULL_REQUEST_ENVIRONMENT},
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+    )
+    prefixes = ["sonar src/a1.py:1 - ", "  Fix: ", "sonar src/a2.py:2 - ", "  Fix: ", "sonar: new 2"]
+    lines = done.stdout.splitlines()
+    assert (done.returncode, all(line.startswith(prefix) for line, prefix in zip(lines, prefixes, strict=True))) == (1, True), done.stdout
+
+
+def test_a_replaced_stdout_still_prints_the_help():
+    """#86 rule 3: `main` leaves the process's streams alone, so a captured stdout works."""
+    captured = io.StringIO()
+    with contextlib.redirect_stdout(captured), pytest.raises(SystemExit) as stopped:
+        cli.main(["--help"])
+    assert (stopped.value.code, "hygiene" in captured.getvalue()) == (0, True)
+
+
+def test_a_closed_stdout_stream_is_cannot_judge_with_its_diagnostic(tmp_path, capsys, monkeypatch):
+    """#86 rule 3: a closed stdout object never crashes `main`; the diagnostic reaches stderr."""
+    monkeypatch.setenv("NO_COLOR", "1")  # Python 3.14's argparse otherwise probes the closed stdout for colour
+    closed = io.TextIOWrapper(io.BytesIO())
+    closed.close()
+    with contextlib.redirect_stdout(closed):
+        code = cli.main(["hygiene", str(tmp_path / "missing")])
+    assert (code, "hygiene: cannot judge" in capsys.readouterr().err) == (2, True)
+
+
+def test_a_closed_stdout_is_cannot_judge_and_never_a_crash(tmp_path):
+    """#86 rule 3: with fd 1 closed the door still exits 2 with its cannot-judge line."""
+    done = subprocess.run(
+        ["bash", "-c", '"$PY" -m quality.cli hygiene "$MISSING" >&-'],
+        env={**os.environ, "PY": sys.executable, "MISSING": str(tmp_path / "missing")},
+        text=True, check=False, stderr=subprocess.PIPE,
+    )
+    assert (done.returncode, "hygiene: cannot judge" in done.stderr) == (2, True), done.stderr
