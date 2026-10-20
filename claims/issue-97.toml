@@ -1,8 +1,0 @@
-claim_id = "099e90da62704b41aefdb7d24760ddd7"
-agent = "claude"
-role = "builder"
-base = "9a3718c4d011b523cdc1f931a3895443f7411f7f"
-branch = "claude/issue-97-escape-repository-text"
-scope = ["README.md", "src/quality/architecture.py", "src/quality/cli.py", "src/quality/ratchet.py", "src/quality/report.py", "src/quality/scoreboard.py", "tests/conftest.py", "tests/test_architecture.py", "tests/test_hygiene.py", "tests/test_output.py", "tests/test_verdict.py"]
-opened_commit = "aabf4cbb56d74e7db542a515b8e6f8c66e445c73"
-whole_reason = "How repository text is rendered (one predicate, one escaper, one prefix for foreign lines), where every line leaves the door, the deletion of the other renderings, the shared test helper and the README's output sentences are one decision about what a log line may contain."
