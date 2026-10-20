@@ -168,4 +168,5 @@ def test_run_writes_and_flushes_the_stop_on_stderr_then_stdout_before_the_door_i
         ("stdout", "flush"),
         ("door", "entered"),
     ]
-    assert STOP_LINE.fullmatch(stderr_stop) and stdout_stop == stderr_stop
+    assert STOP_LINE.fullmatch(stderr_stop)
+    assert stdout_stop == stderr_stop
