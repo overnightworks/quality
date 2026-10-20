@@ -97,3 +97,31 @@ def test_other_doors_start_with_the_stop_too(clean_repo, arguments):
     (clean_repo / "engines").mkdir()
     done = run_door(*arguments, cwd=clean_repo)
     assert stop_token(done.stdout) == stop_token(done.stderr)
+
+
+def run_in_process(environment: dict[str, str], exit_code: int = 3) -> int:
+    with pytest.raises(SystemExit) as exited:
+        cli.run(door=lambda: exit_code, environment=environment)
+    return exited.value.code
+
+
+def test_run_stops_the_commands_on_both_streams_and_keeps_the_door_exit(capsys):
+    """#89 rule 1: in Actions, in process."""
+    assert run_in_process({"GITHUB_ACTIONS": "true"}) == 3
+    captured = capsys.readouterr()
+    assert stop_token(captured.out) == stop_token(captured.err)
+    assert len(captured.out.splitlines()) == len(captured.err.splitlines()) == 1
+
+
+def test_run_prints_nothing_outside_actions_and_keeps_the_door_exit(capsys):
+    """#89 rule 1: not in Actions, in process."""
+    assert run_in_process({}) == 3
+    captured = capsys.readouterr()
+    assert (captured.out, captured.err) == ("", "")
+
+
+def test_run_skips_a_closed_stream_in_process(capsys, monkeypatch):
+    """#89 rule 1: a stream that is None is skipped."""
+    monkeypatch.setattr(sys, "stdout", None)
+    assert run_in_process({"GITHUB_ACTIONS": "true"}) == 3
+    stop_token(capsys.readouterr().err)
