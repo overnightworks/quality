@@ -86,7 +86,7 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   package yaml is src/yaml/__init__.py, but Python finds it outside the repository at site-packages/yaml/__init__.py`, a
   place outside named from the `sys.path` entry it lies under; a place inside is named repository-relative), a symlink
   under a root package that leaves the repository, directly or through a link that stays inside, and a symlink loop, and a `.py` file that "cannot be examined" (no regular file, a name or content that is not valid
-  UTF-8, a coding cookie in any spelling but utf-8, utf8, unicode-1-1-utf-8, unicode11utf8, x-unicode20utf8, ascii, us-ascii or ansi_x3.4-1968, or one the system will not let it read). A
+  UTF-8, a coding cookie in any spelling but utf-8, utf8, unicode-1-1-utf-8, unicode11utf8, x-unicode20utf8, ascii, us-ascii or ansi_x3.4-1968 (accepted in any letter case), or one the system will not let it read). A
   module grimp cannot parse is `hygiene: import-contract unparsable - ...`; a warning grimp gives while building the
   graph is one `import-contract: note - ...` line. No message names an absolute local path.
 - The baseline only falls: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the
