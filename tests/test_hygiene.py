@@ -634,7 +634,7 @@ def test_the_printed_env_fix_untracks_exactly_the_named_file_in_every_shell(
     ids=["#86 cell 7 invalid UTF-8", "#86 cell 8 line feed", "#86 cell 8 escape", "#86 cell 8 C1 control", "#86 cell 8 DEL"],
 )
 def test_an_unprintable_env_name_gets_a_hint_and_never_a_command(build_repo, capsys, name):
-    """#86 rule 2, E4: one hint line; the finding line itself keeps printing the name as before."""
+    """#86 rule 2, E4: one hint line; #97 rule 2 prints the name on the finding line escaped."""
     _, output = run(capsys, build_repo({name: "A=1\n"}))
     assert f"\n  Fix: {UNPRINTABLE_NAME_HINT}\n" in output
     assert "rm --cached" not in output

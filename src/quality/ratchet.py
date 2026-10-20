@@ -19,7 +19,7 @@ from typing import NamedTuple
 
 import lizard
 
-from quality.report import Finding, printable
+from quality.report import Finding
 
 SIZE = "size"
 BASELINE_PATH = "quality/baseline.toml"
@@ -298,7 +298,7 @@ def _toml_string(name: str) -> str:
     try:
         name.encode("utf-8")
     except UnicodeEncodeError:
-        raise SizeError(f"{printable(name)} is not valid UTF-8, so {BASELINE_PATH} cannot hold it") from None
+        raise SizeError(f"{name} is not valid UTF-8, so {BASELINE_PATH} cannot hold it") from None
     return json.dumps(name, ensure_ascii=False).replace("\x7f", "\\u007f")
 
 

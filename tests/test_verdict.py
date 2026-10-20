@@ -7,7 +7,7 @@ import threading
 from pathlib import Path
 
 import pytest
-from conftest import GIT_IDENTITY, UNKNOWN_KEY_CONFIGS
+from conftest import GIT_IDENTITY, UNKNOWN_KEY_CONFIGS, assert_every_line_starts_with_the_door
 from test_sonar import Responder, reply
 
 from quality import cli, verdict
@@ -191,6 +191,21 @@ def test_verdict_exit_code_and_summary_follow_the_run(capsys, run_env, conclusio
     assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (page, None)) == code
     assert capsys.readouterr().out.strip().endswith("green" if code == 0 else "red")
     assert summary.read_text().strip().endswith("green" if code == 0 else "red")
+
+
+def test_a_job_name_with_a_line_feed_prints_as_one_escaped_problem_line_in_log_and_summary(capsys, run_env):
+    """#97 rule 2, cell 15 (E6): the problem line is escaped, the same in the step summary, and `verdict: red` stays a line."""
+    repo, summary = run_env
+    (repo / "quality/config.toml").write_text('[gate]\nmandatory_jobs = ["checks", "a\\n::error::b"]\n')
+    page = json.dumps(
+        {"total_count": 1, "jobs": [{"name": "checks", "run_attempt": 1, "status": "completed", "conclusion": "success"}]}
+    )
+    assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (page, None)) == 1
+    lines = capsys.readouterr().out.split("\n")
+    assert [line for line in lines if "a\\x0a::error::b" in line] != []
+    assert lines[-2:] == ["verdict: red", ""]
+    assert_every_line_starts_with_the_door(lines)
+    assert summary.read_text().split("\n") == lines
 
 
 @UNKNOWN_KEY_CONFIGS

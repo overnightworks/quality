@@ -226,10 +226,10 @@ def git(
     return engines.run([*ANONYMOUS_GIT, *arguments], cwd=scratch, env=environment, timeout=timeout)
 
 
-def render(rows: list[Row], today: date) -> str:
+def render(rows: list[Row], today: date) -> tuple[str, ...]:
     heading = f"**Fleet scoreboard, {today.isoformat()}, quality {__version__} — {LANGUAGES}**"
     table = [table_line(COLUMNS), "|---" * len(COLUMNS) + "|", *(table_line(cells(row)) for row in rows)]
-    return "\n".join((heading, "", *table))
+    return (heading, "", *table)
 
 
 def table_line(values: tuple[str, ...]) -> str:
