@@ -13,6 +13,7 @@ import copy
 import errno
 import importlib.util
 import io
+import itertools
 import logging
 import os
 import re
@@ -114,11 +115,16 @@ def _refuse_control_characters(config: Config) -> None:
     feeds, so a config that holds a character `printable` would change is refused before anything is rendered."""
     options = [*config.options.session_options.values(), *(value for contract in config.options.contracts_options
                                                            for value in contract.values())]
-    for option in options:
-        for text in [option] if isinstance(option, str) else option if isinstance(option, list) else []:
-            if isinstance(text, str) and printable(text) != text:
-                raise ContractError(f"{config.name} holds {printable(text)}, which has a control character;"
-                                    " it cannot be judged")
+    for text in itertools.chain.from_iterable(_texts_of(option) for option in options):
+        if printable(text) != text:
+            raise ContractError(f"{config.name} holds {printable(text)}, which has a control character;"
+                                " it cannot be judged")
+
+
+def _texts_of(option: object) -> list[str]:
+    if isinstance(option, str):
+        return [option]
+    return [item for item in option if isinstance(item, str)] if isinstance(option, list) else []
 
 
 def find_config(configs: Mapping[str, str]) -> Config | None:

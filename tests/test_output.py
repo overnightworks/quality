@@ -258,7 +258,8 @@ def test_a_refusal_is_one_escaped_line(build_repo, capsys, files, refusal_start)
     assert (code, len(refusals)) == (2, 1), lines
     assert_every_line_starts_with_the_door(lines)
     if ".importlinter" in files:
-        assert "\\x0a\\x09[line " in refusals[0] and "'::error::c]" in refusals[0]
+        assert "\\x0a\\x09[line " in refusals[0]
+        assert "'::error::c]" in refusals[0]
 
 
 def test_a_broken_contract_named_like_a_command_keeps_its_chain_on_its_own_line(build_repo, capsys):
