@@ -8,12 +8,12 @@ import unicodedata
 from pathlib import Path
 
 import pytest
-from conftest import FAKE_KEY, allow_config
+from conftest import FAKE_KEY, allow_config, fake_engine
 from test_architecture import FORBIDDEN, SHOP_DB_IMPORTS_WEB, toml
 
 from quality import cli
 from quality.ratchet import BASELINE_PATH
-from quality.report import printable, shell_word
+from quality.report import Finding, printable, render, shell_word
 
 DOOR = [sys.executable, "-m", "quality.cli"]
 STOP_LINE = re.compile(r"::stop-commands::([0-9a-f]{32})")
@@ -245,11 +245,11 @@ def test_a_compose_finding_with_a_control_character_is_one_escaped_line(build_re
     [
         ({"a\n::error::x.compose.yaml": "services: [\n"}, "hygiene: compose-port cannot judge - cannot read a\\x0a::error::x.compose.yaml: line 2, "),
         (
-            {**SHOP_DB_IMPORTS_WEB, ".importlinter": "[importlinter\n::error::c]\nroot_packages = shop\n"},
+            {**SHOP_DB_IMPORTS_WEB, ".importlinter": "[importlinter]\nroot_packages =\n    shop\n\n[importlinter:contract:a\n::error::c]\nname = x\n"},
             "hygiene: import-contract cannot judge - ",
         ),
     ],
-    ids=["compose file name", "importlinter section header"],
+    ids=["compose file name", "importlinter section header that echoes"],
 )
 def test_a_refusal_is_one_escaped_line(build_repo, capsys, files, refusal_start):
     """#97 rule 2, cell 9 (E5): a refusal naming repository text is one line and exit 2."""
@@ -257,16 +257,72 @@ def test_a_refusal_is_one_escaped_line(build_repo, capsys, files, refusal_start)
     refusals = [line for line in lines if line.startswith(refusal_start)]
     assert (code, len(refusals)) == (2, 1), lines
     assert_every_line_starts_with_the_door(lines)
+    if ".importlinter" in files:
+        assert "\\x0a\\x09[line " in refusals[0] and "'::error::c]" in refusals[0]
 
 
-def test_a_broken_contract_with_a_line_feed_in_its_name_keeps_its_chain_on_its_own_line(build_repo, capsys):
-    """#97 rule 2, cell 10 (E6): the name is escaped, the import chain stays a line of its own."""
-    contract = {**FORBIDDEN, "name": "guarded\n::error::c"}
+def test_a_broken_contract_named_like_a_command_keeps_its_chain_on_its_own_line(build_repo, capsys):
+    """#97 rule 2, cell 10 (E6): the name is printed on the finding's line, the import chain stays a line of its own."""
+    contract = {**FORBIDDEN, "name": "guarded ::error::c"}
     repo = build_repo({**SHOP_DB_IMPORTS_WEB, "pyproject.toml": toml(contract)})
     code, lines = door_lines(capsys, "hygiene", str(repo))
     assert code == 1
-    assert "import-contract pyproject.toml - contract guarded\\x0a::error::c is broken:" in lines
+    assert "import-contract pyproject.toml - contract guarded ::error::c is broken:" in lines
     assert any(line.strip("- ") == "shop.db -> shop.web (l.1)" for line in lines), lines
+    assert_every_line_starts_with_the_door(lines)
+
+
+REFUSED_SOURCE_NAMES = [
+    "a\n  File \"ab\", line 1, in b\n  raise E('forged')\nx.py",
+    "a\n::error::x.py",
+    "a\u0085x.py",
+    "lat\udce9.py",
+]
+
+
+@pytest.mark.parametrize("name", REFUSED_SOURCE_NAMES, ids=["File and raise lines", "workflow command", "C1 control", "invalid UTF-8"])
+def test_a_source_path_with_a_control_character_is_refused_as_one_line(build_repo, capsys, name):
+    """#97 rule 2, cell 18 and cell 12: no tracked source name reaches import-linter's output, so none forges a line."""
+    repo = build_repo({**SHOP_DB_IMPORTS_WEB, f"src/shop/{name}": "import shop.web\n", "pyproject.toml": toml(FORBIDDEN)})
+    code, lines = door_lines(capsys, "hygiene", str(repo))
+    refusals = [line for line in lines if line.startswith("hygiene: import-contract cannot judge - ")]
+    assert (code, len(refusals)) == (2, 1), lines
+    assert_every_line_starts_with_the_door(lines)
+
+
+def test_a_source_directory_with_a_control_character_is_refused_as_one_line(build_repo, capsys):
+    """#97 rule 2, cell 18: a package directory name is judged like a file name."""
+    repo = build_repo({**SHOP_DB_IMPORTS_WEB, "src/shop/a\n::error::x/__init__.py": "", "pyproject.toml": toml(FORBIDDEN)})
+    code, lines = door_lines(capsys, "hygiene", str(repo))
+    refusals = [line for line in lines if line.startswith("hygiene: import-contract cannot judge - ")]
+    assert (code, len(refusals)) == (2, 1), lines
+    assert_every_line_starts_with_the_door(lines)
+
+
+@pytest.mark.parametrize("name", ["guarded\n::error::c", "guarded\x1b[31m"], ids=["line feed", "escape"])
+def test_a_contract_name_with_a_control_character_is_refused_as_one_line(build_repo, capsys, name):
+    """#97 rule 2, cell 10a: import-linter would print the name into the chain output, so the config is refused."""
+    repo = build_repo({**SHOP_DB_IMPORTS_WEB, "pyproject.toml": toml({**FORBIDDEN, "name": name})})
+    code, lines = door_lines(capsys, "hygiene", str(repo))
+    refusals = [line for line in lines if line.startswith("hygiene: import-contract cannot judge - pyproject.toml holds ")]
+    assert (code, len(refusals)) == (2, 1), lines
+    assert_every_line_starts_with_the_door(lines)
+
+
+def test_a_finding_prints_its_detail_and_fix_escaped(capsys):
+    """#97 rule 2: every field of a finding, detail lines and fix included, prints without a raw control character."""
+    finding = Finding("r", "p", None, "why", "fix\x1b[31m\n::error::f", detail=("one\n::error::d", "two\x1b"))
+    assert render(finding) == "r p - why\none\\x0a::error::d\ntwo\\x1b\n  Fix: fix\\x1b[31m\\x0a::error::f"
+
+
+def test_an_engine_stderr_with_several_lines_prints_as_one_escaped_line(build_repo, clean_engines, capsys):
+    """#97 rule 2, cell 14 (E5): the stderr tail of a failing engine joins on `\\x0a`, never a line of its own."""
+    fake_engine(clean_engines, "gitleaks", on_scan="echo first >&2; echo '::error::second' >&2; exit 2")
+    repo = build_repo({"README.md": "x\n"})
+    code, lines = door_lines(capsys, "hygiene", "--engines", str(clean_engines), str(repo))
+    refusals = [line for line in lines if line.startswith("hygiene: secret cannot judge - ")]
+    assert (code, len(refusals)) == (2, 1), lines
+    assert "first\\x0a::error::second" in refusals[0]
     assert_every_line_starts_with_the_door(lines)
 
 
@@ -298,6 +354,15 @@ def test_a_raised_baseline_entry_for_a_file_with_a_control_character_prints_esca
     code, lines = door_lines(capsys, "baseline", "write", str(repo))
     assert code == 0
     assert "baseline: adds file_lines src/esc\\x1bape.py 810" in lines
+    assert_every_line_starts_with_the_door(lines)
+
+
+def test_a_baseline_refusal_for_a_file_that_is_not_utf8_prints_its_surrogate_escaped(build_repo, capsys):
+    """#97 rule 2, cell 16: the invalid-UTF-8 branch is one escaped refusal line, exit 2."""
+    repo = build_repo({"src/lat\udce9.py": "x = 1\n" * 810, BASELINE_PATH: "[file_lines]\n\"src/gone.py\" = 900\n"})
+    code, lines = door_lines(capsys, "baseline", "write", str(repo))
+    assert code == 2
+    assert lines[0] == "baseline: not written - src/lat\\udce9.py is not valid UTF-8, so quality/baseline.toml cannot hold it"
     assert_every_line_starts_with_the_door(lines)
 
 

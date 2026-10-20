@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 from conftest import GIT_IDENTITY, UNKNOWN_KEY_CONFIGS
+from test_output import assert_every_line_starts_with_the_door
 from test_sonar import Responder, reply
 
 from quality import cli, verdict
@@ -204,7 +205,7 @@ def test_a_job_name_with_a_line_feed_prints_as_one_escaped_problem_line_in_log_a
     lines = capsys.readouterr().out.split("\n")
     assert [line for line in lines if "a\\x0a::error::b" in line] != []
     assert lines[-2:] == ["verdict: red", ""]
-    assert all(not line.startswith("::") for line in lines)
+    assert_every_line_starts_with_the_door(lines)
     assert summary.read_text().split("\n") == lines
 
 

@@ -39,7 +39,7 @@ from importlinter.domain.contract import Contract, ContractCheck, InvalidContrac
 from importlinter.domain.helpers import MissingImport
 
 from quality import ratchet
-from quality.report import Finding
+from quality.report import Finding, printable
 
 RULE = "import-contract"
 CONFIG_FILES = (".importlinter", "setup.cfg", "pyproject.toml")
@@ -96,6 +96,7 @@ def check_contracts(root: Path, tracked: Sequence[str], configs: Mapping[str, st
     if "contract_types" in config.options.session_options:
         raise ContractError(f"{config.name} sets contract_types, whose plugin modules would be imported;"
                             " only the built-in contract types are judged")
+    _refuse_control_characters(config)
     repository = os.path.realpath(root)
     with _judging(f"the config {config.name}", repository):
         contracts = [_contract(config, index, options, repository)
@@ -106,6 +107,18 @@ def check_contracts(root: Path, tracked: Sequence[str], configs: Mapping[str, st
     verdicts = [_check(contract, graph, config.name, repository) for contract in contracts]
     return ContractsVerdict([finding for verdict in verdicts for finding in verdict.findings],
                             graph_notes + [note for verdict in verdicts for note in verdict.notes])
+
+
+def _refuse_control_characters(config: Config) -> None:
+    """import-linter prints contract names, guidance and module names into the output `_rendered` splits on line
+    feeds, so a config that holds a character `printable` would change is refused before anything is rendered."""
+    options = [*config.options.session_options.values(), *(value for contract in config.options.contracts_options
+                                                           for value in contract.values())]
+    for option in options:
+        for text in [option] if isinstance(option, str) else option if isinstance(option, list) else []:
+            if isinstance(text, str) and printable(text) != text:
+                raise ContractError(f"{config.name} holds {printable(text)}, which has a control character;"
+                                    " it cannot be judged")
 
 
 def find_config(configs: Mapping[str, str]) -> Config | None:
@@ -235,6 +248,8 @@ def _refuse_unreadable_source(repository: str, path: str, file_status: os.stat_r
         path.encode("utf-8")
     except UnicodeEncodeError as error:
         raise _cannot_be_examined(repository, path, "file name is not valid UTF-8") from error
+    if printable(os.path.relpath(path, repository)) != os.path.relpath(path, repository):
+        raise _cannot_be_examined(repository, path, "file name holds a control character")
     try:
         source = Path(path).read_bytes()
         source.decode("utf-8")
@@ -377,7 +392,9 @@ def _unmatched(message: str) -> str:
 
 
 def _rendered(contract: Contract, check: ContractCheck) -> tuple[str, ...]:
-    """The broken contract as import-linter renders it, as plain text, one entry per line."""
+    """The broken contract as import-linter renders it, as plain text, one entry per line. The only line feeds in that
+    output are import-linter's own: the tracked paths and the config text it embeds were refused for control
+    characters before it rendered anything."""
     with output.console.capture() as captured:
         contract.render_broken_contract(check)
     return tuple(ANSI_ESCAPE.sub("", captured.get()).strip().split("\n"))

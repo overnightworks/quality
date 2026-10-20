@@ -170,8 +170,8 @@ request. Records the pinned osv-scanner cannot read are dropped by it silently; 
 Every rule is judged, even when another cannot be, and gives one verdict: clean, findings, unparsable, or cannot judge.
 Each finding names the rule, the file, a reason and a fix. Repository text (a file name, a service, a port, a contract
 or job name, a configuration entry) prints escaped: invalid UTF-8 as `\udcNN` and every control character (line feed,
-carriage return, ESC, tab, DEL, C1) as `\xNN`. Every line the door prints starts with its own text, and a refusal is one
-line; the lines the door means to print (an import chain, the verdict's problems, the scoreboard's table) stay lines. A rule that cannot judge prints its verdict and reason under its rule id (`hygiene: secret cannot
+carriage return, ESC, tab, DEL, C1) as `\xNN`. Repository text never carries a raw control character, so it never starts a line of its own, and a refusal is one
+line; the lines the door means to print (an import chain, the verdict's problems, the scoreboard's table) stay lines (a broken contract's chain lines begin with import-linter's module names). A rule that cannot judge prints its verdict and reason under its rule id (`hygiene: secret cannot
 judge - ...`). A clean run names its rules in run order (`hygiene: clean (env-file, compose-port, size, import-contract); skipped without
 --engines: ...`); any other run ends with the findings and the verdicts counted (`hygiene: 1 finding(s); verdicts: 1
 clean, 1 findings, 1 unparsable`). The lines come in run order, also through a pipe that merges stdout and stderr
@@ -180,7 +180,7 @@ clean, 1 findings, 1 unparsable`). The lines come in run order, also through a p
 folder without permission, a bare repository, the inside of `.git`) is `hygiene: cannot judge - <PATH as given> is not a
 readable git repository: ... (`git -C '<PATH>' status` says why; a PATH with an unprintable character gets `git status` run inside it instead)` and exit `2` before any rule runs.
 In GitHub Actions (`GITHUB_ACTIONS=true`) the door first prints `::stop-commands::<token>` on stderr and on stdout, a new random token per run, so no
-workflow command in repository text runs: no `::warning::` or `##[warning]` annotation, no `add-mask`, no `add-matcher`; the stop lasts for the rest of the step, and the door never prints the line that lifts it. Problem matchers registered in the job (such as setup-uv's) still read the log (the stop does not reach them), and no line the door prints starts with repository text, because it escapes its control characters, so none can match.
+workflow command in repository text runs: no `::warning::` or `##[warning]` annotation, no `add-mask`, no `add-matcher`; the stop lasts for the rest of the step, and the door never prints the line that lifts it. Problem matchers registered in the job still read the log (the stop does not reach them). The gate's jobs register only setup-uv's python matcher, whose two-line pattern repository text cannot complete; a matcher another step registers may still match a door line that contains repository text, and the door cannot prevent that.
 
 ## `quality scan-staged`
 
