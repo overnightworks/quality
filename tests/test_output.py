@@ -140,23 +140,32 @@ class SharedLogStream(io.StringIO):
         self.log.append((self.name, text))
         return len(text)
 
+    def flush(self) -> None:
+        self.log.append((self.name, "flush"))
+
     def reconfigure(self, **_options) -> None:
         pass
 
 
-def test_run_flushes_the_stop_on_stderr_then_stdout_before_the_door_prints(monkeypatch):
+def test_run_writes_and_flushes_the_stop_on_stderr_then_stdout_before_the_door_is_entered(monkeypatch):
     """#89 rule 1: the order of the stops."""
     log: list[tuple[str, str]] = []
     monkeypatch.setattr(sys, "stderr", SharedLogStream("stderr", log))
     monkeypatch.setattr(sys, "stdout", SharedLogStream("stdout", log))
 
     def door() -> int:
-        print("door output")
+        log.append(("door", "entered"))
         return 0
 
     with pytest.raises(SystemExit):
         cli.run(door=door, environment={"GITHUB_ACTIONS": "true"})
-    lines = [(name, text) for name, text in log if text != "\n"]
-    assert [name for name, _ in lines] == ["stderr", "stdout", "stdout"]
-    assert STOP_LINE.fullmatch(lines[0][1]) and lines[1][1] == lines[0][1]
-    assert lines[2][1] == "door output"
+    events = [event for event in log if event[1] != "\n"]
+    stderr_stop, stdout_stop = events[0][1], events[2][1]
+    assert events == [
+        ("stderr", stderr_stop),
+        ("stderr", "flush"),
+        ("stdout", stdout_stop),
+        ("stdout", "flush"),
+        ("door", "entered"),
+    ]
+    assert STOP_LINE.fullmatch(stderr_stop) and stdout_stop == stderr_stop

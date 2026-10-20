@@ -178,7 +178,7 @@ clean, 1 findings, 1 unparsable`). The lines come in run order, also through a p
 folder without permission, a bare repository, the inside of `.git`) is `hygiene: cannot judge - <PATH as given> is not a
 readable git repository: ... (`git -C '<PATH>' status` says why; a PATH with an unprintable character gets `git status` run inside it instead)` and exit `2` before any rule runs.
 In GitHub Actions (`GITHUB_ACTIONS=true`) the door first prints `::stop-commands::<token>` on stderr and on stdout, a new random token per run, so no
-workflow command in repository text runs: no `::warning::` or `##[warning]` annotation, no `add-mask`, no `add-matcher`; the stop lasts for the rest of the step, and the door never prints the line that lifts it.
+workflow command in repository text runs: no `::warning::` or `##[warning]` annotation, no `add-mask`, no `add-matcher`; the stop lasts for the rest of the step, and the door never prints the line that lifts it. Problem matchers registered in the job (such as setup-uv's) still read the log, so the door's own escaping of repository text, not yet in place, is what keeps them from matching.
 
 ## `quality scan-staged`
 
