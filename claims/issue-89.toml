@@ -1,8 +1,0 @@
-claim_id = "e49a9562516644df916bcd6db51c95f9"
-agent = "claude"
-role = "builder"
-base = "9644cc4e038055f922fc37e9b5aca9a33ad3b152"
-branch = "claude/issue-89-stop-workflow-commands"
-scope = ["README.md", "docs/rulings.md", "src/quality/cli.py", "tests/conftest.py", "tests/test_output.py"]
-opened_commit = "4a7e764ecbd01e819966eae00c6b1a2bad8d2bad"
-whole_reason = "The door's command switch, the fixture that keeps local runs local in CI, its tests, its README sentences and the ruling are one decision about what reaches a GitHub Actions log."
