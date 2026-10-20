@@ -1,7 +1,0 @@
-claim_id = "ed7375265c2b495c8f69ba8744d5f57b"
-agent = "claude"
-role = "builder"
-base = "9644cc4e038055f922fc37e9b5aca9a33ad3b152"
-branch = "docs/roadmap-sonar-gate-retired"
-scope = ["docs/roadmap.md"]
-opened_commit = "d87cc7782025f8dd58cbf99bea4ff0200d03e84b"
