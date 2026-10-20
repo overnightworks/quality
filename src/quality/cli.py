@@ -8,6 +8,7 @@ from collections import Counter
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TextIO
 
 from quality import __version__, engines, ratchet, repository, scoreboard, staged
 from quality.config import Allowance, ConfigError, read_gate_settings
@@ -140,21 +141,28 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def emit(*lines: str, file: TextIO | None = None) -> None:
+    """The one print boundary: every line the door prints leaves through `printable`, and the door never splits text,
+    so a line of repository text cannot become several lines."""
+    for line in lines:
+        print(printable(line), file=file)
+
+
 def run_hygiene_check(path: Path, engine_dir: Path | None) -> int:
     try:
         result = run_hygiene(path, engine_dir)
     except CannotJudge as error:
-        print(f"hygiene: {error.label} - {error}", file=sys.stderr)
+        emit(f"hygiene: {error.label} - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     print_secret_allowances(result.allowed_secrets, result.unused_allowances)
     for report in result.reports:
-        print(printable(report))
+        emit(report)
     for verdict in result.verdicts:
         for finding in verdict.findings:
             print(render(finding))
         if verdict.refusal is not None:
-            print(f"hygiene: {verdict.rule} {verdict.refusal.label} - {verdict.refusal}", file=sys.stderr)
-    print(f"hygiene: {hygiene_summary(result)}{coverage_note(engine_dir)}")
+            emit(f"hygiene: {verdict.rule} {verdict.refusal.label} - {verdict.refusal}", file=sys.stderr)
+    emit(f"hygiene: {hygiene_summary(result)}{coverage_note(engine_dir)}")
     return HYGIENE_EXIT[result.worst]
 
 
@@ -169,11 +177,11 @@ def hygiene_summary(result: HygieneResult) -> str:
 
 def print_secret_allowances(allowed: list[Finding], unused: dict[Allowance, str]) -> None:
     if allowed:
-        print(f"{engines.LEAK_RULE}: {len(allowed)} allowed ({', '.join(finding.location for finding in allowed)})")
+        emit(f"{engines.LEAK_RULE}: {len(allowed)} allowed ({', '.join(finding.location for finding in allowed)})")
         for finding in allowed:
-            print(f"  allowed {finding.location} - {finding.reason}")
+            emit(f"  allowed {finding.location} - {finding.reason}")
     for entry, reason in unused.items():
-        print(f"{engines.LEAK_RULE}: unused allowance {entry.rule} in {entry.file} (sha256 {entry.secret_sha256}) - {reason}")
+        emit(f"{engines.LEAK_RULE}: unused allowance {entry.rule} in {entry.file} (sha256 {entry.secret_sha256}) - {reason}")
 
 
 def coverage_note(engine_dir: Path | None) -> str:
@@ -190,12 +198,12 @@ def run_baseline_write(path: Path) -> int:
         loosenings = describe_loosenings(top, entries)
         repository.write_text(top, ratchet.BASELINE_PATH, ratchet.render_baseline(entries))
     except (CannotJudge, repository.RepositoryFileError, ratchet.SizeError) as error:
-        print(f"baseline: not written - {error}", file=sys.stderr)
+        emit(f"baseline: not written - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     for loosening in loosenings:
-        print(f"baseline: {loosening}")
+        emit(f"baseline: {loosening}")
     count = "1 entry" if len(entries) == 1 else f"{len(entries)} entries"
-    print(f"baseline: wrote {count} to {top / ratchet.BASELINE_PATH}")
+    emit(f"baseline: wrote {count} to {top / ratchet.BASELINE_PATH}")
     return EXIT_CLEAN
 
 
@@ -217,12 +225,12 @@ def run_scan_staged(path: Path, engine_dir: Path, read_pins: Callable[[], dict[s
     try:
         result = staged.scan_staged(path, engine_dir, read_pins())
     except (engines.EngineError, ConfigError) as error:
-        print(f"scan-staged: cannot judge - {error}", file=sys.stderr)
+        emit(f"scan-staged: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     print_secret_allowances(result.allowed, result.unused_allowances)
     for finding in result.findings:
         print(render(finding))
-    print(f"scan-staged: {len(result.findings)} finding(s)" if result.findings else "scan-staged: clean")
+    emit(f"scan-staged: {len(result.findings)} finding(s)" if result.findings else "scan-staged: clean")
     return EXIT_FINDINGS if result.findings else EXIT_CLEAN
 
 
@@ -231,10 +239,10 @@ def run_engines_install(directory: Path, read_pins: Callable[[], dict[str, engin
         pins = read_pins()
         downloaded = engines.install(directory, pins)
     except engines.EngineError as error:
-        print(f"engines: cannot install - {error}", file=sys.stderr)
+        emit(f"engines: cannot install - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     for name, pin in pins.items():
-        print(f"{name} {pin.version} {'installed' if downloaded[name] else 'already installed'}")
+        emit(f"{name} {pin.version} {'installed' if downloaded[name] else 'already installed'}")
     return EXIT_CLEAN
 
 
@@ -244,9 +252,9 @@ def run_engines_verify(directory: Path, read_pins: Callable[[], dict[str, engine
     except engines.EngineError as error:
         problems = [str(error)]
     if problems:
-        print("\n".join(f"engines: {problem}" for problem in problems), file=sys.stderr)
+        emit(*(f"engines: {problem}" for problem in problems), file=sys.stderr)
         return EXIT_CANNOT_JUDGE
-    print(f"engines: every pinned engine in {directory} is at its pinned version")
+    emit(f"engines: every pinned engine in {directory} is at its pinned version")
     return EXIT_CLEAN
 
 
@@ -254,9 +262,9 @@ def run_sonar_preflight(path: Path) -> int:
     try:
         preflight(path, os.environ)
     except CannotJudge as error:
-        print(f"sonar: cannot judge - {error}", file=sys.stderr)
+        emit(f"sonar: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
-    print("sonar: preflight clean")
+    emit("sonar: preflight clean")
     return EXIT_CLEAN
 
 
@@ -264,11 +272,11 @@ def run_sonar_findings(transport: Transport, sleep: Sleep) -> int:
     try:
         result = analyse(os.environ, read_gate_settings(Path(".")).legacy, transport, sleep)
     except (CannotJudge, ConfigError) as error:
-        print(f"sonar: cannot judge - {error}", file=sys.stderr)
+        emit(f"sonar: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     for finding in result.findings.listed:
         print(render(finding))
-    print(result.summary(), file=sys.stderr if result.fails_the_run else sys.stdout)
+    emit(result.summary(), file=sys.stderr if result.fails_the_run else sys.stdout)
     return EXIT_FINDINGS if result.fails_the_run else EXIT_CLEAN
 
 
@@ -283,12 +291,12 @@ def run_verdict(path: Path, fetcher_for: Callable[[str], PageFetcher]) -> int:
         gate_results = {name: need["result"] for name, need in json.loads(os.environ["GATE_NEEDS"]).items()}
         result = judge(head, base, jobs, gate_results, int(os.environ["GITHUB_RUN_ATTEMPT"]))
     except (CannotJudge, KeyError, ValueError) as error:
-        report = f"verdict: cannot judge - {error}"
+        report = (f"verdict: cannot judge - {error}",)
         code = EXIT_CANNOT_JUDGE
     else:
-        report = "verdict: green" if result.green else "\n".join((*result.problems, "verdict: red"))
+        report = ("verdict: green",) if result.green else (*result.problems, "verdict: red")
         code = EXIT_CLEAN if result.green else EXIT_FINDINGS
-    print(report, file=sys.stderr if code == EXIT_CANNOT_JUDGE else sys.stdout)
+    emit(*report, file=sys.stderr if code == EXIT_CANNOT_JUDGE else sys.stdout)
     append_step_summary(report)
     return code
 
@@ -297,21 +305,21 @@ def run_scoreboard(path: Path) -> int:
     try:
         fleet = scoreboard.read_fleet(path)
     except scoreboard.FleetError as error:
-        print(f"scoreboard: cannot judge - {error}", file=sys.stderr)
+        emit(f"scoreboard: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     rows = scoreboard.measure_fleet(fleet)
     report = scoreboard.render(rows, datetime.now(UTC).date())
-    print(report)
+    emit(*report)
     append_step_summary(report)
     return EXIT_CANNOT_JUDGE if scoreboard.cannot_judge(rows) else EXIT_CLEAN
 
 
-def append_step_summary(report: str) -> None:
-    """In a GitHub Actions step, the run summary gets the same text as the log."""
+def append_step_summary(report: tuple[str, ...]) -> None:
+    """In a GitHub Actions step, the run summary gets the same escaped lines as the log."""
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
         with open(summary, "a", encoding="utf-8") as handle:
-            handle.write(report + "\n")
+            handle.write("".join(f"{printable(line)}\n" for line in report))
 
 
 def run(door: Callable[[], int] = main, environment: Mapping[str, str] = os.environ) -> None:

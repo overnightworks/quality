@@ -193,6 +193,21 @@ def test_verdict_exit_code_and_summary_follow_the_run(capsys, run_env, conclusio
     assert summary.read_text().strip().endswith("green" if code == 0 else "red")
 
 
+def test_a_job_name_with_a_line_feed_prints_as_one_escaped_problem_line_in_log_and_summary(capsys, run_env):
+    """#97 rule 2, cell 15 (E6): the problem line is escaped, the same in the step summary, and `verdict: red` stays a line."""
+    repo, summary = run_env
+    (repo / "quality/config.toml").write_text('[gate]\nmandatory_jobs = ["checks", "a\\n::error::b"]\n')
+    page = json.dumps(
+        {"total_count": 1, "jobs": [{"name": "checks", "run_attempt": 1, "status": "completed", "conclusion": "success"}]}
+    )
+    assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (page, None)) == 1
+    lines = capsys.readouterr().out.split("\n")
+    assert [line for line in lines if "a\\x0a::error::b" in line] != []
+    assert lines[-2:] == ["verdict: red", ""]
+    assert all(not line.startswith("::") for line in lines)
+    assert summary.read_text().split("\n") == lines
+
+
 @UNKNOWN_KEY_CONFIGS
 def test_verdict_refuses_a_config_with_unknown_keys(capsys, run_env, config):
     """#40 rule 2: the verdict keeps refusing unknown keys of quality/config.toml."""

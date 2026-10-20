@@ -56,7 +56,6 @@ ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 BROKEN_FIX = "change the import or the contract."
 STALE_IGNORE_FIX = "delete the entry."
 PANIC_MODULE = "pyo3_runtime"
-CONTROL_CHARACTER = re.compile(r"[\x00-\x1f\x7f]")
 MAX_ECHOED_SOURCE = 200
 # Probed on grimp 3.17, whose Rust reader (not readable from Python) takes the raw lower-cased spelling of a coding
 # cookie: Python's own aliases such as utf_8, U8, cp65001 or utf-8-sig make it panic.
@@ -279,7 +278,7 @@ def _real_ancestors(real_directories: Mapping[str, str], package_directory: str,
 
 
 def _cannot_be_examined(repository: str, path: str, reason: str) -> ContractError:
-    name = os.path.relpath(path, repository).encode("utf-8", "surrogateescape").decode("utf-8", "backslashreplace")
+    name = os.path.relpath(path, repository)
     return ContractError(f"{name} cannot be examined: {reason}")
 
 
@@ -366,8 +365,10 @@ def _check(contract: Contract, graph: grimp.ImportGraph, config_name: str, repos
         notes = [f"{RULE}: note - contract {contract.name} {_unmatched(warning)}" for warning in check.warnings]
         if check.kept:
             return ContractsVerdict([], notes)
-        broken = f"contract {contract.name} is broken:\n{_rendered(contract, check)}"
-        return ContractsVerdict([Finding(RULE, config_name, None, broken, BROKEN_FIX)], notes)
+        broken = Finding(
+            RULE, config_name, None, f"contract {contract.name} is broken:", BROKEN_FIX, detail=_rendered(contract, check)
+        )
+        return ContractsVerdict([broken], notes)
 
 
 def _unmatched(message: str) -> str:
@@ -375,11 +376,11 @@ def _unmatched(message: str) -> str:
     return message if match is None else f"ignores {match['expression']}, which no import matches"
 
 
-def _rendered(contract: Contract, check: ContractCheck) -> str:
-    """The broken contract as import-linter renders it, as plain text."""
+def _rendered(contract: Contract, check: ContractCheck) -> tuple[str, ...]:
+    """The broken contract as import-linter renders it, as plain text, one entry per line."""
     with output.console.capture() as captured:
         contract.render_broken_contract(check)
-    return ANSI_ESCAPE.sub("", captured.get()).strip()
+    return tuple(ANSI_ESCAPE.sub("", captured.get()).strip().split("\n"))
 
 
 @contextmanager
@@ -390,16 +391,14 @@ def _judging(subject: str, place: str) -> Iterator[None]:
     except ContractError:
         raise
     except SourceSyntaxError as error:
-        raise UnparsableModule(_echoable(_relative(str(error), place))) from error
+        raise UnparsableModule(_cut(_relative(str(error), place))) from error
     except Exception as error:  # every error import-linter or grimp raises is caller-facing: none may escape as a crash
         raise ContractError(f"{subject} cannot be judged: {type(error).__name__}: {_relative(str(error), place)}") from error
 
 
-def _echoable(message: str) -> str:
-    """The source text a syntax error echoes is repository content: no control character reaches the terminal and a
-    long line is cut."""
-    escaped = CONTROL_CHARACTER.sub(lambda match: f"\\x{ord(match.group()):02x}", message)
-    return escaped if len(escaped) <= MAX_ECHOED_SOURCE else escaped[:MAX_ECHOED_SOURCE] + "…"
+def _cut(message: str) -> str:
+    """The source text a syntax error echoes is cut to a few hundred characters; the print boundary escapes what is left."""
+    return message if len(message) <= MAX_ECHOED_SOURCE else message[:MAX_ECHOED_SOURCE] + "…"
 
 
 def _relative(message: str, place: str) -> str:

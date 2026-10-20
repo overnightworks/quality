@@ -408,7 +408,7 @@ def _non_utf8_file_name(package):
         (package / os.fsdecode(b"\xffz.py")).write_text("")
     except OSError:
         pytest.skip("this filesystem refuses a file name that is not UTF-8")
-    return "src/shop/\\xffz.py", "file name is not valid UTF-8"
+    return "src/shop/\\udcffz.py", "file name is not valid UTF-8"
 
 
 @pytest.mark.parametrize("arrange", [_fifo_named_py, _non_utf8_content, _unknown_coding_cookie,
