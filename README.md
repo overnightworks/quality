@@ -348,7 +348,7 @@ The scanner's transport, verified at sonar-scanner-java-library 4.1.1.1633 (the 
 - Re-verify all of this on any bump of the scan action or `scannerVersion`.
 - Sources at 4.1.1.1633: [HttpClientFactory.java:72](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/http/HttpClientFactory.java#L72), [ScannerHttpClient.java:162-170](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/http/ScannerHttpClient.java#L162-L170), [ScannerHttpClient.java:231-233](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/http/ScannerHttpClient.java#L231-L233), [ScannerEndpointResolver.java:40](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/endpoint/ScannerEndpointResolver.java#L40), [ScannerEngineLauncherFactory.java](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/facade/forked/ScannerEngineLauncherFactory.java).
 
-`quality sonar findings` is the SonarCloud zero-findings rule. It reads the scanner's `.scannerwork/report-task.txt` relative to the working directory (no other path can be given); a missing or unreadable file is exit 2.
+`quality sonar findings` is the SonarCloud zero-findings rule, except the findings the [Dependabot exception](#a-dependabot-exception-for-dockers8431) sets aside. It reads the scanner's `.scannerwork/report-task.txt` relative to the working directory (no other path can be given); a missing or unreadable file is exit 2.
 
 The project is the caller's repository: `GITHUB_REPOSITORY` gives the key `<owner>_<repo>` and the organization
 `<owner>`. The task file must name that `projectKey`, `organization=<owner>` and `serverUrl=https://sonarcloud.io`; the URLs inside it are never
@@ -361,14 +361,37 @@ unreadable is exit `2`.
 `gate.yml` passes the repository's default branch (`github.event.repository.default_branch`) as `DEFAULT_BRANCH`; it is
 never assumed to be `main`, and a missing or empty value is exit `2`. "Legacy" means the open findings of that branch,
 counted by the same `issues/search` with the same open statuses, and only counted, never listed.
-- **Pull request:** new findings are listed and make the run exit `1`. Both counts always print, for example
+- **Pull request:** new findings are listed and make the run exit `1` (except the findings the next subsection sets aside). Both counts always print, for example
   `sonar: new 0 · legacy 17 (overnightworks_webauth, main)`.
-- **Default branch:** a run on the default branch exits `1` on any open finding, lists them and prints
+- **Default branch:** a run on the default branch exits `1` on any open finding (except the findings the next subsection sets aside), lists them and prints
   `sonar: N open on <default>`.
 - **Any other branch:** report only, exit `0`: `sonar: N open on <branch> (report only)`.
 
 `[gate] legacy` in `quality/config.toml` decides whether legacy findings fail a pull request. `quality sonar findings`
 reads that file like the verdict does: a missing file, or one without `[gate] mandatory_jobs`, is exit `2` before any request.
+
+### A Dependabot exception for `docker:S8431`
+
+Sonar's rule `docker:S8431` ("Use either the version tag or the digest for the image instead of both") flags the
+`image:tag@sha256:...` form that Dependabot maintains. Sonar's own sensor drops the finding when a Dependabot config
+exists ([DockerSensor.java](https://github.com/SonarSource/sonar-iac/blob/master/iac-extensions/docker/src/main/java/org/sonar/iac/docker/plugin/DockerSensor.java),
+SONARIAC-3096), but only checks that the file exists, and a pull-request analysis looks at changed files only, so it
+cannot see an unchanged `.github/dependabot.yml` and keeps the finding. The gate therefore judges a pull request the
+way Sonar judges main:
+
+- **The rule:** when `.github/dependabot.yml` exists in the checkout, `docker:S8431` does not count. Its content is
+  never read, so an empty or broken file counts as existing; a link to a file counts and a link to nowhere does not.
+  `.github/dependabot.yaml` is not looked at. The rule applies in every run kind.
+- **What prints:** the finding still prints, on stdout after the counted findings and before the summary, without a
+  `Fix:` line: `sonar Dockerfile:3 - docker:S8431: <message> (does not count: .github/dependabot.yml exists, Sonar's
+  own exception, which its pull-request analysis misses)`. The summary line does not count it; the legacy number stays
+  the raw count of the default branch.
+- **An unreachable file:** a `.github` the filesystem refuses access to is exit `2` with a line naming the file, before
+  any request.
+- **Only this rule** has the exception; every other finding and rule counts as before.
+- **Gaps:** `quality emergency-merge` does not honour it and still counts the finding as added; the legacy count is
+  raw; the file's existence does not say that Dependabot maintains the Dockerfile's folder for Docker; a repository
+  that has only `.github/dependabot.yaml` stays red on pull requests; Renovate is not judged.
 
 ```toml
 [gate]

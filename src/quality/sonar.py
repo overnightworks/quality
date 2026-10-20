@@ -8,7 +8,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from email.message import Message
 from enum import Enum
 from pathlib import Path
@@ -37,6 +37,12 @@ MAXIMUM_FINDINGS_PAGES = FINDINGS_SEARCH_LIMIT // FINDINGS_PAGE_SIZE
 # `issueStatuses`, never the legacy `statuses`, whose vocabulary drops an issue a person accepted
 # or marked false positive in the SonarCloud interface.
 OPEN_ISSUE_STATUSES = "OPEN,CONFIRMED,ACCEPTED,FALSE_POSITIVE"
+
+# Sonar itself drops this rule on a branch analysis when the bot config exists, by existence alone; its pull-request
+# analysis cannot see an unchanged file and keeps the finding, so the gate applies the same test everywhere.
+DEPENDABOT_CONFIG = ".github/dependabot.yml"
+DEPENDABOT_EXCEPTION_RULE = "docker:S8431"
+SET_ASIDE_REASON = f" (does not count: {DEPENDABOT_CONFIG} exists, Sonar's own exception, which its pull-request analysis misses)"
 
 PULL_REQUEST_EVENT = "pull_request"
 TOKEN_VARIABLE = "SONAR_TOKEN"
@@ -191,11 +197,17 @@ class Analysis:
 class OpenFindings:
     total: int
     listed: tuple[Finding, ...]
+    set_aside: tuple[Finding, ...] = ()
 
     @property
     def count(self) -> int:
         # A total the same answer contradicts by listing findings is not a zero.
         return max(self.total, len(self.listed))
+
+
+def uncounted_rules(dependabot_config_exists: bool) -> frozenset[str]:
+    """The rules whose findings the gate prints but does not count; a rule's file path is no input."""
+    return frozenset({DEPENDABOT_EXCEPTION_RULE}) if dependabot_config_exists else frozenset()
 
 
 def legacy_unknown(default_branch: str) -> str:
@@ -342,7 +354,13 @@ def decode_property_text(line: str, position: int, stop_at: str = "") -> tuple[s
     return "".join(decoded), position
 
 
-def analyse(environment: Mapping[str, str], legacy_mode: LegacyMode, transport: Transport, sleep: Sleep) -> SonarResult:
+def analyse(
+    environment: Mapping[str, str],
+    legacy_mode: LegacyMode,
+    uncounted: frozenset[str],
+    transport: Transport,
+    sleep: Sleep,
+) -> SonarResult:
     """Every check that can refuse runs before the token is sent anywhere."""
     analysis = read_analysis(environment)
     wait_for_own_task(analysis, transport, sleep)
@@ -352,7 +370,7 @@ def analyse(environment: Mapping[str, str], legacy_mode: LegacyMode, transport: 
     unknown = kind.judges_legacy and not default_analysed
     if unknown and legacy_mode is LegacyMode.FAIL:
         raise CannotJudge(legacy_unknown(analysis.default_branch))
-    findings = open_findings(analysis, transport)
+    findings = open_findings(analysis, transport, uncounted)
     legacy = None
     if kind is RunKind.PULL_REQUEST and default_analysed:
         legacy = open_total(analysis, Scope("branch", analysis.default_branch), transport)
@@ -502,8 +520,10 @@ def open_total(analysis: Analysis, scope: Scope, transport: Transport) -> int:
         raise CannotJudge(f"SonarCloud answered {url.partition('?')[0]} with an unreadable body") from error
 
 
-def open_findings(analysis: Analysis, transport: Transport) -> OpenFindings:
+def open_findings(analysis: Analysis, transport: Transport, uncounted: frozenset[str] = frozenset()) -> OpenFindings:
     listed: list[Finding] = []
+    set_aside: list[Finding] = []
+    fetched = 0
     total = 0
     for page in range(1, MAXIMUM_FINDINGS_PAGES + 1):
         url = issues_search_url(analysis, analysis.scope, page, FINDINGS_PAGE_SIZE)
@@ -513,12 +533,18 @@ def open_findings(analysis: Analysis, transport: Transport) -> OpenFindings:
             issues = report["issues"]
             if not isinstance(issues, list):
                 raise CannotJudge(f"SonarCloud answered {url.partition('?')[0]} with issues that are not a list")
-            listed.extend(finding_from_issue(issue) for issue in issues)
+            for issue in issues:
+                finding = finding_from_issue(issue)
+                if issue["rule"] in uncounted:
+                    set_aside.append(replace(finding, reason=finding.reason + SET_ASIDE_REASON, fix=""))
+                else:
+                    listed.append(finding)
         except (KeyError, TypeError, ValueError) as error:
             raise CannotJudge(f"SonarCloud answered {url.partition('?')[0]} with an unreadable body") from error
-        if not issues or len(listed) >= total:
+        fetched += len(issues)
+        if not issues or fetched >= total:
             break
-    return OpenFindings(total, tuple(listed))
+    return OpenFindings(max(0, total - len(set_aside)), tuple(listed), tuple(set_aside))
 
 
 def analysed_pull_request_commit(analysis: Analysis, transport: Transport) -> str | None:
