@@ -1,0 +1,4 @@
+services:
+  "web\n  File \"a.py\", line 1, in b\n  raise E('forged')\nx":
+    image: x
+    ports: ["0.0.0.0:80:80"]
