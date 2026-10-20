@@ -1,3 +1,4 @@
+import io
 import os
 import re
 import subprocess
@@ -81,10 +82,11 @@ def test_a_closed_stdout_leaves_the_stop_and_the_verdict_on_stderr(broken_compos
 
 def test_a_closed_stderr_keeps_the_stop_on_stdout_and_the_exit(broken_compose_repo):
     """#89 rule 1, cell 5: fd 2 closed."""
-    open_door = run_door("hygiene", ".", cwd=broken_compose_repo)
+    local = run_door("hygiene", ".", cwd=broken_compose_repo, actions=None, shell=CLOSED_STDERR)
     done = run_door("hygiene", ".", cwd=broken_compose_repo, shell=CLOSED_STDERR)
     stop_token(done.stdout)
-    assert done.returncode == open_door.returncode == 2
+    assert done.stdout.split("\n", 1)[1] == local.stdout
+    assert done.returncode == local.returncode == 2
 
 
 @pytest.mark.parametrize(
@@ -122,6 +124,39 @@ def test_run_prints_nothing_outside_actions_and_keeps_the_door_exit(capsys):
 
 def test_run_skips_a_closed_stream_in_process(capsys, monkeypatch):
     """#89 rule 1: a stream that is None is skipped."""
-    monkeypatch.setattr(sys, "stdout", None)
+    monkeypatch.setattr(sys, "stderr", None)
     assert run_in_process({"GITHUB_ACTIONS": "true"}) == 3
-    stop_token(capsys.readouterr().err)
+    stdout = capsys.readouterr().out
+    stop_token(stdout)
+    assert len(stdout.splitlines()) == 1
+
+
+class SharedLogStream(io.StringIO):
+    def __init__(self, name: str, log: list[tuple[str, str]]):
+        super().__init__()
+        self.name, self.log = name, log
+
+    def write(self, text: str) -> int:
+        self.log.append((self.name, text))
+        return len(text)
+
+    def reconfigure(self, **_options) -> None:
+        pass
+
+
+def test_run_flushes_the_stop_on_stderr_then_stdout_before_the_door_prints(monkeypatch):
+    """#89 rule 1: the order of the stops."""
+    log: list[tuple[str, str]] = []
+    monkeypatch.setattr(sys, "stderr", SharedLogStream("stderr", log))
+    monkeypatch.setattr(sys, "stdout", SharedLogStream("stdout", log))
+
+    def door() -> int:
+        print("door output")
+        return 0
+
+    with pytest.raises(SystemExit):
+        cli.run(door=door, environment={"GITHUB_ACTIONS": "true"})
+    lines = [(name, text) for name, text in log if text != "\n"]
+    assert [name for name, _ in lines] == ["stderr", "stdout", "stdout"]
+    assert STOP_LINE.fullmatch(lines[0][1]) and lines[1][1] == lines[0][1]
+    assert lines[2][1] == "door output"
