@@ -377,9 +377,9 @@ def _unmatched(message: str) -> str:
 
 
 def _rendered(contract: Contract, check: ContractCheck) -> tuple[str, ...]:
-    """The broken contract as import-linter renders it, as plain text, one entry per line. Rich's soft wrap is off, so
-    each line is one of import-linter's own `print` calls and a long name is never cut into a line of its own; the
-    door prints every one of them behind its marker, so repository text never starts a printed line."""
+    """The broken contract as import-linter renders it, as plain text, one entry per line. Rich's soft_wrap mode is on,
+    so rich never cuts a line at the console width; a line feed in repository text still splits a print, and the door
+    prints every line behind its marker, so repository text never starts a printed line."""
     soft_wrap_before = output.console.soft_wrap
     output.console.soft_wrap = True
     try:

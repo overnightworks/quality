@@ -277,7 +277,6 @@ FORGED_MATCHER_PAIR = ['  File "a", line 1, in b', "  raise E('forged')"]
 INDEPENDENT_SHOP = {"type": "independence", "modules": ["shop.web", "shop.db"]}
 EXHAUSTIVE_LAYERS = {"type": "layers", "layers": ["web", "db"], "containers": ["shop"], "exhaustive": True}
 WRAPPED_MODULE_NAME = "q" * 70 + ' File "ab", line 1, in b ' + "r" * 52 + " raise E('forged')"
-BEHIND_THE_MARKER = DETAIL_MARKER.rstrip() + " "
 
 
 def broken_contract_lines(capsys, files: dict[str, str], build_repo) -> list[str]:
@@ -291,7 +290,7 @@ def test_a_long_module_name_import_linter_would_wrap_cannot_forge_a_matcher_pair
     """#97 rule 2, cell 18 (Opus D1): rich's soft wrap would put `File "ab", ...` and `raise ...` at the line start."""
     files = {**SHOP, f"src/shop/{WRAPPED_MODULE_NAME}.py": "", "pyproject.toml": toml(EXHAUSTIVE_LAYERS)}
     lines = broken_contract_lines(capsys, files, build_repo)
-    assert f"{BEHIND_THE_MARKER}- shop.{WRAPPED_MODULE_NAME}" in lines
+    assert f"{DETAIL_MARKER}- shop.{WRAPPED_MODULE_NAME}" in lines
 
 
 @pytest.mark.parametrize("guidance", [FORGED_MATCHER_PAIR, "\n".join(FORGED_MATCHER_PAIR)], ids=["list", "multi-line text"])
@@ -299,7 +298,7 @@ def test_contract_guidance_with_several_lines_is_judged_and_printed_behind_the_m
     """#97 rule 2, cell 18 (Codex F1, Opus D2): legitimate multi-line guidance is judged as before: exit 1."""
     contract = {**INDEPENDENT_SHOP, "broken_contract_guidance": guidance}
     lines = broken_contract_lines(capsys, {**SHOP_DB_IMPORTS_WEB, "pyproject.toml": toml(contract)}, build_repo)
-    assert all(f"{BEHIND_THE_MARKER}{line}" in lines for line in FORGED_MATCHER_PAIR)
+    assert all(f"{DETAIL_MARKER}{line}" in lines for line in FORGED_MATCHER_PAIR)
 
 
 @pytest.mark.parametrize(
@@ -314,7 +313,7 @@ def test_a_module_name_with_a_line_feed_is_judged_and_its_second_line_stays_behi
     files = {**SHOP_DB_IMPORTS_WEB, f"src/shop/{name}.py": "import shop.web\n",
              "pyproject.toml": toml({**FORBIDDEN, "source_modules": ["shop.*"]})}
     lines = broken_contract_lines(capsys, files, build_repo)
-    assert any(line.startswith(f"{BEHIND_THE_MARKER}{text_after_the_line_feed}") for line in lines), lines
+    assert any(line.startswith(f"{DETAIL_MARKER}{text_after_the_line_feed}") for line in lines), lines
 
 
 def test_a_source_directory_with_a_line_feed_is_judged_without_a_forged_line(build_repo, capsys):

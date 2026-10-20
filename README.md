@@ -86,7 +86,7 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   package yaml is src/yaml/__init__.py, but Python finds it outside the repository at site-packages/yaml/__init__.py`, a
   place outside named from the `sys.path` entry it lies under; a place inside is named repository-relative), a symlink
   under a root package that leaves the repository, directly or through a link that stays inside, and a symlink loop, and a `.py` file that "cannot be examined" (no regular file, a name or content that is not valid
-  UTF-8, a coding cookie other than UTF-8, or one the system will not let it read). A
+  UTF-8, a coding cookie in any spelling but utf-8, utf8, unicode-1-1-utf-8, unicode11utf8, x-unicode20utf8, ascii, us-ascii or ansi_x3.4-1968, or one the system will not let it read). A
   module grimp cannot parse is `hygiene: import-contract unparsable - ...`; a warning grimp gives while building the
   graph is one `import-contract: note - ...` line. No message names an absolute local path.
 - The baseline only falls: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the
@@ -170,8 +170,8 @@ request. Records the pinned osv-scanner cannot read are dropped by it silently; 
 
 Every rule is judged, even when another cannot be, and gives one verdict: clean, findings, unparsable, or cannot judge.
 Each finding names the rule, the file, a reason and a fix. Repository text (a file name, a service, a port, a contract
-or job name, a configuration entry) prints escaped: invalid UTF-8 as `\udcNN` and every control character (line feed,
-carriage return, ESC, tab, DEL, C1) as `\xNN`. Every line the door prints starts with its own text. Repository text prints its control characters escaped, and every line taken from import-linter (a broken contract's chain and guidance) carries the marker `  | `. So a matcher anchored at the line start, such as setup-uv's python matcher, cannot match repository text. A refusal is one line; the lines the door means to print (an import chain, the verdict's problems, the scoreboard's table) stay lines. A rule that cannot judge prints its verdict and reason under its rule id (`hygiene: secret cannot
+or job name, a configuration entry) prints escaped. In the door's own fields (a finding's location, reason and fix, refusals, reports), invalid UTF-8 prints as `\udcNN` and every control character (line feed,
+carriage return, ESC, tab, DEL, C1) as `\xNN`. A line taken from import-linter's rendering (a broken contract's chain and guidance) prints behind the marker `  | `; rich may drop a carriage return, expand a tab, or start a new marked line at a line feed there. Every line the door prints therefore starts with its own text, so a matcher anchored at the line start, such as setup-uv's python matcher, cannot match repository text. A refusal is one line; the lines the door means to print (an import chain, the verdict's problems, the scoreboard's table) stay lines. A rule that cannot judge prints its verdict and reason under its rule id (`hygiene: secret cannot
 judge - ...`). A clean run names its rules in run order (`hygiene: clean (env-file, compose-port, size, import-contract); skipped without
 --engines: ...`); any other run ends with the findings and the verdicts counted (`hygiene: 1 finding(s); verdicts: 1
 clean, 1 findings, 1 unparsable`). The lines come in run order, also through a pipe that merges stdout and stderr
