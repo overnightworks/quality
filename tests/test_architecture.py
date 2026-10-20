@@ -3,7 +3,6 @@
 Every cell runs through `cli.main(["hygiene", ...])`; the cell numbers are the item's scenario matrix.
 """
 
-import json
 import os
 import signal
 import subprocess
@@ -13,6 +12,7 @@ from pathlib import Path
 import grimp
 import pytest
 import yaml
+from conftest import FORBIDDEN, SHOP, SHOP_DB_IMPORTS_WEB, assert_every_line_starts_with_the_door, toml
 from importlinter.contracts.forbidden import ForbiddenContract
 
 import quality
@@ -20,10 +20,7 @@ from quality import cli
 
 QUALITY_ROOT = Path(__file__).resolve().parents[1]
 CLEAN_LINE = "hygiene: clean (env-file, compose-port, size, import-contract)"
-SHOP = {"src/shop/__init__.py": "", "src/shop/web.py": "", "src/shop/api.py": "", "src/shop/db.py": "x = 1\n"}
-SHOP_DB_IMPORTS_WEB = {**SHOP, "src/shop/db.py": "import shop.web\n"}
 SHOP_CYCLE = {**SHOP_DB_IMPORTS_WEB, "src/shop/web.py": "import shop.db\n"}
-FORBIDDEN = {"type": "forbidden", "source_modules": ["shop.db"], "forbidden_modules": ["shop.web"]}
 LAYERS = {"type": "layers", "layers": ["shop.web", "shop.db"]}
 PROTECTED = {"type": "protected", "protected_modules": ["shop.web"], "allowed_importers": ["shop.api"]}
 INDEPENDENCE = {"type": "independence", "modules": ["shop.web", "shop.db"]}
@@ -46,12 +43,6 @@ def ini(contract: dict, roots: tuple[str, ...] = ("shop",), **session: str | lis
     return ini_section("importlinter", {"root_packages": list(roots), **session}) + ini_section(
         "importlinter:contract:one", {"name": "guarded", **contract}
     )
-
-
-def toml(contract: dict, roots: tuple[str, ...] = ("shop",)) -> str:
-    """A `pyproject.toml` with one contract named `guarded`; JSON strings, lists and booleans are TOML too."""
-    entries = "".join(f"{key} = {json.dumps(value)}\n" for key, value in {"name": "guarded", **contract}.items())
-    return f"[tool.importlinter]\nroot_packages = {json.dumps(list(roots))}\n\n[[tool.importlinter.contracts]]\n{entries}"
 
 
 def run(capsys: pytest.CaptureFixture[str], path: Path) -> tuple[int, str]:
@@ -444,12 +435,12 @@ def test_a_coding_cookie_grimp_reads_is_judged_normally(build_repo, capfd, cooki
 @pytest.mark.parametrize("source, echoed", [("x = 1\0y = 2\n", "x = 1\\x00y = 2"),
                                             ("x = 1 +" + "+" * 400 + "(\n", "…")])
 def test_the_source_text_a_syntax_error_echoes_is_escaped_and_cut(build_repo, capfd, source, echoed):
-    """#61 rule 4: a control character in the echoed source is escaped and a long line is cut."""
+    """#61 rule 4 and #97 rule 2, cell 18: a control character in the echoed source is escaped, a long line is cut."""
     repo = build_repo({**SHOP, "src/shop/bad.py": source, ".importlinter": ini(FORBIDDEN)})
     code, output = run(capfd, repo)
     assert code == 2, output
     assert echoed in output
-    assert "\0" not in output
+    assert_every_line_starts_with_the_door(output.split("\n"))
     assert all(len(line) < 400 for line in output.splitlines())
 
 

@@ -85,7 +85,8 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   dotted root package, a root package with no or several such directories, one Python finds in another place (`root
   package yaml is src/yaml/__init__.py, but Python finds it outside the repository at site-packages/yaml/__init__.py`, a
   place outside named from the `sys.path` entry it lies under; a place inside is named repository-relative), a symlink
-  under a root package that leaves the repository, directly or through a link that stays inside, and a symlink loop. A
+  under a root package that leaves the repository, directly or through a link that stays inside, and a symlink loop, and a `.py` file that "cannot be examined" (no regular file, a name or content that is not valid
+  UTF-8, a coding cookie other than UTF-8, or one the system will not let it read). A
   module grimp cannot parse is `hygiene: import-contract unparsable - ...`; a warning grimp gives while building the
   graph is one `import-contract: note - ...` line. No message names an absolute local path.
 - The baseline only falls: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the
@@ -170,8 +171,7 @@ request. Records the pinned osv-scanner cannot read are dropped by it silently; 
 Every rule is judged, even when another cannot be, and gives one verdict: clean, findings, unparsable, or cannot judge.
 Each finding names the rule, the file, a reason and a fix. Repository text (a file name, a service, a port, a contract
 or job name, a configuration entry) prints escaped: invalid UTF-8 as `\udcNN` and every control character (line feed,
-carriage return, ESC, tab, DEL, C1) as `\xNN`. Repository text never carries a raw control character, so it never starts a line of its own, and a refusal is one
-line; the lines the door means to print (an import chain, the verdict's problems, the scoreboard's table) stay lines (a broken contract's chain lines begin with import-linter's module names). A rule that cannot judge prints its verdict and reason under its rule id (`hygiene: secret cannot
+carriage return, ESC, tab, DEL, C1) as `\xNN`. Every line the door prints starts with its own text. Repository text prints its control characters escaped, and every line taken from import-linter (a broken contract's chain and guidance) carries the marker `  | `. So a matcher anchored at the line start, such as setup-uv's python matcher, cannot match repository text. A refusal is one line; the lines the door means to print (an import chain, the verdict's problems, the scoreboard's table) stay lines. A rule that cannot judge prints its verdict and reason under its rule id (`hygiene: secret cannot
 judge - ...`). A clean run names its rules in run order (`hygiene: clean (env-file, compose-port, size, import-contract); skipped without
 --engines: ...`); any other run ends with the findings and the verdicts counted (`hygiene: 1 finding(s); verdicts: 1
 clean, 1 findings, 1 unparsable`). The lines come in run order, also through a pipe that merges stdout and stderr
@@ -180,7 +180,7 @@ clean, 1 findings, 1 unparsable`). The lines come in run order, also through a p
 folder without permission, a bare repository, the inside of `.git`) is `hygiene: cannot judge - <PATH as given> is not a
 readable git repository: ... (`git -C '<PATH>' status` says why; a PATH with an unprintable character gets `git status` run inside it instead)` and exit `2` before any rule runs.
 In GitHub Actions (`GITHUB_ACTIONS=true`) the door first prints `::stop-commands::<token>` on stderr and on stdout, a new random token per run, so no
-workflow command in repository text runs: no `::warning::` or `##[warning]` annotation, no `add-mask`, no `add-matcher`; the stop lasts for the rest of the step, and the door never prints the line that lifts it. Problem matchers registered in the job still read the log (the stop does not reach them). The gate's jobs register only setup-uv's python matcher, whose two-line pattern repository text cannot complete; a matcher another step registers may still match a door line that contains repository text, and the door cannot prevent that.
+workflow command in repository text runs: no `::warning::` or `##[warning]` annotation, no `add-mask`, no `add-matcher`; the stop lasts for the rest of the step, and the door never prints the line that lifts it. Problem matchers registered in the job still read the log (the stop does not reach them). The gate's jobs register only setup-uv's python matcher, which is anchored at the line start and so cannot match repository text; a matcher another step registers may still match a door line that holds repository text, and the door cannot prevent that.
 
 ## `quality scan-staged`
 

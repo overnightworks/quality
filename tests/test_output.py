@@ -4,16 +4,23 @@ import os
 import re
 import subprocess
 import sys
-import unicodedata
 from pathlib import Path
 
 import pytest
-from conftest import FAKE_KEY, allow_config, fake_engine
-from test_architecture import FORBIDDEN, SHOP_DB_IMPORTS_WEB, toml
+from conftest import (
+    FAKE_KEY,
+    FORBIDDEN,
+    SHOP,
+    SHOP_DB_IMPORTS_WEB,
+    allow_config,
+    assert_every_line_starts_with_the_door,
+    fake_engine,
+    toml,
+)
 
 from quality import cli
 from quality.ratchet import BASELINE_PATH
-from quality.report import Finding, printable, render, shell_word
+from quality.report import DETAIL_MARKER, Finding, printable, render, shell_word
 
 DOOR = [sys.executable, "-m", "quality.cli"]
 STOP_LINE = re.compile(r"::stop-commands::([0-9a-f]{32})")
@@ -185,13 +192,6 @@ def door_lines(capsys, *arguments: str) -> tuple[int, list[str]]:
     return code, (captured.out + captured.err).split("\n")
 
 
-def assert_every_line_starts_with_the_door(lines: list[str]) -> None:
-    """#97 rule 2, cell 18: no line repository text could forge, and no raw control character between the lines."""
-    for line in lines:
-        assert not line.lstrip().startswith(("::", "File ", "raise ")), line
-        assert all(unicodedata.category(character) != "Cc" for character in line), line
-
-
 def compose_services(*services: tuple[str, str]) -> dict[str, str]:
     body = "".join(f"  {json.dumps(name)}:\n    image: x\n    ports: [{json.dumps(port)}]\n" for name, port in services)
     return {"compose.yaml": "services:\n" + body}
@@ -269,43 +269,72 @@ def test_a_broken_contract_named_like_a_command_keeps_its_chain_on_its_own_line(
     code, lines = door_lines(capsys, "hygiene", str(repo))
     assert code == 1
     assert "import-contract pyproject.toml - contract guarded ::error::c is broken:" in lines
-    assert any(line.strip("- ") == "shop.db -> shop.web (l.1)" for line in lines), lines
+    assert f"{DETAIL_MARKER}-   shop.db -> shop.web (l.1)" in lines
     assert_every_line_starts_with_the_door(lines)
 
 
-REFUSED_SOURCE_NAMES = [
-    "a\n  File \"ab\", line 1, in b\n  raise E('forged')\nx.py",
-    "a\n::error::x.py",
-    "a\u0085x.py",
-    "lat\udce9.py",
-]
+FORGED_MATCHER_PAIR = ['  File "a", line 1, in b', "  raise E('forged')"]
+INDEPENDENT_SHOP = {"type": "independence", "modules": ["shop.web", "shop.db"]}
+EXHAUSTIVE_LAYERS = {"type": "layers", "layers": ["web", "db"], "containers": ["shop"], "exhaustive": True}
+WRAPPED_MODULE_NAME = "q" * 70 + ' File "ab", line 1, in b ' + "r" * 52 + " raise E('forged')"
+BEHIND_THE_MARKER = DETAIL_MARKER.rstrip() + " "
 
 
-@pytest.mark.parametrize("name", REFUSED_SOURCE_NAMES, ids=["File and raise lines", "workflow command", "C1 control", "invalid UTF-8"])
-def test_a_source_path_with_a_control_character_is_refused_as_one_line(build_repo, capsys, name):
-    """#97 rule 2, cell 18 and cell 12: no tracked source name reaches import-linter's output, so none forges a line."""
-    repo = build_repo({**SHOP_DB_IMPORTS_WEB, f"src/shop/{name}": "import shop.web\n", "pyproject.toml": toml(FORBIDDEN)})
-    code, lines = door_lines(capsys, "hygiene", str(repo))
-    refusals = [line for line in lines if line.startswith("hygiene: import-contract cannot judge - ")]
-    assert (code, len(refusals)) == (2, 1), lines
+def broken_contract_lines(capsys, files: dict[str, str], build_repo) -> list[str]:
+    code, lines = door_lines(capsys, "hygiene", str(build_repo(files)))
+    assert code == 1, lines
     assert_every_line_starts_with_the_door(lines)
+    return lines
 
 
-def test_a_source_directory_with_a_control_character_is_refused_as_one_line(build_repo, capsys):
+def test_a_long_module_name_import_linter_would_wrap_cannot_forge_a_matcher_pair(build_repo, capsys):
+    """#97 rule 2, cell 18 (Opus D1): rich's soft wrap would put `File "ab", ...` and `raise ...` at the line start."""
+    files = {**SHOP, f"src/shop/{WRAPPED_MODULE_NAME}.py": "", "pyproject.toml": toml(EXHAUSTIVE_LAYERS)}
+    lines = broken_contract_lines(capsys, files, build_repo)
+    assert f"{BEHIND_THE_MARKER}- shop.{WRAPPED_MODULE_NAME}" in lines
+
+
+@pytest.mark.parametrize("guidance", [FORGED_MATCHER_PAIR, "\n".join(FORGED_MATCHER_PAIR)], ids=["list", "multi-line text"])
+def test_contract_guidance_with_several_lines_is_judged_and_printed_behind_the_marker(build_repo, capsys, guidance):
+    """#97 rule 2, cell 18 (Codex F1, Opus D2): legitimate multi-line guidance is judged as before: exit 1."""
+    contract = {**INDEPENDENT_SHOP, "broken_contract_guidance": guidance}
+    lines = broken_contract_lines(capsys, {**SHOP_DB_IMPORTS_WEB, "pyproject.toml": toml(contract)}, build_repo)
+    assert all(f"{BEHIND_THE_MARKER}{line}" in lines for line in FORGED_MATCHER_PAIR)
+
+
+@pytest.mark.parametrize(
+    ("name", "text_after_the_line_feed"),
+    [("a\n::error::x", "::error::x"), ("a\n  File \"ab\", line 1, in b\n  raise E('forged')\nx", "  raise E('forged')")],
+    ids=["workflow command", "File and raise lines"],
+)
+def test_a_module_name_with_a_line_feed_is_judged_and_its_second_line_stays_behind_the_marker(
+    build_repo, capsys, name, text_after_the_line_feed
+):
+    """#97 rule 2, cell 18 and cell 12: a tracked source name no longer stops the judgement, and forges no line."""
+    files = {**SHOP_DB_IMPORTS_WEB, f"src/shop/{name}.py": "import shop.web\n",
+             "pyproject.toml": toml({**FORBIDDEN, "source_modules": ["shop.*"]})}
+    lines = broken_contract_lines(capsys, files, build_repo)
+    assert any(line.startswith(f"{BEHIND_THE_MARKER}{text_after_the_line_feed}") for line in lines), lines
+
+
+def test_a_source_directory_with_a_line_feed_is_judged_without_a_forged_line(build_repo, capsys):
     """#97 rule 2, cell 18: a package directory name is judged like a file name."""
-    repo = build_repo({**SHOP_DB_IMPORTS_WEB, "src/shop/a\n::error::x/__init__.py": "", "pyproject.toml": toml(FORBIDDEN)})
-    code, lines = door_lines(capsys, "hygiene", str(repo))
-    refusals = [line for line in lines if line.startswith("hygiene: import-contract cannot judge - ")]
-    assert (code, len(refusals)) == (2, 1), lines
-    assert_every_line_starts_with_the_door(lines)
+    files = {**SHOP_DB_IMPORTS_WEB, "src/shop/a\n::error::x/__init__.py": "", "pyproject.toml": toml(FORBIDDEN)}
+    broken_contract_lines(capsys, files, build_repo)
 
 
 @pytest.mark.parametrize("name", ["guarded\n::error::c", "guarded\x1b[31m"], ids=["line feed", "escape"])
-def test_a_contract_name_with_a_control_character_is_refused_as_one_line(build_repo, capsys, name):
-    """#97 rule 2, cell 10a: import-linter would print the name into the chain output, so the config is refused."""
-    repo = build_repo({**SHOP_DB_IMPORTS_WEB, "pyproject.toml": toml({**FORBIDDEN, "name": name})})
-    code, lines = door_lines(capsys, "hygiene", str(repo))
-    refusals = [line for line in lines if line.startswith("hygiene: import-contract cannot judge - pyproject.toml holds ")]
+def test_a_contract_name_with_a_control_character_is_judged_and_prints_escaped(build_repo, capsys, name):
+    """#97 rule 2, cell 10a: the name prints escaped on the finding's line and the chain stays behind the marker."""
+    lines = broken_contract_lines(capsys, {**SHOP_DB_IMPORTS_WEB, "pyproject.toml": toml({**FORBIDDEN, "name": name})}, build_repo)
+    assert any(line.startswith("import-contract pyproject.toml - contract guarded\\x") for line in lines), lines
+
+
+def test_a_source_name_that_is_not_utf8_is_still_refused_as_one_line(build_repo, capsys):
+    """#97 rule 2, cell 12: invalid UTF-8 in a tracked source name is refused before import-linter renders it."""
+    files = {**SHOP_DB_IMPORTS_WEB, "src/shop/lat\udce9.py": "import shop.web\n", "pyproject.toml": toml(FORBIDDEN)}
+    code, lines = door_lines(capsys, "hygiene", str(build_repo(files)))
+    refusals = [line for line in lines if line.startswith("hygiene: import-contract cannot judge - ")]
     assert (code, len(refusals)) == (2, 1), lines
     assert_every_line_starts_with_the_door(lines)
 
@@ -313,7 +342,9 @@ def test_a_contract_name_with_a_control_character_is_refused_as_one_line(build_r
 def test_a_finding_prints_its_detail_and_fix_escaped(capsys):
     """#97 rule 2: every field of a finding, detail lines and fix included, prints without a raw control character."""
     finding = Finding("r", "p", None, "why", "fix\x1b[31m\n::error::f", detail=("one\n::error::d", "two\x1b"))
-    assert render(finding) == "r p - why\none\\x0a::error::d\ntwo\\x1b\n  Fix: fix\\x1b[31m\\x0a::error::f"
+    assert render(finding) == (
+        f"r p - why\n{DETAIL_MARKER}one\\x0a::error::d\n{DETAIL_MARKER}two\\x1b\n  Fix: fix\\x1b[31m\\x0a::error::f"
+    )
 
 
 def test_an_engine_stderr_with_several_lines_prints_as_one_escaped_line(build_repo, clean_engines, capsys):

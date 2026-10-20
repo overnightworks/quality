@@ -7,8 +7,7 @@ import threading
 from pathlib import Path
 
 import pytest
-from conftest import GIT_IDENTITY, UNKNOWN_KEY_CONFIGS
-from test_output import assert_every_line_starts_with_the_door
+from conftest import GIT_IDENTITY, UNKNOWN_KEY_CONFIGS, assert_every_line_starts_with_the_door
 from test_sonar import Responder, reply
 
 from quality import cli, verdict

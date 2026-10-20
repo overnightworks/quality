@@ -1,7 +1,9 @@
 import hashlib
+import json
 import os
 import shutil
 import subprocess
+import unicodedata
 from collections.abc import Callable
 from pathlib import Path
 
@@ -21,10 +23,26 @@ UNKNOWN_KEY_CONFIGS = pytest.mark.parametrize(
     ids=["unknown gate key", "unknown table"],
 )
 RepoBuilder = Callable[[dict[str, str]], Path]
+SHOP = {"src/shop/__init__.py": "", "src/shop/web.py": "", "src/shop/api.py": "", "src/shop/db.py": "x = 1\n"}
+SHOP_DB_IMPORTS_WEB = {**SHOP, "src/shop/db.py": "import shop.web\n"}
+FORBIDDEN = {"type": "forbidden", "source_modules": ["shop.db"], "forbidden_modules": ["shop.web"]}
 
 
 def sha256_of(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def toml(contract: dict, roots: tuple[str, ...] = ("shop",)) -> str:
+    """A `pyproject.toml` with one contract named `guarded`; JSON strings, lists and booleans are TOML too."""
+    entries = "".join(f"{key} = {json.dumps(value)}\n" for key, value in {"name": "guarded", **contract}.items())
+    return f"[tool.importlinter]\nroot_packages = {json.dumps(list(roots))}\n\n[[tool.importlinter.contracts]]\n{entries}"
+
+
+def assert_every_line_starts_with_the_door(lines: list[str]) -> None:
+    """#97 rule 2, cell 18: no line repository text could forge, and no raw control character between the lines."""
+    for line in lines:
+        assert not line.lstrip().startswith(("::", "File ", "raise ")), line
+        assert all(unicodedata.category(character) != "Cc" for character in line), line
 
 
 def allow_config(*entries: tuple[str, str, str, str]) -> str:
