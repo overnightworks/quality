@@ -43,6 +43,12 @@ def isolated_git_config(monkeypatch):
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
 
 
+@pytest.fixture(autouse=True)
+def local_door(monkeypatch):
+    """Under GitHub Actions the door stops workflow commands; tests that expect the local door must not inherit that."""
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+
+
 def make_repo(directory: Path, files: dict[str, str]) -> Path:
     """A git repository at `directory` whose one commit tracks exactly `files`, ignored names included."""
     git = ["git", "-C", str(directory), *GIT_IDENTITY]

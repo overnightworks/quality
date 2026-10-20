@@ -177,6 +177,8 @@ clean, 1 findings, 1 unparsable`). The lines come in run order, also through a p
 (never clean), otherwise `1` if any rule has findings, otherwise `0`. A path git cannot read as a work tree (a file, a missing path, a
 folder without permission, a bare repository, the inside of `.git`) is `hygiene: cannot judge - <PATH as given> is not a
 readable git repository: ... (`git -C '<PATH>' status` says why; a PATH with an unprintable character gets `git status` run inside it instead)` and exit `2` before any rule runs.
+In GitHub Actions (`GITHUB_ACTIONS=true`) the door first prints `::stop-commands::<token>` on stderr and on stdout, a new random token per run, so no
+workflow command in repository text runs: no `::warning::` or `##[warning]` annotation, no `add-mask`, no `add-matcher`; the stop lasts for the rest of the step, and the door never prints the line that lifts it. Problem matchers registered in the job (such as setup-uv's) still read the log, so the door's own escaping of repository text, not yet in place, is what keeps them from matching.
 
 ## `quality scan-staged`
 
@@ -269,6 +271,8 @@ Each line has a reason:
   [GitHub's reusable-workflow documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations)),
   so without `actions: read` the run fails at startup and adds no `quality / verdict` check. Where a ruleset or `aco land`
   requires that check, the pull request cannot merge; where nothing requires it, it merges unjudged.
+- **The door stops workflow commands for the rest of its step.** gate.yml runs `quality` alone in each of its steps; a
+  workflow that runs `quality` itself writes its own workflow commands (`::notice::`, `::group::` or any other) in a separate step.
 - **`secrets: SONAR_TOKEN`** and the optional **`with: coverage-artifact`** are described under
   [`quality sonar findings`](#quality-sonar-findings) and [Coverage on new code](#coverage-on-new-code).
 - **`uses:` pins a commit** (`@<commit sha> # v<tag>`), and Dependabot bumps it where the repository's `.github/dependabot.yml` enables the `github-actions` ecosystem.
