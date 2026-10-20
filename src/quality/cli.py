@@ -1,10 +1,11 @@
 import argparse
 import json
 import os
+import secrets
 import sys
 import time
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -313,12 +314,27 @@ def append_step_summary(report: str) -> None:
             handle.write(report + "\n")
 
 
-def run(door: Callable[[], int] = main) -> None:
+def run(door: Callable[[], int] = main, environment: Mapping[str, str] = os.environ) -> None:
     # stderr is line-buffered since Python 3.9, but a pipe makes stdout block-buffered, so `2>&1` showed stderr first.
     # stdout is None when fd 1 was closed before Python started.
     if sys.stdout is not None:
         sys.stdout.reconfigure(line_buffering=True)
+    if environment.get("GITHUB_ACTIONS") == "true":
+        stop_workflow_commands()
     sys.exit(door())
+
+
+def stop_workflow_commands() -> None:
+    """Repository text can spell a workflow command (`::warning::`, `##[add-mask]`), and the runner would run it.
+
+    The stop lasts the rest of the step: the runner keeps the pause per step, and the door never prints the line that
+    lifts it. The runner reads the two pipes without order and hands on stderr first, so each stream starts with the
+    stop. The token is new per run and appears only in this line, which the runner masks.
+    """
+    stop = f"::stop-commands::{secrets.token_hex(16)}"
+    for stream in (sys.stderr, sys.stdout):
+        if stream is not None:
+            print(stop, file=stream, flush=True)
 
 
 if __name__ == "__main__":

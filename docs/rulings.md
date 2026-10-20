@@ -187,3 +187,11 @@ It chose the fix `git --literal-pathspecs rm --cached -- <shlex-quoted name>`, a
 ## Operator ruling (19.10.2026): document first, then an allowlist
 
 „Erst Doku, dann Erlaubnisliste (empfohlen)“ (`network_mode: host` in compose files, [#78](https://github.com/overnightworks/quality/issues/78)).
+
+## Operator ruling (20.10.2026): stop the workflow commands and escape the text
+
+Asked: „Befund 132: Dateinamen oder Compose-Texte aus einem Repo können im CI-Log GitHub-Befehle auslösen und so gefälschte Warnungen im PR erzeugen. Der Schaden ist gering, aber es ist eine Lücke im Sicherheits-Gate. Wie schließen wir sie?“ Options: „Beides (empfohlen)“, „Nur abschalten“, „Nur escapen“.
+
+„Beides (empfohlen)“ ([#89](https://github.com/overnightworks/quality/issues/89)).
+
+In GitHub Actions the door stops workflow commands with a per-run token, and repository text prints its control characters escaped through one boundary. The stop landed first (#89, Part A); the escaping follows as its own item.
