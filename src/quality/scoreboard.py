@@ -84,16 +84,27 @@ class Switch(Enum):
     ALWAYS = "always"
     SIZE_BASELINE = "a size baseline"
     IMPORT_LINTER_CONFIG = "an import-linter config"
+    CLONE_TABLE = "a clone table"
     REPORT_ONLY = "report only"
 
 
 @dataclass(frozen=True)
+class SwitchChange:
+    """From `release` on (None: main only) `switch` decides what the gate does with the rule."""
+
+    release: str | None
+    switch: Switch
+
+
+@dataclass(frozen=True)
 class RuleRelease:
-    """A rule of the door, the first gate release that judges it (None: main only) and what switches it on."""
+    """A rule of the door, the first gate release that judges it (None: main only), what switches it on and how that
+    changes at a later release."""
 
     rule: str
     first_release: str | None
     switch: Switch
+    switched: SwitchChange | None = None
 
 
 # In cell order. The tripwire test holds the ids equal to the rules `hygiene.run_hygiene` judges.
@@ -107,7 +118,7 @@ RULES = (
     RuleRelease(advisories.RULE, RATCHET_RELEASE, Switch.ALWAYS),
     RuleRelease(ratchet.SIZE, RATCHET_RELEASE, Switch.SIZE_BASELINE),
     RuleRelease(architecture.RULE, RATCHET_RELEASE, Switch.IMPORT_LINTER_CONFIG),
-    RuleRelease(clones.RULE, CLONE_RELEASE, Switch.REPORT_ONLY),
+    RuleRelease(clones.RULE, CLONE_RELEASE, Switch.REPORT_ONLY, SwitchChange(None, Switch.CLONE_TABLE)),
 )
 OLDEST_RELEASE = min((rule.first_release for rule in RULES if rule.first_release), key=release_order)
 EVERY_RELEASE_ENFORCES = tuple(
@@ -143,11 +154,12 @@ class Workflows:
 
 @dataclass(frozen=True)
 class Declared:
-    """What a clone's own files switch on: the gate settings, a size baseline, an import-linter config, and the files
-    among them that could not be read."""
+    """What a clone's own files switch on: the gate settings, a size baseline, a clone table, an import-linter config,
+    and the files among them that could not be read."""
 
     settings: config.GateSettings | None
     has_baseline: bool
+    has_clone_table: bool
     has_import_config: bool
     unreadable: frozenset[str]
 
@@ -389,22 +401,24 @@ def measure_public(url: str) -> Row:
 
 
 def read_declared(clone: Path, tracked: list[str]) -> Declared:
-    """The clone's gate settings, size baseline and import-linter config; a file that cannot be read is named."""
+    """The clone's gate settings, size baseline, clone table and import-linter config; a file that cannot be read is named."""
     unreadable: set[str] = set()
-    settings, has_baseline, has_import_config = None, False, False
+    settings, has_baseline, has_clone_table, has_import_config = None, False, False, False
     try:
         settings = config.read_gate_settings(clone) if config.CONFIG_PATH in tracked else None
     except config.ConfigError:
         unreadable.add(config.CONFIG_PATH)
     try:
-        has_baseline = hygiene.read_baseline(clone) is not None
+        baseline = hygiene.read_baseline(clone)
+        has_baseline = baseline is not None
+        has_clone_table = baseline is not None and baseline.clones is not None
     except (hygiene.CannotJudge, ratchet.SizeError):
         unreadable.add(ratchet.BASELINE_PATH)
     try:
         has_import_config = find_import_config(clone, tracked)
     except (repository.RepositoryFileError, architecture.ContractError):
         unreadable.add(IMPORT_LINTER_CONFIG)
-    return Declared(settings, has_baseline, has_import_config, frozenset(unreadable))
+    return Declared(settings, has_baseline, has_clone_table, has_import_config, frozenset(unreadable))
 
 
 def find_import_config(clone: Path, tracked: list[str]) -> bool:
@@ -571,7 +585,21 @@ def rule_cell(rule: RuleRelease, release: Gate | str, declared: Declared) -> Cel
             return NOT_RELEASED
         if release_order(release) < release_order(rule.first_release):
             return f"not in {release}"
-    return switch_words(rule.switch, declared)
+    return switch_words(switch_at(rule, release), declared)
+
+
+def switch_at(rule: RuleRelease, release: Gate | str) -> Switch:
+    """The rule's later switch for main and for a tag at or above the change, else its first switch."""
+    change = rule.switched
+    if change is None:
+        return rule.switch
+    if release is Gate.MAIN:
+        after_change = True
+    else:
+        after_change = (
+            isinstance(release, str) and change.release is not None and release_order(release) >= release_order(change.release)
+        )
+    return change.switch if after_change else rule.switch
 
 
 def switch_words(switch: Switch, declared: Declared) -> Cell:
@@ -579,11 +607,11 @@ def switch_words(switch: Switch, declared: Declared) -> Cell:
         return ENFORCED
     if switch is Switch.REPORT_ONLY:
         return REPORT_ONLY
-    file, present = (
-        (ratchet.BASELINE_PATH, declared.has_baseline)
-        if switch is Switch.SIZE_BASELINE
-        else (IMPORT_LINTER_CONFIG, declared.has_import_config)
-    )
+    file, present = {
+        Switch.SIZE_BASELINE: (ratchet.BASELINE_PATH, declared.has_baseline),
+        Switch.CLONE_TABLE: (ratchet.BASELINE_PATH, declared.has_clone_table),
+        Switch.IMPORT_LINTER_CONFIG: (IMPORT_LINTER_CONFIG, declared.has_import_config),
+    }[switch]
     if file in declared.unreadable:
         return CannotRead((file,))
     return ENFORCED if present else REPORT_ONLY
