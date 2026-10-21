@@ -94,24 +94,11 @@ def test_two_callers_with_two_pins_are_both_named_sorted_and_joined(scoreboard, 
     "content",
     [
         "jobs: [unclosed\n",
-        "env:\n  BUILD_DATE: 2026-99-99\njobs: {}\n",
-        "env:\n  BUILD_DATE: !!timestamp zz\njobs: {}\n",
-        "env:\n  RETRIES: !!int ''\njobs: {}\n",
-        "env:\n  FLAG: !!bool x\njobs: {}\n",
         "env:\n  nested: " + "[" * 100000 + "\njobs: {}\n",
         "? [a]\n: b\njobs: {}\n",
-        "env:\n  RATIO: 1:" + ":".join(["1"] * 400) + ".5\njobs: {}\n",
+        'env:\n  escape: "\\UFFFFFFFF"\njobs: {}\n',
     ],
-    ids=[
-        "not YAML",
-        "an impossible date",
-        "a timestamp tag on a non-timestamp",
-        "an empty integer",
-        "an unknown boolean",
-        "nesting past the recursion limit",
-        "an unhashable key",
-        "a sexagesimal float too large for a float",
-    ],
+    ids=["not YAML", "nesting past the recursion limit", "an unhashable key", "a unicode escape past the last code point"],
 )
 def test_a_workflow_that_is_not_yaml_is_named_in_its_cells_and_the_other_rows_stand(scoreboard, public, content):
     """#123 E11, cell 8: `cannot read <file>`, exit 2, and nothing about the broken file is run or guessed."""
@@ -120,6 +107,25 @@ def test_a_workflow_that_is_not_yaml_is_named_in_its_cells_and_the_other_rows_st
     assert code == 2, output
     assert matrix_row(output, "broken")[1:] == ["cannot read .github/workflows/x.yml"] * 2
     assert matrix_row(output, "fine")[1] == "v0.10.0"
+
+
+@pytest.mark.parametrize(
+    "scalar",
+    [
+        "BUILD_DATE: 2026-99-99",
+        "BUILD_DATE: !!timestamp zz",
+        "RETRIES: !!int ''",
+        "FLAG: !!bool x",
+        "RATIO: 1:" + ":".join(["1"] * 400) + ".5",
+    ],
+    ids=["an impossible date", "a timestamp tag on a non-timestamp", "an empty integer", "an unknown boolean", "a sexagesimal float too large for a float"],
+)
+def test_a_scalar_that_is_no_valid_value_parses_as_text_and_the_workflow_shows_its_pin(scoreboard, public, scalar):
+    """#123 E11, cell 8: only the `uses` strings are read, so a scalar no type accepts does not make the file unreadable."""
+    content = f"env:\n  {scalar}\njobs:\n  gate:\n    uses: {GATE}@{NEWEST}\n"
+    code, output = scoreboard(public("odd", {".github/workflows/x.yml": content}))
+    assert code == 0, output
+    assert matrix_row(output, "odd")[1] == "v0.10.0"
 
 
 def test_unreadable_release_tags_say_so_and_show_pins_as_commits(scoreboard, public):

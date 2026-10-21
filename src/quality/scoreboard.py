@@ -309,9 +309,9 @@ def read_workflows(clone: Path, tracked: list[str]) -> Workflows:
             unreadable.append(name)
             continue
         try:
-            document = yaml.safe_load(text) if text is not None else None
-        # safe_load runs a third-party parser on another repository's untrusted file: any error it raises means the file cannot be read
-        except Exception:  # noqa: BLE001
+            # BaseLoader keeps scalars strings, so no conversion can fail; ValueError is the scanner's chr() on a \U escape past U+10FFFF
+            document = yaml.load(text, Loader=yaml.BaseLoader) if text is not None else None
+        except (yaml.YAMLError, RecursionError, ValueError):
             unreadable.append(name)
             continue
         for uses in job_calls(document):
