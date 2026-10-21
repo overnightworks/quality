@@ -22,6 +22,7 @@ GITLEAKS = "gitleaks"
 CLEAN_EXIT = 0
 GITLEAKS_LEAKS_FOUND = 7  # gitleaks exits 1 on its own errors too, so leaks get a code of their own
 DOWNLOAD_TIMEOUT_SECONDS = 120
+VERSION_TIMEOUT_SECONDS = 30
 SECRET_SCAN_TIMEOUT_SECONDS = 1800  # bounds the scan so the scratch directory and its mirror are always deleted
 STDERR_TAIL_LINES = 5
 LEAK_FIELDS = ("File", "StartLine", "RuleID", "Commit", "Secret")
@@ -67,7 +68,10 @@ def read_pins() -> dict[str, Pin]:
 def install(directory: Path, pins: dict[str, Pin]) -> dict[str, bool]:
     """Engine name -> whether it was downloaded; an engine that already reports its pinned version is left alone."""
     # The operator picks the install directory on purpose, so Sonar's path-traversal taint is accepted here.
-    directory.mkdir(parents=True, exist_ok=True)  # NOSONAR(S8707)
+    try:
+        directory.mkdir(parents=True, exist_ok=True)  # NOSONAR(S8707)
+    except OSError as error:
+        raise EngineError(f"cannot create {directory}: {error.strerror}") from error
     downloaded = {}
     for name, pin in pins.items():
         target = engine_path(directory, name)
@@ -313,7 +317,7 @@ def read_blob(
 
 
 def verify_version(binary: Path, engine_name: str, pinned: str) -> None:
-    asked = run([str(binary), *VERSION_ARGUMENTS[engine_name]])
+    asked = run([str(binary), *VERSION_ARGUMENTS[engine_name]], timeout=VERSION_TIMEOUT_SECONDS)
     if asked.returncode != 0:
         raise EngineError(f"{binary} version exited {asked.returncode}{stderr_tail(asked.stderr)}")
     reported = (asked.stdout.strip().splitlines() or [""])[0].split(" ")[-1]  # "zizmor 1.2.3", or just "1.2.3"
@@ -332,7 +336,9 @@ def run(
         )
     except subprocess.TimeoutExpired:
         raise EngineError(f"{command[0]} did not finish within {timeout} seconds") from None
-    except (OSError, ValueError) as error:  # ValueError: output that is not text
+    except UnicodeDecodeError as error:
+        raise EngineError(f"{command[0]} printed output that is not UTF-8 ({error})") from error
+    except (OSError, ValueError) as error:  # ValueError: an argument the OS refuses, such as an embedded null byte
         raise EngineError(f"cannot run {command[0]}: {error}") from error
 
 

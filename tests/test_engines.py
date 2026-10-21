@@ -45,14 +45,14 @@ def local_pin(tmp_path: Path, archive: bytes, version: str = "1.2.3", sha256: st
 PINNED = engines.read_pins()["gitleaks"].version
 
 
-def fake_gitleaks(tmp_path: Path, version: str = PINNED, on_scan: str = "exit 0", version_exit: int = 0) -> Path:
+def fake_gitleaks(tmp_path: Path, version: str = PINNED, on_scan: str = "exit 0", on_version: str = "exit 0") -> Path:
     """An engine directory whose gitleaks prints `version`, and on any other command runs `on_scan`."""
     engine_dir = tmp_path / "engines"
     engine_dir.mkdir(parents=True)
     binary = engine_dir / "gitleaks"
     binary.write_text(
         "#!/bin/sh\n"
-        f'if [ "$1" = version ]; then echo {version}; exit {version_exit}; fi\n'
+        f'if [ "$1" = version ]; then echo {version}; {on_version}; fi\n'
         'printf "%s\\n" "$@" > "$0.arguments"\n'
         'while [ $# -gt 0 ]; do [ "$1" = --report-path ] && report=$2; shift; done\n'
         f"{on_scan}\n"
@@ -112,13 +112,6 @@ def test_pin_file_names_every_engine_with_a_full_checksum(engine):
     assert re.fullmatch(r"[0-9a-f]{64}", pin.sha256)
 
 
-def test_install_unpacks_a_verified_download_as_an_executable(tmp_path):
-    """#13 rule 1: a download that matches its checksum is installed as an executable."""
-    pins = {"gitleaks": local_pin(tmp_path, archive_with("#!/bin/sh\n"))}
-    engines.install(tmp_path / "bin", pins)
-    assert os.access(tmp_path / "bin" / "gitleaks", os.X_OK)
-
-
 def test_install_follows_a_redirect_to_another_host_without_sending_credentials(tmp_path, serve):
     """#13 rule 1 and fact 3: a redirect to another host is followed, and no credential travels with it."""
     archive = archive_with("#!/bin/sh\n")
@@ -141,19 +134,26 @@ def test_a_redirected_download_with_the_wrong_checksum_installs_nothing(tmp_path
     assert not (tmp_path / "bin" / "gitleaks").exists()
 
 
-def test_wrong_checksum_is_exit_2_and_installs_nothing(tmp_path, capsys):
-    """#13 rule 1: a wrong checksum is exit 2 and leaves no binary."""
-    pin = local_pin(tmp_path, archive_with("x"), sha256="0" * 64)
-    assert cli.main(["engines", "install", str(tmp_path / "bin")], read_pins=lambda: {"gitleaks": pin}) == 2
-    assert "sha256" in capsys.readouterr().err
-    assert not (tmp_path / "bin" / "gitleaks").exists()
-
-
-def test_unreachable_download_is_exit_2(tmp_path, capsys):
-    """#13 rule 1: a download that cannot be fetched is exit 2."""
-    pin = Pin("1.2.3", (tmp_path / "missing.tar.gz").as_uri(), "0" * 64)
-    assert cli.main(["engines", "install", str(tmp_path / "bin")], read_pins=lambda: {"gitleaks": pin}) == 2
-    assert "cannot download" in capsys.readouterr().err
+@pytest.mark.parametrize(
+    ("failure", "expected"),
+    [
+        ("wrong-checksum", "sha256"),
+        ("unreachable", "cannot download"),
+        pytest.param("uncreatable", "cannot create", marks=pytest.mark.skipif(os.geteuid() == 0, reason="root ignores modes")),
+    ],
+)
+def test_an_install_that_cannot_complete_is_exit_2_and_installs_nothing(tmp_path, capsys, failure, expected):
+    """#13 rule 1, #134 rule 2: a wrong checksum, an unreachable download or an uncreatable directory is exit 2."""
+    pin = local_pin(tmp_path, archive_with("x"), sha256="0" * 64 if failure == "wrong-checksum" else None)
+    if failure == "unreachable":
+        pin = Pin("1.2.3", (tmp_path / "missing.tar.gz").as_uri(), "0" * 64)
+    directory = tmp_path / "bin"
+    if failure == "uncreatable":
+        directory = tmp_path / "read-only" / "bin"
+        directory.parent.mkdir(mode=0o500)
+    assert cli.main(["engines", "install", str(directory)], read_pins=lambda: {"gitleaks": pin}) == 2
+    assert expected in capsys.readouterr().err
+    assert not (directory / "gitleaks").exists()
 
 
 VERSIONED_BINARY = "#!/bin/sh\necho 1.2.3\n"
@@ -165,13 +165,14 @@ def install_versioned_gitleaks(tmp_path: Path) -> tuple[Path, dict[str, Pin]]:
 
 
 def test_a_second_install_downloads_nothing_even_when_the_url_is_gone(tmp_path, capsys):
-    """#25 rule 3: an engine that reports its pinned version is not downloaded again."""
+    """#25 rules 2 and 3: an engine that reports its pinned version is verified and not downloaded again."""
     directory, pins = install_versioned_gitleaks(tmp_path)
     assert cli.main(["engines", "install", str(directory)], read_pins=lambda: pins) == 0
     assert capsys.readouterr().out.strip() == "gitleaks 1.2.3 installed"
     unreachable = {"gitleaks": Pin("1.2.3", (tmp_path / "gone.tar.gz").as_uri(), "0" * 64)}
     assert cli.main(["engines", "install", str(directory)], read_pins=lambda: unreachable) == 0
     assert capsys.readouterr().out.strip() == "gitleaks 1.2.3 already installed"
+    assert cli.main(["engines", "verify", str(directory)], read_pins=lambda: pins) == 0
 
 
 @pytest.mark.parametrize("damage", ["deleted", "wrong-version"])
@@ -188,22 +189,14 @@ def test_install_reinstalls_a_missing_or_wrong_binary(tmp_path, damage):
     assert binary.read_text() == VERSIONED_BINARY
 
 
-def test_verify_is_exit_0_when_every_engine_reports_its_pin(tmp_path):
-    """#25 rule 2: a match is exit 0."""
-    directory, pins = install_versioned_gitleaks(tmp_path)
-    engines.install(directory, pins)
-    assert cli.main(["engines", "verify", str(directory)], read_pins=lambda: pins) == 0
-
-
 def test_verify_is_exit_2_naming_both_versions_on_a_mismatch(tmp_path, capsys):
     """#25 rule 2: gitleaks 8.30.0 where 8.30.1 is pinned is exit 2, one line, both versions."""
     pins = {"gitleaks": Pin("8.30.1", "unused", "0" * 64)}
     directory = fake_gitleaks(tmp_path / "fake", "8.30.0")
     assert cli.main(["engines", "verify", str(directory)], read_pins=lambda: pins) == 2
-    lines = capsys.readouterr().err.strip().splitlines()
-    assert len(lines) == 1
-    assert "'8.30.0'" in lines[0]
-    assert "'8.30.1'" in lines[0]
+    (line,) = capsys.readouterr().err.strip().splitlines()
+    assert "'8.30.0'" in line
+    assert "'8.30.1'" in line
 
 
 def test_scan_refuses_an_installed_binary_at_another_version(tmp_path, build_repo, capsys):
@@ -220,10 +213,16 @@ def test_scan_never_falls_back_to_a_gitleaks_on_path(tmp_path, build_repo, monke
     assert "cannot run" in hygiene_exit_2(build_repo({}), tmp_path / "empty", capsys)
 
 
-def test_a_version_command_that_fails_is_exit_2_even_when_it_prints_the_pin(tmp_path, build_repo, capsys):
-    """#13 rule 2: an engine whose version command exits non-zero is not trusted."""
-    engine_dir = fake_gitleaks(tmp_path / "fake", version_exit=3)
-    assert "version exited 3" in hygiene_exit_2(build_repo({}), engine_dir, capsys)
+@pytest.mark.parametrize(
+    ("on_version", "expected"),
+    [("exit 3", "version exited 3"), ("exec sleep 30", "did not finish within 0.2 seconds")],
+    ids=["fails-after-printing-the-pin", "does-not-finish"],
+)
+def test_a_version_command_that_fails_or_hangs_is_exit_2(tmp_path, build_repo, monkeypatch, capsys, on_version, expected):
+    """#13 rule 2, #134 rule 1: an engine whose version command exits non-zero or hangs is not trusted."""
+    monkeypatch.setattr(engines, "VERSION_TIMEOUT_SECONDS", 0.2)
+    engine_dir = fake_gitleaks(tmp_path / "fake", on_version=on_version)
+    assert expected in hygiene_exit_2(build_repo({}), engine_dir, capsys)
 
 
 @pytest.mark.parametrize(
@@ -594,7 +593,7 @@ def fake_workflow_engines(tmp_path: Path, on_scan: str) -> Path:
         ("exit 0", "cannot read the actionlint report"),
         ("echo boom >&2; exit 3", "actionlint exited 3, neither 'clean' nor 'findings': boom"),
         ('printf "[" ; exit 0', "cannot read the actionlint report"),
-        ('printf "\\377\\376"; exit 0', "cannot run"),
+        ('printf "\\377\\376"; exit 0', "printed output that is not UTF-8"),
     ],
     ids=["exit-0-without-report", "error-exit", "cut-off-report", "undecodable-report"],
 )
@@ -661,7 +660,7 @@ INVALID_RUNS_ON = "on: push\npermissions: {}\njobs:\n  j:\n    runs-on: ${{ foo(
     ids=["unpinned-action-without-permissions", "invalid-runs-on-expression", "local-reusable-call-with-dot-slash"],
 )
 def test_a_known_bad_workflow_fails(workflow_repo, installed_engines, capsys, workflow, expected):
-    """#15 rule 3: the real engines fail a known bad workflow at file:line."""
+    """#15 rules 3 and 4: the real engines fail a known bad workflow at file:line."""
     assert scan(workflow_repo(workflow), installed_engines) == 1
     assert expected in capsys.readouterr().out
 
