@@ -297,6 +297,9 @@ def git(arguments: list[str], failure: str, env: dict[str, str] | None = None) -
     return done.stdout
 
 
+REGULAR_FILE_MODES = frozenset({"100644", "100755"})
+
+
 def read_blob(
     repository: Path, revision: str, path: str, unlisted: str, unreadable: str, env: dict[str, str] | None = None
 ) -> str | None:
@@ -305,11 +308,16 @@ def read_blob(
     Each caller words its own failures: `unlisted` when the tree cannot be listed, `unreadable` when the file cannot.
     """
     in_repository = ["-C", str(repository.resolve())]
-    if not git([*in_repository, "ls-tree", "--end-of-options", revision, "--", path], unlisted, env).strip():
+    listed = run(["git", *in_repository, "ls-tree", "--end-of-options", revision, "--", path], env=env)
+    if listed.returncode != 0:
+        raise EngineError(f"{unlisted}: git exited {listed.returncode}")
+    if not listed.stdout.strip():
         return None
+    if listed.stdout.split()[0] not in REGULAR_FILE_MODES:
+        raise EngineError(f"{unreadable}: not a regular file")
     shown = run(["git", *in_repository, "show", "--end-of-options", f"{revision}:{path}"], env=env, encoding=None)
     if shown.returncode != 0:
-        raise EngineError(f"{unreadable}{stderr_tail(shown.stderr.decode(errors='replace'))}")
+        raise EngineError(f"{unreadable}: git exited {shown.returncode}")
     try:
         return shown.stdout.decode("utf-8")
     except UnicodeDecodeError as error:
