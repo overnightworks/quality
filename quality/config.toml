@@ -1,6 +1,12 @@
 [gate]
 mandatory_jobs = ["quality"]
-legacy = "fail"
+legacy = "report"
+
+[[gate.loosened]]
+what = "legacy fail → report"
+item = "#103"
+date = 2026-10-21
+reason = "scratch proof that a declared loosening is labelled; never merged"
 
 [secrets]
 allow = [
