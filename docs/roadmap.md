@@ -12,7 +12,7 @@
 
 **Landed since the v3 draft** (the sentences below are copied from the draft and brought current only where a landing made them false):
 - quality v0.1.0 (bab8770) and v0.1.1 (75467b7) are tagged.
-- quality v0.2.0 (b16b525, 17.10.2026) is quality#33, the legacy switch, not the Q1b engine. The Q1b engine therefore takes the next minor version after v0.2.0.
+- quality v0.2.0 (b16b525, 17.10.2026) is quality#33, the legacy switch, not the Q1b engine. The Q1b engine therefore takes the next minor version after v0.2.0: v0.3.0 (21.10.2026) is Q1b's first release, and v0.4.0 is its end goal (#45).
 - The emergency-merge door (quality#37) landed (b38045d).
 
 ## 0. What changed against v1, and why
@@ -106,16 +106,16 @@ Some steps grow code on purpose (the Postgres test DB, security fixes, specs); t
 |---|---|---|---|---|
 | **Q0, now** (no gate dependency, parallel) | the ruling | • presentator #169 (HIGH, open since 03.10)<br>• edge alarm `subprocess` timeout (`src/edge_check/host.py:24`)<br>• the **reviewer stopgap** in lane.js: no new file ≥ 800 lines, no new test without a criterion or `defect:#n`, no new `patch(` at an import location | each fix with its regression proof; lane.js on marketplace main | 3 |
 | **Q1a, quality v0.1** | Q0 dispatched | `overnightworks/quality` (public, the operator creates it or says yes) with gate.yml, hygiene, the fail-closed verdict and known-pass/fail fixtures. webauth adopts it **between OIDC slices**. `aco land` requires the verdict **where `quality/config.toml` exists**. **`quality/config.toml` names the repo's mandatory jobs; the verdict reads their results from the run itself, is red when a named job is missing or not successful, and removing a named job is a `loosened[]` entry.** Minutes are measured. | the three concept-v2 phase-0 proofs, plus `aco land` refusing a red verdict in webauth and passing an unadopted repo, plus a PR that drops a mandatory test job turning red | 4–5 |
-| **Q1b, quality engine (the next minor after v0.2.0)** (serial, quality only) | Q1a | • size/CCN ratchet (harvested Python; lizard for TS/Rust; Svelte by lines)<br>• clone ratchet<br>• checker adapters (import-linter, dependency-cruiser, cargo-deny) with every baseline in `baseline.toml`<br>• `loosened[]`<br>• `fleet-quality scoreboard`<br>• a **repo-by-rule matrix** (enforced, report-only, ruled exemption or activation-gated) in quality's `docs/` | proven on aco and songmaker at report level, old scripts deleted (net lines negative) | 6–8 |
+| **Q1b, quality engine (first release v0.3.0, end goal v0.4.0, #45)** (serial, quality only) | Q1a | • size/CCN ratchet (harvested Python; lizard for TS/Rust; Svelte by lines)<br>• clone ratchet<br>• checker adapters (import-linter, dependency-cruiser, cargo-deny) with every baseline in `baseline.toml`<br>• `loosened[]`<br>• `fleet-quality scoreboard`<br>• a **repo-by-rule matrix** (enforced, report-only, ruled exemption or activation-gated) in quality's `docs/` | proven on aco and songmaker at report level, old scripts deleted (net lines negative) | 6–8 |
 | **Q2, adoption** (parallel, one lane per repo) | Q1b | • every active repo: gate, checker contract at baseline, ratchets, T0<br>• every dormant repo: the minimum profile only<br>• **Admission control:** while a repo's adoption lane is open, the head dispatches no feature item in that repo (security exempt), and the lane regenerates its baseline against trunk right before landing | every active repo is at its baseline and can grow no violation; every dormant repo is green on the minimum profile; scoreboard T0 complete | 9 + 4 |
-| **Q3, prerequisites** (parallel) | Q2 in that repo | • songmaker Postgres test DB per worker (material)<br>• agent-providers takes over its tests that songmaker holds (one owner)<br>• quality v0.3: spec lint L1/L12/L13 plus JUnit trace, proven on webauth<br>• the parity protocol proven on one area | each by link | 8–10 |
+| **Q3, prerequisites** (parallel) | Q2 in that repo | • songmaker Postgres test DB per worker (material)<br>• agent-providers takes over its tests that songmaker holds (one owner)<br>• a later minor of quality: spec lint L1/L12/L13 plus JUnit trace, proven on webauth<br>• the parity protocol proven on one area | each by link | 8–10 |
 | **Q4, area cycles** | Q3 in that repo | section B per repo, in the order of section E | each area's done-when; the scoreboard after each area | ~85 |
 | **Q5, dormant repos** | the operator pulls the repo | its area cycles, as in Q4 | as Q4, per area | 0 now |
 | **Alongside** | after Q2, idle capacity | code-graph benchmark (mined real cases; adoption only at ≥ 10 pp recall@5); the operator's GraphRAG on kiln as a later arm | benchmark frozen, first comparison reported | 2–3 |
 
 **Owners:**
 - **Q0:** each fix's own item.
-- **Q1a, Q1b and Q3's v0.3:** the quality epic in `overnightworks/quality`.
+- **Q1a, Q1b and Q3's later minor:** the quality epic in `overnightworks/quality`.
 - **Q2 and Q4:** each repo's quality epic.
 - **The wave as a whole:** quality#2 (Done-when 8). marketplace#80 was closed into it on 18.10.2026.
 
@@ -157,7 +157,7 @@ The head dispatches and reports, and each wave's exit proof is linked from quali
   - Each area becomes its own item only at dispatch, and is cut by the breakdown workflow first.
 - **Order across repos:** a `quality-q0`…`q5` label plus `Blocked by` with real item numbers; `aco next` already computes from them. **No milestones:** GitHub milestones are per repo, so one wave would need the same milestone in 14 repos, which is double bookkeeping next to label and epic. Milestones would be added only if the operator wants them as a view.
 - **Agent contract:** every lane brief points at the area item's body. The area cycle, parity protocol and spec format live in quality's `docs/` so a fresh agent needs nothing else. The reviewer stopgap (Q0) and later the gate refuse what the documents forbid.
-- **Rust trace convention** (kiln feedback, 15.10.2026): `fn kiln_ir_07__name()` trips `non_snake_case` under `clippy -D warnings`. The head's recommendation is the ID as a module (`mod kiln_ir_07 { #[test] fn name() }`), read from the test path in nextest's JUnit, which needs no lint exception. kiln has 36 criteria in `specs/kiln-ir.spec.md` (lane kiln#26). quality v0.3's trace reader accepts that form.
+- **Rust trace convention** (kiln feedback, 15.10.2026): `fn kiln_ir_07__name()` trips `non_snake_case` under `clippy -D warnings`. The head's recommendation is the ID as a module (`mod kiln_ir_07 { #[test] fn name() }`), read from the test path in nextest's JUnit, which needs no lint exception. kiln has 36 criteria in `specs/kiln-ir.spec.md` (lane kiln#26). The trace reader of a later minor accepts that form.
 - **Re-baselining:** the scoreboard is re-measured weekly and at each wave exit, and the roadmap is re-checked at each wave exit. A baseline only falls automatically; it rises only by a cited ruling.
 
 ## G. Decisions for the operator
