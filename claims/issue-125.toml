@@ -1,8 +1,0 @@
-claim_id = "5aad30090dc0455aa4ac11bef8468cde"
-agent = "claude"
-role = "builder"
-base = "dc0dff0c916aae0c5cfbe4324345d722737ce9cd"
-branch = "claude/issue-125-matrix-rule-cells"
-scope = ["AGENTS.md", "README.md", "docs/roadmap.md", "src/quality/cli.py", "src/quality/scoreboard.py", "tests/conftest.py", "tests/test_scoreboard.py", "tests/test_scoreboard_matrix.py"]
-opened_commit = "1242c085cebfd03c7b7d1afc7e14f94bdf69e757"
-whole_reason = "The rule table, the declarations that switch its cells and the cells that read both are one view in scoreboard.py with its matrix tests; the other files are the one-line texts (help string, AGENTS.md, roadmap, the README scoreboard section) that name that view and go stale if they land apart."
