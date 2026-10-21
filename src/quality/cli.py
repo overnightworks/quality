@@ -37,11 +37,13 @@ from quality.sonar import (
 )
 from quality.verdict import (
     PageFetcher,
+    UnsettledRun,
     github_fetcher,
     judge,
     read_base,
     read_head,
     read_jobs,
+    read_settled,
 )
 
 EXIT_CLEAN = 0
@@ -80,7 +82,7 @@ def main(
             say=emit,
         )
     if arguments.command == "verdict":
-        return run_verdict(arguments.path, fetcher_for)
+        return run_verdict(arguments.path, fetcher_for, sleep)
     if arguments.command == "scoreboard":
         return run_scoreboard(arguments.path)
     if arguments.command == "baseline":
@@ -292,22 +294,27 @@ def run_sonar_findings(transport: Transport, sleep: Sleep) -> int:
     return EXIT_FINDINGS if result.fails_the_run else EXIT_CLEAN
 
 
-def run_verdict(path: Path, fetcher_for: Callable[[str], PageFetcher]) -> int:
+def run_verdict(path: Path, fetcher_for: Callable[[str], PageFetcher], sleep: Sleep) -> int:
     try:
         head = read_head(path)
         base_sha = os.environ.get("GATE_BASE_SHA", "")
         base = read_base(path, base_sha) if base_sha else None
-        jobs = read_jobs(
-            os.environ["GITHUB_REPOSITORY"], os.environ["GITHUB_RUN_ID"], fetcher_for(os.environ["GITHUB_TOKEN"])
-        )
         gate_results = {name: need["result"] for name, need in json.loads(os.environ["GATE_NEEDS"]).items()}
-        result = judge(head, base, jobs, gate_results, int(os.environ["GITHUB_RUN_ATTEMPT"]))
+        current_attempt = int(os.environ["GITHUB_RUN_ATTEMPT"])
+        repository_name, run_id = os.environ["GITHUB_REPOSITORY"], os.environ["GITHUB_RUN_ID"]
+        fetch = fetcher_for(os.environ["GITHUB_TOKEN"])
+        settled = read_settled(
+            lambda: read_jobs(repository_name, run_id, fetch),
+            lambda jobs: judge(head, base, jobs, gate_results, current_attempt),
+            sleep,
+        )
     except (CannotJudge, KeyError, ValueError) as error:
-        report = (f"verdict: cannot judge - {error}",)
+        preceding = error.preceding_lines if isinstance(error, UnsettledRun) else ()
+        report = (*preceding, f"verdict: cannot judge - {error}")
         code = EXIT_CANNOT_JUDGE
     else:
-        report = result.lines()
-        code = EXIT_CLEAN if result.green else EXIT_FINDINGS
+        report = settled.lines()
+        code = EXIT_CLEAN if settled.verdict.green else EXIT_FINDINGS
     emit(*report, file=sys.stderr if code == EXIT_CANNOT_JUDGE else sys.stdout)
     append_step_summary(report)
     return code
