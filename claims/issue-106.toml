@@ -1,0 +1,8 @@
+claim_id = "7aa093967b0343c7b6dcae1141b1e228"
+agent = "claude"
+role = "builder"
+base = "c4a76a2423ea6a17d5f75f934b25baad5f529373"
+branch = "claude/issue-106-python-314"
+scope = [".github/workflows/ci.yml", ".github/workflows/gate.yml", ".github/workflows/scoreboard.yml", "pyproject.toml", "sonar-project.properties", "src/quality/repository.py", "uv.lock"]
+opened_commit = "3aa0bb51308409bd3829ed15625e5fd3099939a0"
+whole_reason = "One toolchain move: the floor, the lock, every workflow's Python and Sonar's Python version change together, or CI and the gate disagree on the version."
