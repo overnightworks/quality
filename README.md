@@ -238,6 +238,8 @@ duplicating `quality/fleet.toml` is `cannot judge`, exit `2`.
   comment lines included). Production versus test is the `size` rule's file-name rule, so `scripts/test_inventory.py`
   counts as test. `test:prod` is test lines divided by production lines with two decimals, `—` without production
   lines. The debt columns count files from 800 lines, functions from 60 lines and functions with a CCN above 15.
+- `Clone pairs prod / test` counts the `clone` rule's pairs (two near-identical functions in two files, at 40 tokens and
+  90 %); a pair counts as test only when both sides are tests, so a test that copies production code counts as prod.
 - A file Python cannot parse still has its lines counted; the row's note says how many such files there are, never which.
 - A `private` repository is never measured, because the table is published: it shows `not measured: private`. It is
   checked once with an anonymous `git ls-remote`; if anyone can read it, the row is `cannot judge: declared private

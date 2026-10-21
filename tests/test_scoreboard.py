@@ -18,6 +18,7 @@ from typing import ClassVar
 import pytest
 import yaml
 from conftest import GIT_IDENTITY, make_repo
+from test_clones import function as clone_function
 from test_ratchet import branchy_function, long_file, long_function
 
 from quality import __version__, cli
@@ -26,8 +27,10 @@ from quality.scoreboard import read_fleet, require_anonymous
 WORKFLOWS = Path(__file__).parent.parent / ".github" / "workflows"
 HEADER = (
     "| Repo | Commit | Lines prod / test | test:prod | Files ≥ 800 prod / test | Functions ≥ 60 prod / test "
-    "| CCN > 15 prod / test | Note |"
+    "| CCN > 15 prod / test | Clone pairs prod / test | Note |"
 )
+# 3 + 5 * 7 + 2 = 40 tokens: `arguments`, `arg`, `ID`, seven `Assign, Name, ID, Name, ID` and two `Pass`
+CLONE = clone_function("copied", "value", "local")
 PublicRepo = Callable[[str, dict[str, str]], str]
 
 
@@ -94,7 +97,7 @@ def test_a_public_repo_is_one_row_of_commit_lines_ratio_and_debt(scoreboard, pub
     code, output = scoreboard(url)
     assert code == 0, output
     assert row(output, "alpha") == [
-        "alpha", head_of(url)[:7], "3 / 5", "1.67", "0 / 0", "0 / 0", "0 / 0", ""
+        "alpha", head_of(url)[:7], "3 / 5", "1.67", "0 / 0", "0 / 0", "0 / 0", "0 / 0", ""
     ]
 
 
@@ -177,7 +180,7 @@ def test_an_unparsable_file_is_counted_but_never_named(scoreboard, public):
     code, output = scoreboard(public("broken", {"src/secret_name.py": "def (:\n", "src/ok.py": "a = 1\n"}))
     assert code == 0, output
     assert row(output, "broken")[2] == "2 / 0"
-    assert row(output, "broken")[7] == "1 file not valid Python"
+    assert row(output, "broken")[8] == "1 file not valid Python"
     assert "secret_name" not in output
 
 
@@ -192,7 +195,7 @@ def test_an_unreadable_private_repo_is_not_measured(scoreboard, public, missing)
     """Cell 10, rule 4: a declared private repo that anonymous git cannot read shows only its label."""
     code, output = scoreboard(public("open", {"a.py": "a = 1\n"}), private=[missing])
     assert code == 0, output
-    assert row(output, "gone")[1:] == ["—", "not measured: private", "", "", "", "", ""]
+    assert row(output, "gone")[1:] == ["—", "not measured: private", "", "", "", "", "", ""]
 
 
 def test_a_private_repo_readable_anonymously_cannot_be_judged(scoreboard, public):
@@ -201,7 +204,7 @@ def test_a_private_repo_readable_anonymously_cannot_be_judged(scoreboard, public
     leaky = public("leaky", {"src/inside.py": "a = 1\n"})
     code, output = scoreboard(good, private=[leaky])
     assert code == 2, output
-    assert row(output, "leaky")[1:] == ["—", "cannot judge: declared private but readable", "", "", "", "", ""]
+    assert row(output, "leaky")[1:] == ["—", "cannot judge: declared private but readable", "", "", "", "", "", ""]
     assert "inside" not in output
     assert row(output, "open")[2] == "1 / 0"
 
@@ -405,7 +408,7 @@ def test_the_heading_names_date_version_and_languages(scoreboard, public):
     match = re.fullmatch(rf"\*\*Fleet scoreboard, (\S+), quality {re.escape(__version__)} — Python only\*\*", heading)
     assert match, heading
     assert match.group(1) in {before.isoformat(), after.isoformat()}
-    assert (blank, header, separator) == ("", HEADER, "|---" * 8 + "|")
+    assert (blank, header, separator) == ("", HEADER, "|---" * 9 + "|")
 
 
 def test_the_table_goes_to_stdout_and_identically_to_the_step_summary(scoreboard, public, tmp_path, monkeypatch):
@@ -547,3 +550,19 @@ def test_a_repeated_credentialed_url_is_named_by_its_place_never_its_text(capsys
     assert "public[1] repeats public[0]" in captured.err
     assert "private[0] repeats public[0]" in captured.err
     assert "secret" not in captured.out + captured.err
+
+
+@pytest.mark.parametrize(
+    ("files", "pairs"),
+    [
+        ({"src/one.py": CLONE, "src/two.py": CLONE}, "1 / 0"),
+        ({"tests/test_one.py": CLONE, "tests/test_two.py": CLONE}, "0 / 1"),
+        ({"src/one.py": CLONE, "tests/test_two.py": CLONE}, "1 / 0"),
+    ],
+    ids=["two production files", "two test files", "a test copying production"],
+)
+def test_the_clone_pairs_cell_counts_a_pair_as_test_only_when_both_sides_are_tests(scoreboard, public, files, pairs):
+    """#117 E7, rule 3: a function copied between two files is one pair, prod / test."""
+    code, output = scoreboard(public("twins", files))
+    assert code == 0, output
+    assert row(output, "twins")[7] == pairs
