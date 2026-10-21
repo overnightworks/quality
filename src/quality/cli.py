@@ -148,7 +148,10 @@ def build_parser() -> argparse.ArgumentParser:
     emergency.add_argument("pull_request", type=int)
     fleet = commands.add_parser(
         "scoreboard",
-        help="measure the size, the gate and the CodeQL release of the repositories in quality/fleet.toml into two tables",
+        help=(
+            "measure the size, the gate and CodeQL release and what each gate does with each rule"
+            " of the repositories in quality/fleet.toml into two tables"
+        ),
     )
     fleet.add_argument("path", nargs="?", type=Path, default=Path("."))
     return parser

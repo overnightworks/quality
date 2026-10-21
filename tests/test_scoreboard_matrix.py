@@ -4,26 +4,40 @@ import re
 import subprocess
 
 import pytest
-from conftest import GIT_IDENTITY, NEWEST, OLDER, RELEASES, head_of, row
+from conftest import FORBIDDEN, GIT_IDENTITY, NEWEST, OLDER, RELEASES, head_of, make_repo, row, toml
 
+from quality import hygiene, ratchet
 from quality.scoreboard import (
     COLUMNS,
     MATRIX_COLUMNS,
+    RULES,
     Call,
+    Declared,
     ReleaseTagsError,
     calls_of,
+    gate_release,
     pin_cell,
     read_release_tags,
     repository_name,
+    rule_cell,
 )
 
 UNRELEASED = "c" * 40
 GATE = "overnightworks/quality/.github/workflows/gate.yml"
 CODEQL = "overnightworks/quality/.github/workflows/codeql.yml"
+FIRST_RELEASES = {"v0.2.1": OLDER, "v0.3.1": NEWEST}
+CONFIG = "quality/config.toml"
+TWO_IMPORT_CONFIGS = {"pyproject.toml": toml(FORBIDDEN), ".importlinter": "[importlinter]\nroot_package = shop\n"}
+TWO_JOBS = '[gate]\nmandatory_jobs = ["checks", "tests"]\n'
 
 
 def matrix_row(output: str, name: str) -> list[str]:
     return row(output, name, table=1)
+
+
+def pinned_gate(ref: str | None) -> dict[str, str]:
+    """A repository calling the gate at `ref`, or none at all."""
+    return {} if ref is None else caller(f"{GATE}@{ref}")
 
 
 def caller(uses: str) -> dict[str, str]:
@@ -46,14 +60,14 @@ def test_the_gate_cell_names_the_release_the_pinned_commit_is(scoreboard, public
     """#123 E3, cells 1 to 4: the tag the SHA points at, `(behind)` when not the newest; the `# v` comment is not read."""
     code, output = scoreboard(public("pinned", caller(f"{GATE}@{ref} # v0.3.1")))
     assert code == 0, output
-    assert matrix_row(output, "pinned")[1:] == [cell, "none"]
+    assert matrix_row(output, "pinned")[1:3] == [cell, "none"]
 
 
 def test_without_a_caller_there_is_no_gate_and_a_step_level_uses_is_no_caller(scoreboard, public):
     """#123 E3, cell 5: only a job-level `uses:` is a call."""
     steps = {".github/workflows/ci.yml": f"jobs:\n  build:\n    steps:\n      - uses: {GATE}@{NEWEST}\n"}
     _, output = scoreboard(public("bare", {}), public("stepped", steps))
-    assert matrix_row(output, "bare")[1:] == matrix_row(output, "stepped")[1:] == ["no gate", "none"]
+    assert matrix_row(output, "bare")[1:3] == matrix_row(output, "stepped")[1:3] == ["no gate", "none"]
 
 
 def test_the_repositorys_own_workflow_file_is_self_only_in_the_gates_repository():
@@ -105,7 +119,7 @@ def test_a_workflow_that_is_not_yaml_is_named_in_its_cells_and_the_other_rows_st
     broken = {".github/workflows/x.yml": content}
     code, output = scoreboard(public("broken", broken), public("fine", caller(f"{GATE}@{NEWEST}")))
     assert code == 2, output
-    assert matrix_row(output, "broken")[1:] == ["cannot read .github/workflows/x.yml"] * 2
+    assert matrix_row(output, "broken")[1:] == ["cannot read .github/workflows/x.yml"] * (len(MATRIX_COLUMNS) - 1)
     assert matrix_row(output, "fine")[1] == "v0.10.0"
 
 
@@ -145,8 +159,8 @@ def test_the_codeql_cell_reads_its_own_pin_or_says_none(scoreboard, public):
     gate = caller(f"{GATE}@{NEWEST}")
     scan = {".github/workflows/code.yml": f"jobs:\n  scan:\n    uses: {CODEQL}@{OLDER}\n", **gate}
     _, output = scoreboard(public("scanned", scan), public("unscanned", gate))
-    assert matrix_row(output, "scanned")[1:] == ["v0.10.0", "v0.9.0 (behind)"]
-    assert matrix_row(output, "unscanned")[1:] == ["v0.10.0", "none"]
+    assert matrix_row(output, "scanned")[1:3] == ["v0.10.0", "v0.9.0 (behind)"]
+    assert matrix_row(output, "unscanned")[1:3] == ["v0.10.0", "none"]
 
 
 @pytest.mark.parametrize(
@@ -180,8 +194,10 @@ def test_a_private_and_a_cannot_judge_row_keep_their_label_in_the_matrix(scorebo
     """#123 E10, cell 13."""
     code, output = scoreboard("ssh://git@example.invalid/org/repo.git", public("open", {}), private=[missing])
     assert code == 2, output
-    assert matrix_row(output, "org/repo")[1:] == ["cannot judge: cannot clone (not an http, https or file URL)", ""]
-    assert matrix_row(output, "gone")[1:] == ["not measured: private", ""]
+    padding = [""] * (len(MATRIX_COLUMNS) - 2)
+    refusal = "cannot judge: cannot clone (not an http, https or file URL)"
+    assert matrix_row(output, "org/repo")[1:] == [refusal, *padding]
+    assert matrix_row(output, "gone")[1:] == ["not measured: private"] + [""] * (len(MATRIX_COLUMNS) - 2)
 
 
 def test_release_tags_are_the_peeled_commits_of_annotated_and_lightweight_tags(public):
@@ -206,3 +222,138 @@ def test_release_tags_are_the_peeled_commits_of_annotated_and_lightweight_tags(p
 def test_only_the_owner_and_repository_of_a_reusable_call_ignore_case(scoreboard, public, uses, cell):
     _, output = scoreboard(public("cased", caller(uses)))
     assert matrix_row(output, "cased")[1] == cell
+
+
+def cell(output: str, name: str, column: str) -> str:
+    return matrix_row(output, name)[MATRIX_COLUMNS.index(column)]
+
+
+def first_releases(tags: dict[str, str] = FIRST_RELEASES):
+    return lambda: tags
+
+
+def unreadable_tags() -> dict[str, str]:
+    raise ReleaseTagsError("git exited 128")
+
+
+@pytest.mark.parametrize(
+    ("files", "size"),
+    [({ratchet.BASELINE_PATH: ratchet.render_baseline({})}, "enforced"), ({}, "report-only")],
+    ids=["a baseline", "no baseline"],
+)
+def test_the_size_cell_is_enforced_with_a_baseline_and_report_only_without(scoreboard, public, files, size):
+    """#125 cell 16, E7."""
+    _, output = scoreboard(public("sized", {**caller(f"{GATE}@{NEWEST}"), **files}), tags=first_releases())
+    assert cell(output, "sized", "size") == size
+
+
+@pytest.mark.parametrize(
+    ("refs", "tags", "code", "size"),
+    [
+        ([OLDER], first_releases(), 0, "not in v0.2.1"),
+        ([NEWEST, OLDER], first_releases(), 0, "not in v0.2.1"),
+        ([UNRELEASED], first_releases(), 0, "release unknown"),
+        (["main"], first_releases(), 0, "release unknown"),
+        (["v0.3.1"], first_releases(), 0, "release unknown"),
+        ([NEWEST], unreadable_tags, 2, "release unknown"),
+    ],
+    ids=["older than the rule", "two pins, the oldest decides", "a commit without a tag", "a branch", "a tag name",
+         "unreadable tags"],
+)
+def test_a_cell_never_claims_more_than_the_oldest_pinned_release(scoreboard, public, refs, tags, code, size):
+    """#125 cell 17, E16, E17, E12: only an unreadable tag list makes the run red."""
+    files = {f".github/workflows/{n}.yml": f"jobs:\n  gate:\n    uses: {GATE}@{ref}\n" for n, ref in enumerate(refs)}
+    result, output = scoreboard(public("pinned", files), tags=tags)
+    assert result == code, output
+    assert cell(output, "pinned", "size") == size
+
+
+def test_a_rule_only_main_has_is_not_released_on_a_pinned_gate_and_report_only_in_the_gates_own_repository():
+    """#125 cell 18, E7."""
+    clone = next(rule for rule in RULES if rule.rule == "clone")
+    declared = Declared(None, False, False, frozenset())
+    pinned = gate_release((Call(NEWEST),), False, FIRST_RELEASES)
+    own = gate_release((Call(None),), True, FIRST_RELEASES)
+    assert (rule_cell(clone, pinned, declared), rule_cell(clone, own, declared)) == ("not released", "report-only")
+
+
+@pytest.mark.parametrize(
+    ("files", "pin", "code", "cell_words"),
+    [
+        ({"pyproject.toml": toml(FORBIDDEN)}, NEWEST, 0, "enforced"),
+        ({}, NEWEST, 0, "report-only"),
+        (TWO_IMPORT_CONFIGS, NEWEST, 2, "cannot read import-linter config"),
+        (TWO_IMPORT_CONFIGS, None, 0, "—"),
+        (TWO_IMPORT_CONFIGS, OLDER, 0, "not in v0.2.1"),
+        (TWO_IMPORT_CONFIGS, UNRELEASED, 0, "release unknown"),
+    ],
+    ids=["a config", "no config", "two configs", "two configs, no gate", "two configs, older pin",
+         "two configs, no release"],
+)
+def test_the_import_contract_cell_follows_the_import_linter_config(scoreboard, public, files, pin, code, cell_words):
+    """#125 cell 19, E7, E19: two configs leave it open which one the gate runs, but only where the cell shows it."""
+    result, output = scoreboard(public("layered", {**pinned_gate(pin), **files}), tags=first_releases())
+    assert result == code, output
+    assert cell(output, "layered", "import-contract") == cell_words
+
+
+def test_without_a_gate_every_cell_that_needs_one_is_a_dash_and_an_unreadable_workflow_makes_each_unreadable(
+    scoreboard, public
+):
+    """#125 cell 20, E18."""
+    broken = {".github/workflows/x.yml": "jobs: [unclosed\n"}
+    code, output = scoreboard(public("bare", {CONFIG: TWO_JOBS}), public("broken", broken), tags=first_releases())
+    assert code == 2, output
+    assert matrix_row(output, "bare")[3:] == ["—"] * (len(MATRIX_COLUMNS) - 3)
+    assert matrix_row(output, "broken")[1:] == ["cannot read .github/workflows/x.yml"] * (len(MATRIX_COLUMNS) - 1)
+
+
+@pytest.mark.parametrize(
+    ("files", "pin", "code", "jobs", "legacy"),
+    [
+        ({CONFIG: TWO_JOBS}, NEWEST, 0, "2", "report"),
+        ({CONFIG: TWO_JOBS + 'legacy = "fail"\n'}, NEWEST, 0, "2", "fail"),
+        ({}, NEWEST, 0, "no config", "no config"),
+        ({CONFIG: "[gate\n"}, NEWEST, 2, "cannot read quality/config.toml", "cannot read quality/config.toml"),
+        ({CONFIG: "[gate\n"}, None, 0, "—", "—"),
+    ],
+    ids=["jobs counted", "legacy fail", "no config", "malformed config", "malformed config, no gate"],
+)
+def test_the_jobs_cell_counts_and_the_legacy_cell_names_the_mode(scoreboard, public, files, pin, code, jobs, legacy):
+    """#125 cell 21, E6, E9, E11: an unreadable config counts only where a cell shows it."""
+    result, output = scoreboard(public("gated", {**pinned_gate(pin), **files}), tags=first_releases())
+    assert result == code, output
+    assert (cell(output, "gated", "Mandatory jobs"), cell(output, "gated", "Sonar legacy")) == (jobs, legacy)
+
+
+@pytest.mark.parametrize(
+    ("pin", "code", "size"),
+    [
+        (NEWEST, 2, "cannot read quality/baseline.toml"),
+        (None, 0, "—"),
+        (OLDER, 0, "not in v0.2.1"),
+        (UNRELEASED, 0, "release unknown"),
+    ],
+    ids=["newest pin", "no gate", "older pin", "no release"],
+)
+def test_a_malformed_size_baseline_is_named_in_the_size_cell_only_where_the_cell_shows_it(
+    scoreboard, public, pin, code, size
+):
+    """#125 cell 22, E11."""
+    broken = {**pinned_gate(pin), ratchet.BASELINE_PATH: "[file_lines\n"}
+    result, output = scoreboard(public("sized", broken), tags=first_releases())
+    assert result == code, output
+    assert cell(output, "sized", "size") == size
+
+
+def test_every_rule_the_door_judges_has_a_row_in_the_first_release_table(tmp_path):
+    """#125 cell 23: a rule a later slice adds to `hygiene.run_hygiene` without a row turns this red."""
+    judged = {verdict.rule for verdict in hygiene.run_hygiene(make_repo(tmp_path, {"a": "1\n"})).verdicts}
+    assert {rule.rule for rule in RULES} == judged | set(hygiene.ENGINE_RULE_IDS)
+
+
+def test_the_heading_sentence_names_the_rules_the_oldest_release_always_enforces(scoreboard, public):
+    """#125 cell 24, E8: the five rules get a sentence, not five columns."""
+    _, output = scoreboard(public("any", {}), tags=first_releases())
+    assert "Every gate release enforces env-file, compose-port, secret, workflow-lint and workflow-security." in output
+    assert MATRIX_COLUMNS[5:] == ("claude-md", "advisory", "size", "import-contract", "clone")

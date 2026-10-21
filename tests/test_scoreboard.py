@@ -326,9 +326,9 @@ def test_no_configured_credential_reaches_a_private_host(scoreboard, public, pri
     [
         ("public", "ssh://git@example.invalid/org/repo.git", "org/repo", "cannot clone (not an http, https or file URL)"),
         ("public", "git@example.invalid:org/repo.git", "repo", "cannot clone (not an http, https or file URL)"),
-        ("private", "https://user:secret@example.invalid/org/edge", "org/edge",
+        ("private", "https://user:hunter2@example.invalid/org/edge", "org/edge",
          "cannot check that it is private (the URL carries credentials)"),
-        ("public", "https://user:secret@example.invalid/", "example.invalid", "cannot clone (the URL carries credentials)"),
+        ("public", "https://user:hunter2@example.invalid/", "example.invalid", "cannot clone (the URL carries credentials)"),
         ("public", "https://[broken/repo", "unnamed URL", "cannot clone (not a valid URL)"),
         ("private", "https://[broken/edge", "unnamed URL", "cannot check that it is private (not a valid URL)"),
         ("public", "HTTPS://example.invalid/org/repo", "org/repo", "cannot clone (not an http, https or file URL)"),
@@ -354,7 +354,7 @@ def test_a_url_git_could_misread_or_authenticate_with_cannot_be_judged(scoreboar
     code, output = scoreboard(open_repo, *listed[0], private=listed[1])
     assert code == 2, output
     assert row(output, name)[1:3] == ["—", f"cannot judge: {reason}"]
-    assert "secret" not in output
+    assert "hunter2" not in output
     assert row(output, "open")[3] == "1 / 0"
 
 
@@ -577,13 +577,13 @@ def test_the_workflow_reads_only_and_pins_what_ci_pins():
 
 def test_a_repeated_credentialed_url_is_named_by_its_place_never_its_text(capsys, tmp_path):
     """#63 rule 2 and the secrets rule: the duplicate report must not print a password embedded in the URL."""
-    url = "https://user:secret@example.invalid/o/r"
+    url = "https://user:hunter2@example.invalid/o/r"
     fleet = write_fleet(tmp_path / "fleet", [url, url], [url])
     assert cli.main(["scoreboard", str(fleet)]) == 2
     captured = capsys.readouterr()
     assert "public[1] repeats public[0]" in captured.err
     assert "private[0] repeats public[0]" in captured.err
-    assert "secret" not in captured.out + captured.err
+    assert "hunter2" not in captured.out + captured.err
 
 
 @pytest.mark.parametrize(
