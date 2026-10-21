@@ -1,0 +1,7 @@
+claim_id = "2a952dbdecd948718c1eac337a46e11b"
+agent = "claude"
+role = "builder"
+base = "8c86769eeb9545577741ee45cc2c6db143d9db44"
+branch = "fix/scoreboard-clone-release"
+scope = ["src/quality/scoreboard.py", "tests/test_scoreboard_matrix.py"]
+opened_commit = "0344f4b09661f6ac0cb45ec2890f00d6aaa4ccd9"
