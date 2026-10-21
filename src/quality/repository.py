@@ -2,8 +2,9 @@
 
 A name is repository-relative, as the caller gives it. Every read stays inside the repository, and every error names
 the file by that name alone, never a resolved path or the root, so no message prints where the checkout lies.
-It uses os.path.realpath, os.lstat and os.stat rather than Path.resolve and Path.exists, whose error handling
-differs between Python 3.12 and 3.14.
+It uses os.path.realpath, os.lstat and os.stat, not Path.exists or Path.exists(follow_symlinks=False), which turn every
+OSError into False: a path the filesystem refuses (EACCES, ENAMETOOLONG) would read as absent. os.lstat tells an absent
+entry from a dangling link, and os.stat raises the OSError whose errno decides, so each refusal keeps its own cause.
 """
 
 import errno
@@ -76,6 +77,16 @@ def is_on_disk(root: Path, name: str) -> bool:
             return False
         raise RepositoryFileError(f"cannot reach {name}: {os_error_reason(error)}") from error
     return True
+
+
+def is_symlink(root: Path, name: str) -> bool:
+    """Whether `name` is itself a symbolic link, dangling or not; nothing at `name` is not one."""
+    try:
+        return stat.S_ISLNK(os.lstat(os.path.join(root, name)).st_mode)
+    except OSError as error:
+        if error.errno in ABSENT_ERRNOS:
+            return False
+        raise RepositoryFileError(f"cannot reach {name}: {os_error_reason(error)}") from error
 
 
 def write_text(root: Path, name: str, text: str) -> None:

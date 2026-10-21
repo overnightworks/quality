@@ -203,6 +203,13 @@ In GitHub Actions the door stops workflow commands with a per-run token, and rep
 1. The re-ruling. Asked: „Neue Fakten zu Sonar S8431: Sonar setzt seine eigene Dependabot-Ausnahme nur auf main um, bei PR-Analysen nicht … Wie soll das Gate es lösen?“ Answered: „Sonars Ausnahme anwenden (empfohlen)“. The gate applies Sonar's own exception on pull requests too, for this one rule, with no entry per line and no config table.
 2. The detail. Asked: „Wann soll das Gate die Sonar-Regel S8431 nicht zählen? Sonar selbst prüft auf main nur, ob die Datei .github/dependabot.yml existiert, nicht was darin steht.“ Answered: „Wenn dependabot.yml existiert (empfohlen)“. The rule does not count when `.github/dependabot.yml` exists in the checkout; the file is never read.
 
+## Operator ruling (20.10.2026, answered 21.10.2026): CLAUDE.md is absent or exactly `@AGENTS.md`
+
+[#95](https://github.com/overnightworks/quality/issues/95). On 20.10.2026 the operator ruled in marketplace#195: a repository's `CLAUDE.md` is absent or exactly `@AGENTS.md`, so Claude, Codex and Grok read the same text („ich will kein auseinanderlaufen von claude.md und agents.md!“). The hygiene rule `claude-md` checks it. On 21.10.2026 he answered two lines.
+
+1. E18. Asked: „Bei Rot nennt die Meldung nur den Dateinamen und nie den Inhalt der CLAUDE.md, weil darin ein Geheimnis stehen könnte. Einverstanden?“ Answered: „Nur Dateiname (empfohlen)“. The finding names the file and never shows its content.
+2. E20. Asked: „Die Lösung, die die Meldung vorschlägt, ist ein Satz und kein Befehl: „Eigene Zeilen nach AGENTS.md verschieben, dann nur @AGENTS.md stehen lassen, oder die Datei löschen.“ Ein kopierbarer Befehl würde die Zeilen löschen und könnte über einen Symlink sogar AGENTS.md überschreiben. Einverstanden?“ Answered: „Satz, kein Befehl (empfohlen)“. The fix is prose that tells the operator to move the lines into `AGENTS.md`; it prints no command, since a copied command would lose the lines, or `AGENTS.md` itself through a link.
+
 ## Operator ruling (21.10.2026): a declared loosening merges through the operator's door
 
 [#103](https://github.com/overnightworks/quality/issues/103), ruled as D3 on [#45](https://github.com/overnightworks/quality/issues/45).
