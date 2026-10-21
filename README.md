@@ -92,9 +92,10 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
 - The baseline only falls: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the
   base commit's, so growing a function and rewriting the baseline stays red. Each loosening is one line, named with the
   baseline's own metric, path and symbol (a file entry has no symbol):
-  - an entry raised: `loosened: size baseline raises function_lines src/quality/cli.py main 82 -> 90`;
-  - an entry the base does not hold, a moved or renamed one included: `loosened: size baseline adds ccn src/a.py f 16`;
-  - the base's file deleted: `loosened: quality/baseline.toml removed`.
+  - an entry raised: `loosened (undeclared): size baseline raises function_lines src/quality/cli.py main 82 -> 90`;
+  - an entry the base does not hold, a moved or renamed one included:
+    `loosened (undeclared): size baseline adds ccn src/a.py f 16`;
+  - the base's file deleted: `loosened (undeclared): quality/baseline.toml removed`.
 
   A lowered, equal or removed entry is green, and so is adopting a baseline (the base has none) or having none on
   either side. A malformed baseline on either side, a head config or baseline that cannot be read or links out of the
@@ -104,7 +105,8 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   name or a SHA: `HEAD~1` or `-x` is exit `2` (`... is not a ref name or a SHA`) before git runs. Outside a pull
   request (push, `merge_group`, `workflow_dispatch`) `gate.yml` passes no base, so the base is never read and only
   `hygiene` holds the tree. A lizard update that measures a function higher therefore turns the pull request that
-  takes it red until the baseline may declare that loosening.
+  takes it red; a ruled raise is declared (see [Declared loosenings](#declared-loosenings)) and stays red until the
+  operator's door merges it.
 
 With `--engines DIR` the `secret` rule also scans the whole history reachable from `HEAD` with gitleaks (a key removed later is still found; other branches the checkout fetched are not scanned), always with quality's own config
 (`src/quality/gitleaks.toml`): the repository's `.gitleaks.toml`, `.gitleaksignore` and `gitleaks:allow`
@@ -154,7 +156,7 @@ directory (`in speech/: uv lock --upgrade-package ...`); several fixed versions 
 version says `osv lists no fixed version: remove or replace <package>; see https://osv.dev/vulnerability/<id>`. A
 repository's own `osv-scanner.toml` (ignored advisories, package overrides) and `.gitignore` change nothing: the gate
 passes its own empty `src/quality/osv-scanner.toml` and each tracked lock explicitly. A per-repository allowance
-waits for declared loosening in `quality/config.toml`.
+does not exist yet.
 
 quality downloads the PyPI database itself on every run (about 36 MB, `https://osv-vulnerabilities.storage.googleapis.com/PyPI/all.zip`)
 into the scan's own 0700 scratch directory and runs osv-scanner `--offline` on it, so osv-scanner makes no network call
@@ -290,13 +292,44 @@ mandatory_jobs = ["checks"]
   leg as `check (3.12)`. A missing file or key is exit `2`, and the message shows this example.
 - Each job must conclude `success` in its newest attempt up to the verdict's own. A job that is missing from the run is
   `mandatory job "x" is missing from the run`; one that failed, was skipped or cancelled, or is still running is red.
-- On a pull request, removing a job the base config holds is `loosened: mandatory job "x" removed`, and the base's job is
-  still judged.
+- On a pull request, removing a job the base config holds is `loosened (undeclared): mandatory job "x" removed`, and the
+  base's job is still judged; a declared removal (below) is no longer judged.
 - The gate's own jobs are judged through `needs` (`gate job "sonar" result failure`) and need no entry.
 - `[gate] legacy` is described under [New and legacy findings](#new-and-legacy-findings).
 
 The verdict prints `verdict: green` (exit `0`); each problem, then `verdict: red` (exit `1`); or
 `verdict: cannot judge - ...` (exit `2`). The same text goes to the run's step summary.
+
+### Declared loosenings
+
+A pull request that loosens the gate as the operator ruled declares each loosening in its `quality/config.toml`, one
+entry per loosening:
+
+```toml
+[[gate.loosened]]
+what = 'mandatory job "Acceptance evidence (integration)" removed'
+item = "overnightworks/songmaker#1345"
+date = 2026-10-20
+reason = "the operator ruled the requirement shelf machinery out"
+```
+
+- `what` is exactly the verdict's text after `loosened (undeclared): `, unescaped: where the verdict prints a character
+  escaped (`\x0a` for a line feed in a job name), the entry writes the TOML escape (`\n`). Any other text, another
+  number included, declares nothing.
+- `item` is `#<n>` or `<owner>/<repo>#<n>` (ASCII letters, digits, `_`, `.` and `-`), `date` a TOML date without a
+  time, `reason` one non-empty line. A missing or extra key, a text date, two entries with one `what` or any other
+  malformed entry is exit `2`, naming the entry and showing this example.
+- Only new entries declare: those the head holds and the base does not, compared as a whole entry. An inherited entry
+  is never red and declares nothing, so a later pull request that loosens the same way again needs its own entry with
+  its own `item` and `date`; deleting an inherited entry is no loosening. A new entry that matches no loosening of the
+  pull request is red: `declared loosening matches nothing: <what>`. A base without `quality/config.toml` (the
+  adoption) holds no entry, so every entry there is new and matches nothing. Without a base (push, `merge_group`) no
+  entry is judged.
+- A declared loosening stays red (exit `1`) and says so:
+  `loosened (declared, overnightworks/songmaker#1345 of 2026-10-20): mandatory job "…" removed`. When nothing else is
+  red, the last line is `verdict: red - only declared loosenings: only the operator's quality emergency-merge lands this
+  pull request`. No entry approves itself: an agent may write one, but the ruleset and `aco land` still need a green
+  `quality / verdict`, and only [the operator's emergency door](#the-operators-emergency-door) merges.
 
 ## `quality sonar findings`
 
@@ -380,7 +413,7 @@ legacy = "fail"
 - `"fail"`: a pull request fails while the default branch has any open finding, even when it adds none.
 - Any other value is a config error (exit `2`), read before the first SonarCloud request.
 - A pull request whose base config says `legacy = "fail"` and whose head config says anything else is red in the verdict
-  (`loosened: legacy fail → report`; an absent key counts as `report`), like a removed mandatory job.
+  (`loosened (undeclared): legacy fail → report`; an absent key counts as `report`), like a removed mandatory job.
 
 On pull requests and default-branch runs `quality sonar findings` reads `api/project_branches/list` once before the counts.
 - The default branch has no entry, or one without `analysisDate` (a repository's first adoption pull request): the summary
@@ -413,36 +446,52 @@ way Sonar judges main:
   raw; the file's existence does not say that Dependabot maintains the Dockerfile's folder for Docker; a repository
   that has only `.github/dependabot.yaml` stays red on pull requests; Renovate is not judged.
 
-### The way back to green under `legacy = "fail"`
+### The operator's emergency door
 
-Main can gain a finding without any pull request introducing it (a taint finding on an unchanged line, a SonarCloud
-rule-profile update). Then every pull request is red, including the fixing one, and switching `legacy` back is red too.
-The way out is the operator's emergency door, one command (quality#37):
+Two red pull requests have no other way to land. Under `legacy = "fail"`, main can gain a finding without any pull
+request introducing it (a taint finding on an unchanged line, a SonarCloud rule-profile update); then every pull request
+is red, including the fixing one, and switching `legacy` back is red too. And a pull request that loosens the gate as the
+operator ruled stays red for its [declared loosenings](#declared-loosenings). Both land through the operator's door,
+one command (quality#37, quality#103):
 
 ```
 quality emergency-merge <owner/repo> <pr>
 ```
 
 - **Operator only.** It runs under the operator's own `gh` login, which needs admin permission on the repository (checked
-  first: exit `2`, nothing changed, the missing right named). Agents never run it; it refuses when stdin is not a terminal.
-- **It refuses unless the door is the only way** (exit `1`): `quality / sonar` and `quality / verdict` have failed, every
-  other check run and commit status is green, the verdict is red for the Sonar gate alone (the verdict's own judgment,
-  re-derived with the Sonar job assumed green, finds no other problem, so a loosened gate, a raised or removed size
-  baseline (read at the merge commit and at base) or a missing mandatory job is refused), `[gate] legacy` is `fail` at the pull request's current merge commit (under `report` the Sonar job cannot be red on legacy findings, and a
-  missing config reads as `report`), SonarCloud's analysis of the pull request is of the head being merged and adds no finding (the findings are
-  named otherwise), and the default branch has legacy findings. `SONAR_TOKEN` is read from the environment when the project
+  first: exit `2`, nothing changed, the missing right named). Agents never run it; it refuses when stdin is not a
+  terminal. This is the agent contract, not a lock: agents on the operator's machine share his `gh` login, so to an
+  agent the terminal is a hurdle, and that login could switch `quality_gate` directly. A real lock (agents with a token
+  without admin rights) belongs to the machine's setup, not to quality; it is a known residual risk.
+- **It refuses unless the door is the only way** (exit `1`, nothing changed): no check is still running; every check run
+  and commit status other than `quality / sonar` and `quality / verdict` is green; `quality / verdict` has failed; and
+  `quality / sonar` is green or has failed (it did not run, or it ended `timed_out`, `cancelled` or anything else: refused).
+  The verdict is then judged again by its own decider, with the config and size baseline read at the pull request's
+  current merge commit and at base and the Sonar job taken as green: an undeclared loosening, a declaration that matches
+  nothing, or a missing or red mandatory job is refused, naming the verdict's lines.
+- **Sonar green: declared loosenings.** The re-derived verdict must hold at least one declared loosening (otherwise
+  `re-run the verdict`). SonarCloud is not asked and `SONAR_TOKEN` is not needed.
+- **Sonar failed: legacy findings,** as before, next to any declared loosening: `[gate] legacy` is `fail` at the merge
+  commit (under `report` the Sonar job cannot be red on legacy findings, and a missing config reads as `report`),
+  SonarCloud's analysis of the pull request is of the head being merged and adds no finding (the findings are named
+  otherwise), and the default branch has legacy findings. `SONAR_TOKEN` is read from the environment when the project
   needs one: without it the door reads a public project anonymously, with no Authorization header, and an anonymous read
-  that SonarCloud refuses (a private project answers 404) is exit `2`, naming `SONAR_TOKEN`; with a token, a 401 or 403 says the token was rejected.
-- **It shows, then asks:** repository, pull request, head SHA and legacy count, then the typed word `ja`. Anything else
-  changes nothing.
+  that SonarCloud refuses (a private project answers 404) is exit `2`, naming `SONAR_TOKEN`; with a token, a 401 or 403
+  says the token was rejected.
+- **It shows, then asks:** repository, pull request and head SHA with the legacy count (where Sonar failed) and the
+  number of declared loosenings, then one line per declaration with its `item`, `date`, `what` and `reason`, then the
+  typed word `ja`. Anything else changes nothing. Every line it prints is escaped as the other doors' lines are, so a
+  `reason` cannot hide anything before `ja` or forge a line.
 - **Off, merge, on:** it sets the repository's `quality_gate` property to `false` (this removes ruleset 25227067 for it),
   runs `gh pr merge <pr> --merge --match-head-commit <sha>`, and sets the property back to `true` in every case: merged,
-  merge failed, Ctrl-C. A property that cannot be restored is exit `2` with one line naming what to set by hand and the merge outcome. A merge whose
-  outcome GitHub does not confirm (Ctrl-C, a lost answer) is re-read from the pull request; if that does not settle it, exit `2`
-  with `merge state unknown`.
-- **Logged:** one comment on the pull request (who, when, legacy count, `quality_gate off → <outcome> → on`), also when the
-  restore failed. The command
-  prints `aco release <n> --abandoned "landed as PR #<pr> by emergency-merge"` for the head, because `aco land` refuses any non-green check and `--merged` refuses a merge commit without a `Work-Item:` trailer.
+  merge failed, Ctrl-C. A property that cannot be restored is exit `2` with one line naming what to set by hand and the
+  merge outcome. A merge whose outcome GitHub does not confirm (Ctrl-C, a lost answer) is re-read from the pull request;
+  if that does not settle it, exit `2` with `merge state unknown`.
+- **Logged:** one comment on the pull request (who, when, the legacy count and each declaration,
+  `quality_gate off → <outcome> → on`, or `quality_gate not switched off → no merge → on` when switching off failed),
+  also when the restore failed. The command prints `aco release <n> --abandoned "landed as PR #<pr> by emergency-merge"`
+  for the head, because `aco land` refuses any non-green check and `--merged` refuses a merge commit without a
+  `Work-Item:` trailer.
 
 ## `codeql.yml`
 

@@ -1,10 +1,14 @@
+import datetime
 import re
 
 import pytest
 
+from quality import cli
 from quality.config import (
+    CONFIG_PATH,
     Allowance,
     ConfigError,
+    Declaration,
     LegacyMode,
     load_gate_settings,
     load_secret_allowances,
@@ -193,3 +197,43 @@ def test_one_read_of_the_config_gives_the_mandatory_jobs_and_the_legacy_mode(tmp
     (tmp_path / "quality" / "config.toml").write_text('[gate]\nmandatory_jobs = ["checks"]\nlegacy = "fail"\n')
     settings = read_gate_settings(tmp_path)
     assert (settings.mandatory_jobs, settings.legacy) == (("checks",), LegacyMode.FAIL)
+
+
+SONGMAKER_DECLARATION = (
+    '[gate]\nmandatory_jobs = ["checks"]\n\n[[gate.loosened]]\n'
+    "what = 'mandatory job \"Acceptance evidence (integration)\" removed'\n"
+    'item = "overnightworks/songmaker#1345"\ndate = 2026-10-20\n'
+    'reason = "the operator ruled the requirement shelf machinery out"\n'
+)
+
+
+def test_a_declared_loosening_is_read_with_its_ruling(tmp_path):
+    """#103 rule 1 (E1): each [[gate.loosened]] entry is one declaration with its what, item, date and reason."""
+    (tmp_path / "quality").mkdir()
+    (tmp_path / CONFIG_PATH).write_text(SONGMAKER_DECLARATION)
+    assert read_gate_settings(tmp_path).loosened == (
+        Declaration(
+            'mandatory job "Acceptance evidence (integration)" removed',
+            "overnightworks/songmaker#1345",
+            datetime.date(2026, 10, 20),
+            "the operator ruled the requirement shelf machinery out",
+        ),
+    )
+
+
+def test_a_config_without_declarations_declares_nothing():
+    """#103 rule 1: a config with no [[gate.loosened]] entry declares no loosening."""
+    assert load_gate_settings('[gate]\nmandatory_jobs = ["checks"]').loosened == ()
+
+
+@pytest.mark.parametrize(
+    "command",
+    [["hygiene", "--engines", "{engines}", "{repo}"], ["scan-staged", "{repo}", "--engines", "{engines}"]],
+    ids=["hygiene --engines", "scan-staged"],
+)
+def test_the_other_doors_accept_a_declared_loosening(build_repo, clean_engines, capsys, command):
+    """#103 rule 1, cell 12: a [[gate.loosened]] entry is no unknown key for hygiene or the commit hook."""
+    repo = build_repo({CONFIG_PATH: SONGMAKER_DECLARATION})
+    code = cli.main([part.format(repo=repo, engines=clean_engines) for part in command])
+    captured = capsys.readouterr()
+    assert (code, "unknown key" in captured.out + captured.err) == (0, False), captured

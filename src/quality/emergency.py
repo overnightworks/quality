@@ -1,17 +1,17 @@
 """The operator's emergency door: switch a repository's gate off, merge one pull request, switch it on again."""
 
 import json
-import re
 import subprocess
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
+from functools import partial
 
-from quality.config import CONFIG_PATH, GateSettings, LegacyMode
+from quality.config import CONFIG_PATH, REPOSITORY_NAME, Declaration, GateSettings, LegacyMode
 from quality.hygiene import CannotJudge
 from quality.ratchet import BASELINE_PATH
-from quality.report import render
+from quality.report import printable, render
 from quality.sonar import (
     Analysis,
     Scope,
@@ -25,13 +25,12 @@ from quality.sonar import (
     project_of,
     require_resolved,
 )
-from quality.verdict import SUCCESS, Job, Side, judge, side_of
+from quality.verdict import SUCCESS, Job, Side, Verdict, judge, side_of
 
 EXIT_MERGED = 0
 EXIT_REFUSED = 1
 EXIT_NOT_RESTORED = 2
 
-REPOSITORY_NAME = re.compile(r"[\w.-]+/[\w.-]+")
 GATE_PROPERTY = "quality_gate"
 CONFIRMATION_WORD = "ja"
 SONAR_CHECK = "quality / sonar"
@@ -44,6 +43,7 @@ NOT_FOUND = "404"
 
 GhRunner = Callable[[Sequence[str], str | None], str]
 Ask = Callable[[str], str]
+Say = Callable[[str], None]
 
 
 class GhFailed(Exception):
@@ -51,10 +51,15 @@ class GhFailed(Exception):
 
 
 class Refused(Exception):
-    pass
+    """The door stays shut; each of `lines` is one line the operator reads."""
+
+    def __init__(self, *lines: str) -> None:
+        super().__init__(*lines)
+        self.lines = lines
 
 
 class Outcome(Enum):
+    NOT_STARTED = "no merge"
     MERGED = "merge"
     NOT_MERGED = "merge failed"
     UNKNOWN = "merge state unknown"
@@ -92,14 +97,37 @@ class Check:
         return self.status != COMPLETED
 
 
+def described(declaration: Declaration) -> str:
+    return (
+        f"declared loosening ({declaration.item} of {declaration.date.isoformat()}): {declaration.what}"
+        f" - reason: {declaration.reason}"
+    )
+
+
 @dataclass(frozen=True)
 class Door:
-    """What the operator is shown before typing the word."""
+    """What the operator is shown before typing the word: the declared loosenings and, where Sonar failed, the legacy
+    count."""
 
     repository: str
     pull_request: int
     head_sha: str
-    legacy: int
+    declared: tuple[Declaration, ...]
+    legacy: int | None
+
+    @property
+    def legacy_count(self) -> list[str]:
+        return [] if self.legacy is None else [f"{self.legacy} legacy finding(s)"]
+
+    def reasons(self) -> list[str]:
+        """Why the door merges, as the log comment names it."""
+        return [*self.legacy_count, *map(described, self.declared)]
+
+    def shown(self) -> tuple[str, ...]:
+        """What the operator reads before typing the word: the counts, then each declaration."""
+        declared = [f"{len(self.declared)} declared loosening(s)"] if self.declared else []
+        heading = f"{self.repository} #{self.pull_request} head {self.head_sha}: {', '.join([*self.legacy_count, *declared])}"
+        return (heading, *map(described, self.declared))
 
 
 def refusal_of_checks(checks: Sequence[Check]) -> str | None:
@@ -111,19 +139,36 @@ def refusal_of_checks(checks: Sequence[Check]) -> str | None:
         return f"checks other than {' and '.join(LEGACY_CHECKS)} are red: {', '.join(other_red)}"
     if all(check.green for check in checks):
         return "no check is red: the door is not the only way, land the pull request normally"
-    failed = {check.name for check in checks if check.conclusion == RED}
-    missing = [name for name in LEGACY_CHECKS if name not in failed]
-    if missing:
-        return f"{' and '.join(missing)} must have failed for the door to be the only way"
+    if not any(check.name == VERDICT_CHECK and check.conclusion == RED for check in checks):
+        return f"{VERDICT_CHECK} must have failed for the door to be the only way"
     return None
 
 
-def refusal_of_verdict(head: Side, base: Side, check_runs: Sequence[Check]) -> str | None:
-    """Judged by the verdict's own decider: the verdict must be red for the Sonar gate alone, which only legacy = fail can cause."""
+def sonar_failed(checks: Sequence[Check]) -> bool:
+    """True when a quality / sonar run failed, False when every run is green; a missing or other run shuts the door."""
+    runs = [check for check in checks if check.name == SONAR_CHECK]
+    if not runs:
+        raise Refused(f"{SONAR_CHECK} did not run: the door needs it green or failed")
+    neither = [check.conclusion for check in runs if not check.green and check.conclusion != RED]
+    if neither:
+        raise Refused(f"{SONAR_CHECK} is {neither[0]}: the door needs it green or failed")
+    return any(check.conclusion == RED for check in runs)
+
+
+def rederived_verdict(head: Side, base: Side, check_runs: Sequence[Check]) -> Verdict:
+    """The verdict's own decider at the merge commit, with the Sonar job taken as green: the door judges Sonar itself."""
     jobs = [Job(run.name, 1, run.status, SUCCESS if run.name == SONAR_CHECK else run.conclusion) for run in check_runs]
-    problems = judge(head, base, jobs, {"sonar": SUCCESS}, 1).problems
-    if problems:
-        return f"{VERDICT_CHECK} is red for more than legacy findings: {'; '.join(problems)}"
+    return judge(head, base, jobs, {"sonar": SUCCESS}, 1)
+
+
+def refusal_of_verdict(verdict: Verdict, sonar_red: bool) -> str | None:
+    """The door merges legacy findings and declared loosenings, nothing else, and with Sonar green it needs a declared one."""
+    if verdict.blocking:
+        return (
+            f"{VERDICT_CHECK} is red for more than legacy findings and declared loosenings: {'; '.join(verdict.blocking)}"
+        )
+    if not sonar_red and not verdict.declared:
+        return f"{VERDICT_CHECK} is red, but judged again at the merge commit it finds nothing: re-run the verdict"
     return None
 
 
@@ -181,12 +226,29 @@ def judge_sonar(
         raise Refused(f"Sonar analysed {analysed or 'nothing'}, head is {head_sha}")
     findings = open_findings(analysis, transport)
     if findings.count:
-        raise Refused("the pull request adds findings:\n" + "\n".join(render(finding) for finding in findings.listed))
+        # Every field of a rendering is escaped, so its line feeds are the rendering's own.
+        rendered = (line for finding in findings.listed for line in render(finding).split("\n"))
+        raise Refused("the pull request adds findings:", *rendered)
     if not default_branch_analysed(analysis, transport):
         raise Refused(legacy_unknown(default_branch))
     legacy = open_total(analysis, Scope("branch", default_branch), transport)
     if not legacy:
         raise Refused(f"{default_branch} has no open finding: the red checks are not legacy findings")
+    return legacy
+
+
+def judge_legacy(settings: GateSettings, count: Callable[[], int]) -> int:
+    """The legacy count behind a red Sonar check; under legacy = report Sonar cannot be red on legacy findings, though
+    a finding the pull request adds is named first."""
+    legacy_refusal = refusal_of_legacy_mode(settings)
+    try:
+        legacy = count()
+    except CannotJudge:
+        if legacy_refusal:
+            raise Refused(legacy_refusal) from None
+        raise
+    if legacy_refusal:
+        raise Refused(legacy_refusal)
     return legacy
 
 
@@ -218,7 +280,12 @@ def not_restored_warning(door: Door, reason: str) -> str:
     return f"emergency-merge: {GATE_PROPERTY} MAY STILL BE OFF for {door.repository} - set it to true by hand now ({reason})"
 
 
-def switch_off_merge_switch_on(gh: GhRunner, door: Door, report: Callable[[str], None]) -> Attempt:
+def end_interrupted_line(say: Say) -> None:
+    """Ctrl-C leaves the cursor behind the terminal's `^C`, so the next line starts on a line of its own."""
+    say("")
+
+
+def switch_off_merge_switch_on(gh: GhRunner, door: Door, say: Say) -> Attempt:
     outcome, detail, merge_started, interrupted = Outcome.MERGED, None, False, False
     try:
         set_gate(gh, door.repository, False)
@@ -228,12 +295,13 @@ def switch_off_merge_switch_on(gh: GhRunner, door: Door, report: Callable[[str],
             None,
         )
     except (GhFailed, KeyboardInterrupt) as stop:
-        outcome, interrupted = Outcome.NOT_MERGED, isinstance(stop, KeyboardInterrupt)
+        outcome = Outcome.NOT_MERGED if merge_started else Outcome.NOT_STARTED
+        interrupted = isinstance(stop, KeyboardInterrupt)
         detail = "interrupted" if interrupted else str(stop)
+        if interrupted:
+            end_interrupted_line(say)
     finally:
         restore_error = restore_gate(gh, door.repository)
-        if restore_error:
-            report(not_restored_warning(door, restore_error))
     if merge_started and outcome is not Outcome.MERGED:
         # A lost answer or Ctrl-C leaves it open whether GitHub merged.
         landed = merged_on_github(gh, door)
@@ -246,16 +314,18 @@ def switch_off_merge_switch_on(gh: GhRunner, door: Door, report: Callable[[str],
 
 def log_comment(login: str, moment: datetime, door: Door, attempt: Attempt) -> str:
     restored = "on" if attempt.restore_error is None else "NOT restored, it may still be off"
-    return (
-        f"Emergency door used by @{login} at {moment.isoformat(timespec='seconds')}: {door.legacy} legacy finding(s); "
-        f"{GATE_PROPERTY} off → {attempt.outcome.value} → {restored}."
+    switched = "not switched off" if attempt.outcome is Outcome.NOT_STARTED else "off"
+    return printable(
+        f"Emergency door used by @{login} at {moment.isoformat(timespec='seconds')}: {'; '.join(door.reasons())}; "
+        f"{GATE_PROPERTY} {switched} → {attempt.outcome.value} → {restored}."
     )
 
 
-def confirmed(ask: Ask) -> bool:
+def confirmed(ask: Ask, say: Say) -> bool:
     try:
         return ask(f"Switch {GATE_PROPERTY} off, merge, switch it on? Type '{CONFIRMATION_WORD}': ").strip() == CONFIRMATION_WORD
     except (KeyboardInterrupt, EOFError):
+        end_interrupted_line(say)
         return False
 
 
@@ -269,41 +339,48 @@ def judge_pull_request(
         raise Refused(f"the pull request is {pull['state']}")
     head_sha = pull["head"]["sha"]
     check_runs = read_check_runs(gh, repository, head_sha)
-    refusal = refusal_of_checks([*check_runs, *read_statuses(gh, repository, head_sha)])
+    checks = [*check_runs, *read_statuses(gh, repository, head_sha)]
+    refusal = refusal_of_checks(checks)
     if refusal:
         raise Refused(refusal)
+    sonar_red = sonar_failed(checks)
     merge_commit_sha = pull["merge_commit_sha"]
     if not merge_commit_sha:
         raise CannotJudge("GitHub has no merge commit for the pull request yet, so the config the jobs ran on is unknown")
     head = read_side_at(gh, repository, merge_commit_sha)
-    refusal = refusal_of_verdict(head, read_side_at(gh, repository, pull["base"]["sha"]), check_runs)
+    verdict = rederived_verdict(head, read_side_at(gh, repository, pull["base"]["sha"]), check_runs)
+    refusal = refusal_of_verdict(verdict, sonar_red)
     if refusal:
         raise Refused(refusal)
-    legacy_refusal = refusal_of_legacy_mode(head.settings)
-    try:
-        legacy = judge_sonar(
-            repository, pull_request, head_sha, repository_facts["default_branch"], transport, environment.get("SONAR_TOKEN", "")
+    legacy = None
+    if sonar_red:
+        count = partial(
+            judge_sonar, repository, pull_request, head_sha, repository_facts["default_branch"], transport,
+            environment.get("SONAR_TOKEN", ""),
         )
-    except CannotJudge:
-        if legacy_refusal:
-            raise Refused(legacy_refusal) from None
-        raise
-    if legacy_refusal:
-        raise Refused(legacy_refusal)
+        legacy = judge_legacy(head.settings, count)
     login = gh(["api", "user", "--jq", ".login"], None).strip()
-    return Door(repository, pull_request, head_sha, legacy), login
+    return Door(repository, pull_request, head_sha, verdict.declared, legacy), login
 
 
-def report_attempt(attempt: Attempt, pull_request: int, report: Callable[[str], None]) -> int:
-    gate_state = "is on again" if attempt.restore_error is None else "may still be off"
+def merge_outcome(attempt: Attempt, pull_request: int) -> str:
     if attempt.outcome is Outcome.UNKNOWN:
-        report(f"emergency-merge: merge state unknown ({attempt.detail or 'no answer'}) - check #{pull_request} on GitHub; {GATE_PROPERTY} {gate_state}")
+        return f"merge state unknown ({attempt.detail or 'no answer'}) - check #{pull_request} on GitHub"
+    if attempt.outcome is Outcome.MERGED:
+        return f'merged. For the head: aco release <n> --abandoned "landed as PR #{pull_request} by emergency-merge"'
+    return f"not merged - {attempt.detail}"
+
+
+def report_attempt(attempt: Attempt, door: Door, say: Say) -> int:
+    outcome = merge_outcome(attempt, door.pull_request)
+    if attempt.restore_error:
+        say(f"{not_restored_warning(door, attempt.restore_error)}; {outcome}")
         return EXIT_NOT_RESTORED
-    if attempt.outcome is Outcome.NOT_MERGED:
-        report(f"emergency-merge: not merged - {attempt.detail}; {GATE_PROPERTY} {gate_state}")
-        return EXIT_NOT_RESTORED if attempt.restore_error else EXIT_REFUSED
-    report(f"merged. For the head: aco release <n> --abandoned \"landed as PR #{pull_request} by emergency-merge\"")
-    return EXIT_NOT_RESTORED if attempt.restore_error else EXIT_MERGED
+    if attempt.outcome is Outcome.MERGED:
+        say(outcome)
+        return EXIT_MERGED
+    say(f"emergency-merge: {outcome}; {GATE_PROPERTY} is on again")
+    return EXIT_NOT_RESTORED if attempt.outcome is Outcome.UNKNOWN else EXIT_REFUSED
 
 
 def run_emergency_merge(
@@ -316,28 +393,35 @@ def run_emergency_merge(
     is_terminal: bool,
     now: Callable[[], datetime],
     environment: Mapping[str, str],
+    say: Say,
 ) -> int:
+    """Every line it prints leaves through `say`, which escapes it."""
     if not REPOSITORY_NAME.fullmatch(repository):
-        print(f"emergency-merge: {repository!r} is not <owner>/<repo>")
+        say(f"emergency-merge: {repository!r} is not <owner>/<repo>")
         return EXIT_REFUSED
     if not is_terminal:
-        print("emergency-merge: refused - this is the operator's command, it needs a terminal on stdin")
+        say("emergency-merge: refused - this is the operator's command, it needs a terminal on stdin")
         return EXIT_REFUSED
     try:
         door, login = judge_pull_request(repository, pull_request, gh, transport, environment)
-    except Refused as refusal_error:
-        print(f"emergency-merge: refused - {refusal_error}")
+    except Refused as refusal:
+        first, *rest = refusal.lines
+        for line in (f"emergency-merge: refused - {first}", *rest):
+            say(line)
         return EXIT_REFUSED
     except (CannotJudge, GhFailed, KeyError, ValueError) as error:
-        print(f"emergency-merge: cannot judge - {error}; nothing was changed")
+        say(f"emergency-merge: cannot judge - {error}; nothing was changed")
         return EXIT_NOT_RESTORED
-    print(f"{door.repository} #{door.pull_request} head {door.head_sha}: {door.legacy} legacy finding(s)")
-    if not confirmed(ask):
-        print("emergency-merge: not confirmed, nothing was changed")
+    for line in door.shown():
+        say(line)
+    if not confirmed(ask, say):
+        say("emergency-merge: not confirmed, nothing was changed")
         return EXIT_REFUSED
-    attempt = switch_off_merge_switch_on(gh, door, print)
+    attempt = switch_off_merge_switch_on(gh, door, say)
     try:
         gh(["api", "-X", "POST", f"repos/{repository}/issues/{pull_request}/comments", "-f", f"body={log_comment(login, now(), door, attempt)}"], None)
     except (GhFailed, KeyboardInterrupt) as error:
-        print(f"emergency-merge: the log comment on #{pull_request} was not posted, add it by hand ({error})")
-    return report_attempt(attempt, pull_request, print)
+        if isinstance(error, KeyboardInterrupt):
+            end_interrupted_line(say)
+        say(f"emergency-merge: the log comment on #{pull_request} was not posted, add it by hand ({error})")
+    return report_attempt(attempt, door, say)

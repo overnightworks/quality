@@ -2,6 +2,7 @@ import json
 from datetime import UTC, datetime
 
 import pytest
+from conftest import assert_every_line_starts_with_the_door
 
 from quality import cli
 from quality.config import CONFIG_PATH
@@ -20,6 +21,19 @@ LEGACY_RED = {"quality / sonar": "failure", "quality / verdict": "failure"}
 FIXED_NOW = datetime(2026, 10, 17, 12, 0, tzinfo=UTC)
 BASELINE_82 = '[function_lines."src/quality/cli.py"]\n"main" = 82\n'
 BASELINE_90 = BASELINE_82.replace("82", "90")
+ONE_JOB = '[gate]\nmandatory_jobs = ["checks"]\n'
+TWO_JOBS = '[gate]\nmandatory_jobs = ["checks", "B"]\n'
+B_REMOVED = 'mandatory job "B" removed'
+SONAR_GREEN = {"quality / sonar": "success", "quality / verdict": "failure"}
+SHOWN = "declared loosening (overnightworks/songmaker#1345 of 2026-10-20): "
+
+
+def declaring(what, reason="ruled"):
+    """A [[gate.loosened]] entry; JSON's string escapes are TOML's."""
+    return (
+        f'[[gate.loosened]]\nwhat = {json.dumps(what)}\nitem = "overnightworks/songmaker#1345"\ndate = 2026-10-20\n'
+        f"reason = {json.dumps(reason)}\n"
+    )
 
 
 class FakeGh:
@@ -28,7 +42,7 @@ class FakeGh:
     def __init__(
         self, admin=True, checks=None, statuses=None, state="open", fail_on=(), interrupt_on=(), merge_lands=False,
         head_config=GATE_CONFIG, base_config=GATE_CONFIG, merge_config=None, merge_sha=MERGE_SHA,
-        base_baseline=None, merge_baseline=None,
+        base_baseline=None, merge_baseline=None, extra_runs=(),
     ):
         self.admin, self.state, self.fail_on, self.merge_lands = admin, state, set(fail_on), merge_lands
         self.interrupt_on = list(interrupt_on)
@@ -41,6 +55,7 @@ class FakeGh:
             (BASELINE_PATH, MERGE_SHA): merge_baseline,
         }
         self.checks = {"checks": "success", **(LEGACY_RED if checks is None else checks)}
+        self.extra_runs = list(extra_runs)
         self.statuses = statuses or {}
         self.merged = False
         self.calls: list[tuple[str, ...]] = []
@@ -82,7 +97,7 @@ class FakeGh:
         if step == "checks":
             return "\n".join(
                 json.dumps({"name": name, "status": "in_progress" if result is None else "completed", "conclusion": result})
-                for name, result in self.checks.items()
+                for name, result in [*self.checks.items(), *self.extra_runs]
             )
         if step == "statuses":
             return "\n".join(json.dumps({"context": context, "state": state}) for context, state in self.statuses.items())
@@ -251,7 +266,9 @@ def test_anything_but_ja_changes_nothing(typed, capsys):
     code, _ = drive(gh, typed=typed)
     assert code == 1
     changed_nothing(gh)
-    assert "not confirmed, nothing was changed" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "not confirmed, nothing was changed" in output
+    assert ("\n\nemergency-merge: not confirmed" in output) is isinstance(typed, BaseException)
 
 
 @pytest.mark.parametrize(
@@ -264,10 +281,26 @@ def test_anything_but_ja_changes_nothing(typed, capsys):
         ({"statuses": {"external-ci": "failure"}}, {}, "external-ci (failure)"),
         ({"statuses": {"external-ci": "pending"}}, {}, "still running: external-ci"),
         ({"checks": {"quality / sonar": "success", "quality / verdict": "success"}}, {}, "no check is red"),
-        ({"checks": {"quality / sonar": "success", "quality / verdict": "failure"}}, {}, "quality / sonar must have failed"),
-        ({"checks": {"quality / sonar": "timed_out", "quality / verdict": "failure"}}, {}, "quality / sonar must have failed"),
+        ({"checks": {"quality / sonar": "success", "quality / verdict": None}}, {}, "still running: quality / verdict"),
+        ({"checks": {"quality / sonar": "success", "quality / verdict": "failure"}}, {}, "finds nothing: re-run the verdict"),
+        ({"checks": {"quality / sonar": "timed_out", "quality / verdict": "failure"}}, {}, "quality / sonar is timed_out: the door needs it green or failed"),
+        ({"checks": {"quality / sonar": "cancelled", "quality / verdict": "failure"}}, {}, "quality / sonar is cancelled"),
+        ({"checks": {"quality / verdict": "failure"}}, {}, "quality / sonar did not run: the door needs it green or failed"),
         ({"checks": {"quality / sonar": "failure"}}, {}, "quality / verdict must have failed"),
-        ({"head_config": GATE_CONFIG.replace("fail", "report")}, {}, "loosened: legacy fail"),
+        ({"checks": SONAR_GREEN, "base_config": TWO_JOBS, "head_config": ONE_JOB}, {}, f"loosened (undeclared): {B_REMOVED}"),
+        (
+            {"checks": SONAR_GREEN, "base_config": TWO_JOBS, "head_config": ONE_JOB + declaring(B_REMOVED) + declaring("x")},
+            {}, "declared loosening matches nothing: x",
+        ),
+        (
+            {"checks": {**SONAR_GREEN, "B": "failure"}, "base_config": TWO_JOBS, "head_config": ONE_JOB + declaring(B_REMOVED)},
+            {}, "B (failure)",
+        ),
+        (
+            {"checks": SONAR_GREEN, "base_config": TWO_JOBS, "head_config": ONE_JOB + declaring(B_REMOVED), "merge_config": ONE_JOB},
+            {}, f"loosened (undeclared): {B_REMOVED}",
+        ),
+        ({"head_config": GATE_CONFIG.replace("fail", "report")}, {}, "loosened (undeclared): legacy fail"),
         ({"head_config": REPORT_CONFIG, "base_config": REPORT_CONFIG}, {}, "legacy = report at the pull request's current merge commit"),
         ({"head_config": GATE_CONFIG, "base_config": REPORT_CONFIG, "merge_config": REPORT_CONFIG}, {}, "legacy = report at the pull request's current merge commit"),
         ({"head_config": REPORT_CONFIG, "base_config": REPORT_CONFIG}, {"unreachable": True}, "legacy = report"),
@@ -281,12 +314,15 @@ def test_anything_but_ja_changes_nothing(typed, capsys):
     ],
     ids=[
         "new finding", "other red check", "other skipped check", "pending check", "failing status", "pending status",
-        "nothing red", "sonar green", "sonar timed out", "verdict green", "loosened legacy", "report on both sides", "report and Sonar unreachable", "head fail but merge commit report", "no config at either sha", "report mode and a new finding", "removed mandatory job",
+        "cell 18 nothing red", "cell 18 verdict running", "cell 17 sonar green, nothing re-derived", "cell 19 sonar timed out",
+        "cell 19 sonar cancelled", "cell 28 no sonar run", "verdict green", "cell 15 undeclared removal",
+        "cell 16 a stale declaration", "cell 3 the removed job still runs red", "cell 22 only the head sha declares",
+        "loosened legacy", "report on both sides", "head fail but merge commit report", "report and Sonar unreachable", "no config at either sha", "report mode and a new finding", "removed mandatory job",
         "closed", "no legacy", "legacy unknown", "stale analysis",
     ],
 )
 def test_refuses_unless_the_door_is_the_only_way(gh_kwargs, sonar_kwargs, message, capsys):
-    """#37 rule 2: each refusal of the door."""
+    """#37 rule 2 and #103 rule 4 (E7): each refusal of the door."""
     gh = FakeGh(**gh_kwargs)
     code, answers = drive(gh, sonar(**sonar_kwargs))
     assert code == 1
@@ -322,8 +358,11 @@ def test_names_the_finding_a_pull_request_adds(capsys):
 
 @pytest.mark.parametrize(
     ("gh_kwargs", "terminal", "repo", "code"),
-    [({}, False, REPO, 1), ({}, True, "not-a-repo", 1), ({"admin": False}, True, REPO, 2), ({"fail_on": ["pull"]}, True, REPO, 2)],
-    ids=["no terminal", "bad name", "missing admin permission", "gh down"],
+    [
+        ({}, False, REPO, 1), ({}, True, "not-a-repo", 1), ({}, True, "acme/widg\u0435ts", 1), ({"admin": False}, True, REPO, 2),
+        ({"fail_on": ["pull"]}, True, REPO, 2),
+    ],
+    ids=["no terminal", "bad name", "#103 rule 1 lookalike name", "missing admin permission", "gh down"],
 )
 def test_changes_nothing_when_it_cannot_start(gh_kwargs, terminal, repo, code):
     """#37 rule 1: operator only; the right and gh checked first, nothing changed."""
@@ -355,11 +394,12 @@ def test_a_merge_that_landed_despite_a_lost_answer_counts_as_merged():
 
 
 def test_gate_is_back_on_after_ctrl_c_and_the_merge_state_is_unknown(capsys):
-    """#37 rule 4 and exit 2: Ctrl-C during the merge restores the gate and says it cannot tell."""
+    """#37 rule 4 and exit 2, #103 rule 5c: Ctrl-C during the merge restores the gate and says, on a line of its own,
+    that it cannot tell."""
     gh = FakeGh(interrupt_on=["merge"])
     assert drive(gh)[0] == 2
     assert gh.gate_values == ["false", "true"]
-    assert "merge state unknown" in capsys.readouterr().out
+    assert "\n\nemergency-merge: merge state unknown" in capsys.readouterr().out
     assert "merge state unknown" in gh.comments[0]
 
 
@@ -370,7 +410,7 @@ def test_ctrl_c_during_a_merge_that_landed_is_reported_merged():
 
 
 def test_gate_is_back_on_when_switching_off_broke_halfway():
-    """#37 rule 4: a half-done switch off is switched on again, and nothing is merged."""
+    """#37 rule 4, #103 rule 5b: a half-done switch off is switched on again, nothing is merged, and the log says so."""
     gh = FakeGh()
     original = gh.__call__
 
@@ -383,6 +423,7 @@ def test_gate_is_back_on_when_switching_off_broke_halfway():
     assert drive(flaky)[0] == 1
     assert gh.gate_values == ["false", "true"]
     assert gh.merge_calls == []
+    assert "quality_gate not switched off → no merge → on" in gh.comments[0]
 
 
 @pytest.mark.parametrize("restore_failure", [GhFailed("denied"), KeyboardInterrupt()], ids=["gh failed", "Ctrl-C"])
@@ -411,7 +452,7 @@ def test_exit_2_loud_line_and_log_when_the_gate_cannot_be_restored(restore_failu
     ids=["merged", "unknown", "not merged"],
 )
 def test_names_the_merge_outcome_when_the_gate_cannot_be_restored(gh_kwargs, read_back_fails, expected, capsys):
-    """#37 rule 4: the operator learns both manual checks, the gate and the pull request."""
+    """#37 rule 4, #103 rule 5d: the operator learns both manual checks, the gate and the pull request, in one line."""
     gh = FakeGh(**gh_kwargs)
     original = gh.__call__
 
@@ -423,9 +464,7 @@ def test_names_the_merge_outcome_when_the_gate_cannot_be_restored(gh_kwargs, rea
         return original(arguments, stdin)
 
     assert drive(cannot_restore)[0] == 2
-    output = capsys.readouterr().out
-    assert "MAY STILL BE OFF" in output
-    assert expected in output
+    assert [line for line in capsys.readouterr().out.splitlines() if "MAY STILL BE OFF" in line and expected in line] != []
 
 
 def test_ctrl_c_while_reading_back_the_merge_state_is_exit_2_with_the_gate_on(capsys):
@@ -463,9 +502,9 @@ def test_ctrl_c_while_posting_the_log_comment_is_reported(restore_fails, capsys)
 @pytest.mark.parametrize(
     ("base_baseline", "merge_baseline", "code", "message"),
     [
-        (BASELINE_82, BASELINE_90, 1, "loosened: size baseline raises function_lines src/quality/cli.py main 82 -> 90"),
+        (BASELINE_82, BASELINE_90, 1, "loosened (undeclared): size baseline raises function_lines src/quality/cli.py main 82 -> 90"),
         (BASELINE_82, BASELINE_82, 0, "merged."),
-        (BASELINE_82, None, 1, "loosened: quality/baseline.toml removed"),
+        (BASELINE_82, None, 1, "loosened (undeclared): quality/baseline.toml removed"),
         (None, None, 0, "merged."),
     ],
     ids=["cell 20 raised", "cell 21 equal", "cell 22 removed at the merge commit", "cell 23 absent at both"],
@@ -492,3 +531,61 @@ def test_a_malformed_baseline_at_the_merge_commit_cannot_be_judged(capsys):
     assert drive(gh)[0] == 2
     assert f"{BASELINE_PATH} at {MERGE_SHA}" in capsys.readouterr().out
     changed_nothing(gh)
+
+
+@pytest.mark.parametrize(
+    ("base_config", "merge_config", "what"),
+    [(TWO_JOBS, ONE_JOB + declaring(B_REMOVED), B_REMOVED), (GATE_CONFIG, REPORT_CONFIG + declaring("legacy fail → report"),
+      "legacy fail → report")],
+    ids=["cell 14 songmaker's removed job", "cell 27 a declared legacy fail → report"],
+)
+def test_a_declared_loosening_merges_through_the_door_without_sonar(capsys, monkeypatch, base_config, merge_config, what):
+    """#103 rule 4 (E6, E7), cells 14 and 27: with Sonar green and only declared loosenings at the merge commit, the
+    door shows each declaration, then asks, merges with the head pinned, and logs it, with no SonarCloud request."""
+    monkeypatch.delenv("SONAR_TOKEN", raising=False)
+    gh, transport, shown = FakeGh(checks=SONAR_GREEN, base_config=base_config, merge_config=merge_config), recording(sonar()), []
+
+    def ask(prompt):
+        shown.append(capsys.readouterr().out)
+        return "ja"
+
+    code = cli.main(["emergency-merge", REPO, "7"], gh=gh, transport=transport, ask=ask, is_terminal=lambda: True)
+    assert (code, transport.sent, gh.sequence) == (0, [], ["gate false", "merge", "gate true", "comment"])
+    assert shown[0].splitlines() == [f"{REPO} #7 head {SHA}: 1 declared loosening(s)", f"{SHOWN}{what} - reason: ruled"]
+    assert gh.merge_calls == [("pr", "merge", "7", "--repo", REPO, "--merge", "--match-head-commit", SHA)]
+    assert f"{SHOWN}{what} - reason: ruled; quality_gate off → merge → on." in gh.comments[0]
+
+
+def test_legacy_findings_and_a_declared_loosening_merge_in_one_run(capsys):
+    """#103 rule 4 (E8, ruled 21.10.2026), cell 21: a red Sonar on legacy findings next to a declared loosening merges
+    under every legacy condition, showing both."""
+    gh = FakeGh(base_config=GATE_CONFIG.replace('["checks"]', '["checks", "B"]'), head_config=GATE_CONFIG + declaring(B_REMOVED))
+    assert drive(gh)[0] == 0
+    output = capsys.readouterr().out
+    assert f"{REPO} #7 head {SHA}: 4 legacy finding(s), 1 declared loosening(s)\n{SHOWN}{B_REMOVED} - reason: ruled" in output
+    assert f"4 legacy finding(s); {SHOWN}{B_REMOVED}" in gh.comments[0]
+
+
+def test_a_red_sonar_run_next_to_a_green_one_takes_the_legacy_path(capsys):
+    """#103 rule 4, cell 28: Sonar is green only when every run is green, so one red run is judged for legacy findings."""
+    assert drive(FakeGh(extra_runs=[("quality / sonar", "success")]))[0] == 0
+    assert f"{REPO} #7 head {SHA}: 4 legacy finding(s)\n" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("base_config", "merge_config", "code", "expected"),
+    [
+        (TWO_JOBS, ONE_JOB + declaring(B_REMOVED, reason="ok\x1b[8m versteckt"), 0, f"{SHOWN}{B_REMOVED} - reason: ok\\x1b[8m versteckt"),
+        (TWO_JOBS, ONE_JOB + declaring(B_REMOVED, reason="ok\rforged"), 2, "needs a non-empty one-line reason"),
+        (TWO_JOBS, ONE_JOB + declaring(B_REMOVED, reason="ok\nforged"), 2, "needs a non-empty one-line reason"),
+        (ONE_JOB, '[gate]\nmandatory_jobs = ["checks", "a\\n::error::b"]\n', 1, 'mandatory job "a\\x0a::error::b" is missing'),
+    ],
+    ids=["ESC in the reason", "carriage return in the reason", "line feed in the reason", "line feed in a refused job"],
+)
+def test_every_line_the_door_prints_is_escaped(capsys, base_config, merge_config, code, expected):
+    """#103 rule 4 (E9), cell 23: no repository text in a declaration or a refusal can hide, split or forge a line."""
+    gh = FakeGh(checks=SONAR_GREEN, base_config=base_config, merge_config=merge_config)
+    assert drive(gh)[0] == code
+    lines = capsys.readouterr().out.splitlines()
+    assert [line for line in lines if expected in line] != []
+    assert_every_line_starts_with_the_door(lines)

@@ -36,7 +36,6 @@ from quality.sonar import (
     uncounted_rules,
 )
 from quality.verdict import (
-    NO_BASE,
     PageFetcher,
     github_fetcher,
     judge,
@@ -78,6 +77,7 @@ def main(
             is_terminal=is_terminal(),
             now=lambda: datetime.now(UTC),
             environment=os.environ,
+            say=emit,
         )
     if arguments.command == "verdict":
         return run_verdict(arguments.path, fetcher_for)
@@ -296,7 +296,7 @@ def run_verdict(path: Path, fetcher_for: Callable[[str], PageFetcher]) -> int:
     try:
         head = read_head(path)
         base_sha = os.environ.get("GATE_BASE_SHA", "")
-        base = read_base(path, base_sha) if base_sha else NO_BASE
+        base = read_base(path, base_sha) if base_sha else None
         jobs = read_jobs(
             os.environ["GITHUB_REPOSITORY"], os.environ["GITHUB_RUN_ID"], fetcher_for(os.environ["GITHUB_TOKEN"])
         )
@@ -306,7 +306,7 @@ def run_verdict(path: Path, fetcher_for: Callable[[str], PageFetcher]) -> int:
         report = (f"verdict: cannot judge - {error}",)
         code = EXIT_CANNOT_JUDGE
     else:
-        report = ("verdict: green",) if result.green else (*result.problems, "verdict: red")
+        report = result.lines()
         code = EXIT_CLEAN if result.green else EXIT_FINDINGS
     emit(*report, file=sys.stderr if code == EXIT_CANNOT_JUDGE else sys.stdout)
     append_step_summary(report)
