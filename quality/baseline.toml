@@ -5,3 +5,5 @@
 
 [file_lines]
 "tests/test_engines.py" = 993
+
+[clones]

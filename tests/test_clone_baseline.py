@@ -195,14 +195,22 @@ def test_an_unknown_table_names_clones_among_the_known_ones():
         load_baseline("[future]\n")
 
 
-@pytest.mark.parametrize("clones", ["", FIRST], ids=["no clone table", "a clone table"])
-def test_hygiene_with_a_clone_table_holds_the_size_and_leaves_the_clone_rule_report_only(build_repo, capsys, clones):
-    """#130 cell 19: the table changes neither the size rule's verdict nor the clone rule's report-only line."""
-    repo = build_repo({"src/a.py": long_function(71), **TWO_FILES, BASELINE_PATH: LONG_ONE + clones})
+def test_hygiene_without_a_clone_table_holds_the_size_and_leaves_the_clone_rule_report_only(build_repo, capsys):
+    """#136 cell 6 (E3, report half): size tables alone leave the clone rule counting."""
+    repo = build_repo({"src/a.py": long_function(71), **TWO_FILES, BASELINE_PATH: LONG_ONE})
     code, output = hygiene_output(capsys, repo)
     assert code == 1, output
     assert "the baseline holds 70 (it grew)" in output
     assert "clone: report only (no [clones] in quality/baseline.toml) - production: 0 pair(s), tests: 1 pair(s)" in output
+
+
+def test_hygiene_with_a_clone_table_holds_the_size_and_the_pairs_without_a_report_line(build_repo, capsys):
+    """#136 E3, cell 2: a held pair that the tree has is clean, and an enforced rule prints no report line."""
+    repo = build_repo({"src/a.py": long_function(71), **TWO_FILES, BASELINE_PATH: LONG_ONE + FIRST})
+    code, output = hygiene_output(capsys, repo)
+    assert code == 1, output
+    assert "the baseline holds 70 (it grew)" in output
+    assert ("clone:" in output, "clone tests" in output) == (False, False)
 
 
 def test_the_write_with_no_previous_file_writes_both_and_names_no_pair(build_repo, capsys):
@@ -303,3 +311,125 @@ def test_a_pair_across_production_and_tests_round_trips(build_repo, capsys):
 def test_a_size_entry_and_a_pair_load_into_one_baseline():
     key = Key(Metric.FUNCTION_LINES, "src/quality/cli.py", "main")
     assert load_baseline(SIZE + FIRST) == Baseline({key: 82}, frozenset({FIRST_PAIR}))
+
+
+NEW_PAIR = (
+    "clone tests/test_b.py:1 - function hygiene is a near copy of tests/test_a.py run (new pair).\n"
+    "  Fix: give the shared body one owner and call it, or make the cases one parametrized test"
+)
+STALE_PAIR = (
+    "clone tests/test_a.py - the baseline holds the pair tests/test_a.py run <-> tests/test_b.py hygiene, "
+    "which is gone (stale).\n  Fix: lower it with `quality baseline write`"
+)
+
+
+def enforced(capsys, build_repo, files, table=EMPTY_CLONES):
+    return hygiene_output(capsys, build_repo({**files, BASELINE_PATH: table}))
+
+
+def test_an_empty_clone_table_makes_a_new_cross_file_pair_red_at_its_second_side(build_repo, capsys):
+    """#136 E3, E4, cell 1."""
+    code, output = enforced(capsys, build_repo, TWO_FILES)
+    assert code == 1, output
+    assert NEW_PAIR in output
+
+
+def test_a_pair_across_production_and_tests_is_judged_like_any_other(build_repo, capsys):
+    """#136 cell 13."""
+    files = {"src/a.py": clone_function("run", "a", "b"), "tests/test_b.py": clone_function("hygiene", "c", "d")}
+    code, output = enforced(capsys, build_repo, files)
+    assert code == 1, output
+    assert "clone tests/test_b.py:1 - function hygiene is a near copy of src/a.py run (new pair)." in output
+
+
+def test_a_held_pair_whose_side_file_was_deleted_is_red_at_the_first_side(build_repo, capsys):
+    """#136 E4, cell 3."""
+    code, output = enforced(capsys, build_repo, {"tests/test_a.py": TWO_FILES["tests/test_a.py"]}, FIRST)
+    assert code == 1, output
+    assert STALE_PAIR in output
+
+
+def test_a_renamed_function_makes_the_held_pair_stale_and_the_new_name_a_new_pair(build_repo, capsys):
+    """#136 cell 4."""
+    files = {**TWO_FILES, "tests/test_b.py": clone_function("renamed", "c", "d")}
+    code, output = enforced(capsys, build_repo, files, FIRST)
+    assert code == 1, output
+    assert STALE_PAIR in output
+    assert "clone tests/test_b.py:1 - function renamed is a near copy of tests/test_a.py run (new pair)." in output
+
+
+def test_a_held_same_file_pair_and_a_held_self_pair_are_stale(build_repo, capsys):
+    """#136 cell 5: the detector never produces them, so they are held and gone."""
+    table = '[clones."tests/test_a.py"]\nrun = [["tests/test_a.py", "other"], ["tests/test_a.py", "run"]]\n'
+    code, output = enforced(capsys, build_repo, {"tests/test_a.py": TWO_FILES["tests/test_a.py"]}, table)
+    assert code == 1, output
+    assert "the baseline holds the pair tests/test_a.py other <-> tests/test_a.py run, which is gone (stale)." in output
+    assert "the baseline holds the pair tests/test_a.py run <-> tests/test_a.py run, which is gone (stale)." in output
+
+
+def test_a_copy_fixed_in_place_leaves_the_held_pair_stale(build_repo, capsys):
+    """#136 cell 16: both functions remain but are no longer similar."""
+    files = {**TWO_FILES, "tests/test_b.py": "def hygiene(a):\n    return a\n"}
+    code, output = enforced(capsys, build_repo, files, FIRST)
+    assert code == 1, output
+    assert STALE_PAIR in output
+
+
+def test_a_second_side_moved_down_is_named_at_its_new_line(build_repo, capsys):
+    """#136 cell 18."""
+    files = {**TWO_FILES, "tests/test_b.py": "import os\n\n\n" + TWO_FILES["tests/test_b.py"]}
+    code, output = enforced(capsys, build_repo, files)
+    assert code == 1, output
+    assert "clone tests/test_b.py:4 - function hygiene" in output
+
+
+def test_two_new_pairs_print_in_sorted_order(build_repo, capsys):
+    """#136 cell 10."""
+    code, output = enforced(capsys, build_repo, THREE_FILES)
+    assert code == 1, output
+    positions = [output.index(line) for line in (
+        "tests/test_b.py:1 - function hygiene is a near copy of tests/test_a.py run",
+        "tests/test_c.py:1 - function walk is a near copy of tests/test_a.py run",
+        "tests/test_c.py:1 - function walk is a near copy of tests/test_b.py hygiene",
+    )]
+    assert positions == sorted(positions)
+
+
+def test_a_file_python_cannot_parse_leaves_the_enforced_clone_rule_unable_to_judge(build_repo, capsys):
+    """#136 cell 8: the same file and wording as the size rule, and both rules count as unparsable."""
+    code, output = enforced(capsys, build_repo, {**TWO_FILES, "src/broken.py": "def broken(:\n"})
+    assert code == 2, output
+    assert "hygiene: size unparsable - src/broken.py is not valid Python" in output
+    assert "hygiene: clone unparsable - src/broken.py is not valid Python" in output
+    assert "2 unparsable" in output
+
+
+@pytest.mark.parametrize("text", ["[size\n", *MALFORMED], ids=["no clone table, not TOML", *MALFORMED_IDS])
+def test_a_malformed_baseline_leaves_both_rules_unable_to_judge_with_the_rewrite_hint(build_repo, capsys, text):
+    """#136 cell 9: one read, so even a file with no `[clones]` leaves clone's mode unknown."""
+    code, output = hygiene_output(capsys, build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: text}))
+    assert code == 2, output
+    assert "hygiene: size cannot judge" in output
+    assert "hygiene: clone cannot judge" in output
+    assert "rewrite it with `quality baseline write`" in output
+
+
+def test_the_write_and_the_rule_agree(build_repo, capsys):
+    """#136 cell 11."""
+    repo = build_repo(THREE_FILES)
+    assert written(capsys, repo)[0] == 0
+    code, output = hygiene_output(capsys, repo)
+    assert (code, "clone" in output.replace("clone,", "")) == (0, False), output
+
+
+def test_a_control_character_and_undecodable_bytes_in_a_path_print_escaped(build_repo, capsys):
+    """#136 cell 17: a new pair can carry both; a held pair only Unicode."""
+    new = {"src/a\x01.py": clone_function("run", "a", "b"), "src/b\udcff.py": clone_function("hygiene", "c", "d")}
+    code, output = enforced(capsys, build_repo, new)
+    assert code == 1, output
+    assert "clone src/b\\udcff.py:1 - function hygiene is a near copy of src/a\\x01.py run (new pair)." in output
+    pair = ClonePair.of(Place("src/a\x01.py", "run"), Place("src/b.py", "hygiene"))
+    stale = render_baseline(Baseline({}, frozenset({pair})))
+    code, output = enforced(capsys, build_repo, {"src/c.py": "x = 1\n"}, stale)
+    assert code == 1, output
+    assert "clone src/a\\x01.py - the baseline holds the pair src/a\\x01.py run <-> src/b.py hygiene" in output

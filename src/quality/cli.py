@@ -211,7 +211,7 @@ def run_baseline_write(path: Path) -> int:
     try:
         top = work_tree_top(path)
         sources = read_sources(top, tracked_files(top))
-        written = ratchet.Baseline(ratchet.debt(ratchet.measure(sources).complete()), clones.find_pairs(sources))
+        written = ratchet.Baseline(ratchet.debt(ratchet.measure(sources).complete()), clones.find_pairs(sources).pairs)
         loosenings = describe_loosenings(top, written)
         repository.write_text(top, ratchet.BASELINE_PATH, ratchet.render_baseline(written))
     except (CannotJudge, repository.RepositoryFileError, ratchet.SizeError) as error:

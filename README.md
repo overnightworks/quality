@@ -76,14 +76,23 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   src/a.py f 16`) and, when the previous file has a `[clones]` table, each new pair (`baseline: adds clone
   tests/test_a.py run <-> tests/test_b.py hygiene`); a lowered or removed entry or pair is not named; without a
   previous file only the count prints, and a previous file without `[clones]` names no pair but still names its size raises and adds. A previous file it cannot read is
-  overwritten with `baseline: the previous quality/baseline.toml could not be read (...), so raises cannot be named`.
+  overwritten with `baseline: the previous quality/baseline.toml could not be read (...), so raises cannot be named`,
+  but a symlink on its way is never written through: `baseline: not written - cannot write quality/baseline.toml: a
+  symlink on its way would redirect the write`, exit `2`, as for any write the system refuses.
   The write exits `0` with raises too: the verdict is the gate.
 - `clone`: a pair is two functions (methods and nested functions too) in two different tracked `*.py` files, each of at
   least 40 tokens without its docstring, whose structure is at least 90 % the same once every name and literal is
   renamed; tests count like code, and a copy inside one file is no pair. A pair is named by the path and qualified
-  symbol of both sides, as `size` names a function. For now the rule only prints the counts (`clone: report only (no
-  [clones] in quality/baseline.toml) - production: 1 pair(s), tests: 0 pair(s)`); a pair counts as tests only when both
-  files are tests. A file Python cannot parse has no pair.
+  symbol of both sides, as `size` names a function; a pair counts as tests only when both files are tests. Without a
+  `[clones]` table in `quality/baseline.toml` the rule only prints the counts (`clone: report only (no [clones] in
+  quality/baseline.toml) - production: 1 pair(s), tests: 0 pair(s)`). With one, even an empty one, a new pair is a
+  finding at its second side (`clone tests/test_b.py:31 - function hygiene is a near copy of tests/test_a.py run (new
+  pair).`, fix: give the shared body one owner and call it, or make the cases one parametrized test) and so is a held
+  pair the tree lost, even when a side was deleted (`clone tests/test_a.py - the baseline holds the pair tests/test_a.py
+  run <-> tests/test_b.py hygiene, which is gone (stale).`, fix: `quality baseline write`); an enforced rule prints no
+  report line. A Python file that cannot be parsed may hide a pair, so with a `[clones]` table it is `clone
+  unparsable` (exit `2`), as for `size`. The baseline is read once for both rules: one that cannot be read leaves both
+  `cannot judge` (exit `2`), also when it has no `[clones]` table, since the mode is then unknown.
 - `import-contract`: the repository's [import-linter](https://github.com/seddonym/import-linter) contracts must be
   kept. The config is the tracked `.importlinter` or `setup.cfg` (`[importlinter]`) or `pyproject.toml`
   (`[tool.importlinter]`), counted once its name exists in the tree: a tracked one deleted from disk is none, a symlink to

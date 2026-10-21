@@ -290,7 +290,9 @@ def read_sources(root: Path, tracked: list[str]) -> dict[str, bytes]:
 
 
 @dataclass(frozen=True)
-class SizeResult:
+class RuleResult:
+    """A baseline rule's findings, and its report line when it only counts."""
+
     findings: list[Finding]
     report: str | None
 
@@ -309,20 +311,37 @@ def read_baseline(root: Path) -> ratchet.Baseline | None:
         raise ratchet.SizeError(f"{ratchet.BASELINE_PATH} is not valid UTF-8 ({error})") from error
 
 
-def check_size(root: Path, sources: dict[str, bytes]) -> SizeResult:
-    """Report-only without a baseline; with one, the tree on disk must hold it."""
-    tree = ratchet.measure(sources)
+def judged_baseline(root: Path) -> ratchet.Baseline | None:
+    """The baseline both baseline rules judge by, read once; a file that cannot be read cannot be judged."""
     try:
-        baseline = read_baseline(root)
+        return read_baseline(root)
     except ratchet.SizeError as error:
         raise CannotJudge(f"{error}; {ratchet.REWRITE_HINT}") from error
-    if baseline is None:
-        return SizeResult([], ratchet.report_counts(tree))
+
+
+def _complete(tree: ratchet.TreeMeasurement) -> ratchet.Measurements:
+    """Holding a baseline needs every function measured, so an unparsable file cannot be judged."""
     try:
-        measurements = tree.complete()
+        return tree.complete()
     except ratchet.UnparsableSource as error:
         raise Unparsable(str(error)) from error
-    return SizeResult(ratchet.compare(measurements, baseline.size), None)
+
+
+def check_size(tree: ratchet.TreeMeasurement, baseline: ratchet.Baseline | None) -> RuleResult:
+    """Report-only without a baseline; with one, the tree on disk must hold it."""
+    if baseline is None:
+        return RuleResult([], ratchet.report_counts(tree))
+    return RuleResult(ratchet.compare(_complete(tree), baseline.size), None)
+
+
+def check_clones(tree: ratchet.TreeMeasurement, sources: dict[str, bytes], baseline: ratchet.Baseline | None) -> RuleResult:
+    """Report-only without a `[clones]` table, even in a baseline of size tables; with one, every new pair and every
+    held pair the tree lost is a finding. A pair can hide in a file the detector cannot read, so then it cannot judge."""
+    pairs = clones.find_pairs(sources)
+    if baseline is None or baseline.clones is None:
+        return RuleResult([], clones.report_line(pairs.pairs))
+    _complete(tree)
+    return RuleResult(clones.compare_pairs(pairs, baseline.clones), None)
 
 
 def check_import_contract(root: Path, tracked: list[str]) -> architecture.ContractsVerdict:
@@ -432,23 +451,35 @@ def _verdict(rule: str, outcome: Sequence[Finding] | CannotJudge) -> RuleVerdict
     return RuleVerdict(rule, tuple(outcome))
 
 
+def _judge_baseline_rules(
+    sources: dict[str, bytes] | CannotJudge, baseline: ratchet.Baseline | None | CannotJudge
+) -> tuple[RuleResult | CannotJudge, RuleResult | CannotJudge]:
+    """The size and clone verdicts, both from one measurement of the tree and one read of the baseline."""
+    if isinstance(sources, CannotJudge):
+        return sources, sources
+    if isinstance(baseline, CannotJudge):
+        return baseline, baseline
+    tree = ratchet.measure(sources)
+    return _attempt(lambda: check_size(tree, baseline)), _attempt(lambda: check_clones(tree, sources, baseline))
+
+
 def run_hygiene(root: Path, engine_dir: Path | None = None) -> HygieneResult:
     """Judges every active rule, in run order, over the repository `root` lies in; only one git cannot list stops the run."""
     root = work_tree_top(root)
     tracked = tracked_files(root)
     sources = _attempt(lambda: read_sources(root, tracked))
-    size = sources if isinstance(sources, CannotJudge) else _attempt(lambda: check_size(root, sources))
-    pairs = sources if isinstance(sources, CannotJudge) else clones.find_pairs(sources)
+    baseline = sources if isinstance(sources, CannotJudge) else _attempt(lambda: judged_baseline(root))
+    size, clone = _judge_baseline_rules(sources, baseline)
     contracts = _attempt(lambda: check_import_contract(root, tracked))
     verdicts = [
         _verdict(ENV_FILE, check_env_files(tracked)),
         _verdict(COMPOSE_PORT, _attempt(lambda: check_compose_ports(root, tracked))),
         _verdict(ratchet.SIZE, size if isinstance(size, CannotJudge) else size.findings),
-        _verdict(clones.RULE, pairs if isinstance(pairs, CannotJudge) else []),
+        _verdict(clones.RULE, clone if isinstance(clone, CannotJudge) else clone.findings),
         _verdict(architecture.RULE, contracts if isinstance(contracts, CannotJudge) else contracts.findings),
         _verdict(CLAUDE_MD, _attempt(lambda: check_claude_md(root, tracked))),
     ]
-    reports = _reports(size, pairs, contracts)
+    reports = _reports(size, clone, contracts)
     if engine_dir is None:
         return HygieneResult(tuple(verdicts), reports, [], {})
     secrets = _attempt(lambda: check_secrets(root, engine_dir))
@@ -462,11 +493,11 @@ def run_hygiene(root: Path, engine_dir: Path | None = None) -> HygieneResult:
 
 
 def _reports(
-    size: SizeResult | CannotJudge,
-    pairs: frozenset[ratchet.ClonePair] | CannotJudge,
+    size: RuleResult | CannotJudge,
+    clone: RuleResult | CannotJudge,
     contracts: architecture.ContractsVerdict | CannotJudge,
 ) -> tuple[str, ...]:
-    """The report lines of the rules that judged: the size counts without a baseline, the clone pairs, the import-contract notes."""
+    """The report lines of the rules that judged: the size counts without a baseline, the clone pairs without a `[clones]` table, the import-contract notes."""
     size_reports = [] if isinstance(size, CannotJudge) or size.report is None else [size.report]
-    clone_reports = [] if isinstance(pairs, CannotJudge) else [clones.report_line(pairs)]
+    clone_reports = [] if isinstance(clone, CannotJudge) or clone.report is None else [clone.report]
     return (*size_reports, *clone_reports, *([] if isinstance(contracts, CannotJudge) else contracts.notes))
