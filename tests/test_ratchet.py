@@ -385,11 +385,11 @@ def test_baseline_write_overwrites_an_unreadable_previous_baseline_with_a_note(b
 )
 def test_an_unreadable_baseline_cannot_be_judged(build_repo, capsys, baseline):
     """#46 rule 4 and #52 rule 7, cell 14: a baseline the rule cannot read is exit 2, never clean, and says once how
-    to rewrite it."""
+    to rewrite it once per rule that reads it (size and clone, #136)."""
     code, output = hygiene(capsys, build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: baseline}))
     assert code == 2
     assert "cannot judge" in output
-    assert output.count("rewrite it with `quality baseline write`") == 1, output
+    assert output.count("rewrite it with `quality baseline write`") == 2, output
 
 
 def link_the_baseline_elsewhere(repo: Path, elsewhere: Path) -> None:
@@ -542,11 +542,11 @@ def not_utf8_baseline_repo(build_repo) -> Path:
 
 
 def test_a_baseline_that_is_not_utf8_is_malformed_and_says_once_how_to_rewrite_it(build_repo, capsys):
-    """#76 rule 6, cell 18: hygiene's size rule names the invalid encoding and the rewrite once."""
+    """#76 rule 6, cell 18: hygiene's size and clone rules each name the invalid encoding and the rewrite once."""
     code, output = hygiene(capsys, not_utf8_baseline_repo(build_repo))
     assert code == 2
     assert f"{BASELINE_PATH} is not valid UTF-8" in output
-    assert output.count("rewrite it with `quality baseline write`") == 1, output
+    assert output.count("rewrite it with `quality baseline write`") == 2, output
 
 
 def test_baseline_write_overwrites_a_baseline_that_is_not_utf8_without_a_rewrite_hint(build_repo, capsys):

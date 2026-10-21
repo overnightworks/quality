@@ -100,8 +100,8 @@ def test_a_pair_is_named_by_path_and_qualified_symbol_whatever_the_line():
     first, second = function("first", "a", "b"), function("second", "c", "d")
     neighbour = "def neighbour(a):\n    return a\n"
     edited_neighbour = "def neighbour(a, b):\n    c = a\n    return b\n"
-    before = clones.find_pairs({"src/a.py": first.encode(), "src/b.py": f"{neighbour}\n\n{second}".encode()})
-    after = clones.find_pairs({"src/a.py": first.encode(), "src/b.py": f"import os\n\n\n{edited_neighbour}\n\n{second}\nx = 1\n".encode()})
+    before = clones.find_pairs({"src/a.py": first.encode(), "src/b.py": f"{neighbour}\n\n{second}".encode()}).pairs
+    after = clones.find_pairs({"src/a.py": first.encode(), "src/b.py": f"import os\n\n\n{edited_neighbour}\n\n{second}\nx = 1\n".encode()}).pairs
     assert before == after == {ClonePair(Place("src/a.py", "first"), Place("src/b.py", "second"))}
 
 
@@ -109,7 +109,7 @@ def test_methods_and_repeated_names_get_the_size_rules_symbols():
     """#113 E2: `Class.method` and the `#2` of a name defined twice, as the size rule names them."""
     first = "class Holder:\n" + "".join(f"    {line}\n" for line in function("method", "self", "b").splitlines())
     second = function("method", "a", "b") + function("method", "c", "d")
-    pairs = clones.find_pairs({"src/a.py": first.encode(), "src/b.py": second.encode()})
+    pairs = clones.find_pairs({"src/a.py": first.encode(), "src/b.py": second.encode()}).pairs
     assert {pair.first.symbol for pair in pairs} | {pair.second.symbol for pair in pairs} == {"Holder.method", "method", "method#2"}
 
 
@@ -120,7 +120,7 @@ def test_a_file_python_cannot_parse_has_no_pair_and_leaves_the_run_clean(build_r
     assert (code, report(0, 0) in output, "clone unparsable" in output) == (0, True, False), output
 
 
-def test_quality_reports_no_clone_pair_in_its_own_tree(capsys):
-    """#113 row 4a: the four copies of one test helper are one function now."""
+def test_quality_holds_its_own_empty_clone_table_and_prints_no_clone_line(capsys):
+    """#136 cell 12: quality enforces its `[clones]`, so a copied helper in its tree turns its own gate red."""
     code, output = hygiene(capsys, QUALITY_ITSELF)
-    assert (code, report(0, 0) in output) == (0, True), output
+    assert (code, "clone:" in output) == (0, False), output

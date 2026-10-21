@@ -9,11 +9,12 @@ least 0.9; only each function's rarest shingles are indexed, since a pair at tha
 import ast
 import math
 from collections import Counter, defaultdict
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 
 from quality import ratchet
 from quality.ratchet import Area, ClonePair, Place
+from quality.report import Finding
 
 RULE = "clone"
 MIN_TOKENS = 40
@@ -29,7 +30,17 @@ class Unit:
     """A function long enough to be a copy, with the shingles of its token stream."""
 
     place: Place
+    line: int
     shingles: frozenset[int]
+
+
+@dataclass(frozen=True)
+class ClonePairs:
+    """The pairs of a tree, and the line of every place in them; the line is kept apart because a pair's equality is
+    the baseline's identity."""
+
+    pairs: frozenset[ClonePair]
+    lines: Mapping[Place, int]
 
 
 def _literal_class(value: object) -> str:
@@ -103,7 +114,7 @@ def _units(sources: dict[str, bytes]) -> list[Unit]:
             continue
         for place, function in _functions(path, tree):
             if len(tokens := _tokens(function)) >= MIN_TOKENS:
-                units.append(Unit(place, _shingles(tokens)))
+                units.append(Unit(place, function.lineno, _shingles(tokens)))
     return units
 
 
@@ -111,7 +122,7 @@ def _similarity(left: frozenset[int], right: frozenset[int]) -> float:
     return len(left & right) / len(left | right)
 
 
-def _pairs_of(units: list[Unit]) -> Iterator[ClonePair]:
+def _pairs_of(units: list[Unit]) -> Iterator[tuple[Unit, Unit]]:
     frequency: Counter[int] = Counter()
     for unit in units:
         frequency.update(unit.shingles)
@@ -125,14 +136,16 @@ def _pairs_of(units: list[Unit]) -> Iterator[ClonePair]:
             index[shingle].append(unit)
         for other in candidates:
             if other.place.path != unit.place.path and _similarity(unit.shingles, other.shingles) >= SIMILARITY_THRESHOLD:
-                yield ClonePair.of(unit.place, other.place)
+                yield unit, other
 
 
-def find_pairs(sources: dict[str, bytes]) -> frozenset[ClonePair]:
+def find_pairs(sources: dict[str, bytes]) -> ClonePairs:
     """The cross-file pairs among the functions of the Python files among the given sources; a file Python cannot
     parse has none."""
     python = {path: source for path, source in sources.items() if ratchet.language_of(path) is ratchet.Language.PYTHON}
-    return frozenset(_pairs_of(_units(python)))
+    found = list(_pairs_of(_units(python)))
+    pairs = frozenset(ClonePair.of(unit.place, other.place) for unit, other in found)
+    return ClonePairs(pairs, {unit.place: unit.line for pair in found for unit in pair})
 
 
 def summarise_pairs(pairs: frozenset[ClonePair]) -> dict[Area, int]:
@@ -144,3 +157,22 @@ def summarise_pairs(pairs: frozenset[ClonePair]) -> dict[Area, int]:
 def report_line(pairs: frozenset[ClonePair]) -> str:
     counts = ", ".join(f"{area.value}: {count} pair(s)" for area, count in summarise_pairs(pairs).items())
     return f"{RULE}: report only (no [clones] in {ratchet.BASELINE_PATH}) - {counts}"
+
+
+def compare_pairs(measured: ClonePairs, held: frozenset[ClonePair]) -> list[Finding]:
+    """The enforced rule: a pair the tree has and the baseline lacks is new, one the baseline holds and the tree
+    lacks is stale, and a stale pair is red even when a side was deleted. Findings follow the pairs' own order."""
+    findings = {pair: _new_pair_finding(pair, measured.lines[pair.second]) for pair in measured.pairs - held}
+    findings |= {pair: _stale_pair_finding(pair) for pair in held - measured.pairs}
+    return [findings[pair] for pair in sorted(findings)]
+
+
+def _new_pair_finding(pair: ClonePair, line: int) -> Finding:
+    reason = f"function {pair.second.symbol} is a near copy of {pair.first.path} {pair.first.symbol} (new pair)."
+    fix = "give the shared body one owner and call it, or make the cases one parametrized test"
+    return Finding(RULE, pair.second.path, line, reason, fix)
+
+
+def _stale_pair_finding(pair: ClonePair) -> Finding:
+    reason = f"the baseline holds the pair {pair.label}, which is gone (stale)."
+    return Finding(RULE, pair.first.path, None, reason, f"lower it with `{ratchet.WRITE_COMMAND}`")

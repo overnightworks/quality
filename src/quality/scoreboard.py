@@ -382,7 +382,7 @@ def measure_public(url: str) -> Row:
         workflows = read_workflows(clone, tracked)
         declared = read_declared(clone, tracked)
     tree = ratchet.measure(sources)
-    pairs = clones.summarise_pairs(clones.find_pairs(sources))
+    pairs = clones.summarise_pairs(clones.find_pairs(sources).pairs)
     commit = head.stdout.strip()[:SHORT_COMMIT]
     languages, areas = ratchet.language_lines(tree), ratchet.summarise(tree)
     return Measured(name, commit, languages, areas, len(tree.unparsable), pairs, workflows, declared)

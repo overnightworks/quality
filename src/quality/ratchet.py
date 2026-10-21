@@ -139,7 +139,7 @@ class Place(NamedTuple):
     symbol: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, order=True)
 class ClonePair:
     """Two near-identical functions in two files; `first` sorts before `second`, so a pair has one spelling."""
 
@@ -363,12 +363,7 @@ def raised_entries(base: SizeEntries, head: SizeEntries) -> list[RaisedEntry]:
 
 def added_pairs(base: frozenset[ClonePair], head: frozenset[ClonePair]) -> list[ClonePair]:
     """The pairs only the head holds, in the order the file and the lines name them; a removed pair is no loosening."""
-    return _in_order(head - base)
-
-
-def _in_order(pairs: Iterable[ClonePair]) -> list[ClonePair]:
-    """`ClonePair` has no ordering of its own, and `Place` is a NamedTuple, so sort by the two sides."""
-    return sorted(pairs, key=lambda pair: (pair.first, pair.second))
+    return sorted(head - base)
 
 
 def _finding(key: Key, measured: Measured, verdict: str, fix: str) -> Finding:
@@ -401,7 +396,7 @@ def _clone_sections(pairs: frozenset[ClonePair]) -> dict[str, list[str]]:
     if not pairs:
         return {f"[{CLONES}]": []}
     others: dict[Place, list[Place]] = {}
-    for pair in _in_order(pairs):
+    for pair in sorted(pairs):
         others.setdefault(pair.first, []).append(pair.second)
     sections: dict[str, list[str]] = {}
     for first, seconds in others.items():
