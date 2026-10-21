@@ -195,3 +195,10 @@ Asked: „Befund 132: Dateinamen oder Compose-Texte aus einem Repo können im CI
 „Beides (empfohlen)“ ([#89](https://github.com/overnightworks/quality/issues/89)).
 
 In GitHub Actions the door stops workflow commands with a per-run token, and repository text prints its control characters escaped through one boundary. The stop landed first (#89, Part A); the escaping follows as its own item.
+
+## Operator ruling (21.10.2026): Sonar's Dependabot exception, applied on pull requests
+
+[#98](https://github.com/overnightworks/quality/issues/98). On 20.10.2026 the operator had chosen one `quality/config.toml` entry per exact `FROM` line („Eng begrenzte Ausnahme (empfohlen)“); the plan review corrected that premise and he re-ruled in two answers.
+
+1. The re-ruling. Asked: „Neue Fakten zu Sonar S8431: Sonar setzt seine eigene Dependabot-Ausnahme nur auf main um, bei PR-Analysen nicht … Wie soll das Gate es lösen?“ Answered: „Sonars Ausnahme anwenden (empfohlen)“. The gate applies Sonar's own exception on pull requests too, for this one rule, with no entry per line and no config table.
+2. The detail. Asked: „Wann soll das Gate die Sonar-Regel S8431 nicht zählen? Sonar selbst prüft auf main nur, ob die Datei .github/dependabot.yml existiert, nicht was darin steht.“ Answered: „Wenn dependabot.yml existiert (empfohlen)“. The rule does not count when `.github/dependabot.yml` exists in the checkout; the file is never read.

@@ -24,8 +24,17 @@ from quality.hygiene import (
     tracked_files,
     work_tree_top,
 )
-from quality.report import Finding, printable, render
-from quality.sonar import TASK_FILE, Sleep, Transport, analyse, fetch_json, preflight
+from quality.report import Finding, headline, printable, render
+from quality.sonar import (
+    DEPENDABOT_CONFIG,
+    TASK_FILE,
+    Sleep,
+    Transport,
+    analyse,
+    fetch_json,
+    preflight,
+    uncounted_rules,
+)
 from quality.verdict import (
     NO_BASE,
     PageFetcher,
@@ -270,12 +279,15 @@ def run_sonar_preflight(path: Path) -> int:
 
 def run_sonar_findings(transport: Transport, sleep: Sleep) -> int:
     try:
-        result = analyse(os.environ, read_gate_settings(Path(".")).legacy, transport, sleep)
-    except (CannotJudge, ConfigError) as error:
+        legacy_mode = read_gate_settings(Path(".")).legacy
+        uncounted = uncounted_rules(repository.is_on_disk(Path("."), DEPENDABOT_CONFIG))
+        result = analyse(os.environ, legacy_mode, uncounted, transport, sleep)
+    except (CannotJudge, ConfigError, repository.RepositoryFileError) as error:
         emit(f"sonar: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     for finding in result.findings.listed:
         print(render(finding))
+    emit(*(headline(finding) for finding in result.findings.set_aside))
     emit(result.summary(), file=sys.stderr if result.fails_the_run else sys.stdout)
     return EXIT_FINDINGS if result.fails_the_run else EXIT_CLEAN
 
