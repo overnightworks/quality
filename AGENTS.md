@@ -6,7 +6,8 @@ Exit 0 clean, 1 findings, 2 cannot judge.
 Door commands:
 
 - `quality hygiene [PATH]` (`hygiene.py`): `.env` files, compose ports, the `size` ratchet (`ratchet.py`), the
-  `import-contract` rule (`architecture.py`, import-linter as a library), and with `--engines` the secret and workflow
+  `import-contract` rule (`architecture.py`, import-linter as a library), the `claude-md` rule (a tracked `CLAUDE.md` is
+  exactly `@AGENTS.md`), and with `--engines` the secret and workflow
   scans and the `advisory` rule (`advisories.py`: osv-scanner over every tracked `uv.lock`, against a PyPI database
   it downloads itself).
 - `quality baseline write [PATH]` (`ratchet.py`): writes the measured size debt to `quality/baseline.toml`,

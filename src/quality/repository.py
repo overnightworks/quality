@@ -79,6 +79,16 @@ def is_on_disk(root: Path, name: str) -> bool:
     return True
 
 
+def is_symlink(root: Path, name: str) -> bool:
+    """Whether `name` is itself a symbolic link, dangling or not; nothing at `name` is not one."""
+    try:
+        return stat.S_ISLNK(os.lstat(os.path.join(root, name)).st_mode)
+    except OSError as error:
+        if error.errno in ABSENT_ERRNOS:
+            return False
+        raise RepositoryFileError(f"cannot reach {name}: {os_error_reason(error)}") from error
+
+
 def write_text(root: Path, name: str, text: str) -> None:
     """Writes the repository's own `name` as UTF-8, never through a symlink, which could redirect it anywhere."""
     repository = os.path.realpath(root)

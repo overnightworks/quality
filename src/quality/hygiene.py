@@ -15,10 +15,16 @@ from quality.report import Finding, shell_word
 
 ENV_FILE = "env-file"
 COMPOSE_PORT = "compose-port"
+CLAUDE_MD = "claude-md"
 WORKFLOW_RULE_IDS = tuple(engines.WORKFLOW_ENGINES)
 ENGINE_RULE_IDS = (engines.LEAK_RULE, *WORKFLOW_RULE_IDS, advisories.RULE)
 WORKFLOW_DIRECTORY = PurePosixPath(".github/workflows")
 YAML_SUFFIXES = (".yml", ".yaml")
+
+CLAUDE_NESTED_NAME = ".claude/claude.md"
+CLAUDE_FILE_NAMES = frozenset({"claude.md", CLAUDE_NESTED_NAME})
+CLAUDE_IMPORTS = frozenset({b"@AGENTS.md", b"@AGENTS.md\n"})
+AGENTS_FILE = "AGENTS.md"
 
 LOOPBACK = "127.0.0.1"
 LOOPBACK_HOSTS = (LOOPBACK, "::1")
@@ -147,6 +153,43 @@ def check_compose_ports(root: Path, tracked: list[str]) -> list[Finding]:
         if _judged(repository.is_on_disk, root, name) and (text := _judged(repository.read_text, root, name)) is not None:
             findings.extend(_compose_file_findings(name, text))
     return findings
+
+
+def check_claude_md(root: Path, tracked: list[str]) -> list[Finding]:
+    """A tracked CLAUDE.md, in any case, is exactly `@AGENTS.md` beside a tracked AGENTS.md; `.claude/CLAUDE.md` is none.
+
+    The findings carry fixed texts and the file's name, never its content.
+    """
+    findings = []
+    for name in (name for name in tracked if name.casefold() in CLAUDE_FILE_NAMES):
+        problem = _claude_md_problem(root, name, AGENTS_FILE in tracked)
+        if problem is not None:
+            findings.append(Finding(CLAUDE_MD, name, None, *problem))
+    return findings
+
+
+def _claude_md_problem(root: Path, name: str, agents_tracked: bool) -> tuple[str, str] | None:
+    """The reason and the fix for a CLAUDE.md that is not clean; None when it is clean or gone from the tree."""
+    is_link = _judged(repository.is_symlink, root, name)
+    if name.casefold() == CLAUDE_NESTED_NAME:
+        if not (is_link or _judged(repository.is_on_disk, root, name)):
+            return None
+        return (f"{name} gives Claude guidance Codex and Grok never read.",
+                f"move its lines into {AGENTS_FILE} and delete {name}.")
+    if is_link:
+        return (f"{name} is a symlink, not a file holding @AGENTS.md.",
+                f"replace the link with a file whose only line is @AGENTS.md; {AGENTS_FILE} stays as it is.")
+    on_disk = _judged(repository.is_on_disk, root, name)
+    content = _judged(repository.read_bytes, root, name) if on_disk else None
+    if content is None:
+        return None
+    if content not in CLAUDE_IMPORTS:
+        return (f"{name} is not exactly @AGENTS.md, so Claude reads other guidance than Codex and Grok.",
+                f"move its own lines into {AGENTS_FILE}, then leave @AGENTS.md as its only line, or delete it.")
+    if not (agents_tracked and _judged(repository.is_on_disk, root, AGENTS_FILE)):
+        return (f"{name} imports {AGENTS_FILE}, which the repository does not hold.",
+                f"add {AGENTS_FILE} with the repository's guidance, or delete {name}.")
+    return None
 
 
 def _judged[T](ask: Callable[[Path, str], T], root: Path, name: str) -> T:
@@ -393,6 +436,7 @@ def run_hygiene(root: Path, engine_dir: Path | None = None) -> HygieneResult:
         _verdict(COMPOSE_PORT, _attempt(lambda: check_compose_ports(root, tracked))),
         _verdict(ratchet.SIZE, size if isinstance(size, CannotJudge) else size.findings),
         _verdict(architecture.RULE, contracts if isinstance(contracts, CannotJudge) else contracts.findings),
+        _verdict(CLAUDE_MD, _attempt(lambda: check_claude_md(root, tracked))),
     ]
     reports = _reports(size, contracts)
     if engine_dir is None:
