@@ -14,6 +14,8 @@ from quality.scoreboard import (
     Call,
     Declared,
     ReleaseTagsError,
+    RuleRelease,
+    Switch,
     calls_of,
     gate_release,
     pin_cell,
@@ -268,13 +270,31 @@ def test_a_cell_never_claims_more_than_the_oldest_pinned_release(scoreboard, pub
     assert cell(output, "pinned", "size") == size
 
 
-def test_a_rule_only_main_has_is_not_released_on_a_pinned_gate_and_report_only_in_the_gates_own_repository():
+CLONE_RELEASE = "d" * 40
+CLONE_RELEASES = {**FIRST_RELEASES, "v0.4.0": CLONE_RELEASE}
+
+
+@pytest.mark.parametrize(
+    ("pin", "own", "words"),
+    [
+        (CLONE_RELEASE, False, "report-only"),
+        (NEWEST, False, "not in v0.3.1"),
+        (None, True, "report-only"),
+    ],
+    ids=["a pin at the clone release", "an older tag", "the gate's own repository"],
+)
+def test_the_clone_cell_follows_the_release_that_ships_the_rule(pin, own, words):
     """#125 cell 18, E7."""
     clone = next(rule for rule in RULES if rule.rule == "clone")
-    declared = Declared(None, False, False, frozenset())
-    pinned = gate_release((Call(NEWEST),), False, FIRST_RELEASES)
-    own = gate_release((Call(None),), True, FIRST_RELEASES)
-    assert (rule_cell(clone, pinned, declared), rule_cell(clone, own, declared)) == ("not released", "report-only")
+    release = gate_release((Call(pin),), own, CLONE_RELEASES)
+    assert rule_cell(clone, release, Declared(None, False, False, frozenset())) == words
+
+
+def test_a_rule_without_a_release_is_not_released_on_a_pinned_gate():
+    """#125 cell 18, E7."""
+    unreleased = RuleRelease("future", None, Switch.REPORT_ONLY)
+    release = gate_release((Call(NEWEST),), False, FIRST_RELEASES)
+    assert rule_cell(unreleased, release, Declared(None, False, False, frozenset())) == "not released"
 
 
 @pytest.mark.parametrize(
