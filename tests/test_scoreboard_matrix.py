@@ -100,6 +100,7 @@ def test_two_callers_with_two_pins_are_both_named_sorted_and_joined(scoreboard, 
         "env:\n  FLAG: !!bool x\njobs: {}\n",
         "env:\n  nested: " + "[" * 100000 + "\njobs: {}\n",
         "? [a]\n: b\njobs: {}\n",
+        "env:\n  RATIO: 1:" + ":".join(["1"] * 400) + ".5\njobs: {}\n",
     ],
     ids=[
         "not YAML",
@@ -109,6 +110,7 @@ def test_two_callers_with_two_pins_are_both_named_sorted_and_joined(scoreboard, 
         "an unknown boolean",
         "nesting past the recursion limit",
         "an unhashable key",
+        "a sexagesimal float too large for a float",
     ],
 )
 def test_a_workflow_that_is_not_yaml_is_named_in_its_cells_and_the_other_rows_stand(scoreboard, public, content):

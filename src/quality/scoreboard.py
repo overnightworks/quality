@@ -35,8 +35,6 @@ CODEQL_FILE = "codeql.yml"
 WORKFLOW_DIRECTORY = PurePosixPath(".github/workflows")
 WORKFLOW_SUFFIXES = frozenset({".yml", ".yaml"})
 LOCAL_PREFIXES = ("./", "$/")
-# What safe_load raises on a hostile file: PyYAML's constructors leak these for impossible scalars and deep nesting.
-YAML_PARSE_ERRORS = (yaml.YAMLError, ValueError, AttributeError, IndexError, KeyError, RecursionError)
 RELEASE_TAG = re.compile(r"v(\d+)\.(\d+)\.(\d+)")
 COMMIT_SHA = re.compile(r"[0-9a-f]{40}")
 SELF = "self"
@@ -312,7 +310,8 @@ def read_workflows(clone: Path, tracked: list[str]) -> Workflows:
             continue
         try:
             document = yaml.safe_load(text) if text is not None else None
-        except YAML_PARSE_ERRORS:
+        # safe_load runs a third-party parser on another repository's untrusted file: any error it raises means the file cannot be read
+        except Exception:  # noqa: BLE001
             unreadable.append(name)
             continue
         for uses in job_calls(document):
