@@ -41,13 +41,19 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   YAML`). A port that is neither text, a number nor a mapping whose `published` (or, without one, `target`) is text or
   a number is a finding. A service with `network_mode: host` publishes whatever its process binds, and this rule does
   not check that yet (an allowlist follows in Q1b-3g).
-- `size`: every tracked `*.py` file is measured with [lizard](https://github.com/terryyin/lizard): a file from 800
-  lines, a function from 60 lines and a function with a CCN above 15 are debt, counted apart for production and tests
-  (a path under `test/` or `tests/`, `conftest.py`, `test_*.py`, `*_test.py`). Functions are named by their qualified
+- `size`: every tracked file of Python, TypeScript (`.ts` `.tsx` `.mts` `.cts`), JavaScript (`.js` `.jsx` `.mjs`
+  `.cjs`), Svelte or Vue is measured by its lines, and every tracked `*.py` file also with
+  [lizard](https://github.com/terryyin/lizard): a file from 800 lines, a Python function from 60 lines and a Python
+  function with a CCN above 15 are debt, counted apart for production and tests (a path under `test/` or `tests/`;
+  Python also `conftest.py`, `test_*.py`, `*_test.py`; TypeScript and JavaScript also `__tests__/`, `*.test.*` and
+  `*.spec.*`). A minified or generated file is counted by its lines like any other.
+  Functions of the other languages are not measured: lizard misplaces their boundaries
+  ([terryyin/lizard#521](https://github.com/terryyin/lizard/issues/521)). Functions are named by their qualified
   symbol (`Class.method`); a second one of the same name, such as a property setter, is `Class.method#2`. Without
   `quality/baseline.toml` the rule only prints the counts (`size: report only (no quality/baseline.toml) - production:
-  1 file(s) >= 800 lines, ...`) and the size debt leaves the exit unchanged.
-  Files are read the way Python reads source (a PEP 263 coding cookie or a UTF-8 BOM decides the encoding). A file
+  1 file(s) >= 800 lines, ...; languages: Python, TypeScript (functions in Python only)`, the languages largest
+  first) and the size debt leaves the exit unchanged.
+  A `.py` file is read the way Python reads source (a PEP 263 coding cookie or a UTF-8 BOM decides the encoding). One
   Python cannot decode or parse is named as not valid Python: without a baseline the count notes it (`1 file(s) not
   valid Python, functions unmeasured: bad.py`) and the exit is unchanged; with a baseline it is `hygiene: size
   unparsable - bad.py is not valid Python (...)`, and `quality baseline write` refuses with `baseline: not written -
@@ -222,9 +228,9 @@ entries, a path that is not a repository, or a gitleaks run without a report.
 
 ## `quality scoreboard`
 
-`quality scoreboard [PATH]` prints one markdown table of the Python size of every repository `quality/fleet.toml` lists
+`quality scoreboard [PATH]` prints one markdown table of the size of every repository `quality/fleet.toml` lists
 (`public = [...]` and `private = [...]`, each a list of URLs, each listed once), under a heading with the date, the
-quality version and the languages measured (`Python only` for now). With `GITHUB_STEP_SUMMARY` set, the same text is
+quality version and that functions and CCN are measured for Python only. With `GITHUB_STEP_SUMMARY` set, the same text is
 appended there. The fleet list lives once, in `quality/fleet.toml`; `.github/workflows/scoreboard.yml` runs it every
 Monday at 05:17 UTC and on dispatch; the table stands in that run's summary. The run only reports: it writes to no repository and needs no secret. A missing, malformed or
 duplicating `quality/fleet.toml` is `cannot judge`, exit `2`.
@@ -234,13 +240,14 @@ duplicating `quality/fleet.toml` is `cannot judge`, exit `2`.
 - git runs anonymously: without system, global or `GIT_CONFIG_*` config and with an empty `HOME`, so no configured
   header, helper or `~/.netrc` reaches the host. Only `http`, `https` and `file` URLs without credentials in them are
   used; any other URL is `cannot judge`.
-- Lines are the physical lines of the tracked `*.py` files, the count the `size` rule's 800-line limit uses (blank and
-  comment lines included). Production versus test is the `size` rule's file-name rule, so `scripts/test_inventory.py`
-  counts as test. `test:prod` is test lines divided by production lines with two decimals, `—` without production
-  lines. The debt columns count files from 800 lines, functions from 60 lines and functions with a CCN above 15.
+- Lines are the physical lines of the tracked files of the `size` rule's languages, the count its 800-line limit uses
+  (blank and comment lines included); `Languages` lists each with its lines, production and tests together, largest
+  first, ties by name, and `—` for a row with no measured file. Production versus test is the `size` rule's file-name rule, so `scripts/test_inventory.py` counts as test.
+  `test:prod` is test lines divided by production lines with two decimals, `—` without production lines.
+  The debt columns count files from 800 lines, and Python's functions from 60 lines and with a CCN above 15.
 - `Clone pairs prod / test` counts the `clone` rule's pairs (two near-identical functions in two files, at 40 tokens and
   90 %); a pair counts as test only when both sides are tests, so a test that copies production code counts as prod.
-- A file Python cannot parse still has its lines counted; the row's note says how many such files there are, never which.
+- A `.py` file Python cannot parse still has its lines counted; the row's note says how many such files there are, never which.
 - A `private` repository is never measured, because the table is published: it shows `not measured: private`. It is
   checked once with an anonymous `git ls-remote`; if anyone can read it, the row is `cannot judge: declared private
   but readable`.

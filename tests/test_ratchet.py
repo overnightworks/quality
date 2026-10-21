@@ -4,25 +4,21 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+from conftest import (
+    branchy_function,
+    long_file,
+    long_function,
+    make_repo,
+    minified_bundle,
+    typescript_file,
+    typescript_function,
+)
 from conftest import hygiene_output as hygiene
 
 from quality import cli
 from quality.ratchet import BASELINE_PATH, Key, Metric, RaisedEntry, load_baseline, raised_entries, render_baseline
 
 EMPTY_BASELINE = ""
-
-
-def long_file(lines: int) -> str:
-    return "x = 1\n" * lines
-
-
-def long_function(lines: int) -> str:
-    return "def long_one():\n" + "    x = 1\n" * (lines - 1)
-
-
-def branchy_function(ccn: int) -> str:
-    branches = "".join(f"    if x == {value}:\n        return {value}\n" for value in range(ccn - 1))
-    return f"def branchy(x):\n{branches}    return -1\n"
 
 
 def method(lines: int) -> str:
@@ -233,16 +229,18 @@ def test_a_tracked_file_missing_from_disk_is_gone_not_unjudgeable(build_repo, ca
 @pytest.mark.parametrize(
     ("locked", "reason"),
     [
-        ("locked", "cannot reach locked/b.py: [Errno 13] Permission denied"),
-        ("locked/b.py", "cannot read locked/b.py: [Errno 13] Permission denied"),
+        ("locked", "cannot reach {file}: [Errno 13] Permission denied"),
+        ("{file}", "cannot read {file}: [Errno 13] Permission denied"),
     ],
     ids=["directory", "cell 17 file"],
 )
+@pytest.mark.parametrize("file", ["locked/b.py", "locked/b.ts", "locked/b.svelte"], ids=["Python", "#119 cell 21 TypeScript", "#119 cell 21 Svelte"])
 @pytest.mark.parametrize("command", ["hygiene", "baseline write"])
-def test_a_tracked_file_the_filesystem_refuses_to_reach_cannot_be_judged(build_repo, capsys, command, locked, reason):
+def test_a_tracked_file_the_filesystem_refuses_to_reach_cannot_be_judged(build_repo, capsys, command, file, locked, reason):
     """#46 rule 3/5 and #52 rule 5, cell 17: a tracked file the rule may not reach or read is exit 2, never gone,
-    never a traceback, and its reason names no checkout path."""
-    repo = build_repo({"src/a.py": "x = 1\n", "locked/b.py": long_function(62)})
+    never a traceback, and its reason names no checkout path. #119 cell 21: a file of any table language likewise."""
+    repo = build_repo({"src/a.py": "x = 1\n", file: long_function(62)})
+    locked, reason = locked.format(file=file), reason.format(file=file)
     (repo / locked).chmod(0)
     try:
         code = cli.main([*command.split(), str(repo)])
@@ -545,3 +543,121 @@ def test_baseline_write_overwrites_a_baseline_that_is_not_utf8_without_a_rewrite
     code, lines = baseline_write(capsys, not_utf8_baseline_repo(build_repo))
     note = next(line for line in lines if "could not be read" in line)
     assert (code, "is not valid UTF-8" in note, "rewrite it" in note) == (0, True, False), lines
+
+
+MIXED_TREE = {
+    "src/app.py": long_file(100),
+    "frontend/src/lib/api/types.ts": typescript_file(50),
+    "frontend/src/Card.svelte": typescript_file(20),
+    "frontend/src/legacy.js": typescript_file(5),
+    "scripts/deploy.sh": "echo hi\n" * 400,
+    "frontend/src/app.css": "a { color: red; }\n" * 400,
+}
+NEW_DEBT = "size {path} - file has {lines} lines; debt starts at 800 lines (new debt)."
+
+
+def size_report(output: str) -> str:
+    (line,) = [line for line in output.splitlines() if "size: report only" in line]
+    return line
+
+
+@pytest.mark.parametrize(
+    ("files", "languages"),
+    [
+        ({"src/a.py": long_file(3)}, "; languages: Python"),
+        (MIXED_TREE, "; languages: Python, TypeScript, Svelte, JavaScript (functions in Python only)"),
+        ({"a.svelte": long_file(5), "b.js": long_file(5), "c.vue": long_file(5)}, "; languages: JavaScript, Svelte, Vue (functions in Python only)"),
+        ({"src/a.py": long_file(3), "dist/index.js": minified_bundle()}, "; languages: Python, JavaScript (functions in Python only)"),
+    ],
+    ids=[
+        "#119 cell 10 a Python-only tree names Python without the functions note",
+        "#119 cell 11 a mixed tree lists its languages largest first, shell and CSS absent",
+        "#119 cell 11 equal lines are ordered by name",
+        "#119 cell 12 a minified bundle's language is listed and nothing is said to be skipped",
+    ],
+)
+def test_without_a_baseline_the_report_names_the_measured_languages(build_repo, capsys, files, languages):
+    """#119 E5: the report line names each measured language, and says functions are Python's only when another is."""
+    code, output = hygiene(capsys, build_repo(files))
+    line = size_report(output)
+    assert (code, languages in line, "skip" in line) == (0, True, False), output
+    assert line.endswith(languages)
+
+
+@pytest.mark.parametrize("suffix", ["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs", "svelte", "vue"])
+def test_a_file_of_every_table_language_is_new_debt_from_800_lines_against_a_baseline(build_repo, capsys, suffix):
+    """#119 E6, cell 13: against a baseline, a file of any table language from 800 lines is new debt, 799 is not."""
+    path = f"frontend/src/lib/api/types.{suffix}"
+    repo = build_repo({"src/a.py": "x = 1\n", path: typescript_file(1210), "frontend/small." + suffix: typescript_file(799), BASELINE_PATH: EMPTY_BASELINE})
+    code, output = hygiene(capsys, repo)
+    assert (code, NEW_DEBT.format(path=path, lines=1210) in output, "small" in output) == (1, True, False), output
+
+
+@pytest.mark.parametrize("name", ["tool.rs", "run.sh", "app.css", "index.html", "notes.md"])
+def test_a_file_of_a_language_the_table_lacks_is_never_debt(build_repo, capsys, name):
+    """#119 O3: Rust, shell, CSS and HTML stay unmeasured."""
+    code, output = hygiene(capsys, build_repo({name: "line\n" * 2000, BASELINE_PATH: EMPTY_BASELINE}))
+    assert (code, "size " in output) == (0, False), output
+
+
+def test_a_function_of_120_lines_in_typescript_is_no_finding_and_the_file_is_not_unparsable(build_repo, capsys):
+    """#119 E6, cells 14 and 15: lines only, so a held baseline over a .ts that is not Python stays clean."""
+    repo = build_repo({"src/a.py": "x = 1\n", "src/api.ts": typescript_function(120), BASELINE_PATH: EMPTY_BASELINE})
+    code, output = hygiene(capsys, repo)
+    assert (code, "not valid Python" in output, "size " in output) == (0, False, False), output
+
+
+@pytest.mark.parametrize(
+    ("bundle", "code", "named"),
+    [(minified_bundle(), 0, False), ("var a=1;\n" * 800, 1, True)],
+    ids=["#119 cell 16 a one-line bundle is no finding", "#119 cell 16 an 800-line minified file is new debt"],
+)
+def test_a_minified_file_is_counted_by_its_lines_like_any_other(build_repo, capsys, bundle, code, named):
+    """#119 O4: nothing is skipped; the one-line bundle has one line."""
+    result, output = hygiene(capsys, build_repo({"dist/index.js": bundle, BASELINE_PATH: EMPTY_BASELINE}))
+    assert (result, "size dist/index.js" in output) == (code, named), output
+
+
+@pytest.mark.parametrize(
+    ("path", "area"),
+    [
+        ("src/a.test.ts", "tests"),
+        ("e2e/login.spec.ts", "tests"),
+        ("src/decision.svelte.test.ts", "tests"),
+        ("src/__tests__/x.ts", "tests"),
+        ("tests/Harness.svelte", "tests"),
+        ("frontend/e2e/helpers.ts", "production"),
+        ("src/lib/test-utils/x.ts", "production"),
+        ("src/test_x.ts", "production"),
+        ("src/Card.test.svelte", "production"),
+        ("src/__tests__/Card.svelte", "production"),
+    ],
+)
+def test_the_name_rule_of_a_typescript_or_javascript_file_is_the_runners_defaults(build_repo, capsys, path, area):
+    """#119 E3, cell 9: `*.test.*`, `*.spec.*` and `__tests__/` for TS and JS; Svelte and Vue by directory only."""
+    code, output = hygiene(capsys, build_repo({path: typescript_file(800)}))
+    other = "tests" if area == "production" else "production"
+    assert (code, f"{area}: 1 file(s) >= 800" in output, f"{other}: 0 file(s) >= 800" in output) == (0, True, True), output
+
+
+def test_baseline_write_records_a_file_of_another_language_and_names_it_as_added(build_repo, capsys):
+    """#119 E6, cells 17 and 18: the entry is an ordinary [file_lines] one; against a baseline it is named as added."""
+    path = "frontend/src/lib/api/types.ts"
+    repo = build_repo({"src/a.py": long_function(70), path: typescript_file(1210)})
+    assert baseline_write(capsys, repo) == (0, [wrote_line(repo, "2 entries")])
+    assert tomllib.loads((repo / BASELINE_PATH).read_text(encoding="utf-8"))["file_lines"] == {path: 1210}
+    (repo / BASELINE_PATH).write_text('[function_lines."src/a.py"]\nlong_one = 70\n', encoding="utf-8")
+    assert baseline_write(capsys, repo) == (0, [f"baseline: adds file_lines {path} 1210", wrote_line(repo, "2 entries")])
+
+
+def test_a_tree_with_typescript_holds_the_same_python_baseline(tmp_path):
+    """#119 E7, cells 19 and 20: a file of another language adds no Python entry and moves none."""
+    python_only = {"src/b.py": long_file(810) + method(61), "src/a.py": branchy_function(17) + long_function(62)}
+    mixed = {**python_only, "src/ui.ts": typescript_file(100), "src/Card.svelte": typescript_file(30)}
+    written = []
+    for name, files in (("python", python_only), ("mixed", mixed)):
+        (tmp_path / name).mkdir()
+        repo = make_repo(tmp_path / name, files)
+        assert cli.main(["baseline", "write", str(repo)]) == 0
+        written.append((repo / BASELINE_PATH).read_text(encoding="utf-8"))
+    assert written[0] == written[1]

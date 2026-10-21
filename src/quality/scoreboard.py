@@ -1,4 +1,4 @@
-"""`quality scoreboard`: every fleet repository's Python size in one markdown table.
+"""`quality scoreboard`: every fleet repository's size in one markdown table.
 
 Lines and the production/test split are the `size` rule's own (`ratchet.summarise`), measured on a shallow clone of
 the default branch tip. git runs anonymously: only an http, https or file URL without credentials, no credential
@@ -19,11 +19,11 @@ from quality import __version__, clones, engines, hygiene, ratchet, repository
 
 FLEET_PATH = "quality/fleet.toml"
 FLEET_EXAMPLE = 'public = ["https://github.com/o/open"]\nprivate = ["https://github.com/o/closed"]'
-LANGUAGES = "Python only"
+FUNCTION_SCOPE = "functions and CCN: Python only"
 CLONE_TIMEOUT_SECONDS = 300
 LS_REMOTE_TIMEOUT_SECONDS = 60
 SHORT_COMMIT = 7
-NO_COMMIT = "—"
+DASH = "—"
 UNNAMED = "unnamed URL"
 ANONYMOUS_GIT = ("git", "-c", "credential.helper=", "-c", "core.askPass=")
 # ssh authenticates with the user's keys and agent whatever HOME says, so only these transports are anonymous.
@@ -34,6 +34,7 @@ ANONYMOUS_URL = re.compile(rf"(?:{'|'.join(sorted(ANONYMOUS_SCHEMES))})://.*")
 COLUMNS = (
     "Repo",
     "Commit",
+    "Languages",
     "Lines prod / test",
     "test:prod",
     f"Files ≥ {ratchet.FILE_LINES_FROM} prod / test",
@@ -49,6 +50,7 @@ DEBT_COLUMNS = (ratchet.Metric.FILE_LINES, ratchet.Metric.FUNCTION_LINES, ratche
 class Measured:
     name: str
     commit: str
+    languages: dict[ratchet.Language, int]
     areas: dict[ratchet.Area, ratchet.AreaSummary]
     unparsable: int
     pairs: dict[ratchet.Area, int]
@@ -200,12 +202,13 @@ def measure_public(url: str) -> Row:
         if head.returncode != 0:
             return Unjudged(name, f"cannot read the cloned commit (git exited {head.returncode})")
         try:
-            sources = hygiene.read_python_sources(clone, hygiene.tracked_files(clone))
+            sources = hygiene.read_sources(clone, hygiene.tracked_files(clone))
         except hygiene.CannotJudge as error:
             return Unjudged(name, f"cannot measure ({str(error).replace(str(clone), name)})")
     tree = ratchet.measure(sources)
     pairs = clones.summarise_pairs(clones.find_pairs(sources))
-    return Measured(name, head.stdout.strip()[:SHORT_COMMIT], ratchet.summarise(tree), len(tree.unparsable), pairs)
+    commit = head.stdout.strip()[:SHORT_COMMIT]
+    return Measured(name, commit, ratchet.language_lines(tree), ratchet.summarise(tree), len(tree.unparsable), pairs)
 
 
 def judge_private(url: str) -> Row:
@@ -231,7 +234,7 @@ def git(
 
 
 def render(rows: list[Row], today: date) -> tuple[str, ...]:
-    heading = f"**Fleet scoreboard, {today.isoformat()}, quality {__version__} — {LANGUAGES}**"
+    heading = f"**Fleet scoreboard, {today.isoformat()}, quality {__version__} — {FUNCTION_SCOPE}**"
     table = [table_line(COLUMNS), "|---" * len(COLUMNS) + "|", *(table_line(cells(row)) for row in rows)]
     return (heading, "", *table)
 
@@ -244,14 +247,19 @@ def cells(row: Row) -> tuple[str, ...]:
     if isinstance(row, Measured):
         return measured_cells(row)
     label = "not measured: private" if isinstance(row, Private) else f"cannot judge: {row.reason}"
-    return (row.name, NO_COMMIT, label, *("",) * (len(COLUMNS) - 3))
+    return (row.name, DASH, label, *("",) * (len(COLUMNS) - 3))
 
 
 def measured_cells(row: Measured) -> tuple[str, ...]:
     production, tests = row.areas[ratchet.Area.PRODUCTION], row.areas[ratchet.Area.TESTS]
-    ratio = f"{tests.lines / production.lines:.2f}" if production.lines else "—"
+    ratio = f"{tests.lines / production.lines:.2f}" if production.lines else DASH
     debts = (f"{production.debt[metric]} / {tests.debt[metric]}" for metric in DEBT_COLUMNS)
-    return (row.name, row.commit, f"{production.lines:,} / {tests.lines:,}", ratio, *debts, clone_pairs_cell(row), unparsable_note(row))
+    lines = f"{production.lines:,} / {tests.lines:,}"
+    return (row.name, row.commit, languages_cell(row), lines, ratio, *debts, clone_pairs_cell(row), unparsable_note(row))
+
+
+def languages_cell(row: Measured) -> str:
+    return " · ".join(f"{language.value} {lines:,}" for language, lines in row.languages.items()) or DASH
 
 
 def clone_pairs_cell(row: Measured) -> str:

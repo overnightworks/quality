@@ -146,7 +146,7 @@ def build_parser() -> argparse.ArgumentParser:
     emergency.add_argument("repository", help="<owner>/<repo>")
     emergency.add_argument("pull_request", type=int)
     fleet = commands.add_parser(
-        "scoreboard", help="measure the Python size of the repositories in quality/fleet.toml into one markdown table"
+        "scoreboard", help="measure the size of the repositories in quality/fleet.toml into one markdown table"
     )
     fleet.add_argument("path", nargs="?", type=Path, default=Path("."))
     return parser

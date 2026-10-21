@@ -129,8 +129,10 @@ def _pairs_of(units: list[Unit]) -> Iterator[ClonePair]:
 
 
 def find_pairs(sources: dict[str, bytes]) -> frozenset[ClonePair]:
-    """The cross-file pairs among the functions of the given Python sources; a file Python cannot parse has none."""
-    return frozenset(_pairs_of(_units(sources)))
+    """The cross-file pairs among the functions of the Python files among the given sources; a file Python cannot
+    parse has none."""
+    python = {path: source for path, source in sources.items() if ratchet.language_of(path) is ratchet.Language.PYTHON}
+    return frozenset(_pairs_of(_units(python)))
 
 
 def summarise_pairs(pairs: frozenset[ClonePair]) -> dict[Area, int]:

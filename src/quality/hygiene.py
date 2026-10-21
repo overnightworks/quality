@@ -281,14 +281,15 @@ def _describe(port: object) -> str | None:
     return str(port) if isinstance(port, (str, int, float)) else None
 
 
-def read_python_sources(root: Path, tracked: list[str]) -> dict[str, bytes]:
-    """The tracked Python files on disk: a tracked file absent from it (deleted, sparse, a dangling link) is gone."""
-    on_disk = _on_disk(root, [name for name in tracked if ratchet.is_python(name)])
+def read_sources(root: Path, tracked: list[str]) -> dict[str, bytes]:
+    """The tracked files of a table language on disk: a tracked file absent from it (deleted, sparse, a dangling link)
+    is gone."""
+    on_disk = _on_disk(root, [name for name in tracked if ratchet.language_of(name)])
     return _read_existing(repository.read_bytes, root, on_disk)
 
 
 def measure_size(root: Path, tracked: list[str]) -> ratchet.TreeMeasurement:
-    return ratchet.measure(read_python_sources(root, tracked))
+    return ratchet.measure(read_sources(root, tracked))
 
 
 @dataclass(frozen=True)
@@ -433,7 +434,7 @@ def run_hygiene(root: Path, engine_dir: Path | None = None) -> HygieneResult:
     """Judges every active rule, in run order, over the repository `root` lies in; only one git cannot list stops the run."""
     root = work_tree_top(root)
     tracked = tracked_files(root)
-    sources = _attempt(lambda: read_python_sources(root, tracked))
+    sources = _attempt(lambda: read_sources(root, tracked))
     size = sources if isinstance(sources, CannotJudge) else _attempt(lambda: check_size(root, sources))
     pairs = sources if isinstance(sources, CannotJudge) else clones.find_pairs(sources)
     contracts = _attempt(lambda: check_import_contract(root, tracked))
