@@ -305,7 +305,9 @@ duplicating `quality/fleet.toml` is `cannot judge`, exit `2`.
   enforcement depends on the release or the repository. The rules every release enforces stand once in the sentence under
   the heading. A rule cell says what the pinned gate does with the rule, never whether the repository passes it:
   `enforced`, `report-only` (`size` without `quality/baseline.toml`, `import-contract` without an import-linter config,
-  `clone` always), `not in <tag>` when the pinned release predates the rule, `not released` when only main has the rule,
+  `clone` on v0.4.0 and, where the gate knows enforcement (main today), without a `[clones]` table in
+  `quality/baseline.toml`), `not in <tag>` when the pinned release predates the rule, `not released` when only main has
+  the rule,
   and `—` without a gate. Two pins give the oldest release; a pin that is no release (a commit without a tag, a branch or
   tag name, or unreadable release tags) gives `release unknown`. The table of first releases lives in `scoreboard.py`.
 - A workflow file that cannot be read shows `cannot read <file>` in every cell that needs the pin, a malformed

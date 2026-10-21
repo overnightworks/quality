@@ -16,6 +16,7 @@ from quality.scoreboard import (
     ReleaseTagsError,
     RuleRelease,
     Switch,
+    SwitchChange,
     calls_of,
     gate_release,
     pin_cell,
@@ -274,27 +275,63 @@ CLONE_RELEASE = "d" * 40
 CLONE_RELEASES = {**FIRST_RELEASES, "v0.4.0": CLONE_RELEASE}
 
 
+def declared(**fields) -> Declared:
+    """A clone that declares nothing, with the given fields set."""
+    return Declared(**{"settings": None, "has_baseline": False, "has_clone_table": False, "has_import_config": False,
+                       "unreadable": frozenset(), **fields})
+
+
+CLONE = next(rule for rule in RULES if rule.rule == "clone")
+
+
+@pytest.mark.parametrize("has_clone_table", [False, True], ids=["no clone table", "a clone table"])
 @pytest.mark.parametrize(
     ("pin", "own", "words"),
     [
         (CLONE_RELEASE, False, "report-only"),
         (NEWEST, False, "not in v0.3.1"),
-        (None, True, "report-only"),
     ],
-    ids=["a pin at the clone release", "an older tag", "the gate's own repository"],
+    ids=["a pin at the clone release", "an older tag"],
 )
-def test_the_clone_cell_follows_the_release_that_ships_the_rule(pin, own, words):
-    """#125 cell 18, E7."""
-    clone = next(rule for rule in RULES if rule.rule == "clone")
+def test_a_pinned_gate_reports_clones_whatever_the_clone_table_says(pin, own, words, has_clone_table):
+    """#137 tests 1 and 4: no tag up to v0.4.0 enforces clone."""
     release = gate_release((Call(pin),), own, CLONE_RELEASES)
-    assert rule_cell(clone, release, Declared(None, False, False, frozenset())) == words
+    assert rule_cell(CLONE, release, declared(has_clone_table=has_clone_table)) == words
+
+
+@pytest.mark.parametrize(
+    ("has_clone_table", "words"), [(True, "enforced"), (False, "report-only")], ids=["a clone table", "no clone table"]
+)
+def test_the_gates_own_repository_enforces_clones_with_a_clone_table(has_clone_table, words):
+    """#137 test 2."""
+    release = gate_release((Call(None),), True, CLONE_RELEASES)
+    assert rule_cell(CLONE, release, declared(has_clone_table=has_clone_table)) == words
+
+
+def test_a_malformed_baseline_makes_the_gates_own_clone_cell_unreadable_and_the_run_red(
+    scoreboard, public, monkeypatch
+):
+    """#137 test 3: the cell owns the failure, as #125 cell 22 rules."""
+    monkeypatch.setattr("quality.scoreboard.GATE_REPOSITORY", "gate")
+    broken = {**caller("./.github/workflows/gate.yml"), ratchet.BASELINE_PATH: "[file_lines\n"}
+    result, output = scoreboard(public("gate", broken), tags=first_releases())
+    assert result == 2, output
+    assert cell(output, "gate", "clone") == "cannot read quality/baseline.toml"
+
+
+@pytest.mark.parametrize(("pin", "words"), [("v0.5.0", "enforced"), ("v0.4.0", "report-only")], ids=["the switch", "older"])
+def test_a_later_switch_applies_from_the_tag_that_names_it(pin, words):
+    """#137 test 5."""
+    rule = RuleRelease("future", "v0.1.0", Switch.REPORT_ONLY, SwitchChange("v0.5.0", Switch.CLONE_TABLE))
+    release = gate_release((Call("e" * 40),), False, {**CLONE_RELEASES, pin: "e" * 40})
+    assert rule_cell(rule, release, declared(has_clone_table=True)) == words
 
 
 def test_a_rule_without_a_release_is_not_released_on_a_pinned_gate():
     """#125 cell 18, E7."""
     unreleased = RuleRelease("future", None, Switch.REPORT_ONLY)
     release = gate_release((Call(NEWEST),), False, FIRST_RELEASES)
-    assert rule_cell(unreleased, release, Declared(None, False, False, frozenset())) == "not released"
+    assert rule_cell(unreleased, release, declared()) == "not released"
 
 
 @pytest.mark.parametrize(
