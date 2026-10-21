@@ -1,0 +1,7 @@
+claim_id = "311233e1a41e4b4eaef346eb358234d1"
+agent = "claude"
+role = "builder"
+base = "e45bd4e794699a37c213178f75bc9db65411c45e"
+branch = "claude/issue-128-release-v0-4-0"
+scope = [".github/workflows/gate.yml", "docs/roadmap.md", "src/quality/__init__.py"]
+opened_commit = "52ac7958bcdc24836fe7fb21486dc5b52852b706"
