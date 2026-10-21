@@ -141,8 +141,8 @@ def test_unreadable_claude_md_cannot_be_judged_and_other_rules_still_judge(build
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root reaches a mode-0 directory, so no permission is refused")
-@pytest.mark.parametrize("name", ["CLAUDE.md", ".claude/CLAUDE.md"])
-def test_claude_md_link_to_an_unreachable_target_is_the_link_finding(build_repo, capsys, elsewhere, name):
+@pytest.mark.parametrize(("name", "reason"), [("CLAUDE.md", LINK_REASON), (".claude/CLAUDE.md", NESTED_REASON)])
+def test_claude_md_link_to_an_unreachable_target_is_the_link_finding(build_repo, capsys, elsewhere, name, reason):
     """#95 E8: a link is judged from lstat alone, so a target the filesystem refuses changes nothing."""
     locked = elsewhere / "locked"
     locked.mkdir()
@@ -154,7 +154,7 @@ def test_claude_md_link_to_an_unreachable_target_is_the_link_finding(build_repo,
     finally:
         locked.chmod(0o700)
     assert code == 1, output
-    assert f"claude-md {name} - " in output
+    assert f"claude-md {name} - {reason}" in output
     assert "cannot judge" not in output
 
 
