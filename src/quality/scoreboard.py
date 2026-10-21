@@ -35,6 +35,8 @@ CODEQL_FILE = "codeql.yml"
 WORKFLOW_DIRECTORY = PurePosixPath(".github/workflows")
 WORKFLOW_SUFFIXES = frozenset({".yml", ".yaml"})
 LOCAL_PREFIXES = ("./", "$/")
+# What safe_load raises on a hostile file: PyYAML's constructors leak these for impossible scalars and deep nesting.
+YAML_PARSE_ERRORS = (yaml.YAMLError, ValueError, AttributeError, IndexError, KeyError, RecursionError)
 RELEASE_TAG = re.compile(r"v(\d+)\.(\d+)\.(\d+)")
 COMMIT_SHA = re.compile(r"[0-9a-f]{40}")
 SELF = "self"
@@ -305,8 +307,12 @@ def read_workflows(clone: Path, tracked: list[str]) -> Workflows:
             continue
         try:
             text = repository.read_text(clone, name)
+        except repository.RepositoryFileError:
+            unreadable.append(name)
+            continue
+        try:
             document = yaml.safe_load(text) if text is not None else None
-        except (repository.RepositoryFileError, yaml.YAMLError, ValueError, RecursionError):
+        except YAML_PARSE_ERRORS:
             unreadable.append(name)
             continue
         for uses in job_calls(document):
@@ -328,7 +334,9 @@ def calls_of(uses: str, workflow_file: str) -> list[Call]:
     if uses in (f"{prefix}{path}" for prefix in LOCAL_PREFIXES):
         return [Call(None)]
     file, _, ref = uses.partition("@")
-    return [Call(ref)] if file.lower() == f"{GATE_REPOSITORY}/{path}" and ref else []
+    owner_and_repository, _, workflow = file.partition(f"/{WORKFLOW_DIRECTORY}/")
+    matches = owner_and_repository.lower() == GATE_REPOSITORY and workflow == workflow_file
+    return [Call(ref)] if matches and ref else []
 
 
 def judge_private(url: str) -> Row:

@@ -248,7 +248,7 @@ duplicating `quality/fleet.toml` is `cannot judge`, exit `2`.
 - `Clone pairs prod / test` counts the `clone` rule's pairs (two near-identical functions in two files, at 40 tokens and
   90 %); a pair counts as test only when both sides are tests, so a test that copies production code counts as prod.
 - A `.py` file Python cannot parse still has its lines counted; the row's note says how many such files there are, never which.
-- Both tables name a row `owner/name` when it is an http, https or ssh URL with at least two path segments, else by its last path segment; a
+- Both tables name a row `owner/name` when it is a URL other than a `file://` one with a host, with at least two path segments, else by its last path segment; a
   `|` in a name prints as `\|`.
 - The matrix, under a heading naming the newest release tag of `overnightworks/quality` (read by an anonymous
   `git ls-remote --tags`, never from the running code's version), has one `Gate` and one `CodeQL` cell per repository.

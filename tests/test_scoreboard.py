@@ -600,4 +600,3 @@ def test_the_clone_pairs_cell_counts_a_pair_as_test_only_when_both_sides_are_tes
     code, output = scoreboard(public("twins", files))
     assert code == 0, output
     assert row(output, "twins")[8] == pairs
-

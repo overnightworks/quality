@@ -92,8 +92,24 @@ def test_two_callers_with_two_pins_are_both_named_sorted_and_joined(scoreboard, 
 
 @pytest.mark.parametrize(
     "content",
-    ["jobs: [unclosed\n", "env:\n  BUILD_DATE: 2026-99-99\njobs: {}\n"],
-    ids=["not YAML", "a scalar YAML cannot convert"],
+    [
+        "jobs: [unclosed\n",
+        "env:\n  BUILD_DATE: 2026-99-99\njobs: {}\n",
+        "env:\n  BUILD_DATE: !!timestamp zz\njobs: {}\n",
+        "env:\n  RETRIES: !!int ''\njobs: {}\n",
+        "env:\n  FLAG: !!bool x\njobs: {}\n",
+        "env:\n  nested: " + "[" * 100000 + "\njobs: {}\n",
+        "? [a]\n: b\njobs: {}\n",
+    ],
+    ids=[
+        "not YAML",
+        "an impossible date",
+        "a timestamp tag on a non-timestamp",
+        "an empty integer",
+        "an unknown boolean",
+        "nesting past the recursion limit",
+        "an unhashable key",
+    ],
 )
 def test_a_workflow_that_is_not_yaml_is_named_in_its_cells_and_the_other_rows_stand(scoreboard, public, content):
     """#123 E11, cell 8: `cannot read <file>`, exit 2, and nothing about the broken file is run or guessed."""
@@ -169,3 +185,16 @@ def test_release_tags_are_the_peeled_commits_of_annotated_and_lightweight_tags(p
     for tag in (["v0.1.0"], ["-a", "v0.2.0", "-m", "release"], ["not-a-release"]):
         subprocess.run([*git, "tag", *tag], check=True)
     assert read_release_tags(url) == {"v0.1.0": head_of(url), "v0.2.0": head_of(url)}
+
+
+@pytest.mark.parametrize(
+    ("uses", "cell"),
+    [
+        ("OvernightWorks/Quality/.github/workflows/gate.yml@" + NEWEST, "v0.10.0"),
+        ("overnightworks/quality/.github/workflows/Gate.yml@" + NEWEST, "no gate"),
+    ],
+    ids=["owner and repository match in any case", "the workflow path matches exactly"],
+)
+def test_only_the_owner_and_repository_of_a_reusable_call_ignore_case(scoreboard, public, uses, cell):
+    _, output = scoreboard(public("cased", caller(uses)))
+    assert matrix_row(output, "cased")[1] == cell
