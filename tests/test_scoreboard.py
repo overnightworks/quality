@@ -1,6 +1,5 @@
 """`quality scoreboard` (#56): cells name the item's scenario matrix, rules its numbered rules."""
 
-import json
 import os
 import re
 import shlex
@@ -8,9 +7,8 @@ import shutil
 import signal
 import subprocess
 import sys
-import tempfile
 import threading
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -20,18 +18,25 @@ import pytest
 import yaml
 from conftest import (
     GIT_IDENTITY,
+    MATRIX_HEADING,
+    RELEASES,
     branchy_function,
+    head_of,
     long_file,
     long_function,
-    make_repo,
     minified_bundle,
+    row,
     typescript_file,
     typescript_function,
+    write_fleet,
 )
 from test_clones import function as clone_function
 
 from quality import __version__, cli
-from quality.scoreboard import read_fleet, require_anonymous
+from quality.scoreboard import (
+    read_fleet,
+    require_anonymous,
+)
 
 WORKFLOWS = Path(__file__).parent.parent / ".github" / "workflows"
 HEADER = (
@@ -40,64 +45,6 @@ HEADER = (
 )
 # 3 + 5 * 7 + 2 = 40 tokens: `arguments`, `arg`, `ID`, seven `Assign, Name, ID, Name, ID` and two `Pass`
 CLONE = clone_function("copied", "value", "local")
-PublicRepo = Callable[[str, dict[str, str]], str]
-
-
-def write_fleet(directory: Path, public: Sequence[str] = (), private: Sequence[str] = ()) -> Path:
-    """A repository whose quality/fleet.toml lists these URLs; json.dumps writes a TOML array of basic strings."""
-    (directory / "quality").mkdir(parents=True)
-    (directory / "quality" / "fleet.toml").write_text(f"public = {json.dumps(public)}\nprivate = {json.dumps(private)}\n")
-    return directory
-
-
-@pytest.fixture
-def scoreboard(capsys, tmp_path) -> Callable[..., tuple[int, str]]:
-    """Runs `quality scoreboard` on a fleet file listing the given URLs (#63 rule 1)."""
-
-    def run(*public: str, private: Sequence[str] = ()) -> tuple[int, str]:
-        code = cli.main(["scoreboard", str(write_fleet(tmp_path / "fleet", public, private))])
-        return code, capsys.readouterr().out
-
-    return run
-
-
-def row(output: str, name: str) -> list[str]:
-    """The cells of the table row of repository `name`."""
-    (line,) = [line for line in output.splitlines() if line.startswith(f"| {name} |")]
-    return [cell.strip() for cell in line.strip("|").split("|")]
-
-
-def head_of(url: str) -> str:
-    directory = url.removeprefix("file://")
-    return subprocess.run(
-        ["git", "-C", directory, "rev-parse", "HEAD"], capture_output=True, text=True, check=True
-    ).stdout.strip()
-
-
-@pytest.fixture
-def scratch(tmp_path, monkeypatch) -> Path:
-    """The directory every temporary clone is made in, so a test can see what is left behind."""
-    directory = tmp_path / "scratch"
-    directory.mkdir()
-    monkeypatch.setattr(tempfile, "tempdir", str(directory))
-    return directory
-
-
-@pytest.fixture
-def public(tmp_path, scratch) -> PublicRepo:
-    """A repository served as a file:// URL, which the scoreboard clones as it clones a public one (rule 3)."""
-
-    def build(name: str, files: dict[str, str]) -> str:
-        directory = tmp_path / "remotes" / name
-        directory.mkdir(parents=True)
-        return make_repo(directory, files).as_uri()
-
-    return build
-
-
-@pytest.fixture
-def missing(tmp_path) -> str:
-    return (tmp_path / "remotes" / "gone").as_uri()
 
 
 def test_a_public_repo_is_one_row_of_commit_lines_ratio_and_debt(scoreboard, public):
@@ -368,7 +315,7 @@ def test_no_configured_credential_reaches_a_private_host(scoreboard, public, pri
     monkeypatch.setenv("GIT_ASKPASS", str(askpass))
     code, output = scoreboard(public("open", {"a.py": "a = 1\n"}), private=[private_host])
     assert code == 0, output
-    assert row(output, "edge")[1:3] == ["—", "not measured: private"]
+    assert row(output, "overnightworks/edge")[1:3] == ["—", "not measured: private"]
     assert AskingForCredentials.requests >= 1
     assert AskingForCredentials.authorizations == []
     assert sorted(path.name for path in tmp_path.iterdir() if path.name.startswith("asked")) == []
@@ -377,17 +324,17 @@ def test_no_configured_credential_reaches_a_private_host(scoreboard, public, pri
 @pytest.mark.parametrize(
     ("list_name", "url", "name", "reason"),
     [
-        ("public", "ssh://git@example.invalid/org/repo.git", "repo", "cannot clone (not an http, https or file URL)"),
+        ("public", "ssh://git@example.invalid/org/repo.git", "org/repo", "cannot clone (not an http, https or file URL)"),
         ("public", "git@example.invalid:org/repo.git", "repo", "cannot clone (not an http, https or file URL)"),
-        ("private", "https://user:secret@example.invalid/org/edge", "edge",
+        ("private", "https://user:secret@example.invalid/org/edge", "org/edge",
          "cannot check that it is private (the URL carries credentials)"),
         ("public", "https://user:secret@example.invalid/", "example.invalid", "cannot clone (the URL carries credentials)"),
         ("public", "https://[broken/repo", "unnamed URL", "cannot clone (not a valid URL)"),
         ("private", "https://[broken/edge", "unnamed URL", "cannot check that it is private (not a valid URL)"),
-        ("public", "HTTPS://example.invalid/org/repo", "repo", "cannot clone (not an http, https or file URL)"),
+        ("public", "HTTPS://example.invalid/org/repo", "org/repo", "cannot clone (not an http, https or file URL)"),
         ("public", "https:example.invalid/org/repo", "repo", "cannot clone (not an http, https or file URL)"),
         ("public", "file:/tmp/org/repo", "repo", "cannot clone (not an http, https or file URL)"),
-        ("public", "https://example.invalid/org/repo\n", "repo", "cannot clone (not an http, https or file URL)"),
+        ("public", "https://example.invalid/org/repo\n", "org/repo", "cannot clone (not an http, https or file URL)"),
         ("public", "https://[dead]/repo", "unnamed URL", "cannot clone (not a valid URL)"),
         ("public", "https://[::1]x[::2]/repo", "unnamed URL", "cannot clone (not a valid URL)"),
         ("private", "https://[dead]/edge", "unnamed URL", "cannot check that it is private (not a valid URL)"),
@@ -460,7 +407,7 @@ def git_that_signals(directory: Path, signal_name: str) -> Path:
 def scoreboard_signalled(fleet: Path, scratch: Path, fake_git: Path) -> int:
     """The exit status of `quality scoreboard` on `fleet` in its own process, its temporary directories made in `scratch`."""
     environment = {**os.environ, "PATH": f"{fake_git}{os.pathsep}{os.environ['PATH']}", "TMPDIR": str(scratch)}
-    program = "import sys; from quality import cli; sys.exit(cli.main(sys.argv[1:]))"
+    program = f"import sys; from quality import cli; sys.exit(cli.main(sys.argv[1:], release_tags=lambda: {RELEASES!r}))"
     return subprocess.run(
         [sys.executable, "-c", program, "scoreboard", str(fleet)],
         env=environment, capture_output=True, check=False, timeout=60,
@@ -501,6 +448,7 @@ def test_the_table_goes_to_stdout_and_identically_to_the_step_summary(scoreboard
     summary.write_text("earlier step\n")
     monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
     _, output = scoreboard(public("summed", {"a.py": "a = 1\n"}))
+    assert MATRIX_HEADING in output
     assert summary.read_text() == "earlier step\n" + output
 
 
@@ -543,7 +491,7 @@ def test_a_private_only_fleet_is_measured(scoreboard, missing):
 def test_the_fleet_file_is_read_from_the_working_directory_by_default(capsys, public, tmp_path, monkeypatch):
     """#63 rule 1: `quality scoreboard` without PATH reads ./quality/fleet.toml."""
     monkeypatch.chdir(write_fleet(tmp_path / "checkout", [public("here", {"a.py": "a = 1\n"})]))
-    assert cli.main(["scoreboard"]) == 0
+    assert cli.main(["scoreboard"], release_tags=lambda: RELEASES) == 0
     assert row(capsys.readouterr().out, "here")[3] == "1 / 0"
 
 
@@ -553,6 +501,8 @@ def test_public_rows_come_first_then_private_ones_each_in_file_order(scoreboard,
     first = public("first", {"a.py": "a = 1\n"})
     _, output = scoreboard(second, first, private=[missing])
     assert output.index("| second |") < output.index("| first |") < output.index("| gone |")
+    matrix = output.partition(MATRIX_HEADING)[2]  # #123 E1, cell 14: the matrix has the same rows in the same order
+    assert matrix.index("| second |") < matrix.index("| first |") < matrix.index("| gone |")
 
 
 @pytest.mark.parametrize(

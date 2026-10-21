@@ -262,11 +262,11 @@ entries, a path that is not a repository, or a gitleaks run without a report.
 
 ## `quality scoreboard`
 
-`quality scoreboard [PATH]` prints one markdown table of the size of every repository `quality/fleet.toml` lists
+`quality scoreboard [PATH]` prints two markdown tables, the size of every repository `quality/fleet.toml` lists
 (`public = [...]` and `private = [...]`, each a list of URLs, each listed once), under a heading with the date, the
-quality version and that functions and CCN are measured for Python only. With `GITHUB_STEP_SUMMARY` set, the same text is
+quality version and that functions and CCN are measured for Python only, then the same rows as a repo × rule matrix. With `GITHUB_STEP_SUMMARY` set, the same text is
 appended there. The fleet list lives once, in `quality/fleet.toml`; `.github/workflows/scoreboard.yml` runs it every
-Monday at 05:17 UTC and on dispatch; the table stands in that run's summary. The run only reports: it writes to no repository and needs no secret. A missing, malformed or
+Monday at 05:17 UTC and on dispatch; the tables stand in that run's summary. The run only reports: it writes to no repository and needs no secret. A missing, malformed or
 duplicating `quality/fleet.toml` is `cannot judge`, exit `2`.
 
 - A `public` URL is cloned with `git -c credential.helper= clone --depth 1 --no-tags`, `GIT_TERMINAL_PROMPT=0` and no
@@ -282,7 +282,18 @@ duplicating `quality/fleet.toml` is `cannot judge`, exit `2`.
 - `Clone pairs prod / test` counts the `clone` rule's pairs (two near-identical functions in two files, at 40 tokens and
   90 %); a pair counts as test only when both sides are tests, so a test that copies production code counts as prod.
 - A `.py` file Python cannot parse still has its lines counted; the row's note says how many such files there are, never which.
-- A `private` repository is never measured, because the table is published: it shows `not measured: private`. It is
+- Both tables name a row `owner/name` when it is a URL other than a `file://` one with a host, with at least two path segments, else by its last path segment; a
+  `|` in a name prints as `\|`.
+- The matrix, under a heading naming the newest release tag of `overnightworks/quality` (read by an anonymous
+  `git ls-remote --tags`, never from the running code's version), has one `Gate` and one `CodeQL` cell per repository.
+  They come from the job-level `uses:` of each tracked `.github/workflows/*.yml|yaml`, parsed as data and never run.
+  A pin to a commit shows the release tag at that commit, with `(behind)` when it is not the newest;
+  `<7 characters> (no release)` when no tag points there, `<ref> (not a commit)` for a branch or tag name, `no gate`
+  or `none` without a caller, and `self` for the repository's own `./` or `$/` file in `overnightworks/quality`. Two
+  callers show both, joined by ` · `. The `# v` comment is never read.
+- A workflow file that cannot be read shows `cannot read <file>` in both cells, unreadable release tags say so in the
+  heading and show pins as commits, and either makes the exit `2`. No value, `behind` or `no gate` included, makes the run red.
+- A `private` repository is never measured, because the tables are published: it shows `not measured: private`. It is
   checked once with an anonymous `git ls-remote`; if anyone can read it, the row is `cannot judge: declared private
   but readable`.
 - A repository that cannot be cloned or measured shows `cannot judge: <reason>` (for example `cannot clone (git exited
