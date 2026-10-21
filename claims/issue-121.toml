@@ -1,7 +1,0 @@
-claim_id = "00c2d3febf07485ab4bc1aa95087c92f"
-agent = "claude"
-role = "builder"
-base = "94f331075f589efc8720770596ba365ac6961663"
-branch = "claude/issue-121-v0-3-1"
-scope = [".github/workflows/gate.yml", "src/quality/__init__.py"]
-opened_commit = "fd28b54add664aad3ca76c75d36b219ca54cfa97"
