@@ -1,0 +1,8 @@
+claim_id = "480b1071c4054177bbabd8041ff2b9cf"
+agent = "claude"
+role = "builder"
+base = "7c69b00ceced679bfe0ef21788baf42c8fa089d9"
+branch = "claude/issue-116-advisory-allowance"
+scope = ["README.md", "docs/rulings.md", "src/quality/advisories.py", "src/quality/config.py", "src/quality/hygiene.py", "src/quality/osv-scanner.toml", "src/quality/verdict.py", "tests/test_advisories.py", "tests/test_config.py", "tests/test_emergency.py", "tests/test_verdict.py"]
+opened_commit = "715df5a93a5f276a55765558be6221fd73a0b9c2"
+whole_reason = "Four production files land together: the rule without the verdict lets any pull request silence an advisory without the door (R2, R4), and the verdict without the rule ships an inert key."
