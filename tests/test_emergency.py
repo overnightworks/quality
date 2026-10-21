@@ -451,12 +451,14 @@ def test_exit_2_loud_line_and_log_when_the_gate_cannot_be_restored(restore_failu
         ({"merge_lands": True}, False, 'aco release <n> --abandoned "landed as PR #7 by emergency-merge"'),
         ({"fail_on": ["merge"]}, True, ") - check #7 on GitHub"),
         ({"fail_on": ["merge"]}, False, "not merged"),
+        ({"merge_lands": True, "fail_on": ["comment"]}, False, 'aco release <n> --abandoned "landed as PR #7 by emergency-merge"'),
+        ({"fail_on": ["merge", "comment"]}, False, "not merged"),
     ],
-    ids=["merged", "unknown", "not merged"],
+    ids=["merged", "unknown", "not merged", "merged, comment fails", "not merged, comment fails"],
 )
 def test_names_the_merge_outcome_when_the_gate_cannot_be_restored(gh_kwargs, read_back_fails, expected, capsys):
     """#37 rule 4, #103 rule 5d: the operator learns both manual checks, the gate and the pull request, in one line,
-    before the door sends GitHub another request."""
+    before the door sends GitHub another request, and that line is the door's last, even after a failed log comment."""
     gh = FakeGh(**gh_kwargs)
     original = gh.__call__
     printed, warned_before_request = [], []
@@ -475,7 +477,9 @@ def test_names_the_merge_outcome_when_the_gate_cannot_be_restored(gh_kwargs, rea
     assert drive(cannot_restore)[0] == 2
     output = "".join(printed) + capsys.readouterr().out
     assert set(warned_before_request) == {True}
-    assert [line for line in output.splitlines() if "MAY STILL BE OFF" in line and expected in line] != []
+    last_line = output.splitlines()[-1]
+    assert "MAY STILL BE OFF" in last_line
+    assert expected in last_line
 
 
 def test_ctrl_c_while_reading_back_the_merge_state_is_exit_2_with_the_gate_on(capsys):

@@ -388,7 +388,7 @@ def merge_outcome(attempt: Attempt, pull_request: int) -> str:
 
 def report_attempt(attempt: Attempt, door: Door, say: Say) -> int:
     if attempt.restore_error:
-        # Its line was said the moment the restore failed.
+        # Its line was said the moment the restore failed, and again after a failed log comment.
         return EXIT_NOT_RESTORED
     outcome = merge_outcome(attempt, door.pull_request)
     if attempt.outcome is Outcome.MERGED:
@@ -439,4 +439,6 @@ def run_emergency_merge(
         if isinstance(error, KeyboardInterrupt):
             end_interrupted_line(say)
         say(f"emergency-merge: the log comment on #{pull_request} was not posted, add it by hand ({error})")
+        if attempt.restore_error:
+            say(not_restored_warning(door, attempt))
     return report_attempt(attempt, door, say)
