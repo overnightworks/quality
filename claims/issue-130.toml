@@ -1,0 +1,8 @@
+claim_id = "5b8c45c7ea3a47bf9419f0baf16dbe9d"
+agent = "claude"
+role = "builder"
+base = "8c86769eeb9545577741ee45cc2c6db143d9db44"
+branch = "claude/issue-130-clone-baseline"
+scope = ["AGENTS.md", "README.md", "docs/rulings.md", "src/quality/cli.py", "src/quality/emergency.py", "src/quality/hygiene.py", "src/quality/ratchet.py", "src/quality/verdict.py", "tests/test_clone_baseline.py", "tests/test_ratchet.py", "tests/test_scoreboard_matrix.py", "tests/test_verdict.py"]
+opened_commit = "768201d4401d7ebdcaa73178f323b62798301beb"
+whole_reason = "The baseline file's one owner changes its type, so its four readers, the README's baseline and verdict lines, the rulings harvest and the tests that pin them move together."
