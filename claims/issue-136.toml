@@ -1,0 +1,8 @@
+claim_id = "a200b7167814474ca5087b066e4de224"
+agent = "claude"
+role = "builder"
+base = "1e65c25bf874922117c1d0beb12ab04bdd1af76f"
+branch = "claude/issue-136-clone-enforcement"
+scope = ["AGENTS.md", "README.md", "quality/baseline.toml", "src/quality/cli.py", "src/quality/clones.py", "src/quality/hygiene.py", "src/quality/ratchet.py", "src/quality/scoreboard.py", "tests/test_clone_baseline.py", "tests/test_clones.py", "tests/test_hygiene.py"]
+opened_commit = "4085ecbaed347f58050dc923bcfee5d3757dce9a"
+whole_reason = "Enforcing the clone rule changes the detector's result type, the hygiene rule and quality's own baseline together, with the README and the tests that pin them."
