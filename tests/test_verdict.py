@@ -657,33 +657,34 @@ def test_a_run_without_a_base_judges_no_declaration(judged):
 
 
 @pytest.mark.parametrize(
-    "entry",
+    ("entry", "named"),
     [
-        declaration(B_REMOVED).replace('reason = "ruled"\n', ""),
-        declaration(B_REMOVED) + "extra = 1\n",
-        declaration(B_REMOVED, date='"20.10.2026"'),
-        declaration(B_REMOVED, date="2026-10-20T10:00:00"),
-        declaration(B_REMOVED, item="siehe Chat"),
-        declaration(B_REMOVED).replace('"ruled"', '"two\\nlines"'),
-        declaration(""),
-        declaration(B_REMOVED).replace('"ruled"', '""'),
-        declaration(B_REMOVED) + declaration(B_REMOVED, item="#1"),
-        f"[gate.loosened]\nwhat = {json.dumps(B_REMOVED)}\n",
-        declaration(B_REMOVED, item="overnightworks/sоngmaker#1345"),
+        (declaration(B_REMOVED).replace('reason = "ruled"\n', ""), B_REMOVED),
+        (declaration(B_REMOVED) + "extra = 1\n", "'extra': 1"),
+        (declaration(B_REMOVED, date='"20.10.2026"'), "'20.10.2026'"),
+        (declaration(B_REMOVED, date="2026-10-20T10:00:00"), "datetime.datetime(2026, 10, 20, 10, 0)"),
+        (declaration(B_REMOVED, item="siehe Chat"), "'siehe Chat'"),
+        (declaration(B_REMOVED).replace('"ruled"', '"two\\nlines"'), "'two\\nlines'"),
+        (declaration(""), "'what': ''"),
+        (declaration(B_REMOVED).replace('"ruled"', '""'), "'reason': ''"),
+        (declaration(B_REMOVED) + declaration(B_REMOVED, item="#1"), f"what = {B_REMOVED!r} twice"),
+        (f"[gate.loosened]\nwhat = {json.dumps(B_REMOVED)}\n", "as an array of tables"),
+        (declaration(B_REMOVED, item="overnightworks/s\u043engmaker#1345"), "s\u043engmaker"),
     ],
     ids=[
         "missing key", "extra key", "text date", "datetime", "item siehe Chat", "two-line reason", "empty what",
         "empty reason", "duplicate what", "loosened as a table", "Cyrillic item",
     ],
 )
-def test_a_malformed_declaration_cannot_be_judged(capsys, run_env, entry):
-    """#103 rule 1, cell 11 (E1): a malformed declaration is exit 2, one line naming it, with the example."""
+def test_a_malformed_declaration_cannot_be_judged(capsys, run_env, entry, named):
+    """#103 rule 1, cell 11 (E1): a malformed declaration is exit 2, one line naming it (a table: what it must be),
+    with the example."""
     repo, _ = run_env
     (repo / CONFIG_PATH).write_text('[gate]\nmandatory_jobs = ["checks"]\n' + entry)
     assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (CHECKS_GREEN, None)) == 2
     lines = capsys.readouterr().err.splitlines()
     assert len(lines) == 1
-    assert "[[gate.loosened]]" in lines[0]
+    assert named in lines[0]
     assert 'item = "overnightworks/songmaker#1345"' in lines[0]
 
 

@@ -41,12 +41,17 @@ class LegacyMode(Enum):
 
 @dataclass(frozen=True)
 class Declaration:
-    """A loosening a pull request declares, with the ruling behind it; `what` is the verdict's text after `loosened: `."""
+    """A loosening a pull request declares, with the ruling behind it; `what` is the verdict's text after
+    `loosened (undeclared): `, unescaped."""
 
     what: str
     item: str
     date: datetime.date
     reason: str
+
+    def ruling(self) -> str:
+        """The ruling as every line naming the declaration shows it: `<item> of <date>`."""
+        return f"{self.item} of {self.date.isoformat()}"
 
 
 @dataclass(frozen=True)
@@ -130,6 +135,10 @@ def _legacy_mode(gate: dict) -> LegacyMode:
         raise ConfigError(f"{CONFIG_PATH} has [gate] legacy = {value!r}; it must be {modes}, like:\n{LEGACY_EXAMPLE}") from None
 
 
+def _spans_lines(reason: str) -> bool:
+    return "\n" in reason or "\r" in reason
+
+
 def _declarations(gate: dict) -> tuple[Declaration, ...]:
     entries = gate.get("loosened", [])
     if not isinstance(entries, list):
@@ -159,7 +168,7 @@ def _read_declaration(entry: object) -> Declaration:
         raise refuse("item as #<number> or <owner>/<repo>#<number>")
     if not isinstance(date, datetime.date) or isinstance(date, datetime.datetime):
         raise refuse("date as a TOML date without a time")
-    if not (isinstance(reason, str) and reason.strip()) or "\n" in reason or "\r" in reason:
+    if not (isinstance(reason, str) and reason.strip()) or _spans_lines(reason):
         raise refuse("a non-empty one-line reason")
     return Declaration(what, item, date, reason)
 
@@ -185,12 +194,15 @@ def read_gate_settings(repo: Path) -> GateSettings:
 def load_secret_allowances(text: str | None) -> dict[Allowance, str]:
     """Allowance -> reason of every finding the repository allows; a missing config allows nothing.
 
-    The whole document is validated, as the gate does: hygiene and the verdict refuse what they do not know.
+    The whole document is validated, as the gate does: hygiene and the verdict refuse an unknown key and a malformed
+    declaration alike.
     """
     if text is None:
         return {}
     document = _parse(text, ALLOWANCE_EXAMPLE)
-    _refuse_unknown_keys(document, _table(document, "gate", EXAMPLE))
+    gate = _table(document, "gate", EXAMPLE)
+    _refuse_unknown_keys(document, gate)
+    _declarations(gate)
     return _parse_allowances(_table(document, "secrets", ALLOWANCE_EXAMPLE))
 
 
@@ -236,7 +248,7 @@ def _read_allowance(entry: object) -> tuple[Allowance, str]:
             f"{CONFIG_PATH} [secrets] allow entry {entry!r} needs secret_sha256 as 64 lowercase hex digits, like:\n"
             f"{ALLOWANCE_EXAMPLE}"
         )
-    if "\n" in reason or "\r" in reason:
+    if _spans_lines(reason):
         raise ConfigError(f"{CONFIG_PATH} [secrets] allow entry {entry!r} needs a one-line reason")
     return Allowance(rule, file, secret_sha256), reason
 

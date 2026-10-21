@@ -64,7 +64,7 @@ class Loosening:
     def line(self) -> str:
         if self.declaration is None:
             return f"loosened (undeclared): {self.what}"
-        return f"loosened (declared, {self.declaration.item} of {self.declaration.date.isoformat()}): {self.what}"
+        return f"loosened (declared, {self.declaration.ruling()}): {self.what}"
 
 
 @dataclass(frozen=True)

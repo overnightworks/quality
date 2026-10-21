@@ -98,10 +98,7 @@ class Check:
 
 
 def described(declaration: Declaration) -> str:
-    return (
-        f"declared loosening ({declaration.item} of {declaration.date.isoformat()}): {declaration.what}"
-        f" - reason: {declaration.reason}"
-    )
+    return f"declared loosening ({declaration.ruling()}): {declaration.what} - reason: {declaration.reason}"
 
 
 @dataclass(frozen=True)
@@ -257,27 +254,35 @@ def set_gate(gh: GhRunner, repository: str, enabled: bool) -> None:
     gh(["api", "-X", "PATCH", f"repos/{repository}/properties/values", "--input", "-"], json.dumps(body))
 
 
-def merged_on_github(gh: GhRunner, door: Door) -> bool | None:
+def merged_on_github(gh: GhRunner, door: Door, say: Say) -> bool | None:
     """What GitHub says now; None when it cannot be read."""
     try:
         return json.loads(gh(["api", f"repos/{door.repository}/pulls/{door.pull_request}"], None))["merged"] is True
-    except (GhFailed, KeyError, ValueError, KeyboardInterrupt):
+    except (GhFailed, KeyError, ValueError):
+        return None
+    except KeyboardInterrupt:
+        end_interrupted_line(say)
         return None
 
 
-def restore_gate(gh: GhRunner, repository: str) -> str | None:
+def restore_gate(gh: GhRunner, repository: str, say: Say) -> str | None:
     """The reason the gate could not be switched on, None when it is on."""
     try:
         set_gate(gh, repository, True)
     except GhFailed as error:
         return str(error)
     except KeyboardInterrupt:
+        end_interrupted_line(say)
         return "interrupted while switching it on"
     return None
 
 
-def not_restored_warning(door: Door, reason: str) -> str:
-    return f"emergency-merge: {GATE_PROPERTY} MAY STILL BE OFF for {door.repository} - set it to true by hand now ({reason})"
+def not_restored_warning(door: Door, attempt: Attempt) -> str:
+    """One line for both manual checks, the gate and the pull request, with the merge outcome as far as it is known."""
+    return (
+        f"emergency-merge: {GATE_PROPERTY} MAY STILL BE OFF for {door.repository} - set it to true by hand now "
+        f"({attempt.restore_error}); {merge_outcome(attempt, door.pull_request)}"
+    )
 
 
 def end_interrupted_line(say: Say) -> None:
@@ -286,30 +291,40 @@ def end_interrupted_line(say: Say) -> None:
 
 
 def switch_off_merge_switch_on(gh: GhRunner, door: Door, say: Say) -> Attempt:
-    outcome, detail, merge_started, interrupted = Outcome.MERGED, None, False, False
+    """A gate that stays off is said at once, before any further request, since gh has no timeout to end one."""
+    outcome, detail, interrupted = Outcome.NOT_STARTED, None, False
     try:
         set_gate(gh, door.repository, False)
-        merge_started = True
+        outcome = Outcome.UNKNOWN
         gh(
             ["pr", "merge", str(door.pull_request), "--repo", door.repository, "--merge", "--match-head-commit", door.head_sha],
             None,
         )
+        outcome = Outcome.MERGED
     except (GhFailed, KeyboardInterrupt) as stop:
-        outcome = Outcome.NOT_MERGED if merge_started else Outcome.NOT_STARTED
         interrupted = isinstance(stop, KeyboardInterrupt)
         detail = "interrupted" if interrupted else str(stop)
         if interrupted:
             end_interrupted_line(say)
     finally:
-        restore_error = restore_gate(gh, door.repository)
-    if merge_started and outcome is not Outcome.MERGED:
-        # A lost answer or Ctrl-C leaves it open whether GitHub merged.
-        landed = merged_on_github(gh, door)
-        if landed:
-            outcome, detail = Outcome.MERGED, None
-        elif landed is None or interrupted:
-            outcome = Outcome.UNKNOWN
-    return Attempt(outcome, detail, restore_error)
+        restore_error = restore_gate(gh, door.repository, say)
+        if restore_error:
+            say(not_restored_warning(door, Attempt(outcome, detail, restore_error)))
+    if outcome is not Outcome.UNKNOWN:
+        return Attempt(outcome, detail, restore_error)
+    outcome = settled_by_github(gh, door, say, interrupted)
+    attempt = Attempt(outcome, None if outcome is Outcome.MERGED else detail, restore_error)
+    if restore_error and outcome is not Outcome.UNKNOWN:
+        say(not_restored_warning(door, attempt))
+    return attempt
+
+
+def settled_by_github(gh: GhRunner, door: Door, say: Say, interrupted: bool) -> Outcome:
+    """A lost answer or Ctrl-C leaves it open whether GitHub merged; after Ctrl-C a merge not yet shown stays open."""
+    landed = merged_on_github(gh, door, say)
+    if landed:
+        return Outcome.MERGED
+    return Outcome.UNKNOWN if landed is None or interrupted else Outcome.NOT_MERGED
 
 
 def log_comment(login: str, moment: datetime, door: Door, attempt: Attempt) -> str:
@@ -372,10 +387,10 @@ def merge_outcome(attempt: Attempt, pull_request: int) -> str:
 
 
 def report_attempt(attempt: Attempt, door: Door, say: Say) -> int:
-    outcome = merge_outcome(attempt, door.pull_request)
     if attempt.restore_error:
-        say(f"{not_restored_warning(door, attempt.restore_error)}; {outcome}")
+        # Its line was said the moment the restore failed.
         return EXIT_NOT_RESTORED
+    outcome = merge_outcome(attempt, door.pull_request)
     if attempt.outcome is Outcome.MERGED:
         say(outcome)
         return EXIT_MERGED

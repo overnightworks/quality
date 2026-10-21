@@ -326,7 +326,8 @@ reason = "the operator ruled the requirement shelf machinery out"
   number included, declares nothing.
 - `item` is `#<n>` or `<owner>/<repo>#<n>` (ASCII letters, digits, `_`, `.` and `-`), `date` a TOML date without a
   time, `reason` one non-empty line. A missing or extra key, a text date, two entries with one `what` or any other
-  malformed entry is exit `2`, naming the entry and showing this example.
+  malformed entry is exit `2` in `verdict` and in `hygiene --engines` (the `secret` rule), naming the entry and showing
+  this example; `scan-staged` reads only `[secrets]`.
 - Only new entries declare: those the head holds and the base does not, compared as a whole entry. An inherited entry
   is never red and declares nothing, so a later pull request that loosens the same way again needs its own entry with
   its own `item` and `date`; deleting an inherited entry is no loosening. A new entry that matches no loosening of the
@@ -493,8 +494,10 @@ quality emergency-merge <owner/repo> <pr>
 - **Off, merge, on:** it sets the repository's `quality_gate` property to `false` (this removes ruleset 25227067 for it),
   runs `gh pr merge <pr> --merge --match-head-commit <sha>`, and sets the property back to `true` in every case: merged,
   merge failed, Ctrl-C. A property that cannot be restored is exit `2` with one line naming what to set by hand and the
-  merge outcome. A merge whose outcome GitHub does not confirm (Ctrl-C, a lost answer) is re-read from the pull request;
-  if that does not settle it, exit `2` with `merge state unknown`.
+  merge outcome as far as it is known, printed before any further GitHub request; a re-read that settles an open
+  outcome prints that line again with it. After Ctrl-C the next line starts on a line of its own. A merge whose outcome
+  GitHub does not confirm (Ctrl-C, a lost answer) is re-read from the pull request; if that does not settle it, exit
+  `2` with `merge state unknown`.
 - **Logged:** one comment on the pull request (who, when, the legacy count and each declaration,
   `quality_gate off → <outcome> → on`, or `quality_gate not switched off → no merge → on` when switching off failed),
   also when the restore failed. The command prints `aco release <n> --abandoned "landed as PR #<pr> by emergency-merge"`

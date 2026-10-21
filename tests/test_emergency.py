@@ -428,7 +428,8 @@ def test_gate_is_back_on_when_switching_off_broke_halfway():
 
 @pytest.mark.parametrize("restore_failure", [GhFailed("denied"), KeyboardInterrupt()], ids=["gh failed", "Ctrl-C"])
 def test_exit_2_loud_line_and_log_when_the_gate_cannot_be_restored(restore_failure, capsys):
-    """#37 rule 4: a restore that fails is exit 2 with one loud line, and the PR still gets its log."""
+    """#37 rule 4, #103 rule 5c: a restore that fails is exit 2 with one loud line, on a line of its own after Ctrl-C,
+    and the PR still gets its log."""
     gh = FakeGh()
     original = gh.__call__
 
@@ -438,7 +439,9 @@ def test_exit_2_loud_line_and_log_when_the_gate_cannot_be_restored(restore_failu
         return original(arguments, stdin)
 
     assert drive(cannot_restore)[0] == 2
-    assert f"quality_gate MAY STILL BE OFF for {REPO}" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert f"quality_gate MAY STILL BE OFF for {REPO}" in output
+    assert ("\n\nemergency-merge: quality_gate MAY STILL BE OFF" in output) is isinstance(restore_failure, KeyboardInterrupt)
     assert "NOT restored" in gh.comments[0]
 
 
@@ -452,23 +455,32 @@ def test_exit_2_loud_line_and_log_when_the_gate_cannot_be_restored(restore_failu
     ids=["merged", "unknown", "not merged"],
 )
 def test_names_the_merge_outcome_when_the_gate_cannot_be_restored(gh_kwargs, read_back_fails, expected, capsys):
-    """#37 rule 4, #103 rule 5d: the operator learns both manual checks, the gate and the pull request, in one line."""
+    """#37 rule 4, #103 rule 5d: the operator learns both manual checks, the gate and the pull request, in one line,
+    before the door sends GitHub another request."""
     gh = FakeGh(**gh_kwargs)
     original = gh.__call__
+    printed, warned_before_request = [], []
 
     def cannot_restore(arguments, stdin=None):
+        printed.append(capsys.readouterr().out)
+        step = FakeGh.step_of(arguments)
+        if step == "comment" or (gh.merge_calls and step == "pull"):
+            warned_before_request.append("MAY STILL BE OFF" in "".join(printed))
         if stdin and json.loads(stdin)["properties"][0]["value"] == "true":
             raise GhFailed("denied")
-        if read_back_fails and gh.merge_calls and FakeGh.step_of(arguments) == "pull":
+        if read_back_fails and gh.merge_calls and step == "pull":
             raise GhFailed("pull broke")
         return original(arguments, stdin)
 
     assert drive(cannot_restore)[0] == 2
-    assert [line for line in capsys.readouterr().out.splitlines() if "MAY STILL BE OFF" in line and expected in line] != []
+    output = "".join(printed) + capsys.readouterr().out
+    assert set(warned_before_request) == {True}
+    assert [line for line in output.splitlines() if "MAY STILL BE OFF" in line and expected in line] != []
 
 
 def test_ctrl_c_while_reading_back_the_merge_state_is_exit_2_with_the_gate_on(capsys):
-    """#37 rule 4: an interruption after the restore is still an outcome line and exit 2, not a traceback."""
+    """#37 rule 4, #103 rule 5c: an interruption after the restore is still an outcome line, on a line of its own, and
+    exit 2, not a traceback."""
     gh = FakeGh(fail_on=["merge"])
     original = gh.__call__
 
@@ -479,7 +491,7 @@ def test_ctrl_c_while_reading_back_the_merge_state_is_exit_2_with_the_gate_on(ca
 
     assert drive(interrupted_reading_back)[0] == 2
     assert gh.gate_values == ["false", "true"]
-    assert "merge state unknown" in capsys.readouterr().out
+    assert "\n\nemergency-merge: merge state unknown" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("restore_fails", [False, True], ids=["gate on", "gate not restored"])

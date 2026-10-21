@@ -226,14 +226,29 @@ def test_a_config_without_declarations_declares_nothing():
     assert load_gate_settings('[gate]\nmandatory_jobs = ["checks"]').loosened == ()
 
 
+HYGIENE = ["hygiene", "--engines", "{engines}", "{repo}"]
+SCAN_STAGED = ["scan-staged", "{repo}", "--engines", "{engines}"]
+TEXT_DATE_DECLARATION = SONGMAKER_DECLARATION.replace("2026-10-20", '"20.10.2026"')
+
+
 @pytest.mark.parametrize(
-    "command",
-    [["hygiene", "--engines", "{engines}", "{repo}"], ["scan-staged", "{repo}", "--engines", "{engines}"]],
-    ids=["hygiene --engines", "scan-staged"],
+    ("command", "config", "code", "line"),
+    [
+        (HYGIENE, SONGMAKER_DECLARATION, 0, "hygiene: clean ("),
+        (SCAN_STAGED, SONGMAKER_DECLARATION, 0, "scan-staged: clean"),
+        (HYGIENE, TEXT_DATE_DECLARATION, 2, "hygiene: secret cannot judge - quality/config.toml [[gate.loosened]] entry"),
+        (SCAN_STAGED, TEXT_DATE_DECLARATION, 0, "scan-staged: clean"),
+    ],
+    ids=["hygiene --engines", "scan-staged", "hygiene --engines, text date", "scan-staged, text date"],
 )
-def test_the_other_doors_accept_a_declared_loosening(build_repo, clean_engines, capsys, command):
-    """#103 rule 1, cell 12: a [[gate.loosened]] entry is no unknown key for hygiene or the commit hook."""
-    repo = build_repo({CONFIG_PATH: SONGMAKER_DECLARATION})
-    code = cli.main([part.format(repo=repo, engines=clean_engines) for part in command])
+def test_hygiene_judges_a_declaration_as_the_verdict_does_and_the_commit_hook_reads_only_secrets(
+    build_repo, clean_engines, capsys, command, config, code, line
+):
+    """#103 rule 1, cells 11 and 12: a [[gate.loosened]] entry is no unknown key for hygiene or the commit hook; a
+    malformed one is exit 2 under hygiene, as in the verdict, and the commit hook never reads it."""
+    repo = build_repo({CONFIG_PATH: config})
+    assert cli.main([part.format(repo=repo, engines=clean_engines) for part in command]) == code
     captured = capsys.readouterr()
-    assert (code, "unknown key" in captured.out + captured.err) == (0, False), captured
+    output = captured.out + captured.err
+    assert "unknown key" not in output
+    assert line in output, output
