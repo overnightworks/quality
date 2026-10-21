@@ -68,6 +68,8 @@ NO_CONFIG = "no config"
 RELEASE_UNKNOWN = "release unknown"
 NOT_RELEASED = "not released"
 IMPORT_LINTER_CONFIG = "import-linter config"
+FIRST_RELEASE = "v0.1.0"
+RATCHET_RELEASE = "v0.3.0"
 
 
 def release_order(tag: str) -> tuple[int, ...]:
@@ -95,15 +97,15 @@ class RuleRelease:
 
 # In cell order. The tripwire test holds the ids equal to the rules `hygiene.run_hygiene` judges.
 RULES = (
-    RuleRelease(hygiene.ENV_FILE, "v0.1.0", Switch.ALWAYS),
-    RuleRelease(hygiene.COMPOSE_PORT, "v0.1.0", Switch.ALWAYS),
-    RuleRelease(engines.LEAK_RULE, "v0.1.0", Switch.ALWAYS),
-    RuleRelease(engines.WORKFLOW_LINT, "v0.1.0", Switch.ALWAYS),
-    RuleRelease(engines.WORKFLOW_SECURITY, "v0.1.0", Switch.ALWAYS),
-    RuleRelease(hygiene.CLAUDE_MD, "v0.3.0", Switch.ALWAYS),
-    RuleRelease(advisories.RULE, "v0.3.0", Switch.ALWAYS),
-    RuleRelease(ratchet.SIZE, "v0.3.0", Switch.SIZE_BASELINE),
-    RuleRelease(architecture.RULE, "v0.3.0", Switch.IMPORT_LINTER_CONFIG),
+    RuleRelease(hygiene.ENV_FILE, FIRST_RELEASE, Switch.ALWAYS),
+    RuleRelease(hygiene.COMPOSE_PORT, FIRST_RELEASE, Switch.ALWAYS),
+    RuleRelease(engines.LEAK_RULE, FIRST_RELEASE, Switch.ALWAYS),
+    RuleRelease(engines.WORKFLOW_LINT, FIRST_RELEASE, Switch.ALWAYS),
+    RuleRelease(engines.WORKFLOW_SECURITY, FIRST_RELEASE, Switch.ALWAYS),
+    RuleRelease(hygiene.CLAUDE_MD, RATCHET_RELEASE, Switch.ALWAYS),
+    RuleRelease(advisories.RULE, RATCHET_RELEASE, Switch.ALWAYS),
+    RuleRelease(ratchet.SIZE, RATCHET_RELEASE, Switch.SIZE_BASELINE),
+    RuleRelease(architecture.RULE, RATCHET_RELEASE, Switch.IMPORT_LINTER_CONFIG),
     RuleRelease(clones.RULE, None, Switch.REPORT_ONLY),
 )
 OLDEST_RELEASE = min((rule.first_release for rule in RULES if rule.first_release), key=release_order)
