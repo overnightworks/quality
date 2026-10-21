@@ -13,13 +13,13 @@ import grimp
 import pytest
 import yaml
 from conftest import FORBIDDEN, SHOP, SHOP_DB_IMPORTS_WEB, assert_every_line_starts_with_the_door, toml
+from conftest import hygiene_output as run
 from importlinter.contracts.forbidden import ForbiddenContract
 
 import quality
-from quality import cli
 
 QUALITY_ROOT = Path(__file__).resolve().parents[1]
-CLEAN_LINE = "hygiene: clean (env-file, compose-port, size, import-contract, claude-md)"
+CLEAN_LINE = "hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md)"
 SHOP_CYCLE = {**SHOP_DB_IMPORTS_WEB, "src/shop/web.py": "import shop.db\n"}
 LAYERS = {"type": "layers", "layers": ["shop.web", "shop.db"]}
 PROTECTED = {"type": "protected", "protected_modules": ["shop.web"], "allowed_importers": ["shop.api"]}
@@ -43,12 +43,6 @@ def ini(contract: dict, roots: tuple[str, ...] = ("shop",), **session: str | lis
     return ini_section("importlinter", {"root_packages": list(roots), **session}) + ini_section(
         "importlinter:contract:one", {"name": "guarded", **contract}
     )
-
-
-def run(capsys: pytest.CaptureFixture[str], path: Path) -> tuple[int, str]:
-    code = cli.main(["hygiene", str(path)])
-    captured = capsys.readouterr()
-    return code, captured.out + captured.err
 
 
 THREE_ROOTS = {

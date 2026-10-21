@@ -3,17 +3,12 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from conftest import hygiene_output as run
 
 from quality import cli
 
-CLEAN_LINE = "hygiene: clean (env-file, compose-port, size, import-contract, claude-md)"
+CLEAN_LINE = "hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md)"
 ENV_FINDING = "env-file .env - "
-
-
-def run(capsys: pytest.CaptureFixture[str], path: Path) -> tuple[int, str]:
-    code = cli.main(["hygiene", str(path)])
-    captured = capsys.readouterr()
-    return code, captured.out + captured.err
 
 
 GUIDANCE = {"AGENTS.md": "# guidance\n"}

@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from enum import Enum
 from operator import attrgetter
 from pathlib import PurePosixPath
-from typing import NamedTuple
+from typing import NamedTuple, Self
 
 import lizard
 
@@ -91,6 +91,25 @@ Measurements = dict[Key, Measured]
 Baseline = dict[Key, int]
 
 
+class Place(NamedTuple):
+    """A function as the baseline names it: its file and its qualified symbol."""
+
+    path: str
+    symbol: str
+
+
+@dataclass(frozen=True)
+class ClonePair:
+    """Two near-identical functions in two files; `first` sorts before `second`, so a pair has one spelling."""
+
+    first: Place
+    second: Place
+
+    @classmethod
+    def of(cls, one: Place, other: Place) -> Self:
+        return cls(*sorted((one, other)))
+
+
 class SizeError(Exception):
     """The tree or the baseline cannot be measured; the message carries the reason."""
 
@@ -136,7 +155,7 @@ def measure(sources: dict[str, bytes]) -> TreeMeasurement:
     for path, source in sources.items():
         measurements[Key(Metric.FILE_LINES, path)] = Measured(len(source.splitlines()), None)
         try:
-            text = _python_text(source)
+            text = python_text(source)
             tree = ast.parse(text, filename=path)
         except (SyntaxError, ValueError, LookupError) as error:
             unparsable[path] = str(error)
@@ -145,7 +164,7 @@ def measure(sources: dict[str, bytes]) -> TreeMeasurement:
     return TreeMeasurement(measurements, unparsable)
 
 
-def _python_text(source: bytes) -> str:
+def python_text(source: bytes) -> str:
     """Python's own source reading: newlines are translated on the bytes first, as CPython's tokenizer does, so
     a CR-only file has the lines Python sees both for its PEP 263 cookie and for lizard; then a cookie or a
     UTF-8 BOM names the encoding, UTF-8 otherwise."""
@@ -155,24 +174,24 @@ def _python_text(source: bytes) -> str:
 
 
 def _function_measurements(path: str, text: str, tree: ast.Module) -> Iterator[tuple[Key, Measured]]:
-    symbols = _qualified_symbols(tree)
+    symbols = qualified_symbols(tree)
     functions = sorted(lizard.analyze_file.analyze_source_code(path, text).function_list, key=attrgetter("start_line"))
     occurrences: Counter[str] = Counter()
     for function in functions:
         qualified = symbols.get(function.start_line, function.name)
         occurrences[qualified] += 1
-        symbol = _nth(qualified, occurrences[qualified])
+        symbol = nth(qualified, occurrences[qualified])
         yield Key(Metric.FUNCTION_LINES, path, symbol), Measured(function.length, function.start_line)
         yield Key(Metric.CCN, path, symbol), Measured(function.cyclomatic_complexity, function.start_line)
 
 
-def _nth(symbol: str, occurrence: int) -> str:
+def nth(symbol: str, occurrence: int) -> str:
     """A property's getter and setter, or a conditionally redefined function, share one qualified symbol; each
     keeps its own entry, numbered in source order, so the longer one cannot hide the shorter one growing."""
     return symbol if occurrence == 1 else f"{symbol}{OCCURRENCE_MARK}{occurrence}"
 
 
-def _qualified_symbols(tree: ast.Module) -> dict[int, str]:
+def qualified_symbols(tree: ast.Module) -> dict[int, str]:
     symbols: dict[int, str] = {}
 
     def visit(node: ast.AST, prefix: str) -> None:
