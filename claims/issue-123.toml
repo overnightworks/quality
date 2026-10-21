@@ -1,0 +1,8 @@
+claim_id = "86132f29a4284dcf8cd2f909577eff3d"
+agent = "claude"
+role = "builder"
+base = "7c69b00ceced679bfe0ef21788baf42c8fa089d9"
+branch = "claude/issue-123-scoreboard-pins"
+scope = ["AGENTS.md", "README.md", "src/quality/cli.py", "src/quality/scoreboard.py", "tests/test_scoreboard.py"]
+opened_commit = "94858d3eaf5fed96690d18f9d0e8cf177436839d"
+whole_reason = "The pin reader, its release-tag lookup, the second table and its row labels are one view; cli.py only passes the tag reader in and names it in the help."
