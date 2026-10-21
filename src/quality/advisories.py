@@ -5,12 +5,14 @@ import re
 import threading
 import urllib.request
 import zipfile
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from concurrent.futures import Future
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path, PurePosixPath
 
 from quality import engines
+from quality.config import CONFIG_PATH, AdvisoryAllowance
 from quality.engines import EngineError, Pin
 from quality.report import Finding
 
@@ -36,23 +38,103 @@ class LockKind:
 LOCK_KINDS = {"uv.lock": LockKind("PyPI", "uv lock --upgrade-package {package}")}
 
 
+@dataclass(frozen=True)
+class Affected:
+    """One advisory group that affects one package in one tracked lock file; `ids` are every id and alias of the
+    group, `subject` names the group and the package as the finding prints them."""
+
+    lock: str
+    subject: str
+    ids: frozenset[str]
+    fix: str
+
+    def finding(self, note: str = "") -> Finding:
+        return Finding(RULE, self.lock, None, f"{engines.OSV_SCANNER} {self.subject} is affected{note}.", self.fix)
+
+
+@dataclass(frozen=True)
+class AdvisoryScan:
+    """The rule's findings, and one line per advisory an allowance lets through."""
+
+    findings: tuple[Finding, ...]
+    allowed: tuple[str, ...]
+
+    def report(self) -> tuple[str, ...]:
+        return (f"{RULE}: {len(self.allowed)} allowed", *self.allowed) if self.allowed else ()
+
+
 def is_lock(name: str) -> bool:
     return PurePosixPath(name).name in LOCK_KINDS
 
 
-def scan(engine_dir: Path, pins: dict[str, Pin], locks: Mapping[str, Path], root: Path) -> list[Finding]:
-    """The advisories that affect the lock files `locks` (tracked name -> absolute path); no lock needs no engine."""
+def scan(
+    engine_dir: Path, pins: dict[str, Pin], locks: Mapping[str, Path], root: Path,
+    allowances: Sequence[AdvisoryAllowance], today: date,
+) -> AdvisoryScan:
+    """The advisories that affect the lock files `locks` (tracked name -> absolute path), with the repository's
+    allowances applied; no lock needs no engine, and leaves every allowance matching nothing."""
     if not locks:
-        return []
+        return apply_allowances([], allowances, today)
     names_by_path = _names_by_path(locks)
     with engines.scratch_directory() as scratch:
         try:
-            return _scan(engine_dir, pins, locks, scratch, names_by_path)
+            affected = _scan(engine_dir, pins, locks, scratch, names_by_path)
         except EngineError as error:
             raise EngineError(_without_paths(str(error), names_by_path, [(root.resolve(), "<repository>"), (engine_dir.resolve(), "<engines>"), (scratch, "<scratch>")])) from None
+    return apply_allowances(affected, allowances, today)
 
 
-def _scan(engine_dir: Path, pins: dict[str, Pin], locks: Mapping[str, Path], scratch: Path, names_by_path: dict[str, list[str]]) -> list[Finding]:
+def apply_allowances(
+    affected: Iterable[Affected], allowances: Sequence[AdvisoryAllowance], today: date
+) -> AdvisoryScan:
+    """Each group is allowed by the one allowance naming any of its ids in its lock, until that allowance's `until`
+    (inclusive); two allowances on one group allow it for neither, and an allowance no group uses is a finding."""
+    by_lock: dict[str, list[AdvisoryAllowance]] = {}
+    for allowance in allowances:
+        by_lock.setdefault(allowance.lock, []).append(allowance)
+    findings: list[Finding] = []
+    allowed: list[str] = []
+    used: set[AdvisoryAllowance] = set()
+    conflicts: dict[tuple[AdvisoryAllowance, ...], Affected] = {}
+    for group in affected:
+        matching = tuple(allowance for allowance in by_lock.get(group.lock, ()) if allowance.id in group.ids)
+        used.update(matching)
+        if len(matching) > 1:
+            conflicts.setdefault(matching, group)
+        if len(matching) != 1:
+            findings.append(group.finding())
+        elif matching[0].until < today:
+            findings.append(group.finding(f"; its allowance ran out on {matching[0].until} ({matching[0].item})"))
+        else:
+            allowed.append(_allowed_line(group, matching[0]))
+    findings += [_conflict(entries, group) for entries, group in conflicts.items()]
+    findings += [_orphan(allowance) for allowance in allowances if allowance not in used]
+    return AdvisoryScan(tuple(findings), tuple(allowed))
+
+
+def _allowed_line(group: Affected, allowance: AdvisoryAllowance) -> str:
+    return f"  allowed {group.lock} {group.subject} until {allowance.until} ({allowance.item}) - {allowance.reason}"
+
+
+def _conflict(entries: tuple[AdvisoryAllowance, ...], group: Affected) -> Finding:
+    names = " and ".join(entry.id for entry in entries)
+    return Finding(
+        RULE, CONFIG_PATH, None,
+        f"the allowances for {names} in {group.lock} match one advisory group, so neither allows it.",
+        f"keep one [[advisories.allow]] entry for {group.subject}",
+    )
+
+
+def _orphan(allowance: AdvisoryAllowance) -> Finding:
+    return Finding(
+        RULE, CONFIG_PATH, None, f"the allowance for {allowance.id} in {allowance.lock} matches no advisory.",
+        "delete the [[advisories.allow]] entry; deleting an allowance is no loosening and needs no door",
+    )
+
+
+def _scan(
+    engine_dir: Path, pins: dict[str, Pin], locks: Mapping[str, Path], scratch: Path, names_by_path: dict[str, list[str]]
+) -> list[Affected]:
     binary = engines.engine_path(engine_dir, engines.OSV_SCANNER)
     engines.verify_version(binary, engines.OSV_SCANNER, pins[engines.OSV_SCANNER].version)
     for ecosystem in sorted({LOCK_KINDS[PurePosixPath(name).name].ecosystem for name in locks}):
@@ -133,27 +215,28 @@ def _without_paths(text: str, names_by_path: Mapping[str, list[str]], directorie
     return text
 
 
-def _findings(exit_code: int, report_text: str, stderr: str, names_by_path: Mapping[str, list[str]]) -> list[Finding]:
+def _findings(exit_code: int, report_text: str, stderr: str, names_by_path: Mapping[str, list[str]]) -> list[Affected]:
     if exit_code not in (engines.CLEAN_EXIT, OSV_FINDINGS_FOUND):
         raise EngineError(f"{engines.OSV_SCANNER} exited {exit_code}, neither 'clean' nor 'findings'{engines.stderr_tail(stderr)}")
-    findings = _read_report(report_text, names_by_path)
-    if bool(findings) != (exit_code == OSV_FINDINGS_FOUND):
-        raise EngineError(f"{engines.OSV_SCANNER} exited {exit_code} but its report holds {len(findings)} finding(s)")
-    return findings
+    affected = _read_report(report_text, names_by_path)
+    if bool(affected) != (exit_code == OSV_FINDINGS_FOUND):
+        raise EngineError(f"{engines.OSV_SCANNER} exited {exit_code} but its report holds {len(affected)} finding(s)")
+    return affected
 
 
-def _read_report(report_text: str, names_by_path: Mapping[str, list[str]]) -> list[Finding]:
+def _read_report(report_text: str, names_by_path: Mapping[str, list[str]]) -> list[Affected]:
     try:
-        findings = []
+        affected = []
         for result in _dicts(json.loads(report_text)["results"]):
             source = _typed(_typed(result["source"], dict)["path"], str)
             if source not in names_by_path:
                 raise EngineError(f"the {engines.OSV_SCANNER} report names a lock file quality did not pass")
             packages = _dicts(result["packages"])
-            findings += [
-                finding for name in names_by_path[source] for package in packages for finding in _package_findings(name, package)
+            affected += [
+                group for name in names_by_path[source] for package in packages
+                for group in _package_findings(name, package)
             ]
-        return list(dict.fromkeys(findings))
+        return list(dict.fromkeys(affected))
     except (ValueError, KeyError, TypeError, AttributeError) as error:
         raise EngineError(f"cannot read the {engines.OSV_SCANNER} report: {error!r}") from error
 
@@ -169,21 +252,21 @@ def _strings(value: object) -> list[str]:
     return [_typed(item, str) for item in _typed(value, list)]
 
 
-def _package_findings(lock: str, package: dict) -> list[Finding]:
+def _package_findings(lock: str, package: dict) -> list[Affected]:
     affected = _typed(package["package"], dict)
     name, version, ecosystem = (_typed(affected[field], str) for field in ("name", "version", "ecosystem"))
     records = {_typed(record["id"], str): record for record in _dicts(package["vulnerabilities"])}
-    findings = []
+    groups = []
     for group in _dicts(package["groups"]):
         named, *others = _strings(group["ids"])
         aliases = sorted({*others, *_strings(group["aliases"])} - {named})
         records_of_group = [records[identifier] for identifier in [named, *others] if identifier in records]
         listed = f" ({', '.join(aliases)})" if aliases else ""
-        findings.append(Finding(
-            RULE, lock, None, f"{engines.OSV_SCANNER} {named}{listed}: {ecosystem} {name} {version} is affected.",
+        groups.append(Affected(
+            lock, f"{named}{listed}: {ecosystem} {name} {version}", frozenset({named, *aliases}),
             _fix(lock, name, named, ecosystem, records_of_group),
         ))
-    return findings
+    return groups
 
 
 def _fix(lock: str, package: str, advisory: str, ecosystem: str, records: list[dict]) -> str:

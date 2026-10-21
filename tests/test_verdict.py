@@ -1,3 +1,4 @@
+import datetime
 import json
 import os
 import subprocess
@@ -5,7 +6,14 @@ import sys
 from pathlib import Path
 
 import pytest
-from conftest import GIT_IDENTITY, UNKNOWN_KEY_CONFIGS, assert_every_line_starts_with_the_door, head_commit, put
+from conftest import (
+    GIT_IDENTITY,
+    UNKNOWN_KEY_CONFIGS,
+    allowance_config,
+    assert_every_line_starts_with_the_door,
+    head_commit,
+    put,
+)
 from test_sonar import reply
 
 from quality import cli, verdict
@@ -570,6 +578,63 @@ def test_a_run_without_a_base_judges_no_declaration(judged):
     """#103 rule 2, cell 9: a push run judges no loosening and no declaration, so its declarations leave it green."""
     head = gate_config("A", declared=(declaration(B_REMOVED),))
     assert judged(gate_config("A", "B"), head, A_RAN, with_base=False) == (0, ["verdict: green"])
+
+
+PRESENTATOR = "overnightworks/agent-presentator#371"
+QWEN = "speech/providers/qwen/uv.lock"
+ALLOWS = f"loosened (declared, {PRESENTATOR} of 2026-10-21): advisory allowance "
+ADDS_QWEN = "advisory allowance adds GHSA-462x-pgg6-55fp in " + QWEN + " until 2027-01-31"
+
+
+@pytest.mark.parametrize(
+    ("base", "head", "expected"),
+    [
+        (gate_config("A"), gate_config("A") + allowance_config(),
+         [f"{ALLOWS}adds GHSA-462x-pgg6-55fp in {QWEN} until 2027-01-31", ONLY_DECLARED]),
+        (gate_config("A"), gate_config("A") + allowance_config(until=datetime.date(2099, 12, 31)),
+         [f"{ALLOWS}adds GHSA-462x-pgg6-55fp in {QWEN} until 2099-12-31", ONLY_DECLARED]),
+        (gate_config("A") + allowance_config(), gate_config("A") + allowance_config(until=datetime.date(2027, 7, 31)),
+         [f"{ALLOWS}extends GHSA-462x-pgg6-55fp in {QWEN} to 2027-07-31", ONLY_DECLARED]),
+        (gate_config("A") + allowance_config(), gate_config("A") + allowance_config(until=datetime.date(2026, 12, 31)), ["verdict: green"]),
+        (gate_config("A") + allowance_config(), gate_config("A") + allowance_config(reason="reworded"), ["verdict: green"]),
+        (gate_config("A") + allowance_config(), gate_config("A") + allowance_config(item="#116"), ["verdict: green"]),
+        (gate_config("A") + allowance_config(), gate_config("A") + allowance_config(date=datetime.date(2026, 11, 1)), ["verdict: green"]),
+        (gate_config("A") + allowance_config(), gate_config("A"), ["verdict: green"]),
+        (gate_config("A") + allowance_config(), gate_config("A") + allowance_config(lock="uv.lock"),
+         [f"{ALLOWS}adds GHSA-462x-pgg6-55fp in uv.lock until 2027-01-31", ONLY_DECLARED]),
+        (gate_config("A") + allowance_config(), gate_config("A") + allowance_config("CVE-2026-112395"),
+         [f"{ALLOWS}adds CVE-2026-112395 in {QWEN} until 2027-01-31", ONLY_DECLARED]),
+        (None, gate_config("A") + allowance_config() + allowance_config(lock="uv.lock"),
+         [f"{ALLOWS}adds GHSA-462x-pgg6-55fp in {QWEN} until 2027-01-31", f"{ALLOWS}adds GHSA-462x-pgg6-55fp in uv.lock until 2027-01-31",
+          ONLY_DECLARED]),
+        (gate_config("A") + allowance_config(), gate_config("A") + allowance_config(), ["verdict: green"]),
+        (gate_config("A"), gate_config("A", declared=(declaration(ADDS_QWEN),)) + allowance_config(),
+         [f"{ALLOWS}adds GHSA-462x-pgg6-55fp in {QWEN} until 2027-01-31", f"declared loosening matches nothing: {ADDS_QWEN}",
+          "verdict: red"]),
+        (gate_config("A", "B"), gate_config("A") + allowance_config(),
+         [f"{ALLOWS}adds GHSA-462x-pgg6-55fp in {QWEN} until 2027-01-31", *UNDECLARED_B, "verdict: red"]),
+        (gate_config("A"), gate_config("A") + allowance_config("GHSA-\u001b[8m", lock="a\tb/uv.lock"),
+         [f"{ALLOWS}adds GHSA-\\x1b[8m in a\\x09b/uv.lock until 2027-01-31", ONLY_DECLARED]),
+        (gate_config("A", "B"), gate_config("A", declared=(declaration(B_REMOVED),)) + allowance_config(),
+         [DECLARED + B_REMOVED, f"{ALLOWS}adds GHSA-462x-pgg6-55fp in {QWEN} until 2027-01-31", ONLY_DECLARED]),
+    ],
+    ids=[
+        "cell 14 adds", "cell 14 adds with a far until", "cell 15 extends", "cell 16 until earlier", "cell 16 reason reworded", "cell 16 item changed",
+        "cell 16 date changed", "cell 16 deleted", "cell 17 lock changed", "cell 17 id changed", "cell 18 adoption",
+        "cell 20 unchanged", "cell 21 a gate.loosened entry for an allowance", "cell 22 next to an undeclared removal",
+        "cell 25 control characters in id and lock", "cell 28 next to a declared removal",
+    ],
+)
+def test_an_advisory_allowance_declares_its_own_loosening(judged, base, head, expected):
+    """#116 R2, E6, E7, E8: an allowance the base lacks, or whose until the head moves later, is a loosening declared
+    with the allowance's own item and date; nothing else about an allowance loosens, and a [[gate.loosened]] entry
+    naming one matches nothing."""
+    assert judged(base, head, A_RAN) == (0 if expected == ["verdict: green"] else 1, expected)
+
+
+def test_a_run_without_a_base_judges_no_advisory_allowance(judged):
+    """#116 cell 19: a push or merge group judges no loosening, so a new allowance leaves it green."""
+    assert judged(gate_config("A"), gate_config("A") + allowance_config(), A_RAN, with_base=False) == (0, ["verdict: green"])
 
 
 @pytest.mark.parametrize(
