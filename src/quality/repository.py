@@ -2,9 +2,9 @@
 
 A name is repository-relative, as the caller gives it. Every read stays inside the repository, and every error names
 the file by that name alone, never a resolved path or the root, so no message prints where the checkout lies.
-It uses os.path.realpath, os.lstat and os.stat rather than Path.resolve and Path.exists: those swallow the errors
-this reader must tell apart (a path the filesystem refuses, a link to nowhere, a link loop), while the os calls
-raise an OSError whose errno decides.
+It uses os.path.realpath, os.lstat and os.stat, not Path.exists or Path.exists(follow_symlinks=False), which turn every
+OSError into False: a path the filesystem refuses (EACCES, ENAMETOOLONG) would read as absent. os.lstat tells an absent
+entry from a dangling link, and os.stat raises the OSError whose errno decides, so each refusal keeps its own cause.
 """
 
 import errno
