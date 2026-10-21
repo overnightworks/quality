@@ -219,3 +219,12 @@ In GitHub Actions the door stops workflow commands with a per-run token, and rep
 3. E8. Asked: „Darf deine Tür einen PR mergen, der Sonar-Altlasten hat (legacy = fail) und zugleich eine erklärte Lockerung?“ Answered: „Ja, beides in einem Lauf (empfohlen)“.
 4. E10. Asked: „… Dass nur du lockerst, hängt damit am Vertrag, nicht an einer Sperre … Wie gehen wir damit um?“ Answered: „Bekanntes Restrisiko (empfohlen)“. Agents share the operator's `gh` login, so the door is the sanctioned path, not a lock; a real lock belongs to the machine's setup.
 5. The release. Asked: „hopin und songmaker brauchen ein neues quality-Release mit #98 und Q1b-7a … Wie soll das Release heißen?“ Answered: „v0.3.0 jetzt (empfohlen)“.
+
+## Operator ruling (21.10.2026): the verdict re-reads a stale jobs answer
+
+[#85](https://github.com/overnightworks/quality/issues/85). GitHub's jobs listing answers late per job, so the verdict can read a mandatory job as running that the caller's `needs:` already waited for. On 21.10.2026 the operator answered three questions; E4, E5 and E6 were shown to him with their defaults the same day and keep them.
+
+1. E1 and E2. Asked: „Das Verdict liest einen Pflicht-Job, der laut GitHub noch „läuft“, obwohl er fertig sein muss, noch einmal nach, statt sofort rot zu werden. Wie lange darf es höchstens nachlesen?“ Answered: „Bis zu 2 Minuten (empfohlen)“. The verdict reads the run's jobs again at most twelve times, 10 s apart, and judges the first answer that settles every judged job.
+2. E3. Asked: „Steht der Job auch nach dem letzten Nachlesen noch auf „läuft“: Welches Ergebnis?“ Answered: „Exit 2: kann nicht urteilen (empfohlen)“. The line names GitHub's stale answer and says to re-run the verdict.
+3. The release. Asked: „Das Nachlesen (#85) braucht noch einige Stunden, bis es gebaut und geprüft ist. Soll v0.3.0 darauf warten?“ Answered: „v0.3.0 jetzt, #85 als v0.3.1 (empfohlen)“.
+4. The defaults. E4: a verdict that read more than once first prints how often and what GitHub said first. E5: a 5xx is read again in the same budget and, if it lasts, named as GitHub's fault without the permission hint. E6: `(does the caller grant actions: read?)` follows only a 403 or 404.

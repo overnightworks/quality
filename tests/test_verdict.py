@@ -1,14 +1,12 @@
-import http.server
 import json
 import os
 import subprocess
 import sys
-import threading
 from pathlib import Path
 
 import pytest
-from conftest import GIT_IDENTITY, UNKNOWN_KEY_CONFIGS, assert_every_line_starts_with_the_door
-from test_sonar import Responder, reply
+from conftest import GIT_IDENTITY, UNKNOWN_KEY_CONFIGS, assert_every_line_starts_with_the_door, head_commit, put
+from test_sonar import reply
 
 from quality import cli, verdict
 from quality.config import CONFIG_PATH, LegacyMode
@@ -21,8 +19,9 @@ FIXTURES = Path(__file__).parent / "fixtures"
 GREEN_GATE = {"hygiene": "success"}
 
 
-def job(name="checks", attempt=1, status="completed", conclusion="success"):
-    return Job(name, attempt, status, conclusion)
+def job(name="checks", attempt=1, status="completed", conclusion="success", leg=1):
+    """One entry of the run's jobs; GitHub gives each leg of a name, in each attempt, an id of its own."""
+    return Job(name, attempt, status, conclusion, int.from_bytes(f"{name}/{attempt}/{leg}".encode()))
 
 
 def problems(jobs, mandatory=("checks",), base=(), gate=GREEN_GATE, attempt=1, legacy=LegacyMode.REPORT, base_legacy=LegacyMode.REPORT):
@@ -35,12 +34,6 @@ def problems(jobs, mandatory=("checks",), base=(), gate=GREEN_GATE, attempt=1, l
     [
         ([job()], 1, ()),
         ([], 1, ('mandatory job "checks" is missing from the run',)),
-        (
-            [job(status="in_progress", conclusion=None)],
-            1,
-            ('mandatory job "checks" (attempt 1) concluded in_progress',),
-        ),
-        ([job(status="queued", conclusion=None)], 1, ('mandatory job "checks" (attempt 1) concluded queued',)),
         ([job(conclusion="failure")], 1, ('mandatory job "checks" (attempt 1) concluded failure',)),
         ([job(conclusion="skipped")], 1, ('mandatory job "checks" (attempt 1) concluded skipped',)),
         ([job(conclusion="cancelled")], 1, ('mandatory job "checks" (attempt 1) concluded cancelled',)),
@@ -56,8 +49,6 @@ def problems(jobs, mandatory=("checks",), base=(), gate=GREEN_GATE, attempt=1, l
     ids=[
         "success",
         "missing",
-        "in_progress",
-        "queued",
         "failure",
         "skipped",
         "cancelled",
@@ -124,13 +115,13 @@ def test_more_pages_than_the_cap_cannot_be_judged():
 def test_base_config_is_read_from_the_base_commit(build_repo):
     """#6 rule 3: the base config is read from the base commit."""
     repo = build_repo({"quality/config.toml": '[gate]\nmandatory_jobs = ["tests"]\n'})
-    assert read_base(repo, _head(repo)).settings == GateSettings(("tests",), LegacyMode.REPORT)
+    assert read_base(repo, head_commit(repo)).settings == GateSettings(("tests",), LegacyMode.REPORT)
 
 
 def test_the_legacy_mode_is_read_from_the_base_commit(build_repo):
     """#33 sentence 4: the base config's legacy mode is read from the base commit."""
     repo = build_repo({"quality/config.toml": '[gate]\nmandatory_jobs = ["tests"]\nlegacy = "fail"\n'})
-    assert read_base(repo, _head(repo)).settings == GateSettings(("tests",), LegacyMode.FAIL)
+    assert read_base(repo, head_commit(repo)).settings == GateSettings(("tests",), LegacyMode.FAIL)
 
 
 @pytest.mark.parametrize(
@@ -153,30 +144,7 @@ def test_switching_legacy_back_from_fail_is_a_loosening(base_legacy, legacy, exp
 def test_a_base_without_the_config_contributes_nothing(build_repo):
     """#6 rule 3: a base without the config adds no mandatory jobs."""
     repo = build_repo({"README.md": "x"})
-    assert read_base(repo, _head(repo)) == Side(NO_BASE_SETTINGS, None)
-
-
-def _head(repo):
-    return subprocess.run(
-        ["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True, check=True
-    ).stdout.strip()
-
-
-@pytest.fixture
-def run_env(monkeypatch, build_repo, tmp_path):
-    repo = build_repo({"quality/config.toml": '[gate]\nmandatory_jobs = ["checks"]\n'})
-    summary = tmp_path / "summary.md"
-    for key, value in {
-        "GITHUB_REPOSITORY": "o/r",
-        "GITHUB_RUN_ID": "1",
-        "GITHUB_RUN_ATTEMPT": "1",
-        "GITHUB_TOKEN": "t",
-        "GATE_NEEDS": json.dumps({"hygiene": {"result": "success"}}),
-        "GITHUB_STEP_SUMMARY": str(summary),
-    }.items():
-        monkeypatch.setenv(key, value)
-    monkeypatch.delenv("GATE_BASE_SHA", raising=False)
-    return repo, summary
+    assert read_base(repo, head_commit(repo)) == Side(NO_BASE_SETTINGS, None)
 
 
 @pytest.mark.parametrize(("conclusion", "code"), [("success", 0), ("failure", 1)])
@@ -186,7 +154,7 @@ def test_verdict_exit_code_and_summary_follow_the_run(capsys, run_env, conclusio
     page = json.dumps(
         {
             "total_count": 1,
-            "jobs": [{"name": "checks", "run_attempt": 1, "status": "completed", "conclusion": conclusion}],
+            "jobs": [{"id": 1, "name": "checks", "run_attempt": 1, "status": "completed", "conclusion": conclusion}],
         }
     )
     assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (page, None)) == code
@@ -199,7 +167,7 @@ def test_a_job_name_with_a_line_feed_prints_as_one_escaped_problem_line_in_log_a
     repo, summary = run_env
     (repo / "quality/config.toml").write_text('[gate]\nmandatory_jobs = ["checks", "a\\n::error::b"]\n')
     page = json.dumps(
-        {"total_count": 1, "jobs": [{"name": "checks", "run_attempt": 1, "status": "completed", "conclusion": "success"}]}
+        {"total_count": 1, "jobs": [{"id": 1, "name": "checks", "run_attempt": 1, "status": "completed", "conclusion": "success"}]}
     )
     assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (page, None)) == 1
     lines = capsys.readouterr().out.split("\n")
@@ -262,7 +230,7 @@ def test_a_base_config_that_git_cannot_show_cannot_be_judged(build_repo):
 def test_a_malformed_base_config_names_the_base_commit(build_repo):
     """#48 rule 4: the verdict names the side of a malformed config.toml, as the door does."""
     repo = build_repo({CONFIG_PATH: "[gate"})
-    base = _head(repo)
+    base = head_commit(repo)
     with pytest.raises(CannotJudge, match=f"^{CONFIG_PATH} at the base commit {base}: {CONFIG_PATH} is not valid TOML"):
         read_base(repo, base)
 
@@ -298,7 +266,7 @@ def test_a_base_ref_git_would_reject_is_refused(build_repo, ref):
 def test_a_valid_ref_name_is_still_a_readable_base(build_repo, ref, full_ref):
     """#31 rule 1 (S8705): valid ref names, with a slash or a plus, still work."""
     repo = build_repo({"quality/config.toml": '[gate]\nmandatory_jobs = ["tests"]\n'})
-    subprocess.run(["git", "-C", str(repo), "update-ref", full_ref, _head(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "update-ref", full_ref, head_commit(repo)], check=True)
     assert read_base(repo, ref).settings == GateSettings(("tests",), LegacyMode.REPORT)
 
 
@@ -309,17 +277,17 @@ def test_a_pull_request_that_removes_legacy_fail_is_red_in_the_verdict(monkeypat
     config.write_text('[gate]\nmandatory_jobs = ["checks"]\nlegacy = "fail"\n')
     git = ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.invalid"]
     subprocess.run([*git, "commit", "-qam", "base switches legacy on"], check=True)
-    monkeypatch.setenv("GATE_BASE_SHA", _head(repo))
+    monkeypatch.setenv("GATE_BASE_SHA", head_commit(repo))
     config.write_text('[gate]\nmandatory_jobs = ["checks"]\n')
     page = json.dumps(
-        {"total_count": 1, "jobs": [{"name": "checks", "run_attempt": 1, "status": "completed", "conclusion": "success"}]}
+        {"total_count": 1, "jobs": [{"id": 1, "name": "checks", "run_attempt": 1, "status": "completed", "conclusion": "success"}]}
     )
     assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (page, None)) == 1
     assert "loosened (undeclared): legacy fail → report" in capsys.readouterr().out
 
 
 CHECKS_GREEN = json.dumps(
-    {"total_count": 1, "jobs": [{"name": "checks", "run_attempt": 1, "status": "completed", "conclusion": "success"}]}
+    {"total_count": 1, "jobs": [{"id": 1, "name": "checks", "run_attempt": 1, "status": "completed", "conclusion": "success"}]}
 )
 LEGACY_FAIL_CONFIG = '[gate]\nmandatory_jobs = ["checks"]\nlegacy = "fail"\n'
 NEW_CCN_KEY = '[ccn."src/a.py"]\n"f" = 16\n'
@@ -327,34 +295,6 @@ NEW_CCN_KEY = '[ccn."src/a.py"]\n"f" = 16\n'
 
 def main_lines(count: int) -> str:
     return f'[function_lines."src/quality/cli.py"]\n"main" = {count}\n'
-
-
-def put(path: Path, content: str | bytes | None) -> None:
-    """Writes `content` to `path`, or removes the file when `content` is None."""
-    if content is None:
-        path.unlink(missing_ok=True)
-    else:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(content if isinstance(content, bytes) else content.encode())
-
-
-@pytest.fixture
-def pull_request(monkeypatch, run_env):
-    """Commits `base` as the pull request's base baseline and points GATE_BASE_SHA at that commit."""
-    repo, _ = run_env
-
-    def commit_base(base: str | bytes | None, config: str | None = None) -> str:
-        put(repo / BASELINE_PATH, base)
-        if config is not None:
-            put(repo / "quality" / "config.toml", config)
-        git = ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.invalid"]
-        subprocess.run([*git, "add", "-A"], check=True)
-        subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "base"], check=True)
-        sha = _head(repo)
-        monkeypatch.setenv("GATE_BASE_SHA", sha)
-        return sha
-
-    return repo, commit_base
 
 
 def verdict_of(repo: Path, capsys) -> tuple[int, str]:
@@ -477,33 +417,6 @@ def test_a_verdict_without_git_on_the_path_cannot_judge(capsys, monkeypatch, pul
     assert (code, "verdict: cannot judge - cannot run git" in output, "Traceback" in output) == (2, True, False)
 
 
-@pytest.fixture
-def stub_server():
-    """`serve(responder)` starts a loopback server and returns its origin and the headers of each request it got."""
-    servers = []
-
-    def serve(responder: Responder) -> tuple[str, list[dict[str, str]]]:
-        heard: list[dict[str, str]] = []
-
-        class Handler(http.server.BaseHTTPRequestHandler):
-            def do_GET(self):
-                heard.append(dict(self.headers))
-                responder(self)
-
-            def log_message(self, *args):
-                pass
-
-        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        threading.Thread(target=server.serve_forever, daemon=True).start()
-        servers.append(server)
-        return f"http://127.0.0.1:{server.server_address[1]}", heard
-
-    yield serve
-    for server in servers:
-        server.shutdown()
-        server.server_close()
-
-
 def fetch_jobs(origin: str) -> str:
     body, _ = verdict.github_fetcher("t")(origin + "/jobs")
     return body
@@ -583,7 +496,10 @@ def judged(capsys, monkeypatch, pull_request):
             monkeypatch.setenv("GATE_BASE_SHA", "")
         put(repo / CONFIG_PATH, head_config)
         put(repo / BASELINE_PATH, baselines[1])
-        listed = [{"name": name, "run_attempt": 1, "status": "completed", "conclusion": state} for name, state in jobs.items()]
+        listed = [
+            {"id": number, "name": name, "run_attempt": 1, "status": "completed", "conclusion": state}
+            for number, (name, state) in enumerate(jobs.items())
+        ]
         page = json.dumps({"total_count": len(listed), "jobs": listed})
         code = cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (page, None))
         captured = capsys.readouterr()
@@ -690,8 +606,9 @@ def test_a_malformed_declaration_cannot_be_judged(capsys, run_env, entry, named)
 
 @pytest.mark.parametrize(
     "job_entry",
-    [{"name": "checks", "run_attempt": "1"}, {"name": None, "run_attempt": 1}],
-    ids=["run_attempt as text", "name null"],
+    [{"id": 1, "name": "checks", "run_attempt": "1"}, {"id": 1, "name": None, "run_attempt": 1},
+     {"id": "1", "name": "checks", "run_attempt": 1}],
+    ids=["run_attempt as text", "name null", "id as text"],
 )
 def test_a_job_field_of_the_wrong_type_cannot_be_judged(capsys, run_env, job_entry):
     """#103 rule 6, cell 25 (#5 finding 14): a jobs page with a field of the wrong type is exit 2, one line."""
