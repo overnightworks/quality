@@ -332,8 +332,8 @@ MALFORMED_SECRET = f"[secrets]\nallow = [{allow_entry(reason='')}]\n"
 def test_a_malformed_advisory_allowance_cannot_be_judged_where_the_whole_config_is_read(
     capsys, run_env, clean_engines, entry, named
 ):
-    """#116 cell 12: a malformed [advisories] entry is exit 2 in the verdict and in the secret rule of hygiene
-    --engines, one line naming the entry."""
+    """#116 cell 12: a malformed [advisories] entry is exit 2 in the verdict and in the secret and advisory rules of
+    hygiene --engines, one line each naming the entry."""
     repo, _ = run_env
     (repo / CONFIG_PATH).write_text(entry + '[gate]\nmandatory_jobs = ["checks"]\n')
     assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: ("{}", None)) == 2
@@ -341,7 +341,8 @@ def test_a_malformed_advisory_allowance_cannot_be_judged_where_the_whole_config_
     assert (len(verdict), named in verdict[0]) == (1, True), verdict
     assert cli.main(["hygiene", "--engines", str(clean_engines), str(repo)]) == 2
     refusals = [line for line in capsys.readouterr().err.splitlines() if named in line]
-    assert [line.split(" - ")[0] for line in refusals] == ["hygiene: secret cannot judge"], refusals
+    rules = [line.split(" - ")[0] for line in refusals]
+    assert rules == ["hygiene: secret cannot judge", "hygiene: advisory cannot judge"], refusals
 
 
 @pytest.mark.parametrize("entry", [advisory_allowance(reason=None), advisory_allowance(until='"2027-01-31"')])

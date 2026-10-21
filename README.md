@@ -175,8 +175,42 @@ with `Fix: upgrade pyyaml to >= 5.4 (uv lock --upgrade-package pyyaml)`. For a n
 directory (`in speech/: uv lock --upgrade-package ...`); several fixed versions are listed; an advisory with no fixed
 version says `osv lists no fixed version: remove or replace <package>; see https://osv.dev/vulnerability/<id>`. A
 repository's own `osv-scanner.toml` (ignored advisories, package overrides) and `.gitignore` change nothing: the gate
-passes its own empty `src/quality/osv-scanner.toml` and each tracked lock explicitly. A per-repository allowance
-does not exist yet.
+passes its own empty `src/quality/osv-scanner.toml` and each tracked lock explicitly.
+
+An advisory the repository cannot fix is allowed in its own `quality/config.toml`, one entry per advisory and lock:
+
+```toml
+[[advisories.allow]]
+id = "GHSA-462x-pgg6-55fp"
+lock = "speech/providers/qwen/uv.lock"
+until = 2027-01-31
+date = 2026-10-21
+item = "overnightworks/agent-presentator#371"
+reason = "gradio caps pillow<13; no image input"
+```
+
+- `id` is any id of the advisory group, GHSA, PYSEC or CVE alike. `lock` is the tracked relative path; the entry
+  allows the advisory on every package it affects in that lock and in no other, so a lock reached by two tracked names
+  needs an entry per name. Two entries matching one group in one lock (its GHSA and its CVE id) are a finding at
+  `quality/config.toml` naming both, and the group is allowed by neither.
+- `until` is the re-check date and `date` the day of the ruling, both TOML dates without a time; `item` and `reason`
+  are as in a [declared loosening](#declared-loosenings). The allowance holds through `until` (in UTC) and the advisory
+  is red again from the next day: `advisory <lock> - osv-scanner <id> (<aliases>): PyPI <package> <version> is
+  affected; its allowance ran out on <until> (<item>).` quality sets no latest `until`, and an advisory with no fixed
+  version is allowed like any other.
+- Each allowed advisory prints before the findings, and the rule stays clean: `advisory: 1 allowed`, then
+  `  allowed <lock> <id> (<aliases>): PyPI <package> <version> until <until> (<item>) - <reason>`.
+- An entry no reported advisory matches is a finding: `advisory quality/config.toml - the allowance for <id> in
+  <lock> matches no advisory.` Deleting it is no loosening. With no tracked lock every entry matches nothing; without
+  `--engines` no entry is judged.
+- A malformed entry (a missing or extra key, an empty or multi-line `id`, `lock` or `reason`, an `item` that is not
+  `#<n>` or `<owner>/<repo>#<n>`, an `until` or `date` that is text or carries a time, two entries for one `id` and
+  `lock`, or an unknown key in `[advisories]`) is exit `2` in the `advisory` and `secret` rules and in `verdict`,
+  naming the entry; `scan-staged` reads only `[secrets]`.
+- A new allowance, and one whose `until` moves later, is a [declared loosening](#declared-loosenings) the allowance
+  makes itself, so only the operator's door merges it. The pull request writes the allowance, so its item, date and
+  reason prove nothing alone: the verdict's red and the door are the gate. An `id` that is an alias covers every
+  group carrying it in that lock, while the door names the `id` and the lock, not the packages.
 
 quality downloads the PyPI database itself on every run (about 36 MB, `https://osv-vulnerabilities.storage.googleapis.com/PyPI/all.zip`)
 into the scan's own 0700 scratch directory and runs osv-scanner `--offline` on it, so osv-scanner makes no network call
@@ -353,8 +387,8 @@ reason = "the operator ruled the requirement shelf machinery out"
   number included, declares nothing.
 - `item` is `#<n>` or `<owner>/<repo>#<n>` (ASCII letters, digits, `_`, `.` and `-`), `date` a TOML date without a
   time, `reason` one non-empty line. A missing or extra key, a text date, two entries with one `what` or any other
-  malformed entry is exit `2` in `verdict` and in `hygiene --engines` (the `secret` rule), naming the entry and showing
-  this example; `scan-staged` reads only `[secrets]`.
+  malformed entry is exit `2` in `verdict` and in `hygiene --engines` (the `secret` and `advisory` rules), naming the
+  entry and showing this example; `scan-staged` reads only `[secrets]`.
 - Only new entries declare: those the head holds and the base does not, compared as a whole entry. An inherited entry
   is never red and declares nothing, so a later pull request that loosens the same way again needs its own entry with
   its own `item` and `date`; deleting an inherited entry is no loosening. A new entry that matches no loosening of the

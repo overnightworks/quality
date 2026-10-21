@@ -1,4 +1,5 @@
 import contextlib
+import datetime
 import hashlib
 import io
 import json
@@ -12,9 +13,11 @@ import zipfile
 from pathlib import Path
 
 import pytest
-from conftest import fake_engine
+from conftest import assert_every_line_starts_with_the_door, fake_engine
 
 from quality import advisories, cli, engines
+from quality.config import AdvisoryAllowance
+from quality.report import headline
 
 OUTPUTS = Path(__file__).parent / "fixtures" / "engine-outputs"
 OSV = engines.OSV_SCANNER
@@ -586,3 +589,150 @@ def test_install_refuses_a_bare_binary_with_the_wrong_checksum_and_installs_noth
     assert cli.main(["engines", "install", str(target)]) == 2
     assert not (target / OSV).exists()
     assert "the pin says" in capsys.readouterr().err
+
+
+# ---- #116: the allowances, applied by the rule ----
+
+TODAY = datetime.date(2027, 1, 31)
+QWEN = "speech/providers/qwen/uv.lock"
+PILLOW = "GHSA-462x-pgg6-55fp (CVE-2026-112395): PyPI pillow 12.3.0"
+
+
+def affected(lock=QWEN, subject=PILLOW, ids=("GHSA-462x-pgg6-55fp", "CVE-2026-112395")) -> advisories.Affected:
+    return advisories.Affected(lock, subject, frozenset(ids), "upgrade pillow")
+
+
+def allowing(identifier="GHSA-462x-pgg6-55fp", lock=QWEN, until=TODAY) -> AdvisoryAllowance:
+    return AdvisoryAllowance(identifier, lock, until, datetime.date(2026, 10, 21), "#371", "no image input")
+
+
+def allowed_line(lock=QWEN, subject=PILLOW, until=TODAY) -> str:
+    return f"  allowed {lock} {subject} until {until.isoformat()} (#371) - no image input"
+
+
+def red(lock=QWEN, subject=PILLOW) -> str:
+    return f"advisory {lock} - osv-scanner {subject} is affected."
+
+
+def orphaned(identifier="GHSA-462x-pgg6-55fp", lock=QWEN) -> str:
+    return f"advisory quality/config.toml - the allowance for {identifier} in {lock} matches no advisory."
+
+
+YESTERDAY = TODAY - datetime.timedelta(days=1)
+VOXCPM = "speech/providers/voxcpm/uv.lock"
+LINKED = "speech/providers/linked/uv.lock"
+TORCH = "GHSA-462x-pgg6-55fp (CVE-2026-112395): PyPI torch 2.6.0"
+
+
+@pytest.mark.parametrize(
+    ("groups", "allowances", "findings", "allowed"),
+    [
+        ([affected()], [allowing(until=TODAY + datetime.timedelta(days=90))], [],
+         [allowed_line(until=TODAY + datetime.timedelta(days=90))]),
+        ([affected()], [allowing()], [], [allowed_line()]),
+        ([affected()], [allowing(until=YESTERDAY)],
+         [f"advisory {QWEN} - osv-scanner {PILLOW} is affected; its allowance ran out on 2027-01-30 (#371)."], []),
+        ([affected()], [allowing("CVE-2026-112395")], [], [allowed_line()]),
+        ([affected(), affected(VOXCPM)], [allowing()], [red(VOXCPM)], [allowed_line()]),
+        ([affected()], [allowing(lock=VOXCPM)], [red(), orphaned(lock=VOXCPM)], []),
+        ([], [allowing()], [orphaned()], []),
+        ([affected(), affected(LINKED)], [allowing()], [red(LINKED)], [allowed_line()]),
+        ([affected(), affected(subject=TORCH)], [allowing()], [], [allowed_line(), allowed_line(subject=TORCH)]),
+        ([affected(), affected(subject=TORCH)], [allowing(), allowing("CVE-2026-112395")],
+         [red(), red(subject=TORCH), (
+             f"advisory quality/config.toml - the allowances for GHSA-462x-pgg6-55fp and CVE-2026-112395 in {QWEN} "
+             "match one advisory group, so neither allows it."
+         )], []),
+        ([affected()], [], [red()], []),
+    ],
+    ids=[
+        "cell 1 until in the future", "cell 2 until is today", "cell 3 until was yesterday", "cell 4 the CVE alias",
+        "cell 5 the same advisory in an unallowed lock", "cell 6 an allowance for a lock the advisory misses",
+        "cell 7 an advisory no longer reported", "cell 9 the other tracked name of one lock",
+        "cell 10 two packages in one lock", "cell 27 two allowances on one group", "no allowance",
+    ],
+)
+def test_an_allowance_allows_its_advisory_in_its_lock_until_its_date(groups, allowances, findings, allowed):
+    """#116 R3, E2, E4, E5, E10, E12: an allowance matching any id of a group in its lock allows it until `until`
+    (inclusive), then it is red with its date and item; one matching nothing is red, and two on one group allow it
+    for neither."""
+    judged = advisories.apply_allowances(groups, allowances, TODAY)
+    assert ([headline(finding) for finding in judged.findings], list(judged.allowed)) == (findings, allowed)
+
+
+def allowance_config(until: str, reason: str = "fixture", identifier: str = ADVISORY_ID) -> str:
+    return (
+        f'[[advisories.allow]]\nid = "{identifier}"\nlock = "uv.lock"\nuntil = {until}\ndate = 2026-10-21\n'
+        f'item = "#116"\nreason = {json.dumps(reason)}\n'
+    )
+
+
+def drop_fixed_versions(report: dict) -> None:
+    for vulnerability in package_of(report)["vulnerabilities"]:
+        for versions in vulnerability["affected"][0]["ranges"]:
+            versions["events"] = [event for event in versions["events"] if "fixed" not in event]
+
+
+@pytest.mark.parametrize(
+    ("until", "edit", "code", "expected"),
+    [
+        ("2999-12-31", lambda report: None, 0,
+         ["advisory: 1 allowed",
+          f"  allowed uv.lock {ADVISORY_ID} (CVE-2020-1): PyPI pyyaml 5.3.1 until 2999-12-31 (#116) - fixture"]),
+        ("2000-01-01", lambda report: None, 1,
+         [(f"advisory uv.lock - osv-scanner {ADVISORY_ID} (CVE-2020-1): PyPI pyyaml 5.3.1 is affected; its allowance "
+           "ran out on 2000-01-01 (#116)."), f"  {UPGRADE_LINE}"]),
+        ("2999-12-31", drop_fixed_versions, 0,
+         ["advisory: 1 allowed",
+          f"  allowed uv.lock {ADVISORY_ID} (CVE-2020-1): PyPI pyyaml 5.3.1 until 2999-12-31 (#116) - fixture"]),
+    ],
+    ids=["cell 1 allowed until 2999", "cell 3 ran out in 2000", "cell 11 no fixed version"],
+)
+def test_hygiene_prints_each_allowed_advisory_before_the_verdict(
+    build_repo, clean_engines, run_gate, publish_database, edited_report, until, edit, code, expected
+):
+    """#116 R3, E4, E10, E11: through hygiene --engines, an allowed advisory is printed with its date, item and reason
+    and leaves the rule clean; once its date has passed it is red with the date and item."""
+    publish_database()
+    report = edited_report("osv-scanner-finding.json", edit)
+    repo = build_repo({"uv.lock": uv_lock(), "quality/config.toml": allowance_config(until)})
+    code_seen, output = run_gate(repo, osv_engines(clean_engines, reporting(report, 1)))
+    lines = output.splitlines()
+    assert code_seen == code, output
+    assert lines[lines.index(expected[0]):][:len(expected)] == expected, output
+    assert (lines[-1].startswith("hygiene: clean (")) == (code == 0), output
+
+
+def test_hygiene_escapes_the_allowance_in_its_allowed_line(
+    build_repo, clean_engines, run_gate, publish_database, edited_report
+):
+    """#116 cell 25: an allowance's id and reason print escaped in the allowed line."""
+    publish_database()
+    report = edited_report("osv-scanner-finding.json", lambda report: package_of(report)["groups"][0].update(
+        ids=["GHSA-\x1b[8m"], aliases=[]))
+    config = allowance_config("2999-12-31", "ok\x1b[8m versteckt", "GHSA-\\u001b[8m")
+    repo = build_repo({"uv.lock": uv_lock(), "quality/config.toml": config})
+    code, output = run_gate(repo, osv_engines(clean_engines, reporting(report, 1)))
+    assert code == 0, output
+    assert "  allowed uv.lock GHSA-\\x1b[8m: PyPI pyyaml 5.3.1 until 2999-12-31 (#116) - ok\\x1b[8m versteckt" in output
+    assert_every_line_starts_with_the_door(output.splitlines())
+
+
+@pytest.mark.parametrize(
+    ("command", "code", "expected"),
+    [
+        (["hygiene", "--engines", "{engines}", "{repo}"], 1,
+         f"advisory quality/config.toml - the allowance for {ADVISORY_ID} in uv.lock matches no advisory."),
+        (["hygiene", "{repo}"], 0, "skipped without --engines: secret, workflow-lint, workflow-security, advisory"),
+    ],
+    ids=["cell 8 no tracked lock", "cell 26 without --engines"],
+)
+def test_an_allowance_without_a_tracked_lock_is_judged_only_with_the_engines(
+    build_repo, clean_engines, capsys, monkeypatch, command, code, expected
+):
+    """#116 E5, cells 8 and 26: with no tracked lock an allowance matches nothing and is red, with no osv-scanner and
+    no download; without --engines the advisory rule, and with it every allowance, is skipped."""
+    monkeypatch.setattr(advisories, "DATABASE_ROOT", "file:///no/such/root")
+    repo = build_repo({"README.md": "x\n", "quality/config.toml": allowance_config("2999-12-31")})
+    assert cli.main([part.format(repo=repo, engines=clean_engines) for part in command]) == code
+    assert expected in capsys.readouterr().out
