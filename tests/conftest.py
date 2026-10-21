@@ -2,16 +2,19 @@ import hashlib
 import http.server
 import json
 import os
+import re
 import shutil
 import subprocess
+import tempfile
 import threading
 import unicodedata
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import pytest
 
 from quality import cli, engines
+from quality import scoreboard as scoreboard_module
 from quality.ratchet import BASELINE_PATH
 
 FAKE_KEY = "AKIA" + "QYLPMTYX3QZ5ABCD"  # assembled so quality's own scan stays green
@@ -248,3 +251,69 @@ def stub_server():
     for server in servers:
         server.shutdown()
         server.server_close()
+
+
+PublicRepo = Callable[[str, dict[str, str]], str]
+NEWEST, OLDER = "b" * 40, "a" * 40
+RELEASES = {"v0.9.0": OLDER, "v0.10.0": NEWEST}  # the newest by version, not by text
+MATRIX_HEADING = "**Repo × rule, newest release v0.10.0**"
+
+
+def write_fleet(directory: Path, public: Sequence[str] = (), private: Sequence[str] = ()) -> Path:
+    """A repository whose quality/fleet.toml lists these URLs; json.dumps writes a TOML array of basic strings."""
+    (directory / "quality").mkdir(parents=True)
+    (directory / "quality" / "fleet.toml").write_text(f"public = {json.dumps(public)}\nprivate = {json.dumps(private)}\n")
+    return directory
+
+
+@pytest.fixture
+def scoreboard(capsys, tmp_path) -> Callable[..., tuple[int, str]]:
+    """Runs `quality scoreboard` on a fleet file listing the given URLs (#63 rule 1)."""
+
+    def run(
+        *public: str, private: Sequence[str] = (), tags: scoreboard_module.TagReader = lambda: RELEASES
+    ) -> tuple[int, str]:
+        fleet = write_fleet(tmp_path / "fleet", public, private)
+        code = cli.main(["scoreboard", str(fleet)], release_tags=tags)
+        return code, capsys.readouterr().out
+
+    return run
+
+
+def row(output: str, name: str, table: int = 0) -> list[str]:
+    """The cells of repository `name` in the size table (0) or the matrix (1)."""
+    lines = [line for line in output.splitlines() if line.startswith(f"| {name} |")]
+    return [cell.strip() for cell in re.split(r"(?<!\\)\|", lines[table].strip("|"))]
+
+
+def head_of(url: str) -> str:
+    directory = url.removeprefix("file://")
+    return subprocess.run(
+        ["git", "-C", directory, "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+
+
+@pytest.fixture
+def scratch(tmp_path, monkeypatch) -> Path:
+    """The directory every temporary clone is made in, so a test can see what is left behind."""
+    directory = tmp_path / "scratch"
+    directory.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(directory))
+    return directory
+
+
+@pytest.fixture
+def public(tmp_path, scratch) -> PublicRepo:
+    """A repository served as a file:// URL, which the scoreboard clones as it clones a public one (rule 3)."""
+
+    def build(name: str, files: dict[str, str]) -> str:
+        directory = tmp_path / "remotes" / name
+        directory.mkdir(parents=True)
+        return make_repo(directory, files).as_uri()
+
+    return build
+
+
+@pytest.fixture
+def missing(tmp_path) -> str:
+    return (tmp_path / "remotes" / "gone").as_uri()

@@ -1,4 +1,5 @@
-"""`quality scoreboard`: every fleet repository's size in one markdown table.
+"""`quality scoreboard`: every fleet repository's size in one markdown table, and under it the release matrix: the
+gate and CodeQL release each repository's workflows call.
 
 Lines and the production/test split are the `size` rule's own (`ratchet.summarise`), measured on a shallow clone of
 the default branch tip. git runs anonymously: only an http, https or file URL without credentials, no credential
@@ -208,13 +209,13 @@ def require_anonymous(url: str) -> None:
         raise Refused("not an http, https or file URL")
 
 
-def cannot_judge(rows: list[Row], tags: ReleaseTags | None) -> bool:
+def cannot_judge(rows: list[Row], tags: ReleaseTags | ReleaseTagsError) -> bool:
     unreadable = any(isinstance(row, Measured) and row.workflows.unreadable for row in rows)
-    return tags is None or unreadable or any(isinstance(row, Unjudged) for row in rows)
+    return isinstance(tags, ReleaseTagsError) or unreadable or any(isinstance(row, Unjudged) for row in rows)
 
 
 def repository_name(url: str) -> str:
-    """`owner/name` for a URL with a host and two path segments, else its last path segment, else its host: never the
+    """`owner/name` for a non-file URL with a host and two path segments, else its last path segment, else its host: never the
     URL itself, which may carry credentials."""
     try:
         parts = urlsplit(url)
@@ -222,7 +223,7 @@ def repository_name(url: str) -> str:
         return UNNAMED
     segments = [segment for segment in PurePosixPath(parts.path).parts if segment != "/"]
     name = segments[-1].removesuffix(".git") if segments else ""
-    if parts.hostname and name and len(segments) > 1:
+    if parts.scheme != "file" and parts.hostname and name and len(segments) > 1:
         return f"{segments[-2]}/{name}"
     return name or parts.hostname or UNNAMED
 
@@ -305,7 +306,7 @@ def read_workflows(clone: Path, tracked: list[str]) -> Workflows:
         try:
             text = repository.read_text(clone, name)
             document = yaml.safe_load(text) if text is not None else None
-        except (repository.RepositoryFileError, yaml.YAMLError, RecursionError):
+        except (repository.RepositoryFileError, yaml.YAMLError, ValueError, RecursionError):
             unreadable.append(name)
             continue
         for uses in job_calls(document):
@@ -327,7 +328,7 @@ def calls_of(uses: str, workflow_file: str) -> list[Call]:
     if uses in (f"{prefix}{path}" for prefix in LOCAL_PREFIXES):
         return [Call(None)]
     file, _, ref = uses.partition("@")
-    return [Call(ref)] if file == f"{GATE_REPOSITORY}/{path}" and ref else []
+    return [Call(ref)] if file.lower() == f"{GATE_REPOSITORY}/{path}" and ref else []
 
 
 def judge_private(url: str) -> Row:
@@ -352,21 +353,22 @@ def git(
     return engines.run([*ANONYMOUS_GIT, *arguments], cwd=scratch, env=environment, timeout=timeout)
 
 
-def render(rows: list[Row], today: date, tags: ReleaseTags | None) -> tuple[str, ...]:
+def render(rows: list[Row], today: date, tags: ReleaseTags | ReleaseTagsError) -> tuple[str, ...]:
     heading = f"**Fleet scoreboard, {today.isoformat()}, quality {__version__} — {FUNCTION_SCOPE}**"
     table = [table_line(COLUMNS), "|---" * len(COLUMNS) + "|", *(table_line(cells(row)) for row in rows)]
+    pins = None if isinstance(tags, ReleaseTagsError) else tags
     matrix_heading = f"**Repo × rule, {newest_release_words(tags)}**"
     matrix = [
         table_line(MATRIX_COLUMNS),
         "|---" * len(MATRIX_COLUMNS) + "|",
-        *(table_line(matrix_cells(row, tags)) for row in rows),
+        *(table_line(matrix_cells(row, pins)) for row in rows),
     ]
     return (heading, "", *table, "", matrix_heading, "", *matrix)
 
 
-def newest_release_words(tags: ReleaseTags | None) -> str:
-    if tags is None:
-        return "newest release unreadable, pins shown as commits"
+def newest_release_words(tags: ReleaseTags | ReleaseTagsError) -> str:
+    if isinstance(tags, ReleaseTagsError):
+        return f"newest release unreadable ({tags}), pins shown as commits"
     return f"newest release {newest_release(tags)}"
 
 
@@ -393,6 +395,7 @@ def pin_cell(calls: tuple[Call, ...], absent: str, is_gate_repository: bool, tag
 
 
 def pin_words(ref: str, tags: ReleaseTags | None) -> str:
+    ref = ref.lower() if COMMIT_SHA.fullmatch(ref.lower()) else ref
     if not COMMIT_SHA.fullmatch(ref):
         return f"{ref} (not a commit)"
     short = ref[:SHORT_COMMIT]

@@ -331,8 +331,8 @@ def run_scoreboard(path: Path, release_tags: scoreboard.TagReader) -> int:
     rows = scoreboard.measure_fleet(fleet)
     try:
         tags = release_tags()
-    except scoreboard.ReleaseTagsError:
-        tags = None
+    except scoreboard.ReleaseTagsError as error:
+        tags = error
     report = scoreboard.render(rows, datetime.now(UTC).date(), tags)
     emit(*report)
     append_step_summary(report)
