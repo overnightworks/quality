@@ -1,0 +1,7 @@
+claim_id = "8a3e69e0b18f4843b1e23240528f188d"
+agent = "claude"
+role = "builder"
+base = "e456cad5f6056663d18e4c0f685d339abf178e9d"
+branch = "claude/issue-134-engines-exit-two"
+scope = ["src/quality/engines.py", "tests/test_engines.py"]
+opened_commit = "a8bfb39759dafd9c2ff8339e996ea2e92c8cd642"
