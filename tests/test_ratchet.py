@@ -16,7 +16,16 @@ from conftest import (
 from conftest import hygiene_output as hygiene
 
 from quality import cli
-from quality.ratchet import BASELINE_PATH, Key, Metric, RaisedEntry, load_baseline, raised_entries, render_baseline
+from quality.ratchet import (
+    BASELINE_PATH,
+    Baseline,
+    Key,
+    Metric,
+    RaisedEntry,
+    load_baseline,
+    raised_entries,
+    render_baseline,
+)
 
 EMPTY_BASELINE = ""
 
@@ -297,6 +306,7 @@ def test_baseline_write_records_the_measured_debt_sorted_and_hygiene_then_holds_
         "ccn": {"src/a.py": {"branchy": 17}},
         "file_lines": {"src/b.py": 810 + 61 + 1},
         "function_lines": {"src/a.py": {"long_one": 62}, "src/b.py": {"Holder.long_one": 61}},
+        "clones": {"src/a.py": {"long_one": [["src/b.py", "Holder.long_one"]]}},
     }
     assert written.index("[ccn") < written.index("[file_lines]") < written.index('[function_lines."src/a.py"]')
     assert written.index('[function_lines."src/a.py"]') < written.index('[function_lines."src/b.py"]')
@@ -321,7 +331,7 @@ def baseline_write(capsys: pytest.CaptureFixture[str], repo: Path) -> tuple[int,
 
 
 def wrote_line(repo: Path, count: str) -> str:
-    return f"baseline: wrote {count} to {repo / BASELINE_PATH}"
+    return f"baseline: wrote {count} and 0 clone pairs to {repo / BASELINE_PATH}"
 
 
 @pytest.mark.parametrize(
@@ -344,9 +354,9 @@ def test_baseline_write_names_each_raised_or_added_entry_before_the_count(build_
     files = {"src/a.py": long_function(70)}
     repo = build_repo(files if previous is None else {**files, BASELINE_PATH: previous})
     assert baseline_write(capsys, repo) == (0, [*named, wrote_line(repo, "1 entry")])
-    assert load_baseline((repo / BASELINE_PATH).read_text(encoding="utf-8")) == {
-        Key(Metric.FUNCTION_LINES, "src/a.py", "long_one"): 70
-    }
+    assert load_baseline((repo / BASELINE_PATH).read_text(encoding="utf-8")) == Baseline(
+        {Key(Metric.FUNCTION_LINES, "src/a.py", "long_one"): 70}, frozenset()
+    )
 
 
 @pytest.mark.parametrize(
@@ -363,9 +373,9 @@ def test_baseline_write_overwrites_an_unreadable_previous_baseline_with_a_note(b
     assert note.startswith(f"baseline: the previous {BASELINE_PATH} could not be read (")
     assert note.endswith("), so raises cannot be named")
     assert "rewrite it" not in note, "#52 rule 7, cell 15: the write is the rewrite, so its note carries no hint"
-    assert load_baseline((repo / BASELINE_PATH).read_text(encoding="utf-8")) == {
-        Key(Metric.FUNCTION_LINES, "src/a.py", "long_one"): 70
-    }
+    assert load_baseline((repo / BASELINE_PATH).read_text(encoding="utf-8")) == Baseline(
+        {Key(Metric.FUNCTION_LINES, "src/a.py", "long_one"): 70}, frozenset()
+    )
 
 
 @pytest.mark.parametrize(
@@ -435,6 +445,7 @@ def test_a_written_baseline_holds_any_utf8_path(build_repo, capsys, path):
     assert tomllib.loads((repo / BASELINE_PATH).read_text(encoding="utf-8")) == {
         "file_lines": {path: 810 + 62},
         "function_lines": {path: {"long_one": 62}},
+        "clones": {},
     }
     capsys.readouterr()
     code, output = hygiene(capsys, repo)
@@ -479,9 +490,9 @@ def test_only_a_raised_or_added_entry_loosens_the_baseline(base, head, expected)
 def test_a_key_with_quotes_or_unicode_matches_itself_exactly():
     """#48 cell 19: the same quoted or unicode key on both sides is no raise, and a raise on it is found."""
     key = Key(Metric.CCN, QUOTED_PATH, 'Holder."méthode"')
-    base = load_baseline(render_baseline({key: 16}))
-    assert raised_entries(base, load_baseline(render_baseline({key: 16}))) == []
-    assert raised_entries(base, load_baseline(render_baseline({key: 17}))) == [RaisedEntry(key, 16, 17)]
+    base = load_baseline(render_baseline(Baseline({key: 16}, None))).size
+    assert raised_entries(base, load_baseline(render_baseline(Baseline({key: 16}, None))).size) == []
+    assert raised_entries(base, load_baseline(render_baseline(Baseline({key: 17}, None))).size) == [RaisedEntry(key, 16, 17)]
 
 
 @pytest.fixture
@@ -517,7 +528,7 @@ def test_baseline_write_from_a_subfolder_writes_the_root_baseline(repo_with_debt
     stray.parent.mkdir()
     stray.write_text("# stray\n")
     assert cli.main(["baseline", "write"]) == 0
-    assert "baseline: wrote 1 entry to ../quality/baseline.toml" in capsys.readouterr().out
+    assert "baseline: wrote 1 entry and 0 clone pairs to ../quality/baseline.toml" in capsys.readouterr().out
     assert ("src/big.py" in (repo_with_debt_below_src / BASELINE_PATH).read_text(), stray.read_text()) == (True, "# stray\n")
 
 

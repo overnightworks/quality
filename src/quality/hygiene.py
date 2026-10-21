@@ -289,10 +289,6 @@ def read_sources(root: Path, tracked: list[str]) -> dict[str, bytes]:
     return _read_existing(repository.read_bytes, root, on_disk)
 
 
-def measure_size(root: Path, tracked: list[str]) -> ratchet.TreeMeasurement:
-    return ratchet.measure(read_sources(root, tracked))
-
-
 @dataclass(frozen=True)
 class SizeResult:
     findings: list[Finding]
@@ -300,7 +296,7 @@ class SizeResult:
 
 
 def read_baseline(root: Path) -> ratchet.Baseline | None:
-    """The repository's size baseline on disk, None when it has none.
+    """The repository's baseline on disk, None when it has none.
 
     A file that cannot be read cannot be judged; a malformed one raises SizeError.
     """
@@ -326,7 +322,7 @@ def check_size(root: Path, sources: dict[str, bytes]) -> SizeResult:
         measurements = tree.complete()
     except ratchet.UnparsableSource as error:
         raise Unparsable(str(error)) from error
-    return SizeResult(ratchet.compare(measurements, baseline), None)
+    return SizeResult(ratchet.compare(measurements, baseline.size), None)
 
 
 def check_import_contract(root: Path, tracked: list[str]) -> architecture.ContractsVerdict:

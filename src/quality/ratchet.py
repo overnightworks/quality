@@ -1,5 +1,6 @@
 """The `size` rule: lines per file of every tracked file in a table language, and lines and CCN per function of
-every tracked Python file, held by a baseline.
+every tracked Python file, held by a baseline; `ratchet` also owns that baseline file, `quality/baseline.toml`,
+which holds the clone pairs next to the size entries.
 
 lizard measures; Python's own `ast` only names each function by its qualified symbol (`Class.method`), which
 lizard leaves unqualified. Both read the same text, decoded from the file's bytes the way Python reads source.
@@ -9,6 +10,7 @@ The other languages are counted by lines only: lizard misplaces their function b
 import ast
 import io
 import json
+import re
 import tokenize
 import tomllib
 from collections import Counter
@@ -32,6 +34,8 @@ PARSE_ERRORS = (SyntaxError, ValueError, LookupError)
 TEST_DIRECTORIES = frozenset({"test", "tests"})
 RUNNER_TEST_DIRECTORIES = TEST_DIRECTORIES | {"__tests__"}
 RUNNER_TEST_WORDS = frozenset({"test", "spec"})
+CLONES = "clones"
+BARE_KEY = re.compile(r"[A-Za-z0-9_-]+")
 BASELINE_HEADER = f"# Measured by `{WRITE_COMMAND}`. Entries only ever go down.\n"
 
 FILE_LINES_FROM = 800
@@ -125,7 +129,7 @@ class Measured:
 
 
 Measurements = dict[Key, Measured]
-Baseline = dict[Key, int]
+SizeEntries = dict[Key, int]
 
 
 class Place(NamedTuple):
@@ -145,6 +149,19 @@ class ClonePair:
     @classmethod
     def of(cls, one: Place, other: Place) -> Self:
         return cls(*sorted((one, other)))
+
+    @property
+    def label(self) -> str:
+        """The pair as a person reads it, one wording for the write and the verdict."""
+        return f"{self.first.path} {self.first.symbol} <-> {self.second.path} {self.second.symbol}"
+
+
+@dataclass(frozen=True)
+class Baseline:
+    """What `quality/baseline.toml` holds; `clones` is None when the file has no `[clones]` table, so no pair is held."""
+
+    size: SizeEntries
+    clones: frozenset[ClonePair] | None
 
 
 class SizeError(Exception):
@@ -242,7 +259,7 @@ def qualified_symbols(tree: ast.Module) -> dict[int, str]:
     return symbols
 
 
-def debt(measurements: Measurements) -> Baseline:
+def debt(measurements: Measurements) -> SizeEntries:
     return {key: measured.value for key, measured in measurements.items() if key.metric.is_debt(measured.value)}
 
 
@@ -301,7 +318,7 @@ def _unparsable_note(unparsable: dict[str, str]) -> str:
     return f"; {len(unparsable)} file(s) not valid Python, functions unmeasured: {', '.join(sorted(unparsable))}"
 
 
-def compare(measurements: Measurements, baseline: Baseline) -> list[Finding]:
+def compare(measurements: Measurements, baseline: SizeEntries) -> list[Finding]:
     """The tree on disk against the baseline; an entry whose file or function is gone is fine."""
     findings = []
     for key in sorted(measurements, key=_order):
@@ -335,13 +352,23 @@ class RaisedEntry:
         return f"raises {self.key.label} {self.base} -> {self.head}"
 
 
-def raised_entries(base: Baseline, head: Baseline) -> list[RaisedEntry]:
+def raised_entries(base: SizeEntries, head: SizeEntries) -> list[RaisedEntry]:
     """One baseline against another: an entry may fall or go, never rise or appear (a moved entry is a new one)."""
     return [
         RaisedEntry(key, base.get(key), head[key])
         for key in sorted(head, key=_order)
         if key not in base or head[key] > base[key]
     ]
+
+
+def added_pairs(base: frozenset[ClonePair], head: frozenset[ClonePair]) -> list[ClonePair]:
+    """The pairs only the head holds, in the order the file and the lines name them; a removed pair is no loosening."""
+    return _in_order(head - base)
+
+
+def _in_order(pairs: Iterable[ClonePair]) -> list[ClonePair]:
+    """`ClonePair` has no ordering of its own, and `Place` is a NamedTuple, so sort by the two sides."""
+    return sorted(pairs, key=lambda pair: (pair.first, pair.second))
 
 
 def _finding(key: Key, measured: Measured, verdict: str, fix: str) -> Finding:
@@ -355,7 +382,8 @@ def _order(key: Key) -> tuple[str, str, str]:
     return key.metric.value, key.path, key.symbol
 
 
-def render_baseline(entries: Baseline) -> str:
+def render_baseline(baseline: Baseline) -> str:
+    entries = baseline.size
     sections: dict[str, list[str]] = {}
     for key in sorted(entries, key=_order):
         if key.metric is Metric.FILE_LINES:
@@ -363,7 +391,28 @@ def render_baseline(entries: Baseline) -> str:
         else:
             header, name = f"[{key.metric.value}.{_toml_string(key.path)}]", key.symbol
         sections.setdefault(header, []).append(f"{_toml_string(name)} = {entries[key]}")
-    return BASELINE_HEADER + "".join(f"\n{header}\n" + "\n".join(lines) + "\n" for header, lines in sections.items())
+    if baseline.clones is not None:
+        sections.update(_clone_sections(baseline.clones))
+    return BASELINE_HEADER + "".join(f"\n{header}\n" + "".join(f"{line}\n" for line in lines) for header, lines in sections.items())
+
+
+def _clone_sections(pairs: frozenset[ClonePair]) -> dict[str, list[str]]:
+    """Each pair stands once, under its first side: a table per file, a key per function, a list of the other sides."""
+    if not pairs:
+        return {f"[{CLONES}]": []}
+    others: dict[Place, list[Place]] = {}
+    for pair in _in_order(pairs):
+        others.setdefault(pair.first, []).append(pair.second)
+    sections: dict[str, list[str]] = {}
+    for first, seconds in others.items():
+        listed = ", ".join(f"[{_toml_string(second.path)}, {_toml_string(second.symbol)}]" for second in seconds)
+        sections.setdefault(f"[{CLONES}.{_toml_string(first.path)}]", []).append(f"{_toml_key(first.symbol)} = [{listed}]")
+    return sections
+
+
+def _toml_key(name: str) -> str:
+    """A key as TOML allows it bare, else quoted."""
+    return name if BARE_KEY.fullmatch(name) else _toml_string(name)
 
 
 def _toml_string(name: str) -> str:
@@ -380,23 +429,42 @@ def load_baseline(text: str) -> Baseline:
         document = tomllib.loads(text)
     except tomllib.TOMLDecodeError as error:
         raise SizeError(f"{BASELINE_PATH} is not valid TOML ({error})") from error
-    baseline: Baseline = {}
-    for metric_name, table in document.items():
-        metric = _metric_named(metric_name)
-        for path, entry in _table(metric_name, table).items():
+    size: SizeEntries = {}
+    clones = None
+    for table_name, table in document.items():
+        if table_name == CLONES:
+            clones = _clone_pairs(table)
+            continue
+        metric = _metric_named(table_name)
+        for path, entry in _table(table_name, table).items():
             if metric is Metric.FILE_LINES:
-                baseline[Key(metric, path)] = _count(f"{metric_name}.{path}", entry)
+                size[Key(metric, path)] = _count(f"{table_name}.{path}", entry)
             else:
-                for symbol, value in _table(f"{metric_name}.{path}", entry).items():
-                    baseline[Key(metric, path, symbol)] = _count(f"{metric_name}.{path}.{symbol}", value)
-    return baseline
+                for symbol, value in _table(f"{table_name}.{path}", entry).items():
+                    size[Key(metric, path, symbol)] = _count(f"{table_name}.{path}.{symbol}", value)
+    return Baseline(size, clones)
+
+
+def _clone_pairs(table: object) -> frozenset[ClonePair]:
+    """Every pair rebuilt through `ClonePair.of`, so a reversed or repeated entry is its one identity."""
+    pairs = set()
+    for path, entry in _table(CLONES, table).items():
+        for symbol, others in _table(f"{CLONES}.{path}", entry).items():
+            where = f"{CLONES}.{path}.{symbol}"
+            if not isinstance(others, list):
+                raise SizeError(f"{BASELINE_PATH} needs {where} as a list of [path, symbol] pairs")
+            for other in others:
+                if not (isinstance(other, list) and len(other) == 2 and all(isinstance(part, str) for part in other)):
+                    raise SizeError(f"{BASELINE_PATH} needs {where} as a list of [path, symbol] pairs of two strings, not {other!r}")
+                pairs.add(ClonePair.of(Place(path, symbol), Place(*other)))
+    return frozenset(pairs)
 
 
 def _metric_named(name: str) -> Metric:
     try:
         return Metric(name)
     except ValueError:
-        known = ", ".join(metric.value for metric in Metric)
+        known = ", ".join([*(metric.value for metric in Metric), CLONES])
         raise SizeError(f"{BASELINE_PATH} has an unknown table [{name}]; only {known} exist") from None
 
 

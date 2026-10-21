@@ -17,7 +17,7 @@ from quality.config import (
     read_gate_settings,
 )
 from quality.hygiene import CannotJudge, read_baseline
-from quality.ratchet import BASELINE_PATH, REWRITE_HINT, Baseline, SizeError, load_baseline, raised_entries
+from quality.ratchet import BASELINE_PATH, REWRITE_HINT, Baseline, SizeError, added_pairs, load_baseline, raised_entries
 
 JOBS_URL = "https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs?filter=all&per_page=100"
 MAX_PAGES = 10
@@ -46,7 +46,7 @@ ONLY_DECLARED_LINE = (
 
 @dataclass(frozen=True)
 class Side:
-    """What the gate holds at one side of a pull request: its settings and its size baseline, None without one."""
+    """What the gate holds at one side of a pull request: its settings and its baseline, None without one."""
 
     settings: GateSettings
     baseline: Baseline | None
@@ -184,12 +184,20 @@ def _removal(name: str) -> str:
 
 
 def _baseline_loosenings(base: Baseline | None, head: Baseline | None) -> list[str]:
-    """Without a base baseline any head one is adoption; with one, the head may only lower or drop entries."""
+    """Without a base baseline any head one is adoption; with one, the head may only lower or drop entries and pairs.
+
+    A base `[clones]` table is held the same way: the head keeps it, and a base without one lets the head introduce it.
+    """
     if base is None:
         return []
     if head is None:
         return [f"{BASELINE_PATH} removed"]
-    return [f"size baseline {entry.describe()}" for entry in raised_entries(base, head)]
+    lines = [f"size baseline {entry.describe()}" for entry in raised_entries(base.size, head.size)]
+    if base.clones is None:
+        return lines
+    if head.clones is None:
+        return [*lines, "clone baseline removed"]
+    return [*lines, *(f"clone baseline adds {pair.label}" for pair in added_pairs(base.clones, head.clones))]
 
 
 def _judge_job(name: str, jobs: list[Job], current_attempt: int) -> tuple[Unsettled | None, list[str]]:
@@ -396,7 +404,7 @@ def _require_safe_ref(ref: str) -> None:
 
 
 def read_head(repo: Path) -> Side:
-    """The gate's settings and size baseline in the checked-out tree; an unusable file names the head.
+    """The gate's settings and baseline in the checked-out tree; an unusable file names the head.
 
     Only the head's malformed baseline says how to rewrite it: the pull request cannot rewrite its base.
     """
@@ -413,7 +421,7 @@ def read_head(repo: Path) -> Side:
 
 
 def read_base(repo: Path, base_sha: str) -> Side:
-    """The gate's settings and size baseline at the base commit; a file the base lacks reads as absent."""
+    """The gate's settings and baseline at the base commit; a file the base lacks reads as absent."""
     _require_safe_ref(base_sha)
     where = f"the base commit {base_sha}"
     try:
