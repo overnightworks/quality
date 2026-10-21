@@ -3,26 +3,24 @@ import json
 import urllib.error
 
 import pytest
-import test_verdict
+from conftest import put
 from test_sonar import reply
-from test_verdict import GREEN_GATE, declaration, fetch_jobs, gate_config, job, put
+from test_verdict import GREEN_GATE, declaration, fetch_jobs, gate_config, job
 
 from quality import cli, verdict
 from quality.config import CONFIG_PATH, LegacyMode
 from quality.hygiene import CannotJudge
 from quality.verdict import GateSettings, Side, judge
 
-# pytest finds a fixture by its module attribute; imported by name, ruff would read it as unused and redefined.
-run_env, pull_request, stub_server = test_verdict.run_env, test_verdict.pull_request, test_verdict.stub_server
 
-
-def running(state="in_progress", name="checks", attempt=1):
-    return job(name, attempt, state, None)
+def running(state="in_progress", name="checks", attempt=1, leg=1):
+    return job(name, attempt, state, None, leg)
 
 
 def page(*jobs, total=None, link=None):
     listed = [
-        {"name": entry.name, "run_attempt": entry.run_attempt, "status": entry.status, "conclusion": entry.conclusion}
+        {"id": entry.id, "name": entry.name, "run_attempt": entry.run_attempt, "status": entry.status,
+         "conclusion": entry.conclusion}
         for entry in jobs
     ]
     return json.dumps({"total_count": len(listed) if total is None else total, "jobs": listed}), link
@@ -194,7 +192,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             id="cell 10",
         ),
         pytest.param(
-            (page(job(), running()), page(job(), job())),
+            (page(job(), running(leg=2)), page(job(), job(leg=2))),
             {},
             0,
             ['verdict: read the run\'s jobs 2 times - GitHub first listed "checks" (attempt 1) as in_progress',
@@ -244,28 +242,34 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             id="cell 25",
         ),
         pytest.param(
-            (
-                page(job(), job(conclusion="failure"), running(name="X")),
-                page(job(), job("X")),
-                page(job(), job(conclusion="failure"), job("X")),
-            ),
+            (page(job(), job(conclusion="failure", leg=2), running(name="X")), page(job(), job("X"))),
             {"head": gate_config("checks", "X")},
             1,
-            ['verdict: read the run\'s jobs 3 times - GitHub first listed "X" (attempt 1) as in_progress',
+            ['verdict: read the run\'s jobs 2 times - GitHub first listed "X" (attempt 1) as in_progress',
              'mandatory job "checks" (attempt 1) has 2 entries, not all success',
              "verdict: red"],
-            20,
+            10,
             id="cell 26",
         ),
         pytest.param(
-            (page(job(conclusion="failure"), running()), page(job()), page(job(conclusion="failure"), job())),
+            (page(job(conclusion="failure"), running(leg=2)), page(job(leg=2))),
             {},
             1,
-            ['verdict: read the run\'s jobs 3 times - GitHub first listed "checks" (attempt 1) as in_progress',
+            ['verdict: read the run\'s jobs 2 times - GitHub first listed "checks" (attempt 1) as in_progress',
              'mandatory job "checks" (attempt 1) has 2 entries, not all success',
              "verdict: red"],
-            20,
+            10,
             id="cell 27",
+        ),
+        pytest.param(
+            (page(job(conclusion="failure"), running(name="X")), page(job(leg=2), job("X"))),
+            {"head": gate_config("checks", "X")},
+            1,
+            ['verdict: read the run\'s jobs 2 times - GitHub first listed "X" (attempt 1) as in_progress',
+             'mandatory job "checks" (attempt 1) has 2 entries, not all success',
+             "verdict: red"],
+            10,
+            id="cell 29",
         ),
         pytest.param(
             (page(running()),) * 13,
@@ -326,18 +330,21 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             {"attempt": 2},
             2,
             ['verdict: read the run\'s jobs 13 times - GitHub first listed "checks" (attempt 2) as in_progress',
-             ('verdict: cannot judge - GitHub\'s latest answer no longer lists "checks" (attempt 2), which an earlier '
-             "answer showed, after 13 reads; this answer is stale: re-run the verdict")],
+             ('verdict: cannot judge - GitHub still lists "checks" (attempt 2) as in_progress after 13 reads; the gate '
+             "starts after every mandatory job, so this answer is stale: re-run the verdict (a mandatory job missing "
+             "from the caller's needs: must join it)")],
             120,
             id="cell 20 run out",
         ),
         pytest.param(
-            (page(job(), job(conclusion="failure"), running(name="X")), *(page(job(), job("X")),) * 12),
+            (page(job(), job(conclusion="failure", leg=2), running(name="X")), *(page(job()),) * 12),
             {"head": gate_config("checks", "X")},
             2,
             ['verdict: read the run\'s jobs 13 times - GitHub first listed "X" (attempt 1) as in_progress',
-             ('verdict: cannot judge - GitHub\'s latest answer no longer lists "checks" (attempt 1), which an earlier '
-             "answer showed, after 13 reads; this answer is stale: re-run the verdict")],
+             'mandatory job "checks" (attempt 1) has 2 entries, not all success',
+             ('verdict: cannot judge - GitHub still lists "X" (attempt 1) as in_progress after 13 reads; the gate '
+             "starts after every mandatory job, so this answer is stale: re-run the verdict (a mandatory job missing "
+             "from the caller's needs: must join it)")],
             120,
             id="cell 26 run out",
         ),

@@ -305,7 +305,7 @@ def run_verdict(path: Path, fetcher_for: Callable[[str], PageFetcher], sleep: Sl
         fetch = fetcher_for(os.environ["GITHUB_TOKEN"])
         settled = read_settled(
             lambda: read_jobs(repository_name, run_id, fetch),
-            lambda jobs, attempts_seen: judge(head, base, jobs, gate_results, current_attempt, attempts_seen),
+            lambda jobs: judge(head, base, jobs, gate_results, current_attempt),
             sleep,
         )
     except (CannotJudge, KeyError, ValueError) as error:

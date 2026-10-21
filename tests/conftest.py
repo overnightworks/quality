@@ -1,15 +1,19 @@
 import hashlib
+import http.server
 import json
 import os
 import shutil
 import subprocess
+import threading
 import unicodedata
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+from test_sonar import Responder
 
 from quality import cli, engines
+from quality.ratchet import BASELINE_PATH
 
 FAKE_KEY = "AKIA" + "QYLPMTYX3QZ5ABCD"  # assembled so quality's own scan stays green
 OTHER_KEY = "AKIA" + "QYLPMTYX3QZ5WXYZ"  # a second assembled key, to prove another value stays red
@@ -133,3 +137,81 @@ def fake_git(tmp_path, monkeypatch):
         monkeypatch.setenv("PATH", f"{fake_bin}:{os.environ['PATH']}")
 
     return install
+
+
+def head_commit(repo: Path) -> str:
+    return subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+
+
+@pytest.fixture
+def run_env(monkeypatch, build_repo, tmp_path):
+    repo = build_repo({"quality/config.toml": '[gate]\nmandatory_jobs = ["checks"]\n'})
+    summary = tmp_path / "summary.md"
+    for key, value in {
+        "GITHUB_REPOSITORY": "o/r",
+        "GITHUB_RUN_ID": "1",
+        "GITHUB_RUN_ATTEMPT": "1",
+        "GITHUB_TOKEN": "t",
+        "GATE_NEEDS": json.dumps({"hygiene": {"result": "success"}}),
+        "GITHUB_STEP_SUMMARY": str(summary),
+    }.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.delenv("GATE_BASE_SHA", raising=False)
+    return repo, summary
+
+
+def put(path: Path, content: str | bytes | None) -> None:
+    """Writes `content` to `path`, or removes the file when `content` is None."""
+    if content is None:
+        path.unlink(missing_ok=True)
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content if isinstance(content, bytes) else content.encode())
+
+
+@pytest.fixture
+def pull_request(monkeypatch, run_env):
+    """Commits `base` as the pull request's base baseline and points GATE_BASE_SHA at that commit."""
+    repo, _ = run_env
+
+    def commit_base(base: str | bytes | None, config: str | None = None) -> str:
+        put(repo / BASELINE_PATH, base)
+        if config is not None:
+            put(repo / "quality" / "config.toml", config)
+        git = ["git", "-C", str(repo), *GIT_IDENTITY]
+        subprocess.run([*git, "add", "-A"], check=True)
+        subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "base"], check=True)
+        sha = head_commit(repo)
+        monkeypatch.setenv("GATE_BASE_SHA", sha)
+        return sha
+
+    return repo, commit_base
+
+
+@pytest.fixture
+def stub_server():
+    """`serve(responder)` starts a loopback server and returns its origin and the headers of each request it got."""
+    servers = []
+
+    def serve(responder: Responder) -> tuple[str, list[dict[str, str]]]:
+        heard: list[dict[str, str]] = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                heard.append(dict(self.headers))
+                responder(self)
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        servers.append(server)
+        return f"http://127.0.0.1:{server.server_address[1]}", heard
+
+    yield serve
+    for server in servers:
+        server.shutdown()
+        server.server_close()

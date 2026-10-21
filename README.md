@@ -303,9 +303,10 @@ mandatory_jobs = ["checks"]
 - `mandatory_jobs` is a non-empty list of job names as the run lists them: the job's `name:`, else its id, and a matrix
   leg as `check (3.12)`. A missing file or key is exit `2`, and the message shows this example.
 - Each job must conclude `success` in its newest attempt up to the verdict's own. A job that is missing from the run is
-  `mandatory job "x" is missing from the run`; one that failed, was skipped or cancelled is red. One GitHub still lists as
-  running (`queued`, `in_progress`, `waiting`, `requested`, `pending`) is read again, as is an answer that no longer lists
-  an attempt or an entry an earlier answer showed; after the last read the verdict cannot judge.
+  `mandatory job "x" is missing from the run`; one that failed, was skipped or cancelled is red. One GitHub still lists
+  as running (`queued`, `in_progress`, `waiting`, `requested`, `pending`) is read again; after the last read the
+  verdict cannot judge. Each read judges every entry any answer listed, at the furthest state an answer showed, so an
+  answer that lists an entry late or drops one never hides a failure an earlier answer showed.
 - On a pull request, removing a job the base config holds is `loosened (undeclared): mandatory job "x" removed`, and the
   base's job is still judged; a declared removal (below) is no longer judged.
 - The gate's own jobs are judged through `needs` (`gate job "sonar" result failure`) and need no entry.

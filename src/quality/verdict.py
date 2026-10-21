@@ -26,7 +26,7 @@ REREAD_INTERVAL_SECONDS = 10
 NEXT_LINK = re.compile(r'<([^>]+)>;\s*rel="next"')
 SUCCESS = "success"
 COMPLETED = "completed"
-MISSING = "missing"
+PROGRESS_OF_STATUS = MappingProxyType({"in_progress": 1, COMPLETED: 2})
 FIRST_SERVER_ERROR = 500
 PERMISSION_REFUSALS = frozenset({403, 404})
 PERMISSION_HINT = "(does the caller grant actions: read?)"
@@ -54,10 +54,13 @@ class Side:
 
 @dataclass(frozen=True)
 class Job:
+    """One entry of a run's jobs; `id` is GitHub's own, and the door's jobs from check runs keep the default."""
+
     name: str
     run_attempt: int
     status: str
     conclusion: str | None
+    id: int = 0
 
     @property
     def state(self) -> str:
@@ -66,7 +69,7 @@ class Job:
 
 @dataclass(frozen=True)
 class Unsettled:
-    """A judged mandatory job GitHub's answer does not settle: still running, or an attempt seen earlier is missing."""
+    """A judged mandatory job GitHub's answer still lists as running."""
 
     name: str
     attempt: int
@@ -74,17 +77,6 @@ class Unsettled:
 
     def listed(self) -> str:
         return f'"{self.name}" (attempt {self.attempt}) as {self.state}'
-
-
-@dataclass(frozen=True, order=True)
-class AttemptSeen:
-    """A job's newest attempt in one answer and its entries there; within an attempt, entries only appear."""
-
-    attempt: int
-    entries: int
-
-
-NOTHING_SEEN = AttemptSeen(0, 0)
 
 
 @dataclass(frozen=True)
@@ -103,14 +95,12 @@ class Loosening:
 @dataclass(frozen=True)
 class Verdict:
     """The one judgment of a run: its loosenings, the new declarations that bind none, and every other problem;
-    `unsettled` holds the judged jobs GitHub's answer leaves open, `attempts` the highest attempt and entries seen of
-    each."""
+    `unsettled` holds the judged jobs GitHub's answer leaves open."""
 
     loosenings: tuple[Loosening, ...]
     stale: tuple[Declaration, ...]
     failures: tuple[str, ...]
     unsettled: tuple[Unsettled, ...]
-    attempts: Mapping[str, AttemptSeen]
 
     @property
     def declared(self) -> tuple[Declaration, ...]:
@@ -136,28 +126,23 @@ class Verdict:
 
 
 def judge(
-    head: Side, base: Side | None, jobs: list[Job], gate_results: Mapping[str, str], current_attempt: int,
-    attempts_seen: Mapping[str, AttemptSeen] = MappingProxyType({}),
+    head: Side, base: Side | None, jobs: list[Job], gate_results: Mapping[str, str], current_attempt: int
 ) -> Verdict:
     """Without a base (a push, a merge group) no loosening and no declaration is judged; a declared removal of a
-    mandatory job leaves that job unjudged. A job an earlier answer showed at a higher attempt, or with more entries
-    at the same one, is unsettled at that attempt: a lagging answer never brings back a result it dropped."""
+    mandatory job leaves that job unjudged."""
     failures = [f'gate job "{name}" result {result}' for name, result in gate_results.items() if result != SUCCESS]
     loosenings, stale = ((), ()) if base is None else _loosenings(head, base)
     declared = {loosening.what for loosening in loosenings if loosening.declaration is not None}
     base_jobs = () if base is None else base.settings.mandatory_jobs
     unsettled: list[Unsettled] = []
-    attempts: dict[str, AttemptSeen] = {}
     for name in dict.fromkeys((*base_jobs, *head.settings.mandatory_jobs)):
         if _removal(name) in declared:
             continue
-        seen, unsettled_job, problems = _judge_job(name, jobs, current_attempt, attempts_seen.get(name, NOTHING_SEEN))
-        if seen != NOTHING_SEEN:
-            attempts[name] = seen
+        unsettled_job, problems = _judge_job(name, jobs, current_attempt)
         if unsettled_job:
             unsettled.append(unsettled_job)
         failures += problems
-    return Verdict(loosenings, stale, tuple(failures), tuple(unsettled), attempts)
+    return Verdict(loosenings, stale, tuple(failures), tuple(unsettled))
 
 
 def _loosenings(head: Side, base: Side) -> tuple[tuple[Loosening, ...], tuple[Declaration, ...]]:
@@ -189,20 +174,15 @@ def _baseline_loosenings(base: Baseline | None, head: Baseline | None) -> list[s
     return [f"size baseline {entry.describe()}" for entry in raised_entries(base, head)]
 
 
-def _judge_job(
-    name: str, jobs: list[Job], current_attempt: int, seen: AttemptSeen
-) -> tuple[AttemptSeen, Unsettled | None, list[str]]:
-    """The highest attempt seen of the job, its unsettled entry, and its failure lines."""
+def _judge_job(name: str, jobs: list[Job], current_attempt: int) -> tuple[Unsettled | None, list[str]]:
+    """The job's unsettled entry, or its failure lines."""
     attempt, effective = _effective_entries(name, jobs, current_attempt)
-    now = AttemptSeen(attempt, len(effective))
-    if seen > now:
-        return seen, Unsettled(name, seen.attempt, MISSING), []
     if not effective:
-        return now, None, [f'mandatory job "{name}" is missing from the run']
+        return None, [f'mandatory job "{name}" is missing from the run']
     running = [job.status for job in effective if job.status != COMPLETED]
     if running:
-        return now, Unsettled(name, attempt, running[0]), []
-    return now, None, _problems_of_job(name, attempt, effective)
+        return Unsettled(name, attempt, running[0]), []
+    return None, _problems_of_job(name, attempt, effective)
 
 
 def _effective_entries(name: str, jobs: list[Job], current_attempt: int) -> tuple[int, list[Job]]:
@@ -241,10 +221,11 @@ def read_jobs(repo: str, run_id: str, fetch: PageFetcher) -> list[Job]:
 
 
 def _job_of(entry: dict) -> Job:
-    name, run_attempt, status = entry["name"], entry["run_attempt"], entry["status"]
-    if not (isinstance(name, str) and type(run_attempt) is int and isinstance(status, str)):
-        raise TypeError(f"a job's name, run_attempt or status has the wrong type: {entry!r}")
-    return Job(name, run_attempt, status, entry["conclusion"])
+    job_id, name, run_attempt, status = entry["id"], entry["name"], entry["run_attempt"], entry["status"]
+    numbers_typed = type(job_id) is int and type(run_attempt) is int
+    if not (numbers_typed and isinstance(name, str) and isinstance(status, str)):
+        raise TypeError(f"a job's id, name, run_attempt or status has the wrong type: {entry!r}")
+    return Job(name, run_attempt, status, entry["conclusion"], job_id)
 
 
 class GitHubServerError(CannotJudge):
@@ -264,7 +245,8 @@ def unreadable_jobs(url: str, error: Exception) -> CannotJudge:
         return CannotJudge(f"cannot read {url}: {error}{hint}")
     if isinstance(error, OSError):
         if sonar.timed_out(error):
-            return CannotJudge(f"GitHub did not answer {url} within {sonar.REQUEST_TIMEOUT_SECONDS}s; re-run the verdict")
+            seconds = sonar.REQUEST_TIMEOUT_SECONDS
+            return CannotJudge(f"GitHub did not answer {url} within {seconds}s; re-run the verdict")
         return CannotJudge(f"could not reach GitHub at {url}: {error}; re-run the verdict")
     return CannotJudge(f"cannot read {url}: {error}")
 
@@ -282,7 +264,7 @@ def github_fetcher(token: str) -> PageFetcher:
     return fetch
 
 
-Judgement = Callable[[list[Job], Mapping[str, AttemptSeen]], Verdict]
+Judgement = Callable[[list[Job]], Verdict]
 
 
 @dataclass(frozen=True)
@@ -308,14 +290,17 @@ def read_settled(read: Callable[[], list[Job]], judgement: Judgement, sleep: son
     """Judges the run's jobs until no judged job is unsettled, re-reading a stale answer or GitHub's server error.
 
     The gate starts after every mandatory job, so GitHub listing one as running is its lagging answer, not the run.
+    Each read judges the merged view of every answer so far, so a lagging answer can neither drop nor undo an entry.
     """
+    view: Mapping[int, Job] = {}
     last: Verdict | None = None
     first: str | None = None
     for reads in range(1, MAX_REREADS + 2):
         if reads > 1:
             sleep(REREAD_INTERVAL_SECONDS)
         try:
-            verdict = judgement(read(), {} if last is None else last.attempts)
+            view = merged_view(view, read())
+            verdict = judgement(list(view.values()))
         except GitHubServerError as error:
             said, reason = error.answered, _server_error_line(error, reads)
         except CannotJudge as error:
@@ -327,6 +312,22 @@ def read_settled(read: Callable[[], list[Job]], judgement: Judgement, sleep: son
             said, reason = "listed " + _listed(verdict.unsettled), _stale_line(verdict.unsettled, reads)
         first = first or said
     raise _unsettled_run(reason, reads, first, last)
+
+
+def merged_view(view: Mapping[int, Job], answer: Iterable[Job]) -> Mapping[int, Job]:
+    """Every entry any answer listed, keyed by id, at the furthest state an answer reported: a waiting status, then
+    `in_progress`, then `completed`. Within an attempt GitHub only moves an entry forward and never removes one, so an
+    entry missing from a later answer stays, one listed late joins, and a completed entry never changes."""
+    merged = dict(view)
+    for job in answer:
+        known = merged.get(job.id)
+        if known is None or _progress(job) > _progress(known):
+            merged[job.id] = job
+    return MappingProxyType(merged)
+
+
+def _progress(job: Job) -> int:
+    return PROGRESS_OF_STATUS.get(job.status, 0)
 
 
 def _listed(unsettled: Iterable[Unsettled]) -> str:
@@ -350,13 +351,10 @@ def _server_error_line(error: GitHubServerError, reads: int) -> str:
 
 
 def _stale_line(unsettled: tuple[Unsettled, ...], reads: int) -> str:
-    running = [job for job in unsettled if job.state != MISSING]
-    gone = [f'"{job.name}" (attempt {job.attempt})' for job in unsettled if job.state == MISSING]
-    clauses = [f"GitHub still lists {_listed(running)}"] if running else []
-    if gone:
-        clauses.append(f"GitHub's latest answer no longer lists {', '.join(gone)}, which an earlier answer showed,")
-    why = "the gate starts after every mandatory job, so this answer is stale" if running else "this answer is stale"
-    return f"{' and '.join(clauses)} after {reads} reads; {why}: re-run the verdict{NEEDS_HINT if running else ''}"
+    return (
+        f"GitHub still lists {_listed(unsettled)} after {reads} reads; the gate starts after every mandatory job, so "
+        f"this answer is stale: re-run the verdict{NEEDS_HINT}"
+    )
 
 
 FORBIDDEN_REF_CHARACTERS = re.compile(r"[\x00-\x20\x7f~^:?*\[\\]")
