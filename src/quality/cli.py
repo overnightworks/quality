@@ -24,7 +24,7 @@ from quality.hygiene import (
     tracked_files,
     work_tree_top,
 )
-from quality.report import Finding, printable, render
+from quality.report import Finding, headline, printable, render
 from quality.sonar import (
     DEPENDABOT_CONFIG,
     TASK_FILE,
@@ -287,7 +287,7 @@ def run_sonar_findings(transport: Transport, sleep: Sleep) -> int:
         return EXIT_CANNOT_JUDGE
     for finding in result.findings.listed:
         print(render(finding))
-    emit(*(f"{finding.rule} {finding.location} - {finding.reason}" for finding in result.findings.set_aside))
+    emit(*(headline(finding) for finding in result.findings.set_aside))
     emit(result.summary(), file=sys.stderr if result.fails_the_run else sys.stdout)
     return EXIT_FINDINGS if result.fails_the_run else EXIT_CLEAN
 

@@ -34,7 +34,7 @@
 
 ## A. Target state per active repo (unchanged from v1 except for 5)
 1. The fleet minimum profile is enforced by a fail-closed `quality / verdict`. A repo may tighten it, never loosen it.
-   - **SonarCloud is part of the minimum profile** (operator 16.10.2026: „0 Findings Toleranz für alle Repos“; „sollte das da nicht mit rein?“). Every repo has a SonarCloud project, and the gate fails on **any open finding on the PR** at every severity. It reads the findings through the CI, so agents see them in the log and fix them without a browser.
+   - **SonarCloud is part of the minimum profile** (operator 16.10.2026: „0 Findings Toleranz für alle Repos“; „sollte das da nicht mit rein?“). Every repo has a SonarCloud project, and the gate fails on **any open finding on the PR** at every severity, except the one rule the README's [Dependabot exception](../README.md#a-dependabot-exception-for-dockers8431) sets aside. It reads the findings through the CI, so agents see them in the log and fix them without a browser.
    - The gate's Sonar check is quality's own `quality sonar findings`.
    - It replaced marketplace's `sonar-findings-gate`, which marketplace removed on 19.10.2026 (overnightworks/marketplace#140).
    - Existing debt is counted per repo and may only fall: webauth and agent-providers each hold 8 `githubactions:S8541/S8544` findings on their CI's `uv` lines. That is the fleet's "Security C".

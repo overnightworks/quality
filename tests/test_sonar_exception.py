@@ -2,6 +2,8 @@ import os
 from pathlib import Path
 
 import pytest
+from test_emergency import FakeGh, changed_nothing, drive
+from test_emergency import sonar as emergency_sonar
 from test_sonar import (
     FEATURE_ENVIRONMENT,
     FINISHED_FOR_FEATURE,
@@ -21,7 +23,8 @@ SET_ASIDE_LINE = (
     f"sonar Dockerfile:3 - docker:S8431: {MESSAGE} (does not count: .github/dependabot.yml exists, "
     "Sonar's own exception, which its pull-request analysis misses)\n"
 )
-COUNTED_LINE = f"sonar Dockerfile:3 - docker:S8431: {MESSAGE}\n  Fix: "
+FIX = "Fix it in the code; an accepted or false-positive mark in SonarCloud still counts"
+COUNTED_LINE = f"sonar Dockerfile:3 - docker:S8431: {MESSAGE}\n  Fix: {FIX}\n"
 NEW_ZERO = f"sonar: new 0 · legacy 0 ({KEY}, main)\n"
 UNREADABLE = "sonar: cannot judge - cannot reach .github/dependabot.yml: [Errno 13] Permission denied\n"
 
@@ -70,8 +73,7 @@ def test_without_the_bot_config_the_finding_counts_as_before(monkeypatch, capsys
     arrange()
     code, out, err, _ = run_cli(monkeypatch, capsys, findings_of(bot_issue()))
     assert code == 1
-    assert out.startswith(COUNTED_LINE)
-    assert "does not count" not in out
+    assert out == COUNTED_LINE
     assert err == f"sonar: new 1 · legacy 0 ({KEY}, main)\n"
 
 
@@ -173,11 +175,30 @@ def test_without_the_exception_nothing_is_set_aside(monkeypatch, capsys):
     write_bot_config()
     code, out, err, _ = run_cli(monkeypatch, capsys, sonar_answering(issues=issues_page(1, 1)))
     assert code == 1
-    assert out.startswith("sonar src/a1.py:1 - python:S1: m\n  Fix: ")
+    assert out == f"sonar src/a1.py:1 - python:S1: m\n  Fix: {FIX}\n"
     assert err == f"sonar: new 1 · legacy 0 ({KEY}, main)\n"
 
 
 @pytest.mark.parametrize(("exists", "rules"), [(True, {"docker:S8431"}), (False, set())], ids=["file exists", "no file"])
 def test_the_decider_answers_by_existence_alone(exists, rules):
-    """#98 rule 1: the pure decider reads nothing; the door passes no rule set (cell 10, test_emergency.py unchanged)"""
+    """#98 rule 1: the pure decider reads nothing"""
     assert sonar.uncounted_rules(exists) == rules
+
+
+def test_the_emergency_door_still_counts_the_dependabot_rule(capsys):
+    """#98 cell 10: the door passes no rule set, so docker:S8431 stays an added finding next to .github/dependabot.yml"""
+    write_bot_config()
+    answering = emergency_sonar(new=1)
+
+    def transport(url, authorization):
+        answer = answering(url, authorization)
+        if "pullRequest=" in url and "issues" in answer:
+            return {"total": 1, "issues": [bot_issue()]}
+        return answer
+
+    gh = FakeGh()
+    code, answers = drive(gh, transport)
+    assert code == 1
+    assert capsys.readouterr().out == f"emergency-merge: refused - the pull request adds findings:\n{COUNTED_LINE}"
+    changed_nothing(gh)
+    assert answers == []

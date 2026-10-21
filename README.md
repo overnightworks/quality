@@ -361,37 +361,14 @@ unreadable is exit `2`.
 `gate.yml` passes the repository's default branch (`github.event.repository.default_branch`) as `DEFAULT_BRANCH`; it is
 never assumed to be `main`, and a missing or empty value is exit `2`. "Legacy" means the open findings of that branch,
 counted by the same `issues/search` with the same open statuses, and only counted, never listed.
-- **Pull request:** new findings are listed and make the run exit `1` (except the findings the next subsection sets aside). Both counts always print, for example
+- **Pull request:** new findings are listed and make the run exit `1` (except the findings the [Dependabot exception](#a-dependabot-exception-for-dockers8431) sets aside). Both counts always print, for example
   `sonar: new 0 · legacy 17 (overnightworks_webauth, main)`.
-- **Default branch:** a run on the default branch exits `1` on any open finding (except the findings the next subsection sets aside), lists them and prints
+- **Default branch:** a run on the default branch exits `1` on any open finding (except the findings the [Dependabot exception](#a-dependabot-exception-for-dockers8431) sets aside), lists them and prints
   `sonar: N open on <default>`.
 - **Any other branch:** report only, exit `0`: `sonar: N open on <branch> (report only)`.
 
 `[gate] legacy` in `quality/config.toml` decides whether legacy findings fail a pull request. `quality sonar findings`
 reads that file like the verdict does: a missing file, or one without `[gate] mandatory_jobs`, is exit `2` before any request.
-
-### A Dependabot exception for `docker:S8431`
-
-Sonar's rule `docker:S8431` ("Use either the version tag or the digest for the image instead of both") flags the
-`image:tag@sha256:...` form that Dependabot maintains. Sonar's own sensor drops the finding when a Dependabot config
-exists ([DockerSensor.java](https://github.com/SonarSource/sonar-iac/blob/master/iac-extensions/docker/src/main/java/org/sonar/iac/docker/plugin/DockerSensor.java),
-SONARIAC-3096), but only checks that the file exists, and a pull-request analysis looks at changed files only, so it
-cannot see an unchanged `.github/dependabot.yml` and keeps the finding. The gate therefore judges a pull request the
-way Sonar judges main:
-
-- **The rule:** when `.github/dependabot.yml` exists in the checkout, `docker:S8431` does not count. Its content is
-  never read, so an empty or broken file counts as existing; a link to a file counts and a link to nowhere does not.
-  `.github/dependabot.yaml` is not looked at. The rule applies in every run kind.
-- **What prints:** the finding still prints, on stdout after the counted findings and before the summary, without a
-  `Fix:` line: `sonar Dockerfile:3 - docker:S8431: <message> (does not count: .github/dependabot.yml exists, Sonar's
-  own exception, which its pull-request analysis misses)`. The summary line does not count it; the legacy number stays
-  the raw count of the default branch.
-- **An unreachable file:** a `.github` the filesystem refuses access to is exit `2` with a line naming the file, before
-  any request.
-- **Only this rule** has the exception; every other finding and rule counts as before.
-- **Gaps:** `quality emergency-merge` does not honour it and still counts the finding as added; the legacy count is
-  raw; the file's existence does not say that Dependabot maintains the Dockerfile's folder for Docker; a repository
-  that has only `.github/dependabot.yaml` stays red on pull requests; Renovate is not judged.
 
 ```toml
 [gate]
@@ -411,6 +388,30 @@ On pull requests and default-branch runs `quality sonar findings` reads `api/pro
   (`sonar: cannot judge - legacy unknown (<default> not analysed yet)`).
 - The default branch is not SonarCloud's main branch: exit `2` in both modes, with the fix `set SonarCloud's main branch
   to <default>`. A non-main SonarCloud branch counts only changed code, so the legacy count would be too low.
+
+### A Dependabot exception for `docker:S8431`
+
+Sonar's rule `docker:S8431` ("Use either the version tag or the digest for the image instead of both") flags the
+`image:tag@sha256:...` form that Dependabot maintains. Sonar's own sensor drops the finding when a Dependabot config
+exists ([DockerSensor.java](https://github.com/SonarSource/sonar-iac/blob/2bb050011ed1a224b74d23182edcc82afca8695b/iac-extensions/docker/src/main/java/org/sonar/iac/docker/plugin/DockerSensor.java#L204-L226),
+SONARIAC-3096), but only checks that the file exists, and a pull-request analysis looks at changed files only, so it
+cannot see an unchanged `.github/dependabot.yml` and keeps the finding. The gate therefore judges a pull request the
+way Sonar judges main:
+
+- **The rule:** when `.github/dependabot.yml` exists in the checkout, `docker:S8431` does not count. Its content is
+  never read, so an empty or broken file counts as existing; a link to a file counts and a link to nowhere does not; a directory named `.github/dependabot.yml` counts too, unlike
+  Sonar, which needs a file.
+  `.github/dependabot.yaml` is not looked at. The rule applies in every run kind.
+- **What prints:** the finding still prints, on stdout after the counted findings and before the summary, without a
+  `Fix:` line: `sonar Dockerfile:3 - docker:S8431: <message> (does not count: .github/dependabot.yml exists, Sonar's
+  own exception, which its pull-request analysis misses)`. The summary line does not count it; the legacy number stays
+  the raw count of the default branch.
+- **An unreachable file:** a `.github` the filesystem refuses access to is exit `2` with a line naming the file, before
+  any request.
+- **Only this rule** has the exception; every other finding and rule counts as before.
+- **Gaps:** `quality emergency-merge` does not honour it and still counts the finding as added; the legacy count is
+  raw; the file's existence does not say that Dependabot maintains the Dockerfile's folder for Docker; a repository
+  that has only `.github/dependabot.yaml` stays red on pull requests; Renovate is not judged.
 
 ### The way back to green under `legacy = "fail"`
 

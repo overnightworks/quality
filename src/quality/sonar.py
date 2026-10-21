@@ -361,7 +361,7 @@ def analyse(
     transport: Transport,
     sleep: Sleep,
 ) -> SonarResult:
-    """Every check that can refuse runs before the token is sent anywhere."""
+    """The local configuration and destination checks run before the token is sent anywhere."""
     analysis = read_analysis(environment)
     wait_for_own_task(analysis, transport, sleep)
     require_resolved(analysis, transport)
@@ -536,7 +536,7 @@ def open_findings(analysis: Analysis, transport: Transport, uncounted: frozenset
             for issue in issues:
                 finding = finding_from_issue(issue)
                 if issue["rule"] in uncounted:
-                    set_aside.append(replace(finding, reason=finding.reason + SET_ASIDE_REASON, fix=""))
+                    set_aside.append(replace(finding, reason=finding.reason + SET_ASIDE_REASON))
                 else:
                     listed.append(finding)
         except (KeyError, TypeError, ValueError) as error:

@@ -41,6 +41,10 @@ def shell_word(text: str) -> str | None:
     return f"'{word}'" if word.startswith("=") else word
 
 
+def headline(finding: Finding) -> str:
+    return f"{finding.rule} {finding.location} - {printable(finding.reason)}"
+
+
 def render(finding: Finding) -> str:
     detail = "".join(f"\n{DETAIL_MARKER}{printable(line)}" for line in finding.detail)
-    return f"{finding.rule} {finding.location} - {printable(finding.reason)}{detail}\n  Fix: {printable(finding.fix)}"
+    return f"{headline(finding)}{detail}\n  Fix: {printable(finding.fix)}"
