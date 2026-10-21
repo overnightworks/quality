@@ -1,8 +1,0 @@
-claim_id = "2f189518d74640c0b9c7181c8baeba85"
-agent = "claude"
-role = "builder"
-base = "c4a76a2423ea6a17d5f75f934b25baad5f529373"
-branch = "claude/issue-103-declared-loosening"
-scope = ["AGENTS.md", "README.md", "docs/rulings.md", "src/quality/cli.py", "src/quality/config.py", "src/quality/emergency.py", "src/quality/osv-scanner.toml", "src/quality/verdict.py", "tests/test_config.py", "tests/test_emergency.py", "tests/test_verdict.py"]
-opened_commit = "c8c5a821561709ae4b7c149b46b2d826d843843c"
-whole_reason = "Which loosenings a pull request declares, whether its verdict is red only for them, and whether the operator's door may merge it is one decision with one decider in verdict.py; the config key, the door, the README sentences and the tests pinning them move together."
