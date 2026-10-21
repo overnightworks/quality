@@ -254,14 +254,11 @@ def set_gate(gh: GhRunner, repository: str, enabled: bool) -> None:
     gh(["api", "-X", "PATCH", f"repos/{repository}/properties/values", "--input", "-"], json.dumps(body))
 
 
-def merged_on_github(gh: GhRunner, door: Door, say: Say) -> bool | None:
+def merged_on_github(gh: GhRunner, door: Door) -> bool | None:
     """What GitHub says now; None when it cannot be read."""
     try:
         return json.loads(gh(["api", f"repos/{door.repository}/pulls/{door.pull_request}"], None))["merged"] is True
     except (GhFailed, KeyError, ValueError):
-        return None
-    except KeyboardInterrupt:
-        end_interrupted_line(say)
         return None
 
 
@@ -312,16 +309,22 @@ def switch_off_merge_switch_on(gh: GhRunner, door: Door, say: Say) -> Attempt:
             say(not_restored_warning(door, Attempt(outcome, detail, restore_error)))
     if outcome is not Outcome.UNKNOWN:
         return Attempt(outcome, detail, restore_error)
-    outcome = settled_by_github(gh, door, say, interrupted)
+    try:
+        outcome = settled_by_github(gh, door, interrupted)
+    except KeyboardInterrupt:
+        end_interrupted_line(say)
+        outcome, interrupted_reading_back = Outcome.UNKNOWN, True
+    else:
+        interrupted_reading_back = False
     attempt = Attempt(outcome, None if outcome is Outcome.MERGED else detail, restore_error)
-    if restore_error and outcome is not Outcome.UNKNOWN:
+    if restore_error and (outcome is not Outcome.UNKNOWN or interrupted_reading_back):
         say(not_restored_warning(door, attempt))
     return attempt
 
 
-def settled_by_github(gh: GhRunner, door: Door, say: Say, interrupted: bool) -> Outcome:
+def settled_by_github(gh: GhRunner, door: Door, interrupted: bool) -> Outcome:
     """A lost answer or Ctrl-C leaves it open whether GitHub merged; after Ctrl-C a merge not yet shown stays open."""
-    landed = merged_on_github(gh, door, say)
+    landed = merged_on_github(gh, door)
     if landed:
         return Outcome.MERGED
     return Outcome.UNKNOWN if landed is None or interrupted else Outcome.NOT_MERGED

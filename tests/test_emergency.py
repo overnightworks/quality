@@ -446,17 +446,18 @@ def test_exit_2_loud_line_and_log_when_the_gate_cannot_be_restored(restore_failu
 
 
 @pytest.mark.parametrize(
-    ("gh_kwargs", "read_back_fails", "expected"),
+    ("gh_kwargs", "read_back_failure", "expected"),
     [
-        ({"merge_lands": True}, False, 'aco release <n> --abandoned "landed as PR #7 by emergency-merge"'),
-        ({"fail_on": ["merge"]}, True, ") - check #7 on GitHub"),
-        ({"fail_on": ["merge"]}, False, "not merged"),
-        ({"merge_lands": True, "fail_on": ["comment"]}, False, 'aco release <n> --abandoned "landed as PR #7 by emergency-merge"'),
-        ({"fail_on": ["merge", "comment"]}, False, "not merged"),
+        ({"merge_lands": True}, None, 'aco release <n> --abandoned "landed as PR #7 by emergency-merge"'),
+        ({"fail_on": ["merge"]}, GhFailed("pull broke"), ") - check #7 on GitHub"),
+        ({"fail_on": ["merge"]}, KeyboardInterrupt(), ") - check #7 on GitHub"),
+        ({"fail_on": ["merge"]}, None, "not merged"),
+        ({"merge_lands": True, "fail_on": ["comment"]}, None, 'aco release <n> --abandoned "landed as PR #7 by emergency-merge"'),
+        ({"fail_on": ["merge", "comment"]}, None, "not merged"),
     ],
-    ids=["merged", "unknown", "not merged", "merged, comment fails", "not merged, comment fails"],
+    ids=["merged", "unknown", "unknown, Ctrl-C", "not merged", "merged, comment fails", "not merged, comment fails"],
 )
-def test_names_the_merge_outcome_when_the_gate_cannot_be_restored(gh_kwargs, read_back_fails, expected, capsys):
+def test_names_the_merge_outcome_when_the_gate_cannot_be_restored(gh_kwargs, read_back_failure, expected, capsys):
     """#37 rule 4, #103 rule 5d: the operator learns both manual checks, the gate and the pull request, in one line,
     before the door sends GitHub another request, and that line is the door's last, even after a failed log comment."""
     gh = FakeGh(**gh_kwargs)
@@ -470,8 +471,8 @@ def test_names_the_merge_outcome_when_the_gate_cannot_be_restored(gh_kwargs, rea
             warned_before_request.append("MAY STILL BE OFF" in "".join(printed))
         if stdin and json.loads(stdin)["properties"][0]["value"] == "true":
             raise GhFailed("denied")
-        if read_back_fails and gh.merge_calls and step == "pull":
-            raise GhFailed("pull broke")
+        if read_back_failure and gh.merge_calls and step == "pull":
+            raise read_back_failure
         return original(arguments, stdin)
 
     assert drive(cannot_restore)[0] == 2
@@ -513,6 +514,10 @@ def test_ctrl_c_while_posting_the_log_comment_is_reported(restore_fails, capsys)
     output = capsys.readouterr().out
     assert "log comment on #7 was not posted" in output
     assert ("MAY STILL BE OFF" in output) is restore_fails
+    if restore_fails:
+        last_line = output.splitlines()[-1]
+        assert "MAY STILL BE OFF" in last_line
+        assert "merged." in last_line
 
 
 @pytest.mark.parametrize(
