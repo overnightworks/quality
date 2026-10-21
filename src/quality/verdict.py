@@ -1,8 +1,10 @@
 import json
 import re
-from collections.abc import Callable, Mapping
+import urllib.error
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 
 from quality import engines, sonar
 from quality.config import (
@@ -19,8 +21,16 @@ from quality.ratchet import BASELINE_PATH, REWRITE_HINT, Baseline, SizeError, lo
 
 JOBS_URL = "https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs?filter=all&per_page=100"
 MAX_PAGES = 10
+MAX_REREADS = 12
+REREAD_INTERVAL_SECONDS = 10
 NEXT_LINK = re.compile(r'<([^>]+)>;\s*rel="next"')
 SUCCESS = "success"
+COMPLETED = "completed"
+MISSING = "missing"
+FIRST_SERVER_ERROR = 500
+PERMISSION_REFUSALS = frozenset({403, 404})
+PERMISSION_HINT = "(does the caller grant actions: read?)"
+NEEDS_HINT = " (a mandatory job missing from the caller's needs: must join it)"
 
 PageFetcher = Callable[[str], tuple[str, str | None]]
 
@@ -51,7 +61,19 @@ class Job:
 
     @property
     def state(self) -> str:
-        return self.conclusion if self.status == "completed" and self.conclusion else self.status
+        return self.conclusion if self.status == COMPLETED and self.conclusion else self.status
+
+
+@dataclass(frozen=True)
+class Unsettled:
+    """A judged mandatory job GitHub's answer does not settle: still running, or an attempt seen earlier is missing."""
+
+    name: str
+    attempt: int
+    state: str
+
+    def listed(self) -> str:
+        return f'"{self.name}" (attempt {self.attempt}) as {self.state}'
 
 
 @dataclass(frozen=True)
@@ -69,11 +91,14 @@ class Loosening:
 
 @dataclass(frozen=True)
 class Verdict:
-    """The one judgment of a run: its loosenings, the new declarations that bind none, and every other problem."""
+    """The one judgment of a run: its loosenings, the new declarations that bind none, and every other problem;
+    `unsettled` holds the judged jobs GitHub's answer leaves open, `attempts` the highest attempt seen of each."""
 
     loosenings: tuple[Loosening, ...]
     stale: tuple[Declaration, ...]
     failures: tuple[str, ...]
+    unsettled: tuple[Unsettled, ...]
+    attempts: Mapping[str, int]
 
     @property
     def declared(self) -> tuple[Declaration, ...]:
@@ -88,7 +113,7 @@ class Verdict:
 
     @property
     def green(self) -> bool:
-        return not (self.loosenings or self.blocking)
+        return not (self.loosenings or self.blocking or self.unsettled)
 
     def lines(self) -> tuple[str, ...]:
         """The verdict as it prints, one problem per line and the result last."""
@@ -99,18 +124,28 @@ class Verdict:
 
 
 def judge(
-    head: Side, base: Side | None, jobs: list[Job], gate_results: Mapping[str, str], current_attempt: int
+    head: Side, base: Side | None, jobs: list[Job], gate_results: Mapping[str, str], current_attempt: int,
+    attempts_seen: Mapping[str, int] = MappingProxyType({}),
 ) -> Verdict:
     """Without a base (a push, a merge group) no loosening and no declaration is judged; a declared removal of a
-    mandatory job leaves that job unjudged."""
+    mandatory job leaves that job unjudged. A job whose attempt an earlier answer showed higher, or listed when this
+    one does not, is unsettled at that attempt: a lagging answer never brings back an older attempt's result."""
     failures = [f'gate job "{name}" result {result}' for name, result in gate_results.items() if result != SUCCESS]
     loosenings, stale = ((), ()) if base is None else _loosenings(head, base)
     declared = {loosening.what for loosening in loosenings if loosening.declaration is not None}
     base_jobs = () if base is None else base.settings.mandatory_jobs
+    unsettled: list[Unsettled] = []
+    attempts: dict[str, int] = {}
     for name in dict.fromkeys((*base_jobs, *head.settings.mandatory_jobs)):
-        if _removal(name) not in declared:
-            failures += _problems_of_job(name, jobs, current_attempt)
-    return Verdict(loosenings, stale, tuple(failures))
+        if _removal(name) in declared:
+            continue
+        attempt, unsettled_job, problems = _judge_job(name, jobs, current_attempt, attempts_seen.get(name, 0))
+        if attempt:
+            attempts[name] = attempt
+        if unsettled_job:
+            unsettled.append(unsettled_job)
+        failures += problems
+    return Verdict(loosenings, stale, tuple(failures), tuple(unsettled), attempts)
 
 
 def _loosenings(head: Side, base: Side) -> tuple[tuple[Loosening, ...], tuple[Declaration, ...]]:
@@ -142,12 +177,27 @@ def _baseline_loosenings(base: Baseline | None, head: Baseline | None) -> list[s
     return [f"size baseline {entry.describe()}" for entry in raised_entries(base, head)]
 
 
-def _problems_of_job(name: str, jobs: list[Job], current_attempt: int) -> list[str]:
+def _judge_job(name: str, jobs: list[Job], current_attempt: int, seen: int) -> tuple[int, Unsettled | None, list[str]]:
+    """The attempt the job is judged at (0 for none), its unsettled entry, and its failure lines."""
+    attempt, effective = _effective_entries(name, jobs, current_attempt)
+    if seen > attempt:
+        return seen, Unsettled(name, seen, MISSING), []
+    if not effective:
+        return 0, None, [f'mandatory job "{name}" is missing from the run']
+    running = [job.status for job in effective if job.status != COMPLETED]
+    if running:
+        return attempt, Unsettled(name, attempt, running[0]), []
+    return attempt, None, _problems_of_job(name, attempt, effective)
+
+
+def _effective_entries(name: str, jobs: list[Job], current_attempt: int) -> tuple[int, list[Job]]:
+    """The entries of `name` in its newest attempt up to the verdict's own, and that attempt (0 when it has none)."""
     candidates = [job for job in jobs if job.name == name and job.run_attempt <= current_attempt]
-    if not candidates:
-        return [f'mandatory job "{name}" is missing from the run']
-    attempt = max(job.run_attempt for job in candidates)
-    effective = [job for job in candidates if job.run_attempt == attempt]
+    attempt = max((job.run_attempt for job in candidates), default=0)
+    return attempt, [job for job in candidates if job.run_attempt == attempt]
+
+
+def _problems_of_job(name: str, attempt: int, effective: list[Job]) -> list[str]:
     failing = [job for job in effective if job.state != SUCCESS]
     if len(effective) > 1 and failing:
         return [f'mandatory job "{name}" (attempt {attempt}) has {len(effective)} entries, not all success']
@@ -182,16 +232,112 @@ def _job_of(entry: dict) -> Job:
     return Job(name, run_attempt, status, entry["conclusion"])
 
 
+class GitHubServerError(CannotJudge):
+    """GitHub answered 5xx: its fault, not the caller's, so the re-read tries again."""
+
+    def __init__(self, status: int, reason: str, url: str) -> None:
+        self.answered = f"answered HTTP {status} {reason}"
+        super().__init__(f"GitHub {self.answered} for {url}")
+
+
+def unreadable_jobs(url: str, error: Exception) -> CannotJudge:
+    """What a failed jobs read says: only GitHub's 403 and 404 can mean the caller withholds `actions: read`."""
+    if isinstance(error, urllib.error.HTTPError):
+        if error.code >= FIRST_SERVER_ERROR:
+            return GitHubServerError(error.code, error.reason, url)
+        hint = f" {PERMISSION_HINT}" if error.code in PERMISSION_REFUSALS else ""
+        return CannotJudge(f"cannot read {url}: {error}{hint}")
+    if isinstance(error, OSError):
+        if sonar.timed_out(error):
+            return CannotJudge(f"GitHub did not answer {url} within {sonar.REQUEST_TIMEOUT_SECONDS}s; re-run the verdict")
+        return CannotJudge(f"could not reach GitHub at {url}: {error}; re-run the verdict")
+    return CannotJudge(f"cannot read {url}: {error}")
+
+
 def github_fetcher(token: str) -> PageFetcher:
     def fetch(url: str) -> tuple[str, str | None]:
-        def unreadable(error: Exception) -> CannotJudge:
-            return CannotJudge(f"cannot read {url}: {error} (does the caller grant actions: read?)")
-
         headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
-        body, answer_headers = sonar.fetch(url, headers, unreadable)
+        body, answer_headers = sonar.fetch(url, headers, lambda error: unreadable_jobs(url, error))
         return body.decode("utf-8"), answer_headers.get("Link")
 
     return fetch
+
+
+Judgement = Callable[[list[Job], Mapping[str, int]], Verdict]
+
+
+@dataclass(frozen=True)
+class Settled:
+    """The verdict of the first read that settled every judged job; `note` says what the reads before it showed."""
+
+    verdict: Verdict
+    note: str | None
+
+    def lines(self) -> tuple[str, ...]:
+        return (*_noted(self.note), *self.verdict.lines())
+
+
+class UnsettledRun(CannotJudge):
+    """The re-read could not judge the run; it prints its note and the last judged read's blocking lines first."""
+
+    def __init__(self, reason: str, note: str | None, blocking: tuple[str, ...]) -> None:
+        super().__init__(reason)
+        self.preceding_lines = (*_noted(note), *blocking)
+
+
+def read_settled(read: Callable[[], list[Job]], judgement: Judgement, sleep: sonar.Sleep) -> Settled:
+    """Judges the run's jobs until no judged job is unsettled, re-reading a stale answer or GitHub's server error.
+
+    The gate starts after every mandatory job, so GitHub listing one as running is its lagging answer, not the run.
+    """
+    last: Verdict | None = None
+    first: str | None = None
+    for reads in range(1, MAX_REREADS + 2):
+        if reads > 1:
+            sleep(REREAD_INTERVAL_SECONDS)
+        try:
+            verdict = judgement(read(), {} if last is None else last.attempts)
+        except GitHubServerError as error:
+            said, reason = error.answered, _server_error_line(error, reads)
+        except CannotJudge as error:
+            raise _unsettled_run(str(error), reads, first, last) from error
+        else:
+            if not verdict.unsettled:
+                return Settled(verdict, _reread_note(reads, first))
+            last = verdict
+            said, reason = "listed " + _listed(verdict.unsettled), _stale_line(verdict.unsettled, reads)
+        first = first or said
+    raise _unsettled_run(reason, reads, first, last)
+
+
+def _listed(unsettled: Iterable[Unsettled]) -> str:
+    return ", ".join(job.listed() for job in unsettled)
+
+
+def _noted(note: str | None) -> tuple[str, ...]:
+    return () if note is None else (note,)
+
+
+def _reread_note(reads: int, first: str | None) -> str | None:
+    return None if reads == 1 else f"verdict: read the run's jobs {reads} times - GitHub first {first}"
+
+
+def _unsettled_run(reason: str, reads: int, first: str | None, last: Verdict | None) -> UnsettledRun:
+    return UnsettledRun(reason, _reread_note(reads, first), () if last is None else last.blocking)
+
+
+def _server_error_line(error: GitHubServerError, reads: int) -> str:
+    return f"{error} after {reads} reads; this is GitHub's fault, not the caller's: re-run the verdict"
+
+
+def _stale_line(unsettled: tuple[Unsettled, ...], reads: int) -> str:
+    running = [job for job in unsettled if job.state != MISSING]
+    gone = [f'"{job.name}" (attempt {job.attempt})' for job in unsettled if job.state == MISSING]
+    clauses = [f"GitHub still lists {_listed(running)}"] if running else []
+    if gone:
+        clauses.append(f"GitHub's latest answer no longer lists {', '.join(gone)}, which an earlier answer showed,")
+    why = "the gate starts after every mandatory job, so this answer is stale" if running else "this answer is stale"
+    return f"{' and '.join(clauses)} after {reads} reads; {why}: re-run the verdict{NEEDS_HINT if running else ''}"
 
 
 FORBIDDEN_REF_CHARACTERS = re.compile(r"[\x00-\x20\x7f~^:?*\[\\]")

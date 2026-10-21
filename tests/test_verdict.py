@@ -1,9 +1,11 @@
+import http.client
 import http.server
 import json
 import os
 import subprocess
 import sys
 import threading
+import urllib.error
 from pathlib import Path
 
 import pytest
@@ -35,12 +37,6 @@ def problems(jobs, mandatory=("checks",), base=(), gate=GREEN_GATE, attempt=1, l
     [
         ([job()], 1, ()),
         ([], 1, ('mandatory job "checks" is missing from the run',)),
-        (
-            [job(status="in_progress", conclusion=None)],
-            1,
-            ('mandatory job "checks" (attempt 1) concluded in_progress',),
-        ),
-        ([job(status="queued", conclusion=None)], 1, ('mandatory job "checks" (attempt 1) concluded queued',)),
         ([job(conclusion="failure")], 1, ('mandatory job "checks" (attempt 1) concluded failure',)),
         ([job(conclusion="skipped")], 1, ('mandatory job "checks" (attempt 1) concluded skipped',)),
         ([job(conclusion="cancelled")], 1, ('mandatory job "checks" (attempt 1) concluded cancelled',)),
@@ -56,8 +52,6 @@ def problems(jobs, mandatory=("checks",), base=(), gate=GREEN_GATE, attempt=1, l
     ids=[
         "success",
         "missing",
-        "in_progress",
-        "queued",
         "failure",
         "skipped",
         "cancelled",
@@ -179,21 +173,6 @@ def run_env(monkeypatch, build_repo, tmp_path):
     return repo, summary
 
 
-@pytest.mark.parametrize(("conclusion", "code"), [("success", 0), ("failure", 1)])
-def test_verdict_exit_code_and_summary_follow_the_run(capsys, run_env, conclusion, code):
-    """#6 rule 4: exit code and step summary follow the run."""
-    repo, summary = run_env
-    page = json.dumps(
-        {
-            "total_count": 1,
-            "jobs": [{"name": "checks", "run_attempt": 1, "status": "completed", "conclusion": conclusion}],
-        }
-    )
-    assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (page, None)) == code
-    assert capsys.readouterr().out.strip().endswith("green" if code == 0 else "red")
-    assert summary.read_text().strip().endswith("green" if code == 0 else "red")
-
-
 def test_a_job_name_with_a_line_feed_prints_as_one_escaped_problem_line_in_log_and_summary(capsys, run_env):
     """#97 rule 2, cell 15 (E6): the problem line is escaped, the same in the step summary, and `verdict: red` stays a line."""
     repo, summary = run_env
@@ -224,17 +203,6 @@ def test_a_head_without_a_config_is_missing_at_the_head(capsys, run_env):
     (repo / CONFIG_PATH).unlink()
     assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: ({"jobs": []}, None)) == 2
     assert f"verdict: cannot judge - {CONFIG_PATH} at the head: {CONFIG_PATH} is missing" in capsys.readouterr().err
-
-
-def test_verdict_that_cannot_read_the_run_exits_two(capsys, run_env):
-    """#6 rule 2: a page error exits 2 with the reason."""
-    repo, _ = run_env
-
-    def refuse(url):
-        raise CannotJudge("403 (does the caller grant actions: read?)")
-
-    assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: refuse) == 2
-    assert "actions: read" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(
@@ -531,14 +499,20 @@ def test_the_github_token_never_follows_a_redirect(stub_server):
     assert other_heard == []
 
 
-def test_a_refused_jobs_page_keeps_the_verdicts_wording(stub_server):
-    """#58 rule 4: a GitHub that refuses reads as before, the URL asked and urllib's words, with the actions hint."""
-    origin, _ = stub_server(reply(403, b""))
-    with pytest.raises(CannotJudge) as refused:
+@pytest.mark.parametrize(
+    ("status", "kind", "expected"),
+    [
+        (403, CannotJudge, "cannot read {origin}/jobs: HTTP Error 403: Forbidden (does the caller grant actions: read?)"),
+        (502, verdict.GitHubServerError, "GitHub answered HTTP 502 Bad Gateway for {origin}/jobs"),
+    ],
+    ids=["#58 rule 4 and #85 cell 14: a 403 keeps the hint", "#85 cell 13: a 502 is GitHub's"],
+)
+def test_a_failed_jobs_page_is_named_by_its_status(stub_server, status, kind, expected):
+    """#58 rule 4 and #85 rule 3: a refused jobs page reads as before, with the actions hint; a 5xx names GitHub."""
+    origin, _ = stub_server(reply(status, b""))
+    with pytest.raises(CannotJudge) as failed:
         fetch_jobs(origin)
-    assert str(refused.value) == (
-        f"cannot read {origin}/jobs: HTTP Error 403: Forbidden (does the caller grant actions: read?)"
-    )
+    assert (type(failed.value), str(failed.value)) == (kind, expected.format(origin=origin))
 
 
 def test_git_output_is_decoded_as_utf_8_whatever_the_locale(build_repo):
@@ -701,3 +675,120 @@ def test_a_job_field_of_the_wrong_type_cannot_be_judged(capsys, run_env, job_ent
     captured = capsys.readouterr()
     assert captured.err.startswith("verdict: cannot judge - "), captured
     assert captured.err.count("\n") == 1, captured
+
+
+
+def running(state="in_progress", name="checks", attempt=1):
+    return job(name, attempt, state, None)
+
+
+def page(*jobs, total=None, link=None):
+    listed = [{"name": j.name, "run_attempt": j.run_attempt, "status": j.status, "conclusion": j.conclusion} for j in jobs]
+    return json.dumps({"total_count": len(listed) if total is None else total, "jobs": listed}), link
+
+
+def http_error(status, reason):
+    return urllib.error.HTTPError("u", status, reason, {}, None)
+
+
+STALE, GREEN, RED, TWO_PAGES = page(running()), page(job()), page(job(conclusion="failure")), page(job("other"), total=2, link='<n>; rel="next"')
+IN_PROGRESS, AT_2, BAD_GATEWAY = 'listed "checks" (attempt 1) as in_progress', 'listed "checks" (attempt 2) as in_progress', "answered HTTP 502 Bad Gateway"
+NOTE = "verdict: read the run's jobs {} times - GitHub first {}"
+SONAR_RED, SONAR_FAILED, CANNOT = {"sonar": "failure"}, 'gate job "sonar" result failure', "verdict: cannot judge - "
+E3 = CANNOT + 'GitHub still lists "checks" (attempt 1) as in_progress after 13 reads; the gate starts after every mandatory job, so this answer is stale: re-run the verdict (a mandatory job missing from the caller\'s needs: must join it)'
+E5 = CANNOT + "GitHub answered HTTP 502 Bad Gateway for u after 13 reads; this is GitHub's fault, not the caller's: re-run the verdict"
+E3_GONE = CANNOT + 'GitHub\'s latest answer no longer lists "checks" (attempt 2), which an earlier answer showed, after 13 reads; this answer is stale: re-run the verdict'
+B_CONFIGS = {"base": gate_config("checks", "B"), "head": gate_config("checks", "B")}
+CLASSIFIED = [
+    (http_error(502, "Bad Gateway"), verdict.GitHubServerError, "GitHub answered HTTP 502 Bad Gateway for u"),
+    (http_error(500, "Internal Server Error"), verdict.GitHubServerError, "GitHub answered HTTP 500 Internal Server Error for u"),
+    (http_error(403, "Forbidden"), CannotJudge, "cannot read u: HTTP Error 403: Forbidden (does the caller grant actions: read?)"),
+    (http_error(404, "Not Found"), CannotJudge, "cannot read u: HTTP Error 404: Not Found (does the caller grant actions: read?)"),
+    (http_error(401, "Unauthorized"), CannotJudge, "cannot read u: HTTP Error 401: Unauthorized"),
+    (http_error(302, "Found"), CannotJudge, "cannot read u: HTTP Error 302: Found"),
+    (http.client.IncompleteRead(b"abcd", 96), CannotJudge, "cannot read u: IncompleteRead(4 bytes read, 96 more expected)"),
+    (TimeoutError(), CannotJudge, "GitHub did not answer u within 30s; re-run the verdict"),
+    (urllib.error.URLError(TimeoutError()), CannotJudge, "GitHub did not answer u within 30s; re-run the verdict"),
+    (urllib.error.URLError(ConnectionRefusedError(111, "refused")), CannotJudge, "could not reach GitHub at u: <urlopen error [Errno 111] refused>; re-run the verdict"),
+]
+CLASSIFIED_IDS = ["502", "500", "403", "404", "401", "302", "truncated", "read timeout", "connect timeout", "refused"]
+SERVER_ERROR = verdict.unreadable_jobs("u", CLASSIFIED[0][0])
+
+
+@pytest.mark.parametrize(("error", "kind", "line"), CLASSIFIED, ids=CLASSIFIED_IDS)
+def test_a_failed_jobs_read_names_its_cause(error, kind, line):
+    """#85 rule 3, cells 13-16 (E5, E6): a 5xx is GitHub's, only 403 and 404 carry the actions hint, a timeout says re-run."""
+    classified = verdict.unreadable_jobs("u", error)
+    assert (type(classified), str(classified)) == (kind, line)
+
+
+def test_an_unsettled_job_prints_no_failure_and_is_never_green():
+    """#85 rule 1 (E1): a judged job GitHub lists as running is unsettled, adds no failure line, and is never green."""
+    result = judge(Side(GateSettings(("checks",), LegacyMode.REPORT), None), None, [running()], GREEN_GATE, 1)
+    assert (result.unsettled, result.blocking, result.green) == ((verdict.Unsettled("checks", 1, "in_progress"),), (), False)
+
+
+@pytest.fixture
+def reread(capsys, monkeypatch, run_env, pull_request):
+    """#85 rule 6: the verdict's door over a scripted fetcher, one answer per page read, and a recording sleep."""
+    (repo, summary), (_, commit_base) = run_env, pull_request
+
+    def run(*answers, needs=(), attempt=1, base=None, head='[gate]\nmandatory_jobs = ["checks"]\n'):
+        if base:
+            commit_base(None, base)
+        put(repo / CONFIG_PATH, head)
+        monkeypatch.setenv("GATE_NEEDS", json.dumps({name: {"result": result} for name, result in {**GREEN_GATE, **dict(needs)}.items()}))
+        monkeypatch.setenv("GITHUB_RUN_ATTEMPT", str(attempt))
+        script, slept = iter(answers), []
+
+        def fetch(url):
+            answer = next(script)
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+
+        code = cli.main(["verdict", str(repo)], fetcher_for=lambda token: fetch, sleep=slept.append)
+        out, err = capsys.readouterr()
+        assert (next(script, None), (out if code == 2 else err), summary.read_text()) == (None, "", out + err)
+        return code, (out + err).splitlines(), sum(slept)
+
+    return run
+
+
+@pytest.mark.parametrize(
+    ("answers", "options", "code", "expected", "slept"),
+    [
+        ((GREEN,), {}, 0, ["verdict: green"], 0),
+        ((STALE, GREEN), {}, 0, [NOTE.format(2, IN_PROGRESS), "verdict: green"], 10),
+        ((page(running("queued")), STALE, GREEN), {}, 0, [NOTE.format(3, 'listed "checks" (attempt 1) as queued'), "verdict: green"], 20),
+        ((STALE, RED), {}, 1, [NOTE.format(2, IN_PROGRESS), 'mandatory job "checks" (attempt 1) concluded failure', "verdict: red"], 10),
+        *(((page(running(state)), GREEN), {}, 0, [NOTE.format(2, f'listed "checks" (attempt 1) as {state}'), "verdict: green"], 10) for state in ("waiting", "pending", "requested")),
+        ((page(running(name="quality / verdict"), job()),), {}, 0, ["verdict: green"], 0),
+        ((page(job(), running(name="B")),), {**B_CONFIGS, "head": gate_config("checks", declared=(declaration(B_REMOVED),))}, 1, [DECLARED + B_REMOVED, ONLY_DECLARED], 0),
+        ((page(job(), running("queued", "B")), page(job(), job("B"))), B_CONFIGS, 0, [NOTE.format(2, 'listed "B" (attempt 1) as queued'), "verdict: green"], 10),
+        ((page(job(), running(attempt=2)), page(job(), job(attempt=2), running(attempt=3))), {"attempt": 2}, 0, [NOTE.format(2, AT_2), "verdict: green"], 10),
+        ((page(job(), running()), page(job(), job())), {}, 0, [NOTE.format(2, IN_PROGRESS), "verdict: green"], 10),
+        ((SERVER_ERROR, GREEN), {}, 0, [NOTE.format(2, BAD_GATEWAY), "verdict: green"], 10),
+        ((STALE, GREEN), {"needs": SONAR_RED}, 1, [NOTE.format(2, IN_PROGRESS), SONAR_FAILED, "verdict: red"], 10),
+        ((page(job(), running(attempt=2)), GREEN, page(job(), job(attempt=2, conclusion="failure"))), {"attempt": 2}, 1, [NOTE.format(3, AT_2), 'mandatory job "checks" (attempt 2) concluded failure', "verdict: red"], 20),
+        ((TWO_PAGES, SERVER_ERROR, TWO_PAGES, page(job(), total=2)), {}, 0, [NOTE.format(2, BAD_GATEWAY), "verdict: green"], 10),
+        ((STALE,) * 13, {}, 2, [NOTE.format(13, IN_PROGRESS), E3], 120),
+        ((SERVER_ERROR,) * 13, {}, 2, [NOTE.format(13, BAD_GATEWAY), E5], 120),
+        ((STALE,) * 13, {"needs": SONAR_RED}, 2, [NOTE.format(13, IN_PROGRESS), SONAR_FAILED, E3], 120),
+        ((STALE, *(SERVER_ERROR,) * 12), {}, 2, [NOTE.format(13, IN_PROGRESS), E5], 120),
+        ((STALE, *(SERVER_ERROR,) * 12), {"needs": SONAR_RED}, 2, [NOTE.format(13, IN_PROGRESS), SONAR_FAILED, E5], 120),
+        ((page(running(attempt=2)), *(page(),) * 12), {"attempt": 2}, 2, [NOTE.format(13, AT_2), E3_GONE], 120),
+        ((STALE, verdict.unreadable_jobs("u", CLASSIFIED[2][0])), {}, 2, [NOTE.format(2, IN_PROGRESS), CANNOT + CLASSIFIED[2][2]], 10),
+        ((STALE, ('{"jobs": []}', None)), {}, 2, [NOTE.format(2, IN_PROGRESS), f"{CANNOT}{verdict.JOBS_URL.format(repo='o/r', run_id=1)} did not return the expected jobs page: KeyError('total_count')"], 10),
+        ((STALE, page(job(), total=2)), {}, 2, [NOTE.format(2, IN_PROGRESS), CANNOT + "read 1 jobs but the run has 2"], 10),
+        *(((verdict.unreadable_jobs("u", error),), {}, 2, [CANNOT + line], 0) for error, kind, line in CLASSIFIED[2:]),
+    ],
+    ids=["#6 rule 4 and cell 1", "cell 2", "cell 3", "#6 rule 4 and cell 4", "cell 6 waiting", "cell 6 pending", "cell 6 requested", "cell 7",
+         "cell 8", "cell 9", "cell 10", "cell 11", "cell 12", "cell 18", "cell 20", "cell 25", "cell 5", "cell 13", "cell 21", "cell 22",
+         "cell 22 with sonar red", "cell 20 run out", "cell 23", "cell 17", "cell 24", *(f"cells 14-16 {kind}" for kind in CLASSIFIED_IDS[2:])],
+)
+def test_the_verdict_judges_the_first_settled_read_and_never_lets_a_red_reason_go(reread, answers, options, code, expected, slept):
+    """#85 rules 1, 2 and 4 (E1-E6): a stale answer or a 5xx is re-read every 10 s, at most 12 times; the first settled read
+    decides after E4's note; out of reads, or on any other failure, exit 2 keeps the last judged read's blocking lines;
+    a red read is never green and an unsettled job never prints a failure line."""
+    assert reread(*answers, **options) == (code, expected, slept)
