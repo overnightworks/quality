@@ -46,7 +46,7 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   [lizard](https://github.com/terryyin/lizard): a file from 800 lines, a Python function from 60 lines and a Python
   function with a CCN above 15 are debt, counted apart for production and tests (a path under `test/` or `tests/`;
   Python also `conftest.py`, `test_*.py`, `*_test.py`; TypeScript and JavaScript also `__tests__/`, `*.test.*` and
-  `*.spec.*`, as the test runners find them). A minified or generated file is counted by its lines like any other.
+  `*.spec.*`). A minified or generated file is counted by its lines like any other.
   Functions of the other languages are not measured: lizard misplaces their boundaries
   ([terryyin/lizard#521](https://github.com/terryyin/lizard/issues/521)). Functions are named by their qualified
   symbol (`Class.method`); a second one of the same name, such as a property setter, is `Class.method#2`. Without
@@ -230,7 +230,7 @@ entries, a path that is not a repository, or a gitleaks run without a report.
 
 `quality scoreboard [PATH]` prints one markdown table of the size of every repository `quality/fleet.toml` lists
 (`public = [...]` and `private = [...]`, each a list of URLs, each listed once), under a heading with the date, the
-quality version and what is Python's only (`functions and CCN: Python only`). With `GITHUB_STEP_SUMMARY` set, the same text is
+quality version and that functions and CCN are measured for Python only. With `GITHUB_STEP_SUMMARY` set, the same text is
 appended there. The fleet list lives once, in `quality/fleet.toml`; `.github/workflows/scoreboard.yml` runs it every
 Monday at 05:17 UTC and on dispatch; the table stands in that run's summary. The run only reports: it writes to no repository and needs no secret. A missing, malformed or
 duplicating `quality/fleet.toml` is `cannot judge`, exit `2`.
@@ -242,7 +242,7 @@ duplicating `quality/fleet.toml` is `cannot judge`, exit `2`.
   used; any other URL is `cannot judge`.
 - Lines are the physical lines of the tracked files of the `size` rule's languages, the count its 800-line limit uses
   (blank and comment lines included); `Languages` lists each with its lines, production and tests together, largest
-  first. Production versus test is the `size` rule's file-name rule, so `scripts/test_inventory.py` counts as test.
+  first, ties by name, and `—` for a row with no measured file. Production versus test is the `size` rule's file-name rule, so `scripts/test_inventory.py` counts as test.
   `test:prod` is test lines divided by production lines with two decimals, `—` without production lines.
   The debt columns count files from 800 lines, and Python's functions from 60 lines and with a CCN above 15.
 - `Clone pairs prod / test` counts the `clone` rule's pairs (two near-identical functions in two files, at 40 tokens and

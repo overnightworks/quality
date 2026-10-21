@@ -88,7 +88,7 @@ class Language(Enum):
 
     def is_test_file(self, path: PurePosixPath) -> bool:
         """The directory rule is shared; the file name rule is the language's own: Python's pytest names, the
-        TypeScript and JavaScript runners' `*.test.*`, `*.spec.*` and `__tests__/`, none for Svelte and Vue."""
+        TypeScript and JavaScript `*.test.*`, `*.spec.*` and `__tests__/`, none for Svelte and Vue."""
         runner = self in {Language.TYPESCRIPT, Language.JAVASCRIPT}
         if (RUNNER_TEST_DIRECTORIES if runner else TEST_DIRECTORIES) & set(path.parts[:-1]):
             return True
@@ -160,11 +160,10 @@ def language_of(name: str) -> Language | None:
 
 
 def area_of(path: str) -> Area:
-    """The area of a path in a table language; any other path has only the directory rule."""
+    """The area of a path in a table language."""
     posix = PurePosixPath(path)
     language = language_of(path)
-    is_test = language.is_test_file(posix) if language else bool(TEST_DIRECTORIES & set(posix.parts[:-1]))
-    return Area.TESTS if is_test else Area.PRODUCTION
+    return Area.TESTS if language and language.is_test_file(posix) else Area.PRODUCTION
 
 
 @dataclass(frozen=True)

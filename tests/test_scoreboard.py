@@ -190,7 +190,7 @@ def test_untracked_files_are_not_counted(scoreboard, public):
     ids=["tests only", "no Python"],
 )
 def test_without_production_lines_the_ratio_is_a_dash(scoreboard, public, files, cells):
-    """Cells 6 and 7, rule 2: no production lines gives "—"; a repository without Python is a row of zeros."""
+    """Cells 6 and 7, rule 2: no production lines gives "—"; a repository without measured files is a row of zeros."""
     code, output = scoreboard(public("sparse", files))
     assert code == 0, output
     assert row(output, "sparse")[3:8] == cells
