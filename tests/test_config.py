@@ -2,17 +2,21 @@ import datetime
 import re
 
 import pytest
+from conftest import allowance_config
 
 from quality import cli
 from quality.config import (
     CONFIG_PATH,
+    AdvisoryAllowance,
     Allowance,
     ConfigError,
     Declaration,
     LegacyMode,
+    load_advisory_allowances,
     load_gate_settings,
     load_secret_allowances,
     load_staged_secret_allowances,
+    read_advisory_allowances,
     read_gate_settings,
     read_secret_allowances,
 )
@@ -199,6 +203,29 @@ def test_one_read_of_the_config_gives_the_mandatory_jobs_and_the_legacy_mode(tmp
     assert (settings.mandatory_jobs, settings.legacy) == (("checks",), LegacyMode.FAIL)
 
 
+QWEN_ALLOWANCE = AdvisoryAllowance(
+    "GHSA-462x-pgg6-55fp", "speech/providers/qwen/uv.lock", datetime.date(2027, 1, 31), datetime.date(2026, 10, 21),
+    "overnightworks/agent-presentator#371", "gradio caps pillow<13; no image input",
+)
+
+
+def test_an_advisory_allowance_is_read_by_every_loader_that_reads_the_whole_config(tmp_path):
+    """#116 E1, E3: each [[advisories.allow]] entry is one allowance with its id, lock, until, date, item and reason,
+    read alike by the gate and by hygiene."""
+    text = f'[gate]\nmandatory_jobs = ["checks"]\n{allowance_config()}'
+    (tmp_path / "quality").mkdir()
+    (tmp_path / CONFIG_PATH).write_text(text)
+    assert load_gate_settings(text).advisory_allowances == (QWEN_ALLOWANCE,)
+    assert read_advisory_allowances(tmp_path) == load_advisory_allowances(text) == (QWEN_ALLOWANCE,)
+    assert load_secret_allowances(text) == {}
+
+
+@pytest.mark.parametrize("text", [None, '[gate]\nmandatory_jobs = ["checks"]'], ids=["no config", "no allowance"])
+def test_a_config_without_advisory_allowances_allows_no_advisory(text):
+    """#116 E1: no config or no [[advisories.allow]] entry allows nothing."""
+    assert load_advisory_allowances(text) == ()
+
+
 SONGMAKER_DECLARATION = (
     '[gate]\nmandatory_jobs = ["checks"]\n\n[[gate.loosened]]\n'
     "what = 'mandatory job \"Acceptance evidence (integration)\" removed'\n"
@@ -238,8 +265,13 @@ TEXT_DATE_DECLARATION = SONGMAKER_DECLARATION.replace("2026-10-20", '"20.10.2026
         (SCAN_STAGED, SONGMAKER_DECLARATION, 0, "scan-staged: clean"),
         (HYGIENE, TEXT_DATE_DECLARATION, 2, "hygiene: secret cannot judge - quality/config.toml [[gate.loosened]] entry"),
         (SCAN_STAGED, TEXT_DATE_DECLARATION, 0, "scan-staged: clean"),
+        (SCAN_STAGED, allowance_config(), 0, "scan-staged: clean"),
+        (SCAN_STAGED, "[advisories]\nextra = 1\n" + allowance_config(until="2027-01-31"), 0, "scan-staged: clean"),
     ],
-    ids=["hygiene --engines", "scan-staged", "hygiene --engines, text date", "scan-staged, text date"],
+    ids=[
+        "hygiene --engines", "scan-staged", "hygiene --engines, text date", "scan-staged, text date",
+        "#116 cell 13 scan-staged, an allowance", "#116 cell 13 scan-staged, a malformed allowance",
+    ],
 )
 def test_hygiene_judges_a_declaration_as_the_verdict_does_and_the_commit_hook_reads_only_secrets(
     build_repo, clean_engines, capsys, command, config, code, line
@@ -252,3 +284,68 @@ def test_hygiene_judges_a_declaration_as_the_verdict_does_and_the_commit_hook_re
     output = captured.out + captured.err
     assert "unknown key" not in output
     assert line in output, output
+
+
+ALLOWANCE_EXAMPLE_LINE = 'lock = "speech/providers/qwen/uv.lock"'
+MALFORMED_SECRET = f"[secrets]\nallow = [{allow_entry(reason='')}]\n"
+
+
+@pytest.mark.parametrize(
+    ("entry", "named"),
+    [
+        (allowance_config(reason=None), "exactly an id, a lock, an until, a date, an item and a reason"),
+        (allowance_config() + "extra = 1\n", "'extra': 1"),
+        (allowance_config(identifier=""), "'id': ''"),
+        (allowance_config(identifier="  "), "'id': '  '"),
+        (allowance_config(identifier="GHSA-a\nb"), "'id': 'GHSA-a\\nb'"),
+        (allowance_config(lock=""), "'lock': ''"),
+        (allowance_config(lock="uv.lock\rx"), "'lock': 'uv.lock\\rx'"),
+        (allowance_config(reason=""), "'reason': ''"),
+        (allowance_config(reason="two\nlines"), "'reason': 'two\\nlines'"),
+        (allowance_config(item="siehe Chat"), "'item': 'siehe Chat'"),
+        (allowance_config(until="2027-01-31"), "'until': '2027-01-31'"),
+        (allowance_config(until=datetime.datetime(2027, 1, 31)), "'until': datetime.datetime(2027, 1, 31, 0, 0)"),
+        (allowance_config(date="2026-10-21"), "'date': '2026-10-21'"),
+        (allowance_config(date=datetime.datetime(2026, 10, 21, 10, 0)), "'date': datetime.datetime(2026, 10, 21, 10, 0)"),
+        (allowance_config() + allowance_config(reason="again"), "twice"),
+        ("[advisories]\nignore = []\n", "unknown key(s) ['ignore']"),
+        ('[advisories]\nallow = "x"\n', "[[advisories.allow]] as an array of tables"),
+        ("advisories = 1\n", "[advisories] as a value"),
+    ],
+    ids=[
+        "missing key", "extra key", "empty id", "blank id", "multi-line id", "empty lock", "multi-line lock",
+        "empty reason", "multi-line reason", "item siehe Chat", "text until", "datetime until", "text date",
+        "datetime date", "two entries for one id and lock", "unknown key in advisories", "allow not a list",
+        "advisories not a table",
+    ],
+)
+def test_a_malformed_advisory_allowance_cannot_be_judged_where_the_whole_config_is_read(
+    capsys, run_env, clean_engines, entry, named
+):
+    """#116 cell 12: a malformed [advisories] entry is exit 2 in the verdict and in the secret and advisory rules of
+    hygiene --engines, one line each naming the entry."""
+    repo, _ = run_env
+    (repo / CONFIG_PATH).write_text(entry + '[gate]\nmandatory_jobs = ["checks"]\n')
+    assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: ("{}", None)) == 2
+    verdict = capsys.readouterr().err.splitlines()
+    assert (len(verdict), named in verdict[0]) == (1, True), verdict
+    assert cli.main(["hygiene", "--engines", str(clean_engines), str(repo)]) == 2
+    refusals = [line for line in capsys.readouterr().err.splitlines() if named in line]
+    rules = [line.split(" - ")[0] for line in refusals]
+    assert rules == ["hygiene: secret cannot judge", "hygiene: advisory cannot judge"], refusals
+
+
+@pytest.mark.parametrize("entry", [allowance_config(reason=None), allowance_config(until="2027-01-31")])
+def test_a_malformed_advisory_allowance_shows_the_example(entry):
+    """#116 cell 12: the refusal of an [[advisories.allow]] entry shows how to write one."""
+    with pytest.raises(ConfigError, match=re.escape(ALLOWANCE_EXAMPLE_LINE)):
+        load_advisory_allowances(entry)
+
+
+def test_the_verdict_refuses_a_malformed_secret_allowance_as_hygiene_does(capsys, run_env):
+    """#116 cell 12 (the plan review's consequence): one validator reads the whole config, so the verdict refuses a
+    malformed [secrets] entry too."""
+    repo, _ = run_env
+    (repo / CONFIG_PATH).write_text('[gate]\nmandatory_jobs = ["checks"]\n' + MALFORMED_SECRET)
+    assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: ("{}", None)) == 2
+    assert "[secrets] allow entry" in capsys.readouterr().err

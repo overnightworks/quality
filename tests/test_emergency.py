@@ -2,7 +2,7 @@ import json
 from datetime import UTC, datetime
 
 import pytest
-from conftest import assert_every_line_starts_with_the_door
+from conftest import allowance_config, assert_every_line_starts_with_the_door
 
 from quality import cli
 from quality.config import CONFIG_PATH
@@ -26,6 +26,8 @@ TWO_JOBS = '[gate]\nmandatory_jobs = ["checks", "B"]\n'
 B_REMOVED = 'mandatory job "B" removed'
 SONAR_GREEN = {"quality / sonar": "success", "quality / verdict": "failure"}
 SHOWN = "declared loosening (overnightworks/songmaker#1345 of 2026-10-20): "
+ALLOWED_SHOWN = "declared loosening (overnightworks/agent-presentator#371 of 2026-10-21): advisory allowance adds "
+ADDS_QWEN = "advisory allowance adds GHSA-462x-pgg6-55fp in speech/providers/qwen/uv.lock until 2027-01-31"
 
 
 def declaring(what, reason="ruled"):
@@ -300,6 +302,10 @@ def test_anything_but_ja_changes_nothing(typed, capsys):
             {"checks": SONAR_GREEN, "base_config": TWO_JOBS, "head_config": ONE_JOB + declaring(B_REMOVED), "merge_config": ONE_JOB},
             {}, f"loosened (undeclared): {B_REMOVED}",
         ),
+        (
+            {"checks": SONAR_GREEN, "base_config": ONE_JOB, "head_config": ONE_JOB + declaring(ADDS_QWEN) + allowance_config(reason="no image input")},
+            {}, f"declared loosening matches nothing: {ADDS_QWEN}",
+        ),
         ({"head_config": GATE_CONFIG.replace("fail", "report")}, {}, "loosened (undeclared): legacy fail"),
         ({"head_config": REPORT_CONFIG, "base_config": REPORT_CONFIG}, {}, "legacy = report at the pull request's current merge commit"),
         ({"head_config": GATE_CONFIG, "base_config": REPORT_CONFIG, "merge_config": REPORT_CONFIG}, {}, "legacy = report at the pull request's current merge commit"),
@@ -317,6 +323,7 @@ def test_anything_but_ja_changes_nothing(typed, capsys):
         "cell 18 nothing red", "cell 18 verdict running", "cell 17 sonar green, nothing re-derived", "cell 19 sonar timed out",
         "cell 19 sonar cancelled", "cell 28 no sonar run", "verdict green", "cell 15 undeclared removal",
         "cell 16 a stale declaration", "cell 3 the removed job still runs red", "cell 22 only the head sha declares",
+        "#116 cell 24 a gate.loosened entry for an allowance",
         "loosened legacy", "report on both sides", "head fail but merge commit report", "report and Sonar unreachable", "no config at either sha", "report mode and a new finding", "removed mandatory job",
         "closed", "no legacy", "legacy unknown", "stale analysis",
     ],
@@ -555,14 +562,28 @@ def test_a_malformed_baseline_at_the_merge_commit_cannot_be_judged(capsys):
 
 
 @pytest.mark.parametrize(
-    ("base_config", "merge_config", "what"),
-    [(TWO_JOBS, ONE_JOB + declaring(B_REMOVED), B_REMOVED), (GATE_CONFIG, REPORT_CONFIG + declaring("legacy fail → report"),
-      "legacy fail → report")],
-    ids=["cell 14 songmaker's removed job", "cell 27 a declared legacy fail → report"],
+    ("base_config", "merge_config", "declared"),
+    [
+        (TWO_JOBS, ONE_JOB + declaring(B_REMOVED), [f"{SHOWN}{B_REMOVED} - reason: ruled"]),
+        (GATE_CONFIG, REPORT_CONFIG + declaring("legacy fail → report"),
+         [f"{SHOWN}legacy fail → report - reason: ruled"]),
+        (ONE_JOB, ONE_JOB + allowance_config(reason="no image input"),
+         [f"{ALLOWED_SHOWN}GHSA-462x-pgg6-55fp in speech/providers/qwen/uv.lock until 2027-01-31 - reason: no image input"]),
+        (TWO_JOBS, ONE_JOB + declaring(B_REMOVED) + allowance_config(reason="no image input"),
+         [f"{SHOWN}{B_REMOVED} - reason: ruled",
+          f"{ALLOWED_SHOWN}GHSA-462x-pgg6-55fp in speech/providers/qwen/uv.lock until 2027-01-31 - reason: no image input"]),
+    ],
+    ids=[
+        "cell 14 songmaker's removed job", "cell 27 a declared legacy fail → report", "#116 cell 23 an allowance",
+        "#116 cell 28 an allowance next to a declared removal",
+    ],
 )
-def test_a_declared_loosening_merges_through_the_door_without_sonar(capsys, monkeypatch, base_config, merge_config, what):
-    """#103 rule 4 (E6, E7), cells 14 and 27: with Sonar green and only declared loosenings at the merge commit, the
-    door shows each declaration, then asks, merges with the head pinned, and logs it, with no SonarCloud request."""
+def test_a_declared_loosening_merges_through_the_door_without_sonar(
+    capsys, monkeypatch, base_config, merge_config, declared
+):
+    """#103 rule 4 (E6, E7), cells 14 and 27, and #116 R2, E7: with Sonar green and only declared loosenings at the
+    merge commit, an allowance's own among them, the door shows each declaration, then asks, merges with the head
+    pinned, and logs it, with no SonarCloud request."""
     monkeypatch.delenv("SONAR_TOKEN", raising=False)
     gh, transport, shown = FakeGh(checks=SONAR_GREEN, base_config=base_config, merge_config=merge_config), recording(sonar()), []
 
@@ -572,9 +593,22 @@ def test_a_declared_loosening_merges_through_the_door_without_sonar(capsys, monk
 
     code = cli.main(["emergency-merge", REPO, "7"], gh=gh, transport=transport, ask=ask, is_terminal=lambda: True)
     assert (code, transport.sent, gh.sequence) == (0, [], ["gate false", "merge", "gate true", "comment"])
-    assert shown[0].splitlines() == [f"{REPO} #7 head {SHA}: 1 declared loosening(s)", f"{SHOWN}{what} - reason: ruled"]
+    assert shown[0].splitlines() == [f"{REPO} #7 head {SHA}: {len(declared)} declared loosening(s)", *declared]
     assert gh.merge_calls == [("pr", "merge", "7", "--repo", REPO, "--merge", "--match-head-commit", SHA)]
-    assert f"{SHOWN}{what} - reason: ruled; quality_gate off → merge → on." in gh.comments[0]
+    assert f"{'; '.join(declared)}; quality_gate off → merge → on." in gh.comments[0]
+
+
+def test_the_door_names_each_of_79_allowances_within_one_comment(capsys):
+    """#116 cell 29: presentator#372's 79 allowances are 79 door lines, and the log comment stays within GitHub's
+    65,536 characters."""
+    allowances = "".join(
+        allowance_config(f"GHSA-{number:04d}-pgg6-55fp", f"speech/providers/provider-{number}/uv.lock", reason="x" * 60)
+        for number in range(79)
+    )
+    gh = FakeGh(checks=SONAR_GREEN, base_config=ONE_JOB, merge_config=ONE_JOB + allowances)
+    assert drive(gh)[0] == 0
+    shown = [line for line in capsys.readouterr().out.splitlines() if line.startswith(ALLOWED_SHOWN)]
+    assert (len(shown), len(gh.comments[0]) < 65_536) == (79, True)
 
 
 def test_legacy_findings_and_a_declared_loosening_merge_in_one_run(capsys):
@@ -600,8 +634,13 @@ def test_a_red_sonar_run_next_to_a_green_one_takes_the_legacy_path(capsys):
         (TWO_JOBS, ONE_JOB + declaring(B_REMOVED, reason="ok\rforged"), 2, "needs a non-empty one-line reason"),
         (TWO_JOBS, ONE_JOB + declaring(B_REMOVED, reason="ok\nforged"), 2, "needs a non-empty one-line reason"),
         (ONE_JOB, '[gate]\nmandatory_jobs = ["checks", "a\\n::error::b"]\n', 1, 'mandatory job "a\\x0a::error::b" is missing'),
+        (ONE_JOB, ONE_JOB + allowance_config("GHSA-\x1b[8m", "a\tb/uv.lock", reason="ok\x1b[8m versteckt"), 0,
+         f"{ALLOWED_SHOWN}GHSA-\\x1b[8m in a\\x09b/uv.lock until 2027-01-31 - reason: ok\\x1b[8m versteckt"),
     ],
-    ids=["ESC in the reason", "carriage return in the reason", "line feed in the reason", "line feed in a refused job"],
+    ids=[
+        "ESC in the reason", "carriage return in the reason", "line feed in the reason", "line feed in a refused job",
+        "#116 cell 25 control characters in an allowance's id, lock and reason",
+    ],
 )
 def test_every_line_the_door_prints_is_escaped(capsys, base_config, merge_config, code, expected):
     """#103 rule 4 (E9), cell 23: no repository text in a declaration or a refusal can hide, split or forge a line."""

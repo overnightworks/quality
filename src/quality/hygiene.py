@@ -3,6 +3,7 @@ import re
 import subprocess
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import Enum
 from functools import partial
 from pathlib import Path, PurePosixPath
@@ -10,7 +11,7 @@ from pathlib import Path, PurePosixPath
 import yaml
 
 from quality import advisories, architecture, clones, engines, ratchet, repository
-from quality.config import Allowance, ConfigError, read_secret_allowances
+from quality.config import Allowance, ConfigError, read_advisory_allowances, read_secret_allowances
 from quality.report import Finding, shell_word
 
 ENV_FILE = "env-file"
@@ -357,10 +358,15 @@ def check_workflows(root: Path, engine_dir: Path, rule: str, tracked: list[str])
         raise CannotJudge(str(error)) from error
 
 
-def check_advisories(root: Path, engine_dir: Path, tracked: list[str]) -> list[Finding]:
+def check_advisories(root: Path, engine_dir: Path, tracked: list[str]) -> advisories.AdvisoryScan:
+    """The allowances' `until` is judged against today's date in UTC, read here, once."""
+    try:
+        allowances = read_advisory_allowances(root)
+    except ConfigError as error:
+        raise CannotJudge(str(error)) from error
     locks = {name: _judged(repository.resolve_file, root, name) for name in _on_disk(root, [n for n in tracked if advisories.is_lock(n)])}
     try:
-        return advisories.scan(engine_dir, engines.read_pins(), locks, root)
+        return advisories.scan(engine_dir, engines.read_pins(), locks, root, allowances, datetime.now(UTC).date())
     except engines.EngineError as error:
         raise CannotJudge(str(error)) from error
 
@@ -452,9 +458,11 @@ def run_hygiene(root: Path, engine_dir: Path | None = None) -> HygieneResult:
     secrets = _attempt(lambda: check_secrets(root, engine_dir))
     verdicts.append(_verdict(engines.LEAK_RULE, secrets if isinstance(secrets, CannotJudge) else secrets.findings))
     verdicts += [_verdict(rule, _attempt(partial(check_workflows, root, engine_dir, rule, tracked))) for rule in WORKFLOW_RULE_IDS]
-    verdicts.append(_verdict(advisories.RULE, _attempt(partial(check_advisories, root, engine_dir, tracked))))
+    advisory = _attempt(partial(check_advisories, root, engine_dir, tracked))
+    verdicts.append(_verdict(advisories.RULE, advisory if isinstance(advisory, CannotJudge) else advisory.findings))
+    allowed_advisories = () if isinstance(advisory, CannotJudge) else advisory.report()
     allowed, unused = ([], {}) if isinstance(secrets, CannotJudge) else (secrets.allowed, secrets.unused_allowances)
-    return HygieneResult(tuple(verdicts), reports, allowed, unused)
+    return HygieneResult(tuple(verdicts), (*reports, *allowed_advisories), allowed, unused)
 
 
 def _reports(
