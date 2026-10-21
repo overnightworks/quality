@@ -1,10 +1,14 @@
+import datetime
 import re
 
 import pytest
 
+from quality import cli
 from quality.config import (
+    CONFIG_PATH,
     Allowance,
     ConfigError,
+    Declaration,
     LegacyMode,
     load_gate_settings,
     load_secret_allowances,
@@ -193,3 +197,58 @@ def test_one_read_of_the_config_gives_the_mandatory_jobs_and_the_legacy_mode(tmp
     (tmp_path / "quality" / "config.toml").write_text('[gate]\nmandatory_jobs = ["checks"]\nlegacy = "fail"\n')
     settings = read_gate_settings(tmp_path)
     assert (settings.mandatory_jobs, settings.legacy) == (("checks",), LegacyMode.FAIL)
+
+
+SONGMAKER_DECLARATION = (
+    '[gate]\nmandatory_jobs = ["checks"]\n\n[[gate.loosened]]\n'
+    "what = 'mandatory job \"Acceptance evidence (integration)\" removed'\n"
+    'item = "overnightworks/songmaker#1345"\ndate = 2026-10-20\n'
+    'reason = "the operator ruled the requirement shelf machinery out"\n'
+)
+
+
+def test_a_declared_loosening_is_read_with_its_ruling(tmp_path):
+    """#103 rule 1 (E1): each [[gate.loosened]] entry is one declaration with its what, item, date and reason."""
+    (tmp_path / "quality").mkdir()
+    (tmp_path / CONFIG_PATH).write_text(SONGMAKER_DECLARATION)
+    assert read_gate_settings(tmp_path).loosened == (
+        Declaration(
+            'mandatory job "Acceptance evidence (integration)" removed',
+            "overnightworks/songmaker#1345",
+            datetime.date(2026, 10, 20),
+            "the operator ruled the requirement shelf machinery out",
+        ),
+    )
+
+
+def test_a_config_without_declarations_declares_nothing():
+    """#103 rule 1: a config with no [[gate.loosened]] entry declares no loosening."""
+    assert load_gate_settings('[gate]\nmandatory_jobs = ["checks"]').loosened == ()
+
+
+HYGIENE = ["hygiene", "--engines", "{engines}", "{repo}"]
+SCAN_STAGED = ["scan-staged", "{repo}", "--engines", "{engines}"]
+TEXT_DATE_DECLARATION = SONGMAKER_DECLARATION.replace("2026-10-20", '"20.10.2026"')
+
+
+@pytest.mark.parametrize(
+    ("command", "config", "code", "line"),
+    [
+        (HYGIENE, SONGMAKER_DECLARATION, 0, "hygiene: clean ("),
+        (SCAN_STAGED, SONGMAKER_DECLARATION, 0, "scan-staged: clean"),
+        (HYGIENE, TEXT_DATE_DECLARATION, 2, "hygiene: secret cannot judge - quality/config.toml [[gate.loosened]] entry"),
+        (SCAN_STAGED, TEXT_DATE_DECLARATION, 0, "scan-staged: clean"),
+    ],
+    ids=["hygiene --engines", "scan-staged", "hygiene --engines, text date", "scan-staged, text date"],
+)
+def test_hygiene_judges_a_declaration_as_the_verdict_does_and_the_commit_hook_reads_only_secrets(
+    build_repo, clean_engines, capsys, command, config, code, line
+):
+    """#103 rule 1, cells 11 and 12: a [[gate.loosened]] entry is no unknown key for hygiene or the commit hook; a
+    malformed one is exit 2 under hygiene, as in the verdict, and the commit hook never reads it."""
+    repo = build_repo({CONFIG_PATH: config})
+    assert cli.main([part.format(repo=repo, engines=clean_engines) for part in command]) == code
+    captured = capsys.readouterr()
+    output = captured.out + captured.err
+    assert "unknown key" not in output
+    assert line in output, output

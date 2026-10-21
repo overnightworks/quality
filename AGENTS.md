@@ -12,14 +12,15 @@ Door commands:
   it downloads itself).
 - `quality baseline write [PATH]` (`ratchet.py`): writes the measured size debt to `quality/baseline.toml`,
   naming each entry it raises or adds.
-- `quality verdict [PATH]` (`verdict.py`): judges the mandatory jobs of the running workflow run and, on a pull request, holds the head's config and size baseline against the base commit's (a baseline only falls); the fail-closed `quality / verdict`.
+- `quality verdict [PATH]` (`verdict.py`): judges the mandatory jobs of the running workflow run and, on a pull request, holds the head's config and size baseline against the base commit's (a baseline only falls; a loosening stays red, labelled declared when the head adds its `[[gate.loosened]]` entry); the fail-closed `quality / verdict`.
 - `quality scoreboard [PATH]` (`scoreboard.py`): the fleet's Python size in one markdown table, from anonymous shallow
   clones; a private repository is never measured. The fleet list is `quality/fleet.toml` (`public` and `private`).
 - `quality scan-staged [PATH] --engines DIR` (`staged.py`): secret scan of the staged change.
 - `quality engines install|verify DIR` (`engines.py`): the pinned engines (`engines.toml`; `format = "binary"` for a bare executable).
 - `quality sonar preflight [PATH]` and `quality sonar findings` (`sonar.py`): HTTP goes through an injected
   transport, polling through an injected sleep, so tests need no network.
-- `quality emergency-merge <owner/repo> <pr>` (`emergency.py`): the operator's door, it needs a terminal on stdin.
+- `quality emergency-merge <owner/repo> <pr>` (`emergency.py`): the operator's door for legacy findings and declared
+  loosenings, it needs a terminal on stdin and prints only through its injected `say`.
 
 `.github/workflows/codeql.yml` is the reusable CodeQL workflow (input `languages`); `code-scanning.yml` is quality's own caller of it.
 

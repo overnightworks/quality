@@ -1,3 +1,4 @@
+import datetime
 import re
 import tomllib
 from dataclasses import dataclass
@@ -8,15 +9,26 @@ from typing import NamedTuple
 from quality import repository
 
 CONFIG_PATH = "quality/config.toml"
-GATE_KEYS = {"mandatory_jobs", "legacy"}
+GATE_KEYS = {"mandatory_jobs", "legacy", "loosened"}
 SECRETS_KEYS = {"allow"}
 ALLOWANCE_KEYS = {"rule", "file", "secret_sha256", "reason"}
+DECLARATION_KEYS = {"what", "item", "date", "reason"}
 SHA256_HEX = re.compile(r"[0-9a-f]{64}")
+# ASCII only, so a lookalike name (a Cyrillic letter in it) is no repository.
+REPOSITORY_NAME = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
+ITEM_REFERENCE = re.compile(rf"(?:{REPOSITORY_NAME.pattern})?#[1-9][0-9]*")
 EXAMPLE = '[gate]\nmandatory_jobs = ["checks"]'
 LEGACY_EXAMPLE = '[gate]\nlegacy = "fail"'
 ALLOWANCE_EXAMPLE = (
     '[secrets]\nallow = [{ rule = "aws-access-token", file = "tests/fixture.py", '
     'secret_sha256 = "<64 lowercase hex>", reason = "fixture value, not a key" }]'
+)
+LOOSENED_EXAMPLE = (
+    "[[gate.loosened]]\n"
+    "what = 'mandatory job \"Acceptance evidence (integration)\" removed'\n"
+    'item = "overnightworks/songmaker#1345"\n'
+    "date = 2026-10-20\n"
+    'reason = "the operator ruled the requirement shelf machinery out"'
 )
 
 
@@ -28,11 +40,28 @@ class LegacyMode(Enum):
 
 
 @dataclass(frozen=True)
+class Declaration:
+    """A loosening a pull request declares, with the ruling behind it; `what` is the verdict's text after
+    `loosened (undeclared): `, unescaped."""
+
+    what: str
+    item: str
+    date: datetime.date
+    reason: str
+
+    def ruling(self) -> str:
+        """The ruling as every line naming the declaration shows it: `<item> of <date>`."""
+        return f"{self.item} of {self.date.isoformat()}"
+
+
+@dataclass(frozen=True)
 class GateSettings:
-    """The part of quality/config.toml a pull request must not loosen."""
+    """What the gate reads from quality/config.toml: the settings a pull request must not loosen, and the loosenings
+    it declares."""
 
     mandatory_jobs: tuple[str, ...]
     legacy: LegacyMode
+    loosened: tuple[Declaration, ...] = ()
 
 
 class Allowance(NamedTuple):
@@ -71,7 +100,8 @@ def _refuse_unknown_keys(document: dict, gate: dict) -> None:
     unknown = (set(document) - {"gate", "secrets"}) | (set(gate) - GATE_KEYS)
     if unknown:
         raise ConfigError(
-            f"{CONFIG_PATH} has unknown key(s) {sorted(unknown)} - only [gate] mandatory_jobs, [gate] legacy and [secrets] allow exist"
+            f"{CONFIG_PATH} has unknown key(s) {sorted(unknown)} - only [gate] mandatory_jobs, [gate] legacy, "
+            "[[gate.loosened]] and [secrets] allow exist"
         )
 
 
@@ -105,10 +135,48 @@ def _legacy_mode(gate: dict) -> LegacyMode:
         raise ConfigError(f"{CONFIG_PATH} has [gate] legacy = {value!r}; it must be {modes}, like:\n{LEGACY_EXAMPLE}") from None
 
 
+def _spans_lines(reason: str) -> bool:
+    return "\n" in reason or "\r" in reason
+
+
+def _declarations(gate: dict) -> tuple[Declaration, ...]:
+    entries = gate.get("loosened", [])
+    if not isinstance(entries, list):
+        raise ConfigError(f"{CONFIG_PATH} needs [[gate.loosened]] as an array of tables, like:\n{LOOSENED_EXAMPLE}")
+    declarations: dict[str, Declaration] = {}
+    for entry in entries:
+        declaration = _read_declaration(entry)
+        if declaration.what in declarations:
+            raise ConfigError(
+                f"{CONFIG_PATH} [[gate.loosened]] declares what = {declaration.what!r} twice; one entry per loosening, "
+                f"like:\n{LOOSENED_EXAMPLE}"
+            )
+        declarations[declaration.what] = declaration
+    return tuple(declarations.values())
+
+
+def _read_declaration(entry: object) -> Declaration:
+    def refuse(need: str) -> ConfigError:
+        return ConfigError(f"{CONFIG_PATH} [[gate.loosened]] entry {entry!r} needs {need}, like:\n{LOOSENED_EXAMPLE}")
+
+    if not isinstance(entry, dict) or set(entry) != DECLARATION_KEYS:
+        raise refuse("exactly a what, an item, a date and a reason")
+    what, item, date, reason = (entry[key] for key in ("what", "item", "date", "reason"))
+    if not (isinstance(what, str) and what.strip()):
+        raise refuse("a non-empty what")
+    if not (isinstance(item, str) and ITEM_REFERENCE.fullmatch(item)):
+        raise refuse("item as #<number> or <owner>/<repo>#<number>")
+    if not isinstance(date, datetime.date) or isinstance(date, datetime.datetime):
+        raise refuse("date as a TOML date without a time")
+    if not (isinstance(reason, str) and reason.strip()) or _spans_lines(reason):
+        raise refuse("a non-empty one-line reason")
+    return Declaration(what, item, date, reason)
+
+
 def load_gate_settings(text: str | None) -> GateSettings:
     """mandatory_jobs is judged before legacy, so a config wrong in both is refused for mandatory_jobs."""
     gate = _gate_table(text)
-    return GateSettings(_mandatory_jobs(gate), _legacy_mode(gate))
+    return GateSettings(_mandatory_jobs(gate), _legacy_mode(gate), _declarations(gate))
 
 
 def _read_config_text(repo: Path) -> str | None:
@@ -126,12 +194,15 @@ def read_gate_settings(repo: Path) -> GateSettings:
 def load_secret_allowances(text: str | None) -> dict[Allowance, str]:
     """Allowance -> reason of every finding the repository allows; a missing config allows nothing.
 
-    The whole document is validated, as the gate does: hygiene and the verdict refuse what they do not know.
+    The whole document is validated, as the gate does: hygiene and the verdict refuse an unknown key and a malformed
+    declaration alike.
     """
     if text is None:
         return {}
     document = _parse(text, ALLOWANCE_EXAMPLE)
-    _refuse_unknown_keys(document, _table(document, "gate", EXAMPLE))
+    gate = _table(document, "gate", EXAMPLE)
+    _refuse_unknown_keys(document, gate)
+    _declarations(gate)
     return _parse_allowances(_table(document, "secrets", ALLOWANCE_EXAMPLE))
 
 
@@ -177,7 +248,7 @@ def _read_allowance(entry: object) -> tuple[Allowance, str]:
             f"{CONFIG_PATH} [secrets] allow entry {entry!r} needs secret_sha256 as 64 lowercase hex digits, like:\n"
             f"{ALLOWANCE_EXAMPLE}"
         )
-    if "\n" in reason or "\r" in reason:
+    if _spans_lines(reason):
         raise ConfigError(f"{CONFIG_PATH} [secrets] allow entry {entry!r} needs a one-line reason")
     return Allowance(rule, file, secret_sha256), reason
 

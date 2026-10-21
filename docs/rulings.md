@@ -209,3 +209,13 @@ In GitHub Actions the door stops workflow commands with a per-run token, and rep
 
 1. E18. Asked: „Bei Rot nennt die Meldung nur den Dateinamen und nie den Inhalt der CLAUDE.md, weil darin ein Geheimnis stehen könnte. Einverstanden?“ Answered: „Nur Dateiname (empfohlen)“. The finding names the file and never shows its content.
 2. E20. Asked: „Die Lösung, die die Meldung vorschlägt, ist ein Satz und kein Befehl: „Eigene Zeilen nach AGENTS.md verschieben, dann nur @AGENTS.md stehen lassen, oder die Datei löschen.“ Ein kopierbarer Befehl würde die Zeilen löschen und könnte über einen Symlink sogar AGENTS.md überschreiben. Einverstanden?“ Answered: „Satz, kein Befehl (empfohlen)“. The fix is prose that tells the operator to move the lines into `AGENTS.md`; it prints no command, since a copied command would lose the lines, or `AGENTS.md` itself through a link.
+
+## Operator ruling (21.10.2026): a declared loosening merges through the operator's door
+
+[#103](https://github.com/overnightworks/quality/issues/103), ruled as D3 on [#45](https://github.com/overnightworks/quality/issues/45).
+
+1. D3. Asked: „D3: Ein PR lockert das Gate so, wie du es entschieden hast, etwa durch das Entfernen eines Pflicht-Jobs (songmaker #1735). Wie soll so ein PR landen?“ Answered: „Erklären + deine Tür (empfohlen)“. The pull request declares the loosening in `quality/config.toml` with its ruling (item, date, reason); the verdict stays red, but only for declared loosenings; only the operator's emergency door merges such a pull request; no agent can approve a loosening for itself.
+2. E5. Asked: „Erklärte Lockerung „Pflicht-Job entfernt“ (songmaker): Soll das Gate den entfernten Job dann gar nicht mehr prüfen?“ Answered: „Ja, nicht mehr prüfen (empfohlen)“. A declared removal replaces judging that base job.
+3. E8. Asked: „Darf deine Tür einen PR mergen, der Sonar-Altlasten hat (legacy = fail) und zugleich eine erklärte Lockerung?“ Answered: „Ja, beides in einem Lauf (empfohlen)“.
+4. E10. Asked: „… Dass nur du lockerst, hängt damit am Vertrag, nicht an einer Sperre … Wie gehen wir damit um?“ Answered: „Bekanntes Restrisiko (empfohlen)“. Agents share the operator's `gh` login, so the door is the sanctioned path, not a lock; a real lock belongs to the machine's setup.
+5. The release. Asked: „hopin und songmaker brauchen ein neues quality-Release mit #98 und Q1b-7a … Wie soll das Release heißen?“ Answered: „v0.3.0 jetzt (empfohlen)“.
