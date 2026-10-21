@@ -1,8 +1,0 @@
-claim_id = "8f53acf6564a49fcba7a0bb3ba5a47a2"
-agent = "claude"
-role = "builder"
-base = "2e8032c09f17a9388ad98a680d2bffa8c2cb1d8a"
-branch = "claude/issue-113-clone-detector"
-scope = ["AGENTS.md", "README.md", "pyproject.toml", "src/quality/clones.py", "src/quality/hygiene.py", "src/quality/ratchet.py", "tests/conftest.py", "tests/test_architecture.py", "tests/test_claude_md.py", "tests/test_clones.py", "tests/test_hygiene.py", "tests/test_ratchet.py"]
-opened_commit = "0ca68e0cb95f9f9a3b3ad43f77a28ac890bc440a"
-whole_reason = "The detector is one unit with its first caller, the report-only clone rule; splitting it would leave code only tests reach. The clean-line pins and the copied test helper move with it."
