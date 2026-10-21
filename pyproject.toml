@@ -52,7 +52,7 @@ layers = [
     "sonar | scoreboard",
     "hygiene | staged",
     "advisories",
-    "architecture | engines",
+    "architecture | clones | engines",
     "ratchet",
     "report",
     "config",

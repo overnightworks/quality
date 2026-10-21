@@ -67,6 +67,13 @@ def local_door(monkeypatch):
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
 
 
+def hygiene_output(capsys: pytest.CaptureFixture[str], path: Path) -> tuple[int, str]:
+    """The exit code and the whole output of `quality hygiene` over `path`, through the real door."""
+    code = cli.main(["hygiene", str(path)])
+    captured = capsys.readouterr()
+    return code, captured.out + captured.err
+
+
 def make_repo(directory: Path, files: dict[str, str]) -> Path:
     """A git repository at `directory` whose one commit tracks exactly `files`, ignored names included."""
     git = ["git", "-C", str(directory), *GIT_IDENTITY]

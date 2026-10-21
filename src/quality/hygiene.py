@@ -9,7 +9,7 @@ from pathlib import Path, PurePosixPath
 
 import yaml
 
-from quality import advisories, architecture, engines, ratchet, repository
+from quality import advisories, architecture, clones, engines, ratchet, repository
 from quality.config import Allowance, ConfigError, read_secret_allowances
 from quality.report import Finding, shell_word
 
@@ -281,10 +281,14 @@ def _describe(port: object) -> str | None:
     return str(port) if isinstance(port, (str, int, float)) else None
 
 
+def read_python_sources(root: Path, tracked: list[str]) -> dict[str, bytes]:
+    """The tracked Python files on disk: a tracked file absent from it (deleted, sparse, a dangling link) is gone."""
+    on_disk = _on_disk(root, [name for name in tracked if ratchet.is_python(name)])
+    return _read_existing(repository.read_bytes, root, on_disk)
+
+
 def measure_size(root: Path, tracked: list[str]) -> ratchet.TreeMeasurement:
-    """Measures the tree on disk: a tracked file absent from it (deleted, sparse, a dangling link) is gone."""
-    sources = _on_disk(root, [name for name in tracked if ratchet.is_python(name)])
-    return ratchet.measure(_read_existing(repository.read_bytes, root, sources))
+    return ratchet.measure(read_python_sources(root, tracked))
 
 
 @dataclass(frozen=True)
@@ -307,9 +311,9 @@ def read_baseline(root: Path) -> ratchet.Baseline | None:
         raise ratchet.SizeError(f"{ratchet.BASELINE_PATH} is not valid UTF-8 ({error})") from error
 
 
-def check_size(root: Path, tracked: list[str]) -> SizeResult:
+def check_size(root: Path, sources: dict[str, bytes]) -> SizeResult:
     """Report-only without a baseline; with one, the tree on disk must hold it."""
-    tree = measure_size(root, tracked)
+    tree = ratchet.measure(sources)
     try:
         baseline = read_baseline(root)
     except ratchet.SizeError as error:
@@ -429,16 +433,19 @@ def run_hygiene(root: Path, engine_dir: Path | None = None) -> HygieneResult:
     """Judges every active rule, in run order, over the repository `root` lies in; only one git cannot list stops the run."""
     root = work_tree_top(root)
     tracked = tracked_files(root)
-    size = _attempt(lambda: check_size(root, tracked))
+    sources = _attempt(lambda: read_python_sources(root, tracked))
+    size = sources if isinstance(sources, CannotJudge) else _attempt(lambda: check_size(root, sources))
+    pairs = sources if isinstance(sources, CannotJudge) else clones.find_pairs(sources)
     contracts = _attempt(lambda: check_import_contract(root, tracked))
     verdicts = [
         _verdict(ENV_FILE, check_env_files(tracked)),
         _verdict(COMPOSE_PORT, _attempt(lambda: check_compose_ports(root, tracked))),
         _verdict(ratchet.SIZE, size if isinstance(size, CannotJudge) else size.findings),
+        _verdict(clones.RULE, pairs if isinstance(pairs, CannotJudge) else []),
         _verdict(architecture.RULE, contracts if isinstance(contracts, CannotJudge) else contracts.findings),
         _verdict(CLAUDE_MD, _attempt(lambda: check_claude_md(root, tracked))),
     ]
-    reports = _reports(size, contracts)
+    reports = _reports(size, pairs, contracts)
     if engine_dir is None:
         return HygieneResult(tuple(verdicts), reports, [], {})
     secrets = _attempt(lambda: check_secrets(root, engine_dir))
@@ -449,7 +456,12 @@ def run_hygiene(root: Path, engine_dir: Path | None = None) -> HygieneResult:
     return HygieneResult(tuple(verdicts), reports, allowed, unused)
 
 
-def _reports(size: SizeResult | CannotJudge, contracts: architecture.ContractsVerdict | CannotJudge) -> tuple[str, ...]:
-    """The report lines of the rules that judged: the size counts without a baseline, the import-contract notes."""
+def _reports(
+    size: SizeResult | CannotJudge,
+    pairs: frozenset[ratchet.ClonePair] | CannotJudge,
+    contracts: architecture.ContractsVerdict | CannotJudge,
+) -> tuple[str, ...]:
+    """The report lines of the rules that judged: the size counts without a baseline, the clone pairs, the import-contract notes."""
     size_reports = [] if isinstance(size, CannotJudge) or size.report is None else [size.report]
-    return (*size_reports, *([] if isinstance(contracts, CannotJudge) else contracts.notes))
+    clone_reports = [] if isinstance(pairs, CannotJudge) else [clones.report_line(pairs)]
+    return (*size_reports, *clone_reports, *([] if isinstance(contracts, CannotJudge) else contracts.notes))

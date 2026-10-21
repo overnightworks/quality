@@ -69,6 +69,12 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   or removed entry is not named, and without a previous file only the count prints. A previous file it cannot read is
   overwritten with `baseline: the previous quality/baseline.toml could not be read (...), so raises cannot be named`.
   The write exits `0` with raises too: the verdict is the gate.
+- `clone`: a pair is two functions (methods and nested functions too) in two different tracked `*.py` files, each of at
+  least 40 tokens without its docstring, whose structure is at least 90 % the same once every name and literal is
+  renamed; tests count like code, and a copy inside one file is no pair. A pair is named by the path and qualified
+  symbol of both sides, as `size` names a function. For now the rule only prints the counts (`clone: report only (no
+  [clones] in quality/baseline.toml) - production: 1 pair(s), tests: 0 pair(s)`); a pair counts as tests only when both
+  files are tests. A file Python cannot parse has no pair.
 - `import-contract`: the repository's [import-linter](https://github.com/seddonym/import-linter) contracts must be
   kept. The config is the tracked `.importlinter` or `setup.cfg` (`[importlinter]`) or `pyproject.toml`
   (`[tool.importlinter]`), counted once its name exists in the tree: a tracked one deleted from disk is none, a symlink to
@@ -182,7 +188,7 @@ Every rule is judged, even when another cannot be, and gives one verdict: clean,
 Each finding names the rule, the file, a reason and a fix. Repository text (a file name, a service, a port, a contract
 or job name, a configuration entry) prints escaped. In the door's own fields (a finding's location, reason and fix, refusals, reports), invalid UTF-8 prints as `\udcNN` and every control character (line feed,
 carriage return, ESC, tab, DEL, C1) as `\xNN`. A line taken from import-linter's rendering (a broken contract's chain and guidance) prints behind the marker `  | `; rich may drop a carriage return, expand a tab, or start a new marked line at a line feed there. Every line the door prints therefore starts with its own text, so a matcher anchored at the line start, such as setup-uv's python matcher, cannot match repository text. A refusal is one line; the lines the door means to print (an import chain, the verdict's problems, the scoreboard's table) stay lines. A rule that cannot judge prints its verdict and reason under its rule id (`hygiene: secret cannot
-judge - ...`). A clean run names its rules in run order (`hygiene: clean (env-file, compose-port, size, import-contract, claude-md); skipped without
+judge - ...`). A clean run names its rules in run order (`hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md); skipped without
 --engines: ...`); any other run ends with the findings and the verdicts counted (`hygiene: 1 finding(s); verdicts: 1
 clean, 1 findings, 1 unparsable`). The lines come in run order, also through a pipe that merges stdout and stderr
 (`2>&1 | tee log`); each stays on its own stream. The exit is the worst verdict's: `2` if any rule is unparsable or cannot judge
