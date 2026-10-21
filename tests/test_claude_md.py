@@ -32,6 +32,7 @@ def claude_repo(build_repo, tracked: dict[str, str], links: dict[str, str] | Non
     """A repository tracking `tracked` and, as symbolic links, `links` (name to target)."""
     repo = build_repo(tracked)
     for name, target in (links or {}).items():
+        (repo / name).parent.mkdir(exist_ok=True)
         (repo / name).symlink_to(target)
         subprocess.run(["git", "-C", str(repo), "add", "--", name], check=True)
     return repo
@@ -139,10 +140,31 @@ def test_unreadable_claude_md_cannot_be_judged_and_other_rules_still_judge(build
     assert ENV_FINDING in output
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reaches a mode-0 directory, so no permission is refused")
+@pytest.mark.parametrize("name", ["CLAUDE.md", ".claude/CLAUDE.md"])
+def test_claude_md_link_to_an_unreachable_target_is_the_link_finding(build_repo, capsys, elsewhere, name):
+    """#95 E8: a link is judged from lstat alone, so a target the filesystem refuses changes nothing."""
+    locked = elsewhere / "locked"
+    locked.mkdir()
+    (locked / "target").write_text("own\n")
+    repo = claude_repo(build_repo, GUIDANCE, {name: str(locked / "target")})
+    locked.chmod(0)
+    try:
+        code, output = run(capsys, repo)
+    finally:
+        locked.chmod(0o700)
+    assert code == 1, output
+    assert f"claude-md {name} - " in output
+    assert "cannot judge" not in output
+
+
 def test_claude_md_from_a_subdirectory_is_judged_as_from_the_top(build_repo, capsys):
     """#95 cell 18: the verdict does not depend on where the run starts."""
     repo = build_repo({**GUIDANCE, "CLAUDE.md": "own\n", "src/a.py": ""})
-    assert run(capsys, repo / "src") == run(capsys, repo)
+    from_subdirectory = run(capsys, repo / "src")
+    assert from_subdirectory == run(capsys, repo)
+    assert from_subdirectory[0] == 1, from_subdirectory
+    assert "claude-md CLAUDE.md - " in from_subdirectory[1]
 
 
 def test_claude_md_is_named_in_run_order_with_and_without_engines(build_repo, clean_engines, capsys):

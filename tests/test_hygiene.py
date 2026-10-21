@@ -423,7 +423,7 @@ def files(tracked: dict[str, str]):
         "cell 3 unreadable compose hides no size finding",
         "cell 4 findings in two rules",
         "cell 5 clean names the file rules",
-        "cell 6 clean with engines names all eight rules",
+        "cell 6 clean with engines names all nine rules",
         "cell 7 non-utf8 compose name",
         "cell 8 non-utf8 python name",
         "rule 4 non-utf8 python name in the size report",
@@ -735,4 +735,3 @@ def test_a_closed_stdout_is_cannot_judge_and_never_a_crash(tmp_path):
         text=True, check=False, stderr=subprocess.PIPE,
     )
     assert (done.returncode, "hygiene: cannot judge" in done.stderr) == (2, True), done.stderr
-

@@ -94,8 +94,8 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   beside it. No `CLAUDE.md` is clean, with or without an `AGENTS.md`. A symlink is a finding (a dangling one too), and so
   is a tracked `.claude/CLAUDE.md`, which Claude Code reads as project memory and Codex and Grok never read. Any other
   bytes are a finding, a Windows line ending included; a nested `docs/CLAUDE.md` is not judged. The reason and the fix
-  are fixed prose that names the file and never shows its content; the fix tells the operator to move the file's lines
-  into `AGENTS.md` and gives no command. A tracked file missing from disk is skipped; one the filesystem refuses to read
+  are fixed prose that names the file and never shows its content; every fix is prose with no command, and for a file's
+  own text it says to move the lines into `AGENTS.md`. A tracked file missing from disk is skipped; one the filesystem refuses to read
   is `hygiene: claude-md cannot judge - ...`. No configuration switches the rule off.
 - The baseline only falls: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the
   base commit's, so growing a function and rewriting the baseline stays red. Each loosening is one line, named with the

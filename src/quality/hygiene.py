@@ -21,8 +21,8 @@ ENGINE_RULE_IDS = (engines.LEAK_RULE, *WORKFLOW_RULE_IDS, advisories.RULE)
 WORKFLOW_DIRECTORY = PurePosixPath(".github/workflows")
 YAML_SUFFIXES = (".yml", ".yaml")
 
-CLAUDE_FILE_NAMES = frozenset({"claude.md", ".claude/claude.md"})
 CLAUDE_NESTED_NAME = ".claude/claude.md"
+CLAUDE_FILE_NAMES = frozenset({"claude.md", CLAUDE_NESTED_NAME})
 CLAUDE_IMPORTS = frozenset({b"@AGENTS.md", b"@AGENTS.md\n"})
 AGENTS_FILE = "AGENTS.md"
 
@@ -171,15 +171,15 @@ def check_claude_md(root: Path, tracked: list[str]) -> list[Finding]:
 def _claude_md_problem(root: Path, name: str, agents_tracked: bool) -> tuple[str, str] | None:
     """The reason and the fix for a CLAUDE.md that is not clean; None when it is clean or gone from the tree."""
     is_link = _judged(repository.is_symlink, root, name)
-    on_disk = _judged(repository.is_on_disk, root, name)
     if name.casefold() == CLAUDE_NESTED_NAME:
-        if not (is_link or on_disk):
+        if not (is_link or _judged(repository.is_on_disk, root, name)):
             return None
         return (f"{name} gives Claude guidance Codex and Grok never read.",
                 f"move its lines into {AGENTS_FILE} and delete {name}.")
     if is_link:
         return (f"{name} is a symlink, not a file holding @AGENTS.md.",
                 f"replace the link with a file whose only line is @AGENTS.md; {AGENTS_FILE} stays as it is.")
+    on_disk = _judged(repository.is_on_disk, root, name)
     content = _judged(repository.read_bytes, root, name) if on_disk else None
     if content is None:
         return None
