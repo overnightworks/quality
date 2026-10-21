@@ -7,3 +7,6 @@
 "tests/test_engines.py" = 993
 
 [clones]
+
+[clones."src/quality/cli.py"]
+main = [["src/quality/hygiene.py", "run_hygiene"]]
