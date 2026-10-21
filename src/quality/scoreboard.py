@@ -15,7 +15,7 @@ from datetime import date
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlsplit
 
-from quality import __version__, engines, hygiene, ratchet, repository
+from quality import __version__, clones, engines, hygiene, ratchet, repository
 
 FLEET_PATH = "quality/fleet.toml"
 FLEET_EXAMPLE = 'public = ["https://github.com/o/open"]\nprivate = ["https://github.com/o/closed"]'
@@ -39,6 +39,7 @@ COLUMNS = (
     f"Files ≥ {ratchet.FILE_LINES_FROM} prod / test",
     f"Functions ≥ {ratchet.FUNCTION_LINES_FROM} prod / test",
     f"CCN > {ratchet.CCN_ABOVE} prod / test",
+    "Clone pairs prod / test",
     "Note",
 )
 DEBT_COLUMNS = (ratchet.Metric.FILE_LINES, ratchet.Metric.FUNCTION_LINES, ratchet.Metric.CCN)
@@ -50,6 +51,7 @@ class Measured:
     commit: str
     areas: dict[ratchet.Area, ratchet.AreaSummary]
     unparsable: int
+    pairs: dict[ratchet.Area, int]
 
 
 @dataclass(frozen=True)
@@ -198,10 +200,12 @@ def measure_public(url: str) -> Row:
         if head.returncode != 0:
             return Unjudged(name, f"cannot read the cloned commit (git exited {head.returncode})")
         try:
-            tree = hygiene.measure_size(clone, hygiene.tracked_files(clone))
+            sources = hygiene.read_python_sources(clone, hygiene.tracked_files(clone))
         except hygiene.CannotJudge as error:
             return Unjudged(name, f"cannot measure ({str(error).replace(str(clone), name)})")
-    return Measured(name, head.stdout.strip()[:SHORT_COMMIT], ratchet.summarise(tree), len(tree.unparsable))
+    tree = ratchet.measure(sources)
+    pairs = clones.summarise_pairs(clones.find_pairs(sources))
+    return Measured(name, head.stdout.strip()[:SHORT_COMMIT], ratchet.summarise(tree), len(tree.unparsable), pairs)
 
 
 def judge_private(url: str) -> Row:
@@ -247,7 +251,11 @@ def measured_cells(row: Measured) -> tuple[str, ...]:
     production, tests = row.areas[ratchet.Area.PRODUCTION], row.areas[ratchet.Area.TESTS]
     ratio = f"{tests.lines / production.lines:.2f}" if production.lines else "—"
     debts = (f"{production.debt[metric]} / {tests.debt[metric]}" for metric in DEBT_COLUMNS)
-    return (row.name, row.commit, f"{production.lines:,} / {tests.lines:,}", ratio, *debts, unparsable_note(row))
+    return (row.name, row.commit, f"{production.lines:,} / {tests.lines:,}", ratio, *debts, clone_pairs_cell(row), unparsable_note(row))
+
+
+def clone_pairs_cell(row: Measured) -> str:
+    return f"{row.pairs[ratchet.Area.PRODUCTION]} / {row.pairs[ratchet.Area.TESTS]}"
 
 
 def unparsable_note(row: Measured) -> str:
