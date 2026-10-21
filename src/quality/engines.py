@@ -338,7 +338,7 @@ def run(
         raise EngineError(f"{command[0]} did not finish within {timeout} seconds") from None
     except UnicodeDecodeError as error:
         raise EngineError(f"{command[0]} printed output that is not UTF-8 ({error})") from error
-    except (OSError, ValueError) as error:  # ValueError: output that is not text
+    except (OSError, ValueError) as error:  # ValueError: an argument the OS refuses, such as an embedded null byte
         raise EngineError(f"cannot run {command[0]}: {error}") from error
 
 
