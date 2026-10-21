@@ -698,4 +698,5 @@ def test_a_job_field_of_the_wrong_type_cannot_be_judged(capsys, run_env, job_ent
     page = json.dumps({"total_count": 1, "jobs": [{"status": "completed", "conclusion": "success", **job_entry}]})
     assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (page, None)) == 2
     captured = capsys.readouterr()
-    assert captured.err.startswith("verdict: cannot judge - ") and captured.err.count("\n") == 1, captured
+    assert captured.err.startswith("verdict: cannot judge - "), captured
+    assert captured.err.count("\n") == 1, captured
