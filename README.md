@@ -123,8 +123,9 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   - the base's `[clones]` table gone from a head that still has the file: `loosened (undeclared): clone baseline removed`;
   - the base's file deleted: `loosened (undeclared): quality/baseline.toml removed`.
 
-  A lowered, equal or removed entry or pair is green, and so is adopting a baseline or its `[clones]` table (the base
-  has none) or having none on either side. A malformed baseline on either side, a head config or baseline that cannot be read or links out of the
+  A lowered, equal or removed entry or pair is green, and so is adopting a baseline (the base has none) or having none
+  on either side. A `[clones]` table the base lacks is an adoption too: its pairs are not compared, while the size
+  entries are still held against the base's. A malformed baseline on either side, a head config or baseline that cannot be read or links out of the
   repository, or a base commit the clone lacks is exit `2`, naming the side (`quality/baseline.toml at the base commit
   <sha>: ...`, `quality/config.toml at the head: ...`). Only the head's malformed baseline adds ``rewrite it with
   `quality baseline write` ``: a pull request cannot rewrite its base. The base must be a ref
