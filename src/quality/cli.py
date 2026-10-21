@@ -61,6 +61,7 @@ def main(
     argv: list[str] | None = None,
     fetcher_for: Callable[[str], PageFetcher] = github_fetcher,
     read_pins: Callable[[], dict[str, engines.Pin]] = engines.read_pins,
+    release_tags: scoreboard.TagReader = scoreboard.read_release_tags,
     transport: Transport = fetch_json,
     sleep: Sleep = time.sleep,
     gh: GhRunner = run_gh,
@@ -84,7 +85,7 @@ def main(
     if arguments.command == "verdict":
         return run_verdict(arguments.path, fetcher_for, sleep)
     if arguments.command == "scoreboard":
-        return run_scoreboard(arguments.path)
+        return run_scoreboard(arguments.path, release_tags)
     if arguments.command == "baseline":
         return run_baseline_write(arguments.path)
     if arguments.command == "scan-staged":
@@ -146,7 +147,8 @@ def build_parser() -> argparse.ArgumentParser:
     emergency.add_argument("repository", help="<owner>/<repo>")
     emergency.add_argument("pull_request", type=int)
     fleet = commands.add_parser(
-        "scoreboard", help="measure the size of the repositories in quality/fleet.toml into one markdown table"
+        "scoreboard",
+        help="measure the size, the gate and the CodeQL release of the repositories in quality/fleet.toml into two tables",
     )
     fleet.add_argument("path", nargs="?", type=Path, default=Path("."))
     return parser
@@ -320,17 +322,21 @@ def run_verdict(path: Path, fetcher_for: Callable[[str], PageFetcher], sleep: Sl
     return code
 
 
-def run_scoreboard(path: Path) -> int:
+def run_scoreboard(path: Path, release_tags: scoreboard.TagReader) -> int:
     try:
         fleet = scoreboard.read_fleet(path)
     except scoreboard.FleetError as error:
         emit(f"scoreboard: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     rows = scoreboard.measure_fleet(fleet)
-    report = scoreboard.render(rows, datetime.now(UTC).date())
+    try:
+        tags = release_tags()
+    except scoreboard.ReleaseTagsError as error:
+        tags = error
+    report = scoreboard.render(rows, datetime.now(UTC).date(), tags)
     emit(*report)
     append_step_summary(report)
-    return EXIT_CANNOT_JUDGE if scoreboard.cannot_judge(rows) else EXIT_CLEAN
+    return EXIT_CANNOT_JUDGE if scoreboard.cannot_judge(rows, tags) else EXIT_CLEAN
 
 
 def append_step_summary(report: tuple[str, ...]) -> None:
