@@ -269,8 +269,8 @@ duplicating `quality/fleet.toml` is `cannot judge`, exit `2`.
   tag name, or unreadable release tags) gives `release unknown`. The table of first releases lives in `scoreboard.py`.
 - A workflow file that cannot be read shows `cannot read <file>` in every cell that needs the pin, a malformed
   `quality/config.toml` or `quality/baseline.toml` and an import-linter config that cannot be read or that two files hold
-  show `cannot read <file>` (`import-linter config`) in their cells, but only where a cell needs the file (the rule cells under a pin
-  before the rule or `release unknown`; every cell under no gate), unreadable release tags say so in the heading and
+  show `cannot read <file>` (`import-linter config`) in each cell that reads the file, while a cell that does not keeps its value
+  (every cell under no gate, a rule cell under a pin before the rule or `release unknown`), unreadable release tags say so in the heading and
   show pins as commits, and each makes the exit `2`. No value, `behind`, `no gate` or `report-only` included, makes the run red.
 - A `private` repository is never measured, because the tables are published: it shows `not measured: private`. It is
   checked once with an anonymous `git ls-remote`; if anyone can read it, the row is `cannot judge: declared private
