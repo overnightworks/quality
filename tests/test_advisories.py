@@ -13,7 +13,7 @@ import zipfile
 from pathlib import Path
 
 import pytest
-from conftest import assert_every_line_starts_with_the_door, fake_engine
+from conftest import allowance_config, assert_every_line_starts_with_the_door, fake_engine
 
 from quality import advisories, cli, engines
 from quality.config import AdvisoryAllowance
@@ -22,6 +22,7 @@ from quality.report import headline
 OUTPUTS = Path(__file__).parent / "fixtures" / "engine-outputs"
 OSV = engines.OSV_SCANNER
 ADVISORY_ID = "GHSA-aaaa-bbbb-cccc"
+UV_LOCK_ALLOWANCE = {"identifier": ADVISORY_ID, "lock": "uv.lock", "item": "#116", "reason": "fixture"}
 AFFECTED_LINE = f"osv-scanner {ADVISORY_ID} (CVE-2020-1): PyPI pyyaml 5.3.1 is affected."
 UPGRADE_LINE = "Fix: upgrade pyyaml to >= 5.4 (uv lock --upgrade-package pyyaml)"
 VULNERABLE = (("pyyaml", "5.3.1"),)
@@ -660,13 +661,6 @@ def test_an_allowance_allows_its_advisory_in_its_lock_until_its_date(groups, all
     assert ([headline(finding) for finding in judged.findings], list(judged.allowed)) == (findings, allowed)
 
 
-def allowance_config(until: str, reason: str = "fixture", identifier: str = ADVISORY_ID) -> str:
-    return (
-        f'[[advisories.allow]]\nid = "{identifier}"\nlock = "uv.lock"\nuntil = {until}\ndate = 2026-10-21\n'
-        f'item = "#116"\nreason = {json.dumps(reason)}\n'
-    )
-
-
 def drop_fixed_versions(report: dict) -> None:
     for vulnerability in package_of(report)["vulnerabilities"]:
         for versions in vulnerability["affected"][0]["ranges"]:
@@ -695,7 +689,7 @@ def test_hygiene_prints_each_allowed_advisory_before_the_verdict(
     and leaves the rule clean; once its date has passed it is red with the date and item."""
     publish_database()
     report = edited_report("osv-scanner-finding.json", edit)
-    repo = build_repo({"uv.lock": uv_lock(), "quality/config.toml": allowance_config(until)})
+    repo = build_repo({"uv.lock": uv_lock(), "quality/config.toml": allowance_config(**UV_LOCK_ALLOWANCE, until=datetime.date.fromisoformat(until))})
     code_seen, output = run_gate(repo, osv_engines(clean_engines, reporting(report, 1)))
     lines = output.splitlines()
     assert code_seen == code, output
@@ -710,7 +704,10 @@ def test_hygiene_escapes_the_allowance_in_its_allowed_line(
     publish_database()
     report = edited_report("osv-scanner-finding.json", lambda report: package_of(report)["groups"][0].update(
         ids=["GHSA-\x1b[8m"], aliases=[]))
-    config = allowance_config("2999-12-31", "ok\x1b[8m versteckt", "GHSA-\\u001b[8m")
+    config = allowance_config(
+        **UV_LOCK_ALLOWANCE | {"identifier": "GHSA-\x1b[8m", "reason": "ok\x1b[8m versteckt"},
+        until=datetime.date(2999, 12, 31),
+    )
     repo = build_repo({"uv.lock": uv_lock(), "quality/config.toml": config})
     code, output = run_gate(repo, osv_engines(clean_engines, reporting(report, 1)))
     assert code == 0, output
@@ -733,6 +730,6 @@ def test_an_allowance_without_a_tracked_lock_is_judged_only_with_the_engines(
     """#116 E5, cells 8 and 26: with no tracked lock an allowance matches nothing and is red, with no osv-scanner and
     no download; without --engines the advisory rule, and with it every allowance, is skipped."""
     monkeypatch.setattr(advisories, "DATABASE_ROOT", "file:///no/such/root")
-    repo = build_repo({"README.md": "x\n", "quality/config.toml": allowance_config("2999-12-31")})
+    repo = build_repo({"README.md": "x\n", "quality/config.toml": allowance_config(**UV_LOCK_ALLOWANCE, until=datetime.date(2999, 12, 31))})
     assert cli.main([part.format(repo=repo, engines=clean_engines) for part in command]) == code
     assert expected in capsys.readouterr().out

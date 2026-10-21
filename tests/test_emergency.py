@@ -2,7 +2,7 @@ import json
 from datetime import UTC, datetime
 
 import pytest
-from conftest import assert_every_line_starts_with_the_door
+from conftest import allowance_config, assert_every_line_starts_with_the_door
 
 from quality import cli
 from quality.config import CONFIG_PATH
@@ -35,14 +35,6 @@ def declaring(what, reason="ruled"):
     return (
         f'[[gate.loosened]]\nwhat = {json.dumps(what)}\nitem = "overnightworks/songmaker#1345"\ndate = 2026-10-20\n'
         f"reason = {json.dumps(reason)}\n"
-    )
-
-
-def allowing(identifier="GHSA-462x-pgg6-55fp", lock="speech/providers/qwen/uv.lock", reason="no image input"):
-    """An [[advisories.allow]] entry; JSON's string escapes are TOML's."""
-    return (
-        f"[[advisories.allow]]\nid = {json.dumps(identifier)}\nlock = {json.dumps(lock)}\nuntil = 2027-01-31\n"
-        f'date = 2026-10-21\nitem = "overnightworks/agent-presentator#371"\nreason = {json.dumps(reason)}\n'
     )
 
 
@@ -311,7 +303,7 @@ def test_anything_but_ja_changes_nothing(typed, capsys):
             {}, f"loosened (undeclared): {B_REMOVED}",
         ),
         (
-            {"checks": SONAR_GREEN, "base_config": ONE_JOB, "head_config": ONE_JOB + declaring(ADDS_QWEN) + allowing()},
+            {"checks": SONAR_GREEN, "base_config": ONE_JOB, "head_config": ONE_JOB + declaring(ADDS_QWEN) + allowance_config(reason="no image input")},
             {}, f"declared loosening matches nothing: {ADDS_QWEN}",
         ),
         ({"head_config": GATE_CONFIG.replace("fail", "report")}, {}, "loosened (undeclared): legacy fail"),
@@ -575,9 +567,9 @@ def test_a_malformed_baseline_at_the_merge_commit_cannot_be_judged(capsys):
         (TWO_JOBS, ONE_JOB + declaring(B_REMOVED), [f"{SHOWN}{B_REMOVED} - reason: ruled"]),
         (GATE_CONFIG, REPORT_CONFIG + declaring("legacy fail → report"),
          [f"{SHOWN}legacy fail → report - reason: ruled"]),
-        (ONE_JOB, ONE_JOB + allowing(),
+        (ONE_JOB, ONE_JOB + allowance_config(reason="no image input"),
          [f"{ALLOWED_SHOWN}GHSA-462x-pgg6-55fp in speech/providers/qwen/uv.lock - reason: no image input"]),
-        (TWO_JOBS, ONE_JOB + declaring(B_REMOVED) + allowing(),
+        (TWO_JOBS, ONE_JOB + declaring(B_REMOVED) + allowance_config(reason="no image input"),
          [f"{SHOWN}{B_REMOVED} - reason: ruled",
           f"{ALLOWED_SHOWN}GHSA-462x-pgg6-55fp in speech/providers/qwen/uv.lock - reason: no image input"]),
     ],
@@ -610,7 +602,7 @@ def test_the_door_names_each_of_79_allowances_within_one_comment(capsys):
     """#116 cell 29: presentator#372's 79 allowances are 79 door lines, and the log comment stays within GitHub's
     65,536 characters."""
     allowances = "".join(
-        allowing(f"GHSA-{number:04d}-pgg6-55fp", f"speech/providers/provider-{number}/uv.lock", "x" * 60)
+        allowance_config(f"GHSA-{number:04d}-pgg6-55fp", f"speech/providers/provider-{number}/uv.lock", reason="x" * 60)
         for number in range(79)
     )
     gh = FakeGh(checks=SONAR_GREEN, base_config=ONE_JOB, merge_config=ONE_JOB + allowances)
@@ -642,7 +634,7 @@ def test_a_red_sonar_run_next_to_a_green_one_takes_the_legacy_path(capsys):
         (TWO_JOBS, ONE_JOB + declaring(B_REMOVED, reason="ok\rforged"), 2, "needs a non-empty one-line reason"),
         (TWO_JOBS, ONE_JOB + declaring(B_REMOVED, reason="ok\nforged"), 2, "needs a non-empty one-line reason"),
         (ONE_JOB, '[gate]\nmandatory_jobs = ["checks", "a\\n::error::b"]\n', 1, 'mandatory job "a\\x0a::error::b" is missing'),
-        (ONE_JOB, ONE_JOB + allowing("GHSA-\x1b[8m", "a\tb/uv.lock", "ok\x1b[8m versteckt"), 0,
+        (ONE_JOB, ONE_JOB + allowance_config("GHSA-\x1b[8m", "a\tb/uv.lock", reason="ok\x1b[8m versteckt"), 0,
          f"{ALLOWED_SHOWN}GHSA-\\x1b[8m in a\\x09b/uv.lock - reason: ok\\x1b[8m versteckt"),
     ],
     ids=[

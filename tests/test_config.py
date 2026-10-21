@@ -2,6 +2,7 @@ import datetime
 import re
 
 import pytest
+from conftest import allowance_config
 
 from quality import cli
 from quality.config import (
@@ -202,17 +203,6 @@ def test_one_read_of_the_config_gives_the_mandatory_jobs_and_the_legacy_mode(tmp
     assert (settings.mandatory_jobs, settings.legacy) == (("checks",), LegacyMode.FAIL)
 
 
-def advisory_allowance(**changes: str | None) -> str:
-    """One [[advisories.allow]] entry, its values written as TOML; a change to None drops that key."""
-    fields = {
-        "id": '"GHSA-462x-pgg6-55fp"', "lock": '"speech/providers/qwen/uv.lock"', "until": "2027-01-31",
-        "date": "2026-10-21", "item": '"overnightworks/agent-presentator#371"',
-        "reason": '"gradio caps pillow<13; no image input"',
-    } | changes
-    entries = "".join(f"{key} = {value}\n" for key, value in fields.items() if value is not None)
-    return "[[advisories.allow]]\n" + entries
-
-
 QWEN_ALLOWANCE = AdvisoryAllowance(
     "GHSA-462x-pgg6-55fp", "speech/providers/qwen/uv.lock", datetime.date(2027, 1, 31), datetime.date(2026, 10, 21),
     "overnightworks/agent-presentator#371", "gradio caps pillow<13; no image input",
@@ -222,7 +212,7 @@ QWEN_ALLOWANCE = AdvisoryAllowance(
 def test_an_advisory_allowance_is_read_by_every_loader_that_reads_the_whole_config(tmp_path):
     """#116 E1, E3: each [[advisories.allow]] entry is one allowance with its id, lock, until, date, item and reason,
     read alike by the gate and by hygiene."""
-    text = f'[gate]\nmandatory_jobs = ["checks"]\n{advisory_allowance()}'
+    text = f'[gate]\nmandatory_jobs = ["checks"]\n{allowance_config()}'
     (tmp_path / "quality").mkdir()
     (tmp_path / CONFIG_PATH).write_text(text)
     assert load_gate_settings(text).advisory_allowances == (QWEN_ALLOWANCE,)
@@ -275,8 +265,8 @@ TEXT_DATE_DECLARATION = SONGMAKER_DECLARATION.replace("2026-10-20", '"20.10.2026
         (SCAN_STAGED, SONGMAKER_DECLARATION, 0, "scan-staged: clean"),
         (HYGIENE, TEXT_DATE_DECLARATION, 2, "hygiene: secret cannot judge - quality/config.toml [[gate.loosened]] entry"),
         (SCAN_STAGED, TEXT_DATE_DECLARATION, 0, "scan-staged: clean"),
-        (SCAN_STAGED, advisory_allowance(), 0, "scan-staged: clean"),
-        (SCAN_STAGED, "[advisories]\nextra = 1\n" + advisory_allowance(until='"2027-01-31"'), 0, "scan-staged: clean"),
+        (SCAN_STAGED, allowance_config(), 0, "scan-staged: clean"),
+        (SCAN_STAGED, "[advisories]\nextra = 1\n" + allowance_config(until="2027-01-31"), 0, "scan-staged: clean"),
     ],
     ids=[
         "hygiene --engines", "scan-staged", "hygiene --engines, text date", "scan-staged, text date",
@@ -303,21 +293,21 @@ MALFORMED_SECRET = f"[secrets]\nallow = [{allow_entry(reason='')}]\n"
 @pytest.mark.parametrize(
     ("entry", "named"),
     [
-        (advisory_allowance(reason=None), "exactly an id, a lock, an until, a date, an item and a reason"),
-        (advisory_allowance() + "extra = 1\n", "'extra': 1"),
-        (advisory_allowance(id='""'), "'id': ''"),
-        (advisory_allowance(id='"  "'), "'id': '  '"),
-        (advisory_allowance(id='"GHSA-a\\nb"'), "'id': 'GHSA-a\\nb'"),
-        (advisory_allowance(lock='""'), "'lock': ''"),
-        (advisory_allowance(lock='"uv.lock\\rx"'), "'lock': 'uv.lock\\rx'"),
-        (advisory_allowance(reason='""'), "'reason': ''"),
-        (advisory_allowance(reason='"two\\nlines"'), "'reason': 'two\\nlines'"),
-        (advisory_allowance(item='"siehe Chat"'), "'item': 'siehe Chat'"),
-        (advisory_allowance(until='"2027-01-31"'), "'until': '2027-01-31'"),
-        (advisory_allowance(until="2027-01-31T00:00:00"), "'until': datetime.datetime(2027, 1, 31, 0, 0)"),
-        (advisory_allowance(date='"2026-10-21"'), "'date': '2026-10-21'"),
-        (advisory_allowance(date="2026-10-21T10:00:00"), "'date': datetime.datetime(2026, 10, 21, 10, 0)"),
-        (advisory_allowance() + advisory_allowance(reason='"again"'), "twice"),
+        (allowance_config(reason=None), "exactly an id, a lock, an until, a date, an item and a reason"),
+        (allowance_config() + "extra = 1\n", "'extra': 1"),
+        (allowance_config(identifier=""), "'id': ''"),
+        (allowance_config(identifier="  "), "'id': '  '"),
+        (allowance_config(identifier="GHSA-a\nb"), "'id': 'GHSA-a\\nb'"),
+        (allowance_config(lock=""), "'lock': ''"),
+        (allowance_config(lock="uv.lock\rx"), "'lock': 'uv.lock\\rx'"),
+        (allowance_config(reason=""), "'reason': ''"),
+        (allowance_config(reason="two\nlines"), "'reason': 'two\\nlines'"),
+        (allowance_config(item="siehe Chat"), "'item': 'siehe Chat'"),
+        (allowance_config(until="2027-01-31"), "'until': '2027-01-31'"),
+        (allowance_config(until=datetime.datetime(2027, 1, 31)), "'until': datetime.datetime(2027, 1, 31, 0, 0)"),
+        (allowance_config(date="2026-10-21"), "'date': '2026-10-21'"),
+        (allowance_config(date=datetime.datetime(2026, 10, 21, 10, 0)), "'date': datetime.datetime(2026, 10, 21, 10, 0)"),
+        (allowance_config() + allowance_config(reason="again"), "twice"),
         ("[advisories]\nignore = []\n", "unknown key(s) ['ignore']"),
         ('[advisories]\nallow = "x"\n', "[[advisories.allow]] as an array of tables"),
         ("advisories = 1\n", "[advisories] as a value"),
@@ -345,7 +335,7 @@ def test_a_malformed_advisory_allowance_cannot_be_judged_where_the_whole_config_
     assert rules == ["hygiene: secret cannot judge", "hygiene: advisory cannot judge"], refusals
 
 
-@pytest.mark.parametrize("entry", [advisory_allowance(reason=None), advisory_allowance(until='"2027-01-31"')])
+@pytest.mark.parametrize("entry", [allowance_config(reason=None), allowance_config(until="2027-01-31")])
 def test_a_malformed_advisory_allowance_shows_the_example(entry):
     """#116 cell 12: the refusal of an [[advisories.allow]] entry shows how to write one."""
     with pytest.raises(ConfigError, match=re.escape(ALLOWANCE_EXAMPLE_LINE)):

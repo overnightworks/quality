@@ -1,3 +1,4 @@
+import datetime
 import hashlib
 import http.server
 import json
@@ -50,6 +51,23 @@ def assert_every_line_starts_with_the_door(lines: list[str]) -> None:
     for line in lines:
         assert not line.lstrip().startswith(("::", "File ", "raise ")), line
         assert all(unicodedata.category(character) != "Cc" for character in line), line
+
+
+def allowance_config(
+    identifier: str | None = "GHSA-462x-pgg6-55fp",
+    lock: str | None = "speech/providers/qwen/uv.lock",
+    until: datetime.date | str | None = datetime.date(2027, 1, 31),
+    date: datetime.date | str | None = datetime.date(2026, 10, 21),
+    item: str | None = "overnightworks/agent-presentator#371",
+    reason: str | None = "gradio caps pillow<13; no image input",
+) -> str:
+    """One [[advisories.allow]] entry; a string is written as a TOML string, a date as a TOML date, None drops the key."""
+    values = {"id": identifier, "lock": lock, "until": until, "date": date, "item": item, "reason": reason}
+    entries = "".join(
+        f"{key} = {value.isoformat() if isinstance(value, datetime.date) else json.dumps(value)}\n"
+        for key, value in values.items() if value is not None
+    )
+    return "[[advisories.allow]]\n" + entries
 
 
 def allow_config(*entries: tuple[str, str, str, str]) -> str:
