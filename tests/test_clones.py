@@ -56,11 +56,48 @@ def test_a_docstring_does_not_count_towards_the_tokens(build_repo, capsys):
     assert report(0, 0) in hygiene(capsys, build_repo(files))[1]
 
 
+BINARY_OPERATORS = ["+", "-", "*", "/", "//", "%", "**", "<<", ">>", "|", "^", "&", "@"]
+
+
+def operator_chain(name: str, operators: int) -> str:
+    """A function that is one `x = a OP 1` statement per operator, each operator different.
+
+    The parameter is `arguments`, `arg`, `ID` (3 tokens) and a statement is `Assign`, `Name`, `ID`, `BinOp`, `Name`,
+    `ID`, the operator, `Constant`, `N` (9 tokens). A 5-token window holds at most one operator, so the windows
+    holding one are all different, and the 4 windows between two operators are the same 4 windows everywhere.
+    """
+    body = "".join(f"    x = a {BINARY_OPERATORS[index]} 1\n" for index in range(operators))
+    return f"def {name}(a):\n{body}"
+
+
+@pytest.mark.parametrize(
+    ("longer", "shorter", "pairs"),
+    [(9, 8, 1), (8, 7, 0)],
+    ids=[
+        "#113 E1 a copy missing 1 of 9 statements is at the threshold and one pair",
+        "#113 E1 a copy missing 1 of 8 statements is below the threshold and no pair",
+    ],
+)
+def test_the_similarity_threshold_is_ninety_percent(build_repo, capsys, longer, shorter, pairs):
+    """#113 E1, counted by hand for n statements (3 + 9n tokens, so 9n - 1 windows).
+
+    The windows holding operator i are 5, or 3 for the last operator, which the end of the function cuts short.
+    The windows holding none are 3 at the start plus the 4 between two operators, 2 of them the same, so 7. That
+    leaves 5(n - 1) + 3 + 7 = 5n + 5 different windows: 50 for 9 statements, 45 for 8, 40 for 7. The shorter
+    function has no window the longer one lacks, so the intersection is the shorter's windows and the union the
+    longer's: 45 of 50 = 0.9 for 9 and 8 statements, 40 of 45 = 0.889 for 8 and 7.
+    """
+    files = {"src/a.py": operator_chain("longer", longer), "src/b.py": operator_chain("shorter", shorter)}
+    assert report(pairs, 0) in hygiene(capsys, build_repo(files))[1]
+
+
 def test_a_pair_is_named_by_path_and_qualified_symbol_whatever_the_line():
     """#113 E2: lines inserted above the copy and an edited neighbour leave the pair's name unchanged."""
     first, second = function("first", "a", "b"), function("second", "c", "d")
-    before = clones.find_pairs({"src/a.py": first.encode(), "src/b.py": second.encode()})
-    after = clones.find_pairs({"src/a.py": first.encode(), "src/b.py": f"import os\n\n\n{second}\nx = 1\n".encode()})
+    neighbour = "def neighbour(a):\n    return a\n"
+    edited_neighbour = "def neighbour(a, b):\n    c = a\n    return b\n"
+    before = clones.find_pairs({"src/a.py": first.encode(), "src/b.py": f"{neighbour}\n\n{second}".encode()})
+    after = clones.find_pairs({"src/a.py": first.encode(), "src/b.py": f"import os\n\n\n{edited_neighbour}\n\n{second}\nx = 1\n".encode()})
     assert before == after == {ClonePair(Place("src/a.py", "first"), Place("src/b.py", "second"))}
 
 

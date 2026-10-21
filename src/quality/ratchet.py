@@ -27,6 +27,7 @@ WRITE_COMMAND = "quality baseline write"
 REWRITE_HINT = f"rewrite it with `{WRITE_COMMAND}`"
 PYTHON_SUFFIX = ".py"
 OCCURRENCE_MARK = "#"
+PARSE_ERRORS = (SyntaxError, ValueError, LookupError)
 TEST_DIRECTORIES = frozenset({"test", "tests"})
 BASELINE_HEADER = f"# Measured by `{WRITE_COMMAND}`. Entries only ever go down.\n"
 
@@ -157,7 +158,7 @@ def measure(sources: dict[str, bytes]) -> TreeMeasurement:
         try:
             text = python_text(source)
             tree = ast.parse(text, filename=path)
-        except (SyntaxError, ValueError, LookupError) as error:
+        except PARSE_ERRORS as error:
             unparsable[path] = str(error)
             continue
         measurements.update(_function_measurements(path, text, tree))

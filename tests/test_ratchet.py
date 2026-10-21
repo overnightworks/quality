@@ -252,6 +252,8 @@ def test_a_tracked_file_the_filesystem_refuses_to_reach_cannot_be_judged(build_r
     prefix = "hygiene: size cannot judge - " if command == "hygiene" else "baseline: not written - "
     err = capsys.readouterr().err
     assert (prefix + reason in err, str(repo) in err) == (True, False), err
+    if command == "hygiene":
+        assert "hygiene: clone cannot judge - " + reason in err, err
 
 
 def property_pair(lines: int) -> str:

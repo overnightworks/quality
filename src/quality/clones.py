@@ -92,7 +92,7 @@ def _functions(path: str, tree: ast.Module) -> Iterator[tuple[Place, FUNCTION_NO
 def _parsed(path: str, source: bytes) -> ast.Module | None:
     try:
         return ast.parse(ratchet.python_text(source), filename=path)
-    except (SyntaxError, ValueError, LookupError):
+    except ratchet.PARSE_ERRORS:
         return None
 
 
