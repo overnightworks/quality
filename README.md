@@ -259,7 +259,8 @@ duplicating `quality/fleet.toml` is `cannot judge`, exit `2`.
   callers show both, joined by ` · `. The `# v` comment is never read. The owner and repository of a `uses:` match in any
   case, the workflow path exactly.
 - After `Gate` and `CodeQL` the matrix has `Mandatory jobs` (the number in `[gate] mandatory_jobs` of `quality/config.toml`,
-  `no config` without the file), `Sonar legacy` (`report` or `fail` from `[gate] legacy`) and one column per rule whose
+  `no config` without the file, `—` without a gate), `Sonar legacy` (`report` or `fail` from `[gate] legacy`, `no config`
+  without the file, `—` without a gate) and one column per rule whose
   enforcement depends on the release or the repository. The rules every release enforces stand once in the sentence under
   the heading. A rule cell says what the pinned gate does with the rule, never whether the repository passes it:
   `enforced`, `report-only` (`size` without `quality/baseline.toml`, `import-contract` without an import-linter config,
@@ -268,7 +269,8 @@ duplicating `quality/fleet.toml` is `cannot judge`, exit `2`.
   tag name, or unreadable release tags) gives `release unknown`. The table of first releases lives in `scoreboard.py`.
 - A workflow file that cannot be read shows `cannot read <file>` in every cell that needs the pin, a malformed
   `quality/config.toml` or `quality/baseline.toml` and an import-linter config that cannot be read or that two files hold
-  show `cannot read <file>` (`import-linter config`) in their cells, unreadable release tags say so in the heading and
+  show `cannot read <file>` (`import-linter config`) in their cells, but only where a cell needs the file (not under no gate,
+  a pin before the rule or `release unknown`), unreadable release tags say so in the heading and
   show pins as commits, and each makes the exit `2`. No value, `behind`, `no gate` or `report-only` included, makes the run red.
 - A `private` repository is never measured, because the tables are published: it shows `not measured: private`. It is
   checked once with an anonymous `git ls-remote`; if anyone can read it, the row is `cannot judge: declared private

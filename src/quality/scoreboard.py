@@ -151,6 +151,19 @@ class Declared:
     unreadable: frozenset[str]
 
 
+@dataclass(frozen=True)
+class CannotRead:
+    """A matrix cell that depends on files that could not be read; the run cannot judge while one is printed."""
+
+    files: tuple[str, ...]
+
+    def __str__(self) -> str:
+        return f"cannot read {', '.join(self.files)}"
+
+
+Cell = str | CannotRead
+
+
 class Gate(Enum):
     """The release a row's gate is, when it is not a release tag."""
 
@@ -284,10 +297,18 @@ def require_anonymous(url: str) -> None:
 
 
 def cannot_judge(rows: list[Row], tags: ReleaseTags | ReleaseTagsError) -> bool:
+    pins = release_tags_or_none(tags)
     unreadable = any(
-        isinstance(row, Measured) and (row.workflows.unreadable or row.declared.unreadable) for row in rows
+        isinstance(cell, CannotRead)
+        for row in rows
+        if isinstance(row, Measured)
+        for cell in matrix_cells(row, pins)
     )
     return isinstance(tags, ReleaseTagsError) or unreadable or any(isinstance(row, Unjudged) for row in rows)
+
+
+def release_tags_or_none(tags: ReleaseTags | ReleaseTagsError) -> ReleaseTags | None:
+    return None if isinstance(tags, ReleaseTagsError) else tags
 
 
 def repository_name(url: str) -> str:
@@ -371,7 +392,7 @@ def read_declared(clone: Path, tracked: list[str]) -> Declared:
     unreadable: set[str] = set()
     settings, has_baseline, has_import_config = None, False, False
     try:
-        settings = read_gate_settings(clone)
+        settings = config.read_gate_settings(clone) if config.CONFIG_PATH in tracked else None
     except config.ConfigError:
         unreadable.add(config.CONFIG_PATH)
     try:
@@ -383,14 +404,6 @@ def read_declared(clone: Path, tracked: list[str]) -> Declared:
     except (repository.RepositoryFileError, architecture.ContractError):
         unreadable.add(IMPORT_LINTER_CONFIG)
     return Declared(settings, has_baseline, has_import_config, frozenset(unreadable))
-
-
-def read_gate_settings(clone: Path) -> config.GateSettings | None:
-    try:
-        text = repository.read_text(clone, config.CONFIG_PATH)
-    except repository.RepositoryFileError as error:
-        raise config.ConfigError(str(error)) from error
-    return None if text is None else config.load_gate_settings(text)
 
 
 def find_import_config(clone: Path, tracked: list[str]) -> bool:
@@ -467,7 +480,7 @@ def git(
 def render(rows: list[Row], today: date, tags: ReleaseTags | ReleaseTagsError) -> tuple[str, ...]:
     heading = f"**Fleet scoreboard, {today.isoformat()}, quality {__version__} — {FUNCTION_SCOPE}**"
     table = [table_line(COLUMNS), "|---" * len(COLUMNS) + "|", *(table_line(cells(row)) for row in rows)]
-    pins = None if isinstance(tags, ReleaseTagsError) else tags
+    pins = release_tags_or_none(tags)
     matrix_heading = f"**Repo × rule, {newest_release_words(tags)}**"
     every_release = f"Every gate release enforces {words_joined([rule.rule for rule in EVERY_RELEASE_ENFORCES])}."
     matrix = [
@@ -492,12 +505,11 @@ def newest_release(tags: ReleaseTags) -> str:
     return max(tags, key=release_order)
 
 
-def matrix_cells(row: Row, tags: ReleaseTags | None) -> tuple[str, ...]:
+def matrix_cells(row: Row, tags: ReleaseTags | None) -> tuple[Cell, ...]:
     if not isinstance(row, Measured):
         return (row.name, status_label(row), *("",) * (len(MATRIX_COLUMNS) - 2))
     if row.workflows.unreadable:
-        unreadable = f"cannot read {', '.join(row.workflows.unreadable)}"
-        return (row.name, *(unreadable,) * (len(MATRIX_COLUMNS) - 1))
+        return (row.name, *(CannotRead(row.workflows.unreadable),) * (len(MATRIX_COLUMNS) - 1))
     is_gate = row.name == GATE_REPOSITORY
     release = gate_release(row.workflows.gate, is_gate, tags)
     return (
@@ -509,11 +521,11 @@ def matrix_cells(row: Row, tags: ReleaseTags | None) -> tuple[str, ...]:
     )
 
 
-def settings_cells(declared: Declared, release: Gate | str) -> tuple[str, str]:
+def settings_cells(declared: Declared, release: Gate | str) -> tuple[Cell, Cell]:
     if release is Gate.NONE:
         return (DASH, DASH)
     if config.CONFIG_PATH in declared.unreadable:
-        return (f"cannot read {config.CONFIG_PATH}",) * 2
+        return (CannotRead((config.CONFIG_PATH,)),) * 2
     if declared.settings is None:
         return (NO_CONFIG, NO_CONFIG)
     return (str(len(declared.settings.mandatory_jobs)), declared.settings.legacy.value)
@@ -534,14 +546,20 @@ def gate_release(calls: tuple[Call, ...], is_gate_repository: bool, tags: Releas
     return min(tagged, key=release_order) if tagged else Gate.MAIN
 
 
-def pin_release(ref: str, tags: ReleaseTags | None) -> Gate | str:
+def commit_of(ref: str) -> str | None:
+    """The ref lowercased when it has the shape of a full commit, else None."""
     commit = ref.lower()
-    if tags is None or not COMMIT_SHA.fullmatch(commit):
+    return commit if COMMIT_SHA.fullmatch(commit) else None
+
+
+def pin_release(ref: str, tags: ReleaseTags | None) -> Gate | str:
+    commit = commit_of(ref)
+    if tags is None or commit is None:
         return Gate.UNKNOWN
     return released_tag(commit, tags) or Gate.UNKNOWN
 
 
-def rule_cell(rule: RuleRelease, release: Gate | str, declared: Declared) -> str:
+def rule_cell(rule: RuleRelease, release: Gate | str, declared: Declared) -> Cell:
     """What the pinned gate does with the rule: never more than the oldest release the repository calls."""
     if release is Gate.NONE:
         return DASH
@@ -555,7 +573,7 @@ def rule_cell(rule: RuleRelease, release: Gate | str, declared: Declared) -> str
     return switch_words(rule.switch, declared)
 
 
-def switch_words(switch: Switch, declared: Declared) -> str:
+def switch_words(switch: Switch, declared: Declared) -> Cell:
     if switch is Switch.ALWAYS:
         return ENFORCED
     if switch is Switch.REPORT_ONLY:
@@ -566,7 +584,7 @@ def switch_words(switch: Switch, declared: Declared) -> str:
         else (IMPORT_LINTER_CONFIG, declared.has_import_config)
     )
     if file in declared.unreadable:
-        return f"cannot read {file}"
+        return CannotRead((file,))
     return ENFORCED if present else REPORT_ONLY
 
 
@@ -578,13 +596,13 @@ def pin_cell(calls: tuple[Call, ...], absent: str, is_gate_repository: bool, tag
 
 
 def pin_words(ref: str, tags: ReleaseTags | None) -> str:
-    ref = ref.lower() if COMMIT_SHA.fullmatch(ref.lower()) else ref
-    if not COMMIT_SHA.fullmatch(ref):
+    commit = commit_of(ref)
+    if commit is None:
         return f"{ref} (not a commit)"
-    short = ref[:SHORT_COMMIT]
+    short = commit[:SHORT_COMMIT]
     if tags is None:
         return short
-    tag = released_tag(ref, tags)
+    tag = released_tag(commit, tags)
     if tag is None:
         return f"{short} (no release)"
     return tag if tag == newest_release(tags) else f"{tag} (behind)"
@@ -595,8 +613,8 @@ def released_tag(commit: str, tags: ReleaseTags) -> str | None:
     return max((tag for tag, tagged in tags.items() if tagged == commit), key=release_order, default=None)
 
 
-def table_line(values: tuple[str, ...]) -> str:
-    return "| " + " | ".join(value.replace("|", "\\|") for value in values) + " |"
+def table_line(values: tuple[Cell, ...]) -> str:
+    return "| " + " | ".join(str(value).replace("|", "\\|") for value in values) + " |"
 
 
 def cells(row: Row) -> tuple[str, ...]:

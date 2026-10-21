@@ -27,11 +27,17 @@ GATE = "overnightworks/quality/.github/workflows/gate.yml"
 CODEQL = "overnightworks/quality/.github/workflows/codeql.yml"
 FIRST_RELEASES = {"v0.2.1": OLDER, "v0.3.1": NEWEST}
 CONFIG = "quality/config.toml"
+TWO_IMPORT_CONFIGS = {"pyproject.toml": toml(FORBIDDEN), ".importlinter": "[importlinter]\nroot_package = shop\n"}
 TWO_JOBS = '[gate]\nmandatory_jobs = ["checks", "tests"]\n'
 
 
 def matrix_row(output: str, name: str) -> list[str]:
     return row(output, name, table=1)
+
+
+def pinned_gate(ref: str | None) -> dict[str, str]:
+    """A repository calling the gate at `ref`, or none at all."""
+    return {} if ref is None else caller(f"{GATE}@{ref}")
 
 
 def caller(uses: str) -> dict[str, str]:
@@ -272,18 +278,21 @@ def test_a_rule_only_main_has_is_not_released_on_a_pinned_gate_and_report_only_i
 
 
 @pytest.mark.parametrize(
-    ("files", "code", "cell_words"),
+    ("files", "pin", "code", "cell_words"),
     [
-        ({"pyproject.toml": toml(FORBIDDEN)}, 0, "enforced"),
-        ({}, 0, "report-only"),
-        ({"pyproject.toml": toml(FORBIDDEN), ".importlinter": "[importlinter]\nroot_package = shop\n"}, 2,
-         "cannot read import-linter config"),
+        ({"pyproject.toml": toml(FORBIDDEN)}, NEWEST, 0, "enforced"),
+        ({}, NEWEST, 0, "report-only"),
+        (TWO_IMPORT_CONFIGS, NEWEST, 2, "cannot read import-linter config"),
+        (TWO_IMPORT_CONFIGS, None, 0, "—"),
+        (TWO_IMPORT_CONFIGS, OLDER, 0, "not in v0.2.1"),
+        (TWO_IMPORT_CONFIGS, UNRELEASED, 0, "release unknown"),
     ],
-    ids=["a config", "no config", "two configs"],
+    ids=["a config", "no config", "two configs", "two configs, no gate", "two configs, older pin",
+         "two configs, no release"],
 )
-def test_the_import_contract_cell_follows_the_import_linter_config(scoreboard, public, files, code, cell_words):
-    """#125 cell 19, E7, E19: two configs leave it open which one the gate runs."""
-    result, output = scoreboard(public("layered", {**caller(f"{GATE}@{NEWEST}"), **files}), tags=first_releases())
+def test_the_import_contract_cell_follows_the_import_linter_config(scoreboard, public, files, pin, code, cell_words):
+    """#125 cell 19, E7, E19: two configs leave it open which one the gate runs, but only where the cell shows it."""
+    result, output = scoreboard(public("layered", {**pinned_gate(pin), **files}), tags=first_releases())
     assert result == code, output
     assert cell(output, "layered", "import-contract") == cell_words
 
@@ -300,28 +309,41 @@ def test_without_a_gate_every_cell_that_needs_one_is_a_dash_and_an_unreadable_wo
 
 
 @pytest.mark.parametrize(
-    ("files", "code", "jobs", "legacy"),
+    ("files", "pin", "code", "jobs", "legacy"),
     [
-        ({CONFIG: TWO_JOBS}, 0, "2", "report"),
-        ({CONFIG: TWO_JOBS + 'legacy = "fail"\n'}, 0, "2", "fail"),
-        ({}, 0, "no config", "no config"),
-        ({CONFIG: "[gate\n"}, 2, "cannot read quality/config.toml", "cannot read quality/config.toml"),
+        ({CONFIG: TWO_JOBS}, NEWEST, 0, "2", "report"),
+        ({CONFIG: TWO_JOBS + 'legacy = "fail"\n'}, NEWEST, 0, "2", "fail"),
+        ({}, NEWEST, 0, "no config", "no config"),
+        ({CONFIG: "[gate\n"}, NEWEST, 2, "cannot read quality/config.toml", "cannot read quality/config.toml"),
+        ({CONFIG: "[gate\n"}, None, 0, "—", "—"),
     ],
-    ids=["jobs counted", "legacy fail", "no config", "malformed config"],
+    ids=["jobs counted", "legacy fail", "no config", "malformed config", "malformed config, no gate"],
 )
-def test_the_jobs_cell_counts_and_the_legacy_cell_names_the_mode(scoreboard, public, files, code, jobs, legacy):
-    """#125 cell 21, E6, E9, E11."""
-    result, output = scoreboard(public("gated", {**caller(f"{GATE}@{NEWEST}"), **files}), tags=first_releases())
+def test_the_jobs_cell_counts_and_the_legacy_cell_names_the_mode(scoreboard, public, files, pin, code, jobs, legacy):
+    """#125 cell 21, E6, E9, E11: an unreadable config counts only where a cell shows it."""
+    result, output = scoreboard(public("gated", {**pinned_gate(pin), **files}), tags=first_releases())
     assert result == code, output
     assert (cell(output, "gated", "Mandatory jobs"), cell(output, "gated", "Sonar legacy")) == (jobs, legacy)
 
 
-def test_a_malformed_size_baseline_is_named_in_the_size_cell_and_the_run_is_red(scoreboard, public):
+@pytest.mark.parametrize(
+    ("pin", "code", "size"),
+    [
+        (NEWEST, 2, "cannot read quality/baseline.toml"),
+        (None, 0, "—"),
+        (OLDER, 0, "not in v0.2.1"),
+        (UNRELEASED, 0, "release unknown"),
+    ],
+    ids=["newest pin", "no gate", "older pin", "no release"],
+)
+def test_a_malformed_size_baseline_is_named_in_the_size_cell_only_where_the_cell_shows_it(
+    scoreboard, public, pin, code, size
+):
     """#125 cell 22, E11."""
-    broken = {**caller(f"{GATE}@{NEWEST}"), ratchet.BASELINE_PATH: "[file_lines\n"}
-    code, output = scoreboard(public("sized", broken), tags=first_releases())
-    assert code == 2, output
-    assert cell(output, "sized", "size") == "cannot read quality/baseline.toml"
+    broken = {**pinned_gate(pin), ratchet.BASELINE_PATH: "[file_lines\n"}
+    result, output = scoreboard(public("sized", broken), tags=first_releases())
+    assert result == code, output
+    assert cell(output, "sized", "size") == size
 
 
 def test_every_rule_the_door_judges_has_a_row_in_the_first_release_table(tmp_path):
