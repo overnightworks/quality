@@ -401,7 +401,7 @@ def measure_public(url: str) -> Row:
 
 
 def read_declared(clone: Path, tracked: list[str]) -> Declared:
-    """The clone's gate settings, size baseline and import-linter config; a file that cannot be read is named."""
+    """The clone's gate settings, size baseline, clone table and import-linter config; a file that cannot be read is named."""
     unreadable: set[str] = set()
     settings, has_baseline, has_clone_table, has_import_config = None, False, False, False
     try:
@@ -596,7 +596,9 @@ def switch_at(rule: RuleRelease, release: Gate | str) -> Switch:
     if release is Gate.MAIN:
         after_change = True
     else:
-        after_change = change.release is not None and release_order(str(release)) >= release_order(change.release)
+        after_change = (
+            isinstance(release, str) and change.release is not None and release_order(release) >= release_order(change.release)
+        )
     return change.switch if after_change else rule.switch
 
 

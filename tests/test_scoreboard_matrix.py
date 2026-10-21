@@ -286,16 +286,16 @@ CLONE = next(rule for rule in RULES if rule.rule == "clone")
 
 @pytest.mark.parametrize("has_clone_table", [False, True], ids=["no clone table", "a clone table"])
 @pytest.mark.parametrize(
-    ("pin", "own", "words"),
+    ("pin", "words"),
     [
-        (CLONE_RELEASE, False, "report-only"),
-        (NEWEST, False, "not in v0.3.1"),
+        (CLONE_RELEASE, "report-only"),
+        (NEWEST, "not in v0.3.1"),
     ],
     ids=["a pin at the clone release", "an older tag"],
 )
-def test_a_pinned_gate_reports_clones_whatever_the_clone_table_says(pin, own, words, has_clone_table):
+def test_a_pinned_gate_reports_clones_whatever_the_clone_table_says(pin, words, has_clone_table):
     """#137 tests 1 and 4: no tag up to v0.4.0 enforces clone."""
-    release = gate_release((Call(pin),), own, CLONE_RELEASES)
+    release = gate_release((Call(pin),), False, CLONE_RELEASES)
     assert rule_cell(CLONE, release, declared(has_clone_table=has_clone_table)) == words
 
 
