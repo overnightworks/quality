@@ -11,8 +11,11 @@ from quality import repository
 CONFIG_PATH = "quality/config.toml"
 GATE_KEYS = {"mandatory_jobs", "legacy", "loosened"}
 SECRETS_KEYS = {"allow"}
+ADVISORIES_KEYS = {"allow"}
+TABLES = {"gate", "secrets", "advisories"}
 ALLOWANCE_KEYS = {"rule", "file", "secret_sha256", "reason"}
 DECLARATION_KEYS = {"what", "item", "date", "reason"}
+ADVISORY_ALLOWANCE_KEYS = {"id", "lock", "until", "date", "item", "reason"}
 SHA256_HEX = re.compile(r"[0-9a-f]{64}")
 # ASCII only, so a lookalike name (a Cyrillic letter in it) is no repository.
 REPOSITORY_NAME = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
@@ -29,6 +32,15 @@ LOOSENED_EXAMPLE = (
     'item = "overnightworks/songmaker#1345"\n'
     "date = 2026-10-20\n"
     'reason = "the operator ruled the requirement shelf machinery out"'
+)
+ADVISORY_ALLOWANCE_EXAMPLE = (
+    "[[advisories.allow]]\n"
+    'id = "GHSA-462x-pgg6-55fp"\n'
+    'lock = "speech/providers/qwen/uv.lock"\n'
+    "until = 2027-01-31\n"
+    "date = 2026-10-21\n"
+    'item = "overnightworks/agent-presentator#371"\n'
+    'reason = "gradio caps pillow<13; no image input"'
 )
 
 
@@ -55,13 +67,32 @@ class Declaration:
 
 
 @dataclass(frozen=True)
+class AdvisoryAllowance:
+    """An advisory the repository allows in one lock file until `until` (inclusive, in UTC), ruled on `date` in `item`;
+    `id` is any id or alias of the advisory's group."""
+
+    id: str
+    lock: str
+    until: datetime.date
+    date: datetime.date
+    item: str
+    reason: str
+
+    @property
+    def key(self) -> tuple[str, str]:
+        """One allowance per advisory id and lock file."""
+        return self.id, self.lock
+
+
+@dataclass(frozen=True)
 class GateSettings:
-    """What the gate reads from quality/config.toml: the settings a pull request must not loosen, and the loosenings
-    it declares."""
+    """What the gate reads from quality/config.toml: the settings a pull request must not loosen, the loosenings
+    it declares, and the advisories it allows."""
 
     mandatory_jobs: tuple[str, ...]
     legacy: LegacyMode
     loosened: tuple[Declaration, ...] = ()
+    advisory_allowances: tuple[AdvisoryAllowance, ...] = ()
 
 
 class Allowance(NamedTuple):
@@ -74,6 +105,16 @@ class Allowance(NamedTuple):
 
 class ConfigError(Exception):
     """The quality config cannot be read; the message carries the reason and the fix."""
+
+
+@dataclass(frozen=True)
+class _Document:
+    """The whole config, validated once: the [gate] table, its declarations, and both allow lists."""
+
+    gate: dict
+    declarations: tuple[Declaration, ...]
+    secret_allowances: dict[Allowance, str]
+    advisory_allowances: tuple[AdvisoryAllowance, ...]
 
 
 def _parse(text: str, example: str) -> dict:
@@ -96,24 +137,27 @@ def _refuse_unknown_secrets_keys(secrets: dict) -> None:
         raise ConfigError(f"{CONFIG_PATH} has unknown key(s) {sorted(unknown)} in [secrets] - only allow exists")
 
 
-def _refuse_unknown_keys(document: dict, gate: dict) -> None:
-    unknown = (set(document) - {"gate", "secrets"}) | (set(gate) - GATE_KEYS)
+def _refuse_unknown_keys(document: dict, gate: dict, advisories: dict) -> None:
+    unknown = (set(document) - TABLES) | (set(gate) - GATE_KEYS) | (set(advisories) - ADVISORIES_KEYS)
     if unknown:
         raise ConfigError(
             f"{CONFIG_PATH} has unknown key(s) {sorted(unknown)} - only [gate] mandatory_jobs, [gate] legacy, "
-            "[[gate.loosened]] and [secrets] allow exist"
+            "[[gate.loosened]], [secrets] allow and [[advisories.allow]] exist"
         )
 
 
-def _gate_table(text: str | None) -> dict:
-    """The validated [gate] table: one parse, one table fetch and one unknown-key check for every gate key."""
-    if text is None:
-        raise ConfigError(f"{CONFIG_PATH} is missing - create it with:\n{EXAMPLE}")
+def _validated_document(text: str) -> _Document:
+    """The one validation of the whole config: one parse, one unknown-key check, and every entry of every table."""
     document = _parse(text, EXAMPLE)
     gate = _table(document, "gate", EXAMPLE)
-    _refuse_unknown_keys(document, gate)
-    _refuse_unknown_secrets_keys(_table(document, "secrets", ALLOWANCE_EXAMPLE))
-    return gate
+    advisories = _table(document, "advisories", ADVISORY_ALLOWANCE_EXAMPLE)
+    _refuse_unknown_keys(document, gate, advisories)
+    return _Document(
+        gate,
+        _declarations(gate),
+        _parse_allowances(_table(document, "secrets", ALLOWANCE_EXAMPLE)),
+        _advisory_allowances(advisories),
+    )
 
 
 def _mandatory_jobs(gate: dict) -> tuple[str, ...]:
@@ -137,6 +181,15 @@ def _legacy_mode(gate: dict) -> LegacyMode:
 
 def _spans_lines(reason: str) -> bool:
     return "\n" in reason or "\r" in reason
+
+
+def _is_one_line_text(value: object) -> bool:
+    return isinstance(value, str) and bool(value.strip()) and not _spans_lines(value)
+
+
+def _is_date_without_time(value: object) -> bool:
+    """A TOML date: tomllib reads a date with a time as a datetime, which is a date too."""
+    return isinstance(value, datetime.date) and not isinstance(value, datetime.datetime)
 
 
 def _declarations(gate: dict) -> tuple[Declaration, ...]:
@@ -166,17 +219,60 @@ def _read_declaration(entry: object) -> Declaration:
         raise refuse("a non-empty what")
     if not (isinstance(item, str) and ITEM_REFERENCE.fullmatch(item)):
         raise refuse("item as #<number> or <owner>/<repo>#<number>")
-    if not isinstance(date, datetime.date) or isinstance(date, datetime.datetime):
+    if not _is_date_without_time(date):
         raise refuse("date as a TOML date without a time")
-    if not (isinstance(reason, str) and reason.strip()) or _spans_lines(reason):
+    if not _is_one_line_text(reason):
         raise refuse("a non-empty one-line reason")
     return Declaration(what, item, date, reason)
 
 
+def _advisory_allowances(advisories: dict) -> tuple[AdvisoryAllowance, ...]:
+    entries = advisories.get("allow", [])
+    if not isinstance(entries, list):
+        raise ConfigError(
+            f"{CONFIG_PATH} needs [[advisories.allow]] as an array of tables, like:\n{ADVISORY_ALLOWANCE_EXAMPLE}"
+        )
+    allowances: dict[tuple[str, str], AdvisoryAllowance] = {}
+    for entry in entries:
+        allowance = _read_advisory_allowance(entry)
+        if allowance.key in allowances:
+            raise ConfigError(
+                f"{CONFIG_PATH} [[advisories.allow]] allows {allowance.id} in {allowance.lock} twice; one entry per "
+                "advisory and lock file"
+            )
+        allowances[allowance.key] = allowance
+    return tuple(allowances.values())
+
+
+def _read_advisory_allowance(entry: object) -> AdvisoryAllowance:
+    def refuse(need: str) -> ConfigError:
+        return ConfigError(
+            f"{CONFIG_PATH} [[advisories.allow]] entry {entry!r} needs {need}, like:\n{ADVISORY_ALLOWANCE_EXAMPLE}"
+        )
+
+    if not isinstance(entry, dict) or set(entry) != ADVISORY_ALLOWANCE_KEYS:
+        raise refuse("exactly an id, a lock, an until, a date, an item and a reason")
+    identifier, lock, until, date, item, reason = (
+        entry[key] for key in ("id", "lock", "until", "date", "item", "reason")
+    )
+    if not all(_is_one_line_text(value) for value in (identifier, lock, reason)):
+        raise refuse("a non-empty one-line id, lock and reason")
+    if not (isinstance(item, str) and ITEM_REFERENCE.fullmatch(item)):
+        raise refuse("item as #<number> or <owner>/<repo>#<number>")
+    if not (_is_date_without_time(until) and _is_date_without_time(date)):
+        raise refuse("until and date as TOML dates without a time")
+    return AdvisoryAllowance(identifier, lock, until, date, item, reason)
+
+
 def load_gate_settings(text: str | None) -> GateSettings:
     """mandatory_jobs is judged before legacy, so a config wrong in both is refused for mandatory_jobs."""
-    gate = _gate_table(text)
-    return GateSettings(_mandatory_jobs(gate), _legacy_mode(gate), _declarations(gate))
+    if text is None:
+        raise ConfigError(f"{CONFIG_PATH} is missing - create it with:\n{EXAMPLE}")
+    document = _validated_document(text)
+    return GateSettings(
+        _mandatory_jobs(document.gate), _legacy_mode(document.gate), document.declarations,
+        document.advisory_allowances,
+    )
 
 
 def _read_config_text(repo: Path) -> str | None:
@@ -195,15 +291,9 @@ def load_secret_allowances(text: str | None) -> dict[Allowance, str]:
     """Allowance -> reason of every finding the repository allows; a missing config allows nothing.
 
     The whole document is validated, as the gate does: hygiene and the verdict refuse an unknown key and a malformed
-    declaration alike.
+    entry alike.
     """
-    if text is None:
-        return {}
-    document = _parse(text, ALLOWANCE_EXAMPLE)
-    gate = _table(document, "gate", EXAMPLE)
-    _refuse_unknown_keys(document, gate)
-    _declarations(gate)
-    return _parse_allowances(_table(document, "secrets", ALLOWANCE_EXAMPLE))
+    return {} if text is None else _validated_document(text).secret_allowances
 
 
 def load_staged_secret_allowances(text: str | None) -> dict[Allowance, str]:
@@ -255,3 +345,12 @@ def _read_allowance(entry: object) -> tuple[Allowance, str]:
 
 def read_secret_allowances(repo: Path) -> dict[Allowance, str]:
     return load_secret_allowances(_read_config_text(repo))
+
+
+def load_advisory_allowances(text: str | None) -> tuple[AdvisoryAllowance, ...]:
+    """Every advisory the repository allows, the whole document validated; a missing config allows nothing."""
+    return () if text is None else _validated_document(text).advisory_allowances
+
+
+def read_advisory_allowances(repo: Path) -> tuple[AdvisoryAllowance, ...]:
+    return load_advisory_allowances(_read_config_text(repo))
