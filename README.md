@@ -74,8 +74,8 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   `baseline: wrote N entries and M clone pairs ...` line it names, in the verdict's wording, each entry it raises or adds
   against the previous file (`baseline: raises function_lines src/quality/cli.py main 82 -> 90`, `baseline: adds ccn
   src/a.py f 16`) and, when the previous file has a `[clones]` table, each new pair (`baseline: adds clone
-  tests/test_a.py run <-> tests/test_b.py hygiene`); a lowered or removed entry or pair is not named, and without a
-  previous file, or one without `[clones]`, only the count prints. A previous file it cannot read is
+  tests/test_a.py run <-> tests/test_b.py hygiene`); a lowered or removed entry or pair is not named; without a
+  previous file only the count prints, and a previous file without `[clones]` names no pair but still names its size raises and adds. A previous file it cannot read is
   overwritten with `baseline: the previous quality/baseline.toml could not be read (...), so raises cannot be named`.
   The write exits `0` with raises too: the verdict is the gate.
 - `clone`: a pair is two functions (methods and nested functions too) in two different tracked `*.py` files, each of at

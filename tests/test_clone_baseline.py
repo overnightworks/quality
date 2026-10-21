@@ -271,21 +271,21 @@ def test_an_empty_clone_table_is_the_empty_set_and_renders_back_as_the_table(bui
     assert baseline_text(repo).endswith("\n" + EMPTY_CLONES)
 
 
-def test_symbols_and_paths_that_need_quotes_round_trip_through_the_write(build_repo, capsys):
-    """#130 cell 20: `Class.method`, `f#2`, a `"` in a path and a non-ASCII symbol, on the key side and the list side."""
+@pytest.mark.parametrize("class_path, functions_path", [('tests/a"q.py', 'tests/b"r.py'), ('tests/b"r.py', 'tests/a"q.py')])
+def test_symbols_and_paths_that_need_quotes_round_trip_through_the_write(build_repo, capsys, class_path, functions_path):
+    """#130 cell 20: `Class.method`, `f#2`, a `"` in a path and a non-ASCII symbol, each on the key side and the list side."""
     method = textwrap.indent(clone_function("méthode", "a", "b"), "    ")
-    files = {
-        'tests/a"q.py': "class Holder:\n" + method,
-        'tests/b"r.py': clone_function("f", "c", "d") + "\n\n" + clone_function("f", "e", "g"),
-    }
-    repo = build_repo(files)
+    repo = build_repo({
+        class_path: "class Holder:\n" + method,
+        functions_path: clone_function("f", "c", "d") + "\n\n" + clone_function("f", "e", "g"),
+    })
     assert written(capsys, repo)[0] == 0
     first = baseline_text(repo)
     assert '[clones."tests/a\\"q.py"]' in first
     assert 'tests/b\\"r.py' in first
     pairs = frozenset({
-        ClonePair.of(Place('tests/a"q.py', "Holder.méthode"), Place('tests/b"r.py', "f")),
-        ClonePair.of(Place('tests/a"q.py', "Holder.méthode"), Place('tests/b"r.py', "f#2")),
+        ClonePair.of(Place(class_path, "Holder.méthode"), Place(functions_path, "f")),
+        ClonePair.of(Place(class_path, "Holder.méthode"), Place(functions_path, "f#2")),
     })
     assert load_baseline(first) == Baseline({}, pairs)
     assert written(capsys, repo)[0] == 0
