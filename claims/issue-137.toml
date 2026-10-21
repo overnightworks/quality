@@ -1,7 +1,0 @@
-claim_id = "da8ad4457db4436084f589a09abc5152"
-agent = "claude"
-role = "builder"
-base = "1e65c25bf874922117c1d0beb12ab04bdd1af76f"
-branch = "claude/issue-137-matrix-clone-switch"
-scope = ["README.md", "src/quality/scoreboard.py", "tests/test_scoreboard_matrix.py"]
-opened_commit = "8117ba06e466112990dc7ed00be59c0148db826c"
