@@ -1,0 +1,7 @@
+claim_id = "bafdaa038a1f4198a69ff945f3811772"
+agent = "claude"
+role = "builder"
+base = "2338b77d78b04e18ba49fb4c8de766cee7d56db2"
+branch = "claude/issue-117-scoreboard-clone-pairs"
+scope = ["README.md", "src/quality/scoreboard.py", "tests/test_scoreboard.py"]
+opened_commit = "1050b938a602299a21be6bce0410b4d835fe7316"
