@@ -61,7 +61,7 @@ jobs:
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: '0.12.4'
-          python-version: '3.12'
+          python-version: '3.14'
 
       - name: Install the pinned engines
         run: uv run --locked --project "$TOOL_DIR" quality engines install "$RUNNER_TEMP/engines"
@@ -102,7 +102,7 @@ jobs:
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: '0.12.4'
-          python-version: '3.12'
+          python-version: '3.14'
 
       - name: Refuse a token or properties file that could steer the scan
         env:
@@ -152,7 +152,7 @@ jobs:
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: '0.12.4'
-          python-version: '3.12'
+          python-version: '3.14'
 
       - name: Verdict
         env:
