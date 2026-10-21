@@ -1,7 +1,9 @@
-"""The `size` rule: lines per file, lines and CCN per function of every tracked Python file, held by a baseline.
+"""The `size` rule: lines per file of every tracked file in a table language, and lines and CCN per function of
+every tracked Python file, held by a baseline.
 
 lizard measures; Python's own `ast` only names each function by its qualified symbol (`Class.method`), which
 lizard leaves unqualified. Both read the same text, decoded from the file's bytes the way Python reads source.
+The other languages are counted by lines only: lizard misplaces their function boundaries.
 """
 
 import ast
@@ -10,7 +12,7 @@ import json
 import tokenize
 import tomllib
 from collections import Counter
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from enum import Enum
 from operator import attrgetter
@@ -25,10 +27,11 @@ SIZE = "size"
 BASELINE_PATH = "quality/baseline.toml"
 WRITE_COMMAND = "quality baseline write"
 REWRITE_HINT = f"rewrite it with `{WRITE_COMMAND}`"
-PYTHON_SUFFIX = ".py"
 OCCURRENCE_MARK = "#"
 PARSE_ERRORS = (SyntaxError, ValueError, LookupError)
 TEST_DIRECTORIES = frozenset({"test", "tests"})
+RUNNER_TEST_DIRECTORIES = TEST_DIRECTORIES | {"__tests__"}
+RUNNER_TEST_WORDS = frozenset({"test", "spec"})
 BASELINE_HEADER = f"# Measured by `{WRITE_COMMAND}`. Entries only ever go down.\n"
 
 FILE_LINES_FROM = 800
@@ -62,6 +65,39 @@ class Metric(Enum):
             Metric.FILE_LINES: f"split the file below {FILE_LINES_FROM} lines",
             Metric.FUNCTION_LINES: f"split the function below {FUNCTION_LINES_FROM} lines",
         }[self]
+
+
+class Language(Enum):
+    """A language the `size` rule counts: its lines everywhere, its functions only for Python."""
+
+    PYTHON = "Python"
+    TYPESCRIPT = "TypeScript"
+    JAVASCRIPT = "JavaScript"
+    SVELTE = "Svelte"
+    VUE = "Vue"
+
+    @property
+    def suffixes(self) -> frozenset[str]:
+        return {
+            Language.PYTHON: frozenset({".py"}),
+            Language.TYPESCRIPT: frozenset({".ts", ".tsx", ".mts", ".cts"}),
+            Language.JAVASCRIPT: frozenset({".js", ".jsx", ".mjs", ".cjs"}),
+            Language.SVELTE: frozenset({".svelte"}),
+            Language.VUE: frozenset({".vue"}),
+        }[self]
+
+    def is_test_file(self, path: PurePosixPath) -> bool:
+        """The directory rule is shared; the file name rule is the language's own: Python's pytest names, the
+        TypeScript and JavaScript runners' `*.test.*`, `*.spec.*` and `__tests__/`, none for Svelte and Vue."""
+        runner = self in {Language.TYPESCRIPT, Language.JAVASCRIPT}
+        if (RUNNER_TEST_DIRECTORIES if runner else TEST_DIRECTORIES) & set(path.parts[:-1]):
+            return True
+        if self is Language.PYTHON:
+            return path.name == "conftest.py" or path.name.startswith("test_") or path.stem.endswith("_test")
+        return runner and bool(RUNNER_TEST_WORDS & set(path.name.split(".")[1:-1]))
+
+
+LANGUAGE_OF_SUFFIX = {suffix: language for language in Language for suffix in language.suffixes}
 
 
 class Area(Enum):
@@ -119,24 +155,22 @@ class UnparsableSource(SizeError):
     """A tracked file Python cannot decode or parse, so its functions cannot be measured."""
 
 
-def is_python(name: str) -> bool:
-    return PurePosixPath(name).suffix == PYTHON_SUFFIX
+def language_of(name: str) -> Language | None:
+    return LANGUAGE_OF_SUFFIX.get(PurePosixPath(name).suffix)
 
 
 def area_of(path: str) -> Area:
+    """The area of a path in a table language; any other path has only the directory rule."""
     posix = PurePosixPath(path)
-    is_test = (
-        bool(TEST_DIRECTORIES & set(posix.parts[:-1]))
-        or posix.name == "conftest.py"
-        or posix.name.startswith("test_")
-        or posix.stem.endswith("_test")
-    )
+    language = language_of(path)
+    is_test = language.is_test_file(posix) if language else bool(TEST_DIRECTORIES & set(posix.parts[:-1]))
     return Area.TESTS if is_test else Area.PRODUCTION
 
 
 @dataclass(frozen=True)
 class TreeMeasurement:
-    """Every file's lines, and the functions of every file Python can parse; `unparsable` maps the rest to why."""
+    """Every file's lines, and the functions of every Python file Python can parse; `unparsable` maps the rest of
+    the Python files to why."""
 
     measurements: Measurements
     unparsable: dict[str, str]
@@ -155,6 +189,8 @@ def measure(sources: dict[str, bytes]) -> TreeMeasurement:
     unparsable: dict[str, str] = {}
     for path, source in sources.items():
         measurements[Key(Metric.FILE_LINES, path)] = Measured(len(source.splitlines()), None)
+        if language_of(path) is not Language.PYTHON:
+            continue
         try:
             text = python_text(source)
             tree = ast.parse(text, filename=path)
@@ -231,6 +267,23 @@ def summarise(tree: TreeMeasurement) -> dict[Area, AreaSummary]:
     return {area: AreaSummary(lines[area], {metric: debts[area, metric] for metric in Metric}) for area in Area}
 
 
+def language_lines(tree: TreeMeasurement) -> dict[Language, int]:
+    """Every measured language with its lines, production and tests together, largest first and by name on a tie."""
+    lines: Counter[Language] = Counter()
+    for key, measured in tree.measurements.items():
+        if key.metric is Metric.FILE_LINES and (language := language_of(key.path)):
+            lines[language] += measured.value
+    return dict(sorted(lines.items(), key=lambda entry: (-entry[1], entry[0].value)))
+
+
+def _languages_note(languages: Iterable[Language]) -> str:
+    named = list(languages)
+    if not named:
+        return ""
+    functions = "" if named == [Language.PYTHON] else " (functions in Python only)"
+    return f"; languages: {', '.join(language.value for language in named)}{functions}"
+
+
 def report_counts(tree: TreeMeasurement) -> str:
     summaries = summarise(tree)
     areas = "; ".join(
@@ -239,7 +292,8 @@ def report_counts(tree: TreeMeasurement) -> str:
         f"{summary.debt[Metric.CCN]} function(s) CCN > {CCN_ABOVE}"
         for area, summary in summaries.items()
     )
-    return f"{SIZE}: report only (no {BASELINE_PATH}) - {areas}{_unparsable_note(tree.unparsable)}"
+    languages = _languages_note(language_lines(tree))
+    return f"{SIZE}: report only (no {BASELINE_PATH}) - {areas}{languages}{_unparsable_note(tree.unparsable)}"
 
 
 def _unparsable_note(unparsable: dict[str, str]) -> str:

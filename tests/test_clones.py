@@ -33,6 +33,8 @@ def report(production: int, tests: int) -> str:
         ({"src/a.py": function("first", "a", "b"), "src/b.py": function("second", "c", "d")}, 1, 0),
         ({"tests/test_a.py": function("first", "a", "b"), "tests/test_b.py": function("second", "c", "d")}, 0, 1),
         ({"tests/test_a.py": function("first", "a", "b"), "src/b.py": function("second", "c", "d")}, 1, 0),
+        ({"src/a.py": function("first", "a", "b"), "src/b.ts": function("second", "c", "d")}, 0, 0),
+        ({"src/a.ts": function("first", "a", "b"), "src/b.ts": function("first", "a", "b")}, 0, 0),
     ],
     ids=[
         "#113 E1 a renamed-locals copy across two files is one pair",
@@ -41,6 +43,8 @@ def report(production: int, tests: int) -> str:
         "#113 E1 a 40-token copy is one pair",
         "#113 E7 a copy between two tests counts as tests",
         "#113 E7 a test that copies production counts as production",
+        "#119 cell 22 a .ts copy of a Python function is no pair",
+        "#119 cell 22 two identical .ts files are no pair",
     ],
 )
 def test_pairs_are_counted_in_the_report_line_and_the_exit_stays_clean(build_repo, capsys, files, production, tests):
