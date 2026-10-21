@@ -23,7 +23,7 @@ The gitleaks paths (`hygiene --engines`, `scan-staged`) need git 2.41 or newer; 
 
 `hygiene` reads git's view of the repository `PATH` (default `.`) lies in, from its top level, so a run from `src` judges
 the same files and the same `quality/baseline.toml` as one at the top, and names every file relative to the top (`size
-src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree's own top. It applies four rules:
+src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree's own top. It applies five rules:
 
 - `env-file`: no tracked `.env`, `.env.*` or `*.env` file (names ending in `.example` are templates and pass).
   The fix is `git --literal-pathspecs rm --cached -- <name>`, the name quoted for the shell, so a copy untracks
@@ -89,6 +89,14 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   UTF-8, a coding cookie in any spelling but utf-8, utf8, unicode-1-1-utf-8, unicode11utf8, x-unicode20utf8, ascii, us-ascii or ansi_x3.4-1968 (accepted in any letter case), or one the system will not let it read). A
   module grimp cannot parse is `hygiene: import-contract unparsable - ...`; a warning grimp gives while building the
   graph is one `import-contract: note - ...` line. No message names an absolute local path.
+- `claude-md`: a tracked `CLAUDE.md`, in any case (`claude.md` is named as it is), holds exactly `@AGENTS.md` with or
+  without a final line feed, so Claude, Codex and Grok read the same guidance, and the repository tracks an `AGENTS.md`
+  beside it. No `CLAUDE.md` is clean, with or without an `AGENTS.md`. A symlink is a finding (a dangling one too), and so
+  is a tracked `.claude/CLAUDE.md`, which Claude Code reads as project memory and Codex and Grok never read. Any other
+  bytes are a finding, a Windows line ending included; a nested `docs/CLAUDE.md` is not judged. The reason and the fix
+  are fixed prose that names the file and never shows its content; the fix tells the operator to move the file's lines
+  into `AGENTS.md` and gives no command. A tracked file missing from disk is skipped; one the filesystem refuses to read
+  is `hygiene: claude-md cannot judge - ...`. No configuration switches the rule off.
 - The baseline only falls: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the
   base commit's, so growing a function and rewriting the baseline stays red. Each loosening is one line, named with the
   baseline's own metric, path and symbol (a file entry has no symbol):
@@ -172,7 +180,7 @@ Every rule is judged, even when another cannot be, and gives one verdict: clean,
 Each finding names the rule, the file, a reason and a fix. Repository text (a file name, a service, a port, a contract
 or job name, a configuration entry) prints escaped. In the door's own fields (a finding's location, reason and fix, refusals, reports), invalid UTF-8 prints as `\udcNN` and every control character (line feed,
 carriage return, ESC, tab, DEL, C1) as `\xNN`. A line taken from import-linter's rendering (a broken contract's chain and guidance) prints behind the marker `  | `; rich may drop a carriage return, expand a tab, or start a new marked line at a line feed there. Every line the door prints therefore starts with its own text, so a matcher anchored at the line start, such as setup-uv's python matcher, cannot match repository text. A refusal is one line; the lines the door means to print (an import chain, the verdict's problems, the scoreboard's table) stay lines. A rule that cannot judge prints its verdict and reason under its rule id (`hygiene: secret cannot
-judge - ...`). A clean run names its rules in run order (`hygiene: clean (env-file, compose-port, size, import-contract); skipped without
+judge - ...`). A clean run names its rules in run order (`hygiene: clean (env-file, compose-port, size, import-contract, claude-md); skipped without
 --engines: ...`); any other run ends with the findings and the verdicts counted (`hygiene: 1 finding(s); verdicts: 1
 clean, 1 findings, 1 unparsable`). The lines come in run order, also through a pipe that merges stdout and stderr
 (`2>&1 | tee log`); each stays on its own stream. The exit is the worst verdict's: `2` if any rule is unparsable or cannot judge

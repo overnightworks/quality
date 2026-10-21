@@ -202,3 +202,10 @@ In GitHub Actions the door stops workflow commands with a per-run token, and rep
 
 1. The re-ruling. Asked: „Neue Fakten zu Sonar S8431: Sonar setzt seine eigene Dependabot-Ausnahme nur auf main um, bei PR-Analysen nicht … Wie soll das Gate es lösen?“ Answered: „Sonars Ausnahme anwenden (empfohlen)“. The gate applies Sonar's own exception on pull requests too, for this one rule, with no entry per line and no config table.
 2. The detail. Asked: „Wann soll das Gate die Sonar-Regel S8431 nicht zählen? Sonar selbst prüft auf main nur, ob die Datei .github/dependabot.yml existiert, nicht was darin steht.“ Answered: „Wenn dependabot.yml existiert (empfohlen)“. The rule does not count when `.github/dependabot.yml` exists in the checkout; the file is never read.
+
+## Operator ruling (20.10.2026, answered 21.10.2026): CLAUDE.md is absent or exactly `@AGENTS.md`
+
+[#95](https://github.com/overnightworks/quality/issues/95). On 20.10.2026 the operator ruled in marketplace#195: a repository's `CLAUDE.md` is absent or exactly `@AGENTS.md`, so Claude, Codex and Grok read the same text („ich will kein auseinanderlaufen von claude.md und agents.md!“). The hygiene rule `claude-md` checks it. On 21.10.2026 he answered two lines.
+
+1. E18. Asked whether a finding may show the file's content, to keep a stray token out of the public CI log. Answered: „Nur Dateiname (empfohlen)“. The finding names the file and never shows its content.
+2. E20. Asked what the fix says for a `CLAUDE.md` with its own text. Answered: „Satz, kein Befehl (empfohlen)“. The fix is prose that tells to move the lines into `AGENTS.md`; it prints no command, since a copied command would lose the lines, or `AGENTS.md` itself through a link.

@@ -15,7 +15,7 @@ from quality import cli, hygiene, sonar
 from quality.report import Finding
 
 EDGE_STACK = (Path(__file__).parent / "data" / "edge_stack.yml").read_text(encoding="utf-8")
-CLEAN_FILE_RULES = "hygiene: clean (env-file, compose-port, size, import-contract)"
+CLEAN_FILE_RULES = "hygiene: clean (env-file, compose-port, size, import-contract, claude-md)"
 
 
 def compose(*port_lines: str) -> dict[str, str]:
@@ -400,18 +400,18 @@ def files(tracked: dict[str, str]):
     [
         (files({**BASELINE, ".env": "A=1\n", "bad.py": "def broken(:\n"}), False, 2,
          [ENV_FINDING, "hygiene: size unparsable - bad.py is not valid Python",
-          "hygiene: 1 finding(s); verdicts: 2 clean, 1 findings, 1 unparsable"]),
+          "hygiene: 1 finding(s); verdicts: 3 clean, 1 findings, 1 unparsable"]),
         (config_linked_out_of_the_repository, True, 2,
          [ENV_FINDING, "hygiene: secret cannot judge - quality/config.toml resolves outside the repository",
-          "hygiene: 1 finding(s); verdicts: 6 clean, 1 findings, 1 cannot judge"]),
+          "hygiene: 1 finding(s); verdicts: 7 clean, 1 findings, 1 cannot judge"]),
         (files({**BASELINE, "compose.yaml": "services: [\n", "src/a.py": NEW_DEBT}), False, 2,
          ["hygiene: compose-port cannot judge - cannot read compose.yaml", "size src/a.py:1 - function long_one"]),
         (files({".env": "A=1\n", **compose('- "8080:80"')}), False, 1,
-         [ENV_FINDING, "compose-port compose.yaml - ", "hygiene: 2 finding(s); verdicts: 2 clean, 2 findings"]),
+         [ENV_FINDING, "compose-port compose.yaml - ", "hygiene: 2 finding(s); verdicts: 3 clean, 2 findings"]),
         (files({}), False, 0,
          [f"{CLEAN_FILE_RULES}; skipped without --engines: secret, workflow-lint, workflow-security, advisory"]),
         (files({}), True, 0,
-         ["hygiene: clean (env-file, compose-port, size, import-contract, secret, workflow-lint, workflow-security, advisory);"]),
+         ["hygiene: clean (env-file, compose-port, size, import-contract, claude-md, secret, workflow-lint, workflow-security, advisory);"]),
         (files({"compose-\udcff.yaml": compose('- "8080:80"')["compose.yaml"]}), False, 1,
          ["compose-port compose-\\udcff.yaml - service web publishes port 8080:80"]),
         (files({**BASELINE, "src/\udcff.py": NEW_DEBT}), False, 1, ["size src/\\udcff.py:1 - function long_one"]),
@@ -423,7 +423,7 @@ def files(tracked: dict[str, str]):
         "cell 3 unreadable compose hides no size finding",
         "cell 4 findings in two rules",
         "cell 5 clean names the file rules",
-        "cell 6 clean with engines names all seven rules",
+        "cell 6 clean with engines names all eight rules",
         "cell 7 non-utf8 compose name",
         "cell 8 non-utf8 python name",
         "rule 4 non-utf8 python name in the size report",
@@ -735,3 +735,4 @@ def test_a_closed_stdout_is_cannot_judge_and_never_a_crash(tmp_path):
         text=True, check=False, stderr=subprocess.PIPE,
     )
     assert (done.returncode, "hygiene: cannot judge" in done.stderr) == (2, True), done.stderr
+
