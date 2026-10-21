@@ -10,7 +10,6 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from test_sonar import Responder
 
 from quality import cli, engines
 from quality.ratchet import BASELINE_PATH
@@ -27,6 +26,7 @@ UNKNOWN_KEY_CONFIGS = pytest.mark.parametrize(
     ids=["unknown gate key", "unknown table"],
 )
 RepoBuilder = Callable[[dict[str, str]], Path]
+Responder = Callable[[http.server.BaseHTTPRequestHandler], None]
 SHOP = {"src/shop/__init__.py": "", "src/shop/web.py": "", "src/shop/api.py": "", "src/shop/db.py": "x = 1\n"}
 SHOP_DB_IMPORTS_WEB = {**SHOP, "src/shop/db.py": "import shop.web\n"}
 FORBIDDEN = {"type": "forbidden", "source_modules": ["shop.db"], "forbidden_modules": ["shop.web"]}
