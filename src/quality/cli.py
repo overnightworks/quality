@@ -10,15 +10,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TextIO
 
-from quality import __version__, engines, ratchet, repository, scoreboard, staged
+from quality import __version__, clones, engines, ratchet, repository, scoreboard, staged
 from quality.config import Allowance, ConfigError, read_gate_settings
 from quality.emergency import Ask, GhRunner, run_emergency_merge, run_gh
 from quality.hygiene import (
     CannotJudge,
     HygieneResult,
     Outcome,
-    measure_size,
     read_baseline,
+    read_sources,
     run_hygiene,
     skipped_rules,
     tracked_files,
@@ -107,10 +107,10 @@ def build_parser() -> argparse.ArgumentParser:
     hygiene = commands.add_parser("hygiene", help="check a git repository for fleet hygiene")
     hygiene.add_argument("path", nargs="?", type=Path, default=Path("."))
     hygiene.add_argument("--engines", type=Path, help="directory holding the installed engines; enables the secret and workflow scans")
-    baseline = commands.add_parser("baseline", help="manage the size baseline").add_subparsers(
+    baseline = commands.add_parser("baseline", help="manage the baseline").add_subparsers(
         dest="baseline_command", required=True
     )
-    baseline.add_parser("write", help=f"write the measured size debt to {ratchet.BASELINE_PATH}").add_argument(
+    baseline.add_parser("write", help=f"write the measured size debt and clone pairs to {ratchet.BASELINE_PATH}").add_argument(
         "path", nargs="?", type=Path, default=Path("."), help="a folder of the git repository to measure; its top level is measured (default: the current one)"
     )
     scan_staged = commands.add_parser("scan-staged", help="scan the staged change of a repository for secrets")
@@ -210,21 +210,23 @@ def coverage_note(engine_dir: Path | None) -> str:
 def run_baseline_write(path: Path) -> int:
     try:
         top = work_tree_top(path)
-        entries = ratchet.debt(measure_size(top, tracked_files(top)).complete())
-        loosenings = describe_loosenings(top, entries)
-        repository.write_text(top, ratchet.BASELINE_PATH, ratchet.render_baseline(entries))
+        sources = read_sources(top, tracked_files(top))
+        written = ratchet.Baseline(ratchet.debt(ratchet.measure(sources).complete()), clones.find_pairs(sources))
+        loosenings = describe_loosenings(top, written)
+        repository.write_text(top, ratchet.BASELINE_PATH, ratchet.render_baseline(written))
     except (CannotJudge, repository.RepositoryFileError, ratchet.SizeError) as error:
         emit(f"baseline: not written - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     for loosening in loosenings:
         emit(f"baseline: {loosening}")
-    count = "1 entry" if len(entries) == 1 else f"{len(entries)} entries"
-    emit(f"baseline: wrote {count} to {top / ratchet.BASELINE_PATH}")
+    entries = "1 entry" if len(written.size) == 1 else f"{len(written.size)} entries"
+    pairs = "1 clone pair" if len(written.clones) == 1 else f"{len(written.clones)} clone pairs"
+    emit(f"baseline: wrote {entries} and {pairs} to {top / ratchet.BASELINE_PATH}")
     return EXIT_CLEAN
 
 
-def describe_loosenings(path: Path, entries: ratchet.Baseline) -> list[str]:
-    """Each entry the write raises or adds against the previous baseline; an adoption has none to name.
+def describe_loosenings(path: Path, written: ratchet.Baseline) -> list[str]:
+    """Each entry and clone pair the write raises or adds against the previous baseline; an adoption has none to name.
 
     An unreadable previous baseline is overwritten, so the write can only say it cannot name the raises.
     """
@@ -234,7 +236,10 @@ def describe_loosenings(path: Path, entries: ratchet.Baseline) -> list[str]:
         return [f"the previous {ratchet.BASELINE_PATH} could not be read ({error}), so raises cannot be named"]
     if previous is None:
         return []
-    return [entry.describe() for entry in ratchet.raised_entries(previous, entries)]
+    lines = [entry.describe() for entry in ratchet.raised_entries(previous.size, written.size)]
+    if previous.clones is not None:
+        lines += [f"adds clone {pair.label}" for pair in ratchet.added_pairs(previous.clones, written.clones)]
+    return lines
 
 
 def run_scan_staged(path: Path, engine_dir: Path, read_pins: Callable[[], dict[str, engines.Pin]]) -> int:

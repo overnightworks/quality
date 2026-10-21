@@ -66,13 +66,16 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   With `quality/baseline.toml`, the tree on disk must hold the baseline: a new violation, an entry that grew and an
   entry above its measured value (stale: lower it with `quality baseline write`) are findings; an entry whose file or
   function is gone is fine.
-  `quality baseline write [PATH]` writes the measured debt to `quality/baseline.toml` at the top of the repository `PATH`
-  lies in (from `src`: `baseline: wrote 2 entries to ../quality/baseline.toml`; a stray `src/quality/baseline.toml` is
+  `quality baseline write [PATH]` writes the measured debt and the clone pairs to `quality/baseline.toml` at the top of the
+  repository `PATH` lies in (from `src`: `baseline: wrote 2 entries and 1 clone pair to ../quality/baseline.toml`; a stray `src/quality/baseline.toml` is
   neither read nor removed) as sorted TOML, one table
-  per metric (`ccn`, `file_lines`, `function_lines`) keyed by path and qualified symbol. Before its `baseline: wrote N
-  entries ...` line it names, in the verdict's wording, each entry it raises or adds against the previous file
-  (`baseline: raises function_lines src/quality/cli.py main 82 -> 90`, `baseline: adds ccn src/a.py f 16`); a lowered
-  or removed entry is not named, and without a previous file only the count prints. A previous file it cannot read is
+  per metric (`ccn`, `file_lines`, `function_lines`) keyed by path and qualified symbol, then a `[clones]` table that holds each pair once, under its alphabetically first
+  side (`[clones."tests/test_a.py"]`, `run = [["tests/test_b.py", "hygiene"]]`), also when it is empty. Before its
+  `baseline: wrote N entries and M clone pairs ...` line it names, in the verdict's wording, each entry it raises or adds
+  against the previous file (`baseline: raises function_lines src/quality/cli.py main 82 -> 90`, `baseline: adds ccn
+  src/a.py f 16`) and, when the previous file has a `[clones]` table, each new pair (`baseline: adds clone
+  tests/test_a.py run <-> tests/test_b.py hygiene`); a lowered or removed entry or pair is not named; without a
+  previous file only the count prints, and a previous file without `[clones]` names no pair but still names its size raises and adds. A previous file it cannot read is
   overwritten with `baseline: the previous quality/baseline.toml could not be read (...), so raises cannot be named`.
   The write exits `0` with raises too: the verdict is the gate.
 - `clone`: a pair is two functions (methods and nested functions too) in two different tracked `*.py` files, each of at
@@ -115,10 +118,14 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   - an entry raised: `loosened (undeclared): size baseline raises function_lines src/quality/cli.py main 82 -> 90`;
   - an entry the base does not hold, a moved or renamed one included:
     `loosened (undeclared): size baseline adds ccn src/a.py f 16`;
+  - a clone pair the base does not hold, when the base has a `[clones]` table:
+    `loosened (undeclared): clone baseline adds tests/test_a.py run <-> tests/test_b.py hygiene`;
+  - the base's `[clones]` table gone from a head that still has the file: `loosened (undeclared): clone baseline removed`;
   - the base's file deleted: `loosened (undeclared): quality/baseline.toml removed`.
 
-  A lowered, equal or removed entry is green, and so is adopting a baseline (the base has none) or having none on
-  either side. A malformed baseline on either side, a head config or baseline that cannot be read or links out of the
+  A lowered, equal or removed entry or pair is green, and so is adopting a baseline (the base has none) or having none
+  on either side. A `[clones]` table the base lacks is an adoption too: its pairs are not compared, while the size
+  entries are still held against the base's. A malformed baseline on either side, a head config or baseline that cannot be read or links out of the
   repository, or a base commit the clone lacks is exit `2`, naming the side (`quality/baseline.toml at the base commit
   <sha>: ...`, `quality/config.toml at the head: ...`). Only the head's malformed baseline adds ``rewrite it with
   `quality baseline write` ``: a pull request cannot rewrite its base. The base must be a ref
@@ -568,7 +575,7 @@ quality emergency-merge <owner/repo> <pr>
 - **It refuses unless the door is the only way** (exit `1`, nothing changed): no check is still running; every check run
   and commit status other than `quality / sonar` and `quality / verdict` is green; `quality / verdict` has failed; and
   `quality / sonar` is green or has failed (it did not run, or it ended `timed_out`, `cancelled` or anything else: refused).
-  The verdict is then judged again by its own decider, with the config and size baseline read at the pull request's
+  The verdict is then judged again by its own decider, with the config and baseline read at the pull request's
   current merge commit and at base and the Sonar job taken as green: an undeclared loosening, a declaration that matches
   nothing, or a missing or red mandatory job is refused, naming the verdict's lines.
 - **Sonar green: declared loosenings.** The re-derived verdict must hold at least one declared loosening (otherwise

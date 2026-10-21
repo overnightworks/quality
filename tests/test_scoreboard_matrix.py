@@ -240,7 +240,7 @@ def unreadable_tags() -> dict[str, str]:
 
 @pytest.mark.parametrize(
     ("files", "size"),
-    [({ratchet.BASELINE_PATH: ratchet.render_baseline({})}, "enforced"), ({}, "report-only")],
+    [({ratchet.BASELINE_PATH: ratchet.render_baseline(ratchet.Baseline({}, None))}, "enforced"), ({}, "report-only")],
     ids=["a baseline", "no baseline"],
 )
 def test_the_size_cell_is_enforced_with_a_baseline_and_report_only_without(scoreboard, public, files, size):

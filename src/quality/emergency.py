@@ -189,7 +189,7 @@ def read_statuses(gh: GhRunner, repository: str, head_sha: str) -> list[Check]:
 
 
 def read_side_at(gh: GhRunner, repository: str, sha: str) -> Side:
-    """The gate's settings and size baseline at one commit, as the verdict reads them; a 404 reads as absent."""
+    """The gate's settings and baseline at one commit, as the verdict reads them; a 404 reads as absent."""
     config = _read_file_at(gh, repository, CONFIG_PATH, sha)
     baseline = _read_file_at(gh, repository, BASELINE_PATH, sha)
     return side_of(config, baseline, sha)
