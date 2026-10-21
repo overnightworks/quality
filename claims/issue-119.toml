@@ -1,8 +1,0 @@
-claim_id = "ae0695a6aa1f4014acbe8f9c62c68fa5"
-agent = "claude"
-role = "builder"
-base = "0547e9607ce9083241407052f6a76e2a2f5c0842"
-branch = "claude/issue-119-every-language-lines"
-scope = ["AGENTS.md", "README.md", "docs/roadmap.md", "quality/fleet.toml", "src/quality/cli.py", "src/quality/clones.py", "src/quality/hygiene.py", "src/quality/ratchet.py", "src/quality/scoreboard.py", "tests/conftest.py", "tests/test_clones.py", "tests/test_hygiene.py", "tests/test_ratchet.py", "tests/test_scoreboard.py"]
-opened_commit = "cc8a951142062a081b03723cd24a06f8ab662334"
-whole_reason = "One language table changes what the shared read hands size, clone and the scoreboard, so the read, its three consumers, their tests and the docs that print their lines move together; the body names a two-slice fallback if the corridor is passed."
