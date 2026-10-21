@@ -413,7 +413,7 @@ reason = "the operator ruled the requirement shelf machinery out"
   `quality / verdict`, and only [the operator's emergency door](#the-operators-emergency-door) merges.
 - An advisory allowance (`[[advisories.allow]]`, see the `advisory` rule under `quality hygiene`) declares its own
   loosening with its own `item` and `date`, so it needs no `[[gate.loosened]]` entry. An allowance whose `id` and
-  `lock` the base lacks prints `loosened (declared, <item> of <date>): advisory allowance adds <id> in <lock>`; one
+  `lock` the base lacks prints `loosened (declared, <item> of <date>): advisory allowance adds <id> in <lock> until <until>`; one
   whose `until` the head moves later prints `… advisory allowance extends <id> in <lock> to <until>`. An earlier
   `until`, a changed `reason`, `item` or `date`, and a deleted allowance loosen nothing; a changed `id` or `lock` is a
   new allowance. A base without `quality/config.toml` holds no allowance, so every allowance of the adoption is new. A

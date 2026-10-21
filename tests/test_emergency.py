@@ -27,7 +27,7 @@ B_REMOVED = 'mandatory job "B" removed'
 SONAR_GREEN = {"quality / sonar": "success", "quality / verdict": "failure"}
 SHOWN = "declared loosening (overnightworks/songmaker#1345 of 2026-10-20): "
 ALLOWED_SHOWN = "declared loosening (overnightworks/agent-presentator#371 of 2026-10-21): advisory allowance adds "
-ADDS_QWEN = "advisory allowance adds GHSA-462x-pgg6-55fp in speech/providers/qwen/uv.lock"
+ADDS_QWEN = "advisory allowance adds GHSA-462x-pgg6-55fp in speech/providers/qwen/uv.lock until 2027-01-31"
 
 
 def declaring(what, reason="ruled"):
@@ -568,10 +568,10 @@ def test_a_malformed_baseline_at_the_merge_commit_cannot_be_judged(capsys):
         (GATE_CONFIG, REPORT_CONFIG + declaring("legacy fail → report"),
          [f"{SHOWN}legacy fail → report - reason: ruled"]),
         (ONE_JOB, ONE_JOB + allowance_config(reason="no image input"),
-         [f"{ALLOWED_SHOWN}GHSA-462x-pgg6-55fp in speech/providers/qwen/uv.lock - reason: no image input"]),
+         [f"{ALLOWED_SHOWN}GHSA-462x-pgg6-55fp in speech/providers/qwen/uv.lock until 2027-01-31 - reason: no image input"]),
         (TWO_JOBS, ONE_JOB + declaring(B_REMOVED) + allowance_config(reason="no image input"),
          [f"{SHOWN}{B_REMOVED} - reason: ruled",
-          f"{ALLOWED_SHOWN}GHSA-462x-pgg6-55fp in speech/providers/qwen/uv.lock - reason: no image input"]),
+          f"{ALLOWED_SHOWN}GHSA-462x-pgg6-55fp in speech/providers/qwen/uv.lock until 2027-01-31 - reason: no image input"]),
     ],
     ids=[
         "cell 14 songmaker's removed job", "cell 27 a declared legacy fail → report", "#116 cell 23 an allowance",
@@ -635,7 +635,7 @@ def test_a_red_sonar_run_next_to_a_green_one_takes_the_legacy_path(capsys):
         (TWO_JOBS, ONE_JOB + declaring(B_REMOVED, reason="ok\nforged"), 2, "needs a non-empty one-line reason"),
         (ONE_JOB, '[gate]\nmandatory_jobs = ["checks", "a\\n::error::b"]\n', 1, 'mandatory job "a\\x0a::error::b" is missing'),
         (ONE_JOB, ONE_JOB + allowance_config("GHSA-\x1b[8m", "a\tb/uv.lock", reason="ok\x1b[8m versteckt"), 0,
-         f"{ALLOWED_SHOWN}GHSA-\\x1b[8m in a\\x09b/uv.lock - reason: ok\\x1b[8m versteckt"),
+         f"{ALLOWED_SHOWN}GHSA-\\x1b[8m in a\\x09b/uv.lock until 2027-01-31 - reason: ok\\x1b[8m versteckt"),
     ],
     ids=[
         "ESC in the reason", "carriage return in the reason", "line feed in the reason", "line feed in a refused job",

@@ -170,7 +170,7 @@ def _allowance_loosenings(base: GateSettings, head: GateSettings) -> list[Loosen
     for allowance in head.advisory_allowances:
         until = base_until.get(allowance.key)
         if until is None:
-            what = f"advisory allowance adds {allowance.id} in {allowance.lock}"
+            what = f"advisory allowance adds {allowance.id} in {allowance.lock} until {allowance.until.isoformat()}"
         elif allowance.until > until:
             what = f"advisory allowance extends {allowance.id} in {allowance.lock} to {allowance.until.isoformat()}"
         else:
