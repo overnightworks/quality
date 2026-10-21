@@ -2,8 +2,9 @@
 
 A name is repository-relative, as the caller gives it. Every read stays inside the repository, and every error names
 the file by that name alone, never a resolved path or the root, so no message prints where the checkout lies.
-It uses os.path.realpath, os.lstat and os.stat rather than Path.resolve and Path.exists, whose error handling
-differs between Python 3.12 and 3.14.
+It uses os.path.realpath, os.lstat and os.stat rather than Path.resolve and Path.exists: those swallow the errors
+this reader must tell apart (a path the filesystem refuses, a link to nowhere, a link loop), while the os calls
+raise an OSError whose errno decides.
 """
 
 import errno
