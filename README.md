@@ -248,17 +248,28 @@ duplicating `quality/fleet.toml` is `cannot judge`, exit `2`.
 - `Clone pairs prod / test` counts the `clone` rule's pairs (two near-identical functions in two files, at 40 tokens and
   90 %); a pair counts as test only when both sides are tests, so a test that copies production code counts as prod.
 - A `.py` file Python cannot parse still has its lines counted; the row's note says how many such files there are, never which.
-- Both tables name a row `owner/name` when it is a URL other than a `file://` one with a host, with at least two path segments, else by its last path segment; a
-  `|` in a name prints as `\|`.
+- Both tables name a row by the last two path segments (`owner/name`) when its URL is not a `file://` one and has a host and at
+  least two path segments; any other URL is named by its last path segment, else its host. A `|` in a name prints as `\|`.
 - The matrix, under a heading naming the newest release tag of `overnightworks/quality` (read by an anonymous
   `git ls-remote --tags`, never from the running code's version), has one `Gate` and one `CodeQL` cell per repository.
   They come from the job-level `uses:` of each tracked `.github/workflows/*.yml|yaml`, parsed as data and never run.
   A pin to a commit shows the release tag at that commit, with `(behind)` when it is not the newest;
   `<7 characters> (no release)` when no tag points there, `<ref> (not a commit)` for a branch or tag name, `no gate`
   or `none` without a caller, and `self` for the repository's own `./` or `$/` file in `overnightworks/quality`. Two
-  callers show both, joined by ` · `. The `# v` comment is never read.
-- A workflow file that cannot be read shows `cannot read <file>` in both cells, unreadable release tags say so in the
-  heading and show pins as commits, and either makes the exit `2`. No value, `behind` or `no gate` included, makes the run red.
+  callers show both, joined by ` · `. The `# v` comment is never read. The owner and repository of a `uses:` match in any
+  case, the workflow path exactly.
+- After `Gate` and `CodeQL` the matrix has `Mandatory jobs` (the number in `[gate] mandatory_jobs` of `quality/config.toml`,
+  `no config` without the file), `Sonar legacy` (`report` or `fail` from `[gate] legacy`) and one column per rule whose
+  enforcement depends on the release or the repository. The rules every release enforces stand once in the sentence under
+  the heading. A rule cell says what the pinned gate does with the rule, never whether the repository passes it:
+  `enforced`, `report-only` (`size` without `quality/baseline.toml`, `import-contract` without an import-linter config,
+  `clone` always), `not in <tag>` when the pinned release predates the rule, `not released` when only main has the rule,
+  and `—` without a gate. Two pins give the oldest release; a pin that is no release (a commit without a tag, a branch or
+  tag name, or unreadable release tags) gives `release unknown`. The table of first releases lives in `scoreboard.py`.
+- A workflow file that cannot be read shows `cannot read <file>` in every cell that needs the pin, a malformed
+  `quality/config.toml` or `quality/baseline.toml` and an import-linter config that cannot be read or that two files hold
+  show `cannot read <file>` (`import-linter config`) in their cells, unreadable release tags say so in the heading and
+  show pins as commits, and each makes the exit `2`. No value, `behind`, `no gate` or `report-only` included, makes the run red.
 - A `private` repository is never measured, because the tables are published: it shows `not measured: private`. It is
   checked once with an anonymous `git ls-remote`; if anyone can read it, the row is `cannot judge: declared private
   but readable`.

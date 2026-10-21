@@ -14,12 +14,13 @@ import tomllib
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import date
+from enum import Enum
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlsplit
 
 import yaml
 
-from quality import __version__, clones, engines, hygiene, ratchet, repository
+from quality import __version__, advisories, architecture, clones, config, engines, hygiene, ratchet, repository
 
 FLEET_PATH = "quality/fleet.toml"
 FLEET_EXAMPLE = 'public = ["https://github.com/o/open"]\nprivate = ["https://github.com/o/closed"]'
@@ -58,8 +59,59 @@ COLUMNS = (
     "Clone pairs prod / test",
     "Note",
 )
-MATRIX_COLUMNS = ("Repo", "Gate", "CodeQL")
+FIXED_MATRIX_COLUMNS = ("Repo", "Gate", "CodeQL", "Mandatory jobs", "Sonar legacy")
 DEBT_COLUMNS = (ratchet.Metric.FILE_LINES, ratchet.Metric.FUNCTION_LINES, ratchet.Metric.CCN)
+
+ENFORCED = "enforced"
+REPORT_ONLY = "report-only"
+NO_CONFIG = "no config"
+RELEASE_UNKNOWN = "release unknown"
+NOT_RELEASED = "not released"
+IMPORT_LINTER_CONFIG = "import-linter config"
+
+
+def release_order(tag: str) -> tuple[int, ...]:
+    match = RELEASE_TAG.fullmatch(tag)
+    return tuple(int(number) for number in match.groups()) if match else ()
+
+
+class Switch(Enum):
+    """What decides whether a gate that knows a rule enforces it."""
+
+    ALWAYS = "always"
+    SIZE_BASELINE = "a size baseline"
+    IMPORT_LINTER_CONFIG = "an import-linter config"
+    REPORT_ONLY = "report only"
+
+
+@dataclass(frozen=True)
+class RuleRelease:
+    """A rule of the door, the first gate release that judges it (None: main only) and what switches it on."""
+
+    rule: str
+    first_release: str | None
+    switch: Switch
+
+
+# In cell order. The tripwire test holds the ids equal to the rules `hygiene.run_hygiene` judges.
+RULES = (
+    RuleRelease(hygiene.ENV_FILE, "v0.1.0", Switch.ALWAYS),
+    RuleRelease(hygiene.COMPOSE_PORT, "v0.1.0", Switch.ALWAYS),
+    RuleRelease(engines.LEAK_RULE, "v0.1.0", Switch.ALWAYS),
+    RuleRelease(engines.WORKFLOW_LINT, "v0.1.0", Switch.ALWAYS),
+    RuleRelease(engines.WORKFLOW_SECURITY, "v0.1.0", Switch.ALWAYS),
+    RuleRelease(hygiene.CLAUDE_MD, "v0.3.0", Switch.ALWAYS),
+    RuleRelease(advisories.RULE, "v0.3.0", Switch.ALWAYS),
+    RuleRelease(ratchet.SIZE, "v0.3.0", Switch.SIZE_BASELINE),
+    RuleRelease(architecture.RULE, "v0.3.0", Switch.IMPORT_LINTER_CONFIG),
+    RuleRelease(clones.RULE, None, Switch.REPORT_ONLY),
+)
+OLDEST_RELEASE = min((rule.first_release for rule in RULES if rule.first_release), key=release_order)
+EVERY_RELEASE_ENFORCES = tuple(
+    rule for rule in RULES if rule.switch is Switch.ALWAYS and rule.first_release == OLDEST_RELEASE
+)
+SWITCHED_RULES = tuple(rule for rule in RULES if rule not in EVERY_RELEASE_ENFORCES)
+MATRIX_COLUMNS = (*FIXED_MATRIX_COLUMNS, *(rule.rule for rule in SWITCHED_RULES))
 
 
 ReleaseTags = dict[str, str]
@@ -87,6 +139,25 @@ class Workflows:
 
 
 @dataclass(frozen=True)
+class Declared:
+    """What a clone's own files switch on: the gate settings, a size baseline, an import-linter config, and the files
+    among them that could not be read."""
+
+    settings: config.GateSettings | None
+    has_baseline: bool
+    has_import_config: bool
+    unreadable: frozenset[str]
+
+
+class Gate(Enum):
+    """The release a row's gate is, when it is not a release tag."""
+
+    NONE = "no gate"
+    MAIN = "main"
+    UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True)
 class Measured:
     name: str
     commit: str
@@ -95,6 +166,7 @@ class Measured:
     unparsable: int
     pairs: dict[ratchet.Area, int]
     workflows: Workflows
+    declared: Declared
 
 
 @dataclass(frozen=True)
@@ -210,7 +282,9 @@ def require_anonymous(url: str) -> None:
 
 
 def cannot_judge(rows: list[Row], tags: ReleaseTags | ReleaseTagsError) -> bool:
-    unreadable = any(isinstance(row, Measured) and row.workflows.unreadable for row in rows)
+    unreadable = any(
+        isinstance(row, Measured) and (row.workflows.unreadable or row.declared.unreadable) for row in rows
+    )
     return isinstance(tags, ReleaseTagsError) or unreadable or any(isinstance(row, Unjudged) for row in rows)
 
 
@@ -256,11 +330,6 @@ def release_tags_listed(listing: str) -> ReleaseTags:
     return {tag: commit for tag, commit in {**tags, **peeled}.items() if RELEASE_TAG.fullmatch(tag)}
 
 
-def release_order(tag: str) -> tuple[int, ...]:
-    match = RELEASE_TAG.fullmatch(tag)
-    return tuple(int(number) for number in match.groups()) if match else ()
-
-
 def measure_public(url: str) -> Row:
     name = repository_name(url)
     try:
@@ -287,11 +356,44 @@ def measure_public(url: str) -> Row:
         except hygiene.CannotJudge as error:
             return Unjudged(name, f"cannot measure ({str(error).replace(str(clone), name)})")
         workflows = read_workflows(clone, tracked)
+        declared = read_declared(clone, tracked)
     tree = ratchet.measure(sources)
     pairs = clones.summarise_pairs(clones.find_pairs(sources))
     commit = head.stdout.strip()[:SHORT_COMMIT]
     languages, areas = ratchet.language_lines(tree), ratchet.summarise(tree)
-    return Measured(name, commit, languages, areas, len(tree.unparsable), pairs, workflows)
+    return Measured(name, commit, languages, areas, len(tree.unparsable), pairs, workflows, declared)
+
+
+def read_declared(clone: Path, tracked: list[str]) -> Declared:
+    """The clone's gate settings, size baseline and import-linter config; a file that cannot be read is named."""
+    unreadable: set[str] = set()
+    settings, has_baseline, has_import_config = None, False, False
+    try:
+        settings = read_gate_settings(clone)
+    except config.ConfigError:
+        unreadable.add(config.CONFIG_PATH)
+    try:
+        has_baseline = hygiene.read_baseline(clone) is not None
+    except (hygiene.CannotJudge, ratchet.SizeError):
+        unreadable.add(ratchet.BASELINE_PATH)
+    try:
+        has_import_config = find_import_config(clone, tracked)
+    except (repository.RepositoryFileError, architecture.ContractError):
+        unreadable.add(IMPORT_LINTER_CONFIG)
+    return Declared(settings, has_baseline, has_import_config, frozenset(unreadable))
+
+
+def read_gate_settings(clone: Path) -> config.GateSettings | None:
+    try:
+        text = repository.read_text(clone, config.CONFIG_PATH)
+    except repository.RepositoryFileError as error:
+        raise config.ConfigError(str(error)) from error
+    return None if text is None else config.load_gate_settings(text)
+
+
+def find_import_config(clone: Path, tracked: list[str]) -> bool:
+    texts = {name: repository.read_text(clone, name) for name in tracked if name in architecture.CONFIG_FILES}
+    return architecture.find_config({name: text for name, text in texts.items() if text is not None}) is not None
 
 
 def read_workflows(clone: Path, tracked: list[str]) -> Workflows:
@@ -365,12 +467,17 @@ def render(rows: list[Row], today: date, tags: ReleaseTags | ReleaseTagsError) -
     table = [table_line(COLUMNS), "|---" * len(COLUMNS) + "|", *(table_line(cells(row)) for row in rows)]
     pins = None if isinstance(tags, ReleaseTagsError) else tags
     matrix_heading = f"**Repo × rule, {newest_release_words(tags)}**"
+    every_release = f"Every gate release enforces {words_joined([rule.rule for rule in EVERY_RELEASE_ENFORCES])}."
     matrix = [
         table_line(MATRIX_COLUMNS),
         "|---" * len(MATRIX_COLUMNS) + "|",
         *(table_line(matrix_cells(row, pins)) for row in rows),
     ]
-    return (heading, "", *table, "", matrix_heading, "", *matrix)
+    return (heading, "", *table, "", matrix_heading, "", every_release, "", *matrix)
+
+
+def words_joined(words: list[str]) -> str:
+    return f"{', '.join(words[:-1])} and {words[-1]}" if len(words) > 1 else "".join(words)
 
 
 def newest_release_words(tags: ReleaseTags | ReleaseTagsError) -> str:
@@ -385,13 +492,80 @@ def newest_release(tags: ReleaseTags) -> str:
 
 def matrix_cells(row: Row, tags: ReleaseTags | None) -> tuple[str, ...]:
     if not isinstance(row, Measured):
-        return (row.name, status_label(row), "")
+        return (row.name, status_label(row), *("",) * (len(MATRIX_COLUMNS) - 2))
     if row.workflows.unreadable:
         unreadable = f"cannot read {', '.join(row.workflows.unreadable)}"
-        return (row.name, unreadable, unreadable)
+        return (row.name, *(unreadable,) * (len(MATRIX_COLUMNS) - 1))
     is_gate = row.name == GATE_REPOSITORY
-    return (row.name, pin_cell(row.workflows.gate, "no gate", is_gate, tags),
-            pin_cell(row.workflows.codeql, "none", is_gate, tags))
+    release = gate_release(row.workflows.gate, is_gate, tags)
+    return (
+        row.name,
+        pin_cell(row.workflows.gate, "no gate", is_gate, tags),
+        pin_cell(row.workflows.codeql, "none", is_gate, tags),
+        *settings_cells(row.declared, release),
+        *(rule_cell(rule, release, row.declared) for rule in SWITCHED_RULES),
+    )
+
+
+def settings_cells(declared: Declared, release: Gate | str) -> tuple[str, str]:
+    if release is Gate.NONE:
+        return (DASH, DASH)
+    if config.CONFIG_PATH in declared.unreadable:
+        return (f"cannot read {config.CONFIG_PATH}",) * 2
+    if declared.settings is None:
+        return (NO_CONFIG, NO_CONFIG)
+    return (str(len(declared.settings.mandatory_jobs)), declared.settings.legacy.value)
+
+
+def gate_release(calls: tuple[Call, ...], is_gate_repository: bool, tags: ReleaseTags | None) -> Gate | str:
+    """The oldest release the gate calls are: a tag, main for the gate's own file, else why there is none."""
+    pins = [
+        pin_release(call.ref, tags) if call.ref is not None else Gate.MAIN
+        for call in calls
+        if call.ref is not None or is_gate_repository
+    ]
+    tagged = [pin for pin in pins if isinstance(pin, str)]
+    if not pins:
+        return Gate.NONE
+    if Gate.UNKNOWN in pins:
+        return Gate.UNKNOWN
+    return min(tagged, key=release_order) if tagged else Gate.MAIN
+
+
+def pin_release(ref: str, tags: ReleaseTags | None) -> Gate | str:
+    commit = ref.lower()
+    if tags is None or not COMMIT_SHA.fullmatch(commit):
+        return Gate.UNKNOWN
+    return released_tag(commit, tags) or Gate.UNKNOWN
+
+
+def rule_cell(rule: RuleRelease, release: Gate | str, declared: Declared) -> str:
+    """What the pinned gate does with the rule: never more than the oldest release the repository calls."""
+    if release is Gate.NONE:
+        return DASH
+    if release is Gate.UNKNOWN:
+        return RELEASE_UNKNOWN
+    if isinstance(release, str):
+        if rule.first_release is None:
+            return NOT_RELEASED
+        if release_order(release) < release_order(rule.first_release):
+            return f"not in {release}"
+    return switch_words(rule.switch, declared)
+
+
+def switch_words(switch: Switch, declared: Declared) -> str:
+    if switch is Switch.ALWAYS:
+        return ENFORCED
+    if switch is Switch.REPORT_ONLY:
+        return REPORT_ONLY
+    file, present = (
+        (ratchet.BASELINE_PATH, declared.has_baseline)
+        if switch is Switch.SIZE_BASELINE
+        else (IMPORT_LINTER_CONFIG, declared.has_import_config)
+    )
+    if file in declared.unreadable:
+        return f"cannot read {file}"
+    return ENFORCED if present else REPORT_ONLY
 
 
 def pin_cell(calls: tuple[Call, ...], absent: str, is_gate_repository: bool, tags: ReleaseTags | None) -> str:
@@ -408,11 +582,15 @@ def pin_words(ref: str, tags: ReleaseTags | None) -> str:
     short = ref[:SHORT_COMMIT]
     if tags is None:
         return short
-    released = [tag for tag, commit in tags.items() if commit == ref]
-    if not released:
+    tag = released_tag(ref, tags)
+    if tag is None:
         return f"{short} (no release)"
-    tag = max(released, key=release_order)
     return tag if tag == newest_release(tags) else f"{tag} (behind)"
+
+
+def released_tag(commit: str, tags: ReleaseTags) -> str | None:
+    """The newest release tag that points at the commit."""
+    return max((tag for tag, tagged in tags.items() if tagged == commit), key=release_order, default=None)
 
 
 def table_line(values: tuple[str, ...]) -> str:

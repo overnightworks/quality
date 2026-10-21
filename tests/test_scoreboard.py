@@ -354,7 +354,7 @@ def test_a_url_git_could_misread_or_authenticate_with_cannot_be_judged(scoreboar
     code, output = scoreboard(open_repo, *listed[0], private=listed[1])
     assert code == 2, output
     assert row(output, name)[1:3] == ["—", f"cannot judge: {reason}"]
-    assert "secret" not in output
+    assert ":secret@" not in output
     assert row(output, "open")[3] == "1 / 0"
 
 
