@@ -76,6 +76,17 @@ class Unsettled:
         return f'"{self.name}" (attempt {self.attempt}) as {self.state}'
 
 
+@dataclass(frozen=True, order=True)
+class AttemptSeen:
+    """A job's newest attempt in one answer and its entries there; within an attempt, entries only appear."""
+
+    attempt: int
+    entries: int
+
+
+NOTHING_SEEN = AttemptSeen(0, 0)
+
+
 @dataclass(frozen=True)
 class Loosening:
     """One way the head loosens the gate against its base; `what` is the raw text, before any escaping."""
@@ -92,13 +103,14 @@ class Loosening:
 @dataclass(frozen=True)
 class Verdict:
     """The one judgment of a run: its loosenings, the new declarations that bind none, and every other problem;
-    `unsettled` holds the judged jobs GitHub's answer leaves open, `attempts` the highest attempt seen of each."""
+    `unsettled` holds the judged jobs GitHub's answer leaves open, `attempts` the highest attempt and entries seen of
+    each."""
 
     loosenings: tuple[Loosening, ...]
     stale: tuple[Declaration, ...]
     failures: tuple[str, ...]
     unsettled: tuple[Unsettled, ...]
-    attempts: Mapping[str, int]
+    attempts: Mapping[str, AttemptSeen]
 
     @property
     def declared(self) -> tuple[Declaration, ...]:
@@ -125,23 +137,23 @@ class Verdict:
 
 def judge(
     head: Side, base: Side | None, jobs: list[Job], gate_results: Mapping[str, str], current_attempt: int,
-    attempts_seen: Mapping[str, int] = MappingProxyType({}),
+    attempts_seen: Mapping[str, AttemptSeen] = MappingProxyType({}),
 ) -> Verdict:
     """Without a base (a push, a merge group) no loosening and no declaration is judged; a declared removal of a
-    mandatory job leaves that job unjudged. A job whose attempt an earlier answer showed higher, or listed when this
-    one does not, is unsettled at that attempt: a lagging answer never brings back an older attempt's result."""
+    mandatory job leaves that job unjudged. A job an earlier answer showed at a higher attempt, or with more entries
+    at the same one, is unsettled at that attempt: a lagging answer never brings back a result it dropped."""
     failures = [f'gate job "{name}" result {result}' for name, result in gate_results.items() if result != SUCCESS]
     loosenings, stale = ((), ()) if base is None else _loosenings(head, base)
     declared = {loosening.what for loosening in loosenings if loosening.declaration is not None}
     base_jobs = () if base is None else base.settings.mandatory_jobs
     unsettled: list[Unsettled] = []
-    attempts: dict[str, int] = {}
+    attempts: dict[str, AttemptSeen] = {}
     for name in dict.fromkeys((*base_jobs, *head.settings.mandatory_jobs)):
         if _removal(name) in declared:
             continue
-        attempt, unsettled_job, problems = _judge_job(name, jobs, current_attempt, attempts_seen.get(name, 0))
-        if attempt:
-            attempts[name] = attempt
+        seen, unsettled_job, problems = _judge_job(name, jobs, current_attempt, attempts_seen.get(name, NOTHING_SEEN))
+        if seen != NOTHING_SEEN:
+            attempts[name] = seen
         if unsettled_job:
             unsettled.append(unsettled_job)
         failures += problems
@@ -177,17 +189,20 @@ def _baseline_loosenings(base: Baseline | None, head: Baseline | None) -> list[s
     return [f"size baseline {entry.describe()}" for entry in raised_entries(base, head)]
 
 
-def _judge_job(name: str, jobs: list[Job], current_attempt: int, seen: int) -> tuple[int, Unsettled | None, list[str]]:
-    """The attempt the job is judged at (0 for none), its unsettled entry, and its failure lines."""
+def _judge_job(
+    name: str, jobs: list[Job], current_attempt: int, seen: AttemptSeen
+) -> tuple[AttemptSeen, Unsettled | None, list[str]]:
+    """The highest attempt seen of the job, its unsettled entry, and its failure lines."""
     attempt, effective = _effective_entries(name, jobs, current_attempt)
-    if seen > attempt:
-        return seen, Unsettled(name, seen, MISSING), []
+    now = AttemptSeen(attempt, len(effective))
+    if seen > now:
+        return seen, Unsettled(name, seen.attempt, MISSING), []
     if not effective:
-        return 0, None, [f'mandatory job "{name}" is missing from the run']
+        return now, None, [f'mandatory job "{name}" is missing from the run']
     running = [job.status for job in effective if job.status != COMPLETED]
     if running:
-        return attempt, Unsettled(name, attempt, running[0]), []
-    return attempt, None, _problems_of_job(name, attempt, effective)
+        return now, Unsettled(name, attempt, running[0]), []
+    return now, None, _problems_of_job(name, attempt, effective)
 
 
 def _effective_entries(name: str, jobs: list[Job], current_attempt: int) -> tuple[int, list[Job]]:
@@ -258,12 +273,16 @@ def github_fetcher(token: str) -> PageFetcher:
     def fetch(url: str) -> tuple[str, str | None]:
         headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
         body, answer_headers = sonar.fetch(url, headers, lambda error: unreadable_jobs(url, error))
-        return body.decode("utf-8"), answer_headers.get("Link")
+        try:
+            text = body.decode("utf-8")
+        except UnicodeDecodeError as error:
+            raise unreadable_jobs(url, error) from error
+        return text, answer_headers.get("Link")
 
     return fetch
 
 
-Judgement = Callable[[list[Job], Mapping[str, int]], Verdict]
+Judgement = Callable[[list[Job], Mapping[str, AttemptSeen]], Verdict]
 
 
 @dataclass(frozen=True)

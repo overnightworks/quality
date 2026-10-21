@@ -276,8 +276,9 @@ Each line has a reason:
   `quality / verdict`.
 - **`needs:` lists the id of every job that a `mandatory_jobs` name belongs to.** The verdict then judges finished jobs,
   and an answer in which GitHub still lists one as running is stale: the verdict reads the run's jobs again, every 10
-  seconds and at most 12 times. Without `needs:`, a job still running holds the verdict for those two minutes, then it
-  cannot judge: `GitHub still lists "checks" (attempt 1) as in_progress after 13 reads; …`.
+  seconds and at most 12 times: two minutes of waiting plus the time the reads take. Without `needs:`, a job still
+  running holds the verdict for that long, then it cannot judge:
+  `GitHub still lists "checks" (attempt 1) as in_progress after 13 reads; …`.
 - **`if: always()` runs the gate when a needed job failed,** so the verdict names the failure. Without it, a failed needed
   job skips the gate and no verdict judges the run.
 - **`permissions:` grants `contents: read` and `actions: read`.** The verdict reads the run's jobs through the API, and
@@ -304,7 +305,7 @@ mandatory_jobs = ["checks"]
 - Each job must conclude `success` in its newest attempt up to the verdict's own. A job that is missing from the run is
   `mandatory job "x" is missing from the run`; one that failed, was skipped or cancelled is red. One GitHub still lists as
   running (`queued`, `in_progress`, `waiting`, `requested`, `pending`) is read again, as is an answer that no longer lists
-  an attempt an earlier answer showed; after the last read the verdict cannot judge.
+  an attempt or an entry an earlier answer showed; after the last read the verdict cannot judge.
 - On a pull request, removing a job the base config holds is `loosened (undeclared): mandatory job "x" removed`, and the
   base's job is still judged; a declared removal (below) is no longer judged.
 - The gate's own jobs are judged through `needs` (`gate job "sonar" result failure`) and need no entry.
@@ -313,7 +314,7 @@ mandatory_jobs = ["checks"]
 The verdict prints `verdict: green` (exit `0`); each problem, then `verdict: red` (exit `1`); or
 `verdict: cannot judge - ...` (exit `2`). When it read the jobs more than once, a first line says so:
 `verdict: read the run's jobs 2 times - GitHub first listed "checks" (attempt 1) as in_progress`. A GitHub server error
-(5xx) is read again in the same two minutes; if it lasts, the verdict cannot judge and names it as GitHub's fault:
+(5xx) is read again within the same budget; if it lasts, the verdict cannot judge and names it as GitHub's fault:
 `GitHub answered HTTP 502 Bad Gateway for … after 13 reads; this is GitHub's fault, not the caller's: re-run the verdict`.
 A cannot-judge after a re-read still prints the last judged read's problems first. A timeout or an unreachable GitHub
 is not read again: re-run the verdict. The same text goes to the run's step summary.
