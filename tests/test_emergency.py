@@ -18,6 +18,11 @@ MERGE_SHA = "d" * 40
 GATE_CONFIG = '[gate]\nmandatory_jobs = ["checks"]\nlegacy = "fail"\n'
 REPORT_CONFIG = GATE_CONFIG.replace("fail", "report")
 LEGACY_RED = {"quality / sonar": "failure", "quality / verdict": "failure"}
+ALL_METHODS_ALLOWED = {"allow_merge_commit": True, "allow_squash_merge": True, "allow_rebase_merge": True}
+LINEAR_HISTORY = {"type": "required_linear_history"}
+UNRELATED_RULE = {"type": "creation"}
+ONLY_REBASE = "emergency-merge: not merged - the repository and its branch rules allow only rebase; the door lands a merge commit or a squash"
+NO_USABLE_METHOD = "emergency-merge: not merged - the repository and its branch rules allow no merge method the door uses"
 FIXED_NOW = datetime(2026, 10, 17, 12, 0, tzinfo=UTC)
 BASELINE_82 = '[function_lines."src/quality/cli.py"]\n"main" = 82\n'
 BASELINE_90 = BASELINE_82.replace("82", "90")
@@ -28,6 +33,14 @@ SONAR_GREEN = {"quality / sonar": "success", "quality / verdict": "failure"}
 SHOWN = "declared loosening (overnightworks/songmaker#1345 of 2026-10-20): "
 ALLOWED_SHOWN = "declared loosening (overnightworks/agent-presentator#371 of 2026-10-21): advisory allowance adds "
 ADDS_QWEN = "advisory allowance adds GHSA-462x-pgg6-55fp in speech/providers/qwen/uv.lock until 2027-01-31"
+
+
+def pull_request_rule(*methods):
+    return {"type": "pull_request", "parameters": {"allowed_merge_methods": list(methods)}}
+
+
+def settings_allowing(*methods):
+    return {f"allow_{name}": method in methods for method, name in (("merge", "merge_commit"), ("squash", "squash_merge"), ("rebase", "rebase_merge"))}
 
 
 def declaring(what, reason="ruled"):
@@ -44,10 +57,12 @@ class FakeGh:
     def __init__(
         self, admin=True, checks=None, statuses=None, state="open", fail_on=(), interrupt_on=(), merge_lands=False,
         head_config=GATE_CONFIG, base_config=GATE_CONFIG, merge_config=None, merge_sha=MERGE_SHA,
-        base_baseline=None, merge_baseline=None, extra_runs=(),
+        base_baseline=None, merge_baseline=None, extra_runs=(), settings=None, rules=((),), base_ref="main", rules_error=None,
     ):
         self.admin, self.state, self.fail_on, self.merge_lands = admin, state, set(fail_on), merge_lands
         self.interrupt_on = list(interrupt_on)
+        self.settings = ALL_METHODS_ALLOWED if settings is None else settings
+        self.rules, self.base_ref, self.rules_error = rules, base_ref, rules_error
         self.merge_sha = merge_sha
         self.files = {
             (CONFIG_PATH, SHA): head_config,
@@ -81,7 +96,7 @@ class FakeGh:
         text = " ".join(arguments)
         for marker, step in (
             ("check-runs", "checks"), ("/status", "statuses"), ("contents/", "config"), ("/pulls/", "pull"),
-            ("properties/values", "gate"), ("pr merge", "merge"), ("/comments", "comment"), ("--jq .login", "login"),
+            ("/rules/branches/", "rules"), ("properties/values", "gate"), ("pr merge", "merge"), ("/comments", "comment"), ("--jq .login", "login"),
         ):
             if marker in text:
                 return step
@@ -95,7 +110,7 @@ class FakeGh:
 
     def answer(self, step, arguments, stdin):
         if step == "pull":
-            return json.dumps({"state": self.state, "merged": self.merged, "head": {"sha": SHA}, "base": {"sha": BASE_SHA}, "merge_commit_sha": self.merge_sha})
+            return json.dumps({"state": self.state, "merged": self.merged, "head": {"sha": SHA}, "base": {"sha": BASE_SHA, "ref": self.base_ref}, "merge_commit_sha": self.merge_sha})
         if step == "checks":
             return "\n".join(
                 json.dumps({"name": name, "status": "in_progress" if result is None else "completed", "conclusion": result})
@@ -109,9 +124,20 @@ class FakeGh:
                 raise GhFailed("gh api failed: HTTP 404")
             return content
         if step == "repository":
-            return json.dumps({"default_branch": "main", "permissions": {"admin": self.admin}})
+            return json.dumps({"default_branch": "main", "permissions": {"admin": self.admin}, **self.settings})
+        if step == "rules":
+            return self.rules_answer()
         if step == "login":
             return "felix\n"
+        self.record(step, arguments, stdin)
+        return ""
+
+    def rules_answer(self):
+        if self.rules_error:
+            raise GhFailed(self.rules_error)
+        return "\n".join(json.dumps(rule) for page in self.rules for rule in page)
+
+    def record(self, step, arguments, stdin):
         if step == "merge":
             self.merged = True
             self.sequence.append("merge")
@@ -121,7 +147,6 @@ class FakeGh:
         if step == "comment":
             self.comments.append(next(a for a in arguments if a.startswith("body=")))
             self.sequence.append("comment")
-        return ""
 
     @property
     def merge_calls(self):
@@ -649,3 +674,85 @@ def test_every_line_the_door_prints_is_escaped(capsys, base_config, merge_config
     lines = capsys.readouterr().out.splitlines()
     assert [line for line in lines if expected in line] != []
     assert_every_line_starts_with_the_door(lines)
+
+
+def merge_call(flag):
+    return ("pr", "merge", "7", "--repo", REPO, flag, "--match-head-commit", SHA)
+
+
+@pytest.mark.parametrize(
+    ("gh_kwargs", "flag"),
+    [
+        ({}, "--merge"),
+        ({"rules": [[pull_request_rule("squash")]]}, "--squash"),
+        ({"rules": [[LINEAR_HISTORY]]}, "--squash"),
+        ({"settings": settings_allowing("squash", "rebase")}, "--squash"),
+        ({"rules": [[pull_request_rule("merge", "squash"), pull_request_rule("squash", "rebase")]]}, "--squash"),
+        ({"rules": [[UNRELATED_RULE]]}, "--merge"),
+        ({"rules": [[]]}, "--merge"),
+        ({"rules": [[{"type": "pull_request", "parameters": {}}]]}, "--merge"),
+        ({"rules": [[{"type": "pull_request"}]]}, "--merge"),
+        ({"rules": [[pull_request_rule("merge", "squash")], [LINEAR_HISTORY]]}, "--squash"),
+        ({"base_ref": "release/1", "rules": [[pull_request_rule("squash")]]}, "--squash"),
+        ({"settings": settings_allowing("merge"), "rules": [[pull_request_rule("merge", "rebase")]]}, "--merge"),
+    ],
+    ids=[
+        "cell 1 both sources allow a merge commit", "cell 2 a rule allows only squash", "cell 3 linear history",
+        "cell 4 settings forbid merge commits", "cell 5 two rules intersect to squash", "cell 8 an unrelated rule only",
+        "cell 8 no rules", "cell 9 allowed_merge_methods absent", "cell 9 no parameters", "cell 10 two pages both count",
+        "cell 12 a non-default base branch", "cell 13 a merge commit where only it and rebase are allowed",
+    ],
+)
+def test_the_door_merges_with_a_method_the_settings_and_every_rule_allow(gh_kwargs, flag):
+    """#146 rules 1 and 3: the method is the first of merge commit, squash that both sources allow, and the merge pins the head."""
+    gh = FakeGh(**gh_kwargs)
+    assert drive(gh)[0] == 0
+    assert gh.merge_calls == [merge_call(flag)]
+    rules_read = next(call for call in gh.calls if "/rules/branches/" in " ".join(call))
+    assert (rules_read[1], rules_read[2]) == ("--paginate", f"repos/{REPO}/rules/branches/{gh.base_ref}?per_page=100")
+
+
+@pytest.mark.parametrize(
+    ("gh_kwargs", "line"),
+    [
+        ({"settings": settings_allowing("merge"), "rules": [[pull_request_rule("squash")]]}, NO_USABLE_METHOD),
+        ({"settings": settings_allowing("rebase")}, ONLY_REBASE),
+        ({"rules": [[pull_request_rule("rebase")]]}, ONLY_REBASE),
+        ({"rules": [[pull_request_rule()]]}, NO_USABLE_METHOD),
+        ({"settings": settings_allowing()}, NO_USABLE_METHOD),
+        ({"settings": {}}, "emergency-merge: cannot judge - the repository settings withhold or malform"),
+        ({"settings": {**ALL_METHODS_ALLOWED, "allow_squash_merge": "yes"}}, "emergency-merge: cannot judge - the repository settings withhold or malform"),
+        ({"rules": [["not a rule"]]}, "emergency-merge: cannot judge - the branch rules of main are malformed"),
+        ({"rules": [[{"type": "pull_request", "parameters": "x"}]]}, "emergency-merge: cannot judge - the branch rules of main are malformed"),
+        ({"rules": [[{"type": "pull_request", "parameters": {"allowed_merge_methods": "squash"}}]]}, "emergency-merge: cannot judge - the branch rules of main are malformed"),
+        ({"rules": [[pull_request_rule("fast-forward")]]}, "emergency-merge: cannot judge - the branch rules of main are malformed"),
+        ({"rules_error": "gh api failed: HTTP 403: Resource not accessible"}, "emergency-merge: cannot judge - cannot read the branch rules of main"),
+        (
+            {"rules_error": "gh api failed: HTTP 403: Upgrade to GitHub Pro or Team to enable this feature."},
+            "emergency-merge: cannot judge - cannot read the branch rules of main",
+        ),
+    ],
+    ids=[
+        "cell 6 sources do not intersect", "cell 7 settings allow only rebase", "cell 7 a rule allows only rebase",
+        "cell 9 allowed_merge_methods empty", "cell 6 settings allow nothing", "cell 11 settings withheld",
+        "cell 11 settings malformed", "cell 11 a rule is no object", "cell 11 parameters malformed",
+        "cell 11 methods malformed", "cell 11 an unknown method", "cell 11 generic 403", "cell 11 plan 403",
+    ],
+)
+def test_the_door_refuses_before_the_gate_when_no_method_is_usable(gh_kwargs, line, capsys):
+    """#146 rules 2 and 4: a repository that allows no merge commit or squash, or whose rules cannot be read, is exit 2 with a
+    named line, and neither the gate nor the merge is touched."""
+    gh = FakeGh(**gh_kwargs)
+    code, answers = drive(gh)
+    assert code == 2
+    assert [shown for shown in capsys.readouterr().out.splitlines() if shown.startswith(line)] != []
+    changed_nothing(gh)
+    assert answers == []
+
+
+def test_a_method_github_refuses_at_merge_time_leaves_the_gate_on_and_the_pull_request_unmerged(capsys):
+    """#146 cell 14: the selected squash is refused, so the gate is switched on again and the outcome is not merged."""
+    gh = FakeGh(rules=[[pull_request_rule("squash")]], fail_on=["merge"])
+    assert drive(gh)[0] == 1
+    assert (gh.merge_calls, gh.gate_values) == ([merge_call("--squash")], ["false", "true"])
+    assert "not merged" in capsys.readouterr().out

@@ -1,8 +1,5 @@
 # Measured by `quality baseline write`. Entries only ever go down.
 
-[ccn."tests/test_emergency.py"]
-"FakeGh.answer" = 16
-
 [file_lines]
 "tests/test_engines.py" = 993
 
