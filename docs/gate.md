@@ -26,7 +26,7 @@ Each line has a reason:
 - **The caller job is `quality`,** by its id or, if it sets one, by its `name:`. The gate's checks then read
   `quality / hygiene`, `quality / sonar` and `quality / verdict`. Three things look for them by those names: a ruleset
   that requires `quality / verdict` (the fleet's org ruleset does, on the default branch of every repository whose
-  custom property `quality_gate` is `true`), `aco land`, which, once the default branch holds `quality/config.toml`,
+  custom property `quality_gate` is `true`; operator ruling 16.10.2026: „alles ja“), `aco land`, which, once the default branch holds `quality/config.toml`,
   refuses without a green `quality / verdict`, and `quality emergency-merge`, which looks for `quality / sonar` and
   `quality / verdict`.
 - **`needs:` lists the id of every job that a `mandatory_jobs` name belongs to.** The verdict then judges finished jobs,
@@ -40,7 +40,8 @@ Each line has a reason:
   only GitHub's 403 or 404 adds `(does the caller grant actions: read?)` to the line. A job in
   a reusable workflow gets no more than its caller job grants (see
   [GitHub's reusable-workflow documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations)),
-  so without `actions: read` the run fails at startup and adds no `quality / verdict` check. Where a ruleset or `aco land`
+  so without `actions: read` the run fails at startup and adds no `quality / verdict` check (see
+  [Startup failures](#startup-failures)). Where a ruleset or `aco land`
   requires that check, the pull request cannot merge; where nothing requires it, it merges unjudged.
 - **The door stops workflow commands for the rest of its step.** gate.yml runs `quality` alone in each of its steps; a
   workflow that runs `quality` itself writes its own workflow commands (`::notice::`, `::group::` or any other) in a separate step.
@@ -75,6 +76,10 @@ The verdict prints `verdict: green` (exit `0`); each problem, then `verdict: red
 A cannot-judge after a re-read still prints the last judged read's problems first. A timeout or an unreachable GitHub
 is not read again: re-run the verdict. The same text goes to the run's step summary.
 
+GitHub's jobs listing answers late per job, which is why the verdict reads again instead of failing at once (operator
+ruling 21.10.2026: at most two minutes, „Bis zu 2 Minuten (empfohlen)“; a job still running after the last read is exit
+`2`, „Exit 2: kann nicht urteilen (empfohlen)“).
+
 ### Declared loosenings
 
 A pull request that loosens the gate as the operator ruled declares each loosening in its `quality/config.toml`, one
@@ -105,7 +110,7 @@ reason = "the operator ruled the requirement shelf machinery out"
   `loosened (declared, overnightworks/songmaker#1345 of 2026-10-20): mandatory job "…" removed`. When nothing else is
   red, the last line is `verdict: red - only declared loosenings: only the operator's quality emergency-merge lands this
   pull request`. No entry approves itself: an agent may write one, but the ruleset and `aco land` still need a green
-  `quality / verdict`, and only [the operator's emergency door](runbook-emergency-merge.md#the-operators-emergency-door) merges.
+  `quality / verdict`, and only [the operator's emergency door](commands.md#quality-emergency-merge) merges.
 - An advisory allowance (`[[advisories.allow]]`, see the `advisory` rule under `quality hygiene`) declares its own
   loosening with its own `item` and `date`, so it needs no `[[gate.loosened]]` entry. An allowance whose `id` and
   `lock` the base lacks prints `loosened (declared, <item> of <date>): advisory allowance adds <id> in <lock> until <until>`; one
@@ -114,15 +119,22 @@ reason = "the operator ruled the requirement shelf machinery out"
   new allowance. A base without `quality/config.toml` holds no allowance, so every allowance of the adoption is new. A
   `[[gate.loosened]]` entry whose `what` is such a text matches nothing and is red. The verdict and the door read the
   whole config, so a malformed `[secrets]` or `[advisories]` entry is exit `2` there too.
+- The ruling (operator ruling 21.10.2026: „Erklären + deine Tür (empfohlen)“) is that a loosening is declared and stays
+  red, and that only the operator's door merges it; a declared removal of a mandatory job is no longer judged („Ja,
+  nicht mehr prüfen (empfohlen)“), and the door may merge legacy Sonar findings and a declared loosening in one run („Ja,
+  beides in einem Lauf (empfohlen)“). That agents share the operator's `gh` login is a known residual risk, „Bekanntes
+  Restrisiko (empfohlen)“: the door is the agreed path, not a lock. Why the gate is not simply loosened by the pull
+  request stands in [decision 1](decisions/1-loosening-door.md).
 
 
 ## `codeql.yml`
 
-A reusable workflow that runs CodeQL for the languages a caller names, with `build-mode: none` and CodeQL's default
+A reusable workflow that runs CodeQL for the languages a caller names, one for the fleet instead of a copy per repository
+(operator ruling 18.10.2026: „b macht sinn“), with `build-mode: none` and CodeQL's default
 query suite and threat model. It uploads under the category `/language:<language>`, the Default Setup's category, so
 alerts carry over when a repository switches.
 
-A private repository needs GitHub Code Security for code scanning (`code-scanning/default-setup` answers 403 without it); the operator ruled against paying for it (operator ruling 22.10.2026), so private repositories run no CodeQL.
+A private repository needs GitHub Code Security for code scanning (`code-scanning/default-setup` answers 403 without it); the operator declined to pay for it (operator ruling 22.10.2026), so private repositories run no CodeQL.
 
 A caller (`.github/workflows/code-scanning.yml`, workflow `name: CodeQL`):
 
@@ -162,3 +174,14 @@ jobs:
 - **Switch PR:** a caller that fails at startup adds no check to its PR, so the switch PR must show its
   `codeql / Analyze (…)` checks.
 - **Switching a repository:** the Default Setup goes off first.
+
+### Startup failures
+
+A reusable-workflow call that GitHub refuses at startup (a caller job that grants less than the called workflow asks for,
+such as `security-events: write` or `actions: read`) ends its run without a check run for that job, so a ruleset or
+`aco land` waiting for the check never sees it. Measured on 18.10.2026 on a scratch pull request whose CodeQL callers
+were broken: the run ended `failure` and added no `codeql / Analyze (…)` check for them. It is measured for CodeQL
+callers; for `gate.yml` callers the same behaviour is expected and not measured
+here. To re-measure, break a caller's `permissions:` on a scratch pull request and read
+`gh run list --repo <owner/repo> --commit <sha> --json workflowName,conclusion` and
+`gh api repos/<owner/repo>/commits/<sha>/check-runs --jq '.check_runs[].name'`.

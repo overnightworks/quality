@@ -9,7 +9,8 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
 - `env-file`: no tracked `.env`, `.env.*` or `*.env` file (names ending in `.example` are templates and pass).
   The fix is `git --literal-pathspecs rm --cached -- <name>`, the name quoted for the shell, so a copy untracks
   exactly that file; a name that is not printable UTF-8 gets the hint to remove it by its bytes (`git ls-files -z`
-  shows them) instead of a command.
+  shows them) instead of a command. The fix runs exactly as printed, with no home-made encoder for the name
+  (operator ruling 19.10.2026: „Immer exakt (empfohlen)“).
 - `compose-port`: every published port in a tracked compose file binds loopback, `127.0.0.1` or `::1` (`"[::1]:HOST:CONTAINER"`,
   `host_ip: ::1`); `[::]` and `0.0.0.0` are findings. A compose file is a `.yml` or `.yaml` file whose name holds the
   word `compose` between `.`, `-` or `_`, in any case: `docker-compose.ci.yml` and `keycloak/bootstrap.compose.yaml` are
@@ -21,13 +22,16 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   (or its position for a character YAML refuses, `nested too deeply`, `a value does not fit its tag`, or `not valid
   YAML`). A port that is neither text, a number nor a mapping whose `published` (or, without one, `target`) is text or
   a number is a finding. A service with `network_mode: host` publishes whatever its process binds, and this rule does
-  not check that.
+  not check that; the limit is documented and there is no allowlist (operator ruling 19.10.2026: „Erst Doku, dann
+  Erlaubnisliste (empfohlen)“).
 - `size`: every tracked file of Python, TypeScript (`.ts` `.tsx` `.mts` `.cts`), JavaScript (`.js` `.jsx` `.mjs`
   `.cjs`), Svelte or Vue is measured by its lines, and every tracked `*.py` file also with
   [lizard](https://github.com/terryyin/lizard): a file from 800 lines, a Python function from 60 lines and a Python
   function with a CCN above 15 are debt, counted apart for production and tests (a path under `test/` or `tests/`;
   Python also `conftest.py`, `test_*.py`, `*_test.py`; TypeScript and JavaScript also `__tests__/`, `*.test.*` and
-  `*.spec.*`). A minified or generated file is counted by its lines like any other.
+  `*.spec.*`). A minified or generated file is counted by its lines like any other. The rule has no line cap of its own
+  beyond these thresholds; quality passes its own gate (operator ruling 18.10.2026: „wenn es mehr braucht braucht es eben
+  mehr, aber natürlich soll der code gut sein!“).
   Functions of the other languages are not measured: lizard misplaces their boundaries
   ([terryyin/lizard#521](https://github.com/terryyin/lizard/issues/521)). Functions are named by their qualified
   symbol (`Class.method`); a second one of the same name, such as a property setter, is `Class.method#2`. Without
@@ -74,6 +78,8 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   report line. A Python file that cannot be parsed may hide a pair, so with a `[clones]` table it is `clone
   unparsable` (exit `2`), as for `size`. The baseline is read once for both rules: one that cannot be read leaves both
   `cannot judge` (exit `2`), also when it has no `[clones]` table, since the mode is then unknown.
+  quality owns this detector instead of calling jscpd or lizard (operator ruling 21.10.2026: „aco-Prüfer übernehmen
+  (empfohlen)“); the reasons stand in [decision 3](decisions/3-clone-detector.md).
 - `import-contract`: the repository's [import-linter](https://github.com/seddonym/import-linter) contracts must be
   kept. The config is the tracked `.importlinter` or `setup.cfg` (`[importlinter]`) or `pyproject.toml`
   (`[tool.importlinter]`), counted once its name exists in the tree: a tracked one deleted from disk is none, a symlink to
@@ -102,6 +108,9 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   are fixed prose that names the file and never shows its content; every fix is prose with no command, and for a file's
   own text it says to move the lines into `AGENTS.md`. A tracked file missing from disk is skipped; one the filesystem refuses to read
   is `hygiene: claude-md cannot judge - ...`. No configuration switches the rule off.
+  (operator ruling 20.10.2026: „ich will kein auseinanderlaufen von claude.md und agents.md!“; answers of 21.10.2026:
+  the finding names only the file, „Nur Dateiname (empfohlen)“, and the fix is a sentence, „Satz, kein Befehl
+  (empfohlen)“)
 - The baseline only falls: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the
   base commit's, so growing a function and rewriting the baseline stays red. Each loosening is one line, named with the
   baseline's own metric, path and symbol (a file entry has no symbol):
@@ -208,6 +217,11 @@ reason = "gradio caps pillow<13; no image input"
   makes itself, so only the operator's door merges it. The pull request writes the allowance, so its item, date and
   reason prove nothing alone: the verdict's red and the door are the gate. An `id` that is an alias covers every
   group carrying it in that lock, while the door names the `id` and the lock, not the packages.
+  (operator ruling 21.10.2026: „Ja, aber nur du gibst frei (empfohlen)“; a later `until`: „Nein, nur über deine Tür
+  (empfohlen)“; no extra `[[gate.loosened]]` entry: „Ausnahme erklärt sich selbst (empfohlen)“; why only the operator's
+  door merges it stands in [decision 1](decisions/1-loosening-door.md). The other details of the allowance, from the
+  `[[advisories.allow]]` entry's keys to the printed lines, were shown to the operator and left unanswered, so they
+  stand at the proposed default.)
 
 quality downloads the PyPI database itself on every run (about 36 MB, `https://osv-vulnerabilities.storage.googleapis.com/PyPI/all.zip`)
 into the scan's own 0700 scratch directory and runs osv-scanner `--offline` on it, so osv-scanner makes no network call
@@ -233,4 +247,5 @@ clean, 1 findings, 1 unparsable`). The lines come in run order, also through a p
 folder without permission, a bare repository, the inside of `.git`) is `hygiene: cannot judge - <PATH as given> is not a
 readable git repository: ... (`git -C '<PATH>' status` says why; a PATH with an unprintable character gets `git status` run inside it instead)` and exit `2` before any rule runs.
 In GitHub Actions (`GITHUB_ACTIONS=true`) the door first prints `::stop-commands::<token>` on stderr and on stdout, a new random token per run, so no
-workflow command in repository text runs: no `::warning::` or `##[warning]` annotation, no `add-mask`, no `add-matcher`; the stop lasts for the rest of the step, and the door never prints the line that lifts it. Problem matchers registered in the job still read the log (the stop does not reach them). The gate's jobs register only setup-uv's python matcher, which is anchored at the line start and so cannot match repository text; a matcher another step registers may still match a door line that holds repository text, and the door cannot prevent that.
+workflow command in repository text runs (operator ruling 20.10.2026, asked whether to stop the commands, escape the
+text, or both: „Beides (empfohlen)“): no `::warning::` or `##[warning]` annotation, no `add-mask`, no `add-matcher`; the stop lasts for the rest of the step, and the door never prints the line that lifts it. Problem matchers registered in the job still read the log (the stop does not reach them). The gate's jobs register only setup-uv's python matcher, which is anchored at the line start and so cannot match repository text; a matcher another step registers may still match a door line that holds repository text, and the door cannot prevent that.
