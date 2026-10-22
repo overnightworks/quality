@@ -21,8 +21,8 @@ The reasons are the record's reconstruction from #98 and its plan review, not th
 
 - **One `quality/config.toml` entry per exact `FROM` line.** The operator chose this on 20.10.2026 („Eng begrenzte
   Ausnahme (empfohlen)“) on a premise the plan review corrected (Sonar applies its exception on the default branch
-  only); he re-ruled. #98 records the re-ruled answer as: „Dependabot updates stay green, and a pull request is judged
-  the way main is“ (the item's text, not a quote of his).
+  only); he re-ruled. #98 records the re-ruled answer as: "Dependabot updates stay green, and a pull request is judged
+  the way main is" (the item's text, not a quote of his).
 - **Reading `dependabot.yml` to see that it covers the Dockerfile's folder.** Sonar itself checks existence only; the
   gate aligns a pull request with how Sonar judges the default branch; the differences stand in
   [sonar.md](../sonar.md#a-dependabot-exception-for-dockers8431) (an empty file counts, a directory counts).

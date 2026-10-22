@@ -21,7 +21,7 @@ the `advisory` rule of [rules.md](../rules.md).
 ## Rejected alternatives
 
 The reasons are the record's reconstruction from #103, #116 and their reviews, not the operator's words; the last one is
-his ruling E10, quoted below.
+his ruling E10, stated in [gate.md](../gate.md#declared-loosenings).
 
 - **The pull request approves its own loosening** (a declaration that turns the verdict green): an agent could write the
   declaration and the loosening in one pull request, so the gate would hold only against cooperative agents. The
@@ -32,7 +32,7 @@ his ruling E10, quoted below.
   second entry would be a second copy of one declaration.
 - **A real lock** (agents holding a token without admin rights): it belongs to the machine's setup, not to quality. Agents
   on the operator's machine share his `gh` login, so the door is the agreed path and not a lock; the operator ruled
-  that a known residual risk (E10, „Bekanntes Restrisiko (empfohlen)“).
+  that a known residual risk (E10, see [gate.md](../gate.md#declared-loosenings)).
 
 The other options offered to the operator with these questions are not recorded.
 
