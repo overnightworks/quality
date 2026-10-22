@@ -486,10 +486,10 @@ def renames_of(name_status: bytes) -> dict[str, str]:
     twice: set[str] = set()
     for status in records:
         try:
-            paths = [next(records), *([next(records)] if status[:1] in ("R", "C") else [])]
+            paths = [next(records), *([next(records)] if status.startswith(("R", "C")) else [])]
         except StopIteration:
             raise CannotJudge("git's list of renamed files ended inside a record") from None
-        if status[:1] != "R":
+        if not status.startswith("R"):
             continue
         old, new = paths
         if old in renames or old in twice:
