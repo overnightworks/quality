@@ -358,8 +358,22 @@ class RaisedEntry:
         return f"raises {self.key.label} {self.base} -> {self.head}"
 
 
-def carried_base(base: Baseline, head: Baseline, renames: Mapping[str, str]) -> Baseline:
-    """The base as the head's renames read it: `renames` maps a path git renamed to the path it became.
+@dataclass(frozen=True)
+class Renames:
+    """What git renamed between two commits: `moves` maps a source path to its target, `targets` holds every target.
+
+    A target whose source no baseline key can name (not UTF-8) is a target without a move.
+    """
+
+    moves: Mapping[str, str]
+    targets: frozenset[str]
+
+
+NO_RENAMES = Renames({}, frozenset())
+
+
+def carried_base(base: Baseline, head: Baseline, renames: Renames) -> Baseline:
+    """The base as the head's renames read it.
 
     An entry under a rename's target is a leftover of a file the base no longer has and is dropped. The entries under
     the old path move to the target unless the head still holds something under the old path.
@@ -367,12 +381,11 @@ def carried_base(base: Baseline, head: Baseline, renames: Mapping[str, str]) -> 
     held = {key.path for key in head.size} | {
         place.path for pair in head.clones or () for place in (pair.first, pair.second)
     }
-    moves = {old: new for old, new in renames.items() if old not in held}
-    targets = set(renames.values())
+    moves = {old: new for old, new in renames.moves.items() if old not in held}
 
     def new_path(path: str) -> str | None:
         """Where the base's entries under `path` go in the head's reading, None when they are dropped."""
-        if path in targets:
+        if path in renames.targets:
             return None
         return moves.get(path, path)
 

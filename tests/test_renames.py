@@ -15,7 +15,7 @@ from test_verdict import verdict_of
 from quality import cli, emergency, verdict
 from quality.config import CONFIG_PATH
 from quality.hygiene import CannotJudge
-from quality.ratchet import BASELINE_PATH, Baseline, Key, Metric, render_baseline
+from quality.ratchet import BASELINE_PATH, Baseline, Key, Metric, Renames, render_baseline
 
 MOVABLE_FILE = "".join(f"line {number} of a file git can match to its move\n" for number in range(30))
 OTHER_FILE = "".join(f"nothing like the movable file, row {number}\n" for number in range(30))
@@ -40,6 +40,7 @@ def moved_in_head(
     for path, text in (base_files or {}).items():
         put(repo / path, text)
     commit_base(base)
+    (repo / new).parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(["git", "-C", str(repo), "mv", old, new], check=True)
     put(repo / new, new_text)
     put(repo / BASELINE_PATH, head)
@@ -175,6 +176,29 @@ def test_a_leftover_does_not_count_and_the_allowance_moves_rather_than_copies(ca
     assert (actual_code, expected in output, output.count("loosened (undeclared)")) == (code, True, 0 if code == 0 else 1)
 
 
+UNNAMEABLE_SOURCE = os.fsdecode(b"legacy/\xff.txt")
+STALE_LEFTOVER = entry("src/new.py", 200)
+RAISED_LEFTOVER = entry("src/new.py", 150)
+
+
+def test_a_rename_from_a_path_that_is_not_utf8_still_clears_its_target(capsys, pull_request):
+    """#149 rule 2, gate B1: no baseline key names the source, but the stale entry at the target never counts."""
+    moved_in_head(pull_request, STALE_LEFTOVER, RAISED_LEFTOVER, old=UNNAMEABLE_SOURCE)
+    code, output = verdict_of(pull_request[0], capsys)
+    assert (code, "size baseline adds function_lines src/new.py f 150" in output) == (1, True)
+
+
+def test_the_door_refuses_a_rename_from_a_path_that_is_not_utf8_as_the_verdict_does(capsys, tmp_path):
+    """#149 rule 2, gate B1: the door reads the same pair of commits."""
+    gh = pulled(
+        tmp_path, STALE_LEFTOVER, RAISED_LEFTOVER, [(UNNAMEABLE_SOURCE, "src/new.py")],
+        base_config=GATE_CONFIG, merge_config=GATE_CONFIG,
+    )
+    assert drive(gh)[0] == 1
+    assert "size baseline adds function_lines src/new.py f 150" in capsys.readouterr().out
+    assert gh.merge_calls == []
+
+
 def test_a_moved_allowance_is_not_copied_into_a_later_pull_request(capsys, pull_request, monkeypatch):
     """#149 cell 14: after the move the base holds no `old` entry, so recreating `old` adds it."""
     repo, _ = pull_request
@@ -265,16 +289,17 @@ def test_without_a_base_commit_no_renames_are_read(capsys, pull_request, monkeyp
 @pytest.mark.parametrize(
     ("listing", "renames"),
     [
-        (b"", {}),
-        (b"R100\0a.py\0b.py\0M\0c.py\0", {"a.py": "b.py"}),
-        (b"C100\0a.py\0b.py\0", {}),
-        (b"R100\0a.py\0b.py\0R100\0a.py\0c.py\0", {}),
-        (b"R100\0a\rb.py\0c\nd.py\0", {"a\rb.py": "c\nd.py"}),
-        (b"M\0caf\xe9.txt\0A\0\xff\0D\0\xfe\0", {}),
-        (b"R100\0\xff\0b.py\0R100\0a.py\0caf\xe9.py\0R100\0c.py\0d.py\0", {"c.py": "d.py"}),
+        (b"", Renames({}, frozenset())),
+        (b"R100\0a.py\0b.py\0M\0c.py\0", Renames({"a.py": "b.py"}, frozenset({"b.py"}))),
+        (b"C100\0a.py\0b.py\0", Renames({}, frozenset())),
+        (b"R100\0a.py\0b.py\0R100\0a.py\0c.py\0", Renames({}, frozenset())),
+        (b"R100\0a\rb.py\0c\nd.py\0", Renames({"a\rb.py": "c\nd.py"}, frozenset({"c\nd.py"}))),
+        (b"M\0caf\xe9.txt\0A\0\xff\0D\0\xfe\0", Renames({}, frozenset())),
+        (b"R100\0\xff\0b.py\0R100\0a.py\0caf\xe9.py\0R100\0c.py\0d.py\0",
+         Renames({"c.py": "d.py"}, frozenset({"b.py", "d.py"}))),
     ],
     ids=["nothing", "only a rename counts", "a copy carries nothing", "a source named twice carries to neither", "bytes stay bytes",
-         "an edit, an addition and a deletion are never decoded", "a rename of a path that is not UTF-8 is skipped"],
+         "an edit, an addition and a deletion are never decoded", "a source that is not UTF-8 still names its target; a target that is not UTF-8 is skipped"],
 )
 def test_the_rename_list_reads_only_complete_renames(listing, renames):
     """#149 cell 20: the parser."""

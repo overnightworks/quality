@@ -313,7 +313,7 @@ def run_verdict(path: Path, fetcher_for: Callable[[str], PageFetcher], sleep: Sl
         head = read_head(path)
         base_sha = os.environ.get("GATE_BASE_SHA", "")
         base = read_base(path, base_sha) if base_sha else None
-        renames = read_renames(path, base_sha, "HEAD") if compares_baselines(base, head) else {}
+        renames = read_renames(path, base_sha, "HEAD") if compares_baselines(base, head) else ratchet.NO_RENAMES
         gate_results = {name: need["result"] for name, need in json.loads(os.environ["GATE_NEEDS"]).items()}
         current_attempt = int(os.environ["GITHUB_RUN_ATTEMPT"])
         repository_name, run_id = os.environ["GITHUB_REPOSITORY"], os.environ["GITHUB_RUN_ID"]

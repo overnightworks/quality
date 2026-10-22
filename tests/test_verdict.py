@@ -20,7 +20,7 @@ from test_sonar import reply
 from quality import __version__, cli, verdict
 from quality.config import CONFIG_PATH, LegacyMode
 from quality.hygiene import CannotJudge
-from quality.ratchet import BASELINE_PATH
+from quality.ratchet import BASELINE_PATH, NO_RENAMES
 from quality.report import printable
 from quality.verdict import NO_BASE_SETTINGS, GateSettings, Job, Side, judge, read_base, read_jobs
 
@@ -35,7 +35,7 @@ def job(name="checks", attempt=1, status="completed", conclusion="success", leg=
 
 def problems(jobs, mandatory=("checks",), base=(), gate=GREEN_GATE, attempt=1, legacy=LegacyMode.REPORT, base_legacy=LegacyMode.REPORT):
     head, base_side = Side(GateSettings(mandatory, legacy), None), Side(GateSettings(base, base_legacy), None)
-    return judge(head, base_side, jobs, gate, attempt, {}).blocking
+    return judge(head, base_side, jobs, gate, attempt, NO_RENAMES).blocking
 
 
 @pytest.mark.parametrize(
@@ -146,7 +146,7 @@ def test_the_legacy_mode_is_read_from_the_base_commit(build_repo):
 def test_switching_legacy_back_from_fail_is_a_loosening(base_legacy, legacy, expected):
     """#33 sentence 4: a head config that is not "fail" under a base config that is shows as loosened and is red"""
     head, base = Side(GateSettings(("checks",), legacy), None), Side(GateSettings(("checks",), base_legacy), None)
-    result = judge(head, base, [job()], GREEN_GATE, 1, {})
+    result = judge(head, base, [job()], GREEN_GATE, 1, NO_RENAMES)
     assert (result.blocking, result.green) == (expected, not expected)
 
 

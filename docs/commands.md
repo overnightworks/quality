@@ -115,7 +115,8 @@ take are in [the runbook](runbook-emergency-merge.md); this is what the command 
   nothing; `gh` is the only credential source, told where its login lives (`GH_CONFIG_DIR`, else
   `$XDG_CONFIG_HOME/gh`, else `~/.config/gh`), and reaches a private repository through git's credential helper. git
   never prompts and an askpass program is never run. The fetch and the rename list share one limit of 120 seconds each,
-  and a command that outlives it is killed with its children. git's own output is never printed: a fetch or rename list
+  and each of these git commands runs in its own process group, which is killed with it at that limit or when the
+  command is interrupted (every other command stays in quality's own group). git's own output is never printed: a fetch or rename list
   that fails is a refusal in the door's words (exit `1`), never an empty rename list.
 - **Sonar green: declared loosenings.** The re-derived verdict must hold at least one declared loosening (otherwise
   `re-run the verdict`). SonarCloud is not asked and `SONAR_TOKEN` is not needed.

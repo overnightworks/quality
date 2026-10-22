@@ -345,12 +345,14 @@ def git_pull(directory, base_baseline, merge_baseline, moves=()):
     git = ["git", "-C", str(work), *GIT_IDENTITY]
     subprocess.run(["git", "init", "-q", str(work)], check=True)
     for old, _ in moves:
-        put(work / old, "".join(f"{old} row {number} that no other file shares\n" for number in range(30)))
+        name = old.encode("ascii", "backslashreplace").decode()
+        put(work / old, "".join(f"{name} row {number} that no other file shares\n" for number in range(30)))
     put(work / BASELINE_PATH, base_baseline)
     subprocess.run([*git, "add", "-A"], check=True)
     subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "base"], check=True)
     base_sha = subprocess.run([*git, "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
     for old, new in moves:
+        (work / new).parent.mkdir(parents=True, exist_ok=True)
         subprocess.run([*git, "mv", old, new], check=True)
     put(work / BASELINE_PATH, merge_baseline)
     subprocess.run([*git, "add", "-A"], check=True)

@@ -20,6 +20,7 @@ from quality.hygiene import CannotJudge, read_baseline
 from quality.ratchet import (
     BASELINE_PATH,
     Baseline,
+    Renames,
     SizeError,
     added_pairs,
     carried_base,
@@ -140,10 +141,10 @@ def judge(
     jobs: list[Job],
     gate_results: Mapping[str, str],
     current_attempt: int,
-    renames: Mapping[str, str],
+    renames: Renames,
 ) -> Verdict:
     """Without a base (a push, a merge group) no loosening and no declaration is judged; a declared removal of a
-    mandatory job leaves that job unjudged. `renames` maps a base path git renamed to its head path."""
+    mandatory job leaves that job unjudged. `renames` are the files git renamed from the base to the head."""
     failures = [f'gate job "{name}" result {result}' for name, result in gate_results.items() if result != SUCCESS]
     loosenings, stale = ((), ()) if base is None else _loosenings(head, base, renames)
     declared = {loosening.what for loosening in loosenings if loosening.declaration is not None}
@@ -159,7 +160,7 @@ def judge(
     return Verdict(loosenings, stale, tuple(failures), tuple(unsettled))
 
 
-def _loosenings(head: Side, base: Side, renames: Mapping[str, str]) -> tuple[tuple[Loosening, ...], tuple[Declaration, ...]]:
+def _loosenings(head: Side, base: Side, renames: Renames) -> tuple[tuple[Loosening, ...], tuple[Declaration, ...]]:
     """Each loosening, bound to the head's new declaration of it; a declaration the base holds already binds nothing.
     An advisory allowance declares its own loosening, so no [[gate.loosened]] entry binds one."""
     whats = [_removal(name) for name in base.settings.mandatory_jobs if name not in head.settings.mandatory_jobs]
@@ -197,7 +198,7 @@ def _removal(name: str) -> str:
     return f'mandatory job "{name}" removed'
 
 
-def _baseline_loosenings(base: Baseline | None, head: Baseline | None, renames: Mapping[str, str]) -> list[str]:
+def _baseline_loosenings(base: Baseline | None, head: Baseline | None, renames: Renames) -> list[str]:
     """Without a base baseline any head one is adoption; with one, the head may only lower or drop entries and pairs.
 
     A head entry in a file git renamed is held against the base entry under the old path; it is still named, and
@@ -459,9 +460,11 @@ def compares_baselines(base: Side | None, head: Side) -> bool:
 
 
 def read_renames(
-    repo: Path, base: str, head: str, env: dict[str, str] | None = None, timeout: float | None = None
-) -> dict[str, str]:
-    """The files git renamed between two commits, old path to new; the verdict and the door read the same pair."""
+    repo: Path, base: str, head: str, env: dict[str, str] | None = None, bound: float | None = None
+) -> Renames:
+    """The files git renamed between two commits; the verdict and the door read the same pair.
+
+    A `bound` in seconds runs git in its own process group, for the door inside its scratch directory."""
     _require_safe_ref(base, "base")
     _require_safe_ref(head, "head")
     try:
@@ -472,7 +475,7 @@ def read_renames(
             ],
             f"cannot list the files renamed between {base} and {head}",
             env,
-            timeout,
+            bound,
             encoding=None,
         )
     except engines.EngineError as error:
@@ -480,18 +483,20 @@ def read_renames(
     return renames_of(listed)
 
 
-def renames_of(name_status: bytes) -> dict[str, str]:
+def renames_of(name_status: bytes) -> Renames:
     """`git diff --name-status -z` records: a status, then one path, or two for a rename or a copy.
 
     Only a rename counts, and a source two renames name carries to neither. Only a rename's two paths are decoded, as
-    UTF-8 without newline translation, so a path holding a carriage return stays the path git named; a path that is not
-    UTF-8 is skipped, since no baseline key can name it.
+    UTF-8 without newline translation, so a path holding a carriage return stays the path git named. A rename whose
+    target is not UTF-8 is skipped, since no baseline key can name it; one whose source is not UTF-8 still clears its
+    target of leftovers and carries nothing.
     """
     fields = name_status.split(b"\0")
     if fields.pop() != b"":
         raise CannotJudge("git's list of renamed files ended inside a record")
     records = iter(fields)
-    renames: dict[str, str] = {}
+    moves: dict[str, str] = {}
+    unnamed_sources: set[str] = set()
     twice: set[str] = set()
     for status in records:
         try:
@@ -500,15 +505,22 @@ def renames_of(name_status: bytes) -> dict[str, str]:
             raise CannotJudge("git's list of renamed files ended inside a record") from None
         if not status.startswith(b"R"):
             continue
+        old_bytes, new_bytes = paths
         try:
-            old, new = (path.decode("utf-8") for path in paths)
+            new = new_bytes.decode("utf-8")
         except UnicodeDecodeError:
             continue
-        if old in renames or old in twice:
+        try:
+            old = old_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            unnamed_sources.add(new)
+            continue
+        if old in moves or old in twice:
             twice.add(old)
         else:
-            renames[old] = new
-    return {old: new for old, new in renames.items() if old not in twice}
+            moves[old] = new
+    kept = {old: new for old, new in moves.items() if old not in twice}
+    return Renames(kept, frozenset(kept.values()) | unnamed_sources)
 
 
 def side_of(config: str | None, baseline: str | None, where: str) -> Side:

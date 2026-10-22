@@ -13,6 +13,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import overload
 
 from quality.config import Allowance
 from quality.report import Finding
@@ -289,12 +290,26 @@ def unborn_aware_head_commit(repository: Path, git_environment: dict[str, str]) 
     return listed.strip() or None
 
 
+@overload
 def git(
-    arguments: list[str], failure: str, env: dict[str, str] | None = None, timeout: float | None = None,
+    arguments: list[str], failure: str, env: dict[str, str] | None = ..., bound: float | None = ...,
+    encoding: str = ...,
+) -> str: ...
+@overload
+def git(
+    arguments: list[str], failure: str, env: dict[str, str] | None = ..., bound: float | None = ..., *,
+    encoding: None,
+) -> bytes: ...
+def git(
+    arguments: list[str], failure: str, env: dict[str, str] | None = None, bound: float | None = None,
     encoding: str | None = "utf-8",
 ) -> str | bytes:
-    """git's output, bytes for `encoding=None`; a git that fails is an EngineError of `failure` and git's own words."""
-    done = run(["git", *arguments], env=env, timeout=timeout, encoding=encoding)
+    """git's output, bytes for `encoding=None`; a git that fails is an EngineError of `failure` and git's own words.
+
+    A `bound` in seconds runs git in its own process group (see `run_bounded_in_own_group`).
+    """
+    command = ["git", *arguments]
+    done = run(command, env=env, encoding=encoding) if bound is None else run_bounded_in_own_group(command, bound, env, encoding)
     if done.returncode != 0:
         stderr = done.stderr if isinstance(done.stderr, str) else done.stderr.decode("utf-8", "replace")
         raise EngineError(f"{failure}{stderr_tail(stderr)}")
@@ -337,34 +352,51 @@ def verify_version(binary: Path, engine_name: str, pinned: str) -> None:
         raise EngineError(f"{binary} is version {reported!r}, the pin says {pinned!r}")
 
 
-def run(
-    command: list[str], cwd: Path | None = None, env: dict[str, str] | None = None, timeout: float | None = None,
-    encoding: str | None = "utf-8",
-) -> subprocess.CompletedProcess:
-    """`command`'s exit and output, decoded as UTF-8 whatever the locale; `encoding=None` keeps the bytes.
-
-    The command leads its own process group, and a timeout or an interruption kills the whole group, so no child of
-    the command outlives it.
-    """
+@contextmanager
+def _failures_as_engine_errors(command: list[str]) -> Iterator[None]:
     try:
-        with subprocess.Popen(
-            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding=encoding, cwd=cwd, env=env,
-            start_new_session=True,
-        ) as process:
-            try:
-                stdout, stderr = process.communicate(timeout=timeout)
-            except subprocess.TimeoutExpired:
-                _kill_group(process)
-                process.communicate()
-                raise EngineError(f"{command[0]} did not finish within {timeout} seconds") from None
-            except BaseException:
-                _kill_group(process)
-                raise
-            return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+        yield
     except UnicodeDecodeError as error:
         raise EngineError(f"{command[0]} printed output that is not UTF-8 ({error})") from error
     except (OSError, ValueError) as error:  # ValueError: an argument the OS refuses, such as an embedded null byte
         raise EngineError(f"cannot run {command[0]}: {error}") from error
+
+
+def run(
+    command: list[str], cwd: Path | None = None, env: dict[str, str] | None = None, timeout: float | None = None,
+    encoding: str | None = "utf-8",
+) -> subprocess.CompletedProcess:
+    """`command`'s exit and output, decoded as UTF-8 whatever the locale; `encoding=None` keeps the bytes."""
+    with _failures_as_engine_errors(command):
+        try:
+            return subprocess.run(
+                command, capture_output=True, encoding=encoding, check=False, cwd=cwd, env=env, timeout=timeout
+            )
+        except subprocess.TimeoutExpired:
+            raise EngineError(f"{command[0]} did not finish within {timeout} seconds") from None
+
+
+def run_bounded_in_own_group(
+    command: list[str], timeout: float, env: dict[str, str] | None = None, encoding: str | None = "utf-8"
+) -> subprocess.CompletedProcess:
+    """`run` for a command that must not outlive its bound or an interruption: it leads its own process group, which
+    is killed when the bound passes or an exception (the SIGTERM of `scratch_directory`) unwinds the caller.
+
+    Only inside `scratch_directory`: outside it a SIGTERM ends quality without unwinding, and the group would outlive it.
+    """
+    with _failures_as_engine_errors(command), subprocess.Popen(
+        command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding=encoding, env=env, start_new_session=True
+    ) as process:
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            _kill_group(process)
+            process.wait()  # not communicate(): a descendant that left the group would hold the pipes open
+            raise EngineError(f"{command[0]} did not finish within {timeout} seconds") from None
+        except BaseException:
+            _kill_group(process)
+            raise
+        return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
 
 
 def _kill_group(process: subprocess.Popen) -> None:

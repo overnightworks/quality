@@ -13,7 +13,7 @@ from urllib.parse import quote
 from quality import engines
 from quality.config import CONFIG_PATH, REPOSITORY_NAME, Declaration, GateSettings, LegacyMode
 from quality.hygiene import CannotJudge
-from quality.ratchet import BASELINE_PATH
+from quality.ratchet import BASELINE_PATH, NO_RENAMES, Renames
 from quality.report import printable, render
 from quality.sonar import (
     Analysis,
@@ -209,7 +209,7 @@ def fetch_environment(environment: Mapping[str, str], empty_home: Path) -> dict[
     return kept | {"GIT_TERMINAL_PROMPT": "0", "GH_CONFIG_DIR": gh_configuration_directory(environment)}
 
 
-def read_renames_of_pull(remote: str, base_sha: str, merge_sha: str, environment: Mapping[str, str]) -> dict[str, str]:
+def read_renames_of_pull(remote: str, base_sha: str, merge_sha: str, environment: Mapping[str, str]) -> Renames:
     """The renames the verdict reads at the checkout, from the pull request's two commits fetched into a bare repository
     that is removed afterwards. Credentials stay in gh's credential protocol; git's own words never reach the operator."""
     with engines.scratch_directory() as scratch:
@@ -224,7 +224,7 @@ def read_renames_of_pull(remote: str, base_sha: str, merge_sha: str, environment
         )
         for command in commands:
             try:
-                done = engines.run(command, env=isolated, timeout=FETCH_TIMEOUT_SECONDS)
+                done = engines.run_bounded_in_own_group(command, FETCH_TIMEOUT_SECONDS, isolated)
             except engines.EngineError as error:
                 raise Refused(f"cannot fetch the pull request's commits to compare renamed files ({error})") from None
             if done.returncode != 0:
@@ -232,12 +232,12 @@ def read_renames_of_pull(remote: str, base_sha: str, merge_sha: str, environment
                     f"cannot fetch the pull request's commits to compare renamed files (git exited {done.returncode})"
                 )
         try:
-            return read_renames(repository, base_sha, merge_sha, isolated, FETCH_TIMEOUT_SECONDS)
+            return read_renames(repository, base_sha, merge_sha, isolated, bound=FETCH_TIMEOUT_SECONDS)
         except CannotJudge:
             raise Refused("cannot list the files git renamed between the pull request's commits") from None
 
 
-def rederived_verdict(head: Side, base: Side, check_runs: Sequence[Check], renames: Mapping[str, str]) -> Verdict:
+def rederived_verdict(head: Side, base: Side, check_runs: Sequence[Check], renames: Renames) -> Verdict:
     """The verdict's own decider at the merge commit, with the Sonar job taken as green: the door judges Sonar itself."""
     jobs = [Job(run.name, 1, run.status, SUCCESS if run.name == SONAR_CHECK else run.conclusion) for run in check_runs]
     return judge(head, base, jobs, {"sonar": SUCCESS}, 1, renames)
@@ -514,7 +514,7 @@ def judge_pull_request(
     renames = (
         read_renames_of_pull(remote_for(repository), pull["base"]["sha"], merge_commit_sha, environment)
         if compares_baselines(base, head)
-        else {}
+        else NO_RENAMES
     )
     verdict = rederived_verdict(head, base, check_runs, renames)
     refusal = refusal_of_verdict(verdict, sonar_red)

@@ -24,6 +24,7 @@ from quality.ratchet import (
     Metric,
     Place,
     RaisedEntry,
+    Renames,
     carried_base,
     load_baseline,
     raised_entries,
@@ -503,6 +504,10 @@ def sized(path):
     return Key(Metric.CCN, path, "f")
 
 
+def renamed(moves, unnamed_sources=()):
+    return Renames(moves, frozenset(moves.values()) | frozenset(unnamed_sources))
+
+
 def paired(first, second):
     return ClonePair.of(Place(first, "f"), Place(second, "g"))
 
@@ -523,7 +528,7 @@ def paired(first, second):
 )
 def test_the_base_allowance_moves_to_a_rename_target_and_leftovers_there_do_not_count(renames, base, head, expected):
     """#149 R1, rules 1 and 2: the old entry leaves its path; an entry under the target never counts."""
-    assert carried_base(Baseline(base, None), Baseline(head, None), renames).size == expected
+    assert carried_base(Baseline(base, None), Baseline(head, None), renamed(renames)).size == expected
 
 
 @pytest.mark.parametrize(
@@ -540,19 +545,26 @@ def test_the_base_allowance_moves_to_a_rename_target_and_leftovers_there_do_not_
 )
 def test_a_clone_pair_moves_with_its_files_by_the_same_rules(renames, base, head, expected):
     """#149 R3: a pair whose sides only moved is the same pair; the sides re-sort through ClonePair.of."""
-    carried = carried_base(Baseline({}, frozenset(base)), Baseline({}, frozenset(head)), renames)
+    carried = carried_base(Baseline({}, frozenset(base)), Baseline({}, frozenset(head)), renamed(renames))
     assert carried.clones == frozenset(expected)
+
+
+def test_a_target_whose_source_cannot_be_named_is_cleared_and_nothing_moves_to_it():
+    """#149 rule 2: a rename from a path that is not UTF-8 still drops the leftovers under its target."""
+    base = Baseline({sized("new.py"): 200}, frozenset({paired("new.py", "z.py")}))
+    carried = carried_base(base, Baseline({sized("new.py"): 150}, frozenset()), renamed({}, unnamed_sources=["new.py"]))
+    assert carried == Baseline({}, frozenset())
 
 
 def test_a_head_pair_keeps_the_old_path_occupied_for_size_entries_too():
     """#149 rule 1: the head holds the old path through a size entry or a pair side, either blocks the move."""
     base = Baseline({sized("a.py"): 16}, frozenset({paired("a.py", "z.py")}))
     head = Baseline({sized("b.py"): 16}, frozenset({paired("a.py", "z.py"), paired("b.py", "z.py")}))
-    assert carried_base(base, head, {"a.py": "b.py"}) == Baseline({sized("a.py"): 16}, frozenset({paired("a.py", "z.py")}))
+    assert carried_base(base, head, renamed({"a.py": "b.py"})) == Baseline({sized("a.py"): 16}, frozenset({paired("a.py", "z.py")}))
 
 
 def test_a_base_without_a_clone_table_stays_without_one():
-    assert carried_base(Baseline({sized("a.py"): 16}, None), Baseline({sized("b.py"): 16}, None), {"a.py": "b.py"}).clones is None
+    assert carried_base(Baseline({sized("a.py"): 16}, None), Baseline({sized("b.py"): 16}, None), renamed({"a.py": "b.py"})).clones is None
 
 
 def test_a_key_with_quotes_or_unicode_matches_itself_exactly():
