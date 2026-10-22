@@ -168,7 +168,7 @@ jobs:
 ```
 
 - **`languages`:** the one input, required, a string holding a JSON list; `'python'` or `'[]'` fails the run. List
-  every category the repository already analyses (agent-coordination also has `javascript-typescript`, which the
+  every category the repository already analyses (aco also has `javascript-typescript`, which the
   template would drop).
 - **Permissions:** the caller grants `security-events: write`, `contents: read` and `actions: read`, and the workflow
   asks for no more. A caller without `security-events: write` is refused at startup.
