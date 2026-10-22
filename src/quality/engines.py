@@ -10,7 +10,7 @@ import tempfile
 import tomllib
 import urllib.request
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -289,19 +289,15 @@ def unborn_aware_head_commit(repository: Path, git_environment: dict[str, str]) 
     return listed.strip() or None
 
 
-def git(arguments: list[str], failure: str, env: dict[str, str] | None = None) -> str:
-    """git's output; a git that fails is an EngineError of `failure` and git's own words."""
-    done = run(["git", *arguments], env=env)
+def git(
+    arguments: list[str], failure: str, env: dict[str, str] | None = None, timeout: float | None = None,
+    encoding: str | None = "utf-8",
+) -> str | bytes:
+    """git's output, bytes for `encoding=None`; a git that fails is an EngineError of `failure` and git's own words."""
+    done = run(["git", *arguments], env=env, timeout=timeout, encoding=encoding)
     if done.returncode != 0:
-        raise EngineError(f"{failure}{stderr_tail(done.stderr)}")
-    return done.stdout
-
-
-def git_bytes(arguments: list[str], failure: str, env: dict[str, str] | None = None) -> bytes:
-    """git's output undecoded, for a caller that must keep every byte; failures read as in `git`."""
-    done = run(["git", *arguments], env=env, encoding=None)
-    if done.returncode != 0:
-        raise EngineError(f"{failure}{stderr_tail(done.stderr.decode('utf-8', 'replace'))}")
+        stderr = done.stderr if isinstance(done.stderr, str) else done.stderr.decode("utf-8", "replace")
+        raise EngineError(f"{failure}{stderr_tail(stderr)}")
     return done.stdout
 
 
@@ -345,17 +341,35 @@ def run(
     command: list[str], cwd: Path | None = None, env: dict[str, str] | None = None, timeout: float | None = None,
     encoding: str | None = "utf-8",
 ) -> subprocess.CompletedProcess:
-    """`command`'s exit and output, decoded as UTF-8 whatever the locale; `encoding=None` keeps the bytes."""
+    """`command`'s exit and output, decoded as UTF-8 whatever the locale; `encoding=None` keeps the bytes.
+
+    The command leads its own process group, and a timeout or an interruption kills the whole group, so no child of
+    the command outlives it.
+    """
     try:
-        return subprocess.run(
-            command, capture_output=True, encoding=encoding, check=False, cwd=cwd, env=env, timeout=timeout
-        )
-    except subprocess.TimeoutExpired:
-        raise EngineError(f"{command[0]} did not finish within {timeout} seconds") from None
+        with subprocess.Popen(
+            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding=encoding, cwd=cwd, env=env,
+            start_new_session=True,
+        ) as process:
+            try:
+                stdout, stderr = process.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                _kill_group(process)
+                process.communicate()
+                raise EngineError(f"{command[0]} did not finish within {timeout} seconds") from None
+            except BaseException:
+                _kill_group(process)
+                raise
+            return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
     except UnicodeDecodeError as error:
         raise EngineError(f"{command[0]} printed output that is not UTF-8 ({error})") from error
     except (OSError, ValueError) as error:  # ValueError: an argument the OS refuses, such as an embedded null byte
         raise EngineError(f"cannot run {command[0]}: {error}") from error
+
+
+def _kill_group(process: subprocess.Popen) -> None:
+    with suppress(ProcessLookupError):
+        os.killpg(process.pid, signal.SIGKILL)
 
 
 def stderr_tail(stderr: str) -> str:

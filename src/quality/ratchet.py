@@ -368,12 +368,13 @@ def carried_base(base: Baseline, head: Baseline, renames: Mapping[str, str]) -> 
         place.path for pair in head.clones or () for place in (pair.first, pair.second)
     }
     moves = {old: new for old, new in renames.items() if old not in held}
+    targets = set(renames.values())
 
     def new_path(path: str) -> str | None:
         """Where the base's entries under `path` go in the head's reading, None when they are dropped."""
-        if path in moves:
-            return moves[path]
-        return None if path in renames.values() else path
+        if path in targets:
+            return None
+        return moves.get(path, path)
 
     size = {key._replace(path=path): value for key, value in base.size.items() if (path := new_path(key.path))}
     if base.clones is None:

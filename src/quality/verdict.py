@@ -416,9 +416,9 @@ def _is_git_ref_name(ref: str) -> bool:
     return not (broken_name or broken_component)
 
 
-def _require_safe_ref(ref: str) -> None:
+def _require_safe_ref(ref: str, role: str) -> None:
     if not _is_git_ref_name(ref):
-        raise CannotJudge(f"the base {ref!r} is not a ref name or a SHA")
+        raise CannotJudge(f"the {role} {ref!r} is not a ref name or a SHA")
 
 
 def read_head(repo: Path) -> Side:
@@ -440,7 +440,7 @@ def read_head(repo: Path) -> Side:
 
 def read_base(repo: Path, base_sha: str) -> Side:
     """The gate's settings and baseline at the base commit; a file the base lacks reads as absent."""
-    _require_safe_ref(base_sha)
+    _require_safe_ref(base_sha, "base")
     where = f"the base commit {base_sha}"
     try:
         config, baseline = (
@@ -452,17 +452,28 @@ def read_base(repo: Path, base_sha: str) -> Side:
     return side_of(config, baseline, where)
 
 
-def read_renames(repo: Path, base: str, head: str) -> dict[str, str]:
+def compares_baselines(base: Side | None, head: Side) -> bool:
+    """Whether the renames can change the judgement: only a comparison of two baselines reads them. Any other pair is
+    judged without them, so a pull request that renames nothing the baselines name is never held up by the diff."""
+    return base is not None and base.baseline is not None and head.baseline is not None
+
+
+def read_renames(
+    repo: Path, base: str, head: str, env: dict[str, str] | None = None, timeout: float | None = None
+) -> dict[str, str]:
     """The files git renamed between two commits, old path to new; the verdict and the door read the same pair."""
-    _require_safe_ref(base)
-    _require_safe_ref(head)
+    _require_safe_ref(base, "base")
+    _require_safe_ref(head, "head")
     try:
-        listed = engines.git_bytes(
+        listed = engines.git(
             [
                 "-C", str(repo.resolve()), "diff", "-M50%", "-l1000", "--no-color", "--name-status", "-z",
                 "--end-of-options", base, head, "--",
             ],
             f"cannot list the files renamed between {base} and {head}",
+            env,
+            timeout,
+            encoding=None,
         )
     except engines.EngineError as error:
         raise CannotJudge(str(error)) from error
@@ -472,26 +483,27 @@ def read_renames(repo: Path, base: str, head: str) -> dict[str, str]:
 def renames_of(name_status: bytes) -> dict[str, str]:
     """`git diff --name-status -z` records: a status, then one path, or two for a rename or a copy.
 
-    Only a rename counts, and a source two renames name carries to neither. Bytes decode without newline translation,
-    so a path holding a carriage return stays the path git named.
+    Only a rename counts, and a source two renames name carries to neither. Only a rename's two paths are decoded, as
+    UTF-8 without newline translation, so a path holding a carriage return stays the path git named; a path that is not
+    UTF-8 is skipped, since no baseline key can name it.
     """
-    try:
-        fields = name_status.decode("utf-8").split("\0")
-    except UnicodeDecodeError as error:
-        raise CannotJudge(f"git listed a renamed path that is not UTF-8 ({error})") from error
-    if fields.pop() != "":
+    fields = name_status.split(b"\0")
+    if fields.pop() != b"":
         raise CannotJudge("git's list of renamed files ended inside a record")
     records = iter(fields)
     renames: dict[str, str] = {}
     twice: set[str] = set()
     for status in records:
         try:
-            paths = [next(records), *([next(records)] if status.startswith(("R", "C")) else [])]
+            paths = [next(records), *([next(records)] if status.startswith((b"R", b"C")) else [])]
         except StopIteration:
             raise CannotJudge("git's list of renamed files ended inside a record") from None
-        if not status.startswith("R"):
+        if not status.startswith(b"R"):
             continue
-        old, new = paths
+        try:
+            old, new = (path.decode("utf-8") for path in paths)
+        except UnicodeDecodeError:
+            continue
         if old in renames or old in twice:
             twice.add(old)
         else:

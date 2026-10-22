@@ -515,9 +515,11 @@ def paired(first, second):
         ({"a.py": "b.py"}, {sized("b.py"): 99}, {sized("b.py"): 16}, {}),
         ({"a.py": "b.py"}, {sized("a.py"): 16}, {sized("a.py"): 16, sized("b.py"): 16}, {sized("a.py"): 16}),
         ({"a.py": "b.py"}, {sized("a.py"): 16, sized("c.py"): 17}, {sized("b.py"): 16}, {sized("b.py"): 16, sized("c.py"): 17}),
+        ({"a.py": "b.py", "b.py": "c.py"}, {sized("a.py"): 16, sized("b.py"): 17}, {sized("c.py"): 17}, {sized("b.py"): 16}),
     ],
     ids=["the allowance moves", "a leftover under the target is dropped", "a lone leftover is dropped",
-         "nothing moves while the head holds the old path", "an unrelated path stays"],
+         "nothing moves while the head holds the old path", "an unrelated path stays",
+         "leftovers under every target are dropped before the sources move"],
 )
 def test_the_base_allowance_moves_to_a_rename_target_and_leftovers_there_do_not_count(renames, base, head, expected):
     """#149 R1, rules 1 and 2: the old entry leaves its path; an entry under the target never counts."""

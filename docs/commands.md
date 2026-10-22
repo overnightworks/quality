@@ -110,10 +110,13 @@ take are in [the runbook](runbook-emergency-merge.md); this is what the command 
   nothing, or a missing or red mandatory job is refused, naming the verdict's lines. When both sides hold a baseline,
   the files git renamed between the two commits count as they do in the verdict, so the door fetches the pull request's
   base commit and merge commit (`git fetch --depth=1` from `https://github.com/<owner>/<repo>.git`) into a temporary bare
-  repository that is removed afterwards. This needs `git` and `gh` on the path, and `gh auth` reaches a private
-  repository through git's credential helper; git never prompts, an askpass program is never run, the fetch is limited to
-  120 seconds, and git's own output is never printed. A fetch or rename list that fails is a refusal (exit `1`), never an
-  empty rename list.
+  repository that is removed afterwards, also when the command is interrupted. This needs `git` and `gh` on the path.
+  git runs with an empty home and no inherited `GIT_*` variable, so `.netrc` and git's own configuration count for
+  nothing; `gh` is the only credential source, told where its login lives (`GH_CONFIG_DIR`, else
+  `$XDG_CONFIG_HOME/gh`, else `~/.config/gh`), and reaches a private repository through git's credential helper. git
+  never prompts and an askpass program is never run. The fetch and the rename list share one limit of 120 seconds each,
+  and a command that outlives it is killed with its children. git's own output is never printed: a fetch or rename list
+  that fails is a refusal in the door's words (exit `1`), never an empty rename list.
 - **Sonar green: declared loosenings.** The re-derived verdict must hold at least one declared loosening (otherwise
   `re-run the verdict`). SonarCloud is not asked and `SONAR_TOKEN` is not needed.
 - **Sonar failed: legacy findings,** next to any declared loosening: `[gate] legacy` is `fail` at the merge

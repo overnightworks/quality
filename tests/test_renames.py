@@ -2,17 +2,20 @@
 
 import json
 import os
+import signal
 import subprocess
+import sys
+import time
 
 import pytest
-from conftest import GIT_IDENTITY, git_pull, head_commit, put
+from conftest import GIT_IDENTITY, git_pull, head_commit, long_function, process_is_gone, put
 from test_emergency import GATE_CONFIG, ONE_JOB, SONAR_GREEN, FakeGh, changed_nothing, declaring, drive
 from test_verdict import verdict_of
 
-from quality import verdict
+from quality import cli, emergency, verdict
 from quality.config import CONFIG_PATH
 from quality.hygiene import CannotJudge
-from quality.ratchet import BASELINE_PATH
+from quality.ratchet import BASELINE_PATH, Baseline, Key, Metric, render_baseline
 
 MOVABLE_FILE = "".join(f"line {number} of a file git can match to its move\n" for number in range(30))
 OTHER_FILE = "".join(f"nothing like the movable file, row {number}\n" for number in range(30))
@@ -63,27 +66,77 @@ def moves_in_head(pull_request, base, head, moves):
     commit_all(repo, "head moves the files")
 
 
+def metric_baseline(metric, path, size):
+    return render_baseline(Baseline({Key(Metric(metric), path, "" if metric == "file_lines" else "f"): size}, None))
+
+
+def metric_label(metric, path):
+    return f"{metric} {path}" if metric == "file_lines" else f"{metric} {path} f"
+
+
+@pytest.mark.parametrize("metric", ["file_lines", "function_lines", "ccn"])
 @pytest.mark.parametrize(
-    ("head", "new_text", "code", "expected"),
-    [
-        (OLD_ENTRY.replace("old", "new"), MOVABLE_FILE, 0, "verdict: green"),
-        (OLD_ENTRY.replace("old", "new").replace("70", "60"), MOVABLE_FILE, 0, "verdict: green"),
-        (OLD_ENTRY.replace("old", "new").replace("70", "90"), MOVABLE_FILE, 1,
-         "size baseline raises function_lines src/new.py f 70 -> 90"),
-        (OLD_ENTRY.replace("old", "new").replace('"f"', '"g"'), MOVABLE_FILE, 1,
-         "size baseline adds function_lines src/new.py g 70"),
-        (OLD_ENTRY.replace("old", "new"), OTHER_FILE, 1, "size baseline adds function_lines src/new.py f 70"),
-        (OLD_ENTRY.replace("old", "new"), MOVABLE_FILE + "an edit\n", 0, "verdict: green"),
-        (OLD_ENTRY.replace("old", "new") + '[ccn."src/split.py"]\n"h" = 16\n', MOVABLE_FILE, 1, "size baseline adds ccn src/split.py h 16"),
-    ],
-    ids=["moved unchanged", "moved and lowered", "moved and grown", "moved and renamed symbol", "moved past git's threshold",
-         "moved and edited within the threshold", "moved next to a split-off file"],
+    ("change", "code"), [(0, 0), (-1, 0), (1, 1)], ids=["equal", "lower", "raised"],
 )
-def test_a_pure_rename_is_no_loosening_but_a_raise_or_a_new_symbol_in_it_is(capsys, pull_request, head, new_text, code, expected):
-    """#149 R1, R2, R4: git's rename detection gives the moved entry its base path; the raise names the head's path."""
-    moved_in_head(pull_request, OLD_ENTRY, head, new_text)
+def test_a_moved_entry_is_held_against_its_predecessor_for_every_metric(capsys, pull_request, metric, change, code):
+    """#149 cells 1-3, R1: equal and lower are green, a raise names the head path and the base's number."""
+    size = {"file_lines": 900, "function_lines": 70, "ccn": 20}[metric]
+    moved_in_head(
+        pull_request, metric_baseline(metric, "src/old.py", size), metric_baseline(metric, "src/new.py", size + change)
+    )
     actual_code, output = verdict_of(pull_request[0], capsys)
-    assert (actual_code, expected in output, "Traceback" in output) == (code, True, False)
+    assert (actual_code, "Traceback" in output) == (code, False)
+    assert (f"size baseline raises {metric_label(metric, 'src/new.py')} {size} -> {size + 1}" in output) == (change == 1)
+
+
+@pytest.mark.parametrize(
+    ("head", "new_text", "expected"),
+    [
+        (OLD_ENTRY.replace("old", "new").replace('"f"', '"g"'), MOVABLE_FILE,
+         "size baseline adds function_lines src/new.py g 70"),
+        (OLD_ENTRY.replace("old", "new") + '[ccn."src/new.py"]\n"f" = 16\n', MOVABLE_FILE,
+         "size baseline adds ccn src/new.py f 16"),
+        (OLD_ENTRY.replace("old", "new"), OTHER_FILE, "size baseline adds function_lines src/new.py f 70"),
+    ],
+    ids=["moved and renamed symbol", "an existing moved symbol gaining a metric", "moved past git's threshold"],
+)
+def test_a_new_symbol_or_metric_or_an_undetected_rename_is_an_add(capsys, pull_request, head, new_text, expected):
+    """#149 cells 5, 6, 10, R2, R4: git pairs the files, but only the base's own symbols and metrics carry."""
+    moved_in_head(pull_request, OLD_ENTRY, head, new_text)
+    code, output = verdict_of(pull_request[0], capsys)
+    assert (code, expected in output) == (1, True)
+
+
+def test_a_moved_file_edited_within_the_threshold_still_meets_its_predecessor(capsys, pull_request):
+    """#149 cell 9, R4."""
+    moved_in_head(pull_request, OLD_ENTRY, OLD_ENTRY.replace("old", "new"), MOVABLE_FILE + "an edit\n")
+    assert verdict_of(pull_request[0], capsys) == (0, "verdict: green\n")
+
+
+def test_a_file_split_off_beside_a_move_has_its_entries_as_adds(capsys, pull_request):
+    """#149 cell 8: git pairs the moved half with its predecessor; the split-off file is new."""
+    head = OLD_ENTRY.replace("old", "new") + '[ccn."src/split.py"]\n"h" = 16\n'
+    moved_in_head(pull_request, OLD_ENTRY, head, head_files={"src/split.py": OTHER_FILE})
+    code, output = verdict_of(pull_request[0], capsys)
+    assert (code, "size baseline adds ccn src/split.py h 16" in output, "src/new.py" in output) == (1, True, False)
+
+
+def test_a_commit_that_renames_the_baseline_file_removes_it(capsys, pull_request):
+    """#149 cell 19: moved to another name, the baseline is gone from its path, as when deleted."""
+    repo, commit_base = pull_request
+    commit_base(OLD_ENTRY)
+    subprocess.run(["git", "-C", str(repo), "mv", BASELINE_PATH, "quality/baseline-moved.toml"], check=True)
+    commit_all(repo, "renames the baseline")
+    code, output = verdict_of(repo, capsys)
+    assert (code, f"loosened (undeclared): {BASELINE_PATH} removed" in output) == (1, True)
+
+
+def test_the_baseline_write_after_a_move_still_names_the_moved_entries_as_adds(build_repo, capsys):
+    """#149 cell 27: the write is informational and unmapped."""
+    repo = build_repo({"src/old.py": long_function(70), BASELINE_PATH: entry("src/old.py", 70, "long_one")})
+    subprocess.run(["git", "-C", str(repo), "mv", "src/old.py", "src/new.py"], check=True)
+    assert cli.main(["baseline", "write", str(repo)]) == 0
+    assert "baseline: adds function_lines src/new.py long_one 70" in capsys.readouterr().out
 
 
 def pulled(directory, base_baseline, merge_baseline, moves=(), **options):
@@ -217,16 +270,19 @@ def test_without_a_base_commit_no_renames_are_read(capsys, pull_request, monkeyp
         (b"C100\0a.py\0b.py\0", {}),
         (b"R100\0a.py\0b.py\0R100\0a.py\0c.py\0", {}),
         (b"R100\0a\rb.py\0c\nd.py\0", {"a\rb.py": "c\nd.py"}),
+        (b"M\0caf\xe9.txt\0A\0\xff\0D\0\xfe\0", {}),
+        (b"R100\0\xff\0b.py\0R100\0a.py\0caf\xe9.py\0R100\0c.py\0d.py\0", {"c.py": "d.py"}),
     ],
-    ids=["nothing", "only a rename counts", "a copy carries nothing", "a source named twice carries to neither", "bytes stay bytes"],
+    ids=["nothing", "only a rename counts", "a copy carries nothing", "a source named twice carries to neither", "bytes stay bytes",
+         "an edit, an addition and a deletion are never decoded", "a rename of a path that is not UTF-8 is skipped"],
 )
 def test_the_rename_list_reads_only_complete_renames(listing, renames):
     """#149 cell 20: the parser."""
     assert verdict.renames_of(listing) == renames
 
 
-@pytest.mark.parametrize("listing", [b"R100\0a.py\0", b"R100\0a.py\0b.py", b"M\0", b"R100\0\xff\0b\0"],
-                         ids=["a rename without its target", "output cut off", "a record without its path", "not UTF-8"])
+@pytest.mark.parametrize("listing", [b"R100\0a.py\0", b"R100\0a.py\0b.py", b"M\0"],
+                         ids=["a rename without its target", "output cut off", "a record without its path"])
 def test_a_rename_list_git_did_not_finish_cannot_be_judged(listing):
     """#149 cell 20: fail closed, never an empty map."""
     with pytest.raises(CannotJudge):
@@ -338,13 +394,154 @@ def test_the_fetched_repository_is_removed(tmp_path, monkeypatch, fails):
     assert list(scratch.iterdir()) == []
 
 
-def test_a_fetch_that_does_not_finish_in_time_refuses(capsys, tmp_path, monkeypatch, fake_git):
+@pytest.mark.parametrize(
+    ("stalls", "refusal"),
+    [("fetch", "git did not finish within 0.5 seconds"), ("diff", "cannot list the files git renamed between")],
+)
+def test_a_step_that_does_not_finish_in_time_refuses_and_leaves_no_child(
+    capsys, tmp_path, monkeypatch, fake_git, stalls, refusal
+):
+    """#149 fetch boundary: the fetch and the diff share the bound, and the whole process group dies with it."""
     monkeypatch.setattr("quality.emergency.FETCH_TIMEOUT_SECONDS", 0.5)
-    fake_git('case "$*" in *" fetch "*) exec sleep 30;; esac')
+    child = tmp_path / "child-pid"
     gh = failing_fetch(tmp_path)
+    fake_git(f'case "$*" in *" {stalls} "*) sleep 300 & echo $! > "{child}"; wait;; esac')
     assert drive(gh)[0] == 1
-    assert "git did not finish within 0.5 seconds" in capsys.readouterr().out
+    assert refusal in capsys.readouterr().out
+    assert process_is_gone(int(child.read_text()))
     changed_nothing(gh)
+
+
+def test_git_output_of_a_failed_rename_list_never_reaches_the_operator(capsys, tmp_path, fake_git):
+    """#149 fetch boundary: the door refuses in its own words."""
+    gh = failing_fetch(tmp_path)
+    fake_git('case "$*" in *" diff "*) echo STDERR_SENTINEL >&2; exit 1;; esac')
+    assert drive(gh)[0] == 1
+    output = capsys.readouterr().out
+    assert ("refused - cannot list the files git renamed" in output, "STDERR_SENTINEL" in output) == (True, False)
+    changed_nothing(gh)
+
+
+def test_inherited_git_routing_and_configuration_do_not_reach_the_diff(capsys, tmp_path, monkeypatch):
+    """#149 fetch boundary: the diff runs in the isolated environment of the fetch."""
+    gh = failing_fetch(tmp_path)
+    for name, value in {
+        "GIT_DIR": str(tmp_path / "elsewhere"), "GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "diff.orderFile",
+        "GIT_CONFIG_VALUE_0": "/dev/stdin",
+    }.items():
+        monkeypatch.setenv(name, value)
+    assert drive(gh)[0] == 0
+    assert "merged." in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("environment", "expected"),
+    [
+        ({"GH_CONFIG_DIR": "/g", "XDG_CONFIG_HOME": "/x", "HOME": "/h"}, "/g"),
+        ({"XDG_CONFIG_HOME": "/x", "HOME": "/h"}, "/x/gh"),
+        ({"HOME": "/h"}, "/h/.config/gh"),
+    ],
+    ids=["GH_CONFIG_DIR", "XDG_CONFIG_HOME", "home"],
+)
+def test_gh_keeps_the_login_it_would_use_without_the_changed_home(environment, expected):
+    assert emergency.gh_configuration_directory(environment) == expected
+
+
+def unauthorized(handler):
+    handler.send_response(401)
+    handler.send_header("WWW-Authenticate", 'Basic realm="x"')
+    handler.end_headers()
+
+
+def test_a_netrc_in_the_home_is_never_sent_and_gh_finds_its_login_from_the_empty_home(
+    capsys, tmp_path, monkeypatch, stub_server
+):
+    """#149 fetch boundary: gh is the only credential source, and its helper still sees the real configuration."""
+    origin, heard = stub_server(unauthorized)
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / ".netrc").write_text("machine 127.0.0.1 login probe password netrc-secret\n")
+    helper_saw = tmp_path / "helper-saw"
+    bin_directory = tmp_path / "bin"
+    bin_directory.mkdir()
+    (bin_directory / "gh").write_text(f'#!/bin/sh\necho "$GH_CONFIG_DIR $HOME" > "{helper_saw}"\nexit 1\n')
+    (bin_directory / "gh").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_directory}:{os.environ['PATH']}")
+    monkeypatch.setenv("HOME", str(home))
+    for name in ("GH_CONFIG_DIR", "XDG_CONFIG_HOME"):
+        monkeypatch.delenv(name, raising=False)
+    gh = failing_fetch(tmp_path)
+    gh.remote = f"{origin}/acme/widgets.git"
+    assert drive(gh)[0] == 1
+    assert heard
+    assert all("Authorization" not in headers for headers in heard)
+    configuration, helper_home = helper_saw.read_text().split()
+    assert (configuration, helper_home != str(home)) == (str(home / ".config" / "gh"), True)
+
+
+SIGTERM_SCRIPT = """
+import os, socket
+from quality import emergency
+server = socket.socket()
+server.bind(("127.0.0.1", 0))
+server.listen(5)
+print(server.getsockname()[1], flush=True)
+emergency.read_renames_of_pull(
+    f"http://127.0.0.1:{server.getsockname()[1]}/x.git", "a" * 40, "b" * 40, {"PATH": os.environ["PATH"]}
+)
+"""
+
+
+def test_a_sigterm_during_the_fetch_leaves_no_repository_behind(tmp_path):
+    """#149 fetch boundary: the repository is removed on interruption too, through the engines' scratch directory."""
+    scratch_parent = tmp_path / "scratch-parent"
+    scratch_parent.mkdir()
+    door = subprocess.Popen(
+        [sys.executable, "-c", SIGTERM_SCRIPT], env=os.environ | {"TMPDIR": str(scratch_parent)},
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    )
+    try:
+        door.stdout.readline()
+        deadline = time.monotonic() + 30
+        while not list(scratch_parent.glob("*/repository/HEAD")):
+            assert time.monotonic() < deadline, "the door never created its repository"
+            time.sleep(0.05)
+        door.terminate()
+        assert door.wait(timeout=30) == 128 + signal.SIGTERM
+    finally:
+        door.kill()
+        door.communicate()
+    assert list(scratch_parent.iterdir()) == []
+
+
+NON_UTF8_PATH = os.fsdecode(b"assets/caf\xe9.txt")
+
+
+@pytest.mark.parametrize("baseline", [None, OLD_ENTRY], ids=["without baselines", "with baselines"])
+def test_a_pull_request_that_edits_a_path_that_is_not_utf8_is_judged_as_before(capsys, pull_request, baseline):
+    """#149 R4: a file git does not pair counts as new; the rename list never decodes an edit's path."""
+    repo, commit_base = pull_request
+    put(repo / NON_UTF8_PATH, "one\n")
+    commit_base(baseline)
+    put(repo / NON_UTF8_PATH, "two\n")
+    commit_all(repo, "edits the file")
+    assert verdict_of(repo, capsys) == (0, "verdict: green\n")
+
+
+@pytest.mark.parametrize(
+    ("base", "head"), [(None, OLD_ENTRY), (OLD_ENTRY, None)], ids=["no base baseline", "no head baseline"]
+)
+def test_the_diff_is_asked_for_only_when_both_sides_hold_a_baseline(capsys, pull_request, fake_git, tmp_path, base, head):
+    """#149: one decider for both callers; any other pair is judged without renames."""
+    repo, commit_base = pull_request
+    put(repo / "src/old.py", MOVABLE_FILE)
+    commit_base(base)
+    put(repo / BASELINE_PATH, head)
+    commit_all(repo, "head")
+    calls = tmp_path / "git-calls"
+    fake_git(f'echo "$@" >> "{calls}"')
+    verdict_of(repo, capsys)
+    assert " diff " not in f" {calls.read_text()} "
 
 
 CUT_OFF_LIST = "case \"$*\" in *\" diff \"*) printf 'R100\\0a.py\\0'; exit 0;; esac"
@@ -363,5 +560,5 @@ def test_a_rename_list_cut_off_is_a_refusal_at_the_door(capsys, tmp_path, fake_g
     gh = pulled(tmp_path, OLD_ENTRY, NEW_ENTRY, MOVE)
     fake_git(CUT_OFF_LIST)
     assert drive(gh)[0] == 1
-    assert "refused - git's list of renamed files ended inside a record" in capsys.readouterr().out
+    assert "refused - cannot list the files git renamed between the pull request's commits" in capsys.readouterr().out
     changed_nothing(gh)

@@ -1,9 +1,7 @@
 """The operator's emergency door: switch a repository's gate off, merge one pull request, switch it on again."""
 
 import json
-import os
 import subprocess
-import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -30,7 +28,7 @@ from quality.sonar import (
     project_of,
     require_resolved,
 )
-from quality.verdict import SUCCESS, Job, Side, Verdict, judge, read_renames, side_of
+from quality.verdict import SUCCESS, Job, Side, Verdict, compares_baselines, judge, read_renames, side_of
 
 EXIT_MERGED = 0
 EXIT_REFUSED = 1
@@ -193,18 +191,30 @@ def github_remote(repository: str) -> str:
     return f"https://github.com/{repository}.git"
 
 
-def fetch_environment(environment: Mapping[str, str]) -> dict[str, str]:
-    """The environment of the fetch: no inherited git routing or configuration and no way to prompt for a password."""
-    kept = {name: value for name, value in environment.items() if not name.startswith("GIT_") and name != "SSH_ASKPASS"}
-    return kept | {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1", "GIT_TERMINAL_PROMPT": "0"}
+def gh_configuration_directory(environment: Mapping[str, str]) -> str:
+    """Where gh looks for its login: `GH_CONFIG_DIR`, else `$XDG_CONFIG_HOME/gh`, else `~/.config/gh`."""
+    if environment.get("GH_CONFIG_DIR"):
+        return environment["GH_CONFIG_DIR"]
+    if environment.get("XDG_CONFIG_HOME"):
+        return str(Path(environment["XDG_CONFIG_HOME"]) / "gh")
+    return str(Path(environment.get("HOME", "~")).expanduser() / ".config" / "gh")
+
+
+def fetch_environment(environment: Mapping[str, str], empty_home: Path) -> dict[str, str]:
+    """The environment of git around the fetch: no inherited git routing or configuration, an empty home so that
+    `.netrc` and every other file git reads there is absent, and no way to prompt for a password. gh is the only source
+    of credentials, and it keeps its login by being told where the real configuration directory is."""
+    isolated = engines.attribute_free_git_environment(empty_home)
+    kept = {name: value for name, value in isolated.items() if name != "SSH_ASKPASS"}
+    return kept | {"GIT_TERMINAL_PROMPT": "0", "GH_CONFIG_DIR": gh_configuration_directory(environment)}
 
 
 def read_renames_of_pull(remote: str, base_sha: str, merge_sha: str, environment: Mapping[str, str]) -> dict[str, str]:
     """The renames the verdict reads at the checkout, from the pull request's two commits fetched into a bare repository
     that is removed afterwards. Credentials stay in gh's credential protocol; git's own words never reach the operator."""
-    isolated = fetch_environment(environment)
-    with tempfile.TemporaryDirectory() as scratch:
-        repository = Path(scratch)
+    with engines.scratch_directory() as scratch:
+        isolated = fetch_environment(environment, scratch / "home")
+        repository = scratch / "repository"
         commands = (
             ["git", "init", "--bare", "--quiet", str(repository)],
             [
@@ -222,9 +232,9 @@ def read_renames_of_pull(remote: str, base_sha: str, merge_sha: str, environment
                     f"cannot fetch the pull request's commits to compare renamed files (git exited {done.returncode})"
                 )
         try:
-            return read_renames(repository, base_sha, merge_sha)
-        except CannotJudge as error:
-            raise Refused(str(error)) from error
+            return read_renames(repository, base_sha, merge_sha, isolated, FETCH_TIMEOUT_SECONDS)
+        except CannotJudge:
+            raise Refused("cannot list the files git renamed between the pull request's commits") from None
 
 
 def rederived_verdict(head: Side, base: Side, check_runs: Sequence[Check], renames: Mapping[str, str]) -> Verdict:
@@ -501,11 +511,9 @@ def judge_pull_request(
         raise CannotJudge("GitHub has no merge commit for the pull request yet, so the config the jobs ran on is unknown")
     head = read_side_at(gh, repository, merge_commit_sha)
     base = read_side_at(gh, repository, pull["base"]["sha"])
-    # Renames only matter to a comparison of two baselines; any other pair is judged without them, as the verdict does.
-    compares_baselines = base.baseline is not None and head.baseline is not None
     renames = (
         read_renames_of_pull(remote_for(repository), pull["base"]["sha"], merge_commit_sha, environment)
-        if compares_baselines
+        if compares_baselines(base, head)
         else {}
     )
     verdict = rederived_verdict(head, base, check_runs, renames)

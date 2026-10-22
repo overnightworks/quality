@@ -134,8 +134,8 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   with the entries its predecessor held and a raise or an added symbol still names the head's path; an entry the base
   holds under the new path is a leftover and does not count. The allowance moves rather than being copied: while the
   head baseline still names the old path, nothing moves and the new path's entries are adds. A pair whose files moved
-  is the same pair, and a renamed function is a new entry. Without a base nothing is read. `emergency-merge` fetches the same two commits
-  and reads the same renames. `quality baseline write` and `hygiene` name entries and pairs by their current path.
+  is the same pair, and a renamed function is a new entry. Renames are read only when the base and the head both hold a baseline: without a base, or without a baseline on
+  either side, nothing is read. `emergency-merge` fetches the same two commits and reads the same renames. `quality baseline write` and `hygiene` name entries and pairs by their current path.
 
   A lowered, equal or removed entry or pair is green, and so is adopting a baseline (the base has none) or having none
   on either side. A `[clones]` table the base lacks is an adoption too: its pairs are not compared, while the size

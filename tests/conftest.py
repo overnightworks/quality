@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import time
 import unicodedata
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -358,3 +359,17 @@ def git_pull(directory, base_baseline, merge_baseline, moves=()):
     remote = directory / "remote.git"
     subprocess.run(["git", "clone", "-q", "--bare", str(work), str(remote)], check=True)
     return str(remote), base_sha, merge_sha
+
+
+def process_is_gone(pid):
+    """True once the process has exited (a zombie waiting for its reaper counts as exited)."""
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        try:
+            state = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
+        except FileNotFoundError:
+            return True
+        if state == "Z":
+            return True
+        time.sleep(0.05)
+    return False
