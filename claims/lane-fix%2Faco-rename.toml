@@ -1,7 +1,0 @@
-claim_id = "4b86c99d5b46473e9552662ad3c3f067"
-agent = "claude"
-role = "builder"
-base = "03855f1a26e186de04ff6a5d3ead1d341154db79"
-branch = "fix/aco-rename"
-scope = ["docs/gate.md", "quality/fleet.toml"]
-opened_commit = "0119902a1f15322a9ee497e62eaaecca5af2d733"
