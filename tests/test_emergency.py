@@ -137,7 +137,7 @@ class FakeGh:
             raise GhFailed(self.rules_error)
         if self.rules_raw is not None:
             return self.rules_raw
-        return "\n".join(json.dumps(rule) for page in self.rules for rule in page)
+        return json.dumps(self.rules)
 
     def record(self, step, arguments, stdin):
         if step == "merge":
@@ -726,7 +726,7 @@ def test_the_door_merges_with_a_method_the_settings_and_every_rule_allow(gh_kwar
     assert drive(gh)[0] == 0
     assert gh.merge_calls == [merge_call(flag)]
     rules_read = next(call for call in gh.calls if "/rules/branches/" in " ".join(call))
-    assert (rules_read[1], rules_read[2]) == ("--paginate", f"repos/{REPO}/rules/branches/{quote(gh.base_ref, safe='/')}?per_page=100")
+    assert rules_read == ("api", "--paginate", "--slurp", f"repos/{REPO}/rules/branches/{quote(gh.base_ref, safe='/')}?per_page=100")
 
 
 @pytest.mark.parametrize(
@@ -750,6 +750,10 @@ def test_the_door_merges_with_a_method_the_settings_and_every_rule_allow(gh_kwar
         ({"rules": [[{"type": "deletion", "parameters": "x"}]]}, "emergency-merge: cannot judge - the branch rules of main are malformed"),
         ({"rules": [[{"type": "pull_request", "parameters": {"allowed_merge_methods": None}}]]}, "emergency-merge: cannot judge - the branch rules of main are malformed"),
         ({"rules_raw": "not json"}, "emergency-merge: cannot judge - the branch rules of main are malformed"),
+        ({"rules_raw": json.dumps({"type": "creation"})}, "emergency-merge: cannot judge - the branch rules of main are malformed"),
+        ({"rules_raw": json.dumps([{"type": "creation"}])}, "emergency-merge: cannot judge - the branch rules of main are malformed"),
+        ({"rules_raw": json.dumps([['{"type":"creation"}']])}, "emergency-merge: cannot judge - the branch rules of main are malformed"),
+        ({"rules_raw": json.dumps([[5]])}, "emergency-merge: cannot judge - the branch rules of main are malformed"),
         ({"rules_error": "gh api failed: HTTP 403: Resource not accessible"}, "emergency-merge: cannot judge - cannot read the branch rules of main"),
         (
             {"rules_error": "gh api failed: HTTP 403: Upgrade to GitHub Pro or Team to enable this feature."},
@@ -762,7 +766,9 @@ def test_the_door_merges_with_a_method_the_settings_and_every_rule_allow(gh_kwar
         "cell 11 settings malformed", "cell 11 a rule is no object", "cell 11 parameters malformed",
         "cell 11 methods malformed", "cell 11 an unknown method", "cell 11 a rule without a type",
         "cell 11 a rule type that is no string", "cell 11 pull_request parameters null",
-        "cell 11 linear history parameters null", "cell 11 an unrelated rule with parameters that are no object", "cell 11 methods null", "cell 11 a line that is no JSON", "cell 11 generic 403", "cell 11 plan 403",
+        "cell 11 linear history parameters null", "cell 11 an unrelated rule with parameters that are no object", "cell 11 methods null", "cell 11 a line that is no JSON",
+        "cell 11 the answer is an object", "cell 11 a page is an object", "cell 11 a rule is a JSON string", "cell 11 a rule is a number",
+        "cell 11 generic 403", "cell 11 plan 403",
     ],
 )
 def test_the_door_refuses_before_the_gate_when_no_method_is_usable(gh_kwargs, line, capsys):

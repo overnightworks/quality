@@ -307,14 +307,18 @@ def methods_the_rule_allows(rule: object, base: str) -> frozenset[MergeMethod] |
 
 
 def read_branch_rules(gh: GhRunner, repository: str, base: str) -> list[object]:
+    malformed = CannotJudge(f"the branch rules of {base} are malformed")
     try:
-        listed = gh(["api", "--paginate", f"repos/{repository}/rules/branches/{quote(base, safe='/')}?per_page=100", "--jq", ".[]"], None)
+        listed = gh(["api", "--paginate", "--slurp", f"repos/{repository}/rules/branches/{quote(base, safe='/')}?per_page=100"], None)
     except GhFailed as error:
         raise CannotJudge(f"cannot read the branch rules of {base}: {error}") from error
     try:
-        return [json.loads(line) for line in listed.splitlines()]
+        pages = json.loads(listed)
     except ValueError as error:
-        raise CannotJudge(f"the branch rules of {base} are malformed") from error
+        raise malformed from error
+    if not isinstance(pages, list) or not all(isinstance(page, list) for page in pages):
+        raise malformed
+    return [rule for page in pages for rule in page]
 
 
 def choose_merge_method(gh: GhRunner, repository: str, repository_facts: Mapping[str, object], base: str) -> MergeMethod:
