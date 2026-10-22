@@ -87,9 +87,9 @@ its pin sets `format = "binary"` (osv-scanner, a bare executable), which is inst
 `quality engines verify DIR` is exit `0` when every pinned engine in `DIR` reports exactly its pinned version, otherwise
 exit `2` with one line per engine.
 
-quality builds the logic and the process itself and never an engine that needs specialist knowledge: the language
-linters and test runners, gitleaks, osv-scanner and the mutation engines run pinned underneath the one door (operator
-ruling 15.10.2026: „ja! ich agree => ein fleet quality“).
+quality builds the logic and the process itself and never a specialist engine (language linters and test runners,
+gitleaks, osv-scanner, mutation engines); the engines it uses run pinned underneath the one door (operator ruling
+15.10.2026: „ja! ich agree => ein fleet quality“).
 
 ## `quality emergency-merge`
 

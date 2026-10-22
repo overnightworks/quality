@@ -24,7 +24,7 @@ Impact: the pull request cannot merge through `aco land` or the ruleset.
 1. In a terminal, under your own `gh` login: `quality emergency-merge <owner/repo> <pr>`.
 2. Read what it shows (head SHA, legacy count, each declared loosening with its item, date and reason) and type `ja`.
    Anything else changes nothing.
-3. Release the claim as the command prints it (`aco release <n> --abandoned "landed as PR #<pr> by emergency-merge"`).
+3. The head releases the claim with the line the command prints (`aco release <n> --abandoned "landed as PR #<pr> by emergency-merge"`).
 
 Rollback: the command switches the repository's `quality_gate` property off for the merge and back on in every case. To
 undo the merge, revert it with a new pull request. If the property could not be restored the command exits `2` and
@@ -35,5 +35,5 @@ names what to set by hand; set it back to `true` at once, since the repository i
 - The command refuses (exit `1`, nothing changed) and names a reason that is not yours to remove, for example a verdict
   that is red for an undeclared loosening: the pull request is not a case for this door; fix the pull request.
 - The command exits `2`, or `merge state unknown`: read the pull request on GitHub before running it again.
-- A refusal you think is wrong: open an item in overnightworks/quality with the command's output. Who answers it beyond
-  that is not recorded.
+- A refusal you think is wrong: open an idea in overnightworks/quality with the command's output as evidence; quality's
+  head answers it.

@@ -17,12 +17,15 @@ the checkout, `docker:S8431` does not count. The file's content is never read. T
 
 ## Rejected alternatives
 
+The reasons are the record's reconstruction from #98 and its plan review, not the operator's words.
+
 - **One `quality/config.toml` entry per exact `FROM` line.** The operator chose this on 20.10.2026 („Eng begrenzte
-  Ausnahme (empfohlen)“) while believing the exception was Sonar's to apply on pull requests. The plan review found that
-  Sonar applies it on the default branch only, so a per-line entry would copy by hand what Sonar already does there; the
-  operator re-ruled.
+  Ausnahme (empfohlen)“) on a premise the plan review corrected (Sonar applies its exception on the default branch
+  only); he re-ruled. #98 records the re-ruled answer as: „Dependabot updates stay green, and a pull request is judged
+  the way main is“ (the item's text, not a quote of his).
 - **Reading `dependabot.yml` to see that it covers the Dockerfile's folder.** Sonar itself checks existence only; the
-  gate judges a pull request the way Sonar judges the default branch, so the two cannot disagree.
+  gate aligns a pull request with how Sonar judges the default branch; the differences stand in
+  [sonar.md](../sonar.md#a-dependabot-exception-for-dockers8431) (an empty file counts, a directory counts).
 - **An exception table or a general mechanism for other rules.** Only this rule has the premise (Sonar's own exception
   that its pull-request analysis misses); every other finding counts as before.
 
@@ -33,5 +36,4 @@ An empty or broken `dependabot.yml` counts as existing, a repository with only `
 
 ## The operator's words
 
-21.10.2026, asked how the gate should treat Sonar's exception: „Sonars Ausnahme anwenden (empfohlen)“. Asked when the gate
-should not count S8431: „Wenn dependabot.yml existiert (empfohlen)“.
+The two rulings of 21.10.2026 stand in [sonar.md](../sonar.md#a-dependabot-exception-for-dockers8431).

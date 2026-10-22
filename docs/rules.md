@@ -22,16 +22,15 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   (or its position for a character YAML refuses, `nested too deeply`, `a value does not fit its tag`, or `not valid
   YAML`). A port that is neither text, a number nor a mapping whose `published` (or, without one, `target`) is text or
   a number is a finding. A service with `network_mode: host` publishes whatever its process binds, and this rule does
-  not check that; the limit is documented and there is no allowlist (operator ruling 19.10.2026: „Erst Doku, dann
+  not check that; the limit is documented first, and the allowlist the same ruling asks for is
+  [#45](https://github.com/overnightworks/quality/issues/45) row Q1b-3g (operator ruling 19.10.2026: „Erst Doku, dann
   Erlaubnisliste (empfohlen)“).
 - `size`: every tracked file of Python, TypeScript (`.ts` `.tsx` `.mts` `.cts`), JavaScript (`.js` `.jsx` `.mjs`
   `.cjs`), Svelte or Vue is measured by its lines, and every tracked `*.py` file also with
   [lizard](https://github.com/terryyin/lizard): a file from 800 lines, a Python function from 60 lines and a Python
   function with a CCN above 15 are debt, counted apart for production and tests (a path under `test/` or `tests/`;
   Python also `conftest.py`, `test_*.py`, `*_test.py`; TypeScript and JavaScript also `__tests__/`, `*.test.*` and
-  `*.spec.*`). A minified or generated file is counted by its lines like any other. The rule has no line cap of its own
-  beyond these thresholds; quality passes its own gate (operator ruling 18.10.2026: „wenn es mehr braucht braucht es eben
-  mehr, aber natürlich soll der code gut sein!“).
+  `*.spec.*`). A minified or generated file is counted by its lines like any other.
   Functions of the other languages are not measured: lizard misplaces their boundaries
   ([terryyin/lizard#521](https://github.com/terryyin/lizard/issues/521)). Functions are named by their qualified
   symbol (`Class.method`); a second one of the same name, such as a property setter, is `Class.method#2`. Without
@@ -79,7 +78,9 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   unparsable` (exit `2`), as for `size`. The baseline is read once for both rules: one that cannot be read leaves both
   `cannot judge` (exit `2`), also when it has no `[clones]` table, since the mode is then unknown.
   quality owns this detector instead of calling jscpd or lizard (operator ruling 21.10.2026: „aco-Prüfer übernehmen
-  (empfohlen)“); the reasons stand in [decision 3](decisions/3-clone-detector.md).
+  (empfohlen)“); the reasons stand in [decision 3](decisions/3-clone-detector.md). The threshold, what makes a pair, how
+  it is named, the report-only mode and the printed lines were shown to the operator and left unanswered, so they stand
+  at the proposed default and are not his word (#113, O2 and E1 to E7).
 - `import-contract`: the repository's [import-linter](https://github.com/seddonym/import-linter) contracts must be
   kept. The config is the tracked `.importlinter` or `setup.cfg` (`[importlinter]`) or `pyproject.toml`
   (`[tool.importlinter]`), counted once its name exists in the tree: a tracked one deleted from disk is none, a symlink to
@@ -217,11 +218,12 @@ reason = "gradio caps pillow<13; no image input"
   makes itself, so only the operator's door merges it. The pull request writes the allowance, so its item, date and
   reason prove nothing alone: the verdict's red and the door are the gate. An `id` that is an alias covers every
   group carrying it in that lock, while the door names the `id` and the lock, not the packages.
-  (operator ruling 21.10.2026: „Ja, aber nur du gibst frei (empfohlen)“; a later `until`: „Nein, nur über deine Tür
-  (empfohlen)“; no extra `[[gate.loosened]]` entry: „Ausnahme erklärt sich selbst (empfohlen)“; why only the operator's
-  door merges it stands in [decision 1](decisions/1-loosening-door.md). The other details of the allowance, from the
-  `[[advisories.allow]]` entry's keys to the printed lines, were shown to the operator and left unanswered, so they
-  stand at the proposed default.)
+  The operator's rulings of 21.10.2026 on the allowance, and why only the operator's door merges it, stand in
+  [decision 1](decisions/1-loosening-door.md). The rest was shown to him and left unanswered, so it stands at the
+  proposed default and is not his word: the entry's keys, the alias, the date format, the expiry line, the unmatched
+  allowance, the adoption, no latest `until`, the printed lines, an advisory without a fixed version and the reach of an
+  allowance (#116, E1 to E5 and E8 to E12). The head decided on 21.10.2026 that the allowance carries a `date` (E1) and
+  that two entries on one group are red (E2).
 
 quality downloads the PyPI database itself on every run (about 36 MB, `https://osv-vulnerabilities.storage.googleapis.com/PyPI/all.zip`)
 into the scan's own 0700 scratch directory and runs osv-scanner `--offline` on it, so osv-scanner makes no network call
@@ -242,7 +244,8 @@ carriage return, ESC, tab, DEL, C1) as `\xNN`. A line taken from import-linter's
 judge - ...`). A clean run names its rules in run order (`hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md); skipped without
 --engines: ...`); any other run ends with the findings and the verdicts counted (`hygiene: 1 finding(s); verdicts: 1
 clean, 1 findings, 1 unparsable`). The lines come in run order, also through a pipe that merges stdout and stderr
-(`2>&1 | tee log`); each stays on its own stream. The exit is the worst verdict's: `2` if any rule is unparsable or cannot judge
+(`2>&1 | tee log`); each stays on its own stream. That is option (c) of #86 on 19.10.2026, `cli.main` makes stdout
+line-buffered; the head's confirmation that it is the cleanest drew no objection, which is no spoken ruling. The exit is the worst verdict's: `2` if any rule is unparsable or cannot judge
 (never clean), otherwise `1` if any rule has findings, otherwise `0`. A path git cannot read as a work tree (a file, a missing path, a
 folder without permission, a bare repository, the inside of `.git`) is `hygiene: cannot judge - <PATH as given> is not a
 readable git repository: ... (`git -C '<PATH>' status` says why; a PATH with an unprintable character gets `git status` run inside it instead)` and exit `2` before any rule runs.

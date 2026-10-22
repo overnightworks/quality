@@ -17,6 +17,8 @@ are renamed, named by path and qualified symbol. The behaviour stands in the `cl
 
 ## Rejected alternatives
 
+The reasons are the record's reconstruction from #113, not the operator's words.
+
 - **jscpd.** It finds real copies, but its identifier for a pair changes when the neighbouring function changes, so a
   baseline entry would be orphaned by an unrelated edit; its function mode leaves tests out. It stays a candidate for
   TypeScript and Svelte files, where no own detector exists.
@@ -29,4 +31,4 @@ asked when aco drops its script in favour of quality's.
 
 ## The operator's words
 
-21.10.2026, asked which tool finds copied functions: „aco-Prüfer übernehmen (empfohlen)“.
+The ruling of 21.10.2026 stands in the `clone` entry of [rules.md](../rules.md).

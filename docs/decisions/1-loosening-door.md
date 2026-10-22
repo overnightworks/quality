@@ -20,6 +20,9 @@ the `advisory` rule of [rules.md](../rules.md).
 
 ## Rejected alternatives
 
+The reasons are the record's reconstruction from #103, #116 and their reviews, not the operator's words; the last one is
+his ruling E10, quoted below.
+
 - **The pull request approves its own loosening** (a declaration that turns the verdict green): an agent could write the
   declaration and the loosening in one pull request, so the gate would hold only against cooperative agents. The
   declaration is read by the verdict, but the red and the door are the gate.
@@ -28,8 +31,8 @@ the `advisory` rule of [rules.md](../rules.md).
 - **A separate `[[gate.loosened]]` entry for each allowance**: the allowance already carries reason, item and date, so a
   second entry would be a second copy of one declaration.
 - **A real lock** (agents holding a token without admin rights): it belongs to the machine's setup, not to quality. Agents
-  on the operator's machine share his `gh` login, so the door is the agreed path and not a lock; the operator accepted
-  that as a known residual risk.
+  on the operator's machine share his `gh` login, so the door is the agreed path and not a lock; the operator ruled
+  that a known residual risk (E10, „Bekanntes Restrisiko (empfohlen)“).
 
 The other options offered to the operator with these questions are not recorded.
 
@@ -40,9 +43,16 @@ above stays until the machine's setup removes the shared login.
 
 ## The operator's words
 
-Questions and answers of 21.10.2026: „Erklären + deine Tür (empfohlen)“; „Ja, nicht mehr prüfen (empfohlen)“ (a declared
-removal replaces judging that base job); „Ja, beides in einem Lauf (empfohlen)“ (legacy findings and a declared loosening
-in one run); „Bekanntes Restrisiko (empfohlen)“; for advisories „Ja, aber nur du gibst frei (empfohlen)“, „Nein, nur über
-deine Tür (empfohlen)“ and „Ausnahme erklärt sich selbst (empfohlen)“. The ruled sentences for advisories: a new
-allowance is a loosening, the pull request stays red until the door merges it; from the merge the advisory is green until
-its date and red after; no agent can silence an advisory alone.
+The rulings on the loosening and the door (D3, E5, E8, E10 of #103, 21.10.2026) stand in
+[gate.md](../gate.md#declared-loosenings).
+
+For advisories (#116, 21.10.2026), asked whether a repository may allow a known security hole it cannot escape, with a
+reason and a re-check date, and who approves: „Ja, aber nur du gibst frei (empfohlen)“. The ruled sentences:
+
+- R1. Eine Ausnahme steht pro Lücke in `quality/config.toml`, mit Begründung, Item und Datum.
+- R2. Eine neue Ausnahme ist eine Lockerung: der PR bleibt rot, bis deine Tür ihn mergt.
+- R3. Ab dem Merge ist die Lücke grün bis zum Datum, danach wieder rot.
+- R4. Kein Agent kann eine Lücke allein stummschalten. (Bekanntes Restrisiko E10 von #103: Agenten teilen deinen `gh`-Login; die Tür ist der Vertrag, keine Sperre.)
+
+Asked whether a pull request may move the re-check date back without him: „Nein, nur über deine Tür (empfohlen)“. Asked
+whether each new allowance must also be entered as a declared loosening: „Ausnahme erklärt sich selbst (empfohlen)“.

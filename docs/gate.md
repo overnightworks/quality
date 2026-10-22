@@ -26,7 +26,7 @@ Each line has a reason:
 - **The caller job is `quality`,** by its id or, if it sets one, by its `name:`. The gate's checks then read
   `quality / hygiene`, `quality / sonar` and `quality / verdict`. Three things look for them by those names: a ruleset
   that requires `quality / verdict` (the fleet's org ruleset does, on the default branch of every repository whose
-  custom property `quality_gate` is `true`; operator ruling 16.10.2026: „alles ja“), `aco land`, which, once the default branch holds `quality/config.toml`,
+  custom property `quality_gate` is `true`), `aco land`, which, once the default branch holds `quality/config.toml`,
   refuses without a green `quality / verdict`, and `quality emergency-merge`, which looks for `quality / sonar` and
   `quality / verdict`.
 - **`needs:` lists the id of every job that a `mandatory_jobs` name belongs to.** The verdict then judges finished jobs,
@@ -40,14 +40,16 @@ Each line has a reason:
   only GitHub's 403 or 404 adds `(does the caller grant actions: read?)` to the line. A job in
   a reusable workflow gets no more than its caller job grants (see
   [GitHub's reusable-workflow documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations)),
-  so without `actions: read` the run fails at startup and adds no `quality / verdict` check (see
+  so without `actions: read` the run is expected to fail at startup and add no `quality / verdict` check (see
   [Startup failures](#startup-failures)). Where a ruleset or `aco land`
   requires that check, the pull request cannot merge; where nothing requires it, it merges unjudged.
 - **The door stops workflow commands for the rest of its step.** gate.yml runs `quality` alone in each of its steps; a
   workflow that runs `quality` itself writes its own workflow commands (`::notice::`, `::group::` or any other) in a separate step.
 - **`secrets: SONAR_TOKEN`** and the optional **`with: coverage-artifact`** are described under
   [`quality sonar findings`](sonar.md#quality-sonar-findings) and [Coverage on new code](sonar.md#coverage-on-new-code).
-- **`uses:` pins a commit** (`@<commit sha> # v<tag>`), and Dependabot bumps it where the repository's `.github/dependabot.yml` enables the `github-actions` ecosystem.
+- **`uses:` pins a commit** (`@<commit sha> # v<tag>`), and Dependabot bumps it where the repository's `.github/dependabot.yml` enables the `github-actions` ecosystem. There is no copier and no own token that writes to all repositories: quality
+  carries plain version tags and Dependabot opens the bump pull requests (operator, 15.10.2026: „kein copier! … copier
+  ist shice! …“; the points agreed under „ja! ich agree => ein fleet quality“ add the token).
 
 The verdict judges the jobs named in `quality/config.toml`:
 
@@ -78,7 +80,9 @@ is not read again: re-run the verdict. The same text goes to the run's step summ
 
 GitHub's jobs listing answers late per job, which is why the verdict reads again instead of failing at once (operator
 ruling 21.10.2026: at most two minutes, „Bis zu 2 Minuten (empfohlen)“; a job still running after the last read is exit
-`2`, „Exit 2: kann nicht urteilen (empfohlen)“).
+`2`, „Exit 2: kann nicht urteilen (empfohlen)“). The first line that says the verdict read again, the reading of a 5xx and
+the permission hint only after a 403 or 404 were shown to the operator and left unanswered, so they stand at the head's
+proposed default (#85, E4 to E6); they are not his words.
 
 ### Declared loosenings
 
@@ -180,8 +184,9 @@ jobs:
 A reusable-workflow call that GitHub refuses at startup (a caller job that grants less than the called workflow asks for,
 such as `security-events: write` or `actions: read`) ends its run without a check run for that job, so a ruleset or
 `aco land` waiting for the check never sees it. Measured on 18.10.2026 on a scratch pull request whose CodeQL callers
-were broken: the run ended `failure` and added no `codeql / Analyze (…)` check for them. It is measured for CodeQL
+were broken (commit 7a4173ae0cc52a62d5e00177fd3197a2c034102a of overnightworks/quality#70): its `CodeQL` run ended
+`startup_failure` and the commit has no `codeql / Analyze (…)` check run. It is measured for CodeQL
 callers; for `gate.yml` callers the same behaviour is expected and not measured
 here. To re-measure, break a caller's `permissions:` on a scratch pull request and read
-`gh run list --repo <owner/repo> --commit <sha> --json workflowName,conclusion` and
-`gh api repos/<owner/repo>/commits/<sha>/check-runs --jq '.check_runs[].name'`.
+`gh run list --repo <owner/repo> --commit <full sha> --json workflowName,conclusion` and
+`gh api --paginate repos/<owner/repo>/commits/<full sha>/check-runs --jq '.check_runs[].name'`.
