@@ -59,23 +59,23 @@ class Refused(Exception):
 
 
 class MergeMethod(Enum):
-    """The values are the pull request rule's own method names and the `gh pr merge` flag."""
+    """The methods the door lands with, in its order of preference; the values are the pull request rule's method names
+    and the `gh pr merge` flag. A merge commit keeps the judged head as a parent and a squash lands the judged merge
+    ref's tree; a rebase replays commits, so the door never uses it."""
 
     MERGE = "merge"
     SQUASH = "squash"
-    REBASE = "rebase"
 
     @property
     def settings_key(self) -> str:
-        return {"merge": "allow_merge_commit", "squash": "allow_squash_merge", "rebase": "allow_rebase_merge"}[self.value]
+        return {"merge": "allow_merge_commit", "squash": "allow_squash_merge"}[self.value]
 
     @property
     def flag(self) -> str:
         return f"--{self.value}"
 
 
-# A merge commit keeps the judged head as a parent and a squash lands the judged merge ref's tree; a rebase replays commits.
-DOOR_METHODS = (MergeMethod.MERGE, MergeMethod.SQUASH)
+RULE_METHOD_NAMES = ("merge", "squash", "rebase")
 
 
 class NoMergeMethod(Exception):
@@ -296,10 +296,9 @@ def methods_the_rule_allows(rule: object, base: str) -> frozenset[MergeMethod] |
     named = parameters.get("allowed_merge_methods")
     if named is None:
         return None
-    known = {method.value: method for method in MergeMethod}
-    if not isinstance(named, list) or not all(isinstance(name, str) and name in known for name in named):
+    if not isinstance(named, list) or not all(isinstance(name, str) and name in {*RULE_METHOD_NAMES} for name in named):
         raise malformed
-    return frozenset(known[name] for name in named)
+    return frozenset(method for method in MergeMethod if method.value in named)
 
 
 def read_branch_rules(gh: GhRunner, repository: str, base: str) -> list[object]:
@@ -316,12 +315,10 @@ def choose_merge_method(gh: GhRunner, repository: str, repository_facts: Mapping
     for rule in read_branch_rules(gh, repository, base):
         left_open = methods_the_rule_allows(rule, base)
         allowed = allowed if left_open is None else allowed & left_open
-    chosen = next((method for method in DOOR_METHODS if method in allowed), None)
-    if chosen:
-        return chosen
-    if allowed:
-        raise NoMergeMethod("the repository and its branch rules allow only rebase; the door lands a merge commit or a squash")
-    raise NoMergeMethod("the repository and its branch rules allow no merge method the door uses")
+    chosen = next((method for method in MergeMethod if method in allowed), None)
+    if chosen is None:
+        raise NoMergeMethod("the repository and its branch rules allow no merge method the door uses (a merge commit or a squash)")
+    return chosen
 
 
 def set_gate(gh: GhRunner, repository: str, enabled: bool) -> None:

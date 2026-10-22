@@ -21,8 +21,7 @@ LEGACY_RED = {"quality / sonar": "failure", "quality / verdict": "failure"}
 ALL_METHODS_ALLOWED = {"allow_merge_commit": True, "allow_squash_merge": True, "allow_rebase_merge": True}
 LINEAR_HISTORY = {"type": "required_linear_history"}
 UNRELATED_RULE = {"type": "creation"}
-ONLY_REBASE = "emergency-merge: not merged - the repository and its branch rules allow only rebase; the door lands a merge commit or a squash"
-NO_USABLE_METHOD = "emergency-merge: not merged - the repository and its branch rules allow no merge method the door uses"
+NO_USABLE_METHOD = "emergency-merge: not merged - the repository and its branch rules allow no merge method the door uses (a merge commit or a squash)"
 FIXED_NOW = datetime(2026, 10, 17, 12, 0, tzinfo=UTC)
 BASELINE_82 = '[function_lines."src/quality/cli.py"]\n"main" = 82\n'
 BASELINE_90 = BASELINE_82.replace("82", "90")
@@ -716,8 +715,8 @@ def test_the_door_merges_with_a_method_the_settings_and_every_rule_allow(gh_kwar
     ("gh_kwargs", "line"),
     [
         ({"settings": settings_allowing("merge"), "rules": [[pull_request_rule("squash")]]}, NO_USABLE_METHOD),
-        ({"settings": settings_allowing("rebase")}, ONLY_REBASE),
-        ({"rules": [[pull_request_rule("rebase")]]}, ONLY_REBASE),
+        ({"settings": settings_allowing("rebase")}, NO_USABLE_METHOD),
+        ({"rules": [[pull_request_rule("rebase")]]}, NO_USABLE_METHOD),
         ({"rules": [[pull_request_rule()]]}, NO_USABLE_METHOD),
         ({"settings": settings_allowing()}, NO_USABLE_METHOD),
         ({"settings": {}}, "emergency-merge: cannot judge - the repository settings withhold or malform"),
