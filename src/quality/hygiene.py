@@ -316,7 +316,7 @@ def judged_baseline(root: Path) -> ratchet.Baseline | None:
     try:
         return read_baseline(root)
     except ratchet.SizeError as error:
-        raise CannotJudge(f"{error}; {ratchet.REWRITE_HINT}") from error
+        raise CannotJudge(f"{error}; {ratchet.head_advice(error)}") from error
 
 
 def _complete(tree: ratchet.TreeMeasurement) -> ratchet.Measurements:

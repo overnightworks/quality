@@ -23,12 +23,14 @@ from typing import NamedTuple, Self
 
 import lizard
 
+from quality import __version__
 from quality.report import Finding
 
 SIZE = "size"
 BASELINE_PATH = "quality/baseline.toml"
 WRITE_COMMAND = "quality baseline write"
 REWRITE_HINT = f"rewrite it with `{WRITE_COMMAND}`"
+UNKNOWN_TABLE_HINT = "write the baseline with the quality release your gate pins"
 OCCURRENCE_MARK = "#"
 PARSE_ERRORS = (SyntaxError, ValueError, LookupError)
 TEST_DIRECTORIES = frozenset({"test", "tests"})
@@ -166,6 +168,10 @@ class Baseline:
 
 class SizeError(Exception):
     """The tree or the baseline cannot be measured; the message carries the reason."""
+
+
+class UnknownTable(SizeError):
+    """The baseline has a table this quality does not know: a newer quality may have written it, or a hand edit."""
 
 
 class UnparsableSource(SizeError):
@@ -488,7 +494,12 @@ def _metric_named(name: str) -> Metric:
         return Metric(name)
     except ValueError:
         known = ", ".join([*(metric.value for metric in Metric), CLONES])
-        raise SizeError(f"{BASELINE_PATH} has an unknown table [{name}]; only {known} exist") from None
+        raise UnknownTable(f"{BASELINE_PATH} has an unknown table [{name}]; quality {__version__} knows {known}") from None
+
+
+def head_advice(error: SizeError) -> str:
+    """What the head can do about its own unreadable baseline; the base is not the pull request's to rewrite."""
+    return UNKNOWN_TABLE_HINT if isinstance(error, UnknownTable) else REWRITE_HINT
 
 
 def _table(where: str, value: object) -> dict:

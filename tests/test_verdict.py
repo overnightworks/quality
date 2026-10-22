@@ -17,7 +17,7 @@ from conftest import (
 )
 from test_sonar import reply
 
-from quality import cli, verdict
+from quality import __version__, cli, verdict
 from quality.config import CONFIG_PATH, LegacyMode
 from quality.hygiene import CannotJudge
 from quality.ratchet import BASELINE_PATH
@@ -355,6 +355,26 @@ def test_only_the_head_baseline_is_told_to_rewrite_itself(capsys, pull_request, 
     put(repo / BASELINE_PATH, head)
     code, output = verdict_of(repo, capsys)
     assert (code, output.count("rewrite it with `quality baseline write`")) == (2, hints), output
+
+
+UNKNOWN_TABLE_FACT = f"has an unknown table [future]; quality {__version__} knows ccn, file_lines, function_lines, clones"
+
+
+@pytest.mark.parametrize(
+    ("base", "head", "advice"),
+    [(main_lines(82), "[future]\n", 1), ("[future]\n", main_lines(82), 0)],
+    ids=["cell 14 head", "cell 15 base"],
+)
+def test_an_unknown_baseline_table_states_its_fact_and_advises_only_the_head(capsys, pull_request, base, head, advice):
+    """#153 cells 14 and 15: the head is sent to the release its gate pins; the base keeps its wrapper and no advice."""
+    repo, commit_base = pull_request
+    commit_base(base)
+    put(repo / BASELINE_PATH, head)
+    code, output = verdict_of(repo, capsys)
+    assert code == 2
+    assert UNKNOWN_TABLE_FACT in output
+    assert output.count("write the baseline with the quality release your gate pins") == advice, output
+    assert "rewrite it" not in output
 
 
 def make_baseline_a_directory(repo: Path) -> None:

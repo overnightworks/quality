@@ -43,4 +43,8 @@ Checks (all targeted, run from the repo root):
 - `uv run pytest tests/test_<module>.py` (the module you changed; never the whole suite locally, CI runs it)
 - `uv run quality hygiene .`
 
+The version comes from git (hatch-vcs): a tag build prints the tag, any later commit `<next>.devN+g<sha>`, so a checkout
+that installs quality needs its tags (`fetch-depth: 0`). Release: tag the merge commit locally, `uv sync`, then
+`uv run python scripts/verify_release.py vX.Y.Z`, and push the tag only when it exits 0; tags are immutable on the remote.
+
 Tests build their git fixtures in `tmp_path`; never commit a `.env` or compose fail file.

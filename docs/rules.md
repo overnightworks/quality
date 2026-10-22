@@ -46,7 +46,9 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   The reason names the case: a file without read permission is `cannot read locked.py: [Errno 13] ...`, a file behind
   a directory without permission is `cannot reach pkg/m.py: [Errno 13] ...`. A tracked file missing from disk
   (deleted, or a dangling symlink) is skipped. A `quality/baseline.toml` that is not UTF-8 is malformed like invalid
-  TOML and says to rewrite it with `quality baseline write`.
+  TOML and says to rewrite it with `quality baseline write`. A baseline with a table this quality does not know
+  (`has an unknown table [future]; quality <version> knows ccn, file_lines, function_lines, clones`) is not told that:
+  a newer quality may have written it, so the head is told to write the baseline with the quality release its gate pins.
   With `quality/baseline.toml`, the tree on disk must hold the baseline: a new violation, an entry that grew and an
   entry above its measured value (stale: lower it with `quality baseline write`) are findings; an entry whose file or
   function is gone is fine.
@@ -140,7 +142,8 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   entries are still held against the base's. A malformed baseline on either side, a head config or baseline that cannot be read or links out of the
   repository, a base file that is not a regular file (`... : not a regular file`), a base git refuses to read (`... : git exited <n>`, git's own words never printed), or a base commit the clone lacks is exit `2`, naming the side (`quality/baseline.toml at the base commit
   <sha>: ...`, `quality/config.toml at the head: ...`). Only the head's malformed baseline adds ``rewrite it with
-  `quality baseline write` ``: a pull request cannot rewrite its base. The base must be a ref
+  `quality baseline write` `` (an unknown table adds `write the baseline with the quality release your gate pins`
+  instead): a pull request cannot rewrite its base. The base must be a ref
   name or a SHA: `HEAD~1` or `-x` is exit `2` (`... is not a ref name or a SHA`) before git runs. Outside a pull
   request (push, `merge_group`, `workflow_dispatch`) `gate.yml` passes no base, so the base is never read and only
   `hygiene` holds the tree. A lizard update that measures a function higher therefore turns the pull request that
