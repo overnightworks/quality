@@ -1,8 +1,0 @@
-claim_id = "1a41585b323a4403a31e581ed4794838"
-agent = "claude"
-role = "builder"
-base = "420c797300a6995459b250fb7d24e1d2b12a866c"
-branch = "claude/issue-146-door-merge-method"
-scope = ["README.md", "quality/baseline.toml", "src/quality/emergency.py", "tests/test_emergency.py"]
-opened_commit = "19f33acad767966c31925e6310dced26554cd41d"
-whole_reason = "The door's merge-method choice is one change in emergency.py; its tests, the README door sentence, and the baseline entry the test refactor lowered move with it."
