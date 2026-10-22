@@ -1,0 +1,7 @@
+claim_id = "ce65c26bc82a4b488e126f117b3db17c"
+agent = "claude"
+role = "builder"
+base = "419a19d92e70f3827a03a414a0c1ef259002d295"
+branch = "fix/fleet-presentator-rename"
+scope = ["quality/fleet.toml"]
+opened_commit = "d53f161640da4fc4672b6c2a9448021832e6f095"
