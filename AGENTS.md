@@ -32,7 +32,9 @@ enforces it, so a module imports only from the layers below its own.
 Config, hygiene, `sonar findings` and the verdict read the checkout's own files only through `repository.py`, which keeps each read
 inside the repository and names the file repository-relative in every error.
 
-The operator's rulings: `docs/rulings.md`.
+The operator's rulings stand dated in the reference entry of the behaviour they rule (`docs/`); decisions with rejected alternatives: `docs/decisions/`.
+
+quality has no total line budget; its own size baseline only falls (operator ruling 18.10.2026, replacing a budget of about 3,000 lines: „wenn es mehr braucht braucht es eben mehr, aber natürlich soll der code gut sein!“).
 
 Checks (all targeted, run from the repo root):
 
