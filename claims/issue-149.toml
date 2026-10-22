@@ -1,0 +1,8 @@
+claim_id = "4a7aabdc9d8d4bde997c4740fde2a007"
+agent = "claude"
+role = "builder"
+base = "4e555fbeca5a599b425756005e368c48836a9275"
+branch = "claude/issue-149-rename-not-loosening"
+scope = ["docs/decisions", "docs/gate.md", "docs/rules.md", "src/quality/cli.py", "src/quality/emergency.py", "src/quality/engines.py", "src/quality/ratchet.py", "src/quality/verdict.py", "tests/test_clone_baseline.py", "tests/test_emergency.py", "tests/test_ratchet.py", "tests/test_verdict.py"]
+opened_commit = "9e0ad5fb4d82f1ad848f94cb2404bcd1a671df7a"
+whole_reason = "The verdict and the door must read the same rename map in one landing, or the door would re-judge differently; the docs' moved-entry sentences change with them."
