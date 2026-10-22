@@ -135,7 +135,7 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   A lowered, equal or removed entry or pair is green, and so is adopting a baseline (the base has none) or having none
   on either side. A `[clones]` table the base lacks is an adoption too: its pairs are not compared, while the size
   entries are still held against the base's. A malformed baseline on either side, a head config or baseline that cannot be read or links out of the
-  repository, or a base commit the clone lacks is exit `2`, naming the side (`quality/baseline.toml at the base commit
+  repository, a base file that is not a regular file (`... : not a regular file`), a base git refuses to read (`... : git exited <n>`, git's own words never printed), or a base commit the clone lacks is exit `2`, naming the side (`quality/baseline.toml at the base commit
   <sha>: ...`, `quality/config.toml at the head: ...`). Only the head's malformed baseline adds ``rewrite it with
   `quality baseline write` ``: a pull request cannot rewrite its base. The base must be a ref
   name or a SHA: `HEAD~1` or `-x` is exit `2` (`... is not a ref name or a SHA`) before git runs. Outside a pull

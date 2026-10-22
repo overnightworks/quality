@@ -1,6 +1,7 @@
 import datetime
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -354,6 +355,47 @@ def test_only_the_head_baseline_is_told_to_rewrite_itself(capsys, pull_request, 
     put(repo / BASELINE_PATH, head)
     code, output = verdict_of(repo, capsys)
     assert (code, output.count("rewrite it with `quality baseline write`")) == (2, hints), output
+
+
+def make_baseline_a_directory(repo: Path) -> None:
+    (repo / BASELINE_PATH).unlink()
+    put(repo / BASELINE_PATH / "inner.toml", main_lines(82))
+
+
+def make_baseline_a_symlink(repo: Path) -> None:
+    (repo / BASELINE_PATH).rename(repo / "target.toml")
+    (repo / BASELINE_PATH).symlink_to("../target.toml")
+
+
+@pytest.mark.parametrize("make_non_file", [make_baseline_a_directory, make_baseline_a_symlink], ids=["a directory", "a symlink"])
+def test_a_base_baseline_that_is_no_regular_file_is_named_so_and_never_parsed(capsys, monkeypatch, pull_request, make_non_file):
+    """#142 rule 2 (#5 finding 80): a directory or symlink at the base commit is exit 2, `not a regular file`, no TOML."""
+    repo, commit_base = pull_request
+    commit_base(main_lines(82))
+    make_non_file(repo)
+    git = ["git", "-C", str(repo), *GIT_IDENTITY]
+    subprocess.run([*git, "add", "-A"], check=True)
+    subprocess.run([*git, "commit", "-q", "-m", "non-file"], check=True)
+    base_sha = head_commit(repo)
+    monkeypatch.setenv("GATE_BASE_SHA", base_sha)
+    subprocess.run([*git, "rm", "-rq", "--cached", BASELINE_PATH], check=True)
+    if (repo / BASELINE_PATH).is_symlink():
+        (repo / BASELINE_PATH).unlink()
+    else:
+        shutil.rmtree(repo / BASELINE_PATH)
+    put(repo / BASELINE_PATH, main_lines(82))
+    code, output = verdict_of(repo, capsys)
+    expected = f"cannot read {BASELINE_PATH} at the base commit {base_sha}: not a regular file"
+    assert (code, expected in output, "TOML" in output) == (2, True, False)
+
+
+def test_a_base_git_refuses_to_read_is_worded_without_git_stderr_or_the_checkout_path(capsys, monkeypatch, pull_request):
+    """#142 rule 3 (#5 finding 85): git's exit code is named, its stderr and the checkout's path are not printed."""
+    repo, commit_base = pull_request
+    commit_base(main_lines(82))
+    monkeypatch.setenv("GATE_BASE_SHA", "f" * 40)
+    code, output = verdict_of(repo, capsys)
+    assert (code, f"cannot read the base commit {'f' * 40}: git exited 128" in output, "fatal:" in output) == (2, True, False)
 
 
 def test_a_head_baseline_that_links_out_of_the_repository_cannot_be_judged(capsys, pull_request, elsewhere):

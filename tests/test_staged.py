@@ -270,7 +270,7 @@ def test_git_failing_on_the_staged_allow_list_is_exit_2_in_its_words(
     stage(repo, {"quality/config.toml": "[secrets]\n"})
     fake_git(f'case " $* " in *" {failing} "*) echo "{failing} broke" >&2; exit 1;; esac')
     assert scan_staged(repo, installed_engines) == 2
-    assert f"scan-staged: cannot judge - {expected}: {failing} broke" in capsys.readouterr().err
+    assert f"scan-staged: cannot judge - {expected}: git exited 1" in capsys.readouterr().err
 
 
 @pytest.mark.engine
