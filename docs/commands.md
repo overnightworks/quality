@@ -63,7 +63,7 @@ duplicating `quality/fleet.toml` is `cannot judge`, exit `2`.
   enforcement depends on the release or the repository. The rules every release enforces stand once in the sentence under
   the heading. A rule cell says what the pinned gate does with the rule, never whether the repository passes it:
   `enforced`, `report-only` (`size` without `quality/baseline.toml`, `import-contract` without an import-linter config,
-  `clone` on v0.4.0 and, where the gate knows enforcement (main today), without a `[clones]` table in
+  `clone` on v0.4.0 and, from v0.5.0 on, without a `[clones]` table in
   `quality/baseline.toml`), `not in <tag>` when the pinned release predates the rule, `not released` when only main has
   the rule,
   and `—` without a gate. Two pins give the oldest release; a pin that is no release (a commit without a tag, a branch or

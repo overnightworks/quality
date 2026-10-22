@@ -272,7 +272,8 @@ def test_a_cell_never_claims_more_than_the_oldest_pinned_release(scoreboard, pub
 
 
 CLONE_RELEASE = "d" * 40
-CLONE_RELEASES = {**FIRST_RELEASES, "v0.4.0": CLONE_RELEASE}
+CLONE_TABLE_PIN = "e" * 40
+CLONE_RELEASES = {**FIRST_RELEASES, "v0.4.0": CLONE_RELEASE, "v0.5.0": CLONE_TABLE_PIN}
 
 
 def declared(**fields) -> Declared:
@@ -294,8 +295,17 @@ CLONE = next(rule for rule in RULES if rule.rule == "clone")
     ids=["a pin at the clone release", "an older tag"],
 )
 def test_a_pinned_gate_reports_clones_whatever_the_clone_table_says(pin, words, has_clone_table):
-    """#137 tests 1 and 4: no tag up to v0.4.0 enforces clone."""
+    """#137 tests 1 and 4: no tag before the clone-table release enforces clone."""
     release = gate_release((Call(pin),), False, CLONE_RELEASES)
+    assert rule_cell(CLONE, release, declared(has_clone_table=has_clone_table)) == words
+
+
+@pytest.mark.parametrize(
+    ("has_clone_table", "words"), [(True, "enforced"), (False, "report-only")], ids=["a clone table", "no clone table"]
+)
+def test_a_gate_pinned_at_the_clone_table_release_enforces_clones_with_a_clone_table(has_clone_table, words):
+    """#162: v0.5.0 is the first tag that enforces the clone table."""
+    release = gate_release((Call(CLONE_TABLE_PIN),), False, CLONE_RELEASES)
     assert rule_cell(CLONE, release, declared(has_clone_table=has_clone_table)) == words
 
 
@@ -323,7 +333,7 @@ def test_a_malformed_baseline_makes_the_gates_own_clone_cell_unreadable_and_the_
 def test_a_later_switch_applies_from_the_tag_that_names_it(pin, words):
     """#137 test 5."""
     rule = RuleRelease("future", "v0.1.0", Switch.REPORT_ONLY, SwitchChange("v0.5.0", Switch.CLONE_TABLE))
-    release = gate_release((Call("e" * 40),), False, {**CLONE_RELEASES, pin: "e" * 40})
+    release = gate_release((Call("e" * 40),), False, {**FIRST_RELEASES, pin: "e" * 40})
     assert rule_cell(rule, release, declared(has_clone_table=True)) == words
 
 
