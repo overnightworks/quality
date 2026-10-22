@@ -1,8 +1,0 @@
-claim_id = "5148d854484c4869bc317c41f34c6816"
-agent = "claude"
-role = "builder"
-base = "d4d628f93dde8f2d2fc6ca52db86ee34a484974b"
-branch = "claude/issue-151-docs-split"
-scope = [".github/workflows/gate.yml", "AGENTS.md", "README.md", "docs/commands.md", "docs/gate.md", "docs/roadmap.md", "docs/rules.md", "docs/rulings.md", "docs/runbook-emergency-merge.md", "docs/sonar.md"]
-opened_commit = "24a164bf66c8a573d805f4cc247308fd1697d5ca"
-whole_reason = "One README becomes five reference documents in one move, so links and pointers stay whole; the roadmap file the document set forbids goes in the same landing."
