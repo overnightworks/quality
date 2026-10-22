@@ -1,0 +1,8 @@
+claim_id = "2dfbd6a9c27e4fd5ab744c31bf4083d4"
+agent = "claude"
+role = "builder"
+base = "4d089af45f8c00b80ed971b9440b1af754cb6bdd"
+branch = "claude/issue-153-version-from-git"
+scope = [".github/workflows/ci.yml", ".github/workflows/scoreboard.yml", "AGENTS.md", "docs/rules.md", "pyproject.toml", "scripts/verify_release.py", "src/quality/__init__.py", "src/quality/hygiene.py", "src/quality/ratchet.py", "src/quality/verdict.py", "tests/test_clone_baseline.py", "tests/test_ratchet.py", "tests/test_release_pin.py", "tests/test_verdict.py", "tests/test_verify_release.py"]
+opened_commit = "ccc9edb480ebb936395bf2f16f4d5b83de0ca263"
+whole_reason = "The version source and the unknown-table hint that names it land together; the rest are the pins and the two CI checkouts that must see tags."
