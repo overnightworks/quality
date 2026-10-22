@@ -7,7 +7,7 @@ public = [
     "https://github.com/overnightworks/webauth",
     "https://github.com/overnightworks/marketplace",
     "https://github.com/overnightworks/hopin",
-    "https://github.com/overnightworks/ui-console",
+    "https://github.com/overnightworks/ui-style",
 ]
 private = [
     "https://github.com/overnightworks/edge",
