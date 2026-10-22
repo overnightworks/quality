@@ -486,30 +486,27 @@ def read_renames(
 def renames_of(name_status: bytes) -> Renames:
     """`git diff --name-status -z` records: a status, then one path, or two for a rename or a copy.
 
-    Only a rename counts, and a source two renames name carries to neither. Only a rename's two paths are decoded, as
-    UTF-8 without newline translation, so a path holding a carriage return stays the path git named. A rename whose
+    Only a rename counts, and a source git lists as renamed twice cannot be judged. Only a rename's two paths are decoded,
+    as UTF-8 without newline translation, so a path holding a carriage return stays the path git named. A rename whose
     target is not UTF-8 is skipped, since no baseline key can name it; one whose source is not UTF-8 still clears its
     target of leftovers and carries nothing.
     """
+    renamed = list(_renamed_paths(name_status))
+    sources = [old_bytes for old_bytes, _ in renamed]
+    if len(set(sources)) != len(sources):
+        raise CannotJudge("git listed one source as renamed twice")
     moves: dict[str, str] = {}
     unnamed_sources: set[str] = set()
-    twice: set[str] = set()
-    for old_bytes, new_bytes in _renamed_paths(name_status):
+    for old_bytes, new_bytes in renamed:
         try:
             new = new_bytes.decode("utf-8")
         except UnicodeDecodeError:
             continue
         try:
-            old = old_bytes.decode("utf-8")
+            moves[old_bytes.decode("utf-8")] = new
         except UnicodeDecodeError:
             unnamed_sources.add(new)
-            continue
-        if old in moves or old in twice:
-            twice.add(old)
-        else:
-            moves[old] = new
-    kept = {old: new for old, new in moves.items() if old not in twice}
-    return Renames(kept, frozenset(kept.values()) | unnamed_sources)
+    return Renames(moves, frozenset(moves.values()) | unnamed_sources)
 
 
 def _renamed_paths(name_status: bytes) -> Iterator[tuple[bytes, bytes]]:

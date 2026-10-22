@@ -292,13 +292,12 @@ def test_without_a_base_commit_no_renames_are_read(capsys, pull_request, monkeyp
         (b"", Renames({}, frozenset())),
         (b"R100\0a.py\0b.py\0M\0c.py\0", Renames({"a.py": "b.py"}, frozenset({"b.py"}))),
         (b"C100\0a.py\0b.py\0", Renames({}, frozenset())),
-        (b"R100\0a.py\0b.py\0R100\0a.py\0c.py\0", Renames({}, frozenset())),
         (b"R100\0a\rb.py\0c\nd.py\0", Renames({"a\rb.py": "c\nd.py"}, frozenset({"c\nd.py"}))),
         (b"M\0caf\xe9.txt\0A\0\xff\0D\0\xfe\0", Renames({}, frozenset())),
         (b"R100\0\xff\0b.py\0R100\0a.py\0caf\xe9.py\0R100\0c.py\0d.py\0",
          Renames({"c.py": "d.py"}, frozenset({"b.py", "d.py"}))),
     ],
-    ids=["nothing", "only a rename counts", "a copy carries nothing", "a source named twice carries to neither", "bytes stay bytes",
+    ids=["nothing", "only a rename counts", "a copy carries nothing", "bytes stay bytes",
          "an edit, an addition and a deletion are never decoded", "a source that is not UTF-8 still names its target; a target that is not UTF-8 is skipped"],
 )
 def test_the_rename_list_reads_only_complete_renames(listing, renames):
@@ -306,8 +305,17 @@ def test_the_rename_list_reads_only_complete_renames(listing, renames):
     assert verdict.renames_of(listing) == renames
 
 
-@pytest.mark.parametrize("listing", [b"R100\0a.py\0", b"R100\0a.py\0b.py", b"M\0"],
-                         ids=["a rename without its target", "output cut off", "a record without its path"])
+@pytest.mark.parametrize(
+    "listing",
+    [
+        b"R100\0a.py\0", b"R100\0a.py\0b.py", b"M\0",
+        b"R100\0a.py\0b.py\0R100\0a.py\0c.py\0",
+        b"R100\0a.py\0b.py\0R100\0a.py\0caf\xe9.py\0",
+        b"R100\0\xff\0b.py\0R100\0\xff\0c.py\0",
+    ],
+    ids=["a rename without its target", "output cut off", "a record without its path", "a source renamed twice",
+         "a source renamed twice, one target not UTF-8", "a source that is not UTF-8 renamed twice"],
+)
 def test_a_rename_list_git_did_not_finish_cannot_be_judged(listing):
     """#149 cell 20: fail closed, never an empty map."""
     with pytest.raises(CannotJudge):
@@ -569,21 +577,30 @@ def test_the_diff_is_asked_for_only_when_both_sides_hold_a_baseline(capsys, pull
     assert " diff " not in f" {calls.read_text()} "
 
 
-CUT_OFF_LIST = "case \"$*\" in *\" diff \"*) printf 'R100\\0a.py\\0'; exit 0;; esac"
+UNFINISHED_LISTS = [
+    ("R100\\0a.py\\0", "git's list of renamed files ended inside a record"),
+    ("R100\\0a.py\\0b.py\\0R100\\0a.py\\0c.py\\0", "git listed one source as renamed twice"),
+]
 
 
-def test_a_rename_list_cut_off_is_exit_two_at_the_verdict(capsys, pull_request, fake_git):
+def listing_script(printed):
+    return f"case \"$*\" in *\" diff \"*) printf '{printed}'; exit 0;; esac"
+
+
+@pytest.mark.parametrize(("printed", "cause"), UNFINISHED_LISTS, ids=["cut off", "a source renamed twice"])
+def test_a_rename_list_git_did_not_finish_is_exit_two_at_the_verdict(capsys, pull_request, fake_git, printed, cause):
     """#149 cell 20: the adapter turns the parser's refusal into exit 2."""
     moved_in_head(pull_request, OLD_ENTRY, NEW_ENTRY)
-    fake_git(CUT_OFF_LIST)
+    fake_git(listing_script(printed))
     code, output = verdict_of(pull_request[0], capsys)
-    assert (code, "cannot judge - git's list of renamed files ended inside a record" in output) == (2, True)
+    assert (code, f"cannot judge - {cause}" in output) == (2, True)
 
 
-def test_a_rename_list_cut_off_is_a_refusal_at_the_door(capsys, tmp_path, fake_git):
+@pytest.mark.parametrize(("printed", "cause"), UNFINISHED_LISTS, ids=["cut off", "a source renamed twice"])
+def test_a_rename_list_git_did_not_finish_is_a_refusal_at_the_door(capsys, tmp_path, fake_git, printed, cause):
     """#149 cell 20: the door never substitutes an empty map."""
     gh = pulled(tmp_path, OLD_ENTRY, NEW_ENTRY, MOVE)
-    fake_git(CUT_OFF_LIST)
+    fake_git(listing_script(printed))
     assert drive(gh)[0] == 1
     assert "refused - cannot list the files git renamed between the pull request's commits" in capsys.readouterr().out
     changed_nothing(gh)

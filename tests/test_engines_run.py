@@ -32,11 +32,16 @@ def test_a_bounded_command_that_runs_out_of_time_takes_its_children_with_it(tmp_
     assert process_is_gone(int(child.read_text()))
 
 
-def test_a_bounded_command_returns_at_its_bound_though_a_descendant_left_the_group():
+def test_a_bounded_command_returns_at_its_bound_though_a_descendant_left_the_group(tmp_path):
+    escaped = tmp_path / "escaped-pid"
     started = time.monotonic()
-    with pytest.raises(EngineError, match="did not finish within 1 seconds"):
-        engines.run_bounded_in_own_group(["sh", "-c", "setsid sleep 6 & sleep 30"], 1)
-    assert time.monotonic() - started < 4
+    try:
+        with pytest.raises(EngineError, match="did not finish within 1 seconds"):
+            engines.run_bounded_in_own_group(["sh", "-c", f'setsid sleep 6 & echo $! > "{escaped}"; sleep 30'], 1)
+        assert time.monotonic() - started < 4
+    finally:
+        if escaped.exists():
+            os.kill(int(escaped.read_text()), signal.SIGKILL)
 
 
 def test_a_bound_that_cuts_a_utf8_character_reports_the_timeout():
