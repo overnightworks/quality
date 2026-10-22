@@ -71,6 +71,7 @@ IMPORT_LINTER_CONFIG = "import-linter config"
 FIRST_RELEASE = "v0.1.0"
 RATCHET_RELEASE = "v0.3.0"
 CLONE_RELEASE = "v0.4.0"
+CLONE_TABLE_RELEASE = "v0.5.0"
 
 
 def release_order(tag: str) -> tuple[int, ...]:
@@ -118,7 +119,7 @@ RULES = (
     RuleRelease(advisories.RULE, RATCHET_RELEASE, Switch.ALWAYS),
     RuleRelease(ratchet.SIZE, RATCHET_RELEASE, Switch.SIZE_BASELINE),
     RuleRelease(architecture.RULE, RATCHET_RELEASE, Switch.IMPORT_LINTER_CONFIG),
-    RuleRelease(clones.RULE, CLONE_RELEASE, Switch.REPORT_ONLY, SwitchChange(None, Switch.CLONE_TABLE)),
+    RuleRelease(clones.RULE, CLONE_RELEASE, Switch.REPORT_ONLY, SwitchChange(CLONE_TABLE_RELEASE, Switch.CLONE_TABLE)),
 )
 OLDEST_RELEASE = min((rule.first_release for rule in RULES if rule.first_release), key=release_order)
 EVERY_RELEASE_ENFORCES = tuple(
