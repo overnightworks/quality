@@ -1,7 +1,7 @@
 import json
 import re
 import urllib.error
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
@@ -491,21 +491,10 @@ def renames_of(name_status: bytes) -> Renames:
     target is not UTF-8 is skipped, since no baseline key can name it; one whose source is not UTF-8 still clears its
     target of leftovers and carries nothing.
     """
-    fields = name_status.split(b"\0")
-    if fields.pop() != b"":
-        raise CannotJudge("git's list of renamed files ended inside a record")
-    records = iter(fields)
     moves: dict[str, str] = {}
     unnamed_sources: set[str] = set()
     twice: set[str] = set()
-    for status in records:
-        try:
-            paths = [next(records), *([next(records)] if status.startswith((b"R", b"C")) else [])]
-        except StopIteration:
-            raise CannotJudge("git's list of renamed files ended inside a record") from None
-        if not status.startswith(b"R"):
-            continue
-        old_bytes, new_bytes = paths
+    for old_bytes, new_bytes in _renamed_paths(name_status):
         try:
             new = new_bytes.decode("utf-8")
         except UnicodeDecodeError:
@@ -521,6 +510,21 @@ def renames_of(name_status: bytes) -> Renames:
             moves[old] = new
     kept = {old: new for old, new in moves.items() if old not in twice}
     return Renames(kept, frozenset(kept.values()) | unnamed_sources)
+
+
+def _renamed_paths(name_status: bytes) -> Iterator[tuple[bytes, bytes]]:
+    """The (source, target) bytes of each rename record; a record cut short cannot be judged."""
+    fields = name_status.split(b"\0")
+    if fields.pop() != b"":
+        raise CannotJudge("git's list of renamed files ended inside a record")
+    records = iter(fields)
+    for status in records:
+        try:
+            paths = [next(records), *([next(records)] if status.startswith((b"R", b"C")) else [])]
+        except StopIteration:
+            raise CannotJudge("git's list of renamed files ended inside a record") from None
+        if status.startswith(b"R"):
+            yield paths[0], paths[1]
 
 
 def side_of(config: str | None, baseline: str | None, where: str) -> Side:
