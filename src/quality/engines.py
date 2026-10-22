@@ -297,6 +297,14 @@ def git(arguments: list[str], failure: str, env: dict[str, str] | None = None) -
     return done.stdout
 
 
+def git_bytes(arguments: list[str], failure: str, env: dict[str, str] | None = None) -> bytes:
+    """git's output undecoded, for a caller that must keep every byte; failures read as in `git`."""
+    done = run(["git", *arguments], env=env, encoding=None)
+    if done.returncode != 0:
+        raise EngineError(f"{failure}{stderr_tail(done.stderr.decode('utf-8', 'replace'))}")
+    return done.stdout
+
+
 REGULAR_FILE_MODES = frozenset({"100644", "100755"})
 
 

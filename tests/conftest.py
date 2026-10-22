@@ -335,3 +335,26 @@ def public(tmp_path, scratch) -> PublicRepo:
 @pytest.fixture
 def missing(tmp_path) -> str:
     return (tmp_path / "remotes" / "gone").as_uri()
+
+
+def git_pull(directory, base_baseline, merge_baseline, moves=()):
+    """A bare repository holding a base commit and a merge commit that moves each (old, new) file and holds the
+    given baselines; returns its path and the two shas."""
+    work = directory / "work"
+    git = ["git", "-C", str(work), *GIT_IDENTITY]
+    subprocess.run(["git", "init", "-q", str(work)], check=True)
+    for old, _ in moves:
+        put(work / old, "".join(f"{old} row {number} that no other file shares\n" for number in range(30)))
+    put(work / BASELINE_PATH, base_baseline)
+    subprocess.run([*git, "add", "-A"], check=True)
+    subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "base"], check=True)
+    base_sha = subprocess.run([*git, "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
+    for old, new in moves:
+        subprocess.run([*git, "mv", old, new], check=True)
+    put(work / BASELINE_PATH, merge_baseline)
+    subprocess.run([*git, "add", "-A"], check=True)
+    subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "merge"], check=True)
+    merge_sha = subprocess.run([*git, "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
+    remote = directory / "remote.git"
+    subprocess.run(["git", "clone", "-q", "--bare", str(work), str(remote)], check=True)
+    return str(remote), base_sha, merge_sha

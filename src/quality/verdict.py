@@ -23,7 +23,7 @@ from quality.ratchet import (
     Baseline,
     SizeError,
     added_pairs,
-    comparison_identities,
+    carried_base,
     load_baseline,
     raised_entries,
 )
@@ -140,7 +140,7 @@ def judge(
     jobs: list[Job],
     gate_results: Mapping[str, str],
     current_attempt: int,
-    renames: Mapping[str, str] = MappingProxyType({}),
+    renames: Mapping[str, str],
 ) -> Verdict:
     """Without a base (a push, a merge group) no loosening and no declaration is judged; a declared removal of a
     mandatory job leaves that job unjudged. `renames` maps a base path git renamed to its head path."""
@@ -209,13 +209,13 @@ def _baseline_loosenings(base: Baseline | None, head: Baseline | None, renames: 
         return []
     if head is None:
         return [f"{BASELINE_PATH} removed"]
-    identities = comparison_identities(renames, head)
-    lines = [f"size baseline {entry.describe()}" for entry in raised_entries(base.size, head.size, identities)]
+    base = carried_base(base, head, renames)
+    lines = [f"size baseline {entry.describe()}" for entry in raised_entries(base.size, head.size)]
     if base.clones is None:
         return lines
     if head.clones is None:
         return [*lines, "clone baseline removed"]
-    return [*lines, *(f"clone baseline adds {pair.label}" for pair in added_pairs(base.clones, head.clones, identities))]
+    return [*lines, *(f"clone baseline adds {pair.label}" for pair in added_pairs(base.clones, head.clones))]
 
 
 def _judge_job(name: str, jobs: list[Job], current_attempt: int) -> tuple[Unsettled | None, list[str]]:
@@ -452,31 +452,51 @@ def read_base(repo: Path, base_sha: str) -> Side:
     return side_of(config, baseline, where)
 
 
-def read_renames(repo: Path, base_sha: str) -> dict[str, str]:
-    """The files the checked-out commit renamed from the base commit, old path to new, as git detects them."""
-    _require_safe_ref(base_sha)
+def read_renames(repo: Path, base: str, head: str) -> dict[str, str]:
+    """The files git renamed between two commits, old path to new; the verdict and the door read the same pair."""
+    _require_safe_ref(base)
+    _require_safe_ref(head)
     try:
-        listed = engines.git(
+        listed = engines.git_bytes(
             [
                 "-C", str(repo.resolve()), "diff", "-M50%", "-l1000", "--no-color", "--name-status", "-z",
-                "--end-of-options", base_sha, "HEAD", "--",
+                "--end-of-options", base, head, "--",
             ],
-            f"cannot list the files renamed since the base commit {base_sha}",
+            f"cannot list the files renamed between {base} and {head}",
         )
     except engines.EngineError as error:
         raise CannotJudge(str(error)) from error
-    return _renames_of(listed)
+    return renames_of(listed)
 
 
-def _renames_of(name_status: str) -> dict[str, str]:
-    """`git diff --name-status -z` records: a status, then one path, or two for a rename or a copy; only a rename counts."""
-    fields = iter(name_status.split("\0")[:-1])
-    renames = {}
-    for status in fields:
-        paths = [next(fields), *([next(fields)] if status[0] in "RC" else [])]
-        if status[0] == "R":
-            renames[paths[0]] = paths[1]
-    return renames
+def renames_of(name_status: bytes) -> dict[str, str]:
+    """`git diff --name-status -z` records: a status, then one path, or two for a rename or a copy.
+
+    Only a rename counts, and a source two renames name carries to neither. Bytes decode without newline translation,
+    so a path holding a carriage return stays the path git named.
+    """
+    try:
+        fields = name_status.decode("utf-8").split("\0")
+    except UnicodeDecodeError as error:
+        raise CannotJudge(f"git listed a renamed path that is not UTF-8 ({error})") from error
+    if fields.pop() != "":
+        raise CannotJudge("git's list of renamed files ended inside a record")
+    records = iter(fields)
+    renames: dict[str, str] = {}
+    twice: set[str] = set()
+    for status in records:
+        try:
+            paths = [next(records), *([next(records)] if status[:1] in ("R", "C") else [])]
+        except StopIteration:
+            raise CannotJudge("git's list of renamed files ended inside a record") from None
+        if status[:1] != "R":
+            continue
+        old, new = paths
+        if old in renames or old in twice:
+            twice.add(old)
+        else:
+            renames[old] = new
+    return {old: new for old, new in renames.items() if old not in twice}
 
 
 def side_of(config: str | None, baseline: str | None, where: str) -> Side:

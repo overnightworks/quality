@@ -19,7 +19,6 @@ from dataclasses import dataclass
 from enum import Enum
 from operator import attrgetter
 from pathlib import PurePosixPath
-from types import MappingProxyType
 from typing import NamedTuple, Self
 
 import lizard
@@ -353,49 +352,46 @@ class RaisedEntry:
         return f"raises {self.key.label} {self.base} -> {self.head}"
 
 
-def comparison_identities(renames: Mapping[str, str], head: Baseline) -> dict[str, str]:
-    """Each head path git renamed, mapped to the base path it is compared under; every other path stands for itself.
+def carried_base(base: Baseline, head: Baseline, renames: Mapping[str, str]) -> Baseline:
+    """The base as the head's renames read it: `renames` maps a path git renamed to the path it became.
 
-    `renames` maps a base path to the head path git paired it with. A renamed path whose old path some other head entry
-    still occupies keeps its own head path, so its entries are adds and no entry meets another file's allowance.
+    An entry under a rename's target is a leftover of a file the base no longer has and is dropped. The entries under
+    the old path move to the target unless the head still holds something under the old path.
     """
-    paths = {key.path for key in head.size} | {
+    held = {key.path for key in head.size} | {
         place.path for pair in head.clones or () for place in (pair.first, pair.second)
     }
-    occupied = paths - set(renames.values())
-    return {new: old for old, new in renames.items() if old not in occupied}
+    moves = {old: new for old, new in renames.items() if old not in held}
+
+    def new_path(path: str) -> str | None:
+        """Where the base's entries under `path` go in the head's reading, None when they are dropped."""
+        if path in moves:
+            return moves[path]
+        return None if path in renames.values() else path
+
+    size = {key._replace(path=path): value for key, value in base.size.items() if (path := new_path(key.path))}
+    if base.clones is None:
+        return Baseline(size, None)
+    pairs = set()
+    for pair in base.clones:
+        first, second = new_path(pair.first.path), new_path(pair.second.path)
+        if first and second:
+            pairs.add(ClonePair.of(pair.first._replace(path=first), pair.second._replace(path=second)))
+    return Baseline(size, frozenset(pairs))
 
 
-NO_IDENTITIES: Mapping[str, str] = MappingProxyType({})
-
-
-def raised_entries(base: SizeEntries, head: SizeEntries, identities: Mapping[str, str] = NO_IDENTITIES) -> list[RaisedEntry]:
-    """One baseline against another: an entry may fall or go, never rise or appear; a renamed symbol is a new one.
-
-    A head entry is held against the base entry of its metric and symbol under its identity path; it keeps its own key.
-    """
-    held = {key: base.get(key._replace(path=identities.get(key.path, key.path))) for key in head}
+def raised_entries(base: SizeEntries, head: SizeEntries) -> list[RaisedEntry]:
+    """One baseline against another: an entry may fall or go, never rise or appear; a renamed symbol is a new one."""
     return [
-        RaisedEntry(key, held[key], head[key])
+        RaisedEntry(key, base.get(key), head[key])
         for key in sorted(head, key=_order)
-        if held[key] is None or head[key] > held[key]
+        if key not in base or head[key] > base[key]
     ]
 
 
-def added_pairs(
-    base: frozenset[ClonePair], head: frozenset[ClonePair], identities: Mapping[str, str] = NO_IDENTITIES
-) -> list[ClonePair]:
-    """The pairs only the head holds, in the order the file and the lines name them; a removed pair is no loosening.
-
-    A head pair is held when the base holds it with both sides under their identity paths.
-    """
-
-    def under_identity(place: Place) -> Place:
-        return place._replace(path=identities.get(place.path, place.path))
-
-    return sorted(
-        pair for pair in head if ClonePair.of(under_identity(pair.first), under_identity(pair.second)) not in base
-    )
+def added_pairs(base: frozenset[ClonePair], head: frozenset[ClonePair]) -> list[ClonePair]:
+    """The pairs only the head holds, in the order the file and the lines name them; a removed pair is no loosening."""
+    return sorted(head - base)
 
 
 def _finding(key: Key, measured: Measured, verdict: str, fix: str) -> Finding:

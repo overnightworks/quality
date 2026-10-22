@@ -24,8 +24,7 @@ from quality.ratchet import (
     Metric,
     Place,
     RaisedEntry,
-    added_pairs,
-    comparison_identities,
+    carried_base,
     load_baseline,
     raised_entries,
     render_baseline,
@@ -491,34 +490,58 @@ def test_only_a_raised_or_added_entry_loosens_the_baseline(base, head, expected)
     assert raised_entries(base, head) == expected
 
 
+def sized(path):
+    return Key(Metric.CCN, path, "f")
+
+
+def paired(first, second):
+    return ClonePair.of(Place(first, "f"), Place(second, "g"))
+
+
 @pytest.mark.parametrize(
-    ("renames", "head_paths", "expected"),
+    ("renames", "base", "head", "expected"),
     [
-        ({"a.py": "c.py"}, ["c.py"], {"c.py": "a.py"}),
-        ({"a.py": "c.py"}, ["c.py", "a.py"], {}),
-        ({"a.py": "b.py", "b.py": "a.py"}, ["a.py", "b.py"], {"b.py": "a.py", "a.py": "b.py"}),
-        ({"a.py": "b.py", "b.py": "c.py"}, ["b.py", "c.py"], {"b.py": "a.py", "c.py": "b.py"}),
-        ({"a.py": "c.py"}, ["d.py"], {"c.py": "a.py"}),
+        ({"a.py": "b.py"}, {sized("a.py"): 16}, {sized("b.py"): 16}, {sized("b.py"): 16}),
+        ({"a.py": "b.py"}, {sized("a.py"): 16, sized("b.py"): 99}, {sized("b.py"): 16}, {sized("b.py"): 16}),
+        ({"a.py": "b.py"}, {sized("b.py"): 99}, {sized("b.py"): 16}, {}),
+        ({"a.py": "b.py"}, {sized("a.py"): 16}, {sized("a.py"): 16, sized("b.py"): 16}, {sized("a.py"): 16}),
+        ({"a.py": "b.py"}, {sized("a.py"): 16, sized("c.py"): 17}, {sized("b.py"): 16}, {sized("b.py"): 16, sized("c.py"): 17}),
     ],
-    ids=["a rename", "an old path reused by another entry", "a swap", "a chain", "a rename without entries"],
+    ids=["the allowance moves", "a leftover under the target is dropped", "a lone leftover is dropped",
+         "nothing moves while the head holds the old path", "an unrelated path stays"],
 )
-def test_a_renamed_path_is_compared_under_its_old_path_unless_another_entry_occupies_it(renames, head_paths, expected):
-    """#149 R1: one simultaneous map; a collision leaves the renamed path under its own head path."""
-    head = Baseline({Key(Metric.CCN, path, "f"): 16 for path in head_paths}, None)
-    assert comparison_identities(renames, head) == expected
+def test_the_base_allowance_moves_to_a_rename_target_and_leftovers_there_do_not_count(renames, base, head, expected):
+    """#149 R1, rules 1 and 2: the old entry leaves its path; an entry under the target never counts."""
+    assert carried_base(Baseline(base, None), Baseline(head, None), renames).size == expected
 
 
-def test_a_raise_and_a_new_pair_are_named_at_the_head_path_and_held_against_the_identity():
-    """#149 R1-R3: the lookup uses the identity, the finding keeps the head key."""
-    identities = {"b.py": "a.py"}
-    grown, moved, other = Key(Metric.CCN, "b.py", "f"), Key(Metric.CCN, "b.py", "g"), Key(Metric.CCN, "a.py", "f")
-    base = {Key(Metric.CCN, "a.py", "f"): 16, Key(Metric.CCN, "a.py", "g"): 16}
-    assert raised_entries(base, {grown: 17, moved: 16}, identities) == [RaisedEntry(grown, 16, 17)]
-    assert raised_entries(base, {other: 16}, {"b.py": "a.py"}) == []
-    held = ClonePair.of(Place("a.py", "f"), Place("z.py", "g"))
-    assert added_pairs(frozenset({held}), frozenset({ClonePair.of(Place("b.py", "f"), Place("z.py", "g"))}), identities) == []
-    new = ClonePair.of(Place("b.py", "h"), Place("z.py", "g"))
-    assert added_pairs(frozenset({held}), frozenset({new}), identities) == [new]
+@pytest.mark.parametrize(
+    ("renames", "base", "head", "expected"),
+    [
+        ({"a.py": "b.py"}, {paired("a.py", "z.py")}, {paired("b.py", "z.py")}, {paired("b.py", "z.py")}),
+        ({"a.py": "z.py"}, {paired("a.py", "b.py")}, {paired("z.py", "b.py")}, {ClonePair.of(Place("z.py", "f"), Place("b.py", "g"))}),
+        ({"a.py": "c.py", "b.py": "d.py"}, {paired("a.py", "b.py")}, {paired("c.py", "d.py")}, {paired("c.py", "d.py")}),
+        ({"a.py": "b.py"}, {paired("a.py", "z.py"), paired("b.py", "y.py")}, {paired("b.py", "z.py")}, {paired("b.py", "z.py")}),
+        ({"a.py": "b.py"}, {paired("a.py", "z.py")}, {paired("a.py", "z.py"), paired("b.py", "z.py")}, {paired("a.py", "z.py")}),
+    ],
+    ids=["a side moves", "a moved side changes the canonical order", "both sides move", "a leftover pair under the target is dropped",
+         "nothing moves while the head holds the old path"],
+)
+def test_a_clone_pair_moves_with_its_files_by_the_same_rules(renames, base, head, expected):
+    """#149 R3: a pair whose sides only moved is the same pair; the sides re-sort through ClonePair.of."""
+    carried = carried_base(Baseline({}, frozenset(base)), Baseline({}, frozenset(head)), renames)
+    assert carried.clones == frozenset(expected)
+
+
+def test_a_head_pair_keeps_the_old_path_occupied_for_size_entries_too():
+    """#149 rule 1: the head holds the old path through a size entry or a pair side, either blocks the move."""
+    base = Baseline({sized("a.py"): 16}, frozenset({paired("a.py", "z.py")}))
+    head = Baseline({sized("b.py"): 16}, frozenset({paired("a.py", "z.py"), paired("b.py", "z.py")}))
+    assert carried_base(base, head, {"a.py": "b.py"}) == Baseline({sized("a.py"): 16}, frozenset({paired("a.py", "z.py")}))
+
+
+def test_a_base_without_a_clone_table_stays_without_one():
+    assert carried_base(Baseline({sized("a.py"): 16}, None), Baseline({sized("b.py"): 16}, None), {"a.py": "b.py"}).clones is None
 
 
 def test_a_key_with_quotes_or_unicode_matches_itself_exactly():

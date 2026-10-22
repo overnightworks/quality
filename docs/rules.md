@@ -80,7 +80,9 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   quality owns this detector instead of calling jscpd or lizard (operator ruling 21.10.2026: „aco-Prüfer übernehmen
   (empfohlen)“); the reasons stand in [decision 3](decisions/3-clone-detector.md). The threshold, what makes a pair, how
   it is named, the report-only mode and the printed lines were shown to the operator and left unanswered, so they stand
-  at the proposed default and are not his word (#113, O2 and E1 to E7).
+  at the proposed default and are not his word (#113, O2 and E1 to E7). E2 stays for the rule itself: a renamed file or
+  function orphans the held pair and names a new one. Only the verdict's comparison with the base treats a pair whose
+  files git renamed as the same pair (see the baseline paragraph below).
 - `import-contract`: the repository's [import-linter](https://github.com/seddonym/import-linter) contracts must be
   kept. The config is the tracked `.importlinter` or `setup.cfg` (`[importlinter]`) or `pyproject.toml`
   (`[tool.importlinter]`), counted once its name exists in the tree: a tracked one deleted from disk is none, a symlink to
@@ -116,12 +118,22 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   base commit's, so growing a function and rewriting the baseline stays red. Each loosening is one line, named with the
   baseline's own metric, path and symbol (a file entry has no symbol):
   - an entry raised: `loosened (undeclared): size baseline raises function_lines src/quality/cli.py main 82 -> 90`;
-  - an entry the base does not hold, a moved or renamed one included:
+  - an entry the base does not hold (a function or class under another name included; a moved file is judged as below):
     `loosened (undeclared): size baseline adds ccn src/a.py f 16`;
   - a clone pair the base does not hold, when the base has a `[clones]` table:
     `loosened (undeclared): clone baseline adds tests/test_a.py run <-> tests/test_b.py hygiene`;
   - the base's `[clones]` table gone from a head that still has the file: `loosened (undeclared): clone baseline removed`;
   - the base's file deleted: `loosened (undeclared): quality/baseline.toml removed`.
+
+  A file git recognises as renamed, a directory move included, is no loosening when its numbers do not rise
+  (operator ruling 22.10.2026, #149: „ja ja“). The verdict reads the renames between the base and the head commit with `git diff -M50%
+  -l1000` (git's default similarity, whatever the repository's git configuration says; a file git does not pair is new
+  as before). The base's entries and clone sides under the old path then move to the new path, so the head is compared
+  with the entries its predecessor held and a raise or an added symbol still names the head's path; an entry the base
+  holds under the new path is a leftover and does not count. The allowance moves rather than being copied: while the
+  head baseline still names the old path, nothing moves and the new path's entries are adds. A pair whose files moved
+  is the same pair, and a renamed function is a new entry. Without a base nothing is read. `emergency-merge` fetches the same two commits
+  and reads the same renames. `quality baseline write` and `hygiene` name entries and pairs by their current path.
 
   A lowered, equal or removed entry or pair is green, and so is adopting a baseline (the base has none) or having none
   on either side. A `[clones]` table the base lacks is an adoption too: its pairs are not compared, while the size

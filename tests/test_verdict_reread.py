@@ -81,7 +81,7 @@ def test_a_502_jobs_page_is_named_as_githubs(stub_server):
 
 def test_an_unsettled_job_prints_no_failure_and_is_never_green():
     """#85 rule 1 (E1): a judged job GitHub lists as running is unsettled, adds no failure line, and is never green."""
-    result = judge(Side(GateSettings(("checks",), LegacyMode.REPORT), None), None, [running()], GREEN_GATE, 1)
+    result = judge(Side(GateSettings(("checks",), LegacyMode.REPORT), None), None, [running()], GREEN_GATE, 1, {})
     assert (result.unsettled, result.blocking, result.green) == (
         (verdict.Unsettled("checks", 1, "in_progress"),),
         (),

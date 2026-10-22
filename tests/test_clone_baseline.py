@@ -4,10 +4,19 @@ import textwrap
 from pathlib import Path
 
 import pytest
-from conftest import hygiene_output, long_function, put
+from conftest import head_commit, hygiene_output, long_function, put
 from test_clones import function as clone_function
-from test_emergency import ONE_JOB, SONAR_GREEN, FakeGh, declaring, drive
-from test_verdict import MOVABLE_FILE, OLD_ENTRY, ONLY_DECLARED, declaration, moved_in_head, verdict_of
+from test_emergency import ONE_JOB, SONAR_GREEN, declaring, drive
+from test_renames import (
+    OLD_ENTRY,
+    commit_all,
+    entry,
+    file_text,
+    moved_in_head,
+    moves_in_head,
+    pulled,
+)
+from test_verdict import ONLY_DECLARED, declaration, verdict_of
 
 from quality import cli
 from quality.ratchet import (
@@ -112,6 +121,47 @@ def test_a_pair_is_held_under_the_path_its_file_was_renamed_from(pull_request, c
     assert expected in output
 
 
+def pairs_text(*pairs):
+    return render_baseline(Baseline({}, frozenset(pairs)))
+
+
+MOVED_PAIR = ClonePair.of(Place("tests/test_e.py", "run"), Place("tests/test_b.py", "hygiene"))
+BOTH_MOVED_PAIR = ClonePair.of(Place("tests/test_z.py", "run"), Place("tests/test_y.py", "hygiene"))
+NEW_PAIR_LABEL = "tests/test_b.py hygiene <-> tests/test_e.py run"
+
+
+ONE_MOVE = [("tests/test_a.py", "tests/test_e.py")]
+BOTH_MOVES = [("tests/test_a.py", "tests/test_z.py"), ("tests/test_b.py", "tests/test_y.py")]
+
+
+@pytest.mark.parametrize(
+    ("base", "head", "moves", "expected"),
+    [
+        (FIRST, pairs_text(BOTH_MOVED_PAIR), BOTH_MOVES, "verdict: green"),
+        (entry("tests/test_e.py", 99, "run") + FIRST, pairs_text(MOVED_PAIR), ONE_MOVE, "verdict: green"),
+        (FIRST, pairs_text(MOVED_PAIR, SECOND_PAIR), ONE_MOVE, UNDECLARED + f"clone baseline adds {SECOND_LABEL}"),
+        (FIRST, pairs_text(FIRST_PAIR, MOVED_PAIR), ONE_MOVE, UNDECLARED + f"clone baseline adds {NEW_PAIR_LABEL}"),
+    ],
+    ids=["both sides moved so the canonical order flips", "a leftover size entry under the target does not block the move",
+         "a new pair beside a move is an add", "the head keeps the old pair so the moved one is an add"],
+)
+def test_a_pair_moves_with_its_files_by_the_rules_of_the_size_entries(pull_request, capsys, base, head, moves, expected):
+    """#149 cells 13, 16, 17, 18 (R3, rules 1 and 2) for clone pairs."""
+    moves_in_head(pull_request, base, head, moves)
+    assert expected in verdict_of(pull_request[0], capsys)[1]
+
+
+def test_a_moved_pair_is_not_copied_into_a_later_pull_request(pull_request, capsys, monkeypatch):
+    """#149 cell 14 for clone pairs: after the move the base holds no pair under the old path."""
+    repo, _ = pull_request
+    moves_in_head(pull_request, FIRST, pairs_text(MOVED_PAIR), [("tests/test_a.py", "tests/test_e.py")])
+    monkeypatch.setenv("GATE_BASE_SHA", head_commit(repo))
+    put(repo / "tests/test_a.py", file_text("again"))
+    put(repo / BASELINE_PATH, pairs_text(FIRST_PAIR, MOVED_PAIR))
+    commit_all(repo, "recreates the old file")
+    assert UNDECLARED + f"clone baseline adds {FIRST_LABEL}" in verdict_of(repo, capsys)[1]
+
+
 MOVED_ENTRY = OLD_ENTRY.replace("old", "new")
 GROWN_MOVED_ENTRY = MOVED_ENTRY.replace("70", "90")
 MOVED_RAISE = "size baseline raises function_lines src/new.py f 70 -> 90"
@@ -138,34 +188,6 @@ def test_a_raise_in_a_moved_file_is_declared_under_its_head_path(pull_request, c
     assert ONLY_DECLARED in verdict_of(pull_request[0], capsys)[1]
 
 
-@pytest.mark.parametrize("setting", ["renames=false", "renames=copies", "renameLimit=1"])
-def test_a_user_git_config_does_not_change_the_rename_map(pull_request, capsys, monkeypatch, setting):
-    """#149 cell 24 (R4): the flags are explicit, so the map is git's default whatever the user configured."""
-    key, value = setting.split("=")
-    for name, entry in {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": f"diff.{key}", "GIT_CONFIG_VALUE_0": value}.items():
-        monkeypatch.setenv(name, entry)
-    moved_in_head(pull_request, OLD_ENTRY, MOVED_ENTRY, new_text=MOVABLE_FILE + "an edit\n")
-    assert verdict_of(pull_request[0], capsys) == (0, "verdict: green\n")
-
-
-@pytest.mark.parametrize(
-    ("merge_config", "code", "expected"),
-    [
-        (None, 1, "size baseline adds function_lines src/new.py f 70"),
-        (ONE_JOB + declaring("size baseline adds function_lines src/new.py f 70"), 0, "merged."),
-    ],
-    ids=["undeclared is refused", "declared goes on"],
-)
-def test_the_door_has_no_rename_map_so_a_moved_entry_is_an_add_there(capsys, merge_config, code, expected):
-    """#149 cell 22: the door is never looser than the verdict; a rename it must land declares its moved entries."""
-    gh = FakeGh(
-        checks=SONAR_GREEN, base_config=ONE_JOB, merge_config=merge_config, base_baseline=OLD_ENTRY, merge_baseline=MOVED_ENTRY
-    )
-    assert drive(gh)[0] == code
-    assert expected in capsys.readouterr().out
-    assert (len(gh.merge_calls) == 1) == (code == 0)
-
-
 def test_a_size_raise_and_a_clone_add_are_both_named_size_first(pull_request, capsys):
     """#130 E5, cell 10."""
     _, output = judged(pull_request, capsys, SIZE + FIRST, SIZE_RAISED + FIRST + SECOND)
@@ -189,12 +211,11 @@ def test_a_declared_clone_add_is_declared_in_the_verdict(pull_request, capsys):
     assert (code, ONLY_DECLARED in output, UNDECLARED in output) == (1, True, False), output
 
 
-def test_a_declared_clone_add_merges_through_the_door(capsys):
+def test_a_declared_clone_add_merges_through_the_door(capsys, tmp_path):
     """#130 E5, cell 8: the door re-derives the same line from the merge commit and merges."""
     what = f"clone baseline adds {SECOND_LABEL}"
-    gh = FakeGh(
-        checks=SONAR_GREEN, base_config=ONE_JOB, merge_config=ONE_JOB + declaring(what),
-        base_baseline=FIRST, merge_baseline=FIRST + SECOND,
+    gh = pulled(
+        tmp_path, FIRST, FIRST + SECOND, checks=SONAR_GREEN, base_config=ONE_JOB, merge_config=ONE_JOB + declaring(what)
     )
     assert drive(gh)[0] == 0
     assert "merged." in capsys.readouterr().out
@@ -500,3 +521,23 @@ def test_a_control_character_and_undecodable_bytes_in_a_path_print_escaped(build
     code, output = enforced(capsys, build_repo, {"src/c.py": "x = 1\n"}, stale)
     assert code == 1, output
     assert "clone src/a\\x01.py - the baseline holds the pair src/a\\x01.py run <-> src/b.py hygiene" in output
+
+
+@pytest.mark.parametrize(
+    ("merge_config", "code", "expected"),
+    [
+        (ONE_JOB, 1, UNDECLARED + f"clone baseline adds {SECOND_LABEL}"),
+        (ONE_JOB + declaring(f"clone baseline adds {SECOND_LABEL}"), 0, "merged."),
+        (ONE_JOB + declaring(f"clone baseline adds {NEW_PAIR_LABEL}"), 1, UNDECLARED + f"clone baseline adds {SECOND_LABEL}"),
+    ],
+    ids=["undeclared is refused", "declared goes on", "a declaration of another pair is refused"],
+)
+def test_the_door_judges_a_new_pair_beside_a_move_as_the_verdict_does(capsys, tmp_path, merge_config, code, expected):
+    """#149 cell 23b: the moved pair is the same pair, the new one needs its own declaration."""
+    gh = pulled(
+        tmp_path, FIRST, pairs_text(MOVED_PAIR, SECOND_PAIR), ONE_MOVE, checks=SONAR_GREEN, base_config=ONE_JOB,
+        merge_config=merge_config,
+    )
+    assert drive(gh)[0] == code
+    assert expected.replace(UNDECLARED, "") in capsys.readouterr().out
+    assert (len(gh.merge_calls) == 1) == (code == 0)

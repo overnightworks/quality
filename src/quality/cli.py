@@ -12,7 +12,7 @@ from typing import TextIO
 
 from quality import __version__, clones, engines, ratchet, repository, scoreboard, staged
 from quality.config import Allowance, ConfigError, read_gate_settings
-from quality.emergency import Ask, GhRunner, run_emergency_merge, run_gh
+from quality.emergency import Ask, GhRunner, RemoteFor, github_remote, run_emergency_merge, run_gh
 from quality.hygiene import (
     CannotJudge,
     HygieneResult,
@@ -66,6 +66,7 @@ def main(
     transport: Transport = fetch_json,
     sleep: Sleep = time.sleep,
     gh: GhRunner = run_gh,
+    remote_for: RemoteFor = github_remote,
     ask: Ask = input,
     is_terminal: Callable[[], bool] = lambda: sys.stdin.isatty(),
 ) -> int:
@@ -82,6 +83,7 @@ def main(
             now=lambda: datetime.now(UTC),
             environment=os.environ,
             say=emit,
+            remote_for=remote_for,
         )
     if arguments.command == "verdict":
         return run_verdict(arguments.path, fetcher_for, sleep)
@@ -310,7 +312,7 @@ def run_verdict(path: Path, fetcher_for: Callable[[str], PageFetcher], sleep: Sl
         head = read_head(path)
         base_sha = os.environ.get("GATE_BASE_SHA", "")
         base = read_base(path, base_sha) if base_sha else None
-        renames = read_renames(path, base_sha) if base_sha else {}
+        renames = read_renames(path, base_sha, "HEAD") if base_sha else {}
         gate_results = {name: need["result"] for name, need in json.loads(os.environ["GATE_NEEDS"]).items()}
         current_attempt = int(os.environ["GITHUB_RUN_ATTEMPT"])
         repository_name, run_id = os.environ["GITHUB_REPOSITORY"], os.environ["GITHUB_RUN_ID"]

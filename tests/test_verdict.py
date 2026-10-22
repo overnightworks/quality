@@ -35,7 +35,7 @@ def job(name="checks", attempt=1, status="completed", conclusion="success", leg=
 
 def problems(jobs, mandatory=("checks",), base=(), gate=GREEN_GATE, attempt=1, legacy=LegacyMode.REPORT, base_legacy=LegacyMode.REPORT):
     head, base_side = Side(GateSettings(mandatory, legacy), None), Side(GateSettings(base, base_legacy), None)
-    return judge(head, base_side, jobs, gate, attempt).blocking
+    return judge(head, base_side, jobs, gate, attempt, {}).blocking
 
 
 @pytest.mark.parametrize(
@@ -146,7 +146,7 @@ def test_the_legacy_mode_is_read_from_the_base_commit(build_repo):
 def test_switching_legacy_back_from_fail_is_a_loosening(base_legacy, legacy, expected):
     """#33 sentence 4: a head config that is not "fail" under a base config that is shows as loosened and is red"""
     head, base = Side(GateSettings(("checks",), legacy), None), Side(GateSettings(("checks",), base_legacy), None)
-    result = judge(head, base, [job()], GREEN_GATE, 1)
+    result = judge(head, base, [job()], GREEN_GATE, 1, {})
     assert (result.blocking, result.green) == (expected, not expected)
 
 
@@ -341,57 +341,6 @@ def test_the_size_baseline_only_falls_against_the_base(capsys, pull_request, bas
     put(repo / BASELINE_PATH, head)
     actual_code, output = verdict_of(repo, capsys)
     assert (actual_code, expected.format(base=base_sha) in output, "Traceback" in output) == (code, True, False)
-
-
-MOVABLE_FILE = "".join(f"line {number} of a file git can match to its move\n" for number in range(30))
-OTHER_FILE = "".join(f"nothing like the movable file, row {number}\n" for number in range(30))
-OLD_ENTRY = '[function_lines."src/old.py"]\n"f" = 70\n'
-
-
-def moved_in_head(pull_request, base, head, new_text=MOVABLE_FILE, old="src/old.py", new="src/new.py", head_config=None):
-    """The base commit holds `old` and `base`; the head commit moves it to `new` (holding `new_text`) and holds `head`."""
-    repo, commit_base = pull_request
-    put(repo / old, MOVABLE_FILE)
-    commit_base(base)
-    git = ["git", "-C", str(repo), *GIT_IDENTITY]
-    subprocess.run([*git, "mv", old, new], check=True)
-    put(repo / new, new_text)
-    put(repo / BASELINE_PATH, head)
-    if head_config is not None:
-        put(repo / CONFIG_PATH, head_config)
-    subprocess.run([*git, "add", "-A"], check=True)
-    subprocess.run([*git, "commit", "-q", "-m", "head moves the file"], check=True)
-
-
-@pytest.mark.parametrize(
-    ("head", "new_text", "code", "expected"),
-    [
-        (OLD_ENTRY.replace("old", "new"), MOVABLE_FILE, 0, "verdict: green"),
-        (OLD_ENTRY.replace("old", "new").replace("70", "60"), MOVABLE_FILE, 0, "verdict: green"),
-        (OLD_ENTRY.replace("old", "new").replace("70", "90"), MOVABLE_FILE, 1,
-         "size baseline raises function_lines src/new.py f 70 -> 90"),
-        (OLD_ENTRY.replace("old", "new").replace('"f"', '"g"'), MOVABLE_FILE, 1,
-         "size baseline adds function_lines src/new.py g 70"),
-        (OLD_ENTRY.replace("old", "new"), OTHER_FILE, 1, "size baseline adds function_lines src/new.py f 70"),
-        (OLD_ENTRY.replace("old", "new"), MOVABLE_FILE + "an edit\n", 0, "verdict: green"),
-        (OLD_ENTRY.replace("old", "new") + '[ccn."src/split.py"]\n"h" = 16\n', MOVABLE_FILE, 1, "size baseline adds ccn src/split.py h 16"),
-    ],
-    ids=["moved unchanged", "moved and lowered", "moved and grown", "moved and renamed symbol", "moved past git's threshold",
-         "moved and edited within the threshold", "moved next to a split-off file"],
-)
-def test_a_pure_rename_is_no_loosening_but_a_raise_or_a_new_symbol_in_it_is(capsys, pull_request, head, new_text, code, expected):
-    """#149 R1, R2, R4: git's rename detection gives the moved entry its base path; the raise names the head's path."""
-    moved_in_head(pull_request, OLD_ENTRY, head, new_text)
-    actual_code, output = verdict_of(pull_request[0], capsys)
-    assert (actual_code, expected in output, "Traceback" in output) == (code, True, False)
-
-
-def test_a_rename_map_git_cannot_list_cannot_be_judged(capsys, pull_request, fake_git):
-    """#149 R4: fail-closed, the verdict never guesses that nothing was renamed."""
-    moved_in_head(pull_request, OLD_ENTRY, OLD_ENTRY.replace("old", "new"))
-    fake_git('case "$*" in *" diff "*) echo boom >&2; exit 1;; esac')
-    code, output = verdict_of(pull_request[0], capsys)
-    assert (code, "cannot judge - cannot list the files renamed since the base commit" in output, "Traceback" in output) == (2, True, False)
 
 
 @pytest.mark.parametrize(
