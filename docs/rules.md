@@ -218,12 +218,23 @@ reason = "gradio caps pillow<13; no image input"
   makes itself, so only the operator's door merges it. The pull request writes the allowance, so its item, date and
   reason prove nothing alone: the verdict's red and the door are the gate. An `id` that is an alias covers every
   group carrying it in that lock, while the door names the `id` and the lock, not the packages.
-  The operator's rulings of 21.10.2026 on the allowance, and why only the operator's door merges it, stand in
-  [decision 1](decisions/1-loosening-door.md). The rest was shown to him and left unanswered, so it stands at the
+  Why only the operator's door merges it stands in [decision 1](decisions/1-loosening-door.md); his rulings on the
+  allowance follow. The rest was shown to him and left unanswered, so it stands at the
   proposed default and is not his word: the entry's keys, the alias, the date format, the expiry line, the unmatched
   allowance, the adoption, no latest `until`, the printed lines, an advisory without a fixed version and the reach of an
   allowance (#116, E1 to E5 and E8 to E12). The head decided on 21.10.2026 that the allowance carries a `date` (E1) and
   that two entries on one group are red (E2).
+
+For advisories (#116, 21.10.2026), asked whether a repository may allow a known security hole it cannot escape, with a
+reason and a re-check date, and who approves: „Ja, aber nur du gibst frei (empfohlen)“. The ruled sentences:
+
+- R1. Eine Ausnahme steht pro Lücke in `quality/config.toml`, mit Begründung, Item und Datum.
+- R2. Eine neue Ausnahme ist eine Lockerung: der PR bleibt rot, bis deine Tür ihn mergt.
+- R3. Ab dem Merge ist die Lücke grün bis zum Datum, danach wieder rot.
+- R4. Kein Agent kann eine Lücke allein stummschalten. (Bekanntes Restrisiko E10 von #103: Agenten teilen deinen `gh`-Login; die Tür ist der Vertrag, keine Sperre.)
+
+Asked whether a pull request may move the re-check date back without him: „Nein, nur über deine Tür (empfohlen)“. Asked
+whether each new allowance must also be entered as a declared loosening: „Ausnahme erklärt sich selbst (empfohlen)“.
 
 quality downloads the PyPI database itself on every run (about 36 MB, `https://osv-vulnerabilities.storage.googleapis.com/PyPI/all.zip`)
 into the scan's own 0700 scratch directory and runs osv-scanner `--offline` on it, so osv-scanner makes no network call

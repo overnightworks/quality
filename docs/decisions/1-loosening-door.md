@@ -46,13 +46,5 @@ above stays until the machine's setup removes the shared login.
 The rulings on the loosening and the door (D3, E5, E8, E10 of #103, 21.10.2026) stand in
 [gate.md](../gate.md#declared-loosenings).
 
-For advisories (#116, 21.10.2026), asked whether a repository may allow a known security hole it cannot escape, with a
-reason and a re-check date, and who approves: „Ja, aber nur du gibst frei (empfohlen)“. The ruled sentences:
-
-- R1. Eine Ausnahme steht pro Lücke in `quality/config.toml`, mit Begründung, Item und Datum.
-- R2. Eine neue Ausnahme ist eine Lockerung: der PR bleibt rot, bis deine Tür ihn mergt.
-- R3. Ab dem Merge ist die Lücke grün bis zum Datum, danach wieder rot.
-- R4. Kein Agent kann eine Lücke allein stummschalten. (Bekanntes Restrisiko E10 von #103: Agenten teilen deinen `gh`-Login; die Tür ist der Vertrag, keine Sperre.)
-
-Asked whether a pull request may move the re-check date back without him: „Nein, nur über deine Tür (empfohlen)“. Asked
-whether each new allowance must also be entered as a declared loosening: „Ausnahme erklärt sich selbst (empfohlen)“.
+The rulings on advisory allowances (R1-R4 and E6, E7 of #116, 21.10.2026) stand in the `advisory` rule of
+[rules.md](../rules.md).
