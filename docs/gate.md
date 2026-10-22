@@ -45,7 +45,7 @@ Each line has a reason:
 - **The door stops workflow commands for the rest of its step.** gate.yml runs `quality` alone in each of its steps; a
   workflow that runs `quality` itself writes its own workflow commands (`::notice::`, `::group::` or any other) in a separate step.
 - **`secrets: SONAR_TOKEN`** and the optional **`with: coverage-artifact`** are described under
-  [`quality sonar findings`](#quality-sonar-findings) and [Coverage on new code](#coverage-on-new-code).
+  [`quality sonar findings`](sonar.md#quality-sonar-findings) and [Coverage on new code](sonar.md#coverage-on-new-code).
 - **`uses:` pins a commit** (`@<commit sha> # v<tag>`), and Dependabot bumps it where the repository's `.github/dependabot.yml` enables the `github-actions` ecosystem.
 
 The verdict judges the jobs named in `quality/config.toml`:
@@ -65,7 +65,7 @@ mandatory_jobs = ["checks"]
 - On a pull request, removing a job the base config holds is `loosened (undeclared): mandatory job "x" removed`, and the
   base's job is still judged; a declared removal (below) is no longer judged.
 - The gate's own jobs are judged through `needs` (`gate job "sonar" result failure`) and need no entry.
-- `[gate] legacy` is described under [New and legacy findings](#new-and-legacy-findings).
+- `[gate] legacy` is described under [New and legacy findings](sonar.md#new-and-legacy-findings).
 
 The verdict prints `verdict: green` (exit `0`); each problem, then `verdict: red` (exit `1`); or
 `verdict: cannot judge - ...` (exit `2`). When it read the jobs more than once, a first line says so:
@@ -105,7 +105,7 @@ reason = "the operator ruled the requirement shelf machinery out"
   `loosened (declared, overnightworks/songmaker#1345 of 2026-10-20): mandatory job "…" removed`. When nothing else is
   red, the last line is `verdict: red - only declared loosenings: only the operator's quality emergency-merge lands this
   pull request`. No entry approves itself: an agent may write one, but the ruleset and `aco land` still need a green
-  `quality / verdict`, and only [the operator's emergency door](#the-operators-emergency-door) merges.
+  `quality / verdict`, and only [the operator's emergency door](runbook-emergency-merge.md#the-operators-emergency-door) merges.
 - An advisory allowance (`[[advisories.allow]]`, see the `advisory` rule under `quality hygiene`) declares its own
   loosening with its own `item` and `date`, so it needs no `[[gate.loosened]]` entry. An allowance whose `id` and
   `lock` the base lacks prints `loosened (declared, <item> of <date>): advisory allowance adds <id> in <lock> until <until>`; one
@@ -155,10 +155,8 @@ jobs:
 - **Permissions:** the caller grants `security-events: write`, `contents: read` and `actions: read`, and the workflow
   asks for no more. A caller without `security-events: write` is refused at startup.
 - **Updates:** pin `<tag>` to a release; Dependabot's `github-actions` ecosystem bumps it.
-- **Caller path:** a reusable call records the `analysis_key` `<caller file>:analyze` (measured in quality#68), so keep
+- **Caller path:** a reusable call records the `analysis_key` `<caller file>:analyze`, so keep
   the existing caller file's path and the key carries over.
-- **Switch PR:** a caller that fails at startup adds no check to its PR (measured in quality#68: callers on
-  scratch PR #70 ended `startup_failure`/`failure` with no check-run), so the switch PR must show its
+- **Switch PR:** a caller that fails at startup adds no check to its PR, so the switch PR must show its
   `codeql / Analyze (…)` checks.
-- **Switching a repository:** the Default Setup goes off first, in the order of
-  [agent-coordination#138](https://github.com/overnightworks/agent-coordination/issues/138).
+- **Switching a repository:** the Default Setup goes off first.

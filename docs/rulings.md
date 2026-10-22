@@ -3,7 +3,7 @@
 The operator's rulings and the facts and head answers they rest on, harvested from
 overnightworks/marketplace#80 (the fleet quality epic) on 17.10.2026. Quotes are verbatim, in
 the operator's language, with their dates. Nothing here is paraphrased into a stronger claim.
-The roadmap that follows from these rulings is in [roadmap.md](roadmap.md), which also holds the
+The roadmap that followed from these rulings (a document since deleted; recoverable from git at d4d628f) also held the
 later rulings D1 to D3 and the 16.10.2026 rulings in the place where they act.
 
 ## Wish (operator, 14.10.2026, verbatim)
@@ -166,7 +166,7 @@ Head pushback (given in chat):
 
 ## Rulings recorded inside the roadmap
 
-These rulings are quoted verbatim in [roadmap.md](roadmap.md), where they act; this list only points there.
+These rulings were quoted verbatim in the roadmap document, since deleted (recoverable from git at d4d628f); this list only points there.
 - D1, 15.10.2026, ~22:40: „ja a“ (good suites, roadmap section B).
 - D2, 15.10.2026, ~22:45: „ja a“, then „am besten Dienst löschen und Repo lokal löschen“ (atelier-2 archived, roadmap section E).
 - D3, 15.10.2026, ~22:55: „die Grenzen sind Fantasiewerte von mir! nichts ist zwingend, neue Teststrategie wins“ (coverage floors, roadmap section 0, row 7).

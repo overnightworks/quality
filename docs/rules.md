@@ -25,7 +25,7 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   (or its position for a character YAML refuses, `nested too deeply`, `a value does not fit its tag`, or `not valid
   YAML`). A port that is neither text, a number nor a mapping whose `published` (or, without one, `target`) is text or
   a number is a finding. A service with `network_mode: host` publishes whatever its process binds, and this rule does
-  not check that yet (an allowlist follows in Q1b-3g).
+  not check that.
 - `size`: every tracked file of Python, TypeScript (`.ts` `.tsx` `.mts` `.cts`), JavaScript (`.js` `.jsx` `.mjs`
   `.cjs`), Svelte or Vue is measured by its lines, and every tracked `*.py` file also with
   [lizard](https://github.com/terryyin/lizard): a file from 800 lines, a Python function from 60 lines and a Python
@@ -126,7 +126,7 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   name or a SHA: `HEAD~1` or `-x` is exit `2` (`... is not a ref name or a SHA`) before git runs. Outside a pull
   request (push, `merge_group`, `workflow_dispatch`) `gate.yml` passes no base, so the base is never read and only
   `hygiene` holds the tree. A lizard update that measures a function higher therefore turns the pull request that
-  takes it red; a ruled raise is declared (see [Declared loosenings](#declared-loosenings)) and stays red until the
+  takes it red; a ruled raise is declared (see [Declared loosenings](gate.md#declared-loosenings)) and stays red until the
   operator's door merges it.
 
 With `--engines DIR` the `secret` rule also scans the whole history reachable from `HEAD` with gitleaks (a key removed later is still found; other branches the checkout fetched are not scanned), always with quality's own config
@@ -195,7 +195,7 @@ reason = "gradio caps pillow<13; no image input"
   needs an entry per name. Two entries matching one group in one lock (its GHSA and its CVE id) are a finding at
   `quality/config.toml` naming both, and the group is allowed by neither.
 - `until` is the re-check date and `date` the day of the ruling, both TOML dates without a time; `item` and `reason`
-  are as in a [declared loosening](#declared-loosenings). The allowance holds through `until` (in UTC) and the advisory
+  are as in a [declared loosening](gate.md#declared-loosenings). The allowance holds through `until` (in UTC) and the advisory
   is red again from the next day: `advisory <lock> - osv-scanner <id> (<aliases>): PyPI <package> <version> is
   affected; its allowance ran out on <until> (<item>).` quality sets no latest `until`, and an advisory with no fixed
   version is allowed like any other.
@@ -208,7 +208,7 @@ reason = "gradio caps pillow<13; no image input"
   `#<n>` or `<owner>/<repo>#<n>`, an `until` or `date` that is text or carries a time, two entries for one `id` and
   `lock`, or an unknown key in `[advisories]`) is exit `2` in the `advisory` and `secret` rules and in `verdict`,
   naming the entry; `scan-staged` reads only `[secrets]`.
-- A new allowance, and one whose `until` moves later, is a [declared loosening](#declared-loosenings) the allowance
+- A new allowance, and one whose `until` moves later, is a [declared loosening](gate.md#declared-loosenings) the allowance
   makes itself, so only the operator's door merges it. The pull request writes the allowance, so its item, date and
   reason prove nothing alone: the verdict's red and the door are the gate. An `id` that is an alias covers every
   group carrying it in that lock, while the door names the `id` and the lock, not the packages.

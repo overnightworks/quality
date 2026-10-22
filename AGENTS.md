@@ -24,7 +24,7 @@ Door commands:
 
 `.github/workflows/codeql.yml` is the reusable CodeQL workflow (input `languages`); `code-scanning.yml` is quality's own caller of it.
 
-`.github/workflows/gate.yml` is the reusable gate; its caller contract stands in the README's `gate.yml` section and in the file's header.
+`.github/workflows/gate.yml` is the reusable gate; its caller contract stands in `docs/gate.md` and in the file's header.
 
 quality's own layers are an import-linter contract in `pyproject.toml` (`[tool.importlinter]`); `quality hygiene .`
 enforces it, so a module imports only from the layers below its own.
@@ -32,7 +32,7 @@ enforces it, so a module imports only from the layers below its own.
 Config, hygiene, `sonar findings` and the verdict read the checkout's own files only through `repository.py`, which keeps each read
 inside the repository and names the file repository-relative in every error.
 
-Roadmap and the operator's rulings: `docs/roadmap.md`, `docs/rulings.md`.
+The operator's rulings: `docs/rulings.md`.
 
 Checks (all targeted, run from the repo root):
 

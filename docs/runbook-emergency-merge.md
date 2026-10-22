@@ -2,12 +2,12 @@
 
 Runbook for the operator who merges a pull request past the gate with `quality emergency-merge`.
 
-### The operator's emergency door
+## The operator's emergency door
 
 Two red pull requests have no other way to land. Under `legacy = "fail"`, main can gain a finding without any pull
 request introducing it (a taint finding on an unchanged line, a SonarCloud rule-profile update); then every pull request
 is red, including the fixing one, and switching `legacy` back is red too. And a pull request that loosens the gate as the
-operator ruled stays red for its [declared loosenings](#declared-loosenings). Both land through the operator's door,
+operator ruled stays red for its [declared loosenings](gate.md#declared-loosenings). Both land through the operator's door,
 one command (quality#37, quality#103):
 
 ```
