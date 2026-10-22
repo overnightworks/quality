@@ -348,7 +348,7 @@ OTHER_FILE = "".join(f"nothing like the movable file, row {number}\n" for number
 OLD_ENTRY = '[function_lines."src/old.py"]\n"f" = 70\n'
 
 
-def moved_in_head(pull_request, base, head, new_text=MOVABLE_FILE, old="src/old.py", new="src/new.py"):
+def moved_in_head(pull_request, base, head, new_text=MOVABLE_FILE, old="src/old.py", new="src/new.py", head_config=None):
     """The base commit holds `old` and `base`; the head commit moves it to `new` (holding `new_text`) and holds `head`."""
     repo, commit_base = pull_request
     put(repo / old, MOVABLE_FILE)
@@ -357,6 +357,8 @@ def moved_in_head(pull_request, base, head, new_text=MOVABLE_FILE, old="src/old.
     subprocess.run([*git, "mv", old, new], check=True)
     put(repo / new, new_text)
     put(repo / BASELINE_PATH, head)
+    if head_config is not None:
+        put(repo / CONFIG_PATH, head_config)
     subprocess.run([*git, "add", "-A"], check=True)
     subprocess.run([*git, "commit", "-q", "-m", "head moves the file"], check=True)
 
@@ -371,8 +373,11 @@ def moved_in_head(pull_request, base, head, new_text=MOVABLE_FILE, old="src/old.
         (OLD_ENTRY.replace("old", "new").replace('"f"', '"g"'), MOVABLE_FILE, 1,
          "size baseline adds function_lines src/new.py g 70"),
         (OLD_ENTRY.replace("old", "new"), OTHER_FILE, 1, "size baseline adds function_lines src/new.py f 70"),
+        (OLD_ENTRY.replace("old", "new"), MOVABLE_FILE + "an edit\n", 0, "verdict: green"),
+        (OLD_ENTRY.replace("old", "new") + '[ccn."src/split.py"]\n"h" = 16\n', MOVABLE_FILE, 1, "size baseline adds ccn src/split.py h 16"),
     ],
-    ids=["moved unchanged", "moved and lowered", "moved and grown", "moved and renamed symbol", "moved past git's threshold"],
+    ids=["moved unchanged", "moved and lowered", "moved and grown", "moved and renamed symbol", "moved past git's threshold",
+         "moved and edited within the threshold", "moved next to a split-off file"],
 )
 def test_a_pure_rename_is_no_loosening_but_a_raise_or_a_new_symbol_in_it_is(capsys, pull_request, head, new_text, code, expected):
     """#149 R1, R2, R4: git's rename detection gives the moved entry its base path; the raise names the head's path."""

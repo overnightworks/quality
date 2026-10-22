@@ -24,8 +24,9 @@ from quality.ratchet import (
     Metric,
     Place,
     RaisedEntry,
+    added_pairs,
+    comparison_identities,
     load_baseline,
-    moved_forward,
     raised_entries,
     render_baseline,
 )
@@ -491,27 +492,33 @@ def test_only_a_raised_or_added_entry_loosens_the_baseline(base, head, expected)
 
 
 @pytest.mark.parametrize(
-    ("renames", "moved_paths"),
+    ("renames", "head_paths", "expected"),
     [
-        ({"a.py": "c.py"}, ["b.py", "c.py"]),
-        ({"a.py": "b.py"}, ["a.py", "b.py"]),
-        ({"a.py": "b.py", "b.py": "c.py"}, ["b.py", "c.py"]),
-        ({"x.py": "y.py"}, ["a.py", "b.py"]),
+        ({"a.py": "c.py"}, ["c.py"], {"c.py": "a.py"}),
+        ({"a.py": "c.py"}, ["c.py", "a.py"], {}),
+        ({"a.py": "b.py", "b.py": "a.py"}, ["a.py", "b.py"], {"b.py": "a.py", "a.py": "b.py"}),
+        ({"a.py": "b.py", "b.py": "c.py"}, ["b.py", "c.py"], {"b.py": "a.py", "c.py": "b.py"}),
+        ({"a.py": "c.py"}, ["d.py"], {"c.py": "a.py"}),
     ],
-    ids=["a rename", "onto a file the baseline holds separately is none", "a chain moves both", "a file the baseline lacks"],
+    ids=["a rename", "an old path reused by another entry", "a swap", "a chain", "a rename without entries"],
 )
-def test_a_renamed_file_moves_its_entries_and_clone_sides_but_never_onto_another_file(renames, moved_paths):
-    """#149 R1, R3: entries follow git's renames, and two files' entries never collapse onto one key."""
-    one, other = Key(Metric.CCN, "a.py", "f"), Key(Metric.CCN, "b.py", "f")
-    pair = ClonePair.of(Place("a.py", "f"), Place("b.py", "f"))
-    moved = moved_forward(Baseline({one: 16, other: 17}, frozenset({pair})), renames)
-    assert sorted({key.path for key in moved.size}) == moved_paths
-    assert len(moved.size) == 2
-    assert sorted({place.path for held in moved.clones for place in (held.first, held.second)}) == moved_paths
+def test_a_renamed_path_is_compared_under_its_old_path_unless_another_entry_occupies_it(renames, head_paths, expected):
+    """#149 R1: one simultaneous map; a collision leaves the renamed path under its own head path."""
+    head = Baseline({Key(Metric.CCN, path, "f"): 16 for path in head_paths}, None)
+    assert comparison_identities(renames, head) == expected
 
 
-def test_moving_a_baseline_without_a_clone_table_keeps_it_without_one():
-    assert moved_forward(Baseline({}, None), {"a.py": "b.py"}).clones is None
+def test_a_raise_and_a_new_pair_are_named_at_the_head_path_and_held_against_the_identity():
+    """#149 R1-R3: the lookup uses the identity, the finding keeps the head key."""
+    identities = {"b.py": "a.py"}
+    grown, moved, other = Key(Metric.CCN, "b.py", "f"), Key(Metric.CCN, "b.py", "g"), Key(Metric.CCN, "a.py", "f")
+    base = {Key(Metric.CCN, "a.py", "f"): 16, Key(Metric.CCN, "a.py", "g"): 16}
+    assert raised_entries(base, {grown: 17, moved: 16}, identities) == [RaisedEntry(grown, 16, 17)]
+    assert raised_entries(base, {other: 16}, {"b.py": "a.py"}) == []
+    held = ClonePair.of(Place("a.py", "f"), Place("z.py", "g"))
+    assert added_pairs(frozenset({held}), frozenset({ClonePair.of(Place("b.py", "f"), Place("z.py", "g"))}), identities) == []
+    new = ClonePair.of(Place("b.py", "h"), Place("z.py", "g"))
+    assert added_pairs(frozenset({held}), frozenset({new}), identities) == [new]
 
 
 def test_a_key_with_quotes_or_unicode_matches_itself_exactly():

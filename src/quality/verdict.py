@@ -23,8 +23,8 @@ from quality.ratchet import (
     Baseline,
     SizeError,
     added_pairs,
+    comparison_identities,
     load_baseline,
-    moved_forward,
     raised_entries,
 )
 
@@ -143,7 +143,7 @@ def judge(
     renames: Mapping[str, str] = MappingProxyType({}),
 ) -> Verdict:
     """Without a base (a push, a merge group) no loosening and no declaration is judged; a declared removal of a
-    mandatory job leaves that job unjudged. `renames` maps a path the head renamed to its new one."""
+    mandatory job leaves that job unjudged. `renames` maps a base path git renamed to its head path."""
     failures = [f'gate job "{name}" result {result}' for name, result in gate_results.items() if result != SUCCESS]
     loosenings, stale = ((), ()) if base is None else _loosenings(head, base, renames)
     declared = {loosening.what for loosening in loosenings if loosening.declaration is not None}
@@ -200,8 +200,8 @@ def _removal(name: str) -> str:
 def _baseline_loosenings(base: Baseline | None, head: Baseline | None, renames: Mapping[str, str]) -> list[str]:
     """Without a base baseline any head one is adoption; with one, the head may only lower or drop entries and pairs.
 
-    The base is read under the paths the head renamed its files to, so a moved file is the same entry and a raise in it
-    names the head's path.
+    A head entry in a file git renamed is held against the base entry under the old path; it is still named, and
+    declared, under its head path.
 
     A base `[clones]` table is held the same way: the head keeps it, and a base without one lets the head introduce it.
     """
@@ -209,13 +209,13 @@ def _baseline_loosenings(base: Baseline | None, head: Baseline | None, renames: 
         return []
     if head is None:
         return [f"{BASELINE_PATH} removed"]
-    base = moved_forward(base, renames)
-    lines = [f"size baseline {entry.describe()}" for entry in raised_entries(base.size, head.size)]
+    identities = comparison_identities(renames, head)
+    lines = [f"size baseline {entry.describe()}" for entry in raised_entries(base.size, head.size, identities)]
     if base.clones is None:
         return lines
     if head.clones is None:
         return [*lines, "clone baseline removed"]
-    return [*lines, *(f"clone baseline adds {pair.label}" for pair in added_pairs(base.clones, head.clones))]
+    return [*lines, *(f"clone baseline adds {pair.label}" for pair in added_pairs(base.clones, head.clones, identities))]
 
 
 def _judge_job(name: str, jobs: list[Job], current_attempt: int) -> tuple[Unsettled | None, list[str]]:
@@ -457,7 +457,10 @@ def read_renames(repo: Path, base_sha: str) -> dict[str, str]:
     _require_safe_ref(base_sha)
     try:
         listed = engines.git(
-            ["-C", str(repo.resolve()), "diff", "-M", "--name-status", "-z", "--end-of-options", base_sha, "HEAD", "--"],
+            [
+                "-C", str(repo.resolve()), "diff", "-M50%", "-l1000", "--no-color", "--name-status", "-z",
+                "--end-of-options", base_sha, "HEAD", "--",
+            ],
             f"cannot list the files renamed since the base commit {base_sha}",
         )
     except engines.EngineError as error:
@@ -466,15 +469,13 @@ def read_renames(repo: Path, base_sha: str) -> dict[str, str]:
 
 
 def _renames_of(name_status: str) -> dict[str, str]:
-    """`git diff --name-status -z` records: a status, then one path, or two for a rename."""
+    """`git diff --name-status -z` records: a status, then one path, or two for a rename or a copy; only a rename counts."""
     fields = iter(name_status.split("\0")[:-1])
     renames = {}
     for status in fields:
-        if status.startswith("R"):
-            old, new = next(fields), next(fields)
-            renames[old] = new
-        else:
-            next(fields)
+        paths = [next(fields), *([next(fields)] if status[0] in "RC" else [])]
+        if status[0] == "R":
+            renames[paths[0]] = paths[1]
     return renames
 
 

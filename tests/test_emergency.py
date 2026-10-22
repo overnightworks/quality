@@ -26,9 +26,6 @@ NO_USABLE_METHOD = "emergency-merge: not merged - the repository and its branch 
 FIXED_NOW = datetime(2026, 10, 17, 12, 0, tzinfo=UTC)
 BASELINE_82 = '[function_lines."src/quality/cli.py"]\n"main" = 82\n'
 BASELINE_90 = BASELINE_82.replace("82", "90")
-RENAME = {"status": "renamed", "filename": "src/new.py", "previous_filename": "src/old.py"}
-BASELINE_OLD = '[function_lines."src/old.py"]\n"f" = 70\n'
-MOVED = BASELINE_OLD.replace("old", "new")
 ONE_JOB = '[gate]\nmandatory_jobs = ["checks"]\n'
 TWO_JOBS = '[gate]\nmandatory_jobs = ["checks", "B"]\n'
 B_REMOVED = 'mandatory job "B" removed'
@@ -60,13 +57,13 @@ class FakeGh:
     def __init__(
         self, admin=True, checks=None, statuses=None, state="open", fail_on=(), interrupt_on=(), merge_lands=False,
         head_config=GATE_CONFIG, base_config=GATE_CONFIG, merge_config=None, merge_sha=MERGE_SHA,
-        base_baseline=None, merge_baseline=None, extra_runs=(), settings=None, rules=((),), base_ref="main", rules_error=None, rules_raw=None, compare_files=(), changed_files=None, compare_raw=None,
+        base_baseline=None, merge_baseline=None, extra_runs=(), settings=None, rules=((),), base_ref="main", rules_error=None, rules_raw=None,
     ):
         self.admin, self.state, self.fail_on, self.merge_lands = admin, state, set(fail_on), merge_lands
         self.interrupt_on = list(interrupt_on)
         self.settings = ALL_METHODS_ALLOWED if settings is None else settings
         self.rules, self.base_ref, self.rules_error, self.rules_raw = rules, base_ref, rules_error, rules_raw
-        self.merge_sha, self.compare_files, self.compare_raw, self.changed_files = merge_sha, list(compare_files), compare_raw, changed_files
+        self.merge_sha = merge_sha
         self.files = {
             (CONFIG_PATH, SHA): head_config,
             (CONFIG_PATH, BASE_SHA): base_config,
@@ -98,7 +95,7 @@ class FakeGh:
     def step_of(arguments):
         text = " ".join(arguments)
         for marker, step in (
-            ("check-runs", "checks"), ("/compare/", "compare"), ("/status", "statuses"), ("contents/", "config"), ("/pulls/", "pull"),
+            ("check-runs", "checks"), ("/status", "statuses"), ("contents/", "config"), ("/pulls/", "pull"),
             ("/rules/branches/", "rules"), ("properties/values", "gate"), ("pr merge", "merge"), ("/comments", "comment"), ("--jq .login", "login"),
         ):
             if marker in text:
@@ -113,9 +110,7 @@ class FakeGh:
 
     def answer(self, step, arguments, stdin):
         if step == "pull":
-            return json.dumps({"state": self.state, "merged": self.merged, "head": {"sha": SHA}, "base": {"sha": BASE_SHA, "ref": self.base_ref}, "merge_commit_sha": self.merge_sha, "changed_files": len(self.compare_files) if self.changed_files is None else self.changed_files})
-        if step == "compare":
-            return json.dumps([{"files": self.compare_files}]) if self.compare_raw is None else self.compare_raw
+            return json.dumps({"state": self.state, "merged": self.merged, "head": {"sha": SHA}, "base": {"sha": BASE_SHA, "ref": self.base_ref}, "merge_commit_sha": self.merge_sha})
         if step == "checks":
             return "\n".join(
                 json.dumps({"name": name, "status": "in_progress" if result is None else "completed", "conclusion": result})
@@ -560,22 +555,18 @@ def test_ctrl_c_while_posting_the_log_comment_is_reported(restore_fails, capsys)
 
 
 @pytest.mark.parametrize(
-    ("base_baseline", "merge_baseline", "compare_files", "code", "message"),
+    ("base_baseline", "merge_baseline", "code", "message"),
     [
-        (BASELINE_82, BASELINE_90, (), 1, "loosened (undeclared): size baseline raises function_lines src/quality/cli.py main 82 -> 90"),
-        (BASELINE_82, BASELINE_82, (), 0, "merged."),
-        (BASELINE_82, None, (), 1, "loosened (undeclared): quality/baseline.toml removed"),
-        (None, None, (), 0, "merged."),
-        (BASELINE_OLD, MOVED, [RENAME], 0, "merged."),
-        (BASELINE_OLD, MOVED.replace("70", "90"), [RENAME], 1, "size baseline raises function_lines src/new.py f 70 -> 90"),
-        (BASELINE_OLD, MOVED.replace('"f"', '"g"'), [RENAME], 1, "size baseline adds function_lines src/new.py g 70"),
+        (BASELINE_82, BASELINE_90, 1, "loosened (undeclared): size baseline raises function_lines src/quality/cli.py main 82 -> 90"),
+        (BASELINE_82, BASELINE_82, 0, "merged."),
+        (BASELINE_82, None, 1, "loosened (undeclared): quality/baseline.toml removed"),
+        (None, None, 0, "merged."),
     ],
-    ids=["cell 20 raised", "cell 21 equal", "cell 22 removed at the merge commit", "cell 23 absent at both",
-         "#149 a moved file unchanged", "#149 a moved file grown", "#149 a moved file with a renamed symbol"],
+    ids=["cell 20 raised", "cell 21 equal", "cell 22 removed at the merge commit", "cell 23 absent at both"],
 )
-def test_the_door_refuses_a_baseline_loosening_next_to_legacy_red(base_baseline, merge_baseline, compare_files, code, message, capsys):
-    """#48 rule 6, cells 20-23 and #149 R1, R2: the door judges the baseline at the merge commit as the verdict does."""
-    gh = FakeGh(base_baseline=base_baseline, merge_baseline=merge_baseline, compare_files=compare_files)
+def test_the_door_refuses_a_baseline_loosening_next_to_legacy_red(base_baseline, merge_baseline, code, message, capsys):
+    """#48 rule 6, cells 20-23: the door judges the baseline at the merge commit against base, as the verdict does."""
+    gh = FakeGh(base_baseline=base_baseline, merge_baseline=merge_baseline)
     assert drive(gh)[0] == code
     assert message in capsys.readouterr().out
     assert (gh.merge_calls == []) == (code == 1)

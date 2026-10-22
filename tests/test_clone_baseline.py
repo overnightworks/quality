@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 from conftest import hygiene_output, long_function, put
 from test_clones import function as clone_function
-from test_emergency import BASELINE_OLD, ONE_JOB, RENAME, SONAR_GREEN, FakeGh, changed_nothing, declaring, drive
-from test_verdict import ONLY_DECLARED, declaration, moved_in_head, verdict_of
+from test_emergency import ONE_JOB, SONAR_GREEN, FakeGh, declaring, drive
+from test_verdict import MOVABLE_FILE, OLD_ENTRY, ONLY_DECLARED, declaration, moved_in_head, verdict_of
 
 from quality import cli
 from quality.ratchet import (
@@ -112,26 +112,58 @@ def test_a_pair_is_held_under_the_path_its_file_was_renamed_from(pull_request, c
     assert expected in output
 
 
+MOVED_ENTRY = OLD_ENTRY.replace("old", "new")
+GROWN_MOVED_ENTRY = MOVED_ENTRY.replace("70", "90")
+MOVED_RAISE = "size baseline raises function_lines src/new.py f 70 -> 90"
+
+
 @pytest.mark.parametrize(
-    ("arrangement", "message"),
+    ("base", "head", "expected"),
     [
-        ({"compare_files": [{"status": "modified", "filename": f"f{n}"} for n in range(300)]}, "never lists 300 or more"),
-        ({"compare_files": [RENAME], "changed_files": 2}, "lists 1 of the pull request's 2 changed files"),
-        ({"compare_raw": "{}"}, "is malformed"),
-        ({"compare_raw": "not json"}, "is malformed"),
-        ({"compare_raw": '[{"files": [{"status": "renamed"}]}]'}, "is malformed"),
-        ({"changed_files": "2"}, "is malformed"),
-        ({"fail_on": ["compare"]}, "cannot read the compare of"),
+        (None, MOVED_ENTRY, "verdict: green"),
+        (OLD_ENTRY, MOVED_ENTRY + FIRST, "verdict: green"),
+        (OLD_ENTRY + FIRST, MOVED_ENTRY, UNDECLARED + "clone baseline removed"),
     ],
-    ids=["truncated at 300", "fewer files than the pull request", "not a list of pages", "not JSON", "a rename without its old name",
-         "a count that is no number", "gh fails"],
+    ids=["the baseline adopted", "the clone table adopted", "the clone table removed"],
 )
-def test_a_compare_that_hides_renames_cannot_be_judged_and_changes_nothing(arrangement, message, capsys):
-    """#149 R4: the door cannot judge with a rename map it cannot trust, and it has not touched the gate or the merge."""
-    gh = FakeGh(base_baseline=BASELINE_OLD, merge_baseline=BASELINE_OLD, **arrangement)
-    assert drive(gh)[0] == 2
-    assert message in capsys.readouterr().out
-    changed_nothing(gh)
+def test_adopting_or_dropping_a_table_next_to_a_move_judges_as_without_one(pull_request, capsys, base, head, expected):
+    """#149 cells 18-20."""
+    moved_in_head(pull_request, base, head)
+    assert expected in verdict_of(pull_request[0], capsys)[1]
+
+
+def test_a_raise_in_a_moved_file_is_declared_under_its_head_path(pull_request, capsys):
+    """#149 cell 21: the declaration matches the line, which names the head path."""
+    moved_in_head(pull_request, OLD_ENTRY, GROWN_MOVED_ENTRY, head_config=ONE_JOB + declaration(MOVED_RAISE))
+    assert ONLY_DECLARED in verdict_of(pull_request[0], capsys)[1]
+
+
+@pytest.mark.parametrize("setting", ["renames=false", "renames=copies", "renameLimit=1"])
+def test_a_user_git_config_does_not_change_the_rename_map(pull_request, capsys, monkeypatch, setting):
+    """#149 cell 24 (R4): the flags are explicit, so the map is git's default whatever the user configured."""
+    key, value = setting.split("=")
+    for name, entry in {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": f"diff.{key}", "GIT_CONFIG_VALUE_0": value}.items():
+        monkeypatch.setenv(name, entry)
+    moved_in_head(pull_request, OLD_ENTRY, MOVED_ENTRY, new_text=MOVABLE_FILE + "an edit\n")
+    assert verdict_of(pull_request[0], capsys) == (0, "verdict: green\n")
+
+
+@pytest.mark.parametrize(
+    ("merge_config", "code", "expected"),
+    [
+        (None, 1, "size baseline adds function_lines src/new.py f 70"),
+        (ONE_JOB + declaring("size baseline adds function_lines src/new.py f 70"), 0, "merged."),
+    ],
+    ids=["undeclared is refused", "declared goes on"],
+)
+def test_the_door_has_no_rename_map_so_a_moved_entry_is_an_add_there(capsys, merge_config, code, expected):
+    """#149 cell 22: the door is never looser than the verdict; a rename it must land declares its moved entries."""
+    gh = FakeGh(
+        checks=SONAR_GREEN, base_config=ONE_JOB, merge_config=merge_config, base_baseline=OLD_ENTRY, merge_baseline=MOVED_ENTRY
+    )
+    assert drive(gh)[0] == code
+    assert expected in capsys.readouterr().out
+    assert (len(gh.merge_calls) == 1) == (code == 0)
 
 
 def test_a_size_raise_and_a_clone_add_are_both_named_size_first(pull_request, capsys):

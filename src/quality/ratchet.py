@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from enum import Enum
 from operator import attrgetter
 from pathlib import PurePosixPath
+from types import MappingProxyType
 from typing import NamedTuple, Self
 
 import lizard
@@ -352,39 +353,49 @@ class RaisedEntry:
         return f"raises {self.key.label} {self.base} -> {self.head}"
 
 
-def moved_forward(baseline: Baseline, renames: Mapping[str, str]) -> Baseline:
-    """The baseline with every renamed file's entries and clone sides under the file's new path, symbols unchanged.
+def comparison_identities(renames: Mapping[str, str], head: Baseline) -> dict[str, str]:
+    """Each head path git renamed, mapped to the base path it is compared under; every other path stands for itself.
 
-    `renames` maps an old path to its new one. A rename onto a path the baseline holds as another file, which is not
-    itself renamed away, is no rename: the two files' entries never collapse onto one key.
+    `renames` maps a base path to the head path git paired it with. A renamed path whose old path some other head entry
+    still occupies keeps its own head path, so its entries are adds and no entry meets another file's allowance.
     """
-    held = {key.path for key in baseline.size} | {
-        place.path for pair in baseline.clones or () for place in (pair.first, pair.second)
+    paths = {key.path for key in head.size} | {
+        place.path for pair in head.clones or () for place in (pair.first, pair.second)
     }
-    moves = {old: new for old, new in renames.items() if old in held and (new not in held or new in renames)}
-
-    def moved(place: Place) -> Place:
-        return Place(moves.get(place.path, place.path), place.symbol)
-
-    size = {Key(key.metric, moves.get(key.path, key.path), key.symbol): value for key, value in baseline.size.items()}
-    clones = None if baseline.clones is None else frozenset(
-        ClonePair.of(moved(pair.first), moved(pair.second)) for pair in baseline.clones
-    )
-    return Baseline(size, clones)
+    occupied = paths - set(renames.values())
+    return {new: old for old, new in renames.items() if old not in occupied}
 
 
-def raised_entries(base: SizeEntries, head: SizeEntries) -> list[RaisedEntry]:
-    """One baseline against another: an entry may fall or go, never rise or appear; a renamed symbol is a new one."""
+NO_IDENTITIES: Mapping[str, str] = MappingProxyType({})
+
+
+def raised_entries(base: SizeEntries, head: SizeEntries, identities: Mapping[str, str] = NO_IDENTITIES) -> list[RaisedEntry]:
+    """One baseline against another: an entry may fall or go, never rise or appear; a renamed symbol is a new one.
+
+    A head entry is held against the base entry of its metric and symbol under its identity path; it keeps its own key.
+    """
+    held = {key: base.get(key._replace(path=identities.get(key.path, key.path))) for key in head}
     return [
-        RaisedEntry(key, base.get(key), head[key])
+        RaisedEntry(key, held[key], head[key])
         for key in sorted(head, key=_order)
-        if key not in base or head[key] > base[key]
+        if held[key] is None or head[key] > held[key]
     ]
 
 
-def added_pairs(base: frozenset[ClonePair], head: frozenset[ClonePair]) -> list[ClonePair]:
-    """The pairs only the head holds, in the order the file and the lines name them; a removed pair is no loosening."""
-    return sorted(head - base)
+def added_pairs(
+    base: frozenset[ClonePair], head: frozenset[ClonePair], identities: Mapping[str, str] = NO_IDENTITIES
+) -> list[ClonePair]:
+    """The pairs only the head holds, in the order the file and the lines name them; a removed pair is no loosening.
+
+    A head pair is held when the base holds it with both sides under their identity paths.
+    """
+
+    def under_identity(place: Place) -> Place:
+        return place._replace(path=identities.get(place.path, place.path))
+
+    return sorted(
+        pair for pair in head if ClonePair.of(under_identity(pair.first), under_identity(pair.second)) not in base
+    )
 
 
 def _finding(key: Key, measured: Measured, verdict: str, fix: str) -> Finding:
