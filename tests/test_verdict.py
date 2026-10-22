@@ -395,7 +395,7 @@ def test_a_base_git_refuses_to_read_is_worded_without_git_stderr_or_the_checkout
     commit_base(main_lines(82))
     monkeypatch.setenv("GATE_BASE_SHA", "f" * 40)
     code, output = verdict_of(repo, capsys)
-    assert (code, "git exited " in output, "fatal:" in output, str(repo) in output) == (2, True, False, False)
+    assert (code, f"cannot read the base commit {'f' * 40}: git exited 128" in output, "fatal:" in output) == (2, True, False)
 
 
 def test_a_head_baseline_that_links_out_of_the_repository_cannot_be_judged(capsys, pull_request, elsewhere):
