@@ -102,6 +102,16 @@ def test_the_script_refuses_a_head_that_origin_main_does_not_hold(release_checko
     assert "FAIL on origin/main" in done.stdout
 
 
+def test_the_script_refuses_when_origin_cannot_be_fetched_even_if_the_cached_main_holds_head(
+    release_checkout, tmp_path
+):
+    git(release_checkout, "fetch", "-q", "origin", "main")
+    git(release_checkout, "remote", "set-url", "origin", str(tmp_path / "missing.git"))
+    done = run_script(release_checkout, "v0.0.1")
+    assert done.returncode == 1
+    assert "FAIL on origin/main" in done.stdout
+
+
 @pytest.mark.parametrize("arguments", [[], ["v1.2.3", "v1.2.4"]], ids=["no tag", "two tags"])
 def test_the_script_prints_a_usage_line_and_exits_2_for_other_than_one_tag(tmp_path, arguments):
     done = run_script(tmp_path, *arguments)
