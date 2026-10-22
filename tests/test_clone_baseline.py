@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 from conftest import hygiene_output, long_function, put
 from test_clones import function as clone_function
-from test_emergency import ONE_JOB, SONAR_GREEN, FakeGh, declaring, drive
-from test_verdict import ONLY_DECLARED, declaration, verdict_of
+from test_emergency import BASELINE_OLD, ONE_JOB, RENAME, SONAR_GREEN, FakeGh, changed_nothing, declaring, drive
+from test_verdict import ONLY_DECLARED, declaration, moved_in_head, verdict_of
 
 from quality import cli
 from quality.ratchet import (
@@ -97,6 +97,41 @@ def test_the_clone_baseline_only_falls_against_the_base(pull_request, capsys, ba
     assert (actual_code, expected in output) == (code, True), output
     if expected == UNDECLARED + f"{BASELINE_PATH} removed":
         assert "clone baseline removed" not in output
+
+
+@pytest.mark.parametrize(
+    ("moved_symbol", "expected"),
+    [("run", "verdict: green"), ("walk", UNDECLARED + "clone baseline adds tests/test_b.py hygiene <-> tests/test_e.py walk")],
+    ids=["a pair whose side only moved is the same pair", "a moved side with a renamed function is a new pair"],
+)
+def test_a_pair_is_held_under_the_path_its_file_was_renamed_from(pull_request, capsys, moved_symbol, expected):
+    """#149 R3: the moved side keeps its symbol, so only a renamed function makes a new pair."""
+    head = render_baseline(Baseline({}, frozenset({ClonePair.of(Place("tests/test_e.py", moved_symbol), Place("tests/test_b.py", "hygiene"))})))
+    moved_in_head(pull_request, FIRST, head, old="tests/test_a.py", new="tests/test_e.py")
+    _, output = verdict_of(pull_request[0], capsys)
+    assert expected in output
+
+
+@pytest.mark.parametrize(
+    ("arrangement", "message"),
+    [
+        ({"compare_files": [{"status": "modified", "filename": f"f{n}"} for n in range(300)]}, "never lists 300 or more"),
+        ({"compare_files": [RENAME], "changed_files": 2}, "lists 1 of the pull request's 2 changed files"),
+        ({"compare_raw": "{}"}, "is malformed"),
+        ({"compare_raw": "not json"}, "is malformed"),
+        ({"compare_raw": '[{"files": [{"status": "renamed"}]}]'}, "is malformed"),
+        ({"changed_files": "2"}, "is malformed"),
+        ({"fail_on": ["compare"]}, "cannot read the compare of"),
+    ],
+    ids=["truncated at 300", "fewer files than the pull request", "not a list of pages", "not JSON", "a rename without its old name",
+         "a count that is no number", "gh fails"],
+)
+def test_a_compare_that_hides_renames_cannot_be_judged_and_changes_nothing(arrangement, message, capsys):
+    """#149 R4: the door cannot judge with a rename map it cannot trust, and it has not touched the gate or the merge."""
+    gh = FakeGh(base_baseline=BASELINE_OLD, merge_baseline=BASELINE_OLD, **arrangement)
+    assert drive(gh)[0] == 2
+    assert message in capsys.readouterr().out
+    changed_nothing(gh)
 
 
 def test_a_size_raise_and_a_clone_add_are_both_named_size_first(pull_request, capsys):

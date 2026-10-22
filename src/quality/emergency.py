@@ -41,6 +41,7 @@ RED = "failure"
 COMPLETED = "completed"
 PENDING_STATUS = "pending"
 NOT_FOUND = "404"
+COMPARE_FILES_LIMIT = 300
 
 GhRunner = Callable[[Sequence[str], str | None], str]
 Ask = Callable[[str], str]
@@ -182,10 +183,44 @@ def sonar_failed(checks: Sequence[Check]) -> bool:
     return any(check.conclusion == RED for check in runs)
 
 
-def rederived_verdict(head: Side, base: Side, check_runs: Sequence[Check]) -> Verdict:
+def rederived_verdict(head: Side, base: Side, check_runs: Sequence[Check], renames: Mapping[str, str]) -> Verdict:
     """The verdict's own decider at the merge commit, with the Sonar job taken as green: the door judges Sonar itself."""
     jobs = [Job(run.name, 1, run.status, SUCCESS if run.name == SONAR_CHECK else run.conclusion) for run in check_runs]
-    return judge(head, base, jobs, {"sonar": SUCCESS}, 1)
+    return judge(head, base, jobs, {"sonar": SUCCESS}, 1, renames)
+
+
+def read_renames(gh: GhRunner, repository: str, base_sha: str, merge_sha: str, changed_files: object) -> dict[str, str]:
+    """The files the merge commit renamed from the base commit, as GitHub's compare detects them (the three-dot form
+    is the only one GitHub offers; here the base is the merge commit's parent, so it is the verdict's `base..HEAD`).
+
+    A compare lists at most COMPARE_FILES_LIMIT files; a list that may be cut off, or that is shorter than the pull
+    request's own count, hides renames, so the door cannot judge.
+    """
+    malformed = CannotJudge(f"the compare of {base_sha[:12]}...{merge_sha[:12]} is malformed")
+    try:
+        listed = gh(["api", "--paginate", "--slurp", f"repos/{repository}/compare/{base_sha}...{merge_sha}?per_page=100"], None)
+    except GhFailed as error:
+        raise CannotJudge(f"cannot read the compare of {base_sha[:12]}...{merge_sha[:12]}: {error}") from error
+    try:
+        pages = json.loads(listed)
+        if not isinstance(pages, list):
+            raise malformed
+        files = [entry for page in pages for entry in page["files"]]
+        renames = {
+            entry["previous_filename"]: entry["filename"]
+            for entry in files
+            if entry["status"] == "renamed" and isinstance(entry["previous_filename"], str) and isinstance(entry["filename"], str)
+        }
+    except (ValueError, KeyError, TypeError) as error:
+        raise malformed from error
+    if type(changed_files) is not int:
+        raise malformed
+    if len(files) >= COMPARE_FILES_LIMIT or len(files) < changed_files:
+        raise CannotJudge(
+            f"GitHub's compare lists {len(files)} of the pull request's {changed_files} changed files "
+            f"(it never lists {COMPARE_FILES_LIMIT} or more), so a rename could hide in it"
+        )
+    return renames
 
 
 def refusal_of_verdict(verdict: Verdict, sonar_red: bool) -> str | None:
@@ -450,7 +485,9 @@ def judge_pull_request(
     if not merge_commit_sha:
         raise CannotJudge("GitHub has no merge commit for the pull request yet, so the config the jobs ran on is unknown")
     head = read_side_at(gh, repository, merge_commit_sha)
-    verdict = rederived_verdict(head, read_side_at(gh, repository, pull["base"]["sha"]), check_runs)
+    base_sha = pull["base"]["sha"]
+    renames = read_renames(gh, repository, base_sha, merge_commit_sha, pull["changed_files"])
+    verdict = rederived_verdict(head, read_side_at(gh, repository, base_sha), check_runs, renames)
     refusal = refusal_of_verdict(verdict, sonar_red)
     if refusal:
         raise Refused(refusal)

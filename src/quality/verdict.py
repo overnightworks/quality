@@ -17,7 +17,16 @@ from quality.config import (
     read_gate_settings,
 )
 from quality.hygiene import CannotJudge, read_baseline
-from quality.ratchet import BASELINE_PATH, REWRITE_HINT, Baseline, SizeError, added_pairs, load_baseline, raised_entries
+from quality.ratchet import (
+    BASELINE_PATH,
+    REWRITE_HINT,
+    Baseline,
+    SizeError,
+    added_pairs,
+    load_baseline,
+    moved_forward,
+    raised_entries,
+)
 
 JOBS_URL = "https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs?filter=all&per_page=100"
 MAX_PAGES = 10
@@ -126,12 +135,17 @@ class Verdict:
 
 
 def judge(
-    head: Side, base: Side | None, jobs: list[Job], gate_results: Mapping[str, str], current_attempt: int
+    head: Side,
+    base: Side | None,
+    jobs: list[Job],
+    gate_results: Mapping[str, str],
+    current_attempt: int,
+    renames: Mapping[str, str] = MappingProxyType({}),
 ) -> Verdict:
     """Without a base (a push, a merge group) no loosening and no declaration is judged; a declared removal of a
-    mandatory job leaves that job unjudged."""
+    mandatory job leaves that job unjudged. `renames` maps a path the head renamed to its new one."""
     failures = [f'gate job "{name}" result {result}' for name, result in gate_results.items() if result != SUCCESS]
-    loosenings, stale = ((), ()) if base is None else _loosenings(head, base)
+    loosenings, stale = ((), ()) if base is None else _loosenings(head, base, renames)
     declared = {loosening.what for loosening in loosenings if loosening.declaration is not None}
     base_jobs = () if base is None else base.settings.mandatory_jobs
     unsettled: list[Unsettled] = []
@@ -145,13 +159,13 @@ def judge(
     return Verdict(loosenings, stale, tuple(failures), tuple(unsettled))
 
 
-def _loosenings(head: Side, base: Side) -> tuple[tuple[Loosening, ...], tuple[Declaration, ...]]:
+def _loosenings(head: Side, base: Side, renames: Mapping[str, str]) -> tuple[tuple[Loosening, ...], tuple[Declaration, ...]]:
     """Each loosening, bound to the head's new declaration of it; a declaration the base holds already binds nothing.
     An advisory allowance declares its own loosening, so no [[gate.loosened]] entry binds one."""
     whats = [_removal(name) for name in base.settings.mandatory_jobs if name not in head.settings.mandatory_jobs]
     if base.settings.legacy is LegacyMode.FAIL and head.settings.legacy is not LegacyMode.FAIL:
         whats.append(f"legacy {base.settings.legacy.value} → {head.settings.legacy.value}")
-    whats += _baseline_loosenings(base.baseline, head.baseline)
+    whats += _baseline_loosenings(base.baseline, head.baseline, renames)
     new = {
         declaration.what: declaration
         for declaration in head.settings.loosened
@@ -183,8 +197,11 @@ def _removal(name: str) -> str:
     return f'mandatory job "{name}" removed'
 
 
-def _baseline_loosenings(base: Baseline | None, head: Baseline | None) -> list[str]:
+def _baseline_loosenings(base: Baseline | None, head: Baseline | None, renames: Mapping[str, str]) -> list[str]:
     """Without a base baseline any head one is adoption; with one, the head may only lower or drop entries and pairs.
+
+    The base is read under the paths the head renamed its files to, so a moved file is the same entry and a raise in it
+    names the head's path.
 
     A base `[clones]` table is held the same way: the head keeps it, and a base without one lets the head introduce it.
     """
@@ -192,6 +209,7 @@ def _baseline_loosenings(base: Baseline | None, head: Baseline | None) -> list[s
         return []
     if head is None:
         return [f"{BASELINE_PATH} removed"]
+    base = moved_forward(base, renames)
     lines = [f"size baseline {entry.describe()}" for entry in raised_entries(base.size, head.size)]
     if base.clones is None:
         return lines
@@ -432,6 +450,32 @@ def read_base(repo: Path, base_sha: str) -> Side:
     except engines.EngineError as error:
         raise CannotJudge(str(error)) from error
     return side_of(config, baseline, where)
+
+
+def read_renames(repo: Path, base_sha: str) -> dict[str, str]:
+    """The files the checked-out commit renamed from the base commit, old path to new, as git detects them."""
+    _require_safe_ref(base_sha)
+    try:
+        listed = engines.git(
+            ["-C", str(repo.resolve()), "diff", "-M", "--name-status", "-z", "--end-of-options", base_sha, "HEAD", "--"],
+            f"cannot list the files renamed since the base commit {base_sha}",
+        )
+    except engines.EngineError as error:
+        raise CannotJudge(str(error)) from error
+    return _renames_of(listed)
+
+
+def _renames_of(name_status: str) -> dict[str, str]:
+    """`git diff --name-status -z` records: a status, then one path, or two for a rename."""
+    fields = iter(name_status.split("\0")[:-1])
+    renames = {}
+    for status in fields:
+        if status.startswith("R"):
+            old, new = next(fields), next(fields)
+            renames[old] = new
+        else:
+            next(fields)
+    return renames
 
 
 def side_of(config: str | None, baseline: str | None, where: str) -> Side:

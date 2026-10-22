@@ -14,7 +14,7 @@ import re
 import tokenize
 import tomllib
 from collections import Counter
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import Enum
 from operator import attrgetter
@@ -352,8 +352,29 @@ class RaisedEntry:
         return f"raises {self.key.label} {self.base} -> {self.head}"
 
 
+def moved_forward(baseline: Baseline, renames: Mapping[str, str]) -> Baseline:
+    """The baseline with every renamed file's entries and clone sides under the file's new path, symbols unchanged.
+
+    `renames` maps an old path to its new one. A rename onto a path the baseline holds as another file, which is not
+    itself renamed away, is no rename: the two files' entries never collapse onto one key.
+    """
+    held = {key.path for key in baseline.size} | {
+        place.path for pair in baseline.clones or () for place in (pair.first, pair.second)
+    }
+    moves = {old: new for old, new in renames.items() if old in held and (new not in held or new in renames)}
+
+    def moved(place: Place) -> Place:
+        return Place(moves.get(place.path, place.path), place.symbol)
+
+    size = {Key(key.metric, moves.get(key.path, key.path), key.symbol): value for key, value in baseline.size.items()}
+    clones = None if baseline.clones is None else frozenset(
+        ClonePair.of(moved(pair.first), moved(pair.second)) for pair in baseline.clones
+    )
+    return Baseline(size, clones)
+
+
 def raised_entries(base: SizeEntries, head: SizeEntries) -> list[RaisedEntry]:
-    """One baseline against another: an entry may fall or go, never rise or appear (a moved entry is a new one)."""
+    """One baseline against another: an entry may fall or go, never rise or appear; a renamed symbol is a new one."""
     return [
         RaisedEntry(key, base.get(key), head[key])
         for key in sorted(head, key=_order)

@@ -19,10 +19,13 @@ from quality import cli
 from quality.ratchet import (
     BASELINE_PATH,
     Baseline,
+    ClonePair,
     Key,
     Metric,
+    Place,
     RaisedEntry,
     load_baseline,
+    moved_forward,
     raised_entries,
     render_baseline,
 )
@@ -485,6 +488,30 @@ QUOTED_PATH = 'src/straße "q".py'
 def test_only_a_raised_or_added_entry_loosens_the_baseline(base, head, expected):
     """#48 rule 2, cell 18: growth and a new (moved) key loosen; lowering, equality and a removed key do not."""
     assert raised_entries(base, head) == expected
+
+
+@pytest.mark.parametrize(
+    ("renames", "moved_paths"),
+    [
+        ({"a.py": "c.py"}, ["b.py", "c.py"]),
+        ({"a.py": "b.py"}, ["a.py", "b.py"]),
+        ({"a.py": "b.py", "b.py": "c.py"}, ["b.py", "c.py"]),
+        ({"x.py": "y.py"}, ["a.py", "b.py"]),
+    ],
+    ids=["a rename", "onto a file the baseline holds separately is none", "a chain moves both", "a file the baseline lacks"],
+)
+def test_a_renamed_file_moves_its_entries_and_clone_sides_but_never_onto_another_file(renames, moved_paths):
+    """#149 R1, R3: entries follow git's renames, and two files' entries never collapse onto one key."""
+    one, other = Key(Metric.CCN, "a.py", "f"), Key(Metric.CCN, "b.py", "f")
+    pair = ClonePair.of(Place("a.py", "f"), Place("b.py", "f"))
+    moved = moved_forward(Baseline({one: 16, other: 17}, frozenset({pair})), renames)
+    assert sorted({key.path for key in moved.size}) == moved_paths
+    assert len(moved.size) == 2
+    assert sorted({place.path for held in moved.clones for place in (held.first, held.second)}) == moved_paths
+
+
+def test_moving_a_baseline_without_a_clone_table_keeps_it_without_one():
+    assert moved_forward(Baseline({}, None), {"a.py": "b.py"}).clones is None
 
 
 def test_a_key_with_quotes_or_unicode_matches_itself_exactly():

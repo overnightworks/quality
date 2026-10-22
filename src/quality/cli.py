@@ -43,6 +43,7 @@ from quality.verdict import (
     read_base,
     read_head,
     read_jobs,
+    read_renames,
     read_settled,
 )
 
@@ -309,13 +310,14 @@ def run_verdict(path: Path, fetcher_for: Callable[[str], PageFetcher], sleep: Sl
         head = read_head(path)
         base_sha = os.environ.get("GATE_BASE_SHA", "")
         base = read_base(path, base_sha) if base_sha else None
+        renames = read_renames(path, base_sha) if base_sha else {}
         gate_results = {name: need["result"] for name, need in json.loads(os.environ["GATE_NEEDS"]).items()}
         current_attempt = int(os.environ["GITHUB_RUN_ATTEMPT"])
         repository_name, run_id = os.environ["GITHUB_REPOSITORY"], os.environ["GITHUB_RUN_ID"]
         fetch = fetcher_for(os.environ["GITHUB_TOKEN"])
         settled = read_settled(
             lambda: read_jobs(repository_name, run_id, fetch),
-            lambda jobs: judge(head, base, jobs, gate_results, current_attempt),
+            lambda jobs: judge(head, base, jobs, gate_results, current_attempt, renames),
             sleep,
         )
     except (CannotJudge, KeyError, ValueError) as error:
