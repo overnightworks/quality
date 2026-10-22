@@ -707,7 +707,7 @@ def merge_call(flag):
         ({"rules": [[]]}, "--merge"),
         ({"rules": [[{"type": "pull_request", "parameters": {}}]]}, "--merge"),
         ({"rules": [[{"type": "pull_request"}]]}, "--merge"),
-        ({"rules": [[{"type": "pull_request", "parameters": None}]]}, "--merge"),
+        ({"rules": [[UNRELATED_RULE, LINEAR_HISTORY]]}, "--squash"),
         ({"rules": [[pull_request_rule("merge", "squash")], [LINEAR_HISTORY]]}, "--squash"),
         ({"base_ref": "release/1", "rules": [[pull_request_rule("squash")]]}, "--squash"),
         ({"base_ref": "rel#x", "rules": [[pull_request_rule("squash")]]}, "--squash"),
@@ -716,7 +716,7 @@ def merge_call(flag):
     ids=[
         "cell 1 both sources allow a merge commit", "cell 2 a rule allows only squash", "cell 3 linear history",
         "cell 4 settings forbid merge commits", "cell 5 two rules intersect to squash", "cell 8 an unrelated rule only",
-        "cell 8 no rules", "cell 9 allowed_merge_methods absent", "cell 9 no parameters", "cell 9 parameters null", "cell 10 two pages both count",
+        "cell 8 no rules", "cell 9 allowed_merge_methods absent", "cell 9 no parameters", "cell 9 rules without a parameters key", "cell 10 two pages both count",
         "cell 12 a non-default base branch", "cell 12 a base branch with a hash", "cell 13 a merge commit where only it and rebase are allowed",
     ],
 )
@@ -745,6 +745,9 @@ def test_the_door_merges_with_a_method_the_settings_and_every_rule_allow(gh_kwar
         ({"rules": [[pull_request_rule("fast-forward")]]}, "emergency-merge: cannot judge - the branch rules of main are malformed"),
         ({"rules": [[{"parameters": {"allowed_merge_methods": ["merge"]}}]]}, "emergency-merge: cannot judge - the branch rules of main are malformed"),
         ({"rules": [[{"type": 5}]]}, "emergency-merge: cannot judge - the branch rules of main are malformed"),
+        ({"rules": [[{"type": "pull_request", "parameters": None}]]}, "emergency-merge: cannot judge - the branch rules of main are malformed"),
+        ({"rules": [[{"type": "required_linear_history", "parameters": None}]]}, "emergency-merge: cannot judge - the branch rules of main are malformed"),
+        ({"rules": [[{"type": "deletion", "parameters": "x"}]]}, "emergency-merge: cannot judge - the branch rules of main are malformed"),
         ({"rules": [[{"type": "pull_request", "parameters": {"allowed_merge_methods": None}}]]}, "emergency-merge: cannot judge - the branch rules of main are malformed"),
         ({"rules_raw": "not json"}, "emergency-merge: cannot judge - the branch rules of main are malformed"),
         ({"rules_error": "gh api failed: HTTP 403: Resource not accessible"}, "emergency-merge: cannot judge - cannot read the branch rules of main"),
@@ -758,7 +761,8 @@ def test_the_door_merges_with_a_method_the_settings_and_every_rule_allow(gh_kwar
         "cell 9 allowed_merge_methods empty", "cell 6 settings allow nothing", "cell 11 settings withheld",
         "cell 11 settings malformed", "cell 11 a rule is no object", "cell 11 parameters malformed",
         "cell 11 methods malformed", "cell 11 an unknown method", "cell 11 a rule without a type",
-        "cell 11 a rule type that is no string", "cell 11 methods null", "cell 11 a line that is no JSON", "cell 11 generic 403", "cell 11 plan 403",
+        "cell 11 a rule type that is no string", "cell 11 pull_request parameters null",
+        "cell 11 linear history parameters null", "cell 11 an unrelated rule with parameters that are no object", "cell 11 methods null", "cell 11 a line that is no JSON", "cell 11 generic 403", "cell 11 plan 403",
     ],
 )
 def test_the_door_refuses_before_the_gate_when_no_method_is_usable(gh_kwargs, line, capsys):

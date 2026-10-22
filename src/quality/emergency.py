@@ -291,13 +291,13 @@ def methods_the_rule_allows(rule: object, base: str) -> frozenset[MergeMethod] |
     malformed = CannotJudge(f"the branch rules of {base} are malformed")
     if not isinstance(rule, Mapping) or not isinstance(rule.get("type"), str):
         raise malformed
+    if "parameters" in rule and not isinstance(rule["parameters"], Mapping):
+        raise malformed
     if rule["type"] == "required_linear_history":
         return frozenset(MergeMethod) - {MergeMethod.MERGE}
-    if rule["type"] != "pull_request" or "parameters" not in rule or rule["parameters"] is None:
+    if rule["type"] != "pull_request" or "parameters" not in rule:
         return None
     parameters = rule["parameters"]
-    if not isinstance(parameters, Mapping):
-        raise malformed
     if "allowed_merge_methods" not in parameters:
         return None
     named = parameters["allowed_merge_methods"]
