@@ -1,8 +1,0 @@
-claim_id = "441b3d840bb54a72aed6b0ee6e5a53a0"
-agent = "claude"
-role = "builder"
-base = "2bfd061df03cb65ce19a7018ed6d41473d847219"
-branch = "claude/issue-142-base-reader-words"
-scope = ["README.md", "src/quality/engines.py", "tests/test_staged.py", "tests/test_verdict.py"]
-opened_commit = "ceecdd57403a96fcf6fc8901c3139bf54d2a580d"
-whole_reason = "One owner, engines.read_blob, words both readers it serves (the verdict's base and scan-staged's staged tree); the two test modules that pin those readers and the README sentence move with it."
