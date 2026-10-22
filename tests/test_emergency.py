@@ -1,5 +1,6 @@
 import json
 from datetime import UTC, datetime
+from urllib.parse import quote
 
 import pytest
 from conftest import allowance_config, assert_every_line_starts_with_the_door
@@ -56,12 +57,12 @@ class FakeGh:
     def __init__(
         self, admin=True, checks=None, statuses=None, state="open", fail_on=(), interrupt_on=(), merge_lands=False,
         head_config=GATE_CONFIG, base_config=GATE_CONFIG, merge_config=None, merge_sha=MERGE_SHA,
-        base_baseline=None, merge_baseline=None, extra_runs=(), settings=None, rules=((),), base_ref="main", rules_error=None,
+        base_baseline=None, merge_baseline=None, extra_runs=(), settings=None, rules=((),), base_ref="main", rules_error=None, rules_raw=None,
     ):
         self.admin, self.state, self.fail_on, self.merge_lands = admin, state, set(fail_on), merge_lands
         self.interrupt_on = list(interrupt_on)
         self.settings = ALL_METHODS_ALLOWED if settings is None else settings
-        self.rules, self.base_ref, self.rules_error = rules, base_ref, rules_error
+        self.rules, self.base_ref, self.rules_error, self.rules_raw = rules, base_ref, rules_error, rules_raw
         self.merge_sha = merge_sha
         self.files = {
             (CONFIG_PATH, SHA): head_config,
@@ -134,6 +135,8 @@ class FakeGh:
     def rules_answer(self):
         if self.rules_error:
             raise GhFailed(self.rules_error)
+        if self.rules_raw is not None:
+            return self.rules_raw
         return "\n".join(json.dumps(rule) for page in self.rules for rule in page)
 
     def record(self, step, arguments, stdin):
@@ -617,9 +620,9 @@ def test_a_declared_loosening_merges_through_the_door_without_sonar(
 
     code = cli.main(["emergency-merge", REPO, "7"], gh=gh, transport=transport, ask=ask, is_terminal=lambda: True)
     assert (code, transport.sent, gh.sequence) == (0, [], ["gate false", "merge", "gate true", "comment"])
-    assert shown[0].splitlines() == [f"{REPO} #7 head {SHA}: {len(declared)} declared loosening(s)", *declared]
+    assert shown[0].splitlines() == [f"{REPO} #7 head {SHA}: {len(declared)} declared loosening(s)", *declared, "merges with a merge commit"]
     assert gh.merge_calls == [("pr", "merge", "7", "--repo", REPO, "--merge", "--match-head-commit", SHA)]
-    assert f"{'; '.join(declared)}; quality_gate off → merge → on." in gh.comments[0]
+    assert f"{'; '.join(declared)}; merges with a merge commit; quality_gate off → merge → on." in gh.comments[0]
 
 
 def test_the_door_names_each_of_79_allowances_within_one_comment(capsys):
@@ -675,6 +678,19 @@ def test_every_line_the_door_prints_is_escaped(capsys, base_config, merge_config
     assert_every_line_starts_with_the_door(lines)
 
 
+@pytest.mark.parametrize(
+    ("gh_kwargs", "sentence"),
+    [({}, "merges with a merge commit"), ({"rules": [[pull_request_rule("squash")]]}, "merges with a squash")],
+    ids=["a merge commit", "a squash"],
+)
+def test_the_operator_reads_the_method_before_ja_and_the_log_comment_names_it(gh_kwargs, sentence, capsys):
+    """#146: the shown text ends with the method line, and the log comment carries it."""
+    gh = FakeGh(**gh_kwargs)
+    drive(gh)
+    assert sentence in capsys.readouterr().out.splitlines()
+    assert f"; {sentence}; " in gh.comments[0]
+
+
 def merge_call(flag):
     return ("pr", "merge", "7", "--repo", REPO, flag, "--match-head-commit", SHA)
 
@@ -691,15 +707,17 @@ def merge_call(flag):
         ({"rules": [[]]}, "--merge"),
         ({"rules": [[{"type": "pull_request", "parameters": {}}]]}, "--merge"),
         ({"rules": [[{"type": "pull_request"}]]}, "--merge"),
+        ({"rules": [[{"type": "pull_request", "parameters": None}]]}, "--merge"),
         ({"rules": [[pull_request_rule("merge", "squash")], [LINEAR_HISTORY]]}, "--squash"),
         ({"base_ref": "release/1", "rules": [[pull_request_rule("squash")]]}, "--squash"),
+        ({"base_ref": "rel#x", "rules": [[pull_request_rule("squash")]]}, "--squash"),
         ({"settings": settings_allowing("merge"), "rules": [[pull_request_rule("merge", "rebase")]]}, "--merge"),
     ],
     ids=[
         "cell 1 both sources allow a merge commit", "cell 2 a rule allows only squash", "cell 3 linear history",
         "cell 4 settings forbid merge commits", "cell 5 two rules intersect to squash", "cell 8 an unrelated rule only",
-        "cell 8 no rules", "cell 9 allowed_merge_methods absent", "cell 9 no parameters", "cell 10 two pages both count",
-        "cell 12 a non-default base branch", "cell 13 a merge commit where only it and rebase are allowed",
+        "cell 8 no rules", "cell 9 allowed_merge_methods absent", "cell 9 no parameters", "cell 9 parameters null", "cell 10 two pages both count",
+        "cell 12 a non-default base branch", "cell 12 a base branch with a hash", "cell 13 a merge commit where only it and rebase are allowed",
     ],
 )
 def test_the_door_merges_with_a_method_the_settings_and_every_rule_allow(gh_kwargs, flag):
@@ -708,7 +726,7 @@ def test_the_door_merges_with_a_method_the_settings_and_every_rule_allow(gh_kwar
     assert drive(gh)[0] == 0
     assert gh.merge_calls == [merge_call(flag)]
     rules_read = next(call for call in gh.calls if "/rules/branches/" in " ".join(call))
-    assert (rules_read[1], rules_read[2]) == ("--paginate", f"repos/{REPO}/rules/branches/{gh.base_ref}?per_page=100")
+    assert (rules_read[1], rules_read[2]) == ("--paginate", f"repos/{REPO}/rules/branches/{quote(gh.base_ref, safe='/')}?per_page=100")
 
 
 @pytest.mark.parametrize(
@@ -725,6 +743,10 @@ def test_the_door_merges_with_a_method_the_settings_and_every_rule_allow(gh_kwar
         ({"rules": [[{"type": "pull_request", "parameters": "x"}]]}, "emergency-merge: cannot judge - the branch rules of main are malformed"),
         ({"rules": [[{"type": "pull_request", "parameters": {"allowed_merge_methods": "squash"}}]]}, "emergency-merge: cannot judge - the branch rules of main are malformed"),
         ({"rules": [[pull_request_rule("fast-forward")]]}, "emergency-merge: cannot judge - the branch rules of main are malformed"),
+        ({"rules": [[{"parameters": {"allowed_merge_methods": ["merge"]}}]]}, "emergency-merge: cannot judge - the branch rules of main are malformed"),
+        ({"rules": [[{"type": 5}]]}, "emergency-merge: cannot judge - the branch rules of main are malformed"),
+        ({"rules": [[{"type": "pull_request", "parameters": {"allowed_merge_methods": None}}]]}, "emergency-merge: cannot judge - the branch rules of main are malformed"),
+        ({"rules_raw": "not json"}, "emergency-merge: cannot judge - the branch rules of main are malformed"),
         ({"rules_error": "gh api failed: HTTP 403: Resource not accessible"}, "emergency-merge: cannot judge - cannot read the branch rules of main"),
         (
             {"rules_error": "gh api failed: HTTP 403: Upgrade to GitHub Pro or Team to enable this feature."},
@@ -735,7 +757,8 @@ def test_the_door_merges_with_a_method_the_settings_and_every_rule_allow(gh_kwar
         "cell 6 sources do not intersect", "cell 7 settings allow only rebase", "cell 7 a rule allows only rebase",
         "cell 9 allowed_merge_methods empty", "cell 6 settings allow nothing", "cell 11 settings withheld",
         "cell 11 settings malformed", "cell 11 a rule is no object", "cell 11 parameters malformed",
-        "cell 11 methods malformed", "cell 11 an unknown method", "cell 11 generic 403", "cell 11 plan 403",
+        "cell 11 methods malformed", "cell 11 an unknown method", "cell 11 a rule without a type",
+        "cell 11 a rule type that is no string", "cell 11 methods null", "cell 11 a line that is no JSON", "cell 11 generic 403", "cell 11 plan 403",
     ],
 )
 def test_the_door_refuses_before_the_gate_when_no_method_is_usable(gh_kwargs, line, capsys):

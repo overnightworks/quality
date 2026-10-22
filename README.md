@@ -604,8 +604,9 @@ quality emergency-merge <owner/repo> <pr>
   `reason` cannot hide anything before `ja` or forge a line.
 - **Off, merge, on:** it sets the repository's `quality_gate` property to `false` (this removes ruleset 25227067 for it),
   runs `gh pr merge <pr> --merge --match-head-commit <sha>` (`--squash` where the repository settings or a rule on the
-  pull request's base branch exclude a merge commit; a repository that allows only a rebase, or whose rules cannot be
-  read, is refused before the gate is touched), and sets the property back to `true` in every case: merged,
+  pull request's base branch exclude a merge commit but allow a squash; when neither is allowed, or the settings or rules
+  cannot be read or are malformed, it is refused before the gate is touched; the shown text and the log comment name the
+  method), and sets the property back to `true` in every case: merged,
   merge failed, Ctrl-C. A property that cannot be restored is exit `2` with one line naming what to set by hand and the
   merge outcome as far as it is known, printed before any further GitHub request; a re-read that settles an open
   outcome prints that line again with it. After Ctrl-C the next line starts on a line of its own. A merge whose outcome

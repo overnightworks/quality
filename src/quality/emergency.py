@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from functools import partial
+from urllib.parse import quote
 
 from quality.config import CONFIG_PATH, REPOSITORY_NAME, Declaration, GateSettings, LegacyMode
 from quality.hygiene import CannotJudge
@@ -69,6 +70,10 @@ class MergeMethod(Enum):
     @property
     def settings_key(self) -> str:
         return {"merge": "allow_merge_commit", "squash": "allow_squash_merge"}[self.value]
+
+    @property
+    def description(self) -> str:
+        return {"merge": "merges with a merge commit", "squash": "merges with a squash"}[self.value]
 
     @property
     def flag(self) -> str:
@@ -146,10 +151,10 @@ class Door:
         return [*self.legacy_count, *map(described, self.declared)]
 
     def shown(self) -> tuple[str, ...]:
-        """What the operator reads before typing the word: the counts, then each declaration."""
+        """What the operator reads before typing the word: the counts, each declaration, then the merge method."""
         declared = [f"{len(self.declared)} declared loosening(s)"] if self.declared else []
         heading = f"{self.repository} #{self.pull_request} head {self.head_sha}: {', '.join([*self.legacy_count, *declared])}"
-        return (heading, *map(described, self.declared))
+        return (heading, *map(described, self.declared), self.merge_method.description)
 
 
 def refusal_of_checks(checks: Sequence[Check]) -> str | None:
@@ -284,18 +289,18 @@ def methods_the_settings_allow(repository_facts: Mapping[str, object]) -> frozen
 def methods_the_rule_allows(rule: object, base: str) -> frozenset[MergeMethod] | None:
     """The methods one branch rule leaves open, None where it restricts none."""
     malformed = CannotJudge(f"the branch rules of {base} are malformed")
-    if not isinstance(rule, Mapping):
+    if not isinstance(rule, Mapping) or not isinstance(rule.get("type"), str):
         raise malformed
-    if rule.get("type") == "required_linear_history":
+    if rule["type"] == "required_linear_history":
         return frozenset(MergeMethod) - {MergeMethod.MERGE}
-    parameters = rule.get("parameters")
-    if rule.get("type") != "pull_request" or parameters is None:
+    if rule["type"] != "pull_request" or "parameters" not in rule or rule["parameters"] is None:
         return None
+    parameters = rule["parameters"]
     if not isinstance(parameters, Mapping):
         raise malformed
-    named = parameters.get("allowed_merge_methods")
-    if named is None:
+    if "allowed_merge_methods" not in parameters:
         return None
+    named = parameters["allowed_merge_methods"]
     if not isinstance(named, list) or not all(isinstance(name, str) and name in {*RULE_METHOD_NAMES} for name in named):
         raise malformed
     return frozenset(method for method in MergeMethod if method.value in named)
@@ -303,10 +308,13 @@ def methods_the_rule_allows(rule: object, base: str) -> frozenset[MergeMethod] |
 
 def read_branch_rules(gh: GhRunner, repository: str, base: str) -> list[object]:
     try:
-        listed = gh(["api", "--paginate", f"repos/{repository}/rules/branches/{base}?per_page=100", "--jq", ".[]"], None)
+        listed = gh(["api", "--paginate", f"repos/{repository}/rules/branches/{quote(base, safe='/')}?per_page=100", "--jq", ".[]"], None)
     except GhFailed as error:
         raise CannotJudge(f"cannot read the branch rules of {base}: {error}") from error
-    return [json.loads(line) for line in listed.splitlines()]
+    try:
+        return [json.loads(line) for line in listed.splitlines()]
+    except ValueError as error:
+        raise CannotJudge(f"the branch rules of {base} are malformed") from error
 
 
 def choose_merge_method(gh: GhRunner, repository: str, repository_facts: Mapping[str, object], base: str) -> MergeMethod:
@@ -406,7 +414,7 @@ def log_comment(login: str, moment: datetime, door: Door, attempt: Attempt) -> s
     restored = "on" if attempt.restore_error is None else "NOT restored, it may still be off"
     switched = "not switched off" if attempt.outcome is Outcome.NOT_STARTED else "off"
     return printable(
-        f"Emergency door used by @{login} at {moment.isoformat(timespec='seconds')}: {'; '.join(door.reasons())}; "
+        f"Emergency door used by @{login} at {moment.isoformat(timespec='seconds')}: {'; '.join(door.reasons())}; {door.merge_method.description}; "
         f"{GATE_PROPERTY} {switched} → {attempt.outcome.value} → {restored}."
     )
 
