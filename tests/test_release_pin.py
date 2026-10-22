@@ -21,7 +21,8 @@ CLEAN_RELEASE = re.compile(r"\d+\.\d+\.\d+")
 
 def the_one_release_tag(refs: list[str]) -> str:
     """The tag every tool checkout names; red when they differ or one is no release tag."""
-    assert refs and len(set(refs)) == 1 and RELEASE_TAG.fullmatch(refs[0]), f"gate.yml tool refs must be one release tag: {refs}"
+    assert len(set(refs)) == 1, f"gate.yml tool refs must be one release tag: {refs}"
+    assert RELEASE_TAG.fullmatch(refs[0]), f"gate.yml tool refs must be a release tag: {refs}"
     return refs[0]
 
 
