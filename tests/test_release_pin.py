@@ -1,7 +1,9 @@
 import re
 from pathlib import Path
 
+import pytest
 import yaml
+from verify_release import gate_tool_refs
 
 from quality import __version__
 
@@ -13,12 +15,37 @@ def jobs_with_a_tool_checkout() -> int:
     return sum(any(step.get("with", {}).get("repository") == "overnightworks/quality" for step in job["steps"]) for job in jobs)
 
 
-def test_gate_bakes_the_tag_of_the_current_version():
-    """#6 rule 5: every tool checkout in gate.yml pins the tag of this version."""
+RELEASE_TAG = re.compile(r"v\d+\.\d+\.\d+")
+CLEAN_RELEASE = re.compile(r"\d+\.\d+\.\d+")
+
+
+def the_one_release_tag(refs: list[str]) -> str:
+    """The tag every tool checkout names; red when they differ or one is no release tag."""
+    assert refs and len(set(refs)) == 1 and RELEASE_TAG.fullmatch(refs[0]), f"gate.yml tool refs must be one release tag: {refs}"
+    return refs[0]
+
+
+@pytest.mark.parametrize("refs", [["v0.4.0", "v0.4.1", "v0.4.0"], ["main"], ["v0.4.0", "0.4.0"], []], ids=["differ", "branch", "no v", "none"])
+def test_tool_refs_that_are_not_one_release_tag_are_red(refs):
+    """#153 cell 11."""
+    with pytest.raises(AssertionError):
+        the_one_release_tag(refs)
+
+
+def test_gate_bakes_one_release_tag_on_every_commit():
+    """#6 rule 5: every tool checkout in gate.yml pins the same release tag."""
     text = GATE.read_text(encoding="utf-8")
-    tool_checkouts = re.findall(r"repository: overnightworks/quality\n(?:\s+.*\n)*?\s+ref: (\S+)", text)
-    assert len(tool_checkouts) == text.count("repository: overnightworks/quality") == jobs_with_a_tool_checkout()
-    assert set(tool_checkouts) == {f"v{__version__}"}
+    refs = gate_tool_refs(text)
+    assert len(refs) == text.count("repository: overnightworks/quality") == jobs_with_a_tool_checkout()
+    the_one_release_tag(refs)
+
+
+def test_gate_bakes_the_tag_of_a_release_build():
+    """#153: where the installed version is a clean release (a build at a tag), the refs are that tag; scripts/verify_release.py
+    holds the same at the release step, where a dirty checkout skips this."""
+    if not CLEAN_RELEASE.fullmatch(__version__):
+        pytest.skip(f"{__version__} is not a release build")
+    assert the_one_release_tag(gate_tool_refs(GATE.read_text(encoding="utf-8"))) == f"v{__version__}"
 
 
 def test_gate_pins_the_tool_for_every_caller_but_quality_which_runs_its_own_tree():

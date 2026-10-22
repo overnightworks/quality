@@ -17,11 +17,14 @@ quality = "quality.cli:run"
 dev = ["ruff", "pytest", "pytest-cov"]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling==1.32.4", "hatch-vcs==0.5.0", "setuptools-scm==10.3.4", "vcs-versioning==2.6.0"]
 build-backend = "hatchling.build"
 
+[tool.uv]
+cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true, tags = true } }]
+
 [tool.hatch.version]
-path = "src/quality/__init__.py"
+source = "vcs"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/quality"]
@@ -31,6 +34,7 @@ line-length = 120
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["scripts"]
 markers = ["engine: runs a real downloaded engine process (needs network; CI runs it)"]
 
 [tool.coverage.run]

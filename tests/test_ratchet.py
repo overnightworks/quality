@@ -15,7 +15,7 @@ from conftest import (
 )
 from conftest import hygiene_output as hygiene
 
-from quality import cli
+from quality import __version__, cli
 from quality.ratchet import (
     BASELINE_PATH,
     Baseline,
@@ -361,8 +361,8 @@ def test_baseline_write_names_each_raised_or_added_entry_before_the_count(build_
 
 @pytest.mark.parametrize(
     "previous",
-    ["[file_lines\n", '[unknown]\n"src/a.py" = 1\n', '[file_lines]\n"src/a.py" = "many"\n'],
-    ids=["not-toml", "unknown-metric", "not-a-count"],
+    ["[file_lines\n", '[file_lines]\n"src/a.py" = "many"\n'],
+    ids=["not-toml", "not-a-count"],
 )
 def test_baseline_write_overwrites_an_unreadable_previous_baseline_with_a_note(build_repo, capsys, previous):
     """#50 rules 4 and 5, cell 6: an unreadable previous baseline is overwritten, the write says raises cannot be
@@ -380,8 +380,8 @@ def test_baseline_write_overwrites_an_unreadable_previous_baseline_with_a_note(b
 
 @pytest.mark.parametrize(
     "baseline",
-    ["[file_lines\n", '[unknown]\n"src/a.py" = 1\n', '[file_lines]\n"src/a.py" = "many"\n'],
-    ids=["not-toml", "unknown-metric", "not-a-count"],
+    ["[file_lines\n", '[file_lines]\n"src/a.py" = "many"\n'],
+    ids=["not-toml", "not-a-count"],
 )
 def test_an_unreadable_baseline_cannot_be_judged(build_repo, capsys, baseline):
     """#46 rule 4 and #52 rule 7, cell 14: a baseline the rule cannot read is exit 2, never clean, and names the
@@ -390,6 +390,15 @@ def test_an_unreadable_baseline_cannot_be_judged(build_repo, capsys, baseline):
     assert code == 2
     assert "cannot judge" in output
     assert output.count("rewrite it with `quality baseline write`") == 2, output
+
+
+def test_an_unknown_baseline_table_states_the_fact_and_sends_the_head_to_its_pinned_release(build_repo, capsys):
+    """#153 cell 14: the fact and the tool version, not the command that may have written the table."""
+    code, output = hygiene(capsys, build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: "[future]\n"}))
+    assert code == 2
+    assert f"{BASELINE_PATH} has an unknown table [future]; quality {__version__} knows ccn, file_lines, function_lines, clones" in output
+    assert output.count("write the baseline with the quality release your gate pins") == 2, output
+    assert "rewrite it" not in output
 
 
 def link_the_baseline_elsewhere(repo: Path, elsewhere: Path) -> None:

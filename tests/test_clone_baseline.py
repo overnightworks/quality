@@ -1,5 +1,6 @@
 """#130: the clone pairs in quality/baseline.toml, the write that names a new pair and the verdict that lets the table only fall."""
 
+import re
 import textwrap
 from pathlib import Path
 
@@ -9,7 +10,7 @@ from test_clones import function as clone_function
 from test_emergency import ONE_JOB, SONAR_GREEN, FakeGh, declaring, drive
 from test_verdict import ONLY_DECLARED, declaration, verdict_of
 
-from quality import cli
+from quality import __version__, cli
 from quality.ratchet import (
     BASELINE_PATH,
     Baseline,
@@ -189,10 +190,21 @@ def test_the_write_overwrites_a_malformed_previous_clone_table_with_the_unchange
     assert note.endswith("), so raises cannot be named")
 
 
-def test_an_unknown_table_names_clones_among_the_known_ones():
-    """#130 cell 17."""
-    with pytest.raises(SizeError, match=r"unknown table \[future\]; only .*clones"):
+def test_an_unknown_table_names_the_tool_version_and_every_known_table_with_clones():
+    """#130 cell 17, #153 cell 14."""
+    with pytest.raises(SizeError, match=rf"unknown table \[future\]; quality {re.escape(__version__)} knows ccn, .*, clones$"):
         load_baseline("[future]\n")
+
+
+def test_the_write_names_the_unknown_table_of_the_previous_baseline_without_advice(build_repo, capsys):
+    """#153 cell 16: the wrapper is unchanged, the embedded diagnostic is the new one, and no advice follows."""
+    repo = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: "[future]\n"})
+    code, (note, _) = written(capsys, repo)
+    assert code == 0
+    assert note == (
+        f"baseline: the previous {BASELINE_PATH} could not be read ({BASELINE_PATH} has an unknown table [future]; "
+        f"quality {__version__} knows ccn, file_lines, function_lines, clones), so raises cannot be named"
+    )
 
 
 def test_hygiene_without_a_clone_table_holds_the_size_and_leaves_the_clone_rule_report_only(build_repo, capsys):
