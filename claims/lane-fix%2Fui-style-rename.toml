@@ -1,0 +1,7 @@
+claim_id = "67e4bd887d3246988c2a4a31473173c3"
+agent = "claude"
+role = "builder"
+base = "02fbdd0fb1873b9ba91ba7735886ff6f700da1cc"
+branch = "fix/ui-style-rename"
+scope = ["quality/fleet.toml"]
+opened_commit = "9e33f7fa381999ef8fdd59cee7d34d37a29d2888"
