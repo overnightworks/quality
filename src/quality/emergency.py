@@ -7,11 +7,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from functools import partial
+from pathlib import Path
 from urllib.parse import quote
 
+from quality import engines
 from quality.config import CONFIG_PATH, REPOSITORY_NAME, Declaration, GateSettings, LegacyMode
 from quality.hygiene import CannotJudge
-from quality.ratchet import BASELINE_PATH
+from quality.ratchet import BASELINE_PATH, NO_RENAMES, Renames
 from quality.report import printable, render
 from quality.sonar import (
     Analysis,
@@ -26,7 +28,7 @@ from quality.sonar import (
     project_of,
     require_resolved,
 )
-from quality.verdict import SUCCESS, Job, Side, Verdict, judge, side_of
+from quality.verdict import SUCCESS, Job, Side, Verdict, compares_baselines, judge, read_renames, side_of
 
 EXIT_MERGED = 0
 EXIT_REFUSED = 1
@@ -41,9 +43,12 @@ RED = "failure"
 COMPLETED = "completed"
 PENDING_STATUS = "pending"
 NOT_FOUND = "404"
+CREDENTIAL_HELPER = "!gh auth git-credential"
+FETCH_TIMEOUT_SECONDS = 120
 
 GhRunner = Callable[[Sequence[str], str | None], str]
 Ask = Callable[[str], str]
+RemoteFor = Callable[[str], str]
 Say = Callable[[str], None]
 
 
@@ -182,10 +187,60 @@ def sonar_failed(checks: Sequence[Check]) -> bool:
     return any(check.conclusion == RED for check in runs)
 
 
-def rederived_verdict(head: Side, base: Side, check_runs: Sequence[Check]) -> Verdict:
+def github_remote(repository: str) -> str:
+    return f"https://github.com/{repository}.git"
+
+
+def gh_configuration_directory(environment: Mapping[str, str]) -> str:
+    """Where gh looks for its login: `GH_CONFIG_DIR`, else `$XDG_CONFIG_HOME/gh`, else `~/.config/gh`."""
+    if environment.get("GH_CONFIG_DIR"):
+        return environment["GH_CONFIG_DIR"]
+    if environment.get("XDG_CONFIG_HOME"):
+        return str(Path(environment["XDG_CONFIG_HOME"]) / "gh")
+    return str(Path(environment.get("HOME", "~")).expanduser() / ".config" / "gh")
+
+
+def fetch_environment(environment: Mapping[str, str], empty_home: Path) -> dict[str, str]:
+    """The environment of git around the fetch: no inherited git routing or configuration, an empty home so that
+    `.netrc` and every other file git reads there is absent, and no way to prompt for a password. gh is the only source
+    of credentials, and it keeps its login by being told where the real configuration directory is."""
+    isolated = engines.attribute_free_git_environment(empty_home)
+    kept = {name: value for name, value in isolated.items() if name != "SSH_ASKPASS"}
+    return kept | {"GIT_TERMINAL_PROMPT": "0", "GH_CONFIG_DIR": gh_configuration_directory(environment)}
+
+
+def read_renames_of_pull(remote: str, base_sha: str, merge_sha: str, environment: Mapping[str, str]) -> Renames:
+    """The renames the verdict reads at the checkout, from the pull request's two commits fetched into a bare repository
+    that is removed afterwards. Credentials stay in gh's credential protocol; git's own words never reach the operator."""
+    with engines.scratch_directory() as scratch:
+        isolated = fetch_environment(environment, scratch / "home")
+        repository = scratch / "repository"
+        commands = (
+            ["git", "init", "--bare", "--quiet", str(repository)],
+            [
+                "git", "-c", "credential.helper=", "-c", f"credential.helper={CREDENTIAL_HELPER}", "-c", "core.askPass=",
+                "-C", str(repository), "fetch", "--quiet", "--depth=1", "--no-tags", "--", remote, base_sha, merge_sha,
+            ],
+        )
+        for command in commands:
+            try:
+                done = engines.run_bounded_in_own_group(command, FETCH_TIMEOUT_SECONDS, isolated)
+            except engines.EngineError as error:
+                raise Refused(f"cannot fetch the pull request's commits to compare renamed files ({error})") from None
+            if done.returncode != 0:
+                raise Refused(
+                    f"cannot fetch the pull request's commits to compare renamed files (git exited {done.returncode})"
+                )
+        try:
+            return read_renames(repository, base_sha, merge_sha, isolated, bound=FETCH_TIMEOUT_SECONDS)
+        except CannotJudge:
+            raise Refused("cannot list the files git renamed between the pull request's commits") from None
+
+
+def rederived_verdict(head: Side, base: Side, check_runs: Sequence[Check], renames: Renames) -> Verdict:
     """The verdict's own decider at the merge commit, with the Sonar job taken as green: the door judges Sonar itself."""
     jobs = [Job(run.name, 1, run.status, SUCCESS if run.name == SONAR_CHECK else run.conclusion) for run in check_runs]
-    return judge(head, base, jobs, {"sonar": SUCCESS}, 1)
+    return judge(head, base, jobs, {"sonar": SUCCESS}, 1, renames)
 
 
 def refusal_of_verdict(verdict: Verdict, sonar_red: bool) -> str | None:
@@ -432,7 +487,12 @@ def confirmed(ask: Ask, say: Say) -> bool:
 
 
 def judge_pull_request(
-    repository: str, pull_request: int, gh: GhRunner, transport: Transport, environment: Mapping[str, str]
+    repository: str,
+    pull_request: int,
+    gh: GhRunner,
+    transport: Transport,
+    environment: Mapping[str, str],
+    remote_for: RemoteFor,
 ) -> tuple[Door, str]:
     repository_facts = json.loads(gh(["api", f"repos/{repository}"], None))
     require_admin_permission(repository_facts, repository)
@@ -450,7 +510,13 @@ def judge_pull_request(
     if not merge_commit_sha:
         raise CannotJudge("GitHub has no merge commit for the pull request yet, so the config the jobs ran on is unknown")
     head = read_side_at(gh, repository, merge_commit_sha)
-    verdict = rederived_verdict(head, read_side_at(gh, repository, pull["base"]["sha"]), check_runs)
+    base = read_side_at(gh, repository, pull["base"]["sha"])
+    renames = (
+        read_renames_of_pull(remote_for(repository), pull["base"]["sha"], merge_commit_sha, environment)
+        if compares_baselines(base, head)
+        else NO_RENAMES
+    )
+    verdict = rederived_verdict(head, base, check_runs, renames)
     refusal = refusal_of_verdict(verdict, sonar_red)
     if refusal:
         raise Refused(refusal)
@@ -497,6 +563,7 @@ def run_emergency_merge(
     now: Callable[[], datetime],
     environment: Mapping[str, str],
     say: Say,
+    remote_for: RemoteFor = github_remote,
 ) -> int:
     """Every line it prints leaves through `say`, which escapes it."""
     if not REPOSITORY_NAME.fullmatch(repository):
@@ -506,7 +573,7 @@ def run_emergency_merge(
         say("emergency-merge: refused - this is the operator's command, it needs a terminal on stdin")
         return EXIT_REFUSED
     try:
-        door, login = judge_pull_request(repository, pull_request, gh, transport, environment)
+        door, login = judge_pull_request(repository, pull_request, gh, transport, environment, remote_for)
     except Refused as refusal:
         first, *rest = refusal.lines
         for line in (f"emergency-merge: refused - {first}", *rest):

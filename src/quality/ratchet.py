@@ -14,7 +14,7 @@ import re
 import tokenize
 import tomllib
 from collections import Counter
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import Enum
 from operator import attrgetter
@@ -358,8 +358,50 @@ class RaisedEntry:
         return f"raises {self.key.label} {self.base} -> {self.head}"
 
 
+@dataclass(frozen=True)
+class Renames:
+    """What git renamed between two commits: `moves` maps a source path to its target, `targets` holds every target.
+
+    A target whose source no baseline key can name (not UTF-8) is a target without a move.
+    """
+
+    moves: Mapping[str, str]
+    targets: frozenset[str]
+
+
+NO_RENAMES = Renames({}, frozenset())
+
+
+def carried_base(base: Baseline, head: Baseline, renames: Renames) -> Baseline:
+    """The base as the head's renames read it.
+
+    An entry under a rename's target is a leftover of a file the base no longer has and is dropped. The entries under
+    the old path move to the target unless the head still holds something under the old path.
+    """
+    held = {key.path for key in head.size} | {
+        place.path for pair in head.clones or () for place in (pair.first, pair.second)
+    }
+    moves = {old: new for old, new in renames.moves.items() if old not in held}
+
+    def new_path(path: str) -> str | None:
+        """Where the base's entries under `path` go in the head's reading, None when they are dropped."""
+        if path in renames.targets:
+            return None
+        return moves.get(path, path)
+
+    size = {key._replace(path=path): value for key, value in base.size.items() if (path := new_path(key.path))}
+    if base.clones is None:
+        return Baseline(size, None)
+    pairs = set()
+    for pair in base.clones:
+        first, second = new_path(pair.first.path), new_path(pair.second.path)
+        if first and second:
+            pairs.add(ClonePair.of(pair.first._replace(path=first), pair.second._replace(path=second)))
+    return Baseline(size, frozenset(pairs))
+
+
 def raised_entries(base: SizeEntries, head: SizeEntries) -> list[RaisedEntry]:
-    """One baseline against another: an entry may fall or go, never rise or appear (a moved entry is a new one)."""
+    """One baseline against another: an entry may fall or go, never rise or appear; a renamed symbol is a new one."""
     return [
         RaisedEntry(key, base.get(key), head[key])
         for key in sorted(head, key=_order)

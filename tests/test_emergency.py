@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from urllib.parse import quote
 
 import pytest
-from conftest import allowance_config, assert_every_line_starts_with_the_door
+from conftest import allowance_config, assert_every_line_starts_with_the_door, git_pull
 
 from quality import cli
 from quality.config import CONFIG_PATH
@@ -57,19 +57,19 @@ class FakeGh:
     def __init__(
         self, admin=True, checks=None, statuses=None, state="open", fail_on=(), interrupt_on=(), merge_lands=False,
         head_config=GATE_CONFIG, base_config=GATE_CONFIG, merge_config=None, merge_sha=MERGE_SHA,
-        base_baseline=None, merge_baseline=None, extra_runs=(), settings=None, rules=((),), base_ref="main", rules_error=None, rules_raw=None,
+        base_baseline=None, merge_baseline=None, base_sha=BASE_SHA, remote=None, extra_runs=(), settings=None, rules=((),), base_ref="main", rules_error=None, rules_raw=None,
     ):
         self.admin, self.state, self.fail_on, self.merge_lands = admin, state, set(fail_on), merge_lands
         self.interrupt_on = list(interrupt_on)
         self.settings = ALL_METHODS_ALLOWED if settings is None else settings
         self.rules, self.base_ref, self.rules_error, self.rules_raw = rules, base_ref, rules_error, rules_raw
-        self.merge_sha = merge_sha
+        self.merge_sha, self.base_sha, self.remote = merge_sha, base_sha, remote
         self.files = {
             (CONFIG_PATH, SHA): head_config,
-            (CONFIG_PATH, BASE_SHA): base_config,
-            (CONFIG_PATH, MERGE_SHA): head_config if merge_config is None else merge_config,
-            (BASELINE_PATH, BASE_SHA): base_baseline,
-            (BASELINE_PATH, MERGE_SHA): merge_baseline,
+            (CONFIG_PATH, base_sha): base_config,
+            (CONFIG_PATH, merge_sha): head_config if merge_config is None else merge_config,
+            (BASELINE_PATH, base_sha): base_baseline,
+            (BASELINE_PATH, merge_sha): merge_baseline,
         }
         self.checks = {"checks": "success", **(LEGACY_RED if checks is None else checks)}
         self.extra_runs = list(extra_runs)
@@ -110,7 +110,7 @@ class FakeGh:
 
     def answer(self, step, arguments, stdin):
         if step == "pull":
-            return json.dumps({"state": self.state, "merged": self.merged, "head": {"sha": SHA}, "base": {"sha": BASE_SHA, "ref": self.base_ref}, "merge_commit_sha": self.merge_sha})
+            return json.dumps({"state": self.state, "merged": self.merged, "head": {"sha": SHA}, "base": {"sha": self.base_sha, "ref": self.base_ref}, "merge_commit_sha": self.merge_sha})
         if step == "checks":
             return "\n".join(
                 json.dumps({"name": name, "status": "in_progress" if result is None else "completed", "conclusion": result})
@@ -153,6 +153,10 @@ class FakeGh:
     @property
     def merge_calls(self):
         return [call for call in self.calls if call[:2] == ("pr", "merge")]
+
+
+def no_network(repository):
+    raise AssertionError(f"the door reached for {repository}'s remote")
 
 
 def sonar(new=0, legacy=4, main_analysed=True, analysed=SHA, unreachable=False):
@@ -202,8 +206,10 @@ def drive(gh, transport=None, typed="ja", terminal=True, repo=REPO):
             raise typed
         return typed
 
+    remote = getattr(gh, "remote", None)
     code = cli.main(
-        ["emergency-merge", repo, "7"], gh=gh, transport=transport or sonar(), ask=ask, is_terminal=lambda: terminal
+        ["emergency-merge", repo, "7"], gh=gh, transport=transport or sonar(), ask=ask, is_terminal=lambda: terminal,
+        remote_for=no_network if remote is None else lambda repository: remote,
     )
     return code, answers
 
@@ -564,9 +570,10 @@ def test_ctrl_c_while_posting_the_log_comment_is_reported(restore_fails, capsys)
     ],
     ids=["cell 20 raised", "cell 21 equal", "cell 22 removed at the merge commit", "cell 23 absent at both"],
 )
-def test_the_door_refuses_a_baseline_loosening_next_to_legacy_red(base_baseline, merge_baseline, code, message, capsys):
+def test_the_door_refuses_a_baseline_loosening_next_to_legacy_red(base_baseline, merge_baseline, code, message, capsys, tmp_path):
     """#48 rule 6, cells 20-23: the door judges the baseline at the merge commit against base, as the verdict does."""
-    gh = FakeGh(base_baseline=base_baseline, merge_baseline=merge_baseline)
+    remote, base_sha, merge_sha = git_pull(tmp_path, base_baseline, merge_baseline)
+    gh = FakeGh(base_baseline=base_baseline, merge_baseline=merge_baseline, base_sha=base_sha, merge_sha=merge_sha, remote=remote)
     assert drive(gh)[0] == code
     assert message in capsys.readouterr().out
     assert (gh.merge_calls == []) == (code == 1)
