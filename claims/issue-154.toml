@@ -1,0 +1,8 @@
+claim_id = "c0b4a1af2cd54857a52f34afab196406"
+agent = "claude"
+role = "builder"
+base = "4e555fbeca5a599b425756005e368c48836a9275"
+branch = "claude/issue-154-rulings-at-behaviour"
+scope = ["AGENTS.md", "README.md", "docs/commands.md", "docs/decisions", "docs/gate.md", "docs/rules.md", "docs/rulings.md", "docs/runbook-emergency-merge.md", "docs/sonar.md"]
+opened_commit = "e217c55c1aa9fed3afcc1213c38a132b47780341"
+whole_reason = "The rulings archive dissolves into the reference documents it rules, in one move, so no ruling stands in two places or none."
