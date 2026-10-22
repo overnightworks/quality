@@ -32,7 +32,7 @@ enforces it, so a module imports only from the layers below its own.
 Config, hygiene, `sonar findings` and the verdict read the checkout's own files only through `repository.py`, which keeps each read
 inside the repository and names the file repository-relative in every error.
 
-The operator's rulings: `docs/rulings.md`.
+The operator's rulings stand dated in the reference entry of the behaviour they rule (`docs/`); decisions with rejected alternatives: `docs/decisions/`.
 
 Checks (all targeted, run from the repo root):
 
