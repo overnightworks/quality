@@ -1,0 +1,8 @@
+claim_id = "cad2c970411646ee842db99c1f3f9f5a"
+agent = "claude"
+role = "builder"
+base = "1041aa4879e9e7295a24693cbc5a7b52af55b91f"
+branch = "claude/issue-162-release-v0-5-0"
+scope = [".github/workflows/gate.yml", "AGENTS.md", "docs/commands.md", "scripts/verify_release.py", "src/quality/scoreboard.py", "tests/test_release_pin.py", "tests/test_scoreboard.py", "tests/test_scoreboard_matrix.py", "tests/test_verify_release.py"]
+opened_commit = "de0c66a04ede67dfa5f97def5d637895ba9bda16"
+whole_reason = "One release: the tool refs, the scoreboard's release table and the release check land together, so the tag names one consistent tree."
