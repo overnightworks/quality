@@ -41,7 +41,10 @@ def test_a_bounded_command_returns_at_its_bound_though_a_descendant_left_the_gro
         assert time.monotonic() - started < 4
     finally:
         if escaped.exists():
-            os.kill(int(escaped.read_text()), signal.SIGKILL)
+            escaped_pid = int(escaped.read_text())
+            with suppress(ProcessLookupError):
+                os.kill(escaped_pid, signal.SIGKILL)
+            assert process_is_gone(escaped_pid)
 
 
 def test_a_bound_that_cuts_a_utf8_character_reports_the_timeout():
