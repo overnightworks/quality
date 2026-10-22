@@ -17,7 +17,7 @@ from quality.config import (
     read_gate_settings,
 )
 from quality.hygiene import CannotJudge, read_baseline
-from quality.ratchet import BASELINE_PATH, REWRITE_HINT, Baseline, SizeError, added_pairs, load_baseline, raised_entries
+from quality.ratchet import BASELINE_PATH, Baseline, SizeError, added_pairs, head_advice, load_baseline, raised_entries
 
 JOBS_URL = "https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs?filter=all&per_page=100"
 MAX_PAGES = 10
@@ -415,7 +415,7 @@ def read_head(repo: Path) -> Side:
     try:
         return Side(settings, read_baseline(repo))
     except SizeError as error:
-        raise _unusable(BASELINE_PATH, HEAD, f"{error}; {REWRITE_HINT}") from error
+        raise _unusable(BASELINE_PATH, HEAD, f"{error}; {head_advice(error)}") from error
     except CannotJudge as error:
         raise _unusable(BASELINE_PATH, HEAD, error) from error
 
