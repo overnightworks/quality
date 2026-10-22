@@ -122,6 +122,8 @@ A reusable workflow that runs CodeQL for the languages a caller names, with `bui
 query suite and threat model. It uploads under the category `/language:<language>`, the Default Setup's category, so
 alerts carry over when a repository switches.
 
+A private repository needs GitHub Code Security for code scanning (`code-scanning/default-setup` answers 403 without it); the operator ruled against paying for it (22.10.2026), so private repositories run no CodeQL.
+
 A caller (`.github/workflows/code-scanning.yml`, workflow `name: CodeQL`):
 
 ```yaml
