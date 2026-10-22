@@ -25,30 +25,13 @@ The gitleaks paths (`hygiene --engines`, `scan-staged`) need git 2.41 or newer; 
 
 ## Quick start
 
-A repository adopts the gate by calling the reusable workflow from one job of its own workflow:
+A repository adopts the gate with one caller job of `gate.yml` and a `quality/config.toml` that names the mandatory
+jobs; [docs/gate.md](docs/gate.md#gateyml) has the snippet and the reason for each line. The gate's `sonar` job also
+needs a SonarCloud project with automatic analysis off, a root `sonar-project.properties` and the `SONAR_TOKEN` secret
+(a missing token is red); see [docs/sonar.md](docs/sonar.md#quality-sonar-findings).
 
-```yaml
-  quality:
-    if: always()
-    needs: [checks]
-    permissions:
-      contents: read
-      actions: read
-    uses: overnightworks/quality/.github/workflows/gate.yml@<commit sha> # v<tag>
-    with:
-      coverage-artifact: coverage
-    secrets:
-      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-```
-
-and names the jobs that must pass in `quality/config.toml`:
-
-```toml
-[gate]
-mandatory_jobs = ["checks"]
-```
-
-Locally, `quality hygiene .` runs the same rules on the checkout.
+Locally, `quality hygiene .` runs the hygiene rules; `--engines DIR` (after `quality engines install DIR`) adds the
+secret, workflow and advisory scans the gate runs.
 
 ## Read on
 

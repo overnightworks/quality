@@ -53,4 +53,3 @@ quality emergency-merge <owner/repo> <pr>
   also when the restore failed. The command prints `aco release <n> --abandoned "landed as PR #<pr> by emergency-merge"`
   for the head, because `aco land` refuses any non-green check and `--merged` refuses a merge commit without a
   `Work-Item:` trailer.
-

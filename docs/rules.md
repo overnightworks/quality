@@ -2,10 +2,6 @@
 
 Reference for the engineer or operator who needs the exact behaviour of `quality hygiene` and its output contract.
 
-    uv tool install "overnightworks-quality @ git+https://github.com/overnightworks/quality@<tag or commit sha>"
-
-The gitleaks paths (`hygiene --engines`, `scan-staged`) need git 2.41 or newer; with an older git they exit `2`.
-
 `hygiene` reads git's view of the repository `PATH` (default `.`) lies in, from its top level, so a run from `src` judges
 the same files and the same `quality/baseline.toml` as one at the top, and names every file relative to the top (`size
 src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree's own top. It applies five rules:

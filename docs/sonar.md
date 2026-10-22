@@ -116,4 +116,3 @@ way Sonar judges main:
 - **Gaps:** `quality emergency-merge` does not honour it and still counts the finding as added; the legacy count is
   raw; the file's existence does not say that Dependabot maintains the Dockerfile's folder for Docker; a repository
   that has only `.github/dependabot.yaml` stays red on pull requests; Renovate is not judged.
-
