@@ -1,6 +1,6 @@
 public = [
     "https://github.com/overnightworks/quality",
-    "https://github.com/overnightworks/agent-coordination",
+    "https://github.com/overnightworks/aco",
     "https://github.com/overnightworks/songmaker",
     "https://github.com/overnightworks/presentator",
     "https://github.com/overnightworks/agent-providers",
