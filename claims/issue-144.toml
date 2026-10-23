@@ -1,0 +1,8 @@
+claim_id = "b36380252186463193679b9a9529f4fb"
+agent = "claude"
+role = "builder"
+base = "d3a0466fc6dc87898431b722e9488921d729be42"
+branch = "claude/issue-144-root-layout-rule"
+scope = ["AGENTS.md", "docs/commands.md", "docs/rules.md", "src/quality/config.py", "src/quality/hygiene.py", "src/quality/scoreboard.py", "tests"]
+opened_commit = "469f4f97667e9774ef6557da117ebeec968ff478"
+whole_reason = "One rule end to end: its config table, its check and its matrix row land together, and the clean line it changes is pinned across many test modules."
