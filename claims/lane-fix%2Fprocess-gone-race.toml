@@ -1,0 +1,7 @@
+claim_id = "6dfe8069e9f44077b71fcdfe9831b2a3"
+agent = "claude"
+role = "builder"
+base = "7847ce538f2af9fac325a84d82e3414e30599342"
+branch = "fix/process-gone-race"
+scope = ["tests/conftest.py"]
+opened_commit = "a858080df275dfde1b6e62d4f478d335059ae78f"
