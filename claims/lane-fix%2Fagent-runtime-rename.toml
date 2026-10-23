@@ -1,0 +1,7 @@
+claim_id = "4bf3be857c764723b0c238d9d532a7d4"
+agent = "claude"
+role = "builder"
+base = "ea1afbc13fcdcb60eabeb6ecb1a5d1e7c797dd06"
+branch = "fix/agent-runtime-rename"
+scope = ["quality/fleet.toml"]
+opened_commit = "ee187accb3e68eb5f93e7732a44b7cca82f402b8"
