@@ -95,7 +95,8 @@ def test_a_rule_count_above_the_total_is_exit_2(monkeypatch, capsys):
     write_bot_config()
     code, out, err, _ = run_cli(monkeypatch, capsys, findings_of(legacy=2, legacy_by_rule={"docker:S8431": 3}))
     assert (code, out) == (2, "")
-    assert err.startswith("sonar: cannot judge - ") and "docker:S8431" in err
+    assert err.startswith("sonar: cannot judge - ")
+    assert "docker:S8431" in err
 
 
 @pytest.mark.parametrize(
@@ -114,9 +115,11 @@ def test_an_unreadable_rule_count_is_exit_2(monkeypatch, capsys, answer):
 
 @pytest.mark.parametrize("legacy", [-1, True], ids=["negative", "boolean"])
 def test_an_unreadable_raw_count_is_exit_2(monkeypatch, capsys, legacy):
-    write_bot_config()
-    code, out, err, _ = run_cli(monkeypatch, capsys, findings_of(legacy=legacy))
-    assert (code, out, err.startswith("sonar: cannot judge - ")) == (2, "", True)
+    """Report mode and no bot config: only the raw total's own validation can refuse"""
+    code, out, err, _ = run_cli(monkeypatch, capsys, findings_of(legacy=legacy), config_text=legacy_config("report"))
+    assert code == 2
+    assert out == ""
+    assert err.startswith("sonar: cannot judge - ")
 
 
 def test_without_the_bot_config_no_rule_is_counted(monkeypatch, capsys):
