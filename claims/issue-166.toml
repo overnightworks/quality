@@ -1,0 +1,8 @@
+claim_id = "facd041dffec4deabbde84d0645d198b"
+agent = "claude"
+role = "builder"
+base = "edaae73433fa6356ec9731fbf8b94401b663d24c"
+branch = "claude/issue-166-legacy-count-exception"
+scope = [".github/workflows/gate.yml", "docs/sonar.md", "src/quality/sonar.py", "tests/test_sonar.py", "tests/test_sonar_exception.py"]
+opened_commit = "a1692acf193acfd5363fe23a5583ee820899952f"
+whole_reason = "One patch release: the legacy count's fix and the gate's tool refs land together, so the tag v0.5.1 names one consistent tree."
