@@ -216,7 +216,7 @@ def legacy_unknown(default_branch: str) -> str:
 
 @dataclass(frozen=True)
 class SonarResult:
-    """`legacy` is the open count of the default branch, asked for on pull requests only."""
+    """`legacy` is the default branch's open count less the rules its own run sets aside, asked for on pull requests only."""
 
     analysis: Analysis
     findings: OpenFindings
@@ -528,10 +528,14 @@ def legacy_count(analysis: Analysis, uncounted: frozenset[str], transport: Trans
 def open_total(analysis: Analysis, scope: Scope, transport: Transport, rule: str | None = None) -> int:
     """The answer's total alone: findings counted, never listed."""
     url = issues_search_url(analysis, scope, 1, 1, rule)
+    unreadable = CannotJudge(f"SonarCloud answered {url.partition('?')[0]} with an unreadable body")
     try:
-        return int(answer_object(transport(url, analysis.authorization), None, url)["total"])
-    except (KeyError, TypeError, ValueError) as error:
-        raise CannotJudge(f"SonarCloud answered {url.partition('?')[0]} with an unreadable body") from error
+        total = answer_object(transport(url, analysis.authorization), None, url)["total"]
+    except (KeyError, TypeError) as error:
+        raise unreadable from error
+    if type(total) is not int or total < 0:
+        raise unreadable
+    return total
 
 
 def open_findings(analysis: Analysis, transport: Transport, uncounted: frozenset[str] = frozenset()) -> OpenFindings:

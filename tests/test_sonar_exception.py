@@ -98,13 +98,24 @@ def test_a_rule_count_above_the_total_is_exit_2(monkeypatch, capsys):
     assert err.startswith("sonar: cannot judge - ") and "docker:S8431" in err
 
 
-@pytest.mark.parametrize("answer", [{"issues": []}, {"total": "many"}, [], None], ids=["no total", "not a number", "list", "null"])
+@pytest.mark.parametrize(
+    "answer",
+    [{"issues": []}, {"total": "many"}, [], None, {"total": True}, {"total": 3.9}, {"total": -1}, {"total": "3"}],
+    ids=["no total", "not a number", "list", "null", "boolean", "fraction", "negative", "numeral string"],
+)
 def test_an_unreadable_rule_count_is_exit_2(monkeypatch, capsys, answer):
     """#166 cell 7: never a silent zero"""
     write_bot_config()
     fake = findings_of(legacy=5)
     fake.answers[rule_count_endpoint("docker:S8431")] = [answer]
     code, out, err, _ = run_cli(monkeypatch, capsys, fake)
+    assert (code, out, err.startswith("sonar: cannot judge - ")) == (2, "", True)
+
+
+@pytest.mark.parametrize("legacy", [-1, True], ids=["negative", "boolean"])
+def test_an_unreadable_raw_count_is_exit_2(monkeypatch, capsys, legacy):
+    write_bot_config()
+    code, out, err, _ = run_cli(monkeypatch, capsys, findings_of(legacy=legacy))
     assert (code, out, err.startswith("sonar: cannot judge - ")) == (2, "", True)
 
 
