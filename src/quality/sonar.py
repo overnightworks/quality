@@ -216,7 +216,7 @@ def legacy_unknown(default_branch: str) -> str:
 
 @dataclass(frozen=True)
 class SonarResult:
-    """`legacy` is the open count of the default branch, asked for on pull requests only."""
+    """`legacy` is the default branch's open count less the rules its own run sets aside, asked for on pull requests only."""
 
     analysis: Analysis
     findings: OpenFindings
@@ -373,7 +373,7 @@ def analyse(
     findings = open_findings(analysis, transport, uncounted)
     legacy = None
     if kind is RunKind.PULL_REQUEST and default_analysed:
-        legacy = open_total(analysis, Scope("branch", analysis.default_branch), transport)
+        legacy = legacy_count(analysis, uncounted, transport)
     return SonarResult(analysis, findings, legacy_mode, unknown, legacy)
 
 
@@ -500,24 +500,42 @@ def default_branch_analysed(analysis: Analysis, transport: Transport) -> bool:
     return bool(branches[0].get("analysisDate"))
 
 
-def issues_search_url(analysis: Analysis, scope: Scope, page: int, page_size: int) -> str:
+def issues_search_url(analysis: Analysis, scope: Scope, page: int, page_size: int, rule: str | None = None) -> str:
+    rule_filter = {} if rule is None else {"rules": rule}
     return api_url(
         "issues/search",
         componentKeys=analysis.project.key,
         issueStatuses=OPEN_ISSUE_STATUSES,
         ps=page_size,
         p=page,
+        **rule_filter,
         **scope_query(scope),
     )
 
 
-def open_total(analysis: Analysis, scope: Scope, transport: Transport) -> int:
+def legacy_count(analysis: Analysis, uncounted: frozenset[str], transport: Transport) -> int:
+    """The default branch's open total less the findings of the rules its own run sets aside."""
+    scope = Scope("branch", analysis.default_branch)
+    total = open_total(analysis, scope, transport)
+    for rule in sorted(uncounted):
+        set_aside = open_total(analysis, scope, transport, rule)
+        if set_aside > total:
+            raise CannotJudge(f"SonarCloud counts {set_aside} open {rule} findings on {analysis.default_branch} but only {total} open findings in all")
+        total -= set_aside
+    return total
+
+
+def open_total(analysis: Analysis, scope: Scope, transport: Transport, rule: str | None = None) -> int:
     """The answer's total alone: findings counted, never listed."""
-    url = issues_search_url(analysis, scope, 1, 1)
+    url = issues_search_url(analysis, scope, 1, 1, rule)
+    unreadable = CannotJudge(f"SonarCloud answered {url.partition('?')[0]} with an unreadable body")
     try:
-        return int(answer_object(transport(url, analysis.authorization), None, url)["total"])
-    except (KeyError, TypeError, ValueError) as error:
-        raise CannotJudge(f"SonarCloud answered {url.partition('?')[0]} with an unreadable body") from error
+        total = answer_object(transport(url, analysis.authorization), None, url)["total"]
+    except (KeyError, TypeError) as error:
+        raise unreadable from error
+    if type(total) is not int or total < 0:
+        raise unreadable
+    return total
 
 
 def open_findings(analysis: Analysis, transport: Transport, uncounted: frozenset[str] = frozenset()) -> OpenFindings:

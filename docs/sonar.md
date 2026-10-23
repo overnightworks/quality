@@ -66,7 +66,8 @@ unreadable is exit `2`.
 
 `gate.yml` passes the repository's default branch (`github.event.repository.default_branch`) as `DEFAULT_BRANCH`; it is
 never assumed to be `main`, and a missing or empty value is exit `2`. "Legacy" means the open findings of that branch,
-counted by the same `issues/search` with the same open statuses, and only counted, never listed.
+counted by the same `issues/search` with the same open statuses, and only counted, never listed; the findings the
+[Dependabot exception](#a-dependabot-exception-for-dockers8431) sets aside are subtracted, one more count per such rule.
 - **Pull request:** new findings are listed and make the run exit `1` (except the findings the [Dependabot exception](#a-dependabot-exception-for-dockers8431) sets aside). Both counts always print, for example
   `sonar: new 0 · legacy 17 (overnightworks_webauth, main)`.
 - **Default branch:** a run on the default branch exits `1` on any open finding (except the findings the [Dependabot exception](#a-dependabot-exception-for-dockers8431) sets aside), lists them and prints
@@ -110,15 +111,16 @@ way Sonar judges main:
   `.github/dependabot.yaml` is not looked at. The rule applies in every run kind.
 - **What prints:** the finding still prints, on stdout after the counted findings and before the summary, without a
   `Fix:` line: `sonar Dockerfile:3 - docker:S8431: <message> (does not count: .github/dependabot.yml exists, Sonar's
-  own exception, which its pull-request analysis misses)`. The summary line does not count it; the legacy number stays
-  the raw count of the default branch.
+  own exception, which its pull-request analysis misses)`. The summary line does not count it, and the legacy number
+  leaves it out too: the default branch's open total less that rule's open count on the default branch. A rule count
+  above the total is exit `2`.
 - **An unreachable file:** a `.github` the filesystem refuses access to is exit `2` with a line naming the file, before
   any request.
 - **Only this rule** has the exception; every other finding and rule counts as before.
-- **Gaps:** `quality emergency-merge` does not honour it and still counts the finding as added; the legacy count is
-  raw; the file's existence does not say that Dependabot maintains the Dockerfile's folder for Docker; a repository
+- **Gaps:** `quality emergency-merge` does not honour it and still counts the finding as added; the file's existence does not say that Dependabot maintains the Dockerfile's folder for Docker; a repository
   that has only `.github/dependabot.yaml` stays red on pull requests; Renovate is not judged.
 
-(operator ruling 21.10.2026: Sonar's exception applies on pull requests too, „Sonars Ausnahme anwenden (empfohlen)“, and
+(operator rulings 21.10.2026 and 23.10.2026: Sonar's exception applies on pull requests too, „Sonars Ausnahme anwenden (empfohlen)“, and
 holds when the file exists, „Wenn dependabot.yml existiert (empfohlen)“; the rejected per-line entries stand in
-[decision 2](decisions/2-dependabot-exception.md).)
+[decision 2](decisions/2-dependabot-exception.md); 23.10.2026, „ja A“, relayed by edge's head: the legacy count sets
+aside the same findings, re-ruling E3 of #98.)

@@ -36,6 +36,12 @@ FEATURE_ENVIRONMENT = {**PUSH_ENVIRONMENT, "GITHUB_REF_NAME": "feat/a"}
 
 
 LEGACY_COUNT = "issues/search (count only)"
+
+
+def rule_count_endpoint(rule: str) -> str:
+    return f"{LEGACY_COUNT} of {rule}"
+
+
 ANALYSED_MAIN = {"name": "main", "isMain": True, "analysisDate": "2026-10-16T10:00:00+0000"}
 
 
@@ -69,16 +75,20 @@ class FakeSonar:
     @staticmethod
     def endpoint_of(url: str) -> str:
         endpoint = urlparse(url).path.removeprefix("/api/")
-        counts_only = parse_qs(urlparse(url).query).get("ps") == ["1"]
-        return LEGACY_COUNT if endpoint == "issues/search" and counts_only else endpoint
+        query = parse_qs(urlparse(url).query)
+        if endpoint != "issues/search" or query.get("ps") != ["1"]:
+            return endpoint
+        return rule_count_endpoint(query["rules"][0]) if "rules" in query else LEGACY_COUNT
 
     def urls_to(self, endpoint: str) -> list[str]:
         return [url for url, _ in self.requests if self.endpoint_of(url) == endpoint]
 
 
-def sonar_answering(task=FINISHED_FOR_PR_7, issues=None, measures=None, legacy=0, branches=(ANALYSED_MAIN,)) -> FakeSonar:
+def sonar_answering(task=FINISHED_FOR_PR_7, issues=None, measures=None, legacy=0, branches=(ANALYSED_MAIN,), legacy_by_rule=None) -> FakeSonar:
+    set_aside_counts = {"docker:S8431": 0, **(legacy_by_rule or {})}
     return FakeSonar(
         {
+            **{rule_count_endpoint(rule): [{"total": count, "issues": []}] for rule, count in set_aside_counts.items()},
             "ce/task": [{"task": task}],
             "measures/component": [measures or {"component": {}}],
             "project_branches/list": [{"branches": list(branches)}],
