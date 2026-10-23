@@ -74,7 +74,8 @@ def test_an_invalid_declaration_cannot_be_judged_and_shows_an_example(build_repo
 )
 def test_a_malformed_root_table_cannot_be_judged(build_repo, capsys, config):
     code, output = hygiene_output(capsys, build_repo({**GUIDANCE, CONFIG: config}))
-    assert (code, "[[root.allow]]" in output) == (2, True)
+    assert code == 2
+    assert all(text in output for text in ("[[root.allow]]", 'entry = "', 'reason = "'))
 
 
 def test_a_declared_collecting_directory_is_green(build_repo, capsys):
@@ -134,6 +135,12 @@ def test_a_declaration_matching_no_tracked_entry_is_red_and_names_it(build_repo,
     assert (code, entries_of(output)) == (1, ["plans/"])
     assert "declared in quality/config.toml" in output
     assert "tracks no such root entry" in output
+
+
+def test_a_directory_declared_without_its_slash_is_told_the_slash_is_what_is_tracked(build_repo, capsys):
+    repo = build_repo({**GUIDANCE, "frontend/a.js": "x", CONFIG: declaring("frontend")})
+    output = hygiene_output(capsys, repo)[1]
+    assert "the repository tracks frontend/" in output
 
 
 def test_a_finding_names_the_entry_and_both_ways_out_without_a_local_path(build_repo, capsys):

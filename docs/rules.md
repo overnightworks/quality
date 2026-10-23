@@ -137,9 +137,9 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   clean. A finding names the entry and both ways out, move it to its owner's directory or declare it with a reason, in
   prose with no command and no local path; findings are sorted by entry and all printed. An invalid declaration (a `/`
   inside the entry, `.`, `..`, `.git`, an empty entry, a multi-line reason, an unknown key, or one entry declared
-  twice) is `hygiene: root-layout cannot judge - ...` with an example, and so is any other malformed part of
-  `quality/config.toml`, which plain `quality hygiene` reads for this rule. Any pull request may add a declaration with a
-  reason; the review judges whether the reason holds. A declaration is no loosening, so `quality verdict` asks for no
+  twice) is `hygiene: root-layout cannot judge - ...` with an example, and so is any other malformed table or allowance
+  elsewhere in `quality/config.toml`, which plain `quality hygiene` reads for this rule; the values of `[gate]` stay the
+  verdict's to judge. Any pull request may add a declaration with a reason; the review judges whether the reason holds. A declaration is no loosening, so `quality verdict` asks for no
   `[[gate.loosened]]` entry (operator ruling 23.10.2026: „jeder PR mit Grund, das Review urteilt, ohne deine Tür“).
   The rule reads names, never content, and writes nothing. No configuration switches it off. A config reader older than
   the rule refuses `[root]` as an unknown key, so a declaration lands in the pull request that moves the repository to

@@ -12,6 +12,7 @@ import yaml
 
 from quality import advisories, architecture, clones, engines, ratchet, repository
 from quality.config import (
+    CONFIG_PATH,
     Allowance,
     ConfigError,
     RootAllowance,
@@ -224,7 +225,7 @@ def check_root_layout(tracked: list[str], allowances: Sequence[RootAllowance]) -
         _unlisted_root_entry(entry, base_spelling.get(entry.casefold()))
         for entry in entries - ROOT_BASE_ENTRIES - declared
     ]
-    findings += [_stale_root_declaration(entry) for entry in declared - entries]
+    findings += [_stale_root_declaration(entry, entries) for entry in declared - entries]
     return sorted(findings, key=lambda finding: finding.path)
 
 
@@ -233,15 +234,16 @@ def _unlisted_root_entry(entry: str, base_spelling: str | None) -> Finding:
     return Finding(
         ROOT_LAYOUT, entry, None,
         f"not on quality's base list{hint}.",
-        "move it to its owner's directory, or declare it in quality/config.toml with [[root.allow]], an entry and a reason.",
+        f"move it to its owner's directory, or declare it in {CONFIG_PATH} with [[root.allow]], an entry and a reason.",
     )
 
 
-def _stale_root_declaration(entry: str) -> Finding:
+def _stale_root_declaration(entry: str, tracked_entries: set[str]) -> Finding:
+    hint = f" (the repository tracks {entry}/)" if f"{entry}/" in tracked_entries else ""
     return Finding(
         ROOT_LAYOUT, entry, None,
-        "declared in quality/config.toml with [[root.allow]], but the repository tracks no such root entry.",
-        "delete its [[root.allow]] entry from quality/config.toml.",
+        f"declared in {CONFIG_PATH} with [[root.allow]], but the repository tracks no such root entry{hint}.",
+        f"delete its [[root.allow]] entry from {CONFIG_PATH}.",
     )
 
 

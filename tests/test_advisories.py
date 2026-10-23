@@ -179,7 +179,9 @@ def test_a_repository_osv_scanner_config_changes_nothing(build_repo, publish_dat
     """#53 head decision: the caller's osv-scanner.toml is never honoured."""
     publish_database()
     repo = build_repo({"uv.lock": uv_lock(), "osv-scanner.toml": repository_config})
-    assert run_gate(repo, installed_engines)[0] == 1
+    code, output = run_gate(repo, installed_engines)
+    assert code == 1
+    assert "advisory uv.lock - " in output
 
 
 @pytest.mark.engine

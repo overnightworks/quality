@@ -14,7 +14,7 @@ import urllib.request
 from pathlib import Path
 
 import pytest
-from conftest import FAKE_KEY, GIT_IDENTITY, OTHER_KEY, UNKNOWN_KEY_CONFIGS, allow_config, sha256_of
+from conftest import FAKE_KEY, GIT_IDENTITY, OTHER_KEY, UNKNOWN_KEY_CONFIGS, allow_config, assert_key_found, sha256_of
 
 from quality import cli, engines
 from quality.engines import EngineError, Pin
@@ -309,12 +309,12 @@ def test_committed_secret_fails(build_repo, installed_engines, capsys):
 
 
 @pytest.mark.engine
-def test_secret_removed_in_a_later_commit_still_fails(build_repo, installed_engines):
+def test_secret_removed_in_a_later_commit_still_fails(build_repo, installed_engines, capsys):
     """#13 rules 4 and 5: a key removed in a later commit still fails because it lives in history."""
     repo = build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
     (repo / "config.txt").write_text("aws_access_key_id = removed\n")
     commit(repo, "remove the key")
-    assert scan(repo, installed_engines) == 1
+    assert_key_found(repo, installed_engines, capsys)
 
 
 @pytest.mark.engine
@@ -344,10 +344,10 @@ def test_a_relative_repository_path_starting_with_a_dash_is_scanned_as_that_repo
 
 @pytest.mark.engine
 @pytest.mark.parametrize("attribute_line", ["config.txt -diff", "config.txt binary", "* -diff -text"])
-def test_a_committed_attribute_line_cannot_hide_a_key(build_repo, installed_engines, attribute_line):
+def test_a_committed_attribute_line_cannot_hide_a_key(build_repo, installed_engines, attribute_line, capsys):
     """#21 rule 1: a .gitattributes in the repository that makes git print "Binary files differ" is still red."""
     repo = build_repo({".gitattributes": f"{attribute_line}\n", "config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
-    assert scan(repo, installed_engines) == 1
+    assert_key_found(repo, installed_engines, capsys)
 
 
 @pytest.fixture
@@ -363,48 +363,48 @@ def hiding_attributes(tmp_path) -> Path:
 
 
 @pytest.mark.engine
-def test_a_global_attributes_file_cannot_hide_a_key(keyed_repo, installed_engines, tmp_path, monkeypatch):
+def test_a_global_attributes_file_cannot_hide_a_key(keyed_repo, installed_engines, tmp_path, monkeypatch, capsys):
     """#21 rule 1: attributes from the user's global file are not read either."""
     config_home = tmp_path / "config-home"
     (config_home / "git").mkdir(parents=True)
     (config_home / "git" / "attributes").write_text("config.txt -diff\n")
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
-    assert scan(keyed_repo, installed_engines) == 1
+    assert_key_found(keyed_repo, installed_engines, capsys)
 
 
 @pytest.mark.engine
 def test_a_configured_core_attributes_file_cannot_hide_a_key(
-    keyed_repo, installed_engines, tmp_path, monkeypatch, hiding_attributes
+    keyed_repo, installed_engines, tmp_path, monkeypatch, hiding_attributes, capsys
 ):
     """#21 rule 1: a core.attributesFile in the user's own git config is not read."""
     home = tmp_path / "home"
     home.mkdir()
     (home / ".gitconfig").write_text(f"[core]\n\tattributesFile = {hiding_attributes}\n")
     monkeypatch.setenv("HOME", str(home))
-    assert scan(keyed_repo, installed_engines) == 1
+    assert_key_found(keyed_repo, installed_engines, capsys)
 
 
 @pytest.mark.engine
 def test_an_inherited_git_config_variable_cannot_bring_an_attributes_file_back(
-    keyed_repo, installed_engines, monkeypatch, hiding_attributes
+    keyed_repo, installed_engines, monkeypatch, hiding_attributes, capsys
 ):
     """#21 rule 1: every other inherited GIT_* variable is removed, GIT_CONFIG_COUNT included."""
     monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
     monkeypatch.setenv("GIT_CONFIG_KEY_0", "core.attributesFile")
     monkeypatch.setenv("GIT_CONFIG_VALUE_0", str(hiding_attributes))
-    assert scan(keyed_repo, installed_engines) == 1
+    assert_key_found(keyed_repo, installed_engines, capsys)
 
 
 @pytest.mark.engine
-def test_a_diff_driver_marked_binary_cannot_hide_a_key(build_repo, installed_engines, tmp_path, monkeypatch):
+def test_a_diff_driver_marked_binary_cannot_hide_a_key(build_repo, installed_engines, tmp_path, monkeypatch, capsys):
     """#21 rule 1: a diff=<driver> attribute whose configured driver is binary does not hide the key."""
     home = tmp_path / "home"
     home.mkdir()
     (home / ".gitconfig").write_text('[diff "hidden"]\n\tbinary = true\n')
     monkeypatch.setenv("HOME", str(home))
     repo = build_repo({".gitattributes": "config.txt diff=hidden\n", "config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
-    assert scan(repo, installed_engines) == 1
+    assert_key_found(repo, installed_engines, capsys)
 
 
 def test_the_git_environment_cuts_off_every_attributes_source(tmp_path, monkeypatch):
@@ -425,31 +425,31 @@ def test_the_git_environment_cuts_off_every_attributes_source(tmp_path, monkeypa
 
 @pytest.mark.engine
 def test_a_core_attributes_file_in_the_repository_config_cannot_hide_a_key(
-    keyed_repo, installed_engines, hiding_attributes
+    keyed_repo, installed_engines, hiding_attributes, capsys
 ):
     """#21 rule 1: a core.attributesFile in the scanned repository's own config does not reach the mirror."""
     subprocess.run(["git", "-C", str(keyed_repo), "config", "core.attributesFile", str(hiding_attributes)], check=True)
-    assert scan(keyed_repo, installed_engines) == 1
+    assert_key_found(keyed_repo, installed_engines, capsys)
 
 
 @pytest.mark.engine
-def test_the_repositorys_info_attributes_cannot_hide_a_key(keyed_repo, installed_engines):
+def test_the_repositorys_info_attributes_cannot_hide_a_key(keyed_repo, installed_engines, capsys):
     """#21 rule 1: the scanned repository's .git/info/attributes is not read."""
     (keyed_repo / ".git" / "info").mkdir(exist_ok=True)
     (keyed_repo / ".git" / "info" / "attributes").write_text("config.txt -diff\n")
-    assert scan(keyed_repo, installed_engines) == 1
+    assert_key_found(keyed_repo, installed_engines, capsys)
 
 
 @pytest.mark.engine
 def test_a_template_directory_cannot_put_attributes_into_the_mirror(
-    keyed_repo, installed_engines, tmp_path, fake_git
+    keyed_repo, installed_engines, tmp_path, fake_git, capsys
 ):
     """#21 rule 1: attributes shipped by git's default template directory do not reach the mirror."""
     template = tmp_path / "template" / "info"
     template.mkdir(parents=True)
     (template / "attributes").write_text("* -diff\n")
     fake_git(f'export GIT_TEMPLATE_DIR="{template.parent}"')
-    assert scan(keyed_repo, installed_engines) == 1
+    assert_key_found(keyed_repo, installed_engines, capsys)
 
 
 @pytest.mark.engine
@@ -849,7 +849,7 @@ def test_the_scan_passes_the_gates_own_config(build_repo, tmp_path):
 
 
 @pytest.mark.engine
-def test_a_repository_config_and_ignore_file_do_not_silence_the_scan(build_repo, installed_engines):
+def test_a_repository_config_and_ignore_file_do_not_silence_the_scan(build_repo, installed_engines, capsys):
     """#16: a committed .gitleaks.toml, a .gitleaksignore holding the real fingerprint and gitleaks:allow
     have no effect."""
     repo = build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}  # gitleaks:allow\n"})
@@ -859,7 +859,7 @@ def test_a_repository_config_and_ignore_file_do_not_silence_the_scan(build_repo,
     (repo / ".gitleaks.toml").write_text('[extend]\nuseDefault = true\n[allowlist]\npaths = [\'\'\'config.txt\'\'\']\n')
     (repo / ".gitleaksignore").write_text(f"{first_commit}:config.txt:aws-access-token:1\n")
     commit(repo, "try to silence the scan")
-    assert scan(repo, installed_engines) == 1
+    assert_key_found(repo, installed_engines, capsys)
 
 
 def allow_fake_key(repo: Path, file: str = "config.txt") -> None:

@@ -159,9 +159,10 @@ def _refuse_unknown_keys(document: dict, gate: dict, advisories: dict, root: dic
         (set(document) - TABLES) | (set(gate) - GATE_KEYS) | (set(advisories) - ADVISORIES_KEYS) | (set(root) - ROOT_KEYS)
     )
     if unknown:
+        example = f", like:\n{ROOT_ALLOWANCE_EXAMPLE}" if set(root) - ROOT_KEYS else ""
         raise ConfigError(
             f"{CONFIG_PATH} has unknown key(s) {sorted(unknown)} - only [gate] mandatory_jobs, [gate] legacy, "
-            "[[gate.loosened]], [secrets] allow, [[advisories.allow]] and [[root.allow]] exist"
+            f"[[gate.loosened]], [secrets] allow, [[advisories.allow]] and [[root.allow]] exist{example}"
         )
 
 
