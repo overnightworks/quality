@@ -226,10 +226,10 @@ def test_a_lock_the_tree_cannot_hand_over_is_skipped_or_refused(
 ):
     """#53 rule 1, cells 9, 10 and 31."""
     publish_database()
-    repo = build_repo({"uv.lock": uv_lock(), "inside/x": "x\n"})
+    repo = build_repo({"uv.lock": uv_lock(), "docs/x": "x\n"})
     (repo / "uv.lock").unlink()
     if tracked_only == "symlink to a directory":
-        (repo / "uv.lock").symlink_to("inside")
+        (repo / "uv.lock").symlink_to("docs")
     if tracked_only == "symlink out":
         outside = tmp_path.parent / f"{tmp_path.name}-outside.lock"
         outside.write_text(uv_lock())

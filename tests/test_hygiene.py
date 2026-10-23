@@ -16,7 +16,7 @@ from quality import cli, hygiene, sonar
 from quality.report import Finding
 
 EDGE_STACK = (Path(__file__).parent / "data" / "edge_stack.yml").read_text(encoding="utf-8")
-CLEAN_FILE_RULES = "hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md)"
+CLEAN_FILE_RULES = "hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout)"
 
 
 def compose(*port_lines: str) -> dict[str, str]:
@@ -35,7 +35,7 @@ def truncated_compose_repo(build_repo, tmp_path):
 
 
 def non_utf8_filename_repo(build_repo, tmp_path):
-    return build_repo({"\udcff.txt": "x\n"})
+    return build_repo({"docs/\udcff.txt": "x\n"})
 
 
 @pytest.mark.parametrize(
@@ -97,9 +97,9 @@ def assert_refusal(output: str, rule: str, path: str) -> None:
         (".env", True),
         ("config/prod.env", True),
         (".env.local", True),
-        (".env.example", False),
-        ("docker/.env.docker.example", False),
-        ("environment.txt", False),
+        ("docs/.env.example", False),
+        ("docs/docker/.env.docker.example", False),
+        ("docs/environment.txt", False),
     ],
 )
 def test_tracked_env_files(build_repo, capsys, name, refused):
@@ -187,7 +187,7 @@ OPEN_PORT = compose('- "0.0.0.0:1:1"')["compose.yaml"]
     "name",
     [
         "keycloak/bootstrap.compose.yaml",
-        "e2e/oidc/suite-compose.yaml",
+        "docs/oidc/suite-compose.yaml",
         "probe/compose.probe.yaml",
         "docker-compose.ci.yml",
         "compose.override.yml",
@@ -209,7 +209,7 @@ def test_a_compose_name_is_judged(build_repo, capsys, name):
 )
 def test_a_name_without_the_compose_word_is_not_judged(build_repo, capsys, name):
     """#78 rule 1, cell 5: a near miss is not a compose file."""
-    assert run(capsys, build_repo({name: OPEN_PORT}))[0] == 0
+    assert run(capsys, build_repo({f"docs/{name}": OPEN_PORT}))[0] == 0
 
 
 UNREADABLE_YAML = [
@@ -273,7 +273,7 @@ def test_an_untracked_compose_file_is_not_judged_until_it_is_added(build_repo, c
 
 def test_webauth_suite_compose_is_clean(build_repo, capsys):
     """#78 cell 16: a short-syntax `127.0.0.1::8080` port (empty host port) binds loopback."""
-    files = {"e2e/oidc/suite-compose.yaml": compose('- "127.0.0.1::8080"')["compose.yaml"]}
+    files = {"docs/oidc/suite-compose.yaml": compose('- "127.0.0.1::8080"')["compose.yaml"]}
     assert run(capsys, build_repo(files))[0] == 0
 
 
@@ -393,21 +393,22 @@ def files(tracked: dict[str, str]):
 @pytest.mark.parametrize(
     ("arrange", "with_engines", "expected_code", "expected_lines"),
     [
-        (files({**BASELINE, ".env": "A=1\n", "bad.py": "def broken(:\n"}), False, 2,
-         [ENV_FINDING, "hygiene: size unparsable - bad.py is not valid Python",
-          "hygiene: 1 finding(s); verdicts: 4 clean, 1 findings, 1 unparsable"]),
+        (files({**BASELINE, ".env": "A=1\n", "src/bad.py": "def broken(:\n"}), False, 2,
+         [ENV_FINDING, "hygiene: size unparsable - src/bad.py is not valid Python",
+          "hygiene: 2 finding(s); verdicts: 4 clean, 2 findings, 1 unparsable"]),
         (config_linked_out_of_the_repository, True, 2,
          [ENV_FINDING, "hygiene: secret cannot judge - quality/config.toml resolves outside the repository",
           "hygiene: advisory cannot judge - quality/config.toml resolves outside the repository",
-          "hygiene: 1 finding(s); verdicts: 7 clean, 1 findings, 2 cannot judge"]),
+          "hygiene: root-layout cannot judge - quality/config.toml resolves outside the repository",
+          "hygiene: 1 finding(s); verdicts: 7 clean, 1 findings, 3 cannot judge"]),
         (files({**BASELINE, "compose.yaml": "services: [\n", "src/a.py": NEW_DEBT}), False, 2,
          ["hygiene: compose-port cannot judge - cannot read compose.yaml", "size src/a.py:1 - function long_one"]),
         (files({".env": "A=1\n", **compose('- "8080:80"')}), False, 1,
-         [ENV_FINDING, "compose-port compose.yaml - ", "hygiene: 2 finding(s); verdicts: 4 clean, 2 findings"]),
+         [ENV_FINDING, "compose-port compose.yaml - ", "hygiene: 3 finding(s); verdicts: 4 clean, 3 findings"]),
         (files({}), False, 0,
          [f"{CLEAN_FILE_RULES}; skipped without --engines: secret, workflow-lint, workflow-security, advisory"]),
         (files({}), True, 0,
-         ["hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, secret, workflow-lint, workflow-security, advisory);"]),
+         ["hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout, secret, workflow-lint, workflow-security, advisory);"]),
         (files({"compose-\udcff.yaml": compose('- "8080:80"')["compose.yaml"]}), False, 1,
          ["compose-port compose-\\udcff.yaml - service web publishes port 8080:80"]),
         (files({**BASELINE, "src/\udcff.py": NEW_DEBT}), False, 1, ["size src/\\udcff.py:1 - function long_one"]),
@@ -419,7 +420,7 @@ def files(tracked: dict[str, str]):
         "cell 3 unreadable compose hides no size finding",
         "cell 4 findings in two rules",
         "cell 5 clean names the file rules",
-        "cell 6 clean with engines names all ten rules",
+        "cell 6 clean with engines names all eleven rules",
         "cell 7 non-utf8 compose name",
         "cell 8 non-utf8 python name",
         "rule 4 non-utf8 python name in the size report",
@@ -532,10 +533,10 @@ def test_a_machine_without_git_is_cannot_judge_not_a_traceback(tmp_path, monkeyp
 
 def test_compose_files_are_read_and_parsed_one_at_a_time(tmp_path, capsys):
     """#76 E6, rule 1, cell 4: the first file's YAML error is reported although a later file cannot be decoded."""
-    repo = make_repo(tmp_path, {"compose-a.yaml": "a: [\n", "compose-b.yaml": "x"})
-    (repo / "compose-b.yaml").write_bytes(b"\xff")
+    repo = make_repo(tmp_path, {"docs/compose-a.yaml": "a: [\n", "docs/compose-b.yaml": "x"})
+    (repo / "docs/compose-b.yaml").write_bytes(b"\xff")
     code, output = run(capsys, repo)
-    assert (code, "compose-port cannot judge - cannot read compose-a.yaml" in output, "compose-b.yaml" in output) == (2, True, False), output
+    assert (code, "compose-port cannot judge - cannot read docs/compose-a.yaml" in output, "compose-b.yaml" in output) == (2, True, False), output
 
 
 def make_submodule_path(tmp_path: Path) -> tuple[Path, Path]:
@@ -666,7 +667,7 @@ def test_a_merged_pipe_shows_the_hygiene_lines_in_run_order(env_and_broken_compo
     done = quality_door(
         "hygiene", ".", cwd=env_and_broken_compose, door=door, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
     )
-    prefixes = ["size: ", "clone: ", "import-contract: ", "env-file .env - ", "  Fix: ", "hygiene: compose-port cannot judge - ", "hygiene: 1 finding(s)"]
+    prefixes = ["size: ", "clone: ", "import-contract: ", "env-file .env - ", "  Fix: ", "hygiene: compose-port cannot judge - ", "root-layout .env - ", "  Fix: ", "hygiene: 2 finding(s)"]
     lines = done.stdout.splitlines()
     assert all(line.startswith(prefix) for line, prefix in zip(lines, prefixes, strict=True)), done.stdout
 

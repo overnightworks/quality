@@ -295,7 +295,7 @@ def commit(repo: Path, message: str) -> None:
 @pytest.mark.engine
 def test_clean_history_passes(build_repo, installed_engines):
     """#13 rule 4: a repository without a secret passes."""
-    assert scan(build_repo({"notes.txt": "nothing here\n"}), installed_engines) == 0
+    assert scan(build_repo({"docs/notes.txt": "nothing here\n"}), installed_engines) == 0
 
 
 @pytest.mark.engine
@@ -320,7 +320,7 @@ def test_secret_removed_in_a_later_commit_still_fails(build_repo, installed_engi
 @pytest.mark.engine
 def test_secret_reachable_only_from_another_branch_is_not_this_verdicts(build_repo, installed_engines):
     """#24 head ruling: the verdict judges the history reachable from HEAD, not every branch the checkout fetched."""
-    repo = build_repo({"notes.txt": "nothing here\n"})
+    repo = build_repo({"docs/notes.txt": "nothing here\n"})
     (repo / "config.txt").write_text(f"aws_access_key_id = {FAKE_KEY}\n")
     commit(repo, "commit the key")
     subprocess.run(["git", "-C", str(repo), "update-ref", "refs/remotes/origin/side", "HEAD"], check=True)
@@ -608,11 +608,11 @@ def test_an_engine_that_is_a_symlink_inside_the_directory_is_still_judged_by_its
     tmp_path, build_repo, capsys, engine
 ):
     """#15 rule 2: a pinned engine reached through a symlink to a versioned file in the directory is not a crash."""
+    repo = build_repo({".github/workflows/w.yml": "on: push\n"})
     engine_dir = fake_workflow_engines(tmp_path, 'echo "[]"; exit 0')
     versioned = engine_dir / f"{engine}-{engines.read_pins()[engine].version}"
     (engine_dir / engine).rename(versioned)
     (engine_dir / engine).symlink_to(versioned)
-    repo = build_repo({".github/workflows/w.yml": "on: push\n"})
     assert cli.main(["hygiene", "--engines", str(engine_dir), str(repo)]) == 0
 
 
@@ -767,9 +767,9 @@ RECORDED_FILE = "deploy/config.txt"
 
 
 def run_with_recorded_leak(build_repo, tmp_path, capsys, config: str | None) -> tuple[int, str]:
-    files = {"quality/config.toml": config} if config is not None else {}
-    engine_dir = fake_gitleaks(tmp_path / "fake", on_scan=f'cp {OUTPUTS / "gitleaks-finding.json"} "$report"; exit 7')
-    code = cli.main(["hygiene", "--engines", str(engine_dir), str(build_repo(files))])
+    repo = build_repo({"quality/config.toml": config} if config is not None else {})
+    leak = f'cp {OUTPUTS / "gitleaks-finding.json"} "$report"; exit 7'
+    code = cli.main(["hygiene", "--engines", str(fake_gitleaks(tmp_path / "fake", on_scan=leak)), str(repo)])
     return code, capsys.readouterr().out
 
 
@@ -871,15 +871,15 @@ def allow_fake_key(repo: Path, file: str = "config.txt") -> None:
 @pytest.mark.engine
 def test_an_allowed_value_stays_green_at_a_shifted_line_and_across_commits(build_repo, installed_engines, capsys):
     """#24 rule 1: one entry covers the value at line 1, at a later line and in every commit that holds it."""
-    repo = build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
-    (repo / "config.txt").write_text("removed\n")
+    repo = build_repo({"docs/config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
+    (repo / "docs/config.txt").write_text("removed\n")
     commit(repo, "remove the key")
-    (repo / "config.txt").write_text(f"# one\n# two\n# three\naws_access_key_id = {FAKE_KEY}\n")
+    (repo / "docs/config.txt").write_text(f"# one\n# two\n# three\naws_access_key_id = {FAKE_KEY}\n")
     commit(repo, "key again, three lines further down")
-    allow_fake_key(repo)
+    allow_fake_key(repo, "docs/config.txt")
     assert scan(repo, installed_engines) == 0
     summary = next(line for line in capsys.readouterr().out.splitlines() if line.startswith("secret: 2 allowed ("))
-    assert set(summary.removeprefix("secret: 2 allowed (").removesuffix(")").split(", ")) == {"config.txt:1", "config.txt:4"}
+    assert set(summary.removeprefix("secret: 2 allowed (").removesuffix(")").split(", ")) == {"docs/config.txt:1", "docs/config.txt:4"}
 
 
 @pytest.mark.engine

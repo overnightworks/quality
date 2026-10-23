@@ -11,12 +11,20 @@ from pathlib import Path, PurePosixPath
 import yaml
 
 from quality import advisories, architecture, clones, engines, ratchet, repository
-from quality.config import Allowance, ConfigError, read_advisory_allowances, read_secret_allowances
+from quality.config import (
+    Allowance,
+    ConfigError,
+    RootAllowance,
+    read_advisory_allowances,
+    read_root_allowances,
+    read_secret_allowances,
+)
 from quality.report import Finding, shell_word
 
 ENV_FILE = "env-file"
 COMPOSE_PORT = "compose-port"
 CLAUDE_MD = "claude-md"
+ROOT_LAYOUT = "root-layout"
 WORKFLOW_RULE_IDS = tuple(engines.WORKFLOW_ENGINES)
 ENGINE_RULE_IDS = (engines.LEAK_RULE, *WORKFLOW_RULE_IDS, advisories.RULE)
 WORKFLOW_DIRECTORY = PurePosixPath(".github/workflows")
@@ -26,6 +34,19 @@ CLAUDE_NESTED_NAME = ".claude/claude.md"
 CLAUDE_FILE_NAMES = frozenset({"claude.md", CLAUDE_NESTED_NAME})
 CLAUDE_IMPORTS = frozenset({b"@AGENTS.md", b"@AGENTS.md\n"})
 AGENTS_FILE = "AGENTS.md"
+
+# A directory is written with its trailing slash, as `[[root.allow]]` writes it.
+ROOT_BASE_FILES = frozenset({
+    "README.md", "AGENTS.md", "CLAUDE.md", "HEART.md", "LICENSE",
+    ".gitignore", ".gitattributes", ".gitmodules",
+    "pyproject.toml", "uv.lock", ".python-version",
+    "package.json", "pnpm-lock.yaml", "package-lock.json",
+    "Cargo.toml", "Cargo.lock", "rust-toolchain.toml",
+    "Dockerfile", ".dockerignore", "compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml",
+    "sonar-project.properties", ".importlinter", ".pre-commit-config.yaml",
+})
+ROOT_BASE_DIRECTORIES = frozenset({".github/", ".aco/", "quality/", "src/", "tests/", "docs/", "scripts/"})
+ROOT_BASE_ENTRIES = ROOT_BASE_FILES | ROOT_BASE_DIRECTORIES
 
 LOOPBACK = "127.0.0.1"
 LOOPBACK_HOSTS = (LOOPBACK, "::1")
@@ -191,6 +212,44 @@ def _claude_md_problem(root: Path, name: str, agents_tracked: bool) -> tuple[str
         return (f"{name} imports {AGENTS_FILE}, which the repository does not hold.",
                 f"add {AGENTS_FILE} with the repository's guidance, or delete {name}.")
     return None
+
+
+def check_root_layout(tracked: list[str], allowances: Sequence[RootAllowance]) -> list[Finding]:
+    """Every tracked root entry, a directory with its trailing `/`, is on the base list or declared; a declaration that
+    matches no tracked root entry is a finding too. Findings are sorted by entry."""
+    entries = {name.partition("/")[0] + "/" if "/" in name else name for name in tracked}
+    declared = {allowance.entry for allowance in allowances}
+    base_spelling = {entry.casefold(): entry for entry in ROOT_BASE_ENTRIES}
+    findings = [
+        _unlisted_root_entry(entry, base_spelling.get(entry.casefold()))
+        for entry in entries - ROOT_BASE_ENTRIES - declared
+    ]
+    findings += [_stale_root_declaration(entry) for entry in declared - entries]
+    return sorted(findings, key=lambda finding: finding.path)
+
+
+def _unlisted_root_entry(entry: str, base_spelling: str | None) -> Finding:
+    hint = f" (the base list knows {base_spelling})" if base_spelling else ""
+    return Finding(
+        ROOT_LAYOUT, entry, None,
+        f"not on quality's base list{hint}.",
+        "move it to its owner's directory, or declare it in quality/config.toml with [[root.allow]], an entry and a reason.",
+    )
+
+
+def _stale_root_declaration(entry: str) -> Finding:
+    return Finding(
+        ROOT_LAYOUT, entry, None,
+        "declared in quality/config.toml with [[root.allow]], but the repository tracks no such root entry.",
+        "delete its [[root.allow]] entry from quality/config.toml.",
+    )
+
+
+def _root_allowances(root: Path) -> tuple[RootAllowance, ...]:
+    try:
+        return read_root_allowances(root)
+    except ConfigError as error:
+        raise CannotJudge(str(error)) from error
 
 
 def _judged[T](ask: Callable[[Path, str], T], root: Path, name: str) -> T:
@@ -478,6 +537,7 @@ def run_hygiene(root: Path, engine_dir: Path | None = None) -> HygieneResult:
         _verdict(clones.RULE, clone if isinstance(clone, CannotJudge) else clone.findings),
         _verdict(architecture.RULE, contracts if isinstance(contracts, CannotJudge) else contracts.findings),
         _verdict(CLAUDE_MD, _attempt(lambda: check_claude_md(root, tracked))),
+        _verdict(ROOT_LAYOUT, _attempt(lambda: check_root_layout(tracked, _root_allowances(root)))),
     ]
     reports = _reports(size, clone, contracts)
     if engine_dir is None:

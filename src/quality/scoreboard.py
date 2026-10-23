@@ -116,6 +116,7 @@ RULES = (
     RuleRelease(engines.WORKFLOW_LINT, FIRST_RELEASE, Switch.ALWAYS),
     RuleRelease(engines.WORKFLOW_SECURITY, FIRST_RELEASE, Switch.ALWAYS),
     RuleRelease(hygiene.CLAUDE_MD, RATCHET_RELEASE, Switch.ALWAYS),
+    RuleRelease(hygiene.ROOT_LAYOUT, None, Switch.ALWAYS),
     RuleRelease(advisories.RULE, RATCHET_RELEASE, Switch.ALWAYS),
     RuleRelease(ratchet.SIZE, RATCHET_RELEASE, Switch.SIZE_BASELINE),
     RuleRelease(architecture.RULE, RATCHET_RELEASE, Switch.IMPORT_LINTER_CONFIG),

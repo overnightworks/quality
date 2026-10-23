@@ -19,7 +19,7 @@ from importlinter.contracts.forbidden import ForbiddenContract
 import quality
 
 QUALITY_ROOT = Path(__file__).resolve().parents[1]
-CLEAN_LINE = "hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md)"
+CLEAN_LINE = "hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout)"
 SHOP_CYCLE = {**SHOP_DB_IMPORTS_WEB, "src/shop/web.py": "import shop.db\n"}
 LAYERS = {"type": "layers", "layers": ["shop.web", "shop.db"]}
 PROTECTED = {"type": "protected", "protected_modules": ["shop.web"], "allowed_importers": ["shop.api"]}
