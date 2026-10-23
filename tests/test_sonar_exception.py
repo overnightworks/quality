@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from test_emergency import FakeGh, changed_nothing, drive
@@ -9,9 +10,12 @@ from test_sonar import (
     FINISHED_FOR_FEATURE,
     FINISHED_FOR_MAIN,
     KEY,
+    LEGACY_COUNT,
     PUSH_ENVIRONMENT,
     issue,
     issues_page,
+    legacy_config,
+    rule_count_endpoint,
     run_cli,
     sonar_answering,
 )
@@ -55,11 +59,60 @@ def test_a_bot_config_sets_the_finding_aside_and_the_pull_request_is_green(monke
     assert (code, out, err) == (0, SET_ASIDE_LINE + NEW_ZERO, "")
 
 
-def test_a_legacy_count_stays_the_raw_count_of_the_default_branch(monkeypatch, capsys):
-    """#98 cell 1, E3: a non-zero legacy number is the raw count"""
+@pytest.mark.parametrize(
+    ("has_bot_config", "default_branch_total", "mode", "code", "legacy"),
+    [
+        (True, 3, "fail", 0, 0),
+        (True, 5, "fail", 1, 2),
+        (False, 3, "fail", 1, 3),
+        (True, 5, "report", 0, 2),
+    ],
+    ids=["only set-aside findings", "others remain", "no bot config stays raw", "report mode"],
+)
+def test_a_legacy_count_sets_aside_what_the_default_branch_run_sets_aside(
+    monkeypatch, capsys, has_bot_config, default_branch_total, mode, code, legacy
+):
+    """#166 cells 1-4: re-ruling E3 of #98, the legacy number is the default branch's total less its set-aside rule"""
+    if has_bot_config:
+        write_bot_config()
+    fake = findings_of(legacy=default_branch_total, legacy_by_rule={"docker:S8431": 3})
+    result = run_cli(monkeypatch, capsys, fake, config_text=legacy_config(mode))
+    assert (result[0], result[2] or result[1]) == (code, f"sonar: new 0 · legacy {legacy} ({KEY}, main)\n")
+
+
+def test_the_set_aside_rule_is_counted_on_the_default_branch_with_the_same_statuses(monkeypatch, capsys):
+    """#166 cell 5"""
     write_bot_config()
-    code, out, _, _ = run_cli(monkeypatch, capsys, findings_of(bot_issue(), legacy=17))
-    assert (code, out) == (0, SET_ASIDE_LINE + f"sonar: new 0 · legacy 17 ({KEY}, main)\n")
+    fake = findings_of(legacy=5, legacy_by_rule={"docker:S8431": 3})
+    run_cli(monkeypatch, capsys, fake)
+    total, set_aside = (parse_qs(urlparse(url).query) for url in fake.urls_to(LEGACY_COUNT) + fake.urls_to(rule_count_endpoint("docker:S8431")))
+    assert set_aside == {**total, "rules": ["docker:S8431"]}
+    assert (set_aside["branch"], set_aside["issueStatuses"]) == (["main"], total["issueStatuses"])
+
+
+def test_a_rule_count_above_the_total_is_exit_2(monkeypatch, capsys):
+    """#166 cell 6: a contradictory answer is never a negative or clamped number"""
+    write_bot_config()
+    code, out, err, _ = run_cli(monkeypatch, capsys, findings_of(legacy=2, legacy_by_rule={"docker:S8431": 3}))
+    assert (code, out) == (2, "")
+    assert err.startswith("sonar: cannot judge - ") and "docker:S8431" in err
+
+
+@pytest.mark.parametrize("answer", [{"issues": []}, {"total": "many"}, [], None], ids=["no total", "not a number", "list", "null"])
+def test_an_unreadable_rule_count_is_exit_2(monkeypatch, capsys, answer):
+    """#166 cell 7: never a silent zero"""
+    write_bot_config()
+    fake = findings_of(legacy=5)
+    fake.answers[rule_count_endpoint("docker:S8431")] = [answer]
+    code, out, err, _ = run_cli(monkeypatch, capsys, fake)
+    assert (code, out, err.startswith("sonar: cannot judge - ")) == (2, "", True)
+
+
+def test_without_the_bot_config_no_rule_is_counted(monkeypatch, capsys):
+    """#166 cell 9"""
+    fake = findings_of(legacy=3)
+    run_cli(monkeypatch, capsys, fake)
+    assert [url for url, _ in fake.requests if "rules=" in url] == []
 
 
 def only_the_yaml_spelling() -> None:
