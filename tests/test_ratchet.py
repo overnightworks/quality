@@ -118,7 +118,7 @@ NOT_PYTHON = pytest.mark.parametrize(
 @NOT_PYTHON
 def test_without_a_baseline_a_file_python_cannot_read_is_reported_and_the_exit_unchanged(build_repo, capsys, source):
     """#46 rule 3: a tracked file Python cannot read keeps a clean repository at exit 0 and is named in the report."""
-    code, output = hygiene(capsys, build_repo_with_source(build_repo, {"ok.py": "x = 1\n"}, SOURCE_NAME, source))
+    code, output = hygiene(capsys, build_repo_with_source(build_repo, {"src/ok.py": "x = 1\n"}, SOURCE_NAME, source))
     assert code == 0, output
     assert "cannot judge" not in output
     assert f"1 file(s) not valid Python, functions unmeasured: {SOURCE_NAME}" in output
@@ -202,7 +202,7 @@ def test_below_the_thresholds_or_with_a_fixed_entry_gone_is_clean(build_repo, ca
     baseline = '[file_lines]\n"src/gone.py" = 900\n'
     code, output = hygiene(capsys, build_repo({**files, BASELINE_PATH: baseline}))
     assert code == 0, output
-    assert "hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md)" in output
+    assert "hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout)" in output
 
 
 @pytest.fixture(params=["deleted", "dangling", "cell 18 dangling out of the repository"])
@@ -235,7 +235,7 @@ def test_a_tracked_file_missing_from_disk_is_gone_not_unjudgeable(build_repo, ca
     remove(repo / "src/b.py")
     code, output = hygiene(capsys, repo)
     assert code == 0, output
-    assert "hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md)" in output
+    assert "hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout)" in output
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-0 path, so no permission is refused")
@@ -316,7 +316,7 @@ def test_baseline_write_records_the_measured_debt_sorted_and_hygiene_then_holds_
     assert written.index('[function_lines."src/a.py"]') < written.index('[function_lines."src/b.py"]')
     capsys.readouterr()
     code, output = hygiene(capsys, repo)
-    assert (code, "hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md)" in output) == (0, True), output
+    assert (code, "hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout)" in output) == (0, True), output
 
 
 def test_writing_the_baseline_twice_yields_the_same_file(build_repo):
@@ -462,7 +462,7 @@ def test_a_written_baseline_holds_any_utf8_path(build_repo, capsys, path):
     }
     capsys.readouterr()
     code, output = hygiene(capsys, repo)
-    assert (code, "hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md)" in output) == (0, True), output
+    assert (code, "hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout)" in output) == (0, True), output
 
 
 def test_a_path_that_is_not_utf8_cannot_be_written_into_the_baseline(build_repo, capsys):
@@ -638,11 +638,11 @@ def test_baseline_write_overwrites_a_baseline_that_is_not_utf8_without_a_rewrite
 
 MIXED_TREE = {
     "src/app.py": long_file(100),
-    "frontend/src/lib/api/types.ts": typescript_file(50),
-    "frontend/src/Card.svelte": typescript_file(20),
-    "frontend/src/legacy.js": typescript_file(5),
+    "src/frontend/src/lib/api/types.ts": typescript_file(50),
+    "src/frontend/src/Card.svelte": typescript_file(20),
+    "src/frontend/src/legacy.js": typescript_file(5),
     "scripts/deploy.sh": "echo hi\n" * 400,
-    "frontend/src/app.css": "a { color: red; }\n" * 400,
+    "src/frontend/src/app.css": "a { color: red; }\n" * 400,
 }
 NEW_DEBT = "size {path} - file has {lines} lines; debt starts at 800 lines (new debt)."
 
@@ -657,8 +657,8 @@ def size_report(output: str) -> str:
     [
         ({"src/a.py": long_file(3)}, "; languages: Python"),
         (MIXED_TREE, "; languages: Python, TypeScript, Svelte, JavaScript (functions in Python only)"),
-        ({"a.svelte": long_file(5), "b.js": long_file(5), "c.vue": long_file(5)}, "; languages: JavaScript, Svelte, Vue (functions in Python only)"),
-        ({"src/a.py": long_file(3), "dist/index.js": minified_bundle()}, "; languages: Python, JavaScript (functions in Python only)"),
+        ({"src/a.svelte": long_file(5), "src/b.js": long_file(5), "src/c.vue": long_file(5)}, "; languages: JavaScript, Svelte, Vue (functions in Python only)"),
+        ({"src/a.py": long_file(3), "src/dist/index.js": minified_bundle()}, "; languages: Python, JavaScript (functions in Python only)"),
     ],
     ids=[
         "#119 cell 10 a Python-only tree names Python without the functions note",
@@ -687,7 +687,7 @@ def test_a_file_of_every_table_language_is_new_debt_from_800_lines_against_a_bas
 @pytest.mark.parametrize("name", ["tool.rs", "run.sh", "app.css", "index.html", "notes.md"])
 def test_a_file_of_a_language_the_table_lacks_is_never_debt(build_repo, capsys, name):
     """#119 O3: Rust, shell, CSS and HTML stay unmeasured."""
-    code, output = hygiene(capsys, build_repo({name: "line\n" * 2000, BASELINE_PATH: EMPTY_BASELINE}))
+    code, output = hygiene(capsys, build_repo({f"src/{name}": "line\n" * 2000, BASELINE_PATH: EMPTY_BASELINE}))
     assert (code, "size " in output) == (0, False), output
 
 
@@ -705,8 +705,8 @@ def test_a_function_of_120_lines_in_typescript_is_no_finding_and_the_file_is_not
 )
 def test_a_minified_file_is_counted_by_its_lines_like_any_other(build_repo, capsys, bundle, code, named):
     """#119 O4: nothing is skipped; the one-line bundle has one line."""
-    result, output = hygiene(capsys, build_repo({"dist/index.js": bundle, BASELINE_PATH: EMPTY_BASELINE}))
-    assert (result, "size dist/index.js" in output) == (code, named), output
+    result, output = hygiene(capsys, build_repo({"src/dist/index.js": bundle, BASELINE_PATH: EMPTY_BASELINE}))
+    assert (result, "size src/dist/index.js" in output) == (code, named), output
 
 
 @pytest.mark.parametrize(
@@ -726,7 +726,7 @@ def test_a_minified_file_is_counted_by_its_lines_like_any_other(build_repo, caps
 )
 def test_the_name_rule_of_a_typescript_or_javascript_file_is_the_runners_defaults(build_repo, capsys, path, area):
     """#119 E3, cell 9: `*.test.*`, `*.spec.*` and `__tests__/` for TS and JS; Svelte and Vue by directory only."""
-    code, output = hygiene(capsys, build_repo({path: typescript_file(800)}))
+    code, output = hygiene(capsys, build_repo({f"src/{path}": typescript_file(800)}))
     other = "tests" if area == "production" else "production"
     assert (code, f"{area}: 1 file(s) >= 800" in output, f"{other}: 0 file(s) >= 800" in output) == (0, True, True), output
 

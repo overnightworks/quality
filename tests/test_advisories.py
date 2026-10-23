@@ -179,7 +179,9 @@ def test_a_repository_osv_scanner_config_changes_nothing(build_repo, publish_dat
     """#53 head decision: the caller's osv-scanner.toml is never honoured."""
     publish_database()
     repo = build_repo({"uv.lock": uv_lock(), "osv-scanner.toml": repository_config})
-    assert run_gate(repo, installed_engines)[0] == 1
+    code, output = run_gate(repo, installed_engines)
+    assert code == 1
+    assert "advisory uv.lock - " in output
 
 
 @pytest.mark.engine
@@ -226,10 +228,10 @@ def test_a_lock_the_tree_cannot_hand_over_is_skipped_or_refused(
 ):
     """#53 rule 1, cells 9, 10 and 31."""
     publish_database()
-    repo = build_repo({"uv.lock": uv_lock(), "inside/x": "x\n"})
+    repo = build_repo({"uv.lock": uv_lock(), "docs/x": "x\n"})
     (repo / "uv.lock").unlink()
     if tracked_only == "symlink to a directory":
-        (repo / "uv.lock").symlink_to("inside")
+        (repo / "uv.lock").symlink_to("docs")
     if tracked_only == "symlink out":
         outside = tmp_path.parent / f"{tmp_path.name}-outside.lock"
         outside.write_text(uv_lock())

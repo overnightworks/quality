@@ -116,6 +116,35 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   (operator ruling 20.10.2026: „ich will kein auseinanderlaufen von claude.md und agents.md!“; answers of 21.10.2026:
   the finding names only the file, „Nur Dateiname (empfohlen)“, and the fix is a sentence, „Satz, kein Befehl
   (empfohlen)“)
+- `root-layout`: every entry directly in the root of the tracked tree is on quality's base list or declared. An entry is
+  a file or a directory (written `frontend/`); a directory with many files is one entry. Names compare in exact case, and
+  the finding for a name that differs only in case names the base-list spelling. A file and a directory of one name are
+  two entries, and a root symlink counts by its own name. Only tracked files count; a stray left on disk is not judged.
+  The base list: `README.md AGENTS.md CLAUDE.md HEART.md LICENSE .gitignore .gitattributes .gitmodules pyproject.toml
+  uv.lock .python-version package.json pnpm-lock.yaml package-lock.json Cargo.toml Cargo.lock rust-toolchain.toml
+  Dockerfile .dockerignore compose.yaml compose.yml docker-compose.yaml docker-compose.yml sonar-project.properties
+  .importlinter .pre-commit-config.yaml` and the directories `.github/ .aco/ quality/ src/ tests/ docs/ scripts/`. It
+  belongs to quality and changes with a quality version; a repository extends it, never shortens it. Each other entry
+  is declared in `quality/config.toml`, one entry and one one-line reason, no pattern and no deeper path:
+
+  ```toml
+  [[root.allow]]
+  entry = "frontend/"
+  reason = "the web client, built apart from the Python package"
+  ```
+
+  A declaration that matches no tracked root entry is a finding; a declaration of a base-list entry that is tracked is
+  clean. A finding names the entry and both ways out, move it to its owner's directory or declare it with a reason, in
+  prose with no command and no local path; findings are sorted by entry and all printed. An invalid declaration (a `/`
+  inside the entry, `.`, `..`, `.git`, an empty entry, a multi-line reason, an unknown key, or one entry declared
+  twice) is `hygiene: root-layout cannot judge - ...` with a `[[root.allow]]` example. Any other malformed table or
+  allowance elsewhere in `quality/config.toml`, which plain `quality hygiene` reads for this rule, is `root-layout cannot
+  judge` too, with that table's own message; the values of `[gate]` stay the verdict's to judge. Any pull request may add a declaration with a reason; the review judges whether the reason holds. A declaration is no loosening, so `quality verdict` asks for no
+  `[[gate.loosened]]` entry (operator ruling 23.10.2026: „jeder PR mit Grund, das Review urteilt, ohne deine Tür“).
+  The rule reads names, never content, and writes nothing. No configuration switches it off. A config reader older than
+  the rule refuses `[root]` as an unknown key, so a declaration lands in the pull request that moves the repository to
+  a quality version that knows it. Named gaps: a submodule in the root counts as a file entry and no case of it is
+  tested; marketplace's refusal of every symlink in the tree stays that repository's own check.
 - The baseline only falls: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the
   base commit's, so growing a function and rewriting the baseline stays red. Each loosening is one line, named with the
   baseline's own metric, path and symbol (a file entry has no symbol):
@@ -268,7 +297,7 @@ Every rule is judged, even when another cannot be, and gives one verdict: clean,
 Each finding names the rule, the file, a reason and a fix. Repository text (a file name, a service, a port, a contract
 or job name, a configuration entry) prints escaped. In the door's own fields (a finding's location, reason and fix, refusals, reports), invalid UTF-8 prints as `\udcNN` and every control character (line feed,
 carriage return, ESC, tab, DEL, C1) as `\xNN`. A line taken from import-linter's rendering (a broken contract's chain and guidance) prints behind the marker `  | `; rich may drop a carriage return, expand a tab, or start a new marked line at a line feed there. Every line the door prints therefore starts with its own text, so a matcher anchored at the line start, such as setup-uv's python matcher, cannot match repository text. A refusal is one line; the lines the door means to print (an import chain, the verdict's problems, the scoreboard's table) stay lines. A rule that cannot judge prints its verdict and reason under its rule id (`hygiene: secret cannot
-judge - ...`). A clean run names its rules in run order (`hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md); skipped without
+judge - ...`). A clean run names its rules in run order (`hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout); skipped without
 --engines: ...`); any other run ends with the findings and the verdicts counted (`hygiene: 1 finding(s); verdicts: 1
 clean, 1 findings, 1 unparsable`). The lines come in run order, also through a pipe that merges stdout and stderr
 (`2>&1 | tee log`); each stays on its own stream. That is option (c) of #86 on 19.10.2026, `cli.main` makes stdout

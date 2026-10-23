@@ -12,9 +12,12 @@ CONFIG_PATH = "quality/config.toml"
 GATE_KEYS = {"mandatory_jobs", "legacy", "loosened"}
 SECRETS_KEYS = {"allow"}
 ADVISORIES_KEYS = {"allow"}
-TABLES = {"gate", "secrets", "advisories"}
+ROOT_KEYS = {"allow"}
+TABLES = {"gate", "secrets", "advisories", "root"}
 ALLOWANCE_KEYS = {"rule", "file", "secret_sha256", "reason"}
 DECLARATION_KEYS = {"what", "item", "date", "reason"}
+ROOT_ALLOWANCE_KEYS = {"entry", "reason"}
+NOT_ROOT_ENTRY_NAMES = {".", "..", ".git"}
 ADVISORY_ALLOWANCE_KEYS = {"id", "lock", "until", "date", "item", "reason"}
 SHA256_HEX = re.compile(r"[0-9a-f]{64}")
 # ASCII only, so a lookalike name (a Cyrillic letter in it) is no repository.
@@ -41,6 +44,11 @@ ADVISORY_ALLOWANCE_EXAMPLE = (
     "date = 2026-10-21\n"
     'item = "overnightworks/agent-presentator#371"\n'
     'reason = "gradio caps pillow<13; no image input"'
+)
+ROOT_ALLOWANCE_EXAMPLE = (
+    "[[root.allow]]\n"
+    'entry = "frontend/"\n'
+    'reason = "the web client, built apart from the Python package"'
 )
 
 
@@ -85,6 +93,14 @@ class AdvisoryAllowance:
 
 
 @dataclass(frozen=True)
+class RootAllowance:
+    """A root entry the repository declares beyond quality's base list: a file `Makefile` or a directory `frontend/`."""
+
+    entry: str
+    reason: str
+
+
+@dataclass(frozen=True)
 class GateSettings:
     """What the gate reads from quality/config.toml: the settings a pull request must not loosen, the loosenings
     it declares, and the advisories it allows."""
@@ -115,6 +131,7 @@ class _Document:
     declarations: tuple[Declaration, ...]
     secret_allowances: dict[Allowance, str]
     advisory_allowances: tuple[AdvisoryAllowance, ...]
+    root_allowances: tuple[RootAllowance, ...]
 
 
 def _parse(text: str, example: str) -> dict:
@@ -137,12 +154,15 @@ def _refuse_unknown_secrets_keys(secrets: dict) -> None:
         raise ConfigError(f"{CONFIG_PATH} has unknown key(s) {sorted(unknown)} in [secrets] - only allow exists")
 
 
-def _refuse_unknown_keys(document: dict, gate: dict, advisories: dict) -> None:
-    unknown = (set(document) - TABLES) | (set(gate) - GATE_KEYS) | (set(advisories) - ADVISORIES_KEYS)
+def _refuse_unknown_keys(document: dict, gate: dict, advisories: dict, root: dict) -> None:
+    unknown = (
+        (set(document) - TABLES) | (set(gate) - GATE_KEYS) | (set(advisories) - ADVISORIES_KEYS) | (set(root) - ROOT_KEYS)
+    )
     if unknown:
+        example = f", like:\n{ROOT_ALLOWANCE_EXAMPLE}" if set(root) - ROOT_KEYS else ""
         raise ConfigError(
             f"{CONFIG_PATH} has unknown key(s) {sorted(unknown)} - only [gate] mandatory_jobs, [gate] legacy, "
-            "[[gate.loosened]], [secrets] allow and [[advisories.allow]] exist"
+            f"[[gate.loosened]], [secrets] allow, [[advisories.allow]] and [[root.allow]] exist{example}"
         )
 
 
@@ -151,12 +171,14 @@ def _validated_document(text: str) -> _Document:
     document = _parse(text, EXAMPLE)
     gate = _table(document, "gate", EXAMPLE)
     advisories = _table(document, "advisories", ADVISORY_ALLOWANCE_EXAMPLE)
-    _refuse_unknown_keys(document, gate, advisories)
+    root = _table(document, "root", ROOT_ALLOWANCE_EXAMPLE)
+    _refuse_unknown_keys(document, gate, advisories, root)
     return _Document(
         gate,
         _declarations(gate),
         _parse_allowances(_table(document, "secrets", ALLOWANCE_EXAMPLE)),
         _advisory_allowances(advisories),
+        _root_allowances(root),
     )
 
 
@@ -264,6 +286,44 @@ def _read_advisory_allowance(entry: object) -> AdvisoryAllowance:
     return AdvisoryAllowance(identifier, lock, until, date, item, reason)
 
 
+def _root_allowances(root: dict) -> tuple[RootAllowance, ...]:
+    entries = root.get("allow", [])
+    if not isinstance(entries, list):
+        raise ConfigError(f"{CONFIG_PATH} needs [[root.allow]] as an array of tables, like:\n{ROOT_ALLOWANCE_EXAMPLE}")
+    allowances: dict[str, RootAllowance] = {}
+    for entry in entries:
+        allowance = _read_root_allowance(entry)
+        if allowance.entry in allowances:
+            raise ConfigError(
+                f"{CONFIG_PATH} [[root.allow]] declares entry = {allowance.entry!r} twice; one entry per root entry, "
+                f"like:\n{ROOT_ALLOWANCE_EXAMPLE}"
+            )
+        allowances[allowance.entry] = allowance
+    return tuple(allowances.values())
+
+
+def _is_root_entry(entry: object) -> bool:
+    """One name directly in the root, a directory with its trailing `/`; no path, no `.`, `..` or `.git`."""
+    if not isinstance(entry, str):
+        return False
+    name = entry.removesuffix("/")
+    return bool(name.strip()) and "/" not in name and name not in NOT_ROOT_ENTRY_NAMES
+
+
+def _read_root_allowance(entry: object) -> RootAllowance:
+    def refuse(need: str) -> ConfigError:
+        return ConfigError(f"{CONFIG_PATH} [[root.allow]] entry {entry!r} needs {need}, like:\n{ROOT_ALLOWANCE_EXAMPLE}")
+
+    if not isinstance(entry, dict) or set(entry) != ROOT_ALLOWANCE_KEYS:
+        raise refuse("exactly an entry and a reason")
+    name, reason = entry["entry"], entry["reason"]
+    if not _is_root_entry(name):
+        raise refuse("entry as one name directly in the root, a directory with a trailing /, not a path")
+    if not _is_one_line_text(reason):
+        raise refuse("a non-empty one-line reason")
+    return RootAllowance(name, reason)
+
+
 def load_gate_settings(text: str | None) -> GateSettings:
     """mandatory_jobs is judged before legacy, so a config wrong in both is refused for mandatory_jobs."""
     if text is None:
@@ -354,3 +414,9 @@ def load_advisory_allowances(text: str | None) -> tuple[AdvisoryAllowance, ...]:
 
 def read_advisory_allowances(repo: Path) -> tuple[AdvisoryAllowance, ...]:
     return load_advisory_allowances(_read_config_text(repo))
+
+
+def read_root_allowances(repo: Path) -> tuple[RootAllowance, ...]:
+    """The root entries the repository declares, the whole document validated; a missing config declares none."""
+    text = _read_config_text(repo)
+    return () if text is None else _validated_document(text).root_allowances

@@ -100,6 +100,12 @@ def hygiene_output(capsys: pytest.CaptureFixture[str], path: Path) -> tuple[int,
     return code, captured.out + captured.err
 
 
+def assert_key_found(repo: Path, engine_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Exit 1 alone proves nothing, other rules can fail it too: the secret finding itself is asserted."""
+    assert cli.main(["hygiene", "--engines", str(engine_dir), str(repo)]) == 1
+    assert "secret config.txt:1" in capsys.readouterr().out
+
+
 def long_file(lines: int) -> str:
     return "x = 1\n" * lines
 
