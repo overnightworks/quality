@@ -14,8 +14,9 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import pytest
+from advisory_support import OUTPUTS, advisory, zipped
 
-from quality import cli, engines
+from quality import advisories, cli, engines
 from quality import scoreboard as scoreboard_module
 from quality.ratchet import BASELINE_PATH
 
@@ -171,6 +172,11 @@ def fake_engine(directory: Path, name: str, on_scan: str) -> Path:
     binary.write_text(f'#!/bin/sh\nif [ "$*" = "{version_arguments}" ]; then echo {pinned}; exit 0; fi\n{on_scan}\n')
     binary.chmod(0o755)
     return binary
+
+
+def osv_engines(clean_engines, on_scan):
+    fake_engine(clean_engines, engines.OSV_SCANNER, on_scan)
+    return clean_engines
 
 
 @pytest.fixture
@@ -381,3 +387,45 @@ def process_is_gone(pid):
             return True
         time.sleep(0.05)
     return False
+
+
+@pytest.fixture
+def publish_database(tmp_path_factory, monkeypatch):
+    """Points the gate at a file:// advisory database root and publishes an ecosystem's archive there (PyPI unless told otherwise)."""
+    root = tmp_path_factory.mktemp("osv-database")
+    monkeypatch.setattr(advisories, "DATABASE_ROOT", root.as_uri())
+
+    def publish(records=None, archive: bytes | None = None, ecosystem: str = "PyPI") -> None:
+        records = [advisory()] if records is None else records
+        archive = zipped({f"{record['id']}.json": json.dumps(record) for record in records}) if archive is None else archive
+        (root / ecosystem).mkdir(exist_ok=True)
+        (root / ecosystem / "all.zip").write_bytes(archive)
+
+    return publish
+
+
+@pytest.fixture
+def run_gate(capsys):
+    """Runs the gate over a repository and returns (exit code, all output); no output names the checkout or the engine directory (#53 cell 21)."""
+    def run(repo: Path, engine_dir: Path) -> tuple[int, str]:
+        code = cli.main(["hygiene", "--engines", str(engine_dir), str(repo)])
+        captured = capsys.readouterr()
+        output = captured.out + captured.err
+        assert str(repo) not in output
+        assert str(repo).lstrip("/") not in output
+        assert str(engine_dir) not in output
+        assert str(engine_dir).lstrip("/") not in output
+        return code, captured.out + captured.err
+    return run
+
+
+@pytest.fixture
+def edited_report(tmp_path_factory):
+    """Writes the engine-output fixture, edited, outside the fixture repository."""
+    def write(fixture: str, edit) -> Path:
+        report = json.loads((OUTPUTS / fixture).read_text())
+        edit(report)
+        path = tmp_path_factory.mktemp("report") / "report.json"
+        path.write_text(json.dumps(report))
+        return path
+    return write

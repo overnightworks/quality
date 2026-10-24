@@ -217,17 +217,26 @@ Every allowed finding is printed with the entry's reason (`secret: 1 allowed (sr
 nothing is printed too, so a stale entry can be deleted: `secret: unused allowance <rule> in <file> (sha256 <hex>) - <reason>`;
 `scan-staged` prints both kinds of line as well.
 
-The `advisory` rule judges every tracked `uv.lock`, root and nested, with osv-scanner against the OSV advisory
-database (dev dependencies count). It is part of `--engines`, so it is skipped without it (nothing is downloaded),
-and a repository with no tracked `uv.lock` needs no osv-scanner. A lock that is tracked but missing on disk is skipped;
+The `advisory` rule judges every tracked `uv.lock`, `pnpm-lock.yaml` and `requirements*.txt` (a `.in` file is no lock), root
+and nested, with osv-scanner against the OSV advisory database (dev dependencies count). `uv.lock` and `requirements*.txt`
+are judged against the PyPI database, `pnpm-lock.yaml` against the npm database; a `requirements` line with a minimum
+(`pyyaml>=5.3`) counts as its lowest allowed version. A `package-lock.json`, `yarn.lock` or `bun.lock` is not judged yet. It is part of
+`--engines`, so it is skipped without it (nothing is downloaded), and a repository with no tracked lock needs no
+osv-scanner; a database is downloaded only for an ecosystem with a tracked lock, once per run however many locks it has.
+A lock that is tracked but missing on disk is skipped;
 one that links out of the repository or is not a regular file is exit `2`. A lock listed in `.gitignore` is still judged.
 A finding is one per advisory group, package and lock file, named by the tracked relative path:
 `advisory uv.lock - osv-scanner GHSA-8q59-q68h-6hv4 (CVE-2020-14343, PYSEC-2021-142): PyPI pyyaml 5.3.1 is affected.`
-with `Fix: upgrade pyyaml to >= 5.4 (uv lock --upgrade-package pyyaml)`. For a nested lock the command names its
+with `Fix: upgrade pyyaml to >= 5.4 (uv lock --upgrade-package pyyaml)`. For a nested lock the fix names its
 directory (`in speech/: uv lock --upgrade-package ...`); several fixed versions are listed; an advisory with no fixed
-version says `osv lists no fixed version: remove or replace <package>; see https://osv.dev/vulnerability/<id>`. A
-repository's own `osv-scanner.toml` (ignored advisories, package overrides) and `.gitignore` change nothing: the gate
-passes its own empty `src/quality/osv-scanner.toml` and each tracked lock explicitly.
+version, a package listed as malicious included, says `osv lists no fixed version: remove or replace <package>; see
+https://osv.dev/vulnerability/<id>`. The fix prints a command only where it works as printed: for `pnpm-lock.yaml` it
+says to upgrade the package, or its parent when it is transitive, or set a pnpm override in `package.json`; for a
+`requirements*.txt` it says to regenerate the file as its header says. npm names match as written (`lodash.merge` is not
+`lodash-merge`); Python's name rule applies to PyPI only. A repository's own `osv-scanner.toml` (ignored advisories,
+package overrides), its `package.json` `pnpm.auditConfig`, its `.npmrc` and its `.gitignore` change nothing: the gate
+passes its own empty `src/quality/osv-scanner.toml` and each tracked lock explicitly, so only a real fix in the lock
+(an upgrade or an override) turns a finding green.
 
 An advisory the repository cannot fix is allowed in its own `quality/config.toml`, one entry per advisory and lock:
 
@@ -281,17 +290,33 @@ reason and a re-check date, and who approves: „Ja, aber nur du gibst frei (emp
 Asked whether a pull request may move the re-check date back without him: „Nein, nur über deine Tür (empfohlen)“. Asked
 whether each new allowance must also be entered as a declared loosening: „Ausnahme erklärt sich selbst (empfohlen)“.
 
-quality downloads the PyPI database itself on every run (about 36 MB, `https://osv-vulnerabilities.storage.googleapis.com/PyPI/all.zip`)
+quality downloads each needed database itself on every run (PyPI about 37 MB, npm about 219 MB;
+`https://osv-vulnerabilities.storage.googleapis.com/<ecosystem>/all.zip`)
 into the scan's own 0700 scratch directory and runs osv-scanner `--offline` on it, so osv-scanner makes no network call
-and reads no cache of its own. A database that cannot be downloaded within 300 seconds in total (connect, headers and body, however the
+and reads no cache of its own. A database that cannot be downloaded within 300 seconds in total for all downloads together (connect, headers and body, however the
 server drags them out), cannot be placed in the scratch directory, is not a valid zip, or holds
-no advisory is exit `2`, never clean; so are an osv-scanner that is missing, at another version, exits other than `0`
+no advisory is exit `2`, never clean, naming the database; so are an osv-scanner that is missing, at another version, exits other than `0`
 or `1`, runs past its time limit, or writes a report that is not the expected JSON, disagrees with its exit, or names
 a lock file quality did not pass. Trust boundary: the database is an unsigned zip fetched over TLS from the same source
 osv-scanner itself uses; there is deliberately no cache, because a doctored cached database would silence every pull
 request. Records the pinned osv-scanner cannot read are dropped by it silently; the live-database test for
 `pyyaml 5.3.1` on every quality pull request is the canary. osv-scanner judges the lock as written; the caller's own
-`uv sync --locked` guards against a hand-edited lock.
+`uv sync --locked` guards against a hand-edited lock. osv-scanner exits `127` on a lock it cannot parse (a broken
+`pnpm-lock.yaml` included), which is `cannot judge`, never clean.
+
+The hygiene job in `gate.yml` stops at 25 minutes: the 300-second download deadline and the 600-second scan limit take
+15, and setup and the other rules get the remaining 10, so quality's own `cannot judge` shows before GitHub cancels the job.
+Measured on 24.10.2026 (osv-scanner 2.7.0, 12 cores at load 17 to 20): the npm archive is 219,026,863 bytes (230,735 files), the PyPI archive 37,064,024 bytes
+(26,612 files); downloading npm took 34 s; a whole `hygiene --engines` run over a repository with one `pnpm-lock.yaml` and one
+`requirements*.txt`, both databases included, took 81 s wall and 645 MB resident, twice in a row.
+
+An `[[advisories.allow]]` entry for an npm or requirements finding is the same entry with `lock` set to the file's tracked
+path (`id = "..."`, `lock = "frontend/pnpm-lock.yaml"`); it is a declared loosening and merges only through the operator's
+door like any other. When a repository's frontend and its lock are gone, the npm database is no longer downloaded and an
+entry for it is a finding until it is deleted. A repository that falls back to an older quality leaves such an entry
+unmatched and red likewise. The predecessor `pnpm audit --prod` steps are retired by each repository's own head.
+Operator rulings of 24.10.2026 (#145): „ja“ to R1 to R3 (the same allowance, no silencing from the repository's files,
+open npm advisories keep the bump pull request red); the other lines stand at their proposed defaults.
 
 Every rule is judged, even when another cannot be, and gives one verdict: clean, findings, unparsable, or cannot judge.
 Each finding names the rule, the file, a reason and a fix. Repository text (a file name, a service, a port, a contract

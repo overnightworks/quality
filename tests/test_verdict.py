@@ -664,6 +664,8 @@ ADDS_QWEN = "advisory allowance adds GHSA-462x-pgg6-55fp in " + QWEN + " until 2
         (gate_config("A") + allowance_config(), gate_config("A"), ["verdict: green"]),
         (gate_config("A") + allowance_config(), gate_config("A") + allowance_config(lock="uv.lock"),
          [f"{ALLOWS}adds GHSA-462x-pgg6-55fp in uv.lock until 2027-01-31", ONLY_DECLARED]),
+        (gate_config("A"), gate_config("A") + allowance_config(lock="frontend/pnpm-lock.yaml"),
+         [f"{ALLOWS}adds GHSA-462x-pgg6-55fp in frontend/pnpm-lock.yaml until 2027-01-31", ONLY_DECLARED]),
         (gate_config("A") + allowance_config(), gate_config("A") + allowance_config("CVE-2026-112395"),
          [f"{ALLOWS}adds CVE-2026-112395 in {QWEN} until 2027-01-31", ONLY_DECLARED]),
         (None, gate_config("A") + allowance_config() + allowance_config(lock="uv.lock"),
@@ -682,7 +684,7 @@ ADDS_QWEN = "advisory allowance adds GHSA-462x-pgg6-55fp in " + QWEN + " until 2
     ],
     ids=[
         "cell 14 adds", "cell 14 adds with a far until", "cell 15 extends", "cell 16 until earlier", "cell 16 reason reworded", "cell 16 item changed",
-        "cell 16 date changed", "cell 16 deleted", "cell 17 lock changed", "cell 17 id changed", "cell 18 adoption",
+        "cell 16 date changed", "cell 16 deleted", "cell 17 lock changed", "#145 R3 a pnpm lock", "cell 17 id changed", "cell 18 adoption",
         "cell 20 unchanged", "cell 21 a gate.loosened entry for an allowance", "cell 22 next to an undeclared removal",
         "cell 25 control characters in id and lock", "cell 28 next to a declared removal",
     ],
