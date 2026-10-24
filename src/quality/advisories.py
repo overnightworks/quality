@@ -13,7 +13,7 @@ from datetime import date
 from fnmatch import fnmatchcase
 from pathlib import Path, PurePosixPath
 
-from quality import engines
+from quality import engines, repository
 from quality.config import CONFIG_PATH, AdvisoryAllowance
 from quality.engines import EngineError, Pin
 from quality.report import Finding
@@ -102,7 +102,7 @@ def scan(
     names_by_path = _names_by_path(locks)
     with engines.scratch_directory() as scratch:
         try:
-            affected = _scan(engine_dir, pins, locks, scratch, names_by_path)
+            affected = _scan(engine_dir, pins, locks, root, scratch, names_by_path)
         except EngineError as error:
             raise EngineError(_without_paths(str(error), names_by_path, [(root.resolve(), "<repository>"), (engine_dir.resolve(), "<engines>"), (scratch, "<scratch>")])) from None
     return apply_allowances(affected, allowances, today)
@@ -157,7 +157,8 @@ def _orphan(allowance: AdvisoryAllowance) -> Finding:
 
 
 def _scan(
-    engine_dir: Path, pins: dict[str, Pin], locks: Mapping[str, Path], scratch: Path, names_by_path: dict[str, list[str]]
+    engine_dir: Path, pins: dict[str, Pin], locks: Mapping[str, Path], root: Path, scratch: Path,
+    names_by_path: dict[str, list[str]],
 ) -> list[Affected]:
     binary = engines.engine_path(engine_dir, engines.OSV_SCANNER)
     engines.verify_version(binary, engines.OSV_SCANNER, pins[engines.OSV_SCANNER].version)
@@ -169,7 +170,7 @@ def _scan(
         *[f"--lockfile={lock_kind(name).parse_as}:{path}" for name, path in locks.items()],
     ]
     done = engines.run(command, cwd=scratch, timeout=ADVISORY_SCAN_TIMEOUT_SECONDS)
-    return _findings(done.returncode, done.stdout, done.stderr, names_by_path)
+    return _findings(done.returncode, done.stdout, done.stderr, root, names_by_path)
 
 
 def _names_by_path(locks: Mapping[str, Path]) -> dict[str, list[str]]:
@@ -252,41 +253,66 @@ def _without_paths(text: str, names_by_path: Mapping[str, list[str]], directorie
     return text
 
 
-def _findings(exit_code: int, report_text: str, stderr: str, names_by_path: Mapping[str, list[str]]) -> list[Affected]:
+def _findings(
+    exit_code: int, report_text: str, stderr: str, root: Path, names_by_path: Mapping[str, list[str]]
+) -> list[Affected]:
     if exit_code not in (engines.CLEAN_EXIT, OSV_FINDINGS_FOUND):
         raise EngineError(f"{engines.OSV_SCANNER} exited {exit_code}, neither 'clean' nor 'findings'{engines.stderr_tail(stderr)}")
     affected, reported = _read_report(report_text, names_by_path)
-    _refuse_unread_requirements(names_by_path, reported)
+    _refuse_unread_requirements(root, names_by_path, reported)
     if bool(affected) != (exit_code == OSV_FINDINGS_FOUND):
         raise EngineError(f"{engines.OSV_SCANNER} exited {exit_code} but its report holds {len(affected)} finding(s)")
     return affected
 
 
-def _refuse_unread_requirements(names_by_path: Mapping[str, list[str]], reported: set[str]) -> None:
-    """osv-scanner skips a requirements line it cannot parse and answers a file of nothing else with no result and exit 0;
-    a requirements file with a requirement line that the report does not name was therefore not judged."""
+def _refuse_unread_requirements(root: Path, names_by_path: Mapping[str, list[str]], reported: Mapping[str, set[str]]) -> None:
+    """osv-scanner skips a requirement line it cannot parse (`pyyaml=5.3.1`) and answers a file of nothing else with no
+    result and exit 0; a requirement the report of its file does not name was therefore not judged."""
     for path, names in names_by_path.items():
-        if path in reported or REQUIREMENTS_KIND not in {lock_kind(name) for name in names}:
+        if REQUIREMENTS_KIND not in {lock_kind(name) for name in names}:
             continue
         try:
-            lines = Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
-        except OSError as error:
-            raise EngineError(f"cannot read {names[0]}: {error}") from error
-        if any(line.strip() and not line.strip().startswith(("#", "-")) for line in lines):
-            raise EngineError(f"{engines.OSV_SCANNER} read no package from {names[0]}, so it cannot be judged")
+            text = repository.read_text(root, names[0])
+        except repository.RepositoryFileError as error:
+            raise EngineError(str(error)) from error
+        if text is None:
+            raise EngineError(f"cannot read {names[0]}: it is not in the repository")
+        for requirement in _requirements(text):
+            if _project_name(requirement) not in reported.get(path, set()):
+                raise EngineError(f"{engines.OSV_SCANNER} read no package from line `{requirement}` of {names[0]}, so it cannot be judged")
 
 
-def _read_report(report_text: str, names_by_path: Mapping[str, list[str]]) -> tuple[list[Affected], set[str]]:
-    """The affected groups, and the paths the report names."""
+def _requirements(text: str) -> list[str]:
+    """The requirement lines of a requirements file: continuation lines joined, comments, options and blank lines left out."""
+    requirements = []
+    for line in text.replace("\\\n", " ").splitlines():
+        requirement = re.sub(r"(^|\s)#.*", "", line).strip()
+        if requirement and not requirement.startswith("-"):
+            requirements.append(requirement)
+    return requirements
+
+
+def _project_name(requirement: str) -> str:
+    """The leading project name of a requirement as PyPI compares names; the whole line when it has none."""
+    match = re.match(r"[A-Za-z0-9][A-Za-z0-9._-]*", requirement)
+    return _normalised(match.group() if match else requirement)
+
+
+def _normalised(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def _read_report(report_text: str, names_by_path: Mapping[str, list[str]]) -> tuple[list[Affected], dict[str, set[str]]]:
+    """The affected groups, and the normalised package names the report lists for each path it names."""
     try:
         affected = []
-        reported: set[str] = set()
+        reported: dict[str, set[str]] = {}
         for result in _dicts(json.loads(report_text)["results"]):
             source = _typed(_typed(result["source"], dict)["path"], str)
             if source not in names_by_path:
                 raise EngineError(f"the {engines.OSV_SCANNER} report names a lock file quality did not pass")
-            reported.add(source)
             packages = _dicts(result["packages"])
+            reported[source] = {_normalised(_typed(_typed(package["package"], dict)["name"], str)) for package in packages}
             for name in names_by_path[source]:
                 if lock_kind(name) is REQUIREMENTS_KIND:
                     _refuse_unpinned(name, packages)
