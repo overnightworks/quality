@@ -3,9 +3,10 @@ import io
 import json
 import re
 import threading
+import time
 import urllib.request
 import zipfile
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import Future
 from dataclasses import dataclass
 from datetime import date
@@ -17,9 +18,10 @@ from quality.engines import EngineError, Pin
 from quality.report import Finding
 
 RULE = "advisory"
+PYTHON_ECOSYSTEM = "PyPI"
 DATABASE_ROOT = "https://osv-vulnerabilities.storage.googleapis.com"  # read at call time; tests point it at a file:// root
 DATABASE_ARCHIVE = "all.zip"
-DATABASE_DOWNLOAD_DEADLINE_SECONDS = 300  # connect, headers and body together, enforced from outside the HTTP machinery; DOWNLOAD_TIMEOUT_SECONDS bounds each socket wait
+DATABASE_DOWNLOAD_DEADLINE_SECONDS = 300  # connect, headers and body of all downloads together, enforced from outside the HTTP machinery; DOWNLOAD_TIMEOUT_SECONDS bounds each socket wait
 ADVISORY_SCAN_TIMEOUT_SECONDS = 600
 OSV_CONFIG = Path(__file__).with_name("osv-scanner.toml")
 OSV_FINDINGS_FOUND = 1
@@ -31,11 +33,17 @@ OSV_URL = "https://osv.dev/vulnerability/"
 @dataclass(frozen=True)
 class LockKind:
     ecosystem: str
-    upgrade_command: str  # {package} is the advisory's package
+    parse_as: str  # the format name osv-scanner is told to read the file as: `--lockfile=<parse_as>:<path>`
+    upgrade_hint: str  # {package} is the advisory's package
+    hint_is_command: bool = False  # a command lets the tool pick the version, so beside a list of fixed versions to choose from it is left out
 
 
-# The lock file name is also the format osv-scanner is told to read it as (`--lockfile=uv.lock:<path>`).
-LOCK_KINDS = {"uv.lock": LockKind("PyPI", "uv lock --upgrade-package {package}")}
+LOCK_KINDS = {
+    "uv.lock": LockKind(PYTHON_ECOSYSTEM, "uv.lock", "uv lock --upgrade-package {package}", hint_is_command=True),
+    "pnpm-lock.yaml": LockKind(
+        "npm", "pnpm-lock.yaml", "upgrade it, or its parent when it is transitive, or set a pnpm override in package.json"
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -63,13 +71,24 @@ class AdvisoryScan:
         return (f"{RULE}: {len(self.allowed)} allowed", *self.allowed) if self.allowed else ()
 
 
+def _find_kind(name: str) -> LockKind | None:
+    return LOCK_KINDS.get(PurePosixPath(name).name)
+
+
 def is_lock(name: str) -> bool:
-    return PurePosixPath(name).name in LOCK_KINDS
+    return _find_kind(name) is not None
+
+
+def lock_kind(name: str) -> LockKind:
+    kind = _find_kind(name)
+    if kind is None:
+        raise ValueError(f"{name} is not a lock file the advisory rule judges")
+    return kind
 
 
 def scan(
     engine_dir: Path, pins: dict[str, Pin], locks: Mapping[str, Path], root: Path,
-    allowances: Sequence[AdvisoryAllowance], today: date,
+    allowances: Sequence[AdvisoryAllowance], today: date, monotonic: Callable[[], float] = time.monotonic,
 ) -> AdvisoryScan:
     """The advisories that affect the lock files `locks` (tracked name -> absolute path), with the repository's
     allowances applied; no lock needs no engine, and leaves every allowance matching nothing."""
@@ -78,7 +97,7 @@ def scan(
     names_by_path = _names_by_path(locks)
     with engines.scratch_directory() as scratch:
         try:
-            affected = _scan(engine_dir, pins, locks, scratch, names_by_path)
+            affected = _scan(engine_dir, pins, locks, scratch, names_by_path, monotonic)
         except EngineError as error:
             raise EngineError(_without_paths(str(error), names_by_path, [(root.resolve(), "<repository>"), (engine_dir.resolve(), "<engines>"), (scratch, "<scratch>")])) from None
     return apply_allowances(affected, allowances, today)
@@ -133,17 +152,17 @@ def _orphan(allowance: AdvisoryAllowance) -> Finding:
 
 
 def _scan(
-    engine_dir: Path, pins: dict[str, Pin], locks: Mapping[str, Path], scratch: Path, names_by_path: dict[str, list[str]]
+    engine_dir: Path, pins: dict[str, Pin], locks: Mapping[str, Path], scratch: Path,
+    names_by_path: dict[str, list[str]], monotonic: Callable[[], float],
 ) -> list[Affected]:
     binary = engines.engine_path(engine_dir, engines.OSV_SCANNER)
     engines.verify_version(binary, engines.OSV_SCANNER, pins[engines.OSV_SCANNER].version)
-    for ecosystem in sorted({LOCK_KINDS[PurePosixPath(name).name].ecosystem for name in locks}):
-        _place_database(scratch, ecosystem)
+    _place_databases(scratch, sorted({lock_kind(name).ecosystem for name in locks}), monotonic)
     # cwd is the scratch directory so that nothing in the scanned repository is read by accident.
     command = [
         str(binary), "scan", "source", "--offline", f"--local-db-path={scratch}", f"--config={OSV_CONFIG}",
         "--format=json", "--all-vulns", "--allow-no-lockfiles",
-        *[f"--lockfile={PurePosixPath(name).name}:{path}" for name, path in locks.items()],
+        *[f"--lockfile={lock_kind(name).parse_as}:{path}" for name, path in locks.items()],
     ]
     done = engines.run(command, cwd=scratch, timeout=ADVISORY_SCAN_TIMEOUT_SECONDS)
     return _findings(done.returncode, done.stdout, done.stderr, names_by_path)
@@ -157,9 +176,15 @@ def _names_by_path(locks: Mapping[str, Path]) -> dict[str, list[str]]:
     return names_by_path
 
 
-def _place_database(scratch: Path, ecosystem: str) -> None:
-    """The ecosystem's advisory database where osv-scanner looks for it with --local-db-path."""
-    archive = _download_database(f"{DATABASE_ROOT}/{ecosystem}/{DATABASE_ARCHIVE}", ecosystem)
+def _place_databases(scratch: Path, ecosystems: Sequence[str], monotonic: Callable[[], float]) -> None:
+    """Each ecosystem's advisory database where osv-scanner looks for it with --local-db-path; one deadline spans them all."""
+    deadline = monotonic() + DATABASE_DOWNLOAD_DEADLINE_SECONDS
+    for ecosystem in ecosystems:
+        _place_database(scratch, ecosystem, deadline, monotonic)
+
+
+def _place_database(scratch: Path, ecosystem: str, deadline: float, monotonic: Callable[[], float]) -> None:
+    archive = _download_database(f"{DATABASE_ROOT}/{ecosystem}/{DATABASE_ARCHIVE}", ecosystem, deadline, monotonic)
     try:
         with zipfile.ZipFile(io.BytesIO(archive)) as database:
             has_advisories = any(entry.endswith(".json") for entry in database.namelist())
@@ -175,32 +200,40 @@ def _place_database(scratch: Path, ecosystem: str) -> None:
         raise EngineError(f"cannot place the {ecosystem} advisory database in the scratch directory: {error}") from error
 
 
-def _download_database(url: str, ecosystem: str) -> bytes:
-    """The archive at `url`; a worker does the download so that the deadline holds whatever the server sends or withholds.
+def _download_database(url: str, ecosystem: str, deadline: float, monotonic: Callable[[], float]) -> bytes:
+    """The archive at `url` if it arrives before `deadline` (a `monotonic()` value); a worker does the download so
+    that the deadline holds whatever the server sends or withholds.
 
     A daemon worker, because a server that stalls in its headers cannot be interrupted and must not keep the process alive.
     The caller judges by the worker's lifetime: still running at the deadline is the deadline; ended without an outcome
     means an unexpected error (its traceback is on stderr); a download failure, a socket timeout included, is the worker's outcome."""
     download: Future[bytes] = Future()
+    remaining = deadline - monotonic()
+    if remaining <= 0:
+        raise _deadline_exceeded(ecosystem)
 
     def fetch() -> None:
         try:
-            with urllib.request.urlopen(url, timeout=min(engines.DOWNLOAD_TIMEOUT_SECONDS, DATABASE_DOWNLOAD_DEADLINE_SECONDS)) as response:
+            with urllib.request.urlopen(url, timeout=min(engines.DOWNLOAD_TIMEOUT_SECONDS, remaining)) as response:
                 download.set_result(response.read())
         except DOWNLOAD_FAILURES as error:
             download.set_exception(error)
 
     worker = threading.Thread(target=fetch, daemon=True)
     worker.start()
-    worker.join(DATABASE_DOWNLOAD_DEADLINE_SECONDS)
+    worker.join(remaining)
     if worker.is_alive():
-        raise EngineError(f"the {ecosystem} advisory database download exceeded {DATABASE_DOWNLOAD_DEADLINE_SECONDS} seconds")
+        raise _deadline_exceeded(ecosystem)
     if not download.done():
         raise EngineError(f"the {ecosystem} advisory database download stopped on an unexpected error")
     try:
         return download.result()
     except DOWNLOAD_FAILURES as error:
         raise EngineError(f"cannot download the {ecosystem} advisory database from {url}: {error}") from error
+
+
+def _deadline_exceeded(ecosystem: str) -> EngineError:
+    return EngineError(f"the {ecosystem} advisory database download exceeded {DATABASE_DOWNLOAD_DEADLINE_SECONDS} seconds")
 
 
 def _without_paths(text: str, names_by_path: Mapping[str, list[str]], directories: list[tuple[Path, str]]) -> str:
@@ -215,7 +248,9 @@ def _without_paths(text: str, names_by_path: Mapping[str, list[str]], directorie
     return text
 
 
-def _findings(exit_code: int, report_text: str, stderr: str, names_by_path: Mapping[str, list[str]]) -> list[Affected]:
+def _findings(
+    exit_code: int, report_text: str, stderr: str, names_by_path: Mapping[str, list[str]]
+) -> list[Affected]:
     if exit_code not in (engines.CLEAN_EXIT, OSV_FINDINGS_FOUND):
         raise EngineError(f"{engines.OSV_SCANNER} exited {exit_code}, neither 'clean' nor 'findings'{engines.stderr_tail(stderr)}")
     affected = _read_report(report_text, names_by_path)
@@ -255,9 +290,11 @@ def _strings(value: object) -> list[str]:
 def _package_findings(lock: str, package: dict) -> list[Affected]:
     affected = _typed(package["package"], dict)
     name, version, ecosystem = (_typed(affected[field], str) for field in ("name", "version", "ecosystem"))
-    records = {_typed(record["id"], str): record for record in _dicts(package["vulnerabilities"])}
+    if ("vulnerabilities" in package) != ("groups" in package):
+        raise ValueError("a package lists either both of vulnerabilities and groups or neither")
+    records = {_typed(record["id"], str): record for record in _dicts(package.get("vulnerabilities", []))}
     groups = []
-    for group in _dicts(package["groups"]):
+    for group in _dicts(package.get("groups", [])):
         named, *others = _strings(group["ids"])
         aliases = sorted({*others, *_strings(group["aliases"])} - {named})
         records_of_group = [records[identifier] for identifier in [named, *others] if identifier in records]
@@ -279,12 +316,15 @@ def _fix(lock: str, package: str, advisory: str, ecosystem: str, records: list[d
     fixed = list(dict.fromkeys(version for entry in entries for version in _fixed_versions(entry)))
     if not fixed:
         return f"osv lists no fixed version: remove or replace {package}; see {OSV_URL}{advisory}"
-    if len(fixed) > 1:
-        return f"upgrade {package} to a fixed version: {', '.join(fixed)}"
     directory = PurePosixPath(lock).parent
-    command = LOCK_KINDS[PurePosixPath(lock).name].upgrade_command.format(package=package)
-    where = "" if str(directory) == "." else f"in {directory}/: "
-    return f"upgrade {package} to >= {fixed[0]} ({where}{command})"
+    folder = "" if str(directory) == "." else f"in {directory}/"
+    hint = lock_kind(lock).upgrade_hint.format(package=package)
+    if len(fixed) > 1:
+        guidance = [folder] if folder else []
+        if not lock_kind(lock).hint_is_command:
+            guidance.append(hint)
+        return f"upgrade {package} to a fixed version: {', '.join(fixed)}" + (f" ({': '.join(guidance)})" if guidance else "")
+    return f"upgrade {package} to >= {fixed[0]} ({folder + ': ' if folder else ''}{hint})"
 
 
 def _dicts(value: object) -> list[dict]:
@@ -293,11 +333,12 @@ def _dicts(value: object) -> list[dict]:
 
 def _names_package(entry: dict, package: str, ecosystem: str) -> bool:
     named = _typed(entry.get("package", {}), dict)
-    return _typed(named.get("ecosystem", ""), str) == ecosystem and _normalized(_typed(named.get("name", ""), str)) == _normalized(package)
+    return _typed(named.get("ecosystem", ""), str) == ecosystem and _comparable(_typed(named.get("name", ""), str), ecosystem) == _comparable(package, ecosystem)
 
 
-def _normalized(name: str) -> str:
-    return re.sub(r"[-_.]+", "-", name).lower()
+def _comparable(name: str, ecosystem: str) -> str:
+    """The name as its ecosystem compares it: Python's rule applies to PyPI only, an npm name is exact."""
+    return re.sub(r"[-_.]+", "-", name).lower() if ecosystem == PYTHON_ECOSYSTEM else name
 
 
 def _fixed_versions(entry: dict) -> list[str]:

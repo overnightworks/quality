@@ -1,116 +1,35 @@
 import contextlib
 import datetime
 import hashlib
-import io
-import json
-import shlex
 import socketserver
 import subprocess
 import threading
 import time
 import urllib.request
-import zipfile
 from pathlib import Path
 
 import pytest
-from conftest import allowance_config, assert_every_line_starts_with_the_door, fake_engine
+from advisory_support import (
+    ADVISORY_ID,
+    AFFECTED_LINE,
+    OSV,
+    OUTPUTS,
+    SAFE,
+    UPGRADE_LINE,
+    UV_LOCK_ALLOWANCE,
+    VIRTUAL_ROOT_ONLY,
+    advisory,
+    package_of,
+    reporting,
+    tracked_lock_repo,
+    uv_lock,
+    zipped,
+)
+from conftest import allowance_config, assert_every_line_starts_with_the_door, osv_engines
 
 from quality import advisories, cli, engines
 from quality.config import AdvisoryAllowance
 from quality.report import headline
-
-OUTPUTS = Path(__file__).parent / "fixtures" / "engine-outputs"
-OSV = engines.OSV_SCANNER
-ADVISORY_ID = "GHSA-aaaa-bbbb-cccc"
-UV_LOCK_ALLOWANCE = {"identifier": ADVISORY_ID, "lock": "uv.lock", "item": "#116", "reason": "fixture"}
-AFFECTED_LINE = f"osv-scanner {ADVISORY_ID} (CVE-2020-1): PyPI pyyaml 5.3.1 is affected."
-UPGRADE_LINE = "Fix: upgrade pyyaml to >= 5.4 (uv lock --upgrade-package pyyaml)"
-VULNERABLE = (("pyyaml", "5.3.1"),)
-SAFE = (("pyyaml", "6.0.2"),)
-
-
-def uv_lock(packages=VULNERABLE) -> str:
-    registry = "".join(
-        f'\n[[package]]\nname = "{name}"\nversion = "{version}"\nsource = {{ registry = "https://pypi.org/simple" }}\n'
-        for name, version in packages
-    )
-    root = '[[package]]\nname = "demo"\nversion = "0.1.0"\nsource = { editable = "." }\n'
-    return f'version = 1\nrequires-python = ">=3.12"\n\n{root}{registry}'
-
-
-VIRTUAL_ROOT_ONLY = 'version = 1\n\n[[package]]\nname = "demo"\nversion = "0.1.0"\nsource = { virtual = "." }\n'
-
-
-def advisory(identifier=ADVISORY_ID, *, fixed=("5.4",), aliases=("CVE-2020-1",), also_affected=()) -> dict:
-    ranges = [{"type": "ECOSYSTEM", "events": [{"introduced": "0"}, {"fixed": version}]} for version in fixed]
-    ranges = ranges or [{"type": "ECOSYSTEM", "events": [{"introduced": "0"}]}]
-    return {
-        "schema_version": "1.9.0", "id": identifier, "modified": "2026-01-01T00:00:00Z", "aliases": list(aliases),
-        "affected": [{"package": {"name": "pyyaml", "ecosystem": "PyPI"}, "ranges": ranges}, *also_affected],
-    }
-
-
-def zipped(entries: dict[str, str]) -> bytes:
-    buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w") as archive:
-        for name, text in entries.items():
-            archive.writestr(name, text)
-    return buffer.getvalue()
-
-
-@pytest.fixture
-def publish_database(tmp_path_factory, monkeypatch):
-    """Points the gate at a file:// advisory database root and publishes the PyPI archive there."""
-    root = tmp_path_factory.mktemp("osv-database")
-    monkeypatch.setattr(advisories, "DATABASE_ROOT", root.as_uri())
-
-    def publish(records=None, archive: bytes | None = None) -> None:
-        records = [advisory()] if records is None else records
-        archive = zipped({f"{record['id']}.json": json.dumps(record) for record in records}) if archive is None else archive
-        (root / "PyPI").mkdir(exist_ok=True)
-        (root / "PyPI" / "all.zip").write_bytes(archive)
-
-    return publish
-
-
-@pytest.fixture
-def run_gate(capsys):
-    """Runs the gate over a repository and returns (exit code, all output); no output names the checkout or the engine directory (#53 cell 21)."""
-    def run(repo: Path, engine_dir: Path) -> tuple[int, str]:
-        code = cli.main(["hygiene", "--engines", str(engine_dir), str(repo)])
-        captured = capsys.readouterr()
-        output = captured.out + captured.err
-        assert str(repo) not in output
-        assert str(repo).lstrip("/") not in output
-        assert str(engine_dir) not in output
-        assert str(engine_dir).lstrip("/") not in output
-        return code, captured.out + captured.err
-    return run
-
-
-def reporting(report: Path, exit_code: int, stderr: str = "") -> str:
-    """Shell for a fake osv-scanner that prints `report` (@LOCK@ read as the last lock passed) and exits."""
-    return (
-        f'for argument; do lock="${{argument#--lockfile=uv.lock:}}"; done\n'
-        f'sed "s|@LOCK@|$lock|" {shlex.quote(str(report))}\necho {shlex.quote(stderr)} >&2\nexit {exit_code}'
-    )
-
-
-@pytest.fixture
-def edited_report(tmp_path_factory):
-    """Writes the engine-output fixture, edited, outside the fixture repository."""
-    def write(fixture: str, edit) -> Path:
-        report = json.loads((OUTPUTS / fixture).read_text())
-        edit(report)
-        path = tmp_path_factory.mktemp("report") / "report.json"
-        path.write_text(json.dumps(report))
-        return path
-    return write
-
-
-def tracked_lock_repo(build_repo, text: str = uv_lock()) -> Path:
-    return build_repo({"uv.lock": text})
-
 
 # ---- the real osv-scanner against a fake file:// database (CI runs these; they download the binary) ----
 
@@ -139,6 +58,20 @@ def test_the_fix_follows_what_osv_lists(build_repo, publish_database, installed_
     code, output = run_gate(tracked_lock_repo(build_repo), installed_engines)
     assert code == 1, output
     assert expected in output
+
+
+def test_a_record_naming_a_pypi_package_in_other_spelling_still_supplies_the_fix(
+    build_repo, clean_engines, run_gate, publish_database, edited_report
+):
+    """#145 I2: Python's name rule applies to PyPI, so a record naming `PyYAML` fixes the lock's `pyyaml`."""
+    publish_database()
+    report = edited_report(
+        "osv-scanner-finding.json",
+        lambda report: package_of(report)["vulnerabilities"][0]["affected"][0]["package"].update(name="PyYAML"),
+    )
+    code, output = run_gate(tracked_lock_repo(build_repo), osv_engines(clean_engines, reporting(report, 1)))
+    assert code == 1, output
+    assert UPGRADE_LINE in output
 
 
 @pytest.mark.engine
@@ -207,10 +140,6 @@ def test_the_live_database_condemns_pyyaml_5_3_1(build_repo, installed_engines, 
 
 
 # ---- no network, no real osv-scanner ----
-
-def osv_engines(clean_engines, on_scan):
-    fake_engine(clean_engines, OSV, on_scan)
-    return clean_engines
 
 
 def test_without_a_tracked_lock_nothing_is_downloaded_and_no_osv_binary_is_needed(
@@ -387,13 +316,22 @@ def test_a_scratch_directory_that_cannot_be_written_is_cannot_judge(build_repo, 
 
 
 @pytest.mark.engine
+@pytest.mark.parametrize(
+    ("name", "text"),
+    [
+        ("uv.lock", "this is [not a lock\n"),
+        ("src/frontend/pnpm-lock.yaml", "lockfileVersion: '9.0'\npackages: [unclosed\n"),
+    ],
+    ids=["uv.lock", "pnpm-lock.yaml"],
+)
 def test_a_lock_osv_cannot_parse_is_cannot_judge_and_names_neither_form_of_its_path(
-    build_repo, publish_database, installed_engines, run_gate
+    build_repo, publish_database, installed_engines, run_gate, name, text
 ):
-    """#53 rule 3, cell 21: osv prints the lock's path without its leading slash."""
+    """#53 rule 3, cell 21 and #145 S5: osv prints the lock's path without its leading slash; a broken lock is never green."""
     publish_database()
-    code, output = run_gate(tracked_lock_repo(build_repo, "this is [not a lock\n"), installed_engines)
-    assert (code, "uv.lock" in output) == (2, True), output
+    publish_database(ecosystem="npm")
+    code, output = run_gate(build_repo({name: text}), installed_engines)
+    assert (code, name in output) == (2, True), output
 
 
 def linked_lock_repo(build_repo) -> Path:
@@ -455,10 +393,6 @@ def test_an_unexpected_osv_exit_is_cannot_judge_with_the_code_and_stderr(
     assert "boom reason" in output
 
 
-def package_of(report: dict) -> dict:
-    return report["results"][0]["packages"][0]
-
-
 @pytest.mark.parametrize(
     ("fixture", "edit", "exit_code", "expected"),
     [
@@ -479,6 +413,10 @@ def package_of(report: dict) -> dict:
          "cannot read the osv-scanner report"),
         ("osv-scanner-finding.json", lambda report: package_of(report)["groups"][0].update(ids=["a", 7]), 1,
          "cannot read the osv-scanner report"),
+        ("osv-scanner-finding.json", lambda report: package_of(report).pop("groups"), 1,
+         "cannot read the osv-scanner report"),
+        ("osv-scanner-finding.json", lambda report: package_of(report).pop("vulnerabilities"), 1,
+         "cannot read the osv-scanner report"),
         ("osv-scanner-finding.json", lambda report: package_of(report)["vulnerabilities"][0].update(affected="x"), 1,
          "cannot read the osv-scanner report"),
         ("osv-scanner-finding.json", lambda report: package_of(report)["vulnerabilities"][0]["affected"][0].update(ranges={}), 1,
@@ -491,7 +429,7 @@ def package_of(report: dict) -> dict:
     ],
     ids=["cell 18 exit 0 with vulnerabilities", "cell 18 exit 1 without", "cell 19 not JSON", "cell 19 wrong shape",
          "rule 3 results is an empty object", "rule 3 results is an empty string", "rule 3 packages is an object",
-         "rule 3 groups is a string",
+         "rule 3 groups is a string", "rule 3 vulnerabilities without groups", "rule 3 groups without vulnerabilities",
          "cell 20 a source quality did not pass", "rule 3 version is an object", "rule 3 ecosystem is a number",
          "rule 3 an id is a number", "rule 3 affected is a string", "rule 3 ranges is an object", "rule 3 events is a string",
          "rule 3 fixed is a number"],
