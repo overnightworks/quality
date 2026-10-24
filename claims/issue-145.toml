@@ -1,8 +1,0 @@
-claim_id = "6e819fec1ceb4495bf274af4f677126a"
-agent = "claude"
-role = "builder"
-base = "c206b14df9dbd8ef27e9d4bd1d81bf8ef0f2a4c8"
-branch = "claude/issue-145-advisory-pnpm-requirements"
-scope = [".github/workflows/gate.yml", "AGENTS.md", "docs/rules.md", "src/quality/advisories.py", "tests"]
-opened_commit = "4289cb27cb034f3de0debdffd8bbe627d0d7c1b2"
-whole_reason = "One rule extension end to end: the lock kinds, their fix text and the shared deadline need the job timeout and the docs that pin them in the same change."
