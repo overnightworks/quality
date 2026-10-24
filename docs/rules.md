@@ -301,8 +301,10 @@ a lock file quality did not pass. Trust boundary: the database is an unsigned zi
 osv-scanner itself uses; there is deliberately no cache, because a doctored cached database would silence every pull
 request. Records the pinned osv-scanner cannot read are dropped by it silently; the live-database test for
 `pyyaml 5.3.1` on every quality pull request is the canary. osv-scanner judges the lock as written; the caller's own
-`uv sync --locked` guards against a hand-edited lock. osv-scanner exits `127` on a lock it cannot parse (a broken
-`pnpm-lock.yaml` included), which is `cannot judge`, never clean.
+`uv sync --locked` guards against a hand-edited lock. osv-scanner exits `127` on a `uv.lock` or `pnpm-lock.yaml` it cannot parse, which is `cannot judge`, never clean. It
+skips a requirements line it cannot read and exits `0`, so a `requirements*.txt` with requirement lines of which the
+scanner reads none is `cannot judge`, and so is one requirement it cannot pin to one version (`pyyaml`,
+`pyyaml>=5.3,<6`). A garbage line beside readable ones is not caught.
 
 The hygiene job in `gate.yml` stops at 25 minutes: the 300-second download deadline and the 600-second scan limit take
 15, and setup and the other rules get the remaining 10, so quality's own `cannot judge` shows before GitHub cancels the job.

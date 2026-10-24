@@ -1,7 +1,11 @@
 import datetime
-import time
+import functools
+import http.server
+import threading
+import urllib.parse
 import urllib.request
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -26,11 +30,11 @@ LODASH_ADVISORY = advisory(LODASH, fixed=("4.17.21",), aliases=("CVE-2020-2",), 
 FRONTEND_LOCK = "src/frontend/pnpm-lock.yaml"
 
 
-def pnpm_lock(packages=(("lodash", "4.17.15"),)) -> str:
-    """A lockfileVersion 9.0 pnpm lock whose packages are all development dependencies."""
+def pnpm_lock(packages=(("lodash", "4.17.15"),), transitive=()) -> str:
+    """A lockfileVersion 9.0 pnpm lock whose `packages` are development dependencies and whose `transitive` ones are only resolved."""
     direct = "".join(f"      {name}:\n        specifier: {version}\n        version: {version}\n" for name, version in packages)
-    resolved = "".join(f"  {name}@{version}:\n    resolution: {{integrity: sha512-x}}\n\n" for name, version in packages)
-    snapshots = "".join(f"  {name}@{version}: {{}}\n\n" for name, version in packages)
+    resolved = "".join(f"  {name}@{version}:\n    resolution: {{integrity: sha512-x}}\n\n" for name, version in (*packages, *transitive))
+    snapshots = "".join(f"  {name}@{version}: {{}}\n\n" for name, version in (*packages, *transitive))
     return (
         "lockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    devDependencies:\n" + direct
         + "\npackages:\n\n" + resolved + "snapshots:\n\n" + snapshots
@@ -47,6 +51,41 @@ def test_a_pnpm_lock_is_judged_with_its_development_packages_and_names_the_folde
     code, output = run_gate(build_repo({FRONTEND_LOCK: pnpm_lock()}), installed_engines)
     assert code == 1, output
     assert f"advisory {FRONTEND_LOCK} - {NPM_AFFECTED_LINE}\n  Fix: upgrade lodash to >= 4.17.21 (in src/frontend/: {PNPM_FIX})" in output
+
+
+@pytest.mark.engine
+def test_two_vulnerable_versions_of_one_package_in_a_pnpm_lock_are_two_findings(
+    build_repo, publish_database, installed_engines, run_gate
+):
+    """#145 I1: the version is part of a finding's identity, so one package at two versions is red twice."""
+    publish_database([advisory(LODASH, fixed=("4.17.21",), package="lodash", ecosystem="npm")], ecosystem="npm")
+    lock = pnpm_lock(transitive=[("lodash", "4.17.19")])
+    code, output = run_gate(build_repo({FRONTEND_LOCK: lock}), installed_engines)
+    assert code == 1, output
+    assert "hygiene: 2 finding(s)" in output
+    assert "npm lodash 4.17.15 is affected." in output
+    assert "npm lodash 4.17.19 is affected." in output
+
+
+@pytest.mark.engine
+@pytest.mark.parametrize(
+    ("name", "text", "ecosystem", "records", "guidance"),
+    [
+        (FRONTEND_LOCK, pnpm_lock(), "npm", [advisory(LODASH, fixed=("4.17.21", "5.0.0"), package="lodash", ecosystem="npm")], PNPM_FIX),
+        ("requirements.txt", "pyyaml==5.3\n", "PyPI", [advisory(fixed=("5.4", "6.0"))], "regenerate the file as its header says"),
+    ],
+    ids=["pnpm-lock.yaml", "requirements.txt"],
+)
+def test_several_fixed_versions_keep_the_guidance_of_the_lock_kind(
+    build_repo, publish_database, installed_engines, run_gate, name, text, ecosystem, records, guidance
+):
+    """#145 C6: a transitive npm package is fixed by its parent or an override, a requirements file by regenerating it,
+    whether osv lists one fixed version or several."""
+    publish_database(records, ecosystem=ecosystem)
+    code, output = run_gate(build_repo({name: text}), installed_engines)
+    assert code == 1, output
+    assert "to a fixed version: " in output
+    assert guidance in output
 
 
 @pytest.mark.engine
@@ -73,6 +112,21 @@ def test_a_requirements_file_is_judged_at_its_lowest_allowed_version_and_a_requi
     assert "Fix: upgrade pyyaml to >= 5.4 (" in output
     assert "regenerate the file as its header says" in output
     assert "advisory tests/requirements.in" not in output
+
+
+@pytest.mark.engine
+@pytest.mark.parametrize(
+    "text",
+    ["pyyaml\n", "pyyaml>=5.3,<6\n", "requests==2.0.0\npyyaml>=5.3,<6\n"],
+    ids=["unpinned", "a range", "beside a pinned line"],
+)
+def test_a_requirement_osv_cannot_pin_to_one_version_is_cannot_judge_and_named(
+    build_repo, publish_database, installed_engines, run_gate, text
+):
+    """#145 S5, S6: osv drops such a line silently and exits 0; quality names the file and the package instead of calling it clean."""
+    publish_database()
+    code, output = run_gate(build_repo({"docs/requirements.txt": text}), installed_engines)
+    assert (code, "docs/requirements.txt requires pyyaml without pinning one version" in output) == (2, True), output
 
 
 @pytest.mark.engine
@@ -117,38 +171,65 @@ def test_a_package_listed_as_malicious_is_red_and_the_fix_is_to_remove_or_replac
     assert "osv lists no fixed version: remove or replace evil-package" in output
 
 
+@pytest.fixture
+def served_databases(publish_database, monkeypatch):
+    """Serves the published databases over HTTP and points the gate at them; each request is recorded as it arrives and
+    held for `.hold` seconds before it is answered. The server is stopped at teardown."""
+    served = SimpleNamespace(requested=[], hold=0.0)
+    released = threading.Event()
+    root = Path(urllib.request.url2pathname(urllib.parse.urlparse(advisories.DATABASE_ROOT).path))
+
+    class Handler(http.server.SimpleHTTPRequestHandler):
+        def do_GET(self):
+            served.requested.append(self.path)
+            released.wait(served.hold)
+            try:
+                super().do_GET()
+            except OSError:
+                pass  # the downloader gave up at its deadline, which is what S4 expects
+
+        def log_message(self, *arguments):
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(Handler, directory=str(root)))
+    server.daemon_threads = True
+    serving = threading.Thread(target=server.serve_forever)
+    serving.start()
+    monkeypatch.setattr(advisories, "DATABASE_ROOT", f"http://127.0.0.1:{server.server_address[1]}")
+    yield served
+    released.set()
+    server.shutdown()
+    serving.join()
+    server.server_close()
+
+
 @pytest.mark.engine
 def test_a_repository_with_both_kinds_downloads_each_database_once_and_judges_both(
-    build_repo, publish_database, installed_engines, run_gate, monkeypatch
+    build_repo, publish_database, served_databases, installed_engines, run_gate
 ):
     """#145 X1: two pnpm locks and a uv.lock cost one npm and one PyPI download."""
     publish_database([LODASH_ADVISORY], ecosystem="npm")
     publish_database()
-    opened = []
-    real_urlopen = urllib.request.urlopen
-    monkeypatch.setattr(urllib.request, "urlopen", lambda url, **options: opened.append(url) or real_urlopen(url, **options))
     repo = build_repo({FRONTEND_LOCK: pnpm_lock(), "src/admin/pnpm-lock.yaml": pnpm_lock(), "uv.lock": uv_lock()})
     code, output = run_gate(repo, installed_engines)
     assert code == 1, output
-    assert sorted(url.rsplit("/", 2)[1] for url in opened) == ["PyPI", "npm"]
+    assert sorted(served_databases.requested) == ["/PyPI/all.zip", "/npm/all.zip"]
     assert (FRONTEND_LOCK in output, "src/admin/pnpm-lock.yaml" in output, "advisory uv.lock - " in output) == (True, True, True)
 
 
-def test_one_deadline_spans_every_database_download(build_repo, clean_engines, run_gate, publish_database, monkeypatch):
-    """#145 S4: two downloads that each fit the deadline but not together are `cannot judge`, not a hung job."""
+def test_one_deadline_spans_every_database_download(
+    build_repo, clean_engines, run_gate, publish_database, served_databases, monkeypatch
+):
+    """#145 S4: two downloads that each fit the deadline but not together are `cannot judge`, not a hung job; the
+    first download (PyPI) completes, so it is the second (npm) that finds the budget spent."""
     publish_database([LODASH_ADVISORY], ecosystem="npm")
     publish_database()
-    real_urlopen = urllib.request.urlopen
-
-    def slow_urlopen(url, **options):
-        time.sleep(0.3)
-        return real_urlopen(url, **options)
-
-    monkeypatch.setattr(urllib.request, "urlopen", slow_urlopen)
-    monkeypatch.setattr(advisories, "DATABASE_DOWNLOAD_DEADLINE_SECONDS", 0.5)
+    served_databases.hold = 0.4
+    monkeypatch.setattr(advisories, "DATABASE_DOWNLOAD_DEADLINE_SECONDS", 0.6)
     repo = build_repo({FRONTEND_LOCK: pnpm_lock(), "uv.lock": uv_lock()})
     code, output = run_gate(repo, osv_engines(clean_engines, "exit 99"))
-    assert (code, "advisory database download exceeded 0.5 seconds" in output) == (2, True), output
+    assert (code, "the npm advisory database download exceeded 0.6 seconds" in output) == (2, True), output
+    assert served_databases.requested == ["/PyPI/all.zip", "/npm/all.zip"]
 
 
 def test_an_npm_database_that_cannot_be_downloaded_is_cannot_judge_and_named(build_repo, clean_engines, run_gate, publish_database):

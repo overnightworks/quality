@@ -304,8 +304,12 @@ def test_a_scratch_directory_that_cannot_be_written_is_cannot_judge(build_repo, 
 @pytest.mark.engine
 @pytest.mark.parametrize(
     ("name", "text"),
-    [("uv.lock", "this is [not a lock\n"), ("src/frontend/pnpm-lock.yaml", "lockfileVersion: '9.0'\npackages: [unclosed\n")],
-    ids=["uv.lock", "pnpm-lock.yaml"],
+    [
+        ("uv.lock", "this is [not a lock\n"),
+        ("src/frontend/pnpm-lock.yaml", "lockfileVersion: '9.0'\npackages: [unclosed\n"),
+        ("src/requirements.txt", "this is [not a requirements file\n%% garbage ===\n"),
+    ],
+    ids=["uv.lock", "pnpm-lock.yaml", "requirements.txt"],
 )
 def test_a_lock_osv_cannot_parse_is_cannot_judge_and_names_neither_form_of_its_path(
     build_repo, publish_database, installed_engines, run_gate, name, text

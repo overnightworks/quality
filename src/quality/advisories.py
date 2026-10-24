@@ -165,7 +165,7 @@ def _scan(
     # cwd is the scratch directory so that nothing in the scanned repository is read by accident.
     command = [
         str(binary), "scan", "source", "--offline", f"--local-db-path={scratch}", f"--config={OSV_CONFIG}",
-        "--format=json", "--all-vulns", "--allow-no-lockfiles",
+        "--format=json", "--all-vulns", "--all-packages", "--allow-no-lockfiles",
         *[f"--lockfile={lock_kind(name).parse_as}:{path}" for name, path in locks.items()],
     ]
     done = engines.run(command, cwd=scratch, timeout=ADVISORY_SCAN_TIMEOUT_SECONDS)
@@ -255,27 +255,56 @@ def _without_paths(text: str, names_by_path: Mapping[str, list[str]], directorie
 def _findings(exit_code: int, report_text: str, stderr: str, names_by_path: Mapping[str, list[str]]) -> list[Affected]:
     if exit_code not in (engines.CLEAN_EXIT, OSV_FINDINGS_FOUND):
         raise EngineError(f"{engines.OSV_SCANNER} exited {exit_code}, neither 'clean' nor 'findings'{engines.stderr_tail(stderr)}")
-    affected = _read_report(report_text, names_by_path)
+    affected, reported = _read_report(report_text, names_by_path)
+    _refuse_unread_requirements(names_by_path, reported)
     if bool(affected) != (exit_code == OSV_FINDINGS_FOUND):
         raise EngineError(f"{engines.OSV_SCANNER} exited {exit_code} but its report holds {len(affected)} finding(s)")
     return affected
 
 
-def _read_report(report_text: str, names_by_path: Mapping[str, list[str]]) -> list[Affected]:
+def _refuse_unread_requirements(names_by_path: Mapping[str, list[str]], reported: set[str]) -> None:
+    """osv-scanner skips a requirements line it cannot parse and answers a file of nothing else with no result and exit 0;
+    a requirements file with a requirement line that the report does not name was therefore not judged."""
+    for path, names in names_by_path.items():
+        if path in reported or REQUIREMENTS_KIND not in {lock_kind(name) for name in names}:
+            continue
+        try:
+            lines = Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError as error:
+            raise EngineError(f"cannot read {names[0]}: {error}") from error
+        if any(line.strip() and not line.strip().startswith(("#", "-")) for line in lines):
+            raise EngineError(f"{engines.OSV_SCANNER} read no package from {names[0]}, so it cannot be judged")
+
+
+def _read_report(report_text: str, names_by_path: Mapping[str, list[str]]) -> tuple[list[Affected], set[str]]:
+    """The affected groups, and the paths the report names."""
     try:
         affected = []
+        reported: set[str] = set()
         for result in _dicts(json.loads(report_text)["results"]):
             source = _typed(_typed(result["source"], dict)["path"], str)
             if source not in names_by_path:
                 raise EngineError(f"the {engines.OSV_SCANNER} report names a lock file quality did not pass")
+            reported.add(source)
             packages = _dicts(result["packages"])
+            for name in names_by_path[source]:
+                if lock_kind(name) is REQUIREMENTS_KIND:
+                    _refuse_unpinned(name, packages)
             affected += [
                 group for name in names_by_path[source] for package in packages
                 for group in _package_findings(name, package)
             ]
-        return list(dict.fromkeys(affected))
+        return list(dict.fromkeys(affected)), reported
     except (ValueError, KeyError, TypeError, AttributeError) as error:
         raise EngineError(f"cannot read the {engines.OSV_SCANNER} report: {error!r}") from error
+
+
+def _refuse_unpinned(lock: str, packages: list[dict]) -> None:
+    """osv-scanner lists a requirement it cannot pin to one version (`pyyaml`, `pyyaml>=5.3,<6`) with an empty version and judges nothing."""
+    for package in packages:
+        named = _typed(package["package"], dict)
+        if _typed(named["version"], str) == "":
+            raise EngineError(f"{lock} requires {_typed(named['name'], str)} without pinning one version, so it cannot be judged")
 
 
 def _typed[T](value: object, kind: type[T]) -> T:
@@ -292,9 +321,9 @@ def _strings(value: object) -> list[str]:
 def _package_findings(lock: str, package: dict) -> list[Affected]:
     affected = _typed(package["package"], dict)
     name, version, ecosystem = (_typed(affected[field], str) for field in ("name", "version", "ecosystem"))
-    records = {_typed(record["id"], str): record for record in _dicts(package["vulnerabilities"])}
+    records = {_typed(record["id"], str): record for record in _dicts(package.get("vulnerabilities", []))}
     groups = []
-    for group in _dicts(package["groups"]):
+    for group in _dicts(package.get("groups", [])):
         named, *others = _strings(group["ids"])
         aliases = sorted({*others, *_strings(group["aliases"])} - {named})
         records_of_group = [records[identifier] for identifier in [named, *others] if identifier in records]
@@ -318,9 +347,13 @@ def _fix(lock: str, package: str, advisory: str, ecosystem: str, records: list[d
         return f"osv lists no fixed version: remove or replace {package}; see {OSV_URL}{advisory}"
     directory = PurePosixPath(lock).parent
     folder = "" if str(directory) == "." else f"in {directory}/"
-    if len(fixed) > 1:
-        return f"upgrade {package} to a fixed version: {', '.join(fixed)}" + (f" ({folder})" if folder else "")
     hint = lock_kind(lock).upgrade_hint.format(package=package)
+    if len(fixed) > 1:
+        # uv's hint is a command that names one version; with several fixed versions it would be wrong.
+        guidance = [folder] if folder else []
+        if lock_kind(lock) is not LOCK_KINDS["uv.lock"]:
+            guidance.append(hint)
+        return f"upgrade {package} to a fixed version: {', '.join(fixed)}" + (f" ({': '.join(guidance)})" if guidance else "")
     return f"upgrade {package} to >= {fixed[0]} ({folder + ': ' if folder else ''}{hint})"
 
 
