@@ -1,7 +1,6 @@
 import http.client
 import io
 import json
-import re
 import threading
 import time
 import urllib.request
@@ -12,9 +11,10 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path, PurePosixPath
 
-from quality import engines
+from quality import engines, pip_requirements, repository
 from quality.config import CONFIG_PATH, AdvisoryAllowance
 from quality.engines import EngineError, Pin
+from quality.pip_requirements import Requirement
 from quality.report import Finding
 
 RULE = "advisory"
@@ -44,6 +44,9 @@ LOCK_KINDS = {
         "npm", "pnpm-lock.yaml", "upgrade it, or its parent when it is transitive, or set a pnpm override in package.json"
     ),
 }
+REQUIREMENTS_KIND = LockKind(
+    PYTHON_ECOSYSTEM, "requirements.txt", "raise its pin, and compile the file again when it is generated"
+)
 
 
 @dataclass(frozen=True)
@@ -71,8 +74,21 @@ class AdvisoryScan:
         return (f"{RULE}: {len(self.allowed)} allowed", *self.allowed) if self.allowed else ()
 
 
+@dataclass(frozen=True)
+class Handover:
+    """One file osv-scanner is told to read; `expected` are the packages it must report for it, None where quality does
+    not read the file itself."""
+
+    parse_as: str
+    path: Path
+    expected: tuple[Requirement, ...] | None = None
+
+
 def _find_kind(name: str) -> LockKind | None:
-    return LOCK_KINDS.get(PurePosixPath(name).name)
+    file_name = PurePosixPath(name).name
+    if file_name.startswith("requirements") and file_name.endswith(".txt"):
+        return REQUIREMENTS_KIND
+    return LOCK_KINDS.get(file_name)
 
 
 def is_lock(name: str) -> bool:
@@ -97,7 +113,9 @@ def scan(
     names_by_path = _names_by_path(locks)
     with engines.scratch_directory() as scratch:
         try:
-            affected = _scan(engine_dir, pins, locks, scratch, names_by_path, monotonic)
+            handovers = _handovers(root, locks, scratch, names_by_path)
+            ecosystems = sorted({lock_kind(name).ecosystem for name in locks})
+            affected = _scan(engine_dir, pins, ecosystems, handovers, scratch, names_by_path, monotonic)
         except EngineError as error:
             raise EngineError(_without_paths(str(error), names_by_path, [(root.resolve(), "<repository>"), (engine_dir.resolve(), "<engines>"), (scratch, "<scratch>")])) from None
     return apply_allowances(affected, allowances, today)
@@ -151,21 +169,51 @@ def _orphan(allowance: AdvisoryAllowance) -> Finding:
     )
 
 
+def _handovers(root: Path, locks: Mapping[str, Path], scratch: Path, names_by_path: dict[str, list[str]]) -> list[Handover]:
+    """What osv-scanner reads for each lock. A requirements file is read by it as written, and the wheel lines it
+    skips are handed over beside it as a scratch file of `name==version` lines, judged under the same tracked name."""
+    handovers = []
+    for name, path in locks.items():
+        kind = lock_kind(name)
+        if not path.stat().st_size:
+            raise EngineError(f"{name} is empty")
+        if kind is not REQUIREMENTS_KIND:
+            handovers.append(Handover(kind.parse_as, path))
+            continue
+        requirements = _read_requirements(root, name)
+        wheels = tuple(requirement for requirement in requirements if requirement.is_wheel)
+        handovers.append(Handover(kind.parse_as, path, tuple(requirement for requirement in requirements if not requirement.is_wheel)))
+        if wheels:
+            wheel_file = scratch / f"wheels-{len(handovers)}.txt"
+            wheel_file.write_text("".join(f"{wheel.name}=={wheel.version}\n" for wheel in wheels))
+            names_by_path[str(wheel_file)] = [name]
+            handovers.append(Handover(kind.parse_as, wheel_file, wheels))
+    return handovers
+
+
+def _read_requirements(root: Path, name: str) -> tuple[Requirement, ...]:
+    try:
+        return pip_requirements.read(repository.read_text(root, name) or "")
+    except (pip_requirements.RequirementsError, repository.RepositoryFileError) as error:
+        raise EngineError(f"{name}: {error}") from error
+
+
 def _scan(
-    engine_dir: Path, pins: dict[str, Pin], locks: Mapping[str, Path], scratch: Path,
+    engine_dir: Path, pins: dict[str, Pin], ecosystems: Sequence[str], handovers: Sequence[Handover], scratch: Path,
     names_by_path: dict[str, list[str]], monotonic: Callable[[], float],
 ) -> list[Affected]:
     binary = engines.engine_path(engine_dir, engines.OSV_SCANNER)
     engines.verify_version(binary, engines.OSV_SCANNER, pins[engines.OSV_SCANNER].version)
-    _place_databases(scratch, sorted({lock_kind(name).ecosystem for name in locks}), monotonic)
+    _place_databases(scratch, ecosystems, monotonic)
     # cwd is the scratch directory so that nothing in the scanned repository is read by accident.
     command = [
         str(binary), "scan", "source", "--offline", f"--local-db-path={scratch}", f"--config={OSV_CONFIG}",
-        "--format=json", "--all-vulns", "--allow-no-lockfiles",
-        *[f"--lockfile={lock_kind(name).parse_as}:{path}" for name, path in locks.items()],
+        "--format=json", "--all-vulns", "--all-packages", "--allow-no-lockfiles",
+        *[f"--lockfile={handover.parse_as}:{handover.path}" for handover in handovers],
     ]
     done = engines.run(command, cwd=scratch, timeout=ADVISORY_SCAN_TIMEOUT_SECONDS)
-    return _findings(done.returncode, done.stdout, done.stderr, names_by_path)
+    expected = {str(handover.path): handover.expected for handover in handovers if handover.expected is not None}
+    return _findings(done.returncode, done.stdout, done.stderr, names_by_path, expected)
 
 
 def _names_by_path(locks: Mapping[str, Path]) -> dict[str, list[str]]:
@@ -187,10 +235,14 @@ def _place_database(scratch: Path, ecosystem: str, deadline: float, monotonic: C
     archive = _download_database(f"{DATABASE_ROOT}/{ecosystem}/{DATABASE_ARCHIVE}", ecosystem, deadline, monotonic)
     try:
         with zipfile.ZipFile(io.BytesIO(archive)) as database:
-            has_advisories = any(entry.endswith(".json") for entry in database.namelist())
+            entries = [entry for entry in database.namelist() if entry.endswith(".json")]
+            for entry in entries:
+                json.loads(database.read(entry))
     except zipfile.BadZipFile as error:
         raise EngineError(f"the {ecosystem} advisory database is not a valid zip: {error}") from error
-    if not has_advisories:
+    except ValueError as error:
+        raise EngineError(f"the {ecosystem} advisory database holds an entry that is not valid JSON: {error}") from error
+    if not entries:
         raise EngineError(f"the {ecosystem} advisory database holds no advisory")
     destination = scratch / "osv-scalibr" / ecosystem
     try:
@@ -249,31 +301,53 @@ def _without_paths(text: str, names_by_path: Mapping[str, list[str]], directorie
 
 
 def _findings(
-    exit_code: int, report_text: str, stderr: str, names_by_path: Mapping[str, list[str]]
+    exit_code: int, report_text: str, stderr: str, names_by_path: Mapping[str, list[str]],
+    expected: Mapping[str, tuple[Requirement, ...]],
 ) -> list[Affected]:
     if exit_code not in (engines.CLEAN_EXIT, OSV_FINDINGS_FOUND):
         raise EngineError(f"{engines.OSV_SCANNER} exited {exit_code}, neither 'clean' nor 'findings'{engines.stderr_tail(stderr)}")
-    affected = _read_report(report_text, names_by_path)
+    affected = _read_report(report_text, names_by_path, expected)
     if bool(affected) != (exit_code == OSV_FINDINGS_FOUND):
         raise EngineError(f"{engines.OSV_SCANNER} exited {exit_code} but its report holds {len(affected)} finding(s)")
     return affected
 
 
-def _read_report(report_text: str, names_by_path: Mapping[str, list[str]]) -> list[Affected]:
+def _read_report(
+    report_text: str, names_by_path: Mapping[str, list[str]], expected: Mapping[str, tuple[Requirement, ...]]
+) -> list[Affected]:
+    """The findings of the report; for each file in `expected`, the packages the report lists for it must be exactly those."""
     try:
         affected = []
+        listed: dict[str, set[tuple[str, str]]] = {}
         for result in _dicts(json.loads(report_text)["results"]):
             source = _typed(_typed(result["source"], dict)["path"], str)
             if source not in names_by_path:
                 raise EngineError(f"the {engines.OSV_SCANNER} report names a lock file quality did not pass")
             packages = _dicts(result["packages"])
+            listed[source] = {_name_and_version(package) for package in packages}
             affected += [
                 group for name in names_by_path[source] for package in packages
                 for group in _package_findings(name, package)
             ]
-        return list(dict.fromkeys(affected))
     except (ValueError, KeyError, TypeError, AttributeError) as error:
         raise EngineError(f"cannot read the {engines.OSV_SCANNER} report: {error!r}") from error
+    for path, requirements in expected.items():
+        _check_listed(names_by_path[path][0], requirements, listed.get(path, set()))
+    return list(dict.fromkeys(affected))
+
+
+def _name_and_version(package: dict) -> tuple[str, str]:
+    named = _typed(package["package"], dict)
+    return pip_requirements.normalised_name(_typed(named["name"], str)), _typed(named["version"], str)
+
+
+def _check_listed(name: str, requirements: tuple[Requirement, ...], listed: set[tuple[str, str]]) -> None:
+    """osv-scanner skips a line it cannot parse and still reports clean, so a clean run counts only when it read what quality read."""
+    for requirement in requirements:
+        if (requirement.name, requirement.version) not in listed:
+            raise EngineError(f"{engines.OSV_SCANNER} did not read line {requirement.line} of {name}")
+    if listed - {(requirement.name, requirement.version) for requirement in requirements}:
+        raise EngineError(f"{engines.OSV_SCANNER} reported a package of {name} that quality did not read")
 
 
 def _typed[T](value: object, kind: type[T]) -> T:
@@ -338,7 +412,7 @@ def _names_package(entry: dict, package: str, ecosystem: str) -> bool:
 
 def _comparable(name: str, ecosystem: str) -> str:
     """The name as its ecosystem compares it: Python's rule applies to PyPI only, an npm name is exact."""
-    return re.sub(r"[-_.]+", "-", name).lower() if ecosystem == PYTHON_ECOSYSTEM else name
+    return pip_requirements.normalised_name(name) if ecosystem == PYTHON_ECOSYSTEM else name
 
 
 def _fixed_versions(entry: dict) -> list[str]:
