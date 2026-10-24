@@ -303,8 +303,8 @@ request. Records the pinned osv-scanner cannot read are dropped by it silently; 
 `pyyaml 5.3.1` on every quality pull request is the canary. osv-scanner judges the lock as written; the caller's own
 `uv sync --locked` guards against a hand-edited lock. osv-scanner exits `127` on a `uv.lock` or `pnpm-lock.yaml` it cannot parse, which is `cannot judge`, never clean. It
 skips a requirements line it cannot read and exits `0`, so quality requires the report to name the leading project name
-of every requirement line of a `requirements*.txt` (comments, options and blank lines aside); a line it does not name
-(`pyyaml=5.3.1`, garbage, `foo @ url`) is `cannot judge`, and so is one requirement it cannot pin to one version
+of every requirement line of a `requirements*.txt` (comments, options and blank lines aside, an editable `-e` line counted); a line it does not name
+(`pyyaml=5.3.1`, garbage, `foo @ url`, `-e git+https://...#egg=pyyaml`) is `cannot judge`, named by file, line number and project name, never by its text, and so is one requirement it cannot pin to one version
 (`pyyaml`, `pyyaml>=5.3,<6`).
 
 The hygiene job in `gate.yml` stops at 25 minutes: the 300-second download deadline and the 600-second scan limit take

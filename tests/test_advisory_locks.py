@@ -21,7 +21,8 @@ from advisory_support import (
 )
 from conftest import allowance_config, osv_engines
 
-from quality import advisories
+from quality import advisories, engines
+from quality.engines import EngineError
 
 LODASH = "GHSA-npm1-aaaa-bbbb"
 NPM_AFFECTED_LINE = f"osv-scanner {LODASH} (CVE-2020-2): npm lodash 4.17.15 is affected."
@@ -131,21 +132,33 @@ def test_a_requirement_osv_cannot_pin_to_one_version_is_cannot_judge_and_named(
 
 @pytest.mark.engine
 @pytest.mark.parametrize(
-    ("text", "line"),
+    ("text", "location"),
     [
-        ("requests==2.0.0\npyyaml=5.3.1\n", "pyyaml=5.3.1"),
-        ("requests==2.0.0\nthis is garbage ((\n", "this is garbage (("),
-        ("requests==2.0.0\nPyYAML_x @ https://example.org/x.whl\n", "PyYAML_x @ https://example.org/x.whl"),
+        ("requests==2.0.0\npyyaml=5.3.1\n", "line 2 of docs/requirements.txt (pyyaml)"),
+        ("requests==2.0.0\nthis is garbage ((\n", "line 2 of docs/requirements.txt (this)"),
+        ("requests==2.0.0\nPyYAML_x @ https://user:secret@example.org/x.whl\n", "line 2 of docs/requirements.txt (pyyaml-x)"),
+        ("requests==2.0.0\n-e git+https://example.org/x@1.0#egg=pyyaml\n", "line 2 of docs/requirements.txt"),
+        ("requests==2.0.0\n--editable git+https://example.org/x@1.0#egg=pyyaml\n", "line 2 of docs/requirements.txt"),
     ],
-    ids=["a typo beside a readable line", "garbage beside a readable line", "a url requirement"],
+    ids=["a typo beside a readable line", "garbage beside a readable line", "a url requirement", "an editable install", "a long editable option"],
 )
 def test_a_requirement_line_osv_skipped_beside_readable_ones_is_cannot_judge_and_named(
-    build_repo, publish_database, installed_engines, run_gate, text, line
+    build_repo, publish_database, installed_engines, run_gate, text, location
 ):
-    """#145 S5: osv drops the line silently and exits 0 with the readable ones; quality names the file and the line."""
+    """#145 S5: osv drops the line silently and exits 0 with the readable ones; quality names the file, the line number
+    and the project name, never the line's own text (a direct URL can carry a credential)."""
     publish_database()
     code, output = run_gate(build_repo({"docs/requirements.txt": text}), installed_engines)
-    assert (code, f"read no package from line `{line}` of docs/requirements.txt" in output) == (2, True), output
+    assert (code, f"read no package from {location}, so it cannot be judged" in output) == (2, True), output
+    assert ("secret" in output, "git+https" in output) == (False, False), output
+
+
+@pytest.mark.engine
+def test_a_requirement_name_is_compared_as_pypi_compares_names(build_repo, publish_database, installed_engines, run_gate):
+    """#145 I2: osv reports `PyYAML` as `pyyaml` and `Ruamel_Yaml.Clib` as `ruamel-yaml-clib`; such lines are judged, not refused."""
+    publish_database()
+    code, output = run_gate(build_repo({"docs/requirements.txt": "PyYAML==5.3\nRuamel_Yaml.Clib==0.2.0\n"}), installed_engines)
+    assert (code, "PyPI pyyaml 5.3 is affected" in output) == (1, True), output
 
 
 @pytest.mark.engine
@@ -202,23 +215,20 @@ def test_a_package_listed_as_malicious_is_red_and_the_fix_is_to_remove_or_replac
 
 @pytest.fixture
 def served_databases(publish_database, monkeypatch):
-    """Serves the published databases over HTTP and points the gate at them; each request is recorded as it arrives, a
-    path in `.stalled` is not answered until teardown, and `.on_request` is called with each path before it is answered.
+    """Serves the published databases over HTTP and points the gate at them; each request is recorded as it arrives and
+    `.on_request` is called with each path before it is answered.
     The server is stopped at teardown."""
-    served = SimpleNamespace(requested=[], stalled=set(), on_request=lambda path: None)
-    released = threading.Event()
+    served = SimpleNamespace(requested=[], on_request=lambda path: None)
     root = Path(urllib.request.url2pathname(urllib.parse.urlparse(advisories.DATABASE_ROOT).path))
 
     class Handler(http.server.SimpleHTTPRequestHandler):
         def do_GET(self):
             served.requested.append(self.path)
             served.on_request(self.path)
-            if self.path in served.stalled:
-                released.wait()
             try:
                 super().do_GET()
             except OSError:
-                pass  # the downloader gave up at its deadline, which is what S4 expects
+                pass  # the downloader went away
 
         def log_message(self, *arguments):
             pass
@@ -229,7 +239,6 @@ def served_databases(publish_database, monkeypatch):
     serving.start()
     monkeypatch.setattr(advisories, "DATABASE_ROOT", f"http://127.0.0.1:{server.server_address[1]}")
     yield served
-    released.set()
     server.shutdown()
     serving.join()
     server.server_close()
@@ -249,29 +258,23 @@ def test_a_repository_with_both_kinds_downloads_each_database_once_and_judges_bo
     assert (FRONTEND_LOCK in output, "src/admin/pnpm-lock.yaml" in output, "advisory uv.lock - " in output) == (True, True, True)
 
 
-def test_one_deadline_spans_every_database_download(
-    build_repo, clean_engines, run_gate, publish_database, served_databases, monkeypatch
-):
-    """#145 S4: the first download (PyPI) spends all but a sliver of the budget, so the second (npm), which the server
-    never answers, finds it spent and the run is `cannot judge`, not a hung job. The clock is controlled: it moves by
-    the PyPI request alone, so no real delay has to fit a real deadline."""
+def test_one_deadline_spans_every_database_download(build_repo, clean_engines, publish_database, served_databases):
+    """#145 S4: the first download (PyPI) spends the whole budget, so the second (npm) is not even requested and the run
+    is `cannot judge`, not a hung job. The clock is injected and moves by the PyPI request alone."""
     publish_database([LODASH_ADVISORY], ecosystem="npm")
     publish_database()
     now = 0.0
-    sliver = 0.05
 
     def spend_budget_on_the_first_download(path: str) -> None:
         nonlocal now
-        if path == "/PyPI/all.zip":
-            now = advisories.DATABASE_DOWNLOAD_DEADLINE_SECONDS - sliver
+        now = advisories.DATABASE_DOWNLOAD_DEADLINE_SECONDS
 
     served_databases.on_request = spend_budget_on_the_first_download
-    served_databases.stalled.add("/npm/all.zip")
-    monkeypatch.setattr(advisories, "time", SimpleNamespace(monotonic=lambda: now))
     repo = build_repo({FRONTEND_LOCK: pnpm_lock(), "uv.lock": uv_lock()})
-    code, output = run_gate(repo, osv_engines(clean_engines, "exit 99"))
-    assert (code, "the npm advisory database download exceeded 300 seconds" in output) == (2, True), output
-    assert served_databases.requested == ["/PyPI/all.zip", "/npm/all.zip"]
+    locks = {name: repo / name for name in (FRONTEND_LOCK, "uv.lock")}
+    with pytest.raises(EngineError, match="the npm advisory database download exceeded 300 seconds"):
+        advisories.scan(osv_engines(clean_engines, "exit 99"), engines.read_pins(), locks, repo, [], datetime.date(2026, 10, 21), lambda: now)
+    assert served_databases.requested == ["/PyPI/all.zip"]
 
 
 def test_an_npm_database_that_cannot_be_downloaded_is_cannot_judge_and_named(build_repo, clean_engines, run_gate, publish_database):

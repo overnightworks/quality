@@ -6,7 +6,7 @@ import threading
 import time
 import urllib.request
 import zipfile
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import Future
 from dataclasses import dataclass
 from datetime import date
@@ -20,6 +20,7 @@ from quality.report import Finding
 
 RULE = "advisory"
 PYTHON_ECOSYSTEM = "PyPI"
+EDITABLE_OPTION = re.compile(r"(-e|--editable)(\s|=|$)")
 DATABASE_ROOT = "https://osv-vulnerabilities.storage.googleapis.com"  # read at call time; tests point it at a file:// root
 DATABASE_ARCHIVE = "all.zip"
 DATABASE_DOWNLOAD_DEADLINE_SECONDS = 300  # connect, headers and body of all downloads together, enforced from outside the HTTP machinery; DOWNLOAD_TIMEOUT_SECONDS bounds each socket wait
@@ -93,7 +94,7 @@ def lock_kind(name: str) -> LockKind:
 
 def scan(
     engine_dir: Path, pins: dict[str, Pin], locks: Mapping[str, Path], root: Path,
-    allowances: Sequence[AdvisoryAllowance], today: date,
+    allowances: Sequence[AdvisoryAllowance], today: date, monotonic: Callable[[], float] = time.monotonic,
 ) -> AdvisoryScan:
     """The advisories that affect the lock files `locks` (tracked name -> absolute path), with the repository's
     allowances applied; no lock needs no engine, and leaves every allowance matching nothing."""
@@ -102,7 +103,7 @@ def scan(
     names_by_path = _names_by_path(locks)
     with engines.scratch_directory() as scratch:
         try:
-            affected = _scan(engine_dir, pins, locks, root, scratch, names_by_path)
+            affected = _scan(engine_dir, pins, locks, root, scratch, names_by_path, monotonic)
         except EngineError as error:
             raise EngineError(_without_paths(str(error), names_by_path, [(root.resolve(), "<repository>"), (engine_dir.resolve(), "<engines>"), (scratch, "<scratch>")])) from None
     return apply_allowances(affected, allowances, today)
@@ -158,11 +159,11 @@ def _orphan(allowance: AdvisoryAllowance) -> Finding:
 
 def _scan(
     engine_dir: Path, pins: dict[str, Pin], locks: Mapping[str, Path], root: Path, scratch: Path,
-    names_by_path: dict[str, list[str]],
+    names_by_path: dict[str, list[str]], monotonic: Callable[[], float],
 ) -> list[Affected]:
     binary = engines.engine_path(engine_dir, engines.OSV_SCANNER)
     engines.verify_version(binary, engines.OSV_SCANNER, pins[engines.OSV_SCANNER].version)
-    _place_databases(scratch, sorted({lock_kind(name).ecosystem for name in locks}))
+    _place_databases(scratch, sorted({lock_kind(name).ecosystem for name in locks}), monotonic)
     # cwd is the scratch directory so that nothing in the scanned repository is read by accident.
     command = [
         str(binary), "scan", "source", "--offline", f"--local-db-path={scratch}", f"--config={OSV_CONFIG}",
@@ -181,15 +182,15 @@ def _names_by_path(locks: Mapping[str, Path]) -> dict[str, list[str]]:
     return names_by_path
 
 
-def _place_databases(scratch: Path, ecosystems: Sequence[str]) -> None:
+def _place_databases(scratch: Path, ecosystems: Sequence[str], monotonic: Callable[[], float]) -> None:
     """Each ecosystem's advisory database where osv-scanner looks for it with --local-db-path; one deadline spans them all."""
-    deadline = time.monotonic() + DATABASE_DOWNLOAD_DEADLINE_SECONDS
+    deadline = monotonic() + DATABASE_DOWNLOAD_DEADLINE_SECONDS
     for ecosystem in ecosystems:
-        _place_database(scratch, ecosystem, deadline)
+        _place_database(scratch, ecosystem, deadline, monotonic)
 
 
-def _place_database(scratch: Path, ecosystem: str, deadline: float) -> None:
-    archive = _download_database(f"{DATABASE_ROOT}/{ecosystem}/{DATABASE_ARCHIVE}", ecosystem, deadline)
+def _place_database(scratch: Path, ecosystem: str, deadline: float, monotonic: Callable[[], float]) -> None:
+    archive = _download_database(f"{DATABASE_ROOT}/{ecosystem}/{DATABASE_ARCHIVE}", ecosystem, deadline, monotonic)
     try:
         with zipfile.ZipFile(io.BytesIO(archive)) as database:
             has_advisories = any(entry.endswith(".json") for entry in database.namelist())
@@ -205,15 +206,15 @@ def _place_database(scratch: Path, ecosystem: str, deadline: float) -> None:
         raise EngineError(f"cannot place the {ecosystem} advisory database in the scratch directory: {error}") from error
 
 
-def _download_database(url: str, ecosystem: str, deadline: float) -> bytes:
-    """The archive at `url` if it arrives before `deadline` (a time.monotonic() value); a worker does the download so
+def _download_database(url: str, ecosystem: str, deadline: float, monotonic: Callable[[], float]) -> bytes:
+    """The archive at `url` if it arrives before `deadline` (a `monotonic()` value); a worker does the download so
     that the deadline holds whatever the server sends or withholds.
 
     A daemon worker, because a server that stalls in its headers cannot be interrupted and must not keep the process alive.
     The caller judges by the worker's lifetime: still running at the deadline is the deadline; ended without an outcome
     means an unexpected error (its traceback is on stderr); a download failure, a socket timeout included, is the worker's outcome."""
     download: Future[bytes] = Future()
-    remaining = deadline - time.monotonic()
+    remaining = deadline - monotonic()
     if remaining <= 0:
         raise _deadline_exceeded(ecosystem)
 
@@ -277,29 +278,34 @@ def _refuse_unread_requirements(root: Path, names_by_path: Mapping[str, list[str
             raise EngineError(str(error)) from error
         if text is None:
             raise EngineError(f"cannot read {names[0]}: it is not in the repository")
-        for requirement in _requirements(text):
-            if _project_name(requirement) not in reported.get(path, set()):
-                raise EngineError(f"{engines.OSV_SCANNER} read no package from line `{requirement}` of {names[0]}, so it cannot be judged")
+        for number, requirement in _requirements(text):
+            name = _project_name(requirement)
+            if name not in reported.get(path, set()):
+                named = f" ({name})" if name else ""
+                raise EngineError(f"{engines.OSV_SCANNER} read no package from line {number} of {names[0]}{named}, so it cannot be judged")
 
 
-def _requirements(text: str) -> list[str]:
-    """The requirement lines of a requirements file: continuation lines joined, comments, options and blank lines left out."""
+def _requirements(text: str) -> list[tuple[int, str]]:
+    """The requirement lines of a requirements file with their line numbers: continuation lines joined, comments,
+    options and blank lines left out; an editable install counts, because osv-scanner drops it silently."""
     requirements = []
-    for line in text.replace("\\\n", " ").splitlines():
-        requirement = re.sub(r"(^|\s)#.*", "", line).strip()
-        if requirement and not requirement.startswith("-"):
-            requirements.append(requirement)
+    joined, first = "", 0
+    for number, line in enumerate([*text.splitlines(), ""], start=1):
+        first = first or number
+        if line.endswith("\\"):
+            joined += line[:-1] + " "
+            continue
+        requirement = re.sub(r"(^|\s)#.*", "", joined + line).strip()
+        if requirement and (not requirement.startswith("-") or EDITABLE_OPTION.match(requirement)):
+            requirements.append((first, requirement))
+        joined, first = "", 0
     return requirements
 
 
-def _project_name(requirement: str) -> str:
-    """The leading project name of a requirement as PyPI compares names; the whole line when it has none."""
+def _project_name(requirement: str) -> str | None:
+    """The leading project name of a requirement as PyPI compares names; none when the line does not start with one."""
     match = re.match(r"[A-Za-z0-9][A-Za-z0-9._-]*", requirement)
-    return _normalised(match.group() if match else requirement)
-
-
-def _normalised(name: str) -> str:
-    return re.sub(r"[-_.]+", "-", name).lower()
+    return _comparable(match.group(), PYTHON_ECOSYSTEM) if match else None
 
 
 def _read_report(report_text: str, names_by_path: Mapping[str, list[str]]) -> tuple[list[Affected], dict[str, set[str]]]:
@@ -312,7 +318,10 @@ def _read_report(report_text: str, names_by_path: Mapping[str, list[str]]) -> tu
             if source not in names_by_path:
                 raise EngineError(f"the {engines.OSV_SCANNER} report names a lock file quality did not pass")
             packages = _dicts(result["packages"])
-            reported[source] = {_normalised(_typed(_typed(package["package"], dict)["name"], str)) for package in packages}
+            reported[source] = {
+                _comparable(_typed(named["name"], str), _typed(named["ecosystem"], str))
+                for named in (_typed(package["package"], dict) for package in packages)
+            }
             for name in names_by_path[source]:
                 if lock_kind(name) is REQUIREMENTS_KIND:
                     _refuse_unpinned(name, packages)
