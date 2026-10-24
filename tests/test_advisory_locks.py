@@ -139,8 +139,10 @@ def test_a_requirement_osv_cannot_pin_to_one_version_is_cannot_judge_and_named(
         ("requests==2.0.0\nPyYAML_x @ https://user:secret@example.org/x.whl\n", "line 2 of docs/requirements.txt (pyyaml-x)"),
         ("requests==2.0.0\n-e git+https://example.org/x@1.0#egg=pyyaml\n", "line 2 of docs/requirements.txt"),
         ("requests==2.0.0\n--editable git+https://example.org/x@1.0#egg=pyyaml\n", "line 2 of docs/requirements.txt"),
+        ("requests==2.0.0\n-egit+https://example.org/x@1.0#egg=pyyaml\n", "line 2 of docs/requirements.txt"),
+        ("requests==2.0.0\n--edit git+https://example.org/x@1.0#egg=pyyaml\n", "line 2 of docs/requirements.txt"),
     ],
-    ids=["a typo beside a readable line", "garbage beside a readable line", "a url requirement", "an editable install", "a long editable option"],
+    ids=["a typo beside a readable line", "garbage beside a readable line", "a url requirement", "an editable install", "a long editable option", "an attached short editable", "an abbreviated long editable"],
 )
 def test_a_requirement_line_osv_skipped_beside_readable_ones_is_cannot_judge_and_named(
     build_repo, publish_database, installed_engines, run_gate, text, location

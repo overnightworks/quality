@@ -3,7 +3,6 @@ import io
 import json
 import re
 import threading
-import time
 import urllib.request
 import zipfile
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -20,7 +19,7 @@ from quality.report import Finding
 
 RULE = "advisory"
 PYTHON_ECOSYSTEM = "PyPI"
-EDITABLE_OPTION = re.compile(r"(-e|--editable)(\s|=|$)")
+EDITABLE_OPTION = re.compile(r"-e|--ed(itable|itabl|ita|it|i)?(\s|=|$)")  # pip parses with optparse: `-egit+...` attached and any unambiguous prefix of --editable
 DATABASE_ROOT = "https://osv-vulnerabilities.storage.googleapis.com"  # read at call time; tests point it at a file:// root
 DATABASE_ARCHIVE = "all.zip"
 DATABASE_DOWNLOAD_DEADLINE_SECONDS = 300  # connect, headers and body of all downloads together, enforced from outside the HTTP machinery; DOWNLOAD_TIMEOUT_SECONDS bounds each socket wait
@@ -94,7 +93,7 @@ def lock_kind(name: str) -> LockKind:
 
 def scan(
     engine_dir: Path, pins: dict[str, Pin], locks: Mapping[str, Path], root: Path,
-    allowances: Sequence[AdvisoryAllowance], today: date, monotonic: Callable[[], float] = time.monotonic,
+    allowances: Sequence[AdvisoryAllowance], today: date, monotonic: Callable[[], float],
 ) -> AdvisoryScan:
     """The advisories that affect the lock files `locks` (tracked name -> absolute path), with the repository's
     allowances applied; no lock needs no engine, and leaves every allowance matching nothing."""
