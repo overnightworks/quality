@@ -1,7 +1,6 @@
 import os
 import re
 import subprocess
-import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -443,7 +442,7 @@ def check_advisories(root: Path, engine_dir: Path, tracked: list[str]) -> adviso
         raise CannotJudge(str(error)) from error
     locks = {name: _judged(repository.resolve_file, root, name) for name in _on_disk(root, [n for n in tracked if advisories.is_lock(n)])}
     try:
-        return advisories.scan(engine_dir, engines.read_pins(), locks, root, allowances, datetime.now(UTC).date(), time.monotonic)
+        return advisories.scan(engine_dir, engines.read_pins(), locks, root, allowances, datetime.now(UTC).date())
     except engines.EngineError as error:
         raise CannotJudge(str(error)) from error
 

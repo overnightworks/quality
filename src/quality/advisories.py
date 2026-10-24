@@ -3,6 +3,7 @@ import io
 import json
 import re
 import threading
+import time
 import urllib.request
 import zipfile
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -93,7 +94,7 @@ def lock_kind(name: str) -> LockKind:
 
 def scan(
     engine_dir: Path, pins: dict[str, Pin], locks: Mapping[str, Path], root: Path,
-    allowances: Sequence[AdvisoryAllowance], today: date, monotonic: Callable[[], float],
+    allowances: Sequence[AdvisoryAllowance], today: date, monotonic: Callable[[], float] = time.monotonic,
 ) -> AdvisoryScan:
     """The advisories that affect the lock files `locks` (tracked name -> absolute path), with the repository's
     allowances applied; no lock needs no engine, and leaves every allowance matching nothing."""
