@@ -1,0 +1,8 @@
+claim_id = "ebc2eea4365542b9b9410106bf99b777"
+agent = "claude"
+role = "builder"
+base = "68f58fa1246c18d55674caecf361ab59b4ec13ed"
+branch = "claude/issue-176-requirements-advisories"
+scope = ["AGENTS.md", "docs/rules.md", "pyproject.toml", "src/quality/advisories.py", "src/quality/pip_requirements.py", "tests"]
+opened_commit = "79cf8311cb73ac476155f6b530a4784eb9ec84c7"
+whole_reason = "One rule extension end to end: a new pure reader, its layer entry, the scan wiring, its tests and the docs that pin the advisory behaviour."
