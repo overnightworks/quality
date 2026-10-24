@@ -60,6 +60,20 @@ def test_the_fix_follows_what_osv_lists(build_repo, publish_database, installed_
     assert expected in output
 
 
+def test_a_record_naming_a_pypi_package_in_other_spelling_still_supplies_the_fix(
+    build_repo, clean_engines, run_gate, publish_database, edited_report
+):
+    """#145 I2: Python's name rule applies to PyPI, so a record naming `PyYAML` fixes the lock's `pyyaml`."""
+    publish_database()
+    report = edited_report(
+        "osv-scanner-finding.json",
+        lambda report: package_of(report)["vulnerabilities"][0]["affected"][0]["package"].update(name="PyYAML"),
+    )
+    code, output = run_gate(tracked_lock_repo(build_repo), osv_engines(clean_engines, reporting(report, 1)))
+    assert code == 1, output
+    assert UPGRADE_LINE in output
+
+
 @pytest.mark.engine
 def test_two_advisories_that_alias_each_other_are_one_finding(build_repo, publish_database, installed_engines, run_gate):
     """#53 rule 2, cell 6: one finding per alias group, the other ids named as aliases."""
@@ -307,9 +321,8 @@ def test_a_scratch_directory_that_cannot_be_written_is_cannot_judge(build_repo, 
     [
         ("uv.lock", "this is [not a lock\n"),
         ("src/frontend/pnpm-lock.yaml", "lockfileVersion: '9.0'\npackages: [unclosed\n"),
-        ("src/requirements.txt", "this is [not a requirements file\n%% garbage ===\n"),
     ],
-    ids=["uv.lock", "pnpm-lock.yaml", "requirements.txt"],
+    ids=["uv.lock", "pnpm-lock.yaml"],
 )
 def test_a_lock_osv_cannot_parse_is_cannot_judge_and_names_neither_form_of_its_path(
     build_repo, publish_database, installed_engines, run_gate, name, text
@@ -400,6 +413,10 @@ def test_an_unexpected_osv_exit_is_cannot_judge_with_the_code_and_stderr(
          "cannot read the osv-scanner report"),
         ("osv-scanner-finding.json", lambda report: package_of(report)["groups"][0].update(ids=["a", 7]), 1,
          "cannot read the osv-scanner report"),
+        ("osv-scanner-finding.json", lambda report: package_of(report).pop("groups"), 1,
+         "cannot read the osv-scanner report"),
+        ("osv-scanner-finding.json", lambda report: package_of(report).pop("vulnerabilities"), 1,
+         "cannot read the osv-scanner report"),
         ("osv-scanner-finding.json", lambda report: package_of(report)["vulnerabilities"][0].update(affected="x"), 1,
          "cannot read the osv-scanner report"),
         ("osv-scanner-finding.json", lambda report: package_of(report)["vulnerabilities"][0]["affected"][0].update(ranges={}), 1,
@@ -412,7 +429,7 @@ def test_an_unexpected_osv_exit_is_cannot_judge_with_the_code_and_stderr(
     ],
     ids=["cell 18 exit 0 with vulnerabilities", "cell 18 exit 1 without", "cell 19 not JSON", "cell 19 wrong shape",
          "rule 3 results is an empty object", "rule 3 results is an empty string", "rule 3 packages is an object",
-         "rule 3 groups is a string",
+         "rule 3 groups is a string", "rule 3 vulnerabilities without groups", "rule 3 groups without vulnerabilities",
          "cell 20 a source quality did not pass", "rule 3 version is an object", "rule 3 ecosystem is a number",
          "rule 3 an id is a number", "rule 3 affected is a string", "rule 3 ranges is an object", "rule 3 events is a string",
          "rule 3 fixed is a number"],

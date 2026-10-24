@@ -69,108 +69,23 @@ def test_two_vulnerable_versions_of_one_package_in_a_pnpm_lock_are_two_findings(
 
 
 @pytest.mark.engine
-@pytest.mark.parametrize(
-    ("name", "text", "ecosystem", "records", "guidance"),
-    [
-        (FRONTEND_LOCK, pnpm_lock(), "npm", [advisory(LODASH, fixed=("4.17.21", "5.0.0"), package="lodash", ecosystem="npm")], PNPM_FIX),
-        ("requirements.txt", "pyyaml==5.3\n", "PyPI", [advisory(fixed=("5.4", "6.0"))], "regenerate the file as its header says"),
-    ],
-    ids=["pnpm-lock.yaml", "requirements.txt"],
-)
-def test_several_fixed_versions_keep_the_guidance_of_the_lock_kind(
-    build_repo, publish_database, installed_engines, run_gate, name, text, ecosystem, records, guidance
-):
-    """#145 C6: a transitive npm package is fixed by its parent or an override, a requirements file by regenerating it,
-    whether osv lists one fixed version or several."""
-    publish_database(records, ecosystem=ecosystem)
-    code, output = run_gate(build_repo({name: text}), installed_engines)
+def test_several_fixed_versions_keep_the_guidance_of_the_pnpm_lock(build_repo, publish_database, installed_engines, run_gate):
+    """#145 C6: a transitive npm package is fixed by its parent or an override, whether osv lists one fixed version or several."""
+    publish_database([advisory(LODASH, fixed=("4.17.21", "5.0.0"), package="lodash", ecosystem="npm")], ecosystem="npm")
+    code, output = run_gate(build_repo({FRONTEND_LOCK: pnpm_lock()}), installed_engines)
     assert code == 1, output
     assert "to a fixed version: " in output
-    assert guidance in output
+    assert PNPM_FIX in output
 
 
 @pytest.mark.engine
-@pytest.mark.parametrize(
-    ("name", "text"),
-    [
-        ("src/requirements.txt", "pyyaml>=5.3\n"),
-        ("tests/requirements-build.txt", "pyyaml>=5.3\n"),
-        (".github/requirements-build.txt", "pyyaml>=5.3\n"),
-        ("tests/keycloak/requirements.txt", "pyyaml==5.3 \\\n    --hash=sha256:" + "0" * 64 + "\n"),
-    ],
-    ids=["plain name", "build suffix", "hidden folder", "hashed"],
-)
-def test_a_requirements_file_is_judged_at_its_lowest_allowed_version_and_a_requirements_in_is_not(
-    build_repo, publish_database, installed_engines, run_gate, name, text
+def test_a_requirements_file_is_not_judged_and_downloads_no_database(
+    build_repo, publish_database, served_databases, installed_engines, run_gate
 ):
-    """#145 C2, C6, S6: requirements*.txt is judged against the PyPI database; `pyyaml>=5.3` counts as 5.3 and the fix
-    says to regenerate the file; a requirements.in is no lock."""
+    """#145 C2 (moved to #176): requirements*.txt is no lock, so a vulnerable pin in one is neither a finding nor a download."""
     publish_database()
-    repo = build_repo({name: text, "tests/requirements.in": "pyyaml==5.3.1\n"})
-    code, output = run_gate(repo, installed_engines)
-    assert code == 1, output
-    assert f"advisory {name} - osv-scanner {ADVISORY_ID} (CVE-2020-1): PyPI pyyaml 5.3 is affected." in output
-    assert "Fix: upgrade pyyaml to >= 5.4 (" in output
-    assert "regenerate the file as its header says" in output
-    assert "advisory tests/requirements.in" not in output
-
-
-@pytest.mark.engine
-@pytest.mark.parametrize(
-    "text",
-    ["pyyaml\n", "pyyaml>=5.3,<6\n", "requests==2.0.0\npyyaml>=5.3,<6\n"],
-    ids=["unpinned", "a range", "beside a pinned line"],
-)
-def test_a_requirement_osv_cannot_pin_to_one_version_is_cannot_judge_and_named(
-    build_repo, publish_database, installed_engines, run_gate, text
-):
-    """#145 S5, S6: osv drops such a line silently and exits 0; quality names the file and the package instead of calling it clean."""
-    publish_database()
-    code, output = run_gate(build_repo({"docs/requirements.txt": text}), installed_engines)
-    assert (code, "docs/requirements.txt requires pyyaml without pinning one version" in output) == (2, True), output
-
-
-@pytest.mark.engine
-@pytest.mark.parametrize(
-    ("text", "location"),
-    [
-        ("requests==2.0.0\npyyaml=5.3.1\n", "line 2 of docs/requirements.txt (pyyaml)"),
-        ("requests==2.0.0\nthis is garbage ((\n", "line 2 of docs/requirements.txt (this)"),
-        ("requests==2.0.0\nPyYAML_x @ https://user:secret@example.org/x.whl\n", "line 2 of docs/requirements.txt (pyyaml-x)"),
-        ("requests==2.0.0\n-e git+https://example.org/x@1.0#egg=pyyaml\n", "line 2 of docs/requirements.txt"),
-        ("requests==2.0.0\n--editable git+https://example.org/x@1.0#egg=pyyaml\n", "line 2 of docs/requirements.txt"),
-        ("requests==2.0.0\n-egit+https://example.org/x@1.0#egg=pyyaml\n", "line 2 of docs/requirements.txt"),
-        ("requests==2.0.0\n--edit git+https://example.org/x@1.0#egg=pyyaml\n", "line 2 of docs/requirements.txt"),
-    ],
-    ids=["a typo beside a readable line", "garbage beside a readable line", "a url requirement", "an editable install", "a long editable option", "an attached short editable", "an abbreviated long editable"],
-)
-def test_a_requirement_line_osv_skipped_beside_readable_ones_is_cannot_judge_and_named(
-    build_repo, publish_database, installed_engines, run_gate, text, location
-):
-    """#145 S5: osv drops the line silently and exits 0 with the readable ones; quality names the file, the line number
-    and the project name, never the line's own text (a direct URL can carry a credential)."""
-    publish_database()
-    code, output = run_gate(build_repo({"docs/requirements.txt": text}), installed_engines)
-    assert (code, f"read no package from {location}, so it cannot be judged" in output) == (2, True), output
-    assert ("secret" in output, "git+https" in output) == (False, False), output
-
-
-@pytest.mark.engine
-def test_a_requirement_name_is_compared_as_pypi_compares_names(build_repo, publish_database, installed_engines, run_gate):
-    """#145 I2: osv reports `PyYAML` as `pyyaml` and `Ruamel_Yaml.Clib` as `ruamel-yaml-clib`; such lines are judged, not refused."""
-    publish_database()
-    code, output = run_gate(build_repo({"docs/requirements.txt": "PyYAML==5.3\nRuamel_Yaml.Clib==0.2.0\n"}), installed_engines)
-    assert (code, "PyPI pyyaml 5.3 is affected" in output) == (1, True), output
-
-
-@pytest.mark.engine
-def test_a_requirements_file_that_is_not_utf8_is_cannot_judge_and_named(build_repo, publish_database, installed_engines, run_gate):
-    """#145 S5: a file quality cannot read is `cannot read`, not a file with no requirement."""
-    publish_database()
-    repo = build_repo({"docs/requirements.txt": "requests==2.0.0\n"})
-    (repo / "docs/requirements.txt").write_bytes(b"requests==2.0.0\n\xff\xfe\n")
-    code, output = run_gate(repo, installed_engines)
-    assert (code, "cannot read docs/requirements.txt" in output) == (2, True), output
+    code, output = run_gate(build_repo({"docs/requirements.txt": "pyyaml==5.3\n"}), installed_engines)
+    assert (code, served_databases.requested) == (0, []), output
 
 
 @pytest.mark.engine

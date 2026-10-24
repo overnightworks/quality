@@ -10,17 +10,15 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import Future
 from dataclasses import dataclass
 from datetime import date
-from fnmatch import fnmatchcase
 from pathlib import Path, PurePosixPath
 
-from quality import engines, repository
+from quality import engines
 from quality.config import CONFIG_PATH, AdvisoryAllowance
 from quality.engines import EngineError, Pin
 from quality.report import Finding
 
 RULE = "advisory"
 PYTHON_ECOSYSTEM = "PyPI"
-EDITABLE_OPTION = re.compile(r"-e|--ed(itable|itabl|ita|it|i)?(\s|=|$)")  # pip parses with optparse: `-egit+...` attached and any unambiguous prefix of --editable
 DATABASE_ROOT = "https://osv-vulnerabilities.storage.googleapis.com"  # read at call time; tests point it at a file:// root
 DATABASE_ARCHIVE = "all.zip"
 DATABASE_DOWNLOAD_DEADLINE_SECONDS = 300  # connect, headers and body of all downloads together, enforced from outside the HTTP machinery; DOWNLOAD_TIMEOUT_SECONDS bounds each socket wait
@@ -37,16 +35,15 @@ class LockKind:
     ecosystem: str
     parse_as: str  # the format name osv-scanner is told to read the file as: `--lockfile=<parse_as>:<path>`
     upgrade_hint: str  # {package} is the advisory's package
+    hint_is_command: bool = False  # a command lets the tool pick the version, so beside a list of fixed versions to choose from it is left out
 
 
 LOCK_KINDS = {
-    "uv.lock": LockKind(PYTHON_ECOSYSTEM, "uv.lock", "uv lock --upgrade-package {package}"),
+    "uv.lock": LockKind(PYTHON_ECOSYSTEM, "uv.lock", "uv lock --upgrade-package {package}", hint_is_command=True),
     "pnpm-lock.yaml": LockKind(
         "npm", "pnpm-lock.yaml", "upgrade it, or its parent when it is transitive, or set a pnpm override in package.json"
     ),
 }
-REQUIREMENTS_KIND = LockKind(PYTHON_ECOSYSTEM, "requirements.txt", "regenerate the file as its header says")
-REQUIREMENTS_NAME = "requirements*.txt"
 
 
 @dataclass(frozen=True)
@@ -75,10 +72,7 @@ class AdvisoryScan:
 
 
 def _find_kind(name: str) -> LockKind | None:
-    file_name = PurePosixPath(name).name
-    if file_name in LOCK_KINDS:
-        return LOCK_KINDS[file_name]
-    return REQUIREMENTS_KIND if fnmatchcase(file_name, REQUIREMENTS_NAME) else None
+    return LOCK_KINDS.get(PurePosixPath(name).name)
 
 
 def is_lock(name: str) -> bool:
@@ -171,7 +165,7 @@ def _scan(
         *[f"--lockfile={lock_kind(name).parse_as}:{path}" for name, path in locks.items()],
     ]
     done = engines.run(command, cwd=scratch, timeout=ADVISORY_SCAN_TIMEOUT_SECONDS)
-    return _findings(done.returncode, done.stdout, done.stderr, root, names_by_path)
+    return _findings(done.returncode, done.stdout, done.stderr, names_by_path)
 
 
 def _names_by_path(locks: Mapping[str, Path]) -> dict[str, list[str]]:
@@ -255,91 +249,31 @@ def _without_paths(text: str, names_by_path: Mapping[str, list[str]], directorie
 
 
 def _findings(
-    exit_code: int, report_text: str, stderr: str, root: Path, names_by_path: Mapping[str, list[str]]
+    exit_code: int, report_text: str, stderr: str, names_by_path: Mapping[str, list[str]]
 ) -> list[Affected]:
     if exit_code not in (engines.CLEAN_EXIT, OSV_FINDINGS_FOUND):
         raise EngineError(f"{engines.OSV_SCANNER} exited {exit_code}, neither 'clean' nor 'findings'{engines.stderr_tail(stderr)}")
-    affected, reported = _read_report(report_text, names_by_path)
-    _refuse_unread_requirements(root, names_by_path, reported)
+    affected = _read_report(report_text, names_by_path)
     if bool(affected) != (exit_code == OSV_FINDINGS_FOUND):
         raise EngineError(f"{engines.OSV_SCANNER} exited {exit_code} but its report holds {len(affected)} finding(s)")
     return affected
 
 
-def _refuse_unread_requirements(root: Path, names_by_path: Mapping[str, list[str]], reported: Mapping[str, set[str]]) -> None:
-    """osv-scanner skips a requirement line it cannot parse (`pyyaml=5.3.1`) and answers a file of nothing else with no
-    result and exit 0; a requirement the report of its file does not name was therefore not judged."""
-    for path, names in names_by_path.items():
-        if REQUIREMENTS_KIND not in {lock_kind(name) for name in names}:
-            continue
-        try:
-            text = repository.read_text(root, names[0])
-        except repository.RepositoryFileError as error:
-            raise EngineError(str(error)) from error
-        if text is None:
-            raise EngineError(f"cannot read {names[0]}: it is not in the repository")
-        for number, requirement in _requirements(text):
-            name = _project_name(requirement)
-            if name not in reported.get(path, set()):
-                named = f" ({name})" if name else ""
-                raise EngineError(f"{engines.OSV_SCANNER} read no package from line {number} of {names[0]}{named}, so it cannot be judged")
-
-
-def _requirements(text: str) -> list[tuple[int, str]]:
-    """The requirement lines of a requirements file with their line numbers: continuation lines joined, comments,
-    options and blank lines left out; an editable install counts, because osv-scanner drops it silently."""
-    requirements = []
-    joined, first = "", 0
-    for number, line in enumerate([*text.splitlines(), ""], start=1):
-        first = first or number
-        if line.endswith("\\"):
-            joined += line[:-1] + " "
-            continue
-        requirement = re.sub(r"(^|\s)#.*", "", joined + line).strip()
-        if requirement and (not requirement.startswith("-") or EDITABLE_OPTION.match(requirement)):
-            requirements.append((first, requirement))
-        joined, first = "", 0
-    return requirements
-
-
-def _project_name(requirement: str) -> str | None:
-    """The leading project name of a requirement as PyPI compares names; none when the line does not start with one."""
-    match = re.match(r"[A-Za-z0-9][A-Za-z0-9._-]*", requirement)
-    return _comparable(match.group(), PYTHON_ECOSYSTEM) if match else None
-
-
-def _read_report(report_text: str, names_by_path: Mapping[str, list[str]]) -> tuple[list[Affected], dict[str, set[str]]]:
-    """The affected groups, and the normalised package names the report lists for each path it names."""
+def _read_report(report_text: str, names_by_path: Mapping[str, list[str]]) -> list[Affected]:
     try:
         affected = []
-        reported: dict[str, set[str]] = {}
         for result in _dicts(json.loads(report_text)["results"]):
             source = _typed(_typed(result["source"], dict)["path"], str)
             if source not in names_by_path:
                 raise EngineError(f"the {engines.OSV_SCANNER} report names a lock file quality did not pass")
             packages = _dicts(result["packages"])
-            reported[source] = {
-                _comparable(_typed(named["name"], str), _typed(named["ecosystem"], str))
-                for named in (_typed(package["package"], dict) for package in packages)
-            }
-            for name in names_by_path[source]:
-                if lock_kind(name) is REQUIREMENTS_KIND:
-                    _refuse_unpinned(name, packages)
             affected += [
                 group for name in names_by_path[source] for package in packages
                 for group in _package_findings(name, package)
             ]
-        return list(dict.fromkeys(affected)), reported
+        return list(dict.fromkeys(affected))
     except (ValueError, KeyError, TypeError, AttributeError) as error:
         raise EngineError(f"cannot read the {engines.OSV_SCANNER} report: {error!r}") from error
-
-
-def _refuse_unpinned(lock: str, packages: list[dict]) -> None:
-    """osv-scanner lists a requirement it cannot pin to one version (`pyyaml`, `pyyaml>=5.3,<6`) with an empty version and judges nothing."""
-    for package in packages:
-        named = _typed(package["package"], dict)
-        if _typed(named["version"], str) == "":
-            raise EngineError(f"{lock} requires {_typed(named['name'], str)} without pinning one version, so it cannot be judged")
 
 
 def _typed[T](value: object, kind: type[T]) -> T:
@@ -356,6 +290,8 @@ def _strings(value: object) -> list[str]:
 def _package_findings(lock: str, package: dict) -> list[Affected]:
     affected = _typed(package["package"], dict)
     name, version, ecosystem = (_typed(affected[field], str) for field in ("name", "version", "ecosystem"))
+    if ("vulnerabilities" in package) != ("groups" in package):
+        raise ValueError("a package lists either both of vulnerabilities and groups or neither")
     records = {_typed(record["id"], str): record for record in _dicts(package.get("vulnerabilities", []))}
     groups = []
     for group in _dicts(package.get("groups", [])):
@@ -384,9 +320,8 @@ def _fix(lock: str, package: str, advisory: str, ecosystem: str, records: list[d
     folder = "" if str(directory) == "." else f"in {directory}/"
     hint = lock_kind(lock).upgrade_hint.format(package=package)
     if len(fixed) > 1:
-        # uv's hint is a command that names one version; with several fixed versions it would be wrong.
         guidance = [folder] if folder else []
-        if lock_kind(lock) is not LOCK_KINDS["uv.lock"]:
+        if not lock_kind(lock).hint_is_command:
             guidance.append(hint)
         return f"upgrade {package} to a fixed version: {', '.join(fixed)}" + (f" ({': '.join(guidance)})" if guidance else "")
     return f"upgrade {package} to >= {fixed[0]} ({folder + ': ' if folder else ''}{hint})"

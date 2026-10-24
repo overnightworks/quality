@@ -8,7 +8,7 @@ Door commands:
 - `quality hygiene [PATH]` (`hygiene.py`): `.env` files, compose ports, the `size` ratchet (`ratchet.py`), the
   `clone` rule (`clones.py`, enforced with `[clones]` in the baseline, else report-only), the `import-contract` rule (`architecture.py`, import-linter as a library), the `claude-md` rule (a tracked `CLAUDE.md` is
   exactly `@AGENTS.md`), the `root-layout` rule (every root entry is on a base list or declared with `[[root.allow]]`), and with `--engines` the secret and workflow
-  scans and the `advisory` rule (`advisories.py`: osv-scanner over every tracked `uv.lock`, `pnpm-lock.yaml` and `requirements*.txt`, against the PyPI and npm
+  scans and the `advisory` rule (`advisories.py`: osv-scanner over every tracked `uv.lock` and `pnpm-lock.yaml`, against the PyPI and npm
   databases it downloads itself).
 - `quality baseline write [PATH]` (`ratchet.py`): writes the measured size debt and the clone pairs to `quality/baseline.toml`,
   naming each entry it raises or adds.
