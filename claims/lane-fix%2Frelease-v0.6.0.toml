@@ -1,0 +1,7 @@
+claim_id = "3c946b60255b460d9838657d9675810d"
+agent = "claude"
+role = "builder"
+base = "b24bb20ce8a88a28b5bbf574997acae9ae2e2582"
+branch = "fix/release-v0.6.0"
+scope = [".github/workflows/gate.yml"]
+opened_commit = "176b6e620c497a8c739e86be4dddf2d59608e22b"
