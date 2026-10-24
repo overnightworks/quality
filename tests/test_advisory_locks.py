@@ -189,8 +189,10 @@ def test_one_deadline_spans_every_database_download(build_repo, clean_engines, p
     served_databases.on_request = spend_budget_on_the_first_download
     repo = build_repo({FRONTEND_LOCK: pnpm_lock(), "uv.lock": uv_lock()})
     locks = {name: repo / name for name in (FRONTEND_LOCK, "uv.lock")}
+    engine_dir = osv_engines(clean_engines, "exit 99")
+    pins = engines.read_pins()
     with pytest.raises(EngineError, match="the npm advisory database download exceeded 300 seconds"):
-        advisories.scan(osv_engines(clean_engines, "exit 99"), engines.read_pins(), locks, repo, [], datetime.date(2026, 10, 21), lambda: now)
+        advisories.scan(engine_dir, pins, locks, repo, [], datetime.date(2026, 10, 21), lambda: now)
     assert served_databases.requested == ["/PyPI/all.zip"]
 
 
