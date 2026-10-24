@@ -108,13 +108,18 @@ def test_every_tracked_lock_is_judged_with_its_relative_name(build_repo, publish
     ['[[IgnoredVulns]]\nid = "GHSA-aaaa-bbbb-cccc"\n', '[[PackageOverrides]]\nname = "pyyaml"\necosystem = "PyPI"\nignore = true\n'],
     ids=["cell 11 IgnoredVulns", "cell 12 PackageOverrides ignore"],
 )
-def test_a_repository_osv_scanner_config_changes_nothing(build_repo, publish_database, installed_engines, run_gate, repository_config):
-    """#53 head decision: the caller's osv-scanner.toml is never honoured."""
+@pytest.mark.parametrize(
+    ("name", "text"), [("uv.lock", uv_lock()), ("tests/requirements.txt", "pyyaml==5.3.1\n")], ids=["uv.lock", "requirements.txt"]
+)
+def test_a_repository_osv_scanner_config_changes_nothing(
+    build_repo, publish_database, installed_engines, run_gate, repository_config, name, text
+):
+    """#53 head decision: the caller's osv-scanner.toml is never honoured; #176 R2 for a requirements file."""
     publish_database()
-    repo = build_repo({"uv.lock": uv_lock(), "osv-scanner.toml": repository_config})
+    repo = build_repo({name: text, "osv-scanner.toml": repository_config})
     code, output = run_gate(repo, installed_engines)
     assert code == 1
-    assert "advisory uv.lock - " in output
+    assert f"advisory {name} - " in output
 
 
 @pytest.mark.engine
@@ -319,6 +324,23 @@ def test_a_scratch_directory_that_cannot_be_written_is_cannot_judge(build_repo, 
     monkeypatch.setattr(engines, "scratch_directory", scratch_without_room_for_a_database)
     code, output = run_gate(tracked_lock_repo(build_repo), osv_engines(clean_engines, "exit 99"))
     assert (code, "cannot place the PyPI advisory database in the scratch directory" in output, "<scratch>" in output, "secret cannot judge" in output) == (2, True, True, False), output
+
+
+def test_a_wheel_pin_file_that_cannot_be_written_is_cannot_judge(build_repo, clean_engines, run_gate, publish_database, monkeypatch):
+    """#176 fail-closed: a full or read-only scratch while the wheel pins are written is a refusal naming the tracked file, not a traceback."""
+    publish_database()
+    scratch_directory = engines.scratch_directory
+
+    @contextlib.contextmanager
+    def scratch_without_room_for_wheel_pins():  # a directory where the wheel pin file belongs
+        with scratch_directory() as scratch:
+            (scratch / "wheels-1.txt").mkdir()
+            yield scratch
+
+    monkeypatch.setattr(engines, "scratch_directory", scratch_without_room_for_wheel_pins)
+    wheel = "pkg @ https://h/pkg-1.0-py3-none-any.whl --hash=sha256:" + "ab" * 32 + "\n"
+    code, output = run_gate(build_repo({"tests/requirements.txt": wheel}), osv_engines(clean_engines, "exit 99"))
+    assert (code, "tests/requirements.txt: cannot write the wheel pins for the scan" in output, "Traceback" in output) == (2, True, False), output
 
 
 @pytest.mark.engine

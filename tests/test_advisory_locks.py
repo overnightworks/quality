@@ -105,6 +105,7 @@ def test_a_requirements_file_shaped_like_agent_runtimes_is_judged_26_of_26(
     assert code == 1, output
     assert f"advisory tests/keycloak/requirements.txt - osv-scanner {ADVISORY_ID}: PyPI {WEBAUTH} 0.20.1 is affected." in output
     assert "package-" not in output
+    assert "raise its pin, and compile the file again when it is generated" in output
 
 
 @pytest.mark.engine
@@ -253,12 +254,13 @@ def served_databases(publish_database, monkeypatch):
 def test_a_repository_with_both_kinds_downloads_each_database_once_and_judges_both(
     build_repo, publish_database, served_databases, installed_engines, run_gate
 ):
-    """#145 X1: two pnpm locks and a uv.lock cost one npm and one PyPI download."""
+    """#145 X1: two pnpm locks, a uv.lock and a requirements file cost one npm and one PyPI download."""
     publish_database([LODASH_ADVISORY], ecosystem="npm")
     publish_database()
-    repo = build_repo({FRONTEND_LOCK: pnpm_lock(), "src/admin/pnpm-lock.yaml": pnpm_lock(), "uv.lock": uv_lock()})
+    repo = build_repo({FRONTEND_LOCK: pnpm_lock(), "src/admin/pnpm-lock.yaml": pnpm_lock(), "uv.lock": uv_lock(), "tests/requirements.txt": "pyyaml==5.3.1\n"})
     code, output = run_gate(repo, installed_engines)
     assert code == 1, output
+    assert "advisory tests/requirements.txt - " in output
     assert sorted(served_databases.requested) == ["/PyPI/all.zip", "/npm/all.zip"]
     assert (FRONTEND_LOCK in output, "src/admin/pnpm-lock.yaml" in output, "advisory uv.lock - " in output) == (True, True, True)
 

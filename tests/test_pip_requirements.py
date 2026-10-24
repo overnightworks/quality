@@ -21,6 +21,15 @@ WEBAUTH_WHEEL = "overnightworks-webauth @ https://github.com/o/w/releases/downlo
             f"x==1\nreq-a @ https://h/p/Req_A-2.0+local-1-cp312-cp312-manylinux_2_28_x86_64.whl ; sys_platform == 'linux' \\\n {HASH}\n",
             [Requirement("x", "1", 1, is_wheel=False), Requirement("req-a", "2.0+local", 2, is_wheel=True)], id="a wheel with a marker and a build tag",
         ),
+        pytest.param(
+            f"a==1 \\\r\n    {HASH}\r\nb==2\r\n",
+            [Requirement("a", "1", 1, is_wheel=False), Requirement("b", "2", 3, is_wheel=False)], id="CRLF line endings and a continuation",
+        ),
+        pytest.param(
+            'numpy==1.24.4 ; python_version < "3.9"\nnumpy==2.0.0 ; python_version >= "3.9"\n',
+            [Requirement("numpy", "1.24.4", 1, is_wheel=False), Requirement("numpy", "2.0.0", 2, is_wheel=False)],
+            id="two lines for one name with different markers",
+        ),
         pytest.param("", [], id="an empty file"),
         pytest.param("# only a comment\n", [], id="only a comment"),
     ],
@@ -55,6 +64,10 @@ def test_the_two_accepted_forms_are_read_with_their_line(text, expected):
         pytest.param(f"pkg @ http://h/pkg-1.0-py3-none-any.whl {HASH}\n", 1, id="a URL that is not https"),
         pytest.param(f"pkg @ https://h/other-1.0-py3-none-any.whl {HASH}\n", 1, id="a wheel named for another package"),
         pytest.param(f"pkg @ https://h/pkg-1.0-py3-none-any.whl?sig=1 {HASH}\n", 1, id="a wheel URL with a query"),
+        pytest.param(f"pkg @ https://h/pkg-9.9-py3-none-any.whl#/pkg-1.0-py3-none-any.whl {HASH}\n", 1, id="a fragment that names another wheel"),
+        pytest.param(f"pkg @ https://h/pkg-9.9-py3-none-any.whl?/pkg-1.0-py3-none-any.whl {HASH}\n", 1, id="a query that names another wheel"),
+        pytest.param(f"pkg @ https://h/pkg-1.0-py3-none-any.whl#x=/pkg-9.0-py3-none-any.whl {HASH}\n", 1, id="a fragment that replaces the version"),
+        pytest.param(f"pkg @ https://h/a%2Fpkg-1.0-py3-none-any.whl {HASH}\n", 1, id="a percent-encoded slash"),
         pytest.param("pyyaml==6.0.2 --no-binary\n", 1, id="a trailing option"),
         pytest.param("pyyaml==6.0.2 ;\n", 1, id="an empty marker"),
     ],
@@ -67,4 +80,5 @@ def test_any_other_line_is_refused_with_its_number(text, line):
 
 @pytest.mark.parametrize("name", ["Overnightworks_Webauth", "overnightworks.webauth", "OVERNIGHTWORKS--webauth"])
 def test_names_compare_by_pep_503(name):
+    """#176 W1: the wheel's distribution name matches the package by PEP 503."""
     assert normalised_name(name) == "overnightworks-webauth"

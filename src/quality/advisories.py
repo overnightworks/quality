@@ -185,7 +185,10 @@ def _handovers(root: Path, locks: Mapping[str, Path], scratch: Path, names_by_pa
         handovers.append(Handover(kind.parse_as, path, tuple(requirement for requirement in requirements if not requirement.is_wheel)))
         if wheels:
             wheel_file = scratch / f"wheels-{len(handovers)}.txt"
-            wheel_file.write_text("".join(f"{wheel.name}=={wheel.version}\n" for wheel in wheels))
+            try:
+                wheel_file.write_text("".join(f"{wheel.name}=={wheel.version}\n" for wheel in wheels))
+            except OSError as error:
+                raise EngineError(f"{name}: cannot write the wheel pins for the scan: {error.strerror}") from error
             names_by_path[str(wheel_file)] = [name]
             handovers.append(Handover(kind.parse_as, wheel_file, wheels))
     return handovers

@@ -8,7 +8,7 @@ HASHES = r"(?P<hashes>(?:\s+--hash=[a-z0-9]+:[0-9a-f]+)*)"
 MARKER = r"(?:\s*;\s*\S.*?)?"
 PINNED = re.compile(rf"(?P<name>{NAME}){EXTRAS}\s*==\s*(?P<version>{VERSION}){MARKER}{HASHES}")
 WHEEL = re.compile(
-    rf"(?P<name>{NAME}){EXTRAS}\s+@\s+https://\S*/(?P<distribution>[^-/\s]+)-(?P<version>{VERSION})-[^/\s]+\.whl{MARKER}{HASHES}"
+    rf"(?P<name>{NAME}){EXTRAS}\s+@\s+https://[^\s?#%]*/(?P<distribution>[^-/\s?#%]+)-(?P<version>{VERSION})-[^/\s?#%]+\.whl{MARKER}{HASHES}"
 )
 COMMENT = re.compile(r"(^|\s)#.*")
 

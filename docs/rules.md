@@ -232,7 +232,7 @@ with `Fix: upgrade pyyaml to >= 5.4 (uv lock --upgrade-package pyyaml)`. For a n
 directory (`in speech/: uv lock --upgrade-package ...`); several fixed versions are listed; an advisory with no fixed
 version, a package listed as malicious included, says `osv lists no fixed version: remove or replace <package>; see
 https://osv.dev/vulnerability/<id>`. The fix prints a command only where it works as printed: for `pnpm-lock.yaml` it
-says to upgrade the package, or its parent when it is transitive, or set a pnpm override in `package.json`. npm names match as written (`lodash.merge` is not
+says to upgrade the package, or its parent when it is transitive, or set a pnpm override in `package.json`; for a `requirements.txt` it says to raise its pin, and to compile the file again when it is generated. npm names match as written (`lodash.merge` is not
 `lodash-merge`); Python's name rule applies to PyPI only. A repository's own `osv-scanner.toml` (ignored advisories,
 package overrides), its `package.json` `pnpm.auditConfig`, its `.npmrc` and its `.gitignore` change nothing: the gate
 passes its own empty `src/quality/osv-scanner.toml` and each tracked lock explicitly, so only a real fix in the lock
