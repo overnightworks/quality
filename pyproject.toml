@@ -56,7 +56,7 @@ layers = [
     "sonar | scoreboard",
     "hygiene | staged",
     "advisories",
-    "architecture | clones | engines",
+    "architecture | clones | engines | pip_requirements",
     "ratchet",
     "report",
     "config",

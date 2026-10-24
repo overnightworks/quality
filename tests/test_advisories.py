@@ -108,13 +108,18 @@ def test_every_tracked_lock_is_judged_with_its_relative_name(build_repo, publish
     ['[[IgnoredVulns]]\nid = "GHSA-aaaa-bbbb-cccc"\n', '[[PackageOverrides]]\nname = "pyyaml"\necosystem = "PyPI"\nignore = true\n'],
     ids=["cell 11 IgnoredVulns", "cell 12 PackageOverrides ignore"],
 )
-def test_a_repository_osv_scanner_config_changes_nothing(build_repo, publish_database, installed_engines, run_gate, repository_config):
-    """#53 head decision: the caller's osv-scanner.toml is never honoured."""
+@pytest.mark.parametrize(
+    ("name", "text"), [("uv.lock", uv_lock()), ("tests/requirements.txt", "pyyaml==5.3.1\n")], ids=["uv.lock", "requirements.txt"]
+)
+def test_a_repository_osv_scanner_config_changes_nothing(
+    build_repo, publish_database, installed_engines, run_gate, repository_config, name, text
+):
+    """#53 head decision: the caller's osv-scanner.toml is never honoured; #176 R2 for a requirements file."""
     publish_database()
-    repo = build_repo({"uv.lock": uv_lock(), "osv-scanner.toml": repository_config})
+    repo = build_repo({name: text, "osv-scanner.toml": repository_config})
     code, output = run_gate(repo, installed_engines)
     assert code == 1
-    assert "advisory uv.lock - " in output
+    assert f"advisory {name} - " in output
 
 
 @pytest.mark.engine
@@ -131,9 +136,13 @@ def test_a_lock_no_advisory_affects_is_clean(build_repo, publish_database, insta
 
 
 @pytest.mark.engine
-def test_the_live_database_condemns_pyyaml_5_3_1(build_repo, installed_engines, run_gate):
-    """#53 cell 4: the real world, over the network."""
-    code, output = run_gate(tracked_lock_repo(build_repo), installed_engines)
+@pytest.mark.parametrize(
+    ("name", "text"), [("uv.lock", uv_lock()), ("tests/requirements.txt", "pyyaml==5.3.1 --hash=sha256:" + "ab" * 32 + "\n")],
+    ids=["uv.lock", "tests/requirements.txt"],
+)
+def test_the_live_database_condemns_pyyaml_5_3_1(build_repo, installed_engines, run_gate, name, text):
+    """#53 cell 4 and #176 canary: the real world, over the network."""
+    code, output = run_gate(build_repo({name: text}), installed_engines)
     assert code == 1, output
     assert "GHSA-8q59-q68h-6hv4" in output
     assert "upgrade pyyaml to >= 5.4" in output
@@ -151,24 +160,25 @@ def test_without_a_tracked_lock_nothing_is_downloaded_and_no_osv_binary_is_neede
     assert code == 0, output
 
 
+@pytest.mark.parametrize("name", ["uv.lock", "tests/requirements.txt"])
 @pytest.mark.parametrize("tracked_only", ["missing", "symlink to a directory", "symlink out"])
 def test_a_lock_the_tree_cannot_hand_over_is_skipped_or_refused(
-    build_repo, clean_engines, run_gate, publish_database, tmp_path, tracked_only
+    build_repo, clean_engines, run_gate, publish_database, tmp_path, tracked_only, name
 ):
-    """#53 rule 1, cells 9, 10 and 31."""
+    """#53 rule 1, cells 9, 10 and 31; #176 C2 for a requirements file."""
     publish_database()
-    repo = build_repo({"uv.lock": uv_lock(), "docs/x": "x\n"})
-    (repo / "uv.lock").unlink()
+    repo = build_repo({name: uv_lock(), "docs/x": "x\n"})
+    (repo / name).unlink()
     if tracked_only == "symlink to a directory":
-        (repo / "uv.lock").symlink_to("docs")
+        (repo / name).symlink_to(".")
     if tracked_only == "symlink out":
         outside = tmp_path.parent / f"{tmp_path.name}-outside.lock"
         outside.write_text(uv_lock())
-        (repo / "uv.lock").symlink_to(outside)
+        (repo / name).symlink_to(outside)
     code, output = run_gate(repo, osv_engines(clean_engines, "exit 99"))
     expected_code, expected_text = {
-        "missing": (0, "hygiene: clean"), "symlink to a directory": (2, "uv.lock is not a file"),
-        "symlink out": (2, "uv.lock resolves outside the repository"),
+        "missing": (0, "hygiene: clean"), "symlink to a directory": (2, f"{name} is not a file"),
+        "symlink out": (2, f"{name} resolves outside the repository"),
     }[tracked_only]
     assert (code, expected_text in output) == (expected_code, True), output
 
@@ -187,8 +197,9 @@ def test_a_gate_run_without_engines_names_advisory_as_skipped_and_downloads_noth
         (b"not a zip", "is not a valid zip"),
         (zipped({"a.json": "{}"})[:-30], "is not a valid zip"),
         (zipped({"readme.txt": "x"}), "holds no advisory"),
+        (zipped({"a.json": "{}", "b.json": "{not json"}), "holds an entry that is not valid JSON"),
     ],
-    ids=["cell 13 unreachable", "cell 14 not a zip", "cell 14 truncated", "cell 28 no json entry"],
+    ids=["cell 13 unreachable", "cell 14 not a zip", "cell 14 truncated", "cell 28 no json entry", "#5 127 an invalid json entry"],
 )
 def test_a_database_that_cannot_be_used_is_cannot_judge(
     build_repo, clean_engines, run_gate, publish_database, archive, expected
@@ -315,6 +326,23 @@ def test_a_scratch_directory_that_cannot_be_written_is_cannot_judge(build_repo, 
     assert (code, "cannot place the PyPI advisory database in the scratch directory" in output, "<scratch>" in output, "secret cannot judge" in output) == (2, True, True, False), output
 
 
+def test_a_wheel_pin_file_that_cannot_be_written_is_cannot_judge(build_repo, clean_engines, run_gate, publish_database, monkeypatch):
+    """#176 fail-closed: a full or read-only scratch while the wheel pins are written is a refusal naming the tracked file, not a traceback."""
+    publish_database()
+    scratch_directory = engines.scratch_directory
+
+    @contextlib.contextmanager
+    def scratch_without_room_for_wheel_pins():  # a directory where the wheel pin file belongs
+        with scratch_directory() as scratch:
+            (scratch / "wheels-1.txt").mkdir()
+            yield scratch
+
+    monkeypatch.setattr(engines, "scratch_directory", scratch_without_room_for_wheel_pins)
+    wheel = "pkg @ https://h/pkg-1.0-py3-none-any.whl --hash=sha256:" + "ab" * 32 + "\n"
+    code, output = run_gate(build_repo({"tests/requirements.txt": wheel}), osv_engines(clean_engines, "exit 99"))
+    assert (code, "tests/requirements.txt: cannot write the wheel pins for the scan" in output, "Traceback" in output) == (2, True, False), output
+
+
 @pytest.mark.engine
 @pytest.mark.parametrize(
     ("name", "text"),
@@ -429,9 +457,9 @@ def test_an_unexpected_osv_exit_is_cannot_judge_with_the_code_and_stderr(
     ],
     ids=["cell 18 exit 0 with vulnerabilities", "cell 18 exit 1 without", "cell 19 not JSON", "cell 19 wrong shape",
          "rule 3 results is an empty object", "rule 3 results is an empty string", "rule 3 packages is an object",
-         "rule 3 groups is a string", "rule 3 vulnerabilities without groups", "rule 3 groups without vulnerabilities",
-         "cell 20 a source quality did not pass", "rule 3 version is an object", "rule 3 ecosystem is a number",
-         "rule 3 an id is a number", "rule 3 affected is a string", "rule 3 ranges is an object", "rule 3 events is a string",
+         "rule 3 groups is a string", "cell 20 a source quality did not pass", "rule 3 version is an object",
+         "rule 3 ecosystem is a number", "rule 3 an id is a number", "rule 3 vulnerabilities without groups",
+         "rule 3 groups without vulnerabilities", "rule 3 affected is a string", "rule 3 ranges is an object", "rule 3 events is a string",
          "rule 3 fixed is a number"],
 )
 def test_a_report_that_disagrees_with_the_exit_is_cannot_judge(
@@ -445,6 +473,16 @@ def test_a_report_that_disagrees_with_the_exit_is_cannot_judge(
         report = edited_report(fixture, edit)
     code, output = run_gate(tracked_lock_repo(build_repo), osv_engines(clean_engines, reporting(report, exit_code)))
     assert (code, expected in output) == (2, True), output
+
+
+@pytest.mark.parametrize("name", ["uv.lock", "src/frontend/pnpm-lock.yaml", "tests/requirements.txt"])
+def test_a_tracked_file_of_zero_bytes_is_cannot_judge(build_repo, clean_engines, run_gate, publish_database, name):
+    """#5 145: osv-scanner finds no package source in an empty file and exits 0, which is not a judgement."""
+    publish_database()
+    publish_database(ecosystem="npm")
+    engine_dir = osv_engines(clean_engines, reporting(OUTPUTS / "osv-scanner-clean.json", 0))
+    code, output = run_gate(build_repo({name: ""}), engine_dir)
+    assert (code, f"{name} is empty" in output) == (2, True), output
 
 
 def test_a_package_osv_cannot_match_to_the_advisory_gets_only_the_advisory_link(
