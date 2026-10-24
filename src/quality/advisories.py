@@ -97,7 +97,7 @@ def scan(
     names_by_path = _names_by_path(locks)
     with engines.scratch_directory() as scratch:
         try:
-            affected = _scan(engine_dir, pins, locks, root, scratch, names_by_path, monotonic)
+            affected = _scan(engine_dir, pins, locks, scratch, names_by_path, monotonic)
         except EngineError as error:
             raise EngineError(_without_paths(str(error), names_by_path, [(root.resolve(), "<repository>"), (engine_dir.resolve(), "<engines>"), (scratch, "<scratch>")])) from None
     return apply_allowances(affected, allowances, today)
@@ -152,7 +152,7 @@ def _orphan(allowance: AdvisoryAllowance) -> Finding:
 
 
 def _scan(
-    engine_dir: Path, pins: dict[str, Pin], locks: Mapping[str, Path], root: Path, scratch: Path,
+    engine_dir: Path, pins: dict[str, Pin], locks: Mapping[str, Path], scratch: Path,
     names_by_path: dict[str, list[str]], monotonic: Callable[[], float],
 ) -> list[Affected]:
     binary = engines.engine_path(engine_dir, engines.OSV_SCANNER)
@@ -161,7 +161,7 @@ def _scan(
     # cwd is the scratch directory so that nothing in the scanned repository is read by accident.
     command = [
         str(binary), "scan", "source", "--offline", f"--local-db-path={scratch}", f"--config={OSV_CONFIG}",
-        "--format=json", "--all-vulns", "--all-packages", "--allow-no-lockfiles",
+        "--format=json", "--all-vulns", "--allow-no-lockfiles",
         *[f"--lockfile={lock_kind(name).parse_as}:{path}" for name, path in locks.items()],
     ]
     done = engines.run(command, cwd=scratch, timeout=ADVISORY_SCAN_TIMEOUT_SECONDS)

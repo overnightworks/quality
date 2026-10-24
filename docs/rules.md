@@ -306,7 +306,7 @@ The hygiene job in `gate.yml` stops at 25 minutes: the 300-second download deadl
 15, and setup and the other rules get the remaining 10, so quality's own `cannot judge` shows before GitHub cancels the job.
 Measured on 24.10.2026 (osv-scanner 2.7.0, 12 cores at load 17 to 20): the npm archive is 219,026,863 bytes (230,735 files), the PyPI archive 37,064,024 bytes
 (26,612 files); downloading npm took 34 s; a whole `hygiene --engines` run over a repository with one `pnpm-lock.yaml` and one
-Python lock file (a `requirements.txt` then, the same PyPI database), both databases included, took 81 s wall and 645 MB resident, twice in a row.
+`requirements.txt` read against the PyPI database, both databases included, took 81 s wall and 645 MB resident, twice in a row.
 
 An `[[advisories.allow]]` entry for an npm finding is the same entry with `lock` set to the file's tracked
 path (`id = "..."`, `lock = "frontend/pnpm-lock.yaml"`); it is a declared loosening and merges only through the operator's
