@@ -1,0 +1,7 @@
+claim_id = "a3956a0f95be4a4e9c9076ea7df4ad96"
+agent = "codex-quality-01a16e6f"
+role = "builder"
+base = "c9696b982a64a0e8517542b9607268f8ab03d82d"
+branch = "codex-quality-01a16e6f/issue-182-release-v0-6-1-pins"
+scope = [".github/workflows/gate.yml"]
+opened_commit = "467f27d4f97664591dc457f98cec0b46d6f566ce"
