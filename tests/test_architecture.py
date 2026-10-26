@@ -16,6 +16,7 @@ import yaml
 from conftest import FORBIDDEN, SHOP, SHOP_DB_IMPORTS_WEB, assert_every_line_starts_with_the_door, toml
 from conftest import hygiene_output as run
 from importlinter.contracts.forbidden import ForbiddenContract
+from test_emergency import BASE_SHA, ONE_JOB, SHOWN, SONAR_GREEN, FakeGh, changed_nothing, declaring, drive
 
 import quality
 from quality import architecture
@@ -641,3 +642,60 @@ def test_a_side_that_names_a_contract_twice_or_holds_two_configs_cannot_be_judge
     """#148 I4, S3, S4: a side whose contracts are ambiguous raises, so the verdict can name that side."""
     with pytest.raises(architecture.ContractError, match=message):
         architecture.contracts_of(files)
+
+
+A_AND_B = {"a": FORBIDDEN, "b": FORBIDDEN}
+REMOVES_B = {"base_files": {".importlinter": contracts_ini(A_AND_B)}, "merge_files": {".importlinter": contracts_ini({"a": FORBIDDEN})}}
+B_CONTRACT_REMOVED = 'import contract "b" removed'
+FILE_REMOVED = "import-linter config in .importlinter removed"
+
+
+class GhWithImportConfigs(FakeGh):
+    """The door's fake gh, holding import-linter config files at the base and the merge commit."""
+
+    def __init__(self, base_files=None, merge_files=None, **kwargs):
+        super().__init__(**kwargs)
+        self.files |= {(name, self.base_sha): text for name, text in (base_files or {}).items()}
+        self.files |= {(name, self.merge_sha): text for name, text in (merge_files or {}).items()}
+
+
+@pytest.mark.parametrize(
+    ("gh_kwargs", "line"),
+    [
+        (REMOVES_B, B_CONTRACT_REMOVED),
+        ({"base_files": {".importlinter": contracts_ini(A_AND_B)}}, FILE_REMOVED),
+        ({"base_files": {"pyproject.toml": contracts_toml({"a": FORBIDDEN})},
+          "merge_files": {"pyproject.toml": contracts_toml({"a": IGNORING})}}, 'import contract "a" ignores shop.db -> shop.web'),
+    ],
+    ids=["cell 3 a removed contract", "cell 7 the config removed", "cell 11 a new ignore"],
+)
+def test_the_door_refuses_an_undeclared_import_contract_loosening_next_to_legacy_red(gh_kwargs, line, capsys):
+    """#148 R2 (ruled yes 26.10.2026): the door reads the import-linter configs at the base and the merge commit and
+    refuses an undeclared loosening of them, even when it was opened for Sonar's legacy findings."""
+    gh = GhWithImportConfigs(**gh_kwargs)
+    assert drive(gh)[0] == 1
+    assert f"loosened (undeclared): {line}" in capsys.readouterr().out
+    changed_nothing(gh)
+
+
+@pytest.mark.parametrize(
+    ("gh_kwargs", "what"),
+    [(REMOVES_B, B_CONTRACT_REMOVED), ({"base_files": REMOVES_B["base_files"]}, FILE_REMOVED)],
+    ids=["cell 4 a removed contract", "cell 7 the config removed"],
+)
+def test_a_declared_import_contract_loosening_merges_through_the_door(gh_kwargs, what, capsys):
+    """#148 R1, R3 (ruled yes 26.10.2026): with Sonar green, only the declared loosening of an import contract
+    is left, and the door shows the declaration and merges."""
+    gh = GhWithImportConfigs(checks=SONAR_GREEN, base_config=ONE_JOB, merge_config=ONE_JOB + declaring(what), **gh_kwargs)
+    assert drive(gh)[0] == 0
+    assert f"{SHOWN}{what} - reason: ruled" in capsys.readouterr().out
+    assert gh.sequence == ["gate false", "merge", "gate true", "comment"]
+
+
+def test_import_contracts_at_the_base_that_cannot_be_told_apart_cannot_be_judged_and_change_nothing(capsys):
+    """#148 S3: the door names the commit whose import contracts it cannot read, and changes nothing."""
+    twice = contracts_ini({"a": FORBIDDEN}) + ini_section("importlinter:contract:again", {"name": "a", **FORBIDDEN})
+    gh = GhWithImportConfigs(base_files={".importlinter": twice})
+    assert drive(gh)[0] == 2
+    assert f"import-linter config at {BASE_SHA}: " in capsys.readouterr().out
+    changed_nothing(gh)
