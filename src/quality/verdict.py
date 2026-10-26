@@ -2,11 +2,11 @@ import json
 import re
 import urllib.error
 from collections.abc import Callable, Iterable, Iterator, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 
-from quality import engines, sonar
+from quality import architecture, engines, repository, sonar
 from quality.config import (
     CONFIG_PATH,
     ConfigError,
@@ -47,6 +47,7 @@ PageFetcher = Callable[[str], tuple[str, str | None]]
 
 NO_BASE_SETTINGS = GateSettings((), LegacyMode.REPORT)
 HEAD = "the head"
+IMPORT_CONFIG = "import-linter config"
 GREEN_LINE = "verdict: green"
 RED_LINE = "verdict: red"
 ONLY_DECLARED_LINE = (
@@ -56,10 +57,11 @@ ONLY_DECLARED_LINE = (
 
 @dataclass(frozen=True)
 class Side:
-    """What the gate holds at one side of a pull request: its settings and its baseline, None without one."""
+    """What the gate holds at one side of a pull request: its settings, its baseline (None without one) and its import contracts."""
 
     settings: GateSettings
     baseline: Baseline | None
+    contracts: architecture.SideContracts = field(default_factory=architecture.SideContracts)
 
 
 @dataclass(frozen=True)
@@ -167,6 +169,7 @@ def _loosenings(head: Side, base: Side, renames: Renames) -> tuple[tuple[Looseni
     if base.settings.legacy is LegacyMode.FAIL and head.settings.legacy is not LegacyMode.FAIL:
         whats.append(f"legacy {base.settings.legacy.value} → {head.settings.legacy.value}")
     whats += _baseline_loosenings(base.baseline, head.baseline, renames)
+    whats += architecture.contract_loosenings(base.contracts, head.contracts)
     new = {
         declaration.what: declaration
         for declaration in head.settings.loosened
@@ -432,25 +435,30 @@ def read_head(repo: Path) -> Side:
     except ConfigError as error:
         raise _unusable(CONFIG_PATH, HEAD, error) from error
     try:
-        return Side(settings, read_baseline(repo))
+        baseline = read_baseline(repo)
     except SizeError as error:
         raise _unusable(BASELINE_PATH, HEAD, f"{error}; {head_advice(error)}") from error
     except CannotJudge as error:
         raise _unusable(BASELINE_PATH, HEAD, error) from error
+    try:
+        import_configs = {name: repository.read_text(repo, name) for name in architecture.CONFIG_FILES}
+    except repository.RepositoryFileError as error:
+        raise _unusable(IMPORT_CONFIG, HEAD, error) from error
+    return Side(settings, baseline, _contracts_at(import_configs, HEAD))
 
 
 def read_base(repo: Path, base_sha: str) -> Side:
-    """The gate's settings and baseline at the base commit; a file the base lacks reads as absent."""
+    """The gate's settings, baseline and import-linter configs at the base commit; a file the base lacks reads as absent."""
     _require_safe_ref(base_sha, "base")
     where = f"the base commit {base_sha}"
     try:
-        config, baseline = (
-            engines.read_blob(repo, base_sha, path, f"cannot read {where}", f"cannot read {path} at {where}")
-            for path in (CONFIG_PATH, BASELINE_PATH)
-        )
+        texts = {
+            path: engines.read_blob(repo, base_sha, path, f"cannot read {where}", f"cannot read {path} at {where}")
+            for path in (CONFIG_PATH, BASELINE_PATH, *architecture.CONFIG_FILES)
+        }
     except engines.EngineError as error:
         raise CannotJudge(str(error)) from error
-    return side_of(config, baseline, where)
+    return side_of(texts[CONFIG_PATH], texts[BASELINE_PATH], where, {name: texts[name] for name in architecture.CONFIG_FILES})
 
 
 def compares_baselines(base: Side | None, head: Side) -> bool:
@@ -524,16 +532,26 @@ def _renamed_paths(name_status: bytes) -> Iterator[tuple[bytes, bytes]]:
             yield paths[0], paths[1]
 
 
-def side_of(config: str | None, baseline: str | None, where: str) -> Side:
-    """One side from its file texts, None where the side lacks the file; an unreadable file names `where`."""
+def side_of(config: str | None, baseline: str | None, where: str, import_configs: Mapping[str, str | None] = MappingProxyType({})) -> Side:
+    """One side from its file texts, None where the side lacks the file; an unreadable file names `where`.
+
+    `import_configs` holds the text of each import-linter config file the side may have."""
     try:
         settings = NO_BASE_SETTINGS if config is None else load_gate_settings(config)
     except ConfigError as error:
         raise _unusable(CONFIG_PATH, where, error) from error
     try:
-        return Side(settings, None if baseline is None else load_baseline(baseline))
+        loaded = None if baseline is None else load_baseline(baseline)
     except SizeError as error:
         raise _unusable(BASELINE_PATH, where, error) from error
+    return Side(settings, loaded, _contracts_at(import_configs, where))
+
+
+def _contracts_at(texts: Mapping[str, str | None], where: str) -> architecture.SideContracts:
+    try:
+        return architecture.contracts_of({name: text for name, text in texts.items() if text is not None})
+    except architecture.ContractError as error:
+        raise _unusable(IMPORT_CONFIG, where, error) from error
 
 
 def _unusable(name: str, where: str, reason: object) -> CannotJudge:

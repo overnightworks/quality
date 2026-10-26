@@ -1,13 +1,15 @@
 import http.client
 import json
+import re
 import urllib.error
 
 import pytest
-from conftest import put
+from conftest import FORBIDDEN, put
+from test_architecture import contracts_ini, contracts_toml, ini_section
 from test_sonar import reply
-from test_verdict import GREEN_GATE, declaration, fetch_jobs, gate_config, job
+from test_verdict import DECLARED, GREEN_GATE, ONLY_DECLARED, declaration, fetch_jobs, gate_config, job
 
-from quality import cli, verdict
+from quality import architecture, cli, verdict
 from quality.config import CONFIG_PATH, LegacyMode
 from quality.hygiene import CannotJudge
 from quality.ratchet import NO_RENAMES
@@ -416,3 +418,98 @@ def test_a_body_that_is_not_utf_8_after_a_stale_read_keeps_the_note(reread, stub
          "invalid start byte")],
         10,
     )
+
+
+@pytest.fixture
+def judged_contracts(capsys, pull_request):
+    """Commits the base side's import-linter files, writes the head side's, and returns the verdict's exit code and lines."""
+    repo, commit_base = pull_request
+
+    def run(base_files, head_files, declared=()):
+        put(repo / CONFIG_PATH, gate_config("A"))
+        for name, text in base_files.items():
+            put(repo / name, text)
+        commit_base(None)
+        for name in architecture.CONFIG_FILES:
+            put(repo / name, head_files.get(name))
+        put(repo / CONFIG_PATH, gate_config("A", declared=tuple(declaration(what) for what in declared)))
+        page = json.dumps({"total_count": 1, "jobs": [{"id": 1, "name": "A", "run_attempt": 1, "status": "completed", "conclusion": "success"}]})
+        code = cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (page, None))
+        captured = capsys.readouterr()
+        return code, (captured.out + captured.err).splitlines()
+
+    return run
+
+
+TWO_CONTRACTS = {"a": FORBIDDEN, "b": FORBIDDEN}
+DUPLICATE_A = contracts_ini({"a": FORBIDDEN}) + ini_section("importlinter:contract:again", {"name": "a", **FORBIDDEN})
+B_CONTRACT_REMOVED = 'import contract "b" removed'
+FILE_REMOVED = "import-linter config in .importlinter removed"
+IGNORES_WEB = {**FORBIDDEN, "ignore_imports": ["shop.db -> shop.web"]}
+LOOSENED = "loosened (undeclared): "
+STALE = "declared loosening matches nothing: "
+
+
+@pytest.mark.parametrize(
+    ("base", "head", "declared", "expected"),
+    [
+        ({".importlinter": contracts_ini(TWO_CONTRACTS)}, {".importlinter": contracts_ini({"a": FORBIDDEN})}, (),
+         [LOOSENED + B_CONTRACT_REMOVED, "verdict: red"]),
+        ({"pyproject.toml": contracts_toml(TWO_CONTRACTS)}, {"pyproject.toml": contracts_toml({"a": FORBIDDEN})},
+         (B_CONTRACT_REMOVED,), [DECLARED + B_CONTRACT_REMOVED, ONLY_DECLARED]),
+        ({".importlinter": contracts_ini(TWO_CONTRACTS)}, {}, (), [LOOSENED + FILE_REMOVED, "verdict: red"]),
+        ({".importlinter": contracts_ini(TWO_CONTRACTS)}, {}, (FILE_REMOVED,), [DECLARED + FILE_REMOVED, ONLY_DECLARED]),
+        ({"setup.cfg": contracts_ini({"a": FORBIDDEN})}, {"setup.cfg": "[metadata]\nname = shop\n"}, (),
+         [LOOSENED + "import-linter config in setup.cfg removed", "verdict: red"]),
+        ({"pyproject.toml": contracts_toml({"a": FORBIDDEN})}, {"pyproject.toml": contracts_toml({"a": IGNORES_WEB})}, (),
+         [LOOSENED + 'import contract "a" ignores shop.db -> shop.web', "verdict: red"]),
+        ({".importlinter": contracts_ini({"a": FORBIDDEN})}, {".importlinter": contracts_ini({"a": FORBIDDEN}, roots=("shop", "x"))},
+         (), [LOOSENED + "import-linter changes root_packages", "verdict: red"]),
+        ({".importlinter": contracts_ini({"a": FORBIDDEN})}, {"pyproject.toml": contracts_toml({"a": FORBIDDEN})}, (), ["verdict: green"]),
+        ({}, {".importlinter": contracts_ini({"a": FORBIDDEN})}, (), ["verdict: green"]),
+        ({".importlinter": contracts_ini({"a": FORBIDDEN})}, {".importlinter": contracts_ini({"a": FORBIDDEN})}, (FILE_REMOVED,),
+         [STALE + FILE_REMOVED, "verdict: red"]),
+        ({".importlinter": contracts_ini(TWO_CONTRACTS)},
+         {".importlinter": contracts_ini({"b": {**FORBIDDEN, "allow_indirect_imports": True}})}, (),
+         [LOOSENED + 'import contract "a" removed', LOOSENED + 'import contract "b" changes allow_indirect_imports', "verdict: red"]),
+    ],
+    ids=[
+        "cell 1 undeclared removal", "cell 2 declared removal in pyproject.toml", "cell 5 the file removed",
+        "cell 7 the file removed and declared", "cell 6 setup.cfg loses its section", "cell 8 a new ignore",
+        "cell 15 root_packages", "cell 18 INI to TOML", "cell 22 adoption", "cell 26 a declaration that matches nothing",
+        "cell 27 several lines, one each",
+    ],
+)
+def test_an_import_contract_loosening_is_a_loosening_the_verdict_names(judged_contracts, base, head, declared, expected):
+    """#148 R1 (ruled yes 26.10.2026): each import-contract loosening is red, declarable with its exact text, and
+    lands only through the door; moves and adoption stay green; a removed ignore and a new contract are no loosening."""
+    assert judged_contracts(base, head, declared) == (0 if expected == ["verdict: green"] else 1, expected)
+
+
+@pytest.mark.parametrize(
+    ("files", "side", "message"),
+    [
+        ({".importlinter": DUPLICATE_A},
+         "head", 'import contract "a" is declared twice in .importlinter'),
+        ({".importlinter": contracts_ini({"a": FORBIDDEN}), "setup.cfg": contracts_ini({"a": FORBIDDEN})},
+         "head", ".importlinter and setup.cfg each hold an import-linter config; keep one"),
+        ({".importlinter": DUPLICATE_A},
+         "base", 'import contract "a" is declared twice in .importlinter'),
+    ],
+    ids=["cell 21 a duplicate name at the head", "cell 25 two configs at the head", "cell 21 a duplicate name at the base"],
+)
+def test_import_contracts_that_cannot_be_told_apart_cannot_be_judged_naming_the_side(judged_contracts, files, side, message):
+    """#148 I4, S3, S4: an ambiguous side is cannot judge, and the line names the head or the base commit."""
+    code, lines = judged_contracts(files if side == "base" else {}, files if side == "head" else {})
+    assert code == 2
+    place = "the head" if side == "head" else "the base commit [0-9a-f]{40}"
+    assert re.fullmatch(f"verdict: cannot judge - import-linter config at {place}: {re.escape(message)}", lines[0]), lines
+
+
+def test_a_head_import_config_that_links_out_of_the_repository_cannot_be_judged_naming_the_head(build_repo, elsewhere):
+    """#148 S4: a config the head's tree cannot hand over is named, not read through the link."""
+    repo = build_repo({"quality/config.toml": gate_config("A")})
+    (elsewhere / "outside").write_text("[importlinter]\n")
+    (repo / ".importlinter").symlink_to(elsewhere / "outside")
+    with pytest.raises(CannotJudge, match="^import-linter config at the head: .importlinter resolves outside the repository$"):
+        verdict.read_head(repo)

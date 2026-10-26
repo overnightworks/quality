@@ -10,7 +10,7 @@ from functools import partial
 from pathlib import Path
 from urllib.parse import quote
 
-from quality import engines
+from quality import architecture, engines
 from quality.config import CONFIG_PATH, REPOSITORY_NAME, Declaration, GateSettings, LegacyMode
 from quality.hygiene import CannotJudge
 from quality.ratchet import BASELINE_PATH, NO_RENAMES, Renames
@@ -274,10 +274,11 @@ def read_statuses(gh: GhRunner, repository: str, head_sha: str) -> list[Check]:
 
 
 def read_side_at(gh: GhRunner, repository: str, sha: str) -> Side:
-    """The gate's settings and baseline at one commit, as the verdict reads them; a 404 reads as absent."""
+    """The gate's settings, baseline and import-linter configs at one commit, as the verdict reads them; a 404 reads as absent."""
     config = _read_file_at(gh, repository, CONFIG_PATH, sha)
     baseline = _read_file_at(gh, repository, BASELINE_PATH, sha)
-    return side_of(config, baseline, sha)
+    import_configs = {name: _read_file_at(gh, repository, name, sha) for name in architecture.CONFIG_FILES}
+    return side_of(config, baseline, sha, import_configs)
 
 
 def _read_file_at(gh: GhRunner, repository: str, path: str, sha: str) -> str | None:

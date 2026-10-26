@@ -22,7 +22,7 @@ import tempfile
 import tokenize
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
 import grimp
@@ -37,6 +37,7 @@ from importlinter.contracts.layers import LayersContract
 from importlinter.contracts.protected import ProtectedContract
 from importlinter.domain.contract import Contract, ContractCheck, InvalidContractOptions
 from importlinter.domain.helpers import MissingImport
+from importlinter.domain.imports import ImportExpression
 
 from quality import ratchet
 from quality.report import Finding
@@ -51,6 +52,8 @@ BUILT_IN_CONTRACT_TYPES: Mapping[str, type[Contract]] = {
     "protected": ProtectedContract,
     "acyclic_siblings": AcyclicSiblingsContract,
 }
+UNCOMPARED_FIELDS = frozenset({"ignore_imports", "broken_contract_guidance"})
+SESSION_OPTIONS = ("root_packages", "include_external_packages", "exclude_type_checking_imports")
 UNMATCHED_IGNORE = re.compile(r"No matches for ignored import (?P<expression>.+)\.")
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 BROKEN_FIX = "change the import or the contract."
@@ -85,6 +88,25 @@ class ContractsVerdict:
     notes: list[str]
 
 
+@dataclass(frozen=True)
+class ContractFields:
+    """One contract as import-linter parses it: its type, its ignore expressions and every other parsed field."""
+
+    type: str
+    ignores: frozenset[ImportExpression]
+    fields: Mapping[str, object]
+
+
+@dataclass(frozen=True)
+class SideContracts:
+    """The import contracts of one side of a pull request, by name; `config` is the file holding the section, None
+    when the side has none."""
+
+    config: str | None = None
+    session: Mapping[str, object] = field(default_factory=dict)
+    contracts: Mapping[str, ContractFields] = field(default_factory=dict)
+
+
 def check_contracts(root: Path, tracked: Sequence[str], configs: Mapping[str, str]) -> ContractsVerdict:
     """Report only without a config; with one, every contract must be kept.
 
@@ -98,7 +120,7 @@ def check_contracts(root: Path, tracked: Sequence[str], configs: Mapping[str, st
                             " only the built-in contract types are judged")
     repository = os.path.realpath(root)
     with _judging(f"the config {config.name}", repository):
-        contracts = [_contract(config, index, options, repository)
+        contracts = [_contract(config, index, options)
                      for index, options in enumerate(config.options.contracts_options, 1)]
         roots = {package: _source_root(tracked, package) for package in config.options.session_options["root_packages"]}
         with _library_warnings(repository) as graph_notes:
@@ -129,11 +151,64 @@ def _read_config(name: str, text: str) -> Config | None:
                 return None
 
 
-def _contract(config: Config, index: int, options: dict, repository: str) -> Contract:
+def contracts_of(configs: Mapping[str, str]) -> SideContracts:
+    """The contracts the one config among `configs` declares, none without a config; two contracts of one name on a
+    side cannot be told apart, and no import graph is built."""
+    config = find_config(configs)
+    if config is None:
+        return SideContracts()
+    contracts: dict[str, ContractFields] = {}
+    with _judging(f"the config {config.name}", ""):
+        for index, options in enumerate(config.options.contracts_options, 1):
+            contract = _contract(config, index, options)
+            if contract.name in contracts:
+                raise ContractError(f'import contract "{contract.name}" is declared twice in {config.name}')
+            contracts[contract.name] = _fields_of(contract, options["type"])
+        return SideContracts(config.name, _session_of(config.options), contracts)
+
+
+def contract_loosenings(base: SideContracts, head: SideContracts) -> list[str]:
+    """What the head loosens against the base, one sorted line each; adding a config or a contract, and removing an ignore, are none."""
+    if base.config is None:
+        return []
+    if head.config is None:
+        return [f"import-linter config in {base.config} removed"]
+    lines = [f"import-linter changes {option}" for option in SESSION_OPTIONS if base.session[option] != head.session[option]]
+    for name, contract in base.contracts.items():
+        kept = head.contracts.get(name)
+        lines += [f'import contract "{name}" removed'] if kept is None else _contract_loosenings(name, contract, kept)
+    return sorted(lines)
+
+
+def _contract_loosenings(name: str, base: ContractFields, head: ContractFields) -> list[str]:
+    if base.type != head.type:
+        return [f'import contract "{name}" changes type']
+    ignores = [f'import contract "{name}" ignores {expression}' for expression in head.ignores - base.ignores]
+    changed = [f'import contract "{name}" changes {option}' for option in base.fields if base.fields[option] != head.fields[option]]
+    return ignores + changed
+
+
+def _fields_of(contract: Contract, contract_type: str) -> ContractFields:
+    """The parsed fields, never the raw options: the INI reader injects an `id` and spells booleans as it likes."""
+    names = contract._get_field_names()
+    return ContractFields(contract_type, frozenset(getattr(contract, "ignore_imports", None) or ()),
+                          {name: getattr(contract, name) for name in names if name not in UNCOMPARED_FIELDS})
+
+
+def _session_of(options: UserOptions) -> Mapping[str, object]:
+    packages = options.session_options["root_packages"]
+    return {
+        "root_packages": frozenset([packages] if isinstance(packages, str) else packages),
+        "include_external_packages": use_cases._get_include_external_packages(options),
+        "exclude_type_checking_imports": use_cases._get_exclude_type_checking_imports(options),
+    }
+
+
+def _contract(config: Config, index: int, options: dict) -> Contract:
     if "name" not in options:
         raise ContractError(f"contract {index} in {config.name} has no name")
     name = options["name"]
-    with _judging(f"contract {name} in {config.name}", repository):
+    with _judging(f"contract {name} in {config.name}", ""):
         contract_class = BUILT_IN_CONTRACT_TYPES.get(options.get("type"))
         if contract_class is None:
             raise ContractError(f"contract {name} in {config.name} has type {options.get('type')}; only the built-in"
@@ -409,4 +484,6 @@ def _cut(message: str) -> str:
 
 
 def _relative(message: str, place: str) -> str:
+    if not place:
+        return message
     return message.replace(place + os.sep, "").replace(place, ".")

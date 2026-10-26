@@ -3,6 +3,7 @@
 Every cell runs through `cli.main(["hygiene", ...])`; the cell numbers are the item's scenario matrix.
 """
 
+import json
 import os
 import signal
 import subprocess
@@ -15,8 +16,10 @@ import yaml
 from conftest import FORBIDDEN, SHOP, SHOP_DB_IMPORTS_WEB, assert_every_line_starts_with_the_door, toml
 from conftest import hygiene_output as run
 from importlinter.contracts.forbidden import ForbiddenContract
+from test_emergency import BASE_SHA, ONE_JOB, SHOWN, SONAR_GREEN, FakeGh, changed_nothing, declaring, drive
 
 import quality
+from quality import architecture
 
 QUALITY_ROOT = Path(__file__).resolve().parents[1]
 CLEAN_LINE = "hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout, file-suffix)"
@@ -505,3 +508,194 @@ def test_qualitys_own_tree_holds_its_layers(capsys):
     """#61 rule 8, cell 23: quality's own layers contract is enforced and kept."""
     code, output = run(capsys, QUALITY_ROOT)
     assert (code, CLEAN_LINE in output, "report only (no import-linter config)" in output) == (0, True, False), output
+
+
+def contracts_ini(contracts: dict[str, dict], roots: tuple[str, ...] = ("shop",), **session: str | list[str]) -> str:
+    """An import-linter INI file with one numbered contract section per name, each carrying the contract's id."""
+    text = ini_section("importlinter", {"root_packages": list(roots), **session})
+    for number, (name, options) in enumerate(contracts.items(), 1):
+        written = {key: str(value) if isinstance(value, bool) else value for key, value in options.items()}
+        text += ini_section(f"importlinter:contract:{number}", {"id": f"c{number}", "name": name, **written})
+    return text
+
+
+def contracts_toml(contracts: dict[str, dict], roots: tuple[str, ...] = ("shop",), **session) -> str:
+    head = {"root_packages": list(roots), **session}
+    text = "[tool.importlinter]\n" + "".join(f"{key} = {json.dumps(value)}\n" for key, value in head.items())
+    for name, options in contracts.items():
+        entries = {"name": name, **options}
+        text += "\n[[tool.importlinter.contracts]]\n" + "".join(f"{key} = {json.dumps(value)}\n" for key, value in entries.items())
+    return text
+
+
+def loosened(base: dict[str, str], head: dict[str, str]) -> list[str]:
+    return architecture.contract_loosenings(architecture.contracts_of(base), architecture.contracts_of(head))
+
+
+def one(options: dict) -> dict[str, dict]:
+    return {"guarded": options}
+
+
+IGNORING = {**FORBIDDEN, "ignore_imports": ["shop.db -> shop.web"]}
+GUARDED_CHANGES = 'import contract "guarded" changes '
+ALLOWING_INDIRECT = {**FORBIDDEN, "allow_indirect_imports": True}
+PLAIN_FILE = "[metadata]\nname = shop\n"
+
+
+@pytest.mark.parametrize(
+    ("base", "head", "expected"),
+    [
+        ({".importlinter": contracts_ini({"a": FORBIDDEN, "b": FORBIDDEN})},
+         {".importlinter": contracts_ini({"a": FORBIDDEN})}, ['import contract "b" removed']),
+        ({"pyproject.toml": contracts_toml({"a": FORBIDDEN, "b": FORBIDDEN})},
+         {"pyproject.toml": contracts_toml({"b": FORBIDDEN})}, ['import contract "a" removed']),
+        ({".importlinter": contracts_ini({"a": FORBIDDEN, "b": FORBIDDEN})}, {},
+         ["import-linter config in .importlinter removed"]),
+        ({"setup.cfg": contracts_ini({"a": FORBIDDEN})}, {"setup.cfg": PLAIN_FILE},
+         ["import-linter config in setup.cfg removed"]),
+        ({"pyproject.toml": contracts_toml({"a": FORBIDDEN})}, {"pyproject.toml": "[project]\nname = 'x'\n"},
+         ["import-linter config in pyproject.toml removed"]),
+        ({".importlinter": contracts_ini({"a": FORBIDDEN, "b": FORBIDDEN})}, {".importlinter": contracts_ini({})},
+         ['import contract "a" removed', 'import contract "b" removed']),
+        ({"pyproject.toml": contracts_toml(one(FORBIDDEN))}, {"pyproject.toml": contracts_toml(one(IGNORING))},
+         ['import contract "guarded" ignores shop.db -> shop.web']),
+        ({"pyproject.toml": contracts_toml(one(FORBIDDEN))},
+         {"pyproject.toml": contracts_toml(one({**FORBIDDEN, "ignore_imports": ["shop.db -> shop.web", "shop.api->shop.*"]}))},
+         ['import contract "guarded" ignores shop.api -> shop.*', 'import contract "guarded" ignores shop.db -> shop.web']),
+        ({".importlinter": contracts_ini(one(IGNORING))},
+         {".importlinter": contracts_ini(one({**IGNORING, "ignore_imports": ["shop.db -> shop.web", "shop.db -> shop.*"]}))},
+         ['import contract "guarded" ignores shop.db -> shop.*']),
+        ({".importlinter": contracts_ini(one(IGNORING))},
+         {".importlinter": contracts_ini(one({**FORBIDDEN, "ignore_imports": ["shop.db->shop.web"]}))}, []),
+        ({"pyproject.toml": contracts_toml(one(IGNORING))}, {"pyproject.toml": contracts_toml(one(FORBIDDEN))}, []),
+        ({".importlinter": contracts_ini(one(FORBIDDEN))}, {".importlinter": contracts_ini(one(ALLOWING_INDIRECT))},
+         [GUARDED_CHANGES + "allow_indirect_imports"]),
+        ({".importlinter": contracts_ini(one(FORBIDDEN))},
+         {".importlinter": contracts_ini(one({**FORBIDDEN, "unmatched_ignore_imports_alerting": "none"}))},
+         [GUARDED_CHANGES + "unmatched_ignore_imports_alerting"]),
+        ({".importlinter": contracts_ini(one(FORBIDDEN))}, {".importlinter": contracts_ini(one(LAYERS))},
+         [GUARDED_CHANGES + "type"]),
+        ({"pyproject.toml": contracts_toml(one({**FORBIDDEN, "source_modules": ["shop.db", "shop.api"]}))},
+         {"pyproject.toml": contracts_toml(one(FORBIDDEN))}, [GUARDED_CHANGES + "source_modules"]),
+        ({"pyproject.toml": contracts_toml(one(LAYERS))},
+         {"pyproject.toml": contracts_toml(one({"type": "layers", "layers": ["shop.db", "shop.web"]}))},
+         [GUARDED_CHANGES + "layers"]),
+        ({".importlinter": contracts_ini(one(FORBIDDEN))}, {".importlinter": contracts_ini(one(FORBIDDEN), roots=("shop", "other"))},
+         ["import-linter changes root_packages"]),
+        ({".importlinter": contracts_ini(one(FORBIDDEN), include_external_packages="False")},
+         {".importlinter": contracts_ini(one(FORBIDDEN), include_external_packages="True")},
+         ["import-linter changes include_external_packages"]),
+        ({".importlinter": contracts_ini(one(FORBIDDEN))},
+         {".importlinter": contracts_ini(one(FORBIDDEN), exclude_type_checking_imports="True")},
+         ["import-linter changes exclude_type_checking_imports"]),
+        ({".importlinter": contracts_ini(one(FORBIDDEN), roots=("shop", "other"))},
+         {".importlinter": contracts_ini(one(FORBIDDEN), roots=("other", "shop", "shop"))}, []),
+        ({".importlinter": contracts_ini(one(IGNORING))},
+         {".importlinter": contracts_ini({"guarded": FORBIDDEN, "fresh": LAYERS})}, []),
+        ({".importlinter": contracts_ini(one({**FORBIDDEN, "broken_contract_guidance": "ask the web team"}))},
+         {".importlinter": contracts_ini(one({**FORBIDDEN, "broken_contract_guidance": "ask the db team"}))}, []),
+        ({".importlinter": contracts_ini(one({**ALLOWING_INDIRECT, "as_packages": True}))},
+         {"pyproject.toml": contracts_toml(one({**ALLOWING_INDIRECT, "as_packages": True}))}, []),
+        ({"setup.cfg": contracts_ini(one(IGNORING), include_external_packages="True")},
+         {".importlinter": contracts_ini(one(IGNORING), include_external_packages="True")}, []),
+        ({".importlinter": contracts_ini({"old": FORBIDDEN})}, {".importlinter": contracts_ini({"new": FORBIDDEN})},
+         ['import contract "old" removed']),
+        ({}, {".importlinter": contracts_ini(one(FORBIDDEN))}, []),
+        ({}, {}, []),
+        ({".importlinter": contracts_ini({"a": FORBIDDEN, "b": LAYERS})},
+         {".importlinter": contracts_ini({"a": {**ALLOWING_INDIRECT, "ignore_imports": ["shop.db -> shop.api"]}}, roots=("shop", "x"))},
+         ['import contract "a" changes allow_indirect_imports', 'import contract "a" ignores shop.db -> shop.api',
+          'import contract "b" removed', "import-linter changes root_packages"]),
+    ],
+    ids=[
+        "cell 1 a removed contract in INI", "cell 2 a removed contract in TOML", "cell 5 the file deleted is one line",
+        "cell 6 setup.cfg loses its section", "cell 6 pyproject.toml loses its table", "cell 23 no contract is left",
+        "cell 8 a new ignore", "cell 8 two new ignores", "cell 9 a wildcard is a new expression",
+        "cell 10 other spacing around the arrow", "cell 16 a removed ignore", "cell 12 allow_indirect_imports",
+        "cell 13 alerting", "cell 13 type", "cell 14 a module off source_modules", "cell 14 layers in another order",
+        "cell 15 root_packages", "cell 15 include_external_packages", "cell 15 exclude_type_checking_imports",
+        "cell 15 root order and duplicates", "cell 16 a new contract and a removed ignore", "cell 17 reworded guidance",
+        "cell 18 INI to TOML", "cell 19 setup.cfg to .importlinter", "cell 20 a rename", "cell 22 adoption",
+        "no config at either side", "cell 27 several changes, one line each, sorted",
+    ],
+)
+def test_the_contract_diff_names_each_loosening_on_its_own_line(base, head, expected):
+    """#148 C1-C7, I1, I2, I5, S1, S2, X1: the lines the verdict prints after `loosened (undeclared): `."""
+    assert loosened(base, head) == expected
+
+
+@pytest.mark.parametrize(
+    ("files", "message"),
+    [
+        ({".importlinter": contracts_ini({"a": FORBIDDEN}) + ini_section("importlinter:contract:two", {"name": "a", **FORBIDDEN})},
+         'import contract "a" is declared twice in .importlinter'),
+        ({"pyproject.toml": contracts_toml({"a": FORBIDDEN}) + contracts_toml({"a": FORBIDDEN}).split("\n\n", 1)[1]},
+         'import contract "a" is declared twice in pyproject.toml'),
+        ({".importlinter": contracts_ini({"a": FORBIDDEN}), "setup.cfg": contracts_ini({"b": FORBIDDEN})},
+         ".importlinter and setup.cfg each hold an import-linter config; keep one"),
+        ({"pyproject.toml": contracts_toml({"a": FORBIDDEN}, roots=(["shop"],))},
+         "the config pyproject.toml cannot be judged: TypeError"),
+    ],
+    ids=["cell 21 a duplicate name in INI", "cell 21 a duplicate name in TOML", "cell 25 two configs", "cell 25 a root package that is a list"],
+)
+def test_a_side_that_names_a_contract_twice_or_holds_two_configs_cannot_be_judged(files, message):
+    """#148 I4, S3, S4: a side whose contracts are ambiguous raises, so the verdict can name that side."""
+    with pytest.raises(architecture.ContractError, match=message):
+        architecture.contracts_of(files)
+
+
+A_AND_B = {"a": FORBIDDEN, "b": FORBIDDEN}
+REMOVES_B = {"base_files": {".importlinter": contracts_ini(A_AND_B)}, "merge_files": {".importlinter": contracts_ini({"a": FORBIDDEN})}}
+B_CONTRACT_REMOVED = 'import contract "b" removed'
+FILE_REMOVED = "import-linter config in .importlinter removed"
+
+
+class GhWithImportConfigs(FakeGh):
+    """The door's fake gh, holding import-linter config files at the base and the merge commit."""
+
+    def __init__(self, base_files=None, merge_files=None, **kwargs):
+        super().__init__(**kwargs)
+        self.files |= {(name, self.base_sha): text for name, text in (base_files or {}).items()}
+        self.files |= {(name, self.merge_sha): text for name, text in (merge_files or {}).items()}
+
+
+@pytest.mark.parametrize(
+    ("gh_kwargs", "line"),
+    [
+        (REMOVES_B, B_CONTRACT_REMOVED),
+        ({"base_files": {".importlinter": contracts_ini(A_AND_B)}}, FILE_REMOVED),
+        ({"base_files": {"pyproject.toml": contracts_toml({"a": FORBIDDEN})},
+          "merge_files": {"pyproject.toml": contracts_toml({"a": IGNORING})}}, 'import contract "a" ignores shop.db -> shop.web'),
+    ],
+    ids=["cell 3 a removed contract", "cell 7 the config removed", "cell 11 a new ignore"],
+)
+def test_the_door_refuses_an_undeclared_import_contract_loosening_next_to_legacy_red(gh_kwargs, line, capsys):
+    """#148 R2 (ruled yes 26.10.2026): the door reads the import-linter configs at the base and the merge commit and
+    refuses an undeclared loosening of them, even when it was opened for Sonar's legacy findings."""
+    gh = GhWithImportConfigs(**gh_kwargs)
+    assert drive(gh)[0] == 1
+    assert f"loosened (undeclared): {line}" in capsys.readouterr().out
+    changed_nothing(gh)
+
+
+@pytest.mark.parametrize(
+    ("gh_kwargs", "what"),
+    [(REMOVES_B, B_CONTRACT_REMOVED), ({"base_files": REMOVES_B["base_files"]}, FILE_REMOVED)],
+    ids=["cell 4 a removed contract", "cell 7 the config removed"],
+)
+def test_a_declared_import_contract_loosening_merges_through_the_door(gh_kwargs, what, capsys):
+    """#148 R1, R3 (ruled yes 26.10.2026): with Sonar green, only the declared loosening of an import contract
+    is left, and the door shows the declaration and merges."""
+    gh = GhWithImportConfigs(checks=SONAR_GREEN, base_config=ONE_JOB, merge_config=ONE_JOB + declaring(what), **gh_kwargs)
+    assert drive(gh)[0] == 0
+    assert f"{SHOWN}{what} - reason: ruled" in capsys.readouterr().out
+    assert gh.sequence == ["gate false", "merge", "gate true", "comment"]
+
+
+def test_import_contracts_at_the_base_that_cannot_be_told_apart_cannot_be_judged_and_change_nothing(capsys):
+    """#148 S3: the door names the commit whose import contracts it cannot read, and changes nothing."""
+    twice = contracts_ini({"a": FORBIDDEN}) + ini_section("importlinter:contract:again", {"name": "a", **FORBIDDEN})
+    gh = GhWithImportConfigs(base_files={".importlinter": twice})
+    assert drive(gh)[0] == 2
+    assert f"import-linter config at {BASE_SHA}: " in capsys.readouterr().out
+    changed_nothing(gh)
