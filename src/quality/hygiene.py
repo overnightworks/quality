@@ -94,6 +94,23 @@ for number_tag in YAML_NUMBER_TAGS:
     ComposeLoader.add_constructor(number_tag, _number_constructor(yaml.SafeLoader.yaml_constructors[number_tag]))
 
 
+YAML_BOOLEAN_TAG = "tag:yaml.org,2002:bool"
+YAML_BOOLEAN = re.compile(r"^(?:true|True|TRUE|false|False|FALSE)$")
+
+
+def _read_only_true_and_false_as_boolean() -> None:
+    """Compose reads YAML 1.2, where `on`, `yes` and `no` are text, as service names; only YAML 1.1 makes them booleans."""
+    resolvers = {
+        first: [(tag, pattern) for tag, pattern in entries if tag != YAML_BOOLEAN_TAG]
+        for first, entries in yaml.SafeLoader.yaml_implicit_resolvers.items()
+    }
+    ComposeLoader.yaml_implicit_resolvers = resolvers
+    ComposeLoader.add_implicit_resolver(YAML_BOOLEAN_TAG, YAML_BOOLEAN, list("tTfF"))
+
+
+_read_only_true_and_false_as_boolean()
+
+
 class CannotJudge(Exception):
     """The repository cannot be examined; this is never a clean result."""
 

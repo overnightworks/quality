@@ -147,3 +147,13 @@ def test_the_unknown_table_message_lists_the_compose_table(build_repo, capsys):
     code, output = hygiene_output(capsys, build_repo({CONFIG: ONE_JOB + "[nope]\nx = 1\n"}))
     assert code == 2
     assert "[[compose.allow]]" in output
+
+
+@pytest.mark.parametrize("name", ["on", "yes", "off", "no"])
+def test_a_service_named_like_a_yaml_one_one_boolean_is_matched_by_its_name(build_repo, capsys, name):
+    """#188 sentences 3-4: the declared service passes by the name written in the file, and a declaration of its coerced spelling is stale."""
+    files = {"compose.yaml": service_file("host", service=name)}
+    assert judged(capsys, build_repo, files, declaring(service=name)) == (0, [])
+    code, lines = judged(capsys, build_repo, files, declaring(service=name) + declaring(service="True"))
+    assert code == 1
+    assert [line for line in lines if "service True" in line and "declared" in line]
