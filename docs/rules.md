@@ -21,10 +21,26 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   value they wrap; any other tag (`!foo`) and any YAML error is `cannot judge`, in one line with its line and column
   (or its position for a character YAML refuses, `nested too deeply`, `a value does not fit its tag`, or `not valid
   YAML`). A port that is neither text, a number nor a mapping whose `published` (or, without one, `target`) is text or
-  a number is a finding. A service with `network_mode: host` publishes whatever its process binds, and this rule does
-  not check that; the limit is documented first, and the allowlist the same ruling asks for is
-  [#45](https://github.com/overnightworks/quality/issues/45) row Q1b-3g (operator ruling 19.10.2026: „Erst Doku, dann
-  Erlaubnisliste (empfohlen)“).
+  a number is a finding. A service with `network_mode: host` publishes whatever its process binds, so it is a finding
+  too, and so is a `network_mode` that holds a Compose interpolation (`${...}`), which may resolve to `host`; `none`,
+  `service:x` and any other literal are clean. A service is declared in `quality/config.toml`, a table of its own
+  beside `[[layout.allow]]`, with the exact tracked path of its compose file, the service name and a one-line reason:
+
+  ```toml
+  [[compose.allow]]
+  file = "compose.yaml"
+  service = "traefik"
+  reason = "it terminates TLS on the host's own interfaces"
+  ```
+
+  A declared service passes the host check only; its ports are still judged. A declaration that matches nothing is a
+  finding on its file: the file is not tracked or not a compose file, it lacks the service, or the service is neither
+  host-networked nor interpolated there; the fix is to delete the entry. A duplicate `(file, service)`, a folder (a
+  trailing `/`), a pattern (`*`, `?`, `[`), `..`, an absolute path, an unknown key, a missing key or a service or reason
+  that is not one-line text is `hygiene: compose-port cannot judge - ...` with a `[[compose.allow]]` example, and a
+  malformed other table in `quality/config.toml` is forwarded with its validation error. A declaration is no loosening,
+  so `quality verdict` asks for no `[[gate.loosened]]` entry. A config reader older than the rule refuses `[compose]`
+  as an unknown key. (#45 row Q1b-3g, operator ruling 19.10.2026: „Erst Doku, dann Erlaubnisliste (empfohlen)“)
 - `size`: every tracked file of Python, TypeScript (`.ts` `.tsx` `.mts` `.cts`), JavaScript (`.js` `.jsx` `.mjs`
   `.cjs`), Svelte or Vue is measured by its lines, and every tracked `*.py` file also with
   [lizard](https://github.com/terryyin/lizard): a file from 800 lines, a Python function from 60 lines and a Python
