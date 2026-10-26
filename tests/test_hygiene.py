@@ -141,7 +141,7 @@ def test_untracked_ignored_env_file_is_not_a_finding(build_repo, capsys):
     ],
 )
 def test_compose_ports_must_bind_loopback(build_repo, capsys, files, refused_path):
-    """#3 rule 2/4: a compose port beyond loopback is refused with rule id, path, reason and fix; edge's real file is judged in test_compose_host (#78 cell 15)."""
+    """#3 rule 2/4: a compose port beyond loopback is refused with rule id, path, reason and fix; edge's real file is judged in test_container_host (#78 cell 15)."""
     code, output = run(capsys, build_repo(files))
     assert code == (0 if refused_path is None else 1)
     if refused_path:
