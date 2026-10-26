@@ -167,7 +167,7 @@ def test_a_lock_the_tree_cannot_hand_over_is_skipped_or_refused(
 ):
     """#53 rule 1, cells 9, 10 and 31; #176 C2 for a requirements file."""
     publish_database()
-    repo = build_repo({name: uv_lock(), "docs/x": "x\n"})
+    repo = build_repo({name: uv_lock(), "docs/x.txt": "x\n"})
     (repo / name).unlink()
     if tracked_only == "symlink to a directory":
         (repo / name).symlink_to(".")
