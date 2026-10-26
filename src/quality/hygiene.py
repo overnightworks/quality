@@ -10,13 +10,16 @@ from pathlib import Path, PurePosixPath
 
 import yaml
 
-from quality import advisories, architecture, clones, engines, ratchet, repository
+from quality import advisories, architecture, clones, engines, layout, ratchet, repository
 from quality.config import (
     CONFIG_PATH,
     Allowance,
     ConfigError,
+    LayoutAllowance,
+    LayoutRule,
     RootAllowance,
     read_advisory_allowances,
+    read_layout_allowances,
     read_root_allowances,
     read_secret_allowances,
 )
@@ -26,6 +29,7 @@ ENV_FILE = "env-file"
 COMPOSE_PORT = "compose-port"
 CLAUDE_MD = "claude-md"
 ROOT_LAYOUT = "root-layout"
+FILE_SUFFIX = LayoutRule.FILE_SUFFIX.value
 WORKFLOW_RULE_IDS = tuple(engines.WORKFLOW_ENGINES)
 ENGINE_RULE_IDS = (engines.LEAK_RULE, *WORKFLOW_RULE_IDS, advisories.RULE)
 WORKFLOW_DIRECTORY = PurePosixPath(".github/workflows")
@@ -52,6 +56,7 @@ ROOT_BASE_ENTRIES = ROOT_BASE_FILES | ROOT_BASE_DIRECTORIES
 LOOPBACK = "127.0.0.1"
 LOOPBACK_HOSTS = (LOOPBACK, "::1")
 ENV_TEMPLATE_SUFFIX = ".example"
+INDEX_MODE = re.compile(r"[0-7]{6}")
 INTERPOLATION = re.compile(r"\$\{[^}]*\}")
 COMPOSE_TOKEN = "compose"
 NAME_SEPARATORS = re.compile(r"[._-]")
@@ -136,6 +141,21 @@ def work_tree_top(path: Path) -> Path:
 def tracked_files(root: Path) -> list[str]:
     listing = _git_listing(root, ["ls-files", "-z", "--"])
     return [os.fsdecode(name) for name in listing.stdout.split(b"\0") if name]
+
+
+def index_modes(root: Path) -> dict[str, str]:
+    """Each tracked path's index mode; the index is the only source of a mode, and a link is never followed."""
+    listing = _git_listing(root, ["ls-files", "-z", "-s", "--"])
+    modes: dict[str, str] = {}
+    for record in listing.stdout.split(b"\0"):
+        if not record:
+            continue
+        fields, tab, name = os.fsdecode(record).partition("\t")
+        parts = fields.split(" ")
+        if not tab or len(parts) != 3 or not INDEX_MODE.fullmatch(parts[0]):
+            raise CannotJudge(f"git ls-files -s printed an index record quality cannot read in {root}")
+        modes[name] = parts[0]
+    return modes
 
 
 def _untrack_fix(name: str) -> str:
@@ -250,6 +270,13 @@ def _stale_root_declaration(entry: str, tracked_entries: set[str]) -> Finding:
 def _root_allowances(root: Path) -> tuple[RootAllowance, ...]:
     try:
         return read_root_allowances(root)
+    except ConfigError as error:
+        raise CannotJudge(str(error)) from error
+
+
+def _layout_allowances(root: Path) -> tuple[LayoutAllowance, ...]:
+    try:
+        return read_layout_allowances(root)
     except ConfigError as error:
         raise CannotJudge(str(error)) from error
 
@@ -540,6 +567,7 @@ def run_hygiene(root: Path, engine_dir: Path | None = None) -> HygieneResult:
         _verdict(architecture.RULE, contracts if isinstance(contracts, CannotJudge) else contracts.findings),
         _verdict(CLAUDE_MD, _attempt(lambda: check_claude_md(root, tracked))),
         _verdict(ROOT_LAYOUT, _attempt(lambda: check_root_layout(tracked, _root_allowances(root)))),
+        _verdict(FILE_SUFFIX, _attempt(lambda: layout.check_file_suffix(index_modes(root), _layout_allowances(root)))),
     ]
     reports = _reports(size, clone, contracts)
     if engine_dir is None:

@@ -423,4 +423,4 @@ def test_the_heading_sentence_names_the_rules_the_oldest_release_always_enforces
     """#125 cell 24, E8: the five rules get a sentence, not five columns."""
     _, output = scoreboard(public("any", {}), tags=first_releases())
     assert "Every gate release enforces env-file, compose-port, secret, workflow-lint and workflow-security." in output
-    assert MATRIX_COLUMNS[5:] == ("claude-md", "root-layout", "advisory", "size", "import-contract", "clone")
+    assert MATRIX_COLUMNS[5:] == ("claude-md", "root-layout", "file-suffix", "advisory", "size", "import-contract", "clone")
