@@ -13,16 +13,20 @@ GATE_KEYS = {"mandatory_jobs", "legacy", "loosened"}
 SECRETS_KEYS = {"allow"}
 ADVISORIES_KEYS = {"allow"}
 ROOT_KEYS = {"allow"}
-TABLES = {"gate", "secrets", "advisories", "root"}
+LAYOUT_KEYS = {"allow"}
+TABLES = {"gate", "secrets", "advisories", "root", "layout"}
 ALLOWANCE_KEYS = {"rule", "file", "secret_sha256", "reason"}
 DECLARATION_KEYS = {"what", "item", "date", "reason"}
 ROOT_ALLOWANCE_KEYS = {"entry", "reason"}
 NOT_ROOT_ENTRY_NAMES = {".", "..", ".git"}
+LAYOUT_ALLOWANCE_KEYS = {"path", "rule", "reason"}
+PATH_PATTERN_CHARACTERS = "*?["
 ADVISORY_ALLOWANCE_KEYS = {"id", "lock", "until", "date", "item", "reason"}
 SHA256_HEX = re.compile(r"[0-9a-f]{64}")
 # ASCII only, so a lookalike name (a Cyrillic letter in it) is no repository.
 REPOSITORY_NAME = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 ITEM_REFERENCE = re.compile(rf"(?:{REPOSITORY_NAME.pattern})?#[1-9][0-9]*")
+ONE_LINE_REASON = "a non-empty one-line reason"
 EXAMPLE = '[gate]\nmandatory_jobs = ["checks"]'
 LEGACY_EXAMPLE = '[gate]\nlegacy = "fail"'
 ALLOWANCE_EXAMPLE = (
@@ -49,6 +53,12 @@ ROOT_ALLOWANCE_EXAMPLE = (
     "[[root.allow]]\n"
     'entry = "frontend/"\n'
     'reason = "the web client, built apart from the Python package"'
+)
+LAYOUT_ALLOWANCE_EXAMPLE = (
+    "[[layout.allow]]\n"
+    'path = "deploy/EDGE_SHA"\n'
+    'rule = "file-suffix"\n'
+    'reason = "the deploy script reads it by this name"'
 )
 
 
@@ -100,6 +110,21 @@ class RootAllowance:
     reason: str
 
 
+class LayoutRule(Enum):
+    """A layout rule a repository may declare a tracked file against."""
+
+    FILE_SUFFIX = "file-suffix"
+
+
+@dataclass(frozen=True)
+class LayoutAllowance:
+    """A tracked file, by its exact path, the repository declares against one layout rule."""
+
+    path: str
+    rule: LayoutRule
+    reason: str
+
+
 @dataclass(frozen=True)
 class GateSettings:
     """What the gate reads from quality/config.toml: the settings a pull request must not loosen, the loosenings
@@ -132,6 +157,7 @@ class _Document:
     secret_allowances: dict[Allowance, str]
     advisory_allowances: tuple[AdvisoryAllowance, ...]
     root_allowances: tuple[RootAllowance, ...]
+    layout_allowances: tuple[LayoutAllowance, ...]
 
 
 def _parse(text: str, example: str) -> dict:
@@ -154,15 +180,20 @@ def _refuse_unknown_secrets_keys(secrets: dict) -> None:
         raise ConfigError(f"{CONFIG_PATH} has unknown key(s) {sorted(unknown)} in [secrets] - only allow exists")
 
 
-def _refuse_unknown_keys(document: dict, gate: dict, advisories: dict, root: dict) -> None:
+def _refuse_unknown_keys(document: dict, gate: dict, advisories: dict, root: dict, layout: dict) -> None:
     unknown = (
-        (set(document) - TABLES) | (set(gate) - GATE_KEYS) | (set(advisories) - ADVISORIES_KEYS) | (set(root) - ROOT_KEYS)
+        (set(document) - TABLES)
+        | (set(gate) - GATE_KEYS)
+        | (set(advisories) - ADVISORIES_KEYS)
+        | (set(root) - ROOT_KEYS)
+        | (set(layout) - LAYOUT_KEYS)
     )
     if unknown:
         example = f", like:\n{ROOT_ALLOWANCE_EXAMPLE}" if set(root) - ROOT_KEYS else ""
+        example = f", like:\n{LAYOUT_ALLOWANCE_EXAMPLE}" if set(layout) - LAYOUT_KEYS else example
         raise ConfigError(
             f"{CONFIG_PATH} has unknown key(s) {sorted(unknown)} - only [gate] mandatory_jobs, [gate] legacy, "
-            f"[[gate.loosened]], [secrets] allow, [[advisories.allow]] and [[root.allow]] exist{example}"
+            f"[[gate.loosened]], [secrets] allow, [[advisories.allow]], [[root.allow]] and [[layout.allow]] exist{example}"
         )
 
 
@@ -172,13 +203,15 @@ def _validated_document(text: str) -> _Document:
     gate = _table(document, "gate", EXAMPLE)
     advisories = _table(document, "advisories", ADVISORY_ALLOWANCE_EXAMPLE)
     root = _table(document, "root", ROOT_ALLOWANCE_EXAMPLE)
-    _refuse_unknown_keys(document, gate, advisories, root)
+    layout = _table(document, "layout", LAYOUT_ALLOWANCE_EXAMPLE)
+    _refuse_unknown_keys(document, gate, advisories, root, layout)
     return _Document(
         gate,
         _declarations(gate),
         _parse_allowances(_table(document, "secrets", ALLOWANCE_EXAMPLE)),
         _advisory_allowances(advisories),
         _root_allowances(root),
+        _layout_allowances(layout),
     )
 
 
@@ -244,7 +277,7 @@ def _read_declaration(entry: object) -> Declaration:
     if not _is_date_without_time(date):
         raise refuse("date as a TOML date without a time")
     if not _is_one_line_text(reason):
-        raise refuse("a non-empty one-line reason")
+        raise refuse(ONE_LINE_REASON)
     return Declaration(what, item, date, reason)
 
 
@@ -320,8 +353,48 @@ def _read_root_allowance(entry: object) -> RootAllowance:
     if not _is_root_entry(name):
         raise refuse("entry as one name directly in the root, a directory with a trailing /, not a path")
     if not _is_one_line_text(reason):
-        raise refuse("a non-empty one-line reason")
+        raise refuse(ONE_LINE_REASON)
     return RootAllowance(name, reason)
+
+
+def _layout_allowances(layout: dict) -> tuple[LayoutAllowance, ...]:
+    entries = layout.get("allow", [])
+    if not isinstance(entries, list):
+        raise ConfigError(f"{CONFIG_PATH} needs [[layout.allow]] as an array of tables, like:\n{LAYOUT_ALLOWANCE_EXAMPLE}")
+    allowances: dict[tuple[LayoutRule, str], LayoutAllowance] = {}
+    for entry in entries:
+        allowance = _read_layout_allowance(entry)
+        key = (allowance.rule, allowance.path)
+        if key in allowances:
+            raise ConfigError(
+                f"{CONFIG_PATH} [[layout.allow]] declares path = {allowance.path!r} for rule = "
+                f"{allowance.rule.value!r} twice; one declaration per rule and path, like:\n{LAYOUT_ALLOWANCE_EXAMPLE}"
+            )
+        allowances[key] = allowance
+    return tuple(allowances.values())
+
+
+def _is_exact_file_path(path: object) -> bool:
+    """A relative path to one file: no folder (trailing `/`), no pattern character, no `..`, not absolute."""
+    if not isinstance(path, str) or not path.strip() or path.startswith("/") or path.endswith("/"):
+        return False
+    return not any(character in path for character in PATH_PATTERN_CHARACTERS) and ".." not in path.split("/")
+
+
+def _read_layout_allowance(entry: object) -> LayoutAllowance:
+    def refuse(need: str) -> ConfigError:
+        return ConfigError(f"{CONFIG_PATH} [[layout.allow]] entry {entry!r} needs {need}, like:\n{LAYOUT_ALLOWANCE_EXAMPLE}")
+
+    if not isinstance(entry, dict) or set(entry) != LAYOUT_ALLOWANCE_KEYS:
+        raise refuse("exactly a path, a rule and a reason")
+    path, rule, reason = entry["path"], entry["rule"], entry["reason"]
+    if not _is_exact_file_path(path):
+        raise refuse("path as the exact tracked path of one file: no folder, pattern, .. or absolute path")
+    if rule not in [known.value for known in LayoutRule]:
+        raise refuse(f"rule as one of {sorted(known.value for known in LayoutRule)}")
+    if not _is_one_line_text(reason):
+        raise refuse(ONE_LINE_REASON)
+    return LayoutAllowance(path, LayoutRule(rule), reason)
 
 
 def load_gate_settings(text: str | None) -> GateSettings:
@@ -420,3 +493,9 @@ def read_root_allowances(repo: Path) -> tuple[RootAllowance, ...]:
     """The root entries the repository declares, the whole document validated; a missing config declares none."""
     text = _read_config_text(repo)
     return () if text is None else _validated_document(text).root_allowances
+
+
+def read_layout_allowances(repo: Path) -> tuple[LayoutAllowance, ...]:
+    """The files the repository declares against a layout rule, the whole document validated; a missing config declares none."""
+    text = _read_config_text(repo)
+    return () if text is None else _validated_document(text).layout_allowances

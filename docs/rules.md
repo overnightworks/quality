@@ -145,6 +145,29 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   the rule refuses `[root]` as an unknown key, so a declaration lands in the pull request that moves the repository to
   a quality version that knows it. Named gaps: a submodule in the root counts as a file entry and no case of it is
   tested; marketplace's refusal of every symlink in the tree stays that repository's own check.
+- `file-suffix`: a tracked file whose basename has no suffix is a finding, unless it is executable (index mode
+  100755), a symlink (120000) or a gitlink (160000), its basename is a dotfile, its basename is on quality's list of
+  tool-mandated names (`LICENSE Dockerfile Makefile CODEOWNERS`), or it is declared. The index (`git ls-files -s`) is
+  the only source of a path's mode and a link is never followed; index data that cannot be read is `hygiene:
+  file-suffix cannot judge - ...`. Names compare in exact case, in any folder. The list belongs to quality and changes
+  with a quality version. A file is declared in `quality/config.toml`, a table of its own beside `[[root.allow]]`, one
+  exact tracked path, the rule and a one-line reason:
+
+  ```toml
+  [[layout.allow]]
+  path = "deploy/EDGE_SHA"
+  rule = "file-suffix"
+  reason = "the deploy script reads it by this name"
+  ```
+
+  A declared path that is not tracked is a finding; a declaration for a file that already complies is clean. A finding
+  names the file and both ways out, give it a suffix or declare it, in prose with no command; findings are sorted by
+  path and all printed. A duplicate `(rule, path)`, a folder (a trailing `/`), a pattern (`*`, `?`, `[`), `..`, an
+  absolute path, an unknown rule, an unknown key or a reason that is not one-line text is `hygiene: file-suffix cannot
+  judge - ...` with a `[[layout.allow]]` example; a malformed `[layout]` table is the same, and another malformed table in `quality/config.toml` is forwarded with its validation error. A
+  declaration is no loosening, so `quality verdict` asks for no `[[gate.loosened]]` entry. The rule writes nothing and
+  no configuration switches it off. A config reader older than the rule refuses `[layout]` as an unknown key. (#175,
+  operator ruling 24.10.2026: „ja das will ich“)
 - The baseline only falls: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the
   base commit's, so growing a function and rewriting the baseline stays red. Each loosening is one line, named with the
   baseline's own metric, path and symbol (a file entry has no symbol):
@@ -335,7 +358,7 @@ Every rule is judged, even when another cannot be, and gives one verdict: clean,
 Each finding names the rule, the file, a reason and a fix. Repository text (a file name, a service, a port, a contract
 or job name, a configuration entry) prints escaped. In the door's own fields (a finding's location, reason and fix, refusals, reports), invalid UTF-8 prints as `\udcNN` and every control character (line feed,
 carriage return, ESC, tab, DEL, C1) as `\xNN`. A line taken from import-linter's rendering (a broken contract's chain and guidance) prints behind the marker `  | `; rich may drop a carriage return, expand a tab, or start a new marked line at a line feed there. Every line the door prints therefore starts with its own text, so a matcher anchored at the line start, such as setup-uv's python matcher, cannot match repository text. A refusal is one line; the lines the door means to print (an import chain, the verdict's problems, the scoreboard's table) stay lines. A rule that cannot judge prints its verdict and reason under its rule id (`hygiene: secret cannot
-judge - ...`). A clean run names its rules in run order (`hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout); skipped without
+judge - ...`). A clean run names its rules in run order (`hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout, file-suffix); skipped without
 --engines: ...`); any other run ends with the findings and the verdicts counted (`hygiene: 1 finding(s); verdicts: 1
 clean, 1 findings, 1 unparsable`). The lines come in run order, also through a pipe that merges stdout and stderr
 (`2>&1 | tee log`); each stays on its own stream. That is option (c) of #86 on 19.10.2026, `cli.main` makes stdout
