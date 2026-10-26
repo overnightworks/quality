@@ -26,6 +26,7 @@ SHA256_HEX = re.compile(r"[0-9a-f]{64}")
 # ASCII only, so a lookalike name (a Cyrillic letter in it) is no repository.
 REPOSITORY_NAME = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 ITEM_REFERENCE = re.compile(rf"(?:{REPOSITORY_NAME.pattern})?#[1-9][0-9]*")
+ONE_LINE_REASON = "a non-empty one-line reason"
 EXAMPLE = '[gate]\nmandatory_jobs = ["checks"]'
 LEGACY_EXAMPLE = '[gate]\nlegacy = "fail"'
 ALLOWANCE_EXAMPLE = (
@@ -276,7 +277,7 @@ def _read_declaration(entry: object) -> Declaration:
     if not _is_date_without_time(date):
         raise refuse("date as a TOML date without a time")
     if not _is_one_line_text(reason):
-        raise refuse("a non-empty one-line reason")
+        raise refuse(ONE_LINE_REASON)
     return Declaration(what, item, date, reason)
 
 
@@ -352,7 +353,7 @@ def _read_root_allowance(entry: object) -> RootAllowance:
     if not _is_root_entry(name):
         raise refuse("entry as one name directly in the root, a directory with a trailing /, not a path")
     if not _is_one_line_text(reason):
-        raise refuse("a non-empty one-line reason")
+        raise refuse(ONE_LINE_REASON)
     return RootAllowance(name, reason)
 
 
@@ -392,7 +393,7 @@ def _read_layout_allowance(entry: object) -> LayoutAllowance:
     if rule not in [known.value for known in LayoutRule]:
         raise refuse(f"rule as one of {sorted(known.value for known in LayoutRule)}")
     if not _is_one_line_text(reason):
-        raise refuse("a non-empty one-line reason")
+        raise refuse(ONE_LINE_REASON)
     return LayoutAllowance(path, LayoutRule(rule), reason)
 
 
