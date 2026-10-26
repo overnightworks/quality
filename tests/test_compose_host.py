@@ -117,6 +117,8 @@ def test_a_declaration_that_matches_nothing_is_red(build_repo, capsys, files, de
         declaring(file="*.yaml"),
         declaring(file="../compose.yaml"),
         declaring(file="/compose.yaml"),
+        declaring(file="./compose.yaml"),
+        declaring(file="deploy//compose.yaml"),
         declaring(service=""),
         declaring() + "extra = 1\n",
         '[[compose.allow]]\nfile = "compose.yaml"\nservice = "proxy"\n',
@@ -126,7 +128,7 @@ def test_a_declaration_that_matches_nothing_is_red(build_repo, capsys, files, de
         '[compose]\nallow = "x"\n',
     ],
     ids=[
-        "duplicate", "multi-line reason", "blank reason", "folder", "pattern", "parent path", "absolute path",
+        "duplicate", "multi-line reason", "blank reason", "folder", "pattern", "parent path", "absolute path", "dot component", "empty component",
         "blank service", "extra key", "missing service", "missing reason", "file not text", "unknown table key",
         "allow not a list",
     ],

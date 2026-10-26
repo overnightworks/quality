@@ -397,10 +397,13 @@ def _layout_allowances(layout: dict) -> tuple[LayoutAllowance, ...]:
 
 
 def _is_exact_file_path(path: object) -> bool:
-    """A relative path to one file: no folder (trailing `/`), no pattern character, no `..`, not absolute."""
+    """A relative path to one file: no folder (trailing `/`), no pattern character, no empty, `.` or `..` component, not absolute."""
     if not isinstance(path, str) or not path.strip() or path.startswith("/") or path.endswith("/"):
         return False
-    return not any(character in path for character in PATH_PATTERN_CHARACTERS) and ".." not in path.split("/")
+    components = path.split("/")
+    return not any(character in path for character in PATH_PATTERN_CHARACTERS) and all(
+        component not in ("", ".", "..") for component in components
+    )
 
 
 def _read_layout_allowance(entry: object) -> LayoutAllowance:
