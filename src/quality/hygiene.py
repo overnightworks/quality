@@ -14,11 +14,12 @@ from quality import advisories, architecture, clones, engines, layout, ratchet, 
 from quality.config import (
     CONFIG_PATH,
     Allowance,
+    ComposeAllowance,
     ConfigError,
-    LayoutAllowance,
     LayoutRule,
     RootAllowance,
     read_advisory_allowances,
+    read_compose_allowances,
     read_layout_allowances,
     read_root_allowances,
     read_secret_allowances,
@@ -59,6 +60,7 @@ ENV_TEMPLATE_SUFFIX = ".example"
 INDEX_MODE = re.compile(r"[0-7]{6}")
 INTERPOLATION = re.compile(r"\$\{[^}]*\}")
 COMPOSE_TOKEN = "compose"
+HOST_NETWORK_MODE = "host"
 NAME_SEPARATORS = re.compile(r"[._-]")
 YAML_NUMBER_TAGS = ("tag:yaml.org,2002:int", "tag:yaml.org,2002:float")
 
@@ -189,12 +191,18 @@ def is_compose_file(name: str) -> bool:
     return path.suffix.lower() in YAML_SUFFIXES and COMPOSE_TOKEN in NAME_SEPARATORS.split(path.stem.casefold())
 
 
-def check_compose_ports(root: Path, tracked: list[str]) -> list[Finding]:
-    composes = [name for name in tracked if is_compose_file(name)]
+def check_compose_ports(root: Path, tracked: list[str], allowances: Sequence[ComposeAllowance]) -> list[Finding]:
+    """Every published port binds loopback and no service is host-networked (or may be, through an interpolation)
+    unless declared; a declaration that matches no such service is a finding too."""
+    declared = {(allowance.file, allowance.service) for allowance in allowances}
     findings = []
-    for name in composes:
+    host_networked: set[tuple[str, str]] = set()
+    for name in [name for name in tracked if is_compose_file(name)]:
         if _judged(repository.is_on_disk, root, name) and (text := _judged(repository.read_text, root, name)) is not None:
-            findings.extend(_compose_file_findings(name, text))
+            file_findings, services = _compose_file_findings(name, text, {service for file, service in declared if file == name})
+            findings.extend(file_findings)
+            host_networked.update((name, service) for service in services)
+    findings += [_stale_compose_declaration(*key) for key in sorted(declared - host_networked)]
     return findings
 
 
@@ -267,16 +275,10 @@ def _stale_root_declaration(entry: str, tracked_entries: set[str]) -> Finding:
     )
 
 
-def _root_allowances(root: Path) -> tuple[RootAllowance, ...]:
+def _declared[T](read: Callable[[Path], T], root: Path) -> T:
+    """The repository's declarations; a config that cannot be read cannot be judged."""
     try:
-        return read_root_allowances(root)
-    except ConfigError as error:
-        raise CannotJudge(str(error)) from error
-
-
-def _layout_allowances(root: Path) -> tuple[LayoutAllowance, ...]:
-    try:
-        return read_layout_allowances(root)
+        return read(root)
     except ConfigError as error:
         raise CannotJudge(str(error)) from error
 
@@ -299,18 +301,24 @@ def _read_existing[T](read: Callable[[Path, str], T | None], root: Path, names: 
     return {name: content for name in names if (content := _judged(read, root, name)) is not None}
 
 
-def _compose_file_findings(name: str, text: str) -> list[Finding]:
+def _compose_file_findings(name: str, text: str, declared_services: set[str]) -> tuple[list[Finding], list[str]]:
+    """The findings of one compose file and its services that are host-networked or may be, declared or not."""
     try:
         document = yaml.load(text, Loader=ComposeLoader)
     except (yaml.YAMLError, RecursionError, ValueError, KeyError, IndexError) as error:
         raise CannotJudge(f"cannot read {name}: {_yaml_error_reason(error)}") from error
     services = document.get("services") if isinstance(document, dict) else None
     if not isinstance(services, dict):
-        return []
+        return [], []
     findings = []
+    host_networked = []
     for service_name, service in services.items():
         if not isinstance(service, dict):
             continue
+        if (network_finding := _network_mode_finding(name, service_name, service.get("network_mode"))) is not None:
+            host_networked.append(str(service_name))
+            if str(service_name) not in declared_services:
+                findings.append(network_finding)
         ports = service.get("ports") or []
         if not isinstance(ports, list):
             findings.append(Finding(COMPOSE_PORT, name, None,
@@ -318,7 +326,28 @@ def _compose_file_findings(name: str, text: str) -> list[Finding]:
                                     "write ports as a list so each one can be checked."))
             continue
         findings.extend(_port_findings(name, service_name, ports))
-    return findings
+    return findings, host_networked
+
+
+def _network_mode_finding(name: str, service_name: object, network_mode: object) -> Finding | None:
+    """A finding for `host`, and for a value an interpolation may resolve to `host`; None for any other mode."""
+    fix = f"give it a network of its own, or declare it in {CONFIG_PATH} with [[compose.allow]], a file, a service and a reason."
+    if network_mode == HOST_NETWORK_MODE:
+        return Finding(COMPOSE_PORT, name, None,
+                       f"service {service_name} has network_mode: {HOST_NETWORK_MODE}, which publishes whatever it binds beyond loopback.", fix)
+    if isinstance(network_mode, str) and INTERPOLATION.search(network_mode):
+        return Finding(COMPOSE_PORT, name, None,
+                       f"service {service_name} has a network_mode that holds an interpolation, which may resolve to {HOST_NETWORK_MODE} (unverifiable).", fix)
+    return None
+
+
+def _stale_compose_declaration(file: str, service: str) -> Finding:
+    return Finding(
+        COMPOSE_PORT, file, None,
+        f"service {service} is declared in {CONFIG_PATH} with [[compose.allow]], but no tracked compose file of that name "
+        f"has such a service with network_mode: {HOST_NETWORK_MODE} or an interpolated network_mode.",
+        f"delete its [[compose.allow]] entry from {CONFIG_PATH}.",
+    )
 
 
 def _yaml_error_reason(error: Exception) -> str:
@@ -561,13 +590,13 @@ def run_hygiene(root: Path, engine_dir: Path | None = None) -> HygieneResult:
     contracts = _attempt(lambda: check_import_contract(root, tracked))
     verdicts = [
         _verdict(ENV_FILE, check_env_files(tracked)),
-        _verdict(COMPOSE_PORT, _attempt(lambda: check_compose_ports(root, tracked))),
+        _verdict(COMPOSE_PORT, _attempt(lambda: check_compose_ports(root, tracked, _declared(read_compose_allowances, root)))),
         _verdict(ratchet.SIZE, size if isinstance(size, CannotJudge) else size.findings),
         _verdict(clones.RULE, clone if isinstance(clone, CannotJudge) else clone.findings),
         _verdict(architecture.RULE, contracts if isinstance(contracts, CannotJudge) else contracts.findings),
         _verdict(CLAUDE_MD, _attempt(lambda: check_claude_md(root, tracked))),
-        _verdict(ROOT_LAYOUT, _attempt(lambda: check_root_layout(tracked, _root_allowances(root)))),
-        _verdict(FILE_SUFFIX, _attempt(lambda: layout.check_file_suffix(index_modes(root), _layout_allowances(root)))),
+        _verdict(ROOT_LAYOUT, _attempt(lambda: check_root_layout(tracked, _declared(read_root_allowances, root)))),
+        _verdict(FILE_SUFFIX, _attempt(lambda: layout.check_file_suffix(index_modes(root), _declared(read_layout_allowances, root)))),
     ]
     reports = _reports(size, clone, contracts)
     if engine_dir is None:

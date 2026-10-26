@@ -15,7 +15,6 @@ from conftest import hygiene_output as run
 from quality import cli, hygiene, sonar
 from quality.report import Finding
 
-EDGE_STACK = (Path(__file__).parent / "data" / "edge_stack.yml").read_text(encoding="utf-8")
 CLEAN_FILE_RULES = "hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout, file-suffix)"
 
 
@@ -138,12 +137,11 @@ def test_untracked_ignored_env_file_is_not_a_finding(build_repo, capsys):
         (compose("- target: 80", "  host_ip: '::1'"), None),
         (compose('- "[::]:8080:80"'), "compose.yaml"),
         (compose('- "127.0.0.1:${WEB_PORT:-8080}:8080"'), None),
-        ({"compose.yaml": EDGE_STACK}, None),
         ({"README.md": "no compose here\n"}, None),
     ],
 )
 def test_compose_ports_must_bind_loopback(build_repo, capsys, files, refused_path):
-    """#3 rule 2/4: a compose port beyond loopback is refused with rule id, path, reason and fix; edge's real file passes (#78 cell 15)."""
+    """#3 rule 2/4: a compose port beyond loopback is refused with rule id, path, reason and fix; edge's real file is judged in test_compose_host (#78 cell 15)."""
     code, output = run(capsys, build_repo(files))
     assert code == (0 if refused_path is None else 1)
     if refused_path:
@@ -397,11 +395,12 @@ def files(tracked: dict[str, str]):
          [ENV_FINDING, "hygiene: size unparsable - src/bad.py is not valid Python",
           "hygiene: 2 finding(s); verdicts: 5 clean, 2 findings, 1 unparsable"]),
         (config_linked_out_of_the_repository, True, 2,
-         [ENV_FINDING, "hygiene: secret cannot judge - quality/config.toml resolves outside the repository",
+         [ENV_FINDING, "hygiene: compose-port cannot judge - quality/config.toml resolves outside the repository",
+          "hygiene: secret cannot judge - quality/config.toml resolves outside the repository",
           "hygiene: advisory cannot judge - quality/config.toml resolves outside the repository",
           "hygiene: root-layout cannot judge - quality/config.toml resolves outside the repository",
           "hygiene: file-suffix cannot judge - quality/config.toml resolves outside the repository",
-          "hygiene: 1 finding(s); verdicts: 7 clean, 1 findings, 4 cannot judge"]),
+          "hygiene: 1 finding(s); verdicts: 6 clean, 1 findings, 5 cannot judge"]),
         (files({**BASELINE, "compose.yaml": "services: [\n", "src/a.py": NEW_DEBT}), False, 2,
          ["hygiene: compose-port cannot judge - cannot read compose.yaml", "size src/a.py:1 - function long_one"]),
         (files({".env": "A=1\n", **compose('- "8080:80"')}), False, 1,

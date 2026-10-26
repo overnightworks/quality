@@ -14,12 +14,14 @@ SECRETS_KEYS = {"allow"}
 ADVISORIES_KEYS = {"allow"}
 ROOT_KEYS = {"allow"}
 LAYOUT_KEYS = {"allow"}
-TABLES = {"gate", "secrets", "advisories", "root", "layout"}
+COMPOSE_KEYS = {"allow"}
+TABLES = {"gate", "secrets", "advisories", "root", "layout", "compose"}
 ALLOWANCE_KEYS = {"rule", "file", "secret_sha256", "reason"}
 DECLARATION_KEYS = {"what", "item", "date", "reason"}
 ROOT_ALLOWANCE_KEYS = {"entry", "reason"}
 NOT_ROOT_ENTRY_NAMES = {".", "..", ".git"}
 LAYOUT_ALLOWANCE_KEYS = {"path", "rule", "reason"}
+COMPOSE_ALLOWANCE_KEYS = {"file", "service", "reason"}
 PATH_PATTERN_CHARACTERS = "*?["
 ADVISORY_ALLOWANCE_KEYS = {"id", "lock", "until", "date", "item", "reason"}
 SHA256_HEX = re.compile(r"[0-9a-f]{64}")
@@ -59,6 +61,12 @@ LAYOUT_ALLOWANCE_EXAMPLE = (
     'path = "deploy/EDGE_SHA"\n'
     'rule = "file-suffix"\n'
     'reason = "the deploy script reads it by this name"'
+)
+COMPOSE_ALLOWANCE_EXAMPLE = (
+    "[[compose.allow]]\n"
+    'file = "compose.yaml"\n'
+    'service = "traefik"\n'
+    'reason = "it terminates TLS on the host\'s own interfaces"'
 )
 
 
@@ -126,6 +134,15 @@ class LayoutAllowance:
 
 
 @dataclass(frozen=True)
+class ComposeAllowance:
+    """A compose service, by its exact tracked file and name, the repository declares host-networked."""
+
+    file: str
+    service: str
+    reason: str
+
+
+@dataclass(frozen=True)
 class GateSettings:
     """What the gate reads from quality/config.toml: the settings a pull request must not loosen, the loosenings
     it declares, and the advisories it allows."""
@@ -158,6 +175,7 @@ class _Document:
     advisory_allowances: tuple[AdvisoryAllowance, ...]
     root_allowances: tuple[RootAllowance, ...]
     layout_allowances: tuple[LayoutAllowance, ...]
+    compose_allowances: tuple[ComposeAllowance, ...]
 
 
 def _parse(text: str, example: str) -> dict:
@@ -180,20 +198,22 @@ def _refuse_unknown_secrets_keys(secrets: dict) -> None:
         raise ConfigError(f"{CONFIG_PATH} has unknown key(s) {sorted(unknown)} in [secrets] - only allow exists")
 
 
-def _refuse_unknown_keys(document: dict, gate: dict, advisories: dict, root: dict, layout: dict) -> None:
+def _refuse_unknown_keys(document: dict, gate: dict, advisories: dict, root: dict, layout: dict, compose: dict) -> None:
     unknown = (
         (set(document) - TABLES)
         | (set(gate) - GATE_KEYS)
         | (set(advisories) - ADVISORIES_KEYS)
         | (set(root) - ROOT_KEYS)
         | (set(layout) - LAYOUT_KEYS)
+        | (set(compose) - COMPOSE_KEYS)
     )
     if unknown:
         example = f", like:\n{ROOT_ALLOWANCE_EXAMPLE}" if set(root) - ROOT_KEYS else ""
         example = f", like:\n{LAYOUT_ALLOWANCE_EXAMPLE}" if set(layout) - LAYOUT_KEYS else example
+        example = f", like:\n{COMPOSE_ALLOWANCE_EXAMPLE}" if set(compose) - COMPOSE_KEYS else example
         raise ConfigError(
             f"{CONFIG_PATH} has unknown key(s) {sorted(unknown)} - only [gate] mandatory_jobs, [gate] legacy, "
-            f"[[gate.loosened]], [secrets] allow, [[advisories.allow]], [[root.allow]] and [[layout.allow]] exist{example}"
+            f"[[gate.loosened]], [secrets] allow, [[advisories.allow]], [[root.allow]], [[layout.allow]] and [[compose.allow]] exist{example}"
         )
 
 
@@ -204,7 +224,8 @@ def _validated_document(text: str) -> _Document:
     advisories = _table(document, "advisories", ADVISORY_ALLOWANCE_EXAMPLE)
     root = _table(document, "root", ROOT_ALLOWANCE_EXAMPLE)
     layout = _table(document, "layout", LAYOUT_ALLOWANCE_EXAMPLE)
-    _refuse_unknown_keys(document, gate, advisories, root, layout)
+    compose = _table(document, "compose", COMPOSE_ALLOWANCE_EXAMPLE)
+    _refuse_unknown_keys(document, gate, advisories, root, layout, compose)
     return _Document(
         gate,
         _declarations(gate),
@@ -212,6 +233,7 @@ def _validated_document(text: str) -> _Document:
         _advisory_allowances(advisories),
         _root_allowances(root),
         _layout_allowances(layout),
+        _compose_allowances(compose),
     )
 
 
@@ -397,6 +419,39 @@ def _read_layout_allowance(entry: object) -> LayoutAllowance:
     return LayoutAllowance(path, LayoutRule(rule), reason)
 
 
+def _compose_allowances(compose: dict) -> tuple[ComposeAllowance, ...]:
+    entries = compose.get("allow", [])
+    if not isinstance(entries, list):
+        raise ConfigError(f"{CONFIG_PATH} needs [[compose.allow]] as an array of tables, like:\n{COMPOSE_ALLOWANCE_EXAMPLE}")
+    allowances: dict[tuple[str, str], ComposeAllowance] = {}
+    for entry in entries:
+        allowance = _read_compose_allowance(entry)
+        key = (allowance.file, allowance.service)
+        if key in allowances:
+            raise ConfigError(
+                f"{CONFIG_PATH} [[compose.allow]] declares service = {allowance.service!r} of file = "
+                f"{allowance.file!r} twice; one declaration per file and service, like:\n{COMPOSE_ALLOWANCE_EXAMPLE}"
+            )
+        allowances[key] = allowance
+    return tuple(allowances.values())
+
+
+def _read_compose_allowance(entry: object) -> ComposeAllowance:
+    def refuse(need: str) -> ConfigError:
+        return ConfigError(f"{CONFIG_PATH} [[compose.allow]] entry {entry!r} needs {need}, like:\n{COMPOSE_ALLOWANCE_EXAMPLE}")
+
+    if not isinstance(entry, dict) or set(entry) != COMPOSE_ALLOWANCE_KEYS:
+        raise refuse("exactly a file, a service and a reason")
+    file, service, reason = entry["file"], entry["service"], entry["reason"]
+    if not _is_exact_file_path(file):
+        raise refuse("file as the exact tracked path of one compose file: no folder, pattern, .. or absolute path")
+    if not _is_one_line_text(service):
+        raise refuse("service as the one-line name of a service in that file")
+    if not _is_one_line_text(reason):
+        raise refuse(ONE_LINE_REASON)
+    return ComposeAllowance(file, service, reason)
+
+
 def load_gate_settings(text: str | None) -> GateSettings:
     """mandatory_jobs is judged before legacy, so a config wrong in both is refused for mandatory_jobs."""
     if text is None:
@@ -499,3 +554,9 @@ def read_layout_allowances(repo: Path) -> tuple[LayoutAllowance, ...]:
     """The files the repository declares against a layout rule, the whole document validated; a missing config declares none."""
     text = _read_config_text(repo)
     return () if text is None else _validated_document(text).layout_allowances
+
+
+def read_compose_allowances(repo: Path) -> tuple[ComposeAllowance, ...]:
+    """The host-networked services the repository declares, the whole document validated; a missing config declares none."""
+    text = _read_config_text(repo)
+    return () if text is None else _validated_document(text).compose_allowances
