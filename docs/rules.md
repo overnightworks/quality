@@ -164,7 +164,7 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   names the file and both ways out, give it a suffix or declare it, in prose with no command; findings are sorted by
   path and all printed. A duplicate `(rule, path)`, a folder (a trailing `/`), a pattern (`*`, `?`, `[`), `..`, an
   absolute path, an unknown rule, an unknown key or a reason that is not one-line text is `hygiene: file-suffix cannot
-  judge - ...` with a `[[layout.allow]]` example; so is any other malformed table in `quality/config.toml`. A
+  judge - ...` with a `[[layout.allow]]` example; a malformed `[layout]` table is the same, and another malformed table in `quality/config.toml` names its own example. A
   declaration is no loosening, so `quality verdict` asks for no `[[gate.loosened]]` entry. The rule writes nothing and
   no configuration switches it off. A config reader older than the rule refuses `[layout]` as an unknown key. (#175,
   operator ruling 24.10.2026: „ja das will ich“)
