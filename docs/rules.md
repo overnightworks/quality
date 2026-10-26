@@ -105,6 +105,8 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   UTF-8, a coding cookie in any spelling but utf-8, utf8, unicode-1-1-utf-8, unicode11utf8, x-unicode20utf8, ascii, us-ascii or ansi_x3.4-1968 (accepted in any letter case), or one the system will not let it read). A
   module grimp cannot parse is `hygiene: import-contract unparsable - ...`; a warning grimp gives while building the
   graph is one `import-contract: note - ...` line. No message names an absolute local path.
+  On a pull request `quality verdict` and the door also hold the head's import contracts against the base's (see
+  "The import contracts only tighten" below).
 - `claude-md`: a tracked `CLAUDE.md`, in any case (`claude.md` is named as it is), holds exactly `@AGENTS.md` with or
   without a final line feed, so Claude, Codex and Grok read the same guidance, and the repository tracks an `AGENTS.md`
   beside it. No `CLAUDE.md` is clean, with or without an `AGENTS.md`. A symlink is a finding (a dangling one too), and so
@@ -202,6 +204,28 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   `hygiene` holds the tree. A lizard update that measures a function higher therefore turns the pull request that
   takes it red; a ruled raise is declared (see [Declared loosenings](gate.md#declared-loosenings)) and stays red until the
   operator's door merges it.
+- The import contracts only tighten: on a pull request `quality verdict` and the door compare the contracts of the
+  three config places at the head with the base's, as import-linter parses them (never the raw options, so moving a
+  config between `.importlinter`, `setup.cfg` and `pyproject.toml` changes nothing), without building an import graph.
+  A contract is the same on both sides when it has the same `name`; a rename is a removal plus a new contract.
+  Each loosening is one line, sorted (operator rulings 26.10.2026, #148: R1-R3 „ja“):
+  - a contract the base holds and the head lacks: `loosened (undeclared): import contract "layers" removed`;
+  - the base's config gone, whatever it held, or only its section gone from a file that stays, once:
+    `loosened (undeclared): import-linter config in .importlinter removed`;
+  - an `ignore_imports` expression the base does not hold, one line each, compared as parsed (spacing around `->`
+    does not count, a wildcard is a new expression):
+    `loosened (undeclared): import contract "domain" ignores app.domain -> app.web.*`;
+  - any other field of a contract that differs, `broken_contract_guidance` excepted, a tightening included:
+    `loosened (undeclared): import contract "layers" changes allow_indirect_imports` (a changed `type` reads
+    `changes type`; a module dropped from a list reads as that list's field);
+  - `root_packages` (as a set of names), `include_external_packages` or `exclude_type_checking_imports` changed:
+    `loosened (undeclared): import-linter changes root_packages`.
+
+  A new contract, a removed `ignore_imports` entry, a reworded `broken_contract_guidance` and adopting import
+  contracts (the base has no config) are green. Two contracts of one name on a side, two config places holding a
+  section, or a config that cannot be read are exit `2`, naming the side (`import-linter config at the base commit
+  <sha>: ...`, `import-linter config at the head: ...`). Each line can be declared with a `[[gate.loosened]]` entry
+  and then lands only through the operator's door, which reads the same files at the base and the merge commit.
 
 With `--engines DIR` the `secret` rule also scans the whole history reachable from `HEAD` with gitleaks (a key removed later is still found; other branches the checkout fetched are not scanned), always with quality's own config
 (`src/quality/gitleaks.toml`): the repository's `.gitleaks.toml`, `.gitleaksignore` and `gitleaks:allow`

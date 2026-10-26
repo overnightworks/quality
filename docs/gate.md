@@ -123,6 +123,10 @@ reason = "the operator ruled the requirement shelf machinery out"
   new allowance. A base without `quality/config.toml` holds no allowance, so every allowance of the adoption is new. A
   `[[gate.loosened]]` entry whose `what` is such a text matches nothing and is red. The verdict and the door read the
   whole config, so a malformed `[secrets]` or `[advisories]` entry is exit `2` there too.
+- Removing, softening or bypassing an import-linter contract declares the same way, with one of these texts as `what`
+  (the rule is in [rules](rules.md), "The import contracts only tighten"): `import contract "<name>" removed`,
+  `import-linter config in <file> removed`, `import contract "<name>" ignores <expression>`,
+  `import contract "<name>" changes <field>` and `import-linter changes <option>` (operator rulings 26.10.2026, #148).
 - The ruling (operator ruling 21.10.2026: „Erklären + deine Tür (empfohlen)“) is that a loosening is declared and stays
   red, and that only the operator's door merges it; a declared removal of a mandatory job is no longer judged („Ja,
   nicht mehr prüfen (empfohlen)“), and the door may merge legacy Sonar findings and a declared loosening in one run („Ja,

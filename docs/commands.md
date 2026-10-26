@@ -105,7 +105,7 @@ take are in [the runbook](runbook-emergency-merge.md); this is what the command 
 - **It refuses unless the door is the only way** (exit `1`, nothing changed): no check is still running; every check run
   and commit status other than `quality / sonar` and `quality / verdict` is green; `quality / verdict` has failed; and
   `quality / sonar` is green or has failed (it did not run, or it ended `timed_out`, `cancelled` or anything else: refused).
-  The verdict is then judged again by its own decider, with the config and baseline read at the pull request's
+  The verdict is then judged again by its own decider, with the config, baseline and import-linter configs read at the pull request's
   current merge commit and at base and the Sonar job taken as green: an undeclared loosening, a declaration that matches
   nothing, or a missing or red mandatory job is refused, naming the verdict's lines. When both sides hold a baseline,
   the files git renamed between the two commits count as they do in the verdict, so the door fetches the pull request's
