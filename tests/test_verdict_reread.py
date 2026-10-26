@@ -9,7 +9,7 @@ from test_architecture import contracts_ini, contracts_toml, ini_section
 from test_sonar import reply
 from test_verdict import DECLARED, GREEN_GATE, ONLY_DECLARED, declaration, fetch_jobs, gate_config, job
 
-from quality import cli, verdict
+from quality import architecture, cli, verdict
 from quality.config import CONFIG_PATH, LegacyMode
 from quality.hygiene import CannotJudge
 from quality.ratchet import NO_RENAMES
@@ -430,7 +430,7 @@ def judged_contracts(capsys, pull_request):
         for name, text in base_files.items():
             put(repo / name, text)
         commit_base(None)
-        for name in ARCHITECTURE_CONFIGS:
+        for name in architecture.CONFIG_FILES:
             put(repo / name, head_files.get(name))
         put(repo / CONFIG_PATH, gate_config("A", declared=tuple(declaration(what) for what in declared)))
         page = json.dumps({"total_count": 1, "jobs": [{"id": 1, "name": "A", "run_attempt": 1, "status": "completed", "conclusion": "success"}]})
@@ -441,7 +441,6 @@ def judged_contracts(capsys, pull_request):
     return run
 
 
-ARCHITECTURE_CONFIGS = (".importlinter", "setup.cfg", "pyproject.toml")
 TWO_CONTRACTS = {"a": FORBIDDEN, "b": FORBIDDEN}
 DUPLICATE_A = contracts_ini({"a": FORBIDDEN}) + ini_section("importlinter:contract:again", {"name": "a", **FORBIDDEN})
 B_CONTRACT_REMOVED = 'import contract "b" removed'
@@ -483,7 +482,7 @@ STALE = "declared loosening matches nothing: "
 )
 def test_an_import_contract_loosening_is_a_loosening_the_verdict_names(judged_contracts, base, head, declared, expected):
     """#148 R1 (ruled yes 26.10.2026): each import-contract loosening is red, declarable with its exact text, and
-    lands only through the door; moves, adoption and tightenings stay green."""
+    lands only through the door; moves and adoption stay green; a removed ignore and a new contract are no loosening."""
     assert judged_contracts(base, head, declared) == (0 if expected == ["verdict: green"] else 1, expected)
 
 
