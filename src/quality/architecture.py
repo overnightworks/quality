@@ -168,7 +168,7 @@ def contracts_of(configs: Mapping[str, str]) -> SideContracts:
 
 
 def contract_loosenings(base: SideContracts, head: SideContracts) -> list[str]:
-    """What the head loosens against the base, one sorted line each; adding a config, a contract or a tightening is none."""
+    """What the head loosens against the base, one sorted line each; adding a config or a contract, and removing an ignore, are none."""
     if base.config is None:
         return []
     if head.config is None:
