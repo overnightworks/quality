@@ -1,8 +1,0 @@
-claim_id = "181e887adfad462aa3c002216dd7df4c"
-agent = "Claude 7bbab0b4-f923-4f09-a5c2-6fe15143932e"
-role = "builder"
-base = "ce8541b37876a8ac5602b35c7289f6e48d3d01ef"
-branch = "claude/issue-188-compose-network-host"
-scope = ["docs/rules.md", "src/quality/config.py", "src/quality/hygiene.py", "tests"]
-opened_commit = "b1317154386446ff5c58b168fef5884cae79db9e"
-whole_reason = "One contract: the typed [[compose.allow]] table and the compose-port host check that reads it land together; tests span the hygiene and config test modules."
