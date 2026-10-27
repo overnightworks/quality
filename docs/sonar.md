@@ -96,6 +96,39 @@ On pull requests and default-branch runs `quality sonar findings` reads `api/pro
 - The default branch is not SonarCloud's main branch: exit `2` in both modes, with the fix `set SonarCloud's main branch
   to <default>`. A non-main SonarCloud branch counts only changed code, so the legacy count would be too low.
 
+### The quality gate
+
+On a pull request `quality sonar findings` also reads SonarCloud's quality gate for this run's own analysis
+(`api/qualitygates/project_status?analysisId=…`, the id of the finished task it waited for; the token travels in the
+header only). `quality` names no gate and holds no threshold: the repository's gate in SonarCloud decides, and a move
+to another gate changes the verdict with no change here. Default-branch and other-branch runs make no gate request.
+
+| SonarCloud answers | Exit | Output |
+| --- | --- | --- |
+| `OK` | by the findings, as before | the summary line, unchanged |
+| `ERROR` | `1` | one stderr line per failed condition: `sonar: quality gate ERROR - new_coverage is 70.0, the gate needs at least 80` (`LT` reads "at least", `GT` "at most"), then the summary |
+| `NONE`, `WARN`, any other word, no `projectStatus`, an unreadable body | `2` | `sonar: cannot judge` |
+| the task has no `analysisId`, HTTP 401, 403, 404 or 5xx, a timeout | `2` | `sonar: cannot judge`, before the findings are read |
+
+A failed gate fails the `sonar` job whatever the findings count says, and `legacy = "fail"` still fails it on its own;
+the verdict then prints `gate job "sonar" result failure`. `-Dsonar.qualitygate.wait=false` stays in `gate.yml`: the
+scanner does not wait for the gate, this command reads it.
+
+- **What the gates check.** The gate set in SonarCloud for the repository: "Sonar way" and the organization's "fleet"
+  gate both judge new code (coverage, duplication, ratings, reviewed security hotspots), with their own thresholds.
+- **A new security hotspot** needs its review mark in the SonarCloud UI and a re-run before the gate is `OK`; unlike a
+  finding, it is not fixed in code.
+- **A small change.** SonarCloud skips the coverage and duplication conditions for a change of fewer than 20 new lines.
+  When its answer says so (`ignoredConditions`), the job prints `sonar: quality gate ignored its coverage and
+  duplication conditions on a small change (fewer than 20 new lines)` on stdout, with `OK` and with `ERROR`; the exit is
+  unchanged. Branch coverage of a small change is therefore not judged.
+- **Joined coverage.** The gate judges the coverage SonarCloud holds, so it measures the 100 % branch rule only for a
+  repository whose report joins every test layer and carries branches. For a repository that has not joined its layers
+  yet, the coverage gap is SonarCloud's figure and the gap list of #36.
+
+Rulings L11, L6 and L5 (26.10.2026): the verdict takes over the gate status (L11), the gate result fails the job (L6),
+and the 100 % branch rule per repository follows later (L5).
+
 ### A Dependabot exception for `docker:S8431`
 
 Sonar's rule `docker:S8431` ("Use either the version tag or the digest for the image instead of both") flags the

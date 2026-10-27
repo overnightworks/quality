@@ -28,6 +28,13 @@ TASK_POLL_INTERVAL_SECONDS = 5
 TASK_POLL_ATTEMPTS = 120
 FINISHED_TASK_STATUS = "SUCCESS"
 ABANDONED_TASK_STATUSES = ("FAILED", "CANCELED")
+GATE_PASSED = "OK"
+GATE_FAILED = "ERROR"
+# SonarCloud's comparator names for a failed condition, and how the gate's demand reads.
+COMPARATOR_DEMANDS = {"LT": "at least", "GT": "at most"}
+IGNORED_CONDITIONS_LINE = (
+    f"{RULE}: quality gate ignored its coverage and duplication conditions on a small change (fewer than 20 new lines)"
+)
 
 FINDINGS_PAGE_SIZE = 100
 # `issues/search` refuses a page past its ten-thousandth issue, so paging is bounded by that limit
@@ -215,6 +222,30 @@ def legacy_unknown(default_branch: str) -> str:
 
 
 @dataclass(frozen=True)
+class GateCondition:
+    metric: str
+    comparator: str
+    actual: str
+    threshold: str
+
+    @property
+    def sentence(self) -> str:
+        return f"{RULE}: quality gate {GATE_FAILED} - {self.metric} is {self.actual}, the gate needs {COMPARATOR_DEMANDS[self.comparator]} {self.threshold}"
+
+
+@dataclass(frozen=True)
+class GateStatus:
+    """What SonarCloud's quality gate answered for the run's own analysis; only `OK` and `ERROR` are a judgement."""
+
+    failed: tuple[GateCondition, ...]
+    conditions_ignored: bool
+
+    @property
+    def passed(self) -> bool:
+        return not self.failed
+
+
+@dataclass(frozen=True)
 class SonarResult:
     """`legacy` is the default branch's open count less the rules its own run sets aside, asked for on pull requests only."""
 
@@ -223,12 +254,24 @@ class SonarResult:
     legacy_mode: LegacyMode
     legacy_unknown: bool
     legacy: int | None
+    gate: GateStatus | None = None
 
     @property
     def fails_the_run(self) -> bool:
         if self.analysis.kind is RunKind.PULL_REQUEST:
-            return self.findings.count > 0 or (self.legacy_mode is LegacyMode.FAIL and bool(self.legacy))
+            return (
+                self.findings.count > 0
+                or (self.legacy_mode is LegacyMode.FAIL and bool(self.legacy))
+                or (self.gate is not None and not self.gate.passed)
+            )
         return self.analysis.kind is RunKind.DEFAULT_BRANCH and self.findings.count > 0
+
+    def gate_lines(self) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        """The failed conditions (for stderr) and the small-change disclosure (for stdout)."""
+        if self.gate is None:
+            return (), ()
+        disclosure = (IGNORED_CONDITIONS_LINE,) if self.gate.conditions_ignored else ()
+        return tuple(condition.sentence for condition in self.gate.failed), disclosure
 
     def summary(self) -> str:
         count = self.findings.count
@@ -363,9 +406,10 @@ def analyse(
 ) -> SonarResult:
     """The local configuration and destination checks run before the token is sent anywhere."""
     analysis = read_analysis(environment)
-    wait_for_own_task(analysis, transport, sleep)
+    analysis_id = wait_for_own_task(analysis, transport, sleep)
     require_resolved(analysis, transport)
     kind = analysis.kind
+    gate = quality_gate_status(analysis, analysis_id, transport) if kind is RunKind.PULL_REQUEST else None
     default_analysed = kind.judges_legacy and default_branch_analysed(analysis, transport)
     unknown = kind.judges_legacy and not default_analysed
     if unknown and legacy_mode is LegacyMode.FAIL:
@@ -374,7 +418,7 @@ def analyse(
     legacy = None
     if kind is RunKind.PULL_REQUEST and default_analysed:
         legacy = legacy_count(analysis, uncounted, transport)
-    return SonarResult(analysis, findings, legacy_mode, unknown, legacy)
+    return SonarResult(analysis, findings, legacy_mode, unknown, legacy, gate)
 
 
 def read_analysis(environment: Mapping[str, str]) -> Analysis:
@@ -433,7 +477,8 @@ def api_url(endpoint: str, **parameters: object) -> str:
     return f"{SONAR_API_ROOT}/{endpoint}?{urllib.parse.urlencode(parameters)}"
 
 
-def wait_for_own_task(analysis: Analysis, transport: Transport, sleep: Sleep) -> None:
+def wait_for_own_task(analysis: Analysis, transport: Transport, sleep: Sleep) -> object:
+    """The finished task's `analysisId`, as the task answered it."""
     url = api_url("ce/task", id=analysis.task_id)
     status = "unknown"
     for attempt in range(TASK_POLL_ATTEMPTS):
@@ -443,7 +488,7 @@ def wait_for_own_task(analysis: Analysis, transport: Transport, sleep: Sleep) ->
         status = str(task.get("status"))
         if status == FINISHED_TASK_STATUS:
             require_task_binds(task, analysis)
-            return
+            return task.get("analysisId")
         if status in ABANDONED_TASK_STATUSES:
             raise CannotJudge(f"SonarCloud analysis task ended {status}")
     raise CannotJudge(f"SonarCloud analysis task still {status} after {TASK_POLL_ATTEMPTS} checks")
@@ -576,6 +621,32 @@ def analysed_pull_request_commit(analysis: Analysis, transport: Transport) -> st
     except (KeyError, TypeError) as error:
         raise CannotJudge(f"SonarCloud answered {url.partition('?')[0]} with an unreadable body") from error
     return None
+
+
+def quality_gate_status(analysis: Analysis, analysis_id: object, transport: Transport) -> GateStatus:
+    """The quality gate of this run's own analysis; the threshold arrives with SonarCloud's answer."""
+    if not isinstance(analysis_id, str) or not analysis_id:
+        raise CannotJudge(f"SonarCloud task {analysis.task_id} names no analysisId, so its quality gate cannot be read")
+    url = api_url("qualitygates/project_status", analysisId=analysis_id)
+    status = answer_object(transport(url, analysis.authorization), "projectStatus", url)
+    try:
+        word = status["status"]
+        if word == GATE_PASSED:
+            return GateStatus((), status.get("ignoredConditions") is True)
+        if word != GATE_FAILED:
+            raise CannotJudge(f"SonarCloud's quality gate is {word!r}, which is neither {GATE_PASSED} nor {GATE_FAILED}")
+        failed = tuple(failed_condition(condition) for condition in status["conditions"] if condition["status"] == GATE_FAILED)
+    except (KeyError, TypeError) as error:
+        raise CannotJudge(f"SonarCloud answered {url.partition('?')[0]} with an unreadable body") from error
+    if not failed:
+        raise CannotJudge(f"SonarCloud's quality gate is {GATE_FAILED} without a failed condition")
+    return GateStatus(failed, status.get("ignoredConditions") is True)
+
+
+def failed_condition(condition: dict) -> GateCondition:
+    if condition["comparator"] not in COMPARATOR_DEMANDS:
+        raise CannotJudge(f"SonarCloud's quality gate failed {condition['metricKey']} with the comparator {condition['comparator']!r}")
+    return GateCondition(condition["metricKey"], condition["comparator"], condition["actualValue"], condition["errorThreshold"])
 
 
 def answer_object(answer: object, key: str | None, url: str) -> dict:

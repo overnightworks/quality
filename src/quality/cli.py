@@ -304,6 +304,9 @@ def run_sonar_findings(transport: Transport, sleep: Sleep) -> int:
     for finding in result.findings.listed:
         print(render(finding))
     emit(*(headline(finding) for finding in result.findings.set_aside))
+    failed_conditions, disclosure = result.gate_lines()
+    emit(*failed_conditions, file=sys.stderr)
+    emit(*disclosure)
     emit(result.summary(), file=sys.stderr if result.fails_the_run else sys.stdout)
     return EXIT_FINDINGS if result.fails_the_run else EXIT_CLEAN
 
