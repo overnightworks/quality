@@ -29,6 +29,7 @@ FINISHED_FOR_PR_7 = {
     "componentKey": KEY,
     "organization": "overnightworks",
     "pullRequest": "7",
+    "analysisId": "analysis-7",
 }
 FINISHED_FOR_MAIN = {**FINISHED_FOR_PR_7, "pullRequest": None, "branch": "main"}
 FINISHED_FOR_FEATURE = {**FINISHED_FOR_MAIN, "branch": "feat/a"}
@@ -84,12 +85,24 @@ class FakeSonar:
         return [url for url, _ in self.requests if self.endpoint_of(url) == endpoint]
 
 
-def sonar_answering(task=FINISHED_FOR_PR_7, issues=None, measures=None, legacy=0, branches=(ANALYSED_MAIN,), legacy_by_rule=None) -> FakeSonar:
+GATE_OK = {"projectStatus": {"status": "OK", "conditions": []}}
+
+
+def gate_error(*conditions: dict, **extra) -> dict:
+    return {"projectStatus": {"status": "ERROR", "conditions": list(conditions), **extra}}
+
+
+def failed_condition(metric="new_coverage", comparator="LT", actual="70.0", threshold="80") -> dict:
+    return {"status": "ERROR", "metricKey": metric, "comparator": comparator, "actualValue": actual, "errorThreshold": threshold}
+
+
+def sonar_answering(task=FINISHED_FOR_PR_7, issues=None, measures=None, legacy=0, branches=(ANALYSED_MAIN,), legacy_by_rule=None, gate=GATE_OK) -> FakeSonar:
     set_aside_counts = {"docker:S8431": 0, **(legacy_by_rule or {})}
     return FakeSonar(
         {
             **{rule_count_endpoint(rule): [{"total": count, "issues": []}] for rule, count in set_aside_counts.items()},
             "ce/task": [{"task": task}],
+            "qualitygates/project_status": [gate],
             "measures/component": [measures or {"component": {}}],
             "project_branches/list": [{"branches": list(branches)}],
             "issues/search": [issues or issues_page(0)],
