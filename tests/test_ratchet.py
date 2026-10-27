@@ -714,8 +714,8 @@ def test_a_minified_file_is_counted_by_its_lines_like_any_other(build_repo, caps
     ("path", "area"),
     [
         ("src/a.test.ts", "tests"),
-        ("src/a.test-d.ts", "tests"),
-        ("src/a.spec-d.ts", "tests"),
+        pytest.param("src/a.test-d.ts", "tests", id="H21 test-d"),
+        pytest.param("src/a.spec-d.ts", "tests", id="H21 spec-d"),
         ("e2e/login.spec.ts", "tests"),
         ("src/decision.svelte.test.ts", "tests"),
         ("src/__tests__/x.ts", "tests"),

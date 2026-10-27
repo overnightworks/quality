@@ -94,7 +94,7 @@ class Language(Enum):
 
     def is_test_file(self, path: PurePosixPath) -> bool:
         """The directory rule is shared; the file name rule is the language's own: Python's pytest names, the
-        TypeScript and JavaScript `*.test.*`, `*.spec.*` and `__tests__/`, none for Svelte and Vue."""
+        TypeScript and JavaScript `*.test.*`, `*.spec.*`, their `-d` type-test forms and `__tests__/`, none for Svelte and Vue."""
         runner = self in {Language.TYPESCRIPT, Language.JAVASCRIPT}
         if (RUNNER_TEST_DIRECTORIES if runner else TEST_DIRECTORIES) & set(path.parts[:-1]):
             return True
