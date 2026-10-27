@@ -7,7 +7,7 @@ from conftest import hygiene_output as run
 
 from quality import cli
 
-CLEAN_LINE = "hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout, file-suffix)"
+CLEAN_LINE = "hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout, file-suffix, script-name, script-header)"
 ENV_FINDING = "env-file .env - "
 
 
@@ -168,5 +168,5 @@ def test_claude_md_is_named_in_run_order_with_and_without_engines(build_repo, cl
     plain = run(capsys, repo)
     code = cli.main(["hygiene", "--engines", str(clean_engines), str(repo)])
     with_engines = capsys.readouterr()
-    assert (plain[0], "import-contract, claude-md, root-layout, file-suffix" in plain[1]) == (0, True), plain
-    assert (code, "import-contract, claude-md, root-layout, file-suffix, secret" in with_engines.out + with_engines.err) == (0, True)
+    assert (plain[0], "import-contract, claude-md, root-layout, file-suffix, script-name, script-header" in plain[1]) == (0, True), plain
+    assert (code, "import-contract, claude-md, root-layout, file-suffix, script-name, script-header, secret" in with_engines.out + with_engines.err) == (0, True)

@@ -122,6 +122,8 @@ class LayoutRule(Enum):
     """A layout rule a repository may declare a tracked file against."""
 
     FILE_SUFFIX = "file-suffix"
+    SCRIPT_NAME = "script-name"
+    SCRIPT_HEADER = "script-header"
 
 
 @dataclass(frozen=True)
