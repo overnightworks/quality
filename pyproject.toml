@@ -37,8 +37,8 @@ testpaths = ["tests"]
 pythonpath = [".", "scripts"]
 addopts = ["--import-mode=importlib", "--strict-markers"]
 markers = [
-    "unit: starts no process and opens no socket in its setup or call (audit events subprocess.Popen, os.system, os.posix_spawn, os.exec, os.spawn, os.fork, os.forkpty, socket.connect, socket.bind)",
-    "integration: starts a process or opens a socket in its setup or call (the audit events listed under unit)",
+    "unit: starts no process and opens no socket in its setup or call (the audit events in STARTING_EVENTS, tests/conftest.py)",
+    "integration: starts a process or opens a socket in its setup or call (the audit events in STARTING_EVENTS, tests/conftest.py)",
     "engine: runs a real downloaded engine process (needs network; CI runs it)",
 ]
 
