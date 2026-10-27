@@ -345,7 +345,7 @@ def test_a_pinned_gate_has_not_released_test_layout():
     ("pinned", "words"), [(False, "enforced"), (True, "not released")], ids=["main", "pinned"]
 )
 def test_a_rule_judging_every_python_project_needs_no_applicability_cell(rule_id, pinned, words):
-    """Main enforces the rule and a pinned release has not got it."""
+    """#201 sentence 9, F14, sentence 10: the rule judges every Python project, so main enforces it and a pinned release has not got it."""
     rule = next(rule for rule in RULES if rule.rule == rule_id)
     release = gate_release((Call(CLONE_TABLE_PIN if pinned else None),), not pinned, CLONE_RELEASES)
     assert rule_cell(rule, release, declared()) == words
