@@ -253,7 +253,7 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   (move it beside the file it tests and name it `<subject>[<Aspect>]` plus its own tail) and a spec outside `e2e/`
   (move it into the project's `e2e/`, or name a Vitest test `<subject>.test.<suffix>`); every fix ends with declaring
   the path. Rust is not read: no rule opens a `.rs` file or a `Cargo.toml`, and a `package.json` or `pyproject.toml`
-  inside a Cargo tree makes a project like any other. Not judged, and waiting for usage evidence: a subject that is a
+  inside a Cargo tree makes a project like any other. Named gaps, waiting for usage evidence: a subject that is a
   folder, an acronym run read as one word (`HTMLParser.test.ts` beside `HTML.ts` is red), a name holding both `test`
   and `spec` (judged as a spec), a test-named file outside any frontend project, where helpers, setup files and
   fixtures lie, a test whose subject lies outside its project (declare it), an `e2e/` folder that is its own
