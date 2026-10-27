@@ -19,7 +19,9 @@ Exit codes: `0` clean, `1` findings, `2` cannot judge (never clean).
 
 ## Install
 
-    uv tool install "overnightworks-quality @ git+https://github.com/overnightworks/quality@<tag or commit sha>"
+    uv tool install --python 3.14 "overnightworks-quality @ git+https://github.com/overnightworks/quality@<tag or commit sha>"
+
+`--python 3.14` matters because `uv tool install --force` keeps an existing tool environment's older interpreter, which then refuses v0.3.0 or later.
 
 The gitleaks paths (`hygiene --engines`, `scan-staged`) need git 2.41 or newer; with an older git they exit `2`.
 

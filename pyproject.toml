@@ -8,6 +8,7 @@ dependencies = [
     "PyYAML>=6",
     "import-linter==2.15",
     "lizard>=1.24.1,<1.25",
+    "packaging>=24",
 ]
 
 [project.scripts]
