@@ -35,7 +35,7 @@ OCCURRENCE_MARK = "#"
 PARSE_ERRORS = (SyntaxError, ValueError, LookupError)
 TEST_DIRECTORIES = frozenset({"test", "tests"})
 RUNNER_TEST_DIRECTORIES = TEST_DIRECTORIES | {"__tests__"}
-RUNNER_TEST_WORDS = frozenset({"test", "spec"})
+RUNNER_TEST_WORDS = frozenset({"test", "spec", "test-d", "spec-d"})
 CLONES = "clones"
 BARE_KEY = re.compile(r"[A-Za-z0-9_-]+")
 BASELINE_HEADER = f"# Measured by `{WRITE_COMMAND}`. Entries only ever go down.\n"
@@ -100,7 +100,13 @@ class Language(Enum):
             return True
         if self is Language.PYTHON:
             return path.name == "conftest.py" or path.name.startswith("test_") or path.stem.endswith("_test")
-        return runner and bool(RUNNER_TEST_WORDS & set(path.name.split(".")[1:-1]))
+        return runner and bool(runner_test_words(path.name))
+
+
+def runner_test_words(name: str) -> frozenset[str]:
+    """The words between the first and the last `.` of `name` that a test runner reads as a test: `test`, `spec` and
+    their type-test forms."""
+    return RUNNER_TEST_WORDS.intersection(name.split(".")[1:-1])
 
 
 LANGUAGE_OF_SUFFIX = {suffix: language for language in Language for suffix in language.suffixes}

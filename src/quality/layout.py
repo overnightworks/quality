@@ -10,7 +10,8 @@ from quality.config import CONFIG_PATH, LayoutAllowance, LayoutRule
 from quality.report import Finding
 
 EXECUTABLE_MODE = "100755"
-LINK_MODES = frozenset({"120000", "160000"})
+GITLINK_MODE = "160000"
+LINK_MODES = frozenset({"120000", GITLINK_MODE})
 # Names a tool finds by this exact name; the list changes with a quality version, like the root base list.
 TOOL_MANDATED_NAMES = frozenset({"LICENSE", "Dockerfile", "Makefile", "CODEOWNERS"})
 SCRIPTS_DIRECTORY = "scripts"
@@ -27,6 +28,8 @@ TOOL_DIRECTIVE = re.compile(r"(#|//|/\*)\s*(shellcheck\b|-\*-|coding[:=]|noqa\b|
 PEP_723_START = "# /// script"
 PEP_723_END = "# ///"
 PROJECT_FILE = "pyproject.toml"
+PACKAGE_FILE = "package.json"
+PROJECT_FILES = frozenset({PROJECT_FILE, PACKAGE_FILE})
 SOURCE_DIRECTORY = "src"
 INIT_FILE = "__init__.py"
 CONFTEST_FILE = "conftest.py"
@@ -38,6 +41,11 @@ WORKFLOWS_TESTS_DIRECTORY = "workflows"
 WORKFLOWS_FOLDER = PurePosixPath(".github") / "workflows"
 WORKFLOW_SUFFIXES = frozenset({".yml", ".yaml"})
 ROOT_DIRECTORY = "."
+ROUTE_MARK = "+"
+SCRIPT_LANGUAGES = frozenset({ratchet.Language.TYPESCRIPT, ratchet.Language.JAVASCRIPT})
+SPEC_WORD = "spec"
+FRONTEND_WORD_BOUNDARY = re.compile(r"[-_]|(?<=[a-z0-9])(?=[A-Z])")
+PYTHON_WORD_BOUNDARY = re.compile(r"_")
 TEST_PREFIX = "test_"
 WRAPPED_NAME = re.compile(r"__(.+)__")
 
@@ -197,9 +205,19 @@ def python_projects(paths: Iterable[str]) -> list[PythonProject]:
     """Every project: the directory of each tracked `pyproject.toml` that lies in no other project's `tests/`. The
     file's content is never read. Sorted by directory."""
     tracked = [PurePosixPath(path) for path in paths]
-    directories = sorted(path.parent for path in tracked if path.name == PROJECT_FILE)
-    kept = [directory for directory in directories if not any(_inside_tests(directory, other) for other in directories)]
-    return [PythonProject(str(directory), _packages(directory, tracked)) for directory in kept]
+    return [PythonProject(str(directory), _packages(directory, tracked)) for directory in _project_directories(tracked, PROJECT_FILE)]
+
+
+def frontend_projects(paths: Iterable[str]) -> list[str]:
+    """The directory of each tracked `package.json` that lies in no project's `tests/`, of either kind. The file's
+    content is never read. Sorted."""
+    return [str(directory) for directory in _project_directories([PurePosixPath(path) for path in paths], PACKAGE_FILE)]
+
+
+def _project_directories(tracked: Sequence[PurePosixPath], manifest: str) -> list[PurePosixPath]:
+    holders = {path.parent for path in tracked if path.name in PROJECT_FILES}
+    wanted = sorted({path.parent for path in tracked if path.name == manifest})
+    return [directory for directory in wanted if not any(_inside_tests(directory, other) for other in holders)]
 
 
 def _inside_tests(directory: PurePosixPath, other: PurePosixPath) -> bool:
@@ -218,7 +236,8 @@ def check_test_layout(modes: Mapping[str, str], allowances: Sequence[LayoutAllow
     `fixtures/` folder or a file in the top-level `e2e/`, and no `__init__.py` lies there outside `fixtures/`; a
     `test_*.py` outside `fixtures/` and the top-level `e2e/` lies in the folder that mirrors its module and is named
     `test_<module>[_<aspect>].py`; a declaration of an untracked path is a finding too. A project is judged when it
-    has a package."""
+    has a package. A Vitest test of a frontend project lies beside the file it tests and a Playwright spec in the
+    project's top-level `e2e/`."""
     declared = _declared_paths(allowances, LayoutRule.TEST_LAYOUT)
     tracked = [PurePosixPath(path) for path in modes]
     mirrors = {
@@ -226,7 +245,7 @@ def check_test_layout(modes: Mapping[str, str], allowances: Sequence[LayoutAllow
         for project in python_projects(modes)
         if project.packages
     }
-    findings = []
+    findings = _frontend_findings(modes, declared, mirrors.keys())
     for path in tracked:
         tests = next((tests for tests in mirrors if tests in path.parents), None)
         if tests is not None and str(path) not in declared:
@@ -238,7 +257,7 @@ def check_test_layout(modes: Mapping[str, str], allowances: Sequence[LayoutAllow
 def _test_layout_findings(path: PurePosixPath, tests: PurePosixPath, mirror: _ProjectMirror) -> list[Finding]:
     inside = path.relative_to(tests).parts
     folders = inside[:-1]
-    if path.name == INIT_FILE and FIXTURES_DIRECTORY not in folders:
+    if path.name == INIT_FILE and not _in_fixtures(folders):
         return [_init_under_tests(str(path))]
     if _is_test_module(path):
         return _mirror_findings(path, folders, mirror)
@@ -347,13 +366,22 @@ def _key(name: str) -> str:
     return wrapped[1] if wrapped else name.removeprefix("_")
 
 
+def _in_fixtures(folders: Sequence[str]) -> bool:
+    return FIXTURES_DIRECTORY in folders
+
+
+def _word_prefixes(name: str, boundary: re.Pattern[str]) -> list[str]:
+    """`name` and each non-empty prefix of it that ends before a word boundary."""
+    prefixes = [name[: match.start()] for match in boundary.finditer(name)]
+    return [prefix for prefix in prefixes if prefix] + ([name] if name else [])
+
+
 def _names_a_key(name: str, keys: frozenset[str]) -> bool:
-    words = name.split("_")
-    return bool(words[0]) and any("_".join(words[:length]) in keys for length in range(len(words), 0, -1))
+    return not name.startswith("_") and any(prefix in keys for prefix in _word_prefixes(name, PYTHON_WORD_BOUNDARY))
 
 
 def _mirror_findings(path: PurePosixPath, folders: tuple[str, ...], mirror: _ProjectMirror) -> list[Finding]:
-    if FIXTURES_DIRECTORY in folders or folders[:1] == (END_TO_END_DIRECTORY,):
+    if _in_fixtures(folders) or folders[:1] == (END_TO_END_DIRECTORY,):
         return []
     if SUPPORT_DIRECTORY in folders:
         return [_mirror_finding(path, [(
@@ -378,6 +406,69 @@ def _mirror_finding(path: PurePosixPath, problems: Sequence[_Problem]) -> Findin
         LayoutRule.TEST_LAYOUT.value, str(path), None,
         f"a test module that does not mirror a module: {reasons}.",
         f"{fixes}, or declare it in {CONFIG_PATH} with [[layout.allow]], its path, the rule test-layout and a reason.",
+    )
+
+
+def _frontend_findings(modes: Mapping[str, str], declared: set[str], python_tests: Iterable[PurePosixPath]) -> list[Finding]:
+    """A frontend test sits beside a file it tests and a spec lies in its project's `e2e/`; a path under a judged Python
+    `tests/` is left to the Python cases."""
+    projects = {PurePosixPath(project) for project in frontend_projects(modes)}
+    subjects = _subject_keys(modes)
+    findings = []
+    for path, mode in modes.items():
+        file = PurePosixPath(path)
+        project = next((folder for folder in file.parents if folder in projects), None)
+        if project is None or path in declared or mode == GITLINK_MODE or not _is_judged_test(file):
+            continue
+        if any(tests in file.parents for tests in python_tests):
+            continue
+        findings += _frontend_finding(file, project, subjects.get(file.parent, frozenset()))
+    return findings
+
+
+def _is_judged_test(path: PurePosixPath) -> bool:
+    return ratchet.LANGUAGE_OF_SUFFIX.get(path.suffix) in SCRIPT_LANGUAGES and bool(ratchet.runner_test_words(path.name))
+
+
+def _base(name: str) -> str:
+    return name.split(".")[0]
+
+
+def _subject_keys(modes: Mapping[str, str]) -> dict[PurePosixPath, frozenset[str]]:
+    """The key of each file in its folder that is no gitlink and carries no test word."""
+    keys: defaultdict[PurePosixPath, set[str]] = defaultdict(set)
+    for path, mode in modes.items():
+        file = PurePosixPath(path)
+        if mode != GITLINK_MODE and not ratchet.runner_test_words(file.name):
+            keys[file.parent].add(_base(file.name).removeprefix(ROUTE_MARK))
+    return {folder: frozenset(names) for folder, names in keys.items()}
+
+
+def _frontend_finding(path: PurePosixPath, project: PurePosixPath, keys: frozenset[str]) -> list[Finding]:
+    if SPEC_WORD in ratchet.runner_test_words(path.name):
+        inside = path.relative_to(project).parts[:1] == (END_TO_END_DIRECTORY,)
+        return [] if inside else [_spec_outside_end_to_end(str(path), f"{project / END_TO_END_DIRECTORY}/")]
+    base = _base(path.name)
+    named = any(prefix in keys for prefix in _word_prefixes(base, FRONTEND_WORD_BOUNDARY))
+    return [] if named else [_test_without_sibling(path, base)]
+
+
+def _spec_outside_end_to_end(path: str, end_to_end: str) -> Finding:
+    return Finding(
+        LayoutRule.TEST_LAYOUT.value, path, None,
+        f"a spec outside {end_to_end}, where its project keeps its Playwright specs.",
+        f"move it into {end_to_end}, or, if it is a Vitest test, name it `<subject>.test.<suffix>` beside its subject, "
+        f"or declare it in {CONFIG_PATH} with [[layout.allow]], its path, the rule test-layout and a reason.",
+    )
+
+
+def _test_without_sibling(path: PurePosixPath, base: str) -> Finding:
+    reason = f"no file in {path.parent} is named {base} or a word prefix of it" if base else "its name before the first `.` is empty"
+    return Finding(
+        LayoutRule.TEST_LAYOUT.value, str(path), None,
+        f"a test that lies beside no file it tests: {reason}.",
+        f"move it beside the file it tests and name it `<subject>[<Aspect>]{path.name.removeprefix(base)}`, "
+        f"or declare it in {CONFIG_PATH} with [[layout.allow]], its path, the rule test-layout and a reason.",
     )
 
 
@@ -437,7 +528,7 @@ def _tests_directories(modes: Iterable[str]) -> list[PurePosixPath]:
 
 def _in_judged_tests(path: PurePosixPath, tests: Iterable[PurePosixPath]) -> bool:
     return any(
-        directory in path.parents and FIXTURES_DIRECTORY not in path.relative_to(directory).parts[:-1]
+        directory in path.parents and not _in_fixtures(path.relative_to(directory).parts[:-1])
         for directory in tests
     )
 

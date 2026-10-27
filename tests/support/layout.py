@@ -2,6 +2,8 @@
 
 import subprocess
 
+import pytest
+
 from tests.support.hygiene import hygiene_output
 
 CONFIG = "quality/config.toml"
@@ -27,3 +29,13 @@ def red(capsys, repo, rule: str) -> list[str]:
     assert f"hygiene: {rule} cannot judge" not in output
     assert f"hygiene: {rule} unparsable" not in output
     return findings(output, rule)
+
+
+def empty_files(*paths: str) -> dict[str, str]:
+    """The given tracked paths, all empty."""
+    return dict.fromkeys(paths, "")
+
+
+def case(identifier: str, files: dict[str, str], expected: list[str]):
+    """One row of a family that maps tracked `files` to the paths a rule reports."""
+    return pytest.param(files, expected, id=identifier)
