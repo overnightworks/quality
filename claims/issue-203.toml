@@ -1,0 +1,8 @@
+claim_id = "7909640891e74da8b414e18269460220"
+agent = "Claude 7bbab0b4-f923-4f09-a5c2-6fe15143932e"
+role = "builder"
+base = "06fa461d5b13983f5fbae16ecb2a9453ce75530c"
+branch = "claude/issue-203-frontend-test-layout"
+scope = ["AGENTS.md", "docs/commands.md", "docs/rules.md", "src/quality/layout.py", "src/quality/ratchet.py", "src/quality/scoreboard.py", "tests"]
+opened_commit = "ac91976b31702ff8ac7c63a1e73ba66866a16650"
+whole_reason = "One contract: the frontend pass, the shared discovery, the test words and the scoreboard word land together; the word's pins and the new module span several test modules."
