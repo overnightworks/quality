@@ -4,7 +4,6 @@ import re
 import subprocess
 
 import pytest
-from conftest import FORBIDDEN, GIT_IDENTITY, NEWEST, OLDER, RELEASES, head_of, make_repo, row, toml
 
 from quality import hygiene, ratchet
 from quality.scoreboard import (
@@ -24,6 +23,9 @@ from quality.scoreboard import (
     repository_name,
     rule_cell,
 )
+from tests.support.architecture import FORBIDDEN, toml
+from tests.support.git_repositories import GIT_IDENTITY, head_of, make_repo
+from tests.support.scoreboard import NEWEST, OLDER, RELEASES, row
 
 UNRELEASED = "c" * 40
 GATE = "overnightworks/quality/.github/workflows/gate.yml"

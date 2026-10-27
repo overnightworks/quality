@@ -3,7 +3,6 @@
 Every cell runs through `cli.main(["hygiene", ...])`; the cell numbers are the item's scenario matrix.
 """
 
-import json
 import os
 import signal
 import subprocess
@@ -13,13 +12,22 @@ from pathlib import Path
 import grimp
 import pytest
 import yaml
-from conftest import FORBIDDEN, SHOP, SHOP_DB_IMPORTS_WEB, assert_every_line_starts_with_the_door, toml
-from conftest import hygiene_output as run
 from importlinter.contracts.forbidden import ForbiddenContract
-from test_emergency import BASE_SHA, ONE_JOB, SHOWN, SONAR_GREEN, FakeGh, changed_nothing, declaring, drive
 
 import quality
 from quality import architecture
+from tests.support.architecture import (
+    FORBIDDEN,
+    SHOP,
+    SHOP_DB_IMPORTS_WEB,
+    contracts_ini,
+    contracts_toml,
+    ini_section,
+    toml,
+)
+from tests.support.emergency import BASE_SHA, ONE_JOB, SHOWN, SONAR_GREEN, FakeGh, changed_nothing, declaring, drive
+from tests.support.hygiene import assert_every_line_starts_with_the_door
+from tests.support.hygiene import hygiene_output as run
 
 QUALITY_ROOT = Path(__file__).resolve().parents[1]
 CLEAN_LINE = "hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout, file-suffix, script-name, script-header)"
@@ -32,13 +40,6 @@ STALE_IGNORE = {**FORBIDDEN, "ignore_imports": ["shop.db -> shop.api"]}
 STALE_IGNORE_LINE = "contract guarded ignores shop.db -> shop.api, which no import matches"
 BROKEN = "import-contract .importlinter - contract guarded is broken"
 REFUSED = "hygiene: import-contract cannot judge - "
-
-
-def ini_section(header: str, options: dict[str, str | list[str]]) -> str:
-    lines = [f"[{header}]"]
-    for key, value in options.items():
-        lines.append(f"{key} = {value}" if isinstance(value, str) else f"{key} =" + "".join(f"\n    {item}" for item in value))
-    return "\n".join(lines) + "\n"
 
 
 def ini(contract: dict, roots: tuple[str, ...] = ("shop",), **session: str | list[str]) -> str:
@@ -508,24 +509,6 @@ def test_qualitys_own_tree_holds_its_layers(capsys):
     """#61 rule 8, cell 23: quality's own layers contract is enforced and kept."""
     code, output = run(capsys, QUALITY_ROOT)
     assert (code, CLEAN_LINE in output, "report only (no import-linter config)" in output) == (0, True, False), output
-
-
-def contracts_ini(contracts: dict[str, dict], roots: tuple[str, ...] = ("shop",), **session: str | list[str]) -> str:
-    """An import-linter INI file with one numbered contract section per name, each carrying the contract's id."""
-    text = ini_section("importlinter", {"root_packages": list(roots), **session})
-    for number, (name, options) in enumerate(contracts.items(), 1):
-        written = {key: str(value) if isinstance(value, bool) else value for key, value in options.items()}
-        text += ini_section(f"importlinter:contract:{number}", {"id": f"c{number}", "name": name, **written})
-    return text
-
-
-def contracts_toml(contracts: dict[str, dict], roots: tuple[str, ...] = ("shop",), **session) -> str:
-    head = {"root_packages": list(roots), **session}
-    text = "[tool.importlinter]\n" + "".join(f"{key} = {json.dumps(value)}\n" for key, value in head.items())
-    for name, options in contracts.items():
-        entries = {"name": name, **options}
-        text += "\n[[tool.importlinter.contracts]]\n" + "".join(f"{key} = {json.dumps(value)}\n" for key, value in entries.items())
-    return text
 
 
 def loosened(base: dict[str, str], head: dict[str, str]) -> list[str]:

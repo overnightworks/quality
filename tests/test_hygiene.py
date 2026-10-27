@@ -9,11 +9,12 @@ import textwrap
 from pathlib import Path
 
 import pytest
-from conftest import fake_engine, make_repo
-from conftest import hygiene_output as run
 
 from quality import cli, hygiene, sonar
 from quality.report import Finding
+from tests.support.engines import fake_engine
+from tests.support.git_repositories import make_repo
+from tests.support.hygiene import hygiene_output as run
 
 CLEAN_FILE_RULES = "hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout, file-suffix, script-name, script-header)"
 
@@ -141,7 +142,7 @@ def test_untracked_ignored_env_file_is_not_a_finding(build_repo, capsys):
     ],
 )
 def test_compose_ports_must_bind_loopback(build_repo, capsys, files, refused_path):
-    """#3 rule 2/4: a compose port beyond loopback is refused with rule id, path, reason and fix; edge's real file is judged in test_container_host (#78 cell 15)."""
+    """#3 rule 2/4: a compose port beyond loopback is refused with rule id, path, reason and fix; edge's real file is judged in test_hygiene_container_host (#78 cell 15)."""
     code, output = run(capsys, build_repo(files))
     assert code == (0 if refused_path is None else 1)
     if refused_path:
@@ -682,8 +683,8 @@ def test_discarding_stderr_hides_exactly_the_cannot_judge_line(env_and_broken_co
 
 SONAR_FINDINGS_SCRIPT = """
 import sys
-sys.path.insert(0, {tests_directory!r})
-from test_sonar import issues_page, sonar_answering
+sys.path.insert(0, {repository_root!r})
+from tests.support.sonar import issues_page, sonar_answering
 from quality import cli
 cli.run(lambda: cli.main(["sonar", "findings"], transport=sonar_answering(issues=issues_page(2, 1, 2)), sleep=lambda seconds: None))
 """
@@ -691,14 +692,14 @@ cli.run(lambda: cli.main(["sonar", "findings"], transport=sonar_answering(issues
 
 def test_a_merged_pipe_lists_the_sonar_findings_before_the_red_summary(tmp_path):
     """#86 rule 3, cell 12: the findings precede the summary through `2>&1`."""
-    from test_sonar import PULL_REQUEST_ENVIRONMENT, TASK_FIXTURE, legacy_config_absent
+    from tests.support.sonar import PULL_REQUEST_ENVIRONMENT, TASK_FIXTURE, legacy_config_absent
 
     (tmp_path / "quality").mkdir()
     (tmp_path / "quality" / "config.toml").write_text(legacy_config_absent)
     (tmp_path / sonar.TASK_FILE).parent.mkdir()
     (tmp_path / sonar.TASK_FILE).write_text(TASK_FIXTURE.read_text())
     script = tmp_path / "findings.py"
-    script.write_text(textwrap.dedent(SONAR_FINDINGS_SCRIPT).format(tests_directory=str(Path(__file__).parent)))
+    script.write_text(textwrap.dedent(SONAR_FINDINGS_SCRIPT).format(repository_root=str(Path(__file__).parents[1])))
     done = subprocess.run(
         [sys.executable, str(script)], cwd=tmp_path, text=True, check=False, env={**os.environ, **PULL_REQUEST_ENVIRONMENT},
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,

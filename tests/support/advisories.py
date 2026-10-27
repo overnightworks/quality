@@ -1,11 +1,12 @@
+import datetime
 import io
+import json
 import shlex
 import zipfile
 from pathlib import Path
 
 from quality import engines
 
-OUTPUTS = Path(__file__).parent / "fixtures" / "engine-outputs"
 OSV = engines.OSV_SCANNER
 ADVISORY_ID = "GHSA-aaaa-bbbb-cccc"
 UV_LOCK_ALLOWANCE = {"identifier": ADVISORY_ID, "lock": "uv.lock", "item": "#116", "reason": "fixture"}
@@ -60,3 +61,20 @@ def package_of(report: dict) -> dict:
 
 def tracked_lock_repo(build_repo, text: str = uv_lock()) -> Path:
     return build_repo({"uv.lock": text})
+
+
+def allowance_config(
+    identifier: str | None = "GHSA-462x-pgg6-55fp",
+    lock: str | None = "speech/providers/qwen/uv.lock",
+    until: datetime.date | str | None = datetime.date(2027, 1, 31),
+    date: datetime.date | str | None = datetime.date(2026, 10, 21),
+    item: str | None = "overnightworks/agent-presentator#371",
+    reason: str | None = "gradio caps pillow<13; no image input",
+) -> str:
+    """One [[advisories.allow]] entry; a string is written as a TOML string, a date as a TOML date, None drops the key."""
+    values = {"id": identifier, "lock": lock, "until": until, "date": date, "item": item, "reason": reason}
+    entries = "".join(
+        f"{key} = {value.isoformat() if isinstance(value, datetime.date) else json.dumps(value)}\n"
+        for key, value in values.items() if value is not None
+    )
+    return "[[advisories.allow]]\n" + entries

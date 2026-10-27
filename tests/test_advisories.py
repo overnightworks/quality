@@ -9,27 +9,28 @@ import urllib.request
 from pathlib import Path
 
 import pytest
-from advisory_support import (
+
+from quality import advisories, cli, engines
+from quality.config import AdvisoryAllowance
+from quality.report import headline
+from tests.support.advisories import (
     ADVISORY_ID,
     AFFECTED_LINE,
     OSV,
-    OUTPUTS,
     SAFE,
     UPGRADE_LINE,
     UV_LOCK_ALLOWANCE,
     VIRTUAL_ROOT_ONLY,
     advisory,
+    allowance_config,
     package_of,
     reporting,
     tracked_lock_repo,
     uv_lock,
     zipped,
 )
-from conftest import allowance_config, assert_every_line_starts_with_the_door, osv_engines
-
-from quality import advisories, cli, engines
-from quality.config import AdvisoryAllowance
-from quality.report import headline
+from tests.support.engines import OUTPUTS, osv_engines
+from tests.support.hygiene import assert_every_line_starts_with_the_door
 
 # ---- the real osv-scanner against a fake file:// database (CI runs these; they download the binary) ----
 

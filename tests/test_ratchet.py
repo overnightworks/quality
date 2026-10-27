@@ -4,16 +4,6 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from conftest import (
-    branchy_function,
-    long_file,
-    long_function,
-    make_repo,
-    minified_bundle,
-    typescript_file,
-    typescript_function,
-)
-from conftest import hygiene_output as hygiene
 
 from quality import __version__, cli
 from quality.ratchet import (
@@ -29,6 +19,16 @@ from quality.ratchet import (
     load_baseline,
     raised_entries,
     render_baseline,
+)
+from tests.support.git_repositories import make_repo
+from tests.support.hygiene import hygiene_output as hygiene
+from tests.support.source_code import (
+    branchy_function,
+    long_file,
+    long_function,
+    minified_bundle,
+    typescript_file,
+    typescript_function,
 )
 
 EMPTY_BASELINE = ""

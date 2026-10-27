@@ -4,10 +4,11 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from conftest import GIT_IDENTITY
 from verify_release import ReleaseFacts, gate_tool_refs, judge_release
 
-SCRIPT = Path(__file__).parent.parent / "scripts" / "verify_release.py"
+from tests.support.git_repositories import GIT_IDENTITY
+
+SCRIPT = Path(__file__).parents[2] / "scripts" / "verify_release.py"
 RELEASE = ReleaseFacts(
     tag="v1.2.3",
     work_tree_is_clean=True,

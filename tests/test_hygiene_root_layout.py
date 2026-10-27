@@ -3,11 +3,12 @@
 import subprocess
 
 import pytest
-from conftest import hygiene_output, put
-from test_emergency import ONE_JOB
-from test_verdict import verdict_of
 
 from quality.hygiene import ROOT_BASE_DIRECTORIES, ROOT_BASE_FILES
+from tests.support.emergency import ONE_JOB
+from tests.support.git_repositories import put
+from tests.support.hygiene import hygiene_output
+from tests.support.verdict import verdict_of
 
 CONFIG = "quality/config.toml"
 GUIDANCE = {"AGENTS.md": "# guidance\n"}

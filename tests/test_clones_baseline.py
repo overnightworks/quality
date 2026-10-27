@@ -5,19 +5,6 @@ import textwrap
 from pathlib import Path
 
 import pytest
-from conftest import head_commit, hygiene_output, long_function, put
-from test_clones import function as clone_function
-from test_emergency import ONE_JOB, SONAR_GREEN, declaring, drive
-from test_renames import (
-    OLD_ENTRY,
-    commit_all,
-    entry,
-    file_text,
-    moved_in_head,
-    moves_in_head,
-    pulled,
-)
-from test_verdict import ONLY_DECLARED, declaration, verdict_of
 
 from quality import __version__, cli
 from quality.ratchet import (
@@ -31,6 +18,13 @@ from quality.ratchet import (
     load_baseline,
     render_baseline,
 )
+from tests.support.clones import function as clone_function
+from tests.support.emergency import ONE_JOB, SONAR_GREEN, declaring, drive
+from tests.support.git_repositories import head_commit, put
+from tests.support.hygiene import hygiene_output
+from tests.support.source_code import long_function
+from tests.support.verdict import ONLY_DECLARED, declaration, verdict_of
+from tests.support.verdict_renames import OLD_ENTRY, commit_all, entry, file_text, moved_in_head, moves_in_head, pulled
 
 FIRST_PAIR = ClonePair.of(Place("tests/test_a.py", "run"), Place("tests/test_b.py", "hygiene"))
 SECOND_PAIR = ClonePair.of(Place("tests/test_c.py", "walk"), Place("tests/test_d.py", "stroll"))

@@ -14,12 +14,12 @@ import urllib.request
 from pathlib import Path
 
 import pytest
-from conftest import FAKE_KEY, GIT_IDENTITY, OTHER_KEY, UNKNOWN_KEY_CONFIGS, allow_config, assert_key_found, sha256_of
 
 from quality import cli, engines
 from quality.engines import EngineError, Pin
-
-OUTPUTS = Path(__file__).parent / "fixtures" / "engine-outputs"
+from tests.support.engines import OUTPUTS
+from tests.support.git_repositories import GIT_IDENTITY
+from tests.support.secrets import FAKE_KEY, OTHER_KEY, UNKNOWN_KEY_CONFIGS, allow_config, assert_key_found, sha256_of
 
 
 def recorded(name: str) -> str:

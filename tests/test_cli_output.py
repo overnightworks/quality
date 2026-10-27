@@ -7,20 +7,14 @@ import sys
 from pathlib import Path
 
 import pytest
-from conftest import (
-    FAKE_KEY,
-    FORBIDDEN,
-    SHOP,
-    SHOP_DB_IMPORTS_WEB,
-    allow_config,
-    assert_every_line_starts_with_the_door,
-    fake_engine,
-    toml,
-)
 
 from quality import cli
 from quality.ratchet import BASELINE_PATH
 from quality.report import DETAIL_MARKER, Finding, printable, render, shell_word
+from tests.support.architecture import FORBIDDEN, SHOP, SHOP_DB_IMPORTS_WEB, toml
+from tests.support.engines import fake_engine
+from tests.support.hygiene import assert_every_line_starts_with_the_door
+from tests.support.secrets import FAKE_KEY, allow_config
 
 DOOR = [sys.executable, "-m", "quality.cli"]
 STOP_LINE = re.compile(r"::stop-commands::([0-9a-f]{32})")

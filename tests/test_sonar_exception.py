@@ -3,9 +3,11 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import pytest
-from test_emergency import FakeGh, changed_nothing, drive
-from test_emergency import sonar as emergency_sonar
-from test_sonar import (
+
+from quality import sonar
+from tests.support.emergency import FakeGh, changed_nothing, drive
+from tests.support.emergency import sonar as emergency_sonar
+from tests.support.sonar import (
     FEATURE_ENVIRONMENT,
     FINISHED_FOR_FEATURE,
     FINISHED_FOR_MAIN,
@@ -19,8 +21,6 @@ from test_sonar import (
     run_cli,
     sonar_answering,
 )
-
-from quality import sonar
 
 MESSAGE = "Use either the version tag or the digest for the image instead of both"
 SET_ASIDE_LINE = (

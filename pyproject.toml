@@ -34,7 +34,8 @@ line-length = 120
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["scripts"]
+pythonpath = [".", "scripts"]
+addopts = ["--import-mode=importlib"]
 markers = ["engine: runs a real downloaded engine process (needs network; CI runs it)"]
 
 [tool.coverage.run]
