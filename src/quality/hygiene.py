@@ -322,7 +322,7 @@ def _requires_python(path: str, content: bytes) -> tuple[bool, str]:
     try:
         document = tomllib.loads(content.decode("utf-8"))
     except (UnicodeDecodeError, tomllib.TOMLDecodeError, RecursionError) as error:
-        raise Unparsable(f"{path} is not valid UTF-8 TOML ({error})") from error
+        raise Unparsable(f"{path} is not UTF-8 TOML that Python reads ({error})") from error
     project = document.get("project")
     if not isinstance(project, dict):
         return False, ""

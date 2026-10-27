@@ -61,7 +61,8 @@ def test_a_floor_below_python_3_14_names_the_value_and_the_floor(build_repo, cap
 def test_a_project_without_a_floor_admits_every_python(build_repo, capsys, text):
     """F3, sentence 2: a project that sets no lower bound is red as naming no floor."""
     code, output = run(capsys, build_repo({"pyproject.toml": text}))
-    assert code == 1 and "names no floor" in floor_lines(output)[0], output
+    assert code == 1, output
+    assert "names no floor" in floor_lines(output)[0], output
 
 
 @pytest.mark.parametrize(
@@ -166,19 +167,21 @@ def test_an_unreadable_pyproject_is_unparsable_and_leaves_the_other_rules_judged
     (repo / ".env").write_text("A=1\n")
     subprocess.run(["git", "-C", str(repo), "add", "--", ".env", "pyproject.toml"], check=True)
     code, output = run(capsys, repo)
-    assert code == 2 and "hygiene: python-floor unparsable - pyproject.toml" in output, output
+    assert code == 2, output
+    assert "hygiene: python-floor unparsable - pyproject.toml" in output, output
     assert "env-file .env - " in output, output
 
 
 def test_a_pyproject_that_links_out_of_the_repository_cannot_be_judged(build_repo, capsys, elsewhere):
-    """F10, sentence 1: a pyproject.toml linking out of the repository cannot be judged."""
+    """F10, sentence 7: a pyproject.toml linking out of the repository cannot be judged."""
     outside = Path(elsewhere) / "pyproject.toml"
     outside.write_text(project())
     repo = build_repo({"README.md": "x\n"})
     (repo / "pyproject.toml").symlink_to(outside)
     subprocess.run(["git", "-C", str(repo), "add", "--", "pyproject.toml"], check=True)
     code, output = run(capsys, repo)
-    assert code == 2 and "hygiene: python-floor cannot judge - pyproject.toml resolves outside the repository" in output, output
+    assert code == 2, output
+    assert "hygiene: python-floor cannot judge - pyproject.toml resolves outside the repository" in output, output
 
 
 @pytest.mark.parametrize("gitlink_path", ["src/acestep", "src/acestep/pyproject.toml"], ids=["vendor directory", "at a pyproject.toml path"])
