@@ -456,7 +456,7 @@ def read_workflows(clone: Path, tracked: list[str]) -> Workflows:
             continue
         try:
             # BaseLoader keeps scalars strings, so no conversion can fail; ValueError is the scanner's chr() on a \U escape past U+10FFFF
-            document = yaml.load(text, Loader=yaml.BaseLoader) if text is not None else None  # noqa: S506 - BaseLoader builds only strings, lists and mappings
+            document = yaml.load(text, Loader=yaml.BaseLoader) if text is not None else None  # noqa: S506 - BaseLoader builds only strings and lists and mappings
         except (yaml.YAMLError, RecursionError, ValueError):
             unreadable.append(name)
             continue
