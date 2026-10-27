@@ -329,8 +329,7 @@ def _requires_python(path: str, content: bytes) -> tuple[bool, str]:
     value = project.get("requires-python", "")
     if not isinstance(value, str):
         raise Unparsable(f"{path} has requires-python as {type(value).__name__}, not a string")
-    dynamic = project.get("dynamic")
-    return True, "" if isinstance(dynamic, list) and "requires-python" in dynamic else value
+    return True, value
 
 
 def _floor_finding(path: str, requires_python: str, floor: Version | None) -> Finding | None:
