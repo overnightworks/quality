@@ -20,8 +20,8 @@ RULE = "clone"
 MIN_TOKENS = 40
 SHINGLE_SIZE = 5
 SIMILARITY_THRESHOLD = 0.9
-ID_TOKEN = "ID"
-KEYWORD_SPREAD_TOKEN = "**"
+IDENTIFIER_PLACEHOLDER = "ID"
+KEYWORD_SPREAD_PLACEHOLDER = "**"
 FUNCTION_NODES = ast.FunctionDef | ast.AsyncFunctionDef
 
 
@@ -62,9 +62,9 @@ def _emit(node: ast.AST, tokens: list[str]) -> None:
     if isinstance(node, ast.Constant):
         tokens.append(_literal_class(node.value))
     elif isinstance(node, ast.Name | ast.Attribute | ast.arg):
-        tokens.append(ID_TOKEN)
+        tokens.append(IDENTIFIER_PLACEHOLDER)
     elif isinstance(node, ast.keyword):
-        tokens.append(ID_TOKEN if node.arg else KEYWORD_SPREAD_TOKEN)
+        tokens.append(IDENTIFIER_PLACEHOLDER if node.arg else KEYWORD_SPREAD_PLACEHOLDER)
     for child in ast.iter_child_nodes(node):
         _emit(child, tokens)
 

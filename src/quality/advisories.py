@@ -269,7 +269,7 @@ def _download_database(url: str, ecosystem: str, deadline: float, monotonic: Cal
 
     def fetch() -> None:
         try:
-            with urllib.request.urlopen(url, timeout=min(engines.DOWNLOAD_TIMEOUT_SECONDS, remaining)) as response:
+            with urllib.request.urlopen(url, timeout=min(engines.DOWNLOAD_TIMEOUT_SECONDS, remaining)) as response:  # noqa: S310 - url comes from the pinned advisory databases (https)
                 download.set_result(response.read())
         except DOWNLOAD_FAILURES as error:
             download.set_exception(error)

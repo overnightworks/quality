@@ -52,7 +52,7 @@ DEPENDABOT_EXCEPTION_RULE = "docker:S8431"
 SET_ASIDE_REASON = f" (does not count: {DEPENDABOT_CONFIG} exists, Sonar's own exception, which its pull-request analysis misses)"
 
 PULL_REQUEST_EVENT = "pull_request"
-TOKEN_VARIABLE = "SONAR_TOKEN"
+TOKEN_VARIABLE = "SONAR_TOKEN"  # noqa: S105 - the name of an environment variable, not a secret
 # gate.yml passes github.event.repository.default_branch; an absent expression renders as an empty string.
 DEFAULT_BRANCH_VARIABLE = "DEFAULT_BRANCH"
 
@@ -116,7 +116,7 @@ def fetch(
     """The body and headers answered at `url`, never following a redirect; any other answer is `unreadable(error)`."""
     opener = urllib.request.build_opener(RedirectRefusingHandler())
     try:
-        with opener.open(urllib.request.Request(url, headers=dict(headers)), timeout=timeout) as response:
+        with opener.open(urllib.request.Request(url, headers=dict(headers)), timeout=timeout) as response:  # noqa: S310 - url is built by quality from https endpoints
             return response.read(), response.headers
     except (OSError, http.client.HTTPException) as error:  # a truncated body is an HTTPException
         raise unreadable(error) from error
