@@ -140,8 +140,15 @@ def test_a_malformed_python_allowance_cannot_be_judged_by_any_rule_that_reads_th
 
 @pytest.mark.parametrize(
     "content",
-    ["[project\n", "[project]\nrequires-python = 3.14\n", project(">=banana"), project("===foobar"), b"\xff\xfe[project]\n"],
-    ids=["invalid toml", "not a string", "not a specifier", "identity clause not a version", "not utf-8"],
+    [
+        "[project\n",
+        "[project]\nrequires-python = 3.14\n",
+        project(">=banana"),
+        project("===foobar"),
+        b"\xff\xfe[project]\n",
+        f"[project]\nrequires-python = '>=3.14'\na = {'[' * 2000}{']' * 2000}\n",
+    ],
+    ids=["invalid toml", "not a string", "not a specifier", "identity clause not a version", "not utf-8", "nested too deep"],
 )
 def test_an_unreadable_pyproject_is_unparsable_and_leaves_the_other_rules_judged(build_repo, capsys, content):
     repo = build_repo({"pyproject.toml": ""})

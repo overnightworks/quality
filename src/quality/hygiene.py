@@ -322,7 +322,7 @@ def _requires_python(path: str, content: bytes) -> tuple[bool, str]:
     """Whether the file holds a `[project]` table, and its `requires-python` ("" when it names none)."""
     try:
         document = tomllib.loads(content.decode("utf-8"))
-    except (UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
+    except (UnicodeDecodeError, tomllib.TOMLDecodeError, RecursionError) as error:
         raise Unparsable(f"{path} is not valid UTF-8 TOML ({error})") from error
     project = document.get("project")
     if not isinstance(project, dict):
