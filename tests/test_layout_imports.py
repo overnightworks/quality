@@ -94,13 +94,13 @@ def test_one_statement_is_one_finding_naming_each_target(build_repo, capsys):
 
 
 def test_findings_are_all_printed_sorted_by_path_and_line(build_repo, capsys):
-    """#201 G19, sentence 6: a later top-level import precedes, in the walk, an earlier one nested in a function."""
+    """#201 G19, sentence 6: path before line, and a later top-level import precedes, in the walk, an earlier one nested in a function."""
     repo = build_repo(project({
         "tests/conftest.py": "",
         "tests/support/b.py": "def f():\n    import conftest\n\nimport conftest\n",
-        "tests/support/a.py": "import conftest\n",
+        "tests/support/a.py": "x = 1\ny = 2\nimport conftest\n",
     }))
-    assert red(capsys, repo, RULE) == ["tests/support/a.py:1", "tests/support/b.py:2", "tests/support/b.py:4"]
+    assert red(capsys, repo, RULE) == ["tests/support/a.py:3", "tests/support/b.py:2", "tests/support/b.py:4"]
 
 
 @pytest.mark.parametrize(
