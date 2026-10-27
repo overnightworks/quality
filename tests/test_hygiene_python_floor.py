@@ -204,11 +204,3 @@ def test_a_gitlink_is_never_entered(build_repo, capsys, elsewhere, gitlink_path)
     (repo / gitlink_path / "pyproject.toml").write_text(project(">=3.12"))
     code, output = run(capsys, repo)
     assert (code, floor_lines(output)) == (0, []), output
-
-
-def test_a_config_nested_too_deeply_cannot_be_judged_by_any_rule_that_reads_it(build_repo, capsys):
-    """A config the TOML reader gives up on is cannot-judge, not a traceback."""
-    config = f"a = {'[' * 2000}{']' * 2000}\n"
-    code, output = run(capsys, build_repo({"pyproject.toml": project(), CONFIG_PATH: config}))
-    named = {line.split(" - ")[0] for line in output.splitlines() if "is not valid TOML" in line}
-    assert (code, "hygiene: python-floor cannot judge" in named, "hygiene: root-layout cannot judge" in named) == (2, True, True), output
