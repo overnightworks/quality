@@ -10,8 +10,8 @@ from functools import partial
 from pathlib import Path, PurePosixPath
 
 import yaml
-from packaging.specifiers import InvalidSpecifier, Specifier, SpecifierSet
-from packaging.version import InvalidVersion, Version
+from packaging.specifiers import Specifier, SpecifierSet
+from packaging.version import Version
 
 from quality import advisories, architecture, clones, engines, layout, ratchet, repository
 from quality.config import (
@@ -304,15 +304,15 @@ class FloorResult:
 
 
 def _lower_bound(clause: Specifier) -> Version:
-    """The version a clause sets as a lower bound; a trailing `.*` is dropped, so `==3.14.*` counts as 3.14."""
-    return Version(clause.version.removesuffix(".*"))
+    """The version a clause sets as a lower bound; `==3.14.*` counts as 3.14, while `===` takes its version as written."""
+    return Version(clause.version.removesuffix(".*") if clause.operator == "==" else clause.version)
 
 
 def _floor(path: str, requires_python: str) -> Version | None:
     """The highest lower bound among the clauses, None when no clause sets one."""
     try:
         bounds = [_lower_bound(clause) for clause in SpecifierSet(requires_python) if clause.operator in LOWER_BOUND_OPERATORS]
-    except (InvalidSpecifier, InvalidVersion) as error:
+    except ValueError as error:
         raise Unparsable(f'{path} has requires-python "{requires_python}", which is no PEP 440 version specifier ({error})') from error
     return max(bounds, default=None)
 
@@ -321,7 +321,7 @@ def _requires_python(path: str, content: bytes) -> tuple[bool, str]:
     """Whether the file holds a `[project]` table, and its `requires-python` ("" when it names none)."""
     try:
         document = tomllib.loads(content.decode("utf-8"))
-    except (UnicodeDecodeError, tomllib.TOMLDecodeError, RecursionError) as error:
+    except (ValueError, RecursionError) as error:
         raise Unparsable(f"{path} is not UTF-8 TOML that Python reads ({error})") from error
     project = document.get("project")
     if not isinstance(project, dict):

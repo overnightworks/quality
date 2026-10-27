@@ -106,7 +106,9 @@ def test_an_allowed_file_is_clean_and_the_gate_shows_its_value_and_reason(build_
     }
     code, output = run(capsys, build_repo(tracked))
     expected = 'python-floor: allowed src/speech/pyproject.toml (requires-python ">=3.12,<3.13") - qwen-tts has no cp314 wheel'
-    assert (code, output.splitlines().count(expected), CLEAN_LINE in output) == (0, 1, True), output
+    lines = output.splitlines()
+    assert (code, lines.count(expected), CLEAN_LINE in output) == (0, 1, True), output
+    assert lines.index(expected) < next(n for n, line in enumerate(lines) if CLEAN_LINE in line), output
 
 
 @pytest.mark.parametrize(
@@ -131,13 +133,14 @@ def test_an_allowance_for_a_file_that_needs_none_is_a_finding(build_repo, capsys
     [
         allow("src/a/pyproject.toml") + allow("src/a/pyproject.toml"),
         allow("src/a/"),
+        allow("src/a"),
         allow("src/a/*.toml"),
         allow("../pyproject.toml"),
         allow("src/a/pyproject.toml", ""),
         '[[python.allow]]\npath = "src/a/pyproject.toml"\nreason = "one\\ntwo"\n',
         allow("src/a/pyproject.toml") + 'extra = 1\n',
     ],
-    ids=["duplicate", "folder", "pattern", "dotdot", "empty reason", "multi-line reason", "unknown key"],
+    ids=["duplicate", "folder", "folder without slash", "pattern", "dotdot", "empty reason", "multi-line reason", "unknown key"],
 )
 def test_a_malformed_python_allowance_cannot_be_judged_by_any_rule_that_reads_the_config(build_repo, capsys, config):
     """F8, sentence 4: a malformed allowance is cannot-judge in every rule that reads the config."""
@@ -155,10 +158,13 @@ def test_a_malformed_python_allowance_cannot_be_judged_by_any_rule_that_reads_th
         "[project]\nrequires-python = 3.14\n",
         project(">=banana"),
         project("===foobar"),
+        project("===3.14.*"),
+        project(">=" + "9" * 5000),
+        f'[project]\nrequires-python = ">=3.14"\nnumber = {"9" * 5000}\n',
         b"\xff\xfe[project]\n",
         f"[project]\nrequires-python = '>=3.14'\na = {'[' * 2000}{']' * 2000}\n",
     ],
-    ids=["invalid toml", "not a string", "not a specifier", "identity clause not a version", "not utf-8", "nested too deep"],
+    ids=["invalid toml", "not a string", "not a specifier", "identity clause not a version", "identity wildcard", "oversized version", "oversized number", "not utf-8", "nested too deep"],
 )
 def test_an_unreadable_pyproject_is_unparsable_and_leaves_the_other_rules_judged(build_repo, capsys, content):
     """F9, sentence 7: an unreadable pyproject.toml is unparsable and every other rule is still judged."""
@@ -195,5 +201,14 @@ def test_a_gitlink_is_never_entered(build_repo, capsys, elsewhere, gitlink_path)
         ["git", "-C", str(repo), "update-index", "--add", "--cacheinfo", "160000", head_commit(inner), gitlink_path], check=True
     )
     (repo / gitlink_path).mkdir(parents=True)
+    (repo / gitlink_path / "pyproject.toml").write_text(project(">=3.12"))
     code, output = run(capsys, repo)
     assert (code, floor_lines(output)) == (0, []), output
+
+
+def test_a_config_nested_too_deeply_cannot_be_judged_by_any_rule_that_reads_it(build_repo, capsys):
+    """A config the TOML reader gives up on is cannot-judge, not a traceback."""
+    config = f"a = {'[' * 2000}{']' * 2000}\n"
+    code, output = run(capsys, build_repo({"pyproject.toml": project(), CONFIG_PATH: config}))
+    named = {line.split(" - ")[0] for line in output.splitlines() if "is not valid TOML" in line}
+    assert (code, "hygiene: python-floor cannot judge" in named, "hygiene: root-layout cannot judge" in named) == (2, True, True), output

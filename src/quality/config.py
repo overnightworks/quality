@@ -3,7 +3,7 @@ import re
 import tomllib
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 
 from quality import repository
@@ -201,7 +201,7 @@ class _Document:
 def _parse(text: str, example: str) -> dict:
     try:
         return tomllib.loads(text)
-    except tomllib.TOMLDecodeError as error:
+    except (ValueError, RecursionError) as error:
         raise ConfigError(f"{CONFIG_PATH} is not valid TOML ({error}) - write it like:\n{example}") from error
 
 
@@ -443,7 +443,7 @@ def _read_python_allowance(entry: object) -> PythonAllowance:
     if not isinstance(entry, dict) or set(entry) != PYTHON_ALLOWANCE_KEYS:
         raise refuse("exactly a path and a reason")
     path, reason = entry["path"], entry["reason"]
-    if not _is_exact_file_path(path):
+    if not _is_exact_file_path(path) or PurePosixPath(path).name != "pyproject.toml":
         raise refuse("path as the exact tracked path of one pyproject.toml, no folder, pattern or ..")
     if not _is_one_line_text(reason):
         raise refuse(ONE_LINE_REASON)
