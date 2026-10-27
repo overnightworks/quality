@@ -39,6 +39,8 @@ def case(identifier: str, files: dict[str, str], expected: list[str]):
         case("G6 a suffix aligns by component", {"tests/conftest.py": "", "tests/support/y.py": "import myconftest\n"}, []),
         case("G9 an e2e support module", {"tests/e2e/support/x.py": "", "tests/e2e/prove.py": "import tests.e2e.support.x\n"}, []),
         case("G9 a sibling driver", {"tests/e2e/oidc/prove.py": "", "tests/e2e/oidc/run.py": "import prove\nfrom . import prove\n"}, []),
+        case("G9 an e2e driver importing a conftest", {"tests/conftest.py": "", "tests/e2e/prove.py": "import conftest\n"}, ["tests/e2e/prove.py:1"]),
+        case("G9 an e2e conftest importing a test module", {"tests/test_a.py": "", "tests/e2e/conftest.py": "import test_a\n"}, ["tests/e2e/conftest.py:1"]),
         case("G10 inside a function", {"tests/conftest.py": "", "tests/support/y.py": "def f():\n    import conftest\n"}, ["tests/support/y.py:2"]),
         case("G10 under TYPE_CHECKING",
              {"tests/conftest.py": "", "tests/support/y.py": "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    import conftest\n"},
@@ -92,11 +94,13 @@ def test_one_statement_is_one_finding_naming_each_target(build_repo, capsys):
 
 
 def test_findings_are_all_printed_sorted_by_path_and_line(build_repo, capsys):
-    """#201 G19, sentence 6."""
+    """#201 G19, sentence 6: a later top-level import precedes, in the walk, an earlier one nested in a function."""
     repo = build_repo(project({
-        "tests/conftest.py": "", "tests/support/b.py": "x = 1\nimport conftest\nimport conftest\n", "tests/support/a.py": "import conftest\n",
+        "tests/conftest.py": "",
+        "tests/support/b.py": "def f():\n    import conftest\n\nimport conftest\n",
+        "tests/support/a.py": "import conftest\n",
     }))
-    assert red(capsys, repo, RULE) == ["tests/support/a.py:1", "tests/support/b.py:2", "tests/support/b.py:3"]
+    assert red(capsys, repo, RULE) == ["tests/support/a.py:1", "tests/support/b.py:2", "tests/support/b.py:4"]
 
 
 @pytest.mark.parametrize(
