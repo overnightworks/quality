@@ -228,7 +228,8 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   `x`, otherwise one leading `_` is dropped; candidates are the `.py` files and the subfolders that hold a `.py` (in
   `scripts/` any file and subfolder, in `.github/workflows/` the `.yml` and `.yaml` stems with `-` read as `_`), and in
   the top folder of a package also its own name. The test's name, `test_<name>.py`, splits at `_` into words and its
-  longest word prefix must equal a key exactly; the rest is the aspect. A `test_*.py` in a `support/` folder is red.
+  longest word prefix, ending at a word boundary, must equal a key exactly; the rest is the aspect, and a name
+  whose first word is empty (`test_.py`, `test__x.py`) has no prefix. A `test_*.py` in a `support/` folder is red.
   A member's tests map only into the member's own `src/` and `scripts/`. Each case has its own reason and fix, a
   file that breaks the folder and the name condition together gets one finding with both reasons, and every fix ends
   with declaring the path. (#175, #196, #199; operator rulings 24.10.2026: „ja das will ich“, D-A „ja beides a?“,
