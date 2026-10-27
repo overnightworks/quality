@@ -369,7 +369,7 @@ def run(
     """`command`'s exit and output, decoded as UTF-8 whatever the locale; `encoding=None` keeps the bytes."""
     with _failures_as_engine_errors(command):
         try:
-            return subprocess.run(  # noqa: S603 - the one process owner: callers pass an argv list, never a shell
+            return subprocess.run(  # noqa: S603 - callers pass an argv list, never a shell
                 command, capture_output=True, encoding=encoding, check=False, cwd=cwd, env=env, timeout=timeout
             )
         except subprocess.TimeoutExpired:
@@ -384,7 +384,7 @@ def run_bounded_in_own_group(
 
     Only inside `scratch_directory`: outside it a SIGTERM ends quality without unwinding, and the group would outlive it.
     """
-    with _failures_as_engine_errors(command), subprocess.Popen(  # noqa: S603 - the one process owner: callers pass an argv list, never a shell
+    with _failures_as_engine_errors(command), subprocess.Popen(  # noqa: S603 - callers pass an argv list, never a shell
         command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding=encoding, env=env, start_new_session=True
     ) as process:
         try:
