@@ -229,3 +229,17 @@ def edited_report(tmp_path_factory):
         path.write_text(json.dumps(report))
         return path
     return write
+
+
+@pytest.fixture
+def gate_clone(public, fake_git):
+    """The gate's own repository URL, served from a local repository holding `files` by a git on PATH that redirects it."""
+
+    def build(files: dict[str, str]) -> str:
+        url = f"https://github.com/{scoreboard_module.GATE_REPOSITORY}"
+        fake_git(
+            f"export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0='url.{public('gate', files)}.insteadOf' GIT_CONFIG_VALUE_0='{url}'"
+        )
+        return url
+
+    return build

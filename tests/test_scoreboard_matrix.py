@@ -8,6 +8,7 @@ import pytest
 from quality import hygiene, ratchet
 from quality.scoreboard import (
     COLUMNS,
+    GATE_REPOSITORY,
     MATRIX_COLUMNS,
     RULES,
     Call,
@@ -278,23 +279,6 @@ CLONE_TABLE_PIN = "e" * 40
 CLONE_RELEASES = {**FIRST_RELEASES, "v0.4.0": CLONE_RELEASE, "v0.5.0": CLONE_TABLE_PIN}
 
 
-GATE_NAME = "overnightworks/quality"
-
-
-@pytest.fixture
-def gate_clone(public, fake_git):
-    """The gate's own repository URL, served from a local repository holding `files` by a git on PATH that redirects it."""
-
-    def build(files: dict[str, str]) -> str:
-        url = f"https://github.com/{GATE_NAME}"
-        fake_git(
-            f"export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0='url.{public('gate', files)}.insteadOf' GIT_CONFIG_VALUE_0='{url}'"
-        )
-        return url
-
-    return build
-
-
 def declared(**fields) -> Declared:
     """A clone that declares nothing, with the given fields set."""
     return Declared(**{"settings": None, "has_baseline": False, "has_clone_table": False, "has_import_config": False, "has_src_package": False,
@@ -368,7 +352,7 @@ def test_a_pinned_gate_has_not_released_test_layout():
 def test_the_scoreboard_cell_for_test_layout_is_read_from_the_clone(scoreboard, gate_clone, files, words):
     """#196 sentence 9, E3: the clone's tracked files decide the cell, on the gate's own repository."""
     result, output = scoreboard(gate_clone({**caller("./.github/workflows/gate.yml"), **files}), tags=first_releases())
-    assert (result, cell(output, GATE_NAME, "test-layout")) == (0, words), output
+    assert (result, cell(output, GATE_REPOSITORY, "test-layout")) == (0, words), output
 
 
 def test_a_malformed_baseline_makes_the_gates_own_clone_cell_unreadable_and_the_run_red(scoreboard, gate_clone):
@@ -376,7 +360,7 @@ def test_a_malformed_baseline_makes_the_gates_own_clone_cell_unreadable_and_the_
     broken = {**caller("./.github/workflows/gate.yml"), ratchet.BASELINE_PATH: "[file_lines\n"}
     result, output = scoreboard(gate_clone(broken), tags=first_releases())
     assert result == 2, output
-    assert cell(output, GATE_NAME, "clone") == "cannot read quality/baseline.toml"
+    assert cell(output, GATE_REPOSITORY, "clone") == "cannot read quality/baseline.toml"
 
 
 @pytest.mark.parametrize(("pin", "words"), [("v0.5.0", "enforced"), ("v0.4.0", "report-only")], ids=["the switch", "older"])
