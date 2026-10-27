@@ -252,7 +252,7 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   line and no configuration switches the rule off. Not read, and waiting for usage evidence: string imports
   (`importlib.import_module`, `__import__`, `pytest.importorskip`), `pytest_plugins`, `sys.path` edits, `runpy`,
   source passed to a subprocess with `-c`, and `*_test.py` as a target. An import whose name matches a tracked test
-  module is reported even when it means a third-party module; rename the importer or declare it.
+  module is reported even when it means a third-party module; rename the test module or declare the importer.
   (#175, #201)
 - The baseline only falls: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the
   base commit's, so growing a function and rewriting the baseline stays red. Each loosening is one line, named with the
