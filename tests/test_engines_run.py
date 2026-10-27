@@ -8,10 +8,10 @@ import time
 from contextlib import suppress
 
 import pytest
-from conftest import process_is_gone
 
 from quality import engines
 from quality.engines import EngineError
+from tests.support.processes import process_is_gone
 
 
 def test_git_keeps_bytes_when_asked_and_reads_as_text_otherwise():

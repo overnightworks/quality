@@ -3,9 +3,10 @@ import sys
 from pathlib import Path
 
 import pytest
-from conftest import FAKE_KEY, GIT_IDENTITY, OTHER_KEY, allow_config
 
 from quality import cli
+from tests.support.git_repositories import GIT_IDENTITY
+from tests.support.secrets import FAKE_KEY, OTHER_KEY, allow_config
 
 KEY_LINE = f"aws_access_key_id = {FAKE_KEY}\n"
 

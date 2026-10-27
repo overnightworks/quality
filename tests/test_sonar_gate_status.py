@@ -2,7 +2,10 @@ import base64
 from urllib.parse import parse_qs, urlparse
 
 import pytest
-from test_sonar import (
+
+from quality import sonar
+from quality.hygiene import CannotJudge
+from tests.support.sonar import (
     FEATURE_ENVIRONMENT,
     FINISHED_FOR_FEATURE,
     FINISHED_FOR_MAIN,
@@ -18,9 +21,6 @@ from test_sonar import (
     run_cli,
     sonar_answering,
 )
-
-from quality import sonar
-from quality.hygiene import CannotJudge
 
 
 @pytest.fixture(autouse=True)

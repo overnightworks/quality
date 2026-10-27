@@ -3,9 +3,9 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from conftest import hygiene_output as run
 
 from quality import cli
+from tests.support.hygiene import hygiene_output as run
 
 CLEAN_LINE = "hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout, file-suffix, script-name, script-header)"
 ENV_FINDING = "env-file .env - "

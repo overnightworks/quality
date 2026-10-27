@@ -48,3 +48,8 @@ that installs quality needs its tags (`fetch-depth: 0`). Release: tag the merge 
 otherwise keeps a `.dYYYYMMDD` version), then `uv run python scripts/verify_release.py vX.Y.Z`, and push the tag only when it exits 0; tags are immutable on the remote.
 
 Tests build their git fixtures in `tmp_path`; never commit a `.env` or compose fail file.
+
+Tests mirror `src/quality/` flat in `tests/`; script tests sit in `tests/scripts/`, workflow tests in `tests/workflows/`, data in
+`tests/fixtures/`. Fixtures live in `tests/conftest.py`; helpers that other test modules use live in `tests/support/` and are
+imported from the repository root (`from tests.support.git_repositories import make_repo`). A test module imports no other test
+module and no `conftest`.

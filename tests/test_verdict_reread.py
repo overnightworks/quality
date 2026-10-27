@@ -4,16 +4,16 @@ import re
 import urllib.error
 
 import pytest
-from conftest import FORBIDDEN, put
-from test_architecture import contracts_ini, contracts_toml, ini_section
-from test_sonar import reply
-from test_verdict import DECLARED, GREEN_GATE, ONLY_DECLARED, declaration, fetch_jobs, gate_config, job
 
 from quality import architecture, cli, verdict
 from quality.config import CONFIG_PATH, LegacyMode
 from quality.hygiene import CannotJudge
 from quality.ratchet import NO_RENAMES
 from quality.verdict import GateSettings, Side, judge
+from tests.support.architecture import FORBIDDEN, contracts_ini, contracts_toml, ini_section
+from tests.support.git_repositories import put
+from tests.support.sonar import reply
+from tests.support.verdict import DECLARED, GREEN_GATE, ONLY_DECLARED, declaration, fetch_jobs, gate_config, job
 
 
 def running(state="in_progress", name="checks", attempt=1, leg=1):

@@ -7,30 +7,31 @@ import sys
 from pathlib import Path
 
 import pytest
-from conftest import (
-    GIT_IDENTITY,
-    UNKNOWN_KEY_CONFIGS,
-    allowance_config,
-    assert_every_line_starts_with_the_door,
-    head_commit,
-    put,
-)
-from test_sonar import reply
 
-from quality import __version__, cli, verdict
+from quality import __version__, cli
 from quality.config import CONFIG_PATH, LegacyMode
 from quality.hygiene import CannotJudge
 from quality.ratchet import BASELINE_PATH, NO_RENAMES
 from quality.report import printable
-from quality.verdict import NO_BASE_SETTINGS, GateSettings, Job, Side, judge, read_base, read_jobs
+from quality.verdict import NO_BASE_SETTINGS, GateSettings, Side, judge, read_base, read_jobs
+from tests.support.advisories import allowance_config
+from tests.support.git_repositories import GIT_IDENTITY, head_commit, put
+from tests.support.hygiene import assert_every_line_starts_with_the_door
+from tests.support.secrets import UNKNOWN_KEY_CONFIGS
+from tests.support.sonar import reply
+from tests.support.verdict import (
+    CHECKS_GREEN,
+    DECLARED,
+    GREEN_GATE,
+    ONLY_DECLARED,
+    declaration,
+    fetch_jobs,
+    gate_config,
+    job,
+    verdict_of,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
-GREEN_GATE = {"hygiene": "success"}
-
-
-def job(name="checks", attempt=1, status="completed", conclusion="success", leg=1):
-    """One entry of the run's jobs; GitHub gives each leg of a name, in each attempt, an id of its own."""
-    return Job(name, attempt, status, conclusion, int.from_bytes(f"{name}/{attempt}/{leg}".encode()))
 
 
 def problems(jobs, mandatory=("checks",), base=(), gate=GREEN_GATE, attempt=1, legacy=LegacyMode.REPORT, base_legacy=LegacyMode.REPORT):
@@ -295,21 +296,12 @@ def test_a_pull_request_that_removes_legacy_fail_is_red_in_the_verdict(monkeypat
     assert "loosened (undeclared): legacy fail → report" in capsys.readouterr().out
 
 
-CHECKS_GREEN = json.dumps(
-    {"total_count": 1, "jobs": [{"id": 1, "name": "checks", "run_attempt": 1, "status": "completed", "conclusion": "success"}]}
-)
 LEGACY_FAIL_CONFIG = '[gate]\nmandatory_jobs = ["checks"]\nlegacy = "fail"\n'
 NEW_CCN_KEY = '[ccn."src/a.py"]\n"f" = 16\n'
 
 
 def main_lines(count: int) -> str:
     return f'[function_lines."src/quality/cli.py"]\n"main" = {count}\n'
-
-
-def verdict_of(repo: Path, capsys) -> tuple[int, str]:
-    code = cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (CHECKS_GREEN, None))
-    captured = capsys.readouterr()
-    return code, captured.out + captured.err
 
 
 @pytest.mark.parametrize(
@@ -487,11 +479,6 @@ def test_a_verdict_without_git_on_the_path_cannot_judge(capsys, monkeypatch, pul
     assert (code, "verdict: cannot judge - cannot run git" in output, "Traceback" in output) == (2, True, False)
 
 
-def fetch_jobs(origin: str) -> str:
-    body, _ = verdict.github_fetcher("t")(origin + "/jobs")
-    return body
-
-
 def test_the_github_fetcher_sends_the_token_and_reads_the_jobs_page(stub_server):
     """#58 cell 4 (#5 finding 95): the real fetcher sends the token and returns the jobs page unchanged."""
     origin, heard = stub_server(reply(200, CHECKS_GREEN.encode()))
@@ -539,19 +526,7 @@ def test_git_output_is_decoded_as_utf_8_whatever_the_locale(build_repo):
     assert (read.returncode, read.stdout.strip()) == (0, ascii("Grüße")), read.stderr
 
 
-SONGMAKER = "overnightworks/songmaker#1345"
-DECLARED = f"loosened (declared, {SONGMAKER} of 2026-10-20): "
-ONLY_DECLARED = "verdict: red - only declared loosenings: only the operator's quality emergency-merge lands this pull request"
 B_REMOVED = 'mandatory job "B" removed'
-
-
-def declaration(what: str, item: str = SONGMAKER, date: str = "2026-10-20") -> str:
-    """A [[gate.loosened]] entry; JSON's string escapes are TOML's, so `what` is written as the TOML escape."""
-    return f'[[gate.loosened]]\nwhat = {json.dumps(what)}\nitem = "{item}"\ndate = {date}\nreason = "ruled"\n'
-
-
-def gate_config(*jobs: str, legacy: str = "report", declared: tuple[str, ...] = ()) -> str:
-    return f"[gate]\nmandatory_jobs = {json.dumps(jobs)}\nlegacy = \"{legacy}\"\n" + "".join(declared)
 
 
 @pytest.fixture

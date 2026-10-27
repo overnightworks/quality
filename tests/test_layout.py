@@ -3,8 +3,9 @@
 import subprocess
 
 import pytest
-from conftest import hygiene_output
-from test_emergency import ONE_JOB
+
+from tests.support.emergency import ONE_JOB
+from tests.support.hygiene import hygiene_output
 
 CONFIG = "quality/config.toml"
 GUIDANCE = {"AGENTS.md": "# guidance\n"}

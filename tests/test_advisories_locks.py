@@ -9,20 +9,20 @@ from types import SimpleNamespace
 
 import pytest
 import yaml
-from advisory_support import (
+
+from quality import advisories, engines
+from quality.engines import EngineError
+from tests.support.advisories import (
     ADVISORY_ID,
-    OUTPUTS,
     SAFE,
     UV_LOCK_ALLOWANCE,
     advisory,
+    allowance_config,
     package_of,
     reporting,
     uv_lock,
 )
-from conftest import allowance_config, osv_engines
-
-from quality import advisories, engines
-from quality.engines import EngineError
+from tests.support.engines import OUTPUTS, osv_engines
 
 LODASH = "GHSA-npm1-aaaa-bbbb"
 NPM_AFFECTED_LINE = f"osv-scanner {LODASH} (CVE-2020-2): npm lodash 4.17.15 is affected."

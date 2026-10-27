@@ -2,7 +2,6 @@ import datetime
 import re
 
 import pytest
-from conftest import allowance_config
 
 from quality import cli
 from quality.config import (
@@ -20,6 +19,7 @@ from quality.config import (
     read_gate_settings,
     read_secret_allowances,
 )
+from tests.support.advisories import allowance_config
 
 
 def test_reads_the_mandatory_job_names():

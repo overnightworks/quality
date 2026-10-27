@@ -16,26 +16,22 @@ from typing import ClassVar
 
 import pytest
 import yaml
-from conftest import (
-    GIT_IDENTITY,
-    MATRIX_HEADING,
-    RELEASES,
-    branchy_function,
-    head_of,
-    long_file,
-    long_function,
-    minified_bundle,
-    row,
-    typescript_file,
-    typescript_function,
-    write_fleet,
-)
-from test_clones import function as clone_function
 
 from quality import __version__, cli
 from quality.scoreboard import (
     read_fleet,
     require_anonymous,
+)
+from tests.support.clones import function as clone_function
+from tests.support.git_repositories import GIT_IDENTITY, head_of
+from tests.support.scoreboard import MATRIX_HEADING, RELEASES, row, write_fleet
+from tests.support.source_code import (
+    branchy_function,
+    long_file,
+    long_function,
+    minified_bundle,
+    typescript_file,
+    typescript_function,
 )
 
 WORKFLOWS = Path(__file__).parent.parent / ".github" / "workflows"

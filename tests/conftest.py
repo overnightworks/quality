@@ -1,84 +1,28 @@
-import datetime
-import hashlib
 import http.server
 import json
 import os
-import re
 import shutil
 import subprocess
 import tempfile
 import threading
-import time
-import unicodedata
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import pytest
-from advisory_support import OUTPUTS, advisory, zipped
 
-from quality import advisories, cli, engines
+from quality import advisories, cli
 from quality import scoreboard as scoreboard_module
 from quality.ratchet import BASELINE_PATH
 
-FAKE_KEY = "AKIA" + "QYLPMTYX3QZ5ABCD"  # assembled so quality's own scan stays green
-OTHER_KEY = "AKIA" + "QYLPMTYX3QZ5WXYZ"  # a second assembled key, to prove another value stays red
-GIT_IDENTITY = ["-c", "user.name=t", "-c", "user.email=t@example.invalid"]
-UNKNOWN_KEY_CONFIGS = pytest.mark.parametrize(
-    "config",
-    [
-        '[gate]\nmandatory_jobs = ["checks"]\nwhatever = 1\n',
-        '[gate]\nmandatory_jobs = ["checks"]\n[future]\nkey = 1\n',
-    ],
-    ids=["unknown gate key", "unknown table"],
-)
+pytest.register_assert_rewrite("tests.support")  # before the first import of a support module, so its asserts are rewritten
+
+from tests.support.advisories import advisory, zipped
+from tests.support.engines import OUTPUTS, fake_engine
+from tests.support.git_repositories import GIT_IDENTITY, head_commit, make_repo, put
+from tests.support.scoreboard import RELEASES, write_fleet
+
 RepoBuilder = Callable[[dict[str, str]], Path]
 Responder = Callable[[http.server.BaseHTTPRequestHandler], None]
-SHOP = {"src/shop/__init__.py": "", "src/shop/web.py": "", "src/shop/api.py": "", "src/shop/db.py": "x = 1\n"}
-SHOP_DB_IMPORTS_WEB = {**SHOP, "src/shop/db.py": "import shop.web\n"}
-FORBIDDEN = {"type": "forbidden", "source_modules": ["shop.db"], "forbidden_modules": ["shop.web"]}
-
-
-def sha256_of(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
-
-
-def toml(contract: dict, roots: tuple[str, ...] = ("shop",)) -> str:
-    """A `pyproject.toml` with one contract named `guarded`; JSON strings, lists and booleans are TOML too."""
-    entries = "".join(f"{key} = {json.dumps(value)}\n" for key, value in {"name": "guarded", **contract}.items())
-    return f"[tool.importlinter]\nroot_packages = {json.dumps(list(roots))}\n\n[[tool.importlinter.contracts]]\n{entries}"
-
-
-def assert_every_line_starts_with_the_door(lines: list[str]) -> None:
-    """#97 rule 2, cell 18: no line repository text could forge, and no raw control character between the lines."""
-    for line in lines:
-        assert not line.lstrip().startswith(("::", "File ", "raise ")), line
-        assert all(unicodedata.category(character) != "Cc" for character in line), line
-
-
-def allowance_config(
-    identifier: str | None = "GHSA-462x-pgg6-55fp",
-    lock: str | None = "speech/providers/qwen/uv.lock",
-    until: datetime.date | str | None = datetime.date(2027, 1, 31),
-    date: datetime.date | str | None = datetime.date(2026, 10, 21),
-    item: str | None = "overnightworks/agent-presentator#371",
-    reason: str | None = "gradio caps pillow<13; no image input",
-) -> str:
-    """One [[advisories.allow]] entry; a string is written as a TOML string, a date as a TOML date, None drops the key."""
-    values = {"id": identifier, "lock": lock, "until": until, "date": date, "item": item, "reason": reason}
-    entries = "".join(
-        f"{key} = {value.isoformat() if isinstance(value, datetime.date) else json.dumps(value)}\n"
-        for key, value in values.items() if value is not None
-    )
-    return "[[advisories.allow]]\n" + entries
-
-
-def allow_config(*entries: tuple[str, str, str, str]) -> str:
-    """Entries are (rule, file, secret, reason); the config holds the secret's hash only."""
-    rows = ", ".join(
-        f'{{ rule = "{rule}", file = "{file}", secret_sha256 = "{sha256_of(secret)}", reason = "{reason}" }}'
-        for rule, file, secret, reason in entries
-    )
-    return f"[gate]\nmandatory_jobs = [\"checks\"]\n[secrets]\nallow = [{rows}]\n"
 
 
 @pytest.fixture(autouse=True)
@@ -92,58 +36,6 @@ def isolated_git_config(monkeypatch):
 def local_door(monkeypatch):
     """Under GitHub Actions the door stops workflow commands; tests that expect the local door must not inherit that."""
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
-
-
-def hygiene_output(capsys: pytest.CaptureFixture[str], path: Path) -> tuple[int, str]:
-    """The exit code and the whole output of `quality hygiene` over `path`, through the real door."""
-    code = cli.main(["hygiene", str(path)])
-    captured = capsys.readouterr()
-    return code, captured.out + captured.err
-
-
-def assert_key_found(repo: Path, engine_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """Exit 1 alone proves nothing, other rules can fail it too: the secret finding itself is asserted."""
-    assert cli.main(["hygiene", "--engines", str(engine_dir), str(repo)]) == 1
-    assert "secret config.txt:1" in capsys.readouterr().out
-
-
-def long_file(lines: int) -> str:
-    return "x = 1\n" * lines
-
-
-def long_function(lines: int) -> str:
-    return "def long_one():\n" + "    x = 1\n" * (lines - 1)
-
-
-def branchy_function(ccn: int) -> str:
-    branches = "".join(f"    if x == {value}:\n        return {value}\n" for value in range(ccn - 1))
-    return f"def branchy(x):\n{branches}    return -1\n"
-
-
-def typescript_file(lines: int) -> str:
-    """Lines no Python parser accepts, so a measurement that tried to parse them would call the file unparsable."""
-    return "export const answer: number = 42;\n" * lines
-
-
-def typescript_function(lines: int) -> str:
-    return "export function big(): number {\n" + "  const x = 1;\n" * (lines - 3) + "  return 1;\n}\n"
-
-
-def minified_bundle(characters: int = 46_106) -> str:
-    return "var a=function(){return 1};" * (characters // 27) + "\n"
-
-
-def make_repo(directory: Path, files: dict[str, str]) -> Path:
-    """A git repository at `directory` whose one commit tracks exactly `files`, ignored names included."""
-    git = ["git", "-C", str(directory), *GIT_IDENTITY]
-    subprocess.run([*git, "init", "-q"], check=True)
-    for name, content in files.items():
-        target = directory / name
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content)
-    subprocess.run([*git, "add", "-A", "-f"], check=True)
-    subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "fixture"], check=True)
-    return directory
 
 
 @pytest.fixture
@@ -162,21 +54,6 @@ def installed_engines(tmp_path_factory) -> Path:
     directory = tmp_path_factory.mktemp("engines")
     assert cli.main(["engines", "install", str(directory)]) == 0
     return directory
-
-
-def fake_engine(directory: Path, name: str, on_scan: str) -> Path:
-    """Writes a fake `name` engine that prints its pinned version and runs `on_scan` (shell) for any other call."""
-    version_arguments = " ".join(engines.VERSION_ARGUMENTS[name])
-    pinned = engines.read_pins()[name].version
-    binary = directory / name
-    binary.write_text(f'#!/bin/sh\nif [ "$*" = "{version_arguments}" ]; then echo {pinned}; exit 0; fi\n{on_scan}\n')
-    binary.chmod(0o755)
-    return binary
-
-
-def osv_engines(clean_engines, on_scan):
-    fake_engine(clean_engines, engines.OSV_SCANNER, on_scan)
-    return clean_engines
 
 
 @pytest.fixture
@@ -206,12 +83,6 @@ def fake_git(tmp_path, monkeypatch):
     return install
 
 
-def head_commit(repo: Path) -> str:
-    return subprocess.run(
-        ["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True, check=True
-    ).stdout.strip()
-
-
 @pytest.fixture
 def run_env(monkeypatch, build_repo, tmp_path):
     repo = build_repo({"quality/config.toml": '[gate]\nmandatory_jobs = ["checks"]\n'})
@@ -227,15 +98,6 @@ def run_env(monkeypatch, build_repo, tmp_path):
         monkeypatch.setenv(key, value)
     monkeypatch.delenv("GATE_BASE_SHA", raising=False)
     return repo, summary
-
-
-def put(path: Path, content: str | bytes | None) -> None:
-    """Writes `content` to `path`, or removes the file when `content` is None."""
-    if content is None:
-        path.unlink(missing_ok=True)
-    else:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(content if isinstance(content, bytes) else content.encode())
 
 
 @pytest.fixture
@@ -285,16 +147,6 @@ def stub_server():
 
 
 PublicRepo = Callable[[str, dict[str, str]], str]
-NEWEST, OLDER = "b" * 40, "a" * 40
-RELEASES = {"v0.9.0": OLDER, "v0.10.0": NEWEST}  # the newest by version, not by text
-MATRIX_HEADING = "**Repo × rule, newest release v0.10.0**"
-
-
-def write_fleet(directory: Path, public: Sequence[str] = (), private: Sequence[str] = ()) -> Path:
-    """A repository whose quality/fleet.toml lists these URLs; json.dumps writes a TOML array of basic strings."""
-    (directory / "quality").mkdir(parents=True)
-    (directory / "quality" / "fleet.toml").write_text(f"public = {json.dumps(public)}\nprivate = {json.dumps(private)}\n")
-    return directory
 
 
 @pytest.fixture
@@ -309,19 +161,6 @@ def scoreboard(capsys, tmp_path) -> Callable[..., tuple[int, str]]:
         return code, capsys.readouterr().out
 
     return run
-
-
-def row(output: str, name: str, table: int = 0) -> list[str]:
-    """The cells of repository `name` in the size table (0) or the matrix (1)."""
-    lines = [line for line in output.splitlines() if line.startswith(f"| {name} |")]
-    return [cell.strip() for cell in re.split(r"(?<!\\)\|", lines[table].strip("|"))]
-
-
-def head_of(url: str) -> str:
-    directory = url.removeprefix("file://")
-    return subprocess.run(
-        ["git", "-C", directory, "rev-parse", "HEAD"], capture_output=True, text=True, check=True
-    ).stdout.strip()
 
 
 @pytest.fixture
@@ -348,45 +187,6 @@ def public(tmp_path, scratch) -> PublicRepo:
 @pytest.fixture
 def missing(tmp_path) -> str:
     return (tmp_path / "remotes" / "gone").as_uri()
-
-
-def git_pull(directory, base_baseline, merge_baseline, moves=()):
-    """A bare repository holding a base commit and a merge commit that moves each (old, new) file and holds the
-    given baselines; returns its path and the two shas."""
-    work = directory / "work"
-    git = ["git", "-C", str(work), *GIT_IDENTITY]
-    subprocess.run(["git", "init", "-q", str(work)], check=True)
-    for old, _ in moves:
-        name = old.encode("ascii", "backslashreplace").decode()
-        put(work / old, "".join(f"{name} row {number} that no other file shares\n" for number in range(30)))
-    put(work / BASELINE_PATH, base_baseline)
-    subprocess.run([*git, "add", "-A"], check=True)
-    subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "base"], check=True)
-    base_sha = subprocess.run([*git, "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
-    for old, new in moves:
-        (work / new).parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run([*git, "mv", old, new], check=True)
-    put(work / BASELINE_PATH, merge_baseline)
-    subprocess.run([*git, "add", "-A"], check=True)
-    subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "merge"], check=True)
-    merge_sha = subprocess.run([*git, "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
-    remote = directory / "remote.git"
-    subprocess.run(["git", "clone", "-q", "--bare", str(work), str(remote)], check=True)
-    return str(remote), base_sha, merge_sha
-
-
-def process_is_gone(pid):
-    """True once the process has exited (a zombie waiting for its reaper counts as exited)."""
-    deadline = time.monotonic() + 5
-    while time.monotonic() < deadline:
-        try:
-            state = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
-        except (FileNotFoundError, ProcessLookupError):
-            return True
-        if state == "Z":
-            return True
-        time.sleep(0.05)
-    return False
 
 
 @pytest.fixture
