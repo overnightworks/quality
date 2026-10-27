@@ -504,6 +504,7 @@ def test_a_run_writes_nothing_and_restores_sys_path(build_repo, capsys, files):
     assert (status.stdout, (repo / ".import_linter_cache").exists(), sys.path) == ("", False, path_before)
 
 
+@pytest.mark.integration
 def test_qualitys_own_tree_holds_its_layers(capsys):
     """#61 rule 8, cell 23: quality's own layers contract is enforced and kept."""
     code, output = run(capsys, QUALITY_ROOT)

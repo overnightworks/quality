@@ -3,6 +3,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 from collections.abc import Callable, Sequence
@@ -21,8 +22,100 @@ from tests.support.engines import OUTPUTS, fake_engine
 from tests.support.git_repositories import GIT_IDENTITY, head_commit, make_repo, put
 from tests.support.scoreboard import RELEASES, write_fleet
 
+PROCESS_OR_SOCKET_FIXTURES = frozenset(
+    {
+        "build_repo",
+        "public",
+        "fake_git",
+        "stub_server",
+        "installed_engines",
+        "clean_engines",
+        "loopback",
+        "serve",
+        "served_databases",
+        "release_checkout",
+    }
+)
+KIND_MARKERS = frozenset({"unit", "integration"})
+# The event names `pyproject.toml`'s `markers` lines own as the definition of `integration`.
+STARTING_EVENTS = frozenset(
+    {
+        "subprocess.Popen",
+        "os.system",
+        "os.posix_spawn",
+        "os.exec",
+        "os.spawn",
+        "os.fork",
+        "os.forkpty",
+        "socket.connect",
+        "socket.bind",
+    }
+)
+EVENT_DETAIL_ARGUMENTS = {
+    "subprocess.Popen": slice(0, 2),
+    "os.system": slice(0, 1),
+    "os.posix_spawn": slice(0, 2),
+    "os.exec": slice(0, 2),
+    "os.spawn": slice(1, 3),
+    "socket.connect": slice(1, 2),
+    "socket.bind": slice(1, 2),
+}
+
 RepoBuilder = Callable[[dict[str, str]], Path]
 Responder = Callable[[http.server.BaseHTTPRequestHandler], None]
+
+
+_recording: list[str] | None = None
+
+
+def _record_starting_event(event: str, arguments: tuple) -> None:
+    if event not in STARTING_EVENTS or _recording is None:
+        return
+    detail = arguments[EVENT_DETAIL_ARGUMENTS.get(event, slice(0, 0))]  # never the environment: run_env puts a token there
+    _recording.append(f"{event} {detail}" if detail else event)
+
+
+sys.addaudithook(_record_starting_event)
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_collection_modifyitems(session, config, items):
+    for item in items:
+        hand_marked = KIND_MARKERS & {mark.name for mark in item.iter_markers()}
+        if len(hand_marked) == 2:
+            raise pytest.UsageError(f"{item.nodeid} carries both unit and integration")
+        if not hand_marked:
+            starts_process = PROCESS_OR_SOCKET_FIXTURES.intersection(item.fixturenames) or item.get_closest_marker("engine")
+            item.add_marker("integration" if starts_process else "unit")
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_setup(item):
+    global _recording
+    _recording = []
+    return (yield)
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_call(item):
+    global _recording
+    try:
+        return (yield)
+    finally:
+        events, _recording = _recording, None
+        if events and item.get_closest_marker("unit"):
+            pytest.fail(
+                f"unit test started a process or opened a socket: {events[0]}. "
+                "Request a fixture that does (build_repo, ...) or mark the test @pytest.mark.integration.",
+                pytrace=False,
+            )
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_teardown(item):
+    global _recording
+    _recording = None
+    return (yield)
 
 
 @pytest.fixture(autouse=True)

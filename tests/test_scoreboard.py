@@ -477,6 +477,7 @@ def test_a_fleet_given_on_the_command_line_is_a_usage_error(capsys, arguments):
     assert "scoreboard" in capsys.readouterr().err
 
 
+@pytest.mark.integration
 def test_a_private_only_fleet_is_measured(scoreboard, missing):
     """#63 rule 2: an empty public list is fine; the private row stands alone."""
     code, output = scoreboard(private=[missing])

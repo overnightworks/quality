@@ -538,6 +538,7 @@ def bare_binary_pin(tmp_path, monkeypatch):
     return download, pin
 
 
+@pytest.mark.integration
 def test_install_puts_a_verified_bare_binary_in_place_and_leaves_it_alone_the_second_time(bare_binary_pin, tmp_path, capsys):
     """#53 rule 5, cell 24."""
     download, pin = bare_binary_pin
@@ -561,6 +562,7 @@ def test_a_pin_with_an_unknown_format_is_refused_naming_the_pin_and_the_value(ba
     assert "'bianry'" in error
 
 
+@pytest.mark.integration
 def test_install_refuses_a_bare_binary_with_the_wrong_checksum_and_installs_nothing(bare_binary_pin, tmp_path, capsys):
     """#53 rule 5, cell 24."""
     _, pin = bare_binary_pin

@@ -742,6 +742,7 @@ def test_baseline_write_records_a_file_of_another_language_and_names_it_as_added
     assert baseline_write(capsys, repo) == (0, [f"baseline: adds file_lines {path} 1210", wrote_line(repo, "2 entries")])
 
 
+@pytest.mark.integration
 def test_a_tree_with_typescript_holds_the_same_python_baseline(tmp_path):
     """#119 E7, cells 19 and 20: a file of another language adds no Python entry and moves none."""
     python_only = {"src/b.py": long_file(810) + method(61), "src/a.py": branchy_function(17) + long_function(62)}

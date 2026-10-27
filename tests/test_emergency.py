@@ -411,6 +411,7 @@ def test_ctrl_c_while_posting_the_log_comment_is_reported(restore_fails, capsys)
         assert "merged." in last_line
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("base_baseline", "merge_baseline", "code", "message"),
     [
