@@ -296,14 +296,14 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   ">=3.12,<3.13") - <reason>`). An entry whose path is no judged file (untracked, gone, without `[project]`) or whose
   file is already at the floor is a finding; its fix is to delete the entry. A malformed entry is `cannot judge` in
   every rule that reads the config, and a config reader older than the rule refuses `[python]` as an unknown key, so
-  declare only after the bump. A candidate that is not UTF-8 TOML, or whose `requires-python` is no string or no PEP 440
-  specifier set, is `hygiene: python-floor unparsable - ...` (exit 2). No configuration switches the rule off, and a
+  declare only after the bump. A candidate that is not UTF-8 TOML, or whose `requires-python` is no string, no PEP 440
+  specifier set or a `===` clause with a version that is not PEP 440 (`===foobar`), is `hygiene: python-floor unparsable - ...` (exit 2). No configuration switches the rule off, and a
   declaration asks `quality verdict` for no `[[gate.loosened]]` entry. Only `requires-python` is read, because uv and
   pip refuse an interpreter outside it, so a leftover setter cannot install the project on old Python. Not read, and
   waiting for usage evidence: workflows, `.python-version`, Dockerfiles, ruff's `target-version`, `setup.py`,
   `setup.cfg` and Poetry's `[tool.poetry]`; `!=` as a floor (`>=3.13,!=3.13.*` is red although it admits only 3.14 and
-  up); a job that never installs the project, or `uv sync` behind an older setup-python, which runs old Python
-  unnoticed; and a Python project without a `pyproject.toml`. (#207)
+  up); a job that never installs the project, which runs old Python unnoticed; `uv sync` behind an older
+  setup-python, which fetches 3.14 and leaves a stale setter; and a Python project without a `pyproject.toml`. (#207)
 - The baseline only falls: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the
   base commit's, so growing a function and rewriting the baseline stays red. Each loosening is one line, named with the
   baseline's own metric, path and symbol (a file entry has no symbol):
