@@ -170,13 +170,15 @@ def test_a_pyproject_that_links_out_of_the_repository_cannot_be_judged(build_rep
     assert code == 2 and "hygiene: python-floor cannot judge - pyproject.toml resolves outside the repository" in output, output
 
 
-def test_a_gitlink_is_never_entered(build_repo, capsys, elsewhere):
+@pytest.mark.parametrize("gitlink_path", ["src/acestep", "src/acestep/pyproject.toml"], ids=["vendor directory", "at a pyproject.toml path"])
+def test_a_gitlink_is_never_entered(build_repo, capsys, elsewhere, gitlink_path):
     inner = build_repo({"pyproject.toml": project(">=3.12")})
     repo = Path(elsewhere) / "outer"
     repo.mkdir()
     subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
     subprocess.run(
-        ["git", "-C", str(repo), "update-index", "--add", "--cacheinfo", "160000", head_commit(inner), "src/acestep"], check=True
+        ["git", "-C", str(repo), "update-index", "--add", "--cacheinfo", "160000", head_commit(inner), gitlink_path], check=True
     )
+    (repo / gitlink_path).mkdir(parents=True)
     code, output = run(capsys, repo)
     assert (code, floor_lines(output)) == (0, []), output

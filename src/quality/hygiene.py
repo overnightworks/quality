@@ -43,7 +43,6 @@ TEST_IMPORT = LayoutRule.TEST_IMPORT.value
 PYTHON_FLOOR = "python-floor"
 PYTHON_TARGET = Version("3.14")
 LOWER_BOUND_OPERATORS = frozenset({">=", ">", "~=", "==", "==="})
-GITLINK_MODE = "160000"
 WORKFLOW_RULE_IDS = tuple(engines.WORKFLOW_ENGINES)
 ENGINE_RULE_IDS = (engines.LEAK_RULE, *WORKFLOW_RULE_IDS, advisories.RULE)
 WORKFLOW_DIRECTORY = PurePosixPath(".github/workflows")
@@ -384,7 +383,7 @@ def check_python_floor(pyprojects: dict[str, bytes], allowances: Sequence[Python
 def _python_floor_result(root: Path) -> FloorResult:
     modes = index_modes(root)
     names = [str(PurePosixPath(project.directory) / layout.PROJECT_FILE) for project in layout.python_projects(modes)]
-    present = _on_disk(root, [name for name in names if modes[name] != GITLINK_MODE])
+    present = _on_disk(root, [name for name in names if modes[name] != layout.GITLINK_MODE])
     return check_python_floor(_read_existing(repository.read_bytes, root, present), _declared(read_python_allowances, root))
 
 
