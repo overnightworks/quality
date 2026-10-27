@@ -4,7 +4,7 @@ import pytest
 
 from tests.support.emergency import ONE_JOB
 from tests.support.hygiene import hygiene_output
-from tests.support.layout import CONFIG, GUIDANCE, declaring, findings, in_index
+from tests.support.layout import CONFIG, GUIDANCE, declaring, findings, in_index, red
 
 RULE = "test-layout"
 
@@ -14,12 +14,8 @@ def project(*paths: str) -> dict[str, str]:
     return {**GUIDANCE, "pyproject.toml": "", **dict.fromkeys(paths, "")}
 
 
-def red(capsys, repo) -> list[str]:
-    return findings(hygiene_output(capsys, repo)[1], RULE)
-
-
-def case(identifier: str, paths: list[str], expected: list[str]):
-    return pytest.param(paths, expected, id=identifier)
+def case(identifier: str, paths: list[str], expected: list[str], *more: str):
+    return pytest.param(paths, expected, *more, id=identifier)
 
 
 @pytest.mark.parametrize(
@@ -33,11 +29,11 @@ def case(identifier: str, paths: list[str], expected: list[str]):
         case("B4 a package folder", ["src/p/config/x.py", "tests/test_config.py"], []),
         case("B5 one underscore dropped from a module", ["src/p/_x.py", "tests/test_x.py"], []),
         case("B5 one underscore dropped from a package", ["src/p/_x/y.py", "tests/test_x.py"], []),
-        case("B5 the test keeps no underscore", ["src/p/_x.py", "tests/test__x.py"], ["tests/test__x.py"]),
+        case("B5 the test keeps no underscore", ["src/p/_x.py", "src/p/_.py", "tests/test__x.py"], ["tests/test__x.py"]),
         case("B6 main", ["src/p/__main__.py", "tests/test_main.py"], []),
         case("B6 init", ["src/p/__init__.py", "tests/test_init.py", "tests/test_init_exports.py"], []),
         case("B6 about", ["src/p/__about__.py", "tests/test_about.py"], []),
-        case("B7 an empty name", ["src/p/x.py", "tests/test_.py"], ["tests/test_.py"]),
+        case("B7 an empty name", ["src/p/x.py", "src/p/_.py", "tests/test_.py"], ["tests/test_.py"]),
         case("B8 the package's own name", ["src/webauth/x.py", "tests/test_webauth_public_api.py"], []),
         case("B9 a mirrored folder", ["src/p/api/routes.py", "tests/api/test_routes.py"], []),
         case("B9 a module is no folder", ["src/p/hygiene.py", "tests/hygiene/test_x.py"], ["tests/hygiene/test_x.py"]),
@@ -48,7 +44,7 @@ def case(identifier: str, paths: list[str], expected: list[str]):
 )
 def test_a_test_is_named_after_a_module_its_folder_mirrors(build_repo, capsys, paths, expected):
     """#199 sentences 1, 3 and 4."""
-    assert red(capsys, build_repo(project(*paths))) == expected
+    assert red(capsys, build_repo(project(*paths)), RULE) == expected
 
 
 @pytest.mark.parametrize(
@@ -63,7 +59,7 @@ def test_a_test_is_named_after_a_module_its_folder_mirrors(build_repo, capsys, p
 )
 def test_with_several_packages_each_test_lies_under_its_package(build_repo, capsys, paths, expected):
     """#199 sentences 1 and 2."""
-    assert red(capsys, build_repo(project(*paths))) == expected
+    assert red(capsys, build_repo(project(*paths)), RULE) == expected
 
 
 @pytest.mark.parametrize(
@@ -82,7 +78,7 @@ def test_with_several_packages_each_test_lies_under_its_package(build_repo, caps
 )
 def test_script_and_workflow_tests_mirror_their_own_folders(build_repo, capsys, paths, expected):
     """#199 sentences 2 and 3."""
-    assert red(capsys, build_repo(project("src/p/x.py", *paths))) == expected
+    assert red(capsys, build_repo(project("src/p/x.py", *paths)), RULE) == expected
 
 
 @pytest.mark.parametrize(
@@ -95,7 +91,7 @@ def test_script_and_workflow_tests_mirror_their_own_folders(build_repo, capsys, 
 )
 def test_support_is_judged_while_e2e_and_fixtures_are_not(build_repo, capsys, paths, expected):
     """#199 sentence 5."""
-    assert red(capsys, build_repo(project("src/p/x.py", *paths))) == expected
+    assert red(capsys, build_repo(project("src/p/x.py", *paths)), RULE) == expected
 
 
 @pytest.mark.parametrize(
@@ -106,6 +102,9 @@ def test_support_is_judged_while_e2e_and_fixtures_are_not(build_repo, capsys, pa
              ["m/tests/test_y.py"]),
         case("B16 a workflow test in a member", ["m/pyproject.toml", "m/src/q/x.py", ".github/workflows/ci.yml",
                                                  "m/tests/workflows/test_ci.py"], ["m/tests/workflows/test_ci.py"]),
+        case("B13 a member's own script", ["m/pyproject.toml", "m/src/q/y.py", "m/scripts/x.py", "m/tests/scripts/test_x.py"], []),
+        case("B13 not the root's script", ["scripts/x.py", "m/pyproject.toml", "m/src/q/y.py", "m/tests/scripts/test_x.py"],
+             ["m/tests/scripts/test_x.py"]),
         case("B20 nested members", ["speech/pyproject.toml", "speech/src/s/x.py", "speech/tests/test_x.py",
                                     "speech/providers/qwen/pyproject.toml", "speech/providers/qwen/src/q/y.py",
                                     "speech/providers/qwen/tests/test_y.py"], []),
@@ -113,7 +112,7 @@ def test_support_is_judged_while_e2e_and_fixtures_are_not(build_repo, capsys, pa
 )
 def test_a_member_maps_only_into_its_own_project(build_repo, capsys, files, expected):
     """#199 sentence 7."""
-    assert red(capsys, build_repo(project(*files))) == expected
+    assert red(capsys, build_repo(project(*files)), RULE) == expected
 
 
 def test_each_failing_case_has_its_own_reason_and_fix(build_repo, capsys):
@@ -147,28 +146,33 @@ def test_a_project_with_several_packages_names_the_placement(build_repo, capsys)
 
 
 @pytest.mark.parametrize(
-    ("paths", "reasons"),
+    ("paths", "reasons", "fix"),
     [
         case("B15 two reasons", ["tests/workflows/ci/test_lint.py"],
              ["workflow tests lie directly in tests/workflows/",
-              "no workflow in .github/workflows is named by a word prefix of lint"]),
+              "no workflow in .github/workflows is named by a word prefix of lint"],
+             "move it up into tests/workflows/, or rename it test_<workflow>[_<aspect>].py after what it tests, "
+             "or declare it in quality/config.toml with [[layout.allow]], its path, the rule test-layout and a reason."),
         case("B15 one reason", ["tests/workflows/ci/test_lint.py", ".github/workflows/lint.yml"],
-             ["workflow tests lie directly in tests/workflows/"]),
+             ["workflow tests lie directly in tests/workflows/"],
+             "move it up into tests/workflows/, or declare it in quality/config.toml with [[layout.allow]], its path, the rule test-layout and a reason."),
         case("B16 the member case", ["m/pyproject.toml", "m/src/q/x.py", "m/tests/workflows/test_lint.py"],
-             ["workflow tests belong to the root project's tests/workflows/"]),
+             ["workflow tests belong to the root project's tests/workflows/"],
+             "move it to the root's tests/workflows/, or declare it in quality/config.toml with [[layout.allow]], its path, the rule test-layout and a reason."),
     ],
 )
-def test_workflow_tests_lie_directly_in_the_roots_workflows_folder(build_repo, capsys, paths, reasons):
+def test_workflow_tests_lie_directly_in_the_roots_workflows_folder(build_repo, capsys, paths, reasons, fix):
     """#199 sentences 2 and 6: two failures on one file give one finding, joined by a semicolon."""
     output = hygiene_output(capsys, build_repo(project("src/p/x.py", *paths)))[1]
     line = next(line for line in output.splitlines() if line.startswith(f"{RULE} "))
     assert "; ".join(reasons) in line
+    assert f"  Fix: {fix}" in output.splitlines()
 
 
 def test_a_declared_test_module_is_not_judged(build_repo, capsys):
     """#199 sentence 8, B22."""
     repo = build_repo({**project("src/p/x.py", "tests/test_y.py"), CONFIG: ONE_JOB + declaring("tests/test_y.py", rule=RULE)})
-    assert red(capsys, repo) == []
+    assert red(capsys, repo, RULE) == []
 
 
 def test_a_link_counts_by_its_name_and_is_never_followed(build_repo, capsys):
@@ -177,4 +181,4 @@ def test_a_link_counts_by_its_name_and_is_never_followed(build_repo, capsys):
     (repo / "tests" / "test_z.py").symlink_to("support/helper.py")
     (repo / "src" / "p" / "y.py").symlink_to("x.py")
     in_index(repo, "add", "--", "tests/test_z.py", "src/p/y.py")
-    assert red(capsys, repo) == ["tests/test_z.py"]
+    assert red(capsys, repo, RULE) == ["tests/test_z.py"]

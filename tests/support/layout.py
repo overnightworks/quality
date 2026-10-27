@@ -2,6 +2,8 @@
 
 import subprocess
 
+from tests.support.hygiene import hygiene_output
+
 CONFIG = "quality/config.toml"
 GUIDANCE = {"AGENTS.md": "# guidance\n"}
 EXAMPLE_SHA = "1" * 40
@@ -17,3 +19,8 @@ def findings(output: str, rule: str = "file-suffix") -> list[str]:
 
 def in_index(repo, *arguments: str) -> None:
     subprocess.run(["git", "-C", str(repo), *arguments], check=True)
+
+
+def red(capsys, repo, rule: str) -> list[str]:
+    """The paths the hygiene run of `repo` reports under `rule`."""
+    return findings(hygiene_output(capsys, repo)[1], rule)
