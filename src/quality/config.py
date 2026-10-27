@@ -124,6 +124,7 @@ class LayoutRule(Enum):
     FILE_SUFFIX = "file-suffix"
     SCRIPT_NAME = "script-name"
     SCRIPT_HEADER = "script-header"
+    TEST_LAYOUT = "test-layout"
 
 
 @dataclass(frozen=True)

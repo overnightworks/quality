@@ -332,7 +332,7 @@ def test_a_malformed_advisory_allowance_cannot_be_judged_where_the_whole_config_
     assert cli.main(["hygiene", "--engines", str(clean_engines), str(repo)]) == 2
     refusals = [line for line in capsys.readouterr().err.splitlines() if named in line]
     rules = [line.split(" - ")[0] for line in refusals]
-    assert rules == ["hygiene: compose-port cannot judge", "hygiene: root-layout cannot judge", "hygiene: file-suffix cannot judge", "hygiene: script-name cannot judge", "hygiene: script-header cannot judge", "hygiene: secret cannot judge", "hygiene: advisory cannot judge"], refusals
+    assert rules == ["hygiene: compose-port cannot judge", "hygiene: root-layout cannot judge", "hygiene: file-suffix cannot judge", "hygiene: script-name cannot judge", "hygiene: script-header cannot judge", "hygiene: test-layout cannot judge", "hygiene: secret cannot judge", "hygiene: advisory cannot judge"], refusals
 
 
 @pytest.mark.parametrize("entry", [allowance_config(reason=None), allowance_config(until="2027-01-31")])

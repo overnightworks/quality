@@ -280,7 +280,7 @@ CLONE_RELEASES = {**FIRST_RELEASES, "v0.4.0": CLONE_RELEASE, "v0.5.0": CLONE_TAB
 
 def declared(**fields) -> Declared:
     """A clone that declares nothing, with the given fields set."""
-    return Declared(**{"settings": None, "has_baseline": False, "has_clone_table": False, "has_import_config": False,
+    return Declared(**{"settings": None, "has_baseline": False, "has_clone_table": False, "has_import_config": False, "has_src_package": False,
                        "unreadable": frozenset(), **fields})
 
 
@@ -318,6 +318,40 @@ def test_the_gates_own_repository_enforces_clones_with_a_clone_table(has_clone_t
     """#137 test 2."""
     release = gate_release((Call(None),), True, CLONE_RELEASES)
     assert rule_cell(CLONE, release, declared(has_clone_table=has_clone_table)) == words
+
+
+TEST_LAYOUT = next(rule for rule in RULES if rule.rule == "test-layout")
+
+
+@pytest.mark.parametrize(
+    ("has_src_package", "words"), [(True, "enforced"), (False, "no src package")], ids=["a src package", "none"]
+)
+def test_main_enforces_test_layout_only_where_a_project_has_a_src_package(has_src_package, words):
+    """#196 sentence 9: where the gate knows the rule, the cell says whether any project in the clone is judged."""
+    release = gate_release((Call(None),), True, CLONE_RELEASES)
+    assert rule_cell(TEST_LAYOUT, release, declared(has_src_package=has_src_package)) == words
+
+
+def test_a_pinned_gate_has_not_released_test_layout():
+    """#196 sentence 9: a pinned release says `not released` whatever the clone holds."""
+    release = gate_release((Call(CLONE_TABLE_PIN),), False, CLONE_RELEASES)
+    assert rule_cell(TEST_LAYOUT, release, declared(has_src_package=True)) == "not released"
+
+
+@pytest.mark.parametrize(
+    ("files", "words"),
+    [
+        ({"pyproject.toml": "", "src/p/x.py": ""}, "enforced"),
+        ({"pyproject.toml": "", "tests/helpers.py": ""}, "no src package"),
+        ({"src/p/x.py": ""}, "no src package"),
+    ],
+    ids=["a project with a package", "a project without src", "a package without a project"],
+)
+def test_the_scoreboard_cell_for_test_layout_is_read_from_the_clone(scoreboard, public, monkeypatch, files, words):
+    """#196 sentence 9, E3: the clone's tracked files decide the cell, on the gate's own repository."""
+    monkeypatch.setattr("quality.scoreboard.GATE_REPOSITORY", "gate")
+    result, output = scoreboard(public("gate", {**caller("./.github/workflows/gate.yml"), **files}), tags=first_releases())
+    assert (result, cell(output, "gate", "test-layout")) == (0, words), output
 
 
 def test_a_malformed_baseline_makes_the_gates_own_clone_cell_unreadable_and_the_run_red(
@@ -425,4 +459,4 @@ def test_the_heading_sentence_names_the_rules_the_oldest_release_always_enforces
     """#125 cell 24, E8: the five rules get a sentence, not five columns."""
     _, output = scoreboard(public("any", {}), tags=first_releases())
     assert "Every gate release enforces env-file, compose-port, secret, workflow-lint and workflow-security." in output
-    assert MATRIX_COLUMNS[5:] == ("claude-md", "root-layout", "file-suffix", "script-name", "script-header", "advisory", "size", "import-contract", "clone")
+    assert MATRIX_COLUMNS[5:] == ("claude-md", "root-layout", "file-suffix", "script-name", "script-header", "test-layout", "advisory", "size", "import-contract", "clone")

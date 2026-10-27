@@ -1,5 +1,6 @@
 import re
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import PurePosixPath
 
 from quality.config import CONFIG_PATH, LayoutAllowance, LayoutRule
@@ -22,16 +23,27 @@ ENCODING_DIRECTIVE = re.compile(r"#.*?coding[:=]")
 TOOL_DIRECTIVE = re.compile(r"(#|//|/\*)\s*(shellcheck\b|-\*-|coding[:=]|noqa\b|type:|pyright:|ruff:|eslint)")
 PEP_723_START = "# /// script"
 PEP_723_END = "# ///"
+PROJECT_FILE = "pyproject.toml"
+SOURCE_DIRECTORY = "src"
+INIT_FILE = "__init__.py"
+CONFTEST_FILE = "conftest.py"
+HELPER_DIRECTORIES = frozenset({"support", "fixtures"})
+FIXTURES_DIRECTORY = "fixtures"
+END_TO_END_DIRECTORY = "e2e"
 
 
 def check_file_suffix(modes: Mapping[str, str], allowances: Sequence[LayoutAllowance]) -> list[Finding]:
     """Every tracked file without a suffix is executable, a symlink or gitlink, a dotfile, tool-mandated or declared;
     a declaration of an untracked path is a finding too. `modes` maps each tracked path to its index mode. Findings are
     sorted by path."""
-    declared = {allowance.path for allowance in allowances if allowance.rule is LayoutRule.FILE_SUFFIX}
+    declared = _declared_paths(allowances, LayoutRule.FILE_SUFFIX)
     findings = [_suffixless(path) for path, mode in modes.items() if path not in declared and _lacks_suffix(path, mode)]
     findings += [_stale_declaration(path, LayoutRule.FILE_SUFFIX) for path in declared - modes.keys()]
     return sorted(findings, key=lambda finding: finding.path)
+
+
+def _declared_paths(allowances: Sequence[LayoutAllowance], rule: LayoutRule) -> set[str]:
+    return {allowance.path for allowance in allowances if allowance.rule is rule}
 
 
 def _lacks_suffix(path: str, mode: str) -> bool:
@@ -85,7 +97,7 @@ def _judged_scripts(
     allowances: Sequence[LayoutAllowance],
     problem_of: Callable[[str, bytes], tuple[str, str] | None],
 ) -> list[Finding]:
-    declared = {allowance.path for allowance in allowances if allowance.rule is rule}
+    declared = _declared_paths(allowances, rule)
     findings = []
     for path, mode in modes.items():
         content = contents.get(path)
@@ -156,3 +168,82 @@ def _explains(line: str, comment_markers: tuple[str, ...]) -> bool:
     if DOCSTRING_OPENER.match(line):
         return True
     return line.startswith(comment_markers) and not TOOL_DIRECTIVE.match(line)
+
+
+@dataclass(frozen=True)
+class PythonProject:
+    """A directory with a tracked `pyproject.toml` and the packages under its `src/`: the directories that hold a
+    tracked `.py` at any depth."""
+
+    directory: str
+    packages: tuple[str, ...]
+
+    @property
+    def tests_directory(self) -> PurePosixPath:
+        return PurePosixPath(self.directory) / TESTS_DIRECTORY
+
+
+def python_projects(paths: Iterable[str]) -> list[PythonProject]:
+    """Every project: the directory of each tracked `pyproject.toml` that lies in no other project's `tests/`. The
+    file's content is never read. Sorted by directory."""
+    tracked = [PurePosixPath(path) for path in paths]
+    directories = sorted(path.parent for path in tracked if path.name == PROJECT_FILE)
+    kept = [directory for directory in directories if not any(_inside_tests(directory, other) for other in directories)]
+    return [PythonProject(str(directory), _packages(directory, tracked)) for directory in kept]
+
+
+def _inside_tests(directory: PurePosixPath, other: PurePosixPath) -> bool:
+    return directory != other and (other / TESTS_DIRECTORY) in directory.parents
+
+
+def _packages(directory: PurePosixPath, tracked: Sequence[PurePosixPath]) -> tuple[str, ...]:
+    source = directory / SOURCE_DIRECTORY
+    below = [path.relative_to(source).parts for path in tracked if path.suffix == ".py" and source in path.parents]
+    return tuple(sorted({parts[0] for parts in below if len(parts) > 1}))
+
+
+def check_test_layout(modes: Mapping[str, str], allowances: Sequence[LayoutAllowance]) -> list[Finding]:
+    """Every tracked path under a judged project's `tests/` is a `test_*.py`, a `conftest.py`, a file in a `support/` or
+    `fixtures/` folder or a file in the top-level `e2e/`, and no `__init__.py` lies there outside `fixtures/`; a
+    declaration of an untracked path is a finding too. A project is judged when it has a package."""
+    declared = _declared_paths(allowances, LayoutRule.TEST_LAYOUT)
+    judged = [project.tests_directory for project in python_projects(modes) if project.packages]
+    findings = []
+    for path in modes:
+        pure = PurePosixPath(path)
+        if path not in declared and any(tests in pure.parents for tests in judged):
+            findings += _test_layout_findings(pure, next(tests for tests in judged if tests in pure.parents))
+    findings += [_stale_declaration(path, LayoutRule.TEST_LAYOUT) for path in declared - modes.keys()]
+    return sorted(findings, key=lambda finding: finding.path)
+
+
+def _test_layout_findings(path: PurePosixPath, tests: PurePosixPath) -> list[Finding]:
+    inside = path.relative_to(tests).parts
+    folders = inside[:-1]
+    if path.name == INIT_FILE and FIXTURES_DIRECTORY not in folders:
+        return [_init_under_tests(str(path))]
+    allowed = (
+        (path.name.startswith("test_") and path.suffix == ".py")
+        or path.name == CONFTEST_FILE
+        or bool(HELPER_DIRECTORIES.intersection(folders))
+        or (folders[:1] == (END_TO_END_DIRECTORY,))
+    )
+    return [] if allowed else [_stray_under_tests(str(path))]
+
+
+def _init_under_tests(path: str) -> Finding:
+    return Finding(
+        LayoutRule.TEST_LAYOUT.value, path, None,
+        "an __init__.py under tests/, which pytest's importlib mode does not need.",
+        f"delete it, or declare it in {CONFIG_PATH} with [[layout.allow]], its path, the rule test-layout and a reason.",
+    )
+
+
+def _stray_under_tests(path: str) -> Finding:
+    return Finding(
+        LayoutRule.TEST_LAYOUT.value, path, None,
+        "a file under tests/ that is no test_*.py or conftest.py and lies in no support/, fixtures/ or top-level "
+        "e2e/ folder.",
+        "move it to a support/ folder (a helper) or a fixtures/ folder (data), or declare it in "
+        f"{CONFIG_PATH} with [[layout.allow]], its path, the rule test-layout and a reason.",
+    )

@@ -20,7 +20,7 @@ from urllib.parse import urlsplit
 
 import yaml
 
-from quality import __version__, advisories, architecture, clones, config, engines, hygiene, ratchet, repository
+from quality import __version__, advisories, architecture, clones, config, engines, hygiene, layout, ratchet, repository
 
 FLEET_PATH = "quality/fleet.toml"
 FLEET_EXAMPLE = 'public = ["https://github.com/o/open"]\nprivate = ["https://github.com/o/closed"]'
@@ -65,6 +65,7 @@ DEBT_COLUMNS = (ratchet.Metric.FILE_LINES, ratchet.Metric.FUNCTION_LINES, ratche
 ENFORCED = "enforced"
 REPORT_ONLY = "report-only"
 NO_CONFIG = "no config"
+NO_SRC_PACKAGE = "no src package"
 RELEASE_UNKNOWN = "release unknown"
 NOT_RELEASED = "not released"
 IMPORT_LINTER_CONFIG = "import-linter config"
@@ -86,6 +87,7 @@ class Switch(Enum):
     SIZE_BASELINE = "a size baseline"
     IMPORT_LINTER_CONFIG = "an import-linter config"
     CLONE_TABLE = "a clone table"
+    SRC_PACKAGE = "a src package"
     REPORT_ONLY = "report only"
 
 
@@ -120,6 +122,7 @@ RULES = (
     RuleRelease(hygiene.FILE_SUFFIX, None, Switch.ALWAYS),
     RuleRelease(hygiene.SCRIPT_NAME, None, Switch.ALWAYS),
     RuleRelease(hygiene.SCRIPT_HEADER, None, Switch.ALWAYS),
+    RuleRelease(hygiene.TEST_LAYOUT, None, Switch.SRC_PACKAGE),
     RuleRelease(advisories.RULE, RATCHET_RELEASE, Switch.ALWAYS),
     RuleRelease(ratchet.SIZE, RATCHET_RELEASE, Switch.SIZE_BASELINE),
     RuleRelease(architecture.RULE, RATCHET_RELEASE, Switch.IMPORT_LINTER_CONFIG),
@@ -160,12 +163,13 @@ class Workflows:
 @dataclass(frozen=True)
 class Declared:
     """What a clone's own files switch on: the gate settings, a size baseline, a clone table, an import-linter config,
-    and the files among them that could not be read."""
+    a Python project with a src package, and the files among them that could not be read."""
 
     settings: config.GateSettings | None
     has_baseline: bool
     has_clone_table: bool
     has_import_config: bool
+    has_src_package: bool
     unreadable: frozenset[str]
 
 
@@ -423,7 +427,8 @@ def read_declared(clone: Path, tracked: list[str]) -> Declared:
         has_import_config = find_import_config(clone, tracked)
     except (repository.RepositoryFileError, architecture.ContractError):
         unreadable.add(IMPORT_LINTER_CONFIG)
-    return Declared(settings, has_baseline, has_clone_table, has_import_config, frozenset(unreadable))
+    has_src_package = any(project.packages for project in layout.python_projects(tracked))
+    return Declared(settings, has_baseline, has_clone_table, has_import_config, has_src_package, frozenset(unreadable))
 
 
 def find_import_config(clone: Path, tracked: list[str]) -> bool:
@@ -612,6 +617,8 @@ def switch_words(switch: Switch, declared: Declared) -> Cell:
         return ENFORCED
     if switch is Switch.REPORT_ONLY:
         return REPORT_ONLY
+    if switch is Switch.SRC_PACKAGE:
+        return ENFORCED if declared.has_src_package else NO_SRC_PACKAGE
     file, present = {
         Switch.SIZE_BASELINE: (ratchet.BASELINE_PATH, declared.has_baseline),
         Switch.CLONE_TABLE: (ratchet.BASELINE_PATH, declared.has_clone_table),
