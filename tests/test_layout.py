@@ -264,12 +264,15 @@ def test_one_declaration_covers_the_shape_and_the_location(build_repo, capsys):
         ("# -*- coding: utf-8 -*-\n# /// script\n# dependencies = []\n# ///\nprint(1)\n", True),
         ("# coding: utf-8\nprint(1)\n", True),
         ('r"""Runs the checks."""\nprint(1)\n', False),
+        ("# -*- coding: utf-8 -*-\nimport os\nimport sys\n# Runs checks.\n", True),
+        ('b"""Runs checks."""\nprint(1)\n', True),
+        ('f"""Runs checks."""\nprint(1)\n', True),
         ("", True),
     ],
     ids=["code first", "directive only", "blank lines do not count", "third line", "fourth line", "directive then comment",
          "noqa and type", "tool directives", "docstring first", "single-quoted docstring", "after a PEP 723 block",
          "PEP 723 then code", "shebang, block, docstring", "encoding then PEP 723 then code", "plain encoding line",
-         "prefixed docstring", "empty"],
+         "prefixed docstring", "encoding line counts toward the window", "bytes literal", "f-string", "empty"],
 )
 def test_a_script_needs_a_comment_or_docstring_in_its_first_three_lines(build_repo, capsys, content, red):
     """#190 sentence 4: a non-directive comment or docstring within the first three non-blank lines."""
