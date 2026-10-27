@@ -4,7 +4,7 @@ import pytest
 
 from tests.support.emergency import ONE_JOB
 from tests.support.hygiene import hygiene_output
-from tests.test_layout import CONFIG, GUIDANCE, declaring, findings, in_index
+from tests.support.layout import CONFIG, GUIDANCE, declaring, findings, in_index
 
 RULE = "test-layout"
 ROOT_PROJECT = {**GUIDANCE, "pyproject.toml": "", "src/p/cli.py": "x = 1\n"}
@@ -74,10 +74,13 @@ def test_each_finding_case_has_its_own_reason_and_fix(build_repo, capsys):
         ({"pyproject.toml": "", "src/p/x.py": "", "tools/tests/helper.py": ""}, []),
         ({"pyproject.toml": "", "src/p/x.py": "", "tests/fixtures/app/pyproject.toml": "",
           "tests/fixtures/app/src/a/x.py": "", "tests/fixtures/app/tests/helpers.py": ""}, []),
+        ({"pyproject.toml": "", "src/p/x.py": "", "tests/pyproject.toml": "", "tests/src/a/x.py": "",
+          "tests/tests/helpers.py": ""},
+         ["tests/pyproject.toml", "tests/src/a/x.py", "tests/tests/helpers.py"]),
         ({"pyproject.toml": "", "src/modules.py": "", "tests/helpers.py": ""}, []),
     ],
     ids=["no src", "no pyproject", "src without python", "namespace package", "empty project table", "member",
-         "tests elsewhere", "pyproject inside tests makes no project", "src holding only a module"],
+         "tests elsewhere", "pyproject inside tests makes no project", "pyproject directly in tests", "src holding only a module"],
 )
 def test_only_a_project_with_a_package_is_judged(build_repo, capsys, files, expected):
     """#196 sentences 1 and 2, cells A2 to A10."""

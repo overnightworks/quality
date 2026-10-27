@@ -193,7 +193,8 @@ def python_projects(paths: Iterable[str]) -> list[PythonProject]:
 
 
 def _inside_tests(directory: PurePosixPath, other: PurePosixPath) -> bool:
-    return directory != other and (other / TESTS_DIRECTORY) in directory.parents
+    tests = other / TESTS_DIRECTORY
+    return directory == tests or tests in directory.parents
 
 
 def _packages(directory: PurePosixPath, tracked: Sequence[PurePosixPath]) -> tuple[str, ...]:
