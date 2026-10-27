@@ -13,6 +13,8 @@ from quality import engines
 from quality.engines import EngineError
 from tests.support.processes import process_is_gone
 
+pytestmark = pytest.mark.integration
+
 
 def test_git_keeps_bytes_when_asked_and_reads_as_text_otherwise():
     assert engines.git(["--version"], "no git", encoding=None).startswith(b"git version")

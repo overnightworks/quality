@@ -3,10 +3,11 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 from collections.abc import Callable, Sequence
-from pathlib import Path
+from pathlib import Path, PosixPath, PurePosixPath
 
 import pytest
 
@@ -21,8 +22,124 @@ from tests.support.engines import OUTPUTS, fake_engine
 from tests.support.git_repositories import GIT_IDENTITY, head_commit, make_repo, put
 from tests.support.scoreboard import RELEASES, write_fleet
 
+PROCESS_OR_SOCKET_FIXTURES = frozenset(
+    {
+        "build_repo",
+        "public",
+        "fake_git",
+        "stub_server",
+        "installed_engines",
+        "clean_engines",
+        "loopback",
+        "serve",
+        "served_databases",
+        "release_checkout",
+    }
+)
+KIND_MARKERS = frozenset({"unit", "integration"})
+# The one owner of the audit event names that define `integration`.
+STARTING_EVENTS = frozenset(
+    {
+        "subprocess.Popen",
+        "os.system",
+        "os.posix_spawn",
+        "os.exec",
+        "os.spawn",
+        "os.fork",
+        "os.forkpty",
+        "socket.connect",
+        "socket.bind",
+    }
+)
+EVENT_DETAIL_ARGUMENTS = {
+    "subprocess.Popen": slice(0, 2),
+    "os.system": slice(0, 1),
+    "os.posix_spawn": slice(0, 2),
+    "os.exec": slice(0, 2),
+    "os.spawn": slice(1, 3),
+    "socket.connect": slice(1, 2),
+    "socket.bind": slice(1, 2),
+}
+
 RepoBuilder = Callable[[dict[str, str]], Path]
 Responder = Callable[[http.server.BaseHTTPRequestHandler], None]
+
+
+# Exact built-in types whose repr cannot raise; any other type, subclasses included, prints as its name.
+REPRESENTABLE_TYPES = frozenset({int, float, bool, bytes, type(None), PurePosixPath, PosixPath})
+
+_recording: list[tuple[str, tuple]] | None = None
+
+
+def _record_starting_event(event: str, arguments: tuple) -> None:
+    if event in STARTING_EVENTS and _recording is not None:
+        _recording.append((event, arguments[EVENT_DETAIL_ARGUMENTS.get(event, slice(0, 0))]))  # never the environment: run_env puts a token there
+
+
+sys.addaudithook(_record_starting_event)
+
+
+def _describe_value(value: object) -> str:
+    """Never calls the value's own `__repr__`, which may raise."""
+    if isinstance(value, str):
+        return str.__repr__(value)
+    if isinstance(value, (list, tuple)):
+        return "[" + ", ".join(_describe_value(item) for item in value) + "]"
+    if type(value) in REPRESENTABLE_TYPES:
+        return repr(value)
+    return f"<{type(value).__name__}>"
+
+
+def _describe(event: str, detail: tuple) -> str:
+    return f"{event} {', '.join(_describe_value(value) for value in detail)}" if detail else event
+
+
+def _stop_recording_and_judge(item) -> None:
+    global _recording
+    events, _recording = _recording, None
+    if events and item.get_closest_marker("unit"):
+        pytest.fail(
+            f"unit test started a process or opened a socket: {_describe(*events[0])}. "
+            "Request a fixture that does (build_repo, ...) or mark the test @pytest.mark.integration.",
+            pytrace=False,
+        )
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_collection_modifyitems(session, config, items):
+    for item in items:
+        hand_marked = KIND_MARKERS & {mark.name for mark in item.iter_markers()}
+        if len(hand_marked) == 2:
+            raise pytest.UsageError(f"{item.nodeid} carries both unit and integration")
+        if not hand_marked:
+            starts_process = PROCESS_OR_SOCKET_FIXTURES.intersection(item.fixturenames) or item.get_closest_marker("engine")
+            item.add_marker("integration" if starts_process else "unit")
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_setup(item):
+    global _recording
+    _recording = []
+    try:
+        return (yield)
+    except (pytest.skip.Exception, pytest.xfail.Exception):  # a skipped or xfailed setup never reaches the call phase
+        _stop_recording_and_judge(item)
+        raise
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_call(item):
+    try:
+        return (yield)
+    finally:
+        _stop_recording_and_judge(item)
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_teardown(item):
+    global _recording
+    _recording = None
+    return (yield)
 
 
 @pytest.fixture(autouse=True)

@@ -53,3 +53,7 @@ Tests mirror `src/quality/` flat in `tests/`; script tests sit in `tests/scripts
 `tests/fixtures/`. Fixtures live in `tests/conftest.py`; helpers that other test modules use live in `tests/support/` and are
 imported from the repository root (`from tests.support.git_repositories import make_repo`). A test module imports no other test
 module and no `conftest`.
+
+A test's kind, `unit` or `integration`, is derived in `tests/conftest.py` from the definition in `pyproject.toml`'s `markers`, and a
+`unit` test that starts a process or opens a socket fails. A test that starts a process or opens a socket outside the fixtures that do carries
+`@pytest.mark.integration`.

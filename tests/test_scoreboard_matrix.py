@@ -188,6 +188,7 @@ def test_a_row_is_named_owner_slash_name_when_the_url_has_a_host(url, name):
     assert repository_name(url) == name
 
 
+@pytest.mark.integration
 def test_a_pipe_in_a_label_is_escaped_and_the_row_keeps_its_columns(scoreboard):
     """#123 E2, cell 12."""
     _, output = scoreboard("file:///nowhere/a|b")
@@ -462,6 +463,7 @@ def test_a_malformed_size_baseline_is_named_in_the_size_cell_only_where_the_cell
     assert cell(output, "sized", "size") == size
 
 
+@pytest.mark.integration
 def test_every_rule_the_door_judges_has_a_row_in_the_first_release_table(tmp_path):
     """#125 cell 23: a rule a later slice adds to `hygiene.run_hygiene` without a row turns this red."""
     judged = {verdict.rule for verdict in hygiene.run_hygiene(make_repo(tmp_path, {"a": "1\n"})).verdicts}

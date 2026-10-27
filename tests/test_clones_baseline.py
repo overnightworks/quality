@@ -206,6 +206,7 @@ def test_a_declared_clone_add_is_declared_in_the_verdict(pull_request, capsys):
     assert (code, ONLY_DECLARED in output, UNDECLARED in output) == (1, True, False), output
 
 
+@pytest.mark.integration
 def test_a_declared_clone_add_merges_through_the_door(capsys, tmp_path):
     """#130 E5, cell 8: the door re-derives the same line from the merge commit and merges."""
     what = f"clone baseline adds {SECOND_LABEL}"
@@ -529,6 +530,7 @@ def test_a_control_character_and_undecodable_bytes_in_a_path_print_escaped(build
     assert "clone src/a\\x01.py - the baseline holds the pair src/a\\x01.py run <-> src/b.py hygiene" in output
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("merge_config", "code", "expected"),
     [

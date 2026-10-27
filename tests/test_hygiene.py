@@ -275,6 +275,7 @@ def test_webauth_suite_compose_is_clean(build_repo, capsys):
     assert run(capsys, build_repo(files))[0] == 0
 
 
+@pytest.mark.integration
 def test_quality_tracks_no_env_or_compose_file():
     """#3 rule 5: the quality repository passes its own hygiene check and tracks no env or compose file."""
     root = Path(__file__).resolve().parents[1]
@@ -290,6 +291,7 @@ def not_a_directory(tmp_path):
     return target
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     "bad_path",
     [not_a_directory, lambda tmp_path: tmp_path / "missing", lambda tmp_path: tmp_path / "."],
@@ -505,6 +507,7 @@ def test_a_path_git_cannot_read_names_the_path_as_given_and_never_a_traceback(
     assert (code, f"{path} is not a readable git repository" in err, "Traceback" in err) == (2, True, False), err
 
 
+@pytest.mark.integration
 def test_the_hint_for_a_path_git_refuses_quotes_it(tmp_path, monkeypatch, capsys):
     """#76 rule 2, cell 16: the command the message advises runs as printed, whatever the PATH holds."""
     (tmp_path / "a b").write_text("x")
@@ -524,6 +527,7 @@ def test_a_working_directory_that_was_removed_is_cannot_judge_not_a_traceback(tm
     assert [(code, ". is not a readable git repository: the working directory cannot be read ([Errno 2]" in err, "Traceback" in err) for _, code, err in results] == [(2, True, False)] * 2, results
 
 
+@pytest.mark.integration
 def test_a_machine_without_git_is_cannot_judge_not_a_traceback(tmp_path, monkeypatch, capsys):
     """#76 rule 2: git missing from the PATH names that git did not run."""
     repo = make_repo(tmp_path, {"src/a.py": "x = 1\n"})
@@ -535,6 +539,7 @@ def test_a_machine_without_git_is_cannot_judge_not_a_traceback(tmp_path, monkeyp
     assert (code, f"{repo} is not a readable git repository: git did not run ([Errno 2]" in err, "Traceback" in err) == (2, True, False), err
 
 
+@pytest.mark.integration
 def test_compose_files_are_read_and_parsed_one_at_a_time(tmp_path, capsys):
     """#76 E6, rule 1, cell 4: the first file's YAML error is reported although a later file cannot be decoded."""
     repo = make_repo(tmp_path, {"docs/compose-a.yaml": "a: [\n", "docs/compose-b.yaml": "x"})
@@ -560,6 +565,7 @@ def make_linked_worktree_path(tmp_path: Path) -> tuple[Path, Path]:
     return main, linked
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("make", [make_submodule_path, make_linked_worktree_path], ids=["submodule", "linked worktree"])
 def test_a_path_in_a_submodule_or_linked_worktree_means_its_own_top(tmp_path, capsys, make):
     """#76 rule 1, cell 19 (E7): the write lands in the work tree the PATH lies in, not in the superproject or main checkout."""
@@ -641,6 +647,7 @@ def test_an_unprintable_env_name_gets_a_hint_and_never_a_command(build_repo, cap
     assert "rm --cached" not in output
 
 
+@pytest.mark.integration
 def test_the_hint_for_a_path_git_refuses_has_no_command_when_the_path_is_unprintable(tmp_path, monkeypatch, capsys):
     """#86 rule 1, cell 9: a PATH holding a line feed gets the hint without a `git -C` command."""
     (tmp_path / "a\nb").write_text("x")
@@ -691,6 +698,7 @@ cli.run(lambda: cli.main(["sonar", "findings"], transport=sonar_answering(issues
 """
 
 
+@pytest.mark.integration
 def test_a_merged_pipe_lists_the_sonar_findings_before_the_red_summary(tmp_path):
     """#86 rule 3, cell 12: the findings precede the summary through `2>&1`."""
     from tests.support.sonar import PULL_REQUEST_ENVIRONMENT, TASK_FIXTURE, legacy_config_absent
@@ -718,6 +726,7 @@ def test_a_replaced_stdout_still_prints_the_help():
     assert (stopped.value.code, "hygiene" in captured.getvalue()) == (0, True)
 
 
+@pytest.mark.integration
 def test_a_closed_stdout_stream_is_cannot_judge_with_its_diagnostic(tmp_path, capsys, monkeypatch):
     """#86 rule 3: a closed stdout object never crashes `main`; the diagnostic reaches stderr."""
     monkeypatch.setenv("NO_COLOR", "1")  # Python 3.14's argparse otherwise probes the closed stdout for colour
@@ -728,6 +737,7 @@ def test_a_closed_stdout_stream_is_cannot_judge_with_its_diagnostic(tmp_path, ca
     assert (code, "hygiene: cannot judge" in capsys.readouterr().err) == (2, True)
 
 
+@pytest.mark.integration
 def test_a_closed_stdout_is_cannot_judge_and_never_a_crash(tmp_path):
     """#86 rule 3: with fd 1 closed the door still exits 2 with its cannot-judge line."""
     done = subprocess.run(

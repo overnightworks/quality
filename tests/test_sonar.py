@@ -503,6 +503,7 @@ def test_the_real_transport_gives_up_on_a_server_that_never_answers(loopback):
         sonar.fetch_json(url, "Basic x", timeout=0.25)
 
 
+@pytest.mark.integration
 def test_the_real_transport_reports_an_unreachable_server():
     """#22 kept row: an unreachable server is cannot judge"""
     with pytest.raises(CannotJudge, match="could not be reached"):
