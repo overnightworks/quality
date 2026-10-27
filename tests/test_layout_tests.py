@@ -4,14 +4,10 @@ import pytest
 
 from tests.support.emergency import ONE_JOB
 from tests.support.hygiene import hygiene_output
-from tests.support.layout import CONFIG, GUIDANCE, declaring, findings, in_index
+from tests.support.layout import CONFIG, GUIDANCE, declaring, findings, in_index, red
 
 RULE = "test-layout"
 ROOT_PROJECT = {**GUIDANCE, "pyproject.toml": "", "src/p/cli.py": "x = 1\n"}
-
-
-def red(capsys, repo) -> list[str]:
-    return findings(hygiene_output(capsys, repo)[1], RULE)
 
 
 @pytest.mark.parametrize(
@@ -23,15 +19,15 @@ def red(capsys, repo) -> list[str]:
         ({"tests/e2e/flow/helper.py": "", "tests/e2e/data.json": "", "tests/x/e2e/helper.py": ""}, ["tests/x/e2e/helper.py"]),
         ({"tests/conftest.py": "", "tests/api/conftest.py": ""}, []),
         ({"tests/foo.test.mjs": "", "tests/check.sh": ""}, ["tests/check.sh", "tests/foo.test.mjs"]),
-        ({"tests/test_anything.py": "", "tests/support/test_x.py": ""}, []),
+        ({"tests/test_cli.py": "", "tests/fixtures/test_x.py": ""}, []),
         ({"tests/Support/x.py": ""}, ["tests/Support/x.py"]),
     ],
     ids=["clean", "helper beside tests", "data folder", "e2e only at the top", "conftest at any depth",
-         "other languages", "a test file anywhere", "exact case"],
+         "other languages", "a test file", "exact case"],
 )
 def test_rule_four_judges_every_path_under_tests(build_repo, capsys, files, expected):
     """#196 sentences 3 and 5: a test file, a conftest, support/fixtures at any depth and top-level e2e pass."""
-    assert red(capsys, build_repo({**ROOT_PROJECT, **files})) == expected
+    assert red(capsys, build_repo({**ROOT_PROJECT, **files}), RULE) == expected
 
 
 @pytest.mark.parametrize(
@@ -83,7 +79,7 @@ def test_each_finding_case_has_its_own_reason_and_fix(build_repo, capsys):
 )
 def test_only_a_project_with_a_package_is_judged(build_repo, capsys, files, expected):
     """#196 sentences 1 and 2, cells A2 to A10."""
-    assert red(capsys, build_repo({**GUIDANCE, **files})) == expected
+    assert red(capsys, build_repo({**GUIDANCE, **files}), RULE) == expected
 
 
 def test_nested_projects_each_judge_their_own_tests(build_repo, capsys):
@@ -93,7 +89,7 @@ def test_nested_projects_each_judge_their_own_tests(build_repo, capsys):
         "speech/providers/qwen/pyproject.toml": "", "speech/providers/qwen/src/q/x.py": "",
         "speech/providers/qwen/tests/helpers.py": "",
     }
-    assert red(capsys, build_repo({**GUIDANCE, **files})) == ["speech/providers/qwen/tests/helpers.py"]
+    assert red(capsys, build_repo({**GUIDANCE, **files}), RULE) == ["speech/providers/qwen/tests/helpers.py"]
 
 
 def test_a_symlink_and_a_gitlink_under_tests_are_judged_by_their_own_name(build_repo, capsys):
@@ -102,7 +98,7 @@ def test_a_symlink_and_a_gitlink_under_tests_are_judged_by_their_own_name(build_
     (repo / "tests" / "helper.py").symlink_to("support/x.py")
     in_index(repo, "add", "--", "tests/helper.py")
     in_index(repo, "update-index", "--add", "--cacheinfo", f"160000,{'1' * 40},tests/vendor")
-    assert red(capsys, repo) == ["tests/helper.py", "tests/vendor"]
+    assert red(capsys, repo, RULE) == ["tests/helper.py", "tests/vendor"]
 
 
 @pytest.mark.parametrize(
@@ -111,7 +107,7 @@ def test_a_symlink_and_a_gitlink_under_tests_are_judged_by_their_own_name(build_
         (["tests/helpers.py"], [("tests/helpers.py", RULE)], []),
         (["tests/helpers.py"], [("tests/helpers.py", "file-suffix")], ["tests/helpers.py"]),
         ([], [("tests/gone.py", RULE)], ["tests/gone.py"]),
-        (["tests/test_a.py"], [("tests/test_a.py", RULE)], []),
+        (["tests/test_cli.py"], [("tests/test_cli.py", RULE)], []),
     ],
     ids=["declared", "declared under another rule", "not tracked", "already complying"],
 )
@@ -119,7 +115,7 @@ def test_a_declaration_covers_only_its_own_rule_and_a_stale_one_is_a_finding(bui
     """#196 sentence 7, D3 to D5."""
     config = ONE_JOB + "".join(declaring(path, rule=rule) for path, rule in declarations)
     repo = build_repo({**ROOT_PROJECT, **dict.fromkeys(tracked, ""), CONFIG: config})
-    assert red(capsys, repo) == expected
+    assert red(capsys, repo, RULE) == expected
 
 
 def test_a_malformed_layout_table_cannot_be_judged_for_test_layout(build_repo, capsys):

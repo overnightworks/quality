@@ -210,7 +210,7 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   project's `tests/` makes no project. A project is judged when it has a package: a directory directly under
   `<project>/src/` that holds a tracked `.py` at any depth, with or without `__init__.py`. A project without one, and
   a `tests/` folder that belongs to no project, are not judged. Under a judged `<project>/tests/` every tracked path
-  is a `test_*.py` (anywhere; where it maps is not judged yet), a `conftest.py` at any depth, a file in a `support/`
+  is a `test_*.py` (placed and named by the mapping below), a `conftest.py` at any depth, a file in a `support/`
   or `fixtures/` folder at any depth, or a file in the top-level `tests/e2e/`. An `__init__.py` under `tests/` is
   red anywhere, `support/` and `e2e/` included, and is data only inside a `fixtures/` folder. A finding names its
   case: an `__init__.py` (delete it, or declare it) or any other file (move it to a `support/` helper folder or a
@@ -219,9 +219,21 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   own name and never followed; an index record that cannot be read is `hygiene: test-layout cannot judge - ...` (exit
   2). Names compare in exact case, all findings print sorted by path and no configuration switches the rule off.
   Not judged, and waiting for usage evidence: a `tests/` folder elsewhere (`src/p/tests/`), a project with only
-  `setup.py`, a project whose `src/` holds only modules, and a package named `support` or `fixtures`. (#175, #196;
-  operator rulings 24.10.2026: „ja das will ich“, D-A „ja beides a?“, D-B „ja b!“; the details are head decisions of
-  27.10.2026)
+  `setup.py`, a project whose `src/` holds only modules, and a package named `support` or `fixtures`.
+  Every `test_*.py` outside `fixtures/` and the top-level `e2e/` mirrors the module it tests, one direction. Its
+  folder mirrors a folder of `src/<package>/` (`tests/api/` is `src/<package>/api/`; with several packages
+  `tests/<package>/api/` is `src/<package>/api/`), and that folder holds a tracked `.py` at any depth. `tests/scripts/`
+  mirrors `<project>/scripts/` and `tests/workflows/` mirrors the root's `.github/workflows/`, directly and only in the
+  root project; both come before any package name. Each candidate of the mirrored folder has a key: `__x__` reads as
+  `x`, otherwise one leading `_` is dropped; candidates are the `.py` files and the subfolders that hold a `.py` (in
+  `scripts/` any file and subfolder, in `.github/workflows/` the `.yml` and `.yaml` stems with `-` read as `_`), and in
+  the top folder of a package also its own name. The test's name, `test_<name>.py`, splits at `_` into words and its
+  longest word prefix, ending at a word boundary, must equal a key exactly; the rest is the aspect, and a name
+  whose first word is empty (`test_.py`, `test__x.py`) has no prefix. A `test_*.py` in a `support/` folder is red.
+  A member's tests map only into the member's own `src/` and `scripts/`. Each case has its own reason and fix, a
+  file that breaks the folder and the name condition together gets one finding with both reasons, and every fix ends
+  with declaring the path. (#175, #196, #199; operator rulings 24.10.2026: „ja das will ich“, D-A „ja beides a?“,
+  D-B „ja b!“; the details are head decisions of 27.10.2026)
 - The baseline only falls: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the
   base commit's, so growing a function and rewriting the baseline stays red. Each loosening is one line, named with the
   baseline's own metric, path and symbol (a file entry has no symbol):
