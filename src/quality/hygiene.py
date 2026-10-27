@@ -31,6 +31,8 @@ COMPOSE_PORT = "compose-port"
 CLAUDE_MD = "claude-md"
 ROOT_LAYOUT = "root-layout"
 FILE_SUFFIX = LayoutRule.FILE_SUFFIX.value
+SCRIPT_NAME = LayoutRule.SCRIPT_NAME.value
+SCRIPT_HEADER = LayoutRule.SCRIPT_HEADER.value
 WORKFLOW_RULE_IDS = tuple(engines.WORKFLOW_ENGINES)
 ENGINE_RULE_IDS = (engines.LEAK_RULE, *WORKFLOW_RULE_IDS, advisories.RULE)
 WORKFLOW_DIRECTORY = PurePosixPath(".github/workflows")
@@ -597,6 +599,17 @@ def _judge_baseline_rules(
     return _attempt(lambda: check_size(tree, baseline)), _attempt(lambda: check_clones(tree, sources, baseline))
 
 
+def _script_findings(root: Path, check: Callable[..., list[Finding]]) -> list[Finding] | CannotJudge:
+    """The findings of a script rule over the index modes and the contents of the files that may be scripts."""
+
+    def judge() -> list[Finding]:
+        modes = index_modes(root)
+        contents = _read_existing(repository.read_bytes, root, _on_disk(root, layout.script_candidates(modes)))
+        return check(modes, contents, _declared(read_layout_allowances, root))
+
+    return _attempt(judge)
+
+
 def run_hygiene(root: Path, engine_dir: Path | None = None) -> HygieneResult:
     """Judges every active rule, in run order, over the repository `root` lies in; only one git cannot list stops the run."""
     root = work_tree_top(root)
@@ -614,6 +627,8 @@ def run_hygiene(root: Path, engine_dir: Path | None = None) -> HygieneResult:
         _verdict(CLAUDE_MD, _attempt(lambda: check_claude_md(root, tracked))),
         _verdict(ROOT_LAYOUT, _attempt(lambda: check_root_layout(tracked, _declared(read_root_allowances, root)))),
         _verdict(FILE_SUFFIX, _attempt(lambda: layout.check_file_suffix(index_modes(root), _declared(read_layout_allowances, root)))),
+        _verdict(SCRIPT_NAME, _script_findings(root, layout.check_script_name)),
+        _verdict(SCRIPT_HEADER, _script_findings(root, layout.check_script_header)),
     ]
     reports = _reports(size, clone, contracts)
     if engine_dir is None:
