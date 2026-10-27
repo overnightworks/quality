@@ -4,7 +4,7 @@ Reference for the engineer or operator who needs the exact behaviour of `quality
 
 `hygiene` reads git's view of the repository `PATH` (default `.`) lies in, from its top level, so a run from `src` judges
 the same files and the same `quality/baseline.toml` as one at the top, and names every file relative to the top (`size
-src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree's own top. It applies five rules:
+src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree's own top. It applies these rules:
 
 - `env-file`: no tracked `.env`, `.env.*` or `*.env` file (names ending in `.example` are templates and pass).
   The fix is `git --literal-pathspecs rm --cached -- <name>`, the name quoted for the shell, so a copy untracks
@@ -54,7 +54,7 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   1 file(s) >= 800 lines, ...; languages: Python, TypeScript (functions in Python only)`, the languages largest
   first) and the size debt leaves the exit unchanged.
   A `.py` file is read the way Python reads source (a PEP 263 coding cookie or a UTF-8 BOM decides the encoding). One
-  Python cannot decode or parse is named as not valid Python: without a baseline the count notes it (`1 file(s) not
+  Python 3.14 cannot decode or parse is named as not valid Python: without a baseline the count notes it (`1 file(s) not
   valid Python, functions unmeasured: bad.py`) and the exit is unchanged; with a baseline it is `hygiene: size
   unparsable - bad.py is not valid Python (...)`, and `quality baseline write` refuses with `baseline: not written -
   bad.py is not valid Python (...)`; both exit `2`. A tracked file the operating system refuses to read is `hygiene:
@@ -273,7 +273,7 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   One finding per statement, at `path:line`, names each target it imports; the fix is a `support/` module or a
   fixture in `conftest.py`, or a `[[layout.allow]]` entry with the rule `test-import` on the importer's path, which
   exempts all its imports (an untracked declared path is a finding; a `test-layout` declaration does not cover it).
-  Importers are decoded as Python reads source and parsed: a file that does not parse is
+  Importers are decoded as Python 3.14 reads source and parsed: a file that does not parse is
   `hygiene: test-import unparsable - <path> is not valid Python (...)` (exit 2) and one that cannot be read is
   `hygiene: test-import cannot judge - ...` (exit 2); no other file is read. All findings print sorted by path and
   line and no configuration switches the rule off. Not read, and waiting for usage evidence: string imports
@@ -281,6 +281,29 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   source passed to a subprocess with `-c`, and `*_test.py` as a target. An import whose name matches a tracked test
   module is reported even when it means a third-party module; rename the test module or declare the importer.
   (#175, #201)
+- `python-floor` judges every tracked `pyproject.toml` that `test-layout` finds as a project (the root or a member at
+  any depth, none inside another project's `tests/`) and that holds a `[project]` table; one with only `[tool.*]`
+  tables, or with `project` as a value, is not judged, and a gitlink is never entered. The floor is the highest lower
+  bound among the `requires-python` clauses `>=`, `>`, `~=`, `==` and `===`, read with `packaging`; a trailing `.*` is
+  dropped (`==3.14.*` is 3.14, `==3.*` is 3), `!=`, `<` and `<=` set none, and `>3.13` counts as 3.13. The file is clean
+  from a floor of 3.14: `>=3.14`, `>=3.14,<3.15`, `~=3.14`, `==3.14.*` and `>=3.15` pass; `>=3.12`, `>=3.11,<3.15`,
+  `>3.13`, `>=3.14.0rc1`, `<3.15`, an empty value, `dynamic = ["requires-python"]` and a missing `requires-python` are
+  red (the last four name no floor). One finding per file, at its path, naming the value and the floor, with the fix:
+  raise it to `>=3.14` and move CI, `.python-version`, Dockerfiles and ruff's `target-version` with it, or declare it.
+  A `[[python.allow]]` entry with exactly a `path` (the exact tracked path of the `pyproject.toml`, no folder, pattern
+  or `..`) and a one-line `reason`, one per path, makes that file clean; its own table, because the exception is meant
+  to end. The gate shows each one before the verdicts (`python-floor: allowed speech/pyproject.toml (requires-python
+  ">=3.12,<3.13") - <reason>`). An entry whose path is no judged file (untracked, gone, without `[project]`) or whose
+  file is already at the floor is a finding; its fix is to delete the entry. A malformed entry is `cannot judge` in
+  every rule that reads the config, and a config reader older than the rule refuses `[python]` as an unknown key, so
+  declare only after the bump. A candidate that is not UTF-8 TOML, or whose `requires-python` is no string or no PEP 440
+  specifier set, is `hygiene: python-floor unparsable - ...` (exit 2). No configuration switches the rule off, and a
+  declaration asks `quality verdict` for no `[[gate.loosened]]` entry. Only `requires-python` is read, because uv and
+  pip refuse an interpreter outside it, so a leftover setter cannot install the project on old Python. Not read, and
+  waiting for usage evidence: workflows, `.python-version`, Dockerfiles, ruff's `target-version`, `setup.py`,
+  `setup.cfg` and Poetry's `[tool.poetry]`; `!=` as a floor (`>=3.13,!=3.13.*` is red although it admits only 3.14 and
+  up); a job that never installs the project, or `uv sync` behind an older setup-python, which runs old Python
+  unnoticed; and a Python project without a `pyproject.toml`. (#207)
 - The baseline only falls: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the
   base commit's, so growing a function and rewriting the baseline stays red. Each loosening is one line, named with the
   baseline's own metric, path and symbol (a file entry has no symbol):
@@ -493,7 +516,7 @@ Every rule is judged, even when another cannot be, and gives one verdict: clean,
 Each finding names the rule, the file, a reason and a fix. Repository text (a file name, a service, a port, a contract
 or job name, a configuration entry) prints escaped. In the door's own fields (a finding's location, reason and fix, refusals, reports), invalid UTF-8 prints as `\udcNN` and every control character (line feed,
 carriage return, ESC, tab, DEL, C1) as `\xNN`. A line taken from import-linter's rendering (a broken contract's chain and guidance) prints behind the marker `  | `; rich may drop a carriage return, expand a tab, or start a new marked line at a line feed there. Every line the door prints therefore starts with its own text, so a matcher anchored at the line start, such as setup-uv's python matcher, cannot match repository text. A refusal is one line; the lines the door means to print (an import chain, the verdict's problems, the scoreboard's table) stay lines. A rule that cannot judge prints its verdict and reason under its rule id (`hygiene: secret cannot
-judge - ...`). A clean run names its rules in run order (`hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout, file-suffix, script-name, script-header, test-layout, test-import); skipped without
+judge - ...`). A clean run names its rules in run order (`hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout, file-suffix, script-name, script-header, test-layout, test-import, python-floor); skipped without
 --engines: ...`); any other run ends with the findings and the verdicts counted (`hygiene: 1 finding(s); verdicts: 1
 clean, 1 findings, 1 unparsable`). The lines come in run order, also through a pipe that merges stdout and stderr
 (`2>&1 | tee log`); each stays on its own stream. That is option (c) of #86 on 19.10.2026, `cli.main` makes stdout

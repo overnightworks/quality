@@ -203,6 +203,7 @@ source = { editable = "." }
 dependencies = [
     { name = "import-linter" },
     { name = "lizard" },
+    { name = "packaging" },
     { name = "pyyaml" },
 ]
 
@@ -217,6 +218,7 @@ dev = [
 requires-dist = [
     { name = "import-linter", specifier = "==2.15" },
     { name = "lizard", specifier = ">=1.24.1,<1.25" },
+    { name = "packaging", specifier = ">=24" },
     { name = "pyyaml", specifier = ">=6" },
 ]
 

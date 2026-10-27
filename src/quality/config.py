@@ -14,13 +14,15 @@ SECRETS_KEYS = {"allow"}
 ADVISORIES_KEYS = {"allow"}
 ROOT_KEYS = {"allow"}
 LAYOUT_KEYS = {"allow"}
+PYTHON_KEYS = {"allow"}
 COMPOSE_KEYS = {"allow"}
-TABLES = {"gate", "secrets", "advisories", "root", "layout", "compose"}
+TABLES = {"gate", "secrets", "advisories", "root", "layout", "python", "compose"}
 ALLOWANCE_KEYS = {"rule", "file", "secret_sha256", "reason"}
 DECLARATION_KEYS = {"what", "item", "date", "reason"}
 ROOT_ALLOWANCE_KEYS = {"entry", "reason"}
 NOT_ROOT_ENTRY_NAMES = {".", "..", ".git"}
 LAYOUT_ALLOWANCE_KEYS = {"path", "rule", "reason"}
+PYTHON_ALLOWANCE_KEYS = {"path", "reason"}
 COMPOSE_ALLOWANCE_KEYS = {"file", "service", "reason"}
 PATH_PATTERN_CHARACTERS = "*?["
 ADVISORY_ALLOWANCE_KEYS = {"id", "lock", "until", "date", "item", "reason"}
@@ -61,6 +63,11 @@ LAYOUT_ALLOWANCE_EXAMPLE = (
     'path = "deploy/EDGE_SHA"\n'
     'rule = "file-suffix"\n'
     'reason = "the deploy script reads it by this name"'
+)
+PYTHON_ALLOWANCE_EXAMPLE = (
+    "[[python.allow]]\n"
+    'path = "speech/providers/qwen/pyproject.toml"\n'
+    'reason = "qwen-tts has no cp314 wheel"'
 )
 COMPOSE_ALLOWANCE_EXAMPLE = (
     "[[compose.allow]]\n"
@@ -115,6 +122,14 @@ class RootAllowance:
     """A root entry the repository declares beyond quality's base list: a file `Makefile` or a directory `frontend/`."""
 
     entry: str
+    reason: str
+
+
+@dataclass(frozen=True)
+class PythonAllowance:
+    """A `pyproject.toml` the repository allows below the Python floor: its exact tracked path and why."""
+
+    path: str
     reason: str
 
 
@@ -179,6 +194,7 @@ class _Document:
     advisory_allowances: tuple[AdvisoryAllowance, ...]
     root_allowances: tuple[RootAllowance, ...]
     layout_allowances: tuple[LayoutAllowance, ...]
+    python_allowances: tuple[PythonAllowance, ...]
     compose_allowances: tuple[ComposeAllowance, ...]
 
 
@@ -202,22 +218,24 @@ def _refuse_unknown_secrets_keys(secrets: dict) -> None:
         raise ConfigError(f"{CONFIG_PATH} has unknown key(s) {sorted(unknown)} in [secrets] - only allow exists")
 
 
-def _refuse_unknown_keys(document: dict, gate: dict, advisories: dict, root: dict, layout: dict, compose: dict) -> None:
+def _refuse_unknown_keys(document: dict, gate: dict, advisories: dict, root: dict, layout: dict, python: dict, compose: dict) -> None:
     unknown = (
         (set(document) - TABLES)
         | (set(gate) - GATE_KEYS)
         | (set(advisories) - ADVISORIES_KEYS)
         | (set(root) - ROOT_KEYS)
         | (set(layout) - LAYOUT_KEYS)
+        | (set(python) - PYTHON_KEYS)
         | (set(compose) - COMPOSE_KEYS)
     )
     if unknown:
         example = f", like:\n{ROOT_ALLOWANCE_EXAMPLE}" if set(root) - ROOT_KEYS else ""
         example = f", like:\n{LAYOUT_ALLOWANCE_EXAMPLE}" if set(layout) - LAYOUT_KEYS else example
+        example = f", like:\n{PYTHON_ALLOWANCE_EXAMPLE}" if set(python) - PYTHON_KEYS else example
         example = f", like:\n{COMPOSE_ALLOWANCE_EXAMPLE}" if set(compose) - COMPOSE_KEYS else example
         raise ConfigError(
             f"{CONFIG_PATH} has unknown key(s) {sorted(unknown)} - only [gate] mandatory_jobs, [gate] legacy, "
-            f"[[gate.loosened]], [secrets] allow, [[advisories.allow]], [[root.allow]], [[layout.allow]] and [[compose.allow]] exist{example}"
+            f"[[gate.loosened]], [secrets] allow, [[advisories.allow]], [[root.allow]], [[layout.allow]], [[python.allow]] and [[compose.allow]] exist{example}"
         )
 
 
@@ -228,8 +246,9 @@ def _validated_document(text: str) -> _Document:
     advisories = _table(document, "advisories", ADVISORY_ALLOWANCE_EXAMPLE)
     root = _table(document, "root", ROOT_ALLOWANCE_EXAMPLE)
     layout = _table(document, "layout", LAYOUT_ALLOWANCE_EXAMPLE)
+    python = _table(document, "python", PYTHON_ALLOWANCE_EXAMPLE)
     compose = _table(document, "compose", COMPOSE_ALLOWANCE_EXAMPLE)
-    _refuse_unknown_keys(document, gate, advisories, root, layout, compose)
+    _refuse_unknown_keys(document, gate, advisories, root, layout, python, compose)
     return _Document(
         gate,
         _declarations(gate),
@@ -237,6 +256,7 @@ def _validated_document(text: str) -> _Document:
         _advisory_allowances(advisories),
         _root_allowances(root),
         _layout_allowances(layout),
+        _python_allowances(python),
         _compose_allowances(compose),
     )
 
@@ -400,6 +420,36 @@ def _layout_allowances(layout: dict) -> tuple[LayoutAllowance, ...]:
     return tuple(allowances.values())
 
 
+def _python_allowances(python: dict) -> tuple[PythonAllowance, ...]:
+    entries = python.get("allow", [])
+    if not isinstance(entries, list):
+        raise ConfigError(f"{CONFIG_PATH} needs [[python.allow]] as an array of tables, like:\n{PYTHON_ALLOWANCE_EXAMPLE}")
+    allowances: dict[str, PythonAllowance] = {}
+    for entry in entries:
+        allowance = _read_python_allowance(entry)
+        if allowance.path in allowances:
+            raise ConfigError(
+                f"{CONFIG_PATH} [[python.allow]] declares path = {allowance.path!r} twice; one entry per path, "
+                f"like:\n{PYTHON_ALLOWANCE_EXAMPLE}"
+            )
+        allowances[allowance.path] = allowance
+    return tuple(allowances.values())
+
+
+def _read_python_allowance(entry: object) -> PythonAllowance:
+    def refuse(need: str) -> ConfigError:
+        return ConfigError(f"{CONFIG_PATH} [[python.allow]] entry {entry!r} needs {need}, like:\n{PYTHON_ALLOWANCE_EXAMPLE}")
+
+    if not isinstance(entry, dict) or set(entry) != PYTHON_ALLOWANCE_KEYS:
+        raise refuse("exactly a path and a reason")
+    path, reason = entry["path"], entry["reason"]
+    if not _is_exact_file_path(path):
+        raise refuse("path as the exact tracked path of one pyproject.toml, no folder, pattern or ..")
+    if not _is_one_line_text(reason):
+        raise refuse(ONE_LINE_REASON)
+    return PythonAllowance(path, reason)
+
+
 def _is_exact_file_path(path: object) -> bool:
     """A relative path to one file: no folder (trailing `/`), no pattern character, no empty, `.` or `..` component, not absolute."""
     if not isinstance(path, str) or not path.strip() or path.startswith("/") or path.endswith("/"):
@@ -561,6 +611,12 @@ def read_layout_allowances(repo: Path) -> tuple[LayoutAllowance, ...]:
     """The files the repository declares against a layout rule, the whole document validated; a missing config declares none."""
     text = _read_config_text(repo)
     return () if text is None else _validated_document(text).layout_allowances
+
+
+def read_python_allowances(repo: Path) -> tuple[PythonAllowance, ...]:
+    """The pyproject files the repository allows below the Python floor, the whole document validated; a missing config allows none."""
+    text = _read_config_text(repo)
+    return () if text is None else _validated_document(text).python_allowances
 
 
 def read_compose_allowances(repo: Path) -> tuple[ComposeAllowance, ...]:
