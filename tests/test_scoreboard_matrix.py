@@ -278,6 +278,23 @@ CLONE_TABLE_PIN = "e" * 40
 CLONE_RELEASES = {**FIRST_RELEASES, "v0.4.0": CLONE_RELEASE, "v0.5.0": CLONE_TABLE_PIN}
 
 
+GATE_NAME = "overnightworks/quality"
+
+
+@pytest.fixture
+def gate_clone(public, fake_git):
+    """The gate's own repository URL, served from a local repository holding `files` by a git on PATH that redirects it."""
+
+    def build(files: dict[str, str]) -> str:
+        url = f"https://github.com/{GATE_NAME}"
+        fake_git(
+            f"export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0='url.{public('gate', files)}.insteadOf' GIT_CONFIG_VALUE_0='{url}'"
+        )
+        return url
+
+    return build
+
+
 def declared(**fields) -> Declared:
     """A clone that declares nothing, with the given fields set."""
     return Declared(**{"settings": None, "has_baseline": False, "has_clone_table": False, "has_import_config": False, "has_src_package": False,
@@ -344,25 +361,22 @@ def test_a_pinned_gate_has_not_released_test_layout():
         ({"pyproject.toml": "", "src/p/x.py": ""}, "enforced"),
         ({"pyproject.toml": "", "tests/helpers.py": ""}, "no src package"),
         ({"src/p/x.py": ""}, "no src package"),
+        ({"pyproject.toml": "", "tests/pyproject.toml": "", "tests/src/a/x.py": ""}, "no src package"),
     ],
-    ids=["a project with a package", "a project without src", "a package without a project"],
+    ids=["a project with a package", "a project without src", "a package without a project", "a package only in tests"],
 )
-def test_the_scoreboard_cell_for_test_layout_is_read_from_the_clone(scoreboard, public, monkeypatch, files, words):
+def test_the_scoreboard_cell_for_test_layout_is_read_from_the_clone(scoreboard, gate_clone, files, words):
     """#196 sentence 9, E3: the clone's tracked files decide the cell, on the gate's own repository."""
-    monkeypatch.setattr("quality.scoreboard.GATE_REPOSITORY", "gate")
-    result, output = scoreboard(public("gate", {**caller("./.github/workflows/gate.yml"), **files}), tags=first_releases())
-    assert (result, cell(output, "gate", "test-layout")) == (0, words), output
+    result, output = scoreboard(gate_clone({**caller("./.github/workflows/gate.yml"), **files}), tags=first_releases())
+    assert (result, cell(output, GATE_NAME, "test-layout")) == (0, words), output
 
 
-def test_a_malformed_baseline_makes_the_gates_own_clone_cell_unreadable_and_the_run_red(
-    scoreboard, public, monkeypatch
-):
+def test_a_malformed_baseline_makes_the_gates_own_clone_cell_unreadable_and_the_run_red(scoreboard, gate_clone):
     """#137 test 3: the cell owns the failure, as #125 cell 22 rules."""
-    monkeypatch.setattr("quality.scoreboard.GATE_REPOSITORY", "gate")
     broken = {**caller("./.github/workflows/gate.yml"), ratchet.BASELINE_PATH: "[file_lines\n"}
-    result, output = scoreboard(public("gate", broken), tags=first_releases())
+    result, output = scoreboard(gate_clone(broken), tags=first_releases())
     assert result == 2, output
-    assert cell(output, "gate", "clone") == "cannot read quality/baseline.toml"
+    assert cell(output, GATE_NAME, "clone") == "cannot read quality/baseline.toml"
 
 
 @pytest.mark.parametrize(("pin", "words"), [("v0.5.0", "enforced"), ("v0.4.0", "report-only")], ids=["the switch", "older"])
