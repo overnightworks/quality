@@ -57,7 +57,7 @@ def judge_release(facts: ReleaseFacts) -> list[Verdict]:
 
 
 def _git(*arguments: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["git", *arguments], capture_output=True, text=True, check=False)
+    return subprocess.run(["git", *arguments], capture_output=True, text=True, check=False)  # noqa: S603, S607 - argv is fixed words plus release arguments and never a shell
 
 
 def head_is_on_origin_main() -> bool:

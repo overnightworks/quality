@@ -108,7 +108,7 @@ class Attempt:
 
 def run_gh(arguments: Sequence[str], stdin: str | None = None) -> str:
     try:
-        done = subprocess.run(["gh", *arguments], input=stdin, capture_output=True, text=True, check=False)
+        done = subprocess.run(["gh", *arguments], input=stdin, capture_output=True, text=True, check=False)  # noqa: S603, S607 - argv is the fixed gh executable plus arguments and never a shell
     except OSError as error:
         raise GhFailed(f"cannot run gh: {error}") from error
     if done.returncode != 0:

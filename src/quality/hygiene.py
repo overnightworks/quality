@@ -71,7 +71,7 @@ LOOPBACK_HOSTS = (LOOPBACK, "::1")
 ENV_TEMPLATE_SUFFIX = ".example"
 INDEX_MODE = re.compile(r"[0-7]{6}")
 INTERPOLATION = re.compile(r"\$\{[^}]*\}")
-COMPOSE_TOKEN = "compose"
+COMPOSE_WORD = "compose"
 HOST_NETWORK_MODE = "host"
 NAME_SEPARATORS = re.compile(r"[._-]")
 YAML_NUMBER_TAGS = ("tag:yaml.org,2002:int", "tag:yaml.org,2002:float")
@@ -217,7 +217,7 @@ def _is_env_file(name: str) -> bool:
 def is_compose_file(name: str) -> bool:
     """A YAML file whose name holds the word `compose` between `.`, `-` or `_`: `docker-compose.ci.yml`, not `composer.yml`."""
     path = PurePosixPath(name)
-    return path.suffix.lower() in YAML_SUFFIXES and COMPOSE_TOKEN in NAME_SEPARATORS.split(path.stem.casefold())
+    return path.suffix.lower() in YAML_SUFFIXES and COMPOSE_WORD in NAME_SEPARATORS.split(path.stem.casefold())
 
 
 def check_compose_ports(root: Path, tracked: list[str], allowances: Sequence[ComposeAllowance]) -> list[Finding]:
@@ -424,7 +424,7 @@ def _read_existing[T](read: Callable[[Path, str], T | None], root: Path, names: 
 def _compose_file_findings(name: str, text: str, declared_services: set[str]) -> tuple[list[Finding], list[str]]:
     """The findings of one compose file and its services that are host-networked or may be, declared or not."""
     try:
-        document = yaml.load(text, Loader=ComposeLoader)
+        document = yaml.load(text, Loader=ComposeLoader)  # noqa: S506 - ComposeLoader subclasses SafeLoader
     except (yaml.YAMLError, RecursionError, ValueError, KeyError, IndexError) as error:
         raise CannotJudge(f"cannot read {name}: {_yaml_error_reason(error)}") from error
     services = document.get("services") if isinstance(document, dict) else None
