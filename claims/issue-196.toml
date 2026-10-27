@@ -1,8 +1,0 @@
-claim_id = "a7a1b5d3a7824219be1ce65586e2b5c0"
-agent = "Claude 7bbab0b4-f923-4f09-a5c2-6fe15143932e"
-role = "builder"
-base = "5cea9aa0e701da836c3b6a6d4b13c30195899e95"
-branch = "claude/issue-196-test-layout"
-scope = ["AGENTS.md", "docs/commands.md", "docs/rules.md", "src/quality/config.py", "src/quality/hygiene.py", "src/quality/layout.py", "src/quality/scoreboard.py", "tests"]
-opened_commit = "813bdc2a3a6bc7af728eed8356bf416123f3c5d1"
-whole_reason = "One contract: the rule id, its check, its verdict, its RULES row and the scoreboard cell land together, or the scoreboard tripwire goes red; the clean line is pinned across several test modules."
