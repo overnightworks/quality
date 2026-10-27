@@ -37,7 +37,7 @@ PROCESS_OR_SOCKET_FIXTURES = frozenset(
     }
 )
 KIND_MARKERS = frozenset({"unit", "integration"})
-# The event names `pyproject.toml`'s `markers` lines own as the definition of `integration`.
+# The one owner of the audit event names that define `integration`.
 STARTING_EVENTS = frozenset(
     {
         "subprocess.Popen",
@@ -65,17 +65,39 @@ RepoBuilder = Callable[[dict[str, str]], Path]
 Responder = Callable[[http.server.BaseHTTPRequestHandler], None]
 
 
-_recording: list[str] | None = None
+_recording: list[tuple[str, tuple]] | None = None
 
 
 def _record_starting_event(event: str, arguments: tuple) -> None:
-    if event not in STARTING_EVENTS or _recording is None:
-        return
-    detail = arguments[EVENT_DETAIL_ARGUMENTS.get(event, slice(0, 0))]  # never the environment: run_env puts a token there
-    _recording.append(f"{event} {detail}" if detail else event)
+    if event in STARTING_EVENTS and _recording is not None:
+        _recording.append((event, arguments[EVENT_DETAIL_ARGUMENTS.get(event, slice(0, 0))]))  # never the environment: run_env puts a token there
 
 
 sys.addaudithook(_record_starting_event)
+
+
+def _describe_value(value: object) -> str:
+    """Never calls the value's own `__repr__`, which may raise."""
+    if isinstance(value, str):
+        return str.__repr__(value)
+    if isinstance(value, (list, tuple)):
+        return "[" + ", ".join(_describe_value(item) for item in value) + "]"
+    return f"<{type(value).__name__}>"
+
+
+def _describe(event: str, detail: tuple) -> str:
+    return f"{event} {', '.join(_describe_value(value) for value in detail)}" if detail else event
+
+
+def _stop_recording_and_judge(item) -> None:
+    global _recording
+    events, _recording = _recording, None
+    if events and item.get_closest_marker("unit"):
+        pytest.fail(
+            f"unit test started a process or opened a socket: {_describe(*events[0])}. "
+            "Request a fixture that does (build_repo, ...) or mark the test @pytest.mark.integration.",
+            pytrace=False,
+        )
 
 
 @pytest.hookimpl(tryfirst=True)
@@ -93,22 +115,19 @@ def pytest_collection_modifyitems(session, config, items):
 def pytest_runtest_setup(item):
     global _recording
     _recording = []
-    return (yield)
+    try:
+        return (yield)
+    except pytest.skip.Exception:  # a skipped setup never reaches the call phase
+        _stop_recording_and_judge(item)
+        raise
 
 
 @pytest.hookimpl(wrapper=True)
 def pytest_runtest_call(item):
-    global _recording
     try:
         return (yield)
     finally:
-        events, _recording = _recording, None
-        if events and item.get_closest_marker("unit"):
-            pytest.fail(
-                f"unit test started a process or opened a socket: {events[0]}. "
-                "Request a fixture that does (build_repo, ...) or mark the test @pytest.mark.integration.",
-                pytrace=False,
-            )
+        _stop_recording_and_judge(item)
 
 
 @pytest.hookimpl(wrapper=True)
