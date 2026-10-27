@@ -16,9 +16,10 @@ SCRIPT_NAME_SHAPE = re.compile(r"[a-z0-9]+(_[a-z0-9]+)+")
 SHEBANG = b"#!"
 HEADER_LINES = 3
 SLASH_COMMENT_SUFFIX = ".mjs"
-DOCSTRING_OPENERS = ('"""', "'''")
+DOCSTRING_OPENER = re.compile(r"""[rRuUbBfF]{0,2}(\"\"\"|''')""")
+ENCODING_DIRECTIVE = re.compile(r"#.*?coding[:=]")
 # A comment a tool reads, not a person: shellcheck, an encoding line, noqa, type checkers, ruff, eslint.
-TOOL_DIRECTIVE = re.compile(r"(#|//|/\*)\s*(shellcheck\b|-\*-|noqa\b|type:|pyright:|ruff:|eslint)")
+TOOL_DIRECTIVE = re.compile(r"(#|//|/\*)\s*(shellcheck\b|-\*-|coding[:=]|noqa\b|type:|pyright:|ruff:|eslint)")
 PEP_723_START = "# /// script"
 PEP_723_END = "# ///"
 
@@ -142,12 +143,14 @@ def _first_lines_after_preamble(content: bytes) -> list[str]:
     if lines and lines[0].startswith(SHEBANG.decode()):
         lines = lines[1:]
     stripped = [line.strip() for line in lines if line.strip()]
+    while stripped and ENCODING_DIRECTIVE.match(stripped[0]):
+        stripped = stripped[1:]
     if stripped and stripped[0] == PEP_723_START and PEP_723_END in stripped[1:]:
         stripped = stripped[stripped.index(PEP_723_END, 1) + 1 :]
     return stripped[:HEADER_LINES]
 
 
 def _explains(line: str, comment_markers: tuple[str, ...]) -> bool:
-    if line.startswith(DOCSTRING_OPENERS):
+    if DOCSTRING_OPENER.match(line):
         return True
     return line.startswith(comment_markers) and not TOOL_DIRECTIVE.match(line)
