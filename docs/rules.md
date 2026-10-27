@@ -250,8 +250,8 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   `hygiene: test-import unparsable - <path> is not valid Python (...)` (exit 2) and one that cannot be read is
   `hygiene: test-import cannot judge - ...` (exit 2); no other file is read. All findings print sorted by path and
   line and no configuration switches the rule off. Not read, and waiting for usage evidence: string imports
-  (`importlib.import_module`, `__import__`, `pytest.importorskip`), `pytest_plugins`, `sys.path` edits, `*_test.py` as
-  a target, and a third-party module named like a tracked test module (rename it or declare the importer).
+  (`importlib.import_module`, `__import__`, `pytest.importorskip`), `pytest_plugins`, `sys.path` edits, `runpy`,
+  source passed to a subprocess with `-c`, `*_test.py` as a target, and a third-party module named like a tracked test module (rename it or declare the importer).
   (#175, #201)
 - The baseline only falls: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the
   base commit's, so growing a function and rewriting the baseline stays red. Each loosening is one line, named with the

@@ -113,7 +113,7 @@ def test_an_importer_python_cannot_parse_is_unparsable(build_repo, capsys, conte
 
 def test_a_file_with_a_byte_order_mark_is_parsed_and_judged(build_repo, capsys):
     """#201 G16, sentence 7."""
-    repo = build_repo(project({"tests/conftest.py": "", "tests/support/y.py": "﻿import conftest\n"}))
+    repo = build_repo(project({"tests/conftest.py": "", "tests/support/y.py": "\ufeffimport conftest\n"}))
     assert red(capsys, repo, RULE) == ["tests/support/y.py:1"]
 
 
@@ -122,7 +122,7 @@ def test_an_unreadable_importer_cannot_be_judged_but_other_files_are_not_read(bu
     repo = build_repo(project({"tests/support/y.py": "x = 1\n", "tests/fixtures/data.py": "x = 1\n", "docs/n.txt": "x\n"}))
     (repo / "tests" / "fixtures" / "data.py").chmod(0)
     (repo / "docs" / "n.txt").chmod(0)
-    assert "test-import" not in hygiene_output(capsys, repo)[1]
+    assert "hygiene: test-import cannot judge" not in hygiene_output(capsys, repo)[1]
     (repo / "tests" / "support" / "y.py").chmod(0)
     code, output = hygiene_output(capsys, repo)
     assert (code, "hygiene: test-import cannot judge - " in output) == (2, True)

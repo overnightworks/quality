@@ -185,6 +185,6 @@ def test_a_link_counts_by_its_name_and_is_never_followed(build_repo, capsys):
 
 
 def test_an_empty_test_name_says_it_is_empty(build_repo, capsys):
-    """#201 folded follow-up: the reason never reads "a word prefix of" an empty aspect."""
+    """#201 folded follow-up 1 (#199 sentence 6): the reason never reads "a word prefix of" an empty aspect."""
     output = hygiene_output(capsys, build_repo(project("src/p/x.py", "tests/test_.py")))[1]
     assert "is named by an empty name" in output
