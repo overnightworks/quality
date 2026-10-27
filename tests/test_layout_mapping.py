@@ -182,3 +182,9 @@ def test_a_link_counts_by_its_name_and_is_never_followed(build_repo, capsys):
     (repo / "src" / "p" / "y.py").symlink_to("x.py")
     in_index(repo, "add", "--", "tests/test_z.py", "src/p/y.py")
     assert red(capsys, repo, RULE) == ["tests/test_z.py"]
+
+
+def test_an_empty_test_name_says_it_is_empty(build_repo, capsys):
+    """#201 folded follow-up: the reason never reads "a word prefix of" an empty aspect."""
+    output = hygiene_output(capsys, build_repo(project("src/p/x.py", "tests/test_.py")))[1]
+    assert "is named by an empty name" in output
