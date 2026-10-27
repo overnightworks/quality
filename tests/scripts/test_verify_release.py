@@ -113,6 +113,7 @@ def test_the_script_refuses_when_origin_cannot_be_fetched_even_if_the_cached_mai
     assert "FAIL on origin/main" in done.stdout
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("arguments", [[], ["v1.2.3", "v1.2.4"]], ids=["no tag", "two tags"])
 def test_the_script_prints_a_usage_line_and_exits_2_for_other_than_one_tag(tmp_path, arguments):
     done = run_script(tmp_path, *arguments)

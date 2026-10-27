@@ -27,8 +27,7 @@ def recorded(name: str) -> str:
 
 
 def archive_with(binary_text: str) -> bytes:
-    buffer = io.BytesIO()
-    content = binary_text.encode()
+    buffer, content = io.BytesIO(), binary_text.encode()
     with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
         entry = tarfile.TarInfo("gitleaks")
         entry.size = len(content)
@@ -134,6 +133,7 @@ def test_a_redirected_download_with_the_wrong_checksum_installs_nothing(tmp_path
     assert not (tmp_path / "bin" / "gitleaks").exists()
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("failure", "expected"),
     [
@@ -164,6 +164,7 @@ def install_versioned_gitleaks(tmp_path: Path) -> tuple[Path, dict[str, Pin]]:
     return tmp_path / "bin", pins
 
 
+@pytest.mark.integration
 def test_a_second_install_downloads_nothing_even_when_the_url_is_gone(tmp_path, capsys):
     """#25 rules 2 and 3: an engine that reports its pinned version is verified and not downloaded again."""
     directory, pins = install_versioned_gitleaks(tmp_path)
@@ -175,6 +176,7 @@ def test_a_second_install_downloads_nothing_even_when_the_url_is_gone(tmp_path, 
     assert cli.main(["engines", "verify", str(directory)], read_pins=lambda: pins) == 0
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("damage", ["deleted", "wrong-version"])
 def test_install_reinstalls_a_missing_or_wrong_binary(tmp_path, damage):
     """#25 rule 3: a deleted binary or one at another version is installed again."""
@@ -189,6 +191,7 @@ def test_install_reinstalls_a_missing_or_wrong_binary(tmp_path, damage):
     assert binary.read_text() == VERSIONED_BINARY
 
 
+@pytest.mark.integration
 def test_verify_is_exit_2_naming_both_versions_on_a_mismatch(tmp_path, capsys):
     """#25 rule 2: gitleaks 8.30.0 where 8.30.1 is pinned is exit 2, one line, both versions."""
     pins = {"gitleaks": Pin("8.30.1", "unused", "0" * 64)}
@@ -241,10 +244,7 @@ def test_an_engine_that_crashes_or_leaves_no_usable_report_is_exit_2(tmp_path, b
 
 @pytest.mark.parametrize(
     ("report", "exit_code", "expected"),
-    [
-        ("gitleaks-clean.json", 0, []),
-        ("gitleaks-finding.json", 7, ["secret deploy/config.txt:3"]),
-    ],
+    [("gitleaks-clean.json", 0, []), ("gitleaks-finding.json", 7, ["secret deploy/config.txt:3"])],
 )
 def test_report_becomes_findings(report, exit_code, expected):
     """#13 rule 3: each leak in a recorded report becomes a secret finding at file:line."""

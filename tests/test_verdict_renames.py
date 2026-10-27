@@ -129,6 +129,7 @@ def test_a_rename_from_a_path_that_is_not_utf8_still_clears_its_target(capsys, p
     assert (code, "size baseline adds function_lines src/new.py f 150" in output) == (1, True)
 
 
+@pytest.mark.integration
 def test_the_door_refuses_a_rename_from_a_path_that_is_not_utf8_as_the_verdict_does(capsys, tmp_path):
     """#149 rule 2, gate B1: the door reads the same pair of commits."""
     gh = pulled(
@@ -279,6 +280,7 @@ def new_entry(size, path="src/new.py"):
     return f'[function_lines."{path}"]\n"f" = {size}\n'
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("base", "head", "options", "code", "expected"),
     [
@@ -302,6 +304,7 @@ def failing_fetch(tmp_path):
     return pulled(tmp_path, OLD_ENTRY, NEW_ENTRY, MOVE)
 
 
+@pytest.mark.integration
 def test_a_fetch_that_fails_refuses_before_anything_is_touched(capsys, tmp_path):
     """#149 cell 24: no empty rename map is substituted, so a move is never read as an add by guess."""
     gh = failing_fetch(tmp_path)
@@ -355,6 +358,7 @@ def test_the_door_fetches_exactly_the_pull_requests_base_and_merge_commits(tmp_p
     assert "credential.helper=!gh auth git-credential" in fetch
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("fails", [False, True], ids=["after a judgement", "after a failed fetch"])
 def test_the_fetched_repository_is_removed(tmp_path, monkeypatch, fails):
     scratch = tmp_path / "scratch"
@@ -395,6 +399,7 @@ def test_git_output_of_a_failed_rename_list_never_reaches_the_operator(capsys, t
     changed_nothing(gh)
 
 
+@pytest.mark.integration
 def test_inherited_git_routing_and_configuration_do_not_reach_the_diff(capsys, tmp_path, monkeypatch):
     """#149 fetch boundary: the diff runs in the isolated environment of the fetch."""
     gh = failing_fetch(tmp_path)
@@ -465,6 +470,7 @@ emergency.read_renames_of_pull(
 """
 
 
+@pytest.mark.integration
 def test_a_sigterm_during_the_fetch_leaves_no_repository_behind(tmp_path):
     """#149 fetch boundary: the repository is removed on interruption too, through the engines' scratch directory."""
     scratch_parent = tmp_path / "scratch-parent"

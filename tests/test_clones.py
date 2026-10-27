@@ -111,6 +111,7 @@ def test_a_file_python_cannot_parse_has_no_pair_and_leaves_the_run_clean(build_r
     assert (code, report(0, 0) in output, "clone unparsable" in output) == (0, True, False), output
 
 
+@pytest.mark.integration
 def test_quality_holds_its_own_empty_clone_table_and_prints_no_clone_line(capsys):
     """#136 cell 12: quality enforces its `[clones]`, so a copied helper in its tree turns its own gate red."""
     code, output = hygiene(capsys, QUALITY_ITSELF)
