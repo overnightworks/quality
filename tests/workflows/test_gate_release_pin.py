@@ -5,7 +5,7 @@ import pytest
 import yaml
 from verify_release import gate_tool_refs
 
-GATE = Path(__file__).parent.parent / ".github" / "workflows" / "gate.yml"
+GATE = Path(__file__).parents[2] / ".github" / "workflows" / "gate.yml"
 
 
 def jobs_with_a_tool_checkout() -> int:

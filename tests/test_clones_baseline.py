@@ -8,7 +8,8 @@ import pytest
 from conftest import head_commit, hygiene_output, long_function, put
 from test_clones import function as clone_function
 from test_emergency import ONE_JOB, SONAR_GREEN, declaring, drive
-from test_renames import (
+from test_verdict import ONLY_DECLARED, declaration, verdict_of
+from test_verdict_renames import (
     OLD_ENTRY,
     commit_all,
     entry,
@@ -17,7 +18,6 @@ from test_renames import (
     moves_in_head,
     pulled,
 )
-from test_verdict import ONLY_DECLARED, declaration, verdict_of
 
 from quality import __version__, cli
 from quality.ratchet import (

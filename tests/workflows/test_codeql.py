@@ -2,7 +2,7 @@ from pathlib import Path
 
 import yaml
 
-CODEQL = Path(__file__).parent.parent / ".github" / "workflows" / "codeql.yml"
+CODEQL = Path(__file__).parents[2] / ".github" / "workflows" / "codeql.yml"
 
 
 def load_workflow() -> dict:

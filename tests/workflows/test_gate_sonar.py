@@ -6,7 +6,7 @@ import yaml
 
 from quality import sonar
 
-ROOT = Path(__file__).parent.parent
+ROOT = Path(__file__).parents[2]
 WORKFLOWS = ROOT / ".github" / "workflows"
 VERIFIED_SCANNER_VERSION = "8.1.0.6389"
 TOKEN_REFERENCE = "${{ secrets.SONAR_TOKEN }}"
