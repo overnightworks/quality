@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from quality.config import CONFIG_PATH
+from tests.support.git_repositories import head_commit
 from tests.support.hygiene import CLEAN_LINE
 from tests.support.hygiene import hygiene_output as run
 
@@ -168,11 +169,7 @@ def test_a_gitlink_is_never_entered(build_repo, capsys, elsewhere):
     repo.mkdir()
     subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
     subprocess.run(
-        ["git", "-C", str(repo), "update-index", "--add", "--cacheinfo", "160000", _head(inner), "src/acestep"], check=True
+        ["git", "-C", str(repo), "update-index", "--add", "--cacheinfo", "160000", head_commit(inner), "src/acestep"], check=True
     )
     code, output = run(capsys, repo)
     assert (code, floor_lines(output)) == (0, []), output
-
-
-def _head(repo: Path) -> str:
-    return subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
