@@ -218,7 +218,7 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   an exact tracked path. Paths come from the index and nothing is read from disk; a link or gitlink is judged by its
   own name and never followed; an index record that cannot be read is `hygiene: test-layout cannot judge - ...` (exit
   2). Names compare in exact case, all findings print sorted by path and no configuration switches the rule off.
-  Not judged, and waiting for usage evidence: a `tests/` folder elsewhere (`src/p/tests/`), a project with only
+  Named gaps, waiting for usage evidence: a `tests/` folder elsewhere (`src/p/tests/`), a project with only
   `setup.py`, a project whose `src/` holds only modules, and a package named `support` or `fixtures`.
   Every `test_*.py` outside `fixtures/` and the top-level `e2e/` mirrors the module it tests, one direction. Its
   folder mirrors a folder of `src/<package>/` (`tests/api/` is `src/<package>/api/`; with several packages
