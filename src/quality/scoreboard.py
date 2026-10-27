@@ -65,7 +65,7 @@ DEBT_COLUMNS = (ratchet.Metric.FILE_LINES, ratchet.Metric.FUNCTION_LINES, ratche
 ENFORCED = "enforced"
 REPORT_ONLY = "report-only"
 NO_CONFIG = "no config"
-NO_SRC_PACKAGE = "no src package"
+NO_JUDGED_PROJECT = "no judged project"
 RELEASE_UNKNOWN = "release unknown"
 NOT_RELEASED = "not released"
 IMPORT_LINTER_CONFIG = "import-linter config"
@@ -87,7 +87,7 @@ class Switch(Enum):
     SIZE_BASELINE = "a size baseline"
     IMPORT_LINTER_CONFIG = "an import-linter config"
     CLONE_TABLE = "a clone table"
-    SRC_PACKAGE = "a src package"
+    JUDGED_PROJECT = "a judged project"
     REPORT_ONLY = "report only"
 
 
@@ -122,7 +122,7 @@ RULES = (
     RuleRelease(hygiene.FILE_SUFFIX, None, Switch.ALWAYS),
     RuleRelease(hygiene.SCRIPT_NAME, None, Switch.ALWAYS),
     RuleRelease(hygiene.SCRIPT_HEADER, None, Switch.ALWAYS),
-    RuleRelease(hygiene.TEST_LAYOUT, None, Switch.SRC_PACKAGE),
+    RuleRelease(hygiene.TEST_LAYOUT, None, Switch.JUDGED_PROJECT),
     RuleRelease(hygiene.TEST_IMPORT, None, Switch.ALWAYS),
     RuleRelease(advisories.RULE, RATCHET_RELEASE, Switch.ALWAYS),
     RuleRelease(ratchet.SIZE, RATCHET_RELEASE, Switch.SIZE_BASELINE),
@@ -164,13 +164,13 @@ class Workflows:
 @dataclass(frozen=True)
 class Declared:
     """What a clone's own files switch on: the gate settings, a size baseline, a clone table, an import-linter config,
-    a Python project with a src package, and the files among them that could not be read."""
+    a project whose tests the layout rules judge, and the files among them that could not be read."""
 
     settings: config.GateSettings | None
     has_baseline: bool
     has_clone_table: bool
     has_import_config: bool
-    has_src_package: bool
+    has_judged_project: bool
     unreadable: frozenset[str]
 
 
@@ -428,8 +428,10 @@ def read_declared(clone: Path, tracked: list[str]) -> Declared:
         has_import_config = find_import_config(clone, tracked)
     except (repository.RepositoryFileError, architecture.ContractError):
         unreadable.add(IMPORT_LINTER_CONFIG)
-    has_src_package = any(project.packages for project in layout.python_projects(tracked))
-    return Declared(settings, has_baseline, has_clone_table, has_import_config, has_src_package, frozenset(unreadable))
+    has_judged_project = any(project.packages for project in layout.python_projects(tracked)) or bool(
+        layout.frontend_projects(tracked)
+    )
+    return Declared(settings, has_baseline, has_clone_table, has_import_config, has_judged_project, frozenset(unreadable))
 
 
 def find_import_config(clone: Path, tracked: list[str]) -> bool:
@@ -618,8 +620,8 @@ def switch_words(switch: Switch, declared: Declared) -> Cell:
         return ENFORCED
     if switch is Switch.REPORT_ONLY:
         return REPORT_ONLY
-    if switch is Switch.SRC_PACKAGE:
-        return ENFORCED if declared.has_src_package else NO_SRC_PACKAGE
+    if switch is Switch.JUDGED_PROJECT:
+        return ENFORCED if declared.has_judged_project else NO_JUDGED_PROJECT
     file, present = {
         Switch.SIZE_BASELINE: (ratchet.BASELINE_PATH, declared.has_baseline),
         Switch.CLONE_TABLE: (ratchet.BASELINE_PATH, declared.has_clone_table),

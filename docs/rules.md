@@ -45,8 +45,8 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   `.cjs`), Svelte or Vue is measured by its lines, and every tracked `*.py` file also with
   [lizard](https://github.com/terryyin/lizard): a file from 800 lines, a Python function from 60 lines and a Python
   function with a CCN above 15 are debt, counted apart for production and tests (a path under `test/` or `tests/`;
-  Python also `conftest.py`, `test_*.py`, `*_test.py`; TypeScript and JavaScript also `__tests__/`, `*.test.*` and
-  `*.spec.*`). A minified or generated file is counted by its lines like any other.
+  Python also `conftest.py`, `test_*.py`, `*_test.py`; TypeScript and JavaScript also `__tests__/`, `*.test.*`,
+  `*.spec.*`, `*.test-d.*` and `*.spec-d.*`). A minified or generated file is counted by its lines like any other.
   Functions of the other languages are not measured: lizard misplaces their boundaries
   ([terryyin/lizard#521](https://github.com/terryyin/lizard/issues/521)). Functions are named by their qualified
   symbol (`Class.method`); a second one of the same name, such as a property setter, is `Class.method#2`. Without
@@ -205,9 +205,9 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
     (`# shellcheck`, `# -*-`, `# noqa`, `# type:`, `# pyright:`, `# ruff:`, `// eslint`) and code such as
     `set -euo pipefail` do not count. Presence only, never content.
   (#175, #190; head decisions of 27.10.2026: the `tests/` exemption and blank lines not counting)
-- `test-layout` judges what may lie under a Python project's `tests/`. A project is the directory of any tracked
-  `pyproject.toml`, the root or a member at any depth; the file's content is never read, and one inside another
-  project's `tests/` makes no project. A project is judged when it has a package: a directory directly under
+- `test-layout` judges what may lie under a Python project's `tests/` and where a frontend test lies. A project is the
+  directory of any tracked `pyproject.toml`, the root or a member at any depth; the file's content is never read, and
+  one inside the `tests/` of another project, of either kind, makes no project. A project is judged when it has a package: a directory directly under
   `<project>/src/` that holds a tracked `.py` at any depth, with or without `__init__.py`. A project without one, and
   a `tests/` folder that belongs to no project, are not judged. Under a judged `<project>/tests/` every tracked path
   is a `test_*.py` (placed and named by the mapping below), a `conftest.py` at any depth, a file in a `support/`
@@ -218,7 +218,7 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   an exact tracked path. Paths come from the index and nothing is read from disk; a link or gitlink is judged by its
   own name and never followed; an index record that cannot be read is `hygiene: test-layout cannot judge - ...` (exit
   2). Names compare in exact case, all findings print sorted by path and no configuration switches the rule off.
-  Not judged, and waiting for usage evidence: a `tests/` folder elsewhere (`src/p/tests/`), a project with only
+  Named gaps, waiting for usage evidence: a `tests/` folder elsewhere (`src/p/tests/`), a project with only
   `setup.py`, a project whose `src/` holds only modules, and a package named `support` or `fixtures`.
   Every `test_*.py` outside `fixtures/` and the top-level `e2e/` mirrors the module it tests, one direction. Its
   folder mirrors a folder of `src/<package>/` (`tests/api/` is `src/<package>/api/`; with several packages
@@ -234,6 +234,33 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   file that breaks the folder and the name condition together gets one finding with both reasons, and every fix ends
   with declaring the path. (#175, #196, #199; operator rulings 24.10.2026: „ja das will ich“, D-A „ja beides a?“,
   D-B „ja b!“; the details are head decisions of 27.10.2026)
+
+  Frontend tests. A frontend project is the directory of any tracked `package.json`, the root or a
+  member at any depth; its content (`workspaces` included) is never read, a `package.json` inside the `tests/` of a
+  project of either kind makes no project, and a test file belongs to its nearest enclosing frontend project. A
+  repository without one is not judged by these rules. Judged files are tracked TypeScript and JavaScript files (the
+  suffixes `size` counts, `.mjs`, `.js` and `.tsx` included) with a word between the first and the last `.` that is
+  `test`, `spec`, `test-d` or `spec-d`; only the name decides, no `tests/` or `__tests__/` folder does, a link is
+  judged by its name and a gitlink is a folder and never judged. A path under the `tests/` of a Python project with a
+  package is judged by the Python cases only. Sibling: a judged file with no word `spec` is a test, and its base,
+  its name up to the first `.`, or a non-empty prefix of the base that ends before a `-` or `_` or between a lower-case
+  letter or digit and an upper-case letter, must equal the key of a subject in the same folder. A subject is any
+  tracked file there that is no gitlink and carries no test word, whatever its suffix (a symlink counts by its name, a
+  folder never); its key is its base without a leading `+`, so `page.test.ts` maps to `+page.svelte`. An empty base
+  never matches, and `.test.ts` is red. Spec: a judged file with the word `spec` lies under its project's top-level
+  `e2e/` folder at any depth; other files there are not judged as specs, and a `.test.*` there needs its sibling. A
+  declaration exempts its path from every case. Each case has its own reason and fix: a test with no sibling
+  (move it beside the file it tests and name it `<subject>[<Aspect>]` plus its own tail) and a spec outside `e2e/`
+  (move it into the project's `e2e/`, or name a Vitest test `<subject>.test.<suffix>`); every fix ends with declaring
+  the path. `test-layout` judges no `.rs` file and reads no `Cargo.toml`, and Cargo's own layout stands (other rules
+  still read tracked files for a shebang); a `package.json` or `pyproject.toml` inside a Cargo tree makes a project
+  like any other. Named gaps, waiting for usage evidence: a subject that is a
+  folder, an acronym run read as one word (`HTMLParser.test.ts` beside `HTML.ts` is red), a name holding both `test`
+  and `spec` (judged as a spec), a test-named file outside any frontend project, where helpers, setup files and
+  fixtures lie, a test whose subject lies outside its project (declare it), an `e2e/` folder that is its own
+  workspace package (its specs are red), a `package.json` under a `fixtures/` folder outside any `tests/` (a project)
+  and a judged file in a frontend `fixtures/` folder (it needs a sibling). (#175; operator rulings 24.10.2026; the
+  details are head decisions of 27.10.2026)
 - `test-import` judges every Python project, with or without a package, as `test-layout` finds projects. The importers
   are the tracked `.py` files under its `tests/` that are no link and lie in no `fixtures/` folder, `support/` modules
   and `e2e/` drivers included. The targets are the tracked `test_*.py` and `conftest.py` files there (a link is a target

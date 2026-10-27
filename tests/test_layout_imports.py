@@ -4,7 +4,7 @@ import pytest
 
 from tests.support.emergency import ONE_JOB
 from tests.support.hygiene import hygiene_output
-from tests.support.layout import CONFIG, GUIDANCE, declaring, findings, in_index, red
+from tests.support.layout import CONFIG, GUIDANCE, case, declaring, findings, in_index, red
 
 RULE = "test-import"
 
@@ -12,10 +12,6 @@ RULE = "test-import"
 def project(files: dict[str, str]) -> dict[str, str]:
     """A root project (its `pyproject.toml` is added) tracking `files`."""
     return {**GUIDANCE, "pyproject.toml": "", **files}
-
-
-def case(identifier: str, files: dict[str, str], expected: list[str]):
-    return pytest.param(files, expected, id=identifier)
 
 
 @pytest.mark.parametrize(

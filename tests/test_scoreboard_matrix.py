@@ -282,7 +282,7 @@ CLONE_RELEASES = {**FIRST_RELEASES, "v0.4.0": CLONE_RELEASE, "v0.5.0": CLONE_TAB
 
 def declared(**fields) -> Declared:
     """A clone that declares nothing, with the given fields set."""
-    return Declared(**{"settings": None, "has_baseline": False, "has_clone_table": False, "has_import_config": False, "has_src_package": False,
+    return Declared(**{"settings": None, "has_baseline": False, "has_clone_table": False, "has_import_config": False, "has_judged_project": False,
                        "unreadable": frozenset(), **fields})
 
 
@@ -326,18 +326,18 @@ TEST_LAYOUT = next(rule for rule in RULES if rule.rule == "test-layout")
 
 
 @pytest.mark.parametrize(
-    ("has_src_package", "words"), [(True, "enforced"), (False, "no src package")], ids=["a src package", "none"]
+    ("has_judged_project", "words"), [(True, "enforced"), (False, "no judged project")], ids=["a judged project", "none"]
 )
-def test_main_enforces_test_layout_only_where_a_project_has_a_src_package(has_src_package, words):
+def test_main_enforces_test_layout_only_where_a_project_is_judged(has_judged_project, words):
     """#196 sentence 9: where the gate knows the rule, the cell says whether any project in the clone is judged."""
     release = gate_release((Call(None),), True, CLONE_RELEASES)
-    assert rule_cell(TEST_LAYOUT, release, declared(has_src_package=has_src_package)) == words
+    assert rule_cell(TEST_LAYOUT, release, declared(has_judged_project=has_judged_project)) == words
 
 
 def test_a_pinned_gate_has_not_released_test_layout():
     """#196 sentence 9: a pinned release says `not released` whatever the clone holds."""
     release = gate_release((Call(CLONE_TABLE_PIN),), False, CLONE_RELEASES)
-    assert rule_cell(TEST_LAYOUT, release, declared(has_src_package=True)) == "not released"
+    assert rule_cell(TEST_LAYOUT, release, declared(has_judged_project=True)) == "not released"
 
 
 TEST_IMPORT = next(rule for rule in RULES if rule.rule == "test-import")
@@ -356,11 +356,14 @@ def test_test_import_needs_no_applicability_cell(pinned, words):
     ("files", "words"),
     [
         ({"pyproject.toml": "", "src/p/x.py": ""}, "enforced"),
-        ({"pyproject.toml": "", "tests/helpers.py": ""}, "no src package"),
-        ({"src/p/x.py": ""}, "no src package"),
-        ({"pyproject.toml": "", "tests/pyproject.toml": "", "tests/src/a/x.py": ""}, "no src package"),
+        ({"frontend/package.json": ""}, "enforced"),
+        ({"pyproject.toml": "", "tests/fixtures/package.json": ""}, "no judged project"),
+        ({"pyproject.toml": "", "tests/helpers.py": ""}, "no judged project"),
+        ({"src/p/x.py": ""}, "no judged project"),
+        ({"pyproject.toml": "", "tests/pyproject.toml": "", "tests/src/a/x.py": ""}, "no judged project"),
     ],
-    ids=["a project with a package", "a project without src", "a package without a project", "a package only in tests"],
+    ids=["a project with a package", "a frontend project", "a package.json only in tests", "a project without src",
+         "a package without a project", "a package only in tests"],
 )
 def test_the_scoreboard_cell_for_test_layout_is_read_from_the_clone(scoreboard, gate_clone, files, words):
     """#196 sentence 9, E3: the clone's tracked files decide the cell, on the gate's own repository."""
