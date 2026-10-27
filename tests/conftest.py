@@ -7,7 +7,7 @@ import sys
 import tempfile
 import threading
 from collections.abc import Callable, Sequence
-from pathlib import Path
+from pathlib import Path, PosixPath, PurePosixPath
 
 import pytest
 
@@ -65,6 +65,9 @@ RepoBuilder = Callable[[dict[str, str]], Path]
 Responder = Callable[[http.server.BaseHTTPRequestHandler], None]
 
 
+# Exact built-in types whose repr cannot raise; any other type, subclasses included, prints as its name.
+REPRESENTABLE_TYPES = frozenset({int, float, bool, bytes, type(None), PurePosixPath, PosixPath})
+
 _recording: list[tuple[str, tuple]] | None = None
 
 
@@ -82,6 +85,8 @@ def _describe_value(value: object) -> str:
         return str.__repr__(value)
     if isinstance(value, (list, tuple)):
         return "[" + ", ".join(_describe_value(item) for item in value) + "]"
+    if type(value) in REPRESENTABLE_TYPES:
+        return repr(value)
     return f"<{type(value).__name__}>"
 
 
@@ -117,7 +122,7 @@ def pytest_runtest_setup(item):
     _recording = []
     try:
         return (yield)
-    except pytest.skip.Exception:  # a skipped setup never reaches the call phase
+    except (pytest.skip.Exception, pytest.xfail.Exception):  # a skipped or xfailed setup never reaches the call phase
         _stop_recording_and_judge(item)
         raise
 
