@@ -240,7 +240,7 @@ def _test_layout_findings(path: PurePosixPath, tests: PurePosixPath, mirror: _Pr
     folders = inside[:-1]
     if path.name == INIT_FILE and FIXTURES_DIRECTORY not in folders:
         return [_init_under_tests(str(path))]
-    if path.name.startswith(TEST_PREFIX) and path.suffix == ".py":
+    if _is_test_module(path):
         return _mirror_findings(path, folders, mirror)
     allowed = (
         path.name == CONFTEST_FILE
@@ -474,8 +474,12 @@ class _ImportTargets:
         return "/".join((*base, *name.split("."))) + ".py" in self.paths
 
 
+def _is_test_module(path: PurePosixPath) -> bool:
+    return path.name.startswith(TEST_PREFIX) and path.suffix == ".py"
+
+
 def _is_import_target(path: PurePosixPath) -> bool:
-    return path.suffix == ".py" and (path.name == CONFTEST_FILE or path.name.startswith(TEST_PREFIX))
+    return _is_test_module(path) or (path.name == CONFTEST_FILE and path.suffix == ".py")
 
 
 def _parsed(path: str, content: bytes) -> ast.Module:
