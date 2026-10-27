@@ -1,4 +1,5 @@
 import re
+from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import PurePosixPath
@@ -30,6 +31,13 @@ CONFTEST_FILE = "conftest.py"
 HELPER_DIRECTORIES = frozenset({"support", "fixtures"})
 FIXTURES_DIRECTORY = "fixtures"
 END_TO_END_DIRECTORY = "e2e"
+SUPPORT_DIRECTORY = "support"
+WORKFLOWS_TESTS_DIRECTORY = "workflows"
+WORKFLOWS_FOLDER = PurePosixPath(".github") / "workflows"
+WORKFLOW_SUFFIXES = frozenset({".yml", ".yaml"})
+ROOT_DIRECTORY = "."
+TEST_PREFIX = "test_"
+WRAPPED_NAME = re.compile(r"__(.+)__")
 
 
 def check_file_suffix(modes: Mapping[str, str], allowances: Sequence[LayoutAllowance]) -> list[Finding]:
@@ -206,30 +214,168 @@ def _packages(directory: PurePosixPath, tracked: Sequence[PurePosixPath]) -> tup
 def check_test_layout(modes: Mapping[str, str], allowances: Sequence[LayoutAllowance]) -> list[Finding]:
     """Every tracked path under a judged project's `tests/` is a `test_*.py`, a `conftest.py`, a file in a `support/` or
     `fixtures/` folder or a file in the top-level `e2e/`, and no `__init__.py` lies there outside `fixtures/`; a
-    declaration of an untracked path is a finding too. A project is judged when it has a package."""
+    `test_*.py` outside `fixtures/` and the top-level `e2e/` lies in the folder that mirrors its module and is named
+    `test_<module>[_<aspect>].py`; a declaration of an untracked path is a finding too. A project is judged when it
+    has a package."""
     declared = _declared_paths(allowances, LayoutRule.TEST_LAYOUT)
-    judged = [project.tests_directory for project in python_projects(modes) if project.packages]
+    tracked = [PurePosixPath(path) for path in modes]
+    mirrors = {
+        project.tests_directory: _ProjectMirror.of(project, tracked)
+        for project in python_projects(modes)
+        if project.packages
+    }
     findings = []
-    for path in modes:
-        pure = PurePosixPath(path)
-        if path not in declared and any(tests in pure.parents for tests in judged):
-            findings += _test_layout_findings(pure, next(tests for tests in judged if tests in pure.parents))
+    for path in tracked:
+        tests = next((tests for tests in mirrors if tests in path.parents), None)
+        if tests is not None and str(path) not in declared:
+            findings += _test_layout_findings(path, tests, mirrors[tests])
     findings += [_stale_declaration(path, LayoutRule.TEST_LAYOUT) for path in declared - modes.keys()]
     return sorted(findings, key=lambda finding: finding.path)
 
 
-def _test_layout_findings(path: PurePosixPath, tests: PurePosixPath) -> list[Finding]:
+def _test_layout_findings(path: PurePosixPath, tests: PurePosixPath, mirror: _ProjectMirror) -> list[Finding]:
     inside = path.relative_to(tests).parts
     folders = inside[:-1]
     if path.name == INIT_FILE and FIXTURES_DIRECTORY not in folders:
         return [_init_under_tests(str(path))]
+    if path.name.startswith(TEST_PREFIX) and path.suffix == ".py":
+        return _mirror_findings(path, folders, mirror)
     allowed = (
-        (path.name.startswith("test_") and path.suffix == ".py")
-        or path.name == CONFTEST_FILE
+        path.name == CONFTEST_FILE
         or bool(HELPER_DIRECTORIES.intersection(folders))
         or (folders[:1] == (END_TO_END_DIRECTORY,))
     )
     return [] if allowed else [_stray_under_tests(str(path))]
+
+
+_Problem = tuple[str, str]
+
+
+@dataclass(frozen=True)
+class _Destination:
+    """The keys of the folder a test mirrors, and how to call its candidates in a finding."""
+
+    folder: str
+    noun: str
+    placeholder: str
+    keys: frozenset[str]
+
+
+@dataclass(frozen=True)
+class _ProjectMirror:
+    """What a project's tests may mirror: the keys of each `src/` package folder and `scripts/` folder, and the
+    root's workflows."""
+
+    directory: PurePosixPath
+    packages: tuple[str, ...]
+    sources: Mapping[PurePosixPath, frozenset[str]]
+    scripts: Mapping[PurePosixPath, frozenset[str]]
+    workflows: frozenset[str]
+
+    @classmethod
+    def of(cls, project: PythonProject, tracked: Sequence[PurePosixPath]) -> _ProjectMirror:
+        directory = PurePosixPath(project.directory)
+        source, scripts = directory / SOURCE_DIRECTORY, directory / SCRIPTS_DIRECTORY
+        return cls(
+            directory,
+            project.packages,
+            _folder_keys([path for path in tracked if path.suffix == ".py" and source in path.parents], source),
+            _folder_keys([path for path in tracked if scripts in path.parents], scripts),
+            frozenset(
+                _key(path.stem.replace("-", "_"))
+                for path in tracked
+                if path.parent == WORKFLOWS_FOLDER and path.suffix in WORKFLOW_SUFFIXES
+            ),
+        )
+
+    def destination(self, folders: tuple[str, ...]) -> tuple[list[_Problem], _Destination | None]:
+        if folders[:1] == (SCRIPTS_DIRECTORY,):
+            folder = self.directory / SCRIPTS_DIRECTORY / PurePosixPath(*folders[1:])
+            return [], _Destination(str(folder), "script", "script", self.scripts.get(folder, frozenset()))
+        if folders[:1] == (WORKFLOWS_TESTS_DIRECTORY,):
+            return self._workflow_destination(folders)
+        return self._package_destination(folders)
+
+    def _workflow_destination(self, folders: tuple[str, ...]) -> tuple[list[_Problem], _Destination | None]:
+        if str(self.directory) != ROOT_DIRECTORY:
+            return [(
+                "workflow tests belong to the root project's tests/workflows/",
+                "move it to the root's tests/workflows/",
+            )], None
+        problems = []
+        if len(folders) > 1:
+            problems.append(("workflow tests lie directly in tests/workflows/", "move it up into tests/workflows/"))
+        return problems, _Destination(str(WORKFLOWS_FOLDER), "workflow", "workflow", self.workflows)
+
+    def _package_destination(self, folders: tuple[str, ...]) -> tuple[list[_Problem], _Destination | None]:
+        if len(self.packages) == 1:
+            package, below = self.packages[0], folders
+        elif folders[:1] and folders[0] in self.packages:
+            package, below = folders[0], folders[1:]
+        else:
+            return [(
+                "a project with several packages keeps each test under tests/<package>/",
+                "move it under tests/<package>/ of the package it tests",
+            )], None
+        folder = self.directory / SOURCE_DIRECTORY / package / PurePosixPath(*below)
+        if folder not in self.sources:
+            return [(
+                f"its folder mirrors {folder}, which is no package folder",
+                "move it to the folder that mirrors its module's package",
+            )], None
+        own_name = frozenset() if below else frozenset({_key(package)})
+        return [], _Destination(str(folder), "module or package", "module", self.sources[folder] | own_name)
+
+
+def _folder_keys(files: Sequence[PurePosixPath], root: PurePosixPath) -> dict[PurePosixPath, frozenset[str]]:
+    """The key of each file in its folder and of each subfolder in its parent, for every folder below `root`'s
+    files."""
+    keys: defaultdict[PurePosixPath, set[str]] = defaultdict(set)
+    for file in files:
+        keys[file.parent].add(_key(file.stem))
+        for directory in file.parents:
+            if root in directory.parents:
+                keys[directory.parent].add(_key(directory.name))
+    return {folder: frozenset(names) for folder, names in keys.items()}
+
+
+def _key(name: str) -> str:
+    """`__x__` reads as `x`, otherwise one leading `_` is dropped."""
+    wrapped = WRAPPED_NAME.fullmatch(name)
+    return wrapped[1] if wrapped else name.removeprefix("_")
+
+
+def _names_a_key(name: str, keys: frozenset[str]) -> bool:
+    words = name.split("_")
+    return bool(words[0]) and any("_".join(words[:length]) in keys for length in range(len(words), 0, -1))
+
+
+def _mirror_findings(path: PurePosixPath, folders: tuple[str, ...], mirror: _ProjectMirror) -> list[Finding]:
+    if FIXTURES_DIRECTORY in folders or folders[:1] == (END_TO_END_DIRECTORY,):
+        return []
+    if SUPPORT_DIRECTORY in folders:
+        return [_mirror_finding(path, [(
+            "a test module in a support/ folder, which holds helpers",
+            "rename it if it is a helper, or move it to the folder that mirrors its module",
+        )])]
+    problems, destination = mirror.destination(folders)
+    name = path.stem.removeprefix(TEST_PREFIX)
+    if destination is not None and not _names_a_key(name, destination.keys):
+        problems.append((
+            f"no {destination.noun} in {destination.folder} is named by a word prefix of {name}",
+            f"rename it test_<{destination.placeholder}>[_<aspect>].py after what it tests",
+        ))
+    return [_mirror_finding(path, problems)] if problems else []
+
+
+def _mirror_finding(path: PurePosixPath, problems: Sequence[_Problem]) -> Finding:
+    reasons = "; ".join(reason for reason, _ in problems)
+    fixes = ", or ".join(fix for _, fix in problems)
+    return Finding(
+        LayoutRule.TEST_LAYOUT.value, str(path), None,
+        f"a test module that does not mirror a module: {reasons}.",
+        f"{fixes}, or declare it in {CONFIG_PATH} with [[layout.allow]], its path, the rule test-layout and a reason.",
+    )
 
 
 def _init_under_tests(path: str) -> Finding:
