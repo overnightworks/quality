@@ -26,11 +26,10 @@ from tests.support.architecture import (
     toml,
 )
 from tests.support.emergency import BASE_SHA, ONE_JOB, SHOWN, SONAR_GREEN, FakeGh, changed_nothing, declaring, drive
-from tests.support.hygiene import assert_every_line_starts_with_the_door
+from tests.support.hygiene import CLEAN_LINE, assert_every_line_starts_with_the_door
 from tests.support.hygiene import hygiene_output as run
 
 QUALITY_ROOT = Path(__file__).resolve().parents[1]
-CLEAN_LINE = "hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout, file-suffix, script-name, script-header)"
 SHOP_CYCLE = {**SHOP_DB_IMPORTS_WEB, "src/shop/web.py": "import shop.db\n"}
 LAYERS = {"type": "layers", "layers": ["shop.web", "shop.db"]}
 PROTECTED = {"type": "protected", "protected_modules": ["shop.web"], "allowed_importers": ["shop.api"]}

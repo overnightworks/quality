@@ -33,6 +33,7 @@ ROOT_LAYOUT = "root-layout"
 FILE_SUFFIX = LayoutRule.FILE_SUFFIX.value
 SCRIPT_NAME = LayoutRule.SCRIPT_NAME.value
 SCRIPT_HEADER = LayoutRule.SCRIPT_HEADER.value
+TEST_LAYOUT = LayoutRule.TEST_LAYOUT.value
 WORKFLOW_RULE_IDS = tuple(engines.WORKFLOW_ENGINES)
 ENGINE_RULE_IDS = (engines.LEAK_RULE, *WORKFLOW_RULE_IDS, advisories.RULE)
 WORKFLOW_DIRECTORY = PurePosixPath(".github/workflows")
@@ -629,6 +630,7 @@ def run_hygiene(root: Path, engine_dir: Path | None = None) -> HygieneResult:
         _verdict(FILE_SUFFIX, _attempt(lambda: layout.check_file_suffix(index_modes(root), _declared(read_layout_allowances, root)))),
         _verdict(SCRIPT_NAME, _script_findings(root, layout.check_script_name)),
         _verdict(SCRIPT_HEADER, _script_findings(root, layout.check_script_header)),
+        _verdict(TEST_LAYOUT, _attempt(lambda: layout.check_test_layout(index_modes(root), _declared(read_layout_allowances, root)))),
     ]
     reports = _reports(size, clone, contracts)
     if engine_dir is None:

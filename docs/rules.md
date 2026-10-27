@@ -178,7 +178,7 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   reason = "the deploy script reads it by this name"
   ```
 
-  The rule is `file-suffix`, `script-name` or `script-header`; a declaration covers only its own rule, and one
+  The rule is `file-suffix`, `script-name`, `script-header` or `test-layout`; a declaration covers only its own rule, and one
   `script-name` entry covers both the shape and the location of its path. A declared path that is not tracked is a
   finding of the declared rule; a declaration for a file that already complies is clean. A finding
   names the file and both ways out, give it a suffix or declare it, in prose with no command; findings are sorted by
@@ -205,6 +205,23 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
     (`# shellcheck`, `# -*-`, `# noqa`, `# type:`, `# pyright:`, `# ruff:`, `// eslint`) and code such as
     `set -euo pipefail` do not count. Presence only, never content.
   (#175, #190; head decisions of 27.10.2026: the `tests/` exemption and blank lines not counting)
+- `test-layout` judges what may lie under a Python project's `tests/`. A project is the directory of any tracked
+  `pyproject.toml`, the root or a member at any depth; the file's content is never read, and one inside another
+  project's `tests/` makes no project. A project is judged when it has a package: a directory directly under
+  `<project>/src/` that holds a tracked `.py` at any depth, with or without `__init__.py`. A project without one, and
+  a `tests/` folder that belongs to no project, are not judged. Under a judged `<project>/tests/` every tracked path
+  is a `test_*.py` (anywhere; where it maps is not judged yet), a `conftest.py` at any depth, a file in a `support/`
+  or `fixtures/` folder at any depth, or a file in the top-level `tests/e2e/`. An `__init__.py` under `tests/` is
+  red anywhere, `support/` and `e2e/` included, and is data only inside a `fixtures/` folder. A finding names its
+  case: an `__init__.py` (delete it, or declare it) or any other file (move it to a `support/` helper folder or a
+  `fixtures/` data folder, or declare it). A declaration is a `[[layout.allow]]` entry with the rule `test-layout` on
+  an exact tracked path. Paths come from the index and nothing is read from disk; a link or gitlink is judged by its
+  own name and never followed; an index record that cannot be read is `hygiene: test-layout cannot judge - ...` (exit
+  2). Names compare in exact case, all findings print sorted by path and no configuration switches the rule off.
+  Not judged, and waiting for usage evidence: a `tests/` folder elsewhere (`src/p/tests/`), a project with only
+  `setup.py`, a project whose `src/` holds only modules, and a package named `support` or `fixtures`. (#175, #196;
+  operator rulings 24.10.2026: „ja das will ich“, D-A „ja beides a?“, D-B „ja b!“; the details are head decisions of
+  27.10.2026)
 - The baseline only falls: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the
   base commit's, so growing a function and rewriting the baseline stays red. Each loosening is one line, named with the
   baseline's own metric, path and symbol (a file entry has no symbol):
@@ -417,7 +434,7 @@ Every rule is judged, even when another cannot be, and gives one verdict: clean,
 Each finding names the rule, the file, a reason and a fix. Repository text (a file name, a service, a port, a contract
 or job name, a configuration entry) prints escaped. In the door's own fields (a finding's location, reason and fix, refusals, reports), invalid UTF-8 prints as `\udcNN` and every control character (line feed,
 carriage return, ESC, tab, DEL, C1) as `\xNN`. A line taken from import-linter's rendering (a broken contract's chain and guidance) prints behind the marker `  | `; rich may drop a carriage return, expand a tab, or start a new marked line at a line feed there. Every line the door prints therefore starts with its own text, so a matcher anchored at the line start, such as setup-uv's python matcher, cannot match repository text. A refusal is one line; the lines the door means to print (an import chain, the verdict's problems, the scoreboard's table) stay lines. A rule that cannot judge prints its verdict and reason under its rule id (`hygiene: secret cannot
-judge - ...`). A clean run names its rules in run order (`hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout, file-suffix, script-name, script-header); skipped without
+judge - ...`). A clean run names its rules in run order (`hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout, file-suffix, script-name, script-header, test-layout); skipped without
 --engines: ...`); any other run ends with the findings and the verdicts counted (`hygiene: 1 finding(s); verdicts: 1
 clean, 1 findings, 1 unparsable`). The lines come in run order, also through a pipe that merges stdout and stderr
 (`2>&1 | tee log`); each stays on its own stream. That is option (c) of #86 on 19.10.2026, `cli.main` makes stdout

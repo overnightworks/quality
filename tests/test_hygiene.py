@@ -14,9 +14,8 @@ from quality import cli, hygiene, sonar
 from quality.report import Finding
 from tests.support.engines import fake_engine
 from tests.support.git_repositories import make_repo
+from tests.support.hygiene import CLEAN_LINE, ENGINE_RULES, FILE_RULES
 from tests.support.hygiene import hygiene_output as run
-
-CLEAN_FILE_RULES = "hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout, file-suffix, script-name, script-header)"
 
 
 def compose(*port_lines: str) -> dict[str, str]:
@@ -41,12 +40,12 @@ def non_utf8_filename_repo(build_repo, tmp_path):
 @pytest.mark.parametrize(
     ("arrange", "expected_code", "expected_text"),
     [
-        (lambda build_repo, tmp_path: build_repo({}), 0, CLEAN_FILE_RULES),
-        (non_utf8_filename_repo, 0, CLEAN_FILE_RULES),
+        (lambda build_repo, tmp_path: build_repo({}), 0, CLEAN_LINE),
+        (non_utf8_filename_repo, 0, CLEAN_LINE),
         (lambda build_repo, tmp_path: tmp_path, 2, "cannot judge"),
         (lambda build_repo, tmp_path: build_repo({".env": "A=1\n"}), 1, "finding(s)"),
         (lambda build_repo, tmp_path: build_repo({"\udcff.env": "A=1\n"}), 1, "env-file \\udcff.env - "),
-        (deleted_compose_repo, 0, CLEAN_FILE_RULES),
+        (deleted_compose_repo, 0, CLEAN_LINE),
         (truncated_compose_repo, 2, "cannot judge"),
     ],
     ids=[
@@ -70,7 +69,7 @@ def test_compose_specific_tags_are_judged_not_refused(build_repo, capsys):
     """#3 rule 1/4: valid Compose YAML tags are read, and their ports still checked."""
     body = 'services:\n  web:\n    image: x\n    ports: !override\n      - "127.0.0.1:80:80"\n    profiles: !reset []\n'
     code, output = run(capsys, build_repo({"compose.yaml": body}))
-    assert (code, CLEAN_FILE_RULES in output) == (0, True)
+    assert (code, CLEAN_LINE in output) == (0, True)
 
 
 @pytest.mark.parametrize("tagged", ["!reset null", "!reset []"], ids=["null", "empty-list"])
@@ -341,7 +340,7 @@ def test_a_tracked_compose_linked_to_nowhere_is_gone_not_unjudgeable(build_repo,
     (repo / "compose.yaml").unlink()
     link(repo, elsewhere)
     code, output = run(capsys, repo)
-    assert (code, CLEAN_FILE_RULES in output, str(repo) in output) == (0, True, False), output
+    assert (code, CLEAN_LINE in output, str(repo) in output) == (0, True, False), output
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-0 file, so no permission is refused")
@@ -394,7 +393,7 @@ def files(tracked: dict[str, str]):
     [
         (files({**BASELINE, ".env": "A=1\n", "src/bad.py": "def broken(:\n"}), False, 2,
          [ENV_FINDING, "hygiene: size unparsable - src/bad.py is not valid Python",
-          "hygiene: 2 finding(s); verdicts: 7 clean, 2 findings, 1 unparsable"]),
+          "hygiene: 2 finding(s); verdicts: 8 clean, 2 findings, 1 unparsable"]),
         (config_linked_out_of_the_repository, True, 2,
          [ENV_FINDING, "hygiene: compose-port cannot judge - quality/config.toml resolves outside the repository",
           "hygiene: secret cannot judge - quality/config.toml resolves outside the repository",
@@ -403,15 +402,16 @@ def files(tracked: dict[str, str]):
           "hygiene: file-suffix cannot judge - quality/config.toml resolves outside the repository",
           "hygiene: script-name cannot judge - quality/config.toml resolves outside the repository",
           "hygiene: script-header cannot judge - quality/config.toml resolves outside the repository",
-          "hygiene: 1 finding(s); verdicts: 6 clean, 1 findings, 7 cannot judge"]),
+          "hygiene: test-layout cannot judge - quality/config.toml resolves outside the repository",
+          "hygiene: 1 finding(s); verdicts: 6 clean, 1 findings, 8 cannot judge"]),
         (files({**BASELINE, "compose.yaml": "services: [\n", "src/a.py": NEW_DEBT}), False, 2,
          ["hygiene: compose-port cannot judge - cannot read compose.yaml", "size src/a.py:1 - function long_one"]),
         (files({".env": "A=1\n", **compose('- "8080:80"')}), False, 1,
-         [ENV_FINDING, "compose-port compose.yaml - ", "hygiene: 3 finding(s); verdicts: 7 clean, 3 findings"]),
+         [ENV_FINDING, "compose-port compose.yaml - ", "hygiene: 3 finding(s); verdicts: 8 clean, 3 findings"]),
         (files({}), False, 0,
-         [f"{CLEAN_FILE_RULES}; skipped without --engines: secret, workflow-lint, workflow-security, advisory"]),
+         [f"{CLEAN_LINE}; skipped without --engines: secret, workflow-lint, workflow-security, advisory"]),
         (files({}), True, 0,
-         ["hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout, file-suffix, script-name, script-header, secret, workflow-lint, workflow-security, advisory);"]),
+         [f"hygiene: clean ({FILE_RULES}, {ENGINE_RULES});"]),
         (files({"compose-\udcff.yaml": compose('- "8080:80"')["compose.yaml"]}), False, 1,
          ["compose-port compose-\\udcff.yaml - service web publishes port 8080:80"]),
         (files({**BASELINE, "src/\udcff.py": NEW_DEBT}), False, 1, ["size src/\\udcff.py:1 - function long_one"]),
