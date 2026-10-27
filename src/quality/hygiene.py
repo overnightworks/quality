@@ -34,6 +34,7 @@ FILE_SUFFIX = LayoutRule.FILE_SUFFIX.value
 SCRIPT_NAME = LayoutRule.SCRIPT_NAME.value
 SCRIPT_HEADER = LayoutRule.SCRIPT_HEADER.value
 TEST_LAYOUT = LayoutRule.TEST_LAYOUT.value
+TEST_IMPORT = LayoutRule.TEST_IMPORT.value
 WORKFLOW_RULE_IDS = tuple(engines.WORKFLOW_ENGINES)
 ENGINE_RULE_IDS = (engines.LEAK_RULE, *WORKFLOW_RULE_IDS, advisories.RULE)
 WORKFLOW_DIRECTORY = PurePosixPath(".github/workflows")
@@ -600,13 +601,18 @@ def _judge_baseline_rules(
     return _attempt(lambda: check_size(tree, baseline)), _attempt(lambda: check_clones(tree, sources, baseline))
 
 
-def _script_findings(root: Path, check: Callable[..., list[Finding]]) -> list[Finding] | CannotJudge:
-    """The findings of a script rule over the index modes and the contents of the files that may be scripts."""
+def _content_findings(
+    root: Path, candidates: Callable[[dict[str, str]], list[str]], check: Callable[..., list[Finding]]
+) -> list[Finding] | CannotJudge:
+    """The findings of a rule over the index modes and the contents of the files `candidates` names."""
 
     def judge() -> list[Finding]:
         modes = index_modes(root)
-        contents = _read_existing(repository.read_bytes, root, _on_disk(root, layout.script_candidates(modes)))
-        return check(modes, contents, _declared(read_layout_allowances, root))
+        contents = _read_existing(repository.read_bytes, root, _on_disk(root, candidates(modes)))
+        try:
+            return check(modes, contents, _declared(read_layout_allowances, root))
+        except layout.UnparsableTestModule as error:
+            raise Unparsable(str(error)) from error
 
     return _attempt(judge)
 
@@ -628,9 +634,10 @@ def run_hygiene(root: Path, engine_dir: Path | None = None) -> HygieneResult:
         _verdict(CLAUDE_MD, _attempt(lambda: check_claude_md(root, tracked))),
         _verdict(ROOT_LAYOUT, _attempt(lambda: check_root_layout(tracked, _declared(read_root_allowances, root)))),
         _verdict(FILE_SUFFIX, _attempt(lambda: layout.check_file_suffix(index_modes(root), _declared(read_layout_allowances, root)))),
-        _verdict(SCRIPT_NAME, _script_findings(root, layout.check_script_name)),
-        _verdict(SCRIPT_HEADER, _script_findings(root, layout.check_script_header)),
+        _verdict(SCRIPT_NAME, _content_findings(root, layout.script_candidates, layout.check_script_name)),
+        _verdict(SCRIPT_HEADER, _content_findings(root, layout.script_candidates, layout.check_script_header)),
         _verdict(TEST_LAYOUT, _attempt(lambda: layout.check_test_layout(index_modes(root), _declared(read_layout_allowances, root)))),
+        _verdict(TEST_IMPORT, _content_findings(root, layout.test_import_candidates, layout.check_test_import)),
     ]
     reports = _reports(size, clone, contracts)
     if engine_dir is None:

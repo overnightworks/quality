@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from quality import cli
-from tests.support.hygiene import CLEAN_LINE
+from tests.support.hygiene import CLEAN_LINE, ENGINE_RULES, FILE_RULES
 from tests.support.hygiene import hygiene_output as run
 
 ENV_FINDING = "env-file .env - "
@@ -168,5 +168,5 @@ def test_claude_md_is_named_in_run_order_with_and_without_engines(build_repo, cl
     plain = run(capsys, repo)
     code = cli.main(["hygiene", "--engines", str(clean_engines), str(repo)])
     with_engines = capsys.readouterr()
-    assert (plain[0], "import-contract, claude-md, root-layout, file-suffix, script-name, script-header, test-layout" in plain[1]) == (0, True), plain
-    assert (code, "script-header, test-layout, secret" in with_engines.out + with_engines.err) == (0, True)
+    assert (plain[0], CLEAN_LINE in plain[1]) == (0, True), plain
+    assert (code, f"{FILE_RULES}, {ENGINE_RULES}" in with_engines.out + with_engines.err) == (0, True)

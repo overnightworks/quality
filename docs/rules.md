@@ -178,7 +178,7 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   reason = "the deploy script reads it by this name"
   ```
 
-  The rule is `file-suffix`, `script-name`, `script-header` or `test-layout`; a declaration covers only its own rule, and one
+  The rule is `file-suffix`, `script-name`, `script-header`, `test-layout` or `test-import`; a declaration covers only its own rule, and one
   `script-name` entry covers both the shape and the location of its path. A declared path that is not tracked is a
   finding of the declared rule; a declaration for a file that already complies is clean. A finding
   names the file and both ways out, give it a suffix or declare it, in prose with no command; findings are sorted by
@@ -234,6 +234,26 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   file that breaks the folder and the name condition together gets one finding with both reasons, and every fix ends
   with declaring the path. (#175, #196, #199; operator rulings 24.10.2026: „ja das will ich“, D-A „ja beides a?“,
   D-B „ja b!“; the details are head decisions of 27.10.2026)
+- `test-import` judges every Python project, with or without a package, as `test-layout` finds projects. The importers
+  are the tracked `.py` files under its `tests/` that are no link and lie in no `fixtures/` folder, `support/` modules
+  and `e2e/` drivers included. The targets are the tracked `test_*.py` and `conftest.py` files there (a link is a target
+  by its name), including a member's or the root's own. Every `import` and `from ... import` statement is read, inside
+  a function or under `if TYPE_CHECKING:` too. An absolute name is red when its components equal the trailing components
+  of a target's path without `.py`, which covers every `pythonpath` spelling without reading pytest's configuration
+  (`import conftest`, `from tests.test_x import y`, `from e2e.conftest import z`); a `from M import a` checks `M` and
+  `M.a`, so `from tests import conftest` is red and `from tests.support.x import test_helper` is not. A relative name
+  resolves against the importer's folder and must equal a target's path. A plain `e2e/` driver may import another.
+  One finding per statement, at `path:line`, names each target it imports; the fix is a `support/` module or a
+  fixture in `conftest.py`, or a `[[layout.allow]]` entry with the rule `test-import` on the importer's path, which
+  exempts all its imports (an untracked declared path is a finding; a `test-layout` declaration does not cover it).
+  Importers are decoded as Python reads source and parsed: a file that does not parse is
+  `hygiene: test-import unparsable - <path> is not valid Python (...)` (exit 2) and one that cannot be read is
+  `hygiene: test-import cannot judge - ...` (exit 2); no other file is read. All findings print sorted by path and
+  line and no configuration switches the rule off. Not read, and waiting for usage evidence: string imports
+  (`importlib.import_module`, `__import__`, `pytest.importorskip`), `pytest_plugins`, `sys.path` edits, `runpy`,
+  source passed to a subprocess with `-c`, and `*_test.py` as a target. An import whose name matches a tracked test
+  module is reported even when it means a third-party module; rename the test module or declare the importer.
+  (#175, #201)
 - The baseline only falls: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the
   base commit's, so growing a function and rewriting the baseline stays red. Each loosening is one line, named with the
   baseline's own metric, path and symbol (a file entry has no symbol):
@@ -446,7 +466,7 @@ Every rule is judged, even when another cannot be, and gives one verdict: clean,
 Each finding names the rule, the file, a reason and a fix. Repository text (a file name, a service, a port, a contract
 or job name, a configuration entry) prints escaped. In the door's own fields (a finding's location, reason and fix, refusals, reports), invalid UTF-8 prints as `\udcNN` and every control character (line feed,
 carriage return, ESC, tab, DEL, C1) as `\xNN`. A line taken from import-linter's rendering (a broken contract's chain and guidance) prints behind the marker `  | `; rich may drop a carriage return, expand a tab, or start a new marked line at a line feed there. Every line the door prints therefore starts with its own text, so a matcher anchored at the line start, such as setup-uv's python matcher, cannot match repository text. A refusal is one line; the lines the door means to print (an import chain, the verdict's problems, the scoreboard's table) stay lines. A rule that cannot judge prints its verdict and reason under its rule id (`hygiene: secret cannot
-judge - ...`). A clean run names its rules in run order (`hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout, file-suffix, script-name, script-header, test-layout); skipped without
+judge - ...`). A clean run names its rules in run order (`hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout, file-suffix, script-name, script-header, test-layout, test-import); skipped without
 --engines: ...`); any other run ends with the findings and the verdicts counted (`hygiene: 1 finding(s); verdicts: 1
 clean, 1 findings, 1 unparsable`). The lines come in run order, also through a pipe that merges stdout and stderr
 (`2>&1 | tee log`); each stays on its own stream. That is option (c) of #86 on 19.10.2026, `cli.main` makes stdout

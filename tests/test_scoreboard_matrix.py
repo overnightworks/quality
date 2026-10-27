@@ -339,6 +339,18 @@ def test_a_pinned_gate_has_not_released_test_layout():
     assert rule_cell(TEST_LAYOUT, release, declared(has_src_package=True)) == "not released"
 
 
+TEST_IMPORT = next(rule for rule in RULES if rule.rule == "test-import")
+
+
+@pytest.mark.parametrize(
+    ("pinned", "words"), [(False, "enforced"), (True, "not released")], ids=["main", "pinned"]
+)
+def test_test_import_needs_no_applicability_cell(pinned, words):
+    """#201 sentence 9: the rule judges every Python project, so main enforces it and a pinned release has not got it."""
+    release = gate_release((Call(CLONE_TABLE_PIN if pinned else None),), not pinned, CLONE_RELEASES)
+    assert rule_cell(TEST_IMPORT, release, declared()) == words
+
+
 @pytest.mark.parametrize(
     ("files", "words"),
     [
@@ -457,4 +469,4 @@ def test_the_heading_sentence_names_the_rules_the_oldest_release_always_enforces
     """#125 cell 24, E8: the five rules get a sentence, not five columns."""
     _, output = scoreboard(public("any", {}), tags=first_releases())
     assert "Every gate release enforces env-file, compose-port, secret, workflow-lint and workflow-security." in output
-    assert MATRIX_COLUMNS[5:] == ("claude-md", "root-layout", "file-suffix", "script-name", "script-header", "test-layout", "advisory", "size", "import-contract", "clone")
+    assert MATRIX_COLUMNS[5:] == ("claude-md", "root-layout", "file-suffix", "script-name", "script-header", "test-layout", "test-import", "advisory", "size", "import-contract", "clone")

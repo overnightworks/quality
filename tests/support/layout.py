@@ -22,5 +22,8 @@ def in_index(repo, *arguments: str) -> None:
 
 
 def red(capsys, repo, rule: str) -> list[str]:
-    """The paths the hygiene run of `repo` reports under `rule`."""
-    return findings(hygiene_output(capsys, repo)[1], rule)
+    """The paths the hygiene run of `repo` reports under `rule`; a run that cannot judge `rule` fails the test."""
+    output = hygiene_output(capsys, repo)[1]
+    assert f"hygiene: {rule} cannot judge" not in output
+    assert f"hygiene: {rule} unparsable" not in output
+    return findings(output, rule)

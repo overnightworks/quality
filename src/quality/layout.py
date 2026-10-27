@@ -1,9 +1,11 @@
+import ast
 import re
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 
+from quality import ratchet
 from quality.config import CONFIG_PATH, LayoutAllowance, LayoutRule
 from quality.report import Finding
 
@@ -238,7 +240,7 @@ def _test_layout_findings(path: PurePosixPath, tests: PurePosixPath, mirror: _Pr
     folders = inside[:-1]
     if path.name == INIT_FILE and FIXTURES_DIRECTORY not in folders:
         return [_init_under_tests(str(path))]
-    if path.name.startswith(TEST_PREFIX) and path.suffix == ".py":
+    if _is_test_module(path):
         return _mirror_findings(path, folders, mirror)
     allowed = (
         path.name == CONFTEST_FILE
@@ -361,8 +363,9 @@ def _mirror_findings(path: PurePosixPath, folders: tuple[str, ...], mirror: _Pro
     problems, destination = mirror.destination(folders)
     name = path.stem.removeprefix(TEST_PREFIX)
     if destination is not None and not _names_a_key(name, destination.keys):
+        named = f"is named by a word prefix of {name}" if name else "is named by an empty name"
         problems.append((
-            f"no {destination.noun} in {destination.folder} is named by a word prefix of {name}",
+            f"no {destination.noun} in {destination.folder} {named}",
             f"rename it test_<{destination.placeholder}>[_<aspect>].py after what it tests",
         ))
     return [_mirror_finding(path, problems)] if problems else []
@@ -393,4 +396,122 @@ def _stray_under_tests(path: str) -> Finding:
         "e2e/ folder.",
         "move it to a support/ folder (a helper) or a fixtures/ folder (data), or declare it in "
         f"{CONFIG_PATH} with [[layout.allow]], its path, the rule test-layout and a reason.",
+    )
+
+
+class UnparsableTestModule(Exception):
+    """A test importer Python cannot decode or parse."""
+
+
+def test_import_candidates(modes: Mapping[str, str]) -> list[str]:
+    """The tracked paths whose imports are judged: every `.py` that is no link under a Python project's `tests/`,
+    except inside a `fixtures/` folder. The project need not have a package."""
+    tests = _tests_directories(modes)
+    return [
+        path for path, mode in modes.items()
+        if mode not in LINK_MODES and path.endswith(".py") and _in_judged_tests(PurePosixPath(path), tests)
+    ]
+
+
+def check_test_import(
+    modes: Mapping[str, str], contents: Mapping[str, bytes], allowances: Sequence[LayoutAllowance]
+) -> list[Finding]:
+    """No importer imports a test module or a conftest: every `import` and `from ... import` statement is read, in a
+    function or under `if TYPE_CHECKING:` too, and an absolute name is red when its components are the trailing
+    components of a target's path, a relative one when it resolves to the target's path; a from-import checks its
+    module and each imported name. A declaration exempts its importer; a declaration of an untracked path is a finding.
+    `contents` holds the bytes of `test_import_candidates`. Findings are sorted by path and line."""
+    declared = _declared_paths(allowances, LayoutRule.TEST_IMPORT)
+    targets = _ImportTargets.of(modes)
+    findings = []
+    for path, content in contents.items():
+        if path not in declared:
+            findings += _import_findings(path, _parsed(path, content), targets)
+    findings += [_stale_declaration(path, LayoutRule.TEST_IMPORT) for path in declared - modes.keys()]
+    return sorted(findings, key=lambda finding: (finding.path, finding.line or 0))
+
+
+def _tests_directories(modes: Iterable[str]) -> list[PurePosixPath]:
+    return [project.tests_directory for project in python_projects(modes)]
+
+
+def _in_judged_tests(path: PurePosixPath, tests: Iterable[PurePosixPath]) -> bool:
+    return any(
+        directory in path.parents and FIXTURES_DIRECTORY not in path.relative_to(directory).parts[:-1]
+        for directory in tests
+    )
+
+
+@dataclass(frozen=True)
+class _ImportTargets:
+    """The tracked test modules and conftests: their paths, and every trailing run of components of their paths
+    without `.py`, which is how a `pythonpath` entry names them."""
+
+    paths: frozenset[str]
+    suffixes: frozenset[tuple[str, ...]]
+
+    @classmethod
+    def of(cls, modes: Mapping[str, str]) -> _ImportTargets:
+        tests = _tests_directories(modes)
+        named = [
+            PurePosixPath(path) for path in modes
+            if _in_judged_tests(PurePosixPath(path), tests) and _is_import_target(PurePosixPath(path))
+        ]
+        components = [path.with_suffix("").parts for path in named]
+        return cls(
+            frozenset(str(path) for path in named),
+            frozenset(parts[start:] for parts in components for start in range(len(parts))),
+        )
+
+    def absolute(self, name: str) -> bool:
+        return tuple(name.split(".")) in self.suffixes
+
+    def relative(self, folder: PurePosixPath, level: int, name: str) -> bool:
+        up = level - 1
+        if up > len(folder.parts):
+            return False
+        base = folder.parts[: len(folder.parts) - up]
+        return "/".join((*base, *name.split("."))) + ".py" in self.paths
+
+
+def _is_test_module(path: PurePosixPath) -> bool:
+    return path.name.startswith(TEST_PREFIX) and path.suffix == ".py"
+
+
+def _is_import_target(path: PurePosixPath) -> bool:
+    return _is_test_module(path) or (path.name == CONFTEST_FILE and path.suffix == ".py")
+
+
+def _parsed(path: str, content: bytes) -> ast.Module:
+    try:
+        return ast.parse(ratchet.python_text(content), filename=path)
+    except ratchet.PARSE_ERRORS as error:
+        raise UnparsableTestModule(f"{path} is not valid Python ({error})") from error
+
+
+def _import_findings(path: str, tree: ast.Module, targets: _ImportTargets) -> list[Finding]:
+    folder = PurePosixPath(path).parent
+    statements = [node for node in ast.walk(tree) if isinstance(node, ast.Import | ast.ImportFrom)]
+    named = ((node, _imported_targets(node, folder, targets)) for node in statements)
+    return [_imports_a_test_module(path, node.lineno, names) for node, names in named if names]
+
+
+def _imported_targets(node: ast.Import | ast.ImportFrom, folder: PurePosixPath, targets: _ImportTargets) -> list[str]:
+    if isinstance(node, ast.Import):
+        return [alias.name for alias in node.names if targets.absolute(alias.name)]
+    module = node.module or ""
+    names = [module] if module else []
+    names += [f"{module}.{alias.name}" if module else alias.name for alias in node.names if alias.name != "*"]
+    if node.level:
+        dots = "." * node.level
+        return [dots + name for name in names if targets.relative(folder, node.level, name)]
+    return [name for name in names if targets.absolute(name)]
+
+
+def _imports_a_test_module(path: str, line: int, names: Sequence[str]) -> Finding:
+    return Finding(
+        LayoutRule.TEST_IMPORT.value, path, line,
+        f"imports the test module or conftest {', '.join(names)}.",
+        "move what it needs to a support/ module, or make it a fixture in conftest.py, or declare it in "
+        f"{CONFIG_PATH} with [[layout.allow]], its path, the rule test-import and a reason.",
     )

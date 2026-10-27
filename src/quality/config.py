@@ -125,6 +125,7 @@ class LayoutRule(Enum):
     SCRIPT_NAME = "script-name"
     SCRIPT_HEADER = "script-header"
     TEST_LAYOUT = "test-layout"
+    TEST_IMPORT = "test-import"
 
 
 @dataclass(frozen=True)
