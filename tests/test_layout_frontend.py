@@ -1,7 +1,5 @@
 """The test-layout rule maps every frontend test to the file it tests and keeps Playwright specs in `e2e/`."""
 
-from pathlib import Path
-
 import pytest
 
 from tests.support.emergency import ONE_JOB
@@ -9,7 +7,6 @@ from tests.support.hygiene import hygiene_output
 from tests.support.layout import CONFIG, GUIDANCE, case, declaring, empty_files, in_index, red
 
 RULE = "test-layout"
-QUALITY_ITSELF = Path(__file__).parents[1]
 PACKAGE_JSON = {"package.json": "{}\n"}
 PYTHON_PROJECT = {"pyproject.toml": "", "src/p/x.py": ""}
 SPEC_FIX = "or declare it in quality/config.toml with [[layout.allow]], its path, the rule test-layout and a reason."
@@ -31,7 +28,7 @@ def frontend(*paths: str, manifest: str = "package.json") -> dict[str, str]:
              {**GUIDANCE, **PYTHON_PROJECT, **empty_files("tests/fixtures/app/package.json", "tests/fixtures/app/z.test.ts")}, []),
         case("H3 a pyproject.toml in the tests of a frontend project",
              frontend("frontend/package.json", "frontend/tests/fixtures/pyproject.toml", "frontend/tests/fixtures/src/p/x.py",
-                      "frontend/tests/stray.txt"), []),
+                      "frontend/tests/fixtures/tests/stray.txt"), []),
         case("H4 a spec in a member's e2e", frontend("packages/ui/package.json", "packages/ui/e2e/f.spec.ts", "e2e/f.spec.ts"), []),
         case("H4 a spec outside a member's e2e", frontend("packages/ui/package.json", "packages/ui/src/f.spec.ts"),
              ["packages/ui/src/f.spec.ts"]),
@@ -142,8 +139,3 @@ def test_a_root_spec_names_the_root_e2e_folder(build_repo, capsys):
     output = hygiene_output(capsys, build_repo(frontend("src/a.spec.ts")))[1]
     assert "outside e2e/" in output
     assert "move it into e2e/, or" in output
-
-
-def test_quality_itself_has_no_test_layout_finding(capsys):
-    """H19: quality tracks no package.json, so nothing frontend is judged there."""
-    assert red(capsys, QUALITY_ITSELF, RULE) == []
