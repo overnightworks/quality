@@ -52,7 +52,7 @@ DEPENDABOT_EXCEPTION_RULE = "docker:S8431"
 SET_ASIDE_REASON = f" (does not count: {DEPENDABOT_CONFIG} exists, Sonar's own exception, which its pull-request analysis misses)"
 
 PULL_REQUEST_EVENT = "pull_request"
-TOKEN_VARIABLE = "SONAR_TOKEN"  # noqa: S105 - the name of an environment variable, not a secret
+TOKEN_VARIABLE = "SONAR_TOKEN"  # noqa: S105 - the name of an environment variable and not a secret
 # gate.yml passes github.event.repository.default_branch; an absent expression renders as an empty string.
 DEFAULT_BRANCH_VARIABLE = "DEFAULT_BRANCH"
 
