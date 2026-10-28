@@ -273,6 +273,20 @@ def test_the_write_overwrites_a_malformed_previous_clone_table_with_the_unchange
     assert note.endswith("), so raises cannot be named")
 
 
+@pytest.mark.parametrize(
+    "text",
+    [f"[file_lines]\n\"src/a.py\" = {'9' * 5000}\n", f"a = {'[' * 5000}{']' * 5000}\n"],
+    ids=["oversized integer", "nested too deep"],
+)
+def test_the_write_overwrites_a_previous_baseline_the_toml_reader_gives_up_on_with_the_note(build_repo, capsys, text):
+    """#218 sentence 1: the reader's refusal is the ruled overwrite note, not a traceback."""
+    repo = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: text})
+    code, (note, _) = written(capsys, repo)
+    assert code == 0
+    assert note.startswith(f"baseline: the previous {BASELINE_PATH} could not be read (")
+    assert f"{BASELINE_PATH} is not valid TOML" in note
+
+
 def test_an_unknown_table_names_the_tool_version_and_every_known_table_with_clones():
     """#130 cell 17, #153 cell 14."""
     with pytest.raises(SizeError, match=rf"unknown table \[future\]; quality {re.escape(__version__)} knows ccn, .*, clones$"):
