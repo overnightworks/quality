@@ -507,6 +507,8 @@ def test_public_rows_come_first_then_private_ones_each_in_file_order(scoreboard,
     [
         (None, "is missing"),
         ('public = ["https://x/a"', "is not valid TOML"),
+        (f"public = {'9' * 5000}", "is not valid TOML"),
+        (f"public = {'[' * 5000}{']' * 5000}", "is not valid TOML"),
         ('public = ["https://x/a"]\nprivate = []\nextra = 1\n', "unknown key(s) ['extra']"),
         ('public = "https://x/a"\nprivate = []\n', "needs public as a list of strings"),
         ('public = [1]\nprivate = []\n', "needs public as a list of strings"),
@@ -515,7 +517,7 @@ def test_public_rows_come_first_then_private_ones_each_in_file_order(scoreboard,
         ('public = ["https://x/a"]\nprivate = ["https://x/b", "https://x/a"]\n', "private[1] repeats public[0]"),
         ("public = []\nprivate = []\n", "lists no URL"),
     ],
-    ids=["missing file", "invalid TOML", "unknown key", "not a list", "not a string", "missing key", "duplicate",
+    ids=["missing file", "invalid TOML", "oversized integer", "nested too deep", "unknown key", "not a list", "not a string", "missing key", "duplicate",
          "in both lists", "no URL"],
 )
 def test_a_fleet_file_that_cannot_be_used_cannot_be_judged(capsys, tmp_path, content, problem):

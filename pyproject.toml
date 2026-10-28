@@ -49,6 +49,9 @@ markers = [
 
 [tool.coverage.run]
 source_pkgs = ["quality"]
+source_dirs = ["scripts"]
+branch = true
+patch = ["subprocess"]
 relative_files = true
 
 [tool.importlinter]

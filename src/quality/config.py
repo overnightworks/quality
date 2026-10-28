@@ -1,6 +1,5 @@
 import datetime
 import re
-import tomllib
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path, PurePosixPath
@@ -200,8 +199,8 @@ class _Document:
 
 def _parse(text: str, example: str) -> dict:
     try:
-        return tomllib.loads(text)
-    except (ValueError, RecursionError) as error:
+        return repository.parse_toml(text)
+    except repository.TomlError as error:
         raise ConfigError(f"{CONFIG_PATH} is not valid TOML ({error}) - write it like:\n{example}") from error
 
 

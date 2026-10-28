@@ -1,7 +1,6 @@
 import os
 import re
 import subprocess
-import tomllib
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -321,8 +320,8 @@ def _floor(path: str, requires_python: str) -> Version | None:
 def _requires_python(path: str, content: bytes) -> tuple[bool, str]:
     """Whether the file holds a `[project]` table, and its `requires-python` ("" when it names none)."""
     try:
-        document = tomllib.loads(content.decode("utf-8"))
-    except (ValueError, RecursionError) as error:
+        document = repository.parse_toml(content.decode("utf-8"))
+    except (UnicodeDecodeError, repository.TomlError) as error:
         raise Unparsable(f"{path} is not UTF-8 TOML that Python reads ({error})") from error
     project = document.get("project")
     if not isinstance(project, dict):

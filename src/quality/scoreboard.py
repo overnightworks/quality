@@ -10,7 +10,6 @@ is published in a public run summary.
 
 import re
 import subprocess
-import tomllib
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import date
@@ -249,8 +248,8 @@ def read_fleet(root: Path) -> Fleet:
 
 def parse_fleet(text: str) -> Fleet:
     try:
-        document = tomllib.loads(text)
-    except tomllib.TOMLDecodeError as error:
+        document = repository.parse_toml(text)
+    except repository.TomlError as error:
         raise FleetError(f"{FLEET_PATH} is not valid TOML ({error}) - write it like:\n{FLEET_EXAMPLE}") from error
     unknown = sorted(set(document) - {"public", "private"})
     if unknown:

@@ -65,9 +65,14 @@ def test_a_config_file_that_cannot_be_decoded_is_refused(tmp_path):
         read_gate_settings(tmp_path)
 
 
-def test_a_config_nested_too_deeply_cannot_be_judged_by_any_rule_that_reads_it(build_repo, capsys):
+@pytest.mark.parametrize(
+    "content",
+    [f"a = {'[' * 2000}{']' * 2000}\n", f"a = {'9' * 5000}\n"],
+    ids=["nested too deep", "oversized integer"],
+)
+def test_a_config_the_toml_reader_gives_up_on_cannot_be_judged_by_any_rule_that_reads_it(build_repo, capsys, content):
     """sentence 4: a config the TOML reader gives up on is cannot-judge, not a traceback."""
-    repo = build_repo({CONFIG_PATH: f"a = {'[' * 2000}{']' * 2000}\n"})
+    repo = build_repo({CONFIG_PATH: content})
     assert cli.main(["hygiene", str(repo)]) == 2
     named = {line.split(" - ")[0] for line in capsys.readouterr().err.splitlines() if "is not valid TOML" in line}
     assert {"hygiene: python-floor cannot judge", "hygiene: root-layout cannot judge"} <= named

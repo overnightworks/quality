@@ -12,7 +12,6 @@ import io
 import json
 import re
 import tokenize
-import tomllib
 from collections import Counter
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
@@ -23,7 +22,7 @@ from typing import NamedTuple, Self
 
 import lizard
 
-from quality import __version__
+from quality import __version__, repository
 from quality.report import Finding
 
 SIZE = "size"
@@ -475,8 +474,8 @@ def _toml_string(name: str) -> str:
 
 def load_baseline(text: str) -> Baseline:
     try:
-        document = tomllib.loads(text)
-    except tomllib.TOMLDecodeError as error:
+        document = repository.parse_toml(text)
+    except repository.TomlError as error:
         raise SizeError(f"{BASELINE_PATH} is not valid TOML ({error})") from error
     size: SizeEntries = {}
     clones = None

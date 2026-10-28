@@ -282,6 +282,18 @@ def test_a_tracked_file_the_filesystem_refuses_to_reach_cannot_be_judged(build_r
         assert "hygiene: clone cannot judge - " + reason in err, err
 
 
+@pytest.mark.parametrize(
+    "content",
+    [f"[file_lines]\n\"src/a.py\" = {'9' * 5000}\n", f"a = {'[' * 5000}{']' * 5000}\n"],
+    ids=["oversized integer", "nested too deep"],
+)
+def test_a_size_baseline_the_toml_reader_gives_up_on_cannot_be_judged(build_repo, capsys, content):
+    """#218 sentence 1: an integer or a nesting tomllib refuses is exit 2 with the ruled message, not a traceback."""
+    repo = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: content})
+    assert cli.main(["hygiene", str(repo)]) == 2
+    assert f"{BASELINE_PATH} is not valid TOML" in capsys.readouterr().err
+
+
 def property_pair(lines: int) -> str:
     getter = long_function(lines).replace("long_one():", "long_one(self):")
     setter = long_function(lines).replace("long_one():", "long_one(self, value):")
