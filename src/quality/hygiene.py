@@ -13,7 +13,7 @@ import yaml
 from packaging.specifiers import Specifier, SpecifierSet
 from packaging.version import Version
 
-from quality import advisories, architecture, clones, engines, layout, ratchet, repository
+from quality import advisories, architecture, clones, engines, layout, python_lint, ratchet, repository
 from quality.config import (
     CONFIG_PATH,
     Allowance,
@@ -41,6 +41,7 @@ SCRIPT_HEADER = LayoutRule.SCRIPT_HEADER.value
 TEST_LAYOUT = LayoutRule.TEST_LAYOUT.value
 TEST_IMPORT = LayoutRule.TEST_IMPORT.value
 PYTHON_FLOOR = "python-floor"
+PYTHON_SECURITY = python_lint.RULE
 PYTHON_TARGET = Version("3.14")
 LOWER_BOUND_OPERATORS = frozenset({">=", ">", "~=", "==", "==="})
 WORKFLOW_RULE_IDS = tuple(engines.WORKFLOW_ENGINES)
@@ -595,6 +596,19 @@ def check_import_contract(root: Path, tracked: list[str]) -> architecture.Contra
         raise CannotJudge(str(error)) from error
 
 
+def check_python_security(root: Path) -> list[Finding]:
+    """ruff judges the tracked regular `.py` files the tree holds, each read as UTF-8 and resolved inside the repository first."""
+    modes = index_modes(root)
+    texts = _read_existing(repository.read_text, root, _on_disk(root, python_lint.candidates(modes)))
+    files = {name: python_lint.PythonFile(_judged(repository.resolve_file, root, name), text) for name, text in texts.items()}
+    try:
+        return python_lint.check_security(root, files, modes, PYTHON_TARGET)
+    except python_lint.UnparsablePython as error:
+        raise Unparsable(str(error)) from error
+    except python_lint.LintError as error:
+        raise CannotJudge(str(error)) from error
+
+
 def check_secrets(root: Path, engine_dir: Path) -> engines.SecretScan:
     try:
         return engines.scan_secrets(root, engine_dir, engines.read_pins(), read_secret_allowances(root))
@@ -739,6 +753,7 @@ def run_hygiene(root: Path, engine_dir: Path | None = None) -> HygieneResult:
         _verdict(TEST_LAYOUT, _attempt(lambda: layout.check_test_layout(index_modes(root), _declared(read_layout_allowances, root)))),
         _verdict(TEST_IMPORT, _content_findings(root, layout.test_import_candidates, layout.check_test_import)),
         _verdict(PYTHON_FLOOR, floor if isinstance(floor, CannotJudge) else floor.findings),
+        _verdict(PYTHON_SECURITY, _attempt(lambda: check_python_security(root))),
     ]
     reports = _reports(size, clone, contracts, floor)
     if engine_dir is None:

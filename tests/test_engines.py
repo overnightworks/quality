@@ -741,7 +741,7 @@ def test_a_shellcheck_on_path_never_runs_during_workflow_lint(build_repo, instal
 
 @pytest.fixture(scope="module")
 def pinned_zizmor_asset() -> bytes:
-    with urllib.request.urlopen(engines.read_pins()["zizmor"].url, timeout=engines.DOWNLOAD_TIMEOUT_SECONDS) as asset:
+    with urllib.request.urlopen(engines.read_pins()["zizmor"].url, timeout=engines.DOWNLOAD_TIMEOUT_SECONDS) as asset:  # noqa: S310 - the pinned https url of engines.toml
         return asset.read()
 
 

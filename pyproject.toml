@@ -9,13 +9,14 @@ dependencies = [
     "import-linter==2.15",
     "lizard>=1.24.1,<1.25",
     "packaging>=24",
+    "ruff==0.17.1",
 ]
 
 [project.scripts]
 quality = "quality.cli:run"
 
 [dependency-groups]
-dev = ["ruff", "pytest", "pytest-cov"]
+dev = ["pytest", "pytest-cov"]
 
 [build-system]
 requires = ["hatchling==1.32.4", "hatch-vcs==0.5.0", "setuptools-scm==10.3.4", "vcs-versioning==2.6.0"]
@@ -65,6 +66,7 @@ layers = [
     "sonar | scoreboard",
     "hygiene | staged",
     "advisories",
+    "python_lint",
     "architecture | clones | engines | layout | pip_requirements",
     "ratchet",
     "report",
