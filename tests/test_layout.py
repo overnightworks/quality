@@ -241,6 +241,7 @@ def test_one_declaration_covers_the_shape_and_the_location(build_repo, capsys):
         ("#!/usr/bin/env bash\n# shellcheck disable=SC2034\n# Runs it.\n", False),
         ("#!/usr/bin/env python3\n# noqa\n# type: ignore\nx = 1\n", True),
         ("#!/usr/bin/env python3\n# ruff: noqa\n# pyright: basic\n# -*- coding: utf-8 -*-\nx = 1\n", True),
+        ("#!/usr/bin/env python3\n# ruff: noqa: T201 - the script owns its output\nprint(1)\n", True),
         ('"""Runs it."""\nx = 1\n', False),
         ("#!/usr/bin/env python3\n'''Runs it.'''\n", False),
         ('# /// script\n# requires-python = ">=3.12"\n# ///\n# Runs it.\nx = 1\n', False),
@@ -255,12 +256,13 @@ def test_one_declaration_covers_the_shape_and_the_location(build_repo, capsys):
         ("", True),
     ],
     ids=["code first", "directive only", "blank lines do not count", "third line", "fourth line", "directive then comment",
-         "noqa and type", "tool directives", "docstring first", "single-quoted docstring", "after a PEP 723 block",
+         "noqa and type", "tool directives", "output owner directive", "docstring first", "single-quoted docstring", "after a PEP 723 block",
          "PEP 723 then code", "shebang, block, docstring", "encoding then PEP 723 then code", "plain encoding line",
          "prefixed docstring", "encoding line counts toward the window", "bytes literal", "f-string", "empty"],
 )
 def test_a_script_needs_a_comment_or_docstring_in_its_first_three_lines(build_repo, capsys, content, red):
-    """#190 sentence 4: a non-directive comment or docstring within the first three non-blank lines."""
+    """#190 sentence 4: a non-directive comment or docstring within the first three non-blank lines; python-print's
+    output owner line is a directive (#225 cell 7)."""
     repo = build_repo({**GUIDANCE, "scripts/run_it.py": content})
     assert findings(hygiene_output(capsys, repo)[1], "script-header") == (["scripts/run_it.py"] if red else [])
 

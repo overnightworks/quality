@@ -6,6 +6,8 @@ Exit 0 only when the checkout is clean, the tag is at HEAD, HEAD is on origin/ma
 the gate's tool checkouts pin the tag; one line per check says which. Exit 2 for a wrong command line.
 """
 
+# ruff: noqa: T201 - this script prints its verdict lines as its one output
+
 import argparse
 import subprocess
 import sys

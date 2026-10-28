@@ -90,6 +90,7 @@ def test_a_file_python_can_read_is_measured_in_its_declared_encoding(build_repo,
     """#46 rule 1: the size rule measures every tracked Python file Python itself reads; ruff reads UTF-8 only (#219)."""
     code, output = hygiene(capsys, build_repo_with_source(build_repo, {}, SOURCE_NAME, source))
     assert ("hygiene: python-security cannot judge" in output) == python_security_cannot_judge, output
+    assert ("hygiene: python-print cannot judge" in output) == python_security_cannot_judge, output
     assert code == (2 if python_security_cannot_judge else 0), output
     assert "production: 0 file(s) >= 800 lines, 1 function(s) >= 60 lines" in output
     assert "not valid Python" not in output
@@ -122,10 +123,13 @@ NOT_PYTHON = pytest.mark.parametrize(
 def test_without_a_baseline_the_size_rule_names_a_file_python_cannot_read_and_python_security_decides_the_exit(
     build_repo, capsys, source
 ):
-    """#46 rule 3: the size rule reports the file without refusing; python-security (#219) alone turns the run to exit 2."""
+    """#46 rule 3: the size rule reports the file without refusing; python-security (#219) and python-print (#225)
+    alone turn the run to exit 2."""
     code, output = hygiene(capsys, build_repo_with_source(build_repo, {"src/ok.py": "x = 1\n"}, SOURCE_NAME, source))
     assert code == 2, output
-    assert re.search(rf"hygiene: python-security (cannot judge - cannot read|unparsable - ruff cannot parse) {re.escape(SOURCE_NAME)}", output), output
+    for rule in ("python-security", "python-print"):
+        refusal = rf"hygiene: {rule} (cannot judge - cannot read|unparsable - ruff cannot parse) {re.escape(SOURCE_NAME)}"
+        assert re.search(refusal, output), output
     assert "size cannot judge" not in output
     assert "size unparsable" not in output
     assert f"1 file(s) not valid Python, functions unmeasured: {SOURCE_NAME}" in output
@@ -234,21 +238,20 @@ def remove(request, elsewhere) -> Callable[[Path], None]:
     [None, '[function_lines."src/b.py"]\nlong_one = 62\n'],
     ids=["no-baseline", "baseline-holds-the-gone-file"],
 )
-def test_a_tracked_file_missing_from_disk_is_gone_for_the_size_rule_and_only_python_security_refuses_it(
+def test_a_tracked_file_missing_from_disk_is_gone_for_the_size_rule_and_only_the_python_rules_refuse_it(
     build_repo, capsys, remove, baseline
 ):
     """#46 rule 3/4 and #52 cell 18: the size rule judges the tree on disk; a tracked file absent from it is gone,
-    which is fine, wherever a dangling link points. python-security (#219) must read every tracked `.py` file, so it
-    alone refuses the run."""
+    which is fine, wherever a dangling link points. python-security (#219) and python-print (#225) must read every
+    tracked `.py` file, so they alone refuse the run."""
     files = {"src/a.py": "x = 1\n", "src/b.py": long_function(62)}
     repo = build_repo(files if baseline is None else {**files, BASELINE_PATH: baseline})
     remove(repo / "src/b.py")
     code, output = hygiene(capsys, repo)
     refusals = [line for line in output.splitlines() if " cannot judge - " in line or " unparsable - " in line]
     assert (code, "hygiene: 0 finding(s);" in output) == (2, True), output
-    assert len(refusals) == 1, output
-    assert refusals[0].startswith("hygiene: python-security cannot judge - "), output
-    assert "src/b.py" in refusals[0], output
+    assert [refusal.split(" cannot judge - ")[0] for refusal in refusals] == ["hygiene: python-security", "hygiene: python-print"], output
+    assert all("src/b.py" in refusal for refusal in refusals), output
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-0 path, so no permission is refused")
