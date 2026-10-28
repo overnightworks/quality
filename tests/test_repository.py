@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from quality import cli, repository
-from quality.repository import RepositoryFileError
+from quality.repository import RepositoryFileError, TomlError, parse_toml
 
 NAME = "quality/config.toml"
 VALID_CONFIG = '[gate]\nmandatory_jobs = ["checks"]\n'
@@ -307,3 +307,17 @@ def test_a_git_refusal_names_the_path_as_given_and_never_the_checkout(
     output = captured.out + captured.err
     assert (code, f"{prefix}. is not a readable git repository" in output, "Traceback" in output) == (2, True, False), output
     assert not any(path in output for path in checkout_paths(repo)), output
+
+
+def test_valid_toml_is_parsed_into_its_document():
+    assert parse_toml('a = 1\n[b]\nc = "d"\n') == {"a": 1, "b": {"c": "d"}}
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["[table\n", f"a = {'9' * 5000}\n", f"a = {'[' * 5000}{']' * 5000}\n"],
+    ids=["syntax error", "oversized integer", "nested too deep"],
+)
+def test_toml_the_reader_refuses_is_one_error(text):
+    with pytest.raises(TomlError):
+        parse_toml(text)
