@@ -190,6 +190,23 @@ def test_a_repository_without_tracked_python_is_clean_even_when_quality_holds_no
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize(
+    "leave_out",
+    [lambda repo: (repo / "src" / "p" / "a.py").unlink(), lambda repo: in_index(repo, "sparse-checkout", "set", "--no-cone", "/.env")],
+    ids=["deleted", "sparse checkout"],
+)
+def test_a_tracked_python_file_the_checkout_does_not_hold_cannot_be_judged(build_repo, capsys, leave_out):
+    """Sentence 1: every tracked `.py` file is read before ruff runs, so one the checkout lacks is refused, never
+    certified clean by leaving it out; the other rules are still judged."""
+    repo = build_repo({".env": "A=1\n", "src/p/a.py": EVAL})
+    leave_out(repo)
+    code, output = run(capsys, repo)
+    assert code == 2, output
+    assert "hygiene: python-security cannot judge - cannot read src/p/a.py: the checkout does not hold it" in output
+    assert "env-file .env - " in output
+
+
+@pytest.mark.integration
 def test_more_files_than_one_run_holds_are_all_judged(build_repo, monkeypatch):
     """Sentence 1, cell 4: the file list is batched, and every batch is judged."""
     monkeypatch.setattr(python_lint, "ARGUMENT_BYTES_PER_RUN", 1)

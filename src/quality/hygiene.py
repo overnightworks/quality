@@ -596,10 +596,10 @@ def check_import_contract(root: Path, tracked: list[str]) -> architecture.Contra
 
 
 def check_python_security(root: Path, locate_ruff: Callable[[], str]) -> list[Finding]:
-    """ruff judges the tracked regular `.py` files the tree holds, each resolved inside the repository and read the way
-    Python reads it, which must be UTF-8 text."""
+    """ruff judges every tracked regular `.py` file, each resolved inside the repository and read the way Python reads
+    it, which must be UTF-8 text; one the checkout does not hold cannot be judged, so the rule never certifies less."""
     modes = index_modes(root)
-    sources = _read_existing(repository.read_bytes, root, _on_disk(root, python_lint.candidates(modes)))
+    sources = {name: _held(root, name) for name in python_lint.candidates(modes)}
     try:
         files = {
             name: python_lint.PythonFile(_judged(repository.resolve_file, root, name), python_lint.source_text(name, content))
@@ -610,6 +610,14 @@ def check_python_security(root: Path, locate_ruff: Callable[[], str]) -> list[Fi
         raise Unparsable(str(error)) from error
     except python_lint.LintError as error:
         raise CannotJudge(str(error)) from error
+
+
+def _held(root: Path, name: str) -> bytes:
+    """The bytes of a file the checkout must hold: a deleted or sparse file cannot be judged."""
+    content = _judged(repository.read_bytes, root, name)
+    if content is None:
+        raise CannotJudge(f"cannot read {name}: the checkout does not hold it")
+    return content
 
 
 def check_secrets(root: Path, engine_dir: Path) -> engines.SecretScan:

@@ -325,7 +325,8 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   second directive behind a reasoned one (`# noqa: S603 - why  # noqa: E501`). ruff itself honours the reasoned form,
   so a caller's own ruff stays quiet, and `lint.external = ["S", "T20"]` in its ruff config keeps its RUF100 from
   calling the gate's noqa unused. A file ruff cannot parse makes the rule `hygiene: python-security unparsable -
-  ruff cannot parse <path>` (exit 2); a file Python cannot decode, or reads as other
+  ruff cannot parse <path>` (exit 2); a tracked `.py` file the checkout does not hold (deleted, left out by a sparse
+  checkout, or a link to nowhere), a file Python cannot decode, or reads as other
   text than ruff reads as UTF-8 (a PEP 263 cookie such as utf-7), a missing or mismatched ruff, ruff exiting other
   than 0 or 1, a `Failed to lint` warning, a report quality cannot
   read, a time-out or a file with a finding whose comments Python's tokenizer cannot read is `cannot judge` (exit 2). One such file

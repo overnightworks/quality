@@ -234,15 +234,21 @@ def remove(request, elsewhere) -> Callable[[Path], None]:
     [None, '[function_lines."src/b.py"]\nlong_one = 62\n'],
     ids=["no-baseline", "baseline-holds-the-gone-file"],
 )
-def test_a_tracked_file_missing_from_disk_is_gone_not_unjudgeable(build_repo, capsys, remove, baseline):
-    """#46 rule 3/4 and #52 cell 18: the rule judges the tree on disk; a tracked file absent from it is gone, which
-    is fine, wherever a dangling link points."""
+def test_a_tracked_file_missing_from_disk_is_gone_for_the_size_rule_and_only_python_security_refuses_it(
+    build_repo, capsys, remove, baseline
+):
+    """#46 rule 3/4 and #52 cell 18: the size rule judges the tree on disk; a tracked file absent from it is gone,
+    which is fine, wherever a dangling link points. python-security (#219) must read every tracked `.py` file, so it
+    alone refuses the run."""
     files = {"src/a.py": "x = 1\n", "src/b.py": long_function(62)}
     repo = build_repo(files if baseline is None else {**files, BASELINE_PATH: baseline})
     remove(repo / "src/b.py")
     code, output = hygiene(capsys, repo)
-    assert code == 0, output
-    assert CLEAN_LINE in output
+    refusals = [line for line in output.splitlines() if " cannot judge - " in line or " unparsable - " in line]
+    assert (code, "hygiene: 0 finding(s);" in output) == (2, True), output
+    assert len(refusals) == 1, output
+    assert refusals[0].startswith("hygiene: python-security cannot judge - "), output
+    assert "src/b.py" in refusals[0], output
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-0 path, so no permission is refused")
