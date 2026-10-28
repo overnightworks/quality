@@ -125,7 +125,7 @@ def test_without_a_baseline_the_size_rule_names_a_file_python_cannot_read_and_py
     """#46 rule 3: the size rule reports the file without refusing; python-security (#219) alone turns the run to exit 2."""
     code, output = hygiene(capsys, build_repo_with_source(build_repo, {"src/ok.py": "x = 1\n"}, SOURCE_NAME, source))
     assert code == 2, output
-    assert re.search(r"hygiene: python-security (cannot judge|unparsable) - ", output), output
+    assert re.search(rf"hygiene: python-security (cannot judge - cannot read|unparsable - ruff cannot parse) {re.escape(SOURCE_NAME)}", output), output
     assert "size cannot judge" not in output
     assert "size unparsable" not in output
     assert f"1 file(s) not valid Python, functions unmeasured: {SOURCE_NAME}" in output
