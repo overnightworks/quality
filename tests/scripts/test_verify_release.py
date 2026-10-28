@@ -10,10 +10,8 @@ from tests.support.git_repositories import GIT_IDENTITY
 
 SCRIPT = Path(__file__).parents[2] / "scripts" / "verify_release.py"
 RELEASE = ReleaseFacts(
-    tag="v1.2.3",
+    release_tags_at_head=("v1.2.3",),
     work_tree_is_clean=True,
-    tag_commit="a" * 40,
-    head_commit="a" * 40,
     head_is_on_origin_main=True,
     installed_version="1.2.3",
     gate_refs=("v1.2.3", "v1.2.3", "v1.2.3"),
@@ -31,20 +29,25 @@ def test_a_clean_checkout_at_the_tag_with_its_version_and_refs_is_a_release():
     ("facts", "check"),
     [
         (replace(RELEASE, work_tree_is_clean=False), "clean"),
-        (replace(RELEASE, tag_commit="b" * 40), "tag at HEAD"),
-        (replace(RELEASE, tag_commit=None), "tag at HEAD"),
         (replace(RELEASE, head_is_on_origin_main=False), "on origin/main"),
         (replace(RELEASE, installed_version="1.2.4.dev1+gabc"), "installed version"),
         (replace(RELEASE, gate_refs=("v1.2.3", "v1.2.2", "v1.2.3")), "gate refs"),
         (replace(RELEASE, gate_refs=()), "gate refs"),
         (replace(RELEASE, gate_refs=("v1.2.3", None, "v1.2.3")), "gate refs"),
     ],
-    ids=["dirty", "tag elsewhere", "tag missing", "off main", "other metadata", "other ref", "no refs", "missing ref"],
+    ids=["dirty", "off main", "other metadata", "other ref", "no refs", "missing ref"],
 )
 def test_a_release_is_refused_naming_the_check_that_fails(facts, check):
     """#153 cell 13: exactly one check fails, and it is named."""
     failed = [verdict.check for verdict in judge_release(facts) if not verdict.holds]
     assert failed == [check]
+
+
+@pytest.mark.parametrize("tags", [(), ("v1.2.3", "v1.2.4")], ids=["none", "two"])
+def test_a_release_without_exactly_one_tag_at_head_fails_every_check_that_needs_the_tag(tags):
+    failed = [verdict.check for verdict in judge_release(replace(RELEASE, release_tags_at_head=tags)) if not verdict.holds]
+    assert failed[0].startswith("one release tag at HEAD (found: ")
+    assert failed[1:] == ["installed version", "gate refs"]
 
 
 def test_the_gate_tool_refs_are_the_refs_of_the_checkouts_of_this_repository_only():
@@ -78,27 +81,60 @@ def release_checkout(tmp_path):
     return checkout
 
 
-def test_the_script_refuses_a_tag_the_checkout_does_not_carry(release_checkout):
-    """The entry point reads real git facts and exits 1 with one line per check."""
-    done = run_script(release_checkout, "v0.0.1")
-    assert done.returncode == 1
+def tag_head(repo: Path, *tags: str) -> None:
+    for tag in tags:
+        git(repo, "tag", tag)
+
+
+def test_the_script_names_the_release_tag_it_judges(release_checkout):
+    tag_head(release_checkout, "v0.0.1")
+    done = run_script(release_checkout)
     assert done.stdout.count("\n") == 5
-    assert "FAIL tag at HEAD" in done.stdout
+    assert "ok   one release tag at HEAD (found: v0.0.1)" in done.stdout
     assert "ok   on origin/main" in done.stdout
     assert "ok   clean" in done.stdout
 
 
+def test_the_script_ignores_a_tag_that_is_not_of_the_release_form(release_checkout):
+    tag_head(release_checkout, "v0.0.1", "v0.0.2-rc1", "latest")
+    done = run_script(release_checkout)
+    assert "ok   one release tag at HEAD (found: v0.0.1)" in done.stdout
+
+
+@pytest.mark.parametrize(
+    ("tags", "found"),
+    [(("latest",), "none"), (("v0.0.1", "v0.0.2"), "v0.0.1, v0.0.2")],
+    ids=["none", "two"],
+)
+def test_the_script_refuses_a_head_without_exactly_one_release_tag(release_checkout, tags, found):
+    tag_head(release_checkout, *tags)
+    done = run_script(release_checkout)
+    assert done.returncode == 1
+    assert f"FAIL one release tag at HEAD (found: {found})" in done.stdout
+
+
+def test_the_script_counts_a_release_tag_that_the_fetch_brings_in(release_checkout):
+    git(release_checkout, "config", "remote.origin.tagOpt", "--tags")
+    tag_head(release_checkout, "v0.0.1", "v0.0.2")
+    git(release_checkout, "push", "-q", "origin", "v0.0.2")
+    git(release_checkout, "tag", "-d", "v0.0.2")
+    done = run_script(release_checkout)
+    assert done.returncode == 1
+    assert "FAIL one release tag at HEAD (found: v0.0.1, v0.0.2)" in done.stdout
+
+
 def test_the_script_refuses_a_checkout_with_a_staged_edit(release_checkout):
+    tag_head(release_checkout, "v0.0.1")
     (release_checkout / "edit.txt").write_text("edit\n", encoding="utf-8")
     git(release_checkout, "add", "edit.txt")
-    done = run_script(release_checkout, "v0.0.1")
+    done = run_script(release_checkout)
     assert done.returncode == 1
     assert "FAIL clean" in done.stdout
 
 
 def test_the_script_refuses_a_head_that_origin_main_does_not_hold(release_checkout):
     git(release_checkout, "commit", "-q", "--allow-empty", "-m", "unpushed")
-    done = run_script(release_checkout, "v0.0.1")
+    done = run_script(release_checkout)
     assert done.returncode == 1
     assert "FAIL on origin/main" in done.stdout
 
@@ -108,14 +144,12 @@ def test_the_script_refuses_when_origin_cannot_be_fetched_even_if_the_cached_mai
 ):
     git(release_checkout, "fetch", "-q", "origin", "main")
     git(release_checkout, "remote", "set-url", "origin", str(tmp_path / "missing.git"))
-    done = run_script(release_checkout, "v0.0.1")
+    done = run_script(release_checkout)
     assert done.returncode == 1
     assert "FAIL on origin/main" in done.stdout
 
 
-@pytest.mark.integration
-@pytest.mark.parametrize("arguments", [[], ["v1.2.3", "v1.2.4"]], ids=["no tag", "two tags"])
-def test_the_script_prints_a_usage_line_and_exits_2_for_other_than_one_tag(tmp_path, arguments):
-    done = run_script(tmp_path, *arguments)
+def test_the_script_exits_2_for_an_unexpected_command_line_argument(release_checkout):
+    done = run_script(release_checkout, "v0.0.1")
     assert done.returncode == 2
-    assert done.stderr.startswith("usage:")
+    assert done.stdout == ""
