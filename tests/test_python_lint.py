@@ -325,12 +325,14 @@ def test_a_security_finding_names_its_line_code_and_message(build_repo, capsys):
         ("src/p/a.py", f"x = 1\n{PRINT}\n", f"python-print src/p/a.py:2 - {PRINT_REASON}"),
         ("scripts/run_it.py", '"""Runs it."""\nfrom pprint import pprint\npprint(1)\n', "python-print scripts/run_it.py:3 - T203 `pprint` found"),
         ("src/p/a.py", f"import sys\n{PRINT[:-1]}, file=sys.stderr)\n", f"python-print src/p/a.py:2 - {PRINT_REASON}"),
+        ("tests/test_a.py", f"{PRINT}\n", f"python-print tests/test_a.py:1 - {PRINT_REASON}"),
     ],
-    ids=["print in src", "pprint in scripts", "print to stderr"],
+    ids=["print in src", "pprint in scripts", "print to stderr", "print in a test file"],
 )
 def test_a_print_names_its_line_code_and_message(build_repo, capsys, path, source, says):
-    """#225 cells 1 and 2: `python-print <path>:<line> - <CODE> <message>`, exit 1, a print to stderr included."""
-    code, output = run(capsys, build_repo({path: source}))
+    """#225 cells 1 and 2: `python-print <path>:<line> - <CODE> <message>`, exit 1, a print to stderr and one in a test
+    file included."""
+    code, output = run(capsys, build_repo({"pyproject.toml": "[project]\nname = 'x'\n", path: source}))
     assert (code, says in output) == (1, True), output
 
 
