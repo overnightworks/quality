@@ -321,8 +321,9 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   is the text after ` - ` up to the next `#` or the end of the line, holds a letter and no comma (Sonar's noqa grammar
   splits on commas, so a comma raises python:S7632 for every caller that runs Sonar). Every other form is red: no
   reason, a blanket `# noqa`, another directive as the reason (`# type: ignore[x]  # noqa: S607`, `# noqa: S607  #
-  pragma: no cover`), `# noqa: S607: reason`, a wrong code, another line, a file-level `# ruff: noqa`, and a bare
-  second directive behind a reasoned one (`# noqa: S603 - why  # noqa: E501`). ruff itself honours the reasoned form,
+  pragma: no cover`), `# noqa: S607: reason`, a wrong code, another line, a file-level `# ruff: noqa`, and a
+  second directive behind a reasoned one, bare or reasoned (`# noqa: S603 - why  # noqa: E501`), since ruff reads only
+  a line's first directive. ruff itself honours the reasoned form,
   so a caller's own ruff stays quiet, and `lint.external = ["S", "T20"]` in its ruff config keeps its RUF100 from
   calling the gate's noqa unused. A file ruff cannot parse makes the rule `hygiene: python-security unparsable -
   ruff cannot parse <path>` (exit 2); a tracked `.py` file the checkout does not hold (deleted, left out by a sparse

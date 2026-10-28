@@ -19,6 +19,7 @@ GREEN_NOQA_LINES = [
     "run(argv)  # noqa: S603, S607 - argv is fixed words",
     "run(argv)  # noqa: S603 - argv is fixed words  # a closing remark",
 ]
+CODE_IN_SECOND_DIRECTIVE = "run(argv)  # noqa: S607 - argv is fixed words  # noqa: S603 - argv is fixed words"
 
 
 def record(code: str = "S603", line: int = 1, noqa_line: int = 1, path: str = "src/p/a.py") -> RuffFinding:
@@ -67,13 +68,17 @@ def test_a_reasoned_noqa_naming_the_code_at_noqa_row_is_green(line):
         "run(argv)  # noqa: S603 - 42",
         "run(argv)  # noqa:S603 - argv is fixed words",
         "run(argv)  # noqa: S603 - argv is fixed words  # noqa: E501",
+        CODE_IN_SECOND_DIRECTIVE,
+        "run(argv)  # noqa: S603 - argv is fixed words  # noqa: S607 - argv is fixed words",
         'run("# noqa: S603 - argv is fixed words")',
     ],
     ids=["none", "no reason", "blanket", "type ignore as reason", "pragma as reason", "colon form", "comma in reason",
-         "wrong code", "no letter in reason", "no space after colon", "second bare directive", "inside a string"],
+         "wrong code", "no letter in reason", "no space after colon", "second bare directive",
+         "code in second reasoned directive", "second reasoned directive", "inside a string"],
 )
 def test_every_other_noqa_form_is_red(line):
-    """Sentence 5, cells 11 and 12: only the canonical form is green; a bare second directive is not hidden."""
+    """Sentence 5, cells 11 and 12: only the canonical form is green; ruff reads only a line's first directive, so a
+    second one, bare or reasoned, is not hidden."""
     assert judged(f"{line}\n", record()) == ["src/p/a.py:1 S603 `subprocess` call: check for execution of untrusted input"]
 
 
@@ -252,10 +257,11 @@ def test_an_assert_is_exempt_only_in_the_test_files_test_import_judges(build_rep
 
 
 @pytest.mark.integration
-def test_the_pinned_ruff_itself_honours_every_green_noqa_form(tmp_path):
-    """Sentence 5, cell 14: the canonical form is a subset of ruff's own grammar."""
+def test_the_pinned_ruff_itself_honours_every_green_noqa_form_and_not_a_code_in_a_second_directive(tmp_path):
+    """Sentence 5, cell 14: the canonical form is a subset of ruff's own grammar, and ruff reads only a line's first
+    directive, so the gate keeps a code named only in the second one red."""
     names = []
-    for index, line in enumerate(GREEN_NOQA_LINES):
+    for index, line in enumerate([*GREEN_NOQA_LINES, CODE_IN_SECOND_DIRECTIVE]):
         names.append(f"m{index}.py")
         (tmp_path / names[-1]).write_text(f"import subprocess\n{line.replace('run(', 'subprocess.run(')}\n")
 
@@ -265,7 +271,8 @@ def test_the_pinned_ruff_itself_honours_every_green_noqa_form(tmp_path):
 
     assert len(json.loads(ruff("--ignore-noqa", "--output-format", "json").stdout)) == len(names)
     honoured = ruff("--output-format", "json")
-    assert (honoured.returncode, honoured.stdout.strip(), honoured.stderr) == (0, "[]", "")
+    reported = [Path(entry["filename"]).name for entry in json.loads(honoured.stdout)]
+    assert (honoured.returncode, reported, honoured.stderr) == (1, [names[-1]], "")
 
 
 @pytest.mark.integration

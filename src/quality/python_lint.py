@@ -116,13 +116,13 @@ def _comments(name: str, text: str) -> dict[int, str]:
 
 
 def _cleared_by_noqa(code: str, comment: str) -> bool:
-    """Whether the comment names `code` in a reasoned noqa while every noqa directive in it is reasoned; the reason runs
-    up to the next `#`, holds a letter and no comma."""
+    """Whether the comment's one noqa directive is reasoned and names `code`; the reason runs up to the next `#`, holds a
+    letter and no comma. ruff reads only the first directive, so a second one, reasoned or bare, keeps the finding red."""
     directives = [segment for segment in comment.split("#")[1:] if NOQA_DIRECTIVE.match(segment)]
-    named = [_reasoned_codes(directive) for directive in directives]
-    if not named or None in named:
+    if len(directives) != 1:
         return False
-    return any(code in codes for codes in named if codes is not None)
+    codes = _reasoned_codes(directives[0])
+    return codes is not None and code in codes
 
 
 def _reasoned_codes(directive: str) -> frozenset[str] | None:
