@@ -11,7 +11,6 @@ from pathlib import Path, PurePosixPath
 import yaml
 from packaging.specifiers import Specifier, SpecifierSet
 from packaging.version import Version
-from ruff import find_ruff_bin
 
 from quality import advisories, architecture, clones, engines, layout, python_lint, ratchet, repository
 from quality.config import (
@@ -734,7 +733,7 @@ def _content_findings(
     return _attempt(judge)
 
 
-def run_hygiene(root: Path, engine_dir: Path | None = None, locate_ruff: Callable[[], str] = find_ruff_bin) -> HygieneResult:
+def run_hygiene(root: Path, engine_dir: Path | None, locate_ruff: Callable[[], str]) -> HygieneResult:
     """Judges every active rule, in run order, over the repository `root` lies in; only one git cannot list stops the run."""
     root = work_tree_top(root)
     tracked = tracked_files(root)

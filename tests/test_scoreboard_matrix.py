@@ -4,6 +4,7 @@ import re
 import subprocess
 
 import pytest
+from ruff import find_ruff_bin
 
 from quality import hygiene, ratchet
 from quality.scoreboard import (
@@ -465,7 +466,7 @@ def test_a_malformed_size_baseline_is_named_in_the_size_cell_only_where_the_cell
 @pytest.mark.integration
 def test_every_rule_the_door_judges_has_a_row_in_the_first_release_table(tmp_path):
     """#125 cell 23: a rule a later slice adds to `hygiene.run_hygiene` without a row turns this red."""
-    judged = {verdict.rule for verdict in hygiene.run_hygiene(make_repo(tmp_path, {"a": "1\n"})).verdicts}
+    judged = {verdict.rule for verdict in hygiene.run_hygiene(make_repo(tmp_path, {"a": "1\n"}), None, find_ruff_bin).verdicts}
     assert {rule.rule for rule in RULES} == judged | set(hygiene.ENGINE_RULE_IDS)
 
 
