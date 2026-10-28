@@ -1,0 +1,8 @@
+claim_id = "f747c5c964824a9a852f08dcbefb0558"
+agent = "Claude 7bbab0b4-f923-4f09-a5c2-6fe15143932e"
+role = "builder"
+base = "636feb35e525831d56601ecf9dd2bbaad570f266"
+branch = "claude/issue-219-python-security"
+scope = ["AGENTS.md", "docs/rules.md", "pyproject.toml", "quality/baseline.toml", "quality/config.toml", "src/quality/__init__.py", "src/quality/cli.py", "src/quality/hygiene.py", "src/quality/python_lint.py", "src/quality/scoreboard.py", "tests/fixtures/python_lint", "tests/support/hygiene.py", "tests/test_clones.py", "tests/test_clones_baseline.py", "tests/test_engines.py", "tests/test_hygiene.py", "tests/test_python_lint.py", "tests/test_ratchet.py", "tests/test_scoreboard_matrix.py", "uv.lock"]
+opened_commit = "57a015916390d8d1262e4ba92e5b7f380ab85c9f"
+whole_reason = "One rule is one module plus its wiring, docs and lock; run and noqa judge are two halves of one verdict."
