@@ -328,7 +328,7 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   ruff cannot parse <path>` (exit 2); a file Python cannot decode, or reads as other
   text than ruff reads as UTF-8 (a PEP 263 cookie such as utf-7), a missing or mismatched ruff, ruff exiting other
   than 0 or 1, a `Failed to lint` warning, a report quality cannot
-  read, a time-out or a file whose comments Python's tokenizer cannot read is `cannot judge` (exit 2). One such file
+  read, a time-out or a file with a finding whose comments Python's tokenizer cannot read is `cannot judge` (exit 2). One such file
   makes the whole rule `cannot judge` or `unparsable`, so the S findings of the other files are not printed in that run. The other
   rules are judged either way. A deliberately invalid Python fixture takes another suffix, since a `.py` file is Python. No
   configuration switches the rule off, and a reasoned noqa asks `quality verdict` for
