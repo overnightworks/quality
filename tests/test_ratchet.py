@@ -67,14 +67,14 @@ SOURCE_NAME = "src/source.py"
 
 
 @pytest.mark.parametrize(
-    "source",
+    ("source", "python_security_cannot_judge"),
     [
-        b"# -*- coding: latin-1 -*-\n# \xe9\n" + long_function(60).encode(),
-        b"\xef\xbb\xbf" + long_function(60).encode(),
-        "# \u00e9\n".encode() + long_function(60).encode(),
-        b"# header\r" + long_function(60).encode().replace(b"\n", b"\r"),
-        (b"# header\r" + long_function(60).encode() + b"    return b''.decode(encoding=enc)\n").replace(b"\n", b"\r"),
-        b"\r# -*- coding: latin-1 -*-\r# \xe9\r" + long_function(60).encode().replace(b"\n", b"\r"),
+        (b"# -*- coding: latin-1 -*-\n# \xe9\n" + long_function(60).encode(), True),
+        (b"\xef\xbb\xbf" + long_function(60).encode(), False),
+        ("# \u00e9\n".encode() + long_function(60).encode(), False),
+        (b"# header\r" + long_function(60).encode().replace(b"\n", b"\r"), False),
+        ((b"# header\r" + long_function(60).encode() + b"    return b''.decode(encoding=enc)\n").replace(b"\n", b"\r"), False),
+        (b"\r# -*- coding: latin-1 -*-\r# \xe9\r" + long_function(60).encode().replace(b"\n", b"\r"), True),
     ],
     ids=[
         "pep263-latin-1",
@@ -85,10 +85,11 @@ SOURCE_NAME = "src/source.py"
         "cr-only-cookie-on-line-2",
     ],
 )
-def test_a_file_python_can_read_is_measured_in_its_declared_encoding(build_repo, capsys, source):
-    """#46 rule 1: every tracked Python file Python itself reads is measured, whatever encoding it declares."""
+def test_a_file_python_can_read_is_measured_in_its_declared_encoding(build_repo, capsys, source, python_security_cannot_judge):
+    """#46 rule 1: the size rule measures every tracked Python file Python itself reads; ruff reads UTF-8 only (#219)."""
     code, output = hygiene(capsys, build_repo_with_source(build_repo, {}, SOURCE_NAME, source))
-    assert code == 0, output
+    assert ("hygiene: python-security cannot judge" in output) == python_security_cannot_judge, output
+    assert code == (2 if python_security_cannot_judge else 0), output
     assert "production: 0 file(s) >= 800 lines, 1 function(s) >= 60 lines" in output
     assert "not valid Python" not in output
 
@@ -116,12 +117,25 @@ NOT_PYTHON = pytest.mark.parametrize(
 )
 
 
+RUFF_REFUSES = {
+    "undecodable-utf-8": "hygiene: python-security cannot judge - cannot read src/source.py",
+    "invalid-for-its-cookie": "hygiene: python-security cannot judge - cannot read src/source.py",
+    "null-byte": "hygiene: python-security unparsable - ruff cannot parse src/source.py",
+    "python-2": "hygiene: python-security unparsable - ruff cannot parse src/source.py",
+}
+
+
 @NOT_PYTHON
-def test_without_a_baseline_a_file_python_cannot_read_is_reported_and_the_exit_unchanged(build_repo, capsys, source):
-    """#46 rule 3: a tracked file Python cannot read keeps a clean repository at exit 0 and is named in the report."""
+def test_without_a_baseline_the_size_rule_names_a_file_python_cannot_read_and_python_security_decides_the_exit(
+    build_repo, capsys, request, source
+):
+    """#46 rule 3: the size rule reports the file without refusing; python-security (#219) alone turns the run to exit 2."""
     code, output = hygiene(capsys, build_repo_with_source(build_repo, {"src/ok.py": "x = 1\n"}, SOURCE_NAME, source))
-    assert code == 0, output
-    assert "cannot judge" not in output
+    expected_line = RUFF_REFUSES.get(request.node.callspec.id)
+    assert code == (2 if expected_line else 0), output
+    assert (expected_line in output) if expected_line else ("hygiene: python-security" not in output), output
+    assert "size cannot judge" not in output
+    assert "size unparsable" not in output
     assert f"1 file(s) not valid Python, functions unmeasured: {SOURCE_NAME}" in output
 
 
