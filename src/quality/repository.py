@@ -10,6 +10,7 @@ entry from a dangling link, and os.stat raises the OSError whose errno decides, 
 import errno
 import os
 import stat
+import tomllib
 from pathlib import Path
 
 ABSENT_ERRNOS = frozenset({errno.ENOENT, errno.ENOTDIR})
@@ -18,6 +19,10 @@ GONE_ERRNOS = ABSENT_ERRNOS | {errno.ELOOP}
 
 class RepositoryFileError(Exception):
     """A file of the repository cannot be used; the message names it repository-relative."""
+
+
+class TomlError(Exception):
+    """Text that tomllib refuses, for its syntax or for a limit of Python itself; the message is tomllib's reason."""
 
 
 def os_error_reason(error: OSError) -> str:
@@ -66,6 +71,14 @@ def read_text(root: Path, name: str) -> str | None:
         return content.decode("utf-8")
     except UnicodeDecodeError as error:
         raise RepositoryFileError(f"cannot read {name}: {error}") from error
+
+
+def parse_toml(text: str) -> dict:
+    """The TOML document in `text`. tomllib also gives up with ValueError on an oversized integer and RecursionError on deep nesting."""
+    try:
+        return tomllib.loads(text)
+    except (ValueError, RecursionError) as error:
+        raise TomlError(str(error)) from error
 
 
 def is_on_disk(root: Path, name: str) -> bool:
