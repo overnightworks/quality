@@ -85,7 +85,7 @@ def check_security(
 ) -> list[Finding]:
     """The findings ruff reports in `files` that neither a test exemption nor a reasoned noqa clears."""
     if not files:
-        return []  # `ruff check --` without a path would lint the working directory
+        return []  # nothing to lint: skip locating ruff and its version check
     records = _run_ruff(root, {name: file.path for name, file in files.items()}, target, locate_ruff)
     texts = {name: file.text for name, file in files.items()}
     return judge(records, texts, frozenset(layout.test_import_candidates(modes)))
