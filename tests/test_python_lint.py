@@ -8,6 +8,7 @@ from ruff import find_ruff_bin
 
 from quality import hygiene, python_lint
 from quality.python_lint import LintError, RuffFinding, UnparsablePython
+from tests.support.hygiene import CLEAN_LINE
 from tests.support.hygiene import hygiene_output as run
 from tests.support.layout import in_index
 
@@ -29,7 +30,7 @@ def judged(text: str, finding: RuffFinding, test_files: frozenset[str] = frozens
 
 
 def security_verdict(repo: Path) -> hygiene.RuleVerdict:
-    return next(verdict for verdict in hygiene.run_hygiene(repo).verdicts if verdict.rule == python_lint.RULE)
+    return next(verdict for verdict in hygiene.run_hygiene(repo, None, find_ruff_bin).verdicts if verdict.rule == python_lint.RULE)
 
 
 def flagged_paths(repo: Path) -> list[str]:
@@ -172,12 +173,20 @@ def test_untracked_linked_submodule_notebook_stub_and_suffixless_files_are_not_j
     assert flagged_paths(repo) == []
 
 
+def no_ruff_installed() -> str:
+    raise FileNotFoundError
+
+
 @pytest.mark.integration
-def test_a_repository_without_tracked_python_is_clean_and_an_untracked_file_stays_unjudged(build_repo):
-    """Sentence 1, cell 3: with no tracked `.py` file nothing is judged, the working directory's untracked file included."""
+def test_a_repository_without_tracked_python_is_clean_even_when_quality_holds_no_ruff_and_an_untracked_file_stays_unjudged(
+    build_repo, capsys
+):
+    """Sentence 1, cell 3: with no tracked `.py` file nothing is judged and ruff is not asked for, the untracked file included."""
     repo = build_repo({"README.md": "x\n"})
     (repo / "untracked.py").write_text(EVAL)
-    assert flagged_paths(repo) == []
+    code, output = run(capsys, repo, no_ruff_installed)
+    assert code == 0, output
+    assert CLEAN_LINE in output, output
 
 
 @pytest.mark.integration
