@@ -55,7 +55,8 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   first) and the size debt leaves the exit unchanged.
   A `.py` file is read the way Python reads source (a PEP 263 coding cookie or a UTF-8 BOM decides the encoding). One
   Python 3.14 cannot decode or parse is named as not valid Python: without a baseline the count notes it (`1 file(s) not
-  valid Python, functions unmeasured: bad.py`) and the exit is unchanged; with a baseline it is `hygiene: size
+  valid Python, functions unmeasured: bad.py`) and the size verdict is unchanged, while `python-security` judges
+  the file unparsable or cannot judge it; with a baseline it is `hygiene: size
   unparsable - bad.py is not valid Python (...)`, and `quality baseline write` refuses with `baseline: not written -
   bad.py is not valid Python (...)`; both exit `2`. A tracked file the operating system refuses to read is `hygiene:
   size cannot judge - ...` with or without a baseline, and `quality baseline write` refuses with `baseline: not written - ...`; both exit `2`.
@@ -305,6 +306,31 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   `setup.cfg` and Poetry's `[tool.poetry]`; `!=` as a floor (`>=3.13,!=3.13.*` is red although it admits only 3.14 and
   up); a job that never installs the project, which runs old Python unnoticed; `uv sync` behind an older
   setup-python, which fetches 3.14 and leaves a stale setter; and a Python project without a `pyproject.toml`. (#207)
+- `python-security` judges every tracked regular `.py` file in any directory with the `S` codes of quality's own ruff
+  (`ruff==0.17.1`, an exact pin in quality's `pyproject.toml` that serves its own lint too): the ruff binary of
+  quality's installation, never one on `PATH`, at the pinned version, runs `ruff check --isolated --no-cache
+  --ignore-noqa --select S --target-version py314 --output-format json -- <files>`, in batches below the argument
+  limit, and writes nothing into the checkout. With no tracked `.py` file ruff is not started. Not judged: untracked
+  files, a link, anything inside a gitlink, notebooks, `.pyi` files and suffixless scripts. The repository's own ruff
+  `select`, `ignore`, `per-file-ignores`, `exclude`, `extend` and noqa have no effect. Each finding is one line at its
+  file and line (`python-security src/a.py:12 - S307 Use of possibly insecure function; ...`). In the files
+  `test-import` judges (every `.py` under a Python project's `tests/`, outside `fixtures/`) S101, S105 to S107, S603
+  and S607 are exempt; S108 (a shared path breaks test isolation), S310 and every other code stay red there, and
+  `tests/fixtures/` and `src/` get no exemption. A finding is green only when the line at ruff's `noqa_row` (the last
+  line of a multi-line string or call) carries `# noqa: <CODE>[, <CODE>...] - <reason>` naming its code; the reason
+  is the text after ` - ` up to the next `#` or the end of the line, holds a letter and no comma (Sonar's noqa grammar
+  splits on commas, so a comma raises python:S7632 for every caller that runs Sonar). Every other form is red: no
+  reason, a blanket `# noqa`, another directive as the reason (`# type: ignore[x]  # noqa: S607`, `# noqa: S607  #
+  pragma: no cover`), `# noqa: S607: reason`, a wrong code, another line, a file-level `# ruff: noqa`, and a bare
+  second directive behind a reasoned one (`# noqa: S603 - why  # noqa: E501`). ruff itself honours the reasoned form,
+  so a caller's own ruff stays quiet, and `lint.external = ["S", "T20"]` in its ruff config keeps its RUF100 from
+  calling the gate's noqa unused. A file ruff cannot parse makes the rule `hygiene: python-security unparsable -
+  ruff cannot parse <path>` (exit 2); a file that is not UTF-8 (ruff reads nothing else, a PEP 263 cookie included),
+  a missing or mismatched ruff, ruff exiting other than 0 or 1, a `Failed to lint` warning, a report quality cannot
+  read, a time-out or a file whose comments Python's tokenizer cannot read is `cannot judge` (exit 2). The other
+  rules are judged either way. No configuration switches the rule off, and a reasoned noqa asks `quality verdict` for
+  no `[[gate.loosened]]` entry. Not judged, and waiting for usage evidence: notebooks, `.pyi` files and suffixless
+  Python; a stale reasoned noqa, which ruff's RUF100 finds. (#214, #219)
 - The baseline only falls: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the
   base commit's, so growing a function and rewriting the baseline stays red. Each loosening is one line, named with the
   baseline's own metric, path and symbol (a file entry has no symbol):
@@ -517,7 +543,7 @@ Every rule is judged, even when another cannot be, and gives one verdict: clean,
 Each finding names the rule, the file, a reason and a fix. Repository text (a file name, a service, a port, a contract
 or job name, a configuration entry) prints escaped. In the door's own fields (a finding's location, reason and fix, refusals, reports), invalid UTF-8 prints as `\udcNN` and every control character (line feed,
 carriage return, ESC, tab, DEL, C1) as `\xNN`. A line taken from import-linter's rendering (a broken contract's chain and guidance) prints behind the marker `  | `; rich may drop a carriage return, expand a tab, or start a new marked line at a line feed there. Every line the door prints therefore starts with its own text, so a matcher anchored at the line start, such as setup-uv's python matcher, cannot match repository text. A refusal is one line; the lines the door means to print (an import chain, the verdict's problems, the scoreboard's table) stay lines. A rule that cannot judge prints its verdict and reason under its rule id (`hygiene: secret cannot
-judge - ...`). A clean run names its rules in run order (`hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout, file-suffix, script-name, script-header, test-layout, test-import, python-floor); skipped without
+judge - ...`). A clean run names its rules in run order (`hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout, file-suffix, script-name, script-header, test-layout, test-import, python-floor, python-security); skipped without
 --engines: ...`); any other run ends with the findings and the verdicts counted (`hygiene: 1 finding(s); verdicts: 1
 clean, 1 findings, 1 unparsable`). The lines come in run order, also through a pipe that merges stdout and stderr
 (`2>&1 | tee log`); each stays on its own stream. That is option (c) of #86 on 19.10.2026, `cli.main` makes stdout
