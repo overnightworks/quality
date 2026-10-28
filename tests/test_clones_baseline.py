@@ -263,28 +263,39 @@ def test_a_malformed_clone_table_at_the_base_names_the_base_commit_without_a_rew
     assert "rewrite it" not in output
 
 
-@pytest.mark.parametrize("text", MALFORMED, ids=MALFORMED_IDS)
-def test_the_write_overwrites_a_malformed_previous_clone_table_with_the_unchanged_note(build_repo, capsys, text):
-    """#130 cell 16: the write's previous-file message is unchanged."""
-    repo = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: text})
-    code, (note, _) = written(capsys, repo)
-    assert code == 0
-    assert note.startswith(f"baseline: the previous {BASELINE_PATH} could not be read (")
-    assert note.endswith("), so raises cannot be named")
+OVERWRITTEN_PREVIOUS_FILES = [
+    ("clones = 1\n", "needs clones as a table"),
+    ('[clones]\n"tests/test_a.py" = 1\n', "needs clones.tests/test_a.py as a table"),
+    ('[clones."tests/test_a.py"]\nrun = 1\n', "needs clones.tests/test_a.py.run as a list of [path, symbol] pairs"),
+    (
+        '[clones."tests/test_a.py"]\nrun = [["tests/test_b.py"]]\n',
+        "needs clones.tests/test_a.py.run as a list of [path, symbol] pairs of two strings, not ['tests/test_b.py']",
+    ),
+    (
+        '[clones."tests/test_a.py"]\nrun = [["tests/test_b.py", 1]]\n',
+        "needs clones.tests/test_a.py.run as a list of [path, symbol] pairs of two strings, not ['tests/test_b.py', 1]",
+    ),
+    (
+        '[clones."tests/test_a.py"]\nrun = ["tests/test_b.py"]\n',
+        "needs clones.tests/test_a.py.run as a list of [path, symbol] pairs of two strings, not 'tests/test_b.py'",
+    ),
+    (f"[file_lines]\n\"src/a.py\" = {'9' * 5000}\n", "is not valid TOML (Exceeds the limit (4300 digits)"),
+    (f"a = {'[' * 5000}{']' * 5000}\n", "is not valid TOML (maximum recursion depth exceeded)"),
+]
 
 
 @pytest.mark.parametrize(
-    "text",
-    [f"[file_lines]\n\"src/a.py\" = {'9' * 5000}\n", f"a = {'[' * 5000}{']' * 5000}\n"],
-    ids=["oversized integer", "nested too deep"],
+    ("text", "reason"),
+    OVERWRITTEN_PREVIOUS_FILES,
+    ids=[*MALFORMED_IDS, "oversized integer", "nested too deep"],
 )
-def test_the_write_overwrites_a_previous_baseline_the_toml_reader_gives_up_on_with_the_note(build_repo, capsys, text):
-    """#218 sentence 1: the reader's refusal is the ruled overwrite note, not a traceback."""
+def test_the_write_overwrites_an_unreadable_previous_baseline_with_the_note_naming_why(build_repo, capsys, text, reason):
+    """#130 cell 16, #218 sentence 1: the write's previous-file note names the reason, whoever refuses the file."""
     repo = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: text})
     code, (note, _) = written(capsys, repo)
     assert code == 0
-    assert note.startswith(f"baseline: the previous {BASELINE_PATH} could not be read (")
-    assert f"{BASELINE_PATH} is not valid TOML" in note
+    assert note.startswith(f"baseline: the previous {BASELINE_PATH} could not be read ({BASELINE_PATH} {reason}")
+    assert note.endswith("), so raises cannot be named")
 
 
 def test_an_unknown_table_names_the_tool_version_and_every_known_table_with_clones():
