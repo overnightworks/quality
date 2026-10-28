@@ -101,15 +101,23 @@ def test_the_script_ignores_a_tag_that_is_not_of_the_release_form(release_checko
     assert "ok   one release tag at HEAD (found: v0.0.1)" in done.stdout
 
 
-def test_the_script_refuses_a_head_without_a_release_tag(release_checkout):
-    tag_head(release_checkout, "latest")
+@pytest.mark.parametrize(
+    ("tags", "found"),
+    [(("latest",), "none"), (("v0.0.1", "v0.0.2"), "v0.0.1, v0.0.2")],
+    ids=["none", "two"],
+)
+def test_the_script_refuses_a_head_without_exactly_one_release_tag(release_checkout, tags, found):
+    tag_head(release_checkout, *tags)
     done = run_script(release_checkout)
     assert done.returncode == 1
-    assert "FAIL one release tag at HEAD (found: none)" in done.stdout
+    assert f"FAIL one release tag at HEAD (found: {found})" in done.stdout
 
 
-def test_the_script_refuses_a_head_with_two_release_tags(release_checkout):
+def test_the_script_counts_a_release_tag_that_the_fetch_brings_in(release_checkout):
+    git(release_checkout, "config", "remote.origin.tagOpt", "--tags")
     tag_head(release_checkout, "v0.0.1", "v0.0.2")
+    git(release_checkout, "push", "-q", "origin", "v0.0.2")
+    git(release_checkout, "tag", "-d", "v0.0.2")
     done = run_script(release_checkout)
     assert done.returncode == 1
     assert "FAIL one release tag at HEAD (found: v0.0.1, v0.0.2)" in done.stdout
@@ -141,7 +149,7 @@ def test_the_script_refuses_when_origin_cannot_be_fetched_even_if_the_cached_mai
     assert "FAIL on origin/main" in done.stdout
 
 
-def test_the_script_exits_2_for_a_command_line_argument(release_checkout):
+def test_the_script_exits_2_for_an_unexpected_command_line_argument(release_checkout):
     done = run_script(release_checkout, "v0.0.1")
     assert done.returncode == 2
     assert done.stdout == ""

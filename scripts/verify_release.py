@@ -4,7 +4,8 @@
 
 The release tag is read from git: the one tag `vX.Y.Z` that points at HEAD. Exit 0 only when the checkout is clean, exactly
 one release tag is at HEAD, HEAD is on origin/main, the installed version is that tag and the gate's tool checkouts pin
-it; one line per check says which, and the tag judged is in the first. Exit 2 for any command-line argument.
+it; one line per check says which, and the tag judged is in the first. Exit 2 for an unexpected command-line argument;
+`-h` and `--help` print the usage and exit 0 before any check.
 """
 
 import argparse
@@ -64,9 +65,13 @@ def _git(*arguments: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["git", *arguments], capture_output=True, text=True, check=False)  # noqa: S603, S607 - argv is fixed words and never a shell
 
 
-def head_is_on_origin_main() -> bool:
-    """After a fetch of origin's main; a failed fetch or a missing origin is not on it."""
-    fetched = _git("fetch", "--quiet", "origin", "main").returncode == 0
+def fetch_origin_main() -> bool:
+    """Also imports the tags that point into the fetched history, so every read of tags comes after it."""
+    return _git("fetch", "--quiet", "origin", "main").returncode == 0
+
+
+def head_is_on_origin_main(fetched: bool) -> bool:
+    """A failed fetch or a missing origin is not on it."""
     return fetched and _git("merge-base", "--is-ancestor", "HEAD", "origin/main").returncode == 0
 
 
@@ -77,12 +82,13 @@ def release_tags_at_head() -> tuple[str, ...]:
 
 
 def read_facts() -> ReleaseFacts:
-    """The index equals HEAD and the work tree equals the index."""
+    """The index equals HEAD and the work tree equals the index; the fetch comes first, then every read."""
+    fetched = fetch_origin_main()
     clean = _git("diff", "--cached", "--quiet").returncode == 0 and _git("diff", "--quiet").returncode == 0
     return ReleaseFacts(
         release_tags_at_head=release_tags_at_head(),
         work_tree_is_clean=clean,
-        head_is_on_origin_main=head_is_on_origin_main(),
+        head_is_on_origin_main=head_is_on_origin_main(fetched),
         installed_version=version("overnightworks-quality"),
         gate_refs=tuple(gate_tool_refs(GATE.read_text(encoding="utf-8"))),
     )
