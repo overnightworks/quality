@@ -66,7 +66,7 @@ def _git(*arguments: str) -> subprocess.CompletedProcess[str]:
 
 
 def fetch_origin_main() -> bool:
-    """Also imports the tags that point into the fetched history, so every read of tags comes after it."""
+    """Also may import the tags that point into the fetched history, so every read of tags comes after it."""
     return _git("fetch", "--quiet", "origin", "main").returncode == 0
 
 
