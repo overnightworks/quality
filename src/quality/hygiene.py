@@ -11,6 +11,7 @@ from pathlib import Path, PurePosixPath
 import yaml
 from packaging.specifiers import Specifier, SpecifierSet
 from packaging.version import Version
+from ruff import find_ruff_bin
 
 from quality import advisories, architecture, clones, engines, layout, python_lint, ratchet, repository
 from quality.config import (
@@ -595,13 +596,17 @@ def check_import_contract(root: Path, tracked: list[str]) -> architecture.Contra
         raise CannotJudge(str(error)) from error
 
 
-def check_python_security(root: Path) -> list[Finding]:
-    """ruff judges the tracked regular `.py` files the tree holds, each read as UTF-8 and resolved inside the repository first."""
+def check_python_security(root: Path, locate_ruff: Callable[[], str]) -> list[Finding]:
+    """ruff judges the tracked regular `.py` files the tree holds, each resolved inside the repository and read the way
+    Python reads it, which must be UTF-8 text."""
     modes = index_modes(root)
-    texts = _read_existing(repository.read_text, root, _on_disk(root, python_lint.candidates(modes)))
-    files = {name: python_lint.PythonFile(_judged(repository.resolve_file, root, name), text) for name, text in texts.items()}
+    sources = _read_existing(repository.read_bytes, root, _on_disk(root, python_lint.candidates(modes)))
     try:
-        return python_lint.check_security(root, files, modes, PYTHON_TARGET)
+        files = {
+            name: python_lint.PythonFile(_judged(repository.resolve_file, root, name), python_lint.source_text(name, content))
+            for name, content in sources.items()
+        }
+        return python_lint.check_security(root, files, modes, PYTHON_TARGET, locate_ruff)
     except python_lint.UnparsablePython as error:
         raise Unparsable(str(error)) from error
     except python_lint.LintError as error:
@@ -729,7 +734,7 @@ def _content_findings(
     return _attempt(judge)
 
 
-def run_hygiene(root: Path, engine_dir: Path | None = None) -> HygieneResult:
+def run_hygiene(root: Path, engine_dir: Path | None = None, locate_ruff: Callable[[], str] = find_ruff_bin) -> HygieneResult:
     """Judges every active rule, in run order, over the repository `root` lies in; only one git cannot list stops the run."""
     root = work_tree_top(root)
     tracked = tracked_files(root)
@@ -752,7 +757,7 @@ def run_hygiene(root: Path, engine_dir: Path | None = None) -> HygieneResult:
         _verdict(TEST_LAYOUT, _attempt(lambda: layout.check_test_layout(index_modes(root), _declared(read_layout_allowances, root)))),
         _verdict(TEST_IMPORT, _content_findings(root, layout.test_import_candidates, layout.check_test_import)),
         _verdict(PYTHON_FLOOR, floor if isinstance(floor, CannotJudge) else floor.findings),
-        _verdict(PYTHON_SECURITY, _attempt(lambda: check_python_security(root))),
+        _verdict(PYTHON_SECURITY, _attempt(lambda: check_python_security(root, locate_ruff))),
     ]
     reports = _reports(size, clone, contracts, floor)
     if engine_dir is None:

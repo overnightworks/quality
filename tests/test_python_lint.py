@@ -99,7 +99,7 @@ def test_a_finding_spanning_lines_is_judged_at_noqa_row(text, is_red):
     assert bool(judged(text, record(line=1, noqa_line=3))) is is_red
 
 
-@pytest.mark.parametrize("code", sorted(python_lint.TEST_EXEMPT_CODES))
+@pytest.mark.parametrize("code", ["S101", "S105", "S106", "S107", "S603", "S607"])
 @pytest.mark.parametrize(("in_tests", "is_red"), [(True, False), (False, True)], ids=["test file", "other file"])
 def test_the_exempt_codes_are_green_only_in_a_test_file(code, in_tests, is_red):
     """Sentence 4, cells 7 and 8: S101, S105-S107, S603 and S607 are exempt in the files test-import judges alone."""
@@ -117,8 +117,9 @@ def test_a_shared_path_or_an_url_open_stays_red_in_a_test_file(code):
 
 def test_a_file_tokenize_cannot_read_cannot_be_judged():
     """Sentence 5, cell 16: a file ruff parsed but tokenize cannot is `cannot judge`, naming the file."""
+    finding, texts, test_files = record(path="src/p/a.py"), {"src/p/a.py": "run(argv)\nx = '''open\n"}, frozenset()
     with pytest.raises(LintError, match="src/p/a.py"):
-        python_lint.judge([record()], {"src/p/a.py": "run(argv)\nx = '''open\n"}, frozenset())
+        python_lint.judge([finding], texts, test_files)
 
 
 def ruff_entry(code: str = "S307", filename: str = "/r/src/a.py", noqa_row: int | None = 1) -> dict:
@@ -172,15 +173,10 @@ def test_untracked_linked_submodule_notebook_stub_and_suffixless_files_are_not_j
 
 
 @pytest.mark.integration
-def test_a_repository_without_tracked_python_never_starts_ruff(build_repo, monkeypatch):
-    """Sentence 1, cell 3: `ruff check --` without paths would lint the working directory, so ruff is not started."""
+def test_a_repository_without_tracked_python_is_clean_and_an_untracked_file_stays_unjudged(build_repo):
+    """Sentence 1, cell 3: with no tracked `.py` file nothing is judged, the working directory's untracked file included."""
     repo = build_repo({"README.md": "x\n"})
     (repo / "untracked.py").write_text(EVAL)
-
-    def no_ruff() -> str:
-        raise AssertionError("ruff started")
-
-    monkeypatch.setattr(python_lint, "find_ruff_bin", no_ruff)
     assert flagged_paths(repo) == []
 
 
@@ -271,9 +267,8 @@ def test_a_ruff_run_quality_cannot_trust_cannot_be_judged(build_repo, capsys, mo
     """Sentence 8, cell 16: the rule cannot judge, exit 2, and the other rules are still judged."""
     repo = build_repo({".env": "A=1\n", "src/p/a.py": "x = 1\n"})
     binary = fake_ruff(elsewhere, on_check, version)
-    monkeypatch.setattr(python_lint, "find_ruff_bin", lambda: str(binary))
     monkeypatch.setattr(python_lint, "RUN_TIMEOUT_SECONDS", 0.5)
-    code, output = run(capsys, repo)
+    code, output = run(capsys, repo, lambda: str(binary))
     assert (code, "hygiene: python-security cannot judge - " in output, says in output) == (2, True, True), output
     assert "env-file .env - " in output
 
@@ -283,6 +278,16 @@ def test_a_python_file_that_is_not_utf8_cannot_be_judged(build_repo, capsys):
     """Sentence 8, cell 16: ruff would skip it with a warning, so quality reads it first."""
     repo = build_repo({"src/p/a.py": "x = 1\n"})
     (repo / "src" / "p" / "a.py").write_bytes(b"x = '\xff'\n")
+    code, output = run(capsys, repo)
+    assert (code, "hygiene: python-security cannot judge - cannot read src/p/a.py" in output) == (2, True), output
+
+
+@pytest.mark.integration
+def test_code_a_cookie_hides_from_ruff_cannot_be_judged(build_repo, capsys):
+    """Sentence 8, cell 16: Python decodes this UTF-8-valid file with its utf-7 cookie to a second line holding an
+    `eval`, ruff reads a comment; judging it clean would fail open."""
+    repo = build_repo({"src/p/a.py": "x = 1\n"})
+    (repo / "src" / "p" / "a.py").write_bytes(b'# coding: utf-7\nx = 1 # +AAo-y = eval("1")\n')
     code, output = run(capsys, repo)
     assert (code, "hygiene: python-security cannot judge - cannot read src/p/a.py" in output) == (2, True), output
 

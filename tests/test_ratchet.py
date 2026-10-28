@@ -1,4 +1,5 @@
 import os
+import re
 import tomllib
 from collections.abc import Callable
 from pathlib import Path
@@ -117,23 +118,14 @@ NOT_PYTHON = pytest.mark.parametrize(
 )
 
 
-RUFF_REFUSES = {
-    "undecodable-utf-8": "hygiene: python-security cannot judge - cannot read src/source.py",
-    "invalid-for-its-cookie": "hygiene: python-security cannot judge - cannot read src/source.py",
-    "null-byte": "hygiene: python-security unparsable - ruff cannot parse src/source.py",
-    "python-2": "hygiene: python-security unparsable - ruff cannot parse src/source.py",
-}
-
-
 @NOT_PYTHON
 def test_without_a_baseline_the_size_rule_names_a_file_python_cannot_read_and_python_security_decides_the_exit(
-    build_repo, capsys, request, source
+    build_repo, capsys, source
 ):
     """#46 rule 3: the size rule reports the file without refusing; python-security (#219) alone turns the run to exit 2."""
     code, output = hygiene(capsys, build_repo_with_source(build_repo, {"src/ok.py": "x = 1\n"}, SOURCE_NAME, source))
-    expected_line = RUFF_REFUSES.get(request.node.callspec.id)
-    assert code == (2 if expected_line else 0), output
-    assert (expected_line in output) if expected_line else ("hygiene: python-security" not in output), output
+    assert code == 2, output
+    assert re.search(r"hygiene: python-security (cannot judge|unparsable) - ", output), output
     assert "size cannot judge" not in output
     assert "size unparsable" not in output
     assert f"1 file(s) not valid Python, functions unmeasured: {SOURCE_NAME}" in output

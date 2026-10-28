@@ -1,7 +1,9 @@
 import unicodedata
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+from ruff import find_ruff_bin
 
 from quality import cli
 
@@ -18,8 +20,10 @@ def assert_every_line_starts_with_the_door(lines: list[str]) -> None:
         assert all(unicodedata.category(character) != "Cc" for character in line), line
 
 
-def hygiene_output(capsys: pytest.CaptureFixture[str], path: Path) -> tuple[int, str]:
+def hygiene_output(
+    capsys: pytest.CaptureFixture[str], path: Path, locate_ruff: Callable[[], str] = find_ruff_bin
+) -> tuple[int, str]:
     """The exit code and the whole output of `quality hygiene` over `path`, through the real door."""
-    code = cli.main(["hygiene", str(path)])
+    code = cli.main(["hygiene", str(path)], locate_ruff=locate_ruff)
     captured = capsys.readouterr()
     return code, captured.out + captured.err

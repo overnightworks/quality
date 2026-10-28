@@ -7,16 +7,15 @@ import os
 import re
 import subprocess
 import tokenize
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from importlib.metadata import requires
 from pathlib import Path
 
 from packaging.requirements import Requirement
 from packaging.version import Version
-from ruff import find_ruff_bin
 
-from quality import engines, layout
+from quality import DISTRIBUTION, engines, layout, ratchet
 from quality.report import Finding
 
 RULE = "python-security"
@@ -24,7 +23,6 @@ SELECTED_CODES = "S"
 # Exempt in a test: an assert is how a test checks, a password there is a fake, and a test fixes its own argv.
 TEST_EXEMPT_CODES = frozenset({"S101", "S105", "S106", "S107", "S603", "S607"})
 PYTHON_SUFFIX = ".py"
-QUALITY_DISTRIBUTION = "overnightworks-quality"
 RUFF_DISTRIBUTION = "ruff"
 RUN_TIMEOUT_SECONDS = 600
 ARGUMENT_BYTES_PER_RUN = 100_000  # far below Linux's ARG_MAX, which the argument list shares with the environment
@@ -32,7 +30,7 @@ JUDGED_EXIT_CODES = frozenset({0, 1})
 SYNTAX_ERROR = "invalid-syntax"
 LINT_FAILURE = "Failed to lint"
 NOQA_DIRECTIVE = re.compile(r"\s*noqa\b", re.IGNORECASE)
-REASONED_NOQA = re.compile(r" ?noqa: (?P<codes>[A-Z]+[0-9]+(?:, [A-Z]+[0-9]+)*) - (?P<reason>[^,]+)")
+REASONED_NOQA = re.compile(r" ?noqa: (?P<codes>[A-Z]+\d+(?:, [A-Z]+\d+)*) - (?P<reason>[^,]+)", re.ASCII)
 BYTE_ORDER_MARK = "﻿"
 
 
@@ -68,11 +66,27 @@ def candidates(modes: Mapping[str, str]) -> list[str]:
     return [path for path, mode in modes.items() if mode in engines.REGULAR_FILE_MODES and path.endswith(PYTHON_SUFFIX)]
 
 
-def check_security(root: Path, files: Mapping[str, PythonFile], modes: Mapping[str, str], target: Version) -> list[Finding]:
+def source_text(name: str, content: bytes) -> str:
+    """The UTF-8 text ruff reads; a file Python reads differently or cannot read is not judged, since ruff would
+    lint other code than Python runs."""
+    try:
+        python_reads = ratchet.python_text(content)
+        ruff_reads = content.decode("utf-8")
+    except ratchet.PARSE_ERRORS as error:
+        raise LintError(f"cannot read {name}: {error}") from error
+    translated = ruff_reads.replace("\r\n", "\n").replace("\r", "\n").removeprefix(BYTE_ORDER_MARK)
+    if translated != python_reads:
+        raise LintError(f"cannot read {name}: its PEP 263 encoding makes Python read other text than UTF-8")
+    return ruff_reads
+
+
+def check_security(
+    root: Path, files: Mapping[str, PythonFile], modes: Mapping[str, str], target: Version, locate_ruff: Callable[[], str]
+) -> list[Finding]:
     """The findings ruff reports in `files` that neither a test exemption nor a reasoned noqa clears."""
     if not files:
         return []  # `ruff check --` without a path would lint the working directory
-    records = _run_ruff(root, {name: file.path for name, file in files.items()}, target)
+    records = _run_ruff(root, {name: file.path for name, file in files.items()}, target, locate_ruff)
     texts = {name: file.text for name, file in files.items()}
     return judge(records, texts, frozenset(layout.test_import_candidates(modes)))
 
@@ -127,9 +141,9 @@ def _finding(record: RuffFinding) -> Finding:
     )
 
 
-def _run_ruff(root: Path, paths: Mapping[str, Path], target: Version) -> list[RuffFinding]:
+def _run_ruff(root: Path, paths: Mapping[str, Path], target: Version, locate_ruff: Callable[[], str]) -> list[RuffFinding]:
     """ruff's findings in `paths` (name to resolved path), in batches the argument list holds."""
-    binary = _pinned_ruff()
+    binary = _pinned_ruff(locate_ruff)
     names = _report_names(paths)
     return [
         record
@@ -150,10 +164,10 @@ def _report_names(paths: Mapping[str, Path]) -> dict[str, str]:
     return names
 
 
-def _pinned_ruff() -> str:
+def _pinned_ruff(locate_ruff: Callable[[], str]) -> str:
     """The ruff binary of quality's own installation, never one on PATH, at the version quality pins."""
     try:
-        binary = find_ruff_bin()
+        binary = locate_ruff()
     except FileNotFoundError as error:
         raise LintError("quality's installation holds no ruff binary") from error
     asked = _ruff(binary, ["--version"], None, engines.VERSION_TIMEOUT_SECONDS)
@@ -166,7 +180,7 @@ def _pinned_ruff() -> str:
 
 def _ruff_pin() -> str:
     """The specifier of quality's own requirement on ruff, as its installed metadata states it."""
-    requirements = (Requirement(line) for line in requires(QUALITY_DISTRIBUTION) or ())
+    requirements = (Requirement(line) for line in requires(DISTRIBUTION) or ())
     return next((str(requirement.specifier) for requirement in requirements if requirement.name == RUFF_DISTRIBUTION), "")
 
 

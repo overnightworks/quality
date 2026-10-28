@@ -56,7 +56,7 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   A `.py` file is read the way Python reads source (a PEP 263 coding cookie or a UTF-8 BOM decides the encoding). One
   Python 3.14 cannot decode or parse is named as not valid Python: without a baseline the count notes it (`1 file(s) not
   valid Python, functions unmeasured: bad.py`) and the size verdict is unchanged, while `python-security` judges
-  the file unparsable or cannot judge it; with a baseline it is `hygiene: size
+  the file unparsable or cannot judge it (exit `2`); with a baseline it is `hygiene: size
   unparsable - bad.py is not valid Python (...)`, and `quality baseline write` refuses with `baseline: not written -
   bad.py is not valid Python (...)`; both exit `2`. A tracked file the operating system refuses to read is `hygiene:
   size cannot judge - ...` with or without a baseline, and `quality baseline write` refuses with `baseline: not written - ...`; both exit `2`.
@@ -325,14 +325,14 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   second directive behind a reasoned one (`# noqa: S603 - why  # noqa: E501`). ruff itself honours the reasoned form,
   so a caller's own ruff stays quiet, and `lint.external = ["S", "T20"]` in its ruff config keeps its RUF100 from
   calling the gate's noqa unused. A file ruff cannot parse makes the rule `hygiene: python-security unparsable -
-  ruff cannot parse <path>` (exit 2); a file that is not UTF-8 (ruff reads nothing else, a PEP 263 cookie included),
-  a missing or mismatched ruff, ruff exiting other than 0 or 1, a `Failed to lint` warning, a report quality cannot
+  ruff cannot parse <path>` (exit 2); a file Python cannot decode, or reads as other
+  text than ruff reads as UTF-8 (a PEP 263 cookie such as utf-7), a missing or mismatched ruff, ruff exiting other
+  than 0 or 1, a `Failed to lint` warning, a report quality cannot
   read, a time-out or a file whose comments Python's tokenizer cannot read is `cannot judge` (exit 2). The other
-  rules are judged either way. A deliberately invalid Python fixture takes another suffix, since a `.py` file is Python;
-  a non-UTF-8 source (a PEP 263 latin-1 file) stays `cannot judge` because ruff reads UTF-8 only, a named gap. No
+  rules are judged either way. A deliberately invalid Python fixture takes another suffix, since a `.py` file is Python. No
   configuration switches the rule off, and a reasoned noqa asks `quality verdict` for
   no `[[gate.loosened]]` entry. Not judged, and waiting for usage evidence: notebooks, `.pyi` files and suffixless
-  Python; a stale reasoned noqa, which ruff's RUF100 finds. (#214, #219)
+  Python; judging a non-UTF-8 source (a latin-1 file with non-ASCII bytes stays `cannot judge`), since ruff reads UTF-8 only; a stale reasoned noqa, which ruff's RUF100 finds. (#214, #219)
 - The baseline only falls: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the
   base commit's, so growing a function and rewriting the baseline stays red. Each loosening is one line, named with the
   baseline's own metric, path and symbol (a file entry has no symbol):

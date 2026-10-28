@@ -10,6 +10,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TextIO
 
+from ruff import find_ruff_bin
+
 from quality import __version__, clones, engines, ratchet, repository, scoreboard, staged
 from quality.config import Allowance, ConfigError, read_gate_settings
 from quality.emergency import Ask, GhRunner, RemoteFor, github_remote, run_emergency_merge, run_gh
@@ -70,6 +72,7 @@ def main(
     remote_for: RemoteFor = github_remote,
     ask: Ask = input,
     is_terminal: Callable[[], bool] = lambda: sys.stdin.isatty(),
+    locate_ruff: Callable[[], str] = find_ruff_bin,
 ) -> int:
     arguments = build_parser().parse_args(argv)
 
@@ -101,7 +104,7 @@ def main(
     if arguments.command == "engines":
         run_engines = run_engines_install if arguments.engines_command == "install" else run_engines_verify
         return run_engines(arguments.directory, read_pins)
-    return run_hygiene_check(arguments.path, arguments.engines)
+    return run_hygiene_check(arguments.path, arguments.engines, locate_ruff)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -168,9 +171,9 @@ def emit(*lines: str, file: TextIO | None = None) -> None:
         print(printable(line), file=file)
 
 
-def run_hygiene_check(path: Path, engine_dir: Path | None) -> int:
+def run_hygiene_check(path: Path, engine_dir: Path | None, locate_ruff: Callable[[], str]) -> int:
     try:
-        result = run_hygiene(path, engine_dir)
+        result = run_hygiene(path, engine_dir, locate_ruff)
     except CannotJudge as error:
         emit(f"hygiene: {error.label} - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
