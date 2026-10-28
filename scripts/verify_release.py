@@ -1,9 +1,10 @@
 """The release step's check: run it on the tagged merge commit before the tag is pushed, because a pushed tag is immutable.
 
-    uv sync --reinstall-package overnightworks-quality && uv run python scripts/verify_release.py vX.Y.Z
+    uv sync --reinstall-package overnightworks-quality && uv run python scripts/verify_release.py
 
-Exit 0 only when the checkout is clean, the tag is at HEAD, HEAD is on origin/main, the installed version is the tag and
-the gate's tool checkouts pin the tag; one line per check says which. Exit 2 for a wrong command line.
+The release tag is read from git: the one tag `vX.Y.Z` that points at HEAD. Exit 0 only when the checkout is clean, exactly
+one release tag is at HEAD, HEAD is on origin/main, the installed version is that tag and the gate's tool checkouts pin
+it; one line per check says which, and the tag judged is in the first. Exit 2 for any command-line argument.
 """
 
 import argparse
@@ -23,10 +24,8 @@ RELEASE_TAG = re.compile(r"v\d+\.\d+\.\d+")
 
 @dataclass(frozen=True)
 class ReleaseFacts:
-    tag: str
+    release_tags_at_head: tuple[str, ...]
     work_tree_is_clean: bool
-    tag_commit: str | None
-    head_commit: str
     head_is_on_origin_main: bool
     installed_version: str
     gate_refs: tuple[str | None, ...]
@@ -49,23 +48,20 @@ def gate_tool_refs(gate_text: str) -> list[str | None]:
 
 
 def judge_release(facts: ReleaseFacts) -> list[Verdict]:
+    """Without exactly one release tag at HEAD there is no tag to hold the version and the gate refs to, so those fail too."""
+    found = ", ".join(facts.release_tags_at_head) or "none"
+    tag = facts.release_tags_at_head[0] if len(facts.release_tags_at_head) == 1 else None
     return [
+        Verdict(f"one release tag at HEAD (found: {found})", tag is not None),
         Verdict("clean", facts.work_tree_is_clean),
-        Verdict("tag at HEAD", facts.tag_commit == facts.head_commit),
         Verdict("on origin/main", facts.head_is_on_origin_main),
-        Verdict("installed version", facts.installed_version == facts.tag.removeprefix("v")),
-        Verdict("gate refs", bool(facts.gate_refs) and set(facts.gate_refs) == {facts.tag}),
+        Verdict("installed version", tag is not None and facts.installed_version == tag.removeprefix("v")),
+        Verdict("gate refs", tag is not None and bool(facts.gate_refs) and set(facts.gate_refs) == {tag}),
     ]
 
 
-def release_tag(argument: str) -> str:
-    if RELEASE_TAG.fullmatch(argument) is None:
-        raise argparse.ArgumentTypeError(f"{argument!r} is not a release tag of the form vX.Y.Z")
-    return argument
-
-
 def _git(*arguments: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["git", *arguments], capture_output=True, text=True, check=False)  # noqa: S603, S607 - argv is fixed words plus release arguments and never a shell
+    return subprocess.run(["git", *arguments], capture_output=True, text=True, check=False)  # noqa: S603, S607 - argv is fixed words and never a shell
 
 
 def head_is_on_origin_main() -> bool:
@@ -74,15 +70,18 @@ def head_is_on_origin_main() -> bool:
     return fetched and _git("merge-base", "--is-ancestor", "HEAD", "origin/main").returncode == 0
 
 
-def read_facts(tag: str) -> ReleaseFacts:
-    """The index equals HEAD and the work tree equals the index; the tag is peeled, so annotated and lightweight both work."""
+def release_tags_at_head() -> tuple[str, ...]:
+    """Annotated and lightweight tags both point at HEAD; only the form vX.Y.Z is a release."""
+    tags = _git("tag", "--points-at", "HEAD").stdout.split()
+    return tuple(tag for tag in tags if RELEASE_TAG.fullmatch(tag))
+
+
+def read_facts() -> ReleaseFacts:
+    """The index equals HEAD and the work tree equals the index."""
     clean = _git("diff", "--cached", "--quiet").returncode == 0 and _git("diff", "--quiet").returncode == 0
-    tagged = _git("rev-parse", "--verify", "--quiet", f"refs/tags/{tag}^{{commit}}")
     return ReleaseFacts(
-        tag=tag,
+        release_tags_at_head=release_tags_at_head(),
         work_tree_is_clean=clean,
-        tag_commit=tagged.stdout.strip() if tagged.returncode == 0 else None,
-        head_commit=_git("rev-parse", "HEAD").stdout.strip(),
         head_is_on_origin_main=head_is_on_origin_main(),
         installed_version=version("overnightworks-quality"),
         gate_refs=tuple(gate_tool_refs(GATE.read_text(encoding="utf-8"))),
@@ -90,9 +89,8 @@ def read_facts(tag: str) -> ReleaseFacts:
 
 
 def main(arguments: list[str]) -> int:
-    parser = argparse.ArgumentParser(description="Check a tagged merge commit before its tag is pushed.")
-    parser.add_argument("tag", type=release_tag, help="the release tag, vX.Y.Z")
-    verdicts = judge_release(read_facts(parser.parse_args(arguments).tag))
+    argparse.ArgumentParser(description="Check the tagged merge commit at HEAD before its tag is pushed.").parse_args(arguments)
+    verdicts = judge_release(read_facts())
     print("\n".join(verdict.line() for verdict in verdicts))
     return 0 if all(verdict.holds for verdict in verdicts) else 1
 
