@@ -119,3 +119,12 @@ def test_the_script_prints_a_usage_line_and_exits_2_for_other_than_one_tag(tmp_p
     done = run_script(tmp_path, *arguments)
     assert done.returncode == 2
     assert done.stderr.startswith("usage:")
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("argument", ["--version", "-x", "main", "v1.2", "v1.2.3-rc1", "1.2.3"])
+def test_the_script_refuses_an_argument_that_is_not_a_release_tag_and_runs_no_check(release_checkout, argument):
+    done = run_script(release_checkout, "--", argument)
+    assert done.returncode == 2
+    assert "vX.Y.Z" in done.stderr
+    assert done.stdout == ""

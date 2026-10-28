@@ -7,6 +7,7 @@ the gate's tool checkouts pin the tag; one line per check says which. Exit 2 for
 """
 
 import argparse
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -17,6 +18,7 @@ import yaml
 
 TOOL_REPOSITORY = "overnightworks/quality"
 GATE = Path(".github") / "workflows" / "gate.yml"
+RELEASE_TAG = re.compile(r"v\d+\.\d+\.\d+")
 
 
 @dataclass(frozen=True)
@@ -56,6 +58,12 @@ def judge_release(facts: ReleaseFacts) -> list[Verdict]:
     ]
 
 
+def release_tag(argument: str) -> str:
+    if RELEASE_TAG.fullmatch(argument) is None:
+        raise argparse.ArgumentTypeError(f"{argument!r} is not a release tag of the form vX.Y.Z")
+    return argument
+
+
 def _git(*arguments: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["git", *arguments], capture_output=True, text=True, check=False)  # noqa: S603, S607 - argv is fixed words plus release arguments and never a shell
 
@@ -83,7 +91,7 @@ def read_facts(tag: str) -> ReleaseFacts:
 
 def main(arguments: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Check a tagged merge commit before its tag is pushed.")
-    parser.add_argument("tag", help="the release tag, vX.Y.Z")
+    parser.add_argument("tag", type=release_tag, help="the release tag, vX.Y.Z")
     verdicts = judge_release(read_facts(parser.parse_args(arguments).tag))
     print("\n".join(verdict.line() for verdict in verdicts))
     return 0 if all(verdict.holds for verdict in verdicts) else 1
