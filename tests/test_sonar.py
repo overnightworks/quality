@@ -500,20 +500,21 @@ CLEAN_PROPERTIES = (
 )
 
 
-def run_preflight(monkeypatch, capsys, build_repo, properties: str | None = CLEAN_PROPERTIES, environment=PULL_REQUEST_ENVIRONMENT, extra_files=None):
+def run_properties(monkeypatch, capsys, build_repo, properties: str | None = CLEAN_PROPERTIES, environment=PULL_REQUEST_ENVIRONMENT, extra_files=None):
     set_environment(monkeypatch, environment)
     files = dict(extra_files or {})
     if properties is not None:
         files["sonar-project.properties"] = properties
-    code = cli.main(["sonar", "preflight", str(build_repo(files))])
+    monkeypatch.chdir(build_repo(files))
+    code = cli.main(["sonar", "properties"])
     captured = capsys.readouterr()
     assert TOKEN not in captured.out + captured.err
     return code, captured.out, captured.err
 
 
-def test_preflight_passes_the_callers_own_clean_properties(monkeypatch, capsys, build_repo):
+def test_properties_passes_the_callers_own_clean_properties(monkeypatch, capsys, build_repo):
     """#26 rule 3: the caller's own organization, key and allowlisted settings pass"""
-    assert run_preflight(monkeypatch, capsys, build_repo)[0] == 0
+    assert run_properties(monkeypatch, capsys, build_repo)[0] == 0
 
 
 PYTHON_REPORT_KEY = "sonar.python.coverage.reportPaths"
@@ -543,10 +544,10 @@ LCOV_REPORT_KEY = "sonar.javascript.lcov.reportPaths"
         "absolute entry", "entry with a parent segment", "parent segment over an existing report", "** inside a path segment",
     ],
 )
-def test_preflight_requires_every_named_coverage_report_to_exist(monkeypatch, capsys, build_repo, key, value, files, code, named):
+def test_properties_requires_every_named_coverage_report_to_exist(monkeypatch, capsys, build_repo, key, value, files, code, named):
     """#34 rule 2: each entry of a coverage report key is judged on its own; a missing report is exit 2 naming key and entry"""
     properties = CLEAN_PROPERTIES + f"{key}={value}\n"
-    result = run_preflight(monkeypatch, capsys, build_repo, properties, extra_files={name: "<coverage/>" for name in files})
+    result = run_properties(monkeypatch, capsys, build_repo, properties, extra_files={name: "<coverage/>" for name in files})
     assert result[0] == code
     if named:
         assert key in result[2]
@@ -587,29 +588,29 @@ def test_preflight_requires_every_named_coverage_report_to_exist(monkeypatch, ca
         "continuation split substitution", "substitution in a path key", "foreign organization", "foreign key", "malformed escape",
     ],
 )
-def test_preflight_refuses_what_could_steer_the_token_naming_it(monkeypatch, capsys, build_repo, properties, named):
+def test_properties_refuses_what_could_steer_the_token_naming_it(monkeypatch, capsys, build_repo, properties, named):
     """#26 rule 3: a foreign key, endpoint family or ${...} substitution in any decoded value is exit 2, naming the key"""
-    code, _, err = run_preflight(monkeypatch, capsys, build_repo, CLEAN_PROPERTIES + properties + "\n")
+    code, _, err = run_properties(monkeypatch, capsys, build_repo, CLEAN_PROPERTIES + properties + "\n")
     assert code == 2
     assert named in err
 
 
-def test_preflight_drops_a_final_unpaired_backslash_like_java_properties(monkeypatch, capsys, build_repo):
+def test_properties_drops_a_final_unpaired_backslash_like_java_properties(monkeypatch, capsys, build_repo):
     """#26 rule 3: a last line ending in a backslash without a newline is read as java.util.Properties reads it"""
     properties = "sonar.projectKey=overnightworks_quality\nsonar.organization=overnightworks\\"
-    assert run_preflight(monkeypatch, capsys, build_repo, properties)[0] == 0
+    assert run_properties(monkeypatch, capsys, build_repo, properties)[0] == 0
 
 
-def test_preflight_refuses_a_properties_file_without_the_callers_key(monkeypatch, capsys, build_repo):
+def test_properties_refuses_a_properties_file_without_the_callers_key(monkeypatch, capsys, build_repo):
     """#26 rule 3: a file that does not name the caller's project key is exit 2"""
-    code, _, err = run_preflight(monkeypatch, capsys, build_repo, "sonar.organization=overnightworks\n")
+    code, _, err = run_properties(monkeypatch, capsys, build_repo, "sonar.organization=overnightworks\n")
     assert (code, "sonar.projectKey" in err) == (2, True)
 
 
-def test_preflight_lets_a_lone_dollar_a_brace_and_comments_pass(monkeypatch, capsys, build_repo):
+def test_properties_lets_a_lone_dollar_a_brace_and_comments_pass(monkeypatch, capsys, build_repo):
     """#26 rule 3: a lone dollar or a brace without a dollar is not a substitution; comments are skipped"""
     properties = CLEAN_PROPERTIES + "# sonar.host.url=https://evil.example\n! sonar.region=us\nsonar.projectName=cost $ {x}\n"
-    assert run_preflight(monkeypatch, capsys, build_repo, properties)[0] == 0
+    assert run_properties(monkeypatch, capsys, build_repo, properties)[0] == 0
 
 
 @pytest.mark.parametrize(
@@ -617,23 +618,78 @@ def test_preflight_lets_a_lone_dollar_a_brace_and_comments_pass(monkeypatch, cap
     [{**PULL_REQUEST_ENVIRONMENT, "SONAR_TOKEN": ""}, {k: v for k, v in PULL_REQUEST_ENVIRONMENT.items() if k != "SONAR_TOKEN"}],
     ids=["empty token", "unset token"],
 )
-def test_preflight_refuses_a_missing_token_and_never_skips(monkeypatch, capsys, build_repo, environment):
+def test_properties_refuses_a_missing_token_and_never_skips(monkeypatch, capsys, build_repo, environment):
     """#26 rule 2: an empty or unset token is exit 2 naming SONAR_TOKEN"""
-    code, _, err = run_preflight(monkeypatch, capsys, build_repo, environment=environment)
+    code, _, err = run_properties(monkeypatch, capsys, build_repo, environment=environment)
     assert (code, "SONAR_TOKEN is empty" in err) == (2, True)
 
 
-def test_preflight_refuses_a_tracked_scanner_work_directory(monkeypatch, capsys, build_repo):
+def test_properties_refuses_a_tracked_scanner_work_directory(monkeypatch, capsys, build_repo):
     """#26 rule 3: a committed .scannerwork/report-task.txt is exit 2"""
     files = {".scannerwork/report-task.txt": "ceTaskId=x\n"}
-    code, _, err = run_preflight(monkeypatch, capsys, build_repo, extra_files=files)
+    code, _, err = run_properties(monkeypatch, capsys, build_repo, extra_files=files)
     assert (code, ".scannerwork" in err) == (2, True)
 
 
-def test_preflight_refuses_a_repository_without_properties(monkeypatch, capsys, build_repo):
+def test_properties_refuses_a_repository_without_properties(monkeypatch, capsys, build_repo):
     """#26 rule 3: no sonar-project.properties is exit 2"""
-    code, _, err = run_preflight(monkeypatch, capsys, build_repo, properties=None)
+    code, _, err = run_properties(monkeypatch, capsys, build_repo, properties=None)
     assert (code, "sonar-project.properties" in err) == (2, True)
+
+
+def test_the_former_sonar_command_is_refused_as_a_usage_error(capsys):
+    """#228 rule 3: the old command name is not kept as an alias"""
+    with pytest.raises(SystemExit) as exited:
+        cli.main(["sonar", "pre" + "flight"])
+    assert exited.value.code == 2
+
+
+def properties_link_outside(repo: Path, elsewhere: Path) -> None:
+    outside = elsewhere / "outside.properties"
+    outside.write_text("sonar.host.url=https://evil.example\n")
+    (repo / "sonar-project.properties").symlink_to(outside)
+
+
+def properties_directory(repo: Path, elsewhere: Path) -> None:
+    (repo / "sonar-project.properties").mkdir()
+
+
+def properties_not_utf8(repo: Path, elsewhere: Path) -> None:
+    (repo / "sonar-project.properties").write_bytes(b"sonar.sources=\xff\xfe\n")
+
+
+def properties_missing(repo: Path, elsewhere: Path) -> None:
+    pass
+
+
+def properties_link_inside(repo: Path, elsewhere: Path) -> None:
+    (repo / "real.properties").write_text(CLEAN_PROPERTIES)
+    (repo / "sonar-project.properties").symlink_to("real.properties")
+
+
+@pytest.mark.parametrize(
+    ("arrange", "code", "said"),
+    [
+        (properties_link_outside, 2, "sonar-project.properties resolves outside the repository"),
+        (properties_directory, 2, "sonar-project.properties is not a file"),
+        (properties_not_utf8, 2, "cannot read sonar-project.properties:"),
+        (properties_missing, 2, "sonar-project.properties is missing"),
+        (properties_link_inside, 0, ""),
+    ],
+    ids=["link outside", "directory", "not utf-8", "missing", "link inside"],
+)
+def test_a_properties_file_quality_cannot_use_is_exit_2_naming_it_repository_relative(
+    monkeypatch, capsys, build_repo, elsewhere, arrange, code, said
+):
+    """#254 / AGENTS.md: sonar-project.properties is read inside the checkout and named repository-relative"""
+    set_environment(monkeypatch, PULL_REQUEST_ENVIRONMENT)
+    repo = build_repo({"README.md": "x\n"})
+    arrange(repo, elsewhere)
+    monkeypatch.chdir(repo)
+    result = cli.main(["sonar", "properties"])
+    captured = capsys.readouterr()
+    output = captured.out + captured.err
+    assert (result, said in output, str(repo) in output, TOKEN in output) == (code, True, False, False)
 
 
 def test_quality_with_its_own_config_fails_a_pull_request_on_legacy_findings(monkeypatch, capsys):

@@ -31,7 +31,7 @@ def step_named(steps: list[dict], fragment: str) -> dict:
 
 
 def test_the_sonar_job_runs_its_steps_in_the_required_order(sonar_steps):
-    """#26 rule 1, #34 rule 1: caller checkout, coverage download, tool checkout, uv, preflight, scan, findings in this order"""
+    """#26 rule 1, #34 rule 1: caller checkout, coverage download, tool checkout, uv, properties check, scan, findings in this order"""
     kinds = [
         step["uses"].split("@")[0] if "uses" in step else step["run"].partition(" quality ")[2].split(" --")[0]
         for step in sonar_steps
@@ -41,7 +41,7 @@ def test_the_sonar_job_runs_its_steps_in_the_required_order(sonar_steps):
         "actions/download-artifact",
         "actions/checkout",
         "astral-sh/setup-uv",
-        "sonar preflight .",
+        "sonar properties",
         "SonarSource/sonarqube-scan-action",
         "sonar findings",
     ]
@@ -62,7 +62,7 @@ def test_the_scan_pins_the_verified_scanner_and_the_sonarcloud_origin(sonar_step
     assert options["args"] == f"-Dsonar.host.url={sonar.SONAR_ORIGIN} -Dsonar.qualitygate.wait=false"
 
 
-def test_the_token_reaches_only_preflight_scan_and_findings(gate):
+def test_the_token_reaches_only_properties_scan_and_findings(gate):
     """#26 rule 1: no workflow-level env, no job env and no other step sees secrets.SONAR_TOKEN"""
     assert "env" not in gate
     assert not any(TOKEN_REFERENCE in str(job.get("env", {})) for job in gate["jobs"].values())
@@ -111,9 +111,9 @@ def test_quality_wires_the_secret_by_name_into_the_gate():
 
 
 def test_quality_binds_its_own_scan_to_its_own_project(build_repo):
-    """#26 rule 5, #34 rule 2: quality's own sonar-project.properties passes its own preflight once the tests job's report is there"""
+    """#26 rule 5, #34 rule 2: quality's own sonar-project.properties passes its own properties check once the tests job's report is there"""
     checkout = build_repo({sonar.PROPERTIES_FILE: (ROOT / sonar.PROPERTIES_FILE).read_text(encoding="utf-8"), "coverage.xml": "<coverage/>"})
-    sonar.preflight(checkout, {"GITHUB_REPOSITORY": "overnightworks/quality", sonar.TOKEN_VARIABLE: "t"})
+    sonar.check_properties(checkout, {"GITHUB_REPOSITORY": "overnightworks/quality", sonar.TOKEN_VARIABLE: "t"})
 
 
 def test_a_missing_coverage_artifact_fails_the_download_the_job_and_so_the_verdict(gate):

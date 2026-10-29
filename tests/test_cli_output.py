@@ -98,8 +98,8 @@ def test_a_closed_stderr_keeps_the_stop_on_stdout_and_the_exit(broken_compose_re
 
 @pytest.mark.parametrize(
     "arguments",
-    [("baseline", "write", "."), ("engines", "verify", "engines"), ("sonar", "preflight", ".")],
-    ids=["baseline write", "engines verify", "sonar preflight"],
+    [("baseline", "write", "."), ("engines", "verify", "engines"), ("sonar", "properties")],
+    ids=["baseline write", "engines verify", "sonar properties"],
 )
 def test_other_doors_start_with_the_stop_too(clean_repo, arguments):
     """#89 rule 1, cell 6."""

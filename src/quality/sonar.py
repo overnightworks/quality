@@ -10,6 +10,7 @@ from dataclasses import dataclass, replace
 from enum import Enum
 from pathlib import Path
 
+from quality import repository
 from quality.checkout import tracked_files
 from quality.config import LegacyMode
 from quality.report import CannotJudge, Finding
@@ -258,13 +259,13 @@ class SonarResult:
         return f"{line} · {legacy_unknown(default_branch)}" if self.legacy_unknown else line
 
 
-def preflight(root: Path, environment: Mapping[str, str]) -> None:
+def check_properties(root: Path, environment: Mapping[str, str]) -> None:
     """Bind the scan to the caller's own project before the token is handed to the scanner."""
     require_token(environment)
     project = project_of(environment)
     if any(Path(name).parts[0] == SCANNER_WORK_DIRECTORY for name in tracked_files(root)):
         raise CannotJudge(f"{SCANNER_WORK_DIRECTORY}/ is tracked: a committed {TASK_FILE.name} would stand in for this run's analysis")
-    properties = read_properties(root / PROPERTIES_FILE)
+    properties = read_properties(root)
     for key, value in properties:
         if key not in ALLOWED_PROPERTIES:
             raise CannotJudge(f"{PROPERTIES_FILE} sets {key!r}, which is not allowed")
@@ -304,12 +305,14 @@ def require_token(environment: Mapping[str, str]) -> None:
         raise CannotJudge(f"{TOKEN_VARIABLE} is empty: an anonymous reader is told zero findings")
 
 
-def read_properties(path: Path) -> list[tuple[str, str]]:
+def read_properties(root: Path) -> list[tuple[str, str]]:
     """The java.util.Properties grammar: separators, continuations and escapes in keys and values."""
     try:
-        text = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as error:
-        raise CannotJudge(f"cannot read {path.name}: {error.__class__.__name__}") from error
+        text = repository.read_text(root, PROPERTIES_FILE)
+    except repository.RepositoryFileError as error:
+        raise CannotJudge(str(error)) from error
+    if text is None:
+        raise CannotJudge(f"{PROPERTIES_FILE} is missing")
     return [parse_property(line) for line in logical_property_lines(text)]
 
 

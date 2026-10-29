@@ -9,7 +9,7 @@ repository and for the operator who merges past it.
     quality scan-staged [PATH] --engines DIR
     quality engines install DIR
     quality engines verify DIR
-    quality sonar preflight [PATH]
+    quality sonar properties
     quality sonar findings
     quality verdict [PATH]
     quality scoreboard [PATH]
