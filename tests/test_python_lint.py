@@ -8,6 +8,7 @@ from ruff import find_ruff_bin
 
 from quality import hygiene, python_lint
 from quality.python_lint import LintError, RuffFinding, UnparsablePython
+from quality.rules import Rule
 from tests.support.hygiene import CLEAN_LINE
 from tests.support.hygiene import hygiene_output as run
 from tests.support.layout import in_index
@@ -50,11 +51,11 @@ def judged_prints(text: str, records: list[RuffFinding]) -> tuple[list[str], tup
     return [f"{item.location} {item.reason}" for item in result.findings], result.reports
 
 
-def rule_verdict(repo: Path, rule: str = python_lint.SECURITY_RULE) -> hygiene.RuleVerdict:
+def rule_verdict(repo: Path, rule: Rule = Rule.PYTHON_SECURITY) -> hygiene.RuleVerdict:
     return next(verdict for verdict in hygiene.run_hygiene(repo, None, find_ruff_bin).verdicts if verdict.rule == rule)
 
 
-def flagged_paths(repo: Path, rule: str = python_lint.SECURITY_RULE) -> list[str]:
+def flagged_paths(repo: Path, rule: Rule = Rule.PYTHON_SECURITY) -> list[str]:
     verdict = rule_verdict(repo, rule)
     assert verdict.refusal is None, verdict.refusal
     return [finding.path for finding in verdict.findings]
@@ -349,7 +350,7 @@ def test_a_print_names_its_line_code_and_message(build_repo, capsys, path, sourc
     ids=["per-file-ignores", "exclude", "extend to a missing file", "invalid config", "ignore"],
 )
 @pytest.mark.parametrize(
-    ("rule", "source"), [(python_lint.SECURITY_RULE, EVAL), (python_lint.PRINT_RULE, f"{PRINT}\n")], ids=["security", "print"]
+    ("rule", "source"), [(Rule.PYTHON_SECURITY, EVAL), (Rule.PYTHON_PRINT, f"{PRINT}\n")], ids=["security", "print"]
 )
 def test_the_repositorys_own_ruff_settings_have_no_effect(build_repo, config, rule, source):
     """Sentence 3, cell 6, and #225 cell 3: the gate runs its own ruff, isolated from every config."""
@@ -441,7 +442,7 @@ def test_a_ruff_run_quality_cannot_trust_cannot_be_judged(build_repo, capsys, mo
     binary = fake_ruff(elsewhere, on_check, version)
     monkeypatch.setattr(python_lint, "RUN_TIMEOUT_SECONDS", 0.5)
     code, output = run(capsys, repo, lambda: str(binary))
-    rules = [python_lint.SECURITY_RULE, python_lint.PRINT_RULE]
+    rules = [Rule.PYTHON_SECURITY, Rule.PYTHON_PRINT]
     refused = [rule for rule in rules if f"hygiene: {rule} cannot judge - " in output]
     assert (code, refused, says in output) == (2, rules, True), output
     assert "env-file .env - " in output

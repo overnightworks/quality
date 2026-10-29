@@ -21,6 +21,7 @@ from quality.hygiene import (
 )
 from quality.output import append_step_summary, emit, emit_finding, set_up_streams
 from quality.report import CannotJudge, Finding, headline
+from quality.rules import Rule
 from quality.sonar import (
     DEPENDABOT_CONFIG,
     TASK_FILE,
@@ -187,18 +188,18 @@ def hygiene_summary(result: HygieneResult) -> str:
 
 def print_secret_allowances(allowed: list[Finding], unused: dict[Allowance, str]) -> None:
     if allowed:
-        emit(f"{engines.LEAK_RULE}: {len(allowed)} allowed ({', '.join(finding.location for finding in allowed)})")
+        emit(f"{Rule.SECRET}: {len(allowed)} allowed ({', '.join(finding.location for finding in allowed)})")
         for finding in allowed:
             emit(f"  allowed {finding.location} - {finding.reason}")
     for entry, reason in unused.items():
-        emit(f"{engines.LEAK_RULE}: unused allowance {entry.rule} in {entry.file} (sha256 {entry.secret_sha256}) - {reason}")
+        emit(f"{Rule.SECRET}: unused allowance {entry.rule} in {entry.file} (sha256 {entry.secret_sha256}) - {reason}")
 
 
 def coverage_note(engine_dir: Path | None) -> str:
     skipped = skipped_rules(engine_dir)
     if skipped:
         return f"; skipped without --engines: {', '.join(skipped)}"
-    return f"; {engines.WORKFLOW_SECURITY} runs offline, so zizmor's online-only audits do not run"
+    return f"; {Rule.WORKFLOW_SECURITY} runs offline, so zizmor's online-only audits do not run"
 
 
 def run_baseline_write(path: Path) -> int:

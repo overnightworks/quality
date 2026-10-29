@@ -4,8 +4,7 @@ from pathlib import Path
 
 from quality import checkout, repository
 from quality.report import Finding
-
-CLAUDE_MD = "claude-md"
+from quality.rules import Rule
 
 CLAUDE_NESTED_NAME = ".claude/claude.md"
 CLAUDE_FILE_NAMES = frozenset({"claude.md", CLAUDE_NESTED_NAME})
@@ -22,7 +21,7 @@ def check_claude_md(root: Path, tracked: list[str]) -> list[Finding]:
     for name in (name for name in tracked if name.casefold() in CLAUDE_FILE_NAMES):
         problem = _claude_md_problem(root, name, AGENTS_FILE in tracked)
         if problem is not None:
-            findings.append(Finding(CLAUDE_MD, name, None, *problem))
+            findings.append(Finding(Rule.CLAUDE_MD, name, None, *problem))
     return findings
 
 

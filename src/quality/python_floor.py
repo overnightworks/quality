@@ -10,8 +10,8 @@ from packaging.version import Version
 from quality import repository
 from quality.config import CONFIG_PATH, PythonAllowance
 from quality.report import Finding, Unparsable
+from quality.rules import Rule
 
-PYTHON_FLOOR = "python-floor"
 PYTHON_TARGET = Version("3.14")
 LOWER_BOUND_OPERATORS = frozenset({">=", ">", "~=", "==", "==="})
 
@@ -62,7 +62,7 @@ def _floor_finding(path: str, requires_python: str, floor: Version | None) -> Fi
         else f'requires-python "{requires_python}" admits Python {floor}, below {PYTHON_TARGET}.'
     )
     return Finding(
-        PYTHON_FLOOR, path, None, reason,
+        Rule.PYTHON_FLOOR, path, None, reason,
         f"raise it to >={PYTHON_TARGET} and move CI, .python-version, Dockerfiles and ruff's target-version with it, "
         f"or declare it in {CONFIG_PATH} with [[python.allow]], its path and a reason.",
     )
@@ -70,7 +70,7 @@ def _floor_finding(path: str, requires_python: str, floor: Version | None) -> Fi
 
 def _stale_python_allowance(allowance: PythonAllowance, why: str) -> Finding:
     return Finding(
-        PYTHON_FLOOR, allowance.path, None,
+        Rule.PYTHON_FLOOR, allowance.path, None,
         f"declared in {CONFIG_PATH} with [[python.allow]], but {why}.",
         f"delete its [[python.allow]] entry from {CONFIG_PATH}.",
     )

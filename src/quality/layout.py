@@ -6,8 +6,9 @@ from dataclasses import dataclass
 from pathlib import PurePosixPath
 
 from quality import checkout, ratchet
-from quality.config import CONFIG_PATH, LayoutAllowance, LayoutRule
+from quality.config import CONFIG_PATH, LayoutAllowance
 from quality.report import Finding
+from quality.rules import Rule
 
 EXECUTABLE_MODE = "100755"
 GITLINK_MODE = "160000"
@@ -52,13 +53,13 @@ def check_file_suffix(modes: Mapping[str, str], allowances: Sequence[LayoutAllow
     """Every tracked file without a suffix is executable, a symlink or gitlink, a dotfile, tool-mandated or declared;
     a declaration of an untracked path is a finding too. `modes` maps each tracked path to its index mode. Findings are
     sorted by path."""
-    declared = _declared_paths(allowances, LayoutRule.FILE_SUFFIX)
+    declared = _declared_paths(allowances, Rule.FILE_SUFFIX)
     findings = [_suffixless(path) for path, mode in modes.items() if path not in declared and _lacks_suffix(path, mode)]
-    findings += [_stale_declaration(path, LayoutRule.FILE_SUFFIX) for path in declared - modes.keys()]
+    findings += [_stale_declaration(path, Rule.FILE_SUFFIX) for path in declared - modes.keys()]
     return sorted(findings, key=lambda finding: finding.path)
 
 
-def _declared_paths(allowances: Sequence[LayoutAllowance], rule: LayoutRule) -> set[str]:
+def _declared_paths(allowances: Sequence[LayoutAllowance], rule: Rule) -> set[str]:
     return {allowance.path for allowance in allowances if allowance.rule is rule}
 
 
@@ -70,16 +71,16 @@ def _lacks_suffix(path: str, mode: str) -> bool:
 
 def _suffixless(path: str) -> Finding:
     return Finding(
-        LayoutRule.FILE_SUFFIX.value, path, None,
+        Rule.FILE_SUFFIX, path, None,
         "a tracked file without a suffix, that is no executable, link, dotfile or tool-mandated name.",
         f"give it the suffix of its format, or declare it in {CONFIG_PATH} with [[layout.allow]], its path, the rule "
         "file-suffix and a reason.",
     )
 
 
-def _stale_declaration(path: str, rule: LayoutRule) -> Finding:
+def _stale_declaration(path: str, rule: Rule) -> Finding:
     return Finding(
-        rule.value, path, None,
+        rule, path, None,
         f"declared in {CONFIG_PATH} with [[layout.allow]], but the repository tracks no such file.",
         f"delete its [[layout.allow]] entry from {CONFIG_PATH}.",
     )
@@ -95,7 +96,7 @@ def check_script_name(
 ) -> list[Finding]:
     """A script is named `<word>_<word>...` in lower-case letters and digits and lies under a `scripts/` folder, unless
     its name is tool-mandated or a dotfile, or it is declared. `contents` holds the bytes of `script_candidates`."""
-    return _judged_scripts(LayoutRule.SCRIPT_NAME, modes, contents, allowances, _name_problem)
+    return _judged_scripts(Rule.SCRIPT_NAME, modes, contents, allowances, _name_problem)
 
 
 def check_script_header(
@@ -103,11 +104,11 @@ def check_script_header(
 ) -> list[Finding]:
     """A script has a comment or docstring, no tool directive, within its first three non-blank lines after the shebang
     and a PEP 723 block, unless it is declared. Presence only, never content."""
-    return _judged_scripts(LayoutRule.SCRIPT_HEADER, modes, contents, allowances, _header_problem)
+    return _judged_scripts(Rule.SCRIPT_HEADER, modes, contents, allowances, _header_problem)
 
 
 def _judged_scripts(
-    rule: LayoutRule,
+    rule: Rule,
     modes: Mapping[str, str],
     contents: Mapping[str, bytes],
     allowances: Sequence[LayoutAllowance],
@@ -120,7 +121,7 @@ def _judged_scripts(
         if content is None or path in declared or not _is_script(path, mode, content):
             continue
         if problem := problem_of(path, content):
-            findings.append(Finding(rule.value, path, None, *problem))
+            findings.append(Finding(rule, path, None, *problem))
     findings += [_stale_declaration(path, rule) for path in declared - modes.keys()]
     return sorted(findings, key=lambda finding: finding.path)
 
@@ -236,7 +237,7 @@ def check_test_layout(modes: Mapping[str, str], allowances: Sequence[LayoutAllow
     `test_<module>[_<aspect>].py`; a declaration of an untracked path is a finding too. A project is judged when it
     has a package. A Vitest test of a frontend project lies beside the file it tests and a Playwright spec in the
     project's top-level `e2e/`."""
-    declared = _declared_paths(allowances, LayoutRule.TEST_LAYOUT)
+    declared = _declared_paths(allowances, Rule.TEST_LAYOUT)
     tracked = [PurePosixPath(path) for path in modes]
     mirrors = {
         project.tests_directory: _ProjectMirror.of(project, tracked)
@@ -248,7 +249,7 @@ def check_test_layout(modes: Mapping[str, str], allowances: Sequence[LayoutAllow
         tests = next((tests for tests in mirrors if tests in path.parents), None)
         if tests is not None and str(path) not in declared:
             findings += _test_layout_findings(path, tests, mirrors[tests])
-    findings += [_stale_declaration(path, LayoutRule.TEST_LAYOUT) for path in declared - modes.keys()]
+    findings += [_stale_declaration(path, Rule.TEST_LAYOUT) for path in declared - modes.keys()]
     return sorted(findings, key=lambda finding: finding.path)
 
 
@@ -397,14 +398,17 @@ def _mirror_findings(path: PurePosixPath, folders: tuple[str, ...], mirror: _Pro
     return [_mirror_finding(path, problems)] if problems else []
 
 
+def _test_layout_finding(path: str, reason: str, fix: str) -> Finding:
+    return Finding(
+        Rule.TEST_LAYOUT, path, None, reason,
+        f"{fix}, or declare it in {CONFIG_PATH} with [[layout.allow]], its path, the rule test-layout and a reason.",
+    )
+
+
 def _mirror_finding(path: PurePosixPath, problems: Sequence[_Problem]) -> Finding:
     reasons = "; ".join(reason for reason, _ in problems)
     fixes = ", or ".join(fix for _, fix in problems)
-    return Finding(
-        LayoutRule.TEST_LAYOUT.value, str(path), None,
-        f"a test module that does not mirror a module: {reasons}.",
-        f"{fixes}, or declare it in {CONFIG_PATH} with [[layout.allow]], its path, the rule test-layout and a reason.",
-    )
+    return _test_layout_finding(str(path), f"a test module that does not mirror a module: {reasons}.", fixes)
 
 
 def _frontend_findings(modes: Mapping[str, str], declared: set[str], python_tests: Iterable[PurePosixPath]) -> list[Finding]:
@@ -452,39 +456,32 @@ def _frontend_finding(path: PurePosixPath, project: PurePosixPath, keys: frozens
 
 
 def _spec_outside_end_to_end(path: str, end_to_end: str) -> Finding:
-    return Finding(
-        LayoutRule.TEST_LAYOUT.value, path, None,
+    return _test_layout_finding(
+        path,
         f"a spec outside {end_to_end}, where its project keeps its Playwright specs.",
-        f"move it into {end_to_end}, or, if it is a Vitest test, name it `<subject>.test.<suffix>` beside its subject, "
-        f"or declare it in {CONFIG_PATH} with [[layout.allow]], its path, the rule test-layout and a reason.",
+        f"move it into {end_to_end}, or, if it is a Vitest test, name it `<subject>.test.<suffix>` beside its subject",
     )
 
 
 def _test_without_sibling(path: PurePosixPath, base: str) -> Finding:
     reason = f"no file in {path.parent} is named {base} or a word prefix of it" if base else "its name before the first `.` is empty"
-    return Finding(
-        LayoutRule.TEST_LAYOUT.value, str(path), None,
+    return _test_layout_finding(
+        str(path),
         f"a test that lies beside no file it tests: {reason}.",
-        f"move it beside the file it tests and name it `<subject>[<Aspect>]{path.name.removeprefix(base)}`, "
-        f"or declare it in {CONFIG_PATH} with [[layout.allow]], its path, the rule test-layout and a reason.",
+        f"move it beside the file it tests and name it `<subject>[<Aspect>]{path.name.removeprefix(base)}`",
     )
 
 
 def _init_under_tests(path: str) -> Finding:
-    return Finding(
-        LayoutRule.TEST_LAYOUT.value, path, None,
-        "an __init__.py under tests/, which pytest's importlib mode does not need.",
-        f"delete it, or declare it in {CONFIG_PATH} with [[layout.allow]], its path, the rule test-layout and a reason.",
-    )
+    return _test_layout_finding(path, "an __init__.py under tests/, which pytest's importlib mode does not need.", "delete it")
 
 
 def _stray_under_tests(path: str) -> Finding:
-    return Finding(
-        LayoutRule.TEST_LAYOUT.value, path, None,
+    return _test_layout_finding(
+        path,
         "a file under tests/ that is no test_*.py or conftest.py and lies in no support/, fixtures/ or top-level "
         "e2e/ folder.",
-        "move it to a support/ folder (a helper) or a fixtures/ folder (data), or declare it in "
-        f"{CONFIG_PATH} with [[layout.allow]], its path, the rule test-layout and a reason.",
+        "move it to a support/ folder (a helper) or a fixtures/ folder (data)",
     )
 
 
@@ -510,13 +507,13 @@ def check_test_import(
     components of a target's path, a relative one when it resolves to the target's path; a from-import checks its
     module and each imported name. A declaration exempts its importer; a declaration of an untracked path is a finding.
     `contents` holds the bytes of `test_import_candidates`. Findings are sorted by path and line."""
-    declared = _declared_paths(allowances, LayoutRule.TEST_IMPORT)
+    declared = _declared_paths(allowances, Rule.TEST_IMPORT)
     targets = _ImportTargets.of(modes)
     findings = []
     for path, content in contents.items():
         if path not in declared:
             findings += _import_findings(path, _parsed(path, content), targets)
-    findings += [_stale_declaration(path, LayoutRule.TEST_IMPORT) for path in declared - modes.keys()]
+    findings += [_stale_declaration(path, Rule.TEST_IMPORT) for path in declared - modes.keys()]
     return sorted(findings, key=lambda finding: (finding.path, finding.line or 0))
 
 
@@ -599,7 +596,7 @@ def _imported_targets(node: ast.Import | ast.ImportFrom, folder: PurePosixPath, 
 
 def _imports_a_test_module(path: str, line: int, names: Sequence[str]) -> Finding:
     return Finding(
-        LayoutRule.TEST_IMPORT.value, path, line,
+        Rule.TEST_IMPORT, path, line,
         f"imports the test module or conftest {', '.join(names)}.",
         "move what it needs to a support/ module, or make it a fixture in conftest.py, or declare it in "
         f"{CONFIG_PATH} with [[layout.allow]], its path, the rule test-import and a reason.",

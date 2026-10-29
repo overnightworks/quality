@@ -21,24 +21,17 @@ import yaml
 
 from quality import (
     __version__,
-    advisories,
     architecture,
     checkout,
-    claude_md,
     clones,
-    compose,
     config,
-    engines,
-    env_file,
     layout,
     process,
-    python_floor,
-    python_lint,
     ratchet,
     report,
     repository,
-    root_layout,
 )
+from quality.rules import Rule, RuleRelease, Switch
 
 FLEET_PATH = "quality/fleet.toml"
 FLEET_EXAMPLE = 'public = ["https://github.com/o/open"]\nprivate = ["https://github.com/o/closed"]'
@@ -85,10 +78,6 @@ NO_JUDGED_PROJECT = "no judged project"
 RELEASE_UNKNOWN = "release unknown"
 NOT_RELEASED = "not released"
 IMPORT_LINTER_CONFIG = "import-linter config"
-FIRST_RELEASE = "v0.1.0"
-RATCHET_RELEASE = "v0.3.0"
-CLONE_RELEASE = "v0.4.0"
-CLONE_TABLE_RELEASE = "v0.5.0"
 
 
 def release_order(tag: str) -> tuple[int, ...]:
@@ -96,63 +85,12 @@ def release_order(tag: str) -> tuple[int, ...]:
     return tuple(int(number) for number in match.groups()) if match else ()
 
 
-class Switch(Enum):
-    """What decides whether a gate that knows a rule enforces it."""
-
-    ALWAYS = "always"
-    SIZE_BASELINE = "a size baseline"
-    IMPORT_LINTER_CONFIG = "an import-linter config"
-    CLONE_TABLE = "a clone table"
-    JUDGED_PROJECT = "a judged project"
-    REPORT_ONLY = "report only"
-
-
-@dataclass(frozen=True)
-class SwitchChange:
-    """From `release` on (None: main only) `switch` decides what the gate does with the rule."""
-
-    release: str | None
-    switch: Switch
-
-
-@dataclass(frozen=True)
-class RuleRelease:
-    """A rule of the door, the first gate release that judges it (None: main only), what switches it on and how that
-    changes at a later release."""
-
-    rule: str
-    first_release: str | None
-    switch: Switch
-    switched: SwitchChange | None = None
-
-
-# In cell order. The tripwire test holds the ids equal to the rules `hygiene.run_hygiene` judges.
-RULES = (
-    RuleRelease(env_file.ENV_FILE, FIRST_RELEASE, Switch.ALWAYS),
-    RuleRelease(compose.COMPOSE_PORT, FIRST_RELEASE, Switch.ALWAYS),
-    RuleRelease(engines.LEAK_RULE, FIRST_RELEASE, Switch.ALWAYS),
-    RuleRelease(engines.WORKFLOW_LINT, FIRST_RELEASE, Switch.ALWAYS),
-    RuleRelease(engines.WORKFLOW_SECURITY, FIRST_RELEASE, Switch.ALWAYS),
-    RuleRelease(claude_md.CLAUDE_MD, RATCHET_RELEASE, Switch.ALWAYS),
-    RuleRelease(root_layout.ROOT_LAYOUT, None, Switch.ALWAYS),
-    RuleRelease(config.LayoutRule.FILE_SUFFIX.value, None, Switch.ALWAYS),
-    RuleRelease(config.LayoutRule.SCRIPT_NAME.value, None, Switch.ALWAYS),
-    RuleRelease(config.LayoutRule.SCRIPT_HEADER.value, None, Switch.ALWAYS),
-    RuleRelease(config.LayoutRule.TEST_LAYOUT.value, None, Switch.JUDGED_PROJECT),
-    RuleRelease(config.LayoutRule.TEST_IMPORT.value, None, Switch.ALWAYS),
-    RuleRelease(python_floor.PYTHON_FLOOR, None, Switch.ALWAYS),
-    RuleRelease(python_lint.SECURITY_RULE, None, Switch.ALWAYS),
-    RuleRelease(python_lint.PRINT_RULE, None, Switch.ALWAYS),
-    RuleRelease(advisories.RULE, RATCHET_RELEASE, Switch.ALWAYS),
-    RuleRelease(ratchet.SIZE, RATCHET_RELEASE, Switch.SIZE_BASELINE),
-    RuleRelease(architecture.RULE, RATCHET_RELEASE, Switch.IMPORT_LINTER_CONFIG),
-    RuleRelease(clones.RULE, CLONE_RELEASE, Switch.REPORT_ONLY, SwitchChange(CLONE_TABLE_RELEASE, Switch.CLONE_TABLE)),
-)
-OLDEST_RELEASE = min((rule.first_release for rule in RULES if rule.first_release), key=release_order)
+RELEASES = tuple(rule.release for rule in Rule)
+OLDEST_RELEASE = min((rule.first_release for rule in RELEASES if rule.first_release), key=release_order)
 EVERY_RELEASE_ENFORCES = tuple(
-    rule for rule in RULES if rule.switch is Switch.ALWAYS and rule.first_release == OLDEST_RELEASE
+    rule for rule in RELEASES if rule.switch is Switch.ALWAYS and rule.first_release == OLDEST_RELEASE
 )
-SWITCHED_RULES = tuple(rule for rule in RULES if rule not in EVERY_RELEASE_ENFORCES)
+SWITCHED_RULES = tuple(rule for rule in RELEASES if rule not in EVERY_RELEASE_ENFORCES)
 MATRIX_COLUMNS = (*FIXED_MATRIX_COLUMNS, *(rule.rule for rule in SWITCHED_RULES))
 
 

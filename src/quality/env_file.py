@@ -3,8 +3,8 @@
 from pathlib import PurePosixPath
 
 from quality.report import Finding, shell_word
+from quality.rules import Rule
 
-ENV_FILE = "env-file"
 ENV_TEMPLATE_SUFFIX = ".example"
 
 
@@ -18,7 +18,7 @@ def _untrack_fix(name: str) -> str:
 def check_env_files(tracked: list[str]) -> list[Finding]:
     return [
         Finding(
-            ENV_FILE, name, None,
+            Rule.ENV_FILE, name, None,
             "a tracked env file publishes configuration and often secrets.",
             _untrack_fix(name),
         )

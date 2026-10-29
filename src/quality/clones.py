@@ -15,8 +15,8 @@ from dataclasses import dataclass
 from quality import ratchet
 from quality.ratchet import Area, ClonePair, Place
 from quality.report import Finding
+from quality.rules import Rule
 
-RULE = "clone"
 MIN_TOKENS = 40
 SHINGLE_SIZE = 5
 SIMILARITY_THRESHOLD = 0.9
@@ -156,7 +156,7 @@ def summarise_pairs(pairs: frozenset[ClonePair]) -> dict[Area, int]:
 
 def report_line(pairs: frozenset[ClonePair]) -> str:
     counts = ", ".join(f"{area.value}: {count} pair(s)" for area, count in summarise_pairs(pairs).items())
-    return f"{RULE}: report only (no [clones] in {ratchet.BASELINE_PATH}) - {counts}"
+    return f"{Rule.CLONE}: report only (no [clones] in {ratchet.BASELINE_PATH}) - {counts}"
 
 
 def compare_pairs(measured: ClonePairs, held: frozenset[ClonePair]) -> list[Finding]:
@@ -170,12 +170,12 @@ def compare_pairs(measured: ClonePairs, held: frozenset[ClonePair]) -> list[Find
 def _new_pair_finding(pair: ClonePair, line: int) -> Finding:
     reason = f"function {pair.second.symbol} is a near copy of {pair.first.path} {pair.first.symbol} (new pair)."
     fix = "give the shared body one owner and call it, or make the cases one parametrized test"
-    return Finding(RULE, pair.second.path, line, reason, fix)
+    return Finding(Rule.CLONE, pair.second.path, line, reason, fix)
 
 
 def _stale_pair_finding(pair: ClonePair) -> Finding:
     reason = f"the baseline holds the pair {pair.label}, which is gone (stale)."
-    return Finding(RULE, pair.first.path, None, reason, f"lower it with `{ratchet.WRITE_COMMAND}`")
+    return Finding(Rule.CLONE, pair.first.path, None, reason, f"lower it with `{ratchet.WRITE_COMMAND}`")
 
 
 def check_clones(tree: ratchet.TreeMeasurement, sources: dict[str, bytes], baseline: ratchet.Baseline | None) -> ratchet.RuleResult:

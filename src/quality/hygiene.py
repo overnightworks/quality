@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from enum import Enum
 from functools import partial
 from pathlib import Path, PurePosixPath
+from typing import Protocol
 
 from quality import (
     advisories,
@@ -26,13 +27,10 @@ from quality.config import (
     Allowance,
     AllowLists,
     ConfigError,
-    LayoutRule,
     read_allow_lists,
 )
 from quality.report import CannotJudge, Finding, Unparsable
-
-WORKFLOW_RULE_IDS = tuple(engines.WORKFLOW_ENGINES)
-ENGINE_RULE_IDS = (engines.LEAK_RULE, *WORKFLOW_RULE_IDS, advisories.RULE)
+from quality.rules import Engines, Rule
 
 
 def _python_floor_result(root: Path, modes: dict[str, str] | CannotJudge, allow_lists: AllowLists | CannotJudge) -> python_floor.FloorResult:
@@ -106,7 +104,7 @@ def check_secrets(root: Path, engine_dir: Path, allow_lists: AllowLists | Cannot
         raise CannotJudge(str(error)) from error
 
 
-def check_workflows(root: Path, engine_dir: Path, rule: str, tracked: list[str]) -> list[Finding]:
+def check_workflows(root: Path, engine_dir: Path, rule: Rule, tracked: list[str]) -> list[Finding]:
     workflows = checkout.on_disk(root, [name for name in tracked if checkout.is_workflow(PurePosixPath(name))])
     try:
         return engines.scan_workflows(root, engine_dir, engines.read_pins(), rule, workflows)
@@ -124,8 +122,8 @@ def check_advisories(root: Path, engine_dir: Path, tracked: list[str], allow_lis
         raise CannotJudge(str(error)) from error
 
 
-def skipped_rules(engine_dir: Path | None) -> tuple[str, ...]:
-    return ENGINE_RULE_IDS if engine_dir is None else ()
+def skipped_rules(engine_dir: Path | None) -> tuple[Rule, ...]:
+    return tuple(rule for rule in Rule if rule.engines is Engines.NEEDED) if engine_dir is None else ()
 
 
 class Outcome(Enum):
@@ -139,7 +137,7 @@ class Outcome(Enum):
 
 @dataclass(frozen=True)
 class RuleVerdict:
-    rule: str
+    rule: Rule
     findings: tuple[Finding, ...] = ()
     refusal: CannotJudge | None = None
 
@@ -175,7 +173,17 @@ def _attempt[T](check: Callable[[], T]) -> T | CannotJudge:
         return refusal
 
 
-def _verdict(rule: str, outcome: Sequence[Finding] | CannotJudge) -> RuleVerdict:
+class _Judged(Protocol):
+    @property
+    def findings(self) -> Sequence[Finding]: ...
+
+
+def _findings(judged: _Judged | CannotJudge) -> Sequence[Finding] | CannotJudge:
+    """What a rule's check found, or the reason it cannot judge."""
+    return judged if isinstance(judged, CannotJudge) else judged.findings
+
+
+def _verdict(rule: Rule, outcome: Sequence[Finding] | CannotJudge) -> RuleVerdict:
     """The verdict of the rule a check judges; a check that cannot judge leaves its rule unjudged."""
     if isinstance(outcome, CannotJudge):
         return RuleVerdict(rule, refusal=outcome)
@@ -230,31 +238,36 @@ def run_hygiene(root: Path, engine_dir: Path | None, locate_ruff: Callable[[], s
     floor = _attempt(lambda: _python_floor_result(root, modes, allow_lists))
     lint = _attempt(lambda: lint_python(root, modes, locate_ruff))
     printing = _judge_lint(lint, python_lint.judge_print)
-    verdicts = [
-        _verdict(env_file.ENV_FILE, env_file.check_env_files(tracked)),
-        _verdict(compose.COMPOSE_PORT, _attempt(lambda: compose.check_compose_ports(root, tracked, _required(allow_lists).compose))),
-        _verdict(ratchet.SIZE, size if isinstance(size, CannotJudge) else size.findings),
-        _verdict(clones.RULE, clone if isinstance(clone, CannotJudge) else clone.findings),
-        _verdict(architecture.RULE, contracts if isinstance(contracts, CannotJudge) else contracts.findings),
-        _verdict(claude_md.CLAUDE_MD, _attempt(lambda: claude_md.check_claude_md(root, tracked))),
-        _verdict(root_layout.ROOT_LAYOUT, _attempt(lambda: root_layout.check_root_layout(tracked, _required(allow_lists).root))),
-        _verdict(LayoutRule.FILE_SUFFIX.value, _attempt(lambda: layout.check_file_suffix(_required(modes), _required(allow_lists).layout))),
-        _verdict(LayoutRule.SCRIPT_NAME.value, _content_findings(root, modes, allow_lists, layout.script_candidates, layout.check_script_name)),
-        _verdict(LayoutRule.SCRIPT_HEADER.value, _content_findings(root, modes, allow_lists, layout.script_candidates, layout.check_script_header)),
-        _verdict(LayoutRule.TEST_LAYOUT.value, _attempt(lambda: layout.check_test_layout(_required(modes), _required(allow_lists).layout))),
-        _verdict(LayoutRule.TEST_IMPORT.value, _content_findings(root, modes, allow_lists, layout.test_import_candidates, layout.check_test_import)),
-        _verdict(python_floor.PYTHON_FLOOR, floor if isinstance(floor, CannotJudge) else floor.findings),
-        _verdict(python_lint.SECURITY_RULE, _judge_lint(lint, python_lint.judge_security)),
-        _verdict(python_lint.PRINT_RULE, printing if isinstance(printing, CannotJudge) else printing.findings),
-    ]
+    outcomes: dict[Rule, Sequence[Finding] | CannotJudge] = {
+        Rule.ENV_FILE: env_file.check_env_files(tracked),
+        Rule.COMPOSE_PORT: _attempt(lambda: compose.check_compose_ports(root, tracked, _required(allow_lists).compose)),
+        Rule.SIZE: _findings(size),
+        Rule.CLONE: _findings(clone),
+        Rule.IMPORT_CONTRACT: _findings(contracts),
+        Rule.CLAUDE_MD: _attempt(lambda: claude_md.check_claude_md(root, tracked)),
+        Rule.ROOT_LAYOUT: _attempt(lambda: root_layout.check_root_layout(tracked, _required(allow_lists).root)),
+        Rule.FILE_SUFFIX: _attempt(lambda: layout.check_file_suffix(_required(modes), _required(allow_lists).layout)),
+        Rule.SCRIPT_NAME: _content_findings(root, modes, allow_lists, layout.script_candidates, layout.check_script_name),
+        Rule.SCRIPT_HEADER: _content_findings(root, modes, allow_lists, layout.script_candidates, layout.check_script_header),
+        Rule.TEST_LAYOUT: _attempt(lambda: layout.check_test_layout(_required(modes), _required(allow_lists).layout)),
+        Rule.TEST_IMPORT: _content_findings(root, modes, allow_lists, layout.test_import_candidates, layout.check_test_import),
+        Rule.PYTHON_FLOOR: _findings(floor),
+        Rule.PYTHON_SECURITY: _judge_lint(lint, python_lint.judge_security),
+        Rule.PYTHON_PRINT: _findings(printing),
+    }
+    verdicts = [_verdict(rule, outcomes[rule]) for rule in Rule if rule.engines is Engines.NOT_NEEDED]
     reports = _reports(size, clone, contracts, floor, printing)
     if engine_dir is None:
         return HygieneResult(tuple(verdicts), reports, [], {})
     secrets = _attempt(lambda: check_secrets(root, engine_dir, allow_lists))
-    verdicts.append(_verdict(engines.LEAK_RULE, secrets if isinstance(secrets, CannotJudge) else secrets.findings))
-    verdicts += [_verdict(rule, _attempt(partial(check_workflows, root, engine_dir, rule, tracked))) for rule in WORKFLOW_RULE_IDS]
+    workflows = {rule: _attempt(partial(check_workflows, root, engine_dir, rule, tracked)) for rule in engines.WORKFLOW_ENGINES}
     advisory = _attempt(partial(check_advisories, root, engine_dir, tracked, allow_lists))
-    verdicts.append(_verdict(advisories.RULE, advisory if isinstance(advisory, CannotJudge) else advisory.findings))
+    scanned = {
+        Rule.SECRET: _findings(secrets),
+        **workflows,
+        Rule.ADVISORY: _findings(advisory),
+    }
+    verdicts += [_verdict(rule, scanned[rule]) for rule in Rule if rule.engines is Engines.NEEDED]
     allowed_advisories = () if isinstance(advisory, CannotJudge) else advisory.report()
     allowed, unused = ([], {}) if isinstance(secrets, CannotJudge) else (secrets.allowed, secrets.unused_allowances)
     return HygieneResult(tuple(verdicts), (*reports, *allowed_advisories), allowed, unused)
