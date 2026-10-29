@@ -11,13 +11,11 @@ from quality.config import (
     ConfigError,
     Declaration,
     LegacyMode,
-    load_advisory_allowances,
+    load_allow_lists,
     load_gate_settings,
-    load_secret_allowances,
     load_staged_secret_allowances,
-    read_advisory_allowances,
+    read_allow_lists,
     read_gate_settings,
-    read_secret_allowances,
 )
 from tests.support.advisories import allowance_config
 
@@ -121,14 +119,14 @@ def allow_entry(**changes: str) -> str:
 def test_reads_every_allowed_value_with_its_reason():
     """#24 rule 1: [secrets] allow maps each rule, file and value hash to its reason, beside the gate keys."""
     text = f'[gate]\nmandatory_jobs = ["checks"]\n[secrets]\nallow = [{ENTRY}]'
-    assert load_secret_allowances(text) == {Allowance("aws-access-token", "tests/fixture.py", HASH): "fixture value"}
+    assert load_allow_lists(text).secrets == {Allowance("aws-access-token", "tests/fixture.py", HASH): "fixture value"}
     assert load_gate_settings(text).mandatory_jobs == ("checks",)
 
 
 @pytest.mark.parametrize("text", [None, '[gate]\nmandatory_jobs = ["checks"]'])
 def test_a_config_without_allowances_allows_nothing(text):
     """#24 rule 3: an absent allow list allows nothing."""
-    assert load_secret_allowances(text) == {}
+    assert load_allow_lists(text).secrets == {}
 
 
 @pytest.mark.parametrize(
@@ -161,13 +159,13 @@ def test_a_config_without_allowances_allows_nothing(text):
 def test_refuses_an_allowance_that_is_not_a_rule_file_hash_and_reason(text):
     """#24 rule 2: an invalid allow entry cannot be judged."""
     with pytest.raises(ConfigError, match="quality/config.toml"):
-        load_secret_allowances(text)
+        load_allow_lists(text)
 
 
 def test_the_old_fingerprint_form_is_refused_with_the_new_form_shown():
     """#24 rule 2: the message of a fingerprint entry shows the content-bound form."""
     with pytest.raises(ConfigError, match="secret_sha256"):
-        load_secret_allowances('[secrets]\nallow = [{ fingerprint = "a:b:c:1", reason = "old form" }]')
+        load_allow_lists('[secrets]\nallow = [{ fingerprint = "a:b:c:1", reason = "old form" }]')
 
 
 @pytest.mark.parametrize(
@@ -177,14 +175,14 @@ def test_the_old_fingerprint_form_is_refused_with_the_new_form_shown():
 )
 def test_the_staged_allow_list_ignores_everything_outside_secrets(extra):
     """#40 rule 1: a newer gate schema cannot stop the staged scan of an older quality."""
-    assert load_staged_secret_allowances(f"{extra}\n[secrets]\nallow = [{ENTRY}]") == load_secret_allowances(
+    assert load_staged_secret_allowances(f"{extra}\n[secrets]\nallow = [{ENTRY}]") == load_allow_lists(
         f"[secrets]\nallow = [{ENTRY}]"
-    )
+    ).secrets
 
 
 def test_a_repository_without_the_file_allows_nothing(tmp_path):
     """#24 rule 3: a missing quality/config.toml allows nothing."""
-    assert read_secret_allowances(tmp_path) == {}
+    assert read_allow_lists(tmp_path).secrets == {}
 
 
 @pytest.mark.parametrize(
@@ -229,14 +227,14 @@ def test_an_advisory_allowance_is_read_by_every_loader_that_reads_the_whole_conf
     (tmp_path / "quality").mkdir()
     (tmp_path / CONFIG_PATH).write_text(text)
     assert load_gate_settings(text).advisory_allowances == (QWEN_ALLOWANCE,)
-    assert read_advisory_allowances(tmp_path) == load_advisory_allowances(text) == (QWEN_ALLOWANCE,)
-    assert load_secret_allowances(text) == {}
+    assert read_allow_lists(tmp_path).advisories == load_allow_lists(text).advisories == (QWEN_ALLOWANCE,)
+    assert load_allow_lists(text).secrets == {}
 
 
 @pytest.mark.parametrize("text", [None, '[gate]\nmandatory_jobs = ["checks"]'], ids=["no config", "no allowance"])
 def test_a_config_without_advisory_allowances_allows_no_advisory(text):
     """#116 E1: no config or no [[advisories.allow]] entry allows nothing."""
-    assert load_advisory_allowances(text) == ()
+    assert load_allow_lists(text).advisories == ()
 
 
 SONGMAKER_DECLARATION = (
@@ -352,7 +350,7 @@ def test_a_malformed_advisory_allowance_cannot_be_judged_where_the_whole_config_
 def test_a_malformed_advisory_allowance_shows_the_example(entry):
     """#116 cell 12: the refusal of an [[advisories.allow]] entry shows how to write one."""
     with pytest.raises(ConfigError, match=re.escape(ALLOWANCE_EXAMPLE_LINE)):
-        load_advisory_allowances(entry)
+        load_allow_lists(entry)
 
 
 def test_the_verdict_refuses_a_malformed_secret_allowance_as_hygiene_does(capsys, run_env):
