@@ -817,6 +817,21 @@ def test_a_mise_answer_that_names_no_existing_absolute_file_cannot_judge(build_r
     assert scanners.install_command() in err
 
 
+@pytest.mark.parametrize("broken", ["mise", "version"])
+def test_a_mise_or_scanner_whose_output_cannot_be_read_still_names_the_install_command(
+    build_repo, use_mise, served_scanners, capsys, broken
+):
+    """#265: every failure to locate a scanner, a process error included, is exit 2 with the command that installs it."""
+    if broken == "mise":
+        use_mise("printf '\\377'")
+    else:
+        fake_scanner(served_scanners, scanners.GITLEAKS, "true").write_text("#!/bin/sh\nprintf '\\377'\n")
+        use_mise(serving(served_scanners))
+    assert cli.main(["hygiene", str(build_repo({}))]) == 2
+    err = capsys.readouterr().err
+    assert scanners.install_command() in err, err
+
+
 def test_a_repository_with_no_workflow_and_no_lock_needs_only_gitleaks(build_repo, path_without_mise, capsys):
     """#265 F1: nothing to scan needs no scanner, so without mise only the secret rule cannot judge."""
     assert cli.main(["hygiene", str(build_repo({}))]) == 2

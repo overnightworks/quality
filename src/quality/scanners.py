@@ -15,7 +15,6 @@ from quality.rules import Rule
 GITLEAKS = "gitleaks"
 CLEAN_EXIT = 0
 GITLEAKS_LEAKS_FOUND = 7  # gitleaks exits 1 on its own errors too, so leaks get a code of their own
-DOWNLOAD_TIMEOUT_SECONDS = 120
 SECRET_SCAN_TIMEOUT_SECONDS = 1800  # bounds the scan so the scratch directory and its mirror are always deleted
 LEAK_FIELDS = ("File", "StartLine", "RuleID", "Commit", "Secret")
 ACTIONLINT = "actionlint"
@@ -72,11 +71,14 @@ def located(name: str) -> Path:
             f"mise is not installed, and quality finds {name} only through it; install mise ({MISE_INSTALLATION_PAGE}), "
             f"then: {install_command()}"
         )
-    asked = process.run(
-        [MISE, "--cd", str(MANIFEST_DIRECTORY), "which", name, "--tool", f"{tool.key}@{tool.version}"],
-        env=os.environ | {MISE_CEILING_VARIABLE: str(MANIFEST_DIRECTORY.parent)},
-        timeout=process.VERSION_TIMEOUT_SECONDS,
-    )
+    try:
+        asked = process.run(
+            [MISE, "--cd", str(MANIFEST_DIRECTORY), "which", name, "--tool", f"{tool.key}@{tool.version}"],
+            env=os.environ | {MISE_CEILING_VARIABLE: str(MANIFEST_DIRECTORY.parent)},
+            timeout=process.VERSION_TIMEOUT_SECONDS,
+        )
+    except process.ProcessError as error:
+        raise ScannerError(f"{error}; install quality's scanners: {install_command()}") from error
     if asked.returncode != 0:
         raise ScannerError(
             f"mise has no {name} {tool.version} (mise exited {asked.returncode}{process.stderr_tail(asked.stderr)}); "
@@ -87,7 +89,7 @@ def located(name: str) -> Path:
         raise ScannerError(f"mise which printed no {name} executable; install quality's scanners: {install_command()}")
     try:
         verify_version(answer, name, tool.version)
-    except ScannerError as error:
+    except process.ProcessError as error:
         raise ScannerError(f"{error}; install quality's scanners: {install_command()}") from error
     return answer
 
