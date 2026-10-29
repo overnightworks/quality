@@ -1,6 +1,6 @@
 # quality
 
-One door, `quality` (`src/quality/cli.py`). Rules return `Finding`s (`report.py`) and never print.
+One door, `quality` (`src/quality/cli.py`); every line it prints, and the step summary, leave through `output.py`, apart from argparse's help, usage errors and `--version` and `input()`'s prompt. Rules return `Finding`s (`report.py`) and never print.
 Exit 0 clean, 1 findings, 2 cannot judge (`CannotJudge` and `Unparsable` in `report.py`).
 
 Door commands:

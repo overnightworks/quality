@@ -1,14 +1,12 @@
 import argparse
 import json
 import os
-import secrets
 import sys
 import time
 from collections import Counter
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TextIO
 
 from ruff import find_ruff_bin
 
@@ -21,7 +19,8 @@ from quality.hygiene import (
     run_hygiene,
     skipped_rules,
 )
-from quality.report import CannotJudge, Finding, headline, printable, render
+from quality.output import append_step_summary, emit, emit_finding, set_up_streams
+from quality.report import CannotJudge, Finding, headline
 from quality.sonar import (
     DEPENDABOT_CONFIG,
     TASK_FILE,
@@ -157,18 +156,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     fleet.add_argument("path", nargs="?", type=Path, default=Path("."))
     return parser
-
-
-def emit(*lines: str, file: TextIO | None = None) -> None:
-    """The one print boundary: every line the door prints leaves through `printable`, and the door never splits text,
-    so a line of repository text cannot become several lines."""
-    for line in lines:
-        print(printable(line), file=file)
-
-
-def emit_finding(finding: Finding) -> None:
-    """A finding's rendered lines; `render` escapes every newline of repository text, so the split finds only its own."""
-    emit(*render(finding).split("\n"))
 
 
 def run_hygiene_check(path: Path, engine_dir: Path | None, locate_ruff: Callable[[], str]) -> int:
@@ -358,36 +345,9 @@ def run_scoreboard(path: Path, release_tags: scoreboard.TagReader) -> int:
     return EXIT_CANNOT_JUDGE if scoreboard.cannot_judge(rows, tags) else EXIT_CLEAN
 
 
-def append_step_summary(report: tuple[str, ...]) -> None:
-    """In a GitHub Actions step, the run summary gets the same escaped lines as the log."""
-    summary = os.environ.get("GITHUB_STEP_SUMMARY")
-    if summary:
-        with open(summary, "a", encoding="utf-8") as handle:
-            handle.write("".join(f"{printable(line)}\n" for line in report))
-
-
 def run(door: Callable[[], int] = main, environment: Mapping[str, str] = os.environ) -> None:
-    # stderr is line-buffered since Python 3.9, but a pipe makes stdout block-buffered, so `2>&1` showed stderr first.
-    # stdout is None when fd 1 was closed before Python started.
-    if sys.stdout is not None:
-        sys.stdout.reconfigure(line_buffering=True)
-    if environment.get("GITHUB_ACTIONS") == "true":
-        stop_workflow_commands()
+    set_up_streams(environment)
     sys.exit(door())
-
-
-def stop_workflow_commands() -> None:
-    """Repository text can spell a workflow command (`::warning::`, `##[add-mask]`), and the runner would run it.
-
-    The stop lasts the rest of the step: the runner keeps the pause per step (actions/runner v2.338.0, `Handler.cs`),
-    and the door never prints the line that lifts it. The runner reads the two pipes without order and handles stderr
-    first (`ProcessInvoker.cs`), so each stream starts with the stop. The token is new per run and appears only in this
-    line, which the runner masks.
-    """
-    stop = f"::stop-commands::{secrets.token_hex(16)}"
-    for stream in (sys.stderr, sys.stdout):
-        if stream is not None:
-            print(stop, file=stream, flush=True)
 
 
 if __name__ == "__main__":
