@@ -23,7 +23,7 @@ from typing import NamedTuple, Self
 import lizard
 
 from quality import __version__, checkout, repository
-from quality.report import Finding
+from quality.report import Finding, Unparsable
 
 SIZE = "size"
 BASELINE_PATH = "quality/baseline.toml"
@@ -552,3 +552,26 @@ def _count(where: str, value: object) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
         raise SizeError(f"{BASELINE_PATH} needs {where} as a positive count, not {value!r}")
     return value
+
+
+@dataclass(frozen=True)
+class RuleResult:
+    """A baseline rule's findings, and its report line when it only counts."""
+
+    findings: list[Finding]
+    report: str | None
+
+
+def complete(tree: TreeMeasurement) -> Measurements:
+    """Holding a baseline needs every function measured, so an unparsable file cannot be judged."""
+    try:
+        return tree.complete()
+    except UnparsableSource as error:
+        raise Unparsable(str(error)) from error
+
+
+def check_size(tree: TreeMeasurement, baseline: Baseline | None) -> RuleResult:
+    """Report-only without a baseline; with one, the tree on disk must hold it."""
+    if baseline is None:
+        return RuleResult([], report_counts(tree))
+    return RuleResult(compare(complete(tree), baseline.size), None)

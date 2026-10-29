@@ -176,3 +176,13 @@ def _new_pair_finding(pair: ClonePair, line: int) -> Finding:
 def _stale_pair_finding(pair: ClonePair) -> Finding:
     reason = f"the baseline holds the pair {pair.label}, which is gone (stale)."
     return Finding(RULE, pair.first.path, None, reason, f"lower it with `{ratchet.WRITE_COMMAND}`")
+
+
+def check_clones(tree: ratchet.TreeMeasurement, sources: dict[str, bytes], baseline: ratchet.Baseline | None) -> ratchet.RuleResult:
+    """Report-only without a `[clones]` table, even in a baseline of size tables; with one, every new pair and every
+    held pair the tree lost is a finding. A pair can hide in a file the detector cannot read, so then it cannot judge."""
+    pairs = find_pairs(sources)
+    if baseline is None or baseline.clones is None:
+        return ratchet.RuleResult([], report_line(pairs.pairs))
+    ratchet.complete(tree)
+    return ratchet.RuleResult(compare_pairs(pairs, baseline.clones), None)
