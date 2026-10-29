@@ -73,6 +73,7 @@ layers = [
     "architecture | clones | engines | layout | pip_requirements",
     "ratchet",
     "checkout",
+    "output",
     "report",
     "config",
     "repository",
