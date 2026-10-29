@@ -23,7 +23,7 @@ from quality.scoreboard import (
     require_anonymous,
 )
 from tests.support.clones import function as clone_function
-from tests.support.git_repositories import GIT_IDENTITY, head_of
+from tests.support.git_repositories import GIT_IDENTITY, head_of, make_repo
 from tests.support.scoreboard import MATRIX_HEADING, RELEASES, row, write_fleet
 from tests.support.source_code import (
     branchy_function,
@@ -599,3 +599,15 @@ def test_the_clone_pairs_cell_counts_a_pair_as_test_only_when_both_sides_are_tes
     code, output = scoreboard(public("twins", files))
     assert code == 0, output
     assert row(output, "twins")[8] == pairs
+
+
+@pytest.mark.integration
+def test_a_public_repo_with_an_unreadable_tracked_file_cannot_be_measured(scoreboard, tmp_path):
+    """#227 finding 10: a tracked symlink to a folder is refused as a read, and the row names the file, never the clone."""
+    directory = tmp_path / "remotes" / "linked"
+    directory.mkdir(parents=True)
+    os.symlink("docs", directory / "x.py")
+    code, output = scoreboard(make_repo(directory, {"docs/a.md": "text\n"}).as_uri())
+    assert code == 2, output
+    assert row(output, "linked")[1:3] == ["—", "cannot judge: cannot measure (x.py is not a file)"]
+    assert str(tmp_path) not in output
