@@ -7,13 +7,12 @@ import textwrap
 from pathlib import Path
 
 import pytest
-from ruff import find_ruff_bin
 
-from quality import cli, env_file, hygiene, process, sonar
+from quality import cli, env_file, hygiene, installation, process, sonar
 from quality.compose import is_compose_file
 from quality.report import Finding
-from tests.support.engines import fake_engine
-from tests.support.hygiene import CLEAN_LINE, ENGINE_RULES, FILE_RULES, compose
+from tests.support.engines import fake_engine, fake_zizmor, never_located, nothing_installed
+from tests.support.hygiene import CLEAN_LINE, ENGINE_RULES, FILE_RULES, compose, installed_ruff, loosen_requirement
 from tests.support.hygiene import hygiene_output as run
 
 
@@ -166,17 +165,68 @@ def test_a_finding_under_a_rule_its_check_does_not_judge_fails_loud(build_repo, 
         cli.main(arguments)
 
 
-def test_a_refusing_workflow_engine_stops_no_other_workflow_rule(build_repo, clean_engines, capsys):
+def test_a_refusing_workflow_engine_stops_no_other_workflow_rule(build_repo, clean_engines, elsewhere, capsys):
     """#55 rule 1: actionlint cannot judge, yet zizmor still runs and its finding prints under its own rule."""
     zizmor_report = Path(__file__).parent / "fixtures" / "engine-outputs" / "zizmor-finding.json"
     fake_engine(clean_engines, "actionlint", on_scan="echo boom >&2; exit 3")
-    fake_engine(clean_engines, "zizmor", on_scan=f"cat '{zizmor_report}'; exit 12")
+    locate_zizmor = fake_zizmor(elsewhere, on_scan=f"cat '{zizmor_report}'; exit 12")
     repo = build_repo({".github/workflows/w.yml": "on: push\n"})
-    code = cli.main(["hygiene", "--engines", str(clean_engines), str(repo)])
+    code = cli.main(["hygiene", "--engines", str(clean_engines), str(repo)], locate_zizmor=locate_zizmor)
     captured = capsys.readouterr()
     assert code == 2
     assert "hygiene: workflow-lint cannot judge - actionlint exited 3" in captured.err
     assert "workflow-security .github/workflows/w.yml:7 - zizmor unpinned-uses" in captured.out
+
+
+@pytest.mark.parametrize("case", ["not installed", "recorded file deleted", "another version", "failing version", "unpinned"])
+def test_a_zizmor_quality_cannot_find_or_trust_refuses_only_workflow_security(
+    build_repo, clean_engines, elsewhere, monkeypatch, capsys, case
+):
+    """#248 rule 4: a zizmor that is missing, at another version or unable to report one cannot judge and names the
+    reinstall command; a pin quality's own metadata lacks names the defect and no command; no other rule refuses."""
+    fake_engine(clean_engines, "actionlint", on_scan="echo '[]'")
+    repo = build_repo({".env": "A=1\n", ".github/workflows/w.yml": "on: push\n"})
+    for name in ("another", "failing", "pinned"):
+        (elsewhere / name).mkdir()
+    failing = elsewhere / "failing" / "zizmor"
+    failing.write_text("#!/bin/sh\nexit 1\n")
+    failing.chmod(0o755)
+    locators = {
+        "not installed": nothing_installed,
+        "recorded file deleted": lambda: str(elsewhere / "gone" / "zizmor"),
+        "another version": fake_zizmor(elsewhere / "another", "echo '[]'", version="0.0.1"),
+        "failing version": lambda: str(failing),
+        "unpinned": fake_zizmor(elsewhere / "pinned", "echo '[]'"),
+    }
+    if case == "unpinned":
+        loosen_requirement(elsewhere / "metadata", monkeypatch, "zizmor")
+    code = cli.main(["hygiene", "--engines", str(clean_engines), str(repo)], locate_zizmor=locators[case])
+    captured = capsys.readouterr()
+    output = captured.out + captured.err
+    assert code == 2, output
+    assert "hygiene: workflow-security cannot judge - " in output, output
+    assert "workflow-lint cannot judge" not in output
+    assert "env-file .env - " in output
+    assert (installation.REINSTALL in output) is (case != "unpinned"), output
+    if case == "unpinned":
+        assert str(installation.UnpinnedDependency("zizmor")) in output
+    versions_named = ["0.0.1", installation.required_version("zizmor")] if case == "another version" else []
+    assert [version for version in versions_named if version not in output] == [], output
+
+
+def test_a_zizmor_planted_in_the_engine_directory_is_never_run(build_repo, clean_engines, elsewhere, capsys):
+    """#248 rule 4, no bridge: the verdict comes from quality's installation, not from the engine directory."""
+    marker = elsewhere / "ran"
+    planted = clean_engines / "zizmor"
+    planted.write_text(f"#!/bin/sh\ntouch {marker}\n")
+    planted.chmod(0o755)
+    fake_engine(clean_engines, "actionlint", on_scan="echo '[]'")
+    (elsewhere / "installed").mkdir()
+    repo = build_repo({".github/workflows/w.yml": "on: push\n"})
+    code = cli.main(
+        ["hygiene", "--engines", str(clean_engines), str(repo)], locate_zizmor=fake_zizmor(elsewhere / "installed", "echo '[]'")
+    )
+    assert (code, marker.exists()) == (0, False), capsys.readouterr()
 
 
 MODULE_DOOR = [sys.executable, "-m", "quality.cli"]
@@ -278,7 +328,7 @@ def test_an_index_record_quality_cannot_read_refuses_exactly_the_rules_that_read
         return real_run(command, *args, **kwargs)
 
     monkeypatch.setattr(process, "run", unreadable_modes)
-    verdicts = hygiene.run_hygiene(repo, None, find_ruff_bin).verdicts
+    verdicts = hygiene.run_hygiene(repo, None, installed_ruff, never_located).verdicts
     refused = [(verdict.rule, str(verdict.refusal)) for verdict in verdicts if verdict.refusal is not None]
     assert [rule for rule, _ in refused] == [
         "file-suffix", "script-name", "script-header", "test-layout", "test-import", "python-floor", "python-security", "python-print",

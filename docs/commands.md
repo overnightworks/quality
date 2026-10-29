@@ -88,6 +88,12 @@ its pin sets `format = "binary"` (osv-scanner, a bare executable), which is inst
 `quality engines verify DIR` is exit `0` when every pinned engine in `DIR` reports exactly its pinned version, otherwise
 exit `2` with one line per engine.
 
+zizmor (the `workflow-security` rule) and ruff (`python-security`, `python-print`) are no engines. They are pinned
+dependencies of quality's package (`pyproject.toml`, hashed in `uv.lock`), so installing quality installs them. quality
+runs the executable its own installation recorded, never one on `PATH` or in `DIR`. A missing one, or one at another
+version, makes its rules `cannot judge` (exit `2`) with the command that reinstalls quality; a scanner quality's own
+metadata does not pin exactly makes them `cannot judge` as a defect in quality's release.
+
 quality builds the logic and the process itself and never a specialist engine (language linters and test runners,
 gitleaks, osv-scanner, mutation engines); the engines it uses run pinned underneath the one door (operator ruling
 15.10.2026: „ja! ich agree => ein fleet quality“).

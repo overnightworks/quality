@@ -10,6 +10,7 @@ dependencies = [
     "lizard>=1.24.1,<1.25",
     "packaging>=24",
     "ruff==0.17.1",
+    "zizmor==1.31.1",
 ]
 
 [project.scripts]
@@ -80,4 +81,5 @@ layers = [
     "repository",
     "process",
     "rules",
+    "installation",
 ]

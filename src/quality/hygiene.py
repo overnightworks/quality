@@ -104,10 +104,12 @@ def check_secrets(root: Path, engine_dir: Path, allow_lists: AllowLists | Cannot
         raise CannotJudge(str(error)) from error
 
 
-def check_workflows(root: Path, engine_dir: Path, rule: Rule, tracked: list[str]) -> list[Finding]:
+def check_workflows(
+    root: Path, engine_dir: Path, rule: Rule, tracked: list[str], locate_zizmor: Callable[[], str],
+) -> list[Finding]:
     workflows = checkout.on_disk(root, [name for name in tracked if checkout.is_workflow(PurePosixPath(name))])
     try:
-        return engines.scan_workflows(root, engine_dir, engines.read_pins(), rule, workflows)
+        return engines.scan_workflows(root, engine_dir, engines.read_pins(), rule, workflows, locate_zizmor)
     except process.ProcessError as error:
         raise CannotJudge(str(error)) from error
 
@@ -225,7 +227,9 @@ def _content_findings(
     return _attempt(judge)
 
 
-def run_hygiene(root: Path, engine_dir: Path | None, locate_ruff: Callable[[], str]) -> HygieneResult:
+def run_hygiene(
+    root: Path, engine_dir: Path | None, locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str],
+) -> HygieneResult:
     """Judges every active rule, in run order, over the repository `root` lies in; only one git cannot list stops the run."""
     root = checkout.work_tree_top(root)
     tracked = checkout.tracked_files(root)
@@ -260,7 +264,7 @@ def run_hygiene(root: Path, engine_dir: Path | None, locate_ruff: Callable[[], s
     if engine_dir is None:
         return HygieneResult(tuple(verdicts), reports, [], {})
     secrets = _attempt(lambda: check_secrets(root, engine_dir, allow_lists))
-    workflows = {rule: _attempt(partial(check_workflows, root, engine_dir, rule, tracked)) for rule in engines.WORKFLOW_ENGINES}
+    workflows = {rule: _attempt(partial(check_workflows, root, engine_dir, rule, tracked, locate_zizmor)) for rule in engines.WORKFLOW_ENGINES}
     advisory = _attempt(partial(check_advisories, root, engine_dir, tracked, allow_lists))
     scanned = {
         Rule.LEAK: _findings(secrets),

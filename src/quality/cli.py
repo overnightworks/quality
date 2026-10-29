@@ -6,11 +6,22 @@ import time
 from collections import Counter
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 
-from ruff import find_ruff_bin
-
-from quality import __version__, checkout, clones, engines, process, ratchet, repository, scoreboard, staged
+from quality import (
+    __version__,
+    checkout,
+    clones,
+    engines,
+    installation,
+    process,
+    python_lint,
+    ratchet,
+    repository,
+    scoreboard,
+    staged,
+)
 from quality.config import Allowance, ConfigError, read_gate_settings
 from quality.emergency import Ask, GhRunner, RemoteFor, github_remote, run_emergency_merge, run_gh
 from quality.hygiene import (
@@ -56,6 +67,10 @@ HYGIENE_EXIT = {
 }
 
 
+INSTALLED_RUFF = partial(installation.installed_executable, python_lint.RUFF_DISTRIBUTION)
+INSTALLED_ZIZMOR = partial(installation.installed_executable, engines.ZIZMOR)
+
+
 def main(
     argv: list[str] | None = None,
     fetcher_for: Callable[[str], PageFetcher] = github_fetcher,
@@ -67,7 +82,8 @@ def main(
     remote_for: RemoteFor = github_remote,
     ask: Ask = input,
     is_terminal: Callable[[], bool] = lambda: sys.stdin.isatty(),
-    locate_ruff: Callable[[], str] = find_ruff_bin,
+    locate_ruff: Callable[[], str] = INSTALLED_RUFF,
+    locate_zizmor: Callable[[], str] = INSTALLED_ZIZMOR,
 ) -> int:
     arguments = build_parser().parse_args(argv)
 
@@ -99,7 +115,7 @@ def main(
     if arguments.command == "engines":
         run_engines = run_engines_install if arguments.engines_command == "install" else run_engines_verify
         return run_engines(arguments.directory, read_pins)
-    return run_hygiene_check(arguments.path, arguments.engines, locate_ruff)
+    return run_hygiene_check(arguments.path, arguments.engines, locate_ruff, locate_zizmor)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -159,9 +175,11 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def run_hygiene_check(path: Path, engine_dir: Path | None, locate_ruff: Callable[[], str]) -> int:
+def run_hygiene_check(
+    path: Path, engine_dir: Path | None, locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str],
+) -> int:
     try:
-        result = run_hygiene(path, engine_dir, locate_ruff)
+        result = run_hygiene(path, engine_dir, locate_ruff, locate_zizmor)
     except CannotJudge as error:
         emit(f"hygiene: {error.label} - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
