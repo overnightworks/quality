@@ -47,3 +47,11 @@ def test_the_tests_job_installs_the_same_scanners_as_the_gate_and_runs_no_hygien
     }
     assert tests_step["uses"] == gate_step["uses"]
     assert [step for step in load("ci.yml")["jobs"]["tests"]["steps"] if "quality hygiene" in step.get("run", "")] == []
+
+
+@pytest.mark.parametrize("workflow", sorted(path.name for path in WORKFLOWS.glob("*.yml")))
+def test_no_step_of_any_workflow_names_engines(workflow):
+    """#265 test 8: the engines directory is gone, so no step's name, command, inputs or environment mentions it."""
+    for job in load(workflow).get("jobs", {}).values():
+        for step in job.get("steps", []):
+            assert "engines" not in yaml.safe_dump(step), step
