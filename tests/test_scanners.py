@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from quality import cli, process, scanners
-from quality.scanners import EngineError, Pin
+from quality.scanners import Pin, ScannerError
 from tests.support.git_repositories import GIT_IDENTITY
 from tests.support.scanners import OUTPUTS, Locator, fake_engine, fake_zizmor, never_located
 from tests.support.secrets import FAKE_KEY, OTHER_KEY, UNKNOWN_KEY_CONFIGS, allow_config, assert_key_found, sha256_of
@@ -131,7 +131,7 @@ def test_a_redirected_download_with_the_wrong_checksum_installs_nothing(tmp_path
     target = serve(body=archive_with("tampered"))
     release = serve(redirect_to=url_of(target))
     pins = {"gitleaks": Pin("1.2.3", url_of(release), "0" * 64)}
-    with pytest.raises(EngineError, match="sha256"):
+    with pytest.raises(ScannerError, match="sha256"):
         scanners.install(tmp_path / "bin", pins)
     assert not (tmp_path / "bin" / "gitleaks").exists()
 
@@ -251,7 +251,7 @@ def test_an_engine_that_crashes_or_leaves_no_usable_report_is_exit_2(tmp_path, b
 )
 def test_report_becomes_findings(report, exit_code, expected):
     """#13 rule 3: each leak in a recorded report becomes a secret finding at file:line."""
-    findings = scanners.engine_findings(scanners.GITLEAKS_ENGINE, recorded(report), exit_code, "")
+    findings = scanners.scanner_findings(scanners.GITLEAKS_SCANNER, recorded(report), exit_code, "")
     assert [f"{f.rule} {f.location}" for f in findings] == expected
 
 
@@ -271,17 +271,17 @@ def test_report_becomes_findings(report, exit_code, expected):
     ],
 )
 def test_unreadable_or_inconsistent_gitleaks_result_cannot_be_judged(report, exit_code):
-    """#13 rule 3: a garbled, mis-shaped or inconsistent result is an EngineError, never clean."""
+    """#13 rule 3: a garbled, mis-shaped or inconsistent result is an ScannerError, never clean."""
     text = recorded(report) if report.endswith(".json") else report
-    with pytest.raises(EngineError):
-        scanners.engine_findings(scanners.GITLEAKS_ENGINE, text, exit_code, "")
+    with pytest.raises(ScannerError):
+        scanners.scanner_findings(scanners.GITLEAKS_SCANNER, text, exit_code, "")
 
 
 def scan(repo: Path, installed_engines: Path) -> int:
     return cli.main(["hygiene", "--engines", str(installed_engines), str(repo)])
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 @UNKNOWN_KEY_CONFIGS
 def test_hygiene_refuses_a_config_with_unknown_keys(build_repo, installed_engines, capsys, config):
     """#40 rule 2: hygiene keeps refusing unknown keys of quality/config.toml."""
@@ -295,13 +295,13 @@ def commit(repo: Path, message: str) -> None:
     subprocess.run([*git, "commit", "-q", "-m", message], check=True)
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_clean_history_passes(build_repo, installed_engines):
     """#13 rule 4: a repository without a secret passes."""
     assert scan(build_repo({"docs/notes.txt": "nothing here\n"}), installed_engines) == 0
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_committed_secret_fails(build_repo, installed_engines, capsys):
     """#13 rule 4: a committed key fails, reported at file:line with the secret redacted."""
     repo = build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
@@ -311,7 +311,7 @@ def test_committed_secret_fails(build_repo, installed_engines, capsys):
     assert FAKE_KEY not in out
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_secret_removed_in_a_later_commit_still_fails(build_repo, installed_engines, capsys):
     """#13 rules 4 and 5: a key removed in a later commit still fails because it lives in history."""
     repo = build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
@@ -320,7 +320,7 @@ def test_secret_removed_in_a_later_commit_still_fails(build_repo, installed_engi
     assert_key_found(repo, installed_engines, capsys)
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_secret_reachable_only_from_another_branch_is_not_this_verdicts(build_repo, installed_engines):
     """#24 head ruling: the verdict judges the history reachable from HEAD, not every branch the checkout fetched."""
     repo = build_repo({"docs/notes.txt": "nothing here\n"})
@@ -331,7 +331,7 @@ def test_secret_reachable_only_from_another_branch_is_not_this_verdicts(build_re
     assert scan(repo, installed_engines) == 0
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_a_relative_repository_path_starting_with_a_dash_is_scanned_as_that_repository(
     build_repo, installed_engines, tmp_path, monkeypatch
 ):
@@ -345,7 +345,7 @@ def test_a_relative_repository_path_starting_with_a_dash_is_scanned_as_that_repo
     assert [(finding.path, finding.line) for finding in findings] == [("config.txt", 1)]
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 @pytest.mark.parametrize("attribute_line", ["config.txt -diff", "config.txt binary", "* -diff -text"])
 def test_a_committed_attribute_line_cannot_hide_a_key(build_repo, installed_engines, attribute_line, capsys):
     """#21 rule 1: a .gitattributes in the repository that makes git print "Binary files differ" is still red."""
@@ -365,7 +365,7 @@ def hiding_attributes(tmp_path) -> Path:
     return path
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_a_global_attributes_file_cannot_hide_a_key(keyed_repo, installed_engines, tmp_path, monkeypatch, capsys):
     """#21 rule 1: attributes from the user's global file are not read either."""
     config_home = tmp_path / "config-home"
@@ -376,7 +376,7 @@ def test_a_global_attributes_file_cannot_hide_a_key(keyed_repo, installed_engine
     assert_key_found(keyed_repo, installed_engines, capsys)
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_a_configured_core_attributes_file_cannot_hide_a_key(
     keyed_repo, installed_engines, tmp_path, monkeypatch, hiding_attributes, capsys
 ):
@@ -388,7 +388,7 @@ def test_a_configured_core_attributes_file_cannot_hide_a_key(
     assert_key_found(keyed_repo, installed_engines, capsys)
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_an_inherited_git_config_variable_cannot_bring_an_attributes_file_back(
     keyed_repo, installed_engines, monkeypatch, hiding_attributes, capsys
 ):
@@ -399,7 +399,7 @@ def test_an_inherited_git_config_variable_cannot_bring_an_attributes_file_back(
     assert_key_found(keyed_repo, installed_engines, capsys)
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_a_diff_driver_marked_binary_cannot_hide_a_key(build_repo, installed_engines, tmp_path, monkeypatch, capsys):
     """#21 rule 1: a diff=<driver> attribute whose configured driver is binary does not hide the key."""
     home = tmp_path / "home"
@@ -410,7 +410,7 @@ def test_a_diff_driver_marked_binary_cannot_hide_a_key(build_repo, installed_eng
     assert_key_found(repo, installed_engines, capsys)
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_a_core_attributes_file_in_the_repository_config_cannot_hide_a_key(
     keyed_repo, installed_engines, hiding_attributes, capsys
 ):
@@ -419,7 +419,7 @@ def test_a_core_attributes_file_in_the_repository_config_cannot_hide_a_key(
     assert_key_found(keyed_repo, installed_engines, capsys)
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_the_repositorys_info_attributes_cannot_hide_a_key(keyed_repo, installed_engines, capsys):
     """#21 rule 1: the scanned repository's .git/info/attributes is not read."""
     (keyed_repo / ".git" / "info").mkdir(exist_ok=True)
@@ -427,7 +427,7 @@ def test_the_repositorys_info_attributes_cannot_hide_a_key(keyed_repo, installed
     assert_key_found(keyed_repo, installed_engines, capsys)
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_a_template_directory_cannot_put_attributes_into_the_mirror(
     keyed_repo, installed_engines, tmp_path, fake_git, capsys
 ):
@@ -439,7 +439,7 @@ def test_a_template_directory_cannot_put_attributes_into_the_mirror(
     assert_key_found(keyed_repo, installed_engines, capsys)
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 @pytest.mark.parametrize(("command", "refusal"), [("hygiene", "hygiene: secret"), ("scan-staged", "scan-staged:")])
 @pytest.mark.parametrize("git_version", ["2.40.1", "1.9.0"])
 def test_a_git_older_than_2_41_is_exit_2_naming_the_version(
@@ -457,7 +457,7 @@ def test_a_git_older_than_2_41_is_exit_2_naming_the_version(
     )
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_installed_binary_reports_the_pinned_version(build_repo, installed_engines):
     """#13 rule 2: the installed real gitleaks passes the version check against the pin."""
     assert scanners.scan_secrets(build_repo({}), installed_engines, scanners.read_pins(), {}).findings == []
@@ -497,7 +497,7 @@ FINDING_EXIT = {"actionlint": 1, "zizmor": 12}
 
 
 def workflow_findings(engine: str, report_text: str, exit_code: int) -> list:
-    return scanners.engine_findings(next(judge for judge in scanners.WORKFLOW_ENGINES.values() if judge.name == engine), report_text, exit_code, "")
+    return scanners.scanner_findings(next(judge for judge in scanners.WORKFLOW_SCANNERS.values() if judge.name == engine), report_text, exit_code, "")
 
 
 @pytest.mark.parametrize(
@@ -531,10 +531,10 @@ def test_workflow_engine_reports_become_findings(engine, expected):
     ],
 )
 def test_unreadable_or_inconsistent_workflow_result_cannot_be_judged(engine, report, exit_code):
-    """#15 rule 2: a garbled, cut-off, mis-shaped or inconsistent result is an EngineError, never clean."""
+    """#15 rule 2: a garbled, cut-off, mis-shaped or inconsistent result is an ScannerError, never clean."""
     text = recorded(f"{engine}-{report}.json") if report in ("garbled", "clean", "finding") else report
     code = FINDING_EXIT[engine] if exit_code == "finding" else exit_code
-    with pytest.raises(EngineError):
+    with pytest.raises(ScannerError):
         workflow_findings(engine, text, code)
 
 
@@ -577,7 +577,7 @@ def test_an_engine_that_is_a_symlink_inside_the_directory_is_still_judged_by_its
 
 def test_no_workflow_engine_runs_when_the_repository_has_no_workflow(tmp_path):
     """#15 rule 2: without a `.github/workflows/*.y{a,}ml` there is nothing to lint, so no engine is needed."""
-    assert [scanners.scan_workflows(tmp_path, tmp_path, scanners.read_pins(), rule, [], never_located) for rule in scanners.WORKFLOW_ENGINES] == [[], []]
+    assert [scanners.scan_workflows(tmp_path, tmp_path, scanners.read_pins(), rule, [], never_located) for rule in scanners.WORKFLOW_SCANNERS] == [[], []]
 
 
 def test_a_run_without_engines_names_the_skipped_scans(build_repo, capsys):
@@ -608,7 +608,7 @@ def local_reusable_call(prefix: str) -> str:
 INVALID_RUNS_ON = "on: push\npermissions: {}\njobs:\n  j:\n    runs-on: ${{ foo( }}\n    steps:\n      - run: 'true'\n"
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 @pytest.mark.parametrize(
     ("workflow", "expected"),
     [
@@ -624,7 +624,7 @@ def test_a_known_bad_workflow_fails(workflow_repo, installed_engines, capsys, wo
     assert expected in capsys.readouterr().out
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_quality_own_workflows_pass_both_engines(build_repo, installed_engines):
     """#15 rules 3 and 4: quality's own workflows pass actionlint and zizmor unchanged."""
     own = Path(__file__).parent.parent / ".github" / "workflows"
@@ -632,7 +632,7 @@ def test_quality_own_workflows_pass_both_engines(build_repo, installed_engines):
     assert scan(repo, installed_engines) == 0
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_a_local_reusable_call_in_the_dollar_slash_form_passes_both_engines(workflow_repo, installed_engines):
     """#15 rule 4: `uses: $/…` satisfies zizmor's self-repository audit and actionlint's false error is ignored."""
     assert scan(workflow_repo(local_reusable_call("$")), installed_engines) == 0
@@ -645,7 +645,7 @@ ONLY_AN_ONLINE_AUDIT_FLAGS_THIS = (
 )
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_a_run_with_engines_names_no_skipped_scan_and_discloses_that_online_audits_do_not_run(
     workflow_repo, installed_engines, capsys
 ):
@@ -665,7 +665,7 @@ INLINE_IGNORE = UNPINNED_WITHOUT_PERMISSIONS.replace(
 )
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 @pytest.mark.parametrize(
     ("workflow", "caller_files", "expected"),
     [
@@ -684,7 +684,7 @@ def test_what_the_scanned_repository_says_never_silences_a_workflow_finding(
     assert expected in capsys.readouterr().out
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_a_shellcheck_on_path_never_runs_during_workflow_lint(build_repo, installed_engines, tmp_path, monkeypatch):
     """#15 rule 1: actionlint judges without whichever shellcheck PATH offers."""
     planted = tmp_path / "planted"
@@ -704,7 +704,7 @@ def pinned_actionlint_asset() -> bytes:
         return asset.read()
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 @pytest.mark.parametrize(("tamper", "exit_code"), [(False, 0), (True, 2)], ids=["pinned-bytes", "one-byte-changed"])
 def test_a_redirected_pinned_release_asset_is_decided_by_its_checksum_alone(
     tmp_path, serve, pinned_actionlint_asset, tamper, exit_code
@@ -807,7 +807,7 @@ def test_the_scan_passes_the_gates_own_config(build_repo, tmp_path):
     assert given[given.index("--config") + 1] == str(scanners.GITLEAKS_CONFIG)
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_a_repository_config_and_ignore_file_do_not_silence_the_scan(build_repo, installed_engines, capsys):
     """#16: a committed .gitleaks.toml, a .gitleaksignore holding the real fingerprint and gitleaks:allow
     have no effect."""
@@ -827,7 +827,7 @@ def allow_fake_key(repo: Path, file: str = "config.txt") -> None:
     commit(repo, "allow the fixture key")
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_an_allowed_value_stays_green_at_a_shifted_line_and_across_commits(build_repo, installed_engines, capsys):
     """#24 rule 1: one entry covers the value at line 1, at a later line and in every commit that holds it."""
     repo = build_repo({"docs/config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
@@ -841,7 +841,7 @@ def test_an_allowed_value_stays_green_at_a_shifted_line_and_across_commits(build
     assert set(summary.removeprefix("secret: 2 allowed (").removesuffix(")").split(", ")) == {"docs/config.txt:1", "docs/config.txt:4"}
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 @pytest.mark.parametrize(
     ("write", "placed"),
     [
@@ -860,7 +860,7 @@ def test_an_allowance_never_spreads_to_another_value_or_file(build_repo, install
     assert f"secret {placed}" in capsys.readouterr().out
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_a_key_on_an_allowance_line_of_the_config_stays_red(build_repo, installed_engines, capsys):
     """#24 rule 1: only the hash of an allowance is exempt; a real key on the same line is still found."""
     line = f'# {FAKE_KEY} secret_sha256 = "{sha256_of(FAKE_KEY)}"\n'
@@ -869,7 +869,7 @@ def test_a_key_on_an_allowance_line_of_the_config_stays_red(build_repo, installe
     assert "secret quality/config.toml:" in capsys.readouterr().out
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_a_repository_without_quality_config_is_scanned_and_its_key_is_red(build_repo, installed_engines, capsys):
     """#24 rule 3: no quality/config.toml means no allowances, and the scan still judges."""
     repo = build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
@@ -897,7 +897,7 @@ def leak_scan_command(command: str, repo: Path, engine_dir: Path) -> list[str]:
 SECRET_COMMANDS = ["hygiene", "scan-staged"]
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 @pytest.mark.parametrize("command", SECRET_COMMANDS)
 @pytest.mark.parametrize("failure", ["none", *FAILING_REPORTS])
 def test_the_key_reaches_no_output_and_no_file_and_the_scratch_directory_is_gone(
@@ -917,7 +917,7 @@ def test_the_key_reaches_no_output_and_no_file_and_the_scratch_directory_is_gone
     assert list(scratch_parent.iterdir()) == []
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 @pytest.mark.parametrize("command", SECRET_COMMANDS)
 def test_a_sigterm_mid_scan_leaves_no_scratch_directory(keyed_repo, tmp_path, command):
     """#25 rule 1, quality#5 finding 44: a SIGTERM while gitleaks holds the unredacted report deletes the scratch directory."""
@@ -939,7 +939,7 @@ def test_a_sigterm_mid_scan_leaves_no_scratch_directory(keyed_repo, tmp_path, co
     assert list(scratch_parent.iterdir()) == []
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 @pytest.mark.parametrize("command", SECRET_COMMANDS)
 def test_an_allowance_no_finding_used_is_printed(build_repo, installed_engines, capsys, command):
     """#25 rule 1, quality#5 finding 34: a quality/config.toml entry that matches nothing is named, not silent."""

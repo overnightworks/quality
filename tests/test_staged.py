@@ -33,7 +33,7 @@ def unborn_repo(tmp_path) -> Path:
     return repo
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_a_staged_key_is_red_and_its_value_is_not_printed(build_repo, installed_engines, capsys):
     """#25 rule 1: the staged change is judged; the output names the hash, never the value."""
     repo = build_repo({"README": "hello\n"})
@@ -44,7 +44,7 @@ def test_a_staged_key_is_red_and_its_value_is_not_printed(build_repo, installed_
     assert FAKE_KEY not in out
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 @pytest.mark.parametrize("where", ["unstaged edit", "untracked file", "only in HEAD", "removed from HEAD"])
 def test_a_key_that_is_not_in_the_staged_change_is_green(build_repo, installed_engines, where):
     """#25 rule 1: a key only in the work tree, or only in HEAD, is not what the next commit adds."""
@@ -58,7 +58,7 @@ def test_a_key_that_is_not_in_the_staged_change_is_green(build_repo, installed_e
     assert scan_staged(repo, installed_engines) == 0
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_a_repository_without_head_is_scanned(unborn_repo, installed_engines):
     """#25 rule 1: no HEAD is an empty parent, so the whole index is the change."""
     stage(unborn_repo, {"clean.txt": "ok\n"})
@@ -67,7 +67,7 @@ def test_a_repository_without_head_is_scanned(unborn_repo, installed_engines):
     assert scan_staged(unborn_repo, installed_engines) == 1
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 @pytest.mark.parametrize(
     ("name", "content"),
     [
@@ -83,7 +83,7 @@ def test_a_staged_ignore_attribute_or_config_file_changes_nothing(build_repo, in
     assert scan_staged(repo, installed_engines) == 1
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_a_gitleaks_allow_comment_changes_nothing(build_repo, installed_engines):
     """#25 rule 1: an inline gitleaks:allow comment is ignored, the staged key is still red."""
     repo = build_repo({"README": "hello\n"})
@@ -91,7 +91,7 @@ def test_a_gitleaks_allow_comment_changes_nothing(build_repo, installed_engines)
     assert scan_staged(repo, installed_engines) == 1
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_the_live_repositorys_info_attributes_cannot_hide_a_staged_key(build_repo, installed_engines):
     """#25 rule 1 (quality#21 follow-up): git reads $GIT_DIR/info/attributes whatever the environment says; the scratch repository has none."""
     repo = build_repo({"README": "hello\n"})
@@ -101,7 +101,7 @@ def test_the_live_repositorys_info_attributes_cannot_hide_a_staged_key(build_rep
     assert scan_staged(repo, installed_engines) == 1
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 @pytest.mark.parametrize("staged_config", [True, False], ids=["allowance staged", "allowance only in work tree"])
 def test_the_allow_list_is_the_one_of_the_staged_tree(build_repo, installed_engines, staged_config):
     """#25 rule 1.4: an allowed value is green when the staged tree allows it; a work-tree-only file allows nothing."""
@@ -116,7 +116,7 @@ def test_the_allow_list_is_the_one_of_the_staged_tree(build_repo, installed_engi
     assert scan_staged(repo, installed_engines) == (0 if staged_config else 1)
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 @pytest.mark.parametrize(
     ("staged_change", "exit_code", "expected_line"),
     [
@@ -162,7 +162,7 @@ def commit_attempt(repo: Path, how: str) -> subprocess.CompletedProcess[str]:
     return git(repo, *arguments[how], check=False)
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 @pytest.mark.parametrize("how", ["plain", "commit -a", "commit <path>"])
 def test_a_real_commit_is_refused_through_the_hook(refusing_hook, how):
     """#25 rule 1: git's own index for the commit (relative or absolute GIT_INDEX_FILE) is the one scanned."""
@@ -173,7 +173,7 @@ def test_a_real_commit_is_refused_through_the_hook(refusing_hook, how):
     assert git(refusing_hook, "rev-parse", "HEAD").stdout == before
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_a_commit_from_a_linked_worktree_is_refused_through_the_hook(refusing_hook, tmp_path):
     """#25 rule 1: a linked worktree commits with GIT_DIR and an absolute GIT_INDEX_FILE set."""
     linked = tmp_path / "linked"
@@ -184,14 +184,14 @@ def test_a_commit_from_a_linked_worktree_is_refused_through_the_hook(refusing_ho
     assert "matched in the staged change" in attempt.stdout + attempt.stderr
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_a_clean_commit_goes_through_the_hook(refusing_hook):
     """#25 rule 1: a commit with nothing to find passes the hook."""
     stage(refusing_hook, {"tracked.txt": "still clean\n"})
     assert git(refusing_hook, "commit", "-q", "-m", "x", check=False).returncode == 0
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_scan_staged_leaves_the_repository_as_it_found_it(build_repo, installed_engines):
     """#25 rule 1.1: write-tree only writes tree objects, so status is unchanged by the scan."""
     repo = build_repo({"README": "hello\n"})
@@ -201,7 +201,7 @@ def test_scan_staged_leaves_the_repository_as_it_found_it(build_repo, installed_
     assert git(repo, "status", "--porcelain=v2", "--branch").stdout == before
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_an_unmerged_index_is_exit_2(build_repo, installed_engines, capsys):
     """#25 rule 4: an index with unmerged entries is exit 2, never clean."""
     repo = build_repo({"f.txt": "base\n"})
@@ -216,21 +216,21 @@ def test_an_unmerged_index_is_exit_2(build_repo, installed_engines, capsys):
     assert capsys.readouterr().err.startswith("scan-staged: cannot judge - git write-tree failed")
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_a_path_that_is_not_a_repository_is_exit_2(tmp_path, installed_engines, capsys):
     """#25 rule 4: a path that is not a repository is exit 2."""
     assert scan_staged(tmp_path, installed_engines) == 2
     assert capsys.readouterr().err.startswith("scan-staged: cannot judge - ")
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_a_missing_engine_is_exit_2(build_repo, tmp_path, capsys):
     """#25 rule 4: a missing engine is exit 2."""
     assert scan_staged(build_repo({}), tmp_path / "no-engines") == 2
     assert capsys.readouterr().err.startswith("scan-staged: cannot judge - ")
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 @pytest.mark.parametrize(
     ("staged_config", "exit_code"),
     [
@@ -246,7 +246,7 @@ def test_the_staged_scan_reads_only_the_secrets_table(build_repo, installed_engi
     assert scan_staged(repo, installed_engines) == exit_code
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_an_unreadable_allow_list_is_exit_2(build_repo, installed_engines, capsys):
     """#25 rule 4: a staged allow list that cannot be read is exit 2."""
     repo = build_repo({"README": "hello\n"})
@@ -255,7 +255,7 @@ def test_an_unreadable_allow_list_is_exit_2(build_repo, installed_engines, capsy
     assert "quality/config.toml" in capsys.readouterr().err
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 @pytest.mark.parametrize(
     ("failing", "expected"),
     [
@@ -274,7 +274,7 @@ def test_git_failing_on_the_staged_allow_list_is_exit_2_in_its_words(
     assert f"scan-staged: cannot judge - {expected}: git exited 1" in capsys.readouterr().err
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 @pytest.mark.parametrize("kind", ["a missing path", "a regular file"])
 def test_a_path_that_is_not_a_directory_is_exit_2_and_named(kind, tmp_path, installed_engines, capsys):
     """#25 rule 4: a path that is no directory is exit 2, and git's own error names the path (#58 rule 3)."""
@@ -285,7 +285,7 @@ def test_a_path_that_is_not_a_directory_is_exit_2_and_named(kind, tmp_path, inst
     assert str(path) in capsys.readouterr().err
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_a_repository_path_that_starts_with_a_dash_is_scanned_as_a_path(
     tmp_path, installed_engines, monkeypatch, capsys
 ):

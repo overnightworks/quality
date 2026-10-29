@@ -264,7 +264,7 @@ def run_hygiene(
     if engine_dir is None:
         return HygieneResult(tuple(verdicts), reports, [], {})
     secrets = _attempt(lambda: check_secrets(root, engine_dir, allow_lists))
-    workflows = {rule: _attempt(partial(check_workflows, root, engine_dir, rule, tracked, locate_zizmor)) for rule in scanners.WORKFLOW_ENGINES}
+    workflows = {rule: _attempt(partial(check_workflows, root, engine_dir, rule, tracked, locate_zizmor)) for rule in scanners.WORKFLOW_SCANNERS}
     advisory = _attempt(partial(check_advisories, root, engine_dir, tracked, allow_lists))
     scanned = {
         Rule.LEAK: _findings(secrets),
