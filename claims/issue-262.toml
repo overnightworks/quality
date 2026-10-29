@@ -1,7 +1,0 @@
-claim_id = "e818a654dc99496d90436a0dd303d1a9"
-agent = "Claude 7bbab0b4-f923-4f09-a5c2-6fe15143932e"
-role = "builder"
-base = "6c6e2e6dafda2f20a873a8de3d3b99abda732584"
-branch = "claude/issue-262-lint-external-advice"
-scope = ["docs/rules.md"]
-opened_commit = "f83e6a41a66e8cc3f0d25113cc373f2bcaa653e3"
