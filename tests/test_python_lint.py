@@ -8,8 +8,8 @@ import pytest
 from quality import hygiene, installation, python_lint
 from quality.python_lint import LintError, RuffFinding, UnparsablePython
 from quality.rules import Rule
-from tests.support.engines import never_located
-from tests.support.hygiene import CLEAN_LINE, installed_ruff, requirements_loosening
+from tests.support.engines import never_located, nothing_installed
+from tests.support.hygiene import CLEAN_LINE, installed_ruff, loosen_requirement
 from tests.support.hygiene import hygiene_output as run
 from tests.support.layout import in_index
 
@@ -271,10 +271,6 @@ def test_untracked_linked_submodule_notebook_stub_and_suffixless_files_are_not_j
     assert flagged_paths(repo) == []
 
 
-def no_ruff_installed() -> str:
-    raise FileNotFoundError
-
-
 @pytest.mark.integration
 def test_a_repository_without_tracked_python_is_clean_even_when_quality_holds_no_ruff_and_an_untracked_file_stays_unjudged(
     build_repo, capsys
@@ -282,7 +278,7 @@ def test_a_repository_without_tracked_python_is_clean_even_when_quality_holds_no
     """Sentence 1, cell 3: with no tracked `.py` file nothing is judged and ruff is not asked for, the untracked file included."""
     repo = build_repo({"README.md": "x\n"})
     (repo / "untracked.py").write_text(EVAL)
-    code, output = run(capsys, repo, no_ruff_installed)
+    code, output = run(capsys, repo, nothing_installed)
     assert code == 0, output
     assert CLEAN_LINE in output, output
 
@@ -455,17 +451,18 @@ def test_a_ruff_quality_cannot_find_or_trust_names_the_reinstall_command(build_r
     judge and names the reinstall command; a pin quality's own metadata lacks names the defect and no command."""
     repo = build_repo({".env": "A=1\n", "src/p/a.py": "x = 1\n"})
     (elsewhere / "failing").mkdir()
-    failing_version = fake_ruff(elsewhere / "failing", "echo '[]'")
+    failing_version = elsewhere / "failing" / "ruff"
     failing_version.write_text("#!/bin/sh\nexit 1\n")
+    failing_version.chmod(0o755)
     locate = {
-        "not installed": no_ruff_installed,
+        "not installed": nothing_installed,
         "recorded file deleted": lambda: str(elsewhere / "gone" / "ruff"),
         "another version": lambda: str(fake_ruff(elsewhere, "echo '[]'", "0.0.1")),
         "failing version": lambda: str(failing_version),
         "unpinned": installed_ruff,
     }[case]
     if case == "unpinned":
-        monkeypatch.setattr(installation, "requires", requirements_loosening("ruff"))
+        loosen_requirement(elsewhere / "metadata", monkeypatch, "ruff")
     code, output = run(capsys, repo, locate)
     assert code == 2, output
     for rule in (Rule.PYTHON_SECURITY, Rule.PYTHON_PRINT):

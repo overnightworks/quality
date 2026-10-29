@@ -6,6 +6,7 @@ import pytest
 
 from quality import engines, installation
 
+Locator = Callable[[], str]
 OUTPUTS = Path(__file__).parents[1] / "fixtures" / "engine-outputs"
 
 
@@ -19,7 +20,7 @@ def fake_engine(directory: Path, name: str, on_scan: str) -> Path:
     return binary
 
 
-def fake_zizmor(directory: Path, on_scan: str, version: str | None = None) -> Callable[[], str]:
+def fake_zizmor(directory: Path, on_scan: str, version: str | None = None) -> Locator:
     """Writes a fake zizmor that reports `version` (quality's pin by default) and runs `on_scan` (shell) for any other
     call, and returns the locator that names it."""
     reported = version or installation.required_version(engines.ZIZMOR)
@@ -29,6 +30,11 @@ def fake_zizmor(directory: Path, on_scan: str, version: str | None = None) -> Ca
     binary.write_text(f'#!/bin/sh\nif [ "$*" = "{version_arguments}" ]; then echo {engines.ZIZMOR} {reported}; exit 0; fi\n{on_scan}\n')
     binary.chmod(0o755)
     return lambda: str(binary)
+
+
+def nothing_installed() -> NoReturn:
+    """A locator for a scanner that quality's installation does not hold."""
+    raise FileNotFoundError
 
 
 def never_located() -> NoReturn:

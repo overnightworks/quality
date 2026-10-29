@@ -17,7 +17,7 @@ import pytest
 
 from quality import cli, engines, process
 from quality.engines import EngineError, Pin
-from tests.support.engines import OUTPUTS, fake_engine, fake_zizmor, never_located
+from tests.support.engines import OUTPUTS, Locator, fake_engine, fake_zizmor, never_located
 from tests.support.git_repositories import GIT_IDENTITY
 from tests.support.secrets import FAKE_KEY, OTHER_KEY, UNKNOWN_KEY_CONFIGS, allow_config, assert_key_found, sha256_of
 
@@ -46,9 +46,8 @@ PINNED = engines.read_pins()["gitleaks"].version
 
 def fake_gitleaks(tmp_path: Path, version: str = PINNED, on_scan: str = "exit 0", on_version: str = "exit 0") -> Path:
     """An engine directory whose gitleaks prints `version`, and on any other command runs `on_scan`."""
-    engine_dir = tmp_path / "engines"
-    engine_dir.mkdir(parents=True)
-    binary = engine_dir / "gitleaks"
+    binary = tmp_path / "engines" / "gitleaks"
+    binary.parent.mkdir(parents=True)
     binary.write_text(
         "#!/bin/sh\n"
         f'if [ "$1" = version ]; then echo {version}; {on_version}; fi\n'
@@ -57,7 +56,7 @@ def fake_gitleaks(tmp_path: Path, version: str = PINNED, on_scan: str = "exit 0"
         f"{on_scan}\n"
     )
     binary.chmod(0o755)
-    return engine_dir
+    return binary.parent
 
 
 def hygiene_exit_2(repo: Path, engine_dir: Path, capsys, locate_zizmor=never_located) -> str:
@@ -539,7 +538,8 @@ def test_unreadable_or_inconsistent_workflow_result_cannot_be_judged(engine, rep
         workflow_findings(engine, text, code)
 
 
-def fake_workflow_engines(tmp_path: Path, on_scan: str):
+def fake_workflow_engines(tmp_path: Path, on_scan: str) -> tuple[Path, Locator]:
+    """A fake gitleaks and actionlint in an engine directory, and the locator of a fake zizmor, all running `on_scan`."""
     engine_dir = fake_gitleaks(tmp_path / "fake", on_scan='echo "[]" > "$report"; exit 0')
     fake_engine(engine_dir, "actionlint", on_scan)
     return engine_dir, fake_zizmor(tmp_path / "zizmor", on_scan)

@@ -11,8 +11,8 @@ import pytest
 from quality import cli, env_file, hygiene, installation, process, sonar
 from quality.compose import is_compose_file
 from quality.report import Finding
-from tests.support.engines import fake_engine, fake_zizmor, never_located
-from tests.support.hygiene import CLEAN_LINE, ENGINE_RULES, FILE_RULES, compose, installed_ruff, requirements_loosening
+from tests.support.engines import fake_engine, fake_zizmor, never_located, nothing_installed
+from tests.support.hygiene import CLEAN_LINE, ENGINE_RULES, FILE_RULES, compose, installed_ruff, loosen_requirement
 from tests.support.hygiene import hygiene_output as run
 
 
@@ -178,10 +178,6 @@ def test_a_refusing_workflow_engine_stops_no_other_workflow_rule(build_repo, cle
     assert "workflow-security .github/workflows/w.yml:7 - zizmor unpinned-uses" in captured.out
 
 
-def no_zizmor_installed() -> str:
-    raise FileNotFoundError
-
-
 @pytest.mark.parametrize("case", ["not installed", "recorded file deleted", "another version", "failing version", "unpinned"])
 def test_a_zizmor_quality_cannot_find_or_trust_refuses_only_workflow_security(
     build_repo, clean_engines, elsewhere, monkeypatch, capsys, case
@@ -196,14 +192,14 @@ def test_a_zizmor_quality_cannot_find_or_trust_refuses_only_workflow_security(
     failing.write_text("#!/bin/sh\nexit 1\n")
     failing.chmod(0o755)
     locators = {
-        "not installed": no_zizmor_installed,
+        "not installed": nothing_installed,
         "recorded file deleted": lambda: str(elsewhere / "gone" / "zizmor"),
         "another version": fake_zizmor(elsewhere / "another", "echo '[]'", version="0.0.1"),
         "failing version": lambda: str(failing),
         "unpinned": fake_zizmor(elsewhere / "pinned", "echo '[]'"),
     }
     if case == "unpinned":
-        monkeypatch.setattr(installation, "requires", requirements_loosening("zizmor"))
+        loosen_requirement(elsewhere / "metadata", monkeypatch, "zizmor")
     code = cli.main(["hygiene", "--engines", str(clean_engines), str(repo)], locate_zizmor=locators[case])
     captured = capsys.readouterr()
     output = captured.out + captured.err
