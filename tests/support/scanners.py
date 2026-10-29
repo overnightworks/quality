@@ -77,4 +77,3 @@ def nothing_installed() -> NoReturn:
 def never_located() -> NoReturn:
     """A locator for a run that must locate nothing."""
     pytest.fail("a scanner was located where nothing needed one")
-
