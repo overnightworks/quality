@@ -62,8 +62,9 @@ def install_command() -> str:
 def located(name: str) -> Path:
     """The executable of scanner `name` that mise installed from quality's manifest, at exactly the pinned version.
 
-    mise is asked in the manifest directory under a ceiling at its parent, so no mise config of the scanned repository
-    takes part; mise itself is found on PATH, and a scanner never is.
+    mise is asked in the manifest directory under a ceiling at the real path of its parent (mise matches the ceiling
+    against its canonical working directory), so no mise config of the scanned repository takes part; mise itself is
+    found on PATH, and a scanner never is.
     """
     tool = pinned_tool(name)
     if shutil.which(MISE) is None:
@@ -74,7 +75,7 @@ def located(name: str) -> Path:
     try:
         asked = process.run(
             [MISE, "--cd", str(MANIFEST_DIRECTORY), "which", name, "--tool", f"{tool.key}@{tool.version}"],
-            env=os.environ | {MISE_CEILING_VARIABLE: str(MANIFEST_DIRECTORY.parent)},
+            env=os.environ | {MISE_CEILING_VARIABLE: str(MANIFEST_DIRECTORY.resolve().parent)},
             cwd=MANIFEST_DIRECTORY,
             timeout=process.VERSION_TIMEOUT_SECONDS,
         )

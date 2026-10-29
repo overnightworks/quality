@@ -791,16 +791,16 @@ def test_a_gitleaks_on_path_never_runs(build_repo, use_mise, tmp_path, monkeypat
     assert not marker.exists(), capsys.readouterr().err
 
 
-def test_mise_is_asked_in_the_manifest_directory_under_its_ceiling(
-    build_repo, use_mise, served_scanners, tmp_path, elsewhere
-):
-    """#265 D4: mise reads only the manifest directory, whatever mise config the scanned repository holds."""
+def test_mise_is_asked_in_the_manifest_directory_under_its_ceiling(build_repo, use_mise, served_scanners, tmp_path, elsewhere, monkeypatch):
+    """#265 D4: mise reads only the manifest directory under the real path of its parent (mise matches canonical paths)."""
     record = tmp_path / "asked"
+    (elsewhere / "link").symlink_to(scanners.MANIFEST_DIRECTORY.parent)
+    monkeypatch.setattr(scanners, "MANIFEST_DIRECTORY", elsewhere / "link" / scanners.MANIFEST_DIRECTORY.name)
     use_mise(recording(record, serving(served_scanners)))
     declared = '[[root.allow]]\nentry = "mise.toml"\nreason = "the scanned repository holds a mise config"\n'
     repo = build_repo({**WORKFLOW_AND_LOCK, "mise.toml": "[env]\nMISE_X = '1'\n", "quality/config.toml": declared})
     assert cli.main(["hygiene", str(repo)], locate_zizmor=fake_zizmor(elsewhere, "echo '[]'")) == 0
-    directory, ceiling = scanners.MANIFEST_DIRECTORY, scanners.MANIFEST_DIRECTORY.parent
+    directory, ceiling = scanners.MANIFEST_DIRECTORY, scanners.MANIFEST_DIRECTORY.resolve().parent
     assert sorted(record.read_text().splitlines()) == sorted(
         f"--cd {directory} which {name} --tool {tool.key}@{tool.version}|{ceiling}|{directory.resolve()}"
         for name, tool in ((name, scanners.pinned_tool(name)) for name in (scanners.GITLEAKS, scanners.ACTIONLINT, scanners.OSV_SCANNER))
