@@ -636,6 +636,53 @@ def test_preflight_refuses_a_repository_without_properties(monkeypatch, capsys, 
     assert (code, "sonar-project.properties" in err) == (2, True)
 
 
+def properties_link_outside(repo: Path, elsewhere: Path) -> None:
+    outside = elsewhere / "outside.properties"
+    outside.write_text("sonar.host.url=https://evil.example\n")
+    (repo / "sonar-project.properties").symlink_to(outside)
+
+
+def properties_directory(repo: Path, elsewhere: Path) -> None:
+    (repo / "sonar-project.properties").mkdir()
+
+
+def properties_not_utf8(repo: Path, elsewhere: Path) -> None:
+    (repo / "sonar-project.properties").write_bytes(b"sonar.sources=\xff\xfe\n")
+
+
+def properties_missing(repo: Path, elsewhere: Path) -> None:
+    pass
+
+
+def properties_link_inside(repo: Path, elsewhere: Path) -> None:
+    (repo / "real.properties").write_text(CLEAN_PROPERTIES)
+    (repo / "sonar-project.properties").symlink_to("real.properties")
+
+
+@pytest.mark.parametrize(
+    ("arrange", "code", "said"),
+    [
+        (properties_link_outside, 2, "sonar-project.properties resolves outside the repository"),
+        (properties_directory, 2, "sonar-project.properties is not a file"),
+        (properties_not_utf8, 2, "cannot read sonar-project.properties:"),
+        (properties_missing, 2, "sonar-project.properties is missing"),
+        (properties_link_inside, 0, ""),
+    ],
+    ids=["link outside", "directory", "not utf-8", "missing", "link inside"],
+)
+def test_a_properties_file_quality_cannot_use_is_exit_2_naming_it_repository_relative(
+    monkeypatch, capsys, build_repo, elsewhere, arrange, code, said
+):
+    """#254 / AGENTS.md: sonar-project.properties is read inside the checkout and named repository-relative"""
+    set_environment(monkeypatch, PULL_REQUEST_ENVIRONMENT)
+    repo = build_repo({"README.md": "x\n"})
+    arrange(repo, elsewhere)
+    result = cli.main(["sonar", "preflight", str(repo)])
+    captured = capsys.readouterr()
+    output = captured.out + captured.err
+    assert (result, said in output, str(repo) in output, TOKEN in output) == (code, True, False, False)
+
+
 def test_quality_with_its_own_config_fails_a_pull_request_on_legacy_findings(monkeypatch, capsys):
     """#33 sentence 5: quality's shipped config turns one legacy finding into exit 1 for a pull request with none"""
     shipped = (Path(__file__).parent.parent / "quality" / "config.toml").read_text(encoding="utf-8")
