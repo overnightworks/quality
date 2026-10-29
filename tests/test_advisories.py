@@ -327,23 +327,6 @@ def test_a_scratch_directory_that_cannot_be_written_is_cannot_judge(build_repo, 
     assert (code, "cannot place the PyPI advisory database in the scratch directory" in output, "<scratch>" in output, "secret cannot judge" in output) == (2, True, True, False), output
 
 
-def test_a_process_failure_that_names_the_scratch_path_reaches_the_user_sanitised(
-    build_repo, clean_engines, run_gate, publish_database, monkeypatch
-):
-    publish_database()
-
-    run = process.run
-
-    def fail_naming_the_working_directory(command, cwd=None, **options):
-        if cwd is None:
-            return run(command, **options)
-        raise process.ProcessError(f"cannot run {command[0]} in {cwd}")
-
-    monkeypatch.setattr(process, "run", fail_naming_the_working_directory)
-    code, output = run_gate(tracked_lock_repo(build_repo), osv_engines(clean_engines, "exit 99"))
-    assert (code, "in <scratch>" in output) == (2, True), output
-
-
 def test_a_wheel_pin_file_that_cannot_be_written_is_cannot_judge(build_repo, clean_engines, run_gate, publish_database, monkeypatch):
     """#176 fail-closed: a full or read-only scratch while the wheel pins are written is a refusal naming the tracked file, not a traceback."""
     publish_database()

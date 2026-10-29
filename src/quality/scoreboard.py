@@ -306,7 +306,7 @@ def measure_fleet(fleet: Fleet) -> list[Row]:
 
 
 def anonymous_environment(scratch: Path) -> dict[str, str]:
-    """No configuration git could authenticate from: the engines' isolation drops every GIT_* variable and the system
+    """No configuration git could authenticate from: the process boundary's isolation drops every GIT_* variable and the system
     and global config, and points HOME at an empty directory, so no ~/.netrc either."""
     isolated = process.attribute_free_git_environment(scratch / "home")
     # git falls back to SSH_ASKPASS for an http password too.

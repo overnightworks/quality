@@ -161,7 +161,6 @@ def scan_secrets(root: Path, engine_dir: Path, pins: dict[str, Pin], allowances:
         return run_gitleaks(binary, scratch, git_environment, source, [f"--log-opts={head}"], allowances)
 
 
-
 def run_gitleaks(
     binary: Path, scratch: Path, git_environment: dict[str, str], source: Path, scope: list[str],
     allowances: dict[Allowance, str],
@@ -205,7 +204,6 @@ def _split_by_allowance(leaks: list[Finding], allowances: dict[Allowance, str]) 
     )
 
 
-
 def require_git_floor() -> None:
     unreadable = "cannot read the git version"
     version = process.parse_git_version(process.git(["--version"], unreadable))
@@ -225,7 +223,6 @@ def verify_version(binary: Path, engine_name: str, pinned: str) -> None:
     reported = (asked.stdout.strip().splitlines() or [""])[0].split(" ")[-1]  # "zizmor 1.2.3", or just "1.2.3"
     if reported != pinned:
         raise EngineError(f"{binary} is version {reported!r}, the pin says {pinned!r}")
-
 
 
 def _read_leak(entry: object) -> tuple[str, int, str, str, str]:
