@@ -8,12 +8,12 @@ proposes moving the zero-findings rule to SonarCloud's hosted gate.
 [`quality sonar findings`](../sonar.md) counts open findings on a pull request and, with `legacy = "fail"`, on the default
 branch. The pre-scan properties check refuses what could steer the token. Moving the zero rule to the hosted gate would
 have removed the count, `legacy = "fail"`, the failing default-branch runs, the Dependabot exception, the properties
-check, the door's legacy path with the `[gate] legacy` key, and about 670 lines of `sonar.py`. It was ruled on three
+check, the door's legacy path with the `[gate] legacy` key, and most of `sonar.py`. It was ruled on three
 preconditions, measured anonymously on 29.10.2026.
 
 ## Decision
 
-quality keeps judging the findings; only the word `preflight` leaves, for `quality sonar properties`. The preconditions:
+quality keeps judging the findings; the pre-scan check is now named `quality sonar properties`. The preconditions:
 
 - **The hosted gate fails on new issues.** False: the built-in "Sonar way" and the custom "presentator" gate have no
   condition on `new_violations`.
