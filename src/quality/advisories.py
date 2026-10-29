@@ -21,6 +21,7 @@ from quality.scanners import ScannerError
 PYTHON_ECOSYSTEM = "PyPI"
 DATABASE_ROOT = "https://osv-vulnerabilities.storage.googleapis.com"  # read at call time; tests point it at a file:// root
 DATABASE_ARCHIVE = "all.zip"
+DOWNLOAD_TIMEOUT_SECONDS = 120
 DATABASE_DOWNLOAD_DEADLINE_SECONDS = 300  # connect, headers and body of all downloads together, enforced from outside the HTTP machinery; DOWNLOAD_TIMEOUT_SECONDS bounds each socket wait
 ADVISORY_SCAN_TIMEOUT_SECONDS = 600
 OSV_CONFIG = Path(__file__).with_name("osv-scanner.toml")
@@ -268,7 +269,7 @@ def _download_database(url: str, ecosystem: str, deadline: float, monotonic: Cal
 
     def fetch() -> None:
         try:
-            with urllib.request.urlopen(url, timeout=min(scanners.DOWNLOAD_TIMEOUT_SECONDS, remaining)) as response:  # noqa: S310 - url comes from the pinned advisory databases (https)
+            with urllib.request.urlopen(url, timeout=min(DOWNLOAD_TIMEOUT_SECONDS, remaining)) as response:  # noqa: S310 - url comes from the pinned advisory databases (https)
                 download.set_result(response.read())
         except DOWNLOAD_FAILURES as error:
             download.set_exception(error)

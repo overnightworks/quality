@@ -281,7 +281,7 @@ def test_a_server_that_trickles_bytes_hits_the_download_deadline(serve_stalling,
 def test_a_server_that_goes_silent_is_a_timeout_not_the_total_deadline(serve_stalling, timed_gate, monkeypatch):
     """#53 rule 3: a stalled receive is named a timeout; the total deadline is named only when it is the cause."""
     serve_stalling(BODY_BEGUN + b"xx", trickles=False)
-    monkeypatch.setattr(scanners, "DOWNLOAD_TIMEOUT_SECONDS", 0.3)
+    monkeypatch.setattr(advisories, "DOWNLOAD_TIMEOUT_SECONDS", 0.3)
     monkeypatch.setattr(advisories, "DATABASE_DOWNLOAD_DEADLINE_SECONDS", 10)
     code, output, elapsed = timed_gate()
     assert (code, "timed out" in output, "exceeded" in output, elapsed < 3) == (2, True, False, True), output
