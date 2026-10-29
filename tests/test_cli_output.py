@@ -198,12 +198,14 @@ ENV_NAME_CASES = [
     ("tab\tx.env", "tab\\x09x.env"),
     ("del\x7fx.env", "del\\x7fx.env"),
     ("nel\x85x.env", "nel\\x85x.env"),
+    (".env.\u202eelpmaxe\u202c", ".env.\\u202eelpmaxe\\u202c"),
+    ("ls\u2028x.env", "ls\\u2028x.env"),
 ]
 
 
 @pytest.mark.parametrize(("name", "escaped"), ENV_NAME_CASES, ids=[escaped for _, escaped in ENV_NAME_CASES])
-def test_an_env_name_with_a_control_character_prints_as_one_escaped_line(build_repo, capsys, name, escaped):
-    """#97 rule 2, cell 7 (E4): the finding is one line with the name escaped, and the fix is #86's hint."""
+def test_an_env_name_with_a_control_format_or_separator_character_prints_as_one_escaped_line(build_repo, capsys, name, escaped):
+    """#97 rule 2, cell 7 (E4) and #228 rule 7: the finding is one line with the name escaped, and the fix is #86's hint."""
     code, lines = door_lines(capsys, "hygiene", str(build_repo({name: "A=1\n"})))
     assert code == 1
     assert any(line.startswith(f"env-file {escaped} - ") for line in lines), lines
@@ -393,7 +395,8 @@ def test_a_baseline_refusal_for_a_file_that_is_not_utf8_prints_its_surrogate_esc
 
 @pytest.mark.parametrize(
     "name",
-    ["plain.env", "umlaut-\u00e9.env", "-dash.env", "a:b.env", "*.env", "50%.env", "back\\slash.env", "=equals.env"],
+    ["plain.env", "umlaut-\u00e9.env", "-dash.env", "a:b.env", "*.env", "50%.env", "back\\slash.env", "=equals.env",
+     "nbsp\u00a0.env", "e\u0301.env", "smile\U0001f600.env", "\u540d\u524d.env", "\u05e9\u05dd.env", "back\\u202e.env"],
 )
 def test_a_name_printable_unchanged_is_a_shell_word_and_printable_is_idempotent(name):
     """#97 rule 1, cell 17: a word exactly when `printable(x) == x`."""
@@ -402,10 +405,25 @@ def test_a_name_printable_unchanged_is_a_shell_word_and_printable_is_idempotent(
 
 
 @pytest.mark.parametrize(
-    "name", ["lat\udce9.env", "a\nb", "esc\x1b", "c1\x85", "del\x7f", "tab\t", "cr\r", "nul\0"]
+    "name", ["lat\udce9.env", "a\nb", "esc\x1b", "c1\x85", "del\x7f", "tab\t", "cr\r", "nul\0",
+     "rlo\u202e", "lri\u2066", "rlm\u200f", "alm\u061c", "zwsp\u200b", "zwj\u200d", "shy\u00ad", "bom\ufeff", "ls\u2028",
+     "ps\u2029", "tag\U000e0041", "langtag\U000e0001"]
 )
 def test_a_name_printable_changes_has_no_shell_word_and_printing_it_twice_changes_nothing(name):
     """#97 rule 1, cell 17: no word where `printable(x) != x`; the escape is idempotent."""
     assert printable(name) != name
     assert shell_word(name) is None
     assert printable(printable(name)) == printable(name)
+
+
+@pytest.mark.parametrize(
+    ("character", "printed"),
+    [
+        ("\u202e", "\\u202e"), ("\u2066", "\\u2066"), ("\u200f", "\\u200f"), ("\u061c", "\\u061c"), ("\u200b", "\\u200b"),
+        ("\u200d", "\\u200d"), ("\u00ad", "\\u00ad"), ("\ufeff", "\\ufeff"), ("\u2028", "\\u2028"), ("\u2029", "\\u2029"),
+        ("\U000e0041", "\\U000e0041"), ("\U000e0001", "\\U000e0001"),
+    ],
+)
+def test_a_format_or_separator_character_prints_as_its_code_point(character, printed):
+    """#228 rule 7: a format character, U+2028 and U+2029 print as `\\uNNNN` (`\\UNNNNNNNN` above U+FFFF), by category."""
+    assert printable(character) == printed

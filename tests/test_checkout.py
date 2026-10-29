@@ -127,11 +127,12 @@ def test_a_path_in_a_submodule_or_linked_worktree_means_its_own_top(tmp_path, ca
 
 
 @pytest.mark.integration
-def test_the_hint_for_a_path_git_refuses_has_no_command_when_the_path_is_unprintable(tmp_path, monkeypatch, capsys):
-    """#86 rule 1, cell 9: a PATH holding a line feed gets the hint without a `git -C` command."""
-    (tmp_path / "a\nb").write_text("x")
+@pytest.mark.parametrize("path", ["a\nb", "a\u202eb"])
+def test_the_hint_for_a_path_git_refuses_has_no_command_when_the_path_is_unprintable(tmp_path, monkeypatch, capsys, path):
+    """#86 rule 1, cell 9 and #228 rule 7: a PATH holding a line feed or a format character gets the hint without a `git -C` command."""
+    (tmp_path / path).write_text("x")
     monkeypatch.chdir(tmp_path)
-    code = cli.main(["hygiene", "a\nb"])
+    code = cli.main(["hygiene", path])
     err = capsys.readouterr().err
     assert code == 2
     assert "(`git status` run inside it says why)" in err

@@ -97,9 +97,13 @@ date = 2026-10-20
 reason = "the operator ruled the requirement shelf machinery out"
 ```
 
-- `what` is exactly the verdict's text after `loosened (undeclared): `, unescaped: where the verdict prints a character
-  escaped (`\x0a` for a line feed in a job name), the entry writes the TOML escape (`\n`). Any other text, another
-  number included, declares nothing.
+- `what` is exactly the verdict's text after `loosened (undeclared): `, unescaped. The verdict prints a line feed in a
+  job name as `\x0a` and a format character as `\u202e` (`\U000e0041` above U+FFFF), and never escapes a backslash, so a
+  printed backslash is either such an escape or one the name holds itself; the head's files show which. In a
+  double-quoted TOML string, each escape the verdict added is written as its TOML escape (`\x0a` as `\n`; `\u202e` and
+  `\U000e0041` are TOML escapes already) and each backslash the name holds itself as `\\`. A single-quoted literal
+  string, as in the example, fits only a `what` the verdict printed without an escape. Any other text, another number
+  included, declares nothing.
 - `item` is `#<n>` or `<owner>/<repo>#<n>` (ASCII letters, digits, `_`, `.` and `-`), `date` a TOML date without a
   time, `reason` one non-empty line. A missing or extra key, a text date, two entries with one `what` or any other
   malformed entry is exit `2` in `verdict` and in `hygiene --engines` (the `secret` and `advisory` rules), naming the
