@@ -807,12 +807,12 @@ def test_mise_is_asked_in_the_manifest_directory_under_its_ceiling(
     )
 
 
-@pytest.mark.parametrize("body", ["echo ''", "echo relative/gitleaks", "echo /nowhere/gitleaks", "printf '\\377'", 'if [ "$1" = version ]; then printf \'\\377\'; else echo "$0"; fi'],
-    ids=["nothing", "relative-path", "no-file", "unreadable-mise-output", "unreadable-scanner-version"])
-def test_a_mise_answer_that_is_no_usable_scanner_names_the_install_command(build_repo, use_mise, capsys, body):
+@pytest.mark.parametrize(("body", "reason"), [(f"echo {answer}", "mise which printed no gitleaks executable") for answer in ("''", "relative/gitleaks", "/nowhere/gitleaks")] + [("printf '\\377'", ""), ('if [ "$1" = version ]; then printf \'\\377\'; else echo "$0"; fi', "")], ids=["nothing", "relative-path", "no-file", "unreadable-mise-output", "unreadable-scanner-version"])
+def test_a_mise_answer_that_is_no_usable_scanner_names_the_install_command(build_repo, use_mise, capsys, body, reason):
     """#228 rule 4, #265: external output that yields no pinned executable, a process error included, is exit 2 and the install command."""
     use_mise(body)
-    assert (cli.main(["hygiene", str(build_repo({}))]), scanners.install_command() in capsys.readouterr().err) == (2, True)
+    exit_code, err = cli.main(["hygiene", str(build_repo({}))]), capsys.readouterr().err
+    assert (exit_code, reason in err, scanners.install_command() in err) == (2, True, True)
 
 
 def test_a_repository_with_no_workflow_and_no_lock_needs_only_gitleaks(build_repo, path_without_mise, capsys):
