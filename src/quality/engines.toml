@@ -1,7 +1,5 @@
-# The one place an engine's version, download and checksum are written down.
+# The one place a downloaded engine's version, download and checksum are written down.
 # gitleaks and actionlint: sha256 is the release's own *_checksums.txt line for this asset.
-# zizmor publishes no checksums file; its sha256 is the digest the v1.31.1 release itself lists for that asset
-# (GitHub release API, assets[].digest).
 # osv-scanner: a bare binary (format = "binary"); sha256 is the release's own osv-scanner_SHA256SUMS line, equal to the API digest.
 [gitleaks]
 version = "8.30.1"
@@ -12,11 +10,6 @@ sha256 = "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
 version = "1.7.12"
 url = "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz"
 sha256 = "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
-
-[zizmor]
-version = "1.31.1"
-url = "https://github.com/zizmorcore/zizmor/releases/download/v1.31.1/zizmor-x86_64-unknown-linux-gnu.tar.gz"
-sha256 = "d185f726bdaf92df78273217dfdd24ebcd6b0ef48cf3ce776ff5762b6e138c99"
 
 [osv-scanner]
 version = "2.7.0"

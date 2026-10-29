@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from quality import process
+from quality import installation, process
 from quality.config import Allowance
 from quality.report import Finding
 from quality.rules import Rule
@@ -248,13 +248,34 @@ def _leak_finding(entry: object) -> Finding:
 GITLEAKS_ENGINE = _Engine(GITLEAKS, (GITLEAKS_LEAKS_FOUND,), _leak_finding)
 
 
-def scan_workflows(root: Path, engine_dir: Path, pins: dict[str, Pin], rule: Rule, workflows: list[str]) -> list[Finding]:
+def pinned_zizmor(locate_zizmor: Callable[[], str]) -> Path:
+    """The zizmor executable of quality's own installation, at the version quality's metadata pins."""
+    try:
+        located = Path(locate_zizmor())
+        pinned = installation.required_version(ZIZMOR)
+    except FileNotFoundError as error:
+        raise EngineError(f"quality's installation holds no {ZIZMOR}; {installation.REINSTALL}") from error
+    except installation.UnpinnedDependency as error:
+        raise EngineError(str(error)) from error
+    try:
+        verify_version(located, ZIZMOR, pinned)
+    except process.ProcessError as error:
+        raise EngineError(f"{error}; {installation.REINSTALL}") from error
+    return located
+
+
+def scan_workflows(
+    root: Path, engine_dir: Path, pins: dict[str, Pin], rule: Rule, workflows: list[str], locate_zizmor: Callable[[], str],
+) -> list[Finding]:
     """The findings of the one engine that judges `rule`; nothing to scan needs no engine."""
     if not workflows:
         return []
     engine = WORKFLOW_ENGINES[rule]
-    binary = engine_path(engine_dir, engine.name)
-    verify_version(binary, engine.name, pins[engine.name].version)
+    if engine.name == ZIZMOR:
+        binary = pinned_zizmor(locate_zizmor)
+    else:
+        binary = engine_path(engine_dir, engine.name)
+        verify_version(binary, engine.name, pins[engine.name].version)
     scan = process.run([str(binary), *engine.arguments, *workflows], cwd=root)
     return engine_findings(engine, scan.stdout, scan.returncode, scan.stderr)
 

@@ -15,9 +15,9 @@ from pathlib import Path
 
 import pytest
 
-from quality import cli, engines, process, rules
+from quality import cli, engines, process
 from quality.engines import EngineError, Pin
-from tests.support.engines import OUTPUTS
+from tests.support.engines import OUTPUTS, fake_engine, fake_zizmor, never_located
 from tests.support.git_repositories import GIT_IDENTITY
 from tests.support.secrets import FAKE_KEY, OTHER_KEY, UNKNOWN_KEY_CONFIGS, allow_config, assert_key_found, sha256_of
 
@@ -60,8 +60,8 @@ def fake_gitleaks(tmp_path: Path, version: str = PINNED, on_scan: str = "exit 0"
     return engine_dir
 
 
-def hygiene_exit_2(repo: Path, engine_dir: Path, capsys) -> str:
-    assert cli.main(["hygiene", "--engines", str(engine_dir), str(repo)]) == 2
+def hygiene_exit_2(repo: Path, engine_dir: Path, capsys, locate_zizmor=never_located) -> str:
+    assert cli.main(["hygiene", "--engines", str(engine_dir), str(repo)], locate_zizmor=locate_zizmor) == 2
     return capsys.readouterr().err
 
 
@@ -102,7 +102,11 @@ def url_of(server: http.server.HTTPServer) -> str:
     return f"http://127.0.0.1:{server.server_port}/gitleaks.tar.gz"
 
 
-@pytest.mark.parametrize("engine", ["gitleaks", "actionlint", "zizmor", "osv-scanner"])
+def test_zizmor_is_no_downloaded_engine():
+    assert engines.ZIZMOR not in engines.read_pins()
+
+
+@pytest.mark.parametrize("engine", ["gitleaks", "actionlint", "osv-scanner"])
 def test_pin_file_names_every_engine_with_a_full_checksum(engine):
     """#13 rule 1, #15 rule 1: the pin file names the version, a download of that version, and a sha256."""
     pin = engines.read_pins()[engine]
@@ -535,15 +539,10 @@ def test_unreadable_or_inconsistent_workflow_result_cannot_be_judged(engine, rep
         workflow_findings(engine, text, code)
 
 
-def fake_workflow_engines(tmp_path: Path, on_scan: str) -> Path:
-    """An engine directory with all three engines printing their pinned version, running `on_scan` otherwise."""
+def fake_workflow_engines(tmp_path: Path, on_scan: str):
     engine_dir = fake_gitleaks(tmp_path / "fake", on_scan='echo "[]" > "$report"; exit 0')
-    for name, version_flag in (("actionlint", "-version"), ("zizmor", "--version")):
-        binary = engine_dir / name
-        pinned = engines.read_pins()[name].version
-        binary.write_text(f'#!/bin/sh\nif [ "$1" = {version_flag} ]; then echo {pinned}; exit 0; fi\n{on_scan}\n')
-        binary.chmod(0o755)
-    return engine_dir
+    fake_engine(engine_dir, "actionlint", on_scan)
+    return engine_dir, fake_zizmor(tmp_path / "zizmor", on_scan)
 
 
 @pytest.mark.parametrize(
@@ -559,25 +558,26 @@ def fake_workflow_engines(tmp_path: Path, on_scan: str) -> Path:
 def test_a_workflow_engine_without_a_usable_report_is_exit_2(tmp_path, build_repo, capsys, on_scan, expected):
     """#15 rule 2: an engine that exits 0 with no report, or errors out, is exit 2 and never clean."""
     repo = build_repo({".github/workflows/w.yml": "on: push\n"})
-    assert expected in hygiene_exit_2(repo, fake_workflow_engines(tmp_path, on_scan), capsys)
+    engine_dir, locate_zizmor = fake_workflow_engines(tmp_path, on_scan)
+    assert expected in hygiene_exit_2(repo, engine_dir, capsys, locate_zizmor)
 
 
-@pytest.mark.parametrize("engine", ["gitleaks", "actionlint", "zizmor"])
+@pytest.mark.parametrize("engine", ["gitleaks", "actionlint"])
 def test_an_engine_that_is_a_symlink_inside_the_directory_is_still_judged_by_its_name(
     tmp_path, build_repo, capsys, engine
 ):
     """#15 rule 2: a pinned engine reached through a symlink to a versioned file in the directory is not a crash."""
     repo = build_repo({".github/workflows/w.yml": "on: push\n"})
-    engine_dir = fake_workflow_engines(tmp_path, 'echo "[]"; exit 0')
+    engine_dir, locate_zizmor = fake_workflow_engines(tmp_path, 'echo "[]"; exit 0')
     versioned = engine_dir / f"{engine}-{engines.read_pins()[engine].version}"
     (engine_dir / engine).rename(versioned)
     (engine_dir / engine).symlink_to(versioned)
-    assert cli.main(["hygiene", "--engines", str(engine_dir), str(repo)]) == 0
+    assert cli.main(["hygiene", "--engines", str(engine_dir), str(repo)], locate_zizmor=locate_zizmor) == 0
 
 
 def test_no_workflow_engine_runs_when_the_repository_has_no_workflow(tmp_path):
     """#15 rule 2: without a `.github/workflows/*.y{a,}ml` there is nothing to lint, so no engine is needed."""
-    assert engines.scan_workflows(tmp_path, tmp_path / "no-engines", engines.read_pins(), rules.Rule.WORKFLOW_LINT, []) == []
+    assert [engines.scan_workflows(tmp_path, tmp_path, engines.read_pins(), rule, [], never_located) for rule in engines.WORKFLOW_ENGINES] == [[], []]
 
 
 def test_a_run_without_engines_names_the_skipped_scans(build_repo, capsys):
@@ -699,25 +699,25 @@ def test_a_shellcheck_on_path_never_runs_during_workflow_lint(build_repo, instal
 
 
 @pytest.fixture(scope="module")
-def pinned_zizmor_asset() -> bytes:
-    with urllib.request.urlopen(engines.read_pins()["zizmor"].url, timeout=engines.DOWNLOAD_TIMEOUT_SECONDS) as asset:  # noqa: S310 - the pinned https url of engines.toml
+def pinned_actionlint_asset() -> bytes:
+    with urllib.request.urlopen(engines.read_pins()["actionlint"].url, timeout=engines.DOWNLOAD_TIMEOUT_SECONDS) as asset:  # noqa: S310 - the pinned https url of engines.toml
         return asset.read()
 
 
 @pytest.mark.engine
 @pytest.mark.parametrize(("tamper", "exit_code"), [(False, 0), (True, 2)], ids=["pinned-bytes", "one-byte-changed"])
 def test_a_redirected_pinned_release_asset_is_decided_by_its_checksum_alone(
-    tmp_path, serve, pinned_zizmor_asset, tamper, exit_code
+    tmp_path, serve, pinned_actionlint_asset, tamper, exit_code
 ):
     """#15 rule 6, #5 finding 24: the pinned asset served through a redirect installs; a changed byte is exit 2."""
-    served = bytearray(pinned_zizmor_asset)
+    served = bytearray(pinned_actionlint_asset)
     if tamper:
         served[-1] = (served[-1] + 1) % 256
     release = serve(redirect_to=url_of(serve(body=bytes(served))))
-    pinned = engines.read_pins()["zizmor"]
+    pinned = engines.read_pins()["actionlint"]
     pin = Pin(pinned.version, url_of(release), pinned.sha256)
-    assert cli.main(["engines", "install", str(tmp_path / "bin")], read_pins=lambda: {"zizmor": pin}) == exit_code
-    assert (tmp_path / "bin" / "zizmor").exists() is (exit_code == 0)
+    assert cli.main(["engines", "install", str(tmp_path / "bin")], read_pins=lambda: {"actionlint": pin}) == exit_code
+    assert (tmp_path / "bin" / "actionlint").exists() is (exit_code == 0)
 
 
 RECORDED_SECRET = "PLACEHOLDER-SECRET-VALUE"  # the Secret in the recorded gitleaks-finding.json

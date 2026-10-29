@@ -4,12 +4,12 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from ruff import find_ruff_bin
 
-from quality import hygiene, python_lint
+from quality import hygiene, installation, python_lint
 from quality.python_lint import LintError, RuffFinding, UnparsablePython
 from quality.rules import Rule
-from tests.support.hygiene import CLEAN_LINE
+from tests.support.engines import never_located
+from tests.support.hygiene import CLEAN_LINE, installed_ruff, requirements_loosening
 from tests.support.hygiene import hygiene_output as run
 from tests.support.layout import in_index
 
@@ -52,7 +52,7 @@ def judged_prints(text: str, records: list[RuffFinding]) -> tuple[list[str], tup
 
 
 def rule_verdict(repo: Path, rule: Rule = Rule.PYTHON_SECURITY) -> hygiene.RuleVerdict:
-    return next(verdict for verdict in hygiene.run_hygiene(repo, None, find_ruff_bin).verdicts if verdict.rule == rule)
+    return next(verdict for verdict in hygiene.run_hygiene(repo, None, installed_ruff, never_located).verdicts if verdict.rule == rule)
 
 
 def flagged_paths(repo: Path, rule: Rule = Rule.PYTHON_SECURITY) -> list[str]:
@@ -61,10 +61,11 @@ def flagged_paths(repo: Path, rule: Rule = Rule.PYTHON_SECURITY) -> list[str]:
     return [finding.path for finding in verdict.findings]
 
 
-def fake_ruff(directory: Path, on_check: str, version: str = "0.17.1") -> Path:
+def fake_ruff(directory: Path, on_check: str, version: str | None = None) -> Path:
     """A ruff that reports `version` and runs `on_check` (shell) for any other call."""
     binary = directory / "ruff"
-    binary.write_text(f'#!/bin/sh\nif [ "$1" = "--version" ]; then echo "ruff {version}"; exit 0; fi\n{on_check}\n')
+    reported = version or installation.required_version("ruff")
+    binary.write_text(f'#!/bin/sh\nif [ "$1" = "--version" ]; then echo "ruff {reported}"; exit 0; fi\n{on_check}\n')
     binary.chmod(0o755)
     return binary
 
@@ -379,7 +380,7 @@ def test_the_pinned_ruff_itself_honours_every_green_noqa_form_and_not_a_code_in_
         (tmp_path / names[-1]).write_text(f"import subprocess\n{line.replace('run(', 'subprocess.run(')}\n")
 
     def ruff(*options: str) -> subprocess.CompletedProcess:
-        command = [find_ruff_bin(), "check", "--isolated", "--no-cache", "--select", "S603", *options, "--", *names]
+        command = [installed_ruff(), "check", "--isolated", "--no-cache", "--select", "S603", *options, "--", *names]
         return subprocess.run(command, cwd=tmp_path, capture_output=True, text=True, check=False)
 
     assert len(json.loads(ruff("--ignore-noqa", "--output-format", "json").stdout)) == len(names)
@@ -394,7 +395,7 @@ def test_the_pinned_ruff_itself_honours_the_owner_form(tmp_path):
     (tmp_path / "door.py").write_text(f'"""Runs it."""\n\n{OWNER}\n{PRINT}\n')
 
     def ruff(*options: str) -> subprocess.CompletedProcess:
-        command = [find_ruff_bin(), "check", "--isolated", "--no-cache", "--select", "T20", "--output-format", "json", *options, "--", "door.py"]
+        command = [installed_ruff(), "check", "--isolated", "--no-cache", "--select", "T20", "--output-format", "json", *options, "--", "door.py"]
         return subprocess.run(command, cwd=tmp_path, capture_output=True, text=True, check=False)
 
     assert len(json.loads(ruff("--ignore-noqa").stdout)) == 1
@@ -426,26 +427,55 @@ def test_a_syntax_error_is_unparsable_and_the_other_rules_are_still_judged(build
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    ("on_check", "version", "says"),
+    ("on_check", "says"),
     [
-        ("echo '[]'", "0.0.1", "reports ruff 0.0.1, quality pins ruff==0.17.1"),
-        ("echo boom >&2; exit 2", "0.17.1", "ruff exited 2"),
-        ("echo 'not json'", "0.17.1", "ruff printed a report quality cannot read"),
-        ("echo 'warning: Failed to lint src/p/a.py: gone' >&2; echo '[]'", "0.17.1", "warning: Failed to lint src/p/a.py"),
-        ("exec sleep 5", "0.17.1", "did not finish within"),
+        ("echo boom >&2; exit 2", "ruff exited 2"),
+        ("echo 'not json'", "ruff printed a report quality cannot read"),
+        ("echo 'warning: Failed to lint src/p/a.py: gone' >&2; echo '[]'", "warning: Failed to lint src/p/a.py"),
+        ("exec sleep 5", "did not finish within"),
     ],
-    ids=["version mismatch", "exit 2", "unreadable JSON", "failed to lint", "timeout"],
+    ids=["exit 2", "unreadable JSON", "failed to lint", "timeout"],
 )
-def test_a_ruff_run_quality_cannot_trust_cannot_be_judged(build_repo, capsys, monkeypatch, elsewhere, on_check, version, says):
+def test_a_ruff_run_quality_cannot_trust_cannot_be_judged(build_repo, capsys, monkeypatch, elsewhere, on_check, says):
     """Sentence 8, cell 16, and #225 cell 11: both rules cannot judge, exit 2, and the other rules are still judged."""
     repo = build_repo({".env": "A=1\n", "src/p/a.py": "x = 1\n"})
-    binary = fake_ruff(elsewhere, on_check, version)
+    binary = fake_ruff(elsewhere, on_check)
     monkeypatch.setattr(python_lint, "RUN_TIMEOUT_SECONDS", 0.5)
     code, output = run(capsys, repo, lambda: str(binary))
     rules = [Rule.PYTHON_SECURITY, Rule.PYTHON_PRINT]
     refused = [rule for rule in rules if f"hygiene: {rule} cannot judge - " in output]
     assert (code, refused, says in output) == (2, rules, True), output
     assert "env-file .env - " in output
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("case", ["not installed", "recorded file deleted", "another version", "failing version", "unpinned"])
+def test_a_ruff_quality_cannot_find_or_trust_names_the_reinstall_command(build_repo, capsys, monkeypatch, elsewhere, case):
+    """#248 rule 4: a ruff that is missing, at another version or unable to report one makes both python rules cannot
+    judge and names the reinstall command; a pin quality's own metadata lacks names the defect and no command."""
+    repo = build_repo({".env": "A=1\n", "src/p/a.py": "x = 1\n"})
+    (elsewhere / "failing").mkdir()
+    failing_version = fake_ruff(elsewhere / "failing", "echo '[]'")
+    failing_version.write_text("#!/bin/sh\nexit 1\n")
+    locate = {
+        "not installed": no_ruff_installed,
+        "recorded file deleted": lambda: str(elsewhere / "gone" / "ruff"),
+        "another version": lambda: str(fake_ruff(elsewhere, "echo '[]'", "0.0.1")),
+        "failing version": lambda: str(failing_version),
+        "unpinned": installed_ruff,
+    }[case]
+    if case == "unpinned":
+        monkeypatch.setattr(installation, "requires", requirements_loosening("ruff"))
+    code, output = run(capsys, repo, locate)
+    assert code == 2, output
+    for rule in (Rule.PYTHON_SECURITY, Rule.PYTHON_PRINT):
+        assert f"hygiene: {rule} cannot judge - " in output, output
+    assert "env-file .env - " in output
+    assert (installation.REINSTALL in output) is (case != "unpinned"), output
+    if case == "unpinned":
+        assert str(installation.UnpinnedDependency("ruff")) in output
+    if case == "another version":
+        assert f"quality pins ruff=={installation.required_version('ruff')}" in output
 
 
 @pytest.mark.integration

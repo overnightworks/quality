@@ -10,13 +10,11 @@ import subprocess
 import tokenize
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from importlib.metadata import requires
 from pathlib import Path
 
-from packaging.requirements import Requirement
 from packaging.version import Version
 
-from quality import DISTRIBUTION, layout, process, ratchet, repository
+from quality import installation, layout, process, ratchet, repository
 from quality.report import Finding
 from quality.rules import Rule
 
@@ -288,20 +286,19 @@ def _pinned_ruff(locate_ruff: Callable[[], str]) -> str:
     """The ruff binary of quality's own installation, never one on PATH, at the version quality pins."""
     try:
         binary = locate_ruff()
+        pinned = installation.required_version(RUFF_DISTRIBUTION)
     except FileNotFoundError as error:
-        raise LintError("quality's installation holds no ruff binary") from error
-    asked = _ruff(binary, ["--version"], None, process.VERSION_TIMEOUT_SECONDS)
+        raise LintError(f"quality's installation holds no ruff binary; {installation.REINSTALL}") from error
+    except installation.UnpinnedDependency as error:
+        raise LintError(str(error)) from error
+    try:
+        asked = _ruff(binary, ["--version"], None, process.VERSION_TIMEOUT_SECONDS)
+    except LintError as error:
+        raise LintError(f"{error}; {installation.REINSTALL}") from error
     reported = (asked.stdout.split() or [""])[-1] if asked.returncode == 0 else ""
-    pin = _ruff_pin()
-    if f"=={reported}" != pin:
-        raise LintError(f"{binary} reports ruff {reported or 'no version'}, quality pins ruff{pin}")
+    if reported != pinned:
+        raise LintError(f"{binary} reports ruff {reported or 'no version'}, quality pins ruff=={pinned}; {installation.REINSTALL}")
     return binary
-
-
-def _ruff_pin() -> str:
-    """The specifier of quality's own requirement on ruff, as its installed metadata states it."""
-    requirements = (Requirement(line) for line in requires(DISTRIBUTION) or ())
-    return next((str(requirement.specifier) for requirement in requirements if requirement.name == RUFF_DISTRIBUTION), "")
 
 
 def _batches(names: Sequence[str], limit: int) -> Iterator[list[str]]:
