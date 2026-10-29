@@ -1,3 +1,4 @@
 from importlib.metadata import version
 
-__version__ = version("overnightworks-quality")
+DISTRIBUTION = "overnightworks-quality"
+__version__ = version(DISTRIBUTION)

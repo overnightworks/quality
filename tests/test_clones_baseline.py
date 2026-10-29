@@ -516,12 +516,13 @@ def test_two_new_pairs_print_in_sorted_order(build_repo, capsys):
 
 
 def test_a_file_python_cannot_parse_leaves_the_enforced_clone_rule_unable_to_judge(build_repo, capsys):
-    """#136 cell 8: the same file and wording as the size rule, and both rules count as unparsable."""
+    """#136 cell 8: the same file and wording as the size rule; size, clone and python-security (#219) count as unparsable."""
     code, output = enforced(capsys, build_repo, {**TWO_FILES, "src/broken.py": "def broken(:\n"})
     assert code == 2, output
     assert "hygiene: size unparsable - src/broken.py is not valid Python" in output
     assert "hygiene: clone unparsable - src/broken.py is not valid Python" in output
-    assert "2 unparsable" in output
+    assert "hygiene: python-security unparsable - ruff cannot parse src/broken.py" in output
+    assert "3 unparsable" in output
 
 
 @pytest.mark.parametrize("text", ["[size\n", *MALFORMED], ids=["no clone table, not TOML", *MALFORMED_IDS])

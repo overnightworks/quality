@@ -12,7 +12,7 @@ import yaml
 from packaging.specifiers import Specifier, SpecifierSet
 from packaging.version import Version
 
-from quality import advisories, architecture, clones, engines, layout, ratchet, repository
+from quality import advisories, architecture, clones, engines, layout, python_lint, ratchet, repository
 from quality.config import (
     CONFIG_PATH,
     Allowance,
@@ -40,6 +40,7 @@ SCRIPT_HEADER = LayoutRule.SCRIPT_HEADER.value
 TEST_LAYOUT = LayoutRule.TEST_LAYOUT.value
 TEST_IMPORT = LayoutRule.TEST_IMPORT.value
 PYTHON_FLOOR = "python-floor"
+PYTHON_SECURITY = python_lint.RULE
 PYTHON_TARGET = Version("3.14")
 LOWER_BOUND_OPERATORS = frozenset({">=", ">", "~=", "==", "==="})
 WORKFLOW_RULE_IDS = tuple(engines.WORKFLOW_ENGINES)
@@ -594,6 +595,31 @@ def check_import_contract(root: Path, tracked: list[str]) -> architecture.Contra
         raise CannotJudge(str(error)) from error
 
 
+def check_python_security(root: Path, locate_ruff: Callable[[], str]) -> list[Finding]:
+    """ruff judges every tracked regular `.py` file, each resolved inside the repository and read the way Python reads
+    it, which must be UTF-8 text; one the checkout does not hold cannot be judged, so the rule never certifies less."""
+    modes = index_modes(root)
+    sources = {name: _held(root, name) for name in python_lint.candidates(modes)}
+    try:
+        files = {
+            name: python_lint.PythonFile(_judged(repository.resolve_file, root, name), python_lint.source_text(name, content))
+            for name, content in sources.items()
+        }
+        return python_lint.check_security(root, files, modes, PYTHON_TARGET, locate_ruff)
+    except python_lint.UnparsablePython as error:
+        raise Unparsable(str(error)) from error
+    except python_lint.LintError as error:
+        raise CannotJudge(str(error)) from error
+
+
+def _held(root: Path, name: str) -> bytes:
+    """The bytes of a file the checkout must hold: a deleted or sparse file cannot be judged."""
+    content = _judged(repository.read_bytes, root, name)
+    if content is None:
+        raise CannotJudge(f"cannot read {name}: the checkout does not hold it")
+    return content
+
+
 def check_secrets(root: Path, engine_dir: Path) -> engines.SecretScan:
     try:
         return engines.scan_secrets(root, engine_dir, engines.read_pins(), read_secret_allowances(root))
@@ -715,7 +741,7 @@ def _content_findings(
     return _attempt(judge)
 
 
-def run_hygiene(root: Path, engine_dir: Path | None = None) -> HygieneResult:
+def run_hygiene(root: Path, engine_dir: Path | None, locate_ruff: Callable[[], str]) -> HygieneResult:
     """Judges every active rule, in run order, over the repository `root` lies in; only one git cannot list stops the run."""
     root = work_tree_top(root)
     tracked = tracked_files(root)
@@ -738,6 +764,7 @@ def run_hygiene(root: Path, engine_dir: Path | None = None) -> HygieneResult:
         _verdict(TEST_LAYOUT, _attempt(lambda: layout.check_test_layout(index_modes(root), _declared(read_layout_allowances, root)))),
         _verdict(TEST_IMPORT, _content_findings(root, layout.test_import_candidates, layout.check_test_import)),
         _verdict(PYTHON_FLOOR, floor if isinstance(floor, CannotJudge) else floor.findings),
+        _verdict(PYTHON_SECURITY, _attempt(lambda: check_python_security(root, locate_ruff))),
     ]
     reports = _reports(size, clone, contracts, floor)
     if engine_dir is None:

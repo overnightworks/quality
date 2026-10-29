@@ -104,11 +104,12 @@ def test_methods_and_repeated_names_get_the_size_rules_symbols():
     assert {pair.first.symbol for pair in pairs} | {pair.second.symbol for pair in pairs} == {"Holder.method", "method", "method#2"}
 
 
-def test_a_file_python_cannot_parse_has_no_pair_and_leaves_the_run_clean(build_repo, capsys):
-    """#113 rule 3: report-only mode skips the file; the size rule names it, and `clone` stays clean."""
+def test_a_file_python_cannot_parse_has_no_pair_and_leaves_the_clone_rule_clean_while_python_security_exits_2(build_repo, capsys):
+    """#113 rule 3: report-only mode skips the file; `clone` stays clean, python-security (#219) makes the run exit 2."""
     files = {"src/a.py": function("first", "a", "b"), "src/broken.py": "def broken(:\n"}
     code, output = hygiene(capsys, build_repo(files))
-    assert (code, report(0, 0) in output, "clone unparsable" in output) == (0, True, False), output
+    assert (code, report(0, 0) in output, "clone unparsable" in output) == (2, True, False), output
+    assert "hygiene: python-security unparsable - ruff cannot parse src/broken.py" in output
 
 
 @pytest.mark.integration
