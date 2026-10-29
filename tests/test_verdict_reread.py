@@ -492,6 +492,64 @@ def test_an_import_contract_loosening_is_a_loosening_the_verdict_names(judged_co
     assert judged_contracts(base, head, declared) == (0 if expected == ["verdict: green"] else 1, expected)
 
 
+def forbidden_with(**changes) -> dict:
+    return {**FORBIDDEN, **changes}
+
+
+def toml_pair(base: dict, head: dict) -> tuple[dict, dict]:
+    return {"pyproject.toml": contracts_toml({"a": base})}, {"pyproject.toml": contracts_toml({"a": head})}
+
+
+def changes(field: str) -> list[str]:
+    return [LOOSENED + f'import contract "a" changes {field}', "verdict: red"]
+
+
+INDIRECT = forbidden_with(allow_indirect_imports=True)
+PROTECTED = {"type": "protected", "protected_modules": ["shop.db"], "allowed_importers": ["shop.api"]}
+INDEPENDENCE = {"type": "independence", "modules": ["shop.web", "shop.api"]}
+LAYERS = {"type": "layers", "layers": ["shop.web", "shop.db"], "containers": ["shop"]}
+GREEN = ["verdict: green"]
+
+
+@pytest.mark.parametrize(
+    ("base", "head", "declared", "expected"),
+    [
+        (*toml_pair(INDIRECT, FORBIDDEN), (), GREEN),
+        ({".importlinter": contracts_ini({"a": INDIRECT})}, {".importlinter": contracts_ini({"a": FORBIDDEN})}, (), GREEN),
+        (*toml_pair(FORBIDDEN, forbidden_with(source_modules=["shop.db", "shop.api"])), (), GREEN),
+        (*toml_pair(FORBIDDEN, forbidden_with(forbidden_modules=["shop.web", "shop.api"])), (), GREEN),
+        (*toml_pair(FORBIDDEN, forbidden_with(forbidden_modules=["shop.web", "shop.*"])), (), GREEN),
+        (*toml_pair(INDEPENDENCE, {**INDEPENDENCE, "modules": ["shop.web", "shop.api", "shop.db"]}), (), GREEN),
+        (*toml_pair(INDIRECT, forbidden_with(source_modules=["shop.db", "shop.api"], forbidden_modules=["shop.web", "shop.api"])),
+         (), GREEN),
+        (*toml_pair(FORBIDDEN, forbidden_with(forbidden_modules=[])), (), changes("forbidden_modules")),
+        (*toml_pair(INDEPENDENCE, {**INDEPENDENCE, "modules": ["shop.web"]}), (), changes("modules")),
+        (*toml_pair(FORBIDDEN, forbidden_with(source_modules=["shop.api"])), (), changes("source_modules")),
+        (*toml_pair(FORBIDDEN, forbidden_with(source_modules=["shop.api", "shop.web"])), (), changes("source_modules")),
+        (*toml_pair(forbidden_with(forbidden_modules=["shop.web"]), forbidden_with(forbidden_modules=["shop.*"])), (),
+         changes("forbidden_modules")),
+        (*toml_pair(FORBIDDEN, forbidden_with(source_modules=["shop.db", "shop.api"], allow_indirect_imports=True)), (),
+         changes("allow_indirect_imports")),
+        (*toml_pair(LAYERS, {**LAYERS, "exhaustive": True}), (), changes("exhaustive")),
+        (*toml_pair(PROTECTED, {**PROTECTED, "protected_modules": ["shop.db", "shop.web"]}), (), changes("protected_modules")),
+        (*toml_pair(FORBIDDEN, forbidden_with(as_packages=False)), (), changes("as_packages")),
+        (*toml_pair(FORBIDDEN, forbidden_with(source_modules=["shop.db", "shop.api"])), ('import contract "a" changes source_modules',),
+         [STALE + 'import contract "a" changes source_modules', "verdict: red"]),
+    ],
+    ids=[
+        "row 1 indirect imports forbidden", "row 2 the indirect line dropped in INI", "row 3 source module added",
+        "row 4 forbidden module added", "row 5 wildcard added", "row 6 independence module added", "row 7 three tightenings in one contract",
+        "row 8 forbidden module removed", "row 9 independence module removed", "row 10 source module renamed",
+        "row 11 one added and one removed", "row 12 expression replaced by a wider one", "row 13 indirect imports allowed again",
+        "row 14 exhaustive switched on", "row 14 protected module added", "row 14 as_packages switched",
+        "row 15 a declaration of a tightening",
+    ],
+)
+def test_a_change_that_only_forbids_more_is_no_loosening_and_every_other_change_is(judged_contracts, base, head, declared, expected):
+    """#252 (operator ruling 29.10.2026, „Ja, Liste der Verschärfungen“): the listed tightenings are green, all else stays red."""
+    assert judged_contracts(base, head, declared) == (0 if expected == GREEN else 1, expected)
+
+
 @pytest.mark.parametrize(
     ("files", "side", "message"),
     [
