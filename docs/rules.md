@@ -324,8 +324,10 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   pragma: no cover`), `# noqa: S607: reason`, a wrong code, another line, a file-level `# ruff: noqa`, and a
   second directive behind a reasoned one, bare or reasoned (`# noqa: S603 - why  # noqa: E501`), since ruff reads only
   a line's first directive. ruff itself honours the reasoned form,
-  so a caller's own ruff stays quiet, and `lint.external = ["S", "T20"]` in its ruff config keeps its RUF100 from
-  calling the gate's noqa unused. A file ruff cannot parse makes the rule `hygiene: python-security unparsable -
+  so a caller's own ruff stays quiet. A caller whose ruff selects none of a family (S or T20) lists exactly that
+  family in `lint.external`, which keeps its RUF100 from calling the gate's noqa unused; a caller whose ruff selects a
+  family (for example `select = ["ALL"]`) leaves it out, because its ruff honours each noqa itself and ignores a
+  file-level `# ruff: noqa` for a code listed in `external`. A file ruff cannot parse makes the rule `hygiene: python-security unparsable -
   ruff cannot parse <path>` (exit 2); a tracked `.py` file the checkout does not hold (deleted, left out by a sparse
   checkout, or a link to nowhere), a file Python cannot decode, or reads as other
   text than ruff reads as UTF-8 (a PEP 263 cookie such as utf-7), a missing or mismatched ruff, ruff exiting other
