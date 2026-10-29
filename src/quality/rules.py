@@ -2,11 +2,6 @@ from dataclasses import dataclass
 from enum import Enum, StrEnum
 from typing import Self
 
-FIRST_RELEASE = "v0.1.0"
-RATCHET_RELEASE = "v0.3.0"
-CLONE_RELEASE = "v0.4.0"
-CLONE_TABLE_RELEASE = "v0.5.0"
-
 
 class Switch(Enum):
     """What decides whether a gate that knows a rule enforces it."""
@@ -45,33 +40,38 @@ class Engines(Enum):
     NEEDED = "needed"
 
 
+RELEASE_0_1 = "v0.1.0"
+RELEASE_0_3 = "v0.3.0"
+RELEASE_0_7 = "v0.7.0"
+
+
 class Rule(StrEnum):
     """Every rule quality judges, in run order, with whether it needs the engines and its release facts."""
 
     engines: Engines
     release: RuleRelease
 
-    ENV_FILE = "env-file", Engines.NOT_NEEDED, FIRST_RELEASE, Switch.ALWAYS
-    COMPOSE_PORT = "compose-port", Engines.NOT_NEEDED, FIRST_RELEASE, Switch.ALWAYS
-    SIZE = "size", Engines.NOT_NEEDED, RATCHET_RELEASE, Switch.SIZE_BASELINE
+    ENV_FILE = "env-file", Engines.NOT_NEEDED, RELEASE_0_1, Switch.ALWAYS
+    COMPOSE_PORT = "compose-port", Engines.NOT_NEEDED, RELEASE_0_1, Switch.ALWAYS
+    SIZE = "size", Engines.NOT_NEEDED, RELEASE_0_3, Switch.SIZE_BASELINE
     CLONE = (
-        "clone", Engines.NOT_NEEDED, CLONE_RELEASE, Switch.REPORT_ONLY, SwitchChange(CLONE_TABLE_RELEASE, Switch.CLONE_TABLE)
+        "clone", Engines.NOT_NEEDED, "v0.4.0", Switch.REPORT_ONLY, SwitchChange("v0.5.0", Switch.CLONE_TABLE)
     )
-    IMPORT_CONTRACT = "import-contract", Engines.NOT_NEEDED, RATCHET_RELEASE, Switch.IMPORT_LINTER_CONFIG
-    CLAUDE_MD = "claude-md", Engines.NOT_NEEDED, RATCHET_RELEASE, Switch.ALWAYS
-    ROOT_LAYOUT = "root-layout", Engines.NOT_NEEDED, None, Switch.ALWAYS
-    FILE_SUFFIX = "file-suffix", Engines.NOT_NEEDED, None, Switch.ALWAYS
-    SCRIPT_NAME = "script-name", Engines.NOT_NEEDED, None, Switch.ALWAYS
-    SCRIPT_HEADER = "script-header", Engines.NOT_NEEDED, None, Switch.ALWAYS
-    TEST_LAYOUT = "test-layout", Engines.NOT_NEEDED, None, Switch.JUDGED_PROJECT
-    TEST_IMPORT = "test-import", Engines.NOT_NEEDED, None, Switch.ALWAYS
-    PYTHON_FLOOR = "python-floor", Engines.NOT_NEEDED, None, Switch.ALWAYS
-    PYTHON_SECURITY = "python-security", Engines.NOT_NEEDED, None, Switch.ALWAYS
-    PYTHON_PRINT = "python-print", Engines.NOT_NEEDED, None, Switch.ALWAYS
-    LEAK = "secret", Engines.NEEDED, FIRST_RELEASE, Switch.ALWAYS
-    WORKFLOW_LINT = "workflow-lint", Engines.NEEDED, FIRST_RELEASE, Switch.ALWAYS
-    WORKFLOW_SECURITY = "workflow-security", Engines.NEEDED, FIRST_RELEASE, Switch.ALWAYS
-    ADVISORY = "advisory", Engines.NEEDED, RATCHET_RELEASE, Switch.ALWAYS
+    IMPORT_CONTRACT = "import-contract", Engines.NOT_NEEDED, RELEASE_0_3, Switch.IMPORT_LINTER_CONFIG
+    CLAUDE_MD = "claude-md", Engines.NOT_NEEDED, RELEASE_0_3, Switch.ALWAYS
+    ROOT_LAYOUT = "root-layout", Engines.NOT_NEEDED, "v0.6.0", Switch.ALWAYS
+    FILE_SUFFIX = "file-suffix", Engines.NOT_NEEDED, RELEASE_0_7, Switch.ALWAYS
+    SCRIPT_NAME = "script-name", Engines.NOT_NEEDED, RELEASE_0_7, Switch.ALWAYS
+    SCRIPT_HEADER = "script-header", Engines.NOT_NEEDED, RELEASE_0_7, Switch.ALWAYS
+    TEST_LAYOUT = "test-layout", Engines.NOT_NEEDED, RELEASE_0_7, Switch.JUDGED_PROJECT
+    TEST_IMPORT = "test-import", Engines.NOT_NEEDED, RELEASE_0_7, Switch.ALWAYS
+    PYTHON_FLOOR = "python-floor", Engines.NOT_NEEDED, "v0.8.0", Switch.ALWAYS
+    PYTHON_SECURITY = "python-security", Engines.NOT_NEEDED, "v0.9.0", Switch.ALWAYS
+    PYTHON_PRINT = "python-print", Engines.NOT_NEEDED, "v0.9.0", Switch.ALWAYS
+    LEAK = "secret", Engines.NEEDED, RELEASE_0_1, Switch.ALWAYS
+    WORKFLOW_LINT = "workflow-lint", Engines.NEEDED, RELEASE_0_1, Switch.ALWAYS
+    WORKFLOW_SECURITY = "workflow-security", Engines.NEEDED, RELEASE_0_1, Switch.ALWAYS
+    ADVISORY = "advisory", Engines.NEEDED, RELEASE_0_3, Switch.ALWAYS
 
     def __new__(
         cls, rule_id: str, engines: Engines, first_release: str | None, switch: Switch, switched: SwitchChange | None = None

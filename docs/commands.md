@@ -66,7 +66,7 @@ duplicating `quality/fleet.toml` is `cannot judge`, exit `2`.
   `clone` on v0.4.0 and, from v0.5.0 on, without a `[clones]` table in
   `quality/baseline.toml`), `not in <tag>` when the pinned release predates the rule, `not released` when only main has
   the rule,
-  `no judged project` (`test-layout`, on main, when the clone has no Python project with a package under `src/` and no frontend project (a `package.json` outside every project's `tests/`)),
+  `no judged project` (`test-layout`, from v0.7.0 on, when the clone has no Python project with a package under `src/` and no frontend project (a `package.json` outside every project's `tests/`)),
   and `—` without a gate. Two pins give the oldest release; a pin that is no release (a commit without a tag, a branch or
   tag name, or unreadable release tags) gives `release unknown`. The table of first releases lives in `rules.py`.
 - A workflow file that cannot be read shows `cannot read <file>` in every cell that needs the pin, a malformed
