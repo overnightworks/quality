@@ -8,10 +8,10 @@ import pytest
 from quality import hygiene, installation, python_lint
 from quality.python_lint import LintError, RuffFinding, UnparsablePython
 from quality.rules import Rule
-from tests.support.engines import never_located, nothing_installed
 from tests.support.hygiene import CLEAN_LINE, installed_ruff, loosen_requirement
 from tests.support.hygiene import hygiene_output as run
 from tests.support.layout import in_index
+from tests.support.scanners import never_located, nothing_installed
 
 EVAL = 'eval("1")\n'
 EVAL_REASON = "S307 Use of possibly insecure function; consider using `ast.literal_eval`"

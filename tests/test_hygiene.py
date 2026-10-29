@@ -11,9 +11,9 @@ import pytest
 from quality import cli, env_file, hygiene, installation, process, sonar
 from quality.compose import is_compose_file
 from quality.report import Finding
-from tests.support.engines import fake_engine, fake_zizmor, never_located, nothing_installed
 from tests.support.hygiene import CLEAN_LINE, ENGINE_RULES, FILE_RULES, compose, installed_ruff, loosen_requirement
 from tests.support.hygiene import hygiene_output as run
+from tests.support.scanners import fake_engine, fake_zizmor, never_located, nothing_installed
 
 
 def deleted_compose_repo(build_repo, tmp_path):

@@ -15,10 +15,10 @@ from pathlib import Path
 
 import pytest
 
-from quality import cli, engines, process
-from quality.engines import EngineError, Pin
-from tests.support.engines import OUTPUTS, Locator, fake_engine, fake_zizmor, never_located
+from quality import cli, process, scanners
+from quality.scanners import EngineError, Pin
 from tests.support.git_repositories import GIT_IDENTITY
+from tests.support.scanners import OUTPUTS, Locator, fake_engine, fake_zizmor, never_located
 from tests.support.secrets import FAKE_KEY, OTHER_KEY, UNKNOWN_KEY_CONFIGS, allow_config, assert_key_found, sha256_of
 
 
@@ -41,7 +41,7 @@ def local_pin(tmp_path: Path, archive: bytes, version: str = "1.2.3", sha256: st
     return Pin(version, served.as_uri(), sha256 or hashlib.sha256(archive).hexdigest())
 
 
-PINNED = engines.read_pins()["gitleaks"].version
+PINNED = scanners.read_pins()["gitleaks"].version
 
 
 def fake_gitleaks(tmp_path: Path, version: str = PINNED, on_scan: str = "exit 0", on_version: str = "exit 0") -> Path:
@@ -102,13 +102,13 @@ def url_of(server: http.server.HTTPServer) -> str:
 
 
 def test_zizmor_is_no_downloaded_engine():
-    assert engines.ZIZMOR not in engines.read_pins()
+    assert scanners.ZIZMOR not in scanners.read_pins()
 
 
 @pytest.mark.parametrize("engine", ["gitleaks", "actionlint", "osv-scanner"])
 def test_pin_file_names_every_engine_with_a_full_checksum(engine):
     """#13 rule 1, #15 rule 1: the pin file names the version, a download of that version, and a sha256."""
-    pin = engines.read_pins()[engine]
+    pin = scanners.read_pins()[engine]
     assert pin.version
     assert pin.version in pin.url
     assert re.fullmatch(r"[0-9a-f]{64}", pin.sha256)
@@ -120,7 +120,7 @@ def test_install_follows_a_redirect_to_another_host_without_sending_credentials(
     target = serve(body=archive)
     release = serve(redirect_to=url_of(target))
     pins = {"gitleaks": Pin("1.2.3", url_of(release), hashlib.sha256(archive).hexdigest())}
-    engines.install(tmp_path / "bin", pins)
+    scanners.install(tmp_path / "bin", pins)
     sent = {name.lower() for request in release.requests + target.requests for name in request}
     assert os.access(tmp_path / "bin" / "gitleaks", os.X_OK)
     assert not sent & {"authorization", "cookie"}
@@ -132,7 +132,7 @@ def test_a_redirected_download_with_the_wrong_checksum_installs_nothing(tmp_path
     release = serve(redirect_to=url_of(target))
     pins = {"gitleaks": Pin("1.2.3", url_of(release), "0" * 64)}
     with pytest.raises(EngineError, match="sha256"):
-        engines.install(tmp_path / "bin", pins)
+        scanners.install(tmp_path / "bin", pins)
     assert not (tmp_path / "bin" / "gitleaks").exists()
 
 
@@ -184,13 +184,13 @@ def test_a_second_install_downloads_nothing_even_when_the_url_is_gone(tmp_path, 
 def test_install_reinstalls_a_missing_or_wrong_binary(tmp_path, damage):
     """#25 rule 3: a deleted binary or one at another version is installed again."""
     directory, pins = install_versioned_gitleaks(tmp_path)
-    engines.install(directory, pins)
+    scanners.install(directory, pins)
     binary = directory / "gitleaks"
     if damage == "deleted":
         binary.unlink()
     else:
         binary.write_text("#!/bin/sh\necho 9.9.9\n")
-    assert engines.install(directory, pins) == {"gitleaks": True}
+    assert scanners.install(directory, pins) == {"gitleaks": True}
     assert binary.read_text() == VERSIONED_BINARY
 
 
@@ -251,7 +251,7 @@ def test_an_engine_that_crashes_or_leaves_no_usable_report_is_exit_2(tmp_path, b
 )
 def test_report_becomes_findings(report, exit_code, expected):
     """#13 rule 3: each leak in a recorded report becomes a secret finding at file:line."""
-    findings = engines.engine_findings(engines.GITLEAKS_ENGINE, recorded(report), exit_code, "")
+    findings = scanners.engine_findings(scanners.GITLEAKS_ENGINE, recorded(report), exit_code, "")
     assert [f"{f.rule} {f.location}" for f in findings] == expected
 
 
@@ -274,7 +274,7 @@ def test_unreadable_or_inconsistent_gitleaks_result_cannot_be_judged(report, exi
     """#13 rule 3: a garbled, mis-shaped or inconsistent result is an EngineError, never clean."""
     text = recorded(report) if report.endswith(".json") else report
     with pytest.raises(EngineError):
-        engines.engine_findings(engines.GITLEAKS_ENGINE, text, exit_code, "")
+        scanners.engine_findings(scanners.GITLEAKS_ENGINE, text, exit_code, "")
 
 
 def scan(repo: Path, installed_engines: Path) -> int:
@@ -341,7 +341,7 @@ def test_a_relative_repository_path_starting_with_a_dash_is_scanned_as_that_repo
     workdir.mkdir()
     subprocess.run(["git", "clone", "-q", str(repo), "--", str(workdir / "-repo")], check=True)
     monkeypatch.chdir(workdir)
-    findings = engines.scan_secrets(Path("-repo"), installed_engines, engines.read_pins(), {}).findings
+    findings = scanners.scan_secrets(Path("-repo"), installed_engines, scanners.read_pins(), {}).findings
     assert [(finding.path, finding.line) for finding in findings] == [("config.txt", 1)]
 
 
@@ -460,7 +460,7 @@ def test_a_git_older_than_2_41_is_exit_2_naming_the_version(
 @pytest.mark.engine
 def test_installed_binary_reports_the_pinned_version(build_repo, installed_engines):
     """#13 rule 2: the installed real gitleaks passes the version check against the pin."""
-    assert engines.scan_secrets(build_repo({}), installed_engines, engines.read_pins(), {}).findings == []
+    assert scanners.scan_secrets(build_repo({}), installed_engines, scanners.read_pins(), {}).findings == []
 
 
 @pytest.fixture
@@ -497,7 +497,7 @@ FINDING_EXIT = {"actionlint": 1, "zizmor": 12}
 
 
 def workflow_findings(engine: str, report_text: str, exit_code: int) -> list:
-    return engines.engine_findings(next(judge for judge in engines.WORKFLOW_ENGINES.values() if judge.name == engine), report_text, exit_code, "")
+    return scanners.engine_findings(next(judge for judge in scanners.WORKFLOW_ENGINES.values() if judge.name == engine), report_text, exit_code, "")
 
 
 @pytest.mark.parametrize(
@@ -569,7 +569,7 @@ def test_an_engine_that_is_a_symlink_inside_the_directory_is_still_judged_by_its
     """#15 rule 2: a pinned engine reached through a symlink to a versioned file in the directory is not a crash."""
     repo = build_repo({".github/workflows/w.yml": "on: push\n"})
     engine_dir, locate_zizmor = fake_workflow_engines(tmp_path, 'echo "[]"; exit 0')
-    versioned = engine_dir / f"{engine}-{engines.read_pins()[engine].version}"
+    versioned = engine_dir / f"{engine}-{scanners.read_pins()[engine].version}"
     (engine_dir / engine).rename(versioned)
     (engine_dir / engine).symlink_to(versioned)
     assert cli.main(["hygiene", "--engines", str(engine_dir), str(repo)], locate_zizmor=locate_zizmor) == 0
@@ -577,7 +577,7 @@ def test_an_engine_that_is_a_symlink_inside_the_directory_is_still_judged_by_its
 
 def test_no_workflow_engine_runs_when_the_repository_has_no_workflow(tmp_path):
     """#15 rule 2: without a `.github/workflows/*.y{a,}ml` there is nothing to lint, so no engine is needed."""
-    assert [engines.scan_workflows(tmp_path, tmp_path, engines.read_pins(), rule, [], never_located) for rule in engines.WORKFLOW_ENGINES] == [[], []]
+    assert [scanners.scan_workflows(tmp_path, tmp_path, scanners.read_pins(), rule, [], never_located) for rule in scanners.WORKFLOW_ENGINES] == [[], []]
 
 
 def test_a_run_without_engines_names_the_skipped_scans(build_repo, capsys):
@@ -700,7 +700,7 @@ def test_a_shellcheck_on_path_never_runs_during_workflow_lint(build_repo, instal
 
 @pytest.fixture(scope="module")
 def pinned_actionlint_asset() -> bytes:
-    with urllib.request.urlopen(engines.read_pins()["actionlint"].url, timeout=engines.DOWNLOAD_TIMEOUT_SECONDS) as asset:  # noqa: S310 - the pinned https url of engines.toml
+    with urllib.request.urlopen(scanners.read_pins()["actionlint"].url, timeout=scanners.DOWNLOAD_TIMEOUT_SECONDS) as asset:  # noqa: S310 - the pinned https url of engines.toml
         return asset.read()
 
 
@@ -714,7 +714,7 @@ def test_a_redirected_pinned_release_asset_is_decided_by_its_checksum_alone(
     if tamper:
         served[-1] = (served[-1] + 1) % 256
     release = serve(redirect_to=url_of(serve(body=bytes(served))))
-    pinned = engines.read_pins()["actionlint"]
+    pinned = scanners.read_pins()["actionlint"]
     pin = Pin(pinned.version, url_of(release), pinned.sha256)
     assert cli.main(["engines", "install", str(tmp_path / "bin")], read_pins=lambda: {"actionlint": pin}) == exit_code
     assert (tmp_path / "bin" / "actionlint").exists() is (exit_code == 0)
@@ -802,9 +802,9 @@ def test_the_scan_passes_the_gates_own_config(build_repo, tmp_path):
     """#16: gitleaks is told to use quality's config, not the repository's."""
     engine_dir = fake_gitleaks(tmp_path / "fake", on_scan='echo "[]" > "$report"; exit 0')
     repo = build_repo({".gitleaks.toml": "[allowlist]\n"})
-    engines.scan_secrets(repo, engine_dir, engines.read_pins(), {})
+    scanners.scan_secrets(repo, engine_dir, scanners.read_pins(), {})
     given = (engine_dir / "gitleaks.arguments").read_text().split()
-    assert given[given.index("--config") + 1] == str(engines.GITLEAKS_CONFIG)
+    assert given[given.index("--config") + 1] == str(scanners.GITLEAKS_CONFIG)
 
 
 @pytest.mark.engine
@@ -908,7 +908,7 @@ def test_the_key_reaches_no_output_and_no_file_and_the_scratch_directory_is_gone
     scratch_parent.mkdir()
     monkeypatch.setattr(tempfile, "tempdir", str(scratch_parent))
     if failure == "gitleaks-stalls":
-        monkeypatch.setattr(engines, "SECRET_SCAN_TIMEOUT_SECONDS", 1)
+        monkeypatch.setattr(scanners, "SECRET_SCAN_TIMEOUT_SECONDS", 1)
     engine_dir = installed_engines if failure == "none" else fake_gitleaks(tmp_path / "failing", on_scan=FAILING_REPORTS[failure])
     exit_code = cli.main(leak_scan_command(command, keyed_repo, engine_dir))
     assert exit_code == (1 if failure == "none" else 2)

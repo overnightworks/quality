@@ -1,9 +1,9 @@
 import os
 from pathlib import Path
 
-from quality import engines, process
+from quality import process, scanners
 from quality.config import CONFIG_PATH, load_staged_secret_allowances
-from quality.engines import Pin, SecretScan
+from quality.scanners import Pin, SecretScan
 
 INDEX_VARIABLE = "GIT_INDEX_FILE"
 
@@ -15,7 +15,7 @@ def scan_staged(path: Path, engine_dir: Path, pins: dict[str, Pin]) -> SecretSca
     nothing the live repository holds (work-tree ignore files, `info/attributes`, config, the index file the
     caller's environment points at) can change what is found.
     """
-    binary = engines.prepare_gitleaks(engine_dir, pins)
+    binary = scanners.prepare_gitleaks(engine_dir, pins)
     path = path.resolve()  # absolute, so a path that starts with `-` can never read as a git option
     staged_tree = _git_output(path, "write-tree")
     head = process.unborn_aware_head_commit(path, _caller_git_environment())
@@ -29,7 +29,7 @@ def scan_staged(path: Path, engine_dir: Path, pins: dict[str, Pin]) -> SecretSca
             f"{CONFIG_PATH} cannot be read from the staged tree", git_environment,
         )
         allowances = load_staged_secret_allowances(staged_config)
-        return engines.run_gitleaks(binary, scratch, git_environment, source, ["--pre-commit", "--staged"], allowances)
+        return scanners.run_gitleaks(binary, scratch, git_environment, source, ["--pre-commit", "--staged"], allowances)
 
 
 def _caller_git_environment() -> dict[str, str]:

@@ -13,12 +13,12 @@ from quality import (
     __version__,
     checkout,
     clones,
-    engines,
     installation,
     process,
     python_lint,
     ratchet,
     repository,
+    scanners,
     scoreboard,
     staged,
 )
@@ -68,13 +68,13 @@ HYGIENE_EXIT = {
 
 
 INSTALLED_RUFF = partial(installation.installed_executable, python_lint.RUFF_DISTRIBUTION)
-INSTALLED_ZIZMOR = partial(installation.installed_executable, engines.ZIZMOR)
+INSTALLED_ZIZMOR = partial(installation.installed_executable, scanners.ZIZMOR)
 
 
 def main(
     argv: list[str] | None = None,
     fetcher_for: Callable[[str], PageFetcher] = github_fetcher,
-    read_pins: Callable[[], dict[str, engines.Pin]] = engines.read_pins,
+    read_pins: Callable[[], dict[str, scanners.Pin]] = scanners.read_pins,
     release_tags: scoreboard.TagReader = scoreboard.read_release_tags,
     transport: Transport = fetch_json,
     sleep: Sleep = time.sleep,
@@ -255,7 +255,7 @@ def describe_loosenings(path: Path, written: ratchet.Baseline) -> list[str]:
     return lines
 
 
-def run_scan_staged(path: Path, engine_dir: Path, read_pins: Callable[[], dict[str, engines.Pin]]) -> int:
+def run_scan_staged(path: Path, engine_dir: Path, read_pins: Callable[[], dict[str, scanners.Pin]]) -> int:
     try:
         result = staged.scan_staged(path, engine_dir, read_pins())
     except (process.ProcessError, ConfigError) as error:
@@ -268,10 +268,10 @@ def run_scan_staged(path: Path, engine_dir: Path, read_pins: Callable[[], dict[s
     return EXIT_FINDINGS if result.findings else EXIT_CLEAN
 
 
-def run_engines_install(directory: Path, read_pins: Callable[[], dict[str, engines.Pin]]) -> int:
+def run_engines_install(directory: Path, read_pins: Callable[[], dict[str, scanners.Pin]]) -> int:
     try:
         pins = read_pins()
-        downloaded = engines.install(directory, pins)
+        downloaded = scanners.install(directory, pins)
     except process.ProcessError as error:
         emit(f"engines: cannot install - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
@@ -280,9 +280,9 @@ def run_engines_install(directory: Path, read_pins: Callable[[], dict[str, engin
     return EXIT_CLEAN
 
 
-def run_engines_verify(directory: Path, read_pins: Callable[[], dict[str, engines.Pin]]) -> int:
+def run_engines_verify(directory: Path, read_pins: Callable[[], dict[str, scanners.Pin]]) -> int:
     try:
-        problems = engines.verification_problems(directory, read_pins())
+        problems = scanners.verification_problems(directory, read_pins())
     except process.ProcessError as error:
         problems = [str(error)]
     if problems:

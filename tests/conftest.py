@@ -18,8 +18,8 @@ from quality.ratchet import BASELINE_PATH
 pytest.register_assert_rewrite("tests.support")  # before the first import of a support module, so its asserts are rewritten
 
 from tests.support.advisories import advisory, zipped
-from tests.support.engines import OUTPUTS, fake_engine
 from tests.support.git_repositories import GIT_IDENTITY, head_commit, make_repo, put
+from tests.support.scanners import OUTPUTS, fake_engine
 from tests.support.scoreboard import RELEASES, write_fleet
 
 PROCESS_OR_SOCKET_FIXTURES = frozenset(

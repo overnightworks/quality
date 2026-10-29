@@ -11,12 +11,12 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path, PurePosixPath
 
-from quality import engines, pip_requirements, process, repository
+from quality import pip_requirements, process, repository, scanners
 from quality.config import CONFIG_PATH, AdvisoryAllowance
-from quality.engines import EngineError, Pin
 from quality.pip_requirements import Requirement
 from quality.report import Finding
 from quality.rules import Rule
+from quality.scanners import EngineError, Pin
 
 PYTHON_ECOSYSTEM = "PyPI"
 DATABASE_ROOT = "https://osv-vulnerabilities.storage.googleapis.com"  # read at call time; tests point it at a file:// root
@@ -60,7 +60,7 @@ class Affected:
     fix: str
 
     def finding(self, note: str = "") -> Finding:
-        return Finding(Rule.ADVISORY, self.lock, None, f"{engines.OSV_SCANNER} {self.subject} is affected{note}.", self.fix)
+        return Finding(Rule.ADVISORY, self.lock, None, f"{scanners.OSV_SCANNER} {self.subject} is affected{note}.", self.fix)
 
 
 @dataclass(frozen=True)
@@ -205,8 +205,8 @@ def _scan(
     engine_dir: Path, pins: dict[str, Pin], ecosystems: Sequence[str], handovers: Sequence[Handover], scratch: Path,
     names_by_path: dict[str, list[str]], monotonic: Callable[[], float],
 ) -> list[Affected]:
-    binary = engines.engine_path(engine_dir, engines.OSV_SCANNER)
-    engines.verify_version(binary, engines.OSV_SCANNER, pins[engines.OSV_SCANNER].version)
+    binary = scanners.engine_path(engine_dir, scanners.OSV_SCANNER)
+    scanners.verify_version(binary, scanners.OSV_SCANNER, pins[scanners.OSV_SCANNER].version)
     _place_databases(scratch, ecosystems, monotonic)
     # cwd is the scratch directory so that nothing in the scanned repository is read by accident.
     command = [
@@ -269,7 +269,7 @@ def _download_database(url: str, ecosystem: str, deadline: float, monotonic: Cal
 
     def fetch() -> None:
         try:
-            with urllib.request.urlopen(url, timeout=min(engines.DOWNLOAD_TIMEOUT_SECONDS, remaining)) as response:  # noqa: S310 - url comes from the pinned advisory databases (https)
+            with urllib.request.urlopen(url, timeout=min(scanners.DOWNLOAD_TIMEOUT_SECONDS, remaining)) as response:  # noqa: S310 - url comes from the pinned advisory databases (https)
                 download.set_result(response.read())
         except DOWNLOAD_FAILURES as error:
             download.set_exception(error)
@@ -307,11 +307,11 @@ def _findings(
     exit_code: int, report_text: str, stderr: str, names_by_path: Mapping[str, list[str]],
     expected: Mapping[str, tuple[Requirement, ...]],
 ) -> list[Affected]:
-    if exit_code not in (engines.CLEAN_EXIT, OSV_FINDINGS_FOUND):
-        raise EngineError(f"{engines.OSV_SCANNER} exited {exit_code}, neither 'clean' nor 'findings'{process.stderr_tail(stderr)}")
+    if exit_code not in (scanners.CLEAN_EXIT, OSV_FINDINGS_FOUND):
+        raise EngineError(f"{scanners.OSV_SCANNER} exited {exit_code}, neither 'clean' nor 'findings'{process.stderr_tail(stderr)}")
     affected = _read_report(report_text, names_by_path, expected)
     if bool(affected) != (exit_code == OSV_FINDINGS_FOUND):
-        raise EngineError(f"{engines.OSV_SCANNER} exited {exit_code} but its report holds {len(affected)} finding(s)")
+        raise EngineError(f"{scanners.OSV_SCANNER} exited {exit_code} but its report holds {len(affected)} finding(s)")
     return affected
 
 
@@ -325,7 +325,7 @@ def _read_report(
         for result in _dicts(json.loads(report_text)["results"]):
             source = _typed(_typed(result["source"], dict)["path"], str)
             if source not in names_by_path:
-                raise EngineError(f"the {engines.OSV_SCANNER} report names a lock file quality did not pass")
+                raise EngineError(f"the {scanners.OSV_SCANNER} report names a lock file quality did not pass")
             packages = _dicts(result["packages"])
             listed[source] = {_name_and_version(package) for package in packages}
             affected += [
@@ -333,7 +333,7 @@ def _read_report(
                 for group in _package_findings(name, package)
             ]
     except (ValueError, KeyError, TypeError, AttributeError) as error:
-        raise EngineError(f"cannot read the {engines.OSV_SCANNER} report: {error!r}") from error
+        raise EngineError(f"cannot read the {scanners.OSV_SCANNER} report: {error!r}") from error
     for path, requirements in expected.items():
         _check_listed(names_by_path[path][0], requirements, listed.get(path, set()))
     return list(dict.fromkeys(affected))
@@ -348,9 +348,9 @@ def _check_listed(name: str, requirements: tuple[Requirement, ...], listed: set[
     """osv-scanner skips a line it cannot parse and still reports clean, so a clean run counts only when it read what quality read."""
     for requirement in requirements:
         if (requirement.name, requirement.version) not in listed:
-            raise EngineError(f"{engines.OSV_SCANNER} did not read line {requirement.line} of {name}")
+            raise EngineError(f"{scanners.OSV_SCANNER} did not read line {requirement.line} of {name}")
     if listed - {(requirement.name, requirement.version) for requirement in requirements}:
-        raise EngineError(f"{engines.OSV_SCANNER} reported a package of {name} that quality did not read")
+        raise EngineError(f"{scanners.OSV_SCANNER} reported a package of {name} that quality did not read")
 
 
 def _typed[T](value: object, kind: type[T]) -> T:
