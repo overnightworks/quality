@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from tests.support.hygiene import assert_refusal
-from tests.support.hygiene import hygiene_output as run
+from tests.support.check import assert_refusal
+from tests.support.check import hygiene_output as run
 
 
 @pytest.mark.parametrize(

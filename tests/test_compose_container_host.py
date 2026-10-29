@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.support.check import hygiene_output
 from tests.support.emergency import ONE_JOB
-from tests.support.hygiene import hygiene_output
 
 CONFIG = "quality/config.toml"
 EDGE_STACK = (Path(__file__).parent / "fixtures" / "edge_stack.yml").read_text(encoding="utf-8")

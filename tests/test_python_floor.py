@@ -4,9 +4,9 @@ from pathlib import Path
 import pytest
 
 from quality.config import CONFIG_PATH
+from tests.support.check import CLEAN_LINE
+from tests.support.check import hygiene_output as run
 from tests.support.git_repositories import head_commit
-from tests.support.hygiene import CLEAN_LINE
-from tests.support.hygiene import hygiene_output as run
 
 ROOT_FLOOR_FIX = (
     "raise it to >=3.14 and move CI, .python-version, Dockerfiles and ruff's target-version with it, "

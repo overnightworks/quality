@@ -22,14 +22,14 @@ from quality import (
     scoreboard,
     staged,
 )
-from quality.config import Allowance, ConfigError, read_gate_settings
-from quality.emergency import Ask, GhRunner, RemoteFor, github_remote, run_emergency_merge, run_gh
-from quality.hygiene import (
+from quality.check import (
     HygieneResult,
     Outcome,
     run_hygiene,
     skipped_rules,
 )
+from quality.config import Allowance, ConfigError, read_gate_settings
+from quality.emergency import Ask, GhRunner, RemoteFor, github_remote, run_emergency_merge, run_gh
 from quality.output import append_step_summary, emit, emit_finding, set_up_streams
 from quality.report import CannotJudge, Finding, headline
 from quality.rules import Rule

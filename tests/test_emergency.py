@@ -10,6 +10,7 @@ from quality.emergency import GhFailed
 from quality.ratchet import BASELINE_PATH
 from quality.sonar import SonarHttpError, basic_authorization
 from tests.support.advisories import allowance_config
+from tests.support.check import assert_every_line_starts_with_the_door
 from tests.support.emergency import (
     ALL_METHODS_ALLOWED,
     GATE_CONFIG,
@@ -27,7 +28,6 @@ from tests.support.emergency import (
     sonar,
 )
 from tests.support.git_repositories import git_pull
-from tests.support.hygiene import assert_every_line_starts_with_the_door
 
 REPORT_CONFIG = GATE_CONFIG.replace("fail", "report")
 LINEAR_HISTORY = {"type": "required_linear_history"}

@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
+from tests.support.check import CLEAN_LINE, assert_refusal, compose
+from tests.support.check import hygiene_output as run
 from tests.support.git_repositories import make_repo
-from tests.support.hygiene import CLEAN_LINE, assert_refusal, compose
-from tests.support.hygiene import hygiene_output as run
 
 
 def test_compose_specific_tags_are_judged_not_refused(build_repo, capsys):

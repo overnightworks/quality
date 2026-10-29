@@ -3,8 +3,8 @@
 
 import pytest
 
+from tests.support.check import hygiene_output
 from tests.support.emergency import ONE_JOB
-from tests.support.hygiene import hygiene_output
 from tests.support.layout import CONFIG, EXAMPLE_SHA, GUIDANCE, declaring, findings, in_index
 
 

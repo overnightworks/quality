@@ -25,9 +25,9 @@ from tests.support.architecture import (
     ini_section,
     toml,
 )
+from tests.support.check import CLEAN_LINE, assert_every_line_starts_with_the_door
+from tests.support.check import hygiene_output as run
 from tests.support.emergency import BASE_SHA, ONE_JOB, SHOWN, SONAR_GREEN, FakeGh, changed_nothing, declaring, drive
-from tests.support.hygiene import CLEAN_LINE, assert_every_line_starts_with_the_door
-from tests.support.hygiene import hygiene_output as run
 
 QUALITY_ROOT = Path(__file__).resolve().parents[1]
 SHOP_CYCLE = {**SHOP_DB_IMPORTS_WEB, "src/shop/web.py": "import shop.db\n"}

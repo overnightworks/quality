@@ -18,10 +18,10 @@ from quality.ratchet import (
     load_baseline,
     render_baseline,
 )
+from tests.support.check import hygiene_output
 from tests.support.clones import function as clone_function
 from tests.support.emergency import ONE_JOB, SONAR_GREEN, declaring, drive
 from tests.support.git_repositories import head_commit, put
-from tests.support.hygiene import hygiene_output
 from tests.support.source_code import long_function
 from tests.support.verdict import ONLY_DECLARED, declaration, verdict_of
 from tests.support.verdict_renames import OLD_ENTRY, commit_all, entry, file_text, moved_in_head, moves_in_head, pulled

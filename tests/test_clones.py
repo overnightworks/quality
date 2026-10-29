@@ -4,8 +4,8 @@ import pytest
 
 from quality import clones
 from quality.ratchet import ClonePair, Place
+from tests.support.check import hygiene_output as hygiene
 from tests.support.clones import function
-from tests.support.hygiene import hygiene_output as hygiene
 
 REPORT = "clone: report only (no [clones] in quality/baseline.toml) - production: {production} pair(s), tests: {tests} pair(s)"
 QUALITY_ITSELF = Path(__file__).parents[1]

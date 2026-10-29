@@ -29,7 +29,7 @@ from tests.support.advisories import (
     uv_lock,
     zipped,
 )
-from tests.support.hygiene import assert_every_line_starts_with_the_door
+from tests.support.check import assert_every_line_starts_with_the_door
 from tests.support.scanners import OUTPUTS, osv_engines
 
 # ---- the real osv-scanner against a fake file:// database (CI runs these; they download the binary) ----
