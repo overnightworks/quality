@@ -3,8 +3,8 @@
 import pytest
 
 from tests.support.check import hygiene_output
-from tests.support.emergency import ONE_JOB
 from tests.support.layout import CONFIG, GUIDANCE, case, declaring, empty_files, in_index, red
+from tests.support.merge import ONE_JOB
 
 RULE = "test-layout"
 PACKAGE_JSON = {"package.json": "{}\n"}

@@ -3,8 +3,8 @@ import subprocess
 
 from quality.config import CONFIG_PATH
 from quality.ratchet import BASELINE_PATH
-from tests.support.emergency import FakeGh
 from tests.support.git_repositories import GIT_IDENTITY, git_pull, put
+from tests.support.merge import FakeGh
 
 MOVABLE_FILE = "".join(f"line {number} of a file git can match to its move\n" for number in range(30))
 

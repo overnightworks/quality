@@ -3,8 +3,8 @@
 import pytest
 
 from tests.support.check import hygiene_output
-from tests.support.emergency import ONE_JOB
 from tests.support.layout import CONFIG, GUIDANCE, declaring, findings, in_index, red
+from tests.support.merge import ONE_JOB
 
 RULE = "test-layout"
 ROOT_PROJECT = {**GUIDANCE, "pyproject.toml": "", "src/p/cli.py": "x = 1\n"}

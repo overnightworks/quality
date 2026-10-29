@@ -4,8 +4,8 @@
 import pytest
 
 from tests.support.check import hygiene_output
-from tests.support.emergency import ONE_JOB
 from tests.support.layout import CONFIG, EXAMPLE_SHA, GUIDANCE, declaring, findings, in_index
+from tests.support.merge import ONE_JOB
 
 
 def test_a_file_without_a_suffix_is_red(build_repo, capsys):

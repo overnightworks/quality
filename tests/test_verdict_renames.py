@@ -8,11 +8,11 @@ import time
 
 import pytest
 
-from quality import cli, emergency, verdict
+from quality import cli, merge, verdict
 from quality.ratchet import BASELINE_PATH, Baseline, Key, Metric, Renames, render_baseline
 from quality.report import CannotJudge
-from tests.support.emergency import GATE_CONFIG, ONE_JOB, SONAR_GREEN, changed_nothing, declaring, drive
 from tests.support.git_repositories import head_commit, put
+from tests.support.merge import GATE_CONFIG, ONE_JOB, SONAR_GREEN, changed_nothing, declaring, drive
 from tests.support.processes import process_is_gone
 from tests.support.source_code import long_function
 from tests.support.verdict import verdict_of
@@ -379,7 +379,7 @@ def test_a_step_that_does_not_finish_in_time_refuses_and_leaves_no_child(
     capsys, tmp_path, monkeypatch, fake_git, stalls, refusal
 ):
     """#149 fetch boundary: the fetch and the diff share the bound, and the whole process group dies with it."""
-    monkeypatch.setattr("quality.emergency.FETCH_TIMEOUT_SECONDS", 0.5)
+    monkeypatch.setattr("quality.merge.FETCH_TIMEOUT_SECONDS", 0.5)
     child = tmp_path / "child-pid"
     gh = failing_fetch(tmp_path)
     fake_git(f'case "$*" in *" {stalls} "*) sleep 300 & echo $! > "{child}"; wait;; esac')
@@ -422,7 +422,7 @@ def test_inherited_git_routing_and_configuration_do_not_reach_the_diff(capsys, t
     ids=["GH_CONFIG_DIR", "XDG_CONFIG_HOME", "home"],
 )
 def test_gh_keeps_the_login_it_would_use_without_the_changed_home(environment, expected):
-    assert emergency.gh_configuration_directory(environment) == expected
+    assert merge.gh_configuration_directory(environment) == expected
 
 
 def unauthorized(handler):
@@ -459,12 +459,12 @@ def test_a_netrc_in_the_home_is_never_sent_and_gh_finds_its_login_from_the_empty
 
 SIGTERM_SCRIPT = """
 import os, socket
-from quality import emergency
+from quality import merge
 server = socket.socket()
 server.bind(("127.0.0.1", 0))
 server.listen(5)
 print(server.getsockname()[1], flush=True)
-emergency.read_renames_of_pull(
+merge.read_renames_of_pull(
     f"http://127.0.0.1:{server.getsockname()[1]}/x.git", "a" * 40, "b" * 40, {"PATH": os.environ["PATH"]}
 )
 """

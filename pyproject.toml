@@ -65,7 +65,7 @@ containers = ["quality"]
 exhaustive = true
 layers = [
     "cli",
-    "emergency",
+    "merge",
     "verdict",
     "sonar | fleet",
     "check | staged",

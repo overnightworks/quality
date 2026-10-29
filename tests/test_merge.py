@@ -6,12 +6,13 @@ import pytest
 
 from quality import cli
 from quality.config import CONFIG_PATH
-from quality.emergency import GhFailed
+from quality.merge import GhFailed
 from quality.ratchet import BASELINE_PATH
 from quality.sonar import SonarHttpError, basic_authorization
 from tests.support.advisories import allowance_config
 from tests.support.check import assert_every_line_starts_with_the_door
-from tests.support.emergency import (
+from tests.support.git_repositories import git_pull
+from tests.support.merge import (
     ALL_METHODS_ALLOWED,
     GATE_CONFIG,
     LEGACY_RED,
@@ -27,7 +28,6 @@ from tests.support.emergency import (
     drive,
     sonar,
 )
-from tests.support.git_repositories import git_pull
 
 REPORT_CONFIG = GATE_CONFIG.replace("fail", "report")
 LINEAR_HISTORY = {"type": "required_linear_history"}
