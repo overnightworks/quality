@@ -1,0 +1,7 @@
+claim_id = "277804ceb14b45af8d43df8c2c76f247"
+agent = "Claude 7bbab0b4-f923-4f09-a5c2-6fe15143932e"
+role = "builder"
+base = "fd40847d60e7b28f8a2b3eb1ef1e8d8209f20ed3"
+branch = "claude/issue-252-tightening-is-no-loosening"
+scope = ["docs/rules.md", "src/quality/architecture.py", "tests/test_verdict_reread.py"]
+opened_commit = "11035e27d4aef8dd46c6e24b93f6500c0ee3fcaf"
