@@ -23,6 +23,7 @@ from quality import (
     __version__,
     advisories,
     architecture,
+    checkout,
     clones,
     config,
     engines,
@@ -45,8 +46,6 @@ GATE_REPOSITORY = "overnightworks/quality"
 GATE_URL = f"https://github.com/{GATE_REPOSITORY}"
 GATE_FILE = "gate.yml"
 CODEQL_FILE = "codeql.yml"
-WORKFLOW_DIRECTORY = PurePosixPath(".github/workflows")
-WORKFLOW_SUFFIXES = frozenset({".yml", ".yaml"})
 LOCAL_PREFIXES = ("./", "$/")
 RELEASE_TAG = re.compile(r"v(\d+)\.(\d+)\.(\d+)")
 COMMIT_SHA = re.compile(r"[0-9a-f]{40}")
@@ -412,8 +411,8 @@ def measure_public(url: str) -> Row:
         if head.returncode != 0:
             return Unjudged(name, f"cannot read the cloned commit (git exited {head.returncode})")
         try:
-            tracked = hygiene.tracked_files(clone)
-            sources = hygiene.read_sources(clone, tracked)
+            tracked = checkout.tracked_files(clone)
+            sources = ratchet.read_sources(clone, tracked)
         except report.CannotJudge as error:
             return Unjudged(name, f"cannot measure ({str(error).replace(str(clone), name)})")
         workflows = read_workflows(clone, tracked)
@@ -434,7 +433,7 @@ def read_declared(clone: Path, tracked: list[str]) -> Declared:
     except config.ConfigError:
         unreadable.add(config.CONFIG_PATH)
     try:
-        baseline = hygiene.read_baseline(clone)
+        baseline = ratchet.read_baseline(clone)
         has_baseline = baseline is not None
         has_clone_table = baseline is not None and baseline.clones is not None
     except (report.CannotJudge, ratchet.SizeError):
@@ -461,7 +460,7 @@ def read_workflows(clone: Path, tracked: list[str]) -> Workflows:
     unreadable: list[str] = []
     for name in tracked:
         path = PurePosixPath(name)
-        if path.parent != WORKFLOW_DIRECTORY or path.suffix not in WORKFLOW_SUFFIXES:
+        if not checkout.is_workflow(path):
             continue
         try:
             text = repository.read_text(clone, name)
@@ -489,11 +488,11 @@ def job_calls(document: object) -> Iterator[str]:
 
 
 def calls_of(uses: str, workflow_file: str) -> list[Call]:
-    path = f"{WORKFLOW_DIRECTORY}/{workflow_file}"
+    path = f"{checkout.WORKFLOW_DIRECTORY}/{workflow_file}"
     if uses in (f"{prefix}{path}" for prefix in LOCAL_PREFIXES):
         return [Call(None)]
     file, _, ref = uses.partition("@")
-    owner_and_repository, _, workflow = file.partition(f"/{WORKFLOW_DIRECTORY}/")
+    owner_and_repository, _, workflow = file.partition(f"/{checkout.WORKFLOW_DIRECTORY}/")
     matches = owner_and_repository.lower() == GATE_REPOSITORY and workflow == workflow_file
     return [Call(ref)] if matches and ref else []
 

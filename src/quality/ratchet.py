@@ -17,12 +17,12 @@ from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import Enum
 from operator import attrgetter
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import NamedTuple, Self
 
 import lizard
 
-from quality import __version__, repository
+from quality import __version__, checkout, repository
 from quality.report import Finding
 
 SIZE = "size"
@@ -185,6 +185,13 @@ class UnparsableSource(SizeError):
 
 def language_of(name: str) -> Language | None:
     return LANGUAGE_OF_SUFFIX.get(PurePosixPath(name).suffix)
+
+
+def read_sources(root: Path, tracked: list[str]) -> dict[str, bytes]:
+    """The tracked files of a table language on disk: a tracked file absent from it (deleted, sparse, a dangling link)
+    is gone."""
+    on_disk = checkout.on_disk(root, [name for name in tracked if language_of(name)])
+    return checkout.read_existing(repository.read_bytes, root, on_disk)
 
 
 def area_of(path: str) -> Area:
@@ -491,6 +498,20 @@ def load_baseline(text: str) -> Baseline:
                 for symbol, value in _table(f"{table_name}.{path}", entry).items():
                     size[Key(metric, path, symbol)] = _count(f"{table_name}.{path}.{symbol}", value)
     return Baseline(size, clones)
+
+
+def read_baseline(root: Path) -> Baseline | None:
+    """The repository's baseline on disk, None when it has none.
+
+    A file that cannot be read cannot be judged; a malformed one raises SizeError.
+    """
+    content = checkout.judged(repository.read_bytes, root, BASELINE_PATH)
+    if content is None:
+        return None
+    try:
+        return load_baseline(content.decode("utf-8"))
+    except UnicodeDecodeError as error:
+        raise SizeError(f"{BASELINE_PATH} is not valid UTF-8 ({error})") from error
 
 
 def _clone_pairs(table: object) -> frozenset[ClonePair]:

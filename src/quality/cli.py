@@ -12,18 +12,14 @@ from typing import TextIO
 
 from ruff import find_ruff_bin
 
-from quality import __version__, clones, engines, process, ratchet, repository, scoreboard, staged
+from quality import __version__, checkout, clones, engines, process, ratchet, repository, scoreboard, staged
 from quality.config import Allowance, ConfigError, read_gate_settings
 from quality.emergency import Ask, GhRunner, RemoteFor, github_remote, run_emergency_merge, run_gh
 from quality.hygiene import (
     HygieneResult,
     Outcome,
-    read_baseline,
-    read_sources,
     run_hygiene,
     skipped_rules,
-    tracked_files,
-    work_tree_top,
 )
 from quality.report import CannotJudge, Finding, headline, printable, render
 from quality.sonar import (
@@ -220,8 +216,8 @@ def coverage_note(engine_dir: Path | None) -> str:
 
 def run_baseline_write(path: Path) -> int:
     try:
-        top = work_tree_top(path)
-        sources = read_sources(top, tracked_files(top))
+        top = checkout.work_tree_top(path)
+        sources = ratchet.read_sources(top, checkout.tracked_files(top))
         written = ratchet.Baseline(ratchet.debt(ratchet.measure(sources).complete()), clones.find_pairs(sources).pairs)
         loosenings = describe_loosenings(top, written)
         repository.write_text(top, ratchet.BASELINE_PATH, ratchet.render_baseline(written))
@@ -242,7 +238,7 @@ def describe_loosenings(path: Path, written: ratchet.Baseline) -> list[str]:
     An unreadable previous baseline is overwritten, so the write can only say it cannot name the raises.
     """
     try:
-        previous = read_baseline(path)
+        previous = ratchet.read_baseline(path)
     except (CannotJudge, ratchet.SizeError) as error:
         return [f"the previous {ratchet.BASELINE_PATH} could not be read ({error}), so raises cannot be named"]
     if previous is None:

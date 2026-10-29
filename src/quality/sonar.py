@@ -13,8 +13,8 @@ from email.message import Message
 from enum import Enum
 from pathlib import Path
 
+from quality.checkout import tracked_files
 from quality.config import LegacyMode
-from quality.hygiene import tracked_files
 from quality.report import CannotJudge, Finding
 
 SONAR_ORIGIN = "https://sonarcloud.io"

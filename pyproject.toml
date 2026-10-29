@@ -72,6 +72,7 @@ layers = [
     "python_lint",
     "architecture | clones | engines | layout | pip_requirements",
     "ratchet",
+    "checkout",
     "report",
     "config",
     "repository",
