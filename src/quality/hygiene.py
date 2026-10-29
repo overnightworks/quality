@@ -263,7 +263,7 @@ def run_hygiene(root: Path, engine_dir: Path | None, locate_ruff: Callable[[], s
     workflows = {rule: _attempt(partial(check_workflows, root, engine_dir, rule, tracked)) for rule in engines.WORKFLOW_ENGINES}
     advisory = _attempt(partial(check_advisories, root, engine_dir, tracked, allow_lists))
     scanned = {
-        Rule.SECRET: _findings(secrets),
+        Rule.LEAK: _findings(secrets),
         **workflows,
         Rule.ADVISORY: _findings(advisory),
     }

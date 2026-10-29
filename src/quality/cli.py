@@ -188,11 +188,11 @@ def hygiene_summary(result: HygieneResult) -> str:
 
 def print_secret_allowances(allowed: list[Finding], unused: dict[Allowance, str]) -> None:
     if allowed:
-        emit(f"{Rule.SECRET}: {len(allowed)} allowed ({', '.join(finding.location for finding in allowed)})")
+        emit(f"{Rule.LEAK}: {len(allowed)} allowed ({', '.join(finding.location for finding in allowed)})")
         for finding in allowed:
             emit(f"  allowed {finding.location} - {finding.reason}")
     for entry, reason in unused.items():
-        emit(f"{Rule.SECRET}: unused allowance {entry.rule} in {entry.file} (sha256 {entry.secret_sha256}) - {reason}")
+        emit(f"{Rule.LEAK}: unused allowance {entry.rule} in {entry.file} (sha256 {entry.secret_sha256}) - {reason}")
 
 
 def coverage_note(engine_dir: Path | None) -> str:

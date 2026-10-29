@@ -238,7 +238,7 @@ def _leak_finding(entry: object) -> Finding:
     path, line, rule, commit, secret = _read_leak(entry)
     secret_sha256 = hashlib.sha256(secret.encode("utf-8")).hexdigest()
     return Finding(
-        Rule.SECRET, path, line,
+        Rule.LEAK, path, line,
         f"{GITLEAKS} rule {rule} matched {f'at {commit[:8]}' if commit else 'in the staged change'} (sha256 {secret_sha256}, value not shown).",
         "rotate the secret; for a false positive, allow this rule, file and sha256 with a reason in quality/config.toml.",
         Allowance(rule, path, secret_sha256),

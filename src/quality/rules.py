@@ -68,7 +68,7 @@ class Rule(StrEnum):
     PYTHON_FLOOR = "python-floor", Engines.NOT_NEEDED, None, Switch.ALWAYS
     PYTHON_SECURITY = "python-security", Engines.NOT_NEEDED, None, Switch.ALWAYS
     PYTHON_PRINT = "python-print", Engines.NOT_NEEDED, None, Switch.ALWAYS
-    SECRET = "secret", Engines.NEEDED, FIRST_RELEASE, Switch.ALWAYS
+    LEAK = "secret", Engines.NEEDED, FIRST_RELEASE, Switch.ALWAYS
     WORKFLOW_LINT = "workflow-lint", Engines.NEEDED, FIRST_RELEASE, Switch.ALWAYS
     WORKFLOW_SECURITY = "workflow-security", Engines.NEEDED, FIRST_RELEASE, Switch.ALWAYS
     ADVISORY = "advisory", Engines.NEEDED, RATCHET_RELEASE, Switch.ALWAYS
