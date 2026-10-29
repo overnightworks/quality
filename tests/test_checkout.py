@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 
 from quality import cli
+from tests.support.check import hygiene_output as run
 from tests.support.git_repositories import make_repo
-from tests.support.hygiene import hygiene_output as run
 
 
 def not_a_directory(tmp_path):

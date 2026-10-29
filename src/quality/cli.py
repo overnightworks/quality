@@ -13,23 +13,23 @@ from quality import (
     __version__,
     checkout,
     clones,
-    engines,
+    fleet,
     installation,
     process,
     python_lint,
     ratchet,
     repository,
-    scoreboard,
+    scanners,
     staged,
 )
-from quality.config import Allowance, ConfigError, read_gate_settings
-from quality.emergency import Ask, GhRunner, RemoteFor, github_remote, run_emergency_merge, run_gh
-from quality.hygiene import (
+from quality.check import (
     HygieneResult,
     Outcome,
     run_hygiene,
     skipped_rules,
 )
+from quality.config import Allowance, ConfigError, read_gate_settings
+from quality.merge import Ask, GhRunner, RemoteFor, github_remote, run_emergency_merge, run_gh
 from quality.output import append_step_summary, emit, emit_finding, set_up_streams
 from quality.report import CannotJudge, Finding, headline
 from quality.rules import Rule
@@ -68,14 +68,14 @@ HYGIENE_EXIT = {
 
 
 INSTALLED_RUFF = partial(installation.installed_executable, python_lint.RUFF_DISTRIBUTION)
-INSTALLED_ZIZMOR = partial(installation.installed_executable, engines.ZIZMOR)
+INSTALLED_ZIZMOR = partial(installation.installed_executable, scanners.ZIZMOR)
 
 
 def main(
     argv: list[str] | None = None,
     fetcher_for: Callable[[str], PageFetcher] = github_fetcher,
-    read_pins: Callable[[], dict[str, engines.Pin]] = engines.read_pins,
-    release_tags: scoreboard.TagReader = scoreboard.read_release_tags,
+    read_pins: Callable[[], dict[str, scanners.Pin]] = scanners.read_pins,
+    release_tags: fleet.TagReader = fleet.read_release_tags,
     transport: Transport = fetch_json,
     sleep: Sleep = time.sleep,
     gh: GhRunner = run_gh,
@@ -164,14 +164,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     emergency.add_argument("repository", help="<owner>/<repo>")
     emergency.add_argument("pull_request", type=int)
-    fleet = commands.add_parser(
+    scoreboard = commands.add_parser(
         "scoreboard",
         help=(
             "measure the size, the gate and CodeQL release and what each gate does with each rule"
             " of the repositories in quality/fleet.toml into two tables"
         ),
     )
-    fleet.add_argument("path", nargs="?", type=Path, default=Path("."))
+    scoreboard.add_argument("path", nargs="?", type=Path, default=Path("."))
     return parser
 
 
@@ -255,7 +255,7 @@ def describe_loosenings(path: Path, written: ratchet.Baseline) -> list[str]:
     return lines
 
 
-def run_scan_staged(path: Path, engine_dir: Path, read_pins: Callable[[], dict[str, engines.Pin]]) -> int:
+def run_scan_staged(path: Path, engine_dir: Path, read_pins: Callable[[], dict[str, scanners.Pin]]) -> int:
     try:
         result = staged.scan_staged(path, engine_dir, read_pins())
     except (process.ProcessError, ConfigError) as error:
@@ -268,10 +268,10 @@ def run_scan_staged(path: Path, engine_dir: Path, read_pins: Callable[[], dict[s
     return EXIT_FINDINGS if result.findings else EXIT_CLEAN
 
 
-def run_engines_install(directory: Path, read_pins: Callable[[], dict[str, engines.Pin]]) -> int:
+def run_engines_install(directory: Path, read_pins: Callable[[], dict[str, scanners.Pin]]) -> int:
     try:
         pins = read_pins()
-        downloaded = engines.install(directory, pins)
+        downloaded = scanners.install(directory, pins)
     except process.ProcessError as error:
         emit(f"engines: cannot install - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
@@ -280,9 +280,9 @@ def run_engines_install(directory: Path, read_pins: Callable[[], dict[str, engin
     return EXIT_CLEAN
 
 
-def run_engines_verify(directory: Path, read_pins: Callable[[], dict[str, engines.Pin]]) -> int:
+def run_engines_verify(directory: Path, read_pins: Callable[[], dict[str, scanners.Pin]]) -> int:
     try:
-        problems = engines.verification_problems(directory, read_pins())
+        problems = scanners.verification_problems(directory, read_pins())
     except process.ProcessError as error:
         problems = [str(error)]
     if problems:
@@ -347,21 +347,21 @@ def run_verdict(path: Path, fetcher_for: Callable[[str], PageFetcher], sleep: Sl
     return code
 
 
-def run_scoreboard(path: Path, release_tags: scoreboard.TagReader) -> int:
+def run_scoreboard(path: Path, release_tags: fleet.TagReader) -> int:
     try:
-        fleet = scoreboard.read_fleet(path)
-    except scoreboard.FleetError as error:
+        listed = fleet.read_fleet(path)
+    except fleet.FleetError as error:
         emit(f"scoreboard: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
-    rows = scoreboard.measure_fleet(fleet)
+    rows = fleet.measure_fleet(listed)
     try:
         tags = release_tags()
-    except scoreboard.ReleaseTagsError as error:
+    except fleet.ReleaseTagsError as error:
         tags = error
-    report = scoreboard.render(rows, datetime.now(UTC).date(), tags)
+    report = fleet.render(rows, datetime.now(UTC).date(), tags)
     emit(*report)
     append_step_summary(report)
-    return EXIT_CANNOT_JUDGE if scoreboard.cannot_judge(rows, tags) else EXIT_CLEAN
+    return EXIT_CANNOT_JUDGE if fleet.cannot_judge(rows, tags) else EXIT_CLEAN
 
 
 def run(door: Callable[[], int] = main, environment: Mapping[str, str] = os.environ) -> None:

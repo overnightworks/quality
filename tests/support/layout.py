@@ -4,7 +4,7 @@ import subprocess
 
 import pytest
 
-from tests.support.hygiene import hygiene_output
+from tests.support.check import hygiene_output
 
 CONFIG = "quality/config.toml"
 GUIDANCE = {"AGENTS.md": "# guidance\n"}

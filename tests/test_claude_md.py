@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 
 from quality import cli
-from tests.support.hygiene import CLEAN_LINE, ENGINE_RULES, FILE_RULES
-from tests.support.hygiene import hygiene_output as run
+from tests.support.check import CLEAN_LINE, ENGINE_RULES, FILE_RULES
+from tests.support.check import hygiene_output as run
 
 ENV_FINDING = "env-file .env - "
 

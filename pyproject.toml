@@ -65,13 +65,13 @@ containers = ["quality"]
 exhaustive = true
 layers = [
     "cli",
-    "emergency",
+    "merge",
     "verdict",
-    "sonar | scoreboard",
-    "hygiene | staged",
+    "sonar | fleet",
+    "check | staged",
     "advisories",
     "python_lint",
-    "architecture | claude_md | clones | compose | engines | env_file | layout | pip_requirements | python_floor | root_layout",
+    "architecture | claude_md | clones | compose | env_file | layout | pip_requirements | python_floor | root_layout | scanners",
     "ratchet",
     "checkout",
     "output",

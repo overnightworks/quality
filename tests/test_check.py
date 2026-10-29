@@ -8,12 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from quality import cli, env_file, hygiene, installation, process, sonar
+from quality import check, cli, env_file, installation, process, sonar
 from quality.compose import is_compose_file
 from quality.report import Finding
-from tests.support.engines import fake_engine, fake_zizmor, never_located, nothing_installed
-from tests.support.hygiene import CLEAN_LINE, ENGINE_RULES, FILE_RULES, compose, installed_ruff, loosen_requirement
-from tests.support.hygiene import hygiene_output as run
+from tests.support.check import CLEAN_LINE, ENGINE_RULES, FILE_RULES, compose, installed_ruff, loosen_requirement
+from tests.support.check import hygiene_output as run
+from tests.support.scanners import fake_engine, fake_zizmor, never_located, nothing_installed
 
 
 def deleted_compose_repo(build_repo, tmp_path):
@@ -328,7 +328,7 @@ def test_an_index_record_quality_cannot_read_refuses_exactly_the_rules_that_read
         return real_run(command, *args, **kwargs)
 
     monkeypatch.setattr(process, "run", unreadable_modes)
-    verdicts = hygiene.run_hygiene(repo, None, installed_ruff, never_located).verdicts
+    verdicts = check.run_hygiene(repo, None, installed_ruff, never_located).verdicts
     refused = [(verdict.rule, str(verdict.refusal)) for verdict in verdicts if verdict.refusal is not None]
     assert [rule for rule, _ in refused] == [
         "file-suffix", "script-name", "script-header", "test-layout", "test-import", "python-floor", "python-security", "python-print",

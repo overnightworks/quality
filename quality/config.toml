@@ -9,6 +9,6 @@ allow = [
 
 [[gate.loosened]]
 what = "import contract \"quality's layers, top to bottom\" changes layers"
-item = "overnightworks/quality#219"
-date = 2026-10-28
-reason = "the new python_lint module gets its own layer above the layout group; adding a module to the exhaustive contract changes its layers (#214 D4)"
+item = "overnightworks/quality#253"
+date = 2026-10-29
+reason = "slice N of #228 renames hygiene, engines, scoreboard and emergency to check, scanners, fleet and merge; a rename in the exhaustive layers contract stays a loosening (#217)"

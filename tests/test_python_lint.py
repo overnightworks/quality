@@ -5,13 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from quality import hygiene, installation, python_lint
+from quality import check, installation, python_lint
 from quality.python_lint import LintError, RuffFinding, UnparsablePython
 from quality.rules import Rule
-from tests.support.engines import never_located, nothing_installed
-from tests.support.hygiene import CLEAN_LINE, installed_ruff, loosen_requirement
-from tests.support.hygiene import hygiene_output as run
+from tests.support.check import CLEAN_LINE, installed_ruff, loosen_requirement
+from tests.support.check import hygiene_output as run
 from tests.support.layout import in_index
+from tests.support.scanners import never_located, nothing_installed
 
 EVAL = 'eval("1")\n'
 EVAL_REASON = "S307 Use of possibly insecure function; consider using `ast.literal_eval`"
@@ -51,8 +51,8 @@ def judged_prints(text: str, records: list[RuffFinding]) -> tuple[list[str], tup
     return [f"{item.location} {item.reason}" for item in result.findings], result.reports
 
 
-def rule_verdict(repo: Path, rule: Rule = Rule.PYTHON_SECURITY) -> hygiene.RuleVerdict:
-    return next(verdict for verdict in hygiene.run_hygiene(repo, None, installed_ruff, never_located).verdicts if verdict.rule == rule)
+def rule_verdict(repo: Path, rule: Rule = Rule.PYTHON_SECURITY) -> check.RuleVerdict:
+    return next(verdict for verdict in check.run_hygiene(repo, None, installed_ruff, never_located).verdicts if verdict.rule == rule)
 
 
 def flagged_paths(repo: Path, rule: Rule = Rule.PYTHON_SECURITY) -> list[str]:

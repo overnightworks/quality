@@ -5,8 +5,8 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 
 from quality import sonar
-from tests.support.emergency import FakeGh, changed_nothing, drive
-from tests.support.emergency import sonar as emergency_sonar
+from tests.support.merge import FakeGh, changed_nothing, drive
+from tests.support.merge import sonar as emergency_sonar
 from tests.support.sonar import (
     FEATURE_ENVIRONMENT,
     FINISHED_FOR_FEATURE,

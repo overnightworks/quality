@@ -13,7 +13,6 @@ from quality import (
     claude_md,
     clones,
     compose,
-    engines,
     env_file,
     layout,
     process,
@@ -22,6 +21,7 @@ from quality import (
     ratchet,
     repository,
     root_layout,
+    scanners,
 )
 from quality.config import (
     Allowance,
@@ -97,9 +97,9 @@ def _judge_lint[T](lint: python_lint.Lint | CannotJudge, judge: Callable[[python
         return CannotJudge(str(error))
 
 
-def check_secrets(root: Path, engine_dir: Path, allow_lists: AllowLists | CannotJudge) -> engines.SecretScan:
+def check_secrets(root: Path, engine_dir: Path, allow_lists: AllowLists | CannotJudge) -> scanners.SecretScan:
     try:
-        return engines.scan_secrets(root, engine_dir, engines.read_pins(), _required(allow_lists).secrets)
+        return scanners.scan_secrets(root, engine_dir, scanners.read_pins(), _required(allow_lists).secrets)
     except process.ProcessError as error:
         raise CannotJudge(str(error)) from error
 
@@ -109,7 +109,7 @@ def check_workflows(
 ) -> list[Finding]:
     workflows = checkout.on_disk(root, [name for name in tracked if checkout.is_workflow(PurePosixPath(name))])
     try:
-        return engines.scan_workflows(root, engine_dir, engines.read_pins(), rule, workflows, locate_zizmor)
+        return scanners.scan_workflows(root, engine_dir, scanners.read_pins(), rule, workflows, locate_zizmor)
     except process.ProcessError as error:
         raise CannotJudge(str(error)) from error
 
@@ -119,7 +119,7 @@ def check_advisories(root: Path, engine_dir: Path, tracked: list[str], allow_lis
     allowances = _required(allow_lists).advisories
     locks = {name: checkout.judged(repository.resolve_file, root, name) for name in checkout.on_disk(root, [n for n in tracked if advisories.is_lock(n)])}
     try:
-        return advisories.scan(engine_dir, engines.read_pins(), locks, root, allowances, datetime.now(UTC).date())
+        return advisories.scan(engine_dir, scanners.read_pins(), locks, root, allowances, datetime.now(UTC).date())
     except process.ProcessError as error:
         raise CannotJudge(str(error)) from error
 
@@ -264,7 +264,7 @@ def run_hygiene(
     if engine_dir is None:
         return HygieneResult(tuple(verdicts), reports, [], {})
     secrets = _attempt(lambda: check_secrets(root, engine_dir, allow_lists))
-    workflows = {rule: _attempt(partial(check_workflows, root, engine_dir, rule, tracked, locate_zizmor)) for rule in engines.WORKFLOW_ENGINES}
+    workflows = {rule: _attempt(partial(check_workflows, root, engine_dir, rule, tracked, locate_zizmor)) for rule in scanners.WORKFLOW_ENGINES}
     advisory = _attempt(partial(check_advisories, root, engine_dir, tracked, allow_lists))
     scanned = {
         Rule.LEAK: _findings(secrets),

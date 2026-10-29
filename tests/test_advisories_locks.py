@@ -10,8 +10,8 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
-from quality import advisories, engines
-from quality.engines import EngineError
+from quality import advisories, scanners
+from quality.scanners import EngineError
 from tests.support.advisories import (
     ADVISORY_ID,
     SAFE,
@@ -22,7 +22,7 @@ from tests.support.advisories import (
     reporting,
     uv_lock,
 )
-from tests.support.engines import OUTPUTS, osv_engines
+from tests.support.scanners import OUTPUTS, osv_engines
 
 LODASH = "GHSA-npm1-aaaa-bbbb"
 NPM_AFFECTED_LINE = f"osv-scanner {LODASH} (CVE-2020-2): npm lodash 4.17.15 is affected."
@@ -280,7 +280,7 @@ def test_one_deadline_spans_every_database_download(build_repo, clean_engines, p
     repo = build_repo({FRONTEND_LOCK: pnpm_lock(), "uv.lock": uv_lock()})
     locks = {name: repo / name for name in (FRONTEND_LOCK, "uv.lock")}
     engine_dir = osv_engines(clean_engines, "exit 99")
-    pins = engines.read_pins()
+    pins = scanners.read_pins()
     today = datetime.date(2026, 10, 21)
     with pytest.raises(EngineError, match="the npm advisory database download exceeded 300 seconds"):
         advisories.scan(engine_dir, pins, locks, repo, [], today, lambda: now)

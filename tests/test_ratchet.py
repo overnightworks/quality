@@ -21,9 +21,9 @@ from quality.ratchet import (
     raised_entries,
     render_baseline,
 )
+from tests.support.check import CLEAN_LINE
+from tests.support.check import hygiene_output as hygiene
 from tests.support.git_repositories import make_repo
-from tests.support.hygiene import CLEAN_LINE
-from tests.support.hygiene import hygiene_output as hygiene
 from tests.support.source_code import (
     branchy_function,
     long_file,

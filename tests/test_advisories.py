@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import advisories, cli, engines, process
+from quality import advisories, cli, process, scanners
 from quality.config import AdvisoryAllowance
 from quality.report import headline
 from tests.support.advisories import (
@@ -29,8 +29,8 @@ from tests.support.advisories import (
     uv_lock,
     zipped,
 )
-from tests.support.engines import OUTPUTS, osv_engines
-from tests.support.hygiene import assert_every_line_starts_with_the_door
+from tests.support.check import assert_every_line_starts_with_the_door
+from tests.support.scanners import OUTPUTS, osv_engines
 
 # ---- the real osv-scanner against a fake file:// database (CI runs these; they download the binary) ----
 
@@ -282,7 +282,7 @@ def test_a_server_that_trickles_bytes_hits_the_download_deadline(serve_stalling,
 def test_a_server_that_goes_silent_is_a_timeout_not_the_total_deadline(serve_stalling, timed_gate, monkeypatch):
     """#53 rule 3: a stalled receive is named a timeout; the total deadline is named only when it is the cause."""
     serve_stalling(BODY_BEGUN + b"xx", trickles=False)
-    monkeypatch.setattr(engines, "DOWNLOAD_TIMEOUT_SECONDS", 0.3)
+    monkeypatch.setattr(scanners, "DOWNLOAD_TIMEOUT_SECONDS", 0.3)
     monkeypatch.setattr(advisories, "DATABASE_DOWNLOAD_DEADLINE_SECONDS", 10)
     code, output, elapsed = timed_gate()
     assert (code, "timed out" in output, "exceeded" in output, elapsed < 3) == (2, True, False, True), output
@@ -406,7 +406,7 @@ def test_an_osv_binary_at_the_wrong_version_names_both_versions(
     (clean_engines / OSV).write_text('#!/bin/sh\necho "osv-scanner version: 9.9.9"\n')
     (clean_engines / OSV).chmod(0o755)
     code, output = run_gate(tracked_lock_repo(build_repo), clean_engines)
-    assert (code, "'9.9.9'" in output, engines.read_pins()[OSV].version in output) == (2, True, True), output
+    assert (code, "'9.9.9'" in output, scanners.read_pins()[OSV].version in output) == (2, True, True), output
 
 
 @pytest.mark.parametrize("exit_code", [2, 127, 128])
@@ -523,7 +523,7 @@ def test_a_fake_osv_clean_report_for_a_tracked_lock_is_clean(build_repo, clean_e
 @pytest.fixture
 def bare_binary_pin(tmp_path, monkeypatch):
     """A pin file with one `format = "binary"` engine whose download is a local script; returns (download, pin(sha256))."""
-    version = engines.read_pins()[OSV].version
+    version = scanners.read_pins()[OSV].version
     download = tmp_path / "osv-download"
     download.write_text(f'#!/bin/sh\necho "osv-scanner version: {version}"\n')
     pin_file = tmp_path / "pins.toml"
@@ -534,7 +534,7 @@ def bare_binary_pin(tmp_path, monkeypatch):
             f'sha256 = "{sha256}"\nformat = "binary"\n'
         )
 
-    monkeypatch.setattr(engines, "PIN_FILE", pin_file)
+    monkeypatch.setattr(scanners, "PIN_FILE", pin_file)
     return download, pin
 
 
@@ -548,14 +548,14 @@ def test_install_puts_a_verified_bare_binary_in_place_and_leaves_it_alone_the_se
     assert (target / OSV).read_bytes() == download.read_bytes()
     assert (target / OSV).stat().st_mode & 0o111
     assert cli.main(["engines", "install", str(target)]) == 0
-    assert f"{OSV} {engines.read_pins()[OSV].version} already installed" in capsys.readouterr().out
+    assert f"{OSV} {scanners.read_pins()[OSV].version} already installed" in capsys.readouterr().out
 
 
 def test_a_pin_with_an_unknown_format_is_refused_naming_the_pin_and_the_value(bare_binary_pin, tmp_path, capsys):
     """#53 rule 5: a typo in a pin's format fails where it is written."""
     download, pin = bare_binary_pin
     pin(hashlib.sha256(download.read_bytes()).hexdigest())
-    engines.PIN_FILE.write_text(engines.PIN_FILE.read_text().replace('"binary"', '"bianry"'))
+    scanners.PIN_FILE.write_text(scanners.PIN_FILE.read_text().replace('"binary"', '"bianry"'))
     assert cli.main(["engines", "install", str(tmp_path / "engines")]) == 2
     error = capsys.readouterr().err
     assert OSV in error

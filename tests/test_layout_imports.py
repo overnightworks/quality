@@ -2,9 +2,9 @@
 
 import pytest
 
-from tests.support.emergency import ONE_JOB
-from tests.support.hygiene import hygiene_output
+from tests.support.check import hygiene_output
 from tests.support.layout import CONFIG, GUIDANCE, case, declaring, findings, in_index, red
+from tests.support.merge import ONE_JOB
 
 RULE = "test-import"
 

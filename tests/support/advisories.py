@@ -5,9 +5,9 @@ import shlex
 import zipfile
 from pathlib import Path
 
-from quality import engines
+from quality import scanners
 
-OSV = engines.OSV_SCANNER
+OSV = scanners.OSV_SCANNER
 ADVISORY_ID = "GHSA-aaaa-bbbb-cccc"
 UV_LOCK_ALLOWANCE = {"identifier": ADVISORY_ID, "lock": "uv.lock", "item": "#116", "reason": "fixture"}
 AFFECTED_LINE = f"osv-scanner {ADVISORY_ID} (CVE-2020-1): PyPI pyyaml 5.3.1 is affected."

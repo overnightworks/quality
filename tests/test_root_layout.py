@@ -5,9 +5,9 @@ import subprocess
 import pytest
 
 from quality.root_layout import ROOT_BASE_DIRECTORIES, ROOT_BASE_FILES
-from tests.support.emergency import ONE_JOB
+from tests.support.check import hygiene_output
 from tests.support.git_repositories import put
-from tests.support.hygiene import hygiene_output
+from tests.support.merge import ONE_JOB
 from tests.support.verdict import verdict_of
 
 CONFIG = "quality/config.toml"

@@ -12,15 +12,15 @@ from pathlib import Path, PosixPath, PurePosixPath
 import pytest
 
 from quality import advisories, cli
-from quality import scoreboard as scoreboard_module
+from quality import fleet as fleet_module
 from quality.ratchet import BASELINE_PATH
 
 pytest.register_assert_rewrite("tests.support")  # before the first import of a support module, so its asserts are rewritten
 
 from tests.support.advisories import advisory, zipped
-from tests.support.engines import OUTPUTS, fake_engine
+from tests.support.fleet import RELEASES, write_fleet
 from tests.support.git_repositories import GIT_IDENTITY, head_commit, make_repo, put
-from tests.support.scoreboard import RELEASES, write_fleet
+from tests.support.scanners import OUTPUTS, fake_engine
 
 PROCESS_OR_SOCKET_FIXTURES = frozenset(
     {
@@ -271,7 +271,7 @@ def scoreboard(capsys, tmp_path) -> Callable[..., tuple[int, str]]:
     """Runs `quality scoreboard` on a fleet file listing the given URLs (#63 rule 1)."""
 
     def run(
-        *public: str, private: Sequence[str] = (), tags: scoreboard_module.TagReader = lambda: RELEASES
+        *public: str, private: Sequence[str] = (), tags: fleet_module.TagReader = lambda: RELEASES
     ) -> tuple[int, str]:
         fleet = write_fleet(tmp_path / "fleet", public, private)
         code = cli.main(["scoreboard", str(fleet)], release_tags=tags)
@@ -353,7 +353,7 @@ def gate_clone(public, fake_git):
     """The gate's own repository URL, served from a local repository holding `files` by a git on PATH that redirects it."""
 
     def build(files: dict[str, str]) -> str:
-        url = f"https://github.com/{scoreboard_module.GATE_REPOSITORY}"
+        url = f"https://github.com/{fleet_module.GATE_REPOSITORY}"
         fake_git(
             f"export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0='url.{public('gate', files)}.insteadOf' GIT_CONFIG_VALUE_0='{url}'"
         )
