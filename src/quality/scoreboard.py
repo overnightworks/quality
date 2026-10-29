@@ -24,10 +24,12 @@ from quality import (
     advisories,
     architecture,
     checkout,
+    claude_md,
     clones,
     compose,
     config,
     engines,
+    env_file,
     hygiene,
     layout,
     process,
@@ -35,6 +37,7 @@ from quality import (
     ratchet,
     report,
     repository,
+    root_layout,
 )
 
 FLEET_PATH = "quality/fleet.toml"
@@ -125,13 +128,13 @@ class RuleRelease:
 
 # In cell order. The tripwire test holds the ids equal to the rules `hygiene.run_hygiene` judges.
 RULES = (
-    RuleRelease(hygiene.ENV_FILE, FIRST_RELEASE, Switch.ALWAYS),
+    RuleRelease(env_file.ENV_FILE, FIRST_RELEASE, Switch.ALWAYS),
     RuleRelease(compose.COMPOSE_PORT, FIRST_RELEASE, Switch.ALWAYS),
     RuleRelease(engines.LEAK_RULE, FIRST_RELEASE, Switch.ALWAYS),
     RuleRelease(engines.WORKFLOW_LINT, FIRST_RELEASE, Switch.ALWAYS),
     RuleRelease(engines.WORKFLOW_SECURITY, FIRST_RELEASE, Switch.ALWAYS),
-    RuleRelease(hygiene.CLAUDE_MD, RATCHET_RELEASE, Switch.ALWAYS),
-    RuleRelease(hygiene.ROOT_LAYOUT, None, Switch.ALWAYS),
+    RuleRelease(claude_md.CLAUDE_MD, RATCHET_RELEASE, Switch.ALWAYS),
+    RuleRelease(root_layout.ROOT_LAYOUT, None, Switch.ALWAYS),
     RuleRelease(hygiene.FILE_SUFFIX, None, Switch.ALWAYS),
     RuleRelease(hygiene.SCRIPT_NAME, None, Switch.ALWAYS),
     RuleRelease(hygiene.SCRIPT_HEADER, None, Switch.ALWAYS),

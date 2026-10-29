@@ -9,22 +9,23 @@ from quality import (
     advisories,
     architecture,
     checkout,
+    claude_md,
     clones,
     compose,
     engines,
+    env_file,
     layout,
     process,
     python_floor,
     python_lint,
     ratchet,
     repository,
+    root_layout,
 )
 from quality.config import (
-    CONFIG_PATH,
     Allowance,
     ConfigError,
     LayoutRule,
-    RootAllowance,
     read_advisory_allowances,
     read_compose_allowances,
     read_layout_allowances,
@@ -32,11 +33,8 @@ from quality.config import (
     read_root_allowances,
     read_secret_allowances,
 )
-from quality.report import CannotJudge, Finding, Unparsable, shell_word
+from quality.report import CannotJudge, Finding, Unparsable
 
-ENV_FILE = "env-file"
-CLAUDE_MD = "claude-md"
-ROOT_LAYOUT = "root-layout"
 FILE_SUFFIX = LayoutRule.FILE_SUFFIX.value
 SCRIPT_NAME = LayoutRule.SCRIPT_NAME.value
 SCRIPT_HEADER = LayoutRule.SCRIPT_HEADER.value
@@ -47,126 +45,12 @@ PYTHON_PRINT = python_lint.PRINT_RULE
 WORKFLOW_RULE_IDS = tuple(engines.WORKFLOW_ENGINES)
 ENGINE_RULE_IDS = (engines.LEAK_RULE, *WORKFLOW_RULE_IDS, advisories.RULE)
 
-CLAUDE_NESTED_NAME = ".claude/claude.md"
-CLAUDE_FILE_NAMES = frozenset({"claude.md", CLAUDE_NESTED_NAME})
-CLAUDE_IMPORTS = frozenset({b"@AGENTS.md", b"@AGENTS.md\n"})
-AGENTS_FILE = "AGENTS.md"
-
-# A directory is written with its trailing slash, as `[[root.allow]]` writes it.
-ROOT_BASE_FILES = frozenset({
-    "README.md", "AGENTS.md", "CLAUDE.md", "HEART.md", "LICENSE",
-    ".gitignore", ".gitattributes", ".gitmodules",
-    "pyproject.toml", "uv.lock", ".python-version",
-    "package.json", "pnpm-lock.yaml", "package-lock.json",
-    "Cargo.toml", "Cargo.lock", "rust-toolchain.toml",
-    "Dockerfile", ".dockerignore", "compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml",
-    "sonar-project.properties", ".importlinter", ".pre-commit-config.yaml",
-})
-ROOT_BASE_DIRECTORIES = frozenset({".github/", ".aco/", "quality/", "src/", "tests/", "docs/", "scripts/"})
-ROOT_BASE_ENTRIES = ROOT_BASE_FILES | ROOT_BASE_DIRECTORIES
-
-ENV_TEMPLATE_SUFFIX = ".example"
-
-
-def _untrack_fix(name: str) -> str:
-    word = shell_word(name)
-    if word is None:
-        return "remove it from the index by its bytes (git ls-files -z shows them), then add it to .gitignore."
-    return f"git --literal-pathspecs rm --cached -- {word} and add it to .gitignore."
-
-
-def check_env_files(tracked: list[str]) -> list[Finding]:
-    return [
-        Finding(
-            ENV_FILE, name, None,
-            "a tracked env file publishes configuration and often secrets.",
-            _untrack_fix(name),
-        )
-        for name in tracked
-        if _is_env_file(PurePosixPath(name).name)
-    ]
-
-
-def _is_env_file(name: str) -> bool:
-    if name.endswith(ENV_TEMPLATE_SUFFIX):
-        return False
-    return name == ".env" or name.startswith(".env.") or name.endswith(".env")
-
-
-def check_claude_md(root: Path, tracked: list[str]) -> list[Finding]:
-    """A tracked CLAUDE.md, in any case, is exactly `@AGENTS.md` beside a tracked AGENTS.md; `.claude/CLAUDE.md` is none.
-
-    The findings carry fixed texts and the file's name, never its content.
-    """
-    findings = []
-    for name in (name for name in tracked if name.casefold() in CLAUDE_FILE_NAMES):
-        problem = _claude_md_problem(root, name, AGENTS_FILE in tracked)
-        if problem is not None:
-            findings.append(Finding(CLAUDE_MD, name, None, *problem))
-    return findings
-
-
-def _claude_md_problem(root: Path, name: str, agents_tracked: bool) -> tuple[str, str] | None:
-    """The reason and the fix for a CLAUDE.md that is not clean; None when it is clean or gone from the tree."""
-    is_link = checkout.judged(repository.is_symlink, root, name)
-    if name.casefold() == CLAUDE_NESTED_NAME:
-        if not (is_link or checkout.judged(repository.is_on_disk, root, name)):
-            return None
-        return (f"{name} gives Claude guidance Codex and Grok never read.",
-                f"move its lines into {AGENTS_FILE} and delete {name}.")
-    if is_link:
-        return (f"{name} is a symlink, not a file holding @AGENTS.md.",
-                f"replace the link with a file whose only line is @AGENTS.md; {AGENTS_FILE} stays as it is.")
-    on_disk = checkout.judged(repository.is_on_disk, root, name)
-    content = checkout.judged(repository.read_bytes, root, name) if on_disk else None
-    if content is None:
-        return None
-    if content not in CLAUDE_IMPORTS:
-        return (f"{name} is not exactly @AGENTS.md, so Claude reads other guidance than Codex and Grok.",
-                f"move its own lines into {AGENTS_FILE}, then leave @AGENTS.md as its only line, or delete it.")
-    if not (agents_tracked and checkout.judged(repository.is_on_disk, root, AGENTS_FILE)):
-        return (f"{name} imports {AGENTS_FILE}, which the repository does not hold.",
-                f"add {AGENTS_FILE} with the repository's guidance, or delete {name}.")
-    return None
-
-
-def check_root_layout(tracked: list[str], allowances: Sequence[RootAllowance]) -> list[Finding]:
-    """Every tracked root entry, a directory with its trailing `/`, is on the base list or declared; a declaration that
-    matches no tracked root entry is a finding too. Findings are sorted by entry."""
-    entries = {name.partition("/")[0] + "/" if "/" in name else name for name in tracked}
-    declared = {allowance.entry for allowance in allowances}
-    base_spelling = {entry.casefold(): entry for entry in ROOT_BASE_ENTRIES}
-    findings = [
-        _unlisted_root_entry(entry, base_spelling.get(entry.casefold()))
-        for entry in entries - ROOT_BASE_ENTRIES - declared
-    ]
-    findings += [_stale_root_declaration(entry, entries) for entry in declared - entries]
-    return sorted(findings, key=lambda finding: finding.path)
-
-
-def _unlisted_root_entry(entry: str, base_spelling: str | None) -> Finding:
-    hint = f" (the base list knows {base_spelling})" if base_spelling else ""
-    return Finding(
-        ROOT_LAYOUT, entry, None,
-        f"not on quality's base list{hint}.",
-        f"move it to its owner's directory, or declare it in {CONFIG_PATH} with [[root.allow]], an entry and a reason.",
-    )
-
 
 def _python_floor_result(root: Path) -> python_floor.FloorResult:
     modes = checkout.index_modes(root)
     names = [str(PurePosixPath(project.directory) / layout.PROJECT_FILE) for project in layout.python_projects(modes)]
     present = checkout.on_disk(root, [name for name in names if modes[name] != layout.GITLINK_MODE])
     return python_floor.check_python_floor(checkout.read_existing(repository.read_bytes, root, present), _declared(read_python_allowances, root))
-
-
-def _stale_root_declaration(entry: str, tracked_entries: set[str]) -> Finding:
-    hint = f" (the repository tracks {entry}/)" if f"{entry}/" in tracked_entries else ""
-    return Finding(
-        ROOT_LAYOUT, entry, None,
-        f"declared in {CONFIG_PATH} with [[root.allow]], but the repository tracks no such root entry{hint}.",
-        f"delete its [[root.allow]] entry from {CONFIG_PATH}.",
-    )
 
 
 def _declared[T](read: Callable[[Path], T], root: Path) -> T:
@@ -381,13 +265,13 @@ def run_hygiene(root: Path, engine_dir: Path | None, locate_ruff: Callable[[], s
     lint = _attempt(lambda: lint_python(root, locate_ruff))
     printing = _judge_lint(lint, python_lint.judge_print)
     verdicts = [
-        _verdict(ENV_FILE, check_env_files(tracked)),
+        _verdict(env_file.ENV_FILE, env_file.check_env_files(tracked)),
         _verdict(compose.COMPOSE_PORT, _attempt(lambda: compose.check_compose_ports(root, tracked, _declared(read_compose_allowances, root)))),
         _verdict(ratchet.SIZE, size if isinstance(size, CannotJudge) else size.findings),
         _verdict(clones.RULE, clone if isinstance(clone, CannotJudge) else clone.findings),
         _verdict(architecture.RULE, contracts if isinstance(contracts, CannotJudge) else contracts.findings),
-        _verdict(CLAUDE_MD, _attempt(lambda: check_claude_md(root, tracked))),
-        _verdict(ROOT_LAYOUT, _attempt(lambda: check_root_layout(tracked, _declared(read_root_allowances, root)))),
+        _verdict(claude_md.CLAUDE_MD, _attempt(lambda: claude_md.check_claude_md(root, tracked))),
+        _verdict(root_layout.ROOT_LAYOUT, _attempt(lambda: root_layout.check_root_layout(tracked, _declared(read_root_allowances, root)))),
         _verdict(FILE_SUFFIX, _attempt(lambda: layout.check_file_suffix(checkout.index_modes(root), _declared(read_layout_allowances, root)))),
         _verdict(SCRIPT_NAME, _content_findings(root, layout.script_candidates, layout.check_script_name)),
         _verdict(SCRIPT_HEADER, _content_findings(root, layout.script_candidates, layout.check_script_header)),

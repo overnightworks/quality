@@ -4,7 +4,7 @@ import subprocess
 
 import pytest
 
-from quality.hygiene import ROOT_BASE_DIRECTORIES, ROOT_BASE_FILES
+from quality.root_layout import ROOT_BASE_DIRECTORIES, ROOT_BASE_FILES
 from tests.support.emergency import ONE_JOB
 from tests.support.git_repositories import put
 from tests.support.hygiene import hygiene_output
