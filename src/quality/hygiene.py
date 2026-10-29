@@ -35,13 +35,6 @@ from quality.config import (
 )
 from quality.report import CannotJudge, Finding, Unparsable
 
-FILE_SUFFIX = LayoutRule.FILE_SUFFIX.value
-SCRIPT_NAME = LayoutRule.SCRIPT_NAME.value
-SCRIPT_HEADER = LayoutRule.SCRIPT_HEADER.value
-TEST_LAYOUT = LayoutRule.TEST_LAYOUT.value
-TEST_IMPORT = LayoutRule.TEST_IMPORT.value
-PYTHON_SECURITY = python_lint.SECURITY_RULE
-PYTHON_PRINT = python_lint.PRINT_RULE
 WORKFLOW_RULE_IDS = tuple(engines.WORKFLOW_ENGINES)
 ENGINE_RULE_IDS = (engines.LEAK_RULE, *WORKFLOW_RULE_IDS, advisories.RULE)
 
@@ -61,45 +54,12 @@ def _declared[T](read: Callable[[Path], T], root: Path) -> T:
         raise CannotJudge(str(error)) from error
 
 
-@dataclass(frozen=True)
-class RuleResult:
-    """A baseline rule's findings, and its report line when it only counts."""
-
-    findings: list[Finding]
-    report: str | None
-
-
 def judged_baseline(root: Path) -> ratchet.Baseline | None:
     """The baseline both baseline rules judge by, read once; a file that cannot be read cannot be judged."""
     try:
         return ratchet.read_baseline(root)
     except ratchet.SizeError as error:
         raise CannotJudge(f"{error}; {ratchet.head_advice(error)}") from error
-
-
-def _complete(tree: ratchet.TreeMeasurement) -> ratchet.Measurements:
-    """Holding a baseline needs every function measured, so an unparsable file cannot be judged."""
-    try:
-        return tree.complete()
-    except ratchet.UnparsableSource as error:
-        raise Unparsable(str(error)) from error
-
-
-def check_size(tree: ratchet.TreeMeasurement, baseline: ratchet.Baseline | None) -> RuleResult:
-    """Report-only without a baseline; with one, the tree on disk must hold it."""
-    if baseline is None:
-        return RuleResult([], ratchet.report_counts(tree))
-    return RuleResult(ratchet.compare(_complete(tree), baseline.size), None)
-
-
-def check_clones(tree: ratchet.TreeMeasurement, sources: dict[str, bytes], baseline: ratchet.Baseline | None) -> RuleResult:
-    """Report-only without a `[clones]` table, even in a baseline of size tables; with one, every new pair and every
-    held pair the tree lost is a finding. A pair can hide in a file the detector cannot read, so then it cannot judge."""
-    pairs = clones.find_pairs(sources)
-    if baseline is None or baseline.clones is None:
-        return RuleResult([], clones.report_line(pairs.pairs))
-    _complete(tree)
-    return RuleResult(clones.compare_pairs(pairs, baseline.clones), None)
 
 
 def check_import_contract(root: Path, tracked: list[str]) -> architecture.ContractsVerdict:
@@ -227,14 +187,14 @@ def _verdict(rule: str, outcome: Sequence[Finding] | CannotJudge) -> RuleVerdict
 
 def _judge_baseline_rules(
     sources: dict[str, bytes] | CannotJudge, baseline: ratchet.Baseline | None | CannotJudge
-) -> tuple[RuleResult | CannotJudge, RuleResult | CannotJudge]:
+) -> tuple[ratchet.RuleResult | CannotJudge, ratchet.RuleResult | CannotJudge]:
     """The size and clone verdicts, both from one measurement of the tree and one read of the baseline."""
     if isinstance(sources, CannotJudge):
         return sources, sources
     if isinstance(baseline, CannotJudge):
         return baseline, baseline
     tree = ratchet.measure(sources)
-    return _attempt(lambda: check_size(tree, baseline)), _attempt(lambda: check_clones(tree, sources, baseline))
+    return _attempt(lambda: ratchet.check_size(tree, baseline)), _attempt(lambda: clones.check_clones(tree, sources, baseline))
 
 
 def _content_findings(
@@ -272,14 +232,14 @@ def run_hygiene(root: Path, engine_dir: Path | None, locate_ruff: Callable[[], s
         _verdict(architecture.RULE, contracts if isinstance(contracts, CannotJudge) else contracts.findings),
         _verdict(claude_md.CLAUDE_MD, _attempt(lambda: claude_md.check_claude_md(root, tracked))),
         _verdict(root_layout.ROOT_LAYOUT, _attempt(lambda: root_layout.check_root_layout(tracked, _declared(read_root_allowances, root)))),
-        _verdict(FILE_SUFFIX, _attempt(lambda: layout.check_file_suffix(checkout.index_modes(root), _declared(read_layout_allowances, root)))),
-        _verdict(SCRIPT_NAME, _content_findings(root, layout.script_candidates, layout.check_script_name)),
-        _verdict(SCRIPT_HEADER, _content_findings(root, layout.script_candidates, layout.check_script_header)),
-        _verdict(TEST_LAYOUT, _attempt(lambda: layout.check_test_layout(checkout.index_modes(root), _declared(read_layout_allowances, root)))),
-        _verdict(TEST_IMPORT, _content_findings(root, layout.test_import_candidates, layout.check_test_import)),
+        _verdict(LayoutRule.FILE_SUFFIX.value, _attempt(lambda: layout.check_file_suffix(checkout.index_modes(root), _declared(read_layout_allowances, root)))),
+        _verdict(LayoutRule.SCRIPT_NAME.value, _content_findings(root, layout.script_candidates, layout.check_script_name)),
+        _verdict(LayoutRule.SCRIPT_HEADER.value, _content_findings(root, layout.script_candidates, layout.check_script_header)),
+        _verdict(LayoutRule.TEST_LAYOUT.value, _attempt(lambda: layout.check_test_layout(checkout.index_modes(root), _declared(read_layout_allowances, root)))),
+        _verdict(LayoutRule.TEST_IMPORT.value, _content_findings(root, layout.test_import_candidates, layout.check_test_import)),
         _verdict(python_floor.PYTHON_FLOOR, floor if isinstance(floor, CannotJudge) else floor.findings),
-        _verdict(PYTHON_SECURITY, _judge_lint(lint, python_lint.judge_security)),
-        _verdict(PYTHON_PRINT, printing if isinstance(printing, CannotJudge) else printing.findings),
+        _verdict(python_lint.SECURITY_RULE, _judge_lint(lint, python_lint.judge_security)),
+        _verdict(python_lint.PRINT_RULE, printing if isinstance(printing, CannotJudge) else printing.findings),
     ]
     reports = _reports(size, clone, contracts, floor, printing)
     if engine_dir is None:
@@ -295,8 +255,8 @@ def run_hygiene(root: Path, engine_dir: Path | None, locate_ruff: Callable[[], s
 
 
 def _reports(
-    size: RuleResult | CannotJudge,
-    clone: RuleResult | CannotJudge,
+    size: ratchet.RuleResult | CannotJudge,
+    clone: ratchet.RuleResult | CannotJudge,
     contracts: architecture.ContractsVerdict | CannotJudge,
     floor: python_floor.FloorResult | CannotJudge,
     printing: python_lint.PrintResult | CannotJudge,
