@@ -112,7 +112,7 @@ def pytest_collection_modifyitems(session, config, items):
         if len(hand_marked) == 2:
             raise pytest.UsageError(f"{item.nodeid} carries both unit and integration")
         if not hand_marked:
-            starts_process = PROCESS_OR_SOCKET_FIXTURES.intersection(item.fixturenames) or item.get_closest_marker("engine")
+            starts_process = PROCESS_OR_SOCKET_FIXTURES.intersection(item.fixturenames) or item.get_closest_marker("scanner")
             item.add_marker("integration" if starts_process else "unit")
 
 

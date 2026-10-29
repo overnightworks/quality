@@ -7,7 +7,7 @@ import pytest
 from quality import installation, scanners
 
 Locator = Callable[[], str]
-OUTPUTS = Path(__file__).parents[1] / "fixtures" / "engine-outputs"
+OUTPUTS = Path(__file__).parents[1] / "fixtures" / "scanner-outputs"
 
 
 def fake_engine(directory: Path, name: str, on_scan: str) -> Path:

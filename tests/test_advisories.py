@@ -34,7 +34,7 @@ from tests.support.scanners import OUTPUTS, osv_engines
 
 # ---- the real osv-scanner against a fake file:// database (CI runs these; they download the binary) ----
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_an_affected_lock_is_red_and_names_the_advisory_and_the_fix(build_repo, publish_database, installed_engines, run_gate):
     """#53 rule 2, rule 3, cells 3 and 21."""
     publish_database()
@@ -43,7 +43,7 @@ def test_an_affected_lock_is_red_and_names_the_advisory_and_the_fix(build_repo, 
     assert f"advisory uv.lock - {AFFECTED_LINE}\n  {UPGRADE_LINE}" in output
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 @pytest.mark.parametrize(
     ("records", "expected"),
     [
@@ -75,7 +75,7 @@ def test_a_record_naming_a_pypi_package_in_other_spelling_still_supplies_the_fix
     assert UPGRADE_LINE in output
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_two_advisories_that_alias_each_other_are_one_finding(build_repo, publish_database, installed_engines, run_gate):
     """#53 rule 2, cell 6: one finding per alias group, the other ids named as aliases."""
     publish_database([advisory("GHSA-aaaa-bbbb-cccc", aliases=("PYSEC-1",)), advisory("PYSEC-1", aliases=("GHSA-aaaa-bbbb-cccc",))])
@@ -85,7 +85,7 @@ def test_two_advisories_that_alias_each_other_are_one_finding(build_repo, publis
     assert "GHSA-aaaa-bbbb-cccc (PYSEC-1)" in output or "PYSEC-1 (GHSA-aaaa-bbbb-cccc)" in output
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_every_tracked_lock_is_judged_with_its_relative_name(build_repo, publish_database, installed_engines, run_gate):
     """#53 rule 1, rule 2, cells 7, 8, 22, 30: nested, odd-named and gitignored locks are scanned, an untracked one is not."""
     repo = build_repo({
@@ -103,7 +103,7 @@ def test_every_tracked_lock_is_judged_with_its_relative_name(build_repo, publish
     assert "(in speech/: uv lock --upgrade-package pyyaml)" in output
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 @pytest.mark.parametrize(
     "repository_config",
     ['[[IgnoredVulns]]\nid = "GHSA-aaaa-bbbb-cccc"\n', '[[PackageOverrides]]\nname = "pyyaml"\necosystem = "PyPI"\nignore = true\n'],
@@ -123,7 +123,7 @@ def test_a_repository_osv_scanner_config_changes_nothing(
     assert f"advisory {name} - " in output
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 @pytest.mark.parametrize(
     "lock", [uv_lock(SAFE), VIRTUAL_ROOT_ONLY], ids=["cell 2 a clean lock", "cell 29 only a virtual root"]
 )
@@ -136,7 +136,7 @@ def test_a_lock_no_advisory_affects_is_clean(build_repo, publish_database, insta
     assert "advisory" in output
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 @pytest.mark.parametrize(
     ("name", "text"), [("uv.lock", uv_lock()), ("tests/requirements.txt", "pyyaml==5.3.1 --hash=sha256:" + "ab" * 32 + "\n")],
     ids=["uv.lock", "tests/requirements.txt"],
@@ -344,7 +344,7 @@ def test_a_wheel_pin_file_that_cannot_be_written_is_cannot_judge(build_repo, cle
     assert (code, "tests/requirements.txt: cannot write the wheel pins for the scan" in output, "Traceback" in output) == (2, True, False), output
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 @pytest.mark.parametrize(
     ("name", "text"),
     [
@@ -381,7 +381,7 @@ def test_two_tracked_names_for_one_lock_are_each_judged(build_repo, clean_engine
     assert "advisory speech/uv.lock - " in output
 
 
-@pytest.mark.engine
+@pytest.mark.scanner
 def test_two_tracked_names_for_one_lock_are_each_judged_by_the_real_osv(build_repo, publish_database, installed_engines, run_gate):
     """#53 rule 2: the same, with the real osv-scanner reporting however it reports a repeated lock."""
     publish_database()

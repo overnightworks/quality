@@ -16,7 +16,7 @@ from quality.config import CONFIG_PATH, AdvisoryAllowance
 from quality.pip_requirements import Requirement
 from quality.report import Finding
 from quality.rules import Rule
-from quality.scanners import EngineError, Pin
+from quality.scanners import Pin, ScannerError
 
 PYTHON_ECOSYSTEM = "PyPI"
 DATABASE_ROOT = "https://osv-vulnerabilities.storage.googleapis.com"  # read at call time; tests point it at a file:// root
@@ -117,7 +117,7 @@ def scan(
             ecosystems = sorted({lock_kind(name).ecosystem for name in locks})
             affected = _scan(engine_dir, pins, ecosystems, handovers, scratch, names_by_path, monotonic)
         except process.ProcessError as error:
-            raise EngineError(_without_paths(str(error), names_by_path, [(root.resolve(), "<repository>"), (engine_dir.resolve(), "<engines>"), (scratch, "<scratch>")])) from None
+            raise ScannerError(_without_paths(str(error), names_by_path, [(root.resolve(), "<repository>"), (engine_dir.resolve(), "<engines>"), (scratch, "<scratch>")])) from None
     return apply_allowances(affected, allowances, today)
 
 
@@ -176,7 +176,7 @@ def _handovers(root: Path, locks: Mapping[str, Path], scratch: Path, names_by_pa
     for name, path in locks.items():
         kind = lock_kind(name)
         if not path.stat().st_size:
-            raise EngineError(f"{name} is empty")
+            raise ScannerError(f"{name} is empty")
         if kind is not REQUIREMENTS_KIND:
             handovers.append(Handover(kind.parse_as, path))
             continue
@@ -188,7 +188,7 @@ def _handovers(root: Path, locks: Mapping[str, Path], scratch: Path, names_by_pa
             try:
                 wheel_file.write_text("".join(f"{wheel.name}=={wheel.version}\n" for wheel in wheels))
             except OSError as error:
-                raise EngineError(f"{name}: cannot write the wheel pins for the scan: {error.strerror}") from error
+                raise ScannerError(f"{name}: cannot write the wheel pins for the scan: {error.strerror}") from error
             names_by_path[str(wheel_file)] = [name]
             handovers.append(Handover(kind.parse_as, wheel_file, wheels))
     return handovers
@@ -198,7 +198,7 @@ def _read_requirements(root: Path, name: str) -> tuple[Requirement, ...]:
     try:
         return pip_requirements.read(repository.read_text(root, name) or "")
     except (pip_requirements.RequirementsError, repository.RepositoryFileError) as error:
-        raise EngineError(f"{name}: {error}") from error
+        raise ScannerError(f"{name}: {error}") from error
 
 
 def _scan(
@@ -242,17 +242,17 @@ def _place_database(scratch: Path, ecosystem: str, deadline: float, monotonic: C
             for entry in entries:
                 json.loads(database.read(entry))
     except zipfile.BadZipFile as error:
-        raise EngineError(f"the {ecosystem} advisory database is not a valid zip: {error}") from error
+        raise ScannerError(f"the {ecosystem} advisory database is not a valid zip: {error}") from error
     except ValueError as error:
-        raise EngineError(f"the {ecosystem} advisory database holds an entry that is not valid JSON: {error}") from error
+        raise ScannerError(f"the {ecosystem} advisory database holds an entry that is not valid JSON: {error}") from error
     if not entries:
-        raise EngineError(f"the {ecosystem} advisory database holds no advisory")
+        raise ScannerError(f"the {ecosystem} advisory database holds no advisory")
     destination = scratch / "osv-scalibr" / ecosystem
     try:
         destination.mkdir(parents=True)
         (destination / DATABASE_ARCHIVE).write_bytes(archive)
     except OSError as error:
-        raise EngineError(f"cannot place the {ecosystem} advisory database in the scratch directory: {error}") from error
+        raise ScannerError(f"cannot place the {ecosystem} advisory database in the scratch directory: {error}") from error
 
 
 def _download_database(url: str, ecosystem: str, deadline: float, monotonic: Callable[[], float]) -> bytes:
@@ -280,15 +280,15 @@ def _download_database(url: str, ecosystem: str, deadline: float, monotonic: Cal
     if worker.is_alive():
         raise _deadline_exceeded(ecosystem)
     if not download.done():
-        raise EngineError(f"the {ecosystem} advisory database download stopped on an unexpected error")
+        raise ScannerError(f"the {ecosystem} advisory database download stopped on an unexpected error")
     try:
         return download.result()
     except DOWNLOAD_FAILURES as error:
-        raise EngineError(f"cannot download the {ecosystem} advisory database from {url}: {error}") from error
+        raise ScannerError(f"cannot download the {ecosystem} advisory database from {url}: {error}") from error
 
 
-def _deadline_exceeded(ecosystem: str) -> EngineError:
-    return EngineError(f"the {ecosystem} advisory database download exceeded {DATABASE_DOWNLOAD_DEADLINE_SECONDS} seconds")
+def _deadline_exceeded(ecosystem: str) -> ScannerError:
+    return ScannerError(f"the {ecosystem} advisory database download exceeded {DATABASE_DOWNLOAD_DEADLINE_SECONDS} seconds")
 
 
 def _without_paths(text: str, names_by_path: Mapping[str, list[str]], directories: list[tuple[Path, str]]) -> str:
@@ -308,10 +308,10 @@ def _findings(
     expected: Mapping[str, tuple[Requirement, ...]],
 ) -> list[Affected]:
     if exit_code not in (scanners.CLEAN_EXIT, OSV_FINDINGS_FOUND):
-        raise EngineError(f"{scanners.OSV_SCANNER} exited {exit_code}, neither 'clean' nor 'findings'{process.stderr_tail(stderr)}")
+        raise ScannerError(f"{scanners.OSV_SCANNER} exited {exit_code}, neither 'clean' nor 'findings'{process.stderr_tail(stderr)}")
     affected = _read_report(report_text, names_by_path, expected)
     if bool(affected) != (exit_code == OSV_FINDINGS_FOUND):
-        raise EngineError(f"{scanners.OSV_SCANNER} exited {exit_code} but its report holds {len(affected)} finding(s)")
+        raise ScannerError(f"{scanners.OSV_SCANNER} exited {exit_code} but its report holds {len(affected)} finding(s)")
     return affected
 
 
@@ -325,7 +325,7 @@ def _read_report(
         for result in _dicts(json.loads(report_text)["results"]):
             source = _typed(_typed(result["source"], dict)["path"], str)
             if source not in names_by_path:
-                raise EngineError(f"the {scanners.OSV_SCANNER} report names a lock file quality did not pass")
+                raise ScannerError(f"the {scanners.OSV_SCANNER} report names a lock file quality did not pass")
             packages = _dicts(result["packages"])
             listed[source] = {_name_and_version(package) for package in packages}
             affected += [
@@ -333,7 +333,7 @@ def _read_report(
                 for group in _package_findings(name, package)
             ]
     except (ValueError, KeyError, TypeError, AttributeError) as error:
-        raise EngineError(f"cannot read the {scanners.OSV_SCANNER} report: {error!r}") from error
+        raise ScannerError(f"cannot read the {scanners.OSV_SCANNER} report: {error!r}") from error
     for path, requirements in expected.items():
         _check_listed(names_by_path[path][0], requirements, listed.get(path, set()))
     return list(dict.fromkeys(affected))
@@ -348,9 +348,9 @@ def _check_listed(name: str, requirements: tuple[Requirement, ...], listed: set[
     """osv-scanner skips a line it cannot parse and still reports clean, so a clean run counts only when it read what quality read."""
     for requirement in requirements:
         if (requirement.name, requirement.version) not in listed:
-            raise EngineError(f"{scanners.OSV_SCANNER} did not read line {requirement.line} of {name}")
+            raise ScannerError(f"{scanners.OSV_SCANNER} did not read line {requirement.line} of {name}")
     if listed - {(requirement.name, requirement.version) for requirement in requirements}:
-        raise EngineError(f"{scanners.OSV_SCANNER} reported a package of {name} that quality did not read")
+        raise ScannerError(f"{scanners.OSV_SCANNER} reported a package of {name} that quality did not read")
 
 
 def _typed[T](value: object, kind: type[T]) -> T:

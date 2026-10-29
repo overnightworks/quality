@@ -34,8 +34,8 @@ ZIZMOR_CONFIG = Path(__file__).with_name("zizmor.yml")
 GITLEAKS_CONFIG = Path(__file__).with_name("gitleaks.toml")
 
 
-class EngineError(process.ProcessError):
-    """An engine cannot be installed or trusted; this is never a clean result."""
+class ScannerError(process.ProcessError):
+    """A scanner cannot be installed or trusted; this is never a clean result."""
 
 
 @dataclass(frozen=True)
@@ -51,7 +51,7 @@ def read_pins() -> dict[str, Pin]:
         pins = {name: Pin(**fields) for name, fields in tomllib.load(handle).items()}
     for name, pin in pins.items():
         if pin.format not in (TARBALL, BINARY):
-            raise EngineError(f"the {name} pin has format {pin.format!r}, neither {TARBALL!r} nor {BINARY!r}")
+            raise ScannerError(f"the {name} pin has format {pin.format!r}, neither {TARBALL!r} nor {BINARY!r}")
     return pins
 
 
@@ -61,7 +61,7 @@ def install(directory: Path, pins: dict[str, Pin]) -> dict[str, bool]:
     try:
         directory.mkdir(parents=True, exist_ok=True)  # NOSONAR(S8707)
     except OSError as error:
-        raise EngineError(f"cannot create {directory}: {error.strerror}") from error
+        raise ScannerError(f"cannot create {directory}: {error.strerror}") from error
     downloaded = {}
     for name, pin in pins.items():
         target = engine_path(directory, name)
@@ -89,7 +89,7 @@ def engine_path(directory: Path, name: str) -> Path:
     root = directory.resolve()
     path = (root / name).resolve()
     if path.parent != root:
-        raise EngineError(f"{name} is not a plain file name inside {root}")
+        raise ScannerError(f"{name} is not a plain file name inside {root}")
     return path
 
 
@@ -98,10 +98,10 @@ def _download_verified(name: str, pin: Pin) -> bytes:
         with urllib.request.urlopen(pin.url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:  # noqa: S310 - pinned https url; follows redirects
             archive = response.read()
     except (OSError, ValueError) as error:
-        raise EngineError(f"cannot download {name} from {pin.url}: {error}") from error
+        raise ScannerError(f"cannot download {name} from {pin.url}: {error}") from error
     actual = hashlib.sha256(archive).hexdigest()
     if actual != pin.sha256:
-        raise EngineError(f"{name} download has sha256 {actual}, the pin says {pin.sha256}")
+        raise ScannerError(f"{name} download has sha256 {actual}, the pin says {pin.sha256}")
     return archive
 
 
@@ -114,14 +114,14 @@ def _unpack_binary(name: str, archive: bytes) -> bytes:
         with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as tar:
             member = tar.extractfile(name)
             if member is None:
-                raise EngineError(f"the {name} archive has no file {name}")
+                raise ScannerError(f"the {name} archive has no file {name}")
             return member.read()
     except (tarfile.TarError, KeyError) as error:
-        raise EngineError(f"cannot unpack {name}: {error}") from error
+        raise ScannerError(f"cannot unpack {name}: {error}") from error
 
 
 @dataclass(frozen=True)
-class _Engine:
+class _Scanner:
     name: str
     finding_exits: range | tuple[int, ...]
     read_finding: Callable[[object], Finding]
@@ -155,7 +155,7 @@ def scan_secrets(root: Path, engine_dir: Path, pins: dict[str, Pin], allowances:
             f"cannot clone {root} for the {GITLEAKS} scan", git_environment)
         head = process.unborn_aware_head_commit(source, git_environment)
         if head is None:
-            raise EngineError(f"cannot resolve HEAD of {source}: it has no commit")
+            raise ScannerError(f"cannot resolve HEAD of {source}: it has no commit")
         return run_gitleaks(binary, scratch, git_environment, source, [f"--log-opts={head}"], allowances)
 
 
@@ -175,8 +175,8 @@ def run_gitleaks(
     ]
     scan = process.run(command, env=git_environment, timeout=SECRET_SCAN_TIMEOUT_SECONDS)
     if not report.is_file():
-        raise EngineError(f"{GITLEAKS} exited {scan.returncode} without writing its report{process.stderr_tail(scan.stderr)}")
-    leaks = engine_findings(GITLEAKS_ENGINE, _read_report(report), scan.returncode, scan.stderr)
+        raise ScannerError(f"{GITLEAKS} exited {scan.returncode} without writing its report{process.stderr_tail(scan.stderr)}")
+    leaks = scanner_findings(GITLEAKS_SCANNER, _read_report(report), scan.returncode, scan.stderr)
     return _split_by_allowance(leaks, allowances)
 
 
@@ -185,9 +185,9 @@ def _read_report(report: Path) -> str:
     try:
         return report.read_bytes().decode("utf-8")
     except OSError as error:
-        raise EngineError(f"cannot read the {GITLEAKS} report: {type(error).__name__}") from None
+        raise ScannerError(f"cannot read the {GITLEAKS} report: {type(error).__name__}") from None
     except UnicodeDecodeError as error:
-        raise EngineError(f"cannot read the {GITLEAKS} report: not UTF-8 at byte {error.start}") from None
+        raise ScannerError(f"cannot read the {GITLEAKS} report: not UTF-8 at byte {error.start}") from None
 
 
 def _split_by_allowance(leaks: list[Finding], allowances: dict[Allowance, str]) -> SecretScan:
@@ -206,10 +206,10 @@ def require_git_floor() -> None:
     unreadable = "cannot read the git version"
     version = process.parse_git_version(process.git(["--version"], unreadable))
     if version is None:
-        raise EngineError(unreadable)
+        raise ScannerError(unreadable)
     if tuple(int(part) for part in version.split("."))[:2] < GIT_FLOOR:
         required = ".".join(map(str, GIT_FLOOR))
-        raise EngineError(
+        raise ScannerError(
             f"git {version} cannot hide .gitattributes from the {GITLEAKS} scan, it needs git {required}"
         )
 
@@ -217,20 +217,20 @@ def require_git_floor() -> None:
 def verify_version(binary: Path, engine_name: str, pinned: str) -> None:
     asked = process.run([str(binary), *VERSION_ARGUMENTS[engine_name]], timeout=process.VERSION_TIMEOUT_SECONDS)
     if asked.returncode != 0:
-        raise EngineError(f"{binary} version exited {asked.returncode}{process.stderr_tail(asked.stderr)}")
+        raise ScannerError(f"{binary} version exited {asked.returncode}{process.stderr_tail(asked.stderr)}")
     reported = (asked.stdout.strip().splitlines() or [""])[0].split(" ")[-1]  # "zizmor 1.2.3", or just "1.2.3"
     if reported != pinned:
-        raise EngineError(f"{binary} is version {reported!r}, the pin says {pinned!r}")
+        raise ScannerError(f"{binary} is version {reported!r}, the pin says {pinned!r}")
 
 
 def _read_leak(entry: object) -> tuple[str, int, str, str, str]:
     try:
         path, line, rule, commit, secret = (entry[key] for key in LEAK_FIELDS)
     except (KeyError, TypeError) as error:
-        raise EngineError(f"cannot read the {GITLEAKS} report: {error!r}") from error
+        raise ScannerError(f"cannot read the {GITLEAKS} report: {error!r}") from error
     if not (isinstance(path, str) and isinstance(line, int) and isinstance(rule, str) and isinstance(commit, str)
             and isinstance(secret, str)):
-        raise EngineError(f"a {GITLEAKS} leak has fields of the wrong type")
+        raise ScannerError(f"a {GITLEAKS} leak has fields of the wrong type")
     return path, line, rule, commit, secret
 
 
@@ -245,7 +245,7 @@ def _leak_finding(entry: object) -> Finding:
     )
 
 
-GITLEAKS_ENGINE = _Engine(GITLEAKS, (GITLEAKS_LEAKS_FOUND,), _leak_finding)
+GITLEAKS_SCANNER = _Scanner(GITLEAKS, (GITLEAKS_LEAKS_FOUND,), _leak_finding)
 
 
 def pinned_zizmor(locate_zizmor: Callable[[], str]) -> Path:
@@ -254,13 +254,13 @@ def pinned_zizmor(locate_zizmor: Callable[[], str]) -> Path:
         located = Path(locate_zizmor())
         pinned = installation.required_version(ZIZMOR)
     except FileNotFoundError as error:
-        raise EngineError(f"quality's installation holds no {ZIZMOR}; {installation.REINSTALL}") from error
+        raise ScannerError(f"quality's installation holds no {ZIZMOR}; {installation.REINSTALL}") from error
     except installation.UnpinnedDependency as error:
-        raise EngineError(str(error)) from error
+        raise ScannerError(str(error)) from error
     try:
         verify_version(located, ZIZMOR, pinned)
     except process.ProcessError as error:
-        raise EngineError(f"{error}; {installation.REINSTALL}") from error
+        raise ScannerError(f"{error}; {installation.REINSTALL}") from error
     return located
 
 
@@ -270,37 +270,37 @@ def scan_workflows(
     """The findings of the one engine that judges `rule`; nothing to scan needs no engine."""
     if not workflows:
         return []
-    engine = WORKFLOW_ENGINES[rule]
+    engine = WORKFLOW_SCANNERS[rule]
     if engine.name == ZIZMOR:
         binary = pinned_zizmor(locate_zizmor)
     else:
         binary = engine_path(engine_dir, engine.name)
         verify_version(binary, engine.name, pins[engine.name].version)
     scan = process.run([str(binary), *engine.arguments, *workflows], cwd=root)
-    return engine_findings(engine, scan.stdout, scan.returncode, scan.stderr)
+    return scanner_findings(engine, scan.stdout, scan.returncode, scan.stderr)
 
 
-def engine_findings(engine: _Engine, report_text: str, exit_code: int, stderr: str) -> list[Finding]:
-    if exit_code != CLEAN_EXIT and exit_code not in engine.finding_exits:
-        raise EngineError(f"{engine.name} exited {exit_code}, neither 'clean' nor 'findings'{process.stderr_tail(stderr)}")
+def scanner_findings(scanner: _Scanner, report_text: str, exit_code: int, stderr: str) -> list[Finding]:
+    if exit_code != CLEAN_EXIT and exit_code not in scanner.finding_exits:
+        raise ScannerError(f"{scanner.name} exited {exit_code}, neither 'clean' nor 'findings'{process.stderr_tail(stderr)}")
     try:
         entries = json.loads(report_text)
     except ValueError as error:
-        raise EngineError(f"cannot read the {engine.name} report: {error!r}") from error
+        raise ScannerError(f"cannot read the {scanner.name} report: {error!r}") from error
     if not isinstance(entries, list):
-        raise EngineError(f"the {engine.name} report is not a list of findings")
+        raise ScannerError(f"the {scanner.name} report is not a list of findings")
     if bool(entries) != (exit_code != CLEAN_EXIT):
-        raise EngineError(f"{engine.name} exited {exit_code} but its report holds {len(entries)} finding(s)")
-    return [engine.read_finding(entry) for entry in entries]
+        raise ScannerError(f"{scanner.name} exited {exit_code} but its report holds {len(entries)} finding(s)")
+    return [scanner.read_finding(entry) for entry in entries]
 
 
 def actionlint_finding(entry: object) -> Finding:
     try:
         message, path, line = entry["message"], entry["filepath"], entry["line"]
     except (KeyError, TypeError) as error:
-        raise EngineError(f"cannot read the {ACTIONLINT} report: {error!r}") from error
+        raise ScannerError(f"cannot read the {ACTIONLINT} report: {error!r}") from error
     if not (isinstance(message, str) and isinstance(path, str) and isinstance(line, int)):
-        raise EngineError(f"an {ACTIONLINT} finding has fields of the wrong type")
+        raise ScannerError(f"an {ACTIONLINT} finding has fields of the wrong type")
     return Finding(Rule.WORKFLOW_LINT, path, line, f"{ACTIONLINT}: {message}", "correct the workflow as the message says.")
 
 
@@ -311,21 +311,21 @@ def zizmor_finding(entry: object) -> Finding:
         path = primary["symbolic"]["key"]["Local"]["verbatim_path"]
         row = primary["concrete"]["location"]["start_point"]["row"]
     except (KeyError, TypeError, StopIteration) as error:
-        raise EngineError(f"cannot read the {ZIZMOR} report: {error!r}") from error
+        raise ScannerError(f"cannot read the {ZIZMOR} report: {error!r}") from error
     if not (isinstance(rule, str) and isinstance(description, str) and isinstance(url, str)
             and isinstance(path, str) and isinstance(row, int)):
-        raise EngineError(f"a {ZIZMOR} finding has fields of the wrong type")
+        raise ScannerError(f"a {ZIZMOR} finding has fields of the wrong type")
     return Finding(Rule.WORKFLOW_SECURITY, path, row + 1, f"{ZIZMOR} {rule}: {description}.", f"see {url}")
 
 
-WORKFLOW_ENGINES = {
+WORKFLOW_SCANNERS = {
     # No shellcheck or pyflakes: actionlint would run whichever it finds on PATH, an unpinned engine in the verdict.
-    Rule.WORKFLOW_LINT: _Engine(
+    Rule.WORKFLOW_LINT: _Scanner(
         name=ACTIONLINT, finding_exits=(ACTIONLINT_FINDINGS,), read_finding=actionlint_finding,
         arguments=("-config-file", str(ACTIONLINT_CONFIG), "-shellcheck=", "-pyflakes=", "-format", "{{json .}}"),
     ),
     # The tool's config and no ignore comments: what the scanned repository says never silences a finding.
-    Rule.WORKFLOW_SECURITY: _Engine(
+    Rule.WORKFLOW_SECURITY: _Scanner(
         name=ZIZMOR, finding_exits=ZIZMOR_FINDINGS, read_finding=zizmor_finding,
         arguments=(
             "--config", str(ZIZMOR_CONFIG), "--no-ignores",

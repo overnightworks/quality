@@ -167,7 +167,7 @@ def test_a_finding_under_a_rule_its_check_does_not_judge_fails_loud(build_repo, 
 
 def test_a_refusing_workflow_engine_stops_no_other_workflow_rule(build_repo, clean_engines, elsewhere, capsys):
     """#55 rule 1: actionlint cannot judge, yet zizmor still runs and its finding prints under its own rule."""
-    zizmor_report = Path(__file__).parent / "fixtures" / "engine-outputs" / "zizmor-finding.json"
+    zizmor_report = Path(__file__).parent / "fixtures" / "scanner-outputs" / "zizmor-finding.json"
     fake_engine(clean_engines, "actionlint", on_scan="echo boom >&2; exit 3")
     locate_zizmor = fake_zizmor(elsewhere, on_scan=f"cat '{zizmor_report}'; exit 12")
     repo = build_repo({".github/workflows/w.yml": "on: push\n"})
