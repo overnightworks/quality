@@ -20,7 +20,7 @@ import stat
 import sys
 import tempfile
 import tokenize
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from enum import Enum, auto
@@ -57,7 +57,7 @@ BUILT_IN_CONTRACT_TYPES: Mapping[str, type[Contract]] = {
 
 
 class Tightening(Enum):
-    """A change of one contract field that can only forbid more (operator ruling 29.10.2026, #252)."""
+    """A change of one contract field that can only forbid more."""
 
     EXPRESSIONS_ADDED = auto()
     INDIRECT_IMPORTS_FORBIDDEN = auto()
@@ -70,6 +70,11 @@ TIGHTENINGS: Mapping[tuple[str, str], Tightening] = MappingProxyType({
     (ForbiddenContract.type_name, "allow_indirect_imports"): Tightening.INDIRECT_IMPORTS_FORBIDDEN,
     (IndependenceContract.type_name, "modules"): Tightening.EXPRESSIONS_ADDED,
     (LayersContract.type_name, "layers"): Tightening.MODULES_PLACED_IN_LAYERS,
+})
+_TIGHTENING_HOLDS: Mapping[Tightening, Callable[[object, object], bool]] = MappingProxyType({
+    Tightening.EXPRESSIONS_ADDED: lambda before, after: before <= after,
+    Tightening.INDIRECT_IMPORTS_FORBIDDEN: lambda before, after: before is True and after is False,
+    Tightening.MODULES_PLACED_IN_LAYERS: lambda before, after: _without_modules_unknown_to(before, after) == before,
 })
 UNCOMPARED_FIELDS = frozenset({"ignore_imports", "broken_contract_guidance"})
 SESSION_OPTIONS = ("root_packages", "include_external_packages", "exclude_type_checking_imports")
@@ -216,13 +221,7 @@ def _field_changed(option: str, base: ContractFields, head: ContractFields) -> b
 
 
 def _holds(tightening: Tightening, before: object, after: object) -> bool:
-    match tightening:
-        case Tightening.EXPRESSIONS_ADDED:
-            return before <= after
-        case Tightening.INDIRECT_IMPORTS_FORBIDDEN:
-            return before is True and after is False
-        case Tightening.MODULES_PLACED_IN_LAYERS:
-            return _without_modules_unknown_to(before, after) == before
+    return _TIGHTENING_HOLDS[tightening](before, after)
 
 
 def _without_modules_unknown_to(base_layers: Sequence[Layer], head_layers: Sequence[Layer]) -> list[Layer]:
