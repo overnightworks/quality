@@ -2,6 +2,7 @@ import io
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -13,6 +14,7 @@ from quality.ratchet import BASELINE_PATH
 from quality.report import DETAIL_MARKER, Finding, printable, render, shell_word
 from tests.support.architecture import FORBIDDEN, SHOP, SHOP_DB_IMPORTS_WEB, toml
 from tests.support.check import assert_every_line_starts_with_the_door
+from tests.support.processes import process_is_gone
 from tests.support.scanners import fake_engine
 from tests.support.secrets import FAKE_KEY, allow_config
 
@@ -427,3 +429,47 @@ def test_a_name_printable_changes_has_no_shell_word_and_printing_it_twice_change
 def test_a_format_or_separator_character_prints_as_its_code_point(character, printed):
     """#228 rule 7: a format character, U+2028 and U+2029 print as `\\uNNNN` (`\\UNNNNNNNN` above U+FFFF), by category."""
     assert printable(character) == printed
+
+
+def test_ctrl_c_in_the_door_ends_the_run_as_interrupted_through_the_injected_sender(capsys):
+    """#228 rule 2: an interrupt ends the run with 130 and prints nothing."""
+    sent = []
+
+    def interrupted_door() -> int:
+        raise KeyboardInterrupt
+
+    saved = signal.getsignal(signal.SIGINT)
+    try:
+        with pytest.raises(SystemExit) as exited:
+            cli.run(door=interrupted_door, environment={}, send_signal=lambda pid, number: sent.append((pid, number)))
+    finally:
+        signal.signal(signal.SIGINT, saved)
+    assert sent == [(os.getpid(), signal.SIGINT)]
+    assert exited.value.code == 128 + signal.SIGINT == 130
+    captured = capsys.readouterr()
+    assert (captured.out, captured.err) == ("", "")
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("under_shell", [True, False], ids=["under a shell", "direct"])
+def test_ctrl_c_during_a_scan_ends_the_run_as_interrupted_without_a_traceback(clean_repo, clean_engines, tmp_path, under_shell):
+    """#228 rule 2: a shell reads 130 (the process dies by SIGINT), the engine is gone and the scratch directory removed."""
+    engine_pid = tmp_path / "engine.pid"
+    scratch_parent = tmp_path / "scratch"
+    scratch_parent.mkdir()
+    fake_engine(
+        clean_engines, "gitleaks",
+        on_scan='echo $$ > "$ENGINE_PID"; head -c 1048576 /dev/zero; kill -INT $PPID; exec sleep 60',
+    )
+    door = [*DOOR, "hygiene", "--engines", str(clean_engines), str(clean_repo)]
+    command = ["sh", "-c", '"$@"; echo "exit $?" >&2', "sh", *door] if under_shell else door
+    environment = os.environ | {"ENGINE_PID": str(engine_pid), "TMPDIR": str(scratch_parent)}
+    interrupted = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=60, check=False)
+    if under_shell:
+        assert interrupted.stderr.rstrip().endswith("exit 130")
+    else:
+        assert interrupted.returncode == -signal.SIGINT
+    assert "Traceback" not in interrupted.stdout + interrupted.stderr
+    assert "KeyboardInterrupt" not in interrupted.stdout + interrupted.stderr
+    assert process_is_gone(int(engine_pid.read_text()))
+    assert list(scratch_parent.iterdir()) == []

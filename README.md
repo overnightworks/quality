@@ -15,7 +15,7 @@ repository and for the operator who merges past it.
     quality scoreboard [PATH]
     quality emergency-merge OWNER/REPO PR
 
-Exit codes: `0` clean, `1` findings, `2` cannot judge (never clean).
+Exit codes: `0` clean, `1` findings, `2` cannot judge (never clean), `130` interrupted (Ctrl-C).
 
 ## Install
 
