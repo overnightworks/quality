@@ -682,3 +682,41 @@ def test_import_contracts_at_the_base_that_cannot_be_told_apart_cannot_be_judged
     assert drive(gh)[0] == 2
     assert f"import-linter config at {BASE_SHA}: " in capsys.readouterr().out
     changed_nothing(gh)
+
+
+def exhaustive(*layers: str, **options) -> dict:
+    return {"type": "layers", "layers": list(layers), "containers": ["shop"], "exhaustive": True, **options}
+
+
+@pytest.mark.parametrize(
+    ("base", "head", "expected"),
+    [
+        (exhaustive("a", "b"), exhaustive("a", "new", "b"), []),
+        (exhaustive("a | b"), exhaustive("a | b | new"), []),
+        (exhaustive("a", "b"), exhaustive("new", "a", "b"), []),
+        (exhaustive("a", "b"), exhaustive("a", "b", "new"), []),
+        (exhaustive("a", "b"), exhaustive("a", "new | other", "b"), []),
+        (exhaustive("a : b"), exhaustive("a : new : b"), []),
+        (exhaustive("a", "b"), exhaustive("b", "a"), [GUARDED_CHANGES + "layers"]),
+        (exhaustive("a", "b"), exhaustive("a | b"), [GUARDED_CHANGES + "layers"]),
+        (exhaustive("a", "b"), exhaustive("a"), [GUARDED_CHANGES + "layers"]),
+        (exhaustive("a", "b | c"), exhaustive("a | c", "b"), [GUARDED_CHANGES + "layers"]),
+        (exhaustive("a | b"), exhaustive("a : b"), [GUARDED_CHANGES + "layers"]),
+        (exhaustive("a", "b"), exhaustive("a", "(b)"), [GUARDED_CHANGES + "layers"]),
+        (exhaustive("a", "b"), exhaustive("a", "b", containers=["shop", "other"]), [GUARDED_CHANGES + "containers"]),
+        (exhaustive("a", "b"), exhaustive("a", "b", exhaustive=False), [GUARDED_CHANGES + "exhaustive"]),
+        (exhaustive("a", "b"), exhaustive("a", "b", exhaustive_ignores=["new"]), [GUARDED_CHANGES + "exhaustive_ignores"]),
+        (exhaustive("a", "b"), exhaustive("a", "new", "b", exhaustive=False), [GUARDED_CHANGES + "exhaustive"]),
+        (exhaustive("a", "b"), exhaustive("b", "new", "a"), [GUARDED_CHANGES + "layers"]),
+    ],
+    ids=[
+        "a module inserted between layers", "a module added to an independent layer", "a module added on top",
+        "a module added at the bottom", "an added layer of two new modules", "a module added to a dependent layer",
+        "a reorder", "a merge", "a removal", "a module moved to another layer", "independent turned dependent",
+        "a required module made optional", "changed containers", "exhaustive switched off", "a new exhaustive ignore",
+        "an insert next to exhaustive switched off", "a reorder next to an insert",
+    ],
+)
+def test_a_layers_contract_is_compared_without_the_modules_the_base_does_not_name(base, head, expected):
+    """#217 (ruled 28.10.2026): the head's layers lose every module the base does not name, then compare as before."""
+    assert loosened({"pyproject.toml": contracts_toml(one(base))}, {"pyproject.toml": contracts_toml(one(head))}) == expected

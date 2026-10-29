@@ -408,6 +408,12 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   - `root_packages` (as a set of names), `include_external_packages` or `exclude_type_checking_imports` changed:
     `loosened (undeclared): import-linter changes root_packages`.
 
+  A module newly placed in a `layers` contract is no loosening (operator ruling 28.10.2026, #217: „ok“): the head's
+  `layers` are compared with every module name the base's `layers` do not name stripped, and a layer left empty
+  dropped. Base layers `a`, `b` against head `a`, `new`, `b` is green. A reorder, a merge into `a | b`, a
+  removal, a module moved to another layer, `a | b` turned into `a : b`, a required `a` made optional `(a)`, a changed
+  `containers`, `exhaustive` switched off and a new `exhaustive_ignores` entry stay `changes layers` (or that field).
+
   A new contract, a removed `ignore_imports` entry, a reworded `broken_contract_guidance` and adopting import
   contracts (the base has no config) are green. Two contracts of one name on a side, two config places holding a
   section, or a config that cannot be read are exit `2`, naming the side (`import-linter config at the base commit
