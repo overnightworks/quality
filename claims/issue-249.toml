@@ -1,0 +1,8 @@
+claim_id = "bb530035fc2b422e9d81bee32075b8de"
+agent = "Claude 7bbab0b4-f923-4f09-a5c2-6fe15143932e"
+role = "builder"
+base = "f19dd7a364fd877ae4d32b7c7b9e25c5c324d4e5"
+branch = "claude/issue-249-release-facts"
+scope = ["docs/commands.md", "scripts/verify_release.py", "src/quality/rules.py", "tests/scripts/test_verify_release.py", "tests/test_scoreboard_matrix.py"]
+opened_commit = "7623325f302ef273c22be6723eb9d22ba18ce3a8"
+whole_reason = "The nine rules' release facts become what the tags ship and the release check refuses a tag while any rule or switch has no release, so the registry, the check, their two test modules and the one stale docs clause change together."
