@@ -445,13 +445,13 @@ TWO_CONTRACTS = {"a": FORBIDDEN, "b": FORBIDDEN}
 DUPLICATE_A = contracts_ini({"a": FORBIDDEN}) + ini_section("importlinter:contract:again", {"name": "a", **FORBIDDEN})
 B_CONTRACT_REMOVED = 'import contract "b" removed'
 FILE_REMOVED = "import-linter config in .importlinter removed"
-def exhaustive_layers(*layers):
-    return {"a": {"type": "layers", "layers": list(layers), "containers": ["shop"], "exhaustive": True}}
-
-
 IGNORES_WEB = {**FORBIDDEN, "ignore_imports": ["shop.db -> shop.web"]}
 LOOSENED = "loosened (undeclared): "
 STALE = "declared loosening matches nothing: "
+
+
+def exhaustive_layers(*layers: str) -> dict:
+    return {"a": {"type": "layers", "layers": list(layers), "containers": ["shop"], "exhaustive": True}}
 
 
 @pytest.mark.parametrize(
