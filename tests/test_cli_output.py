@@ -393,7 +393,8 @@ def test_a_baseline_refusal_for_a_file_that_is_not_utf8_prints_its_surrogate_esc
 
 @pytest.mark.parametrize(
     "name",
-    ["plain.env", "umlaut-\u00e9.env", "-dash.env", "a:b.env", "*.env", "50%.env", "back\\slash.env", "=equals.env"],
+    ["plain.env", "umlaut-\u00e9.env", "-dash.env", "a:b.env", "*.env", "50%.env", "back\\slash.env", "=equals.env",
+     "nbsp\u00a0.env", "e\u0301.env", "smile\U0001f600.env", "\u540d\u524d.env", "\u05e9\u05dd.env", "back\\u202e.env"],
 )
 def test_a_name_printable_unchanged_is_a_shell_word_and_printable_is_idempotent(name):
     """#97 rule 1, cell 17: a word exactly when `printable(x) == x`."""
