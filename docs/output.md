@@ -44,7 +44,7 @@ The same row for the three readers, and foreign text:
 (terminal: coloured per stream; pipe, file, agent, CI log: as above, uncoloured)
 
 ```text
-    ! src/‮gnp.py  tracked  a file without a suffix that is no executable
+    ! src/\u202egnp.py  tracked  a file without a suffix that is no executable
 ```
 
 ## Cases
@@ -353,7 +353,7 @@ $ quality report
   ✓ quality       measured       8c8121b · 3s
   ✓ aco           measured       2f4e9a0 · 5s
   ✓ songmaker     measured       71c3d8e · 11s
-  …                                         (six more)
+  …
 **Fleet report, 2026-10-28, quality v0.9.0 — functions and CCN: Python only**
 
 | Repo | Commit | Languages | Lines prod / test | … |
@@ -364,6 +364,8 @@ $ quality report
 | …
 ✓ 9 of 9 public repositories measured · 4 private not measured · 1m12s
 ```
+
+(`…` after the third repository stands for six more rows.)
 
 Into a file, a repository not measurable. Exit 2. All lines shown: stderr.
 
