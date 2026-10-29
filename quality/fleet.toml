@@ -7,11 +7,11 @@ public = [
     "https://github.com/overnightworks/webauth",
     "https://github.com/overnightworks/marketplace",
     "https://github.com/overnightworks/hopin",
-    "https://github.com/overnightworks/ui-style",
-]
-private = [
-    "https://github.com/overnightworks/edge",
+    "https://github.com/overnightworks/appkit",
+    "https://github.com/overnightworks/hal",
     "https://github.com/overnightworks/kiln",
-    "https://github.com/overnightworks/gmail-cleanup",
     "https://github.com/overnightworks/claudebot",
+    "https://github.com/overnightworks/gmail-cleanup",
+    "https://github.com/overnightworks/speech-runtime",
 ]
+private = []

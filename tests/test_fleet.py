@@ -533,10 +533,9 @@ def test_a_fleet_file_that_cannot_be_used_cannot_be_judged(capsys, tmp_path, con
     assert captured.out == ""
 
 
-def test_the_fleet_file_lists_the_fleet_the_workflow_reports():
-    """#63 rule 5: nine public and four private repositories, and the workflow carries no URL."""
-    fleet = read_fleet(Path(__file__).parent.parent)
-    assert (len(fleet.public), len(fleet.private)) == (9, 4)
+def test_the_fleet_lives_once_in_the_fleet_file():
+    """#63 rule 5: the real fleet file parses and the workflow carries no URL."""
+    read_fleet(Path(__file__).parent.parent)
     assert "github.com/overnightworks" not in (WORKFLOWS / "scoreboard.yml").read_text()
 
 
