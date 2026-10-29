@@ -4,7 +4,9 @@
 
 The release tag is read from git: the one tag `vX.Y.Z` that points at HEAD. Exit 0 only when the checkout is clean, exactly
 one release tag is at HEAD, HEAD is on origin/main, the installed version is that tag and the gate's tool checkouts pin
-it; one line per check says which, and the tag judged is in the first. Exit 2 for an unexpected command-line argument;
+it and every rule's release facts name a release; one line per check says which, and the tag judged is in the first.
+A rule or switch new since the last release names the tag being cut in `src/quality/rules.py`, set in the release pull
+request that moves gate.yml's tool refs. Exit 2 for an unexpected command-line argument;
 `-h` and `--help` print the usage and exit 0 before any check.
 """
 
@@ -20,6 +22,8 @@ from pathlib import Path
 
 import yaml
 
+from quality.rules import Rule
+
 TOOL_REPOSITORY = "overnightworks/quality"
 GATE = Path(".github") / "workflows" / "gate.yml"
 RELEASE_TAG = re.compile(r"v\d+\.\d+\.\d+")
@@ -32,6 +36,7 @@ class ReleaseFacts:
     head_is_on_origin_main: bool
     installed_version: str
     gate_refs: tuple[str | None, ...]
+    rules_without_release: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -60,6 +65,9 @@ def judge_release(facts: ReleaseFacts) -> list[Verdict]:
         Verdict("on origin/main", facts.head_is_on_origin_main),
         Verdict("installed version", tag is not None and facts.installed_version == tag.removeprefix("v")),
         Verdict("gate refs", tag is not None and bool(facts.gate_refs) and set(facts.gate_refs) == {tag}),
+        Verdict(
+            f"rule release facts (missing: {', '.join(facts.rules_without_release) or 'none'})", not facts.rules_without_release
+        ),
     ]
 
 
@@ -83,6 +91,15 @@ def release_tags_at_head() -> tuple[str, ...]:
     return tuple(tag for tag in tags if RELEASE_TAG.fullmatch(tag))
 
 
+def rules_without_release() -> tuple[str, ...]:
+    """The rules, or later switches, that only main has."""
+    return tuple(
+        rule.value
+        for rule in Rule
+        if rule.release.first_release is None or (rule.release.switched is not None and rule.release.switched.release is None)
+    )
+
+
 def read_facts() -> ReleaseFacts:
     """The index equals HEAD and the work tree equals the index; the fetch comes first, then every read."""
     fetched = fetch_origin_main()
@@ -93,6 +110,7 @@ def read_facts() -> ReleaseFacts:
         head_is_on_origin_main=head_is_on_origin_main(fetched),
         installed_version=version("overnightworks-quality"),
         gate_refs=tuple(gate_tool_refs(GATE.read_text(encoding="utf-8"))),
+        rules_without_release=rules_without_release(),
     )
 
 

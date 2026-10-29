@@ -331,21 +331,44 @@ def test_main_enforces_test_layout_only_where_a_project_is_judged(has_judged_pro
     assert rule_cell(TEST_LAYOUT, release, declared(has_judged_project=has_judged_project)) == words
 
 
-def test_a_pinned_gate_has_not_released_test_layout():
-    """#196 sentence 9: a pinned release says `not released` whatever the clone holds."""
-    release = gate_release((Call(CLONE_TABLE_PIN),), False, CLONE_RELEASES)
-    assert rule_cell(TEST_LAYOUT, release, declared(has_judged_project=True)) == "not released"
+@pytest.mark.parametrize(
+    ("pin", "has_judged_project", "words"),
+    [("v0.6.1", True, "not in v0.6.1"), ("v0.7.0", True, "enforced"), ("v0.7.0", False, "no judged project")],
+    ids=["before the first release", "a judged project", "none"],
+)
+def test_a_pinned_gate_judges_test_layout_from_the_tag_that_first_ships_it(pin, has_judged_project, words):
+    """docs/commands.md rule cells, #249: v0.7.0 is the first tag that wires test-layout, for a judged project."""
+    tags = {"v0.6.1": "e" * 40, "v0.7.0": "f" * 40}
+    release = gate_release((Call(tags[pin]),), False, tags)
+    assert rule_cell(TEST_LAYOUT, release, declared(has_judged_project=has_judged_project)) == words
 
 
 @pytest.mark.parametrize("rule_id", ["test-import", "python-floor", "python-security", "python-print"])
+def test_a_rule_judging_every_python_project_needs_no_applicability_cell(rule_id):
+    """docs/commands.md rule cells: the rule judges every Python project, so main enforces it with no applicability cell."""
+    release = gate_release((Call(None),), True, CLONE_RELEASES)
+    assert rule_cell(Rule(rule_id).release, release, declared()) == "enforced"
+
+
 @pytest.mark.parametrize(
-    ("pinned", "words"), [(False, "enforced"), (True, "not released")], ids=["main", "pinned"]
+    ("rule_id", "before", "first"),
+    [
+        ("root-layout", "v0.5.1", "v0.6.0"),
+        ("file-suffix", "v0.6.1", "v0.7.0"),
+        ("script-name", "v0.6.1", "v0.7.0"),
+        ("script-header", "v0.6.1", "v0.7.0"),
+        ("test-import", "v0.6.1", "v0.7.0"),
+        ("python-floor", "v0.7.0", "v0.8.0"),
+        ("python-security", "v0.8.0", "v0.9.0"),
+        ("python-print", "v0.8.0", "v0.9.0"),
+    ],
 )
-def test_a_rule_judging_every_python_project_needs_no_applicability_cell(rule_id, pinned, words):
-    """#201 sentence 9, F14, sentence 10: the rule judges every Python project, so main enforces it and a pinned release has not got it."""
+def test_a_pinned_gate_has_a_rule_from_the_tag_that_first_ships_it(rule_id, before, first):
+    """#249: the tags' hygiene wires each rule from its first tag on, unconditionally."""
+    tags = {before: "a" * 40, first: "b" * 40}
     rule = Rule(rule_id).release
-    release = gate_release((Call(CLONE_TABLE_PIN if pinned else None),), not pinned, CLONE_RELEASES)
-    assert rule_cell(rule, release, declared()) == words
+    assert rule_cell(rule, gate_release((Call("a" * 40),), False, tags), declared()) == f"not in {before}"
+    assert rule_cell(rule, gate_release((Call("b" * 40),), False, tags), declared()) == "enforced"
 
 
 @pytest.mark.parametrize(
