@@ -91,9 +91,9 @@ linux-x64`, never by hand). The command that installs them from the lock is
 
 and every reason that a scanner cannot be found ends with it, the path filled in. A scan finds a scanner by asking
 `mise which` in that directory, for exactly the manifest's version, and runs it only when it reports that version. A
-scanner on `PATH` is never used. mise reads only the manifest directory and the user's own global config: `MISE_CEILING_PATHS` is
-set to the directory above it, so a `mise.toml` in the scanned repository (or in the checkout the gate holds the
-manifest in) takes no part in which binary runs.
+scanner on `PATH` is never used. mise reads only the manifest directory and the operator's own user and system configuration: it starts in that
+directory under `MISE_CEILING_PATHS` set to the directory above it, so a `mise.toml` or `.miserc.toml` in the scanned
+repository (or in the checkout the gate holds the manifest in) takes no part in which binary runs.
 
 `hygiene` and `scan-staged` exit `2` for a scanner that mise has not installed, that is at another version, or whose
 answer names no executable, and for a machine without mise, which names mise's install page and the command; only the
