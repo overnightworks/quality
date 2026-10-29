@@ -30,7 +30,7 @@ Anatomy of a row, and the verdict that ends the run:
     ! src/shop/parse.py:88  grew  function read_rows has 71 lines · ceiling 64
       fix: bring it back to 64 lines or below
 
-! 1 finding in 1 area · 5 areas clean · 9s
+! 1 finding in 1 area · 6 areas clean · 9s
 ```
 
 Columns: glyph (state at a glance), subject (the area, or `path:line` of the finding), event (one typed word: what is the case), fact (values, a few words), then `fix:` (what you do).
