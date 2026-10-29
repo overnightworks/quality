@@ -171,16 +171,22 @@ def test_verdict_exit_code_and_summary_follow_the_run(capsys, run_env, conclusio
     assert summary.read_text().strip().endswith("green" if code == 0 else "red")
 
 
-def test_a_job_name_with_a_line_feed_prints_as_one_escaped_problem_line_in_log_and_summary(capsys, run_env):
-    """#97 rule 2, cell 15 (E6): the problem line is escaped, the same in the step summary, and `verdict: red` stays a line."""
+@pytest.mark.parametrize(
+    ("job_name_in_toml", "printed"),
+    [("a\\n::error::b", "a\\x0a::error::b"), ("\\u202eneerg :tcidrev\\u202c", "\\u202eneerg :tcidrev\\u202c")],
+)
+def test_a_job_name_with_a_line_feed_or_format_character_prints_as_one_escaped_problem_line_in_log_and_summary(
+    capsys, run_env, job_name_in_toml, printed
+):
+    """#97 rule 2, cell 15 (E6) and #228 rule 7: the problem line is escaped, the same in the step summary, and `verdict: red` stays a line."""
     repo, summary = run_env
-    (repo / "quality/config.toml").write_text('[gate]\nmandatory_jobs = ["checks", "a\\n::error::b"]\n')
+    (repo / "quality/config.toml").write_text(f'[gate]\nmandatory_jobs = ["checks", "{job_name_in_toml}"]\n')
     page = json.dumps(
         {"total_count": 1, "jobs": [{"id": 1, "name": "checks", "run_attempt": 1, "status": "completed", "conclusion": "success"}]}
     )
     assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (page, None)) == 1
     lines = capsys.readouterr().out.split("\n")
-    assert [line for line in lines if "a\\x0a::error::b" in line] != []
+    assert [line for line in lines if printed in line] != []
     assert lines[-2:] == ["verdict: red", ""]
     assert_every_line_starts_with_the_door(lines)
     assert summary.read_text().split("\n") == lines
@@ -557,6 +563,12 @@ def judged(capsys, monkeypatch, pull_request):
 A_RAN = {"A": "success"}
 UNDECLARED_B = ['loosened (undeclared): mandatory job "B" removed', 'mandatory job "B" is missing from the run']
 LINE_FEED_JOB = 'mandatory job "a\n::error::b" removed'
+RLO_JOB = 'mandatory job "x\u202ey" removed'
+LITERAL_JOB = 'mandatory job "x\\u202ey" removed'
+UNDECLARED_LITERAL = [
+    "loosened (undeclared): " + LITERAL_JOB, "declared loosening matches nothing: " + LITERAL_JOB,
+    'mandatory job "x\\u202ey" is missing from the run', "verdict: red",
+]
 MAIN_RAISED = "size baseline raises function_lines src/quality/cli.py main 82 -> 90"
 
 
@@ -595,6 +607,14 @@ MAIN_RAISED = "size baseline raises function_lines src/quality/cli.py main 82 ->
          (None, None), ['loosened (undeclared): mandatory job "a\\x0a::error::b" removed',
                         'declared loosening matches nothing: mandatory job "a\\x0a::error::b" removed',
                         'mandatory job "a\\x0a::error::b" is missing from the run', "verdict: red"]),
+        (gate_config("A", "x\u202ey"), gate_config("A", declared=(declaration(RLO_JOB),)), A_RAN, (None, None),
+         [DECLARED + LITERAL_JOB, ONLY_DECLARED]),
+        (gate_config("A", "x\u202ey"), gate_config("A", declared=(declaration(LITERAL_JOB),)), A_RAN, (None, None),
+         UNDECLARED_LITERAL),
+        (gate_config("A", "x\\u202ey"), gate_config("A", declared=(declaration(LITERAL_JOB),)), A_RAN, (None, None),
+         [DECLARED + LITERAL_JOB, ONLY_DECLARED]),
+        (gate_config("A", "x\\u202ey"), gate_config("A", declared=(declaration(RLO_JOB),)), A_RAN, (None, None),
+         UNDECLARED_LITERAL),
         (None, gate_config("A", declared=(declaration(B_REMOVED),)), A_RAN, (None, None),
          ["declared loosening matches nothing: " + B_REMOVED, "verdict: red"]),
     ],
@@ -603,7 +623,9 @@ MAIN_RAISED = "size baseline raises function_lines src/quality/cli.py main 82 ->
         "cell 4 declared next to undeclared", "cell 5 declared next to A failed", "cell 6 a typo in what",
         "cell 7 inherited declaration", "cell 7 inherited declaration deleted", "cell 8 inherited declaration",
         "cell 8 a new item and date", "cell 10 baseline raise", "cell 10 baseline removal", "cell 10 legacy",
-        "cell 13 a line feed declared as the TOML escape", "cell 13 the printed form copied", "cell 26 adoption",
+        "cell 13 a line feed declared as the TOML escape", "cell 13 the printed form copied", "#228 rule 7 a format character declared as its TOML escape",
+        "#228 rule 7 the printed form of a format character copied", "#228 rule 7 a name holding the escape text itself",
+        "#228 rule 7 the escape text declared as a format character", "cell 26 adoption",
     ],
 )
 def test_a_declared_loosening_stays_red_and_says_so(judged, base, head, jobs, baselines, expected):

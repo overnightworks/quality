@@ -517,6 +517,7 @@ def test_a_red_sonar_run_next_to_a_green_one_takes_the_legacy_path(capsys):
     ("base_config", "merge_config", "code", "expected"),
     [
         (TWO_JOBS, ONE_JOB + declaring(B_REMOVED, reason="ok\x1b[8m versteckt"), 0, f"{SHOWN}{B_REMOVED} - reason: ok\\x1b[8m versteckt"),
+        (TWO_JOBS, ONE_JOB + declaring(B_REMOVED, reason="ok\u202edetsurt"), 0, f"{SHOWN}{B_REMOVED} - reason: ok\\u202edetsurt"),
         (TWO_JOBS, ONE_JOB + declaring(B_REMOVED, reason="ok\rforged"), 2, "needs a non-empty one-line reason"),
         (TWO_JOBS, ONE_JOB + declaring(B_REMOVED, reason="ok\nforged"), 2, "needs a non-empty one-line reason"),
         (ONE_JOB, '[gate]\nmandatory_jobs = ["checks", "a\\n::error::b"]\n', 1, 'mandatory job "a\\x0a::error::b" is missing'),
@@ -524,7 +525,7 @@ def test_a_red_sonar_run_next_to_a_green_one_takes_the_legacy_path(capsys):
          f"{ALLOWED_SHOWN}GHSA-\\x1b[8m in a\\x09b/uv.lock until 2027-01-31 - reason: ok\\x1b[8m versteckt"),
     ],
     ids=[
-        "ESC in the reason", "carriage return in the reason", "line feed in the reason", "line feed in a refused job",
+        "ESC in the reason", "bidi override in the reason", "carriage return in the reason", "line feed in the reason", "line feed in a refused job",
         "#116 cell 25 control characters in an allowance's id, lock and reason",
     ],
 )
@@ -535,6 +536,7 @@ def test_every_line_the_door_prints_is_escaped(capsys, base_config, merge_config
     lines = capsys.readouterr().out.splitlines()
     assert [line for line in lines if expected in line] != []
     assert_every_line_starts_with_the_door(lines)
+    assert "\u202e" not in "".join(gh.comments)
 
 
 @pytest.mark.parametrize(

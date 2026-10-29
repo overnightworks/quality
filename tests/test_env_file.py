@@ -107,8 +107,8 @@ def test_the_printed_env_fix_untracks_exactly_the_named_file_in_every_shell(
 
 @pytest.mark.parametrize(
     "name",
-    ["lat\udce9.env", "line\nfeed.env", "esc\x1bape.env", "c1\x85.env", "del\x7f.env"],
-    ids=["#86 cell 7 invalid UTF-8", "#86 cell 8 line feed", "#86 cell 8 escape", "#86 cell 8 C1 control", "#86 cell 8 DEL"],
+    ["lat\udce9.env", "line\nfeed.env", "esc\x1bape.env", "c1\x85.env", "del\x7f.env", "rlo\u202e.env", "zwsp\u200b.env"],
+    ids=["#86 cell 7 invalid UTF-8", "#86 cell 8 line feed", "#86 cell 8 escape", "#86 cell 8 C1 control", "#86 cell 8 DEL", "#228 rule 7 bidi override", "#228 rule 7 zero-width space"],
 )
 def test_an_unprintable_env_name_gets_a_hint_and_never_a_command(build_repo, capsys, name):
     """#86 rule 2, E4: one hint line; #97 rule 2 prints the name on the finding line escaped."""

@@ -27,10 +27,11 @@ def loosen_requirement(site: Path, monkeypatch: pytest.MonkeyPatch, name: str) -
 
 
 def assert_every_line_starts_with_the_door(lines: list[str]) -> None:
-    """#97 rule 2, cell 18: no line repository text could forge, and no raw control character between the lines."""
+    """#97 rule 2, cell 18 and #228 rule 7: no line repository text could forge, and no raw control, format or line-separator
+    character (categories Cc, Cf, Zl, Zp, listed here by hand from the rule) between the lines."""
     for line in lines:
         assert not line.lstrip().startswith(("::", "File ", "raise ")), line
-        assert all(unicodedata.category(character) != "Cc" for character in line), line
+        assert all(unicodedata.category(character) not in ("Cc", "Cf", "Zl", "Zp") for character in line), line
 
 
 def hygiene_output(

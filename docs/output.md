@@ -9,7 +9,7 @@ This is the target picture of quality's command-line output that the slices of #
 - Every run ends with exactly one closing verdict line, or with an `error:`/`next:` pair when it could not answer.
 - stdout carries rows and the verdict. stderr carries the live line, the input prompt and `error:`/`next:`. So `quality check | less` shows every finding and an error stays visible.
 - With no TTY, with `NO_COLOR` or with `TERM=dumb` the same words print without colour, without the live line and never shortened.
-- Repository text is masked: control characters as `\xNN`, and U+2028, U+2029 and format characters as `\uNNNN`.
+- Repository text is masked: control characters as `\xNN`, and U+2028, U+2029 and format characters as `\uNNNN` (`\UNNNNNNNN` above U+FFFF).
 - `-v` shows the scanner's raw output indented under its row, never a secret.
 
 Glyphs:

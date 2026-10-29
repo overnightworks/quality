@@ -36,11 +36,26 @@ class Finding:
         return path if self.line is None else f"{path}:{self.line}"
 
 
+# Control, format (bidi overrides and isolates, zero-width characters, tags) and line- or paragraph-separator characters.
+ESCAPED_CATEGORIES = frozenset({"Cc", "Cf", "Zl", "Zp"})
+
+
+def _escaped(character: str) -> str:
+    category = unicodedata.category(character)
+    if category not in ESCAPED_CATEGORIES:
+        return character
+    code_point = ord(character)
+    if category == "Cc":
+        return f"\\x{code_point:02x}"
+    return f"\\u{code_point:04x}" if code_point <= 0xFFFF else f"\\U{code_point:08x}"
+
+
 def printable(text: str) -> str:
-    """The one rendering of repository text: invalid UTF-8 prints as `\\udcNN` and every control character (C0, DEL,
-    C1) as `\\xNN`, so no printed line can start with, or be split by, what a repository holds."""
+    """The one rendering of repository text: invalid UTF-8 prints as `\\udcNN`, every control character (C0, DEL, C1)
+    as `\\xNN`, and U+2028, U+2029 and every format character as `\\uNNNN` (`\\UNNNNNNNN` above U+FFFF), so no printed
+    line can start with, be split by, or be reordered by what a repository holds."""
     escaped = text.encode("utf-8", "backslashreplace").decode("utf-8")
-    return "".join(f"\\x{ord(character):02x}" if unicodedata.category(character) == "Cc" else character for character in escaped)
+    return "".join(_escaped(character) for character in escaped)
 
 
 def shell_word(text: str) -> str | None:
