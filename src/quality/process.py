@@ -3,10 +3,10 @@ import re
 import signal
 import subprocess
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager, suppress
 from pathlib import Path
-from typing import overload
+from typing import NoReturn, overload
 
 VERSION_TIMEOUT_SECONDS = 30
 STDERR_TAIL_LINES = 5
@@ -15,6 +15,16 @@ EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
 class ProcessError(Exception):
     """A process or git call that cannot be trusted: it did not run, did not finish or failed."""
+
+
+def exit_as_interrupted(send_signal: Callable[[int, int], None]) -> NoReturn:
+    """Ends the process the way an unhandled Ctrl-C does: it dies by SIGINT, so a shell reads 130 and a calling loop stops.
+
+    Only after the cleanup has unwound; the self-kill skips finalization. Returns to the fallback exit only when SIGINT is blocked.
+    """
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    send_signal(os.getpid(), signal.SIGINT)
+    raise SystemExit(128 + signal.SIGINT)
 
 
 @contextmanager

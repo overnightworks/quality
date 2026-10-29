@@ -368,9 +368,15 @@ def run_scoreboard(path: Path, release_tags: fleet.TagReader) -> int:
     return EXIT_CANNOT_JUDGE if fleet.cannot_judge(rows, tags) else EXIT_CLEAN
 
 
-def run(door: Callable[[], int] = main, environment: Mapping[str, str] = os.environ) -> None:
+def run(
+    door: Callable[[], int] = main, environment: Mapping[str, str] = os.environ, send_signal: Callable[[int, int], None] = os.kill,
+) -> None:
     set_up_streams(environment)
-    sys.exit(door())
+    try:
+        exit_code = door()
+    except KeyboardInterrupt:
+        process.exit_as_interrupted(send_signal)
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":
