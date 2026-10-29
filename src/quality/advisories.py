@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path, PurePosixPath
 
-from quality import engines, pip_requirements, repository
+from quality import engines, pip_requirements, process, repository
 from quality.config import CONFIG_PATH, AdvisoryAllowance
 from quality.engines import EngineError, Pin
 from quality.pip_requirements import Requirement
@@ -111,12 +111,12 @@ def scan(
     if not locks:
         return apply_allowances([], allowances, today)
     names_by_path = _names_by_path(locks)
-    with engines.scratch_directory() as scratch:
+    with process.scratch_directory() as scratch:
         try:
             handovers = _handovers(root, locks, scratch, names_by_path)
             ecosystems = sorted({lock_kind(name).ecosystem for name in locks})
             affected = _scan(engine_dir, pins, ecosystems, handovers, scratch, names_by_path, monotonic)
-        except EngineError as error:
+        except process.ProcessError as error:
             raise EngineError(_without_paths(str(error), names_by_path, [(root.resolve(), "<repository>"), (engine_dir.resolve(), "<engines>"), (scratch, "<scratch>")])) from None
     return apply_allowances(affected, allowances, today)
 
@@ -214,7 +214,7 @@ def _scan(
         "--format=json", "--all-vulns", "--all-packages", "--allow-no-lockfiles",
         *[f"--lockfile={handover.parse_as}:{handover.path}" for handover in handovers],
     ]
-    done = engines.run(command, cwd=scratch, timeout=ADVISORY_SCAN_TIMEOUT_SECONDS)
+    done = process.run(command, cwd=scratch, timeout=ADVISORY_SCAN_TIMEOUT_SECONDS)
     expected = {str(handover.path): handover.expected for handover in handovers if handover.expected is not None}
     return _findings(done.returncode, done.stdout, done.stderr, names_by_path, expected)
 
@@ -308,7 +308,7 @@ def _findings(
     expected: Mapping[str, tuple[Requirement, ...]],
 ) -> list[Affected]:
     if exit_code not in (engines.CLEAN_EXIT, OSV_FINDINGS_FOUND):
-        raise EngineError(f"{engines.OSV_SCANNER} exited {exit_code}, neither 'clean' nor 'findings'{engines.stderr_tail(stderr)}")
+        raise EngineError(f"{engines.OSV_SCANNER} exited {exit_code}, neither 'clean' nor 'findings'{process.stderr_tail(stderr)}")
     affected = _read_report(report_text, names_by_path, expected)
     if bool(affected) != (exit_code == OSV_FINDINGS_FOUND):
         raise EngineError(f"{engines.OSV_SCANNER} exited {exit_code} but its report holds {len(affected)} finding(s)")

@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from quality import engines
+from quality import engines, process
 from quality.config import CONFIG_PATH, load_staged_secret_allowances
 from quality.engines import Pin, SecretScan
 
@@ -18,13 +18,13 @@ def scan_staged(path: Path, engine_dir: Path, pins: dict[str, Pin]) -> SecretSca
     binary = engines.prepare_gitleaks(engine_dir, pins)
     path = path.resolve()  # absolute, so a path that starts with `-` can never read as a git option
     staged_tree = _git_output(path, "write-tree")
-    head = engines.unborn_aware_head_commit(path, _caller_git_environment())
+    head = process.unborn_aware_head_commit(path, _caller_git_environment())
     object_store = Path(_git_output(path, "rev-parse", "--path-format=absolute", "--git-path", "objects"))
-    with engines.scratch_directory() as scratch:
-        git_environment = engines.attribute_free_git_environment(scratch / "home")
+    with process.scratch_directory() as scratch:
+        git_environment = process.attribute_free_git_environment(scratch / "home")
         source = _scratch_repository(scratch / "source", object_store, head, staged_tree, git_environment)
         # A tree without quality/config.toml allows nothing.
-        staged_config = engines.read_blob(
+        staged_config = process.read_blob(
             source, staged_tree, CONFIG_PATH, f"cannot look for {CONFIG_PATH} in the staged tree",
             f"{CONFIG_PATH} cannot be read from the staged tree", git_environment,
         )
@@ -42,16 +42,16 @@ def _caller_git_environment() -> dict[str, str]:
 
 
 def _git_output(path: Path, *arguments: str) -> str:
-    return engines.git(["-C", str(path), *arguments], f"git {arguments[0]} failed in {path}", _caller_git_environment()).strip()
+    return process.git(["-C", str(path), *arguments], f"git {arguments[0]} failed in {path}", _caller_git_environment()).strip()
 
 
 def _scratch_repository(
     destination: Path, object_store: Path, head: str | None, staged_tree: str, git_environment: dict[str, str]
 ) -> Path:
     def git(*arguments: str) -> None:
-        engines.git(["-C", str(destination), *arguments], f"git {arguments[0]} failed in the scratch repository", git_environment)
+        process.git(["-C", str(destination), *arguments], f"git {arguments[0]} failed in the scratch repository", git_environment)
 
-    engines.git(["init", "--quiet", "--template=", str(destination)], "cannot create the scratch repository", git_environment)
+    process.git(["init", "--quiet", "--template=", str(destination)], "cannot create the scratch repository", git_environment)
     alternates = destination / ".git" / "objects" / "info" / "alternates"
     alternates.parent.mkdir(parents=True, exist_ok=True)
     alternates.write_text(f"{object_store}\n", encoding="utf-8")

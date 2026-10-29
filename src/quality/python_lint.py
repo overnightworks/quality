@@ -16,7 +16,7 @@ from pathlib import Path
 from packaging.requirements import Requirement
 from packaging.version import Version
 
-from quality import DISTRIBUTION, engines, layout, ratchet, repository
+from quality import DISTRIBUTION, layout, process, ratchet, repository
 from quality.report import Finding
 
 SECURITY_RULE = "python-security"
@@ -99,7 +99,7 @@ class PrintResult:
 
 def candidates(modes: Mapping[str, str]) -> list[str]:
     """Every tracked regular `.py` file: no link, and nothing inside a gitlink, which the index never lists."""
-    return [path for path, mode in modes.items() if mode in engines.REGULAR_FILE_MODES and path.endswith(PYTHON_SUFFIX)]
+    return [path for path, mode in modes.items() if mode in process.REGULAR_FILE_MODES and path.endswith(PYTHON_SUFFIX)]
 
 
 def read_files(root: Path, modes: Mapping[str, str]) -> dict[str, PythonFile]:
@@ -291,7 +291,7 @@ def _pinned_ruff(locate_ruff: Callable[[], str]) -> str:
         binary = locate_ruff()
     except FileNotFoundError as error:
         raise LintError("quality's installation holds no ruff binary") from error
-    asked = _ruff(binary, ["--version"], None, engines.VERSION_TIMEOUT_SECONDS)
+    asked = _ruff(binary, ["--version"], None, process.VERSION_TIMEOUT_SECONDS)
     reported = (asked.stdout.split() or [""])[-1] if asked.returncode == 0 else ""
     pin = _ruff_pin()
     if f"=={reported}" != pin:
@@ -328,7 +328,7 @@ def _ruff_report(binary: str, root: Path, names: Sequence[str], target: Version)
     ]
     done = _ruff(binary, arguments, Path(os.path.realpath(root)), RUN_TIMEOUT_SECONDS)
     if done.returncode not in JUDGED_EXIT_CODES:
-        raise LintError(f"ruff exited {done.returncode}{engines.stderr_tail(done.stderr)}")
+        raise LintError(f"ruff exited {done.returncode}{process.stderr_tail(done.stderr)}")
     failures = [line for line in done.stderr.splitlines() if LINT_FAILURE in line]
     if failures:
         raise LintError(f"ruff could not lint every file: {failures[0]}")
@@ -337,8 +337,8 @@ def _ruff_report(binary: str, root: Path, names: Sequence[str], target: Version)
 
 def _ruff(binary: str, arguments: list[str], cwd: Path | None, timeout: float) -> subprocess.CompletedProcess[str]:
     try:
-        return engines.run([binary, *arguments], cwd=cwd, timeout=timeout)
-    except engines.EngineError as error:
+        return process.run([binary, *arguments], cwd=cwd, timeout=timeout)
+    except process.ProcessError as error:
         raise LintError(str(error)) from error
 
 

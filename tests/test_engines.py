@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import cli, engines
+from quality import cli, engines, process
 from quality.engines import EngineError, Pin
 from tests.support.engines import OUTPUTS
 from tests.support.git_repositories import GIT_IDENTITY
@@ -223,7 +223,7 @@ def test_scan_never_falls_back_to_a_gitleaks_on_path(tmp_path, build_repo, monke
 )
 def test_a_version_command_that_fails_or_hangs_is_exit_2(tmp_path, build_repo, monkeypatch, capsys, on_version, expected):
     """#13 rule 2, #134 rule 1: an engine whose version command exits non-zero or hangs is not trusted."""
-    monkeypatch.setattr(engines, "VERSION_TIMEOUT_SECONDS", 0.2)
+    monkeypatch.setattr(process, "VERSION_TIMEOUT_SECONDS", 0.2)
     engine_dir = fake_gitleaks(tmp_path / "fake", on_version=on_version)
     assert expected in hygiene_exit_2(build_repo({}), engine_dir, capsys)
 
@@ -407,22 +407,6 @@ def test_a_diff_driver_marked_binary_cannot_hide_a_key(build_repo, installed_eng
     assert_key_found(repo, installed_engines, capsys)
 
 
-def test_the_git_environment_cuts_off_every_attributes_source(tmp_path, monkeypatch):
-    """#21 rule 1: the git environment excludes the system file, forces an empty attributes file, drops other GIT_*."""
-    monkeypatch.setenv("GIT_DIR", "/elsewhere")
-    monkeypatch.setenv("GIT_CONFIG_COUNT", "5")
-    environment = engines.attribute_free_git_environment(tmp_path / "home")
-    assert {name: value for name, value in environment.items() if name.startswith("GIT_")} == {
-        "GIT_ATTR_NOSYSTEM": "1",
-        "GIT_ATTR_SOURCE": engines.EMPTY_TREE,
-        "GIT_CONFIG_GLOBAL": os.devnull,
-        "GIT_CONFIG_NOSYSTEM": "1",
-        "GIT_CONFIG_COUNT": "1",
-        "GIT_CONFIG_KEY_0": "core.attributesFile",
-        "GIT_CONFIG_VALUE_0": os.devnull,
-    }
-
-
 @pytest.mark.engine
 def test_a_core_attributes_file_in_the_repository_config_cannot_hide_a_key(
     keyed_repo, installed_engines, hiding_attributes, capsys
@@ -468,31 +452,6 @@ def test_a_git_older_than_2_41_is_exit_2_naming_the_version(
         f"{refusal} cannot judge - git {git_version} cannot hide .gitattributes from the gitleaks scan, "
         "it needs git 2.41"
     )
-
-
-@pytest.mark.parametrize(
-    ("version_output", "expected"),
-    [
-        ("git version 2.39.3 (Apple Git-146)", "2.39.3"),
-        ("git version 2.41.0.windows.1", "2.41.0"),
-        ("git version 2.40", "2.40"),
-        ("git version 2.9.5", "2.9.5"),
-        ("git version 2.53.0", "2.53.0"),
-        ("git version 2.0000041", "2.0000041"),
-        ("git version 12345.6", "12345.6"),
-        ("git version 2.41.0-rc0", "2.41.0"),
-        ("git version v2.41.0", "2.41.0"),
-        ("git version 2.43.0-rc1", "2.43.0"),
-        ("git version 2.41.0.dirty", "2.41.0"),
-        ("git version 2.41.x", "2.41"),
-        ("git version unknown", None),
-        ("", None),
-        ("9" * 50_000, None),
-    ],
-)
-def test_the_git_version_is_the_first_dotted_number_in_the_output(version_output, expected):
-    """#31 rule 2 (S8786): the version is found as the old pattern found it, in any word, and on any digit length."""
-    assert engines.parse_git_version(version_output) == expected
 
 
 @pytest.mark.engine

@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 
-from quality import architecture, engines, repository, sonar
+from quality import architecture, process, repository, sonar
 from quality.config import (
     CONFIG_PATH,
     ConfigError,
@@ -453,10 +453,10 @@ def read_base(repo: Path, base_sha: str) -> Side:
     where = f"the base commit {base_sha}"
     try:
         texts = {
-            path: engines.read_blob(repo, base_sha, path, f"cannot read {where}", f"cannot read {path} at {where}")
+            path: process.read_blob(repo, base_sha, path, f"cannot read {where}", f"cannot read {path} at {where}")
             for path in (CONFIG_PATH, BASELINE_PATH, *architecture.CONFIG_FILES)
         }
-    except engines.EngineError as error:
+    except process.ProcessError as error:
         raise CannotJudge(str(error)) from error
     return side_of(texts[CONFIG_PATH], texts[BASELINE_PATH], where, {name: texts[name] for name in architecture.CONFIG_FILES})
 
@@ -476,7 +476,7 @@ def read_renames(
     _require_safe_ref(base, "base")
     _require_safe_ref(head, "head")
     try:
-        listed = engines.git(
+        listed = process.git(
             [
                 "-C", str(repo.resolve()), "diff", "-M50%", "-l1000", "--no-color", "--name-status", "-z",
                 "--end-of-options", base, head, "--",
@@ -486,7 +486,7 @@ def read_renames(
             bound,
             encoding=None,
         )
-    except engines.EngineError as error:
+    except process.ProcessError as error:
         raise CannotJudge(str(error)) from error
     return renames_of(listed)
 

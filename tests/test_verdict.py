@@ -518,8 +518,8 @@ def test_git_output_is_decoded_as_utf_8_whatever_the_locale(build_repo):
     repo = build_repo({})
     subprocess.run(["git", "-C", str(repo), *GIT_IDENTITY, "commit", "-q", "--allow-empty", "-m", "Grüße"], check=True)
     program = (
-        "import sys; from quality import engines; "
-        "print(ascii(engines.run(['git', '-C', sys.argv[1], 'log', '-1', '--format=%s']).stdout.strip()))"
+        "import sys; from quality import process; "
+        "print(ascii(process.run(['git', '-C', sys.argv[1], 'log', '-1', '--format=%s']).stdout.strip()))"
     )
     ascii_locale = {**os.environ, "LC_ALL": "C", "LANG": "C", "PYTHONUTF8": "0", "PYTHONCOERCECLOCALE": "0"}
     read = subprocess.run(
