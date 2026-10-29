@@ -5,9 +5,6 @@ from enum import Enum
 from functools import partial
 from pathlib import Path, PurePosixPath
 
-from packaging.specifiers import Specifier, SpecifierSet
-from packaging.version import Version
-
 from quality import (
     advisories,
     architecture,
@@ -17,6 +14,7 @@ from quality import (
     engines,
     layout,
     process,
+    python_floor,
     python_lint,
     ratchet,
     repository,
@@ -26,7 +24,6 @@ from quality.config import (
     Allowance,
     ConfigError,
     LayoutRule,
-    PythonAllowance,
     RootAllowance,
     read_advisory_allowances,
     read_compose_allowances,
@@ -45,11 +42,8 @@ SCRIPT_NAME = LayoutRule.SCRIPT_NAME.value
 SCRIPT_HEADER = LayoutRule.SCRIPT_HEADER.value
 TEST_LAYOUT = LayoutRule.TEST_LAYOUT.value
 TEST_IMPORT = LayoutRule.TEST_IMPORT.value
-PYTHON_FLOOR = "python-floor"
 PYTHON_SECURITY = python_lint.SECURITY_RULE
 PYTHON_PRINT = python_lint.PRINT_RULE
-PYTHON_TARGET = Version("3.14")
-LOWER_BOUND_OPERATORS = frozenset({">=", ">", "~=", "==", "==="})
 WORKFLOW_RULE_IDS = tuple(engines.WORKFLOW_ENGINES)
 ENGINE_RULE_IDS = (engines.LEAK_RULE, *WORKFLOW_RULE_IDS, advisories.RULE)
 
@@ -159,95 +153,11 @@ def _unlisted_root_entry(entry: str, base_spelling: str | None) -> Finding:
     )
 
 
-@dataclass(frozen=True)
-class FloorResult:
-    """The python-floor findings and one report line per allowed file."""
-
-    findings: list[Finding]
-    reports: tuple[str, ...]
-
-
-def _lower_bound(clause: Specifier) -> Version:
-    """The version a clause sets as a lower bound; `==3.14.*` counts as 3.14, while `===` takes its version as written."""
-    return Version(clause.version.removesuffix(".*") if clause.operator == "==" else clause.version)
-
-
-def _floor(path: str, requires_python: str) -> Version | None:
-    """The highest lower bound among the clauses, None when no clause sets one."""
-    try:
-        bounds = [_lower_bound(clause) for clause in SpecifierSet(requires_python) if clause.operator in LOWER_BOUND_OPERATORS]
-    except ValueError as error:
-        raise Unparsable(f'{path} has requires-python "{requires_python}", which is no PEP 440 version specifier ({error})') from error
-    return max(bounds, default=None)
-
-
-def _requires_python(path: str, content: bytes) -> tuple[bool, str]:
-    """Whether the file holds a `[project]` table, and its `requires-python` ("" when it names none)."""
-    try:
-        document = repository.parse_toml(content.decode("utf-8"))
-    except (UnicodeDecodeError, repository.TomlError) as error:
-        raise Unparsable(f"{path} is not UTF-8 TOML that Python reads ({error})") from error
-    project = document.get("project")
-    if not isinstance(project, dict):
-        return False, ""
-    value = project.get("requires-python", "")
-    if not isinstance(value, str):
-        raise Unparsable(f"{path} has requires-python as {type(value).__name__}, not a string")
-    return True, value
-
-
-def _floor_finding(path: str, requires_python: str, floor: Version | None) -> Finding | None:
-    if floor is not None and floor >= PYTHON_TARGET:
-        return None
-    reason = (
-        f'requires-python "{requires_python}" names no floor, so it admits every Python, below {PYTHON_TARGET}.'
-        if floor is None
-        else f'requires-python "{requires_python}" admits Python {floor}, below {PYTHON_TARGET}.'
-    )
-    return Finding(
-        PYTHON_FLOOR, path, None, reason,
-        f"raise it to >={PYTHON_TARGET} and move CI, .python-version, Dockerfiles and ruff's target-version with it, "
-        f"or declare it in {CONFIG_PATH} with [[python.allow]], its path and a reason.",
-    )
-
-
-def _stale_python_allowance(allowance: PythonAllowance, why: str) -> Finding:
-    return Finding(
-        PYTHON_FLOOR, allowance.path, None,
-        f"declared in {CONFIG_PATH} with [[python.allow]], but {why}.",
-        f"delete its [[python.allow]] entry from {CONFIG_PATH}.",
-    )
-
-
-def check_python_floor(pyprojects: dict[str, bytes], allowances: Sequence[PythonAllowance]) -> FloorResult:
-    """Each judged `pyproject.toml` (one with a `[project]` table) must name a floor of the target version or higher, or be allowed."""
-    declared = {allowance.path: allowance for allowance in allowances}
-    findings: list[Finding] = []
-    reports: list[str] = []
-    judged: set[str] = set()
-    for path, content in sorted(pyprojects.items()):
-        has_project, requires_python = _requires_python(path, content)
-        if not has_project:
-            continue
-        judged.add(path)
-        finding = _floor_finding(path, requires_python, _floor(path, requires_python))
-        if finding is None:
-            continue
-        if (allowance := declared.pop(path, None)) is None:
-            findings.append(finding)
-        else:
-            reports.append(f'python-floor: allowed {path} (requires-python "{requires_python}") - {allowance.reason}')
-    for allowance in declared.values():
-        why = "that file is already at the floor" if allowance.path in judged else "no tracked pyproject.toml with a [project] table lies there"
-        findings.append(_stale_python_allowance(allowance, why))
-    return FloorResult(sorted(findings, key=lambda finding: finding.path), tuple(reports))
-
-
-def _python_floor_result(root: Path) -> FloorResult:
+def _python_floor_result(root: Path) -> python_floor.FloorResult:
     modes = checkout.index_modes(root)
     names = [str(PurePosixPath(project.directory) / layout.PROJECT_FILE) for project in layout.python_projects(modes)]
     present = checkout.on_disk(root, [name for name in names if modes[name] != layout.GITLINK_MODE])
-    return check_python_floor(checkout.read_existing(repository.read_bytes, root, present), _declared(read_python_allowances, root))
+    return python_floor.check_python_floor(checkout.read_existing(repository.read_bytes, root, present), _declared(read_python_allowances, root))
 
 
 def _stale_root_declaration(entry: str, tracked_entries: set[str]) -> Finding:
@@ -325,7 +235,7 @@ def check_import_contract(root: Path, tracked: list[str]) -> architecture.Contra
 def lint_python(root: Path, locate_ruff: Callable[[], str]) -> python_lint.Lint:
     """ruff's one run over every tracked regular `.py` file, which python-security and python-print both judge."""
     try:
-        return python_lint.lint(root, checkout.index_modes(root), PYTHON_TARGET, locate_ruff)
+        return python_lint.lint(root, checkout.index_modes(root), python_floor.PYTHON_TARGET, locate_ruff)
     except python_lint.UnparsablePython as error:
         raise Unparsable(str(error)) from error
     except python_lint.LintError as error:
@@ -483,7 +393,7 @@ def run_hygiene(root: Path, engine_dir: Path | None, locate_ruff: Callable[[], s
         _verdict(SCRIPT_HEADER, _content_findings(root, layout.script_candidates, layout.check_script_header)),
         _verdict(TEST_LAYOUT, _attempt(lambda: layout.check_test_layout(checkout.index_modes(root), _declared(read_layout_allowances, root)))),
         _verdict(TEST_IMPORT, _content_findings(root, layout.test_import_candidates, layout.check_test_import)),
-        _verdict(PYTHON_FLOOR, floor if isinstance(floor, CannotJudge) else floor.findings),
+        _verdict(python_floor.PYTHON_FLOOR, floor if isinstance(floor, CannotJudge) else floor.findings),
         _verdict(PYTHON_SECURITY, _judge_lint(lint, python_lint.judge_security)),
         _verdict(PYTHON_PRINT, printing if isinstance(printing, CannotJudge) else printing.findings),
     ]
@@ -504,7 +414,7 @@ def _reports(
     size: RuleResult | CannotJudge,
     clone: RuleResult | CannotJudge,
     contracts: architecture.ContractsVerdict | CannotJudge,
-    floor: FloorResult | CannotJudge,
+    floor: python_floor.FloorResult | CannotJudge,
     printing: python_lint.PrintResult | CannotJudge,
 ) -> tuple[str, ...]:
     """The report lines of the rules that judged: the size counts without a baseline, the clone pairs without a `[clones]` table, the import-contract notes, each python-floor exception, each output owner."""

@@ -70,7 +70,7 @@ layers = [
     "hygiene | staged",
     "advisories",
     "python_lint",
-    "architecture | clones | compose | engines | layout | pip_requirements",
+    "architecture | clones | compose | engines | layout | pip_requirements | python_floor",
     "ratchet",
     "checkout",
     "output",
