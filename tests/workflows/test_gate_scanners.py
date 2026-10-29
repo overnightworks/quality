@@ -1,3 +1,4 @@
+import posixpath
 import re
 from pathlib import Path
 
@@ -31,12 +32,24 @@ def test_the_hygiene_job_installs_the_scanners_through_one_pinned_mise_step():
     assert [given[name] for name in GIVEN_FALSE] == [False] * len(GIVEN_FALSE)
 
 
-@pytest.mark.parametrize(("workflow", "job"), [("gate.yml", "hygiene"), ("ci.yml", "tests")])
-def test_the_ceiling_of_mise_is_the_parent_of_the_manifest_directory(workflow, job):
-    """#265 B1: trust protects nothing in CI, so mise must never read above the manifest's parent."""
+def rendered(expression: str, tool_dir: str) -> str:
+    """The workflow `expression` with `github.workspace` as `/work` and `env.TOOL_DIR` as `tool_dir`, evaluated as Python."""
+
+    def evaluate(match: re.Match) -> str:
+        python = match[1].replace("&&", " and ").replace("||", " or ").replace("env.TOOL_DIR", "TOOL_DIR")
+        python = python.replace("github.workspace", "'/work'")
+        return str(eval(python, {"TOOL_DIR": tool_dir, "format": str.format}))  # noqa: S307 - the expression is this repository's own workflow text
+
+    return re.sub(r"\$\{\{ (.*?) \}\}", evaluate, expression)
+
+
+@pytest.mark.parametrize(("workflow", "job", "tool_dir"), [("gate.yml", "hygiene", "."), ("gate.yml", "hygiene", ".gate-tool"), ("ci.yml", "tests", ".")])
+def test_the_ceiling_of_mise_is_the_normalised_parent_of_the_manifest_directory(workflow, job, tool_dir):
+    """#265 B1: trust protects nothing in CI, so mise must never read above the manifest's parent, whatever spelling of the path it compares."""
     step = the_mise_step(workflow, job)
-    manifest_directory = step["with"]["working_directory"]
-    assert step["env"]["MISE_CEILING_PATHS"] == "${{ github.workspace }}/" + manifest_directory.rsplit("/", 1)[0]
+    manifest_directory = step["with"]["working_directory"].replace("${{ env.TOOL_DIR }}", tool_dir)
+    expected = posixpath.normpath("/work/" + manifest_directory.rsplit("/", 1)[0])
+    assert rendered(step["env"]["MISE_CEILING_PATHS"], tool_dir) == expected
 
 
 def test_the_tests_job_installs_the_same_scanners_as_the_gate_and_runs_no_hygiene():
