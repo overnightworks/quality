@@ -7,8 +7,9 @@ import textwrap
 from pathlib import Path
 
 import pytest
+from ruff import find_ruff_bin
 
-from quality import cli, env_file, sonar
+from quality import cli, env_file, hygiene, process, sonar
 from quality.compose import is_compose_file
 from quality.report import Finding
 from tests.support.engines import fake_engine
@@ -265,3 +266,21 @@ def test_a_closed_stdout_is_cannot_judge_and_never_a_crash(tmp_path):
         text=True, check=False, stderr=subprocess.PIPE,
     )
     assert (done.returncode, "hygiene: cannot judge" in done.stderr) == (2, True), done.stderr
+
+
+def test_an_index_record_quality_cannot_read_refuses_exactly_the_rules_that_read_index_modes(build_repo, monkeypatch):
+    repo = build_repo({})
+    real_run = process.run
+
+    def unreadable_modes(command, *args, **kwargs):
+        if command[-4:] == ["ls-files", "-z", "-s", "--"]:
+            return subprocess.CompletedProcess(command, 0, stdout=b"100644 no-tab\0")
+        return real_run(command, *args, **kwargs)
+
+    monkeypatch.setattr(process, "run", unreadable_modes)
+    verdicts = hygiene.run_hygiene(repo, None, find_ruff_bin).verdicts
+    refused = [(verdict.rule, str(verdict.refusal)) for verdict in verdicts if verdict.refusal is not None]
+    assert [rule for rule, _ in refused] == [
+        "file-suffix", "script-name", "script-header", "test-layout", "test-import", "python-floor", "python-security", "python-print",
+    ]
+    assert all("git ls-files -s printed an index record quality cannot read" in reason for _, reason in refused)
