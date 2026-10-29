@@ -637,6 +637,13 @@ def test_properties_refuses_a_repository_without_properties(monkeypatch, capsys,
     assert (code, "sonar-project.properties" in err) == (2, True)
 
 
+def test_the_former_sonar_command_is_refused_as_a_usage_error(capsys):
+    """#228 rule 3: the old command name is not kept as an alias"""
+    with pytest.raises(SystemExit) as exited:
+        cli.main(["sonar", "pre" + "flight"])
+    assert exited.value.code == 2
+
+
 def properties_link_outside(repo: Path, elsewhere: Path) -> None:
     outside = elsewhere / "outside.properties"
     outside.write_text("sonar.host.url=https://evil.example\n")
