@@ -22,7 +22,7 @@ import tempfile
 import tokenize
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 
 import grimp
@@ -33,7 +33,7 @@ from importlinter.application.user_options import UserOptions
 from importlinter.contracts.acyclic_siblings import AcyclicSiblingsContract
 from importlinter.contracts.forbidden import ForbiddenContract
 from importlinter.contracts.independence import IndependenceContract
-from importlinter.contracts.layers import LayersContract
+from importlinter.contracts.layers import Layer, LayersContract
 from importlinter.contracts.protected import ProtectedContract
 from importlinter.domain.contract import Contract, ContractCheck, InvalidContractOptions
 from importlinter.domain.helpers import MissingImport
@@ -184,8 +184,21 @@ def _contract_loosenings(name: str, base: ContractFields, head: ContractFields) 
     if base.type != head.type:
         return [f'import contract "{name}" changes type']
     ignores = [f'import contract "{name}" ignores {expression}' for expression in head.ignores - base.ignores]
-    changed = [f'import contract "{name}" changes {option}' for option in base.fields if base.fields[option] != head.fields[option]]
+    changed = [f'import contract "{name}" changes {option}' for option in base.fields if _field_changed(option, base, head)]
     return ignores + changed
+
+
+def _field_changed(option: str, base: ContractFields, head: ContractFields) -> bool:
+    if option == "layers":
+        return _without_modules_unknown_to(base.fields[option], head.fields[option]) != base.fields[option]
+    return base.fields[option] != head.fields[option]
+
+
+def _without_modules_unknown_to(base_layers: Sequence[Layer], head_layers: Sequence[Layer]) -> list[Layer]:
+    """The head's layers without the modules the base does not name, and without the layers that leaves empty."""
+    known = {tail.name for layer in base_layers for tail in layer.module_tails}
+    stripped = [replace(layer, module_tails={tail for tail in layer.module_tails if tail.name in known}) for layer in head_layers]
+    return [layer for layer in stripped if layer.module_tails]
 
 
 def _fields_of(contract: Contract, contract_type: str) -> ContractFields:

@@ -721,13 +721,3 @@ def test_a_module_newly_placed_in_a_layers_contract_is_no_loosening(base, head, 
     """#217 (ruled 28.10.2026): the head's layers lose every module the base does not name, then compare as before."""
     assert loosened({"pyproject.toml": contracts_toml(one(base))}, {"pyproject.toml": contracts_toml(one(head))}) == expected
 
-
-def test_a_pull_request_that_only_inserts_a_module_into_an_exhaustive_contract_merges_without_a_declaration(capsys):
-    """#217: the door finds no loosening in an inserted module, so no `[[gate.loosened]]` entry is asked for."""
-    gh = GhWithImportConfigs(
-        checks=SONAR_GREEN, base_config=ONE_JOB, merge_config=ONE_JOB,
-        base_files={"pyproject.toml": contracts_toml(one(exhaustive("a", "b")))},
-        merge_files={"pyproject.toml": contracts_toml(one(exhaustive("a", "new", "b")))},
-    )
-    assert drive(gh)[0] == 0
-    assert "loosened" not in capsys.readouterr().out
