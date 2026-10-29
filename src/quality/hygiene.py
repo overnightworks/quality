@@ -40,7 +40,8 @@ SCRIPT_HEADER = LayoutRule.SCRIPT_HEADER.value
 TEST_LAYOUT = LayoutRule.TEST_LAYOUT.value
 TEST_IMPORT = LayoutRule.TEST_IMPORT.value
 PYTHON_FLOOR = "python-floor"
-PYTHON_SECURITY = python_lint.RULE
+PYTHON_SECURITY = python_lint.SECURITY_RULE
+PYTHON_PRINT = python_lint.PRINT_RULE
 PYTHON_TARGET = Version("3.14")
 LOWER_BOUND_OPERATORS = frozenset({">=", ">", "~=", "==", "==="})
 WORKFLOW_RULE_IDS = tuple(engines.WORKFLOW_ENGINES)
@@ -595,29 +596,24 @@ def check_import_contract(root: Path, tracked: list[str]) -> architecture.Contra
         raise CannotJudge(str(error)) from error
 
 
-def check_python_security(root: Path, locate_ruff: Callable[[], str]) -> list[Finding]:
-    """ruff judges every tracked regular `.py` file, each resolved inside the repository and read the way Python reads
-    it, which must be UTF-8 text; one the checkout does not hold cannot be judged, so the rule never certifies less."""
-    modes = index_modes(root)
-    sources = {name: _held(root, name) for name in python_lint.candidates(modes)}
+def lint_python(root: Path, locate_ruff: Callable[[], str]) -> python_lint.Lint:
+    """ruff's one run over every tracked regular `.py` file, which python-security and python-print both judge."""
     try:
-        files = {
-            name: python_lint.PythonFile(_judged(repository.resolve_file, root, name), python_lint.source_text(name, content))
-            for name, content in sources.items()
-        }
-        return python_lint.check_security(root, files, modes, PYTHON_TARGET, locate_ruff)
+        return python_lint.lint(root, index_modes(root), PYTHON_TARGET, locate_ruff)
     except python_lint.UnparsablePython as error:
         raise Unparsable(str(error)) from error
     except python_lint.LintError as error:
         raise CannotJudge(str(error)) from error
 
 
-def _held(root: Path, name: str) -> bytes:
-    """The bytes of a file the checkout must hold: a deleted or sparse file cannot be judged."""
-    content = _judged(repository.read_bytes, root, name)
-    if content is None:
-        raise CannotJudge(f"cannot read {name}: the checkout does not hold it")
-    return content
+def _judge_lint[T](lint: python_lint.Lint | CannotJudge, judge: Callable[[python_lint.Lint], T]) -> T | CannotJudge:
+    """One rule's verdict on the shared run; a run that cannot judge refuses both rules, a judge's own refusal only its rule."""
+    if isinstance(lint, CannotJudge):
+        return lint
+    try:
+        return judge(lint)
+    except python_lint.LintError as error:
+        return CannotJudge(str(error))
 
 
 def check_secrets(root: Path, engine_dir: Path) -> engines.SecretScan:
@@ -750,6 +746,8 @@ def run_hygiene(root: Path, engine_dir: Path | None, locate_ruff: Callable[[], s
     size, clone = _judge_baseline_rules(sources, baseline)
     contracts = _attempt(lambda: check_import_contract(root, tracked))
     floor = _attempt(lambda: _python_floor_result(root))
+    lint = _attempt(lambda: lint_python(root, locate_ruff))
+    printing = _judge_lint(lint, python_lint.judge_print)
     verdicts = [
         _verdict(ENV_FILE, check_env_files(tracked)),
         _verdict(COMPOSE_PORT, _attempt(lambda: check_compose_ports(root, tracked, _declared(read_compose_allowances, root)))),
@@ -764,9 +762,10 @@ def run_hygiene(root: Path, engine_dir: Path | None, locate_ruff: Callable[[], s
         _verdict(TEST_LAYOUT, _attempt(lambda: layout.check_test_layout(index_modes(root), _declared(read_layout_allowances, root)))),
         _verdict(TEST_IMPORT, _content_findings(root, layout.test_import_candidates, layout.check_test_import)),
         _verdict(PYTHON_FLOOR, floor if isinstance(floor, CannotJudge) else floor.findings),
-        _verdict(PYTHON_SECURITY, _attempt(lambda: check_python_security(root, locate_ruff))),
+        _verdict(PYTHON_SECURITY, _judge_lint(lint, python_lint.judge_security)),
+        _verdict(PYTHON_PRINT, printing if isinstance(printing, CannotJudge) else printing.findings),
     ]
-    reports = _reports(size, clone, contracts, floor)
+    reports = _reports(size, clone, contracts, floor, printing)
     if engine_dir is None:
         return HygieneResult(tuple(verdicts), reports, [], {})
     secrets = _attempt(lambda: check_secrets(root, engine_dir))
@@ -784,10 +783,12 @@ def _reports(
     clone: RuleResult | CannotJudge,
     contracts: architecture.ContractsVerdict | CannotJudge,
     floor: FloorResult | CannotJudge,
+    printing: python_lint.PrintResult | CannotJudge,
 ) -> tuple[str, ...]:
-    """The report lines of the rules that judged: the size counts without a baseline, the clone pairs without a `[clones]` table, the import-contract notes, each python-floor exception."""
+    """The report lines of the rules that judged: the size counts without a baseline, the clone pairs without a `[clones]` table, the import-contract notes, each python-floor exception, each output owner."""
     size_reports = [] if isinstance(size, CannotJudge) or size.report is None else [size.report]
     clone_reports = [] if isinstance(clone, CannotJudge) or clone.report is None else [clone.report]
     contract_notes = [] if isinstance(contracts, CannotJudge) else contracts.notes
     floor_reports = () if isinstance(floor, CannotJudge) else floor.reports
-    return (*size_reports, *clone_reports, *contract_notes, *floor_reports)
+    owner_reports = () if isinstance(printing, CannotJudge) else printing.reports
+    return (*size_reports, *clone_reports, *contract_notes, *floor_reports, *owner_reports)

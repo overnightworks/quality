@@ -125,6 +125,7 @@ RULES = (
     RuleRelease(hygiene.TEST_IMPORT, None, Switch.ALWAYS),
     RuleRelease(hygiene.PYTHON_FLOOR, None, Switch.ALWAYS),
     RuleRelease(hygiene.PYTHON_SECURITY, None, Switch.ALWAYS),
+    RuleRelease(hygiene.PYTHON_PRINT, None, Switch.ALWAYS),
     RuleRelease(advisories.RULE, RATCHET_RELEASE, Switch.ALWAYS),
     RuleRelease(ratchet.SIZE, RATCHET_RELEASE, Switch.SIZE_BASELINE),
     RuleRelease(architecture.RULE, RATCHET_RELEASE, Switch.IMPORT_LINTER_CONFIG),

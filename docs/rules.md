@@ -309,8 +309,8 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
 - `python-security` judges every tracked regular `.py` file in any directory with the `S` codes of quality's own ruff
   (`ruff==0.17.1`, an exact pin in quality's `pyproject.toml` that serves its own lint too): the ruff binary of
   quality's installation, never one on `PATH`, at the pinned version, runs `ruff check --isolated --no-cache
-  --ignore-noqa --select S --target-version py314 --output-format json -- <files>`, in batches below the argument
-  limit, and writes nothing into the checkout. With no tracked `.py` file ruff is not started. Not judged: untracked
+  --ignore-noqa --select S,T20 --target-version py314 --output-format json -- <files>`, in batches below the argument
+  limit, and writes nothing into the checkout. That one run serves `python-print` too. With no tracked `.py` file ruff is not started. Not judged: untracked
   files, a link, anything inside a gitlink, notebooks, `.pyi` files and suffixless scripts. The repository's own ruff
   `select`, `ignore`, `per-file-ignores`, `exclude`, `extend` and noqa have no effect. Each finding is one line at its
   file and line (`python-security src/a.py:12 - S307 Use of possibly insecure function; ...`). In the files
@@ -331,11 +331,32 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   text than ruff reads as UTF-8 (a PEP 263 cookie such as utf-7), a missing or mismatched ruff, ruff exiting other
   than 0 or 1, a `Failed to lint` warning, a report quality cannot
   read, a time-out or a file with a finding whose comments Python's tokenizer cannot read is `cannot judge` (exit 2). One such file
-  makes the whole rule `cannot judge` or `unparsable`, so the S findings of the other files are not printed in that run. The other
+  makes the whole rule `cannot judge` or `unparsable`, so the S findings of the other files are not printed in that run;
+  everything here but the tokenizer refuses the shared run, so `python-print` refuses with it. The other
   rules are judged either way. A deliberately invalid Python fixture takes another suffix, since a `.py` file is Python. No
   configuration switches the rule off, and a reasoned noqa asks `quality verdict` for
   no `[[gate.loosened]]` entry. Not judged, and waiting for usage evidence: notebooks, `.pyi` files and suffixless
   Python; judging a non-UTF-8 source (a latin-1 file with non-ASCII bytes stays `cannot judge`), since ruff reads UTF-8 only; a stale reasoned noqa, which ruff's RUF100 finds. (#214, #219)
+- `python-print` judges `T201` (`print`) and `T203` (`pprint`) from `python-security`'s run, over the same files,
+  with the same deafness to the repository's ruff settings and the same refusals: a run quality cannot trust or a file
+  ruff cannot parse leaves both rules `cannot judge` or `unparsable`. Each finding is one line
+  (``python-print scripts/sync_agents.py:12 - T201 `print` found``), a print to `sys.stderr` included, and tests get no
+  exemption. A reasoned `# noqa: T201 - <reason>` at `noqa_row` clears one line, as for `python-security`. A program's
+  one output owner declares itself in its code, never in a path list (operator ruling 27.10.2026): a file-level
+  `# ruff: noqa: T201[, T203] - <reason>` on a line of its own, the form ruff honours too, clears the codes it names in
+  its own file only; its reason holds a letter and no comma, and the comment holds no second `#`. A bare
+  `# ruff: noqa`, one without a reason, a comma in the reason, one naming an S code
+  (`# ruff: noqa: S603, T201 - reason`), one behind code on its line and `# flake8: noqa` clear nothing, and no file
+  directive clears an S code. The owner line is a tool directive, so it does not satisfy `script-header`: a script
+  keeps its comment or docstring first and the owner below it, as `scripts/verify_release.py` does. Each honoured
+  owner prints `python-print: output owner <path> - <reason>` before the verdicts; an owner that names no code found in
+  its file is a finding on its line, to delete. python-print reads the comments of each file with a print finding or
+  the text `# ruff:`, and one whose comments Python's tokenizer cannot read leaves python-print alone `cannot judge`.
+  No configuration switches the rule off, and an owner or noqa asks `quality verdict` for no `[[gate.loosened]]`
+  entry. Not judged, and waiting for usage evidence: `sys.stdout.write` and `sys.stderr.write` (ruff's TID251 would
+  flag every reference to the streams, `logging.StreamHandler(sys.stderr)` included, for a bypass nobody has used;
+  reopened when a landing replaces a `print` with a direct stream write), and `print(..., file=<variable>)`, which
+  ruff 0.17.1 does not report as T201. (#214, #225)
 - The baseline only falls: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the
   base commit's, so growing a function and rewriting the baseline stays red. Each loosening is one line, named with the
   baseline's own metric, path and symbol (a file entry has no symbol):
@@ -548,7 +569,7 @@ Every rule is judged, even when another cannot be, and gives one verdict: clean,
 Each finding names the rule, the file, a reason and a fix. Repository text (a file name, a service, a port, a contract
 or job name, a configuration entry) prints escaped. In the door's own fields (a finding's location, reason and fix, refusals, reports), invalid UTF-8 prints as `\udcNN` and every control character (line feed,
 carriage return, ESC, tab, DEL, C1) as `\xNN`. A line taken from import-linter's rendering (a broken contract's chain and guidance) prints behind the marker `  | `; rich may drop a carriage return, expand a tab, or start a new marked line at a line feed there. Every line the door prints therefore starts with its own text, so a matcher anchored at the line start, such as setup-uv's python matcher, cannot match repository text. A refusal is one line; the lines the door means to print (an import chain, the verdict's problems, the scoreboard's table) stay lines. A rule that cannot judge prints its verdict and reason under its rule id (`hygiene: secret cannot
-judge - ...`). A clean run names its rules in run order (`hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout, file-suffix, script-name, script-header, test-layout, test-import, python-floor, python-security); skipped without
+judge - ...`). A clean run names its rules in run order (`hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout, file-suffix, script-name, script-header, test-layout, test-import, python-floor, python-security, python-print); skipped without
 --engines: ...`); any other run ends with the findings and the verdicts counted (`hygiene: 1 finding(s); verdicts: 1
 clean, 1 findings, 1 unparsable`). The lines come in run order, also through a pipe that merges stdout and stderr
 (`2>&1 | tee log`); each stays on its own stream. That is option (c) of #86 on 19.10.2026, `cli.main` makes stdout

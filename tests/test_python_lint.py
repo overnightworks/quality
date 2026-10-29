@@ -20,22 +20,42 @@ GREEN_NOQA_LINES = [
     "run(argv)  # noqa: S603 - argv is fixed words  # a closing remark",
 ]
 CODE_IN_SECOND_DIRECTIVE = "run(argv)  # noqa: S607 - argv is fixed words  # noqa: S603 - argv is fixed words"
+PRINT = 'print("x")'
+PRINT_REASON = "T201 `print` found"
+OWNER = "# ruff: noqa: T201 - the command line owns its output"
 
 
 def record(code: str = "S603", line: int = 1, noqa_line: int = 1, path: str = "src/p/a.py") -> RuffFinding:
     return RuffFinding(path, code, "`subprocess` call: check for execution of untrusted input", line, noqa_line)
 
 
+def print_record(text: str, path: str = "src/p/a.py") -> RuffFinding:
+    """The T201 finding ruff reports on the first line of `text` that calls print."""
+    line = next(number for number, content in enumerate(text.splitlines(), 1) if content.startswith("print("))
+    return RuffFinding(path, "T201", "`print` found", line, line)
+
+
+def linted(records: list[RuffFinding], texts: dict[str, str], test_files: frozenset[str] = frozenset()) -> python_lint.Lint:
+    return python_lint.Lint(tuple(records), texts, test_files)
+
+
 def judged(text: str, finding: RuffFinding, test_files: frozenset[str] = frozenset()) -> list[str]:
-    return [f"{item.location} {item.reason}" for item in python_lint.judge([finding], {finding.path: text}, test_files)]
+    findings = python_lint.judge_security(linted([finding], {finding.path: text}, test_files))
+    return [f"{item.location} {item.reason}" for item in findings]
 
 
-def security_verdict(repo: Path) -> hygiene.RuleVerdict:
-    return next(verdict for verdict in hygiene.run_hygiene(repo, None, find_ruff_bin).verdicts if verdict.rule == python_lint.RULE)
+def judged_prints(text: str, records: list[RuffFinding]) -> tuple[list[str], tuple[str, ...]]:
+    """The python-print findings as `<location> <reason>`, and the report lines."""
+    result = python_lint.judge_print(linted(records, {"src/p/a.py": text}))
+    return [f"{item.location} {item.reason}" for item in result.findings], result.reports
 
 
-def flagged_paths(repo: Path) -> list[str]:
-    verdict = security_verdict(repo)
+def rule_verdict(repo: Path, rule: str = python_lint.SECURITY_RULE) -> hygiene.RuleVerdict:
+    return next(verdict for verdict in hygiene.run_hygiene(repo, None, find_ruff_bin).verdicts if verdict.rule == rule)
+
+
+def flagged_paths(repo: Path, rule: str = python_lint.SECURITY_RULE) -> list[str]:
+    verdict = rule_verdict(repo, rule)
     assert verdict.refusal is None, verdict.refusal
     return [finding.path for finding in verdict.findings]
 
@@ -121,11 +141,81 @@ def test_a_shared_path_or_an_url_open_stays_red_in_a_test_file(code):
     assert judged("x\n", finding, frozenset({finding.path})) != []
 
 
-def test_a_file_tokenize_cannot_read_cannot_be_judged():
-    """Sentence 5, cell 16: a file ruff parsed but tokenize cannot is `cannot judge`, naming the file."""
-    finding, texts, test_files = record(path="src/p/a.py"), {"src/p/a.py": "run(argv)\nx = '''open\n"}, frozenset()
+@pytest.mark.parametrize(
+    ("code", "refusing", "judging"),
+    [("S603", python_lint.judge_security, python_lint.judge_print), ("T201", python_lint.judge_print, python_lint.judge_security)],
+    ids=["security finding", "print finding"],
+)
+def test_a_file_tokenize_cannot_read_refuses_only_the_rule_whose_finding_lies_in_it(code, refusing, judging):
+    """Sentence 5, cell 16, and #225 cell 12: a file ruff parsed but tokenize cannot is `cannot judge`, naming the
+    file, for the rule whose finding lies in it; the other rule never reads its comments."""
+    lint = linted([record(code=code)], {"src/p/a.py": "print(argv)\nx = '''open\n"})
     with pytest.raises(LintError, match="src/p/a.py"):
-        python_lint.judge([finding], texts, test_files)
+        refusing(lint)
+    judging(lint)
+
+
+@pytest.mark.parametrize(
+    ("text", "is_red"),
+    [
+        (f"{PRINT}\n", True),
+        (f"{PRINT}  # noqa: T201 - the door prints here\n", False),
+        (f"{OWNER}\n{PRINT}\n", False),
+        (f'"""Runs it."""\n\n{PRINT}\n{OWNER}\n', False),
+        (f"{PRINT}\n# ruff: noqa: T201, T203 - the command line owns its output\n", False),
+        (f"# ruff: noqa\n{PRINT}\n", True),
+        (f"# ruff: noqa: T201\n{PRINT}\n", True),
+        (f"# ruff: noqa: T201 - the command line, its output\n{PRINT}\n", True),
+        (f"# ruff: noqa: S603, T201 - the command line owns its output\n{PRINT}\n", True),
+        (f"# ruff: noqa: T203 - the command line owns its output\n{PRINT}\n", True),
+        (f"# ruff: noqa: T201 - 42\n{PRINT}\n", True),
+        (f"# ruff: noqa: T201: the command line owns its output\n{PRINT}\n", True),
+        (f"x = 1  {OWNER}\n{PRINT}\n", True),
+        (f"{OWNER}  # noqa: E501\n{PRINT}\n", True),
+        (f"# flake8: noqa: T201 - the command line owns its output\n{PRINT}\n", True),
+        (f'x = """\n{OWNER}\n"""\n{PRINT}\n', True),
+    ],
+    ids=["none", "line noqa", "owner on top", "owner below", "owner of both codes", "bare file noqa", "no reason",
+         "comma in reason", "security code", "other code", "no letter in reason", "colon form", "after code",
+         "second directive", "flake8 form", "inside a string"],
+)
+def test_only_an_own_line_reasoned_owner_naming_the_code_or_a_reasoned_line_noqa_clears_a_print(text, is_red):
+    """#225 cells 4, 5 and 6: the owner is `# ruff: noqa: <T20 code>[, ...] - <reason>` on its own line, naming the
+    code, with a letter and no comma in its reason; every other file directive leaves the print red."""
+    findings, _ = judged_prints(text, [print_record(text)])
+    assert any(PRINT_REASON in finding for finding in findings) is is_red, findings
+
+
+def test_an_honoured_owner_is_reported_with_its_path_and_reason():
+    """#225 cell 8: `python-print: output owner <path> - <reason>`, and no finding."""
+    text = f"{OWNER}\n{PRINT}\n"
+    assert judged_prints(text, [print_record(text)]) == (
+        [], ("python-print: output owner src/p/a.py - the command line owns its output",)
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "records"),
+    [(f"x = 1\n{OWNER}\n", []), (f"x = 1\n{OWNER}\npprint(1)\n", [record(code="T203", line=3, noqa_line=3)])],
+    ids=["no print", "only another code"],
+)
+def test_an_owner_that_clears_no_finding_is_a_finding_on_its_line(text, records):
+    """#225 cell 9: a directive kept where nothing it names is found is a finding; delete it."""
+    findings, reports = judged_prints(text, records)
+    assert (any(finding.startswith("src/p/a.py:2 ") for finding in findings), reports) == (True, ()), findings
+
+
+def test_an_owner_clears_only_its_own_files_prints_and_never_a_security_finding():
+    """#225 cell 5: the owner's file is green for T201, another file stays red, and the owner's S findings are judged."""
+    owner_text, other_text = f"{OWNER}\n{PRINT}\nrun(argv)\n", f"{PRINT}\n"
+    owner_print, other_print = print_record(owner_text, "src/p/door.py"), print_record(other_text, "src/p/other.py")
+    lint = linted(
+        [owner_print, other_print, record(line=3, noqa_line=3, path="src/p/door.py")],
+        {"src/p/door.py": owner_text, "src/p/other.py": other_text},
+    )
+    printed = [finding.location for finding in python_lint.judge_print(lint).findings]
+    secured = [finding.location for finding in python_lint.judge_security(lint)]
+    assert (printed, secured) == (["src/p/other.py:1"], ["src/p/door.py:3"])
 
 
 def ruff_entry(code: str = "S307", filename: str = "/r/src/a.py", noqa_row: int | None = 1) -> dict:
@@ -135,8 +225,9 @@ def ruff_entry(code: str = "S307", filename: str = "/r/src/a.py", noqa_row: int 
 @pytest.mark.parametrize(
     "report",
     ["not json", "{}", "[1]", json.dumps([{**ruff_entry(), "code": 7}]), json.dumps([{**ruff_entry(), "location": {}}]),
-     json.dumps([ruff_entry(filename="/elsewhere/a.py")]), json.dumps([ruff_entry(noqa_row=None)])],
-    ids=["not json", "not a list", "no record", "code not text", "no row", "unknown file", "no noqa_row"],
+     json.dumps([ruff_entry(filename="/elsewhere/a.py")]), json.dumps([ruff_entry(noqa_row=None)]),
+     json.dumps([ruff_entry(code="E501")])],
+    ids=["not json", "not a list", "no record", "code not text", "no row", "unknown file", "no noqa_row", "code not selected"],
 )
 def test_a_report_quality_cannot_read_cannot_be_judged(report):
     """Sentence 8, cell 16: unreadable JSON is `cannot judge`, never clean."""
@@ -229,19 +320,40 @@ def test_a_security_finding_names_its_line_code_and_message(build_repo, capsys):
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
+    ("path", "source", "says"),
+    [
+        ("src/p/a.py", f"x = 1\n{PRINT}\n", f"python-print src/p/a.py:2 - {PRINT_REASON}"),
+        ("scripts/run_it.py", '"""Runs it."""\nfrom pprint import pprint\npprint(1)\n', "python-print scripts/run_it.py:3 - T203 `pprint` found"),
+        ("src/p/a.py", f"import sys\n{PRINT[:-1]}, file=sys.stderr)\n", f"python-print src/p/a.py:2 - {PRINT_REASON}"),
+        ("tests/test_a.py", f"{PRINT}\n", f"python-print tests/test_a.py:1 - {PRINT_REASON}"),
+    ],
+    ids=["print in src", "pprint in scripts", "print to stderr", "print in a test file"],
+)
+def test_a_print_names_its_line_code_and_message(build_repo, capsys, path, source, says):
+    """#225 cells 1 and 2: `python-print <path>:<line> - <CODE> <message>`, exit 1, a print to stderr and one in a test
+    file included."""
+    code, output = run(capsys, build_repo({"pyproject.toml": "[project]\nname = 'x'\n", path: source}))
+    assert (code, says in output) == (1, True), output
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
     "config",
     [
-        {"pyproject.toml": '[tool.ruff.lint.per-file-ignores]\n"src/**" = ["S"]\n'},
+        {"pyproject.toml": '[tool.ruff.lint.per-file-ignores]\n"src/**" = ["S", "T201"]\n'},
         {"pyproject.toml": '[tool.ruff]\nexclude = ["src"]\n'},
         {"ruff.toml": 'extend = "missing.toml"\n'},
         {"ruff.toml": "this is no toml [\n"},
-        {"ruff.toml": "[lint]\nignore = [\"S307\"]\n"},
+        {"ruff.toml": "[lint]\nignore = [\"S307\", \"T201\"]\n"},
     ],
     ids=["per-file-ignores", "exclude", "extend to a missing file", "invalid config", "ignore"],
 )
-def test_the_repositorys_own_ruff_settings_have_no_effect(build_repo, config):
-    """Sentence 3, cell 6: the gate runs its own ruff, isolated from every config."""
-    assert flagged_paths(build_repo({**config, "src/p/a.py": EVAL})) == ["src/p/a.py"]
+@pytest.mark.parametrize(
+    ("rule", "source"), [(python_lint.SECURITY_RULE, EVAL), (python_lint.PRINT_RULE, f"{PRINT}\n")], ids=["security", "print"]
+)
+def test_the_repositorys_own_ruff_settings_have_no_effect(build_repo, config, rule, source):
+    """Sentence 3, cell 6, and #225 cell 3: the gate runs its own ruff, isolated from every config."""
+    assert flagged_paths(build_repo({**config, "src/p/a.py": source}), rule) == ["src/p/a.py"]
 
 
 @pytest.mark.integration
@@ -276,11 +388,38 @@ def test_the_pinned_ruff_itself_honours_every_green_noqa_form_and_not_a_code_in_
 
 
 @pytest.mark.integration
+def test_the_pinned_ruff_itself_honours_the_owner_form(tmp_path):
+    """#225 cell 5: ruff reads the owner directive below a docstring as a file-level exemption of the code it names."""
+    (tmp_path / "door.py").write_text(f'"""Runs it."""\n\n{OWNER}\n{PRINT}\n')
+
+    def ruff(*options: str) -> subprocess.CompletedProcess:
+        command = [find_ruff_bin(), "check", "--isolated", "--no-cache", "--select", "T20", "--output-format", "json", *options, "--", "door.py"]
+        return subprocess.run(command, cwd=tmp_path, capture_output=True, text=True, check=False)
+
+    assert len(json.loads(ruff("--ignore-noqa").stdout)) == 1
+    honoured = ruff()
+    assert (honoured.returncode, json.loads(honoured.stdout), honoured.stderr) == (0, [], "")
+
+
+@pytest.mark.integration
+def test_an_output_owner_is_reported_before_the_verdicts_and_clears_only_its_own_prints(build_repo, capsys):
+    """#225 cells 5 and 8: the owner's report line comes first; another file's print and the owner's S finding stay red."""
+    repo = build_repo({"src/p/door.py": f"{OWNER}\n{PRINT}\n{EVAL}", "src/p/other.py": f"{PRINT}\n"})
+    code, output = run(capsys, repo)
+    lines = output.splitlines()
+    report = lines.index("python-print: output owner src/p/door.py - the command line owns its output")
+    print_finding = lines.index(f"python-print src/p/other.py:1 - {PRINT_REASON}")
+    assert (code, report < print_finding, "python-print src/p/door.py" in output) == (1, True, False), output
+    assert f"python-security src/p/door.py:3 - {EVAL_REASON}" in output
+
+
+@pytest.mark.integration
 def test_a_syntax_error_is_unparsable_and_the_other_rules_are_still_judged(build_repo, capsys):
-    """Sentence 8, cell 15: `python-security unparsable` names the file, exit 2."""
+    """Sentence 8, cell 15, and #225 cell 10: both rules are unparsable, naming the file, exit 2."""
     code, output = run(capsys, build_repo({".env": "A=1\n", "src/p/bad.py": "def broken(:\n"}))
     assert code == 2
     assert "hygiene: python-security unparsable - ruff cannot parse src/p/bad.py" in output
+    assert "hygiene: python-print unparsable - ruff cannot parse src/p/bad.py" in output
     assert "env-file .env - " in output
 
 
@@ -297,13 +436,27 @@ def test_a_syntax_error_is_unparsable_and_the_other_rules_are_still_judged(build
     ids=["version mismatch", "exit 2", "unreadable JSON", "failed to lint", "timeout"],
 )
 def test_a_ruff_run_quality_cannot_trust_cannot_be_judged(build_repo, capsys, monkeypatch, elsewhere, on_check, version, says):
-    """Sentence 8, cell 16: the rule cannot judge, exit 2, and the other rules are still judged."""
+    """Sentence 8, cell 16, and #225 cell 11: both rules cannot judge, exit 2, and the other rules are still judged."""
     repo = build_repo({".env": "A=1\n", "src/p/a.py": "x = 1\n"})
     binary = fake_ruff(elsewhere, on_check, version)
     monkeypatch.setattr(python_lint, "RUN_TIMEOUT_SECONDS", 0.5)
     code, output = run(capsys, repo, lambda: str(binary))
-    assert (code, "hygiene: python-security cannot judge - " in output, says in output) == (2, True, True), output
+    rules = [python_lint.SECURITY_RULE, python_lint.PRINT_RULE]
+    refused = [rule for rule in rules if f"hygiene: {rule} cannot judge - " in output]
+    assert (code, refused, says in output) == (2, rules, True), output
     assert "env-file .env - " in output
+
+
+@pytest.mark.integration
+def test_a_print_in_a_file_tokenize_cannot_read_refuses_only_python_print(build_repo, capsys, elsewhere):
+    """#225 cell 12: ruff reports a print where the tokenizer fails; python-print cannot judge, python-security is judged."""
+    repo = build_repo({"src/p/a.py": "print(argv)\nx = '''open\n"})
+    entry = {**ruff_entry(code="T201", filename=os.path.realpath(repo / "src" / "p" / "a.py")), "message": "`print` found"}
+    (elsewhere / "report.json").write_text(json.dumps([entry]))
+    binary = fake_ruff(elsewhere, f"cat {elsewhere / 'report.json'}")
+    code, output = run(capsys, repo, lambda: str(binary))
+    assert (code, "hygiene: python-print cannot judge - cannot read the comments of src/p/a.py" in output) == (2, True), output
+    assert "hygiene: python-security" not in output, output
 
 
 @pytest.mark.integration

@@ -1,5 +1,6 @@
-"""The python-security rule: quality's own pinned ruff reports the `S` codes in every tracked Python file, and quality
-alone judges each noqa, so neither the repository's ruff settings nor its noqa comments switch a code off."""
+"""The python-security and python-print rules: one run of quality's own pinned ruff reports the `S` and `T20` codes in
+every tracked Python file, and quality alone judges each noqa and output owner, so neither the repository's ruff
+settings nor its noqa comments switch a code off."""
 
 import io
 import json
@@ -15,11 +16,14 @@ from pathlib import Path
 from packaging.requirements import Requirement
 from packaging.version import Version
 
-from quality import DISTRIBUTION, engines, layout, ratchet
+from quality import DISTRIBUTION, engines, layout, ratchet, repository
 from quality.report import Finding
 
-RULE = "python-security"
-SELECTED_CODES = "S"
+SECURITY_RULE = "python-security"
+PRINT_RULE = "python-print"
+SECURITY_FAMILY = "S"
+PRINT_FAMILY = "T20"
+SELECTED_CODES = f"{SECURITY_FAMILY},{PRINT_FAMILY}"
 # Exempt in a test: an assert is how a test checks, a password there is a fake, and a test fixes its own argv.
 TEST_EXEMPT_CODES = frozenset({"S101", "S105", "S106", "S107", "S603", "S607"})
 PYTHON_SUFFIX = ".py"
@@ -31,6 +35,7 @@ SYNTAX_ERROR = "invalid-syntax"
 LINT_FAILURE = "Failed to lint"
 NOQA_DIRECTIVE = re.compile(r"\s*noqa\b", re.IGNORECASE)
 REASONED_NOQA = re.compile(r" ?noqa: (?P<codes>[A-Z]+\d+(?:, [A-Z]+\d+)*) - (?P<reason>[^,]+)", re.ASCII)
+OWNER_PREFIX = "# ruff:"
 BYTE_ORDER_MARK = "﻿"
 
 
@@ -61,9 +66,55 @@ class RuffFinding:
     noqa_line: int
 
 
+@dataclass(frozen=True)
+class Lint:
+    """One ruff run: its findings, the text of every judged file, and which of them are test files."""
+
+    records: tuple[RuffFinding, ...]
+    texts: Mapping[str, str]
+    test_files: frozenset[str]
+
+
+@dataclass(frozen=True)
+class ReasonedNoqa:
+    codes: frozenset[str]
+    reason: str
+
+
+@dataclass(frozen=True)
+class OutputOwner:
+    """A file-level `# ruff: noqa: <T20 code>[, ...] - <reason>` on its own line."""
+
+    line: int
+    noqa: ReasonedNoqa
+
+
+@dataclass(frozen=True)
+class PrintResult:
+    """The python-print findings and one report line per honoured output owner."""
+
+    findings: list[Finding]
+    reports: tuple[str, ...]
+
+
 def candidates(modes: Mapping[str, str]) -> list[str]:
     """Every tracked regular `.py` file: no link, and nothing inside a gitlink, which the index never lists."""
     return [path for path, mode in modes.items() if mode in engines.REGULAR_FILE_MODES and path.endswith(PYTHON_SUFFIX)]
+
+
+def read_files(root: Path, modes: Mapping[str, str]) -> dict[str, PythonFile]:
+    """Every candidate resolved inside the repository and read the way Python reads it, which must be UTF-8 text; one
+    the checkout does not hold cannot be judged, so the rules never certify less."""
+    files = {}
+    for name in candidates(modes):
+        try:
+            content = repository.read_bytes(root, name)
+            if content is None:
+                raise LintError(f"cannot read {name}: the checkout does not hold it")
+            files[name] = PythonFile(repository.resolve_file(root, name), source_text(name, content))
+        except repository.RepositoryFileError as error:
+            raise LintError(str(error)) from error
+    return files
 
 
 def source_text(name: str, content: bytes) -> str:
@@ -80,39 +131,93 @@ def source_text(name: str, content: bytes) -> str:
     return ruff_reads
 
 
-def check_security(
-    root: Path, files: Mapping[str, PythonFile], modes: Mapping[str, str], target: Version, locate_ruff: Callable[[], str]
-) -> list[Finding]:
-    """The findings ruff reports in `files` that neither a test exemption nor a reasoned noqa clears."""
-    if not files:
-        return []  # nothing to lint: skip locating ruff and its version check
-    records = _run_ruff(root, {name: file.path for name, file in files.items()}, target, locate_ruff)
+def lint(root: Path, modes: Mapping[str, str], target: Version, locate_ruff: Callable[[], str]) -> Lint:
+    """ruff's one run over every candidate, which both rules judge."""
+    files = read_files(root, modes)
     texts = {name: file.text for name, file in files.items()}
-    return judge(records, texts, frozenset(layout.test_import_candidates(modes)))
+    test_files = frozenset(layout.test_import_candidates(modes))
+    if not files:
+        return Lint((), texts, test_files)  # nothing to lint: skip locating ruff and its version check
+    return Lint(tuple(_run_ruff(root, {name: file.path for name, file in files.items()}, target, locate_ruff)), texts, test_files)
 
 
-def judge(records: Sequence[RuffFinding], texts: Mapping[str, str], test_files: frozenset[str]) -> list[Finding]:
-    """The records that stay red: an exempt code in a test file is green, and so is one whose noqa_row carries a
+def judge_security(lint: Lint) -> list[Finding]:
+    """The `S` records that stay red: an exempt code in a test file is green, and so is one whose noqa_row carries a
     reasoned noqa naming it. Findings are sorted by path, line and code."""
     comments: dict[str, dict[int, str]] = {}
     findings = []
-    for record in records:
-        if record.path in test_files and record.code in TEST_EXEMPT_CODES:
+    for record in _family(lint, SECURITY_FAMILY):
+        if record.path in lint.test_files and record.code in TEST_EXEMPT_CODES:
             continue
         if record.path not in comments:
-            comments[record.path] = _comments(record.path, texts[record.path])
+            comments[record.path] = _line_comments(_comment_tokens(record.path, lint.texts[record.path]))
         if not _cleared_by_noqa(record.code, comments[record.path].get(record.noqa_line, "")):
-            findings.append(_finding(record))
+            findings.append(_security_finding(record))
+    return _sorted(findings)
+
+
+def judge_print(lint: Lint) -> PrintResult:
+    """The `T20` records an output owner of their file or a reasoned noqa at noqa_row does not clear, and each owner:
+    reported where it clears a finding, a finding where it clears none. Only a file with a print record or an owner
+    prefix is tokenized."""
+    records: dict[str, list[RuffFinding]] = {}
+    for record in _family(lint, PRINT_FAMILY):
+        records.setdefault(record.path, []).append(record)
+    owning = {name for name, text in lint.texts.items() if OWNER_PREFIX in text}
+    findings: list[Finding] = []
+    reports: list[str] = []
+    for name in sorted(records.keys() | owning):
+        file_findings, file_reports = _judge_prints(name, _comment_tokens(name, lint.texts[name]), records.get(name, []))
+        findings += file_findings
+        reports += file_reports
+    return PrintResult(_sorted(findings), tuple(reports))
+
+
+def _judge_prints(name: str, tokens: Sequence[tokenize.TokenInfo], records: Sequence[RuffFinding]) -> tuple[list[Finding], list[str]]:
+    owners = [owner for token in tokens if (owner := _output_owner(token)) is not None]
+    owned = {code for owner in owners for code in owner.noqa.codes}
+    comments = _line_comments(tokens)
+    findings = [
+        _print_finding(record)
+        for record in records
+        if record.code not in owned and not _cleared_by_noqa(record.code, comments.get(record.noqa_line, ""))
+    ]
+    found = {record.code for record in records}
+    reports = [f"{PRINT_RULE}: output owner {name} - {owner.noqa.reason.strip()}" for owner in owners if owner.noqa.codes & found]
+    findings += [_stale_owner(name, owner) for owner in owners if not owner.noqa.codes & found]
+    return findings, reports
+
+
+def _family(lint: Lint, family: str) -> list[RuffFinding]:
+    return [record for record in lint.records if record.code.startswith(family)]
+
+
+def _sorted(findings: list[Finding]) -> list[Finding]:
     return sorted(findings, key=lambda finding: (finding.path, finding.line or 0, finding.reason))
 
 
-def _comments(name: str, text: str) -> dict[int, str]:
-    """Each line's comment as Python's tokenizer reads it, so a `#` inside a string is no comment."""
+def _comment_tokens(name: str, text: str) -> list[tokenize.TokenInfo]:
+    """The comments as Python's tokenizer reads them, so a `#` inside a string is no comment."""
     readline = io.StringIO(text.removeprefix(BYTE_ORDER_MARK), newline=None).readline
     try:
-        return {token.start[0]: token.string for token in tokenize.generate_tokens(readline) if token.type == tokenize.COMMENT}
+        return [token for token in tokenize.generate_tokens(readline) if token.type == tokenize.COMMENT]
     except (tokenize.TokenError, SyntaxError) as error:
         raise LintError(f"cannot read the comments of {name} ({error})") from error
+
+
+def _line_comments(tokens: Sequence[tokenize.TokenInfo]) -> dict[int, str]:
+    return {token.start[0]: token.string for token in tokens}
+
+
+def _output_owner(token: tokenize.TokenInfo) -> OutputOwner | None:
+    """The owner a comment declares: on its own line, as ruff requires of a file-level directive, the one directive in
+    the comment, reasoned, and naming `T20` codes alone."""
+    if token.line[: token.start[1]].strip() or not token.string.startswith(OWNER_PREFIX) or "#" in token.string[1:]:
+        return None
+    noqa = _reasoned_noqa(token.string.removeprefix(OWNER_PREFIX))
+    if noqa is None or not all(code.startswith(PRINT_FAMILY) for code in noqa.codes):
+        return None
+    return OutputOwner(token.start[0], noqa)
 
 
 def _cleared_by_noqa(code: str, comment: str) -> bool:
@@ -121,23 +226,39 @@ def _cleared_by_noqa(code: str, comment: str) -> bool:
     directives = [segment for segment in comment.split("#")[1:] if NOQA_DIRECTIVE.match(segment)]
     if len(directives) != 1:
         return False
-    codes = _reasoned_codes(directives[0])
-    return codes is not None and code in codes
+    noqa = _reasoned_noqa(directives[0])
+    return noqa is not None and code in noqa.codes
 
 
-def _reasoned_codes(directive: str) -> frozenset[str] | None:
-    """The codes a reasoned noqa names, None when the directive is not one."""
+def _reasoned_noqa(directive: str) -> ReasonedNoqa | None:
+    """The codes and reason of a reasoned noqa, None when the directive is not one."""
     reasoned = REASONED_NOQA.fullmatch(directive)
     if reasoned is None or not any(character.isalpha() for character in reasoned["reason"]):
         return None
-    return frozenset(reasoned["codes"].split(", "))
+    return ReasonedNoqa(frozenset(reasoned["codes"].split(", ")), reasoned["reason"])
 
 
-def _finding(record: RuffFinding) -> Finding:
+def _security_finding(record: RuffFinding) -> Finding:
     return Finding(
-        RULE, record.path, record.line, f"{record.code} {record.message}",
+        SECURITY_RULE, record.path, record.line, f"{record.code} {record.message}",
         f"remove the cause, or where it is deliberate end line {record.noqa_line} with "
         f"`# noqa: {record.code} - <reason>`, a reason with a letter and no comma.",
+    )
+
+
+def _print_finding(record: RuffFinding) -> Finding:
+    return Finding(
+        PRINT_RULE, record.path, record.line, f"{record.code} {record.message}",
+        f"write through the program's one output owner; in that owner's file, declare it on a line of its own with "
+        f"`# ruff: noqa: {record.code} - <reason>`, a reason with a letter and no comma.",
+    )
+
+
+def _stale_owner(name: str, owner: OutputOwner) -> Finding:
+    codes = ", ".join(sorted(owner.noqa.codes))
+    return Finding(
+        PRINT_RULE, name, owner.line, f"declares an output owner for {codes}, but the file has no such finding.",
+        "delete the line.",
     )
 
 
@@ -239,7 +360,8 @@ def _record(entry: dict, names: Mapping[str, str]) -> RuffFinding:
     location = entry.get("location")
     row = location.get("row") if isinstance(location, dict) else None
     code, message, noqa_row = entry.get("code"), entry.get("message"), entry.get("noqa_row")
-    if not (isinstance(code, str) and isinstance(message, str) and _is_line(row) and _is_line(noqa_row)):
+    selected = isinstance(code, str) and code.startswith((SECURITY_FAMILY, PRINT_FAMILY))
+    if not (selected and isinstance(message, str) and _is_line(row) and _is_line(noqa_row)):
         raise LintError(f"ruff printed a record quality cannot read in its report on {_name(entry, names)}")
     return RuffFinding(_name(entry, names), code, message, row, noqa_row)
 
