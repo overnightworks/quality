@@ -445,6 +445,10 @@ TWO_CONTRACTS = {"a": FORBIDDEN, "b": FORBIDDEN}
 DUPLICATE_A = contracts_ini({"a": FORBIDDEN}) + ini_section("importlinter:contract:again", {"name": "a", **FORBIDDEN})
 B_CONTRACT_REMOVED = 'import contract "b" removed'
 FILE_REMOVED = "import-linter config in .importlinter removed"
+def exhaustive_layers(*layers):
+    return {"a": {"type": "layers", "layers": list(layers), "containers": ["shop"], "exhaustive": True}}
+
+
 IGNORES_WEB = {**FORBIDDEN, "ignore_imports": ["shop.db -> shop.web"]}
 LOOSENED = "loosened (undeclared): "
 STALE = "declared loosening matches nothing: "
@@ -472,12 +476,14 @@ STALE = "declared loosening matches nothing: "
         ({".importlinter": contracts_ini(TWO_CONTRACTS)},
          {".importlinter": contracts_ini({"b": {**FORBIDDEN, "allow_indirect_imports": True}})}, (),
          [LOOSENED + 'import contract "a" removed', LOOSENED + 'import contract "b" changes allow_indirect_imports', "verdict: red"]),
+        ({"pyproject.toml": contracts_toml(exhaustive_layers("a", "b"))}, {"pyproject.toml": contracts_toml(exhaustive_layers("a", "new", "b"))},
+         (), ["verdict: green"]),
     ],
     ids=[
         "cell 1 undeclared removal", "cell 2 declared removal in pyproject.toml", "cell 5 the file removed",
         "cell 7 the file removed and declared", "cell 6 setup.cfg loses its section", "cell 8 a new ignore",
         "cell 15 root_packages", "cell 18 INI to TOML", "cell 22 adoption", "cell 26 a declaration that matches nothing",
-        "cell 27 several lines, one each",
+        "cell 27 several lines, one each", "a module inserted into an exhaustive layers contract",
     ],
 )
 def test_an_import_contract_loosening_is_a_loosening_the_verdict_names(judged_contracts, base, head, declared, expected):
