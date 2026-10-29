@@ -16,13 +16,14 @@ import argparse
 import re
 import subprocess
 import sys
+from collections.abc import Iterable
 from dataclasses import dataclass
 from importlib.metadata import version
 from pathlib import Path
 
 import yaml
 
-from quality.rules import Rule
+from quality.rules import Rule, RuleRelease
 
 TOOL_REPOSITORY = "overnightworks/quality"
 GATE = Path(".github") / "workflows" / "gate.yml"
@@ -66,7 +67,8 @@ def judge_release(facts: ReleaseFacts) -> list[Verdict]:
         Verdict("installed version", tag is not None and facts.installed_version == tag.removeprefix("v")),
         Verdict("gate refs", tag is not None and bool(facts.gate_refs) and set(facts.gate_refs) == {tag}),
         Verdict(
-            f"rule release facts (missing: {', '.join(facts.rules_without_release) or 'none'})", not facts.rules_without_release
+            f"rule release facts (missing: {', '.join(facts.rules_without_release) or 'none'})",
+            not facts.rules_without_release,
         ),
     ]
 
@@ -91,12 +93,12 @@ def release_tags_at_head() -> tuple[str, ...]:
     return tuple(tag for tag in tags if RELEASE_TAG.fullmatch(tag))
 
 
-def rules_without_release() -> tuple[str, ...]:
+def rules_without_release(releases: Iterable[RuleRelease]) -> tuple[str, ...]:
     """The rules, or later switches, that only main has."""
     return tuple(
-        rule.value
-        for rule in Rule
-        if rule.release.first_release is None or (rule.release.switched is not None and rule.release.switched.release is None)
+        release.rule
+        for release in releases
+        if release.first_release is None or (release.switched is not None and release.switched.release is None)
     )
 
 
@@ -110,12 +112,14 @@ def read_facts() -> ReleaseFacts:
         head_is_on_origin_main=head_is_on_origin_main(fetched),
         installed_version=version("overnightworks-quality"),
         gate_refs=tuple(gate_tool_refs(GATE.read_text(encoding="utf-8"))),
-        rules_without_release=rules_without_release(),
+        rules_without_release=rules_without_release(rule.release for rule in Rule),
     )
 
 
 def main(arguments: list[str]) -> int:
-    argparse.ArgumentParser(description="Check the tagged merge commit at HEAD before its tag is pushed.").parse_args(arguments)
+    argparse.ArgumentParser(description="Check the tagged merge commit at HEAD before its tag is pushed.").parse_args(
+        arguments
+    )
     verdicts = judge_release(read_facts())
     print("\n".join(verdict.line() for verdict in verdicts))
     return 0 if all(verdict.holds for verdict in verdicts) else 1

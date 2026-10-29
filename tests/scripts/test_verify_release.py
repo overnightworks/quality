@@ -4,8 +4,9 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from verify_release import ReleaseFacts, gate_tool_refs, judge_release
+from verify_release import ReleaseFacts, gate_tool_refs, judge_release, rules_without_release
 
+from quality.rules import RuleRelease, Switch, SwitchChange
 from tests.support.git_repositories import GIT_IDENTITY
 
 SCRIPT = Path(__file__).parents[2] / "scripts" / "verify_release.py"
@@ -45,9 +46,25 @@ def test_a_release_is_refused_naming_the_check_that_fails(facts, check):
     assert failed == [check]
 
 
+@pytest.mark.parametrize(
+    ("release", "missing"),
+    [
+        (RuleRelease("alpha", None, Switch.ALWAYS), ("alpha",)),
+        (RuleRelease("alpha", "v1.0.0", Switch.ALWAYS, SwitchChange(None, Switch.REPORT_ONLY)), ("alpha",)),
+        (RuleRelease("alpha", "v1.0.0", Switch.ALWAYS, SwitchChange("v1.1.0", Switch.REPORT_ONLY)), ()),
+        (RuleRelease("alpha", "v1.0.0", Switch.ALWAYS), ()),
+    ],
+    ids=["first release missing", "switch release missing", "switch released", "no switch"],
+)
+def test_the_rules_without_a_released_first_release_or_switch_are_named(release, missing):
+    assert rules_without_release([release]) == missing
+
+
 @pytest.mark.parametrize("tags", [(), ("v1.2.3", "v1.2.4")], ids=["none", "two"])
 def test_a_release_without_exactly_one_tag_at_head_fails_every_check_that_needs_the_tag(tags):
-    failed = [verdict.check for verdict in judge_release(replace(RELEASE, release_tags_at_head=tags)) if not verdict.holds]
+    failed = [
+        verdict.check for verdict in judge_release(replace(RELEASE, release_tags_at_head=tags)) if not verdict.holds
+    ]
     assert failed[0].startswith("one release tag at HEAD (found: ")
     assert failed[1:] == ["installed version", "gate refs"]
 
@@ -66,7 +83,9 @@ def git(repo: Path, *arguments: str) -> None:
 
 
 def run_script(repo: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run([sys.executable, "-I", str(SCRIPT), *arguments], cwd=repo, capture_output=True, text=True, check=False)
+    return subprocess.run(
+        [sys.executable, "-I", str(SCRIPT), *arguments], cwd=repo, capture_output=True, text=True, check=False
+    )
 
 
 @pytest.fixture
