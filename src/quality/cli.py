@@ -171,6 +171,11 @@ def emit(*lines: str, file: TextIO | None = None) -> None:
         print(printable(line), file=file)
 
 
+def emit_finding(finding: Finding) -> None:
+    """A finding's rendered lines; `render` escapes every newline of repository text, so the split finds only its own."""
+    emit(*render(finding).split("\n"))
+
+
 def run_hygiene_check(path: Path, engine_dir: Path | None, locate_ruff: Callable[[], str]) -> int:
     try:
         result = run_hygiene(path, engine_dir, locate_ruff)
@@ -182,7 +187,7 @@ def run_hygiene_check(path: Path, engine_dir: Path | None, locate_ruff: Callable
         emit(report)
     for verdict in result.verdicts:
         for finding in verdict.findings:
-            print(render(finding))
+            emit_finding(finding)
         if verdict.refusal is not None:
             emit(f"hygiene: {verdict.rule} {verdict.refusal.label} - {verdict.refusal}", file=sys.stderr)
     emit(f"hygiene: {hygiene_summary(result)}{coverage_note(engine_dir)}")
@@ -257,7 +262,7 @@ def run_scan_staged(path: Path, engine_dir: Path, read_pins: Callable[[], dict[s
         return EXIT_CANNOT_JUDGE
     print_secret_allowances(result.allowed, result.unused_allowances)
     for finding in result.findings:
-        print(render(finding))
+        emit_finding(finding)
     emit(f"scan-staged: {len(result.findings)} finding(s)" if result.findings else "scan-staged: clean")
     return EXIT_FINDINGS if result.findings else EXIT_CLEAN
 
@@ -305,7 +310,7 @@ def run_sonar_findings(transport: Transport, sleep: Sleep) -> int:
         emit(f"sonar: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     for finding in result.findings.listed:
-        print(render(finding))
+        emit_finding(finding)
     emit(*(headline(finding) for finding in result.findings.set_aside))
     failed_conditions, disclosure = result.gate_lines()
     emit(*failed_conditions, file=sys.stderr)

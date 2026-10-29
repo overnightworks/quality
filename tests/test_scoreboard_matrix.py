@@ -341,7 +341,7 @@ def test_a_pinned_gate_has_not_released_test_layout():
     assert rule_cell(TEST_LAYOUT, release, declared(has_judged_project=True)) == "not released"
 
 
-@pytest.mark.parametrize("rule_id", ["test-import", "python-floor", "python-security"])
+@pytest.mark.parametrize("rule_id", ["test-import", "python-floor", "python-security", "python-print"])
 @pytest.mark.parametrize(
     ("pinned", "words"), [(False, "enforced"), (True, "not released")], ids=["main", "pinned"]
 )
@@ -474,4 +474,4 @@ def test_the_heading_sentence_names_the_rules_the_oldest_release_always_enforces
     """#125 cell 24, E8: the five rules get a sentence, not five columns."""
     _, output = scoreboard(public("any", {}), tags=first_releases())
     assert "Every gate release enforces env-file, compose-port, secret, workflow-lint and workflow-security." in output
-    assert MATRIX_COLUMNS[5:] == ("claude-md", "root-layout", "file-suffix", "script-name", "script-header", "test-layout", "test-import", "python-floor", "python-security", "advisory", "size", "import-contract", "clone")
+    assert MATRIX_COLUMNS[5:] == ("claude-md", "root-layout", "file-suffix", "script-name", "script-header", "test-layout", "test-import", "python-floor", "python-security", "python-print", "advisory", "size", "import-contract", "clone")

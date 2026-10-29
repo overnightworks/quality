@@ -8,6 +8,8 @@ it; one line per check says which, and the tag judged is in the first. Exit 2 fo
 `-h` and `--help` print the usage and exit 0 before any check.
 """
 
+# ruff: noqa: T201 - this script prints its verdict lines as its one output
+
 import argparse
 import re
 import subprocess

@@ -8,7 +8,7 @@ from ruff import find_ruff_bin
 from quality import cli
 
 # The rules a run without engines judges, in run order; a new rule is added here once.
-FILE_RULES = "env-file, compose-port, size, clone, import-contract, claude-md, root-layout, file-suffix, script-name, script-header, test-layout, test-import, python-floor, python-security"
+FILE_RULES = "env-file, compose-port, size, clone, import-contract, claude-md, root-layout, file-suffix, script-name, script-header, test-layout, test-import, python-floor, python-security, python-print"
 CLEAN_LINE = f"hygiene: clean ({FILE_RULES})"
 ENGINE_RULES = "secret, workflow-lint, workflow-security, advisory"
 
