@@ -25,6 +25,7 @@ from quality import (
     architecture,
     checkout,
     clones,
+    compose,
     config,
     engines,
     hygiene,
@@ -124,7 +125,7 @@ class RuleRelease:
 # In cell order. The tripwire test holds the ids equal to the rules `hygiene.run_hygiene` judges.
 RULES = (
     RuleRelease(hygiene.ENV_FILE, FIRST_RELEASE, Switch.ALWAYS),
-    RuleRelease(hygiene.COMPOSE_PORT, FIRST_RELEASE, Switch.ALWAYS),
+    RuleRelease(compose.COMPOSE_PORT, FIRST_RELEASE, Switch.ALWAYS),
     RuleRelease(engines.LEAK_RULE, FIRST_RELEASE, Switch.ALWAYS),
     RuleRelease(engines.WORKFLOW_LINT, FIRST_RELEASE, Switch.ALWAYS),
     RuleRelease(engines.WORKFLOW_SECURITY, FIRST_RELEASE, Switch.ALWAYS),

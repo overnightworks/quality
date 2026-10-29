@@ -1,3 +1,4 @@
+import re
 import unicodedata
 from collections.abc import Callable
 from pathlib import Path
@@ -27,3 +28,12 @@ def hygiene_output(
     code = cli.main(["hygiene", str(path)], locate_ruff=locate_ruff)
     captured = capsys.readouterr()
     return code, captured.out + captured.err
+
+
+def compose(*port_lines: str) -> dict[str, str]:
+    body = "".join(f"      {line}\n" for line in port_lines)
+    return {"compose.yaml": f"services:\n  web:\n    image: x\n    ports:\n{body}"}
+
+
+def assert_refusal(output: str, rule: str, path: str) -> None:
+    assert re.search(rf"^{rule} {re.escape(path)} - \S.*\n  Fix: \S", output, re.MULTILINE), output
