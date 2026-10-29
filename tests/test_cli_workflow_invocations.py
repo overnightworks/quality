@@ -6,7 +6,7 @@ import yaml
 
 from quality import cli
 
-WORKFLOWS = Path(__file__).parents[2] / ".github" / "workflows"
+WORKFLOWS = Path(__file__).parents[1] / ".github" / "workflows"
 
 
 def quality_invocations() -> list[tuple[str, str, str, list[str]]]:
