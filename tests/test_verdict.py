@@ -10,9 +10,8 @@ import pytest
 
 from quality import __version__, cli
 from quality.config import CONFIG_PATH, LegacyMode
-from quality.hygiene import CannotJudge
 from quality.ratchet import BASELINE_PATH, NO_RENAMES
-from quality.report import printable
+from quality.report import CannotJudge, printable
 from quality.verdict import NO_BASE_SETTINGS, GateSettings, Side, judge, read_base, read_jobs
 from tests.support.advisories import allowance_config
 from tests.support.git_repositories import GIT_IDENTITY, head_commit, put

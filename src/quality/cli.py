@@ -16,7 +16,6 @@ from quality import __version__, clones, engines, process, ratchet, repository, 
 from quality.config import Allowance, ConfigError, read_gate_settings
 from quality.emergency import Ask, GhRunner, RemoteFor, github_remote, run_emergency_merge, run_gh
 from quality.hygiene import (
-    CannotJudge,
     HygieneResult,
     Outcome,
     read_baseline,
@@ -26,7 +25,7 @@ from quality.hygiene import (
     tracked_files,
     work_tree_top,
 )
-from quality.report import Finding, headline, printable, render
+from quality.report import CannotJudge, Finding, headline, printable, render
 from quality.sonar import (
     DEPENDABOT_CONFIG,
     TASK_FILE,

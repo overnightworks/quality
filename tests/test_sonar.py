@@ -8,7 +8,7 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 
 from quality import cli, sonar
-from quality.hygiene import CannotJudge
+from quality.report import CannotJudge
 from tests.support.sonar import (
     ANALYSED_MAIN,
     FEATURE_ENVIRONMENT,

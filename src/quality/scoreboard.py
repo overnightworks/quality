@@ -30,6 +30,7 @@ from quality import (
     layout,
     process,
     ratchet,
+    report,
     repository,
 )
 
@@ -413,7 +414,7 @@ def measure_public(url: str) -> Row:
         try:
             tracked = hygiene.tracked_files(clone)
             sources = hygiene.read_sources(clone, tracked)
-        except hygiene.CannotJudge as error:
+        except report.CannotJudge as error:
             return Unjudged(name, f"cannot measure ({str(error).replace(str(clone), name)})")
         workflows = read_workflows(clone, tracked)
         declared = read_declared(clone, tracked)
@@ -436,7 +437,7 @@ def read_declared(clone: Path, tracked: list[str]) -> Declared:
         baseline = hygiene.read_baseline(clone)
         has_baseline = baseline is not None
         has_clone_table = baseline is not None and baseline.clones is not None
-    except (hygiene.CannotJudge, ratchet.SizeError):
+    except (report.CannotJudge, ratchet.SizeError):
         unreadable.add(ratchet.BASELINE_PATH)
     try:
         has_import_config = find_import_config(clone, tracked)

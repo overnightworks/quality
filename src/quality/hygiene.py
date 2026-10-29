@@ -28,7 +28,7 @@ from quality.config import (
     read_root_allowances,
     read_secret_allowances,
 )
-from quality.report import Finding, shell_word
+from quality.report import CannotJudge, Finding, Unparsable, shell_word
 
 ENV_FILE = "env-file"
 COMPOSE_PORT = "compose-port"
@@ -122,18 +122,6 @@ def _read_only_true_and_false_as_boolean() -> None:
 
 
 _read_only_true_and_false_as_boolean()
-
-
-class CannotJudge(Exception):
-    """The repository cannot be examined; this is never a clean result."""
-
-    label = "cannot judge"
-
-
-class Unparsable(CannotJudge):
-    """A tracked file Python cannot decode or parse; only an operating-system read error is `cannot judge`."""
-
-    label = "unparsable"
 
 
 def _refusal(path: Path, because: str) -> CannotJudge:
