@@ -1,8 +1,0 @@
-claim_id = "a59985557e434a9aa77d074a7304166a"
-agent = "Claude 7bbab0b4-f923-4f09-a5c2-6fe15143932e"
-role = "builder"
-base = "929d9eeea1393441d35df2bf7d98f226f2a9daa0"
-branch = "claude/issue-256-exit-as-interrupted"
-scope = ["README.md", "src/quality/cli.py", "src/quality/process.py", "tests/test_cli_output.py"]
-opened_commit = "c1302f623fbf4b4b1a55c40fa2e6088e230b0c25"
-whole_reason = "CO-b: Ctrl-C ends quality as interrupted (130 as a shell reads it) without a traceback; the entry, its process helper, README's exit line and two tests change together."
