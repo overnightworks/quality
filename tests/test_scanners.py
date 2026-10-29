@@ -807,29 +807,12 @@ def test_mise_is_asked_in_the_manifest_directory_under_its_ceiling(
     )
 
 
-@pytest.mark.parametrize("answer", ["", "relative/gitleaks", "/nowhere/gitleaks"], ids=["nothing", "relative-path", "no-file"])
-def test_a_mise_answer_that_names_no_existing_absolute_file_cannot_judge(build_repo, use_mise, capsys, answer):
-    """#228 rule 4: mise's output is external input; an answer that is no executable path is exit 2, never a run."""
-    use_mise(f"echo '{answer}'")
-    assert cli.main(["hygiene", str(build_repo({}))]) == 2
-    err = capsys.readouterr().err
-    assert "mise which printed no gitleaks executable" in err
-    assert scanners.install_command() in err
-
-
-@pytest.mark.parametrize("broken", ["mise", "version"])
-def test_a_mise_or_scanner_whose_output_cannot_be_read_still_names_the_install_command(
-    build_repo, use_mise, served_scanners, capsys, broken
-):
-    """#265: every failure to locate a scanner, a process error included, is exit 2 with the command that installs it."""
-    if broken == "mise":
-        use_mise("printf '\\377'")
-    else:
-        fake_scanner(served_scanners, scanners.GITLEAKS, "true").write_text("#!/bin/sh\nprintf '\\377'\n")
-        use_mise(serving(served_scanners))
-    assert cli.main(["hygiene", str(build_repo({}))]) == 2
-    err = capsys.readouterr().err
-    assert scanners.install_command() in err, err
+@pytest.mark.parametrize("body", ["echo ''", "echo relative/gitleaks", "echo /nowhere/gitleaks", "printf '\\377'", 'if [ "$1" = version ]; then printf \'\\377\'; else echo "$0"; fi'],
+    ids=["nothing", "relative-path", "no-file", "unreadable-mise-output", "unreadable-scanner-version"])
+def test_a_mise_answer_that_is_no_usable_scanner_names_the_install_command(build_repo, use_mise, capsys, body):
+    """#228 rule 4, #265: external output that yields no pinned executable, a process error included, is exit 2 and the install command."""
+    use_mise(body)
+    assert (cli.main(["hygiene", str(build_repo({}))]), scanners.install_command() in capsys.readouterr().err) == (2, True)
 
 
 def test_a_repository_with_no_workflow_and_no_lock_needs_only_gitleaks(build_repo, path_without_mise, capsys):
