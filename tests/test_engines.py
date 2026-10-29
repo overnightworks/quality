@@ -539,7 +539,7 @@ def test_unreadable_or_inconsistent_workflow_result_cannot_be_judged(engine, rep
 
 
 def fake_workflow_engines(tmp_path: Path, on_scan: str) -> tuple[Path, Locator]:
-    """A fake gitleaks and actionlint in an engine directory, and the locator of a fake zizmor, all running `on_scan`."""
+    """A fake gitleaks that always writes a clean report, and a fake actionlint and zizmor running `on_scan`."""
     engine_dir = fake_gitleaks(tmp_path / "fake", on_scan='echo "[]" > "$report"; exit 0')
     fake_engine(engine_dir, "actionlint", on_scan)
     return engine_dir, fake_zizmor(tmp_path / "zizmor", on_scan)
