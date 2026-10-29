@@ -28,10 +28,7 @@ def quality_invocations() -> list[tuple[str, str, str, list[str]]]:
 )
 def test_every_quality_invocation_in_a_workflow_parses_with_the_current_parser(workflow, step, line, argv):
     """#228 invariant 4: a workflow never calls quality with arguments the parser refuses."""
-    try:
-        cli.build_parser().parse_args(argv)
-    except SystemExit:
-        pytest.fail(f"{workflow}, step {step!r}: the parser refuses `{line}`")
+    cli.build_parser().parse_args(argv)
 
 
 def test_the_invocations_include_the_gate_hygiene_step():
