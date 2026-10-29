@@ -492,8 +492,17 @@ def test_an_import_contract_loosening_is_a_loosening_the_verdict_names(judged_co
     assert judged_contracts(base, head, declared) == (0 if expected == ["verdict: green"] else 1, expected)
 
 
-def forbidden_with(**changes) -> dict:
-    return {**FORBIDDEN, **changes}
+def forbidden_with(**fields) -> dict:
+    return {**FORBIDDEN, **fields}
+
+
+def contract_of(type_name: str, **fields) -> dict:
+    defaults = {
+        "protected": {"type": "protected", "protected_modules": ["shop.db"], "allowed_importers": ["shop.api"]},
+        "independence": {"type": "independence", "modules": ["shop.web", "shop.api"]},
+        "layers": {"type": "layers", "layers": ["shop.web", "shop.db"], "containers": ["shop"]},
+    }[type_name]
+    return {**defaults, **fields}
 
 
 def toml_pair(base: dict, head: dict) -> tuple[dict, dict]:
@@ -504,34 +513,30 @@ def changes(field: str) -> list[str]:
     return [LOOSENED + f'import contract "a" changes {field}', "verdict: red"]
 
 
-INDIRECT = forbidden_with(allow_indirect_imports=True)
-PROTECTED = {"type": "protected", "protected_modules": ["shop.db"], "allowed_importers": ["shop.api"]}
-INDEPENDENCE = {"type": "independence", "modules": ["shop.web", "shop.api"]}
-LAYERS = {"type": "layers", "layers": ["shop.web", "shop.db"], "containers": ["shop"]}
 GREEN = ["verdict: green"]
 
 
 @pytest.mark.parametrize(
     ("base", "head", "declared", "expected"),
     [
-        (*toml_pair(INDIRECT, FORBIDDEN), (), GREEN),
-        ({".importlinter": contracts_ini({"a": INDIRECT})}, {".importlinter": contracts_ini({"a": FORBIDDEN})}, (), GREEN),
+        (*toml_pair(forbidden_with(allow_indirect_imports=True), FORBIDDEN), (), GREEN),
+        ({".importlinter": contracts_ini({"a": forbidden_with(allow_indirect_imports=True)})}, {".importlinter": contracts_ini({"a": FORBIDDEN})}, (), GREEN),
         (*toml_pair(FORBIDDEN, forbidden_with(source_modules=["shop.db", "shop.api"])), (), GREEN),
         (*toml_pair(FORBIDDEN, forbidden_with(forbidden_modules=["shop.web", "shop.api"])), (), GREEN),
         (*toml_pair(FORBIDDEN, forbidden_with(forbidden_modules=["shop.web", "shop.*"])), (), GREEN),
-        (*toml_pair(INDEPENDENCE, {**INDEPENDENCE, "modules": ["shop.web", "shop.api", "shop.db"]}), (), GREEN),
-        (*toml_pair(INDIRECT, forbidden_with(source_modules=["shop.db", "shop.api"], forbidden_modules=["shop.web", "shop.api"])),
+        (*toml_pair(contract_of("independence"), contract_of("independence", modules=["shop.web", "shop.api", "shop.db"])), (), GREEN),
+        (*toml_pair(forbidden_with(allow_indirect_imports=True), forbidden_with(source_modules=["shop.db", "shop.api"], forbidden_modules=["shop.web", "shop.api"])),
          (), GREEN),
         (*toml_pair(FORBIDDEN, forbidden_with(forbidden_modules=[])), (), changes("forbidden_modules")),
-        (*toml_pair(INDEPENDENCE, {**INDEPENDENCE, "modules": ["shop.web"]}), (), changes("modules")),
+        (*toml_pair(contract_of("independence"), contract_of("independence", modules=["shop.web"])), (), changes("modules")),
         (*toml_pair(FORBIDDEN, forbidden_with(source_modules=["shop.api"])), (), changes("source_modules")),
         (*toml_pair(FORBIDDEN, forbidden_with(source_modules=["shop.api", "shop.web"])), (), changes("source_modules")),
         (*toml_pair(forbidden_with(forbidden_modules=["shop.web"]), forbidden_with(forbidden_modules=["shop.*"])), (),
          changes("forbidden_modules")),
         (*toml_pair(FORBIDDEN, forbidden_with(source_modules=["shop.db", "shop.api"], allow_indirect_imports=True)), (),
          changes("allow_indirect_imports")),
-        (*toml_pair(LAYERS, {**LAYERS, "exhaustive": True}), (), changes("exhaustive")),
-        (*toml_pair(PROTECTED, {**PROTECTED, "protected_modules": ["shop.db", "shop.web"]}), (), changes("protected_modules")),
+        (*toml_pair(contract_of("layers"), contract_of("layers", exhaustive=True)), (), changes("exhaustive")),
+        (*toml_pair(contract_of("protected"), contract_of("protected", protected_modules=["shop.db", "shop.web"])), (), changes("protected_modules")),
         (*toml_pair(FORBIDDEN, forbidden_with(as_packages=False)), (), changes("as_packages")),
         (*toml_pair(FORBIDDEN, forbidden_with(source_modules=["shop.db", "shop.api"])), ('import contract "a" changes source_modules',),
          [STALE + 'import contract "a" changes source_modules', "verdict: red"]),
@@ -546,7 +551,7 @@ GREEN = ["verdict: green"]
     ],
 )
 def test_a_change_that_only_forbids_more_is_no_loosening_and_every_other_change_is(judged_contracts, base, head, declared, expected):
-    """#252 (operator ruling 29.10.2026, „Ja, Liste der Verschärfungen“): the listed tightenings are green, all else stays red."""
+    """The listed tightenings are green; every other change of a contract field stays a loosening."""
     assert judged_contracts(base, head, declared) == (0 if expected == GREEN else 1, expected)
 
 
