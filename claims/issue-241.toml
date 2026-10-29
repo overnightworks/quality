@@ -1,0 +1,8 @@
+claim_id = "ae9a8a6b8da64680b4b3fddae940fd7e"
+agent = "Claude 7bbab0b4-f923-4f09-a5c2-6fe15143932e"
+role = "builder"
+base = "38cb0b9cc0bd37428f48058d771fadfe6fd616c4"
+branch = "claude/issue-241-web-transport"
+scope = ["AGENTS.md", "pyproject.toml", "src/quality/cli.py", "src/quality/sonar.py", "src/quality/verdict.py", "src/quality/web.py", "tests/test_sonar.py", "tests/test_web.py"]
+opened_commit = "04c094b85f7d2980ca1cee5cb4556e0b2754a4a6"
+whole_reason = "The HTTP transport moves to its own owner; with no alias allowed, sonar, verdict, cli, the layer line, AGENTS.md and the moved test change together."
