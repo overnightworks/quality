@@ -1,5 +1,6 @@
 import importlib.metadata
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -29,12 +30,12 @@ def test_an_exact_requirement_gives_its_version(asked, lines, version):
 
 @pytest.mark.parametrize(
     "lines",
-    [["x>=1"], ["x==1,<2"], ["x==1.2.*"], ["x===1.2.3"], ["y==1"], []],
+    [["scanner>=1"], ["scanner==1,<2"], ["scanner==1.2.*"], ["scanner===1.2.3"], ["other==1"], []],
     ids=["lower bound", "two specifiers", "wildcard", "arbitrary equality", "another name", "no requirement"],
 )
 def test_a_requirement_that_is_not_one_exact_version_is_a_packaging_defect(lines):
-    with pytest.raises(UnpinnedDependency, match="x"):
-        installation.exact_version(lines, "x")
+    with pytest.raises(UnpinnedDependency, match=re.escape("pin scanner ")):
+        installation.exact_version(lines, "scanner")
 
 
 def test_a_dependency_quality_does_not_require_is_a_packaging_defect():
