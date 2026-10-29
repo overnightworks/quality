@@ -1,0 +1,8 @@
+claim_id = "25e1c9f226c9494d881b0a5c96132d3f"
+agent = "Claude 7bbab0b4-f923-4f09-a5c2-6fe15143932e"
+role = "builder"
+base = "f19dd7a364fd877ae4d32b7c7b9e25c5c324d4e5"
+branch = "claude/issue-248-installed-scanners"
+scope = ["AGENTS.md", "docs/commands.md", "pyproject.toml", "quality/baseline.toml", "src/quality/cli.py", "src/quality/engines.py", "src/quality/engines.toml", "src/quality/hygiene.py", "src/quality/installation.py", "src/quality/python_lint.py", "tests/support/engines.py", "tests/support/hygiene.py", "tests/test_engines.py", "tests/test_hygiene.py", "tests/test_installation.py", "tests/test_python_lint.py", "tests/test_scoreboard_matrix.py", "uv.lock"]
+opened_commit = "aefa7bc35a0d98a4ee8af2cee514fb6357448035"
+whole_reason = "zizmor stops being a downloaded engine and becomes a pinned dependency of quality's package, and ruff and zizmor are found and version-checked through one owner of quality's own installation, which production and tests both use. The version source moves from engines.toml to pyproject.toml and uv.lock in one step, and the locator threads from cli through hygiene into engines and python_lint, so every file changes together."
