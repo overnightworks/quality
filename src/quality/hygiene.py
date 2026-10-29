@@ -1,6 +1,4 @@
-import os
 import re
-import subprocess
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -12,7 +10,18 @@ import yaml
 from packaging.specifiers import Specifier, SpecifierSet
 from packaging.version import Version
 
-from quality import advisories, architecture, clones, engines, layout, process, python_lint, ratchet, repository
+from quality import (
+    advisories,
+    architecture,
+    checkout,
+    clones,
+    engines,
+    layout,
+    process,
+    python_lint,
+    ratchet,
+    repository,
+)
 from quality.config import (
     CONFIG_PATH,
     Allowance,
@@ -28,7 +37,7 @@ from quality.config import (
     read_root_allowances,
     read_secret_allowances,
 )
-from quality.report import Finding, shell_word
+from quality.report import CannotJudge, Finding, Unparsable, shell_word
 
 ENV_FILE = "env-file"
 COMPOSE_PORT = "compose-port"
@@ -46,8 +55,6 @@ PYTHON_TARGET = Version("3.14")
 LOWER_BOUND_OPERATORS = frozenset({">=", ">", "~=", "==", "==="})
 WORKFLOW_RULE_IDS = tuple(engines.WORKFLOW_ENGINES)
 ENGINE_RULE_IDS = (engines.LEAK_RULE, *WORKFLOW_RULE_IDS, advisories.RULE)
-WORKFLOW_DIRECTORY = PurePosixPath(".github/workflows")
-YAML_SUFFIXES = (".yml", ".yaml")
 
 CLAUDE_NESTED_NAME = ".claude/claude.md"
 CLAUDE_FILE_NAMES = frozenset({"claude.md", CLAUDE_NESTED_NAME})
@@ -70,7 +77,6 @@ ROOT_BASE_ENTRIES = ROOT_BASE_FILES | ROOT_BASE_DIRECTORIES
 LOOPBACK = "127.0.0.1"
 LOOPBACK_HOSTS = (LOOPBACK, "::1")
 ENV_TEMPLATE_SUFFIX = ".example"
-INDEX_MODE = re.compile(r"[0-7]{6}")
 INTERPOLATION = re.compile(r"\$\{[^}]*\}")
 COMPOSE_WORD = "compose"
 HOST_NETWORK_MODE = "host"
@@ -124,72 +130,6 @@ def _read_only_true_and_false_as_boolean() -> None:
 _read_only_true_and_false_as_boolean()
 
 
-class CannotJudge(Exception):
-    """The repository cannot be examined; this is never a clean result."""
-
-    label = "cannot judge"
-
-
-class Unparsable(CannotJudge):
-    """A tracked file Python cannot decode or parse; only an operating-system read error is `cannot judge`."""
-
-    label = "unparsable"
-
-
-def _refusal(path: Path, because: str) -> CannotJudge:
-    word = shell_word(str(path))
-    says_why = f"`git -C {word} status` says why" if word else "`git status` run inside it says why"
-    return CannotJudge(f"{path} is not a readable git repository: {because} ({says_why})")
-
-
-def _refusal_without_git(path: Path, what: str, reason: object) -> CannotJudge:
-    return CannotJudge(f"{path} is not a readable git repository: {what} ({reason})")
-
-
-def _git_listing(path: Path, command: list[str]) -> subprocess.CompletedProcess:
-    """git's answer for the repository at `path`; one that refuses, or does not run, is a repository git cannot read."""
-    try:
-        done = process.run(["git", "-C", str(path.absolute()), *command], encoding=None)
-    except OSError as error:
-        raise _refusal_without_git(path, "the working directory cannot be read", repository.os_error_reason(error)) from error
-    except process.ProcessError as error:
-        reason = repository.os_error_reason(error.__cause__) if isinstance(error.__cause__, OSError) else error
-        raise _refusal_without_git(path, "git did not run", reason) from error
-    if done.returncode != 0:
-        # git's own words name the checkout it resolved, so only the exit code is printed and git is asked again.
-        raise _refusal(path, f"git {command[0]} exited {done.returncode}")
-    return done
-
-
-def work_tree_top(path: Path) -> Path:
-    """The top of the work tree `path` lies in, as `path` reaches it; `--show-cdup` never prints where the checkout lies."""
-    answer = _git_listing(path, ["rev-parse", "--is-inside-work-tree", "--show-cdup"]).stdout
-    inside, _, cdup = os.fsdecode(answer).strip().partition("\n")
-    if inside != "true":
-        raise _refusal(path, "it lies outside any work tree")
-    return path / cdup
-
-
-def tracked_files(root: Path) -> list[str]:
-    listing = _git_listing(root, ["ls-files", "-z", "--"])
-    return [os.fsdecode(name) for name in listing.stdout.split(b"\0") if name]
-
-
-def index_modes(root: Path) -> dict[str, str]:
-    """Each tracked path's index mode; the index is the only source of a mode, and a link is never followed."""
-    listing = _git_listing(root, ["ls-files", "-z", "-s", "--"])
-    modes: dict[str, str] = {}
-    for record in listing.stdout.split(b"\0"):
-        if not record:
-            continue
-        fields, tab, name = os.fsdecode(record).partition("\t")
-        parts = fields.split(" ")
-        if not tab or len(parts) != 3 or not INDEX_MODE.fullmatch(parts[0]):
-            raise CannotJudge(f"git ls-files -s printed an index record quality cannot read in {root}")
-        modes[name] = parts[0]
-    return modes
-
-
 def _untrack_fix(name: str) -> str:
     word = shell_word(name)
     if word is None:
@@ -218,7 +158,7 @@ def _is_env_file(name: str) -> bool:
 def is_compose_file(name: str) -> bool:
     """A YAML file whose name holds the word `compose` between `.`, `-` or `_`: `docker-compose.ci.yml`, not `composer.yml`."""
     path = PurePosixPath(name)
-    return path.suffix.lower() in YAML_SUFFIXES and COMPOSE_WORD in NAME_SEPARATORS.split(path.stem.casefold())
+    return path.suffix.lower() in checkout.YAML_SUFFIXES and COMPOSE_WORD in NAME_SEPARATORS.split(path.stem.casefold())
 
 
 def check_compose_ports(root: Path, tracked: list[str], allowances: Sequence[ComposeAllowance]) -> list[Finding]:
@@ -228,7 +168,7 @@ def check_compose_ports(root: Path, tracked: list[str], allowances: Sequence[Com
     findings = []
     host_networked: set[tuple[str, str]] = set()
     for name in [name for name in tracked if is_compose_file(name)]:
-        if _judged(repository.is_on_disk, root, name) and (text := _judged(repository.read_text, root, name)) is not None:
+        if checkout.judged(repository.is_on_disk, root, name) and (text := checkout.judged(repository.read_text, root, name)) is not None:
             file_findings, services = _compose_file_findings(name, text, {service for file, service in declared if file == name})
             findings.extend(file_findings)
             host_networked.update((name, service) for service in services)
@@ -251,23 +191,23 @@ def check_claude_md(root: Path, tracked: list[str]) -> list[Finding]:
 
 def _claude_md_problem(root: Path, name: str, agents_tracked: bool) -> tuple[str, str] | None:
     """The reason and the fix for a CLAUDE.md that is not clean; None when it is clean or gone from the tree."""
-    is_link = _judged(repository.is_symlink, root, name)
+    is_link = checkout.judged(repository.is_symlink, root, name)
     if name.casefold() == CLAUDE_NESTED_NAME:
-        if not (is_link or _judged(repository.is_on_disk, root, name)):
+        if not (is_link or checkout.judged(repository.is_on_disk, root, name)):
             return None
         return (f"{name} gives Claude guidance Codex and Grok never read.",
                 f"move its lines into {AGENTS_FILE} and delete {name}.")
     if is_link:
         return (f"{name} is a symlink, not a file holding @AGENTS.md.",
                 f"replace the link with a file whose only line is @AGENTS.md; {AGENTS_FILE} stays as it is.")
-    on_disk = _judged(repository.is_on_disk, root, name)
-    content = _judged(repository.read_bytes, root, name) if on_disk else None
+    on_disk = checkout.judged(repository.is_on_disk, root, name)
+    content = checkout.judged(repository.read_bytes, root, name) if on_disk else None
     if content is None:
         return None
     if content not in CLAUDE_IMPORTS:
         return (f"{name} is not exactly @AGENTS.md, so Claude reads other guidance than Codex and Grok.",
                 f"move its own lines into {AGENTS_FILE}, then leave @AGENTS.md as its only line, or delete it.")
-    if not (agents_tracked and _judged(repository.is_on_disk, root, AGENTS_FILE)):
+    if not (agents_tracked and checkout.judged(repository.is_on_disk, root, AGENTS_FILE)):
         return (f"{name} imports {AGENTS_FILE}, which the repository does not hold.",
                 f"add {AGENTS_FILE} with the repository's guidance, or delete {name}.")
     return None
@@ -381,10 +321,10 @@ def check_python_floor(pyprojects: dict[str, bytes], allowances: Sequence[Python
 
 
 def _python_floor_result(root: Path) -> FloorResult:
-    modes = index_modes(root)
+    modes = checkout.index_modes(root)
     names = [str(PurePosixPath(project.directory) / layout.PROJECT_FILE) for project in layout.python_projects(modes)]
-    present = _on_disk(root, [name for name in names if modes[name] != layout.GITLINK_MODE])
-    return check_python_floor(_read_existing(repository.read_bytes, root, present), _declared(read_python_allowances, root))
+    present = checkout.on_disk(root, [name for name in names if modes[name] != layout.GITLINK_MODE])
+    return check_python_floor(checkout.read_existing(repository.read_bytes, root, present), _declared(read_python_allowances, root))
 
 
 def _stale_root_declaration(entry: str, tracked_entries: set[str]) -> Finding:
@@ -402,24 +342,6 @@ def _declared[T](read: Callable[[Path], T], root: Path) -> T:
         return read(root)
     except ConfigError as error:
         raise CannotJudge(str(error)) from error
-
-
-def _judged[T](ask: Callable[[Path, str], T], root: Path, name: str) -> T:
-    """Asks the repository reader; a file it cannot use cannot be judged."""
-    try:
-        return ask(root, name)
-    except repository.RepositoryFileError as error:
-        raise CannotJudge(str(error)) from error
-
-
-def _on_disk(root: Path, names: Sequence[str]) -> list[str]:
-    """The tracked names the tree holds: a file deleted, sparse or linked to nowhere is gone, one the filesystem refuses is not."""
-    return [name for name in names if _judged(repository.is_on_disk, root, name)]
-
-
-def _read_existing[T](read: Callable[[Path, str], T | None], root: Path, names: Sequence[str]) -> dict[str, T]:
-    """The content of each name the tree holds; a name that vanished since it was listed is gone."""
-    return {name: content for name in names if (content := _judged(read, root, name)) is not None}
 
 
 def _compose_file_findings(name: str, text: str, declared_services: set[str]) -> tuple[list[Finding], list[str]]:
@@ -520,13 +442,6 @@ def _describe(port: object) -> str | None:
     return str(port) if isinstance(port, (str, int, float)) else None
 
 
-def read_sources(root: Path, tracked: list[str]) -> dict[str, bytes]:
-    """The tracked files of a table language on disk: a tracked file absent from it (deleted, sparse, a dangling link)
-    is gone."""
-    on_disk = _on_disk(root, [name for name in tracked if ratchet.language_of(name)])
-    return _read_existing(repository.read_bytes, root, on_disk)
-
-
 @dataclass(frozen=True)
 class RuleResult:
     """A baseline rule's findings, and its report line when it only counts."""
@@ -535,24 +450,10 @@ class RuleResult:
     report: str | None
 
 
-def read_baseline(root: Path) -> ratchet.Baseline | None:
-    """The repository's baseline on disk, None when it has none.
-
-    A file that cannot be read cannot be judged; a malformed one raises SizeError.
-    """
-    content = _judged(repository.read_bytes, root, ratchet.BASELINE_PATH)
-    if content is None:
-        return None
-    try:
-        return ratchet.load_baseline(content.decode("utf-8"))
-    except UnicodeDecodeError as error:
-        raise ratchet.SizeError(f"{ratchet.BASELINE_PATH} is not valid UTF-8 ({error})") from error
-
-
 def judged_baseline(root: Path) -> ratchet.Baseline | None:
     """The baseline both baseline rules judge by, read once; a file that cannot be read cannot be judged."""
     try:
-        return read_baseline(root)
+        return ratchet.read_baseline(root)
     except ratchet.SizeError as error:
         raise CannotJudge(f"{error}; {ratchet.head_advice(error)}") from error
 
@@ -587,7 +488,7 @@ def check_import_contract(root: Path, tracked: list[str]) -> architecture.Contra
 
     A config counts when its name exists, so a tracked one deleted from the tree is none and a link to nowhere cannot be read.
     """
-    configs = _read_existing(repository.read_text, root, [name for name in tracked if name in architecture.CONFIG_FILES])
+    configs = checkout.read_existing(repository.read_text, root, [name for name in tracked if name in architecture.CONFIG_FILES])
     try:
         return architecture.check_contracts(root, tracked, configs)
     except architecture.UnparsableModule as error:
@@ -599,7 +500,7 @@ def check_import_contract(root: Path, tracked: list[str]) -> architecture.Contra
 def lint_python(root: Path, locate_ruff: Callable[[], str]) -> python_lint.Lint:
     """ruff's one run over every tracked regular `.py` file, which python-security and python-print both judge."""
     try:
-        return python_lint.lint(root, index_modes(root), PYTHON_TARGET, locate_ruff)
+        return python_lint.lint(root, checkout.index_modes(root), PYTHON_TARGET, locate_ruff)
     except python_lint.UnparsablePython as error:
         raise Unparsable(str(error)) from error
     except python_lint.LintError as error:
@@ -624,7 +525,7 @@ def check_secrets(root: Path, engine_dir: Path) -> engines.SecretScan:
 
 
 def check_workflows(root: Path, engine_dir: Path, rule: str, tracked: list[str]) -> list[Finding]:
-    workflows = _on_disk(root, [name for name in tracked if _is_workflow(PurePosixPath(name))])
+    workflows = checkout.on_disk(root, [name for name in tracked if checkout.is_workflow(PurePosixPath(name))])
     try:
         return engines.scan_workflows(root, engine_dir, engines.read_pins(), rule, workflows)
     except process.ProcessError as error:
@@ -637,15 +538,11 @@ def check_advisories(root: Path, engine_dir: Path, tracked: list[str]) -> adviso
         allowances = read_advisory_allowances(root)
     except ConfigError as error:
         raise CannotJudge(str(error)) from error
-    locks = {name: _judged(repository.resolve_file, root, name) for name in _on_disk(root, [n for n in tracked if advisories.is_lock(n)])}
+    locks = {name: checkout.judged(repository.resolve_file, root, name) for name in checkout.on_disk(root, [n for n in tracked if advisories.is_lock(n)])}
     try:
         return advisories.scan(engine_dir, engines.read_pins(), locks, root, allowances, datetime.now(UTC).date())
     except process.ProcessError as error:
         raise CannotJudge(str(error)) from error
-
-
-def _is_workflow(path: PurePosixPath) -> bool:
-    return path.parent == WORKFLOW_DIRECTORY and path.suffix in YAML_SUFFIXES
 
 
 def skipped_rules(engine_dir: Path | None) -> tuple[str, ...]:
@@ -727,8 +624,8 @@ def _content_findings(
     """The findings of a rule over the index modes and the contents of the files `candidates` names."""
 
     def judge() -> list[Finding]:
-        modes = index_modes(root)
-        contents = _read_existing(repository.read_bytes, root, _on_disk(root, candidates(modes)))
+        modes = checkout.index_modes(root)
+        contents = checkout.read_existing(repository.read_bytes, root, checkout.on_disk(root, candidates(modes)))
         try:
             return check(modes, contents, _declared(read_layout_allowances, root))
         except layout.UnparsableTestModule as error:
@@ -739,9 +636,9 @@ def _content_findings(
 
 def run_hygiene(root: Path, engine_dir: Path | None, locate_ruff: Callable[[], str]) -> HygieneResult:
     """Judges every active rule, in run order, over the repository `root` lies in; only one git cannot list stops the run."""
-    root = work_tree_top(root)
-    tracked = tracked_files(root)
-    sources = _attempt(lambda: read_sources(root, tracked))
+    root = checkout.work_tree_top(root)
+    tracked = checkout.tracked_files(root)
+    sources = _attempt(lambda: ratchet.read_sources(root, tracked))
     baseline = sources if isinstance(sources, CannotJudge) else _attempt(lambda: judged_baseline(root))
     size, clone = _judge_baseline_rules(sources, baseline)
     contracts = _attempt(lambda: check_import_contract(root, tracked))
@@ -756,10 +653,10 @@ def run_hygiene(root: Path, engine_dir: Path | None, locate_ruff: Callable[[], s
         _verdict(architecture.RULE, contracts if isinstance(contracts, CannotJudge) else contracts.findings),
         _verdict(CLAUDE_MD, _attempt(lambda: check_claude_md(root, tracked))),
         _verdict(ROOT_LAYOUT, _attempt(lambda: check_root_layout(tracked, _declared(read_root_allowances, root)))),
-        _verdict(FILE_SUFFIX, _attempt(lambda: layout.check_file_suffix(index_modes(root), _declared(read_layout_allowances, root)))),
+        _verdict(FILE_SUFFIX, _attempt(lambda: layout.check_file_suffix(checkout.index_modes(root), _declared(read_layout_allowances, root)))),
         _verdict(SCRIPT_NAME, _content_findings(root, layout.script_candidates, layout.check_script_name)),
         _verdict(SCRIPT_HEADER, _content_findings(root, layout.script_candidates, layout.check_script_header)),
-        _verdict(TEST_LAYOUT, _attempt(lambda: layout.check_test_layout(index_modes(root), _declared(read_layout_allowances, root)))),
+        _verdict(TEST_LAYOUT, _attempt(lambda: layout.check_test_layout(checkout.index_modes(root), _declared(read_layout_allowances, root)))),
         _verdict(TEST_IMPORT, _content_findings(root, layout.test_import_candidates, layout.check_test_import)),
         _verdict(PYTHON_FLOOR, floor if isinstance(floor, CannotJudge) else floor.findings),
         _verdict(PYTHON_SECURITY, _judge_lint(lint, python_lint.judge_security)),

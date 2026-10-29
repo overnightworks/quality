@@ -5,7 +5,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 
-from quality import ratchet
+from quality import checkout, ratchet
 from quality.config import CONFIG_PATH, LayoutAllowance, LayoutRule
 from quality.report import Finding
 
@@ -38,8 +38,6 @@ FIXTURES_DIRECTORY = "fixtures"
 END_TO_END_DIRECTORY = "e2e"
 SUPPORT_DIRECTORY = "support"
 WORKFLOWS_TESTS_DIRECTORY = "workflows"
-WORKFLOWS_FOLDER = PurePosixPath(".github") / "workflows"
-WORKFLOW_SUFFIXES = frozenset({".yml", ".yaml"})
 ROOT_DIRECTORY = "."
 ROUTE_MARK = "+"
 SCRIPT_LANGUAGES = frozenset({ratchet.Language.TYPESCRIPT, ratchet.Language.JAVASCRIPT})
@@ -305,7 +303,7 @@ class _ProjectMirror:
             frozenset(
                 _key(path.stem.replace("-", "_"))
                 for path in tracked
-                if path.parent == WORKFLOWS_FOLDER and path.suffix in WORKFLOW_SUFFIXES
+                if checkout.is_workflow(path)
             ),
         )
 
@@ -326,7 +324,7 @@ class _ProjectMirror:
         problems = []
         if len(folders) > 1:
             problems.append(("workflow tests lie directly in tests/workflows/", "move it up into tests/workflows/"))
-        return problems, _Destination(str(WORKFLOWS_FOLDER), "workflow", "workflow", self.workflows)
+        return problems, _Destination(str(checkout.WORKFLOW_DIRECTORY), "workflow", "workflow", self.workflows)
 
     def _package_destination(self, folders: tuple[str, ...]) -> tuple[list[_Problem], _Destination | None]:
         if len(self.packages) == 1:

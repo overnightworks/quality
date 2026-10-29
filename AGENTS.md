@@ -1,7 +1,7 @@
 # quality
 
 One door, `quality` (`src/quality/cli.py`). Rules return `Finding`s (`report.py`) and never print.
-Exit 0 clean, 1 findings, 2 cannot judge.
+Exit 0 clean, 1 findings, 2 cannot judge (`CannotJudge` and `Unparsable` in `report.py`).
 
 Door commands:
 
@@ -29,7 +29,8 @@ Door commands:
 quality's own layers are an import-linter contract in `pyproject.toml` (`[tool.importlinter]`); `quality hygiene .`
 enforces it, so a module imports only from the layers below its own.
 
-Config, hygiene, `sonar findings` and the verdict read the checkout's own files only through `repository.py`, which keeps each read
+`checkout.py` lists the checkout through git, decides what a workflow file is and turns a refused read into cannot judge.
+Config, hygiene, ratchet, `sonar findings` and the verdict read the checkout's own files only through `repository.py`, which keeps each read
 inside the repository and names the file repository-relative in every error.
 
 The operator's rulings stand dated in the reference entry of the behaviour they rule (`docs/`); decisions with rejected alternatives: `docs/decisions/`.

@@ -16,7 +16,6 @@ from quality.config import (
     load_gate_settings,
     read_gate_settings,
 )
-from quality.hygiene import CannotJudge, read_baseline
 from quality.ratchet import (
     BASELINE_PATH,
     Baseline,
@@ -27,7 +26,9 @@ from quality.ratchet import (
     head_advice,
     load_baseline,
     raised_entries,
+    read_baseline,
 )
+from quality.report import CannotJudge
 
 JOBS_URL = "https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs?filter=all&per_page=100"
 MAX_PAGES = 10

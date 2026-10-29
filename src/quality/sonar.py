@@ -13,9 +13,9 @@ from email.message import Message
 from enum import Enum
 from pathlib import Path
 
+from quality.checkout import tracked_files
 from quality.config import LegacyMode
-from quality.hygiene import CannotJudge, tracked_files
-from quality.report import Finding
+from quality.report import CannotJudge, Finding
 
 SONAR_ORIGIN = "https://sonarcloud.io"
 SONAR_API_ROOT = f"{SONAR_ORIGIN}/api"

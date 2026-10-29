@@ -9,8 +9,8 @@ import time
 import pytest
 
 from quality import cli, emergency, verdict
-from quality.hygiene import CannotJudge
 from quality.ratchet import BASELINE_PATH, Baseline, Key, Metric, Renames, render_baseline
+from quality.report import CannotJudge
 from tests.support.emergency import GATE_CONFIG, ONE_JOB, SONAR_GREEN, changed_nothing, declaring, drive
 from tests.support.git_repositories import head_commit, put
 from tests.support.processes import process_is_gone

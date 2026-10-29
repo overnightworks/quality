@@ -8,6 +8,18 @@ from quality.config import Allowance
 DETAIL_MARKER = "  | "
 
 
+class CannotJudge(Exception):
+    """The repository cannot be examined; this is never a clean result."""
+
+    label = "cannot judge"
+
+
+class Unparsable(CannotJudge):
+    """A tracked file Python cannot decode or parse; only an operating-system read error is `cannot judge`."""
+
+    label = "unparsable"
+
+
 @dataclass(frozen=True)
 class Finding:
     rule: str

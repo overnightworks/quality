@@ -3,8 +3,8 @@ import json
 from quality import cli
 from quality.config import CONFIG_PATH
 from quality.emergency import GhFailed
-from quality.hygiene import CannotJudge
 from quality.ratchet import BASELINE_PATH
+from quality.report import CannotJudge
 
 REPO = "acme/widgets"
 

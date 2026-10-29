@@ -12,9 +12,8 @@ from urllib.parse import quote
 
 from quality import architecture, process
 from quality.config import CONFIG_PATH, REPOSITORY_NAME, Declaration, GateSettings, LegacyMode
-from quality.hygiene import CannotJudge
 from quality.ratchet import BASELINE_PATH, NO_RENAMES, Renames
-from quality.report import printable, render
+from quality.report import CannotJudge, printable, render
 from quality.sonar import (
     Analysis,
     Scope,

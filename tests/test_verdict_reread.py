@@ -7,8 +7,8 @@ import pytest
 
 from quality import architecture, cli, verdict
 from quality.config import CONFIG_PATH, LegacyMode
-from quality.hygiene import CannotJudge
 from quality.ratchet import NO_RENAMES
+from quality.report import CannotJudge
 from quality.verdict import GateSettings, Side, judge
 from tests.support.architecture import FORBIDDEN, contracts_ini, contracts_toml, ini_section
 from tests.support.git_repositories import put
