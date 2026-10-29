@@ -4,8 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import cli
-from tests.support.check import CLEAN_LINE, ENGINE_RULES, FILE_RULES
+from tests.support.check import CLEAN_LINE
 from tests.support.check import hygiene_output as run
 
 ENV_FINDING = "env-file .env - "
@@ -162,11 +161,7 @@ def test_claude_md_from_a_subdirectory_is_judged_as_from_the_top(build_repo, cap
     assert "claude-md CLAUDE.md - " in from_subdirectory[1]
 
 
-def test_claude_md_is_named_in_run_order_with_and_without_engines(build_repo, clean_engines, capsys):
-    """#95 E15 cell 19: the clean line names the rule after import-contract, in both runs."""
-    repo = build_repo({**GUIDANCE, "CLAUDE.md": IMPORT})
-    plain = run(capsys, repo)
-    code = cli.main(["hygiene", "--engines", str(clean_engines), str(repo)])
-    with_engines = capsys.readouterr()
+def test_claude_md_is_named_in_run_order(build_repo, capsys):
+    """#95 E15 cell 19: the clean line names the rule after import-contract."""
+    plain = run(capsys, build_repo({**GUIDANCE, "CLAUDE.md": IMPORT}))
     assert (plain[0], CLEAN_LINE in plain[1]) == (0, True), plain
-    assert (code, f"{FILE_RULES}, {ENGINE_RULES}" in with_engines.out + with_engines.err) == (0, True)

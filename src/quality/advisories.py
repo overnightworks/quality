@@ -16,7 +16,7 @@ from quality.config import CONFIG_PATH, AdvisoryAllowance
 from quality.pip_requirements import Requirement
 from quality.report import Finding
 from quality.rules import Rule
-from quality.scanners import Pin, ScannerError
+from quality.scanners import ScannerError
 
 PYTHON_ECOSYSTEM = "PyPI"
 DATABASE_ROOT = "https://osv-vulnerabilities.storage.googleapis.com"  # read at call time; tests point it at a file:// root
@@ -103,21 +103,22 @@ def lock_kind(name: str) -> LockKind:
 
 
 def scan(
-    engine_dir: Path, pins: dict[str, Pin], locks: Mapping[str, Path], root: Path,
-    allowances: Sequence[AdvisoryAllowance], today: date, monotonic: Callable[[], float] = time.monotonic,
+    locks: Mapping[str, Path], root: Path, allowances: Sequence[AdvisoryAllowance], today: date,
+    monotonic: Callable[[], float] = time.monotonic,
 ) -> AdvisoryScan:
     """The advisories that affect the lock files `locks` (tracked name -> absolute path), with the repository's
-    allowances applied; no lock needs no engine, and leaves every allowance matching nothing."""
+    allowances applied; no lock needs no scanner, and leaves every allowance matching nothing."""
     if not locks:
         return apply_allowances([], allowances, today)
     names_by_path = _names_by_path(locks)
+    binary = scanners.located(scanners.OSV_SCANNER)
     with process.scratch_directory() as scratch:
         try:
             handovers = _handovers(root, locks, scratch, names_by_path)
             ecosystems = sorted({lock_kind(name).ecosystem for name in locks})
-            affected = _scan(engine_dir, pins, ecosystems, handovers, scratch, names_by_path, monotonic)
+            affected = _scan(binary, ecosystems, handovers, scratch, names_by_path, monotonic)
         except process.ProcessError as error:
-            raise ScannerError(_without_paths(str(error), names_by_path, [(root.resolve(), "<repository>"), (engine_dir.resolve(), "<engines>"), (scratch, "<scratch>")])) from None
+            raise ScannerError(_without_paths(str(error), names_by_path, [(root.resolve(), "<repository>"), (binary.parent.resolve(), "<scanner>"), (scratch, "<scratch>")])) from None
     return apply_allowances(affected, allowances, today)
 
 
@@ -202,11 +203,9 @@ def _read_requirements(root: Path, name: str) -> tuple[Requirement, ...]:
 
 
 def _scan(
-    engine_dir: Path, pins: dict[str, Pin], ecosystems: Sequence[str], handovers: Sequence[Handover], scratch: Path,
+    binary: Path, ecosystems: Sequence[str], handovers: Sequence[Handover], scratch: Path,
     names_by_path: dict[str, list[str]], monotonic: Callable[[], float],
 ) -> list[Affected]:
-    binary = scanners.engine_path(engine_dir, scanners.OSV_SCANNER)
-    scanners.verify_version(binary, scanners.OSV_SCANNER, pins[scanners.OSV_SCANNER].version)
     _place_databases(scratch, ecosystems, monotonic)
     # cwd is the scratch directory so that nothing in the scanned repository is read by accident.
     command = [
@@ -292,7 +291,7 @@ def _deadline_exceeded(ecosystem: str) -> ScannerError:
 
 
 def _without_paths(text: str, names_by_path: Mapping[str, list[str]], directories: list[tuple[Path, str]]) -> str:
-    """`text` with every lock, the checkout and the engine and scratch directories named as the gate names them.
+    """`text` with every lock, the checkout and the scanner and scratch directories named as the gate names them.
 
     osv-scanner prints some paths without the leading slash, so both forms are replaced, the longest first."""
     replacements = [(path, names[0]) for path, names in names_by_path.items()]

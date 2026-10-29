@@ -39,11 +39,6 @@ def test_the_ceiling_of_mise_is_the_parent_of_the_manifest_directory(workflow, j
     assert step["env"]["MISE_CEILING_PATHS"] == "${{ github.workspace }}/" + manifest_directory.rsplit("/", 1)[0]
 
 
-def test_no_workflow_step_names_the_engines():
-    """#228 rule 4: the engines command and its directory are gone from every workflow."""
-    assert [path.name for path in WORKFLOWS.glob("*.yml") if "engines" in path.read_text(encoding="utf-8")] == []
-
-
 def test_the_tests_job_installs_the_same_scanners_as_the_gate_and_runs_no_hygiene():
     """#265 D8: the pin stands twice and is held equal; the gate's hygiene job is quality's own check."""
     gate_step, tests_step = the_mise_step("gate.yml", "hygiene"), the_mise_step("ci.yml", "tests")

@@ -1,11 +1,11 @@
 # Commands
 
-Reference for the engineer or operator who runs `quality scan-staged`, `quality scoreboard`, `quality engines` or
-`quality emergency-merge`.
+Reference for the engineer or operator who runs `quality scan-staged`, `quality scoreboard`, installs the scanners or
+runs `quality emergency-merge`.
 
 ## `quality scan-staged`
 
-`quality scan-staged [PATH] --engines DIR` scans exactly what the next commit records: the effective index of the
+`quality scan-staged [PATH]` scans exactly what the next commit records: the effective index of the
 repository at `PATH` (default `.`) compared with `HEAD`. It is meant for a pre-commit hook, which runs it in the
 work-tree top. A relative `GIT_INDEX_FILE` is resolved against the working directory, as git does, so `git commit -a`,
 `git commit <path>` and a linked worktree scan the index git is committing.
@@ -22,7 +22,7 @@ are `hygiene`'s:
 
 gitleaks' staged mode sees only added and changed lines, so a known false positive blocks only the commits that touch
 its line, and then needs its allowance, as in CI. A key only in the work tree or only in `HEAD` is clean. Exit `2` (never
-clean): an engine missing or at the wrong version, git older than 2.41, an unreadable allow list, an index with unmerged
+clean): a scanner missing or at another version, with the command that installs it, git older than 2.41, an unreadable allow list, an index with unmerged
 entries, a path that is not a repository, or a gitleaks run without a report.
 
 ## `quality scoreboard`
@@ -80,22 +80,34 @@ duplicating `quality/fleet.toml` is `cannot judge`, exit `2`.
 - A repository that cannot be cloned or measured shows `cannot judge: <reason>` (for example `cannot clone (git exited
   128)`), with no local path; every other row still shows, and the exit is `2`. Otherwise the exit is `0`.
 
-## `quality engines`
+## Scanners
 
-`quality engines install DIR` verifies each pinned engine first and downloads only one that is missing or does not report
-its pinned version, so a second run downloads nothing (`gitleaks 8.30.1 already installed`; otherwise `... installed`). Every engine is a `tar.gz` release asset unless
-its pin sets `format = "binary"` (osv-scanner, a bare executable), which is installed as downloaded after its sha256 check.
-`quality engines verify DIR` is exit `0` when every pinned engine in `DIR` reports exactly its pinned version, otherwise
-exit `2` with one line per engine.
+gitleaks, actionlint and osv-scanner are not quality's to install: they come through [mise](https://mise.jdx.dev/installing-mise.html)
+from the manifest and lock inside quality's installation. `quality/mise/mise.toml` holds the one version of each
+scanner, `quality/mise/mise.lock` the sha256 of its release asset (linux x64 only, written by `mise lock --platform
+linux-x64`, never by hand). The command that installs them from the lock is
 
-zizmor (the `workflow-security` rule) and ruff (`python-security`, `python-print`) are no engines. They are pinned
+    mise --cd <quality's installation>/quality/mise install --locked
+
+and every reason that a scanner cannot be found ends with it, the path filled in. A scan finds a scanner by asking
+`mise which` in that directory, for exactly the manifest's version, and runs it only when it reports that version. A
+scanner on `PATH` is never used. mise reads only the manifest directory and the user's own global config: `MISE_CEILING_PATHS` is
+set to the directory above it, so a `mise.toml` in the scanned repository (or in the checkout the gate holds the
+manifest in) takes no part in which binary runs.
+
+`hygiene` and `scan-staged` exit `2` for a scanner that mise has not installed, that is at another version, or whose
+answer names no executable, and for a machine without mise, which names mise's install page and the command; only the
+rule that needs the scanner cannot judge. A repository with no workflow needs no actionlint and one with no lock file
+no osv-scanner.
+
+zizmor (the `workflow-security` rule) and ruff (`python-security`, `python-print`) are not mise's. They are pinned
 dependencies of quality's package (`pyproject.toml`, hashed in `uv.lock`), so installing quality installs them. quality
-runs the executable its own installation recorded, never one on `PATH` or in `DIR`. A missing one, or one at another
+runs the executable its own installation recorded, never one on `PATH`. A missing one, or one at another
 version, makes its rules `cannot judge` (exit `2`) with the command that reinstalls quality; a scanner quality's own
 metadata does not pin exactly makes them `cannot judge` as a defect in quality's release.
 
-quality builds the logic and the process itself and never a specialist engine (language linters and test runners,
-gitleaks, osv-scanner, mutation engines); the engines it uses run pinned underneath the one door (operator ruling
+quality builds the logic and the process itself and never a specialist scanner (language linters and test runners,
+gitleaks, osv-scanner, mutation tools); the scanners it uses run pinned underneath the one door (operator ruling
 15.10.2026: „ja! ich agree => ein fleet quality“).
 
 ## `quality emergency-merge`

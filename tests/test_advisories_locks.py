@@ -10,10 +10,11 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
-from quality import advisories, scanners
+from quality import advisories
 from quality.scanners import ScannerError
 from tests.support.advisories import (
     ADVISORY_ID,
+    OSV,
     SAFE,
     UV_LOCK_ALLOWANCE,
     advisory,
@@ -22,7 +23,7 @@ from tests.support.advisories import (
     reporting,
     uv_lock,
 )
-from tests.support.scanners import OUTPUTS, osv_engines
+from tests.support.scanners import OUTPUTS, fake_scanner
 
 LODASH = "GHSA-npm1-aaaa-bbbb"
 NPM_AFFECTED_LINE = f"osv-scanner {LODASH} (CVE-2020-2): npm lodash 4.17.15 is affected."
@@ -44,24 +45,24 @@ def pnpm_lock(packages=(("lodash", "4.17.15"),), transitive=()) -> str:
 
 @pytest.mark.scanner
 def test_a_pnpm_lock_is_judged_with_its_development_packages_and_names_the_folder(
-    build_repo, publish_database, installed_engines, run_gate
+    build_repo, publish_database, installed_scanners, run_gate
 ):
     """#145 C1, C6, I1: a nested pnpm-lock.yaml is red with the fixed version and its folder, the fix saying how a
     transitive package is fixed and printing no command that would not work."""
     publish_database([LODASH_ADVISORY], ecosystem="npm")
-    code, output = run_gate(build_repo({FRONTEND_LOCK: pnpm_lock()}), installed_engines)
+    code, output = run_gate(build_repo({FRONTEND_LOCK: pnpm_lock()}))
     assert code == 1, output
     assert f"advisory {FRONTEND_LOCK} - {NPM_AFFECTED_LINE}\n  Fix: upgrade lodash to >= 4.17.21 (in src/frontend/: {PNPM_FIX})" in output
 
 
 @pytest.mark.scanner
 def test_two_vulnerable_versions_of_one_package_in_a_pnpm_lock_are_two_findings(
-    build_repo, publish_database, installed_engines, run_gate
+    build_repo, publish_database, installed_scanners, run_gate
 ):
     """#145 I1: the version is part of a finding's identity, so one package at two versions is red twice."""
     publish_database([advisory(LODASH, fixed=("4.17.21",), package="lodash", ecosystem="npm")], ecosystem="npm")
     lock = pnpm_lock(transitive=[("lodash", "4.17.19")])
-    code, output = run_gate(build_repo({FRONTEND_LOCK: lock}), installed_engines)
+    code, output = run_gate(build_repo({FRONTEND_LOCK: lock}))
     assert code == 1, output
     assert "hygiene: 2 finding(s)" in output
     assert "npm lodash 4.17.15 is affected." in output
@@ -69,10 +70,10 @@ def test_two_vulnerable_versions_of_one_package_in_a_pnpm_lock_are_two_findings(
 
 
 @pytest.mark.scanner
-def test_several_fixed_versions_keep_the_guidance_of_the_pnpm_lock(build_repo, publish_database, installed_engines, run_gate):
+def test_several_fixed_versions_keep_the_guidance_of_the_pnpm_lock(build_repo, publish_database, installed_scanners, run_gate):
     """#145 C6: a transitive npm package is fixed by its parent or an override, whether osv lists one fixed version or several."""
     publish_database([advisory(LODASH, fixed=("4.17.21", "5.0.0"), package="lodash", ecosystem="npm")], ecosystem="npm")
-    code, output = run_gate(build_repo({FRONTEND_LOCK: pnpm_lock()}), installed_engines)
+    code, output = run_gate(build_repo({FRONTEND_LOCK: pnpm_lock()}))
     assert code == 1, output
     assert "to a fixed version: " in output
     assert PNPM_FIX in output
@@ -92,16 +93,16 @@ def agent_runtime_requirements() -> str:
 
 @pytest.mark.scanner
 def test_a_requirements_file_shaped_like_agent_runtimes_is_judged_26_of_26(
-    build_repo, publish_database, installed_engines, run_gate
+    build_repo, publish_database, installed_scanners, run_gate
 ):
     """#176 acceptance and W1: a clean database leaves exit 0 only when osv-scanner read all 26 lines (S5), the wheel included;
     a vulnerable wheel version is found as the PyPI package at the version in the wheel's name."""
     repo = build_repo({"tests/keycloak/requirements.txt": agent_runtime_requirements()})
     publish_database()
-    code, output = run_gate(repo, installed_engines)
+    code, output = run_gate(repo)
     assert code == 0, output
     publish_database([advisory(fixed=("0.21.0",), aliases=(), package=WEBAUTH)])
-    code, output = run_gate(repo, installed_engines)
+    code, output = run_gate(repo)
     assert code == 1, output
     assert f"advisory tests/keycloak/requirements.txt - osv-scanner {ADVISORY_ID}: PyPI {WEBAUTH} 0.20.1 is affected." in output
     assert "package-" not in output
@@ -110,21 +111,21 @@ def test_a_requirements_file_shaped_like_agent_runtimes_is_judged_26_of_26(
 
 @pytest.mark.scanner
 @pytest.mark.parametrize("name", [BUILD_REQUIREMENTS, "tests/requirements.txt", "docs/requirements-dev.txt"])
-def test_every_tracked_requirements_file_is_judged_against_pypi(build_repo, publish_database, installed_engines, run_gate, name):
+def test_every_tracked_requirements_file_is_judged_against_pypi(build_repo, publish_database, installed_scanners, run_gate, name):
     """#176 C2."""
     publish_database()
-    code, output = run_gate(build_repo({name: "pyyaml==5.3.1\n"}), installed_engines)
+    code, output = run_gate(build_repo({name: "pyyaml==5.3.1\n"}))
     assert (code, f"advisory {name} - osv-scanner {ADVISORY_ID}" in output) == (1, True), output
 
 
 @pytest.mark.scanner
 @pytest.mark.parametrize("name", ["docs/requirements.in", "docs/dev-requirements.txt", "docs/requirements.txt.orig"])
 def test_a_file_that_is_no_requirements_txt_is_not_judged_and_downloads_no_database(
-    build_repo, publish_database, served_databases, installed_engines, run_gate, name
+    build_repo, publish_database, served_databases, installed_scanners, run_gate, name
 ):
     """#176 C2, counter-example."""
     publish_database()
-    code, output = run_gate(build_repo({name: "pyyaml==5.3\n"}), installed_engines)
+    code, output = run_gate(build_repo({name: "pyyaml==5.3\n"}))
     assert (code, served_databases.requested) == (0, []), output
 
 
@@ -136,11 +137,11 @@ def test_a_file_that_is_no_requirements_txt_is_not_judged_and_downloads_no_datab
     ids=["-e", ">=", "-r", "a bare URL", "--index-url", "a wheel without a hash"],
 )
 def test_a_requirements_line_in_neither_accepted_form_is_cannot_judge_with_its_line_number(
-    build_repo, publish_database, installed_engines, run_gate, line
+    build_repo, publish_database, installed_scanners, run_gate, line
 ):
     """#176 S5, S6, W1, W2: never clean, and the line is named; the file is refused before any database is fetched."""
     text = f"# header\na==1\n\n{line}\nb==2\n"
-    code, output = run_gate(build_repo({BUILD_REQUIREMENTS: text}), installed_engines)
+    code, output = run_gate(build_repo({BUILD_REQUIREMENTS: text}))
     assert (code, f"{BUILD_REQUIREMENTS}: line 4 is neither" in output) == (2, True), output
 
 
@@ -154,7 +155,7 @@ def test_a_requirements_line_in_neither_accepted_form_is_cannot_judge_with_its_l
     ids=["a package left out", "another version", "an extra package"],
 )
 def test_a_package_osv_did_not_read_as_quality_did_is_cannot_judge(
-    build_repo, clean_engines, run_gate, publish_database, edited_report, packages, expected
+    build_repo, served_scanners, run_gate, publish_database, edited_report, packages, expected
 ):
     """#176 S5: the cross-check against osv-scanner's own package list."""
     publish_database()
@@ -162,18 +163,19 @@ def test_a_package_osv_did_not_read_as_quality_did_is_cannot_judge(
     listed = [{"package": {"name": name, "version": version, "ecosystem": "PyPI"}} for name, version in packages]
     report = edited_report("osv-scanner-clean.json", lambda report: report.update(results=[{"source": source, "packages": listed}]))
     repo = build_repo({"tests/requirements.txt": "a==1\nb==2\n"})
-    code, output = run_gate(repo, osv_engines(clean_engines, reporting(report, 0)))
+    fake_scanner(served_scanners, OSV, reporting(report, 0))
+    code, output = run_gate(repo)
     assert (code, expected in output) == (2, True), output
 
 
 @pytest.mark.scanner
 def test_an_allowance_for_a_wheel_line_uses_the_tracked_requirements_path(
-    build_repo, publish_database, installed_engines, run_gate
+    build_repo, publish_database, installed_scanners, run_gate
 ):
     """#176 R1 and W1: a finding on a wheel line is matched by the allowance for the tracked file, not a scratch path."""
     publish_database([advisory(fixed=("0.21.0",), aliases=(), package=WEBAUTH)])
     config = allowance_config(**UV_LOCK_ALLOWANCE | {"lock": BUILD_REQUIREMENTS}, until=datetime.date(2999, 12, 31))
-    code, output = run_gate(build_repo({BUILD_REQUIREMENTS: WEBAUTH_WHEEL + "\n", "quality/config.toml": config}), installed_engines)
+    code, output = run_gate(build_repo({BUILD_REQUIREMENTS: WEBAUTH_WHEEL + "\n", "quality/config.toml": config}))
     assert (code, "advisory: 1 allowed" in output) == (0, True), output
 
 
@@ -187,33 +189,33 @@ def test_an_allowance_for_a_wheel_line_uses_the_tracked_requirements_path(
     ],
     ids=["pnpm.auditConfig", ".npmrc", "osv-scanner.toml"],
 )
-def test_nothing_a_repository_writes_silences_an_npm_advisory(build_repo, publish_database, installed_engines, run_gate, files):
+def test_nothing_a_repository_writes_silences_an_npm_advisory(build_repo, publish_database, installed_scanners, run_gate, files):
     """#145 R2: only a real fix in the lock counts, never the repository's own ignore list."""
     publish_database([LODASH_ADVISORY], ecosystem="npm")
-    code, output = run_gate(build_repo({FRONTEND_LOCK: pnpm_lock(), **files}), installed_engines)
+    code, output = run_gate(build_repo({FRONTEND_LOCK: pnpm_lock(), **files}))
     assert code == 1, output
     assert f"advisory {FRONTEND_LOCK} - " in output
 
 
 @pytest.mark.scanner
-def test_a_big_frontend_shows_every_finding_without_a_cap(build_repo, publish_database, installed_engines, run_gate):
+def test_a_big_frontend_shows_every_finding_without_a_cap(build_repo, publish_database, installed_scanners, run_gate):
     """#145 X3."""
     names = [f"package-{number}" for number in range(25)]
     records = [advisory(f"GHSA-npm{number:02d}-aaaa-bbbb", package=name, ecosystem="npm") for number, name in enumerate(names)]
     publish_database(records, ecosystem="npm")
-    code, output = run_gate(build_repo({FRONTEND_LOCK: pnpm_lock([(name, "1.0.0") for name in names])}), installed_engines)
+    code, output = run_gate(build_repo({FRONTEND_LOCK: pnpm_lock([(name, "1.0.0") for name in names])}))
     assert code == 1, output
     assert "hygiene: 25 finding(s)" in output
 
 
 @pytest.mark.scanner
 def test_a_package_listed_as_malicious_is_red_and_the_fix_is_to_remove_or_replace_it(
-    build_repo, publish_database, installed_engines, run_gate
+    build_repo, publish_database, installed_scanners, run_gate
 ):
     """#145 I3."""
     malicious = advisory("MAL-2026-1", fixed=(), aliases=(), package="evil-package", ecosystem="npm")
     publish_database([malicious], ecosystem="npm")
-    code, output = run_gate(build_repo({FRONTEND_LOCK: pnpm_lock([("evil-package", "1.0.0")])}), installed_engines)
+    code, output = run_gate(build_repo({FRONTEND_LOCK: pnpm_lock([("evil-package", "1.0.0")])}))
     assert code == 1, output
     assert "MAL-2026-1: npm evil-package 1.0.0 is affected." in output
     assert "osv lists no fixed version: remove or replace evil-package" in output
@@ -252,20 +254,20 @@ def served_databases(publish_database, monkeypatch):
 
 @pytest.mark.scanner
 def test_a_repository_with_both_kinds_downloads_each_database_once_and_judges_both(
-    build_repo, publish_database, served_databases, installed_engines, run_gate
+    build_repo, publish_database, served_databases, installed_scanners, run_gate
 ):
     """#145 X1: two pnpm locks, a uv.lock and a requirements file cost one npm and one PyPI download."""
     publish_database([LODASH_ADVISORY], ecosystem="npm")
     publish_database()
     repo = build_repo({FRONTEND_LOCK: pnpm_lock(), "src/admin/pnpm-lock.yaml": pnpm_lock(), "uv.lock": uv_lock(), "tests/requirements.txt": "pyyaml==5.3.1\n"})
-    code, output = run_gate(repo, installed_engines)
+    code, output = run_gate(repo)
     assert code == 1, output
     assert "advisory tests/requirements.txt - " in output
     assert sorted(served_databases.requested) == ["/PyPI/all.zip", "/npm/all.zip"]
     assert (FRONTEND_LOCK in output, "src/admin/pnpm-lock.yaml" in output, "advisory uv.lock - " in output) == (True, True, True)
 
 
-def test_one_deadline_spans_every_database_download(build_repo, clean_engines, publish_database, served_databases):
+def test_one_deadline_spans_every_database_download(build_repo, publish_database, served_databases):
     """#145 S4: the first download (PyPI) spends the whole budget, so the second (npm) is not even requested and the run
     is `cannot judge`, not a hung job. The clock is injected and moves by the PyPI request alone."""
     publish_database([LODASH_ADVISORY], ecosystem="npm")
@@ -279,27 +281,26 @@ def test_one_deadline_spans_every_database_download(build_repo, clean_engines, p
     served_databases.on_request = spend_budget_on_the_first_download
     repo = build_repo({FRONTEND_LOCK: pnpm_lock(), "uv.lock": uv_lock()})
     locks = {name: repo / name for name in (FRONTEND_LOCK, "uv.lock")}
-    engine_dir = osv_engines(clean_engines, "exit 99")
-    pins = scanners.read_pins()
     today = datetime.date(2026, 10, 21)
     with pytest.raises(ScannerError, match="the npm advisory database download exceeded 300 seconds"):
-        advisories.scan(engine_dir, pins, locks, repo, [], today, lambda: now)
+        advisories.scan(locks, repo, [], today, lambda: now)
     assert served_databases.requested == ["/PyPI/all.zip"]
 
 
-def test_an_npm_database_that_cannot_be_downloaded_is_cannot_judge_and_named(build_repo, clean_engines, run_gate, database_root):
+def test_an_npm_database_that_cannot_be_downloaded_is_cannot_judge_and_named(build_repo, served_scanners, run_gate, database_root):
     """#145 S3: the npm database missing makes the whole rule `cannot judge`, though the PyPI one is there."""
     (database_root / "npm" / "all.zip").unlink()
     repo = build_repo({FRONTEND_LOCK: pnpm_lock(), "uv.lock": uv_lock()})
-    code, output = run_gate(repo, osv_engines(clean_engines, "exit 99"))
+    fake_scanner(served_scanners, OSV, "exit 99")
+    code, output = run_gate(repo)
     assert (code, "cannot download the npm advisory database" in output) == (2, True), output
 
 
-def test_without_a_pnpm_lock_the_npm_database_is_not_downloaded(build_repo, clean_engines, run_gate, publish_database):
+def test_without_a_pnpm_lock_the_npm_database_is_not_downloaded(build_repo, served_scanners, run_gate, publish_database):
     """#145 S1: a repository with only a uv.lock is judged although no npm database is published."""
     publish_database()
-    engine_dir = osv_engines(clean_engines, reporting(OUTPUTS / "osv-scanner-clean.json", 0))
-    code, output = run_gate(build_repo({"uv.lock": uv_lock(SAFE)}), engine_dir)
+    fake_scanner(served_scanners, OSV, reporting(OUTPUTS / "osv-scanner-clean.json", 0))
+    code, output = run_gate(build_repo({"uv.lock": uv_lock(SAFE)}))
     assert code == 0, output
 
 
@@ -318,12 +319,13 @@ def npm_report(package: str, affected_name: str):
     ids=["the same name", "Python's name rule is not npm's"],
 )
 def test_npm_names_match_exactly_as_written(
-    build_repo, clean_engines, run_gate, publish_database, edited_report, affected_name, expected
+    build_repo, served_scanners, run_gate, publish_database, edited_report, affected_name, expected
 ):
     """#145 I2: `lodash.merge` is not `lodash-merge`."""
     publish_database(ecosystem="npm")
     report = edited_report("osv-scanner-finding.json", npm_report("lodash.merge", affected_name))
-    code, output = run_gate(build_repo({FRONTEND_LOCK: pnpm_lock()}), osv_engines(clean_engines, reporting(report, 1)))
+    fake_scanner(served_scanners, OSV, reporting(report, 1))
+    code, output = run_gate(build_repo({FRONTEND_LOCK: pnpm_lock()}))
     assert code == 1, output
     assert expected in output
 
@@ -332,7 +334,7 @@ PNPM_ALLOWANCE = UV_LOCK_ALLOWANCE | {"lock": FRONTEND_LOCK}
 
 
 def test_an_allowance_in_a_pnpm_lock_allows_its_advisory_until_its_date(
-    build_repo, clean_engines, run_gate, publish_database, edited_report
+    build_repo, served_scanners, run_gate, publish_database, edited_report
 ):
     """#145 R1: the same [[advisories.allow]] entry, with the lock's path, allows an npm advisory; once the lock is
     fixed the entry matches nothing and is red until it is deleted (U1)."""
@@ -340,11 +342,12 @@ def test_an_allowance_in_a_pnpm_lock_allows_its_advisory_until_its_date(
     config = allowance_config(**PNPM_ALLOWANCE, until=datetime.date(2999, 12, 31))
     repo = build_repo({FRONTEND_LOCK: pnpm_lock(), "quality/config.toml": config})
     report = edited_report("osv-scanner-finding.json", npm_report("lodash", "lodash"))
-    code, output = run_gate(repo, osv_engines(clean_engines, reporting(report, 1)))
+    fake_scanner(served_scanners, OSV, reporting(report, 1))
+    code, output = run_gate(repo)
     assert code == 0, output
     assert f"  allowed {FRONTEND_LOCK} {ADVISORY_ID} (CVE-2020-1): npm lodash 4.6.0 until 2999-12-31 (#116) - fixture" in output
-    fixed = osv_engines(clean_engines, reporting(OUTPUTS / "osv-scanner-clean.json", 0))
-    code, output = run_gate(repo, fixed)
+    fake_scanner(served_scanners, OSV, reporting(OUTPUTS / "osv-scanner-clean.json", 0))
+    code, output = run_gate(repo)
     assert (code, f"advisory quality/config.toml - the allowance for {ADVISORY_ID} in {FRONTEND_LOCK} matches no advisory." in output) == (1, True), output
 
 

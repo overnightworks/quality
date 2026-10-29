@@ -6,9 +6,7 @@ repository and for the operator who merges past it.
 
     quality hygiene [PATH]
     quality baseline write [PATH]
-    quality scan-staged [PATH] --engines DIR
-    quality engines install DIR
-    quality engines verify DIR
+    quality scan-staged [PATH]
     quality sonar properties
     quality sonar findings
     quality verdict [PATH]
@@ -23,7 +21,12 @@ Exit codes: `0` clean, `1` findings, `2` cannot judge (never clean), `130` inter
 
 `--python 3.14` matters because `uv tool install --force` keeps an existing tool environment's older interpreter, which then refuses v0.3.0 or later.
 
-The gitleaks paths (`hygiene --engines`, `scan-staged`) need git 2.41 or newer; with an older git they exit `2`.
+The gitleaks paths (`hygiene`, `scan-staged`) need git 2.41 or newer; with an older git they exit `2`.
+
+gitleaks, actionlint and osv-scanner come through [mise](https://mise.jdx.dev/installing-mise.html), from the manifest
+and lock inside quality's installation; a scanner that is missing exits `2` and names the command that installs it:
+
+    mise --cd <quality's installation>/quality/mise install --locked
 
 ## Quick start
 
@@ -32,13 +35,12 @@ jobs; [docs/gate.md](docs/gate.md#gateyml) has the snippet and the reason for ea
 needs a SonarCloud project with automatic analysis off, a root `sonar-project.properties` and the `SONAR_TOKEN` secret
 (a missing token is red); see [docs/sonar.md](docs/sonar.md#quality-sonar-findings).
 
-Locally, `quality hygiene .` runs the hygiene rules; `--engines DIR` (after `quality engines install DIR`) adds the
-secret, workflow and advisory scans the gate runs.
+Locally, `quality hygiene .` runs every rule the gate runs, the secret, workflow and advisory scans included.
 
 ## Read on
 
 - [docs/rules.md](docs/rules.md): the `hygiene` rules, the secret and advisory scans, the output contract.
-- [docs/commands.md](docs/commands.md): `scan-staged`, `scoreboard`, `engines` and `emergency-merge`.
+- [docs/commands.md](docs/commands.md): `scan-staged`, the scanners, `scoreboard` and `emergency-merge`.
 - [docs/gate.md](docs/gate.md): the `gate.yml` caller contract, the verdict, declared loosenings, `codeql.yml`.
 - [docs/sonar.md](docs/sonar.md): `sonar findings`, coverage on new code, new and legacy findings, the quality gate, the Dependabot exception.
 - [docs/runbook-emergency-merge.md](docs/runbook-emergency-merge.md): the operator's door past a red gate.

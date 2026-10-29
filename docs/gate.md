@@ -45,11 +45,15 @@ Each line has a reason:
   requires that check, the pull request cannot merge; where nothing requires it, it merges unjudged.
 - **The door stops workflow commands for the rest of its step.** gate.yml runs `quality` alone in each of its steps; a
   workflow that runs `quality` itself writes its own workflow commands (`::notice::`, `::group::` or any other) in a separate step.
+- **The `hygiene` job installs the scanners itself.** It runs a pinned `jdx/mise-action` that installs gitleaks,
+  actionlint and osv-scanner from the tool's own manifest and lock ([Scanners](commands.md#scanners)), so a caller adds
+  nothing; its CI needs network access to GitHub release assets. The step sets `MISE_CEILING_PATHS`, so a `mise.toml` in
+  the caller's checkout takes no part.
 - **`secrets: SONAR_TOKEN`** and the optional **`with: coverage-artifact`** are described under
   [`quality sonar findings`](sonar.md#quality-sonar-findings) and [Coverage on new code](sonar.md#coverage-on-new-code).
 - **`uses:` pins a commit** (`@<commit sha> # v<tag>`), and Dependabot bumps it where the repository's `.github/dependabot.yml` enables the `github-actions` ecosystem. There is no copier and no own token that writes to all repositories: quality
   carries plain version tags and Dependabot opens the bump pull requests (operator, 15.10.2026: „kein copier! … copier
-  ist shice! …“; the points agreed with the operator's 15.10.2026 answer, quoted in [commands.md](commands.md#quality-engines), add the token).
+  ist shice! …“; the points agreed with the operator's 15.10.2026 answer, quoted in [commands.md](commands.md#scanners), add the token).
 
 The verdict judges the jobs named in `quality/config.toml`:
 
@@ -106,7 +110,7 @@ reason = "the operator ruled the requirement shelf machinery out"
   included, declares nothing.
 - `item` is `#<n>` or `<owner>/<repo>#<n>` (ASCII letters, digits, `_`, `.` and `-`), `date` a TOML date without a
   time, `reason` one non-empty line. A missing or extra key, a text date, two entries with one `what` or any other
-  malformed entry is exit `2` in `verdict` and in `hygiene --engines` (the `secret` and `advisory` rules), naming the
+  malformed entry is exit `2` in `verdict` and in `hygiene` (the `secret` and `advisory` rules), naming the
   entry and showing this example; `scan-staged` reads only `[secrets]`.
 - Only new entries declare: those the head holds and the base does not, compared as a whole entry. An inherited entry
   is never red and declares nothing, so a later pull request that loosens the same way again needs its own entry with

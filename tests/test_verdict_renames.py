@@ -472,7 +472,7 @@ merge.read_renames_of_pull(
 
 @pytest.mark.integration
 def test_a_sigterm_during_the_fetch_leaves_no_repository_behind(tmp_path):
-    """#149 fetch boundary: the repository is removed on interruption too, through the engines' scratch directory."""
+    """#149 fetch boundary: the repository is removed on interruption too, through the scratch directory scanners use."""
     scratch_parent = tmp_path / "scratch-parent"
     scratch_parent.mkdir()
     door = subprocess.Popen(

@@ -52,7 +52,7 @@ def judged_prints(text: str, records: list[RuffFinding]) -> tuple[list[str], tup
 
 
 def rule_verdict(repo: Path, rule: Rule = Rule.PYTHON_SECURITY) -> check.RuleVerdict:
-    return next(verdict for verdict in check.run_hygiene(repo, None, installed_ruff, never_located).verdicts if verdict.rule == rule)
+    return next(verdict for verdict in check.run_hygiene(repo, installed_ruff, never_located).verdicts if verdict.rule == rule)
 
 
 def flagged_paths(repo: Path, rule: Rule = Rule.PYTHON_SECURITY) -> list[str]:

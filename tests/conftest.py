@@ -20,7 +20,7 @@ pytest.register_assert_rewrite("tests.support")  # before the first import of a 
 from tests.support.advisories import advisory, zipped
 from tests.support.fleet import RELEASES, write_fleet
 from tests.support.git_repositories import GIT_IDENTITY, head_commit, make_repo, put
-from tests.support.scanners import CLEAN_SCANS, OUTPUTS, fake_engine, fake_scanner, serving, write_mise
+from tests.support.scanners import CLEAN_SCANS, OUTPUTS, fake_scanner, serving, write_mise
 
 PROCESS_OR_SOCKET_FIXTURES = frozenset(
     {
@@ -28,8 +28,6 @@ PROCESS_OR_SOCKET_FIXTURES = frozenset(
         "public",
         "fake_git",
         "stub_server",
-        "installed_engines",
-        "clean_engines",
         "use_mise",
         "installed_scanners",
         "loopback",
@@ -167,25 +165,6 @@ def build_repo(tmp_path: Path) -> RepoBuilder:
 def elsewhere(tmp_path_factory) -> Path:
     """A scratch directory outside every fixture repository."""
     return tmp_path_factory.mktemp("elsewhere")
-
-
-@pytest.fixture(scope="session")
-def installed_engines(tmp_path_factory) -> Path:
-    directory = tmp_path_factory.mktemp("engines")
-    assert cli.main(["engines", "install", str(directory)]) == 0
-    return directory
-
-
-@pytest.fixture
-def clean_engines(tmp_path_factory) -> Path:
-    """A gitleaks that reports its pin and no leak; with no workflow tracked, no other engine runs."""
-    directory = tmp_path_factory.mktemp("engines")
-    fake_engine(
-        directory,
-        "gitleaks",
-        on_scan='while [ $# -gt 0 ]; do [ "$1" = --report-path ] && report=$2; shift; done\necho "[]" > "$report"',
-    )
-    return directory
 
 
 @pytest.fixture
@@ -378,23 +357,23 @@ def publish_database(database_root):
 
 
 @pytest.fixture
-def run_gate(capsys):
-    """Runs the gate over a repository and returns (exit code, all output); no output names the checkout or the engine directory (#53 cell 21)."""
-    def run(repo: Path, engine_dir: Path) -> tuple[int, str]:
-        code = cli.main(["hygiene", "--engines", str(engine_dir), str(repo)])
+def run_gate(capsys, served_scanners):
+    """Runs the gate over a repository and returns (exit code, all output); no output names the checkout or the scanner directory (#53 cell 21)."""
+    def run(repo: Path) -> tuple[int, str]:
+        code = cli.main(["hygiene", str(repo)])
         captured = capsys.readouterr()
         output = captured.out + captured.err
         assert str(repo) not in output
         assert str(repo).lstrip("/") not in output
-        assert str(engine_dir) not in output
-        assert str(engine_dir).lstrip("/") not in output
+        assert str(served_scanners) not in output
+        assert str(served_scanners).lstrip("/") not in output
         return code, captured.out + captured.err
     return run
 
 
 @pytest.fixture
 def edited_report(tmp_path_factory):
-    """Writes the engine-output fixture, edited, outside the fixture repository."""
+    """Writes the scanner-output fixture, edited, outside the fixture repository."""
     def write(fixture: str, edit) -> Path:
         report = json.loads((OUTPUTS / fixture).read_text())
         edit(report)

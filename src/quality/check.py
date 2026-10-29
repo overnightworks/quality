@@ -30,7 +30,7 @@ from quality.config import (
     read_allow_lists,
 )
 from quality.report import CannotJudge, Finding, Unparsable
-from quality.rules import Engines, Rule
+from quality.rules import Rule
 
 
 def _python_floor_result(root: Path, modes: dict[str, str] | CannotJudge, allow_lists: AllowLists | CannotJudge) -> python_floor.FloorResult:
@@ -97,35 +97,29 @@ def _judge_lint[T](lint: python_lint.Lint | CannotJudge, judge: Callable[[python
         return CannotJudge(str(error))
 
 
-def check_secrets(root: Path, engine_dir: Path, allow_lists: AllowLists | CannotJudge) -> scanners.SecretScan:
+def check_secrets(root: Path, allow_lists: AllowLists | CannotJudge) -> scanners.SecretScan:
     try:
-        return scanners.scan_secrets(root, engine_dir, scanners.read_pins(), _required(allow_lists).secrets)
+        return scanners.scan_secrets(root, _required(allow_lists).secrets)
     except process.ProcessError as error:
         raise CannotJudge(str(error)) from error
 
 
-def check_workflows(
-    root: Path, engine_dir: Path, rule: Rule, tracked: list[str], locate_zizmor: Callable[[], str],
-) -> list[Finding]:
+def check_workflows(root: Path, rule: Rule, tracked: list[str], locate_zizmor: Callable[[], str]) -> list[Finding]:
     workflows = checkout.on_disk(root, [name for name in tracked if checkout.is_workflow(PurePosixPath(name))])
     try:
-        return scanners.scan_workflows(root, engine_dir, scanners.read_pins(), rule, workflows, locate_zizmor)
+        return scanners.scan_workflows(root, rule, workflows, locate_zizmor)
     except process.ProcessError as error:
         raise CannotJudge(str(error)) from error
 
 
-def check_advisories(root: Path, engine_dir: Path, tracked: list[str], allow_lists: AllowLists | CannotJudge) -> advisories.AdvisoryScan:
+def check_advisories(root: Path, tracked: list[str], allow_lists: AllowLists | CannotJudge) -> advisories.AdvisoryScan:
     """The allowances' `until` is judged against today's date in UTC, read here, once."""
     allowances = _required(allow_lists).advisories
     locks = {name: checkout.judged(repository.resolve_file, root, name) for name in checkout.on_disk(root, [n for n in tracked if advisories.is_lock(n)])}
     try:
-        return advisories.scan(engine_dir, scanners.read_pins(), locks, root, allowances, datetime.now(UTC).date())
+        return advisories.scan(locks, root, allowances, datetime.now(UTC).date())
     except process.ProcessError as error:
         raise CannotJudge(str(error)) from error
-
-
-def skipped_rules(engine_dir: Path | None) -> tuple[Rule, ...]:
-    return tuple(rule for rule in Rule if rule.engines is Engines.NEEDED) if engine_dir is None else ()
 
 
 class Outcome(Enum):
@@ -227,9 +221,7 @@ def _content_findings(
     return _attempt(judge)
 
 
-def run_hygiene(
-    root: Path, engine_dir: Path | None, locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str],
-) -> HygieneResult:
+def run_hygiene(root: Path, locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str]) -> HygieneResult:
     """Judges every active rule, in run order, over the repository `root` lies in; only one git cannot list stops the run."""
     root = checkout.work_tree_top(root)
     tracked = checkout.tracked_files(root)
@@ -259,19 +251,15 @@ def run_hygiene(
         Rule.PYTHON_SECURITY: _judge_lint(lint, python_lint.judge_security),
         Rule.PYTHON_PRINT: _findings(printing),
     }
-    verdicts = [_verdict(rule, outcomes[rule]) for rule in Rule if rule.engines is Engines.NOT_NEEDED]
-    reports = _reports(size, clone, contracts, floor, printing)
-    if engine_dir is None:
-        return HygieneResult(tuple(verdicts), reports, [], {})
-    secrets = _attempt(lambda: check_secrets(root, engine_dir, allow_lists))
-    workflows = {rule: _attempt(partial(check_workflows, root, engine_dir, rule, tracked, locate_zizmor)) for rule in scanners.WORKFLOW_SCANNERS}
-    advisory = _attempt(partial(check_advisories, root, engine_dir, tracked, allow_lists))
-    scanned = {
+    secrets = _attempt(lambda: check_secrets(root, allow_lists))
+    advisory = _attempt(partial(check_advisories, root, tracked, allow_lists))
+    outcomes |= {
         Rule.LEAK: _findings(secrets),
-        **workflows,
+        **{rule: _attempt(partial(check_workflows, root, rule, tracked, locate_zizmor)) for rule in scanners.WORKFLOW_SCANNERS},
         Rule.ADVISORY: _findings(advisory),
     }
-    verdicts += [_verdict(rule, scanned[rule]) for rule in Rule if rule.engines is Engines.NEEDED]
+    verdicts = [_verdict(rule, outcomes[rule]) for rule in Rule]
+    reports = _reports(size, clone, contracts, floor, printing)
     allowed_advisories = () if isinstance(advisory, CannotJudge) else advisory.report()
     allowed, unused = ([], {}) if isinstance(secrets, CannotJudge) else (secrets.allowed, secrets.unused_allowances)
     return HygieneResult(tuple(verdicts), (*reports, *allowed_advisories), allowed, unused)

@@ -8,13 +8,13 @@ from pathlib import Path
 
 import pytest
 
-from quality import check, cli, env_file, installation, process, sonar
+from quality import check, cli, env_file, installation, process, scanners, sonar
 from quality.compose import is_compose_file
 from quality.report import Finding
 from quality.rules import Rule
-from tests.support.check import CLEAN_LINE, ENGINE_RULES, FILE_RULES, compose, installed_ruff, loosen_requirement
+from tests.support.check import CLEAN_LINE, compose, installed_ruff, loosen_requirement
 from tests.support.check import hygiene_output as run
-from tests.support.scanners import fake_engine, fake_zizmor, never_located, nothing_installed
+from tests.support.scanners import fake_scanner, fake_zizmor, lacking, never_located, nothing_installed
 
 
 def deleted_compose_repo(build_repo, tmp_path):
@@ -69,11 +69,12 @@ def test_quality_tracks_no_env_or_compose_file():
     assert ".env" not in tracked
 
 
-def test_a_tracked_workflow_missing_from_disk_is_never_handed_to_an_engine(build_repo, clean_engines, capsys):
-    """#76 rule 3, cell 10: no workflow engine is installed, so any name passed on would be cannot judge."""
+def test_a_tracked_workflow_missing_from_disk_is_never_handed_to_a_scanner(build_repo, use_mise, served_scanners, capsys):
+    """#76 rule 3, cell 10: no workflow scanner is installed, so any name passed on would be cannot judge."""
+    use_mise(lacking(served_scanners, scanners.ACTIONLINT))
     repo = build_repo({".github/workflows/w.yml": "on: push\n"})
     (repo / ".github/workflows/w.yml").unlink()
-    code = cli.main(["hygiene", "--engines", str(clean_engines), str(repo)])
+    code = cli.main(["hygiene", str(repo)])
     captured = capsys.readouterr()
     assert (code, "hygiene: clean (" in captured.out) == (0, True), captured.err
 
@@ -97,14 +98,14 @@ def files(tracked: dict[str, str]):
 
 
 @pytest.mark.parametrize(
-    ("arrange", "with_engines", "expected_code", "expected_lines"),
+    ("arrange", "expected_code", "expected_lines"),
     [
-        (files({**BASELINE, ".env": "A=1\n", "src/bad.py": "def broken(:\n"}), False, 2,
+        (files({**BASELINE, ".env": "A=1\n", "src/bad.py": "def broken(:\n"}), 2,
          [ENV_FINDING, "hygiene: size unparsable - src/bad.py is not valid Python",
           "hygiene: python-security unparsable - ruff cannot parse src/bad.py",
           "hygiene: python-print unparsable - ruff cannot parse src/bad.py",
-          "hygiene: 2 finding(s); verdicts: 10 clean, 2 findings, 3 unparsable"]),
-        (config_linked_out_of_the_repository, True, 2,
+          "hygiene: 2 finding(s); verdicts: 14 clean, 2 findings, 3 unparsable"]),
+        (config_linked_out_of_the_repository, 2,
          [ENV_FINDING, "hygiene: compose-port cannot judge - quality/config.toml resolves outside the repository",
           "hygiene: secret cannot judge - quality/config.toml resolves outside the repository",
           "hygiene: advisory cannot judge - quality/config.toml resolves outside the repository",
@@ -116,18 +117,14 @@ def files(tracked: dict[str, str]):
           "hygiene: test-import cannot judge - quality/config.toml resolves outside the repository",
           "hygiene: python-floor cannot judge - quality/config.toml resolves outside the repository",
           "hygiene: 1 finding(s); verdicts: 8 clean, 1 findings, 10 cannot judge"]),
-        (files({**BASELINE, "compose.yaml": "services: [\n", "src/a.py": NEW_DEBT}), False, 2,
+        (files({**BASELINE, "compose.yaml": "services: [\n", "src/a.py": NEW_DEBT}), 2,
          ["hygiene: compose-port cannot judge - cannot read compose.yaml", "size src/a.py:1 - function long_one"]),
-        (files({".env": "A=1\n", **compose('- "8080:80"')}), False, 1,
-         [ENV_FINDING, "compose-port compose.yaml - ", "hygiene: 3 finding(s); verdicts: 12 clean, 3 findings"]),
-        (files({}), False, 0,
-         [f"{CLEAN_LINE}; skipped without --engines: secret, workflow-lint, workflow-security, advisory"]),
-        (files({}), True, 0,
-         [f"hygiene: clean ({FILE_RULES}, {ENGINE_RULES});"]),
-        (files({"compose-\udcff.yaml": compose('- "8080:80"')["compose.yaml"]}), False, 1,
+        (files({".env": "A=1\n", **compose('- "8080:80"')}), 1,
+         [ENV_FINDING, "compose-port compose.yaml - ", "hygiene: 3 finding(s); verdicts: 16 clean, 3 findings"]),
+        (files({"compose-\udcff.yaml": compose('- "8080:80"')["compose.yaml"]}), 1,
          ["compose-port compose-\\udcff.yaml - service web publishes port 8080:80"]),
-        (files({**BASELINE, "src/\udcff.py": NEW_DEBT}), False, 1, ["size src/\\udcff.py:1 - function long_one"]),
-        (files({"src/\udcff.py": "def broken(:\n"}), False, 2,
+        (files({**BASELINE, "src/\udcff.py": NEW_DEBT}), 1, ["size src/\\udcff.py:1 - function long_one"]),
+        (files({"src/\udcff.py": "def broken(:\n"}), 2,
          ["functions unmeasured: src/\\udcff.py", "hygiene: python-security unparsable - ruff cannot parse src/\\udcff.py",
           "hygiene: python-print unparsable - ruff cannot parse src/\\udcff.py"]),
     ],
@@ -136,21 +133,18 @@ def files(tracked: dict[str, str]):
         "cell 2 secret cannot judge hides no env-file finding",
         "cell 3 unreadable compose hides no size finding",
         "cell 4 findings in two rules",
-        "cell 5 clean names the file rules",
-        "cell 6 clean with engines names all eleven rules",
         "cell 7 non-utf8 compose name",
         "cell 8 non-utf8 python name",
         "rule 4 non-utf8 python name in the size report",
     ],
 )
 def test_every_rule_is_judged_and_the_exit_is_the_worst(
-    build_repo, elsewhere, clean_engines, capsys, arrange, with_engines, expected_code, expected_lines
+    build_repo, elsewhere, capsys, arrange, expected_code, expected_lines
 ):
     """#55 rules 1-4, cells 1-8 (cell 9 is the exit-code table's non-utf8 env case): each rule prints its own
     verdict, one rule's refusal hides no other rule's, the exit is the worst verdict's, the clean line names the
     rules, and every path prints backslash-escaped."""
-    engine_arguments = ["--engines", str(clean_engines)] if with_engines else []
-    code = cli.main(["hygiene", *engine_arguments, str(arrange(build_repo, elsewhere))])
+    code = cli.main(["hygiene", str(arrange(build_repo, elsewhere))])
     captured = capsys.readouterr()
     output = captured.out + captured.err
     assert code == expected_code, output
@@ -172,13 +166,13 @@ def test_a_finding_under_a_rule_its_check_does_not_judge_fails_loud(build_repo, 
         cli.main(arguments)
 
 
-def test_a_refusing_workflow_engine_stops_no_other_workflow_rule(build_repo, clean_engines, elsewhere, capsys):
+def test_a_refusing_workflow_scanner_stops_no_other_workflow_rule(build_repo, served_scanners, elsewhere, capsys):
     """#55 rule 1: actionlint cannot judge, yet zizmor still runs and its finding prints under its own rule."""
     zizmor_report = Path(__file__).parent / "fixtures" / "scanner-outputs" / "zizmor-finding.json"
-    fake_engine(clean_engines, "actionlint", on_scan="echo boom >&2; exit 3")
+    fake_scanner(served_scanners, scanners.ACTIONLINT, "echo boom >&2; exit 3")
     locate_zizmor = fake_zizmor(elsewhere, on_scan=f"cat '{zizmor_report}'; exit 12")
     repo = build_repo({".github/workflows/w.yml": "on: push\n"})
-    code = cli.main(["hygiene", "--engines", str(clean_engines), str(repo)], locate_zizmor=locate_zizmor)
+    code = cli.main(["hygiene", str(repo)], locate_zizmor=locate_zizmor)
     captured = capsys.readouterr()
     assert code == 2
     assert "hygiene: workflow-lint cannot judge - actionlint exited 3" in captured.err
@@ -187,11 +181,10 @@ def test_a_refusing_workflow_engine_stops_no_other_workflow_rule(build_repo, cle
 
 @pytest.mark.parametrize("case", ["not installed", "recorded file deleted", "another version", "failing version", "unpinned"])
 def test_a_zizmor_quality_cannot_find_or_trust_refuses_only_workflow_security(
-    build_repo, clean_engines, elsewhere, monkeypatch, capsys, case
+    build_repo, served_scanners, elsewhere, monkeypatch, capsys, case
 ):
     """#248 rule 4: a zizmor that is missing, at another version or unable to report one cannot judge and names the
     reinstall command; a pin quality's own metadata lacks names the defect and no command; no other rule refuses."""
-    fake_engine(clean_engines, "actionlint", on_scan="echo '[]'")
     repo = build_repo({".env": "A=1\n", ".github/workflows/w.yml": "on: push\n"})
     for name in ("another", "failing", "pinned"):
         (elsewhere / name).mkdir()
@@ -207,7 +200,7 @@ def test_a_zizmor_quality_cannot_find_or_trust_refuses_only_workflow_security(
     }
     if case == "unpinned":
         loosen_requirement(elsewhere / "metadata", monkeypatch, "zizmor")
-    code = cli.main(["hygiene", "--engines", str(clean_engines), str(repo)], locate_zizmor=locators[case])
+    code = cli.main(["hygiene", str(repo)], locate_zizmor=locators[case])
     captured = capsys.readouterr()
     output = captured.out + captured.err
     assert code == 2, output
@@ -221,18 +214,15 @@ def test_a_zizmor_quality_cannot_find_or_trust_refuses_only_workflow_security(
     assert [version for version in versions_named if version not in output] == [], output
 
 
-def test_a_zizmor_planted_in_the_engine_directory_is_never_run(build_repo, clean_engines, elsewhere, capsys):
-    """#248 rule 4, no bridge: the verdict comes from quality's installation, not from the engine directory."""
+def test_a_zizmor_planted_in_the_scanner_directory_is_never_run(build_repo, served_scanners, elsewhere, capsys):
+    """#248 rule 4, no bridge: the verdict comes from quality's installation, not from the directory mise serves."""
     marker = elsewhere / "ran"
-    planted = clean_engines / "zizmor"
+    planted = served_scanners / "zizmor"
     planted.write_text(f"#!/bin/sh\ntouch {marker}\n")
     planted.chmod(0o755)
-    fake_engine(clean_engines, "actionlint", on_scan="echo '[]'")
     (elsewhere / "installed").mkdir()
     repo = build_repo({".github/workflows/w.yml": "on: push\n"})
-    code = cli.main(
-        ["hygiene", "--engines", str(clean_engines), str(repo)], locate_zizmor=fake_zizmor(elsewhere / "installed", "echo '[]'")
-    )
+    code = cli.main(["hygiene", str(repo)], locate_zizmor=fake_zizmor(elsewhere / "installed", "echo '[]'"))
     assert (code, marker.exists()) == (0, False), capsys.readouterr()
 
 
@@ -335,7 +325,7 @@ def test_an_index_record_quality_cannot_read_refuses_exactly_the_rules_that_read
         return real_run(command, *args, **kwargs)
 
     monkeypatch.setattr(process, "run", unreadable_modes)
-    verdicts = check.run_hygiene(repo, None, installed_ruff, never_located).verdicts
+    verdicts = check.run_hygiene(repo, installed_ruff, never_located).verdicts
     refused = [(verdict.rule, str(verdict.refusal)) for verdict in verdicts if verdict.refusal is not None]
     assert [rule for rule, _ in refused] == [
         "file-suffix", "script-name", "script-header", "test-layout", "test-import", "python-floor", "python-security", "python-print",

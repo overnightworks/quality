@@ -71,14 +71,14 @@ process.run(["sh", "-c", f'sleep 300 & echo $! > "{sys.argv[1]}"; wait'])
 
 
 @pytest.mark.integration
-def test_a_sigterm_to_the_process_group_leaves_no_engine_running(tmp_path):
-    """A caller outside a scratch directory has no SIGTERM handler: its engine stays in the group the signal reaches."""
+def test_a_sigterm_to_the_process_group_leaves_no_scanner_running(tmp_path):
+    """A caller outside a scratch directory has no SIGTERM handler: its scanner stays in the group the signal reaches."""
     child = tmp_path / "child-pid"
     caller = subprocess.Popen([sys.executable, "-c", SIGTERM_OUTSIDE_SCRATCH, str(child)], start_new_session=True)
     try:
         deadline = time.monotonic() + 30
         while not (child.exists() and child.read_text().strip()):
-            assert time.monotonic() < deadline, "the engine never started"
+            assert time.monotonic() < deadline, "the scanner never started"
             time.sleep(0.05)
         os.killpg(caller.pid, signal.SIGTERM)
         caller.wait(timeout=30)

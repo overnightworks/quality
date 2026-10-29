@@ -6,7 +6,7 @@ Status: accepted, 21.10.2026. Reader: an engineer who proposes replacing the det
 
 The clone ratchet needs every pair of near-identical functions to carry an identity that survives unrelated changes, so a
 baseline can name it and a rename or deletion orphans it. The standing rule is to build logic and process ourselves and
-never the specialist engines (see [commands.md](../commands.md#quality-engines)); the operator also prefers standard
+never the specialist engines (see [commands.md](../commands.md#scanners)); the operator also prefers standard
 tools. The choice therefore stood against a measurement.
 
 ## Decision
