@@ -302,12 +302,12 @@ def test_installed_binary_reports_the_pinned_version(build_repo, installed_scann
 
 @pytest.mark.scanner
 def test_a_mise_config_above_the_manifests_parent_never_takes_part(installed_scanners, tmp_path, monkeypatch):
-    """#265 D4, B1: the gate's layout, a checkout whose root mise.toml does not parse; mise reads it only without the
-    ceiling, and then fails whatever its trust, so a found scanner proves the boundary."""
+    """#265 D4: a checkout whose mise.toml and .miserc.toml do not parse; a found scanner proves mise reads neither."""
     checkout = tmp_path / "checkout"
     manifest_copy = checkout / "src" / "quality" / "mise"
     shutil.copytree(scanners.MANIFEST_DIRECTORY, manifest_copy)
-    (checkout / "mise.toml").write_text("[tools\nthis does not parse")
+    for name in ("mise.toml", ".miserc.toml"): (checkout / name).write_text("[tools\nthis does not parse")
+    monkeypatch.chdir(checkout)
     monkeypatch.setattr(scanners, "MANIFEST_DIRECTORY", manifest_copy)
     assert scanners.located(scanners.GITLEAKS).is_file()
 
@@ -802,7 +802,7 @@ def test_mise_is_asked_in_the_manifest_directory_under_its_ceiling(
     assert cli.main(["hygiene", str(repo)], locate_zizmor=fake_zizmor(elsewhere, "echo '[]'")) == 0
     directory, ceiling = scanners.MANIFEST_DIRECTORY, scanners.MANIFEST_DIRECTORY.parent
     assert sorted(record.read_text().splitlines()) == sorted(
-        f"--cd {directory} which {name} --tool {tool.key}@{tool.version}|{ceiling}"
+        f"--cd {directory} which {name} --tool {tool.key}@{tool.version}|{ceiling}|{directory.resolve()}"
         for name, tool in ((name, scanners.pinned_tool(name)) for name in (scanners.GITLEAKS, scanners.ACTIONLINT, scanners.OSV_SCANNER))
     )
 

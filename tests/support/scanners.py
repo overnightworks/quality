@@ -53,8 +53,9 @@ def lacking(served: Path, *names: str) -> str:
 
 
 def recording(record: Path, body: str) -> str:
-    """`body` after a line that appends one line to `record` for each call: the arguments, `|`, MISE_CEILING_PATHS."""
-    return f'printf "%s\\n" "$*|$MISE_CEILING_PATHS" >> {record}\n{body}'
+    """`body` after a line that appends one line to `record` for each call: the arguments, `|`, MISE_CEILING_PATHS, `|`, the
+    working directory."""
+    return f'printf "%s\\n" "$*|$MISE_CEILING_PATHS|$(pwd -P)" >> {record}\n{body}'
 
 
 def fake_zizmor(directory: Path, on_scan: str, version: str | None = None) -> Locator:

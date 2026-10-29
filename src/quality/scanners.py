@@ -75,6 +75,7 @@ def located(name: str) -> Path:
         asked = process.run(
             [MISE, "--cd", str(MANIFEST_DIRECTORY), "which", name, "--tool", f"{tool.key}@{tool.version}"],
             env=os.environ | {MISE_CEILING_VARIABLE: str(MANIFEST_DIRECTORY.parent)},
+            cwd=MANIFEST_DIRECTORY,
             timeout=process.VERSION_TIMEOUT_SECONDS,
         )
     except process.ProcessError as error:
