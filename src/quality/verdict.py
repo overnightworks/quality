@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 
-from quality import architecture, process, repository, sonar
+from quality import architecture, process, repository, web
 from quality.config import (
     CONFIG_PATH,
     ConfigError,
@@ -293,8 +293,8 @@ def unreadable_jobs(url: str, error: Exception) -> CannotJudge:
         hint = f" {PERMISSION_HINT}" if error.code in PERMISSION_REFUSALS else ""
         return CannotJudge(f"cannot read {url}: {error}{hint}")
     if isinstance(error, OSError):
-        if sonar.timed_out(error):
-            seconds = sonar.REQUEST_TIMEOUT_SECONDS
+        if web.timed_out(error):
+            seconds = web.REQUEST_TIMEOUT_SECONDS
             return CannotJudge(f"GitHub did not answer {url} within {seconds}s; re-run the verdict")
         return CannotJudge(f"could not reach GitHub at {url}: {error}; re-run the verdict")
     return CannotJudge(f"cannot read {url}: {error}")
@@ -303,7 +303,7 @@ def unreadable_jobs(url: str, error: Exception) -> CannotJudge:
 def github_fetcher(token: str) -> PageFetcher:
     def fetch(url: str) -> tuple[str, str | None]:
         headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
-        body, answer_headers = sonar.fetch(url, headers, lambda error: unreadable_jobs(url, error))
+        body, answer_headers = web.fetch(url, headers, lambda error: unreadable_jobs(url, error))
         try:
             text = body.decode("utf-8")
         except UnicodeDecodeError as error:
@@ -335,7 +335,7 @@ class UnsettledRun(CannotJudge):
         self.preceding_lines = (*_noted(note), *blocking)
 
 
-def read_settled(read: Callable[[], list[Job]], judgement: Judgement, sleep: sonar.Sleep) -> Settled:
+def read_settled(read: Callable[[], list[Job]], judgement: Judgement, sleep: web.Sleep) -> Settled:
     """Judges the run's jobs until no judged job is unsettled, re-reading a stale answer or GitHub's server error.
 
     The gate starts after every mandatory job, so GitHub listing one as running is its lagging answer, not the run.
