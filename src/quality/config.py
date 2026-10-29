@@ -1,6 +1,6 @@
 import datetime
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path, PurePosixPath
 from typing import NamedTuple
@@ -184,17 +184,24 @@ class ConfigError(Exception):
 
 
 @dataclass(frozen=True)
+class AllowLists:
+    """What the repository allows or declares, one list per table; the default allows nothing, as a missing config does."""
+
+    secrets: dict[Allowance, str] = field(default_factory=dict)
+    advisories: tuple[AdvisoryAllowance, ...] = ()
+    root: tuple[RootAllowance, ...] = ()
+    layout: tuple[LayoutAllowance, ...] = ()
+    python: tuple[PythonAllowance, ...] = ()
+    compose: tuple[ComposeAllowance, ...] = ()
+
+
+@dataclass(frozen=True)
 class _Document:
-    """The whole config, validated once: the [gate] table, its declarations, and both allow lists."""
+    """The whole config, validated once: the [gate] table, its declarations, and every allow list."""
 
     gate: dict
     declarations: tuple[Declaration, ...]
-    secret_allowances: dict[Allowance, str]
-    advisory_allowances: tuple[AdvisoryAllowance, ...]
-    root_allowances: tuple[RootAllowance, ...]
-    layout_allowances: tuple[LayoutAllowance, ...]
-    python_allowances: tuple[PythonAllowance, ...]
-    compose_allowances: tuple[ComposeAllowance, ...]
+    allow_lists: AllowLists
 
 
 def _parse(text: str, example: str) -> dict:
@@ -251,12 +258,14 @@ def _validated_document(text: str) -> _Document:
     return _Document(
         gate,
         _declarations(gate),
-        _parse_allowances(_table(document, "secrets", ALLOWANCE_EXAMPLE)),
-        _advisory_allowances(advisories),
-        _root_allowances(root),
-        _layout_allowances(layout),
-        _python_allowances(python),
-        _compose_allowances(compose),
+        AllowLists(
+            _parse_allowances(_table(document, "secrets", ALLOWANCE_EXAMPLE)),
+            _advisory_allowances(advisories),
+            _root_allowances(root),
+            _layout_allowances(layout),
+            _python_allowances(python),
+            _compose_allowances(compose),
+        ),
     )
 
 
@@ -515,7 +524,7 @@ def load_gate_settings(text: str | None) -> GateSettings:
     document = _validated_document(text)
     return GateSettings(
         _mandatory_jobs(document.gate), _legacy_mode(document.gate), document.declarations,
-        document.advisory_allowances,
+        document.allow_lists.advisories,
     )
 
 
@@ -531,13 +540,17 @@ def read_gate_settings(repo: Path) -> GateSettings:
     return load_gate_settings(_read_config_text(repo))
 
 
-def load_secret_allowances(text: str | None) -> dict[Allowance, str]:
-    """Allowance -> reason of every finding the repository allows; a missing config allows nothing.
+def load_allow_lists(text: str | None) -> AllowLists:
+    """Every list the repository allows or declares; a missing config allows nothing.
 
     The whole document is validated, as the gate does: hygiene and the verdict refuse an unknown key and a malformed
     entry alike.
     """
-    return {} if text is None else _validated_document(text).secret_allowances
+    return AllowLists() if text is None else _validated_document(text).allow_lists
+
+
+def read_allow_lists(repo: Path) -> AllowLists:
+    return load_allow_lists(_read_config_text(repo))
 
 
 def load_staged_secret_allowances(text: str | None) -> dict[Allowance, str]:
@@ -585,40 +598,3 @@ def _read_allowance(entry: object) -> tuple[Allowance, str]:
     if _spans_lines(reason):
         raise ConfigError(f"{CONFIG_PATH} [secrets] allow entry {entry!r} needs a one-line reason")
     return Allowance(rule, file, secret_sha256), reason
-
-
-def read_secret_allowances(repo: Path) -> dict[Allowance, str]:
-    return load_secret_allowances(_read_config_text(repo))
-
-
-def load_advisory_allowances(text: str | None) -> tuple[AdvisoryAllowance, ...]:
-    """Every advisory the repository allows, the whole document validated; a missing config allows nothing."""
-    return () if text is None else _validated_document(text).advisory_allowances
-
-
-def read_advisory_allowances(repo: Path) -> tuple[AdvisoryAllowance, ...]:
-    return load_advisory_allowances(_read_config_text(repo))
-
-
-def read_root_allowances(repo: Path) -> tuple[RootAllowance, ...]:
-    """The root entries the repository declares, the whole document validated; a missing config declares none."""
-    text = _read_config_text(repo)
-    return () if text is None else _validated_document(text).root_allowances
-
-
-def read_layout_allowances(repo: Path) -> tuple[LayoutAllowance, ...]:
-    """The files the repository declares against a layout rule, the whole document validated; a missing config declares none."""
-    text = _read_config_text(repo)
-    return () if text is None else _validated_document(text).layout_allowances
-
-
-def read_python_allowances(repo: Path) -> tuple[PythonAllowance, ...]:
-    """The pyproject files the repository allows below the Python floor, the whole document validated; a missing config allows none."""
-    text = _read_config_text(repo)
-    return () if text is None else _validated_document(text).python_allowances
-
-
-def read_compose_allowances(repo: Path) -> tuple[ComposeAllowance, ...]:
-    """The host-networked services the repository declares, the whole document validated; a missing config declares none."""
-    text = _read_config_text(repo)
-    return () if text is None else _validated_document(text).compose_allowances
