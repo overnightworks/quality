@@ -75,4 +75,5 @@ layers = [
     "report",
     "config",
     "repository",
+    "process",
 ]

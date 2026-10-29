@@ -12,7 +12,7 @@ from typing import TextIO
 
 from ruff import find_ruff_bin
 
-from quality import __version__, clones, engines, ratchet, repository, scoreboard, staged
+from quality import __version__, clones, engines, process, ratchet, repository, scoreboard, staged
 from quality.config import Allowance, ConfigError, read_gate_settings
 from quality.emergency import Ask, GhRunner, RemoteFor, github_remote, run_emergency_merge, run_gh
 from quality.hygiene import (
@@ -257,7 +257,7 @@ def describe_loosenings(path: Path, written: ratchet.Baseline) -> list[str]:
 def run_scan_staged(path: Path, engine_dir: Path, read_pins: Callable[[], dict[str, engines.Pin]]) -> int:
     try:
         result = staged.scan_staged(path, engine_dir, read_pins())
-    except (engines.EngineError, ConfigError) as error:
+    except (process.ProcessError, ConfigError) as error:
         emit(f"scan-staged: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     print_secret_allowances(result.allowed, result.unused_allowances)
@@ -271,7 +271,7 @@ def run_engines_install(directory: Path, read_pins: Callable[[], dict[str, engin
     try:
         pins = read_pins()
         downloaded = engines.install(directory, pins)
-    except engines.EngineError as error:
+    except process.ProcessError as error:
         emit(f"engines: cannot install - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     for name, pin in pins.items():
@@ -282,7 +282,7 @@ def run_engines_install(directory: Path, read_pins: Callable[[], dict[str, engin
 def run_engines_verify(directory: Path, read_pins: Callable[[], dict[str, engines.Pin]]) -> int:
     try:
         problems = engines.verification_problems(directory, read_pins())
-    except engines.EngineError as error:
+    except process.ProcessError as error:
         problems = [str(error)]
     if problems:
         emit(*(f"engines: {problem}" for problem in problems), file=sys.stderr)

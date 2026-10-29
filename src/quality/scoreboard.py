@@ -19,7 +19,19 @@ from urllib.parse import urlsplit
 
 import yaml
 
-from quality import __version__, advisories, architecture, clones, config, engines, hygiene, layout, ratchet, repository
+from quality import (
+    __version__,
+    advisories,
+    architecture,
+    clones,
+    config,
+    engines,
+    hygiene,
+    layout,
+    process,
+    ratchet,
+    repository,
+)
 
 FLEET_PATH = "quality/fleet.toml"
 FLEET_EXAMPLE = 'public = ["https://github.com/o/open"]\nprivate = ["https://github.com/o/closed"]'
@@ -296,7 +308,7 @@ def measure_fleet(fleet: Fleet) -> list[Row]:
 def anonymous_environment(scratch: Path) -> dict[str, str]:
     """No configuration git could authenticate from: the engines' isolation drops every GIT_* variable and the system
     and global config, and points HOME at an empty directory, so no ~/.netrc either."""
-    isolated = engines.attribute_free_git_environment(scratch / "home")
+    isolated = process.attribute_free_git_environment(scratch / "home")
     # git falls back to SSH_ASKPASS for an http password too.
     return {**{name: value for name, value in isolated.items() if name != "SSH_ASKPASS"}, "GIT_TERMINAL_PROMPT": "0"}
 
@@ -352,11 +364,11 @@ def repository_name(url: str) -> str:
 
 def read_release_tags(url: str = GATE_URL) -> ReleaseTags:
     """Release tag -> commit of the gate repository, the annotated ones peeled, by one anonymous `git ls-remote`."""
-    with engines.scratch_directory() as scratch:
+    with process.scratch_directory() as scratch:
         try:
             listed = git(["ls-remote", "--tags", "--", url], scratch, anonymous_environment(scratch),
                          LS_REMOTE_TIMEOUT_SECONDS)
-        except engines.EngineError as error:
+        except process.ProcessError as error:
             raise ReleaseTagsError(str(error)) from error
     if listed.returncode != 0:
         raise ReleaseTagsError(f"git exited {listed.returncode}")
@@ -384,7 +396,7 @@ def measure_public(url: str) -> Row:
         require_anonymous(url)
     except Refused as refused:
         return Unjudged(name, f"cannot clone ({refused})")
-    with engines.scratch_directory() as scratch:
+    with process.scratch_directory() as scratch:
         environment = anonymous_environment(scratch)
         clone = scratch / "clone"
         try:
@@ -394,7 +406,7 @@ def measure_public(url: str) -> Row:
             if cloned.returncode != 0:
                 return Unjudged(name, f"cannot clone (git exited {cloned.returncode})")
             head = git(["-C", str(clone), "rev-parse", "HEAD"], scratch, environment, CLONE_TIMEOUT_SECONDS)
-        except engines.EngineError as error:
+        except process.ProcessError as error:
             return Unjudged(name, f"cannot clone ({error})")
         if head.returncode != 0:
             return Unjudged(name, f"cannot read the cloned commit (git exited {head.returncode})")
@@ -491,10 +503,10 @@ def judge_private(url: str) -> Row:
         require_anonymous(url)
     except Refused as refused:
         return Unjudged(name, f"cannot check that it is private ({refused})")
-    with engines.scratch_directory() as scratch:
+    with process.scratch_directory() as scratch:
         try:
             listed = git(["ls-remote", "--", url], scratch, anonymous_environment(scratch), LS_REMOTE_TIMEOUT_SECONDS)
-        except engines.EngineError as error:
+        except process.ProcessError as error:
             return Unjudged(name, f"cannot check that it is private ({error})")
     if listed.returncode == 0:
         return Unjudged(name, "declared private but readable")
@@ -504,7 +516,7 @@ def judge_private(url: str) -> Row:
 def git(
     arguments: list[str], scratch: Path, environment: dict[str, str], timeout: float
 ) -> subprocess.CompletedProcess[str]:
-    return engines.run([*ANONYMOUS_GIT, *arguments], cwd=scratch, env=environment, timeout=timeout)
+    return process.run([*ANONYMOUS_GIT, *arguments], cwd=scratch, env=environment, timeout=timeout)
 
 
 def render(rows: list[Row], today: date, tags: ReleaseTags | ReleaseTagsError) -> tuple[str, ...]:

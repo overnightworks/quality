@@ -10,7 +10,7 @@ from functools import partial
 from pathlib import Path
 from urllib.parse import quote
 
-from quality import architecture, engines
+from quality import architecture, process
 from quality.config import CONFIG_PATH, REPOSITORY_NAME, Declaration, GateSettings, LegacyMode
 from quality.hygiene import CannotJudge
 from quality.ratchet import BASELINE_PATH, NO_RENAMES, Renames
@@ -204,7 +204,7 @@ def fetch_environment(environment: Mapping[str, str], empty_home: Path) -> dict[
     """The environment of git around the fetch: no inherited git routing or configuration, an empty home so that
     `.netrc` and every other file git reads there is absent, and no way to prompt for a password. gh is the only source
     of credentials, and it keeps its login by being told where the real configuration directory is."""
-    isolated = engines.attribute_free_git_environment(empty_home)
+    isolated = process.attribute_free_git_environment(empty_home)
     kept = {name: value for name, value in isolated.items() if name != "SSH_ASKPASS"}
     return kept | {"GIT_TERMINAL_PROMPT": "0", "GH_CONFIG_DIR": gh_configuration_directory(environment)}
 
@@ -212,7 +212,7 @@ def fetch_environment(environment: Mapping[str, str], empty_home: Path) -> dict[
 def read_renames_of_pull(remote: str, base_sha: str, merge_sha: str, environment: Mapping[str, str]) -> Renames:
     """The renames the verdict reads at the checkout, from the pull request's two commits fetched into a bare repository
     that is removed afterwards. Credentials stay in gh's credential protocol; git's own words never reach the operator."""
-    with engines.scratch_directory() as scratch:
+    with process.scratch_directory() as scratch:
         isolated = fetch_environment(environment, scratch / "home")
         repository = scratch / "repository"
         commands = (
@@ -224,8 +224,8 @@ def read_renames_of_pull(remote: str, base_sha: str, merge_sha: str, environment
         )
         for command in commands:
             try:
-                done = engines.run_bounded_in_own_group(command, FETCH_TIMEOUT_SECONDS, isolated)
-            except engines.EngineError as error:
+                done = process.run_bounded_in_own_group(command, FETCH_TIMEOUT_SECONDS, isolated)
+            except process.ProcessError as error:
                 raise Refused(f"cannot fetch the pull request's commits to compare renamed files ({error})") from None
             if done.returncode != 0:
                 raise Refused(

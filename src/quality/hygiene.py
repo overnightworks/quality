@@ -12,7 +12,7 @@ import yaml
 from packaging.specifiers import Specifier, SpecifierSet
 from packaging.version import Version
 
-from quality import advisories, architecture, clones, engines, layout, python_lint, ratchet, repository
+from quality import advisories, architecture, clones, engines, layout, process, python_lint, ratchet, repository
 from quality.config import (
     CONFIG_PATH,
     Allowance,
@@ -149,10 +149,10 @@ def _refusal_without_git(path: Path, what: str, reason: object) -> CannotJudge:
 def _git_listing(path: Path, command: list[str]) -> subprocess.CompletedProcess:
     """git's answer for the repository at `path`; one that refuses, or does not run, is a repository git cannot read."""
     try:
-        done = engines.run(["git", "-C", str(path.absolute()), *command], encoding=None)
+        done = process.run(["git", "-C", str(path.absolute()), *command], encoding=None)
     except OSError as error:
         raise _refusal_without_git(path, "the working directory cannot be read", repository.os_error_reason(error)) from error
-    except engines.EngineError as error:
+    except process.ProcessError as error:
         reason = repository.os_error_reason(error.__cause__) if isinstance(error.__cause__, OSError) else error
         raise _refusal_without_git(path, "git did not run", reason) from error
     if done.returncode != 0:
@@ -619,7 +619,7 @@ def _judge_lint[T](lint: python_lint.Lint | CannotJudge, judge: Callable[[python
 def check_secrets(root: Path, engine_dir: Path) -> engines.SecretScan:
     try:
         return engines.scan_secrets(root, engine_dir, engines.read_pins(), read_secret_allowances(root))
-    except (engines.EngineError, ConfigError) as error:
+    except (process.ProcessError, ConfigError) as error:
         raise CannotJudge(str(error)) from error
 
 
@@ -627,7 +627,7 @@ def check_workflows(root: Path, engine_dir: Path, rule: str, tracked: list[str])
     workflows = _on_disk(root, [name for name in tracked if _is_workflow(PurePosixPath(name))])
     try:
         return engines.scan_workflows(root, engine_dir, engines.read_pins(), rule, workflows)
-    except engines.EngineError as error:
+    except process.ProcessError as error:
         raise CannotJudge(str(error)) from error
 
 
@@ -640,7 +640,7 @@ def check_advisories(root: Path, engine_dir: Path, tracked: list[str]) -> adviso
     locks = {name: _judged(repository.resolve_file, root, name) for name in _on_disk(root, [n for n in tracked if advisories.is_lock(n)])}
     try:
         return advisories.scan(engine_dir, engines.read_pins(), locks, root, allowances, datetime.now(UTC).date())
-    except engines.EngineError as error:
+    except process.ProcessError as error:
         raise CannotJudge(str(error)) from error
 
 

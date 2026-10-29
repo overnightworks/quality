@@ -1,20 +1,14 @@
 import hashlib
 import io
 import json
-import os
-import re
-import signal
-import subprocess
 import tarfile
-import tempfile
 import tomllib
 import urllib.request
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager, suppress
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import overload
 
+from quality import process
 from quality.config import Allowance
 from quality.report import Finding
 
@@ -23,9 +17,7 @@ GITLEAKS = "gitleaks"
 CLEAN_EXIT = 0
 GITLEAKS_LEAKS_FOUND = 7  # gitleaks exits 1 on its own errors too, so leaks get a code of their own
 DOWNLOAD_TIMEOUT_SECONDS = 120
-VERSION_TIMEOUT_SECONDS = 30
 SECRET_SCAN_TIMEOUT_SECONDS = 1800  # bounds the scan so the scratch directory and its mirror are always deleted
-STDERR_TAIL_LINES = 5
 LEAK_FIELDS = ("File", "StartLine", "RuleID", "Commit", "Secret")
 WORKFLOW_LINT = "workflow-lint"
 WORKFLOW_SECURITY = "workflow-security"
@@ -38,14 +30,13 @@ ACTIONLINT_FINDINGS = 1
 ZIZMOR_FINDINGS = range(10, 15)  # zizmor encodes the worst severity in 10..14
 VERSION_ARGUMENTS = {GITLEAKS: ["version"], ACTIONLINT: ["-version"], ZIZMOR: ["--version"], OSV_SCANNER: ["--version"]}
 GIT_FLOOR = (2, 41)  # GIT_ATTR_SOURCE, which hides the repository's attributes from the scan, arrived in 2.41
-EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 PIN_FILE = Path(__file__).with_name("engines.toml")
 ACTIONLINT_CONFIG = Path(__file__).with_name("actionlint.yaml")
 ZIZMOR_CONFIG = Path(__file__).with_name("zizmor.yml")
 GITLEAKS_CONFIG = Path(__file__).with_name("gitleaks.toml")
 
 
-class EngineError(Exception):
+class EngineError(process.ProcessError):
     """An engine cannot be installed or trusted; this is never a clean result."""
 
 
@@ -91,7 +82,7 @@ def verification_problems(directory: Path, pins: dict[str, Pin]) -> list[str]:
 def _version_problem(directory: Path, name: str, pin: Pin) -> str | None:
     try:
         verify_version(engine_path(directory, name), name, pin.version)
-    except EngineError as error:
+    except process.ProcessError as error:
         return str(error)
     return None
 
@@ -156,35 +147,19 @@ def prepare_gitleaks(engine_dir: Path, pins: dict[str, Pin]) -> Path:
 
 def scan_secrets(root: Path, engine_dir: Path, pins: dict[str, Pin], allowances: dict[Allowance, str]) -> SecretScan:
     binary = prepare_gitleaks(engine_dir, pins)
-    with scratch_directory() as scratch:
-        git_environment = attribute_free_git_environment(scratch / "home")
+    with process.scratch_directory() as scratch:
+        git_environment = process.attribute_free_git_environment(scratch / "home")
         # gitleaks also reads <source>/.gitleaksignore, so it scans a mirror clone (bare), which has no work tree to
         # read it from. The verdict judges the history reachable from the scanned HEAD only: the mirror also brings
         # other branches, which are not this verdict's.
         source = scratch / "source"
-        git(["clone", "--mirror", "--quiet", "--template=", str(root.resolve()), str(source)],
+        process.git(["clone", "--mirror", "--quiet", "--template=", str(root.resolve()), str(source)],
             f"cannot clone {root} for the {GITLEAKS} scan", git_environment)
-        head = unborn_aware_head_commit(source, git_environment)
+        head = process.unborn_aware_head_commit(source, git_environment)
         if head is None:
             raise EngineError(f"cannot resolve HEAD of {source}: it has no commit")
         return run_gitleaks(binary, scratch, git_environment, source, [f"--log-opts={head}"], allowances)
 
-
-@contextmanager
-def scratch_directory() -> Iterator[Path]:
-    """A 0700 directory removed on every exit path, SIGTERM included (a hook runner or `timeout` sends it).
-
-    The signal raises, so subprocess.run kills its child and the directory goes with the unredacted report in it.
-    """
-    def unwind(signal_number: int, _frame: object) -> None:
-        raise SystemExit(128 + signal_number)
-
-    previous = signal.signal(signal.SIGTERM, unwind)
-    try:
-        with tempfile.TemporaryDirectory() as scratch:
-            yield Path(scratch)
-    finally:
-        signal.signal(signal.SIGTERM, previous)
 
 
 def run_gitleaks(
@@ -201,9 +176,9 @@ def run_gitleaks(
         "--exit-code", str(GITLEAKS_LEAKS_FOUND),
         "--report-format", "json", "--report-path", str(report), "--", str(source),
     ]
-    scan = run(command, env=git_environment, timeout=SECRET_SCAN_TIMEOUT_SECONDS)
+    scan = process.run(command, env=git_environment, timeout=SECRET_SCAN_TIMEOUT_SECONDS)
     if not report.is_file():
-        raise EngineError(f"{GITLEAKS} exited {scan.returncode} without writing its report{stderr_tail(scan.stderr)}")
+        raise EngineError(f"{GITLEAKS} exited {scan.returncode} without writing its report{process.stderr_tail(scan.stderr)}")
     leaks = engine_findings(GITLEAKS_ENGINE, _read_report(report), scan.returncode, scan.stderr)
     return _split_by_allowance(leaks, allowances)
 
@@ -230,49 +205,10 @@ def _split_by_allowance(leaks: list[Finding], allowances: dict[Allowance, str]) 
     )
 
 
-def attribute_free_git_environment(empty_home: Path) -> dict[str, str]:
-    """The environment git runs in so that no .gitattributes line can turn a diff into "Binary files differ".
-
-    This cuts off the repository and tree attributes, the system file, the user's global file
-    (`$XDG_CONFIG_HOME/git/attributes`) and any `core.attributesFile`, the repository's own config included, since
-    the forced command-line value wins. It does not cut off `$GIT_DIR/info/attributes`: git reads it from disk whatever
-    the environment says. The hygiene scan stays clear of it by scanning a fresh template-less mirror, which copies
-    none; a caller that runs git in the real repository must deal with it itself.
-    """
-    empty_home.mkdir(parents=True)
-    inherited = {name: value for name, value in os.environ.items() if not name.startswith("GIT_")}
-    return inherited | {
-        "GIT_ATTR_SOURCE": EMPTY_TREE,
-        "GIT_ATTR_NOSYSTEM": "1",
-        "GIT_CONFIG_GLOBAL": os.devnull,
-        "GIT_CONFIG_NOSYSTEM": "1",
-        "GIT_CONFIG_COUNT": "1",
-        "GIT_CONFIG_KEY_0": "core.attributesFile",
-        "GIT_CONFIG_VALUE_0": os.devnull,
-        "HOME": str(empty_home),
-        "XDG_CONFIG_HOME": str(empty_home),
-    }
-
-
-def parse_git_version(version_output: str) -> str | None:
-    """The first `major.minor[.patch]` number in `git --version` output, wherever it sits in a word.
-
-    Digit runs and the text between them are tokenised once, so a long run of digits cannot backtrack.
-    """
-    tokens = re.findall(r"\d+|\D+", version_output)
-    for start in range(len(tokens) - 2):
-        major, dot, minor = tokens[start : start + 3]
-        if major.isdigit() and dot == "." and minor.isdigit():
-            patch = tokens[start + 3 : start + 5]
-            if len(patch) == 2 and patch[0] == "." and patch[1].isdigit():
-                return f"{major}.{minor}.{patch[1]}"
-            return f"{major}.{minor}"
-    return None
-
 
 def require_git_floor() -> None:
     unreadable = "cannot read the git version"
-    version = parse_git_version(git(["--version"], unreadable))
+    version = process.parse_git_version(process.git(["--version"], unreadable))
     if version is None:
         raise EngineError(unreadable)
     if tuple(int(part) for part in version.split("."))[:2] < GIT_FLOOR:
@@ -282,131 +218,14 @@ def require_git_floor() -> None:
         )
 
 
-def unborn_aware_head_commit(repository: Path, git_environment: dict[str, str]) -> str | None:
-    """The commit HEAD names; None when the repository has no commit yet."""
-    # --ignore-missing: a HEAD without a commit lists nothing and exits 0, where rev-parse would fail.
-    listed = git(["-C", str(repository.resolve()), "rev-list", "--no-walk", "--ignore-missing", "HEAD", "--"],
-                 f"cannot resolve HEAD of {repository}", git_environment)
-    return listed.strip() or None
-
-
-@overload
-def git(
-    arguments: list[str], failure: str, env: dict[str, str] | None = ..., bound: float | None = ...,
-    encoding: str = ...,
-) -> str: ...
-@overload
-def git(
-    arguments: list[str], failure: str, env: dict[str, str] | None = ..., bound: float | None = ..., *,
-    encoding: None,
-) -> bytes: ...
-def git(
-    arguments: list[str], failure: str, env: dict[str, str] | None = None, bound: float | None = None,
-    encoding: str | None = "utf-8",
-) -> str | bytes:
-    """git's output, bytes for `encoding=None`; a git that fails is an EngineError of `failure` and git's own words.
-
-    A `bound` in seconds runs git in its own process group (see `run_bounded_in_own_group`).
-    """
-    command = ["git", *arguments]
-    done = run(command, env=env, encoding=encoding) if bound is None else run_bounded_in_own_group(command, bound, env, encoding)
-    if done.returncode != 0:
-        stderr = done.stderr if isinstance(done.stderr, str) else done.stderr.decode("utf-8", "replace")
-        raise EngineError(f"{failure}{stderr_tail(stderr)}")
-    return done.stdout
-
-
-REGULAR_FILE_MODES = frozenset({"100644", "100755"})
-
-
-def read_blob(
-    repository: Path, revision: str, path: str, unlisted: str, unreadable: str, env: dict[str, str] | None = None
-) -> str | None:
-    """The UTF-8 text of `path` at `revision`, None when the tree there lacks it.
-
-    Each caller words its own failures: `unlisted` when the tree cannot be listed, `unreadable` when the file cannot.
-    """
-    in_repository = ["-C", str(repository.resolve())]
-    listed = run(["git", *in_repository, "ls-tree", "--end-of-options", revision, "--", path], env=env)
-    if listed.returncode != 0:
-        raise EngineError(f"{unlisted}: git exited {listed.returncode}")
-    if not listed.stdout.strip():
-        return None
-    if listed.stdout.split()[0] not in REGULAR_FILE_MODES:
-        raise EngineError(f"{unreadable}: not a regular file")
-    shown = run(["git", *in_repository, "show", "--end-of-options", f"{revision}:{path}"], env=env, encoding=None)
-    if shown.returncode != 0:
-        raise EngineError(f"{unreadable}: git exited {shown.returncode}")
-    try:
-        return shown.stdout.decode("utf-8")
-    except UnicodeDecodeError as error:
-        raise EngineError(f"{unreadable}: {error}") from error
-
-
 def verify_version(binary: Path, engine_name: str, pinned: str) -> None:
-    asked = run([str(binary), *VERSION_ARGUMENTS[engine_name]], timeout=VERSION_TIMEOUT_SECONDS)
+    asked = process.run([str(binary), *VERSION_ARGUMENTS[engine_name]], timeout=process.VERSION_TIMEOUT_SECONDS)
     if asked.returncode != 0:
-        raise EngineError(f"{binary} version exited {asked.returncode}{stderr_tail(asked.stderr)}")
+        raise EngineError(f"{binary} version exited {asked.returncode}{process.stderr_tail(asked.stderr)}")
     reported = (asked.stdout.strip().splitlines() or [""])[0].split(" ")[-1]  # "zizmor 1.2.3", or just "1.2.3"
     if reported != pinned:
         raise EngineError(f"{binary} is version {reported!r}, the pin says {pinned!r}")
 
-
-@contextmanager
-def _failures_as_engine_errors(command: list[str]) -> Iterator[None]:
-    try:
-        yield
-    except UnicodeDecodeError as error:
-        raise EngineError(f"{command[0]} printed output that is not UTF-8 ({error})") from error
-    except (OSError, ValueError) as error:  # ValueError: an argument the OS refuses, such as an embedded null byte
-        raise EngineError(f"cannot run {command[0]}: {error}") from error
-
-
-def run(
-    command: list[str], cwd: Path | None = None, env: dict[str, str] | None = None, timeout: float | None = None,
-    encoding: str | None = "utf-8",
-) -> subprocess.CompletedProcess:
-    """`command`'s exit and output, decoded as UTF-8 whatever the locale; `encoding=None` keeps the bytes."""
-    with _failures_as_engine_errors(command):
-        try:
-            return subprocess.run(  # noqa: S603 - callers pass an argv list and never a shell
-                command, capture_output=True, encoding=encoding, check=False, cwd=cwd, env=env, timeout=timeout
-            )
-        except subprocess.TimeoutExpired:
-            raise EngineError(f"{command[0]} did not finish within {timeout} seconds") from None
-
-
-def run_bounded_in_own_group(
-    command: list[str], timeout: float, env: dict[str, str] | None = None, encoding: str | None = "utf-8"
-) -> subprocess.CompletedProcess:
-    """`run` for a command that must not outlive its bound or an interruption: it leads its own process group, which
-    is killed when the bound passes or an exception (the SIGTERM of `scratch_directory`) unwinds the caller.
-
-    Only inside `scratch_directory`: outside it a SIGTERM ends quality without unwinding, and the group would outlive it.
-    """
-    with _failures_as_engine_errors(command), subprocess.Popen(  # noqa: S603 - callers pass an argv list and never a shell
-        command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding=encoding, env=env, start_new_session=True
-    ) as process:
-        try:
-            stdout, stderr = process.communicate(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            _kill_group(process)
-            process.wait()  # not communicate(): a descendant that left the group would hold the pipes open
-            raise EngineError(f"{command[0]} did not finish within {timeout} seconds") from None
-        except BaseException:
-            _kill_group(process)
-            raise
-        return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
-
-
-def _kill_group(process: subprocess.Popen) -> None:
-    with suppress(ProcessLookupError):
-        os.killpg(process.pid, signal.SIGKILL)
-
-
-def stderr_tail(stderr: str) -> str:
-    tail = "\n".join(stderr.strip().splitlines()[-STDERR_TAIL_LINES:])
-    return f": {tail}" if tail else ""
 
 
 def _read_leak(entry: object) -> tuple[str, int, str, str, str]:
@@ -441,13 +260,13 @@ def scan_workflows(root: Path, engine_dir: Path, pins: dict[str, Pin], rule: str
     engine = WORKFLOW_ENGINES[rule]
     binary = engine_path(engine_dir, engine.name)
     verify_version(binary, engine.name, pins[engine.name].version)
-    scan = run([str(binary), *engine.arguments, *workflows], cwd=root)
+    scan = process.run([str(binary), *engine.arguments, *workflows], cwd=root)
     return engine_findings(engine, scan.stdout, scan.returncode, scan.stderr)
 
 
 def engine_findings(engine: _Engine, report_text: str, exit_code: int, stderr: str) -> list[Finding]:
     if exit_code != CLEAN_EXIT and exit_code not in engine.finding_exits:
-        raise EngineError(f"{engine.name} exited {exit_code}, neither 'clean' nor 'findings'{stderr_tail(stderr)}")
+        raise EngineError(f"{engine.name} exited {exit_code}, neither 'clean' nor 'findings'{process.stderr_tail(stderr)}")
     try:
         entries = json.loads(report_text)
     except ValueError as error:
