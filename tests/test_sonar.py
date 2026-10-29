@@ -1,7 +1,6 @@
 import base64
 import http.server
 import threading
-import urllib.error
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -416,20 +415,6 @@ def test_the_default_branch_comes_from_the_environment_not_from_the_name_main(mo
     code, out, _, _ = run_cli(monkeypatch, capsys, fake, {**PULL_REQUEST_ENVIRONMENT, "DEFAULT_BRANCH": "trunk"})
     assert (code, f"legacy 4 ({KEY}, trunk)" in out) == (0, True)
     assert parse_qs(urlparse(fake.urls_to(LEGACY_COUNT)[0]).query)["branch"] == ["trunk"]
-
-
-@pytest.mark.parametrize(
-    ("error", "expected"),
-    [
-        (TimeoutError(), True),
-        (urllib.error.URLError(TimeoutError()), True),
-        (urllib.error.URLError(ConnectionRefusedError()), False),
-        (OSError(), False),
-    ],
-)
-def test_recognises_which_transport_failures_ran_out_of_time(error, expected):
-    """#22 kept row: a transport failure is told apart as a timeout"""
-    assert sonar.timed_out(error) is expected
 
 
 @pytest.fixture

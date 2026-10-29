@@ -1,28 +1,24 @@
 """The SonarCloud zero-findings rule: wait for this run's own analysis, then count its open findings."""
 
 import base64
-import http.client
 import json
 import re
 import urllib.error
 import urllib.parse
-import urllib.request
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
-from email.message import Message
 from enum import Enum
 from pathlib import Path
 
 from quality.checkout import tracked_files
 from quality.config import LegacyMode
 from quality.report import CannotJudge, Finding
+from quality.web import REQUEST_TIMEOUT_SECONDS, Sleep, fetch, timed_out
 
 SONAR_ORIGIN = "https://sonarcloud.io"
 SONAR_API_ROOT = f"{SONAR_ORIGIN}/api"
 RULE = "sonar"
 
-# A SonarCloud that accepts the connection and then stops answering must not hang the job.
-REQUEST_TIMEOUT_SECONDS = 30
 # 5 s x 120 stays below the job timeout the workflow gives this step.
 TASK_POLL_INTERVAL_SECONDS = 5
 TASK_POLL_ATTEMPTS = 120
@@ -93,7 +89,6 @@ PROPERTY_ESCAPES = {"t": "\t", "n": "\n", "r": "\r", "f": "\f"}
 
 # The second argument is the Authorization header value; None sends the request anonymously.
 Transport = Callable[[str, str | None], object]
-Sleep = Callable[[float], None]
 TOKEN_REFUSALS = frozenset({401, 403})
 
 
@@ -101,25 +96,6 @@ class SonarHttpError(CannotJudge):
     def __init__(self, status: int, url: str) -> None:
         super().__init__(f"SonarCloud answered HTTP {status} for {url.partition('?')[0]}")
         self.status = status
-
-
-class RedirectRefusingHandler(urllib.request.HTTPRedirectHandler):
-    # A redirect would forward the Authorization header to another host; refuse it instead.
-    def redirect_request(self, *args, **kwargs) -> None:
-        return None
-
-
-def fetch(
-    url: str, headers: Mapping[str, str], unreadable: Callable[[Exception], CannotJudge],
-    timeout: float = REQUEST_TIMEOUT_SECONDS,
-) -> tuple[bytes, Message]:
-    """The body and headers answered at `url`, never following a redirect; any other answer is `unreadable(error)`."""
-    opener = urllib.request.build_opener(RedirectRefusingHandler())
-    try:
-        with opener.open(urllib.request.Request(url, headers=dict(headers)), timeout=timeout) as response:  # noqa: S310 - urls are SonarCloud and GitHub API endpoints built by quality plus the next page url from GitHub's Link header (trusted as GitHub's https answer; no scheme check)
-            return response.read(), response.headers
-    except (OSError, http.client.HTTPException) as error:  # a truncated body is an HTTPException
-        raise unreadable(error) from error
 
 
 def fetch_json(url: str, authorization: str | None, timeout: float = REQUEST_TIMEOUT_SECONDS) -> object:
@@ -139,13 +115,6 @@ def fetch_json(url: str, authorization: str | None, timeout: float = REQUEST_TIM
         return json.loads(body)
     except ValueError as error:  # JSONDecodeError and UnicodeDecodeError
         raise unreadable(error) from error
-
-
-def timed_out(error: OSError) -> bool:
-    # A read that runs out of time raises TimeoutError itself; a connect that does arrives in URLError.
-    return isinstance(error, TimeoutError) or (
-        isinstance(error, urllib.error.URLError) and isinstance(error.reason, TimeoutError)
-    )
 
 
 @dataclass(frozen=True)

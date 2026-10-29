@@ -24,7 +24,6 @@ from quality.report import CannotJudge, Finding, headline
 from quality.sonar import (
     DEPENDABOT_CONFIG,
     TASK_FILE,
-    Sleep,
     Transport,
     analyse,
     fetch_json,
@@ -43,6 +42,7 @@ from quality.verdict import (
     read_renames,
     read_settled,
 )
+from quality.web import Sleep
 
 EXIT_CLEAN = 0
 EXIT_FINDINGS = 1

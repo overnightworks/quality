@@ -17,8 +17,7 @@ Door commands:
   markdown tables, from anonymous shallow clones; a private repository is never measured. The fleet list is `quality/fleet.toml` (`public` and `private`).
 - `quality scan-staged [PATH] --engines DIR` (`staged.py`): secret scan of the staged change.
 - `quality engines install|verify DIR` (`engines.py`): the pinned engines (`engines.toml`; `format = "binary"` for a bare executable).
-- `quality sonar preflight [PATH]` and `quality sonar findings` (`sonar.py`): HTTP goes through an injected
-  transport, polling through an injected sleep, so tests need no network.
+- `quality sonar preflight [PATH]` and `quality sonar findings` (`sonar.py`). Their HTTP and the verdict's go through `web.py`, which follows no redirect and bounds every wait; the door injects the transport, the GitHub fetcher and the poll sleep, so tests need no network.
 - `quality emergency-merge <owner/repo> <pr>` (`emergency.py`): the operator's door for legacy findings and declared
   loosenings, it needs a terminal on stdin and prints only through its injected `say`.
 
