@@ -18,9 +18,8 @@ from packaging.version import Version
 
 from quality import DISTRIBUTION, layout, process, ratchet, repository
 from quality.report import Finding
+from quality.rules import Rule
 
-SECURITY_RULE = "python-security"
-PRINT_RULE = "python-print"
 SECURITY_FAMILY = "S"
 PRINT_FAMILY = "T20"
 SELECTED_CODES = f"{SECURITY_FAMILY},{PRINT_FAMILY}"
@@ -183,7 +182,7 @@ def _judge_prints(name: str, tokens: Sequence[tokenize.TokenInfo], records: Sequ
         if record.code not in owned and not _cleared_by_noqa(record.code, comments.get(record.noqa_line, ""))
     ]
     found = {record.code for record in records}
-    reports = [f"{PRINT_RULE}: output owner {name} - {owner.noqa.reason.strip()}" for owner in owners if owner.noqa.codes & found]
+    reports = [f"{Rule.PYTHON_PRINT}: output owner {name} - {owner.noqa.reason.strip()}" for owner in owners if owner.noqa.codes & found]
     findings += [_stale_owner(name, owner) for owner in owners if not owner.noqa.codes & found]
     return findings, reports
 
@@ -240,7 +239,7 @@ def _reasoned_noqa(directive: str) -> ReasonedNoqa | None:
 
 def _security_finding(record: RuffFinding) -> Finding:
     return Finding(
-        SECURITY_RULE, record.path, record.line, f"{record.code} {record.message}",
+        Rule.PYTHON_SECURITY, record.path, record.line, f"{record.code} {record.message}",
         f"remove the cause, or where it is deliberate end line {record.noqa_line} with "
         f"`# noqa: {record.code} - <reason>`, a reason with a letter and no comma.",
     )
@@ -248,7 +247,7 @@ def _security_finding(record: RuffFinding) -> Finding:
 
 def _print_finding(record: RuffFinding) -> Finding:
     return Finding(
-        PRINT_RULE, record.path, record.line, f"{record.code} {record.message}",
+        Rule.PYTHON_PRINT, record.path, record.line, f"{record.code} {record.message}",
         f"write through the program's one output owner; in that owner's file, declare it on a line of its own with "
         f"`# ruff: noqa: {record.code} - <reason>`, a reason with a letter and no comma.",
     )
@@ -257,7 +256,7 @@ def _print_finding(record: RuffFinding) -> Finding:
 def _stale_owner(name: str, owner: OutputOwner) -> Finding:
     codes = ", ".join(sorted(owner.noqa.codes))
     return Finding(
-        PRINT_RULE, name, owner.line, f"declares an output owner for {codes}, but the file has no such finding.",
+        Rule.PYTHON_PRINT, name, owner.line, f"declares an output owner for {codes}, but the file has no such finding.",
         "delete the line.",
     )
 

@@ -24,8 +24,8 @@ import lizard
 
 from quality import __version__, checkout, repository
 from quality.report import Finding, Unparsable
+from quality.rules import Rule
 
-SIZE = "size"
 BASELINE_PATH = "quality/baseline.toml"
 WRITE_COMMAND = "quality baseline write"
 REWRITE_HINT = f"rewrite it with `{WRITE_COMMAND}`"
@@ -327,7 +327,7 @@ def report_counts(tree: TreeMeasurement) -> str:
         for area, summary in summaries.items()
     )
     languages = _languages_note(language_lines(tree))
-    return f"{SIZE}: report only (no {BASELINE_PATH}) - {areas}{languages}{_unparsable_note(tree.unparsable)}"
+    return f"{Rule.SIZE}: report only (no {BASELINE_PATH}) - {areas}{languages}{_unparsable_note(tree.unparsable)}"
 
 
 def _unparsable_note(unparsable: dict[str, str]) -> str:
@@ -429,7 +429,7 @@ def added_pairs(base: frozenset[ClonePair], head: frozenset[ClonePair]) -> list[
 def _finding(key: Key, measured: Measured, verdict: str, fix: str) -> Finding:
     subject = "file" if key.metric is Metric.FILE_LINES else f"function {key.symbol}"
     return Finding(
-        SIZE, key.path, measured.line, f"{subject} has {key.metric.describe(measured.value)}; {verdict}.", fix
+        Rule.SIZE, key.path, measured.line, f"{subject} has {key.metric.describe(measured.value)}; {verdict}.", fix
     )
 
 

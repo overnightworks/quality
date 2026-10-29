@@ -79,4 +79,5 @@ layers = [
     "config",
     "repository",
     "process",
+    "rules",
 ]

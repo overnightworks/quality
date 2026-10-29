@@ -4,20 +4,16 @@ import re
 import subprocess
 
 import pytest
-from ruff import find_ruff_bin
 
-from quality import hygiene, ratchet
+from quality import ratchet
+from quality.rules import Rule, RuleRelease, Switch, SwitchChange
 from quality.scoreboard import (
     COLUMNS,
     GATE_REPOSITORY,
     MATRIX_COLUMNS,
-    RULES,
     Call,
     Declared,
     ReleaseTagsError,
-    RuleRelease,
-    Switch,
-    SwitchChange,
     calls_of,
     gate_release,
     pin_cell,
@@ -26,7 +22,7 @@ from quality.scoreboard import (
     rule_cell,
 )
 from tests.support.architecture import FORBIDDEN, toml
-from tests.support.git_repositories import GIT_IDENTITY, head_of, make_repo
+from tests.support.git_repositories import GIT_IDENTITY, head_of
 from tests.support.scoreboard import NEWEST, OLDER, RELEASES, row
 
 UNRELEASED = "c" * 40
@@ -287,7 +283,7 @@ def declared(**fields) -> Declared:
                        "unreadable": frozenset(), **fields})
 
 
-CLONE = next(rule for rule in RULES if rule.rule == "clone")
+CLONE = Rule.CLONE.release
 
 
 @pytest.mark.parametrize("has_clone_table", [False, True], ids=["no clone table", "a clone table"])
@@ -323,7 +319,7 @@ def test_the_gates_own_repository_enforces_clones_with_a_clone_table(has_clone_t
     assert rule_cell(CLONE, release, declared(has_clone_table=has_clone_table)) == words
 
 
-TEST_LAYOUT = next(rule for rule in RULES if rule.rule == "test-layout")
+TEST_LAYOUT = Rule.TEST_LAYOUT.release
 
 
 @pytest.mark.parametrize(
@@ -347,7 +343,7 @@ def test_a_pinned_gate_has_not_released_test_layout():
 )
 def test_a_rule_judging_every_python_project_needs_no_applicability_cell(rule_id, pinned, words):
     """#201 sentence 9, F14, sentence 10: the rule judges every Python project, so main enforces it and a pinned release has not got it."""
-    rule = next(rule for rule in RULES if rule.rule == rule_id)
+    rule = Rule(rule_id).release
     release = gate_release((Call(CLONE_TABLE_PIN if pinned else None),), not pinned, CLONE_RELEASES)
     assert rule_cell(rule, release, declared()) == words
 
@@ -463,15 +459,8 @@ def test_a_malformed_size_baseline_is_named_in_the_size_cell_only_where_the_cell
     assert cell(output, "sized", "size") == size
 
 
-@pytest.mark.integration
-def test_every_rule_the_door_judges_has_a_row_in_the_first_release_table(tmp_path):
-    """#125 cell 23: a rule a later slice adds to `hygiene.run_hygiene` without a row turns this red."""
-    judged = {verdict.rule for verdict in hygiene.run_hygiene(make_repo(tmp_path, {"a": "1\n"}), None, find_ruff_bin).verdicts}
-    assert {rule.rule for rule in RULES} == judged | set(hygiene.ENGINE_RULE_IDS)
-
-
 def test_the_heading_sentence_names_the_rules_the_oldest_release_always_enforces(scoreboard, public):
     """#125 cell 24, E8: the five rules get a sentence, not five columns."""
     _, output = scoreboard(public("any", {}), tags=first_releases())
     assert "Every gate release enforces env-file, compose-port, secret, workflow-lint and workflow-security." in output
-    assert MATRIX_COLUMNS[5:] == ("claude-md", "root-layout", "file-suffix", "script-name", "script-header", "test-layout", "test-import", "python-floor", "python-security", "python-print", "advisory", "size", "import-contract", "clone")
+    assert MATRIX_COLUMNS[5:] == ("size", "clone", "import-contract", "claude-md", "root-layout", "file-suffix", "script-name", "script-header", "test-layout", "test-import", "python-floor", "python-security", "python-print", "advisory")

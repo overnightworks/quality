@@ -6,6 +6,7 @@ from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 
 from quality import repository
+from quality.rules import Rule
 
 CONFIG_PATH = "quality/config.toml"
 GATE_KEYS = {"mandatory_jobs", "legacy", "loosened"}
@@ -132,14 +133,7 @@ class PythonAllowance:
     reason: str
 
 
-class LayoutRule(Enum):
-    """A layout rule a repository may declare a tracked file against."""
-
-    FILE_SUFFIX = "file-suffix"
-    SCRIPT_NAME = "script-name"
-    SCRIPT_HEADER = "script-header"
-    TEST_LAYOUT = "test-layout"
-    TEST_IMPORT = "test-import"
+LAYOUT_RULES = (Rule.FILE_SUFFIX, Rule.SCRIPT_NAME, Rule.SCRIPT_HEADER, Rule.TEST_LAYOUT, Rule.TEST_IMPORT)
 
 
 @dataclass(frozen=True)
@@ -147,7 +141,7 @@ class LayoutAllowance:
     """A tracked file, by its exact path, the repository declares against one layout rule."""
 
     path: str
-    rule: LayoutRule
+    rule: Rule
     reason: str
 
 
@@ -415,7 +409,7 @@ def _layout_allowances(layout: dict) -> tuple[LayoutAllowance, ...]:
     entries = layout.get("allow", [])
     if not isinstance(entries, list):
         raise ConfigError(f"{CONFIG_PATH} needs [[layout.allow]] as an array of tables, like:\n{LAYOUT_ALLOWANCE_EXAMPLE}")
-    allowances: dict[tuple[LayoutRule, str], LayoutAllowance] = {}
+    allowances: dict[tuple[Rule, str], LayoutAllowance] = {}
     for entry in entries:
         allowance = _read_layout_allowance(entry)
         key = (allowance.rule, allowance.path)
@@ -477,11 +471,11 @@ def _read_layout_allowance(entry: object) -> LayoutAllowance:
     path, rule, reason = entry["path"], entry["rule"], entry["reason"]
     if not _is_exact_file_path(path):
         raise refuse("path as the exact tracked path of one file: no folder, pattern, .. or absolute path")
-    if rule not in [known.value for known in LayoutRule]:
-        raise refuse(f"rule as one of {sorted(known.value for known in LayoutRule)}")
+    if rule not in LAYOUT_RULES:
+        raise refuse(f"rule as one of {sorted(str(known) for known in LAYOUT_RULES)}")
     if not _is_one_line_text(reason):
         raise refuse(ONE_LINE_REASON)
-    return LayoutAllowance(path, LayoutRule(rule), reason)
+    return LayoutAllowance(path, Rule(rule), reason)
 
 
 def _compose_allowances(compose: dict) -> tuple[ComposeAllowance, ...]:

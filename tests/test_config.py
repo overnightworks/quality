@@ -360,3 +360,27 @@ def test_the_verdict_refuses_a_malformed_secret_allowance_as_hygiene_does(capsys
     (repo / CONFIG_PATH).write_text('[gate]\nmandatory_jobs = ["checks"]\n' + MALFORMED_SECRET)
     assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: ("{}", None)) == 2
     assert "[secrets] allow entry" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("entries", "message"),
+    [
+        (
+            '[[layout.allow]]\npath = "NOTES"\nrule = "size"\nreason = "r"\n',
+            "needs rule as one of ['file-suffix', 'script-header', 'script-name', 'test-import', 'test-layout']",
+        ),
+        (
+            '[[layout.allow]]\npath = "NOTES"\nrule = "file-suffix"\nreason = "r"\n' * 2,
+            "for rule = 'file-suffix' twice",
+        ),
+        (
+            '[[layout.allow]]\npath = "NOTES"\nrule = [1]\nreason = "r"\n',
+            "needs rule as one of ['file-suffix', 'script-header', 'script-name', 'test-import', 'test-layout']",
+        ),
+    ],
+    ids=["an unknown rule", "a duplicate declaration", "an unhashable rule"],
+)
+def test_a_layout_allowance_refusal_names_the_rules_in_plain_words(entries, message):
+    """The refusal of a [[layout.allow]] entry prints rule ids, never an enum's repr."""
+    with pytest.raises(ConfigError, match=re.escape(message)):
+        load_allow_lists(entries)

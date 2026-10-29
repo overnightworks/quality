@@ -16,8 +16,8 @@ from quality.config import CONFIG_PATH, AdvisoryAllowance
 from quality.engines import EngineError, Pin
 from quality.pip_requirements import Requirement
 from quality.report import Finding
+from quality.rules import Rule
 
-RULE = "advisory"
 PYTHON_ECOSYSTEM = "PyPI"
 DATABASE_ROOT = "https://osv-vulnerabilities.storage.googleapis.com"  # read at call time; tests point it at a file:// root
 DATABASE_ARCHIVE = "all.zip"
@@ -60,7 +60,7 @@ class Affected:
     fix: str
 
     def finding(self, note: str = "") -> Finding:
-        return Finding(RULE, self.lock, None, f"{engines.OSV_SCANNER} {self.subject} is affected{note}.", self.fix)
+        return Finding(Rule.ADVISORY, self.lock, None, f"{engines.OSV_SCANNER} {self.subject} is affected{note}.", self.fix)
 
 
 @dataclass(frozen=True)
@@ -71,7 +71,7 @@ class AdvisoryScan:
     allowed: tuple[str, ...]
 
     def report(self) -> tuple[str, ...]:
-        return (f"{RULE}: {len(self.allowed)} allowed", *self.allowed) if self.allowed else ()
+        return (f"{Rule.ADVISORY}: {len(self.allowed)} allowed", *self.allowed) if self.allowed else ()
 
 
 @dataclass(frozen=True)
@@ -156,7 +156,7 @@ def _allowed_line(group: Affected, allowance: AdvisoryAllowance) -> str:
 def _conflict(entries: tuple[AdvisoryAllowance, ...], group: Affected) -> Finding:
     names = " and ".join(entry.id for entry in entries)
     return Finding(
-        RULE, CONFIG_PATH, None,
+        Rule.ADVISORY, CONFIG_PATH, None,
         f"the allowances for {names} in {group.lock} match one advisory group, so neither allows it.",
         f"keep one [[advisories.allow]] entry for {group.subject}",
     )
@@ -164,7 +164,7 @@ def _conflict(entries: tuple[AdvisoryAllowance, ...], group: Affected) -> Findin
 
 def _orphan(allowance: AdvisoryAllowance) -> Finding:
     return Finding(
-        RULE, CONFIG_PATH, None, f"the allowance for {allowance.id} in {allowance.lock} matches no advisory.",
+        Rule.ADVISORY, CONFIG_PATH, None, f"the allowance for {allowance.id} in {allowance.lock} matches no advisory.",
         "delete the [[advisories.allow]] entry; deleting an allowance is no loosening and needs no door",
     )
 

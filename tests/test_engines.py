@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import cli, engines, process
+from quality import cli, engines, process, rules
 from quality.engines import EngineError, Pin
 from tests.support.engines import OUTPUTS
 from tests.support.git_repositories import GIT_IDENTITY
@@ -577,7 +577,7 @@ def test_an_engine_that_is_a_symlink_inside_the_directory_is_still_judged_by_its
 
 def test_no_workflow_engine_runs_when_the_repository_has_no_workflow(tmp_path):
     """#15 rule 2: without a `.github/workflows/*.y{a,}ml` there is nothing to lint, so no engine is needed."""
-    assert engines.scan_workflows(tmp_path, tmp_path / "no-engines", engines.read_pins(), engines.WORKFLOW_LINT, []) == []
+    assert engines.scan_workflows(tmp_path, tmp_path / "no-engines", engines.read_pins(), rules.Rule.WORKFLOW_LINT, []) == []
 
 
 def test_a_run_without_engines_names_the_skipped_scans(build_repo, capsys):

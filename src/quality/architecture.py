@@ -41,10 +41,10 @@ from importlinter.domain.imports import ImportExpression
 
 from quality import ratchet
 from quality.report import Finding
+from quality.rules import Rule
 
-RULE = "import-contract"
 CONFIG_FILES = (".importlinter", "setup.cfg", "pyproject.toml")
-NO_CONFIG_REPORT = f"{RULE}: report only (no import-linter config)"
+NO_CONFIG_REPORT = f"{Rule.IMPORT_CONTRACT}: report only (no import-linter config)"
 BUILT_IN_CONTRACT_TYPES: Mapping[str, type[Contract]] = {
     "forbidden": ForbiddenContract,
     "layers": LayersContract,
@@ -391,7 +391,7 @@ def _library_warnings(repository: str) -> Iterator[list[str]]:
     notes: list[str] = []
     try:
         yield notes
-        notes += [f"{RULE}: note - {_relative(message, repository)}" for message in collected.messages]
+        notes += [f"{Rule.IMPORT_CONTRACT}: note - {_relative(message, repository)}" for message in collected.messages]
     finally:
         logger.removeHandler(collected)
         logger.propagate = propagates
@@ -447,14 +447,14 @@ def _check(contract: Contract, graph: grimp.ImportGraph, config_name: str, repos
             check = contract.check(copy.deepcopy(graph), verbose=False)
         except MissingImport as stale:
             return ContractsVerdict([
-                Finding(RULE, config_name, None, f"contract {contract.name} {_unmatched(line)}", STALE_IGNORE_FIX)
+                Finding(Rule.IMPORT_CONTRACT, config_name, None, f"contract {contract.name} {_unmatched(line)}", STALE_IGNORE_FIX)
                 for line in str(stale).splitlines()
             ], [])
-        notes = [f"{RULE}: note - contract {contract.name} {_unmatched(warning)}" for warning in check.warnings]
+        notes = [f"{Rule.IMPORT_CONTRACT}: note - contract {contract.name} {_unmatched(warning)}" for warning in check.warnings]
         if check.kept:
             return ContractsVerdict([], notes)
         broken = Finding(
-            RULE, config_name, None, f"contract {contract.name} is broken:", BROKEN_FIX, detail=_rendered(contract, check)
+            Rule.IMPORT_CONTRACT, config_name, None, f"contract {contract.name} is broken:", BROKEN_FIX, detail=_rendered(contract, check)
         )
         return ContractsVerdict([broken], notes)
 

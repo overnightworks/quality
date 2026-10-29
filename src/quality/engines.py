@@ -11,16 +11,14 @@ from pathlib import Path
 from quality import process
 from quality.config import Allowance
 from quality.report import Finding
+from quality.rules import Rule
 
-LEAK_RULE = "secret"
 GITLEAKS = "gitleaks"
 CLEAN_EXIT = 0
 GITLEAKS_LEAKS_FOUND = 7  # gitleaks exits 1 on its own errors too, so leaks get a code of their own
 DOWNLOAD_TIMEOUT_SECONDS = 120
 SECRET_SCAN_TIMEOUT_SECONDS = 1800  # bounds the scan so the scratch directory and its mirror are always deleted
 LEAK_FIELDS = ("File", "StartLine", "RuleID", "Commit", "Secret")
-WORKFLOW_LINT = "workflow-lint"
-WORKFLOW_SECURITY = "workflow-security"
 ACTIONLINT = "actionlint"
 ZIZMOR = "zizmor"
 OSV_SCANNER = "osv-scanner"
@@ -240,7 +238,7 @@ def _leak_finding(entry: object) -> Finding:
     path, line, rule, commit, secret = _read_leak(entry)
     secret_sha256 = hashlib.sha256(secret.encode("utf-8")).hexdigest()
     return Finding(
-        LEAK_RULE, path, line,
+        Rule.LEAK, path, line,
         f"{GITLEAKS} rule {rule} matched {f'at {commit[:8]}' if commit else 'in the staged change'} (sha256 {secret_sha256}, value not shown).",
         "rotate the secret; for a false positive, allow this rule, file and sha256 with a reason in quality/config.toml.",
         Allowance(rule, path, secret_sha256),
@@ -250,7 +248,7 @@ def _leak_finding(entry: object) -> Finding:
 GITLEAKS_ENGINE = _Engine(GITLEAKS, (GITLEAKS_LEAKS_FOUND,), _leak_finding)
 
 
-def scan_workflows(root: Path, engine_dir: Path, pins: dict[str, Pin], rule: str, workflows: list[str]) -> list[Finding]:
+def scan_workflows(root: Path, engine_dir: Path, pins: dict[str, Pin], rule: Rule, workflows: list[str]) -> list[Finding]:
     """The findings of the one engine that judges `rule`; nothing to scan needs no engine."""
     if not workflows:
         return []
@@ -282,7 +280,7 @@ def actionlint_finding(entry: object) -> Finding:
         raise EngineError(f"cannot read the {ACTIONLINT} report: {error!r}") from error
     if not (isinstance(message, str) and isinstance(path, str) and isinstance(line, int)):
         raise EngineError(f"an {ACTIONLINT} finding has fields of the wrong type")
-    return Finding(WORKFLOW_LINT, path, line, f"{ACTIONLINT}: {message}", "correct the workflow as the message says.")
+    return Finding(Rule.WORKFLOW_LINT, path, line, f"{ACTIONLINT}: {message}", "correct the workflow as the message says.")
 
 
 def zizmor_finding(entry: object) -> Finding:
@@ -296,17 +294,17 @@ def zizmor_finding(entry: object) -> Finding:
     if not (isinstance(rule, str) and isinstance(description, str) and isinstance(url, str)
             and isinstance(path, str) and isinstance(row, int)):
         raise EngineError(f"a {ZIZMOR} finding has fields of the wrong type")
-    return Finding(WORKFLOW_SECURITY, path, row + 1, f"{ZIZMOR} {rule}: {description}.", f"see {url}")
+    return Finding(Rule.WORKFLOW_SECURITY, path, row + 1, f"{ZIZMOR} {rule}: {description}.", f"see {url}")
 
 
 WORKFLOW_ENGINES = {
     # No shellcheck or pyflakes: actionlint would run whichever it finds on PATH, an unpinned engine in the verdict.
-    WORKFLOW_LINT: _Engine(
+    Rule.WORKFLOW_LINT: _Engine(
         name=ACTIONLINT, finding_exits=(ACTIONLINT_FINDINGS,), read_finding=actionlint_finding,
         arguments=("-config-file", str(ACTIONLINT_CONFIG), "-shellcheck=", "-pyflakes=", "-format", "{{json .}}"),
     ),
     # The tool's config and no ignore comments: what the scanned repository says never silences a finding.
-    WORKFLOW_SECURITY: _Engine(
+    Rule.WORKFLOW_SECURITY: _Engine(
         name=ZIZMOR, finding_exits=ZIZMOR_FINDINGS, read_finding=zizmor_finding,
         arguments=(
             "--config", str(ZIZMOR_CONFIG), "--no-ignores",
