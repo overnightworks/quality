@@ -32,13 +32,22 @@ def test_the_hygiene_job_installs_the_scanners_through_one_pinned_mise_step():
     assert [given[name] for name in GIVEN_FALSE] == [False] * len(GIVEN_FALSE)
 
 
+OPTIONAL_SUBDIRECTORY = re.compile(r"env\.TOOL_DIR != '(?P<root>[^']*)' && format\('(?P<template>[^']*)', env\.TOOL_DIR\) \|\| '(?P<otherwise>[^']*)'")
+
+
 def rendered(expression: str, tool_dir: str) -> str:
-    """The workflow `expression` with `github.workspace` as `/work` and `env.TOOL_DIR` as `tool_dir`, evaluated as Python."""
+    """The workflow `expression` with `github.workspace` as `/work` and `env.TOOL_DIR` as `tool_dir`; only the forms the workflows use are understood."""
 
     def evaluate(match: re.Match) -> str:
-        python = match[1].replace("&&", " and ").replace("||", " or ").replace("env.TOOL_DIR", "TOOL_DIR")
-        python = python.replace("github.workspace", "'/work'")
-        return str(eval(python, {"TOOL_DIR": tool_dir, "format": str.format}))  # noqa: S307 - the expression is this repository's own workflow text
+        text = match[1]
+        if text == "github.workspace":
+            return "/work"
+        optional = OPTIONAL_SUBDIRECTORY.fullmatch(text)
+        assert optional, f"the test does not understand the expression {text!r}"
+        # GitHub compares strings without regard to case.
+        if tool_dir.casefold() == optional["root"].casefold():
+            return optional["otherwise"]
+        return optional["template"].replace("{0}", tool_dir)
 
     return re.sub(r"\$\{\{ (.*?) \}\}", evaluate, expression)
 

@@ -463,7 +463,7 @@ The `advisory` rule judges every tracked `uv.lock`, `pnpm-lock.yaml` and `requir
 with `requirements` and ends in `.txt`; `requirements.in` and `dev-requirements.txt` are not), root
 and nested, with osv-scanner against the OSV advisory database (dev dependencies count). `uv.lock` and the
 requirements files are judged against the PyPI database, `pnpm-lock.yaml` against the npm database. A
-`package-lock.json`, `yarn.lock` or `bun.lock` is not judged yet. It is part of
+`package-lock.json`, `yarn.lock` or `bun.lock` is not judged yet.
 A repository with no tracked lock needs no
 osv-scanner (and none is located); a database is downloaded only for an ecosystem with a tracked lock, once per run however many locks it has.
 A lock that is tracked but missing on disk is skipped;
