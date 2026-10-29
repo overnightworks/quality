@@ -37,6 +37,11 @@ PROCESS_OR_SOCKET_FIXTURES = frozenset(
     }
 )
 REAL_DATABASE_ROOT = advisories.DATABASE_ROOT
+MISE_DIRECTORIES = (
+    ("MISE_DATA_DIR", "XDG_DATA_HOME", ".local/share"),
+    ("MISE_CACHE_DIR", "XDG_CACHE_HOME", ".cache"),
+    ("MISE_STATE_DIR", "XDG_STATE_HOME", ".local/state"),
+)
 KIND_MARKERS = frozenset({"unit", "integration"})
 # The one owner of the audit event names that define `integration`.
 STARTING_EVENTS = frozenset(
@@ -207,10 +212,21 @@ def served_scanners(tmp_path_factory, monkeypatch, publish_database) -> Path:
 
 @pytest.fixture
 def installed_scanners(served_scanners, monkeypatch) -> None:
-    """The real mise and the real scanners it installed from quality's manifest, and the live advisory database."""
+    """The real mise and the real scanners it installed from quality's manifest.
+
+    mise keeps its installs under the user's home, which some tests move; its directories are pinned first.
+    """
     fake_mise_directory = str(served_scanners.parent / "bin")
     on_path = [entry for entry in os.environ["PATH"].split(os.pathsep) if entry != fake_mise_directory]
     monkeypatch.setenv("PATH", os.pathsep.join(on_path))
+    for variable, xdg_variable, fallback in MISE_DIRECTORIES:
+        default = Path(os.environ.get(xdg_variable) or Path.home() / fallback) / "mise"
+        monkeypatch.setenv(variable, os.environ.get(variable, str(default)))
+
+
+@pytest.fixture
+def live_database(monkeypatch) -> None:
+    """The advisory database the gate reads is the real one, over the network."""
     monkeypatch.setattr(advisories, "DATABASE_ROOT", REAL_DATABASE_ROOT)
 
 

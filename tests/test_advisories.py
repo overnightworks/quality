@@ -141,7 +141,7 @@ def test_a_lock_no_advisory_affects_is_clean(build_repo, publish_database, insta
     ("name", "text"), [("uv.lock", uv_lock()), ("tests/requirements.txt", "pyyaml==5.3.1 --hash=sha256:" + "ab" * 32 + "\n")],
     ids=["uv.lock", "tests/requirements.txt"],
 )
-def test_the_live_database_condemns_pyyaml_5_3_1(build_repo, installed_scanners, run_gate, name, text):
+def test_the_live_database_condemns_pyyaml_5_3_1(build_repo, installed_scanners, live_database, run_gate, name, text):
     """#53 cell 4 and #176 canary: the real world, over the network."""
     code, output = run_gate(build_repo({name: text}))
     assert code == 1, output

@@ -6,7 +6,7 @@ import pytest
 from quality.config import CONFIG_PATH
 from tests.support.check import CLEAN_LINE
 from tests.support.check import hygiene_output as run
-from tests.support.git_repositories import head_commit
+from tests.support.git_repositories import GIT_IDENTITY, head_commit
 
 ROOT_FLOOR_FIX = (
     "raise it to >=3.14 and move CI, .python-version, Dockerfiles and ruff's target-version with it, "
@@ -200,6 +200,7 @@ def test_a_gitlink_is_never_entered(build_repo, capsys, elsewhere, gitlink_path)
     subprocess.run(
         ["git", "-C", str(repo), "update-index", "--add", "--cacheinfo", "160000", head_commit(inner), gitlink_path], check=True
     )
+    subprocess.run(["git", "-C", str(repo), *GIT_IDENTITY, "commit", "-q", "-m", "outer"], check=True)
     (repo / gitlink_path).mkdir(parents=True)
     (repo / gitlink_path / "pyproject.toml").write_text(project(">=3.12"))
     code, output = run(capsys, repo)
