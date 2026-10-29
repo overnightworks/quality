@@ -210,8 +210,8 @@ def test_a_zizmor_quality_cannot_find_or_trust_refuses_only_workflow_security(
     assert (installation.REINSTALL in output) is (case != "unpinned"), output
     if case == "unpinned":
         assert str(installation.UnpinnedDependency("zizmor")) in output
-    if case == "another version":
-        assert "0.0.1" in output and installation.required_version("zizmor") in output
+    versions_named = ["0.0.1", installation.required_version("zizmor")] if case == "another version" else []
+    assert [version for version in versions_named if version not in output] == [], output
 
 
 def test_a_zizmor_planted_in_the_engine_directory_is_never_run(build_repo, clean_engines, elsewhere, capsys):
