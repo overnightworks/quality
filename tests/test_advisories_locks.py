@@ -296,9 +296,9 @@ def test_an_npm_database_that_cannot_be_downloaded_is_cannot_judge_and_named(bui
     assert (code, "cannot download the npm advisory database" in output) == (2, True), output
 
 
-def test_without_a_pnpm_lock_the_npm_database_is_not_downloaded(build_repo, served_scanners, run_gate, publish_database):
+def test_without_a_pnpm_lock_the_npm_database_is_not_downloaded(build_repo, served_scanners, run_gate, database_root):
     """#145 S1: a repository with only a uv.lock is judged although no npm database is published."""
-    publish_database()
+    (database_root / "npm" / "all.zip").unlink()
     fake_scanner(served_scanners, OSV, reporting(OUTPUTS / "osv-scanner-clean.json", 0))
     code, output = run_gate(build_repo({"uv.lock": uv_lock(SAFE)}))
     assert code == 0, output
