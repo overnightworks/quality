@@ -1,0 +1,8 @@
+claim_id = "75a0b757746945ceb1ab0db215eb7dd8"
+agent = "Claude 7bbab0b4-f923-4f09-a5c2-6fe15143932e"
+role = "builder"
+base = "6c06106c2fa08db6f6a7fb65ccb870f7f0c34172"
+branch = "claude/issue-254-sonar-properties"
+scope = [".github/workflows/gate.yml", "AGENTS.md", "README.md", "docs/decisions/4-sonar-findings-stay-in-quality.md", "docs/sonar.md", "src/quality/cli.py", "src/quality/sonar.py", "tests/test_cli_output.py", "tests/test_repository.py", "tests/test_sonar.py", "tests/workflows/test_gate_sonar.py"]
+opened_commit = "f2b94cc35eedb8fb779a20220058ac5deb361959"
+whole_reason = "Sonar option 2: the pre-scan word preflight becomes sonar properties without a path, its properties read goes through repository.py (#227 F7), and gate.yml, the tests that pin the word, and the docs change with it; findings, legacy and the door stay."
