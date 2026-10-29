@@ -1,6 +1,7 @@
 # SonarCloud
 
-Reference for the engineer who reads SonarCloud findings through `quality sonar findings` or the gate.
+Reference for the engineer who reads SonarCloud findings through `quality sonar findings` or the gate. Why quality judges the
+findings itself and keeps the properties check: [decision 4](decisions/4-sonar-findings-stay-in-quality.md).
 
 ## `quality sonar findings`
 
@@ -27,25 +28,27 @@ The sonar job downloads the artifact right after the caller checkout and before 
 pinned ref. This is defence in depth, not a guarantee. An artifact that plants `.gate-tool/.git/` still reaches git
 through the checkout, and the caller's own checks job is arbitrary code anyway.
 
-Preflight exits `2` naming the key and the entry when a listed report does not exist: each comma-separated entry is
+The properties check exits `2` naming the key and the entry when a listed report does not exist: each comma-separated entry is
 judged on its own, a glob (`*`, `?`, `**`) must match at least one file and `**` must be a whole path segment, a plain
 entry must be a file, and an absolute entry or one with `..` is refused. So a key whose report is missing, for instance
 because no `coverage-artifact` was passed, is red, not a silent `0.0%`. A
 caller that names no coverage key and passes no input scans as before.
 
-`quality sonar preflight [PATH]` runs before the scan and refuses (exit `2`, naming the key) any property outside an
+`quality sonar properties` runs before the scan and refuses (exit `2`, naming the key) any property outside an
 allowlist (`sonar.organization`, `sonar.projectKey`, `sonar.projectName`, `sonar.sources`, `sonar.tests`, the
 inclusion/exclusion keys, `sonar.sourceEncoding`, `sonar.python.version` and the two coverage report path keys), any
 value containing a `${...}` substitution after decoding (the scanner would expand `${env.SONAR_TOKEN}`), a
 `sonar.organization` or `sonar.projectKey` other than `<owner>` and `<owner>_<repo>`, a tracked `.scannerwork/`, and
 an empty token. The file is read with the `java.util.Properties` grammar (`=`, `:` or whitespace separators, `\`
-continuation, `\uXXXX` and `\` escapes).
+continuation, `\uXXXX` and `\` escapes). The file is read inside the checkout; a link leading out of it is refused,
+and every refusal names the file repository-relative. The check does not stop a pull request that edits the caller's
+workflow, which holds the token itself.
 
 The scanner's transport, verified at sonar-scanner-java-library 4.1.1.1633 (the library of sonar-scanner-cli
 8.1.0.6389, which `gate.yml` pins through `scannerVersion`):
 
 - The bootstrap's authenticated requests reach only `sonarcloud.io` and `api.sonarcloud.io`. This holds only with the
-  pinned `-Dsonar.host.url=https://sonarcloud.io` argument and a properties file that passed preflight.
+  pinned `-Dsonar.host.url=https://sonarcloud.io` argument and a properties file that passed the properties check.
 - Residual limit: a redirect issued by SonarCloud itself carries the token to the host it names.
 - The engine is downloaded from SonarCloud and is not pinned by the CLI pin. SonarSource's server-side code is an
   accepted trust boundary: the token's only purpose is to authenticate to SonarCloud.
@@ -114,8 +117,8 @@ A failed gate fails the `sonar` job whatever the findings count says, and `legac
 the verdict then prints `gate job "sonar" result failure`. `-Dsonar.qualitygate.wait=false` stays in `gate.yml`: the
 scanner does not wait for the gate, this command reads it.
 
-- **What the gates check.** The gate set in SonarCloud for the repository: "Sonar way" and the organization's "fleet"
-  gate both judge new code (coverage, duplication, ratings, reviewed security hotspots), with their own thresholds.
+- **What the gates check.** The gate set in SonarCloud for the repository; the organization's default is the built-in
+  "Sonar way". It judges new code (coverage, duplication, ratings, reviewed security hotspots).
 - **A new security hotspot** needs its review mark in the SonarCloud UI and a re-run before the gate is `OK`; unlike a
   finding, it is not fixed in code.
 - **A small change.** SonarCloud skips the coverage and duplication conditions for a change of fewer than 20 new lines.

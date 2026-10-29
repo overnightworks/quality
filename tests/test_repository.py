@@ -288,9 +288,9 @@ def point_git_dir_at_a_file(repo: Path, monkeypatch) -> None:
     [
         (["hygiene", "."], "hygiene: cannot judge - "),
         (["baseline", "write", "."], "baseline: not written - "),
-        (["sonar", "preflight", "."], "sonar: cannot judge - "),
+        (["sonar", "properties"], "sonar: cannot judge - "),
     ],
-    ids=["hygiene", "baseline write", "sonar preflight"],
+    ids=["hygiene", "baseline write", "sonar properties"],
 )
 def test_a_git_refusal_names_the_path_as_given_and_never_the_checkout(
     git_repo, monkeypatch, capsys, git_refusal, argv, prefix

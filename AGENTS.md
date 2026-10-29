@@ -17,7 +17,7 @@ Door commands:
   markdown tables, from anonymous shallow clones; a private repository is never measured. The fleet list is `quality/fleet.toml` (`public` and `private`).
 - `quality scan-staged [PATH] --engines DIR` (`staged.py`): secret scan of the staged change.
 - `quality engines install|verify DIR` (`scanners.py`): the downloaded engines (`engines.toml`; `format = "binary"` for a bare executable). ruff and zizmor are none of them: they are pinned dependencies of quality's package, and `installation.py` finds each in quality's own installation and reads its pin.
-- `quality sonar preflight [PATH]` and `quality sonar findings` (`sonar.py`). Their HTTP and the verdict's go through `web.py`, which follows no redirect and bounds every wait; the door injects the transport, the GitHub fetcher and the poll sleep, so tests need no network.
+- `quality sonar properties` and `quality sonar findings` (`sonar.py`). Their HTTP and the verdict's go through `web.py`, which follows no redirect and bounds every wait; the door injects the transport, the GitHub fetcher and the poll sleep, so tests need no network.
 - `quality emergency-merge <owner/repo> <pr>` (`merge.py`): the operator's door for legacy findings and declared
   loosenings, it needs a terminal on stdin and prints only through its injected `say`.
 
@@ -29,7 +29,7 @@ quality's own layers are an import-linter contract in `pyproject.toml` (`[tool.i
 enforces it, so a module imports only from the layers below its own.
 
 `checkout.py` lists the checkout through git, decides what a workflow file is and turns a refused read into cannot judge.
-Config, `check.py`, `compose.py`, `claude_md.py`, `python_floor.py`, ratchet, `sonar findings` and the verdict read the checkout's own files only through `repository.py`, which keeps each read
+Config, `check.py`, `compose.py`, `claude_md.py`, `python_floor.py`, ratchet, `sonar findings`, `sonar properties`' read of `sonar-project.properties` and the verdict read the checkout's own files only through `repository.py`, which keeps each read
 inside the repository and names the file repository-relative in every error.
 
 The operator's rulings stand dated in the reference entry of the behaviour they rule (`docs/`); decisions with rejected alternatives: `docs/decisions/`.

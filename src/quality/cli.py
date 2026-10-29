@@ -38,8 +38,8 @@ from quality.sonar import (
     TASK_FILE,
     Transport,
     analyse,
+    check_properties,
     fetch_json,
-    preflight,
     uncounted_rules,
 )
 from quality.verdict import (
@@ -109,8 +109,8 @@ def main(
     if arguments.command == "scan-staged":
         return run_scan_staged(arguments.path, arguments.engines, read_pins)
     if arguments.command == "sonar":
-        if arguments.sonar_command == "preflight":
-            return run_sonar_preflight(arguments.path)
+        if arguments.sonar_command == "properties":
+            return run_sonar_properties()
         return run_sonar_findings(transport, sleep)
     if arguments.command == "engines":
         run_engines = run_engines_install if arguments.engines_command == "install" else run_engines_verify
@@ -148,8 +148,12 @@ def build_parser() -> argparse.ArgumentParser:
     sonar = commands.add_parser("sonar", help="check SonarCloud for open findings").add_subparsers(
         dest="sonar_command", required=True
     )
-    sonar.add_parser("preflight", help="refuse a token or properties file that could steer the scan").add_argument(
-        "path", nargs="?", type=Path, default=Path(".")
+    sonar.add_parser(
+        "properties",
+        help=(
+            "run by the gate before the scan: refuse a sonar-project.properties, token, coverage report"
+            " or tracked .scannerwork/ the scan must not start with"
+        ),
     )
     sonar.add_parser(
         "findings",
@@ -292,13 +296,13 @@ def run_engines_verify(directory: Path, read_pins: Callable[[], dict[str, scanne
     return EXIT_CLEAN
 
 
-def run_sonar_preflight(path: Path) -> int:
+def run_sonar_properties() -> int:
     try:
-        preflight(path, os.environ)
+        check_properties(Path("."), os.environ)
     except CannotJudge as error:
         emit(f"sonar: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
-    emit("sonar: preflight clean")
+    emit("sonar: properties clean")
     return EXIT_CLEAN
 
 

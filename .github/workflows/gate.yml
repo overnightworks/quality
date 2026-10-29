@@ -4,7 +4,7 @@
 # SonarCloud scan transport (SonarSource/sonarqube-scan-action v8.2.1 with sonar-scanner-cli 8.1.0.6389, which
 # bundles sonar-scanner-java-library 4.1.1.1633). What is verified and what is trusted:
 #  - The bootstrap's authenticated requests reach only sonarcloud.io and api.sonarcloud.io. That holds only with the
-#    pinned -Dsonar.host.url=https://sonarcloud.io below and a sonar-project.properties that `quality sonar preflight`
+#    pinned -Dsonar.host.url=https://sonarcloud.io below and a sonar-project.properties that `quality sonar properties`
 #    accepted: its allowlist keeps endpoint, region and proxy keys out, and refuses any ${...} substitution.
 #  - Residual limit: ScannerHttpClient follows redirects by hand with the token attached, so a redirect issued by
 #    SonarCloud itself would carry the token to the host it names. SonarCloud already receives the token.
@@ -107,7 +107,7 @@ jobs:
       - name: Refuse a token or properties file that could steer the scan
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: uv run --locked --project "$TOOL_DIR" quality sonar preflight .
+        run: uv run --locked --project "$TOOL_DIR" quality sonar properties
 
       - name: Scan
         uses: SonarSource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f # v8.2.1
