@@ -6,8 +6,7 @@ import subprocess
 import pytest
 
 from quality import ratchet
-from quality.rules import Rule, RuleRelease, Switch, SwitchChange
-from quality.scoreboard import (
+from quality.fleet import (
     COLUMNS,
     GATE_REPOSITORY,
     MATRIX_COLUMNS,
@@ -21,9 +20,10 @@ from quality.scoreboard import (
     repository_name,
     rule_cell,
 )
+from quality.rules import Rule, RuleRelease, Switch, SwitchChange
 from tests.support.architecture import FORBIDDEN, toml
+from tests.support.fleet import NEWEST, OLDER, RELEASES, row
 from tests.support.git_repositories import GIT_IDENTITY, head_of
-from tests.support.scoreboard import NEWEST, OLDER, RELEASES, row
 
 UNRELEASED = "c" * 40
 GATE = "overnightworks/quality/.github/workflows/gate.yml"

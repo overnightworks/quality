@@ -13,7 +13,7 @@ Door commands:
 - `quality baseline write [PATH]` (`ratchet.py`): writes the measured size debt and the clone pairs to `quality/baseline.toml`,
   naming each entry it raises or adds.
 - `quality verdict [PATH]` (`verdict.py`): judges the mandatory jobs of the running workflow run and, on a pull request, holds the head's config, baseline and import-linter configs against the base commit's (a baseline only falls, an import contract only tightens; a loosening stays red, labelled declared when the head adds its `[[gate.loosened]]` entry); the fail-closed `quality / verdict`.
-- `quality scoreboard [PATH]` (`scoreboard.py`): the fleet's size and each repository's gate and CodeQL release and what each gate does with each rule in two
+- `quality scoreboard [PATH]` (`fleet.py`): the fleet's size and each repository's gate and CodeQL release and what each gate does with each rule in two
   markdown tables, from anonymous shallow clones; a private repository is never measured. The fleet list is `quality/fleet.toml` (`public` and `private`).
 - `quality scan-staged [PATH] --engines DIR` (`staged.py`): secret scan of the staged change.
 - `quality engines install|verify DIR` (`scanners.py`): the downloaded engines (`engines.toml`; `format = "binary"` for a bare executable). ruff and zizmor are none of them: they are pinned dependencies of quality's package, and `installation.py` finds each in quality's own installation and reads its pin.

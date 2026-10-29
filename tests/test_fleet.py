@@ -18,13 +18,13 @@ import pytest
 import yaml
 
 from quality import __version__, cli
-from quality.scoreboard import (
+from quality.fleet import (
     read_fleet,
     require_anonymous,
 )
 from tests.support.clones import function as clone_function
+from tests.support.fleet import MATRIX_HEADING, RELEASES, row, write_fleet
 from tests.support.git_repositories import GIT_IDENTITY, head_of, make_repo
-from tests.support.scoreboard import MATRIX_HEADING, RELEASES, row, write_fleet
 from tests.support.source_code import (
     branchy_function,
     long_file,
