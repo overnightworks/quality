@@ -203,10 +203,12 @@ def test_a_gate_run_without_engines_names_advisory_as_skipped_and_downloads_noth
     ids=["cell 13 unreachable", "cell 14 not a zip", "cell 14 truncated", "cell 28 no json entry", "#5 127 an invalid json entry"],
 )
 def test_a_database_that_cannot_be_used_is_cannot_judge(
-    build_repo, clean_engines, run_gate, publish_database, archive, expected
+    build_repo, clean_engines, run_gate, database_root, publish_database, archive, expected
 ):
     """#53 rule 3: never clean, never a fallback."""
-    if archive is not None:  # None: nothing is published at the root
+    if archive is None:  # nothing is published at the root
+        (database_root / "PyPI" / "all.zip").unlink()
+    else:
         publish_database(archive=archive)
     code, output = run_gate(tracked_lock_repo(build_repo), osv_engines(clean_engines, "exit 99"))
     assert (code, expected in output) == (2, True), output

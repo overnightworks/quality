@@ -1,0 +1,54 @@
+import re
+from pathlib import Path
+
+import pytest
+import yaml
+
+WORKFLOWS = Path(__file__).parents[2] / ".github" / "workflows"
+MISE_ACTION = re.compile(r"jdx/mise-action@[0-9a-f]{40}")
+GIVEN_FALSE = ("cache", "env", "export_path", "add_shims_to_path")
+
+
+def load(name: str) -> dict:
+    return yaml.safe_load((WORKFLOWS / name).read_text(encoding="utf-8"))
+
+
+def the_mise_step(workflow: str, job: str) -> dict:
+    steps = [step for step in load(workflow)["jobs"][job]["steps"] if str(step.get("uses", "")).startswith("jdx/mise-action@")]
+    assert len(steps) == 1, f"{workflow} {job} must install through exactly one mise-action step, it has {len(steps)}"
+    return steps[0]
+
+
+def test_the_hygiene_job_installs_the_scanners_through_one_pinned_mise_step():
+    """#228 rule 4: one mise-action pinned by commit, a release and its binary's checksum, installing from the lock."""
+    gate_step = the_mise_step("gate.yml", "hygiene")
+    given = gate_step["with"]
+    assert MISE_ACTION.fullmatch(gate_step["uses"].split(" ")[0]), gate_step["uses"]
+    assert re.fullmatch(r"[0-9a-f]{64}", given["sha256"])
+    assert given["version"]
+    assert given["working_directory"].endswith("src/quality/mise")
+    assert given["install_args"] == "--locked"
+    assert [given[name] for name in GIVEN_FALSE] == [False] * len(GIVEN_FALSE)
+
+
+@pytest.mark.parametrize(("workflow", "job"), [("gate.yml", "hygiene"), ("ci.yml", "tests")])
+def test_the_ceiling_of_mise_is_the_parent_of_the_manifest_directory(workflow, job):
+    """#265 B1: trust protects nothing in CI, so mise must never read above the manifest's parent."""
+    step = the_mise_step(workflow, job)
+    manifest_directory = step["with"]["working_directory"]
+    assert step["env"]["MISE_CEILING_PATHS"] == "${{ github.workspace }}/" + manifest_directory.rsplit("/", 1)[0]
+
+
+def test_no_workflow_step_names_the_engines():
+    """#228 rule 4: the engines command and its directory are gone from every workflow."""
+    assert [path.name for path in WORKFLOWS.glob("*.yml") if "engines" in path.read_text(encoding="utf-8")] == []
+
+
+def test_the_tests_job_installs_the_same_scanners_as_the_gate_and_runs_no_hygiene():
+    """#265 D8: the pin stands twice and is held equal; the gate's hygiene job is quality's own check."""
+    gate_step, tests_step = the_mise_step("gate.yml", "hygiene"), the_mise_step("ci.yml", "tests")
+    assert {key: value for key, value in tests_step["with"].items() if key != "working_directory"} == {
+        key: value for key, value in gate_step["with"].items() if key != "working_directory"
+    }
+    assert tests_step["uses"] == gate_step["uses"]
+    assert [step for step in load("ci.yml")["jobs"]["tests"]["steps"] if "quality hygiene" in step.get("run", "")] == []

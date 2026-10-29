@@ -287,9 +287,9 @@ def test_one_deadline_spans_every_database_download(build_repo, clean_engines, p
     assert served_databases.requested == ["/PyPI/all.zip"]
 
 
-def test_an_npm_database_that_cannot_be_downloaded_is_cannot_judge_and_named(build_repo, clean_engines, run_gate, publish_database):
+def test_an_npm_database_that_cannot_be_downloaded_is_cannot_judge_and_named(build_repo, clean_engines, run_gate, database_root):
     """#145 S3: the npm database missing makes the whole rule `cannot judge`, though the PyPI one is there."""
-    publish_database()
+    (database_root / "npm" / "all.zip").unlink()
     repo = build_repo({FRONTEND_LOCK: pnpm_lock(), "uv.lock": uv_lock()})
     code, output = run_gate(repo, osv_engines(clean_engines, "exit 99"))
     assert (code, "cannot download the npm advisory database" in output) == (2, True), output

@@ -3,6 +3,7 @@ import http.server
 import io
 import os
 import re
+import shlex
 import signal
 import subprocess
 import sys
@@ -10,6 +11,7 @@ import tarfile
 import tempfile
 import threading
 import time
+import tomllib
 import urllib.request
 from pathlib import Path
 
@@ -17,8 +19,18 @@ import pytest
 
 from quality import cli, process, scanners
 from quality.scanners import Pin, ScannerError
+from tests.support.advisories import uv_lock
 from tests.support.git_repositories import GIT_IDENTITY
-from tests.support.scanners import OUTPUTS, Locator, fake_engine, fake_zizmor, never_located
+from tests.support.scanners import (
+    OUTPUTS,
+    Locator,
+    fake_engine,
+    fake_scanner,
+    fake_zizmor,
+    never_located,
+    recording,
+    serving,
+)
 from tests.support.secrets import FAKE_KEY, OTHER_KEY, UNKNOWN_KEY_CONFIGS, allow_config, assert_key_found, sha256_of
 
 
@@ -950,3 +962,123 @@ def test_an_allowance_no_finding_used_is_printed(build_repo, installed_engines, 
         f"secret: unused allowance aws-access-token in nothere.txt (sha256 {sha256_of(FAKE_KEY)}) - stale entry"
         in capsys.readouterr().out
     )
+
+
+
+# ---- mise finds the scanners (#228 rule 4) ----
+
+NOT_INSTALLED = 'echo "mise ERROR no version is installed" >&2; exit 1'
+WORKFLOW_AND_LOCK = {".github/workflows/w.yml": "on: push\n", "uv.lock": uv_lock()}
+SCANNER_COMMANDS = [
+    ("hygiene", scanners.GITLEAKS),
+    ("hygiene", scanners.ACTIONLINT),
+    ("hygiene", scanners.OSV_SCANNER),
+    ("scan-staged", scanners.GITLEAKS),
+]
+
+
+def without(name: str, answer: str, served: Path) -> str:
+    """The body of a mise that gives `answer` for `name` and serves every other scanner from `served`."""
+    return f'if [ "$4" = {name} ]; then {answer}; fi\n{serving(served)}'
+
+
+@pytest.mark.parametrize(("command", "name"), SCANNER_COMMANDS)
+def test_a_scanner_mise_has_not_installed_cannot_judge_and_names_the_install_command(
+    build_repo, use_mise, served_scanners, elsewhere, capsys, command, name
+):
+    """#228 rule 4: a missing scanner is exit 2 with the command that installs it, and no other rule is refused."""
+    use_mise(without(name, NOT_INSTALLED, served_scanners))
+    code = cli.main([command, str(build_repo(WORKFLOW_AND_LOCK))], locate_zizmor=fake_zizmor(elsewhere, "echo '[]'"))
+    err = capsys.readouterr().err
+    assert code == 2, err
+    assert f"{name} {scanners.pinned_tool(name).version}" in err
+    assert scanners.install_command() in err
+    assert err.count("cannot judge") == 1, err
+
+
+def test_without_mise_the_scanner_rules_cannot_judge_and_every_other_rule_still_judges(
+    build_repo, path_without_mise, elsewhere, capsys
+):
+    """#228 rule 4: no mise on PATH is exit 2 naming mise's install page and the command; the other rules still print."""
+    repo = build_repo({**WORKFLOW_AND_LOCK, ".env": "A=1\n"})
+    code = cli.main(["hygiene", str(repo)], locate_zizmor=fake_zizmor(elsewhere, "echo '[]'"))
+    captured = capsys.readouterr()
+    assert code == 2, captured.err
+    assert "https://mise.jdx.dev/installing-mise.html" in captured.err
+    assert scanners.install_command() in captured.err
+    assert {rule: f"hygiene: {rule} cannot judge" in captured.err for rule in ("secret", "workflow-lint", "advisory")} == {
+        "secret": True, "workflow-lint": True, "advisory": True,
+    }
+    assert "env-file .env - " in captured.out
+
+
+@pytest.mark.parametrize("command", ["hygiene", "scan-staged"])
+def test_a_scanner_that_reports_another_version_than_the_manifest_is_never_run(
+    build_repo, served_scanners, tmp_path, capsys, command
+):
+    """#228 invariant 10: the exact pinned version runs; a binary at another version is exit 2 naming both versions."""
+    marker = tmp_path / "scanned"
+    fake_scanner(served_scanners, scanners.GITLEAKS, f"touch {marker}", version="9.9.9")
+    code = cli.main([command, str(build_repo({}))])
+    err = capsys.readouterr().err
+    assert (code, "'9.9.9'" in err, repr(scanners.pinned_tool(scanners.GITLEAKS).version) in err) == (2, True, True), err
+    assert not marker.exists()
+
+
+@pytest.mark.parametrize("command", ["hygiene", "scan-staged"])
+def test_a_gitleaks_on_path_never_runs(build_repo, use_mise, tmp_path, monkeypatch, capsys, command):
+    """#228 invariant 10: when mise has no gitleaks, one that PATH offers is never used in its place."""
+    use_mise(NOT_INSTALLED)
+    planted = tmp_path / "planted"
+    planted.mkdir()
+    marker = tmp_path / "ran"
+    fake_scanner(planted, scanners.GITLEAKS, f"touch {marker}")
+    monkeypatch.setenv("PATH", f"{planted}:{os.environ['PATH']}")
+    assert cli.main([command, str(build_repo({}))]) == 2
+    assert not marker.exists(), capsys.readouterr().err
+
+
+def test_mise_is_asked_in_the_manifest_directory_under_its_ceiling(
+    build_repo, use_mise, served_scanners, tmp_path, elsewhere
+):
+    """#265 D4: mise reads only the manifest directory, whatever mise config the scanned repository holds."""
+    record = tmp_path / "asked"
+    use_mise(recording(record, serving(served_scanners)))
+    repo = build_repo({**WORKFLOW_AND_LOCK, "mise.toml": "[env]\nMISE_X = '1'\n"})
+    assert cli.main(["hygiene", str(repo)], locate_zizmor=fake_zizmor(elsewhere, "echo '[]'")) == 0
+    directory, ceiling = scanners.MANIFEST_DIRECTORY, scanners.MANIFEST_DIRECTORY.parent
+    assert sorted(record.read_text().splitlines()) == sorted(
+        f"--cd {directory} which {name} --tool {tool.key}@{tool.version}|{ceiling}"
+        for name, tool in ((name, scanners.pinned_tool(name)) for name in (scanners.GITLEAKS, scanners.ACTIONLINT, scanners.OSV_SCANNER))
+    )
+
+
+@pytest.mark.parametrize("answer", ["", "relative/gitleaks", "/nowhere/gitleaks"], ids=["nothing", "relative-path", "no-file"])
+def test_a_mise_answer_that_names_no_existing_absolute_file_cannot_judge(build_repo, use_mise, capsys, answer):
+    """#228 rule 4: mise's output is external input; an answer that is no executable path is exit 2, never a run."""
+    use_mise(f"echo '{answer}'")
+    assert cli.main(["hygiene", str(build_repo({}))]) == 2
+    err = capsys.readouterr().err
+    assert "mise which printed no gitleaks executable" in err
+    assert scanners.install_command() in err
+
+
+def test_the_manifest_pins_each_scanner_once():
+    """#228 invariant 10: one version source, three scanners, each once."""
+    with (scanners.MANIFEST_DIRECTORY / "mise.toml").open("rb") as handle:
+        tools = tomllib.load(handle)["tools"]
+    assert sorted(key.rsplit("/", 1)[-1] for key in tools) == [scanners.ACTIONLINT, scanners.GITLEAKS, scanners.OSV_SCANNER]
+
+
+def test_the_install_command_names_the_manifest_directory_as_one_shell_word(tmp_path, monkeypatch):
+    """#265 F4: a path with a space stays one word of the command a person copies."""
+    monkeypatch.setattr(scanners, "MANIFEST_DIRECTORY", tmp_path / "with space")
+    assert shlex.split(scanners.install_command()) == ["mise", "--cd", str(tmp_path / "with space"), "install", "--locked"]
+
+
+def test_the_install_command_shows_a_path_no_shell_word_can_hold_escaped(tmp_path, monkeypatch):
+    """#265 F4: a path with a control character is printed escaped on one line, never as a command to copy."""
+    monkeypatch.setattr(scanners, "MANIFEST_DIRECTORY", tmp_path / "a\nb")
+    command = scanners.install_command()
+    assert "\n" not in command
+    assert "a\\x0ab" in command

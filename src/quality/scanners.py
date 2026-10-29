@@ -10,7 +10,7 @@ from pathlib import Path
 
 from quality import installation, process
 from quality.config import Allowance
-from quality.report import Finding
+from quality.report import Finding, printable, shell_word
 from quality.rules import Rule
 
 GITLEAKS = "gitleaks"
@@ -29,6 +29,8 @@ ZIZMOR_FINDINGS = range(10, 15)  # zizmor encodes the worst severity in 10..14
 VERSION_ARGUMENTS = {GITLEAKS: ["version"], ACTIONLINT: ["-version"], ZIZMOR: ["--version"], OSV_SCANNER: ["--version"]}
 GIT_FLOOR = (2, 41)  # GIT_ATTR_SOURCE, which hides the repository's attributes from the scan, arrived in 2.41
 PIN_FILE = Path(__file__).with_name("engines.toml")
+MANIFEST_DIRECTORY = Path(__file__).with_name("mise")
+MANIFEST_FILE = "mise.toml"
 ACTIONLINT_CONFIG = Path(__file__).with_name("actionlint.yaml")
 ZIZMOR_CONFIG = Path(__file__).with_name("zizmor.yml")
 GITLEAKS_CONFIG = Path(__file__).with_name("gitleaks.toml")
@@ -36,6 +38,27 @@ GITLEAKS_CONFIG = Path(__file__).with_name("gitleaks.toml")
 
 class ScannerError(process.ProcessError):
     """A scanner cannot be installed or trusted; this is never a clean result."""
+
+
+@dataclass(frozen=True)
+class PinnedTool:
+    """A scanner as the manifest pins it: mise's tool key and the exact version."""
+
+    key: str
+    version: str
+
+
+def pinned_tool(name: str) -> PinnedTool:
+    with (MANIFEST_DIRECTORY / MANIFEST_FILE).open("rb") as handle:
+        tools = tomllib.load(handle)["tools"]
+    (key,) = (key for key in tools if key.rsplit("/", 1)[-1] == name)
+    return PinnedTool(key, tools[key])
+
+
+def install_command() -> str:
+    """The command that installs quality's scanners from its manifest and lock, as one line to copy."""
+    directory = str(MANIFEST_DIRECTORY)
+    return f"mise --cd {shell_word(directory) or printable(directory)} install --locked"
 
 
 @dataclass(frozen=True)

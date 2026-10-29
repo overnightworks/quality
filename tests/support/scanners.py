@@ -5,6 +5,7 @@ from typing import NoReturn
 import pytest
 
 from quality import installation, scanners
+from tests.support.advisories import reporting
 
 Locator = Callable[[], str]
 OUTPUTS = Path(__file__).parents[1] / "fixtures" / "scanner-outputs"
@@ -18,6 +19,44 @@ def fake_engine(directory: Path, name: str, on_scan: str) -> Path:
     binary.write_text(f'#!/bin/sh\nif [ "$*" = "{version_arguments}" ]; then echo {pinned}; exit 0; fi\n{on_scan}\n')
     binary.chmod(0o755)
     return binary
+
+
+CLEAN_SCANS = {
+    scanners.GITLEAKS: 'while [ $# -gt 0 ]; do [ "$1" = --report-path ] && report=$2; shift; done\necho "[]" > "$report"',
+    scanners.ACTIONLINT: "echo '[]'",
+    scanners.OSV_SCANNER: reporting(OUTPUTS / "osv-scanner-clean.json", 0),
+}
+
+
+def fake_scanner(directory: Path, name: str, on_scan: str, version: str | None = None) -> Path:
+    """Writes a fake `name` into `directory` that prints `version` (the manifest's by default) and runs `on_scan`
+    (shell) for any other call."""
+    version_arguments = " ".join(scanners.VERSION_ARGUMENTS[name])
+    reported = version or scanners.pinned_tool(name).version
+    binary = directory / name
+    binary.write_text(f'#!/bin/sh\nif [ "$*" = "{version_arguments}" ]; then echo {reported}; exit 0; fi\n{on_scan}\n')
+    binary.chmod(0o755)
+    return binary
+
+
+def write_mise(directory: Path, body: str) -> Path:
+    """Writes a `mise` that runs `body` (shell) for any call; the arguments of `mise --cd DIR which NAME --tool TOOL`
+    are $1 to $6."""
+    directory.mkdir(parents=True, exist_ok=True)
+    binary = directory / "mise"
+    binary.write_text(f"#!/bin/sh\n{body}\n")
+    binary.chmod(0o755)
+    return binary
+
+
+def serving(directory: Path) -> str:
+    """The body of a mise that has every scanner in `directory`."""
+    return f'echo "{directory}/$4"'
+
+
+def recording(record: Path, body: str) -> str:
+    """`body` after a line that appends one line to `record` for each call: the arguments, `|`, MISE_CEILING_PATHS."""
+    return f'printf "%s\\n" "$*|$MISE_CEILING_PATHS" >> {record}\n{body}'
 
 
 def fake_zizmor(directory: Path, on_scan: str, version: str | None = None) -> Locator:

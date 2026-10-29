@@ -11,6 +11,7 @@ import pytest
 from quality import check, cli, env_file, installation, process, sonar
 from quality.compose import is_compose_file
 from quality.report import Finding
+from quality.rules import Rule
 from tests.support.check import CLEAN_LINE, ENGINE_RULES, FILE_RULES, compose, installed_ruff, loosen_requirement
 from tests.support.check import hygiene_output as run
 from tests.support.scanners import fake_engine, fake_zizmor, never_located, nothing_installed
@@ -154,6 +155,12 @@ def test_every_rule_is_judged_and_the_exit_is_the_worst(
     output = captured.out + captured.err
     assert code == expected_code, output
     assert [line for line in expected_lines if line not in output] == [], output
+
+
+def test_a_run_without_flags_judges_every_rule(build_repo, capsys):
+    """#228 rule 4: no scan is ever skipped, so a plain run names every rule in run order."""
+    code, output = run(capsys, build_repo({}))
+    assert (code, f"hygiene: clean ({', '.join(Rule)})" in output) == (0, True), output
 
 
 def test_a_finding_under_a_rule_its_check_does_not_judge_fails_loud(build_repo, monkeypatch):
