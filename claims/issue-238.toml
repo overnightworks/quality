@@ -1,0 +1,8 @@
+claim_id = "51f5752d9d734336ad85b2a7f45ddec6"
+agent = "Claude 7bbab0b4-f923-4f09-a5c2-6fe15143932e"
+role = "builder"
+base = "e7cecff8aaaa58f1c35b990e29ad8146206d3f7e"
+branch = "claude/issue-238-output-owner"
+scope = ["AGENTS.md", "pyproject.toml", "src/quality/cli.py", "src/quality/output.py"]
+opened_commit = "f92da77d4a98b1ad5c6a33b2906751fdcd90ecdd"
+whole_reason = "One output owner leaves cli.py; its layer line and AGENTS.md sentence must land with it."
