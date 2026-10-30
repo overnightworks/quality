@@ -264,8 +264,8 @@ def test_a_config_without_declarations_declares_nothing():
     assert load_gate_settings('[gate]\nmandatory_jobs = ["checks"]').loosened == ()
 
 
-HYGIENE = ["hygiene", "--engines", "{engines}", "{repo}"]
-SCAN_STAGED = ["scan-staged", "{repo}", "--engines", "{engines}"]
+HYGIENE = ["hygiene", "{repo}"]
+SCAN_STAGED = ["scan-staged", "{repo}"]
 TEXT_DATE_DECLARATION = SONGMAKER_DECLARATION.replace("2026-10-20", '"20.10.2026"')
 
 
@@ -280,17 +280,17 @@ TEXT_DATE_DECLARATION = SONGMAKER_DECLARATION.replace("2026-10-20", '"20.10.2026
         (SCAN_STAGED, "[advisories]\nextra = 1\n" + allowance_config(until="2027-01-31"), 0, "scan-staged: clean"),
     ],
     ids=[
-        "hygiene --engines", "scan-staged", "hygiene --engines, text date", "scan-staged, text date",
+        "hygiene", "scan-staged", "hygiene, text date", "scan-staged, text date",
         "#116 cell 13 scan-staged, an allowance", "#116 cell 13 scan-staged, a malformed allowance",
     ],
 )
 def test_hygiene_judges_a_declaration_as_the_verdict_does_and_the_commit_hook_reads_only_secrets(
-    build_repo, clean_engines, capsys, command, config, code, line
+    build_repo, capsys, command, config, code, line
 ):
     """#103 rule 1, cells 11 and 12: a [[gate.loosened]] entry is no unknown key for hygiene or the commit hook; a
     malformed one is exit 2 under hygiene, as in the verdict, and the commit hook never reads it."""
     repo = build_repo({CONFIG_PATH: config})
-    assert cli.main([part.format(repo=repo, engines=clean_engines) for part in command]) == code
+    assert cli.main([part.format(repo=repo) for part in command]) == code
     captured = capsys.readouterr()
     output = captured.out + captured.err
     assert "unknown key" not in output
@@ -331,16 +331,16 @@ MALFORMED_SECRET = f"[secrets]\nallow = [{allow_entry(reason='')}]\n"
     ],
 )
 def test_a_malformed_advisory_allowance_cannot_be_judged_where_the_whole_config_is_read(
-    capsys, run_env, clean_engines, entry, named
+    capsys, run_env, entry, named
 ):
     """#116 cell 12: a malformed [advisories] entry is exit 2 in the verdict and in the secret and advisory rules of
-    hygiene --engines, one line each naming the entry."""
+    hygiene, one line each naming the entry."""
     repo, _ = run_env
     (repo / CONFIG_PATH).write_text(entry + '[gate]\nmandatory_jobs = ["checks"]\n')
     assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: ("{}", None)) == 2
     verdict = capsys.readouterr().err.splitlines()
     assert (len(verdict), named in verdict[0]) == (1, True), verdict
-    assert cli.main(["hygiene", "--engines", str(clean_engines), str(repo)]) == 2
+    assert cli.main(["hygiene", str(repo)]) == 2
     refusals = [line for line in capsys.readouterr().err.splitlines() if named in line]
     rules = [line.split(" - ")[0] for line in refusals]
     assert rules == ["hygiene: compose-port cannot judge", "hygiene: root-layout cannot judge", "hygiene: file-suffix cannot judge", "hygiene: script-name cannot judge", "hygiene: script-header cannot judge", "hygiene: test-layout cannot judge", "hygiene: test-import cannot judge", "hygiene: python-floor cannot judge", "hygiene: secret cannot judge", "hygiene: advisory cannot judge"], refusals

@@ -429,7 +429,7 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   <sha>: ...`, `import-linter config at the head: ...`). Each line can be declared with a `[[gate.loosened]]` entry
   and then lands only through the operator's door, which reads the same files at the base and the merge commit.
 
-With `--engines DIR` the `secret` rule also scans the whole history reachable from `HEAD` with gitleaks (a key removed later is still found; other branches the checkout fetched are not scanned), always with quality's own config
+The `secret` rule scans the whole history reachable from `HEAD` with gitleaks (a key removed later is still found; other branches the checkout fetched are not scanned), always with quality's own config
 (`src/quality/gitleaks.toml`): the repository's `.gitleaks.toml`, `.gitleaksignore` and `gitleaks:allow`
 comments have no effect. A known false positive is allowed by the value, not the place: the repository's
 `quality/config.toml` names the gitleaks rule, the file and the SHA-256 of the finding's secret (UTF-8, lowercase hex)
@@ -470,9 +470,9 @@ The `advisory` rule judges every tracked `uv.lock`, `pnpm-lock.yaml` and `requir
 with `requirements` and ends in `.txt`; `requirements.in` and `dev-requirements.txt` are not), root
 and nested, with osv-scanner against the OSV advisory database (dev dependencies count). `uv.lock` and the
 requirements files are judged against the PyPI database, `pnpm-lock.yaml` against the npm database. A
-`package-lock.json`, `yarn.lock` or `bun.lock` is not judged yet. It is part of
-`--engines`, so it is skipped without it (nothing is downloaded), and a repository with no tracked lock needs no
-osv-scanner; a database is downloaded only for an ecosystem with a tracked lock, once per run however many locks it has.
+`package-lock.json`, `yarn.lock` or `bun.lock` is not judged yet.
+A repository with no tracked lock needs no
+osv-scanner (and none is located); a database is downloaded only for an ecosystem with a tracked lock, once per run however many locks it has.
 A lock that is tracked but missing on disk is skipped;
 one that links out of the repository, is not a regular file or is empty (zero bytes) is exit `2`. A lock listed in `.gitignore` is still judged.
 A finding is one per advisory group, package and lock file, named by the tracked relative path:
@@ -511,8 +511,7 @@ reason = "gradio caps pillow<13; no image input"
 - Each allowed advisory prints before the findings, and the rule stays clean: `advisory: 1 allowed`, then
   `  allowed <lock> <id> (<aliases>): PyPI <package> <version> until <until> (<item>) - <reason>`.
 - An entry no reported advisory matches is a finding: `advisory quality/config.toml - the allowance for <id> in
-  <lock> matches no advisory.` Deleting it is no loosening. With no tracked lock every entry matches nothing; without
-  `--engines` no entry is judged.
+  <lock> matches no advisory.` Deleting it is no loosening. With no tracked lock every entry matches nothing.
 - A malformed entry (a missing or extra key, an empty or multi-line `id`, `lock` or `reason`, an `item` that is not
   `#<n>` or `<owner>/<repo>#<n>`, an `until` or `date` that is text or carries a time, two entries for one `id` and
   `lock`, or an unknown key in `[advisories]`) is exit `2` in the `advisory` and `secret` rules and in `verdict`,
@@ -555,7 +554,7 @@ request. Records the pinned osv-scanner cannot read are dropped by it silently; 
 The hygiene job in `gate.yml` stops at 25 minutes: the 300-second download deadline and the 600-second scan limit take
 15, and setup and the other rules get the remaining 10, so quality's own `cannot judge` shows before GitHub cancels the job.
 Measured on 24.10.2026 (osv-scanner 2.7.0, 12 cores; the download at load 17 to 20): the npm archive is 219,026,863 bytes (230,735 files), the PyPI archive 37,064,024 bytes
-(26,612 files); downloading npm took 34 s; a whole `hygiene --engines` run over a repository with one `pnpm-lock.yaml` and one hashed
+(26,612 files); downloading npm took 34 s; a whole `hygiene` run over a repository with one `pnpm-lock.yaml` and one hashed
 `requirements.txt` (one pin) under `--all-packages`, both databases included, took 63 s and 69 s wall and 640 MB resident (load 3 to 5).
 A `uv.lock` is judged against the same PyPI database; that setup was not measured.
 
@@ -584,8 +583,7 @@ Every rule is judged, even when another cannot be, and gives one verdict: clean,
 Each finding names the rule, the file, a reason and a fix. Repository text (a file name, a service, a port, a contract
 or job name, a configuration entry) prints escaped. In the door's own fields (a finding's location, reason and fix, refusals, reports), invalid UTF-8 prints as `\udcNN`, every control character (line feed,
 carriage return, ESC, tab, DEL, C1) as `\xNN`, and U+2028, U+2029 and every format character (Unicode category Cf: bidi overrides, isolates and marks, zero-width characters, the soft hyphen, the byte order mark, tag characters) as `\uNNNN` (`\UNNNNNNNN` above U+FFFF). A line taken from import-linter's rendering (a broken contract's chain and guidance) prints behind the marker `  | `; rich may drop a carriage return, expand a tab, or start a new marked line at a line feed there. Every line the door prints therefore starts with its own text, so a matcher anchored at the line start, such as setup-uv's python matcher, cannot match repository text. A refusal is one line; the lines the door means to print (an import chain, the verdict's problems, the scoreboard's table) stay lines. A rule that cannot judge prints its verdict and reason under its rule id (`hygiene: secret cannot
-judge - ...`). A clean run names its rules in run order (`hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout, file-suffix, script-name, script-header, test-layout, test-import, python-floor, python-security, python-print); skipped without
---engines: ...`); any other run ends with the findings and the verdicts counted (`hygiene: 1 finding(s); verdicts: 1
+judge - ...`). A clean run names its rules in run order (`hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout, file-suffix, script-name, script-header, test-layout, test-import, python-floor, python-security, python-print, secret, workflow-lint, workflow-security, advisory); workflow-security runs offline, so zizmor's online-only audits do not run`); any other run ends with the findings and the verdicts counted (`hygiene: 1 finding(s); verdicts: 1
 clean, 1 findings, 1 unparsable`). The lines come in run order, also through a pipe that merges stdout and stderr
 (`2>&1 | tee log`); each stays on its own stream. That is option (c) of #86 on 19.10.2026, `cli.main` makes stdout
 line-buffered; the head's confirmation that it is the cleanest drew no objection, which is no spoken ruling. The exit is the worst verdict's: `2` if any rule is unparsable or cannot judge

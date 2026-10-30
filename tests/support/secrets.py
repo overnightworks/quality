@@ -30,7 +30,7 @@ def allow_config(*entries: tuple[str, str, str, str]) -> str:
     return f"[gate]\nmandatory_jobs = [\"checks\"]\n[secrets]\nallow = [{rows}]\n"
 
 
-def assert_key_found(repo: Path, engine_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def assert_key_found(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
     """Exit 1 alone proves nothing, other rules can fail it too: the secret finding itself is asserted."""
-    assert cli.main(["hygiene", "--engines", str(engine_dir), str(repo)]) == 1
+    assert cli.main(["hygiene", str(repo)]) == 1
     assert "secret config.txt:1" in capsys.readouterr().out

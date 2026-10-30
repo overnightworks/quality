@@ -26,7 +26,6 @@ from quality.check import (
     HygieneResult,
     Outcome,
     run_hygiene,
-    skipped_rules,
 )
 from quality.config import Allowance, ConfigError, read_gate_settings
 from quality.merge import Ask, GhRunner, RemoteFor, github_remote, run_emergency_merge, run_gh
@@ -69,12 +68,12 @@ HYGIENE_EXIT = {
 
 INSTALLED_RUFF = partial(installation.installed_executable, python_lint.RUFF_DISTRIBUTION)
 INSTALLED_ZIZMOR = partial(installation.installed_executable, scanners.ZIZMOR)
+ONLINE_AUDITS_NOTE = f"{Rule.WORKFLOW_SECURITY} runs offline, so zizmor's online-only audits do not run"
 
 
 def main(
     argv: list[str] | None = None,
     fetcher_for: Callable[[str], PageFetcher] = github_fetcher,
-    read_pins: Callable[[], dict[str, scanners.Pin]] = scanners.read_pins,
     release_tags: fleet.TagReader = fleet.read_release_tags,
     transport: Transport = fetch_json,
     sleep: Sleep = time.sleep,
@@ -107,15 +106,12 @@ def main(
     if arguments.command == "baseline":
         return run_baseline_write(arguments.path)
     if arguments.command == "scan-staged":
-        return run_scan_staged(arguments.path, arguments.engines, read_pins)
+        return run_scan_staged(arguments.path)
     if arguments.command == "sonar":
         if arguments.sonar_command == "properties":
             return run_sonar_properties()
         return run_sonar_findings(transport, sleep)
-    if arguments.command == "engines":
-        run_engines = run_engines_install if arguments.engines_command == "install" else run_engines_verify
-        return run_engines(arguments.directory, read_pins)
-    return run_hygiene_check(arguments.path, arguments.engines, locate_ruff, locate_zizmor)
+    return run_hygiene_check(arguments.path, locate_ruff, locate_zizmor)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -124,7 +120,6 @@ def build_parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
     hygiene = commands.add_parser("hygiene", help="check a git repository for fleet hygiene")
     hygiene.add_argument("path", nargs="?", type=Path, default=Path("."))
-    hygiene.add_argument("--engines", type=Path, help="directory holding the installed engines; enables the secret and workflow scans")
     baseline = commands.add_parser("baseline", help="manage the baseline").add_subparsers(
         dest="baseline_command", required=True
     )
@@ -133,16 +128,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     scan_staged = commands.add_parser("scan-staged", help="scan the staged change of a repository for secrets")
     scan_staged.add_argument("path", nargs="?", type=Path, default=Path("."))
-    scan_staged.add_argument("--engines", type=Path, required=True, help="directory holding the installed engines")
-    engine_commands = commands.add_parser("engines", help="manage the pinned engines").add_subparsers(
-        dest="engines_command", required=True
-    )
-    engine_commands.add_parser("install", help="download, verify and unpack the pinned engines that are not yet right").add_argument(
-        "directory", type=Path
-    )
-    engine_commands.add_parser("verify", help="check that every pinned engine reports its pinned version").add_argument(
-        "directory", type=Path
-    )
     verdict = commands.add_parser("verdict", help="judge the mandatory jobs of the running workflow run")
     verdict.add_argument("path", nargs="?", type=Path, default=Path("."))
     sonar = commands.add_parser("sonar", help="check SonarCloud for open findings").add_subparsers(
@@ -179,11 +164,9 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def run_hygiene_check(
-    path: Path, engine_dir: Path | None, locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str],
-) -> int:
+def run_hygiene_check(path: Path, locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str]) -> int:
     try:
-        result = run_hygiene(path, engine_dir, locate_ruff, locate_zizmor)
+        result = run_hygiene(path, locate_ruff, locate_zizmor)
     except CannotJudge as error:
         emit(f"hygiene: {error.label} - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
@@ -195,7 +178,7 @@ def run_hygiene_check(
             emit_finding(finding)
         if verdict.refusal is not None:
             emit(f"hygiene: {verdict.rule} {verdict.refusal.label} - {verdict.refusal}", file=sys.stderr)
-    emit(f"hygiene: {hygiene_summary(result)}{coverage_note(engine_dir)}")
+    emit(f"hygiene: {hygiene_summary(result)}; {ONLINE_AUDITS_NOTE}")
     return HYGIENE_EXIT[result.worst]
 
 
@@ -215,13 +198,6 @@ def print_secret_allowances(allowed: list[Finding], unused: dict[Allowance, str]
             emit(f"  allowed {finding.location} - {finding.reason}")
     for entry, reason in unused.items():
         emit(f"{Rule.LEAK}: unused allowance {entry.rule} in {entry.file} (sha256 {entry.secret_sha256}) - {reason}")
-
-
-def coverage_note(engine_dir: Path | None) -> str:
-    skipped = skipped_rules(engine_dir)
-    if skipped:
-        return f"; skipped without --engines: {', '.join(skipped)}"
-    return f"; {Rule.WORKFLOW_SECURITY} runs offline, so zizmor's online-only audits do not run"
 
 
 def run_baseline_write(path: Path) -> int:
@@ -259,9 +235,9 @@ def describe_loosenings(path: Path, written: ratchet.Baseline) -> list[str]:
     return lines
 
 
-def run_scan_staged(path: Path, engine_dir: Path, read_pins: Callable[[], dict[str, scanners.Pin]]) -> int:
+def run_scan_staged(path: Path) -> int:
     try:
-        result = staged.scan_staged(path, engine_dir, read_pins())
+        result = staged.scan_staged(path)
     except (process.ProcessError, ConfigError) as error:
         emit(f"scan-staged: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
@@ -270,30 +246,6 @@ def run_scan_staged(path: Path, engine_dir: Path, read_pins: Callable[[], dict[s
         emit_finding(finding)
     emit(f"scan-staged: {len(result.findings)} finding(s)" if result.findings else "scan-staged: clean")
     return EXIT_FINDINGS if result.findings else EXIT_CLEAN
-
-
-def run_engines_install(directory: Path, read_pins: Callable[[], dict[str, scanners.Pin]]) -> int:
-    try:
-        pins = read_pins()
-        downloaded = scanners.install(directory, pins)
-    except process.ProcessError as error:
-        emit(f"engines: cannot install - {error}", file=sys.stderr)
-        return EXIT_CANNOT_JUDGE
-    for name, pin in pins.items():
-        emit(f"{name} {pin.version} {'installed' if downloaded[name] else 'already installed'}")
-    return EXIT_CLEAN
-
-
-def run_engines_verify(directory: Path, read_pins: Callable[[], dict[str, scanners.Pin]]) -> int:
-    try:
-        problems = scanners.verification_problems(directory, read_pins())
-    except process.ProcessError as error:
-        problems = [str(error)]
-    if problems:
-        emit(*(f"engines: {problem}" for problem in problems), file=sys.stderr)
-        return EXIT_CANNOT_JUDGE
-    emit(f"engines: every pinned engine in {directory} is at its pinned version")
-    return EXIT_CLEAN
 
 
 def run_sonar_properties() -> int:

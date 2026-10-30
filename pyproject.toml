@@ -45,7 +45,7 @@ addopts = ["--import-mode=importlib", "--strict-markers"]
 markers = [
     "unit: starts no process and opens no socket in its setup or call (the audit events in STARTING_EVENTS, tests/conftest.py)",
     "integration: starts a process or opens a socket in its setup or call (the audit events in STARTING_EVENTS, tests/conftest.py)",
-    "scanner: runs a real downloaded scanner process (needs network; CI runs it)",
+    "scanner: runs a real scanner that mise installed from quality's manifest (CI installs them)",
 ]
 
 [tool.coverage.run]

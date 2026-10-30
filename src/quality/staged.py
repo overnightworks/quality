@@ -3,19 +3,19 @@ from pathlib import Path
 
 from quality import process, scanners
 from quality.config import CONFIG_PATH, load_staged_secret_allowances
-from quality.scanners import Pin, SecretScan
+from quality.scanners import SecretScan
 
 INDEX_VARIABLE = "GIT_INDEX_FILE"
 
 
-def scan_staged(path: Path, engine_dir: Path, pins: dict[str, Pin]) -> SecretScan:
+def scan_staged(path: Path) -> SecretScan:
     """Scan exactly what the next commit records: the effective index of the repository at `path`, against HEAD.
 
     gitleaks never sees the live repository. It scans a scratch repository that borrows only the objects, so
     nothing the live repository holds (work-tree ignore files, `info/attributes`, config, the index file the
     caller's environment points at) can change what is found.
     """
-    binary = scanners.prepare_gitleaks(engine_dir, pins)
+    binary = scanners.prepare_gitleaks()
     path = path.resolve()  # absolute, so a path that starts with `-` can never read as a git option
     staged_tree = _git_output(path, "write-tree")
     head = process.unborn_aware_head_commit(path, _caller_git_environment())

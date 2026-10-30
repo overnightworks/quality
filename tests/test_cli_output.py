@@ -15,7 +15,7 @@ from quality.report import DETAIL_MARKER, Finding, printable, render, shell_word
 from tests.support.architecture import FORBIDDEN, SHOP, SHOP_DB_IMPORTS_WEB, toml
 from tests.support.check import assert_every_line_starts_with_the_door
 from tests.support.processes import process_is_gone
-from tests.support.scanners import fake_engine
+from tests.support.scanners import fake_scanner
 from tests.support.secrets import FAKE_KEY, allow_config
 
 DOOR = [sys.executable, "-m", "quality.cli"]
@@ -100,12 +100,11 @@ def test_a_closed_stderr_keeps_the_stop_on_stdout_and_the_exit(broken_compose_re
 
 @pytest.mark.parametrize(
     "arguments",
-    [("baseline", "write", "."), ("engines", "verify", "engines"), ("sonar", "properties")],
-    ids=["baseline write", "engines verify", "sonar properties"],
+    [("baseline", "write", "."), ("sonar", "properties")],
+    ids=["baseline write", "sonar properties"],
 )
 def test_other_doors_start_with_the_stop_too(clean_repo, arguments):
     """#89 rule 1, cell 6."""
-    (clean_repo / "engines").mkdir()
     done = run_door(*arguments, cwd=clean_repo)
     assert stop_token(done.stdout) == stop_token(done.stderr)
 
@@ -344,22 +343,22 @@ def test_a_finding_prints_its_detail_and_fix_escaped(capsys):
     )
 
 
-def test_an_engine_stderr_with_several_lines_prints_as_one_escaped_line(build_repo, clean_engines, capsys):
-    """#97 rule 2, cell 14 (E5): the stderr tail of a failing engine joins on `\\x0a`, never a line of its own."""
-    fake_engine(clean_engines, "gitleaks", on_scan="echo first >&2; echo '::error::second' >&2; exit 2")
+def test_a_scanner_stderr_with_several_lines_prints_as_one_escaped_line(build_repo, served_scanners, capsys):
+    """#97 rule 2, cell 14 (E5): the stderr tail of a failing scanner joins on `\\x0a`, never a line of its own."""
+    fake_scanner(served_scanners, "gitleaks", on_scan="echo first >&2; echo '::error::second' >&2; exit 2")
     repo = build_repo({"README.md": "x\n"})
-    code, lines = door_lines(capsys, "hygiene", "--engines", str(clean_engines), str(repo))
+    code, lines = door_lines(capsys, "hygiene", str(repo))
     refusals = [line for line in lines if line.startswith("hygiene: secret cannot judge - ")]
     assert (code, len(refusals)) == (2, 1), lines
     assert "first\\x0a::error::second" in refusals[0]
     assert_every_line_starts_with_the_door(lines)
 
 
-def test_an_unused_allowance_with_a_control_character_prints_escaped(build_repo, clean_engines, capsys):
+def test_an_unused_allowance_with_a_control_character_prints_escaped(build_repo, capsys):
     """#97 rule 2, cell 13 (E4): the unused allowance line names its file escaped."""
     config = allow_config(("aws-access-token", "no\\u001bthere.txt", FAKE_KEY, "stale entry"))
     repo = build_repo({"quality/config.toml": config})
-    code, lines = door_lines(capsys, "hygiene", "--engines", str(clean_engines), str(repo))
+    code, lines = door_lines(capsys, "hygiene", str(repo))
     assert code == 0
     assert any(line.startswith("secret: unused allowance aws-access-token in no\\x1bthere.txt (sha256 ") for line in lines)
     assert_every_line_starts_with_the_door(lines)
@@ -452,18 +451,18 @@ def test_ctrl_c_in_the_door_ends_the_run_as_interrupted_through_the_injected_sen
 
 @pytest.mark.integration
 @pytest.mark.parametrize("under_shell", [True, False], ids=["under a shell", "direct"])
-def test_ctrl_c_during_a_scan_ends_the_run_as_interrupted_without_a_traceback(clean_repo, clean_engines, tmp_path, under_shell):
-    """#228 rule 2: a shell reads 130 (the process dies by SIGINT), the engine is gone and the scratch directory removed."""
-    engine_pid = tmp_path / "engine.pid"
+def test_ctrl_c_during_a_scan_ends_the_run_as_interrupted_without_a_traceback(clean_repo, served_scanners, tmp_path, under_shell):
+    """#228 rule 2: a shell reads 130 (the process dies by SIGINT), the scanner is gone and the scratch directory removed."""
+    scanner_pid = tmp_path / "scanner.pid"
     scratch_parent = tmp_path / "scratch"
     scratch_parent.mkdir()
-    fake_engine(
-        clean_engines, "gitleaks",
-        on_scan='echo $$ > "$ENGINE_PID"; head -c 1048576 /dev/zero; kill -INT $PPID; exec sleep 60',
+    fake_scanner(
+        served_scanners, "gitleaks",
+        on_scan='echo $$ > "$SCANNER_PID"; head -c 1048576 /dev/zero; kill -INT $PPID; exec sleep 60',
     )
-    door = [*DOOR, "hygiene", "--engines", str(clean_engines), str(clean_repo)]
+    door = [*DOOR, "hygiene", str(clean_repo)]
     command = ["sh", "-c", '"$@"; echo "exit $?" >&2', "sh", *door] if under_shell else door
-    environment = os.environ | {"ENGINE_PID": str(engine_pid), "TMPDIR": str(scratch_parent)}
+    environment = os.environ | {"SCANNER_PID": str(scanner_pid), "TMPDIR": str(scratch_parent)}
     interrupted = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=60, check=False)
     if under_shell:
         assert interrupted.stderr.rstrip().endswith("exit 130")
@@ -471,5 +470,5 @@ def test_ctrl_c_during_a_scan_ends_the_run_as_interrupted_without_a_traceback(cl
         assert interrupted.returncode == -signal.SIGINT
     assert "Traceback" not in interrupted.stdout + interrupted.stderr
     assert "KeyboardInterrupt" not in interrupted.stdout + interrupted.stderr
-    assert process_is_gone(int(engine_pid.read_text()))
+    assert process_is_gone(int(scanner_pid.read_text()))
     assert list(scratch_parent.iterdir()) == []

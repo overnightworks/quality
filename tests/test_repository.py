@@ -211,10 +211,6 @@ def run_command(command: str, repo: Path, scratch: Path, monkeypatch, capsys) ->
     if command == "sonar findings":
         monkeypatch.chdir(repo)
         argv = ["sonar", "findings"]
-    elif command == "hygiene --engines":
-        engine_dir = scratch / "engines"
-        engine_dir.mkdir(exist_ok=True)
-        argv = ["hygiene", str(repo), "--engines", str(engine_dir)]
     else:
         argv = [*command.split(), str(repo)]
     code = cli.main(argv, transport=lambda url, token: requests.append(url))
@@ -225,7 +221,7 @@ def run_command(command: str, repo: Path, scratch: Path, monkeypatch, capsys) ->
 
 
 PREFIXES = {
-    "hygiene --engines": "hygiene: secret cannot judge - ",
+    "hygiene": "hygiene: secret cannot judge - ",
     "verdict": f"verdict: cannot judge - {NAME} at the head: ",
     "sonar findings": "sonar: cannot judge - ",
 }
@@ -237,7 +233,7 @@ def test_an_unusable_config_is_exit_2_with_one_reason_in_every_command(
     git_repo, monkeypatch, capsys, command, arrange, reason
 ):
     """#52 rules 2-5, cells 1-9: every command that reads the config refuses it with the same reason after its own
-    prefix, names no checkout path, and sonar sends no request; hygiene reads it before any engine runs."""
+    prefix, names no checkout path, and sonar sends no request; hygiene reads it before any scanner runs."""
     repo, scratch = git_repo
     arrange(repo, scratch)
     code, output = run_command(command, repo, scratch, monkeypatch, capsys)

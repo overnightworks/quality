@@ -22,8 +22,8 @@ def stage(repo: Path, files: dict[str, str]) -> None:
     git(repo, "add", "-f", *files)
 
 
-def scan_staged(repo: Path, engines: Path) -> int:
-    return cli.main(["scan-staged", "--engines", str(engines), str(repo)])
+def scan_staged(repo: Path) -> int:
+    return cli.main(["scan-staged", str(repo)])
 
 
 @pytest.fixture
@@ -34,11 +34,11 @@ def unborn_repo(tmp_path) -> Path:
 
 
 @pytest.mark.scanner
-def test_a_staged_key_is_red_and_its_value_is_not_printed(build_repo, installed_engines, capsys):
+def test_a_staged_key_is_red_and_its_value_is_not_printed(build_repo, installed_scanners, capsys):
     """#25 rule 1: the staged change is judged; the output names the hash, never the value."""
     repo = build_repo({"README": "hello\n"})
     stage(repo, {"src/a.py": KEY_LINE})
-    assert scan_staged(repo, installed_engines) == 1
+    assert scan_staged(repo) == 1
     out = capsys.readouterr().out
     assert "secret src/a.py:1 - gitleaks rule aws-access-token matched in the staged change (sha256 " in out
     assert FAKE_KEY not in out
@@ -46,7 +46,7 @@ def test_a_staged_key_is_red_and_its_value_is_not_printed(build_repo, installed_
 
 @pytest.mark.scanner
 @pytest.mark.parametrize("where", ["unstaged edit", "untracked file", "only in HEAD", "removed from HEAD"])
-def test_a_key_that_is_not_in_the_staged_change_is_green(build_repo, installed_engines, where):
+def test_a_key_that_is_not_in_the_staged_change_is_green(build_repo, installed_scanners, where):
     """#25 rule 1: a key only in the work tree, or only in HEAD, is not what the next commit adds."""
     repo = build_repo({"kept.txt": KEY_LINE} if where.endswith("HEAD") else {"kept.txt": "clean\n"})
     if where == "unstaged edit":
@@ -55,16 +55,16 @@ def test_a_key_that_is_not_in_the_staged_change_is_green(build_repo, installed_e
         (repo / "new.txt").write_text(KEY_LINE)
     if where == "removed from HEAD":
         git(repo, "rm", "-q", "kept.txt")
-    assert scan_staged(repo, installed_engines) == 0
+    assert scan_staged(repo) == 0
 
 
 @pytest.mark.scanner
-def test_a_repository_without_head_is_scanned(unborn_repo, installed_engines):
+def test_a_repository_without_head_is_scanned(unborn_repo, installed_scanners):
     """#25 rule 1: no HEAD is an empty parent, so the whole index is the change."""
     stage(unborn_repo, {"clean.txt": "ok\n"})
-    assert scan_staged(unborn_repo, installed_engines) == 0
+    assert scan_staged(unborn_repo) == 0
     stage(unborn_repo, {"config.txt": KEY_LINE})
-    assert scan_staged(unborn_repo, installed_engines) == 1
+    assert scan_staged(unborn_repo) == 1
 
 
 @pytest.mark.scanner
@@ -76,34 +76,34 @@ def test_a_repository_without_head_is_scanned(unborn_repo, installed_engines):
         (".gitleaks.toml", "[allowlist]\nregexes = ['AKIA.*']\n"),
     ],
 )
-def test_a_staged_ignore_attribute_or_config_file_changes_nothing(build_repo, installed_engines, name, content):
+def test_a_staged_ignore_attribute_or_config_file_changes_nothing(build_repo, installed_scanners, name, content):
     """#25 rule 1: the scratch work tree is empty, so no file of the scanned repository steers gitleaks or git."""
     repo = build_repo({"README": "hello\n"})
     stage(repo, {name: content, "config.txt": KEY_LINE})
-    assert scan_staged(repo, installed_engines) == 1
+    assert scan_staged(repo) == 1
 
 
 @pytest.mark.scanner
-def test_a_gitleaks_allow_comment_changes_nothing(build_repo, installed_engines):
+def test_a_gitleaks_allow_comment_changes_nothing(build_repo, installed_scanners):
     """#25 rule 1: an inline gitleaks:allow comment is ignored, the staged key is still red."""
     repo = build_repo({"README": "hello\n"})
     stage(repo, {"config.txt": f"aws_access_key_id = {FAKE_KEY}  # gitleaks:allow\n"})
-    assert scan_staged(repo, installed_engines) == 1
+    assert scan_staged(repo) == 1
 
 
 @pytest.mark.scanner
-def test_the_live_repositorys_info_attributes_cannot_hide_a_staged_key(build_repo, installed_engines):
+def test_the_live_repositorys_info_attributes_cannot_hide_a_staged_key(build_repo, installed_scanners):
     """#25 rule 1 (quality#21 follow-up): git reads $GIT_DIR/info/attributes whatever the environment says; the scratch repository has none."""
     repo = build_repo({"README": "hello\n"})
     (repo / ".git" / "info").mkdir(exist_ok=True)
     (repo / ".git" / "info" / "attributes").write_text("k.txt -diff\n")
     stage(repo, {"k.txt": KEY_LINE})
-    assert scan_staged(repo, installed_engines) == 1
+    assert scan_staged(repo) == 1
 
 
 @pytest.mark.scanner
 @pytest.mark.parametrize("staged_config", [True, False], ids=["allowance staged", "allowance only in work tree"])
-def test_the_allow_list_is_the_one_of_the_staged_tree(build_repo, installed_engines, staged_config):
+def test_the_allow_list_is_the_one_of_the_staged_tree(build_repo, installed_scanners, staged_config):
     """#25 rule 1.4: an allowed value is green when the staged tree allows it; a work-tree-only file allows nothing."""
     repo = build_repo({"README": "hello\n"})
     config = allow_config(("aws-access-token", "config.txt", FAKE_KEY, "test key"))
@@ -113,7 +113,7 @@ def test_the_allow_list_is_the_one_of_the_staged_tree(build_repo, installed_engi
     else:
         (repo / "quality").mkdir()
         (repo / "quality" / "config.toml").write_text(config)
-    assert scan_staged(repo, installed_engines) == (0 if staged_config else 1)
+    assert scan_staged(repo) == (0 if staged_config else 1)
 
 
 @pytest.mark.scanner
@@ -130,25 +130,23 @@ def test_the_allow_list_is_the_one_of_the_staged_tree(build_repo, installed_engi
     ids=["allowed value moved to another line of its file", "allowed value replaced by another key"],
 )
 def test_an_allowance_follows_the_value_in_the_staged_scan(
-    build_repo, installed_engines, capsys, staged_change, exit_code, expected_line
+    build_repo, installed_scanners, capsys, staged_change, exit_code, expected_line
 ):
     """#25 rule 1.4, #24 rule 1: the staged diff matches by rule, file and value hash, not by line."""
     config = allow_config(("aws-access-token", "config.txt", FAKE_KEY, "test key"))
     repo = build_repo({"config.txt": KEY_LINE, "quality/config.toml": config})
     stage(repo, {"config.txt": staged_change})
-    assert scan_staged(repo, installed_engines) == exit_code
+    assert scan_staged(repo) == exit_code
     if expected_line is not None:
         assert expected_line in capsys.readouterr().out
 
 
 @pytest.fixture
-def refusing_hook(build_repo, installed_engines):
+def refusing_hook(build_repo, installed_scanners):
     """A repository whose pre-commit hook runs `quality scan-staged`, with a committed clean file."""
     repo = build_repo({"tracked.txt": "clean\n"})
     hook = repo / ".git" / "hooks" / "pre-commit"
-    hook.write_text(
-        f"#!/bin/sh\nexec {sys.executable} -m quality.cli scan-staged . --engines {installed_engines}\n"
-    )
+    hook.write_text(f"#!/bin/sh\nexec {sys.executable} -m quality.cli scan-staged .\n")
     hook.chmod(0o755)
     return repo
 
@@ -192,17 +190,17 @@ def test_a_clean_commit_goes_through_the_hook(refusing_hook):
 
 
 @pytest.mark.scanner
-def test_scan_staged_leaves_the_repository_as_it_found_it(build_repo, installed_engines):
+def test_scan_staged_leaves_the_repository_as_it_found_it(build_repo, installed_scanners):
     """#25 rule 1.1: write-tree only writes tree objects, so status is unchanged by the scan."""
     repo = build_repo({"README": "hello\n"})
     stage(repo, {"config.txt": KEY_LINE})
     before = git(repo, "status", "--porcelain=v2", "--branch").stdout
-    scan_staged(repo, installed_engines)
+    scan_staged(repo)
     assert git(repo, "status", "--porcelain=v2", "--branch").stdout == before
 
 
 @pytest.mark.scanner
-def test_an_unmerged_index_is_exit_2(build_repo, installed_engines, capsys):
+def test_an_unmerged_index_is_exit_2(build_repo, installed_scanners, capsys):
     """#25 rule 4: an index with unmerged entries is exit 2, never clean."""
     repo = build_repo({"f.txt": "base\n"})
     git(repo, "checkout", "-q", "-b", "other")
@@ -212,21 +210,14 @@ def test_an_unmerged_index_is_exit_2(build_repo, installed_engines, capsys):
     stage(repo, {"f.txt": "main\n"})
     git(repo, "commit", "-q", "-m", "main")
     git(repo, "merge", "other", check=False)
-    assert scan_staged(repo, installed_engines) == 2
+    assert scan_staged(repo) == 2
     assert capsys.readouterr().err.startswith("scan-staged: cannot judge - git write-tree failed")
 
 
 @pytest.mark.scanner
-def test_a_path_that_is_not_a_repository_is_exit_2(tmp_path, installed_engines, capsys):
+def test_a_path_that_is_not_a_repository_is_exit_2(tmp_path, installed_scanners, capsys):
     """#25 rule 4: a path that is not a repository is exit 2."""
-    assert scan_staged(tmp_path, installed_engines) == 2
-    assert capsys.readouterr().err.startswith("scan-staged: cannot judge - ")
-
-
-@pytest.mark.scanner
-def test_a_missing_engine_is_exit_2(build_repo, tmp_path, capsys):
-    """#25 rule 4: a missing engine is exit 2."""
-    assert scan_staged(build_repo({}), tmp_path / "no-engines") == 2
+    assert scan_staged(tmp_path) == 2
     assert capsys.readouterr().err.startswith("scan-staged: cannot judge - ")
 
 
@@ -239,19 +230,19 @@ def test_a_missing_engine_is_exit_2(build_repo, tmp_path, capsys):
     ],
     ids=["unknown gate keys and tables are ignored", "a malformed allowance is still refused"],
 )
-def test_the_staged_scan_reads_only_the_secrets_table(build_repo, installed_engines, staged_config, exit_code):
+def test_the_staged_scan_reads_only_the_secrets_table(build_repo, installed_scanners, staged_config, exit_code):
     """#40 rule 1: only [secrets] of the staged config is validated."""
     repo = build_repo({"README": "hello\n"})
     stage(repo, {"quality/config.toml": staged_config})
-    assert scan_staged(repo, installed_engines) == exit_code
+    assert scan_staged(repo) == exit_code
 
 
 @pytest.mark.scanner
-def test_an_unreadable_allow_list_is_exit_2(build_repo, installed_engines, capsys):
+def test_an_unreadable_allow_list_is_exit_2(build_repo, installed_scanners, capsys):
     """#25 rule 4: a staged allow list that cannot be read is exit 2."""
     repo = build_repo({"README": "hello\n"})
     stage(repo, {"quality/config.toml": "not [valid toml"})
-    assert scan_staged(repo, installed_engines) == 2
+    assert scan_staged(repo) == 2
     assert "quality/config.toml" in capsys.readouterr().err
 
 
@@ -264,33 +255,33 @@ def test_an_unreadable_allow_list_is_exit_2(build_repo, installed_engines, capsy
     ],
 )
 def test_git_failing_on_the_staged_allow_list_is_exit_2_in_its_words(
-    build_repo, installed_engines, fake_git, capsys, failing, expected
+    build_repo, installed_scanners, fake_git, capsys, failing, expected
 ):
     """#25 rule 4: git that cannot read the staged allow list is exit 2, and the message says which read failed."""
     repo = build_repo({"README": "hello\n"})
     stage(repo, {"quality/config.toml": "[secrets]\n"})
     fake_git(f'case " $* " in *" {failing} "*) echo "{failing} broke" >&2; exit 1;; esac')
-    assert scan_staged(repo, installed_engines) == 2
+    assert scan_staged(repo) == 2
     assert f"scan-staged: cannot judge - {expected}: git exited 1" in capsys.readouterr().err
 
 
 @pytest.mark.scanner
 @pytest.mark.parametrize("kind", ["a missing path", "a regular file"])
-def test_a_path_that_is_not_a_directory_is_exit_2_and_named(kind, tmp_path, installed_engines, capsys):
+def test_a_path_that_is_not_a_directory_is_exit_2_and_named(kind, tmp_path, installed_scanners, capsys):
     """#25 rule 4: a path that is no directory is exit 2, and git's own error names the path (#58 rule 3)."""
     path = tmp_path / "not-a-directory"
     if kind == "a regular file":
         path.write_text("content\n")
-    assert scan_staged(path, installed_engines) == 2
+    assert scan_staged(path) == 2
     assert str(path) in capsys.readouterr().err
 
 
 @pytest.mark.scanner
 def test_a_repository_path_that_starts_with_a_dash_is_scanned_as_a_path(
-    tmp_path, installed_engines, monkeypatch, capsys
+    tmp_path, installed_scanners, monkeypatch, capsys
 ):
     """#25 rule 4: `-C` reached by a relative path is a repository, never a git option, so its staged key is red."""
     git(tmp_path, "init", "-q", "--", "-C")
     stage(tmp_path / "-C", {"config.txt": KEY_LINE})
     monkeypatch.chdir(tmp_path)
-    assert cli.main(["scan-staged", "--engines", str(installed_engines), "--", "-C"]) == 1
+    assert cli.main(["scan-staged", "--", "-C"]) == 1

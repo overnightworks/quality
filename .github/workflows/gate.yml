@@ -63,11 +63,22 @@ jobs:
           version: '0.12.4'
           python-version: '3.14'
 
-      - name: Install the pinned engines
-        run: uv run --locked --project "$TOOL_DIR" quality engines install "$RUNNER_TEMP/engines"
+      - name: Install the pinned scanners
+        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        with:
+          version: v2026.10.23
+          sha256: a6ac620e73fb58cefbdfef8fb154856fbd8ae08d75ae88103e4b81daef3a836e
+          working_directory: ${{ env.TOOL_DIR }}/src/quality/mise
+          install_args: --locked
+          cache: false
+          env: false
+          export_path: false
+          add_shims_to_path: false
+        env:
+          MISE_CEILING_PATHS: ${{ github.workspace }}${{ env.TOOL_DIR != '.' && format('/{0}', env.TOOL_DIR) || '' }}/src/quality
 
       - name: Hygiene
-        run: uv run --locked --project "$TOOL_DIR" quality hygiene --engines "$RUNNER_TEMP/engines" .
+        run: uv run --locked --project "$TOOL_DIR" quality hygiene .
 
   sonar:
     runs-on: ubuntu-latest

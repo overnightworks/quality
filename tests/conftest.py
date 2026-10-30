@@ -20,7 +20,7 @@ pytest.register_assert_rewrite("tests.support")  # before the first import of a 
 from tests.support.advisories import advisory, zipped
 from tests.support.fleet import RELEASES, write_fleet
 from tests.support.git_repositories import GIT_IDENTITY, head_commit, make_repo, put
-from tests.support.scanners import OUTPUTS, fake_engine
+from tests.support.scanners import CLEAN_SCANS, OUTPUTS, fake_scanner, serving, write_mise
 
 PROCESS_OR_SOCKET_FIXTURES = frozenset(
     {
@@ -28,13 +28,19 @@ PROCESS_OR_SOCKET_FIXTURES = frozenset(
         "public",
         "fake_git",
         "stub_server",
-        "installed_engines",
-        "clean_engines",
+        "use_mise",
+        "installed_scanners",
         "loopback",
         "serve",
         "served_databases",
         "release_checkout",
     }
+)
+REAL_DATABASE_ROOT = advisories.DATABASE_ROOT
+MISE_DIRECTORIES = (
+    ("MISE_DATA_DIR", "XDG_DATA_HOME", ".local/share"),
+    ("MISE_CACHE_DIR", "XDG_CACHE_HOME", ".cache"),
+    ("MISE_STATE_DIR", "XDG_STATE_HOME", ".local/state"),
 )
 KIND_MARKERS = frozenset({"unit", "integration"})
 # The one owner of the audit event names that define `integration`.
@@ -166,23 +172,62 @@ def elsewhere(tmp_path_factory) -> Path:
     return tmp_path_factory.mktemp("elsewhere")
 
 
-@pytest.fixture(scope="session")
-def installed_engines(tmp_path_factory) -> Path:
-    directory = tmp_path_factory.mktemp("engines")
-    assert cli.main(["engines", "install", str(directory)]) == 0
+@pytest.fixture
+def use_mise(tmp_path_factory, monkeypatch):
+    """`use_mise(body)` puts a `mise` that runs `body` (shell) first on PATH and returns its directory."""
+
+    def put(body: str) -> Path:
+        directory = tmp_path_factory.mktemp("fake-mise")
+        write_mise(directory, body)
+        monkeypatch.setenv("PATH", f"{directory}:{os.environ['PATH']}")
+        return directory
+
+    return put
+
+
+@pytest.fixture
+def path_without_mise(tmp_path_factory, monkeypatch):
+    """A PATH that holds git and nothing else, so no mise is found whatever the machine has installed."""
+    directory = tmp_path_factory.mktemp("only-git")
+    (directory / "git").symlink_to(shutil.which("git"))
+    monkeypatch.setenv("PATH", str(directory))
+
+
+@pytest.fixture(autouse=True)
+def served_scanners(tmp_path_factory, monkeypatch, publish_database) -> Path:
+    """The directory whose clean fake gitleaks, actionlint and osv-scanner a fake `mise` on PATH serves, so no test
+    reaches a real scanner or the network by accident; a valid advisory database for each ecosystem is published
+    locally for the same reason."""
+    toolchain = tmp_path_factory.mktemp("toolchain")
+    directory = toolchain / "scanners"
+    directory.mkdir()
+    for name, on_scan in CLEAN_SCANS.items():
+        fake_scanner(directory, name, on_scan)
+    write_mise(toolchain / "bin", serving(directory))
+    monkeypatch.setenv("PATH", f"{toolchain / 'bin'}:{os.environ['PATH']}")
+    for ecosystem in sorted({kind.ecosystem for kind in advisories.LOCK_KINDS.values()}):
+        publish_database(ecosystem=ecosystem)
     return directory
 
 
 @pytest.fixture
-def clean_engines(tmp_path_factory) -> Path:
-    """A gitleaks that reports its pin and no leak; with no workflow tracked, no other engine runs."""
-    directory = tmp_path_factory.mktemp("engines")
-    fake_engine(
-        directory,
-        "gitleaks",
-        on_scan='while [ $# -gt 0 ]; do [ "$1" = --report-path ] && report=$2; shift; done\necho "[]" > "$report"',
-    )
-    return directory
+def installed_scanners(served_scanners, monkeypatch) -> None:
+    """The real mise and the real scanners it installed from quality's manifest.
+
+    mise keeps its installs under the user's home, which some tests move; its directories are pinned first.
+    """
+    fake_mise_directory = str(served_scanners.parent / "bin")
+    on_path = [entry for entry in os.environ["PATH"].split(os.pathsep) if entry != fake_mise_directory]
+    monkeypatch.setenv("PATH", os.pathsep.join(on_path))
+    for variable, xdg_variable, fallback in MISE_DIRECTORIES:
+        default = Path(os.environ.get(xdg_variable) or Path.home() / fallback) / "mise"
+        monkeypatch.setenv(variable, os.environ.get(variable, str(default)))
+
+
+@pytest.fixture
+def live_database(monkeypatch) -> None:
+    """The advisory database the gate reads is the real one, over the network."""
+    monkeypatch.setattr(advisories, "DATABASE_ROOT", REAL_DATABASE_ROOT)
 
 
 @pytest.fixture
@@ -307,38 +352,44 @@ def missing(tmp_path) -> str:
 
 
 @pytest.fixture
-def publish_database(tmp_path_factory, monkeypatch):
-    """Points the gate at a file:// advisory database root and publishes an ecosystem's archive there (PyPI unless told otherwise)."""
+def database_root(tmp_path_factory, monkeypatch) -> Path:
+    """A file:// advisory database root the gate reads instead of the live one; nothing is published in it."""
     root = tmp_path_factory.mktemp("osv-database")
     monkeypatch.setattr(advisories, "DATABASE_ROOT", root.as_uri())
+    return root
+
+
+@pytest.fixture
+def publish_database(database_root):
+    """Publishes an ecosystem's archive at the local database root (PyPI unless told otherwise)."""
 
     def publish(records=None, archive: bytes | None = None, ecosystem: str = "PyPI") -> None:
         records = [advisory()] if records is None else records
         archive = zipped({f"{record['id']}.json": json.dumps(record) for record in records}) if archive is None else archive
-        (root / ecosystem).mkdir(exist_ok=True)
-        (root / ecosystem / "all.zip").write_bytes(archive)
+        (database_root / ecosystem).mkdir(exist_ok=True)
+        (database_root / ecosystem / "all.zip").write_bytes(archive)
 
     return publish
 
 
 @pytest.fixture
-def run_gate(capsys):
-    """Runs the gate over a repository and returns (exit code, all output); no output names the checkout or the engine directory (#53 cell 21)."""
-    def run(repo: Path, engine_dir: Path) -> tuple[int, str]:
-        code = cli.main(["hygiene", "--engines", str(engine_dir), str(repo)])
+def run_gate(capsys, served_scanners):
+    """Runs the gate over a repository and returns (exit code, all output); no output names the checkout or the scanner directory (#53 cell 21)."""
+    def run(repo: Path) -> tuple[int, str]:
+        code = cli.main(["hygiene", str(repo)])
         captured = capsys.readouterr()
         output = captured.out + captured.err
         assert str(repo) not in output
         assert str(repo).lstrip("/") not in output
-        assert str(engine_dir) not in output
-        assert str(engine_dir).lstrip("/") not in output
+        assert str(served_scanners) not in output
+        assert str(served_scanners).lstrip("/") not in output
         return code, captured.out + captured.err
     return run
 
 
 @pytest.fixture
 def edited_report(tmp_path_factory):
-    """Writes the engine-output fixture, edited, outside the fixture repository."""
+    """Writes the scanner-output fixture, edited, outside the fixture repository."""
     def write(fixture: str, edit) -> Path:
         report = json.loads((OUTPUTS / fixture).read_text())
         edit(report)

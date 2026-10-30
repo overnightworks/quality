@@ -129,10 +129,10 @@ $ quality check
       fix: uv lock --upgrade-package jinja2
   ✓ code          clean          2 rules · 41 Python files
 error: 1 of 7 areas could not check · 1 finding in the others
-next: mise install gitleaks@8.30.1
+next: mise --cd ~/.local/share/uv/tools/overnightworks-quality/lib/python3.14/site-packages/quality/mise install --locked
 ```
 
-The `next:` form is open (decision 11). Wrong version on the PATH: the same row, another fact.
+The `next:` form is decision 11. A scanner that reports another version than the release pins: the same row, another fact.
 
 ```text
   ✗ secrets       not checked    gitleaks 8.28.0 found, the release pins 8.30.1
@@ -523,7 +523,7 @@ Ruled by the operator on 28.10.2026 („ok“). Those marked * add to or change 
 8. * The release is missing (changes rule 6): A, quality fetches exactly the pin through uv and says so in the release row; offline is exit 2. Not B (exit 2 with a `uvx --from git+…` command).
 9. No pin, old pin, quality itself: no workflow calls `gate.yml` is exit 2; a pin older than the release with `check` is exit 2 with "raise the gate pin"; in quality itself the checkout judges.
 10. `--staged` only with `secrets`: any other area with `--staged` is exit 2 with `next: quality check secrets --staged`.
-11. * The command that installs a scanner (open in rule 4): the picture shows the placeholder with version; the exact command is fixed in the mise slice and must use the release's manifest.
+11. * The command that installs a scanner (rule 4): `mise --cd <quality's installation>/quality/mise install --locked`, the release's own manifest and lock; the path is quality's installation, shown as the example shows it.
 12. Rule names only in an allowance fix: a `fix:` line that asks for an `[[….allow]]` entry names the rule, because the entry needs it.
 13. The CI log stays without colour: no special rule beyond "no TTY, no colour".
 14. `merge` no longer names aco: the "For the head: aco release …" ending goes; that step belongs in the head's instructions.

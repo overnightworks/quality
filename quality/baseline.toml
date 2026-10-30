@@ -1,6 +1,6 @@
 # Measured by `quality baseline write`. Entries only ever go down.
 
 [file_lines]
-"tests/test_scanners.py" = 952
+"tests/test_scanners.py" = 843
 
 [clones]

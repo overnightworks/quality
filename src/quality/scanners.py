@@ -1,34 +1,34 @@
 import hashlib
-import io
 import json
-import tarfile
+import os
+import shutil
 import tomllib
-import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
 
 from quality import installation, process
 from quality.config import Allowance
-from quality.report import Finding
+from quality.report import Finding, printable, shell_word
 from quality.rules import Rule
 
 GITLEAKS = "gitleaks"
 CLEAN_EXIT = 0
 GITLEAKS_LEAKS_FOUND = 7  # gitleaks exits 1 on its own errors too, so leaks get a code of their own
-DOWNLOAD_TIMEOUT_SECONDS = 120
 SECRET_SCAN_TIMEOUT_SECONDS = 1800  # bounds the scan so the scratch directory and its mirror are always deleted
 LEAK_FIELDS = ("File", "StartLine", "RuleID", "Commit", "Secret")
 ACTIONLINT = "actionlint"
 ZIZMOR = "zizmor"
 OSV_SCANNER = "osv-scanner"
-TARBALL = "tar.gz"
-BINARY = "binary"
 ACTIONLINT_FINDINGS = 1
 ZIZMOR_FINDINGS = range(10, 15)  # zizmor encodes the worst severity in 10..14
 VERSION_ARGUMENTS = {GITLEAKS: ["version"], ACTIONLINT: ["-version"], ZIZMOR: ["--version"], OSV_SCANNER: ["--version"]}
 GIT_FLOOR = (2, 41)  # GIT_ATTR_SOURCE, which hides the repository's attributes from the scan, arrived in 2.41
-PIN_FILE = Path(__file__).with_name("engines.toml")
+MANIFEST_DIRECTORY = Path(__file__).with_name("mise")
+MANIFEST_FILE = "mise.toml"
+MISE = "mise"
+MISE_INSTALLATION_PAGE = "https://mise.jdx.dev/installing-mise.html"
+MISE_CEILING_VARIABLE = "MISE_CEILING_PATHS"
 ACTIONLINT_CONFIG = Path(__file__).with_name("actionlint.yaml")
 ZIZMOR_CONFIG = Path(__file__).with_name("zizmor.yml")
 GITLEAKS_CONFIG = Path(__file__).with_name("gitleaks.toml")
@@ -39,85 +39,61 @@ class ScannerError(process.ProcessError):
 
 
 @dataclass(frozen=True)
-class Pin:
+class PinnedTool:
+    """A scanner as the manifest pins it: mise's tool key and the exact version."""
+
+    key: str
     version: str
-    url: str
-    sha256: str
-    format: str = TARBALL  # "binary" for a release asset that is the executable itself
 
 
-def read_pins() -> dict[str, Pin]:
-    with PIN_FILE.open("rb") as handle:
-        pins = {name: Pin(**fields) for name, fields in tomllib.load(handle).items()}
-    for name, pin in pins.items():
-        if pin.format not in (TARBALL, BINARY):
-            raise ScannerError(f"the {name} pin has format {pin.format!r}, neither {TARBALL!r} nor {BINARY!r}")
-    return pins
+def pinned_tool(name: str) -> PinnedTool:
+    with (MANIFEST_DIRECTORY / MANIFEST_FILE).open("rb") as handle:
+        tools = tomllib.load(handle)["tools"]
+    (key,) = (key for key in tools if key.rsplit("/", 1)[-1] == name)
+    return PinnedTool(key, tools[key])
 
 
-def install(directory: Path, pins: dict[str, Pin]) -> dict[str, bool]:
-    """Engine name -> whether it was downloaded; an engine that already reports its pinned version is left alone."""
-    # The operator picks the install directory on purpose, so Sonar's path-traversal taint is accepted here.
+def install_command() -> str:
+    """The command that installs quality's scanners from its manifest and lock, as one line to copy."""
+    directory = str(MANIFEST_DIRECTORY)
+    return f"mise --cd {shell_word(directory) or printable(directory)} install --locked"
+
+
+def located(name: str) -> Path:
+    """The executable of scanner `name` that mise installed from quality's manifest, at exactly the pinned version.
+
+    mise is asked in the manifest directory under a ceiling at the real path of its parent (mise matches the ceiling
+    against its canonical working directory), so no mise config of the scanned repository takes part; mise itself is
+    found on PATH, and a scanner never is.
+    """
+    tool = pinned_tool(name)
+    if shutil.which(MISE) is None:
+        raise ScannerError(
+            f"mise is not installed, and quality finds {name} only through it; install mise ({MISE_INSTALLATION_PAGE}), "
+            f"then: {install_command()}"
+        )
     try:
-        directory.mkdir(parents=True, exist_ok=True)  # NOSONAR(S8707)
-    except OSError as error:
-        raise ScannerError(f"cannot create {directory}: {error.strerror}") from error
-    downloaded = {}
-    for name, pin in pins.items():
-        target = engine_path(directory, name)
-        downloaded[name] = _version_problem(directory, name, pin) is not None
-        if downloaded[name]:
-            target.write_bytes(_executable_from(name, pin, _download_verified(name, pin)))
-            target.chmod(0o755)
-    return downloaded
-
-
-def verification_problems(directory: Path, pins: dict[str, Pin]) -> list[str]:
-    """One line per pinned engine in `directory` that is missing or not at its pinned version."""
-    return [problem for name, pin in pins.items() if (problem := _version_problem(directory, name, pin))]
-
-
-def _version_problem(directory: Path, name: str, pin: Pin) -> str | None:
-    try:
-        verify_version(engine_path(directory, name), name, pin.version)
+        asked = process.run(
+            [MISE, "--cd", str(MANIFEST_DIRECTORY), "which", name, "--tool", f"{tool.key}@{tool.version}"],
+            env=os.environ | {MISE_CEILING_VARIABLE: str(MANIFEST_DIRECTORY.resolve().parent)},
+            cwd=MANIFEST_DIRECTORY,
+            timeout=process.VERSION_TIMEOUT_SECONDS,
+        )
     except process.ProcessError as error:
-        return str(error)
-    return None
-
-
-def engine_path(directory: Path, name: str) -> Path:
-    root = directory.resolve()
-    path = (root / name).resolve()
-    if path.parent != root:
-        raise ScannerError(f"{name} is not a plain file name inside {root}")
-    return path
-
-
-def _download_verified(name: str, pin: Pin) -> bytes:
+        raise ScannerError(f"{error}; install quality's scanners: {install_command()}") from error
+    if asked.returncode != 0:
+        raise ScannerError(
+            f"mise has no {name} {tool.version} (mise exited {asked.returncode}{process.stderr_tail(asked.stderr)}); "
+            f"install quality's scanners: {install_command()}"
+        )
+    answer = Path((asked.stdout.splitlines() or [""])[0])
+    if not (answer.is_absolute() and answer.is_file()):
+        raise ScannerError(f"mise which printed no {name} executable; install quality's scanners: {install_command()}")
     try:
-        with urllib.request.urlopen(pin.url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:  # noqa: S310 - pinned https url; follows redirects
-            archive = response.read()
-    except (OSError, ValueError) as error:
-        raise ScannerError(f"cannot download {name} from {pin.url}: {error}") from error
-    actual = hashlib.sha256(archive).hexdigest()
-    if actual != pin.sha256:
-        raise ScannerError(f"{name} download has sha256 {actual}, the pin says {pin.sha256}")
-    return archive
-
-
-def _executable_from(name: str, pin: Pin, download: bytes) -> bytes:
-    return download if pin.format == BINARY else _unpack_binary(name, download)
-
-
-def _unpack_binary(name: str, archive: bytes) -> bytes:
-    try:
-        with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as tar:
-            member = tar.extractfile(name)
-            if member is None:
-                raise ScannerError(f"the {name} archive has no file {name}")
-            return member.read()
-    except (tarfile.TarError, KeyError) as error:
-        raise ScannerError(f"cannot unpack {name}: {error}") from error
+        verify_version(answer, name, tool.version)
+    except process.ProcessError as error:
+        raise ScannerError(f"{error}; install quality's scanners: {install_command()}") from error
+    return answer
 
 
 @dataclass(frozen=True)
@@ -135,16 +111,15 @@ class SecretScan:
     unused_allowances: dict[Allowance, str]  # entries of quality/config.toml that no finding used, with their reasons
 
 
-def prepare_gitleaks(engine_dir: Path, pins: dict[str, Pin]) -> Path:
+def prepare_gitleaks() -> Path:
     """The pinned gitleaks binary, once it and the git floor are known to hold."""
-    binary = engine_path(engine_dir, GITLEAKS)
-    verify_version(binary, GITLEAKS, pins[GITLEAKS].version)
+    binary = located(GITLEAKS)
     require_git_floor()
     return binary
 
 
-def scan_secrets(root: Path, engine_dir: Path, pins: dict[str, Pin], allowances: dict[Allowance, str]) -> SecretScan:
-    binary = prepare_gitleaks(engine_dir, pins)
+def scan_secrets(root: Path, allowances: dict[Allowance, str]) -> SecretScan:
+    binary = prepare_gitleaks()
     with process.scratch_directory() as scratch:
         git_environment = process.attribute_free_git_environment(scratch / "home")
         # gitleaks also reads <source>/.gitleaksignore, so it scans a mirror clone (bare), which has no work tree to
@@ -214,8 +189,8 @@ def require_git_floor() -> None:
         )
 
 
-def verify_version(binary: Path, engine_name: str, pinned: str) -> None:
-    asked = process.run([str(binary), *VERSION_ARGUMENTS[engine_name]], timeout=process.VERSION_TIMEOUT_SECONDS)
+def verify_version(binary: Path, scanner_name: str, pinned: str) -> None:
+    asked = process.run([str(binary), *VERSION_ARGUMENTS[scanner_name]], timeout=process.VERSION_TIMEOUT_SECONDS)
     if asked.returncode != 0:
         raise ScannerError(f"{binary} version exited {asked.returncode}{process.stderr_tail(asked.stderr)}")
     reported = (asked.stdout.strip().splitlines() or [""])[0].split(" ")[-1]  # "zizmor 1.2.3", or just "1.2.3"
@@ -264,20 +239,14 @@ def pinned_zizmor(locate_zizmor: Callable[[], str]) -> Path:
     return located
 
 
-def scan_workflows(
-    root: Path, engine_dir: Path, pins: dict[str, Pin], rule: Rule, workflows: list[str], locate_zizmor: Callable[[], str],
-) -> list[Finding]:
-    """The findings of the one engine that judges `rule`; nothing to scan needs no engine."""
+def scan_workflows(root: Path, rule: Rule, workflows: list[str], locate_zizmor: Callable[[], str]) -> list[Finding]:
+    """The findings of the one scanner that judges `rule`; nothing to scan needs no scanner."""
     if not workflows:
         return []
-    engine = WORKFLOW_SCANNERS[rule]
-    if engine.name == ZIZMOR:
-        binary = pinned_zizmor(locate_zizmor)
-    else:
-        binary = engine_path(engine_dir, engine.name)
-        verify_version(binary, engine.name, pins[engine.name].version)
-    scan = process.run([str(binary), *engine.arguments, *workflows], cwd=root)
-    return scanner_findings(engine, scan.stdout, scan.returncode, scan.stderr)
+    scanner = WORKFLOW_SCANNERS[rule]
+    binary = pinned_zizmor(locate_zizmor) if scanner.name == ZIZMOR else located(scanner.name)
+    scan = process.run([str(binary), *scanner.arguments, *workflows], cwd=root)
+    return scanner_findings(scanner, scan.stdout, scan.returncode, scan.stderr)
 
 
 def scanner_findings(scanner: _Scanner, report_text: str, exit_code: int, stderr: str) -> list[Finding]:
@@ -319,7 +288,7 @@ def zizmor_finding(entry: object) -> Finding:
 
 
 WORKFLOW_SCANNERS = {
-    # No shellcheck or pyflakes: actionlint would run whichever it finds on PATH, an unpinned engine in the verdict.
+    # No shellcheck or pyflakes: actionlint would run whichever it finds on PATH, an unpinned scanner in the verdict.
     Rule.WORKFLOW_LINT: _Scanner(
         name=ACTIONLINT, finding_exits=(ACTIONLINT_FINDINGS,), read_finding=actionlint_finding,
         arguments=("-config-file", str(ACTIONLINT_CONFIG), "-shellcheck=", "-pyflakes=", "-format", "{{json .}}"),
