@@ -600,7 +600,8 @@ def test_an_example_entry_is_accepted_beside_a_gate_that_lists_its_job(table):
 
 def test_the_gate_example_is_accepted():
     """#279 acceptance 5: the example of a missing or malformed [gate] is a valid gate."""
-    assert load_gate_settings("\n".join(config.EXAMPLE)).mandatory_jobs == ("checks",)
+    text = "\n".join(config.EXAMPLE)
+    assert load_gate_settings(text).mandatory_jobs == tuple(tomllib.loads(text)["gate"]["mandatory_jobs"])
 
 
 def test_the_secrets_example_holds_a_placeholder_hash_a_person_fills():
