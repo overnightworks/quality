@@ -35,11 +35,10 @@ Monday at 05:17 UTC and on dispatch; the tables stand in that run's summary. The
 (also across case) or non-`owner/name` `quality/fleet.toml` is `cannot judge`, exit `2`, before any clone; each bad entry is named by
 its place (`repositories[3]`), never by its text.
 
-- A `public` URL is cloned with `git -c credential.helper= clone --depth 1 --no-tags`, `GIT_TERMINAL_PROMPT=0` and no
+- Each repository is cloned from `https://github.com/<owner>/<name>` with `git -c credential.helper= clone --depth 1 --no-tags`, `GIT_TERMINAL_PROMPT=0` and no
   askpass, into a temporary directory that is removed on every exit, and its default branch tip is measured.
 - git runs anonymously: without system, global or `GIT_CONFIG_*` config and with an empty `HOME`, so no configured
-  header, helper or `~/.netrc` reaches the host. Only `http`, `https` and `file` URLs without credentials in them are
-  used; any other URL is `cannot judge`.
+  header, helper or `~/.netrc` reaches the host.
 - Lines are the physical lines of the tracked files of the `size` rule's languages, the count its 800-line limit uses
   (blank and comment lines included); `Languages` lists each with its lines, production and tests together, largest
   first, ties by name, and `—` for a row with no measured file. Production versus test is the `size` rule's file-name rule, so `scripts/test_inventory.py` counts as test.
@@ -48,8 +47,6 @@ its place (`repositories[3]`), never by its text.
 - `Clone pairs prod / test` counts the `clone` rule's pairs (two near-identical functions in two files, at 40 tokens and
   90 %); a pair counts as test only when both sides are tests, so a test that copies production code counts as prod.
 - A `.py` file Python cannot parse still has its lines counted; the row's note says how many such files there are, never which.
-- Both tables name a row by the last two path segments (`owner/name`) when its URL is not a `file://` one and has a host and at
-  least two path segments; any other URL is named by its last path segment, else its host. A `|` in a name prints as `\|`.
 - The matrix, under a heading naming the newest release tag of `overnightworks/quality` (read by an anonymous
   `git ls-remote --tags`, never from the running code's version), has one `Gate` and one `CodeQL` cell per repository.
   They come from the job-level `uses:` of each tracked `.github/workflows/*.yml|yaml`, parsed as data and never run.
@@ -75,7 +72,7 @@ its place (`repositories[3]`), never by its text.
   show `cannot read <file>` (`import-linter config`) in each cell that reads the file, while a cell that does not keeps its value
   (every cell under no gate, a rule cell under a pin before the rule or `release unknown`), unreadable release tags say so in the heading and
   show pins as commits, and each makes the exit `2`. No value, `behind`, `no gate` or `report-only` included, makes the run red.
-- Each listed repository is cloned anonymously from `https://github.com/<owner>/<name>`; rows are named by the entry as written
+- Rows are named by the entry as written (a `|` prints as `\|`)
   and sorted by it, case-insensitively. A private repository is not measured, because the tables are published and it is not
   anonymously readable: it shows as a `cannot judge` row like any repository that cannot be cloned.
 - A repository that cannot be cloned or measured shows `cannot judge: <reason>` (for example `cannot clone (git exited

@@ -451,7 +451,8 @@ def test_rows_sort_by_lower_cased_name_in_both_tables_whatever_the_file_order(sc
     ids=["missing file", "invalid TOML", "oversized integer", "nested too deep", "public", "private", "unknown key",
          "no repositories", "not a list", "not a string", "empty list"],
 )
-def test_a_fleet_file_that_cannot_be_used_cannot_be_judged(capsys, scratch, tmp_path, content, problem):
+@pytest.mark.usefixtures("public")
+def test_a_fleet_file_that_cannot_be_used_cannot_be_judged(capsys, tmp_path, content, problem):
     """#63 rule 2: exit 2 before any clone, naming quality/fleet.toml, the problem and the right shape, and no table."""
     (tmp_path / "quality").mkdir()
     if content is not None:
@@ -462,7 +463,6 @@ def test_a_fleet_file_that_cannot_be_used_cannot_be_judged(capsys, scratch, tmp_
     assert problem in captured.err
     assert FLEET_EXAMPLE in captured.err
     assert captured.out == ""
-    assert list(scratch.iterdir()) == []
 
 
 @pytest.mark.parametrize("entry", ["overnightworks/quality", "O/My.repo_x-1", "a/b", "a-b/...x", "o/.hidden"])
@@ -489,7 +489,8 @@ def test_an_entry_that_is_no_owner_slash_name_is_named_by_its_place_never_its_te
     assert "hunter2" not in str(refused.value)
 
 
-def test_every_entry_problem_of_a_fleet_file_is_named_in_one_exit_2_message(capsys, scratch, tmp_path):
+@pytest.mark.usefixtures("public")
+def test_every_entry_problem_of_a_fleet_file_is_named_in_one_exit_2_message(capsys, tmp_path):
     """#270 target: two malformed entries and a repeat across case are reported together, before any clone."""
     fleet = write_fleet(tmp_path / "fleet", ["o/a", "nope", "O/A", "https://user:hunter2@github.com/o/r"])
     assert cli.main(["scoreboard", str(fleet)]) == 2
@@ -498,7 +499,6 @@ def test_every_entry_problem_of_a_fleet_file_is_named_in_one_exit_2_message(caps
         assert problem in captured.err
     assert "hunter2" not in captured.out + captured.err
     assert captured.out == ""
-    assert list(scratch.iterdir()) == []
 
 
 def test_the_fleet_lives_once_in_the_fleet_file():

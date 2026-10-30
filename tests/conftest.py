@@ -312,7 +312,7 @@ PublicRepo = Callable[..., str]
 
 
 @pytest.fixture
-def scoreboard(capsys, tmp_path, missing) -> Callable[..., tuple[int, str]]:
+def scoreboard(capsys, tmp_path, public) -> Callable[..., tuple[int, str]]:
     """Runs `quality scoreboard` on a fleet file listing the given `owner/name`s (#63 rule 1)."""
 
     def run(*repositories: str, tags: fleet_module.TagReader = lambda: RELEASES) -> tuple[int, str]:
