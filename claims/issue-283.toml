@@ -1,8 +1,0 @@
-claim_id = "c6500e4dd80c4357bde99a87f32d5ac2"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "e5907ec365fe7ff3cdb159db5054e8f16ec5bea4"
-branch = "claude/issue-283-layout-finding-rows"
-scope = ["docs/output.md", "docs/rules.md", "src/quality/claude_md.py", "src/quality/layout.py", "src/quality/report.py", "src/quality/root_layout.py", "tests/support/check.py", "tests/support/layout.py", "tests/test_check.py", "tests/test_claude_md.py", "tests/test_cli_output.py", "tests/test_compose.py", "tests/test_env_file.py", "tests/test_layout.py", "tests/test_layout_frontend.py", "tests/test_layout_imports.py", "tests/test_layout_mapping.py", "tests/test_layout_tests.py", "tests/test_output.py", "tests/test_root_layout.py"]
-opened_commit = "473bca9c98d1a465d2d1daa53c47f753a2751b3b"
-whole_reason = "The seven producers need their event members in report.py, and every test module that parses their printed lines or looks up one row at a root path changes with them; one slice keeps the vocabulary review in one place and spares the freeze a serial landing."
