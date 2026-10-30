@@ -2,10 +2,13 @@ from pathlib import Path
 
 import pytest
 
-from quality import clones
+from quality import check, clones
 from quality.ratchet import ClonePair, Place
+from quality.rules import Rule
 from tests.support.check import hygiene_output as hygiene
+from tests.support.check import installed_ruff, refusal_row
 from tests.support.clones import function
+from tests.support.scanners import never_located
 
 REPORT = "clone: report only (no [clones] in quality/baseline.toml) - production: {production} pair(s), tests: {tests} pair(s)"
 QUALITY_ITSELF = Path(__file__).parents[1]
@@ -108,10 +111,11 @@ def test_a_file_python_cannot_parse_has_no_pair_and_leaves_the_clone_rule_clean_
     """#113 rule 3: report-only mode skips the file; `clone` stays clean, python-security (#219) and python-print (#225)
     make the run exit 2."""
     files = {"src/a.py": function("first", "a", "b"), "src/broken.py": "def broken(:\n"}
-    code, output = hygiene(capsys, build_repo(files))
-    assert (code, report(0, 0) in output, "clone unparsable" in output) == (2, True, False), output
-    assert "hygiene: python-security unparsable - ruff cannot parse src/broken.py" in output
-    assert "hygiene: python-print unparsable - ruff cannot parse src/broken.py" in output
+    repo = build_repo(files)
+    code, output = hygiene(capsys, repo)
+    clone_verdict = next(verdict for verdict in check.run_hygiene(repo, installed_ruff, never_located).verdicts if verdict.rule is Rule.CLONE)
+    assert (code, report(0, 0) in output, clone_verdict.refusal) == (2, True, None), output
+    assert f"{refusal_row('code')}ruff cannot parse src/broken.py" in output
 
 
 @pytest.mark.integration

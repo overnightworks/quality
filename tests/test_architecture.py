@@ -25,7 +25,7 @@ from tests.support.architecture import (
     ini_section,
     toml,
 )
-from tests.support.check import CLEAN_LINE, assert_every_line_starts_with_the_door
+from tests.support.check import CLEAN_VERDICT, assert_every_line_starts_with_the_door, is_clean, refusal_row
 from tests.support.check import hygiene_output as run
 from tests.support.merge import BASE_SHA, ONE_JOB, SHOWN, SONAR_GREEN, FakeGh, changed_nothing, declaring, drive
 
@@ -38,7 +38,7 @@ ACYCLIC_SIBLINGS = {"type": "acyclic_siblings", "ancestors": ["shop"]}
 STALE_IGNORE = {**FORBIDDEN, "ignore_imports": ["shop.db -> shop.api"]}
 STALE_IGNORE_LINE = "contract guarded ignores shop.db -> shop.api, which no import matches"
 BROKEN = "import-contract .importlinter - contract guarded is broken"
-REFUSED = "hygiene: import-contract cannot judge - "
+REFUSED = f"{refusal_row('imports')}"
 
 
 def ini(contract: dict, roots: tuple[str, ...] = ("shop",), **session: str | list[str]) -> str:
@@ -59,16 +59,16 @@ ALPHA_NEVER_REACHES_GAMMA = {"type": "forbidden", "source_modules": ["alpha"], "
 @pytest.mark.parametrize(
     ("files", "expected_code", "expected_lines"),
     [
-        ({"src/shop/__init__.py": ""}, 0, ["import-contract: report only (no import-linter config)", CLEAN_LINE]),
-        ({**SHOP, ".importlinter": ini(FORBIDDEN)}, 0, [CLEAN_LINE]),
+        ({"src/shop/__init__.py": ""}, 0, ["import-contract: report only (no import-linter config)", CLEAN_VERDICT]),
+        ({**SHOP, ".importlinter": ini(FORBIDDEN)}, 0, [CLEAN_VERDICT]),
         ({**SHOP_DB_IMPORTS_WEB, ".importlinter": ini(FORBIDDEN)}, 1, [BROKEN, "shop.db -> shop.web (l.1)"]),
         ({**SHOP_DB_IMPORTS_WEB, "pyproject.toml": toml(LAYERS)}, 1,
          ["import-contract pyproject.toml - contract guarded is broken", "shop.db -> shop.web (l.1)"]),
         ({**SHOP_DB_IMPORTS_WEB, "setup.cfg": ini(PROTECTED)}, 1,
          ["import-contract setup.cfg - contract guarded is broken", "shop.db"]),
-        ({**SHOP, ".importlinter": ini(INDEPENDENCE)}, 0, [CLEAN_LINE]),
+        ({**SHOP, ".importlinter": ini(INDEPENDENCE)}, 0, [CLEAN_VERDICT]),
         ({**SHOP_DB_IMPORTS_WEB, ".importlinter": ini(INDEPENDENCE)}, 1, [BROKEN, "shop.db -> shop.web (l.1)"]),
-        ({**SHOP_DB_IMPORTS_WEB, ".importlinter": ini(ACYCLIC_SIBLINGS)}, 0, [CLEAN_LINE]),
+        ({**SHOP_DB_IMPORTS_WEB, ".importlinter": ini(ACYCLIC_SIBLINGS)}, 0, [CLEAN_VERDICT]),
         ({**SHOP_CYCLE, ".importlinter": ini(ACYCLIC_SIBLINGS)}, 1, [BROKEN, "No cycles are allowed in shop."]),
         ({**SHOP, ".importlinter": ini(FORBIDDEN), "pyproject.toml": toml(FORBIDDEN)}, 2,
          [f"{REFUSED}.importlinter and pyproject.toml each hold an import-linter config; keep one"]),
@@ -77,7 +77,7 @@ ALPHA_NEVER_REACHES_GAMMA = {"type": "forbidden", "source_modules": ["alpha"], "
         ({**SHOP, "lib/shop/__init__.py": "", ".importlinter": ini(FORBIDDEN)}, 2,
          [(f"{REFUSED}root package shop needs exactly one tracked shop/__init__.py outside the tests,"
            " found: lib/shop, src/shop")]),
-        ({**SHOP, "tests/shop/__init__.py": "", ".importlinter": ini(FORBIDDEN)}, 0, [CLEAN_LINE]),
+        ({**SHOP, "tests/shop/__init__.py": "", ".importlinter": ini(FORBIDDEN)}, 0, [CLEAN_VERDICT]),
         ({**THREE_ROOTS, ".importlinter": ini(ALPHA_NEVER_REACHES_GAMMA, roots=("alpha", "beta", "gamma"))}, 1,
          [BROKEN, "alpha.top -> beta.mid (l.1)", "beta.mid -> gamma.low (l.1)"]),
         ({**SHOP, ".importlinter": ini({"type": "custom"})}, 2,
@@ -165,7 +165,7 @@ def test_a_stale_ignore_follows_the_contracts_own_alerting(build_repo, capsys, a
     """#61 rule 7, cell 16b: `warn` prints one note and stays green, `none` prints nothing."""
     repo = build_repo({**SHOP, ".importlinter": ini({**STALE_IGNORE, "unmatched_ignore_imports_alerting": alerting})})
     code, output = run(capsys, repo)
-    assert (code, CLEAN_LINE in output) == (0, True), output
+    assert (code, is_clean(output)) == (0, True), output
     assert [line for line in output.splitlines() if "ignores shop.db" in line] == ([expected_note] if expected_note else [])
 
 
@@ -198,7 +198,7 @@ def test_a_syntax_error_is_unparsable_and_hides_no_other_rule(build_repo, capsys
     repo = build_repo({**SHOP, "src/shop/bad.py": "def broken(:\n", ".env": "A=1\n", ".importlinter": ini(FORBIDDEN)})
     code, output = run(capsys, repo)
     assert code == 2, output
-    assert "hygiene: import-contract unparsable - Syntax error in src/shop/bad.py, line 1" in output
+    assert f"{refusal_row('imports')}Syntax error in src/shop/bad.py, line 1" in output
     assert "env-file .env - " in output
     assert str(repo) not in output
 
@@ -508,7 +508,7 @@ def test_a_run_writes_nothing_and_restores_sys_path(build_repo, capsys, files):
 def test_qualitys_own_tree_holds_its_layers(capsys):
     """#61 rule 8, cell 23: quality's own layers contract is enforced and kept."""
     code, output = run(capsys, QUALITY_ROOT)
-    assert (code, CLEAN_LINE in output, "report only (no import-linter config)" in output) == (0, True, False), output
+    assert (code, is_clean(output), "report only (no import-linter config)" in output) == (0, True, False), output
 
 
 def loosened(base: dict[str, str], head: dict[str, str]) -> list[str]:

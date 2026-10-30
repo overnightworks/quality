@@ -3,7 +3,7 @@ import re
 
 import pytest
 
-from quality import cli
+from quality import check, cli
 from quality.config import (
     CONFIG_PATH,
     AdvisoryAllowance,
@@ -18,7 +18,9 @@ from quality.config import (
     read_allow_lists,
     read_gate_settings,
 )
+from quality.rules import Rule
 from tests.support.advisories import allowance_config
+from tests.support.check import CLEAN_VERDICT, refusal_row
 from tests.support.generated_files import TYPES_FILE, generated_config
 
 
@@ -65,6 +67,12 @@ def test_a_config_file_that_cannot_be_decoded_is_refused(tmp_path):
         read_gate_settings(tmp_path)
 
 
+def refusing_rules(repo, reason: str) -> list[Rule]:
+    """The rules whose refusal holds `reason`, in run order."""
+    verdicts = check.run_hygiene(repo, cli.INSTALLED_RUFF, cli.INSTALLED_ZIZMOR).verdicts
+    return [verdict.rule for verdict in verdicts if verdict.refusal is not None and reason in str(verdict.refusal)]
+
+
 @pytest.mark.parametrize(
     "content",
     [f"a = {'[' * 2000}{']' * 2000}\n", f"a = {'9' * 5000}\n"],
@@ -74,8 +82,8 @@ def test_a_config_the_toml_reader_gives_up_on_cannot_be_judged_by_any_rule_that_
     """sentence 4: a config the TOML reader gives up on is cannot-judge, not a traceback."""
     repo = build_repo({CONFIG_PATH: content})
     assert cli.main(["hygiene", str(repo)]) == 2
-    named = {line.split(" - ")[0] for line in capsys.readouterr().err.splitlines() if "is not valid TOML" in line}
-    assert {"hygiene: python-floor cannot judge", "hygiene: root-layout cannot judge"} <= named
+    capsys.readouterr()
+    assert {Rule.PYTHON_FLOOR, Rule.ROOT_LAYOUT} <= set(refusing_rules(repo, "is not valid TOML"))
 
 
 def test_a_config_directory_that_cannot_be_entered_is_refused(tmp_path):
@@ -274,9 +282,9 @@ TEXT_DATE_DECLARATION = SONGMAKER_DECLARATION.replace("2026-10-20", '"20.10.2026
 @pytest.mark.parametrize(
     ("command", "config", "code", "line"),
     [
-        (HYGIENE, SONGMAKER_DECLARATION, 0, "hygiene: clean ("),
+        (HYGIENE, SONGMAKER_DECLARATION, 0, CLEAN_VERDICT),
         (SCAN_STAGED, SONGMAKER_DECLARATION, 0, "scan-staged: clean"),
-        (HYGIENE, TEXT_DATE_DECLARATION, 2, "hygiene: secret cannot judge - quality/config.toml [[gate.loosened]] entry"),
+        (HYGIENE, TEXT_DATE_DECLARATION, 2, f"{refusal_row('secrets')}quality/config.toml [[gate.loosened]] entry"),
         (SCAN_STAGED, TEXT_DATE_DECLARATION, 0, "scan-staged: clean"),
         (SCAN_STAGED, allowance_config(), 0, "scan-staged: clean"),
         (SCAN_STAGED, "[advisories]\nextra = 1\n" + allowance_config(until="2027-01-31"), 0, "scan-staged: clean"),
@@ -343,9 +351,11 @@ def test_a_malformed_advisory_allowance_cannot_be_judged_where_the_whole_config_
     verdict = capsys.readouterr().err.splitlines()
     assert (len(verdict), named in verdict[0]) == (1, True), verdict
     assert cli.main(["hygiene", str(repo)]) == 2
-    refusals = [line for line in capsys.readouterr().err.splitlines() if named in line]
-    rules = [line.split(" - ")[0] for line in refusals]
-    assert rules == ["hygiene: compose-port cannot judge", "hygiene: size cannot judge", "hygiene: root-layout cannot judge", "hygiene: file-suffix cannot judge", "hygiene: script-name cannot judge", "hygiene: script-header cannot judge", "hygiene: test-layout cannot judge", "hygiene: test-import cannot judge", "hygiene: python-floor cannot judge", "hygiene: secret cannot judge", "hygiene: advisory cannot judge"], refusals
+    capsys.readouterr()
+    assert refusing_rules(repo, named) == [
+        Rule.COMPOSE_PORT, Rule.SIZE, Rule.ROOT_LAYOUT, Rule.FILE_SUFFIX, Rule.SCRIPT_NAME, Rule.SCRIPT_HEADER, Rule.TEST_LAYOUT, Rule.TEST_IMPORT,
+        Rule.PYTHON_FLOOR, Rule.LEAK, Rule.ADVISORY,
+    ]
 
 
 @pytest.mark.parametrize("entry", [allowance_config(reason=None), allowance_config(until="2027-01-31")])
@@ -469,16 +479,17 @@ def test_a_generated_file_needs_mandatory_jobs_that_are_non_empty_names(jobs, jo
 
 @pytest.mark.parametrize(
     ("command", "refusal"),
-    [(["hygiene", "{repo}"], "hygiene: size cannot judge - "), (["baseline", "write", "{repo}"], "baseline: not written - ")],
+    [(["hygiene", "{repo}"], f"{refusal_row('debt')}"), (["baseline", "write", "{repo}"], "baseline: not written - ")],
     ids=["hygiene", "baseline write"],
 )
 def test_a_malformed_generated_file_stops_the_size_rule_and_the_baseline_write(build_repo, capsys, command, refusal):
     """#174 sentence 3: hygiene cannot judge size and baseline write writes nothing."""
     repo = build_repo({CONFIG_PATH: GATE_WITH_CHECKS + generated_config(job="other")})
     assert cli.main([part.format(repo=repo) for part in command]) == 2
-    err = capsys.readouterr().err
-    assert refusal in err
-    assert "[[size.generated]]" in err
+    captured = capsys.readouterr()
+    output = captured.out + captured.err
+    assert refusal in output
+    assert "[[size.generated]]" in output
     assert not (repo / "quality" / "baseline.toml").exists()
 
 
