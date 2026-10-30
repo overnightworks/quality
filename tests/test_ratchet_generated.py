@@ -88,6 +88,7 @@ def test_baseline_write_leaves_a_declared_file_out_and_names_no_raise_for_it(bui
     repo = build_repo({**files, BASELINE_PATH: f'[file_lines]\n"{TYPES_FILE}" = 850\n'})
     assert cli.main(["baseline", "write", str(repo)]) == 0
     output = capsys.readouterr().out
-    assert "raises" not in output and "adds" not in output
+    assert "raises" not in output
+    assert "adds" not in output
     assert "baseline: wrote 0 entries and 0 clone pairs" in output
     assert TYPES_FILE not in (repo / BASELINE_PATH).read_text()

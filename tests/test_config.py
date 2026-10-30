@@ -447,8 +447,9 @@ def test_a_malformed_generated_file_is_refused_with_the_entry_and_the_example(en
 
 def test_a_generated_file_naming_a_job_needs_the_config_to_list_mandatory_jobs():
     """#174 sentence 3: a config without [gate] mandatory_jobs cannot hold a job, so a declaration is refused."""
+    text = generated_config()
     with pytest.raises(ConfigError, match="job as one of") as refused:
-        load_allow_lists(generated_config())
+        load_allow_lists(text)
     assert "[[size.generated]] entry" in str(refused.value)
 
 
@@ -476,7 +477,8 @@ def test_a_malformed_generated_file_stops_the_size_rule_and_the_baseline_write(b
     repo = build_repo({CONFIG_PATH: GATE_WITH_CHECKS + generated_config(job="other")})
     assert cli.main([part.format(repo=repo) for part in command]) == 2
     err = capsys.readouterr().err
-    assert refusal in err and "[[size.generated]]" in err
+    assert refusal in err
+    assert "[[size.generated]]" in err
     assert not (repo / "quality" / "baseline.toml").exists()
 
 
@@ -486,7 +488,8 @@ def test_the_verdict_refuses_a_malformed_generated_file_naming_the_side(capsys, 
     (repo / CONFIG_PATH).write_text(GATE_WITH_CHECKS + generated_config(job="other"))
     assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: ("{}", None)) == 2
     err = capsys.readouterr().err
-    assert "quality/config.toml at the head" in err and "[[size.generated]]" in err
+    assert "quality/config.toml at the head" in err
+    assert "[[size.generated]]" in err
 
 
 def test_the_commit_hook_ignores_a_malformed_size_table():

@@ -26,6 +26,7 @@ LAYOUT_ALLOWANCE_KEYS = {"path", "rule", "reason"}
 PYTHON_ALLOWANCE_KEYS = {"path", "reason"}
 COMPOSE_ALLOWANCE_KEYS = {"file", "service", "reason"}
 GENERATED_FILE_KEYS = {"path", "job", "item", "date", "reason"}
+ITEM_REFERENCE_EXPECTED = "item as #<number> or <owner>/<repo>#<number>"
 PATH_PATTERN_CHARACTERS = "*?["
 ADVISORY_ALLOWANCE_KEYS = {"id", "lock", "until", "date", "item", "reason"}
 SHA256_HEX = re.compile(r"[0-9a-f]{64}")
@@ -359,7 +360,7 @@ def _read_declaration(entry: object) -> Declaration:
     if not (isinstance(what, str) and what.strip()):
         raise refuse("a non-empty what")
     if not (isinstance(item, str) and ITEM_REFERENCE.fullmatch(item)):
-        raise refuse("item as #<number> or <owner>/<repo>#<number>")
+        raise refuse(ITEM_REFERENCE_EXPECTED)
     if not _is_date_without_time(date):
         raise refuse("date as a TOML date without a time")
     if not _is_one_line_text(reason):
@@ -399,7 +400,7 @@ def _read_advisory_allowance(entry: object) -> AdvisoryAllowance:
     if not all(_is_one_line_text(value) for value in (identifier, lock, reason)):
         raise refuse("a non-empty one-line id, lock and reason")
     if not (isinstance(item, str) and ITEM_REFERENCE.fullmatch(item)):
-        raise refuse("item as #<number> or <owner>/<repo>#<number>")
+        raise refuse(ITEM_REFERENCE_EXPECTED)
     if not (_is_date_without_time(until) and _is_date_without_time(date)):
         raise refuse("until and date as TOML dates without a time")
     return AdvisoryAllowance(identifier, lock, until, date, item, reason)
@@ -578,7 +579,7 @@ def _read_generated_file(entry: object, mandatory_jobs: tuple[str, ...]) -> Gene
     if job not in mandatory_jobs:
         raise refuse("job as one of [gate] mandatory_jobs, the job whose generator check proves the file")
     if not (isinstance(item, str) and ITEM_REFERENCE.fullmatch(item)):
-        raise refuse("item as #<number> or <owner>/<repo>#<number>")
+        raise refuse(ITEM_REFERENCE_EXPECTED)
     if not _is_date_without_time(date):
         raise refuse("date as a TOML date without a time")
     if not _is_one_line_text(reason):
