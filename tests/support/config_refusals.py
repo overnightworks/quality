@@ -59,7 +59,6 @@ class ArrayTable:
     defaults: dict[str, object]
     keys_need: str
     needs: tuple[tuple[dict[str, object], str], ...]
-    not_a_list: str
     duplicate: str
     duplicate_example: bool = True
 
@@ -70,9 +69,6 @@ class ArrayTable:
     def entry(self, **changes: object) -> str:
         return entry_text(self.name, self.defaults | changes)
 
-    def valid(self) -> str:
-        return GATE + self.entry()
-
 
 DATE = datetime.date(2026, 10, 21)
 ARRAY_TABLES = (
@@ -82,7 +78,7 @@ ARRAY_TABLES = (
         "exactly a what, an item, a date and a reason",
         (({"what": "  "}, "a non-empty what"), ({"item": "siehe Chat"}, ITEM_NEED), ({"date": "x"}, DATE_NEED),
          ({"reason": ""}, ONE_LINE_NEED)),
-        'loosened = "x"\n', 'declares what = "mandatory job removed" twice; one entry per loosening',
+        'declares what = "mandatory job removed" twice; one entry per loosening',
     ),
     ArrayTable(
         "advisories.allow", "ADVISORY_ALLOWANCE_EXAMPLE",
@@ -91,7 +87,7 @@ ARRAY_TABLES = (
         (({"id": ""}, "a non-empty one-line id, lock and reason"), ({"item": "siehe Chat"}, ITEM_NEED),
          ({"until": "2027-01-31"}, "until and date as TOML dates without a time"),
          ({"reason": "two\nlines"}, "a non-empty one-line id, lock and reason")),
-        "", 'allows id = "GHSA-aaaa-bbbb-cccc" in lock = "uv.lock" twice; one entry per advisory and lock file',
+        'allows id = "GHSA-aaaa-bbbb-cccc" in lock = "uv.lock" twice; one entry per advisory and lock file',
         duplicate_example=False,
     ),
     ArrayTable(
@@ -99,7 +95,7 @@ ARRAY_TABLES = (
         "exactly an entry and a reason",
         (({"entry": "a/b"}, "entry as one name directly in the root, a directory with a trailing /, not a path"),
          ({"reason": ""}, ONE_LINE_NEED)),
-        "", 'declares entry = "plans/" twice; one entry per root entry',
+        'declares entry = "plans/" twice; one entry per root entry',
     ),
     ArrayTable(
         "layout.allow", "LAYOUT_ALLOWANCE_EXAMPLE", {"path": "NOTES", "rule": "file-suffix", "reason": "ruled"},
@@ -108,21 +104,21 @@ ARRAY_TABLES = (
          ({"rule": "size"}, "rule as one of file-suffix, script-header, script-name, test-import, test-layout"),
          ({"rule": [1]}, "rule as one of file-suffix, script-header, script-name, test-import, test-layout"),
          ({"reason": ""}, ONE_LINE_NEED)),
-        "", 'declares path = "NOTES" for rule = "file-suffix" twice; one declaration per rule and path',
+        'declares path = "NOTES" for rule = "file-suffix" twice; one declaration per rule and path',
     ),
     ArrayTable(
         "python.allow", "PYTHON_ALLOWANCE_EXAMPLE", {"path": "speech/pyproject.toml", "reason": "ruled"},
         "exactly a path and a reason",
         (({"path": "speech/"}, "path as the exact tracked path of one pyproject.toml, no folder, pattern or .."),
          ({"reason": ""}, ONE_LINE_NEED)),
-        "", 'declares path = "speech/pyproject.toml" twice; one entry per path',
+        'declares path = "speech/pyproject.toml" twice; one entry per path',
     ),
     ArrayTable(
         "compose.allow", "COMPOSE_ALLOWANCE_EXAMPLE", {"file": "compose.yaml", "service": "web", "reason": "ruled"},
         "exactly a file, a service and a reason",
         (({"file": "dir/"}, "file as the exact tracked path of one compose file: no folder, pattern, .. or absolute path"),
          ({"service": ""}, "service as the one-line name of a service in that file"), ({"reason": ""}, ONE_LINE_NEED)),
-        "", 'declares service = "web" of file = "compose.yaml" twice; one declaration per file and service',
+        'declares service = "web" of file = "compose.yaml" twice; one declaration per file and service',
     ),
     ArrayTable(
         "size.generated", "GENERATED_FILE_EXAMPLE",
@@ -131,7 +127,7 @@ ARRAY_TABLES = (
         (({"path": "dir/"}, FILE_PATH_NEED),
          ({"job": "other"}, "job as one of [gate] mandatory_jobs, the job whose generator check proves the file"),
          ({"item": "siehe Chat"}, ITEM_NEED), ({"date": "x"}, DATE_NEED), ({"reason": ""}, ONE_LINE_NEED)),
-        "", 'declares path = "types.ts" twice; one entry per file',
+        'declares path = "types.ts" twice; one entry per file',
     ),
 )
 NOT_A_LIST_TEXT = {

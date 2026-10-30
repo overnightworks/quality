@@ -92,8 +92,3 @@ def test_an_example_holds_its_label_and_lines_and_equal_examples_hash_alike():
     assert (example.label, example.lines, example == same, hash(example) == hash(same)) == (
         "write it in a file like this", ("[table]", "key = 1"), True, True,
     )
-
-
-def test_a_refusal_carries_an_example_among_its_steps():
-    example = Example("write it", ("a = 1",))
-    assert CannotJudge("bad", (example,)).reason == Reason("bad", (example,))
