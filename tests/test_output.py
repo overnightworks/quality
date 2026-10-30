@@ -327,12 +327,12 @@ def env_and_broken_compose(build_repo) -> Path:
 
 @pytest.mark.parametrize("door", [MODULE_DOOR, CONSOLE_SCRIPT_DOOR], ids=["module", "console script"])
 def test_a_merged_pipe_shows_the_hygiene_lines_in_run_order(env_and_broken_compose, door):
-    """#86 rule 3, cells 10 and 12a: the notes, the area rows with their findings, then the pair."""
+    """#86 rule 3, cells 10 and 12a: the notes, the area rows with their findings (`.env` as env-file's and root-layout's rows, each with its fix), then the pair."""
     done = quality_door(
         "hygiene", ".", cwd=env_and_broken_compose, door=door, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
     )
     prefixes = [
-        "size: ", "clone: ", "import-contract: ", "workflow-security runs offline", "  ✗ files", ENV_ROW, FIX_LINE, "root-layout .env - ", "  Fix: ",
+        "size: ", "clone: ", "import-contract: ", "workflow-security runs offline", "  ✗ files", ENV_ROW, FIX_LINE, ENV_ROW, FIX_LINE,
         "  · debt", "  ✓ imports", "  ✓ secrets", "  ✓ workflows", "  ✓ dependencies", "  ✓ code", "error: ", "next: ",
     ]
     lines = done.stdout.splitlines()

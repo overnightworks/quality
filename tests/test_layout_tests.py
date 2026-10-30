@@ -2,11 +2,14 @@
 
 import pytest
 
-from tests.support.check import hygiene_output, refusals
-from tests.support.layout import CONFIG, GUIDANCE, declaring, findings, in_index, red
+from quality.output import FIX_LABEL
+from quality.report import FindingEvent
+from quality.rules import Rule
+from tests.support.check import hygiene_output, refusals, rows_of, rule_findings
+from tests.support.layout import CONFIG, GUIDANCE, assert_row_is_kind, declaring, in_index, red
 from tests.support.merge import ONE_JOB
 
-RULE = "test-layout"
+RULE = Rule.TEST_LAYOUT
 ROOT_PROJECT = {**GUIDANCE, "pyproject.toml": "", "src/p/cli.py": "x = 1\n"}
 
 
@@ -25,9 +28,9 @@ ROOT_PROJECT = {**GUIDANCE, "pyproject.toml": "", "src/p/cli.py": "x = 1\n"}
     ids=["clean", "helper beside tests", "data folder", "e2e only at the top", "conftest at any depth",
          "other languages", "a test file", "exact case"],
 )
-def test_rule_four_judges_every_path_under_tests(build_repo, capsys, files, expected):
+def test_rule_four_judges_every_path_under_tests(build_repo, files, expected):
     """#196 sentences 3 and 5: a test file, a conftest, support/fixtures at any depth and top-level e2e pass."""
-    assert red(capsys, build_repo({**ROOT_PROJECT, **files}), RULE) == expected
+    assert red(build_repo({**ROOT_PROJECT, **files}), RULE) == expected
 
 
 @pytest.mark.parametrize(
@@ -39,23 +42,23 @@ def test_rule_four_judges_every_path_under_tests(build_repo, capsys, files, expe
     ],
     ids=["red anywhere", "data inside fixtures"],
 )
-def test_an_init_file_under_tests_is_red_unless_it_is_fixture_data(build_repo, capsys, init_files, expected):
+def test_an_init_file_under_tests_is_red_unless_it_is_fixture_data(build_repo, init_files, expected):
     """#196 sentence 4."""
-    output = hygiene_output(capsys, build_repo({**ROOT_PROJECT, **dict.fromkeys(init_files, "")}))[1]
-    assert findings(output, RULE) == expected
-    assert ("delete it, or declare it" in output) == bool(expected)
+    repo = build_repo({**ROOT_PROJECT, **dict.fromkeys(init_files, "")})
+    assert red(repo, RULE) == expected
+    assert {finding.event for finding in rule_findings(repo, RULE)} == ({FindingEvent.STRAY} if expected else set())
 
 
-def test_each_finding_case_has_its_own_reason_and_fix(build_repo, capsys):
-    """#196 sentence 6: both ways out are named; #196 E1: all printed, sorted by path."""
+def test_an_init_file_and_a_stray_helper_are_strays_with_a_fix_line_each(build_repo, capsys):
+    """#196 sentence 6, E1 and #283 O12: all printed, sorted by path, both ways out in each fix; unequal fixes print apiece."""
     repo = build_repo({**ROOT_PROJECT, "tests/__init__.py": "", "tests/helpers.py": ""})
     code, output = hygiene_output(capsys, repo)
-    first, second = output.split(f"{RULE} tests/helpers.py")
-    assert code == 1
-    assert "pytest's importlib mode does not need" in first
-    assert "delete it, or declare it" in first
-    assert "a support/ folder (a helper) or a fixtures/ folder (data)" in second
-    assert "the rule test-layout" in second
+    init, helper = rule_findings(repo, RULE)
+    assert_row_is_kind(output, init, FindingEvent.STRAY)
+    rows = [row for finding in (init, helper) for row in rows_of(output, finding)]
+    assert (code, [finding.event for finding in (init, helper)]) == (1, [FindingEvent.STRAY] * 2)
+    assert ([row.fix_follows for row in rows], output.count(f" {FIX_LABEL} ")) == ([True, True], 2)
+    assert init.fix != helper.fix
 
 
 @pytest.mark.parametrize(
@@ -77,28 +80,28 @@ def test_each_finding_case_has_its_own_reason_and_fix(build_repo, capsys):
     ids=["no src", "no pyproject", "src without python", "namespace package", "empty project table", "member",
          "tests elsewhere", "pyproject inside tests makes no project", "pyproject directly in tests", "src holding only a module"],
 )
-def test_only_a_project_with_a_package_is_judged(build_repo, capsys, files, expected):
+def test_only_a_project_with_a_package_is_judged(build_repo, files, expected):
     """#196 sentences 1 and 2, cells A2 to A10."""
-    assert red(capsys, build_repo({**GUIDANCE, **files}), RULE) == expected
+    assert red(build_repo({**GUIDANCE, **files}), RULE) == expected
 
 
-def test_nested_projects_each_judge_their_own_tests(build_repo, capsys):
+def test_nested_projects_each_judge_their_own_tests(build_repo):
     """#196 sentence 1, A8: `speech/tests` belongs to speech, `speech/providers/qwen/tests` to qwen."""
     files = {
         "speech/pyproject.toml": "", "speech/src/s/x.py": "", "speech/tests/support/x.py": "",
         "speech/providers/qwen/pyproject.toml": "", "speech/providers/qwen/src/q/x.py": "",
         "speech/providers/qwen/tests/helpers.py": "",
     }
-    assert red(capsys, build_repo({**GUIDANCE, **files}), RULE) == ["speech/providers/qwen/tests/helpers.py"]
+    assert red(build_repo({**GUIDANCE, **files}), RULE) == ["speech/providers/qwen/tests/helpers.py"]
 
 
-def test_a_symlink_and_a_gitlink_under_tests_are_judged_by_their_own_name(build_repo, capsys):
+def test_a_symlink_and_a_gitlink_under_tests_are_judged_by_their_own_name(build_repo):
     """#196 sentence 8, D1 and D2: never followed."""
     repo = build_repo({**ROOT_PROJECT, "tests/support/x.py": ""})
     (repo / "tests" / "helper.py").symlink_to("support/x.py")
     in_index(repo, "add", "--", "tests/helper.py")
     in_index(repo, "update-index", "--add", "--cacheinfo", f"160000,{'1' * 40},tests/vendor")
-    assert red(capsys, repo, RULE) == ["tests/helper.py", "tests/vendor"]
+    assert red(repo, RULE) == ["tests/helper.py", "tests/vendor"]
 
 
 @pytest.mark.parametrize(
@@ -111,11 +114,11 @@ def test_a_symlink_and_a_gitlink_under_tests_are_judged_by_their_own_name(build_
     ],
     ids=["declared", "declared under another rule", "not tracked", "already complying"],
 )
-def test_a_declaration_covers_only_its_own_rule_and_a_stale_one_is_a_finding(build_repo, capsys, tracked, declarations, expected):
+def test_a_declaration_covers_only_its_own_rule_and_a_stale_one_is_a_finding(build_repo, tracked, declarations, expected):
     """#196 sentence 7, D3 to D5."""
     config = ONE_JOB + "".join(declaring(path, rule=rule) for path, rule in declarations)
     repo = build_repo({**ROOT_PROJECT, **dict.fromkeys(tracked, ""), CONFIG: config})
-    assert red(capsys, repo, RULE) == expected
+    assert red(repo, RULE) == expected
 
 
 def test_a_malformed_layout_table_cannot_be_judged_for_test_layout(build_repo, capsys):

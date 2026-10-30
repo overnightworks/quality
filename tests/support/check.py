@@ -86,6 +86,11 @@ def finding_rows(printed: str, location: str) -> list[FindingRow]:
     return rows
 
 
+def rows_of(printed: str, finding: Finding) -> list[FindingRow]:
+    """The rows at `finding.location` whose event is the finding's, in printed order: another rule's row at the same location is not it."""
+    return [row for row in finding_rows(printed, finding.location) if row.event is finding.event]
+
+
 def rule_findings(repo: Path, rule: Rule) -> list[Finding]:
     """The findings `rule` returns over `repo` before the door prints them."""
     return [finding for verdict in hygiene_run(repo).verdicts if verdict.rule is rule for finding in verdict.findings]

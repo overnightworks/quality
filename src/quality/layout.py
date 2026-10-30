@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from pathlib import PurePosixPath
 
 from quality import checkout, ratchet
-from quality.config import CONFIG_PATH, LayoutAllowance
-from quality.report import Finding
+from quality.config import CONFIG_PATH, LAYOUT_ALLOWANCE_HEADING, LayoutAllowance
+from quality.report import Finding, FindingEvent
 from quality.rules import Rule
 
 EXECUTABLE_MODE = "100755"
@@ -34,10 +34,10 @@ PROJECT_FILES = frozenset({PROJECT_FILE, PACKAGE_FILE})
 SOURCE_DIRECTORY = "src"
 INIT_FILE = "__init__.py"
 CONFTEST_FILE = "conftest.py"
-HELPER_DIRECTORIES = frozenset({"support", "fixtures"})
 FIXTURES_DIRECTORY = "fixtures"
 END_TO_END_DIRECTORY = "e2e"
 SUPPORT_DIRECTORY = "support"
+HELPER_DIRECTORIES = frozenset({SUPPORT_DIRECTORY, FIXTURES_DIRECTORY})
 WORKFLOWS_TESTS_DIRECTORY = "workflows"
 ROOT_DIRECTORY = "."
 ROUTE_MARK = "+"
@@ -69,20 +69,25 @@ def _lacks_suffix(path: str, mode: str) -> bool:
     return not exempt and not PurePosixPath(name).suffix
 
 
+def _allowance_clause(rule: Rule) -> str:
+    return f"declare it in {CONFIG_PATH} with {LAYOUT_ALLOWANCE_HEADING}, its path, the rule {rule} and a reason"
+
+
 def _suffixless(path: str) -> Finding:
     return Finding(
         Rule.FILE_SUFFIX, path, None,
-        "a tracked file without a suffix, that is no executable, link, dotfile or tool-mandated name.",
-        f"give it the suffix of its format, or declare it in {CONFIG_PATH} with [[layout.allow]], its path, the rule "
-        "file-suffix and a reason.",
+        "a file without a suffix that is no executable",
+        f"give it the suffix of its format, or {_allowance_clause(Rule.FILE_SUFFIX)}",
+        event=FindingEvent.TRACKED,
     )
 
 
 def _stale_declaration(path: str, rule: Rule) -> Finding:
     return Finding(
         rule, path, None,
-        f"declared in {CONFIG_PATH} with [[layout.allow]], but the repository tracks no such file.",
-        f"delete its [[layout.allow]] entry from {CONFIG_PATH}.",
+        f"{LAYOUT_ALLOWANCE_HEADING} matches no tracked file",
+        f"delete every {LAYOUT_ALLOWANCE_HEADING} entry for it from {CONFIG_PATH}",
+        event=FindingEvent.UNUSED,
     )
 
 
@@ -112,7 +117,7 @@ def _judged_scripts(
     modes: Mapping[str, str],
     contents: Mapping[str, bytes],
     allowances: Sequence[LayoutAllowance],
-    problem_of: Callable[[str, bytes], tuple[str, str] | None],
+    problem_of: Callable[[str, bytes], tuple[FindingEvent, str, str] | None],
 ) -> list[Finding]:
     declared = _declared_paths(allowances, rule)
     findings = []
@@ -121,7 +126,8 @@ def _judged_scripts(
         if content is None or path in declared or not _is_script(path, mode, content):
             continue
         if problem := problem_of(path, content):
-            findings.append(Finding(rule, path, None, *problem))
+            event, fact, fix = problem
+            findings.append(Finding(rule, path, None, fact, fix, event=event))
     findings += [_stale_declaration(path, rule) for path in declared - modes.keys()]
     return sorted(findings, key=lambda finding: finding.path)
 
@@ -138,32 +144,28 @@ def _is_script(path: str, mode: str, content: bytes) -> bool:
     return mode == EXECUTABLE_MODE or content.startswith(SHEBANG) or in_scripts_folder
 
 
-def _name_problem(path: str, _content: bytes) -> tuple[str, str] | None:
+def _name_problem(path: str, _content: bytes) -> tuple[FindingEvent, str, str] | None:
     pure = PurePosixPath(path)
     if pure.name.startswith(".") or pure.name in TOOL_MANDATED_NAMES:
         return None
-    problems = []
-    if not SCRIPT_NAME_SHAPE.fullmatch(pure.stem):
-        problems.append("its name is not snake_case with at least two words (lower-case letters and digits)")
+    badly_shaped = not SCRIPT_NAME_SHAPE.fullmatch(pure.stem)
+    problems = ["not snake_case with at least two words"] if badly_shaped else []
     if SCRIPTS_DIRECTORY not in pure.parent.parts:
-        problems.append(f"it lies outside a {SCRIPTS_DIRECTORY}/ folder")
+        problems.append(f"outside a {SCRIPTS_DIRECTORY}/ folder")
     if not problems:
         return None
-    return (
-        f"a script that breaks the naming rule: {'; '.join(problems)}.",
-        (f"rename or move it, or declare it in {CONFIG_PATH} with [[layout.allow]], its path, the rule script-name "
-        "and a reason."),
-    )
+    event = FindingEvent.MISNAMED if badly_shaped else FindingEvent.MISPLACED
+    return event, "; ".join(problems), f"rename or move it, or {_allowance_clause(Rule.SCRIPT_NAME)}"
 
 
-def _header_problem(path: str, content: bytes) -> tuple[str, str] | None:
+def _header_problem(path: str, content: bytes) -> tuple[FindingEvent, str, str] | None:
     markers = ("//", "/*") if PurePosixPath(path).suffix == SLASH_COMMENT_SUFFIX else ("#",)
     if any(_explains(line, markers) for line in _first_lines_after_preamble(content)):
         return None
     return (
-        f"a script with no comment or docstring within its first {HEADER_LINES} non-blank lines after the shebang.",
-        (f"say what it does in a comment or docstring at the top, or declare it in {CONFIG_PATH} with [[layout.allow]], "
-         "its path, the rule script-header and a reason."),
+        FindingEvent.NO_HEADER,
+        f"no header comment or docstring in the first {HEADER_LINES} non-blank lines after its shebang and script metadata",
+        f"say what it does in a comment or docstring at the top, or {_allowance_clause(Rule.SCRIPT_HEADER)}",
     )
 
 
@@ -384,7 +386,7 @@ def _mirror_findings(path: PurePosixPath, folders: tuple[str, ...], mirror: _Pro
         return []
     if SUPPORT_DIRECTORY in folders:
         return [_mirror_finding(path, [(
-            "a test module in a support/ folder, which holds helpers",
+            f"a test module in a {SUPPORT_DIRECTORY}/ folder, which holds helpers",
             "rename it if it is a helper, or move it to the folder that mirrors its module",
         )])]
     problems, destination = mirror.destination(folders)
@@ -398,17 +400,14 @@ def _mirror_findings(path: PurePosixPath, folders: tuple[str, ...], mirror: _Pro
     return [_mirror_finding(path, problems)] if problems else []
 
 
-def _test_layout_finding(path: str, reason: str, fix: str) -> Finding:
-    return Finding(
-        Rule.TEST_LAYOUT, path, None, reason,
-        f"{fix}, or declare it in {CONFIG_PATH} with [[layout.allow]], its path, the rule test-layout and a reason.",
-    )
+def _test_layout_finding(path: str, event: FindingEvent, fact: str, fix: str) -> Finding:
+    return Finding(Rule.TEST_LAYOUT, path, None, fact, f"{fix}, or {_allowance_clause(Rule.TEST_LAYOUT)}", event=event)
 
 
 def _mirror_finding(path: PurePosixPath, problems: Sequence[_Problem]) -> Finding:
-    reasons = "; ".join(reason for reason, _ in problems)
+    facts = "; ".join(fact for fact, _ in problems)
     fixes = ", or ".join(fix for _, fix in problems)
-    return _test_layout_finding(str(path), f"a test module that does not mirror a module: {reasons}.", fixes)
+    return _test_layout_finding(str(path), FindingEvent.MISPLACED, facts, fixes)
 
 
 def _frontend_findings(modes: Mapping[str, str], declared: set[str], python_tests: Iterable[PurePosixPath]) -> list[Finding]:
@@ -457,31 +456,30 @@ def _frontend_finding(path: PurePosixPath, project: PurePosixPath, keys: frozens
 
 def _spec_outside_end_to_end(path: str, end_to_end: str) -> Finding:
     return _test_layout_finding(
-        path,
-        f"a spec outside {end_to_end}, where its project keeps its Playwright specs.",
+        path, FindingEvent.MISPLACED,
+        f"a Playwright spec outside {end_to_end}",
         f"move it into {end_to_end}, or, if it is a Vitest test, name it `<subject>.test.<suffix>` beside its subject",
     )
 
 
 def _test_without_sibling(path: PurePosixPath, base: str) -> Finding:
-    reason = f"no file in {path.parent} is named {base} or a word prefix of it" if base else "its name before the first `.` is empty"
+    folder = "the repository root" if str(path.parent) == ROOT_DIRECTORY else str(path.parent)
+    fact = f"no file in {folder} is named {base} or a word prefix of it" if base else "its name before the first `.` is empty"
     return _test_layout_finding(
-        str(path),
-        f"a test that lies beside no file it tests: {reason}.",
+        str(path), FindingEvent.MISPLACED, fact,
         f"move it beside the file it tests and name it `<subject>[<Aspect>]{path.name.removeprefix(base)}`",
     )
 
 
 def _init_under_tests(path: str) -> Finding:
-    return _test_layout_finding(path, "an __init__.py under tests/, which pytest's importlib mode does not need.", "delete it")
+    return _test_layout_finding(path, FindingEvent.STRAY, f"an {INIT_FILE}, which pytest's importlib mode does not need", "delete it")
 
 
 def _stray_under_tests(path: str) -> Finding:
     return _test_layout_finding(
-        path,
-        "a file under tests/ that is no test_*.py or conftest.py and lies in no support/, fixtures/ or top-level "
-        "e2e/ folder.",
-        "move it to a support/ folder (a helper) or a fixtures/ folder (data)",
+        path, FindingEvent.STRAY,
+        f"no test_*.py or {CONFTEST_FILE}, in no {SUPPORT_DIRECTORY}/, {FIXTURES_DIRECTORY}/ or top-level {END_TO_END_DIRECTORY}/ folder",
+        f"move it to a {SUPPORT_DIRECTORY}/ folder (a helper) or a {FIXTURES_DIRECTORY}/ folder (data)",
     )
 
 
@@ -597,7 +595,8 @@ def _imported_targets(node: ast.Import | ast.ImportFrom, folder: PurePosixPath, 
 def _imports_a_test_module(path: str, line: int, names: Sequence[str]) -> Finding:
     return Finding(
         Rule.TEST_IMPORT, path, line,
-        f"imports the test module or conftest {', '.join(names)}.",
-        "move what it needs to a support/ module, or make it a fixture in conftest.py, or declare it in "
-        f"{CONFIG_PATH} with [[layout.allow]], its path, the rule test-import and a reason.",
+        f"imports {', '.join(names)}",
+        f"move what it needs to a {SUPPORT_DIRECTORY}/ module, or make it a fixture in {CONFTEST_FILE}, or "
+        f"{_allowance_clause(Rule.TEST_IMPORT)}",
+        event=FindingEvent.TEST_IMPORT,
     )

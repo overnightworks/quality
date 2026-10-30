@@ -24,6 +24,7 @@ from tests.support.check import (
     assert_row_prints_finding,
     env_row_stands,
     finding_rows,
+    rows_of,
     rule_findings,
 )
 from tests.support.merge import ONE_JOB
@@ -226,9 +227,8 @@ def test_an_env_name_with_a_control_format_or_separator_character_prints_as_one_
     repo = build_repo({name: "A=1\n"})
     code, lines = door_lines(capsys, "hygiene", str(repo))
     (finding,) = rule_findings(repo, Rule.ENV_FILE)
-    (row,) = finding_rows("\n".join(lines), escaped)
     assert (code, finding.location) == (1, escaped)
-    assert_row_prints_finding(row, finding)
+    assert_row_prints_finding(*rows_of("\n".join(lines), finding), finding)
     assert_every_line_starts_with_the_door(lines)
 
 
@@ -537,15 +537,16 @@ def test_the_files_block_lists_the_event_rows_in_run_order_with_one_fix_per_run(
         assert_row_prints_finding(row, finding)
 
 
-def test_findings_without_an_event_follow_the_rows_in_today_s_form(build_repo, capsys):
-    repo = build_repo({".env": "A=1\n", "notes.txt": "x\n"})
+def test_findings_without_an_event_follow_the_event_rows_in_today_s_form(build_repo, capsys):
+    repo = build_repo({".env": "A=1\n", "CLAUDE.md": "own\n", "notes.txt": "x\n", "docs/NOTES": "x\n", "pyproject.toml": '[project]\nrequires-python = ">=3.12"\n'})
     code, out, _ = frame_run(capsys, repo)
+    found = check.run_hygiene(repo, cli.INSTALLED_RUFF, cli.INSTALLED_ZIZMOR).findings
+    rows, legacy = [f for f in found if f.event is not None], [line for f in found if f.event is None for line in report.render(f).split("\n")]
     files_row = next(number for number, line in enumerate(out) if line.startswith("  ! files  "))
-    legacy = [finding for finding in check.run_hygiene(repo, cli.INSTALLED_RUFF, cli.INSTALLED_ZIZMOR).findings if finding.event is None]
-    assert (code, out[files_row].endswith("3 findings"), env_row_stands("\n".join(out))) == (1, True, True)
-    assert out[files_row + 1].split()[1] == ".env"
-    legacy_lines = [line for finding in legacy for line in report.render(finding).split("\n")]
-    assert out[files_row + 3 : files_row + 3 + len(legacy_lines)] == legacy_lines
+    shown = [line.split()[1] for line in out[files_row + 1 : out.index(legacy[0])] if line.lstrip().startswith(f"{Glyph.NEEDS_YOU} ")]
+    assert (code, out[files_row].endswith(f"{len(found)} findings"), out[out.index(legacy[0]) :][: len(legacy)], shown) == (1, True, legacy, [f.location for f in rows])
+    for finding in rows:
+        assert_row_prints_finding(*rows_of("\n".join(out[files_row:]), finding), finding)
 
 
 def test_an_area_that_cannot_check_ends_the_run_with_the_pair_and_no_verdict(build_repo, use_mise, served_scanners, capsys):
@@ -560,11 +561,11 @@ def test_an_area_that_cannot_check_ends_the_run_with_the_pair_and_no_verdict(bui
 
 
 def test_findings_in_the_area_that_cannot_check_stay_under_its_row_and_are_counted(build_repo, capsys):
-    code, out, err = frame_run(capsys, build_repo({".env": "A=1\n", "compose.yaml": "services: [\n"}))
+    code, out, err = frame_run(capsys, repo := build_repo({".env": "A=1\n", "compose.yaml": "services: [\n"}))
     row = next(number for number, line in enumerate(out) if line.startswith("  ✗ files  "))
     assert code == 2
     assert [line for line in headers(out) if "files" in line and "!" in line] == []
-    (env_row,) = finding_rows("\n".join(out[row + 1 :]), ".env")
+    (env_row,) = rows_of("\n".join(out[row + 1 :]), *rule_findings(repo, Rule.ENV_FILE))
     assert (env_row.event, env_row.fix_follows) == (FindingEvent.TRACKED, True)
     assert re.fullmatch(r"error: 1 of 7 areas could not check · \d+ findings?, \d+ of them in those areas", err[0]), err
 

@@ -45,7 +45,7 @@ The same row for the three readers, and foreign text:
 (terminal: coloured per stream; pipe, file, agent, CI log: as above, uncoloured)
 
 ```text
-    ! src/\u202egnp.py  tracked  a file without a suffix that is no executable
+    ! deploy/\u202eEDGE_SHA  tracked  a file without a suffix that is no executable
 ```
 
 ## Cases
@@ -101,7 +101,7 @@ $ quality check
 ! 5 findings in 3 areas · 4 areas clean · 14s
 ```
 
-No rule name stands in a row (`compose-port`, `env-file`); the event says it in words. The rule name appears only in a `fix:` line that asks for an `[[….allow]]` entry. No `next:` follows this verdict: the `fix:` lines carry the way. The events, facts and fixes of the `files` rows are head proposals O12 to O14 of 30.10.2026, their recommendations applied: one event word per kind of finding, shared across rules (`report.FindingEvent`); the env fix names the file for `.gitignore` only where it is its own shell word, else `it`; and the findings of an area in run order. Paths and events align per area by character count.
+No rule name stands in a row (`compose-port`, `env-file`); the event says it in words. The rule name appears only in a `fix:` line that asks for an `[[….allow]]` entry. No `next:` follows this verdict: the `fix:` lines carry the way. The events, facts and fixes of the `files` rows are head proposals O12 to O14, O18 and O19 of 30.10.2026, their recommendations applied: one event word per kind of finding, shared across rules (`report.FindingEvent`); the env fix names the file for `.gitignore` only where it is its own shell word, else `it`; and the findings of an area in run order. Paths and events align per area by character count.
 
 ### 3. `quality check`, no git work tree
 
@@ -155,7 +155,7 @@ next: reinstall quality with its dependencies, one of:
   ✗ files         not checked    2 reasons
     ✗ cannot read compose.yaml: line 1, column 11 ...
     ✗ pyproject.toml has a requires-python quality cannot read
-    ! .env          tracked         an env file carries configuration, often secrets
+    ! .env  tracked  an env file carries configuration, often secrets
       fix: git --literal-pathspecs rm --cached -- .env, then add .env to .gitignore
 error: 1 of 7 areas could not check · 1 finding, 1 of them in those areas
 next: fix what the ✗ rows name, then run quality check again

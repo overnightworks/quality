@@ -4,19 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from tests.support.check import env_row_stands, is_clean, refusal_row, refusals
+from quality.report import FindingEvent
+from quality.rules import Rule
+from tests.support.check import env_row_stands, is_clean, refusal_row, refusals, rows_of, rule_findings
 from tests.support.check import hygiene_output as run
+from tests.support.layout import assert_prints_as_kind, rule_ids_in
 
 GUIDANCE = {"AGENTS.md": "# guidance\n"}
 IMPORT = "@AGENTS.md\n"
-MISMATCH_REASON = "{name} is not exactly @AGENTS.md, so Claude reads other guidance than Codex and Grok."
-MISMATCH_FIX = "move its own lines into AGENTS.md, then leave @AGENTS.md as its only line, or delete it."
-NESTED_REASON = ".claude/CLAUDE.md gives Claude guidance Codex and Grok never read."
-NESTED_FIX = "move its lines into AGENTS.md and delete .claude/CLAUDE.md."
-LINK_REASON = "CLAUDE.md is a symlink, not a file holding @AGENTS.md."
-LINK_FIX = "replace the link with a file whose only line is @AGENTS.md; AGENTS.md stays as it is."
-MISSING_IMPORT_REASON = "CLAUDE.md imports AGENTS.md, which the repository does not hold."
-MISSING_IMPORT_FIX = "add AGENTS.md with the repository's guidance, or delete CLAUDE.md."
 
 
 def claude_repo(build_repo, tracked: dict[str, str], links: dict[str, str] | None = None) -> Path:
@@ -52,20 +47,20 @@ def test_claude_md_that_is_absent_or_exactly_the_import_is_clean(build_repo, cap
 
 
 @pytest.mark.parametrize(
-    ("tracked", "links", "name", "reason", "fix"),
+    ("tracked", "links", "name", "event"),
     [
-        ({**GUIDANCE, "CLAUDE.md": "@AGENTS.md\r\n"}, {}, "CLAUDE.md", MISMATCH_REASON, MISMATCH_FIX),
-        ({**GUIDANCE, "CLAUDE.md": ""}, {}, "CLAUDE.md", MISMATCH_REASON, MISMATCH_FIX),
-        ({**GUIDANCE, "CLAUDE.md": " @AGENTS.md\n"}, {}, "CLAUDE.md", MISMATCH_REASON, MISMATCH_FIX),
-        ({**GUIDANCE, "CLAUDE.md": "@AGENTS.md\n\n"}, {}, "CLAUDE.md", MISMATCH_REASON, MISMATCH_FIX),
-        ({**GUIDANCE, "CLAUDE.md": "\ufeff@AGENTS.md\n"}, {}, "CLAUDE.md", MISMATCH_REASON, MISMATCH_FIX),
-        ({**GUIDANCE, "CLAUDE.md": "@AGENTS.md\nuse pnpm\n"}, {}, "CLAUDE.md", MISMATCH_REASON, MISMATCH_FIX),
-        ({**GUIDANCE, "claude.md": "own rules\n"}, {}, "claude.md", MISMATCH_REASON, MISMATCH_FIX),
-        ({**GUIDANCE, ".claude/CLAUDE.md": IMPORT}, {}, ".claude/CLAUDE.md", NESTED_REASON, NESTED_FIX),
-        (GUIDANCE, {"CLAUDE.md": "AGENTS.md"}, "CLAUDE.md", LINK_REASON, LINK_FIX),
-        (GUIDANCE, {"CLAUDE.md": "missing.md"}, "CLAUDE.md", LINK_REASON, LINK_FIX),
-        ({"CLAUDE.md": IMPORT}, {}, "CLAUDE.md", MISSING_IMPORT_REASON, MISSING_IMPORT_FIX),
-        ({"CLAUDE.md": IMPORT, "agents.md": "x\n"}, {}, "CLAUDE.md", MISSING_IMPORT_REASON, MISSING_IMPORT_FIX),
+        ({**GUIDANCE, "CLAUDE.md": "@AGENTS.md\r\n"}, {}, "CLAUDE.md", FindingEvent.DIVERGES),
+        ({**GUIDANCE, "CLAUDE.md": ""}, {}, "CLAUDE.md", FindingEvent.DIVERGES),
+        ({**GUIDANCE, "CLAUDE.md": " @AGENTS.md\n"}, {}, "CLAUDE.md", FindingEvent.DIVERGES),
+        ({**GUIDANCE, "CLAUDE.md": "@AGENTS.md\n\n"}, {}, "CLAUDE.md", FindingEvent.DIVERGES),
+        ({**GUIDANCE, "CLAUDE.md": "\ufeff@AGENTS.md\n"}, {}, "CLAUDE.md", FindingEvent.DIVERGES),
+        ({**GUIDANCE, "CLAUDE.md": "@AGENTS.md\nuse pnpm\n"}, {}, "CLAUDE.md", FindingEvent.DIVERGES),
+        ({**GUIDANCE, "claude.md": "own rules\n"}, {}, "claude.md", FindingEvent.DIVERGES),
+        ({**GUIDANCE, ".claude/CLAUDE.md": IMPORT}, {}, ".claude/CLAUDE.md", FindingEvent.CLAUDE_ONLY),
+        (GUIDANCE, {"CLAUDE.md": "AGENTS.md"}, "CLAUDE.md", FindingEvent.SYMLINK),
+        (GUIDANCE, {"CLAUDE.md": "missing.md"}, "CLAUDE.md", FindingEvent.SYMLINK),
+        ({"CLAUDE.md": IMPORT}, {}, "CLAUDE.md", FindingEvent.NO_AGENTS_FILE),
+        ({"CLAUDE.md": IMPORT, "agents.md": "x\n"}, {}, "CLAUDE.md", FindingEvent.NO_AGENTS_FILE),
     ],
     ids=[
         "#95 E12 cell 5 windows line ending",
@@ -82,12 +77,10 @@ def test_claude_md_that_is_absent_or_exactly_the_import_is_clean(build_repo, cap
         "#95 E4 cell 16 only agents.md",
     ],
 )
-def test_claude_md_that_is_not_the_import_is_one_finding_naming_the_file(build_repo, capsys, tracked, links, name, reason, fix):
-    """#95 E1/E17/E20: the reason and the fix are fixed prose, and the fix is never a command."""
-    code, output = run(capsys, claude_repo(build_repo, tracked, links))
-    assert code == 1, output
-    assert f"claude-md {name} - {reason.format(name=name)}\n  Fix: {fix}\n" in output
-    assert output.count("claude-md ") == 1
+def test_claude_md_that_is_not_the_import_is_one_finding_of_its_kind_at_the_file(build_repo, capsys, tracked, links, name, event):
+    """#95 E1/E17/E20 and #283 O12: the finding's location is the file and its fact never names the file; the fix is never a command."""
+    finding = assert_prints_as_kind(capsys, claude_repo(build_repo, tracked, links), Rule.CLAUDE_MD, event)
+    assert (finding.path, name in finding.reason, "git " in finding.fix, rule_ids_in(finding.fix)) == (name, False, False, set())
 
 
 def test_claude_md_finding_never_prints_the_files_content(build_repo, capsys):
@@ -96,14 +89,15 @@ def test_claude_md_finding_never_prints_the_files_content(build_repo, capsys):
     (repo / "claude.md").write_bytes(b"\xff\xfe secret-bytes\n")
     subprocess.run(["git", "-C", str(repo), "add", "--", "claude.md"], check=True)
     code, output = run(capsys, repo)
-    assert (code, output.count("claude-md "), "hunter2" in output, "secret-bytes" in output) == (1, 2, False, False), output
+    assert (code, len(rule_findings(repo, Rule.CLAUDE_MD)), "hunter2" in output, "secret-bytes" in output) == (1, 2, False, False), output
 
 
 def test_claude_md_two_wrong_files_are_two_findings(build_repo, capsys):
     """#95 E22 cell 20: one finding per wrong file."""
     repo = build_repo({**GUIDANCE, "CLAUDE.md": "own\n", ".claude/CLAUDE.md": "own\n"})
     code, output = run(capsys, repo)
-    assert (code, output.count("claude-md ")) == (1, 2), output
+    findings = rule_findings(repo, Rule.CLAUDE_MD)
+    assert (code, [len(rows_of(output, finding)) for finding in findings]) == (1, [1, 1]), output
 
 
 def test_claude_md_counts_only_once_tracked_and_only_while_on_disk(build_repo, capsys):
@@ -113,10 +107,11 @@ def test_claude_md_counts_only_once_tracked_and_only_while_on_disk(build_repo, c
     untracked = run(capsys, repo)
     subprocess.run(["git", "-C", str(repo), "add", "--", "CLAUDE.md"], check=True)
     tracked = run(capsys, repo)
+    (finding,) = rule_findings(repo, Rule.CLAUDE_MD)
     (repo / "CLAUDE.md").unlink()
     deleted = run(capsys, repo)
     assert (untracked[0], is_clean(untracked[1])) == (0, True), untracked
-    assert (tracked[0], "claude-md CLAUDE.md - " in tracked[1]) == (1, True), tracked
+    assert (tracked[0], len(rows_of(tracked[1], finding))) == (1, 1), tracked
     assert (deleted[0], is_clean(deleted[1])) == (0, True), deleted
 
 
@@ -132,8 +127,8 @@ def test_unreadable_claude_md_cannot_be_judged_and_other_rules_still_judge(build
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root reaches a mode-0 directory, so no permission is refused")
-@pytest.mark.parametrize(("name", "reason"), [("CLAUDE.md", LINK_REASON), (".claude/CLAUDE.md", NESTED_REASON)])
-def test_claude_md_link_to_an_unreachable_target_is_the_link_finding(build_repo, capsys, elsewhere, name, reason):
+@pytest.mark.parametrize(("name", "event"), [("CLAUDE.md", FindingEvent.SYMLINK), (".claude/CLAUDE.md", FindingEvent.CLAUDE_ONLY)])
+def test_claude_md_link_to_an_unreachable_target_is_the_link_finding(build_repo, capsys, elsewhere, name, event):
     """#95 E8: a link is judged from lstat alone, so a target the filesystem refuses changes nothing."""
     locked = elsewhere / "locked"
     locked.mkdir()
@@ -144,8 +139,8 @@ def test_claude_md_link_to_an_unreachable_target_is_the_link_finding(build_repo,
         code, output = run(capsys, repo)
     finally:
         locked.chmod(0o700)
-    assert code == 1, output
-    assert f"claude-md {name} - {reason}" in output
+    (finding,) = rule_findings(repo, Rule.CLAUDE_MD)
+    assert (code, finding.path, finding.event, len(rows_of(output, finding))) == (1, name, event, 1), output
     assert not refusals(repo)
 
 
@@ -154,8 +149,8 @@ def test_claude_md_from_a_subdirectory_is_judged_as_from_the_top(build_repo, cap
     repo = build_repo({**GUIDANCE, "CLAUDE.md": "own\n", "src/a.py": ""})
     from_subdirectory = run(capsys, repo / "src")
     assert from_subdirectory == run(capsys, repo)
-    assert from_subdirectory[0] == 1, from_subdirectory
-    assert "claude-md CLAUDE.md - " in from_subdirectory[1]
+    (finding,) = rule_findings(repo, Rule.CLAUDE_MD)
+    assert (from_subdirectory[0], len(rows_of(from_subdirectory[1], finding))) == (1, 1), from_subdirectory
 
 
 def test_claude_md_is_named_in_run_order(build_repo, capsys):

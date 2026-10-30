@@ -104,6 +104,16 @@ class FindingEvent(StrEnum):
     UNREADABLE_PORT = "unreadable port"
     HOST_NETWORK = "host network"
     UNUSED = "unused"
+    UNLISTED = "unlisted"
+    CLAUDE_ONLY = "claude only"
+    SYMLINK = "symlink"
+    DIVERGES = "diverges"
+    NO_AGENTS_FILE = "no AGENTS.md"
+    MISNAMED = "misnamed"
+    MISPLACED = "misplaced"
+    NO_HEADER = "no header"
+    STRAY = "stray"
+    TEST_IMPORT = "test import"
 
 
 @dataclass(frozen=True)
