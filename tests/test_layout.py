@@ -32,20 +32,20 @@ def test_a_file_without_a_suffix_is_red(build_repo, capsys):
     assert (code, red(repo)) == (1, ["EDGE_SHA"])
 
 
-def test_the_tool_mandated_names_and_dotfiles_are_clean(build_repo, capsys):
+def test_the_tool_mandated_names_and_dotfiles_are_clean(build_repo):
     """#184 sentence 1: tool-mandated names and dotfiles are clean."""
     names = ["LICENSE", "Dockerfile", "Makefile", "CODEOWNERS", ".gitignore", "docs/.keep", "deploy/Dockerfile"]
     repo = build_repo({**GUIDANCE, **{name: "x" for name in names}})
     assert red(repo) == []
 
 
-def test_names_compare_in_exact_case(build_repo, capsys):
+def test_names_compare_in_exact_case(build_repo):
     """#184 sentence 4: names compare in exact case."""
     repo = build_repo({**GUIDANCE, "license": "x", "makefile": "x"})
     assert red(repo) == ["license", "makefile"]
 
 
-def test_an_executable_a_symlink_and_a_gitlink_are_clean(build_repo, capsys):
+def test_an_executable_a_symlink_and_a_gitlink_are_clean(build_repo):
     """#184 sentence 1: executables, symlinks and gitlinks are clean."""
     repo = build_repo({**GUIDANCE, "scripts/run": "#!/bin/sh\n", "scripts/stray": "x"})
     in_index(repo, "update-index", "--chmod=+x", "scripts/run")
@@ -55,7 +55,7 @@ def test_an_executable_a_symlink_and_a_gitlink_are_clean(build_repo, capsys):
     assert red(repo) == ["scripts/stray"]
 
 
-def test_a_symlink_is_judged_by_its_own_name_whatever_it_points_at(build_repo, capsys):
+def test_a_symlink_is_judged_by_its_own_name_whatever_it_points_at(build_repo):
     """#184 sentence 2: a link is never dereferenced."""
     repo = build_repo({**GUIDANCE, "target.txt": "x"})
     (repo / "latest").symlink_to("target.txt")
@@ -64,7 +64,7 @@ def test_a_symlink_is_judged_by_its_own_name_whatever_it_points_at(build_repo, c
     assert red(repo) == []
 
 
-def test_the_mode_comes_from_the_index_not_the_disk(build_repo, capsys):
+def test_the_mode_comes_from_the_index_not_the_disk(build_repo):
     """#184 sentence 2: the index is the only source of a path's mode."""
     repo = build_repo({**GUIDANCE, "run": "#!/bin/sh\n"})
     (repo / "run").chmod(0o755)
@@ -84,7 +84,7 @@ def test_findings_are_all_printed_sorted_by_path_with_both_ways_out(build_repo, 
     assert red(repo) == []
 
 
-def test_a_declared_file_is_clean_and_a_declaration_for_a_compliant_file_stays_clean(build_repo, capsys):
+def test_a_declared_file_is_clean_and_a_declaration_for_a_compliant_file_stays_clean(build_repo):
     """#184 sentence 3: a declared file is clean; a declaration for a compliant file stays clean."""
     config = ONE_JOB + declaring("docs/EDGE_SHA") + declaring("LICENSE") + declaring("docs/guide.md")
     repo = build_repo({**GUIDANCE, "docs/EDGE_SHA": "x", "LICENSE": "x", "docs/guide.md": "x", CONFIG: config})
@@ -99,7 +99,7 @@ def test_a_declaration_for_an_untracked_path_is_a_finding(build_repo, capsys):
     assert_prints_as_kind(capsys, repo, Rule.FILE_SUFFIX, FindingEvent.UNUSED)
 
 
-def test_a_declaration_is_exact_so_another_case_is_not_it(build_repo, capsys):
+def test_a_declaration_is_exact_so_another_case_is_not_it(build_repo):
     """#184 sentence 3: a declaration is an exact path."""
     repo = build_repo({**GUIDANCE, "notes": "x", CONFIG: ONE_JOB + declaring("Notes")})
     assert red(repo) == ["Notes", "notes"]
@@ -154,15 +154,15 @@ def test_a_malformed_layout_table_cannot_be_judged(build_repo, capsys, config):
     assert "[[layout.allow]]" in output
 
 
-def test_the_layout_table_is_separate_from_the_root_table(build_repo, capsys):
+def test_the_layout_table_is_separate_from_the_root_table(build_repo):
     """#184 sentence 3: `[[layout.allow]]` is separate from `[[root.allow]]`."""
     root = '[[root.allow]]\nentry = "NOTES"\nreason = "r"\n'
     repo = build_repo({**GUIDANCE, "NOTES": "x", CONFIG: ONE_JOB + root})
     assert red(repo) == ["NOTES"]
 
 
-@pytest.mark.parametrize(("character", "escaped"), CONTROL_CHARACTERS, ids=["control", "escape", "right-to-left override"])
-def test_a_path_with_a_control_character_prints_escaped(build_repo, capsys, character, escaped):
+@pytest.mark.parametrize(("character", "escaped"), CONTROL_CHARACTERS)
+def test_a_path_with_a_control_format_or_separator_character_prints_escaped(build_repo, capsys, character, escaped):
     """#184 sentence 4: a finding prints the path escaped."""
     assert_prints_escaped_row(capsys, build_repo, Rule.FILE_SUFFIX, character, escaped)
 
@@ -197,7 +197,7 @@ def script_findings(repo) -> dict[Rule, list[str]]:
     ],
     ids=["shebang", "executable", "scripts folder at any depth", "data beside a script", "tests folder", "no script"],
 )
-def test_what_a_script_is(build_repo, capsys, files, executable, scripts):
+def test_what_a_script_is(build_repo, files, executable, scripts):
     """#190 sentence 1: executable, a shebang, or .sh/.py/.mjs under scripts/; a tests/ path never; data never."""
     repo = build_repo({**GUIDANCE, **files})
     for name in executable:
@@ -205,7 +205,7 @@ def test_what_a_script_is(build_repo, capsys, files, executable, scripts):
     assert red(repo, Rule.SCRIPT_HEADER) == scripts
 
 
-def test_a_link_is_never_a_script(build_repo, capsys):
+def test_a_link_is_never_a_script(build_repo):
     """#190 sentence 1: links (120000, 160000) are never scripts."""
     repo = build_repo({**GUIDANCE, "scripts/target_it.sh": SHELL_HEADER})
     (repo / "scripts" / "go.sh").symlink_to("target_it.sh")
@@ -219,7 +219,7 @@ def test_a_link_is_never_a_script(build_repo, capsys):
     ["scripts/check.sh", "scripts/prove-x.py", "scripts/Run_it.sh", "scripts/run__it.sh", "scripts/_run.sh", "scripts/run_.sh",
      "scripts/run.it.sh"],
 )
-def test_a_script_name_that_is_not_two_snake_case_words_is_red(build_repo, capsys, path):
+def test_a_script_name_that_is_not_two_snake_case_words_is_red(build_repo, path):
     """#190 sentence 2: check.sh and prove-x.py are red."""
     repo = build_repo({**GUIDANCE, path: SHELL_HEADER})
     assert script_findings(repo) == {Rule.SCRIPT_NAME: [path], Rule.SCRIPT_HEADER: []}
@@ -228,13 +228,13 @@ def test_a_script_name_that_is_not_two_snake_case_words_is_red(build_repo, capsy
 @pytest.mark.parametrize(
     "path", ["scripts/run_static_checks.sh", "scripts/verify_release.py", "scripts/step_2.sh", "frontend/scripts/a1_b2.mjs"]
 )
-def test_a_snake_case_script_name_is_clean(build_repo, capsys, path):
+def test_a_snake_case_script_name_is_clean(build_repo, path):
     """#190 sentence 2: run_static_checks.sh and verify_release.py are clean."""
     repo = build_repo({**GUIDANCE, path: "// Builds it.\n" if path.endswith(".mjs") else SHELL_HEADER})
     assert script_findings(repo) == CLEAN_SCRIPTS
 
 
-def test_a_script_outside_a_scripts_folder_is_red_unless_tool_mandated_or_a_dotfile(build_repo, capsys):
+def test_a_script_outside_a_scripts_folder_is_red_unless_tool_mandated_or_a_dotfile(build_repo):
     """#190 sentence 3: an executable docker/entrypoint.sh is red; tool-mandated names and dotfiles are exempt."""
     names = ["docker/entrypoint.sh", "Dockerfile", "Makefile", "docker/.hook"]
     repo = build_repo({**GUIDANCE, **{name: SHELL_HEADER for name in names}})
@@ -243,7 +243,7 @@ def test_a_script_outside_a_scripts_folder_is_red_unless_tool_mandated_or_a_dotf
     assert script_findings(repo) == {Rule.SCRIPT_NAME: ["docker/entrypoint.sh"], Rule.SCRIPT_HEADER: []}
 
 
-def test_one_declaration_covers_the_shape_and_the_location(build_repo, capsys):
+def test_one_declaration_covers_the_shape_and_the_location(build_repo):
     """#190 sentence 3: one script-name entry covers both shape and location for its path."""
     config = ONE_JOB + declaring("docker/Entry-Point.sh", rule="script-name")
     repo = build_repo({**GUIDANCE, "docker/Entry-Point.sh": SHELL_HEADER, CONFIG: config})
@@ -281,7 +281,7 @@ def test_one_declaration_covers_the_shape_and_the_location(build_repo, capsys):
          "PEP 723 then code", "shebang, block, docstring", "encoding then PEP 723 then code", "plain encoding line",
          "prefixed docstring", "encoding line counts toward the window", "bytes literal", "f-string", "empty"],
 )
-def test_a_script_needs_a_comment_or_docstring_in_its_first_three_lines(build_repo, capsys, content, is_red):
+def test_a_script_needs_a_comment_or_docstring_in_its_first_three_lines(build_repo, content, is_red):
     """#190 sentence 4: a non-directive comment or docstring within the first three non-blank lines; python-print's
     output owner line is a directive (#225 cell 7)."""
     repo = build_repo({**GUIDANCE, "scripts/run_it.py": content})
@@ -294,19 +294,19 @@ def test_a_script_needs_a_comment_or_docstring_in_its_first_three_lines(build_re
      ("// eslint-disable\nexport {};\n", True), ("# Builds it.\nexport {};\n", True)],
     ids=["line comment", "block comment", "eslint directive", "hash is no mjs comment"],
 )
-def test_the_comment_marker_of_an_mjs_script_is_slashes(build_repo, capsys, content, is_red):
+def test_the_comment_marker_of_an_mjs_script_is_slashes(build_repo, content, is_red):
     """#190 sentence 4: `//` or `/*` for .mjs."""
     repo = build_repo({**GUIDANCE, "scripts/build_it.mjs": content})
     assert red(repo, Rule.SCRIPT_HEADER) == (["scripts/build_it.mjs"] if is_red else [])
 
 
-def test_the_header_is_judged_for_presence_never_content(build_repo, capsys):
+def test_the_header_is_judged_for_presence_never_content(build_repo):
     """#190 sentence 4: presence only."""
     repo = build_repo({**GUIDANCE, "scripts/run_it.sh": "#!/bin/sh\n#\nset -e\n"})
     assert red(repo, Rule.SCRIPT_HEADER) == []
 
 
-def test_a_script_header_declaration_covers_only_the_header(build_repo, capsys):
+def test_a_script_header_declaration_covers_only_the_header(build_repo):
     """#190 sentence 6: script-header is a rule; the declared file is clean of it and the other rule still judges it."""
     config = ONE_JOB + declaring("scripts/bad.sh", rule="script-header")
     repo = build_repo({**GUIDANCE, "scripts/bad.sh": "set -e\n", CONFIG: config})

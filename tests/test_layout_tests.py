@@ -28,7 +28,7 @@ ROOT_PROJECT = {**GUIDANCE, "pyproject.toml": "", "src/p/cli.py": "x = 1\n"}
     ids=["clean", "helper beside tests", "data folder", "e2e only at the top", "conftest at any depth",
          "other languages", "a test file", "exact case"],
 )
-def test_rule_four_judges_every_path_under_tests(build_repo, capsys, files, expected):
+def test_rule_four_judges_every_path_under_tests(build_repo, files, expected):
     """#196 sentences 3 and 5: a test file, a conftest, support/fixtures at any depth and top-level e2e pass."""
     assert red(build_repo({**ROOT_PROJECT, **files}), RULE) == expected
 
@@ -42,7 +42,7 @@ def test_rule_four_judges_every_path_under_tests(build_repo, capsys, files, expe
     ],
     ids=["red anywhere", "data inside fixtures"],
 )
-def test_an_init_file_under_tests_is_red_unless_it_is_fixture_data(build_repo, capsys, init_files, expected):
+def test_an_init_file_under_tests_is_red_unless_it_is_fixture_data(build_repo, init_files, expected):
     """#196 sentence 4."""
     repo = build_repo({**ROOT_PROJECT, **dict.fromkeys(init_files, "")})
     assert red(repo, RULE) == expected
@@ -80,12 +80,12 @@ def test_an_init_file_and_a_stray_helper_are_strays_with_a_fix_line_each(build_r
     ids=["no src", "no pyproject", "src without python", "namespace package", "empty project table", "member",
          "tests elsewhere", "pyproject inside tests makes no project", "pyproject directly in tests", "src holding only a module"],
 )
-def test_only_a_project_with_a_package_is_judged(build_repo, capsys, files, expected):
+def test_only_a_project_with_a_package_is_judged(build_repo, files, expected):
     """#196 sentences 1 and 2, cells A2 to A10."""
     assert red(build_repo({**GUIDANCE, **files}), RULE) == expected
 
 
-def test_nested_projects_each_judge_their_own_tests(build_repo, capsys):
+def test_nested_projects_each_judge_their_own_tests(build_repo):
     """#196 sentence 1, A8: `speech/tests` belongs to speech, `speech/providers/qwen/tests` to qwen."""
     files = {
         "speech/pyproject.toml": "", "speech/src/s/x.py": "", "speech/tests/support/x.py": "",
@@ -95,7 +95,7 @@ def test_nested_projects_each_judge_their_own_tests(build_repo, capsys):
     assert red(build_repo({**GUIDANCE, **files}), RULE) == ["speech/providers/qwen/tests/helpers.py"]
 
 
-def test_a_symlink_and_a_gitlink_under_tests_are_judged_by_their_own_name(build_repo, capsys):
+def test_a_symlink_and_a_gitlink_under_tests_are_judged_by_their_own_name(build_repo):
     """#196 sentence 8, D1 and D2: never followed."""
     repo = build_repo({**ROOT_PROJECT, "tests/support/x.py": ""})
     (repo / "tests" / "helper.py").symlink_to("support/x.py")
@@ -114,7 +114,7 @@ def test_a_symlink_and_a_gitlink_under_tests_are_judged_by_their_own_name(build_
     ],
     ids=["declared", "declared under another rule", "not tracked", "already complying"],
 )
-def test_a_declaration_covers_only_its_own_rule_and_a_stale_one_is_a_finding(build_repo, capsys, tracked, declarations, expected):
+def test_a_declaration_covers_only_its_own_rule_and_a_stale_one_is_a_finding(build_repo, tracked, declarations, expected):
     """#196 sentence 7, D3 to D5."""
     config = ONE_JOB + "".join(declaring(path, rule=rule) for path, rule in declarations)
     repo = build_repo({**ROOT_PROJECT, **dict.fromkeys(tracked, ""), CONFIG: config})

@@ -87,12 +87,12 @@ def frontend(*paths: str, manifest: str = "package.json") -> dict[str, str]:
              {**GUIDANCE, **empty_files("Cargo.toml", "tools/package.json", "tools/a.test.mjs")}, ["tools/a.test.mjs"]),
     ],
 )
-def test_the_sibling_and_the_e2e_folder_are_judged_per_frontend_project(build_repo, capsys, files, expected):
+def test_the_sibling_and_the_e2e_folder_are_judged_per_frontend_project(build_repo, files, expected):
     """H1 to H14 and H18: only a judged test file in a frontend project is red, once, by its name."""
     assert red(build_repo(files), RULE) == expected
 
 
-def test_a_symlink_is_judged_by_its_name_and_a_gitlink_is_never_judged_or_a_subject(build_repo, capsys):
+def test_a_symlink_is_judged_by_its_name_and_a_gitlink_is_never_judged_or_a_subject(build_repo):
     """H9 and H16: a link is never followed; a symlink is a subject by its own name, a gitlink is a folder."""
     repo = build_repo(frontend("src/real.ts", "src/b.test.ts", "src/c.test.ts", "src/d.test.ts"))
     (repo / "src" / "a.ts").symlink_to("real.ts")
@@ -103,7 +103,7 @@ def test_a_symlink_is_judged_by_its_name_and_a_gitlink_is_never_judged_or_a_subj
     assert red(repo, RULE) == ["src/b.test.ts", "src/c.test.ts", "src/d.test.ts", "src/x.test.ts"]
 
 
-def test_a_symlinked_subject_maps_a_test(build_repo, capsys):
+def test_a_symlinked_subject_maps_a_test(build_repo):
     """H9: `a.test.ts` beside a symlink `a.ts` is clean."""
     repo = build_repo(frontend("src/real.ts", "src/a.test.ts"))
     (repo / "src" / "a.ts").symlink_to("real.ts")
@@ -121,7 +121,7 @@ def test_a_symlinked_subject_maps_a_test(build_repo, capsys):
     ],
     ids=["a declared test", "a declared spec", "declared under another rule", "a stale declaration"],
 )
-def test_a_declaration_exempts_a_frontend_test_from_rules_six_and_seven(build_repo, capsys, tracked, declarations, expected):
+def test_a_declaration_exempts_a_frontend_test_from_rules_six_and_seven(build_repo, tracked, declarations, expected):
     """H15: one declaration covers its own rule only, and a stale one is one finding."""
     config = ONE_JOB + "".join(declaring(path, rule=rule) for path, rule in declarations)
     assert red(build_repo({**frontend(*tracked), CONFIG: config}), RULE) == expected

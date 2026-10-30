@@ -19,7 +19,11 @@ from tests.support.check import (
 CONFIG = "quality/config.toml"
 GUIDANCE = {"AGENTS.md": "# guidance\n"}
 EXAMPLE_SHA = "1" * 40
-CONTROL_CHARACTERS = [("\x01", "\\x01"), ("\x1b", "\\x1b"), ("\u202e", "\\u202e")]
+CONTROL_CHARACTERS = [
+    pytest.param("\x01", "\\x01", id="control"),
+    pytest.param("\x1b", "\\x1b", id="escape"),
+    pytest.param("\u202e", "\\u202e", id="right-to-left override"),
+]
 
 
 def declaring(path: str, reason: str = "the build reads it by this name", rule: str = Rule.FILE_SUFFIX) -> str:

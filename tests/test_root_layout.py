@@ -1,11 +1,12 @@
 """#144: the root-layout rule, every root entry on quality's base list or declared with a reason."""
 
+import re
 import subprocess
 
 import pytest
 
 from quality.config import CONFIG_PATH, ROOT_ALLOWANCE_EXAMPLE
-from quality.output import FIX_LABEL
+from quality.output import FIX_LABEL, Glyph
 from quality.report import FindingEvent
 from quality.root_layout import ROOT_BASE_DIRECTORIES, ROOT_BASE_ENTRIES, ROOT_BASE_FILES
 from quality.rules import Rule
@@ -37,7 +38,7 @@ def test_two_strays_are_two_findings_and_a_directory_counts_once(build_repo, cap
     assert (code, red(repo, Rule.ROOT_LAYOUT)) == (1, ["misc/", "notes.txt"])
 
 
-def test_an_untracked_file_is_green_until_it_is_added(build_repo, capsys):
+def test_an_untracked_file_is_green_until_it_is_added(build_repo):
     repo = build_repo(GUIDANCE)
     (repo / "scratch.png").write_text("x")
     assert red(repo, Rule.ROOT_LAYOUT) == []
@@ -45,7 +46,7 @@ def test_an_untracked_file_is_green_until_it_is_added(build_repo, capsys):
     assert red(repo, Rule.ROOT_LAYOUT) == ["scratch.png"]
 
 
-def test_every_base_list_entry_is_green_without_a_config(build_repo, capsys):
+def test_every_base_list_entry_is_green_without_a_config(build_repo):
     files = {name: "x" for name in ROOT_BASE_FILES}
     files |= {"CLAUDE.md": "@AGENTS.md\n", "AGENTS.md": "# guidance\n", "compose.yaml": "services: {}\n"}
     files |= {"compose.yml": "services: {}\n", "docker-compose.yaml": "services: {}\n", "docker-compose.yml": "services: {}\n"}
@@ -89,12 +90,12 @@ def test_a_malformed_root_table_cannot_be_judged(build_repo, capsys, config, fac
     assert output.count(copy_block(ROOT_ALLOWANCE_EXAMPLE)) == 1
 
 
-def test_a_declared_collecting_directory_is_green(build_repo, capsys):
+def test_a_declared_collecting_directory_is_green(build_repo):
     repo = build_repo({**GUIDANCE, "misc/a.py": "x", CONFIG: declaring("misc/")})
     assert red(repo, Rule.ROOT_LAYOUT) == []
 
 
-def test_a_wrongly_cased_name_is_unlisted_and_its_fact_names_the_base_list_spelling(build_repo, capsys):
+def test_a_wrongly_cased_name_is_unlisted_and_its_fact_names_the_base_list_spelling(build_repo):
     repo = build_repo({**GUIDANCE, "readme.md": "x", "SRC/a.py": "x"})
     found = {finding.path: finding for finding in rule_findings(repo, Rule.ROOT_LAYOUT)}
     assert {path: finding.event for path, finding in found.items()} == dict.fromkeys(["SRC/", "readme.md"], FindingEvent.UNLISTED)
@@ -103,12 +104,12 @@ def test_a_wrongly_cased_name_is_unlisted_and_its_fact_names_the_base_list_spell
     assert [spelling[path] in found[other].reason for path, other in (("SRC/", "readme.md"), ("readme.md", "SRC/"))] == [False, False]
 
 
-def test_a_file_named_like_an_allowed_directory_is_red(build_repo, capsys):
+def test_a_file_named_like_an_allowed_directory_is_red(build_repo):
     repo = build_repo({**GUIDANCE, "src": "x"})
     assert red(repo, Rule.ROOT_LAYOUT) == ["src"]
 
 
-def test_a_root_symlink_counts_by_its_own_name(build_repo, capsys):
+def test_a_root_symlink_counts_by_its_own_name(build_repo):
     repo = build_repo(GUIDANCE)
     (repo / "latest").symlink_to("AGENTS.md")
     subprocess.run(["git", "-C", str(repo), "add", "--", "latest"], check=True)
@@ -123,8 +124,8 @@ def test_the_same_entry_declared_twice_cannot_be_judged_and_is_named(build_repo,
     assert output.count(copy_block(ROOT_ALLOWANCE_EXAMPLE)) == 1
 
 
-@pytest.mark.parametrize(("character", "escaped"), CONTROL_CHARACTERS, ids=["control", "escape", "right-to-left override"])
-def test_a_name_with_a_control_character_prints_escaped(build_repo, capsys, character, escaped):
+@pytest.mark.parametrize(("character", "escaped"), CONTROL_CHARACTERS)
+def test_a_name_with_a_control_format_or_separator_character_prints_escaped(build_repo, capsys, character, escaped):
     assert_prints_escaped_row(capsys, build_repo, Rule.ROOT_LAYOUT, character, escaped)
 
 
@@ -139,7 +140,7 @@ def test_the_rule_is_on_in_a_repository_without_a_config(build_repo, capsys):
     assert (code, red(repo, Rule.ROOT_LAYOUT)) == (1, ["notes.txt"])
 
 
-def test_a_declared_entry_is_green_and_a_base_list_entry_may_be_declared(build_repo, capsys):
+def test_a_declared_entry_is_green_and_a_base_list_entry_may_be_declared(build_repo):
     repo = build_repo({**GUIDANCE, "Makefile": "x", CONFIG: declaring("Makefile") + declaring("AGENTS.md")})
     assert red(repo, Rule.ROOT_LAYOUT) == []
 
@@ -166,14 +167,14 @@ def test_a_finding_names_the_entry_and_both_ways_out_without_a_local_path(build_
     assert red(repo, Rule.ROOT_LAYOUT) == []
 
 
-def test_removing_a_declaration_makes_the_entry_red(build_repo, capsys):
+def test_removing_a_declaration_makes_the_entry_red(build_repo):
     repo = build_repo({**GUIDANCE, "misc/a.py": "x", CONFIG: declaring("misc/")})
     assert red(repo, Rule.ROOT_LAYOUT) == []
     put(repo / CONFIG, None)
     assert red(repo, Rule.ROOT_LAYOUT) == ["misc/"]
 
 
-def test_moving_an_entry_without_its_declaration_leaves_the_declaration_red(build_repo, capsys):
+def test_moving_an_entry_without_its_declaration_leaves_the_declaration_red(build_repo):
     repo = build_repo({**GUIDANCE, "docs/misc/a.py": "x", CONFIG: declaring("misc/")})
     assert red(repo, Rule.ROOT_LAYOUT) == ["misc/"]
 
@@ -192,7 +193,7 @@ def test_a_tracked_env_file_is_red_under_env_file_and_under_root_layout(build_re
     assert (red(repo, Rule.ROOT_LAYOUT), env_row_stands(hygiene_output(capsys, repo)[1])) == ([".env"], True)
 
 
-def test_tsconfig_in_the_root_is_red_unless_declared(build_repo, capsys):
+def test_tsconfig_in_the_root_is_red_unless_declared(build_repo):
     assert red(build_repo({**GUIDANCE, "tsconfig.json": "{}"}), Rule.ROOT_LAYOUT) == ["tsconfig.json"]
 
 
@@ -200,8 +201,9 @@ def test_a_hundred_strays_print_a_hundred_sorted_findings(build_repo, capsys):
     names = [f"stray{number:03d}.txt" for number in range(100)]
     repo = build_repo({**GUIDANCE, **{name: "x" for name in reversed(names)}})
     output = hygiene_output(capsys, repo)[1]
+    printed = [match[0] for line in output.splitlines() if Glyph.NEEDS_YOU in line and (match := re.search(r"stray\d{3}\.txt", line))]
     rows = [row for name in names for row in finding_rows(output, name)]
-    assert (red(repo, Rule.ROOT_LAYOUT), len(rows), [row.fix_follows for row in rows]) == (names, 100, [False] * 99 + [True])
+    assert (red(repo, Rule.ROOT_LAYOUT), printed, len(rows), [row.fix_follows for row in rows]) == (names, names, 100, [False] * 99 + [True])
     assert output.count(f" {FIX_LABEL} ") == 1
 
 

@@ -26,8 +26,8 @@ def project(*paths: str) -> dict[str, str]:
     return {**GUIDANCE, "pyproject.toml": "", **dict.fromkeys(paths, "")}
 
 
-def case(identifier: str, paths: list[str], expected: list[str], *more: str):
-    return pytest.param(paths, expected, *more, id=identifier)
+def case(identifier: str, paths: list[str], expected: list[str]):
+    return pytest.param(paths, expected, id=identifier)
 
 
 @pytest.mark.parametrize(
@@ -54,7 +54,7 @@ def case(identifier: str, paths: list[str], expected: list[str], *more: str):
              ["tests/test_static.py"]),
     ],
 )
-def test_a_test_is_named_after_a_module_its_folder_mirrors(build_repo, capsys, paths, expected):
+def test_a_test_is_named_after_a_module_its_folder_mirrors(build_repo, paths, expected):
     """#199 sentences 1, 3 and 4."""
     assert red(build_repo(project(*paths)), RULE) == expected
 
@@ -69,7 +69,7 @@ def test_a_test_is_named_after_a_module_its_folder_mirrors(build_repo, capsys, p
         case("B12 scripts come first", ["src/a/x.py", "src/b/y.py", "scripts/x.py", "tests/scripts/test_x.py"], []),
     ],
 )
-def test_with_several_packages_each_test_lies_under_its_package(build_repo, capsys, paths, expected):
+def test_with_several_packages_each_test_lies_under_its_package(build_repo, paths, expected):
     """#199 sentences 1 and 2."""
     assert red(build_repo(project(*paths)), RULE) == expected
 
@@ -88,7 +88,7 @@ def test_with_several_packages_each_test_lies_under_its_package(build_repo, caps
         case("B15a no workflows folder", ["tests/workflows/test_x.py"], ["tests/workflows/test_x.py"]),
     ],
 )
-def test_script_and_workflow_tests_mirror_their_own_folders(build_repo, capsys, paths, expected):
+def test_script_and_workflow_tests_mirror_their_own_folders(build_repo, paths, expected):
     """#199 sentences 2 and 3."""
     assert red(build_repo(project("src/p/x.py", *paths)), RULE) == expected
 
@@ -101,7 +101,7 @@ def test_script_and_workflow_tests_mirror_their_own_folders(build_repo, capsys, 
         case("B18 e2e and fixtures", ["tests/e2e/test_flow.py", "tests/fixtures/test_x.py"], []),
     ],
 )
-def test_support_is_judged_while_e2e_and_fixtures_are_not(build_repo, capsys, paths, expected):
+def test_support_is_judged_while_e2e_and_fixtures_are_not(build_repo, paths, expected):
     """#199 sentence 5."""
     assert red(build_repo(project("src/p/x.py", *paths)), RULE) == expected
 
@@ -122,7 +122,7 @@ def test_support_is_judged_while_e2e_and_fixtures_are_not(build_repo, capsys, pa
                                     "speech/providers/qwen/tests/test_y.py"], []),
     ],
 )
-def test_a_member_maps_only_into_its_own_project(build_repo, capsys, files, expected):
+def test_a_member_maps_only_into_its_own_project(build_repo, files, expected):
     """#199 sentence 7."""
     assert red(build_repo(project(*files)), RULE) == expected
 
@@ -176,13 +176,13 @@ def test_a_workflow_test_in_a_member_is_a_misplaced_finding(build_repo, capsys):
     assert_prints_as_kind(capsys, repo, RULE, FindingEvent.MISPLACED)
 
 
-def test_a_declared_test_module_is_not_judged(build_repo, capsys):
+def test_a_declared_test_module_is_not_judged(build_repo):
     """#199 sentence 8, B22."""
     repo = build_repo({**project("src/p/x.py", "tests/test_y.py"), CONFIG: ONE_JOB + declaring("tests/test_y.py", rule=RULE)})
     assert red(repo, RULE) == []
 
 
-def test_a_link_counts_by_its_name_and_is_never_followed(build_repo, capsys):
+def test_a_link_counts_by_its_name_and_is_never_followed(build_repo):
     """#199 sentence 8, B21: a linked test is judged by its name, a linked module maps a test."""
     repo = build_repo(project("src/p/x.py", "tests/support/helper.py", "tests/test_y.py"))
     (repo / "tests" / "test_z.py").symlink_to("support/helper.py")
