@@ -62,8 +62,8 @@ def hygiene_exit_2(repo: Path, capsys, locate_zizmor=never_located) -> str:
      ("", "exit 0", f"gitleaks reports no version, the release pins {PINNED}")],
     ids=["fails-after-printing-the-pin", "does-not-finish", "prints-nothing"],
 )
-def test_a_version_command_that_fails_or_hangs_is_exit_2(served_scanners, build_repo, monkeypatch, capsys, version, on_version, expected):
-    """#13 rule 2, #134 rule 1: a scanner whose version command exits non-zero or hangs is not trusted."""
+def test_a_version_command_that_fails_hangs_or_reports_no_version_is_exit_2(served_scanners, build_repo, monkeypatch, capsys, version, on_version, expected):
+    """#13 rule 2, #134 rule 1: a scanner whose version command exits non-zero, hangs or reports no version is not trusted."""
     monkeypatch.setattr(process, "VERSION_TIMEOUT_SECONDS", 0.2)
     fake_gitleaks(served_scanners, version, on_version=on_version)
     assert expected in hygiene_exit_2(build_repo({}), capsys)
