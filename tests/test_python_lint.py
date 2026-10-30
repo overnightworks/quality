@@ -472,6 +472,8 @@ def test_a_ruff_quality_cannot_find_or_trust_names_the_reinstall_command(build_r
         assert (lines.count(choice.text), output.count(choice.text)) == (expected_once, expected_once), output
     if case == "unpinned":
         assert str(installation.UnpinnedDependency("ruff")) in output
+    if case == "failing version":
+        assert " ruff version exited 1" in output
     if case == "another version":
         assert f"ruff 0.0.1 found, the release pins {installation.required_version('ruff')}" in output
 

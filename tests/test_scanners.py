@@ -58,14 +58,14 @@ def hygiene_exit_2(repo: Path, capsys, locate_zizmor=never_located) -> str:
 
 
 @pytest.mark.parametrize(
-    ("on_version", "expected"),
-    [("exit 3", "version exited 3"), ("exec sleep 30", "did not finish within 0.2 seconds")],
-    ids=["fails-after-printing-the-pin", "does-not-finish"],
+    ("version", "on_version", "expected"), [(PINNED, "exit 3", " gitleaks version exited 3"), (PINNED, "exec sleep 30", "did not finish within 0.2 seconds"),
+     ("", "exit 0", f"gitleaks reports no version, the release pins {PINNED}")],
+    ids=["fails-after-printing-the-pin", "does-not-finish", "prints-nothing"],
 )
-def test_a_version_command_that_fails_or_hangs_is_exit_2(served_scanners, build_repo, monkeypatch, capsys, on_version, expected):
+def test_a_version_command_that_fails_or_hangs_is_exit_2(served_scanners, build_repo, monkeypatch, capsys, version, on_version, expected):
     """#13 rule 2, #134 rule 1: a scanner whose version command exits non-zero or hangs is not trusted."""
     monkeypatch.setattr(process, "VERSION_TIMEOUT_SECONDS", 0.2)
-    fake_gitleaks(served_scanners, on_version=on_version)
+    fake_gitleaks(served_scanners, version, on_version=on_version)
     assert expected in hygiene_exit_2(build_repo({}), capsys)
 
 

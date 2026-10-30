@@ -211,6 +211,8 @@ def test_a_zizmor_quality_cannot_find_or_trust_refuses_only_workflow_security(
         assert (lines.count(choice.text), output.count(choice.text)) == (expected_once, expected_once), output
     if case == "unpinned":
         assert str(installation.UnpinnedDependency("zizmor")) in output
+    if case == "failing version":
+        assert " zizmor version exited 1" in output
     if case == "another version":
         assert f"zizmor 0.0.1 found, the release pins {installation.required_version('zizmor')}" in output
 
