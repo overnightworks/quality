@@ -1,0 +1,8 @@
+claim_id = "026cf320b7454a5886b9d6e03e26e6e5"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "bd2d6cff8efd57bbcc07417afa365166839781d6"
+branch = "claude/issue-281-files-finding-rows"
+scope = ["AGENTS.md", "docs/output.md", "docs/rules.md", "quality/baseline.toml", "src/quality/cli.py", "src/quality/compose.py", "src/quality/env_file.py", "src/quality/output.py", "src/quality/report.py", "tests/support/check.py", "tests/test_architecture.py", "tests/test_check.py", "tests/test_claude_md.py", "tests/test_cli_output.py", "tests/test_compose.py", "tests/test_compose_container_host.py", "tests/test_env_file.py", "tests/test_output.py", "tests/test_python_floor.py", "tests/test_python_lint.py", "tests/test_root_layout.py", "tests/test_scanners.py"]
+opened_commit = "9df4943c8b2245454f827d17b34ffc2de9076a09"
+whole_reason = "The event field, the renderer and the door must land with a producer that fills them, or they are code no entry point reaches; env-file and compose-port together complete case 2's files block, and every test module pinning their old line changes with them."
