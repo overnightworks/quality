@@ -228,7 +228,7 @@ $ quality check debt --fix
 ✓ clean · ceiling recorded · 1 area · 2s
 ```
 
-A ceiling file that holds only one of the two debt rules (size without `[clones]`, or the reverse) is the partly recorded form. Head proposal of 30.10.2026 (O4), built unless the operator rules otherwise.
+A ceiling file without a `[clones]` table is the partly recorded form. Head proposal of 30.10.2026 (O4), built unless the operator rules otherwise.
 
 ```text
   · debt          not recorded   partly measured only
