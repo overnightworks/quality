@@ -1,0 +1,8 @@
+claim_id = "2d2188da9e9c4be08d2ba9d2d21fcb66"
+agent = "Claude 7bbab0b4-f923-4f09-a5c2-6fe15143932e"
+role = "builder"
+base = "df3835ad3aa0d95bf6f61a1964c3d15efcd94d64"
+branch = "claude/issue-275-hygiene-frame"
+scope = ["README.md", "docs/output.md", "docs/rules.md", "quality/baseline.toml", "src/quality/check.py", "src/quality/checkout.py", "src/quality/cli.py", "src/quality/clones.py", "src/quality/output.py", "src/quality/ratchet.py", "src/quality/rules.py", "tests/support/check.py", "tests/support/layout.py", "tests/test_advisories.py", "tests/test_advisories_locks.py", "tests/test_architecture.py", "tests/test_check.py", "tests/test_checkout.py", "tests/test_claude_md.py", "tests/test_cli_output.py", "tests/test_clones.py", "tests/test_clones_baseline.py", "tests/test_compose.py", "tests/test_compose_container_host.py", "tests/test_config.py", "tests/test_layout.py", "tests/test_layout_imports.py", "tests/test_layout_tests.py", "tests/test_output.py", "tests/test_python_floor.py", "tests/test_python_lint.py", "tests/test_ratchet.py", "tests/test_ratchet_generated.py", "tests/test_report.py", "tests/test_repository.py", "tests/test_rules.py", "tests/test_scanners.py"]
+opened_commit = "6bc17943065876f8334e769569351bdf3e9911f3"
+whole_reason = "The rows would state false outcomes without the area grouping, the measured-only state and the outside-a-work-tree kind, which have their only caller in the rows, and every test module that pins hygiene's summary, refusal or whole-run line must change with them in one landing."
