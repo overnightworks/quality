@@ -729,14 +729,14 @@ def test_a_function_of_120_lines_in_typescript_is_no_finding_and_the_file_is_not
 
 
 @pytest.mark.parametrize(
-    ("bundle", "code", "named"),
+    ("bundle", "expected_code", "expected_named"),
     [(minified_bundle(), 0, False), ("var a=1;\n" * 800, 1, True)],
     ids=["#119 cell 16 a one-line bundle is no finding", "#119 cell 16 an 800-line minified file is new debt"],
 )
-def test_a_minified_file_is_counted_by_its_lines_like_any_other(build_repo, capsys, bundle, code, named):
+def test_a_minified_file_is_counted_by_its_lines_like_any_other(build_repo, capsys, bundle, expected_code, expected_named):
     """#119 O4: nothing is skipped; the one-line bundle has one line."""
     result, output = hygiene(capsys, build_repo({"src/dist/index.js": bundle, BASELINE_PATH: EMPTY_BASELINE}))
-    assert (result, "size src/dist/index.js" in output) == (code, named), output
+    assert (result, "size src/dist/index.js" in output) == (expected_code, expected_named), output
 
 
 @pytest.mark.parametrize(
