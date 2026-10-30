@@ -104,7 +104,9 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   overwritten with `baseline: the previous quality/baseline.toml could not be read (...), so raises cannot be named`,
   but a symlink on its way is never written through: `baseline: not written - cannot write quality/baseline.toml: a
   symlink on its way would redirect the write`, exit `2`, as for any write the system refuses.
-  It also reads `quality/config.toml` for `[[size.generated]]` and refuses with `baseline: not written - ...`, exit `2`, a config it cannot read or finds malformed; a declared file Python cannot parse leaves the `size` rule, but the write still refuses it, because the clone pairs of the whole tree must be measured.
+  It also reads `quality/config.toml` for `[[size.generated]]` and refuses with `baseline: not written - ...`, exit `2`,
+  a config it cannot read or finds malformed; a declared file Python cannot parse leaves the `size` rule, but the write
+  still refuses it, because the clone pairs of the whole tree must be measured.
   The write exits `0` with raises too: the verdict is the gate.
 - `clone`: a pair is two functions (methods and nested functions too) in two different tracked `*.py` files, each of at
   least 40 tokens without its docstring, whose structure is at least 90 % the same once every name and literal is
