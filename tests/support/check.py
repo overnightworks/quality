@@ -65,10 +65,14 @@ def refusal_row(area: str) -> str:
     return f"  ✗ {area:<12}  {'not checked':<14} "
 
 
+def hygiene_run(repo: Path, locate_ruff: Callable[[], str] = installed_ruff, locate_zizmor: Callable[[], str] | None = None) -> check.HygieneResult:
+    """What the rule runner judged over `repo`, before the door prints it."""
+    return check.run_hygiene(repo, locate_ruff, locate_zizmor or cli.INSTALLED_ZIZMOR)
+
+
 def refusals(repo: Path, locate_ruff: Callable[[], str] = installed_ruff, locate_zizmor: Callable[[], str] | None = None) -> dict[Rule, str]:
     """Each rule that cannot judge `repo`, with its reason, as the rule runner reports it."""
-    locate = locate_zizmor or cli.INSTALLED_ZIZMOR
-    verdicts = check.run_hygiene(repo, locate_ruff, locate).verdicts
+    verdicts = hygiene_run(repo, locate_ruff, locate_zizmor).verdicts
     return {verdict.rule: str(verdict.refusal) for verdict in verdicts if verdict.refusal is not None}
 
 

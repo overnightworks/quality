@@ -23,7 +23,7 @@ from quality.ratchet import (
 )
 from quality.rules import Rule
 from tests.support.check import hygiene_output as hygiene
-from tests.support.check import is_clean, refusal_row, refusals
+from tests.support.check import hygiene_run, is_clean, refusal_row, refusals
 from tests.support.git_repositories import make_repo
 from tests.support.source_code import (
     branchy_function,
@@ -250,7 +250,8 @@ def test_a_tracked_file_missing_from_disk_is_gone_for_the_size_rule_and_only_the
     remove(repo / "src/b.py")
     code, output = hygiene(capsys, repo)
     refusing = refusals(repo)
-    assert (code, [line for line in output.splitlines() if line.startswith("! ")]) == (2, []), output
+    assert code == 2, output
+    assert hygiene_run(repo).findings == [], output
     assert list(refusing) == [Rule.PYTHON_SECURITY, Rule.PYTHON_PRINT], output
     assert all("src/b.py" in reason for reason in refusing.values()), output
 
