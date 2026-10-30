@@ -14,6 +14,7 @@ from tests.support.check import (
     is_clean,
     refusal_row,
     refused,
+    rows_of,
     rule_findings,
 )
 from tests.support.check import hygiene_output as run
@@ -132,7 +133,8 @@ def test_a_compose_name_is_judged(build_repo, capsys, name):
     repo = build_repo({name: OPEN_PORT})
     code, output = run(capsys, repo)
     assert (code, [finding.path for finding in rule_findings(repo, Rule.COMPOSE_PORT)]) == (1, [name])
-    assert len(finding_rows(output, name)) == 1
+    (finding,) = rule_findings(repo, Rule.COMPOSE_PORT)
+    assert len(rows_of(output, finding)) == 1
 
 
 @pytest.mark.parametrize(
@@ -312,7 +314,9 @@ LOOPBACK_EXAMPLE = re.compile(r'"([^"]+)"')
 def test_the_loopback_fix_example_bound_to_the_services_own_ports_clears_the_finding(build_repo, capsys):
     """#281 O12: the printed example, its address kept and bound to the scenario's own ports, is what the rule accepts."""
     repo = build_repo(compose('- "8080:80"'))
+    output = run(capsys, repo)[1]
     (finding,) = rule_findings(repo, Rule.COMPOSE_PORT)
-    address = ":".join(LOOPBACK_EXAMPLE.search(finding.fix).group(1).split(":")[:-2])
+    (row,) = rows_of(output, finding)
+    address = ":".join(LOOPBACK_EXAMPLE.search(row.fix).group(1).split(":")[:-2])
     (repo / "compose.yaml").write_text(compose(f'- "{address}:8080:80"')["compose.yaml"])
     assert rule_findings(repo, Rule.COMPOSE_PORT) == []

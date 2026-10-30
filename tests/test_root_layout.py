@@ -6,9 +6,11 @@ import pytest
 
 from quality.config import CONFIG_PATH, ROOT_ALLOWANCE_EXAMPLE
 from quality.root_layout import ROOT_BASE_DIRECTORIES, ROOT_BASE_FILES
+from quality.rules import Rule
 from tests.support.check import copy_block, env_row_stands, hygiene_output
 from tests.support.config_refusals import KNOWN_KEYS, ONE_LINE_NEED
 from tests.support.git_repositories import put
+from tests.support.layout import red
 from tests.support.merge import ONE_JOB
 from tests.support.verdict import verdict_of
 
@@ -24,22 +26,18 @@ def findings(output: str) -> list[str]:
     return [line for line in output.splitlines() if line.startswith("root-layout ")]
 
 
-def entries_of(output: str) -> list[str]:
-    return [line.split()[1] for line in findings(output)]
-
-
 def test_two_strays_are_two_findings_and_a_directory_counts_once(build_repo, capsys):
     repo = build_repo({**GUIDANCE, "notes.txt": "x", "misc/a.py": "x", "misc/b.py": "x"})
-    code, output = hygiene_output(capsys, repo)
-    assert (code, entries_of(output)) == (1, ["misc/", "notes.txt"])
+    code = hygiene_output(capsys, repo)[0]
+    assert (code, red(repo, Rule.ROOT_LAYOUT)) == (1, ["misc/", "notes.txt"])
 
 
 def test_an_untracked_file_is_green_until_it_is_added(build_repo, capsys):
     repo = build_repo(GUIDANCE)
     (repo / "scratch.png").write_text("x")
-    assert findings(hygiene_output(capsys, repo)[1]) == []
+    assert red(repo, Rule.ROOT_LAYOUT) == []
     subprocess.run(["git", "-C", str(repo), "add", "--", "scratch.png"], check=True)
-    assert entries_of(hygiene_output(capsys, repo)[1]) == ["scratch.png"]
+    assert red(repo, Rule.ROOT_LAYOUT) == ["scratch.png"]
 
 
 def test_every_base_list_entry_is_green_without_a_config(build_repo, capsys):
@@ -47,7 +45,7 @@ def test_every_base_list_entry_is_green_without_a_config(build_repo, capsys):
     files |= {"CLAUDE.md": "@AGENTS.md\n", "AGENTS.md": "# guidance\n", "compose.yaml": "services: {}\n"}
     files |= {"compose.yml": "services: {}\n", "docker-compose.yaml": "services: {}\n", "docker-compose.yml": "services: {}\n"}
     files |= {f"{directory}f": "x" for directory in ROOT_BASE_DIRECTORIES}
-    assert findings(hygiene_output(capsys, build_repo(files))[1]) == []
+    assert red(build_repo(files), Rule.ROOT_LAYOUT) == []
 
 
 ROOT = f"{CONFIG_PATH} [[root.allow]]"
@@ -88,7 +86,7 @@ def test_a_malformed_root_table_cannot_be_judged(build_repo, capsys, config, fac
 
 def test_a_declared_collecting_directory_is_green(build_repo, capsys):
     repo = build_repo({**GUIDANCE, "misc/a.py": "x", CONFIG: declaring("misc/")})
-    assert findings(hygiene_output(capsys, repo)[1]) == []
+    assert red(repo, Rule.ROOT_LAYOUT) == []
 
 
 def test_a_wrongly_cased_name_is_red_and_names_the_allowed_spelling(build_repo, capsys):
@@ -99,14 +97,14 @@ def test_a_wrongly_cased_name_is_red_and_names_the_allowed_spelling(build_repo, 
 
 def test_a_file_named_like_an_allowed_directory_is_red(build_repo, capsys):
     repo = build_repo({**GUIDANCE, "src": "x"})
-    assert entries_of(hygiene_output(capsys, repo)[1]) == ["src"]
+    assert red(repo, Rule.ROOT_LAYOUT) == ["src"]
 
 
 def test_a_root_symlink_counts_by_its_own_name(build_repo, capsys):
     repo = build_repo(GUIDANCE)
     (repo / "latest").symlink_to("AGENTS.md")
     subprocess.run(["git", "-C", str(repo), "add", "--", "latest"], check=True)
-    assert entries_of(hygiene_output(capsys, repo)[1]) == ["latest"]
+    assert red(repo, Rule.ROOT_LAYOUT) == ["latest"]
 
 
 def test_the_same_entry_declared_twice_cannot_be_judged_and_is_named(build_repo, capsys):
@@ -130,19 +128,20 @@ def test_no_key_of_the_root_table_switches_the_rule_off(build_repo, capsys):
 
 
 def test_the_rule_is_on_in_a_repository_without_a_config(build_repo, capsys):
-    code, output = hygiene_output(capsys, build_repo({**GUIDANCE, "notes.txt": "x"}))
-    assert (code, entries_of(output)) == (1, ["notes.txt"])
+    repo = build_repo({**GUIDANCE, "notes.txt": "x"})
+    code = hygiene_output(capsys, repo)[0]
+    assert (code, red(repo, Rule.ROOT_LAYOUT)) == (1, ["notes.txt"])
 
 
 def test_a_declared_entry_is_green_and_a_base_list_entry_may_be_declared(build_repo, capsys):
     repo = build_repo({**GUIDANCE, "Makefile": "x", CONFIG: declaring("Makefile") + declaring("AGENTS.md")})
-    assert findings(hygiene_output(capsys, repo)[1]) == []
+    assert red(repo, Rule.ROOT_LAYOUT) == []
 
 
 def test_a_declaration_matching_no_tracked_entry_is_red_and_names_it(build_repo, capsys):
     repo = build_repo({**GUIDANCE, CONFIG: declaring("plans/")})
     code, output = hygiene_output(capsys, repo)
-    assert (code, entries_of(output)) == (1, ["plans/"])
+    assert (code, red(repo, Rule.ROOT_LAYOUT)) == (1, ["plans/"])
     assert "declared in quality/config.toml" in output
     assert "tracks no such root entry" in output
 
@@ -163,14 +162,14 @@ def test_a_finding_names_the_entry_and_both_ways_out_without_a_local_path(build_
 
 def test_removing_a_declaration_makes_the_entry_red(build_repo, capsys):
     repo = build_repo({**GUIDANCE, "misc/a.py": "x", CONFIG: declaring("misc/")})
-    assert findings(hygiene_output(capsys, repo)[1]) == []
+    assert red(repo, Rule.ROOT_LAYOUT) == []
     put(repo / CONFIG, None)
-    assert entries_of(hygiene_output(capsys, repo)[1]) == ["misc/"]
+    assert red(repo, Rule.ROOT_LAYOUT) == ["misc/"]
 
 
 def test_moving_an_entry_without_its_declaration_leaves_the_declaration_red(build_repo, capsys):
     repo = build_repo({**GUIDANCE, "docs/misc/a.py": "x", CONFIG: declaring("misc/")})
-    assert entries_of(hygiene_output(capsys, repo)[1]) == ["misc/"]
+    assert red(repo, Rule.ROOT_LAYOUT) == ["misc/"]
 
 
 def test_the_rule_writes_nothing_and_prints_no_command(build_repo, capsys):
@@ -183,18 +182,18 @@ def test_the_rule_writes_nothing_and_prints_no_command(build_repo, capsys):
 
 
 def test_a_tracked_env_file_is_red_under_env_file_and_under_root_layout(build_repo, capsys):
-    output = hygiene_output(capsys, build_repo({**GUIDANCE, ".env": "A=1\n"}))[1]
-    assert (entries_of(output), env_row_stands(output)) == ([".env"], True)
+    repo = build_repo({**GUIDANCE, ".env": "A=1\n"})
+    assert (red(repo, Rule.ROOT_LAYOUT), env_row_stands(hygiene_output(capsys, repo)[1])) == ([".env"], True)
 
 
 def test_tsconfig_in_the_root_is_red_unless_declared(build_repo, capsys):
-    assert entries_of(hygiene_output(capsys, build_repo({**GUIDANCE, "tsconfig.json": "{}"}))[1]) == ["tsconfig.json"]
+    assert red(build_repo({**GUIDANCE, "tsconfig.json": "{}"}), Rule.ROOT_LAYOUT) == ["tsconfig.json"]
 
 
 def test_a_hundred_strays_print_a_hundred_sorted_findings(build_repo, capsys):
     names = [f"stray{number:03d}.txt" for number in range(100)]
     repo = build_repo({**GUIDANCE, **{name: "x" for name in reversed(names)}})
-    assert entries_of(hygiene_output(capsys, repo)[1]) == names
+    assert red(repo, Rule.ROOT_LAYOUT) == names
 
 
 def test_a_declaration_is_no_loosening_at_the_verdict(pull_request, capsys):

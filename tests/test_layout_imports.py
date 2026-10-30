@@ -2,11 +2,12 @@
 
 import pytest
 
+from quality.rules import Rule
 from tests.support.check import hygiene_output, refusal_row, refusals
-from tests.support.layout import CONFIG, GUIDANCE, case, declaring, findings, in_index, red
+from tests.support.layout import CONFIG, GUIDANCE, case, declaring, in_index, red
 from tests.support.merge import ONE_JOB
 
-RULE = "test-import"
+RULE = Rule.TEST_IMPORT
 
 
 def project(files: dict[str, str]) -> dict[str, str]:
@@ -51,7 +52,7 @@ def project(files: dict[str, str]) -> dict[str, str]:
 )
 def test_an_import_of_a_test_module_or_conftest_is_red(build_repo, capsys, files, expected):
     """#201 sentences 1 to 5: which names are red, which importers are judged, which paths are targets."""
-    assert red(capsys, build_repo(project(files)), RULE) == expected
+    assert red(build_repo(project(files)), RULE) == expected
 
 
 def test_a_members_test_importing_the_roots_conftest_is_red(build_repo, capsys):
@@ -59,7 +60,7 @@ def test_a_members_test_importing_the_roots_conftest_is_red(build_repo, capsys):
     repo = build_repo(project({
         "tests/conftest.py": "", "m/pyproject.toml": "", "m/tests/test_x.py": "from tests.conftest import fixture\n",
     }))
-    assert red(capsys, repo, RULE) == ["m/tests/test_x.py:1"]
+    assert red(repo, RULE) == ["m/tests/test_x.py:1"]
 
 
 def test_a_test_module_and_a_conftest_are_importers_too(build_repo, capsys):
@@ -67,7 +68,7 @@ def test_a_test_module_and_a_conftest_are_importers_too(build_repo, capsys):
     repo = build_repo(project({
         "tests/conftest.py": "", "tests/test_a.py": "from tests.conftest import f\n", "tests/api/conftest.py": "import test_a\n",
     }))
-    assert red(capsys, repo, RULE) == ["tests/api/conftest.py:1", "tests/test_a.py:1"]
+    assert red(repo, RULE) == ["tests/api/conftest.py:1", "tests/test_a.py:1"]
 
 
 def test_a_symlink_is_never_read_but_is_a_target_by_its_name(build_repo, capsys):
@@ -76,14 +77,14 @@ def test_a_symlink_is_never_read_but_is_a_target_by_its_name(build_repo, capsys)
     (repo / "tests" / "helper.py").symlink_to("real.py")
     (repo / "tests" / "test_x.py").symlink_to("real.py")
     in_index(repo, "add", "--", "tests/helper.py", "tests/test_x.py")
-    assert red(capsys, repo, RULE) == ["tests/real.py:1", "tests/support/y.py:1"]
+    assert red(repo, RULE) == ["tests/real.py:1", "tests/support/y.py:1"]
 
 
 def test_one_statement_is_one_finding_naming_each_target(build_repo, capsys):
     """#201 G11, sentence 6."""
     repo = build_repo(project({"tests/conftest.py": "", "tests/test_x.py": "", "tests/support/y.py": "import os, conftest, test_x\n"}))
     code, output = hygiene_output(capsys, repo)
-    assert (code, findings(output, RULE)) == (1, ["tests/support/y.py:1"])
+    assert (code, red(repo, RULE)) == (1, ["tests/support/y.py:1"])
     assert "imports the test module or conftest conftest, test_x" in output
     assert "move what it needs to a support/ module, or make it a fixture in conftest.py" in output
     assert "the rule test-import" in output
@@ -96,7 +97,7 @@ def test_findings_are_all_printed_sorted_by_path_and_line(build_repo, capsys):
         "tests/support/b.py": "def f():\n    import conftest\n\nimport conftest\n",
         "tests/support/a.py": "x = 1\ny = 2\nimport conftest\n",
     }))
-    assert red(capsys, repo, RULE) == ["tests/support/a.py:3", "tests/support/b.py:2", "tests/support/b.py:4"]
+    assert red(repo, RULE) == ["tests/support/a.py:3", "tests/support/b.py:2", "tests/support/b.py:4"]
 
 
 @pytest.mark.parametrize(
@@ -114,7 +115,7 @@ def test_an_importer_python_cannot_parse_is_unparsable(build_repo, capsys, conte
 def test_a_file_with_a_byte_order_mark_is_parsed_and_judged(build_repo, capsys):
     """#201 G16, sentence 7."""
     repo = build_repo(project({"tests/conftest.py": "", "tests/support/y.py": "\ufeffimport conftest\n"}))
-    assert red(capsys, repo, RULE) == ["tests/support/y.py:1"]
+    assert red(repo, RULE) == ["tests/support/y.py:1"]
 
 
 def test_an_unreadable_importer_cannot_be_judged_but_other_files_are_not_read(build_repo, capsys):
@@ -140,4 +141,4 @@ def test_an_unreadable_importer_cannot_be_judged_but_other_files_are_not_read(bu
 def test_a_declaration_exempts_only_its_importer_under_its_own_rule(build_repo, capsys, config, expected):
     """#201 G18, sentence 8."""
     repo = build_repo(project({"tests/conftest.py": "", "tests/support/y.py": "import conftest\n", CONFIG: config}))
-    assert red(capsys, repo, RULE) == expected
+    assert red(repo, RULE) == expected

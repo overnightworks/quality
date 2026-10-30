@@ -2,11 +2,12 @@
 
 import pytest
 
+from quality.rules import Rule
 from tests.support.check import hygiene_output
 from tests.support.layout import CONFIG, GUIDANCE, case, declaring, empty_files, in_index, red
 from tests.support.merge import ONE_JOB
 
-RULE = "test-layout"
+RULE = Rule.TEST_LAYOUT
 PACKAGE_JSON = {"package.json": "{}\n"}
 PYTHON_PROJECT = {"pyproject.toml": "", "src/p/x.py": ""}
 SPEC_FIX = "or declare it in quality/config.toml with [[layout.allow]], its path, the rule test-layout and a reason."
@@ -74,7 +75,7 @@ def frontend(*paths: str, manifest: str = "package.json") -> dict[str, str]:
 )
 def test_the_sibling_and_the_e2e_folder_are_judged_per_frontend_project(build_repo, capsys, files, expected):
     """H1 to H14 and H18: only a judged test file in a frontend project is red, once, by its name."""
-    assert red(capsys, build_repo(files), RULE) == expected
+    assert red(build_repo(files), RULE) == expected
 
 
 def test_a_symlink_is_judged_by_its_name_and_a_gitlink_is_never_judged_or_a_subject(build_repo, capsys):
@@ -85,7 +86,7 @@ def test_a_symlink_is_judged_by_its_name_and_a_gitlink_is_never_judged_or_a_subj
     in_index(repo, "add", "--", "src/a.ts", "src/x.test.ts")
     in_index(repo, "update-index", "--add", "--cacheinfo", f"160000,{'1' * 40},src/b")
     in_index(repo, "update-index", "--add", "--cacheinfo", f"160000,{'1' * 40},src/y.test.ts")
-    assert red(capsys, repo, RULE) == ["src/b.test.ts", "src/c.test.ts", "src/d.test.ts", "src/x.test.ts"]
+    assert red(repo, RULE) == ["src/b.test.ts", "src/c.test.ts", "src/d.test.ts", "src/x.test.ts"]
 
 
 def test_a_symlinked_subject_maps_a_test(build_repo, capsys):
@@ -93,7 +94,7 @@ def test_a_symlinked_subject_maps_a_test(build_repo, capsys):
     repo = build_repo(frontend("src/real.ts", "src/a.test.ts"))
     (repo / "src" / "a.ts").symlink_to("real.ts")
     in_index(repo, "add", "--", "src/a.ts")
-    assert red(capsys, repo, RULE) == []
+    assert red(repo, RULE) == []
 
 
 @pytest.mark.parametrize(
@@ -109,7 +110,7 @@ def test_a_symlinked_subject_maps_a_test(build_repo, capsys):
 def test_a_declaration_exempts_a_frontend_test_from_rules_six_and_seven(build_repo, capsys, tracked, declarations, expected):
     """H15: one declaration covers its own rule only, and a stale one is one finding."""
     config = ONE_JOB + "".join(declaring(path, rule=rule) for path, rule in declarations)
-    assert red(capsys, build_repo({**frontend(*tracked), CONFIG: config}), RULE) == expected
+    assert red(build_repo({**frontend(*tracked), CONFIG: config}), RULE) == expected
 
 
 def test_every_finding_prints_sorted_by_path_with_its_own_reason_and_fix(build_repo, capsys):

@@ -12,12 +12,13 @@ from tests.support.check import (
     CLEAN_VERDICT,
     compose,
     env_row_stands,
-    finding_rows,
     installed_ruff,
     is_clean,
     loosen_requirement,
     refusal_row,
     refused,
+    rows_of,
+    rule_findings,
 )
 from tests.support.check import hygiene_output as run
 from tests.support.config_refusals import GATE, Refusal, all_refusals
@@ -144,12 +145,15 @@ def test_every_rule_is_judged_and_the_exit_is_the_worst(
     """#55 rules 1-4, cells 1-8 (cell 9 is the exit-code table's non-utf8 env case): each rule prints its own
     verdict, one rule's refusal hides no other rule's, the exit is the worst verdict's, the clean line names the
     rules, and every path prints backslash-escaped."""
-    code = cli.main(["hygiene", str(arrange(build_repo, elsewhere))], clock=lambda: 0.0)
+    repo = arrange(build_repo, elsewhere)
+    code = cli.main(["hygiene", str(repo)], clock=lambda: 0.0)
     captured = capsys.readouterr()
     output = captured.out + captured.err
     assert code == expected_code, output
     assert [line for line in expected_lines if line not in output] == [], output
-    assert [len(finding_rows(output, location)) for location in rows] == [1] * len(rows), output
+    repo_findings = [found for rule in (Rule.ENV_FILE, Rule.COMPOSE_PORT) for found in rule_findings(repo, rule)]
+    assert [found.location for found in repo_findings] == rows
+    assert [len(rows_of(output, found)) for found in repo_findings] == [1] * len(rows), output
 
 
 def test_a_run_without_flags_judges_every_rule(build_repo, capsys):

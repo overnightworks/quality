@@ -4,30 +4,27 @@ import subprocess
 
 import pytest
 
-from tests.support.check import hygiene_output, refusals
+from quality.rules import Rule
+from tests.support.check import hygiene_run
 
 CONFIG = "quality/config.toml"
 GUIDANCE = {"AGENTS.md": "# guidance\n"}
 EXAMPLE_SHA = "1" * 40
 
 
-def declaring(path: str, reason: str = "the build reads it by this name", rule: str = "file-suffix") -> str:
+def declaring(path: str, reason: str = "the build reads it by this name", rule: str = Rule.FILE_SUFFIX) -> str:
     return f'[[layout.allow]]\npath = "{path}"\nrule = "{rule}"\nreason = "{reason}"\n'
-
-
-def findings(output: str, rule: str = "file-suffix") -> list[str]:
-    return [line.split()[1] for line in output.splitlines() if line.startswith(f"{rule} ")]
 
 
 def in_index(repo, *arguments: str) -> None:
     subprocess.run(["git", "-C", str(repo), *arguments], check=True)
 
 
-def red(capsys, repo, rule: str) -> list[str]:
-    """The paths the hygiene run of `repo` reports under `rule`; a run that cannot judge `rule` fails the test."""
-    output = hygiene_output(capsys, repo)[1]
-    assert rule not in refusals(repo)
-    return findings(output, rule)
+def red(repo, rule: Rule = Rule.FILE_SUFFIX) -> list[str]:
+    """The locations of the findings the rule runner returns for `rule` over `repo`; a run that cannot judge `rule` fails the test."""
+    (verdict,) = (verdict for verdict in hygiene_run(repo).verdicts if verdict.rule is rule)
+    assert verdict.refusal is None
+    return [finding.location for finding in verdict.findings]
 
 
 def empty_files(*paths: str) -> dict[str, str]:

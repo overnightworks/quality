@@ -7,7 +7,7 @@ import pytest
 
 from quality.report import FindingEvent
 from quality.rules import Rule
-from tests.support.check import assert_row_prints_finding, finding_rows, rule_findings
+from tests.support.check import assert_row_prints_finding, rows_of, rule_findings
 from tests.support.check import hygiene_output as run
 
 TRACKED_NAMES = [".env", "config/prod.env", ".env.local"]
@@ -25,7 +25,7 @@ def test_the_door_prints_each_tracked_env_file_once_as_the_rule_found_it(build_r
     code, output = run(capsys, repo)
     assert code == 1
     for finding in rule_findings(repo, Rule.ENV_FILE):
-        (row,) = finding_rows(output, finding.location)
+        (row,) = rows_of(output, finding)
         assert_row_prints_finding(row, finding)
 
 
@@ -46,7 +46,8 @@ def test_a_tracked_env_file_deleted_from_disk_is_still_a_finding(build_repo, cap
     (repo / ".env").unlink()
     code, output = run(capsys, repo)
     assert code == 1
-    assert len(finding_rows(output, ".env")) == 1
+    (finding,) = rule_findings(repo, Rule.ENV_FILE)
+    assert len(rows_of(output, finding)) == 1
 
 
 SHELLS = ["dash", "bash"]
@@ -103,7 +104,8 @@ def test_the_printed_env_fix_untracks_exactly_the_named_file_in_every_shell(
     repo = build_repo({name: "A=1\n" for name in [target, *neighbours]})
     before = tracked_names(repo)
     _, output = run(capsys, repo)
-    (row,) = finding_rows(output, target)
+    (finding,) = (found for found in rule_findings(repo, Rule.ENV_FILE) if found.path == target)
+    (row,) = rows_of(output, finding)
     command, rest = split_fix(row.fix)
     assert command.endswith(f" {printed_word}")
     subprocess.run([shell_path, "-c", command], cwd=repo, check=True, capture_output=True)
@@ -131,7 +133,7 @@ def test_an_unprintable_env_name_gets_a_hint_and_never_a_command(build_repo, cap
     assert len(findings) == len(names)
     assert len({finding.fix for finding in findings}) == 1
     for finding in findings:
-        (row,) = finding_rows(output, finding.location)
+        (row,) = rows_of(output, finding)
         assert_row_prints_finding(row, finding)
         assert finding.path not in row.fix
         assert finding.location not in row.fix

@@ -2,11 +2,12 @@
 
 import pytest
 
+from quality.rules import Rule
 from tests.support.check import hygiene_output
-from tests.support.layout import CONFIG, GUIDANCE, declaring, findings, in_index, red
+from tests.support.layout import CONFIG, GUIDANCE, declaring, in_index, red
 from tests.support.merge import ONE_JOB
 
-RULE = "test-layout"
+RULE = Rule.TEST_LAYOUT
 
 
 def project(*paths: str) -> dict[str, str]:
@@ -44,7 +45,7 @@ def case(identifier: str, paths: list[str], expected: list[str], *more: str):
 )
 def test_a_test_is_named_after_a_module_its_folder_mirrors(build_repo, capsys, paths, expected):
     """#199 sentences 1, 3 and 4."""
-    assert red(capsys, build_repo(project(*paths)), RULE) == expected
+    assert red(build_repo(project(*paths)), RULE) == expected
 
 
 @pytest.mark.parametrize(
@@ -59,7 +60,7 @@ def test_a_test_is_named_after_a_module_its_folder_mirrors(build_repo, capsys, p
 )
 def test_with_several_packages_each_test_lies_under_its_package(build_repo, capsys, paths, expected):
     """#199 sentences 1 and 2."""
-    assert red(capsys, build_repo(project(*paths)), RULE) == expected
+    assert red(build_repo(project(*paths)), RULE) == expected
 
 
 @pytest.mark.parametrize(
@@ -78,7 +79,7 @@ def test_with_several_packages_each_test_lies_under_its_package(build_repo, caps
 )
 def test_script_and_workflow_tests_mirror_their_own_folders(build_repo, capsys, paths, expected):
     """#199 sentences 2 and 3."""
-    assert red(capsys, build_repo(project("src/p/x.py", *paths)), RULE) == expected
+    assert red(build_repo(project("src/p/x.py", *paths)), RULE) == expected
 
 
 @pytest.mark.parametrize(
@@ -91,7 +92,7 @@ def test_script_and_workflow_tests_mirror_their_own_folders(build_repo, capsys, 
 )
 def test_support_is_judged_while_e2e_and_fixtures_are_not(build_repo, capsys, paths, expected):
     """#199 sentence 5."""
-    assert red(capsys, build_repo(project("src/p/x.py", *paths)), RULE) == expected
+    assert red(build_repo(project("src/p/x.py", *paths)), RULE) == expected
 
 
 @pytest.mark.parametrize(
@@ -112,7 +113,7 @@ def test_support_is_judged_while_e2e_and_fixtures_are_not(build_repo, capsys, pa
 )
 def test_a_member_maps_only_into_its_own_project(build_repo, capsys, files, expected):
     """#199 sentence 7."""
-    assert red(capsys, build_repo(project(*files)), RULE) == expected
+    assert red(build_repo(project(*files)), RULE) == expected
 
 
 def test_each_failing_case_has_its_own_reason_and_fix(build_repo, capsys):
@@ -122,7 +123,7 @@ def test_each_failing_case_has_its_own_reason_and_fix(build_repo, capsys):
         "tests/workflows/test_d.py",
     ))
     code, output = hygiene_output(capsys, repo)
-    assert (code, findings(output, RULE)) == (1, [
+    assert (code, red(repo, RULE)) == (1, [
         "tests/hygiene/test_b.py", "tests/support/test_a.py", "tests/test_c.py", "tests/workflows/test_d.py",
     ])
     for words in (
@@ -172,7 +173,7 @@ def test_workflow_tests_lie_directly_in_the_roots_workflows_folder(build_repo, c
 def test_a_declared_test_module_is_not_judged(build_repo, capsys):
     """#199 sentence 8, B22."""
     repo = build_repo({**project("src/p/x.py", "tests/test_y.py"), CONFIG: ONE_JOB + declaring("tests/test_y.py", rule=RULE)})
-    assert red(capsys, repo, RULE) == []
+    assert red(repo, RULE) == []
 
 
 def test_a_link_counts_by_its_name_and_is_never_followed(build_repo, capsys):
@@ -181,7 +182,7 @@ def test_a_link_counts_by_its_name_and_is_never_followed(build_repo, capsys):
     (repo / "tests" / "test_z.py").symlink_to("support/helper.py")
     (repo / "src" / "p" / "y.py").symlink_to("x.py")
     in_index(repo, "add", "--", "tests/test_z.py", "src/p/y.py")
-    assert red(capsys, repo, RULE) == ["tests/test_z.py"]
+    assert red(repo, RULE) == ["tests/test_z.py"]
 
 
 def test_an_empty_test_name_says_it_is_empty(build_repo, capsys):

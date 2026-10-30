@@ -24,6 +24,7 @@ from tests.support.check import (
     assert_row_prints_finding,
     env_row_stands,
     finding_rows,
+    rows_of,
     rule_findings,
 )
 from tests.support.merge import ONE_JOB
@@ -226,7 +227,7 @@ def test_an_env_name_with_a_control_format_or_separator_character_prints_as_one_
     repo = build_repo({name: "A=1\n"})
     code, lines = door_lines(capsys, "hygiene", str(repo))
     (finding,) = rule_findings(repo, Rule.ENV_FILE)
-    (row,) = finding_rows("\n".join(lines), escaped)
+    (row,) = rows_of("\n".join(lines), finding)
     assert (code, finding.location) == (1, escaped)
     assert_row_prints_finding(row, finding)
     assert_every_line_starts_with_the_door(lines)
@@ -560,11 +561,11 @@ def test_an_area_that_cannot_check_ends_the_run_with_the_pair_and_no_verdict(bui
 
 
 def test_findings_in_the_area_that_cannot_check_stay_under_its_row_and_are_counted(build_repo, capsys):
-    code, out, err = frame_run(capsys, build_repo({".env": "A=1\n", "compose.yaml": "services: [\n"}))
+    code, out, err = frame_run(capsys, repo := build_repo({".env": "A=1\n", "compose.yaml": "services: [\n"}))
     row = next(number for number, line in enumerate(out) if line.startswith("  ✗ files  "))
     assert code == 2
     assert [line for line in headers(out) if "files" in line and "!" in line] == []
-    (env_row,) = finding_rows("\n".join(out[row + 1 :]), ".env")
+    (env_row,) = rows_of("\n".join(out[row + 1 :]), *rule_findings(repo, Rule.ENV_FILE))
     assert (env_row.event, env_row.fix_follows) == (FindingEvent.TRACKED, True)
     assert re.fullmatch(r"error: 1 of 7 areas could not check · \d+ findings?, \d+ of them in those areas", err[0]), err
 
