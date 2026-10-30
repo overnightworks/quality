@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TextIO
 
-from quality.report import Finding, printable, render
+from quality.report import Command, Finding, Instruction, OneOf, Step, printable, render
 
 
 def emit(*lines: str, file: TextIO | None = None) -> None:
@@ -178,9 +178,32 @@ def write_verdict(verdict: Verdict, file: TextIO | None = None) -> None:
     _print_lines([SEPARATOR.join(painted)], file)
 
 
-def write_pair(error: str, next_step: str, file: TextIO | None = None) -> None:
+INDENT = "    "
+
+
+def _step_lines(step: Step) -> list[tuple[int, str]]:
+    """A step as lines, each at a level: a command alone on its line, a label above the commands it applies to."""
+    match step:
+        case Command(text, None) | Instruction(text):
+            return [(0, text)]
+        case Command(text, label):
+            return [(0, f"{label}:"), (1, text)]
+        case OneOf(label, choices):
+            return [(0, f"{label}, one of:"), *(line for choice in choices for line in [(1, f"{choice.label}:"), (2, choice.text)])]
+
+
+def _next_lines(next_steps: tuple[Step, ...], label: str) -> list[str]:
+    """One step begins on the `next:` line; several stand below a bare `next:`, four spaces per level."""
+    lines = [_step_lines(step) for step in next_steps]
+    if len(lines) == 1:
+        (_, first), *rest = lines[0]
+        return [f"{label} {printable(first)}", *(f"{INDENT * level}{printable(text)}" for level, text in rest)]
+    return [label, *(f"{INDENT * (level + 1)}{printable(text)}" for step in lines for level, text in step)]
+
+
+def write_pair(error: str, next_steps: tuple[Step, ...], file: TextIO | None = None) -> None:
     """`error:` and `next:`, the pair that ends a run that could not judge; stderr by default."""
     stream = sys.stderr if file is None else file
     styled = style_is_on(stream, os.environ)
-    labelled = ((_paint("error:", f"{BOLD};{RED}", styled), error), (_paint("next:", CYAN, styled), next_step))
-    _print_lines([f"{label} {printable(text)}" for label, text in labelled], stream)
+    _print_lines([f"{_paint('error:', f'{BOLD};{RED}', styled)} {printable(error)}"], stream)
+    _print_lines(_next_lines(next_steps, _paint("next:", CYAN, styled)), stream)

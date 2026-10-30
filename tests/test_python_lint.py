@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import check, installation, python_lint
+from quality import check, installation, python_lint, scanners
 from quality.python_lint import LintError, RuffFinding, UnparsablePython
 from quality.rules import Rule
 from tests.support.check import hygiene_output as run
@@ -466,11 +466,14 @@ def test_a_ruff_quality_cannot_find_or_trust_names_the_reinstall_command(build_r
     assert code == 2, output
     assert list(refusals(repo, locate)) == [Rule.PYTHON_SECURITY, Rule.PYTHON_PRINT]
     assert "env-file .env - " in output
-    assert (installation.REINSTALL in output) is (case != "unpinned"), output
+    lines = [line.strip() for line in output.splitlines()]
+    expected_once = int(case != "unpinned")
+    for choice in scanners.REINSTALL.choices:
+        assert (lines.count(choice.text), output.count(choice.text)) == (expected_once, expected_once), output
     if case == "unpinned":
         assert str(installation.UnpinnedDependency("ruff")) in output
     if case == "another version":
-        assert f"quality pins ruff=={installation.required_version('ruff')}" in output
+        assert f"ruff 0.0.1 found, the release pins {installation.required_version('ruff')}" in output
 
 
 @pytest.mark.integration

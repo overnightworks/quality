@@ -13,6 +13,7 @@ import pytest
 
 from quality import cli, output, sonar
 from quality.output import Glyph, Row, SubLine, Verdict
+from quality.report import Command, Instruction, OneOf
 
 OWN_SGR = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -93,10 +94,34 @@ def test_the_verdict_line_counts_and_ends_with_the_duration(counts, expected):
     assert verdict_line(**counts) == expected
 
 
+TWO_WAYS = OneOf("pick one", (Command("first command", "first case"), Command("second command", "second case")))
+
+
+@pytest.mark.parametrize(
+    ("steps", "expected"),
+    [
+        ((Command("do this"),), "next: do this\n"),
+        ((Command("do this"), Instruction("then think")), "next:\n    do this\n    then think\n"),
+        ((Command("do this", "where"),), "next: where:\n    do this\n"),
+        ((TWO_WAYS,), "next: pick one, one of:\n    first case:\n        first command\n    second case:\n        second command\n"),
+        (
+            (Command("do this"), TWO_WAYS),
+            ("next:\n    do this\n    pick one, one of:\n        first case:\n            first command\n"
+             "        second case:\n            second command\n"),
+        ),
+    ],
+    ids=["one step", "two steps", "labelled command", "choice alone", "choice after a command"],
+)
+def test_the_pair_prints_a_lone_step_on_the_next_line_and_several_below_it(steps, expected):
+    stream = io.StringIO()
+    output.write_pair("e", steps, file=stream)
+    assert stream.getvalue() == f"error: e\n{expected}"
+
+
 def test_the_pair_labels_and_escapes_each_text():
     stream = io.StringIO()
-    output.write_pair("a\x1b[35mb", "c\nd", file=stream)
-    assert stream.getvalue() == "error: a\\x1b[35mb\nnext: c\\x0ad\n"
+    output.write_pair("a\x1b[35mb", (Command("c\nd"), Instruction("e\x1b")), file=stream)
+    assert stream.getvalue() == "error: a\\x1b[35mb\nnext:\n    c\\x0ad\n    e\\x1b\n"
 
 
 @pytest.mark.parametrize("closed", [False, True], ids=["open", "closed"])
@@ -144,7 +169,7 @@ def test_a_styled_verdict_and_pair_hold_exactly_the_plain_words(at_a_terminal):
     assert OWN_SGR.sub("", written(Terminal, lambda stream: output.write_verdict(verdict, file=stream))) == verdict_line(
         findings=1, areas_with_findings=1, clean_areas=6, notes=("debt measured, not enforced",), seconds=3
     )
-    pair = written(Terminal, lambda stream: output.write_pair("e", "n", file=stream))
+    pair = written(Terminal, lambda stream: output.write_pair("e", (Command("n"),), file=stream))
     assert ("\x1b[" in pair, OWN_SGR.sub("", pair)) == (True, "error: e\nnext: n\n")
 
 
@@ -163,7 +188,7 @@ def test_plain_output_holds_no_escape_byte(monkeypatch, no_color):
     if no_color:
         monkeypatch.setenv("NO_COLOR", no_color)
     output.write_rows((Row(Glyph.CLEAN, "files", Event.CLEAN),), file=stream)
-    output.write_pair("e", "n", file=stream)
+    output.write_pair("e", (Command("n"),), file=stream)
     assert "\x1b" not in stream.getvalue()
 
 

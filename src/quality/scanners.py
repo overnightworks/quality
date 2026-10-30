@@ -7,9 +7,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from quality import installation, process
+from quality import DISTRIBUTION, installation, process
 from quality.config import Allowance
-from quality.report import Finding, printable, shell_word
+from quality.report import CannotJudge, Command, Finding, Instruction, OneOf, printable, shell_word
 from quality.rules import Rule
 
 GITLEAKS = "gitleaks"
@@ -22,7 +22,8 @@ ZIZMOR = "zizmor"
 OSV_SCANNER = "osv-scanner"
 ACTIONLINT_FINDINGS = 1
 ZIZMOR_FINDINGS = range(10, 15)  # zizmor encodes the worst severity in 10..14
-VERSION_ARGUMENTS = {GITLEAKS: ["version"], ACTIONLINT: ["-version"], ZIZMOR: ["--version"], OSV_SCANNER: ["--version"]}
+RUFF = "ruff"
+VERSION_ARGUMENTS = {GITLEAKS: ["version"], ACTIONLINT: ["-version"], ZIZMOR: ["--version"], OSV_SCANNER: ["--version"], RUFF: ["--version"]}
 GIT_FLOOR = (2, 41)  # GIT_ATTR_SOURCE, which hides the repository's attributes from the scan, arrived in 2.41
 MANIFEST_DIRECTORY = Path(__file__).with_name("mise")
 MANIFEST_FILE = "mise.toml"
@@ -32,6 +33,15 @@ MISE_CEILING_VARIABLE = "MISE_CEILING_PATHS"
 ACTIONLINT_CONFIG = Path(__file__).with_name("actionlint.yaml")
 ZIZMOR_CONFIG = Path(__file__).with_name("zizmor.yml")
 GITLEAKS_CONFIG = Path(__file__).with_name("gitleaks.toml")
+
+
+REINSTALL = OneOf(
+    "reinstall quality with its dependencies",
+    (
+        Command("uv sync --locked --reinstall", "in quality's checkout"),
+        Command(f"uv tool upgrade --reinstall {DISTRIBUTION}", "for a tool install"),
+    ),
+)
 
 
 class ScannerError(process.ProcessError):
@@ -67,11 +77,9 @@ def located(name: str) -> Path:
     found on PATH, and a scanner never is.
     """
     tool = pinned_tool(name)
+    install = Command(install_command())
     if shutil.which(MISE) is None:
-        raise ScannerError(
-            f"mise is not installed, and quality finds {name} only through it; install mise ({MISE_INSTALLATION_PAGE}), "
-            f"then: {install_command()}"
-        )
+        raise CannotJudge("mise is not installed", (Instruction(f"install mise: {MISE_INSTALLATION_PAGE}"), install))
     try:
         asked = process.run(
             [MISE, "--cd", str(MANIFEST_DIRECTORY), "which", name, "--tool", f"{tool.key}@{tool.version}"],
@@ -80,19 +88,16 @@ def located(name: str) -> Path:
             timeout=process.VERSION_TIMEOUT_SECONDS,
         )
     except process.ProcessError as error:
-        raise ScannerError(f"{error}; install quality's scanners: {install_command()}") from error
+        raise CannotJudge(str(error), (install,)) from error
     if asked.returncode != 0:
-        raise ScannerError(
-            f"mise has no {name} {tool.version} (mise exited {asked.returncode}{process.stderr_tail(asked.stderr)}); "
-            f"install quality's scanners: {install_command()}"
-        )
+        raise CannotJudge(f"mise could not locate {name} {tool.version}", (install,))
     answer = Path((asked.stdout.splitlines() or [""])[0])
     if not (answer.is_absolute() and answer.is_file()):
-        raise ScannerError(f"mise which printed no {name} executable; install quality's scanners: {install_command()}")
+        raise CannotJudge(f"mise which printed no {name} executable", (install,))
     try:
         verify_version(answer, name, tool.version)
     except process.ProcessError as error:
-        raise ScannerError(f"{error}; install quality's scanners: {install_command()}") from error
+        raise CannotJudge(str(error), (install,)) from error
     return answer
 
 
@@ -192,10 +197,12 @@ def require_git_floor() -> None:
 def verify_version(binary: Path, scanner_name: str, pinned: str) -> None:
     asked = process.run([str(binary), *VERSION_ARGUMENTS[scanner_name]], timeout=process.VERSION_TIMEOUT_SECONDS)
     if asked.returncode != 0:
-        raise ScannerError(f"{binary} version exited {asked.returncode}{process.stderr_tail(asked.stderr)}")
+        raise ScannerError(f"{scanner_name} version exited {asked.returncode}{process.stderr_tail(asked.stderr)}")
     reported = (asked.stdout.strip().splitlines() or [""])[0].split(" ")[-1]  # "zizmor 1.2.3", or just "1.2.3"
+    if not reported:
+        raise ScannerError(f"{scanner_name} reports no version, the release pins {pinned}")
     if reported != pinned:
-        raise ScannerError(f"{binary} is version {reported!r}, the pin says {pinned!r}")
+        raise ScannerError(f"{scanner_name} {reported} found, the release pins {pinned}")
 
 
 def _read_leak(entry: object) -> tuple[str, int, str, str, str]:
@@ -223,20 +230,20 @@ def _leak_finding(entry: object) -> Finding:
 GITLEAKS_SCANNER = _Scanner(GITLEAKS, (GITLEAKS_LEAKS_FOUND,), _leak_finding)
 
 
-def pinned_zizmor(locate_zizmor: Callable[[], str]) -> Path:
-    """The zizmor executable of quality's own installation, at the version quality's metadata pins."""
+def pinned_installed(name: str, locate: Callable[[], str]) -> Path:
+    """The executable of quality's own installation for `name`, at the version quality's metadata pins."""
     try:
-        located = Path(locate_zizmor())
-        pinned = installation.required_version(ZIZMOR)
+        executable = Path(locate())
+        pinned = installation.required_version(name)
     except FileNotFoundError as error:
-        raise ScannerError(f"quality's installation holds no {ZIZMOR}; {installation.REINSTALL}") from error
+        raise CannotJudge(f"quality's installation holds no {name}", (REINSTALL,)) from error
     except installation.UnpinnedDependency as error:
-        raise ScannerError(str(error)) from error
+        raise CannotJudge(str(error)) from error
     try:
-        verify_version(located, ZIZMOR, pinned)
+        verify_version(executable, name, pinned)
     except process.ProcessError as error:
-        raise ScannerError(f"{error}; {installation.REINSTALL}") from error
-    return located
+        raise CannotJudge(str(error), (REINSTALL,)) from error
+    return executable
 
 
 def scan_workflows(root: Path, rule: Rule, workflows: list[str], locate_zizmor: Callable[[], str]) -> list[Finding]:
@@ -244,7 +251,7 @@ def scan_workflows(root: Path, rule: Rule, workflows: list[str], locate_zizmor: 
     if not workflows:
         return []
     scanner = WORKFLOW_SCANNERS[rule]
-    binary = pinned_zizmor(locate_zizmor) if scanner.name == ZIZMOR else located(scanner.name)
+    binary = pinned_installed(ZIZMOR, locate_zizmor) if scanner.name == ZIZMOR else located(scanner.name)
     scan = process.run([str(binary), *scanner.arguments, *workflows], cwd=root)
     return scanner_findings(scanner, scan.stdout, scan.returncode, scan.stderr)
 

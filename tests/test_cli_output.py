@@ -4,6 +4,7 @@ import json
 import os
 import pty
 import re
+import shlex
 import signal
 import subprocess
 import sys
@@ -12,14 +13,15 @@ from pathlib import Path
 
 import pytest
 
-from quality import cli, scanners
+from quality import check, cli, ratchet, scanners
 from quality.ratchet import BASELINE_PATH
-from quality.report import DETAIL_MARKER
-from quality.rules import Area
+from quality.report import DETAIL_MARKER, CannotJudge, Command
+from quality.rules import Area, Rule
+from tests.support.advisories import uv_lock
 from tests.support.architecture import FORBIDDEN, SHOP, SHOP_DB_IMPORTS_WEB, toml
 from tests.support.check import assert_every_line_starts_with_the_door
 from tests.support.processes import process_is_gone
-from tests.support.scanners import fake_scanner, lacking
+from tests.support.scanners import fake_scanner, fake_zizmor, lacking
 from tests.support.secrets import FAKE_KEY, allow_config
 
 DOOR = [sys.executable, "-m", "quality.cli"]
@@ -497,9 +499,10 @@ def test_an_area_that_cannot_check_ends_the_run_with_the_pair_and_no_verdict(bui
     code, out, err = frame_run(capsys, build_repo({**CLONES_BASELINE, **PRINTING}))
     unchecked = [line for line in out if line.startswith("  ✗ secrets  ")]
     assert (code, len(unchecked), [line for line in out if "areas clean" in line or " · 7 areas" in line]) == (2, 1, [])
-    assert "not checked" in unchecked[0]
+    assert unchecked[0].endswith(f"not checked    mise could not locate {scanners.GITLEAKS} {scanners.pinned_tool(scanners.GITLEAKS).version}")
     assert header(Area.CODE, "!", "1 finding") in out
-    assert err == ["error: 1 of 7 areas could not check · 1 finding in the others", "next: fix what the ✗ rows name, then run quality hygiene again"]
+    assert err == ["error: 1 of 7 areas could not check · 1 finding in the others", f"next: {scanners.install_command()}"]
+    assert scanners.install_command() not in "\n".join(out)
 
 
 def test_findings_in_the_area_that_cannot_check_stay_under_its_row_and_are_counted(build_repo, capsys):
@@ -538,12 +541,13 @@ def test_a_folder_outside_any_repository_prints_only_the_location_pair(tmp_path,
 
 
 @pytest.mark.integration
-def test_a_missing_path_gets_the_general_pair(tmp_path, capsys):
+def test_a_missing_path_gets_the_git_step(tmp_path, capsys):
     code, out, err = frame_run(capsys, tmp_path / "missing")
     assert (code, out) == (2, [])
     assert err[0].startswith("error: ")
     assert "not inside a git work tree" not in err[0]
-    assert err[1:] == ["next: fix what the error names, then run quality hygiene again"]
+    assert shlex.split(err[1].removeprefix("next: ")) == ["git", "-C", str(tmp_path / "missing"), "status"]
+    assert len(err) == 2
 
 
 def test_a_bare_repository_and_the_inside_of_git_are_outside_a_work_tree(tmp_path, build_repo, capsys):
@@ -567,14 +571,14 @@ def test_a_folder_outside_any_repository_is_outside_in_every_locale(tmp_path, fa
     assert (code, out, err[0]) == (2, [], f"error: not inside a git work tree · {tmp_path}")
 
 
-def test_a_repository_git_refuses_gets_the_general_pair(build_repo, monkeypatch, capsys):
+def test_a_repository_git_refuses_gets_the_git_step(build_repo, monkeypatch, capsys):
     repo = build_repo(CLEAN_FILES)
     monkeypatch.setenv("GIT_TEST_ASSUME_DIFFERENT_OWNER", "1")
     code, out, err = frame_run(capsys, repo)
     assert (code, out) == (2, [])
     assert err[0].startswith("error: ")
     assert "not inside a git work tree" not in err[0]
-    assert err[1] == "next: fix what the error names, then run quality hygiene again"
+    assert shlex.split(err[1].removeprefix("next: "))[:3] == ["git", "-C", str(repo)]
 
 
 def exits_and_rows(build_repo, capsys, use_mise, served_scanners, case: str):
@@ -637,3 +641,64 @@ def test_the_real_door_colours_a_pseudo_terminal_only_without_no_color(clean_rep
     os.close(parent)
     text = b"".join(chunks).decode()
     assert (done.returncode, "\x1b[" in text, "✓" in text) == (0, coloured, True), text
+
+
+def test_a_refusal_git_did_not_run_for_gets_the_general_instruction(build_repo, tmp_path, monkeypatch, capsys):
+    repo = build_repo(CLEAN_FILES)
+    nowhere = tmp_path / "empty-bin"
+    nowhere.mkdir()
+    monkeypatch.setenv("PATH", str(nowhere))
+    code, out, err = frame_run(capsys, repo)
+    assert (code, out, err[1:]) == (2, [], [f"next: {cli.START_FAILURE_NEXT.text}"])
+
+
+def test_without_mise_three_rows_say_so_and_the_steps_stand_once_each_below_next(build_repo, path_without_mise, elsewhere, capsys):
+    files = {".github/workflows/w.yml": "on: push\n", "uv.lock": uv_lock(), ".env": "A=1\n", **CLONES_BASELINE}
+    code, out, err = frame_run(capsys, build_repo(files), locate_zizmor=fake_zizmor(elsewhere, "echo '[]'"))
+    facts = [line for line in out if line.startswith("  ✗ ") and line.endswith("mise is not installed")]
+    assert (code, len(facts)) == (2, 3), "\n".join(out)
+    assert any(line.startswith("env-file .env - ") for line in out)
+    assert err[1:] == ["next:", f"    install mise: {scanners.MISE_INSTALLATION_PAGE}", f"    {scanners.install_command()}"]
+    assert scanners.install_command() not in "\n".join(out)
+
+
+def test_a_malformed_baseline_beside_a_missing_scanner_names_the_baseline_step_then_the_install_command(
+    build_repo, use_mise, served_scanners, capsys
+):
+    use_mise(lacking(served_scanners, scanners.GITLEAKS))
+    code, out, err = frame_run(capsys, build_repo({BASELINE_PATH: "x = [\n"}))
+    assert code == 2
+    assert err[1:] == ["next:", f"    {ratchet.WRITE_COMMAND}", f"    {scanners.install_command()}"]
+    assert ratchet.WRITE_COMMAND not in "\n".join(out)
+
+
+def areas_refusing(*reasons_by_area: tuple[CannotJudge, ...]) -> tuple[check.AreaVerdict, ...]:
+    rules = iter(Rule)
+    return tuple(
+        check.AreaVerdict(area, tuple(check.RuleVerdict(next(rules), refusal=refusal) for refusal in refusals))
+        for area, refusals in zip(Area, reasons_by_area, strict=False)
+    )
+
+
+ONE, TWO = Command("one"), Command("two")
+
+
+@pytest.mark.parametrize(
+    ("areas", "expected"),
+    [
+        (((CannotJudge("a"),),), (cli.REFUSED_AREAS_NEXT,)),
+        (((CannotJudge("a", (ONE,)),), (CannotJudge("b", (ONE,)),)), (ONE,)),
+        (((CannotJudge("a", (ONE,)),), (CannotJudge("b"),)), (ONE, cli.REFUSED_AREAS_NEXT)),
+        (((CannotJudge("a", (TWO,)),), (CannotJudge("b", (ONE,)),)), (TWO, ONE)),
+        (((CannotJudge("a", (TWO, ONE)),),), (TWO, ONE)),
+    ],
+    ids=["none carries a step", "one step shared", "one step beside a refusal without one", "two steps in row order", "one reason with two steps"],
+)
+def test_next_names_each_distinct_step_once_in_row_order_and_the_general_instruction_last_where_a_refusal_has_none(areas, expected):
+    assert cli.next_steps(areas_refusing(*areas)) == expected
+
+
+def test_an_area_names_one_fact_once_for_two_reasons_that_differ_only_in_steps():
+    area = areas_refusing((CannotJudge("same", (ONE,)), CannotJudge("same", (TWO,))))[0]
+    row = cli.area_row(area)
+    assert (row.fact, row.sub_lines) == ("same", ())

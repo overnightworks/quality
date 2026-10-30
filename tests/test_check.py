@@ -5,7 +5,7 @@ import pytest
 
 from quality import check, cli, env_file, installation, process, scanners
 from quality.compose import is_compose_file
-from quality.report import CannotJudge, Finding, Unparsable
+from quality.report import CannotJudge, Command, Finding, Reason, Unparsable
 from quality.rules import Area, Rule
 from tests.support.check import (
     CLEAN_VERDICT,
@@ -205,11 +205,14 @@ def test_a_zizmor_quality_cannot_find_or_trust_refuses_only_workflow_security(
     assert code == 2, output
     assert refused(output, "workflows"), output
     assert "env-file .env - " in output
-    assert (installation.REINSTALL in output) is (case != "unpinned"), output
+    lines = [line.strip() for line in output.splitlines()]
+    expected_once = int(case != "unpinned")
+    for choice in scanners.REINSTALL.choices:
+        assert (lines.count(choice.text), output.count(choice.text)) == (expected_once, expected_once), output
     if case == "unpinned":
         assert str(installation.UnpinnedDependency("zizmor")) in output
-    versions_named = ["0.0.1", installation.required_version("zizmor")] if case == "another version" else []
-    assert [version for version in versions_named if version not in output] == [], output
+    if case == "another version":
+        assert f"zizmor 0.0.1 found, the release pins {installation.required_version('zizmor')}" in output
 
 
 def test_a_zizmor_planted_in_the_scanner_directory_is_never_run(build_repo, served_scanners, elsewhere, capsys):
@@ -281,7 +284,16 @@ def test_an_area_names_each_distinct_reason_once_in_run_order():
         check.RuleVerdict(Rule.COMPOSE_PORT, refusal=CannotJudge("first")),
         check.RuleVerdict(Rule.CLAUDE_MD, refusal=Unparsable("second")),
     )
-    assert area.reasons == ("second", "first")
+    assert area.reasons == (Reason("second"), Reason("first"))
+
+
+def test_an_area_keeps_two_reasons_with_one_fact_apart_when_their_steps_differ():
+    area = area_of(
+        check.RuleVerdict(Rule.ENV_FILE, refusal=CannotJudge("same", (Command("one"),))),
+        check.RuleVerdict(Rule.COMPOSE_PORT, refusal=CannotJudge("same", (Command("two"),))),
+        check.RuleVerdict(Rule.CLAUDE_MD, refusal=CannotJudge("same", (Command("one"),))),
+    )
+    assert area.reasons == (Reason("same", (Command("one"),)), Reason("same", (Command("two"),)))
 
 
 @pytest.mark.parametrize(

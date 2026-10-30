@@ -400,7 +400,7 @@ def test_an_osv_binary_at_the_wrong_version_names_both_versions(build_repo, serv
     code = cli.main(["hygiene", str(tracked_lock_repo(build_repo))])
     captured = capsys.readouterr()
     output = captured.out + captured.err
-    assert (code, "'9.9.9'" in output, scanners.pinned_tool(OSV).version in output) == (2, True, True), output
+    assert (code, f"{OSV} 9.9.9 found, the release pins {scanners.pinned_tool(OSV).version}" in output) == (2, True), output
 
 
 @pytest.mark.parametrize("exit_code", [2, 127, 128])

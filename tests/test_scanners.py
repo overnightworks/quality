@@ -741,26 +741,23 @@ def test_a_scanner_mise_has_not_installed_cannot_judge_and_names_the_install_com
     """#228 rule 4: a missing scanner is exit 2 with the command that installs it, and no other rule is refused."""
     use_mise(lacking(served_scanners, name))
     repo, locate_zizmor = build_repo(WORKFLOW_AND_LOCK), fake_zizmor(elsewhere, "echo '[]'")
-    code = cli.main([command, str(repo)], locate_zizmor=locate_zizmor)
-    output = heard(capsys)
-    assert code == 2, output
-    assert all(text in output for text in (f"{name} {scanners.pinned_tool(name).version}", scanners.install_command()))
+    code, captured = cli.main([command, str(repo)], locate_zizmor=locate_zizmor), capsys.readouterr()
+    output, install = captured.out + captured.err, scanners.install_command()
+    assert (code, captured.out.count(install), captured.err.count(install)) == (2, 0, 1), output
+    assert f"mise could not locate {name} {scanners.pinned_tool(name).version}" in output
     if rule is None:
         assert output.count("cannot judge") == 1, output
     else:
         assert list(refusals(repo, locate_zizmor=locate_zizmor)) == [rule]
 
 
-def test_without_mise_the_scanner_rules_cannot_judge_and_every_other_rule_still_judges(
-    build_repo, path_without_mise, elsewhere, capsys
-):
+def test_without_mise_the_scanner_rules_cannot_judge_and_every_other_rule_still_judges(build_repo, path_without_mise, elsewhere, capsys):
     """#228 rule 4: no mise on PATH is exit 2 naming mise's install page and the command; the other rules still print."""
     repo = build_repo({**WORKFLOW_AND_LOCK, ".env": "A=1\n"})
     code = cli.main(["hygiene", str(repo)], locate_zizmor=fake_zizmor(elsewhere, "echo '[]'"))
     captured = capsys.readouterr()
-    assert code == 2, captured.err
-    assert "https://mise.jdx.dev/installing-mise.html" in captured.out
-    assert scanners.install_command() in captured.out
+    assert (code, captured.out.count("mise is not installed"), captured.out.count(scanners.install_command())) == (2, 3, 0), captured.err
+    assert captured.err.splitlines()[1:] == ["next:", f"    install mise: {scanners.MISE_INSTALLATION_PAGE}", f"    {scanners.install_command()}"]
     assert set(refusals(repo, locate_zizmor=fake_zizmor(elsewhere, "echo '[]'"))) == {Rule.LEAK, Rule.WORKFLOW_LINT, Rule.ADVISORY}
     assert "env-file .env - " in captured.out
 
@@ -774,13 +771,13 @@ def test_a_scanner_that_reports_another_version_than_the_manifest_is_never_run(
     fake_scanner(served_scanners, scanners.GITLEAKS, f"touch {marker}", version="9.9.9")
     code = cli.main([command, str(build_repo({}))])
     output = heard(capsys)
-    assert (code, "'9.9.9'" in output, repr(scanners.pinned_tool(scanners.GITLEAKS).version) in output) == (2, True, True), output
+    assert (code, f"gitleaks 9.9.9 found, the release pins {PINNED}" in output) == (2, True), output
     assert not marker.exists()
 
 
 @pytest.mark.parametrize("command", ["hygiene", "scan-staged"])
 def test_a_gitleaks_on_path_never_runs(build_repo, use_mise, tmp_path, monkeypatch, capsys, command):
-    """#228 invariant 10: when mise has no gitleaks, one that PATH offers is never used in its place."""
+    """#228 invariant 10: when mise cannot locate gitleaks, one that PATH offers is never used in its place."""
     use_mise(NOT_INSTALLED)
     planted = tmp_path / "planted"
     planted.mkdir()
@@ -807,12 +804,14 @@ def test_mise_is_asked_in_the_manifest_directory_under_its_ceiling(build_repo, u
     )
 
 
-@pytest.mark.parametrize(("body", "reason"), [(f"echo {answer}", "mise which printed no gitleaks executable") for answer in ("''", "relative/gitleaks", "/nowhere/gitleaks")] + [("printf '\\377'", ""), ('if [ "$1" = version ]; then printf \'\\377\'; else echo "$0"; fi', "")], ids=["nothing", "relative-path", "no-file", "unreadable-mise-output", "unreadable-scanner-version"])
+@pytest.mark.parametrize(("body", "reason"), [(f"echo {answer}", "mise which printed no gitleaks executable") for answer in ("''", "relative/gitleaks", "/nowhere/gitleaks")] + [("printf '\\377'", "mise printed output that is not UTF-8"), ('if [ "$1" = version ]; then printf \'\\377\'; else echo "$0"; fi', "printed output that is not UTF-8"), ('echo "mise ERROR error parsing config file" >&2; exit 1', f"mise could not locate gitleaks {PINNED}")], ids=["nothing", "relative-path", "no-file", "unreadable-mise-output", "unreadable-scanner-version", "config error"])
 def test_a_mise_answer_that_is_no_usable_scanner_names_the_install_command(build_repo, use_mise, capsys, body, reason):
     """#228 rule 4, #265: external output that yields no pinned executable, a process error included, is exit 2 and the install command."""
     use_mise(body)
-    exit_code, output = cli.main(["hygiene", str(build_repo({}))]), heard(capsys)
-    assert (exit_code, reason in output, scanners.install_command() in output) == (2, True, True)
+    exit_code, captured = cli.main(["hygiene", str(build_repo({}))]), capsys.readouterr()
+    row = next(line for line in captured.out.splitlines() if line.startswith("  ✗ secrets"))
+    stdout_and_stderr_counts = (captured.out.count(scanners.install_command()), captured.err.count(scanners.install_command()))
+    assert (exit_code, reason in row, "config file" in row, *stdout_and_stderr_counts) == (2, True, False, 0, 1)
 
 
 def test_a_repository_with_no_workflow_and_no_lock_needs_only_gitleaks(build_repo, path_without_mise, capsys):

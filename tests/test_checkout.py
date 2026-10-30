@@ -1,4 +1,6 @@
 import os
+import shlex
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -76,7 +78,9 @@ def test_the_hint_for_a_path_git_refuses_quotes_it(tmp_path, monkeypatch, capsys
     monkeypatch.chdir(tmp_path)
     code = cli.main(["hygiene", "a b"])
     err = capsys.readouterr().err
-    assert (code, "a b is not a readable git repository: git rev-parse exited 128 (`git -C 'a b' status` says why)" in err) == (2, True), err
+    error_line, next_line = err.splitlines()
+    assert (code, error_line) == (2, "error: a b is not a readable git repository: git rev-parse exited 128")
+    assert shlex.split(next_line.removeprefix("next: ")) == ["git", "-C", "a b", "status"]
 
 
 def test_a_working_directory_that_was_removed_is_cannot_judge_not_a_traceback(tmp_path, monkeypatch, capsys):
@@ -137,7 +141,25 @@ def test_the_hint_for_a_path_git_refuses_has_no_command_when_the_path_is_unprint
     code = cli.main(["hygiene", path])
     err = capsys.readouterr().err
     assert code == 2
-    assert "(`git status` run inside it says why)" in err
+    assert err.splitlines()[-1] == "next: run git status inside the folder named above"
     assert "git -C" not in err
 
 
+
+
+@pytest.mark.integration
+def test_a_git_that_refuses_the_index_listing_after_the_run_started_names_one_step_on_next(build_repo, tmp_path, monkeypatch, capsys):
+    """The files and code rows carry the fact; the `git -C` command stands once, on `next:`."""
+    repo = build_repo({"src/a.py": "x = 1\n"})
+    real_git = shutil.which("git")
+    wrapper = tmp_path / "bin" / "git"
+    wrapper.parent.mkdir()
+    wrapper.write_text(f'#!/bin/sh\ncase "$*" in *"ls-files -z -s"*) exit 3;; esac\nexec {real_git} "$@"\n')
+    wrapper.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{wrapper.parent}{os.pathsep}{os.environ['PATH']}")
+    code = cli.main(["hygiene", str(repo)])
+    captured = capsys.readouterr()
+    command = f"git -C {repo} status"
+    rows = [line for line in captured.out.splitlines() if line.startswith("  ✗")]
+    assert (code, len(rows) >= 2, captured.err.count(command), captured.out.count(command)) == (2, True, 1, 0), captured
+    assert all("git ls-files exited 3" in row or "reasons" in row for row in rows), rows

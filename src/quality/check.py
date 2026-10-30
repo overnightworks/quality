@@ -29,7 +29,7 @@ from quality.config import (
     ConfigError,
     read_allow_lists,
 )
-from quality.report import CannotJudge, Finding, Unparsable
+from quality.report import CannotJudge, Finding, Reason, Unparsable
 from quality.rules import Area, Rule
 
 
@@ -60,7 +60,7 @@ def judged_baseline(root: Path) -> ratchet.Baseline | None:
     try:
         return ratchet.read_baseline(root)
     except ratchet.SizeError as error:
-        raise CannotJudge(f"{error}; {ratchet.head_advice(error)}") from error
+        raise CannotJudge(str(error), (ratchet.head_step(error),)) from error
 
 
 def check_import_contract(root: Path, tracked: list[str]) -> architecture.ContractsVerdict:
@@ -173,9 +173,9 @@ class AreaVerdict:
         return tuple(finding for verdict in self.verdicts for finding in verdict.findings)
 
     @property
-    def reasons(self) -> tuple[str, ...]:
-        """The distinct reasons its rules could not judge, equal text once, in run order."""
-        return tuple(dict.fromkeys(str(verdict.refusal) for verdict in self.verdicts if verdict.refusal is not None))
+    def reasons(self) -> tuple[Reason, ...]:
+        """The distinct reasons its rules could not judge, equal reasons once, in run order."""
+        return tuple(dict.fromkeys(verdict.refusal.reason for verdict in self.verdicts if verdict.refusal is not None))
 
     @property
     def measurement(self) -> Measurement:

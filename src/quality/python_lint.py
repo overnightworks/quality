@@ -14,7 +14,7 @@ from pathlib import Path
 
 from packaging.version import Version
 
-from quality import installation, layout, process, ratchet, repository
+from quality import layout, process, ratchet, repository, scanners
 from quality.report import Finding
 from quality.rules import Rule
 
@@ -24,7 +24,6 @@ SELECTED_CODES = f"{SECURITY_FAMILY},{PRINT_FAMILY}"
 # Exempt in a test: an assert is how a test checks, a password there is a fake, and a test fixes its own argv.
 TEST_EXEMPT_CODES = frozenset({"S101", "S105", "S106", "S107", "S603", "S607"})
 PYTHON_SUFFIX = ".py"
-RUFF_DISTRIBUTION = "ruff"
 RUN_TIMEOUT_SECONDS = 600
 ARGUMENT_BYTES_PER_RUN = 100_000  # far below Linux's ARG_MAX, which the argument list shares with the environment
 JUDGED_EXIT_CODES = frozenset({0, 1})
@@ -261,7 +260,7 @@ def _stale_owner(name: str, owner: OutputOwner) -> Finding:
 
 def _run_ruff(root: Path, paths: Mapping[str, Path], target: Version, locate_ruff: Callable[[], str]) -> list[RuffFinding]:
     """ruff's findings in `paths` (name to resolved path), in batches the argument list holds."""
-    binary = _pinned_ruff(locate_ruff)
+    binary = str(scanners.pinned_installed(scanners.RUFF, locate_ruff))
     names = _report_names(paths)
     return [
         record
@@ -280,25 +279,6 @@ def _report_names(paths: Mapping[str, Path]) -> dict[str, str]:
             raise LintError(f"ruff's report cannot tell {names[printed]} from {name}")
         names[printed] = name
     return names
-
-
-def _pinned_ruff(locate_ruff: Callable[[], str]) -> str:
-    """The ruff binary of quality's own installation, never one on PATH, at the version quality pins."""
-    try:
-        binary = locate_ruff()
-        pinned = installation.required_version(RUFF_DISTRIBUTION)
-    except FileNotFoundError as error:
-        raise LintError(f"quality's installation holds no ruff binary; {installation.REINSTALL}") from error
-    except installation.UnpinnedDependency as error:
-        raise LintError(str(error)) from error
-    try:
-        asked = _ruff(binary, ["--version"], None, process.VERSION_TIMEOUT_SECONDS)
-    except LintError as error:
-        raise LintError(f"{error}; {installation.REINSTALL}") from error
-    reported = (asked.stdout.split() or [""])[-1] if asked.returncode == 0 else ""
-    if reported != pinned:
-        raise LintError(f"{binary} reports ruff {reported or 'no version'}, quality pins ruff=={pinned}; {installation.REINSTALL}")
-    return binary
 
 
 def _batches(names: Sequence[str], limit: int) -> Iterator[list[str]]:

@@ -1,6 +1,18 @@
 import pytest
 
-from quality.report import DETAIL_MARKER, Finding, printable, render, shell_word
+from quality.report import (
+    DETAIL_MARKER,
+    CannotJudge,
+    Command,
+    Finding,
+    Instruction,
+    OneOf,
+    Reason,
+    Unparsable,
+    printable,
+    render,
+    shell_word,
+)
 
 
 def test_a_finding_prints_its_detail_and_fix_escaped(capsys):
@@ -45,3 +57,24 @@ def test_a_name_printable_changes_has_no_shell_word_and_printing_it_twice_change
 def test_a_format_or_separator_character_prints_as_its_code_point(character, printed):
     """#228 rule 7: a format character, U+2028 and U+2029 print as `\\uNNNN` (`\\UNNNNNNNN` above U+FFFF), by category."""
     assert printable(character) == printed
+
+
+def test_a_refusal_without_steps_prints_its_fact_and_carries_it_as_a_reason():
+    refusal = CannotJudge("no scanner")
+    assert (str(refusal), refusal.reason) == ("no scanner", Reason("no scanner"))
+
+
+def test_a_refusal_with_steps_prints_the_first_after_next_and_the_others_after_then():
+    steps = (Instruction("install mise"), Command("mise install"), Command("run it", "in a shell"))
+    refusal = CannotJudge("no scanner", steps)
+    assert (str(refusal), refusal.reason) == ("no scanner; next: install mise; then: mise install; then: in a shell: run it", Reason("no scanner", steps))
+
+
+def test_a_subclass_built_with_one_message_keeps_both_its_label_and_its_message():
+    refusal = Unparsable("bad file")
+    assert (refusal.label, str(refusal)) == ("unparsable", "bad file")
+
+
+def test_alternative_commands_print_their_labels_and_commands_on_one_line():
+    choice = OneOf("reinstall", (Command("one", "here"), Command("two", "there")))
+    assert str(choice) == "reinstall, one of: here: one or there: two"

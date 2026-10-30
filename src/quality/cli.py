@@ -17,7 +17,6 @@ from quality import (
     fleet,
     installation,
     process,
-    python_lint,
     ratchet,
     repository,
     scanners,
@@ -46,7 +45,7 @@ from quality.output import (
     write_rows,
     write_verdict,
 )
-from quality.report import CannotJudge, Finding, headline
+from quality.report import CannotJudge, Finding, Instruction, Step, headline
 from quality.rules import Rule
 from quality.sonar import (
     DEPENDABOT_CONFIG,
@@ -83,7 +82,7 @@ HYGIENE_EXIT = {
 }
 
 
-INSTALLED_RUFF = partial(installation.installed_executable, python_lint.RUFF_DISTRIBUTION)
+INSTALLED_RUFF = partial(installation.installed_executable, scanners.RUFF)
 INSTALLED_ZIZMOR = partial(installation.installed_executable, scanners.ZIZMOR)
 ONLINE_AUDITS_NOTE = f"{Rule.WORKFLOW_SECURITY} runs offline, so zizmor's online-only audits do not run"
 
@@ -191,16 +190,17 @@ class AreaEvent(StrEnum):
     NOT_RECORDED = "not recorded"
 
 
-START_FAILURE_NEXT = "fix what the error names, then run quality hygiene again"
-REFUSED_AREAS_NEXT = "fix what the ✗ rows name, then run quality hygiene again"
+START_FAILURE_NEXT = Instruction("fix what the error names, then run quality hygiene again")
+REFUSED_AREAS_NEXT = Instruction("fix what the ✗ rows name, then run quality hygiene again")
 
 
 def area_row(verdict: AreaVerdict) -> Row:
-    if verdict.reasons:
-        if len(verdict.reasons) == 1:
-            return Row(Glyph.COULD_NOT_CHECK, verdict.area, AreaEvent.NOT_CHECKED, verdict.reasons[0])
-        sub_lines = tuple(SubLine(Glyph.COULD_NOT_CHECK, reason) for reason in verdict.reasons)
-        return Row(Glyph.COULD_NOT_CHECK, verdict.area, AreaEvent.NOT_CHECKED, f"{len(verdict.reasons)} reasons", sub_lines=sub_lines)
+    facts = tuple(dict.fromkeys(reason.fact for reason in verdict.reasons))
+    if facts:
+        if len(facts) == 1:
+            return Row(Glyph.COULD_NOT_CHECK, verdict.area, AreaEvent.NOT_CHECKED, facts[0])
+        sub_lines = tuple(SubLine(Glyph.COULD_NOT_CHECK, fact) for fact in facts)
+        return Row(Glyph.COULD_NOT_CHECK, verdict.area, AreaEvent.NOT_CHECKED, f"{len(facts)} reasons", sub_lines=sub_lines)
     if verdict.findings:
         return Row(Glyph.NEEDS_YOU, verdict.area, AreaEvent.FINDING, count=len(verdict.findings))
     if verdict.outcome is Outcome.MEASURED_ONLY:
@@ -225,15 +225,23 @@ def refusal_error(areas: tuple[AreaVerdict, ...]) -> str:
     return f"{error} · {counted(found, 'finding')}, {held} of them in those areas" if held else f"{error} · {counted(found, 'finding')} in the others"
 
 
+def next_steps(areas: tuple[AreaVerdict, ...]) -> tuple[Step, ...]:
+    """Each distinct step of the run's refusals once, in row order; the general instruction last where a refusal carries
+    no step, and alone where none does."""
+    reasons = [reason for verdict in areas for reason in verdict.reasons]
+    steps = tuple(dict.fromkeys(step for reason in reasons for step in reason.next_steps))
+    return steps if reasons and all(reason.next_steps for reason in reasons) else (*steps, REFUSED_AREAS_NEXT)
+
+
 def run_hygiene_check(path: Path, locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str], clock: Callable[[], float]) -> int:
     started = clock()
     try:
         result = run_hygiene(path, locate_ruff, locate_zizmor)
     except OutsideWorkTree as error:
-        write_pair(f"not inside a git work tree · {error.path}", "run quality hygiene inside a repository")
+        write_pair(f"not inside a git work tree · {error.path}", (Instruction("run quality hygiene inside a repository"),))
         return EXIT_CANNOT_JUDGE
     except CannotJudge as error:
-        write_pair(str(error), START_FAILURE_NEXT)
+        write_pair(error.reason.fact, error.reason.next_steps or (START_FAILURE_NEXT,))
         return EXIT_CANNOT_JUDGE
     print_secret_allowances(result.allowed_secrets, result.unused_allowances)
     emit(*result.reports, ONLINE_AUDITS_NOTE)
@@ -243,7 +251,7 @@ def run_hygiene_check(path: Path, locate_ruff: Callable[[], str], locate_zizmor:
             emit_finding(finding)
     exit_code = HYGIENE_EXIT[result.worst]
     if exit_code == EXIT_CANNOT_JUDGE:
-        write_pair(refusal_error(result.areas), REFUSED_AREAS_NEXT)
+        write_pair(refusal_error(result.areas), next_steps(result.areas))
         return exit_code
     outcomes = Counter(verdict.outcome for verdict in result.areas)
     write_verdict(
@@ -310,7 +318,7 @@ def describe_loosenings(path: Path, written: ratchet.Baseline) -> list[str]:
 def run_scan_staged(path: Path) -> int:
     try:
         result = staged.scan_staged(path)
-    except (process.ProcessError, ConfigError) as error:
+    except (process.ProcessError, ConfigError, CannotJudge) as error:
         emit(f"scan-staged: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     print_secret_allowances(result.allowed, result.unused_allowances)
