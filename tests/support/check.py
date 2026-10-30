@@ -6,13 +6,22 @@ from pathlib import Path
 
 import pytest
 
-from quality import DISTRIBUTION, cli
+from quality import DISTRIBUTION, check, cli
+from quality.rules import Rule
 
 installed_ruff = cli.INSTALLED_RUFF
 
-# The rules a run judges, in run order; a new rule is added here once.
-RULES = "env-file, compose-port, size, clone, import-contract, claude-md, root-layout, file-suffix, script-name, script-header, test-layout, test-import, python-floor, python-security, python-print, secret, workflow-lint, workflow-security, advisory"
-CLEAN_LINE = f"hygiene: clean ({RULES})"
+CLEAN_VERDICT = "✓ clean · "
+
+
+def is_clean(output: str) -> bool:
+    """The run ended in the clean verdict line, which the door prints only on exit 0 with no finding."""
+    return any(line.startswith(CLEAN_VERDICT) for line in output.splitlines())
+
+
+def refused(output: str, area: str) -> bool:
+    """The run named `area` as one it could not check."""
+    return any(line.startswith(f"  ✗ {area} ") for line in output.splitlines())
 
 
 def loosen_requirement(site: Path, monkeypatch: pytest.MonkeyPatch, name: str) -> None:
@@ -37,7 +46,7 @@ def hygiene_output(
     capsys: pytest.CaptureFixture[str], path: Path, locate_ruff: Callable[[], str] = installed_ruff
 ) -> tuple[int, str]:
     """The exit code and the whole output of `quality hygiene` over `path`, through the real door."""
-    code = cli.main(["hygiene", str(path)], locate_ruff=locate_ruff)
+    code = cli.main(["hygiene", str(path)], locate_ruff=locate_ruff, clock=lambda: 0.0)
     captured = capsys.readouterr()
     return code, captured.out + captured.err
 
@@ -49,3 +58,25 @@ def compose(*port_lines: str) -> dict[str, str]:
 
 def assert_refusal(output: str, rule: str, path: str) -> None:
     assert re.search(rf"^{rule} {re.escape(path)} - \S.*\n  Fix: \S", output, re.MULTILINE), output
+
+
+def refusal_row(area: str) -> str:
+    """What an area row that could not check says before its reason (docs/output.md, case 4)."""
+    return f"  ✗ {area:<12}  {'not checked':<14} "
+
+
+def hygiene_run(repo: Path, locate_ruff: Callable[[], str] = installed_ruff, locate_zizmor: Callable[[], str] | None = None) -> check.HygieneResult:
+    """What the rule runner judged over `repo`, before the door prints it."""
+    return check.run_hygiene(repo, locate_ruff, locate_zizmor or cli.INSTALLED_ZIZMOR)
+
+
+def refusals(repo: Path, locate_ruff: Callable[[], str] = installed_ruff, locate_zizmor: Callable[[], str] | None = None) -> dict[Rule, str]:
+    """Each rule that cannot judge `repo`, with its reason, as the rule runner reports it."""
+    verdicts = hygiene_run(repo, locate_ruff, locate_zizmor).verdicts
+    return {verdict.rule: str(verdict.refusal) for verdict in verdicts if verdict.refusal is not None}
+
+
+def heard(capsys: pytest.CaptureFixture[str]) -> str:
+    """Everything the door printed since the last read, stdout then stderr."""
+    captured = capsys.readouterr()
+    return captured.out + captured.err

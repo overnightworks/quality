@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from tests.support.check import CLEAN_LINE
 from tests.support.check import hygiene_output as run
+from tests.support.check import is_clean, refusal_row, refusals
 
 ENV_FINDING = "env-file .env - "
 
@@ -51,7 +51,7 @@ def claude_repo(build_repo, tracked: dict[str, str], links: dict[str, str] | Non
 )
 def test_claude_md_that_is_absent_or_exactly_the_import_is_clean(build_repo, capsys, tracked, links):
     code, output = run(capsys, claude_repo(build_repo, tracked, links))
-    assert (code, CLEAN_LINE in output) == (0, True), output
+    assert (code, is_clean(output)) == (0, True), output
 
 
 @pytest.mark.parametrize(
@@ -118,9 +118,9 @@ def test_claude_md_counts_only_once_tracked_and_only_while_on_disk(build_repo, c
     tracked = run(capsys, repo)
     (repo / "CLAUDE.md").unlink()
     deleted = run(capsys, repo)
-    assert (untracked[0], CLEAN_LINE in untracked[1]) == (0, True), untracked
+    assert (untracked[0], is_clean(untracked[1])) == (0, True), untracked
     assert (tracked[0], "claude-md CLAUDE.md - " in tracked[1]) == (1, True), tracked
-    assert (deleted[0], CLEAN_LINE in deleted[1]) == (0, True), deleted
+    assert (deleted[0], is_clean(deleted[1])) == (0, True), deleted
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-0 file, so no permission is refused")
@@ -130,7 +130,7 @@ def test_unreadable_claude_md_cannot_be_judged_and_other_rules_still_judge(build
     (repo / "CLAUDE.md").chmod(0)
     code, output = run(capsys, repo)
     assert code == 2, output
-    assert "hygiene: claude-md cannot judge - cannot read CLAUDE.md" in output
+    assert f"{refusal_row('files')}cannot read CLAUDE.md" in output
     assert ENV_FINDING in output
 
 
@@ -149,7 +149,7 @@ def test_claude_md_link_to_an_unreachable_target_is_the_link_finding(build_repo,
         locked.chmod(0o700)
     assert code == 1, output
     assert f"claude-md {name} - {reason}" in output
-    assert "cannot judge" not in output
+    assert not refusals(repo)
 
 
 def test_claude_md_from_a_subdirectory_is_judged_as_from_the_top(build_repo, capsys):
@@ -164,4 +164,4 @@ def test_claude_md_from_a_subdirectory_is_judged_as_from_the_top(build_repo, cap
 def test_claude_md_is_named_in_run_order(build_repo, capsys):
     """#95 E15 cell 19: the clean line names the rule after import-contract."""
     plain = run(capsys, build_repo({**GUIDANCE, "CLAUDE.md": IMPORT}))
-    assert (plain[0], CLEAN_LINE in plain[1]) == (0, True), plain
+    assert (plain[0], is_clean(plain[1])) == (0, True), plain

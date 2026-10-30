@@ -28,7 +28,7 @@ from tests.support.advisories import (
     uv_lock,
     zipped,
 )
-from tests.support.check import assert_every_line_starts_with_the_door
+from tests.support.check import CLEAN_VERDICT, assert_every_line_starts_with_the_door, is_clean, refused
 from tests.support.scanners import OUTPUTS, fake_scanner, lacking
 
 # ---- the real osv-scanner against a fake file:// database (CI runs these; they download the binary) ----
@@ -81,7 +81,7 @@ def test_two_advisories_that_alias_each_other_are_one_finding(build_repo, publis
     publish_database([advisory("GHSA-aaaa-bbbb-cccc", aliases=("PYSEC-1",)), advisory("PYSEC-1", aliases=("GHSA-aaaa-bbbb-cccc",))])
     code, output = run_gate(tracked_lock_repo(build_repo))
     assert code == 1
-    assert "hygiene: 1 finding(s)" in output
+    assert "! 1 finding in 1 area" in output
     assert "GHSA-aaaa-bbbb-cccc (PYSEC-1)" in output or "PYSEC-1 (GHSA-aaaa-bbbb-cccc)" in output
 
 
@@ -132,8 +132,8 @@ def test_a_lock_no_advisory_affects_is_clean(build_repo, publish_database, insta
     publish_database()
     code, output = run_gate(tracked_lock_repo(build_repo, lock))
     assert code == 0, output
-    assert "hygiene: clean (" in output
-    assert "advisory" in output
+    assert is_clean(output)
+    assert "✓ dependencies" in output
 
 
 @pytest.mark.scanner
@@ -180,7 +180,7 @@ def test_a_lock_the_tree_cannot_hand_over_is_skipped_or_refused(
     fake_scanner(served_scanners, OSV, "exit 99")
     code, output = run_gate(repo)
     expected_code, expected_text = {
-        "missing": (0, "hygiene: clean"), "symlink to a directory": (2, f"{name} is not a file"),
+        "missing": (0, CLEAN_VERDICT), "symlink to a directory": (2, f"{name} is not a file"),
         "symlink out": (2, f"{name} resolves outside the repository"),
     }[tracked_only]
     assert (code, expected_text in output) == (expected_code, True), output
@@ -324,7 +324,7 @@ def test_a_scratch_directory_that_cannot_be_written_is_cannot_judge(build_repo, 
     monkeypatch.setattr(process, "scratch_directory", scratch_without_room_for_a_database)
     fake_scanner(served_scanners, OSV, "exit 99")
     code, output = run_gate(tracked_lock_repo(build_repo))
-    assert (code, "cannot place the PyPI advisory database in the scratch directory" in output, "<scratch>" in output, "secret cannot judge" in output) == (2, True, True, False), output
+    assert (code, "cannot place the PyPI advisory database in the scratch directory" in output, "<scratch>" in output, refused(output, "secrets")) == (2, True, True, False), output
 
 
 def test_a_wheel_pin_file_that_cannot_be_written_is_cannot_judge(build_repo, served_scanners, run_gate, publish_database, monkeypatch):
@@ -398,8 +398,9 @@ def test_an_osv_binary_at_the_wrong_version_names_both_versions(build_repo, serv
     (served_scanners / OSV).write_text('#!/bin/sh\necho "osv-scanner version: 9.9.9"\n')
     (served_scanners / OSV).chmod(0o755)
     code = cli.main(["hygiene", str(tracked_lock_repo(build_repo))])
-    err = capsys.readouterr().err
-    assert (code, "'9.9.9'" in err, scanners.pinned_tool(OSV).version in err) == (2, True, True), err
+    captured = capsys.readouterr()
+    output = captured.out + captured.err
+    assert (code, "'9.9.9'" in output, scanners.pinned_tool(OSV).version in output) == (2, True, True), output
 
 
 @pytest.mark.parametrize("exit_code", [2, 127, 128])
@@ -617,7 +618,7 @@ def test_hygiene_prints_each_allowed_advisory_before_the_verdict(
     lines = output.splitlines()
     assert code_seen == code, output
     assert lines[lines.index(expected[0]):][:len(expected)] == expected, output
-    assert (lines[-1].startswith("hygiene: clean (")) == (code == 0), output
+    assert is_clean(lines[-1]) == (code == 0), output
 
 
 def test_hygiene_escapes_the_allowance_in_its_allowed_line(

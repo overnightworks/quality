@@ -9,6 +9,7 @@ This is the target picture of quality's command-line output that the slices of #
 - Every run ends with exactly one closing verdict line, or with an `error:`/`next:` pair when it could not answer.
 - stdout carries rows and the verdict. stderr carries the live line, the input prompt and `error:`/`next:`. So `quality check | less` shows every finding and an error stays visible.
 - With no TTY, with `NO_COLOR` or with `TERM=dumb` the same words print without colour, without the live line and never shortened.
+- On a terminal the glyphs, the verdict and the `error:`/`next:` labels are coloured with the 16 base colours and facts and notes are dim, each stream on its own, as hal does.
 - Repository text is masked: control characters as `\xNN`, and U+2028, U+2029 and format characters as `\uNNNN` (`\UNNNNNNNN` above U+FFFF).
 - `-v` shows the scanner's raw output indented under its row, never a secret.
 
@@ -138,6 +139,17 @@ The `next:` form is decision 11. A scanner that reports another version than the
   ✗ secrets       not checked    gitleaks 8.28.0 found, the release pins 8.30.1
 ```
 
+Several areas can fail, and an area can fail for more than one reason. Head proposals of 30.10.2026 (O1 to O3), built unless the operator rules otherwise. A reason that several rules of one area share stands once; distinct reasons make the row name their count and stand on `✗` lines below it, and findings of an area that also cannot check stay under its `✗` row and are counted in the error line. The `next:` line, when the refusals share no single command, is a general instruction.
+
+```text
+  ✗ files         not checked    2 reasons
+    ✗ cannot read compose.yaml: line 1, column 11 ...
+    ✗ pyproject.toml has a requires-python quality cannot read
+env-file .env - ...
+error: 1 of 7 areas could not check · 1 finding, 1 of them in those areas
+next: fix what the ✗ rows name, then run quality check again
+```
+
 ### 5. The debt ceiling: `check debt`, `--fix --dry-run`, `--fix`
 
 The debt ceiling is `quality/baseline.toml`. Where code shrank it can fall; `--fix` lowers it and never raises it.
@@ -214,6 +226,13 @@ $ quality check debt --fix
   · release       v0.9.0         pinned in .github/workflows/ci.yml
   ✓ debt          recorded       31 entries, 2 clone pairs · quality/baseline.toml is new
 ✓ clean · ceiling recorded · 1 area · 2s
+```
+
+A ceiling file without a `[clones]` table is the partly recorded form. Head proposal of 30.10.2026 (O4), built unless the operator rules otherwise.
+
+```text
+  · debt          not recorded   partly measured only
+✓ clean · 7 areas · debt partly measured, not enforced · 2s
 ```
 
 ### 6. `quality check secrets --staged`: the commit hook

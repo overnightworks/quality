@@ -183,6 +183,6 @@ def check_clones(tree: ratchet.TreeMeasurement, sources: dict[str, bytes], basel
     held pair the tree lost is a finding. A pair can hide in a file the detector cannot read, so then it cannot judge."""
     pairs = find_pairs(sources)
     if baseline is None or baseline.clones is None:
-        return ratchet.RuleResult([], report_line(pairs.pairs))
+        return ratchet.RuleResult([], ratchet.MeasuredOnly(report_line(pairs.pairs)))
     ratchet.complete(tree)
     return ratchet.RuleResult(compare_pairs(pairs, baseline.clones), None)

@@ -13,12 +13,27 @@ from quality.report import CannotJudge, shell_word
 WORKFLOW_DIRECTORY = PurePosixPath(".github/workflows")
 YAML_SUFFIXES = frozenset({".yml", ".yaml"})
 INDEX_MODE = re.compile(r"[0-7]{6}")
+# git's sentence when the search up from the path finds no repository, read in the C locale; a git that words it
+# differently leaves the refusal general, which stays true.
+NO_REPOSITORY_SENTENCE = b"fatal: not a git repository (or any"
+
+
+class OutsideWorkTree(CannotJudge):
+    """The path lies in no work tree: git says so, or the path is a bare repository or the inside of `.git`."""
+
+    def __init__(self, path: Path, message: str) -> None:
+        super().__init__(message)
+        self.path = path
+
+
+def _refusal_text(path: Path, because: str) -> str:
+    word = shell_word(str(path))
+    says_why = f"`git -C {word} status` says why" if word else "`git status` run inside it says why"
+    return f"{path} is not a readable git repository: {because} ({says_why})"
 
 
 def _refusal(path: Path, because: str) -> CannotJudge:
-    word = shell_word(str(path))
-    says_why = f"`git -C {word} status` says why" if word else "`git status` run inside it says why"
-    return CannotJudge(f"{path} is not a readable git repository: {because} ({says_why})")
+    return CannotJudge(_refusal_text(path, because))
 
 
 def _refusal_without_git(path: Path, what: str, reason: object) -> CannotJudge:
@@ -26,9 +41,10 @@ def _refusal_without_git(path: Path, what: str, reason: object) -> CannotJudge:
 
 
 def _git_listing(path: Path, command: list[str]) -> subprocess.CompletedProcess:
-    """git's answer for the repository at `path`; one that refuses, or does not run, is a repository git cannot read."""
+    """git's answer for the repository at `path`, asked in the C locale so its words read the same everywhere; one that
+    refuses, or does not run, is a repository git cannot read."""
     try:
-        done = process.run(["git", "-C", str(path.absolute()), *command], encoding=None)
+        done = process.run(["git", "-C", str(path.absolute()), *command], env={**os.environ, "LC_ALL": "C"}, encoding=None)
     except OSError as error:
         raise _refusal_without_git(path, "the working directory cannot be read", repository.os_error_reason(error)) from error
     except process.ProcessError as error:
@@ -36,7 +52,10 @@ def _git_listing(path: Path, command: list[str]) -> subprocess.CompletedProcess:
         raise _refusal_without_git(path, "git did not run", reason) from error
     if done.returncode != 0:
         # git's own words name the checkout it resolved, so only the exit code is printed and git is asked again.
-        raise _refusal(path, f"git {command[0]} exited {done.returncode}")
+        because = f"git {command[0]} exited {done.returncode}"
+        if done.stderr.startswith(NO_REPOSITORY_SENTENCE):
+            raise OutsideWorkTree(path, _refusal_text(path, because))
+        raise _refusal(path, because)
     return done
 
 
@@ -45,7 +64,7 @@ def work_tree_top(path: Path) -> Path:
     answer = _git_listing(path, ["rev-parse", "--is-inside-work-tree", "--show-cdup"]).stdout
     inside, _, cdup = os.fsdecode(answer).strip().partition("\n")
     if inside != "true":
-        raise _refusal(path, "it lies outside any work tree")
+        raise OutsideWorkTree(path, _refusal_text(path, "it lies outside any work tree"))
     return path / cdup
 
 

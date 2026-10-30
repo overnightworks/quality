@@ -64,7 +64,7 @@ def test_two_vulnerable_versions_of_one_package_in_a_pnpm_lock_are_two_findings(
     lock = pnpm_lock(transitive=[("lodash", "4.17.19")])
     code, output = run_gate(build_repo({FRONTEND_LOCK: lock}))
     assert code == 1, output
-    assert "hygiene: 2 finding(s)" in output
+    assert "! 2 findings in 1 area" in output
     assert "npm lodash 4.17.15 is affected." in output
     assert "npm lodash 4.17.19 is affected." in output
 
@@ -205,7 +205,7 @@ def test_a_big_frontend_shows_every_finding_without_a_cap(build_repo, publish_da
     publish_database(records, ecosystem="npm")
     code, output = run_gate(build_repo({FRONTEND_LOCK: pnpm_lock([(name, "1.0.0") for name in names])}))
     assert code == 1, output
-    assert "hygiene: 25 finding(s)" in output
+    assert "! 25 findings in 1 area" in output
 
 
 @pytest.mark.scanner

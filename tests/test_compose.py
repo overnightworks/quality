@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support.check import CLEAN_LINE, assert_refusal, compose
+from tests.support.check import assert_refusal, compose, is_clean, refusal_row, refused
 from tests.support.check import hygiene_output as run
 from tests.support.git_repositories import make_repo
 
@@ -13,7 +13,7 @@ def test_compose_specific_tags_are_judged_not_refused(build_repo, capsys):
     """#3 rule 1/4: valid Compose YAML tags are read, and their ports still checked."""
     body = 'services:\n  web:\n    image: x\n    ports: !override\n      - "127.0.0.1:80:80"\n    profiles: !reset []\n'
     code, output = run(capsys, build_repo({"compose.yaml": body}))
-    assert (code, CLEAN_LINE in output) == (0, True)
+    assert (code, is_clean(output)) == (0, True)
 
 
 @pytest.mark.parametrize("tagged", ["!reset null", "!reset []"], ids=["null", "empty-list"])
@@ -27,7 +27,7 @@ def test_unknown_yaml_tag_cannot_be_judged(build_repo, capsys):
     """#3 rule 1: a tag Compose does not define is not read as a plain value."""
     code, output = run(capsys, build_repo({"compose.yaml": "services:\n  web:\n    image: !foo x\n"}))
     assert code == 2
-    assert "cannot judge" in output
+    assert refused(output, "files")
 
 
 @pytest.mark.parametrize(
@@ -171,7 +171,7 @@ def test_a_port_that_is_a_container_is_one_short_finding(build_repo, capsys, ser
     """#78 rule 4, cell 12: an aliased container is never printed."""
     repo = build_repo({"compose.yaml": f"x-bomb:\n  {ALIAS_BOMB.replace(chr(10), chr(10) + '  ')}\nservices:\n  web:\n{service}"})
     code, output = run(capsys, repo)
-    assert (code, "has a port that is not a string, a number or a mapping whose published (or, without one, target) is text or a number (unreadable)" in output, len(output) < 800) == (1, True, True), output
+    assert (code, "has a port that is not a string, a number or a mapping whose published (or, without one, target) is text or a number (unreadable)" in output, max(len(line) for line in output.splitlines() if "has a port" in line) < 400) == (1, True, True), output
 
 
 def test_an_untracked_compose_file_is_not_judged_until_it_is_added(build_repo, capsys):
@@ -227,7 +227,7 @@ def test_a_tracked_compose_linked_to_nowhere_is_gone_not_unjudgeable(build_repo,
     (repo / "compose.yaml").unlink()
     link(repo, elsewhere)
     code, output = run(capsys, repo)
-    assert (code, CLEAN_LINE in output, str(repo) in output) == (0, True, False), output
+    assert (code, is_clean(output), str(repo) in output) == (0, True, False), output
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-0 file, so no permission is refused")
@@ -245,4 +245,4 @@ def test_compose_files_are_read_and_parsed_one_at_a_time(tmp_path, capsys):
     repo = make_repo(tmp_path, {"docs/compose-a.yaml": "a: [\n", "docs/compose-b.yaml": "x"})
     (repo / "docs/compose-b.yaml").write_bytes(b"\xff")
     code, output = run(capsys, repo)
-    assert (code, "compose-port cannot judge - cannot read docs/compose-a.yaml" in output, "compose-b.yaml" in output) == (2, True, False), output
+    assert (code, f"{refusal_row('files')}cannot read docs/compose-a.yaml" in output, "compose-b.yaml" in output) == (2, True, False), output

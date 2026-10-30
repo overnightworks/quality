@@ -2,7 +2,7 @@
 
 import pytest
 
-from tests.support.check import hygiene_output
+from tests.support.check import hygiene_output, refusals
 from tests.support.layout import CONFIG, GUIDANCE, declaring, findings, in_index, red
 from tests.support.merge import ONE_JOB
 
@@ -121,13 +121,14 @@ def test_a_declaration_covers_only_its_own_rule_and_a_stale_one_is_a_finding(bui
 def test_a_malformed_layout_table_cannot_be_judged_for_test_layout(build_repo, capsys):
     """#196 sentence 7, D6."""
     duplicate = declaring("tests/helpers.py", rule=RULE) * 2
-    code, output = hygiene_output(capsys, build_repo({**ROOT_PROJECT, "tests/helpers.py": "", CONFIG: ONE_JOB + duplicate}))
-    assert (code, f"{RULE} cannot judge" in output) == (2, True)
+    repo = build_repo({**ROOT_PROJECT, "tests/helpers.py": "", CONFIG: ONE_JOB + duplicate})
+    code, _ = hygiene_output(capsys, repo)
+    assert (code, RULE in refusals(repo)) == (2, True)
 
 
 def test_an_index_record_that_cannot_be_read_cannot_be_judged(build_repo, capsys, fake_git):
     """#196 sentence 8, D7."""
     repo = build_repo(GUIDANCE)
     fake_git(r"""case " $* " in *" -s "*) printf 'not-a-mode abc 0\tAGENTS.md\0'; exit 0;; esac""")
-    code, output = hygiene_output(capsys, repo)
-    assert (code, f"{RULE} cannot judge" in output) == (2, True)
+    code, _ = hygiene_output(capsys, repo)
+    assert (code, RULE in refusals(repo)) == (2, True)

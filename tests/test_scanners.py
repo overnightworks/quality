@@ -12,8 +12,10 @@ from pathlib import Path
 import pytest
 
 from quality import cli, process, scanners
+from quality.rules import Rule
 from quality.scanners import ScannerError
 from tests.support.advisories import uv_lock
+from tests.support.check import heard, refusal_row, refusals
 from tests.support.git_repositories import GIT_IDENTITY
 from tests.support.scanners import (
     NOT_INSTALLED,
@@ -52,7 +54,7 @@ def fake_gitleaks(served: Path, version: str = PINNED, on_scan: str = "exit 0", 
 
 def hygiene_exit_2(repo: Path, capsys, locate_zizmor=never_located) -> str:
     assert cli.main(["hygiene", str(repo)], locate_zizmor=locate_zizmor) == 2
-    return capsys.readouterr().err
+    return heard(capsys)
 
 
 @pytest.mark.parametrize(
@@ -123,7 +125,7 @@ def scan(repo: Path) -> int:
 def test_hygiene_refuses_a_config_with_unknown_keys(build_repo, installed_scanners, capsys, config):
     """#40 rule 2: hygiene keeps refusing unknown keys of quality/config.toml."""
     assert scan(build_repo({"quality/config.toml": config})) == 2
-    assert "unknown key" in capsys.readouterr().err
+    assert "unknown key" in heard(capsys)
 
 
 def commit(repo: Path, message: str) -> None:
@@ -277,7 +279,7 @@ def test_a_template_directory_cannot_put_attributes_into_the_mirror(
 
 
 @pytest.mark.scanner
-@pytest.mark.parametrize(("command", "refusal"), [("hygiene", "hygiene: secret"), ("scan-staged", "scan-staged:")])
+@pytest.mark.parametrize(("command", "refusal"), [("hygiene", refusal_row("secrets")), ("scan-staged", "scan-staged: cannot judge - ")])
 @pytest.mark.parametrize("git_version", ["2.40.1", "1.9.0"])
 def test_a_git_older_than_2_41_is_exit_2_naming_the_version(
     installed_scanners, build_repo, fake_git, capsys, git_version, command, refusal
@@ -288,10 +290,7 @@ def test_a_git_older_than_2_41_is_exit_2_naming_the_version(
     """
     fake_git(f'[ "$1" = "--version" ] && echo "git version {git_version}" && exit 0')
     assert cli.main([command, str(build_repo({}))]) == 2
-    assert capsys.readouterr().err.strip() == (
-        f"{refusal} cannot judge - git {git_version} cannot hide .gitattributes from the gitleaks scan, "
-        "it needs git 2.41"
-    )
+    assert f"{refusal}git {git_version} cannot hide .gitattributes from the gitleaks scan, it needs git 2.41" in heard(capsys)
 
 
 @pytest.mark.scanner
@@ -511,7 +510,7 @@ def run_with_recorded_leak(build_repo, served_scanners, capsys, config: str | No
         (allow_config(("generic-api-key", RECORDED_FILE, RECORDED_SECRET, "other rule")), 1,
          "secret deploy/config.txt:3", "allowed"),
         (allow_config((RECORDED_RULE, RECORDED_FILE, RECORDED_SECRET, "test data")), 0,
-         "secret: 1 allowed (deploy/config.txt:3)", "hygiene: 1 finding"),
+         "secret: 1 allowed (deploy/config.txt:3)", " finding"),
     ],
     ids=[
         "no-config-is-red-not-exit-2",
@@ -728,25 +727,28 @@ def test_an_allowance_no_finding_used_is_printed(build_repo, installed_scanners,
 
 WORKFLOW_AND_LOCK = {".github/workflows/w.yml": "on: push\n", "uv.lock": uv_lock()}
 SCANNER_COMMANDS = [
-    ("hygiene", scanners.GITLEAKS),
-    ("hygiene", scanners.ACTIONLINT),
-    ("hygiene", scanners.OSV_SCANNER),
-    ("scan-staged", scanners.GITLEAKS),
+    ("hygiene", scanners.GITLEAKS, Rule.LEAK),
+    ("hygiene", scanners.ACTIONLINT, Rule.WORKFLOW_LINT),
+    ("hygiene", scanners.OSV_SCANNER, Rule.ADVISORY),
+    ("scan-staged", scanners.GITLEAKS, None),
 ]
 
 
-@pytest.mark.parametrize(("command", "name"), SCANNER_COMMANDS)
+@pytest.mark.parametrize(("command", "name", "rule"), SCANNER_COMMANDS)
 def test_a_scanner_mise_has_not_installed_cannot_judge_and_names_the_install_command(
-    build_repo, use_mise, served_scanners, elsewhere, capsys, command, name
+    build_repo, use_mise, served_scanners, elsewhere, capsys, command, name, rule
 ):
     """#228 rule 4: a missing scanner is exit 2 with the command that installs it, and no other rule is refused."""
     use_mise(lacking(served_scanners, name))
-    code = cli.main([command, str(build_repo(WORKFLOW_AND_LOCK))], locate_zizmor=fake_zizmor(elsewhere, "echo '[]'"))
-    err = capsys.readouterr().err
-    assert code == 2, err
-    assert f"{name} {scanners.pinned_tool(name).version}" in err
-    assert scanners.install_command() in err
-    assert err.count("cannot judge") == 1, err
+    repo, locate_zizmor = build_repo(WORKFLOW_AND_LOCK), fake_zizmor(elsewhere, "echo '[]'")
+    code = cli.main([command, str(repo)], locate_zizmor=locate_zizmor)
+    output = heard(capsys)
+    assert code == 2, output
+    assert all(text in output for text in (f"{name} {scanners.pinned_tool(name).version}", scanners.install_command()))
+    if rule is None:
+        assert output.count("cannot judge") == 1, output
+    else:
+        assert list(refusals(repo, locate_zizmor=locate_zizmor)) == [rule]
 
 
 def test_without_mise_the_scanner_rules_cannot_judge_and_every_other_rule_still_judges(
@@ -757,11 +759,9 @@ def test_without_mise_the_scanner_rules_cannot_judge_and_every_other_rule_still_
     code = cli.main(["hygiene", str(repo)], locate_zizmor=fake_zizmor(elsewhere, "echo '[]'"))
     captured = capsys.readouterr()
     assert code == 2, captured.err
-    assert "https://mise.jdx.dev/installing-mise.html" in captured.err
-    assert scanners.install_command() in captured.err
-    assert {rule: f"hygiene: {rule} cannot judge" in captured.err for rule in ("secret", "workflow-lint", "advisory")} == {
-        "secret": True, "workflow-lint": True, "advisory": True,
-    }
+    assert "https://mise.jdx.dev/installing-mise.html" in captured.out
+    assert scanners.install_command() in captured.out
+    assert set(refusals(repo, locate_zizmor=fake_zizmor(elsewhere, "echo '[]'"))) == {Rule.LEAK, Rule.WORKFLOW_LINT, Rule.ADVISORY}
     assert "env-file .env - " in captured.out
 
 
@@ -773,8 +773,8 @@ def test_a_scanner_that_reports_another_version_than_the_manifest_is_never_run(
     marker = tmp_path / "scanned"
     fake_scanner(served_scanners, scanners.GITLEAKS, f"touch {marker}", version="9.9.9")
     code = cli.main([command, str(build_repo({}))])
-    err = capsys.readouterr().err
-    assert (code, "'9.9.9'" in err, repr(scanners.pinned_tool(scanners.GITLEAKS).version) in err) == (2, True, True), err
+    output = heard(capsys)
+    assert (code, "'9.9.9'" in output, repr(scanners.pinned_tool(scanners.GITLEAKS).version) in output) == (2, True, True), output
     assert not marker.exists()
 
 
@@ -811,15 +811,15 @@ def test_mise_is_asked_in_the_manifest_directory_under_its_ceiling(build_repo, u
 def test_a_mise_answer_that_is_no_usable_scanner_names_the_install_command(build_repo, use_mise, capsys, body, reason):
     """#228 rule 4, #265: external output that yields no pinned executable, a process error included, is exit 2 and the install command."""
     use_mise(body)
-    exit_code, err = cli.main(["hygiene", str(build_repo({}))]), capsys.readouterr().err
-    assert (exit_code, reason in err, scanners.install_command() in err) == (2, True, True)
+    exit_code, output = cli.main(["hygiene", str(build_repo({}))]), heard(capsys)
+    assert (exit_code, reason in output, scanners.install_command() in output) == (2, True, True)
 
 
 def test_a_repository_with_no_workflow_and_no_lock_needs_only_gitleaks(build_repo, path_without_mise, capsys):
     """#265 F1: nothing to scan needs no scanner, so without mise only the secret rule cannot judge."""
-    assert cli.main(["hygiene", str(build_repo({}))]) == 2
-    err = capsys.readouterr().err
-    assert (err.count("cannot judge"), "hygiene: secret cannot judge" in err) == (1, True), err
+    repo = build_repo({})
+    assert cli.main(["hygiene", str(repo)]) == 2
+    assert list(refusals(repo)) == [Rule.LEAK], heard(capsys)
 
 
 def test_the_manifest_pins_each_scanner_once():

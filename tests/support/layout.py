@@ -4,7 +4,7 @@ import subprocess
 
 import pytest
 
-from tests.support.check import hygiene_output
+from tests.support.check import hygiene_output, refusals
 
 CONFIG = "quality/config.toml"
 GUIDANCE = {"AGENTS.md": "# guidance\n"}
@@ -26,8 +26,7 @@ def in_index(repo, *arguments: str) -> None:
 def red(capsys, repo, rule: str) -> list[str]:
     """The paths the hygiene run of `repo` reports under `rule`; a run that cannot judge `rule` fails the test."""
     output = hygiene_output(capsys, repo)[1]
-    assert f"hygiene: {rule} cannot judge" not in output
-    assert f"hygiene: {rule} unparsable" not in output
+    assert rule not in refusals(repo)
     return findings(output, rule)
 
 

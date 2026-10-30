@@ -16,7 +16,7 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   word `compose` between `.`, `-` or `_`, in any case: `docker-compose.ci.yml` and `keycloak/bootstrap.compose.yaml` are
   judged, `composer.yml`, `compose2.yaml` and `compose.yaml.example` are not. Only tracked files count: an untracked
   `compose.yaml` is never judged, one added with `git add` is. A tracked file missing from disk (deleted, or a symlink
-  to nowhere or in a loop) is skipped; one the filesystem refuses to read is `hygiene: compose-port cannot judge - ...`.
+  to nowhere or in a loop) is skipped; one the filesystem refuses to read makes the `files` row `✗ not checked` with the reason (exit `2`).
   A file is read as Compose reads it: `- 22:22` is the text `22:22`, and `!override` and `!reset` are read as the
   value they wrap; any other tag (`!foo`) and any YAML error is `cannot judge`, in one line with its line and column
   (or its position for a character YAML refuses, `nested too deeply`, `a value does not fit its tag`, or `not valid
@@ -37,7 +37,7 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   finding on its file: the file is not tracked or not a compose file, it lacks the service, or the service is neither
   host-networked nor interpolated there; the fix is to delete the entry. A duplicate `(file, service)`, a folder (a
   trailing `/`), a pattern (`*`, `?`, `[`), `..`, an absolute path, an unknown key, a missing key or a service or reason
-  that is not one-line text is `hygiene: compose-port cannot judge - ...` with a `[[compose.allow]]` example, and a
+  that is not one-line text makes the `files` row `✗ not checked` with the reason and a `[[compose.allow]]` example, and a
   malformed other table in `quality/config.toml` is forwarded with its validation error. A declaration is no loosening,
   so `quality verdict` asks for no `[[gate.loosened]]` entry. A config reader older than the rule refuses `[compose]`
   as an unknown key. (#45 row Q1b-3g, operator ruling 19.10.2026: „Erst Doku, dann Erlaubnisliste (empfohlen)“)
@@ -64,7 +64,7 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   cannot see what that job runs; the operator checks it once, at the door). A missing or extra key, a folder, a pattern,
   `..`, an absolute path, a `job` the gate does not list (a config without `mandatory_jobs` included), a malformed `item`
   or `date`, a reason that is not one line or two entries for one path is exit `2` naming the entry with this
-  example: in `hygiene` as `size cannot judge`, in `quality baseline write` as `baseline: not written`, and in the
+  example: in `hygiene` as the `debt` row `✗ not checked`, in `quality baseline write` as `baseline: not written`, and in the
   verdict and the door naming the side; `scan-staged` reads only `[secrets]`. A declaration whose path holds no tracked file in
   a measured language is a `size` finding on that path, fixed by deleting the entry. Only `quality/config.toml` declares:
   `.gitattributes`, `linguist-generated` included, plays no part. Only the `size` rule leaves the file out: `clone` and
@@ -78,10 +78,10 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   A `.py` file is read the way Python reads source (a PEP 263 coding cookie or a UTF-8 BOM decides the encoding). One
   Python 3.14 cannot decode or parse is named as not valid Python: without a baseline the count notes it (`1 file(s) not
   valid Python, functions unmeasured: bad.py`) and the size verdict is unchanged, while `python-security` judges
-  the file unparsable or cannot judge it (exit `2`); with a baseline it is `hygiene: size
-  unparsable - bad.py is not valid Python (...)`, and `quality baseline write` refuses with `baseline: not written -
-  bad.py is not valid Python (...)`; both exit `2`. A tracked file the operating system refuses to read is `hygiene:
-  size cannot judge - ...` with or without a baseline, and `quality baseline write` refuses with `baseline: not written - ...`; both exit `2`.
+  the file unparsable or cannot judge it (exit `2`); with a baseline the `debt` row is `✗ not checked` with
+  `bad.py is not valid Python (...)`, and `quality baseline write` refuses with `baseline: not written -
+  bad.py is not valid Python (...)`; both exit `2`. A tracked file the operating system refuses to read makes the
+  `debt` row `✗ not checked` with or without a baseline, and `quality baseline write` refuses with `baseline: not written - ...`; both exit `2`.
   The reason names the case: a file without read permission is `cannot read locked.py: [Errno 13] ...`, a file behind
   a directory without permission is `cannot reach pkg/m.py: [Errno 13] ...`. A tracked file missing from disk
   (deleted, or a dangling symlink) is skipped. A `quality/baseline.toml` that is not UTF-8 is malformed like invalid
@@ -118,9 +118,9 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   pair).`, fix: give the shared body one owner and call it, or make the cases one parametrized test) and so is a held
   pair the tree lost, even when a side was deleted (`clone tests/test_a.py - the baseline holds the pair tests/test_a.py
   run <-> tests/test_b.py hygiene, which is gone (stale).`, fix: `quality baseline write`); an enforced rule prints no
-  report line. A Python file that cannot be parsed may hide a pair, so with a `[clones]` table it is `clone
-  unparsable` (exit `2`), as for `size`. The baseline is read once for both rules: one that cannot be read leaves both
-  `cannot judge` (exit `2`), also when it has no `[clones]` table, since the mode is then unknown.
+  report line. A Python file that cannot be parsed may hide a pair, so with a `[clones]` table the `debt` row is `✗ not checked`
+  (exit `2`), as for `size`. The baseline is read once for both rules: one that cannot be read leaves both
+  unjudged (the `debt` row names the reason once, exit `2`), also when it has no `[clones]` table, since the mode is then unknown.
   quality owns this detector instead of calling jscpd or lizard (operator ruling 21.10.2026: „aco-Prüfer übernehmen
   (empfohlen)“); the reasons stand in [decision 3](decisions/3-clone-detector.md). The threshold, what makes a pair, how
   it is named, the report-only mode and the printed lines were shown to the operator and left unanswered, so they stand
@@ -145,7 +145,7 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   place outside named from the `sys.path` entry it lies under; a place inside is named repository-relative), a symlink
   under a root package that leaves the repository, directly or through a link that stays inside, and a symlink loop, and a `.py` file that "cannot be examined" (no regular file, a name or content that is not valid
   UTF-8, a coding cookie in any spelling but utf-8, utf8, unicode-1-1-utf-8, unicode11utf8, x-unicode20utf8, ascii, us-ascii or ansi_x3.4-1968 (accepted in any letter case), or one the system will not let it read). A
-  module grimp cannot parse is `hygiene: import-contract unparsable - ...`; a warning grimp gives while building the
+  module grimp cannot parse makes the `imports` row `✗ not checked` with the reason (exit `2`); a warning grimp gives while building the
   graph is one `import-contract: note - ...` line. No message names an absolute local path.
   On a pull request `quality verdict` and the door also hold the head's import contracts against the base's (see
   "The import contracts only tighten" below).
@@ -156,7 +156,7 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   bytes are a finding, a Windows line ending included; a nested `docs/CLAUDE.md` is not judged. The reason and the fix
   are fixed prose that names the file and never shows its content; every fix is prose with no command, and for a file's
   own text it says to move the lines into `AGENTS.md`. A tracked file missing from disk is skipped; one the filesystem refuses to read
-  is `hygiene: claude-md cannot judge - ...`. No configuration switches the rule off.
+  makes the `files` row `✗ not checked` with the reason (exit `2`). No configuration switches the rule off.
   (operator ruling 20.10.2026: „ich will kein auseinanderlaufen von claude.md und agents.md!“; answers of 21.10.2026:
   the finding names only the file, „Nur Dateiname (empfohlen)“, and the fix is a sentence, „Satz, kein Befehl
   (empfohlen)“)
@@ -181,9 +181,9 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   clean. A finding names the entry and both ways out, move it to its owner's directory or declare it with a reason, in
   prose with no command and no local path; findings are sorted by entry and all printed. An invalid declaration (a `/`
   inside the entry, `.`, `..`, `.git`, an empty entry, a multi-line reason, an unknown key, or one entry declared
-  twice) is `hygiene: root-layout cannot judge - ...` with a `[[root.allow]]` example. Any other malformed table or
-  allowance elsewhere in `quality/config.toml`, which plain `quality hygiene` reads for this rule, is `root-layout cannot
-  judge` too, with that table's own message; the values of `[gate]` stay the verdict's to judge. Any pull request may add a declaration with a reason; the review judges whether the reason holds. A declaration is no loosening, so `quality verdict` asks for no
+  twice) makes the `files` row `✗ not checked` with the reason and a `[[root.allow]]` example. Any other malformed table or
+  allowance elsewhere in `quality/config.toml`, which plain `quality hygiene` reads for this rule, refuses it too,
+  with that table's own message; the values of `[gate]` stay the verdict's to judge. Any pull request may add a declaration with a reason; the review judges whether the reason holds. A declaration is no loosening, so `quality verdict` asks for no
   `[[gate.loosened]]` entry (operator ruling 23.10.2026: „jeder PR mit Grund, das Review urteilt, ohne deine Tür“).
   The rule reads names, never content, and writes nothing. No configuration switches it off. A config reader older than
   the rule refuses `[root]` as an unknown key, so a declaration lands in the pull request that moves the repository to
@@ -192,8 +192,8 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
 - `file-suffix`: a tracked file whose basename has no suffix is a finding, unless it is executable (index mode
   100755), a symlink (120000) or a gitlink (160000), its basename is a dotfile, its basename is on quality's list of
   tool-mandated names (`LICENSE Dockerfile Makefile CODEOWNERS`), or it is declared. The index (`git ls-files -s`) is
-  the only source of a path's mode and a link is never followed; index data that cannot be read is
-  `hygiene: file-suffix cannot judge - ...`. Names compare in exact case, in any folder. The list belongs to quality and
+  the only source of a path's mode and a link is never followed; index data that cannot be read makes
+  the `files` row `✗ not checked` with the reason (exit `2`). Names compare in exact case, in any folder. The list belongs to quality and
   changes with a quality version. A file is declared in `quality/config.toml`, a table of its own beside
   `[[root.allow]]`, one exact tracked path, the rule and a one-line reason:
 
@@ -210,7 +210,7 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   names the file and both ways out, give it a suffix or declare it, in prose with no command; findings are sorted by
   path and all printed. A duplicate `(rule, path)`, a folder (a trailing `/`), a pattern (`*`, `?`, `[`), `..`, a
   leading `./`, an empty component, an absolute path, an unknown rule, an unknown key or a reason that is not one-line
-  text is `hygiene: file-suffix cannot judge - ...` with a `[[layout.allow]]` example; a malformed `[layout]` table is
+  text makes the `files` row `✗ not checked` with the reason and a `[[layout.allow]]` example; a malformed `[layout]` table is
   the same, and another malformed table in `quality/config.toml` is forwarded with its validation error. A
   declaration is no loosening, so `quality verdict` asks for no `[[gate.loosened]]` entry. The rule writes nothing and
   no configuration switches it off. A config reader older than the rule refuses `[layout]` as an unknown key. (#175,
@@ -219,7 +219,7 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   `#!`, or that is a `.sh`, `.py` or `.mjs` file under a `scripts/` folder at any depth (`frontend/scripts/` too). A
   path with a `tests/` component is never a script, nor is a link (120000, 160000), nor data beside a script such as
   `scripts/BACKUP.md`. The mode comes from the index only; the content is read through the repository reader, and a
-  file that cannot be read is `hygiene: script-header cannot judge - ...` (exit 2). Both rules compare names in exact
+  file that cannot be read makes the `files` row `✗ not checked` with the reason (exit 2). Both rules compare names in exact
   case, print all findings sorted by path and have no off switch. A declaration is a `[[layout.allow]]` entry as for
   `file-suffix`.
   - `script-name`: a script's basename without its extension is snake_case with at least two words
@@ -242,8 +242,8 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   case: an `__init__.py` (delete it, or declare it) or any other file (move it to a `support/` helper folder or a
   `fixtures/` data folder, or declare it). A declaration is a `[[layout.allow]]` entry with the rule `test-layout` on
   an exact tracked path. Paths come from the index and nothing is read from disk; a link or gitlink is judged by its
-  own name and never followed; an index record that cannot be read is `hygiene: test-layout cannot judge - ...` (exit
-  2). Names compare in exact case, all findings print sorted by path and no configuration switches the rule off.
+  own name and never followed; an index record that cannot be read makes the `files` row `✗ not checked` (exit
+  `2`). Names compare in exact case, all findings print sorted by path and no configuration switches the rule off.
   Named gaps, waiting for usage evidence: a `tests/` folder elsewhere (`src/p/tests/`), a project with only
   `setup.py`, a project whose `src/` holds only modules, and a package named `support` or `fixtures`.
   Every `test_*.py` outside `fixtures/` and the top-level `e2e/` mirrors the module it tests, one direction. Its
@@ -299,9 +299,8 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   One finding per statement, at `path:line`, names each target it imports; the fix is a `support/` module or a
   fixture in `conftest.py`, or a `[[layout.allow]]` entry with the rule `test-import` on the importer's path, which
   exempts all its imports (an untracked declared path is a finding; a `test-layout` declaration does not cover it).
-  Importers are decoded as Python 3.14 reads source and parsed: a file that does not parse is
-  `hygiene: test-import unparsable - <path> is not valid Python (...)` (exit 2) and one that cannot be read is
-  `hygiene: test-import cannot judge - ...` (exit 2); no other file is read. All findings print sorted by path and
+  Importers are decoded as Python 3.14 reads source and parsed: a file that does not parse
+  (`<path> is not valid Python (...)`) or cannot be read makes the `files` row `✗ not checked` with the reason (exit 2); no other file is read. All findings print sorted by path and
   line and no configuration switches the rule off. Not read, and waiting for usage evidence: string imports
   (`importlib.import_module`, `__import__`, `pytest.importorskip`), `pytest_plugins`, `sys.path` edits, `runpy`,
   source passed to a subprocess with `-c`, and `*_test.py` as a target. An import whose name matches a tracked test
@@ -320,11 +319,11 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   or `..`) and a one-line `reason`, one per path, makes that file clean; its own table, because the exception is meant
   to end. The gate shows each one before the verdicts (`python-floor: allowed speech/pyproject.toml (requires-python
   ">=3.12,<3.13") - <reason>`). An entry whose path is no judged file (untracked, gone, without `[project]`) or whose
-  file is already at the floor is a finding; its fix is to delete the entry. A malformed entry is `cannot judge` in
+  file is already at the floor is a finding; its fix is to delete the entry. A malformed entry refuses
   every rule that reads the config, and a config reader older than the rule refuses `[python]` as an unknown key, so
   declare only after the bump. A candidate that is not UTF-8 TOML, or whose `requires-python` is no string, no PEP 440
-  specifier set or a `===` clause with a version that is not PEP 440 (`===foobar`), is
-  `hygiene: python-floor unparsable - ...` (exit 2). No configuration switches the rule off, and a declaration asks
+  specifier set or a `===` clause with a version that is not PEP 440 (`===foobar`), makes
+  the `files` row `✗ not checked` with the reason (exit 2). No configuration switches the rule off, and a declaration asks
   `quality verdict` for no `[[gate.loosened]]` entry. Only `requires-python` is read, because uv and
   pip refuse an interpreter outside it, so a leftover setter cannot install the project on old Python. Not read, and
   waiting for usage evidence: workflows, `.python-version`, Dockerfiles, ruff's `target-version`, `setup.py`,
@@ -352,9 +351,9 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   so a caller's own ruff stays quiet. A caller whose ruff selects none of a family (S or T20) lists exactly that
   family in `lint.external`, which keeps its RUF100 from calling the gate's noqa unused; a caller whose ruff selects a
   family (for example `select = ["ALL"]`) leaves it out, because its ruff honours each noqa itself and ignores a
-  file-level `# ruff: noqa` for a code listed in `external`. A file ruff cannot parse makes the rule `hygiene: python-security unparsable -
-  ruff cannot parse <path>` (exit 2); a tracked `.py` file the checkout does not hold (deleted, left out by a sparse
-  checkout, or a link to nowhere), a file Python cannot decode, or reads as other
+  file-level `# ruff: noqa` for a code listed in `external`. A file ruff cannot parse makes the `code` row
+  `✗ not checked` with `ruff cannot parse <path>` (exit 2); a tracked `.py` file the checkout does not hold (deleted,
+  left out by a sparse checkout, or a link to nowhere), a file Python cannot decode, or reads as other
   text than ruff reads as UTF-8 (a PEP 263 cookie such as utf-7), a missing or mismatched ruff, ruff exiting other
   than 0 or 1, a `Failed to lint` warning, a report quality cannot
   read, a time-out or a file with a finding whose comments Python's tokenizer cannot read is `cannot judge` (exit 2). One such file
@@ -608,14 +607,7 @@ open npm advisories keep the bump pull request red); the other lines stand at th
 Every rule is judged, even when another cannot be, and gives one verdict: clean, findings, unparsable, or cannot judge.
 Each finding names the rule, the file, a reason and a fix. Repository text (a file name, a service, a port, a contract
 or job name, a configuration entry) prints escaped. In the door's own fields (a finding's location, reason and fix, refusals, reports), invalid UTF-8 prints as `\udcNN`, every control character (line feed,
-carriage return, ESC, tab, DEL, C1) as `\xNN`, and U+2028, U+2029 and every format character (Unicode category Cf: bidi overrides, isolates and marks, zero-width characters, the soft hyphen, the byte order mark, tag characters) as `\uNNNN` (`\UNNNNNNNN` above U+FFFF). A line taken from import-linter's rendering (a broken contract's chain and guidance) prints behind the marker `  | `; rich may drop a carriage return, expand a tab, or start a new marked line at a line feed there. Every line the door prints therefore starts with its own text, so a matcher anchored at the line start, such as setup-uv's python matcher, cannot match repository text. A refusal is one line; the lines the door means to print (an import chain, the verdict's problems, the scoreboard's table) stay lines. A rule that cannot judge prints its verdict and reason under its rule id (`hygiene: secret cannot
-judge - ...`). A clean run names its rules in run order (`hygiene: clean (env-file, compose-port, size, clone, import-contract, claude-md, root-layout, file-suffix, script-name, script-header, test-layout, test-import, python-floor, python-security, python-print, secret, workflow-lint, workflow-security, advisory); workflow-security runs offline, so zizmor's online-only audits do not run`); any other run ends with the findings and the verdicts counted (`hygiene: 1 finding(s); verdicts: 1
-clean, 1 findings, 1 unparsable`). The lines come in run order, also through a pipe that merges stdout and stderr
-(`2>&1 | tee log`); each stays on its own stream. That is option (c) of #86 on 19.10.2026, `cli.main` makes stdout
-line-buffered; the head's confirmation that it is the cleanest drew no objection, which is no spoken ruling. The exit is the worst verdict's: `2` if any rule is unparsable or cannot judge
-(never clean), otherwise `1` if any rule has findings, otherwise `0`. A path git cannot read as a work tree (a file, a missing path, a
-folder without permission, a bare repository, the inside of `.git`) is `hygiene: cannot judge - <PATH as given> is not a
-readable git repository: ... (`git -C '<PATH>' status` says why; a PATH with an unprintable character gets `git status` run inside it instead)` and exit `2` before any rule runs.
+carriage return, ESC, tab, DEL, C1) as `\xNN`, and U+2028, U+2029 and every format character (Unicode category Cf: bidi overrides, isolates and marks, zero-width characters, the soft hyphen, the byte order mark, tag characters) as `\uNNNN` (`\UNNNNNNNN` above U+FFFF). A line taken from import-linter's rendering (a broken contract's chain and guidance) prints behind the marker `  | `; rich may drop a carriage return, expand a tab, or start a new marked line at a line feed there. Every line the door prints therefore starts with its own text, so a matcher anchored at the line start, such as setup-uv's python matcher, cannot match repository text. A refusal is one line; the lines the door means to print (an import chain, the verdict's problems, the scoreboard's table) stay lines. The picture of the output is `docs/output.md`; `quality hygiene` prints its frame. First the notes, each in its own text: the allowed secrets and unused allowances, then the notes of the rules in run order (the size and clone counts of a debt without a ceiling file, the import-contract and python-floor notes, the python-print output owners, the allowed advisories), and last the online-audits note (`workflow-security runs offline, so zizmor's online-only audits do not run`). Then one header row per area, in the order files, debt, imports, secrets, workflows, dependencies, code, also when it is clean, and under a row the findings of that area in their own text, whatever its glyph: `✓ <area>  clean`; `! <area>  N findings`; `· debt  not recorded  measured only` (`partly measured only` when the ceiling file has no `[clones]` table); `✗ <area>  not checked  <reason>`. An area whose rules cannot judge for several distinct reasons says `✗ <area>  not checked  N reasons` and names each reason on a `✗` line below the row, and an equal reason counts once. A rule that cannot judge refuses only itself, so the findings of the other rules, those of its own area included, still print (head proposals O2 and O3 of 30.10.2026, `docs/output.md`, case 4). Exit `0` or `1` ends with one verdict line on stdout: `✓ clean · 7 areas · <1s` or `! 5 findings in 3 areas · 4 areas clean · 14s`, with `debt measured, not enforced` (`partly measured, not enforced`) before the duration when no ceiling file holds the debt; the duration is `<1s`, `12s` or `1m12s`. Exit `2` ends instead with `error: K of 7 areas could not check`, followed by ` · N findings in the others` or, when findings stand under a `✗` row, ` · N findings, M of them in those areas`, and `next: fix what the ✗ rows name, then run quality hygiene again` on stderr, and prints no verdict line. The lines come in run order, also through a pipe that merges stdout and stderr (`2>&1 | tee log`); each stays on its own stream. That is option (c) of #86 on 19.10.2026, `output.set_up_streams`, which `cli.run` calls, makes stdout line-buffered; the head's confirmation that it is the cleanest drew no objection, which is no spoken ruling. The glyphs, the verdict and the `error:` and `next:` labels are coloured with the 16 base colours, and facts and notes are dim, only on a stream that is a terminal, with `NO_COLOR` unset or empty and `TERM` not `dumb`; a pipe, the CI log and `NO_COLOR` print the same words plain. The exit is the worst verdict's: `2` if any rule is unparsable or cannot judge (never clean), otherwise `1` if any rule has findings, otherwise `0`; a rule that only measured is `0`. A run that cannot start prints only the pair and exits `2` before any rule runs: `error: not inside a git work tree · <PATH as given>` with `next: run quality hygiene inside a repository` when git, asked in the C locale, says the path lies outside any work tree (a folder outside any repository, a bare repository, the inside of `.git`), and otherwise (a file, a missing path, a folder without permission, a repository git refuses) `error: <PATH as given> is not a readable git repository: ...` (`git -C '<PATH>' status` says why; a PATH with an unprintable character gets `git status` run inside it instead) with `next: fix what the error names, then run quality hygiene again` (O5).
 In GitHub Actions (`GITHUB_ACTIONS=true`) the door first prints `::stop-commands::<token>` on stderr and on stdout, a new random token per run, so no
 workflow command in repository text runs (operator ruling 20.10.2026, asked whether to stop the commands, escape the
 text, or both: „Beides (empfohlen)“): no `::warning::` or `##[warning]` annotation, no `add-mask`, no `add-matcher`; the stop lasts for the rest of the step, and the door never prints the line that lifts it. Problem matchers registered in the job still read the log (the stop does not reach them). The gate's jobs register only setup-uv's python matcher, which is anchored at the line start and so cannot match repository text; a matcher another step registers may still match a door line that holds repository text, and the door cannot prevent that.

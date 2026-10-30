@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support.check import hygiene_output
+from tests.support.check import hygiene_output, refused
 from tests.support.merge import ONE_JOB
 
 CONFIG = "quality/config.toml"
@@ -138,7 +138,7 @@ def test_a_malformed_compose_table_cannot_be_judged(build_repo, capsys, config):
     """#188 sentence 3: each malformed entry is exit 2 and names `[[compose.allow]]` with an example."""
     code, output = hygiene_output(capsys, build_repo({"compose.yaml": service_file("host"), CONFIG: ONE_JOB + config}))
     assert code == 2
-    assert "compose-port cannot judge" in output
+    assert refused(output, "files")
     assert "[[compose.allow]]" in output
     assert "like:" in output
 

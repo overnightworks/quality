@@ -21,8 +21,9 @@ from quality.ratchet import (
     raised_entries,
     render_baseline,
 )
-from tests.support.check import CLEAN_LINE
+from quality.rules import Rule
 from tests.support.check import hygiene_output as hygiene
+from tests.support.check import hygiene_run, is_clean, refusal_row, refusals
 from tests.support.git_repositories import make_repo
 from tests.support.source_code import (
     branchy_function,
@@ -50,11 +51,12 @@ def test_without_a_baseline_the_rule_only_counts_production_and_tests(build_repo
     )
     code, output = hygiene(capsys, repo)
     assert code == 0, output
-    assert (
+    counts = (
         "size: report only (no quality/baseline.toml) - production: 1 file(s) >= 800 lines, "
         "1 function(s) >= 60 lines, 1 function(s) CCN > 15; tests: 1 file(s) >= 800 lines, "
         "0 function(s) >= 60 lines, 0 function(s) CCN > 15"
-    ) in output
+    )
+    assert counts in output
 
 
 def build_repo_with_source(build_repo, files: dict[str, str], name: str, source: bytes) -> Path:
@@ -88,9 +90,10 @@ SOURCE_NAME = "src/source.py"
 )
 def test_a_file_python_can_read_is_measured_in_its_declared_encoding(build_repo, capsys, source, python_security_cannot_judge):
     """#46 rule 1: the size rule measures every tracked Python file Python itself reads; ruff reads UTF-8 only (#219)."""
-    code, output = hygiene(capsys, build_repo_with_source(build_repo, {}, SOURCE_NAME, source))
-    assert ("hygiene: python-security cannot judge" in output) == python_security_cannot_judge, output
-    assert ("hygiene: python-print cannot judge" in output) == python_security_cannot_judge, output
+    repo = build_repo_with_source(build_repo, {}, SOURCE_NAME, source)
+    code, output = hygiene(capsys, repo)
+    assert (Rule.PYTHON_SECURITY in refusals(repo)) == python_security_cannot_judge, output
+    assert (Rule.PYTHON_PRINT in refusals(repo)) == python_security_cannot_judge, output
     assert code == (2 if python_security_cannot_judge else 0), output
     assert "production: 0 file(s) >= 800 lines, 1 function(s) >= 60 lines" in output
     assert "not valid Python" not in output
@@ -125,13 +128,11 @@ def test_without_a_baseline_the_size_rule_names_a_file_python_cannot_read_and_py
 ):
     """#46 rule 3: the size rule reports the file without refusing; python-security (#219) and python-print (#225)
     alone turn the run to exit 2."""
-    code, output = hygiene(capsys, build_repo_with_source(build_repo, {"src/ok.py": "x = 1\n"}, SOURCE_NAME, source))
+    repo = build_repo_with_source(build_repo, {"src/ok.py": "x = 1\n"}, SOURCE_NAME, source)
+    code, output = hygiene(capsys, repo)
     assert code == 2, output
-    for rule in ("python-security", "python-print"):
-        refusal = rf"hygiene: {rule} (cannot judge - cannot read|unparsable - ruff cannot parse) {re.escape(SOURCE_NAME)}"
-        assert re.search(refusal, output), output
-    assert "size cannot judge" not in output
-    assert "size unparsable" not in output
+    assert list(refusals(repo)) == [Rule.PYTHON_SECURITY, Rule.PYTHON_PRINT]
+    assert all(re.search(rf"(cannot read|ruff cannot parse) {re.escape(SOURCE_NAME)}", reason) for reason in refusals(repo).values())
     assert f"1 file(s) not valid Python, functions unmeasured: {SOURCE_NAME}" in output
 
 
@@ -141,7 +142,7 @@ def test_against_a_baseline_a_file_python_cannot_read_is_unparsable(build_repo, 
     repo = build_repo_with_source(build_repo, {BASELINE_PATH: EMPTY_BASELINE}, SOURCE_NAME, source)
     code, output = hygiene(capsys, repo)
     assert code == 2
-    assert f"hygiene: size unparsable - {SOURCE_NAME} is not valid Python" in output
+    assert f"{refusal_row('debt')}{SOURCE_NAME} is not valid Python" in output
 
 
 @NOT_PYTHON
@@ -213,7 +214,7 @@ def test_below_the_thresholds_or_with_a_fixed_entry_gone_is_clean(build_repo, ca
     baseline = '[file_lines]\n"src/gone.py" = 900\n'
     code, output = hygiene(capsys, build_repo({**files, BASELINE_PATH: baseline}))
     assert code == 0, output
-    assert CLEAN_LINE in output
+    assert is_clean(output)
 
 
 @pytest.fixture(params=["deleted", "dangling", "cell 18 dangling out of the repository"])
@@ -248,10 +249,11 @@ def test_a_tracked_file_missing_from_disk_is_gone_for_the_size_rule_and_only_the
     repo = build_repo(files if baseline is None else {**files, BASELINE_PATH: baseline})
     remove(repo / "src/b.py")
     code, output = hygiene(capsys, repo)
-    refusals = [line for line in output.splitlines() if " cannot judge - " in line or " unparsable - " in line]
-    assert (code, "hygiene: 0 finding(s);" in output) == (2, True), output
-    assert [refusal.split(" cannot judge - ")[0] for refusal in refusals] == ["hygiene: python-security", "hygiene: python-print"], output
-    assert all("src/b.py" in refusal for refusal in refusals), output
+    refusing = refusals(repo)
+    assert code == 2, output
+    assert hygiene_run(repo).findings == [], output
+    assert list(refusing) == [Rule.PYTHON_SECURITY, Rule.PYTHON_PRINT], output
+    assert all("src/b.py" in reason for reason in refusing.values()), output
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-0 path, so no permission is refused")
@@ -276,11 +278,10 @@ def test_a_tracked_file_the_filesystem_refuses_to_reach_cannot_be_judged(build_r
     finally:
         (repo / locked).chmod(0o755)
     assert code == 2
-    prefix = "hygiene: size cannot judge - " if command == "hygiene" else "baseline: not written - "
-    err = capsys.readouterr().err
-    assert (prefix + reason in err, str(repo) in err) == (True, False), err
-    if command == "hygiene":
-        assert "hygiene: clone cannot judge - " + reason in err, err
+    prefix = f"{refusal_row('debt')}" if command == "hygiene" else "baseline: not written - "
+    captured = capsys.readouterr()
+    output = captured.out + captured.err
+    assert (prefix + reason in output, str(repo) in output) == (True, False), output
 
 
 @pytest.mark.parametrize(
@@ -292,7 +293,7 @@ def test_a_size_baseline_the_toml_reader_gives_up_on_cannot_be_judged(build_repo
     """#218 sentence 1: an integer or a nesting tomllib refuses is exit 2 with the ruled message, not a traceback."""
     repo = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: content})
     assert cli.main(["hygiene", str(repo)]) == 2
-    assert f"{BASELINE_PATH} is not valid TOML" in capsys.readouterr().err
+    assert f"{BASELINE_PATH} is not valid TOML" in capsys.readouterr().out
 
 
 def property_pair(lines: int) -> str:
@@ -344,7 +345,7 @@ def test_baseline_write_records_the_measured_debt_sorted_and_hygiene_then_holds_
     assert written.index('[function_lines."src/a.py"]') < written.index('[function_lines."src/b.py"]')
     capsys.readouterr()
     code, output = hygiene(capsys, repo)
-    assert (code, CLEAN_LINE in output) == (0, True), output
+    assert (code, is_clean(output)) == (0, True), output
 
 
 def test_writing_the_baseline_twice_yields_the_same_file(build_repo):
@@ -418,18 +419,20 @@ def test_baseline_write_overwrites_an_unreadable_previous_baseline_with_a_note(b
 def test_an_unreadable_baseline_cannot_be_judged(build_repo, capsys, baseline):
     """#46 rule 4 and #52 rule 7, cell 14: a baseline the rule cannot read is exit 2, never clean, and names the
     rewrite once per rule that reads it (size and clone, #136)."""
-    code, output = hygiene(capsys, build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: baseline}))
+    repo = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: baseline})
+    code, output = hygiene(capsys, repo)
     assert code == 2
-    assert "cannot judge" in output
-    assert output.count("rewrite it with `quality baseline write`") == 2, output
+    assert list(refusals(repo)) == [Rule.SIZE, Rule.CLONE]
+    assert output.count("rewrite it with `quality baseline write`") == 1, output  # both rules, one reason: the debt row names it once
 
 
 def test_an_unknown_baseline_table_states_the_fact_and_sends_the_head_to_its_pinned_release(build_repo, capsys):
     """#153 cell 14: the fact and the tool version, not the command that may have written the table."""
-    code, output = hygiene(capsys, build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: "[future]\n"}))
-    assert code == 2
+    repo = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: "[future]\n"})
+    code, output = hygiene(capsys, repo)
+    assert (code, list(refusals(repo))) == (2, [Rule.SIZE, Rule.CLONE])
     assert f"{BASELINE_PATH} has an unknown table [future]; quality {__version__} knows ccn, file_lines, function_lines, clones" in output
-    assert output.count("write the baseline with the quality release your gate pins") == 2, output
+    assert output.count("write the baseline with the quality release your gate pins") == 1, output
     assert "rewrite it" not in output
 
 
@@ -490,7 +493,7 @@ def test_a_written_baseline_holds_any_utf8_path(build_repo, capsys, path):
     }
     capsys.readouterr()
     code, output = hygiene(capsys, repo)
-    assert (code, CLEAN_LINE in output) == (0, True), output
+    assert (code, is_clean(output)) == (0, True), output
 
 
 def test_a_path_that_is_not_utf8_cannot_be_written_into_the_baseline(build_repo, capsys):
@@ -651,10 +654,11 @@ def not_utf8_baseline_repo(build_repo) -> Path:
 
 def test_a_baseline_that_is_not_utf8_is_malformed_and_names_the_rewrite_once_per_rule(build_repo, capsys):
     """#76 rule 6, cell 18: hygiene's size and clone rules each name the invalid encoding and the rewrite once."""
-    code, output = hygiene(capsys, not_utf8_baseline_repo(build_repo))
-    assert code == 2
+    repo = not_utf8_baseline_repo(build_repo)
+    code, output = hygiene(capsys, repo)
+    assert (code, list(refusals(repo))) == (2, [Rule.SIZE, Rule.CLONE])
     assert f"{BASELINE_PATH} is not valid UTF-8" in output
-    assert output.count("rewrite it with `quality baseline write`") == 2, output
+    assert output.count("rewrite it with `quality baseline write`") == 1, output
 
 
 def test_baseline_write_overwrites_a_baseline_that_is_not_utf8_without_a_rewrite_hint(build_repo, capsys):
@@ -727,14 +731,14 @@ def test_a_function_of_120_lines_in_typescript_is_no_finding_and_the_file_is_not
 
 
 @pytest.mark.parametrize(
-    ("bundle", "code", "named"),
+    ("bundle", "expected_code", "expected_named"),
     [(minified_bundle(), 0, False), ("var a=1;\n" * 800, 1, True)],
     ids=["#119 cell 16 a one-line bundle is no finding", "#119 cell 16 an 800-line minified file is new debt"],
 )
-def test_a_minified_file_is_counted_by_its_lines_like_any_other(build_repo, capsys, bundle, code, named):
+def test_a_minified_file_is_counted_by_its_lines_like_any_other(build_repo, capsys, bundle, expected_code, expected_named):
     """#119 O4: nothing is skipped; the one-line bundle has one line."""
     result, output = hygiene(capsys, build_repo({"src/dist/index.js": bundle, BASELINE_PATH: EMPTY_BASELINE}))
-    assert (result, "size src/dist/index.js" in output) == (code, named), output
+    assert (result, "size src/dist/index.js" in output) == (expected_code, expected_named), output
 
 
 @pytest.mark.parametrize(
