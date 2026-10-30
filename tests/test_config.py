@@ -1,9 +1,11 @@
 import datetime
+import json
 import re
+import tomllib
 
 import pytest
 
-from quality import cli
+from quality import cli, config
 from quality.config import (
     CONFIG_PATH,
     AdvisoryAllowance,
@@ -18,9 +20,21 @@ from quality.config import (
     read_allow_lists,
     read_gate_settings,
 )
+from quality.report import printable
 from quality.rules import Rule
 from tests.support.advisories import allowance_config
 from tests.support.check import CLEAN_VERDICT, refusal_row, refusals
+from tests.support.config_refusals import (
+    ARRAY_TABLES,
+    DATE_NEED,
+    FILE_PATH_NEED,
+    HASH,
+    ITEM_NEED,
+    KNOWN_KEYS,
+    Refusal,
+    all_refusals,
+    secret_entry,
+)
 from tests.support.generated_files import TYPES_FILE, generated_config
 
 
@@ -111,13 +125,7 @@ def test_a_config_symlink_loop_is_refused(tmp_path):
         read_gate_settings(tmp_path)
 
 
-HASH = "a" * 64
-ENTRY = f'{{ rule = "aws-access-token", file = "tests/fixture.py", secret_sha256 = "{HASH}", reason = "fixture value" }}'
-
-
-def allow_entry(**changes: str) -> str:
-    fields = {"rule": "aws-access-token", "file": "tests/fixture.py", "secret_sha256": HASH, "reason": "fixture value"}
-    return "{ " + ", ".join(f'{key} = "{value}"' for key, value in (fields | changes).items()) + " }"
+ENTRY = secret_entry()
 
 
 def test_reads_every_allowed_value_with_its_reason():
@@ -138,17 +146,17 @@ def test_a_config_without_allowances_allows_nothing(text):
     [
         f"[secrets]\nallow = [\"{HASH}\"]",
         '[secrets]\nallow = [{ fingerprint = "a:b:c:1", reason = "old form" }]',
-        f"[secrets]\nallow = [{allow_entry(reason='')}]",
-        f"[secrets]\nallow = [{allow_entry(reason='  ')}]",
-        f"[secrets]\nallow = [{allow_entry(reason='two\\nlines')}]",
-        f"[secrets]\nallow = [{allow_entry(rule='')}]",
-        f"[secrets]\nallow = [{allow_entry(file='')}]",
-        f"[secrets]\nallow = [{allow_entry(secret_sha256='a' * 63)}]",
-        f"[secrets]\nallow = [{allow_entry(secret_sha256='A' * 64)}]",
-        f"[secrets]\nallow = [{allow_entry(secret_sha256='g' * 64)}]",
+        f"[secrets]\nallow = [{secret_entry(reason='')}]",
+        f"[secrets]\nallow = [{secret_entry(reason='  ')}]",
+        f"[secrets]\nallow = [{secret_entry(reason='two\nlines')}]",
+        f"[secrets]\nallow = [{secret_entry(rule='')}]",
+        f"[secrets]\nallow = [{secret_entry(file='')}]",
+        f"[secrets]\nallow = [{secret_entry(secret_sha256='a' * 63)}]",
+        f"[secrets]\nallow = [{secret_entry(secret_sha256='A' * 64)}]",
+        f"[secrets]\nallow = [{secret_entry(secret_sha256='g' * 64)}]",
         f"[secrets]\nallow = [{ENTRY[:-2]}, extra = 1 }}]",
         f"[secrets]\nallow = [{{ rule = \"r\", file = \"f\", secret_sha256 = \"{HASH}\" }}]",
-        f"[secrets]\nallow = [{ENTRY}, {allow_entry(reason='again')}]",
+        f"[secrets]\nallow = [{ENTRY}, {secret_entry(reason='again')}]",
         '[secrets]\nallow = "x"',
         "[secrets]\nignore = []",
         "secrets = 1",
@@ -301,31 +309,39 @@ def test_hygiene_judges_a_declaration_as_the_verdict_does_and_the_commit_hook_re
     assert line in output, output
 
 
-ALLOWANCE_EXAMPLE_LINE = 'lock = "speech/providers/qwen/uv.lock"'
-MALFORMED_SECRET = f"[secrets]\nallow = [{allow_entry(reason='')}]\n"
+MALFORMED_SECRET = f"[secrets]\nallow = [{secret_entry(reason='')}]\n"
+
+
+ADVISORY = f"{CONFIG_PATH} [[advisories.allow]]"
+ADVISORY_ONE_LINE = f"{ADVISORY} entry 1 needs a non-empty one-line id, lock and reason"
+ADVISORY_DATES = f"{ADVISORY} entry 1 needs until and date as TOML dates without a time"
+ADVISORY_KEYS = f"{ADVISORY} entry 1 needs exactly an id, a lock, an until, a date, an item and a reason"
 
 
 @pytest.mark.parametrize(
     ("entry", "named"),
     [
-        (allowance_config(reason=None), "exactly an id, a lock, an until, a date, an item and a reason"),
-        (allowance_config() + "extra = 1\n", "'extra': 1"),
-        (allowance_config(identifier=""), "'id': ''"),
-        (allowance_config(identifier="  "), "'id': '  '"),
-        (allowance_config(identifier="GHSA-a\nb"), "'id': 'GHSA-a\\nb'"),
-        (allowance_config(lock=""), "'lock': ''"),
-        (allowance_config(lock="uv.lock\rx"), "'lock': 'uv.lock\\rx'"),
-        (allowance_config(reason=""), "'reason': ''"),
-        (allowance_config(reason="two\nlines"), "'reason': 'two\\nlines'"),
-        (allowance_config(item="siehe Chat"), "'item': 'siehe Chat'"),
-        (allowance_config(until="2027-01-31"), "'until': '2027-01-31'"),
-        (allowance_config(until=datetime.datetime(2027, 1, 31)), "'until': datetime.datetime(2027, 1, 31, 0, 0)"),
-        (allowance_config(date="2026-10-21"), "'date': '2026-10-21'"),
-        (allowance_config(date=datetime.datetime(2026, 10, 21, 10, 0)), "'date': datetime.datetime(2026, 10, 21, 10, 0)"),
-        (allowance_config() + allowance_config(reason="again"), "twice"),
-        ("[advisories]\nignore = []\n", "unknown key(s) ['ignore']"),
-        ('[advisories]\nallow = "x"\n', "[[advisories.allow]] as an array of tables"),
-        ("advisories = 1\n", "[advisories] as a value"),
+        (allowance_config(reason=None), ADVISORY_KEYS),
+        (allowance_config() + "extra = 1\n", ADVISORY_KEYS),
+        (allowance_config(identifier=""), ADVISORY_ONE_LINE),
+        (allowance_config(identifier="  "), ADVISORY_ONE_LINE),
+        (allowance_config(identifier="GHSA-a\nb"), ADVISORY_ONE_LINE),
+        (allowance_config(lock=""), ADVISORY_ONE_LINE),
+        (allowance_config(lock="uv.lock\rx"), ADVISORY_ONE_LINE),
+        (allowance_config(reason=""), ADVISORY_ONE_LINE),
+        (allowance_config(reason="two\nlines"), ADVISORY_ONE_LINE),
+        (allowance_config(item="siehe Chat"), f"{ADVISORY} entry 1 needs {ITEM_NEED}"),
+        (allowance_config(until="2027-01-31"), ADVISORY_DATES),
+        (allowance_config(until=datetime.datetime(2027, 1, 31)), ADVISORY_DATES),
+        (allowance_config(date="2026-10-21"), ADVISORY_DATES),
+        (allowance_config(date=datetime.datetime(2026, 10, 21, 10, 0)), ADVISORY_DATES),
+        (
+            allowance_config() + allowance_config(reason="again"),
+            f'{ADVISORY} allows id = "GHSA-462x-pgg6-55fp" in lock = "speech/providers/qwen/uv.lock" twice; one entry per advisory and lock file',
+        ),
+        ("[advisories]\nignore = []\n", f"{CONFIG_PATH} has unknown key ignore - {KNOWN_KEYS}"),
+        ('[advisories]\nallow = "x"\n', f"{CONFIG_PATH} needs [[advisories.allow]] as an array of tables"),
+        ("advisories = 1\n", f"{CONFIG_PATH} has [advisories] as a value, not a table"),
     ],
     ids=[
         "missing key", "extra key", "empty id", "blank id", "multi-line id", "empty lock", "multi-line lock",
@@ -354,9 +370,10 @@ def test_a_malformed_advisory_allowance_cannot_be_judged_where_the_whole_config_
 
 @pytest.mark.parametrize("entry", [allowance_config(reason=None), allowance_config(until="2027-01-31")])
 def test_a_malformed_advisory_allowance_shows_the_example(entry):
-    """#116 cell 12: the refusal of an [[advisories.allow]] entry shows how to write one."""
-    with pytest.raises(ConfigError, match=re.escape(ALLOWANCE_EXAMPLE_LINE)):
+    """#116 cell 12: the refusal of an [[advisories.allow]] entry carries the example of how to write one."""
+    with pytest.raises(ConfigError) as refused:
         load_allow_lists(entry)
+    assert refused.value.example == config.ADVISORY_ALLOWANCE_EXAMPLE
 
 
 def test_the_verdict_refuses_a_malformed_secret_allowance_as_hygiene_does(capsys, run_env):
@@ -368,28 +385,32 @@ def test_the_verdict_refuses_a_malformed_secret_allowance_as_hygiene_does(capsys
     assert "[secrets] allow entry" in capsys.readouterr().err
 
 
+LAYOUT_RULE_IDS = "file-suffix, script-header, script-name, test-import, test-layout"
+
+
 @pytest.mark.parametrize(
     ("entries", "message"),
     [
         (
             '[[layout.allow]]\npath = "NOTES"\nrule = "size"\nreason = "r"\n',
-            "needs rule as one of ['file-suffix', 'script-header', 'script-name', 'test-import', 'test-layout']",
+            f"{CONFIG_PATH} [[layout.allow]] entry 1 needs rule as one of {LAYOUT_RULE_IDS}",
         ),
         (
             '[[layout.allow]]\npath = "NOTES"\nrule = "file-suffix"\nreason = "r"\n' * 2,
-            "for rule = 'file-suffix' twice",
+            f'{CONFIG_PATH} [[layout.allow]] declares path = "NOTES" for rule = "file-suffix" twice; one declaration per rule and path',
         ),
         (
             '[[layout.allow]]\npath = "NOTES"\nrule = [1]\nreason = "r"\n',
-            "needs rule as one of ['file-suffix', 'script-header', 'script-name', 'test-import', 'test-layout']",
+            f"{CONFIG_PATH} [[layout.allow]] entry 1 needs rule as one of {LAYOUT_RULE_IDS}",
         ),
     ],
     ids=["an unknown rule", "a duplicate declaration", "an unhashable rule"],
 )
 def test_a_layout_allowance_refusal_names_the_rules_in_plain_words(entries, message):
-    """The refusal of a [[layout.allow]] entry prints rule ids, never an enum's repr."""
-    with pytest.raises(ConfigError, match=re.escape(message)):
+    """The refusal of a [[layout.allow]] entry prints rule ids as plain words, never an enum's or a list's repr."""
+    with pytest.raises(ConfigError) as refused:
         load_allow_lists(entries)
+    assert refused.value.fact == message
 
 
 GATE_WITH_CHECKS = '[gate]\nmandatory_jobs = ["checks"]\n'
@@ -414,23 +435,26 @@ def test_a_config_without_generated_files_declares_none(text):
     assert load_allow_lists(text).generated == ()
 
 
+GENERATED = f"{CONFIG_PATH} [[size.generated]]"
+GENERATED_KEYS = f"{GENERATED} entry 1 needs exactly a path, a job, an item, a date and a reason"
+GENERATED_PATH = f"{GENERATED} entry 1 needs {FILE_PATH_NEED}"
 MALFORMED_GENERATED = [
-    (generated_config(path=None), "exactly a path, a job, an item, a date and a reason"),
-    (generated_config() + "extra = 1\n", "'extra': 1"),
-    (generated_config(path="frontend/src/lib/api/"), "'path': 'frontend/src/lib/api/'"),
-    (generated_config(path="frontend/**/types.ts"), "'path': 'frontend/**/types.ts'"),
-    (generated_config(path="../types.ts"), "'path': '../types.ts'"),
-    (generated_config(path="/types.ts"), "'path': '/types.ts'"),
-    (generated_config(job="Backend (Python 3.12)"), "job as one of [gate] mandatory_jobs"),
-    (generated_config(item="siehe Chat"), "'item': 'siehe Chat'"),
-    (generated_config(date="2026-10-30"), "'date': '2026-10-30'"),
-    (generated_config(date=datetime.datetime(2026, 10, 30, 9, 0)), "datetime.datetime(2026, 10, 30, 9, 0)"),
-    (generated_config(reason="two\nlines"), "'reason': 'two\\nlines'"),
-    (generated_config(reason=""), "'reason': ''"),
-    (generated_config() + generated_config(reason="again"), "twice"),
-    ('[size]\nignore = []\n', "unknown key(s) ['ignore']"),
-    ('[size]\ngenerated = "x"\n', "[[size.generated]] as an array of tables"),
-    ("size = 1\n", "[size] as a value"),
+    (generated_config(path=None), GENERATED_KEYS),
+    (generated_config() + "extra = 1\n", GENERATED_KEYS),
+    (generated_config(path="frontend/src/lib/api/"), GENERATED_PATH),
+    (generated_config(path="frontend/**/types.ts"), GENERATED_PATH),
+    (generated_config(path="../types.ts"), GENERATED_PATH),
+    (generated_config(path="/types.ts"), GENERATED_PATH),
+    (generated_config(job="Backend (Python 3.12)"), f"{GENERATED} entry 1 needs job as one of [gate] mandatory_jobs, the job whose generator check proves the file"),
+    (generated_config(item="siehe Chat"), f"{GENERATED} entry 1 needs {ITEM_NEED}"),
+    (generated_config(date="2026-10-30"), f"{GENERATED} entry 1 needs {DATE_NEED}"),
+    (generated_config(date=datetime.datetime(2026, 10, 30, 9, 0)), f"{GENERATED} entry 1 needs {DATE_NEED}"),
+    (generated_config(reason="two\nlines"), f"{GENERATED} entry 1 needs a non-empty one-line reason"),
+    (generated_config(reason=""), f"{GENERATED} entry 1 needs a non-empty one-line reason"),
+    (generated_config() + generated_config(reason="again"), f'{GENERATED} declares path = "{TYPES_FILE}" twice; one entry per file'),
+    ('[size]\nignore = []\n', f"{CONFIG_PATH} has unknown key ignore - {KNOWN_KEYS}"),
+    ('[size]\ngenerated = "x"\n', f"{CONFIG_PATH} needs [[size.generated]] as an array of tables"),
+    ("size = 1\n", f"{CONFIG_PATH} has [size] as a value, not a table"),
 ]
 MALFORMED_GENERATED_IDS = [
     "missing key", "extra key", "folder", "pattern", "dot-dot", "absolute path", "job no mandatory job", "item siehe Chat",
@@ -441,12 +465,12 @@ MALFORMED_GENERATED_IDS = [
 
 @pytest.mark.parametrize(("entry", "named"), MALFORMED_GENERATED, ids=MALFORMED_GENERATED_IDS)
 def test_a_malformed_generated_file_is_refused_with_the_entry_and_the_example(entry, named):
-    """#174 sentence 3: each malformed case is refused by both loaders, names the entry and shows how to write one."""
+    """#174 sentence 3: each malformed case is refused by both loaders, names the entry and carries how to write one."""
     text = entry + GATE_WITH_CHECKS
     for load in (load_allow_lists, load_gate_settings):
-        with pytest.raises(ConfigError, match=re.escape(named)) as refused:
+        with pytest.raises(ConfigError) as refused:
             load(text)
-        assert "[[size.generated]]" in str(refused.value)
+        assert (refused.value.fact, refused.value.example) == (named, config.GENERATED_FILE_EXAMPLE)
 
 
 def test_a_generated_file_naming_a_job_needs_the_config_to_list_mandatory_jobs():
@@ -500,3 +524,130 @@ def test_the_verdict_refuses_a_malformed_generated_file_naming_the_side(capsys, 
 def test_the_commit_hook_ignores_a_malformed_size_table():
     """#174 sentence 3: only [secrets] is read by the commit hook."""
     assert load_staged_secret_allowances(generated_config(job="other") + "[size]\nextra = 1\n") == {}
+
+
+def refused_by(refusal: Refusal, loader: str, tmp_path) -> ConfigError:
+    """The error `loader` raises for `refusal`; a directory where the file should be is read from disk."""
+    if refusal.directory:
+        (tmp_path / "quality" / "config.toml").mkdir(parents=True)
+        read = {"allow_lists": read_allow_lists, "gate": read_gate_settings}[loader]
+        argument = tmp_path
+    else:
+        read = {"allow_lists": load_allow_lists, "gate": load_gate_settings, "staged": load_staged_secret_allowances}[loader]
+        argument = refusal.text
+    with pytest.raises(ConfigError) as refused:
+        read(argument)
+    return refused.value
+
+
+REFUSALS = all_refusals()
+
+
+@pytest.mark.parametrize(
+    ("refusal", "loader"),
+    [(refusal, loader) for refusal in REFUSALS for loader in refusal.loaders],
+    ids=[f"{refusal.id} ({loader})" for refusal in REFUSALS for loader in refusal.loaders],
+)
+def test_a_config_refusal_carries_its_whole_fact_and_its_example_apart(refusal, loader, tmp_path):
+    """#279 O10, O11, acceptance 1 and 2: every refusal names its table, entry position and unmet need as the fact,
+    without a Python repr, and carries the example the table owns as TOML lines, or none."""
+    error = refused_by(refusal, loader, tmp_path)
+    assert (error.fact, error.example) == (refusal.fact, refusal.example)
+
+
+def test_the_refusals_use_every_example_and_every_refusal_without_one():
+    """#279 acceptance 1: the rows hold all ten example constants and the refusals the trace gives none."""
+    assert {refusal.example for refusal in REFUSALS} == {
+        None, config.EXAMPLE, config.LEGACY_EXAMPLE, config.ALLOWANCE_EXAMPLE, config.LOOSENED_EXAMPLE,
+        config.ADVISORY_ALLOWANCE_EXAMPLE, config.ROOT_ALLOWANCE_EXAMPLE, config.LAYOUT_ALLOWANCE_EXAMPLE,
+        config.PYTHON_ALLOWANCE_EXAMPLE, config.COMPOSE_ALLOWANCE_EXAMPLE, config.GENERATED_FILE_EXAMPLE,
+    }
+
+
+def test_the_one_line_form_of_a_refusal_is_its_fact_then_like_and_the_example_lines():
+    """#279 acceptance 1: the doors outside the picture print `str(error)`."""
+    assert str(ConfigError("no", ("[t]", "a = 1"))) == "no, like:\n[t]\na = 1"
+    assert str(ConfigError("no")) == "no"
+
+
+EXAMPLES = {
+    "gate": config.EXAMPLE, "legacy": config.LEGACY_EXAMPLE, "secrets": config.ALLOWANCE_EXAMPLE,
+    **{table.name: table.example for table in ARRAY_TABLES},
+}
+
+
+@pytest.mark.parametrize("lines", EXAMPLES.values(), ids=EXAMPLES.keys())
+def test_an_example_as_printed_with_its_indent_is_toml(lines):
+    """#279 acceptance 5: the lines a person copies, four spaces deep as `next:` prints them, parse as TOML."""
+    assert isinstance(lines, tuple)
+    tomllib.loads("\n".join(f"    {line}" for line in lines))
+
+
+@pytest.mark.parametrize("table", ARRAY_TABLES, ids=[table.name for table in ARRAY_TABLES])
+def test_an_example_entry_is_accepted_beside_a_gate_that_lists_its_job(table):
+    """#279 acceptance 5: each array table's example is a config the reader accepts."""
+    lines = table.example
+    document = tomllib.loads("\n".join(lines))
+    job = document.get("size", {}).get("generated", [{}])[0].get("job", "checks")
+    text = f"[gate]\nmandatory_jobs = [{json.dumps(job)}]\n" + "\n".join(lines)
+    assert load_gate_settings(text).mandatory_jobs == (job,)
+    entries_read = len(load_gate_settings(text).loosened) + sum(len(read) for read in vars(load_allow_lists(text)).values())
+    assert entries_read == 1
+
+
+def test_the_gate_example_is_accepted():
+    """#279 acceptance 5: the example of a missing or malformed [gate] is a valid gate."""
+    text = "\n".join(config.EXAMPLE)
+    assert load_gate_settings(text).mandatory_jobs == tuple(tomllib.loads(text)["gate"]["mandatory_jobs"])
+
+
+def test_the_secrets_example_holds_a_placeholder_hash_a_person_fills():
+    """#279 acceptance 5: [secrets]'s example parses; its hash is a placeholder, so the reader refuses it."""
+    text = "\n".join(config.ALLOWANCE_EXAMPLE)
+    assert tomllib.loads(text)["secrets"]["allow"][0]["rule"]
+    with pytest.raises(ConfigError, match="secret_sha256 as 64 lowercase hex digits"):
+        load_allow_lists(text)
+
+
+def toml_escaped(value: str) -> str:
+    """`value` written with a \\U escape for every character, so any character reaches the config as itself."""
+    return "".join(f"\\U{ord(character):08x}" for character in value)
+
+
+AWKWARD_CHARACTERS = ["\"", "\\", "\t", "\x1b", "\x7f", "\x85", "\u202e", "\u2028", "\U000e0001", "\U0001f600"]
+AWKWARD_IDS = ["quote", "backslash", "tab", "ESC", "DEL", "U+0085", "U+202E", "U+2028", "U+E0001", "U+1F600"]
+QUOTED = r'"(?:[^"\\]|\\.)*"'
+
+
+@pytest.mark.parametrize("character", AWKWARD_CHARACTERS, ids=AWKWARD_IDS)
+def test_a_repeated_value_is_quoted_so_that_its_printed_form_reads_back_as_the_value(character):
+    """#279 O11, acceptance 2: the fact passed through the one escaping holds the value as a TOML string."""
+    value = f"a{character}b"
+    entries = f'[[root.allow]]\nentry = "{toml_escaped(value)}"\nreason = "r"\n' * 2
+    with pytest.raises(ConfigError) as refused:
+        load_allow_lists(entries)
+    printed = printable(refused.value.fact)
+    quoted = re.search(rf"entry = ({QUOTED}) twice", printed)
+    assert quoted, printed
+    assert tomllib.loads(f"value = {quoted.group(1)}")["value"] == value
+    assert not set(printed) & {"\n", "\r", "\u2028", "\u2029"}
+
+
+@pytest.mark.parametrize("character", AWKWARD_CHARACTERS, ids=AWKWARD_IDS)
+def test_an_unknown_key_that_is_no_bare_key_is_quoted_so_that_it_reads_back_as_the_key(character):
+    """#279 O11, acceptance 2: an unknown key stands as a TOML string, read back as the scenario's key."""
+    key = f"a{character}b"
+    text = f'[root]\n"{toml_escaped(key)}" = 1\n'
+    with pytest.raises(ConfigError) as refused:
+        load_allow_lists(text)
+    printed = printable(refused.value.fact)
+    quoted = re.search(rf"unknown key ({QUOTED}) - ", printed)
+    assert quoted, printed
+    assert tomllib.loads(f"{quoted.group(1)} = 1") == {key: 1}
+
+
+def test_a_bare_unknown_key_stands_unquoted_and_any_other_stands_as_a_toml_string():
+    """#279 O11: a non-empty key of A-Z, a-z, 0-9, `_` and `-` is bare."""
+    with pytest.raises(ConfigError) as refused:
+        load_allow_lists('[root]\nAb_9-z = 1\n"" = 2\n')
+    assert refused.value.fact.startswith(f'{CONFIG_PATH} has unknown keys "", Ab_9-z - ')

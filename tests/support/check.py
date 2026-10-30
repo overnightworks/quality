@@ -76,6 +76,11 @@ def refusals(repo: Path, locate_ruff: Callable[[], str] = installed_ruff, locate
     return {verdict.rule: str(verdict.refusal) for verdict in verdicts if verdict.refusal is not None}
 
 
+def copy_block(example: tuple[str, ...]) -> str:
+    """The lone `next:` step that shows `example`, as the run's stderr holds it: the label, then each line four spaces deep."""
+    return "\n".join([f"next: {check.CONFIG_EXAMPLE_LABEL}:", *(f"    {line}" for line in example)]) + "\n"
+
+
 def heard(capsys: pytest.CaptureFixture[str]) -> str:
     """Everything the door printed since the last read, stdout then stderr."""
     captured = capsys.readouterr()

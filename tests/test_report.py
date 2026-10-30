@@ -3,7 +3,9 @@ import pytest
 from quality.report import (
     DETAIL_MARKER,
     CannotJudge,
+    Choice,
     Command,
+    Example,
     Finding,
     Instruction,
     OneOf,
@@ -76,5 +78,13 @@ def test_a_subclass_built_with_one_message_keeps_both_its_label_and_its_message(
 
 
 def test_alternative_commands_print_their_labels_and_commands_on_one_line():
-    choice = OneOf("reinstall", (Command("one", "here"), Command("two", "there")))
+    choice = OneOf("reinstall", (Choice("one", "here"), Choice("two", "there")))
     assert str(choice) == "reinstall, one of: here: one or there: two"
+
+
+def test_an_example_holds_its_label_and_lines_and_equal_examples_hash_alike():
+    example = Example("write it in a file like this", ("[table]", "key = 1"))
+    same = Example("write it in a file like this", ("[table]", "key = 1"))
+    assert (example.label, example.lines, example == same, hash(example) == hash(same)) == (
+        "write it in a file like this", ("[table]", "key = 1"), True, True,
+    )

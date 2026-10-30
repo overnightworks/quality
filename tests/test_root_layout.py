@@ -4,8 +4,10 @@ import subprocess
 
 import pytest
 
+from quality.config import CONFIG_PATH, ROOT_ALLOWANCE_EXAMPLE
 from quality.root_layout import ROOT_BASE_DIRECTORIES, ROOT_BASE_FILES
-from tests.support.check import hygiene_output
+from tests.support.check import copy_block, hygiene_output
+from tests.support.config_refusals import KNOWN_KEYS, ONE_LINE_NEED
 from tests.support.git_repositories import put
 from tests.support.merge import ONE_JOB
 from tests.support.verdict import verdict_of
@@ -48,6 +50,10 @@ def test_every_base_list_entry_is_green_without_a_config(build_repo, capsys):
     assert findings(hygiene_output(capsys, build_repo(files))[1]) == []
 
 
+ROOT = f"{CONFIG_PATH} [[root.allow]]"
+ROOT_NAME_NEED = "entry as one name directly in the root, a directory with a trailing /, not a path"
+
+
 @pytest.mark.parametrize(
     "entry",
     ["a/b", "/", ".", "..", ".git", "./", "", " ", "src/pkg/", "/abs"],
@@ -57,26 +63,27 @@ def test_an_invalid_declaration_cannot_be_judged_and_shows_an_example(build_repo
     repo = build_repo({**GUIDANCE, CONFIG: declaring(entry)})
     code, output = hygiene_output(capsys, repo)
     assert code == 2
-    assert "[[root.allow]]" in output
-    assert 'entry = "frontend/"' in output
+    assert f"{ROOT} entry 1 needs {ROOT_NAME_NEED}" in output
+    assert output.count(copy_block(ROOT_ALLOWANCE_EXAMPLE)) == 1
 
 
 @pytest.mark.parametrize(
-    "config",
+    ("config", "fact"),
     [
-        '[[root.allow]]\nentry = "x/"\nreason = "two\\nlines"\n',
-        '[[root.allow]]\nentry = "x/"\nreason = "r"\nextra = 1\n',
-        '[[root.allow]]\nentry = "x/"\n',
-        '[[root.allow]]\nentry = 3\nreason = "r"\n',
-        '[root]\nignore = []\n',
-        '[root]\nallow = "x"\n',
+        ('[[root.allow]]\nentry = "x/"\nreason = "two\\nlines"\n', f"{ROOT} entry 1 needs {ONE_LINE_NEED}"),
+        ('[[root.allow]]\nentry = "x/"\nreason = "r"\nextra = 1\n', f"{ROOT} entry 1 needs exactly an entry and a reason"),
+        ('[[root.allow]]\nentry = "x/"\n', f"{ROOT} entry 1 needs exactly an entry and a reason"),
+        ('[[root.allow]]\nentry = 3\nreason = "r"\n', f"{ROOT} entry 1 needs {ROOT_NAME_NEED}"),
+        ("[root]\nignore = []\n", f"{CONFIG_PATH} has unknown key ignore - {KNOWN_KEYS}"),
+        ('[root]\nallow = "x"\n', f"{CONFIG_PATH} needs [[root.allow]] as an array of tables"),
     ],
     ids=["multi-line reason", "unknown key", "no reason", "entry not text", "unknown table key", "allow not a list"],
 )
-def test_a_malformed_root_table_cannot_be_judged(build_repo, capsys, config):
+def test_a_malformed_root_table_cannot_be_judged(build_repo, capsys, config, fact):
     code, output = hygiene_output(capsys, build_repo({**GUIDANCE, CONFIG: config}))
     assert code == 2
-    assert all(text in output for text in ("[[root.allow]]", 'entry = "', 'reason = "'))
+    assert fact in output
+    assert output.count(copy_block(ROOT_ALLOWANCE_EXAMPLE)) == 1
 
 
 def test_a_declared_collecting_directory_is_green(build_repo, capsys):
@@ -105,7 +112,9 @@ def test_a_root_symlink_counts_by_its_own_name(build_repo, capsys):
 def test_the_same_entry_declared_twice_cannot_be_judged_and_is_named(build_repo, capsys):
     repo = build_repo({**GUIDANCE, "plans/a.md": "x", CONFIG: declaring("plans/") + declaring("plans/", "again")})
     code, output = hygiene_output(capsys, repo)
-    assert (code, "'plans/' twice" in output) == (2, True)
+    assert code == 2
+    assert f'{ROOT} declares entry = "plans/" twice; one entry per root entry' in output
+    assert output.count(copy_block(ROOT_ALLOWANCE_EXAMPLE)) == 1
 
 
 def test_a_name_with_a_control_character_prints_escaped(build_repo, capsys):

@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from quality import __version__, cli
-from quality.config import CONFIG_PATH, LegacyMode
+from quality.config import CONFIG_PATH, LOOSENED_EXAMPLE, LegacyMode
 from quality.ratchet import BASELINE_PATH, NO_RENAMES
 from quality.report import CannotJudge, printable
 from quality.verdict import NO_BASE_SETTINGS, GateSettings, Side, judge, read_base, read_jobs
@@ -699,20 +699,30 @@ def test_a_run_without_a_base_judges_no_advisory_allowance(judged):
     assert judged(gate_config("A"), gate_config("A") + allowance_config(), A_RAN, with_base=False) == (0, ["verdict: green"])
 
 
+LOOSENED = f"{CONFIG_PATH} [[gate.loosened]]"
+LOOSENED_KEYS = f"{LOOSENED} entry 1 needs exactly a what, an item, a date and a reason"
+LOOSENED_DATE = f"{LOOSENED} entry 1 needs date as a TOML date without a time"
+LOOSENED_ITEM = f"{LOOSENED} entry 1 needs item as #<number> or <owner>/<repo>#<number>"
+LOOSENED_REASON = f"{LOOSENED} entry 1 needs a non-empty one-line reason"
+
+
 @pytest.mark.parametrize(
     ("entry", "named"),
     [
-        (declaration(B_REMOVED).replace('reason = "ruled"\n', ""), B_REMOVED),
-        (declaration(B_REMOVED) + "extra = 1\n", "'extra': 1"),
-        (declaration(B_REMOVED, date='"20.10.2026"'), "'20.10.2026'"),
-        (declaration(B_REMOVED, date="2026-10-20T10:00:00"), "datetime.datetime(2026, 10, 20, 10, 0)"),
-        (declaration(B_REMOVED, item="siehe Chat"), "'siehe Chat'"),
-        (declaration(B_REMOVED).replace('"ruled"', '"two\\nlines"'), "'two\\nlines'"),
-        (declaration(""), "'what': ''"),
-        (declaration(B_REMOVED).replace('"ruled"', '""'), "'reason': ''"),
-        (declaration(B_REMOVED) + declaration(B_REMOVED, item="#1"), f"what = {B_REMOVED!r} twice"),
-        (f"[gate.loosened]\nwhat = {json.dumps(B_REMOVED)}\n", "as an array of tables"),
-        (declaration(B_REMOVED, item="overnightworks/s\u043engmaker#1345"), "s\u043engmaker"),
+        (declaration(B_REMOVED).replace('reason = "ruled"\n', ""), LOOSENED_KEYS),
+        (declaration(B_REMOVED) + "extra = 1\n", LOOSENED_KEYS),
+        (declaration(B_REMOVED, date='"20.10.2026"'), LOOSENED_DATE),
+        (declaration(B_REMOVED, date="2026-10-20T10:00:00"), LOOSENED_DATE),
+        (declaration(B_REMOVED, item="siehe Chat"), LOOSENED_ITEM),
+        (declaration(B_REMOVED).replace('"ruled"', '"two\\nlines"'), LOOSENED_REASON),
+        (declaration(""), f"{LOOSENED} entry 1 needs a non-empty what"),
+        (declaration(B_REMOVED).replace('"ruled"', '""'), LOOSENED_REASON),
+        (
+            declaration(B_REMOVED) + declaration(B_REMOVED, item="#1"),
+            f'{LOOSENED} declares what = "mandatory job \\"B\\" removed" twice; one entry per loosening',
+        ),
+        (f"[gate.loosened]\nwhat = {json.dumps(B_REMOVED)}\n", f"{CONFIG_PATH} needs [[gate.loosened]] as an array of tables"),
+        (declaration(B_REMOVED, item="overnightworks/s\u043engmaker#1345"), LOOSENED_ITEM),
     ],
     ids=[
         "missing key", "extra key", "text date", "datetime", "item siehe Chat", "two-line reason", "empty what",
@@ -720,15 +730,14 @@ def test_a_run_without_a_base_judges_no_advisory_allowance(judged):
     ],
 )
 def test_a_malformed_declaration_cannot_be_judged(capsys, run_env, entry, named):
-    """#103 rule 1, cell 11 (E1): a malformed declaration is exit 2, one line naming it (a table: what it must be),
-    with the example."""
+    """#103 rule 1, cell 11 (E1): a malformed declaration is exit 2, one line: the fact, `, like:` and the example's
+    lines joined by an escaped line feed."""
     repo, _ = run_env
     (repo / CONFIG_PATH).write_text('[gate]\nmandatory_jobs = ["checks"]\n' + entry)
     assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (CHECKS_GREEN, None)) == 2
     lines = capsys.readouterr().err.splitlines()
     assert len(lines) == 1
-    assert named in lines[0]
-    assert 'item = "overnightworks/songmaker#1345"' in lines[0]
+    assert lines[0].endswith(f"{named}, like:\\x0a" + "\\x0a".join(LOOSENED_EXAMPLE))
 
 
 @pytest.mark.parametrize(

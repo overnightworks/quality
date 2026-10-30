@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TextIO
 
-from quality.report import Command, Finding, Instruction, OneOf, Step, printable, render
+from quality.report import Choice, Command, Example, Finding, Instruction, OneOf, Step, printable, render
 
 
 def emit(*lines: str, file: TextIO | None = None) -> None:
@@ -182,7 +182,7 @@ INDENT = "    "
 
 
 def _step_lines(step: Step) -> list[tuple[int, str]]:
-    """A step as lines, each at a level: a command alone on its line, a label above the commands it applies to."""
+    """A step as lines, each at a level: a command alone on its line, a label above the commands or the lines to copy it applies to."""
     match step:
         case Command(text, None) | Instruction(text):
             return [(0, text)]
@@ -190,11 +190,13 @@ def _step_lines(step: Step) -> list[tuple[int, str]]:
             return [(0, f"{label}:"), (1, text)]
         case OneOf(label, choices):
             return [(0, f"{label}, one of:"), *(line for choice in choices for line in _choice_lines(choice))]
+        case Example(label, lines):
+            return [(0, f"{label}:"), *((1, line) for line in lines)]
 
 
-def _choice_lines(choice: Command) -> list[tuple[int, str]]:
-    """A choice below its `one of:` line: its label above its command, or the command alone when it has none."""
-    return [(1, choice.text)] if choice.label is None else [(1, f"{choice.label}:"), (2, choice.text)]
+def _choice_lines(choice: Choice) -> list[tuple[int, str]]:
+    """A choice below its `one of:` line: its label above its command."""
+    return [(1, f"{choice.label}:"), (2, choice.text)]
 
 
 def _next_lines(next_steps: tuple[Step, ...], label: str) -> list[str]:

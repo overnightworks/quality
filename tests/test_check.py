@@ -1,11 +1,12 @@
 import subprocess
+from collections import Counter
 from pathlib import Path
 
 import pytest
 
-from quality import check, cli, env_file, installation, process, scanners
+from quality import check, cli, config, env_file, installation, process, scanners
 from quality.compose import is_compose_file
-from quality.report import CannotJudge, Command, Finding, Reason, Unparsable
+from quality.report import CannotJudge, Command, Example, Finding, Reason, Unparsable
 from quality.rules import Area, Rule
 from tests.support.check import (
     CLEAN_VERDICT,
@@ -17,6 +18,8 @@ from tests.support.check import (
     refused,
 )
 from tests.support.check import hygiene_output as run
+from tests.support.config_refusals import GATE, Refusal, all_refusals
+from tests.support.generated_files import generated_config
 from tests.support.scanners import fake_scanner, fake_zizmor, lacking, never_located, nothing_installed
 
 
@@ -316,3 +319,53 @@ def test_a_run_holds_one_area_verdict_per_area_in_area_order(build_repo):
     result = check.run_hygiene(build_repo({}), installed_ruff, never_located)
     assert [verdict.area for verdict in result.areas] == list(Area)
     assert [rule for area in result.areas for rule in (v.rule for v in area.verdicts)] == sorted(Rule, key=lambda rule: list(Area).index(rule.area))
+
+
+def test_every_rule_a_malformed_config_refuses_carries_its_fact_and_its_example_as_fields(build_repo):
+    """#279 acceptance 3: the adapter turns a ConfigError into a refusal whose reason holds the error's fact and an
+    Example step; the refusals of one run are all the same reason."""
+    repo = build_repo({"quality/config.toml": GATE + generated_config(job="other")})
+    reasons = {verdict.refusal.reason for area in check.run_hygiene(repo, installed_ruff, never_located).areas for verdict in area.verdicts if verdict.refusal}
+    fact = f"{config.CONFIG_PATH} [[size.generated]] entry 1 needs job as one of [gate] mandatory_jobs, the job whose generator check proves the file"
+    assert reasons == {Reason(fact, (Example(check.CONFIG_EXAMPLE_LABEL, config.GENERATED_FILE_EXAMPLE),))}
+
+
+def test_a_config_refusal_without_an_example_carries_no_step(build_repo):
+    """#279 acceptance 3: an error without an example becomes a refusal without a step."""
+    repo = build_repo({"quality/config.toml": "[secrets]\nignore = []\n"})
+    reasons = {verdict.refusal.reason for area in check.run_hygiene(repo, installed_ruff, never_located).areas for verdict in area.verdicts if verdict.refusal}
+    assert reasons == {Reason(f"{config.CONFIG_PATH} has unknown key ignore in [secrets] - only allow exists")}
+
+
+HYGIENE_REFUSALS = [refusal for refusal in all_refusals() if refusal.reaches_hygiene]
+CONFIG_AREAS = ("files", "debt", "secrets", "dependencies")
+
+
+def hygiene_over(build_repo, capsys, refusal: Refusal) -> tuple[int, list[str], list[str]]:
+    repo = build_repo({".env": "A=1\n", **({} if refusal.directory else {"quality/config.toml": refusal.text})})
+    if refusal.directory:
+        (repo / "quality" / "config.toml").mkdir(parents=True)
+    code = cli.main(["hygiene", str(repo)], clock=lambda: 0.0)
+    captured = capsys.readouterr()
+    return code, captured.out.splitlines(), captured.err.splitlines()
+
+
+@pytest.mark.parametrize("refusal", HYGIENE_REFUSALS, ids=[refusal.id for refusal in HYGIENE_REFUSALS])
+def test_hygiene_names_a_config_refusal_on_its_rows_and_shows_the_example_once_under_next(build_repo, capsys, refusal):
+    """#279 O10, acceptance 4: each refused area's row ends in the fact; the example's label and lines stand once on
+    stderr, four spaces deep; a refusal without one gets the general instruction and no label."""
+    code, out, err = hygiene_over(build_repo, capsys, refusal)
+    assert code == 2
+    assert [f"{refusal_row(area)}{refusal.fact}" in out for area in CONFIG_AREAS] == [True] * 4, out
+    assert any(line.startswith("env-file .env - ") for line in out)
+    label = f"next: {check.CONFIG_EXAMPLE_LABEL}:"
+    if refusal.example is None:
+        assert f"next: {cli.REFUSED_AREAS_NEXT.text}" in err
+        assert label not in err
+        return
+    indented = [f"    {line}" for line in refusal.example]
+    assert err.count(label) == 1
+    start = err.index(label) + 1
+    assert err[start:start + len(indented)] == indented
+    assert not set(indented) & set(out)
+    assert Counter(line for line in err if line in indented) == Counter(indented)

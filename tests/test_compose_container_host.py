@@ -4,7 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from tests.support.check import hygiene_output, refused
+from quality.config import COMPOSE_ALLOWANCE_EXAMPLE, CONFIG_PATH
+from tests.support.check import copy_block, hygiene_output, refused
+from tests.support.config_refusals import KNOWN_KEYS, ONE_LINE_NEED
 from tests.support.merge import ONE_JOB
 
 CONFIG = "quality/config.toml"
@@ -108,25 +110,33 @@ def test_a_declaration_that_matches_nothing_is_red(build_repo, capsys, files, de
     assert stale[0].startswith(f"compose-port {declaration.split('"')[1]} - ")
 
 
+COMPOSE = f"{CONFIG_PATH} [[compose.allow]]"
+COMPOSE_FILE_NEED = f"{COMPOSE} entry 1 needs file as the exact tracked path of one compose file: no folder, pattern, .. or absolute path"
+COMPOSE_KEYS = f"{COMPOSE} entry 1 needs exactly a file, a service and a reason"
+
+
 @pytest.mark.parametrize(
-    "config",
+    ("config", "fact"),
     [
-        declaring() + declaring(reason="again"),
-        declaring(reason="two\\nlines"),
-        declaring(reason=" "),
-        declaring(file="compose/"),
-        declaring(file="*.yaml"),
-        declaring(file="../compose.yaml"),
-        declaring(file="/compose.yaml"),
-        declaring(file="./compose.yaml"),
-        declaring(file="deploy//compose.yaml"),
-        declaring(service=""),
-        declaring() + "extra = 1\n",
-        '[[compose.allow]]\nfile = "compose.yaml"\nservice = "proxy"\n',
-        '[[compose.allow]]\nfile = "compose.yaml"\nreason = "r"\n',
-        '[[compose.allow]]\nfile = 3\nservice = "proxy"\nreason = "r"\n',
-        "[compose]\nignore = []\n",
-        '[compose]\nallow = "x"\n',
+        (
+            declaring() + declaring(reason="again"),
+            f'{COMPOSE} declares service = "proxy" of file = "compose.yaml" twice; one declaration per file and service',
+        ),
+        (declaring(reason="two\\nlines"), f"{COMPOSE} entry 1 needs {ONE_LINE_NEED}"),
+        (declaring(reason=" "), f"{COMPOSE} entry 1 needs {ONE_LINE_NEED}"),
+        (declaring(file="compose/"), COMPOSE_FILE_NEED),
+        (declaring(file="*.yaml"), COMPOSE_FILE_NEED),
+        (declaring(file="../compose.yaml"), COMPOSE_FILE_NEED),
+        (declaring(file="/compose.yaml"), COMPOSE_FILE_NEED),
+        (declaring(file="./compose.yaml"), COMPOSE_FILE_NEED),
+        (declaring(file="deploy//compose.yaml"), COMPOSE_FILE_NEED),
+        (declaring(service=""), f"{COMPOSE} entry 1 needs service as the one-line name of a service in that file"),
+        (declaring() + "extra = 1\n", COMPOSE_KEYS),
+        ('[[compose.allow]]\nfile = "compose.yaml"\nservice = "proxy"\n', COMPOSE_KEYS),
+        ('[[compose.allow]]\nfile = "compose.yaml"\nreason = "r"\n', COMPOSE_KEYS),
+        ('[[compose.allow]]\nfile = 3\nservice = "proxy"\nreason = "r"\n', COMPOSE_FILE_NEED),
+        ("[compose]\nignore = []\n", f"{CONFIG_PATH} has unknown key ignore - {KNOWN_KEYS}"),
+        ('[compose]\nallow = "x"\n', f"{CONFIG_PATH} needs [[compose.allow]] as an array of tables"),
     ],
     ids=[
         "duplicate", "multi-line reason", "blank reason", "folder", "pattern", "parent path", "absolute path", "dot component", "empty component",
@@ -134,13 +144,13 @@ def test_a_declaration_that_matches_nothing_is_red(build_repo, capsys, files, de
         "allow not a list",
     ],
 )
-def test_a_malformed_compose_table_cannot_be_judged(build_repo, capsys, config):
-    """#188 sentence 3: each malformed entry is exit 2 and names `[[compose.allow]]` with an example."""
+def test_a_malformed_compose_table_cannot_be_judged(build_repo, capsys, config, fact):
+    """#188 sentence 3: each malformed entry is exit 2, names its fact on the files row and shows the example once."""
     code, output = hygiene_output(capsys, build_repo({"compose.yaml": service_file("host"), CONFIG: ONE_JOB + config}))
     assert code == 2
     assert refused(output, "files")
-    assert "[[compose.allow]]" in output
-    assert "like:" in output
+    assert fact in output
+    assert output.count(copy_block(COMPOSE_ALLOWANCE_EXAMPLE)) == 1
 
 
 def test_the_unknown_table_message_lists_the_compose_table(build_repo, capsys):

@@ -160,6 +160,23 @@ error: 1 of 7 areas could not check · 1 finding, 1 of them in those areas
 next: fix what the ✗ rows name, then run quality check again
 ```
 
+A config refusal names its fact on each `✗` row it reaches and shows the example to copy once under `next:` (head proposal O10 of 30.10.2026, its recommendation applied): the label `write it in quality/config.toml like this:` and the example's lines one level deeper, each whole on its own line and never shortened, so the lines copied as printed are valid TOML. The fact names an entry by its table and 1-based position, a repeated value as a TOML string, never as a Python repr (head proposal O11 of 30.10.2026, its recommendation applied).
+
+```text
+  ✗ files         not checked    quality/config.toml [[size.generated]] entry 1 needs job as one of [gate] mandatory_jobs, the job whose generator check proves the file
+  ✗ debt          not checked    quality/config.toml [[size.generated]] entry 1 needs job as one of [gate] mandatory_jobs, the job whose generator check proves the file
+  ✗ secrets       not checked    quality/config.toml [[size.generated]] entry 1 needs job as one of [gate] mandatory_jobs, the job whose generator check proves the file
+  ✗ dependencies  not checked    quality/config.toml [[size.generated]] entry 1 needs job as one of [gate] mandatory_jobs, the job whose generator check proves the file
+error: 4 of 7 areas could not check
+next: write it in quality/config.toml like this:
+    [[size.generated]]
+    path = "frontend/src/lib/api/types.ts"
+    job = "Backend (Python 3.14)"
+    item = "overnightworks/songmaker#1784"
+    date = 2026-10-30
+    reason = "written by scripts/generate_types.py, proven by its --check"
+```
+
 ### 5. The debt ceiling: `check debt`, `--fix --dry-run`, `--fix`
 
 The debt ceiling is `quality/baseline.toml`. Where code shrank it can fall; `--fix` lowers it and never raises it.

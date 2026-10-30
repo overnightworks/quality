@@ -24,13 +24,16 @@ from quality import (
     scanners,
 )
 from quality.config import (
+    CONFIG_PATH,
     Allowance,
     AllowLists,
     ConfigError,
     read_allow_lists,
 )
-from quality.report import CannotJudge, Finding, Reason, Unparsable
+from quality.report import CannotJudge, Example, Finding, Reason, Unparsable
 from quality.rules import Area, Rule
+
+CONFIG_EXAMPLE_LABEL = f"write it in {CONFIG_PATH} like this"
 
 
 def _python_floor_result(root: Path, modes: dict[str, str] | CannotJudge, allow_lists: AllowLists | CannotJudge) -> python_floor.FloorResult:
@@ -45,7 +48,8 @@ def _read_allow_lists(root: Path) -> AllowLists:
     try:
         return read_allow_lists(root)
     except ConfigError as error:
-        raise CannotJudge(str(error)) from error
+        steps = () if error.example is None else (Example(CONFIG_EXAMPLE_LABEL, error.example),)
+        raise CannotJudge(error.fact, steps) from error
 
 
 def _required[T](read: T | CannotJudge) -> T:

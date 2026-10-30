@@ -3,9 +3,10 @@ from pathlib import Path
 
 import pytest
 
-from quality.config import CONFIG_PATH
+from quality.config import CONFIG_PATH, PYTHON_ALLOWANCE_EXAMPLE
+from tests.support.check import copy_block, is_clean, refusal_row, refusals
 from tests.support.check import hygiene_output as run
-from tests.support.check import is_clean, refusal_row, refusals
+from tests.support.config_refusals import ONE_LINE_NEED
 from tests.support.git_repositories import GIT_IDENTITY, head_commit
 
 ROOT_FLOOR_FIX = (
@@ -128,28 +129,35 @@ def test_an_allowance_for_a_file_that_needs_none_is_a_finding(build_repo, capsys
     assert f"delete its [[python.allow]] entry from {CONFIG_PATH}." in output
 
 
+PYTHON = f"{CONFIG_PATH} [[python.allow]]"
+PYTHON_PATH_NEED = f"{PYTHON} entry 1 needs path as the exact tracked path of one pyproject.toml, no folder, pattern or .."
+
+
 @pytest.mark.parametrize(
-    "config",
+    ("config", "fact"),
     [
-        allow("src/a/pyproject.toml") + allow("src/a/pyproject.toml"),
-        allow("src/a/"),
-        allow("src/a"),
-        allow("src/a/*.toml"),
-        allow("../pyproject.toml"),
-        allow("src/a/pyproject.toml", ""),
-        '[[python.allow]]\npath = "src/a/pyproject.toml"\nreason = "one\\ntwo"\n',
-        allow("src/a/pyproject.toml") + 'extra = 1\n',
+        (
+            allow("src/a/pyproject.toml") + allow("src/a/pyproject.toml"),
+            f'{PYTHON} declares path = "src/a/pyproject.toml" twice; one entry per path',
+        ),
+        (allow("src/a/"), PYTHON_PATH_NEED),
+        (allow("src/a"), PYTHON_PATH_NEED),
+        (allow("src/a/*.toml"), PYTHON_PATH_NEED),
+        (allow("../pyproject.toml"), PYTHON_PATH_NEED),
+        (allow("src/a/pyproject.toml", ""), f"{PYTHON} entry 1 needs {ONE_LINE_NEED}"),
+        ('[[python.allow]]\npath = "src/a/pyproject.toml"\nreason = "one\\ntwo"\n', f"{PYTHON} entry 1 needs {ONE_LINE_NEED}"),
+        (allow("src/a/pyproject.toml") + 'extra = 1\n', f"{PYTHON} entry 1 needs exactly a path and a reason"),
     ],
     ids=["duplicate", "folder", "folder without slash", "pattern", "dotdot", "empty reason", "multi-line reason", "unknown key"],
 )
-def test_a_malformed_python_allowance_cannot_be_judged_by_any_rule_that_reads_the_config(build_repo, capsys, config):
-    """F8, sentence 4: a malformed allowance is cannot-judge in every rule that reads the config."""
+def test_a_malformed_python_allowance_cannot_be_judged_by_any_rule_that_reads_the_config(build_repo, capsys, config, fact):
+    """F8, sentence 4: a malformed allowance is cannot-judge in every rule that reads the config; its example stands
+    once under next:."""
     repo = build_repo({"src/a/pyproject.toml": project(), CONFIG_PATH: config})
     code, output = run(capsys, repo)
-    refusal_lines = [line for line in output.splitlines() if "[[python.allow]]" in line]
     refusing = refusals(repo)
-    assert (code, "python-floor" in refusing, "root-layout" in refusing) == (2, True, True), output
-    assert all("qwen-tts has no cp314 wheel" in line for line in refusal_lines), refusal_lines
+    assert (code, fact in refusing["python-floor"], fact in refusing["root-layout"]) == (2, True, True), output
+    assert output.count(copy_block(PYTHON_ALLOWANCE_EXAMPLE)) == 1
 
 
 @pytest.mark.parametrize(

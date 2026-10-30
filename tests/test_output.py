@@ -13,7 +13,7 @@ import pytest
 
 from quality import cli, output, sonar
 from quality.output import Glyph, Row, SubLine, Verdict
-from quality.report import Command, Instruction, OneOf
+from quality.report import Choice, Command, Example, Instruction, OneOf
 
 OWN_SGR = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -94,7 +94,8 @@ def test_the_verdict_line_counts_and_ends_with_the_duration(counts, expected):
     assert verdict_line(**counts) == expected
 
 
-TWO_WAYS = OneOf("pick one", (Command("first command", "first case"), Command("second command", "second case")))
+TWO_WAYS = OneOf("pick one", (Choice("first command", "first case"), Choice("second command", "second case")))
+COPY = Example("write it in a.toml like this", ("[[table]]", 'key = "value"', "other = 1"))
 
 
 @pytest.mark.parametrize(
@@ -104,15 +105,16 @@ TWO_WAYS = OneOf("pick one", (Command("first command", "first case"), Command("s
         ((Command("do this"), Instruction("then think")), "next:\n    do this\n    then think\n"),
         ((Command("do this", "where"),), "next: where:\n    do this\n"),
         ((TWO_WAYS,), "next: pick one, one of:\n    first case:\n        first command\n    second case:\n        second command\n"),
-        ((OneOf("pick one", (Command("first command"), Command("second command"))),),
-         "next: pick one, one of:\n    first command\n    second command\n"),
+        ((COPY,), 'next: write it in a.toml like this:\n    [[table]]\n    key = "value"\n    other = 1\n'),
+        ((Command("do this"), COPY),
+         'next:\n    do this\n    write it in a.toml like this:\n        [[table]]\n        key = "value"\n        other = 1\n'),
         (
             (Command("do this"), TWO_WAYS),
             ("next:\n    do this\n    pick one, one of:\n        first case:\n            first command\n"
              "        second case:\n            second command\n"),
         ),
     ],
-    ids=["one step", "two steps", "labelled command", "choice alone", "unlabelled choices", "choice after a command"],
+    ids=["one step", "two steps", "labelled command", "choice alone", "example alone", "example after a command", "choice after a command"],
 )
 def test_the_pair_prints_a_lone_step_on_the_next_line_and_several_below_it(steps, expected):
     stream = io.StringIO()
@@ -291,3 +293,22 @@ def test_a_closed_stdout_fd_still_prints_the_pair_and_never_crashes(tmp_path):
         text=True, check=False, stderr=subprocess.PIPE,
     )
     assert (done.returncode, done.stderr.startswith("error: ")) == (2, True), done.stderr
+
+
+def test_an_example_line_prints_whole_however_long_and_escaped():
+    long_line = 'reason = "' + "x" * 400 + '"'
+    stream = io.StringIO()
+    output.write_pair("e", (Example("write it", (long_line, "k = \x1b[35m\u202e")),), file=stream)
+    assert stream.getvalue() == f"error: e\nnext: write it:\n    {long_line}\n    k = \\x1b[35m\\u202e\n"
+
+
+@pytest.mark.parametrize(("term", "no_color"), [("xterm", None), ("xterm", "1"), ("dumb", None)], ids=["terminal", "NO_COLOR", "dumb"])
+def test_an_example_is_painted_by_its_label_only_at_a_terminal(monkeypatch, term, no_color):
+    monkeypatch.setenv("TERM", term)
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    if no_color:
+        monkeypatch.setenv("NO_COLOR", no_color)
+    styled = written(Terminal, lambda stream: output.write_pair("e", (COPY,), file=stream))
+    assert OWN_SGR.sub("", styled) == "error: e\nnext: write it in a.toml like this:\n    [[table]]\n    key = \"value\"\n    other = 1\n"
+    assert ("\x1b[" in styled) is (term == "xterm" and no_color is None)
+    assert not any("\x1b[" in line for line in styled.splitlines() if line.startswith("    "))
