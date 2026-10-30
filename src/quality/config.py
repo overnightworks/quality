@@ -198,7 +198,17 @@ class Allowance(NamedTuple):
 
 
 class ConfigError(Exception):
-    """The quality config cannot be read; the message carries the reason and the fix."""
+    """The quality config cannot be read: `fact` says why, `example` (TOML lines to copy) how to write it, where there is one.
+
+    `str` is the one-line form for the doors that print a single line; the structured fields are the contract."""
+
+    def __init__(self, fact: str, example: tuple[str, *tuple[str, ...]] | None = None) -> None:
+        super().__init__(fact)
+        self.fact = fact
+        self.example = example
+
+    def __str__(self) -> str:
+        return self.fact if self.example is None else f"{self.fact}, like:\n" + "\n".join(self.example)
 
 
 @dataclass(frozen=True)

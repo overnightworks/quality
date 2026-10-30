@@ -1,9 +1,11 @@
 import datetime
+import json
 import re
+import tomllib
 
 import pytest
 
-from quality import cli
+from quality import cli, config
 from quality.config import (
     CONFIG_PATH,
     AdvisoryAllowance,
@@ -18,9 +20,11 @@ from quality.config import (
     read_allow_lists,
     read_gate_settings,
 )
+from quality.report import printable
 from quality.rules import Rule
 from tests.support.advisories import allowance_config
 from tests.support.check import CLEAN_VERDICT, refusal_row, refusals
+from tests.support.config_refusals import ARRAY_TABLES, DIRECTORY, Refusal, all_refusals
 from tests.support.generated_files import TYPES_FILE, generated_config
 
 
@@ -500,3 +504,129 @@ def test_the_verdict_refuses_a_malformed_generated_file_naming_the_side(capsys, 
 def test_the_commit_hook_ignores_a_malformed_size_table():
     """#174 sentence 3: only [secrets] is read by the commit hook."""
     assert load_staged_secret_allowances(generated_config(job="other") + "[size]\nextra = 1\n") == {}
+
+
+def refused_by(refusal: Refusal, loader: str, tmp_path) -> ConfigError:
+    """The error `loader` raises for `refusal`; a directory where the file should be is read from disk."""
+    if refusal.text == DIRECTORY:
+        (tmp_path / "quality" / "config.toml").mkdir(parents=True)
+        read = {"allow_lists": read_allow_lists, "gate": read_gate_settings}[loader]
+        argument = tmp_path
+    else:
+        read = {"allow_lists": load_allow_lists, "gate": load_gate_settings, "staged": load_staged_secret_allowances}[loader]
+        argument = refusal.text
+    with pytest.raises(ConfigError) as refused:
+        read(argument)
+    return refused.value
+
+
+REFUSALS = all_refusals()
+
+
+@pytest.mark.parametrize(
+    ("refusal", "loader"),
+    [(refusal, loader) for refusal in REFUSALS for loader in refusal.loaders],
+    ids=[f"{refusal.id} ({loader})" for refusal in REFUSALS for loader in refusal.loaders],
+)
+def test_a_config_refusal_carries_its_whole_fact_and_its_example_apart(refusal, loader, tmp_path):
+    """#279 O10, O11, acceptance 1 and 2: every refusal names its table, entry position and unmet need as the fact,
+    without a Python repr, and carries the example the table owns as TOML lines, or none."""
+    error = refused_by(refusal, loader, tmp_path)
+    expected = None if refusal.example is None else getattr(config, refusal.example)
+    assert (error.fact, error.example) == (refusal.fact, expected)
+
+
+def test_the_refusals_use_every_example_and_every_refusal_without_one():
+    """#279 acceptance 1: the rows hold all ten example constants and the refusals the trace gives none."""
+    names = {refusal.example for refusal in REFUSALS}
+    assert names == {
+        None, "EXAMPLE", "LEGACY_EXAMPLE", "ALLOWANCE_EXAMPLE", "LOOSENED_EXAMPLE", "ADVISORY_ALLOWANCE_EXAMPLE",
+        "ROOT_ALLOWANCE_EXAMPLE", "LAYOUT_ALLOWANCE_EXAMPLE", "PYTHON_ALLOWANCE_EXAMPLE", "COMPOSE_ALLOWANCE_EXAMPLE",
+        "GENERATED_FILE_EXAMPLE",
+    }
+
+
+def test_the_one_line_form_of_a_refusal_is_its_fact_then_like_and_the_example_lines():
+    """#279 acceptance 1: the doors outside the picture print `str(error)`."""
+    assert str(ConfigError("no", ("[t]", "a = 1"))) == "no, like:\n[t]\na = 1"
+    assert str(ConfigError("no")) == "no"
+
+
+EXAMPLE_NAMES = [
+    "EXAMPLE", "LEGACY_EXAMPLE", "ALLOWANCE_EXAMPLE", *(table.example for table in ARRAY_TABLES),
+]
+
+
+@pytest.mark.parametrize("name", EXAMPLE_NAMES)
+def test_an_example_as_printed_with_its_indent_is_toml(name):
+    """#279 acceptance 5: the lines a person copies, four spaces deep as `next:` prints them, parse as TOML."""
+    lines = getattr(config, name)
+    assert isinstance(lines, tuple)
+    tomllib.loads("\n".join(f"    {line}" for line in lines))
+
+
+@pytest.mark.parametrize("table", ARRAY_TABLES, ids=[table.name for table in ARRAY_TABLES])
+def test_an_example_entry_is_accepted_beside_a_gate_that_lists_its_job(table):
+    """#279 acceptance 5: each array table's example is a config the reader accepts."""
+    lines = getattr(config, table.example)
+    document = tomllib.loads("\n".join(lines))
+    job = document.get("size", {}).get("generated", [{}])[0].get("job", "checks")
+    text = f"[gate]\nmandatory_jobs = [{json.dumps(job)}]\n" + "\n".join(lines)
+    assert load_gate_settings(text).mandatory_jobs == (job,)
+    assert load_allow_lists(text) is not None
+
+
+def test_the_gate_example_is_accepted():
+    """#279 acceptance 5: the example of a missing or malformed [gate] is a valid gate."""
+    assert load_gate_settings("\n".join(config.EXAMPLE)).mandatory_jobs == ("checks",)
+
+
+def test_the_secrets_example_holds_a_placeholder_hash_a_person_fills():
+    """#279 acceptance 5: [secrets]'s example parses; its hash is a placeholder, so the reader refuses it."""
+    text = "\n".join(config.ALLOWANCE_EXAMPLE)
+    assert tomllib.loads(text)["secrets"]["allow"][0]["rule"]
+    with pytest.raises(ConfigError, match="secret_sha256 as 64 lowercase hex digits"):
+        load_allow_lists(text)
+
+
+def toml_escaped(value: str) -> str:
+    """`value` written with a \\U escape for every character, so any character reaches the config as itself."""
+    return "".join(f"\\U{ord(character):08x}" for character in value)
+
+
+AWKWARD_CHARACTERS = ["\"", "\\", "\t", "\x1b", "\x7f", "\x85", "\u202e", "\u2028", "\U000e0001", "\U0001f600"]
+AWKWARD_IDS = ["quote", "backslash", "tab", "ESC", "DEL", "U+0085", "U+202E", "U+2028", "U+E0001", "U+1F600"]
+QUOTED = r'"(?:[^"\\]|\\.)*"'
+
+
+@pytest.mark.parametrize("character", AWKWARD_CHARACTERS, ids=AWKWARD_IDS)
+def test_a_repeated_value_is_quoted_so_that_its_printed_form_reads_back_as_the_value(character):
+    """#279 O11, acceptance 2: the fact passed through the one escaping holds the value as a TOML string."""
+    value = f"a{character}b"
+    entries = f'[[root.allow]]\nentry = "{toml_escaped(value)}"\nreason = "r"\n' * 2
+    with pytest.raises(ConfigError) as refused:
+        load_allow_lists(entries)
+    printed = printable(refused.value.fact)
+    quoted = re.search(rf"entry = ({QUOTED}) twice", printed)
+    assert quoted, printed
+    assert tomllib.loads(f"value = {quoted.group(1)}")["value"] == value
+    assert not set(printed) & {"\n", "\r", "\u2028", "\u2029"}
+
+
+@pytest.mark.parametrize("character", AWKWARD_CHARACTERS, ids=AWKWARD_IDS)
+def test_an_unknown_key_that_is_no_bare_key_is_quoted_so_that_it_reads_back_as_the_key(character):
+    """#279 O11, acceptance 2: an unknown key stands as a TOML string, read back as the scenario's key."""
+    key = f"a{character}b"
+    with pytest.raises(ConfigError) as refused:
+        load_allow_lists(f'[root]\n"{toml_escaped(key)}" = 1\n')
+    printed = printable(refused.value.fact)
+    quoted = re.search(rf"unknown key ({QUOTED}) - ", printed)
+    assert quoted, printed
+    assert tomllib.loads(f"{quoted.group(1)} = 1") == {key: 1}
+
+
+def test_a_bare_unknown_key_stands_unquoted_and_any_other_stands_as_a_toml_string():
+    """#279 O11: a non-empty key of A-Z, a-z, 0-9, `_` and `-` is bare."""
+    with pytest.raises(ConfigError) as refused:
+        load_allow_lists('[root]\nAb_9-z = 1\n"" = 2\n')
+    assert refused.value.fact.startswith(f'{CONFIG_PATH} has unknown keys "", Ab_9-z - ')

@@ -30,17 +30,38 @@ class Instruction:
 
 
 @dataclass(frozen=True)
+class Choice:
+    """One of the commands a person picks from; the label says when this one fits."""
+
+    text: str
+    label: str
+
+    def __str__(self) -> str:
+        return f"{self.label}: {self.text}"
+
+
+@dataclass(frozen=True)
 class OneOf:
-    """Labelled commands of which a person runs the one whose label fits, never one after the other."""
+    """Commands of which a person runs the one whose label fits, never one after the other; each choice carries the
+    label a person chooses it by."""
 
     label: str
-    choices: tuple[Command, Command, *tuple[Command, ...]]
+    choices: tuple[Choice, Choice, *tuple[Choice, ...]]
 
     def __str__(self) -> str:
         return f"{self.label}, one of: " + " or ".join(str(choice) for choice in self.choices)
 
 
-type Step = Command | Instruction | OneOf
+@dataclass(frozen=True)
+class Example:
+    """Lines a person copies as they stand into the place `label` names; never a command and never shortened. It has no
+    one-line form: lines joined onto one line are no example to copy."""
+
+    label: str
+    lines: tuple[str, *tuple[str, ...]]
+
+
+type Step = Command | Instruction | OneOf | Example
 
 
 @dataclass(frozen=True)

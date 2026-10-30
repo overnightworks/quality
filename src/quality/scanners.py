@@ -9,7 +9,7 @@ from pathlib import Path
 
 from quality import DISTRIBUTION, installation, process
 from quality.config import Allowance
-from quality.report import CannotJudge, Command, Finding, Instruction, OneOf, printable, shell_word
+from quality.report import CannotJudge, Choice, Command, Finding, Instruction, OneOf, printable, shell_word
 from quality.rules import Rule
 
 GITLEAKS = "gitleaks"
@@ -38,8 +38,8 @@ GITLEAKS_CONFIG = Path(__file__).with_name("gitleaks.toml")
 REINSTALL = OneOf(
     "reinstall quality with its dependencies",
     (
-        Command("uv sync --locked --reinstall", "in quality's checkout"),
-        Command(f"uv tool upgrade --reinstall {DISTRIBUTION}", "for a tool install"),
+        Choice("uv sync --locked --reinstall", "in quality's checkout"),
+        Choice(f"uv tool upgrade --reinstall {DISTRIBUTION}", "for a tool install"),
     ),
 )
 

@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import check, cli, ratchet, scanners
+from quality import check, cli, config, ratchet, scanners
 from quality.ratchet import BASELINE_PATH
 from quality.report import DETAIL_MARKER, CannotJudge, Command
 from quality.rules import Area, Rule
@@ -364,14 +364,26 @@ def test_an_unused_allowance_with_a_control_character_prints_escaped(build_repo,
     assert_every_line_starts_with_the_door(lines)
 
 
-def test_a_config_error_example_is_one_stderr_line(build_repo, monkeypatch, capsys):
-    """#97 rule 2, cell 14 (E5): the multi-line `like:` example of a config error joins with `\\x0a`."""
-    monkeypatch.chdir(build_repo({"quality/config.toml": "[gate]\nmandatory_jobs = 3\n"}))
+@pytest.mark.parametrize(
+    ("config_text", "fact", "example"),
+    [
+        (None, "quality/config.toml is missing", "EXAMPLE"),
+        ("[gate]\nmandatory_jobs = 3\n", "quality/config.toml needs [gate] mandatory_jobs as a non-empty list of job names", "EXAMPLE"),
+        ('[gate]\nmandatory_jobs = ["checks"]\nlegacy = "x"\n', 'quality/config.toml [gate] legacy must be "report" or "fail"', "LEGACY_EXAMPLE"),
+    ],
+    ids=["missing config", "malformed jobs", "malformed legacy"],
+)
+def test_a_door_outside_the_picture_prints_a_config_refusal_as_its_fact_then_the_example_in_one_stderr_line(
+    build_repo, monkeypatch, capsys, config_text, fact, example
+):
+    """#279 acceptance 7: `sonar findings` keeps its one-line form: the fact, `, like:` and the example joined with `\\x0a`."""
+    monkeypatch.chdir(build_repo({} if config_text is None else {"quality/config.toml": config_text}))
+    monkeypatch.setenv("SONAR_TOKEN", "x")
     code, lines = door_lines(capsys, "sonar", "findings")
-    cannot_judge = [line for line in lines if line.startswith("sonar: cannot judge - ")]
-    assert (code, len(cannot_judge)) == (2, 1), lines
-    assert "like:" in cannot_judge[0]
-    assert "\\x0a" in cannot_judge[0]
+    lines_of_example = "\\x0a".join(getattr(config, example))
+    assert (code, [line for line in lines if line.startswith("sonar: cannot judge - ")]) == (
+        2, [f"sonar: cannot judge - {fact}, like:\\x0a{lines_of_example}"],
+    )
     assert_every_line_starts_with_the_door(lines)
 
 
@@ -691,3 +703,38 @@ def test_an_area_names_one_fact_once_for_two_reasons_that_differ_only_in_steps()
     area = areas_refusing((CannotJudge("same", (ONE,)), CannotJudge("same", (TWO,))))[0]
     row = cli.area_row(area)
     assert (row.fact, row.sub_lines) == ("same", ())
+
+
+REFUSED_CONFIG = {"quality/config.toml": '[gate]\nmandatory_jobs = ["checks"]\n[[size.generated]]\npath = "x.ts"\njob = "other"\n'
+                  'item = "#1"\ndate = 2026-10-30\nreason = "r"\n'}
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("environment", "coloured"),
+    [({"TERM": "xterm"}, True), ({"TERM": "xterm", "NO_COLOR": "1"}, False), ({"TERM": "dumb"}, False), (None, False)],
+    ids=["terminal", "NO_COLOR", "dumb", "pipe"],
+)
+def test_the_real_door_prints_every_config_example_line_whole_in_each_stderr_form(build_repo, environment, coloured):
+    """#279 acceptance 6: after removing quality's SGR, each example line stands whole on its own line in all four
+    forms; colour only at a terminal."""
+    repo = build_repo(REFUSED_CONFIG)
+    base = {key: value for key, value in os.environ.items() if key not in ("NO_COLOR", "GITHUB_ACTIONS", "TERM")}
+    parent, child = pty.openpty() if environment else (None, subprocess.PIPE)
+    done = subprocess.run([*DOOR, "hygiene", "."], cwd=repo, env={**base, **(environment or {})}, stdout=subprocess.DEVNULL,
+                          stderr=child, check=False, text=environment is None)
+    if environment:
+        os.close(child)
+        chunks = []
+        with contextlib.suppress(OSError):
+            while chunk := os.read(parent, 4096):
+                chunks.append(chunk)
+        os.close(parent)
+        text = b"".join(chunks).decode()
+    else:
+        text = done.stderr
+    stripped = re.sub(r"\x1b\[[0-9;]*m", "", text)
+    lines = stripped.replace("\r\n", "\n").splitlines()
+    assert done.returncode == 2
+    assert ("\x1b[" in text) is coloured, text
+    assert [f"    {line}" for line in config.GENERATED_FILE_EXAMPLE] == lines[lines.index(f"next: {check.CONFIG_EXAMPLE_LABEL}:") + 1:][: len(config.GENERATED_FILE_EXAMPLE)]

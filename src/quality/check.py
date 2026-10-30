@@ -24,6 +24,7 @@ from quality import (
     scanners,
 )
 from quality.config import (
+    CONFIG_PATH,
     Allowance,
     AllowLists,
     ConfigError,
@@ -31,6 +32,8 @@ from quality.config import (
 )
 from quality.report import CannotJudge, Finding, Reason, Unparsable
 from quality.rules import Area, Rule
+
+CONFIG_EXAMPLE_LABEL = f"write it in {CONFIG_PATH} like this"
 
 
 def _python_floor_result(root: Path, modes: dict[str, str] | CannotJudge, allow_lists: AllowLists | CannotJudge) -> python_floor.FloorResult:
