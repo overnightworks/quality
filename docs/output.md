@@ -165,7 +165,9 @@ A config refusal names its fact on each `✗` row it reaches and shows the examp
 ```text
   ✗ files         not checked    quality/config.toml [[size.generated]] entry 1 needs job as one of [gate] mandatory_jobs, the job whose generator check proves the file
   ✗ debt          not checked    quality/config.toml [[size.generated]] entry 1 needs job as one of [gate] mandatory_jobs, the job whose generator check proves the file
-error: 2 of 7 areas could not check
+  ✗ secrets       not checked    quality/config.toml [[size.generated]] entry 1 needs job as one of [gate] mandatory_jobs, the job whose generator check proves the file
+  ✗ dependencies  not checked    quality/config.toml [[size.generated]] entry 1 needs job as one of [gate] mandatory_jobs, the job whose generator check proves the file
+error: 4 of 7 areas could not check
 next: write it in quality/config.toml like this:
     [[size.generated]]
     path = "frontend/src/lib/api/types.ts"
