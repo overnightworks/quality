@@ -59,7 +59,10 @@ def test_both_streams_start_with_the_same_stop_and_nothing_resumes_it(clean_repo
     actions = run_door("hygiene", ".", cwd=clean_repo)
     token = stop_token(actions.stdout)
     assert stop_token(actions.stderr) == token
-    assert actions.stdout.split("\n", 1)[1] == local.stdout
+    *actions_lines, actions_verdict = actions.stdout.split("\n", 1)[1].splitlines()
+    *local_lines, local_verdict = local.stdout.splitlines()
+    assert actions_lines == local_lines  # the verdict line ends in each run's own duration
+    assert all(re.fullmatch(r"✓ clean · 7 areas · debt measured, not enforced · (<1s|\d+s)", line) for line in (actions_verdict, local_verdict))
     assert actions.stderr.split("\n", 1)[1] == local.stderr
     assert f"::{token}::" not in actions.stdout + actions.stderr
     assert actions.returncode == local.returncode
@@ -90,7 +93,7 @@ def test_a_closed_stdout_leaves_the_stop_and_the_verdict_on_stderr(broken_compos
     """#89 rule 1, cell 5: fd 1 closed."""
     done = run_door("hygiene", ".", cwd=broken_compose_repo, shell=CLOSED_STDOUT)
     stop_token(done.stderr)
-    assert (done.returncode, "compose-port cannot judge" in done.stderr) == (2, True)
+    assert (done.returncode, "error: 1 of 7 areas could not check" in done.stderr) == (2, True)
 
 
 def test_a_closed_stderr_keeps_the_stop_on_stdout_and_the_exit(broken_compose_repo):
@@ -244,10 +247,10 @@ def test_a_compose_finding_with_a_control_character_is_one_escaped_line(build_re
 @pytest.mark.parametrize(
     ("files", "refusal_start"),
     [
-        ({"a\n::error::x.compose.yaml": "services: [\n"}, "hygiene: compose-port cannot judge - cannot read a\\x0a::error::x.compose.yaml: line 2, "),
+        ({"a\n::error::x.compose.yaml": "services: [\n"}, "  ✗ files         not checked    cannot read a\\x0a::error::x.compose.yaml: line 2, "),
         (
             {**SHOP_DB_IMPORTS_WEB, ".importlinter": "[importlinter]\nroot_packages =\n    shop\n\n[importlinter:contract:a\n::error::c]\nname = x\n"},
-            "hygiene: import-contract cannot judge - ",
+            "  ✗ imports       not checked    ",
         ),
     ],
     ids=["compose file name", "importlinter section header that echoes"],
@@ -334,7 +337,7 @@ def test_a_source_name_that_is_not_utf8_is_still_refused_as_one_line(build_repo,
     """#97 rule 2, cell 12: invalid UTF-8 in a tracked source name is refused before import-linter renders it."""
     files = {**SHOP_DB_IMPORTS_WEB, "src/shop/lat\udce9.py": "import shop.web\n", "pyproject.toml": toml(FORBIDDEN)}
     code, lines = door_lines(capsys, "hygiene", str(build_repo(files)))
-    refusals = [line for line in lines if line.startswith("hygiene: import-contract cannot judge - ")]
+    refusals = [line for line in lines if line.startswith("  ✗ imports       not checked    ")]
     assert (code, len(refusals)) == (2, 1), lines
     assert_every_line_starts_with_the_door(lines)
 
@@ -352,7 +355,7 @@ def test_a_scanner_stderr_with_several_lines_prints_as_one_escaped_line(build_re
     fake_scanner(served_scanners, "gitleaks", on_scan="echo first >&2; echo '::error::second' >&2; exit 2")
     repo = build_repo({"README.md": "x\n"})
     code, lines = door_lines(capsys, "hygiene", str(repo))
-    refusals = [line for line in lines if line.startswith("hygiene: secret cannot judge - ")]
+    refusals = [line for line in lines if line.startswith("  ✗ secrets       not checked    ")]
     assert (code, len(refusals)) == (2, 1), lines
     assert "first\\x0a::error::second" in refusals[0]
     assert_every_line_starts_with_the_door(lines)
@@ -571,11 +574,13 @@ def test_one_reason_refusing_rules_in_several_areas_stands_once_in_each(build_re
     assert all("not checked" in line and "bogus" in line for line in unchecked)
 
 
+@pytest.mark.integration
 def test_a_folder_outside_any_repository_prints_only_the_location_pair(tmp_path, capsys):
     code, out, err = frame_run(capsys, tmp_path)
     assert (code, out, err) == (2, [], [f"error: not inside a git work tree · {tmp_path}", "next: run quality hygiene inside a repository"])
 
 
+@pytest.mark.integration
 def test_a_missing_path_gets_the_general_pair(tmp_path, capsys):
     code, out, err = frame_run(capsys, tmp_path / "missing")
     assert (code, out) == (2, [])
@@ -592,6 +597,7 @@ def test_a_bare_repository_and_the_inside_of_git_are_outside_a_work_tree(tmp_pat
         assert (code, out, err) == (2, [], [f"error: not inside a git work tree · {path}", "next: run quality hygiene inside a repository"])
 
 
+@pytest.mark.integration
 def test_a_folder_outside_any_repository_is_outside_in_every_locale(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("LANG", "de_DE.UTF-8")
     monkeypatch.setenv("LANGUAGE", "de")
@@ -633,8 +639,8 @@ def test_a_refusal_row_appears_exactly_when_the_exit_is_two_and_a_findings_row_w
     assert len(rows) == len(Area)
 
 
-@pytest.fixture
-def at_a_terminal(monkeypatch):
+def terminal_streams(monkeypatch) -> tuple[Terminal, Terminal]:
+    """Both streams terminals; set inside the test, because pytest's capture puts its own back when the test starts."""
     monkeypatch.setenv("TERM", "xterm")
     monkeypatch.delenv("NO_COLOR", raising=False)
     stdout, stderr = Terminal(), Terminal()
@@ -643,13 +649,13 @@ def at_a_terminal(monkeypatch):
     return stdout, stderr
 
 
-def test_at_a_terminal_a_refusal_from_repository_text_prints_as_escaped_text_between_quality_sgr_only(build_repo, at_a_terminal):
-    stdout, stderr = at_a_terminal
+def test_at_a_terminal_a_refusal_from_repository_text_prints_as_escaped_text_between_quality_sgr_only(build_repo, monkeypatch):
     repo = build_repo({"a\x1b[35m\n\u202e.compose.yaml": "services: [\n"})
+    stdout, stderr = terminal_streams(monkeypatch)
     code = cli.main(["hygiene", str(repo)], clock=lambda: 0.0)
     stripped = re.sub(r"\x1b\[[0-9;]*m", "", stdout.getvalue() + stderr.getvalue())
     assert code == 2
-    assert "\x1b[" in stdout.getvalue()
+    assert "\x1b[" in stdout.getvalue(), stderr.getvalue()
     assert "a\\x1b[35m\\x0a\\u202e.compose.yaml" in stripped
     assert [c for c in stripped if unicodedata.category(c) in ("Cc", "Cf", "Zl", "Zp") and c != "\n"] == []
 

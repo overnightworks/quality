@@ -165,20 +165,24 @@ class AreaVerdict:
 
     @property
     def outcome(self) -> Outcome:
-        raise NotImplementedError
+        severity = list(Outcome)
+        return max((verdict.outcome for verdict in self.verdicts), key=severity.index, default=Outcome.CLEAN)
 
     @property
     def findings(self) -> tuple[Finding, ...]:
-        raise NotImplementedError
+        return tuple(finding for verdict in self.verdicts for finding in verdict.findings)
 
     @property
     def reasons(self) -> tuple[str, ...]:
         """The distinct reasons its rules could not judge, equal text once, in run order."""
-        raise NotImplementedError
+        return tuple(dict.fromkeys(str(verdict.refusal) for verdict in self.verdicts if verdict.refusal is not None))
 
     @property
     def measurement(self) -> Measurement:
-        raise NotImplementedError
+        judging = [verdict.measured_only for verdict in self.verdicts if verdict.refusal is None]
+        if judging and all(judging):
+            return Measurement.MEASURED_ONLY
+        return Measurement.PARTLY_MEASURED_ONLY if any(judging) else Measurement.ENFORCED
 
 
 @dataclass(frozen=True)
@@ -194,7 +198,7 @@ class HygieneResult:
 
     @property
     def areas(self) -> tuple[AreaVerdict, ...]:
-        raise NotImplementedError
+        return tuple(AreaVerdict(area, tuple(verdict for verdict in self.verdicts if verdict.rule.area is area)) for area in Area)
 
     @property
     def worst(self) -> Outcome:
@@ -220,14 +224,14 @@ def _findings(judged: _Judged | CannotJudge) -> Sequence[Finding] | CannotJudge:
     return judged if isinstance(judged, CannotJudge) else judged.findings
 
 
-def _verdict(rule: Rule, outcome: Sequence[Finding] | CannotJudge) -> RuleVerdict:
+def _verdict(rule: Rule, outcome: Sequence[Finding] | CannotJudge, measured_only: bool) -> RuleVerdict:
     """The verdict of the rule a check judges; a check that cannot judge leaves its rule unjudged."""
     if isinstance(outcome, CannotJudge):
         return RuleVerdict(rule, refusal=outcome)
     foreign = sorted({finding.rule for finding in outcome} - {rule})
     if foreign:
         raise ValueError(f"a check judging {rule} returned findings under {', '.join(foreign)}")
-    return RuleVerdict(rule, tuple(outcome))
+    return RuleVerdict(rule, tuple(outcome), measured_only=measured_only)
 
 
 def _judge_baseline_rules(
@@ -302,11 +306,20 @@ def run_hygiene(root: Path, locate_ruff: Callable[[], str], locate_zizmor: Calla
         **{rule: _attempt(partial(check_workflows, root, rule, tracked, locate_zizmor)) for rule in scanners.WORKFLOW_SCANNERS},
         Rule.ADVISORY: _findings(advisory),
     }
-    verdicts = [_verdict(rule, outcomes[rule]) for rule in Rule]
+    measuring = {rule for rule, result in ((Rule.SIZE, size), (Rule.CLONE, clone)) if _measures_only(result)}
+    verdicts = [_verdict(rule, outcomes[rule], rule in measuring) for rule in Rule]
     reports = _reports(size, clone, contracts, floor, printing)
     allowed_advisories = () if isinstance(advisory, CannotJudge) else advisory.report()
     allowed, unused = ([], {}) if isinstance(secrets, CannotJudge) else (secrets.allowed, secrets.unused_allowances)
     return HygieneResult(tuple(verdicts), (*reports, *allowed_advisories), allowed, unused)
+
+
+def _measures_only(result: ratchet.RuleResult | CannotJudge) -> bool:
+    return not isinstance(result, CannotJudge) and result.measured_only is not None
+
+
+def _measured_notes(result: ratchet.RuleResult | CannotJudge) -> list[str]:
+    return [result.measured_only.note] if not isinstance(result, CannotJudge) and result.measured_only else []
 
 
 def _reports(
@@ -317,8 +330,8 @@ def _reports(
     printing: python_lint.PrintResult | CannotJudge,
 ) -> tuple[str, ...]:
     """The report lines of the rules that judged: the size counts without a baseline, the clone pairs without a `[clones]` table, the import-contract notes, each python-floor exception, each output owner."""
-    size_reports = [] if isinstance(size, CannotJudge) or size.report is None else [size.report]
-    clone_reports = [] if isinstance(clone, CannotJudge) or clone.report is None else [clone.report]
+    size_reports = _measured_notes(size)
+    clone_reports = _measured_notes(clone)
     contract_notes = [] if isinstance(contracts, CannotJudge) else contracts.notes
     floor_reports = () if isinstance(floor, CannotJudge) else floor.reports
     owner_reports = () if isinstance(printing, CannotJudge) else printing.reports

@@ -556,11 +556,18 @@ def _count(where: str, value: object) -> int:
 
 
 @dataclass(frozen=True)
+class MeasuredOnly:
+    """A rule that measured and did not enforce, and the note line that says what it measured."""
+
+    note: str
+
+
+@dataclass(frozen=True)
 class RuleResult:
-    """A baseline rule's findings, and its report line when it only counts."""
+    """A baseline rule's findings, and `measured_only` when it counted without enforcing."""
 
     findings: list[Finding]
-    report: str | None
+    measured_only: MeasuredOnly | None
 
 
 def complete(tree: TreeMeasurement) -> Measurements:
@@ -601,5 +608,5 @@ def check_size(tree: TreeMeasurement, baseline: Baseline | None, generated: Coll
     stale = _stale_declarations(tree, generated)
     judged = without_generated(tree, generated)
     if baseline is None:
-        return RuleResult(stale, report_counts(judged))
+        return RuleResult(stale, MeasuredOnly(report_counts(judged)))
     return RuleResult([*stale, *compare(complete(judged), baseline.size)], None)

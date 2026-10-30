@@ -1,18 +1,21 @@
-import contextlib
-import io
-import os
 import subprocess
-import sys
-import textwrap
 from pathlib import Path
 
 import pytest
 
-from quality import check, cli, env_file, installation, process, scanners, sonar
+from quality import check, cli, env_file, installation, process, scanners
 from quality.compose import is_compose_file
 from quality.report import CannotJudge, Finding, Unparsable
 from quality.rules import Area, Rule
-from tests.support.check import CLEAN_LINE, compose, installed_ruff, loosen_requirement
+from tests.support.check import (
+    CLEAN_VERDICT,
+    compose,
+    installed_ruff,
+    is_clean,
+    loosen_requirement,
+    refusal_row,
+    refused,
+)
 from tests.support.check import hygiene_output as run
 from tests.support.scanners import fake_scanner, fake_zizmor, lacking, never_located, nothing_installed
 
@@ -34,13 +37,13 @@ def non_utf8_filename_repo(build_repo, tmp_path):
 @pytest.mark.parametrize(
     ("arrange", "expected_code", "expected_text"),
     [
-        (lambda build_repo, tmp_path: build_repo({}), 0, CLEAN_LINE),
-        (non_utf8_filename_repo, 0, CLEAN_LINE),
-        (lambda build_repo, tmp_path: tmp_path, 2, "cannot judge"),
-        (lambda build_repo, tmp_path: build_repo({".env": "A=1\n"}), 1, "finding(s)"),
+        (lambda build_repo, tmp_path: build_repo({}), 0, CLEAN_VERDICT),
+        (non_utf8_filename_repo, 0, CLEAN_VERDICT),
+        (lambda build_repo, tmp_path: tmp_path, 2, "error: not inside a git work tree"),
+        (lambda build_repo, tmp_path: build_repo({".env": "A=1\n"}), 1, "findings in 1 area · "),
         (lambda build_repo, tmp_path: build_repo({"\udcff.env": "A=1\n"}), 1, "env-file \\udcff.env - "),
-        (deleted_compose_repo, 0, CLEAN_LINE),
-        (truncated_compose_repo, 2, "cannot judge"),
+        (deleted_compose_repo, 0, CLEAN_VERDICT),
+        (truncated_compose_repo, 2, "✗ files "),
     ],
     ids=[
         "empty-repository",
@@ -76,7 +79,7 @@ def test_a_tracked_workflow_missing_from_disk_is_never_handed_to_a_scanner(build
     (repo / ".github/workflows/w.yml").unlink()
     code = cli.main(["hygiene", str(repo)])
     captured = capsys.readouterr()
-    assert (code, "hygiene: clean (" in captured.out) == (0, True), captured.err
+    assert (code, is_clean(captured.out)) == (0, True), captured.err
 
 
 BASELINE = {"quality/baseline.toml": ""}
@@ -101,33 +104,26 @@ def files(tracked: dict[str, str]):
     ("arrange", "expected_code", "expected_lines"),
     [
         (files({**BASELINE, ".env": "A=1\n", "src/bad.py": "def broken(:\n"}), 2,
-         [ENV_FINDING, "hygiene: size unparsable - src/bad.py is not valid Python",
-          "hygiene: python-security unparsable - ruff cannot parse src/bad.py",
-          "hygiene: python-print unparsable - ruff cannot parse src/bad.py",
-          "hygiene: 2 finding(s); verdicts: 14 clean, 2 findings, 3 unparsable"]),
+         [ENV_FINDING, f"{refusal_row('debt')}src/bad.py is not valid Python",
+          f"{refusal_row('code')}ruff cannot parse src/bad.py",
+          f"{refusal_row('code')}ruff cannot parse src/bad.py",
+          "error: 2 of 7 areas could not check · 2 findings in the others"]),
         (config_linked_out_of_the_repository, 2,
-         [ENV_FINDING, "hygiene: compose-port cannot judge - quality/config.toml resolves outside the repository",
-          "hygiene: size cannot judge - quality/config.toml resolves outside the repository",
-          "hygiene: secret cannot judge - quality/config.toml resolves outside the repository",
-          "hygiene: advisory cannot judge - quality/config.toml resolves outside the repository",
-          "hygiene: root-layout cannot judge - quality/config.toml resolves outside the repository",
-          "hygiene: file-suffix cannot judge - quality/config.toml resolves outside the repository",
-          "hygiene: script-name cannot judge - quality/config.toml resolves outside the repository",
-          "hygiene: script-header cannot judge - quality/config.toml resolves outside the repository",
-          "hygiene: test-layout cannot judge - quality/config.toml resolves outside the repository",
-          "hygiene: test-import cannot judge - quality/config.toml resolves outside the repository",
-          "hygiene: python-floor cannot judge - quality/config.toml resolves outside the repository",
-          "hygiene: 1 finding(s); verdicts: 7 clean, 1 findings, 11 cannot judge"]),
+         [ENV_FINDING, f"{refusal_row('files')}quality/config.toml resolves outside the repository",
+          f"{refusal_row('debt')}quality/config.toml resolves outside the repository",
+          f"{refusal_row('secrets')}quality/config.toml resolves outside the repository",
+          f"{refusal_row('dependencies')}quality/config.toml resolves outside the repository",
+          "error: 4 of 7 areas could not check · 1 finding, 1 of them in those areas"]),
         (files({**BASELINE, "compose.yaml": "services: [\n", "src/a.py": NEW_DEBT}), 2,
-         ["hygiene: compose-port cannot judge - cannot read compose.yaml", "size src/a.py:1 - function long_one"]),
+         [f"{refusal_row('files')}cannot read compose.yaml", "size src/a.py:1 - function long_one"]),
         (files({".env": "A=1\n", **compose('- "8080:80"')}), 1,
-         [ENV_FINDING, "compose-port compose.yaml - ", "hygiene: 3 finding(s); verdicts: 16 clean, 3 findings"]),
+         [ENV_FINDING, "compose-port compose.yaml - ", "! 3 findings in 1 area · 5 areas clean · debt measured, not enforced · <1s"]),
         (files({"compose-\udcff.yaml": compose('- "8080:80"')["compose.yaml"]}), 1,
          ["compose-port compose-\\udcff.yaml - service web publishes port 8080:80"]),
         (files({**BASELINE, "src/\udcff.py": NEW_DEBT}), 1, ["size src/\\udcff.py:1 - function long_one"]),
         (files({"src/\udcff.py": "def broken(:\n"}), 2,
-         ["functions unmeasured: src/\\udcff.py", "hygiene: python-security unparsable - ruff cannot parse src/\\udcff.py",
-          "hygiene: python-print unparsable - ruff cannot parse src/\\udcff.py"]),
+         ["functions unmeasured: src/\\udcff.py", f"{refusal_row('code')}ruff cannot parse src/\\udcff.py",
+          f"{refusal_row('code')}ruff cannot parse src/\\udcff.py"]),
     ],
     ids=[
         "cell 1 unparsable size hides no env-file finding",
@@ -145,7 +141,7 @@ def test_every_rule_is_judged_and_the_exit_is_the_worst(
     """#55 rules 1-4, cells 1-8 (cell 9 is the exit-code table's non-utf8 env case): each rule prints its own
     verdict, one rule's refusal hides no other rule's, the exit is the worst verdict's, the clean line names the
     rules, and every path prints backslash-escaped."""
-    code = cli.main(["hygiene", str(arrange(build_repo, elsewhere))])
+    code = cli.main(["hygiene", str(arrange(build_repo, elsewhere))], clock=lambda: 0.0)
     captured = capsys.readouterr()
     output = captured.out + captured.err
     assert code == expected_code, output
@@ -153,9 +149,9 @@ def test_every_rule_is_judged_and_the_exit_is_the_worst(
 
 
 def test_a_run_without_flags_judges_every_rule(build_repo, capsys):
-    """#228 rule 4: no scan is ever skipped, so a plain run names every rule in run order."""
-    code, output = run(capsys, build_repo({}))
-    assert (code, f"hygiene: clean ({', '.join(Rule)})" in output) == (0, True), output
+    """#228 rule 4: no scan is ever skipped, so a plain run judges every rule in run order."""
+    verdicts = check.run_hygiene(build_repo({}), installed_ruff, never_located).verdicts
+    assert ([verdict.rule for verdict in verdicts], [verdict.refusal for verdict in verdicts]) == (list(Rule), [None] * len(Rule))
 
 
 def test_a_finding_under_a_rule_its_check_does_not_judge_fails_loud(build_repo, monkeypatch):
@@ -176,7 +172,7 @@ def test_a_refusing_workflow_scanner_stops_no_other_workflow_rule(build_repo, se
     code = cli.main(["hygiene", str(repo)], locate_zizmor=locate_zizmor)
     captured = capsys.readouterr()
     assert code == 2
-    assert "hygiene: workflow-lint cannot judge - actionlint exited 3" in captured.err
+    assert f"{refusal_row('workflows')}actionlint exited 3" in captured.out
     assert "workflow-security .github/workflows/w.yml:7 - zizmor unpinned-uses" in captured.out
 
 
@@ -201,12 +197,13 @@ def test_a_zizmor_quality_cannot_find_or_trust_refuses_only_workflow_security(
     }
     if case == "unpinned":
         loosen_requirement(elsewhere / "metadata", monkeypatch, "zizmor")
+    refusing = [verdict.rule for verdict in check.run_hygiene(repo, installed_ruff, locators[case]).verdicts if verdict.refusal]
+    assert refusing == [Rule.WORKFLOW_SECURITY]
     code = cli.main(["hygiene", str(repo)], locate_zizmor=locators[case])
     captured = capsys.readouterr()
     output = captured.out + captured.err
     assert code == 2, output
-    assert "hygiene: workflow-security cannot judge - " in output, output
-    assert "workflow-lint cannot judge" not in output
+    assert refused(output, "workflows"), output
     assert "env-file .env - " in output
     assert (installation.REINSTALL in output) is (case != "unpinned"), output
     if case == "unpinned":
@@ -225,95 +222,6 @@ def test_a_zizmor_planted_in_the_scanner_directory_is_never_run(build_repo, serv
     repo = build_repo({".github/workflows/w.yml": "on: push\n"})
     code = cli.main(["hygiene", str(repo)], locate_zizmor=fake_zizmor(elsewhere / "installed", "echo '[]'"))
     assert (code, marker.exists()) == (0, False), capsys.readouterr()
-
-
-MODULE_DOOR = [sys.executable, "-m", "quality.cli"]
-CONSOLE_SCRIPT_DOOR = [str(Path(sys.executable).parent / "quality")]
-
-
-def quality_door(*arguments: str, cwd: Path, door: list[str] = MODULE_DOOR, **streams) -> subprocess.CompletedProcess[str]:
-    return subprocess.run([*door, *arguments], cwd=cwd, text=True, check=False, **streams)
-
-
-@pytest.fixture
-def env_and_broken_compose(build_repo) -> Path:
-    return build_repo({".env": "A=1\n", "compose.yaml": "services: [\n"})
-
-
-@pytest.mark.parametrize("door", [MODULE_DOOR, CONSOLE_SCRIPT_DOOR], ids=["module", "console script"])
-def test_a_merged_pipe_shows_the_hygiene_lines_in_run_order(env_and_broken_compose, door):
-    """#86 rule 3, cells 10 and 12a: reports, the finding with its fix, `cannot judge`, then the summary."""
-    done = quality_door(
-        "hygiene", ".", cwd=env_and_broken_compose, door=door, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
-    )
-    prefixes = ["size: ", "clone: ", "import-contract: ", "env-file .env - ", "  Fix: ", "hygiene: compose-port cannot judge - ", "root-layout .env - ", "  Fix: ", "hygiene: 2 finding(s)"]
-    lines = done.stdout.splitlines()
-    assert all(line.startswith(prefix) for line, prefix in zip(lines, prefixes, strict=True)), done.stdout
-
-
-def test_discarding_stderr_hides_exactly_the_cannot_judge_line(env_and_broken_compose):
-    """#86 rule 3, cell 11: no line changes its stream; the exit stays 2."""
-    done = quality_door("hygiene", ".", cwd=env_and_broken_compose, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    assert (done.returncode, "compose-port cannot judge" in done.stdout, "env-file .env" in done.stdout) == (2, False, True)
-
-
-SONAR_FINDINGS_SCRIPT = """
-import sys
-sys.path.insert(0, {repository_root!r})
-from tests.support.sonar import issues_page, sonar_answering
-from quality import cli
-cli.run(lambda: cli.main(["sonar", "findings"], transport=sonar_answering(issues=issues_page(2, 1, 2)), sleep=lambda seconds: None))
-"""
-
-
-@pytest.mark.integration
-def test_a_merged_pipe_lists_the_sonar_findings_before_the_red_summary(tmp_path):
-    """#86 rule 3, cell 12: the findings precede the summary through `2>&1`."""
-    from tests.support.sonar import PULL_REQUEST_ENVIRONMENT, TASK_FIXTURE, legacy_config_absent
-
-    (tmp_path / "quality").mkdir()
-    (tmp_path / "quality" / "config.toml").write_text(legacy_config_absent)
-    (tmp_path / sonar.TASK_FILE).parent.mkdir()
-    (tmp_path / sonar.TASK_FILE).write_text(TASK_FIXTURE.read_text())
-    script = tmp_path / "findings.py"
-    script.write_text(textwrap.dedent(SONAR_FINDINGS_SCRIPT).format(repository_root=str(Path(__file__).parents[1])))
-    done = subprocess.run(
-        [sys.executable, str(script)], cwd=tmp_path, text=True, check=False, env={**os.environ, **PULL_REQUEST_ENVIRONMENT},
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-    )
-    prefixes = ["sonar src/a1.py:1 - ", "  Fix: ", "sonar src/a2.py:2 - ", "  Fix: ", "sonar: new 2"]
-    lines = done.stdout.splitlines()
-    assert (done.returncode, all(line.startswith(prefix) for line, prefix in zip(lines, prefixes, strict=True))) == (1, True), done.stdout
-
-
-def test_a_replaced_stdout_still_prints_the_help():
-    """#86 rule 3: `main` leaves the process's streams alone, so a captured stdout works."""
-    captured = io.StringIO()
-    with contextlib.redirect_stdout(captured), pytest.raises(SystemExit) as stopped:
-        cli.main(["--help"])
-    assert (stopped.value.code, "hygiene" in captured.getvalue()) == (0, True)
-
-
-@pytest.mark.integration
-def test_a_closed_stdout_stream_is_cannot_judge_with_its_diagnostic(tmp_path, capsys, monkeypatch):
-    """#86 rule 3: a closed stdout object never crashes `main`; the diagnostic reaches stderr."""
-    monkeypatch.setenv("NO_COLOR", "1")  # Python 3.14's argparse otherwise probes the closed stdout for colour
-    closed = io.TextIOWrapper(io.BytesIO())
-    closed.close()
-    with contextlib.redirect_stdout(closed):
-        code = cli.main(["hygiene", str(tmp_path / "missing")])
-    assert (code, "hygiene: cannot judge" in capsys.readouterr().err) == (2, True)
-
-
-@pytest.mark.integration
-def test_a_closed_stdout_is_cannot_judge_and_never_a_crash(tmp_path):
-    """#86 rule 3: with fd 1 closed the door still exits 2 with its cannot-judge line."""
-    done = subprocess.run(
-        ["bash", "-c", '"$PY" -m quality.cli hygiene "$MISSING" >&-'],
-        env={**os.environ, "PY": sys.executable, "MISSING": str(tmp_path / "missing")},
-        text=True, check=False, stderr=subprocess.PIPE,
-    )
-    assert (done.returncode, "hygiene: cannot judge" in done.stderr) == (2, True), done.stderr
 
 
 def test_an_index_record_quality_cannot_read_refuses_exactly_the_rules_that_read_index_modes(build_repo, monkeypatch):

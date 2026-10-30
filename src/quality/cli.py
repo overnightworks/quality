@@ -6,6 +6,7 @@ import time
 from collections import Counter
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
+from enum import StrEnum
 from functools import partial
 from pathlib import Path
 
@@ -23,13 +24,28 @@ from quality import (
     staged,
 )
 from quality.check import (
-    HygieneResult,
+    AreaVerdict,
+    Measurement,
     Outcome,
     run_hygiene,
 )
+from quality.checkout import OutsideWorkTree
 from quality.config import Allowance, ConfigError, read_allow_lists, read_gate_settings
 from quality.merge import Ask, GhRunner, RemoteFor, github_remote, run_emergency_merge, run_gh
-from quality.output import append_step_summary, emit, emit_finding, set_up_streams
+from quality.output import (
+    Glyph,
+    Row,
+    SubLine,
+    Verdict,
+    append_step_summary,
+    counted,
+    emit,
+    emit_finding,
+    set_up_streams,
+    write_pair,
+    write_rows,
+    write_verdict,
+)
 from quality.report import CannotJudge, Finding, headline
 from quality.rules import Rule
 from quality.sonar import (
@@ -60,6 +76,7 @@ EXIT_FINDINGS = 1
 EXIT_CANNOT_JUDGE = 2
 HYGIENE_EXIT = {
     Outcome.CLEAN: EXIT_CLEAN,
+    Outcome.MEASURED_ONLY: EXIT_CLEAN,
     Outcome.FINDINGS: EXIT_FINDINGS,
     Outcome.UNPARSABLE: EXIT_CANNOT_JUDGE,
     Outcome.CANNOT_JUDGE: EXIT_CANNOT_JUDGE,
@@ -83,6 +100,7 @@ def main(
     is_terminal: Callable[[], bool] = lambda: sys.stdin.isatty(),
     locate_ruff: Callable[[], str] = INSTALLED_RUFF,
     locate_zizmor: Callable[[], str] = INSTALLED_ZIZMOR,
+    clock: Callable[[], float] = time.monotonic,
 ) -> int:
     arguments = build_parser().parse_args(argv)
 
@@ -111,7 +129,7 @@ def main(
         if arguments.sonar_command == "properties":
             return run_sonar_properties()
         return run_sonar_findings(transport, sleep)
-    return run_hygiene_check(arguments.path, locate_ruff, locate_zizmor)
+    return run_hygiene_check(arguments.path, locate_ruff, locate_zizmor, clock)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -164,31 +182,81 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def run_hygiene_check(path: Path, locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str]) -> int:
+class AreaEvent(StrEnum):
+    """What an area row says happened."""
+
+    CLEAN = "clean"
+    FINDING = "finding"
+    NOT_CHECKED = "not checked"
+    NOT_RECORDED = "not recorded"
+
+
+START_FAILURE_NEXT = "fix what the error names, then run quality hygiene again"
+REFUSED_AREAS_NEXT = "fix what the ✗ rows name, then run quality hygiene again"
+
+
+def area_row(verdict: AreaVerdict) -> Row:
+    if verdict.reasons:
+        if len(verdict.reasons) == 1:
+            return Row(Glyph.COULD_NOT_CHECK, verdict.area, AreaEvent.NOT_CHECKED, verdict.reasons[0])
+        sub_lines = tuple(SubLine(Glyph.COULD_NOT_CHECK, reason) for reason in verdict.reasons)
+        return Row(Glyph.COULD_NOT_CHECK, verdict.area, AreaEvent.NOT_CHECKED, f"{len(verdict.reasons)} reasons", sub_lines=sub_lines)
+    if verdict.findings:
+        return Row(Glyph.NEEDS_YOU, verdict.area, AreaEvent.FINDING, count=len(verdict.findings))
+    if verdict.outcome is Outcome.MEASURED_ONLY:
+        partly = "" if verdict.measurement is Measurement.MEASURED_ONLY else "partly "
+        return Row(Glyph.NOTE, verdict.area, AreaEvent.NOT_RECORDED, f"{partly}measured only")
+    return Row(Glyph.CLEAN, verdict.area, AreaEvent.CLEAN)
+
+
+def measured_notes(areas: tuple[AreaVerdict, ...]) -> tuple[str, ...]:
+    """What the verdict says of an area whose rules only measured: it is not enforced."""
+    words = {Measurement.MEASURED_ONLY: "measured", Measurement.PARTLY_MEASURED_ONLY: "partly measured"}
+    return tuple(f"{verdict.area} {words[verdict.measurement]}, not enforced" for verdict in areas if verdict.measurement in words)
+
+
+def refusal_error(areas: tuple[AreaVerdict, ...]) -> str:
+    refused = [verdict for verdict in areas if verdict.reasons]
+    found = sum(len(verdict.findings) for verdict in areas)
+    held = sum(len(verdict.findings) for verdict in refused)
+    error = f"{len(refused)} of {len(areas)} areas could not check"
+    if not found:
+        return error
+    return f"{error} · {counted(found, 'finding')}, {held} of them in those areas" if held else f"{error} · {counted(found, 'finding')} in the others"
+
+
+def run_hygiene_check(path: Path, locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str], clock: Callable[[], float]) -> int:
+    started = clock()
     try:
         result = run_hygiene(path, locate_ruff, locate_zizmor)
+    except OutsideWorkTree as error:
+        write_pair(f"not inside a git work tree · {error.path}", "run quality hygiene inside a repository")
+        return EXIT_CANNOT_JUDGE
     except CannotJudge as error:
-        emit(f"hygiene: {error.label} - {error}", file=sys.stderr)
+        write_pair(str(error), START_FAILURE_NEXT)
         return EXIT_CANNOT_JUDGE
     print_secret_allowances(result.allowed_secrets, result.unused_allowances)
-    for report in result.reports:
-        emit(report)
-    for verdict in result.verdicts:
+    emit(*result.reports, ONLINE_AUDITS_NOTE)
+    for verdict in result.areas:
+        write_rows((area_row(verdict),))
         for finding in verdict.findings:
             emit_finding(finding)
-        if verdict.refusal is not None:
-            emit(f"hygiene: {verdict.rule} {verdict.refusal.label} - {verdict.refusal}", file=sys.stderr)
-    emit(f"hygiene: {hygiene_summary(result)}; {ONLINE_AUDITS_NOTE}")
-    return HYGIENE_EXIT[result.worst]
-
-
-def hygiene_summary(result: HygieneResult) -> str:
-    """The clean line names the rules it judged; any other line counts the findings and the rules per verdict."""
-    if result.worst is Outcome.CLEAN:
-        return f"clean ({', '.join(verdict.rule for verdict in result.verdicts)})"
-    outcomes = Counter(verdict.outcome for verdict in result.verdicts)
-    counts = ", ".join(f"{outcomes[outcome]} {outcome.value}" for outcome in Outcome if outcomes[outcome])
-    return f"{len(result.findings)} finding(s); verdicts: {counts}"
+    exit_code = HYGIENE_EXIT[result.worst]
+    if exit_code == EXIT_CANNOT_JUDGE:
+        write_pair(refusal_error(result.areas), REFUSED_AREAS_NEXT)
+        return exit_code
+    outcomes = Counter(verdict.outcome for verdict in result.areas)
+    write_verdict(
+        Verdict(
+            findings=len(result.findings),
+            areas_with_findings=outcomes[Outcome.FINDINGS],
+            clean_areas=outcomes[Outcome.CLEAN],
+            areas=len(result.areas),
+            notes=measured_notes(result.areas),
+            seconds=clock() - started,
+        )
+    )
+    return exit_code
 
 
 def print_secret_allowances(allowed: list[Finding], unused: dict[Allowance, str]) -> None:

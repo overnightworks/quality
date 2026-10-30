@@ -25,7 +25,7 @@ def test_a_path_that_is_no_repository_is_exit_2(tmp_path, capsys, bad_path):
     """#31 rule 1 (S8705): a path that is not a readable git repository is exit 2, never clean."""
     code, output = run(capsys, bad_path(tmp_path))
     assert code == 2
-    assert "cannot judge" in output
+    assert "error: " in output
 
 
 def locked_parent(build_repo, tmp_path):
@@ -64,7 +64,9 @@ def test_a_path_git_cannot_read_names_the_path_as_given_and_never_a_traceback(
         if (tmp_path / "locked").exists():
             (tmp_path / "locked").chmod(0o755)
     err = capsys.readouterr().err
-    assert (code, f"{path} is not a readable git repository" in err, "Traceback" in err) == (2, True, False), err
+    outside = command == ["hygiene"] and arrange in (bare_repository, git_directory)
+    named = f"not inside a git work tree · {path}" if outside else f"{path} is not a readable git repository"
+    assert (code, named in err, "Traceback" in err) == (2, True, False), err
 
 
 @pytest.mark.integration
