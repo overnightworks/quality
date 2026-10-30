@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import check, cli, config, env_file, installation, process, scanners
+from quality import check, cli, config, env_file, installation, scanners
 from quality.compose import is_compose_file
 from quality.report import CannotJudge, Command, Example, Finding, Reason, Unparsable, printable
 from quality.rules import Area, Rule
@@ -241,16 +241,9 @@ def test_a_zizmor_planted_in_the_scanner_directory_is_never_run(build_repo, serv
     assert (code, marker.exists()) == (0, False), capsys.readouterr()
 
 
-def test_an_index_record_quality_cannot_read_refuses_exactly_the_rules_that_read_index_modes(build_repo, monkeypatch):
+def test_an_index_record_quality_cannot_read_refuses_exactly_the_rules_that_read_index_modes(build_repo, fake_git):
     repo = build_repo({})
-    real_run = process.run
-
-    def unreadable_modes(command, *args, **kwargs):
-        if command[-4:] == ["ls-files", "-z", "-s", "--"]:
-            return subprocess.CompletedProcess(command, 0, stdout=b"100644 no-tab\0")
-        return real_run(command, *args, **kwargs)
-
-    monkeypatch.setattr(process, "run", unreadable_modes)
+    fake_git(r"""case " $* " in *" -s "*) printf '100644 no-tab\0'; exit 0;; esac""")
     verdicts = check.run_hygiene(repo, installed_ruff, never_located).verdicts
     refused = [(verdict.rule, str(verdict.refusal)) for verdict in verdicts if verdict.refusal is not None]
     assert [rule for rule, _ in refused] == [
