@@ -135,3 +135,4 @@ def test_an_unprintable_env_name_gets_a_hint_and_never_a_command(build_repo, cap
         assert_row_prints_finding(row, finding)
         assert finding.path not in row.fix
         assert finding.location not in row.fix
+        assert not {"rm", "--cached"} & set(row.fix.split())

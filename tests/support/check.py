@@ -37,7 +37,7 @@ def loosen_requirement(site: Path, monkeypatch: pytest.MonkeyPatch, name: str) -
 
 
 def assert_every_line_starts_with_the_door(lines: list[str]) -> None:
-    """#97 rule 2, cell 18 and #228 rule 7: no line repository text could forge, and no raw control, format or line-separator
+    """#97 rule 2, cell 18 and #228 rule 7: no line repository text could forge, and no raw control, format or line- or paragraph-separator
     character (categories Cc, Cf, Zl, Zp, listed here by hand from the rule) between the lines."""
     for line in lines:
         assert not line.lstrip().startswith(("::", "File ", "raise ")), line

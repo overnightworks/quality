@@ -26,6 +26,7 @@ from tests.support.check import (
     finding_rows,
     rule_findings,
 )
+from tests.support.merge import ONE_JOB
 from tests.support.processes import process_is_gone
 from tests.support.scanners import fake_scanner, lacking
 from tests.support.secrets import FAKE_KEY, allow_config
@@ -516,7 +517,7 @@ def test_findings_in_two_areas_follow_their_rows_and_end_in_the_counted_verdict(
 
 
 CASE_TWO = {**compose_services(("web", "8080:80"), ("db", "5432")), ".env": "A=1\n"}
-ROOT_ALLOWS_ENV = {"quality/config.toml": '[gate]\nmandatory_jobs = ["checks"]\n[[root.allow]]\nentry = ".env"\nreason = "r"\n'}
+ROOT_ALLOWS_ENV = {"quality/config.toml": ONE_JOB + '[[root.allow]]\nentry = ".env"\nreason = "r"\n'}
 
 
 def test_the_files_block_lists_the_event_rows_in_run_order_with_one_fix_per_run(build_repo, capsys):
@@ -531,7 +532,7 @@ def test_the_files_block_lists_the_event_rows_in_run_order_with_one_fix_per_run(
     assert [row.fix_follows for row in (env_row, first, second)] == [True, False, True]
     assert env_row.indent == first.indent == second.indent > len(out[files_row]) - len(out[files_row].lstrip())
     assert out[files_row + 1].split()[1] == ".env"
-    assert [out[files_row + 3].split()[1], out[files_row + 4].split()[1]] == ["compose.yaml"] * 2
+    assert out[files_row + 3].split()[1] == out[files_row + 4].split()[1] == compose_findings[0].location
     for row, finding in zip((env_row, first, second), [env_finding, *compose_findings], strict=True):
         assert_row_prints_finding(row, finding)
 
