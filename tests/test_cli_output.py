@@ -13,12 +13,19 @@ from pathlib import Path
 
 import pytest
 
-from quality import check, cli, config, ratchet, scanners
+from quality import check, cli, config, ratchet, report, scanners
+from quality.output import Glyph
 from quality.ratchet import BASELINE_PATH
-from quality.report import DETAIL_MARKER, CannotJudge, Command
+from quality.report import DETAIL_MARKER, CannotJudge, Command, FindingEvent
 from quality.rules import Area, Rule
 from tests.support.architecture import FORBIDDEN, SHOP, SHOP_DB_IMPORTS_WEB, toml
-from tests.support.check import assert_every_line_starts_with_the_door
+from tests.support.check import (
+    assert_every_line_starts_with_the_door,
+    assert_row_prints_finding,
+    env_row_stands,
+    finding_rows,
+    rule_findings,
+)
 from tests.support.processes import process_is_gone
 from tests.support.scanners import fake_scanner, lacking
 from tests.support.secrets import FAKE_KEY, allow_config
@@ -214,11 +221,13 @@ ENV_NAME_CASES = [
 
 @pytest.mark.parametrize(("name", "escaped"), ENV_NAME_CASES, ids=[escaped for _, escaped in ENV_NAME_CASES])
 def test_an_env_name_with_a_control_format_or_separator_character_prints_as_one_escaped_line(build_repo, capsys, name, escaped):
-    """#97 rule 2, cell 7 (E4) and #228 rule 7: the finding is one line with the name escaped, and the fix is #86's hint."""
-    code, lines = door_lines(capsys, "hygiene", str(build_repo({name: "A=1\n"})))
-    assert code == 1
-    assert any(line.startswith(f"env-file {escaped} - ") for line in lines), lines
-    assert any(line.startswith("  Fix: remove it from the index by its bytes") for line in lines)
+    """#97 rule 2, cell 7 (E4) and #228 rule 7: one row with the name escaped, equal to the rule runner's finding."""
+    repo = build_repo({name: "A=1\n"})
+    code, lines = door_lines(capsys, "hygiene", str(repo))
+    (finding,) = rule_findings(repo, Rule.ENV_FILE)
+    (row,) = finding_rows("\n".join(lines), escaped)
+    assert (code, finding.location) == (1, escaped)
+    assert_row_prints_finding(row, finding)
     assert_every_line_starts_with_the_door(lines)
 
 
@@ -226,22 +235,23 @@ FILE_AND_RAISE = "web\n  File \"a.py\", line 1, in b\n  raise E('forged')\nx"
 
 
 @pytest.mark.parametrize(
-    ("services", "line_start"),
+    ("services", "escaped_text"),
     [
-        ([("web\n::error::svc", "8080:80")], "compose-port compose.yaml - service web\\x0a::error::svc publishes port 8080:80"),
-        ([("svc", "5432:5432\n::error::port")], "compose-port compose.yaml - service svc publishes port 5432:5432\\x0a::error::port"),
-        (
-            [(FILE_AND_RAISE, "0.0.0.0:80:80")],
-            "compose-port compose.yaml - service web\\x0a  File \"a.py\", line 1, in b\\x0a  raise E('forged')\\x0ax",
-        ),
+        ([("web\n::error::svc", "8080:80")], ["web\\x0a::error::svc", "8080:80"]),
+        ([("svc", "5432:5432\n::error::port")], ["svc", "5432:5432\\x0a::error::port"]),
+        ([(FILE_AND_RAISE, "0.0.0.0:80:80")], ["web\\x0a  File \"a.py\", line 1, in b\\x0a  raise E('forged')\\x0ax"]),
     ],
     ids=["service name", "port text", "File and raise lines"],
 )
-def test_a_compose_finding_with_a_control_character_is_one_escaped_line(build_repo, capsys, services, line_start):
-    """#97 rule 2, cell 8 (E4): the service and the port text print escaped on the finding's own line."""
-    code, lines = door_lines(capsys, "hygiene", str(build_repo(compose_services(*services))))
+def test_a_compose_finding_with_a_control_character_is_one_escaped_row(build_repo, capsys, services, escaped_text):
+    """#97 rule 2, cell 8 (E4): the service and the port text print escaped in the finding's own row."""
+    repo = build_repo(compose_services(*services))
+    code, lines = door_lines(capsys, "hygiene", str(repo))
+    (finding,) = rule_findings(repo, Rule.COMPOSE_PORT)
+    (row,) = finding_rows("\n".join(lines), finding.location)
     assert code == 1
-    assert any(line.startswith(line_start) for line in lines), lines
+    assert_row_prints_finding(row, finding)
+    assert all(text in row.fact for text in escaped_text)
     assert_every_line_starts_with_the_door(lines)
 
 
@@ -499,9 +509,42 @@ def test_findings_in_two_areas_follow_their_rows_and_end_in_the_counted_verdict(
     code, out, err = frame_run(capsys, build_repo({**CLONES_BASELINE, **PRINTING, ".env": "A=1\n"}))
     files_row, code_row = out.index(header(Area.FILES, "!", "2 findings")), out.index(header(Area.CODE, "!", "1 finding"))
     assert (code, err) == (1, [])
-    assert out[files_row + 1].startswith("env-file .env - ")
+    assert out[files_row + 1].split()[:2] == [Glyph.NEEDS_YOU, ".env"]
+    assert env_row_stands("\n".join(out))
     assert out[code_row + 1].startswith("python-print src/a.py:1 - ")
     assert out[-1] == f"! 3 findings in 2 areas · 5 areas clean · {ZERO_SECONDS}"
+
+
+CASE_TWO = {**compose_services(("web", "8080:80"), ("db", "5432")), ".env": "A=1\n"}
+ROOT_ALLOWS_ENV = {"quality/config.toml": '[gate]\nmandatory_jobs = ["checks"]\n[[root.allow]]\nentry = ".env"\nreason = "r"\n'}
+
+
+def test_the_files_block_lists_the_event_rows_in_run_order_with_one_fix_per_run(build_repo, capsys):
+    """#281 case 2: three rows under the files row, the compose pair sharing the fix that follows its last row."""
+    repo = build_repo({**CASE_TWO, **ROOT_ALLOWS_ENV})
+    code, out, err = frame_run(capsys, repo)
+    env_finding, *compose_findings = rule_findings(repo, Rule.ENV_FILE) + rule_findings(repo, Rule.COMPOSE_PORT)
+    (env_row,) = finding_rows("\n".join(out), ".env")
+    first, second = finding_rows("\n".join(out), "compose.yaml")
+    files_row = out.index(header(Area.FILES, "!", "3 findings"))
+    assert (code, err, compose_findings[0].fix) == (1, [], compose_findings[1].fix)
+    assert [row.fix_follows for row in (env_row, first, second)] == [True, False, True]
+    assert env_row.indent == first.indent == second.indent > len(out[files_row]) - len(out[files_row].lstrip())
+    assert out[files_row + 1].split()[1] == ".env"
+    assert [out[files_row + 3].split()[1], out[files_row + 4].split()[1]] == ["compose.yaml"] * 2
+    for row, finding in zip((env_row, first, second), [env_finding, *compose_findings], strict=True):
+        assert_row_prints_finding(row, finding)
+
+
+def test_findings_without_an_event_follow_the_rows_in_today_s_form(build_repo, capsys):
+    repo = build_repo({".env": "A=1\n", "notes.txt": "x\n"})
+    code, out, _ = frame_run(capsys, repo)
+    files_row = next(number for number, line in enumerate(out) if line.startswith("  ! files  "))
+    legacy = [finding for finding in check.run_hygiene(repo, cli.INSTALLED_RUFF, cli.INSTALLED_ZIZMOR).findings if finding.event is None]
+    assert (code, out[files_row].endswith("3 findings"), env_row_stands("\n".join(out))) == (1, True, True)
+    assert out[files_row + 1].split()[1] == ".env"
+    legacy_lines = [line for finding in legacy for line in report.render(finding).split("\n")]
+    assert out[files_row + 3 : files_row + 3 + len(legacy_lines)] == legacy_lines
 
 
 def test_an_area_that_cannot_check_ends_the_run_with_the_pair_and_no_verdict(build_repo, use_mise, served_scanners, capsys):
@@ -520,7 +563,8 @@ def test_findings_in_the_area_that_cannot_check_stay_under_its_row_and_are_count
     row = next(number for number, line in enumerate(out) if line.startswith("  ✗ files  "))
     assert code == 2
     assert [line for line in headers(out) if "files" in line and "!" in line] == []
-    assert any(line.startswith("env-file .env - ") for line in out[row + 1 :])
+    (env_row,) = finding_rows("\n".join(out[row + 1 :]), ".env")
+    assert (env_row.event, env_row.fix_follows) == (FindingEvent.TRACKED, True)
     assert re.fullmatch(r"error: 1 of 7 areas could not check · \d+ findings?, \d+ of them in those areas", err[0]), err
 
 
@@ -656,6 +700,21 @@ def test_the_real_door_colours_a_pseudo_terminal_only_without_no_color(clean_rep
     done = subprocess.run([*DOOR, "hygiene", "."], cwd=clean_repo, env={**base, **environment}, stdout=child, stderr=subprocess.PIPE, check=False)
     text = read_pseudo_terminal(parent, child)
     assert (done.returncode, "\x1b[" in text, "✓" in text) == (0, coloured, True), text
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("environment", [{"TERM": "xterm"}, {"TERM": "xterm", "NO_COLOR": "1"}, {"TERM": "dumb"}, None], ids=["terminal", "NO_COLOR", "dumb", "pipe"])
+def test_the_real_door_paints_the_files_block_only_at_a_terminal_and_prints_the_same_words(build_repo, environment):
+    """#281 acceptance 6: SGR only in the first form; stripped of it, the lines equal the piped ones."""
+    repo = build_repo({**CASE_TWO, **ROOT_ALLOWS_ENV})
+    base = {key: value for key, value in os.environ.items() if key not in ("NO_COLOR", "GITHUB_ACTIONS", "TERM")}
+    piped = subprocess.run([*DOOR, "hygiene", "."], cwd=repo, env=base, capture_output=True, text=True, check=False).stdout
+    parent, child = pty.openpty() if environment else (None, subprocess.PIPE)
+    done = subprocess.run([*DOOR, "hygiene", "."], cwd=repo, env={**base, **(environment or {})}, stdout=child, check=False, text=environment is None)
+    text = read_pseudo_terminal(parent, child) if environment else done.stdout
+    words = [re.sub(r"\x1b\[[0-9;]*m", "", line) for line in text.replace("\r\n", "\n").splitlines()]
+    assert ("\x1b[" in text) is (environment == {"TERM": "xterm"}), text
+    assert [line for line in words if not line.startswith(("!", "✓")) or " · " not in line] == [line for line in piped.splitlines() if not line.startswith(("!", "✓")) or " · " not in line]
 
 
 def test_a_refusal_git_did_not_run_for_gets_the_general_instruction(build_repo, tmp_path, monkeypatch, capsys):
