@@ -165,7 +165,7 @@ def judge(
 
 def _loosenings(head: Side, base: Side, renames: Renames) -> tuple[tuple[Loosening, ...], tuple[Declaration, ...]]:
     """Each loosening, bound to the head's new declaration of it; a declaration the base holds already binds nothing.
-    An advisory allowance declares its own loosening, so no [[gate.loosened]] entry binds one."""
+    An advisory allowance and a generated file declare their own loosening, so no [[gate.loosened]] entry binds one."""
     whats = [_removal(name) for name in base.settings.mandatory_jobs if name not in head.settings.mandatory_jobs]
     if base.settings.legacy is LegacyMode.FAIL and head.settings.legacy is not LegacyMode.FAIL:
         whats.append(f"legacy {base.settings.legacy.value} → {head.settings.legacy.value}")
@@ -179,7 +179,7 @@ def _loosenings(head: Side, base: Side, renames: Renames) -> tuple[tuple[Looseni
     loosened = set(whats)
     stale = tuple(declaration for what, declaration in new.items() if what not in loosened)
     own = (Loosening(what, new.get(what)) for what in whats)
-    return (*own, *_allowance_loosenings(base.settings, head.settings)), stale
+    return (*own, *_allowance_loosenings(base.settings, head.settings), *_generated_loosenings(base.settings, head.settings)), stale
 
 
 def _allowance_loosenings(base: GateSettings, head: GateSettings) -> list[Loosening]:
@@ -195,6 +195,17 @@ def _allowance_loosenings(base: GateSettings, head: GateSettings) -> list[Loosen
         else:
             continue
         loosenings.append(Loosening(what, Declaration(what, allowance.item, allowance.date, allowance.reason)))
+    return loosenings
+
+
+def _generated_loosenings(base: GateSettings, head: GateSettings) -> list[Loosening]:
+    """Each head path the base does not declare generated, declared by its own item and date."""
+    inherited = {file.path for file in base.generated_files}
+    loosenings = []
+    for file in head.generated_files:
+        if file.path not in inherited:
+            what = f"size leaves out generated file {file.path}"
+            loosenings.append(Loosening(what, Declaration(what, file.item, file.date, file.reason)))
     return loosenings
 
 

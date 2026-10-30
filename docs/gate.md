@@ -131,6 +131,12 @@ reason = "the operator ruled the requirement shelf machinery out"
   new allowance. A base without `quality/config.toml` holds no allowance, so every allowance of the adoption is new. A
   `[[gate.loosened]]` entry whose `what` is such a text matches nothing and is red. The verdict and the door read the
   whole config, so a malformed `[secrets]` or `[advisories]` entry is exit `2` there too.
+- A generated-file declaration (`[[size.generated]]`, see the `size` rule under `quality hygiene`) declares its own
+  loosening with its own `item` and `date`, like an allowance. A head `path` the base does not declare prints
+  `loosened (declared, <item> of <date>): size leaves out generated file <path>`, so a changed `path` and every
+  declaration of an adoption (a base without `quality/config.toml`) are new. An inherited or deleted declaration and a
+  changed `job`, `reason`, `item` or `date` loosen nothing. A `[[gate.loosened]]` entry whose `what` is such a text
+  matches nothing and is red. A malformed `[size]` entry is exit `2` in the verdict and the door, naming the side.
 - Removing, softening or bypassing an import-linter contract declares the same way, with one of these texts as `what`
   (the rule is in [rules](rules.md), "The import contracts only tighten"): `import contract "<name>" removed`,
   `import-linter config in <file> removed`, `import contract "<name>" ignores <expression>`,

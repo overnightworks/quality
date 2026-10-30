@@ -27,7 +27,7 @@ from quality.check import (
     Outcome,
     run_hygiene,
 )
-from quality.config import Allowance, ConfigError, read_gate_settings
+from quality.config import Allowance, ConfigError, read_allow_lists, read_gate_settings
 from quality.merge import Ask, GhRunner, RemoteFor, github_remote, run_emergency_merge, run_gh
 from quality.output import append_step_summary, emit, emit_finding, set_up_streams
 from quality.report import CannotJudge, Finding, headline
@@ -204,10 +204,14 @@ def run_baseline_write(path: Path) -> int:
     try:
         top = checkout.work_tree_top(path)
         sources = ratchet.read_sources(top, checkout.tracked_files(top))
-        written = ratchet.Baseline(ratchet.debt(ratchet.measure(sources).complete()), clones.find_pairs(sources).pairs)
+        generated = read_allow_lists(top).generated
+        tree = ratchet.measure(sources)
+        ratchet.complete(tree)
+        measured = ratchet.without_generated(tree, generated).complete()
+        written = ratchet.Baseline(ratchet.debt(measured), clones.find_pairs(sources).pairs)
         loosenings = describe_loosenings(top, written)
         repository.write_text(top, ratchet.BASELINE_PATH, ratchet.render_baseline(written))
-    except (CannotJudge, repository.RepositoryFileError, ratchet.SizeError) as error:
+    except (CannotJudge, ConfigError, repository.RepositoryFileError, ratchet.SizeError) as error:
         emit(f"baseline: not written - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     for loosening in loosenings:

@@ -10,6 +10,7 @@ from quality.config import (
     Allowance,
     ConfigError,
     Declaration,
+    GeneratedFile,
     LegacyMode,
     load_allow_lists,
     load_gate_settings,
@@ -18,6 +19,7 @@ from quality.config import (
     read_gate_settings,
 )
 from tests.support.advisories import allowance_config
+from tests.support.generated_files import TYPES_FILE, generated_config
 
 
 def test_reads_the_mandatory_job_names():
@@ -343,7 +345,7 @@ def test_a_malformed_advisory_allowance_cannot_be_judged_where_the_whole_config_
     assert cli.main(["hygiene", str(repo)]) == 2
     refusals = [line for line in capsys.readouterr().err.splitlines() if named in line]
     rules = [line.split(" - ")[0] for line in refusals]
-    assert rules == ["hygiene: compose-port cannot judge", "hygiene: root-layout cannot judge", "hygiene: file-suffix cannot judge", "hygiene: script-name cannot judge", "hygiene: script-header cannot judge", "hygiene: test-layout cannot judge", "hygiene: test-import cannot judge", "hygiene: python-floor cannot judge", "hygiene: secret cannot judge", "hygiene: advisory cannot judge"], refusals
+    assert rules == ["hygiene: compose-port cannot judge", "hygiene: size cannot judge", "hygiene: root-layout cannot judge", "hygiene: file-suffix cannot judge", "hygiene: script-name cannot judge", "hygiene: script-header cannot judge", "hygiene: test-layout cannot judge", "hygiene: test-import cannot judge", "hygiene: python-floor cannot judge", "hygiene: secret cannot judge", "hygiene: advisory cannot judge"], refusals
 
 
 @pytest.mark.parametrize("entry", [allowance_config(reason=None), allowance_config(until="2027-01-31")])
@@ -384,3 +386,112 @@ def test_a_layout_allowance_refusal_names_the_rules_in_plain_words(entries, mess
     """The refusal of a [[layout.allow]] entry prints rule ids, never an enum's repr."""
     with pytest.raises(ConfigError, match=re.escape(message)):
         load_allow_lists(entries)
+
+
+GATE_WITH_CHECKS = '[gate]\nmandatory_jobs = ["checks"]\n'
+TYPES_DECLARATION = GeneratedFile(
+    TYPES_FILE, "checks", "#174", datetime.date(2026, 10, 30), "written by scripts/generate_types.py, proven by its --check"
+)
+
+
+def test_a_generated_file_is_read_by_every_loader_that_reads_the_whole_config(tmp_path):
+    """#174 sentence 1: each [[size.generated]] entry is one declaration with its path, job, item, date and reason,
+    read alike by the gate and by hygiene."""
+    text = GATE_WITH_CHECKS + generated_config()
+    (tmp_path / "quality").mkdir()
+    (tmp_path / CONFIG_PATH).write_text(text)
+    assert load_gate_settings(text).generated_files == (TYPES_DECLARATION,)
+    assert read_allow_lists(tmp_path).generated == load_allow_lists(text).generated == (TYPES_DECLARATION,)
+
+
+@pytest.mark.parametrize("text", [None, GATE_WITH_CHECKS], ids=["no config", "no declaration"])
+def test_a_config_without_generated_files_declares_none(text):
+    """#174 sentence 1: no config or no [[size.generated]] entry leaves nothing out of the size rule."""
+    assert load_allow_lists(text).generated == ()
+
+
+MALFORMED_GENERATED = [
+    (generated_config(path=None), "exactly a path, a job, an item, a date and a reason"),
+    (generated_config() + "extra = 1\n", "'extra': 1"),
+    (generated_config(path="frontend/src/lib/api/"), "'path': 'frontend/src/lib/api/'"),
+    (generated_config(path="frontend/**/types.ts"), "'path': 'frontend/**/types.ts'"),
+    (generated_config(path="../types.ts"), "'path': '../types.ts'"),
+    (generated_config(path="/types.ts"), "'path': '/types.ts'"),
+    (generated_config(job="Backend (Python 3.12)"), "job as one of [gate] mandatory_jobs"),
+    (generated_config(item="siehe Chat"), "'item': 'siehe Chat'"),
+    (generated_config(date="2026-10-30"), "'date': '2026-10-30'"),
+    (generated_config(date=datetime.datetime(2026, 10, 30, 9, 0)), "datetime.datetime(2026, 10, 30, 9, 0)"),
+    (generated_config(reason="two\nlines"), "'reason': 'two\\nlines'"),
+    (generated_config(reason=""), "'reason': ''"),
+    (generated_config() + generated_config(reason="again"), "twice"),
+    ('[size]\nignore = []\n', "unknown key(s) ['ignore']"),
+    ('[size]\ngenerated = "x"\n', "[[size.generated]] as an array of tables"),
+    ("size = 1\n", "[size] as a value"),
+]
+MALFORMED_GENERATED_IDS = [
+    "missing key", "extra key", "folder", "pattern", "dot-dot", "absolute path", "job no mandatory job", "item siehe Chat",
+    "text date", "datetime", "two-line reason", "empty reason", "two entries for one path", "unknown key in size",
+    "generated not a list", "size not a table",
+]
+
+
+@pytest.mark.parametrize(("entry", "named"), MALFORMED_GENERATED, ids=MALFORMED_GENERATED_IDS)
+def test_a_malformed_generated_file_is_refused_with_the_entry_and_the_example(entry, named):
+    """#174 sentence 3: each malformed case is refused by both loaders, names the entry and shows how to write one."""
+    text = entry + GATE_WITH_CHECKS
+    for load in (load_allow_lists, load_gate_settings):
+        with pytest.raises(ConfigError, match=re.escape(named)) as refused:
+            load(text)
+        assert "[[size.generated]]" in str(refused.value)
+
+
+def test_a_generated_file_naming_a_job_needs_the_config_to_list_mandatory_jobs():
+    """#174 sentence 3: a config without [gate] mandatory_jobs cannot hold a job, so a declaration is refused."""
+    text = generated_config()
+    with pytest.raises(ConfigError, match="job as one of") as refused:
+        load_allow_lists(text)
+    assert "[[size.generated]] entry" in str(refused.value)
+
+
+@pytest.mark.parametrize(
+    ("jobs", "job"),
+    [("[1]", "1"), ('[""]', '""'), ('"checks"', '"c"')],
+    ids=["number", "empty name", "not a list"],
+)
+def test_a_generated_file_needs_mandatory_jobs_that_are_non_empty_names(jobs, job):
+    """#174 sentence 3: a job is compared only with valid job names, in every loader that reads the declaration."""
+    text = f"[gate]\nmandatory_jobs = {jobs}\n" + generated_config(job=None) + f"job = {job}\n"
+    for load in (load_allow_lists, load_gate_settings):
+        with pytest.raises(ConfigError, match="job as one of") as refused:
+            load(text)
+        assert "[[size.generated]] entry" in str(refused.value)
+
+
+@pytest.mark.parametrize(
+    ("command", "refusal"),
+    [(["hygiene", "{repo}"], "hygiene: size cannot judge - "), (["baseline", "write", "{repo}"], "baseline: not written - ")],
+    ids=["hygiene", "baseline write"],
+)
+def test_a_malformed_generated_file_stops_the_size_rule_and_the_baseline_write(build_repo, capsys, command, refusal):
+    """#174 sentence 3: hygiene cannot judge size and baseline write writes nothing."""
+    repo = build_repo({CONFIG_PATH: GATE_WITH_CHECKS + generated_config(job="other")})
+    assert cli.main([part.format(repo=repo) for part in command]) == 2
+    err = capsys.readouterr().err
+    assert refusal in err
+    assert "[[size.generated]]" in err
+    assert not (repo / "quality" / "baseline.toml").exists()
+
+
+def test_the_verdict_refuses_a_malformed_generated_file_naming_the_side(capsys, run_env):
+    """#174 sentence 3: the verdict at the head is exit 2."""
+    repo, _ = run_env
+    (repo / CONFIG_PATH).write_text(GATE_WITH_CHECKS + generated_config(job="other"))
+    assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: ("{}", None)) == 2
+    err = capsys.readouterr().err
+    assert "quality/config.toml at the head" in err
+    assert "[[size.generated]]" in err
+
+
+def test_the_commit_hook_ignores_a_malformed_size_table():
+    """#174 sentence 3: only [secrets] is read by the commit hook."""
+    assert load_staged_secret_allowances(generated_config(job="other") + "[size]\nextra = 1\n") == {}
