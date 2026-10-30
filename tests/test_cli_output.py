@@ -378,7 +378,6 @@ def test_a_door_outside_the_picture_prints_a_config_refusal_as_its_fact_then_the
 ):
     """#279 acceptance 7: `sonar findings` keeps its one-line form: the fact, `, like:` and the example joined with `\\x0a`."""
     monkeypatch.chdir(build_repo({} if config_text is None else {"quality/config.toml": config_text}))
-    monkeypatch.setenv("SONAR_TOKEN", "x")
     code, lines = door_lines(capsys, "sonar", "findings")
     lines_of_example = "\\x0a".join(getattr(config, example))
     assert (code, [line for line in lines if line.startswith("sonar: cannot judge - ")]) == (
