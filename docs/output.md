@@ -77,17 +77,17 @@ Live line while the secrets scan runs (stderr, terminal only, replaced by the ro
 
 ### 2. `quality check`, findings in several areas
 
-Exit 1. stdout. Two findings in a row with the same fix: the fix stands once, under the last.
+Exit 1. stdout. Two findings in a row with the same fix: the fix stands once, under the last. The findings of an area stand in run order (head proposal O14 of 30.10.2026).
 
 ```text
 $ quality check
   · release       v0.9.0         pinned in .github/workflows/ci.yml
   ! files         3 findings
+    ! .env          tracked         an env file carries configuration, often secrets
+      fix: git --literal-pathspecs rm --cached -- .env, then add .env to .gitignore
     ! compose.yaml  published port  service web: 8080:80 beyond loopback
     ! compose.yaml  published port  service db: 5432 beyond loopback
       fix: bind it to loopback, for example "127.0.0.1:HOST:CONTAINER"
-    ! .env          tracked         an env file carries configuration, often secrets
-      fix: git --literal-pathspecs rm --cached -- .env, then add .env to .gitignore
   ! debt          1 finding
     ! src/shop/parse.py:88  grew  function read_rows has 71 lines · ceiling 64
       fix: bring it back to 64 lines or below
@@ -101,7 +101,7 @@ $ quality check
 ! 5 findings in 3 areas · 4 areas clean · 14s
 ```
 
-No rule name stands in a row (`compose-port`, `env-file`); the event says it in words. The rule name appears only in a `fix:` line that asks for an `[[….allow]]` entry. No `next:` follows this verdict: the `fix:` lines carry the way.
+No rule name stands in a row (`compose-port`, `env-file`); the event says it in words. The rule name appears only in a `fix:` line that asks for an `[[….allow]]` entry. No `next:` follows this verdict: the `fix:` lines carry the way. The events, facts and fixes of the `files` rows are head proposals O12 to O14 of 30.10.2026, their recommendations applied: one event word per kind of finding, shared across rules (`report.FindingEvent`); the env fix names the file for `.gitignore` only where it is its own shell word, else `it`; and the findings of an area in run order. Paths and events align per area by character count; aligning by display width is for a later slice.
 
 ### 3. `quality check`, no git work tree
 
@@ -155,7 +155,8 @@ next: reinstall quality with its dependencies, one of:
   ✗ files         not checked    2 reasons
     ✗ cannot read compose.yaml: line 1, column 11 ...
     ✗ pyproject.toml has a requires-python quality cannot read
-env-file .env - ...
+    ! .env          tracked         an env file carries configuration, often secrets
+      fix: git --literal-pathspecs rm --cached -- .env, then add .env to .gitignore
 error: 1 of 7 areas could not check · 1 finding, 1 of them in those areas
 next: fix what the ✗ rows name, then run quality check again
 ```
