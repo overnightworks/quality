@@ -349,7 +349,7 @@ All measured. Exit 0. Tables: stdout; every other line: stderr.
 
 ```text
 $ quality report
-  · fleet         13 listed      quality/fleet.toml · 4 private, never measured
+  · fleet         14 listed      quality/fleet.toml
   ✓ quality       measured       8c8121b · 3s
   ✓ aco           measured       2f4e9a0 · 5s
   ✓ songmaker     measured       71c3d8e · 11s
@@ -362,20 +362,20 @@ $ quality report
 
 **Repo × rule, newest release v0.9.0**
 | …
-✓ 9 of 9 public repositories measured · 4 private not measured · 1m12s
+✓ 14 of 14 repositories measured · 1m12s
 ```
 
-(`…` after the third repository stands for six more rows.)
+(`…` after the third repository stands for eleven more rows.)
 
 Into a file, a repository not measurable. Exit 2. All lines shown: stderr.
 
 ```text
 $ quality report > fleet.md
-  · fleet         13 listed      quality/fleet.toml · 4 private, never measured
+  · fleet         14 listed      quality/fleet.toml
   ✓ quality       measured       8c8121b · 3s
   ✗ hopin         not measured   clone timed out after 300s
   …
-error: 1 of 9 public repositories not measured · its row says so in fleet.md
+error: 1 of 14 repositories not measured · its row says so in fleet.md
 next: quality report
 ```
 

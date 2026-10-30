@@ -14,7 +14,7 @@ Door commands:
   naming each entry it raises or adds.
 - `quality verdict [PATH]` (`verdict.py`): judges the mandatory jobs of the running workflow run and, on a pull request, holds the head's config, baseline and import-linter configs against the base commit's (a baseline only falls, an import contract only tightens; a loosening stays red, labelled declared when the head adds its `[[gate.loosened]]` entry); the fail-closed `quality / verdict`.
 - `quality scoreboard [PATH]` (`fleet.py`): the fleet's size and each repository's gate and CodeQL release and what each gate does with each rule in two
-  markdown tables, from anonymous shallow clones; a private repository is never measured. The fleet list is `quality/fleet.toml` (`public` and `private`).
+  markdown tables, from anonymous shallow clones; only anonymously readable repositories are measured. The fleet list is `quality/fleet.toml` (`repositories`, GitHub `owner/name`s).
 - `quality scan-staged [PATH]` (`staged.py`): secret scan of the staged change.
 - Scanners (`scanners.py`): gitleaks, actionlint and osv-scanner come through mise from `src/quality/mise/` (`mise.toml` holds the versions, `mise.lock` the sha256); `scanners.py` asks `mise which` there under `MISE_CEILING_PATHS` and runs only the exact version. ruff and zizmor are pinned dependencies of quality's package: `installation.py` finds each in quality's own installation and reads its pin.
 - `quality sonar properties` and `quality sonar findings` (`sonar.py`). Their HTTP and the verdict's go through `web.py`, which follows no redirect and bounds every wait; the door injects the transport, the GitHub fetcher and the poll sleep, so tests need no network.
