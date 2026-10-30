@@ -7,12 +7,19 @@ import pytest
 from quality.config import CONFIG_PATH, ROOT_ALLOWANCE_EXAMPLE
 from quality.output import FIX_LABEL
 from quality.report import FindingEvent
-from quality.root_layout import ROOT_BASE_DIRECTORIES, ROOT_BASE_FILES
+from quality.root_layout import ROOT_BASE_DIRECTORIES, ROOT_BASE_ENTRIES, ROOT_BASE_FILES
 from quality.rules import Rule
-from tests.support.check import copy_block, env_row_stands, finding_rows, hygiene_output, rule_findings
+from tests.support.check import copy_block, env_row_stands, finding_rows, hygiene_output, rows_of, rule_findings
 from tests.support.config_refusals import KNOWN_KEYS, ONE_LINE_NEED
 from tests.support.git_repositories import put
-from tests.support.layout import assert_prints_as_kind, assert_prints_escaped_row, assert_row_is_kind, red, rule_ids_in
+from tests.support.layout import (
+    CONTROL_CHARACTERS,
+    assert_prints_as_kind,
+    assert_prints_escaped_row,
+    assert_row_is_kind,
+    red,
+    rule_ids_in,
+)
 from tests.support.merge import ONE_JOB
 from tests.support.verdict import verdict_of
 
@@ -91,8 +98,9 @@ def test_a_wrongly_cased_name_is_unlisted_and_its_fact_names_the_base_list_spell
     repo = build_repo({**GUIDANCE, "readme.md": "x", "SRC/a.py": "x"})
     found = {finding.path: finding for finding in rule_findings(repo, Rule.ROOT_LAYOUT)}
     assert {path: finding.event for path, finding in found.items()} == dict.fromkeys(["SRC/", "readme.md"], FindingEvent.UNLISTED)
-    assert ("src/" in found["SRC/"].reason, "README.md" in found["readme.md"].reason) == (True, True)
-    assert ("README.md" in found["SRC/"].reason, "src/" in found["readme.md"].reason) == (False, False)
+    spelling = {path: next(entry for entry in ROOT_BASE_ENTRIES if entry.casefold() == path.casefold()) for path in found}
+    assert [spelling[path] in found[path].reason for path in found] == [True, True]
+    assert [spelling[path] in found[other].reason for path, other in (("SRC/", "readme.md"), ("readme.md", "SRC/"))] == [False, False]
 
 
 def test_a_file_named_like_an_allowed_directory_is_red(build_repo, capsys):
@@ -115,9 +123,10 @@ def test_the_same_entry_declared_twice_cannot_be_judged_and_is_named(build_repo,
     assert output.count(copy_block(ROOT_ALLOWANCE_EXAMPLE)) == 1
 
 
-def test_a_name_with_a_control_character_prints_escaped(build_repo, capsys):
-    repo = build_repo({**GUIDANCE, "bad\x01name": "x"})
-    assert_prints_escaped_row(capsys, repo, Rule.ROOT_LAYOUT, "bad\\x01name")
+@pytest.mark.parametrize(("character", "escaped"), CONTROL_CHARACTERS, ids=["control", "escape", "right-to-left override"])
+def test_a_name_with_a_control_character_prints_escaped(build_repo, capsys, character, escaped):
+    repo = build_repo({**GUIDANCE, f"bad{character}name": "x"})
+    assert_prints_escaped_row(capsys, repo, Rule.ROOT_LAYOUT, f"bad{escaped}name")
 
 
 def test_no_key_of_the_root_table_switches_the_rule_off(build_repo, capsys):
@@ -173,10 +182,10 @@ def test_moving_an_entry_without_its_declaration_leaves_the_declaration_red(buil
 def test_the_rule_writes_nothing_and_prints_no_command(build_repo, capsys):
     repo = build_repo({**GUIDANCE, "notes.txt": "x"})
     before = subprocess.run(["git", "-C", str(repo), "status", "--porcelain"], capture_output=True, check=True).stdout
-    hygiene_output(capsys, repo)
+    output = hygiene_output(capsys, repo)[1]
     after = subprocess.run(["git", "-C", str(repo), "status", "--porcelain"], capture_output=True, check=True).stdout
     assert (before, after) == (b"", b"")
-    assert ["git " in finding.fix for finding in rule_findings(repo, Rule.ROOT_LAYOUT)] == [False]
+    assert ["git " in row.fix for finding in rule_findings(repo, Rule.ROOT_LAYOUT) for row in rows_of(output, finding)] == [False]
 
 
 def test_a_tracked_env_file_is_red_under_env_file_and_under_root_layout(build_repo, capsys):

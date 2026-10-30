@@ -11,10 +11,12 @@ from tests.support.check import hygiene_output, refusals, rows_of, rule_findings
 from tests.support.git_repositories import put
 from tests.support.layout import (
     CONFIG,
+    CONTROL_CHARACTERS,
     EXAMPLE_SHA,
     GUIDANCE,
     assert_prints_as_kind,
     assert_prints_escaped_row,
+    assert_row_is_kind,
     declaring,
     in_index,
     red,
@@ -72,8 +74,14 @@ def test_the_mode_comes_from_the_index_not_the_disk(build_repo, capsys):
 def test_findings_are_all_printed_sorted_by_path_with_both_ways_out(build_repo, capsys):
     """#184 sentence 4: all findings, sorted by path, naming both ways out."""
     repo = build_repo({**GUIDANCE, "z/NOTES": "x", "EDGE_SHA": "x", "a/b/TODO": "x"})
-    code = hygiene_output(capsys, repo)[0]
+    code, output = hygiene_output(capsys, repo)
+    found = rule_findings(repo, Rule.FILE_SUFFIX)
+    rows = [row for finding in found for row in rows_of(output, finding)]
     assert (code, red(repo)) == (1, ["EDGE_SHA", "a/b/TODO", "z/NOTES"])
+    assert ([row.fix_follows for row in rows], output.count(f" {FIX_LABEL} {found[0].fix}")) == ([False, False, True], 1)
+    assert [finding.fix for finding in found if "git " in finding.fix] == []
+    put(repo / CONFIG, ONE_JOB + "".join(declaring(finding.path) for finding in found))
+    assert red(repo) == []
 
 
 def test_a_declared_file_is_clean_and_a_declaration_for_a_compliant_file_stays_clean(build_repo, capsys):
@@ -153,10 +161,11 @@ def test_the_layout_table_is_separate_from_the_root_table(build_repo, capsys):
     assert red(repo) == ["NOTES"]
 
 
-def test_a_path_with_a_control_character_prints_escaped(build_repo, capsys):
+@pytest.mark.parametrize(("character", "escaped"), CONTROL_CHARACTERS, ids=["control", "escape", "right-to-left override"])
+def test_a_path_with_a_control_character_prints_escaped(build_repo, capsys, character, escaped):
     """#184 sentence 4: a finding prints the path escaped."""
-    repo = build_repo({**GUIDANCE, "bad\x01name": "x"})
-    assert_prints_escaped_row(capsys, repo, Rule.FILE_SUFFIX, "bad\\x01name")
+    repo = build_repo({**GUIDANCE, f"bad{character}name": "x"})
+    assert_prints_escaped_row(capsys, repo, Rule.FILE_SUFFIX, f"bad{escaped}name")
 
 
 def test_an_index_record_that_cannot_be_read_cannot_be_judged(build_repo, capsys, fake_git):
@@ -373,7 +382,7 @@ def test_the_allowance_fix_names_the_findings_own_rule_and_its_entry_clears_the_
     (finding,) = rule_findings(repo, rule)
     assert rule_ids_in(finding.fix) == {rule.value}
     put(repo / CONFIG, ONE_JOB + declaring(finding.path, rule=rule))
-    assert rule_findings(repo, rule) == []
+    assert red(repo, rule) == []
 
 
 def test_a_path_declared_under_two_rules_and_untracked_is_one_equal_stale_row_per_rule(build_repo, capsys):
@@ -386,7 +395,7 @@ def test_a_path_declared_under_two_rules_and_untracked_is_one_equal_stale_row_pe
     assert (len({(finding.reason, finding.fix) for finding in found}), rule_ids_in(found[0].fix)) == (1, set())
     assert [len(rows_of(output, finding)) for finding in found] == [2, 2]
     put(repo / CONFIG, ONE_JOB)
-    assert [finding for rule in SCRIPT_RULES for finding in rule_findings(repo, rule)] == []
+    assert script_findings(repo) == CLEAN_SCRIPTS
 
 
 def test_script_name_is_misnamed_where_the_shape_breaks_and_misplaced_where_only_the_place_does(build_repo, capsys):
@@ -402,6 +411,8 @@ def test_script_name_is_misnamed_where_the_shape_breaks_and_misplaced_where_only
     assert len({finding.fix for finding in found.values()}) == 1
     rows = [row for path in paths for row in rows_of(output, found[path])]
     assert [row.fix_follows for row in rows] == [False, False, True]
+    for path, event in zip(paths, [FindingEvent.MISNAMED, FindingEvent.MISNAMED, FindingEvent.MISPLACED], strict=True):
+        assert_row_is_kind(output, found[path], event)
 
 
 def test_a_script_without_a_header_is_a_no_header_finding(build_repo, capsys):

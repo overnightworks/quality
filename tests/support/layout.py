@@ -7,11 +7,19 @@ import pytest
 
 from quality.report import Finding, FindingEvent
 from quality.rules import Area, Rule
-from tests.support.check import assert_row_prints_finding, hygiene_output, hygiene_run, rows_of, rule_findings
+from tests.support.check import (
+    assert_every_line_starts_with_the_door,
+    assert_row_prints_finding,
+    hygiene_output,
+    hygiene_run,
+    rows_of,
+    rule_findings,
+)
 
 CONFIG = "quality/config.toml"
 GUIDANCE = {"AGENTS.md": "# guidance\n"}
 EXAMPLE_SHA = "1" * 40
+CONTROL_CHARACTERS = [("\x01", "\\x01"), ("\x1b", "\\x1b"), ("\u202e", "\\u202e")]
 
 
 def declaring(path: str, reason: str = "the build reads it by this name", rule: str = Rule.FILE_SUFFIX) -> str:
@@ -50,7 +58,7 @@ def assert_prints_escaped_row(capsys, repo, rule: Rule, location: str) -> None:
     (finding,) = rule_findings(repo, rule)
     output = hygiene_output(capsys, repo)[1]
     assert (finding.location, len(rows_of(output, finding))) == (location, 1)
-    assert "\x01" not in output
+    assert_every_line_starts_with_the_door(output.splitlines())
 
 
 def assert_empty_name_has_its_own_fact(capsys, repo, rule: Rule, empty: str, named: str, name: str) -> None:

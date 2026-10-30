@@ -6,7 +6,7 @@ from quality.output import FIX_LABEL
 from quality.report import FindingEvent
 from quality.rules import Rule
 from tests.support.check import hygiene_output, refusals, rows_of, rule_findings
-from tests.support.layout import CONFIG, GUIDANCE, declaring, in_index, red
+from tests.support.layout import CONFIG, GUIDANCE, assert_row_is_kind, declaring, in_index, red
 from tests.support.merge import ONE_JOB
 
 RULE = Rule.TEST_LAYOUT
@@ -54,6 +54,7 @@ def test_an_init_file_and_a_stray_helper_are_strays_with_a_fix_line_each(build_r
     repo = build_repo({**ROOT_PROJECT, "tests/__init__.py": "", "tests/helpers.py": ""})
     code, output = hygiene_output(capsys, repo)
     init, helper = rule_findings(repo, RULE)
+    assert_row_is_kind(output, init, FindingEvent.STRAY)
     rows = [row for finding in (init, helper) for row in rows_of(output, finding)]
     assert (code, [finding.event for finding in (init, helper)]) == (1, [FindingEvent.STRAY] * 2)
     assert ([row.fix_follows for row in rows], output.count(f" {FIX_LABEL} ")) == ([True, True], 2)

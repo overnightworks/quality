@@ -99,7 +99,7 @@ def test_two_importing_lines_print_two_rows_and_one_fix_after_the_second(build_r
     rows = [row for finding in rule_findings(repo, RULE) for row in rows_of(output, finding)]
     assert ([row.fix_follows for row in rows], output.count(f" {FIX_LABEL} ")) == ([False, True], 1)
     put(repo / CONFIG, ONE_JOB + declaring("tests/support/y.py", rule=RULE))
-    assert rule_findings(repo, RULE) == []
+    assert red(repo, RULE) == []
 
 
 def test_findings_are_all_printed_sorted_by_path_and_line(build_repo, capsys):
