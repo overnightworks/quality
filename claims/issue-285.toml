@@ -3,6 +3,6 @@ agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
 role = "builder"
 base = "0e1c31ee4b2cbbb78dac0c6e82432b2fd6f8c0d9"
 branch = "claude/issue-285-python-floor-rows-files-notes-extent"
-scope = ["AGENTS.md", "docs/output.md", "docs/rules.md", "src/quality/check.py", "src/quality/cli.py", "src/quality/output.py", "src/quality/python_floor.py", "src/quality/report.py", "tests/support/check.py", "tests/test_cli_output.py", "tests/test_output.py", "tests/test_python_floor.py"]
+scope = ["AGENTS.md", "docs/output.md", "docs/rules.md", "src/quality/check.py", "src/quality/cli.py", "src/quality/output.py", "src/quality/python_floor.py", "src/quality/report.py", "tests/support/check.py", "tests/test_cli_area_row.py", "tests/test_cli_output.py", "tests/test_output.py", "tests/test_python_floor.py"]
 opened_commit = "4434fcda4e1f442b5daab32a3db9ddc083e24e04"
 whole_reason = "The note record, its renderer and its producer must land together or no entry point reaches them, python_floor.py changes once for findings and note, and the extent touches the check.py and cli.py the notes already change."
