@@ -13,7 +13,8 @@ import pytest
 
 from quality import cli, output, sonar
 from quality.output import Glyph, Row, SubLine, Verdict
-from quality.report import Choice, Command, Example, Instruction, OneOf
+from quality.report import Choice, Command, Example, Finding, FindingEvent, Instruction, OneOf, printable
+from tests.support.check import FindingRow, finding_rows
 
 OWN_SGR = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -194,6 +195,119 @@ def test_plain_output_holds_no_escape_byte(monkeypatch, no_color):
     output.write_rows((Row(Glyph.CLEAN, "files", Event.CLEAN),), file=stream)
     output.write_pair("e", (Command("n"),), file=stream)
     assert "\x1b" not in stream.getvalue()
+
+
+def finding(path: str, event: FindingEvent, fact: str = "a fact", fix: str = "a fix", line: int | None = None) -> Finding:
+    return Finding("some-rule", path, line, fact, fix, event=event)
+
+
+def findings_written(findings: list[Finding], stream_kind: type[io.StringIO] = io.StringIO) -> str:
+    return written(stream_kind, lambda stream: output.write_findings(findings, file=stream))
+
+
+def area_row_indent() -> int:
+    row = plain((Row(Glyph.NEEDS_YOU, "files", Event.FINDING, count=1),))
+    return len(row) - len(row.lstrip(" "))
+
+
+def test_a_finding_prints_its_row_then_its_fix_deeper_than_an_area_row():
+    (row,) = finding_rows(findings_written([finding("a.env", FindingEvent.TRACKED, "the fact", "the fix")]), "a.env")
+    assert (row.event, row.fact, row.fix, row.fix_follows) == (FindingEvent.TRACKED, "the fact", "the fix", True)
+    assert area_row_indent() < row.indent < row.fix_indent
+
+
+def test_the_event_and_the_fact_start_at_one_column_after_the_longest_location_and_event():
+    findings = [
+        finding("a.env", FindingEvent.TRACKED, "first fact", "one"),
+        finding("deploy/longer.env", FindingEvent.PUBLISHED_PORT, "second fact", "two"),
+        finding("mid.env", FindingEvent.UNUSED, "third fact", "three"),
+    ]
+    rows = [line for line in findings_written(findings).splitlines() if line.lstrip().startswith("!")]
+    event_columns = {line.index(finding.event.value) for line, finding in zip(rows, findings, strict=True)}
+    fact_columns = {line.index(finding.reason) for line, finding in zip(rows, findings, strict=True)}
+    longest_location = max(findings, key=lambda candidate: len(candidate.location)).location
+    longest_event = max(findings, key=lambda candidate: len(candidate.event)).event
+    assert (len(event_columns), len(fact_columns)) == (1, 1)
+    assert rows[1].index(longest_location) + len(longest_location) < event_columns.pop()
+    assert rows[1].index(longest_event) + len(longest_event) < fact_columns.pop()
+
+
+@pytest.mark.parametrize(
+    ("fixes", "fix_follows"),
+    [
+        ("AA", [False, True]),
+        ("ABA", [True, True, True]),
+        ("AABB", [False, True, False, True]),
+    ],
+    ids=["equal pair", "alternating", "two runs"],
+)
+def test_one_fix_follows_the_last_finding_of_each_run_of_equal_fixes(fixes, fix_follows):
+    findings = [finding(f"{number}.env", FindingEvent.TRACKED, fix=f"fix {fix}") for number, fix in enumerate(fixes)]
+    printed = findings_written(findings)
+    rows = [row for number in range(len(fixes)) for row in finding_rows(printed, f"{number}.env")]
+    assert [row.fix_follows for row in rows] == fix_follows
+    assert [row.fix for row in rows] == [f"fix {fix}" for fix in fixes]
+    assert printed.count(f"{output.FIX_LABEL} ") == len(fix_follows) - fix_follows.count(False)
+
+
+def test_a_finding_with_a_line_shows_its_location():
+    findings = [finding("a.env", FindingEvent.TRACKED, line=7), finding("b.env", FindingEvent.TRACKED)]
+    assert [finding_rows(findings_written(findings), candidate.location) != [] for candidate in findings] == [True, True]
+    assert findings[0].location != findings[0].path
+
+
+def test_repository_text_is_escaped_before_it_is_padded():
+    hostile = "x\nesc\x1b[31m\u202eend\u2028"
+    findings = [finding(f"{hostile}.env", FindingEvent.TRACKED, hostile, hostile), finding("short", FindingEvent.TRACKED, "plain", hostile)]
+    printed = findings_written(findings)
+    (row,) = finding_rows(printed, findings[0].location)
+    assert (row.fact, row.fix) == (printable(hostile), printable(hostile))
+    assert [character for character in printed if unicodedata.category(character) in ("Cc", "Cf", "Zl", "Zp") and character != "\n"] == []
+    short_row = next(line for line in printed.splitlines() if " short " in line)
+    assert short_row.index(FindingEvent.TRACKED.value) == next(line for line in printed.splitlines() if "x\\x0a" in line).index(FindingEvent.TRACKED.value)
+
+
+def test_wide_and_combining_characters_print_whole():
+    paths = ["漢字.env", "e\u0301.env", "plain.env"]
+    findings = [finding(path, FindingEvent.TRACKED, f"fact of {path}", f"fix of {path}") for path in paths]
+    printed = findings_written(findings)
+    rows = [row for path in paths for row in finding_rows(printed, path)]
+    assert [(row.fact, row.fix) for row in rows] == [(f"fact of {path}", f"fix of {path}") for path in paths]
+
+
+@pytest.fixture
+def painted_like_an_area_row(at_a_terminal) -> tuple[str, str, str, str]:
+    """The paint an area row puts around its `!` and its fact, read from `write_rows` on a terminal."""
+    styled = written(Terminal, lambda stream: output.write_rows((Row(Glyph.NEEDS_YOU, "files", Event.FINDING, "FACT"),), file=stream))
+    glyph = re.search(r"(\x1b\[[\d;]*m)!(\x1b\[[\d;]*m)", styled)
+    fact = re.search(r"(\x1b\[[\d;]*m)FACT(\x1b\[[\d;]*m)", styled)
+    return glyph.group(1), glyph.group(2), fact.group(1), fact.group(2)
+
+
+def test_at_a_terminal_the_glyph_and_the_fact_are_painted_as_an_area_row_paints_them(painted_like_an_area_row):
+    glyph_start, glyph_end, fact_start, fact_end = painted_like_an_area_row
+    findings = [finding("a.env", FindingEvent.TRACKED, "FACT", "the fix")]
+    styled = findings_written(findings, Terminal)
+    row_line = next(line for line in styled.splitlines() if "!" in line)
+    assert f"{glyph_start}!{glyph_end}" in row_line
+    assert f"{fact_start}FACT{fact_end}" in row_line
+    unpainted = row_line.replace(f"{glyph_start}!{glyph_end}", "").replace(f"{fact_start}FACT{fact_end}", "")
+    assert "\x1b" not in unpainted
+    assert "\x1b" not in next(line for line in styled.splitlines() if "the fix" in line)
+    assert OWN_SGR.sub("", styled) == findings_written(findings)
+
+
+@pytest.mark.parametrize(("term", "no_color"), [("xterm", "1"), ("dumb", None)], ids=["NO_COLOR", "dumb"])
+def test_a_terminal_that_asks_for_no_style_prints_no_escape_byte(monkeypatch, term, no_color):
+    monkeypatch.setenv("TERM", term)
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    if no_color:
+        monkeypatch.setenv("NO_COLOR", no_color)
+    assert "\x1b" not in findings_written([finding("a.env", FindingEvent.TRACKED)], Terminal)
+
+
+def test_no_findings_print_nothing():
+    assert findings_written([]) == ""
 
 
 MODULE_DOOR = [sys.executable, "-m", "quality.cli"]

@@ -1,12 +1,15 @@
 import re
 import unicodedata
 from collections.abc import Callable
+from dataclasses import dataclass
 from importlib.metadata import requires
 from pathlib import Path
 
 import pytest
 
-from quality import DISTRIBUTION, check, cli
+from quality import DISTRIBUTION, check, cli, output
+from quality.output import Glyph
+from quality.report import FindingEvent
 from quality.rules import Rule
 
 installed_ruff = cli.INSTALLED_RUFF
@@ -40,6 +43,48 @@ def assert_every_line_starts_with_the_door(lines: list[str]) -> None:
     for line in lines:
         assert not line.lstrip().startswith(("::", "File ", "raise ")), line
         assert all(unicodedata.category(character) not in ("Cc", "Cf", "Zl", "Zp") for character in line), line
+
+
+@dataclass(frozen=True)
+class FindingRow:
+    """One finding row as printed: its indentation, event and fact, the fix of the `fix:` run it belongs to (the next
+    `fix:` line below it), that line's indentation, and whether that line follows it directly."""
+
+    indent: int
+    event: FindingEvent
+    fact: str
+    fix: str | None
+    fix_indent: int | None
+    fix_follows: bool
+
+
+def _indentation(line: str) -> int:
+    return len(line) - len(line.lstrip(" "))
+
+
+def finding_rows(printed: str, location: str) -> list[FindingRow]:
+    """Every finding row at `location`, in printed order. A row is found by its glyph and an event of `FindingEvent`, a
+    fix line by the label of `output`; the padding between the columns is never rebuilt."""
+    lines = printed.splitlines()
+    rows = []
+    for number, line in enumerate(lines):
+        prefix = f"{Glyph.NEEDS_YOU} {location} "
+        if not line.lstrip().startswith(prefix):
+            continue
+        remainder = line.lstrip()[len(prefix):].lstrip(" ")
+        events = [event for event in FindingEvent if remainder.startswith(f"{event.value} ")]
+        if not events:
+            continue
+        event = max(events, key=lambda member: len(member.value))
+        fix, fix_indent, fix_follows = None, None, False
+        for later, following in enumerate(lines[number + 1:], start=number + 1):
+            if _indentation(following) < _indentation(line):
+                break
+            if following.lstrip().startswith(f"{output.FIX_LABEL} "):
+                fix, fix_indent, fix_follows = following.lstrip()[len(output.FIX_LABEL) + 1:], _indentation(following), later == number + 1
+                break
+        rows.append(FindingRow(_indentation(line), event, remainder[len(event.value):].strip(), fix, fix_indent, fix_follows))
+    return rows
 
 
 def hygiene_output(

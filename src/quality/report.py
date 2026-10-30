@@ -1,6 +1,7 @@
 import shlex
 import unicodedata
 from dataclasses import dataclass
+from enum import StrEnum
 
 from quality.config import Allowance
 
@@ -95,8 +96,20 @@ class Unparsable(CannotJudge):
     label = "unparsable"
 
 
+class FindingEvent(StrEnum):
+    """What a finding's row says is the case: one fixed word per kind of finding, for every rule."""
+
+    TRACKED = "tracked"
+    PUBLISHED_PORT = "published port"
+    UNREADABLE_PORT = "unreadable port"
+    HOST_NETWORK = "host network"
+    UNUSED = "unused"
+
+
 @dataclass(frozen=True)
 class Finding:
+    """With an `event`, `reason` is the fact its row shows; without one, the sentence of `headline`."""
+
     rule: str
     path: str
     line: int | None
@@ -104,6 +117,7 @@ class Finding:
     fix: str
     allowance: Allowance | None = None
     detail: tuple[str, ...] = ()
+    event: FindingEvent | None = None
 
     @property
     def location(self) -> str:
