@@ -1,8 +1,0 @@
-claim_id = "f4a660b4b67949a2ac760a304b7efc8a"
-agent = "Claude 7bbab0b4-f923-4f09-a5c2-6fe15143932e"
-role = "builder"
-base = "b6ba2bf1e2cbf32c1393f6374f2609eda8cb8a57"
-branch = "claude/issue-277-structured-refusals"
-scope = ["AGENTS.md", "docs/commands.md", "docs/output.md", "docs/rules.md", "quality/baseline.toml", "src/quality/check.py", "src/quality/checkout.py", "src/quality/cli.py", "src/quality/installation.py", "src/quality/output.py", "src/quality/python_lint.py", "src/quality/ratchet.py", "src/quality/report.py", "src/quality/scanners.py", "tests/test_advisories.py", "tests/test_check.py", "tests/test_checkout.py", "tests/test_cli_output.py", "tests/test_clones_baseline.py", "tests/test_output.py", "tests/test_python_lint.py", "tests/test_ratchet.py", "tests/test_report.py", "tests/test_scanners.py"]
-opened_commit = "894dcf8e82301c33bff89057b94491050d3f4a68"
-whole_reason = "The refusal contract with its typed steps, the door that prints them and the four raisers that fill them, the reinstall and baseline steps included, must land together, or a command leaves a fact before the door can print it, and the test modules pinning those refusals change with them."
