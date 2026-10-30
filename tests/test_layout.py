@@ -164,8 +164,7 @@ def test_the_layout_table_is_separate_from_the_root_table(build_repo, capsys):
 @pytest.mark.parametrize(("character", "escaped"), CONTROL_CHARACTERS, ids=["control", "escape", "right-to-left override"])
 def test_a_path_with_a_control_character_prints_escaped(build_repo, capsys, character, escaped):
     """#184 sentence 4: a finding prints the path escaped."""
-    repo = build_repo({**GUIDANCE, f"bad{character}name": "x"})
-    assert_prints_escaped_row(capsys, repo, Rule.FILE_SUFFIX, f"bad{escaped}name")
+    assert_prints_escaped_row(capsys, build_repo, Rule.FILE_SUFFIX, character, escaped)
 
 
 def test_an_index_record_that_cannot_be_read_cannot_be_judged(build_repo, capsys, fake_git):

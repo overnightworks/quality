@@ -125,8 +125,7 @@ def test_the_same_entry_declared_twice_cannot_be_judged_and_is_named(build_repo,
 
 @pytest.mark.parametrize(("character", "escaped"), CONTROL_CHARACTERS, ids=["control", "escape", "right-to-left override"])
 def test_a_name_with_a_control_character_prints_escaped(build_repo, capsys, character, escaped):
-    repo = build_repo({**GUIDANCE, f"bad{character}name": "x"})
-    assert_prints_escaped_row(capsys, repo, Rule.ROOT_LAYOUT, f"bad{escaped}name")
+    assert_prints_escaped_row(capsys, build_repo, Rule.ROOT_LAYOUT, character, escaped)
 
 
 def test_no_key_of_the_root_table_switches_the_rule_off(build_repo, capsys):

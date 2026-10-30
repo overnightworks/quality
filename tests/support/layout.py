@@ -53,8 +53,11 @@ def assert_prints_as_kind(capsys, repo, rule: Rule, event: FindingEvent, *named:
     return finding
 
 
-def assert_prints_escaped_row(capsys, repo, rule: Rule, location: str) -> None:
-    """The one finding of `rule` over `repo` prints as one row at the escaped `location`, and no raw control reaches the output."""
+def assert_prints_escaped_row(capsys, build_repo, rule: Rule, character: str, escaped: str) -> None:
+    """A root entry or path named with `character` is the one finding of `rule`; it prints as one row at the name with `character`
+    escaped as `escaped`, and no raw control, format or separator character reaches the output."""
+    repo = build_repo({**GUIDANCE, f"bad{character}name": "x"})
+    location = f"bad{escaped}name"
     (finding,) = rule_findings(repo, rule)
     output = hygiene_output(capsys, repo)[1]
     assert (finding.location, len(rows_of(output, finding))) == (location, 1)
