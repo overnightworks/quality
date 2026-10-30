@@ -40,6 +40,7 @@ Locally, `quality hygiene .` runs every rule the gate runs, the secret, workflow
 ## Read on
 
 - [docs/rules.md](docs/rules.md): the `hygiene` rules, the secret and advisory scans, the output contract.
+- [docs/output.md](docs/output.md): the picture of what the commands print; `hygiene` prints its frame today.
 - [docs/commands.md](docs/commands.md): `scan-staged`, the scanners, `scoreboard` and `emergency-merge`.
 - [docs/gate.md](docs/gate.md): the `gate.yml` caller contract, the verdict, declared loosenings, `codeql.yml`.
 - [docs/sonar.md](docs/sonar.md): `sonar findings`, coverage on new code, new and legacy findings, the quality gate, the Dependabot exception.
