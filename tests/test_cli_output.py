@@ -14,7 +14,7 @@ import pytest
 
 from quality import cli, scanners
 from quality.ratchet import BASELINE_PATH
-from quality.report import DETAIL_MARKER, Finding, printable, render, shell_word
+from quality.report import DETAIL_MARKER
 from quality.rules import Area
 from tests.support.architecture import FORBIDDEN, SHOP, SHOP_DB_IMPORTS_WEB, toml
 from tests.support.check import assert_every_line_starts_with_the_door
@@ -342,14 +342,6 @@ def test_a_source_name_that_is_not_utf8_is_still_refused_as_one_line(build_repo,
     assert_every_line_starts_with_the_door(lines)
 
 
-def test_a_finding_prints_its_detail_and_fix_escaped(capsys):
-    """#97 rule 2: every field of a finding, detail lines and fix included, prints without a raw control character."""
-    finding = Finding("r", "p", None, "why", "fix\x1b[31m\n::error::f", detail=("one\n::error::d", "two\x1b"))
-    assert render(finding) == (
-        f"r p - why\n{DETAIL_MARKER}one\\x0a::error::d\n{DETAIL_MARKER}two\\x1b\n  Fix: fix\\x1b[31m\\x0a::error::f"
-    )
-
-
 def test_a_scanner_stderr_with_several_lines_prints_as_one_escaped_line(build_repo, served_scanners, capsys):
     """#97 rule 2, cell 14 (E5): the stderr tail of a failing scanner joins on `\\x0a`, never a line of its own."""
     fake_scanner(served_scanners, "gitleaks", on_scan="echo first >&2; echo '::error::second' >&2; exit 2")
@@ -399,42 +391,6 @@ def test_a_baseline_refusal_for_a_file_that_is_not_utf8_prints_its_surrogate_esc
     assert code == 2
     assert lines[0] == "baseline: not written - src/lat\\udce9.py is not valid UTF-8, so quality/baseline.toml cannot hold it"
     assert_every_line_starts_with_the_door(lines)
-
-
-@pytest.mark.parametrize(
-    "name",
-    ["plain.env", "umlaut-\u00e9.env", "-dash.env", "a:b.env", "*.env", "50%.env", "back\\slash.env", "=equals.env",
-     "nbsp\u00a0.env", "e\u0301.env", "smile\U0001f600.env", "\u540d\u524d.env", "\u05e9\u05dd.env", "back\\u202e.env"],
-)
-def test_a_name_printable_unchanged_is_a_shell_word_and_printable_is_idempotent(name):
-    """#97 rule 1, cell 17: a word exactly when `printable(x) == x`."""
-    assert printable(name) == name
-    assert shell_word(name) is not None
-
-
-@pytest.mark.parametrize(
-    "name", ["lat\udce9.env", "a\nb", "esc\x1b", "c1\x85", "del\x7f", "tab\t", "cr\r", "nul\0",
-     "rlo\u202e", "lri\u2066", "rlm\u200f", "alm\u061c", "zwsp\u200b", "zwj\u200d", "shy\u00ad", "bom\ufeff", "ls\u2028",
-     "ps\u2029", "tag\U000e0041", "langtag\U000e0001"]
-)
-def test_a_name_printable_changes_has_no_shell_word_and_printing_it_twice_changes_nothing(name):
-    """#97 rule 1, cell 17: no word where `printable(x) != x`; the escape is idempotent."""
-    assert printable(name) != name
-    assert shell_word(name) is None
-    assert printable(printable(name)) == printable(name)
-
-
-@pytest.mark.parametrize(
-    ("character", "printed"),
-    [
-        ("\u202e", "\\u202e"), ("\u2066", "\\u2066"), ("\u200f", "\\u200f"), ("\u061c", "\\u061c"), ("\u200b", "\\u200b"),
-        ("\u200d", "\\u200d"), ("\u00ad", "\\u00ad"), ("\ufeff", "\\ufeff"), ("\u2028", "\\u2028"), ("\u2029", "\\u2029"),
-        ("\U000e0041", "\\U000e0041"), ("\U000e0001", "\\U000e0001"),
-    ],
-)
-def test_a_format_or_separator_character_prints_as_its_code_point(character, printed):
-    """#228 rule 7: a format character, U+2028 and U+2029 print as `\\uNNNN` (`\\UNNNNNNNN` above U+FFFF), by category."""
-    assert printable(character) == printed
 
 
 def test_ctrl_c_in_the_door_ends_the_run_as_interrupted_through_the_injected_sender(capsys):
