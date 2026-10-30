@@ -452,10 +452,14 @@ def test_a_generated_file_naming_a_job_needs_the_config_to_list_mandatory_jobs()
     assert "[[size.generated]] entry" in str(refused.value)
 
 
-@pytest.mark.parametrize("jobs", ["[1]", '[""]', '"checks"'], ids=["number", "empty name", "not a list"])
-def test_a_generated_file_needs_mandatory_jobs_that_are_non_empty_names(jobs):
+@pytest.mark.parametrize(
+    ("jobs", "job"),
+    [("[1]", "1"), ('[""]', '""'), ('"checks"', '"c"')],
+    ids=["number", "empty name", "not a list"],
+)
+def test_a_generated_file_needs_mandatory_jobs_that_are_non_empty_names(jobs, job):
     """#174 sentence 3: a job is compared only with valid job names, in every loader that reads the declaration."""
-    text = f"[gate]\nmandatory_jobs = {jobs}\n" + generated_config(job=None) + "job = 1\n"
+    text = f"[gate]\nmandatory_jobs = {jobs}\n" + generated_config(job=None) + f"job = {job}\n"
     for load in (load_allow_lists, load_gate_settings):
         with pytest.raises(ConfigError, match="job as one of") as refused:
             load(text)

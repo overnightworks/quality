@@ -293,13 +293,21 @@ def _validated_document(text: str) -> _Document:
     )
 
 
-def _mandatory_jobs(gate: dict) -> tuple[str, ...]:
+def _job_names(gate: dict) -> tuple[str, ...]:
+    """The [gate] mandatory_jobs when they are a non-empty list of non-empty names, else none."""
     names = gate.get("mandatory_jobs")
-    if not isinstance(names, list) or not names or not all(isinstance(name, str) and name for name in names):
+    if isinstance(names, list) and all(isinstance(name, str) and name for name in names):
+        return tuple(names)
+    return ()
+
+
+def _mandatory_jobs(gate: dict) -> tuple[str, ...]:
+    names = _job_names(gate)
+    if not names:
         raise ConfigError(
             f"{CONFIG_PATH} needs [gate] mandatory_jobs as a non-empty list of job names, like:\n{EXAMPLE}"
         )
-    return tuple(names)
+    return names
 
 
 def _legacy_mode(gate: dict) -> LegacyMode:
@@ -545,8 +553,7 @@ def _generated_files(size: dict, gate: dict) -> tuple[GeneratedFile, ...]:
     entries = size.get("generated", [])
     if not isinstance(entries, list):
         raise ConfigError(f"{CONFIG_PATH} needs [[size.generated]] as an array of tables, like:\n{GENERATED_FILE_EXAMPLE}")
-    names = gate.get("mandatory_jobs")
-    jobs = tuple(names) if isinstance(names, list) and all(isinstance(name, str) and name for name in names) else ()
+    jobs = _job_names(gate)
     declared: dict[str, GeneratedFile] = {}
     for entry in entries:
         generated = _read_generated_file(entry, jobs)
