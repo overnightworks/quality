@@ -73,12 +73,14 @@ def test_a_declaration_without_a_measured_file_is_one_size_finding_with_the_dele
 def test_a_declared_python_file_python_cannot_parse_leaves_the_size_rule_judgeable_but_not_the_baseline_write(build_repo, capsys):
     """#174 Design: the size rule leaves a declared file's unparsable entry out; the baseline write still refuses
     a tree whose clones it could not measure."""
-    repo = build_repo({"gen/api.py": "def broken(:\n", CONFIG_PATH: GATE + generated_config(path="gen/api.py"), BASELINE_PATH: ""})
+    seeded = '[clones."src/a.py"]\nlong_one = [["src/b.py", "long_one"]]\n'
+    repo = build_repo({"gen/api.py": "def broken(:\n", CONFIG_PATH: GATE + generated_config(path="gen/api.py"), BASELINE_PATH: seeded})
     _, output = hygiene(capsys, repo)
     assert size_lines(output) == []
     assert "size unparsable" not in output
     assert cli.main(["baseline", "write", str(repo)]) == 2
     assert "baseline: not written - gen/api.py is not valid Python" in capsys.readouterr().err
+    assert (repo / BASELINE_PATH).read_text() == seeded
 
 
 def test_baseline_write_leaves_a_declared_file_out_and_names_no_raise_for_it(build_repo, capsys):
