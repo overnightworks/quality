@@ -13,8 +13,19 @@ import pytest
 
 from quality import cli, output, sonar
 from quality.output import Glyph, Row, SubLine, Verdict
-from quality.report import Choice, Command, Example, Finding, FindingEvent, Instruction, OneOf, printable
-from tests.support.check import finding_rows
+from quality.report import (
+    Choice,
+    Command,
+    Example,
+    Finding,
+    FindingEvent,
+    Instruction,
+    Note,
+    NoteEvent,
+    OneOf,
+    printable,
+)
+from tests.support.check import finding_rows, note_rows
 
 OWN_SGR = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -201,8 +212,12 @@ def finding(path: str, event: FindingEvent, fact: str = "a fact", fix: str = "a 
     return Finding("some-rule", path, line, fact, fix, event=event)
 
 
-def findings_written(findings: list[Finding], stream_kind: type[io.StringIO] = io.StringIO) -> str:
-    return written(stream_kind, lambda stream: output.write_findings(findings, file=stream))
+def note(path: str, fact: str = "a note") -> Note:
+    return Note(path, NoteEvent.ALLOWED, fact)
+
+
+def findings_written(findings: list[Finding], stream_kind: type[io.StringIO] = io.StringIO, notes: list[Note] | None = None) -> str:
+    return written(stream_kind, lambda stream: output.write_findings_and_notes(findings, notes or [], file=stream))
 
 
 def area_row_indent() -> int:
@@ -306,8 +321,47 @@ def test_a_terminal_that_asks_for_no_style_prints_no_escape_byte(monkeypatch, te
     assert "\x1b" not in findings_written([finding("a.env", FindingEvent.TRACKED)], Terminal)
 
 
-def test_no_findings_print_nothing():
+def test_no_findings_and_no_notes_print_nothing():
     assert findings_written([]) == ""
+
+
+def test_findings_and_notes_share_one_location_column_and_one_event_column():
+    findings = [finding("a.env", FindingEvent.TRACKED, "first fact")]
+    notes = [note("deploy/longer.toml", "second fact")]
+    printed = findings_written(findings, notes=notes)
+    finding_line, note_line = (next(line for line in printed.splitlines() if marker in line) for marker in ("first fact", "second fact"))
+    assert finding_line.index("first fact") == note_line.index("second fact")
+    assert finding_line.index(FindingEvent.TRACKED.value) == note_line.index(NoteEvent.ALLOWED.value)
+    assert finding_line.index(FindingEvent.TRACKED.value) > len(notes[0].location)
+
+
+def test_a_note_row_follows_the_last_fix_and_has_no_fix_of_its_own():
+    printed = findings_written([finding("a.env", FindingEvent.TRACKED)], notes=[note("b.toml"), note("c.toml")])
+    lines = printed.splitlines()
+    note_numbers = [number for number, line in enumerate(lines) if line.lstrip().startswith(Glyph.NOTE)]
+    assert note_numbers == [len(lines) - 2, len(lines) - 1]
+    assert printed.count(f"{output.FIX_LABEL} ") == 1
+    assert [row.event for path in ("b.toml", "c.toml") for row in note_rows(printed, path)] == [NoteEvent.ALLOWED] * 2
+
+
+def test_notes_alone_print_their_rows_without_a_fix():
+    printed = findings_written([], notes=[note("b.toml")])
+    assert (len(printed.splitlines()), output.FIX_LABEL in printed) == (1, False)
+
+
+def test_a_note_row_is_painted_dim_as_a_whole_as_an_area_note_row_is(at_a_terminal):
+    area = written(Terminal, lambda stream: output.write_rows((Row(Glyph.NOTE, "debt", Event.CLEAN, "FACT"),), file=stream))
+    dim = re.match(r"(\x1b\[[\d;]*m)", area).group(1)
+    styled = findings_written([], Terminal, notes=[note("b.toml", "FACT")])
+    assert (styled.startswith(dim), styled.rstrip("\n").endswith(output.RESET), OWN_SGR.sub("", styled)) == (True, True, findings_written([], notes=[note("b.toml", "FACT")]))
+
+
+def test_a_notes_location_and_fact_are_escaped_before_they_are_padded():
+    hostile = "x\nesc\x1b[31m\u202eend\u2028"
+    printed = findings_written([], notes=[note(hostile, hostile), note("short")])
+    (row,) = note_rows(printed, printable(hostile))
+    assert row.fact == printable(hostile)
+    assert [character for character in printed if unicodedata.category(character) in ("Cc", "Cf", "Zl", "Zp") and character != "\n"] == []
 
 
 ENV_ROW = f"{Glyph.NEEDS_YOU} .env "

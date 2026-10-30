@@ -8,7 +8,7 @@ import pytest
 
 from quality import DISTRIBUTION, check, cli, env_file, output
 from quality.output import Glyph
-from quality.report import Finding, FindingEvent, printable
+from quality.report import Finding, FindingEvent, Note, NoteEvent, printable
 from quality.rules import Rule
 
 installed_ruff = cli.INSTALLED_RUFF
@@ -84,6 +84,36 @@ def finding_rows(printed: str, location: str) -> list[FindingRow]:
                 break
         rows.append(FindingRow(_indentation(line), event, remainder[len(event.value):].strip(), fix, fix_indent, fix_follows))
     return rows
+
+
+@dataclass(frozen=True)
+class NoteRow:
+    """One note row as printed: its indentation, event and fact."""
+
+    indent: int
+    event: NoteEvent
+    fact: str
+
+
+def note_rows(printed: str, location: str) -> list[NoteRow]:
+    """Every note row at `location`, in printed order. A row is found by its glyph and an event of `NoteEvent`; the
+    padding between the columns is never rebuilt."""
+    rows = []
+    for line in printed.splitlines():
+        prefix = f"{Glyph.NOTE} {location} "
+        if not line.lstrip().startswith(prefix):
+            continue
+        remainder = line.lstrip()[len(prefix):].lstrip(" ")
+        events = [event for event in NoteEvent if remainder.startswith(f"{event.value} ")]
+        if events:
+            event = max(events, key=lambda member: len(member.value))
+            rows.append(NoteRow(_indentation(line), event, remainder[len(event.value):].strip()))
+    return rows
+
+
+def rule_notes(repo: Path, rule: Rule) -> list[Note]:
+    """The notes `rule` returns over `repo` before the door prints them."""
+    return [note for verdict in hygiene_run(repo).verdicts if verdict.rule is rule for note in verdict.notes]
 
 
 def rows_of(printed: str, finding: Finding) -> list[FindingRow]:
