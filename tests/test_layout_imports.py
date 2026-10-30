@@ -2,9 +2,12 @@
 
 import pytest
 
+from quality.output import FIX_LABEL
+from quality.report import FindingEvent
 from quality.rules import Rule
-from tests.support.check import hygiene_output, refusal_row, refusals
-from tests.support.layout import CONFIG, GUIDANCE, case, declaring, in_index, red
+from tests.support.check import hygiene_output, refusal_row, refusals, rows_of, rule_findings
+from tests.support.git_repositories import put
+from tests.support.layout import CONFIG, GUIDANCE, assert_prints_as_kind, case, declaring, in_index, red
 from tests.support.merge import ONE_JOB
 
 RULE = Rule.TEST_IMPORT
@@ -81,13 +84,22 @@ def test_a_symlink_is_never_read_but_is_a_target_by_its_name(build_repo, capsys)
 
 
 def test_one_statement_is_one_finding_naming_each_target(build_repo, capsys):
-    """#201 G11, sentence 6."""
+    """#201 G11, sentence 6, #283 O12: the row stands at `path:line`, its fact names each imported target."""
     repo = build_repo(project({"tests/conftest.py": "", "tests/test_x.py": "", "tests/support/y.py": "import os, conftest, test_x\n"}))
-    code, output = hygiene_output(capsys, repo)
-    assert (code, red(repo, RULE)) == (1, ["tests/support/y.py:1"])
-    assert "imports the test module or conftest conftest, test_x" in output
-    assert "move what it needs to a support/ module, or make it a fixture in conftest.py" in output
-    assert "the rule test-import" in output
+    code = hygiene_output(capsys, repo)[0]
+    finding = assert_prints_as_kind(capsys, repo, RULE, FindingEvent.TEST_IMPORT, "conftest", "test_x")
+    assert (code, finding.location) == (1, "tests/support/y.py:1")
+
+
+def test_two_importing_lines_print_two_rows_and_one_fix_after_the_second(build_repo, capsys):
+    """#283 decisions 4 and 12: a fix shared by consecutive findings prints once; the entry it asks for clears both rows."""
+    content = "import conftest\nfrom tests.test_x import a\n"
+    repo = build_repo(project({"tests/conftest.py": "", "tests/test_x.py": "", "tests/support/y.py": content}))
+    output = hygiene_output(capsys, repo)[1]
+    rows = [row for finding in rule_findings(repo, RULE) for row in rows_of(output, finding)]
+    assert ([row.fix_follows for row in rows], output.count(f" {FIX_LABEL} ")) == ([False, True], 1)
+    put(repo / CONFIG, ONE_JOB + declaring("tests/support/y.py", rule=RULE))
+    assert rule_findings(repo, RULE) == []
 
 
 def test_findings_are_all_printed_sorted_by_path_and_line(build_repo, capsys):

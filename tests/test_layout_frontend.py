@@ -1,16 +1,31 @@
 """The test-layout rule maps every frontend test to the file it tests and keeps Playwright specs in `e2e/`."""
 
+import re
+
 import pytest
 
+from quality import layout
+from quality.output import FIX_LABEL
+from quality.report import FindingEvent
 from quality.rules import Rule
-from tests.support.check import hygiene_output
-from tests.support.layout import CONFIG, GUIDANCE, case, declaring, empty_files, in_index, red
+from tests.support.check import hygiene_output, rule_findings
+from tests.support.layout import (
+    CONFIG,
+    GUIDANCE,
+    assert_empty_name_has_its_own_fact,
+    assert_prints_as_kind,
+    assert_row_is_kind,
+    case,
+    declaring,
+    empty_files,
+    in_index,
+    red,
+)
 from tests.support.merge import ONE_JOB
 
 RULE = Rule.TEST_LAYOUT
 PACKAGE_JSON = {"package.json": "{}\n"}
 PYTHON_PROJECT = {"pyproject.toml": "", "src/p/x.py": ""}
-SPEC_FIX = "or declare it in quality/config.toml with [[layout.allow]], its path, the rule test-layout and a reason."
 
 
 def frontend(*paths: str, manifest: str = "package.json") -> dict[str, str]:
@@ -113,30 +128,39 @@ def test_a_declaration_exempts_a_frontend_test_from_rules_six_and_seven(build_re
     assert red(build_repo({**frontend(*tracked), CONFIG: config}), RULE) == expected
 
 
-def test_every_finding_prints_sorted_by_path_with_its_own_reason_and_fix(build_repo, capsys):
-    """H17: both frontend cases and a Python finding in one run, one per file, each with its reason and fix."""
+def test_every_finding_prints_sorted_by_path_with_its_own_kind_fact_and_fix(build_repo, capsys):
+    """H17, #283 O12: both frontend cases and a Python stray in one run, one per file, each its own row and fix line."""
     files = {
         **frontend("packages/ui/package.json", "packages/ui/src/z.svelte.test.ts", "packages/ui/src/spec.spec.ts", "tests/helpers.py"),
         **PYTHON_PROJECT,
     }
-    code, output = hygiene_output(capsys, build_repo(files))
-    lines = [line for line in output.splitlines() if line.startswith(f"{RULE} ")]
-    assert code == 1
-    assert [line.split()[1] for line in lines] == ["packages/ui/src/spec.spec.ts", "packages/ui/src/z.svelte.test.ts", "tests/helpers.py"]
-    assert "outside packages/ui/e2e/" in lines[0]
-    assert "no file in packages/ui/src is named z or a word prefix of it" in lines[1]
-    assert f"  Fix: move it into packages/ui/e2e/, or, if it is a Vitest test, name it `<subject>.test.<suffix>` beside its subject, {SPEC_FIX}" in output
-    assert f"  Fix: move it beside the file it tests and name it `<subject>[<Aspect>].svelte.test.ts`, {SPEC_FIX}" in output
+    repo = build_repo(files)
+    code, output = hygiene_output(capsys, repo)
+    spec, test, stray = found = rule_findings(repo, RULE)
+    assert (code, [finding.location for finding in found]) == (1, ["packages/ui/src/spec.spec.ts", "packages/ui/src/z.svelte.test.ts", "tests/helpers.py"])
+    assert_row_is_kind(output, spec, FindingEvent.MISPLACED, f"packages/ui/{layout.END_TO_END_DIRECTORY}/")
+    assert_row_is_kind(output, test, FindingEvent.MISPLACED, "packages/ui/src", "z")
+    assert_row_is_kind(output, stray, FindingEvent.STRAY)
+    assert (len({finding.fix for finding in found}), output.count(f" {FIX_LABEL} ")) == (3, 3)
 
 
-def test_an_empty_base_says_it_is_empty(build_repo, capsys):
-    """H8: the reason never reads "a word prefix of" an empty base."""
-    output = hygiene_output(capsys, build_repo(frontend("src/.test.ts")))[1]
-    assert "its name before the first `.` is empty" in output
+def test_an_empty_base_is_not_described_as_a_name_with_nothing_in_it(build_repo, capsys):
+    """H8."""
+    repo = build_repo(frontend("src/.test.ts", "src/zz.test.ts"))
+    assert_empty_name_has_its_own_fact(capsys, repo, RULE, "src/.test.ts", "src/zz.test.ts", "zz")
 
 
 def test_a_root_spec_names_the_root_e2e_folder(build_repo, capsys):
     """H4: the root project's folder is `e2e/`."""
-    output = hygiene_output(capsys, build_repo(frontend("src/a.spec.ts")))[1]
-    assert "outside e2e/" in output
-    assert "move it into e2e/, or" in output
+    finding = assert_prints_as_kind(capsys, build_repo(frontend("src/a.spec.ts")), RULE, FindingEvent.MISPLACED, f"{layout.END_TO_END_DIRECTORY}/")
+    assert finding.path == "src/a.spec.ts"
+
+
+def test_a_test_with_no_subject_in_the_root_folder_does_not_name_the_folder_as_a_dot(build_repo, capsys):
+    """#5 206a: the root folder is told apart from `src`, which a test there names as it is."""
+    repo = build_repo(frontend("x.test.ts", "src/x.test.ts"))
+    output = hygiene_output(capsys, repo)[1]
+    found = {finding.path: finding for finding in rule_findings(repo, RULE)}
+    assert_row_is_kind(output, found["x.test.ts"], FindingEvent.MISPLACED, "x")
+    assert_row_is_kind(output, found["src/x.test.ts"], FindingEvent.MISPLACED, "src")
+    assert re.search(r"(?<!\w)\.(?!\w)", found["x.test.ts"].reason) is None

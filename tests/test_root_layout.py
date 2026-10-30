@@ -5,12 +5,14 @@ import subprocess
 import pytest
 
 from quality.config import CONFIG_PATH, ROOT_ALLOWANCE_EXAMPLE
+from quality.output import FIX_LABEL
+from quality.report import FindingEvent
 from quality.root_layout import ROOT_BASE_DIRECTORIES, ROOT_BASE_FILES
 from quality.rules import Rule
-from tests.support.check import copy_block, env_row_stands, hygiene_output
+from tests.support.check import copy_block, env_row_stands, finding_rows, hygiene_output, rule_findings
 from tests.support.config_refusals import KNOWN_KEYS, ONE_LINE_NEED
 from tests.support.git_repositories import put
-from tests.support.layout import red
+from tests.support.layout import assert_prints_as_kind, assert_prints_escaped_row, red, rule_ids_in
 from tests.support.merge import ONE_JOB
 from tests.support.verdict import verdict_of
 
@@ -20,10 +22,6 @@ GUIDANCE = {"AGENTS.md": "# guidance\n"}
 
 def declaring(entry: str, reason: str = "built apart from the package") -> str:
     return f'[[root.allow]]\nentry = "{entry}"\nreason = "{reason}"\n'
-
-
-def findings(output: str) -> list[str]:
-    return [line for line in output.splitlines() if line.startswith("root-layout ")]
 
 
 def test_two_strays_are_two_findings_and_a_directory_counts_once(build_repo, capsys):
@@ -89,10 +87,12 @@ def test_a_declared_collecting_directory_is_green(build_repo, capsys):
     assert red(repo, Rule.ROOT_LAYOUT) == []
 
 
-def test_a_wrongly_cased_name_is_red_and_names_the_allowed_spelling(build_repo, capsys):
+def test_a_wrongly_cased_name_is_unlisted_and_its_fact_names_the_base_list_spelling(build_repo, capsys):
     repo = build_repo({**GUIDANCE, "readme.md": "x", "SRC/a.py": "x"})
-    lines = findings(hygiene_output(capsys, repo)[1])
-    assert [("README.md" in line, "src/" in line) for line in lines] == [(False, True), (True, False)]
+    found = {finding.path: finding for finding in rule_findings(repo, Rule.ROOT_LAYOUT)}
+    assert {path: finding.event for path, finding in found.items()} == dict.fromkeys(["SRC/", "readme.md"], FindingEvent.UNLISTED)
+    assert ("src/" in found["SRC/"].reason, "README.md" in found["readme.md"].reason) == (True, True)
+    assert ("README.md" in found["SRC/"].reason, "src/" in found["readme.md"].reason) == (False, False)
 
 
 def test_a_file_named_like_an_allowed_directory_is_red(build_repo, capsys):
@@ -117,9 +117,7 @@ def test_the_same_entry_declared_twice_cannot_be_judged_and_is_named(build_repo,
 
 def test_a_name_with_a_control_character_prints_escaped(build_repo, capsys):
     repo = build_repo({**GUIDANCE, "bad\x01name": "x"})
-    output = hygiene_output(capsys, repo)[1]
-    assert "root-layout bad\\x01name - " in output
-    assert "\x01" not in output
+    assert_prints_escaped_row(capsys, repo, Rule.ROOT_LAYOUT, "bad\\x01name")
 
 
 def test_no_key_of_the_root_table_switches_the_rule_off(build_repo, capsys):
@@ -140,24 +138,23 @@ def test_a_declared_entry_is_green_and_a_base_list_entry_may_be_declared(build_r
 
 def test_a_declaration_matching_no_tracked_entry_is_red_and_names_it(build_repo, capsys):
     repo = build_repo({**GUIDANCE, CONFIG: declaring("plans/")})
-    code, output = hygiene_output(capsys, repo)
+    code = hygiene_output(capsys, repo)[0]
     assert (code, red(repo, Rule.ROOT_LAYOUT)) == (1, ["plans/"])
-    assert "declared in quality/config.toml" in output
-    assert "tracks no such root entry" in output
+    assert_prints_as_kind(capsys, repo, Rule.ROOT_LAYOUT, FindingEvent.UNUSED)
 
 
 def test_a_directory_declared_without_its_slash_is_told_the_slash_is_what_is_tracked(build_repo, capsys):
     repo = build_repo({**GUIDANCE, "frontend/a.js": "x", CONFIG: declaring("frontend")})
-    output = hygiene_output(capsys, repo)[1]
-    assert "the repository tracks frontend/" in output
+    assert_prints_as_kind(capsys, repo, Rule.ROOT_LAYOUT, FindingEvent.UNUSED, "frontend/")
 
 
 def test_a_finding_names_the_entry_and_both_ways_out_without_a_local_path(build_repo, capsys):
     repo = build_repo({**GUIDANCE, "notes.txt": "x"})
-    output = hygiene_output(capsys, repo)[1]
-    assert "root-layout notes.txt - not on quality's base list." in output
-    assert "Fix: move it to its owner's directory, or declare it in quality/config.toml with [[root.allow]]" in output
-    assert str(repo) not in "\n".join(findings(output))
+    finding = assert_prints_as_kind(capsys, repo, Rule.ROOT_LAYOUT, FindingEvent.UNLISTED)
+    assert (finding.path, str(repo) in f"{finding.reason} {finding.fix}") == ("notes.txt", False)
+    assert rule_ids_in(finding.fix) == set()
+    put(repo / CONFIG, ONE_JOB + declaring(finding.path))
+    assert red(repo, Rule.ROOT_LAYOUT) == []
 
 
 def test_removing_a_declaration_makes_the_entry_red(build_repo, capsys):
@@ -175,10 +172,10 @@ def test_moving_an_entry_without_its_declaration_leaves_the_declaration_red(buil
 def test_the_rule_writes_nothing_and_prints_no_command(build_repo, capsys):
     repo = build_repo({**GUIDANCE, "notes.txt": "x"})
     before = subprocess.run(["git", "-C", str(repo), "status", "--porcelain"], capture_output=True, check=True).stdout
-    output = hygiene_output(capsys, repo)[1]
+    hygiene_output(capsys, repo)
     after = subprocess.run(["git", "-C", str(repo), "status", "--porcelain"], capture_output=True, check=True).stdout
     assert (before, after) == (b"", b"")
-    assert "git " not in "\n".join(findings(output))
+    assert ["git " in finding.fix for finding in rule_findings(repo, Rule.ROOT_LAYOUT)] == [False]
 
 
 def test_a_tracked_env_file_is_red_under_env_file_and_under_root_layout(build_repo, capsys):
@@ -193,7 +190,10 @@ def test_tsconfig_in_the_root_is_red_unless_declared(build_repo, capsys):
 def test_a_hundred_strays_print_a_hundred_sorted_findings(build_repo, capsys):
     names = [f"stray{number:03d}.txt" for number in range(100)]
     repo = build_repo({**GUIDANCE, **{name: "x" for name in reversed(names)}})
-    assert red(repo, Rule.ROOT_LAYOUT) == names
+    output = hygiene_output(capsys, repo)[1]
+    rows = [row for name in names for row in finding_rows(output, name)]
+    assert (red(repo, Rule.ROOT_LAYOUT), len(rows), [row.fix_follows for row in rows]) == (names, 100, [False] * 99 + [True])
+    assert output.count(f" {FIX_LABEL} ") == 1
 
 
 def test_a_declaration_is_no_loosening_at_the_verdict(pull_request, capsys):

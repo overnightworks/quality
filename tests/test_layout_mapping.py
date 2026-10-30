@@ -2,9 +2,20 @@
 
 import pytest
 
+from quality import checkout, layout
+from quality.report import FindingEvent
 from quality.rules import Rule
-from tests.support.check import hygiene_output
-from tests.support.layout import CONFIG, GUIDANCE, declaring, in_index, red
+from tests.support.check import hygiene_output, rule_findings
+from tests.support.layout import (
+    CONFIG,
+    GUIDANCE,
+    assert_empty_name_has_its_own_fact,
+    assert_prints_as_kind,
+    assert_row_is_kind,
+    declaring,
+    in_index,
+    red,
+)
 from tests.support.merge import ONE_JOB
 
 RULE = Rule.TEST_LAYOUT
@@ -116,58 +127,53 @@ def test_a_member_maps_only_into_its_own_project(build_repo, capsys, files, expe
     assert red(build_repo(project(*files)), RULE) == expected
 
 
-def test_each_failing_case_has_its_own_reason_and_fix(build_repo, capsys):
-    """#199 sentence 6 and E1: every case prints, sorted by path, and the folder failure names its target."""
+def test_each_failing_case_is_a_misplaced_finding_naming_its_own_values(build_repo, capsys):
+    """#199 sentence 6 and E1, #283 O12: every case prints, sorted by path, and the fact names the folder or name at fault."""
     repo = build_repo(project(
         "src/p/api/v1/routes.py", "tests/support/test_a.py", "tests/hygiene/test_b.py", "tests/test_c.py",
         "tests/workflows/test_d.py",
     ))
     code, output = hygiene_output(capsys, repo)
+    found = {finding.path: finding for finding in rule_findings(repo, RULE)}
     assert (code, red(repo, RULE)) == (1, [
         "tests/hygiene/test_b.py", "tests/support/test_a.py", "tests/test_c.py", "tests/workflows/test_d.py",
     ])
-    for words in (
-        "a test module in a support/ folder, which holds helpers",
-        "rename it if it is a helper, or move it to the folder that mirrors its module",
-        "its folder mirrors src/p/hygiene, which is no package folder",
-        "move it to the folder that mirrors its module's package",
-        "no module or package in src/p is named by a word prefix of c",
-        "rename it test_<module>[_<aspect>].py after what it tests",
-        "no workflow in .github/workflows is named by a word prefix of d",
-        "or declare it in quality/config.toml with [[layout.allow]]",
-    ):
-        assert words in output
+    named = {
+        "tests/hygiene/test_b.py": "src/p/hygiene",
+        "tests/support/test_a.py": f"{layout.SUPPORT_DIRECTORY}/",
+        "tests/test_c.py": "src/p",
+        "tests/workflows/test_d.py": str(checkout.WORKFLOW_DIRECTORY),
+    }
+    for path, value in named.items():
+        assert_row_is_kind(output, found[path], FindingEvent.MISPLACED, value)
 
 
-def test_a_project_with_several_packages_names_the_placement(build_repo, capsys):
+def test_a_project_with_several_packages_is_a_misplaced_finding(build_repo, capsys):
     """#199 sentence 6: the placement case."""
-    output = hygiene_output(capsys, build_repo(project("src/a/x.py", "src/b/y.py", "tests/test_x.py")))[1]
-    assert "a project with several packages keeps each test under tests/<package>/" in output
-    assert "move it under tests/<package>/ of the package it tests" in output
+    assert_prints_as_kind(capsys, build_repo(project("src/a/x.py", "src/b/y.py", "tests/test_x.py")), RULE, FindingEvent.MISPLACED)
 
 
-@pytest.mark.parametrize(
-    ("paths", "reasons", "fix"),
-    [
-        case("B15 two reasons", ["tests/workflows/ci/test_lint.py"],
-             ["workflow tests lie directly in tests/workflows/",
-              "no workflow in .github/workflows is named by a word prefix of lint"],
-             "move it up into tests/workflows/, or rename it test_<workflow>[_<aspect>].py after what it tests, "
-             "or declare it in quality/config.toml with [[layout.allow]], its path, the rule test-layout and a reason."),
-        case("B15 one reason", ["tests/workflows/ci/test_lint.py", ".github/workflows/lint.yml"],
-             ["workflow tests lie directly in tests/workflows/"],
-             "move it up into tests/workflows/, or declare it in quality/config.toml with [[layout.allow]], its path, the rule test-layout and a reason."),
-        case("B16 the member case", ["m/pyproject.toml", "m/src/q/x.py", "m/tests/workflows/test_lint.py"],
-             ["workflow tests belong to the root project's tests/workflows/"],
-             "move it to the root's tests/workflows/, or declare it in quality/config.toml with [[layout.allow]], its path, the rule test-layout and a reason."),
-    ],
-)
-def test_workflow_tests_lie_directly_in_the_roots_workflows_folder(build_repo, capsys, paths, reasons, fix):
-    """#199 sentences 2 and 6: two failures on one file give one finding, joined by a semicolon."""
-    output = hygiene_output(capsys, build_repo(project("src/p/x.py", *paths)))[1]
-    line = next(line for line in output.splitlines() if line.startswith(f"{RULE} "))
-    assert "; ".join(reasons) in line
-    assert f"  Fix: {fix}" in output.splitlines()
+WORKFLOW_TEST = "tests/workflows/ci/test_lint.py"
+
+
+def test_two_failures_on_one_file_give_one_finding_joining_the_single_failures(build_repo, capsys):
+    """#199 sentences 2 and 6, B15: the two-failure fact starts with the one-failure fact of the same folder problem, the
+    fixes join by `, or ` (and the two-failure fix does not contain the one-failure fix), each naming the allowance once."""
+    both = build_repo(project("src/p/x.py", WORKFLOW_TEST))
+    (two,) = rule_findings(both, RULE)
+    assert_prints_as_kind(capsys, both, RULE, FindingEvent.MISPLACED)
+    (both / ".github" / "workflows").mkdir(parents=True)
+    (both / ".github" / "workflows" / "lint.yml").write_text("name: lint\n")
+    in_index(both, "add", "--", ".github/workflows/lint.yml")
+    (one,) = rule_findings(both, RULE)
+    assert two.reason.startswith(f"{one.reason}; ")
+    assert (two.fix.count(RULE), one.fix.count(RULE), one.fix in two.fix) == (1, 1, False)
+
+
+def test_a_workflow_test_in_a_member_is_a_misplaced_finding(build_repo, capsys):
+    """#199 sentences 2 and 6, B16."""
+    repo = build_repo(project("src/p/x.py", "m/pyproject.toml", "m/src/q/x.py", "m/tests/workflows/test_lint.py"))
+    assert_prints_as_kind(capsys, repo, RULE, FindingEvent.MISPLACED)
 
 
 def test_a_declared_test_module_is_not_judged(build_repo, capsys):
@@ -185,7 +191,7 @@ def test_a_link_counts_by_its_name_and_is_never_followed(build_repo, capsys):
     assert red(repo, RULE) == ["tests/test_z.py"]
 
 
-def test_an_empty_test_name_says_it_is_empty(build_repo, capsys):
-    """#201 folded follow-up 1 (#199 sentence 6): the reason never reads "a word prefix of" an empty aspect."""
-    output = hygiene_output(capsys, build_repo(project("src/p/x.py", "tests/test_.py")))[1]
-    assert "is named by an empty name" in output
+def test_an_empty_test_name_is_not_described_as_a_name_with_nothing_in_it(build_repo, capsys):
+    """#201 folded follow-up 1 (#199 sentence 6)."""
+    repo = build_repo(project("src/p/x.py", "tests/test_.py", "tests/test_zz.py"))
+    assert_empty_name_has_its_own_fact(capsys, repo, RULE, "tests/test_.py", "tests/test_zz.py", "zz")

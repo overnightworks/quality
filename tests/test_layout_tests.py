@@ -2,8 +2,10 @@
 
 import pytest
 
+from quality.output import FIX_LABEL
+from quality.report import FindingEvent
 from quality.rules import Rule
-from tests.support.check import hygiene_output, refusals
+from tests.support.check import hygiene_output, refusals, rows_of, rule_findings
 from tests.support.layout import CONFIG, GUIDANCE, declaring, in_index, red
 from tests.support.merge import ONE_JOB
 
@@ -43,21 +45,19 @@ def test_rule_four_judges_every_path_under_tests(build_repo, capsys, files, expe
 def test_an_init_file_under_tests_is_red_unless_it_is_fixture_data(build_repo, capsys, init_files, expected):
     """#196 sentence 4."""
     repo = build_repo({**ROOT_PROJECT, **dict.fromkeys(init_files, "")})
-    output = hygiene_output(capsys, repo)[1]
     assert red(repo, RULE) == expected
-    assert ("delete it, or declare it" in output) == bool(expected)
+    assert {finding.event for finding in rule_findings(repo, RULE)} == ({FindingEvent.STRAY} if expected else set())
 
 
-def test_each_finding_case_has_its_own_reason_and_fix(build_repo, capsys):
-    """#196 sentence 6: both ways out are named; #196 E1: all printed, sorted by path."""
+def test_an_init_file_and_a_stray_helper_are_strays_with_a_fix_line_each(build_repo, capsys):
+    """#196 sentence 6, E1 and #283 O12: all printed, sorted by path, both ways out in each fix; unequal fixes print apiece."""
     repo = build_repo({**ROOT_PROJECT, "tests/__init__.py": "", "tests/helpers.py": ""})
     code, output = hygiene_output(capsys, repo)
-    first, second = output.split(f"{RULE} tests/helpers.py")
-    assert code == 1
-    assert "pytest's importlib mode does not need" in first
-    assert "delete it, or declare it" in first
-    assert "a support/ folder (a helper) or a fixtures/ folder (data)" in second
-    assert "the rule test-layout" in second
+    init, helper = rule_findings(repo, RULE)
+    rows = [row for finding in (init, helper) for row in rows_of(output, finding)]
+    assert (code, [finding.event for finding in (init, helper)]) == (1, [FindingEvent.STRAY] * 2)
+    assert ([row.fix_follows for row in rows], output.count(f" {FIX_LABEL} ")) == ([True, True], 2)
+    assert init.fix != helper.fix
 
 
 @pytest.mark.parametrize(

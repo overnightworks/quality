@@ -3,9 +3,23 @@
 
 import pytest
 
+from quality import layout
+from quality.output import FIX_LABEL
+from quality.report import FindingEvent
 from quality.rules import Rule
-from tests.support.check import hygiene_output, refusals
-from tests.support.layout import CONFIG, EXAMPLE_SHA, GUIDANCE, declaring, in_index, red
+from tests.support.check import hygiene_output, refusals, rows_of, rule_findings
+from tests.support.git_repositories import put
+from tests.support.layout import (
+    CONFIG,
+    EXAMPLE_SHA,
+    GUIDANCE,
+    assert_prints_as_kind,
+    assert_prints_escaped_row,
+    declaring,
+    in_index,
+    red,
+    rule_ids_in,
+)
 from tests.support.merge import ONE_JOB
 
 
@@ -58,10 +72,8 @@ def test_the_mode_comes_from_the_index_not_the_disk(build_repo, capsys):
 def test_findings_are_all_printed_sorted_by_path_with_both_ways_out(build_repo, capsys):
     """#184 sentence 4: all findings, sorted by path, naming both ways out."""
     repo = build_repo({**GUIDANCE, "z/NOTES": "x", "EDGE_SHA": "x", "a/b/TODO": "x"})
-    code, output = hygiene_output(capsys, repo)
+    code = hygiene_output(capsys, repo)[0]
     assert (code, red(repo)) == (1, ["EDGE_SHA", "a/b/TODO", "z/NOTES"])
-    assert "[[layout.allow]]" in output
-    assert "git update-index" not in output
 
 
 def test_a_declared_file_is_clean_and_a_declaration_for_a_compliant_file_stays_clean(build_repo, capsys):
@@ -74,9 +86,9 @@ def test_a_declared_file_is_clean_and_a_declaration_for_a_compliant_file_stays_c
 def test_a_declaration_for_an_untracked_path_is_a_finding(build_repo, capsys):
     """#184 sentence 3: a declared path that is not tracked is a finding."""
     repo = build_repo({**GUIDANCE, CONFIG: ONE_JOB + declaring("gone/NOTES")})
-    code, output = hygiene_output(capsys, repo)
+    code = hygiene_output(capsys, repo)[0]
     assert (code, red(repo)) == (1, ["gone/NOTES"])
-    assert "[[layout.allow]]" in output
+    assert_prints_as_kind(capsys, repo, Rule.FILE_SUFFIX, FindingEvent.UNUSED)
 
 
 def test_a_declaration_is_exact_so_another_case_is_not_it(build_repo, capsys):
@@ -144,8 +156,7 @@ def test_the_layout_table_is_separate_from_the_root_table(build_repo, capsys):
 def test_a_path_with_a_control_character_prints_escaped(build_repo, capsys):
     """#184 sentence 4: a finding prints the path escaped."""
     repo = build_repo({**GUIDANCE, "bad\x01name": "x"})
-    assert red(repo) == ["bad\\x01name"]
-    assert "\x01" not in hygiene_output(capsys, repo)[1]
+    assert_prints_escaped_row(capsys, repo, Rule.FILE_SUFFIX, "bad\\x01name")
 
 
 def test_an_index_record_that_cannot_be_read_cannot_be_judged(build_repo, capsys, fake_git):
@@ -298,9 +309,9 @@ def test_a_script_header_declaration_covers_only_the_header(build_repo, capsys):
 def test_a_declaration_for_an_untracked_script_names_its_own_rule(build_repo, capsys, rule):
     """#190 sentence 6: a declared path that is not tracked is a finding naming its own rule."""
     repo = build_repo({**GUIDANCE, CONFIG: ONE_JOB + declaring("scripts/gone.sh", rule=rule)})
-    code, output = hygiene_output(capsys, repo)
+    code = hygiene_output(capsys, repo)[0]
     assert (code, red(repo, rule), red(repo)) == (1, ["scripts/gone.sh"], [])
-    assert "[[layout.allow]]" in output
+    assert_prints_as_kind(capsys, repo, rule, FindingEvent.UNUSED)
 
 
 def test_a_declaration_for_a_compliant_script_stays_clean(build_repo, capsys):
@@ -331,3 +342,70 @@ def test_a_file_under_tests_is_not_read_for_a_shebang(build_repo, capsys):
     repo = build_repo({**GUIDANCE, "tests/data.bin": "x\n"})
     (repo / "tests" / "data.bin").chmod(0)
     assert hygiene_output(capsys, repo)[0] == 0
+
+
+def test_a_suffixless_file_is_a_tracked_finding_the_door_prints_as_its_row(build_repo, capsys):
+    """#283 O12 and picture :48: the kind `tracked`, no trailing period, the row equal to the finding."""
+    assert_prints_as_kind(capsys, build_repo({**GUIDANCE, "docs/EDGE_SHA": "x"}), Rule.FILE_SUFFIX, FindingEvent.TRACKED)
+
+
+def test_three_suffixless_files_print_three_rows_and_one_fix_after_the_third(build_repo, capsys):
+    """#228 rule 7, decision 4: a fix shared by consecutive findings prints once, under the last."""
+    repo = build_repo({**GUIDANCE, "docs/EDGE_SHA": "x", "docs/b/TODO": "x", "docs/NOTES": "x"})
+    output = hygiene_output(capsys, repo)[1]
+    rows = [row for finding in rule_findings(repo, Rule.FILE_SUFFIX) for row in rows_of(output, finding)]
+    assert ([row.fix_follows for row in rows], output.count(f" {FIX_LABEL} ")) == ([False, False, True], 1)
+
+
+LAYOUT_ALLOWANCE_SCENARIOS = [
+    (Rule.FILE_SUFFIX, {"docs/NOTES": "x"}),
+    (Rule.SCRIPT_NAME, {"scripts/check.sh": SHELL_HEADER}),
+    (Rule.SCRIPT_HEADER, {"scripts/run_it.sh": "set -e\n"}),
+    (Rule.TEST_LAYOUT, {"pyproject.toml": "", "src/p/x.py": "", "tests/helpers.py": ""}),
+    (Rule.TEST_IMPORT, {"pyproject.toml": "", "tests/conftest.py": "", "tests/support/y.py": "import conftest\n"}),
+]
+
+
+@pytest.mark.parametrize(("rule", "files"), LAYOUT_ALLOWANCE_SCENARIOS, ids=[rule.value for rule, _ in LAYOUT_ALLOWANCE_SCENARIOS])
+def test_the_allowance_fix_names_the_findings_own_rule_and_its_entry_clears_the_finding(build_repo, rule, files):
+    """#283 decision 12: the one rule id a fix names is the finding's own, and the entry it asks for is accepted."""
+    repo = build_repo({**GUIDANCE, **files})
+    (finding,) = rule_findings(repo, rule)
+    assert rule_ids_in(finding.fix) == {rule.value}
+    put(repo / CONFIG, ONE_JOB + declaring(finding.path, rule=rule))
+    assert rule_findings(repo, rule) == []
+
+
+def test_a_path_declared_under_two_rules_and_untracked_is_one_equal_stale_row_per_rule(build_repo, capsys):
+    """#283 O18: the rows read alike and name no rule; deleting every entry of the path clears both."""
+    config = ONE_JOB + declaring("scripts/gone.sh", rule=Rule.SCRIPT_NAME) + declaring("scripts/gone.sh", rule=Rule.SCRIPT_HEADER)
+    repo = build_repo({**GUIDANCE, CONFIG: config})
+    found = [finding for rule in SCRIPT_RULES for finding in rule_findings(repo, rule)]
+    output = hygiene_output(capsys, repo)[1]
+    assert [(finding.rule, finding.event) for finding in found] == [(rule, FindingEvent.UNUSED) for rule in SCRIPT_RULES]
+    assert (len({(finding.reason, finding.fix) for finding in found}), rule_ids_in(found[0].fix)) == (1, set())
+    assert [len(rows_of(output, finding)) for finding in found] == [2, 2]
+    put(repo / CONFIG, ONE_JOB)
+    assert [finding for rule in SCRIPT_RULES for finding in rule_findings(repo, rule)] == []
+
+
+def test_script_name_is_misnamed_where_the_shape_breaks_and_misplaced_where_only_the_place_does(build_repo, capsys):
+    """#283 O19: both broken is `misnamed` and holds the place-only fact; all three share one fix, printed once."""
+    paths = ["scripts/check.sh", "tools/Entry.sh", "tools/entry_point.sh"]
+    repo = build_repo({**GUIDANCE, **dict.fromkeys(paths, SHELL_HEADER)})
+    for path in paths[1:]:
+        in_index(repo, "update-index", "--chmod=+x", path)
+    found = {finding.path: finding for finding in rule_findings(repo, Rule.SCRIPT_NAME)}
+    output = hygiene_output(capsys, repo)[1]
+    assert [found[path].event for path in paths] == [FindingEvent.MISNAMED, FindingEvent.MISNAMED, FindingEvent.MISPLACED]
+    assert found["tools/entry_point.sh"].reason in found["tools/Entry.sh"].reason
+    assert len({finding.fix for finding in found.values()}) == 1
+    rows = [row for path in paths for row in rows_of(output, found[path])]
+    assert ([row.fix_follows for row in rows], output.count(f" {FIX_LABEL} ")) == ([False, False, True], 1)
+
+
+def test_a_script_without_a_header_is_a_no_header_finding(build_repo, capsys):
+    """#283 O12: the fact names the window it checks, never the file."""
+    repo = build_repo({**GUIDANCE, "scripts/run_it.sh": "set -e\n"})
+    finding = assert_prints_as_kind(capsys, repo, Rule.SCRIPT_HEADER, FindingEvent.NO_HEADER, str(layout.HEADER_LINES))
+    assert finding.path not in finding.reason

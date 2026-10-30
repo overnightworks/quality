@@ -227,9 +227,8 @@ def test_an_env_name_with_a_control_format_or_separator_character_prints_as_one_
     repo = build_repo({name: "A=1\n"})
     code, lines = door_lines(capsys, "hygiene", str(repo))
     (finding,) = rule_findings(repo, Rule.ENV_FILE)
-    (row,) = rows_of("\n".join(lines), finding)
     assert (code, finding.location) == (1, escaped)
-    assert_row_prints_finding(row, finding)
+    assert_row_prints_finding(*rows_of("\n".join(lines), finding), finding)
     assert_every_line_starts_with_the_door(lines)
 
 
@@ -538,15 +537,16 @@ def test_the_files_block_lists_the_event_rows_in_run_order_with_one_fix_per_run(
         assert_row_prints_finding(row, finding)
 
 
-def test_findings_without_an_event_follow_the_rows_in_today_s_form(build_repo, capsys):
-    repo = build_repo({".env": "A=1\n", "notes.txt": "x\n"})
+def test_findings_without_an_event_follow_the_event_rows_in_today_s_form(build_repo, capsys):
+    repo = build_repo({".env": "A=1\n", "CLAUDE.md": "own\n", "notes.txt": "x\n", "docs/NOTES": "x\n", "pyproject.toml": '[project]\nrequires-python = ">=3.12"\n'})
     code, out, _ = frame_run(capsys, repo)
+    found = check.run_hygiene(repo, cli.INSTALLED_RUFF, cli.INSTALLED_ZIZMOR).findings
+    rows, legacy = [f for f in found if f.event is not None], [line for f in found if f.event is None for line in report.render(f).split("\n")]
     files_row = next(number for number, line in enumerate(out) if line.startswith("  ! files  "))
-    legacy = [finding for finding in check.run_hygiene(repo, cli.INSTALLED_RUFF, cli.INSTALLED_ZIZMOR).findings if finding.event is None]
-    assert (code, out[files_row].endswith("3 findings"), env_row_stands("\n".join(out))) == (1, True, True)
-    assert out[files_row + 1].split()[1] == ".env"
-    legacy_lines = [line for finding in legacy for line in report.render(finding).split("\n")]
-    assert out[files_row + 3 : files_row + 3 + len(legacy_lines)] == legacy_lines
+    shown = [line.split()[1] for line in out[files_row + 1 :] if line.lstrip().startswith(f"{Glyph.NEEDS_YOU} ")]
+    assert (code, out[files_row].endswith(f"{len(found)} findings"), out[out.index(legacy[0]) :][: len(legacy)], shown) == (1, True, legacy, [f.location for f in rows])
+    for finding in rows:
+        assert_row_prints_finding(*rows_of("\n".join(out[files_row:]), finding), finding)
 
 
 def test_an_area_that_cannot_check_ends_the_run_with_the_pair_and_no_verdict(build_repo, use_mise, served_scanners, capsys):
