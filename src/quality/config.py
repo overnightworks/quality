@@ -1,5 +1,7 @@
 import datetime
 import re
+import unicodedata
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path, PurePosixPath
@@ -34,59 +36,63 @@ SHA256_HEX = re.compile(r"[0-9a-f]{64}")
 REPOSITORY_NAME = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 ITEM_REFERENCE = re.compile(rf"(?:{REPOSITORY_NAME.pattern})?#[1-9][0-9]*")
 ONE_LINE_REASON = "a non-empty one-line reason"
-EXAMPLE = '[gate]\nmandatory_jobs = ["checks"]'
-LEGACY_EXAMPLE = '[gate]\nlegacy = "fail"'
-ALLOWANCE_EXAMPLE = (
-    '[secrets]\nallow = [{ rule = "aws-access-token", file = "tests/fixture.py", '
-    'secret_sha256 = "<64 lowercase hex>", reason = "fixture value, not a key" }]'
+BARE_KEY = re.compile(r"[A-Za-z0-9_-]+")
+type ExampleLines = tuple[str, *tuple[str, ...]]
+EXAMPLE: ExampleLines = ("[gate]", 'mandatory_jobs = ["checks"]')
+LEGACY_EXAMPLE: ExampleLines = ("[gate]", 'legacy = "fail"')
+ALLOWANCE_EXAMPLE: ExampleLines = (
+    "[secrets]",
+    (
+        'allow = [{ rule = "aws-access-token", file = "tests/fixture.py", secret_sha256 = "<64 lowercase hex>", '
+        'reason = "fixture value, not a key" }]'
+    ),
 )
-LOOSENED_EXAMPLE = (
-    "[[gate.loosened]]\n"
-    "what = 'mandatory job \"Acceptance evidence (integration)\" removed'\n"
-    'item = "overnightworks/songmaker#1345"\n'
-    "date = 2026-10-20\n"
-    'reason = "the operator ruled the requirement shelf machinery out"'
+LOOSENED_EXAMPLE: ExampleLines = (
+    "[[gate.loosened]]",
+    "what = 'mandatory job \"Acceptance evidence (integration)\" removed'",
+    'item = "overnightworks/songmaker#1345"',
+    "date = 2026-10-20",
+    'reason = "the operator ruled the requirement shelf machinery out"',
 )
-ADVISORY_ALLOWANCE_EXAMPLE = (
-    "[[advisories.allow]]\n"
-    'id = "GHSA-462x-pgg6-55fp"\n'
-    'lock = "speech/providers/qwen/uv.lock"\n'
-    "until = 2027-01-31\n"
-    "date = 2026-10-21\n"
-    'item = "overnightworks/agent-presentator#371"\n'
-    'reason = "gradio caps pillow<13; no image input"'
+ADVISORY_ALLOWANCE_EXAMPLE: ExampleLines = (
+    "[[advisories.allow]]",
+    'id = "GHSA-462x-pgg6-55fp"',
+    'lock = "speech/providers/qwen/uv.lock"',
+    "until = 2027-01-31",
+    "date = 2026-10-21",
+    'item = "overnightworks/agent-presentator#371"',
+    'reason = "gradio caps pillow<13; no image input"',
 )
-ROOT_ALLOWANCE_EXAMPLE = (
-    "[[root.allow]]\n"
-    'entry = "frontend/"\n'
-    'reason = "the web client, built apart from the Python package"'
+ROOT_ALLOWANCE_EXAMPLE: ExampleLines = (
+    "[[root.allow]]",
+    'entry = "frontend/"',
+    'reason = "the web client, built apart from the Python package"',
 )
-LAYOUT_ALLOWANCE_EXAMPLE = (
-    "[[layout.allow]]\n"
-    'path = "deploy/EDGE_SHA"\n'
-    'rule = "file-suffix"\n'
-    'reason = "the deploy script reads it by this name"'
+LAYOUT_ALLOWANCE_EXAMPLE: ExampleLines = (
+    "[[layout.allow]]",
+    'path = "deploy/EDGE_SHA"',
+    'rule = "file-suffix"',
+    'reason = "the deploy script reads it by this name"',
 )
-PYTHON_ALLOWANCE_EXAMPLE = (
-    "[[python.allow]]\n"
-    'path = "speech/providers/qwen/pyproject.toml"\n'
-    'reason = "qwen-tts has no cp314 wheel"'
+PYTHON_ALLOWANCE_EXAMPLE: ExampleLines = (
+    "[[python.allow]]",
+    'path = "speech/providers/qwen/pyproject.toml"',
+    'reason = "qwen-tts has no cp314 wheel"',
 )
-COMPOSE_ALLOWANCE_EXAMPLE = (
-    "[[compose.allow]]\n"
-    'file = "compose.yaml"\n'
-    'service = "traefik"\n'
-    'reason = "it terminates TLS on the host\'s own interfaces"'
+COMPOSE_ALLOWANCE_EXAMPLE: ExampleLines = (
+    "[[compose.allow]]",
+    'file = "compose.yaml"',
+    'service = "traefik"',
+    'reason = "it terminates TLS on the host\'s own interfaces"',
 )
-GENERATED_FILE_EXAMPLE = (
-    "[[size.generated]]\n"
-    'path = "frontend/src/lib/api/types.ts"\n'
-    'job = "Backend (Python 3.14)"\n'
-    'item = "overnightworks/songmaker#1784"\n'
-    "date = 2026-10-30\n"
-    'reason = "written by scripts/generate_types.py, proven by its --check"'
+GENERATED_FILE_EXAMPLE: ExampleLines = (
+    "[[size.generated]]",
+    'path = "frontend/src/lib/api/types.ts"',
+    'job = "Backend (Python 3.14)"',
+    'item = "overnightworks/songmaker#1784"',
+    "date = 2026-10-30",
+    'reason = "written by scripts/generate_types.py, proven by its --check"',
 )
-
 
 class LegacyMode(Enum):
     """What the repository's open findings on its default branch do to a pull request."""
@@ -202,7 +208,7 @@ class ConfigError(Exception):
 
     `str` is the one-line form for the doors that print a single line; the structured fields are the contract."""
 
-    def __init__(self, fact: str, example: tuple[str, *tuple[str, ...]] | None = None) -> None:
+    def __init__(self, fact: str, example: ExampleLines | None = None) -> None:
         super().__init__(fact)
         self.fact = fact
         self.example = example
@@ -233,24 +239,61 @@ class _Document:
     allow_lists: AllowLists
 
 
-def _parse(text: str, example: str) -> dict:
+def _toml_string(value: str) -> str:
+    """`value` as a TOML basic string: `\\` and `"` escaped, every control character (category Cc) as `\\uNNNN`, every
+    other character as itself, so what a person copies reads back as `value`; `report.printable` escapes the rest
+    when the line is printed."""
+    return f'"{"".join(_escaped_in_string(character) for character in value)}"'
+
+
+def _escaped_in_string(character: str) -> str:
+    if character in '\\"':
+        return f"\\{character}"
+    return f"\\u{ord(character):04x}" if unicodedata.category(character) == "Cc" else character
+
+
+def _key_name(key: str) -> str:
+    """A key as TOML writes it: bare when it can be, else a basic string."""
+    return key if BARE_KEY.fullmatch(key) else _toml_string(key)
+
+
+def _unknown_keys(unknown: set[str]) -> str:
+    return f"unknown {'key' if len(unknown) == 1 else 'keys'} {', '.join(_key_name(key) for key in sorted(unknown))}"
+
+
+def _parse(text: str, example: ExampleLines) -> dict:
     try:
         return repository.parse_toml(text)
     except repository.TomlError as error:
-        raise ConfigError(f"{CONFIG_PATH} is not valid TOML ({error}) - write it like:\n{example}") from error
+        raise ConfigError(f"{CONFIG_PATH} is not valid TOML ({error})", example) from error
 
 
-def _table(document: dict, name: str, example: str) -> dict:
+def _table(document: dict, name: str, example: ExampleLines) -> dict:
     table = document.get(name, {})
     if not isinstance(table, dict):
-        raise ConfigError(f"{CONFIG_PATH} has [{name}] as a value, not a table - write it like:\n{example}")
+        raise ConfigError(f"{CONFIG_PATH} has [{name}] as a value, not a table", example)
     return table
+
+
+def _entries(table: dict, key: str, heading: str, example: ExampleLines, shape: str = "an array of tables") -> Iterator[tuple[int, object]]:
+    """The entries of a list in `table` with their 1-based positions, counted once for every reader."""
+    entries = table.get(key, [])
+    if not isinstance(entries, list):
+        raise ConfigError(f"{CONFIG_PATH} needs {heading} as {shape}", example)
+    return enumerate(entries, start=1)
+
+
+def _entry_refusal(heading: str, position: int, example: ExampleLines | None) -> Callable[[str], ConfigError]:
+    def refuse(need: str) -> ConfigError:
+        return ConfigError(f"{CONFIG_PATH} {heading} entry {position} needs {need}", example)
+
+    return refuse
 
 
 def _refuse_unknown_secrets_keys(secrets: dict) -> None:
     unknown = set(secrets) - SECRETS_KEYS
     if unknown:
-        raise ConfigError(f"{CONFIG_PATH} has unknown key(s) {sorted(unknown)} in [secrets] - only allow exists")
+        raise ConfigError(f"{CONFIG_PATH} has {_unknown_keys(unknown)} in [secrets] - only allow exists")
 
 
 def _refuse_unknown_keys(
@@ -267,14 +310,20 @@ def _refuse_unknown_keys(
         | (set(size) - SIZE_KEYS)
     )
     if unknown:
-        example = f", like:\n{ROOT_ALLOWANCE_EXAMPLE}" if set(root) - ROOT_KEYS else ""
-        example = f", like:\n{LAYOUT_ALLOWANCE_EXAMPLE}" if set(layout) - LAYOUT_KEYS else example
-        example = f", like:\n{PYTHON_ALLOWANCE_EXAMPLE}" if set(python) - PYTHON_KEYS else example
-        example = f", like:\n{COMPOSE_ALLOWANCE_EXAMPLE}" if set(compose) - COMPOSE_KEYS else example
-        example = f", like:\n{GENERATED_FILE_EXAMPLE}" if set(size) - SIZE_KEYS else example
+        example = None
+        for table, keys, table_example in (
+            (root, ROOT_KEYS, ROOT_ALLOWANCE_EXAMPLE),
+            (layout, LAYOUT_KEYS, LAYOUT_ALLOWANCE_EXAMPLE),
+            (python, PYTHON_KEYS, PYTHON_ALLOWANCE_EXAMPLE),
+            (compose, COMPOSE_KEYS, COMPOSE_ALLOWANCE_EXAMPLE),
+            (size, SIZE_KEYS, GENERATED_FILE_EXAMPLE),
+        ):
+            example = table_example if set(table) - keys else example
         raise ConfigError(
-            f"{CONFIG_PATH} has unknown key(s) {sorted(unknown)} - only [gate] mandatory_jobs, [gate] legacy, "
-            f"[[gate.loosened]], [secrets] allow, [[advisories.allow]], [[root.allow]], [[layout.allow]], [[python.allow]], [[compose.allow]] and [[size.generated]] exist{example}"
+            f"{CONFIG_PATH} has {_unknown_keys(unknown)} - only [gate] mandatory_jobs, [gate] legacy, "
+            "[[gate.loosened]], [secrets] allow, [[advisories.allow]], [[root.allow]], [[layout.allow]], "
+            "[[python.allow]], [[compose.allow]] and [[size.generated]] exist",
+            example,
         )
 
 
@@ -315,9 +364,7 @@ def _job_names(gate: dict) -> tuple[str, ...]:
 def _mandatory_jobs(gate: dict) -> tuple[str, ...]:
     names = _job_names(gate)
     if not names:
-        raise ConfigError(
-            f"{CONFIG_PATH} needs [gate] mandatory_jobs as a non-empty list of job names, like:\n{EXAMPLE}"
-        )
+        raise ConfigError(f"{CONFIG_PATH} needs [gate] mandatory_jobs as a non-empty list of job names", EXAMPLE)
     return names
 
 
@@ -328,7 +375,7 @@ def _legacy_mode(gate: dict) -> LegacyMode:
         return LegacyMode(value)
     except ValueError:
         modes = " or ".join(f'"{mode.value}"' for mode in LegacyMode)
-        raise ConfigError(f"{CONFIG_PATH} has [gate] legacy = {value!r}; it must be {modes}, like:\n{LEGACY_EXAMPLE}") from None
+        raise ConfigError(f"{CONFIG_PATH} [gate] legacy must be {modes}", LEGACY_EXAMPLE) from None
 
 
 def _spans_lines(reason: str) -> bool:
@@ -345,25 +392,21 @@ def _is_date_without_time(value: object) -> bool:
 
 
 def _declarations(gate: dict) -> tuple[Declaration, ...]:
-    entries = gate.get("loosened", [])
-    if not isinstance(entries, list):
-        raise ConfigError(f"{CONFIG_PATH} needs [[gate.loosened]] as an array of tables, like:\n{LOOSENED_EXAMPLE}")
     declarations: dict[str, Declaration] = {}
-    for entry in entries:
-        declaration = _read_declaration(entry)
+    for position, entry in _entries(gate, "loosened", "[[gate.loosened]]", LOOSENED_EXAMPLE):
+        declaration = _read_declaration(entry, position)
         if declaration.what in declarations:
             raise ConfigError(
-                f"{CONFIG_PATH} [[gate.loosened]] declares what = {declaration.what!r} twice; one entry per loosening, "
-                f"like:\n{LOOSENED_EXAMPLE}"
+                f"{CONFIG_PATH} [[gate.loosened]] declares what = {_toml_string(declaration.what)} twice; "
+                "one entry per loosening",
+                LOOSENED_EXAMPLE,
             )
         declarations[declaration.what] = declaration
     return tuple(declarations.values())
 
 
-def _read_declaration(entry: object) -> Declaration:
-    def refuse(need: str) -> ConfigError:
-        return ConfigError(f"{CONFIG_PATH} [[gate.loosened]] entry {entry!r} needs {need}, like:\n{LOOSENED_EXAMPLE}")
-
+def _read_declaration(entry: object, position: int) -> Declaration:
+    refuse = _entry_refusal("[[gate.loosened]]", position, LOOSENED_EXAMPLE)
     if not isinstance(entry, dict) or set(entry) != DECLARATION_KEYS:
         raise refuse("exactly a what, an item, a date and a reason")
     what, item, date, reason = (entry[key] for key in ("what", "item", "date", "reason"))
@@ -379,29 +422,20 @@ def _read_declaration(entry: object) -> Declaration:
 
 
 def _advisory_allowances(advisories: dict) -> tuple[AdvisoryAllowance, ...]:
-    entries = advisories.get("allow", [])
-    if not isinstance(entries, list):
-        raise ConfigError(
-            f"{CONFIG_PATH} needs [[advisories.allow]] as an array of tables, like:\n{ADVISORY_ALLOWANCE_EXAMPLE}"
-        )
     allowances: dict[tuple[str, str], AdvisoryAllowance] = {}
-    for entry in entries:
-        allowance = _read_advisory_allowance(entry)
+    for position, entry in _entries(advisories, "allow", "[[advisories.allow]]", ADVISORY_ALLOWANCE_EXAMPLE):
+        allowance = _read_advisory_allowance(entry, position)
         if allowance.key in allowances:
             raise ConfigError(
-                f"{CONFIG_PATH} [[advisories.allow]] allows {allowance.id} in {allowance.lock} twice; one entry per "
-                "advisory and lock file"
+                f"{CONFIG_PATH} [[advisories.allow]] allows id = {_toml_string(allowance.id)} in lock = "
+                f"{_toml_string(allowance.lock)} twice; one entry per advisory and lock file"
             )
         allowances[allowance.key] = allowance
     return tuple(allowances.values())
 
 
-def _read_advisory_allowance(entry: object) -> AdvisoryAllowance:
-    def refuse(need: str) -> ConfigError:
-        return ConfigError(
-            f"{CONFIG_PATH} [[advisories.allow]] entry {entry!r} needs {need}, like:\n{ADVISORY_ALLOWANCE_EXAMPLE}"
-        )
-
+def _read_advisory_allowance(entry: object, position: int) -> AdvisoryAllowance:
+    refuse = _entry_refusal("[[advisories.allow]]", position, ADVISORY_ALLOWANCE_EXAMPLE)
     if not isinstance(entry, dict) or set(entry) != ADVISORY_ALLOWANCE_KEYS:
         raise refuse("exactly an id, a lock, an until, a date, an item and a reason")
     identifier, lock, until, date, item, reason = (
@@ -417,16 +451,14 @@ def _read_advisory_allowance(entry: object) -> AdvisoryAllowance:
 
 
 def _root_allowances(root: dict) -> tuple[RootAllowance, ...]:
-    entries = root.get("allow", [])
-    if not isinstance(entries, list):
-        raise ConfigError(f"{CONFIG_PATH} needs [[root.allow]] as an array of tables, like:\n{ROOT_ALLOWANCE_EXAMPLE}")
     allowances: dict[str, RootAllowance] = {}
-    for entry in entries:
-        allowance = _read_root_allowance(entry)
+    for position, entry in _entries(root, "allow", "[[root.allow]]", ROOT_ALLOWANCE_EXAMPLE):
+        allowance = _read_root_allowance(entry, position)
         if allowance.entry in allowances:
             raise ConfigError(
-                f"{CONFIG_PATH} [[root.allow]] declares entry = {allowance.entry!r} twice; one entry per root entry, "
-                f"like:\n{ROOT_ALLOWANCE_EXAMPLE}"
+                f"{CONFIG_PATH} [[root.allow]] declares entry = {_toml_string(allowance.entry)} twice; "
+                "one entry per root entry",
+                ROOT_ALLOWANCE_EXAMPLE,
             )
         allowances[allowance.entry] = allowance
     return tuple(allowances.values())
@@ -440,10 +472,8 @@ def _is_root_entry(entry: object) -> bool:
     return bool(name.strip()) and "/" not in name and name not in NOT_ROOT_ENTRY_NAMES
 
 
-def _read_root_allowance(entry: object) -> RootAllowance:
-    def refuse(need: str) -> ConfigError:
-        return ConfigError(f"{CONFIG_PATH} [[root.allow]] entry {entry!r} needs {need}, like:\n{ROOT_ALLOWANCE_EXAMPLE}")
-
+def _read_root_allowance(entry: object, position: int) -> RootAllowance:
+    refuse = _entry_refusal("[[root.allow]]", position, ROOT_ALLOWANCE_EXAMPLE)
     if not isinstance(entry, dict) or set(entry) != ROOT_ALLOWANCE_KEYS:
         raise refuse("exactly an entry and a reason")
     name, reason = entry["entry"], entry["reason"]
@@ -455,42 +485,35 @@ def _read_root_allowance(entry: object) -> RootAllowance:
 
 
 def _layout_allowances(layout: dict) -> tuple[LayoutAllowance, ...]:
-    entries = layout.get("allow", [])
-    if not isinstance(entries, list):
-        raise ConfigError(f"{CONFIG_PATH} needs [[layout.allow]] as an array of tables, like:\n{LAYOUT_ALLOWANCE_EXAMPLE}")
     allowances: dict[tuple[Rule, str], LayoutAllowance] = {}
-    for entry in entries:
-        allowance = _read_layout_allowance(entry)
+    for position, entry in _entries(layout, "allow", "[[layout.allow]]", LAYOUT_ALLOWANCE_EXAMPLE):
+        allowance = _read_layout_allowance(entry, position)
         key = (allowance.rule, allowance.path)
         if key in allowances:
             raise ConfigError(
-                f"{CONFIG_PATH} [[layout.allow]] declares path = {allowance.path!r} for rule = "
-                f"{allowance.rule.value!r} twice; one declaration per rule and path, like:\n{LAYOUT_ALLOWANCE_EXAMPLE}"
+                f"{CONFIG_PATH} [[layout.allow]] declares path = {_toml_string(allowance.path)} for rule = "
+                f"{_toml_string(allowance.rule.value)} twice; one declaration per rule and path",
+                LAYOUT_ALLOWANCE_EXAMPLE,
             )
         allowances[key] = allowance
     return tuple(allowances.values())
 
 
 def _python_allowances(python: dict) -> tuple[PythonAllowance, ...]:
-    entries = python.get("allow", [])
-    if not isinstance(entries, list):
-        raise ConfigError(f"{CONFIG_PATH} needs [[python.allow]] as an array of tables, like:\n{PYTHON_ALLOWANCE_EXAMPLE}")
     allowances: dict[str, PythonAllowance] = {}
-    for entry in entries:
-        allowance = _read_python_allowance(entry)
+    for position, entry in _entries(python, "allow", "[[python.allow]]", PYTHON_ALLOWANCE_EXAMPLE):
+        allowance = _read_python_allowance(entry, position)
         if allowance.path in allowances:
             raise ConfigError(
-                f"{CONFIG_PATH} [[python.allow]] declares path = {allowance.path!r} twice; one entry per path, "
-                f"like:\n{PYTHON_ALLOWANCE_EXAMPLE}"
+                f"{CONFIG_PATH} [[python.allow]] declares path = {_toml_string(allowance.path)} twice; one entry per path",
+                PYTHON_ALLOWANCE_EXAMPLE,
             )
         allowances[allowance.path] = allowance
     return tuple(allowances.values())
 
 
-def _read_python_allowance(entry: object) -> PythonAllowance:
-    def refuse(need: str) -> ConfigError:
-        return ConfigError(f"{CONFIG_PATH} [[python.allow]] entry {entry!r} needs {need}, like:\n{PYTHON_ALLOWANCE_EXAMPLE}")
-
+def _read_python_allowance(entry: object, position: int) -> PythonAllowance:
+    refuse = _entry_refusal("[[python.allow]]", position, PYTHON_ALLOWANCE_EXAMPLE)
     if not isinstance(entry, dict) or set(entry) != PYTHON_ALLOWANCE_KEYS:
         raise refuse("exactly a path and a reason")
     path, reason = entry["path"], entry["reason"]
@@ -511,43 +534,37 @@ def _is_exact_file_path(path: object) -> bool:
     )
 
 
-def _read_layout_allowance(entry: object) -> LayoutAllowance:
-    def refuse(need: str) -> ConfigError:
-        return ConfigError(f"{CONFIG_PATH} [[layout.allow]] entry {entry!r} needs {need}, like:\n{LAYOUT_ALLOWANCE_EXAMPLE}")
-
+def _read_layout_allowance(entry: object, position: int) -> LayoutAllowance:
+    refuse = _entry_refusal("[[layout.allow]]", position, LAYOUT_ALLOWANCE_EXAMPLE)
     if not isinstance(entry, dict) or set(entry) != LAYOUT_ALLOWANCE_KEYS:
         raise refuse("exactly a path, a rule and a reason")
     path, rule, reason = entry["path"], entry["rule"], entry["reason"]
     if not _is_exact_file_path(path):
         raise refuse("path as the exact tracked path of one file: no folder, pattern, .. or absolute path")
     if rule not in LAYOUT_RULES:
-        raise refuse(f"rule as one of {sorted(str(known) for known in LAYOUT_RULES)}")
+        raise refuse(f"rule as one of {', '.join(sorted(str(known) for known in LAYOUT_RULES))}")
     if not _is_one_line_text(reason):
         raise refuse(ONE_LINE_REASON)
     return LayoutAllowance(path, Rule(rule), reason)
 
 
 def _compose_allowances(compose: dict) -> tuple[ComposeAllowance, ...]:
-    entries = compose.get("allow", [])
-    if not isinstance(entries, list):
-        raise ConfigError(f"{CONFIG_PATH} needs [[compose.allow]] as an array of tables, like:\n{COMPOSE_ALLOWANCE_EXAMPLE}")
     allowances: dict[tuple[str, str], ComposeAllowance] = {}
-    for entry in entries:
-        allowance = _read_compose_allowance(entry)
+    for position, entry in _entries(compose, "allow", "[[compose.allow]]", COMPOSE_ALLOWANCE_EXAMPLE):
+        allowance = _read_compose_allowance(entry, position)
         key = (allowance.file, allowance.service)
         if key in allowances:
             raise ConfigError(
-                f"{CONFIG_PATH} [[compose.allow]] declares service = {allowance.service!r} of file = "
-                f"{allowance.file!r} twice; one declaration per file and service, like:\n{COMPOSE_ALLOWANCE_EXAMPLE}"
+                f"{CONFIG_PATH} [[compose.allow]] declares service = {_toml_string(allowance.service)} of file = "
+                f"{_toml_string(allowance.file)} twice; one declaration per file and service",
+                COMPOSE_ALLOWANCE_EXAMPLE,
             )
         allowances[key] = allowance
     return tuple(allowances.values())
 
 
-def _read_compose_allowance(entry: object) -> ComposeAllowance:
-    def refuse(need: str) -> ConfigError:
-        return ConfigError(f"{CONFIG_PATH} [[compose.allow]] entry {entry!r} needs {need}, like:\n{COMPOSE_ALLOWANCE_EXAMPLE}")
-
+def _read_compose_allowance(entry: object, position: int) -> ComposeAllowance:
+    refuse = _entry_refusal("[[compose.allow]]", position, COMPOSE_ALLOWANCE_EXAMPLE)
     if not isinstance(entry, dict) or set(entry) != COMPOSE_ALLOWANCE_KEYS:
         raise refuse("exactly a file, a service and a reason")
     file, service, reason = entry["file"], entry["service"], entry["reason"]
@@ -561,26 +578,22 @@ def _read_compose_allowance(entry: object) -> ComposeAllowance:
 
 
 def _generated_files(size: dict, gate: dict) -> tuple[GeneratedFile, ...]:
-    entries = size.get("generated", [])
-    if not isinstance(entries, list):
-        raise ConfigError(f"{CONFIG_PATH} needs [[size.generated]] as an array of tables, like:\n{GENERATED_FILE_EXAMPLE}")
     jobs = _job_names(gate)
     declared: dict[str, GeneratedFile] = {}
-    for entry in entries:
-        generated = _read_generated_file(entry, jobs)
+    for position, entry in _entries(size, "generated", "[[size.generated]]", GENERATED_FILE_EXAMPLE):
+        generated = _read_generated_file(entry, position, jobs)
         if generated.path in declared:
             raise ConfigError(
-                f"{CONFIG_PATH} [[size.generated]] declares path = {generated.path!r} twice; one entry per file, "
-                f"like:\n{GENERATED_FILE_EXAMPLE}"
+                f"{CONFIG_PATH} [[size.generated]] declares path = {_toml_string(generated.path)} twice; "
+                "one entry per file",
+                GENERATED_FILE_EXAMPLE,
             )
         declared[generated.path] = generated
     return tuple(declared.values())
 
 
-def _read_generated_file(entry: object, mandatory_jobs: tuple[str, ...]) -> GeneratedFile:
-    def refuse(need: str) -> ConfigError:
-        return ConfigError(f"{CONFIG_PATH} [[size.generated]] entry {entry!r} needs {need}, like:\n{GENERATED_FILE_EXAMPLE}")
-
+def _read_generated_file(entry: object, position: int, mandatory_jobs: tuple[str, ...]) -> GeneratedFile:
+    refuse = _entry_refusal("[[size.generated]]", position, GENERATED_FILE_EXAMPLE)
     if not isinstance(entry, dict) or set(entry) != GENERATED_FILE_KEYS:
         raise refuse("exactly a path, a job, an item, a date and a reason")
     path, job, item, date, reason = (entry[key] for key in ("path", "job", "item", "date", "reason"))
@@ -600,7 +613,7 @@ def _read_generated_file(entry: object, mandatory_jobs: tuple[str, ...]) -> Gene
 def load_gate_settings(text: str | None) -> GateSettings:
     """mandatory_jobs is judged before legacy, so a config wrong in both is refused for mandatory_jobs."""
     if text is None:
-        raise ConfigError(f"{CONFIG_PATH} is missing - create it with:\n{EXAMPLE}")
+        raise ConfigError(f"{CONFIG_PATH} is missing", EXAMPLE)
     document = _validated_document(text)
     return GateSettings(
         _mandatory_jobs(document.gate), _legacy_mode(document.gate), document.declarations,
@@ -646,35 +659,27 @@ def load_staged_secret_allowances(text: str | None) -> dict[Allowance, str]:
 
 def _parse_allowances(secrets: dict) -> dict[Allowance, str]:
     _refuse_unknown_secrets_keys(secrets)
-    entries = secrets.get("allow", [])
-    if not isinstance(entries, list):
-        raise ConfigError(f"{CONFIG_PATH} needs [secrets] allow as a list, like:\n{ALLOWANCE_EXAMPLE}")
     allowances: dict[Allowance, str] = {}
-    for entry in entries:
-        allowance, reason = _read_allowance(entry)
+    for position, entry in _entries(secrets, "allow", "[secrets] allow", ALLOWANCE_EXAMPLE, "a list"):
+        allowance, reason = _read_allowance(entry, position)
         if allowance in allowances:
-            raise ConfigError(f"{CONFIG_PATH} [secrets] allow lists {allowance.rule} in {allowance.file} twice for one value")
+            raise ConfigError(
+                f"{CONFIG_PATH} [secrets] allow lists rule = {_toml_string(allowance.rule)} in file = "
+                f"{_toml_string(allowance.file)} twice for one value"
+            )
         allowances[allowance] = reason
     return allowances
 
 
-def _read_allowance(entry: object) -> tuple[Allowance, str]:
+def _read_allowance(entry: object, position: int) -> tuple[Allowance, str]:
+    refuse = _entry_refusal("[secrets] allow", position, ALLOWANCE_EXAMPLE)
     if not isinstance(entry, dict) or set(entry) != ALLOWANCE_KEYS:
-        raise ConfigError(
-            f"{CONFIG_PATH} [secrets] allow entry {entry!r} needs exactly a rule, a file, a secret_sha256 and a "
-            f"reason (the old fingerprint form is gone), like:\n{ALLOWANCE_EXAMPLE}"
-        )
+        raise refuse("exactly a rule, a file, a secret_sha256 and a reason (the old fingerprint form is gone)")
     rule, file, secret_sha256, reason = (entry[key] for key in ("rule", "file", "secret_sha256", "reason"))
     if not all(isinstance(value, str) and value.strip() for value in (rule, file, reason)):
-        raise ConfigError(
-            f"{CONFIG_PATH} [secrets] allow entry {entry!r} needs a non-empty rule, file and reason, like:\n"
-            f"{ALLOWANCE_EXAMPLE}"
-        )
+        raise refuse("a non-empty rule, file and reason")
     if not (isinstance(secret_sha256, str) and SHA256_HEX.fullmatch(secret_sha256)):
-        raise ConfigError(
-            f"{CONFIG_PATH} [secrets] allow entry {entry!r} needs secret_sha256 as 64 lowercase hex digits, like:\n"
-            f"{ALLOWANCE_EXAMPLE}"
-        )
+        raise refuse("secret_sha256 as 64 lowercase hex digits")
     if _spans_lines(reason):
-        raise ConfigError(f"{CONFIG_PATH} [secrets] allow entry {entry!r} needs a one-line reason")
+        raise ConfigError(f"{CONFIG_PATH} [secrets] allow entry {position} needs a one-line reason")
     return Allowance(rule, file, secret_sha256), reason
