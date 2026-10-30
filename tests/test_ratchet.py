@@ -51,11 +51,12 @@ def test_without_a_baseline_the_rule_only_counts_production_and_tests(build_repo
     )
     code, output = hygiene(capsys, repo)
     assert code == 0, output
-    assert (
+    counts = (
         "size: report only (no quality/baseline.toml) - production: 1 file(s) >= 800 lines, "
         "1 function(s) >= 60 lines, 1 function(s) CCN > 15; tests: 1 file(s) >= 800 lines, "
         "0 function(s) >= 60 lines, 0 function(s) CCN > 15"
-    ) in output
+    )
+    assert counts in output
 
 
 def build_repo_with_source(build_repo, files: dict[str, str], name: str, source: bytes) -> Path:

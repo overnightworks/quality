@@ -517,7 +517,8 @@ def test_two_distinct_reasons_in_one_area_stand_as_sub_lines_in_run_order(build_
     assert code == 2
     assert out[row].endswith("not checked    2 reasons")
     assert [bool(re.match(r"    ✗ \S", line)) for line in out[row + 1 : row + 3]] == [True, True]
-    assert "cannot read compose.yaml" in out[row + 1] and "pyproject.toml" in out[row + 2]
+    assert "cannot read compose.yaml" in out[row + 1]
+    assert "pyproject.toml" in out[row + 2]
 
 
 def test_one_reason_refusing_rules_in_several_areas_stands_once_in_each(build_repo, capsys):
@@ -540,7 +541,8 @@ def test_a_folder_outside_any_repository_prints_only_the_location_pair(tmp_path,
 def test_a_missing_path_gets_the_general_pair(tmp_path, capsys):
     code, out, err = frame_run(capsys, tmp_path / "missing")
     assert (code, out) == (2, [])
-    assert err[0].startswith("error: ") and "not inside a git work tree" not in err[0]
+    assert err[0].startswith("error: ")
+    assert "not inside a git work tree" not in err[0]
     assert err[1:] == ["next: fix what the error names, then run quality hygiene again"]
 
 
@@ -555,8 +557,20 @@ def test_a_bare_repository_and_the_inside_of_git_are_outside_a_work_tree(tmp_pat
 
 @pytest.mark.integration
 def test_a_folder_outside_any_repository_is_outside_in_every_locale(tmp_path, monkeypatch, capsys):
-    monkeypatch.setenv("LANG", "de_DE.UTF-8")
-    monkeypatch.setenv("LANGUAGE", "de")
+    """A git that speaks German unless it is asked in the C locale, so the test needs no installed catalogue."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_git = fake_bin / "git"
+    fake_git.write_text(
+        "#!/bin/sh\n"
+        'if [ "$LC_ALL" = C ]; then echo "fatal: not a git repository (or any of the parent directories): .git" >&2\n'
+        'else echo "fatal: Kein Git-Repository (oder irgendein Elternverzeichnis): .git" >&2; fi\n'
+        "exit 128\n",
+        encoding="utf-8",
+    )
+    fake_git.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{fake_bin}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setenv("LC_ALL", "de_DE.UTF-8")
     code, out, err = frame_run(capsys, tmp_path)
     assert (code, out, err[0]) == (2, [], f"error: not inside a git work tree · {tmp_path}")
 
@@ -566,11 +580,12 @@ def test_a_repository_git_refuses_gets_the_general_pair(build_repo, monkeypatch,
     monkeypatch.setenv("GIT_TEST_ASSUME_DIFFERENT_OWNER", "1")
     code, out, err = frame_run(capsys, repo)
     assert (code, out) == (2, [])
-    assert err[0].startswith("error: ") and "not inside a git work tree" not in err[0]
+    assert err[0].startswith("error: ")
+    assert "not inside a git work tree" not in err[0]
     assert err[1] == "next: fix what the error names, then run quality hygiene again"
 
 
-def exits_and_rows(build_repo, tmp_path_factory, capsys, use_mise, served_scanners, case: str):
+def exits_and_rows(build_repo, capsys, use_mise, served_scanners, case: str):
     arranged = {
         "clean": ({**CLEAN_FILES, **CLONES_BASELINE}, False),
         "measured only": (CLEAN_FILES, False),
@@ -586,9 +601,9 @@ def exits_and_rows(build_repo, tmp_path_factory, capsys, use_mise, served_scanne
 
 @pytest.mark.parametrize("case", ["clean", "measured only", "findings", "refusal", "refusal with findings"])
 def test_a_refusal_row_appears_exactly_when_the_exit_is_two_and_a_findings_row_when_an_area_has_findings(
-    case, build_repo, tmp_path_factory, capsys, use_mise, served_scanners
+    case, build_repo, capsys, use_mise, served_scanners
 ):
-    code, out, _ = exits_and_rows(build_repo, tmp_path_factory, capsys, use_mise, served_scanners, case)
+    code, out, _ = exits_and_rows(build_repo, capsys, use_mise, served_scanners, case)
     rows = headers(out)
     assert any(row.startswith("  ✗") for row in rows) is (code == 2)
     assert any(row.startswith("  !") for row in rows) is (case in ("findings", "refusal with findings"))

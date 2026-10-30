@@ -93,7 +93,7 @@ def test_the_verdict_line_counts_and_ends_with_the_duration(counts, expected):
     assert verdict_line(**counts) == expected
 
 
-def test_the_pair_goes_to_stderr_words_and_escapes_each_text():
+def test_the_pair_labels_and_escapes_each_text():
     stream = io.StringIO()
     output.write_pair("a\x1b[35mb", "c\nd", file=stream)
     assert stream.getvalue() == "error: a\\x1b[35mb\nnext: c\\x0ad\n"
