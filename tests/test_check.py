@@ -10,8 +10,8 @@ import pytest
 
 from quality import check, cli, env_file, installation, process, scanners, sonar
 from quality.compose import is_compose_file
-from quality.report import Finding
-from quality.rules import Rule
+from quality.report import CannotJudge, Finding, Unparsable
+from quality.rules import Area, Rule
 from tests.support.check import CLEAN_LINE, compose, installed_ruff, loosen_requirement
 from tests.support.check import hygiene_output as run
 from tests.support.scanners import fake_scanner, fake_zizmor, lacking, never_located, nothing_installed
@@ -332,3 +332,65 @@ def test_an_index_record_quality_cannot_read_refuses_exactly_the_rules_that_read
         "file-suffix", "script-name", "script-header", "test-layout", "test-import", "python-floor", "python-security", "python-print",
     ]
     assert all("git ls-files -s printed an index record quality cannot read" in reason for _, reason in refused)
+
+
+def finding_of(rule: Rule) -> Finding:
+    return Finding(rule, "a", None, "reason", "fix")
+
+
+def area_of(*verdicts: check.RuleVerdict) -> check.AreaVerdict:
+    return check.AreaVerdict(Area.FILES, verdicts)
+
+
+@pytest.mark.parametrize(
+    ("verdicts", "expected"),
+    [
+        ([check.RuleVerdict(Rule.ENV_FILE), check.RuleVerdict(Rule.COMPOSE_PORT)], check.Outcome.CLEAN),
+        ([check.RuleVerdict(Rule.SIZE, measured_only=True), check.RuleVerdict(Rule.CLONE)], check.Outcome.MEASURED_ONLY),
+        ([check.RuleVerdict(Rule.SIZE, measured_only=True), check.RuleVerdict(Rule.CLONE, (finding_of(Rule.CLONE),))], check.Outcome.FINDINGS),
+        ([check.RuleVerdict(Rule.ENV_FILE, (finding_of(Rule.ENV_FILE),)), check.RuleVerdict(Rule.COMPOSE_PORT, refusal=Unparsable("x"))], check.Outcome.UNPARSABLE),
+        ([check.RuleVerdict(Rule.ENV_FILE, refusal=Unparsable("x")), check.RuleVerdict(Rule.COMPOSE_PORT, refusal=CannotJudge("y"))], check.Outcome.CANNOT_JUDGE),
+    ],
+    ids=["clean", "measured only", "a finding beats measured only", "a refusal beats a finding", "the worst refusal"],
+)
+def test_an_area_is_as_bad_as_its_worst_rule(verdicts, expected):
+    assert area_of(*verdicts).outcome is expected
+
+
+def test_a_measured_only_rule_with_a_finding_is_a_finding():
+    assert check.RuleVerdict(Rule.CLONE, (finding_of(Rule.CLONE),), measured_only=True).outcome is check.Outcome.FINDINGS
+
+
+def test_an_area_keeps_the_findings_of_its_rules_also_when_one_of_them_refused():
+    kept = finding_of(Rule.ENV_FILE)
+    area = area_of(check.RuleVerdict(Rule.ENV_FILE, (kept,)), check.RuleVerdict(Rule.COMPOSE_PORT, refusal=CannotJudge("y")))
+    assert area.findings == (kept,)
+
+
+def test_an_area_names_each_distinct_reason_once_in_run_order():
+    area = area_of(
+        check.RuleVerdict(Rule.ENV_FILE, refusal=CannotJudge("second")),
+        check.RuleVerdict(Rule.COMPOSE_PORT, refusal=CannotJudge("first")),
+        check.RuleVerdict(Rule.CLAUDE_MD, refusal=Unparsable("second")),
+    )
+    assert area.reasons == ("second", "first")
+
+
+@pytest.mark.parametrize(
+    ("verdicts", "expected"),
+    [
+        ([check.RuleVerdict(Rule.SIZE, measured_only=True), check.RuleVerdict(Rule.CLONE, measured_only=True)], check.Measurement.MEASURED_ONLY),
+        ([check.RuleVerdict(Rule.SIZE), check.RuleVerdict(Rule.CLONE, measured_only=True)], check.Measurement.PARTLY_MEASURED_ONLY),
+        ([check.RuleVerdict(Rule.SIZE, refusal=CannotJudge("x")), check.RuleVerdict(Rule.CLONE, measured_only=True)], check.Measurement.MEASURED_ONLY),
+        ([check.RuleVerdict(Rule.SIZE), check.RuleVerdict(Rule.CLONE)], check.Measurement.ENFORCED),
+    ],
+    ids=["all", "some", "the rules that judged", "none"],
+)
+def test_an_area_tells_whether_all_or_some_of_its_judging_rules_only_measured(verdicts, expected):
+    assert area_of(*verdicts).measurement is expected
+
+
+def test_a_run_holds_one_area_verdict_per_area_in_area_order(build_repo):
+    result = check.run_hygiene(build_repo({}), installed_ruff, never_located)
+    assert [verdict.area for verdict in result.areas] == list(Area)
+    assert [rule for area in result.areas for rule in (v.rule for v in area.verdicts)] == sorted(Rule, key=lambda rule: list(Area).index(rule.area))

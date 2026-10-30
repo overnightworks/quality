@@ -1,21 +1,25 @@
+import contextlib
 import io
 import json
 import os
+import pty
 import re
 import signal
 import subprocess
 import sys
+import unicodedata
 from pathlib import Path
 
 import pytest
 
-from quality import cli
+from quality import cli, scanners
 from quality.ratchet import BASELINE_PATH
 from quality.report import DETAIL_MARKER, Finding, printable, render, shell_word
+from quality.rules import Area
 from tests.support.architecture import FORBIDDEN, SHOP, SHOP_DB_IMPORTS_WEB, toml
 from tests.support.check import assert_every_line_starts_with_the_door
 from tests.support.processes import process_is_gone
-from tests.support.scanners import fake_scanner
+from tests.support.scanners import fake_scanner, lacking
 from tests.support.secrets import FAKE_KEY, allow_config
 
 DOOR = [sys.executable, "-m", "quality.cli"]
@@ -472,3 +476,195 @@ def test_ctrl_c_during_a_scan_ends_the_run_as_interrupted_without_a_traceback(cl
     assert "KeyboardInterrupt" not in interrupted.stdout + interrupted.stderr
     assert process_is_gone(int(scanner_pid.read_text()))
     assert list(scratch_parent.iterdir()) == []
+
+
+# Decision 16 and the frame: one header row per area, the findings under it, the verdict line or the error and next pair.
+
+CLEAN_FILES = {"README.md": "x\n"}
+CLONES_BASELINE = {BASELINE_PATH: "[clones]\n"}
+PRINTING = {"src/a.py": 'print("x")\n'}
+ZERO_SECONDS = "<1s"
+
+
+class Terminal(io.StringIO):
+    def isatty(self) -> bool:
+        return True
+
+
+def frame_run(capsys, path: Path, **keywords) -> tuple[int, list[str], list[str]]:
+    code = cli.main(["hygiene", str(path)], clock=lambda: 0.0, **keywords)
+    captured = capsys.readouterr()
+    return code, captured.out.splitlines(), captured.err.splitlines()
+
+
+def header(area: Area, glyph: str, event: str, fact: str = "") -> str:
+    return f"  {glyph} {area.value:<12}  {event:<14} {fact}".rstrip()
+
+
+def headers(lines: list[str]) -> list[str]:
+    return [line for line in lines if re.match(rf"  [✓!✗·] ({'|'.join(Area)}) ", line)]
+
+
+def test_a_clean_run_has_seven_clean_rows_in_area_order_and_the_verdict(build_repo, capsys):
+    code, out, err = frame_run(capsys, build_repo({**CLEAN_FILES, **CLONES_BASELINE}))
+    assert (code, headers(out), out[-1], err) == (0, [header(area, "✓", "clean") for area in Area], f"✓ clean · 7 areas · {ZERO_SECONDS}", [])
+
+
+def test_a_run_without_a_baseline_notes_the_debt_as_not_recorded_and_says_it_is_not_enforced(build_repo, capsys):
+    code, out, err = frame_run(capsys, build_repo(CLEAN_FILES))
+    assert (code, err) == (0, [])
+    assert header(Area.DEBT, "·", "not recorded", "measured only") in out
+    assert out[-1] == f"✓ clean · 7 areas · debt measured, not enforced · {ZERO_SECONDS}"
+
+
+def test_a_baseline_without_clones_is_partly_measured_only(build_repo, capsys):
+    code, out, err = frame_run(capsys, build_repo({**CLEAN_FILES, BASELINE_PATH: ""}))
+    assert (code, err) == (0, [])
+    assert header(Area.DEBT, "·", "not recorded", "partly measured only") in out
+    assert out[-1] == f"✓ clean · 7 areas · debt partly measured, not enforced · {ZERO_SECONDS}"
+
+
+def test_findings_in_two_areas_follow_their_rows_and_end_in_the_counted_verdict(build_repo, capsys):
+    code, out, err = frame_run(capsys, build_repo({**CLONES_BASELINE, **PRINTING, ".env": "A=1\n"}))
+    files_row, code_row = out.index(header(Area.FILES, "!", "2 findings")), out.index(header(Area.CODE, "!", "1 finding"))
+    assert (code, err) == (1, [])
+    assert out[files_row + 1].startswith("env-file .env - ")
+    assert out[code_row + 1].startswith("python-print src/a.py:1 - ")
+    assert out[-1] == f"! 3 findings in 2 areas · 5 areas clean · {ZERO_SECONDS}"
+
+
+def test_an_area_that_cannot_check_ends_the_run_with_the_pair_and_no_verdict(build_repo, use_mise, served_scanners, capsys):
+    use_mise(lacking(served_scanners, scanners.GITLEAKS))
+    code, out, err = frame_run(capsys, build_repo({**CLONES_BASELINE, **PRINTING}))
+    unchecked = [line for line in out if line.startswith("  ✗ secrets  ")]
+    assert (code, len(unchecked), [line for line in out if "areas clean" in line or " · 7 areas" in line]) == (2, 1, [])
+    assert "not checked" in unchecked[0]
+    assert header(Area.CODE, "!", "1 finding") in out
+    assert err == ["error: 1 of 7 areas could not check · 1 finding in the others", "next: fix what the ✗ rows name, then run quality hygiene again"]
+
+
+def test_findings_in_the_area_that_cannot_check_stay_under_its_row_and_are_counted(build_repo, capsys):
+    code, out, err = frame_run(capsys, build_repo({".env": "A=1\n", "compose.yaml": "services: [\n"}))
+    row = next(number for number, line in enumerate(out) if line.startswith("  ✗ files  "))
+    assert code == 2
+    assert [line for line in headers(out) if "files" in line and "!" in line] == []
+    assert any(line.startswith("env-file .env - ") for line in out[row + 1 :])
+    assert re.fullmatch(r"error: 1 of 7 areas could not check · \d+ findings?, \d+ of them in those areas", err[0]), err
+
+
+def test_two_distinct_reasons_in_one_area_stand_as_sub_lines_in_run_order(build_repo, capsys):
+    code, out, _ = frame_run(capsys, build_repo({"compose.yaml": "services: [\n", "pyproject.toml": '[project]\nrequires-python = "banana"\n'}))
+    row = next(number for number, line in enumerate(out) if line.startswith("  ✗ files  "))
+    assert code == 2
+    assert out[row].endswith("not checked    2 reasons")
+    assert [bool(re.match(r"    ✗ \S", line)) for line in out[row + 1 : row + 3]] == [True, True]
+    assert "cannot read compose.yaml" in out[row + 1] and "pyproject.toml" in out[row + 2]
+
+
+def test_one_reason_refusing_rules_in_several_areas_stands_once_in_each(build_repo, capsys):
+    unknown_table = {"quality/config.toml": "[bogus]\nx = 1\n"}
+    code, out, err = frame_run(capsys, build_repo({**CLEAN_FILES, **unknown_table}))
+    unchecked = [line for line in out if re.match(r"  ✗ ", line)]
+    assert code == 2
+    assert len(unchecked) >= 2
+    assert err[0] == f"error: {len(unchecked)} of 7 areas could not check"
+    assert all("not checked" in line and "bogus" in line for line in unchecked)
+
+
+def test_a_folder_outside_any_repository_prints_only_the_location_pair(tmp_path, capsys):
+    code, out, err = frame_run(capsys, tmp_path)
+    assert (code, out, err) == (2, [], [f"error: not inside a git work tree · {tmp_path}", "next: run quality hygiene inside a repository"])
+
+
+def test_a_missing_path_gets_the_general_pair(tmp_path, capsys):
+    code, out, err = frame_run(capsys, tmp_path / "missing")
+    assert (code, out) == (2, [])
+    assert err[0].startswith("error: ") and "not inside a git work tree" not in err[0]
+    assert err[1:] == ["next: fix what the error names, then run quality hygiene again"]
+
+
+def test_a_bare_repository_and_the_inside_of_git_are_outside_a_work_tree(tmp_path, build_repo, capsys):
+    bare = tmp_path / "bare.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
+    inside = build_repo(CLEAN_FILES) / ".git"
+    for path in (bare, inside):
+        code, out, err = frame_run(capsys, path)
+        assert (code, out, err) == (2, [], [f"error: not inside a git work tree · {path}", "next: run quality hygiene inside a repository"])
+
+
+def test_a_folder_outside_any_repository_is_outside_in_every_locale(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("LANG", "de_DE.UTF-8")
+    monkeypatch.setenv("LANGUAGE", "de")
+    code, out, err = frame_run(capsys, tmp_path)
+    assert (code, out, err[0]) == (2, [], f"error: not inside a git work tree · {tmp_path}")
+
+
+def test_a_repository_git_refuses_gets_the_general_pair(build_repo, monkeypatch, capsys):
+    repo = build_repo(CLEAN_FILES)
+    monkeypatch.setenv("GIT_TEST_ASSUME_DIFFERENT_OWNER", "1")
+    code, out, err = frame_run(capsys, repo)
+    assert (code, out) == (2, [])
+    assert err[0].startswith("error: ") and "not inside a git work tree" not in err[0]
+    assert err[1] == "next: fix what the error names, then run quality hygiene again"
+
+
+def exits_and_rows(build_repo, tmp_path_factory, capsys, use_mise, served_scanners, case: str):
+    arranged = {
+        "clean": ({**CLEAN_FILES, **CLONES_BASELINE}, False),
+        "measured only": (CLEAN_FILES, False),
+        "findings": ({**CLONES_BASELINE, **PRINTING}, False),
+        "refusal": ({**CLONES_BASELINE}, True),
+        "refusal with findings": ({**CLONES_BASELINE, **PRINTING}, True),
+    }
+    files, refuses = arranged[case]
+    if refuses:
+        use_mise(lacking(served_scanners, scanners.GITLEAKS))
+    return frame_run(capsys, build_repo(files))
+
+
+@pytest.mark.parametrize("case", ["clean", "measured only", "findings", "refusal", "refusal with findings"])
+def test_a_refusal_row_appears_exactly_when_the_exit_is_two_and_a_findings_row_when_an_area_has_findings(
+    case, build_repo, tmp_path_factory, capsys, use_mise, served_scanners
+):
+    code, out, _ = exits_and_rows(build_repo, tmp_path_factory, capsys, use_mise, served_scanners, case)
+    rows = headers(out)
+    assert any(row.startswith("  ✗") for row in rows) is (code == 2)
+    assert any(row.startswith("  !") for row in rows) is (case in ("findings", "refusal with findings"))
+    assert len(rows) == len(Area)
+
+
+@pytest.fixture
+def at_a_terminal(monkeypatch):
+    monkeypatch.setenv("TERM", "xterm")
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    stdout, stderr = Terminal(), Terminal()
+    monkeypatch.setattr(sys, "stdout", stdout)
+    monkeypatch.setattr(sys, "stderr", stderr)
+    return stdout, stderr
+
+
+def test_at_a_terminal_a_refusal_from_repository_text_prints_as_escaped_text_between_quality_sgr_only(build_repo, at_a_terminal):
+    stdout, stderr = at_a_terminal
+    repo = build_repo({"a\x1b[35m\n\u202e.compose.yaml": "services: [\n"})
+    code = cli.main(["hygiene", str(repo)], clock=lambda: 0.0)
+    stripped = re.sub(r"\x1b\[[0-9;]*m", "", stdout.getvalue() + stderr.getvalue())
+    assert code == 2
+    assert "\x1b[" in stdout.getvalue()
+    assert "a\\x1b[35m\\x0a\\u202e.compose.yaml" in stripped
+    assert [c for c in stripped if unicodedata.category(c) in ("Cc", "Cf", "Zl", "Zp") and c != "\n"] == []
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(("environment", "coloured"), [({"TERM": "xterm"}, True), ({"TERM": "xterm", "NO_COLOR": "1"}, False)], ids=["terminal", "NO_COLOR"])
+def test_the_real_door_colours_a_pseudo_terminal_only_without_no_color(clean_repo, environment, coloured):
+    parent, child = pty.openpty()
+    base = {key: value for key, value in os.environ.items() if key not in ("NO_COLOR", "GITHUB_ACTIONS")}
+    done = subprocess.run([*DOOR, "hygiene", "."], cwd=clean_repo, env={**base, **environment}, stdout=child, stderr=subprocess.PIPE, check=False)
+    os.close(child)
+    chunks = []
+    with contextlib.suppress(OSError):
+        while chunk := os.read(parent, 4096):
+            chunks.append(chunk)
+    os.close(parent)
+    text = b"".join(chunks).decode()
+    assert (done.returncode, "\x1b[" in text, "✓" in text) == (0, coloured, True), text

@@ -1,7 +1,7 @@
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from enum import Enum
+from enum import Enum, auto
 from functools import partial
 from pathlib import Path, PurePosixPath
 from typing import Protocol
@@ -30,7 +30,7 @@ from quality.config import (
     read_allow_lists,
 )
 from quality.report import CannotJudge, Finding, Unparsable
-from quality.rules import Rule
+from quality.rules import Area, Rule
 
 
 def _python_floor_result(root: Path, modes: dict[str, str] | CannotJudge, allow_lists: AllowLists | CannotJudge) -> python_floor.FloorResult:
@@ -126,6 +126,7 @@ class Outcome(Enum):
     """A rule's verdict, mildest first: the worst verdict of a run decides its exit."""
 
     CLEAN = "clean"
+    MEASURED_ONLY = "measured only"
     FINDINGS = "findings"
     UNPARSABLE = Unparsable.label
     CANNOT_JUDGE = CannotJudge.label
@@ -136,12 +137,48 @@ class RuleVerdict:
     rule: Rule
     findings: tuple[Finding, ...] = ()
     refusal: CannotJudge | None = None
+    measured_only: bool = False
 
     @property
     def outcome(self) -> Outcome:
         if self.refusal is not None:
             return Outcome(self.refusal.label)
-        return Outcome.FINDINGS if self.findings else Outcome.CLEAN
+        if self.findings:
+            return Outcome.FINDINGS
+        return Outcome.MEASURED_ONLY if self.measured_only else Outcome.CLEAN
+
+
+class Measurement(Enum):
+    """How much of an area's judging was only measured: none of it, some of its rules, or all of the rules that judged."""
+
+    ENFORCED = auto()
+    PARTLY_MEASURED_ONLY = auto()
+    MEASURED_ONLY = auto()
+
+
+@dataclass(frozen=True)
+class AreaVerdict:
+    """What the rules of one area said, in run order."""
+
+    area: Area
+    verdicts: tuple[RuleVerdict, ...]
+
+    @property
+    def outcome(self) -> Outcome:
+        raise NotImplementedError
+
+    @property
+    def findings(self) -> tuple[Finding, ...]:
+        raise NotImplementedError
+
+    @property
+    def reasons(self) -> tuple[str, ...]:
+        """The distinct reasons its rules could not judge, equal text once, in run order."""
+        raise NotImplementedError
+
+    @property
+    def measurement(self) -> Measurement:
+        raise NotImplementedError
 
 
 @dataclass(frozen=True)
@@ -154,6 +191,10 @@ class HygieneResult:
     @property
     def findings(self) -> list[Finding]:
         return [finding for verdict in self.verdicts for finding in verdict.findings]
+
+    @property
+    def areas(self) -> tuple[AreaVerdict, ...]:
+        raise NotImplementedError
 
     @property
     def worst(self) -> Outcome:

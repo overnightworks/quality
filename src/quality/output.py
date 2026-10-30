@@ -5,6 +5,8 @@ import os
 import secrets
 import sys
 from collections.abc import Mapping
+from dataclasses import dataclass
+from enum import StrEnum
 from typing import TextIO
 
 from quality.report import Finding, printable, render
@@ -51,3 +53,62 @@ def set_up_streams(environment: Mapping[str, str]) -> None:
         sys.stdout.reconfigure(line_buffering=True)
     if environment.get("GITHUB_ACTIONS") == "true":
         stop_workflow_commands()
+
+
+class Glyph(StrEnum):
+    """What a row's first mark says: nothing to do, needs you, could not check, or a note."""
+
+    CLEAN = "✓"
+    NEEDS_YOU = "!"
+    COULD_NOT_CHECK = "✗"
+    NOTE = "·"
+
+
+@dataclass(frozen=True)
+class SubLine:
+    glyph: Glyph
+    text: str
+
+
+@dataclass(frozen=True)
+class Row:
+    """`glyph subject event fact`, the event a member of an enum the caller owns; with a `count` it reads `3 findings`."""
+
+    glyph: Glyph
+    subject: str
+    event: StrEnum
+    fact: str = ""
+    count: int | None = None
+    sub_lines: tuple[SubLine, ...] = ()
+
+
+@dataclass(frozen=True)
+class Verdict:
+    """The closing line of a run that judged: counts first, the notes of what was only measured, the duration last."""
+
+    findings: int
+    areas_with_findings: int
+    clean_areas: int
+    areas: int
+    notes: tuple[str, ...]
+    seconds: float
+
+
+def format_duration(seconds: float) -> str:
+    raise NotImplementedError
+
+
+def style_is_on(stream: TextIO | None, environment: Mapping[str, str]) -> bool:
+    raise NotImplementedError
+
+
+def write_rows(rows: tuple[Row, ...], file: TextIO | None = None) -> None:
+    raise NotImplementedError
+
+
+def write_verdict(verdict: Verdict, file: TextIO | None = None) -> None:
+    raise NotImplementedError
+
+
+def write_pair(error: str, next_step: str, file: TextIO | None = None) -> None:
+    raise NotImplementedError
