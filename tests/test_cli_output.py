@@ -556,20 +556,12 @@ def test_a_bare_repository_and_the_inside_of_git_are_outside_a_work_tree(tmp_pat
 
 
 @pytest.mark.integration
-def test_a_folder_outside_any_repository_is_outside_in_every_locale(tmp_path, monkeypatch, capsys):
+def test_a_folder_outside_any_repository_is_outside_in_every_locale(tmp_path, fake_git, monkeypatch, capsys):
     """A git that speaks German unless it is asked in the C locale, so the test needs no installed catalogue."""
-    fake_bin = tmp_path / "bin"
-    fake_bin.mkdir()
-    fake_git = fake_bin / "git"
-    fake_git.write_text(
-        "#!/bin/sh\n"
-        'if [ "$LC_ALL" = C ]; then echo "fatal: not a git repository (or any of the parent directories): .git" >&2\n'
-        'else echo "fatal: Kein Git-Repository (oder irgendein Elternverzeichnis): .git" >&2; fi\n'
-        "exit 128\n",
-        encoding="utf-8",
+    fake_git(
+        'if [ "$LC_ALL" = C ]; then echo "fatal: not a git repository (or any of the parent directories): .git" >&2; '
+        'else echo "fatal: Kein Git-Repository (oder irgendein Elternverzeichnis): .git" >&2; fi; exit 128'
     )
-    fake_git.chmod(0o755)
-    monkeypatch.setenv("PATH", f"{fake_bin}{os.pathsep}{os.environ['PATH']}")
     monkeypatch.setenv("LC_ALL", "de_DE.UTF-8")
     code, out, err = frame_run(capsys, tmp_path)
     assert (code, out, err[0]) == (2, [], f"error: not inside a git work tree · {tmp_path}")
