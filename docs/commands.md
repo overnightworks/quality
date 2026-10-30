@@ -72,7 +72,7 @@ its place (`repositories[3]`), never by its text.
   show `cannot read <file>` (`import-linter config`) in each cell that reads the file, while a cell that does not keeps its value
   (every cell under no gate, a rule cell under a pin before the rule or `release unknown`), unreadable release tags say so in the heading and
   show pins as commits, and each makes the exit `2`. No value, `behind`, `no gate` or `report-only` included, makes the run red.
-- Rows are named by the entry as written (a `|` prints as `\|`)
+- Rows are named by the entry as written
   and sorted by it, case-insensitively. A private repository is not measured, because the tables are published and it is not
   anonymously readable: it shows as a `cannot judge` row like any repository that cannot be cloned.
 - A repository that cannot be cloned or measured shows `cannot judge: <reason>` (for example `cannot clone (git exited
