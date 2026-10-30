@@ -545,7 +545,8 @@ def _generated_files(size: dict, gate: dict) -> tuple[GeneratedFile, ...]:
     entries = size.get("generated", [])
     if not isinstance(entries, list):
         raise ConfigError(f"{CONFIG_PATH} needs [[size.generated]] as an array of tables, like:\n{GENERATED_FILE_EXAMPLE}")
-    jobs = _mandatory_jobs(gate) if entries else ()
+    names = gate.get("mandatory_jobs")
+    jobs = tuple(names) if isinstance(names, list) and all(isinstance(name, str) and name for name in names) else ()
     declared: dict[str, GeneratedFile] = {}
     for entry in entries:
         generated = _read_generated_file(entry, jobs)

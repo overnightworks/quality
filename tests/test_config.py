@@ -447,8 +447,9 @@ def test_a_malformed_generated_file_is_refused_with_the_entry_and_the_example(en
 
 def test_a_generated_file_naming_a_job_needs_the_config_to_list_mandatory_jobs():
     """#174 sentence 3: a config without [gate] mandatory_jobs cannot hold a job, so a declaration is refused."""
-    with pytest.raises(ConfigError, match="mandatory_jobs as a non-empty list"):
+    with pytest.raises(ConfigError, match="job as one of") as refused:
         load_allow_lists(generated_config())
+    assert "[[size.generated]] entry" in str(refused.value)
 
 
 @pytest.mark.parametrize("jobs", ["[1]", '[""]', '"checks"'], ids=["number", "empty name", "not a list"])
@@ -456,8 +457,9 @@ def test_a_generated_file_needs_mandatory_jobs_that_are_non_empty_names(jobs):
     """#174 sentence 3: a job is compared only with valid job names, in every loader that reads the declaration."""
     text = f"[gate]\nmandatory_jobs = {jobs}\n" + generated_config(job=None) + "job = 1\n"
     for load in (load_allow_lists, load_gate_settings):
-        with pytest.raises(ConfigError, match="mandatory_jobs as a non-empty list"):
+        with pytest.raises(ConfigError, match="job as one of") as refused:
             load(text)
+        assert "[[size.generated]] entry" in str(refused.value)
 
 
 @pytest.mark.parametrize(
