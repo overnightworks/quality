@@ -6,7 +6,7 @@ import subprocess
 import sys
 import tempfile
 import threading
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from pathlib import Path, PosixPath, PurePosixPath
 
 import pytest
@@ -18,7 +18,7 @@ from quality.ratchet import BASELINE_PATH
 pytest.register_assert_rewrite("tests.support")  # before the first import of a support module, so its asserts are rewritten
 
 from tests.support.advisories import advisory, zipped
-from tests.support.fleet import RELEASES, write_fleet
+from tests.support.fleet import GITHUB_BASE_VARIABLE, GITHUB_REDIRECT, RELEASES, TEST_OWNER, write_fleet
 from tests.support.git_repositories import GIT_IDENTITY, head_commit, make_repo, put
 from tests.support.scanners import CLEAN_SCANS, OUTPUTS, fake_scanner, serving, write_mise
 
@@ -308,17 +308,15 @@ def stub_server():
         server.server_close()
 
 
-PublicRepo = Callable[[str, dict[str, str]], str]
+PublicRepo = Callable[..., str]
 
 
 @pytest.fixture
-def scoreboard(capsys, tmp_path) -> Callable[..., tuple[int, str]]:
-    """Runs `quality scoreboard` on a fleet file listing the given URLs (#63 rule 1)."""
+def scoreboard(capsys, tmp_path, public) -> Callable[..., tuple[int, str]]:
+    """Runs `quality scoreboard` on a fleet file listing the given `owner/name`s (#63 rule 1)."""
 
-    def run(
-        *public: str, private: Sequence[str] = (), tags: fleet_module.TagReader = lambda: RELEASES
-    ) -> tuple[int, str]:
-        fleet = write_fleet(tmp_path / "fleet", public, private)
+    def run(*repositories: str, tags: fleet_module.TagReader = lambda: RELEASES) -> tuple[int, str]:
+        fleet = write_fleet(tmp_path / "fleet", repositories)
         code = cli.main(["scoreboard", str(fleet)], release_tags=tags)
         return code, capsys.readouterr().out
 
@@ -335,20 +333,35 @@ def scratch(tmp_path, monkeypatch) -> Path:
 
 
 @pytest.fixture
-def public(tmp_path, scratch) -> PublicRepo:
-    """A repository served as a file:// URL, which the scoreboard clones as it clones a public one (rule 3)."""
+def remotes(tmp_path) -> Path:
+    """The directory standing in for github.com: `<owner>/<name>` lies at `remotes/<owner>/<name>`."""
+    return tmp_path / "remotes"
 
-    def build(name: str, files: dict[str, str]) -> str:
-        directory = tmp_path / "remotes" / name
+
+@pytest.fixture
+def github_base(remotes, monkeypatch) -> None:
+    """Where `https://github.com/` is served from; a test may point it at a local HTTP host instead."""
+    monkeypatch.setenv(GITHUB_BASE_VARIABLE, f"{remotes}/")
+
+
+@pytest.fixture
+def public(remotes, scratch, fake_git, github_base) -> PublicRepo:
+    """Serves a repository as `https://github.com/<owner>/<name>`, which the scoreboard clones as it clones a public one
+    (rule 3). A repository nobody served fails with git exit 128 and never reaches the network."""
+    fake_git(GITHUB_REDIRECT)
+
+    def build(name: str, files: dict[str, str], owner: str = TEST_OWNER) -> str:
+        directory = remotes / owner / name
         directory.mkdir(parents=True)
-        return make_repo(directory, files).as_uri()
+        make_repo(directory, files)
+        return f"{owner}/{name}"
 
     return build
 
 
 @pytest.fixture
-def missing(tmp_path) -> str:
-    return (tmp_path / "remotes" / "gone").as_uri()
+def missing(public) -> str:
+    return f"{TEST_OWNER}/gone"
 
 
 @pytest.fixture
@@ -400,14 +413,11 @@ def edited_report(tmp_path_factory):
 
 
 @pytest.fixture
-def gate_clone(public, fake_git):
-    """The gate's own repository URL, served from a local repository holding `files` by a git on PATH that redirects it."""
+def gate_clone(public):
+    """The gate's own repository, served from a local repository holding `files`; returns its name."""
 
     def build(files: dict[str, str]) -> str:
-        url = f"https://github.com/{fleet_module.GATE_REPOSITORY}"
-        fake_git(
-            f"export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0='url.{public('gate', files)}.insteadOf' GIT_CONFIG_VALUE_0='{url}'"
-        )
-        return url
+        owner, name = fleet_module.GATE_REPOSITORY.split("/")
+        return public(name, files, owner=owner)
 
     return build

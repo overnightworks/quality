@@ -2,10 +2,10 @@
 gate and CodeQL release each repository's workflows call.
 
 Lines and the production/test split are the `size` rule's own (`ratchet.summarise`), measured on a shallow clone of
-the default branch tip. git runs anonymously: only an http, https or file URL without credentials, no credential
-helper, no askpass, no terminal prompt, no system, global or environment config and an empty HOME, from a temporary
-directory, so no checkout's own config reaches it either. A repository declared private is never cloned: the table
-is published in a public run summary.
+the default branch tip. Only `https://github.com/<owner>/<name>` is cloned, built from the fleet entry, and git runs
+anonymously: no credential helper, no askpass, no terminal prompt, no system, global or environment config and an
+empty HOME, from a temporary directory, so no checkout's own config reaches it either. A repository that is not
+anonymously readable is not measured: the table is published in a public run summary.
 """
 
 import re
@@ -15,7 +15,6 @@ from dataclasses import dataclass
 from datetime import date
 from enum import Enum
 from pathlib import Path, PurePosixPath
-from urllib.parse import urlsplit
 
 import yaml
 
@@ -33,15 +32,23 @@ from quality import (
 )
 from quality.rules import Rule, RuleRelease, Switch
 
+GITHUB = "https://github.com/"
+
+
+def repository_url(name: str) -> str:
+    return f"{GITHUB}{name}"
+
+
 FLEET_PATH = "quality/fleet.toml"
-FLEET_EXAMPLE = 'public = ["https://github.com/o/open"]\nprivate = ["https://github.com/o/closed"]'
+FLEET_EXAMPLE = 'repositories = ["overnightworks/quality"]'
+ENTRY = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*/(?!\.+\Z)[A-Za-z0-9._-]+")
 FUNCTION_SCOPE = "functions and CCN: Python only"
 CLONE_TIMEOUT_SECONDS = 300
 LS_REMOTE_TIMEOUT_SECONDS = 60
 SHORT_COMMIT = 7
 DASH = "—"
 GATE_REPOSITORY = "overnightworks/quality"
-GATE_URL = f"https://github.com/{GATE_REPOSITORY}"
+GATE_URL = repository_url(GATE_REPOSITORY)
 GATE_FILE = "gate.yml"
 CODEQL_FILE = "codeql.yml"
 LOCAL_PREFIXES = ("./", "$/")
@@ -49,13 +56,7 @@ RELEASE_TAG = re.compile(r"v(\d+)\.(\d+)\.(\d+)")
 COMMIT_SHA = re.compile(r"[0-9a-f]{40}")
 SELF = "self"
 CALLER_SEPARATOR = " · "
-UNNAMED = "unnamed URL"
 ANONYMOUS_GIT = ("git", "-c", "credential.helper=", "-c", "core.askPass=")
-# ssh authenticates with the user's keys and agent whatever HOME says, so only these transports are anonymous.
-ANONYMOUS_SCHEMES = frozenset({"file", "http", "https"})
-# scheme and "//" then the rest of the line (a space stays, git takes the URL as one argument); git reads "https:host/x"
-# as scp-style ssh and an uppercase scheme as a missing remote helper
-ANONYMOUS_URL = re.compile(rf"(?:{'|'.join(sorted(ANONYMOUS_SCHEMES))})://.*")
 COLUMNS = (
     "Repo",
     "Commit",
@@ -165,27 +166,19 @@ class Measured:
 
 
 @dataclass(frozen=True)
-class Private:
-    """Declared private and not readable anonymously: nothing about it is published."""
-
-    name: str
-
-
-@dataclass(frozen=True)
 class Unjudged:
     name: str
     reason: str
 
 
-Row = Measured | Private | Unjudged
+Row = Measured | Unjudged
 
 
 @dataclass(frozen=True)
 class Fleet:
-    """The repositories to report: URLs in file order, each listed once."""
+    """The repositories to report: GitHub `owner/name`s sorted by lower-cased name, each listed once."""
 
-    public: tuple[str, ...]
-    private: tuple[str, ...]
+    repositories: tuple[str, ...]
 
 
 class FleetError(Exception):
@@ -207,45 +200,37 @@ def parse_fleet(text: str) -> Fleet:
         document = repository.parse_toml(text)
     except repository.TomlError as error:
         raise FleetError(f"{FLEET_PATH} is not valid TOML ({error}) - write it like:\n{FLEET_EXAMPLE}") from error
-    unknown = sorted(set(document) - {"public", "private"})
+    unknown = sorted(set(document) - {"repositories"})
     if unknown:
-        raise FleetError(f"{FLEET_PATH} has unknown key(s) {unknown} - only public and private exist, like:\n{FLEET_EXAMPLE}")
-    fleet = Fleet(_url_list(document, "public"), _url_list(document, "private"))
-    urls = [*fleet.public, *fleet.private]
-    if not urls:
-        raise FleetError(f"{FLEET_PATH} lists no URL - list at least one, like:\n{FLEET_EXAMPLE}")
-    repeats = _repeats(fleet)
-    if repeats:
-        raise FleetError(
-            f"{FLEET_PATH} lists a URL more than once ({'; '.join(repeats)}) - list each URL once, like:\n{FLEET_EXAMPLE}"
-        )
-    return fleet
+        raise FleetError(f"{FLEET_PATH} has unknown key(s) {unknown} - only repositories exists, like:\n{FLEET_EXAMPLE}")
+    entries = document.get("repositories")
+    if not isinstance(entries, list) or not all(isinstance(entry, str) for entry in entries):
+        raise FleetError(f"{FLEET_PATH} needs repositories as a list of strings, like:\n{FLEET_EXAMPLE}")
+    if not entries:
+        raise FleetError(f"{FLEET_PATH} lists no repository - list at least one, like:\n{FLEET_EXAMPLE}")
+    problems = _entry_problems(entries)
+    if problems:
+        raise FleetError(f"{FLEET_PATH}: {'; '.join(problems)} - write each as owner/name, once, like:\n{FLEET_EXAMPLE}")
+    return Fleet(tuple(sorted(entries, key=str.lower)))
 
 
-def _repeats(fleet: Fleet) -> list[str]:
-    """Each repeated entry named by its place, never its text: a URL may embed credentials."""
-    first_place: dict[str, str] = {}
-    repeats = []
-    for list_name, urls in (("public", fleet.public), ("private", fleet.private)):
-        for index, url in enumerate(urls):
-            place = f"{list_name}[{index}]"
-            if url in first_place:
-                repeats.append(f"{place} repeats {first_place[url]}")
-            else:
-                first_place[url] = place
-    return repeats
-
-
-def _url_list(document: dict, key: str) -> tuple[str, ...]:
-    urls = document.get(key)
-    if not isinstance(urls, list) or not all(isinstance(url, str) for url in urls):
-        raise FleetError(f"{FLEET_PATH} needs {key} as a list of strings, like:\n{FLEET_EXAMPLE}")
-    return tuple(urls)
+def _entry_problems(entries: list[str]) -> list[str]:
+    """Each problem named by its place, never its text: an entry may be a pasted URL with a password."""
+    first_place: dict[str, int] = {}
+    problems = []
+    for index, entry in enumerate(entries):
+        if not ENTRY.fullmatch(entry):
+            problems.append(f"repositories[{index}] is no owner/name")
+        elif entry.lower() in first_place:
+            problems.append(f"repositories[{index}] repeats repositories[{first_place[entry.lower()]}]")
+        else:
+            first_place[entry.lower()] = index
+    return problems
 
 
 def measure_fleet(fleet: Fleet) -> list[Row]:
-    """One row per URL, public ones first, each in file order; one row that fails never stops the others."""
-    return [*(measure_public(url) for url in fleet.public), *(judge_private(url) for url in fleet.private)]
+    """One row per repository in the fleet's order; one row that fails never stops the others."""
+    return [measure_repository(name) for name in fleet.repositories]
 
 
 def anonymous_environment(scratch: Path) -> dict[str, str]:
@@ -254,26 +239,6 @@ def anonymous_environment(scratch: Path) -> dict[str, str]:
     isolated = process.attribute_free_git_environment(scratch / "home")
     # git falls back to SSH_ASKPASS for an http password too.
     return {**{name: value for name, value in isolated.items() if name != "SSH_ASKPASS"}, "GIT_TERMINAL_PROMPT": "0"}
-
-
-class Refused(Exception):
-    """Why git must not be pointed at a URL."""
-
-
-def require_anonymous(url: str) -> None:
-    """Refuses a URL git could read as an option or authenticate with; any other is anonymous."""
-    if url.startswith("-"):
-        raise Refused("reads as a git option")
-    try:
-        parts = urlsplit(url)
-    except ValueError:
-        raise Refused("not a valid URL") from None
-    if parts.scheme not in ANONYMOUS_SCHEMES:
-        raise Refused("not an http, https or file URL")
-    if parts.username is not None or parts.password is not None:
-        raise Refused("the URL carries credentials")
-    if not ANONYMOUS_URL.fullmatch(url):
-        raise Refused("not an http, https or file URL")
 
 
 def cannot_judge(rows: list[Row], tags: ReleaseTags | ReleaseTagsError) -> bool:
@@ -291,25 +256,11 @@ def release_tags_or_none(tags: ReleaseTags | ReleaseTagsError) -> ReleaseTags | 
     return None if isinstance(tags, ReleaseTagsError) else tags
 
 
-def repository_name(url: str) -> str:
-    """`owner/name` for a non-file URL with a host and two path segments, else its last path segment, else its host: never the
-    URL itself, which may carry credentials."""
-    try:
-        parts = urlsplit(url)
-    except ValueError:
-        return UNNAMED
-    segments = [segment for segment in PurePosixPath(parts.path).parts if segment != "/"]
-    name = segments[-1].removesuffix(".git") if segments else ""
-    if parts.scheme != "file" and parts.hostname and name and len(segments) > 1:
-        return f"{segments[-2]}/{name}"
-    return name or parts.hostname or UNNAMED
-
-
-def read_release_tags(url: str = GATE_URL) -> ReleaseTags:
+def read_release_tags() -> ReleaseTags:
     """Release tag -> commit of the gate repository, the annotated ones peeled, by one anonymous `git ls-remote`."""
     with process.scratch_directory() as scratch:
         try:
-            listed = git(["ls-remote", "--tags", "--", url], scratch, anonymous_environment(scratch),
+            listed = git(["ls-remote", "--tags", "--", GATE_URL], scratch, anonymous_environment(scratch),
                          LS_REMOTE_TIMEOUT_SECONDS)
         except process.ProcessError as error:
             raise ReleaseTagsError(str(error)) from error
@@ -333,17 +284,12 @@ def release_tags_listed(listing: str) -> ReleaseTags:
     return {tag: commit for tag, commit in {**tags, **peeled}.items() if RELEASE_TAG.fullmatch(tag)}
 
 
-def measure_public(url: str) -> Row:
-    name = repository_name(url)
-    try:
-        require_anonymous(url)
-    except Refused as refused:
-        return Unjudged(name, f"cannot clone ({refused})")
+def measure_repository(name: str) -> Row:
     with process.scratch_directory() as scratch:
         environment = anonymous_environment(scratch)
         clone = scratch / "clone"
         try:
-            cloned = git(["clone", "--depth", "1", "--no-tags", "--quiet", "--", url, str(clone)], scratch, environment,
+            cloned = git(["clone", "--depth", "1", "--no-tags", "--quiet", "--", repository_url(name), str(clone)], scratch, environment,
                          CLONE_TIMEOUT_SECONDS)
             # git's own words name the local clone directory, so only its exit code is reported.
             if cloned.returncode != 0:
@@ -438,22 +384,6 @@ def calls_of(uses: str, workflow_file: str) -> list[Call]:
     owner_and_repository, _, workflow = file.partition(f"/{checkout.WORKFLOW_DIRECTORY}/")
     matches = owner_and_repository.lower() == GATE_REPOSITORY and workflow == workflow_file
     return [Call(ref)] if matches and ref else []
-
-
-def judge_private(url: str) -> Row:
-    name = repository_name(url)
-    try:
-        require_anonymous(url)
-    except Refused as refused:
-        return Unjudged(name, f"cannot check that it is private ({refused})")
-    with process.scratch_directory() as scratch:
-        try:
-            listed = git(["ls-remote", "--", url], scratch, anonymous_environment(scratch), LS_REMOTE_TIMEOUT_SECONDS)
-        except process.ProcessError as error:
-            return Unjudged(name, f"cannot check that it is private ({error})")
-    if listed.returncode == 0:
-        return Unjudged(name, "declared private but readable")
-    return Private(name)
 
 
 def git(
@@ -624,8 +554,8 @@ def cells(row: Row) -> tuple[str, ...]:
     return (row.name, DASH, status_label(row), *("",) * (len(COLUMNS) - 3))
 
 
-def status_label(row: Private | Unjudged) -> str:
-    return "not measured: private" if isinstance(row, Private) else f"cannot judge: {row.reason}"
+def status_label(row: Unjudged) -> str:
+    return f"cannot judge: {row.reason}"
 
 
 def measured_cells(row: Measured) -> tuple[str, ...]:

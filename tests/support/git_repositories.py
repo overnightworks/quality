@@ -34,13 +34,6 @@ def put(path: Path, content: str | bytes | None) -> None:
         path.write_bytes(content if isinstance(content, bytes) else content.encode())
 
 
-def head_of(url: str) -> str:
-    directory = url.removeprefix("file://")
-    return subprocess.run(
-        ["git", "-C", directory, "rev-parse", "HEAD"], capture_output=True, text=True, check=True
-    ).stdout.strip()
-
-
 def git_pull(directory, base_baseline, merge_baseline, moves=()):
     """A bare repository holding a base commit and a merge commit that moves each (old, new) file and holds the
     given baselines; returns its path and the two shas."""
