@@ -13,7 +13,7 @@ import json
 import re
 import tokenize
 from collections import Counter
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Collection, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import Enum
 from operator import attrgetter
@@ -23,6 +23,7 @@ from typing import NamedTuple, Self
 import lizard
 
 from quality import __version__, checkout, repository
+from quality.config import GeneratedFile
 from quality.report import Finding, Unparsable
 from quality.rules import Rule
 
@@ -570,8 +571,35 @@ def complete(tree: TreeMeasurement) -> Measurements:
         raise Unparsable(str(error)) from error
 
 
-def check_size(tree: TreeMeasurement, baseline: Baseline | None) -> RuleResult:
-    """Report-only without a baseline; with one, the tree on disk must hold it."""
+def without_generated(tree: TreeMeasurement, generated: Collection[GeneratedFile]) -> TreeMeasurement:
+    """The tree the size rule judges and the baseline records: the declared files' measurements and unparsable
+    entries are left out."""
+    declared = {file.path for file in generated}
+    return TreeMeasurement(
+        {key: measured for key, measured in tree.measurements.items() if key.path not in declared},
+        {path: reason for path, reason in tree.unparsable.items() if path not in declared},
+    )
+
+
+def _stale_declarations(tree: TreeMeasurement, generated: Collection[GeneratedFile]) -> list[Finding]:
+    return [
+        Finding(
+            Rule.SIZE,
+            file.path,
+            None,
+            "declared in quality/config.toml with [[size.generated]], but no tracked file the size rule measures lies there.",
+            "delete its [[size.generated]] entry from quality/config.toml.",
+        )
+        for file in generated
+        if Key(Metric.FILE_LINES, file.path) not in tree.measurements
+    ]
+
+
+def check_size(tree: TreeMeasurement, baseline: Baseline | None, generated: Collection[GeneratedFile]) -> RuleResult:
+    """Report-only without a baseline; with one, the tree on disk must hold it. A declared file is left out of
+    either, and a declaration without a measured file is a finding."""
+    stale = _stale_declarations(tree, generated)
+    judged = without_generated(tree, generated)
     if baseline is None:
-        return RuleResult([], report_counts(tree))
-    return RuleResult(compare(complete(tree), baseline.size), None)
+        return RuleResult(stale, report_counts(judged))
+    return RuleResult([*stale, *compare(complete(judged), baseline.size)], None)

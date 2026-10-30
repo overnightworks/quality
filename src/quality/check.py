@@ -190,7 +190,9 @@ def _verdict(rule: Rule, outcome: Sequence[Finding] | CannotJudge) -> RuleVerdic
 
 
 def _judge_baseline_rules(
-    sources: dict[str, bytes] | CannotJudge, baseline: ratchet.Baseline | None | CannotJudge
+    sources: dict[str, bytes] | CannotJudge,
+    baseline: ratchet.Baseline | None | CannotJudge,
+    allow_lists: AllowLists | CannotJudge,
 ) -> tuple[ratchet.RuleResult | CannotJudge, ratchet.RuleResult | CannotJudge]:
     """The size and clone verdicts, both from one measurement of the tree and one read of the baseline."""
     if isinstance(sources, CannotJudge):
@@ -198,7 +200,8 @@ def _judge_baseline_rules(
     if isinstance(baseline, CannotJudge):
         return baseline, baseline
     tree = ratchet.measure(sources)
-    return _attempt(lambda: ratchet.check_size(tree, baseline)), _attempt(lambda: clones.check_clones(tree, sources, baseline))
+    size = _attempt(lambda: ratchet.check_size(tree, baseline, _required(allow_lists).generated))
+    return size, _attempt(lambda: clones.check_clones(tree, sources, baseline))
 
 
 def _content_findings(
@@ -227,10 +230,10 @@ def run_hygiene(root: Path, locate_ruff: Callable[[], str], locate_zizmor: Calla
     tracked = checkout.tracked_files(root)
     sources = _attempt(lambda: ratchet.read_sources(root, tracked))
     baseline = sources if isinstance(sources, CannotJudge) else _attempt(lambda: judged_baseline(root))
-    size, clone = _judge_baseline_rules(sources, baseline)
+    allow_lists = _attempt(lambda: _read_allow_lists(root))
+    size, clone = _judge_baseline_rules(sources, baseline, allow_lists)
     contracts = _attempt(lambda: check_import_contract(root, tracked))
     modes = _attempt(lambda: checkout.index_modes(root))
-    allow_lists = _attempt(lambda: _read_allow_lists(root))
     floor = _attempt(lambda: _python_floor_result(root, modes, allow_lists))
     lint = _attempt(lambda: lint_python(root, modes, locate_ruff))
     printing = _judge_lint(lint, python_lint.judge_print)
