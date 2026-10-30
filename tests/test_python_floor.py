@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from quality.config import CONFIG_PATH, PYTHON_ALLOWANCE_EXAMPLE
-from tests.support.check import copy_block, is_clean, refusal_row, refusals
+from tests.support.check import copy_block, env_row_stands, is_clean, refusal_row, refusals
 from tests.support.check import hygiene_output as run
 from tests.support.config_refusals import ONE_LINE_NEED
 from tests.support.git_repositories import GIT_IDENTITY, head_commit
@@ -184,7 +184,7 @@ def test_an_unreadable_pyproject_is_unparsable_and_leaves_the_other_rules_judged
     code, output = run(capsys, repo)
     assert code == 2, output
     assert f"{refusal_row('files')}pyproject.toml" in output, output
-    assert "env-file .env - " in output, output
+    assert env_row_stands(output), output
 
 
 def test_a_pyproject_that_links_out_of_the_repository_cannot_be_judged(build_repo, capsys, elsewhere):

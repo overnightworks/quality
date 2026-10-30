@@ -15,7 +15,7 @@ from quality import cli, process, scanners
 from quality.rules import Rule
 from quality.scanners import ScannerError
 from tests.support.advisories import uv_lock
-from tests.support.check import heard, refusal_row, refusals
+from tests.support.check import env_row_stands, heard, refusal_row, refusals
 from tests.support.git_repositories import GIT_IDENTITY
 from tests.support.scanners import (
     NOT_INSTALLED,
@@ -759,7 +759,7 @@ def test_without_mise_the_scanner_rules_cannot_judge_and_every_other_rule_still_
     assert (code, captured.out.count("mise is not installed"), captured.out.count(scanners.install_command())) == (2, 3, 0), captured.err
     assert captured.err.splitlines()[1:] == ["next:", f"    install mise: {scanners.MISE_INSTALLATION_PAGE}", f"    {scanners.install_command()}"]
     assert set(refusals(repo, locate_zizmor=fake_zizmor(elsewhere, "echo '[]'"))) == {Rule.LEAK, Rule.WORKFLOW_LINT, Rule.ADVISORY}
-    assert "env-file .env - " in captured.out
+    assert env_row_stands(captured.out)
 
 
 @pytest.mark.parametrize("command", ["hygiene", "scan-staged"])

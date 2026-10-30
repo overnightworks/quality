@@ -4,11 +4,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.support.check import env_row_stands, is_clean, refusal_row, refusals
 from tests.support.check import hygiene_output as run
-from tests.support.check import is_clean, refusal_row, refusals
-
-ENV_FINDING = "env-file .env - "
-
 
 GUIDANCE = {"AGENTS.md": "# guidance\n"}
 IMPORT = "@AGENTS.md\n"
@@ -61,7 +58,7 @@ def test_claude_md_that_is_absent_or_exactly_the_import_is_clean(build_repo, cap
         ({**GUIDANCE, "CLAUDE.md": ""}, {}, "CLAUDE.md", MISMATCH_REASON, MISMATCH_FIX),
         ({**GUIDANCE, "CLAUDE.md": " @AGENTS.md\n"}, {}, "CLAUDE.md", MISMATCH_REASON, MISMATCH_FIX),
         ({**GUIDANCE, "CLAUDE.md": "@AGENTS.md\n\n"}, {}, "CLAUDE.md", MISMATCH_REASON, MISMATCH_FIX),
-        ({**GUIDANCE, "CLAUDE.md": "﻿@AGENTS.md\n"}, {}, "CLAUDE.md", MISMATCH_REASON, MISMATCH_FIX),
+        ({**GUIDANCE, "CLAUDE.md": "\ufeff@AGENTS.md\n"}, {}, "CLAUDE.md", MISMATCH_REASON, MISMATCH_FIX),
         ({**GUIDANCE, "CLAUDE.md": "@AGENTS.md\nuse pnpm\n"}, {}, "CLAUDE.md", MISMATCH_REASON, MISMATCH_FIX),
         ({**GUIDANCE, "claude.md": "own rules\n"}, {}, "claude.md", MISMATCH_REASON, MISMATCH_FIX),
         ({**GUIDANCE, ".claude/CLAUDE.md": IMPORT}, {}, ".claude/CLAUDE.md", NESTED_REASON, NESTED_FIX),
@@ -131,7 +128,7 @@ def test_unreadable_claude_md_cannot_be_judged_and_other_rules_still_judge(build
     code, output = run(capsys, repo)
     assert code == 2, output
     assert f"{refusal_row('files')}cannot read CLAUDE.md" in output
-    assert ENV_FINDING in output
+    assert env_row_stands(output)
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root reaches a mode-0 directory, so no permission is refused")

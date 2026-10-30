@@ -9,7 +9,7 @@ import yaml
 
 from quality import checkout, repository
 from quality.config import CONFIG_PATH, ComposeAllowance
-from quality.report import CannotJudge, Finding
+from quality.report import CannotJudge, Finding, FindingEvent
 from quality.rules import Rule
 
 LOOPBACK = "127.0.0.1"
@@ -109,8 +109,9 @@ def _compose_file_findings(name: str, text: str, declared_services: set[str]) ->
         ports = service.get("ports") or []
         if not isinstance(ports, list):
             findings.append(Finding(Rule.COMPOSE_PORT, name, None,
-                                    f"service {service_name} has ports that are not a list (unreadable).",
-                                    "write ports as a list so each one can be checked."))
+                                    f"service {service_name}: ports is no list",
+                                    "write ports as a list so each one can be checked",
+                                    event=FindingEvent.UNREADABLE_PORT))
             continue
         findings.extend(_port_findings(name, service_name, ports))
     return findings, host_networked
@@ -118,22 +119,22 @@ def _compose_file_findings(name: str, text: str, declared_services: set[str]) ->
 
 def _network_mode_finding(name: str, service_name: object, network_mode: object) -> Finding | None:
     """A finding for `host`, and for a value an interpolation may resolve to `host`; None for any other mode."""
-    fix = f"give it a network of its own, or declare it in {CONFIG_PATH} with [[compose.allow]], a file, a service and a reason."
+    fix = f"give it a network of its own, or declare it in {CONFIG_PATH} with [[compose.allow]], a file, a service and a reason"
     if network_mode == HOST_NETWORK_MODE:
         return Finding(Rule.COMPOSE_PORT, name, None,
-                       f"service {service_name} has network_mode: {HOST_NETWORK_MODE}, which publishes whatever it binds beyond loopback.", fix)
+                       f"service {service_name}: network_mode: {HOST_NETWORK_MODE} publishes all it binds", fix, event=FindingEvent.HOST_NETWORK)
     if isinstance(network_mode, str) and INTERPOLATION.search(network_mode):
         return Finding(Rule.COMPOSE_PORT, name, None,
-                       f"service {service_name} has a network_mode that holds an interpolation, which may resolve to {HOST_NETWORK_MODE} (unverifiable).", fix)
+                       f"service {service_name}: an interpolated network_mode may be {HOST_NETWORK_MODE}", fix, event=FindingEvent.HOST_NETWORK)
     return None
 
 
 def _stale_compose_declaration(file: str, service: str) -> Finding:
     return Finding(
         Rule.COMPOSE_PORT, file, None,
-        f"service {service} is declared in {CONFIG_PATH} with [[compose.allow]], but no tracked compose file of that name "
-        f"has such a service with network_mode: {HOST_NETWORK_MODE} or an interpolated network_mode.",
-        f"delete its [[compose.allow]] entry from {CONFIG_PATH}.",
+        f"[[compose.allow]] service {service} is not host-networked there",
+        f"delete its [[compose.allow]] entry from {CONFIG_PATH}",
+        event=FindingEvent.UNUSED,
     )
 
 
@@ -158,12 +159,14 @@ def _port_findings(name: str, service_name: object, ports: list) -> list[Finding
         description = _describe(port)
         if description is None:
             findings.append(Finding(Rule.COMPOSE_PORT, name, None,
-                                    f"service {service_name} has a port that is not a string, a number or a mapping whose published (or, without one, target) is text or a number (unreadable).",
-                                    "write each port as a string, a number or a mapping whose published (or, without one, target) is text or a number."))
+                                    f"service {service_name}: a port that is no text, number or mapping of one",
+                                    "write each port as text, a number or a mapping whose published (or, without one, target) is text or a number",
+                                    event=FindingEvent.UNREADABLE_PORT))
         elif not _binds_loopback(port):
             findings.append(Finding(Rule.COMPOSE_PORT, name, None,
-                                    f"service {service_name} publishes port {description} beyond loopback.",
-                                    f"bind it explicitly, for example \"{LOOPBACK}:HOST:CONTAINER\"."))
+                                    f"service {service_name}: {description} beyond loopback",
+                                    f"bind it to loopback, for example \"{LOOPBACK}:HOST:CONTAINER\"",
+                                    event=FindingEvent.PUBLISHED_PORT))
     return findings
 
 

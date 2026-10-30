@@ -41,6 +41,7 @@ from quality.output import (
     emit,
     emit_finding,
     set_up_streams,
+    write_findings,
     write_pair,
     write_rows,
     write_verdict,
@@ -247,8 +248,10 @@ def run_hygiene_check(path: Path, locate_ruff: Callable[[], str], locate_zizmor:
     emit(*result.reports, ONLINE_AUDITS_NOTE)
     for verdict in result.areas:
         write_rows((area_row(verdict),))
+        write_findings([finding for finding in verdict.findings if finding.event])
         for finding in verdict.findings:
-            emit_finding(finding)
+            if not finding.event:
+                emit_finding(finding)
     exit_code = HYGIENE_EXIT[result.worst]
     if exit_code == EXIT_CANNOT_JUDGE:
         write_pair(refusal_error(result.areas), next_steps(result.areas))

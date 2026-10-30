@@ -6,11 +6,13 @@ import pytest
 
 from quality import check, cli, config, env_file, installation, process, scanners
 from quality.compose import is_compose_file
-from quality.report import CannotJudge, Command, Example, Finding, Reason, Unparsable
+from quality.report import CannotJudge, Command, Example, Finding, Reason, Unparsable, printable
 from quality.rules import Area, Rule
 from tests.support.check import (
     CLEAN_VERDICT,
     compose,
+    env_row_stands,
+    finding_rows,
     installed_ruff,
     is_clean,
     loosen_requirement,
@@ -44,7 +46,7 @@ def non_utf8_filename_repo(build_repo, tmp_path):
         (non_utf8_filename_repo, 0, CLEAN_VERDICT),
         (lambda build_repo, tmp_path: tmp_path, 2, "error: not inside a git work tree"),
         (lambda build_repo, tmp_path: build_repo({".env": "A=1\n"}), 1, "findings in 1 area · "),
-        (lambda build_repo, tmp_path: build_repo({"\udcff.env": "A=1\n"}), 1, "env-file \\udcff.env - "),
+        (lambda build_repo, tmp_path: build_repo({"\udcff.env": "A=1\n"}), 1, printable("\udcff.env")),
         (deleted_compose_repo, 0, CLEAN_VERDICT),
         (truncated_compose_repo, 2, "✗ files "),
     ],
@@ -87,7 +89,6 @@ def test_a_tracked_workflow_missing_from_disk_is_never_handed_to_a_scanner(build
 
 BASELINE = {"quality/baseline.toml": ""}
 NEW_DEBT = "def long_one():\n" + "    x = 1\n" * 61
-ENV_FINDING = "env-file .env - "
 
 
 def config_linked_out_of_the_repository(build_repo, elsewhere):
@@ -104,29 +105,28 @@ def files(tracked: dict[str, str]):
 
 
 @pytest.mark.parametrize(
-    ("arrange", "expected_code", "expected_lines"),
+    ("arrange", "expected_code", "expected_lines", "rows"),
     [
         (files({**BASELINE, ".env": "A=1\n", "src/bad.py": "def broken(:\n"}), 2,
-         [ENV_FINDING, f"{refusal_row('debt')}src/bad.py is not valid Python",
+         [f"{refusal_row('debt')}src/bad.py is not valid Python",
           f"{refusal_row('code')}ruff cannot parse src/bad.py",
           f"{refusal_row('code')}ruff cannot parse src/bad.py",
-          "error: 2 of 7 areas could not check · 2 findings in the others"]),
+          "error: 2 of 7 areas could not check · 2 findings in the others"], [".env"]),
         (config_linked_out_of_the_repository, 2,
-         [ENV_FINDING, f"{refusal_row('files')}quality/config.toml resolves outside the repository",
+         [f"{refusal_row('files')}quality/config.toml resolves outside the repository",
           f"{refusal_row('debt')}quality/config.toml resolves outside the repository",
           f"{refusal_row('secrets')}quality/config.toml resolves outside the repository",
           f"{refusal_row('dependencies')}quality/config.toml resolves outside the repository",
-          "error: 4 of 7 areas could not check · 1 finding, 1 of them in those areas"]),
+          "error: 4 of 7 areas could not check · 1 finding, 1 of them in those areas"], [".env"]),
         (files({**BASELINE, "compose.yaml": "services: [\n", "src/a.py": NEW_DEBT}), 2,
-         [f"{refusal_row('files')}cannot read compose.yaml", "size src/a.py:1 - function long_one"]),
+         [f"{refusal_row('files')}cannot read compose.yaml", "size src/a.py:1 - function long_one"], []),
         (files({".env": "A=1\n", **compose('- "8080:80"')}), 1,
-         [ENV_FINDING, "compose-port compose.yaml - ", "! 3 findings in 1 area · 5 areas clean · debt measured, not enforced · <1s"]),
-        (files({"compose-\udcff.yaml": compose('- "8080:80"')["compose.yaml"]}), 1,
-         ["compose-port compose-\\udcff.yaml - service web publishes port 8080:80"]),
-        (files({**BASELINE, "src/\udcff.py": NEW_DEBT}), 1, ["size src/\\udcff.py:1 - function long_one"]),
+         ["! 3 findings in 1 area · 5 areas clean · debt measured, not enforced · <1s"], [".env", "compose.yaml"]),
+        (files({"compose-\udcff.yaml": compose('- "8080:80"')["compose.yaml"]}), 1, [], [printable("compose-\udcff.yaml")]),
+        (files({**BASELINE, "src/\udcff.py": NEW_DEBT}), 1, ["size src/\\udcff.py:1 - function long_one"], []),
         (files({"src/\udcff.py": "def broken(:\n"}), 2,
          ["functions unmeasured: src/\\udcff.py", f"{refusal_row('code')}ruff cannot parse src/\\udcff.py",
-          f"{refusal_row('code')}ruff cannot parse src/\\udcff.py"]),
+          f"{refusal_row('code')}ruff cannot parse src/\\udcff.py"], []),
     ],
     ids=[
         "cell 1 unparsable size hides no env-file finding",
@@ -139,7 +139,7 @@ def files(tracked: dict[str, str]):
     ],
 )
 def test_every_rule_is_judged_and_the_exit_is_the_worst(
-    build_repo, elsewhere, capsys, arrange, expected_code, expected_lines
+    build_repo, elsewhere, capsys, arrange, expected_code, expected_lines, rows
 ):
     """#55 rules 1-4, cells 1-8 (cell 9 is the exit-code table's non-utf8 env case): each rule prints its own
     verdict, one rule's refusal hides no other rule's, the exit is the worst verdict's, the clean line names the
@@ -149,6 +149,7 @@ def test_every_rule_is_judged_and_the_exit_is_the_worst(
     output = captured.out + captured.err
     assert code == expected_code, output
     assert [line for line in expected_lines if line not in output] == [], output
+    assert [len(finding_rows(output, location)) for location in rows] == [1] * len(rows), output
 
 
 def test_a_run_without_flags_judges_every_rule(build_repo, capsys):
@@ -179,9 +180,18 @@ def test_a_refusing_workflow_scanner_stops_no_other_workflow_rule(build_repo, se
     assert "workflow-security .github/workflows/w.yml:7 - zizmor unpinned-uses" in captured.out
 
 
-@pytest.mark.parametrize("case", ["not installed", "recorded file deleted", "another version", "failing version", "unpinned"])
+@pytest.mark.parametrize(
+    ("case", "reinstall_shown", "fragment"),
+    [
+        ("not installed", True, None),
+        ("recorded file deleted", True, None),
+        ("another version", True, f"zizmor 0.0.1 found, the release pins {installation.required_version('zizmor')}"),
+        ("failing version", True, " zizmor version exited 1"),
+        ("unpinned", False, str(installation.UnpinnedDependency("zizmor"))),
+    ],
+)
 def test_a_zizmor_quality_cannot_find_or_trust_refuses_only_workflow_security(
-    build_repo, served_scanners, elsewhere, monkeypatch, capsys, case
+    build_repo, served_scanners, elsewhere, monkeypatch, capsys, case, reinstall_shown, fragment
 ):
     """#248 rule 4: a zizmor that is missing, at another version or unable to report one cannot judge and names the
     reinstall command; a pin quality's own metadata lacks names the defect and no command; no other rule refuses."""
@@ -207,17 +217,12 @@ def test_a_zizmor_quality_cannot_find_or_trust_refuses_only_workflow_security(
     output = captured.out + captured.err
     assert code == 2, output
     assert refused(output, "workflows"), output
-    assert "env-file .env - " in output
+    assert env_row_stands(output)
     lines = [line.strip() for line in output.splitlines()]
-    expected_once = int(case != "unpinned")
+    expected_once = int(reinstall_shown)
     for choice in scanners.REINSTALL.choices:
         assert (lines.count(choice.text), output.count(choice.text)) == (expected_once, expected_once), output
-    if case == "unpinned":
-        assert str(installation.UnpinnedDependency("zizmor")) in output
-    if case == "failing version":
-        assert " zizmor version exited 1" in output
-    if case == "another version":
-        assert f"zizmor 0.0.1 found, the release pins {installation.required_version('zizmor')}" in output
+    assert fragment is None or fragment in output
 
 
 def test_a_zizmor_planted_in_the_scanner_directory_is_never_run(build_repo, served_scanners, elsewhere, capsys):
@@ -357,7 +362,7 @@ def test_hygiene_names_a_config_refusal_on_its_rows_and_shows_the_example_once_u
     code, out, err = hygiene_over(build_repo, capsys, refusal)
     assert code == 2
     assert [f"{refusal_row(area)}{refusal.fact}" in out for area in CONFIG_AREAS] == [True] * 4, out
-    assert any(line.startswith("env-file .env - ") for line in out)
+    assert env_row_stands("\n".join(out))
     label = f"next: {check.CONFIG_EXAMPLE_LABEL}:"
     if refusal.example is None:
         assert f"next: {cli.REFUSED_AREAS_NEXT.text}" in err

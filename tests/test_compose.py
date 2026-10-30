@@ -1,12 +1,24 @@
 import os
+import re
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from tests.support.check import assert_refusal, compose, is_clean, refusal_row, refused
+from quality.report import FindingEvent
+from quality.rules import Rule
+from tests.support.check import (
+    assert_row_prints_finding,
+    compose,
+    finding_rows,
+    is_clean,
+    refusal_row,
+    refused,
+    rule_findings,
+)
 from tests.support.check import hygiene_output as run
 from tests.support.git_repositories import make_repo
+from tests.support.merge import ONE_JOB
 
 
 def test_compose_specific_tags_are_judged_not_refused(build_repo, capsys):
@@ -55,18 +67,23 @@ def test_unknown_yaml_tag_cannot_be_judged(build_repo, capsys):
     ],
 )
 def test_compose_ports_must_bind_loopback(build_repo, capsys, files, refused_path):
-    """#3 rule 2/4: a compose port beyond loopback is refused with rule id, path, reason and fix; edge's real file is judged in test_compose_container_host (#78 cell 15)."""
-    code, output = run(capsys, build_repo(files))
+    """#3 rule 2/4: a compose port beyond loopback is a finding at its file, printed once; edge's real file is judged in test_compose_container_host (#78 cell 15)."""
+    repo = build_repo(files)
+    code, output = run(capsys, repo)
+    findings = rule_findings(repo, Rule.COMPOSE_PORT)
     assert code == (0 if refused_path is None else 1)
-    if refused_path:
-        assert_refusal(output, "compose-port", refused_path)
+    assert [finding.path for finding in findings] == ([] if refused_path is None else [refused_path])
+    for finding in findings:
+        (row,) = finding_rows(output, finding.location)
+        assert_row_prints_finding(row, finding)
 
 
 def test_quoted_tagged_port_is_read_as_the_string_it_wraps(build_repo, capsys):
     """#3 rule 4: `!override "22:22"` is the string 22:22, not a sexagesimal number."""
-    code, output = run(capsys, build_repo(compose('- !override "22:22"')))
-    assert code == 1
-    assert "port 22:22 " in output
+    repo = build_repo(compose('- !override "22:22"'))
+    code, _ = run(capsys, repo)
+    (finding,) = rule_findings(repo, Rule.COMPOSE_PORT)
+    assert (code, finding.event, "22:22" in finding.reason) == (1, FindingEvent.PUBLISHED_PORT, True)
 
 
 @pytest.mark.parametrize(
@@ -83,8 +100,11 @@ def test_quoted_tagged_port_is_read_as_the_string_it_wraps(build_repo, capsys):
 )
 def test_a_port_is_described_as_compose_reads_it(build_repo, capsys, port_line, described):
     """#78 rule 2, cells 1-3: `22:22` is text, not the base-60 number 1342."""
-    code, output = run(capsys, build_repo(compose(port_line)))
-    assert (code, f"port {described} beyond loopback" in output) == (1, True), output
+    repo = build_repo(compose(port_line))
+    code, output = run(capsys, repo)
+    (finding,) = rule_findings(repo, Rule.COMPOSE_PORT)
+    (row,) = finding_rows(output, finding.location)
+    assert (code, finding.event, described in row.fact) == (1, FindingEvent.PUBLISHED_PORT, True)
 
 
 def test_a_loopback_port_with_an_ip_is_clean(build_repo, capsys):
@@ -109,9 +129,10 @@ OPEN_PORT = compose('- "0.0.0.0:1:1"')["compose.yaml"]
 )
 def test_a_compose_name_is_judged(build_repo, capsys, name):
     """#78 rule 1, cell 4: the word `compose` between `.`, `-` or `_` makes a file a compose file."""
-    code, output = run(capsys, build_repo({name: OPEN_PORT}))
-    assert code == 1
-    assert_refusal(output, "compose-port", name)
+    repo = build_repo({name: OPEN_PORT})
+    code, output = run(capsys, repo)
+    assert (code, [finding.path for finding in rule_findings(repo, Rule.COMPOSE_PORT)]) == (1, [name])
+    assert len(finding_rows(output, name)) == 1
 
 
 @pytest.mark.parametrize(
@@ -171,7 +192,10 @@ def test_a_port_that_is_a_container_is_one_short_finding(build_repo, capsys, ser
     """#78 rule 4, cell 12: an aliased container is never printed."""
     repo = build_repo({"compose.yaml": f"x-bomb:\n  {ALIAS_BOMB.replace(chr(10), chr(10) + '  ')}\nservices:\n  web:\n{service}"})
     code, output = run(capsys, repo)
-    assert (code, "has a port that is not a string, a number or a mapping whose published (or, without one, target) is text or a number (unreadable)" in output, max(len(line) for line in output.splitlines() if "has a port" in line) < 400) == (1, True, True), output
+    (finding,) = rule_findings(repo, Rule.COMPOSE_PORT)
+    (row,) = finding_rows(output, finding.location)
+    assert (code, finding.event, row.event) == (1, FindingEvent.UNREADABLE_PORT, FindingEvent.UNREADABLE_PORT)
+    assert max(len(line) for line in output.splitlines()) < 400
 
 
 def test_an_untracked_compose_file_is_not_judged_until_it_is_added(build_repo, capsys):
@@ -246,3 +270,49 @@ def test_compose_files_are_read_and_parsed_one_at_a_time(tmp_path, capsys):
     (repo / "docs/compose-b.yaml").write_bytes(b"\xff")
     code, output = run(capsys, repo)
     assert (code, f"{refusal_row('files')}cannot read docs/compose-a.yaml" in output, "compose-b.yaml" in output) == (2, True, False), output
+
+
+def host_network_file(mode: str) -> dict[str, str]:
+    return {"compose.yaml": f"services:\n  web:\n    image: x\n    network_mode: {mode}\n"}
+
+
+STALE_DECLARATION = '[[compose.allow]]\nfile = "compose.yaml"\nservice = "web"\nreason = "r"\n'
+KINDS = [
+    (compose('- "8080:80"'), "", FindingEvent.PUBLISHED_PORT),
+    (compose("- target: [1]"), "", FindingEvent.UNREADABLE_PORT),
+    ({"compose.yaml": "services:\n  web:\n    ports: 8080\n"}, "", FindingEvent.UNREADABLE_PORT),
+    (host_network_file("host"), "", FindingEvent.HOST_NETWORK),
+    (host_network_file("${NET}"), "", FindingEvent.HOST_NETWORK),
+    (host_network_file("none"), STALE_DECLARATION, FindingEvent.UNUSED),
+]
+
+
+@pytest.mark.parametrize(
+    ("files", "declaration", "event"),
+    KINDS,
+    ids=["port beyond loopback", "unreadable port", "ports no list", "host network", "interpolated network", "stale declaration"],
+)
+def test_each_kind_of_finding_has_its_event_a_short_fact_and_a_fix_the_door_prints(build_repo, capsys, files, declaration, event):
+    """#281 O12: one event per kind, a fact naming the service, neither fact nor fix ending in a period, the row equal to the finding."""
+    config = {"quality/config.toml": ONE_JOB + declaration} if declaration else {}
+    repo = build_repo({**files, **config})
+    _, output = run(capsys, repo)
+    (finding,) = rule_findings(repo, Rule.COMPOSE_PORT)
+    (row,) = finding_rows(output, finding.location)
+    assert finding.event is event
+    assert "web" in finding.reason
+    assert not finding.reason.endswith(".")
+    assert not finding.fix.endswith(".")
+    assert_row_prints_finding(row, finding)
+
+
+LOOPBACK_EXAMPLE = re.compile(r'"([^"]+)"')
+
+
+def test_the_loopback_fix_example_bound_to_the_services_own_ports_clears_the_finding(build_repo, capsys):
+    """#281 O12: the printed example, its address kept and bound to the scenario's own ports, is what the rule accepts."""
+    repo = build_repo(compose('- "8080:80"'))
+    (finding,) = rule_findings(repo, Rule.COMPOSE_PORT)
+    address = ":".join(LOOPBACK_EXAMPLE.search(finding.fix).group(1).split(":")[:-2])
+    (repo / "compose.yaml").write_text(compose(f'- "{address}:8080:80"')["compose.yaml"])
+    assert rule_findings(repo, Rule.COMPOSE_PORT) == []

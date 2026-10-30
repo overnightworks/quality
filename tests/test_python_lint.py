@@ -8,8 +8,8 @@ import pytest
 from quality import check, installation, python_lint, scanners
 from quality.python_lint import LintError, RuffFinding, UnparsablePython
 from quality.rules import Rule
+from tests.support.check import env_row_stands, installed_ruff, is_clean, loosen_requirement, refusal_row, refusals
 from tests.support.check import hygiene_output as run
-from tests.support.check import installed_ruff, is_clean, loosen_requirement, refusal_row, refusals
 from tests.support.layout import in_index
 from tests.support.scanners import never_located, nothing_installed
 
@@ -297,7 +297,7 @@ def test_a_tracked_python_file_the_checkout_does_not_hold_cannot_be_judged(build
     code, output = run(capsys, repo)
     assert code == 2, output
     assert f"{refusal_row('code')}cannot read src/p/a.py: the checkout does not hold it" in output
-    assert "env-file .env - " in output
+    assert env_row_stands(output)
 
 
 @pytest.mark.integration
@@ -418,7 +418,7 @@ def test_a_syntax_error_is_unparsable_and_the_other_rules_are_still_judged(build
     assert code == 2
     assert f"{refusal_row('code')}ruff cannot parse src/p/bad.py" in output
     assert f"{refusal_row('code')}ruff cannot parse src/p/bad.py" in output
-    assert "env-file .env - " in output
+    assert env_row_stands(output)
 
 
 @pytest.mark.integration
@@ -440,7 +440,7 @@ def test_a_ruff_run_quality_cannot_trust_cannot_be_judged(build_repo, capsys, mo
     code, output = run(capsys, repo, lambda: str(binary))
     rules = [Rule.PYTHON_SECURITY, Rule.PYTHON_PRINT]
     assert (code, list(refusals(repo, lambda: str(binary))), says in output) == (2, rules, True), output
-    assert "env-file .env - " in output
+    assert env_row_stands(output)
 
 
 @pytest.mark.integration
@@ -465,7 +465,7 @@ def test_a_ruff_quality_cannot_find_or_trust_names_the_reinstall_command(build_r
     code, output = run(capsys, repo, locate)
     assert code == 2, output
     assert list(refusals(repo, locate)) == [Rule.PYTHON_SECURITY, Rule.PYTHON_PRINT]
-    assert "env-file .env - " in output
+    assert env_row_stands(output)
     lines = [line.strip() for line in output.splitlines()]
     expected_once = int(case != "unpinned")
     for choice in scanners.REINSTALL.choices:

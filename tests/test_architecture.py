@@ -25,7 +25,13 @@ from tests.support.architecture import (
     ini_section,
     toml,
 )
-from tests.support.check import CLEAN_VERDICT, assert_every_line_starts_with_the_door, is_clean, refusal_row
+from tests.support.check import (
+    CLEAN_VERDICT,
+    assert_every_line_starts_with_the_door,
+    env_row_stands,
+    is_clean,
+    refusal_row,
+)
 from tests.support.check import hygiene_output as run
 from tests.support.merge import BASE_SHA, ONE_JOB, SHOWN, SONAR_GREEN, FakeGh, changed_nothing, declaring, drive
 
@@ -199,7 +205,7 @@ def test_a_syntax_error_is_unparsable_and_hides_no_other_rule(build_repo, capsys
     code, output = run(capsys, repo)
     assert code == 2, output
     assert f"{refusal_row('imports')}Syntax error in src/shop/bad.py, line 1" in output
-    assert "env-file .env - " in output
+    assert env_row_stands(output)
     assert str(repo) not in output
 
 
