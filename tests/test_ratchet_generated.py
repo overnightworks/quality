@@ -76,6 +76,7 @@ def test_a_declared_python_file_python_cannot_parse_leaves_the_size_rule_judgeab
     repo = build_repo({"gen/api.py": "def broken(:\n", CONFIG_PATH: GATE + generated_config(path="gen/api.py"), BASELINE_PATH: ""})
     _, output = hygiene(capsys, repo)
     assert size_lines(output) == []
+    assert "size unparsable" not in output
     assert cli.main(["baseline", "write", str(repo)]) == 2
     assert "baseline: not written - gen/api.py is not valid Python" in capsys.readouterr().err
 
