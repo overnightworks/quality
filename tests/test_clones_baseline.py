@@ -9,6 +9,7 @@ import pytest
 from quality import __version__, cli
 from quality.ratchet import (
     BASELINE_PATH,
+    WRITE_COMMAND,
     Baseline,
     ClonePair,
     Key,
@@ -530,13 +531,14 @@ def test_a_file_python_cannot_parse_leaves_the_enforced_clone_rule_unable_to_jud
 
 
 @pytest.mark.parametrize("text", ["[size\n", *MALFORMED], ids=["no clone table, not TOML", *MALFORMED_IDS])
-def test_a_malformed_baseline_leaves_both_rules_unable_to_judge_with_the_rewrite_hint(build_repo, capsys, text):
+def test_a_malformed_baseline_leaves_both_rules_unable_to_judge_naming_the_rewrite_once_on_next(build_repo, capsys, text):
     """#136 cell 9: one read, so even a file with no `[clones]` leaves clone's mode unknown."""
     repo = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: text})
     code, output = hygiene_output(capsys, repo)
     assert code == 2, output
     assert set(refusals(repo)) == {Rule.SIZE, Rule.CLONE}
-    assert "rewrite it with `quality baseline write`" in output
+    assert (output.count(WRITE_COMMAND), "rewrite it with" in output) == (1, False), output
+    assert f"next: {WRITE_COMMAND}" in output.splitlines()
 
 
 def test_the_write_and_the_rule_agree(build_repo, capsys):

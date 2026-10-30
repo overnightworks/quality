@@ -11,11 +11,6 @@ from packaging.utils import canonicalize_name
 
 from quality import DISTRIBUTION
 
-REINSTALL = (
-    "reinstall quality with its dependencies: `uv sync --locked --reinstall` in its checkout, "
-    "or `uv tool upgrade --reinstall overnightworks-quality` for a tool install"
-)
-
 
 class UnpinnedDependency(Exception):
     """Quality's metadata does not pin a dependency to exactly one version."""

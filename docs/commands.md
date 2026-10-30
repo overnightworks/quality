@@ -87,13 +87,13 @@ linux-x64`, never by hand). The command that installs them from the lock is
 
     mise --cd <quality's installation>/quality/mise install --locked
 
-and every reason that a scanner cannot be found ends with it, the path filled in. A scan finds a scanner by asking
+and `hygiene` names it once, on its own line after `next:`, however many rules lack a scanner, the path filled in; `scan-staged`'s refusal ends with `; next: ` and the steps. A scan finds a scanner by asking
 `mise which` in that directory, for exactly the manifest's version, and runs it only when it reports that version. A
 scanner on `PATH` is never used. mise reads only the manifest directory and the operator's own user and system configuration: it starts in that
 directory under `MISE_CEILING_PATHS` set to the directory above it, so a `mise.toml` or `.miserc.toml` in the scanned
 repository (or in the checkout the gate holds the manifest in) takes no part in which binary runs.
 
-`hygiene` and `scan-staged` exit `2` for a scanner that mise has not installed, that is at another version, or whose
+`hygiene` and `scan-staged` exit `2` for a scanner mise cannot locate, that is at another version, or whose
 answer names no executable, and for a machine without mise, which names mise's install page and the command; only the
 rule that needs the scanner cannot judge. A repository with no workflow needs no actionlint and one with no lock file
 no osv-scanner.
@@ -101,7 +101,7 @@ no osv-scanner.
 zizmor (the `workflow-security` rule) and ruff (`python-security`, `python-print`) are not mise's. They are pinned
 dependencies of quality's package (`pyproject.toml`, hashed in `uv.lock`), so installing quality installs them. quality
 runs the executable its own installation recorded, never one on `PATH`. A missing one, or one at another
-version, makes its rules `cannot judge` (exit `2`) with the command that reinstalls quality; a scanner quality's own
+version, makes its rules `cannot judge` (exit `2`) with the two commands that reinstall quality, one in its checkout and one for a tool install, as alternatives under `next:`; a scanner quality's own
 metadata does not pin exactly makes them `cannot judge` as a defect in quality's release.
 
 quality builds the logic and the process itself and never a specialist scanner (language linters and test runners,

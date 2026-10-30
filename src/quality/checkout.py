@@ -8,7 +8,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path, PurePosixPath
 
 from quality import process, repository
-from quality.report import CannotJudge, shell_word
+from quality.report import CannotJudge, Command, Instruction, Step, shell_word
 
 WORKFLOW_DIRECTORY = PurePosixPath(".github/workflows")
 YAML_SUFFIXES = frozenset({".yml", ".yaml"})
@@ -21,19 +21,19 @@ NO_REPOSITORY_SENTENCE = b"fatal: not a git repository (or any"
 class OutsideWorkTree(CannotJudge):
     """The path lies in no work tree: git says so, or the path is a bare repository or the inside of `.git`."""
 
-    def __init__(self, path: Path, message: str) -> None:
-        super().__init__(message)
+    def __init__(self, path: Path, fact: str, next_steps: tuple[Step, ...]) -> None:
+        super().__init__(fact, next_steps)
         self.path = path
 
 
-def _refusal_text(path: Path, because: str) -> str:
+def _refusal_reason(path: Path, because: str) -> tuple[str, tuple[Step, ...]]:
     word = shell_word(str(path))
-    says_why = f"`git -C {word} status` says why" if word else "`git status` run inside it says why"
-    return f"{path} is not a readable git repository: {because} ({says_why})"
+    step = Command(f"git -C {word} status") if word else Instruction("run git status inside the folder named above")
+    return f"{path} is not a readable git repository: {because}", (step,)
 
 
 def _refusal(path: Path, because: str) -> CannotJudge:
-    return CannotJudge(_refusal_text(path, because))
+    return CannotJudge(*_refusal_reason(path, because))
 
 
 def _refusal_without_git(path: Path, what: str, reason: object) -> CannotJudge:
@@ -54,7 +54,7 @@ def _git_listing(path: Path, command: list[str]) -> subprocess.CompletedProcess:
         # git's own words name the checkout it resolved, so only the exit code is printed and git is asked again.
         because = f"git {command[0]} exited {done.returncode}"
         if done.stderr.startswith(NO_REPOSITORY_SENTENCE):
-            raise OutsideWorkTree(path, _refusal_text(path, because))
+            raise OutsideWorkTree(path, *_refusal_reason(path, because))
         raise _refusal(path, because)
     return done
 
@@ -64,7 +64,7 @@ def work_tree_top(path: Path) -> Path:
     answer = _git_listing(path, ["rev-parse", "--is-inside-work-tree", "--show-cdup"]).stdout
     inside, _, cdup = os.fsdecode(answer).strip().partition("\n")
     if inside != "true":
-        raise OutsideWorkTree(path, _refusal_text(path, "it lies outside any work tree"))
+        raise OutsideWorkTree(path, *_refusal_reason(path, "it lies outside any work tree"))
     return path / cdup
 
 

@@ -9,6 +9,7 @@ import pytest
 from quality import __version__, cli
 from quality.ratchet import (
     BASELINE_PATH,
+    WRITE_COMMAND,
     Baseline,
     ClonePair,
     Key,
@@ -423,7 +424,8 @@ def test_an_unreadable_baseline_cannot_be_judged(build_repo, capsys, baseline):
     code, output = hygiene(capsys, repo)
     assert code == 2
     assert list(refusals(repo)) == [Rule.SIZE, Rule.CLONE]
-    assert output.count("rewrite it with `quality baseline write`") == 1, output  # both rules, one reason: the debt row names it once
+    assert (output.count(WRITE_COMMAND), "rewrite it with" in output) == (1, False), output  # both rules, one reason: the run names it once, on next:
+    assert f"next: {WRITE_COMMAND}" in output.splitlines()
 
 
 def test_an_unknown_baseline_table_states_the_fact_and_sends_the_head_to_its_pinned_release(build_repo, capsys):
@@ -658,7 +660,7 @@ def test_a_baseline_that_is_not_utf8_is_malformed_and_names_the_rewrite_once_per
     code, output = hygiene(capsys, repo)
     assert (code, list(refusals(repo))) == (2, [Rule.SIZE, Rule.CLONE])
     assert f"{BASELINE_PATH} is not valid UTF-8" in output
-    assert output.count("rewrite it with `quality baseline write`") == 1, output
+    assert (output.count(WRITE_COMMAND), "rewrite it with" in output) == (1, False), output
 
 
 def test_baseline_write_overwrites_a_baseline_that_is_not_utf8_without_a_rewrite_hint(build_repo, capsys):

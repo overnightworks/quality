@@ -24,12 +24,11 @@ import lizard
 
 from quality import __version__, checkout, repository
 from quality.config import GeneratedFile
-from quality.report import Finding, Unparsable
+from quality.report import Command, Finding, Instruction, Unparsable
 from quality.rules import Rule
 
 BASELINE_PATH = "quality/baseline.toml"
 WRITE_COMMAND = "quality baseline write"
-REWRITE_HINT = f"rewrite it with `{WRITE_COMMAND}`"
 UNKNOWN_TABLE_HINT = "write the baseline with the quality release your gate pins"
 OCCURRENCE_MARK = "#"
 PARSE_ERRORS = (SyntaxError, ValueError, LookupError)
@@ -538,9 +537,14 @@ def _metric_named(name: str) -> Metric:
         raise UnknownTable(f"{BASELINE_PATH} has an unknown table [{name}]; quality {__version__} knows {known}") from None
 
 
-def head_advice(error: SizeError) -> str:
+def head_step(error: SizeError) -> Command | Instruction:
     """What the head can do about its own unreadable baseline; the base is not the pull request's to rewrite."""
-    return UNKNOWN_TABLE_HINT if isinstance(error, UnknownTable) else REWRITE_HINT
+    return Instruction(UNKNOWN_TABLE_HINT) if isinstance(error, UnknownTable) else Command(WRITE_COMMAND)
+
+
+def head_advice(error: SizeError) -> str:
+    step = head_step(error)
+    return f"rewrite it with `{step.text}`" if isinstance(step, Command) else step.text
 
 
 def _table(where: str, value: object) -> dict:

@@ -8,10 +8,64 @@ from quality.config import Allowance
 DETAIL_MARKER = "  | "
 
 
+@dataclass(frozen=True)
+class Command:
+    """One line a person copies whole and runs; the label says where or when it applies."""
+
+    text: str
+    label: str | None = None
+
+    def __str__(self) -> str:
+        return self.text if self.label is None else f"{self.label}: {self.text}"
+
+
+@dataclass(frozen=True)
+class Instruction:
+    """A step in words, for a remedy no single command performs."""
+
+    text: str
+
+    def __str__(self) -> str:
+        return self.text
+
+
+@dataclass(frozen=True)
+class OneOf:
+    """Labelled commands of which a person runs the one whose label fits, never one after the other."""
+
+    label: str
+    choices: tuple[Command, Command, *tuple[Command, ...]]
+
+    def __str__(self) -> str:
+        return f"{self.label}, one of: " + " or ".join(str(choice) for choice in self.choices)
+
+
+type Step = Command | Instruction | OneOf
+
+
+@dataclass(frozen=True)
+class Reason:
+    """Why a rule could not judge: a fact of a few words and the steps that remedy it, in the order a person takes them."""
+
+    fact: str
+    next_steps: tuple[Step, ...] = ()
+
+
 class CannotJudge(Exception):
     """The repository cannot be examined; this is never a clean result."""
 
     label = "cannot judge"
+
+    def __init__(self, fact: str, next_steps: tuple[Step, ...] = ()) -> None:
+        super().__init__(fact)
+        self.reason = Reason(fact, next_steps)
+
+    def __str__(self) -> str:
+        fact, next_steps = self.reason.fact, self.reason.next_steps
+        if not next_steps:
+            return fact
+        first, *later = next_steps
+        return "; ".join([fact, f"next: {first}", *(f"then: {step}" for step in later)])
 
 
 class Unparsable(CannotJudge):
@@ -36,7 +90,6 @@ class Finding:
         return path if self.line is None else f"{path}:{self.line}"
 
 
-# Control, format (bidi overrides and isolates, zero-width characters, tags) and line- or paragraph-separator characters.
 ESCAPED_CATEGORIES = frozenset({"Cc", "Cf", "Zl", "Zp"})
 
 

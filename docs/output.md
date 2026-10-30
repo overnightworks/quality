@@ -123,7 +123,7 @@ $ quality check
   ✓ files         clean          10 rules · 214 files
   ✓ debt          clean          ceiling held · 31 entries, 2 clone pairs
   ✓ imports       clean          1 contract
-  ✗ secrets       not checked    gitleaks is not installed
+  ✗ secrets       not checked    mise could not locate gitleaks 8.30.1
   ✓ workflows     clean          5 workflows
   ! dependencies  1 finding
     ! uv.lock  affected  jinja2 3.1.4 · GHSA-q8x2-4m7c-9v3p · fixed in 3.1.6
@@ -139,7 +139,17 @@ The `next:` form is decision 11. A scanner that reports another version than the
   ✗ secrets       not checked    gitleaks 8.28.0 found, the release pins 8.30.1
 ```
 
-Several areas can fail, and an area can fail for more than one reason. Head proposals of 30.10.2026 (O1 to O3), built unless the operator rules otherwise. A reason that several rules of one area share stands once; distinct reasons make the row name their count and stand on `✗` lines below it, and findings of an area that also cannot check stay under its `✗` row and are counted in the error line. The `next:` line, when the refusals share no single command, is a general instruction.
+Several areas can fail, and an area can fail for more than one reason. Head proposals of 30.10.2026 (O1 to O3), built unless the operator rules otherwise. A reason that several rules of one area share stands once; distinct reasons make the row name their count and stand on `✗` lines below it, and findings of an area that also cannot check stay under its `✗` row and are counted in the error line. `next:` names each distinct step of the run's refusals once, in row order (head proposals O6 to O9 of 30.10.2026): one step stands on the `next:` line, several each below a bare `next:` (O7), and the general instruction is the last line when a refusal carries no step and the only one when none does. A fact of a few words says what is missing (`mise could not locate gitleaks 8.30.1`, true for every non-zero answer of mise, O8). Without mise the first step is `install mise: <page>` and the second the install command (O6). Alternative commands stand under a label ending `, one of:`, each choice's label on a line and its command one level deeper (O9).
+
+```text
+  ✗ workflows     not checked    quality's installation holds no zizmor
+error: 1 of 7 areas could not check
+next: reinstall quality with its dependencies, one of:
+    in quality's checkout:
+        uv sync --locked --reinstall
+    for a tool install:
+        uv tool upgrade --reinstall overnightworks-quality
+```
 
 ```text
   ✗ files         not checked    2 reasons
