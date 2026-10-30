@@ -4,7 +4,7 @@
 import os
 import secrets
 import sys
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TextIO
@@ -168,6 +168,33 @@ def _print_lines(lines: list[str], file: TextIO | None) -> None:
 def write_rows(rows: tuple[Row, ...], file: TextIO | None = None) -> None:
     styled = style_is_on(_stream(file), os.environ)
     _print_lines([line for row in rows for line in _row_lines(row, styled)], file)
+
+
+FINDING_INDENT = "    "
+FIX_INDENT = "      "
+FIX_LABEL = "fix:"
+FINDING_GAP = "  "
+
+
+def _finding_lines(findings: Sequence[Finding], styled: bool) -> list[str]:
+    """Each field is escaped before it is padded, so the columns hold in a pipe as at a terminal; they count characters."""
+    locations = [finding.location for finding in findings]
+    location_width = max(map(len, locations))
+    event_width = max(len(str(finding.event)) for finding in findings)
+    lines = []
+    for position, (finding, location) in enumerate(zip(findings, locations, strict=True)):
+        columns = f"{location.ljust(location_width)}{FINDING_GAP}{str(finding.event).ljust(event_width)}{FINDING_GAP}"
+        lines.append(f"{FINDING_INDENT}{_paint(Glyph.NEEDS_YOU, GLYPH_STYLE[Glyph.NEEDS_YOU], styled)} {columns}{_paint(printable(finding.reason), DIM, styled)}")
+        if position + 1 == len(findings) or findings[position + 1].fix != finding.fix:
+            lines.append(f"{FIX_INDENT}{FIX_LABEL} {printable(finding.fix)}")
+    return lines
+
+
+def write_findings(findings: Sequence[Finding], file: TextIO | None = None) -> None:
+    """The rows of one area's findings that carry an event, each `! location  event  fact`, and one `fix:` line after
+    the last finding of each run of equal fixes."""
+    if findings:
+        _print_lines(_finding_lines(findings, style_is_on(_stream(file), os.environ)), file)
 
 
 def write_verdict(verdict: Verdict, file: TextIO | None = None) -> None:
