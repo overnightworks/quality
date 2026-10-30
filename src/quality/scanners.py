@@ -45,7 +45,7 @@ REINSTALL = OneOf(
 
 
 class ScannerError(process.ProcessError):
-    """A scanner cannot be installed or trusted; this is never a clean result."""
+    """A scanner's output cannot be trusted; this is never a clean result."""
 
 
 @dataclass(frozen=True)

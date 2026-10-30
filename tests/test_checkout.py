@@ -145,8 +145,6 @@ def test_the_hint_for_a_path_git_refuses_has_no_command_when_the_path_is_unprint
     assert "git -C" not in err
 
 
-
-
 @pytest.mark.integration
 def test_a_git_that_refuses_the_index_listing_after_the_run_started_names_one_step_on_next(build_repo, tmp_path, monkeypatch, capsys):
     """The files and code rows carry the fact; the `git -C` command stands once, on `next:`."""

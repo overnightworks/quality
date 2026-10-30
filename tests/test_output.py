@@ -104,13 +104,15 @@ TWO_WAYS = OneOf("pick one", (Command("first command", "first case"), Command("s
         ((Command("do this"), Instruction("then think")), "next:\n    do this\n    then think\n"),
         ((Command("do this", "where"),), "next: where:\n    do this\n"),
         ((TWO_WAYS,), "next: pick one, one of:\n    first case:\n        first command\n    second case:\n        second command\n"),
+        ((OneOf("pick one", (Command("first command"), Command("second command"))),),
+         "next: pick one, one of:\n    first command\n    second command\n"),
         (
             (Command("do this"), TWO_WAYS),
             ("next:\n    do this\n    pick one, one of:\n        first case:\n            first command\n"
              "        second case:\n            second command\n"),
         ),
     ],
-    ids=["one step", "two steps", "labelled command", "choice alone", "choice after a command"],
+    ids=["one step", "two steps", "labelled command", "choice alone", "unlabelled choices", "choice after a command"],
 )
 def test_the_pair_prints_a_lone_step_on_the_next_line_and_several_below_it(steps, expected):
     stream = io.StringIO()

@@ -189,7 +189,12 @@ def _step_lines(step: Step) -> list[tuple[int, str]]:
         case Command(text, label):
             return [(0, f"{label}:"), (1, text)]
         case OneOf(label, choices):
-            return [(0, f"{label}, one of:"), *(line for choice in choices for line in [(1, f"{choice.label}:"), (2, choice.text)])]
+            return [(0, f"{label}, one of:"), *(line for choice in choices for line in _choice_lines(choice))]
+
+
+def _choice_lines(choice: Command) -> list[tuple[int, str]]:
+    """A choice below its `one of:` line: its label above its command, or the command alone when it has none."""
+    return [(1, choice.text)] if choice.label is None else [(1, f"{choice.label}:"), (2, choice.text)]
 
 
 def _next_lines(next_steps: tuple[Step, ...], label: str) -> list[str]:

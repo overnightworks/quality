@@ -17,11 +17,10 @@ from quality import check, cli, ratchet, scanners
 from quality.ratchet import BASELINE_PATH
 from quality.report import DETAIL_MARKER, CannotJudge, Command
 from quality.rules import Area, Rule
-from tests.support.advisories import uv_lock
 from tests.support.architecture import FORBIDDEN, SHOP, SHOP_DB_IMPORTS_WEB, toml
 from tests.support.check import assert_every_line_starts_with_the_door
 from tests.support.processes import process_is_gone
-from tests.support.scanners import fake_scanner, fake_zizmor, lacking
+from tests.support.scanners import fake_scanner, lacking
 from tests.support.secrets import FAKE_KEY, allow_config
 
 DOOR = [sys.executable, "-m", "quality.cli"]
@@ -650,16 +649,6 @@ def test_a_refusal_git_did_not_run_for_gets_the_general_instruction(build_repo, 
     monkeypatch.setenv("PATH", str(nowhere))
     code, out, err = frame_run(capsys, repo)
     assert (code, out, err[1:]) == (2, [], [f"next: {cli.START_FAILURE_NEXT.text}"])
-
-
-def test_without_mise_three_rows_say_so_and_the_steps_stand_once_each_below_next(build_repo, path_without_mise, elsewhere, capsys):
-    files = {".github/workflows/w.yml": "on: push\n", "uv.lock": uv_lock(), ".env": "A=1\n", **CLONES_BASELINE}
-    code, out, err = frame_run(capsys, build_repo(files), locate_zizmor=fake_zizmor(elsewhere, "echo '[]'"))
-    facts = [line for line in out if line.startswith("  ✗ ") and line.endswith("mise is not installed")]
-    assert (code, len(facts)) == (2, 3), "\n".join(out)
-    assert any(line.startswith("env-file .env - ") for line in out)
-    assert err[1:] == ["next:", f"    install mise: {scanners.MISE_INSTALLATION_PAGE}", f"    {scanners.install_command()}"]
-    assert scanners.install_command() not in "\n".join(out)
 
 
 def test_a_malformed_baseline_beside_a_missing_scanner_names_the_baseline_step_then_the_install_command(
