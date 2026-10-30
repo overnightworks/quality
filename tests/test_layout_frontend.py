@@ -5,10 +5,9 @@ import re
 import pytest
 
 from quality import layout
-from quality.output import FIX_LABEL
 from quality.report import FindingEvent
 from quality.rules import Rule
-from tests.support.check import hygiene_output, rule_findings
+from tests.support.check import hygiene_output, rows_of, rule_findings
 from tests.support.layout import (
     CONFIG,
     GUIDANCE,
@@ -141,7 +140,7 @@ def test_every_finding_prints_sorted_by_path_with_its_own_kind_fact_and_fix(buil
     assert_row_is_kind(output, spec, FindingEvent.MISPLACED, f"packages/ui/{layout.END_TO_END_DIRECTORY}/")
     assert_row_is_kind(output, test, FindingEvent.MISPLACED, "packages/ui/src", "z")
     assert_row_is_kind(output, stray, FindingEvent.STRAY)
-    assert (len({finding.fix for finding in found}), output.count(f" {FIX_LABEL} ")) == (3, 3)
+    assert (len({finding.fix for finding in found}), [rows_of(output, finding)[0].fix_follows for finding in found]) == (3, [True] * 3)
 
 
 def test_an_empty_base_is_not_described_as_a_name_with_nothing_in_it(build_repo, capsys):

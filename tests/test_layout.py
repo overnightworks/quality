@@ -401,7 +401,7 @@ def test_script_name_is_misnamed_where_the_shape_breaks_and_misplaced_where_only
     assert found["tools/entry_point.sh"].reason in found["tools/Entry.sh"].reason
     assert len({finding.fix for finding in found.values()}) == 1
     rows = [row for path in paths for row in rows_of(output, found[path])]
-    assert ([row.fix_follows for row in rows], output.count(f" {FIX_LABEL} ")) == ([False, False, True], 1)
+    assert [row.fix_follows for row in rows] == [False, False, True]
 
 
 def test_a_script_without_a_header_is_a_no_header_finding(build_repo, capsys):

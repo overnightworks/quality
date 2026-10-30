@@ -107,10 +107,10 @@ def test_claude_md_counts_only_once_tracked_and_only_while_on_disk(build_repo, c
     untracked = run(capsys, repo)
     subprocess.run(["git", "-C", str(repo), "add", "--", "CLAUDE.md"], check=True)
     tracked = run(capsys, repo)
+    (finding,) = rule_findings(repo, Rule.CLAUDE_MD)
     (repo / "CLAUDE.md").unlink()
     deleted = run(capsys, repo)
     assert (untracked[0], is_clean(untracked[1])) == (0, True), untracked
-    (finding,) = rule_findings(repo, Rule.CLAUDE_MD)
     assert (tracked[0], len(rows_of(tracked[1], finding))) == (1, 1), tracked
     assert (deleted[0], is_clean(deleted[1])) == (0, True), deleted
 

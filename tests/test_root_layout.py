@@ -12,7 +12,7 @@ from quality.rules import Rule
 from tests.support.check import copy_block, env_row_stands, finding_rows, hygiene_output, rule_findings
 from tests.support.config_refusals import KNOWN_KEYS, ONE_LINE_NEED
 from tests.support.git_repositories import put
-from tests.support.layout import assert_prints_as_kind, assert_prints_escaped_row, red, rule_ids_in
+from tests.support.layout import assert_prints_as_kind, assert_prints_escaped_row, assert_row_is_kind, red, rule_ids_in
 from tests.support.merge import ONE_JOB
 from tests.support.verdict import verdict_of
 
@@ -145,7 +145,8 @@ def test_a_declaration_matching_no_tracked_entry_is_red_and_names_it(build_repo,
 
 def test_a_directory_declared_without_its_slash_is_told_the_slash_is_what_is_tracked(build_repo, capsys):
     repo = build_repo({**GUIDANCE, "frontend/a.js": "x", CONFIG: declaring("frontend")})
-    assert_prints_as_kind(capsys, repo, Rule.ROOT_LAYOUT, FindingEvent.UNUSED, "frontend/")
+    stale = next(finding for finding in rule_findings(repo, Rule.ROOT_LAYOUT) if finding.event is FindingEvent.UNUSED)
+    assert_row_is_kind(hygiene_output(capsys, repo)[1], stale, FindingEvent.UNUSED, "frontend/")
 
 
 def test_a_finding_names_the_entry_and_both_ways_out_without_a_local_path(build_repo, capsys):

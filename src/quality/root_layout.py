@@ -2,8 +2,8 @@
 
 from collections.abc import Sequence
 
-from quality.config import CONFIG_PATH, RootAllowance
-from quality.report import Finding
+from quality.config import CONFIG_PATH, ROOT_ALLOWANCE_HEADING, RootAllowance
+from quality.report import Finding, FindingEvent
 from quality.rules import Rule
 
 # A directory is written with its trailing slash, as `[[root.allow]]` writes it.
@@ -35,18 +35,20 @@ def check_root_layout(tracked: list[str], allowances: Sequence[RootAllowance]) -
 
 
 def _unlisted_root_entry(entry: str, base_spelling: str | None) -> Finding:
-    hint = f" (the base list knows {base_spelling})" if base_spelling else ""
+    hint = f" · the list spells it {base_spelling}" if base_spelling else ""
     return Finding(
         Rule.ROOT_LAYOUT, entry, None,
-        f"not on quality's base list{hint}.",
-        f"move it to its owner's directory, or declare it in {CONFIG_PATH} with [[root.allow]], an entry and a reason.",
+        f"not on quality's base list{hint}",
+        f"move it to its owner's directory, or declare it in {CONFIG_PATH} with {ROOT_ALLOWANCE_HEADING}, an entry and a reason",
+        event=FindingEvent.UNLISTED,
     )
 
 
 def _stale_root_declaration(entry: str, tracked_entries: set[str]) -> Finding:
-    hint = f" (the repository tracks {entry}/)" if f"{entry}/" in tracked_entries else ""
+    hint = f" · the repository tracks {entry}/" if f"{entry}/" in tracked_entries else ""
     return Finding(
         Rule.ROOT_LAYOUT, entry, None,
-        f"declared in {CONFIG_PATH} with [[root.allow]], but the repository tracks no such root entry{hint}.",
-        f"delete its [[root.allow]] entry from {CONFIG_PATH}.",
+        f"{ROOT_ALLOWANCE_HEADING} matches no tracked root entry{hint}",
+        f"delete its {ROOT_ALLOWANCE_HEADING} entry from {CONFIG_PATH}",
+        event=FindingEvent.UNUSED,
     )

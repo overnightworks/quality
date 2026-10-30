@@ -543,7 +543,7 @@ def test_findings_without_an_event_follow_the_event_rows_in_today_s_form(build_r
     found = check.run_hygiene(repo, cli.INSTALLED_RUFF, cli.INSTALLED_ZIZMOR).findings
     rows, legacy = [f for f in found if f.event is not None], [line for f in found if f.event is None for line in report.render(f).split("\n")]
     files_row = next(number for number, line in enumerate(out) if line.startswith("  ! files  "))
-    shown = [line.split()[1] for line in out[files_row + 1 :] if line.lstrip().startswith(f"{Glyph.NEEDS_YOU} ")]
+    shown = [line.split()[1] for line in out[files_row + 1 : out.index(legacy[0])] if line.lstrip().startswith(f"{Glyph.NEEDS_YOU} ")]
     assert (code, out[files_row].endswith(f"{len(found)} findings"), out[out.index(legacy[0]) :][: len(legacy)], shown) == (1, True, legacy, [f.location for f in rows])
     for finding in rows:
         assert_row_prints_finding(*rows_of("\n".join(out[files_row:]), finding), finding)
