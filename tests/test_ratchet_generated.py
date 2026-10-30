@@ -10,7 +10,6 @@ from tests.support.generated_files import MANDATORY_JOB, TYPES_FILE, generated_c
 from tests.support.source_code import long_function, typescript_file
 
 GATE = f'[gate]\nmandatory_jobs = ["{MANDATORY_JOB}"]\n'
-DECLARING_TYPES = GATE + generated_config()
 STALE_FINDING = (
     f"size {TYPES_FILE} - declared in quality/config.toml with [[size.generated]], but no tracked file the size rule "
     "measures lies there."
@@ -50,6 +49,7 @@ def test_the_report_only_counts_leave_a_declared_file_out(build_repo, capsys, de
     assert f"production: {counted} file(s) >= 800 lines" in output
 
 
+@pytest.mark.parametrize("baseline", [{BASELINE_PATH: ""}, {}], ids=["with a baseline", "without a baseline"])
 @pytest.mark.parametrize(
     ("files", "arrange"),
     [
@@ -57,17 +57,27 @@ def test_the_report_only_counts_leave_a_declared_file_out(build_repo, capsys, de
         ({"src/a.py": "x = 1\n", TYPES_FILE.replace(".ts", ".txt"): "text\n"}, "tracked, no measured language"),
         ({"src/a.py": "x = 1\n", TYPES_FILE: "export {};\n"}, "deleted from disk"),
     ],
-    ids=["untracked", "tracked in no measured language", "deleted from disk"],
+    ids=["absent", "tracked in no measured language", "deleted from disk"],
 )
-def test_a_declaration_without_a_measured_file_is_one_size_finding_with_the_delete_fix(build_repo, capsys, files, arrange):
+def test_a_declaration_without_a_measured_file_is_one_size_finding_with_the_delete_fix(build_repo, capsys, files, arrange, baseline):
     """#174 sentence 4, acceptance 4: a stale declaration is a size finding on its path, in both report modes."""
     declared = TYPES_FILE.replace(".ts", ".txt") if arrange == "tracked, no measured language" else TYPES_FILE
-    repo = build_repo({**files, CONFIG_PATH: GATE + generated_config(path=declared), BASELINE_PATH: ""})
+    repo = build_repo({**files, CONFIG_PATH: GATE + generated_config(path=declared), **baseline})
     if arrange == "deleted from disk":
         (repo / TYPES_FILE).unlink()
     code, output = hygiene(capsys, repo)
     assert (code, size_lines(output)) == (1, [STALE_FINDING.replace(TYPES_FILE, declared)])
     assert STALE_FIX in output
+
+
+def test_a_declared_python_file_python_cannot_parse_leaves_the_size_rule_judgeable_but_not_the_baseline_write(build_repo, capsys):
+    """#174 Design: the size rule leaves a declared file's unparsable entry out; the baseline write still refuses
+    a tree whose clones it could not measure."""
+    repo = build_repo({"gen/api.py": "def broken(:\n", CONFIG_PATH: GATE + generated_config(path="gen/api.py"), BASELINE_PATH: ""})
+    _, output = hygiene(capsys, repo)
+    assert size_lines(output) == []
+    assert cli.main(["baseline", "write", str(repo)]) == 2
+    assert "baseline: not written - gen/api.py is not valid Python" in capsys.readouterr().err
 
 
 def test_baseline_write_leaves_a_declared_file_out_and_names_no_raise_for_it(build_repo, capsys):
