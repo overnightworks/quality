@@ -38,6 +38,13 @@ ITEM_REFERENCE = re.compile(rf"(?:{REPOSITORY_NAME.pattern})?#[1-9][0-9]*")
 ONE_LINE_REASON = "a non-empty one-line reason"
 BARE_KEY = re.compile(r"[A-Za-z0-9_-]+")
 type ExampleLines = tuple[str, *tuple[str, ...]]
+LOOSENED_HEADING = "[[gate.loosened]]"
+ADVISORY_ALLOWANCE_HEADING = "[[advisories.allow]]"
+ROOT_ALLOWANCE_HEADING = "[[root.allow]]"
+LAYOUT_ALLOWANCE_HEADING = "[[layout.allow]]"
+PYTHON_ALLOWANCE_HEADING = "[[python.allow]]"
+COMPOSE_ALLOWANCE_HEADING = "[[compose.allow]]"
+GENERATED_FILE_HEADING = "[[size.generated]]"
 EXAMPLE: ExampleLines = ("[gate]", 'mandatory_jobs = ["checks"]')
 LEGACY_EXAMPLE: ExampleLines = ("[gate]", 'legacy = "fail"')
 ALLOWANCE_EXAMPLE: ExampleLines = (
@@ -48,14 +55,14 @@ ALLOWANCE_EXAMPLE: ExampleLines = (
     ),
 )
 LOOSENED_EXAMPLE: ExampleLines = (
-    "[[gate.loosened]]",
+    LOOSENED_HEADING,
     "what = 'mandatory job \"Acceptance evidence (integration)\" removed'",
     'item = "overnightworks/songmaker#1345"',
     "date = 2026-10-20",
     'reason = "the operator ruled the requirement shelf machinery out"',
 )
 ADVISORY_ALLOWANCE_EXAMPLE: ExampleLines = (
-    "[[advisories.allow]]",
+    ADVISORY_ALLOWANCE_HEADING,
     'id = "GHSA-462x-pgg6-55fp"',
     'lock = "speech/providers/qwen/uv.lock"',
     "until = 2027-01-31",
@@ -64,35 +71,36 @@ ADVISORY_ALLOWANCE_EXAMPLE: ExampleLines = (
     'reason = "gradio caps pillow<13; no image input"',
 )
 ROOT_ALLOWANCE_EXAMPLE: ExampleLines = (
-    "[[root.allow]]",
+    ROOT_ALLOWANCE_HEADING,
     'entry = "frontend/"',
     'reason = "the web client, built apart from the Python package"',
 )
 LAYOUT_ALLOWANCE_EXAMPLE: ExampleLines = (
-    "[[layout.allow]]",
+    LAYOUT_ALLOWANCE_HEADING,
     'path = "deploy/EDGE_SHA"',
     'rule = "file-suffix"',
     'reason = "the deploy script reads it by this name"',
 )
 PYTHON_ALLOWANCE_EXAMPLE: ExampleLines = (
-    "[[python.allow]]",
+    PYTHON_ALLOWANCE_HEADING,
     'path = "speech/providers/qwen/pyproject.toml"',
     'reason = "qwen-tts has no cp314 wheel"',
 )
 COMPOSE_ALLOWANCE_EXAMPLE: ExampleLines = (
-    "[[compose.allow]]",
+    COMPOSE_ALLOWANCE_HEADING,
     'file = "compose.yaml"',
     'service = "traefik"',
     'reason = "it terminates TLS on the host\'s own interfaces"',
 )
 GENERATED_FILE_EXAMPLE: ExampleLines = (
-    "[[size.generated]]",
+    GENERATED_FILE_HEADING,
     'path = "frontend/src/lib/api/types.ts"',
     'job = "Backend (Python 3.14)"',
     'item = "overnightworks/songmaker#1784"',
     "date = 2026-10-30",
     'reason = "written by scripts/generate_types.py, proven by its --check"',
 )
+
 
 class LegacyMode(Enum):
     """What the repository's open findings on its default branch do to a pull request."""
@@ -393,7 +401,7 @@ def _is_date_without_time(value: object) -> bool:
 
 def _declarations(gate: dict) -> tuple[Declaration, ...]:
     declarations: dict[str, Declaration] = {}
-    for position, entry in _entries(gate, "loosened", "[[gate.loosened]]", LOOSENED_EXAMPLE):
+    for position, entry in _entries(gate, "loosened", LOOSENED_HEADING, LOOSENED_EXAMPLE):
         declaration = _read_declaration(entry, position)
         if declaration.what in declarations:
             raise ConfigError(
@@ -406,7 +414,7 @@ def _declarations(gate: dict) -> tuple[Declaration, ...]:
 
 
 def _read_declaration(entry: object, position: int) -> Declaration:
-    refuse = _entry_refusal("[[gate.loosened]]", position, LOOSENED_EXAMPLE)
+    refuse = _entry_refusal(LOOSENED_HEADING, position, LOOSENED_EXAMPLE)
     if not isinstance(entry, dict) or set(entry) != DECLARATION_KEYS:
         raise refuse("exactly a what, an item, a date and a reason")
     what, item, date, reason = (entry[key] for key in ("what", "item", "date", "reason"))
@@ -423,7 +431,7 @@ def _read_declaration(entry: object, position: int) -> Declaration:
 
 def _advisory_allowances(advisories: dict) -> tuple[AdvisoryAllowance, ...]:
     allowances: dict[tuple[str, str], AdvisoryAllowance] = {}
-    for position, entry in _entries(advisories, "allow", "[[advisories.allow]]", ADVISORY_ALLOWANCE_EXAMPLE):
+    for position, entry in _entries(advisories, "allow", ADVISORY_ALLOWANCE_HEADING, ADVISORY_ALLOWANCE_EXAMPLE):
         allowance = _read_advisory_allowance(entry, position)
         if allowance.key in allowances:
             raise ConfigError(
@@ -435,7 +443,7 @@ def _advisory_allowances(advisories: dict) -> tuple[AdvisoryAllowance, ...]:
 
 
 def _read_advisory_allowance(entry: object, position: int) -> AdvisoryAllowance:
-    refuse = _entry_refusal("[[advisories.allow]]", position, ADVISORY_ALLOWANCE_EXAMPLE)
+    refuse = _entry_refusal(ADVISORY_ALLOWANCE_HEADING, position, ADVISORY_ALLOWANCE_EXAMPLE)
     if not isinstance(entry, dict) or set(entry) != ADVISORY_ALLOWANCE_KEYS:
         raise refuse("exactly an id, a lock, an until, a date, an item and a reason")
     identifier, lock, until, date, item, reason = (
@@ -452,7 +460,7 @@ def _read_advisory_allowance(entry: object, position: int) -> AdvisoryAllowance:
 
 def _root_allowances(root: dict) -> tuple[RootAllowance, ...]:
     allowances: dict[str, RootAllowance] = {}
-    for position, entry in _entries(root, "allow", "[[root.allow]]", ROOT_ALLOWANCE_EXAMPLE):
+    for position, entry in _entries(root, "allow", ROOT_ALLOWANCE_HEADING, ROOT_ALLOWANCE_EXAMPLE):
         allowance = _read_root_allowance(entry, position)
         if allowance.entry in allowances:
             raise ConfigError(
@@ -473,7 +481,7 @@ def _is_root_entry(entry: object) -> bool:
 
 
 def _read_root_allowance(entry: object, position: int) -> RootAllowance:
-    refuse = _entry_refusal("[[root.allow]]", position, ROOT_ALLOWANCE_EXAMPLE)
+    refuse = _entry_refusal(ROOT_ALLOWANCE_HEADING, position, ROOT_ALLOWANCE_EXAMPLE)
     if not isinstance(entry, dict) or set(entry) != ROOT_ALLOWANCE_KEYS:
         raise refuse("exactly an entry and a reason")
     name, reason = entry["entry"], entry["reason"]
@@ -486,7 +494,7 @@ def _read_root_allowance(entry: object, position: int) -> RootAllowance:
 
 def _layout_allowances(layout: dict) -> tuple[LayoutAllowance, ...]:
     allowances: dict[tuple[Rule, str], LayoutAllowance] = {}
-    for position, entry in _entries(layout, "allow", "[[layout.allow]]", LAYOUT_ALLOWANCE_EXAMPLE):
+    for position, entry in _entries(layout, "allow", LAYOUT_ALLOWANCE_HEADING, LAYOUT_ALLOWANCE_EXAMPLE):
         allowance = _read_layout_allowance(entry, position)
         key = (allowance.rule, allowance.path)
         if key in allowances:
@@ -501,7 +509,7 @@ def _layout_allowances(layout: dict) -> tuple[LayoutAllowance, ...]:
 
 def _python_allowances(python: dict) -> tuple[PythonAllowance, ...]:
     allowances: dict[str, PythonAllowance] = {}
-    for position, entry in _entries(python, "allow", "[[python.allow]]", PYTHON_ALLOWANCE_EXAMPLE):
+    for position, entry in _entries(python, "allow", PYTHON_ALLOWANCE_HEADING, PYTHON_ALLOWANCE_EXAMPLE):
         allowance = _read_python_allowance(entry, position)
         if allowance.path in allowances:
             raise ConfigError(
@@ -513,7 +521,7 @@ def _python_allowances(python: dict) -> tuple[PythonAllowance, ...]:
 
 
 def _read_python_allowance(entry: object, position: int) -> PythonAllowance:
-    refuse = _entry_refusal("[[python.allow]]", position, PYTHON_ALLOWANCE_EXAMPLE)
+    refuse = _entry_refusal(PYTHON_ALLOWANCE_HEADING, position, PYTHON_ALLOWANCE_EXAMPLE)
     if not isinstance(entry, dict) or set(entry) != PYTHON_ALLOWANCE_KEYS:
         raise refuse("exactly a path and a reason")
     path, reason = entry["path"], entry["reason"]
@@ -535,7 +543,7 @@ def _is_exact_file_path(path: object) -> bool:
 
 
 def _read_layout_allowance(entry: object, position: int) -> LayoutAllowance:
-    refuse = _entry_refusal("[[layout.allow]]", position, LAYOUT_ALLOWANCE_EXAMPLE)
+    refuse = _entry_refusal(LAYOUT_ALLOWANCE_HEADING, position, LAYOUT_ALLOWANCE_EXAMPLE)
     if not isinstance(entry, dict) or set(entry) != LAYOUT_ALLOWANCE_KEYS:
         raise refuse("exactly a path, a rule and a reason")
     path, rule, reason = entry["path"], entry["rule"], entry["reason"]
@@ -550,7 +558,7 @@ def _read_layout_allowance(entry: object, position: int) -> LayoutAllowance:
 
 def _compose_allowances(compose: dict) -> tuple[ComposeAllowance, ...]:
     allowances: dict[tuple[str, str], ComposeAllowance] = {}
-    for position, entry in _entries(compose, "allow", "[[compose.allow]]", COMPOSE_ALLOWANCE_EXAMPLE):
+    for position, entry in _entries(compose, "allow", COMPOSE_ALLOWANCE_HEADING, COMPOSE_ALLOWANCE_EXAMPLE):
         allowance = _read_compose_allowance(entry, position)
         key = (allowance.file, allowance.service)
         if key in allowances:
@@ -564,7 +572,7 @@ def _compose_allowances(compose: dict) -> tuple[ComposeAllowance, ...]:
 
 
 def _read_compose_allowance(entry: object, position: int) -> ComposeAllowance:
-    refuse = _entry_refusal("[[compose.allow]]", position, COMPOSE_ALLOWANCE_EXAMPLE)
+    refuse = _entry_refusal(COMPOSE_ALLOWANCE_HEADING, position, COMPOSE_ALLOWANCE_EXAMPLE)
     if not isinstance(entry, dict) or set(entry) != COMPOSE_ALLOWANCE_KEYS:
         raise refuse("exactly a file, a service and a reason")
     file, service, reason = entry["file"], entry["service"], entry["reason"]
@@ -580,7 +588,7 @@ def _read_compose_allowance(entry: object, position: int) -> ComposeAllowance:
 def _generated_files(size: dict, gate: dict) -> tuple[GeneratedFile, ...]:
     jobs = _job_names(gate)
     declared: dict[str, GeneratedFile] = {}
-    for position, entry in _entries(size, "generated", "[[size.generated]]", GENERATED_FILE_EXAMPLE):
+    for position, entry in _entries(size, "generated", GENERATED_FILE_HEADING, GENERATED_FILE_EXAMPLE):
         generated = _read_generated_file(entry, position, jobs)
         if generated.path in declared:
             raise ConfigError(
@@ -593,7 +601,7 @@ def _generated_files(size: dict, gate: dict) -> tuple[GeneratedFile, ...]:
 
 
 def _read_generated_file(entry: object, position: int, mandatory_jobs: tuple[str, ...]) -> GeneratedFile:
-    refuse = _entry_refusal("[[size.generated]]", position, GENERATED_FILE_EXAMPLE)
+    refuse = _entry_refusal(GENERATED_FILE_HEADING, position, GENERATED_FILE_EXAMPLE)
     if not isinstance(entry, dict) or set(entry) != GENERATED_FILE_KEYS:
         raise refuse("exactly a path, a job, an item, a date and a reason")
     path, job, item, date, reason = (entry[key] for key in ("path", "job", "item", "date", "reason"))

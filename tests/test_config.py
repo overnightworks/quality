@@ -33,6 +33,7 @@ from tests.support.config_refusals import (
     KNOWN_KEYS,
     Refusal,
     all_refusals,
+    secret_entry,
 )
 from tests.support.generated_files import TYPES_FILE, generated_config
 
@@ -128,11 +129,6 @@ HASH = "a" * 64
 ENTRY = f'{{ rule = "aws-access-token", file = "tests/fixture.py", secret_sha256 = "{HASH}", reason = "fixture value" }}'
 
 
-def allow_entry(**changes: str) -> str:
-    fields = {"rule": "aws-access-token", "file": "tests/fixture.py", "secret_sha256": HASH, "reason": "fixture value"}
-    return "{ " + ", ".join(f'{key} = "{value}"' for key, value in (fields | changes).items()) + " }"
-
-
 def test_reads_every_allowed_value_with_its_reason():
     """#24 rule 1: [secrets] allow maps each rule, file and value hash to its reason, beside the gate keys."""
     text = f'[gate]\nmandatory_jobs = ["checks"]\n[secrets]\nallow = [{ENTRY}]'
@@ -151,17 +147,17 @@ def test_a_config_without_allowances_allows_nothing(text):
     [
         f"[secrets]\nallow = [\"{HASH}\"]",
         '[secrets]\nallow = [{ fingerprint = "a:b:c:1", reason = "old form" }]',
-        f"[secrets]\nallow = [{allow_entry(reason='')}]",
-        f"[secrets]\nallow = [{allow_entry(reason='  ')}]",
-        f"[secrets]\nallow = [{allow_entry(reason='two\\nlines')}]",
-        f"[secrets]\nallow = [{allow_entry(rule='')}]",
-        f"[secrets]\nallow = [{allow_entry(file='')}]",
-        f"[secrets]\nallow = [{allow_entry(secret_sha256='a' * 63)}]",
-        f"[secrets]\nallow = [{allow_entry(secret_sha256='A' * 64)}]",
-        f"[secrets]\nallow = [{allow_entry(secret_sha256='g' * 64)}]",
+        f"[secrets]\nallow = [{secret_entry(reason='')}]",
+        f"[secrets]\nallow = [{secret_entry(reason='  ')}]",
+        f"[secrets]\nallow = [{secret_entry(reason='two\nlines')}]",
+        f"[secrets]\nallow = [{secret_entry(rule='')}]",
+        f"[secrets]\nallow = [{secret_entry(file='')}]",
+        f"[secrets]\nallow = [{secret_entry(secret_sha256='a' * 63)}]",
+        f"[secrets]\nallow = [{secret_entry(secret_sha256='A' * 64)}]",
+        f"[secrets]\nallow = [{secret_entry(secret_sha256='g' * 64)}]",
         f"[secrets]\nallow = [{ENTRY[:-2]}, extra = 1 }}]",
         f"[secrets]\nallow = [{{ rule = \"r\", file = \"f\", secret_sha256 = \"{HASH}\" }}]",
-        f"[secrets]\nallow = [{ENTRY}, {allow_entry(reason='again')}]",
+        f"[secrets]\nallow = [{ENTRY}, {secret_entry(reason='again')}]",
         '[secrets]\nallow = "x"',
         "[secrets]\nignore = []",
         "secrets = 1",
@@ -314,7 +310,7 @@ def test_hygiene_judges_a_declaration_as_the_verdict_does_and_the_commit_hook_re
     assert line in output, output
 
 
-MALFORMED_SECRET = f"[secrets]\nallow = [{allow_entry(reason='')}]\n"
+MALFORMED_SECRET = f"[secrets]\nallow = [{secret_entry(reason='')}]\n"
 
 
 ADVISORY = f"{CONFIG_PATH} [[advisories.allow]]"
@@ -598,7 +594,8 @@ def test_an_example_entry_is_accepted_beside_a_gate_that_lists_its_job(table):
     job = document.get("size", {}).get("generated", [{}])[0].get("job", "checks")
     text = f"[gate]\nmandatory_jobs = [{json.dumps(job)}]\n" + "\n".join(lines)
     assert load_gate_settings(text).mandatory_jobs == (job,)
-    assert load_allow_lists(text) is not None
+    entries_read = len(load_gate_settings(text).loosened) + sum(len(read) for read in vars(load_allow_lists(text)).values())
+    assert entries_read == 1
 
 
 def test_the_gate_example_is_accepted():
@@ -642,8 +639,9 @@ def test_a_repeated_value_is_quoted_so_that_its_printed_form_reads_back_as_the_v
 def test_an_unknown_key_that_is_no_bare_key_is_quoted_so_that_it_reads_back_as_the_key(character):
     """#279 O11, acceptance 2: an unknown key stands as a TOML string, read back as the scenario's key."""
     key = f"a{character}b"
+    text = f'[root]\n"{toml_escaped(key)}" = 1\n'
     with pytest.raises(ConfigError) as refused:
-        load_allow_lists(f'[root]\n"{toml_escaped(key)}" = 1\n')
+        load_allow_lists(text)
     printed = printable(refused.value.fact)
     quoted = re.search(rf"unknown key ({QUOTED}) - ", printed)
     assert quoted, printed
