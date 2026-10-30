@@ -14,7 +14,7 @@ import pytest
 from quality import cli, output, sonar
 from quality.output import Glyph, Row, SubLine, Verdict
 from quality.report import Choice, Command, Example, Finding, FindingEvent, Instruction, OneOf, printable
-from tests.support.check import FindingRow, finding_rows
+from tests.support.check import finding_rows
 
 OWN_SGR = re.compile(r"\x1b\[[0-9;]*m")
 
