@@ -367,9 +367,9 @@ def test_an_unused_allowance_with_a_control_character_prints_escaped(build_repo,
 @pytest.mark.parametrize(
     ("config_text", "fact", "example"),
     [
-        (None, "quality/config.toml is missing", "EXAMPLE"),
-        ("[gate]\nmandatory_jobs = 3\n", "quality/config.toml needs [gate] mandatory_jobs as a non-empty list of job names", "EXAMPLE"),
-        ('[gate]\nmandatory_jobs = ["checks"]\nlegacy = "x"\n', 'quality/config.toml [gate] legacy must be "report" or "fail"', "LEGACY_EXAMPLE"),
+        (None, "quality/config.toml is missing", config.EXAMPLE),
+        ("[gate]\nmandatory_jobs = 3\n", "quality/config.toml needs [gate] mandatory_jobs as a non-empty list of job names", config.EXAMPLE),
+        ('[gate]\nmandatory_jobs = ["checks"]\nlegacy = "x"\n', 'quality/config.toml [gate] legacy must be "report" or "fail"', config.LEGACY_EXAMPLE),
     ],
     ids=["missing config", "malformed jobs", "malformed legacy"],
 )
@@ -379,7 +379,7 @@ def test_a_door_outside_the_picture_prints_a_config_refusal_as_its_fact_then_the
     """#279 acceptance 7: `sonar findings` keeps its one-line form: the fact, `, like:` and the example joined with `\\x0a`."""
     monkeypatch.chdir(build_repo({} if config_text is None else {"quality/config.toml": config_text}))
     code, lines = door_lines(capsys, "sonar", "findings")
-    lines_of_example = "\\x0a".join(getattr(config, example))
+    lines_of_example = "\\x0a".join(example)
     assert (code, [line for line in lines if line.startswith("sonar: cannot judge - ")]) == (
         2, [f"sonar: cannot judge - {fact}, like:\\x0a{lines_of_example}"],
     )
@@ -637,19 +637,24 @@ def test_at_a_terminal_a_refusal_from_repository_text_prints_as_escaped_text_bet
     assert [c for c in stripped if unicodedata.category(c) in ("Cc", "Cf", "Zl", "Zp") and c != "\n"] == []
 
 
-@pytest.mark.integration
-@pytest.mark.parametrize(("environment", "coloured"), [({"TERM": "xterm"}, True), ({"TERM": "xterm", "NO_COLOR": "1"}, False)], ids=["terminal", "NO_COLOR"])
-def test_the_real_door_colours_a_pseudo_terminal_only_without_no_color(clean_repo, environment, coloured):
-    parent, child = pty.openpty()
-    base = {key: value for key, value in os.environ.items() if key not in ("NO_COLOR", "GITHUB_ACTIONS")}
-    done = subprocess.run([*DOOR, "hygiene", "."], cwd=clean_repo, env={**base, **environment}, stdout=child, stderr=subprocess.PIPE, check=False)
+def read_pseudo_terminal(parent: int, child: int) -> str:
+    """Everything the finished process wrote to the pseudo-terminal, which `parent` and `child` are closed after."""
     os.close(child)
     chunks = []
     with contextlib.suppress(OSError):
         while chunk := os.read(parent, 4096):
             chunks.append(chunk)
     os.close(parent)
-    text = b"".join(chunks).decode()
+    return b"".join(chunks).decode()
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(("environment", "coloured"), [({"TERM": "xterm"}, True), ({"TERM": "xterm", "NO_COLOR": "1"}, False)], ids=["terminal", "NO_COLOR"])
+def test_the_real_door_colours_a_pseudo_terminal_only_without_no_color(clean_repo, environment, coloured):
+    parent, child = pty.openpty()
+    base = {key: value for key, value in os.environ.items() if key not in ("NO_COLOR", "GITHUB_ACTIONS")}
+    done = subprocess.run([*DOOR, "hygiene", "."], cwd=clean_repo, env={**base, **environment}, stdout=child, stderr=subprocess.PIPE, check=False)
+    text = read_pseudo_terminal(parent, child)
     assert (done.returncode, "\x1b[" in text, "✓" in text) == (0, coloured, True), text
 
 
@@ -723,13 +728,7 @@ def test_the_real_door_prints_every_config_example_line_whole_in_each_stderr_for
     done = subprocess.run([*DOOR, "hygiene", "."], cwd=repo, env={**base, **(environment or {})}, stdout=subprocess.DEVNULL,
                           stderr=child, check=False, text=environment is None)
     if environment:
-        os.close(child)
-        chunks = []
-        with contextlib.suppress(OSError):
-            while chunk := os.read(parent, 4096):
-                chunks.append(chunk)
-        os.close(parent)
-        text = b"".join(chunks).decode()
+        text = read_pseudo_terminal(parent, child)
     else:
         text = done.stderr
     stripped = re.sub(r"\x1b\[[0-9;]*m", "", text)

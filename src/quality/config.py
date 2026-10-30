@@ -291,7 +291,7 @@ def _entries(table: dict, key: str, heading: str, example: ExampleLines, shape: 
     return enumerate(entries, start=1)
 
 
-def _entry_refusal(heading: str, position: int, example: ExampleLines | None) -> Callable[[str], ConfigError]:
+def _entry_refusal(heading: str, position: int, example: ExampleLines) -> Callable[[str], ConfigError]:
     def refuse(need: str) -> ConfigError:
         return ConfigError(f"{CONFIG_PATH} {heading} entry {position} needs {need}", example)
 
@@ -405,7 +405,7 @@ def _declarations(gate: dict) -> tuple[Declaration, ...]:
         declaration = _read_declaration(entry, position)
         if declaration.what in declarations:
             raise ConfigError(
-                f"{CONFIG_PATH} [[gate.loosened]] declares what = {_toml_string(declaration.what)} twice; "
+                f"{CONFIG_PATH} {LOOSENED_HEADING} declares what = {_toml_string(declaration.what)} twice; "
                 "one entry per loosening",
                 LOOSENED_EXAMPLE,
             )
@@ -435,7 +435,7 @@ def _advisory_allowances(advisories: dict) -> tuple[AdvisoryAllowance, ...]:
         allowance = _read_advisory_allowance(entry, position)
         if allowance.key in allowances:
             raise ConfigError(
-                f"{CONFIG_PATH} [[advisories.allow]] allows id = {_toml_string(allowance.id)} in lock = "
+                f"{CONFIG_PATH} {ADVISORY_ALLOWANCE_HEADING} allows id = {_toml_string(allowance.id)} in lock = "
                 f"{_toml_string(allowance.lock)} twice; one entry per advisory and lock file"
             )
         allowances[allowance.key] = allowance
@@ -464,7 +464,7 @@ def _root_allowances(root: dict) -> tuple[RootAllowance, ...]:
         allowance = _read_root_allowance(entry, position)
         if allowance.entry in allowances:
             raise ConfigError(
-                f"{CONFIG_PATH} [[root.allow]] declares entry = {_toml_string(allowance.entry)} twice; "
+                f"{CONFIG_PATH} {ROOT_ALLOWANCE_HEADING} declares entry = {_toml_string(allowance.entry)} twice; "
                 "one entry per root entry",
                 ROOT_ALLOWANCE_EXAMPLE,
             )
@@ -499,7 +499,7 @@ def _layout_allowances(layout: dict) -> tuple[LayoutAllowance, ...]:
         key = (allowance.rule, allowance.path)
         if key in allowances:
             raise ConfigError(
-                f"{CONFIG_PATH} [[layout.allow]] declares path = {_toml_string(allowance.path)} for rule = "
+                f"{CONFIG_PATH} {LAYOUT_ALLOWANCE_HEADING} declares path = {_toml_string(allowance.path)} for rule = "
                 f"{_toml_string(allowance.rule.value)} twice; one declaration per rule and path",
                 LAYOUT_ALLOWANCE_EXAMPLE,
             )
@@ -513,7 +513,7 @@ def _python_allowances(python: dict) -> tuple[PythonAllowance, ...]:
         allowance = _read_python_allowance(entry, position)
         if allowance.path in allowances:
             raise ConfigError(
-                f"{CONFIG_PATH} [[python.allow]] declares path = {_toml_string(allowance.path)} twice; one entry per path",
+                f"{CONFIG_PATH} {PYTHON_ALLOWANCE_HEADING} declares path = {_toml_string(allowance.path)} twice; one entry per path",
                 PYTHON_ALLOWANCE_EXAMPLE,
             )
         allowances[allowance.path] = allowance
@@ -563,7 +563,7 @@ def _compose_allowances(compose: dict) -> tuple[ComposeAllowance, ...]:
         key = (allowance.file, allowance.service)
         if key in allowances:
             raise ConfigError(
-                f"{CONFIG_PATH} [[compose.allow]] declares service = {_toml_string(allowance.service)} of file = "
+                f"{CONFIG_PATH} {COMPOSE_ALLOWANCE_HEADING} declares service = {_toml_string(allowance.service)} of file = "
                 f"{_toml_string(allowance.file)} twice; one declaration per file and service",
                 COMPOSE_ALLOWANCE_EXAMPLE,
             )
@@ -592,7 +592,7 @@ def _generated_files(size: dict, gate: dict) -> tuple[GeneratedFile, ...]:
         generated = _read_generated_file(entry, position, jobs)
         if generated.path in declared:
             raise ConfigError(
-                f"{CONFIG_PATH} [[size.generated]] declares path = {_toml_string(generated.path)} twice; "
+                f"{CONFIG_PATH} {GENERATED_FILE_HEADING} declares path = {_toml_string(generated.path)} twice; "
                 "one entry per file",
                 GENERATED_FILE_EXAMPLE,
             )

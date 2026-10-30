@@ -27,8 +27,8 @@ from tests.support.check import CLEAN_VERDICT, refusal_row, refusals
 from tests.support.config_refusals import (
     ARRAY_TABLES,
     DATE_NEED,
-    DIRECTORY,
     FILE_PATH_NEED,
+    HASH,
     ITEM_NEED,
     KNOWN_KEYS,
     Refusal,
@@ -125,8 +125,7 @@ def test_a_config_symlink_loop_is_refused(tmp_path):
         read_gate_settings(tmp_path)
 
 
-HASH = "a" * 64
-ENTRY = f'{{ rule = "aws-access-token", file = "tests/fixture.py", secret_sha256 = "{HASH}", reason = "fixture value" }}'
+ENTRY = secret_entry()
 
 
 def test_reads_every_allowed_value_with_its_reason():
@@ -529,7 +528,7 @@ def test_the_commit_hook_ignores_a_malformed_size_table():
 
 def refused_by(refusal: Refusal, loader: str, tmp_path) -> ConfigError:
     """The error `loader` raises for `refusal`; a directory where the file should be is read from disk."""
-    if refusal.text == DIRECTORY:
+    if refusal.directory:
         (tmp_path / "quality" / "config.toml").mkdir(parents=True)
         read = {"allow_lists": read_allow_lists, "gate": read_gate_settings}[loader]
         argument = tmp_path
@@ -553,17 +552,15 @@ def test_a_config_refusal_carries_its_whole_fact_and_its_example_apart(refusal, 
     """#279 O10, O11, acceptance 1 and 2: every refusal names its table, entry position and unmet need as the fact,
     without a Python repr, and carries the example the table owns as TOML lines, or none."""
     error = refused_by(refusal, loader, tmp_path)
-    expected = None if refusal.example is None else getattr(config, refusal.example)
-    assert (error.fact, error.example) == (refusal.fact, expected)
+    assert (error.fact, error.example) == (refusal.fact, refusal.example)
 
 
 def test_the_refusals_use_every_example_and_every_refusal_without_one():
     """#279 acceptance 1: the rows hold all ten example constants and the refusals the trace gives none."""
-    names = {refusal.example for refusal in REFUSALS}
-    assert names == {
-        None, "EXAMPLE", "LEGACY_EXAMPLE", "ALLOWANCE_EXAMPLE", "LOOSENED_EXAMPLE", "ADVISORY_ALLOWANCE_EXAMPLE",
-        "ROOT_ALLOWANCE_EXAMPLE", "LAYOUT_ALLOWANCE_EXAMPLE", "PYTHON_ALLOWANCE_EXAMPLE", "COMPOSE_ALLOWANCE_EXAMPLE",
-        "GENERATED_FILE_EXAMPLE",
+    assert {refusal.example for refusal in REFUSALS} == {
+        None, config.EXAMPLE, config.LEGACY_EXAMPLE, config.ALLOWANCE_EXAMPLE, config.LOOSENED_EXAMPLE,
+        config.ADVISORY_ALLOWANCE_EXAMPLE, config.ROOT_ALLOWANCE_EXAMPLE, config.LAYOUT_ALLOWANCE_EXAMPLE,
+        config.PYTHON_ALLOWANCE_EXAMPLE, config.COMPOSE_ALLOWANCE_EXAMPLE, config.GENERATED_FILE_EXAMPLE,
     }
 
 
@@ -573,15 +570,15 @@ def test_the_one_line_form_of_a_refusal_is_its_fact_then_like_and_the_example_li
     assert str(ConfigError("no")) == "no"
 
 
-EXAMPLE_NAMES = [
-    "EXAMPLE", "LEGACY_EXAMPLE", "ALLOWANCE_EXAMPLE", *(table.example for table in ARRAY_TABLES),
-]
+EXAMPLES = {
+    "gate": config.EXAMPLE, "legacy": config.LEGACY_EXAMPLE, "secrets": config.ALLOWANCE_EXAMPLE,
+    **{table.name: table.example for table in ARRAY_TABLES},
+}
 
 
-@pytest.mark.parametrize("name", EXAMPLE_NAMES)
-def test_an_example_as_printed_with_its_indent_is_toml(name):
+@pytest.mark.parametrize("lines", EXAMPLES.values(), ids=EXAMPLES.keys())
+def test_an_example_as_printed_with_its_indent_is_toml(lines):
     """#279 acceptance 5: the lines a person copies, four spaces deep as `next:` prints them, parse as TOML."""
-    lines = getattr(config, name)
     assert isinstance(lines, tuple)
     tomllib.loads("\n".join(f"    {line}" for line in lines))
 
@@ -589,7 +586,7 @@ def test_an_example_as_printed_with_its_indent_is_toml(name):
 @pytest.mark.parametrize("table", ARRAY_TABLES, ids=[table.name for table in ARRAY_TABLES])
 def test_an_example_entry_is_accepted_beside_a_gate_that_lists_its_job(table):
     """#279 acceptance 5: each array table's example is a config the reader accepts."""
-    lines = getattr(config, table.example)
+    lines = table.example
     document = tomllib.loads("\n".join(lines))
     job = document.get("size", {}).get("generated", [{}])[0].get("job", "checks")
     text = f"[gate]\nmandatory_jobs = [{json.dumps(job)}]\n" + "\n".join(lines)

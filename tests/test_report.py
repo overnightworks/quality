@@ -82,10 +82,6 @@ def test_alternative_commands_print_their_labels_and_commands_on_one_line():
     assert str(choice) == "reinstall, one of: here: one or there: two"
 
 
-def test_a_choice_prints_its_label_before_its_text():
-    assert str(Choice("uv sync", "in a checkout")) == "in a checkout: uv sync"
-
-
 def test_an_example_holds_its_label_and_lines_and_equal_examples_hash_alike():
     example = Example("write it in a file like this", ("[table]", "key = 1"))
     same = Example("write it in a file like this", ("[table]", "key = 1"))

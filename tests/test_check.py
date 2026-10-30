@@ -18,7 +18,7 @@ from tests.support.check import (
     refused,
 )
 from tests.support.check import hygiene_output as run
-from tests.support.config_refusals import DIRECTORY, GATE, Refusal, all_refusals
+from tests.support.config_refusals import GATE, Refusal, all_refusals
 from tests.support.generated_files import generated_config
 from tests.support.scanners import fake_scanner, fake_zizmor, lacking, never_located, nothing_installed
 
@@ -342,8 +342,8 @@ CONFIG_AREAS = ("files", "debt", "secrets", "dependencies")
 
 
 def hygiene_over(build_repo, capsys, refusal: Refusal) -> tuple[int, list[str], list[str]]:
-    repo = build_repo({".env": "A=1\n", **({} if refusal.text == DIRECTORY else {"quality/config.toml": refusal.text})})
-    if refusal.text == DIRECTORY:
+    repo = build_repo({".env": "A=1\n", **({} if refusal.directory else {"quality/config.toml": refusal.text})})
+    if refusal.directory:
         (repo / "quality" / "config.toml").mkdir(parents=True)
     code = cli.main(["hygiene", str(repo)], clock=lambda: 0.0)
     captured = capsys.readouterr()
@@ -363,8 +363,7 @@ def test_hygiene_names_a_config_refusal_on_its_rows_and_shows_the_example_once_u
         assert f"next: {cli.REFUSED_AREAS_NEXT.text}" in err
         assert label not in err
         return
-    lines = getattr(config, refusal.example)
-    indented = [f"    {line}" for line in lines]
+    indented = [f"    {line}" for line in refusal.example]
     assert err.count(label) == 1
     start = err.index(label) + 1
     assert err[start:start + len(indented)] == indented
