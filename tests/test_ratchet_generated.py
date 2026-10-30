@@ -5,7 +5,9 @@ import pytest
 from quality import cli
 from quality.config import CONFIG_PATH
 from quality.ratchet import BASELINE_PATH
+from quality.rules import Rule
 from tests.support.check import hygiene_output as hygiene
+from tests.support.check import refusals
 from tests.support.generated_files import MANDATORY_JOB, TYPES_FILE, generated_config
 from tests.support.source_code import long_function, typescript_file
 
@@ -78,7 +80,7 @@ def test_a_declared_python_file_python_cannot_parse_leaves_the_size_rule_judgeab
     seeded_bytes = (repo / BASELINE_PATH).read_bytes()
     _, output = hygiene(capsys, repo)
     assert size_lines(output) == []
-    assert "size unparsable" not in output
+    assert Rule.SIZE not in refusals(repo)
     assert cli.main(["baseline", "write", str(repo)]) == 2
     assert "baseline: not written - gen/api.py is not valid Python" in capsys.readouterr().err
     assert (repo / BASELINE_PATH).read_bytes() == seeded_bytes

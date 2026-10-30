@@ -6,6 +6,7 @@ import pytest
 
 from quality import cli, repository
 from quality.repository import RepositoryFileError, TomlError, parse_toml
+from tests.support.check import refusal_row
 
 NAME = "quality/config.toml"
 VALID_CONFIG = '[gate]\nmandatory_jobs = ["checks"]\n'
@@ -221,7 +222,7 @@ def run_command(command: str, repo: Path, scratch: Path, monkeypatch, capsys) ->
 
 
 PREFIXES = {
-    "hygiene": "hygiene: secret cannot judge - ",
+    "hygiene": f"{refusal_row('secrets')}",
     "baseline write": "baseline: not written - ",
     "verdict": f"verdict: cannot judge - {NAME} at the head: ",
     "sonar findings": "sonar: cannot judge - ",
@@ -248,7 +249,7 @@ def test_an_unusable_config_is_exit_2_with_one_reason_in_every_command(
 @pytest.mark.parametrize(
     ("command", "refusal"),
     [
-        ("hygiene", "hygiene: size cannot judge - cannot read quality/baseline.toml: [Errno 13] Permission denied"),
+        ("hygiene", f"{refusal_row('debt')}cannot read quality/baseline.toml: [Errno 13] Permission denied"),
         ("baseline write", "baseline: not written - cannot read quality/config.toml: [Errno 13] Permission denied"),
         ("verdict", f"verdict: cannot judge - {NAME} at the head: {DENIED}"),
         ("sonar findings", f"sonar: cannot judge - {DENIED}"),
@@ -283,7 +284,7 @@ def point_git_dir_at_a_file(repo: Path, monkeypatch) -> None:
 @pytest.mark.parametrize(
     ("argv", "prefix"),
     [
-        (["hygiene", "."], "hygiene: cannot judge - "),
+        (["hygiene", "."], "error: "),
         (["baseline", "write", "."], "baseline: not written - "),
         (["sonar", "properties"], "sonar: cannot judge - "),
     ],

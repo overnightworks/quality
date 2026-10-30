@@ -4,8 +4,8 @@ from pathlib import Path
 import pytest
 
 from quality.config import CONFIG_PATH
-from tests.support.check import CLEAN_LINE
 from tests.support.check import hygiene_output as run
+from tests.support.check import is_clean, refusal_row, refusals
 from tests.support.git_repositories import GIT_IDENTITY, head_commit
 
 ROOT_FLOOR_FIX = (
@@ -31,7 +31,7 @@ def floor_lines(output: str) -> list[str]:
 def test_a_floor_of_python_3_14_or_higher_is_clean(build_repo, capsys, requires_python):
     """F1, sentence 2: a floor of 3.14 or higher is clean."""
     code, output = run(capsys, build_repo({"pyproject.toml": project(requires_python)}))
-    assert (code, CLEAN_LINE in output) == (0, True), output
+    assert (code, is_clean(output)) == (0, True), output
 
 
 @pytest.mark.parametrize(
@@ -107,8 +107,8 @@ def test_an_allowed_file_is_clean_and_the_gate_shows_its_value_and_reason(build_
     code, output = run(capsys, build_repo(tracked))
     expected = 'python-floor: allowed src/speech/pyproject.toml (requires-python ">=3.12,<3.13") - qwen-tts has no cp314 wheel'
     lines = output.splitlines()
-    assert (code, lines.count(expected), CLEAN_LINE in output) == (0, 1, True), output
-    assert lines.index(expected) < next(n for n, line in enumerate(lines) if CLEAN_LINE in line), output
+    assert (code, lines.count(expected), is_clean(output)) == (0, 1, True), output
+    assert lines.index(expected) < next(n for n, line in enumerate(lines) if is_clean(line)), output
 
 
 @pytest.mark.parametrize(
@@ -144,11 +144,12 @@ def test_an_allowance_for_a_file_that_needs_none_is_a_finding(build_repo, capsys
 )
 def test_a_malformed_python_allowance_cannot_be_judged_by_any_rule_that_reads_the_config(build_repo, capsys, config):
     """F8, sentence 4: a malformed allowance is cannot-judge in every rule that reads the config."""
-    code, output = run(capsys, build_repo({"src/a/pyproject.toml": project(), CONFIG_PATH: config}))
-    refusals = [line for line in output.splitlines() if "[[python.allow]]" in line]
-    named = {line.split(" - ")[0] for line in refusals}
-    assert (code, "hygiene: python-floor cannot judge" in named, "hygiene: root-layout cannot judge" in named) == (2, True, True), output
-    assert all("qwen-tts has no cp314 wheel" in line for line in refusals), refusals
+    repo = build_repo({"src/a/pyproject.toml": project(), CONFIG_PATH: config})
+    code, output = run(capsys, repo)
+    refusal_lines = [line for line in output.splitlines() if "[[python.allow]]" in line]
+    refusing = refusals(repo)
+    assert (code, "python-floor" in refusing, "root-layout" in refusing) == (2, True, True), output
+    assert all("qwen-tts has no cp314 wheel" in line for line in refusal_lines), refusal_lines
 
 
 @pytest.mark.parametrize(
@@ -174,7 +175,7 @@ def test_an_unreadable_pyproject_is_unparsable_and_leaves_the_other_rules_judged
     subprocess.run(["git", "-C", str(repo), "add", "--", ".env", "pyproject.toml"], check=True)
     code, output = run(capsys, repo)
     assert code == 2, output
-    assert "hygiene: python-floor unparsable - pyproject.toml" in output, output
+    assert f"{refusal_row('files')}pyproject.toml" in output, output
     assert "env-file .env - " in output, output
 
 
@@ -187,7 +188,7 @@ def test_a_pyproject_that_links_out_of_the_repository_cannot_be_judged(build_rep
     subprocess.run(["git", "-C", str(repo), "add", "--", "pyproject.toml"], check=True)
     code, output = run(capsys, repo)
     assert code == 2, output
-    assert "hygiene: python-floor cannot judge - pyproject.toml resolves outside the repository" in output, output
+    assert f"{refusal_row('files')}pyproject.toml resolves outside the repository" in output, output
 
 
 @pytest.mark.parametrize("gitlink_path", ["src/acestep", "src/acestep/pyproject.toml"], ids=["vendor directory", "at a pyproject.toml path"])

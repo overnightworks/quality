@@ -6,7 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from quality import DISTRIBUTION, cli
+from quality import DISTRIBUTION, check, cli
+from quality.rules import Rule
 
 installed_ruff = cli.INSTALLED_RUFF
 
@@ -62,3 +63,10 @@ def assert_refusal(output: str, rule: str, path: str) -> None:
 def refusal_row(area: str) -> str:
     """What an area row that could not check says before its reason (docs/output.md, case 4)."""
     return f"  ✗ {area:<12}  {'not checked':<14} "
+
+
+def refusals(repo: Path, locate_ruff: Callable[[], str] = installed_ruff, locate_zizmor: Callable[[], str] | None = None) -> dict[Rule, str]:
+    """Each rule that cannot judge `repo`, with its reason, as the rule runner reports it."""
+    locate = locate_zizmor or cli.INSTALLED_ZIZMOR
+    verdicts = check.run_hygiene(repo, locate_ruff, locate).verdicts
+    return {verdict.rule: str(verdict.refusal) for verdict in verdicts if verdict.refusal is not None}

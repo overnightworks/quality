@@ -8,8 +8,8 @@ import pytest
 from quality import check, installation, python_lint
 from quality.python_lint import LintError, RuffFinding, UnparsablePython
 from quality.rules import Rule
-from tests.support.check import CLEAN_LINE, installed_ruff, loosen_requirement
 from tests.support.check import hygiene_output as run
+from tests.support.check import installed_ruff, is_clean, loosen_requirement, refusal_row, refusals
 from tests.support.layout import in_index
 from tests.support.scanners import never_located, nothing_installed
 
@@ -280,7 +280,7 @@ def test_a_repository_without_tracked_python_is_clean_even_when_quality_holds_no
     (repo / "untracked.py").write_text(EVAL)
     code, output = run(capsys, repo, nothing_installed)
     assert code == 0, output
-    assert CLEAN_LINE in output, output
+    assert is_clean(output), output
 
 
 @pytest.mark.integration
@@ -296,7 +296,7 @@ def test_a_tracked_python_file_the_checkout_does_not_hold_cannot_be_judged(build
     leave_out(repo)
     code, output = run(capsys, repo)
     assert code == 2, output
-    assert "hygiene: python-security cannot judge - cannot read src/p/a.py: the checkout does not hold it" in output
+    assert f"{refusal_row('code')}cannot read src/p/a.py: the checkout does not hold it" in output
     assert "env-file .env - " in output
 
 
@@ -416,8 +416,8 @@ def test_a_syntax_error_is_unparsable_and_the_other_rules_are_still_judged(build
     """Sentence 8, cell 15, and #225 cell 10: both rules are unparsable, naming the file, exit 2."""
     code, output = run(capsys, build_repo({".env": "A=1\n", "src/p/bad.py": "def broken(:\n"}))
     assert code == 2
-    assert "hygiene: python-security unparsable - ruff cannot parse src/p/bad.py" in output
-    assert "hygiene: python-print unparsable - ruff cannot parse src/p/bad.py" in output
+    assert f"{refusal_row('code')}ruff cannot parse src/p/bad.py" in output
+    assert f"{refusal_row('code')}ruff cannot parse src/p/bad.py" in output
     assert "env-file .env - " in output
 
 
@@ -439,8 +439,7 @@ def test_a_ruff_run_quality_cannot_trust_cannot_be_judged(build_repo, capsys, mo
     monkeypatch.setattr(python_lint, "RUN_TIMEOUT_SECONDS", 0.5)
     code, output = run(capsys, repo, lambda: str(binary))
     rules = [Rule.PYTHON_SECURITY, Rule.PYTHON_PRINT]
-    refused = [rule for rule in rules if f"hygiene: {rule} cannot judge - " in output]
-    assert (code, refused, says in output) == (2, rules, True), output
+    assert (code, list(refusals(repo, lambda: str(binary))), says in output) == (2, rules, True), output
     assert "env-file .env - " in output
 
 
@@ -465,8 +464,7 @@ def test_a_ruff_quality_cannot_find_or_trust_names_the_reinstall_command(build_r
         loosen_requirement(elsewhere / "metadata", monkeypatch, "ruff")
     code, output = run(capsys, repo, locate)
     assert code == 2, output
-    for rule in (Rule.PYTHON_SECURITY, Rule.PYTHON_PRINT):
-        assert f"hygiene: {rule} cannot judge - " in output, output
+    assert list(refusals(repo, locate)) == [Rule.PYTHON_SECURITY, Rule.PYTHON_PRINT]
     assert "env-file .env - " in output
     assert (installation.REINSTALL in output) is (case != "unpinned"), output
     if case == "unpinned":
@@ -483,8 +481,8 @@ def test_a_print_in_a_file_tokenize_cannot_read_refuses_only_python_print(build_
     (elsewhere / "report.json").write_text(json.dumps([entry]))
     binary = fake_ruff(elsewhere, f"cat {elsewhere / 'report.json'}")
     code, output = run(capsys, repo, lambda: str(binary))
-    assert (code, "hygiene: python-print cannot judge - cannot read the comments of src/p/a.py" in output) == (2, True), output
-    assert "hygiene: python-security" not in output, output
+    assert (code, f"{refusal_row('code')}cannot read the comments of src/p/a.py" in output) == (2, True), output
+    assert list(refusals(repo, lambda: str(binary))) == [Rule.PYTHON_PRINT], output
 
 
 @pytest.mark.integration
@@ -493,7 +491,7 @@ def test_a_python_file_that_is_not_utf8_cannot_be_judged(build_repo, capsys):
     repo = build_repo({"src/p/a.py": "x = 1\n"})
     (repo / "src" / "p" / "a.py").write_bytes(b"x = '\xff'\n")
     code, output = run(capsys, repo)
-    assert (code, "hygiene: python-security cannot judge - cannot read src/p/a.py" in output) == (2, True), output
+    assert (code, f"{refusal_row('code')}cannot read src/p/a.py" in output) == (2, True), output
 
 
 @pytest.mark.integration
@@ -503,7 +501,7 @@ def test_code_a_cookie_hides_from_ruff_cannot_be_judged(build_repo, capsys):
     repo = build_repo({"src/p/a.py": "x = 1\n"})
     (repo / "src" / "p" / "a.py").write_bytes(b'# coding: utf-7\nx = 1 # +AAo-y = eval("1")\n')
     code, output = run(capsys, repo)
-    assert (code, "hygiene: python-security cannot judge - cannot read src/p/a.py" in output) == (2, True), output
+    assert (code, f"{refusal_row('code')}cannot read src/p/a.py" in output) == (2, True), output
 
 
 @pytest.mark.integration

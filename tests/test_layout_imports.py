@@ -2,7 +2,7 @@
 
 import pytest
 
-from tests.support.check import hygiene_output
+from tests.support.check import hygiene_output, refusal_row, refusals
 from tests.support.layout import CONFIG, GUIDANCE, case, declaring, findings, in_index, red
 from tests.support.merge import ONE_JOB
 
@@ -108,7 +108,7 @@ def test_an_importer_python_cannot_parse_is_unparsable(build_repo, capsys, conte
     """#201 G15, sentence 7."""
     code, output = hygiene_output(capsys, build_repo(project({"tests/support/y.py": content})))
     assert code == 2
-    assert "hygiene: test-import unparsable - tests/support/y.py is not valid Python (" in output
+    assert f"{refusal_row('files')}tests/support/y.py is not valid Python (" in output
 
 
 def test_a_file_with_a_byte_order_mark_is_parsed_and_judged(build_repo, capsys):
@@ -122,10 +122,10 @@ def test_an_unreadable_importer_cannot_be_judged_but_other_files_are_not_read(bu
     repo = build_repo(project({"tests/support/y.py": "x = 1\n", "tests/fixtures/data.py": "x = 1\n", "docs/n.txt": "x\n"}))
     (repo / "tests" / "fixtures" / "data.py").chmod(0)
     (repo / "docs" / "n.txt").chmod(0)
-    assert "hygiene: test-import cannot judge" not in hygiene_output(capsys, repo)[1]
+    assert "test-import" not in refusals(repo)
     (repo / "tests" / "support" / "y.py").chmod(0)
-    code, output = hygiene_output(capsys, repo)
-    assert (code, "hygiene: test-import cannot judge - " in output) == (2, True)
+    code, _ = hygiene_output(capsys, repo)
+    assert (code, "test-import" in refusals(repo)) == (2, True)
 
 
 @pytest.mark.parametrize(

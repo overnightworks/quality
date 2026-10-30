@@ -3,7 +3,8 @@
 
 import pytest
 
-from tests.support.check import hygiene_output
+from quality.rules import Rule
+from tests.support.check import hygiene_output, refusals
 from tests.support.layout import CONFIG, EXAMPLE_SHA, GUIDANCE, declaring, findings, in_index
 from tests.support.merge import ONE_JOB
 
@@ -126,9 +127,10 @@ def test_an_invalid_declared_path_cannot_be_judged_and_shows_an_example(build_re
 )
 def test_a_malformed_layout_table_cannot_be_judged(build_repo, capsys, config):
     """#184 sentence 3: a duplicate, unknown rule or key, or a reason that is not one-line text is exit 2."""
-    code, output = hygiene_output(capsys, build_repo({**GUIDANCE, "NOTES": "x", CONFIG: ONE_JOB + config}))
+    repo = build_repo({**GUIDANCE, "NOTES": "x", CONFIG: ONE_JOB + config})
+    code, output = hygiene_output(capsys, repo)
     assert code == 2
-    assert "file-suffix cannot judge" in output
+    assert Rule.FILE_SUFFIX in refusals(repo)
     assert "[[layout.allow]]" in output
 
 
@@ -150,8 +152,8 @@ def test_an_index_record_that_cannot_be_read_cannot_be_judged(build_repo, capsys
     """#184 sentence 2: index data that cannot be read is exit 2."""
     repo = build_repo(GUIDANCE)
     fake_git(r"""case " $* " in *" -s "*) printf 'not-a-mode abc 0\tAGENTS.md\0'; exit 0;; esac""")
-    code, output = hygiene_output(capsys, repo)
-    assert (code, "file-suffix cannot judge" in output) == (2, True)
+    code, _ = hygiene_output(capsys, repo)
+    assert (code, Rule.FILE_SUFFIX in refusals(repo)) == (2, True)
 
 
 SHELL_HEADER = "#!/usr/bin/env bash\n# Runs the static checks.\nset -euo pipefail\n"
@@ -320,8 +322,8 @@ def test_a_script_that_cannot_be_read_cannot_be_judged(build_repo, capsys):
     """#190 sentence 5: a file that cannot be read is exit 2."""
     repo = build_repo({**GUIDANCE, "scripts/run_it.sh": SHELL_HEADER})
     (repo / "scripts" / "run_it.sh").chmod(0)
-    code, output = hygiene_output(capsys, repo)
-    assert (code, "script-header cannot judge" in output) == (2, True)
+    code, _ = hygiene_output(capsys, repo)
+    assert (code, Rule.SCRIPT_HEADER in refusals(repo)) == (2, True)
 
 
 def test_a_file_under_tests_is_not_read_for_a_shebang(build_repo, capsys):
