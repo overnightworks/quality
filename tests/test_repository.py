@@ -222,6 +222,7 @@ def run_command(command: str, repo: Path, scratch: Path, monkeypatch, capsys) ->
 
 PREFIXES = {
     "hygiene": "hygiene: secret cannot judge - ",
+    "baseline write": "baseline: not written - ",
     "verdict": f"verdict: cannot judge - {NAME} at the head: ",
     "sonar findings": "sonar: cannot judge - ",
 }

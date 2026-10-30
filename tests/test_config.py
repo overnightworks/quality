@@ -446,18 +446,31 @@ def test_a_malformed_generated_file_is_refused_with_the_entry_and_the_example(en
 
 
 def test_a_generated_file_naming_a_job_needs_the_config_to_list_mandatory_jobs():
-    """#174 sentence 3: a config without [gate] mandatory_jobs cannot hold a job, so it declares nothing."""
-    with pytest.raises(ConfigError, match="job as one of"):
+    """#174 sentence 3: a config without [gate] mandatory_jobs cannot hold a job, so a declaration is refused."""
+    with pytest.raises(ConfigError, match="mandatory_jobs as a non-empty list"):
         load_allow_lists(generated_config())
 
 
-@pytest.mark.parametrize("command", [["hygiene", "{repo}"], ["baseline", "write", "{repo}"]], ids=["hygiene", "baseline write"])
-def test_a_malformed_generated_file_stops_the_size_rule_and_the_baseline_write(build_repo, capsys, command):
+@pytest.mark.parametrize("jobs", ["[1]", '[""]', '"checks"'], ids=["number", "empty name", "not a list"])
+def test_a_generated_file_needs_mandatory_jobs_that_are_non_empty_names(jobs):
+    """#174 sentence 3: a job is compared only with valid job names, in every loader that reads the declaration."""
+    text = f"[gate]\nmandatory_jobs = {jobs}\n" + generated_config(job=None) + "job = 1\n"
+    for load in (load_allow_lists, load_gate_settings):
+        with pytest.raises(ConfigError, match="mandatory_jobs as a non-empty list"):
+            load(text)
+
+
+@pytest.mark.parametrize(
+    ("command", "refusal"),
+    [(["hygiene", "{repo}"], "hygiene: size cannot judge - "), (["baseline", "write", "{repo}"], "baseline: not written - ")],
+    ids=["hygiene", "baseline write"],
+)
+def test_a_malformed_generated_file_stops_the_size_rule_and_the_baseline_write(build_repo, capsys, command, refusal):
     """#174 sentence 3: hygiene cannot judge size and baseline write writes nothing."""
     repo = build_repo({CONFIG_PATH: GATE_WITH_CHECKS + generated_config(job="other")})
     assert cli.main([part.format(repo=repo) for part in command]) == 2
     err = capsys.readouterr().err
-    assert ("hygiene: size cannot judge - " in err or "baseline: not written - " in err) and "[[size.generated]]" in err
+    assert refusal in err and "[[size.generated]]" in err
     assert not (repo / "quality" / "baseline.toml").exists()
 
 
@@ -466,7 +479,8 @@ def test_the_verdict_refuses_a_malformed_generated_file_naming_the_side(capsys, 
     repo, _ = run_env
     (repo / CONFIG_PATH).write_text(GATE_WITH_CHECKS + generated_config(job="other"))
     assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: ("{}", None)) == 2
-    assert "[[size.generated]]" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "quality/config.toml at the head" in err and "[[size.generated]]" in err
 
 
 def test_the_commit_hook_ignores_a_malformed_size_table():

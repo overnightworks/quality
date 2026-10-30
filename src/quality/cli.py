@@ -205,7 +205,9 @@ def run_baseline_write(path: Path) -> int:
         top = checkout.work_tree_top(path)
         sources = ratchet.read_sources(top, checkout.tracked_files(top))
         generated = read_allow_lists(top).generated
-        measured = ratchet.without_generated(ratchet.measure(sources), generated).complete()
+        tree = ratchet.measure(sources)
+        tree.complete()
+        measured = ratchet.without_generated(tree, generated).complete()
         written = ratchet.Baseline(ratchet.debt(measured), clones.find_pairs(sources).pairs)
         loosenings = describe_loosenings(top, written)
         repository.write_text(top, ratchet.BASELINE_PATH, ratchet.render_baseline(written))

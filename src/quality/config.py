@@ -545,8 +545,7 @@ def _generated_files(size: dict, gate: dict) -> tuple[GeneratedFile, ...]:
     entries = size.get("generated", [])
     if not isinstance(entries, list):
         raise ConfigError(f"{CONFIG_PATH} needs [[size.generated]] as an array of tables, like:\n{GENERATED_FILE_EXAMPLE}")
-    mandatory = gate.get("mandatory_jobs")
-    jobs = mandatory if isinstance(mandatory, list) else []
+    jobs = _mandatory_jobs(gate) if entries else ()
     declared: dict[str, GeneratedFile] = {}
     for entry in entries:
         generated = _read_generated_file(entry, jobs)
@@ -559,7 +558,7 @@ def _generated_files(size: dict, gate: dict) -> tuple[GeneratedFile, ...]:
     return tuple(declared.values())
 
 
-def _read_generated_file(entry: object, mandatory_jobs: list) -> GeneratedFile:
+def _read_generated_file(entry: object, mandatory_jobs: tuple[str, ...]) -> GeneratedFile:
     def refuse(need: str) -> ConfigError:
         return ConfigError(f"{CONFIG_PATH} [[size.generated]] entry {entry!r} needs {need}, like:\n{GENERATED_FILE_EXAMPLE}")
 
