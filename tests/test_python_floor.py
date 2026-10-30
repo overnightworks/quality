@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from quality import cli
+from quality import output as output_module
 from quality.config import CONFIG_PATH, PYTHON_ALLOWANCE_EXAMPLE, PYTHON_ALLOWANCE_HEADING
 from quality.output import SEPARATOR, Glyph
 from quality.report import FindingEvent, NoteEvent, printable
@@ -22,7 +23,7 @@ from tests.support.check import (
 )
 from tests.support.check import hygiene_output as run
 from tests.support.config_refusals import ONE_LINE_NEED
-from tests.support.git_repositories import GIT_IDENTITY, head_commit
+from tests.support.git_repositories import GIT_IDENTITY, head_commit, make_repo
 
 
 def project(requires_python: str | None = ">=3.14") -> str:
@@ -32,6 +33,11 @@ def project(requires_python: str | None = ">=3.14") -> str:
 
 def allow(path: str, reason: str = "qwen-tts has no cp314 wheel") -> str:
     return f'{PYTHON_ALLOWANCE_HEADING}\npath = "{path}"\nreason = "{reason}"\n'
+
+
+def tmp_path_dir(parent: Path, name: str) -> Path:
+    (directory := parent / name).mkdir()
+    return directory
 
 
 def floor_paths(repo: Path) -> list[str]:
@@ -248,19 +254,19 @@ def test_a_gitlink_is_never_entered(build_repo, capsys, elsewhere, gitlink_path)
     assert (code, floor_paths(repo)) == (0, []), output
 
 
-def test_the_entry_the_fix_asks_for_leaves_no_finding_and_one_allowed_note(build_repo):
+def test_the_entry_the_fix_asks_for_leaves_no_finding_and_one_allowed_note(build_repo, tmp_path):
     """Decision 12: the allowance the fix names clears the finding and stands as one note."""
     tracked = {"pyproject.toml": project(">=3.12")}
-    assert floor_paths(build_repo(tracked)) == ["pyproject.toml"]
+    assert floor_paths(make_repo(tmp_path_dir(tmp_path, "before"), tracked)) == ["pyproject.toml"]
     repo = build_repo({**tracked, CONFIG_PATH: allow("pyproject.toml")})
     assert (floor_paths(repo), [note.event for note in rule_notes(repo, Rule.PYTHON_FLOOR)]) == ([], [NoteEvent.ALLOWED])
 
 
-def test_deleting_the_entry_a_stale_finding_names_leaves_no_finding(build_repo):
+def test_deleting_the_entry_a_stale_finding_names_leaves_no_finding(build_repo, tmp_path):
     """Decision 12: the stale allowance's fix, applied, clears it."""
     tracked = {"pyproject.toml": project()}
     assert floor_paths(build_repo({**tracked, CONFIG_PATH: allow("src/m/pyproject.toml")})) == ["src/m/pyproject.toml"]
-    assert floor_paths(build_repo(tracked)) == []
+    assert floor_paths(make_repo(tmp_path_dir(tmp_path, "after"), tracked)) == []
 
 
 def test_a_refusal_for_an_oversized_requires_python_holds_the_path_and_not_the_value(build_repo):
@@ -302,6 +308,6 @@ def test_a_tracked_env_file_and_an_allowed_file_give_a_files_row_without_a_fact_
     _, output = run(capsys, repo)
     row, below = files_row_and_rows_below(output)
     (note,) = rule_notes(repo, Rule.PYTHON_FLOOR)
-    assert row.split(maxsplit=3)[-1].endswith("finding"), output
-    assert [line.split()[0] for line in below] == [Glyph.NEEDS_YOU, "fix:", Glyph.NOTE], output
-    assert below[-1].split()[1] == note.location, output
+    assert len(row.split()) == len(f"{Glyph.NEEDS_YOU} files 2 findings".split()), output
+    assert (below[-2].split()[0], below[-1].split()[:2]) == (output_module.FIX_LABEL, [Glyph.NOTE, note.location]), output
+    assert Glyph.NOTE not in "".join(line.lstrip()[:1] for line in below[:-1]), output
