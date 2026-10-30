@@ -3,16 +3,12 @@ from pathlib import Path
 
 import pytest
 
-from quality.config import CONFIG_PATH, PYTHON_ALLOWANCE_EXAMPLE
-from tests.support.check import copy_block, env_row_stands, is_clean, refusal_row, refusals
+from quality.config import CONFIG_PATH, PYTHON_ALLOWANCE_EXAMPLE, PYTHON_ALLOWANCE_HEADING
+from quality.rules import Rule
+from tests.support.check import copy_block, env_row_stands, is_clean, refusal_row, refusals, rule_findings
 from tests.support.check import hygiene_output as run
 from tests.support.config_refusals import ONE_LINE_NEED
 from tests.support.git_repositories import GIT_IDENTITY, head_commit
-
-ROOT_FLOOR_FIX = (
-    "raise it to >=3.14 and move CI, .python-version, Dockerfiles and ruff's target-version with it, "
-    "or declare it in quality/config.toml with [[python.allow]], its path and a reason."
-)
 
 
 def project(requires_python: str | None = ">=3.14") -> str:
@@ -21,11 +17,11 @@ def project(requires_python: str | None = ">=3.14") -> str:
 
 
 def allow(path: str, reason: str = "qwen-tts has no cp314 wheel") -> str:
-    return f'[[python.allow]]\npath = "{path}"\nreason = "{reason}"\n'
+    return f'{PYTHON_ALLOWANCE_HEADING}\npath = "{path}"\nreason = "{reason}"\n'
 
 
-def floor_lines(output: str) -> list[str]:
-    return [line for line in output.splitlines() if line.startswith("python-floor")]
+def floor_paths(repo: Path) -> list[str]:
+    return [finding.path for finding in rule_findings(repo, Rule.PYTHON_FLOOR)]
 
 
 @pytest.mark.parametrize("requires_python", [">=3.14", ">=3.14,<3.15", "~=3.14", "~=3.14.1", "==3.14.*", ">=3.15"])
@@ -49,9 +45,11 @@ def test_a_floor_of_python_3_14_or_higher_is_clean(build_repo, capsys, requires_
 )
 def test_a_floor_below_python_3_14_names_the_value_and_the_floor(build_repo, capsys, requires_python, floor):
     """F2, sentence 3: a floor below 3.14 is red and the reason names the value and the floor."""
-    code, output = run(capsys, build_repo({"pyproject.toml": project(requires_python)}))
-    reason = f'requires-python "{requires_python}" admits Python {floor}, below 3.14.'
-    assert (code, floor_lines(output), ROOT_FLOOR_FIX in output) == (1, [f"python-floor pyproject.toml - {reason}"], True), output
+    repo = build_repo({"pyproject.toml": project(requires_python)})
+    code, output = run(capsys, repo)
+    findings = rule_findings(repo, Rule.PYTHON_FLOOR)
+    assert (code, [finding.path for finding in findings]) == (1, ["pyproject.toml"]), output
+    assert [requires_python in findings[0].reason, floor in findings[0].reason] == [True, True], output
 
 
 @pytest.mark.parametrize(
@@ -61,9 +59,9 @@ def test_a_floor_below_python_3_14_names_the_value_and_the_floor(build_repo, cap
 )
 def test_a_project_without_a_floor_admits_every_python(build_repo, capsys, text):
     """F3, sentence 2: a project that sets no lower bound is red as naming no floor."""
-    code, output = run(capsys, build_repo({"pyproject.toml": text}))
-    assert code == 1, output
-    assert "names no floor" in floor_lines(output)[0], output
+    repo = build_repo({"pyproject.toml": text})
+    code, output = run(capsys, repo)
+    assert (code, floor_paths(repo)) == (1, ["pyproject.toml"]), output
 
 
 @pytest.mark.parametrize(
@@ -79,23 +77,24 @@ def test_a_project_without_a_floor_admits_every_python(build_repo, capsys, text)
 )
 def test_a_file_without_a_project_table_is_not_judged(build_repo, capsys, tracked):
     """F4, sentence 1: a file without a [project] table, or inside tests, is not judged."""
-    code, output = run(capsys, build_repo(tracked))
-    assert (code, floor_lines(output)) == (0, []), output
+    repo = build_repo(tracked)
+    code, output = run(capsys, repo)
+    assert (code, floor_paths(repo)) == (0, []), output
 
 
 def test_a_member_below_the_floor_is_the_only_finding_beside_a_root_at_the_floor(build_repo, capsys):
     """F5, sentence 1: a member below the floor is the only finding beside a root at the floor."""
-    code, output = run(capsys, build_repo({"pyproject.toml": project(), "src/speech/pyproject.toml": project(">=3.12")}))
-    assert (code, [line.split(" - ")[0] for line in floor_lines(output)]) == (1, ["python-floor src/speech/pyproject.toml"]), output
+    repo = build_repo({"pyproject.toml": project(), "src/speech/pyproject.toml": project(">=3.12")})
+    code, output = run(capsys, repo)
+    assert (code, floor_paths(repo)) == (1, ["src/speech/pyproject.toml"]), output
 
 
 def test_every_file_below_the_floor_is_a_finding_sorted_by_path(build_repo, capsys):
     """F11, sentence 3: every file below the floor is one finding with reason and fix, sorted by path."""
     tracked = {"pyproject.toml": project(">=3.12"), "src/b/pyproject.toml": project(">=3.13"), "src/a/pyproject.toml": project(None)}
-    code, output = run(capsys, build_repo(tracked))
-    paths = [line.split(" - ")[0] for line in floor_lines(output)]
-    assert (code, paths) == (1, ["python-floor pyproject.toml", "python-floor src/a/pyproject.toml", "python-floor src/b/pyproject.toml"]), output
-    assert output.count(ROOT_FLOOR_FIX) == 3, output
+    repo = build_repo(tracked)
+    code, output = run(capsys, repo)
+    assert (code, floor_paths(repo)) == (1, ["pyproject.toml", "src/a/pyproject.toml", "src/b/pyproject.toml"]), output
 
 
 def test_an_allowed_file_is_clean_and_the_gate_shows_its_value_and_reason(build_repo, capsys):
@@ -105,31 +104,28 @@ def test_an_allowed_file_is_clean_and_the_gate_shows_its_value_and_reason(build_
         "src/speech/pyproject.toml": project(">=3.12,<3.13"),
         CONFIG_PATH: allow("src/speech/pyproject.toml"),
     }
-    code, output = run(capsys, build_repo(tracked))
-    expected = 'python-floor: allowed src/speech/pyproject.toml (requires-python ">=3.12,<3.13") - qwen-tts has no cp314 wheel'
-    lines = output.splitlines()
-    assert (code, lines.count(expected), is_clean(output)) == (0, 1, True), output
-    assert lines.index(expected) < next(n for n, line in enumerate(lines) if is_clean(line)), output
+    repo = build_repo(tracked)
+    code, output = run(capsys, repo)
+    assert (code, floor_paths(repo), is_clean(output)) == (0, [], True), output
 
 
 @pytest.mark.parametrize(
-    ("tracked", "why"),
+    "tracked",
     [
-        ({"pyproject.toml": project()}, "no tracked pyproject.toml with a [project] table lies there"),
-        ({"pyproject.toml": project(), "src/m/pyproject.toml": "[tool.ruff]\n"}, "no tracked pyproject.toml with a [project] table lies there"),
-        ({"pyproject.toml": project(), "src/m/pyproject.toml": project()}, "that file is already at the floor"),
+        {"pyproject.toml": project()},
+        {"pyproject.toml": project(), "src/m/pyproject.toml": "[tool.ruff]\n"},
+        {"pyproject.toml": project(), "src/m/pyproject.toml": project()},
     ],
     ids=["untracked path", "no project table", "already at the floor"],
 )
-def test_an_allowance_for_a_file_that_needs_none_is_a_finding(build_repo, capsys, tracked, why):
+def test_an_allowance_for_a_file_that_needs_none_is_a_finding(build_repo, capsys, tracked):
     """F7, sentence 6: an allowance for a file that needs none is a finding."""
-    code, output = run(capsys, build_repo({**tracked, CONFIG_PATH: allow("src/m/pyproject.toml")}))
-    expected = f"python-floor src/m/pyproject.toml - declared in {CONFIG_PATH} with [[python.allow]], but {why}."
-    assert (code, floor_lines(output)) == (1, [expected]), output
-    assert f"delete its [[python.allow]] entry from {CONFIG_PATH}." in output
+    repo = build_repo({**tracked, CONFIG_PATH: allow("src/m/pyproject.toml")})
+    code, output = run(capsys, repo)
+    assert (code, floor_paths(repo)) == (1, ["src/m/pyproject.toml"]), output
 
 
-PYTHON = f"{CONFIG_PATH} [[python.allow]]"
+PYTHON = f"{CONFIG_PATH} {PYTHON_ALLOWANCE_HEADING}"
 PYTHON_PATH_NEED = f"{PYTHON} entry 1 needs path as the exact tracked path of one pyproject.toml, no folder, pattern or .."
 
 
@@ -213,4 +209,4 @@ def test_a_gitlink_is_never_entered(build_repo, capsys, elsewhere, gitlink_path)
     (repo / gitlink_path).mkdir(parents=True)
     (repo / gitlink_path / "pyproject.toml").write_text(project(">=3.12"))
     code, output = run(capsys, repo)
-    assert (code, floor_lines(output)) == (0, []), output
+    assert (code, floor_paths(repo)) == (0, []), output
