@@ -6,7 +6,7 @@ import pytest
 
 from quality.config import CONFIG_PATH, ROOT_ALLOWANCE_EXAMPLE
 from quality.root_layout import ROOT_BASE_DIRECTORIES, ROOT_BASE_FILES
-from tests.support.check import copy_block, hygiene_output
+from tests.support.check import copy_block, env_row_stands, hygiene_output
 from tests.support.config_refusals import KNOWN_KEYS, ONE_LINE_NEED
 from tests.support.git_repositories import put
 from tests.support.merge import ONE_JOB
@@ -184,7 +184,7 @@ def test_the_rule_writes_nothing_and_prints_no_command(build_repo, capsys):
 
 def test_a_tracked_env_file_is_red_under_env_file_and_under_root_layout(build_repo, capsys):
     output = hygiene_output(capsys, build_repo({**GUIDANCE, ".env": "A=1\n"}))[1]
-    assert (entries_of(output), "env-file .env - " in output) == ([".env"], True)
+    assert (entries_of(output), env_row_stands(output)) == ([".env"], True)
 
 
 def test_tsconfig_in_the_root_is_red_unless_declared(build_repo, capsys):

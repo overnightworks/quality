@@ -310,6 +310,8 @@ def test_no_findings_print_nothing():
     assert findings_written([]) == ""
 
 
+ENV_ROW = f"{Glyph.NEEDS_YOU} .env "
+FIX_LINE = f"{output.FIX_LABEL} "
 MODULE_DOOR = [sys.executable, "-m", "quality.cli"]
 CONSOLE_SCRIPT_DOOR = [str(Path(sys.executable).parent / "quality")]
 
@@ -330,11 +332,12 @@ def test_a_merged_pipe_shows_the_hygiene_lines_in_run_order(env_and_broken_compo
         "hygiene", ".", cwd=env_and_broken_compose, door=door, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
     )
     prefixes = [
-        "size: ", "clone: ", "import-contract: ", "workflow-security runs offline", "  ✗ files", "env-file .env - ", "  Fix: ", "root-layout .env - ", "  Fix: ",
+        "size: ", "clone: ", "import-contract: ", "workflow-security runs offline", "  ✗ files", ENV_ROW, FIX_LINE, "root-layout .env - ", "  Fix: ",
         "  · debt", "  ✓ imports", "  ✓ secrets", "  ✓ workflows", "  ✓ dependencies", "  ✓ code", "error: ", "next: ",
     ]
     lines = done.stdout.splitlines()
-    assert all(line.startswith(prefix) for line, prefix in zip(lines, prefixes, strict=True)), done.stdout
+    indented = (ENV_ROW, FIX_LINE)
+    assert all((line.lstrip() if prefix in indented else line).startswith(prefix) for line, prefix in zip(lines, prefixes, strict=True)), done.stdout
 
 
 def test_discarding_stderr_hides_exactly_the_pair(env_and_broken_compose):
