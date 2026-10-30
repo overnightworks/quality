@@ -1,6 +1,6 @@
 # quality
 
-One door, `quality` (`src/quality/cli.py`); every line it prints, and the step summary, leave through `output.py`, apart from argparse's help, usage errors and `--version` and `input()`'s prompt. Rules return `Finding`s (`report.py`) and never print. Each rule's id, its place in the run order and its facts are one member of `Rule` (`rules.py`).
+One door, `quality` (`src/quality/cli.py`); every line it prints, and the step summary, leave through `output.py`, apart from argparse's help, usage errors and `--version` and `input()`'s prompt. Rules return `Finding`s (`report.py`) and never print. A `CannotJudge` carries a few-word fact and, where its mechanism knows them, its next steps as typed values (`report.Reason`: a command, an instruction, or alternative commands), never inside the fact. Each rule's id, its place in the run order and its facts are one member of `Rule` (`rules.py`).
 Exit 0 clean, 1 findings, 2 cannot judge (`CannotJudge` and `Unparsable` in `report.py`).
 
 Door commands:
