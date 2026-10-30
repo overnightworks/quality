@@ -92,7 +92,8 @@ def test_a_file_python_can_read_is_measured_in_its_declared_encoding(build_repo,
     """#46 rule 1: the size rule measures every tracked Python file Python itself reads; ruff reads UTF-8 only (#219)."""
     repo = build_repo_with_source(build_repo, {}, SOURCE_NAME, source)
     code, output = hygiene(capsys, repo)
-    assert (Rule.PYTHON_SECURITY in refusals(repo), Rule.PYTHON_PRINT in refusals(repo)) == (python_security_cannot_judge,) * 2, output
+    assert (Rule.PYTHON_SECURITY in refusals(repo)) == python_security_cannot_judge, output
+    assert (Rule.PYTHON_PRINT in refusals(repo)) == python_security_cannot_judge, output
     assert code == (2 if python_security_cannot_judge else 0), output
     assert "production: 0 file(s) >= 800 lines, 1 function(s) >= 60 lines" in output
     assert "not valid Python" not in output
