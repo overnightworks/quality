@@ -1,32 +1,36 @@
 import os
-import re
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from tests.support.check import assert_refusal
+from quality.report import FindingEvent
+from quality.rules import Rule
+from tests.support.check import assert_row_prints_finding, finding_rows, rule_findings
 from tests.support.check import hygiene_output as run
 
+TRACKED_NAMES = [".env", "config/prod.env", ".env.local"]
+IGNORED_NAMES = ["docs/.env.example", "docs/docker/.env.docker.example", "docs/environment.txt"]
 
-@pytest.mark.parametrize(
-    ("name", "refused"),
-    [
-        (".env", True),
-        ("config/prod.env", True),
-        (".env.local", True),
-        ("docs/.env.example", False),
-        ("docs/docker/.env.docker.example", False),
-        ("docs/environment.txt", False),
-    ],
-)
-def test_tracked_env_files(build_repo, capsys, name, refused):
-    """#3 rule 2/3: a tracked env file is refused with rule id, path, reason and fix; templates pass."""
-    code, output = run(capsys, build_repo({name: "A=1\n"}))
-    assert code == (1 if refused else 0)
-    if refused:
-        assert_refusal(output, "env-file", name)
+
+def test_the_rule_finds_the_tracked_env_files_and_no_template(build_repo):
+    """#3 rule 2/3: a tracked env file is found as `tracked`; templates pass."""
+    findings = rule_findings(build_repo({name: "A=1\n" for name in [*TRACKED_NAMES, *IGNORED_NAMES]}), Rule.ENV_FILE)
+    assert [(finding.path, finding.event) for finding in findings] == [(name, FindingEvent.TRACKED) for name in sorted(TRACKED_NAMES)]
+
+
+def test_the_door_prints_each_tracked_env_file_once_as_the_rule_found_it(build_repo, capsys):
+    repo = build_repo({name: "A=1\n" for name in [*TRACKED_NAMES, *IGNORED_NAMES]})
+    code, output = run(capsys, repo)
+    assert code == 1
+    for finding in rule_findings(repo, Rule.ENV_FILE):
+        (row,) = finding_rows(output, finding.location)
+        assert_row_prints_finding(row, finding)
+
+
+def test_a_repository_without_a_tracked_env_file_passes(build_repo, capsys):
+    assert run(capsys, build_repo({name: "A=1\n" for name in IGNORED_NAMES}))[0] == 0
 
 
 def test_untracked_ignored_env_file_is_not_a_finding(build_repo, capsys):
@@ -42,20 +46,21 @@ def test_a_tracked_env_file_deleted_from_disk_is_still_a_finding(build_repo, cap
     (repo / ".env").unlink()
     code, output = run(capsys, repo)
     assert code == 1
-    assert_refusal(output, "env-file", ".env")
+    assert len(finding_rows(output, ".env")) == 1
 
 
-UNPRINTABLE_NAME_HINT = "remove it from the index by its bytes (git ls-files -z shows them), then add it to .gitignore."
-FIX_SUFFIX = " and add it to .gitignore."
 SHELLS = ["dash", "bash"]
 
 
-def printed_fix(output: str, shown_name: str) -> str:
-    """The command the `env-file` finding for `shown_name` prints after `Fix: `, without the closing sentence."""
-    fix = re.search(rf"^env-file {re.escape(shown_name)} - .*\n  Fix: (.*)$", output, re.MULTILINE)
-    assert fix, output
-    assert fix.group(1).endswith(FIX_SUFFIX), output
-    return fix.group(1).removesuffix(FIX_SUFFIX)
+def split_fix(fix: str) -> tuple[str, str]:
+    """The command and the rest of a fix, divided at its first `, ` outside shell quotes, single or double (a shell word holds a space only inside them)."""
+    open_quote = None
+    for position, character in enumerate(fix):
+        if open_quote is None and fix[position:position + 2] == ", ":
+            return fix[:position], fix[position + 2:]
+        if character in "'\"" and open_quote in (None, character):
+            open_quote = None if open_quote else character
+    raise AssertionError(fix)
 
 
 def tracked_names(repo: Path) -> set[bytes]:
@@ -98,20 +103,35 @@ def test_the_printed_env_fix_untracks_exactly_the_named_file_in_every_shell(
     repo = build_repo({name: "A=1\n" for name in [target, *neighbours]})
     before = tracked_names(repo)
     _, output = run(capsys, repo)
-    fix = printed_fix(output, target)
-    assert fix == f"git --literal-pathspecs rm --cached -- {printed_word}"
-    subprocess.run([shell_path, "-c", fix], cwd=repo, check=True, capture_output=True)
+    (row,) = finding_rows(output, target)
+    command, rest = split_fix(row.fix)
+    assert command.endswith(f" {printed_word}")
+    subprocess.run([shell_path, "-c", command], cwd=repo, check=True, capture_output=True)
     assert tracked_names(repo) == before - {os.fsencode(target)}
     assert (repo / target).exists()
+    if printed_word == target:
+        assert target in rest.split()
+        (repo / ".gitignore").write_text(f"{target}\n")
+        ignored = subprocess.run(
+            ["git", "check-ignore", "--no-index", "--stdin", "-z"], cwd=repo, check=True, capture_output=True, text=True, input=f"./{target}\0"
+        )
+        # check-ignore reads a leading `:` as pathspec magic, also on stdin, so the path goes in relative.
+        assert ignored.stdout.rstrip("\0").removeprefix("./") == target
+    else:
+        assert target not in rest
+        assert printed_word not in rest
 
 
-@pytest.mark.parametrize(
-    "name",
-    ["lat\udce9.env", "line\nfeed.env", "esc\x1bape.env", "c1\x85.env", "del\x7f.env", "rlo\u202e.env", "zwsp\u200b.env"],
-    ids=["#86 cell 7 invalid UTF-8", "#86 cell 8 line feed", "#86 cell 8 escape", "#86 cell 8 C1 control", "#86 cell 8 DEL", "#228 rule 7 bidi override", "#228 rule 7 zero-width space"],
-)
-def test_an_unprintable_env_name_gets_a_hint_and_never_a_command(build_repo, capsys, name):
-    """#86 rule 2, E4: one hint line; #97 rule 2 prints the name on the finding line escaped."""
-    _, output = run(capsys, build_repo({name: "A=1\n"}))
-    assert f"\n  Fix: {UNPRINTABLE_NAME_HINT}\n" in output
-    assert "rm --cached" not in output
+def test_an_unprintable_env_name_gets_a_hint_and_never_a_command(build_repo, capsys):
+    """#86 rule 2, E4: the same hint for every such name, with no command; #97 rule 2 prints the name escaped."""
+    names = ["lat\udce9.env", "line\nfeed.env", "esc\x1bape.env", "c1\x85.env", "del\x7f.env", "rlo\u202e.env", "zwsp\u200b.env"]
+    repo = build_repo({name: "A=1\n" for name in names})
+    _, output = run(capsys, repo)
+    findings = rule_findings(repo, Rule.ENV_FILE)
+    assert len(findings) == len(names)
+    assert len({finding.fix for finding in findings}) == 1
+    for finding in findings:
+        (row,) = finding_rows(output, finding.location)
+        assert_row_prints_finding(row, finding)
+        assert finding.path not in row.fix
+        assert finding.location not in row.fix

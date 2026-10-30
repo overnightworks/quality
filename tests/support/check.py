@@ -1,4 +1,3 @@
-import re
 import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -7,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from quality import DISTRIBUTION, check, cli, output
+from quality import DISTRIBUTION, check, cli, env_file, output
 from quality.output import Glyph
-from quality.report import FindingEvent
+from quality.report import Finding, FindingEvent, printable
 from quality.rules import Rule
 
 installed_ruff = cli.INSTALLED_RUFF
@@ -87,6 +86,21 @@ def finding_rows(printed: str, location: str) -> list[FindingRow]:
     return rows
 
 
+def rule_findings(repo: Path, rule: Rule) -> list[Finding]:
+    """The findings `rule` returns over `repo` before the door prints them."""
+    return [finding for verdict in hygiene_run(repo).verdicts if verdict.rule is rule for finding in verdict.findings]
+
+
+def assert_row_prints_finding(row: FindingRow, finding: Finding) -> None:
+    """The decoded row carries the finding's event, fact and fix as the owners escape them."""
+    assert (row.event, row.fact, row.fix) == (finding.event, printable(finding.reason), printable(finding.fix))
+
+
+def env_row_stands(printed: str) -> bool:
+    """The `.env` finding of the env-file rule stands as a row of the output, with the rule's event and fact."""
+    return any(row.event is FindingEvent.TRACKED and row.fact == printable(env_file.ENV_FACT) for row in finding_rows(printed, ".env"))
+
+
 def hygiene_output(
     capsys: pytest.CaptureFixture[str], path: Path, locate_ruff: Callable[[], str] = installed_ruff
 ) -> tuple[int, str]:
@@ -99,10 +113,6 @@ def hygiene_output(
 def compose(*port_lines: str) -> dict[str, str]:
     body = "".join(f"      {line}\n" for line in port_lines)
     return {"compose.yaml": f"services:\n  web:\n    image: x\n    ports:\n{body}"}
-
-
-def assert_refusal(output: str, rule: str, path: str) -> None:
-    assert re.search(rf"^{rule} {re.escape(path)} - \S.*\n  Fix: \S", output, re.MULTILINE), output
 
 
 def refusal_row(area: str) -> str:
