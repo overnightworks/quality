@@ -46,7 +46,29 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   [lizard](https://github.com/terryyin/lizard): a file from 800 lines, a Python function from 60 lines and a Python
   function with a CCN above 15 are debt, counted apart for production and tests (a path under `test/` or `tests/`;
   Python also `conftest.py`, `test_*.py`, `*_test.py`; TypeScript and JavaScript also `__tests__/`, `*.test.*`,
-  `*.spec.*`, `*.test-d.*` and `*.spec-d.*`). A minified or generated file is counted by its lines like any other.
+  `*.spec.*`, `*.test-d.*` and `*.spec-d.*`). A minified or generated file is counted by its lines like any other,
+  unless the repository declares it generated:
+
+  ```toml
+  [[size.generated]]
+  path = "frontend/src/lib/api/types.ts"
+  job = "Backend (Python 3.14)"
+  item = "overnightworks/songmaker#1784"
+  date = 2026-10-30
+  reason = "written by scripts/generate_types.py, proven by its --check"
+  ```
+
+  A declared file's lines, functions and CCN are neither judged, counted in the report-only line nor written by
+  `quality baseline write`; a baseline entry left under its path is gone, as for a deleted file. `path` is the exact
+  tracked path of one file, `job` one of `[gate] mandatory_jobs`, the job whose generator check proves the file (quality
+  cannot see what that job runs; the operator checks it once, at the door). A missing or extra key, a folder, a pattern,
+  `..`, an absolute path, a `job` the gate does not list (a config without `mandatory_jobs` included), a malformed `item`
+  or `date`, a reason that is not one line or two entries for one path is exit `2` naming the entry with this
+  example: in `hygiene` as `size cannot judge`, in `quality baseline write` as `baseline: not written`, and in the
+  verdict and the door naming the side; `scan-staged` reads only `[secrets]`. A declaration whose path holds no tracked file in
+  a measured language is a `size` finding on that path, fixed by deleting the entry. Only `quality/config.toml` declares:
+  `.gitattributes`, `linguist-generated` included, plays no part. Only the `size` rule leaves the file out: `clone` and
+  the scoreboard still read it. (Operator ruling 30.10.2026, #174: „Einmal erklären, einmal Tür (empfohlen)“)
   Functions of the other languages are not measured: lizard misplaces their boundaries
   ([terryyin/lizard#521](https://github.com/terryyin/lizard/issues/521)). Functions are named by their qualified
   symbol (`Class.method`); a second one of the same name, such as a property setter, is `Class.method#2`. Without
@@ -369,6 +391,7 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
     `loosened (undeclared): clone baseline adds tests/test_a.py run <-> tests/test_b.py hygiene`;
   - the base's `[clones]` table gone from a head that still has the file: `loosened (undeclared): clone baseline removed`;
   - the base's file deleted: `loosened (undeclared): quality/baseline.toml removed`.
+  - a `[[size.generated]]` declaration is judged as in [gate](gate.md), "Declared loosenings".
 
   A file git recognises as renamed, a directory move included, is no loosening when its numbers do not rise
   (operator ruling 22.10.2026, #149: „ja ja“). The verdict reads the renames between the base and the head commit with `git diff -M50%
