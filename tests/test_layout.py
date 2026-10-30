@@ -162,7 +162,7 @@ def test_the_layout_table_is_separate_from_the_root_table(build_repo):
 
 
 @pytest.mark.parametrize(("character", "escaped"), CONTROL_CHARACTERS)
-def test_a_path_with_a_control_format_or_separator_character_prints_escaped(build_repo, capsys, character, escaped):
+def test_a_path_with_a_control_or_format_character_prints_escaped(build_repo, capsys, character, escaped):
     """#184 sentence 4: a finding prints the path escaped."""
     assert_prints_escaped_row(capsys, build_repo, Rule.FILE_SUFFIX, character, escaped)
 

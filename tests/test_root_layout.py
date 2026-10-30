@@ -125,7 +125,7 @@ def test_the_same_entry_declared_twice_cannot_be_judged_and_is_named(build_repo,
 
 
 @pytest.mark.parametrize(("character", "escaped"), CONTROL_CHARACTERS)
-def test_a_name_with_a_control_format_or_separator_character_prints_escaped(build_repo, capsys, character, escaped):
+def test_a_name_with_a_control_or_format_character_prints_escaped(build_repo, capsys, character, escaped):
     assert_prints_escaped_row(capsys, build_repo, Rule.ROOT_LAYOUT, character, escaped)
 
 
