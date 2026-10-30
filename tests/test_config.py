@@ -3,7 +3,7 @@ import re
 
 import pytest
 
-from quality import check, cli
+from quality import cli
 from quality.config import (
     CONFIG_PATH,
     AdvisoryAllowance,
@@ -20,7 +20,7 @@ from quality.config import (
 )
 from quality.rules import Rule
 from tests.support.advisories import allowance_config
-from tests.support.check import CLEAN_VERDICT, refusal_row
+from tests.support.check import CLEAN_VERDICT, refusal_row, refusals
 from tests.support.generated_files import TYPES_FILE, generated_config
 
 
@@ -67,12 +67,6 @@ def test_a_config_file_that_cannot_be_decoded_is_refused(tmp_path):
         read_gate_settings(tmp_path)
 
 
-def refusing_rules(repo, reason: str) -> list[Rule]:
-    """The rules whose refusal holds `reason`, in run order."""
-    verdicts = check.run_hygiene(repo, cli.INSTALLED_RUFF, cli.INSTALLED_ZIZMOR).verdicts
-    return [verdict.rule for verdict in verdicts if verdict.refusal is not None and reason in str(verdict.refusal)]
-
-
 @pytest.mark.parametrize(
     "content",
     [f"a = {'[' * 2000}{']' * 2000}\n", f"a = {'9' * 5000}\n"],
@@ -83,7 +77,7 @@ def test_a_config_the_toml_reader_gives_up_on_cannot_be_judged_by_any_rule_that_
     repo = build_repo({CONFIG_PATH: content})
     assert cli.main(["hygiene", str(repo)]) == 2
     capsys.readouterr()
-    assert {Rule.PYTHON_FLOOR, Rule.ROOT_LAYOUT} <= set(refusing_rules(repo, "is not valid TOML"))
+    assert {Rule.PYTHON_FLOOR, Rule.ROOT_LAYOUT} <= {rule for rule, reason in refusals(repo).items() if "is not valid TOML" in reason}
 
 
 def test_a_config_directory_that_cannot_be_entered_is_refused(tmp_path):
@@ -352,7 +346,7 @@ def test_a_malformed_advisory_allowance_cannot_be_judged_where_the_whole_config_
     assert (len(verdict), named in verdict[0]) == (1, True), verdict
     assert cli.main(["hygiene", str(repo)]) == 2
     capsys.readouterr()
-    assert refusing_rules(repo, named) == [
+    assert [rule for rule, reason in refusals(repo).items() if named in reason] == [
         Rule.COMPOSE_PORT, Rule.SIZE, Rule.ROOT_LAYOUT, Rule.FILE_SUFFIX, Rule.SCRIPT_NAME, Rule.SCRIPT_HEADER, Rule.TEST_LAYOUT, Rule.TEST_IMPORT,
         Rule.PYTHON_FLOOR, Rule.LEAK, Rule.ADVISORY,
     ]

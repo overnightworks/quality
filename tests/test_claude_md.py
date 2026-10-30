@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from tests.support.check import hygiene_output as run
-from tests.support.check import is_clean, refusal_row
+from tests.support.check import is_clean, refusal_row, refusals
 
 ENV_FINDING = "env-file .env - "
 
@@ -149,7 +149,7 @@ def test_claude_md_link_to_an_unreachable_target_is_the_link_finding(build_repo,
         locked.chmod(0o700)
     assert code == 1, output
     assert f"claude-md {name} - {reason}" in output
-    assert "cannot judge" not in output
+    assert not refusals(repo)
 
 
 def test_claude_md_from_a_subdirectory_is_judged_as_from_the_top(build_repo, capsys):

@@ -28,7 +28,7 @@ from tests.support.advisories import (
     uv_lock,
     zipped,
 )
-from tests.support.check import CLEAN_VERDICT, assert_every_line_starts_with_the_door, is_clean
+from tests.support.check import CLEAN_VERDICT, assert_every_line_starts_with_the_door, is_clean, refused
 from tests.support.scanners import OUTPUTS, fake_scanner, lacking
 
 # ---- the real osv-scanner against a fake file:// database (CI runs these; they download the binary) ----
@@ -324,7 +324,7 @@ def test_a_scratch_directory_that_cannot_be_written_is_cannot_judge(build_repo, 
     monkeypatch.setattr(process, "scratch_directory", scratch_without_room_for_a_database)
     fake_scanner(served_scanners, OSV, "exit 99")
     code, output = run_gate(tracked_lock_repo(build_repo))
-    assert (code, "cannot place the PyPI advisory database in the scratch directory" in output, "<scratch>" in output, "secret cannot judge" in output) == (2, True, True, False), output
+    assert (code, "cannot place the PyPI advisory database in the scratch directory" in output, "<scratch>" in output, refused(output, "secrets")) == (2, True, True, False), output
 
 
 def test_a_wheel_pin_file_that_cannot_be_written_is_cannot_judge(build_repo, served_scanners, run_gate, publish_database, monkeypatch):

@@ -70,3 +70,9 @@ def refusals(repo: Path, locate_ruff: Callable[[], str] = installed_ruff, locate
     locate = locate_zizmor or cli.INSTALLED_ZIZMOR
     verdicts = check.run_hygiene(repo, locate_ruff, locate).verdicts
     return {verdict.rule: str(verdict.refusal) for verdict in verdicts if verdict.refusal is not None}
+
+
+def heard(capsys: pytest.CaptureFixture[str]) -> str:
+    """Everything the door printed since the last read, stdout then stderr."""
+    captured = capsys.readouterr()
+    return captured.out + captured.err

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import __version__, check, cli
+from quality import __version__, cli
 from quality.ratchet import (
     BASELINE_PATH,
     Baseline,
@@ -19,11 +19,10 @@ from quality.ratchet import (
     render_baseline,
 )
 from quality.rules import Rule
-from tests.support.check import hygiene_output, installed_ruff, refusal_row
+from tests.support.check import hygiene_output, refusal_row, refusals
 from tests.support.clones import function as clone_function
 from tests.support.git_repositories import head_commit, put
 from tests.support.merge import ONE_JOB, SONAR_GREEN, declaring, drive
-from tests.support.scanners import never_located
 from tests.support.source_code import long_function
 from tests.support.verdict import ONLY_DECLARED, declaration, verdict_of
 from tests.support.verdict_renames import OLD_ENTRY, commit_all, entry, file_text, moved_in_head, moves_in_head, pulled
@@ -445,12 +444,6 @@ STALE_PAIR = (
 )
 
 
-def refusals_of(repo) -> dict[Rule, str]:
-    """Each rule that cannot judge, with its reason."""
-    verdicts = check.run_hygiene(repo, installed_ruff, never_located).verdicts
-    return {verdict.rule: str(verdict.refusal) for verdict in verdicts if verdict.refusal is not None}
-
-
 def enforced(capsys, build_repo, files, table=EMPTY_CLONES):
     return hygiene_output(capsys, build_repo({**files, BASELINE_PATH: table}))
 
@@ -528,10 +521,10 @@ def test_a_file_python_cannot_parse_leaves_the_enforced_clone_rule_unable_to_jud
     (#225) count as unparsable."""
     repo = build_repo({**TWO_FILES, "src/broken.py": "def broken(:\n", BASELINE_PATH: EMPTY_CLONES})
     code, output = hygiene_output(capsys, repo)
-    refusals = refusals_of(repo)
+    refusing = refusals(repo)
     assert code == 2, output
-    assert set(refusals) == {Rule.SIZE, Rule.CLONE, Rule.PYTHON_SECURITY, Rule.PYTHON_PRINT}
-    assert refusals[Rule.SIZE] == refusals[Rule.CLONE]
+    assert set(refusing) == {Rule.SIZE, Rule.CLONE, Rule.PYTHON_SECURITY, Rule.PYTHON_PRINT}
+    assert refusing[Rule.SIZE] == refusing[Rule.CLONE]
     assert f"{refusal_row('debt')}src/broken.py is not valid Python" in output
     assert f"{refusal_row('code')}ruff cannot parse src/broken.py" in output
 
@@ -542,7 +535,7 @@ def test_a_malformed_baseline_leaves_both_rules_unable_to_judge_with_the_rewrite
     repo = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: text})
     code, output = hygiene_output(capsys, repo)
     assert code == 2, output
-    assert set(refusals_of(repo)) == {Rule.SIZE, Rule.CLONE}
+    assert set(refusals(repo)) == {Rule.SIZE, Rule.CLONE}
     assert "rewrite it with `quality baseline write`" in output
 
 
