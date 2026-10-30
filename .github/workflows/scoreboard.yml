@@ -34,6 +34,6 @@ jobs:
       - name: Sync
         run: uv sync --locked
 
-      # The fleet list lives in quality/fleet.toml. A private repository is never measured: this run is public.
+      # The fleet list lives in quality/fleet.toml. A repository that is not anonymously readable is not measured: this run is public.
       - name: Measure the fleet
         run: uv run --locked quality scoreboard

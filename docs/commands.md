@@ -28,11 +28,12 @@ entries, a path that is not a repository, or a gitleaks run without a report.
 ## `quality scoreboard`
 
 `quality scoreboard [PATH]` prints two markdown tables, the size of every repository `quality/fleet.toml` lists
-(`public = [...]` and `private = [...]`, each a list of URLs, each listed once), under a heading with the date, the
+(`repositories = [...]`, GitHub `owner/name`s, each listed once), under a heading with the date, the
 quality version and that functions and CCN are measured for Python only, then the same rows as a repo × rule matrix. With `GITHUB_STEP_SUMMARY` set, the same text is
 appended there. The fleet list lives once, in `quality/fleet.toml`; `.github/workflows/scoreboard.yml` runs it every
-Monday at 05:17 UTC and on dispatch; the tables stand in that run's summary. The run only reports: it writes to no repository and needs no secret. A missing, malformed or
-duplicating `quality/fleet.toml` is `cannot judge`, exit `2`.
+Monday at 05:17 UTC and on dispatch; the tables stand in that run's summary. The run only reports: it writes to no repository and needs no secret. A missing, malformed, duplicating
+(also across case) or non-`owner/name` `quality/fleet.toml` is `cannot judge`, exit `2`, before any clone; each bad entry is named by
+its place (`repositories[3]`), never by its text.
 
 - A `public` URL is cloned with `git -c credential.helper= clone --depth 1 --no-tags`, `GIT_TERMINAL_PROMPT=0` and no
   askpass, into a temporary directory that is removed on every exit, and its default branch tip is measured.
@@ -74,9 +75,9 @@ duplicating `quality/fleet.toml` is `cannot judge`, exit `2`.
   show `cannot read <file>` (`import-linter config`) in each cell that reads the file, while a cell that does not keeps its value
   (every cell under no gate, a rule cell under a pin before the rule or `release unknown`), unreadable release tags say so in the heading and
   show pins as commits, and each makes the exit `2`. No value, `behind`, `no gate` or `report-only` included, makes the run red.
-- A `private` repository is never measured, because the tables are published: it shows `not measured: private`. It is
-  checked once with an anonymous `git ls-remote`; if anyone can read it, the row is `cannot judge: declared private
-  but readable`.
+- Each listed repository is cloned anonymously from `https://github.com/<owner>/<name>`; rows are named by the entry as written
+  and sorted by it, case-insensitively. A private repository is not measured, because the tables are published and it is not
+  anonymously readable: it shows as a `cannot judge` row like any repository that cannot be cloned.
 - A repository that cannot be cloned or measured shows `cannot judge: <reason>` (for example `cannot clone (git exited
   128)`), with no local path; every other row still shows, and the exit is `2`. Otherwise the exit is `0`.
 
