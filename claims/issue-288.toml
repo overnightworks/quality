@@ -1,8 +1,0 @@
-claim_id = "c1a55b55bd744a4b9197950e803c6708"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "39f1167de73d84677732c3f9f5d31017fc903ed4"
-branch = "claude/issue-288-forward-port-release-v0-9"
-scope = [".github/workflows/code-scanning.yml", ".github/workflows/gate.yml", "AGENTS.md", "scripts/verify_release.py", "tests/scripts/test_verify_release.py"]
-opened_commit = "c8ff005f9f5670d250687c3c1fdf27ae1c65e57c"
-whole_reason = "One merge of release/v0.9 brings all five paths at once; resolving it file by file would split one merge commit."
