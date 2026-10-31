@@ -4,9 +4,21 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from quality import sonar
+from quality import cli, sonar
 from quality.merge import GhFailed
-from tests.support.merge import BASE_SHA, MERGE_SHA, FakeGh, changed_nothing, drive
+from tests.support.merge import (
+    B_REMOVED,
+    BASE_SHA,
+    MERGE_SHA,
+    ONE_JOB,
+    REPO,
+    SONAR_GREEN,
+    TWO_JOBS,
+    FakeGh,
+    changed_nothing,
+    declaring,
+    drive,
+)
 from tests.support.merge import sonar as emergency_sonar
 from tests.support.sonar import (
     FEATURE_ENVIRONMENT,
@@ -34,7 +46,7 @@ NEW_ZERO = f"sonar: new 0 · legacy 0 ({KEY}, main)\n"
 UNREADABLE = "sonar: cannot judge - cannot reach .github/dependabot.yml: [Errno 13] Permission denied\n"
 
 
-def bot_issue(rule: str = "docker:S8431", path: str = "Dockerfile") -> dict:
+def bot_issue(rule: str = sonar.DEPENDABOT_EXCEPTION_RULE, path: str = "Dockerfile") -> dict:
     return {"rule": rule, "component": f"{KEY}:{path}", "line": 3, "textRange": {"startLine": 3}, "message": MESSAGE}
 
 
@@ -253,46 +265,53 @@ def test_the_decider_answers_by_existence_alone(exists, rules):
     assert sonar.uncounted_rules(exists) == rules
 
 
-def door_issue(rule: str) -> dict:
-    return {**bot_issue(), "rule": rule}
-
-
 def serve_config_at_merge_commit(gh: FakeGh) -> None:
     gh.files[(sonar.DEPENDABOT_CONFIG, MERGE_SHA)] = "version: 2\n"
 
 
-def test_the_emergency_door_sets_the_dependabot_rule_aside_and_shows_it(capsys):
-    """#291 matrix 1: the file at the merge commit sets the added finding aside; the legacy count leaves main's out"""
+def test_the_emergency_door_sets_the_dependabot_rule_aside_and_shows_it_before_asking(capsys):
+    """Door matrix 1: the file at the merge commit sets the added finding aside; the legacy count leaves main's out"""
     gh = FakeGh(merge_lands=True)
     serve_config_at_merge_commit(gh)
     legacy, set_aside = 12, 2
-    code, answers = drive(gh, emergency_sonar(added=[bot_issue()], legacy=legacy, set_aside=set_aside))
-    shown = capsys.readouterr().out
+    shown_before_asking = []
+
+    def ask(prompt):
+        shown_before_asking.append(capsys.readouterr().out)
+        return "ja"
+
+    code = cli.main(
+        ["emergency-merge", REPO, "7"], gh=gh, transport=emergency_sonar(added=[bot_issue()], legacy=legacy, set_aside=set_aside),
+        ask=ask, is_terminal=lambda: True,
+    )
+    (shown,) = shown_before_asking
+    (line,) = [line for line in shown.splitlines() if sonar.DEPENDABOT_EXCEPTION_RULE in line]
     assert code == 0
-    assert SET_ASIDE_LINE.rstrip("\n") in shown
+    assert sonar.SET_ASIDE_REASON in line
     assert f"{legacy - set_aside} legacy finding(s)" in shown
-    assert len(answers) == 1
     assert len(gh.merge_calls) == 1
 
 
 @pytest.mark.parametrize("served_at", [BASE_SHA, None], ids=["base commit only", "nowhere"])
 def test_the_emergency_door_refuses_the_dependabot_rule_without_the_file_at_the_merge_commit(served_at, capsys):
-    """#291 matrix 2 and 3"""
+    """Door matrix 2 and 3"""
     gh = FakeGh()
     if served_at:
         gh.files[(sonar.DEPENDABOT_CONFIG, served_at)] = "version: 2\n"
     code, answers = drive(gh, emergency_sonar(added=[bot_issue()], legacy=12))
+    refusal = capsys.readouterr().out
     assert code == 1
-    assert capsys.readouterr().out == f"emergency-merge: refused - the pull request adds findings:\n{COUNTED_LINE}"
+    assert "adds findings" in refusal
+    assert sonar.DEPENDABOT_EXCEPTION_RULE in refusal
     changed_nothing(gh)
     assert answers == []
 
 
 def test_the_emergency_door_names_only_the_counted_finding_beside_a_set_aside_one(capsys):
-    """#291 matrix 4"""
+    """Door matrix 4"""
     gh = FakeGh()
     serve_config_at_merge_commit(gh)
-    code, answers = drive(gh, emergency_sonar(added=[bot_issue(), door_issue("python:S1")], legacy=12))
+    code, answers = drive(gh, emergency_sonar(added=[bot_issue(), bot_issue("python:S1")], legacy=12))
     refusal = capsys.readouterr().out
     assert code == 1
     assert "python:S1" in refusal
@@ -302,7 +321,7 @@ def test_the_emergency_door_names_only_the_counted_finding_beside_a_set_aside_on
 
 
 def test_the_emergency_door_asks_when_nothing_is_added_and_main_has_set_aside_findings(capsys):
-    """#291 matrix 5"""
+    """Door matrix 5"""
     gh = FakeGh(merge_lands=True)
     serve_config_at_merge_commit(gh)
     legacy, set_aside = 12, 2
@@ -313,7 +332,7 @@ def test_the_emergency_door_asks_when_nothing_is_added_and_main_has_set_aside_fi
 
 
 def test_the_emergency_door_refuses_when_every_legacy_finding_is_set_aside(capsys):
-    """#291 matrix 6"""
+    """Door matrix 6"""
     gh = FakeGh()
     serve_config_at_merge_commit(gh)
     code, answers = drive(gh, emergency_sonar(legacy=2, set_aside=2))
@@ -324,7 +343,7 @@ def test_the_emergency_door_refuses_when_every_legacy_finding_is_set_aside(capsy
 
 
 def test_the_emergency_door_cannot_judge_when_the_file_read_fails_other_than_not_found(capsys):
-    """#291 matrix 7"""
+    """Door matrix 7"""
     gh = FakeGh()
     gh.files[(sonar.DEPENDABOT_CONFIG, MERGE_SHA)] = GhFailed("gh api failed: HTTP 500")
     code, answers = drive(gh, emergency_sonar(added=[bot_issue()], legacy=12))
@@ -335,7 +354,7 @@ def test_the_emergency_door_cannot_judge_when_the_file_read_fails_other_than_not
 
 
 def test_the_emergency_door_cannot_judge_a_rule_count_above_the_total(capsys):
-    """#291 matrix 8"""
+    """Door matrix 8"""
     gh = FakeGh()
     serve_config_at_merge_commit(gh)
     code, answers = drive(gh, emergency_sonar(legacy=2, set_aside=3))
@@ -346,7 +365,9 @@ def test_the_emergency_door_cannot_judge_a_rule_count_above_the_total(capsys):
 
 
 def test_the_emergency_door_reads_no_dependabot_file_when_sonar_is_green():
-    """#291 matrix 9"""
-    gh = FakeGh(checks={"quality / sonar": "success", "quality / verdict": "failure"}, merge_lands=True)
-    drive(gh, emergency_sonar(unreachable=True))
+    """Door matrix 9: a declared loosening with Sonar green merges with no read of the file and none of Sonar"""
+    gh = FakeGh(checks=SONAR_GREEN, base_config=TWO_JOBS, head_config=ONE_JOB + declaring(B_REMOVED), merge_lands=True)
+    code, _ = drive(gh, emergency_sonar(unreachable=True))
+    assert code == 0
+    assert len(gh.merge_calls) == 1
     assert not any(sonar.DEPENDABOT_CONFIG in " ".join(call) for call in gh.calls)

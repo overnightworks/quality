@@ -33,6 +33,8 @@ ONE_JOB = '[gate]\nmandatory_jobs = ["checks"]\n'
 SONAR_GREEN = {"quality / sonar": "success", "quality / verdict": "failure"}
 
 
+TWO_JOBS = '[gate]\nmandatory_jobs = ["checks", "B"]\n'
+B_REMOVED = 'mandatory job "B" removed'
 SHOWN = "declared loosening (overnightworks/songmaker#1345 of 2026-10-20): "
 
 
