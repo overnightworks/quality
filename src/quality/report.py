@@ -114,6 +114,14 @@ class FindingEvent(StrEnum):
     NO_HEADER = "no header"
     STRAY = "stray"
     TEST_IMPORT = "test import"
+    BELOW_FLOOR = "below floor"
+    NO_FLOOR = "no floor"
+
+
+class NoteEvent(StrEnum):
+    """What a note's row says; a separate enum, so a finding can never carry one of these."""
+
+    ALLOWED = "allowed"
 
 
 @dataclass(frozen=True)
@@ -133,6 +141,19 @@ class Finding:
     def location(self) -> str:
         path = printable(self.path)
         return path if self.line is None else f"{path}:{self.line}"
+
+
+@dataclass(frozen=True)
+class Note:
+    """What a rule reports without asking for a change: a `·` row under its area, which counts as no finding."""
+
+    path: str
+    event: NoteEvent
+    fact: str
+
+    @property
+    def location(self) -> str:
+        return printable(self.path)
 
 
 ESCAPED_CATEGORIES = frozenset({"Cc", "Cf", "Zl", "Zp"})

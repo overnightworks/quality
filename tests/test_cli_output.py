@@ -13,10 +13,10 @@ from pathlib import Path
 
 import pytest
 
-from quality import check, cli, config, ratchet, report, scanners
-from quality.output import Glyph
+from quality import check, cli, config, ratchet, scanners
+from quality.output import SEPARATOR, Glyph
 from quality.ratchet import BASELINE_PATH
-from quality.report import DETAIL_MARKER, CannotJudge, Command, FindingEvent
+from quality.report import DETAIL_MARKER, FindingEvent
 from quality.rules import Area, Rule
 from tests.support.architecture import FORBIDDEN, SHOP, SHOP_DB_IMPORTS_WEB, toml
 from tests.support.check import (
@@ -488,8 +488,13 @@ def headers(lines: list[str]) -> list[str]:
 
 
 def test_a_clean_run_has_seven_clean_rows_in_area_order_and_the_verdict(build_repo, capsys):
-    code, out, err = frame_run(capsys, build_repo({**CLEAN_FILES, **CLONES_BASELINE}))
-    assert (code, headers(out), out[-1], err) == (0, [header(area, "✓", "clean") for area in Area], f"✓ clean · 7 areas · {ZERO_SECONDS}", [])
+    """O16: the six other rows carry no fact; the files row's fact holds the area's rules and the tracked paths."""
+    tracked = {**CLEAN_FILES, **CLONES_BASELINE}
+    code, out, err = frame_run(capsys, build_repo(tracked))
+    files_row, *others = headers(out)
+    extent = [int(part.split()[0]) for part in files_row.partition(cli.AreaEvent.CLEAN)[2].split(SEPARATOR)]
+    assert (code, others, out[-1], err) == (0, [header(area, "✓", "clean") for area in list(Area)[1:]], f"✓ clean · 7 areas · {ZERO_SECONDS}", [])
+    assert extent == [sum(rule.area is Area.FILES for rule in Rule), len(tracked)]
 
 
 def test_a_run_without_a_baseline_notes_the_debt_as_not_recorded_and_says_it_is_not_enforced(build_repo, capsys):
@@ -537,16 +542,25 @@ def test_the_files_block_lists_the_event_rows_in_run_order_with_one_fix_per_run(
         assert_row_prints_finding(row, finding)
 
 
-def test_findings_without_an_event_follow_the_event_rows_in_today_s_form(build_repo, capsys):
-    repo = build_repo({".env": "A=1\n", "CLAUDE.md": "own\n", "notes.txt": "x\n", "docs/NOTES": "x\n", "pyproject.toml": '[project]\nrequires-python = ">=3.12"\n'})
+def test_the_files_block_lists_every_finding_in_run_order_python_floor_last_then_the_notes(build_repo, capsys):
+    """O14, O15: the rule runner's findings stand as rows in its order, then the area's notes."""
+    floor = '[project]\nrequires-python = ">=3.12"\n'
+    allowance = f'{config.PYTHON_ALLOWANCE_HEADING}\npath = "src/s/pyproject.toml"\nreason = "r"\n'
+    tracked = {".env": "A=1\n", "CLAUDE.md": "own\n", "notes.txt": "x\n", "docs/NOTES": "x\n", "pyproject.toml": floor,
+               "src/s/pyproject.toml": floor, "quality/config.toml": ONE_JOB + allowance}
+    repo = build_repo(tracked)
     code, out, _ = frame_run(capsys, repo)
-    found = check.run_hygiene(repo, cli.INSTALLED_RUFF, cli.INSTALLED_ZIZMOR).findings
-    rows, legacy = [f for f in found if f.event is not None], [line for f in found if f.event is None for line in report.render(f).split("\n")]
-    files_row = next(number for number, line in enumerate(out) if line.startswith("  ! files  "))
-    shown = [line.split()[1] for line in out[files_row + 1 : out.index(legacy[0])] if line.lstrip().startswith(f"{Glyph.NEEDS_YOU} ")]
-    assert (code, out[files_row].endswith(f"{len(found)} findings"), out[out.index(legacy[0]) :][: len(legacy)], shown) == (1, True, legacy, [f.location for f in rows])
-    for finding in rows:
-        assert_row_prints_finding(*rows_of("\n".join(out[files_row:]), finding), finding)
+    files = next(verdict for verdict in check.run_hygiene(repo, cli.INSTALLED_RUFF, cli.INSTALLED_ZIZMOR).areas if verdict.area is Area.FILES)
+    printed = "\n".join(out)
+    start = next(number for number, line in enumerate(out) if line.startswith("  ! files  "))
+    end = next(number for number, line in enumerate(out) if number > start and line in headers(out))
+    block = [line for line in out[start + 1 : end] if line.lstrip().startswith((Glyph.NEEDS_YOU, Glyph.NOTE, "fix:"))]
+    shown = [line.split()[1] for line in block if not line.lstrip().startswith("fix:")]
+    assert (code, out[start].endswith(f"{len(files.findings)} findings"), files.findings[-1].rule) == (1, True, Rule.PYTHON_FLOOR)
+    assert shown == [candidate.location for candidate in (*files.findings, *files.notes)]
+    assert block[-1].split()[0] == Glyph.NOTE
+    for finding in files.findings:
+        assert_row_prints_finding(*rows_of(printed, finding), finding)
 
 
 def test_an_area_that_cannot_check_ends_the_run_with_the_pair_and_no_verdict(build_repo, use_mise, served_scanners, capsys):
@@ -736,38 +750,6 @@ def test_a_malformed_baseline_beside_a_missing_scanner_names_the_baseline_step_t
     assert code == 2
     assert err[1:] == ["next:", f"    {ratchet.WRITE_COMMAND}", f"    {scanners.install_command()}"]
     assert ratchet.WRITE_COMMAND not in "\n".join(out)
-
-
-def areas_refusing(*reasons_by_area: tuple[CannotJudge, ...]) -> tuple[check.AreaVerdict, ...]:
-    rules = iter(Rule)
-    return tuple(
-        check.AreaVerdict(area, tuple(check.RuleVerdict(next(rules), refusal=refusal) for refusal in refusals))
-        for area, refusals in zip(Area, reasons_by_area, strict=False)
-    )
-
-
-ONE, TWO = Command("one"), Command("two")
-
-
-@pytest.mark.parametrize(
-    ("areas", "expected"),
-    [
-        (((CannotJudge("a"),),), (cli.REFUSED_AREAS_NEXT,)),
-        (((CannotJudge("a", (ONE,)),), (CannotJudge("b", (ONE,)),)), (ONE,)),
-        (((CannotJudge("a", (ONE,)),), (CannotJudge("b"),)), (ONE, cli.REFUSED_AREAS_NEXT)),
-        (((CannotJudge("a", (TWO,)),), (CannotJudge("b", (ONE,)),)), (TWO, ONE)),
-        (((CannotJudge("a", (TWO, ONE)),),), (TWO, ONE)),
-    ],
-    ids=["none carries a step", "one step shared", "one step beside a refusal without one", "two steps in row order", "one reason with two steps"],
-)
-def test_next_names_each_distinct_step_once_in_row_order_and_the_general_instruction_last_where_a_refusal_has_none(areas, expected):
-    assert cli.next_steps(areas_refusing(*areas)) == expected
-
-
-def test_an_area_names_one_fact_once_for_two_reasons_that_differ_only_in_steps():
-    area = areas_refusing((CannotJudge("same", (ONE,)), CannotJudge("same", (TWO,))))[0]
-    row = cli.area_row(area)
-    assert (row.fact, row.sub_lines) == ("same", ())
 
 
 REFUSED_CONFIG = {"quality/config.toml": '[gate]\nmandatory_jobs = ["checks"]\n[[size.generated]]\npath = "x.ts"\njob = "other"\n'

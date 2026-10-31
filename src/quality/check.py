@@ -30,7 +30,7 @@ from quality.config import (
     ConfigError,
     read_allow_lists,
 )
-from quality.report import CannotJudge, Example, Finding, Reason, Unparsable
+from quality.report import CannotJudge, Example, Finding, Note, Reason, Unparsable
 from quality.rules import Area, Rule
 
 CONFIG_EXAMPLE_LABEL = f"write it in {CONFIG_PATH} like this"
@@ -142,6 +142,7 @@ class RuleVerdict:
     findings: tuple[Finding, ...] = ()
     refusal: CannotJudge | None = None
     measured_only: bool = False
+    notes: tuple[Note, ...] = ()
 
     @property
     def outcome(self) -> Outcome:
@@ -177,6 +178,10 @@ class AreaVerdict:
         return tuple(finding for verdict in self.verdicts for finding in verdict.findings)
 
     @property
+    def notes(self) -> tuple[Note, ...]:
+        return tuple(note for verdict in self.verdicts for note in verdict.notes)
+
+    @property
     def reasons(self) -> tuple[Reason, ...]:
         """The distinct reasons its rules could not judge, equal reasons once, in run order."""
         return tuple(dict.fromkeys(verdict.refusal.reason for verdict in self.verdicts if verdict.refusal is not None))
@@ -193,6 +198,7 @@ class AreaVerdict:
 class HygieneResult:
     verdicts: tuple[RuleVerdict, ...]
     reports: tuple[str, ...]
+    tracked_paths: int
     allowed_secrets: list[Finding]
     unused_allowances: dict[Allowance, str]
 
@@ -228,14 +234,14 @@ def _findings(judged: _Judged | CannotJudge) -> Sequence[Finding] | CannotJudge:
     return judged if isinstance(judged, CannotJudge) else judged.findings
 
 
-def _verdict(rule: Rule, outcome: Sequence[Finding] | CannotJudge, measured_only: bool) -> RuleVerdict:
+def _verdict(rule: Rule, outcome: Sequence[Finding] | CannotJudge, measured_only: bool, notes: tuple[Note, ...]) -> RuleVerdict:
     """The verdict of the rule a check judges; a check that cannot judge leaves its rule unjudged."""
     if isinstance(outcome, CannotJudge):
         return RuleVerdict(rule, refusal=outcome)
     foreign = sorted({finding.rule for finding in outcome} - {rule})
     if foreign:
         raise ValueError(f"a check judging {rule} returned findings under {', '.join(foreign)}")
-    return RuleVerdict(rule, tuple(outcome), measured_only=measured_only)
+    return RuleVerdict(rule, tuple(outcome), measured_only=measured_only, notes=notes)
 
 
 def _judge_baseline_rules(
@@ -311,11 +317,12 @@ def run_hygiene(root: Path, locate_ruff: Callable[[], str], locate_zizmor: Calla
         Rule.ADVISORY: _findings(advisory),
     }
     measuring = {rule for rule, result in ((Rule.SIZE, size), (Rule.CLONE, clone)) if _measures_only(result)}
-    verdicts = [_verdict(rule, outcomes[rule], rule in measuring) for rule in Rule]
-    reports = _reports(size, clone, contracts, floor, printing)
+    notes = {Rule.PYTHON_FLOOR: () if isinstance(floor, CannotJudge) else floor.notes}
+    verdicts = [_verdict(rule, outcomes[rule], rule in measuring, notes.get(rule, ())) for rule in Rule]
+    reports = _reports(size, clone, contracts, printing)
     allowed_advisories = () if isinstance(advisory, CannotJudge) else advisory.report()
     allowed, unused = ([], {}) if isinstance(secrets, CannotJudge) else (secrets.allowed, secrets.unused_allowances)
-    return HygieneResult(tuple(verdicts), (*reports, *allowed_advisories), allowed, unused)
+    return HygieneResult(tuple(verdicts), (*reports, *allowed_advisories), len(set(tracked)), allowed, unused)
 
 
 def _measures_only(result: ratchet.RuleResult | CannotJudge) -> bool:
@@ -330,13 +337,11 @@ def _reports(
     size: ratchet.RuleResult | CannotJudge,
     clone: ratchet.RuleResult | CannotJudge,
     contracts: architecture.ContractsVerdict | CannotJudge,
-    floor: python_floor.FloorResult | CannotJudge,
     printing: python_lint.PrintResult | CannotJudge,
 ) -> tuple[str, ...]:
-    """The report lines of the rules that judged: the size counts without a baseline, the clone pairs without a `[clones]` table, the import-contract notes, each python-floor exception, each output owner."""
+    """The report lines of the rules that judged: the size counts without a baseline, the clone pairs without a `[clones]` table, the import-contract notes, each output owner."""
     size_reports = _measured_notes(size)
     clone_reports = _measured_notes(clone)
     contract_notes = [] if isinstance(contracts, CannotJudge) else contracts.notes
-    floor_reports = () if isinstance(floor, CannotJudge) else floor.reports
     owner_reports = () if isinstance(printing, CannotJudge) else printing.reports
-    return (*size_reports, *clone_reports, *contract_notes, *floor_reports, *owner_reports)
+    return (*size_reports, *clone_reports, *contract_notes, *owner_reports)
