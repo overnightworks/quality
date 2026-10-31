@@ -1,0 +1,8 @@
+claim_id = "5594389525364d0fba94c6b768f32be3"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "a0fddee1b6259f764f7862c5f1910a1de83fba40"
+branch = "claude/issue-293-imports-rows-and-not-set-up"
+scope = ["docs/output.md", "docs/rules.md", "src/quality/architecture.py", "src/quality/check.py", "src/quality/cli.py", "src/quality/clones.py", "src/quality/output.py", "src/quality/ratchet.py", "src/quality/report.py", "tests/support/architecture.py", "tests/support/check.py", "tests/test_architecture.py", "tests/test_architecture_output.py", "tests/test_check.py", "tests/test_cli_area_row.py", "tests/test_cli_output.py", "tests/test_output.py", "tests/test_ratchet.py", "tests/test_report.py"]
+opened_commit = "74cf4b6401a714621ea88a7b3911fc75d7a7fb48"
+whole_reason = "A cut into events, vocabulary and detail rendering first and notes, extents and ruling B second would lose nothing, but both halves change the same test modules and the same block decoder and share one matrix, and #228's freeze is serial, so a further landing costs more than the larger review."
