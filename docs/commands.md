@@ -140,14 +140,16 @@ take are in [the runbook](runbook-emergency-merge.md); this is what the command 
 - **Sonar failed: legacy findings,** next to any declared loosening: `[gate] legacy` is `fail` at the merge
   commit (under `report` the Sonar job cannot be red on legacy findings, and a missing config reads as `report`),
   SonarCloud's analysis of the pull request is of the head being merged and adds no finding (the findings are named
-  otherwise), and the default branch has legacy findings. `SONAR_TOKEN` is read from the environment when the project
-  needs one: without it the door reads a public project anonymously, with no Authorization header, and an anonymous read
-  that SonarCloud refuses (a private project answers 404) is exit `2`, naming `SONAR_TOKEN`; with a token, a 401 or 403
+  otherwise), and the default branch has legacy findings. Where `.github/dependabot.yml` exists at the merge commit,
+  the door counts as the gate does: findings of the rule the exception sets aside neither refuse the pull request nor
+  enter the legacy number (a read of the file that fails other than 404 is exit `2`). `SONAR_TOKEN` is read from the environment when
+  the project needs one: without it the door reads a public project anonymously, with no Authorization header, and an
+  anonymous read that SonarCloud refuses (a private project answers 404) is exit `2`, naming `SONAR_TOKEN`; with a token, a 401 or 403
   says the token was rejected.
 - **It shows, then asks:** repository, pull request and head SHA with the legacy count (where Sonar failed) and the
-  number of declared loosenings, then one line per declaration with its `item`, `date`, `what` and `reason`, then the
-  typed word `ja`. Anything else changes nothing. Every line it prints is escaped as the other doors' lines are, so a
-  `reason` cannot hide anything before `ja` or forge a line.
+  number of declared loosenings, then one line per finding set aside, then one line per declaration with its `item`,
+  `date`, `what` and `reason`, then the typed word `ja`. Anything else changes nothing. Every line it prints is
+  escaped as the other doors' lines are, so a `reason` cannot hide anything before `ja` or forge a line.
 - **Off, merge, on:** it sets the repository's `quality_gate` property to `false` (this takes the fleet's ruleset off it),
   runs `gh pr merge <pr> --merge --match-head-commit <sha>` (`--squash` where the repository settings or a rule on the
   pull request's base branch exclude a merge commit but allow a squash; when neither is allowed, or the settings or rules

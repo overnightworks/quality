@@ -14,6 +14,7 @@ from tests.support.check import assert_every_line_starts_with_the_door
 from tests.support.git_repositories import git_pull
 from tests.support.merge import (
     ALL_METHODS_ALLOWED,
+    B_REMOVED,
     GATE_CONFIG,
     LEGACY_RED,
     MERGE_SHA,
@@ -22,6 +23,7 @@ from tests.support.merge import (
     SHA,
     SHOWN,
     SONAR_GREEN,
+    TWO_JOBS,
     FakeGh,
     changed_nothing,
     declaring,
@@ -36,8 +38,6 @@ NO_USABLE_METHOD = "emergency-merge: not merged - the repository and its branch 
 FIXED_NOW = datetime(2026, 10, 17, 12, 0, tzinfo=UTC)
 BASELINE_82 = '[function_lines."src/quality/cli.py"]\n"main" = 82\n'
 BASELINE_90 = BASELINE_82.replace("82", "90")
-TWO_JOBS = '[gate]\nmandatory_jobs = ["checks", "B"]\n'
-B_REMOVED = 'mandatory job "B" removed'
 ALLOWED_SHOWN = "declared loosening (overnightworks/agent-presentator#371 of 2026-10-21): advisory allowance adds "
 ADDS_QWEN = "advisory allowance adds GHSA-462x-pgg6-55fp in speech/providers/qwen/uv.lock until 2027-01-31"
 
