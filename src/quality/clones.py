@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 from quality import ratchet
 from quality.ratchet import Area, ClonePair, Place
-from quality.report import Finding
+from quality.report import Finding, FindingEvent
 from quality.rules import Rule
 
 MIN_TOKENS = 40
@@ -154,11 +154,6 @@ def summarise_pairs(pairs: frozenset[ClonePair]) -> dict[Area, int]:
     return {Area.PRODUCTION: len(pairs) - tests, Area.TESTS: tests}
 
 
-def report_line(pairs: frozenset[ClonePair]) -> str:
-    counts = ", ".join(f"{area.value}: {count} pair(s)" for area, count in summarise_pairs(pairs).items())
-    return f"{Rule.CLONE}: report only (no [clones] in {ratchet.BASELINE_PATH}) - {counts}"
-
-
 def compare_pairs(measured: ClonePairs, held: frozenset[ClonePair]) -> list[Finding]:
     """The enforced rule: a pair the tree has and the baseline lacks is new, one the baseline holds and the tree
     lacks is stale, and a stale pair is red even when a side was deleted. Findings follow the pairs' own order."""
@@ -168,14 +163,14 @@ def compare_pairs(measured: ClonePairs, held: frozenset[ClonePair]) -> list[Find
 
 
 def _new_pair_finding(pair: ClonePair, line: int) -> Finding:
-    reason = f"function {pair.second.symbol} is a near copy of {pair.first.path} {pair.first.symbol} (new pair)."
+    fact = f"function {pair.second.symbol} and {pair.first.path} {pair.first.symbol}"
     fix = "give the shared body one owner and call it, or make the cases one parametrized test"
-    return Finding(Rule.CLONE, pair.second.path, line, reason, fix)
+    return Finding(Rule.CLONE, pair.second.path, line, fact, fix, event=FindingEvent.NEAR_COPY)
 
 
 def _stale_pair_finding(pair: ClonePair) -> Finding:
-    reason = f"the baseline holds the pair {pair.label}, which is gone (stale)."
-    return Finding(Rule.CLONE, pair.first.path, None, reason, f"lower it with `{ratchet.WRITE_COMMAND}`")
+    fact = f"pair {pair.label} is gone"
+    return Finding(Rule.CLONE, pair.first.path, None, fact, ratchet.WRITE_COMMAND, event=FindingEvent.CAN_FALL)
 
 
 def check_clones(tree: ratchet.TreeMeasurement, sources: dict[str, bytes], baseline: ratchet.Baseline | None) -> ratchet.RuleResult:
@@ -183,6 +178,6 @@ def check_clones(tree: ratchet.TreeMeasurement, sources: dict[str, bytes], basel
     held pair the tree lost is a finding. A pair can hide in a file the detector cannot read, so then it cannot judge."""
     pairs = find_pairs(sources)
     if baseline is None or baseline.clones is None:
-        return ratchet.RuleResult([], ratchet.MeasuredOnly(report_line(pairs.pairs)))
+        return ratchet.RuleResult([], len(pairs.pairs), True)
     ratchet.complete(tree)
-    return ratchet.RuleResult(compare_pairs(pairs, baseline.clones), None)
+    return ratchet.RuleResult(compare_pairs(pairs, baseline.clones), len(baseline.clones), False)

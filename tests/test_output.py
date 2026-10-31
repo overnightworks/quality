@@ -378,6 +378,10 @@ MODULE_DOOR = [sys.executable, "-m", "quality.cli"]
 CONSOLE_SCRIPT_DOOR = [str(Path(sys.executable).parent / "quality")]
 
 
+def test_counted_gives_the_noun_for_one_and_its_plural_for_any_other_count():
+    assert [output.counted(count, "entry", "entries") for count in (1, 2)] == ["1 entry", "2 entries"]
+
+
 def quality_door(*arguments: str, cwd: Path, door: list[str] = MODULE_DOOR, **streams) -> subprocess.CompletedProcess[str]:
     return subprocess.run([*door, *arguments], cwd=cwd, text=True, check=False, **streams)
 
@@ -394,7 +398,7 @@ def test_a_merged_pipe_shows_the_hygiene_lines_in_run_order(env_and_broken_compo
         "hygiene", ".", cwd=env_and_broken_compose, door=door, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
     )
     prefixes = [
-        "size: ", "clone: ", "import-contract: ", "workflow-security runs offline", "  ✗ files", ENV_ROW, FIX_LINE, ENV_ROW, FIX_LINE,
+        "import-contract: ", "workflow-security runs offline", "  ✗ files", ENV_ROW, FIX_LINE, ENV_ROW, FIX_LINE,
         "  · debt", "  ✓ imports", "  ✓ secrets", "  ✓ workflows", "  ✓ dependencies", "  ✓ code", "error: ", "next: ",
     ]
     lines = done.stdout.splitlines()

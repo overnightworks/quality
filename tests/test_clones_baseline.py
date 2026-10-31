@@ -1,12 +1,14 @@
 """#130: the clone pairs in quality/baseline.toml, the write that names a new pair and the verdict that lets the table only fall."""
 
 import re
+import shlex
 import textwrap
 from pathlib import Path
 
 import pytest
 
 from quality import __version__, cli
+from quality.check import RuleVerdict
 from quality.ratchet import (
     BASELINE_PATH,
     WRITE_COMMAND,
@@ -17,10 +19,25 @@ from quality.ratchet import (
     Place,
     SizeError,
     load_baseline,
+    read_baseline,
     render_baseline,
 )
-from quality.rules import Rule
-from tests.support.check import hygiene_output, refusal_row, refusals
+from quality.report import Finding, FindingEvent, printable
+from quality.rules import Area, Rule
+from tests.support.check import (
+    area_fact,
+    area_finding_rows,
+    assert_every_line_starts_with_the_door,
+    assert_finding_vocabulary,
+    assert_row_prints_finding,
+    extent_counts,
+    hygiene_output,
+    hygiene_run,
+    refusal_row,
+    refusals,
+    rows_of,
+    rule_findings,
+)
 from tests.support.clones import function as clone_function
 from tests.support.git_repositories import head_commit, put
 from tests.support.merge import ONE_JOB, SONAR_GREEN, declaring, drive
@@ -317,22 +334,38 @@ def test_the_write_names_the_unknown_table_of_the_previous_baseline_without_advi
     )
 
 
+def judged_rules(repo: Path) -> dict[Rule, RuleVerdict]:
+    return {verdict.rule: verdict for verdict in hygiene_run(repo).verdicts}
+
+
+def assert_the_debt_block_is_the_findings_in_run_order(repo: Path, output: str) -> None:
+    """Decision 4, rule 7: the debt block decoded once in printed order (several findings at one location included)
+    is exactly the size findings then the clone findings the rule runner returned."""
+    findings = [finding for rule, verdict in judged_rules(repo).items() if rule.area is Area.DEBT for finding in verdict.findings]
+    decoded = [(location, row.event, row.fact, row.fix) for location, row in area_finding_rows(output, Area.DEBT)]
+    assert decoded == [(finding.location, finding.event, printable(finding.reason), printable(finding.fix)) for finding in findings]
+    assert all(finding.event for finding in findings)
+
+
 def test_hygiene_without_a_clone_table_holds_the_size_and_leaves_the_clone_rule_report_only(build_repo, capsys):
     """#136 cell 6 (E3, report half): size tables alone leave the clone rule counting."""
     repo = build_repo({"src/a.py": long_function(71), **TWO_FILES, BASELINE_PATH: LONG_ONE})
     code, output = hygiene_output(capsys, repo)
+    rules = judged_rules(repo)
     assert code == 1, output
-    assert "the baseline holds 70 (it grew)" in output
-    assert "clone: report only (no [clones] in quality/baseline.toml) - production: 0 pair(s), tests: 1 pair(s)" in output
+    assert [finding.event for finding in rules[Rule.SIZE].findings] == [FindingEvent.GREW]
+    assert (rules[Rule.CLONE].findings, rules[Rule.CLONE].measured_only, rules[Rule.CLONE].extent) == ((), True, 1)
+    assert_the_debt_block_is_the_findings_in_run_order(repo, output)
 
 
 def test_hygiene_with_a_clone_table_holds_the_size_and_the_pairs_without_a_report_line(build_repo, capsys):
-    """#136 E3, cell 2: a held pair that the tree has is clean, and an enforced rule prints no report line."""
+    """#136 E3, cell 2: a held pair that the tree has is clean, and an enforced rule only measures nothing."""
     repo = build_repo({"src/a.py": long_function(71), **TWO_FILES, BASELINE_PATH: LONG_ONE + FIRST})
     code, output = hygiene_output(capsys, repo)
+    clone = judged_rules(repo)[Rule.CLONE]
     assert code == 1, output
-    assert "the baseline holds 70 (it grew)" in output
-    assert ("clone:" in output, "clone tests" in output) == (False, False)
+    assert (clone.findings, clone.measured_only, clone.extent) == ((), False, len(read_baseline(repo).clones))
+    assert_the_debt_block_is_the_findings_in_run_order(repo, output)
 
 
 def test_the_write_with_no_previous_file_writes_both_and_names_no_pair(build_repo, capsys):
@@ -435,86 +468,132 @@ def test_a_size_entry_and_a_pair_load_into_one_baseline():
     assert load_baseline(SIZE + FIRST) == Baseline({key: 82}, frozenset({FIRST_PAIR}))
 
 
-NEW_PAIR = (
-    "clone tests/test_b.py:1 - function hygiene is a near copy of tests/test_a.py run (new pair).\n"
-    "  Fix: give the shared body one owner and call it, or make the cases one parametrized test"
-)
-STALE_PAIR = (
-    "clone tests/test_a.py - the baseline holds the pair tests/test_a.py run <-> tests/test_b.py hygiene, "
-    "which is gone (stale).\n  Fix: lower it with `quality baseline write`"
-)
-
-
 def enforced(capsys, build_repo, files, table=EMPTY_CLONES):
-    return hygiene_output(capsys, build_repo({**files, BASELINE_PATH: table}))
+    repo = build_repo({**files, BASELINE_PATH: table})
+    return repo, *hygiene_output(capsys, repo)
+
+
+def clone_findings(repo: Path) -> list[Finding]:
+    return rule_findings(repo, Rule.CLONE)
+
+
+def assert_new_pair(finding: Finding, location: str, other: Place, symbol: str) -> None:
+    """A near copy at its second side, naming its own symbol and the other side's path and symbol."""
+    assert (finding.location, finding.event) == (location, FindingEvent.NEAR_COPY)
+    assert all(word in finding.reason for word in (symbol, other.path, other.symbol)), finding.reason
+    assert_finding_vocabulary(finding)
+
+
+def assert_gone_pair(finding: Finding, pair: ClonePair) -> None:
+    """A held pair the tree lost, named by the one wording of write and verdict, at its first side."""
+    assert (finding.path, finding.event) == (pair.first.path, FindingEvent.CAN_FALL)
+    assert pair.label in finding.reason, finding.reason
+    assert_finding_vocabulary(finding)
 
 
 def test_an_empty_clone_table_makes_a_new_cross_file_pair_red_at_its_second_side(build_repo, capsys):
     """#136 E3, E4, cell 1."""
-    code, output = enforced(capsys, build_repo, TWO_FILES)
+    repo, code, output = enforced(capsys, build_repo, TWO_FILES)
+    (finding,) = clone_findings(repo)
     assert code == 1, output
-    assert NEW_PAIR in output
+    assert_new_pair(finding, "tests/test_b.py:1", FIRST_PAIR.first, "hygiene")
+    (row,) = rows_of(output, finding)
+    assert_row_prints_finding(row, finding)
 
 
 def test_a_pair_across_production_and_tests_is_judged_like_any_other(build_repo, capsys):
     """#136 cell 13."""
     files = {"src/a.py": clone_function("run", "a", "b"), "tests/test_b.py": clone_function("hygiene", "c", "d")}
-    code, output = enforced(capsys, build_repo, files)
+    repo, code, output = enforced(capsys, build_repo, files)
+    (finding,) = clone_findings(repo)
     assert code == 1, output
-    assert "clone tests/test_b.py:1 - function hygiene is a near copy of src/a.py run (new pair)." in output
+    assert_new_pair(finding, "tests/test_b.py:1", Place("src/a.py", "run"), "hygiene")
 
 
-def test_a_held_pair_whose_side_file_was_deleted_is_red_at_the_first_side(build_repo, capsys):
-    """#136 E4, cell 3."""
-    code, output = enforced(capsys, build_repo, {"tests/test_a.py": TWO_FILES["tests/test_a.py"]}, FIRST)
+def test_a_held_pair_whose_side_file_was_deleted_is_red_at_the_first_side_and_its_fix_clears_it(build_repo, capsys, monkeypatch):
+    """#136 E4, cell 3, decision 7: the printed fix is a command of this door."""
+    repo, code, output = enforced(capsys, build_repo, {"tests/test_a.py": TWO_FILES["tests/test_a.py"]}, FIRST)
+    (finding,) = clone_findings(repo)
     assert code == 1, output
-    assert STALE_PAIR in output
+    assert_gone_pair(finding, FIRST_PAIR)
+    command = shlex.split(finding.fix)
+    assert command[0] == cli.build_parser().prog
+    monkeypatch.chdir(repo)
+    assert cli.main(command[1:]) == 0
+    assert hygiene_output(capsys, repo)[0] == 0
 
 
 def test_a_renamed_function_makes_the_held_pair_stale_and_the_new_name_a_new_pair(build_repo, capsys):
     """#136 cell 4."""
     files = {**TWO_FILES, "tests/test_b.py": clone_function("renamed", "c", "d")}
-    code, output = enforced(capsys, build_repo, files, FIRST)
+    repo, code, output = enforced(capsys, build_repo, files, FIRST)
+    stale, new = sorted(clone_findings(repo), key=lambda finding: finding.event is FindingEvent.NEAR_COPY)
     assert code == 1, output
-    assert STALE_PAIR in output
-    assert "clone tests/test_b.py:1 - function renamed is a near copy of tests/test_a.py run (new pair)." in output
+    assert_gone_pair(stale, FIRST_PAIR)
+    assert_new_pair(new, "tests/test_b.py:1", FIRST_PAIR.first, "renamed")
+    assert_the_debt_block_is_the_findings_in_run_order(repo, output)
 
 
 def test_a_held_same_file_pair_and_a_held_self_pair_are_stale(build_repo, capsys):
     """#136 cell 5: the detector never produces them, so they are held and gone."""
     table = '[clones."tests/test_a.py"]\nrun = [["tests/test_a.py", "other"], ["tests/test_a.py", "run"]]\n'
-    code, output = enforced(capsys, build_repo, {"tests/test_a.py": TWO_FILES["tests/test_a.py"]}, table)
+    repo, code, output = enforced(capsys, build_repo, {"tests/test_a.py": TWO_FILES["tests/test_a.py"]}, table)
     assert code == 1, output
-    assert "the baseline holds the pair tests/test_a.py other <-> tests/test_a.py run, which is gone (stale)." in output
-    assert "the baseline holds the pair tests/test_a.py run <-> tests/test_a.py run, which is gone (stale)." in output
+    held = sorted(read_baseline(repo).clones)
+    assert len(held) == 2
+    for finding, pair in zip(clone_findings(repo), held, strict=True):
+        assert_gone_pair(finding, pair)
+    assert_the_debt_block_is_the_findings_in_run_order(repo, output)
 
 
 def test_a_copy_fixed_in_place_leaves_the_held_pair_stale(build_repo, capsys):
     """#136 cell 16: both functions remain but are no longer similar."""
     files = {**TWO_FILES, "tests/test_b.py": "def hygiene(a):\n    return a\n"}
-    code, output = enforced(capsys, build_repo, files, FIRST)
+    repo, code, output = enforced(capsys, build_repo, files, FIRST)
+    (finding,) = clone_findings(repo)
     assert code == 1, output
-    assert STALE_PAIR in output
+    assert_gone_pair(finding, FIRST_PAIR)
 
 
 def test_a_second_side_moved_down_is_named_at_its_new_line(build_repo, capsys):
     """#136 cell 18."""
     files = {**TWO_FILES, "tests/test_b.py": "import os\n\n\n" + TWO_FILES["tests/test_b.py"]}
-    code, output = enforced(capsys, build_repo, files)
+    repo, code, output = enforced(capsys, build_repo, files)
+    (finding,) = clone_findings(repo)
     assert code == 1, output
-    assert "clone tests/test_b.py:4 - function hygiene" in output
+    assert_new_pair(finding, "tests/test_b.py:4", FIRST_PAIR.first, "hygiene")
 
 
-def test_two_new_pairs_print_in_sorted_order(build_repo, capsys):
-    """#136 cell 10."""
-    code, output = enforced(capsys, build_repo, THREE_FILES)
+def test_new_pairs_print_in_sorted_order_across_locations_and_at_one_location(build_repo, capsys):
+    """#136 cell 10: the block decoded once in printed order, with two rows at test_c.py:1."""
+    repo, code, output = enforced(capsys, build_repo, THREE_FILES)
     assert code == 1, output
-    positions = [output.index(line) for line in (
-        "tests/test_b.py:1 - function hygiene is a near copy of tests/test_a.py run",
-        "tests/test_c.py:1 - function walk is a near copy of tests/test_a.py run",
-        "tests/test_c.py:1 - function walk is a near copy of tests/test_b.py hygiene",
-    )]
-    assert positions == sorted(positions)
+    assert [finding.location for finding in clone_findings(repo)] == ["tests/test_b.py:1", "tests/test_c.py:1", "tests/test_c.py:1"]
+    assert_the_debt_block_is_the_findings_in_run_order(repo, output)
+
+
+def test_two_file_rows_share_one_fix(build_repo, capsys):
+    """Rule 7, decision 4: a fix shared by consecutive rows is printed once, under the last of them."""
+    _, _, output = enforced(capsys, build_repo, {"src/a.py": "x = 1\n" * 800, "src/b.py": "x = 1\n" * 801}, "")
+    first, second = (row for _, row in area_finding_rows(output, Area.DEBT))
+    assert (first.fix_follows, second.fix_follows, first.fix == second.fix) == (False, True, True), output
+
+
+def test_a_size_can_fall_row_and_a_clone_can_fall_row_share_one_fix(build_repo, capsys):
+    """Rule 7, decision 4: the fix of both is printed once, after the clone row."""
+    files = {"src/a.py": long_function(65), "tests/test_a.py": TWO_FILES["tests/test_a.py"]}
+    _, _, output = enforced(capsys, build_repo, files, LONG_ONE + FIRST)
+    size_row, clone_row = (row for _, row in area_finding_rows(output, Area.DEBT))
+    assert (size_row.event, clone_row.event) == (FindingEvent.CAN_FALL, FindingEvent.CAN_FALL)
+    assert (size_row.fix_follows, clone_row.fix_follows, size_row.fix == clone_row.fix) == (False, True, True), output
+
+
+def test_no_line_before_the_first_area_row_opens_with_a_rule_of_the_debt_area(build_repo, capsys):
+    """O15: the size and clone counts are the debt row's extent, never a prelude line."""
+    _, _, output = enforced(capsys, build_repo, TWO_FILES, "")
+    lines = output.splitlines()
+    prelude = lines[: next(number for number, line in enumerate(lines) if line.split()[1:2] == [Area.FILES])]
+    assert [line for line in prelude if line.startswith(tuple(rule.value for rule in Rule if rule.area is Area.DEBT))] == []
 
 
 def test_a_file_python_cannot_parse_leaves_the_enforced_clone_rule_unable_to_judge(build_repo, capsys):
@@ -542,24 +621,35 @@ def test_a_malformed_baseline_leaves_both_rules_unable_to_judge_naming_the_rewri
 
 
 def test_the_write_and_the_rule_agree(build_repo, capsys):
-    """#136 cell 11."""
+    """#136 cell 11: after the write the clone rule finds nothing and the debt row counts what the write wrote."""
     repo = build_repo(THREE_FILES)
     assert written(capsys, repo)[0] == 0
     code, output = hygiene_output(capsys, repo)
-    assert (code, "clone" in output) == (0, False), output
+    held = read_baseline(repo)
+    assert (code, clone_findings(repo)) == (0, []), output
+    assert extent_counts(area_fact(output, Area.DEBT)) == [len(held.size), len(held.clones)] == [0, 3]
 
 
-def test_a_control_character_and_undecodable_bytes_in_a_path_print_escaped(build_repo, capsys):
-    """#136 cell 17: a new pair can carry both; a held pair only Unicode."""
+def test_a_control_character_and_undecodable_bytes_in_a_new_pair_print_escaped(build_repo, capsys):
+    """#136 cell 17: a new pair can carry both."""
     new = {"src/a\x01.py": clone_function("run", "a", "b"), "src/b\udcff.py": clone_function("hygiene", "c", "d")}
-    code, output = enforced(capsys, build_repo, new)
+    repo, code, output = enforced(capsys, build_repo, new)
+    (finding,) = clone_findings(repo)
     assert code == 1, output
-    assert "clone src/b\\udcff.py:1 - function hygiene is a near copy of src/a\\x01.py run (new pair)." in output
+    assert (finding.location, rows_of(output, finding)[0].fact) == ("src/b\\udcff.py:1", printable(finding.reason))
+    assert_every_line_starts_with_the_door(output.splitlines())
+
+
+def test_a_control_character_in_a_held_pair_prints_escaped(build_repo, capsys):
+    """#136 cell 17: a held pair carries only Unicode."""
     pair = ClonePair.of(Place("src/a\x01.py", "run"), Place("src/b.py", "hygiene"))
     stale = render_baseline(Baseline({}, frozenset({pair})))
-    code, output = enforced(capsys, build_repo, {"src/c.py": "x = 1\n"}, stale)
+    repo, code, output = enforced(capsys, build_repo, {"src/c.py": "x = 1\n"}, stale)
+    (finding,) = clone_findings(repo)
     assert code == 1, output
-    assert "clone src/a\\x01.py - the baseline holds the pair src/a\\x01.py run <-> src/b.py hygiene" in output
+    assert_gone_pair(finding, pair)
+    assert (finding.location, rows_of(output, finding)[0].fact) == ("src/a\\x01.py", printable(finding.reason))
+    assert_every_line_starts_with_the_door(output.splitlines())
 
 
 @pytest.mark.integration

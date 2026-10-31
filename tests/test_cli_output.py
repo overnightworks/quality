@@ -20,13 +20,18 @@ from quality.report import DETAIL_MARKER, FindingEvent
 from quality.rules import Area, Rule
 from tests.support.architecture import FORBIDDEN, SHOP, SHOP_DB_IMPORTS_WEB, toml
 from tests.support.check import (
+    area_fact,
     assert_every_line_starts_with_the_door,
     assert_row_prints_finding,
     env_row_stands,
+    extent_counts,
     finding_rows,
+    leading_count,
+    recorded_entries,
     rows_of,
     rule_findings,
 )
+from tests.support.clones import function
 from tests.support.merge import ONE_JOB
 from tests.support.processes import process_is_gone
 from tests.support.scanners import fake_scanner, lacking
@@ -488,26 +493,35 @@ def headers(lines: list[str]) -> list[str]:
 
 
 def test_a_clean_run_has_seven_clean_rows_in_area_order_and_the_verdict(build_repo, capsys):
-    """O16: the six other rows carry no fact; the files row's fact holds the area's rules and the tracked paths."""
-    tracked = {**CLEAN_FILES, **CLONES_BASELINE}
-    code, out, err = frame_run(capsys, build_repo(tracked))
-    files_row, *others = headers(out)
+    """O16, O21: the five other rows carry no fact; the files row holds the rules and the tracked paths, the debt row the entries and pairs of the ceiling file."""
+    tracked = {**CLEAN_FILES, BASELINE_PATH: '[file_lines]\n"src/gone.py" = 900\n\n[clones]\n'}
+    repo = build_repo(tracked)
+    code, out, err = frame_run(capsys, repo)
+    files_row, _, *others = headers(out)
     extent = [int(part.split()[0]) for part in files_row.partition(cli.AreaEvent.CLEAN)[2].split(SEPARATOR)]
-    assert (code, others, out[-1], err) == (0, [header(area, "✓", "clean") for area in list(Area)[1:]], f"✓ clean · 7 areas · {ZERO_SECONDS}", [])
+    held = ratchet.read_baseline(repo)
+    assert (code, others, out[-1], err) == (0, [header(area, "✓", "clean") for area in list(Area)[2:]], f"✓ clean · 7 areas · {ZERO_SECONDS}", [])
     assert extent == [sum(rule.area is Area.FILES for rule in Rule), len(tracked)]
+    assert extent_counts(area_fact("\n".join(out), Area.DEBT)) == [len(held.size), len(held.clones)] == [1, 0]
 
 
 def test_a_run_without_a_baseline_notes_the_debt_as_not_recorded_and_says_it_is_not_enforced(build_repo, capsys):
-    code, out, err = frame_run(capsys, build_repo(CLEAN_FILES))
+    repo = build_repo({**CLEAN_FILES, "src/big.py": "x = 1\n" * 800})
+    code, out, err = frame_run(capsys, repo)
+    fact = area_fact("\n".join(out), Area.DEBT)
     assert (code, err) == (0, [])
-    assert header(Area.DEBT, "·", "not recorded", "measured only") in out
+    assert (leading_count(fact), fact.split(SEPARATOR)[-1]) == (recorded_entries(repo), "measured only")
     assert out[-1] == f"✓ clean · 7 areas · debt measured, not enforced · {ZERO_SECONDS}"
 
 
 def test_a_baseline_without_clones_is_partly_measured_only(build_repo, capsys):
-    code, out, err = frame_run(capsys, build_repo({**CLEAN_FILES, BASELINE_PATH: ""}))
+    repo = build_repo({**CLEAN_FILES, BASELINE_PATH: "", "src/a.py": function("first", "a", "b"), "src/b.py": function("second", "c", "d")})
+    code, out, err = frame_run(capsys, repo)
+    fact = area_fact("\n".join(out), Area.DEBT)
     assert (code, err) == (0, [])
-    assert header(Area.DEBT, "·", "not recorded", "partly measured only") in out
+    assert fact.split(SEPARATOR)[-1] == "partly measured only"
+    assert cli.main(["baseline", "write", str(repo)]) == 0
+    assert leading_count(fact) == len(ratchet.read_baseline(repo).clones) == 1
     assert out[-1] == f"✓ clean · 7 areas · debt partly measured, not enforced · {ZERO_SECONDS}"
 
 

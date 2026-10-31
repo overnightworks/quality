@@ -3,18 +3,18 @@ from pathlib import Path
 import pytest
 
 from quality import clones
-from quality.ratchet import ClonePair, Place
+from quality.ratchet import Area, ClonePair, Place, read_baseline
 from quality.rules import Rule
+from tests.support.check import area_fact, extent_counts, refusal_row, refusals, rule_findings
 from tests.support.check import hygiene_output as hygiene
-from tests.support.check import refusal_row, refusals
 from tests.support.clones import function
 
-REPORT = "clone: report only (no [clones] in quality/baseline.toml) - production: {production} pair(s), tests: {tests} pair(s)"
 QUALITY_ITSELF = Path(__file__).parents[1]
 
 
-def report(production: int, tests: int) -> str:
-    return REPORT.format(production=production, tests=tests)
+def pairs_by_area(files: dict[str, str]) -> dict[Area, int]:
+    """The cross-file pairs among `files`, counted the way the scoreboard counts them."""
+    return clones.summarise_pairs(clones.find_pairs({path: text.encode() for path, text in files.items()}).pairs)
 
 
 @pytest.mark.parametrize(
@@ -40,17 +40,16 @@ def report(production: int, tests: int) -> str:
         "#119 cell 22 two identical .ts files are no pair",
     ],
 )
-def test_pairs_are_counted_in_the_report_line_and_the_exit_stays_clean(build_repo, capsys, files, production, tests):
+def test_pairs_are_counted_by_area(files, production, tests):
     """The 39-token function is the 40-token one with one `pass` less (3 + 35 + 1 = 39)."""
-    code, output = hygiene(capsys, build_repo(files))
-    assert (code, report(production, tests) in output) == (0, True), output
+    assert pairs_by_area(files) == {Area.PRODUCTION: production, Area.TESTS: tests}
 
 
-def test_a_docstring_does_not_count_towards_the_tokens(build_repo, capsys):
+def test_a_docstring_does_not_count_towards_the_tokens():
     """#113 E1: the 39-token body plus a docstring is still 39 tokens, so no pair."""
     documented = function("first", "a", "b", passes=1).replace(":\n", ':\n    """Says what it does."""\n', 1)
     files = {"src/a.py": documented, "src/b.py": function("second", "c", "d", passes=1)}
-    assert report(0, 0) in hygiene(capsys, build_repo(files))[1]
+    assert pairs_by_area(files) == {Area.PRODUCTION: 0, Area.TESTS: 0}
 
 
 BINARY_OPERATORS = ["+", "-", "*", "/", "//", "%", "**", "<<", ">>", "|", "^", "&", "@"]
@@ -75,7 +74,7 @@ def operator_chain(name: str, operators: int) -> str:
         "#113 E1 a copy missing 1 of 8 statements is below the threshold and no pair",
     ],
 )
-def test_the_similarity_threshold_is_ninety_percent(build_repo, capsys, longer, shorter, pairs):
+def test_the_similarity_threshold_is_ninety_percent(longer, shorter, pairs):
     """#113 E1, counted by hand for n statements (3 + 9n tokens, so 9n - 1 windows).
 
     The windows holding operator i are 5, or 3 for the last operator, which the end of the function cuts short.
@@ -85,7 +84,7 @@ def test_the_similarity_threshold_is_ninety_percent(build_repo, capsys, longer, 
     longer's: 45 of 50 = 0.9 for 9 and 8 statements, 40 of 45 = 0.889 for 8 and 7.
     """
     files = {"src/a.py": operator_chain("longer", longer), "src/b.py": operator_chain("shorter", shorter)}
-    assert report(pairs, 0) in hygiene(capsys, build_repo(files))[1]
+    assert pairs_by_area(files) == {Area.PRODUCTION: pairs, Area.TESTS: 0}
 
 
 def test_a_pair_is_named_by_path_and_qualified_symbol_whatever_the_line():
@@ -107,17 +106,18 @@ def test_methods_and_repeated_names_get_the_size_rules_symbols():
 
 
 def test_a_file_python_cannot_parse_has_no_pair_and_leaves_the_clone_rule_clean_while_the_python_rules_exit_2(build_repo, capsys):
-    """#113 rule 3: report-only mode skips the file; `clone` stays clean, python-security (#219) and python-print (#225)
+    """#113 rule 3: report-only mode skips the file; `clone` stays judging, python-security (#219) and python-print (#225)
     make the run exit 2."""
     files = {"src/a.py": function("first", "a", "b"), "src/broken.py": "def broken(:\n"}
     repo = build_repo(files)
     code, output = hygiene(capsys, repo)
-    assert (code, report(0, 0) in output, Rule.CLONE in refusals(repo)) == (2, True, False), output
+    assert (code, Rule.CLONE in refusals(repo), rule_findings(repo, Rule.CLONE)) == (2, False, []), output
     assert f"{refusal_row('code')}ruff cannot parse src/broken.py" in output
 
 
 @pytest.mark.integration
-def test_quality_holds_its_own_empty_clone_table_and_prints_no_clone_line(capsys):
+def test_quality_holds_its_own_clone_table_and_its_clean_debt_row_counts_the_ceiling_file(capsys):
     """#136 cell 12: quality enforces its `[clones]`, so a copied helper in its tree turns its own gate red."""
     code, output = hygiene(capsys, QUALITY_ITSELF)
-    assert (code, "clone:" in output) == (0, False), output
+    held = read_baseline(QUALITY_ITSELF)
+    assert (code, extent_counts(area_fact(output, "debt"))) == (0, [len(held.size), len(held.clones)]), output

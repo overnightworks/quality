@@ -1,5 +1,6 @@
 import os
 import re
+import shlex
 import tomllib
 from collections.abc import Callable
 from pathlib import Path
@@ -22,9 +23,25 @@ from quality.ratchet import (
     raised_entries,
     render_baseline,
 )
+from quality.report import FindingEvent, NoteEvent
 from quality.rules import Rule
+from tests.support.check import (
+    area_fact,
+    assert_finding_vocabulary,
+    assert_row_prints_finding,
+    finding_rows,
+    hygiene_run,
+    is_clean,
+    leading_count,
+    note_rows,
+    recorded_entries,
+    refusal_row,
+    refusals,
+    rows_of,
+    rule_findings,
+    rule_notes,
+)
 from tests.support.check import hygiene_output as hygiene
-from tests.support.check import hygiene_run, is_clean, refusal_row, refusals
 from tests.support.git_repositories import make_repo
 from tests.support.source_code import (
     branchy_function,
@@ -42,22 +59,12 @@ def method(lines: int) -> str:
     return "class Holder:\n" + "".join(f"    {line}\n" for line in long_function(lines).splitlines())
 
 
-def test_without_a_baseline_the_rule_only_counts_production_and_tests(build_repo, capsys):
-    """#46 rule 3: no baseline, counts per class for production and tests, exit unchanged."""
-    repo = build_repo(
-        {
-            "src/big.py": long_file(800) + long_function(60) + branchy_function(16),
-            "tests/test_big.py": long_file(900),
-        }
-    )
+def test_without_a_baseline_the_debt_row_counts_the_entries_a_first_recording_writes(build_repo, capsys):
+    """#46 rule 3, O21: no baseline, the extent is the entries over the thresholds, the exit unchanged."""
+    repo = build_repo({"src/big.py": long_file(800) + long_function(60) + branchy_function(16), "tests/test_big.py": long_file(900)})
     code, output = hygiene(capsys, repo)
     assert code == 0, output
-    counts = (
-        "size: report only (no quality/baseline.toml) - production: 1 file(s) >= 800 lines, "
-        "1 function(s) >= 60 lines, 1 function(s) CCN > 15; tests: 1 file(s) >= 800 lines, "
-        "0 function(s) >= 60 lines, 0 function(s) CCN > 15"
-    )
-    assert counts in output
+    assert leading_count(area_fact(output, "debt")) == recorded_entries(repo) == 4
 
 
 def build_repo_with_source(build_repo, files: dict[str, str], name: str, source: bytes) -> Path:
@@ -96,8 +103,8 @@ def test_a_file_python_can_read_is_measured_in_its_declared_encoding(build_repo,
     assert (Rule.PYTHON_SECURITY in refusals(repo)) == python_security_cannot_judge, output
     assert (Rule.PYTHON_PRINT in refusals(repo)) == python_security_cannot_judge, output
     assert code == (2 if python_security_cannot_judge else 0), output
-    assert "production: 0 file(s) >= 800 lines, 1 function(s) >= 60 lines" in output
-    assert "not valid Python" not in output
+    assert leading_count(area_fact(output, "debt")) == recorded_entries(repo) == 1, output
+    assert note_rows(output, SOURCE_NAME) == [], output
 
 
 NOT_PYTHON = pytest.mark.parametrize(
@@ -124,7 +131,7 @@ NOT_PYTHON = pytest.mark.parametrize(
 
 
 @NOT_PYTHON
-def test_without_a_baseline_the_size_rule_names_a_file_python_cannot_read_and_python_security_decides_the_exit(
+def test_without_a_baseline_the_size_rule_notes_a_file_python_cannot_read_and_python_security_decides_the_exit(
     build_repo, capsys, source
 ):
     """#46 rule 3: the size rule reports the file without refusing; python-security (#219) and python-print (#225)
@@ -134,7 +141,9 @@ def test_without_a_baseline_the_size_rule_names_a_file_python_cannot_read_and_py
     assert code == 2, output
     assert list(refusals(repo)) == [Rule.PYTHON_SECURITY, Rule.PYTHON_PRINT]
     assert all(re.search(rf"(cannot read|ruff cannot parse) {re.escape(SOURCE_NAME)}", reason) for reason in refusals(repo).values())
-    assert f"1 file(s) not valid Python, functions unmeasured: {SOURCE_NAME}" in output
+    (note,) = rule_notes(repo, Rule.SIZE)
+    assert (note.path, note.event) == (SOURCE_NAME, NoteEvent.NOT_MEASURED)
+    assert [(row.event, row.fact) for row in note_rows(output, SOURCE_NAME)] == [(note.event, note.fact)], output
 
 
 @NOT_PYTHON
@@ -143,6 +152,7 @@ def test_against_a_baseline_a_file_python_cannot_read_is_unparsable(build_repo, 
     repo = build_repo_with_source(build_repo, {BASELINE_PATH: EMPTY_BASELINE}, SOURCE_NAME, source)
     code, output = hygiene(capsys, repo)
     assert code == 2
+    assert rule_notes(repo, Rule.SIZE) == []
     assert f"{refusal_row('debt')}{SOURCE_NAME} is not valid Python" in output
 
 
@@ -155,50 +165,54 @@ def test_baseline_write_refuses_a_file_python_cannot_read(build_repo, capsys, so
     assert not (repo / BASELINE_PATH).exists()
 
 
+HELD_70 = '[function_lines."src/a.py"]\nlong_one = 70\n'
+
+
 @pytest.mark.parametrize(
-    ("files", "baseline", "expected"),
+    ("files", "baseline", "event", "values"),
     [
-        (
-            {"src/big.py": long_file(800)},
-            EMPTY_BASELINE,
-            "size src/big.py - file has 800 lines; debt starts at 800 lines (new debt).",
-        ),
-        (
-            {"src/a.py": method(60)},
-            EMPTY_BASELINE,
-            "size src/a.py:2 - function Holder.long_one has 60 lines; debt starts at 60 lines (new debt).",
-        ),
-        (
-            {"src/a.py": branchy_function(16)},
-            EMPTY_BASELINE,
-            "size src/a.py:1 - function branchy has CCN 16; debt starts at CCN 16 (new debt).",
-        ),
-        (
-            {"src/a.py": long_function(71)},
-            '[function_lines."src/a.py"]\nlong_one = 70\n',
-            "size src/a.py:1 - function long_one has 71 lines; the baseline holds 70 (it grew).",
-        ),
-        (
-            {"src/a.py": long_function(65)},
-            '[function_lines."src/a.py"]\nlong_one = 70\n',
-            "size src/a.py:1 - function long_one has 65 lines; the baseline holds 70 (stale).",
-        ),
+        ({"src/big.py": long_file(800)}, EMPTY_BASELINE, FindingEvent.NEW_DEBT, (str(Metric.FILE_LINES.debt_from),)),
+        ({"src/a.py": method(60)}, EMPTY_BASELINE, FindingEvent.NEW_DEBT, ("Holder.long_one", str(Metric.FUNCTION_LINES.debt_from))),
+        ({"src/a.py": branchy_function(16)}, EMPTY_BASELINE, FindingEvent.NEW_DEBT, ("branchy", str(Metric.CCN.debt_from))),
+        ({"src/a.py": long_function(71)}, HELD_70, FindingEvent.GREW, ("long_one", "71", "70")),
+        ({"src/a.py": long_function(65)}, HELD_70, FindingEvent.CAN_FALL, ("long_one", "65", "70")),
     ],
     ids=["new-file-from-800-lines", "new-function-from-60-lines", "new-ccn-above-15", "grown-entry", "stale-entry"],
 )
-def test_against_a_baseline_new_grown_and_stale_entries_are_red(build_repo, capsys, files, baseline, expected):
+def test_against_a_baseline_new_grown_and_stale_entries_are_red(build_repo, capsys, files, baseline, event, values):
     """#46 rule 4: a new violation, a grown entry and a stale entry each name path, symbol, value and fix."""
-    code, output = hygiene(capsys, build_repo({**files, BASELINE_PATH: baseline}))
+    repo = build_repo({**files, BASELINE_PATH: baseline})
+    code, output = hygiene(capsys, repo)
+    (finding,) = rule_findings(repo, Rule.SIZE)
     assert code == 1
-    assert expected in output
-    assert "\n  Fix: " in output
+    assert finding.event is event
+    assert all(value in finding.reason for value in values), finding.reason
+    assert_finding_vocabulary(finding)
+    (row,) = rows_of(output, finding)
+    assert_row_prints_finding(row, finding)
 
 
-def test_a_stale_entry_tells_how_to_lower_it(build_repo, capsys):
-    """#46 rule 4: a stale entry says "lower it with `quality baseline write`"."""
-    repo = build_repo({"src/a.py": long_function(65), BASELINE_PATH: '[function_lines."src/a.py"]\nlong_one = 70\n'})
-    _, output = hygiene(capsys, repo)
-    assert "lower it with `quality baseline write`" in output
+def test_the_fix_of_a_stale_entry_run_in_the_repository_leaves_a_clean_run(build_repo, capsys, monkeypatch):
+    """#46 rule 4, decision 7: the printed fix is a command of this door, and running it lowers the entry."""
+    repo = build_repo({"src/a.py": long_function(65), BASELINE_PATH: HELD_70})
+    hygiene(capsys, repo)
+    (finding,) = rule_findings(repo, Rule.SIZE)
+    command = shlex.split(finding.fix)
+    assert command[0] == cli.build_parser().prog
+    monkeypatch.chdir(repo)
+    assert cli.main(command[1:]) == 0
+    code, output = hygiene(capsys, repo)
+    assert (code, is_clean(output)) == (0, True), output
+
+
+def test_bringing_a_grown_function_back_to_its_held_value_clears_the_finding(build_repo, capsys):
+    """#46 rule 4: the value a grown entry's fix names is the value that holds."""
+    repo = build_repo({"src/a.py": long_function(71), BASELINE_PATH: HELD_70})
+    hygiene(capsys, repo)
+    assert [finding.event for finding in rule_findings(repo, Rule.SIZE)] == [FindingEvent.GREW]
+    (repo / "src/a.py").write_text(long_function(70))
+    code, output = hygiene(capsys, repo)
+    assert (code, is_clean(output)) == (0, True), output
 
 
 @pytest.mark.parametrize(
@@ -250,9 +264,10 @@ def test_a_tracked_file_missing_from_disk_is_gone_for_the_size_rule_and_only_the
     repo = build_repo(files if baseline is None else {**files, BASELINE_PATH: baseline})
     remove(repo / "src/b.py")
     code, output = hygiene(capsys, repo)
-    refusing = refusals(repo)
+    result = hygiene_run(repo)
+    refusing = {verdict.rule: str(verdict.refusal) for verdict in result.verdicts if verdict.refusal is not None}
     assert code == 2, output
-    assert hygiene_run(repo).findings == [], output
+    assert result.findings == [], output
     assert list(refusing) == [Rule.PYTHON_SECURITY, Rule.PYTHON_PRINT], output
     assert all("src/b.py" in reason for reason in refusing.values()), output
 
@@ -311,8 +326,9 @@ def property_pair(lines: int) -> str:
 )
 def test_two_functions_sharing_a_qualified_name_count_as_two(build_repo, capsys, source):
     """#46 rule 3: the counts per class count every function, also two that share one qualified symbol."""
-    _, output = hygiene(capsys, build_repo({"src/a.py": source}))
-    assert "production: 0 file(s) >= 800 lines, 2 function(s) >= 60 lines" in output
+    repo = build_repo({"src/a.py": source})
+    _, output = hygiene(capsys, repo)
+    assert leading_count(area_fact(output, "debt")) == recorded_entries(repo) == 2
 
 
 def test_the_shorter_of_two_same_named_functions_cannot_grow_under_the_baseline(build_repo, capsys):
@@ -322,7 +338,8 @@ def test_the_shorter_of_two_same_named_functions_cannot_grow_under_the_baseline(
     (repo / "src/a.py").write_text(long_function(65) + long_function(70))
     code, output = hygiene(capsys, repo)
     assert code == 1, output
-    assert "has 65 lines; the baseline holds 62 (it grew)." in output
+    (finding,) = rule_findings(repo, Rule.SIZE)
+    assert (finding.event, "65" in finding.reason, "62" in finding.reason) == (FindingEvent.GREW, True, True)
 
 
 def test_baseline_write_records_the_measured_debt_sorted_and_hygiene_then_holds_it(build_repo, capsys):
@@ -623,7 +640,7 @@ def test_hygiene_from_a_subfolder_judges_the_whole_repository_by_its_root_baseli
     """#76 rule 1, cells 1-2, 20: the size debt is found from src, named from the top, and no line names the checkout."""
     code = cli.main(["hygiene", *path_argument])
     output = (captured := capsys.readouterr()).out + captured.err
-    assert (code, "size src/big.py - file has 900 lines" in output, str(repo_with_debt_below_src) in output) == (1, True, False), output
+    assert (code, [row.event for row in finding_rows(output, "src/big.py")], str(repo_with_debt_below_src) in output) == (1, [FindingEvent.NEW_DEBT], False), output
 
 
 def test_hygiene_given_a_subfolder_by_name_judges_the_repository_from_its_top(build_repo, monkeypatch, capsys):
@@ -631,7 +648,7 @@ def test_hygiene_given_a_subfolder_by_name_judges_the_repository_from_its_top(bu
     repo = build_repo({BASELINE_PATH: EMPTY_BASELINE, "src/big.py": long_file(900)})
     monkeypatch.chdir(repo)
     code = cli.main(["hygiene", "src"])
-    assert (code, "size src/big.py - file has 900 lines" in capsys.readouterr().out) == (1, True)
+    assert (code, [row.event for row in finding_rows(capsys.readouterr().out, "src/big.py")]) == (1, [FindingEvent.NEW_DEBT])
 
 
 def test_baseline_write_from_a_subfolder_writes_the_root_baseline(repo_with_debt_below_src, capsys):
@@ -670,101 +687,42 @@ def test_baseline_write_overwrites_a_baseline_that_is_not_utf8_without_a_rewrite
     assert (code, "is not valid UTF-8" in note, "rewrite it" in note) == (0, True, False), lines
 
 
-MIXED_TREE = {
-    "src/app.py": long_file(100),
-    "src/frontend/src/lib/api/types.ts": typescript_file(50),
-    "src/frontend/src/Card.svelte": typescript_file(20),
-    "src/frontend/src/legacy.js": typescript_file(5),
-    "scripts/deploy_app.sh": "# Deploys the app.\n" + "echo hi\n" * 399,
-    "src/frontend/src/app.css": "a { color: red; }\n" * 400,
-}
-NEW_DEBT = "size {path} - file has {lines} lines; debt starts at 800 lines (new debt)."
-
-
-def size_report(output: str) -> str:
-    (line,) = [line for line in output.splitlines() if "size: report only" in line]
-    return line
-
-
-@pytest.mark.parametrize(
-    ("files", "languages"),
-    [
-        ({"src/a.py": long_file(3)}, "; languages: Python"),
-        (MIXED_TREE, "; languages: Python, TypeScript, Svelte, JavaScript (functions in Python only)"),
-        ({"src/a.svelte": long_file(5), "src/b.js": long_file(5), "src/c.vue": long_file(5)}, "; languages: JavaScript, Svelte, Vue (functions in Python only)"),
-        ({"src/a.py": long_file(3), "src/dist/index.js": minified_bundle()}, "; languages: Python, JavaScript (functions in Python only)"),
-    ],
-    ids=[
-        "#119 cell 10 a Python-only tree names Python without the functions note",
-        "#119 cell 11 a mixed tree lists its languages largest first, shell and CSS absent",
-        "#119 cell 11 equal lines are ordered by name",
-        "#119 cell 12 a minified bundle's language is listed and nothing is said to be skipped",
-    ],
-)
-def test_without_a_baseline_the_report_names_the_measured_languages(build_repo, capsys, files, languages):
-    """#119 E5: the report line names each measured language, and says functions are Python's only when another is."""
-    code, output = hygiene(capsys, build_repo(files))
-    line = size_report(output)
-    assert (code, languages in line, "skip" in line) == (0, True, False), output
-    assert line.endswith(languages)
-
-
 @pytest.mark.parametrize("suffix", ["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs", "svelte", "vue"])
 def test_a_file_of_every_table_language_is_new_debt_from_800_lines_against_a_baseline(build_repo, capsys, suffix):
     """#119 E6, cell 13: against a baseline, a file of any table language from 800 lines is new debt, 799 is not."""
     path = f"frontend/src/lib/api/types.{suffix}"
     repo = build_repo({"src/a.py": "x = 1\n", path: typescript_file(1210), "frontend/small." + suffix: typescript_file(799), BASELINE_PATH: EMPTY_BASELINE})
     code, output = hygiene(capsys, repo)
-    assert (code, NEW_DEBT.format(path=path, lines=1210) in output, "small" in output) == (1, True, False), output
+    (finding,) = rule_findings(repo, Rule.SIZE)
+    assert (code, finding.path, finding.event, "1210" in finding.reason) == (1, path, FindingEvent.NEW_DEBT, True), output
+    assert len(rows_of(output, finding)) == 1
 
 
 @pytest.mark.parametrize("name", ["tool.rs", "run.sh", "app.css", "index.html", "notes.md"])
 def test_a_file_of_a_language_the_table_lacks_is_never_debt(build_repo, capsys, name):
     """#119 O3: Rust, shell, CSS and HTML stay unmeasured."""
-    code, output = hygiene(capsys, build_repo({f"src/{name}": "line\n" * 2000, BASELINE_PATH: EMPTY_BASELINE}))
-    assert (code, "size " in output) == (0, False), output
+    repo = build_repo({f"src/{name}": "line\n" * 2000, BASELINE_PATH: EMPTY_BASELINE})
+    code, output = hygiene(capsys, repo)
+    assert (code, rule_findings(repo, Rule.SIZE)) == (0, []), output
 
 
 def test_a_function_of_120_lines_in_typescript_is_no_finding_and_the_file_is_not_unparsable(build_repo, capsys):
     """#119 E6, cells 14 and 15: lines only, so a held baseline over a .ts that is not Python stays clean."""
     repo = build_repo({"src/a.py": "x = 1\n", "src/api.ts": typescript_function(120), BASELINE_PATH: EMPTY_BASELINE})
     code, output = hygiene(capsys, repo)
-    assert (code, "not valid Python" in output, "size " in output) == (0, False, False), output
+    assert (code, rule_notes(repo, Rule.SIZE), rule_findings(repo, Rule.SIZE)) == (0, [], []), output
 
 
 @pytest.mark.parametrize(
     ("bundle", "expected_code", "expected_named"),
-    [(minified_bundle(), 0, False), ("var a=1;\n" * 800, 1, True)],
+    [(minified_bundle(), 0, 0), ("var a=1;\n" * 800, 1, 1)],
     ids=["#119 cell 16 a one-line bundle is no finding", "#119 cell 16 an 800-line minified file is new debt"],
 )
 def test_a_minified_file_is_counted_by_its_lines_like_any_other(build_repo, capsys, bundle, expected_code, expected_named):
     """#119 O4: nothing is skipped; the one-line bundle has one line."""
-    result, output = hygiene(capsys, build_repo({"src/dist/index.js": bundle, BASELINE_PATH: EMPTY_BASELINE}))
-    assert (result, "size src/dist/index.js" in output) == (expected_code, expected_named), output
-
-
-@pytest.mark.parametrize(
-    ("path", "area"),
-    [
-        ("src/a.test.ts", "tests"),
-        pytest.param("src/a.test-d.ts", "tests", id="H21 test-d"),
-        pytest.param("src/a.spec-d.ts", "tests", id="H21 spec-d"),
-        ("e2e/login.spec.ts", "tests"),
-        ("src/decision.svelte.test.ts", "tests"),
-        ("src/__tests__/x.ts", "tests"),
-        ("tests/Harness.svelte", "tests"),
-        ("frontend/e2e/helpers.ts", "production"),
-        ("src/lib/test-utils/x.ts", "production"),
-        ("src/test_x.ts", "production"),
-        ("src/Card.test.svelte", "production"),
-        ("src/__tests__/Card.svelte", "production"),
-    ],
-)
-def test_the_name_rule_of_a_typescript_or_javascript_file_is_the_runners_defaults(build_repo, capsys, path, area):
-    """#119 E3, cell 9: `*.test.*`, `*.spec.*` and `__tests__/` for TS and JS; Svelte and Vue by directory only."""
-    code, output = hygiene(capsys, build_repo({f"src/{path}": typescript_file(800)}))
-    other = "tests" if area == "production" else "production"
-    assert (code, f"{area}: 1 file(s) >= 800" in output, f"{other}: 0 file(s) >= 800" in output) == (0, True, True), output
+    repo = build_repo({"src/dist/index.js": bundle, BASELINE_PATH: EMPTY_BASELINE})
+    result, output = hygiene(capsys, repo)
+    assert (result, [finding.path for finding in rule_findings(repo, Rule.SIZE)]) == (expected_code, ["src/dist/index.js"] * expected_named), output
 
 
 def test_baseline_write_records_a_file_of_another_language_and_names_it_as_added(build_repo, capsys):
