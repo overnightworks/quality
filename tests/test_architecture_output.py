@@ -248,7 +248,7 @@ def test_the_real_door_paints_the_not_set_up_row_as_one_dim_span_only_at_a_termi
     parent, child = pty.openpty()
     subprocess.run([*DOOR, "hygiene", "."], cwd=repo, env={**base, **environment}, stdout=child, check=False)
     text = read_pseudo_terminal(parent, child)
-    row = next(line for line in text.replace("\r\n", "\n").splitlines() if "imports" in line.split("\x1b[0m")[0] or Area.IMPORTS in line)
+    row = next(line for line in text.replace("\r\n", "\n").splitlines() if Area.IMPORTS in line)
     spans = re.findall(r"\x1b\[[0-9;]*m", row)
     assert (len(spans), "\x1b[" in text) == ((2, True) if painted else (0, False))
     assert not painted or re.fullmatch(r"\x1b\[2m.*\x1b\[0m", row)

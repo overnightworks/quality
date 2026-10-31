@@ -223,13 +223,16 @@ def test_an_unmatched_ignore_names_its_expression_and_a_grimp_warning_the_skippe
     assert ("src/shop/some.module.py" in warning.fact, str(skipping) in warning.fact) == (True, False)
 
 
-def test_removing_the_unmatched_ignore_or_the_offending_import_clears_its_finding(build_repo):
-    """O23: the fixes each finding asks for, done, leave the rule clean."""
-    stale = build_repo({**SHOP, ".importlinter": ini(STALE_IGNORE)})
-    broken = build_repo({**SHOP_DB_IMPORTS_WEB, ".importlinter": ini(FORBIDDEN)})
-    (stale / ".importlinter").write_text(ini(FORBIDDEN))
-    (broken / "src/shop/db.py").write_text("x = 1\n")
-    assert [rule_findings(repo, Rule.IMPORT_CONTRACT) for repo in (stale, broken)] == [[], []]
+@pytest.mark.parametrize(("files", "event", "remedy"), [
+    ({**SHOP, ".importlinter": ini(STALE_IGNORE)}, FindingEvent.UNUSED, (".importlinter", ini(FORBIDDEN))),
+    ({**SHOP_DB_IMPORTS_WEB, ".importlinter": ini(FORBIDDEN)}, FindingEvent.BROKEN, ("src/shop/db.py", "x = 1\n")),
+], ids=["an unmatched ignore", "an offending import"])
+def test_removing_the_unmatched_ignore_or_the_offending_import_clears_its_finding(build_repo, files, event, remedy):
+    """O23: the finding is there first; the fix it asks for, done, leaves the rule clean."""
+    repo = build_repo(files)
+    before = [finding.event for finding in rule_findings(repo, Rule.IMPORT_CONTRACT)]
+    (repo / remedy[0]).write_text(remedy[1])
+    assert (before, rule_findings(repo, Rule.IMPORT_CONTRACT)) == ([event], [])
 
 
 NO_CONTRACTS = {"root_packages": ["shop"]}
