@@ -1,8 +1,0 @@
-claim_id = "8eb171649f1e4ff49283b12f1720aaa6"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "19e42357f357c9134e11c215609b14c0edadf2e0"
-branch = "claude/issue-291-door-sets-aside-s8431"
-scope = ["docs/commands.md", "docs/runbook-emergency-merge.md", "docs/sonar.md", "src/quality/merge.py", "tests/support/merge.py", "tests/test_merge.py", "tests/test_sonar_exception.py"]
-opened_commit = "caffe0e4ef92b6f358ffbdaa59356b4173fb9b2a"
-whole_reason = "The door's count, the fake its tests need and the three documents that say what the door counts change together; split, a document would be false between landings."
