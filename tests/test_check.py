@@ -15,10 +15,12 @@ from tests.support.check import (
     installed_ruff,
     is_clean,
     loosen_requirement,
+    note_rows,
     refusal_row,
     refused,
     rows_of,
     rule_findings,
+    rule_notes,
 )
 from tests.support.check import hygiene_output as run
 from tests.support.config_refusals import GATE, Refusal, all_refusals
@@ -120,13 +122,13 @@ def files(tracked: dict[str, str]):
           f"{refusal_row('dependencies')}quality/config.toml resolves outside the repository",
           "error: 4 of 7 areas could not check · 1 finding, 1 of them in those areas"], [".env"]),
         (files({**BASELINE, "compose.yaml": "services: [\n", "src/a.py": NEW_DEBT}), 2,
-         [f"{refusal_row('files')}cannot read compose.yaml", "size src/a.py:1 - function long_one"], []),
+         [f"{refusal_row('files')}cannot read compose.yaml"], ["src/a.py:1"]),
         (files({".env": "A=1\n", **compose('- "8080:80"')}), 1,
          ["! 3 findings in 1 area · 5 areas clean · debt measured, not enforced · <1s"], [".env", "compose.yaml"]),
         (files({"compose-\udcff.yaml": compose('- "8080:80"')["compose.yaml"]}), 1, [], [printable("compose-\udcff.yaml")]),
-        (files({**BASELINE, "src/\udcff.py": NEW_DEBT}), 1, ["size src/\\udcff.py:1 - function long_one"], []),
+        (files({**BASELINE, "src/\udcff.py": NEW_DEBT}), 1, [], ["src/\\udcff.py:1"]),
         (files({"src/\udcff.py": "def broken(:\n"}), 2,
-         ["functions unmeasured: src/\\udcff.py", f"{refusal_row('code')}ruff cannot parse src/\\udcff.py",
+         [f"{refusal_row('code')}ruff cannot parse src/\\udcff.py",
           f"{refusal_row('code')}ruff cannot parse src/\\udcff.py"], []),
     ],
     ids=[
@@ -151,9 +153,17 @@ def test_every_rule_is_judged_and_the_exit_is_the_worst(
     output = captured.out + captured.err
     assert code == expected_code, output
     assert [line for line in expected_lines if line not in output] == [], output
-    repo_findings = [found for rule in (Rule.ENV_FILE, Rule.COMPOSE_PORT) for found in rule_findings(repo, rule)]
+    repo_findings = [found for rule in (Rule.ENV_FILE, Rule.COMPOSE_PORT, Rule.SIZE) for found in rule_findings(repo, rule)]
     assert [found.location for found in repo_findings] == rows
     assert [len(rows_of(output, found)) for found in repo_findings] == [1] * len(rows), output
+
+
+def test_a_python_file_with_a_non_utf8_name_the_size_rule_cannot_parse_is_one_escaped_note(build_repo, capsys):
+    """#290 O22: the note row stands at the escaped path, with the note's own event and fact."""
+    repo = build_repo({"src/\udcff.py": "def broken(:\n"})
+    _, output = run(capsys, repo)
+    (note,) = rule_notes(repo, Rule.SIZE)
+    assert [(row.event, row.fact) for row in note_rows(output, note.location)] == [(note.event, note.fact)], output
 
 
 def test_a_run_without_flags_judges_every_rule(build_repo, capsys):

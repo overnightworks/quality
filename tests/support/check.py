@@ -1,3 +1,4 @@
+import re
 import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -8,6 +9,7 @@ import pytest
 
 from quality import DISTRIBUTION, check, cli, env_file, output
 from quality.output import Glyph
+from quality.ratchet import BASELINE_PATH, load_baseline
 from quality.report import Finding, FindingEvent, Note, NoteEvent, printable
 from quality.rules import Rule
 
@@ -92,6 +94,42 @@ def printed_finding_rows(printed: str, locations: list[str]) -> list[tuple[str, 
     return rows
 
 
+def area_fact(printed: str, area: str) -> str:
+    """The fact of `area`'s row, found by the area word and an `AreaEvent`; the padding between the columns is never rebuilt."""
+    for line in printed.splitlines():
+        words = line.split()
+        if len(words) > 2 and words[1] == area:
+            remainder = line.split(area, 1)[1].lstrip(" ")
+            events = [event for event in cli.AreaEvent if remainder.startswith(f"{event.value} ")]
+            if events:
+                return remainder[len(max(events, key=lambda member: len(member.value)).value):].strip()
+    raise AssertionError(f"no row of {area} in {printed}")
+
+
+def leading_count(fact: str) -> int:
+    """The integer an extent opens with."""
+    return int(fact.split()[0])
+
+
+def extent_counts(fact: str) -> list[int]:
+    """Every integer of an extent, in the order the fact names them."""
+    return [int(number) for number in re.findall(r"\d+", fact)]
+
+
+def area_finding_rows(printed: str, area: str) -> list[tuple[str, FindingRow]]:
+    """Every finding row standing under `area`'s row, each with its location, in printed order."""
+    lines = printed.splitlines()
+    start = next(number for number, line in enumerate(lines) if line.split()[1:2] == [area])
+    locations = []
+    for line in lines[start + 1:]:
+        if not line.startswith(f"{output.FINDING_INDENT}{Glyph.NEEDS_YOU} "):
+            if line.startswith(output.FINDING_INDENT):
+                continue
+            break
+        locations.append(line.split()[1])
+    return printed_finding_rows(printed, list(dict.fromkeys(locations)))
+
+
 @dataclass(frozen=True)
 class NoteRow:
     """One note row as printed: its indentation, event and fact."""
@@ -122,6 +160,12 @@ def rule_notes(repo: Path, rule: Rule) -> list[Note]:
     return [note for verdict in hygiene_run(repo).verdicts if verdict.rule is rule for note in verdict.notes]
 
 
+def recorded_entries(repo: Path) -> int:
+    """How many entries a first `quality baseline write` records for `repo`."""
+    assert cli.main(["baseline", "write", str(repo)]) == 0
+    return len(load_baseline((repo / BASELINE_PATH).read_text(encoding="utf-8")).size)
+
+
 def rows_of(printed: str, finding: Finding) -> list[FindingRow]:
     """The rows at `finding.location` whose event is the finding's, in printed order: another rule's row at the same location is not it."""
     return [row for row in finding_rows(printed, finding.location) if row.event is finding.event]
@@ -135,6 +179,13 @@ def rule_findings(repo: Path, rule: Rule) -> list[Finding]:
 def assert_row_prints_finding(row: FindingRow, finding: Finding) -> None:
     """The decoded row carries the finding's event, fact and fix as the owners escape them."""
     assert (row.event, row.fact, row.fix) == (finding.event, printable(finding.reason), printable(finding.fix))
+
+
+def assert_finding_vocabulary(finding: Finding) -> None:
+    """Decision 3 and 12: neither fact nor fix ends in a full stop, and no word of the row is a rule id."""
+    assert not finding.reason.endswith(".")
+    assert not finding.fix.endswith(".")
+    assert {rule.value for rule in Rule}.isdisjoint(f"{finding.event} {finding.reason} {finding.fix}".split())
 
 
 def env_row_stands(printed: str) -> bool:

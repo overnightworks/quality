@@ -192,6 +192,7 @@ class AreaEvent(StrEnum):
     NOT_RECORDED = "not recorded"
 
 
+CEILING_HELD = "ceiling held"
 START_FAILURE_NEXT = Instruction("fix what the error names, then run quality hygiene again")
 REFUSED_AREAS_NEXT = Instruction("fix what the ✗ rows name, then run quality hygiene again")
 
@@ -207,10 +208,29 @@ def area_row(verdict: AreaVerdict, extent: str) -> Row:
         return Row(Glyph.NEEDS_YOU, verdict.area, AreaEvent.FINDING, count=len(verdict.findings))
     if verdict.outcome is Outcome.MEASURED_ONLY:
         partly = "" if verdict.measurement is Measurement.MEASURED_ONLY else "partly "
-        return Row(Glyph.NOTE, verdict.area, AreaEvent.NOT_RECORDED, f"{partly}measured only")
+        mode = f"{partly}{Outcome.MEASURED_ONLY.value}"
+        return Row(Glyph.NOTE, verdict.area, AreaEvent.NOT_RECORDED, SEPARATOR.join(filter(None, (extent, mode))))
     allowed = sum(note.event is NoteEvent.ALLOWED for note in verdict.notes)
     facts = [extent, f"{allowed} {NoteEvent.ALLOWED}" if allowed else ""]
     return Row(Glyph.CLEAN, verdict.area, AreaEvent.CLEAN, SEPARATOR.join(fact for fact in facts if fact))
+
+
+def area_extent(verdict: AreaVerdict, tracked_paths: int) -> str:
+    """What an area's row says it covered: the rules and files of `files`, the ceiling file's entries and pairs of
+    `debt` (what is measured, where it is not recorded); nothing for an area that could not check or has no extent."""
+    if verdict.area is Area.FILES:
+        return SEPARATOR.join((counted(len(verdict.verdicts), "rule"), counted(tracked_paths, "file")))
+    extents = {rule_verdict.rule: rule_verdict.extent for rule_verdict in verdict.verdicts}
+    if verdict.area is not Area.DEBT or verdict.reasons or None in extents.values():
+        return ""
+    entries, pairs = counted(extents[Rule.SIZE], "entry", "entries"), counted(extents[Rule.CLONE], "clone pair")
+    match verdict.measurement:
+        case Measurement.MEASURED_ONLY:
+            return f"{entries} over the thresholds"
+        case Measurement.PARTLY_MEASURED_ONLY:
+            return pairs
+        case Measurement.ENFORCED:
+            return f"{CEILING_HELD}{SEPARATOR}{entries}, {pairs}"
 
 
 def measured_notes(areas: tuple[AreaVerdict, ...]) -> tuple[str, ...]:
@@ -250,8 +270,7 @@ def run_hygiene_check(path: Path, locate_ruff: Callable[[], str], locate_zizmor:
     print_secret_allowances(result.allowed_secrets, result.unused_allowances)
     emit(*result.reports, ONLINE_AUDITS_NOTE)
     for verdict in result.areas:
-        extent = SEPARATOR.join((counted(len(verdict.verdicts), "rule"), counted(result.tracked_paths, "file"))) if verdict.area is Area.FILES else ""
-        write_rows((area_row(verdict, extent),))
+        write_rows((area_row(verdict, area_extent(verdict, result.tracked_paths)),))
         write_findings_and_notes([finding for finding in verdict.findings if finding.event], verdict.notes)
         for finding in verdict.findings:
             if not finding.event:

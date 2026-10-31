@@ -13,7 +13,7 @@ import json
 import re
 import tokenize
 from collections import Counter
-from collections.abc import Collection, Iterable, Iterator, Mapping
+from collections.abc import Collection, Iterator, Mapping
 from dataclasses import dataclass
 from enum import Enum
 from operator import attrgetter
@@ -23,8 +23,9 @@ from typing import NamedTuple, Self
 import lizard
 
 from quality import __version__, checkout, repository
-from quality.config import GeneratedFile
-from quality.report import Command, Finding, Instruction, Unparsable
+from quality.config import CONFIG_PATH, GENERATED_FILE_HEADING, GeneratedFile
+from quality.output import SEPARATOR
+from quality.report import Command, Finding, FindingEvent, Instruction, Note, NoteEvent, Unparsable
 from quality.rules import Rule
 
 BASELINE_PATH = "quality/baseline.toml"
@@ -310,48 +311,19 @@ def language_lines(tree: TreeMeasurement) -> dict[Language, int]:
     return dict(sorted(lines.items(), key=lambda entry: (-entry[1], entry[0].value)))
 
 
-def _languages_note(languages: Iterable[Language]) -> str:
-    named = list(languages)
-    if not named:
-        return ""
-    functions = "" if named == [Language.PYTHON] else " (functions in Python only)"
-    return f"; languages: {', '.join(language.value for language in named)}{functions}"
-
-
-def report_counts(tree: TreeMeasurement) -> str:
-    summaries = summarise(tree)
-    areas = "; ".join(
-        f"{area.value}: {summary.debt[Metric.FILE_LINES]} file(s) >= {FILE_LINES_FROM} lines, "
-        f"{summary.debt[Metric.FUNCTION_LINES]} function(s) >= {FUNCTION_LINES_FROM} lines, "
-        f"{summary.debt[Metric.CCN]} function(s) CCN > {CCN_ABOVE}"
-        for area, summary in summaries.items()
-    )
-    languages = _languages_note(language_lines(tree))
-    return f"{Rule.SIZE}: report only (no {BASELINE_PATH}) - {areas}{languages}{_unparsable_note(tree.unparsable)}"
-
-
-def _unparsable_note(unparsable: dict[str, str]) -> str:
-    if not unparsable:
-        return ""
-    return f"; {len(unparsable)} file(s) not valid Python, functions unmeasured: {', '.join(sorted(unparsable))}"
-
-
 def compare(measurements: Measurements, baseline: SizeEntries) -> list[Finding]:
     """The tree on disk against the baseline; an entry whose file or function is gone is fine."""
     findings = []
     for key in sorted(measurements, key=_order):
         measured, held = measurements[key], baseline.get(key)
         if held is None and key.metric.is_debt(measured.value):
-            starts = key.metric.describe(key.metric.debt_from)
-            findings.append(_finding(key, measured, f"debt starts at {starts} (new debt)", key.metric.fix))
+            limit = f"debt from {key.metric.describe(key.metric.debt_from)}"
+            findings.append(_finding(key, measured, FindingEvent.NEW_DEBT, limit, key.metric.fix))
         elif held is not None and measured.value > held:
-            findings.append(
-                _finding(key, measured, f"the baseline holds {held} (it grew)", f"bring it back to {held} or below")
-            )
+            fix = f"bring it back to {key.metric.describe(held)} or below"
+            findings.append(_finding(key, measured, FindingEvent.GREW, f"ceiling {held}", fix))
         elif held is not None and measured.value < held:
-            findings.append(
-                _finding(key, measured, f"the baseline holds {held} (stale)", f"lower it with `{WRITE_COMMAND}`")
-            )
+            findings.append(_finding(key, measured, FindingEvent.CAN_FALL, f"ceiling {held}", WRITE_COMMAND))
     return findings
 
 
@@ -426,11 +398,10 @@ def added_pairs(base: frozenset[ClonePair], head: frozenset[ClonePair]) -> list[
     return sorted(head - base)
 
 
-def _finding(key: Key, measured: Measured, verdict: str, fix: str) -> Finding:
+def _finding(key: Key, measured: Measured, event: FindingEvent, limit: str, fix: str) -> Finding:
     subject = "file" if key.metric is Metric.FILE_LINES else f"function {key.symbol}"
-    return Finding(
-        Rule.SIZE, key.path, measured.line, f"{subject} has {key.metric.describe(measured.value)}; {verdict}.", fix
-    )
+    fact = SEPARATOR.join((f"{subject} has {key.metric.describe(measured.value)}", limit))
+    return Finding(Rule.SIZE, key.path, measured.line, fact, fix, event=event)
 
 
 def _order(key: Key) -> tuple[str, str, str]:
@@ -560,18 +531,14 @@ def _count(where: str, value: object) -> int:
 
 
 @dataclass(frozen=True)
-class MeasuredOnly:
-    """A rule that measured and did not enforce, and the note line that says what it measured."""
-
-    note: str
-
-
-@dataclass(frozen=True)
 class RuleResult:
-    """A baseline rule's findings, and `measured_only` when it counted without enforcing."""
+    """A baseline rule's findings and `extent`, how many entries or pairs the debt row names for it; `measured_only`
+    when it counted without enforcing, and the `notes` of what it could not measure."""
 
     findings: list[Finding]
-    measured_only: MeasuredOnly | None
+    extent: int
+    measured_only: bool
+    notes: tuple[Note, ...] = ()
 
 
 def complete(tree: TreeMeasurement) -> Measurements:
@@ -598,12 +565,17 @@ def _stale_declarations(tree: TreeMeasurement, generated: Collection[GeneratedFi
             Rule.SIZE,
             file.path,
             None,
-            "declared in quality/config.toml with [[size.generated]], but no tracked file the size rule measures lies there.",
-            "delete its [[size.generated]] entry from quality/config.toml.",
+            f"{GENERATED_FILE_HEADING} matches no tracked file in a measured language",
+            f"delete its {GENERATED_FILE_HEADING} entry from {CONFIG_PATH}",
+            event=FindingEvent.UNUSED,
         )
         for file in generated
         if Key(Metric.FILE_LINES, file.path) not in tree.measurements
     ]
+
+
+def _unmeasured_notes(unparsable: Mapping[str, str]) -> tuple[Note, ...]:
+    return tuple(Note(path, NoteEvent.NOT_MEASURED, "not valid Python") for path in sorted(unparsable))
 
 
 def check_size(tree: TreeMeasurement, baseline: Baseline | None, generated: Collection[GeneratedFile]) -> RuleResult:
@@ -612,5 +584,5 @@ def check_size(tree: TreeMeasurement, baseline: Baseline | None, generated: Coll
     stale = _stale_declarations(tree, generated)
     judged = without_generated(tree, generated)
     if baseline is None:
-        return RuleResult(stale, MeasuredOnly(report_counts(judged)))
-    return RuleResult([*stale, *compare(complete(judged), baseline.size)], None)
+        return RuleResult(stale, len(debt(judged.measurements)), True, _unmeasured_notes(judged.unparsable))
+    return RuleResult([*stale, *compare(complete(judged), baseline.size)], len(baseline.size), False)

@@ -116,12 +116,17 @@ class FindingEvent(StrEnum):
     TEST_IMPORT = "test import"
     BELOW_FLOOR = "below floor"
     NO_FLOOR = "no floor"
+    NEW_DEBT = "new debt"
+    GREW = "grew"
+    CAN_FALL = "can fall"
+    NEAR_COPY = "near copy"
 
 
 class NoteEvent(StrEnum):
     """What a note's row says; a separate enum, so a finding can never carry one of these."""
 
     ALLOWED = "allowed"
+    NOT_MEASURED = "not measured"
 
 
 @dataclass(frozen=True)
