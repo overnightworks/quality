@@ -359,7 +359,7 @@ def test_hygiene_without_a_clone_table_holds_the_size_and_leaves_the_clone_rule_
 
 
 def test_hygiene_with_a_clone_table_holds_the_size_and_the_pairs_without_a_report_line(build_repo, capsys):
-    """#136 E3, cell 2: a held pair that the tree has is clean, and an enforced rule only measures nothing."""
+    """#136 E3, cell 2: a held pair that the tree has is clean, and the clone rule is enforced, not measured only, its extent the ceiling file's pairs."""
     repo = build_repo({"src/a.py": long_function(71), **TWO_FILES, BASELINE_PATH: LONG_ONE + FIRST})
     code, output = hygiene_output(capsys, repo)
     clone = judged_rules(repo)[Rule.CLONE]
@@ -594,7 +594,8 @@ def test_a_size_can_fall_row_and_a_clone_can_fall_row_share_one_fix(build_repo, 
 
 def test_no_line_before_the_first_area_row_opens_with_a_rule_of_the_debt_area(build_repo, capsys):
     """O15: the size and clone counts are the debt row's extent, never a prelude line."""
-    _, _, output = enforced(capsys, build_repo, TWO_FILES, "")
+    repo = build_repo(TWO_FILES)
+    _, output = hygiene_output(capsys, repo)
     lines = output.splitlines()
     prelude = lines[: next(number for number, line in enumerate(lines) if line.split()[1:2] == [Area.FILES])]
     assert [line for line in prelude if line.startswith(tuple(rule.value for rule in Rule if rule.area is Area.DEBT))] == []

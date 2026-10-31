@@ -122,8 +122,8 @@ def area_finding_rows(printed: str, area: str) -> list[tuple[str, FindingRow]]:
     start = next(number for number, line in enumerate(lines) if line.split()[1:2] == [area])
     locations = []
     for line in lines[start + 1:]:
-        if not line.startswith(f"    {Glyph.NEEDS_YOU} "):
-            if line.startswith("    "):
+        if not line.startswith(f"{output.FINDING_INDENT}{Glyph.NEEDS_YOU} "):
+            if line.startswith(output.FINDING_INDENT):
                 continue
             break
         locations.append(line.split()[1])

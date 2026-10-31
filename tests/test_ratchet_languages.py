@@ -13,6 +13,8 @@ MIXED_TREE = {
     "scripts/deploy_app.sh": "# Deploys the app.\n" + "echo hi\n" * 399,
     "src/frontend/src/app.css": "a { color: red; }\n" * 400,
 }
+
+
 @pytest.mark.parametrize(
     ("files", "languages"),
     [

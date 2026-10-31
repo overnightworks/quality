@@ -5,7 +5,7 @@ import pytest
 from quality import clones
 from quality.ratchet import Area, ClonePair, Place, read_baseline
 from quality.rules import Rule
-from tests.support.check import area_fact, extent_counts, refusal_row, refusals, rule_findings
+from tests.support.check import area_fact, extent_counts, hygiene_run, refusal_row, refusals
 from tests.support.check import hygiene_output as hygiene
 from tests.support.clones import function
 
@@ -111,7 +111,8 @@ def test_a_file_python_cannot_parse_has_no_pair_and_leaves_the_clone_rule_clean_
     files = {"src/a.py": function("first", "a", "b"), "src/broken.py": "def broken(:\n"}
     repo = build_repo(files)
     code, output = hygiene(capsys, repo)
-    assert (code, Rule.CLONE in refusals(repo), rule_findings(repo, Rule.CLONE)) == (2, False, []), output
+    (clone,) = (verdict for verdict in hygiene_run(repo).verdicts if verdict.rule is Rule.CLONE)
+    assert (code, Rule.CLONE in refusals(repo), clone.extent) == (2, False, 0), output
     assert f"{refusal_row('code')}ruff cannot parse src/broken.py" in output
 
 
