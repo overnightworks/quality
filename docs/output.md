@@ -101,7 +101,7 @@ $ quality check
 ! 5 findings in 3 areas · 4 areas clean · 14s
 ```
 
-No rule name stands in a row (`compose-port`, `env-file`); the event says it in words. The rule name appears only in a `fix:` line that asks for an `[[….allow]]` entry. No `next:` follows this verdict: the `fix:` lines carry the way. The events, facts and fixes of the `files` rows are head proposals O12 to O16, O18 and O19 of 30.10.2026, their recommendations applied: one event word per kind of finding, shared across rules (`report.FindingEvent`); the env fix names the file for `.gitignore` only where it is its own shell word, else `it`; and the findings of an area in run order. Paths and events align per area by character count.
+No rule name stands in a row (`compose-port`, `env-file`); the event says it in words. The rule name appears only in a `fix:` line that asks for an `[[….allow]]` entry. No `next:` follows this verdict: the `fix:` lines carry the way. The events, facts and fixes of the `files` rows are head proposals O12 to O16, O18 and O19 of 30.10.2026, those of the `debt` rows O20 to O22 of 31.10.2026, their recommendations applied: one event word per kind of finding, shared across rules (`report.FindingEvent`); the env fix names the file for `.gitignore` only where it is its own shell word, else `it`; and the findings of an area in run order. Paths and events align per area by character count.
 
 ### 3. `quality check`, no git work tree
 
@@ -256,10 +256,10 @@ $ quality check debt --fix
 ✓ clean · ceiling recorded · 1 area · 2s
 ```
 
-A ceiling file without a `[clones]` table is the partly recorded form. Head proposal of 30.10.2026 (O4), built unless the operator rules otherwise.
+A ceiling file without a `[clones]` table is the partly recorded form. Head proposal of 30.10.2026 (O4), revised by O21 of 31.10.2026 (the row names the pairs a recording would add), built unless the operator rules otherwise.
 
 ```text
-  · debt          not recorded   partly measured only
+  · debt          not recorded   2 clone pairs · partly measured only
 ✓ clean · 7 areas · debt partly measured, not enforced · 2s
 ```
 
