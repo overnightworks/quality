@@ -13,19 +13,21 @@ from urllib.parse import quote
 from quality import architecture, process
 from quality.config import CONFIG_PATH, REPOSITORY_NAME, Declaration, GateSettings, LegacyMode
 from quality.ratchet import BASELINE_PATH, NO_RENAMES, Renames
-from quality.report import CannotJudge, printable, render
+from quality.report import CannotJudge, Finding, headline, printable, render
 from quality.sonar import (
+    DEPENDABOT_CONFIG,
     Analysis,
     Scope,
     Transport,
     analysed_pull_request_commit,
     basic_authorization,
     default_branch_analysed,
+    legacy_count,
     legacy_unknown,
     open_findings,
-    open_total,
     project_of,
     require_resolved,
+    uncounted_rules,
 )
 from quality.verdict import SUCCESS, Job, Side, Verdict, compares_baselines, judge, read_renames, side_of
 
@@ -145,6 +147,7 @@ class Door:
     declared: tuple[Declaration, ...]
     legacy: int | None
     merge_method: MergeMethod
+    set_aside: tuple[Finding, ...] = ()
 
     @property
     def legacy_count(self) -> list[str]:
@@ -155,10 +158,11 @@ class Door:
         return [*self.legacy_count, *map(described, self.declared)]
 
     def shown(self) -> tuple[str, ...]:
-        """What the operator reads before typing the word: the counts, each declaration, then the merge method."""
+        """What the operator reads before typing the word: the counts, each finding set aside, each declaration, then the
+        merge method."""
         declared = [f"{len(self.declared)} declared loosening(s)"] if self.declared else []
         heading = f"{self.repository} #{self.pull_request} head {self.head_sha}: {', '.join([*self.legacy_count, *declared])}"
-        return (heading, *map(described, self.declared), self.merge_method.description)
+        return (heading, *map(headline, self.set_aside), *map(described, self.declared), self.merge_method.description)
 
 
 def refusal_of_checks(checks: Sequence[Check]) -> str | None:
@@ -295,10 +299,22 @@ def require_admin_permission(repository_facts: Mapping[str, object], repository:
         raise CannotJudge(f"the gh login has no admin permission on {repository}, which switching {GATE_PROPERTY} needs")
 
 
+@dataclass(frozen=True)
+class SonarJudgement:
+    legacy: int
+    set_aside: tuple[Finding, ...]
+
+
 def judge_sonar(
-    repository: str, pull_request: int, head_sha: str, default_branch: str, transport: Transport, sonar_token: str
-) -> int:
-    """The legacy count, once the pull request's own scope at this head is proven free of findings."""
+    repository: str,
+    pull_request: int,
+    head_sha: str,
+    default_branch: str,
+    transport: Transport,
+    sonar_token: str,
+    uncounted: frozenset[str],
+) -> SonarJudgement:
+    """The legacy count, once the pull request's own scope at this head is proven free of counted findings."""
     project = project_of({"GITHUB_REPOSITORY": repository})
     pull_scope = Scope("pullRequest", str(pull_request))
     analysis = Analysis(project, pull_scope, "", basic_authorization(sonar_token) if sonar_token else None, default_branch)
@@ -306,20 +322,20 @@ def judge_sonar(
     analysed = analysed_pull_request_commit(analysis, transport)
     if analysed != head_sha:
         raise Refused(f"Sonar analysed {analysed or 'nothing'}, head is {head_sha}")
-    findings = open_findings(analysis, transport)
+    findings = open_findings(analysis, transport, uncounted)
     if findings.count:
         # Every field of a rendering is escaped, so its line feeds are the rendering's own.
         rendered = (line for finding in findings.listed for line in render(finding).split("\n"))
         raise Refused("the pull request adds findings:", *rendered)
     if not default_branch_analysed(analysis, transport):
         raise Refused(legacy_unknown(default_branch))
-    legacy = open_total(analysis, Scope("branch", default_branch), transport)
+    legacy = legacy_count(analysis, uncounted, transport)
     if not legacy:
-        raise Refused(f"{default_branch} has no open finding: the red checks are not legacy findings")
-    return legacy
+        raise Refused(f"{default_branch} has no legacy finding: the red checks are not legacy findings")
+    return SonarJudgement(legacy, findings.set_aside)
 
 
-def judge_legacy(settings: GateSettings, count: Callable[[], int]) -> int:
+def judge_legacy(settings: GateSettings, count: Callable[[], SonarJudgement]) -> SonarJudgement:
     """The legacy count behind a red Sonar check; under legacy = report Sonar cannot be red on legacy findings, though
     a finding the pull request adds is named first."""
     legacy_refusal = refusal_of_legacy_mode(settings)
@@ -520,16 +536,18 @@ def judge_pull_request(
     refusal = refusal_of_verdict(verdict, sonar_red)
     if refusal:
         raise Refused(refusal)
-    legacy = None
+    judgement = None
     if sonar_red:
+        uncounted = uncounted_rules(_read_file_at(gh, repository, DEPENDABOT_CONFIG, merge_commit_sha) is not None)
         count = partial(
             judge_sonar, repository, pull_request, head_sha, repository_facts["default_branch"], transport,
-            environment.get("SONAR_TOKEN", ""),
+            environment.get("SONAR_TOKEN", ""), uncounted,
         )
-        legacy = judge_legacy(head.settings, count)
+        judgement = judge_legacy(head.settings, count)
     merge_method = choose_merge_method(gh, repository, repository_facts, pull["base"]["ref"])
     login = gh(["api", "user", "--jq", ".login"], None).strip()
-    return Door(repository, pull_request, head_sha, verdict.declared, legacy, merge_method), login
+    legacy, set_aside = (None, ()) if judgement is None else (judgement.legacy, judgement.set_aside)
+    return Door(repository, pull_request, head_sha, verdict.declared, legacy, merge_method, set_aside), login
 
 
 def merge_outcome(attempt: Attempt, pull_request: int) -> str:
