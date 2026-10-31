@@ -113,6 +113,8 @@ class FakeGh:
             return "\n".join(json.dumps({"context": context, "state": state}) for context, state in self.statuses.items())
         if step == "config":
             content = self.files.get(self.file_of(arguments))
+            if isinstance(content, GhFailed):
+                raise content
             if content is None:
                 raise GhFailed("gh api failed: HTTP 404")
             return content
@@ -152,7 +154,9 @@ def no_network(repository):
     raise AssertionError(f"the door reached for {repository}'s remote")
 
 
-def sonar(new=0, legacy=4, main_analysed=True, analysed=SHA, unreachable=False):
+def sonar(new=0, legacy=4, main_analysed=True, analysed=SHA, unreachable=False, added=None, set_aside=0):
+    """`added` lists the pull request's open issues (`new` makes that many alike); `set_aside` is the default branch's
+    count of the one rule a rule-filtered question names."""
     def transport(url, authorization):
         if unreachable:
             raise CannotJudge("SonarCloud is down")
@@ -163,8 +167,10 @@ def sonar(new=0, legacy=4, main_analysed=True, analysed=SHA, unreachable=False):
         if "measures" in url:
             return {}
         if "pullRequest=" in url:
-            issues = [{"component": "k:a.py", "line": 3, "rule": "s1", "message": "bad"}][:new]
-            return {"total": new, "issues": issues}
+            issues = added if added is not None else [{"component": "k:a.py", "line": 3, "rule": "s1", "message": "bad"}][:new]
+            return {"total": len(issues), "issues": issues}
+        if "rules=" in url:
+            return {"total": set_aside, "issues": []}
         return {"total": legacy, "issues": []}
 
     return transport
