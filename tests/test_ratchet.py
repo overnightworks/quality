@@ -64,7 +64,8 @@ def test_without_a_baseline_the_debt_row_counts_the_entries_a_first_recording_wr
     repo = build_repo({"src/big.py": long_file(800) + long_function(60) + branchy_function(16), "tests/test_big.py": long_file(900)})
     code, output = hygiene(capsys, repo)
     assert code == 0, output
-    assert leading_count(area_fact(output, "debt")) == recorded_entries(repo) == 4
+    assert leading_count(area_fact(output, "debt")) == 4
+    assert recorded_entries(repo) == 4
 
 
 def build_repo_with_source(build_repo, files: dict[str, str], name: str, source: bytes) -> Path:
@@ -103,7 +104,8 @@ def test_a_file_python_can_read_is_measured_in_its_declared_encoding(build_repo,
     assert (Rule.PYTHON_SECURITY in refusals(repo)) == python_security_cannot_judge, output
     assert (Rule.PYTHON_PRINT in refusals(repo)) == python_security_cannot_judge, output
     assert code == (2 if python_security_cannot_judge else 0), output
-    assert leading_count(area_fact(output, "debt")) == recorded_entries(repo) == 1, output
+    assert leading_count(area_fact(output, "debt")) == 1, output
+    assert recorded_entries(repo) == 1, output
     assert note_rows(output, SOURCE_NAME) == [], output
 
 
@@ -329,7 +331,8 @@ def test_two_functions_sharing_a_qualified_name_count_as_two(build_repo, capsys,
     """#46 rule 3: the counts per class count every function, also two that share one qualified symbol."""
     repo = build_repo({"src/a.py": source})
     _, output = hygiene(capsys, repo)
-    assert leading_count(area_fact(output, "debt")) == recorded_entries(repo) == 2
+    assert leading_count(area_fact(output, "debt")) == 2
+    assert recorded_entries(repo) == 2
 
 
 def test_the_shorter_of_two_same_named_functions_cannot_grow_under_the_baseline(build_repo, capsys):
