@@ -170,6 +170,8 @@ def write_rows(rows: tuple[Row, ...], file: TextIO | None = None) -> None:
     _print_lines([line for row in rows for line in _row_lines(row, styled)], file)
 
 
+# A line taken from another tool's rendering carries this, so no line the door prints starts with repository text.
+DETAIL_MARKER = "|"
 FINDING_INDENT = "    "
 FIX_INDENT = "      "
 FIX_LABEL = "fix:"

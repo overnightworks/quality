@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import check, cli, config, ratchet, scanners
+from quality import architecture, check, cli, config, ratchet, scanners
 from quality.output import SEPARATOR, Glyph
 from quality.ratchet import BASELINE_PATH
 from quality.report import FindingEvent
@@ -428,16 +428,18 @@ def headers(lines: list[str]) -> list[str]:
 
 
 def test_a_clean_run_has_seven_clean_rows_in_area_order_and_the_verdict(build_repo, capsys):
-    """O16, O21: the five other rows carry no fact; the files row holds the rules and the tracked paths, the debt row the entries and pairs of the ceiling file."""
-    tracked = {**CLEAN_FILES, BASELINE_PATH: '[file_lines]\n"src/gone.py" = 900\n\n[clones]\n'}
+    """O16, O21: the four other rows carry no fact; the files row holds the rules and the tracked paths, the debt row the entries and pairs of the ceiling file, the imports row the contracts of the config."""
+    tracked = {**CLEAN_FILES, **KEPT_CONTRACT, BASELINE_PATH: '[file_lines]\n"src/gone.py" = 900\n\n[clones]\n'}
     repo = build_repo(tracked)
     code, out, err = frame_run(capsys, repo)
-    files_row, _, *others = headers(out)
+    files_row, _, _, *others = headers(out)
     extent = [int(part.split()[0]) for part in files_row.partition(cli.AreaEvent.CLEAN)[2].split(SEPARATOR)]
     held = ratchet.read_baseline(repo)
-    assert (code, others, out[-1], err) == (0, [header(area, "✓", "clean") for area in list(Area)[2:]], f"✓ clean · 7 areas · {ZERO_SECONDS}", [])
+    contracts = architecture.contracts_of({".importlinter": tracked[".importlinter"]}).contracts
+    assert (code, others, out[-1], err) == (0, [header(area, "✓", "clean") for area in list(Area)[3:]], f"✓ clean · 7 areas · {ZERO_SECONDS}", [])
     assert extent == [sum(rule.area is Area.FILES for rule in Rule), len(tracked)]
     assert extent_counts(area_fact("\n".join(out), Area.DEBT)) == [len(held.size), len(held.clones)] == [1, 0]
+    assert leading_count(area_fact("\n".join(out), Area.IMPORTS)) == len(contracts)
 
 
 def test_a_run_without_a_baseline_notes_the_debt_as_not_recorded_and_says_it_is_not_enforced(build_repo, capsys):

@@ -58,6 +58,7 @@ class FindingRow:
     fix: str | None
     fix_indent: int | None
     fix_follows: bool
+    detail: tuple[str, ...] = ()
 
 
 def _indentation(line: str) -> int:
@@ -76,6 +77,13 @@ class BlockLine:
 class FindingLine(BlockLine):
     location: str
     row: FindingRow
+
+
+@dataclass(frozen=True)
+class DetailLine(BlockLine):
+    """A line of a finding's detail: everything after the marker's one separator space, leading whitespace included."""
+
+    detail: str
 
 
 @dataclass(frozen=True)
@@ -107,14 +115,33 @@ def _location_and_remainder(stripped: str, locations: Sequence[str]) -> tuple[st
     return location, after_glyph[len(location):].lstrip(" ")
 
 
+def _detail_of(line: str) -> str | None:
+    """What a detail line holds after the marker, or None for a line that is none."""
+    marker = f"{output.FIX_INDENT}{output.DETAIL_MARKER}"
+    if not line.startswith(marker) or line[len(marker):len(marker) + 1] not in ("", " "):
+        return None
+    return line[len(marker) + 1:]
+
+
+def _details_below(lines: Sequence[str], number: int) -> tuple[str, ...]:
+    """The detail lines standing contiguously directly under the row at `number`."""
+    details = []
+    for following in lines[number + 1:]:
+        if (detail := _detail_of(following)) is None:
+            break
+        details.append(detail)
+    return tuple(details)
+
+
 def _fix_below(lines: Sequence[str], number: int) -> tuple[str | None, int | None, bool]:
     """The fix of the `fix:` run a row belongs to: the next `fix:` line below it that is not shallower, its indentation,
-    and whether it follows the row directly."""
+    and whether it follows the row and its own detail lines directly."""
+    own = number + len(_details_below(lines, number))
     for later, following in enumerate(lines[number + 1:], start=number + 1):
         if _indentation(following) < _indentation(lines[number]):
             break
         if following.lstrip().startswith(f"{output.FIX_LABEL} "):
-            return following.lstrip()[len(output.FIX_LABEL) + 1:], _indentation(following), later == number + 1
+            return following.lstrip()[len(output.FIX_LABEL) + 1:], _indentation(following), later == own + 1
     return None, None, False
 
 
@@ -128,6 +155,8 @@ def decode_block(lines: Sequence[str], locations: Sequence[str] = (), first_posi
         position = first_position + number
         if stripped.startswith(f"{Glyph.NEEDS_YOU} ") and (found := _finding_line(lines, number, locations, position)):
             decoded.append(found)
+        elif (detail := _detail_of(line)) is not None:
+            decoded.append(DetailLine(position, line, detail))
         elif stripped.startswith(f"{output.FIX_LABEL} "):
             decoded.append(FixLine(position, line))
         elif stripped.startswith(f"{Glyph.NOTE} ") and (note := _note_line(line, locations, position)):
@@ -143,7 +172,8 @@ def _finding_line(lines: Sequence[str], number: int, locations: Sequence[str], p
     if event is None:
         return None
     fix, fix_indent, fix_follows = _fix_below(lines, number)
-    row = FindingRow(_indentation(lines[number]), event, remainder[len(event.value):].strip(), fix, fix_indent, fix_follows)
+    detail = _details_below(lines, number)
+    row = FindingRow(_indentation(lines[number]), event, remainder[len(event.value):].strip(), fix, fix_indent, fix_follows, detail)
     return FindingLine(position, lines[number], location, row)
 
 
@@ -165,16 +195,30 @@ def printed_finding_rows(printed: str, locations: list[str]) -> list[tuple[str, 
     return [(line.location, line.row) for line in decode_block(printed.splitlines(), locations) if isinstance(line, FindingLine) and line.location in locations]
 
 
-def area_fact(printed: str, area: str) -> str:
-    """The fact of `area`'s row, found by the area word and an `AreaEvent`; the padding between the columns is never rebuilt."""
+@dataclass(frozen=True)
+class AreaRow:
+    """One area row as printed: its glyph, `AreaEvent` and fact."""
+
+    glyph: str
+    event: cli.AreaEvent
+    fact: str
+
+
+def area_row(printed: str, area: str) -> AreaRow:
+    """`area`'s row, found by the area word and an `AreaEvent`; the padding between the columns is never rebuilt."""
     for line in printed.splitlines():
         words = line.split()
         if len(words) > 2 and words[1] == area:
             remainder = line.split(area, 1)[1].lstrip(" ")
-            events = [event for event in cli.AreaEvent if remainder.startswith(f"{event.value} ")]
-            if events:
-                return remainder[len(max(events, key=lambda member: len(member.value)).value):].strip()
+            event = _event_of(remainder, cli.AreaEvent)
+            if event is not None:
+                return AreaRow(words[0], event, remainder[len(event.value):].strip())
     raise AssertionError(f"no row of {area} in {printed}")
+
+
+def area_fact(printed: str, area: str) -> str:
+    """The fact of `area`'s row."""
+    return area_row(printed, area).fact
 
 
 def leading_count(fact: str) -> int:
@@ -199,6 +243,36 @@ def area_block(printed: str, area: str) -> list[BlockLine]:
 def area_finding_rows(printed: str, area: str) -> list[tuple[str, FindingRow]]:
     """Every finding row standing under `area`'s row, each with its location, in printed order."""
     return [(line.location, line.row) for line in area_block(printed, area) if isinstance(line, FindingLine)]
+
+
+def assert_block_order(block: Sequence[BlockLine]) -> None:
+    """Decision 4 and O25: a finding's detail lines stand contiguously directly under its row, each run's `fix:` follows
+    the last detail line of the run's last row and equals that row's fix, and every note follows the block's final `fix:`."""
+    for index, line in enumerate(block):
+        before = block[index - 1] if index else None
+        if isinstance(line, DetailLine):
+            assert isinstance(before, FindingLine | DetailLine), line
+        if isinstance(line, FixLine):
+            assert isinstance(before, FindingLine | DetailLine), line
+            owner = next(earlier for earlier in reversed(block[:index]) if isinstance(earlier, FindingLine))
+            assert line.text.strip() == f"{output.FIX_LABEL} {owner.row.fix}", line
+        if isinstance(line, FindingLine) and index:
+            assert not any(isinstance(earlier, NoteLine) for earlier in block[:index]), line
+    last_fix = max((line.position for line in block if isinstance(line, FixLine)), default=-1)
+    assert all(line.position > last_fix for line in block if isinstance(line, NoteLine))
+
+
+def assert_block_prints(block: Sequence[BlockLine], findings: Sequence[Finding], notes: Sequence[Note]) -> None:
+    """The decoded block equals what the rule returned: each row its finding with its escaped detail, each note its note,
+    in order, and the block keeps the order of `assert_block_order`."""
+    rows = [line for line in block if isinstance(line, FindingLine)]
+    assert len(rows) == len(findings)
+    for line, found in zip(rows, findings, strict=True):
+        assert (line.location, line.row.detail) == (found.location, tuple(printable(text) for text in found.detail))
+        assert_row_prints_finding(line.row, found)
+    printed_notes = [(line.location, line.row.event, line.row.fact) for line in block if isinstance(line, NoteLine)]
+    assert printed_notes == [(note.location, note.event, printable(note.fact)) for note in notes]
+    assert_block_order(block)
 
 
 @dataclass(frozen=True)

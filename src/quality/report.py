@@ -120,6 +120,7 @@ class FindingEvent(StrEnum):
     GREW = "grew"
     CAN_FALL = "can fall"
     NEAR_COPY = "near copy"
+    BROKEN = "broken"
 
 
 class NoteEvent(StrEnum):
@@ -127,6 +128,8 @@ class NoteEvent(StrEnum):
 
     ALLOWED = "allowed"
     NOT_MEASURED = "not measured"
+    UNUSED = "unused"
+    WARNING = "warning"
 
 
 @dataclass(frozen=True)

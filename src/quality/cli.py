@@ -190,6 +190,7 @@ class AreaEvent(StrEnum):
     FINDING = "finding"
     NOT_CHECKED = "not checked"
     NOT_RECORDED = "not recorded"
+    NOT_SET_UP = "not set up"
 
 
 CEILING_HELD = "ceiling held"
