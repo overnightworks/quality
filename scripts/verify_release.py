@@ -51,12 +51,12 @@ def gate_tool_refs(gate_text: str) -> list[str | None]:
     return [options.get("ref") for options in steps if options.get("repository") == TOOL_REPOSITORY]
 
 
-def branches_for(tag: str | None) -> tuple[str, ...]:
+def branches_for(tag: str | None) -> list[str]:
     """The origin branches that may hold the tagged commit: main, and for a patch tag its minor's release branch."""
     match = tag and RELEASE_TAG.fullmatch(tag)
     if not match or match["patch"] == "0":
-        return ("main",)
-    return ("main", f"release/v{match['major']}.{match['minor']}")
+        return ["main"]
+    return ["main", f"release/v{match['major']}.{match['minor']}"]
 
 
 def judge_release(facts: ReleaseFacts) -> list[Verdict]:
