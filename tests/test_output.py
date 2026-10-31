@@ -325,14 +325,15 @@ def test_no_findings_and_no_notes_print_nothing():
     assert findings_written([]) == ""
 
 
-def test_findings_and_notes_share_one_location_column_and_one_event_column():
-    findings = [finding("a.env", FindingEvent.TRACKED, "first fact")]
+@pytest.mark.parametrize("event", [FindingEvent.UNUSED, FindingEvent.PUBLISHED_PORT], ids=["event shorter than a note's", "event longer than a note's"])
+def test_findings_and_notes_share_one_location_column_and_one_event_column(event):
+    findings = [finding("a.env", event, "first fact")]
     notes = [note("deploy/longer.toml", "second fact")]
     printed = findings_written(findings, notes=notes)
     finding_line, note_line = (next(line for line in printed.splitlines() if marker in line) for marker in ("first fact", "second fact"))
     assert finding_line.index("first fact") == note_line.index("second fact")
-    assert finding_line.index(FindingEvent.TRACKED.value) == note_line.index(NoteEvent.ALLOWED.value)
-    assert finding_line.index(FindingEvent.TRACKED.value) > len(notes[0].location)
+    assert finding_line.index(event.value) == note_line.index(NoteEvent.ALLOWED.value)
+    assert finding_line.index(event.value) > len(notes[0].location)
 
 
 def test_a_note_row_follows_the_last_fix_and_has_no_fix_of_its_own():

@@ -81,8 +81,17 @@ def test_a_floor_below_python_3_14_names_the_value_and_the_floor(build_repo, cap
     code, output = run(capsys, repo)
     findings = rule_findings(repo, Rule.PYTHON_FLOOR)
     assert (code, [finding.path for finding in findings]) == (1, ["pyproject.toml"]), output
-    assert [findings[0].event, requires_python in findings[0].reason, floor in findings[0].reason] == [FindingEvent.BELOW_FLOOR, True, True], output
+    fact = findings[0].reason
+    assert [findings[0].event, requires_python in fact, floor in fact.replace(requires_python, "")] == [FindingEvent.BELOW_FLOOR, True, True], output
     assert_findings_print_as_rows(repo, output)
+
+
+def test_a_no_floor_finding_names_the_value_it_found(build_repo, capsys):
+    """F3, sentence 3: the fact of a project that sets no lower bound names the value it found."""
+    repo = build_repo({"pyproject.toml": project("<3.15")})
+    run(capsys, repo)
+    (finding,) = rule_findings(repo, Rule.PYTHON_FLOOR)
+    assert "<3.15" in finding.reason
 
 
 @pytest.mark.parametrize(
@@ -130,8 +139,12 @@ def test_every_file_below_the_floor_is_a_finding_sorted_by_path(build_repo, caps
     repo = build_repo(tracked)
     code, output = run(capsys, repo)
     assert (code, floor_paths(repo)) == (1, ["pyproject.toml", "src/a/pyproject.toml", "src/b/pyproject.toml"]), output
-    rows = [row for finding in rule_findings(repo, Rule.PYTHON_FLOOR) for row in rows_of(output, finding)]
-    assert [row.fix_follows for row in rows] == [False, False, True], output
+    findings = rule_findings(repo, Rule.PYTHON_FLOOR)
+    lines = output.splitlines()
+    printed_order = sorted(findings, key=lambda finding: next(number for number, line in enumerate(lines) if line.lstrip().startswith(f"{Glyph.NEEDS_YOU} {finding.location} ")))
+    assert printed_order == findings, output
+    rows = [row for finding in printed_order for row in rows_of(output, finding)]
+    assert [(row.event, row.fact, row.fix_follows) for row in rows] == [(finding.event, printable(finding.reason), finding.path == "src/b/pyproject.toml") for finding in findings], output
     assert output.count(rows[0].fix) == 1, output
 
 
@@ -187,7 +200,7 @@ PYTHON_PATH_NEED = f"{PYTHON} entry 1 needs path as the exact tracked path of on
         (allow("src/a/*.toml"), PYTHON_PATH_NEED),
         (allow("../pyproject.toml"), PYTHON_PATH_NEED),
         (allow("src/a/pyproject.toml", ""), f"{PYTHON} entry 1 needs {ONE_LINE_NEED}"),
-        ('[[python.allow]]\npath = "src/a/pyproject.toml"\nreason = "one\\ntwo"\n', f"{PYTHON} entry 1 needs {ONE_LINE_NEED}"),
+        (f'{PYTHON_ALLOWANCE_HEADING}\npath = "src/a/pyproject.toml"\nreason = "one\\ntwo"\n', f"{PYTHON} entry 1 needs {ONE_LINE_NEED}"),
         (allow("src/a/pyproject.toml") + 'extra = 1\n', f"{PYTHON} entry 1 needs exactly a path and a reason"),
     ],
     ids=["duplicate", "folder", "folder without slash", "pattern", "dotdot", "empty reason", "multi-line reason", "unknown key"],
