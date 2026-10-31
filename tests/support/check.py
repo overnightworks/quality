@@ -62,13 +62,19 @@ def _indentation(line: str) -> int:
 
 
 def finding_rows(printed: str, location: str) -> list[FindingRow]:
-    """Every finding row at `location`, in printed order. A row is found by its glyph and an event of `FindingEvent`, a
-    fix line by the label of `output`; the padding between the columns is never rebuilt."""
+    """Every finding row at `location`, in printed order."""
+    return [row for _, row in printed_finding_rows(printed, [location])]
+
+
+def printed_finding_rows(printed: str, locations: list[str]) -> list[tuple[str, FindingRow]]:
+    """Every finding row at any of `locations`, each with its location, in the order the output prints them. A row is
+    found by its glyph and an event of `FindingEvent`, a fix line by the label of `output`; the padding between the
+    columns is never rebuilt."""
     lines = printed.splitlines()
     rows = []
     for number, line in enumerate(lines):
-        prefix = f"{Glyph.NEEDS_YOU} {location} "
-        if not line.lstrip().startswith(prefix):
+        prefix = next((f"{Glyph.NEEDS_YOU} {location} " for location in locations if line.lstrip().startswith(f"{Glyph.NEEDS_YOU} {location} ")), None)
+        if prefix is None:
             continue
         remainder = line.lstrip()[len(prefix):].lstrip(" ")
         events = [event for event in FindingEvent if remainder.startswith(f"{event.value} ")]
@@ -82,7 +88,7 @@ def finding_rows(printed: str, location: str) -> list[FindingRow]:
             if following.lstrip().startswith(f"{output.FIX_LABEL} "):
                 fix, fix_indent, fix_follows = following.lstrip()[len(output.FIX_LABEL) + 1:], _indentation(following), later == number + 1
                 break
-        rows.append(FindingRow(_indentation(line), event, remainder[len(event.value):].strip(), fix, fix_indent, fix_follows))
+        rows.append((prefix[len(Glyph.NEEDS_YOU) + 1:-1], FindingRow(_indentation(line), event, remainder[len(event.value):].strip(), fix, fix_indent, fix_follows)))
     return rows
 
 

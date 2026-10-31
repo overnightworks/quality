@@ -15,6 +15,7 @@ from tests.support.check import (
     env_row_stands,
     is_clean,
     note_rows,
+    printed_finding_rows,
     refusal_row,
     refusals,
     rows_of,
@@ -140,12 +141,9 @@ def test_every_file_below_the_floor_is_a_finding_sorted_by_path(build_repo, caps
     code, output = run(capsys, repo)
     assert (code, floor_paths(repo)) == (1, ["pyproject.toml", "src/a/pyproject.toml", "src/b/pyproject.toml"]), output
     findings = rule_findings(repo, Rule.PYTHON_FLOOR)
-    lines = output.splitlines()
-    printed_order = sorted(findings, key=lambda finding: next(number for number, line in enumerate(lines) if line.lstrip().startswith(f"{Glyph.NEEDS_YOU} {finding.location} ")))
-    assert printed_order == findings, output
-    rows = [row for finding in printed_order for row in rows_of(output, finding)]
-    assert [(row.event, row.fact, row.fix_follows) for row in rows] == [(finding.event, printable(finding.reason), finding.path == "src/b/pyproject.toml") for finding in findings], output
-    assert output.count(rows[0].fix) == 1, output
+    rows = printed_finding_rows(output, [finding.location for finding in findings])
+    assert [(location, row.event, row.fact, row.fix_follows) for location, row in rows] == [(finding.location, finding.event, printable(finding.reason), finding.path == "src/b/pyproject.toml") for finding in findings], output
+    assert output.count(rows[0][1].fix) == 1, output
 
 
 def test_an_allowed_file_is_clean_and_the_gate_shows_its_value_and_reason(build_repo, capsys):
