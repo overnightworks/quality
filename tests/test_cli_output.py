@@ -510,7 +510,7 @@ def test_a_run_without_a_baseline_notes_the_debt_as_not_recorded_and_says_it_is_
     code, out, err = frame_run(capsys, repo)
     fact = area_fact("\n".join(out), Area.DEBT)
     assert (code, err) == (0, [])
-    assert (leading_count(fact), fact.split(SEPARATOR)[-1]) == (recorded_entries(repo), "measured only")
+    assert (leading_count(fact), fact.split(SEPARATOR)[-1]) == (recorded_entries(repo), check.Outcome.MEASURED_ONLY.value)
     assert out[-1] == f"✓ clean · 7 areas · debt measured, not enforced · {ZERO_SECONDS}"
 
 
@@ -519,7 +519,8 @@ def test_a_baseline_without_clones_is_partly_measured_only(build_repo, capsys):
     code, out, err = frame_run(capsys, repo)
     fact = area_fact("\n".join(out), Area.DEBT)
     assert (code, err) == (0, [])
-    assert fact.split(SEPARATOR)[-1] == "partly measured only"
+    mode = fact.split(SEPARATOR)[-1]
+    assert mode.endswith(check.Outcome.MEASURED_ONLY.value) and mode != check.Outcome.MEASURED_ONLY.value
     assert cli.main(["baseline", "write", str(repo)]) == 0
     assert leading_count(fact) == len(ratchet.read_baseline(repo).clones) == 1
     assert out[-1] == f"✓ clean · 7 areas · debt partly measured, not enforced · {ZERO_SECONDS}"

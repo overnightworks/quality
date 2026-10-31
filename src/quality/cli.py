@@ -208,7 +208,7 @@ def area_row(verdict: AreaVerdict, extent: str) -> Row:
         return Row(Glyph.NEEDS_YOU, verdict.area, AreaEvent.FINDING, count=len(verdict.findings))
     if verdict.outcome is Outcome.MEASURED_ONLY:
         partly = "" if verdict.measurement is Measurement.MEASURED_ONLY else "partly "
-        mode = f"{partly}measured only"
+        mode = f"{partly}{Outcome.MEASURED_ONLY.value}"
         return Row(Glyph.NOTE, verdict.area, AreaEvent.NOT_RECORDED, SEPARATOR.join(filter(None, (extent, mode))))
     allowed = sum(note.event is NoteEvent.ALLOWED for note in verdict.notes)
     facts = [extent, f"{allowed} {NoteEvent.ALLOWED}" if allowed else ""]
