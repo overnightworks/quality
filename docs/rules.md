@@ -402,17 +402,24 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   - an `ignore_imports` expression the base does not hold, one line each, compared as parsed (spacing around `->`
     does not count, a wildcard is a new expression):
     `loosened (undeclared): import contract "domain" ignores app.domain -> app.web.*`;
-  - any other field of a contract that differs, `broken_contract_guidance` excepted, a tightening included:
-    `loosened (undeclared): import contract "layers" changes allow_indirect_imports` (a changed `type` reads
-    `changes type`; a module dropped from a list reads as that list's field);
+  - any other field of a contract that differs, `broken_contract_guidance` excepted, unless the change only forbids
+    more (below): `loosened (undeclared): import contract "layers" changes allow_indirect_imports` (a changed `type`
+    reads `changes type`; a module dropped from a list reads as that list's field);
   - `root_packages` (as a set of names), `include_external_packages` or `exclude_type_checking_imports` changed:
     `loosened (undeclared): import-linter changes root_packages`.
 
-  A module newly placed in a `layers` contract is no loosening (operator ruling 28.10.2026, #217: „ok“): the head's
-  `layers` are compared with every module name the base's `layers` do not name stripped, and a layer left empty
-  dropped. Base layers `a`, `b` against head `a`, `new`, `b` is green. A reorder, a merge into `a | b`, a
-  removal, a module moved to another layer, `a | b` turned into `a : b`, a required `a` made optional `(a)`, a changed
-  `containers`, `exhaustive` switched off and a new `exhaustive_ignores` entry stay `changes layers` (or that field).
+  A change that can only forbid more is no loosening (operator ruling 29.10.2026, #252: „Ja, Liste der
+  Verschärfungen“). Per contract type: `allow_indirect_imports` turned from true to false (also by dropping the line)
+  and a module added to `source_modules` or `forbidden_modules` of a `forbidden` contract, the base's expressions all
+  kept; a module added to the `modules` of an `independence` contract, the base's all kept; and a module newly placed
+  in a `layers` contract (operator ruling 28.10.2026, #217: „ok“): the head's `layers` are compared with every module
+  name the base's `layers` do not name stripped, and a layer left empty dropped. Base layers `a`, `b` against head
+  `a`, `new`, `b` is green. Everything else stays a loosening: a removed, renamed or replaced expression (`shop.web`
+  turned into `shop.*` included), a module dropped because it was deleted, an expression added and another removed in
+  one field, `allow_indirect_imports` turned from false to true, `as_packages`,
+  `unmatched_ignore_imports_alerting`, `containers`, `exhaustive`, `exhaustive_ignores` and every `protected` or
+  `acyclic_siblings` field in either direction, a reorder, a merge into `a | b`, a module moved to another layer,
+  `a | b` turned into `a : b`, a required `a` made optional `(a)`, and the session options. No import graph is built.
 
   A new contract, a removed `ignore_imports` entry, a reworded `broken_contract_guidance` and adopting import
   contracts (the base has no config) are green. Two contracts of one name on a side, two config places holding a
