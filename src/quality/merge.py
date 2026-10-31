@@ -147,7 +147,7 @@ class Door:
     declared: tuple[Declaration, ...]
     legacy: int | None
     merge_method: MergeMethod
-    set_aside: tuple[Finding, ...] = ()
+    set_aside: tuple[Finding, ...]
 
     @property
     def legacy_count(self) -> list[str]:
