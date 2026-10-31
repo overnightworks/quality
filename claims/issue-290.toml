@@ -3,6 +3,6 @@ agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
 role = "builder"
 base = "39f1167de73d84677732c3f9f5d31017fc903ed4"
 branch = "claude/issue-290-debt-rows-and-extents"
-scope = ["docs/output.md", "docs/rules.md", "src/quality/check.py", "src/quality/cli.py", "src/quality/clones.py", "src/quality/output.py", "src/quality/ratchet.py", "src/quality/report.py", "tests/support/check.py", "tests/test_check.py", "tests/test_cli_area_row.py", "tests/test_cli_output.py", "tests/test_clones.py", "tests/test_clones_baseline.py", "tests/test_output.py", "tests/test_ratchet.py", "tests/test_ratchet_generated.py"]
+scope = ["docs/output.md", "docs/rules.md", "src/quality/check.py", "src/quality/cli.py", "src/quality/clones.py", "src/quality/output.py", "src/quality/ratchet.py", "src/quality/report.py", "tests/support/check.py", "tests/test_check.py", "tests/test_cli_area_row.py", "tests/test_cli_output.py", "tests/test_clones.py", "tests/test_clones_baseline.py", "tests/test_output.py", "tests/test_ratchet.py", "tests/test_ratchet_generated.py", "tests/test_ratchet_languages.py"]
 opened_commit = "97ad79d8d24180dcfca24eba199e6eabaa76ee5c"
 whole_reason = "The debt row's extent replaces the size and clone lines the slice removes, so findings, extent and prelude removal land together; size and clone share one row and one can-fall fix run."
