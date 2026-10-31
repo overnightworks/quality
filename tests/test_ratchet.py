@@ -171,23 +171,24 @@ HELD_70 = '[function_lines."src/a.py"]\nlong_one = 70\n'
 
 
 @pytest.mark.parametrize(
-    ("files", "baseline", "location", "event", "values"),
+    ("files", "baseline", "path", "line", "event", "values"),
     [
-        ({"src/big.py": long_file(800)}, EMPTY_BASELINE, ("src/big.py", None), FindingEvent.NEW_DEBT, (str(Metric.FILE_LINES.debt_from),)),
-        ({"src/a.py": method(60)}, EMPTY_BASELINE, ("src/a.py", 2), FindingEvent.NEW_DEBT, ("Holder.long_one", str(Metric.FUNCTION_LINES.debt_from))),
-        ({"src/a.py": branchy_function(16)}, EMPTY_BASELINE, ("src/a.py", 1), FindingEvent.NEW_DEBT, ("branchy", str(Metric.CCN.debt_from))),
-        ({"src/a.py": long_function(71)}, HELD_70, ("src/a.py", 1), FindingEvent.GREW, ("long_one", "71", "70")),
-        ({"src/a.py": long_function(65)}, HELD_70, ("src/a.py", 1), FindingEvent.CAN_FALL, ("long_one", "65", "70")),
+        ({"src/big.py": long_file(800)}, EMPTY_BASELINE, "src/big.py", None, FindingEvent.NEW_DEBT, (str(Metric.FILE_LINES.debt_from),)),
+        ({"src/a.py": method(60)}, EMPTY_BASELINE, "src/a.py", 2, FindingEvent.NEW_DEBT, ("Holder.long_one", str(Metric.FUNCTION_LINES.debt_from))),
+        ({"src/a.py": branchy_function(16)}, EMPTY_BASELINE, "src/a.py", 1, FindingEvent.NEW_DEBT, ("branchy", str(Metric.CCN.debt_from))),
+        ({"src/a.py": long_function(71)}, HELD_70, "src/a.py", 1, FindingEvent.GREW, ("long_one", "71", "70")),
+        ({"src/a.py": long_function(65)}, HELD_70, "src/a.py", 1, FindingEvent.CAN_FALL, ("long_one", "65", "70")),
     ],
     ids=["new-file-from-800-lines", "new-function-from-60-lines", "new-ccn-above-15", "grown-entry", "stale-entry"],
 )
-def test_against_a_baseline_new_grown_and_stale_entries_are_red(build_repo, capsys, files, baseline, location, event, values):
+def test_against_a_baseline_new_grown_and_stale_entries_are_red(build_repo, capsys, files, baseline, path, line, event, values):
     """#46 rule 4: a new violation, a grown entry and a stale entry each name path, symbol, value and fix."""
     repo = build_repo({**files, BASELINE_PATH: baseline})
     code, output = hygiene(capsys, repo)
     (finding,) = rule_findings(repo, Rule.SIZE)
     assert code == 1
-    assert (finding.path, finding.line) == location
+    assert finding.path == path
+    assert finding.line == line
     assert finding.event is event
     assert all(value in finding.reason for value in values), finding.reason
     assert_finding_vocabulary(finding)
