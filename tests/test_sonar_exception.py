@@ -1,17 +1,19 @@
 import os
+from dataclasses import replace
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from quality import cli, sonar
+from quality import sonar
 from quality.merge import GhFailed
+from quality.report import headline
+from quality.sonar import finding_from_issue
 from tests.support.merge import (
     B_REMOVED,
     BASE_SHA,
     MERGE_SHA,
     ONE_JOB,
-    REPO,
     SONAR_GREEN,
     TWO_JOBS,
     FakeGh,
@@ -276,18 +278,14 @@ def test_the_emergency_door_sets_the_dependabot_rule_aside_and_shows_it_before_a
     legacy, set_aside = 12, 2
     shown_before_asking = []
 
-    def ask(prompt):
-        shown_before_asking.append(capsys.readouterr().out)
-        return "ja"
-
-    code = cli.main(
-        ["emergency-merge", REPO, "7"], gh=gh, transport=emergency_sonar(added=[bot_issue()], legacy=legacy, set_aside=set_aside),
-        ask=ask, is_terminal=lambda: True,
+    code, _ = drive(
+        gh, emergency_sonar(added=[bot_issue()], legacy=legacy, set_aside=set_aside),
+        when_asked=lambda: shown_before_asking.append(capsys.readouterr().out),
     )
     (shown,) = shown_before_asking
-    (line,) = [line for line in shown.splitlines() if sonar.DEPENDABOT_EXCEPTION_RULE in line]
+    expected = replace(finding_from_issue(bot_issue()), reason=finding_from_issue(bot_issue()).reason + sonar.SET_ASIDE_REASON)
     assert code == 0
-    assert sonar.SET_ASIDE_REASON in line
+    assert headline(expected) in shown.splitlines()
     assert f"{legacy - set_aside} legacy finding(s)" in shown
     assert len(gh.merge_calls) == 1
 

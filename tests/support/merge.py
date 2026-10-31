@@ -178,10 +178,11 @@ def sonar(new=0, legacy=4, main_analysed=True, analysed=SHA, unreachable=False, 
     return transport
 
 
-def drive(gh, transport=None, typed="ja", terminal=True, repo=REPO):
+def drive(gh, transport=None, typed="ja", terminal=True, repo=REPO, when_asked=lambda: None):
     answers = []
 
     def ask(prompt):
+        when_asked()
         answers.append(prompt)
         if isinstance(typed, BaseException):
             raise typed
