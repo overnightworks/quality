@@ -126,14 +126,16 @@ def test_two_broken_contracts_stand_in_config_order_with_their_lines_and_one_fix
     assert all(name in line.row.fact for line, name in zip([line for line in block if isinstance(line, FindingLine)], ("first", "second"), strict=True))
     assert all(name in finding.reason for finding, name in zip(findings, ("first", "second"), strict=True))
     assert all(line.row.detail for line in block if isinstance(line, FindingLine))
-    assert sum(isinstance(line, FixLine) for line in block) == 1
+    fix_lines = [line for line in block if isinstance(line, FixLine)]
+    assert len(fix_lines) == 1
 
 
 def test_a_broken_and_an_unused_finding_keep_their_own_fixes(build_repo, capsys):
     files = {**SHOP_DB_IMPORTS_WEB, ".importlinter": contracts_ini({"broken": FORBIDDEN, "stale": STALE})}
     _, block, repo = broken_block(capsys, files, build_repo)
     assert_block_prints(block, rule_findings(repo, Rule.IMPORT_CONTRACT), [])
-    assert sum(isinstance(line, FixLine) for line in block) == 2
+    fix_lines = [line for line in block if isinstance(line, FixLine)]
+    assert len(fix_lines) == 2
     assert [bool(line.row.detail) for line in block if isinstance(line, FindingLine)] == [True, False]
 
 
