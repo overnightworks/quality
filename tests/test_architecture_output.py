@@ -136,7 +136,8 @@ def test_a_broken_and_an_unused_finding_keep_their_own_fixes(build_repo, capsys)
     assert_block_prints(block, rule_findings(repo, Rule.IMPORT_CONTRACT), [])
     fix_lines = [line for line in block if isinstance(line, FixLine)]
     assert len(fix_lines) == 2
-    assert [bool(line.row.detail) for line in block if isinstance(line, FindingLine)] == [True, False]
+    has_lines = [bool(line.row.detail) for line in block if isinstance(line, FindingLine)]
+    assert has_lines == [True, False]
 
 
 def test_the_notes_follow_the_final_fix_in_the_shared_columns_grimp_first(build_repo, capsys):
@@ -146,10 +147,12 @@ def test_the_notes_follow_the_final_fix_in_the_shared_columns_grimp_first(build_
     files = {**SHOP_DB_IMPORTS_WEB, "src/shop/some.module.py": "", ".importlinter": contracts_ini(contracts)}
     _, block, repo = broken_block(capsys, files, build_repo)
     notes = rule_notes(repo, Rule.IMPORT_CONTRACT)
-    assert [note.event for note in notes] == [NoteEvent.WARNING, NoteEvent.UNUSED, NoteEvent.UNUSED]
+    note_events = [note.event for note in notes]
+    assert note_events == [NoteEvent.WARNING, NoteEvent.UNUSED, NoteEvent.UNUSED]
     assert_block_prints(block, rule_findings(repo, Rule.IMPORT_CONTRACT), notes)
     rows = [line for line in block if isinstance(line, FindingLine | NoteLine)]
-    assert len({line.text.index(line.row.event.value, line.text.index(line.location) + len(line.location)) for line in rows}) == 1
+    event_columns = {line.text.index(line.row.event.value, line.text.index(line.location) + len(line.location)) for line in rows}
+    assert len(event_columns) == 1
 
 
 def test_warnings_stand_in_order_when_every_contract_is_kept(build_repo, capsys):
@@ -159,7 +162,9 @@ def test_warnings_stand_in_order_when_every_contract_is_kept(build_repo, capsys)
     repo = build_repo(files)
     code, printed = hygiene_output(capsys, repo)
     notes = rule_notes(repo, Rule.IMPORT_CONTRACT)
-    assert (code, [note.event for note in notes]) == (0, [NoteEvent.WARNING, NoteEvent.UNUSED, NoteEvent.UNUSED])
+    note_events = [note.event for note in notes]
+    assert code == 0
+    assert note_events == [NoteEvent.WARNING, NoteEvent.UNUSED, NoteEvent.UNUSED]
     assert all(name in note.fact for note, name in zip(notes[1:], ("first", "second"), strict=True))
     assert_block_prints(area_block(printed, Area.IMPORTS), [], notes)
 
@@ -177,8 +182,10 @@ def test_no_import_contract_line_stands_before_the_area_rows(build_repo, capsys,
     """O15: the notes leave the prelude."""
     repo = build_repo(files)
     _, printed = hygiene_output(capsys, repo)
-    assert [line for line in printed.splitlines() if line.startswith(Rule.IMPORT_CONTRACT)] == []
-    assert [line for line in hygiene_run(repo).reports if line.startswith(Rule.IMPORT_CONTRACT)] == []
+    printed_lines = [line for line in printed.splitlines() if line.startswith(Rule.IMPORT_CONTRACT)]
+    reported_lines = [line for line in hygiene_run(repo).reports if line.startswith(Rule.IMPORT_CONTRACT)]
+    assert printed_lines == []
+    assert reported_lines == []
 
 
 def imports_verdict(repo: Path) -> check.RuleVerdict:
@@ -207,7 +214,8 @@ def test_without_an_import_linter_config_the_row_is_a_grey_note_and_the_verdict_
     notes = cli.measured_notes(hygiene_run(repo).areas)
     assert (code, verdict.measured_only, verdict.findings, verdict.notes, verdict.refusal) == (0, True, (), (), None)
     assert (row.glyph, row.event) == (Glyph.NOTE, cli.AreaEvent.NOT_SET_UP)
-    assert parts[-1 - len(notes):-1] == list(notes)
+    printed_notes = parts[-1 - len(notes):-1]
+    assert printed_notes == list(notes)
     assert notes[-1].startswith(Area.IMPORTS)
 
 
@@ -222,7 +230,8 @@ def test_a_kept_contract_adds_one_clean_area_and_removes_exactly_the_imports_not
     imports_note = notes_without[-1]
     assert (code_without, code_with, result_without.findings) == (1, 1, result_with.findings)
     assert leading_count(parts_with[1]) == leading_count(parts_without[1]) + 1
-    assert parts_with[2:-1] == [part for part in parts_without[2:-1] if part != imports_note]
+    without_the_note = [part for part in parts_without[2:-1] if part != imports_note]
+    assert parts_with[2:-1] == without_the_note
     assert imports_note in parts_without
 
 
