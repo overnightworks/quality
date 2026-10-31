@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TextIO
 
-from quality.report import Choice, Command, Example, Finding, Instruction, OneOf, Step, printable, render
+from quality.report import Choice, Command, Example, Finding, Instruction, Note, OneOf, Step, printable, render
 
 
 def emit(*lines: str, file: TextIO | None = None) -> None:
@@ -176,25 +176,37 @@ FIX_LABEL = "fix:"
 FINDING_GAP = "  "
 
 
-def _finding_lines(findings: Sequence[Finding], styled: bool) -> list[str]:
-    """Each field is escaped before it is padded, so the columns hold in a pipe as at a terminal; they count characters."""
-    locations = [finding.location for finding in findings]
-    location_width = max(map(len, locations))
-    event_width = max(len(str(finding.event)) for finding in findings)
+def _row_columns(location: str, event: str, widths: tuple[int, int]) -> str:
+    """The location and event columns of a row, each padded to its width and followed by the gap that opens the fact."""
+    location_width, event_width = widths
+    return f"{location.ljust(location_width)}{FINDING_GAP}{event.ljust(event_width)}{FINDING_GAP}"
+
+
+def _finding_lines(findings: Sequence[Finding], notes: Sequence[Note], styled: bool) -> list[str]:
+    """Each field is escaped before it is padded, so the columns hold in a pipe as at a terminal; they count characters.
+    The findings and the notes share one location column and one event column."""
+    widths = (
+        max(len(row.location) for row in (*findings, *notes)),
+        max(len(str(row.event)) for row in (*findings, *notes)),
+    )
     lines = []
-    for position, (finding, location) in enumerate(zip(findings, locations, strict=True)):
-        columns = f"{location.ljust(location_width)}{FINDING_GAP}{str(finding.event).ljust(event_width)}{FINDING_GAP}"
-        lines.append(f"{FINDING_INDENT}{_paint(Glyph.NEEDS_YOU, GLYPH_STYLE[Glyph.NEEDS_YOU], styled)} {columns}{_paint(printable(finding.reason), DIM, styled)}")
+    for position, finding in enumerate(findings):
+        glyph = _paint(Glyph.NEEDS_YOU, GLYPH_STYLE[Glyph.NEEDS_YOU], styled)
+        columns = _row_columns(finding.location, str(finding.event), widths)
+        lines.append(f"{FINDING_INDENT}{glyph} {columns}{_paint(printable(finding.reason), DIM, styled)}")
         if position + 1 == len(findings) or findings[position + 1].fix != finding.fix:
             lines.append(f"{FIX_INDENT}{FIX_LABEL} {printable(finding.fix)}")
+    for note in notes:
+        columns = _row_columns(note.location, str(note.event), widths)
+        lines.append(_paint(f"{FINDING_INDENT}{Glyph.NOTE} {columns}{printable(note.fact)}", DIM, styled))
     return lines
 
 
-def write_findings(findings: Sequence[Finding], file: TextIO | None = None) -> None:
-    """The rows of one area's findings that carry an event, each `! location  event  fact`, and one `fix:` line after
-    the last finding of each run of equal fixes."""
-    if findings:
-        _print_lines(_finding_lines(findings, style_is_on(_stream(file), os.environ)), file)
+def write_findings_and_notes(findings: Sequence[Finding], notes: Sequence[Note], file: TextIO | None = None) -> None:
+    """The rows of one area that carry an event: each finding `! location  event  fact` with one `fix:` line after the
+    last of each run of equal fixes, then each note `· location  event  fact`, the columns shared."""
+    if findings or notes:
+        _print_lines(_finding_lines(findings, notes, style_is_on(_stream(file), os.environ)), file)
 
 
 def write_verdict(verdict: Verdict, file: TextIO | None = None) -> None:

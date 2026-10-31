@@ -32,6 +32,7 @@ from quality.checkout import OutsideWorkTree
 from quality.config import Allowance, ConfigError, read_allow_lists, read_gate_settings
 from quality.merge import Ask, GhRunner, RemoteFor, github_remote, run_emergency_merge, run_gh
 from quality.output import (
+    SEPARATOR,
     Glyph,
     Row,
     SubLine,
@@ -41,13 +42,13 @@ from quality.output import (
     emit,
     emit_finding,
     set_up_streams,
-    write_findings,
+    write_findings_and_notes,
     write_pair,
     write_rows,
     write_verdict,
 )
-from quality.report import CannotJudge, Finding, Instruction, Step, headline
-from quality.rules import Rule
+from quality.report import CannotJudge, Finding, Instruction, NoteEvent, Step, headline
+from quality.rules import Area, Rule
 from quality.sonar import (
     DEPENDABOT_CONFIG,
     TASK_FILE,
@@ -195,7 +196,7 @@ START_FAILURE_NEXT = Instruction("fix what the error names, then run quality hyg
 REFUSED_AREAS_NEXT = Instruction("fix what the ✗ rows name, then run quality hygiene again")
 
 
-def area_row(verdict: AreaVerdict) -> Row:
+def area_row(verdict: AreaVerdict, extent: str) -> Row:
     facts = tuple(dict.fromkeys(reason.fact for reason in verdict.reasons))
     if facts:
         if len(facts) == 1:
@@ -207,7 +208,9 @@ def area_row(verdict: AreaVerdict) -> Row:
     if verdict.outcome is Outcome.MEASURED_ONLY:
         partly = "" if verdict.measurement is Measurement.MEASURED_ONLY else "partly "
         return Row(Glyph.NOTE, verdict.area, AreaEvent.NOT_RECORDED, f"{partly}measured only")
-    return Row(Glyph.CLEAN, verdict.area, AreaEvent.CLEAN)
+    allowed = sum(note.event is NoteEvent.ALLOWED for note in verdict.notes)
+    facts = [extent, f"{allowed} {NoteEvent.ALLOWED}" if allowed else ""]
+    return Row(Glyph.CLEAN, verdict.area, AreaEvent.CLEAN, SEPARATOR.join(fact for fact in facts if fact))
 
 
 def measured_notes(areas: tuple[AreaVerdict, ...]) -> tuple[str, ...]:
@@ -247,8 +250,9 @@ def run_hygiene_check(path: Path, locate_ruff: Callable[[], str], locate_zizmor:
     print_secret_allowances(result.allowed_secrets, result.unused_allowances)
     emit(*result.reports, ONLINE_AUDITS_NOTE)
     for verdict in result.areas:
-        write_rows((area_row(verdict),))
-        write_findings([finding for finding in verdict.findings if finding.event])
+        extent = SEPARATOR.join((counted(len(verdict.verdicts), "rule"), counted(result.tracked_paths, "file"))) if verdict.area is Area.FILES else ""
+        write_rows((area_row(verdict, extent),))
+        write_findings_and_notes([finding for finding in verdict.findings if finding.event], verdict.notes)
         for finding in verdict.findings:
             if not finding.event:
                 emit_finding(finding)

@@ -3,16 +3,28 @@ from pathlib import Path
 
 import pytest
 
-from quality.config import CONFIG_PATH, PYTHON_ALLOWANCE_EXAMPLE
-from tests.support.check import copy_block, env_row_stands, is_clean, refusal_row, refusals
+from quality import cli, python_floor
+from quality import output as output_module
+from quality.config import CONFIG_PATH, PYTHON_ALLOWANCE_EXAMPLE, PYTHON_ALLOWANCE_HEADING
+from quality.output import SEPARATOR, Glyph
+from quality.report import FindingEvent, NoteEvent, printable
+from quality.rules import Area, Rule
+from tests.support.check import (
+    assert_row_prints_finding,
+    copy_block,
+    env_row_stands,
+    is_clean,
+    note_rows,
+    printed_finding_rows,
+    refusal_row,
+    refusals,
+    rows_of,
+    rule_findings,
+    rule_notes,
+)
 from tests.support.check import hygiene_output as run
 from tests.support.config_refusals import ONE_LINE_NEED
-from tests.support.git_repositories import GIT_IDENTITY, head_commit
-
-ROOT_FLOOR_FIX = (
-    "raise it to >=3.14 and move CI, .python-version, Dockerfiles and ruff's target-version with it, "
-    "or declare it in quality/config.toml with [[python.allow]], its path and a reason."
-)
+from tests.support.git_repositories import GIT_IDENTITY, head_commit, make_repo
 
 
 def project(requires_python: str | None = ">=3.14") -> str:
@@ -21,11 +33,28 @@ def project(requires_python: str | None = ">=3.14") -> str:
 
 
 def allow(path: str, reason: str = "qwen-tts has no cp314 wheel") -> str:
-    return f'[[python.allow]]\npath = "{path}"\nreason = "{reason}"\n'
+    return f'{PYTHON_ALLOWANCE_HEADING}\npath = "{path}"\nreason = "{reason}"\n'
 
 
-def floor_lines(output: str) -> list[str]:
-    return [line for line in output.splitlines() if line.startswith("python-floor")]
+def tmp_path_dir(parent: Path, name: str) -> Path:
+    (directory := parent / name).mkdir()
+    return directory
+
+
+def floor_paths(repo: Path) -> list[str]:
+    return [finding.path for finding in rule_findings(repo, Rule.PYTHON_FLOOR)]
+
+
+FILES_RULES = [rule for rule in Rule if rule.area is Area.FILES]
+
+
+def assert_findings_print_as_rows(repo: Path, printed: str) -> None:
+    """Every finding of the rule stands as one row equal to it, ends no sentence and names no rule id."""
+    for finding in rule_findings(repo, Rule.PYTHON_FLOOR):
+        (row,) = rows_of(printed, finding)
+        assert_row_prints_finding(row, finding)
+        words = (finding.event.value, finding.reason, finding.fix)
+        assert [word.endswith(".") or any(rule.value in word for rule in FILES_RULES) for word in words] == [False, False, False]
 
 
 @pytest.mark.parametrize("requires_python", [">=3.14", ">=3.14,<3.15", "~=3.14", "~=3.14.1", "==3.14.*", ">=3.15"])
@@ -49,9 +78,20 @@ def test_a_floor_of_python_3_14_or_higher_is_clean(build_repo, capsys, requires_
 )
 def test_a_floor_below_python_3_14_names_the_value_and_the_floor(build_repo, capsys, requires_python, floor):
     """F2, sentence 3: a floor below 3.14 is red and the reason names the value and the floor."""
-    code, output = run(capsys, build_repo({"pyproject.toml": project(requires_python)}))
-    reason = f'requires-python "{requires_python}" admits Python {floor}, below 3.14.'
-    assert (code, floor_lines(output), ROOT_FLOOR_FIX in output) == (1, [f"python-floor pyproject.toml - {reason}"], True), output
+    repo = build_repo({"pyproject.toml": project(requires_python)})
+    code, output = run(capsys, repo)
+    findings = rule_findings(repo, Rule.PYTHON_FLOOR)
+    assert (code, [finding.path for finding in findings]) == (1, ["pyproject.toml"]), output
+    fact = findings[0].reason
+    assert [findings[0].event, requires_python in fact, floor in fact.replace(requires_python, "")] == [FindingEvent.BELOW_FLOOR, True, True], output
+    assert_findings_print_as_rows(repo, output)
+
+
+def test_a_no_floor_finding_names_the_value_it_found(build_repo):
+    """F3, sentence 3: the fact of a project that sets no lower bound names the value it found."""
+    repo = build_repo({"pyproject.toml": project("<3.15")})
+    (finding,) = rule_findings(repo, Rule.PYTHON_FLOOR)
+    assert (finding.event, "<3.15" in finding.reason) == (FindingEvent.NO_FLOOR, True)
 
 
 @pytest.mark.parametrize(
@@ -61,9 +101,11 @@ def test_a_floor_below_python_3_14_names_the_value_and_the_floor(build_repo, cap
 )
 def test_a_project_without_a_floor_admits_every_python(build_repo, capsys, text):
     """F3, sentence 2: a project that sets no lower bound is red as naming no floor."""
-    code, output = run(capsys, build_repo({"pyproject.toml": text}))
-    assert code == 1, output
-    assert "names no floor" in floor_lines(output)[0], output
+    repo = build_repo({"pyproject.toml": text})
+    code, output = run(capsys, repo)
+    assert (code, floor_paths(repo)) == (1, ["pyproject.toml"]), output
+    assert rule_findings(repo, Rule.PYTHON_FLOOR)[0].event is FindingEvent.NO_FLOOR, output
+    assert_findings_print_as_rows(repo, output)
 
 
 @pytest.mark.parametrize(
@@ -79,23 +121,28 @@ def test_a_project_without_a_floor_admits_every_python(build_repo, capsys, text)
 )
 def test_a_file_without_a_project_table_is_not_judged(build_repo, capsys, tracked):
     """F4, sentence 1: a file without a [project] table, or inside tests, is not judged."""
-    code, output = run(capsys, build_repo(tracked))
-    assert (code, floor_lines(output)) == (0, []), output
+    repo = build_repo(tracked)
+    code, output = run(capsys, repo)
+    assert (code, floor_paths(repo)) == (0, []), output
 
 
 def test_a_member_below_the_floor_is_the_only_finding_beside_a_root_at_the_floor(build_repo, capsys):
     """F5, sentence 1: a member below the floor is the only finding beside a root at the floor."""
-    code, output = run(capsys, build_repo({"pyproject.toml": project(), "src/speech/pyproject.toml": project(">=3.12")}))
-    assert (code, [line.split(" - ")[0] for line in floor_lines(output)]) == (1, ["python-floor src/speech/pyproject.toml"]), output
+    repo = build_repo({"pyproject.toml": project(), "src/speech/pyproject.toml": project(">=3.12")})
+    code, output = run(capsys, repo)
+    assert (code, floor_paths(repo)) == (1, ["src/speech/pyproject.toml"]), output
 
 
 def test_every_file_below_the_floor_is_a_finding_sorted_by_path(build_repo, capsys):
     """F11, sentence 3: every file below the floor is one finding with reason and fix, sorted by path."""
     tracked = {"pyproject.toml": project(">=3.12"), "src/b/pyproject.toml": project(">=3.13"), "src/a/pyproject.toml": project(None)}
-    code, output = run(capsys, build_repo(tracked))
-    paths = [line.split(" - ")[0] for line in floor_lines(output)]
-    assert (code, paths) == (1, ["python-floor pyproject.toml", "python-floor src/a/pyproject.toml", "python-floor src/b/pyproject.toml"]), output
-    assert output.count(ROOT_FLOOR_FIX) == 3, output
+    repo = build_repo(tracked)
+    code, output = run(capsys, repo)
+    assert (code, floor_paths(repo)) == (1, ["pyproject.toml", "src/a/pyproject.toml", "src/b/pyproject.toml"]), output
+    findings = rule_findings(repo, Rule.PYTHON_FLOOR)
+    rows = printed_finding_rows(output, [finding.location for finding in findings])
+    assert [(location, row.event, row.fact, row.fix_follows) for location, row in rows] == [(finding.location, finding.event, printable(finding.reason), finding.path == "src/b/pyproject.toml") for finding in findings], output
+    assert output.count(rows[0][1].fix) == 1, output
 
 
 def test_an_allowed_file_is_clean_and_the_gate_shows_its_value_and_reason(build_repo, capsys):
@@ -105,31 +152,36 @@ def test_an_allowed_file_is_clean_and_the_gate_shows_its_value_and_reason(build_
         "src/speech/pyproject.toml": project(">=3.12,<3.13"),
         CONFIG_PATH: allow("src/speech/pyproject.toml"),
     }
-    code, output = run(capsys, build_repo(tracked))
-    expected = 'python-floor: allowed src/speech/pyproject.toml (requires-python ">=3.12,<3.13") - qwen-tts has no cp314 wheel'
-    lines = output.splitlines()
-    assert (code, lines.count(expected), is_clean(output)) == (0, 1, True), output
-    assert lines.index(expected) < next(n for n, line in enumerate(lines) if is_clean(line)), output
+    repo = build_repo(tracked)
+    code, output = run(capsys, repo)
+    (note,) = rule_notes(repo, Rule.PYTHON_FLOOR)
+    assert (code, floor_paths(repo), is_clean(output)) == (0, [], True), output
+    assert (note.path, note.event) == ("src/speech/pyproject.toml", NoteEvent.ALLOWED), output
+    assert ">=3.12,<3.13" in note.fact, output
+    assert "qwen-tts has no cp314 wheel" in note.fact, output
+    (row,) = note_rows(output, note.location)
+    assert (row.event, row.fact) == (note.event, printable(note.fact)), output
 
 
 @pytest.mark.parametrize(
-    ("tracked", "why"),
+    "tracked",
     [
-        ({"pyproject.toml": project()}, "no tracked pyproject.toml with a [project] table lies there"),
-        ({"pyproject.toml": project(), "src/m/pyproject.toml": "[tool.ruff]\n"}, "no tracked pyproject.toml with a [project] table lies there"),
-        ({"pyproject.toml": project(), "src/m/pyproject.toml": project()}, "that file is already at the floor"),
+        {"pyproject.toml": project()},
+        {"pyproject.toml": project(), "src/m/pyproject.toml": "[tool.ruff]\n"},
+        {"pyproject.toml": project(), "src/m/pyproject.toml": project()},
     ],
     ids=["untracked path", "no project table", "already at the floor"],
 )
-def test_an_allowance_for_a_file_that_needs_none_is_a_finding(build_repo, capsys, tracked, why):
+def test_an_allowance_for_a_file_that_needs_none_is_a_finding(build_repo, capsys, tracked):
     """F7, sentence 6: an allowance for a file that needs none is a finding."""
-    code, output = run(capsys, build_repo({**tracked, CONFIG_PATH: allow("src/m/pyproject.toml")}))
-    expected = f"python-floor src/m/pyproject.toml - declared in {CONFIG_PATH} with [[python.allow]], but {why}."
-    assert (code, floor_lines(output)) == (1, [expected]), output
-    assert f"delete its [[python.allow]] entry from {CONFIG_PATH}." in output
+    repo = build_repo({**tracked, CONFIG_PATH: allow("src/m/pyproject.toml")})
+    code, output = run(capsys, repo)
+    assert (code, floor_paths(repo)) == (1, ["src/m/pyproject.toml"]), output
+    assert rule_findings(repo, Rule.PYTHON_FLOOR)[0].event is FindingEvent.UNUSED, output
+    assert_findings_print_as_rows(repo, output)
 
 
-PYTHON = f"{CONFIG_PATH} [[python.allow]]"
+PYTHON = f"{CONFIG_PATH} {PYTHON_ALLOWANCE_HEADING}"
 PYTHON_PATH_NEED = f"{PYTHON} entry 1 needs path as the exact tracked path of one pyproject.toml, no folder, pattern or .."
 
 
@@ -145,7 +197,7 @@ PYTHON_PATH_NEED = f"{PYTHON} entry 1 needs path as the exact tracked path of on
         (allow("src/a/*.toml"), PYTHON_PATH_NEED),
         (allow("../pyproject.toml"), PYTHON_PATH_NEED),
         (allow("src/a/pyproject.toml", ""), f"{PYTHON} entry 1 needs {ONE_LINE_NEED}"),
-        ('[[python.allow]]\npath = "src/a/pyproject.toml"\nreason = "one\\ntwo"\n', f"{PYTHON} entry 1 needs {ONE_LINE_NEED}"),
+        (f'{PYTHON_ALLOWANCE_HEADING}\npath = "src/a/pyproject.toml"\nreason = "one\\ntwo"\n', f"{PYTHON} entry 1 needs {ONE_LINE_NEED}"),
         (allow("src/a/pyproject.toml") + 'extra = 1\n', f"{PYTHON} entry 1 needs exactly a path and a reason"),
     ],
     ids=["duplicate", "folder", "folder without slash", "pattern", "dotdot", "empty reason", "multi-line reason", "unknown key"],
@@ -213,4 +265,77 @@ def test_a_gitlink_is_never_entered(build_repo, capsys, elsewhere, gitlink_path)
     (repo / gitlink_path).mkdir(parents=True)
     (repo / gitlink_path / "pyproject.toml").write_text(project(">=3.12"))
     code, output = run(capsys, repo)
-    assert (code, floor_lines(output)) == (0, []), output
+    assert (code, floor_paths(repo)) == (0, []), output
+
+
+def test_the_entry_the_fix_asks_for_leaves_no_finding_and_one_allowed_note(build_repo, elsewhere):
+    """Decision 12: the allowance the fix names clears the finding and stands as one note."""
+    tracked = {"pyproject.toml": project(">=3.12")}
+    assert floor_paths(make_repo(tmp_path_dir(elsewhere, "before"), tracked)) == ["pyproject.toml"]
+    repo = build_repo({**tracked, CONFIG_PATH: allow("pyproject.toml")})
+    assert (floor_paths(repo), [note.event for note in rule_notes(repo, Rule.PYTHON_FLOOR)]) == ([], [NoteEvent.ALLOWED])
+
+
+def test_deleting_the_entry_a_stale_finding_names_leaves_no_finding(build_repo, elsewhere):
+    """Decision 12: the stale allowance's fix, applied, clears it."""
+    tracked = {"pyproject.toml": project()}
+    assert floor_paths(build_repo({**tracked, CONFIG_PATH: allow("src/m/pyproject.toml")})) == ["src/m/pyproject.toml"]
+    assert floor_paths(make_repo(tmp_path_dir(elsewhere, "after"), tracked)) == []
+
+
+def test_raising_the_requirement_to_the_floor_the_fix_names_leaves_no_finding(build_repo, elsewhere):
+    """Decision 12: the requirement the fix names clears the finding."""
+    assert floor_paths(build_repo({"pyproject.toml": project(">=3.12")})) == ["pyproject.toml"]
+    raised = project(">=" + str(python_floor.PYTHON_TARGET))
+    assert floor_paths(make_repo(tmp_path_dir(elsewhere, "raised"), {"pyproject.toml": raised})) == []
+
+
+def test_a_refusal_for_an_oversized_requires_python_holds_the_path_and_not_the_value(build_repo):
+    """208d: the refusal names the file and none of its value."""
+    repo = build_repo({"pyproject.toml": project(">=" + "9" * 5000)})
+    refusal = refusals(repo)[Rule.PYTHON_FLOOR]
+    assert ("pyproject.toml" in refusal, "9" * 5000 in refusal) == (True, False)
+
+
+
+def files_row_and_rows_below(printed: str) -> tuple[str, list[str]]:
+    """The files area row, and the lines under it up to the next area row."""
+    lines = printed.splitlines()
+    start = next(number for number, line in enumerate(lines) if line.lstrip().startswith(tuple(f"{glyph} files " for glyph in Glyph)))
+    end = next((number for number in range(start + 1, len(lines)) if not lines[number].startswith("    ")), len(lines))
+    return lines[start], lines[start + 1 : end]
+
+
+def test_an_allowed_file_stands_as_a_note_row_under_the_files_row_and_no_line_before_the_area_rows_names_the_rule(build_repo, capsys):
+    """O15, #207 sentence 5."""
+    tracked = {"pyproject.toml": project(), "src/s/pyproject.toml": project(">=3.12"), CONFIG_PATH: allow("src/s/pyproject.toml")}
+    repo = build_repo(tracked)
+    _, output = run(capsys, repo)
+    _, below = files_row_and_rows_below(output)
+    (note,) = rule_notes(repo, Rule.PYTHON_FLOOR)
+    first_area_row = next(number for number, line in enumerate(output.splitlines()) if line.lstrip().startswith(tuple(f"{glyph} " for glyph in Glyph)))
+    assert [line.split()[:2] for line in below] == [[Glyph.NOTE, note.location]], output
+    assert Rule.PYTHON_FLOOR.value not in "\n".join(output.splitlines()[:first_area_row]), output
+
+
+def test_a_clean_files_row_counts_its_rules_its_tracked_paths_and_its_allowed_files(build_repo, capsys):
+    """O16, case 1: the clean files row ends in the rule count, the tracked-path count and the allowed files."""
+    tracked = {"pyproject.toml": project(), "src/s/pyproject.toml": project(">=3.12"), CONFIG_PATH: allow("src/s/pyproject.toml")}
+    _, output = run(capsys, build_repo(tracked))
+    row, _ = files_row_and_rows_below(output)
+    extent = [int(part.split()[0]) for part in row.partition(cli.AreaEvent.CLEAN)[2].split(SEPARATOR)]
+    assert (extent[0], extent[1], extent[2], row.rsplit(SEPARATOR, 1)[1].split()[1]) == (
+        sum(rule.area is Area.FILES for rule in Rule), len(tracked), 1, NoteEvent.ALLOWED
+    )
+
+
+def test_a_tracked_env_file_and_an_allowed_file_give_a_files_row_without_a_fact_and_the_note_after_the_fix(build_repo, capsys):
+    """O15, decision 4: the area with findings keeps its row without a fact; the note follows the last fix."""
+    tracked = {".env": "A=1\n", "pyproject.toml": project(">=3.12"), CONFIG_PATH: allow("pyproject.toml")}
+    repo = build_repo(tracked)
+    _, output = run(capsys, repo)
+    row, below = files_row_and_rows_below(output)
+    (note,) = rule_notes(repo, Rule.PYTHON_FLOOR)
+    assert len(row.split()) == len(f"{Glyph.NEEDS_YOU} files 2 findings".split()), output
+    assert (below[-2].split()[0], below[-1].split()[:2]) == (output_module.FIX_LABEL, [Glyph.NOTE, note.location]), output
+    assert Glyph.NOTE not in "".join(line.lstrip()[:1] for line in below[:-1]), output

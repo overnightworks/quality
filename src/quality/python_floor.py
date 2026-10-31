@@ -8,8 +8,8 @@ from packaging.specifiers import Specifier, SpecifierSet
 from packaging.version import Version
 
 from quality import repository
-from quality.config import CONFIG_PATH, PythonAllowance
-from quality.report import Finding, Unparsable
+from quality.config import CONFIG_PATH, PYTHON_ALLOWANCE_HEADING, PythonAllowance
+from quality.report import Finding, FindingEvent, Note, NoteEvent, Unparsable
 from quality.rules import Rule
 
 PYTHON_TARGET = Version("3.14")
@@ -18,10 +18,10 @@ LOWER_BOUND_OPERATORS = frozenset({">=", ">", "~=", "==", "==="})
 
 @dataclass(frozen=True)
 class FloorResult:
-    """The python-floor findings and one report line per allowed file."""
+    """The python-floor findings and one note per allowed file."""
 
     findings: list[Finding]
-    reports: tuple[str, ...]
+    notes: tuple[Note, ...]
 
 
 def _lower_bound(clause: Specifier) -> Version:
@@ -34,7 +34,7 @@ def _floor(path: str, requires_python: str) -> Version | None:
     try:
         bounds = [_lower_bound(clause) for clause in SpecifierSet(requires_python) if clause.operator in LOWER_BOUND_OPERATORS]
     except ValueError as error:
-        raise Unparsable(f'{path} has requires-python "{requires_python}", which is no PEP 440 version specifier ({error})') from error
+        raise Unparsable(f"{path} has a requires-python quality cannot read") from error
     return max(bounds, default=None)
 
 
@@ -53,26 +53,27 @@ def _requires_python(path: str, content: bytes) -> tuple[bool, str]:
     return True, value
 
 
+def _below_floor_fact(requires_python: str, floor: Version | None) -> str:
+    reach = "sets no lower bound" if floor is None else f"admits Python {floor}"
+    return f'requires-python "{requires_python}" {reach}'
+
+
 def _floor_finding(path: str, requires_python: str, floor: Version | None) -> Finding | None:
     if floor is not None and floor >= PYTHON_TARGET:
         return None
-    reason = (
-        f'requires-python "{requires_python}" names no floor, so it admits every Python, below {PYTHON_TARGET}.'
-        if floor is None
-        else f'requires-python "{requires_python}" admits Python {floor}, below {PYTHON_TARGET}.'
-    )
     return Finding(
-        Rule.PYTHON_FLOOR, path, None, reason,
-        f"raise it to >={PYTHON_TARGET} and move CI, .python-version, Dockerfiles and ruff's target-version with it, "
-        f"or declare it in {CONFIG_PATH} with [[python.allow]], its path and a reason.",
+        Rule.PYTHON_FLOOR, path, None, _below_floor_fact(requires_python, floor),
+        f"raise requires-python to >={PYTHON_TARGET} and move CI, .python-version, Dockerfiles and ruff's target-version with it, "
+        f"or declare it in {CONFIG_PATH} with {PYTHON_ALLOWANCE_HEADING}, its path and a reason",
+        event=FindingEvent.NO_FLOOR if floor is None else FindingEvent.BELOW_FLOOR,
     )
 
 
-def _stale_python_allowance(allowance: PythonAllowance, why: str) -> Finding:
+def _stale_python_allowance(allowance: PythonAllowance, fact: str) -> Finding:
     return Finding(
-        Rule.PYTHON_FLOOR, allowance.path, None,
-        f"declared in {CONFIG_PATH} with [[python.allow]], but {why}.",
-        f"delete its [[python.allow]] entry from {CONFIG_PATH}.",
+        Rule.PYTHON_FLOOR, allowance.path, None, f"{PYTHON_ALLOWANCE_HEADING} {fact}",
+        f"delete its {PYTHON_ALLOWANCE_HEADING} entry from {CONFIG_PATH}",
+        event=FindingEvent.UNUSED,
     )
 
 
@@ -80,7 +81,7 @@ def check_python_floor(pyprojects: dict[str, bytes], allowances: Sequence[Python
     """Each judged `pyproject.toml` (one with a `[project]` table) must name a floor of the target version or higher, or be allowed."""
     declared = {allowance.path: allowance for allowance in allowances}
     findings: list[Finding] = []
-    reports: list[str] = []
+    notes: list[Note] = []
     judged: set[str] = set()
     for path, content in sorted(pyprojects.items()):
         has_project, requires_python = _requires_python(path, content)
@@ -93,8 +94,8 @@ def check_python_floor(pyprojects: dict[str, bytes], allowances: Sequence[Python
         if (allowance := declared.pop(path, None)) is None:
             findings.append(finding)
         else:
-            reports.append(f'python-floor: allowed {path} (requires-python "{requires_python}") - {allowance.reason}')
+            notes.append(Note(path, NoteEvent.ALLOWED, f"{finding.reason} · {allowance.reason}"))
     for allowance in declared.values():
-        why = "that file is already at the floor" if allowance.path in judged else "no tracked pyproject.toml with a [project] table lies there"
-        findings.append(_stale_python_allowance(allowance, why))
-    return FloorResult(sorted(findings, key=lambda finding: finding.path), tuple(reports))
+        fact = "allows a file already at the floor" if allowance.path in judged else "matches no tracked pyproject.toml with a [project] table"
+        findings.append(_stale_python_allowance(allowance, fact))
+    return FloorResult(sorted(findings, key=lambda finding: finding.path), tuple(notes))

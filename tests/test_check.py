@@ -371,3 +371,12 @@ def test_hygiene_names_a_config_refusal_on_its_rows_and_shows_the_example_once_u
     assert err[start:start + len(indented)] == indented
     assert not set(indented) & set(out)
     assert Counter(line for line in err if line in indented) == Counter(indented)
+
+
+def test_a_path_in_conflict_counts_once_among_the_tracked_paths(build_repo):
+    """O16: git lists an unmerged path once per stage; the extent counts distinct paths."""
+    repo = build_repo({"README.md": "x\n", "a.txt": "x\n"})
+    blob = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD:a.txt"], capture_output=True, text=True, check=True).stdout.strip()
+    stages = "".join(f"100644 {blob} {stage}\ta.txt\n" for stage in (1, 2, 3))
+    subprocess.run(["git", "-C", str(repo), "update-index", "--index-info"], input=f"0 {'0' * 40}\ta.txt\n{stages}", text=True, check=True)
+    assert check.run_hygiene(repo, installed_ruff, cli.INSTALLED_ZIZMOR).tracked_paths == 2
