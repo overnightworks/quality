@@ -49,7 +49,7 @@ that installs quality needs its tags (`fetch-depth: 0`). Release: tag the merge 
 otherwise keeps a `.dYYYYMMDD` version), then `uv run python scripts/verify_release.py`, and push the tag only when it exits 0; tags are immutable on the remote.
 A minor release `vX.Y.0` is tagged on main. A patch `vX.Y.Z` is tagged on main or, while main takes no tag, on `release/vX.Y`, cut from the last `vX.Y` tag: its
 pull requests target that branch, pass the same gate and merge with `gh pr merge --merge --match-head-commit <sha>` once `quality / verdict` is green (`aco land` lands only
-into main); after the tag the branch is merged into main.
+into main); after the tag the branch is merged into main and deleted.
 
 Tests build their git fixtures in `tmp_path`; never commit a `.env` or compose fail file.
 
