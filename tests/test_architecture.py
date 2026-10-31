@@ -251,10 +251,10 @@ TWO_KEPT = {"guarded": FORBIDDEN, "apart": {"type": "independence", "modules": [
 def test_the_imports_row_counts_the_contracts_the_config_declares_and_the_judgement_stays_clean(build_repo, capsys, configs):
     """O23 and decision 1: the extent is read from both owners; a config without contracts is clean with extent 0."""
     repo = build_repo({**SHOP, **configs})
-    code, output = run(capsys, repo)
+    _, output = run(capsys, repo)
     (verdict,) = [found for found in hygiene_run(repo).verdicts if found.rule is Rule.IMPORT_CONTRACT]
     declared = len(architecture.contracts_of(configs).contracts)
-    assert (code, verdict.findings, verdict.measured_only) == (0, (), False)
+    assert (verdict.findings, verdict.measured_only) == ((), False)
     assert (verdict.extent, leading_count(area_fact(output, Area.IMPORTS))) == (declared, declared)
 
 

@@ -5,9 +5,6 @@ from enum import StrEnum
 
 from quality.config import Allowance
 
-# A line taken from another tool's rendering carries this, so no line the door prints starts with repository text.
-DETAIL_MARKER = "  | "
-
 
 @dataclass(frozen=True)
 class Command:
@@ -195,10 +192,20 @@ def shell_word(text: str) -> str | None:
     return f"'{word}'" if word.startswith("=") else word
 
 
+@dataclass(frozen=True)
+class RuleResult:
+    """What a rule judged: its `findings`, its `extent` (how much its area row says it covered), `measured_only` when
+    it judged without enforcing, and the `notes` it reports without asking for a change."""
+
+    findings: list[Finding]
+    extent: int
+    measured_only: bool
+    notes: tuple[Note, ...] = ()
+
+
 def headline(finding: Finding) -> str:
     return f"{finding.rule} {finding.location} - {printable(finding.reason)}"
 
 
 def render(finding: Finding) -> str:
-    detail = "".join(f"\n{DETAIL_MARKER}{printable(line)}" for line in finding.detail)
-    return f"{headline(finding)}{detail}\n  Fix: {printable(finding.fix)}"
+    return f"{headline(finding)}\n  Fix: {printable(finding.fix)}"

@@ -30,7 +30,7 @@ from quality.config import (
     ConfigError,
     read_allow_lists,
 )
-from quality.report import CannotJudge, Example, Finding, Note, Reason, Unparsable
+from quality.report import CannotJudge, Example, Finding, Note, Reason, RuleResult, Unparsable
 from quality.rules import Area, Rule
 
 CONFIG_EXAMPLE_LABEL = f"write it in {CONFIG_PATH} like this"
@@ -67,8 +67,8 @@ def judged_baseline(root: Path) -> ratchet.Baseline | None:
         raise CannotJudge(str(error), (ratchet.head_step(error),)) from error
 
 
-def check_import_contract(root: Path, tracked: list[str]) -> architecture.ContractsVerdict:
-    """Report-only without an import-linter config at the top; with one, its contracts must be kept.
+def check_import_contract(root: Path, tracked: list[str]) -> RuleResult:
+    """Measured only without an import-linter config at the top; with one, its contracts must be kept.
 
     A config counts when its name exists, so a tracked one deleted from the tree is none and a link to nowhere cannot be read.
     """
@@ -251,7 +251,7 @@ def _judge_baseline_rules(
     sources: dict[str, bytes] | CannotJudge,
     baseline: ratchet.Baseline | None | CannotJudge,
     allow_lists: AllowLists | CannotJudge,
-) -> tuple[ratchet.RuleResult | CannotJudge, ratchet.RuleResult | CannotJudge]:
+) -> tuple[RuleResult | CannotJudge, RuleResult | CannotJudge]:
     """The size and clone verdicts, both from one measurement of the tree and one read of the baseline."""
     if isinstance(sources, CannotJudge):
         return sources, sources
@@ -319,28 +319,16 @@ def run_hygiene(root: Path, locate_ruff: Callable[[], str], locate_zizmor: Calla
         **{rule: _attempt(partial(check_workflows, root, rule, tracked, locate_zizmor)) for rule in scanners.WORKFLOW_SCANNERS},
         Rule.ADVISORY: _findings(advisory),
     }
-    measuring = {rule for rule, result in ((Rule.SIZE, size), (Rule.CLONE, clone)) if _measures_only(result)}
-    notes = {
-        Rule.SIZE: () if isinstance(size, CannotJudge) else size.notes,
-        Rule.PYTHON_FLOOR: () if isinstance(floor, CannotJudge) else floor.notes,
-    }
-    extents = {rule: None if isinstance(result, CannotJudge) else result.extent for rule, result in ((Rule.SIZE, size), (Rule.CLONE, clone))}
+    results = ((Rule.SIZE, size), (Rule.CLONE, clone), (Rule.IMPORT_CONTRACT, contracts))
+    measuring = {rule for rule, result in results if _measures_only(result)}
+    notes = {rule: () if isinstance(result, CannotJudge) else result.notes for rule, result in (*results, (Rule.PYTHON_FLOOR, floor))}
+    extents = {rule: None if isinstance(result, CannotJudge) else result.extent for rule, result in results}
     verdicts = [_verdict(rule, outcomes[rule], rule in measuring, notes.get(rule, ()), extents.get(rule)) for rule in Rule]
-    reports = _reports(contracts, printing)
+    reports = () if isinstance(printing, CannotJudge) else printing.reports
     allowed_advisories = () if isinstance(advisory, CannotJudge) else advisory.report()
     allowed, unused = ([], {}) if isinstance(secrets, CannotJudge) else (secrets.allowed, secrets.unused_allowances)
     return HygieneResult(tuple(verdicts), (*reports, *allowed_advisories), len(set(tracked)), allowed, unused)
 
 
-def _measures_only(result: ratchet.RuleResult | CannotJudge) -> bool:
+def _measures_only(result: RuleResult | CannotJudge) -> bool:
     return not isinstance(result, CannotJudge) and result.measured_only
-
-
-def _reports(
-    contracts: architecture.ContractsVerdict | CannotJudge,
-    printing: python_lint.PrintResult | CannotJudge,
-) -> tuple[str, ...]:
-    """The report lines of the rules that judged: the import-contract notes, each output owner."""
-    contract_notes = [] if isinstance(contracts, CannotJudge) else contracts.notes
-    owner_reports = () if isinstance(printing, CannotJudge) else printing.reports
-    return (*contract_notes, *owner_reports)

@@ -194,6 +194,8 @@ class AreaEvent(StrEnum):
 
 
 CEILING_HELD = "ceiling held"
+NO_CONFIG_FACT = "no import-linter config"
+MEASURED_ONLY_EVENT = {Area.DEBT: AreaEvent.NOT_RECORDED, Area.IMPORTS: AreaEvent.NOT_SET_UP}
 START_FAILURE_NEXT = Instruction("fix what the error names, then run quality hygiene again")
 REFUSED_AREAS_NEXT = Instruction("fix what the ✗ rows name, then run quality hygiene again")
 
@@ -208,6 +210,8 @@ def area_row(verdict: AreaVerdict, extent: str) -> Row:
     if verdict.findings:
         return Row(Glyph.NEEDS_YOU, verdict.area, AreaEvent.FINDING, count=len(verdict.findings))
     if verdict.outcome is Outcome.MEASURED_ONLY:
+        if MEASURED_ONLY_EVENT[verdict.area] is AreaEvent.NOT_SET_UP:
+            return Row(Glyph.NOTE, verdict.area, AreaEvent.NOT_SET_UP, extent)
         partly = "" if verdict.measurement is Measurement.MEASURED_ONLY else "partly "
         mode = f"{partly}{Outcome.MEASURED_ONLY.value}"
         return Row(Glyph.NOTE, verdict.area, AreaEvent.NOT_RECORDED, SEPARATOR.join(filter(None, (extent, mode))))
@@ -222,7 +226,11 @@ def area_extent(verdict: AreaVerdict, tracked_paths: int) -> str:
     if verdict.area is Area.FILES:
         return SEPARATOR.join((counted(len(verdict.verdicts), "rule"), counted(tracked_paths, "file")))
     extents = {rule_verdict.rule: rule_verdict.extent for rule_verdict in verdict.verdicts}
-    if verdict.area is not Area.DEBT or verdict.reasons or None in extents.values():
+    if verdict.reasons or None in extents.values():
+        return ""
+    if verdict.area is Area.IMPORTS:
+        return NO_CONFIG_FACT if verdict.measurement is Measurement.MEASURED_ONLY else counted(extents[Rule.IMPORT_CONTRACT], "contract")
+    if verdict.area is not Area.DEBT:
         return ""
     entries, pairs = counted(extents[Rule.SIZE], "entry", "entries"), counted(extents[Rule.CLONE], "clone pair")
     match verdict.measurement:
@@ -235,9 +243,13 @@ def area_extent(verdict: AreaVerdict, tracked_paths: int) -> str:
 
 
 def measured_notes(areas: tuple[AreaVerdict, ...]) -> tuple[str, ...]:
-    """What the verdict says of an area whose rules only measured: it is not enforced."""
+    """What the verdict says of an area whose rules only measured: it is not enforced, and measured where it measured something."""
     words = {Measurement.MEASURED_ONLY: "measured", Measurement.PARTLY_MEASURED_ONLY: "partly measured"}
-    return tuple(f"{verdict.area} {words[verdict.measurement]}, not enforced" for verdict in areas if verdict.measurement in words)
+    return tuple(
+        f"{verdict.area} not enforced" if MEASURED_ONLY_EVENT[verdict.area] is AreaEvent.NOT_SET_UP
+        else f"{verdict.area} {words[verdict.measurement]}, not enforced"
+        for verdict in areas if verdict.measurement in words
+    )
 
 
 def refusal_error(areas: tuple[AreaVerdict, ...]) -> str:

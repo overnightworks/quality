@@ -184,6 +184,11 @@ def _row_columns(location: str, event: str, widths: tuple[int, int]) -> str:
     return f"{location.ljust(location_width)}{FINDING_GAP}{event.ljust(event_width)}{FINDING_GAP}"
 
 
+def _detail_line(text: str) -> str:
+    """One line of another tool's rendering under its finding's row; a blank line is the bare marker."""
+    return f"{FIX_INDENT}{DETAIL_MARKER} {printable(text)}" if text else f"{FIX_INDENT}{DETAIL_MARKER}"
+
+
 def _finding_lines(findings: Sequence[Finding], notes: Sequence[Note], styled: bool) -> list[str]:
     """Each field is escaped before it is padded, so the columns hold in a pipe as at a terminal; they count characters.
     The findings and the notes share one location column and one event column."""
@@ -196,6 +201,7 @@ def _finding_lines(findings: Sequence[Finding], notes: Sequence[Note], styled: b
         glyph = _paint(Glyph.NEEDS_YOU, GLYPH_STYLE[Glyph.NEEDS_YOU], styled)
         columns = _row_columns(finding.location, str(finding.event), widths)
         lines.append(f"{FINDING_INDENT}{glyph} {columns}{_paint(printable(finding.reason), DIM, styled)}")
+        lines += [_paint(_detail_line(text), DIM, styled) for text in finding.detail]
         if position + 1 == len(findings) or findings[position + 1].fix != finding.fix:
             lines.append(f"{FIX_INDENT}{FIX_LABEL} {printable(finding.fix)}")
     for note in notes:
