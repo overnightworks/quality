@@ -22,7 +22,7 @@ Impact: the pull request cannot merge through `aco land` or the ruleset.
 ## Fix
 
 1. In a terminal, under your own `gh` login: `quality emergency-merge <owner/repo> <pr>`.
-2. Read what it shows (head SHA, legacy count, each declared loosening with its item, date and reason) and type `ja`.
+2. Read what it shows (head SHA, legacy count, each finding the exception sets aside, each declared loosening with its item, date and reason) and type `ja`.
    Anything else changes nothing.
 3. The head releases the claim with the line the command prints (`aco release <n> --abandoned "landed as PR #<pr> by emergency-merge"`).
 
