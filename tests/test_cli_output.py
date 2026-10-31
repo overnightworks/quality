@@ -545,7 +545,7 @@ def test_the_files_block_lists_the_event_rows_in_run_order_with_one_fix_per_run(
 def test_the_files_block_lists_every_finding_in_run_order_python_floor_last_then_the_notes(build_repo, capsys):
     """O14, O15: the rule runner's findings stand as rows in its order, then the area's notes."""
     floor = '[project]\nrequires-python = ">=3.12"\n'
-    allowance = '[[python.allow]]\npath = "src/s/pyproject.toml"\nreason = "r"\n'
+    allowance = f'{config.PYTHON_ALLOWANCE_HEADING}\npath = "src/s/pyproject.toml"\nreason = "r"\n'
     tracked = {".env": "A=1\n", "CLAUDE.md": "own\n", "notes.txt": "x\n", "docs/NOTES": "x\n", "pyproject.toml": floor,
                "src/s/pyproject.toml": floor, "quality/config.toml": ONE_JOB + allowance}
     repo = build_repo(tracked)
