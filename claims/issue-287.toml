@@ -1,8 +1,0 @@
-claim_id = "cdc4ec870ce74341868d2df79c59390a"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "0512e98cff3190c9bec855e6bc753180ab3aae02"
-branch = "claude/issue-287-v0-9-1-from-release-branch"
-scope = [".github/workflows/code-scanning.yml", ".github/workflows/gate.yml", "AGENTS.md", "docs/rules.md", "scripts/verify_release.py", "src/quality/architecture.py", "tests/scripts/test_verify_release.py", "tests/test_verdict_reread.py"]
-opened_commit = "a1f9972f378146ccf9c4af97ceae847257c66bea"
-whole_reason = "The tagged commit must hold the picked fix, the release check that accepts its branch, the CodeQL trigger, the paragraph and the gate refs together; all paths are on release/v0.9, not main."
