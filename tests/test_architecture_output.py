@@ -123,8 +123,8 @@ def test_two_broken_contracts_stand_in_config_order_with_their_lines_and_one_fix
     _, block, repo = broken_block(capsys, files, build_repo)
     findings = rule_findings(repo, Rule.IMPORT_CONTRACT)
     assert_block_prints(block, findings, [])
-    assert [name in line.row.fact for line, name in zip([line for line in block if isinstance(line, FindingLine)], ("first", "second"), strict=True)] == [True, True]
-    assert [name in finding.reason for finding, name in zip(findings, ("first", "second"), strict=True)] == [True, True]
+    assert all(name in line.row.fact for line, name in zip([line for line in block if isinstance(line, FindingLine)], ("first", "second"), strict=True))
+    assert all(name in finding.reason for finding, name in zip(findings, ("first", "second"), strict=True))
     assert all(line.row.detail for line in block if isinstance(line, FindingLine))
     assert sum(isinstance(line, FixLine) for line in block) == 1
 
@@ -158,7 +158,7 @@ def test_warnings_stand_in_order_when_every_contract_is_kept(build_repo, capsys)
     code, printed = hygiene_output(capsys, repo)
     notes = rule_notes(repo, Rule.IMPORT_CONTRACT)
     assert (code, [note.event for note in notes]) == (0, [NoteEvent.WARNING, NoteEvent.UNUSED, NoteEvent.UNUSED])
-    assert [name in note.fact for note, name in zip(notes[1:], ("first", "second"), strict=True)] == [True, True]
+    assert all(name in note.fact for note, name in zip(notes[1:], ("first", "second"), strict=True))
     assert_block_prints(area_block(printed, Area.IMPORTS), [], notes)
 
 
