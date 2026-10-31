@@ -568,7 +568,11 @@ def test_new_pairs_print_in_sorted_order_across_locations_and_at_one_location(bu
     """#136 cell 10: the block decoded once in printed order, with two rows at test_c.py:1."""
     repo, code, output = enforced(capsys, build_repo, THREE_FILES)
     assert code == 1, output
-    assert [finding.location for finding in clone_findings(repo)] == ["tests/test_b.py:1", "tests/test_c.py:1", "tests/test_c.py:1"]
+    findings = clone_findings(repo)
+    assert [finding.location for finding in findings] == ["tests/test_b.py:1", "tests/test_c.py:1", "tests/test_c.py:1"]
+    first_at_c, second_at_c = findings[1:]
+    assert ("tests/test_a.py" in first_at_c.reason, "tests/test_b.py" in first_at_c.reason) == (True, False)
+    assert ("tests/test_a.py" in second_at_c.reason, "tests/test_b.py" in second_at_c.reason) == (False, True)
     assert_the_debt_block_is_the_findings_in_run_order(repo, output)
 
 
