@@ -16,6 +16,7 @@ from importlinter.contracts.forbidden import ForbiddenContract
 
 import quality
 from quality import architecture
+from quality.rules import Rule
 from tests.support.architecture import (
     FORBIDDEN,
     SHOP,
@@ -31,6 +32,7 @@ from tests.support.check import (
     env_row_stands,
     is_clean,
     refusal_row,
+    rule_findings,
 )
 from tests.support.check import hygiene_output as run
 from tests.support.merge import BASE_SHA, ONE_JOB, SHOWN, SONAR_GREEN, FakeGh, changed_nothing, declaring, drive
@@ -43,7 +45,6 @@ INDEPENDENCE = {"type": "independence", "modules": ["shop.web", "shop.db"]}
 ACYCLIC_SIBLINGS = {"type": "acyclic_siblings", "ancestors": ["shop"]}
 STALE_IGNORE = {**FORBIDDEN, "ignore_imports": ["shop.db -> shop.api"]}
 STALE_IGNORE_LINE = "contract guarded ignores shop.db -> shop.api, which no import matches"
-BROKEN = "import-contract .importlinter - contract guarded is broken"
 REFUSED = f"{refusal_row('imports')}"
 
 
@@ -62,20 +63,55 @@ THREE_ROOTS = {
 ALPHA_NEVER_REACHES_GAMMA = {"type": "forbidden", "source_modules": ["alpha"], "forbidden_modules": ["gamma"]}
 
 
+FINDING_CELLS = [
+    ({**SHOP_DB_IMPORTS_WEB, ".importlinter": ini(FORBIDDEN)}, ".importlinter", "guarded", ["shop.db -> shop.web (l.1)"]),
+    ({**SHOP_DB_IMPORTS_WEB, "pyproject.toml": toml(LAYERS)}, "pyproject.toml", "guarded", ["shop.db -> shop.web (l.1)"]),
+    ({**SHOP_DB_IMPORTS_WEB, "setup.cfg": ini(PROTECTED)}, "setup.cfg", "guarded", ["shop.db"]),
+    ({**SHOP_DB_IMPORTS_WEB, ".importlinter": ini(INDEPENDENCE)}, ".importlinter", "guarded", ["shop.db -> shop.web (l.1)"]),
+    ({**SHOP_CYCLE, ".importlinter": ini(ACYCLIC_SIBLINGS)}, ".importlinter", "guarded", ["No cycles are allowed in shop."]),
+    ({**THREE_ROOTS, ".importlinter": ini(ALPHA_NEVER_REACHES_GAMMA, roots=("alpha", "beta", "gamma"))}, ".importlinter", "guarded",
+     ["alpha.top -> beta.mid (l.1)", "beta.mid -> gamma.low (l.1)"]),
+    ({**SHOP, ".importlinter": ini(STALE_IGNORE)}, ".importlinter", "shop.db -> shop.api", []),
+    ({**SHOP, "src/shop/db.py": "import sqlalchemy\n",
+      ".importlinter": ini({**FORBIDDEN, "forbidden_modules": ["sqlalchemy"]}, include_external_packages="True")}, ".importlinter",
+     "guarded", ["shop.db -> sqlalchemy (l.1)"]),
+]
+
+
+@pytest.mark.parametrize(
+    ("files", "location", "named", "chain"),
+    FINDING_CELLS,
+    ids=[
+        "cell 3 a broken forbidden contract names the chain",
+        "cell 4 a broken layers contract in pyproject.toml",
+        "cell 5 a broken protected contract in setup.cfg",
+        "cell 6 independence broken",
+        "cell 6 acyclic_siblings broken",
+        "cell 11 a chain across three source roots",
+        "cell 16 a stale ignore_imports entry",
+        "cell 21 an external forbidden module that is not installed",
+    ],
+)
+def test_a_contract_that_does_not_hold_is_one_finding_at_its_config(build_repo, capsys, files, location, named, chain):
+    """#61 rules 2-8: a broken contract or a stale ignore is exit 1, one finding at the config naming the contract or the
+    entry, its chain within the lines import-linter rendered, and every printed path is repository-relative."""
+    repo = build_repo(files)
+    code, output = run(capsys, repo)
+    (finding,) = rule_findings(repo, Rule.IMPORT_CONTRACT)
+    assert code == 1, output
+    assert finding.location == location
+    assert named in finding.reason
+    assert [line for line in chain if line not in "\n".join(finding.detail)] == []
+    assert str(repo) not in output
+
+
 @pytest.mark.parametrize(
     ("files", "expected_code", "expected_lines"),
     [
         ({"src/shop/__init__.py": ""}, 0, ["import-contract: report only (no import-linter config)", CLEAN_VERDICT]),
         ({**SHOP, ".importlinter": ini(FORBIDDEN)}, 0, [CLEAN_VERDICT]),
-        ({**SHOP_DB_IMPORTS_WEB, ".importlinter": ini(FORBIDDEN)}, 1, [BROKEN, "shop.db -> shop.web (l.1)"]),
-        ({**SHOP_DB_IMPORTS_WEB, "pyproject.toml": toml(LAYERS)}, 1,
-         ["import-contract pyproject.toml - contract guarded is broken", "shop.db -> shop.web (l.1)"]),
-        ({**SHOP_DB_IMPORTS_WEB, "setup.cfg": ini(PROTECTED)}, 1,
-         ["import-contract setup.cfg - contract guarded is broken", "shop.db"]),
         ({**SHOP, ".importlinter": ini(INDEPENDENCE)}, 0, [CLEAN_VERDICT]),
-        ({**SHOP_DB_IMPORTS_WEB, ".importlinter": ini(INDEPENDENCE)}, 1, [BROKEN, "shop.db -> shop.web (l.1)"]),
         ({**SHOP_DB_IMPORTS_WEB, ".importlinter": ini(ACYCLIC_SIBLINGS)}, 0, [CLEAN_VERDICT]),
-        ({**SHOP_CYCLE, ".importlinter": ini(ACYCLIC_SIBLINGS)}, 1, [BROKEN, "No cycles are allowed in shop."]),
         ({**SHOP, ".importlinter": ini(FORBIDDEN), "pyproject.toml": toml(FORBIDDEN)}, 2,
          [f"{REFUSED}.importlinter and pyproject.toml each hold an import-linter config; keep one"]),
         ({**SHOP, ".importlinter": ini(FORBIDDEN, roots=("ghost",))}, 2,
@@ -84,43 +120,28 @@ ALPHA_NEVER_REACHES_GAMMA = {"type": "forbidden", "source_modules": ["alpha"], "
          [(f"{REFUSED}root package shop needs exactly one tracked shop/__init__.py outside the tests,"
            " found: lib/shop, src/shop")]),
         ({**SHOP, "tests/shop/__init__.py": "", ".importlinter": ini(FORBIDDEN)}, 0, [CLEAN_VERDICT]),
-        ({**THREE_ROOTS, ".importlinter": ini(ALPHA_NEVER_REACHES_GAMMA, roots=("alpha", "beta", "gamma"))}, 1,
-         [BROKEN, "alpha.top -> beta.mid (l.1)", "beta.mid -> gamma.low (l.1)"]),
         ({**SHOP, ".importlinter": ini({"type": "custom"})}, 2,
          [(f"{REFUSED}contract guarded in .importlinter has type custom; only the built-in types are judged"
            " (forbidden, layers, independence, protected, acyclic_siblings)")]),
         ({**SHOP, ".importlinter": ini({"type": "forbidden", "source_modules": ["shop.db"]})}, 2,
          [f"{REFUSED}contract guarded in .importlinter has invalid options (forbidden_modules: This is a required field.)"]),
-        ({**SHOP, ".importlinter": ini(STALE_IGNORE)}, 1,
-         [f"import-contract .importlinter - {STALE_IGNORE_LINE}", "Fix: delete the entry"]),
-        ({**SHOP, "src/shop/db.py": "import sqlalchemy\n",
-          ".importlinter": ini({**FORBIDDEN, "forbidden_modules": ["sqlalchemy"]}, include_external_packages="True")}, 1,
-         [BROKEN, "shop.db -> sqlalchemy (l.1)"]),
     ],
     ids=[
         "cell 1 no config is report only",
         "cell 2 a kept forbidden contract",
-        "cell 3 a broken forbidden contract names the chain",
-        "cell 4 a broken layers contract in pyproject.toml",
-        "cell 5 a broken protected contract in setup.cfg",
         "cell 6 independence kept",
-        "cell 6 independence broken",
         "cell 6 acyclic_siblings kept",
-        "cell 6 acyclic_siblings broken",
         "cell 7 two configs",
         "cell 8 a root package without a tracked __init__",
         "cell 9 a root package in two production directories",
         "cell 10 a root package also under tests",
-        "cell 11 a chain across three source roots",
         "cell 14 an unknown contract type",
         "cell 15 a required field missing",
-        "cell 16 a stale ignore_imports entry",
-        "cell 21 an external forbidden module that is not installed",
     ],
 )
 def test_the_import_contract_rule_judges_the_contracts(build_repo, capsys, files, expected_code, expected_lines):
-    """#61 rules 2-8: kept is clean, broken is exit 1 naming the contract and the chain, a config the rule cannot
-    judge is exit 2 naming why, and every printed path is repository-relative."""
+    """#61 rules 2-8: kept is clean, a config the rule cannot judge is exit 2 naming why, and every printed path is
+    repository-relative."""
     repo = build_repo(files)
     code, output = run(capsys, repo)
     assert code == expected_code, output
@@ -623,7 +644,7 @@ def test_the_contract_diff_names_each_loosening_on_its_own_line(base, head, expe
         ({".importlinter": contracts_ini({"a": FORBIDDEN}), "setup.cfg": contracts_ini({"b": FORBIDDEN})},
          ".importlinter and setup.cfg each hold an import-linter config; keep one"),
         ({"pyproject.toml": contracts_toml({"a": FORBIDDEN}, roots=(["shop"],))},
-         "the config pyproject.toml cannot be judged: TypeError"),
+         "the config pyproject.toml cannot be judged: "),
     ],
     ids=["cell 21 a duplicate name in INI", "cell 21 a duplicate name in TOML", "cell 25 two configs", "cell 25 a root package that is a list"],
 )

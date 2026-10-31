@@ -1,7 +1,8 @@
 import re
 import unicodedata
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from enum import StrEnum
 from importlib.metadata import requires
 from pathlib import Path
 
@@ -63,35 +64,105 @@ def _indentation(line: str) -> int:
     return len(line) - len(line.lstrip(" "))
 
 
+@dataclass(frozen=True)
+class BlockLine:
+    """One printed line of a decoded span, at its place in the printed output."""
+
+    position: int
+    text: str
+
+
+@dataclass(frozen=True)
+class FindingLine(BlockLine):
+    location: str
+    row: FindingRow
+
+
+@dataclass(frozen=True)
+class FixLine(BlockLine):
+    """A `fix:` line."""
+
+
+@dataclass(frozen=True)
+class NoteLine(BlockLine):
+    location: str
+    row: NoteRow
+
+
+@dataclass(frozen=True)
+class OtherLine(BlockLine):
+    """Any line that is none of these: until the other areas move to rows, an event-less finding's text."""
+
+
+def _event_of[Event: StrEnum](remainder: str, events: type[Event]) -> Event | None:
+    """The member whose word opens `remainder` followed by a space; the longest wins."""
+    matching = [event for event in events if remainder.startswith(f"{event.value} ")]
+    return max(matching, key=lambda member: len(member.value)) if matching else None
+
+
+def _location_and_remainder(stripped: str, locations: Sequence[str]) -> tuple[str, str]:
+    """The location a row names and what follows it: a known location first, else the first word."""
+    after_glyph = stripped.split(" ", 1)[1] if " " in stripped else ""
+    location = next((known for known in locations if after_glyph.startswith(f"{known} ")), after_glyph.split(" ", 1)[0])
+    return location, after_glyph[len(location):].lstrip(" ")
+
+
+def _fix_below(lines: Sequence[str], number: int) -> tuple[str | None, int | None, bool]:
+    """The fix of the `fix:` run a row belongs to: the next `fix:` line below it that is not shallower, its indentation,
+    and whether it follows the row directly."""
+    for later, following in enumerate(lines[number + 1:], start=number + 1):
+        if _indentation(following) < _indentation(lines[number]):
+            break
+        if following.lstrip().startswith(f"{output.FIX_LABEL} "):
+            return following.lstrip()[len(output.FIX_LABEL) + 1:], _indentation(following), later == number + 1
+    return None, None, False
+
+
+def decode_block(lines: Sequence[str], locations: Sequence[str] = (), first_position: int = 0) -> list[BlockLine]:
+    """Every line of a span in printed order: a finding row (glyph `!`, a location, a `FindingEvent`, a fact), a `fix:`
+    line, a note row (glyph `·`, a location, a `NoteEvent`, a fact) or any other line. A row is found by its glyph and
+    its event; the padding between the columns is never rebuilt."""
+    decoded: list[BlockLine] = []
+    for number, line in enumerate(lines):
+        stripped = line.lstrip()
+        position = first_position + number
+        if stripped.startswith(f"{Glyph.NEEDS_YOU} ") and (found := _finding_line(lines, number, locations, position)):
+            decoded.append(found)
+        elif stripped.startswith(f"{output.FIX_LABEL} "):
+            decoded.append(FixLine(position, line))
+        elif stripped.startswith(f"{Glyph.NOTE} ") and (note := _note_line(line, locations, position)):
+            decoded.append(note)
+        else:
+            decoded.append(OtherLine(position, line))
+    return decoded
+
+
+def _finding_line(lines: Sequence[str], number: int, locations: Sequence[str], position: int) -> FindingLine | None:
+    location, remainder = _location_and_remainder(lines[number].lstrip(), locations)
+    event = _event_of(remainder, FindingEvent)
+    if event is None:
+        return None
+    fix, fix_indent, fix_follows = _fix_below(lines, number)
+    row = FindingRow(_indentation(lines[number]), event, remainder[len(event.value):].strip(), fix, fix_indent, fix_follows)
+    return FindingLine(position, lines[number], location, row)
+
+
+def _note_line(line: str, locations: Sequence[str], position: int) -> NoteLine | None:
+    location, remainder = _location_and_remainder(line.lstrip(), locations)
+    event = _event_of(remainder, NoteEvent)
+    if event is None:
+        return None
+    return NoteLine(position, line, location, NoteRow(_indentation(line), event, remainder[len(event.value):].strip()))
+
+
 def finding_rows(printed: str, location: str) -> list[FindingRow]:
     """Every finding row at `location`, in printed order."""
     return [row for _, row in printed_finding_rows(printed, [location])]
 
 
 def printed_finding_rows(printed: str, locations: list[str]) -> list[tuple[str, FindingRow]]:
-    """Every finding row at any of `locations`, each with its location, in the order the output prints them. A row is
-    found by its glyph and an event of `FindingEvent`, a fix line by the label of `output`; the padding between the
-    columns is never rebuilt."""
-    lines = printed.splitlines()
-    rows = []
-    for number, line in enumerate(lines):
-        prefix = next((f"{Glyph.NEEDS_YOU} {location} " for location in locations if line.lstrip().startswith(f"{Glyph.NEEDS_YOU} {location} ")), None)
-        if prefix is None:
-            continue
-        remainder = line.lstrip()[len(prefix):].lstrip(" ")
-        events = [event for event in FindingEvent if remainder.startswith(f"{event.value} ")]
-        if not events:
-            continue
-        event = max(events, key=lambda member: len(member.value))
-        fix, fix_indent, fix_follows = None, None, False
-        for later, following in enumerate(lines[number + 1:], start=number + 1):
-            if _indentation(following) < _indentation(line):
-                break
-            if following.lstrip().startswith(f"{output.FIX_LABEL} "):
-                fix, fix_indent, fix_follows = following.lstrip()[len(output.FIX_LABEL) + 1:], _indentation(following), later == number + 1
-                break
-        rows.append((prefix[len(Glyph.NEEDS_YOU) + 1:-1], FindingRow(_indentation(line), event, remainder[len(event.value):].strip(), fix, fix_indent, fix_follows)))
-    return rows
+    """Every finding row at any of `locations`, each with its location, in the order the output prints them."""
+    return [(line.location, line.row) for line in decode_block(printed.splitlines(), locations) if isinstance(line, FindingLine) and line.location in locations]
 
 
 def area_fact(printed: str, area: str) -> str:
@@ -116,18 +187,18 @@ def extent_counts(fact: str) -> list[int]:
     return [int(number) for number in re.findall(r"\d+", fact)]
 
 
-def area_finding_rows(printed: str, area: str) -> list[tuple[str, FindingRow]]:
-    """Every finding row standing under `area`'s row, each with its location, in printed order."""
+def area_block(printed: str, area: str) -> list[BlockLine]:
+    """Every line under `area`'s row, in printed order with its position: from the row to the next area row, the verdict
+    line or `error:`, that is while the lines stay indented under the row."""
     lines = printed.splitlines()
     start = next(number for number, line in enumerate(lines) if line.split()[1:2] == [area])
-    locations = []
-    for line in lines[start + 1:]:
-        if not line.startswith(f"{output.FINDING_INDENT}{Glyph.NEEDS_YOU} "):
-            if line.startswith(output.FINDING_INDENT):
-                continue
-            break
-        locations.append(line.split()[1])
-    return printed_finding_rows(printed, list(dict.fromkeys(locations)))
+    end = next((number for number in range(start + 1, len(lines)) if not lines[number].startswith(output.FINDING_INDENT)), len(lines))
+    return decode_block(lines[start + 1:end], first_position=start + 1)
+
+
+def area_finding_rows(printed: str, area: str) -> list[tuple[str, FindingRow]]:
+    """Every finding row standing under `area`'s row, each with its location, in printed order."""
+    return [(line.location, line.row) for line in area_block(printed, area) if isinstance(line, FindingLine)]
 
 
 @dataclass(frozen=True)
@@ -140,19 +211,8 @@ class NoteRow:
 
 
 def note_rows(printed: str, location: str) -> list[NoteRow]:
-    """Every note row at `location`, in printed order. A row is found by its glyph and an event of `NoteEvent`; the
-    padding between the columns is never rebuilt."""
-    rows = []
-    for line in printed.splitlines():
-        prefix = f"{Glyph.NOTE} {location} "
-        if not line.lstrip().startswith(prefix):
-            continue
-        remainder = line.lstrip()[len(prefix):].lstrip(" ")
-        events = [event for event in NoteEvent if remainder.startswith(f"{event.value} ")]
-        if events:
-            event = max(events, key=lambda member: len(member.value))
-            rows.append(NoteRow(_indentation(line), event, remainder[len(event.value):].strip()))
-    return rows
+    """Every note row at `location`, in printed order."""
+    return [line.row for line in decode_block(printed.splitlines(), [location]) if isinstance(line, NoteLine) and line.location == location]
 
 
 def rule_notes(repo: Path, rule: Rule) -> list[Note]:
@@ -217,10 +277,14 @@ def hygiene_run(repo: Path, locate_ruff: Callable[[], str] = installed_ruff, loc
     return check.run_hygiene(repo, locate_ruff, locate_zizmor or cli.INSTALLED_ZIZMOR)
 
 
+def refusals_of(result: check.HygieneResult) -> dict[Rule, str]:
+    """Each rule that cannot judge, with its reason, as the rule runner reports it."""
+    return {verdict.rule: str(verdict.refusal) for verdict in result.verdicts if verdict.refusal is not None}
+
+
 def refusals(repo: Path, locate_ruff: Callable[[], str] = installed_ruff, locate_zizmor: Callable[[], str] | None = None) -> dict[Rule, str]:
     """Each rule that cannot judge `repo`, with its reason, as the rule runner reports it."""
-    verdicts = hygiene_run(repo, locate_ruff, locate_zizmor).verdicts
-    return {verdict.rule: str(verdict.refusal) for verdict in verdicts if verdict.refusal is not None}
+    return refusals_of(hygiene_run(repo, locate_ruff, locate_zizmor))
 
 
 def copy_block(example: tuple[str, ...]) -> str:

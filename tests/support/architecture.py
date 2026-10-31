@@ -38,3 +38,6 @@ def contracts_toml(contracts: dict[str, dict], roots: tuple[str, ...] = ("shop",
         entries = {"name": name, **options}
         text += "\n[[tool.importlinter.contracts]]\n" + "".join(f"{key} = {json.dumps(value)}\n" for key, value in entries.items())
     return text
+
+
+KEPT_CONTRACT = {**SHOP, ".importlinter": contracts_ini({"guarded": FORBIDDEN})}
