@@ -362,6 +362,8 @@ def test_a_notes_location_and_fact_are_escaped_before_they_are_padded():
     (row,) = note_rows(printed, printable(hostile))
     assert row.fact == printable(hostile)
     assert [character for character in printed if unicodedata.category(character) in ("Cc", "Cf", "Zl", "Zp") and character != "\n"] == []
+    short_row = next(line for line in printed.splitlines() if " short " in line)
+    assert short_row.index(NoteEvent.ALLOWED.value) == next(line for line in printed.splitlines() if "x\\x0a" in line).index(NoteEvent.ALLOWED.value)
 
 
 ENV_ROW = f"{Glyph.NEEDS_YOU} .env "

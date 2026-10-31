@@ -94,8 +94,7 @@ def check_python_floor(pyprojects: dict[str, bytes], allowances: Sequence[Python
         if (allowance := declared.pop(path, None)) is None:
             findings.append(finding)
         else:
-            fact = _below_floor_fact(requires_python, _floor(path, requires_python))
-            notes.append(Note(path, NoteEvent.ALLOWED, f"{fact} · {allowance.reason}"))
+            notes.append(Note(path, NoteEvent.ALLOWED, f"{finding.reason} · {allowance.reason}"))
     for allowance in declared.values():
         fact = "allows a file already at the floor" if allowance.path in judged else "matches no tracked pyproject.toml with a [project] table"
         findings.append(_stale_python_allowance(allowance, fact))
