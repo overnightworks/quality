@@ -87,12 +87,11 @@ def test_a_floor_below_python_3_14_names_the_value_and_the_floor(build_repo, cap
     assert_findings_print_as_rows(repo, output)
 
 
-def test_a_no_floor_finding_names_the_value_it_found(build_repo, capsys):
+def test_a_no_floor_finding_names_the_value_it_found(build_repo):
     """F3, sentence 3: the fact of a project that sets no lower bound names the value it found."""
     repo = build_repo({"pyproject.toml": project("<3.15")})
-    run(capsys, repo)
     (finding,) = rule_findings(repo, Rule.PYTHON_FLOOR)
-    assert "<3.15" in finding.reason
+    assert (finding.event, "<3.15" in finding.reason) == (FindingEvent.NO_FLOOR, True)
 
 
 @pytest.mark.parametrize(

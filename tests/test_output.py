@@ -325,8 +325,13 @@ def test_no_findings_and_no_notes_print_nothing():
     assert findings_written([]) == ""
 
 
-@pytest.mark.parametrize("event", [FindingEvent.UNUSED, FindingEvent.PUBLISHED_PORT], ids=["event shorter than a note's", "event longer than a note's"])
-def test_findings_and_notes_share_one_location_column_and_one_event_column(event):
+@pytest.mark.parametrize(
+    ("event", "longer_than_a_notes"),
+    [(FindingEvent.UNUSED, False), (FindingEvent.PUBLISHED_PORT, True)],
+    ids=["event shorter than a note's", "event longer than a note's"],
+)
+def test_findings_and_notes_share_one_location_column_and_one_event_column(event, longer_than_a_notes):
+    assert (len(event.value) > len(NoteEvent.ALLOWED.value)) == longer_than_a_notes
     findings = [finding("a.env", event, "first fact")]
     notes = [note("deploy/longer.toml", "second fact")]
     printed = findings_written(findings, notes=notes)
