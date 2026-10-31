@@ -472,7 +472,7 @@ def _check(contract: Contract, graph: grimp.ImportGraph, config_name: str, repos
             check = contract.check(copy.deepcopy(graph), verbose=False)
         except MissingImport as stale:
             return RuleResult([
-                Finding(Rule.IMPORT_CONTRACT, config_name, None, _ignore_fact(contract.name, line), STALE_IGNORE_FIX, event=FindingEvent.UNUSED)
+                Finding(Rule.IMPORT_CONTRACT, config_name, None, _ignore_fact(contract.name, line, _ignored_expression(line)), STALE_IGNORE_FIX, event=FindingEvent.UNUSED)
                 for line in str(stale).splitlines()
             ], 1, False)
         notes = tuple(_warning_note(contract.name, config_name, warning) for warning in check.warnings)
@@ -485,16 +485,22 @@ def _check(contract: Contract, graph: grimp.ImportGraph, config_name: str, repos
         return RuleResult([broken], 1, False, notes)
 
 
-def _ignore_fact(contract_name: str, message: str) -> str:
-    """What an unmatched-ignore message says of a contract: the expression it ignores, else import-linter's own words."""
+def _ignored_expression(message: str) -> str | None:
+    """The expression an unmatched-ignore message names, or None for any other message."""
     match = UNMATCHED_IGNORE.fullmatch(message)
-    return f"contract {contract_name} {message}" if match is None else f"contract {contract_name} ignores {match['expression']}"
+    return None if match is None else match["expression"]
+
+
+def _ignore_fact(contract_name: str, message: str, expression: str | None) -> str:
+    """What a message says of a contract: the expression it ignores, else import-linter's own words."""
+    return f"contract {contract_name} {message}" if expression is None else f"contract {contract_name} ignores {expression}"
 
 
 def _warning_note(contract_name: str, config_name: str, message: str) -> Note:
     """An unmatched ignore at `warn` is an `unused` note, any other warning of the contract a `warning` note."""
-    event = NoteEvent.UNUSED if UNMATCHED_IGNORE.fullmatch(message) else NoteEvent.WARNING
-    return Note(config_name, event, _ignore_fact(contract_name, message))
+    expression = _ignored_expression(message)
+    event = NoteEvent.WARNING if expression is None else NoteEvent.UNUSED
+    return Note(config_name, event, _ignore_fact(contract_name, message, expression))
 
 
 def _rendered(contract: Contract, check: ContractCheck) -> tuple[str, ...]:
