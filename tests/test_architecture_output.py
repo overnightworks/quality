@@ -250,5 +250,6 @@ def test_the_real_door_paints_the_not_set_up_row_as_one_dim_span_only_at_a_termi
     text = read_pseudo_terminal(parent, child)
     row = next(line for line in text.replace("\r\n", "\n").splitlines() if Area.IMPORTS in line)
     spans = re.findall(r"\x1b\[[0-9;]*m", row)
-    assert (len(spans), "\x1b[" in text) == ((2, True) if painted else (0, False))
+    escape_present = "\x1b[" in text
+    assert (len(spans), escape_present) == ((2, True) if painted else (0, False))
     assert not painted or re.fullmatch(r"\x1b\[2m.*\x1b\[0m", row)
