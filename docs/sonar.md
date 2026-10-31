@@ -153,7 +153,8 @@ way Sonar judges main:
 - **An unreachable file:** a `.github` the filesystem refuses access to is exit `2` with a line naming the file, before
   any request.
 - **Only this rule** has the exception; every other finding and rule counts as before.
-- **Gaps:** `quality emergency-merge` does not honour it and still counts the finding as added; the file's existence does not say that Dependabot maintains the Dockerfile's folder for Docker; a repository
+- **The emergency door** reads the file at the pull request's merge commit (the commit the gate's checkout stands on) and counts and shows as the gate does.
+- **Gaps:** the file's existence does not say that Dependabot maintains the Dockerfile's folder for Docker; a repository
   that has only `.github/dependabot.yaml` stays red on pull requests; Renovate is not judged.
 
 (operator rulings 21.10.2026 and 23.10.2026: Sonar's exception applies on pull requests too, „Sonars Ausnahme anwenden (empfohlen)“, and
