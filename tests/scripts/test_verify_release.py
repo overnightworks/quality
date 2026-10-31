@@ -219,8 +219,12 @@ def test_the_script_accepts_a_patch_tag_that_main_holds_when_origin_has_no_relea
 
 
 @pytest.mark.integration
-def test_a_failed_listing_of_the_branches_holding_head_holds_none(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
+def test_a_failed_listing_of_the_branches_holding_head_holds_none_even_if_it_printed_a_branch(tmp_path, monkeypatch):
+    fake_git = tmp_path / "bin" / "git"
+    fake_git.parent.mkdir()
+    fake_git.write_text("#!/bin/sh\necho main\nexit 1\n", encoding="utf-8")
+    fake_git.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{fake_git.parent}:/usr/bin:/bin")
     assert branches_holding_head(fetched=True) == frozenset()
 
 

@@ -80,7 +80,7 @@ def _git(*arguments: str) -> subprocess.CompletedProcess[str]:
 
 
 def fetch_origin_branches() -> bool:
-    """Prunes, so a cached ref of a branch deleted on origin never holds HEAD; also may import the tags that point into the fetched history, so every read of tags comes after it."""
+    """Prunes, so a cached ref of a deleted branch never holds HEAD; tags follow the fetch, so every tag read comes after it."""
     refspecs = ("+refs/heads/main:refs/remotes/origin/main", "+refs/heads/release/*:refs/remotes/origin/release/*")
     return _git("fetch", "--quiet", "--prune", "origin", *refspecs).returncode == 0
 
