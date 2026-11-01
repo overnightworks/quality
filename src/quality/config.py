@@ -39,6 +39,7 @@ ONE_LINE_REASON = "a non-empty one-line reason"
 BARE_KEY = re.compile(r"[A-Za-z0-9_-]+")
 type ExampleLines = tuple[str, *tuple[str, ...]]
 LOOSENED_HEADING = "[[gate.loosened]]"
+SECRETS_ALLOWANCE_HEADING = "[[secrets.allow]]"
 ADVISORY_ALLOWANCE_HEADING = "[[advisories.allow]]"
 ROOT_ALLOWANCE_HEADING = "[[root.allow]]"
 LAYOUT_ALLOWANCE_HEADING = "[[layout.allow]]"

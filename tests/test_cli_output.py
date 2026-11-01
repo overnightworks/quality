@@ -16,11 +16,13 @@ import pytest
 from quality import architecture, check, cli, config, ratchet, scanners
 from quality.output import SEPARATOR, Glyph
 from quality.ratchet import BASELINE_PATH
-from quality.report import FindingEvent
+from quality.report import FindingEvent, NoteEvent, printable
 from quality.rules import Area, Rule
 from tests.support.architecture import FORBIDDEN, KEPT_CONTRACT, SHOP_DB_IMPORTS_WEB, toml
 from tests.support.check import (
     CLEAN_VERDICT,
+    NoteLine,
+    area_block,
     area_fact,
     assert_every_line_starts_with_the_door,
     assert_row_prints_finding,
@@ -311,7 +313,8 @@ def test_an_unused_allowance_with_a_control_character_prints_escaped(build_repo,
     repo = build_repo({"quality/config.toml": config})
     code, lines = door_lines(capsys, "hygiene", str(repo))
     assert code == 0
-    assert any(line.startswith("secret: unused allowance aws-access-token in no\\x1bthere.txt (sha256 ") for line in lines)
+    (note,) = (line.row for line in area_block("\n".join(lines), "secrets") if isinstance(line, NoteLine))
+    assert (note.event, printable("no\x1bthere.txt") in note.fact) == (NoteEvent.UNUSED, True)
     assert_every_line_starts_with_the_door(lines)
 
 

@@ -1,70 +1,113 @@
+import json
 import os
 import signal
 import subprocess
 import sys
 import tempfile
 import time
+import tomllib
 from pathlib import Path
 
 import pytest
 
-from quality import cli, scanners
+from quality import cli, config, scanners, staged
+from quality.report import Example, FindingEvent, NoteEvent
+from quality.rules import Rule
+from tests.support.check import (
+    CopyLine,
+    FixLine,
+    area_block,
+    area_fact,
+    assert_block_prints,
+    assert_every_line_starts_with_the_door,
+    assert_finding_vocabulary,
+    decode_block,
+    env_row_stands,
+    extent_counts,
+    heard,
+    leading_count,
+    refusals,
+    rule_findings,
+    rule_notes,
+)
 from tests.support.scanners import OUTPUTS, commit, fake_gitleaks, hygiene_exit_2, scan, serving
 from tests.support.secrets import FAKE_KEY, OTHER_KEY, allow_config, assert_key_found, sha256_of
 
 RECORDED_SECRET = "PLACEHOLDER-SECRET-VALUE"  # the Secret in the recorded gitleaks-finding.json
 RECORDED_RULE = "aws-access-token"
 RECORDED_FILE = "deploy/config.txt"
+RECORDED_LOCATION = f"{RECORDED_FILE}:3"
 
 
-def run_with_recorded_leak(build_repo, served_scanners, capsys, config: str | None) -> tuple[int, str]:
-    repo = build_repo({"quality/config.toml": config} if config is not None else {})
+RECORDED_COMMIT = json.loads((OUTPUTS / "gitleaks-finding.json").read_text(encoding="utf-8"))[0]["Commit"]
+GATE_ONLY = '[gate]\nmandatory_jobs = ["checks"]\n'
+
+
+def recorded_leak_repo(build_repo, served_scanners, config_text: str | None) -> Path:
+    repo = build_repo({"quality/config.toml": config_text} if config_text is not None else {})
     fake_gitleaks(served_scanners, on_scan=f'cp {OUTPUTS / "gitleaks-finding.json"} "$report"; exit 7')
-    code = cli.main(["hygiene", str(repo)])
-    return code, capsys.readouterr().out
+    return repo
+
+
+def allowed_locations(repo: Path) -> list[str]:
+    return [note.location for note in rule_notes(repo, Rule.LEAK) if note.event is NoteEvent.ALLOWED]
 
 
 @pytest.mark.parametrize(
-    ("config", "code", "printed", "not_printed"),
+    ("config_text", "code", "found", "allowed"),
     [
-        (None, 1, "secret deploy/config.txt:3", "allowed"),
-        (allow_config((RECORDED_RULE, RECORDED_FILE, "another value", "other value")), 1,
-         "secret deploy/config.txt:3", "allowed"),
-        (allow_config((RECORDED_RULE, "src/app.py", RECORDED_SECRET, "other file")), 1,
-         "secret deploy/config.txt:3", "allowed"),
-        (allow_config(("generic-api-key", RECORDED_FILE, RECORDED_SECRET, "other rule")), 1,
-         "secret deploy/config.txt:3", "allowed"),
-        (allow_config((RECORDED_RULE, RECORDED_FILE, RECORDED_SECRET, "test data")), 0,
-         "secret: 1 allowed (deploy/config.txt:3)", " finding"),
+        (None, 1, [RECORDED_LOCATION], []),
+        (allow_config((RECORDED_RULE, RECORDED_FILE, "another value", "other value")), 1, [RECORDED_LOCATION], []),
+        (allow_config((RECORDED_RULE, "src/app.py", RECORDED_SECRET, "other file")), 1, [RECORDED_LOCATION], []),
+        (allow_config(("generic-api-key", RECORDED_FILE, RECORDED_SECRET, "other rule")), 1, [RECORDED_LOCATION], []),
+        (allow_config((RECORDED_RULE, RECORDED_FILE, RECORDED_SECRET, "test data")), 0, [], [RECORDED_LOCATION]),
     ],
     ids=[
         "no-config-is-red-not-exit-2",
         "another-value-at-the-same-place-is-red",
         "the-value-in-another-file-is-red",
         "the-value-under-another-rule-is-red",
-        "allowed-value-is-green-and-printed",
+        "allowed-value-is-green-and-a-note",
     ],
 )
-def test_a_secret_finding_is_allowed_only_by_rule_file_and_value(
-    build_repo, served_scanners, capsys, config, code, printed, not_printed
-):
+def test_a_secret_finding_is_allowed_only_by_rule_file_and_value(build_repo, served_scanners, capsys, config_text, code, found, allowed):
     """#24 rule 1: a finding is allowed only when rule, file and the hash of its value match one entry."""
-    exit_code, out = run_with_recorded_leak(build_repo, served_scanners, capsys, config)
-    assert exit_code == code, out
-    assert printed in out
-    assert not_printed not in out
-    assert RECORDED_SECRET not in out
-    if code == 0:
-        assert RECORDED_RULE in out
-        assert "test data" in out  # the entry's reason
+    repo = recorded_leak_repo(build_repo, served_scanners, config_text)
+    exit_code = cli.main(["hygiene", str(repo)])
+    assert exit_code == code
+    assert [finding.location for finding in rule_findings(repo, Rule.LEAK)] == found
+    assert allowed_locations(repo) == allowed
+    assert RECORDED_SECRET not in heard(capsys)
 
 
-def test_a_red_secret_finding_prints_the_hash_to_allow_and_not_the_value(build_repo, served_scanners, capsys):
-    """#24 rule 4: the output names the hash a reviewer would put into the allowance, never the value."""
-    _, out = run_with_recorded_leak(build_repo, served_scanners, capsys, None)
-    assert f"sha256 {sha256_of(RECORDED_SECRET)}, value not shown" in out
-    assert "allow this rule, file and sha256 with a reason in quality/config.toml" in out
-    assert RECORDED_SECRET not in out
+def test_a_recorded_leak_is_one_secret_finding_naming_its_rule_and_commit_and_never_its_value(build_repo, served_scanners):
+    """#24 rule 4, O28: the finding carries the secret event, a fact with the rule and the commit's first eight characters."""
+    (finding,) = rule_findings(recorded_leak_repo(build_repo, served_scanners, None), Rule.LEAK)
+    assert finding.event is FindingEvent.SECRET
+    assert (RECORDED_RULE in finding.reason, RECORDED_COMMIT[:8] in finding.reason) == (True, True)
+    assert RECORDED_SECRET not in repr(finding)
+    assert_finding_vocabulary(finding)
+
+
+def test_the_entry_to_copy_is_lines_that_read_as_one_allowance_once_a_reason_is_added(build_repo, served_scanners):
+    """O31, O33: the fix is an example, not a sentence; its lines are TOML that holds one secrets allowance."""
+    (finding,) = rule_findings(recorded_leak_repo(build_repo, served_scanners, None), Rule.LEAK)
+    assert isinstance(finding.fix, Example)
+    entries = tomllib.loads("\n".join(finding.fix.lines))["secrets"]["allow"]
+    assert len(entries) == 1
+
+
+@pytest.mark.scanner
+def test_one_value_on_two_lines_is_two_rows_and_one_fix(build_repo, installed_scanners, capsys):
+    """Rule 7: one value on two lines of one file is two rows under one `fix:` and one entry."""
+    repo = build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}\nsecond = {FAKE_KEY}\n"})
+    assert cli.main(["hygiene", str(repo)]) == 1
+    block = area_block(capsys.readouterr().out, "secrets")
+    findings = rule_findings(repo, Rule.LEAK)
+    assert_block_prints(block, findings, rule_notes(repo, Rule.LEAK))
+    assert len(findings) == 2
+    assert sum(isinstance(line, FixLine) for line in block) == 1
+    assert sum(isinstance(line, CopyLine) for line in block) == len(findings[0].fix.lines)
 
 
 @pytest.mark.parametrize(
@@ -128,8 +171,10 @@ def test_an_allowed_value_stays_green_at_a_shifted_line_and_across_commits(build
     commit(repo, "key again, three lines further down")
     allow_fake_key(repo, "docs/config.txt")
     assert scan(repo) == 0
-    summary = next(line for line in capsys.readouterr().out.splitlines() if line.startswith("secret: 2 allowed ("))
-    assert set(summary.removeprefix("secret: 2 allowed (").removesuffix(")").split(", ")) == {"docs/config.txt:1", "docs/config.txt:4"}
+    printed = capsys.readouterr().out
+    allowed = [note.location for note in rule_notes(repo, Rule.LEAK) if note.event is NoteEvent.ALLOWED]
+    assert sorted(allowed) == ["docs/config.txt:1", "docs/config.txt:4"]
+    assert extent_counts(area_fact(printed, "secrets"))[-1] == len(allowed)
 
 
 @pytest.mark.scanner
@@ -148,7 +193,8 @@ def test_an_allowance_never_spreads_to_another_value_or_file(build_repo, install
     write(repo)
     commit(repo, "a second leak")
     assert scan(repo) == 1
-    assert f"secret {placed}" in capsys.readouterr().out
+    assert [finding.location for finding in rule_findings(repo, Rule.LEAK)] == [placed]
+    assert FAKE_KEY not in heard(capsys)
 
 
 @pytest.mark.scanner
@@ -157,7 +203,8 @@ def test_a_key_on_an_allowance_line_of_the_config_stays_red(build_repo, installe
     line = f'# {FAKE_KEY} secret_sha256 = "{sha256_of(FAKE_KEY)}"\n'
     repo = build_repo({"quality/config.toml": allow_config() + line})
     assert scan(repo) == 1
-    assert "secret quality/config.toml:" in capsys.readouterr().out
+    assert [finding.path for finding in rule_findings(repo, Rule.LEAK)] == [config.CONFIG_PATH]
+    assert FAKE_KEY not in heard(capsys)
 
 
 @pytest.mark.scanner
@@ -166,7 +213,8 @@ def test_a_repository_without_quality_config_is_scanned_and_its_key_is_red(build
     repo = build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
     assert not (repo / "quality").exists()
     assert scan(repo) == 1
-    assert "secret config.txt:1" in capsys.readouterr().out
+    assert [finding.location for finding in rule_findings(repo, Rule.LEAK)] == ["config.txt:1"]
+    assert FAKE_KEY not in heard(capsys)
 
 
 FAILING_REPORTS = {
@@ -174,6 +222,8 @@ FAILING_REPORTS = {
     "gitleaks-stalls": f'printf \'[{{"Secret":"{FAKE_KEY}"}}]\' > "$report"; exec sleep 30',
     "parsing-raises": f'printf \'[{{"Secret":"{FAKE_KEY}"}}]\' > "$report"; exit 7',
     "report-not-utf8": f'printf \'[{{"Secret":"{FAKE_KEY}"}}]\\342\\202\' > "$report"; exit 7',
+    "stderr-without-report": f'echo "aws_access_key_id = {FAKE_KEY}" >&2; exit 3',
+    "stderr-beside-a-report": f'printf \'[{{"Secret":"{FAKE_KEY}"}}]\' > "$report"; echo "aws_access_key_id = {FAKE_KEY}" >&2; exit 3',
 }
 
 
@@ -234,14 +284,89 @@ def test_a_sigterm_mid_scan_leaves_no_scratch_directory(keyed_repo, served_scann
     assert list(scratch_parent.iterdir()) == []
 
 
+STALE_FILE = "no\x1bthere.txt"
+HOSTILE_FILE = 'k\x1b"\u202e.txt'
+
+
 @pytest.mark.scanner
 @pytest.mark.parametrize("command", SECRET_COMMANDS)
-def test_an_allowance_no_finding_used_is_printed(build_repo, installed_scanners, capsys, command):
-    """#25 rule 1, quality#5 finding 34: a quality/config.toml entry that matches nothing is named, not silent."""
-    repo = build_repo({"quality/config.toml": allow_config(("aws-access-token", "nothere.txt", FAKE_KEY, "stale entry"))})
+def test_an_allowance_no_finding_used_is_one_unused_note_at_the_config(build_repo, installed_scanners, capsys, command):
+    """#25 rule 1, quality#5 finding 34: an entry that matches nothing is named, not silent, in both doors."""
+    repo = build_repo({"quality/config.toml": allow_config(("aws-access-token", "no\\u001bthere.txt", FAKE_KEY, "stale entry"))})
     code = cli.main([command, str(repo)])
-    assert code == 0
-    assert (
-        f"secret: unused allowance aws-access-token in nothere.txt (sha256 {sha256_of(FAKE_KEY)}) - stale entry"
-        in capsys.readouterr().out
-    )
+    printed = capsys.readouterr().out
+    hygiene = command == "hygiene"
+    notes = rule_notes(repo, Rule.LEAK) if hygiene else list(staged.scan_staged(repo).notes)
+    block = area_block(printed, "secrets") if hygiene else decode_block(printed.splitlines())
+    (note,) = notes
+    assert (code, note.event, note.path) == (0, NoteEvent.UNUSED, config.CONFIG_PATH)
+    assert ("aws-access-token" in note.fact, STALE_FILE in note.fact) == (True, True)
+    assert_block_prints(block, [], notes)
+    assert FAKE_KEY not in printed
+    assert_every_line_starts_with_the_door(printed.splitlines())
+
+
+@pytest.mark.scanner
+@pytest.mark.parametrize("name", ["config.txt", HOSTILE_FILE], ids=["plain-path", "esc-quote-and-bidi-path"])
+def test_the_printed_entry_with_a_reason_allows_exactly_that_finding(build_repo, installed_scanners, capsys, name):
+    """O31, acceptance 3: the lines under `fix:`, with a reason added and committed, turn the finding into one allowed note."""
+    repo = build_repo({name: f"aws_access_key_id = {FAKE_KEY}\n", config.CONFIG_PATH: GATE_ONLY})
+    assert scan(repo) == 1
+    first = capsys.readouterr()
+    (finding,) = rule_findings(repo, Rule.LEAK)
+    entry = [line.copy for line in area_block(first.out, "secrets") if isinstance(line, CopyLine)]
+    with (repo / config.CONFIG_PATH).open("a", encoding="utf-8") as allowing:
+        allowing.write("\n".join(entry) + '\nreason = "scenario reason"\n')
+    commit(repo, "allow what the door printed")
+    assert scan(repo) == 0
+    second = capsys.readouterr()
+    assert (rule_findings(repo, Rule.LEAK), allowed_locations(repo)) == ([], [finding.location])
+    assert FAKE_KEY not in first.out + first.err + second.out + second.err
+
+
+@pytest.mark.scanner
+def test_the_clean_secrets_row_counts_the_commits_the_scenario_made(build_repo, installed_scanners, capsys):
+    """O30: one commit reads as one."""
+    assert scan(build_repo({"docs/notes.txt": "nothing here\n"})) == 0
+    assert leading_count(area_fact(capsys.readouterr().out, "secrets")) == 1
+
+
+@pytest.mark.scanner
+def test_the_clean_secrets_row_counts_every_commit_and_every_allowed_leak(build_repo, installed_scanners, capsys):
+    """O30, acceptance 5: three commits with a key removed in the second; the row ends with the allowed notes."""
+    repo = build_repo({"docs/config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
+    (repo / "docs/config.txt").write_text("removed\n")
+    commit(repo, "remove the key")
+    allow_fake_key(repo, "docs/config.txt")
+    assert scan(repo) == 0
+    counts = extent_counts(area_fact(capsys.readouterr().out, "secrets"))
+    assert (counts[0], counts[-1]) == (3, len(allowed_locations(repo)))
+
+
+@pytest.mark.scanner
+def test_nothing_about_secrets_prints_before_the_area_rows(build_repo, installed_scanners, capsys):
+    """O15: an allowed key, an unused entry and a red key print as rows under the secrets row, none before the first area row."""
+    entries = (("aws-access-token", "config.txt", FAKE_KEY, "test key"), ("aws-access-token", "nothere.txt", FAKE_KEY, "stale entry"))
+    repo = build_repo({
+        "config.txt": f"aws_access_key_id = {FAKE_KEY}\n", "other.txt": f"aws_access_key_id = {OTHER_KEY}\n",
+        config.CONFIG_PATH: allow_config(*entries),
+    })
+    assert scan(repo) == 1
+    lines = capsys.readouterr().out.splitlines()
+    prelude = lines[:next(number for number, line in enumerate(lines) if line.split()[1:2] == ["files"])]
+    assert [line for line in prelude if line.lstrip().startswith(Rule.LEAK)] == []
+    found, notes = rule_findings(repo, Rule.LEAK), rule_notes(repo, Rule.LEAK)
+    assert ([finding.location for finding in found], sorted(note.event for note in notes)) == (["other.txt:1"], [NoteEvent.ALLOWED, NoteEvent.UNUSED])
+    assert_block_prints(area_block("\n".join(lines), "secrets"), found, notes)
+
+
+@pytest.mark.parametrize(
+    "answer", ["echo 'fatal: refused' >&2; exit 1", "echo many; exit 0"], ids=["git-fails", "git-prints-no-number"]
+)
+def test_a_commit_count_git_cannot_give_refuses_the_secret_rule_alone(build_repo, served_scanners, fake_git, capsys, answer):
+    """O30: the extent of a clean row is never guessed; the secret rule cannot judge, the other rows stand."""
+    repo = build_repo({".env": "KEY=1\n"})
+    fake_git(f'case "$*" in *rev-list*--count*) {answer};; esac')
+    out = hygiene_exit_2(repo, capsys)
+    assert set(refusals(repo)) == {Rule.LEAK}
+    assert env_row_stands(out)

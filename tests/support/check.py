@@ -1,4 +1,5 @@
 import re
+import string
 import unicodedata
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -11,7 +12,7 @@ import pytest
 from quality import DISTRIBUTION, check, cli, env_file, output
 from quality.output import Glyph
 from quality.ratchet import BASELINE_PATH, load_baseline
-from quality.report import Finding, FindingEvent, Note, NoteEvent, printable
+from quality.report import Example, Finding, FindingEvent, Note, NoteEvent, printable
 from quality.rules import Rule
 
 installed_ruff = cli.INSTALLED_RUFF
@@ -59,6 +60,7 @@ class FindingRow:
     fix_indent: int | None
     fix_follows: bool
     detail: tuple[str, ...] = ()
+    copy: tuple[str, ...] = ()
 
 
 def _indentation(line: str) -> int:
@@ -89,6 +91,14 @@ class DetailLine(BlockLine):
 @dataclass(frozen=True)
 class FixLine(BlockLine):
     """A `fix:` line."""
+
+
+@dataclass(frozen=True)
+class CopyLine(BlockLine):
+    """A line of the entry to copy: it stands deeper than the `fix:` line above it and is no row; `copy` is the line as printed
+    after its indentation."""
+
+    copy: str
 
 
 @dataclass(frozen=True)
@@ -133,16 +143,29 @@ def _details_below(lines: Sequence[str], number: int) -> tuple[str, ...]:
     return tuple(details)
 
 
-def _fix_below(lines: Sequence[str], number: int) -> tuple[str | None, int | None, bool]:
+def _copy_below(lines: Sequence[str], fix_number: int) -> tuple[str, ...]:
+    """The lines to copy directly under the `fix:` line at `fix_number`: each deeper than it, up to the first that is not."""
+    copied = []
+    for following in lines[fix_number + 1:]:
+        if not following.strip() or _indentation(following) <= _indentation(lines[fix_number]):
+            break
+        copied.append(following.strip())
+    return tuple(copied)
+
+
+def _fix_below(lines: Sequence[str], number: int) -> tuple[str | None, int | None, bool, tuple[str, ...]]:
     """The fix of the `fix:` run a row belongs to: the next `fix:` line below it that is not shallower, its indentation,
-    and whether it follows the row and its own detail lines directly."""
+    whether it follows the row and its own detail lines directly, and the lines to copy under it. The label of a fix with
+    lines to copy is kept without the colon the output prints before them."""
     own = number + len(_details_below(lines, number))
     for later, following in enumerate(lines[number + 1:], start=number + 1):
         if _indentation(following) < _indentation(lines[number]):
             break
         if following.lstrip().startswith(f"{output.FIX_LABEL} "):
-            return following.lstrip()[len(output.FIX_LABEL) + 1:], _indentation(following), later == own + 1
-    return None, None, False
+            fix = following.lstrip()[len(output.FIX_LABEL) + 1:]
+            copy = _copy_below(lines, later)
+            return (fix.removesuffix(":") if copy else fix), _indentation(following), later == own + 1, copy
+    return None, None, False, ()
 
 
 def decode_block(lines: Sequence[str], locations: Sequence[str] = (), first_position: int = 0) -> list[BlockLine]:
@@ -150,19 +173,26 @@ def decode_block(lines: Sequence[str], locations: Sequence[str] = (), first_posi
     line, a note row (glyph `·`, a location, a `NoteEvent`, a fact) or any other line. A row is found by its glyph and
     its event; the padding between the columns is never rebuilt."""
     decoded: list[BlockLine] = []
+    fix_indent: int | None = None
     for number, line in enumerate(lines):
         stripped = line.lstrip()
         position = first_position + number
-        if stripped.startswith(f"{Glyph.NEEDS_YOU} ") and (found := _finding_line(lines, number, locations, position)):
+        if fix_indent is not None and _indentation(line) > fix_indent:
+            decoded.append(CopyLine(position, line, stripped))
+            continue
+        elif stripped.startswith(f"{Glyph.NEEDS_YOU} ") and (found := _finding_line(lines, number, locations, position)):
             decoded.append(found)
         elif (detail := _detail_of(line)) is not None:
             decoded.append(DetailLine(position, line, detail))
         elif stripped.startswith(f"{output.FIX_LABEL} "):
             decoded.append(FixLine(position, line))
+            fix_indent = _indentation(line)
+            continue
         elif stripped.startswith(f"{Glyph.NOTE} ") and (note := _note_line(line, locations, position)):
             decoded.append(note)
         else:
             decoded.append(OtherLine(position, line))
+        fix_indent = None
     return decoded
 
 
@@ -171,9 +201,9 @@ def _finding_line(lines: Sequence[str], number: int, locations: Sequence[str], p
     event = _event_of(remainder, FindingEvent)
     if event is None:
         return None
-    fix, fix_indent, fix_follows = _fix_below(lines, number)
+    fix, fix_indent, fix_follows, copy = _fix_below(lines, number)
     detail = _details_below(lines, number)
-    row = FindingRow(_indentation(lines[number]), event, remainder[len(event.value):].strip(), fix, fix_indent, fix_follows, detail)
+    row = FindingRow(_indentation(lines[number]), event, remainder[len(event.value):].strip(), fix, fix_indent, fix_follows, detail, copy)
     return FindingLine(position, lines[number], location, row)
 
 
@@ -247,18 +277,22 @@ def area_finding_rows(printed: str, area: str) -> list[tuple[str, FindingRow]]:
 
 def assert_block_order(block: Sequence[BlockLine]) -> None:
     """Decision 4 and O25: a finding's detail lines stand contiguously directly under its row, each run's `fix:` follows
-    the last detail line of the run's last row and equals that row's fix, and every note follows the block's final `fix:`."""
+    the last detail line of the run's last row and equals that row's fix, its lines to copy stand directly under it, and
+    every note follows the block's final `fix:` or line to copy."""
     for index, line in enumerate(block):
         before = block[index - 1] if index else None
         if isinstance(line, DetailLine):
             assert isinstance(before, FindingLine | DetailLine), line
+        if isinstance(line, CopyLine):
+            assert isinstance(before, FixLine | CopyLine), line
         if isinstance(line, FixLine):
             assert isinstance(before, FindingLine | DetailLine), line
             owner = next(earlier for earlier in reversed(block[:index]) if isinstance(earlier, FindingLine))
-            assert line.text.strip() == f"{output.FIX_LABEL} {owner.row.fix}", line
+            colon = ":" if owner.row.copy else ""
+            assert line.text.strip() == f"{output.FIX_LABEL} {owner.row.fix}{colon}", line
         if isinstance(line, FindingLine) and index:
             assert not any(isinstance(earlier, NoteLine) for earlier in block[:index]), line
-    last_fix = max((line.position for line in block if isinstance(line, FixLine)), default=-1)
+    last_fix = max((line.position for line in block if isinstance(line, FixLine | CopyLine)), default=-1)
     assert all(line.position > last_fix for line in block if isinstance(line, NoteLine))
 
 
@@ -310,16 +344,32 @@ def rule_findings(repo: Path, rule: Rule) -> list[Finding]:
     return [finding for verdict in hygiene_run(repo).verdicts if verdict.rule is rule for finding in verdict.findings]
 
 
+def fix_label_and_lines(finding: Finding) -> tuple[str, tuple[str, ...]]:
+    """The fix as the output prints it, escaped: a sentence with no lines to copy, or an example's label with its lines."""
+    if isinstance(finding.fix, Example):
+        return printable(finding.fix.label), tuple(printable(line) for line in finding.fix.lines)
+    return printable(finding.fix), ()
+
+
 def assert_row_prints_finding(row: FindingRow, finding: Finding) -> None:
-    """The decoded row carries the finding's event, fact and fix as the owners escape them."""
-    assert (row.event, row.fact, row.fix) == (finding.event, printable(finding.reason), printable(finding.fix))
+    """The decoded row carries the finding's event, fact, fix and lines to copy as the owners escape them."""
+    assert (row.event, row.fact, (row.fix, row.copy)) == (finding.event, printable(finding.reason), fix_label_and_lines(finding))
+
+
+def _words(text: str) -> set[str]:
+    """The whitespace-separated tokens of `text` with the punctuation around each stripped."""
+    return {token.strip(string.punctuation) for token in text.split()}
 
 
 def assert_finding_vocabulary(finding: Finding) -> None:
-    """Decision 3 and 12: neither fact nor fix ends in a full stop, and no word of the row is a rule id."""
+    """Decision 3 and 12, O29: neither fact nor the fix's sentence or label ends in a full stop, and no word of the fact or
+    the label is a rule id that is an identifier by its shape (it holds `-`). The one-word ids are also ordinary words
+    and are judged by review; the lines to copy hold repository values and are never judged."""
+    label, _ = fix_label_and_lines(finding)
     assert not finding.reason.endswith(".")
-    assert not finding.fix.endswith(".")
-    assert {rule.value for rule in Rule}.isdisjoint(f"{finding.event} {finding.reason} {finding.fix}".split())
+    assert not label.endswith(".")
+    identifiers = {rule.value for rule in Rule if "-" in rule.value}
+    assert identifiers.isdisjoint(_words(f"{finding.reason} {label}"))
 
 
 def env_row_stands(printed: str) -> bool:

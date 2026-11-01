@@ -118,6 +118,7 @@ class FindingEvent(StrEnum):
     CAN_FALL = "can fall"
     NEAR_COPY = "near copy"
     BROKEN = "broken"
+    SECRET = "secret"
 
 
 class NoteEvent(StrEnum):
@@ -131,13 +132,14 @@ class NoteEvent(StrEnum):
 
 @dataclass(frozen=True)
 class Finding:
-    """With an `event`, `reason` is the fact its row shows; without one, the sentence of `headline`."""
+    """With an `event`, `reason` is the fact its row shows; without one, the sentence of `headline`. `fix` is a sentence,
+    or an `Example`: a label with the lines a person copies."""
 
     rule: str
     path: str
     line: int | None
     reason: str
-    fix: str
+    fix: str | Example
     allowance: Allowance | None = None
     detail: tuple[str, ...] = ()
     event: FindingEvent | None = None
@@ -155,10 +157,12 @@ class Note:
     path: str
     event: NoteEvent
     fact: str
+    line: int | None = None
 
     @property
     def location(self) -> str:
-        return printable(self.path)
+        path = printable(self.path)
+        return path if self.line is None else f"{path}:{self.line}"
 
 
 ESCAPED_CATEGORIES = frozenset({"Cc", "Cf", "Zl", "Zp"})

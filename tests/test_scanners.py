@@ -48,18 +48,23 @@ def test_a_version_command_that_fails_hangs_or_reports_no_version_is_exit_2(serv
 
 
 @pytest.mark.parametrize(
-    ("on_scan", "expected"),
+    "on_scan",
     [
-        ("echo boom >&2; exit 3", "exited 3 without writing its report: boom"),
-        ("exit 0", "exited 0 without writing its report"),
-        ('echo "[]" > "$report"; echo boom >&2; exit 3', "exited 3, neither 'clean' nor 'findings': boom"),
-        ('printf "\\377\\376" > "$report"; exit 0', "cannot read the gitleaks report"),
+        "echo boom >&2; exit 3",
+        "exit 0",
+        'echo "[]" > "$report"; echo boom >&2; exit 3',
+        'printf "\\377\\376" > "$report"; exit 0',
     ],
+    ids=["crash-without-report", "exit-0-without-report", "unexpected-exit-with-report", "report-not-utf8"],
 )
-def test_a_scanner_that_crashes_or_leaves_no_usable_report_is_exit_2(served_scanners, build_repo, capsys, on_scan, expected):
-    """#13 rule 3: a missing, undecodable or exit-code-inconsistent report is exit 2, with the scanner's stderr."""
+def test_a_scanner_that_crashes_or_leaves_no_usable_report_is_exit_2(served_scanners, build_repo, capsys, on_scan):
+    """#13 rule 3: a missing, undecodable or exit-code-inconsistent report is exit 2 for the secret rule alone, and
+    gitleaks' stderr reaches no printed line."""
     fake_gitleaks(served_scanners, on_scan=on_scan)
-    assert expected in hygiene_exit_2(build_repo({}), capsys)
+    repo = build_repo({})
+    printed = hygiene_exit_2(repo, capsys)
+    assert set(refusals(repo)) == {Rule.LEAK}
+    assert "boom" not in printed
 
 
 @pytest.mark.parametrize(
