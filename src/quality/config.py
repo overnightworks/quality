@@ -49,11 +49,11 @@ GENERATED_FILE_HEADING = "[[size.generated]]"
 EXAMPLE: ExampleLines = ("[gate]", 'mandatory_jobs = ["checks"]')
 LEGACY_EXAMPLE: ExampleLines = ("[gate]", 'legacy = "fail"')
 ALLOWANCE_EXAMPLE: ExampleLines = (
-    "[secrets]",
-    (
-        'allow = [{ rule = "aws-access-token", file = "tests/fixture.py", secret_sha256 = "<64 lowercase hex>", '
-        'reason = "fixture value, not a key" }]'
-    ),
+    SECRETS_ALLOWANCE_HEADING,
+    'rule = "aws-access-token"',
+    'file = "tests/fixture.py"',
+    'secret_sha256 = "<64 lowercase hex>"',
+    'reason = "fixture value, not a key"',
 )
 LOOSENED_EXAMPLE: ExampleLines = (
     LOOSENED_HEADING,
@@ -246,6 +246,16 @@ class _Document:
     gate: dict
     declarations: tuple[Declaration, ...]
     allow_lists: AllowLists
+
+
+def secret_allowance_entry(allowance: Allowance) -> ExampleLines:
+    """The entry that allows `allowance`, as the block the reader takes; the reason is the person's to write."""
+    return (
+        SECRETS_ALLOWANCE_HEADING,
+        f"rule = {_toml_string(allowance.rule)}",
+        f"file = {_toml_string(allowance.file)}",
+        f'secret_sha256 = "{allowance.secret_sha256}"',
+    )
 
 
 def _toml_string(value: str) -> str:

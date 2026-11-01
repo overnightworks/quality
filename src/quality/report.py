@@ -118,7 +118,7 @@ class FindingEvent(StrEnum):
     CAN_FALL = "can fall"
     NEAR_COPY = "near copy"
     BROKEN = "broken"
-    SECRET = "secret"
+    SECRET = "secret"  # noqa: S105 - the event word of a secret finding and no password
 
 
 class NoteEvent(StrEnum):

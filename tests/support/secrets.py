@@ -35,5 +35,7 @@ def allow_config(*entries: tuple[str, str, str, str]) -> str:
 def assert_key_found(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
     """Exit 1 alone proves nothing, other rules can fail it too: one secret row at the key's place is asserted."""
     assert cli.main(["hygiene", str(repo)]) == 1
-    rows = area_finding_rows(capsys.readouterr().out, "secrets")
+    printed = capsys.readouterr().out
+    rows = area_finding_rows(printed, "secrets")
     assert [(location, row.event) for location, row in rows] == [("config.txt:1", FindingEvent.SECRET)]
+    assert FAKE_KEY not in printed

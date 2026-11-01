@@ -310,10 +310,11 @@ def test_two_findings_with_equal_lines_to_copy_print_them_once():
 def test_at_a_terminal_the_fix_and_its_lines_to_copy_stay_plain_and_the_words_equal_the_plain_ones(at_a_terminal):
     findings = [finding("a.env", FindingEvent.SECRET, fix=ENTRY)]
     styled = findings_written(findings, Terminal)
-    block = decode_block(styled.splitlines())
-    assert [line.text for line in block if isinstance(line, FixLine | CopyLine)] == [
-        line for line in findings_written(findings).splitlines() if line.lstrip().startswith(ENTRY.label) or line.strip() in map(printable, ENTRY.lines)
-    ]
+
+    def fix_and_copy_lines(printed: str) -> list[str]:
+        return [line.text for line in decode_block(printed.splitlines()) if isinstance(line, FixLine | CopyLine)]
+
+    assert fix_and_copy_lines(styled) == fix_and_copy_lines(findings_written(findings))
     assert OWN_SGR.sub("", styled) == findings_written(findings)
 
 

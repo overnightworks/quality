@@ -119,10 +119,7 @@ def test_clean_history_passes(build_repo, installed_scanners):
 def test_committed_secret_fails(build_repo, installed_scanners, capsys):
     """#13 rule 4: a committed key fails, reported at file:line with the secret redacted."""
     repo = build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
-    assert scan(repo) == 1
-    out = capsys.readouterr().out
-    assert "secret config.txt:1" in out
-    assert FAKE_KEY not in out
+    assert_key_found(repo, capsys)
 
 
 @pytest.mark.scanner

@@ -189,6 +189,14 @@ def _detail_line(text: str) -> str:
     return f"{FIX_INDENT}{DETAIL_MARKER} {printable(text)}" if text else f"{FIX_INDENT}{DETAIL_MARKER}"
 
 
+def _fix_lines(fix: str | Example) -> list[str]:
+    """A fix as its `fix:` line; a fix with lines to copy ends its label with a colon and stands them two spaces deeper,
+    each escaped and none joined."""
+    if isinstance(fix, str):
+        return [f"{FIX_INDENT}{FIX_LABEL} {printable(fix)}"]
+    return [f"{FIX_INDENT}{FIX_LABEL} {printable(fix.label)}:", *(f"{FIX_INDENT}  {printable(line)}" for line in fix.lines)]
+
+
 def _finding_lines(findings: Sequence[Finding], notes: Sequence[Note], styled: bool) -> list[str]:
     """Each field is escaped before it is padded, so the columns hold in a pipe as at a terminal; they count characters.
     The findings and the notes share one location column and one event column."""
@@ -203,7 +211,7 @@ def _finding_lines(findings: Sequence[Finding], notes: Sequence[Note], styled: b
         lines.append(f"{FINDING_INDENT}{glyph} {columns}{_paint(printable(finding.reason), DIM, styled)}")
         lines += [_paint(_detail_line(text), DIM, styled) for text in finding.detail]
         if position + 1 == len(findings) or findings[position + 1].fix != finding.fix:
-            lines.append(f"{FIX_INDENT}{FIX_LABEL} {printable(finding.fix)}")
+            lines += _fix_lines(finding.fix)
     for note in notes:
         columns = _row_columns(note.location, str(note.event), widths)
         lines.append(_paint(f"{FINDING_INDENT}{Glyph.NOTE} {columns}{printable(note.fact)}", DIM, styled))

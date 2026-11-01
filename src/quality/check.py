@@ -25,7 +25,6 @@ from quality import (
 )
 from quality.config import (
     CONFIG_PATH,
-    Allowance,
     AllowLists,
     ConfigError,
     read_allow_lists,
@@ -101,7 +100,7 @@ def _judge_lint[T](lint: python_lint.Lint | CannotJudge, judge: Callable[[python
         return CannotJudge(str(error))
 
 
-def check_secrets(root: Path, allow_lists: AllowLists | CannotJudge) -> scanners.SecretScan:
+def check_secrets(root: Path, allow_lists: AllowLists | CannotJudge) -> RuleResult:
     try:
         return scanners.scan_secrets(root, _required(allow_lists).secrets)
     except process.ProcessError as error:
@@ -200,8 +199,6 @@ class HygieneResult:
     verdicts: tuple[RuleVerdict, ...]
     reports: tuple[str, ...]
     tracked_paths: int
-    allowed_secrets: list[Finding]
-    unused_allowances: dict[Allowance, str]
 
     @property
     def findings(self) -> list[Finding]:
@@ -319,15 +316,14 @@ def run_hygiene(root: Path, locate_ruff: Callable[[], str], locate_zizmor: Calla
         **{rule: _attempt(partial(check_workflows, root, rule, tracked, locate_zizmor)) for rule in scanners.WORKFLOW_SCANNERS},
         Rule.ADVISORY: _findings(advisory),
     }
-    results = ((Rule.SIZE, size), (Rule.CLONE, clone), (Rule.IMPORT_CONTRACT, contracts))
+    results = ((Rule.SIZE, size), (Rule.CLONE, clone), (Rule.IMPORT_CONTRACT, contracts), (Rule.LEAK, secrets))
     measuring = {rule for rule, result in results if _measures_only(result)}
     notes = {rule: () if isinstance(result, CannotJudge) else result.notes for rule, result in (*results, (Rule.PYTHON_FLOOR, floor))}
     extents = {rule: None if isinstance(result, CannotJudge) else result.extent for rule, result in results}
     verdicts = [_verdict(rule, outcomes[rule], rule in measuring, notes.get(rule, ()), extents.get(rule)) for rule in Rule]
     reports = () if isinstance(printing, CannotJudge) else printing.reports
     allowed_advisories = () if isinstance(advisory, CannotJudge) else advisory.report()
-    allowed, unused = ([], {}) if isinstance(secrets, CannotJudge) else (secrets.allowed, secrets.unused_allowances)
-    return HygieneResult(tuple(verdicts), (*reports, *allowed_advisories), len(set(tracked)), allowed, unused)
+    return HygieneResult(tuple(verdicts), (*reports, *allowed_advisories), len(set(tracked)))
 
 
 def _measures_only(result: RuleResult | CannotJudge) -> bool:

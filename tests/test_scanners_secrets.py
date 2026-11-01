@@ -307,7 +307,7 @@ def test_an_allowance_no_finding_used_is_one_unused_note_at_the_config(build_rep
 
 
 @pytest.mark.scanner
-@pytest.mark.parametrize("name", ["config.txt", HOSTILE_FILE], ids=["plain-path", "esc-quote-and-bidi-path"])
+@pytest.mark.parametrize("name", ["docs/config.txt", f"docs/{HOSTILE_FILE}"], ids=["plain-path", "esc-quote-and-bidi-path"])
 def test_the_printed_entry_with_a_reason_allows_exactly_that_finding(build_repo, installed_scanners, capsys, name):
     """O31, acceptance 3: the lines under `fix:`, with a reason added and committed, turn the finding into one allowed note."""
     repo = build_repo({name: f"aws_access_key_id = {FAKE_KEY}\n", config.CONFIG_PATH: GATE_ONLY})

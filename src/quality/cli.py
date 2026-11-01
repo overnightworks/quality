@@ -29,7 +29,7 @@ from quality.check import (
     run_hygiene,
 )
 from quality.checkout import OutsideWorkTree
-from quality.config import Allowance, ConfigError, read_allow_lists, read_gate_settings
+from quality.config import ConfigError, read_allow_lists, read_gate_settings
 from quality.merge import Ask, GhRunner, RemoteFor, github_remote, run_emergency_merge, run_gh
 from quality.output import (
     SEPARATOR,
@@ -47,7 +47,7 @@ from quality.output import (
     write_rows,
     write_verdict,
 )
-from quality.report import CannotJudge, Finding, Instruction, NoteEvent, Step, headline
+from quality.report import CannotJudge, Instruction, NoteEvent, Step, headline
 from quality.rules import Area, Rule
 from quality.sonar import (
     DEPENDABOT_CONFIG,
@@ -230,6 +230,8 @@ def area_extent(verdict: AreaVerdict, tracked_paths: int) -> str:
         return ""
     if verdict.area is Area.IMPORTS:
         return NO_CONFIG_FACT if verdict.measurement is Measurement.MEASURED_ONLY else counted(extents[Rule.IMPORT_CONTRACT], "contract")
+    if verdict.area is Area.SECRETS:
+        return counted(extents[Rule.LEAK], "commit")
     if verdict.area is not Area.DEBT:
         return ""
     entries, pairs = counted(extents[Rule.SIZE], "entry", "entries"), counted(extents[Rule.CLONE], "clone pair")
@@ -280,7 +282,6 @@ def run_hygiene_check(path: Path, locate_ruff: Callable[[], str], locate_zizmor:
     except CannotJudge as error:
         write_pair(error.reason.fact, error.reason.next_steps or (START_FAILURE_NEXT,))
         return EXIT_CANNOT_JUDGE
-    print_secret_allowances(result.allowed_secrets, result.unused_allowances)
     emit(*result.reports, ONLINE_AUDITS_NOTE)
     for verdict in result.areas:
         write_rows((area_row(verdict, area_extent(verdict, result.tracked_paths)),))
@@ -304,15 +305,6 @@ def run_hygiene_check(path: Path, locate_ruff: Callable[[], str], locate_zizmor:
         )
     )
     return exit_code
-
-
-def print_secret_allowances(allowed: list[Finding], unused: dict[Allowance, str]) -> None:
-    if allowed:
-        emit(f"{Rule.LEAK}: {len(allowed)} allowed ({', '.join(finding.location for finding in allowed)})")
-        for finding in allowed:
-            emit(f"  allowed {finding.location} - {finding.reason}")
-    for entry, reason in unused.items():
-        emit(f"{Rule.LEAK}: unused allowance {entry.rule} in {entry.file} (sha256 {entry.secret_sha256}) - {reason}")
 
 
 def run_baseline_write(path: Path) -> int:
@@ -360,9 +352,7 @@ def run_scan_staged(path: Path) -> int:
     except (process.ProcessError, ConfigError, CannotJudge) as error:
         emit(f"scan-staged: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
-    print_secret_allowances(result.allowed, result.unused_allowances)
-    for finding in result.findings:
-        emit_finding(finding)
+    write_findings_and_notes(result.findings, result.notes)
     emit(f"scan-staged: {len(result.findings)} finding(s)" if result.findings else "scan-staged: clean")
     return EXIT_FINDINGS if result.findings else EXIT_CLEAN
 

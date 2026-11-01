@@ -298,12 +298,12 @@ def test_a_source_name_that_is_not_utf8_is_still_refused_as_one_line(build_repo,
 
 def test_a_scanner_stderr_with_several_lines_prints_as_one_escaped_line(build_repo, served_scanners, capsys):
     """#97 rule 2, cell 14 (E5): the stderr tail of a failing scanner joins on `\\x0a`, never a line of its own."""
-    fake_scanner(served_scanners, "gitleaks", on_scan="echo first >&2; echo '::error::second' >&2; exit 2")
-    repo = build_repo({"README.md": "x\n"})
+    fake_scanner(served_scanners, "actionlint", on_scan="echo first >&2; echo '::error::second' >&2; exit 2")
+    repo = build_repo({"README.md": "x\n", ".github/workflows/w.yml": "on: push\n"})
     code, lines = door_lines(capsys, "hygiene", str(repo))
-    refusals = [line for line in lines if line.startswith("  ✗ secrets       not checked    ")]
+    refusals = [line for line in lines if line.startswith("  ✗ workflows     not checked    ")]
     assert (code, len(refusals)) == (2, 1), lines
-    assert "first\\x0a::error::second" in refusals[0]
+    assert [line for line in lines if "first\\x0a::error::second" in line] != []
     assert_every_line_starts_with_the_door(lines)
 
 
@@ -431,18 +431,19 @@ def headers(lines: list[str]) -> list[str]:
 
 
 def test_a_clean_run_has_seven_clean_rows_in_area_order_and_the_verdict(build_repo, capsys):
-    """O16, O21: the four other rows carry no fact; the files row holds the rules and the tracked paths, the debt row the entries and pairs of the ceiling file, the imports row the contracts of the config."""
+    """O16, O21, O30: the three other rows carry no fact; the files row holds the rules and the tracked paths, the debt row the entries and pairs of the ceiling file, the imports row the contracts of the config."""
     tracked = {**CLEAN_FILES, **KEPT_CONTRACT, BASELINE_PATH: '[file_lines]\n"src/gone.py" = 900\n\n[clones]\n'}
     repo = build_repo(tracked)
     code, out, err = frame_run(capsys, repo)
-    files_row, _, _, *others = headers(out)
+    files_row, _, _, secrets_row, *others = headers(out)
     extent = [int(part.split()[0]) for part in files_row.partition(cli.AreaEvent.CLEAN)[2].split(SEPARATOR)]
     held = ratchet.read_baseline(repo)
     contracts = architecture.contracts_of({".importlinter": tracked[".importlinter"]}).contracts
-    assert (code, others, out[-1], err) == (0, [header(area, "✓", "clean") for area in list(Area)[3:]], f"✓ clean · 7 areas · {ZERO_SECONDS}", [])
+    assert (code, others, out[-1], err) == (0, [header(area, "✓", "clean") for area in list(Area)[4:]], f"✓ clean · 7 areas · {ZERO_SECONDS}", [])
     assert extent == [sum(rule.area is Area.FILES for rule in Rule), len(tracked)]
     assert extent_counts(area_fact("\n".join(out), Area.DEBT)) == [len(held.size), len(held.clones)] == [1, 0]
     assert leading_count(area_fact("\n".join(out), Area.IMPORTS)) == len(contracts)
+    assert (secrets_row.startswith("  ✓ secrets"), leading_count(area_fact("\n".join(out), Area.SECRETS))) == (True, 1)
 
 
 def test_a_run_without_a_baseline_notes_the_debt_as_not_recorded_and_says_it_is_not_enforced(build_repo, capsys):

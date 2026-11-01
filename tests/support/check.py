@@ -275,23 +275,30 @@ def area_finding_rows(printed: str, area: str) -> list[tuple[str, FindingRow]]:
     return [(line.location, line.row) for line in area_block(printed, area) if isinstance(line, FindingLine)]
 
 
+def _assert_line_in_place(block: Sequence[BlockLine], index: int) -> None:
+    """One line of `assert_block_order`: details and the `fix:` follow a row, lines to copy follow their `fix:`, and a `fix:`
+    equals its row's fix."""
+    line = block[index]
+    before = block[index - 1] if index else None
+    if isinstance(line, DetailLine):
+        assert isinstance(before, FindingLine | DetailLine), line
+    if isinstance(line, CopyLine):
+        assert isinstance(before, FixLine | CopyLine), line
+    if isinstance(line, FixLine):
+        assert isinstance(before, FindingLine | DetailLine), line
+        owner = next(earlier for earlier in reversed(block[:index]) if isinstance(earlier, FindingLine))
+        colon = ":" if owner.row.copy else ""
+        assert line.text.strip() == f"{output.FIX_LABEL} {owner.row.fix}{colon}", line
+    if isinstance(line, FindingLine) and index:
+        assert not any(isinstance(earlier, NoteLine) for earlier in block[:index]), line
+
+
 def assert_block_order(block: Sequence[BlockLine]) -> None:
     """Decision 4 and O25: a finding's detail lines stand contiguously directly under its row, each run's `fix:` follows
     the last detail line of the run's last row and equals that row's fix, its lines to copy stand directly under it, and
     every note follows the block's final `fix:` or line to copy."""
-    for index, line in enumerate(block):
-        before = block[index - 1] if index else None
-        if isinstance(line, DetailLine):
-            assert isinstance(before, FindingLine | DetailLine), line
-        if isinstance(line, CopyLine):
-            assert isinstance(before, FixLine | CopyLine), line
-        if isinstance(line, FixLine):
-            assert isinstance(before, FindingLine | DetailLine), line
-            owner = next(earlier for earlier in reversed(block[:index]) if isinstance(earlier, FindingLine))
-            colon = ":" if owner.row.copy else ""
-            assert line.text.strip() == f"{output.FIX_LABEL} {owner.row.fix}{colon}", line
-        if isinstance(line, FindingLine) and index:
-            assert not any(isinstance(earlier, NoteLine) for earlier in block[:index]), line
+    for index in range(len(block)):
+        _assert_line_in_place(block, index)
     last_fix = max((line.position for line in block if isinstance(line, FixLine | CopyLine)), default=-1)
     assert all(line.position > last_fix for line in block if isinstance(line, NoteLine))
 
