@@ -31,7 +31,7 @@ from tests.support.check import (
     rule_notes,
 )
 from tests.support.scanners import OUTPUTS, commit, fake_gitleaks, hygiene_exit_2, scan, serving
-from tests.support.secrets import FAKE_KEY, OTHER_KEY, allow_config, assert_key_found, sha256_of
+from tests.support.secrets import FAKE_KEY, HOSTILE_FILE, OTHER_KEY, allow_config, assert_key_found, sha256_of
 
 RECORDED_SECRET = "PLACEHOLDER-SECRET-VALUE"  # the Secret in the recorded gitleaks-finding.json
 RECORDED_RULE = "aws-access-token"
@@ -285,7 +285,6 @@ def test_a_sigterm_mid_scan_leaves_no_scratch_directory(keyed_repo, served_scann
 
 
 STALE_FILE = "no\x1bthere.txt"
-HOSTILE_FILE = 'k\x1b"\u202e.txt'
 
 
 @pytest.mark.scanner
@@ -294,7 +293,8 @@ def test_an_allowance_no_finding_used_is_one_unused_note_at_the_config(build_rep
     """#25 rule 1, quality#5 finding 34: an entry that matches nothing is named, not silent, in both doors."""
     repo = build_repo({"quality/config.toml": allow_config(("aws-access-token", "no\\u001bthere.txt", FAKE_KEY, "stale entry"))})
     code = cli.main([command, str(repo)])
-    printed = capsys.readouterr().out
+    streams = capsys.readouterr()
+    printed = streams.out
     hygiene = command == "hygiene"
     notes = rule_notes(repo, Rule.LEAK) if hygiene else list(staged.scan_staged(repo).notes)
     block = area_block(printed, "secrets") if hygiene else decode_block(printed.splitlines())
@@ -302,7 +302,7 @@ def test_an_allowance_no_finding_used_is_one_unused_note_at_the_config(build_rep
     assert (code, note.event, note.path) == (0, NoteEvent.UNUSED, config.CONFIG_PATH)
     assert ("aws-access-token" in note.fact, STALE_FILE in note.fact) == (True, True)
     assert_block_prints(block, [], notes)
-    assert FAKE_KEY not in printed
+    assert FAKE_KEY not in streams.out + streams.err
     assert_every_line_starts_with_the_door(printed.splitlines())
 
 
@@ -352,11 +352,15 @@ def test_nothing_about_secrets_prints_before_the_area_rows(build_repo, installed
         config.CONFIG_PATH: allow_config(*entries),
     })
     assert scan(repo) == 1
-    lines = capsys.readouterr().out.splitlines()
+    streams = capsys.readouterr()
+    lines = streams.out.splitlines()
+    assert FAKE_KEY not in streams.out + streams.err
     prelude = lines[:next(number for number, line in enumerate(lines) if line.split()[1:2] == ["files"])]
     assert [line for line in prelude if line.lstrip().startswith(Rule.LEAK)] == []
     found, notes = rule_findings(repo, Rule.LEAK), rule_notes(repo, Rule.LEAK)
-    assert ([finding.location for finding in found], sorted(note.event for note in notes)) == (["other.txt:1"], [NoteEvent.ALLOWED, NoteEvent.UNUSED])
+    assert ([finding.location for finding in found], [note.event for note in notes]) == (["other.txt:1"], [NoteEvent.ALLOWED, NoteEvent.UNUSED])
+    allowed = notes[0]
+    assert ("aws-access-token" in allowed.fact, "test key" in allowed.fact) == (True, True)
     assert_block_prints(area_block("\n".join(lines), "secrets"), found, notes)
 
 

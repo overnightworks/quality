@@ -83,7 +83,6 @@ def never_located() -> NoReturn:
     pytest.fail("a scanner was located where nothing needed one")
 
 
-
 PINNED = scanners.pinned_tool(scanners.GITLEAKS).version
 
 

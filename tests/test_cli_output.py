@@ -24,6 +24,7 @@ from tests.support.check import (
     NoteLine,
     area_block,
     area_fact,
+    area_row,
     assert_every_line_starts_with_the_door,
     assert_row_prints_finding,
     env_row_stands,
@@ -301,8 +302,8 @@ def test_a_scanner_stderr_with_several_lines_prints_as_one_escaped_line(build_re
     fake_scanner(served_scanners, "actionlint", on_scan="echo first >&2; echo '::error::second' >&2; exit 2")
     repo = build_repo({"README.md": "x\n", ".github/workflows/w.yml": "on: push\n"})
     code, lines = door_lines(capsys, "hygiene", str(repo))
-    refusals = [line for line in lines if line.startswith("  ✗ workflows     not checked    ")]
-    assert (code, len(refusals)) == (2, 1), lines
+    workflows = area_row("\n".join(lines), Area.WORKFLOWS)
+    assert (code, workflows.glyph, workflows.event) == (2, Glyph.COULD_NOT_CHECK, cli.AreaEvent.NOT_CHECKED), lines
     assert [line for line in lines if "first\\x0a::error::second" in line] != []
     assert_every_line_starts_with_the_door(lines)
 
@@ -435,7 +436,7 @@ def test_a_clean_run_has_seven_clean_rows_in_area_order_and_the_verdict(build_re
     tracked = {**CLEAN_FILES, **KEPT_CONTRACT, BASELINE_PATH: '[file_lines]\n"src/gone.py" = 900\n\n[clones]\n'}
     repo = build_repo(tracked)
     code, out, err = frame_run(capsys, repo)
-    files_row, _, _, secrets_row, *others = headers(out)
+    files_row, _, _, _, *others = headers(out)
     extent = [int(part.split()[0]) for part in files_row.partition(cli.AreaEvent.CLEAN)[2].split(SEPARATOR)]
     held = ratchet.read_baseline(repo)
     contracts = architecture.contracts_of({".importlinter": tracked[".importlinter"]}).contracts
@@ -443,7 +444,7 @@ def test_a_clean_run_has_seven_clean_rows_in_area_order_and_the_verdict(build_re
     assert extent == [sum(rule.area is Area.FILES for rule in Rule), len(tracked)]
     assert extent_counts(area_fact("\n".join(out), Area.DEBT)) == [len(held.size), len(held.clones)] == [1, 0]
     assert leading_count(area_fact("\n".join(out), Area.IMPORTS)) == len(contracts)
-    assert (secrets_row.startswith("  ✓ secrets"), leading_count(area_fact("\n".join(out), Area.SECRETS))) == (True, 1)
+    assert (area_row("\n".join(out), Area.SECRETS).glyph, leading_count(area_fact("\n".join(out), Area.SECRETS))) == (Glyph.CLEAN, 1)
 
 
 def test_a_run_without_a_baseline_notes_the_debt_as_not_recorded_and_says_it_is_not_enforced(build_repo, capsys):

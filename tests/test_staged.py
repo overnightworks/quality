@@ -12,12 +12,9 @@ from tests.support.check import (
     assert_block_prints,
     assert_finding_vocabulary,
     decode_block,
-    heard,
 )
 from tests.support.git_repositories import GIT_IDENTITY, head_commit
-from tests.support.secrets import FAKE_KEY, OTHER_KEY, allow_config
-
-HOSTILE_FILE = 'k\x1b"\u202e.txt'
+from tests.support.secrets import FAKE_KEY, HOSTILE_FILE, OTHER_KEY, allow_config
 
 KEY_LINE = f"aws_access_key_id = {FAKE_KEY}\n"
 
@@ -155,10 +152,13 @@ def test_an_allowance_follows_the_value_in_the_staged_scan(
     repo = build_repo({"config.txt": KEY_LINE, "quality/config.toml": config})
     stage(repo, {"config.txt": staged_change})
     assert scan_staged(repo) == exit_code
+    streams = capsys.readouterr()
     result = staged.scan_staged(repo)
-    allowed = [note.location for note in result.notes if note.event is NoteEvent.ALLOWED]
-    assert allowed == ([] if expected_line is None else [expected_line])
-    assert FAKE_KEY not in heard(capsys)
+    allowed = [note for note in result.notes if note.event is NoteEvent.ALLOWED]
+    assert [note.location for note in allowed] == ([] if expected_line is None else [expected_line])
+    assert all(("aws-access-token" in note.fact, "test key" in note.fact) == (True, True) for note in allowed)
+    assert_block_prints(decode_block(streams.out.splitlines()), result.findings, result.notes)
+    assert FAKE_KEY not in streams.out + streams.err
 
 
 @pytest.fixture
