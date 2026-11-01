@@ -25,7 +25,7 @@ from quality.report import (
     OneOf,
     printable,
 )
-from tests.support.check import finding_rows, note_rows
+from tests.support.check import FindingLine, assert_block_order, decode_block, finding_rows, note_rows
 
 OWN_SGR = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -265,6 +265,19 @@ def test_one_fix_follows_the_last_finding_of_each_run_of_equal_fixes(fixes, fix_
     assert printed.count(f"{output.FIX_LABEL} ") == len(fix_follows) - fix_follows.count(False)
 
 
+def test_an_event_findings_detail_prints_escaped_under_its_row_before_the_fix(at_a_terminal):
+    detail = ("one\n::error::d", "", "  two\x1b")
+    found = Finding("some-rule", "a.env", None, "a fact", "a fix", detail=detail, event=FindingEvent.BROKEN)
+    printed = findings_written([found])
+    block = decode_block(printed.splitlines())
+    (row,) = [line for line in block if isinstance(line, FindingLine)]
+    assert row.row.detail == tuple(printable(line) for line in detail)
+    assert (row.row.fix, row.row.fix_follows) == ("a fix", True)
+    assert f"{output.FIX_INDENT}{output.DETAIL_MARKER}" in printed.splitlines()
+    assert_block_order(block)
+    assert OWN_SGR.sub("", findings_written([found], Terminal)) == printed
+
+
 def test_a_finding_with_a_line_shows_its_location():
     findings = [finding("a.env", FindingEvent.TRACKED, line=7), finding("b.env", FindingEvent.TRACKED)]
     assert [finding_rows(findings_written(findings), candidate.location) != [] for candidate in findings] == [True, True]
@@ -398,8 +411,8 @@ def test_a_merged_pipe_shows_the_hygiene_lines_in_run_order(env_and_broken_compo
         "hygiene", ".", cwd=env_and_broken_compose, door=door, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
     )
     prefixes = [
-        "import-contract: ", "workflow-security runs offline", "  ✗ files", ENV_ROW, FIX_LINE, ENV_ROW, FIX_LINE,
-        "  · debt", "  ✓ imports", "  ✓ secrets", "  ✓ workflows", "  ✓ dependencies", "  ✓ code", "error: ", "next: ",
+        "workflow-security runs offline", "  ✗ files", ENV_ROW, FIX_LINE, ENV_ROW, FIX_LINE,
+        "  · debt", "  · imports", "  ✓ secrets", "  ✓ workflows", "  ✓ dependencies", "  ✓ code", "error: ", "next: ",
     ]
     lines = done.stdout.splitlines()
     indented = (ENV_ROW, FIX_LINE)

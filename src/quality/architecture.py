@@ -42,11 +42,10 @@ from importlinter.domain.helpers import MissingImport
 from importlinter.domain.imports import ImportExpression
 
 from quality import ratchet
-from quality.report import Finding
+from quality.report import Finding, FindingEvent, Note, NoteEvent, RuleResult
 from quality.rules import Rule
 
 CONFIG_FILES = (".importlinter", "setup.cfg", "pyproject.toml")
-NO_CONFIG_REPORT = f"{Rule.IMPORT_CONTRACT}: report only (no import-linter config)"
 BUILT_IN_CONTRACT_TYPES: Mapping[str, type[Contract]] = {
     "forbidden": ForbiddenContract,
     "layers": LayersContract,
@@ -80,8 +79,9 @@ UNCOMPARED_FIELDS = frozenset({"ignore_imports", "broken_contract_guidance"})
 SESSION_OPTIONS = ("root_packages", "include_external_packages", "exclude_type_checking_imports")
 UNMATCHED_IGNORE = re.compile(r"No matches for ignored import (?P<expression>.+)\.")
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
-BROKEN_FIX = "change the import or the contract."
-STALE_IGNORE_FIX = "delete the entry."
+BROKEN_FIX = "change the import or the contract"
+STALE_IGNORE_FIX = "delete it from the contract's ignore_imports"
+GRIMP_WARNING_PREFIX = "Warning: "
 PANIC_MODULE = "pyo3_runtime"
 MAX_ECHOED_SOURCE = 200
 # Probed on grimp 3.17, whose Rust reader (not readable from Python) takes the raw lower-cased spelling of a coding
@@ -107,12 +107,6 @@ class Config:
 
 
 @dataclass(frozen=True)
-class ContractsVerdict:
-    findings: list[Finding]
-    notes: list[str]
-
-
-@dataclass(frozen=True)
 class ContractFields:
     """One contract as import-linter parses it: its type, its ignore expressions and every other parsed field."""
 
@@ -131,14 +125,14 @@ class SideContracts:
     contracts: Mapping[str, ContractFields] = field(default_factory=dict)
 
 
-def check_contracts(root: Path, tracked: Sequence[str], configs: Mapping[str, str]) -> ContractsVerdict:
-    """Report only without a config; with one, every contract must be kept.
+def check_contracts(root: Path, tracked: Sequence[str], configs: Mapping[str, str]) -> RuleResult:
+    """Measured only without a config; with one, every contract must be kept and the extent is how many it declares.
 
     `configs` maps each tracked config file at the repository's top to its text.
     """
     config = find_config(configs)
     if config is None:
-        return ContractsVerdict([], [NO_CONFIG_REPORT])
+        return RuleResult([], 0, True)
     if "contract_types" in config.options.session_options:
         raise ContractError(f"{config.name} sets contract_types, whose plugin modules would be imported;"
                             " only the built-in contract types are judged")
@@ -147,11 +141,12 @@ def check_contracts(root: Path, tracked: Sequence[str], configs: Mapping[str, st
         contracts = [_contract(config, index, options)
                      for index, options in enumerate(config.options.contracts_options, 1)]
         roots = {package: _source_root(tracked, package) for package in config.options.session_options["root_packages"]}
-        with _library_warnings(repository) as graph_notes:
+        with _library_warnings(repository) as graph_warnings:
             graph = _build_graph(repository, roots, config.options)
-    verdicts = [_check(contract, graph, config.name, repository) for contract in contracts]
-    return ContractsVerdict([finding for verdict in verdicts for finding in verdict.findings],
-                            graph_notes + [note for verdict in verdicts for note in verdict.notes])
+    results = [_check(contract, graph, config.name, repository) for contract in contracts]
+    grimp_notes = tuple(Note(config.name, NoteEvent.WARNING, message.removeprefix(GRIMP_WARNING_PREFIX)) for message in graph_warnings)
+    return RuleResult([finding for result in results for finding in result.findings], len(contracts), False,
+                      (*grimp_notes, *(note for result in results for note in result.notes)))
 
 
 def find_config(configs: Mapping[str, str]) -> Config | None:
@@ -411,17 +406,17 @@ class _CollectedWarnings(logging.Handler):
 
 @contextmanager
 def _library_warnings(repository: str) -> Iterator[list[str]]:
-    """grimp warns through logging with absolute paths; its warnings become the rule's notes, repository-relative,
-    instead of reaching the terminal."""
+    """grimp warns through logging with absolute paths; its messages are collected, repository-relative, instead of
+    reaching the terminal."""
     logger = logging.getLogger(grimp.__name__)
     collected = _CollectedWarnings()
     propagates = logger.propagate
     logger.addHandler(collected)
     logger.propagate = False
-    notes: list[str] = []
+    messages: list[str] = []
     try:
-        yield notes
-        notes += [f"{Rule.IMPORT_CONTRACT}: note - {_relative(message, repository)}" for message in collected.messages]
+        yield messages
+        messages += [_relative(message, repository) for message in collected.messages]
     finally:
         logger.removeHandler(collected)
         logger.propagate = propagates
@@ -470,28 +465,42 @@ def _path_entry_holding(found: str) -> Path | None:
     return max(holding, key=lambda entry: len(entry.parts), default=None)
 
 
-def _check(contract: Contract, graph: grimp.ImportGraph, config_name: str, repository: str) -> ContractsVerdict:
+def _check(contract: Contract, graph: grimp.ImportGraph, config_name: str, repository: str) -> RuleResult:
     """Checks one contract on its own copy of the graph, as import-linter does."""
     with _judging(f"contract {contract.name} in {config_name}", repository):
         try:
             check = contract.check(copy.deepcopy(graph), verbose=False)
         except MissingImport as stale:
-            return ContractsVerdict([
-                Finding(Rule.IMPORT_CONTRACT, config_name, None, f"contract {contract.name} {_unmatched(line)}", STALE_IGNORE_FIX)
+            return RuleResult([
+                Finding(Rule.IMPORT_CONTRACT, config_name, None, _ignore_fact(contract.name, line, _ignored_expression(line)), STALE_IGNORE_FIX, event=FindingEvent.UNUSED)
                 for line in str(stale).splitlines()
-            ], [])
-        notes = [f"{Rule.IMPORT_CONTRACT}: note - contract {contract.name} {_unmatched(warning)}" for warning in check.warnings]
+            ], 1, False)
+        notes = tuple(_warning_note(contract.name, config_name, warning) for warning in check.warnings)
         if check.kept:
-            return ContractsVerdict([], notes)
+            return RuleResult([], 1, False, notes)
         broken = Finding(
-            Rule.IMPORT_CONTRACT, config_name, None, f"contract {contract.name} is broken:", BROKEN_FIX, detail=_rendered(contract, check)
+            Rule.IMPORT_CONTRACT, config_name, None, f"contract {contract.name}", BROKEN_FIX,
+            detail=_rendered(contract, check), event=FindingEvent.BROKEN,
         )
-        return ContractsVerdict([broken], notes)
+        return RuleResult([broken], 1, False, notes)
 
 
-def _unmatched(message: str) -> str:
+def _ignored_expression(message: str) -> str | None:
+    """The expression an unmatched-ignore message names, or None for any other message."""
     match = UNMATCHED_IGNORE.fullmatch(message)
-    return message if match is None else f"ignores {match['expression']}, which no import matches"
+    return None if match is None else match["expression"]
+
+
+def _ignore_fact(contract_name: str, message: str, expression: str | None) -> str:
+    """What a message says of a contract: the expression it ignores, else import-linter's own words."""
+    return f"contract {contract_name} {message}" if expression is None else f"contract {contract_name} ignores {expression}"
+
+
+def _warning_note(contract_name: str, config_name: str, message: str) -> Note:
+    """An unmatched ignore at `warn` is an `unused` note, any other warning of the contract a `warning` note."""
+    expression = _ignored_expression(message)
+    event = NoteEvent.WARNING if expression is None else NoteEvent.UNUSED
+    return Note(config_name, event, _ignore_fact(contract_name, message, expression))
 
 
 def _rendered(contract: Contract, check: ContractCheck) -> tuple[str, ...]:

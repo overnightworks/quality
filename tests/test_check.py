@@ -8,6 +8,7 @@ from quality import check, cli, config, env_file, installation, scanners
 from quality.compose import is_compose_file
 from quality.report import CannotJudge, Command, Example, Finding, Reason, Unparsable, printable
 from quality.rules import Area, Rule
+from tests.support.architecture import KEPT_CONTRACT
 from tests.support.check import (
     CLEAN_VERDICT,
     compose,
@@ -123,7 +124,7 @@ def files(tracked: dict[str, str]):
           "error: 4 of 7 areas could not check · 1 finding, 1 of them in those areas"], [".env"]),
         (files({**BASELINE, "compose.yaml": "services: [\n", "src/a.py": NEW_DEBT}), 2,
          [f"{refusal_row('files')}cannot read compose.yaml"], ["src/a.py:1"]),
-        (files({".env": "A=1\n", **compose('- "8080:80"')}), 1,
+        (files({".env": "A=1\n", **KEPT_CONTRACT, **compose('- "8080:80"')}), 1,
          ["! 3 findings in 1 area · 5 areas clean · debt measured, not enforced · <1s"], [".env", "compose.yaml"]),
         (files({"compose-\udcff.yaml": compose('- "8080:80"')["compose.yaml"]}), 1, [], [printable("compose-\udcff.yaml")]),
         (files({**BASELINE, "src/\udcff.py": NEW_DEBT}), 1, [], ["src/\\udcff.py:1"]),

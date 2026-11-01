@@ -1,7 +1,6 @@
 import pytest
 
 from quality.report import (
-    DETAIL_MARKER,
     CannotJudge,
     Choice,
     Command,
@@ -17,12 +16,10 @@ from quality.report import (
 )
 
 
-def test_a_finding_prints_its_detail_and_fix_escaped(capsys):
-    """#97 rule 2: every field of a finding, detail lines and fix included, prints without a raw control character."""
-    finding = Finding("r", "p", None, "why", "fix\x1b[31m\n::error::f", detail=("one\n::error::d", "two\x1b"))
-    assert render(finding) == (
-        f"r p - why\n{DETAIL_MARKER}one\\x0a::error::d\n{DETAIL_MARKER}two\\x1b\n  Fix: fix\\x1b[31m\\x0a::error::f"
-    )
+def test_an_event_less_finding_prints_its_headline_and_fix_escaped():
+    """#97 rule 2: every field of a finding, fix included, prints without a raw control character."""
+    finding = Finding("r", "p", None, "why\x1b", "fix\x1b[31m\n::error::f")
+    assert render(finding) == "r p - why\\x1b\n  Fix: fix\\x1b[31m\\x0a::error::f"
 
 
 @pytest.mark.parametrize(

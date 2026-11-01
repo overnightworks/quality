@@ -25,7 +25,7 @@ import lizard
 from quality import __version__, checkout, repository
 from quality.config import CONFIG_PATH, GENERATED_FILE_HEADING, GeneratedFile
 from quality.output import SEPARATOR
-from quality.report import Command, Finding, FindingEvent, Instruction, Note, NoteEvent, Unparsable
+from quality.report import Command, Finding, FindingEvent, Instruction, Note, NoteEvent, RuleResult, Unparsable
 from quality.rules import Rule
 
 BASELINE_PATH = "quality/baseline.toml"
@@ -528,17 +528,6 @@ def _count(where: str, value: object) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
         raise SizeError(f"{BASELINE_PATH} needs {where} as a positive count, not {value!r}")
     return value
-
-
-@dataclass(frozen=True)
-class RuleResult:
-    """A baseline rule's findings and `extent`, how many entries or pairs the debt row names for it; `measured_only`
-    when it counted without enforcing, and the `notes` of what it could not measure."""
-
-    findings: list[Finding]
-    extent: int
-    measured_only: bool
-    notes: tuple[Note, ...] = ()
 
 
 def complete(tree: TreeMeasurement) -> Measurements:

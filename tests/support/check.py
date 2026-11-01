@@ -1,7 +1,8 @@
 import re
 import unicodedata
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from enum import StrEnum
 from importlib.metadata import requires
 from pathlib import Path
 
@@ -57,10 +58,131 @@ class FindingRow:
     fix: str | None
     fix_indent: int | None
     fix_follows: bool
+    detail: tuple[str, ...] = ()
 
 
 def _indentation(line: str) -> int:
     return len(line) - len(line.lstrip(" "))
+
+
+@dataclass(frozen=True)
+class BlockLine:
+    """One printed line of a decoded span, at its place in the printed output."""
+
+    position: int
+    text: str
+
+
+@dataclass(frozen=True)
+class FindingLine(BlockLine):
+    location: str
+    row: FindingRow
+
+
+@dataclass(frozen=True)
+class DetailLine(BlockLine):
+    """A line of a finding's detail: everything after the marker's one separator space, leading whitespace included."""
+
+    detail: str
+
+
+@dataclass(frozen=True)
+class FixLine(BlockLine):
+    """A `fix:` line."""
+
+
+@dataclass(frozen=True)
+class NoteLine(BlockLine):
+    location: str
+    row: NoteRow
+
+
+@dataclass(frozen=True)
+class OtherLine(BlockLine):
+    """Any line that is none of these: until the other areas move to rows, an event-less finding's text."""
+
+
+def _event_of[Event: StrEnum](remainder: str, events: type[Event]) -> Event | None:
+    """The member whose word opens `remainder` followed by a space; the longest wins."""
+    matching = [event for event in events if remainder.startswith(f"{event.value} ")]
+    return max(matching, key=lambda member: len(member.value)) if matching else None
+
+
+def _location_and_remainder(stripped: str, locations: Sequence[str]) -> tuple[str, str]:
+    """The location a row names and what follows it: a known location first, else the first word."""
+    after_glyph = stripped.split(" ", 1)[1] if " " in stripped else ""
+    location = next((known for known in locations if after_glyph.startswith(f"{known} ")), after_glyph.split(" ", 1)[0])
+    return location, after_glyph[len(location):].lstrip(" ")
+
+
+def _detail_of(line: str) -> str | None:
+    """What a detail line holds after the marker, or None for a line that is none."""
+    marker = f"{output.FIX_INDENT}{output.DETAIL_MARKER}"
+    if not line.startswith(marker) or line[len(marker):len(marker) + 1] not in ("", " "):
+        return None
+    return line[len(marker) + 1:]
+
+
+def _details_below(lines: Sequence[str], number: int) -> tuple[str, ...]:
+    """The detail lines standing contiguously directly under the row at `number`."""
+    details = []
+    for following in lines[number + 1:]:
+        if (detail := _detail_of(following)) is None:
+            break
+        details.append(detail)
+    return tuple(details)
+
+
+def _fix_below(lines: Sequence[str], number: int) -> tuple[str | None, int | None, bool]:
+    """The fix of the `fix:` run a row belongs to: the next `fix:` line below it that is not shallower, its indentation,
+    and whether it follows the row and its own detail lines directly."""
+    own = number + len(_details_below(lines, number))
+    for later, following in enumerate(lines[number + 1:], start=number + 1):
+        if _indentation(following) < _indentation(lines[number]):
+            break
+        if following.lstrip().startswith(f"{output.FIX_LABEL} "):
+            return following.lstrip()[len(output.FIX_LABEL) + 1:], _indentation(following), later == own + 1
+    return None, None, False
+
+
+def decode_block(lines: Sequence[str], locations: Sequence[str] = (), first_position: int = 0) -> list[BlockLine]:
+    """Every line of a span in printed order: a finding row (glyph `!`, a location, a `FindingEvent`, a fact), a `fix:`
+    line, a note row (glyph `·`, a location, a `NoteEvent`, a fact) or any other line. A row is found by its glyph and
+    its event; the padding between the columns is never rebuilt."""
+    decoded: list[BlockLine] = []
+    for number, line in enumerate(lines):
+        stripped = line.lstrip()
+        position = first_position + number
+        if stripped.startswith(f"{Glyph.NEEDS_YOU} ") and (found := _finding_line(lines, number, locations, position)):
+            decoded.append(found)
+        elif (detail := _detail_of(line)) is not None:
+            decoded.append(DetailLine(position, line, detail))
+        elif stripped.startswith(f"{output.FIX_LABEL} "):
+            decoded.append(FixLine(position, line))
+        elif stripped.startswith(f"{Glyph.NOTE} ") and (note := _note_line(line, locations, position)):
+            decoded.append(note)
+        else:
+            decoded.append(OtherLine(position, line))
+    return decoded
+
+
+def _finding_line(lines: Sequence[str], number: int, locations: Sequence[str], position: int) -> FindingLine | None:
+    location, remainder = _location_and_remainder(lines[number].lstrip(), locations)
+    event = _event_of(remainder, FindingEvent)
+    if event is None:
+        return None
+    fix, fix_indent, fix_follows = _fix_below(lines, number)
+    detail = _details_below(lines, number)
+    row = FindingRow(_indentation(lines[number]), event, remainder[len(event.value):].strip(), fix, fix_indent, fix_follows, detail)
+    return FindingLine(position, lines[number], location, row)
+
+
+def _note_line(line: str, locations: Sequence[str], position: int) -> NoteLine | None:
+    location, remainder = _location_and_remainder(line.lstrip(), locations)
+    event = _event_of(remainder, NoteEvent)
+    if event is None:
+        return None
+    return NoteLine(position, line, location, NoteRow(_indentation(line), event, remainder[len(event.value):].strip()))
 
 
 def finding_rows(printed: str, location: str) -> list[FindingRow]:
@@ -69,41 +191,34 @@ def finding_rows(printed: str, location: str) -> list[FindingRow]:
 
 
 def printed_finding_rows(printed: str, locations: list[str]) -> list[tuple[str, FindingRow]]:
-    """Every finding row at any of `locations`, each with its location, in the order the output prints them. A row is
-    found by its glyph and an event of `FindingEvent`, a fix line by the label of `output`; the padding between the
-    columns is never rebuilt."""
-    lines = printed.splitlines()
-    rows = []
-    for number, line in enumerate(lines):
-        prefix = next((f"{Glyph.NEEDS_YOU} {location} " for location in locations if line.lstrip().startswith(f"{Glyph.NEEDS_YOU} {location} ")), None)
-        if prefix is None:
-            continue
-        remainder = line.lstrip()[len(prefix):].lstrip(" ")
-        events = [event for event in FindingEvent if remainder.startswith(f"{event.value} ")]
-        if not events:
-            continue
-        event = max(events, key=lambda member: len(member.value))
-        fix, fix_indent, fix_follows = None, None, False
-        for later, following in enumerate(lines[number + 1:], start=number + 1):
-            if _indentation(following) < _indentation(line):
-                break
-            if following.lstrip().startswith(f"{output.FIX_LABEL} "):
-                fix, fix_indent, fix_follows = following.lstrip()[len(output.FIX_LABEL) + 1:], _indentation(following), later == number + 1
-                break
-        rows.append((prefix[len(Glyph.NEEDS_YOU) + 1:-1], FindingRow(_indentation(line), event, remainder[len(event.value):].strip(), fix, fix_indent, fix_follows)))
-    return rows
+    """Every finding row at any of `locations`, each with its location, in the order the output prints them."""
+    return [(line.location, line.row) for line in decode_block(printed.splitlines(), locations) if isinstance(line, FindingLine) and line.location in locations]
 
 
-def area_fact(printed: str, area: str) -> str:
-    """The fact of `area`'s row, found by the area word and an `AreaEvent`; the padding between the columns is never rebuilt."""
+@dataclass(frozen=True)
+class AreaRow:
+    """One area row as printed: its glyph, `AreaEvent` and fact."""
+
+    glyph: str
+    event: cli.AreaEvent
+    fact: str
+
+
+def area_row(printed: str, area: str) -> AreaRow:
+    """`area`'s row, found by the area word and an `AreaEvent`; the padding between the columns is never rebuilt."""
     for line in printed.splitlines():
         words = line.split()
         if len(words) > 2 and words[1] == area:
             remainder = line.split(area, 1)[1].lstrip(" ")
-            events = [event for event in cli.AreaEvent if remainder.startswith(f"{event.value} ")]
-            if events:
-                return remainder[len(max(events, key=lambda member: len(member.value)).value):].strip()
+            event = _event_of(remainder, cli.AreaEvent)
+            if event is not None:
+                return AreaRow(words[0], event, remainder[len(event.value):].strip())
     raise AssertionError(f"no row of {area} in {printed}")
+
+
+def area_fact(printed: str, area: str) -> str:
+    """The fact of `area`'s row."""
+    return area_row(printed, area).fact
 
 
 def leading_count(fact: str) -> int:
@@ -116,18 +231,48 @@ def extent_counts(fact: str) -> list[int]:
     return [int(number) for number in re.findall(r"\d+", fact)]
 
 
-def area_finding_rows(printed: str, area: str) -> list[tuple[str, FindingRow]]:
-    """Every finding row standing under `area`'s row, each with its location, in printed order."""
+def area_block(printed: str, area: str) -> list[BlockLine]:
+    """Every line under `area`'s row, in printed order with its position: from the row to the next area row, the verdict
+    line or `error:`, that is while the lines stay indented under the row."""
     lines = printed.splitlines()
     start = next(number for number, line in enumerate(lines) if line.split()[1:2] == [area])
-    locations = []
-    for line in lines[start + 1:]:
-        if not line.startswith(f"{output.FINDING_INDENT}{Glyph.NEEDS_YOU} "):
-            if line.startswith(output.FINDING_INDENT):
-                continue
-            break
-        locations.append(line.split()[1])
-    return printed_finding_rows(printed, list(dict.fromkeys(locations)))
+    end = next((number for number in range(start + 1, len(lines)) if not lines[number].startswith(output.FINDING_INDENT)), len(lines))
+    return decode_block(lines[start + 1:end], first_position=start + 1)
+
+
+def area_finding_rows(printed: str, area: str) -> list[tuple[str, FindingRow]]:
+    """Every finding row standing under `area`'s row, each with its location, in printed order."""
+    return [(line.location, line.row) for line in area_block(printed, area) if isinstance(line, FindingLine)]
+
+
+def assert_block_order(block: Sequence[BlockLine]) -> None:
+    """Decision 4 and O25: a finding's detail lines stand contiguously directly under its row, each run's `fix:` follows
+    the last detail line of the run's last row and equals that row's fix, and every note follows the block's final `fix:`."""
+    for index, line in enumerate(block):
+        before = block[index - 1] if index else None
+        if isinstance(line, DetailLine):
+            assert isinstance(before, FindingLine | DetailLine), line
+        if isinstance(line, FixLine):
+            assert isinstance(before, FindingLine | DetailLine), line
+            owner = next(earlier for earlier in reversed(block[:index]) if isinstance(earlier, FindingLine))
+            assert line.text.strip() == f"{output.FIX_LABEL} {owner.row.fix}", line
+        if isinstance(line, FindingLine) and index:
+            assert not any(isinstance(earlier, NoteLine) for earlier in block[:index]), line
+    last_fix = max((line.position for line in block if isinstance(line, FixLine)), default=-1)
+    assert all(line.position > last_fix for line in block if isinstance(line, NoteLine))
+
+
+def assert_block_prints(block: Sequence[BlockLine], findings: Sequence[Finding], notes: Sequence[Note]) -> None:
+    """The decoded block equals what the rule returned: each row its finding with its escaped detail, each note its note,
+    in order, and the block keeps the order of `assert_block_order`."""
+    rows = [line for line in block if isinstance(line, FindingLine)]
+    assert len(rows) == len(findings)
+    for line, found in zip(rows, findings, strict=True):
+        assert (line.location, line.row.detail) == (found.location, tuple(printable(text) for text in found.detail))
+        assert_row_prints_finding(line.row, found)
+    printed_notes = [(line.location, line.row.event, line.row.fact) for line in block if isinstance(line, NoteLine)]
+    assert printed_notes == [(note.location, note.event, printable(note.fact)) for note in notes]
+    assert_block_order(block)
 
 
 @dataclass(frozen=True)
@@ -140,19 +285,8 @@ class NoteRow:
 
 
 def note_rows(printed: str, location: str) -> list[NoteRow]:
-    """Every note row at `location`, in printed order. A row is found by its glyph and an event of `NoteEvent`; the
-    padding between the columns is never rebuilt."""
-    rows = []
-    for line in printed.splitlines():
-        prefix = f"{Glyph.NOTE} {location} "
-        if not line.lstrip().startswith(prefix):
-            continue
-        remainder = line.lstrip()[len(prefix):].lstrip(" ")
-        events = [event for event in NoteEvent if remainder.startswith(f"{event.value} ")]
-        if events:
-            event = max(events, key=lambda member: len(member.value))
-            rows.append(NoteRow(_indentation(line), event, remainder[len(event.value):].strip()))
-    return rows
+    """Every note row at `location`, in printed order."""
+    return [line.row for line in decode_block(printed.splitlines(), [location]) if isinstance(line, NoteLine) and line.location == location]
 
 
 def rule_notes(repo: Path, rule: Rule) -> list[Note]:
@@ -217,10 +351,14 @@ def hygiene_run(repo: Path, locate_ruff: Callable[[], str] = installed_ruff, loc
     return check.run_hygiene(repo, locate_ruff, locate_zizmor or cli.INSTALLED_ZIZMOR)
 
 
+def refusals_of(result: check.HygieneResult) -> dict[Rule, str]:
+    """Each rule that cannot judge, with its reason, as the rule runner reports it."""
+    return {verdict.rule: str(verdict.refusal) for verdict in result.verdicts if verdict.refusal is not None}
+
+
 def refusals(repo: Path, locate_ruff: Callable[[], str] = installed_ruff, locate_zizmor: Callable[[], str] | None = None) -> dict[Rule, str]:
     """Each rule that cannot judge `repo`, with its reason, as the rule runner reports it."""
-    verdicts = hygiene_run(repo, locate_ruff, locate_zizmor).verdicts
-    return {verdict.rule: str(verdict.refusal) for verdict in verdicts if verdict.refusal is not None}
+    return refusals_of(hygiene_run(repo, locate_ruff, locate_zizmor))
 
 
 def copy_block(example: tuple[str, ...]) -> str:

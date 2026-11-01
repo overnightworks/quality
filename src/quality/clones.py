@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 from quality import ratchet
 from quality.ratchet import Area, ClonePair, Place
-from quality.report import Finding, FindingEvent
+from quality.report import Finding, FindingEvent, RuleResult
 from quality.rules import Rule
 
 MIN_TOKENS = 40
@@ -173,11 +173,11 @@ def _stale_pair_finding(pair: ClonePair) -> Finding:
     return Finding(Rule.CLONE, pair.first.path, None, fact, ratchet.WRITE_COMMAND, event=FindingEvent.CAN_FALL)
 
 
-def check_clones(tree: ratchet.TreeMeasurement, sources: dict[str, bytes], baseline: ratchet.Baseline | None) -> ratchet.RuleResult:
+def check_clones(tree: ratchet.TreeMeasurement, sources: dict[str, bytes], baseline: ratchet.Baseline | None) -> RuleResult:
     """Report-only without a `[clones]` table, even in a baseline of size tables; with one, every new pair and every
     held pair the tree lost is a finding. A pair can hide in a file the detector cannot read, so then it cannot judge."""
     pairs = find_pairs(sources)
     if baseline is None or baseline.clones is None:
-        return ratchet.RuleResult([], len(pairs.pairs), True)
+        return RuleResult([], len(pairs.pairs), True)
     ratchet.complete(tree)
-    return ratchet.RuleResult(compare_pairs(pairs, baseline.clones), len(baseline.clones), False)
+    return RuleResult(compare_pairs(pairs, baseline.clones), len(baseline.clones), False)

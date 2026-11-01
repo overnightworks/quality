@@ -37,6 +37,7 @@ from tests.support.check import (
     recorded_entries,
     refusal_row,
     refusals,
+    refusals_of,
     rows_of,
     rule_findings,
     rule_notes,
@@ -269,7 +270,7 @@ def test_a_tracked_file_missing_from_disk_is_gone_for_the_size_rule_and_only_the
     remove(repo / "src/b.py")
     code, output = hygiene(capsys, repo)
     result = hygiene_run(repo)
-    refusing = {verdict.rule: str(verdict.refusal) for verdict in result.verdicts if verdict.refusal is not None}
+    refusing = refusals_of(result)
     assert code == 2, output
     assert result.findings == [], output
     assert list(refusing) == [Rule.PYTHON_SECURITY, Rule.PYTHON_PRINT], output

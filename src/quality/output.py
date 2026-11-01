@@ -170,6 +170,8 @@ def write_rows(rows: tuple[Row, ...], file: TextIO | None = None) -> None:
     _print_lines([line for row in rows for line in _row_lines(row, styled)], file)
 
 
+# A line taken from another tool's rendering carries this, so no line the door prints starts with repository text.
+DETAIL_MARKER = "|"
 FINDING_INDENT = "    "
 FIX_INDENT = "      "
 FIX_LABEL = "fix:"
@@ -180,6 +182,11 @@ def _row_columns(location: str, event: str, widths: tuple[int, int]) -> str:
     """The location and event columns of a row, each padded to its width and followed by the gap that opens the fact."""
     location_width, event_width = widths
     return f"{location.ljust(location_width)}{FINDING_GAP}{event.ljust(event_width)}{FINDING_GAP}"
+
+
+def _detail_line(text: str) -> str:
+    """One line of another tool's rendering under its finding's row; a blank line is the bare marker."""
+    return f"{FIX_INDENT}{DETAIL_MARKER} {printable(text)}" if text else f"{FIX_INDENT}{DETAIL_MARKER}"
 
 
 def _finding_lines(findings: Sequence[Finding], notes: Sequence[Note], styled: bool) -> list[str]:
@@ -194,6 +201,7 @@ def _finding_lines(findings: Sequence[Finding], notes: Sequence[Note], styled: b
         glyph = _paint(Glyph.NEEDS_YOU, GLYPH_STYLE[Glyph.NEEDS_YOU], styled)
         columns = _row_columns(finding.location, str(finding.event), widths)
         lines.append(f"{FINDING_INDENT}{glyph} {columns}{_paint(printable(finding.reason), DIM, styled)}")
+        lines += [_paint(_detail_line(text), DIM, styled) for text in finding.detail]
         if position + 1 == len(findings) or findings[position + 1].fix != finding.fix:
             lines.append(f"{FIX_INDENT}{FIX_LABEL} {printable(finding.fix)}")
     for note in notes:

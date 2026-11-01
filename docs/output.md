@@ -101,7 +101,7 @@ $ quality check
 ! 5 findings in 3 areas · 4 areas clean · 14s
 ```
 
-No rule name stands in a row (`compose-port`, `env-file`); the event says it in words. The rule name appears only in a `fix:` line that asks for an `[[….allow]]` entry. No `next:` follows this verdict: the `fix:` lines carry the way. The events, facts and fixes of the `files` rows are head proposals O12 to O16, O18 and O19 of 30.10.2026, those of the `debt` rows O20 to O22 of 31.10.2026, their recommendations applied: one event word per kind of finding, shared across rules (`report.FindingEvent`); the env fix names the file for `.gitignore` only where it is its own shell word, else `it`; and the findings of an area in run order. Paths and events align per area by character count.
+No rule name stands in a row (`compose-port`, `env-file`); the event says it in words. The rule name appears only in a `fix:` line that asks for an `[[….allow]]` entry. No `next:` follows this verdict: the `fix:` lines carry the way. The events, facts and fixes of the `files` rows are head proposals O12 to O16, O18 and O19 of 30.10.2026, those of the `debt` rows O20 to O22 of 31.10.2026, those of the `imports` rows O23 to O27 of 31.10.2026, their recommendations applied: one event word per kind of finding, shared across rules (`report.FindingEvent`); the env fix names the file for `.gitignore` only where it is its own shell word, else `it`; and the findings of an area in run order. Paths and events align per area by character count.
 
 ### 3. `quality check`, no git work tree
 
@@ -261,6 +261,13 @@ A ceiling file without a `[clones]` table is the partly recorded form. Head prop
 ```text
   · debt          not recorded   2 clone pairs · partly measured only
 ✓ clean · 7 areas · debt partly measured, not enforced · 2s
+```
+
+Without an import-linter config the imports row is a grey note, not counted among the clean areas, and the verdict names it before the duration, after debt's note when both stand (operator ruling 31.10.2026 on #293: „B“; the order is head proposal O27).
+
+```text
+  · imports       not set up     no import-linter config
+✓ clean · 7 areas · imports not enforced · 2s
 ```
 
 ### 6. `quality check secrets --staged`: the commit hook
