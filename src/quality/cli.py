@@ -306,10 +306,14 @@ def run_sonar_preflight(path: Path) -> int:
     except (CannotJudge, repository.RepositoryFileError) as error:
         emit(f"sonar: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
+    try:
+        append_step_output(SCANNER_ARGUMENTS_OUTPUT, scanner_exclusions(uncounted))
+    except OSError as error:
+        emit(f"sonar: cannot judge - GITHUB_OUTPUT is not writable: {error}", file=sys.stderr)
+        return EXIT_CANNOT_JUDGE
     emit("sonar: preflight clean")
     if uncounted:
         emit(f"sonar: the scan excludes {', '.join(sorted(uncounted))} ({DEPENDABOT_CONFIG} exists)")
-    append_step_output(SCANNER_ARGUMENTS_OUTPUT, scanner_exclusions(uncounted))
     return EXIT_CLEAN
 
 

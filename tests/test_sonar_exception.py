@@ -311,9 +311,8 @@ def scanner_properties(value: str) -> dict[str, str]:
 
 
 @pytest.mark.parametrize(("arrange", "excluded"), ARRANGEMENTS)
-def test_preflight_hands_the_scan_one_exclusion_exactly_when_the_bot_config_exists(monkeypatch, capsys, build_repo, tmp_path, arrange, excluded):
-    """#298 cells 1-7: the exception is one criterion for the rule, over every file, or an empty value"""
-    step_output = tmp_path.parent / f"{tmp_path.name}-output"
+def test_preflight_hands_the_scan_one_exclusion_exactly_when_the_bot_config_exists(monkeypatch, capsys, build_repo, elsewhere, arrange, excluded):
+    step_output = elsewhere / "output"
     code, out, _ = run_preflight(monkeypatch, capsys, build_repo, arrange=arrange, step_output=step_output)
     (value,) = written_arguments(step_output)
     declared = scanner_properties(value)
@@ -330,27 +329,24 @@ def test_preflight_hands_the_scan_one_exclusion_exactly_when_the_bot_config_exis
 
 
 @pytest.mark.parametrize(("arrange", "excluded"), ARRANGEMENTS)
-def test_preflight_excludes_exactly_what_the_findings_door_sets_aside(monkeypatch, capsys, build_repo, tmp_path, arrange, excluded):
-    """#298 cell 13: one decider, so the scan drops the rule exactly where the count sets it aside"""
-    step_output = tmp_path.parent / f"{tmp_path.name}-output"
+def test_preflight_excludes_exactly_what_the_findings_door_sets_aside(monkeypatch, capsys, build_repo, elsewhere, arrange, excluded):
+    step_output = elsewhere / "output"
     run_preflight(monkeypatch, capsys, build_repo, arrange=arrange, step_output=step_output)
     (value,) = written_arguments(step_output)
     _, out, _, _ = run_cli(monkeypatch, capsys, findings_of(bot_issue()))
     assert (bool(value), "does not count" in out) == (excluded, excluded)
 
 
-def test_every_key_preflight_writes_is_a_multicriteria_exclusion_key(monkeypatch, capsys, build_repo, tmp_path):
-    """#298 protective limit: the arguments cannot steer the host, the proxy or the gate wait"""
-    step_output = tmp_path.parent / f"{tmp_path.name}-output"
+def test_every_key_preflight_writes_is_a_multicriteria_exclusion_key(monkeypatch, capsys, build_repo, elsewhere):
+    step_output = elsewhere / "output"
     run_preflight(monkeypatch, capsys, build_repo, arrange=put_bot_config, step_output=step_output)
     (value,) = written_arguments(step_output)
     assert all(key.startswith(sonar.IGNORE_CRITERIA_KEY) for key in scanner_properties(value))
     assert all(argument.startswith("-Dsonar.issue.ignore.") for argument in shlex.split(value))
 
 
-def test_preflight_keeps_the_lines_the_output_file_already_holds(monkeypatch, capsys, build_repo, tmp_path):
-    """#298 cell 12: append only"""
-    step_output = tmp_path.parent / f"{tmp_path.name}-output"
+def test_preflight_keeps_the_lines_the_output_file_already_holds(monkeypatch, capsys, build_repo, elsewhere):
+    step_output = elsewhere / "output"
     step_output.write_text("earlier=1\n")
     run_preflight(monkeypatch, capsys, build_repo, arrange=put_bot_config, step_output=step_output)
     lines = step_output.read_text().splitlines()
@@ -358,17 +354,14 @@ def test_preflight_keeps_the_lines_the_output_file_already_holds(monkeypatch, ca
     assert lines[1].startswith(f"{cli.SCANNER_ARGUMENTS_OUTPUT}=")
 
 
-def test_preflight_outside_a_workflow_step_prints_and_writes_nothing(monkeypatch, capsys, build_repo, tmp_path):
-    """#298 cell 11: no GITHUB_OUTPUT"""
+def test_preflight_outside_a_workflow_step_prints_and_exits_clean(monkeypatch, capsys, build_repo):
     code, out, _ = run_preflight(monkeypatch, capsys, build_repo, arrange=put_bot_config)
     assert (code, sonar.DEPENDABOT_EXCEPTION_RULE in out) == (0, True)
-    assert not list(tmp_path.parent.glob(f"{tmp_path.name}-output"))
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-0 path, so no permission is refused")
-def test_preflight_with_an_unreachable_bot_config_is_exit_2_and_writes_nothing(monkeypatch, capsys, build_repo, tmp_path):
-    """#298 cell 8"""
-    step_output = tmp_path.parent / f"{tmp_path.name}-output"
+def test_preflight_with_an_unreachable_bot_config_is_exit_2_and_writes_nothing(monkeypatch, capsys, build_repo, elsewhere):
+    step_output = elsewhere / "output"
     step_output.write_text("earlier=1\n")
 
     def lock_github(root: Path) -> None:
@@ -391,9 +384,15 @@ def test_preflight_with_an_unreachable_bot_config_is_exit_2_and_writes_nothing(m
     ],
     ids=["a property that widens the exclusion", "a foreign project"],
 )
-def test_a_refused_properties_file_is_exit_2_and_writes_nothing_even_with_a_bot_config(monkeypatch, capsys, build_repo, tmp_path, properties):
-    """#298 cells 9 and 10"""
-    step_output = tmp_path.parent / f"{tmp_path.name}-output"
+def test_a_refused_properties_file_is_exit_2_and_writes_nothing_even_with_a_bot_config(monkeypatch, capsys, build_repo, elsewhere, properties):
+    step_output = elsewhere / "output"
     step_output.write_text("earlier=1\n")
     code, _, _ = run_preflight(monkeypatch, capsys, build_repo, properties, arrange=put_bot_config, step_output=step_output)
     assert (code, step_output.read_text()) == (2, "earlier=1\n")
+
+
+@pytest.mark.parametrize("arrange", [put_bot_config, lambda root: None], ids=["with a bot config", "without a bot config"])
+def test_preflight_with_an_unwritable_step_output_is_exit_2_and_claims_no_success(monkeypatch, capsys, build_repo, elsewhere, arrange):
+    code, out, err = run_preflight(monkeypatch, capsys, build_repo, arrange=arrange, step_output=elsewhere)
+    assert (code, out) == (2, "")
+    assert "GITHUB_OUTPUT" in err

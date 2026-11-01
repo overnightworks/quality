@@ -56,14 +56,16 @@ def test_the_sonar_job_checks_out_the_caller_with_full_history_without_credentia
 
 
 def test_the_scan_pins_the_verified_scanner_and_the_sonarcloud_origin(sonar_steps):
-    """#26 rule 4: removing scannerVersion or changing the host argument fails this test; #298: the preflight's arguments follow them"""
+    """#26 rule 4: removing scannerVersion or changing the host argument fails this test"""
     options = step_named(sonar_steps, "Scan")["with"]
     preflight_id = step_named(sonar_steps, "Refuse a token")["id"]
     arguments = f"${{{{ steps.{preflight_id}.outputs.{cli.SCANNER_ARGUMENTS_OUTPUT} }}}}"
     assert options["scannerVersion"] == VERIFIED_SCANNER_VERSION
-    assert options["args"].split(" ", 2)[:2] == [f"-Dsonar.host.url={sonar.SONAR_ORIGIN}", "-Dsonar.qualitygate.wait=false"]
-    assert options["args"].count("${{") == 1
-    assert options["args"].endswith(f" {arguments}")
+    assert options["args"].split(" ", 2) == [
+        f"-Dsonar.host.url={sonar.SONAR_ORIGIN}",
+        "-Dsonar.qualitygate.wait=false",
+        arguments,
+    ]
 
 
 def test_the_token_reaches_only_preflight_scan_and_findings(gate):
