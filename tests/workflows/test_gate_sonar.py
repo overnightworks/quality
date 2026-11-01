@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from quality import sonar
+from quality import cli, sonar
 
 ROOT = Path(__file__).parents[2]
 WORKFLOWS = ROOT / ".github" / "workflows"
@@ -56,10 +56,14 @@ def test_the_sonar_job_checks_out_the_caller_with_full_history_without_credentia
 
 
 def test_the_scan_pins_the_verified_scanner_and_the_sonarcloud_origin(sonar_steps):
-    """#26 rule 4: removing scannerVersion or changing the host argument fails this test"""
+    """#26 rule 4: removing scannerVersion or changing the host argument fails this test; #298: the preflight's arguments follow them"""
     options = step_named(sonar_steps, "Scan")["with"]
+    preflight_id = step_named(sonar_steps, "Refuse a token")["id"]
+    arguments = f"${{{{ steps.{preflight_id}.outputs.{cli.SCANNER_ARGUMENTS_OUTPUT} }}}}"
     assert options["scannerVersion"] == VERIFIED_SCANNER_VERSION
-    assert options["args"] == f"-Dsonar.host.url={sonar.SONAR_ORIGIN} -Dsonar.qualitygate.wait=false"
+    assert options["args"].split(" ", 2)[:2] == [f"-Dsonar.host.url={sonar.SONAR_ORIGIN}", "-Dsonar.qualitygate.wait=false"]
+    assert options["args"].count("${{") == 1
+    assert options["args"].endswith(f" {arguments}")
 
 
 def test_the_token_reaches_only_preflight_scan_and_findings(gate):

@@ -105,6 +105,7 @@ jobs:
           python-version: '3.14'
 
       - name: Refuse a token or properties file that could steer the scan
+        id: preflight
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: uv run --locked --project "$TOOL_DIR" quality sonar preflight .
@@ -115,7 +116,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
           scannerVersion: 8.1.0.6389
-          args: -Dsonar.host.url=https://sonarcloud.io -Dsonar.qualitygate.wait=false
+          args: -Dsonar.host.url=https://sonarcloud.io -Dsonar.qualitygate.wait=false ${{ steps.preflight.outputs.scanner-arguments }}
 
       - name: Findings of this run's own analysis
         env:
