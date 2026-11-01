@@ -59,7 +59,7 @@ def test_the_scan_pins_the_verified_scanner_and_the_sonarcloud_origin(sonar_step
     """#26 rule 4: removing scannerVersion or changing the host argument fails this test"""
     options = step_named(sonar_steps, "Scan")["with"]
     assert options["scannerVersion"] == VERIFIED_SCANNER_VERSION
-    assert options["args"] == f"-Dsonar.host.url={sonar.SONAR_ORIGIN} -Dsonar.qualitygate.wait=false"
+    assert options["args"] == f"-Dsonar.host.url={sonar.SONAR_ORIGIN} -Dsonar.qualitygate.wait=false -Dsonar.issue.ignore.multicriteria=e1 -Dsonar.issue.ignore.multicriteria.e1.ruleKey=docker:S8431 -Dsonar.issue.ignore.multicriteria.e1.resourceKey=**/*"
 
 
 def test_the_token_reaches_only_preflight_scan_and_findings(gate):
