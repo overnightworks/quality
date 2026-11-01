@@ -124,6 +124,38 @@ def set_environment(monkeypatch, environment) -> None:
         monkeypatch.setenv(name, value)
 
 
+CLEAN_PROPERTIES = (
+    "sonar.organization=overnightworks\nsonar.projectKey=overnightworks_quality\nsonar.sources=src\nsonar.tests=tests\n"
+)
+
+
+def run_preflight(
+    monkeypatch,
+    capsys,
+    build_repo,
+    properties: str | None = CLEAN_PROPERTIES,
+    environment=PULL_REQUEST_ENVIRONMENT,
+    extra_files=None,
+    arrange: Callable[[Path], None] | None = None,
+    step_output: Path | None = None,
+):
+    """Drives the preflight door; `arrange` changes the checkout on disk after its commit, `step_output` is GITHUB_OUTPUT."""
+    set_environment(monkeypatch, environment)
+    monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
+    if step_output is not None:
+        monkeypatch.setenv("GITHUB_OUTPUT", str(step_output))
+    files = dict(extra_files or {})
+    if properties is not None:
+        files["sonar-project.properties"] = properties
+    root = build_repo(files)
+    if arrange is not None:
+        arrange(root)
+    code = cli.main(["sonar", "preflight", str(root)])
+    captured = capsys.readouterr()
+    assert TOKEN not in captured.out + captured.err
+    return code, captured.out, captured.err
+
+
 legacy_config_absent = '[gate]\nmandatory_jobs = ["quality"]\n'
 
 

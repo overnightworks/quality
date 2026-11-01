@@ -11,6 +11,7 @@ from quality import cli, sonar
 from quality.hygiene import CannotJudge
 from tests.support.sonar import (
     ANALYSED_MAIN,
+    CLEAN_PROPERTIES,
     FEATURE_ENVIRONMENT,
     FINISHED_FOR_FEATURE,
     FINISHED_FOR_MAIN,
@@ -29,6 +30,7 @@ from tests.support.sonar import (
     legacy_config_absent,
     reply,
     run_cli,
+    run_preflight,
     set_environment,
     sonar_answering,
 )
@@ -508,22 +510,6 @@ def test_the_real_transport_reports_an_unreachable_server():
     """#22 kept row: an unreachable server is cannot judge"""
     with pytest.raises(CannotJudge, match="could not be reached"):
         sonar.fetch_json("http://127.0.0.1:1/x", "Basic x")
-
-
-CLEAN_PROPERTIES = (
-    "sonar.organization=overnightworks\nsonar.projectKey=overnightworks_quality\nsonar.sources=src\nsonar.tests=tests\n"
-)
-
-
-def run_preflight(monkeypatch, capsys, build_repo, properties: str | None = CLEAN_PROPERTIES, environment=PULL_REQUEST_ENVIRONMENT, extra_files=None):
-    set_environment(monkeypatch, environment)
-    files = dict(extra_files or {})
-    if properties is not None:
-        files["sonar-project.properties"] = properties
-    code = cli.main(["sonar", "preflight", str(build_repo(files))])
-    captured = capsys.readouterr()
-    assert TOKEN not in captured.out + captured.err
-    return code, captured.out, captured.err
 
 
 def test_preflight_passes_the_callers_own_clean_properties(monkeypatch, capsys, build_repo):

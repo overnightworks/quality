@@ -6,8 +6,8 @@ exception.
 ## Context
 
 Sonar's rule `docker:S8431` flags the `image:tag@sha256:...` form that Dependabot maintains. Sonar's own sensor drops the
-finding when `.github/dependabot.yml` exists, but a pull-request analysis looks at changed files only, so it cannot see an
-unchanged file and keeps the finding. On the default branch the finding is gone, on every pull request it is red.
+finding when its scanner has indexed `.github/dependabot.yml`, but a pull-request analysis looks at changed files only, so it cannot see an
+unchanged file and keeps the finding. On the default branch the finding is gone where `.github` is indexed, on every pull request it is red.
 
 ## Decision
 
@@ -33,6 +33,10 @@ The reasons are the record's reconstruction from #98 and its plan review, not th
 
 An empty or broken `dependabot.yml` counts as existing, a repository with only `.github/dependabot.yaml` stays red, and
 `quality emergency-merge` still counts the finding.
+
+Where the file exists, preflight also hands the scan an issue exclusion for the rule (#298), so no analysis raises the
+finding and SonarCloud's own quality gate agrees with the count; a repository's multi-criteria exclusion set in
+SonarCloud's interface is replaced there. The count still sets aside a finding an earlier analysis raised.
 
 ## The operator's words
 

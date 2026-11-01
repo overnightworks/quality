@@ -35,6 +35,7 @@ from quality.sonar import (
     analyse,
     fetch_json,
     preflight,
+    scanner_exclusions,
     uncounted_rules,
 )
 from quality.verdict import (
@@ -53,6 +54,8 @@ from quality.verdict import (
 EXIT_CLEAN = 0
 EXIT_FINDINGS = 1
 EXIT_CANNOT_JUDGE = 2
+# The name gate.yml reads as `steps.<id>.outputs.scanner-arguments` from the preflight step.
+SCANNER_ARGUMENTS_OUTPUT = "scanner-arguments"
 HYGIENE_EXIT = {
     Outcome.CLEAN: EXIT_CLEAN,
     Outcome.FINDINGS: EXIT_FINDINGS,
@@ -291,20 +294,33 @@ def run_engines_verify(directory: Path, read_pins: Callable[[], dict[str, engine
     return EXIT_CLEAN
 
 
+def uncounted_rules_at(root: Path) -> frozenset[str]:
+    """The one place `.github/dependabot.yml` decides which rules the sonar doors do not count."""
+    return uncounted_rules(repository.is_on_disk(root, DEPENDABOT_CONFIG))
+
+
 def run_sonar_preflight(path: Path) -> int:
     try:
         preflight(path, os.environ)
-    except CannotJudge as error:
+        uncounted = uncounted_rules_at(path)
+    except (CannotJudge, repository.RepositoryFileError) as error:
         emit(f"sonar: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
+    try:
+        append_step_output(SCANNER_ARGUMENTS_OUTPUT, scanner_exclusions(uncounted))
+    except OSError as error:
+        emit(f"sonar: cannot judge - GITHUB_OUTPUT is not writable: {error}", file=sys.stderr)
+        return EXIT_CANNOT_JUDGE
     emit("sonar: preflight clean")
+    if uncounted:
+        emit(f"sonar: the scan excludes {', '.join(sorted(uncounted))} ({DEPENDABOT_CONFIG} exists)")
     return EXIT_CLEAN
 
 
 def run_sonar_findings(transport: Transport, sleep: Sleep) -> int:
     try:
         legacy_mode = read_gate_settings(Path(".")).legacy
-        uncounted = uncounted_rules(repository.is_on_disk(Path("."), DEPENDABOT_CONFIG))
+        uncounted = uncounted_rules_at(Path("."))
         result = analyse(os.environ, legacy_mode, uncounted, transport, sleep)
     except (CannotJudge, ConfigError, repository.RepositoryFileError) as error:
         emit(f"sonar: cannot judge - {error}", file=sys.stderr)
@@ -369,6 +385,14 @@ def append_step_summary(report: tuple[str, ...]) -> None:
     if summary:
         with open(summary, "a", encoding="utf-8") as handle:
             handle.write("".join(f"{printable(line)}\n" for line in report))
+
+
+def append_step_output(name: str, value: str) -> None:
+    """In a GitHub Actions step, later steps read the value as `steps.<id>.outputs.<name>`."""
+    step_output = os.environ.get("GITHUB_OUTPUT")
+    if step_output:
+        with open(step_output, "a", encoding="utf-8") as handle:
+            handle.write(f"{name}={value}\n")
 
 
 def run(door: Callable[[], int] = main, environment: Mapping[str, str] = os.environ) -> None:
