@@ -1,0 +1,8 @@
+claim_id = "6efd0bc4fc024032986a0d8605991b88"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "62a911d38caf0be11c07c38539530086d0cb21cc"
+branch = "claude/issue-298-v0-9-2-s8431-scanner-exclusion"
+scope = [".github/workflows/gate.yml", "docs/decisions/2-dependabot-exception.md", "docs/sonar.md", "src/quality/cli.py", "src/quality/sonar.py", "tests/support/sonar.py", "tests/test_sonar.py", "tests/test_sonar_exception.py", "tests/workflows/test_gate_sonar.py"]
+opened_commit = "a069480a1144592415dc89e59a3c9e05121b01be"
+whole_reason = "The tagged commit must hold the exclusion's decider wiring, the workflow that passes it to the scanner, their tests, the corrected docs and the gate refs together; all paths are on release/v0.9, not main."
