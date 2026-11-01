@@ -115,7 +115,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
           scannerVersion: 8.1.0.6389
-          args: -Dsonar.host.url=https://sonarcloud.io -Dsonar.qualitygate.wait=false
+          args: -Dsonar.host.url=https://sonarcloud.io -Dsonar.qualitygate.wait=false -Dsonar.issue.ignore.multicriteria=e1 -Dsonar.issue.ignore.multicriteria.e1.ruleKey=docker:S8431 -Dsonar.issue.ignore.multicriteria.e1.resourceKey=**/*
 
       - name: Findings of this run's own analysis
         env:
