@@ -292,10 +292,14 @@ $ quality check secrets --staged
   ! secrets       1 finding      staged change · 4 files
     ! src/shop/settings.py:12  secret  gitleaks rule generic-api-key · value not shown
       fix: rotate it; if it is no secret, allow it in quality/config.toml with a reason:
-        [[secrets.allow]] rule = "generic-api-key", file = "src/shop/settings.py",
-        sha256 = "3b1f0c9a6e2d47b8a5c91f03d6e8b2a47c5d9e1f0a3b6c8d2e4f7a9b1c3d5e7f"
+        [[secrets.allow]]
+        rule = "generic-api-key"
+        file = "src/shop/settings.py"
+        secret_sha256 = "3b1f3b1f3b1f3b1f3b1f3b1f3b1f3b1f3b1f3b1f3b1f3b1f3b1f3b1f3b1f3b1f"
 ! 1 finding in 1 area · <1s
 ```
+
+The entry is the four lines a reader takes, whole and never shortened; the person adds `reason` (head correction O31 of 1.11.2026, under the operator's instruction of 28.10.2026 to decide small wording questions alone: the earlier picture's `sha256` is a key no reader takes, the allowance contract is unchanged).
 
 `--staged` with another area. Exit 2. stderr.
 
