@@ -21,6 +21,7 @@ from tests.support.advisories import advisory, zipped
 from tests.support.fleet import GITHUB_BASE_VARIABLE, GITHUB_REDIRECT, RELEASES, TEST_OWNER, write_fleet
 from tests.support.git_repositories import GIT_IDENTITY, head_commit, make_repo, put
 from tests.support.scanners import CLEAN_SCANS, OUTPUTS, fake_scanner, serving, write_mise
+from tests.support.secrets import FAKE_KEY
 
 PROCESS_OR_SOCKET_FIXTURES = frozenset(
     {
@@ -164,6 +165,11 @@ def local_door(monkeypatch):
 @pytest.fixture
 def build_repo(tmp_path: Path) -> RepoBuilder:
     return lambda files: make_repo(tmp_path, files)
+
+
+@pytest.fixture
+def keyed_repo(build_repo) -> Path:
+    return build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
 
 
 @pytest.fixture
