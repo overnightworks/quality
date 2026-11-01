@@ -41,6 +41,11 @@ value containing a `${...}` substitution after decoding (the scanner would expan
 an empty token. The file is read with the `java.util.Properties` grammar (`=`, `:` or whitespace separators, `\`
 continuation, `\uXXXX` and `\` escapes).
 
+After its checks pass, preflight also hands the scan its issue exclusion: it appends `scanner-arguments=<value>` to the
+file named by `$GITHUB_OUTPUT` (nothing outside a workflow step) and prints which rule the scan excludes. `gate.yml`
+appends that step output to the scan's `args`. The value is empty unless `.github/dependabot.yml` exists, and the keys it
+sets are all `sonar.issue.ignore.multicriteria` keys (see the Dependabot exception below).
+
 The scanner's transport, verified at sonar-scanner-java-library 4.1.1.1633 (the library of sonar-scanner-cli
 8.1.0.6389, which `gate.yml` pins through `scannerVersion`):
 
@@ -132,18 +137,23 @@ and the 100 % branch rule per repository follows later (L5).
 ### A Dependabot exception for `docker:S8431`
 
 Sonar's rule `docker:S8431` ("Use either the version tag or the digest for the image instead of both") flags the
-`image:tag@sha256:...` form that Dependabot maintains. Sonar's own sensor drops the finding when a Dependabot config
-exists ([DockerSensor.java](https://github.com/SonarSource/sonar-iac/blob/2bb050011ed1a224b74d23182edcc82afca8695b/iac-extensions/docker/src/main/java/org/sonar/iac/docker/plugin/DockerSensor.java#L204-L226),
-SONARIAC-3096), but only checks that the file exists, and a pull-request analysis looks at changed files only, so it
-cannot see an unchanged `.github/dependabot.yml` and keeps the finding. The gate therefore judges a pull request the
-way Sonar judges main:
+`image:tag@sha256:...` form that Dependabot maintains. Sonar's own sensor drops the finding when its scanner has
+indexed a Dependabot config
+([DockerSensor.java](https://github.com/SonarSource/sonar-iac/blob/2bb050011ed1a224b74d23182edcc82afca8695b/iac-extensions/docker/src/main/java/org/sonar/iac/docker/plugin/DockerSensor.java#L204-L226),
+SONARIAC-3096). A pull-request analysis does not see an unchanged `.github/dependabot.yml`, and a repository whose
+`sonar.sources` leaves `.github` out keeps the finding on its default branch too. The gate therefore judges a pull
+request the way Sonar judges main:
 
+- **In the analysis:** where `.github/dependabot.yml` exists, preflight hands the scan a multi-criteria issue exclusion
+  for `docker:S8431` over every file, so no analysis, pull request or branch, raises the finding and SonarCloud's own
+  quality gate agrees with the count. The exclusion replaces a multi-criteria exclusion set in SonarCloud's interface
+  on such a repository, because a value given to the scanner takes precedence over the interface's.
 - **The rule:** when `.github/dependabot.yml` exists in the checkout, `docker:S8431` does not count. Its content is
   never read, so an empty or broken file counts as existing; a link to a file counts and a link to nowhere does not; a directory named `.github/dependabot.yml` counts too, unlike
   Sonar, which needs a file.
   `.github/dependabot.yaml` is not looked at. The rule applies in every run kind.
 - **What prints:** the finding still prints, on stdout after the counted findings and before the summary, without a
-  `Fix:` line: `sonar Dockerfile:3 - docker:S8431: <message> (does not count: .github/dependabot.yml exists, Sonar's
+  `Fix:` line, for a finding an earlier analysis raised: `sonar Dockerfile:3 - docker:S8431: <message> (does not count: .github/dependabot.yml exists, Sonar's
   own exception, which its pull-request analysis misses)`. The summary line does not count it, and the legacy number
   leaves it out too: the default branch's open total less that rule's open count on the default branch. A rule count
   above the total is exit `2`.
