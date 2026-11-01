@@ -53,7 +53,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: overnightworks/quality
-          ref: v0.9.1
+          ref: 0862bfcaf6f2d508016e9f8cd995978cc2813e44
           path: .gate-tool
           persist-credentials: false
 
@@ -94,7 +94,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: overnightworks/quality
-          ref: v0.9.1
+          ref: 0862bfcaf6f2d508016e9f8cd995978cc2813e44
           path: .gate-tool
           persist-credentials: false
 
@@ -145,7 +145,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: overnightworks/quality
-          ref: v0.9.1
+          ref: 0862bfcaf6f2d508016e9f8cd995978cc2813e44
           path: .gate-tool
           persist-credentials: false
 
