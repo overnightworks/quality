@@ -1,10 +1,11 @@
 import os
-from pathlib import Path
+import shlex
+from pathlib import Path, PurePath
 from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from quality import sonar
+from quality import cli, sonar
 from tests.support.emergency import FakeGh, changed_nothing, drive
 from tests.support.emergency import sonar as emergency_sonar
 from tests.support.sonar import (
@@ -19,6 +20,7 @@ from tests.support.sonar import (
     legacy_config,
     rule_count_endpoint,
     run_cli,
+    run_preflight,
     sonar_answering,
 )
 
@@ -269,3 +271,129 @@ def test_the_emergency_door_still_counts_the_dependabot_rule(capsys):
     assert capsys.readouterr().out == f"emergency-merge: refused - the pull request adds findings:\n{COUNTED_LINE}"
     changed_nothing(gh)
     assert answers == []
+
+
+def put_bot_config(root: Path, name: str = "dependabot.yml", content: str = "version: 2\n") -> None:
+    (root / ".github").mkdir(exist_ok=True)
+    (root / ".github" / name).write_text(content)
+
+
+def link_bot_config(root: Path, target: str) -> None:
+    put_bot_config(root, "real.yml")
+    (root / ".github" / "dependabot.yml").symlink_to(target)
+
+
+def make_bot_config_a_directory(root: Path) -> None:
+    (root / ".github" / "dependabot.yml").mkdir(parents=True)
+
+
+ARRANGEMENTS = [
+    pytest.param(put_bot_config, True, id="file"),
+    pytest.param(lambda root: put_bot_config(root, content=""), True, id="empty file"),
+    pytest.param(make_bot_config_a_directory, True, id="directory"),
+    pytest.param(lambda root: link_bot_config(root, "real.yml"), True, id="link to a file"),
+    pytest.param(lambda root: link_bot_config(root, "missing.yml"), False, id="dangling link"),
+    pytest.param(lambda root: put_bot_config(root, "dependabot.yaml"), False, id="only the yaml spelling"),
+    pytest.param(lambda root: None, False, id="no .github"),
+]
+
+
+def written_arguments(step_output: Path) -> list[str]:
+    """The values of every `scanner-arguments=` line the door appended."""
+    prefix = f"{cli.SCANNER_ARGUMENTS_OUTPUT}="
+    return [line.removeprefix(prefix) for line in step_output.read_text().splitlines() if line.startswith(prefix)]
+
+
+def scanner_properties(value: str) -> dict[str, str]:
+    """The `-Dkey=value` arguments as the scan action splits them."""
+    pairs = (argument.removeprefix("-D").partition("=") for argument in shlex.split(value))
+    return {key: setting for key, _, setting in pairs}
+
+
+@pytest.mark.parametrize(("arrange", "excluded"), ARRANGEMENTS)
+def test_preflight_hands_the_scan_one_exclusion_exactly_when_the_bot_config_exists(monkeypatch, capsys, build_repo, tmp_path, arrange, excluded):
+    """#298 cells 1-7: the exception is one criterion for the rule, over every file, or an empty value"""
+    step_output = tmp_path.parent / f"{tmp_path.name}-output"
+    code, out, _ = run_preflight(monkeypatch, capsys, build_repo, arrange=arrange, step_output=step_output)
+    (value,) = written_arguments(step_output)
+    declared = scanner_properties(value)
+    assert code == 0
+    assert (sonar.DEPENDABOT_EXCEPTION_RULE in out) == excluded
+    if not excluded:
+        assert declared == {}
+        return
+    (criterion,) = declared[sonar.IGNORE_CRITERIA_KEY].split(",")
+    pattern = declared[f"{sonar.IGNORE_CRITERIA_KEY}.{criterion}.resourceKey"]
+    assert declared[f"{sonar.IGNORE_CRITERIA_KEY}.{criterion}.ruleKey"] == sonar.DEPENDABOT_EXCEPTION_RULE
+    assert all(PurePath(path).full_match(pattern) for path in ("Dockerfile", "src/probe/Dockerfile", "a/b/c/Dockerfile.dev"))
+    assert len(declared) == 3
+
+
+@pytest.mark.parametrize(("arrange", "excluded"), ARRANGEMENTS)
+def test_preflight_excludes_exactly_what_the_findings_door_sets_aside(monkeypatch, capsys, build_repo, tmp_path, arrange, excluded):
+    """#298 cell 13: one decider, so the scan drops the rule exactly where the count sets it aside"""
+    step_output = tmp_path.parent / f"{tmp_path.name}-output"
+    run_preflight(monkeypatch, capsys, build_repo, arrange=arrange, step_output=step_output)
+    (value,) = written_arguments(step_output)
+    _, out, _, _ = run_cli(monkeypatch, capsys, findings_of(bot_issue()))
+    assert (bool(value), "does not count" in out) == (excluded, excluded)
+
+
+def test_every_key_preflight_writes_is_a_multicriteria_exclusion_key(monkeypatch, capsys, build_repo, tmp_path):
+    """#298 protective limit: the arguments cannot steer the host, the proxy or the gate wait"""
+    step_output = tmp_path.parent / f"{tmp_path.name}-output"
+    run_preflight(monkeypatch, capsys, build_repo, arrange=put_bot_config, step_output=step_output)
+    (value,) = written_arguments(step_output)
+    assert all(key.startswith(sonar.IGNORE_CRITERIA_KEY) for key in scanner_properties(value))
+    assert all(argument.startswith("-Dsonar.issue.ignore.") for argument in shlex.split(value))
+
+
+def test_preflight_keeps_the_lines_the_output_file_already_holds(monkeypatch, capsys, build_repo, tmp_path):
+    """#298 cell 12: append only"""
+    step_output = tmp_path.parent / f"{tmp_path.name}-output"
+    step_output.write_text("earlier=1\n")
+    run_preflight(monkeypatch, capsys, build_repo, arrange=put_bot_config, step_output=step_output)
+    lines = step_output.read_text().splitlines()
+    assert (lines[0], len(lines)) == ("earlier=1", 2)
+    assert lines[1].startswith(f"{cli.SCANNER_ARGUMENTS_OUTPUT}=")
+
+
+def test_preflight_outside_a_workflow_step_prints_and_writes_nothing(monkeypatch, capsys, build_repo, tmp_path):
+    """#298 cell 11: no GITHUB_OUTPUT"""
+    code, out, _ = run_preflight(monkeypatch, capsys, build_repo, arrange=put_bot_config)
+    assert (code, sonar.DEPENDABOT_EXCEPTION_RULE in out) == (0, True)
+    assert not list(tmp_path.parent.glob(f"{tmp_path.name}-output"))
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-0 path, so no permission is refused")
+def test_preflight_with_an_unreachable_bot_config_is_exit_2_and_writes_nothing(monkeypatch, capsys, build_repo, tmp_path):
+    """#298 cell 8"""
+    step_output = tmp_path.parent / f"{tmp_path.name}-output"
+    step_output.write_text("earlier=1\n")
+
+    def lock_github(root: Path) -> None:
+        put_bot_config(root)
+        (root / ".github").chmod(0)
+
+    try:
+        code, _, err = run_preflight(monkeypatch, capsys, build_repo, arrange=lock_github, step_output=step_output)
+    finally:
+        Path(".github").chmod(0o755)
+    assert (code, step_output.read_text()) == (2, "earlier=1\n")
+    assert ".github/dependabot.yml" in err
+
+
+@pytest.mark.parametrize(
+    "properties",
+    [
+        "sonar.organization=overnightworks\nsonar.projectKey=overnightworks_quality\nsonar.issue.ignore.multicriteria.e1.ruleKey=*\n",
+        "sonar.organization=overnightworks\nsonar.projectKey=someone_else\n",
+    ],
+    ids=["a property that widens the exclusion", "a foreign project"],
+)
+def test_a_refused_properties_file_is_exit_2_and_writes_nothing_even_with_a_bot_config(monkeypatch, capsys, build_repo, tmp_path, properties):
+    """#298 cells 9 and 10"""
+    step_output = tmp_path.parent / f"{tmp_path.name}-output"
+    step_output.write_text("earlier=1\n")
+    code, _, _ = run_preflight(monkeypatch, capsys, build_repo, properties, arrange=put_bot_config, step_output=step_output)
+    assert (code, step_output.read_text()) == (2, "earlier=1\n")
