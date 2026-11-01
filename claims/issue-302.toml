@@ -1,0 +1,8 @@
+claim_id = "3d52dac0fd7b4cb58652a62d1e9cba66"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "d39de5782585668605e7b47b706ba1ac4a31fd8d"
+branch = "claude/issue-302-c3f1-secrets-rows"
+scope = ["docs/commands.md", "docs/output.md", "docs/rules.md", "quality/baseline.toml", "src/quality/check.py", "src/quality/cli.py", "src/quality/config.py", "src/quality/output.py", "src/quality/report.py", "src/quality/scanners.py", "tests/conftest.py", "tests/support/check.py", "tests/support/scanners.py", "tests/support/secrets.py", "tests/test_cli_area_row.py", "tests/test_cli_output.py", "tests/test_config.py", "tests/test_output.py", "tests/test_report.py", "tests/test_scanners.py", "tests/test_scanners_secrets.py", "tests/test_staged.py"]
+opened_commit = "a9d6de3bef8b4430d51005d13055f1d04220e655"
+whole_reason = "A cut into the finding with its entry (five production files) and the notes and extent (four) leaves neither half within three files; both rewrite run_gitleaks' one split for both doors and share the decoder, test moves, value-absence proof and matrix, so a second material-risk landing costs more."
