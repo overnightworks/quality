@@ -172,7 +172,7 @@ def test_a_python_file_with_a_non_utf8_name_the_size_rule_cannot_parse_is_one_es
 
 def test_a_run_without_flags_judges_every_rule(build_repo, capsys):
     """#228 rule 4: no scan is ever skipped, so a plain run judges every rule in run order."""
-    verdicts = check.run_hygiene(build_repo({}), installed_ruff, never_located).verdicts
+    verdicts = hygiene_run(build_repo({}), installed_ruff, never_located).verdicts
     assert ([verdict.rule for verdict in verdicts], [verdict.refusal for verdict in verdicts]) == (list(Rule), [None] * len(Rule))
 
 
@@ -235,7 +235,7 @@ def test_a_zizmor_quality_cannot_find_or_trust_refuses_only_workflow_security(
     }
     if case == "unpinned":
         loosen_requirement(elsewhere / "metadata", monkeypatch, "zizmor")
-    refusing = [verdict.rule for verdict in check.run_hygiene(repo, installed_ruff, locators[case]).verdicts if verdict.refusal]
+    refusing = [verdict.rule for verdict in hygiene_run(repo, installed_ruff, locators[case]).verdicts if verdict.refusal]
     assert refusing == [Rule.WORKFLOW_SECURITY]
     code = cli.main(["hygiene", str(repo)], locate_zizmor=locators[case])
     captured = capsys.readouterr()
@@ -265,7 +265,7 @@ def test_a_zizmor_planted_in_the_scanner_directory_is_never_run(build_repo, serv
 def test_an_index_record_quality_cannot_read_refuses_exactly_the_rules_that_read_index_modes(build_repo, fake_git):
     repo = build_repo({})
     fake_git(r"""case " $* " in *" -s "*) printf '100644 no-tab\0'; exit 0;; esac""")
-    verdicts = check.run_hygiene(repo, installed_ruff, never_located).verdicts
+    verdicts = hygiene_run(repo, installed_ruff, never_located).verdicts
     refused = [(verdict.rule, str(verdict.refusal)) for verdict in verdicts if verdict.refusal is not None]
     assert [rule for rule, _ in refused] == [
         "file-suffix", "script-name", "script-header", "test-layout", "test-import", "python-floor", "python-security", "python-print",
@@ -339,7 +339,7 @@ def test_an_area_tells_whether_all_or_some_of_its_judging_rules_only_measured(ve
 
 
 def test_a_run_holds_one_area_verdict_per_area_in_area_order(build_repo):
-    result = check.run_hygiene(build_repo({}), installed_ruff, never_located)
+    result = hygiene_run(build_repo({}), installed_ruff, never_located)
     assert [verdict.area for verdict in result.areas] == list(Area)
     assert [rule for area in result.areas for rule in (v.rule for v in area.verdicts)] == sorted(Rule, key=lambda rule: list(Area).index(rule.area))
 
@@ -348,7 +348,7 @@ def test_every_rule_a_malformed_config_refuses_carries_its_fact_and_its_example_
     """#279 acceptance 3: the adapter turns a ConfigError into a refusal whose reason holds the error's fact and an
     Example step; the refusals of one run are all the same reason."""
     repo = build_repo({"quality/config.toml": GATE + generated_config(job="other")})
-    reasons = {verdict.refusal.reason for area in check.run_hygiene(repo, installed_ruff, never_located).areas for verdict in area.verdicts if verdict.refusal}
+    reasons = {verdict.refusal.reason for area in hygiene_run(repo, installed_ruff, never_located).areas for verdict in area.verdicts if verdict.refusal}
     fact = f"{config.CONFIG_PATH} [[size.generated]] entry 1 needs job as one of [gate] mandatory_jobs, the job whose generator check proves the file"
     assert reasons == {Reason(fact, (Example(check.CONFIG_EXAMPLE_LABEL, config.GENERATED_FILE_EXAMPLE),))}
 
@@ -356,7 +356,7 @@ def test_every_rule_a_malformed_config_refuses_carries_its_fact_and_its_example_
 def test_a_config_refusal_without_an_example_carries_no_step(build_repo):
     """#279 acceptance 3: an error without an example becomes a refusal without a step."""
     repo = build_repo({"quality/config.toml": "[secrets]\nignore = []\n"})
-    reasons = {verdict.refusal.reason for area in check.run_hygiene(repo, installed_ruff, never_located).areas for verdict in area.verdicts if verdict.refusal}
+    reasons = {verdict.refusal.reason for area in hygiene_run(repo, installed_ruff, never_located).areas for verdict in area.verdicts if verdict.refusal}
     assert reasons == {Reason(f"{config.CONFIG_PATH} has unknown key ignore in [secrets] - only allow exists")}
 
 
@@ -400,4 +400,4 @@ def test_a_path_in_conflict_counts_once_among_the_tracked_paths(build_repo):
     blob = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD:a.txt"], capture_output=True, text=True, check=True).stdout.strip()
     stages = "".join(f"100644 {blob} {stage}\ta.txt\n" for stage in (1, 2, 3))
     subprocess.run(["git", "-C", str(repo), "update-index", "--index-info"], input=f"0 {'0' * 40}\ta.txt\n{stages}", text=True, check=True)
-    assert check.run_hygiene(repo, installed_ruff, cli.INSTALLED_ZIZMOR).tracked_paths == 2
+    assert hygiene_run(repo, installed_ruff, cli.INSTALLED_ZIZMOR).tracked_paths == 2
