@@ -254,6 +254,59 @@ def test_a_link_or_directory_counts_exactly_when_it_leads_to_something(monkeypat
     assert (code, "does not count" in out) == (0 if set_aside else 1, set_aside)
 
 
+@pytest.mark.parametrize("arrange", [write_bot_config, lambda: None, only_the_yaml_spelling], ids=["bot config", "no .github", "only dependabot.yaml"])
+def test_a_dependabot_rule_finding_counts_like_any_other(monkeypatch, capsys, arrange):
+    """An analysis that raises the rule's finding anyway has it fail the run, with or without the config."""
+    arrange()
+    code, out, err, _ = run_cli(monkeypatch, capsys, findings_of(bot_issue()))
+    assert (code, out, err) == (1, COUNTED_LINE, f"sonar: new 1 · legacy 0 ({KEY}, main)\n")
+
+
+@pytest.mark.parametrize(
+    ("environment", "task", "code", "summary"),
+    [
+        (PUSH_ENVIRONMENT, FINISHED_FOR_MAIN, 1, "sonar: 1 open on main"),
+        (FEATURE_ENVIRONMENT, FINISHED_FOR_FEATURE, 0, "sonar: 1 open on feat/a (report only)"),
+    ],
+    ids=["default branch", "another branch"],
+)
+def test_every_run_kind_counts_the_dependabot_rule_finding(monkeypatch, capsys, environment, task, code, summary):
+    """The default branch and another branch list the finding as an ordinary one."""
+    write_bot_config()
+    result = run_cli(monkeypatch, capsys, findings_of(bot_issue(), task=task), environment)
+    assert (result[0], result[1].startswith(COUNTED_LINE), summary in result[1] + result[2]) == (code, True, True)
+
+
+@pytest.mark.parametrize("has_bot_config", [True, False], ids=["bot config", "no bot config"])
+@pytest.mark.parametrize(("mode", "code"), [("fail", 1), ("report", 0)])
+def test_the_legacy_number_is_the_default_branchs_whole_total(monkeypatch, capsys, has_bot_config, mode, code):
+    """A rule's own count never lowers the number: the fake answers 3 for the rule beside a total of 5."""
+    if has_bot_config:
+        write_bot_config()
+    fake = findings_of(legacy=5, legacy_by_rule={sonar.DEPENDABOT_EXCEPTION_RULE: 3})
+    result = run_cli(monkeypatch, capsys, fake, config_text=legacy_config(mode))
+    assert (result[0], result[2] or result[1]) == (code, f"sonar: new 0 · legacy 5 ({KEY}, main)\n")
+
+
+def test_no_count_request_names_a_rule(monkeypatch, capsys):
+    write_bot_config()
+    fake = findings_of(legacy=5)
+    run_cli(monkeypatch, capsys, fake)
+    queries = [parse_qs(urlparse(url).query) for url, _ in fake.requests]
+    assert [query for query in queries if "rules" in query] == []
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-0 path, so no permission is refused")
+def test_the_findings_door_never_reads_the_bot_config(monkeypatch, capsys):
+    write_bot_config()
+    Path(".github").chmod(0)
+    try:
+        code, _, _, _ = run_cli(monkeypatch, capsys, findings_of())
+    finally:
+        Path(".github").chmod(0o755)
+    assert code == 0
+
+
 def test_a_sonar_finding_carries_the_open_event():
     assert finding_from_issue(bot_issue()).event is FindingEvent.OPEN
 
@@ -377,6 +430,32 @@ def test_the_emergency_door_reads_no_dependabot_file_when_sonar_is_green():
     assert not any(sonar.DEPENDABOT_CONFIG in " ".join(call) for call in gh.calls)
 
 
+@pytest.mark.parametrize("served", [True, False], ids=["file at the merge commit", "not served"])
+def test_the_emergency_door_names_every_added_finding_where_the_bot_config_exists(served, capsys):
+    gh = FakeGh()
+    if served:
+        serve_config_at_merge_commit(gh)
+    code, answers = drive(gh, emergency_sonar(added=[bot_issue(), bot_issue("python:S1")], legacy=12))
+    refusal = capsys.readouterr().out
+    assert code == 1
+    assert (sonar.DEPENDABOT_EXCEPTION_RULE in refusal, "python:S1" in refusal) == (True, True)
+    changed_nothing(gh)
+    assert answers == []
+
+
+def test_the_emergency_door_shows_main_whole_and_reads_no_bot_config(capsys):
+    gh = FakeGh(merge_lands=True)
+    serve_config_at_merge_commit(gh)
+    shown_before_asking = []
+    code, _ = drive(
+        gh, emergency_sonar(legacy=12, set_aside=2), when_asked=lambda: shown_before_asking.append(capsys.readouterr().out)
+    )
+    (shown,) = shown_before_asking
+    assert code == 0
+    assert "12 legacy finding(s)" in shown
+    assert [call for call in gh.calls if sonar.DEPENDABOT_CONFIG in " ".join(call)] == []
+
+
 def put_bot_config(root: Path, name: str = "dependabot.yml", content: str = "version: 2\n") -> None:
     (root / ".github").mkdir(exist_ok=True)
     (root / ".github" / name).write_text(content)
@@ -394,6 +473,7 @@ def make_bot_config_a_directory(root: Path) -> None:
 ARRANGEMENTS = [
     pytest.param(put_bot_config, True, id="file"),
     pytest.param(lambda root: put_bot_config(root, content=""), True, id="empty file"),
+    pytest.param(lambda root: put_bot_config(root, content="updates: ["), True, id="broken file"),
     pytest.param(make_bot_config_a_directory, True, id="directory"),
     pytest.param(lambda root: link_bot_config(root, "real.yml"), True, id="link to a file"),
     pytest.param(lambda root: link_bot_config(root, "missing.yml"), False, id="dangling link"),
