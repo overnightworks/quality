@@ -412,7 +412,11 @@ def local_reusable_call(prefix: str) -> str:
     )
 
 
-INVALID_RUNS_ON = "on: push\npermissions: {}\njobs:\n  j:\n    runs-on: ${{ foo( }}\n    steps:\n      - run: 'true'\n"
+def runs_on(label: str) -> str:
+    return f"on: push\npermissions: {{}}\njobs:\n  j:\n    runs-on: {label}\n    steps:\n      - run: 'true'\n"
+
+
+INVALID_RUNS_ON = runs_on("${{ foo( }}")
 
 
 def workflow_rows(capsys) -> list[tuple[str, FindingEvent, str]]:
@@ -450,14 +454,10 @@ def test_a_local_reusable_call_in_the_dollar_slash_form_passes_both_scanners(wor
     assert scan(workflow_repo(local_reusable_call("$"))) == 0
 
 
-def runs_on(label: str) -> str:
-    return f"on: push\npermissions: {{}}\njobs:\n  j:\n    runs-on: {label}\n    steps:\n      - run: 'true'\n"
-
-
 @pytest.mark.scanner
 @pytest.mark.parametrize(("label", "exit_code"), [("ubuntu-26.04", 0), ("ubuntu-26.04-arm", 0), ("ubuntu-26.4", 1)])
 def test_a_runner_label_github_hosts_passes_and_a_misspelt_one_stays_a_finding(workflow_repo, installed_scanners, capsys, label, exit_code):
-    """#335: GitHub's ubuntu-26.04 images are accepted although actionlint does not know them; a misspelt label is still `invalid`."""
+    """GitHub's ubuntu-26.04 images are accepted although actionlint does not know them; a misspelt label is still `invalid`."""
     assert scan(workflow_repo(runs_on(label))) == exit_code
     assert ((".github/workflows/w.yml:5", FindingEvent.INVALID) in [(found, kind) for found, kind, _ in workflow_rows(capsys)]) == bool(exit_code)
 
