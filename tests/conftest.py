@@ -181,6 +181,14 @@ def elsewhere(tmp_path_factory) -> Path:
 
 
 @pytest.fixture
+def own_home(tmp_path_factory, monkeypatch) -> Path:
+    """A home folder of the test's own, set as `HOME`, so no folder of the test reads as the developer's `~`."""
+    home = tmp_path_factory.mktemp("home")
+    monkeypatch.setenv("HOME", str(home))
+    return home
+
+
+@pytest.fixture
 def use_mise(tmp_path_factory, monkeypatch):
     """`use_mise(body)` puts a `mise` that runs `body` (shell) first on PATH and returns its directory."""
 
@@ -262,7 +270,7 @@ def run_env(monkeypatch, build_repo, tmp_path):
         "GITHUB_RUN_ID": "1",
         "GITHUB_RUN_ATTEMPT": "1",
         "GITHUB_TOKEN": "t",
-        "GATE_NEEDS": json.dumps({"hygiene": {"result": "success"}}),
+        "GATE_NEEDS": json.dumps({"check": {"result": "success"}}),
         "GITHUB_STEP_SUMMARY": str(summary),
     }.items():
         monkeypatch.setenv(key, value)

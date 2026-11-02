@@ -5,7 +5,7 @@ Exit 0 clean, 1 findings, 2 cannot judge (`CannotJudge` and `Unparsable` in `rep
 
 Door commands:
 
-- `quality hygiene [PATH]` (`check.py` runs the rules area by area, in `Area`'s order, holds the door's live line up around each scanner and hands each finished area to the door): `.env` files (`env_file.py`), compose ports (`compose.py`, where Compose files are read as YAML 1.2), the `size` ratchet (`ratchet.py`), the
+- `quality check` (runs in the repository it is started in and takes no path; `check.py` runs the rules area by area, in `Area`'s order, holds the door's live line up around each scanner and hands each finished area to the door): `.env` files (`env_file.py`), compose ports (`compose.py`, where Compose files are read as YAML 1.2), the `size` ratchet (`ratchet.py`), the
   `clone` rule (`clones.py`, enforced with `[clones]` in the baseline, else report-only), the `import-contract` rule (`architecture.py`, import-linter as a library), the `claude-md` rule (`claude_md.py`: a tracked `CLAUDE.md` is
   exactly `@AGENTS.md`), the `root-layout` rule (`root_layout.py`: every root entry is on a base list or declared with `[[root.allow]]`), the `file-suffix` rule (`layout.py`: a tracked file without a suffix is executable, a link, a dotfile, tool-mandated or declared with `[[layout.allow]]`), the `script-name` and `script-header` rules (`layout.py`: a script is named `<word>_<word>` and lies under `scripts/`, and opens with a comment or docstring), the `test-layout` rule (`layout.py`: what may lie under a Python project's `tests/`, each `test_*.py` mirrors the `src/` module it tests, a Vitest test sits beside its subject and a Playwright spec lies in its project's `e2e/`), the `test-import` rule (`layout.py`: no file under a Python project's `tests/` imports a test module or `conftest`), the `python-floor` rule (`python_floor.py`: every Python project's `requires-python` floor is 3.14 or declared with `[[python.allow]]`), the `python-security` and `python-print` rules (`python_lint.py`: one run of quality's pinned ruff reports the `S` and `T20` codes in every tracked `.py` file; only a reasoned noqa clears a finding, and a file-level `# ruff: noqa: T201 - <reason>` declares a program's one output owner), and the secret and workflow
   scans and the `advisory` rule (`advisories.py`: osv-scanner over every tracked `uv.lock`, `pnpm-lock.yaml` and `requirements*.txt` (read by `pip_requirements.py`), against the PyPI and npm
@@ -25,7 +25,7 @@ Door commands:
 
 `.github/workflows/gate.yml` is the reusable gate; its caller contract stands in `docs/gate.md` and in the file's header.
 
-quality's own layers are an import-linter contract in `pyproject.toml` (`[tool.importlinter]`); `quality hygiene .`
+quality's own layers are an import-linter contract in `pyproject.toml` (`[tool.importlinter]`); `quality check`
 enforces it, so a module imports only from the layers below its own.
 
 `checkout.py` lists the checkout through git, decides what a workflow file is and turns a refused read into cannot judge.
@@ -42,7 +42,7 @@ Checks (all targeted, run from the repo root):
 - `uv run ruff check`
 - `uv run pytest tests/test_<module>.py` (the module you changed; never the whole suite locally, CI runs it)
 - `mise --cd src/quality/mise install --locked` (once per scanner bump; needs mise)
-- `uv run quality hygiene .` (needs mise, the three scanners and network: no scan is skipped, so each run downloads the PyPI advisory database, about 37 MB)
+- `uv run quality check` (needs mise, the three scanners and network: no scan is skipped, so each run downloads the PyPI advisory database, about 37 MB)
 
 The version comes from git (hatch-vcs): a tag build prints the tag, any later commit `<next>.devN+g<sha>`, so a checkout
 that installs quality needs its tags (`fetch-depth: 0`). Release: tag the merge commit locally, `uv sync --reinstall-package overnightworks-quality` (a checkout dirty at its last sync

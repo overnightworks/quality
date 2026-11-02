@@ -4,7 +4,7 @@ Reference for the engineer who calls the reusable `gate.yml` or `codeql.yml` wor
 
 ## `gate.yml`
 
-`.github/workflows/gate.yml` is the reusable gate: a `hygiene` job, a `sonar` job and a `verdict` job. A repository calls
+`.github/workflows/gate.yml` is the reusable gate: a `check` job, a `sonar` job and a `verdict` job. A repository calls
 it from one job of its own workflow:
 
 ```yaml
@@ -24,7 +24,7 @@ it from one job of its own workflow:
 Each line has a reason:
 
 - **The caller job is `quality`,** by its id or, if it sets one, by its `name:`. The gate's checks then read
-  `quality / hygiene`, `quality / sonar` and `quality / verdict`. Three things look for them by those names: a ruleset
+  `quality / check`, `quality / sonar` and `quality / verdict`. Three things look for them by those names: a ruleset
   that requires `quality / verdict` (the fleet's org ruleset does, on the default branch of every repository whose
   custom property `quality_gate` is `true`), `aco land`, which, once the default branch holds `quality/config.toml`,
   refuses without a green `quality / verdict`, and `quality emergency-merge`, which looks for `quality / sonar` and
@@ -45,7 +45,7 @@ Each line has a reason:
   requires that check, the pull request cannot merge; where nothing requires it, it merges unjudged.
 - **The door stops workflow commands for the rest of its step.** gate.yml runs `quality` alone in each of its steps; a
   workflow that runs `quality` itself writes its own workflow commands (`::notice::`, `::group::` or any other) in a separate step.
-- **The `hygiene` job installs the scanners itself.** It runs a pinned `jdx/mise-action` that installs gitleaks,
+- **The `check` job installs the scanners itself.** It runs a pinned `jdx/mise-action` that installs gitleaks,
   actionlint and osv-scanner from the tool's own manifest and lock ([Scanners](commands.md#scanners)), so a caller adds
   nothing; its CI needs network access to GitHub release assets. The step sets `MISE_CEILING_PATHS`, so a `mise.toml` in
   the caller's checkout takes no part.
@@ -110,7 +110,7 @@ reason = "the operator ruled the requirement shelf machinery out"
   included, declares nothing.
 - `item` is `#<n>` or `<owner>/<repo>#<n>` (ASCII letters, digits, `_`, `.` and `-`), `date` a TOML date without a
   time, `reason` one non-empty line. A missing or extra key, a text date, two entries with one `what` or any other
-  malformed entry is exit `2` in `verdict` and in `hygiene` (the `secret` and `advisory` rules), naming the
+  malformed entry is exit `2` in `verdict` and in `check` (the `secret` and `advisory` rules), naming the
   entry and showing this example; `scan-staged` reads only `[secrets]`.
 - Only new entries declare: those the head holds and the base does not, compared as a whole entry. An inherited entry
   is never red and declares nothing, so a later pull request that loosens the same way again needs its own entry with
@@ -123,7 +123,7 @@ reason = "the operator ruled the requirement shelf machinery out"
   red, the last line is `verdict: red - only declared loosenings: only the operator's quality emergency-merge lands this
   pull request`. No entry approves itself: an agent may write one, but the ruleset and `aco land` still need a green
   `quality / verdict`, and only [the operator's emergency door](commands.md#quality-emergency-merge) merges.
-- An advisory allowance (`[[advisories.allow]]`, see the `advisory` rule under `quality hygiene`) declares its own
+- An advisory allowance (`[[advisories.allow]]`, see the `advisory` rule under `quality check`) declares its own
   loosening with its own `item` and `date`, so it needs no `[[gate.loosened]]` entry. An allowance whose `id` and
   `lock` the base lacks prints `loosened (declared, <item> of <date>): advisory allowance adds <id> in <lock> until <until>`; one
   whose `until` the head moves later prints `… advisory allowance extends <id> in <lock> to <until>`. An earlier
@@ -131,7 +131,7 @@ reason = "the operator ruled the requirement shelf machinery out"
   new allowance. A base without `quality/config.toml` holds no allowance, so every allowance of the adoption is new. A
   `[[gate.loosened]]` entry whose `what` is such a text matches nothing and is red. The verdict and the door read the
   whole config, so a malformed `[secrets]` or `[advisories]` entry is exit `2` there too.
-- A generated-file declaration (`[[size.generated]]`, see the `size` rule under `quality hygiene`) declares its own
+- A generated-file declaration (`[[size.generated]]`, see the `size` rule under `quality check`) declares its own
   loosening with its own `item` and `date`, like an allowance. A head `path` the base does not declare prints
   `loosened (declared, <item> of <date>): size leaves out generated file <path>`, so a changed `path` and every
   declaration of an adoption (a base without `quality/config.toml`) are new. An inherited or deleted declaration and a

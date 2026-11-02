@@ -35,7 +35,7 @@ from tests.support.check import (
     note_rows,
     refusal_pair,
 )
-from tests.support.door import CHECK_WORD, MODULE_DOOR
+from tests.support.door import CHECK_WORD, MODULE_DOOR, door_in
 from tests.support.fleet import RELEASES, write_fleet
 from tests.support.terminal import Terminal, without_sgr
 from tests.support.verdict import CHECKS_GREEN
@@ -516,29 +516,29 @@ def test_a_replaced_stdout_still_prints_the_help():
     captured = io.StringIO()
     with contextlib.redirect_stdout(captured), pytest.raises(SystemExit) as stopped:
         cli.main(["--help"])
-    assert (stopped.value.code, "hygiene" in captured.getvalue()) == (0, True)
+    assert (stopped.value.code, "check" in captured.getvalue()) == (0, True)
 
 
 @pytest.mark.integration
-def test_a_closed_stdout_object_still_prints_the_pair_on_stderr(tmp_path, capsys, monkeypatch):
+def test_a_closed_stdout_object_still_prints_the_pair_on_stderr(tmp_path, capsys, monkeypatch, own_home):
     """#86 rule 3: a closed stdout object never crashes `main`; the diagnostic reaches stderr."""
     monkeypatch.setenv("NO_COLOR", "1")  # Python 3.14's argparse otherwise probes the closed stdout for colour
     closed = io.TextIOWrapper(io.BytesIO())
     closed.close()
     with contextlib.redirect_stdout(closed):
-        code = cli.main(["hygiene", str(tmp_path)])
-    assert (code, capsys.readouterr().err) == (2, f"error: not inside a git work tree · {tmp_path}\nnext: run quality hygiene inside a repository\n")
+        code = door_in(tmp_path, CHECK_WORD)
+    assert (code, capsys.readouterr().err) == (2, f"error: not inside a git work tree · {tmp_path}\nnext: run quality check inside a repository\n")
 
 
 @pytest.mark.integration
-def test_a_closed_stdout_fd_still_prints_the_pair_and_never_crashes(tmp_path):
+def test_a_closed_stdout_fd_still_prints_the_pair_and_never_crashes(tmp_path, own_home):
     """#86 rule 3: with fd 1 closed the door still exits 2 with its cannot-judge line."""
     done = subprocess.run(
-        ["bash", "-c", '"$PY" -m quality.cli hygiene "$FOLDER" >&-'],
-        env={**os.environ, "PY": sys.executable, "FOLDER": str(tmp_path)},
-        text=True, check=False, stderr=subprocess.PIPE,
+        ["bash", "-c", '"$PY" -m quality.cli check >&-'],
+        env={**os.environ, "PY": sys.executable},
+        cwd=tmp_path, text=True, check=False, stderr=subprocess.PIPE, timeout=60,
     )
-    assert (done.returncode, done.stderr) == (2, f"error: not inside a git work tree · {tmp_path}\nnext: run quality hygiene inside a repository\n")
+    assert (done.returncode, done.stderr) == (2, f"error: not inside a git work tree · {tmp_path}\nnext: run quality check inside a repository\n")
 
 
 def test_an_example_line_prints_whole_however_long_and_escaped():

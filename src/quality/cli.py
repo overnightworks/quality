@@ -146,15 +146,15 @@ def main(
         if arguments.sonar_command == "properties":
             return run_sonar_properties()
         return run_sonar_findings(transport, sleep)
-    return run_check(arguments.path, locate_ruff, locate_zizmor, clock, channels)
+    return run_check(locate_ruff, locate_zizmor, clock, channels)
 
 
 QUALITY_HELP = f"""\
 usage: quality COMMAND
 
 Commands:
-  hygiene [PATH]
-      Check a repository against the fleet's rules.
+  check
+      Check this repository against the fleet's rules.
   baseline write [PATH]
       Record the debt ceiling ({ratchet.BASELINE_PATH}): the measured size
       debt and the clone pairs.
@@ -180,6 +180,17 @@ Options:
   -h, --help  show this help
 
 Exit codes: 0 yes, 1 no, 2 could not answer, 130 interrupted.
+"""
+
+CHECK_HELP = """\
+usage: quality check
+
+Check this repository against the fleet's rules.
+
+Options:
+  -h, --help  show this help
+
+Exit codes: 0 clean, 1 findings, 2 could not check, 130 interrupted.
 """
 
 
@@ -230,8 +241,8 @@ def build_parser() -> DoorParser:
     parser.pictured_help = QUALITY_HELP
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command")
-    check_parser = commands.add_parser("hygiene")
-    check_parser.add_argument("path", nargs="?", type=Path, default=Path("."))
+    check_parser = commands.add_parser("check")
+    check_parser.pictured_help = CHECK_HELP
     baseline = commands.add_parser("baseline").add_subparsers(dest="baseline_command")
     baseline.add_parser("write", help=f"write the measured size debt and clone pairs to {ratchet.BASELINE_PATH}").add_argument(
         "path", nargs="?", type=Path, default=Path("."), help="a folder of the git repository to measure; its top level is measured (default: the current one)"
@@ -277,8 +288,8 @@ CEILING_HELD = "ceiling held"
 OFFLINE_AUDITS = "offline audits only"
 NO_CONFIG_FACT = "no import-linter config"
 MEASURED_ONLY_EVENT = {Area.DEBT: AreaEvent.NOT_RECORDED, Area.IMPORTS: AreaEvent.NOT_SET_UP}
-START_FAILURE_NEXT = Instruction("fix what the error names, then run quality hygiene again")
-REFUSED_AREAS_NEXT = Instruction("fix what the ✗ rows name, then run quality hygiene again")
+START_FAILURE_NEXT = Instruction("fix what the error names, then run quality check again")
+REFUSED_AREAS_NEXT = Instruction("fix what the ✗ rows name, then run quality check again")
 
 
 def area_row(verdict: AreaVerdict, extent: str) -> Row:
@@ -387,14 +398,19 @@ def write_area(out: Channel, verdict: AreaVerdict, tracked_paths: int) -> None:
     write_findings_and_notes(verdict.findings, verdict.notes, out)
 
 
+def _spoken_folder(folder: Path) -> str:
+    home = Path(os.path.expanduser("~"))
+    return str(Path("~", folder.relative_to(home))) if folder.is_relative_to(home) else str(folder)
+
+
 def run_check(
-    path: Path, locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str], clock: Callable[[], float], channels: Channels
+    locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str], clock: Callable[[], float], channels: Channels
 ) -> int:
     started = clock()
     try:
-        result = judge_repository(path, locate_ruff, locate_zizmor, partial(write_area, channels.out), live_line(channels.err))
+        result = judge_repository(Path("."), locate_ruff, locate_zizmor, partial(write_area, channels.out), live_line(channels.err))
     except OutsideWorkTree as error:
-        write_pair(f"not inside a git work tree · {error.path}", (Instruction("run quality hygiene inside a repository"),), channels.err)
+        write_pair(f"not inside a git work tree · {_spoken_folder(error.path.absolute())}", (Instruction("run quality check inside a repository"),), channels.err)
         return EXIT_CANNOT_JUDGE
     except CannotJudge as error:
         write_pair(error.reason.fact, error.reason.next_steps or (START_FAILURE_NEXT,), channels.err)

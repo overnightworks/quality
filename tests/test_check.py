@@ -207,7 +207,7 @@ def test_a_refusing_workflow_scanner_stops_no_other_workflow_rule(build_repo, se
     ]
     areas = check_result(repo, locate_zizmor=locate_zizmor).areas
     error, next_line = captured.err.splitlines()
-    assert (error, next_line) == (f"error: {cli.refusal_error(areas)}", f"next: {cli.REFUSED_AREAS_NEXT.text}")
+    assert (error, next_line) == (f"error: {cli.refusal_error(areas)}", "next: fix what the ✗ rows name, then run quality check again")
     assert [int(number) for number in re.findall(r"\d+", error)] == [1, len(Area), 1, 1]
 
 

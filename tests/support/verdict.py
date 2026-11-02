@@ -4,7 +4,7 @@ from pathlib import Path
 from quality import cli, verdict
 from quality.verdict import Job
 
-GREEN_GATE = {"hygiene": "success"}
+GREEN_GATE = {"check": "success"}
 
 
 def job(name="checks", attempt=1, status="completed", conclusion="success", leg=1):

@@ -78,7 +78,7 @@ def test_judges_the_effective_result_of_each_mandatory_job(jobs, attempt, expect
 
 def test_a_gate_job_that_did_not_succeed_is_red():
     """#6 rule 4: a gate job that did not succeed makes the verdict red."""
-    assert problems([job()], gate={"hygiene": "failure"}) == ('gate job "hygiene" result failure',)
+    assert problems([job()], gate={"check": "failure"}) == ('gate job "check" result failure',)
 
 
 def test_a_job_dropped_against_the_base_is_loosened_and_red():

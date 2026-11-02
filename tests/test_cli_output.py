@@ -415,7 +415,7 @@ ZERO_SECONDS = "<1s"
 
 
 def frame_run(capsys, path: Path, **keywords) -> tuple[int, list[str], list[str]]:
-    code = cli.main(["hygiene", str(path)], clock=lambda: 0.0, **keywords)
+    code = check_door(path, clock=lambda: 0.0, **keywords)
     captured = capsys.readouterr()
     return code, captured.out.splitlines(), captured.err.splitlines()
 
@@ -568,32 +568,48 @@ def test_one_reason_refusing_rules_in_several_areas_stands_once_in_each(build_re
 
 
 @pytest.mark.integration
-def test_a_folder_outside_any_repository_prints_only_the_location_pair(tmp_path, capsys):
+def test_a_folder_outside_any_repository_prints_only_the_location_pair(tmp_path, capsys, own_home):
     code, out, err = frame_run(capsys, tmp_path)
-    assert (code, out, err) == (2, [], [f"error: not inside a git work tree · {tmp_path}", "next: run quality hygiene inside a repository"])
+    assert (code, out, err) == (2, [], [f"error: not inside a git work tree · {tmp_path}", "next: run quality check inside a repository"])
 
 
 @pytest.mark.integration
-def test_a_missing_path_gets_the_git_step(tmp_path, capsys):
-    code, out, err = frame_run(capsys, tmp_path / "missing")
-    assert (code, out) == (2, [])
-    assert err[0].startswith("error: ")
-    assert "not inside a git work tree" not in err[0]
-    assert shlex.split(err[1].removeprefix("next: ")) == ["git", "-C", str(tmp_path / "missing"), "status"]
-    assert len(err) == 2
+@pytest.mark.parametrize(
+    ("home_spelling", "folder_of", "tail_of"),
+    [
+        pytest.param("{home}", lambda home: home / "Downloads", lambda folder: f"~/{folder.name}", id="under the home folder"),
+        pytest.param("{home}", lambda home: home, lambda folder: "~", id="the home folder itself"),
+        pytest.param("{home}", lambda home: home.with_name(f"{home.name}2"), str, id="outside it"),
+        pytest.param("{home}/.", lambda home: home / "Downloads", lambda folder: f"~/{folder.name}", id="an untidy home"),
+    ],
+)
+def test_the_folder_is_spoken_with_the_home_folder_as_a_tilde(own_home, monkeypatch, capsys, home_spelling, folder_of, tail_of):
+    folder = folder_of(own_home)
+    folder.mkdir(exist_ok=True)
+    monkeypatch.setenv("HOME", home_spelling.format(home=own_home))
+    code, out, err = frame_run(capsys, folder)
+    assert (code, out, err) == (2, [], [f"error: not inside a git work tree · {tail_of(folder)}", "next: run quality check inside a repository"])
 
 
-def test_a_bare_repository_and_the_inside_of_git_are_outside_a_work_tree(tmp_path, build_repo, capsys):
+@pytest.mark.integration
+def test_an_unknown_home_folder_speaks_the_absolute_folder_and_never_a_traceback(tmp_path, monkeypatch, capsys):
+    monkeypatch.delenv("HOME")
+    monkeypatch.setattr("pwd.getpwuid", lambda _uid: (_ for _ in ()).throw(KeyError("uid")))
+    code, out, err = frame_run(capsys, tmp_path)
+    assert (code, out, err) == (2, [], [f"error: not inside a git work tree · {tmp_path}", "next: run quality check inside a repository"])
+
+
+def test_a_bare_repository_and_the_inside_of_git_are_outside_a_work_tree(tmp_path, build_repo, capsys, own_home):
     bare = tmp_path / "bare.git"
     subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
     inside = build_repo(CLEAN_FILES) / ".git"
     for path in (bare, inside):
         code, out, err = frame_run(capsys, path)
-        assert (code, out, err) == (2, [], [f"error: not inside a git work tree · {path}", "next: run quality hygiene inside a repository"])
+        assert (code, out, err) == (2, [], [f"error: not inside a git work tree · {path}", "next: run quality check inside a repository"])
 
 
 @pytest.mark.integration
-def test_a_folder_outside_any_repository_is_outside_in_every_locale(tmp_path, fake_git, monkeypatch, capsys):
+def test_a_folder_outside_any_repository_is_outside_in_every_locale(tmp_path, fake_git, monkeypatch, capsys, own_home):
     """A git that speaks German unless it is asked in the C locale, so the test needs no installed catalogue."""
     fake_git(
         'if [ "$LC_ALL" = C ]; then echo "fatal: not a git repository (or any of the parent directories): .git" >&2; '
@@ -611,7 +627,7 @@ def test_a_repository_git_refuses_gets_the_git_step(build_repo, monkeypatch, cap
     assert (code, out) == (2, [])
     assert err[0].startswith("error: ")
     assert "not inside a git work tree" not in err[0]
-    assert shlex.split(err[1].removeprefix("next: "))[:3] == ["git", "-C", str(repo)]
+    assert shlex.split(err[1].removeprefix("next: "))[:3] == ["git", "-C", "."]
 
 
 def exits_and_rows(build_repo, capsys, use_mise, served_scanners, case: str):
@@ -690,7 +706,7 @@ def test_a_refusal_git_did_not_run_for_gets_the_general_instruction(build_repo, 
     nowhere.mkdir()
     monkeypatch.setenv("PATH", str(nowhere))
     code, out, err = frame_run(capsys, repo)
-    assert (code, out, err[1:]) == (2, [], [f"next: {cli.START_FAILURE_NEXT.text}"])
+    assert (code, out, err[1:]) == (2, [], ["next: fix what the error names, then run quality check again"])
 
 
 def test_a_malformed_baseline_beside_a_missing_scanner_names_the_baseline_step_then_the_install_command(

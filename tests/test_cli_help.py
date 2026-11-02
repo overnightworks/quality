@@ -70,6 +70,24 @@ def test_the_help_stands_in_the_pictures_frame(capsys):
     )
 
 
+def test_the_check_help_stands_in_the_pictures_frame(capsys):
+    lines = help_of(capsys, ["check"]).splitlines()
+    options = lines[lines.index("Options:") + 1 : -2]
+    assert (lines[0], lines[2], headings(lines), options, lines[-1], max(len(line) for line in lines) <= 80) == (
+        "usage: quality check",
+        "Check this repository against the fleet's rules.",
+        ["Options:"],
+        ["  -h, --help  show this help"],
+        "Exit codes: 0 clean, 1 findings, 2 could not check, 130 interrupted.",
+        True,
+    )
+
+
+def test_the_check_entry_takes_no_path_in_the_top_level_help(capsys):
+    lines = help_of(capsys, []).splitlines()
+    assert "  check" in entries_under(lines, "Commands:")
+
+
 def test_every_command_path_stands_in_the_help_once_and_every_entry_is_one(capsys):
     lines = help_of(capsys, []).splitlines()
     shown = [path_of(entry) for heading in headings(lines)[:2] for entry in entries_under(lines, heading)]
@@ -87,7 +105,7 @@ def test_verdict_and_sonar_stand_apart_under_run_by_the_gate(capsys):
     "words",
     [
         pytest.param([], id="quality"),
-        pytest.param(["hygiene"], id="hygiene"),
+        pytest.param(["check"], id="check"),
         pytest.param(["baseline"], id="baseline"),
         pytest.param(["baseline", "write"], id="baseline write"),
         pytest.param(["scan-staged"], id="scan-staged"),
@@ -105,7 +123,7 @@ def test_each_doors_help_goes_to_stdout_alone_and_exits_0(capsys, words):
     assert first.split()[1:][: len(expected)] == expected
 
 
-@pytest.mark.parametrize("words", [[], ["hygiene"], ["sonar", "properties"]], ids=["quality", "hygiene", "sonar properties"])
+@pytest.mark.parametrize("words", [[], ["check"], ["sonar", "properties"]], ids=["quality", "check", "sonar properties"])
 def test_short_help_equals_long_help(capsys, words):
     long = help_of(capsys, words)
     with pytest.raises(SystemExit) as stopped:
@@ -115,7 +133,7 @@ def test_short_help_equals_long_help(capsys, words):
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize("words", [["--help"], ["hygiene", "--help"], ["sonar", "properties", "--help"]], ids=["--help", "hygiene --help", "sonar properties --help"])
+@pytest.mark.parametrize("words", [["--help"], ["scan-staged", "--help"], ["sonar", "properties", "--help"]], ids=["--help", "scan-staged --help", "sonar properties --help"])
 def test_no_door_paints_its_help_where_python_would(tmp_path, words):
     forced = run_door(words, tmp_path, FORCE_COLOR="1", TERM="xterm")
     refused = run_door(words, tmp_path, NO_COLOR="1", TERM="xterm")
@@ -123,7 +141,7 @@ def test_no_door_paints_its_help_where_python_would(tmp_path, words):
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize(("words", "columns"), [(["--help"], 40), (["hygiene", "--help"], 200)], ids=["quality --help", "hygiene --help"])
+@pytest.mark.parametrize(("words", "columns"), [(["--help"], 40), (["scan-staged", "--help"], 200)], ids=["quality --help", "scan-staged --help"])
 def test_a_help_at_a_terminal_carries_no_escape_and_stands_whole(tmp_path, window, words, columns):
     terminal = window(columns)
     done = subprocess.run(
@@ -162,10 +180,12 @@ def test_a_closed_stdout_takes_no_help_and_exit_is_0(tmp_path):
         pytest.param(["nonsense"], (), "no command nonsense{sep}commands: {commands}", "quality", id="unknown command"),
         pytest.param(["sonar"], ("sonar",), "no command{sep}commands: {commands}", "quality sonar", id="no sonar command"),
         pytest.param(["baseline", "nonsense"], ("baseline",), "no command nonsense{sep}commands: {commands}", "quality baseline", id="unknown baseline command"),
-        pytest.param(["hygiene", "a", "b"], (), "unknown argument{sep}b", "quality hygiene", id="stray argument"),
+        pytest.param(["check", "a", "b"], (), "unknown argument{sep}a b", "quality check", id="stray argument"),
+        pytest.param(["check", "."], (), "unknown argument{sep}.", "quality check", id="a path of the old form"),
+        pytest.param(["check", "src"], (), "unknown argument{sep}src", "quality check", id="a folder name"),
         pytest.param(["scan-staged", "--nonsense"], (), "unknown argument{sep}--nonsense", "quality scan-staged", id="stray option"),
         pytest.param(["baseline", "write", "a", "b"], (), "unknown argument{sep}b", "quality baseline", id="stray argument of a group's command"),
-        pytest.param(["hygiene", "a", "b", "c"], (), "unknown argument{sep}b c", "quality hygiene", id="two stray arguments"),
+        pytest.param(["check", "a", "b", "c"], (), "unknown argument{sep}a b c", "quality check", id="two stray arguments"),
         pytest.param(["sonar", "properties", "x"], (), "unknown argument{sep}x", "quality sonar", id="stray argument of sonar"),
         pytest.param(["--nonsense", "scoreboard"], (), "unknown argument{sep}--nonsense", "quality scoreboard", id="stray option before a command"),
     ],

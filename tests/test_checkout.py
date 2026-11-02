@@ -7,8 +7,7 @@ from pathlib import Path
 import pytest
 
 from quality import cli
-from tests.support.check import heard
-from tests.support.door import CHECK_WORD
+from tests.support.door import CHECK_WORD, check_door
 from tests.support.git_repositories import make_repo
 
 
@@ -26,9 +25,8 @@ def not_a_directory(tmp_path):
 )
 def test_a_path_that_is_no_repository_is_exit_2(tmp_path, capsys, bad_path):
     """#31 rule 1 (S8705): a path that is not a readable git repository is exit 2, never clean."""
-    code, output = cli.main(["hygiene", str(bad_path(tmp_path))]), heard(capsys)
-    assert code == 2
-    assert "error: " in output
+    code = cli.main(["baseline", "write", str(bad_path(tmp_path))])
+    assert (code, "baseline: not written - " in capsys.readouterr().err) == (2, True)
 
 
 def locked_parent(build_repo, tmp_path):
@@ -55,21 +53,16 @@ def git_directory(build_repo, tmp_path):
     ],
     ids=["parent without permission", "bare repository", "inside .git"],
 )
-@pytest.mark.parametrize("command", [["hygiene"], ["baseline", "write"]])
-def test_a_path_git_cannot_read_names_the_path_as_given_and_never_a_traceback(
-    build_repo, tmp_path, capsys, arrange, command
-):
+def test_a_path_git_cannot_read_names_the_path_as_given_and_never_a_traceback(build_repo, tmp_path, capsys, arrange):
     """#76 rule 2, cell 15: git's refusal, whichever its cause, is exit 2 naming the PATH."""
     path = arrange(build_repo, tmp_path)
     try:
-        code = cli.main([*command, str(path)])
+        code = cli.main(["baseline", "write", str(path)])
     finally:
         if (tmp_path / "locked").exists():
             (tmp_path / "locked").chmod(0o755)
     err = capsys.readouterr().err
-    outside = command == ["hygiene"] and arrange in (bare_repository, git_directory)
-    named = f"not inside a git work tree · {path}" if outside else f"{path} is not a readable git repository"
-    assert (code, named in err, "Traceback" in err) == (2, True, False), err
+    assert (code, f"{path} is not a readable git repository" in err, "Traceback" in err) == (2, True, False), err
 
 
 @pytest.mark.integration
@@ -77,11 +70,11 @@ def test_the_hint_for_a_path_git_refuses_quotes_it(tmp_path, monkeypatch, capsys
     """#76 rule 2, cell 16: the command the message advises runs as printed, whatever the PATH holds."""
     (tmp_path / "a b").write_text("x")
     monkeypatch.chdir(tmp_path)
-    code = cli.main(["hygiene", "a b"])
+    code = cli.main(["baseline", "write", "a b"])
     err = capsys.readouterr().err
-    error_line, next_line = err.splitlines()
-    assert (code, error_line) == (2, "error: a b is not a readable git repository: git rev-parse exited 128")
-    assert shlex.split(next_line.removeprefix("next: ")) == ["git", "-C", "a b", "status"]
+    fact, _, step = err.strip().partition("; next: ")
+    assert (code, fact) == (2, "baseline: not written - a b is not a readable git repository: git rev-parse exited 128")
+    assert shlex.split(step) == ["git", "-C", "a b", "status"]
 
 
 def test_a_working_directory_that_was_removed_is_cannot_judge_not_a_traceback(tmp_path, monkeypatch, capsys):
@@ -90,7 +83,7 @@ def test_a_working_directory_that_was_removed_is_cannot_judge_not_a_traceback(tm
     gone.mkdir()
     monkeypatch.chdir(gone)
     gone.rmdir()
-    results = [(command, cli.main(command), capsys.readouterr().err) for command in ([CHECK_WORD, "."], ["baseline", "write", "."])]
+    results = [(command, cli.main(command), capsys.readouterr().err) for command in ([CHECK_WORD], ["baseline", "write", "."])]
     assert [(code, ". is not a readable git repository: the working directory cannot be read ([Errno 2]" in err, "Traceback" in err) for _, code, err in results] == [(2, True, False)] * 2, results
 
 
@@ -101,9 +94,9 @@ def test_a_machine_without_git_is_cannot_judge_not_a_traceback(tmp_path, monkeyp
     nowhere = tmp_path / "empty-bin"
     nowhere.mkdir()
     monkeypatch.setenv("PATH", str(nowhere))
-    code = cli.main(["hygiene", str(repo)])
+    code = check_door(repo)
     err = capsys.readouterr().err
-    assert (code, f"{repo} is not a readable git repository: git did not run ([Errno 2]" in err, "Traceback" in err) == (2, True, False), err
+    assert (code, ". is not a readable git repository: git did not run ([Errno 2]" in err, "Traceback" in err) == (2, True, False), err
 
 
 def make_submodule_path(tmp_path: Path) -> tuple[Path, Path]:
@@ -139,10 +132,10 @@ def test_the_hint_for_a_path_git_refuses_has_no_command_when_the_path_is_unprint
     """#86 rule 1, cell 9 and #228 rule 7: a PATH holding a line feed or a format character gets the hint without a `git -C` command."""
     (tmp_path / path).write_text("x")
     monkeypatch.chdir(tmp_path)
-    code = cli.main(["hygiene", path])
+    code = cli.main(["baseline", "write", path])
     err = capsys.readouterr().err
     assert code == 2
-    assert err.splitlines()[-1] == "next: run git status inside the folder named above"
+    assert err.strip().endswith("; next: run git status inside the folder named above")
     assert "git -C" not in err
 
 
@@ -156,9 +149,9 @@ def test_a_git_that_refuses_the_index_listing_after_the_run_started_names_one_st
     wrapper.write_text(f'#!/bin/sh\ncase "$*" in *"ls-files -z -s"*) exit 3;; esac\nexec {real_git} "$@"\n')
     wrapper.chmod(0o755)
     monkeypatch.setenv("PATH", f"{wrapper.parent}{os.pathsep}{os.environ['PATH']}")
-    code = cli.main(["hygiene", str(repo)])
+    code = check_door(repo)
     captured = capsys.readouterr()
-    command = f"git -C {repo} status"
+    command = "git -C . status"
     rows = [line for line in captured.out.splitlines() if line.startswith("  ✗")]
     assert (code, len(rows) >= 2, captured.err.count(command), captured.out.count(command)) == (2, True, 1, 0), captured
     assert all("git ls-files exited 3" in row or "reasons" in row for row in rows), rows

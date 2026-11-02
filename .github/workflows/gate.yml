@@ -34,7 +34,7 @@ permissions:
   contents: read
 
 jobs:
-  hygiene:
+  check:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -77,8 +77,8 @@ jobs:
         env:
           MISE_CEILING_PATHS: ${{ github.workspace }}${{ env.TOOL_DIR != '.' && format('/{0}', env.TOOL_DIR) || '' }}/src/quality
 
-      - name: Hygiene
-        run: uv run --locked --project "$TOOL_DIR" quality hygiene .
+      - name: Check
+        run: uv run --locked --project "$TOOL_DIR" quality check
 
   sonar:
     runs-on: ubuntu-latest
@@ -137,7 +137,7 @@ jobs:
         run: uv run --locked --project "$TOOL_DIR" quality sonar findings
 
   verdict:
-    needs: [hygiene, sonar]
+    needs: [check, sonar]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
