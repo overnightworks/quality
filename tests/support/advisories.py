@@ -2,6 +2,7 @@ import datetime
 import io
 import json
 import shlex
+import subprocess
 import zipfile
 from pathlib import Path
 
@@ -78,3 +79,26 @@ def allowance_config(
         for key, value in values.items() if value is not None
     )
     return "[[advisories.allow]]\n" + entries
+
+
+def drop_fixed_versions(report: dict) -> None:
+    for vulnerability in package_of(report)["vulnerabilities"]:
+        for versions in vulnerability["affected"][0]["ranges"]:
+            versions["events"] = [event for event in versions["events"] if "fixed" not in event]
+
+
+def npm_report(package: str, affected_name: str):
+    """An edit of the finding fixture into an npm finding for `package` whose osv record fixes `affected_name`."""
+    def edit(report: dict) -> None:
+        found = package_of(report)
+        found["package"].update(name=package, ecosystem="npm", version="4.6.0")
+        found["vulnerabilities"][0]["affected"][0]["package"] = {"name": affected_name, "ecosystem": "npm"}
+    return edit
+
+
+def linked_lock_repo(build_repo) -> Path:
+    """uv.lock, and speech/uv.lock as a tracked link to it: two tracked names for one resolved file."""
+    repo = build_repo({"uv.lock": uv_lock(), "speech/keep": "x\n"})
+    (repo / "speech/uv.lock").symlink_to("../uv.lock")
+    subprocess.run(["git", "-C", str(repo), "add", "speech/uv.lock"], check=True)
+    return repo

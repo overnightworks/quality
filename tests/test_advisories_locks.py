@@ -19,7 +19,7 @@ from tests.support.advisories import (
     UV_LOCK_ALLOWANCE,
     advisory,
     allowance_config,
-    package_of,
+    npm_report,
     reporting,
     uv_lock,
 )
@@ -302,15 +302,6 @@ def test_without_a_pnpm_lock_the_npm_database_is_not_downloaded(build_repo, serv
     fake_scanner(served_scanners, OSV, reporting(OUTPUTS / "osv-scanner-clean.json", 0))
     code, output = run_gate(build_repo({"uv.lock": uv_lock(SAFE)}))
     assert code == 0, output
-
-
-def npm_report(package: str, affected_name: str):
-    """An edit of the finding fixture into an npm finding for `package` whose osv record fixes `affected_name`."""
-    def edit(report: dict) -> None:
-        found = package_of(report)
-        found["package"].update(name=package, ecosystem="npm", version="4.6.0")
-        found["vulnerabilities"][0]["affected"][0]["package"] = {"name": affected_name, "ecosystem": "npm"}
-    return edit
 
 
 @pytest.mark.parametrize(

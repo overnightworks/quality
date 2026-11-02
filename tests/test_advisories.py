@@ -1,11 +1,9 @@
 import contextlib
 import datetime
 import socketserver
-import subprocess
 import threading
 import time
 import urllib.request
-from pathlib import Path
 
 import pytest
 
@@ -22,6 +20,8 @@ from tests.support.advisories import (
     VIRTUAL_ROOT_ONLY,
     advisory,
     allowance_config,
+    drop_fixed_versions,
+    linked_lock_repo,
     package_of,
     reporting,
     tracked_lock_repo,
@@ -364,14 +364,6 @@ def test_a_lock_osv_cannot_parse_is_cannot_judge_and_names_neither_form_of_its_p
     assert (code, name in output) == (2, True), output
 
 
-def linked_lock_repo(build_repo) -> Path:
-    """uv.lock, and speech/uv.lock as a tracked link to it: two tracked names for one resolved file."""
-    repo = build_repo({"uv.lock": uv_lock(), "speech/keep": "x\n"})
-    (repo / "speech/uv.lock").symlink_to("../uv.lock")
-    subprocess.run(["git", "-C", str(repo), "add", "speech/uv.lock"], check=True)
-    return repo
-
-
 def test_two_tracked_names_for_one_lock_are_each_judged(build_repo, served_scanners, run_gate, publish_database):
     """#53 rule 2: a finding for every tracked name, not only the last one that resolves to the file."""
     publish_database()
@@ -582,12 +574,6 @@ def test_an_allowance_allows_its_advisory_in_its_lock_until_its_date(groups, all
     for neither."""
     judged = advisories.apply_allowances(groups, allowances, TODAY)
     assert ([headline(finding) for finding in judged.findings], list(judged.allowed)) == (findings, allowed)
-
-
-def drop_fixed_versions(report: dict) -> None:
-    for vulnerability in package_of(report)["vulnerabilities"]:
-        for versions in vulnerability["affected"][0]["ranges"]:
-            versions["events"] = [event for event in versions["events"] if "fixed" not in event]
 
 
 @pytest.mark.parametrize(
