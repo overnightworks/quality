@@ -125,6 +125,32 @@ def style_is_on(stream: TextIO | None, environment: Mapping[str, str]) -> bool:
     return not environment.get("NO_COLOR") and environment.get("TERM") != "dumb"
 
 
+@dataclass(frozen=True)
+class Channel:
+    """One output stream and its style, captured once when the run opened it; the writers do not probe it again."""
+
+    stream: TextIO | None
+    styled: bool
+
+
+@dataclass(frozen=True)
+class Channels:
+    """The door's two streams, each decided on its own."""
+
+    out: Channel
+    err: Channel
+
+
+def open_channel(stream: TextIO | None, environment: Mapping[str, str]) -> Channel:
+    return Channel(stream, style_is_on(stream, environment))
+
+
+def open_channels(environment: Mapping[str, str]) -> Channels:
+    """Each stream's style, decided once for the run from the environment the door is given; `output.py` reads the
+    process environment only for the step summary."""
+    return Channels(open_channel(sys.stdout, environment), open_channel(sys.stderr, environment))
+
+
 def _paint(text: str, style: str, styled: bool) -> str:
     return f"\x1b[{style}m{text}{RESET}" if styled and text else text
 

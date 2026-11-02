@@ -642,8 +642,6 @@ def test_a_refusal_row_appears_exactly_when_the_exit_is_two_and_a_findings_row_w
 
 def terminal_streams(monkeypatch) -> tuple[Terminal, Terminal]:
     """Both streams terminals; set inside the test, because pytest's capture puts its own back when the test starts."""
-    monkeypatch.setenv("TERM", "xterm")
-    monkeypatch.delenv("NO_COLOR", raising=False)
     stdout, stderr = Terminal(), Terminal()
     monkeypatch.setattr(sys, "stdout", stdout)
     monkeypatch.setattr(sys, "stderr", stderr)
@@ -653,7 +651,7 @@ def terminal_streams(monkeypatch) -> tuple[Terminal, Terminal]:
 def test_at_a_terminal_a_refusal_from_repository_text_prints_as_escaped_text_between_quality_sgr_only(build_repo, monkeypatch):
     repo = build_repo({"a\x1b[35m\n\u202e.compose.yaml": "services: [\n"})
     stdout, stderr = terminal_streams(monkeypatch)
-    code = cli.main(["hygiene", str(repo)], clock=lambda: 0.0)
+    code = cli.main(["hygiene", str(repo)], clock=lambda: 0.0, environment={"TERM": "xterm"})
     stripped = re.sub(r"\x1b\[[0-9;]*m", "", stdout.getvalue() + stderr.getvalue())
     assert code == 2
     assert "\x1b[" in stdout.getvalue(), stderr.getvalue()
