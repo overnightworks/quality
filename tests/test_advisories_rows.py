@@ -402,9 +402,10 @@ def test_a_refused_area_leaves_the_note_row_and_the_exact_pair(drive_advisories,
         "one name in two ecosystems", "two results listing different packages", "two results listing the same package",
     ],
 )
-def test_a_clean_row_counts_the_lockfiles_and_the_packages_the_report_lists(drive_advisories, edited_report, files, edit, counts):
+def test_a_clean_row_counts_the_lockfiles_and_the_packages_the_report_lists(drive_advisories, build_repo, files, edit, counts):
     """O48: a package counts once per tracked file, by ecosystem, name as the ecosystem compares it and version."""
-    run = drive_advisories(files, edited_report("osv-scanner-finding.json", edit), code=0)
+    repo = build_repo(files)
+    run = drive_advisories(repo, report_naming(repo, next(iter(files)), edit), code=0)
     assert (area_row(run.out, Area.DEPENDENCIES).glyph, extent_counts(area_fact(run.out, Area.DEPENDENCIES))) == (Glyph.CLEAN, counts)
     assert (run.code, run.err) == (0, "")
 

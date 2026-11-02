@@ -29,7 +29,7 @@ from quality.config import (
     ConfigError,
     read_allow_lists,
 )
-from quality.report import CannotJudge, Example, Finding, Note, Reason, RuleResult, Unparsable
+from quality.report import CannotJudge, Example, Extent, Finding, Note, Reason, RuleResult, Unparsable
 from quality.rules import Area, Rule
 
 CONFIG_EXAMPLE_LABEL = f"write it in {CONFIG_PATH} like this"
@@ -115,7 +115,7 @@ def check_workflows(root: Path, rule: Rule, tracked: list[str], locate_zizmor: C
         raise CannotJudge(str(error)) from error
 
 
-def check_advisories(root: Path, tracked: list[str], allow_lists: AllowLists | CannotJudge) -> advisories.AdvisoryScan:
+def check_advisories(root: Path, tracked: list[str], allow_lists: AllowLists | CannotJudge) -> RuleResult:
     """The allowances' `until` is judged against today's date in UTC, read here, once."""
     allowances = _required(allow_lists).advisories
     locks = {name: checkout.judged(repository.resolve_file, root, name) for name in checkout.on_disk(root, [n for n in tracked if advisories.is_lock(n)])}
@@ -142,7 +142,7 @@ class RuleVerdict:
     refusal: CannotJudge | None = None
     measured_only: bool = False
     notes: tuple[Note, ...] = ()
-    extent: int | None = None
+    extent: Extent | None = None
 
     @property
     def outcome(self) -> Outcome:
@@ -233,7 +233,7 @@ def _findings(judged: _Judged | CannotJudge) -> Sequence[Finding] | CannotJudge:
 
 
 def _verdict(
-    rule: Rule, outcome: Sequence[Finding] | CannotJudge, measured_only: bool, notes: tuple[Note, ...], extent: int | None
+    rule: Rule, outcome: Sequence[Finding] | CannotJudge, measured_only: bool, notes: tuple[Note, ...], extent: Extent | None
 ) -> RuleVerdict:
     """The verdict of the rule a check judges; a check that cannot judge leaves its rule unjudged."""
     if isinstance(outcome, CannotJudge):
@@ -317,14 +317,13 @@ def run_hygiene(root: Path, locate_ruff: Callable[[], str], locate_zizmor: Calla
         **{rule: _findings(result) for rule, result in workflows.items()},
         Rule.ADVISORY: _findings(advisory),
     }
-    results = ((Rule.SIZE, size), (Rule.CLONE, clone), (Rule.IMPORT_CONTRACT, contracts), (Rule.LEAK, secrets), *workflows.items())
+    results = ((Rule.SIZE, size), (Rule.CLONE, clone), (Rule.IMPORT_CONTRACT, contracts), (Rule.LEAK, secrets), *workflows.items(), (Rule.ADVISORY, advisory))
     measuring = {rule for rule, result in results if _measures_only(result)}
     notes = {rule: () if isinstance(result, CannotJudge) else result.notes for rule, result in (*results, (Rule.PYTHON_FLOOR, floor))}
     extents = {rule: None if isinstance(result, CannotJudge) else result.extent for rule, result in results}
     verdicts = [_verdict(rule, outcomes[rule], rule in measuring, notes.get(rule, ()), extents.get(rule)) for rule in Rule]
     reports = () if isinstance(printing, CannotJudge) else printing.reports
-    allowed_advisories = () if isinstance(advisory, CannotJudge) else advisory.report()
-    return HygieneResult(tuple(verdicts), (*reports, *allowed_advisories), len(set(tracked)))
+    return HygieneResult(tuple(verdicts), reports, len(set(tracked)))
 
 
 def _measures_only(result: RuleResult | CannotJudge) -> bool:

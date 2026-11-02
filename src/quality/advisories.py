@@ -15,7 +15,7 @@ from quality import pip_requirements, process, repository, scanners
 from quality.config import ADVISORY_ALLOWANCE_HEADING, CONFIG_PATH, AdvisoryAllowance
 from quality.output import SEPARATOR
 from quality.pip_requirements import Requirement
-from quality.report import Finding, FindingEvent, shell_word
+from quality.report import Finding, FindingEvent, LockExtent, Note, NoteEvent, RuleResult, shell_word
 from quality.rules import Rule
 from quality.scanners import ScannerError
 
@@ -54,10 +54,10 @@ REQUIREMENTS_KIND = LockKind(
 @dataclass(frozen=True)
 class Affected:
     """One advisory group that affects one package in one tracked lock file; `ids` are every id and alias of the
-    group, `subject` names the group and the package as the allowed line prints them, `fact` as the finding's row does."""
+    group, `fact` is the finding's row."""
 
     lock: str
-    subject: str
+    ecosystem: str
     ids: frozenset[str]
     fact: str
     fix: str
@@ -69,14 +69,11 @@ class Affected:
 
 
 @dataclass(frozen=True)
-class AdvisoryScan:
-    """The rule's findings, and one line per advisory an allowance lets through."""
+class OsvReport:
+    """What one osv-scanner report says: the advisories, and the distinct packages it lists, counted per tracked name."""
 
-    findings: tuple[Finding, ...]
-    allowed: tuple[str, ...]
-
-    def report(self) -> tuple[str, ...]:
-        return (f"{Rule.ADVISORY}: {len(self.allowed)} allowed", *self.allowed) if self.allowed else ()
+    affected: list[Affected]
+    packages: int
 
 
 @dataclass(frozen=True)
@@ -110,33 +107,33 @@ def lock_kind(name: str) -> LockKind:
 def scan(
     locks: Mapping[str, Path], root: Path, allowances: Sequence[AdvisoryAllowance], today: date,
     monotonic: Callable[[], float] = time.monotonic,
-) -> AdvisoryScan:
+) -> RuleResult:
     """The advisories that affect the lock files `locks` (tracked name -> absolute path), with the repository's
     allowances applied; no lock needs no scanner, and leaves every allowance matching nothing."""
     if not locks:
-        return apply_allowances([], allowances, today)
+        return apply_allowances([], allowances, today, LockExtent(0, 0))
     names_by_path = _names_by_path(locks)
     binary = scanners.located(scanners.OSV_SCANNER)
     with process.scratch_directory() as scratch:
         try:
             handovers = _handovers(root, locks, scratch, names_by_path)
             ecosystems = sorted({lock_kind(name).ecosystem for name in locks})
-            affected = _scan(binary, ecosystems, handovers, scratch, names_by_path, monotonic)
+            report = _scan(binary, ecosystems, handovers, scratch, names_by_path, monotonic)
         except process.ProcessError as error:
             raise ScannerError(_without_paths(str(error), names_by_path, [(root.resolve(), "<repository>"), (binary.parent.resolve(), "<scanner>"), (scratch, "<scratch>")])) from None
-    return apply_allowances(affected, allowances, today)
+    return apply_allowances(report.affected, allowances, today, LockExtent(len(locks), report.packages))
 
 
 def apply_allowances(
-    affected: Iterable[Affected], allowances: Sequence[AdvisoryAllowance], today: date
-) -> AdvisoryScan:
+    affected: Iterable[Affected], allowances: Sequence[AdvisoryAllowance], today: date, extent: LockExtent
+) -> RuleResult:
     """Each group is allowed by the one allowance naming any of its ids in its lock, until that allowance's `until`
     (inclusive); two allowances on one group allow it for neither, and an allowance no group uses is a finding."""
     by_lock: dict[str, list[AdvisoryAllowance]] = {}
     for allowance in allowances:
         by_lock.setdefault(allowance.lock, []).append(allowance)
     findings: list[Finding] = []
-    allowed: list[str] = []
+    notes: list[Note] = []
     used: set[AdvisoryAllowance] = set()
     conflicts: dict[tuple[AdvisoryAllowance, ...], None] = {}
     for group in affected:
@@ -149,14 +146,14 @@ def apply_allowances(
         elif matching[0].until < today:
             findings.append(group.finding(f"allowance ran out on {matching[0].until} ({matching[0].item})"))
         else:
-            allowed.append(_allowed_line(group, matching[0]))
+            notes.append(_allowed_note(group, matching[0]))
     findings += [_conflict(entries) for entries in conflicts]
     findings += [_orphan(allowance) for allowance in allowances if allowance not in used]
-    return AdvisoryScan(tuple(findings), tuple(allowed))
+    return RuleResult(findings, extent, False, tuple(notes))
 
 
-def _allowed_line(group: Affected, allowance: AdvisoryAllowance) -> str:
-    return f"  allowed {group.lock} {group.subject} until {allowance.until} ({allowance.item}) - {allowance.reason}"
+def _allowed_note(group: Affected, allowance: AdvisoryAllowance) -> Note:
+    return Note(group.lock, NoteEvent.ALLOWED, SEPARATOR.join((group.fact, f"until {allowance.until} ({allowance.item})", allowance.reason)))
 
 
 def _conflict(entries: tuple[AdvisoryAllowance, ...]) -> Finding:
@@ -210,7 +207,7 @@ def _read_requirements(root: Path, name: str) -> tuple[Requirement, ...]:
 def _scan(
     binary: Path, ecosystems: Sequence[str], handovers: Sequence[Handover], scratch: Path,
     names_by_path: dict[str, list[str]], monotonic: Callable[[], float],
-) -> list[Affected]:
+) -> OsvReport:
     _place_databases(scratch, ecosystems, monotonic)
     # cwd is the scratch directory so that nothing in the scanned repository is read by accident.
     command = [
@@ -310,28 +307,32 @@ def _without_paths(text: str, names_by_path: Mapping[str, list[str]], directorie
 def _findings(
     exit_code: int, report_text: str, stderr: str, names_by_path: Mapping[str, list[str]],
     expected: Mapping[str, tuple[Requirement, ...]],
-) -> list[Affected]:
+) -> OsvReport:
     if exit_code not in (scanners.CLEAN_EXIT, OSV_FINDINGS_FOUND):
         raise ScannerError(f"{scanners.OSV_SCANNER} exited {exit_code}, neither 'clean' nor 'findings'{process.stderr_tail(stderr)}")
-    affected = _read_report(report_text, names_by_path, expected)
-    if bool(affected) != (exit_code == OSV_FINDINGS_FOUND):
-        raise ScannerError(f"{scanners.OSV_SCANNER} exited {exit_code} but its report holds {len(affected)} finding(s)")
-    return affected
+    report = _read_report(report_text, names_by_path, expected)
+    if bool(report.affected) != (exit_code == OSV_FINDINGS_FOUND):
+        raise ScannerError(f"{scanners.OSV_SCANNER} exited {exit_code} but its report holds {len(report.affected)} finding(s)")
+    return report
 
 
 def _read_report(
     report_text: str, names_by_path: Mapping[str, list[str]], expected: Mapping[str, tuple[Requirement, ...]]
-) -> list[Affected]:
-    """The findings of the report; for each file in `expected`, the packages the report lists for it must be exactly those."""
+) -> OsvReport:
+    """The findings of the report and the packages it lists; for each file in `expected`, the packages the report lists for it must be exactly those."""
     try:
         affected = []
         listed: dict[str, set[tuple[str, str]]] = {}
+        counted: dict[str, set[tuple[str, str, str]]] = {}
         for result in _dicts(json.loads(report_text)["results"]):
             source = _typed(_typed(result["source"], dict)["path"], str)
             if source not in names_by_path:
                 raise ScannerError(f"the {scanners.OSV_SCANNER} report names a lock file quality did not pass")
             packages = _dicts(result["packages"])
             listed[source] = {_name_and_version(package) for package in packages}
+            identities = {_package_identity(package) for package in packages}
+            for name in names_by_path[source]:
+                counted.setdefault(name, set()).update(identities)
             affected += [
                 group for name in names_by_path[source] for package in packages
                 for group in _package_findings(name, package)
@@ -340,12 +341,18 @@ def _read_report(
         raise ScannerError(f"cannot read the {scanners.OSV_SCANNER} report: {error!r}") from error
     for path, requirements in expected.items():
         _check_listed(names_by_path[path][0], requirements, listed.get(path, set()))
-    return list(dict.fromkeys(affected))
+    return OsvReport(list(dict.fromkeys(affected)), sum(len(found) for found in counted.values()))
 
 
 def _name_and_version(package: dict) -> tuple[str, str]:
     named = _typed(package["package"], dict)
     return pip_requirements.normalised_name(_typed(named["name"], str)), _typed(named["version"], str)
+
+
+def _package_identity(package: dict) -> tuple[str, str, str]:
+    named = _typed(package["package"], dict)
+    ecosystem, name, version = (_typed(named[field], str) for field in ("ecosystem", "name", "version"))
+    return ecosystem, _comparable(name, ecosystem), version
 
 
 def _check_listed(name: str, requirements: tuple[Requirement, ...], listed: set[tuple[str, str]]) -> None:
@@ -377,12 +384,11 @@ def _package_findings(lock: str, package: dict) -> list[Affected]:
     groups = []
     for group in _dicts(package.get("groups", [])):
         named, *others = _strings(group["ids"])
-        aliases = sorted({*others, *_strings(group["aliases"])} - {named})
+        ids = frozenset({named, *others, *_strings(group["aliases"])})
         records_of_group = [records[identifier] for identifier in [named, *others] if identifier in records]
-        listed = f" ({', '.join(aliases)})" if aliases else ""
         state, fix = _remedy(lock, name, named, ecosystem, records_of_group)
         groups.append(Affected(
-            lock, f"{named}{listed}: {ecosystem} {name} {version}", frozenset({named, *aliases}),
+            lock, ecosystem, ids,
             SEPARATOR.join(filter(None, (f"{name} {version}", named, state))), fix,
         ))
     return groups
