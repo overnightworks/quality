@@ -1,8 +1,0 @@
-claim_id = "de414b82bb2f4403aec773dadbfb31db"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "dcc857747c85198ecb399b9c699f34cdd7582e0d"
-branch = "claude/issue-316-c3s1-one-channel-per-stream"
-scope = ["src/quality/cli.py", "src/quality/output.py", "tests/support/check.py", "tests/support/terminal.py", "tests/test_cli_channels.py", "tests/test_cli_output.py", "tests/test_output.py", "tests/test_staged.py"]
-opened_commit = "2c2d6ce5a2c89c1e3a654967938bfc7f388b0bf8"
-whole_reason = "Two production files, about +46/-28, inside the corridor; the channel lands neutral so that shortening and display width (C3s2) read one decision; the live line is C3h, argparse C3i."
