@@ -248,22 +248,27 @@ def _workflows_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | None
     return SEPARATOR.join((counted(extents[Rule.WORKFLOW_LINT], "workflow"), OFFLINE_AUDITS))
 
 
+def _code_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | None]) -> str:
+    return SEPARATOR.join((counted(len(verdict.verdicts), "rule"), counted(extents[Rule.PYTHON_SECURITY], "Python file")))
+
+
 JUDGED_EXTENT: dict[Area, Callable[[AreaVerdict, Mapping[Rule, Extent | None]], str]] = {
     Area.DEBT: _debt_extent,
     Area.IMPORTS: _imports_extent,
     Area.SECRETS: _secrets_extent,
     Area.DEPENDENCIES: _dependencies_extent,
     Area.WORKFLOWS: _workflows_extent,
+    Area.CODE: _code_extent,
 }
 
 
 def area_extent(verdict: AreaVerdict, tracked_paths: int) -> str:
     """What an area's row says it covered: the rules and files of `files`, then what the area's rules judged;
-    nothing for an area that could not check or has no extent."""
+    nothing for an area that could not check."""
     if verdict.area is Area.FILES:
         return SEPARATOR.join((counted(len(verdict.verdicts), "rule"), counted(tracked_paths, "file")))
     extents = {rule_verdict.rule: rule_verdict.extent for rule_verdict in verdict.verdicts}
-    if verdict.reasons or None in extents.values() or verdict.area not in JUDGED_EXTENT:
+    if verdict.reasons or None in extents.values():
         return ""
     return JUDGED_EXTENT[verdict.area](verdict, extents)
 
@@ -306,7 +311,6 @@ def run_hygiene_check(path: Path, locate_ruff: Callable[[], str], locate_zizmor:
     except CannotJudge as error:
         write_pair(error.reason.fact, error.reason.next_steps or (START_FAILURE_NEXT,))
         return EXIT_CANNOT_JUDGE
-    emit(*result.reports)
     for verdict in result.areas:
         write_rows((area_row(verdict, area_extent(verdict, result.tracked_paths)),))
         write_findings_and_notes(verdict.findings, verdict.notes)

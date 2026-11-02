@@ -434,15 +434,18 @@ def headers(lines: list[str]) -> list[str]:
 
 
 def test_a_clean_run_has_seven_clean_rows_in_area_order_and_the_verdict(build_repo, capsys):
-    """O16, O21, O30, O38: the one row after the dependencies row carries no fact, the dependencies row the lock files and packages of a tree with none, and the workflows row the workflow files the tree holds and the offline audits; the files row holds the rules and the tracked paths, the debt row the entries and pairs of the ceiling file, the imports row the contracts of the config."""
+    """O16, O21, O30, O38: the dependencies row the lock files and packages of a tree with none, the workflows row the workflow files the tree holds and the offline audits, the code row the area's rules and the Python files ruff judged; the files row holds the rules and the tracked paths, the debt row the entries and pairs of the ceiling file, the imports row the contracts of the config."""
     tracked = {**CLEAN_FILES, **KEPT_CONTRACT, BASELINE_PATH: '[file_lines]\n"src/gone.py" = 900\n\n[clones]\n'}
     repo = build_repo(tracked)
     code, out, err = frame_run(capsys, repo)
-    files_row, _, _, _, _, _, code_row = headers(out)
+    files_row = headers(out)[0]
     extent = [int(part.split()[0]) for part in files_row.partition(cli.AreaEvent.CLEAN)[2].split(SEPARATOR)]
     held = ratchet.read_baseline(repo)
     contracts = architecture.contracts_of({".importlinter": tracked[".importlinter"]}).contracts
-    assert (code, out[0], code_row, out[-1], err) == (0, headers(out)[0], header(Area.CODE, "✓", "clean"), f"✓ clean · 7 areas · {ZERO_SECONDS}", [])
+    assert [line.split()[1] for line in headers(out)] == list(Area)
+    assert (code, out[0], out[-1], err) == (0, headers(out)[0], f"✓ clean · 7 areas · {ZERO_SECONDS}", [])
+    assert area_row("\n".join(out), Area.CODE).glyph == Glyph.CLEAN
+    assert extent_counts(area_fact("\n".join(out), Area.CODE)) == [sum(rule.area is Area.CODE for rule in Rule), sum(name.endswith(".py") for name in tracked)]
     assert extent_counts(area_fact("\n".join(out), Area.DEPENDENCIES)) == [0, 0]
     workflows = area_fact("\n".join(out), Area.WORKFLOWS)
     assert (leading_count(workflows), workflows.endswith(cli.OFFLINE_AUDITS)) == (0, True)
@@ -689,13 +692,14 @@ def test_the_real_door_paints_the_files_block_only_at_a_terminal_and_prints_the_
     """#281 acceptance 6: SGR only in the first form; stripped of it, the lines equal the piped ones."""
     repo = build_repo({**CASE_TWO, **ROOT_ALLOWS_ENV})
     base = {key: value for key, value in os.environ.items() if key not in ("NO_COLOR", "GITHUB_ACTIONS", "TERM")}
-    piped = subprocess.run([*DOOR, "hygiene", "."], cwd=repo, env=base, capture_output=True, text=True, check=False).stdout
+    piped = subprocess.run([*DOOR, "hygiene", "."], cwd=repo, env=base, capture_output=True, text=True, check=False)
     parent, child = pty.openpty() if environment else (None, subprocess.PIPE)
-    done = subprocess.run([*DOOR, "hygiene", "."], cwd=repo, env={**base, **(environment or {})}, stdout=child, check=False, text=environment is None)
+    done = subprocess.run([*DOOR, "hygiene", "."], cwd=repo, env={**base, **(environment or {})}, stdout=child, stderr=subprocess.PIPE, check=False, text=True)
     text = read_pseudo_terminal(parent, child) if environment else done.stdout
     words = [re.sub(r"\x1b\[[0-9;]*m", "", line) for line in text.replace("\r\n", "\n").splitlines()]
     assert ("\x1b[" in text) is (environment == {"TERM": "xterm"}), text
-    assert [line for line in words if not line.startswith(("!", "✓")) or " · " not in line] == [line for line in piped.splitlines() if not line.startswith(("!", "✓")) or " · " not in line]
+    assert [line for line in words if not line.startswith(("!", "✓")) or " · " not in line] == [line for line in piped.stdout.splitlines() if not line.startswith(("!", "✓")) or " · " not in line]
+    assert (piped.stderr, done.stderr) == ("", "")
 
 
 def test_a_refusal_git_did_not_run_for_gets_the_general_instruction(build_repo, tmp_path, monkeypatch, capsys):

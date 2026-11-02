@@ -384,13 +384,21 @@ def env_row_stands(printed: str) -> bool:
     return any(row.event is FindingEvent.TRACKED and row.fact == printable(env_file.ENV_FACT) for row in finding_rows(printed, ".env"))
 
 
+def hygiene_streams(
+    capsys: pytest.CaptureFixture[str], path: Path, locate_ruff: Callable[[], str] = installed_ruff
+) -> tuple[int, str, str]:
+    """The exit code, stdout and stderr of `quality hygiene` over `path`, through the real door."""
+    code = cli.main(["hygiene", str(path)], locate_ruff=locate_ruff, clock=lambda: 0.0)
+    captured = capsys.readouterr()
+    return code, captured.out, captured.err
+
+
 def hygiene_output(
     capsys: pytest.CaptureFixture[str], path: Path, locate_ruff: Callable[[], str] = installed_ruff
 ) -> tuple[int, str]:
     """The exit code and the whole output of `quality hygiene` over `path`, through the real door."""
-    code = cli.main(["hygiene", str(path)], locate_ruff=locate_ruff, clock=lambda: 0.0)
-    captured = capsys.readouterr()
-    return code, captured.out + captured.err
+    code, out, err = hygiene_streams(capsys, path, locate_ruff)
+    return code, out + err
 
 
 def compose(*port_lines: str) -> dict[str, str]:
