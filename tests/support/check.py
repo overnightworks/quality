@@ -2,6 +2,7 @@ import re
 import string
 import unicodedata
 from collections.abc import Callable, Sequence
+from contextlib import nullcontext
 from dataclasses import dataclass
 from enum import StrEnum
 from importlib.metadata import requires
@@ -413,7 +414,7 @@ def refusal_row(area: str) -> str:
 
 def hygiene_run(repo: Path, locate_ruff: Callable[[], str] = installed_ruff, locate_zizmor: Callable[[], str] | None = None) -> check.HygieneResult:
     """What the rule runner judged over `repo`, before the door prints it."""
-    return check.run_hygiene(repo, locate_ruff, locate_zizmor or cli.INSTALLED_ZIZMOR, lambda _verdict, _tracked_paths: None)
+    return check.run_hygiene(repo, locate_ruff, locate_zizmor or cli.INSTALLED_ZIZMOR, lambda _verdict, _tracked_paths: None, lambda _area, _scanner: nullcontext())
 
 
 def refusal_pair(repo: Path) -> str:

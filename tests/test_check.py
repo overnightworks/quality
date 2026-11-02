@@ -1,7 +1,7 @@
 import re
 import subprocess
 from collections import Counter
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 
 import pytest
@@ -351,7 +351,7 @@ def test_a_run_holds_one_area_verdict_per_area_in_area_order(build_repo):
 
 def test_the_run_hands_each_area_to_its_reporter_once_in_row_order(build_repo):
     reported = []
-    result = check.run_hygiene(build_repo({}), installed_ruff, never_located, lambda verdict, tracked_paths: reported.append((verdict, tracked_paths)))
+    result = check.run_hygiene(build_repo({}), installed_ruff, never_located, lambda verdict, tracked_paths: reported.append((verdict, tracked_paths)), lambda _area, _scanner: nullcontext())
     assert [verdict.area for verdict, _ in reported] == list(Area)
     assert reported == [(area, result.tracked_paths) for area in result.areas]
 

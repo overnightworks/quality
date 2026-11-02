@@ -47,6 +47,7 @@ from quality.output import (
     counted,
     emit,
     emit_finding,
+    live_line,
     open_channels,
     set_up_streams,
     write_findings_and_notes,
@@ -134,7 +135,7 @@ def main(
     if arguments.command == "baseline":
         return run_baseline_write(arguments.path)
     if arguments.command == "scan-staged":
-        return run_scan_staged(arguments.path, channels.out)
+        return run_scan_staged(arguments.path, channels)
     if arguments.command == "sonar":
         if arguments.sonar_command == "properties":
             return run_sonar_properties()
@@ -321,7 +322,7 @@ def run_hygiene_check(
 ) -> int:
     started = clock()
     try:
-        result = run_hygiene(path, locate_ruff, locate_zizmor, partial(write_area, channels.out))
+        result = run_hygiene(path, locate_ruff, locate_zizmor, partial(write_area, channels.out), live_line(channels.err))
     except OutsideWorkTree as error:
         write_pair(f"not inside a git work tree · {error.path}", (Instruction("run quality hygiene inside a repository"),), channels.err)
         return EXIT_CANNOT_JUDGE
@@ -386,13 +387,14 @@ def describe_loosenings(path: Path, written: ratchet.Baseline) -> list[str]:
     return lines
 
 
-def run_scan_staged(path: Path, out: Channel) -> int:
+def run_scan_staged(path: Path, channels: Channels) -> int:
     try:
-        result = staged.scan_staged(path)
+        with live_line(channels.err)(Area.SECRETS, scanners.GITLEAKS):
+            result = staged.scan_staged(path)
     except (process.ProcessError, ConfigError, CannotJudge) as error:
         emit(f"scan-staged: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
-    write_findings_and_notes(result.findings, result.notes, out)
+    write_findings_and_notes(result.findings, result.notes, channels.out)
     emit(f"scan-staged: {len(result.findings)} finding(s)" if result.findings else "scan-staged: clean")
     return EXIT_FINDINGS if result.findings else EXIT_CLEAN
 

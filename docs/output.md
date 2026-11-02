@@ -96,6 +96,8 @@ Live line while the secrets scan runs (stderr, terminal only, replaced by the ro
   ⠋ secrets       gitleaks       412 commits · 3s
 ```
 
+Built: one line per scanner, this frame, the area and the scanner, dim, leaving the window's last column free (a window of one or two columns, or a terminal that draws `…` two cells wide, is not served), on a terminal whose window is known; each is erased before the next line prints, so the area's row takes its place. The moving frame and the fact (`412 commits · 3s`) stay the target (#5).
+
 ### 2. `quality check`, findings in several areas
 
 Exit 1. stdout. Two findings in a row with the same fix: the fix stands once, under the last. The findings of an area stand in run order (head proposal O14 of 30.10.2026).

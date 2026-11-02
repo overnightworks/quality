@@ -1,4 +1,5 @@
 from collections.abc import Callable, Iterator, Mapping
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import Enum, auto
@@ -220,6 +221,15 @@ def _attempt[T](check: Callable[[], T]) -> T | CannotJudge:
         return refusal
 
 
+type Running = Callable[[Area, str], AbstractContextManager[None]]
+
+
+def _scanned[T](running: Running, area: Area, scanner: str, check: Callable[[], T]) -> T | CannotJudge:
+    """The check's `_attempt` under the live line of `scanner`, which is down again before the area's row can print."""
+    with running(area, scanner):
+        return _attempt(check)
+
+
 type Judged = RuleResult | python_floor.FloorResult | list[Finding] | CannotJudge
 type AreaReport = Callable[[AreaVerdict, int], None]
 
@@ -276,7 +286,9 @@ def _content_findings(
     return _attempt(judge)
 
 
-def _judged_areas(root: Path, tracked: list[str], locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str]) -> Iterator[AreaVerdict]:
+def _judged_areas(
+    root: Path, tracked: list[str], locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str], running: Running
+) -> Iterator[AreaVerdict]:
     """Each area as its last rule ends, in the order the rows stand."""
     allow_lists = _attempt(lambda: _read_allow_lists(root))
     modes = _attempt(lambda: checkout.index_modes(root))
@@ -300,12 +312,19 @@ def _judged_areas(root: Path, tracked: list[str], locate_ruff: Callable[[], str]
     size, clone = _judge_baseline_rules(sources, baseline, allow_lists)
     yield _area_verdict(Area.DEBT, {Rule.SIZE: size, Rule.CLONE: clone})
     yield _area_verdict(Area.IMPORTS, {Rule.IMPORT_CONTRACT: _attempt(lambda: check_import_contract(root, tracked))})
-    yield _area_verdict(Area.SECRETS, {Rule.LEAK: _attempt(lambda: check_secrets(root, allow_lists))})
+    yield _area_verdict(Area.SECRETS, {Rule.LEAK: _scanned(running, Area.SECRETS, scanners.GITLEAKS, lambda: check_secrets(root, allow_lists))})
     yield _area_verdict(
-        Area.WORKFLOWS, {rule: _attempt(partial(check_workflows, root, rule, tracked, locate_zizmor)) for rule in scanners.WORKFLOW_SCANNERS}
+        Area.WORKFLOWS,
+        {
+            rule: _scanned(running, Area.WORKFLOWS, scanner.name, partial(check_workflows, root, rule, tracked, locate_zizmor))
+            for rule, scanner in scanners.WORKFLOW_SCANNERS.items()
+        },
     )
-    yield _area_verdict(Area.DEPENDENCIES, {Rule.ADVISORY: _attempt(partial(check_advisories, root, tracked, allow_lists))})
-    lint = _attempt(lambda: lint_python(root, modes, locate_ruff))
+    yield _area_verdict(
+        Area.DEPENDENCIES,
+        {Rule.ADVISORY: _scanned(running, Area.DEPENDENCIES, scanners.OSV_SCANNER, partial(check_advisories, root, tracked, allow_lists))},
+    )
+    lint = _scanned(running, Area.CODE, scanners.RUFF, lambda: lint_python(root, modes, locate_ruff))
     yield _area_verdict(
         Area.CODE,
         {Rule.PYTHON_SECURITY: _judge_lint(lint, python_lint.judge_security), Rule.PYTHON_PRINT: _judge_lint(lint, python_lint.judge_print)},
@@ -313,15 +332,16 @@ def _judged_areas(root: Path, tracked: list[str], locate_ruff: Callable[[], str]
 
 
 def run_hygiene(
-    root: Path, locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str], report_area: AreaReport
+    root: Path, locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str], report_area: AreaReport, running: Running
 ) -> HygieneResult:
     """Judges every active rule over the repository `root` lies in, area by area in row order, and hands each finished
-    area and the count of tracked paths to `report_area`; only one git cannot list stops the run."""
+    area and the count of tracked paths to `report_area`; `running` holds the live line up around each scanner. Only
+    one git cannot list stops the run."""
     root = checkout.work_tree_top(root)
     tracked = checkout.tracked_files(root)
     tracked_paths = len(set(tracked))
     areas: list[AreaVerdict] = []
-    for area in _judged_areas(root, tracked, locate_ruff, locate_zizmor):
+    for area in _judged_areas(root, tracked, locate_ruff, locate_zizmor, running):
         report_area(area, tracked_paths)
         areas.append(area)
     return HygieneResult(tuple(areas), tracked_paths)
