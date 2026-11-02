@@ -1,7 +1,6 @@
 import hashlib
 import json
 import os
-import re
 import shutil
 import tomllib
 from collections.abc import Callable
@@ -190,14 +189,8 @@ def run_gitleaks(
     return _split_by_allowance(leaks, allowances)
 
 
-# A terminal control code sits against a value without a word boundary, which gitleaks' rules need; `printable` leaves the rest of it.
-CONTROL_SEQUENCE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
-
-
-def _vetted_text(text: str) -> str:
-    """The text as written, with each control code as a space, and without them: a code is a boundary and joins or eats
-    nothing, whichever form a value was written in."""
-    return "\n".join((VET_OPENING + text, CONTROL_SEQUENCE.sub(" ", text), CONTROL_SEQUENCE.sub("", text)))
+# A terminal code can stand against a value without the word boundary gitleaks' rules need, and `printable` leaves the rest of it, so no scan can clear such a text.
+TERMINAL_CODE_OPENERS = frozenset(chr(code) for code in (0x1B, *range(0x80, 0xA0)))
 
 
 def _stderr_lines(stderr: str) -> list[str]:
@@ -208,6 +201,8 @@ def _stderr_lines(stderr: str) -> list[str]:
 def _cleared_by_gitleaks(text: str) -> bool:
     """Whether quality's secret scan finds nothing in `text`, under the rules it judges a repository by; anything but
     that clean answer is no."""
+    if not TERMINAL_CODE_OPENERS.isdisjoint(text):
+        return False
     try:
         binary = located(GITLEAKS)
         with process.scratch_directory() as scratch:
@@ -215,7 +210,7 @@ def _cleared_by_gitleaks(text: str) -> bool:
             # cwd: gitleaks reads .gitleaksignore from the folder it stands in, whatever --gitleaks-ignore-path names.
             vet = process.run(
                 [str(binary), "stdin", "--no-banner", "--no-color", "--log-level", "error", "--redact", *_judging_arguments(scratch, report)],
-                cwd=scratch, timeout=VET_TIMEOUT_SECONDS, input_text=_vetted_text(text),
+                cwd=scratch, timeout=VET_TIMEOUT_SECONDS, input_text=f"{VET_OPENING}{text}",
             )
             return not scanner_findings(GITLEAKS_SCANNER, _read_report(report), vet.returncode)
     except (CannotJudge, process.ProcessError, OSError):

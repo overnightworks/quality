@@ -143,6 +143,28 @@ def test_a_stalled_vet_withholds_the_text(build_repo, served_scanners, elsewhere
     assert "boom" not in out + err
 
 
+@pytest.mark.parametrize(
+    "stderr",
+    [
+        f"\x1b[1m{FAKE_KEY}\x1b[0m\x1b[2m\n",
+        f"\x1b[{FAKE_KEY}\n",
+        f"\x1b(B{FAKE_KEY}\n",
+        f"\x9b1m{FAKE_KEY}\n",
+        "\x1b[31mboom\x1b[0m\n",
+    ],
+    ids=["colour around a key", "a cursor code before a key", "a charset selection", "an 8-bit control", "a clean coloured line"],
+)
+def test_a_text_holding_a_terminal_code_is_withheld_without_a_vet(build_repo, served_scanners, elsewhere, capsys, stderr):
+    fake_gitleaks(served_scanners, on_scan=vetting("exit 0"))
+    ruff = fake_ruff(elsewhere, f"printf '%s' {shlex.quote(stderr)} >&2; exit 2")
+    code, out, err = refused(build_repo({"src/a.py": "x = 1\n"}), capsys, locate_ruff=lambda: str(ruff))
+    assert code == 2
+    assert area_fact(out, "code") == "ruff exited 2 · 1 stderr line withheld · not cleared by gitleaks"
+    assert not (served_scanners / "gitleaks.vetted").exists()
+    assert FAKE_KEY not in out + err
+    assert "boom" not in out + err
+
+
 @pytest.mark.integration
 def test_no_scratch_directory_withholds_the_text(tmp_path, monkeypatch):
     monkeypatch.setattr(tempfile, "tempdir", str(tmp_path / "missing"))
@@ -156,6 +178,8 @@ def test_a_clean_run_starts_no_vet(build_repo, served_scanners, elsewhere, capsy
     fake_scanner(served_scanners, scanners.OSV_SCANNER, reporting(OUTPUTS / "osv-scanner-clean.json", 0, "noted"))
     ruff = fake_ruff(elsewhere, f"{noted}; echo '[]'")
     zizmor = fake_zizmor(elsewhere / "zizmor", f"{noted}; echo '[]'")
+    for binary in (served_scanners / scanners.ACTIONLINT, served_scanners / scanners.OSV_SCANNER, ruff, elsewhere / "zizmor" / scanners.ZIZMOR):
+        binary.write_text(binary.read_text().replace("#!/bin/sh\n", "#!/bin/sh\necho noted >&2\n", 1))
     code, _, _ = refused(judged_repository(build_repo), capsys, locate_ruff=lambda: str(ruff), locate_zizmor=zizmor)
     assert code == 0
     assert not (served_scanners / "gitleaks.vetted").exists()
@@ -199,16 +223,12 @@ def test_the_vet_judges_as_the_secret_scan_judges(build_repo, served_scanners, e
         (f"error:\t{FAKE_KEY}\nsecond\n", True, False),
         (multi_line_key() + "three\nmore\nlines\n", True, False),
         (f"{FAKE_KEY}\n" + "tidy\n" * 6, True, False),
-        (f"error: \x1b[1m{FAKE_KEY}\x1b[0m\nsecond\n", True, False),
-        (f"error: {FAKE_KEY}\x1b[0mword\nsecond\n", True, False),
-        (f"error: \x1b[1m{FAKE_KEY}\x1b[0m \x1b[2mat line 3\nsecond\n", True, False),
-        (f"error: \x1b[{FAKE_KEY}\nsecond\n", True, False),
         (f"aws_access_key_id = {FAKE_KEY}  # gitleaks:allow\nsecond\n", True, False),
         (f"%PDF-1.4\naws_access_key_id = {FAKE_KEY}\n", True, False),
         (f"aws_access_key_id = {FAKE_KEY}\nsecond\n", True, True),
     ],
     ids=[
-        "clean text", "a key", "a key after a tab", "a multi-line key", "a key above the tail", "a key wrapped in colour", "a key before a colour reset", "colour on both sides of a key", "a key after an escape bracket", "a key beside gitleaks:allow",
+        "clean text", "a key", "a key after a tab", "a multi-line key", "a key above the tail", "a key beside gitleaks:allow",
         "a binary type's first bytes", "a .gitleaksignore in the repository",
     ],
 )
