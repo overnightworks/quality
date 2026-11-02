@@ -627,6 +627,7 @@ def test_a_workflows_row_that_could_not_check_carries_no_extent(drive_workflows,
     run = drive_workflows(workflow_pair, lint="echo boom >&2; exit 3")
     row = area_row(run.out, Area.WORKFLOWS)
     assert (run.code, row.event, cli.OFFLINE_AUDITS not in workflows_row(run.out)) == (2, cli.AreaEvent.NOT_CHECKED, True)
+    assert cli.OFFLINE_AUDITS not in run.out + run.err
 
 
 def test_a_path_and_a_message_with_control_characters_print_escaped_and_forge_no_line(drive_workflows, workflow_pair, edited_report):
@@ -637,6 +638,7 @@ def test_a_path_and_a_message_with_control_characters_print_escaped_and_forge_no
     (row,) = [line for line in area_block(run.out, Area.WORKFLOWS) if isinstance(line, FindingLine)]
     assert (row.location, row.row.detail) == (printable(f"{path}:{recorded_entry('actionlint')['line']}"), (printable(message),))
     assert_every_line_starts_with_the_door(run.out.splitlines())
+    assert run.err == ""
 
 
 # ---- mise finds the scanners (#228 rule 4) ----

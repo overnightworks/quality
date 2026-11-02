@@ -286,6 +286,14 @@ def test_an_event_findings_detail_prints_escaped_under_its_row_before_the_fix(at
     assert OWN_SGR.sub("", findings_written([found], Terminal)) == printed
 
 
+def test_at_a_terminal_each_detail_line_is_painted_as_an_area_rows_fact_is(painted_like_an_area_row):
+    _, _, fact_start, fact_end = painted_like_an_area_row
+    found = Finding("some-rule", "a.env", None, "a fact", "a fix", detail=("one", "two"), event=FindingEvent.BROKEN)
+    styled = findings_written([found], Terminal).splitlines()
+    detail_lines = [line for line in styled if output.DETAIL_MARKER in line]
+    assert (len(detail_lines), all(line.startswith(fact_start) and line.endswith(fact_end) for line in detail_lines)) == (2, True)
+
+
 ENTRY = Example("copy this", ("[[table]]", 'key = "esc\x1b"'))
 
 
