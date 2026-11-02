@@ -2,18 +2,24 @@ import datetime
 import io
 import json
 import shlex
+import subprocess
 import zipfile
 from pathlib import Path
 
-from quality import scanners
+from quality import advisories, scanners
 
 OSV = scanners.OSV_SCANNER
 ADVISORY_ID = "GHSA-aaaa-bbbb-cccc"
 UV_LOCK_ALLOWANCE = {"identifier": ADVISORY_ID, "lock": "uv.lock", "item": "#116", "reason": "fixture"}
-AFFECTED_LINE = f"osv-scanner {ADVISORY_ID} (CVE-2020-1): PyPI pyyaml 5.3.1 is affected."
-UPGRADE_LINE = "Fix: upgrade pyyaml to >= 5.4 (uv lock --upgrade-package pyyaml)"
-VULNERABLE = (("pyyaml", "5.3.1"),)
+ADVISORY_LINK = f"{advisories.OSV_URL}{ADVISORY_ID}"
+PACKAGE_NAME = "pyyaml"
+VULNERABLE = ((PACKAGE_NAME, "5.3.1"),)
 SAFE = (("pyyaml", "6.0.2"),)
+
+
+def upgrade_fix(lock: str = "uv.lock", package: str = PACKAGE_NAME) -> str:
+    """The hint of `lock`'s kind for `package`, which is the fix of a lock at the repository root."""
+    return advisories.lock_kind(lock).upgrade_hint.format(package=package)
 
 
 def uv_lock(packages=VULNERABLE) -> str:
@@ -78,3 +84,26 @@ def allowance_config(
         for key, value in values.items() if value is not None
     )
     return "[[advisories.allow]]\n" + entries
+
+
+def drop_fixed_versions(report: dict) -> None:
+    for vulnerability in package_of(report)["vulnerabilities"]:
+        for versions in vulnerability["affected"][0]["ranges"]:
+            versions["events"] = [event for event in versions["events"] if "fixed" not in event]
+
+
+def npm_report(package: str, affected_name: str):
+    """An edit of the finding fixture into an npm finding for `package` whose osv record fixes `affected_name`."""
+    def edit(report: dict) -> None:
+        found = package_of(report)
+        found["package"].update(name=package, ecosystem="npm", version="4.6.0")
+        found["vulnerabilities"][0]["affected"][0]["package"] = {"name": affected_name, "ecosystem": "npm"}
+    return edit
+
+
+def linked_lock_repo(build_repo) -> Path:
+    """uv.lock, and speech/uv.lock as a tracked link to it: two tracked names for one resolved file."""
+    repo = build_repo({"uv.lock": uv_lock(), "speech/keep": "x\n"})
+    (repo / "speech/uv.lock").symlink_to("../uv.lock")
+    subprocess.run(["git", "-C", str(repo), "add", "speech/uv.lock"], check=True)
+    return repo

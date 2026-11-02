@@ -12,9 +12,10 @@ from datetime import date
 from pathlib import Path, PurePosixPath
 
 from quality import pip_requirements, process, repository, scanners
-from quality.config import CONFIG_PATH, AdvisoryAllowance
+from quality.config import ADVISORY_ALLOWANCE_HEADING, CONFIG_PATH, AdvisoryAllowance
+from quality.output import SEPARATOR
 from quality.pip_requirements import Requirement
-from quality.report import Finding
+from quality.report import Finding, FindingEvent, shell_word
 from quality.rules import Rule
 from quality.scanners import ScannerError
 
@@ -29,39 +30,42 @@ OSV_FINDINGS_FOUND = 1
 RANGE_TYPES_WITH_VERSIONS = ("ECOSYSTEM", "SEMVER")  # a GIT range's `fixed` is a commit, not a version
 DOWNLOAD_FAILURES = (OSError, ValueError, http.client.HTTPException)
 OSV_URL = "https://osv.dev/vulnerability/"
+NO_FIXED_VERSION = "no fixed version listed"  # what osv lists, not a claim that no fix exists
 
 
 @dataclass(frozen=True)
 class LockKind:
     ecosystem: str
     parse_as: str  # the format name osv-scanner is told to read the file as: `--lockfile=<parse_as>:<path>`
-    upgrade_hint: str  # {package} is the advisory's package
-    hint_is_command: bool = False  # a command lets the tool pick the version, so beside a list of fixed versions to choose from it is left out
+    upgrade_hint: str  # {package} is the advisory's package, as a shell word
 
 
 LOCK_KINDS = {
-    "uv.lock": LockKind(PYTHON_ECOSYSTEM, "uv.lock", "uv lock --upgrade-package {package}", hint_is_command=True),
+    "uv.lock": LockKind(PYTHON_ECOSYSTEM, "uv.lock", "uv lock --upgrade-package {package}"),
     "pnpm-lock.yaml": LockKind(
-        "npm", "pnpm-lock.yaml", "upgrade it, or its parent when it is transitive, or set a pnpm override in package.json"
+        "npm", "pnpm-lock.yaml", "upgrade each listed package, or its parent when it is transitive, or set a pnpm override in package.json"
     ),
 }
 REQUIREMENTS_KIND = LockKind(
-    PYTHON_ECOSYSTEM, "requirements.txt", "raise its pin, and compile the file again when it is generated"
+    PYTHON_ECOSYSTEM, "requirements.txt", "raise each listed package's pin, and compile the file again when it is generated"
 )
 
 
 @dataclass(frozen=True)
 class Affected:
     """One advisory group that affects one package in one tracked lock file; `ids` are every id and alias of the
-    group, `subject` names the group and the package as the finding prints them."""
+    group, `subject` names the group and the package as the allowed line prints them, `fact` as the finding's row does."""
 
     lock: str
     subject: str
     ids: frozenset[str]
+    fact: str
     fix: str
 
-    def finding(self, note: str = "") -> Finding:
-        return Finding(Rule.ADVISORY, self.lock, None, f"{scanners.OSV_SCANNER} {self.subject} is affected{note}.", self.fix)
+    def finding(self, *later_facts: str) -> Finding:
+        return Finding(
+            Rule.ADVISORY, self.lock, None, SEPARATOR.join((self.fact, *later_facts)), self.fix, event=FindingEvent.AFFECTED
+        )
 
 
 @dataclass(frozen=True)
@@ -134,19 +138,19 @@ def apply_allowances(
     findings: list[Finding] = []
     allowed: list[str] = []
     used: set[AdvisoryAllowance] = set()
-    conflicts: dict[tuple[AdvisoryAllowance, ...], Affected] = {}
+    conflicts: dict[tuple[AdvisoryAllowance, ...], None] = {}
     for group in affected:
         matching = tuple(allowance for allowance in by_lock.get(group.lock, ()) if allowance.id in group.ids)
         used.update(matching)
         if len(matching) > 1:
-            conflicts.setdefault(matching, group)
+            conflicts.setdefault(matching, None)
         if len(matching) != 1:
             findings.append(group.finding())
         elif matching[0].until < today:
-            findings.append(group.finding(f"; its allowance ran out on {matching[0].until} ({matching[0].item})"))
+            findings.append(group.finding(f"allowance ran out on {matching[0].until} ({matching[0].item})"))
         else:
             allowed.append(_allowed_line(group, matching[0]))
-    findings += [_conflict(entries, group) for entries, group in conflicts.items()]
+    findings += [_conflict(entries) for entries in conflicts]
     findings += [_orphan(allowance) for allowance in allowances if allowance not in used]
     return AdvisoryScan(tuple(findings), tuple(allowed))
 
@@ -155,19 +159,19 @@ def _allowed_line(group: Affected, allowance: AdvisoryAllowance) -> str:
     return f"  allowed {group.lock} {group.subject} until {allowance.until} ({allowance.item}) - {allowance.reason}"
 
 
-def _conflict(entries: tuple[AdvisoryAllowance, ...], group: Affected) -> Finding:
+def _conflict(entries: tuple[AdvisoryAllowance, ...]) -> Finding:
     names = " and ".join(entry.id for entry in entries)
     return Finding(
-        Rule.ADVISORY, CONFIG_PATH, None,
-        f"the allowances for {names} in {group.lock} match one advisory group, so neither allows it.",
-        f"keep one [[advisories.allow]] entry for {group.subject}",
+        Rule.ADVISORY, CONFIG_PATH, None, SEPARATOR.join((f"{names} in {entries[0].lock} match one advisory", "none allows it")),
+        f"keep one {ADVISORY_ALLOWANCE_HEADING} entry per advisory", event=FindingEvent.CONFLICT,
     )
 
 
 def _orphan(allowance: AdvisoryAllowance) -> Finding:
     return Finding(
-        Rule.ADVISORY, CONFIG_PATH, None, f"the allowance for {allowance.id} in {allowance.lock} matches no advisory.",
-        "delete the [[advisories.allow]] entry; deleting an allowance is no loosening and needs no door",
+        Rule.ADVISORY, CONFIG_PATH, None, f"{allowance.id} in {allowance.lock} matches no advisory",
+        f"delete the {ADVISORY_ALLOWANCE_HEADING} entry; deleting an allowance is no loosening and needs no door",
+        event=FindingEvent.UNUSED,
     )
 
 
@@ -376,32 +380,30 @@ def _package_findings(lock: str, package: dict) -> list[Affected]:
         aliases = sorted({*others, *_strings(group["aliases"])} - {named})
         records_of_group = [records[identifier] for identifier in [named, *others] if identifier in records]
         listed = f" ({', '.join(aliases)})" if aliases else ""
+        state, fix = _remedy(lock, name, named, ecosystem, records_of_group)
         groups.append(Affected(
             lock, f"{named}{listed}: {ecosystem} {name} {version}", frozenset({named, *aliases}),
-            _fix(lock, name, named, ecosystem, records_of_group),
+            SEPARATOR.join(filter(None, (f"{name} {version}", named, state))), fix,
         ))
     return groups
 
 
-def _fix(lock: str, package: str, advisory: str, ecosystem: str, records: list[dict]) -> str:
+def _remedy(lock: str, package: str, advisory: str, ecosystem: str, records: list[dict]) -> tuple[str, str]:
+    """What the row says of a fix (what osv lists), and the `fix:` (what a person does)."""
     entries = [
         entry for record in records for entry in _dicts(record.get("affected", []))
         if _names_package(entry, package, ecosystem)
     ]
     if not entries:
-        return f"see {OSV_URL}{advisory}"
+        return "", f"see {OSV_URL}{advisory}"
     fixed = list(dict.fromkeys(version for entry in entries for version in _fixed_versions(entry)))
     if not fixed:
-        return f"osv lists no fixed version: remove or replace {package}; see {OSV_URL}{advisory}"
+        return NO_FIXED_VERSION, f"remove or replace {package}; see {OSV_URL}{advisory}"
     directory = PurePosixPath(lock).parent
-    folder = "" if str(directory) == "." else f"in {directory}/"
-    hint = lock_kind(lock).upgrade_hint.format(package=package)
-    if len(fixed) > 1:
-        guidance = [folder] if folder else []
-        if not lock_kind(lock).hint_is_command:
-            guidance.append(hint)
-        return f"upgrade {package} to a fixed version: {', '.join(fixed)}" + (f" ({': '.join(guidance)})" if guidance else "")
-    return f"upgrade {package} to >= {fixed[0]} ({folder + ': ' if folder else ''}{hint})"
+    folder = "" if str(directory) == "." else f"in {directory}/: "
+    word = shell_word(package)
+    hint = lock_kind(lock).upgrade_hint.format(package=word) if word else f"see {OSV_URL}{advisory}"
+    return f"fixed in {', '.join(fixed)}", f"{folder}{hint}"
 
 
 def _dicts(value: object) -> list[dict]:

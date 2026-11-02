@@ -120,6 +120,8 @@ class FindingEvent(StrEnum):
     BROKEN = "broken"
     INVALID = "invalid"
     INSECURE = "insecure"
+    AFFECTED = "affected"
+    CONFLICT = "conflict"
     SECRET = "secret"  # noqa: S105 - the event word of a secret finding and no password
 
 
