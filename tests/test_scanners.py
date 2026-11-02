@@ -326,7 +326,7 @@ def recorded_entry(scanner: str) -> dict:
 
 @pytest.mark.parametrize(("scanner", "event"), [("actionlint", "INVALID"), ("zizmor", "INSECURE")])
 def test_a_workflow_finding_carries_the_event_of_its_kind_and_the_vocabulary(scanner, event):
-    """#228 decision 3 and 12, O36: one event word per kind, a fact and a fix that end in no full stop and name no rule id."""
+    """O36: one event word per kind, a fact and a fix that end in no full stop and name no rule id."""
     (found,) = workflow_findings(scanner, recorded(f"{scanner}-finding.json"), FINDING_EXIT[scanner])
     assert found.event is FindingEvent[event]
     assert_finding_vocabulary(found)
@@ -430,7 +430,7 @@ def workflow_rows(capsys) -> list[tuple[str, FindingEvent, str]]:
     ids=["unpinned-action-without-permissions", "invalid-runs-on-expression", "local-reusable-call-with-dot-slash"],
 )
 def test_a_known_bad_workflow_fails(workflow_repo, installed_scanners, capsys, workflow, location, event):
-    """#15 rules 3 and 4: the real scanners fail a known bad workflow at file:line, as a row of its kind."""
+    """The real scanners fail a known bad workflow at file:line, as a row of its kind."""
     assert scan(workflow_repo(workflow)) == 1
     assert (location, FindingEvent[event]) in [(found, kind) for found, kind, _ in workflow_rows(capsys)]
 
@@ -458,7 +458,7 @@ ONLY_AN_ONLINE_AUDIT_FLAGS_THIS = (
 
 @pytest.mark.scanner
 def test_a_clean_row_says_a_workflow_only_an_online_audit_would_flag_was_audited_offline_only(workflow_repo, installed_scanners, capsys):
-    """#15 rule 5, the operator's ruling of 1.11.2026: a workflow only zizmor's online audit (impostor-commit) would flag passes, and its row says offline audits only."""
+    """a workflow only zizmor's online audit (impostor-commit) would flag passes, and its row says offline audits only."""
     assert scan(workflow_repo(ONLY_AN_ONLINE_AUDIT_FLAGS_THIS)) == 0
     assert area_fact(capsys.readouterr().out, Area.WORKFLOWS).endswith(cli.OFFLINE_AUDITS)
 
@@ -485,7 +485,7 @@ INLINE_IGNORE = UNPINNED_WITHOUT_PERMISSIONS.replace(
 def test_what_the_scanned_repository_says_never_silences_a_workflow_finding(
     build_repo, installed_scanners, capsys, workflow, caller_files, location, event, fact
 ):
-    """#15 material risk: a caller's scanner config or ignore comment cannot turn a failing workflow green, and the row
+    """A caller's scanner config or ignore comment cannot turn a failing workflow green, and the row
     of the scenario's own audit stands, so another audit's row cannot stand in for a suppressed one."""
     repo = build_repo({".github/workflows/w.yml": workflow, **caller_files})
     assert scan(repo) == 1
@@ -508,10 +508,6 @@ def test_a_shellcheck_on_path_never_runs_during_workflow_lint(build_repo, instal
 
 # ---- the workflows block, through the door with the recorded reports ----
 
-RECORDED_LINT, RECORDED_SECURITY = OUTPUTS / "actionlint-finding.json", OUTPUTS / "zizmor-finding.json"
-CLEAN_REPORT = "echo '[]'"
-WORKFLOW_PAIR = {".github/workflows/a.yml": "on: push\n", ".github/workflows/w.yml": "on: push\n"}
-
 
 def prints(report: Path, exit_code: int) -> str:
     return f"cat '{report}'; exit {exit_code}"
@@ -531,11 +527,16 @@ class WorkflowRun:
 
 
 @pytest.fixture
+def workflow_pair() -> dict[str, str]:
+    return {".github/workflows/a.yml": "on: push\n", ".github/workflows/w.yml": "on: push\n"}
+
+
+@pytest.fixture
 def drive_workflows(build_repo, served_scanners, elsewhere, capsys):
     """`drive(files, lint=…, security=…)` runs `hygiene` over a repository tracking `files`, with a fake actionlint and zizmor
     running the given shell (clean by default); `deleted` names tracked files taken from the tree before the run."""
 
-    def drive(files: dict[str, str], lint: str = CLEAN_REPORT, security: str = CLEAN_REPORT, deleted: tuple[str, ...] = ()) -> WorkflowRun:
+    def drive(files: dict[str, str], lint: str = "echo '[]'", security: str = "echo '[]'", deleted: tuple[str, ...] = ()) -> WorkflowRun:
         repo = build_repo(files)
         for name in deleted:
             (repo / name).unlink()
@@ -549,12 +550,16 @@ def drive_workflows(build_repo, served_scanners, elsewhere, capsys):
 
 
 @pytest.fixture
-def red_workflows(drive_workflows) -> WorkflowRun:
-    return drive_workflows(WORKFLOW_PAIR, prints(RECORDED_LINT, 1), prints(RECORDED_SECURITY, 12))
+def red_workflows(drive_workflows, workflow_pair) -> WorkflowRun:
+    return drive_workflows(
+        workflow_pair,
+        prints(OUTPUTS / "actionlint-finding.json", FINDING_EXIT["actionlint"]),
+        prints(OUTPUTS / "zizmor-finding.json", FINDING_EXIT["zizmor"]),
+    )
 
 
 def test_the_workflows_block_prints_lint_before_security_each_message_under_its_row_and_one_fix_per_run(red_workflows):
-    """#228 rule 7, decision 4, O37: rows, details and fixes equal what the rules returned, in order."""
+    """O37: rows, details and fixes equal what the rules returned, in order."""
     assert [finding.rule for finding in red_workflows.area.findings] == [Rule.WORKFLOW_LINT, Rule.WORKFLOW_SECURITY]
     block = area_block(red_workflows.out, Area.WORKFLOWS)
     assert_block_prints(block, red_workflows.area.findings, ())
@@ -582,15 +587,15 @@ def test_a_red_workflows_run_prints_no_prelude_and_no_line_starts_with_a_rule_id
     ],
     ids=["the same audit twice", "two audits"],
 )
-def test_equal_zizmor_fixes_share_one_fix_line_and_different_ones_do_not(drive_workflows, edited_report, edit, fixes):
-    """#228 rule 7: one `fix:` per run of equal fixes, after the run's last row."""
+def test_equal_zizmor_fixes_share_one_fix_line_and_different_ones_do_not(drive_workflows, workflow_pair, edited_report, edit, fixes):
+    """One `fix:` per run of equal fixes, after the run's last row."""
 
     def twice(report: list) -> None:
         report.append(copy.deepcopy(report[0]))
         edit(report[1])
 
     report = edited_report("zizmor-finding.json", twice)
-    run = drive_workflows(WORKFLOW_PAIR, security=prints(report, 12))
+    run = drive_workflows(workflow_pair, security=prints(report, 12))
     block = area_block(run.out, Area.WORKFLOWS)
     assert_block_prints(block, run.area.findings, ())
     assert (sum(isinstance(line, FindingLine) for line in block), sum(isinstance(line, FixLine) for line in block)) == (2, fixes)
@@ -600,7 +605,7 @@ def test_equal_zizmor_fixes_share_one_fix_line_and_different_ones_do_not(drive_w
     ("tracked", "deleted"), [(0, 0), (1, 0), (2, 0), (2, 1)], ids=["none", "one", "two", "two, one deleted from the tree"]
 )
 def test_a_clean_workflows_row_counts_the_workflow_files_the_tree_holds_and_ends_with_the_offline_audits(drive_workflows, tracked, deleted):
-    """The ruling of 1.11.2026, O38: N is what the tree holds; the disclosure follows."""
+    """O38: N is what the tree holds; the disclosure follows."""
     names = [f".github/workflows/{name}.yml" for name in ("a", "b")[:tracked]]
     run = drive_workflows({name: "on: push\n" for name in names}, deleted=tuple(names[:deleted]))
     fact = area_fact(run.out, Area.WORKFLOWS)
@@ -617,18 +622,18 @@ def test_a_workflows_row_with_a_finding_carries_no_extent(red_workflows):
     assert cli.OFFLINE_AUDITS not in workflows_row(red_workflows.out)
 
 
-def test_a_workflows_row_that_could_not_check_carries_no_extent(drive_workflows):
+def test_a_workflows_row_that_could_not_check_carries_no_extent(drive_workflows, workflow_pair):
     """O39, acceptance 7: a refusal names its reason and none of the clean row's words."""
-    run = drive_workflows(WORKFLOW_PAIR, lint="echo boom >&2; exit 3")
+    run = drive_workflows(workflow_pair, lint="echo boom >&2; exit 3")
     row = area_row(run.out, Area.WORKFLOWS)
     assert (run.code, row.event, cli.OFFLINE_AUDITS not in workflows_row(run.out)) == (2, cli.AreaEvent.NOT_CHECKED, True)
 
 
-def test_a_path_and_a_message_with_control_characters_print_escaped_and_forge_no_line(drive_workflows, edited_report):
-    """Acceptance 9, #97 rule 2: the row's path and the detail line pass through `printable`."""
+def test_a_path_and_a_message_with_control_characters_print_escaped_and_forge_no_line(drive_workflows, workflow_pair, edited_report):
+    """the row's path and the detail line pass through `printable`."""
     path, message = ".github/workflows/a\x1b\u202eb.yml", "::error::\x1b[31mforged"
     report = edited_report("actionlint-finding.json", lambda entries: entries[0].update(filepath=path, message=message))
-    run = drive_workflows(WORKFLOW_PAIR, lint=prints(report, 1))
+    run = drive_workflows(workflow_pair, lint=prints(report, 1))
     (row,) = [line for line in area_block(run.out, Area.WORKFLOWS) if isinstance(line, FindingLine)]
     assert (row.location, row.row.detail) == (printable(f"{path}:{recorded_entry('actionlint')['line']}"), (printable(message),))
     assert_every_line_starts_with_the_door(run.out.splitlines())
