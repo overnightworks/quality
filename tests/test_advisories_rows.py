@@ -551,7 +551,7 @@ def test_an_allowance_that_ran_out_leaves_no_note(drive_advisories):
 
 
 def test_an_allowed_advisory_leaves_no_line_before_the_area_rows(drive_advisories):
-    """The prelude holds no allowed line: the first line is the first area's row."""
+    """The first line of the output is the first area's row."""
     run = drive_advisories({"uv.lock": uv_lock(), "quality/config.toml": entry()})
     assert (run.out.splitlines()[0].split()[1], run.err) == (next(iter(Area)), "")
 

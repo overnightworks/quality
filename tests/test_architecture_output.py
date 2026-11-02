@@ -180,7 +180,7 @@ def test_warnings_stand_in_order_when_every_contract_is_kept(build_repo, capsys)
     ids=["without a config", "a warn note", "a grimp warning"],
 )
 def test_no_import_contract_line_stands_before_the_area_rows(build_repo, capsys, files):
-    """O15: the notes leave the prelude."""
+    """O15: the first line is the first area's row, with no import-contract line before it."""
     repo = build_repo(files)
     _, out, err = hygiene_streams(capsys, repo)
     printed_lines = [line for line in out.splitlines() if line.startswith(Rule.IMPORT_CONTRACT)]

@@ -8,7 +8,7 @@ import pytest
 
 from quality import check, cli
 from quality.output import Glyph
-from quality.report import FindingEvent, NoteEvent, headline, printable
+from quality.report import FindingEvent, NoteEvent, headline
 from quality.rules import Area, Rule
 from tests.support.check import (
     area_block,
@@ -19,6 +19,7 @@ from tests.support.check import (
     assert_finding_vocabulary,
     extent_counts,
     hygiene_run,
+    hygiene_streams,
     installed_ruff,
 )
 from tests.support.python_lint import EVAL, EVAL_REASON, OWNER, PRINT, PRINT_REASON, fake_ruff, ruff_entry
@@ -47,9 +48,7 @@ def drive_code(build_repo, capsys):
 
     def drive(files: dict[str, str] | Path, locate_ruff: Callable[[], str] = installed_ruff) -> CodeRun:
         repo = files if isinstance(files, Path) else build_repo(files)
-        code = cli.main(["hygiene", str(repo)], locate_ruff=locate_ruff, clock=lambda: 0.0)
-        captured = capsys.readouterr()
-        return CodeRun(repo, locate_ruff, code, captured.out, captured.err)
+        return CodeRun(repo, locate_ruff, *hygiene_streams(capsys, repo, locate_ruff))
 
     return drive
 
@@ -210,15 +209,17 @@ def test_a_clean_code_row_counts_each_honoured_owner_as_allowed(drive_code, file
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    ("path", "reason"),
-    [("src/p/a\x1b[31m\u202e.py", "why"), ("src/p/a.py", "why \x1b[31m \u202e here")],
+    ("path", "reason", "original", "escaped"),
+    [
+        ("src/p/a\x1b[31m\u202e.py", "why", "src/p/a\x1b[31m\u202e.py", "src/p/a\\x1b[31m\\u202e.py"),
+        ("src/p/a.py", "why \x1b[31m \u202e here", "why \x1b[31m \u202e here", "why \\x1b[31m \\u202e here"),
+    ],
     ids=["path", "reason"],
 )
-def test_an_owner_note_prints_its_path_and_reason_escaped(drive_code, path, reason):
+def test_an_owner_note_prints_its_path_and_reason_escaped(drive_code, path, reason, original, escaped):
     run = drive_code({path: f"# ruff: noqa: T201 - {reason}\n{PRINT}\n"})
-    original = path if reason == "why" else reason
     assert_block_prints(area_block(run.out, Area.CODE), (), run.area.notes)
-    assert printable(original) in run.out
+    assert escaped in run.out
     assert original not in run.out
     assert_every_line_starts_with_the_door((run.out + run.err).splitlines())
     assert run.err == ""
@@ -248,23 +249,24 @@ def test_an_owner_note_stands_under_a_refused_row_only_where_its_rule_judged(dri
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    ("path", "message"),
-    [("src/p/a\x1b[31m\u202e.py", None), ("src/p/a.py", "bad \x1b[31m \u202e message")],
+    ("path", "message", "original", "escaped"),
+    [
+        ("src/p/a\x1b[31m\u202e.py", None, "src/p/a\x1b[31m\u202e.py", "src/p/a\\x1b[31m\\u202e.py"),
+        ("src/p/a.py", "bad \x1b[31m \u202e message", "bad \x1b[31m \u202e message", "bad \\x1b[31m \\u202e message"),
+    ],
     ids=["path", "message"],
 )
-def test_a_row_prints_a_path_and_a_ruff_message_escaped(drive_code, build_repo, elsewhere, path, message):
+def test_a_row_prints_a_path_and_a_ruff_message_escaped(drive_code, build_repo, elsewhere, path, message, original, escaped):
     if message is None:
         run = drive_code({path: f"{PRINT}\n"})
-        original = path
     else:
         repo = build_repo({path: f"{PRINT}\n"})
         entry = {**ruff_entry(code="T201", filename=os.path.realpath(repo / path)), "message": message}
         (elsewhere / "report.json").write_text(json.dumps([entry]))
         binary = fake_ruff(elsewhere, f"cat {elsewhere / 'report.json'}")
         run = drive_code(repo, lambda: str(binary))
-        original = message
     assert_block_prints(area_block(run.out, Area.CODE), run.area.findings, ())
-    assert printable(original) in run.out
+    assert escaped in run.out
     assert original not in run.out
     assert_every_line_starts_with_the_door((run.out + run.err).splitlines())
     assert (run.code, run.err) == (1, "")
