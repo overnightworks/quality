@@ -66,7 +66,7 @@ def test_an_affected_lock_is_red_and_names_the_advisory_and_the_fix(build_repo, 
     ids=["rule 2 several fixed versions", "cell 5 no fixed event", "cell 26 an unknown ecosystem beside PyPI"],
 )
 def test_the_fix_follows_what_osv_lists(build_repo, publish_database, installed_scanners, run_gate, records, in_fact, fix_is):
-    """#53 rule 2, cells 5 and 26: the row and its fix are built from the affected entries osv lists for the package."""
+    """The row and its fix are built from the affected entries osv lists for the package."""
     publish_database(records)
     code, output = run_gate(tracked_lock_repo(build_repo))
     assert code == 1, output
@@ -160,8 +160,12 @@ def test_the_live_database_condemns_pyyaml_5_3_1(build_repo, installed_scanners,
     """#53 cell 4 and #176 canary: the real world, over the network."""
     code, output = run_gate(build_repo({name: text}))
     assert code == 1, output
-    assert "GHSA-8q59-q68h-6hv4" in output
-    assert "upgrade pyyaml to >= 5.4" in output
+    assert any(
+        (location, row.event) == (name, FindingEvent.AFFECTED)
+        and row.fix == upgrade_fix(name)
+        and all(word in row.fact for word in (PACKAGE_NAME, "5.3.1", "5.4"))
+        for location, row in area_finding_rows(output, Area.DEPENDENCIES)
+    ), output
 
 
 # ---- no network, no real osv-scanner ----
@@ -498,7 +502,9 @@ def test_a_package_osv_cannot_match_to_the_advisory_gets_only_the_advisory_link(
     fake_scanner(served_scanners, OSV, reporting(report, 1))
     code, output = run_gate(tracked_lock_repo(build_repo))
     assert code == 1
-    assert [row.fix for _, row in area_finding_rows(output, Area.DEPENDENCIES)] == [f"see {ADVISORY_LINK}"]
+    ((_, row),) = area_finding_rows(output, Area.DEPENDENCIES)
+    assert (row.fix.endswith(ADVISORY_LINK), PACKAGE_NAME in row.fix) == (True, False)
+    assert row.fact.count(SEPARATOR) == 1, row.fact
 
 
 def test_a_hanging_osv_is_cannot_judge_within_its_time_limit(
@@ -527,8 +533,12 @@ QWEN = "speech/providers/qwen/uv.lock"
 PILLOW = "GHSA-462x-pgg6-55fp (CVE-2026-112395): PyPI pillow 12.3.0"
 
 
-def affected(lock=QWEN, subject=PILLOW, ids=("GHSA-462x-pgg6-55fp", "CVE-2026-112395")) -> advisories.Affected:
-    return advisories.Affected(lock, subject, frozenset(ids), SEPARATOR.join(("pillow 12.3.0", ids[0])), "upgrade pillow")
+def affected(
+    lock=QWEN, subject=PILLOW, ids=("GHSA-462x-pgg6-55fp", "CVE-2026-112395"),
+    fact=None,
+) -> advisories.Affected:
+    fact = fact or SEPARATOR.join(("pillow 12.3.0", "GHSA-462x-pgg6-55fp"))
+    return advisories.Affected(lock, subject, frozenset(ids), fact, "upgrade pillow")
 
 
 def allowing(identifier="GHSA-462x-pgg6-55fp", lock=QWEN, until=TODAY) -> AdvisoryAllowance:
@@ -551,6 +561,7 @@ YESTERDAY = TODAY - datetime.timedelta(days=1)
 VOXCPM = "speech/providers/voxcpm/uv.lock"
 LINKED = "speech/providers/linked/uv.lock"
 TORCH = "GHSA-462x-pgg6-55fp (CVE-2026-112395): PyPI torch 2.6.0"
+TORCH_FACT = SEPARATOR.join(("torch 2.6.0", "GHSA-462x-pgg6-55fp"))
 
 
 @pytest.mark.parametrize(
@@ -566,9 +577,9 @@ TORCH = "GHSA-462x-pgg6-55fp (CVE-2026-112395): PyPI torch 2.6.0"
         ([affected()], [allowing(lock=VOXCPM)], [red(), orphaned(lock=VOXCPM)], []),
         ([], [allowing()], [orphaned()], []),
         ([affected(), affected(LINKED)], [allowing()], [red(LINKED)], [allowed_line()]),
-        ([affected(), affected(subject=TORCH)], [allowing()], [], [allowed_line(), allowed_line(subject=TORCH)]),
-        ([affected(), affected(subject=TORCH)], [allowing(), allowing("CVE-2026-112395")],
-         [red(), red(), (CONFIG_PATH, FindingEvent.CONFLICT, ("GHSA-462x-pgg6-55fp", "CVE-2026-112395", QWEN))], []),
+        ([affected(), affected(subject=TORCH, fact=TORCH_FACT)], [allowing()], [], [allowed_line(), allowed_line(subject=TORCH)]),
+        ([affected(), affected(subject=TORCH, fact=TORCH_FACT)], [allowing(), allowing("CVE-2026-112395")],
+         [red(), red(QWEN, "torch"), (CONFIG_PATH, FindingEvent.CONFLICT, ("GHSA-462x-pgg6-55fp", "CVE-2026-112395", QWEN))], []),
         ([affected()], [], [red()], []),
     ],
     ids=[
@@ -589,35 +600,30 @@ def test_an_allowance_allows_its_advisory_in_its_lock_until_its_date(groups, all
 
 
 @pytest.mark.parametrize(
-    ("until", "edit", "code", "expected"),
-    [
-        ("2999-12-31", lambda report: None, 0,
-         ["advisory: 1 allowed",
-          f"  allowed uv.lock {ADVISORY_ID} (CVE-2020-1): PyPI pyyaml 5.3.1 until 2999-12-31 (#116) - fixture"]),
-        ("2999-12-31", drop_fixed_versions, 0,
-         ["advisory: 1 allowed",
-          f"  allowed uv.lock {ADVISORY_ID} (CVE-2020-1): PyPI pyyaml 5.3.1 until 2999-12-31 (#116) - fixture"]),
-    ],
-    ids=["cell 1 allowed until 2999", "cell 11 no fixed version"],
+    "edit", [lambda report: None, drop_fixed_versions], ids=["cell 1 allowed until 2999", "cell 11 no fixed version"]
 )
 def test_hygiene_prints_each_allowed_advisory_before_the_verdict(
-    build_repo, served_scanners, run_gate, publish_database, edited_report, until, edit, code, expected
+    build_repo, served_scanners, run_gate, publish_database, edited_report, edit
 ):
     """#116 R3, E4, E10, E11: through hygiene, an allowed advisory is printed with its date, item and reason
     and leaves the rule clean."""
     publish_database()
     report = edited_report("osv-scanner-finding.json", edit)
-    repo = build_repo({"uv.lock": uv_lock(), "quality/config.toml": allowance_config(**UV_LOCK_ALLOWANCE, until=datetime.date.fromisoformat(until))})
+    repo = build_repo({"uv.lock": uv_lock(), "quality/config.toml": allowance_config(**UV_LOCK_ALLOWANCE, until=datetime.date(2999, 12, 31))})
     fake_scanner(served_scanners, OSV, reporting(report, 1))
-    code_seen, output = run_gate(repo)
+    code, output = run_gate(repo)
+    allowed_lines = [
+        "advisory: 1 allowed",
+        f"  allowed uv.lock {ADVISORY_ID} (CVE-2020-1): PyPI pyyaml 5.3.1 until 2999-12-31 (#116) - fixture",
+    ]
     lines = output.splitlines()
-    assert code_seen == code, output
-    assert lines[lines.index(expected[0]):][:len(expected)] == expected, output
-    assert is_clean(lines[-1]) == (code == 0), output
+    assert code == 0, output
+    assert lines[lines.index(allowed_lines[0]):][:len(allowed_lines)] == allowed_lines, output
+    assert is_clean(lines[-1]), output
 
 
 def test_hygiene_prints_an_allowance_that_ran_out_as_an_affected_row(build_repo, served_scanners, run_gate, publish_database):
-    """#116 R3, E4: once the date has passed the advisory is red with the date and item, in the upgrade's row."""
+    """Once the date has passed the advisory is red with the date and item, in the upgrade's row."""
     publish_database()
     config = allowance_config(**UV_LOCK_ALLOWANCE, until=datetime.date(2000, 1, 1))
     fake_scanner(served_scanners, OSV, reporting(OUTPUTS / "osv-scanner-finding.json", 1))

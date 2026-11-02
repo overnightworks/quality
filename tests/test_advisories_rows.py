@@ -26,6 +26,7 @@ from tests.support.advisories import (
     uv_lock,
 )
 from tests.support.check import (
+    BlockLine,
     FindingLine,
     FixLine,
     area_block,
@@ -125,8 +126,11 @@ def then(*edits):
     return edit
 
 
-def fixes_and_rows(run: AdvisoryRun) -> tuple[int, int]:
-    block = area_block(run.out, Area.DEPENDENCIES)
+def points_only_to_the_advisory(name: str):
+    return lambda fix: fix.endswith(ADVISORY_LINK) and name not in fix and printable(name) not in fix
+
+
+def rows_and_fixes_of(block: list[BlockLine]) -> tuple[int, int]:
     return sum(isinstance(line, FindingLine) for line in block), sum(isinstance(line, FixLine) for line in block)
 
 
@@ -136,14 +140,14 @@ def fixes_and_rows(run: AdvisoryRun) -> tuple[int, int]:
         (lambda report: None, "pyyaml", (FIXED_VERSION,), lambda fix: fix == upgrade_fix()),
         (add_fixed_version("6.0"), "pyyaml", (FIXED_VERSION, "6.0"), lambda fix: fix == upgrade_fix()),
         (drop_fixed_versions, "pyyaml", (), lambda fix: "pyyaml" in fix and fix.endswith(ADVISORY_LINK)),
-        (rename_affected_entry("something-else"), "pyyaml", None, lambda fix: fix == f"see {ADVISORY_LINK}"),
+        (rename_affected_entry("something-else"), "pyyaml", None, points_only_to_the_advisory("pyyaml")),
         (
             then(rename_package("py;yaml"), add_fixed_version("6.0")), "py;yaml", (FIXED_VERSION, "6.0"),
             lambda fix: fix == upgrade_fix(package=shell_word("py;yaml")),
         ),
         (
             then(rename_package("py\x1byaml"), add_fixed_version("6.0")), "py\x1byaml", (FIXED_VERSION, "6.0"),
-            lambda fix: fix == f"see {ADVISORY_LINK}",
+            points_only_to_the_advisory("py\x1byaml"),
         ),
     ],
     ids=["one fixed version", "several", "none listed", "no affected entry for the package", "a shell metacharacter", "an escape character"],
@@ -204,8 +208,9 @@ PNPM_PACKAGE = npm_report("lodash", "lodash")
 def test_equal_fixes_share_one_fix_line_and_different_ones_do_not(drive_advisories, edited_report, files, edit, rows_and_fixes):
     """Rule 7: one `fix:` per run of equal fixes, and a uv fix names its package."""
     run = drive_advisories(files, edited_report("osv-scanner-finding.json", edit))
-    assert_block_prints(area_block(run.out, Area.DEPENDENCIES), run.area.findings, ())
-    assert (fixes_and_rows(run), run.code, run.err) == (rows_and_fixes, 1, "")
+    block = area_block(run.out, Area.DEPENDENCIES)
+    assert_block_prints(block, run.area.findings, ())
+    assert (rows_and_fixes_of(block), run.code, run.err) == (rows_and_fixes, 1, "")
 
 
 @pytest.mark.parametrize(

@@ -71,8 +71,8 @@ def test_two_vulnerable_versions_of_one_package_in_a_pnpm_lock_are_two_findings(
     code, output = run_gate(build_repo({FRONTEND_LOCK: lock}))
     assert code == 1, output
     assert "! 2 findings in 1 area" in output
-    assert ["4.17.15" in row.fact for _, row in area_finding_rows(output, Area.DEPENDENCIES)] == [True, False]
-    assert ["4.17.19" in row.fact for _, row in area_finding_rows(output, Area.DEPENDENCIES)] == [False, True]
+    facts = [row.fact for _, row in area_finding_rows(output, Area.DEPENDENCIES)]
+    assert [("4.17.15" in fact, "4.17.19" in fact) for fact in facts] == [(True, False), (False, True)]
 
 
 @pytest.mark.scanner
@@ -225,8 +225,10 @@ def test_a_package_listed_as_malicious_is_red_and_the_fix_is_to_remove_or_replac
     code, output = run_gate(build_repo({FRONTEND_LOCK: pnpm_lock([("evil-package", "1.0.0")])}))
     assert code == 1, output
     ((_, row),) = area_finding_rows(output, Area.DEPENDENCIES)
-    assert all(word in row.fact for word in ("MAL-2026-1", "evil-package", "1.0.0")) and row.fact.endswith(advisories.NO_FIXED_VERSION)
-    assert "evil-package" in row.fix and row.fix.endswith(f"{advisories.OSV_URL}MAL-2026-1")
+    assert all(word in row.fact for word in ("MAL-2026-1", "evil-package", "1.0.0"))
+    assert row.fact.endswith(advisories.NO_FIXED_VERSION)
+    assert "evil-package" in row.fix
+    assert row.fix.endswith(f"{advisories.OSV_URL}MAL-2026-1")
 
 
 @pytest.fixture
@@ -314,12 +316,12 @@ def test_without_a_pnpm_lock_the_npm_database_is_not_downloaded(build_repo, serv
 
 
 @pytest.mark.parametrize(
-    ("affected_name", "expected"),
-    [("lodash.merge", upgrade_fix(FRONTEND_LOCK)), ("lodash-merge", f"see {ADVISORY_LINK}")],
+    ("affected_name", "upgrades"),
+    [("lodash.merge", True), ("lodash-merge", False)],
     ids=["the same name", "Python's name rule is not npm's"],
 )
 def test_npm_names_match_exactly_as_written(
-    build_repo, served_scanners, run_gate, publish_database, edited_report, affected_name, expected
+    build_repo, served_scanners, run_gate, publish_database, edited_report, affected_name, upgrades
 ):
     """#145 I2: `lodash.merge` is not `lodash-merge`."""
     publish_database(ecosystem="npm")
@@ -328,7 +330,7 @@ def test_npm_names_match_exactly_as_written(
     code, output = run_gate(build_repo({FRONTEND_LOCK: pnpm_lock()}))
     assert code == 1, output
     ((_, row),) = area_finding_rows(output, Area.DEPENDENCIES)
-    assert row.fix.endswith(expected)
+    assert (row.fix.endswith(upgrade_fix(FRONTEND_LOCK)), row.fix.endswith(ADVISORY_LINK)) == (upgrades, not upgrades)
 
 
 PNPM_ALLOWANCE = UV_LOCK_ALLOWANCE | {"lock": FRONTEND_LOCK}
