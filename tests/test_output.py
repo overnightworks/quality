@@ -563,17 +563,23 @@ def test_a_verdict_whose_step_summary_cannot_be_written_is_exit_2_with_the_fact_
     unwritable = tmp_path / "a-directory"
     unwritable.mkdir()
     monkeypatch.setenv(output.STEP_SUMMARY_VARIABLE, str(unwritable))
-    code = cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (CHECKS_GREEN, None))
+    door = "verdict"
+    code = cli.main([door, str(repo)], fetcher_for=lambda token: lambda url: (CHECKS_GREEN, None))
     assert code == 2
-    assert output.STEP_SUMMARY_VARIABLE in capsys.readouterr().err
+    stderr = capsys.readouterr().err
+    assert stderr.startswith(f"{door}: ")
+    assert output.STEP_SUMMARY_VARIABLE in stderr
 
 
 @pytest.mark.integration
 def test_a_scoreboard_whose_step_summary_cannot_be_written_is_exit_2_with_the_fact_and_no_traceback(monkeypatch, capsys, public, tmp_path):
-    fleet_file = write_fleet(tmp_path / "fleet", [public("healthy", {"a.md": "text\n"})])
+    fleet = write_fleet(tmp_path / "fleet", [public("healthy", {"a.md": "text\n"})])
     unwritable = tmp_path / "a-directory"
     unwritable.mkdir()
     monkeypatch.setenv(output.STEP_SUMMARY_VARIABLE, str(unwritable))
-    code = cli.main(["scoreboard", str(fleet_file)], release_tags=lambda: RELEASES)
+    door = "scoreboard"
+    code = cli.main([door, str(fleet)], release_tags=lambda: RELEASES)
     assert code == 2
-    assert output.STEP_SUMMARY_VARIABLE in capsys.readouterr().err
+    stderr = capsys.readouterr().err
+    assert stderr.startswith(f"{door}: ")
+    assert output.STEP_SUMMARY_VARIABLE in stderr
