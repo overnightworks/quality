@@ -47,7 +47,7 @@ from quality.output import (
     write_rows,
     write_verdict,
 )
-from quality.report import CannotJudge, Instruction, NoteEvent, Step, headline
+from quality.report import CannotJudge, Extent, Instruction, NoteEvent, Step, headline
 from quality.rules import Area, Rule
 from quality.sonar import (
     DEPENDABOT_CONFIG,
@@ -220,15 +220,20 @@ def area_row(verdict: AreaVerdict, extent: str) -> Row:
     return Row(Glyph.CLEAN, verdict.area, AreaEvent.CLEAN, SEPARATOR.join(fact for fact in facts if fact))
 
 
-def _imports_extent(verdict: AreaVerdict, extents: Mapping[Rule, int | None]) -> str:
+def _imports_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | None]) -> str:
     return NO_CONFIG_FACT if verdict.measurement is Measurement.MEASURED_ONLY else counted(extents[Rule.IMPORT_CONTRACT], "contract")
 
 
-def _secrets_extent(verdict: AreaVerdict, extents: Mapping[Rule, int | None]) -> str:
+def _secrets_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | None]) -> str:
     return counted(extents[Rule.LEAK], "commit")
 
 
-def _debt_extent(verdict: AreaVerdict, extents: Mapping[Rule, int | None]) -> str:
+def _dependencies_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | None]) -> str:
+    judged = extents[Rule.ADVISORY]
+    return SEPARATOR.join((counted(judged.lockfiles, "lockfile"), counted(judged.packages, "package")))
+
+
+def _debt_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | None]) -> str:
     entries, pairs = counted(extents[Rule.SIZE], "entry", "entries"), counted(extents[Rule.CLONE], "clone pair")
     match verdict.measurement:
         case Measurement.MEASURED_ONLY:
@@ -239,14 +244,15 @@ def _debt_extent(verdict: AreaVerdict, extents: Mapping[Rule, int | None]) -> st
             return f"{CEILING_HELD}{SEPARATOR}{entries}, {pairs}"
 
 
-def _workflows_extent(verdict: AreaVerdict, extents: Mapping[Rule, int | None]) -> str:
+def _workflows_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | None]) -> str:
     return SEPARATOR.join((counted(extents[Rule.WORKFLOW_LINT], "workflow"), OFFLINE_AUDITS))
 
 
-JUDGED_EXTENT: dict[Area, Callable[[AreaVerdict, Mapping[Rule, int | None]], str]] = {
+JUDGED_EXTENT: dict[Area, Callable[[AreaVerdict, Mapping[Rule, Extent | None]], str]] = {
     Area.DEBT: _debt_extent,
     Area.IMPORTS: _imports_extent,
     Area.SECRETS: _secrets_extent,
+    Area.DEPENDENCIES: _dependencies_extent,
     Area.WORKFLOWS: _workflows_extent,
 }
 

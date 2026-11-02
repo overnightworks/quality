@@ -2,9 +2,9 @@ import pytest
 
 from quality import check, cli
 from quality.output import SEPARATOR, Glyph
-from quality.report import CannotJudge, Command, Note, NoteEvent
+from quality.report import CannotJudge, Command, LockExtent, Note, NoteEvent
 from quality.rules import Area, Rule
-from tests.support.check import leading_count
+from tests.support.check import extent_counts, leading_count
 
 
 def areas_refusing(*reasons_by_area: tuple[CannotJudge, ...]) -> tuple[check.AreaVerdict, ...]:
@@ -142,6 +142,18 @@ def test_a_workflows_area_with_one_refusing_rule_has_no_extent_whatever_the_othe
     assert cli.area_extent(workflows_area(lint, security), 0) == ""
 
 
-@pytest.mark.parametrize(("area", "rule"), [(Area.DEPENDENCIES, Rule.ADVISORY), (Area.CODE, Rule.PYTHON_PRINT)])
-def test_an_area_without_an_extent_of_its_own_has_none(area, rule):
-    assert cli.area_extent(check.AreaVerdict(area, (check.RuleVerdict(rule, extent=3),)), 0) == ""
+def dependencies_area(extent: LockExtent | None, refusal: CannotJudge | None = None) -> check.AreaVerdict:
+    return check.AreaVerdict(Area.DEPENDENCIES, (check.RuleVerdict(Rule.ADVISORY, extent=extent, refusal=refusal),))
+
+
+@pytest.mark.parametrize("extent", [LockExtent(0, 0), LockExtent(1, 1), LockExtent(2, 63)])
+def test_a_judged_dependencies_area_counts_its_lockfiles_and_packages(extent):
+    assert extent_counts(cli.area_extent(dependencies_area(extent), 0)) == [extent.lockfiles, extent.packages]
+
+
+def test_a_dependencies_area_that_could_not_check_has_no_extent():
+    assert cli.area_extent(dependencies_area(None, CannotJudge("why")), 0) == ""
+
+
+def test_an_area_without_an_extent_of_its_own_has_none():
+    assert cli.area_extent(check.AreaVerdict(Area.CODE, (check.RuleVerdict(Rule.PYTHON_PRINT, extent=3),)), 0) == ""
