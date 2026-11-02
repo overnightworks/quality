@@ -9,7 +9,20 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TextIO
 
-from quality.report import Choice, Command, Example, Finding, Instruction, Note, OneOf, Step, printable, render
+from quality.report import (
+    Choice,
+    Command,
+    Example,
+    Finding,
+    FindingEvent,
+    Instruction,
+    Note,
+    NoteEvent,
+    OneOf,
+    Step,
+    printable,
+    render,
+)
 
 
 def emit(*lines: str, file: TextIO | None = None) -> None:
@@ -66,6 +79,8 @@ class Glyph(StrEnum):
 
 @dataclass(frozen=True)
 class SubLine:
+    """A reason under a `✗` row; at a terminal its text may be shortened."""
+
     glyph: Glyph
     text: str
 
@@ -80,6 +95,7 @@ class Row:
     fact: str = ""
     count: int | None = None
     sub_lines: tuple[SubLine, ...] = ()
+    descriptive: bool = False
 
 
 @dataclass(frozen=True)
@@ -102,6 +118,27 @@ BOLD, DIM, RED, GREEN, YELLOW, CYAN = "1", "2", "31", "32", "33", "36"
 GLYPH_STYLE = {Glyph.CLEAN: GREEN, Glyph.NEEDS_YOU: YELLOW, Glyph.COULD_NOT_CHECK: RED, Glyph.NOTE: DIM}
 VERDICT_STYLE = {Glyph.CLEAN: BOLD, Glyph.NEEDS_YOU: f"{BOLD};{YELLOW}"}
 SECONDS_PER_MINUTE = 60
+ELLIPSIS = "…"
+# Free text a terminal may cut; any other event, a new one included, stands whole.
+DESCRIPTIVE_FINDINGS = frozenset(
+    {
+        FindingEvent.TRACKED,
+        FindingEvent.UNREADABLE_PORT,
+        FindingEvent.HOST_NETWORK,
+        FindingEvent.CLAUDE_ONLY,
+        FindingEvent.SYMLINK,
+        FindingEvent.DIVERGES,
+        FindingEvent.NO_AGENTS_FILE,
+        FindingEvent.MISNAMED,
+        FindingEvent.MISPLACED,
+        FindingEvent.NO_HEADER,
+        FindingEvent.STRAY,
+        FindingEvent.INSECURE,
+        FindingEvent.PRINT_CALL,
+        FindingEvent.OPEN,
+    }
+)
+DESCRIPTIVE_NOTES = frozenset({NoteEvent.WARNING})
 
 
 def counted(count: int, noun: str, plural: str | None = None) -> str:
@@ -127,10 +164,12 @@ def style_is_on(stream: TextIO | None, environment: Mapping[str, str]) -> bool:
 
 @dataclass(frozen=True)
 class Channel:
-    """One output stream and its style, captured once when the run opened it; the writers do not probe it again."""
+    """One output stream, its style and the columns of its terminal (None where unknown), captured once when the run
+    opened it; the writers do not probe it again."""
 
     stream: TextIO | None
     styled: bool
+    width: int | None
 
 
 @dataclass(frozen=True)
@@ -142,7 +181,7 @@ class Channels:
 
 
 def open_channel(stream: TextIO | None, environment: Mapping[str, str]) -> Channel:
-    return Channel(stream, style_is_on(stream, environment))
+    return Channel(stream, style_is_on(stream, environment), None)
 
 
 def open_channels(environment: Mapping[str, str]) -> Channels:
