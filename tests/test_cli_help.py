@@ -83,6 +83,11 @@ def test_the_check_help_stands_in_the_pictures_frame(capsys):
     )
 
 
+def test_the_check_entry_takes_no_path_in_the_top_level_help(capsys):
+    lines = help_of(capsys, []).splitlines()
+    assert "  check" in entries_under(lines, "Commands:")
+
+
 def test_every_command_path_stands_in_the_help_once_and_every_entry_is_one(capsys):
     lines = help_of(capsys, []).splitlines()
     shown = [path_of(entry) for heading in headings(lines)[:2] for entry in entries_under(lines, heading)]

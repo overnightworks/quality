@@ -588,7 +588,15 @@ def test_the_folder_is_spoken_with_the_home_folder_as_a_tilde(own_home, monkeypa
     folder.mkdir(exist_ok=True)
     monkeypatch.setenv("HOME", home_spelling.format(home=own_home))
     code, out, err = frame_run(capsys, folder)
-    assert (code, out, err[0]) == (2, [], f"error: not inside a git work tree · {tail_of(folder)}")
+    assert (code, out, err) == (2, [], [f"error: not inside a git work tree · {tail_of(folder)}", "next: run quality check inside a repository"])
+
+
+@pytest.mark.integration
+def test_an_unknown_home_folder_speaks_the_absolute_folder_and_never_a_traceback(tmp_path, monkeypatch, capsys):
+    monkeypatch.delenv("HOME")
+    monkeypatch.setattr("pwd.getpwuid", lambda _uid: (_ for _ in ()).throw(KeyError("uid")))
+    code, out, err = frame_run(capsys, tmp_path)
+    assert (code, out, err) == (2, [], [f"error: not inside a git work tree · {tmp_path}", "next: run quality check inside a repository"])
 
 
 def test_a_bare_repository_and_the_inside_of_git_are_outside_a_work_tree(tmp_path, build_repo, capsys, own_home):

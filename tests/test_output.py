@@ -536,7 +536,7 @@ def test_a_closed_stdout_fd_still_prints_the_pair_and_never_crashes(tmp_path, ow
     done = subprocess.run(
         ["bash", "-c", '"$PY" -m quality.cli check >&-'],
         env={**os.environ, "PY": sys.executable},
-        cwd=tmp_path, text=True, check=False, stderr=subprocess.PIPE,
+        cwd=tmp_path, text=True, check=False, stderr=subprocess.PIPE, timeout=60,
     )
     assert (done.returncode, done.stderr) == (2, f"error: not inside a git work tree · {tmp_path}\nnext: run quality check inside a repository\n")
 
