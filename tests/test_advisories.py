@@ -10,7 +10,7 @@ import pytest
 from quality import advisories, cli, process, scanners
 from quality.config import CONFIG_PATH, AdvisoryAllowance
 from quality.output import SEPARATOR
-from quality.report import FindingEvent
+from quality.report import FindingEvent, LockExtent, NoteEvent
 from quality.rules import Area
 from tests.support.advisories import (
     ADVISORY_ID,
@@ -22,7 +22,6 @@ from tests.support.advisories import (
     VIRTUAL_ROOT_ONLY,
     advisory,
     allowance_config,
-    drop_fixed_versions,
     linked_lock_repo,
     package_of,
     reporting,
@@ -34,7 +33,6 @@ from tests.support.advisories import (
 from tests.support.check import (
     CLEAN_VERDICT,
     area_finding_rows,
-    assert_every_line_starts_with_the_door,
     is_clean,
     refused,
 )
@@ -532,27 +530,23 @@ def test_a_fake_osv_clean_report_for_a_tracked_lock_is_clean(build_repo, served_
 
 TODAY = datetime.date(2027, 1, 31)
 QWEN = "speech/providers/qwen/uv.lock"
-PILLOW = "GHSA-462x-pgg6-55fp (CVE-2026-112395): PyPI pillow 12.3.0"
 
 
-def affected(
-    lock=QWEN, subject=PILLOW, ids=("GHSA-462x-pgg6-55fp", "CVE-2026-112395"),
-    fact=None,
-) -> advisories.Affected:
+def affected(lock=QWEN, ids=("GHSA-462x-pgg6-55fp", "CVE-2026-112395"), fact=None) -> advisories.Affected:
     fact = fact or SEPARATOR.join(("pillow 12.3.0", "GHSA-462x-pgg6-55fp"))
-    return advisories.Affected(lock, subject, frozenset(ids), fact, "upgrade pillow")
+    return advisories.Affected(lock, advisories.PYTHON_ECOSYSTEM, frozenset(ids), fact, "upgrade pillow")
 
 
 def torch() -> advisories.Affected:
-    return affected(subject=TORCH, fact=SEPARATOR.join(("torch 2.6.0", "GHSA-462x-pgg6-55fp")))
+    return affected(fact=SEPARATOR.join(("torch 2.6.0", "GHSA-462x-pgg6-55fp")))
 
 
 def allowing(identifier="GHSA-462x-pgg6-55fp", lock=QWEN, until=TODAY) -> AdvisoryAllowance:
     return AdvisoryAllowance(identifier, lock, until, datetime.date(2026, 10, 21), "#371", "no image input")
 
 
-def allowed_line(lock=QWEN, subject=PILLOW, until=TODAY) -> str:
-    return f"  allowed {lock} {subject} until {until.isoformat()} (#371) - no image input"
+def allowed(lock=QWEN, package="pillow 12.3.0", until=TODAY) -> tuple[str, NoteEvent, tuple[str, ...]]:
+    return lock, NoteEvent.ALLOWED, (package, "GHSA-462x-pgg6-55fp", until.isoformat(), "#371", "no image input")
 
 
 def red(lock=QWEN, *words) -> tuple[str, FindingEvent, tuple[str, ...]]:
@@ -566,23 +560,22 @@ def orphaned(identifier="GHSA-462x-pgg6-55fp", lock=QWEN) -> tuple[str, FindingE
 YESTERDAY = TODAY - datetime.timedelta(days=1)
 VOXCPM = "speech/providers/voxcpm/uv.lock"
 LINKED = "speech/providers/linked/uv.lock"
-TORCH = "GHSA-462x-pgg6-55fp (CVE-2026-112395): PyPI torch 2.6.0"
 
 
 @pytest.mark.parametrize(
-    ("groups", "allowances", "findings", "allowed"),
+    ("groups", "allowances", "findings", "notes"),
     [
         ([affected()], [allowing(until=TODAY + datetime.timedelta(days=90))], [],
-         [allowed_line(until=TODAY + datetime.timedelta(days=90))]),
-        ([affected()], [allowing()], [], [allowed_line()]),
+         [allowed(until=TODAY + datetime.timedelta(days=90))]),
+        ([affected()], [allowing()], [], [allowed()]),
         ([affected()], [allowing(until=YESTERDAY)],
          [red(QWEN, "2027-01-30", "#371")], []),
-        ([affected()], [allowing("CVE-2026-112395")], [], [allowed_line()]),
-        ([affected(), affected(VOXCPM)], [allowing()], [red(VOXCPM)], [allowed_line()]),
+        ([affected()], [allowing("CVE-2026-112395")], [], [allowed()]),
+        ([affected(), affected(VOXCPM)], [allowing()], [red(VOXCPM)], [allowed()]),
         ([affected()], [allowing(lock=VOXCPM)], [red(), orphaned(lock=VOXCPM)], []),
         ([], [allowing()], [orphaned()], []),
-        ([affected(), affected(LINKED)], [allowing()], [red(LINKED)], [allowed_line()]),
-        ([affected(), torch()], [allowing()], [], [allowed_line(), allowed_line(subject=TORCH)]),
+        ([affected(), affected(LINKED)], [allowing()], [red(LINKED)], [allowed()]),
+        ([affected(), torch()], [allowing()], [], [allowed(), allowed(package="torch 2.6.0")]),
         ([affected(), torch()], [allowing(), allowing("CVE-2026-112395")],
          [red(), red(QWEN, "torch"), (CONFIG_PATH, FindingEvent.CONFLICT, ("GHSA-462x-pgg6-55fp", "CVE-2026-112395", QWEN))], []),
         ([affected()], [], [red()], []),
@@ -594,37 +587,20 @@ TORCH = "GHSA-462x-pgg6-55fp (CVE-2026-112395): PyPI torch 2.6.0"
         "cell 10 two packages in one lock", "cell 27 two allowances on one group", "no allowance",
     ],
 )
-def test_an_allowance_allows_its_advisory_in_its_lock_until_its_date(groups, allowances, findings, allowed):
+def test_an_allowance_allows_its_advisory_in_its_lock_until_its_date(groups, allowances, findings, notes):
     """#116 R3, E2, E4, E5, E10, E12: an allowance matching any id of a group in its lock allows it until `until`
     (inclusive), then it is red with its date and item; one matching nothing is red, and two on one group allow it
     for neither."""
-    judged = advisories.apply_allowances(groups, allowances, TODAY)
-    assert ([(finding.location, finding.event) for finding in judged.findings], list(judged.allowed)) == ([found[:2] for found in findings], allowed)
+    extent = LockExtent(1, 1)
+    judged = advisories.apply_allowances(groups, allowances, TODAY, extent)
+    assert [(finding.location, finding.event) for finding in judged.findings] == [found[:2] for found in findings]
+    assert [(note.location, note.event) for note in judged.notes] == [found[:2] for found in notes]
+    assert judged.extent == extent
     for finding, (_, _, words) in zip(judged.findings, findings, strict=True):
         assert all(word in finding.reason for word in words)
-
-
-@pytest.mark.parametrize(
-    "edit", [lambda report: None, drop_fixed_versions], ids=["cell 1 allowed until 2999", "cell 11 no fixed version"]
-)
-def test_hygiene_prints_each_allowed_advisory_before_the_verdict(
-    build_repo, served_scanners, run_gate, publish_database, edited_report, edit
-):
-    """#116 R3, E4, E10, E11: through hygiene, an allowed advisory is printed with its date, item and reason
-    and leaves the rule clean."""
-    publish_database()
-    report = edited_report("osv-scanner-finding.json", edit)
-    repo = build_repo({"uv.lock": uv_lock(), "quality/config.toml": allowance_config(**UV_LOCK_ALLOWANCE, until=datetime.date(2999, 12, 31))})
-    fake_scanner(served_scanners, OSV, reporting(report, 1))
-    code, output = run_gate(repo)
-    allowed_lines = [
-        "advisory: 1 allowed",
-        f"  allowed uv.lock {ADVISORY_ID} (CVE-2020-1): PyPI pyyaml 5.3.1 until 2999-12-31 (#116) - fixture",
-    ]
-    lines = output.splitlines()
-    assert code == 0, output
-    assert lines[lines.index(allowed_lines[0]):][:len(allowed_lines)] == allowed_lines, output
-    assert is_clean(lines[-1]), output
+    for note, (_, _, words) in zip(judged.notes, notes, strict=True):
+        positions = [note.fact.index(word) for word in words]
+        assert positions == sorted(positions)
 
 
 def test_hygiene_prints_an_allowance_that_ran_out_as_an_affected_row(build_repo, served_scanners, run_gate, publish_database):
@@ -636,25 +612,6 @@ def test_hygiene_prints_an_allowance_that_ran_out_as_an_affected_row(build_repo,
     ((location, row),) = area_finding_rows(output, Area.DEPENDENCIES)
     assert (code, location, row.event, row.fix) == (1, "uv.lock", FindingEvent.AFFECTED, upgrade_fix()), output
     assert all(word in row.fact for word in ("2000-01-01", UV_LOCK_ALLOWANCE["item"]))
-
-
-def test_hygiene_escapes_the_allowance_in_its_allowed_line(
-    build_repo, served_scanners, run_gate, publish_database, edited_report
-):
-    """#116 cell 25: an allowance's id and reason print escaped in the allowed line."""
-    publish_database()
-    report = edited_report("osv-scanner-finding.json", lambda report: package_of(report)["groups"][0].update(
-        ids=["GHSA-\x1b[8m"], aliases=[]))
-    config = allowance_config(
-        **UV_LOCK_ALLOWANCE | {"identifier": "GHSA-\x1b[8m", "reason": "ok\x1b[8m versteckt"},
-        until=datetime.date(2999, 12, 31),
-    )
-    repo = build_repo({"uv.lock": uv_lock(), "quality/config.toml": config})
-    fake_scanner(served_scanners, OSV, reporting(report, 1))
-    code, output = run_gate(repo)
-    assert code == 0, output
-    assert "  allowed uv.lock GHSA-\\x1b[8m: PyPI pyyaml 5.3.1 until 2999-12-31 (#116) - ok\\x1b[8m versteckt" in output
-    assert_every_line_starts_with_the_door(output.splitlines())
 
 
 def test_an_allowance_without_a_tracked_lock_is_red_with_no_osv_scanner_and_no_download(

@@ -10,9 +10,9 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
-from quality import advisories
+from quality import advisories, cli
 from quality.config import CONFIG_PATH
-from quality.report import FindingEvent
+from quality.report import FindingEvent, NoteEvent
 from quality.rules import Area
 from quality.scanners import ScannerError
 from tests.support.advisories import (
@@ -28,7 +28,7 @@ from tests.support.advisories import (
     upgrade_fix,
     uv_lock,
 )
-from tests.support.check import area_finding_rows
+from tests.support.check import area_fact, area_finding_rows, extent_counts, note_rows
 from tests.support.scanners import OUTPUTS, fake_scanner
 
 LODASH = "GHSA-npm1-aaaa-bbbb"
@@ -106,7 +106,7 @@ def test_a_requirements_file_shaped_like_agent_runtimes_is_judged_26_of_26(
     repo = build_repo({"tests/keycloak/requirements.txt": agent_runtime_requirements()})
     publish_database()
     code, output = run_gate(repo)
-    assert code == 0, output
+    assert (code, extent_counts(area_fact(output, Area.DEPENDENCIES))) == (0, [1, 26]), output
     publish_database([advisory(fixed=("0.21.0",), aliases=(), package=WEBAUTH)])
     code, output = run_gate(repo)
     assert code == 1, output
@@ -183,7 +183,7 @@ def test_an_allowance_for_a_wheel_line_uses_the_tracked_requirements_path(
     publish_database([advisory(fixed=("0.21.0",), aliases=(), package=WEBAUTH)])
     config = allowance_config(**UV_LOCK_ALLOWANCE | {"lock": BUILD_REQUIREMENTS}, until=datetime.date(2999, 12, 31))
     code, output = run_gate(build_repo({BUILD_REQUIREMENTS: WEBAUTH_WHEEL + "\n", "quality/config.toml": config}))
-    assert (code, "advisory: 1 allowed" in output) == (0, True), output
+    assert (code, extent_counts(area_fact(output, Area.DEPENDENCIES))) == (0, [1, 1, 1]), output
 
 
 @pytest.mark.scanner
@@ -337,22 +337,30 @@ PNPM_ALLOWANCE = UV_LOCK_ALLOWANCE | {"lock": FRONTEND_LOCK}
 
 
 def test_an_allowance_in_a_pnpm_lock_allows_its_advisory_until_its_date(
-    build_repo, served_scanners, run_gate, publish_database, edited_report
+    build_repo, served_scanners, publish_database, edited_report, capsys
 ):
     """#145 R1: the same [[advisories.allow]] entry, with the lock's path, allows an npm advisory; once the lock is
     fixed the entry matches nothing and is red until it is deleted (U1)."""
     publish_database(ecosystem="npm")
     config = allowance_config(**PNPM_ALLOWANCE, until=datetime.date(2999, 12, 31))
     repo = build_repo({FRONTEND_LOCK: pnpm_lock(), "quality/config.toml": config})
+
+    def hygiene() -> tuple[int, str, str]:
+        code = cli.main(["hygiene", str(repo)], clock=lambda: 0.0)
+        heard = capsys.readouterr()
+        return code, heard.out, heard.err
+
     report = edited_report("osv-scanner-finding.json", npm_report("lodash", "lodash"))
     fake_scanner(served_scanners, OSV, reporting(report, 1))
-    code, output = run_gate(repo)
-    assert code == 0, output
-    assert f"  allowed {FRONTEND_LOCK} {ADVISORY_ID} (CVE-2020-1): npm lodash 4.6.0 until 2999-12-31 (#116) - fixture" in output
+    code, out, err = hygiene()
+    (row,) = note_rows(out, FRONTEND_LOCK)
+    assert (code, err, row.event) == (0, "", NoteEvent.ALLOWED), out
+    words = ("lodash", "4.6.0", ADVISORY_ID, "2999-12-31", PNPM_ALLOWANCE["item"], PNPM_ALLOWANCE["reason"])
+    assert all(word in row.fact for word in words), row.fact
     fake_scanner(served_scanners, OSV, reporting(OUTPUTS / "osv-scanner-clean.json", 0))
-    code, output = run_gate(repo)
-    ((location, row),) = area_finding_rows(output, Area.DEPENDENCIES)
-    assert (code, location, row.event, ADVISORY_ID in row.fact, FRONTEND_LOCK in row.fact) == (1, CONFIG_PATH, FindingEvent.UNUSED, True, True), output
+    code, out, err = hygiene()
+    ((location, row),) = area_finding_rows(out, Area.DEPENDENCIES)
+    assert (code, err, location, row.event, ADVISORY_ID in row.fact, FRONTEND_LOCK in row.fact) == (1, "", CONFIG_PATH, FindingEvent.UNUSED, True, True), out
 
 
 SETUP_AND_OTHER_RULES_MINUTES = 10

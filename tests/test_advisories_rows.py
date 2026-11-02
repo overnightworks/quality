@@ -1,6 +1,7 @@
 import copy
 import datetime
 import json
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
@@ -8,13 +9,14 @@ import pytest
 
 from quality import advisories, check, cli, scanners
 from quality.config import ADVISORY_ALLOWANCE_HEADING, CONFIG_PATH
-from quality.output import SEPARATOR
-from quality.report import FindingEvent, printable, shell_word
+from quality.output import SEPARATOR, Glyph
+from quality.report import FindingEvent, NoteEvent, printable, shell_word
 from quality.rules import Area, Rule
 from tests.support.advisories import (
     ADVISORY_ID,
     ADVISORY_LINK,
     OSV,
+    PACKAGE_NAME,
     UV_LOCK_ALLOWANCE,
     allowance_config,
     drop_fixed_versions,
@@ -30,10 +32,12 @@ from tests.support.check import (
     FindingLine,
     FixLine,
     area_block,
+    area_fact,
     area_row,
     assert_block_prints,
     assert_every_line_starts_with_the_door,
     assert_finding_vocabulary,
+    extent_counts,
     hygiene_run,
 )
 from tests.support.scanners import OUTPUTS, fake_scanner, lacking
@@ -126,6 +130,62 @@ def then(*edits):
     return edit
 
 
+def entry(
+    identifier: str = ADVISORY_ID, lock: str = "uv.lock", until: datetime.date = datetime.date(2999, 12, 31),
+    reason: str = UV_LOCK_ALLOWANCE["reason"],
+) -> str:
+    return allowance_config(**UV_LOCK_ALLOWANCE | {"identifier": identifier, "lock": lock, "reason": reason}, until=until)
+
+
+def no_advisories(report: dict) -> None:
+    """Every listed package of every result without a group or a vulnerability record."""
+    for result in report["results"]:
+        for found in result["packages"]:
+            found.pop("groups")
+            found.pop("vulnerabilities")
+
+
+def without_vulnerability_records(report: dict) -> None:
+    for result in report["results"]:
+        for found in result["packages"]:
+            found["vulnerabilities"] = []
+
+
+def copy_listed_as(name: str | None = None, ecosystem: str | None = None):
+    """Lists a copy of the first package again, under another name or in another ecosystem."""
+    def edit(report: dict) -> None:
+        copied = copy.deepcopy(package_of(report))
+        copied["package"].update({key: value for key, value in (("name", name), ("ecosystem", ecosystem)) if value})
+        report["results"][0]["packages"].append(copied)
+    return edit
+
+
+def listed_in_results(*picks: tuple[int, ...]):
+    """Rebuilds the results as one copy of the first result per pick, each holding the packages at the picked indexes."""
+    def edit(report: dict) -> None:
+        first = report["results"][0]
+        report["results"] = [
+            {**copy.deepcopy(first), "packages": [copy.deepcopy(first["packages"][index]) for index in pick]} for pick in picks
+        ]
+    return edit
+
+
+def assert_in_order(text: str, *parts: str) -> None:
+    position = 0
+    for part in parts:
+        position = text.index(part, position) + len(part)
+
+
+def report_naming(repo: Path, name: str, edit) -> Path:
+    """A report file whose first result names the resolved path of `name` in `repo`, after `edit`."""
+    report = json.loads(FINDING_REPORT.read_text(encoding="utf-8"))
+    report["results"][0]["source"]["path"] = str((repo / name).resolve())
+    edit(report)
+    report_file = repo / "report.json"
+    report_file.write_text(json.dumps(report), encoding="utf-8")
+    return report_file
+
+
 def points_only_to_the_advisory(name: str):
     return lambda fix: fix.endswith(ADVISORY_LINK) and name not in fix and printable(name) not in fix
 
@@ -161,9 +221,7 @@ def test_each_kind_of_advisory_finding_carries_its_event_fact_and_fix(drive_advi
     if fixed is None:
         assert state == []
     elif fixed:
-        position = 0
-        for version in fixed:
-            position = state[0].index(version, position) + len(version)
+        assert_in_order(state[0], *fixed)
     else:
         assert state == [advisories.NO_FIXED_VERSION]
     assert fix_is(finding.fix)
@@ -185,11 +243,12 @@ def test_the_dependencies_block_prints_what_the_rule_returned(drive_advisories):
     assert (run.out.splitlines()[0].split()[1], run.code, run.err) == (next(iter(Area)), 1, "")
 
 
-def test_no_printed_line_starts_with_the_rule_id(drive_advisories):
-    """Decision 12: quality adds no rule-id label to a finding."""
-    run = drive_advisories({"uv.lock": uv_lock()})
+@pytest.mark.parametrize(("config", "code"), [(None, 1), (entry(), 0)], ids=["no allowance", "an allowance"])
+def test_no_printed_line_starts_with_the_rule_id(drive_advisories, config, code):
+    """Decision 12: quality adds no rule-id label to a finding or a note."""
+    run = drive_advisories({"uv.lock": uv_lock(), **({"quality/config.toml": config} if config else {})})
     assert not any(line.lstrip().startswith(Rule.ADVISORY) for line in (run.out + run.err).splitlines())
-    assert run.err == ""
+    assert (run.code, run.err) == (code, "")
 
 
 PNPM_PACKAGE = npm_report("lodash", "lodash")
@@ -252,10 +311,6 @@ def test_two_tracked_names_of_one_lock_print_one_row_each_and_align(drive_adviso
     assert (sorted(line.location for line in rows), len(columns), run.err) == (["speech/uv.lock", "uv.lock"], 1, "")
 
 
-def entry(identifier: str = ADVISORY_ID, lock: str = "uv.lock", until: datetime.date = datetime.date(2999, 12, 31)) -> str:
-    return allowance_config(**UV_LOCK_ALLOWANCE | {"identifier": identifier, "lock": lock}, until=until)
-
-
 @pytest.mark.parametrize(
     ("with_lock", "config", "expected", "words"),
     [
@@ -310,9 +365,194 @@ def test_a_refused_area_leaves_the_dependencies_rows_and_the_pair_names_them_in_
     assert (run.code, run.err) == (2, f"error: {cli.refusal_error(run.areas)}\nnext: {scanners.install_command()}\n")
 
 
-def test_a_refusing_osv_scanner_prints_no_row_under_its_area_and_the_exact_pair(drive_advisories):
-    """A rule that cannot judge refuses only itself: its row names the reason and nothing stands under it."""
-    run = drive_advisories({"uv.lock": uv_lock()}, code=3, stderr="boom")
+def test_a_refusing_osv_scanner_prints_no_note_and_no_extent_and_the_exact_pair(drive_advisories):
+    """A rule that cannot judge refuses only itself: its row names the reason, and neither an extent, a note nor a line of its own stands for it."""
+    run = drive_advisories({"uv.lock": uv_lock(), "quality/config.toml": entry()}, code=3, stderr="boom")
     row = area_row(run.out, Area.DEPENDENCIES)
-    assert (row.event, row.fact.endswith("boom"), area_block(run.out, Area.DEPENDENCIES)) == (cli.AreaEvent.NOT_CHECKED, True, [])
+    assert (row.event, row.fact.endswith("boom"), extent_counts(row.fact), area_block(run.out, Area.DEPENDENCIES)) == (cli.AreaEvent.NOT_CHECKED, True, [3], [])
+    assert not any(line.lstrip().startswith(Rule.ADVISORY) for line in run.out.splitlines())
     assert (run.code, run.err) == (2, f"error: {cli.refusal_error(run.areas)}\nnext: {cli.REFUSED_AREAS_NEXT.text}\n")
+
+
+def test_a_refused_area_leaves_the_note_row_and_the_exact_pair(drive_advisories, use_mise, served_scanners):
+    """Decision 6: another area's refusal leaves the dependencies note standing and counts the refused area in the error line."""
+    use_mise(lacking(served_scanners, scanners.GITLEAKS))
+    run = drive_advisories({"uv.lock": uv_lock(), "quality/config.toml": entry()})
+    assert_block_prints(area_block(run.out, Area.DEPENDENCIES), (), run.area.notes)
+    assert (len(run.area.notes), run.code, run.err) == (1, 2, f"error: {cli.refusal_error(run.areas)}\nnext: {scanners.install_command()}\n")
+
+
+@pytest.mark.parametrize(
+    ("files", "edit", "counts"),
+    [
+        ({"uv.lock": uv_lock()}, then(no_advisories), [1, 1]),
+        ({"uv.lock": uv_lock()}, then(add_second_package, no_advisories), [1, 2]),
+        ({"uv.lock": uv_lock()}, then(copy_listed_as(), no_advisories), [1, 1]),
+        ({"uv.lock": uv_lock()}, lambda report: report.update(results=[]), [1, 0]),
+        (
+            {"src/frontend/pnpm-lock.yaml": PNPM_LOCK},
+            then(npm_report("lodash.merge", "lodash.merge"), copy_listed_as("lodash-merge"), no_advisories), [1, 2],
+        ),
+        ({"uv.lock": uv_lock()}, then(copy_listed_as(ecosystem="npm"), no_advisories), [1, 2]),
+        ({"uv.lock": uv_lock()}, then(add_second_package, listed_in_results((0,), (1,)), no_advisories), [1, 2]),
+        ({"uv.lock": uv_lock()}, then(listed_in_results((0,), (0,)), no_advisories), [1, 1]),
+    ],
+    ids=[
+        "one package", "two packages", "one package listed twice", "a report listing nothing", "two npm spellings",
+        "one name in two ecosystems", "two results listing different packages", "two results listing the same package",
+    ],
+)
+def test_a_clean_row_counts_the_lockfiles_and_the_packages_the_report_lists(drive_advisories, build_repo, files, edit, counts):
+    """O48: a package counts once per tracked file, by ecosystem, name as the ecosystem compares it and version."""
+    repo = build_repo(files)
+    run = drive_advisories(repo, report_naming(repo, next(iter(files)), edit), code=0)
+    assert (area_row(run.out, Area.DEPENDENCIES).glyph, extent_counts(area_fact(run.out, Area.DEPENDENCIES))) == (Glyph.CLEAN, counts)
+    assert (run.code, run.err) == (0, "")
+
+
+def test_the_packages_of_two_lock_files_add_up(drive_advisories, build_repo):
+    """O48: each tracked lock counts the packages the report lists for it."""
+    other = "src/speech/uv.lock"
+    repo = build_repo({"uv.lock": uv_lock(), other: uv_lock()})
+
+    def second_lock(report: dict) -> None:
+        add_second_package(report)
+        report["results"].append(
+            {"source": {"path": str((repo / other).resolve()), "type": "lockfile"}, "packages": [copy.deepcopy(package_of(report))]}
+        )
+
+    run = drive_advisories(repo, report_naming(repo, "uv.lock", then(second_lock, no_advisories)), code=0)
+    assert extent_counts(area_fact(run.out, Area.DEPENDENCIES)) == [2, 3]
+    assert (run.code, run.err) == (0, "")
+
+
+def test_a_lock_reached_by_two_tracked_names_counts_for_each(drive_advisories, build_repo, edited_report):
+    """O48: one resolved file under two tracked names is two lock files with a package each."""
+    repo = build_repo({"uv.lock": uv_lock()})
+    (repo / "src/speech").mkdir(parents=True)
+    (repo / "src/speech/uv.lock").symlink_to("../../uv.lock")
+    subprocess.run(["git", "-C", str(repo), "add", "src/speech/uv.lock"], check=True)
+    run = drive_advisories(repo, edited_report("osv-scanner-finding.json", no_advisories), code=0)
+    assert extent_counts(area_fact(run.out, Area.DEPENDENCIES)) == [2, 2]
+    assert (run.code, run.err) == (0, "")
+
+
+def test_a_package_a_requirements_file_lists_as_a_pin_and_as_a_wheel_counts_once(drive_advisories, build_repo):
+    """O48: the pin and the wheel line of one package are read from two files under one tracked name."""
+    wheel = f"{PACKAGE_NAME} @ https://example.invalid/{PACKAGE_NAME}-6.0.2-py3-none-any.whl --hash=sha256:{'ab' * 32}"
+    name = "docs/requirements.txt"
+    repo = build_repo({name: f"{PACKAGE_NAME}==6.0.2\n{wheel}\n"})
+
+    def pin_and_wheel(report: dict) -> None:
+        package_of(report)["package"]["version"] = "6.0.2"
+        report["results"].append({**copy.deepcopy(report["results"][0]), "source": {"path": "@LOCK@", "type": "lockfile"}})
+
+    run = drive_advisories(repo, report_naming(repo, name, then(pin_and_wheel, no_advisories)), code=0)
+    assert extent_counts(area_fact(run.out, Area.DEPENDENCIES)) == [1, 1]
+    assert (run.code, run.err) == (0, "")
+
+
+def test_two_packages_that_differ_only_in_their_ecosystem_stay_two_findings(drive_advisories, edited_report):
+    """The finding's identity is its lock, ecosystem, ids, fact and fix: equal facts in two ecosystems are two findings."""
+    edit = then(copy_listed_as(ecosystem="npm"), without_vulnerability_records)
+    run = drive_advisories({"uv.lock": uv_lock()}, edited_report("osv-scanner-finding.json", edit))
+    rows = [line for line in area_block(run.out, Area.DEPENDENCIES) if isinstance(line, FindingLine)]
+    assert (len(run.area.findings), len(rows), run.code, run.err) == (2, 2, 1, "")
+
+
+def distant() -> datetime.date:
+    return datetime.date(2999, 12, 31)
+
+
+def second_group_id(report_file: Path) -> str:
+    return package_of(json.loads(report_file.read_text(encoding="utf-8")))["groups"][1]["ids"][0]
+
+
+@pytest.mark.parametrize(
+    ("lock", "files", "edit", "package", "version"),
+    [
+        ("uv.lock", {"uv.lock": uv_lock()}, lambda report: None, PACKAGE_NAME, VERSION),
+        ("uv.lock", {"uv.lock": uv_lock()}, drop_fixed_versions, PACKAGE_NAME, VERSION),
+        ("uv.lock", {"uv.lock": uv_lock()}, rename_affected_entry("something-else"), PACKAGE_NAME, VERSION),
+        ("src/speech/uv.lock", {"src/speech/uv.lock": uv_lock()}, lambda report: None, PACKAGE_NAME, VERSION),
+        ("src/frontend/pnpm-lock.yaml", {"src/frontend/pnpm-lock.yaml": PNPM_LOCK}, PNPM_PACKAGE, "lodash", "4.6.0"),
+        ("docs/requirements.txt", {"docs/requirements.txt": f"{PACKAGE_NAME}=={VERSION}\n"}, lambda report: None, PACKAGE_NAME, VERSION),
+    ],
+    ids=["a recorded fix", "no fixed version", "no affected entry for the package", "a nested uv.lock", "a pnpm lock", "a requirements file"],
+)
+@pytest.mark.parametrize("named", [FIRST_ID, ALIAS], ids=["the group's first id", "an alias"])
+def test_an_allowed_advisory_stands_as_a_note_row_under_the_clean_row(drive_advisories, edited_report, lock, files, edit, package, version, named):
+    """O15, O49: the allowance is matched by any id of the group, and its note holds the package, the group's first id, the date, the item and the reason."""
+    run = drive_advisories({"quality/config.toml": entry(named, lock), **files}, edited_report("osv-scanner-finding.json", edit))
+    (note,) = run.area.notes
+    assert (note.location, note.event) == (lock, NoteEvent.ALLOWED)
+    assert_in_order(note.fact, package, version, FIRST_ID, distant().isoformat(), UV_LOCK_ALLOWANCE["item"], UV_LOCK_ALLOWANCE["reason"])
+    assert extent_counts(area_fact(run.out, Area.DEPENDENCIES)) == [1, 1, 1]
+    assert ALIAS not in run.out
+    assert_block_prints(area_block(run.out, Area.DEPENDENCIES), (), run.area.notes)
+    assert (run.code, run.err) == (0, "")
+
+
+def test_two_allowed_advisories_stand_as_two_note_rows_and_the_row_counts_them(drive_advisories, edited_report):
+    """O15: one note per allowed group, in the order of the groups, and the row counts them."""
+    report = edited_report("osv-scanner-finding.json", add_second_group)
+    second = second_group_id(report)
+    run = drive_advisories({"uv.lock": uv_lock(), "quality/config.toml": entry() + entry(second)}, report)
+    first_note, second_note = run.area.notes
+    assert (FIRST_ID in first_note.fact, second in second_note.fact) == (True, True)
+    assert extent_counts(area_fact(run.out, Area.DEPENDENCIES)) == [1, 1, 2]
+    assert_block_prints(area_block(run.out, Area.DEPENDENCIES), (), run.area.notes)
+    assert (run.code, run.err) == (0, "")
+
+
+def test_an_allowed_advisory_stands_after_the_findings_and_their_fix(drive_advisories, edited_report):
+    """O15: the note follows the last `fix:`, and an area with a finding keeps its row without an extent."""
+    run = drive_advisories({"uv.lock": uv_lock(), "quality/config.toml": entry()}, edited_report("osv-scanner-finding.json", add_second_group))
+    row_line = next(line for line in run.out.splitlines() if line.split()[1:2] == [Area.DEPENDENCIES])
+    assert_block_prints(area_block(run.out, Area.DEPENDENCIES), run.area.findings, run.area.notes)
+    assert (row_line.split()[0], extent_counts(row_line.split(Area.DEPENDENCIES, 1)[1]), NoteEvent.ALLOWED in row_line) == (Glyph.NEEDS_YOU, [1], False)
+    assert (len(run.area.findings), len(run.area.notes), run.code, run.err) == (1, 1, 1, "")
+
+
+def test_an_allowance_that_ran_out_leaves_no_note(drive_advisories):
+    """An allowance past its date is an affected row, and no note stands for it."""
+    run = drive_advisories({"uv.lock": uv_lock(), "quality/config.toml": entry(until=datetime.date(2000, 1, 1))})
+    rows = [line for line in area_block(run.out, Area.DEPENDENCIES) if isinstance(line, FindingLine)]
+    assert (run.area.notes, [row.row.event for row in rows], run.err) == ((), [FindingEvent.AFFECTED], "")
+
+
+def test_an_allowed_advisory_leaves_no_line_before_the_area_rows(drive_advisories):
+    """The prelude holds no allowed line: the first line is the first area's row."""
+    run = drive_advisories({"uv.lock": uv_lock(), "quality/config.toml": entry()})
+    assert (hygiene_run(run.repo).reports, run.out.splitlines()[0].split()[1], run.err) == ((), next(iter(Area)), "")
+
+
+def test_the_reports_hold_only_the_lines_of_python_print(drive_advisories):
+    """The prelude keeps the output owner of python-print, and the allowed advisory stands under its row."""
+    owner = "# ruff: noqa: T201 - the command line owns its output\nprint(1)\n"
+    run = drive_advisories({"src/door.py": owner, "uv.lock": uv_lock(), "quality/config.toml": entry()})
+    (report,) = hygiene_run(run.repo).reports
+    assert (report.startswith(Rule.PYTHON_PRINT), len(run.area.notes), run.err) == (True, 1, "")
+    assert_block_prints(area_block(run.out, Area.DEPENDENCIES), (), run.area.notes)
+
+
+@pytest.mark.parametrize(
+    ("name", "identifier", "reason"),
+    [
+        ("src/a\x1b\u202eb/uv.lock", ADVISORY_ID, UV_LOCK_ALLOWANCE["reason"]),
+        ("uv.lock", "GHSA-\x1b[8m", UV_LOCK_ALLOWANCE["reason"]),
+        ("uv.lock", ADVISORY_ID, "ok\x1b[8m versteckt\u202e"),
+    ],
+    ids=["a lock path", "an id", "a reason"],
+)
+def test_an_allowed_advisory_with_control_characters_prints_escaped_and_forges_no_line(drive_advisories, build_repo, name, identifier, reason):
+    """The location and the fact of a note pass through `printable`."""
+    repo = build_repo({name: uv_lock(), "quality/config.toml": entry(identifier, name, reason=reason)})
+
+    def rename_group(report: dict) -> None:
+        package_of(report)["groups"][0].update(ids=[identifier], aliases=[])
+
+    run = drive_advisories(repo, report_naming(repo, name, rename_group))
+    assert_block_prints(area_block(run.out, Area.DEPENDENCIES), (), run.area.notes)
+    assert_every_line_starts_with_the_door((run.out + run.err).splitlines())
+    assert (len(run.area.notes), run.code, run.err) == (1, 0, "")
