@@ -1,7 +1,6 @@
 import contextlib
 import io
 import os
-import re
 import select
 import signal
 import subprocess
@@ -11,16 +10,15 @@ from pathlib import Path
 import pytest
 
 from quality import check, cli, ratchet, scanners
+from quality.output import Glyph
 from quality.rules import Area
 from tests.support.advisories import uv_lock
-from tests.support.check import refusal_pair
+from tests.support.check import area_row, refusal_pair
 from tests.support.git_repositories import GIT_IDENTITY
 from tests.support.processes import process_is_gone
 from tests.support.python_lint import fake_ruff
 from tests.support.scanners import CLEAN_SCANS, OUTPUTS, fake_gitleaks, fake_scanner, fake_zizmor
 from tests.support.terminal import without_sgr
-
-BOUND = 60
 
 
 def door_argv(command: str, target: Path) -> list[str]:
@@ -36,7 +34,7 @@ def door_environment(**extra: str) -> dict[str, str]:
 def printed_before(printed: str, area: Area) -> str:
     """The lines of `printed` above the row of `area`, each with its line feed."""
     lines = printed.splitlines(keepends=True)
-    return "".join(lines[: next(number for number, line in enumerate(lines) if re.match(rf"  \S {area.value} ", line))])
+    return "".join(lines[: next(number for number, line in enumerate(lines) if line.split()[1:2] == [area.value])])
 
 
 def kill_recorded(pid_file: Path) -> None:
@@ -88,23 +86,16 @@ def test_each_area_starts_after_the_rows_of_every_area_above_it(build_repo, serv
     assert (code, stderr.getvalue()) == (1, "")
 
 
-def test_a_refused_area_stands_before_the_next_scanner_and_the_pair_after_every_row(build_repo, served_scanners, tmp_path):
+def test_a_refused_area_stands_before_the_next_scanner_and_the_pair_stays_on_stderr(build_repo, served_scanners, tmp_path):
     repo = build_repo({"compose.yaml": "services: [\n"})
     rows, seen = tmp_path / "rows", tmp_path / "seen"
     fake_scanner(served_scanners, scanners.GITLEAKS, f'cp "$ROWS" "{seen}"\n{CLEAN_SCANS[scanners.GITLEAKS]}')
     with open(rows, "w", encoding="utf-8") as stdout:
-        done = subprocess.run(door_argv("hygiene", repo), env=door_environment(ROWS=str(rows)), stdout=stdout, stderr=subprocess.PIPE, text=True, timeout=BOUND, check=False)
+        done = subprocess.run(door_argv("hygiene", repo), env=door_environment(ROWS=str(rows)), stdout=stdout, stderr=subprocess.PIPE, text=True, timeout=60, check=False)
     finished = rows.read_text(encoding="utf-8")
     assert seen.read_text(encoding="utf-8") == printed_before(finished, Area.SECRETS)
-    assert re.search(rf"  ✗ {Area.FILES.value} ", seen.read_text(encoding="utf-8"))
+    assert area_row(seen.read_text(encoding="utf-8"), Area.FILES).glyph == Glyph.COULD_NOT_CHECK
     assert (done.returncode, done.stderr) == (2, refusal_pair(repo))
-
-
-INTERRUPT_CASES = {
-    "Ctrl-C under a shell": (signal.SIGINT, True),
-    "Ctrl-C direct": (signal.SIGINT, False),
-    "SIGTERM direct": (signal.SIGTERM, False),
-}
 
 
 def interrupting_gitleaks(served_scanners: Path, name: str) -> None:
@@ -113,17 +104,24 @@ def interrupting_gitleaks(served_scanners: Path, name: str) -> None:
     fake_scanner(served_scanners, scanners.GITLEAKS, f'echo $$ > "$SCANNER_PID"; head -c 1048576 /dev/zero; kill -{name} $PPID; exec sleep 60')
 
 
-@pytest.mark.parametrize(("sent", "under_shell"), INTERRUPT_CASES.values(), ids=INTERRUPT_CASES.keys())
+@pytest.mark.parametrize(
+    ("sent", "under_shell"),
+    [
+        pytest.param(signal.SIGINT, True, id="Ctrl-C under a shell"),
+        pytest.param(signal.SIGINT, False, id="Ctrl-C direct"),
+        pytest.param(signal.SIGTERM, False, id="SIGTERM direct"),
+    ],
+)
 def test_an_interrupt_during_a_scan_leaves_the_rows_of_the_finished_areas_whole(build_repo, served_scanners, tmp_path, sent, under_shell):
     repo = build_repo({"README.md": "x\n"})
-    complete = subprocess.run(door_argv("hygiene", repo), env=door_environment(), capture_output=True, text=True, timeout=BOUND, check=False)
+    complete = subprocess.run(door_argv("hygiene", repo), env=door_environment(), capture_output=True, text=True, timeout=60, check=False)
     pid_file, scratch_parent = tmp_path / "scanner.pid", tmp_path / "scratch"
     scratch_parent.mkdir()
     interrupting_gitleaks(served_scanners, signal.Signals(sent).name.removeprefix("SIG"))
     door = door_argv("hygiene", repo)
     command = ["sh", "-c", '"$@"; echo "exit $?" >&2', "sh", *door] if under_shell else door
     try:
-        done = subprocess.run(command, env=door_environment(SCANNER_PID=str(pid_file), TMPDIR=str(scratch_parent)), capture_output=True, text=True, timeout=BOUND, check=False)
+        done = subprocess.run(command, env=door_environment(SCANNER_PID=str(pid_file), TMPDIR=str(scratch_parent)), capture_output=True, text=True, timeout=60, check=False)
         assert done.stdout == printed_before(complete.stdout, Area.SECRETS)
         if under_shell:
             assert done.stderr == f"exit {128 + signal.SIGINT}\n"
@@ -137,13 +135,13 @@ def test_an_interrupt_during_a_scan_leaves_the_rows_of_the_finished_areas_whole(
 
 def test_ctrl_c_at_a_terminal_leaves_whole_lines(build_repo, served_scanners, tmp_path, window):
     repo = build_repo({"README.md": "x\n"})
-    complete = subprocess.run(door_argv("hygiene", repo), env=door_environment(), capture_output=True, text=True, timeout=BOUND, check=False)
+    complete = subprocess.run(door_argv("hygiene", repo), env=door_environment(), capture_output=True, text=True, timeout=60, check=False)
     pid_file = tmp_path / "scanner.pid"
     interrupting_gitleaks(served_scanners, "INT")
     terminal = window(200)
     try:
         done = subprocess.run(
-            door_argv("hygiene", repo), env=door_environment(TERM="xterm", SCANNER_PID=str(pid_file)), stdout=terminal.stream, stderr=terminal.stream, timeout=BOUND, check=False,
+            door_argv("hygiene", repo), env=door_environment(TERM="xterm", SCANNER_PID=str(pid_file)), stdout=terminal.stream, stderr=terminal.stream, timeout=60, check=False,
         )
         assert without_sgr(terminal.read()) == printed_before(complete.stdout, Area.SECRETS)
         assert done.returncode == -signal.SIGINT
@@ -152,18 +150,18 @@ def test_ctrl_c_at_a_terminal_leaves_whole_lines(build_repo, served_scanners, tm
         kill_recorded(pid_file)
 
 
-READER_CASES = {
-    "clean": ({"README.md": "x\n"}, False),
-    "finding": ({"src/a.py": 'eval("1")\n'}, False),
-    "refused": ({"compose.yaml": "services: [\n"}, False),
-    "refused, both streams in one pipe": ({"compose.yaml": "services: [\n"}, True),
-}
-
-
-@pytest.mark.parametrize(("files", "one_pipe"), READER_CASES.values(), ids=READER_CASES.keys())
+@pytest.mark.parametrize(
+    ("files", "one_pipe"),
+    [
+        pytest.param({"README.md": "x\n"}, False, id="clean"),
+        pytest.param({"src/a.py": 'eval("1")\n'}, False, id="finding"),
+        pytest.param({"compose.yaml": "services: [\n"}, False, id="refused"),
+        pytest.param({"compose.yaml": "services: [\n"}, True, id="refused, both streams in one pipe"),
+    ],
+)
 def test_a_reader_that_left_after_the_first_line_changes_neither_the_judging_nor_the_exit(build_repo, served_scanners, tmp_path, files, one_pipe):
     repo = build_repo(files)
-    complete = subprocess.run(door_argv("hygiene", repo), env=door_environment(), capture_output=True, text=True, timeout=BOUND, check=False)
+    complete = subprocess.run(door_argv("hygiene", repo), env=door_environment(), capture_output=True, text=True, timeout=60, check=False)
     expected = (complete.returncode, complete.stdout.splitlines()[0])
     expected_stderr = refusal_pair(repo) if complete.returncode == 2 else ""
     pid_file, release, stderr_file = tmp_path / "scanner.pid", tmp_path / "release", tmp_path / "stderr"
@@ -177,19 +175,24 @@ def test_a_reader_that_left_after_the_first_line_changes_neither_the_judging_nor
                 door_argv("hygiene", repo), env=door_environment(SCANNER_PID=str(pid_file), RELEASE=str(release)),
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT if one_pipe else errors, text=True,
             )
-            readable, _, _ = select.select([door.stdout], [], [], 30)
-            assert readable, "the door printed no line while its first scanner was still running"
-            first_line = door.stdout.readline().rstrip("\n")
+            printed = b""
+            while b"\n" not in printed:
+                readable, _, _ = select.select([door.stdout], [], [], 30)
+                assert readable, "the door printed no whole line while its first scanner was still running"
+                chunk = os.read(door.stdout.fileno(), 4096)
+                assert chunk, "the door closed its output before it printed a whole line"
+                printed += chunk
+            first_line = printed.split(b"\n", 1)[0].decode("utf-8")
             door.stdout.close()
             os.write(release_end, b"\n")
-            door.wait(timeout=BOUND)
+            door.wait(timeout=60)
         assert (door.returncode, first_line) == expected
         if not one_pipe:
             assert stderr_file.read_text(encoding="utf-8") == expected_stderr
     finally:
         if door is not None and door.poll() is None:
             door.kill()
-            door.wait()
+            door.wait(timeout=60)
         kill_recorded(pid_file)
         os.close(release_end)
 
@@ -198,11 +201,11 @@ def test_a_reader_that_left_after_the_first_line_changes_neither_the_judging_nor
 def test_a_start_failure_printed_on_stdout_because_stderr_is_closed_survives_a_reader_that_left(elsewhere, tmp_path):
     command = ["sh", "-c", 'exec "$@" 2>&-', "sh", *door_argv("hygiene", elsewhere)]
     with open(tmp_path / "stdout", "w", encoding="utf-8") as stdout:
-        complete = subprocess.run(command, env=door_environment(), stdout=stdout, timeout=BOUND, check=False)
+        complete = subprocess.run(command, env=door_environment(), stdout=stdout, timeout=60, check=False)
     read_end, write_end = os.pipe()
     os.close(read_end)
     try:
-        done = subprocess.run(command, env=door_environment(), stdout=write_end, timeout=BOUND, check=False)
+        done = subprocess.run(command, env=door_environment(), stdout=write_end, timeout=60, check=False)
     finally:
         os.close(write_end)
     assert done.returncode == complete.returncode
@@ -211,13 +214,13 @@ def test_a_start_failure_printed_on_stdout_because_stderr_is_closed_survives_a_r
 def test_a_reader_that_left_before_the_staged_findings_silences_them_and_the_closing_line(build_repo, served_scanners, tmp_path):
     repo = build_repo({"README.md": "x\n"})
     (repo / "staged.txt").write_text("x\n", encoding="utf-8")
-    subprocess.run(["git", "-C", str(repo), *GIT_IDENTITY, "add", "staged.txt"], check=True)
+    subprocess.run(["git", "-C", str(repo), *GIT_IDENTITY, "add", "staged.txt"], check=True, timeout=60)
     fake_gitleaks(served_scanners, on_scan=f'cp "{OUTPUTS / "gitleaks-finding.json"}" "$report"; exit 7')
     read_end, write_end = os.pipe()
     os.close(read_end)
     try:
         with open(tmp_path / "stderr", "w", encoding="utf-8") as errors:
-            done = subprocess.run(door_argv("scan-staged", repo), env=door_environment(), stdout=write_end, stderr=errors, timeout=BOUND, check=False)
+            done = subprocess.run(door_argv("scan-staged", repo), env=door_environment(), stdout=write_end, stderr=errors, timeout=60, check=False)
     finally:
         os.close(write_end)
     assert (done.returncode, (tmp_path / "stderr").read_text(encoding="utf-8")) == (1, "")
