@@ -121,3 +121,27 @@ def test_each_area_that_only_measured_has_its_own_note_in_area_order(size_measur
     areas = (debt_area(size_measured_only=size_measured_only), imports_area(extent=0, measured_only=True))
     debt_note, imports_note = cli.measured_notes(areas)
     assert (debt_note.startswith(Area.DEBT), imports_note.startswith(Area.IMPORTS), debt_note != imports_note) == (True, True, True)
+
+
+def judging(rule: Rule, extent: int | None) -> check.RuleVerdict:
+    return check.RuleVerdict(rule, extent=extent, refusal=CannotJudge("why") if extent is None else None)
+
+
+def workflows_area(lint: int | None, security: int | None) -> check.AreaVerdict:
+    return check.AreaVerdict(Area.WORKFLOWS, (judging(Rule.WORKFLOW_LINT, lint), judging(Rule.WORKFLOW_SECURITY, security)))
+
+
+@pytest.mark.parametrize("extent", [0, 1, 5])
+def test_a_judged_workflows_area_opens_its_extent_with_the_verdicts_extent_and_ends_with_the_offline_audits(extent):
+    fact = cli.area_extent(workflows_area(extent, extent), 0)
+    assert (leading_count(fact), fact.endswith(cli.OFFLINE_AUDITS)) == (extent, True)
+
+
+@pytest.mark.parametrize(("lint", "security"), [(None, 5), (5, None), (None, None)], ids=["lint refuses", "security refuses", "both refuse"])
+def test_a_workflows_area_with_one_refusing_rule_has_no_extent_whatever_the_other_carries(lint, security):
+    assert cli.area_extent(workflows_area(lint, security), 0) == ""
+
+
+@pytest.mark.parametrize(("area", "rule"), [(Area.DEPENDENCIES, Rule.ADVISORY), (Area.CODE, Rule.PYTHON_PRINT)])
+def test_an_area_without_an_extent_of_its_own_has_none(area, rule):
+    assert cli.area_extent(check.AreaVerdict(area, (check.RuleVerdict(rule, extent=3),)), 0) == ""

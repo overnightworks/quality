@@ -86,7 +86,6 @@ HYGIENE_EXIT = {
 
 INSTALLED_RUFF = partial(installation.installed_executable, scanners.RUFF)
 INSTALLED_ZIZMOR = partial(installation.installed_executable, scanners.ZIZMOR)
-ONLINE_AUDITS_NOTE = f"{Rule.WORKFLOW_SECURITY} runs offline, so zizmor's online-only audits do not run"
 
 
 def main(
@@ -194,6 +193,7 @@ class AreaEvent(StrEnum):
 
 
 CEILING_HELD = "ceiling held"
+OFFLINE_AUDITS = "offline audits only"
 NO_CONFIG_FACT = "no import-linter config"
 MEASURED_ONLY_EVENT = {Area.DEBT: AreaEvent.NOT_RECORDED, Area.IMPORTS: AreaEvent.NOT_SET_UP}
 START_FAILURE_NEXT = Instruction("fix what the error names, then run quality hygiene again")
@@ -220,20 +220,15 @@ def area_row(verdict: AreaVerdict, extent: str) -> Row:
     return Row(Glyph.CLEAN, verdict.area, AreaEvent.CLEAN, SEPARATOR.join(fact for fact in facts if fact))
 
 
-def area_extent(verdict: AreaVerdict, tracked_paths: int) -> str:
-    """What an area's row says it covered: the rules and files of `files`, the ceiling file's entries and pairs of
-    `debt` (what is measured, where it is not recorded); nothing for an area that could not check or has no extent."""
-    if verdict.area is Area.FILES:
-        return SEPARATOR.join((counted(len(verdict.verdicts), "rule"), counted(tracked_paths, "file")))
-    extents = {rule_verdict.rule: rule_verdict.extent for rule_verdict in verdict.verdicts}
-    if verdict.reasons or None in extents.values():
-        return ""
-    if verdict.area is Area.IMPORTS:
-        return NO_CONFIG_FACT if verdict.measurement is Measurement.MEASURED_ONLY else counted(extents[Rule.IMPORT_CONTRACT], "contract")
-    if verdict.area is Area.SECRETS:
-        return counted(extents[Rule.LEAK], "commit")
-    if verdict.area is not Area.DEBT:
-        return ""
+def _imports_extent(verdict: AreaVerdict, extents: Mapping[Rule, int | None]) -> str:
+    return NO_CONFIG_FACT if verdict.measurement is Measurement.MEASURED_ONLY else counted(extents[Rule.IMPORT_CONTRACT], "contract")
+
+
+def _secrets_extent(verdict: AreaVerdict, extents: Mapping[Rule, int | None]) -> str:
+    return counted(extents[Rule.LEAK], "commit")
+
+
+def _debt_extent(verdict: AreaVerdict, extents: Mapping[Rule, int | None]) -> str:
     entries, pairs = counted(extents[Rule.SIZE], "entry", "entries"), counted(extents[Rule.CLONE], "clone pair")
     match verdict.measurement:
         case Measurement.MEASURED_ONLY:
@@ -242,6 +237,29 @@ def area_extent(verdict: AreaVerdict, tracked_paths: int) -> str:
             return pairs
         case Measurement.ENFORCED:
             return f"{CEILING_HELD}{SEPARATOR}{entries}, {pairs}"
+
+
+def _workflows_extent(verdict: AreaVerdict, extents: Mapping[Rule, int | None]) -> str:
+    return SEPARATOR.join((counted(extents[Rule.WORKFLOW_LINT], "workflow"), OFFLINE_AUDITS))
+
+
+JUDGED_EXTENT: dict[Area, Callable[[AreaVerdict, Mapping[Rule, int | None]], str]] = {
+    Area.DEBT: _debt_extent,
+    Area.IMPORTS: _imports_extent,
+    Area.SECRETS: _secrets_extent,
+    Area.WORKFLOWS: _workflows_extent,
+}
+
+
+def area_extent(verdict: AreaVerdict, tracked_paths: int) -> str:
+    """What an area's row says it covered: the rules and files of `files`, then what the area's rules judged;
+    nothing for an area that could not check or has no extent."""
+    if verdict.area is Area.FILES:
+        return SEPARATOR.join((counted(len(verdict.verdicts), "rule"), counted(tracked_paths, "file")))
+    extents = {rule_verdict.rule: rule_verdict.extent for rule_verdict in verdict.verdicts}
+    if verdict.reasons or None in extents.values() or verdict.area not in JUDGED_EXTENT:
+        return ""
+    return JUDGED_EXTENT[verdict.area](verdict, extents)
 
 
 def measured_notes(areas: tuple[AreaVerdict, ...]) -> tuple[str, ...]:
@@ -282,7 +300,7 @@ def run_hygiene_check(path: Path, locate_ruff: Callable[[], str], locate_zizmor:
     except CannotJudge as error:
         write_pair(error.reason.fact, error.reason.next_steps or (START_FAILURE_NEXT,))
         return EXIT_CANNOT_JUDGE
-    emit(*result.reports, ONLINE_AUDITS_NOTE)
+    emit(*result.reports)
     for verdict in result.areas:
         write_rows((area_row(verdict, area_extent(verdict, result.tracked_paths)),))
         write_findings_and_notes([finding for finding in verdict.findings if finding.event], verdict.notes)

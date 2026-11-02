@@ -1,17 +1,37 @@
+import copy
+import json
 import os
 import shlex
 import shutil
 import subprocess
 import tomllib
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
-from quality import cli, process, scanners
-from quality.rules import Rule
+from quality import check, cli, process, scanners
+from quality.report import FindingEvent, printable
+from quality.rules import Area, Rule
 from quality.scanners import ScannerError
 from tests.support.advisories import uv_lock
-from tests.support.check import env_row_stands, heard, refusal_row, refusals
+from tests.support.check import (
+    FindingLine,
+    FixLine,
+    area_block,
+    area_fact,
+    area_finding_rows,
+    area_row,
+    assert_block_prints,
+    assert_every_line_starts_with_the_door,
+    assert_finding_vocabulary,
+    env_row_stands,
+    heard,
+    hygiene_run,
+    leading_count,
+    refusal_row,
+    refusals,
+)
 from tests.support.scanners import (
     NOT_INSTALLED,
     OUTPUTS,
@@ -300,6 +320,31 @@ def test_workflow_scanner_reports_become_findings(scanner, expected):
     assert [f"{f.rule} {f.location}" for f in findings] == [expected]
 
 
+def recorded_entry(scanner: str) -> dict:
+    return json.loads(recorded(f"{scanner}-finding.json"))[0]
+
+
+@pytest.mark.parametrize(("scanner", "event"), [("actionlint", "INVALID"), ("zizmor", "INSECURE")])
+def test_a_workflow_finding_carries_the_event_of_its_kind_and_the_vocabulary(scanner, event):
+    """O36: one event word per kind, a fact and a fix that end in no full stop and name no rule id."""
+    (found,) = workflow_findings(scanner, recorded(f"{scanner}-finding.json"), FINDING_EXIT[scanner])
+    assert found.event is FindingEvent[event]
+    assert_finding_vocabulary(found)
+
+
+def test_an_actionlint_finding_names_the_scanner_and_holds_the_whole_message_as_its_one_detail_line():
+    """O37: the message of the recorded report stands whole as the finding's detail."""
+    (found,) = workflow_findings("actionlint", recorded("actionlint-finding.json"), FINDING_EXIT["actionlint"])
+    assert (found.reason, found.detail) == (scanners.ACTIONLINT, (recorded_entry("actionlint")["message"],))
+
+
+def test_a_zizmor_finding_names_its_audit_and_description_and_its_fix_holds_the_audit_url():
+    """O36: the scenario's own values stand in the fact and the fix."""
+    (found,) = workflow_findings("zizmor", recorded("zizmor-finding.json"), FINDING_EXIT["zizmor"])
+    entry = recorded_entry("zizmor")
+    assert (entry["ident"] in found.reason, entry["desc"] in found.reason, entry["url"] in found.fix) == (True, True, True)
+
+
 @pytest.mark.parametrize("scanner", ["actionlint", "zizmor"])
 @pytest.mark.parametrize(
     ("report", "exit_code"),
@@ -369,20 +414,25 @@ def local_reusable_call(prefix: str) -> str:
 INVALID_RUNS_ON = "on: push\npermissions: {}\njobs:\n  j:\n    runs-on: ${{ foo( }}\n    steps:\n      - run: 'true'\n"
 
 
+def workflow_rows(capsys) -> list[tuple[str, FindingEvent, str]]:
+    """The finding rows under the workflows row of what the door printed: location, event and fact."""
+    return [(location, row.event, row.fact) for location, row in area_finding_rows(capsys.readouterr().out, Area.WORKFLOWS)]
+
+
 @pytest.mark.scanner
 @pytest.mark.parametrize(
-    ("workflow", "expected"),
+    ("workflow", "location", "event"),
     [
-        (UNPINNED_WITHOUT_PERMISSIONS, "workflow-security .github/workflows/w.yml:6"),
-        (INVALID_RUNS_ON, "workflow-lint .github/workflows/w.yml:5"),
-        (local_reusable_call("."), "workflow-security .github/workflows/w.yml:7"),
+        (UNPINNED_WITHOUT_PERMISSIONS, ".github/workflows/w.yml:6", "INSECURE"),
+        (INVALID_RUNS_ON, ".github/workflows/w.yml:5", "INVALID"),
+        (local_reusable_call("."), ".github/workflows/w.yml:7", "INSECURE"),
     ],
     ids=["unpinned-action-without-permissions", "invalid-runs-on-expression", "local-reusable-call-with-dot-slash"],
 )
-def test_a_known_bad_workflow_fails(workflow_repo, installed_scanners, capsys, workflow, expected):
-    """#15 rules 3 and 4: the real scanners fail a known bad workflow at file:line."""
+def test_a_known_bad_workflow_fails(workflow_repo, installed_scanners, capsys, workflow, location, event):
+    """The real scanners fail a known bad workflow at file:line, as a row of its kind."""
     assert scan(workflow_repo(workflow)) == 1
-    assert expected in capsys.readouterr().out
+    assert (location, FindingEvent[event]) in [(found, kind) for found, kind, _ in workflow_rows(capsys)]
 
 
 @pytest.mark.scanner
@@ -407,10 +457,10 @@ ONLY_AN_ONLINE_AUDIT_FLAGS_THIS = (
 
 
 @pytest.mark.scanner
-def test_a_run_discloses_that_online_audits_do_not_run(workflow_repo, installed_scanners, capsys):
-    """#15 rule 5: a workflow only zizmor's online audit (impostor-commit) would flag passes, and the run says so."""
+def test_a_clean_row_says_a_workflow_only_an_online_audit_would_flag_was_audited_offline_only(workflow_repo, installed_scanners, capsys):
+    """A workflow only zizmor's online audit (impostor-commit) would flag passes, and its row says offline audits only."""
     assert scan(workflow_repo(ONLY_AN_ONLINE_AUDIT_FLAGS_THIS)) == 0
-    assert "online-only audits do not run" in capsys.readouterr().out
+    assert area_fact(capsys.readouterr().out, Area.WORKFLOWS).endswith(cli.OFFLINE_AUDITS)
 
 
 CALLER_SILENCES = {
@@ -424,21 +474,22 @@ INLINE_IGNORE = UNPINNED_WITHOUT_PERMISSIONS.replace(
 
 @pytest.mark.scanner
 @pytest.mark.parametrize(
-    ("workflow", "caller_files", "expected"),
+    ("workflow", "caller_files", "location", "event", "fact"),
     [
-        (UNPINNED_WITHOUT_PERMISSIONS, {".github/zizmor.yml": CALLER_SILENCES[".github/zizmor.yml"]}, "unpinned-uses"),
-        (INLINE_IGNORE, {}, "unpinned-uses"),
-        (INVALID_RUNS_ON, {".github/actionlint.yaml": CALLER_SILENCES[".github/actionlint.yaml"]}, "workflow-lint"),
+        (UNPINNED_WITHOUT_PERMISSIONS, {".github/zizmor.yml": CALLER_SILENCES[".github/zizmor.yml"]}, ".github/workflows/w.yml:6", "INSECURE", "unpinned-uses"),
+        (INLINE_IGNORE, {}, ".github/workflows/w.yml:6", "INSECURE", "unpinned-uses"),
+        (INVALID_RUNS_ON, {".github/actionlint.yaml": CALLER_SILENCES[".github/actionlint.yaml"]}, ".github/workflows/w.yml:5", "INVALID", ""),
     ],
     ids=["caller-zizmor-config", "inline-zizmor-ignore", "caller-actionlint-config"],
 )
 def test_what_the_scanned_repository_says_never_silences_a_workflow_finding(
-    build_repo, installed_scanners, capsys, workflow, caller_files, expected
+    build_repo, installed_scanners, capsys, workflow, caller_files, location, event, fact
 ):
-    """#15 material risk: a caller's scanner config or ignore comment cannot turn a failing workflow green."""
+    """A caller's scanner config or ignore comment cannot turn a failing workflow green, and the row
+    of the scenario's own audit stands, so another audit's row cannot stand in for a suppressed one."""
     repo = build_repo({".github/workflows/w.yml": workflow, **caller_files})
     assert scan(repo) == 1
-    assert expected in capsys.readouterr().out
+    assert [row for row in workflow_rows(capsys) if row[:2] == (location, FindingEvent[event]) and fact in row[2]]
 
 
 @pytest.mark.scanner
@@ -453,6 +504,141 @@ def test_a_shellcheck_on_path_never_runs_during_workflow_lint(build_repo, instal
     workflow = "on: push\npermissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo $FOO\n"
     scan(build_repo({".github/workflows/w.yml": workflow}))
     assert not marker.exists()
+
+
+# ---- the workflows block, through the door with the recorded reports ----
+
+
+def prints(report: Path, exit_code: int) -> str:
+    return f"cat '{report}'; exit {exit_code}"
+
+
+@dataclass(frozen=True)
+class WorkflowRun:
+    repo: Path
+    locate_zizmor: Locator
+    code: int
+    out: str
+    err: str
+
+    @property
+    def area(self) -> check.AreaVerdict:
+        return next(verdict for verdict in hygiene_run(self.repo, locate_zizmor=self.locate_zizmor).areas if verdict.area is Area.WORKFLOWS)
+
+
+@pytest.fixture
+def workflow_pair() -> dict[str, str]:
+    return {".github/workflows/a.yml": "on: push\n", ".github/workflows/w.yml": "on: push\n"}
+
+
+@pytest.fixture
+def drive_workflows(build_repo, served_scanners, elsewhere, capsys):
+    """`drive(files, lint=…, security=…)` runs `hygiene` over a repository tracking `files`, with a fake actionlint and zizmor
+    running the given shell (clean by default); `deleted` names tracked files taken from the tree before the run."""
+
+    def drive(files: dict[str, str], lint: str = "echo '[]'", security: str = "echo '[]'", deleted: tuple[str, ...] = ()) -> WorkflowRun:
+        repo = build_repo(files)
+        for name in deleted:
+            (repo / name).unlink()
+        fake_scanner(served_scanners, scanners.ACTIONLINT, lint)
+        locate_zizmor = fake_zizmor(elsewhere, security)
+        code = cli.main(["hygiene", str(repo)], locate_zizmor=locate_zizmor, clock=lambda: 0.0)
+        captured = capsys.readouterr()
+        return WorkflowRun(repo, locate_zizmor, code, captured.out, captured.err)
+
+    return drive
+
+
+@pytest.fixture
+def red_workflows(drive_workflows, workflow_pair) -> WorkflowRun:
+    return drive_workflows(
+        workflow_pair,
+        prints(OUTPUTS / "actionlint-finding.json", FINDING_EXIT["actionlint"]),
+        prints(OUTPUTS / "zizmor-finding.json", FINDING_EXIT["zizmor"]),
+    )
+
+
+def test_the_workflows_block_prints_lint_before_security_each_message_under_its_row_and_one_fix_per_run(red_workflows):
+    """O37: rows, details and fixes equal what the rules returned, in order."""
+    assert [finding.rule for finding in red_workflows.area.findings] == [Rule.WORKFLOW_LINT, Rule.WORKFLOW_SECURITY]
+    block = area_block(red_workflows.out, Area.WORKFLOWS)
+    assert_block_prints(block, red_workflows.area.findings, ())
+    assert (red_workflows.code, sum(isinstance(line, FixLine) for line in block)) == (1, 2)
+
+
+def test_the_whole_recorded_message_stands_on_one_detail_line_under_the_lint_row(red_workflows):
+    """O37: no cut and no wrap of the message, whatever its length."""
+    (lint_row, *_) = [line for line in area_block(red_workflows.out, Area.WORKFLOWS) if isinstance(line, FindingLine)]
+    assert lint_row.row.detail == (printable(recorded_entry("actionlint")["message"]),)
+
+
+def test_a_red_workflows_run_prints_no_prelude_and_no_line_starts_with_a_rule_id(red_workflows):
+    """O15, decision 12: the first line is the first area row, and quality adds no rule-id label."""
+    lines = red_workflows.out.splitlines()
+    assert (lines[0].split()[1], red_workflows.err) == (next(iter(Area)), "")
+    assert not any(line.lstrip().startswith((Rule.WORKFLOW_LINT, Rule.WORKFLOW_SECURITY)) for line in lines)
+
+
+@pytest.mark.parametrize(
+    ("edit", "fixes"),
+    [
+        (lambda entry: None, 1),
+        (lambda entry: entry.update(ident="another-audit", url="https://example.invalid/another-audit"), 2),
+    ],
+    ids=["the same audit twice", "two audits"],
+)
+def test_equal_zizmor_fixes_share_one_fix_line_and_different_ones_do_not(drive_workflows, workflow_pair, edited_report, edit, fixes):
+    """One `fix:` per run of equal fixes, after the run's last row."""
+
+    def twice(report: list) -> None:
+        report.append(copy.deepcopy(report[0]))
+        edit(report[1])
+
+    report = edited_report("zizmor-finding.json", twice)
+    run = drive_workflows(workflow_pair, security=prints(report, FINDING_EXIT["zizmor"]))
+    block = area_block(run.out, Area.WORKFLOWS)
+    assert_block_prints(block, run.area.findings, ())
+    assert (sum(isinstance(line, FindingLine) for line in block), sum(isinstance(line, FixLine) for line in block)) == (2, fixes)
+
+
+@pytest.mark.parametrize(
+    ("tracked", "deleted"), [(0, 0), (1, 0), (2, 0), (2, 1)], ids=["none", "one", "two", "two, one deleted from the tree"]
+)
+def test_a_clean_workflows_row_counts_the_workflow_files_the_tree_holds_and_ends_with_the_offline_audits(drive_workflows, tracked, deleted):
+    """O38: N is what the tree holds; the disclosure follows."""
+    names = [f".github/workflows/{name}.yml" for name in ("a", "b")[:tracked]]
+    run = drive_workflows({name: "on: push\n" for name in names}, deleted=tuple(names[:deleted]))
+    fact = area_fact(run.out, Area.WORKFLOWS)
+    assert (run.code, leading_count(fact), fact.endswith(cli.OFFLINE_AUDITS)) == (0, tracked - deleted, True)
+
+
+def workflows_row(printed: str) -> str:
+    """The line of the workflows row, whatever it says."""
+    return next(line for line in printed.splitlines() if line.split()[1:2] == [Area.WORKFLOWS])
+
+
+def test_a_workflows_row_with_a_finding_carries_no_extent(red_workflows):
+    """O39: a red area claims no pass."""
+    assert cli.OFFLINE_AUDITS not in workflows_row(red_workflows.out)
+
+
+def test_a_workflows_row_that_could_not_check_carries_no_extent(drive_workflows, workflow_pair):
+    """O39: a refusal names its reason and none of the clean row's words."""
+    run = drive_workflows(workflow_pair, lint="echo boom >&2; exit 3")
+    row = area_row(run.out, Area.WORKFLOWS)
+    assert (run.code, row.event, cli.OFFLINE_AUDITS not in workflows_row(run.out)) == (2, cli.AreaEvent.NOT_CHECKED, True)
+    assert cli.OFFLINE_AUDITS not in run.out + run.err
+
+
+def test_a_path_and_a_message_with_control_characters_print_escaped_and_forge_no_line(drive_workflows, workflow_pair, edited_report):
+    """The row's path and the detail line pass through `printable`."""
+    path, message = ".github/workflows/a\x1b\u202eb.yml", "::error::\x1b[31mforged"
+    report = edited_report("actionlint-finding.json", lambda entries: entries[0].update(filepath=path, message=message))
+    run = drive_workflows(workflow_pair, lint=prints(report, FINDING_EXIT["actionlint"]))
+    (row,) = [line for line in area_block(run.out, Area.WORKFLOWS) if isinstance(line, FindingLine)]
+    assert (row.location, row.row.detail) == (printable(f"{path}:{recorded_entry('actionlint')['line']}"), (printable(message),))
+    assert_every_line_starts_with_the_door(run.out.splitlines())
+    assert run.err == ""
 
 
 # ---- mise finds the scanners (#228 rule 4) ----

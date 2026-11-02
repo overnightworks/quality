@@ -1,3 +1,4 @@
+import re
 import subprocess
 from collections import Counter
 from pathlib import Path
@@ -6,13 +7,15 @@ import pytest
 
 from quality import check, cli, config, env_file, installation, scanners
 from quality.compose import is_compose_file
-from quality.report import CannotJudge, Command, Example, Finding, Reason, Unparsable, printable
+from quality.report import CannotJudge, Command, Example, Finding, FindingEvent, Reason, Unparsable, printable
 from quality.rules import Area, Rule
 from tests.support.architecture import KEPT_CONTRACT
 from tests.support.check import (
     CLEAN_VERDICT,
+    area_finding_rows,
     compose,
     env_row_stands,
+    hygiene_run,
     installed_ruff,
     is_clean,
     loosen_requirement,
@@ -183,7 +186,8 @@ def test_a_finding_under_a_rule_its_check_does_not_judge_fails_loud(build_repo, 
 
 
 def test_a_refusing_workflow_scanner_stops_no_other_workflow_rule(build_repo, served_scanners, elsewhere, capsys):
-    """#55 rule 1: actionlint cannot judge, yet zizmor still runs and its finding prints under its own rule."""
+    """When actionlint cannot judge, zizmor still runs and its finding prints under its own rule; stderr holds the refusal
+    pair alone, its counts the scenario's one refused area and one finding in it."""
     zizmor_report = Path(__file__).parent / "fixtures" / "scanner-outputs" / "zizmor-finding.json"
     fake_scanner(served_scanners, scanners.ACTIONLINT, "echo boom >&2; exit 3")
     locate_zizmor = fake_zizmor(elsewhere, on_scan=f"cat '{zizmor_report}'; exit 12")
@@ -192,7 +196,13 @@ def test_a_refusing_workflow_scanner_stops_no_other_workflow_rule(build_repo, se
     captured = capsys.readouterr()
     assert code == 2
     assert f"{refusal_row('workflows')}actionlint exited 3" in captured.out
-    assert "workflow-security .github/workflows/w.yml:7 - zizmor unpinned-uses" in captured.out
+    assert [(location, row.event) for location, row in area_finding_rows(captured.out, Area.WORKFLOWS)] == [
+        (".github/workflows/w.yml:7", FindingEvent.INSECURE)
+    ]
+    areas = hygiene_run(repo, locate_zizmor=locate_zizmor).areas
+    error, next_line = captured.err.splitlines()
+    assert (error, next_line) == (f"error: {cli.refusal_error(areas)}", f"next: {cli.REFUSED_AREAS_NEXT.text}")
+    assert [int(number) for number in re.findall(r"\d+", error)] == [1, len(Area), 1, 1]
 
 
 @pytest.mark.parametrize(
