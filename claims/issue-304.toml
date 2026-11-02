@@ -1,0 +1,8 @@
+claim_id = "affeb60e335f4bb19d783f0ff4b66c3d"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "cdfea986248c95d877edfafc0106915097c77c21"
+branch = "claude/issue-304-c3f2-workflows-rows"
+scope = ["docs/output.md", "docs/rules.md", "src/quality/check.py", "src/quality/cli.py", "src/quality/report.py", "src/quality/scanners.py", "tests/test_check.py", "tests/test_cli_area_row.py", "tests/test_cli_output.py", "tests/test_output.py", "tests/test_scanners.py"]
+opened_commit = "7b2c0e86b4c3e83987cff30c0db09ff6e3c739a8"
+whole_reason = "Four production files, about 84 changed lines, one over the corridor's three files: the event, its constructor, the rule's extent and the row are one vertical through their four owners, and commit 1 isolates the behaviour-neutral refactor."
