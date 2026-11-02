@@ -1,14 +1,10 @@
-import contextlib
 import io
 import itertools
-import re
-from pathlib import Path
 
 import pytest
 
-from quality import cli
 from tests.support.check import refusal_pair
-from tests.support.terminal import Terminal
+from tests.support.terminal import Terminal, run_on, without_sgr
 
 
 class TurnsPlain(Terminal):
@@ -21,15 +17,6 @@ class TurnsPlain(Terminal):
     def isatty(self) -> bool:
         first, self.asked = not self.asked, True
         return first
-
-
-def run_on(repo: Path, stdout: io.StringIO, stderr: io.StringIO, environment: dict[str, str]) -> int:
-    with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-        return cli.main(["hygiene", str(repo)], clock=lambda: 0.0, environment=environment)
-
-
-def without_sgr(text: str) -> str:
-    return re.sub(r"\x1b\[[0-9;]*m", "", text)
 
 
 @pytest.mark.parametrize(("stdout_kind", "stderr_kind"), list(itertools.product((Terminal, io.StringIO), repeat=2)))

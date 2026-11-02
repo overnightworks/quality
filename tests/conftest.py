@@ -72,7 +72,7 @@ RepoBuilder = Callable[[dict[str, str]], Path]
 Responder = Callable[[http.server.BaseHTTPRequestHandler], None]
 
 
-# Exact built-in types whose repr cannot raise; any other type, subclasses included, prints as its name.
+# Exact built-in types whose repr is safe for the values these events carry; any other type, subclasses included, prints as its name.
 REPRESENTABLE_TYPES = frozenset({int, float, bool, bytes, type(None), PurePosixPath, PosixPath})
 
 _recording: list[tuple[str, tuple]] | None = None
