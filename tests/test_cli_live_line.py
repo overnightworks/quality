@@ -14,7 +14,7 @@ from quality import check, cli, scanners
 from tests.support.advisories import uv_lock
 from tests.support.git_repositories import GIT_IDENTITY
 from tests.support.python_lint import fake_ruff
-from tests.support.scanners import CLEAN_SCANS, fake_scanner, fake_zizmor, lacking
+from tests.support.scanners import CLEAN_SCANS, OUTPUTS, fake_gitleaks, fake_scanner, fake_zizmor, lacking
 from tests.support.terminal import PseudoTerminal, Terminal, run_on, screen, without_sgr
 
 
@@ -154,23 +154,28 @@ def test_an_exception_in_a_check_takes_the_line_down(build_repo, window, monkeyp
 
 
 @pytest.mark.parametrize(
-    ("refused", "marker"), [pytest.param(False, "gitleaks", id="clean"), pytest.param(True, "", id="refused")]
+    ("outcome", "marker"),
+    [pytest.param("clean", "gitleaks", id="clean"), pytest.param("finding", "gitleaks", id="finding"), pytest.param("refused", "", id="refused")],
 )
 def test_the_staged_door_shows_its_scanner_and_takes_the_line_down_before_its_answer(
-    build_repo, served_scanners, use_mise, window, monkeypatch, xterm, refused, marker
+    build_repo, served_scanners, use_mise, window, monkeypatch, xterm, outcome, marker
 ):
     repo = build_repo({"README.md": "x\n"})
     (repo / "staged.txt").write_text("x\n", encoding="utf-8")
     subprocess.run(["git", "-C", str(repo), *GIT_IDENTITY, "add", "staged.txt"], check=True, timeout=60)
-    fake_scanner(served_scanners, scanners.GITLEAKS, showing(scanners.GITLEAKS, CLEAN_SCANS[scanners.GITLEAKS]))
-    if refused:
+    if outcome == "finding":
+        fake_gitleaks(served_scanners, on_scan=showing(scanners.GITLEAKS, f'cp "{OUTPUTS / "gitleaks-finding.json"}" "$report"; exit 7'))
+    else:
+        fake_scanner(served_scanners, scanners.GITLEAKS, showing(scanners.GITLEAKS, CLEAN_SCANS[scanners.GITLEAKS]))
+    if outcome == "refused":
         use_mise(lacking(served_scanners, scanners.GITLEAKS))
     monkeypatch.setenv("LIVE_TERMINAL", os.devnull)
     plain_out, plain_err = io.StringIO(), io.StringIO()
     scan_staged_on(repo, plain_out, plain_err, xterm)
-    terminal = window(80)
+    terminal = window(200)
     terminal.stream.reconfigure(line_buffering=False)
     monkeypatch.setenv("LIVE_TERMINAL", os.ttyname(terminal.stream.fileno()))
-    scan_staged_on(repo, terminal.stream, terminal.stream, xterm)
+    stdout = io.StringIO() if outcome == "refused" else terminal.stream
+    scan_staged_on(repo, stdout, terminal.stream, xterm)
     answer = plain_out.getvalue() + plain_err.getvalue()
     assert without_sgr(terminal.read()) == f"  ⠋ secrets       gitleaks\r{marker}\r\x1b[K{answer}"
