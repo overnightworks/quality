@@ -6,6 +6,8 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 
 from quality import output, sonar
+from quality.config import CONFIG_PATH
+from quality.merge import GhFailed
 from quality.report import FindingEvent
 from quality.sonar import finding_from_issue
 from tests.support.merge import (
@@ -20,6 +22,7 @@ from tests.support.sonar import (
     FINISHED_FOR_FEATURE,
     FINISHED_FOR_MAIN,
     KEY,
+    LEGACY_COUNT,
     PUSH_ENVIRONMENT,
     legacy_config,
     run_cli,
@@ -32,13 +35,13 @@ FIX = "Fix it in the code; an accepted or false-positive mark in SonarCloud stil
 COUNTED_LINE = f"sonar Dockerfile:3 - docker:S8431: {MESSAGE}\n  Fix: {FIX}\n"
 
 
-def bot_issue(rule: str = sonar.DEPENDABOT_EXCEPTION_RULE, path: str = "Dockerfile") -> dict:
-    return {"rule": rule, "component": f"{KEY}:{path}", "line": 3, "textRange": {"startLine": 3}, "message": MESSAGE}
+def bot_issue(rule: str = sonar.DEPENDABOT_EXCEPTION_RULE) -> dict:
+    return {"rule": rule, "component": f"{KEY}:Dockerfile", "line": 3, "textRange": {"startLine": 3}, "message": MESSAGE}
 
 
-def write_bot_config(content: str = "version: 2\n") -> None:
+def write_bot_config() -> None:
     Path(".github").mkdir(exist_ok=True)
-    Path(".github/dependabot.yml").write_text(content)
+    Path(".github/dependabot.yml").write_text("version: 2\n")
 
 
 @pytest.fixture(autouse=True)
@@ -94,6 +97,7 @@ def test_no_count_request_names_a_rule(monkeypatch, capsys):
     write_bot_config()
     fake = findings_of(legacy=5)
     run_cli(monkeypatch, capsys, fake)
+    assert fake.urls_to(LEGACY_COUNT)
     queries = [parse_qs(urlparse(url).query) for url, _ in fake.requests]
     assert [query for query in queries if "rules" in query] == []
 
@@ -109,9 +113,15 @@ def test_the_findings_door_never_reads_the_bot_config(monkeypatch, capsys):
     assert code == 0
 
 
-@pytest.mark.parametrize("legacy", [-1, True], ids=["negative", "boolean"])
-def test_an_unreadable_legacy_count_is_exit_2(monkeypatch, capsys, legacy):
-    code, out, err, _ = run_cli(monkeypatch, capsys, findings_of(legacy=legacy), config_text=legacy_config("report"))
+@pytest.mark.parametrize(
+    "answer",
+    [{"issues": []}, {"total": "many"}, [], None, {"total": True}, {"total": 3.9}, {"total": -1}, {"total": "3"}],
+    ids=["no total", "not a number", "list", "null", "boolean", "fraction", "negative", "numeral string"],
+)
+def test_an_unreadable_legacy_count_is_exit_2(monkeypatch, capsys, answer):
+    fake = findings_of(legacy=5)
+    fake.answers[LEGACY_COUNT] = [answer]
+    code, out, err, _ = run_cli(monkeypatch, capsys, fake, config_text=legacy_config("report"))
     assert (code, out, err.startswith("sonar: cannot judge - ")) == (2, "", True)
 
 
@@ -132,6 +142,16 @@ def test_the_emergency_door_names_every_added_finding_where_the_bot_config_exist
     refusal = capsys.readouterr().out
     assert code == 1
     assert (sonar.DEPENDABOT_EXCEPTION_RULE in refusal, "python:S1" in refusal) == (True, True)
+    changed_nothing(gh)
+    assert answers == []
+
+
+def test_the_emergency_door_cannot_judge_when_a_config_read_fails_other_than_not_found(capsys):
+    gh = FakeGh()
+    gh.files[(CONFIG_PATH, MERGE_SHA)] = GhFailed("gh api failed: HTTP 500")
+    code, answers = drive(gh, emergency_sonar(legacy=12))
+    assert code == 2
+    assert "cannot judge" in capsys.readouterr().out
     changed_nothing(gh)
     assert answers == []
 

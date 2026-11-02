@@ -545,7 +545,7 @@ def run_sonar_findings(transport: Transport, sleep: Sleep) -> int:
     try:
         legacy_mode = read_gate_settings(Path(".")).legacy
         result = analyse(os.environ, legacy_mode, transport, sleep)
-    except (CannotJudge, ConfigError, repository.RepositoryFileError) as error:
+    except (CannotJudge, ConfigError) as error:
         emit(f"sonar: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     for finding in result.findings.listed:
