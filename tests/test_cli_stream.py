@@ -124,8 +124,7 @@ def test_an_interrupt_during_a_scan_leaves_the_rows_of_the_finished_areas_whole(
         done = subprocess.run(command, env=door_environment(SCANNER_PID=str(pid_file), TMPDIR=str(scratch_parent)), capture_output=True, text=True, timeout=60, check=False)
         assert done.stdout == printed_before(complete.stdout, Area.SECRETS)
         if under_shell:
-            expected_stderr = f"exit {128 + signal.SIGINT}\n"
-            assert done.stderr == expected_stderr
+            assert done.stderr == f"exit {128 + signal.SIGINT}\n"
         else:
             assert (done.returncode, done.stderr) == (-signal.SIGINT if sent == signal.SIGINT else 128 + signal.SIGTERM, "")
         assert list(scratch_parent.iterdir()) == []
@@ -163,7 +162,6 @@ def test_ctrl_c_at_a_terminal_leaves_whole_lines(build_repo, served_scanners, tm
 def test_a_reader_that_left_after_the_first_line_changes_neither_the_judging_nor_the_exit(build_repo, served_scanners, tmp_path, files, one_pipe):
     repo = build_repo(files)
     complete = subprocess.run(door_argv("hygiene", repo), env=door_environment(), capture_output=True, text=True, timeout=60, check=False)
-    expected = (complete.returncode, complete.stdout.splitlines()[0])
     expected_stderr = refusal_pair(repo) if complete.returncode == 2 else ""
     pid_file, release, stderr_file = tmp_path / "scanner.pid", tmp_path / "release", tmp_path / "stderr"
     os.mkfifo(release)
@@ -187,7 +185,7 @@ def test_a_reader_that_left_after_the_first_line_changes_neither_the_judging_nor
             door.stdout.close()
             os.write(release_end, b"\n")
             door.wait(timeout=60)
-        assert (door.returncode, first_line) == expected
+        assert (door.returncode, first_line) == (complete.returncode, complete.stdout.splitlines()[0])
         if not one_pipe:
             assert stderr_file.read_text(encoding="utf-8") == expected_stderr
     finally:
