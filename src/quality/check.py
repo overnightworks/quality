@@ -3,7 +3,7 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import Enum, auto
-from functools import partial
+from functools import cached_property, partial
 from pathlib import Path, PurePosixPath
 
 from quality import (
@@ -297,13 +297,30 @@ def _content_findings(
     return _attempt(judge)
 
 
-def _judged_areas(
-    root: Path, tracked: list[str], locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str], running: Running, verbose: bool
-) -> Iterator[AreaVerdict]:
-    """Each area as its last rule ends, in the order the rows stand."""
-    allow_lists = _attempt(lambda: _read_allow_lists(root))
-    modes = _attempt(lambda: checkout.index_modes(root))
-    yield _area_verdict(
+@dataclass(frozen=True)
+class RunInputs:
+    """What every area of one run reads: the repository and what the door injected. Each shared read happens once,
+    when the first area that needs it asks, so a run of other areas never starts it."""
+
+    root: Path
+    tracked: list[str]
+    locate_ruff: Callable[[], str]
+    locate_zizmor: Callable[[], str]
+    running: Running
+    verbose: bool
+
+    @cached_property
+    def allow_lists(self) -> AllowLists | CannotJudge:
+        return _attempt(lambda: _read_allow_lists(self.root))
+
+    @cached_property
+    def modes(self) -> dict[str, str] | CannotJudge:
+        return _attempt(lambda: checkout.index_modes(self.root))
+
+
+def _judge_files(inputs: RunInputs) -> AreaVerdict:
+    root, tracked, allow_lists, modes = inputs.root, inputs.tracked, inputs.allow_lists, inputs.modes
+    return _area_verdict(
         Area.FILES,
         {
             Rule.ENV_FILE: env_file.check_env_files(tracked),
@@ -318,33 +335,63 @@ def _judged_areas(
             Rule.PYTHON_FLOOR: _attempt(lambda: _python_floor_result(root, modes, allow_lists)),
         },
     )
-    sources = _attempt(lambda: ratchet.read_sources(root, tracked))
-    baseline = sources if isinstance(sources, CannotJudge) else _attempt(lambda: judged_baseline(root))
-    size, clone = _judge_baseline_rules(sources, baseline, allow_lists)
-    yield _area_verdict(Area.DEBT, {Rule.SIZE: size, Rule.CLONE: clone})
-    yield _area_verdict(Area.IMPORTS, {Rule.IMPORT_CONTRACT: _attempt(lambda: check_import_contract(root, tracked))})
-    secret_runs, secret_log = _run_log(verbose)
-    leak = _scanned(running, Area.SECRETS, scanners.GITLEAKS, lambda: check_secrets(root, allow_lists, secret_log))
-    yield _area_verdict(Area.SECRETS, {Rule.LEAK: leak}, secret_runs)
-    workflow_runs, workflow_log = _run_log(verbose)
-    yield _area_verdict(
-        Area.WORKFLOWS,
-        {
-            rule: _scanned(running, Area.WORKFLOWS, scanner.name, partial(check_workflows, root, rule, tracked, locate_zizmor, workflow_log))
-            for rule, scanner in scanners.WORKFLOW_SCANNERS.items()
-        },
-        workflow_runs,
+
+
+def _judge_debt(inputs: RunInputs) -> AreaVerdict:
+    sources = _attempt(lambda: ratchet.read_sources(inputs.root, inputs.tracked))
+    baseline = sources if isinstance(sources, CannotJudge) else _attempt(lambda: judged_baseline(inputs.root))
+    size, clone = _judge_baseline_rules(sources, baseline, inputs.allow_lists)
+    return _area_verdict(Area.DEBT, {Rule.SIZE: size, Rule.CLONE: clone})
+
+
+def _judge_imports(inputs: RunInputs) -> AreaVerdict:
+    return _area_verdict(Area.IMPORTS, {Rule.IMPORT_CONTRACT: _attempt(lambda: check_import_contract(inputs.root, inputs.tracked))})
+
+
+def _judge_secrets(inputs: RunInputs) -> AreaVerdict:
+    runs, log = _run_log(inputs.verbose)
+    leak = _scanned(inputs.running, Area.SECRETS, scanners.GITLEAKS, lambda: check_secrets(inputs.root, inputs.allow_lists, log))
+    return _area_verdict(Area.SECRETS, {Rule.LEAK: leak}, runs)
+
+
+def _judge_workflows(inputs: RunInputs) -> AreaVerdict:
+    runs, log = _run_log(inputs.verbose)
+    judged = {
+        rule: _scanned(inputs.running, Area.WORKFLOWS, scanner.name, partial(check_workflows, inputs.root, rule, inputs.tracked, inputs.locate_zizmor, log))
+        for rule, scanner in scanners.WORKFLOW_SCANNERS.items()
+    }
+    return _area_verdict(Area.WORKFLOWS, judged, runs)
+
+
+def _judge_dependencies(inputs: RunInputs) -> AreaVerdict:
+    runs, log = _run_log(inputs.verbose)
+    advisory = _scanned(
+        inputs.running, Area.DEPENDENCIES, scanners.OSV_SCANNER, partial(check_advisories, inputs.root, inputs.tracked, inputs.allow_lists, log)
     )
-    advisory_runs, advisory_log = _run_log(verbose)
-    advisory = _scanned(running, Area.DEPENDENCIES, scanners.OSV_SCANNER, partial(check_advisories, root, tracked, allow_lists, advisory_log))
-    yield _area_verdict(Area.DEPENDENCIES, {Rule.ADVISORY: advisory}, advisory_runs)
-    code_runs, code_log = _run_log(verbose)
-    lint = _scanned(running, Area.CODE, scanners.RUFF, lambda: lint_python(root, modes, locate_ruff, code_log))
-    yield _area_verdict(
-        Area.CODE,
-        {Rule.PYTHON_SECURITY: _judge_lint(lint, python_lint.judge_security), Rule.PYTHON_PRINT: _judge_lint(lint, python_lint.judge_print)},
-        code_runs,
-    )
+    return _area_verdict(Area.DEPENDENCIES, {Rule.ADVISORY: advisory}, runs)
+
+
+def _judge_code(inputs: RunInputs) -> AreaVerdict:
+    runs, log = _run_log(inputs.verbose)
+    lint = _scanned(inputs.running, Area.CODE, scanners.RUFF, lambda: lint_python(inputs.root, inputs.modes, inputs.locate_ruff, log))
+    judged = {Rule.PYTHON_SECURITY: _judge_lint(lint, python_lint.judge_security), Rule.PYTHON_PRINT: _judge_lint(lint, python_lint.judge_print)}
+    return _area_verdict(Area.CODE, judged, runs)
+
+
+AREA_JUDGES: Mapping[Area, Callable[[RunInputs], AreaVerdict]] = {
+    Area.FILES: _judge_files,
+    Area.DEBT: _judge_debt,
+    Area.IMPORTS: _judge_imports,
+    Area.SECRETS: _judge_secrets,
+    Area.WORKFLOWS: _judge_workflows,
+    Area.DEPENDENCIES: _judge_dependencies,
+    Area.CODE: _judge_code,
+}
+
+
+def _judged_areas(inputs: RunInputs) -> Iterator[AreaVerdict]:
+    """Each area as its last rule ends, in the order the rows stand."""
+    return (AREA_JUDGES[area](inputs) for area in Area)
 
 
 def judge_repository(
@@ -357,8 +404,9 @@ def judge_repository(
     root = checkout.work_tree_top(root)
     tracked = checkout.tracked_files(root)
     tracked_paths = len(set(tracked))
+    inputs = RunInputs(root, tracked, locate_ruff, locate_zizmor, running, verbose)
     areas: list[AreaVerdict] = []
-    for area in _judged_areas(root, tracked, locate_ruff, locate_zizmor, running, verbose):
+    for area in _judged_areas(inputs):
         report_area(area, tracked_paths)
         areas.append(area)
     return CheckResult(tuple(areas), tracked_paths)
