@@ -244,6 +244,17 @@ def test_an_honoured_owner_is_reported_with_its_path_and_reason():
     )
 
 
+@pytest.mark.parametrize(
+    ("text", "records"),
+    [(f"x = 1\n{OWNER}\n", []), (f"x = 1\n{OWNER}\npprint(1)\n", [record(code="T203", line=3, noqa_line=3)])],
+    ids=["no print", "only another code"],
+)
+def test_an_owner_that_clears_no_finding_is_a_finding_on_its_line(text, records):
+    """#225 cell 9: a directive kept where nothing it names is found is a finding; delete it."""
+    findings, reports = judged_prints(text, records)
+    assert (any(finding.startswith("src/p/a.py:2 ") for finding in findings), reports) == (True, ()), findings
+
+
 def test_a_fix_names_the_code_found_and_the_line_its_noqa_must_stand_on():
     text = "run(argv)\n" * 9
     (secured,) = python_lint.judge_security(linted([record(line=7, noqa_line=9)], {"src/p/a.py": text}))
@@ -421,11 +432,12 @@ def test_a_code_finding_ends_in_no_full_stop_and_names_no_rule_id(drive_code):
         (f"{PRINT}\nfrom pprint import pprint\npprint(1)\n", [True, True]),
         (f"{EVAL}{EVAL}", [True, True]),
         ('eval("1"); eval("2")\n', [False, True]),
+        ({"src/p/a.py": EVAL, "src/p/b.py": EVAL}, [False, True]),
     ],
-    ids=["print twice", "print and pprint", "eval on two lines", "eval twice on one line"],
+    ids=["print twice", "print and pprint", "eval on two lines", "eval twice on one line", "eval on line one of two files"],
 )
 def test_equal_fixes_in_the_code_area_print_once(drive_code, source, fix_follows):
-    run = drive_code({"src/p/a.py": source})
+    run = drive_code(source if isinstance(source, dict) else {"src/p/a.py": source})
     assert [row.fix_follows for _, row in area_finding_rows(run.out, Area.CODE)] == fix_follows
     assert run.err == ""
 
@@ -667,6 +679,8 @@ def test_a_finding_beside_a_rule_that_refused_stands_under_the_refused_row_with_
     binary = fake_ruff(elsewhere, f"cat {elsewhere / 'report.json'}")
     run = drive_code(repo, lambda: str(binary))
     row = area_row(run.out, Area.CODE)
+    (finding,) = run.area.findings
+    assert (finding.location, finding.event) == ("src/p/b.py:1", FindingEvent.INSECURE)
     assert ((row.glyph, row.event), run.code) == ((Glyph.COULD_NOT_CHECK, cli.AreaEvent.NOT_CHECKED), 2)
     assert_block_prints(area_block(run.out, Area.CODE), run.area.findings, ())
     assert run.err == f"error: {cli.refusal_error(run.areas)}\nnext: {cli.REFUSED_AREAS_NEXT.text}\n"
@@ -677,3 +691,4 @@ def test_a_file_that_opens_with_a_byte_order_mark_is_judged(drive_code):
     run = drive_code({"src/p/a.py": f"\ufeff{PRINT}\n"})
     (finding,) = run.area.findings
     assert (finding.location, run.code, run.err) == ("src/p/a.py:1", 1, "")
+    assert_block_prints(area_block(run.out, Area.CODE), run.area.findings, ())
