@@ -1,0 +1,8 @@
+claim_id = "39a46e13e3c040e089ea740c969291ed"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "d35ad31c131d2808be50b9cb6925ba341e1629ba"
+branch = "claude/issue-306-c3f3-dependencies-finding-rows"
+scope = ["docs/output.md", "docs/rules.md", "src/quality/advisories.py", "src/quality/report.py", "tests/support/advisories.py", "tests/test_advisories.py", "tests/test_advisories_locks.py", "tests/test_advisories_rows.py"]
+opened_commit = "bf35ef3db972b4e1e4f0fb7ca519917b87458ee4"
+whole_reason = "Two production files, about 85 changed lines, inside the corridor; the row and notes of the area are C3f4."
