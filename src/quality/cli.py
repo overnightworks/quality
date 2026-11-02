@@ -309,10 +309,7 @@ def run_hygiene_check(path: Path, locate_ruff: Callable[[], str], locate_zizmor:
     emit(*result.reports)
     for verdict in result.areas:
         write_rows((area_row(verdict, area_extent(verdict, result.tracked_paths)),))
-        write_findings_and_notes([finding for finding in verdict.findings if finding.event], verdict.notes)
-        for finding in verdict.findings:
-            if not finding.event:
-                emit_finding(finding)
+        write_findings_and_notes(verdict.findings, verdict.notes)
     exit_code = HYGIENE_EXIT[result.worst]
     if exit_code == EXIT_CANNOT_JUDGE:
         write_pair(refusal_error(result.areas), next_steps(result.areas))

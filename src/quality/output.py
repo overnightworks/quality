@@ -129,8 +129,12 @@ def _paint(text: str, style: str, styled: bool) -> str:
     return f"\x1b[{style}m{text}{RESET}" if styled and text else text
 
 
+def _event_word(row: Row | Finding | Note) -> str:
+    return printable(str(row.event))
+
+
 def _event_text(row: Row) -> str:
-    event = printable(str(row.event))
+    event = _event_word(row)
     return event if row.count is None else counted(row.count, event)
 
 
@@ -202,18 +206,18 @@ def _finding_lines(findings: Sequence[Finding], notes: Sequence[Note], styled: b
     The findings and the notes share one location column and one event column."""
     widths = (
         max(len(row.location) for row in (*findings, *notes)),
-        max(len(str(row.event)) for row in (*findings, *notes)),
+        max(len(_event_word(row)) for row in (*findings, *notes)),
     )
     lines = []
     for position, finding in enumerate(findings):
         glyph = _paint(Glyph.NEEDS_YOU, GLYPH_STYLE[Glyph.NEEDS_YOU], styled)
-        columns = _row_columns(finding.location, str(finding.event), widths)
+        columns = _row_columns(finding.location, _event_word(finding), widths)
         lines.append(f"{FINDING_INDENT}{glyph} {columns}{_paint(printable(finding.reason), DIM, styled)}")
         lines += [_paint(_detail_line(text), DIM, styled) for text in finding.detail]
         if position + 1 == len(findings) or findings[position + 1].fix != finding.fix:
             lines += _fix_lines(finding.fix)
     for note in notes:
-        columns = _row_columns(note.location, str(note.event), widths)
+        columns = _row_columns(note.location, _event_word(note), widths)
         lines.append(_paint(f"{FINDING_INDENT}{Glyph.NOTE} {columns}{printable(note.fact)}", DIM, styled))
     return lines
 

@@ -108,7 +108,17 @@ $ quality check
 ! 5 findings in 3 areas · 4 areas clean · 14s
 ```
 
-No rule name stands in a row (`compose-port`, `env-file`); the event says it in words. The rule name appears only in a `fix:` line that asks for an `[[….allow]]` entry. No `next:` follows this verdict: the `fix:` lines carry the way. The events, facts and fixes of the `files` rows are head proposals O12 to O16, O18 and O19 of 30.10.2026, those of the `debt` rows O20 to O22 of 31.10.2026, those of the `imports` rows O23 to O27 of 31.10.2026, those of the `secrets` rows O28, O29 and O32 to O35 of 1.11.2026, those of the `workflows` rows O36 to O40 of 2.11.2026, those of the `dependencies` rows O41 to O46 of 2.11.2026, their recommendations applied: one event word per kind of finding, shared across rules (`report.FindingEvent`); the env fix names the file for `.gitignore` only where it is its own shell word, else `it`; and the findings of an area in run order. Paths and events align per area by character count.
+No rule name stands in a row (`compose-port`, `env-file`); the event says it in words. The rule name appears only in a `fix:` line that asks for an `[[….allow]]` entry. No `next:` follows this verdict: the `fix:` lines carry the way. The events, facts and fixes of the `files` rows are head proposals O12 to O16, O18 and O19 of 30.10.2026, those of the `debt` rows O20 to O22 of 31.10.2026, those of the `imports` rows O23 to O27 of 31.10.2026, those of the `secrets` rows O28, O29 and O32 to O35 of 1.11.2026, those of the `workflows` rows O36 to O40 of 2.11.2026, those of the `dependencies` rows O41 to O46 of 2.11.2026, those of the `code` rows O51 and O52 of 2.11.2026, their recommendations applied: one event word per kind of finding, shared across rules (`report.FindingEvent`); the env fix names the file for `.gitignore` only where it is its own shell word, else `it`; and the findings of an area in run order. Paths and events align per area by character count.
+
+The fix of a security finding names the line its noqa must stand on, so each stands under its row, and a code and ruff's message are the fact:
+
+```text
+  ! code          2 findings
+    ! src/shop/parse.py:12  insecure    S307 Use of possibly insecure function; consider using `ast.literal_eval`
+      fix: remove the cause, or where it is deliberate end line 12 with `# noqa: S307 - <reason>`, a reason with a letter and no comma
+    ! src/shop/parse.py:40  print call  T201 `print` found
+      fix: write through the program's one output owner; in that owner's file, declare it on a line of its own with `# ruff: noqa: T201 - <reason>`, a reason with a letter and no comma
+```
 
 ### 3. `quality check`, no git work tree
 

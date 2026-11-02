@@ -13,7 +13,7 @@ from pathlib import Path
 from quality import repository
 from quality.checkout import tracked_files
 from quality.config import LegacyMode
-from quality.report import CannotJudge, Finding
+from quality.report import CannotJudge, Finding, FindingEvent
 from quality.web import REQUEST_TIMEOUT_SECONDS, Sleep, fetch, timed_out
 
 SONAR_ORIGIN = "https://sonarcloud.io"
@@ -640,4 +640,5 @@ def finding_from_issue(issue: dict) -> Finding:
         line=issue.get("line"),
         reason=f"{issue['rule']}: {issue['message']}",
         fix="Fix it in the code; an accepted or false-positive mark in SonarCloud still counts",
+        event=FindingEvent.OPEN,
     )
