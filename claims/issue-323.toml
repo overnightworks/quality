@@ -1,8 +1,0 @@
-claim_id = "d7beae4b39fb422cbf02424b43b1f49e"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "4840da44f6e2303859512cee4a70eaeb997273f6"
-branch = "claude/issue-323-c3h1-area-stream"
-scope = ["AGENTS.md", "docs/output.md", "docs/rules.md", "src/quality/check.py", "src/quality/cli.py", "src/quality/output.py", "src/quality/rules.py", "tests/support/check.py", "tests/test_check.py", "tests/test_cli_output.py", "tests/test_cli_stream.py", "tests/test_config.py", "tests/test_python_lint.py"]
-opened_commit = "acc26e1ffc118477d4896ba3569dce3d50ee265e"
-whole_reason = "Four production files, one of them two docstrings, about +79/-78: the run's order becomes the rows' order and rows leave as areas finish, which the live line (C3h2) needs for its row to replace it, and the writer's handler keeps a reader that left from turning every streamed run into a traceback; no printed byte of a finished run changes. It does not split: the order without the hand-over has no caller, and the hand-over without the handler breaks every pipe."
