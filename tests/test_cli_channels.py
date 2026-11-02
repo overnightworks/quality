@@ -81,7 +81,7 @@ def test_a_streams_style_holds_for_the_whole_run(build_repo, monkeypatch):
     stdout, stderr = TurnsPlain(), io.StringIO()
     code = run_on(repo, stdout, stderr, {"TERM": "xterm"})
     lines = stdout.getvalue().splitlines()
-    assert (escape in lines[0], escape in lines[-1], stderr.getvalue(), code) == (True, True, "", 1)
+    assert (escape in lines[0], escape in lines[1], escape in lines[-1], stderr.getvalue(), code) == (True, True, True, "", 1)
 
 
 def test_the_pairs_style_holds_for_both_its_lines(build_repo):
