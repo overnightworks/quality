@@ -52,10 +52,8 @@ def judged_repository(build_repo) -> Path:
     ],
     ids=["actionlint", "zizmor", "osv-scanner", "ruff", "ruff's lint failure", "zizmor's version"],
 )
-def test_a_refused_scanners_value_is_withheld(build_repo, served_scanners, elsewhere, tmp_path, monkeypatch, capsys, who, area, fact):
+def test_a_refused_scanners_value_is_withheld(build_repo, served_scanners, elsewhere, summary, capsys, who, area, fact):
     fake_gitleaks(served_scanners, on_scan=vetting(flagging(FAKE_KEY)))
-    summary = tmp_path / "summary.md"
-    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
     said = shouting([f"aws_access_key_id = {FAKE_KEY}"])
     refusing = f"{said}; exit 3"
     clean_zizmor = fake_zizmor(elsewhere / "clean", "echo '[]'")

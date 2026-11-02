@@ -16,9 +16,10 @@ Before a fact quotes any of a scanner's stderr, the whole text goes through `git
 `gitleaks.toml`, the definition of a secret that `quality check` judges with. Only a clean answer clears the text: exit
 0 and an empty report. A flagged text and a vet that cannot answer (gitleaks missing, a timeout, any other exit, a
 missing or unreadable report, a report that disagrees with the exit) withhold it whole, never partly, and the fact says
-how many lines: `· N stderr lines withheld · not cleared by gitleaks`. The exit and the verdict never move. A run whose
-scanners refuse nothing, or write no stderr, starts no vet. No refusal quotes gitleaks' own stderr, because the vet
-cannot vet the tool that failed.
+how many lines: `· N stderr lines withheld · not cleared by gitleaks`. The exit and the verdict never move. Without `-v`, a run
+whose scanners refuse nothing starts no vet; under `-v`, a finished scan that wrote stderr starts one, as does a refusal that
+wrote any, and a refusal with no stderr starts none. No refusal quotes gitleaks' own stderr, because the vet cannot vet the
+tool that failed.
 
 A text holding ESC or a C1 control (U+0080 to U+009F) has no clean answer: a terminal code can stand against a value
 without the word boundary gitleaks' rules need, and the printed text escapes only the code, so the value would print
@@ -34,6 +35,11 @@ How the vet calls gitleaks, so it judges as the secret scan judges:
   whatever `--gitleaks-ignore-path` names, and a repository could list the fingerprint of a stdin finding.
 - The text opens with a fixed line: gitleaks answers clean for a text whose first bytes read as a binary type.
 - `--redact`: the report holds no value, and it lives in a 0700 directory removed on every exit.
+
+`quality check -v` prints a scanner's stderr through the same vet, line by line behind the marker, once gitleaks has
+cleared all of it. A failing gitleaks (any exit but 0 and 7) is counted unread, `· N stderr lines withheld · a failing
+gitleaks is never quoted`: that stream relays git's stderr line by line, where a value cut across two lines passes the
+vet. Nothing is collected without `-v`, so an ordinary run keeps no stderr and starts no vet beyond a refusal's.
 
 ## What passes
 

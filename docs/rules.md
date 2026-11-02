@@ -503,11 +503,10 @@ exists, so it is exit `2` too.
 Secret handling: the secret scan runs gitleaks without `--redact` so the report carries each `Secret` to be hashed. gitleaks
 writes that report to a `tempfile` scratch directory (mode 0700); quality reads it, keeps only the hash, and deletes
 the directory on every exit path (success, gitleaks failure, parse error). The value reaches no stdout,
-stderr, log, exception text or retained file; gitleaks runs without `-v`. While the scan runs, the value exists in
+stderr, log, exception text or retained file; gitleaks itself runs without its `-v`. While the scan runs, the value exists in
 that report file and in quality's process memory. The boundary is the deletion and the absence of any other sink,
 not memory-only handling. The hash is safe to print: it appears only where the history already shows the content,
-and a real secret must be rotated anyway. gitleaks' scan stderr is never printed, because it may echo scanned values;
-the missing-report and unexpected-exit refusals keep their exit code without those diagnostics.
+and a real secret must be rotated anyway. gitleaks' scan stderr may echo scanned values, so no refusal quotes it and `quality check -v` prints it only for a finished scan that gitleaks cleared, and counts a failing gitleaks' lines unread (`docs/decisions/5-scanner-stderr-goes-through-gitleaks.md`); the missing-report and unexpected-exit refusals keep their exit code without those diagnostics.
 
 The scan runs git without any attributes (not the repository's `.gitattributes`, not `info/attributes`, not the
 system or global file), so a `-diff` or `binary` line cannot hide a key. That needs git 2.41 or newer; an older git
@@ -657,4 +656,4 @@ In GitHub Actions (`GITHUB_ACTIONS=true`) the door first prints `::stop-commands
 workflow command in repository text runs (operator ruling 20.10.2026, asked whether to stop the commands, escape the
 text, or both: „Beides (empfohlen)“): no `::warning::` or `##[warning]` annotation, no `add-mask`, no `add-matcher`; the stop lasts for the rest of the step, and the door never prints the line that lifts it. Problem matchers registered in the job still read the log (the stop does not reach them). The gate's jobs register only setup-uv's python matcher, which is anchored at the line start and so cannot match repository text; a matcher another step registers may still match a door line that holds repository text, and the door cannot prevent that.
 
-A scanner's stderr reaches a `✗` fact only once gitleaks has cleared all of it ([decision 5](decisions/5-scanner-stderr-goes-through-gitleaks.md)).
+A scanner's stderr reaches a `✗` fact only once gitleaks has cleared all of it ([decision 5](decisions/5-scanner-stderr-goes-through-gitleaks.md)). `quality check -v` adds, under each area that ran a scanner, after its findings and notes, one `·` row per scanner run, `· <scanner>  exited  <n>`, and that scanner's stderr line by line behind the marker `| `, escaped and never shortened, split on line feeds alone; a text gitleaks does not clear is withheld whole, and the row counts its lines; a scanner that did not finish or printed no UTF-8 has no row. A scanner's report never stands there: it is what the rows are read from, and it can quote repository lines. `-v` changes no exit, no verdict and no scanner's arguments; a run without it keeps no stderr and adds no vet to a refusal's; `check` writes no step summary.

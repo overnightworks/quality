@@ -22,6 +22,7 @@ from quality.report import (
     Note,
     NoteEvent,
     OneOf,
+    ScannerRun,
     Step,
     printable,
     render,
@@ -399,6 +400,19 @@ def write_findings_and_notes(findings: Sequence[Finding], notes: Sequence[Note],
     last of each run of equal fixes, then each note `· location  event  fact`, the columns shared."""
     if findings or notes:
         _print_lines(_finding_lines(findings, notes, channel), channel)
+
+
+def _exit_note(run: ScannerRun) -> Note:
+    return Note(run.scanner, NoteEvent.EXITED, SEPARATOR.join(filter(None, (str(run.exit_code), run.withheld))))
+
+
+def write_scanner_runs(runs: Sequence[ScannerRun], channel: Channel) -> None:
+    """Each scanner of an area under `-v`: a `·` row with its exit, then its lines behind the marker, each whole."""
+    lines = []
+    for run in runs:
+        lines += _finding_lines((), (_exit_note(run),), channel)
+        lines += [_paint(_detail_line(text), DIM, channel.styled) for text in run.lines]
+    _print_lines(lines, channel)
 
 
 def write_verdict(verdict: Verdict, channel: Channel) -> None:

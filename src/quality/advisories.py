@@ -106,7 +106,7 @@ def lock_kind(name: str) -> LockKind:
 
 def scan(
     locks: Mapping[str, Path], root: Path, allowances: Sequence[AdvisoryAllowance], today: date,
-    monotonic: Callable[[], float] = time.monotonic,
+    monotonic: Callable[[], float] = time.monotonic, log: scanners.ScannerLog = scanners.no_log,
 ) -> RuleResult:
     """The advisories that affect the lock files `locks` (tracked name -> absolute path), with the repository's
     allowances applied; no lock needs no scanner, and leaves every allowance matching nothing."""
@@ -115,12 +115,13 @@ def scan(
     names_by_path = _names_by_path(locks)
     binary = scanners.located(scanners.OSV_SCANNER)
     with process.scratch_directory() as scratch:
+        known = [(root.resolve(), "<repository>"), (binary.parent.resolve(), "<scanner>"), (scratch, "<scratch>")]
         try:
             handovers = _handovers(root, locks, scratch, names_by_path)
             ecosystems = sorted({lock_kind(name).ecosystem for name in locks})
-            report = _scan(binary, ecosystems, handovers, scratch, names_by_path, monotonic)
+            report = _scan(binary, ecosystems, handovers, scratch, names_by_path, monotonic, known, log)
         except process.ProcessError as error:
-            raise ScannerError(_without_paths(str(error), names_by_path, [(root.resolve(), "<repository>"), (binary.parent.resolve(), "<scanner>"), (scratch, "<scratch>")])) from None
+            raise ScannerError(_without_paths(str(error), names_by_path, known)) from None
     return apply_allowances(report.affected, allowances, today, LockExtent(len(locks), report.packages))
 
 
@@ -206,7 +207,7 @@ def _read_requirements(root: Path, name: str) -> tuple[Requirement, ...]:
 
 def _scan(
     binary: Path, ecosystems: Sequence[str], handovers: Sequence[Handover], scratch: Path,
-    names_by_path: dict[str, list[str]], monotonic: Callable[[], float],
+    names_by_path: dict[str, list[str]], monotonic: Callable[[], float], known: list[tuple[Path, str]], log: scanners.ScannerLog,
 ) -> OsvReport:
     _place_databases(scratch, ecosystems, monotonic)
     # cwd is the scratch directory so that nothing in the scanned repository is read by accident.
@@ -216,6 +217,7 @@ def _scan(
         *[f"--lockfile={handover.parse_as}:{handover.path}" for handover in handovers],
     ]
     done = process.run(command, cwd=scratch, timeout=ADVISORY_SCAN_TIMEOUT_SECONDS)
+    log(scanners.OSV_SCANNER, done.returncode, _without_paths(done.stderr, names_by_path, known))
     expected = {str(handover.path): handover.expected for handover in handovers if handover.expected is not None}
     return _findings(done.returncode, done.stdout, done.stderr, names_by_path, expected)
 

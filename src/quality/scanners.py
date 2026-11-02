@@ -22,6 +22,7 @@ from quality.report import (
     NoteEvent,
     OneOf,
     RuleResult,
+    ScannerRun,
     printable,
     shell_word,
 )
@@ -54,6 +55,13 @@ VET_TIMEOUT_SECONDS = 30  # a stalled gitleaks withholds the text and holds no r
 # gitleaks answers clean for a text whose first bytes read as a binary type, so a text never opens with a scanner's bytes.
 VET_OPENING = "scanner stderr\n"
 NOT_CLEARED = "not cleared by gitleaks"
+GITLEAKS_FAILED = "a failing gitleaks is never quoted"
+
+type ScannerLog = Callable[[str, int, str], None]
+
+
+def no_log(_scanner: str, _exit_code: int, _stderr: str) -> None:
+    """A run nobody asked to see: nothing is kept and no vet starts."""
 
 
 REINSTALL = OneOf(
@@ -145,7 +153,7 @@ def prepare_gitleaks() -> Path:
     return binary
 
 
-def scan_secrets(root: Path, allowances: dict[Allowance, str]) -> RuleResult:
+def scan_secrets(root: Path, allowances: dict[Allowance, str], log: ScannerLog = no_log) -> RuleResult:
     binary = prepare_gitleaks()
     with process.scratch_directory() as scratch:
         git_environment = process.attribute_free_git_environment(scratch / "home")
@@ -161,7 +169,7 @@ def scan_secrets(root: Path, allowances: dict[Allowance, str]) -> RuleResult:
         commits = process.git(["-C", str(source), "rev-list", "--count", head, "--"], COMMIT_COUNT_FAILURE, git_environment).strip()
         if not (commits.isascii() and commits.isdigit()):
             raise ScannerError(f"{COMMIT_COUNT_FAILURE}: git printed no number")
-        scan = run_gitleaks(binary, scratch, git_environment, source, [f"--log-opts={head}"], allowances)
+        scan = run_gitleaks(binary, scratch, git_environment, source, [f"--log-opts={head}"], allowances, log)
         return RuleResult(scan.findings, int(commits), False, scan.notes)
 
 
@@ -176,12 +184,13 @@ def _judging_arguments(scratch: Path, report: Path) -> list[str]:
 
 def run_gitleaks(
     binary: Path, scratch: Path, git_environment: dict[str, str], source: Path, scope: list[str],
-    allowances: dict[Allowance, str],
+    allowances: dict[Allowance, str], log: ScannerLog = no_log,
 ) -> SecretScan:
     # No --redact: the report must carry Secret to be hashed. It lives only in the 0700 scratch directory.
     report = scratch / "report.json"
     command = [str(binary), "git", "--no-banner", "--no-color", *scope, *_judging_arguments(scratch, report), "--", str(source)]
     scan = process.run(command, env=git_environment, timeout=SECRET_SCAN_TIMEOUT_SECONDS)
+    log(GITLEAKS, scan.returncode, scan.stderr)
     # gitleaks' stderr may echo what it scanned, so no refusal quotes it.
     if not report.is_file():
         raise ScannerError(f"{GITLEAKS} exited {scan.returncode} without writing its report")
@@ -222,7 +231,26 @@ def vetted_quote(stderr: str, quote: str) -> str:
     are withheld. All of it, so no line leaves unseen and a key across lines stays whole; no quote starts no process."""
     if not quote or _cleared_by_gitleaks(stderr):
         return quote
-    return SEPARATOR.join(("", f"{counted(len(_stderr_lines(stderr)), 'stderr line')} withheld", NOT_CLEARED))
+    return f"{SEPARATOR}{_withheld(_stderr_lines(stderr), NOT_CLEARED)}"
+
+
+def _withheld(lines: list[str], reason: str) -> str:
+    return SEPARATOR.join((f"{counted(len(lines), 'stderr line')} withheld", reason))
+
+
+def scanner_run(scanner: str, exit_code: int, stderr: str) -> ScannerRun:
+    """A scanner's exit and its stderr as it wrote it, once gitleaks has cleared all of it. A gitleaks that failed
+    relays git's stderr line by line, where a value cut across lines passes any vet, so it is counted unread."""
+    lines = _stderr_lines(stderr)
+    if lines and scanner == GITLEAKS and exit_code not in (CLEAN_EXIT, GITLEAKS_LEAKS_FOUND):
+        return ScannerRun(scanner, exit_code, (), _withheld(lines, GITLEAKS_FAILED))
+    if not lines or _cleared_by_gitleaks(stderr):
+        return ScannerRun(scanner, exit_code, tuple(lines))
+    return ScannerRun(scanner, exit_code, (), _withheld(lines, NOT_CLEARED))
+
+
+def keep_run(runs: list[ScannerRun], scanner: str, exit_code: int, stderr: str) -> None:
+    runs.append(scanner_run(scanner, exit_code, stderr))
 
 
 def vetted_tail(stderr: str) -> str:
@@ -316,13 +344,16 @@ def pinned_installed(name: str, locate: Callable[[], str]) -> Path:
     return executable
 
 
-def scan_workflows(root: Path, rule: Rule, workflows: list[str], locate_zizmor: Callable[[], str]) -> list[Finding]:
+def scan_workflows(
+    root: Path, rule: Rule, workflows: list[str], locate_zizmor: Callable[[], str], log: ScannerLog = no_log
+) -> list[Finding]:
     """The findings of the one scanner that judges `rule`; nothing to scan needs no scanner."""
     if not workflows:
         return []
     scanner = WORKFLOW_SCANNERS[rule]
     binary = pinned_installed(ZIZMOR, locate_zizmor) if scanner.name == ZIZMOR else located(scanner.name)
     scan = process.run([str(binary), *scanner.arguments, *workflows], cwd=root)
+    log(scanner.name, scan.returncode, scan.stderr)
     return scanner_findings(scanner, scan.stdout, scan.returncode, scan.stderr)
 
 

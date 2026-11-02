@@ -120,14 +120,16 @@ def source_text(name: str, content: bytes) -> str:
     return ruff_reads
 
 
-def lint(root: Path, modes: Mapping[str, str], target: Version, locate_ruff: Callable[[], str]) -> Lint:
+def lint(
+    root: Path, modes: Mapping[str, str], target: Version, locate_ruff: Callable[[], str], log: scanners.ScannerLog = scanners.no_log
+) -> Lint:
     """ruff's one run over every candidate, which both rules judge."""
     files = read_files(root, modes)
     texts = {name: file.text for name, file in files.items()}
     test_files = frozenset(layout.test_import_candidates(modes))
     if not files:
         return Lint((), texts, test_files)  # nothing to lint: skip locating ruff and its version check
-    return Lint(tuple(_run_ruff(root, {name: file.path for name, file in files.items()}, target, locate_ruff)), texts, test_files)
+    return Lint(tuple(_run_ruff(root, {name: file.path for name, file in files.items()}, target, locate_ruff, log)), texts, test_files)
 
 
 def judge_security(lint: Lint) -> RuleResult:
@@ -257,14 +259,16 @@ def _stale_owner(name: str, owner: OutputOwner) -> Finding:
     )
 
 
-def _run_ruff(root: Path, paths: Mapping[str, Path], target: Version, locate_ruff: Callable[[], str]) -> list[RuffFinding]:
+def _run_ruff(
+    root: Path, paths: Mapping[str, Path], target: Version, locate_ruff: Callable[[], str], log: scanners.ScannerLog
+) -> list[RuffFinding]:
     """ruff's findings in `paths` (name to resolved path), in batches the argument list holds."""
     binary = str(scanners.pinned_installed(scanners.RUFF, locate_ruff))
     names = _report_names(paths)
     return [
         record
         for batch in _batches(sorted(paths), ARGUMENT_BYTES_PER_RUN)
-        for record in read_report(_ruff_report(binary, root, batch, target), names)
+        for record in read_report(_ruff_report(binary, root, batch, target, log), names)
     ]
 
 
@@ -294,7 +298,7 @@ def _batches(names: Sequence[str], limit: int) -> Iterator[list[str]]:
         yield batch
 
 
-def _ruff_report(binary: str, root: Path, names: Sequence[str], target: Version) -> str:
+def _ruff_report(binary: str, root: Path, names: Sequence[str], target: Version, log: scanners.ScannerLog) -> str:
     """ruff's JSON report on `names`, run from the repository's resolved top so every warning names a file as the
     repository does; any file ruff fails to lint makes the run untrustworthy, since ruff then reports nothing for it."""
     arguments = [
@@ -302,6 +306,7 @@ def _ruff_report(binary: str, root: Path, names: Sequence[str], target: Version)
         "--target-version", f"py{target.major}{target.minor}", "--output-format", "json", "--", *names,
     ]
     done = _ruff(binary, arguments, Path(os.path.realpath(root)), RUN_TIMEOUT_SECONDS)
+    log(scanners.RUFF, done.returncode, done.stderr)
     if done.returncode not in JUDGED_EXIT_CODES:
         raise LintError(f"ruff exited {done.returncode}{scanners.vetted_tail(done.stderr)}")
     failures = [line for line in done.stderr.splitlines() if LINT_FAILURE in line]

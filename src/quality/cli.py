@@ -55,6 +55,7 @@ from quality.output import (
     write_help,
     write_pair,
     write_rows,
+    write_scanner_runs,
     write_verdict,
 )
 from quality.report import CannotJudge, Command, Extent, Instruction, NoteEvent, Step, headline
@@ -146,7 +147,7 @@ def main(
         if arguments.sonar_command == "properties":
             return run_sonar_properties()
         return run_sonar_findings(transport, sleep)
-    return run_check(locate_ruff, locate_zizmor, clock, channels)
+    return run_check(locate_ruff, locate_zizmor, clock, channels, arguments.verbose)
 
 
 QUALITY_HELP = f"""\
@@ -183,11 +184,12 @@ Exit codes: 0 yes, 1 no, 2 could not answer, 130 interrupted.
 """
 
 CHECK_HELP = """\
-usage: quality check
+usage: quality check [-v]
 
 Check this repository against the fleet's rules.
 
 Options:
+  -v          show the raw scanner output, never a secret
   -h, --help  show this help
 
 Exit codes: 0 clean, 1 findings, 2 could not check, 130 interrupted.
@@ -243,6 +245,7 @@ def build_parser() -> DoorParser:
     commands = parser.add_subparsers(dest="command")
     check_parser = commands.add_parser("check")
     check_parser.pictured_help = CHECK_HELP
+    check_parser.add_argument("-v", dest="verbose", action="store_true")
     baseline = commands.add_parser("baseline").add_subparsers(dest="baseline_command")
     baseline.add_parser("write", help=f"write the measured size debt and clone pairs to {ratchet.BASELINE_PATH}").add_argument(
         "path", nargs="?", type=Path, default=Path("."), help="a folder of the git repository to measure; its top level is measured (default: the current one)"
@@ -396,6 +399,7 @@ def next_steps(areas: tuple[AreaVerdict, ...]) -> tuple[Step, ...]:
 def write_area(out: Channel, verdict: AreaVerdict, tracked_paths: int) -> None:
     write_rows((area_row(verdict, area_extent(verdict, tracked_paths)),), out)
     write_findings_and_notes(verdict.findings, verdict.notes, out)
+    write_scanner_runs(verdict.scanner_runs, out)
 
 
 def _spoken_folder(folder: Path) -> str:
@@ -404,11 +408,13 @@ def _spoken_folder(folder: Path) -> str:
 
 
 def run_check(
-    locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str], clock: Callable[[], float], channels: Channels
+    locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str], clock: Callable[[], float], channels: Channels, verbose: bool
 ) -> int:
     started = clock()
     try:
-        result = judge_repository(Path("."), locate_ruff, locate_zizmor, partial(write_area, channels.out), live_line(channels.err))
+        result = judge_repository(
+            Path("."), locate_ruff, locate_zizmor, partial(write_area, channels.out), live_line(channels.err), verbose
+        )
     except OutsideWorkTree as error:
         write_pair(f"not inside a git work tree · {_spoken_folder(error.path.absolute())}", (Instruction("run quality check inside a repository"),), channels.err)
         return EXIT_CANNOT_JUDGE

@@ -165,6 +165,14 @@ def local_door(monkeypatch):
 
 
 @pytest.fixture
+def summary(tmp_path, monkeypatch) -> Path:
+    """The step summary path `verdict` and `scoreboard` would write; `check` writes none, so it stays absent after a check."""
+    path = tmp_path / "summary.md"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(path))
+    return path
+
+
+@pytest.fixture
 def build_repo(tmp_path: Path) -> RepoBuilder:
     return lambda files: make_repo(tmp_path, files)
 
