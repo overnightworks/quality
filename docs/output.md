@@ -98,6 +98,38 @@ Live line while the secrets scan runs (stderr, terminal only, replaced by the ro
 
 Built: one line per scanner, this frame, the area and the scanner, dim, leaving the window's last column free (a window of one or two columns, or a terminal that draws `…` two cells wide, is not served), on a terminal whose window is known; each is erased before the next line prints, so the area's row takes its place. The moving frame and the fact (`412 commits · 3s`) stay the target (#5).
 
+With `-v`, under each area that ran a scanner, after its findings and notes: one `·` row per scanner run with its exit, and that scanner's stderr behind the marker, dim and never cut. A text gitleaks does not clear stands as the count of its lines; a failing gitleaks' lines are counted unread. A scanner's report never stands there.
+
+Built:
+
+```text
+$ quality check -v
+  ✓ secrets       clean          2 commits
+    · gitleaks  exited  0
+      | 10:40PM INF Unknown SCM platform. Use --platform to include links in findings. host=
+      | 10:40PM INF 2 commits scanned.
+      | 10:40PM INF scanned ~134 bytes (134 bytes) in 116ms
+      | 10:40PM INF no leaks found
+  ✓ workflows     clean          1 workflow · offline audits only
+    · actionlint  exited  0
+    · zizmor  exited  0
+      |  INFO zizmor: 🌈 zizmor v1.31.1
+      |  INFO audit: zizmor: 🌈 completed .github/workflows/w.yml
+  ✓ dependencies  clean          1 lockfile · 2 packages
+    · osv-scanner  exited  0
+      | Starting filesystem walk for root: /
+      | Scanned uv.lock file and found 2 packages
+      | End status: 0 dirs visited, 1 inodes visited, 1 Extract calls, 121.166µs elapsed, 121.226µs wall time
+      | Loaded PyPI local db from <scratch>/osv-scalibr/PyPI/all.zip
+```
+
+A scanner that refused, with a stderr gitleaks does not clear:
+
+```text
+  ✗ workflows     not checked    zizmor exited 1, neither 'clean' nor 'findings' · 8 stderr lines withheld · not cleared by gitleaks
+    · zizmor  exited  1 · 8 stderr lines withheld · not cleared by gitleaks
+```
+
 ### 2. `quality check`, findings in several areas
 
 Exit 1. stdout. Two findings in a row with the same fix: the fix stands once, under the last. The findings of an area stand in run order (head proposal O14 of 30.10.2026).

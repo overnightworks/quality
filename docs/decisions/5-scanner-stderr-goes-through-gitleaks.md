@@ -35,6 +35,11 @@ How the vet calls gitleaks, so it judges as the secret scan judges:
 - The text opens with a fixed line: gitleaks answers clean for a text whose first bytes read as a binary type.
 - `--redact`: the report holds no value, and it lives in a 0700 directory removed on every exit.
 
+`quality check -v` prints a scanner's stderr through the same vet, line by line behind the marker, once gitleaks has
+cleared all of it. A failing gitleaks (any exit but 0 and 7) is counted unread, `· N stderr lines withheld · a failing
+gitleaks is never quoted`: that stream relays git's stderr line by line, where a value cut across two lines passes the
+vet. Nothing is collected without `-v`, so an ordinary run keeps no stderr and starts no vet beyond a refusal's.
+
 ## What passes
 
 Quality's definition of a secret is what its secret scan recognises in the text it is shown. So these pass the vet:

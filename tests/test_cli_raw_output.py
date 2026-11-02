@@ -244,7 +244,9 @@ def test_osv_scanners_lines_name_paths_as_the_refusal_does(build_repo, served_sc
     body = f'echo "read {lock} in $PWD" >&2\n{reporting(OUTPUTS / "osv-scanner-clean.json", 0)}'
     fake_gitleaks(served_scanners, on_scan=vetting('echo "[]" > "$report"; exit 0'))
     _, out, _ = streams(repo, capsys, "-v", **installing(served_scanners, elsewhere, {scanners.OSV_SCANNER: body}))
-    assert scanner_rows(out, Area.DEPENDENCIES) == [(scanners.OSV_SCANNER, "0", ("read uv.lock in <scratch>",))]
+    assert [(scanner, fact, details[0]) for scanner, fact, details in scanner_rows(out, Area.DEPENDENCIES)] == [
+        (scanners.OSV_SCANNER, "0", "read uv.lock in <scratch>")
+    ]
     assert str(repo) not in out
     assert "read uv.lock in <scratch>\n" in (served_scanners / "gitleaks.vetted").read_text()
 

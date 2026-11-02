@@ -1,4 +1,4 @@
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -29,7 +29,7 @@ from quality.config import (
     ConfigError,
     read_allow_lists,
 )
-from quality.report import CannotJudge, Example, Extent, Finding, Note, Reason, RuleResult, Unparsable
+from quality.report import CannotJudge, Example, Extent, Finding, Note, Reason, RuleResult, ScannerRun, Unparsable
 from quality.rules import Area, Rule
 
 CONFIG_EXAMPLE_LABEL = f"write it in {CONFIG_PATH} like this"
@@ -80,10 +80,12 @@ def check_import_contract(root: Path, tracked: list[str]) -> RuleResult:
         raise CannotJudge(str(error)) from error
 
 
-def lint_python(root: Path, modes: dict[str, str] | CannotJudge, locate_ruff: Callable[[], str]) -> python_lint.Lint:
+def lint_python(
+    root: Path, modes: dict[str, str] | CannotJudge, locate_ruff: Callable[[], str], log: scanners.ScannerLog
+) -> python_lint.Lint:
     """ruff's one run over every tracked regular `.py` file, which python-security and python-print both judge."""
     try:
-        return python_lint.lint(root, _required(modes), python_floor.PYTHON_TARGET, locate_ruff)
+        return python_lint.lint(root, _required(modes), python_floor.PYTHON_TARGET, locate_ruff, log)
     except python_lint.UnparsablePython as error:
         raise Unparsable(str(error)) from error
     except python_lint.LintError as error:
@@ -100,27 +102,29 @@ def _judge_lint(lint: python_lint.Lint | CannotJudge, judge: Callable[[python_li
         return CannotJudge(str(error))
 
 
-def check_secrets(root: Path, allow_lists: AllowLists | CannotJudge) -> RuleResult:
+def check_secrets(root: Path, allow_lists: AllowLists | CannotJudge, log: scanners.ScannerLog) -> RuleResult:
     try:
-        return scanners.scan_secrets(root, _required(allow_lists).secrets)
+        return scanners.scan_secrets(root, _required(allow_lists).secrets, log)
     except process.ProcessError as error:
         raise CannotJudge(str(error)) from error
 
 
-def check_workflows(root: Path, rule: Rule, tracked: list[str], locate_zizmor: Callable[[], str]) -> RuleResult:
+def check_workflows(
+    root: Path, rule: Rule, tracked: list[str], locate_zizmor: Callable[[], str], log: scanners.ScannerLog
+) -> RuleResult:
     workflows = checkout.on_disk(root, [name for name in tracked if checkout.is_workflow(PurePosixPath(name))])
     try:
-        return RuleResult(scanners.scan_workflows(root, rule, workflows, locate_zizmor), len(workflows), False)
+        return RuleResult(scanners.scan_workflows(root, rule, workflows, locate_zizmor, log), len(workflows), False)
     except process.ProcessError as error:
         raise CannotJudge(str(error)) from error
 
 
-def check_advisories(root: Path, tracked: list[str], allow_lists: AllowLists | CannotJudge) -> RuleResult:
+def check_advisories(root: Path, tracked: list[str], allow_lists: AllowLists | CannotJudge, log: scanners.ScannerLog) -> RuleResult:
     """The allowances' `until` is judged against today's date in UTC, read here, once."""
     allowances = _required(allow_lists).advisories
     locks = {name: checkout.judged(repository.resolve_file, root, name) for name in checkout.on_disk(root, [n for n in tracked if advisories.is_lock(n)])}
     try:
-        return advisories.scan(locks, root, allowances, datetime.now(UTC).date())
+        return advisories.scan(locks, root, allowances, datetime.now(UTC).date(), log=log)
     except process.ProcessError as error:
         raise CannotJudge(str(error)) from error
 
@@ -167,6 +171,7 @@ class AreaVerdict:
 
     area: Area
     verdicts: tuple[RuleVerdict, ...]
+    scanner_runs: tuple[ScannerRun, ...] = ()
 
     @property
     def outcome(self) -> Outcome:
@@ -247,8 +252,14 @@ def _rule_verdict(rule: Rule, judged: Judged) -> RuleVerdict:
     return RuleVerdict(rule, tuple(findings), notes=() if isinstance(judged, list) else judged.notes)
 
 
-def _area_verdict(area: Area, judged: Mapping[Rule, Judged]) -> AreaVerdict:
-    return AreaVerdict(area, tuple(_rule_verdict(rule, judged[rule]) for rule in Rule if rule.area is area))
+def _area_verdict(area: Area, judged: Mapping[Rule, Judged], runs: Sequence[ScannerRun] = ()) -> AreaVerdict:
+    return AreaVerdict(area, tuple(_rule_verdict(rule, judged[rule]) for rule in Rule if rule.area is area), tuple(runs))
+
+
+def _run_log(verbose: bool) -> tuple[list[ScannerRun], scanners.ScannerLog]:
+    """Where an area's scanner runs go: a list under `-v`; without it no run is read, so nothing is kept and no vet starts."""
+    runs: list[ScannerRun] = []
+    return runs, (partial(scanners.keep_run, runs) if verbose else scanners.no_log)
 
 
 def _judge_baseline_rules(
@@ -287,7 +298,7 @@ def _content_findings(
 
 
 def _judged_areas(
-    root: Path, tracked: list[str], locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str], running: Running
+    root: Path, tracked: list[str], locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str], running: Running, verbose: bool
 ) -> Iterator[AreaVerdict]:
     """Each area as its last rule ends, in the order the rows stand."""
     allow_lists = _attempt(lambda: _read_allow_lists(root))
@@ -312,36 +323,43 @@ def _judged_areas(
     size, clone = _judge_baseline_rules(sources, baseline, allow_lists)
     yield _area_verdict(Area.DEBT, {Rule.SIZE: size, Rule.CLONE: clone})
     yield _area_verdict(Area.IMPORTS, {Rule.IMPORT_CONTRACT: _attempt(lambda: check_import_contract(root, tracked))})
-    yield _area_verdict(Area.SECRETS, {Rule.LEAK: _scanned(running, Area.SECRETS, scanners.GITLEAKS, lambda: check_secrets(root, allow_lists))})
+    secret_runs, secret_log = _run_log(verbose)
+    leak = _scanned(running, Area.SECRETS, scanners.GITLEAKS, lambda: check_secrets(root, allow_lists, secret_log))
+    yield _area_verdict(Area.SECRETS, {Rule.LEAK: leak}, secret_runs)
+    workflow_runs, workflow_log = _run_log(verbose)
     yield _area_verdict(
         Area.WORKFLOWS,
         {
-            rule: _scanned(running, Area.WORKFLOWS, scanner.name, partial(check_workflows, root, rule, tracked, locate_zizmor))
+            rule: _scanned(running, Area.WORKFLOWS, scanner.name, partial(check_workflows, root, rule, tracked, locate_zizmor, workflow_log))
             for rule, scanner in scanners.WORKFLOW_SCANNERS.items()
         },
+        workflow_runs,
     )
-    yield _area_verdict(
-        Area.DEPENDENCIES,
-        {Rule.ADVISORY: _scanned(running, Area.DEPENDENCIES, scanners.OSV_SCANNER, partial(check_advisories, root, tracked, allow_lists))},
-    )
-    lint = _scanned(running, Area.CODE, scanners.RUFF, lambda: lint_python(root, modes, locate_ruff))
+    advisory_runs, advisory_log = _run_log(verbose)
+    advisory = _scanned(running, Area.DEPENDENCIES, scanners.OSV_SCANNER, partial(check_advisories, root, tracked, allow_lists, advisory_log))
+    yield _area_verdict(Area.DEPENDENCIES, {Rule.ADVISORY: advisory}, advisory_runs)
+    code_runs, code_log = _run_log(verbose)
+    lint = _scanned(running, Area.CODE, scanners.RUFF, lambda: lint_python(root, modes, locate_ruff, code_log))
     yield _area_verdict(
         Area.CODE,
         {Rule.PYTHON_SECURITY: _judge_lint(lint, python_lint.judge_security), Rule.PYTHON_PRINT: _judge_lint(lint, python_lint.judge_print)},
+        code_runs,
     )
 
 
 def judge_repository(
-    root: Path, locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str], report_area: AreaReport, running: Running
+    root: Path, locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str], report_area: AreaReport, running: Running,
+    verbose: bool = False,
 ) -> CheckResult:
     """Judges every active rule over the repository `root` lies in, area by area in row order, and hands each finished
-    area and the count of tracked paths to `report_area`; `running` holds the live line up around each scanner. Only
+    area and the count of tracked paths to `report_area`; `running` holds the live line up around each scanner, and `verbose` keeps
+    what each scanner said. Only
     one git cannot list stops the run."""
     root = checkout.work_tree_top(root)
     tracked = checkout.tracked_files(root)
     tracked_paths = len(set(tracked))
     areas: list[AreaVerdict] = []
-    for area in _judged_areas(root, tracked, locate_ruff, locate_zizmor, running):
+    for area in _judged_areas(root, tracked, locate_ruff, locate_zizmor, running, verbose):
         report_area(area, tracked_paths)
         areas.append(area)
     return CheckResult(tuple(areas), tracked_paths)

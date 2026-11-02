@@ -27,7 +27,7 @@ has an empty work tree and none of the live repository's config or `info/attribu
 attribute-free environment as `check`, with quality's config. The allow list is the staged tree's own
 `quality/config.toml` (none staged: no allowances). `scan-staged` validates only the `[secrets]` table of that config and ignores other tables
 and keys, while `check` and `verdict` stay strict, so schema growth never blocks a commit. Output and secret handling
-are `check`'s: it prints the secrets finding rows and the note rows as `check` does under its secrets row
+are `check`'s, and it takes no `-v`: it prints the secrets finding rows and the note rows as `check` does under its secrets row
 (`docs/rules.md`), without a commit in the fact, then `scan-staged: N finding(s)` or `scan-staged: clean`. At a terminal stderr shows `check`'s live line while gitleaks runs (`docs/rules.md`).
 
 gitleaks' staged mode sees only added and changed lines, so a known false positive blocks only the commits that touch
