@@ -416,6 +416,11 @@ def hygiene_run(repo: Path, locate_ruff: Callable[[], str] = installed_ruff, loc
     return check.run_hygiene(repo, locate_ruff, locate_zizmor or cli.INSTALLED_ZIZMOR)
 
 
+def refusal_pair(repo: Path) -> str:
+    """The pair a refused run ends with, as its owners spell it."""
+    return f"error: {cli.refusal_error(hygiene_run(repo).areas)}\nnext: {cli.REFUSED_AREAS_NEXT.text}\n"
+
+
 def refusals_of(result: check.HygieneResult) -> dict[Rule, str]:
     """Each rule that cannot judge, with its reason, as the rule runner reports it."""
     return {verdict.rule: str(verdict.refusal) for verdict in result.verdicts if verdict.refusal is not None}

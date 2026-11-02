@@ -42,6 +42,7 @@ from tests.support.merge import ONE_JOB
 from tests.support.processes import process_is_gone
 from tests.support.scanners import fake_scanner, lacking
 from tests.support.secrets import FAKE_KEY, allow_config
+from tests.support.terminal import Terminal
 
 DOOR = [sys.executable, "-m", "quality.cli"]
 STOP_LINE = re.compile(r"::stop-commands::([0-9a-f]{32})")
@@ -414,11 +415,6 @@ PRINTING = {"src/a.py": 'print("x")\n'}
 ZERO_SECONDS = "<1s"
 
 
-class Terminal(io.StringIO):
-    def isatty(self) -> bool:
-        return True
-
-
 def frame_run(capsys, path: Path, **keywords) -> tuple[int, list[str], list[str]]:
     code = cli.main(["hygiene", str(path)], clock=lambda: 0.0, **keywords)
     captured = capsys.readouterr()
@@ -744,7 +740,8 @@ def test_the_real_door_prints_every_config_example_line_whole_in_each_stderr_for
     else:
         text = done.stderr
     stripped = re.sub(r"\x1b\[[0-9;]*m", "", text)
-    lines = stripped.replace("\r\n", "\n").splitlines()
+    example = [f"    {line}" for line in config.GENERATED_FILE_EXAMPLE]
+    expected = [f"error: {cli.refusal_error(hygiene_run(repo).areas)}", f"next: {check.CONFIG_EXAMPLE_LABEL}:", *example]
     assert done.returncode == 2
     assert ("\x1b[" in text) is coloured, text
-    assert [f"    {line}" for line in config.GENERATED_FILE_EXAMPLE] == lines[lines.index(f"next: {check.CONFIG_EXAMPLE_LABEL}:") + 1:][: len(config.GENERATED_FILE_EXAMPLE)]
+    assert stripped.replace("\r\n", "\n").splitlines() == expected

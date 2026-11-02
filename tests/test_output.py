@@ -33,7 +33,9 @@ from tests.support.check import (
     decode_block,
     finding_rows,
     note_rows,
+    refusal_pair,
 )
+from tests.support.terminal import Terminal
 
 OWN_SGR = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -41,11 +43,6 @@ OWN_SGR = re.compile(r"\x1b\[[0-9;]*m")
 class Event(StrEnum):
     CLEAN = "clean"
     FINDING = "finding"
-
-
-class Terminal(io.StringIO):
-    def isatty(self) -> bool:
-        return True
 
 
 def plain(rows: tuple[Row, ...]) -> str:
@@ -489,13 +486,13 @@ def test_discarding_stderr_hides_exactly_the_pair(env_and_broken_compose):
     """#86 rule 3, cell 11: no line changes its stream; the exit stays 2."""
     merged = quality_door("hygiene", ".", cwd=env_and_broken_compose, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     done = quality_door("hygiene", ".", cwd=env_and_broken_compose, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    assert (done.returncode, merged.stdout.startswith(done.stdout), merged.stdout[len(done.stdout):].count("\n")) == (2, True, 2)
+    assert (done.returncode, merged.stdout.startswith(done.stdout), merged.stdout[len(done.stdout):]) == (2, True, refusal_pair(env_and_broken_compose))
 
 
 def test_discarding_stdout_leaves_exactly_the_pair(env_and_broken_compose):
     """#86 rule 3: the rows are results and the pair is not."""
     done = quality_door("hygiene", ".", cwd=env_and_broken_compose, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-    assert (done.returncode, [line.split(" ", 1)[0] for line in done.stderr.splitlines()]) == (2, ["error:", "next:"])
+    assert (done.returncode, done.stderr) == (2, refusal_pair(env_and_broken_compose))
 
 
 SONAR_FINDINGS_SCRIPT = """
@@ -542,19 +539,19 @@ def test_a_closed_stdout_object_still_prints_the_pair_on_stderr(tmp_path, capsys
     closed = io.TextIOWrapper(io.BytesIO())
     closed.close()
     with contextlib.redirect_stdout(closed):
-        code = cli.main(["hygiene", str(tmp_path / "missing")])
-    assert (code, "error: " in capsys.readouterr().err) == (2, True)
+        code = cli.main(["hygiene", str(tmp_path)])
+    assert (code, capsys.readouterr().err) == (2, f"error: not inside a git work tree · {tmp_path}\nnext: run quality hygiene inside a repository\n")
 
 
 @pytest.mark.integration
 def test_a_closed_stdout_fd_still_prints_the_pair_and_never_crashes(tmp_path):
     """#86 rule 3: with fd 1 closed the door still exits 2 with its cannot-judge line."""
     done = subprocess.run(
-        ["bash", "-c", '"$PY" -m quality.cli hygiene "$MISSING" >&-'],
-        env={**os.environ, "PY": sys.executable, "MISSING": str(tmp_path / "missing")},
+        ["bash", "-c", '"$PY" -m quality.cli hygiene "$FOLDER" >&-'],
+        env={**os.environ, "PY": sys.executable, "FOLDER": str(tmp_path)},
         text=True, check=False, stderr=subprocess.PIPE,
     )
-    assert (done.returncode, done.stderr.startswith("error: ")) == (2, True), done.stderr
+    assert (done.returncode, done.stderr) == (2, f"error: not inside a git work tree · {tmp_path}\nnext: run quality hygiene inside a repository\n")
 
 
 def test_an_example_line_prints_whole_however_long_and_escaped():
