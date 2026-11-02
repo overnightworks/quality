@@ -131,6 +131,7 @@ class NoteEvent(StrEnum):
     """What a note's row says; a separate enum, so a finding can never carry one of these."""
 
     ALLOWED = "allowed"
+    EXITED = "exited"
     NOT_MEASURED = "not measured"
     UNUSED = "unused"
     WARNING = "warning"
@@ -168,6 +169,16 @@ class Note:
     def location(self) -> str:
         path = printable(self.path)
         return path if self.line is None else f"{path}:{self.line}"
+
+
+@dataclass(frozen=True)
+class ScannerRun:
+    """What one scanner said in one run, for `-v`: its exit, and its stderr's lines or what stands instead of them."""
+
+    scanner: str
+    exit_code: int
+    lines: tuple[str, ...]
+    withheld: str = ""
 
 
 ESCAPED_CATEGORIES = frozenset({"Cc", "Cf", "Zl", "Zp"})

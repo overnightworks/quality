@@ -1,5 +1,6 @@
 import json
 import os
+import shlex
 import signal
 import subprocess
 import tempfile
@@ -10,11 +11,13 @@ from pathlib import Path
 import pytest
 
 from quality import config, scanners, staged
-from quality.report import Example, FindingEvent, NoteEvent
+from quality.report import Example, FindingEvent, NoteEvent, printable
 from quality.rules import Rule
 from tests.support.check import (
     CopyLine,
+    DetailLine,
     FixLine,
+    NoteLine,
     area_block,
     area_fact,
     assert_block_prints,
@@ -30,7 +33,7 @@ from tests.support.check import (
     rule_notes,
 )
 from tests.support.door import CHECK_WORD, MODULE_DOOR, check_door, door_in
-from tests.support.scanners import OUTPUTS, check_exit_2, commit, fake_gitleaks, scan, serving
+from tests.support.scanners import OUTPUTS, check_exit_2, commit, fake_gitleaks, flagging, scan, serving, vetting
 from tests.support.secrets import FAKE_KEY, HOSTILE_FILE, OTHER_KEY, allow_config, assert_key_found, sha256_of
 
 RECORDED_SECRET = "PLACEHOLDER-SECRET-VALUE"  # the Secret in the recorded gitleaks-finding.json
@@ -375,3 +378,119 @@ def test_a_commit_count_git_cannot_give_refuses_the_secret_rule_alone(build_repo
     out = check_exit_2(repo, capsys)
     assert set(refusals(repo)) == {Rule.LEAK}
     assert env_row_stands(out)
+
+
+def assert_no_value(value: str, printed: str, summary: Path) -> None:
+    """Neither `value` nor its escaped form stands in `printed`, and no step summary was written."""
+    assert [form for form in (value, printable(value)) if form in printed] == []
+    assert not summary.exists()
+
+
+def gitleaks_exit_rows(printed: str) -> list[tuple[str, str]]:
+    """Each `check` exit row under the secrets row, as its scanner and fact."""
+    return [(line.location, line.row.fact) for line in area_block(printed, "secrets") if isinstance(line, NoteLine) and line.row.event is NoteEvent.EXITED]
+
+
+def recorded_leak_with(edited_report, **fields: str) -> Path:
+    """The recorded gitleaks report with these fields of its one leak set."""
+    return edited_report("gitleaks-finding.json", lambda report: report[0].update(fields))
+
+
+def leak_with_stderr(report: Path, *lines: str) -> str:
+    """Shell for a gitleaks scan that reports the leak in `report`, writes `lines` to stderr and exits with leaks found."""
+    return f"cp '{report}' \"$report\"; printf '%s\\n' {shlex.join(lines)} >&2; exit {scanners.GITLEAKS_LEAKS_FOUND}"
+
+
+NOT_CLEARED_PAIR = "7 · 2 stderr lines withheld · not cleared by gitleaks"
+FAILING_PAIR = "3 · 1 stderr line withheld · a failing gitleaks is never quoted"
+
+
+@pytest.mark.parametrize(
+    ("id_", "allowed", "expected", "vetted"),
+    [
+        ("a finding", False, (1, NOT_CLEARED_PAIR), True),
+        ("an allowed finding", True, (0, NOT_CLEARED_PAIR), True),
+        ("gitleaks failing with stderr", False, (2, FAILING_PAIR), False),
+        ("stderr beside a report", False, (2, FAILING_PAIR), False),
+        ("a report that is not UTF-8", False, (2, "7"), False),
+        ("a report that is no JSON", False, (2, "7"), False),
+        ("the value on gitleaks' stdout", False, (0, "0"), False),
+        ("a value in a commit message", False, (1, "7"), False),
+    ],
+)
+def test_a_planted_value_reaches_no_stream_of_a_verbose_run(
+    build_repo, served_scanners, edited_report, tmp_path, monkeypatch, capsys, id_, allowed, expected, vetted
+):
+    """The row's cases under `-v`: the value stands in no stream and no summary, and gitleaks' own row stands with its exit."""
+    summary = tmp_path / "summary.md"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    leak = recorded_leak_with(edited_report, Secret=FAKE_KEY)
+    git_scans = {
+        "a finding": leak_with_stderr(leak, "3:14PM INF scanned", f"ERR [git] {FAKE_KEY}"),
+        "gitleaks failing with stderr": FAILING_REPORTS["stderr-without-report"],
+        "stderr beside a report": FAILING_REPORTS["stderr-beside-a-report"],
+        "a report that is not UTF-8": FAILING_REPORTS["report-not-utf8"],
+        "a report that is no JSON": f'printf \'[{{"Secret":"{FAKE_KEY}"\' > "$report"; exit 7',
+        "the value on gitleaks' stdout": f'echo "[]" > "$report"; echo {FAKE_KEY}',
+        "a value in a commit message": f"cp '{recorded_leak_with(edited_report, Message=FAKE_KEY)}' \"$report\"; exit 7",
+    }
+    git_scans["an allowed finding"] = git_scans["a finding"]
+    config_text = allow_config((RECORDED_RULE, RECORDED_FILE, FAKE_KEY, "a planted value")) if allowed else None
+    fake_gitleaks(served_scanners, on_scan=vetting(flagging(FAKE_KEY), on_git=git_scans[id_]))
+    repo = build_repo({"quality/config.toml": config_text} if config_text is not None else {})
+    code = door_in(repo, CHECK_WORD, "-v", clock=lambda: 0.0)
+    printed = capsys.readouterr()
+    assert (code, gitleaks_exit_rows(printed.out)) == (expected[0], [(scanners.GITLEAKS, expected[1])])
+    assert_no_value(FAKE_KEY, printed.out + printed.err, summary)
+    assert (served_scanners / "gitleaks.vetted").exists() == vetted
+
+
+@pytest.mark.parametrize(
+    "id_", ["a finding", "gitleaks failing with stderr", "a report that is not UTF-8", "a staged key"]
+)
+def test_a_planted_value_reaches_no_stream_of_the_staged_door(build_repo, served_scanners, edited_report, tmp_path, monkeypatch, capsys, id_):
+    """The staged door takes no `-v`: nothing a scanner writes to either stream reaches a stream of the door or a summary."""
+    summary = tmp_path / "summary.md"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    on_scan = {
+        "a finding": leak_with_stderr(recorded_leak_with(edited_report, Secret=FAKE_KEY), f"ERR [git] {FAKE_KEY}"),
+        "gitleaks failing with stderr": FAILING_REPORTS["stderr-without-report"],
+        "a report that is not UTF-8": FAILING_REPORTS["report-not-utf8"],
+        "a staged key": f'echo "[]" > "$report"; echo {FAKE_KEY}; echo {FAKE_KEY} >&2',
+    }[id_]
+    fake_gitleaks(served_scanners, on_scan=on_scan)
+    repo = build_repo({})
+    door_in(repo, *leak_scan_words("scan-staged", repo))
+    printed = capsys.readouterr()
+    assert_no_value(FAKE_KEY, printed.out + printed.err, summary)
+
+
+def test_a_value_in_a_file_name_stands_no_more_often_under_v(build_repo, served_scanners, edited_report, capsys):
+    """A file's name in a finding's row is a route older than `-v`; a stderr line naming the file adds none."""
+    name = f"docs/{FAKE_KEY}.txt"
+    leak = recorded_leak_with(edited_report, File=name)
+    fake_gitleaks(served_scanners, on_scan=vetting(flagging(FAKE_KEY), on_git=leak_with_stderr(leak, f"WRN leak in {name}")))
+    repo = build_repo({})
+    door_in(repo, CHECK_WORD, clock=lambda: 0.0)
+    plain = capsys.readouterr().out
+    door_in(repo, CHECK_WORD, "-v", clock=lambda: 0.0)
+    assert capsys.readouterr().out.count(FAKE_KEY) == plain.count(FAKE_KEY)
+
+
+@pytest.mark.scanner
+@pytest.mark.parametrize(
+    ("files", "fact", "said"),
+    [
+        pytest.param({"docs/a.md": "nothing\n"}, "0", "no leaks found", id="clean"),
+        pytest.param({"config.txt": f"aws_access_key_id = {FAKE_KEY}\n"}, "7", "leaks found: 1", id="a finding"),
+    ],
+)
+def test_gitleaks_real_stderr_stands_whole_under_v(build_repo, installed_scanners, capsys, files, fact, said):
+    """A bump of gitleaks that changes what it writes to stderr turns this red."""
+    door_in(build_repo(files), CHECK_WORD, "-v", clock=lambda: 0.0)
+    printed = capsys.readouterr()
+    block = area_block(printed.out, "secrets")
+    details = [line.detail for line in block if isinstance(line, DetailLine)]
+    assert gitleaks_exit_rows(printed.out) == [(scanners.GITLEAKS, fact)]
+    assert any(said in detail for detail in details)
+    assert FAKE_KEY not in printed.out + printed.err

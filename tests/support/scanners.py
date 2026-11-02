@@ -112,10 +112,10 @@ def fake_gitleaks(served: Path, version: str = PINNED, on_scan: str = "exit 0", 
     return binary.parent
 
 
-def vetting(on_vet: str) -> str:
-    """The `on_scan` of a `fake_gitleaks` whose history scan is clean and whose `gitleaks stdin` keeps what it read in
-    `$0.vetted`, then runs `on_vet` (shell)."""
-    return f'if grep -qx stdin "$0.arguments"; then cat > "$0.vetted"; {on_vet}; fi\necho "[]" > "$report"'
+def vetting(on_vet: str, on_git: str = 'echo "[]" > "$report"') -> str:
+    """The `on_scan` of a `fake_gitleaks` whose `gitleaks stdin` keeps what it read in `$0.vetted`, then runs `on_vet`
+    (shell), and whose history scan runs `on_git` (shell), a clean report by default."""
+    return f'if grep -qx stdin "$0.arguments"; then cat > "$0.vetted"; {on_vet}; fi\n{on_git}'
 
 
 def flagging(value: str) -> str:

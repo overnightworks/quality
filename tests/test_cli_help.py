@@ -74,10 +74,10 @@ def test_the_check_help_stands_in_the_pictures_frame(capsys):
     lines = help_of(capsys, ["check"]).splitlines()
     options = lines[lines.index("Options:") + 1 : -2]
     assert (lines[0], lines[2], headings(lines), options, lines[-1], max(len(line) for line in lines) <= 80) == (
-        "usage: quality check",
+        "usage: quality check [-v]",
         "Check this repository against the fleet's rules.",
         ["Options:"],
-        ["  -h, --help  show this help"],
+        ["  -v          show the raw scanner output, never a secret", "  -h, --help  show this help"],
         "Exit codes: 0 clean, 1 findings, 2 could not check, 130 interrupted.",
         True,
     )
@@ -183,6 +183,10 @@ def test_a_closed_stdout_takes_no_help_and_exit_is_0(tmp_path):
         pytest.param(["check", "a", "b"], (), "unknown argument{sep}a b", "quality check", id="stray argument"),
         pytest.param(["check", "."], (), "unknown argument{sep}.", "quality check", id="a path of the old form"),
         pytest.param(["check", "src"], (), "unknown argument{sep}src", "quality check", id="a folder name"),
+        pytest.param(["check", "-v", "."], (), "unknown argument{sep}.", "quality check", id="a path after the flag"),
+        pytest.param(["check", "--verbose"], (), "unknown argument{sep}--verbose", "quality check", id="the long form of the flag"),
+        pytest.param(["-v", "check"], (), "unknown argument{sep}-v", "quality check", id="the flag before the command"),
+        pytest.param(["scan-staged", "-v"], (), "unknown argument{sep}-v", "quality scan-staged", id="the flag on the staged door"),
         pytest.param(["scan-staged", "--nonsense"], (), "unknown argument{sep}--nonsense", "quality scan-staged", id="stray option"),
         pytest.param(["baseline", "write", "a", "b"], (), "unknown argument{sep}b", "quality baseline", id="stray argument of a group's command"),
         pytest.param(["check", "a", "b", "c"], (), "unknown argument{sep}a b c", "quality check", id="two stray arguments"),
