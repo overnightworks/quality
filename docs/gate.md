@@ -49,6 +49,7 @@ Each line has a reason:
   actionlint and osv-scanner from the tool's own manifest and lock ([Scanners](commands.md#scanners)), so a caller adds
   nothing; its CI needs network access to GitHub release assets. The step sets `MISE_CEILING_PATHS`, so a `mise.toml` in
   the caller's checkout takes no part.
+- **The `check` job runs the whole `quality check`.** `gate.yml` has no input for an area, and a test pins the step's words. A job that names areas says so in its verdict (`✓ clean · 1 area`); a selected-area job is not evidence of a whole check.
 - **`secrets: SONAR_TOKEN`** and the optional **`with: coverage-artifact`** are described under
   [`quality sonar findings`](sonar.md#quality-sonar-findings) and [Coverage on new code](sonar.md#coverage-on-new-code).
 - **`uses:` pins a commit** (`@<commit sha> # v<tag>`), and Dependabot bumps it where the repository's `.github/dependabot.yml` enables the `github-actions` ecosystem. There is no copier and no own token that writes to all repositories: quality

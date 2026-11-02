@@ -1,4 +1,4 @@
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -389,24 +389,26 @@ AREA_JUDGES: Mapping[Area, Callable[[RunInputs], AreaVerdict]] = {
 }
 
 
-def _judged_areas(inputs: RunInputs) -> Iterator[AreaVerdict]:
-    """Each area as its last rule ends, in the order the rows stand."""
-    return (AREA_JUDGES[area](inputs) for area in Area)
+def _judged_areas(inputs: RunInputs, selected: frozenset[Area]) -> Iterator[AreaVerdict]:
+    """Each selected area as its last rule ends, in the order the rows stand."""
+    return (AREA_JUDGES[area](inputs) for area in Area if area in selected)
 
 
 def judge_repository(
     root: Path, locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str], report_area: AreaReport, running: Running,
     verbose: bool = False,
+    named: Iterable[Area] = (),
 ) -> CheckResult:
-    """Judges every active rule over the repository `root` lies in, area by area in row order, and hands each finished
-    area and the count of tracked paths to `report_area`; `running` holds the live line up around each scanner, and
-    `verbose` keeps what each scanner said. Only one git cannot list stops the run."""
+    """Judges every active rule of the areas `named`, of all of them where none is, over the repository `root` lies
+    in, area by area in row order, and hands each finished area and the count of tracked paths to `report_area`;
+    `running` holds the live line up around each scanner, and `verbose` keeps what each scanner said. Only one git
+    cannot list stops the run."""
     root = checkout.work_tree_top(root)
     tracked = checkout.tracked_files(root)
     tracked_paths = len(set(tracked))
     inputs = RunInputs(root, tracked, locate_ruff, locate_zizmor, running, verbose)
     areas: list[AreaVerdict] = []
-    for area in _judged_areas(inputs):
+    for area in _judged_areas(inputs, frozenset(named) or frozenset(Area)):
         report_area(area, tracked_paths)
         areas.append(area)
     return CheckResult(tuple(areas), tracked_paths)

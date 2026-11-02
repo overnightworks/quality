@@ -79,12 +79,12 @@ def test_a_run_of_named_areas_equals_the_same_request_spelt_otherwise(build_repo
 @pytest.mark.parametrize(
     ("words", "code", "last_line"),
     [
-        pytest.param(["files"], 1, "! 1 finding in 1 area · <1s", id="files"),
+        pytest.param(["files"], 1, "! 2 findings in 1 area · <1s", id="files"),
         pytest.param(["secrets"], 0, "✓ clean · 1 area · <1s", id="secrets"),
         pytest.param(["debt"], 0, "✓ clean · 1 area · debt measured, not enforced · <1s", id="debt"),
         pytest.param(["imports"], 0, "✓ clean · 1 area · imports not enforced · <1s", id="imports"),
         pytest.param(["debt", "imports"], 0, "✓ clean · 2 areas · debt measured, not enforced · imports not enforced · <1s", id="debt and imports"),
-        pytest.param(["files", "secrets"], 1, "! 1 finding in 1 area · 1 area clean · <1s", id="files and secrets"),
+        pytest.param(["files", "secrets"], 1, "! 2 findings in 1 area · 1 area clean · <1s", id="files and secrets"),
     ],
 )
 def test_a_selected_run_counts_what_it_judged_and_nothing_else(build_repo, capsys, words, code, last_line):

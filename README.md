@@ -4,7 +4,7 @@
 SonarCloud findings, and the fail-closed pull request verdict. It is for the engineer who adds the gate to a
 repository and for the operator who merges past it.
 
-    quality check [-v]
+    quality check [AREA ...] [-v]
     quality baseline write [PATH]
     quality scan-staged [PATH]
     quality sonar properties
@@ -35,7 +35,7 @@ jobs; [docs/gate.md](docs/gate.md#gateyml) has the snippet and the reason for ea
 needs a SonarCloud project with automatic analysis off, a root `sonar-project.properties` and the `SONAR_TOKEN` secret
 (a missing token is red); see [docs/sonar.md](docs/sonar.md#quality-sonar-findings).
 
-Locally, `quality check` runs every rule the gate runs, the secret, workflow and advisory scans included.
+Locally, `quality check` runs every rule the gate runs, the secret, workflow and advisory scans included; `quality check <area>` runs only that area.
 
 ## Read on
 
