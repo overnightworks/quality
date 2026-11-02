@@ -416,11 +416,9 @@ def leak_with_stderr(report: Path, *lines: str) -> str:
     ],
 )
 def test_a_planted_value_reaches_no_stream_of_a_verbose_run(
-    build_repo, served_scanners, edited_report, tmp_path, monkeypatch, capsys, id_, allowed, expected, vetted
+    build_repo, served_scanners, edited_report, summary, capsys, id_, allowed, expected, vetted
 ):
     """The row's cases under `-v`: the value stands in no stream and no summary, and gitleaks' own row stands with its exit."""
-    summary = tmp_path / "summary.md"
-    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
     leak = recorded_leak_with(edited_report, Secret=FAKE_KEY)
     git_scans = {
         "a finding": leak_with_stderr(leak, "3:14PM INF scanned", f"ERR [git] {FAKE_KEY}"),
@@ -446,10 +444,8 @@ def test_a_planted_value_reaches_no_stream_of_a_verbose_run(
 @pytest.mark.parametrize(
     "id_", ["a finding", "gitleaks failing with stderr", "a report that is not UTF-8", "a staged key"]
 )
-def test_a_planted_value_reaches_no_stream_of_the_staged_door(build_repo, served_scanners, edited_report, tmp_path, monkeypatch, capsys, id_):
+def test_a_planted_value_reaches_no_stream_of_the_staged_door(build_repo, served_scanners, edited_report, summary, capsys, id_):
     """The staged door takes no `-v`: nothing a scanner writes to either stream reaches a stream of the door or a summary."""
-    summary = tmp_path / "summary.md"
-    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
     on_scan = {
         "a finding": leak_with_stderr(recorded_leak_with(edited_report, Secret=FAKE_KEY), f"ERR [git] {FAKE_KEY}"),
         "gitleaks failing with stderr": FAILING_REPORTS["stderr-without-report"],

@@ -14,7 +14,7 @@ from quality import scanners
 from quality.report import NoteEvent
 from quality.rules import Area
 from tests.support.advisories import reporting, uv_lock
-from tests.support.check import DetailLine, FindingLine, NoteLine, area_block, decode_block
+from tests.support.check import DetailLine, FindingLine, NoteLine, area_block, area_fact, decode_block
 from tests.support.door import CHECK_WORD, door_in
 from tests.support.python_lint import fake_ruff, ruff_entry
 from tests.support.scanners import (
@@ -43,19 +43,20 @@ def shouting(lines: list[str]) -> str:
     return f"printf '%s\\n' {shlex.join(lines)} >&2"
 
 
-def writing(name: str, line: str, exit_code: int = 0, nothing_said: str = "echo '[]'") -> str:
+def writing(name: str, line: str, exit_code: int = 0) -> str:
     """The body of scanner `name` that answers clean, then writes `line` to stderr and exits `exit_code`."""
     if name == scanners.OSV_SCANNER:
         return reporting(OUTPUTS / "osv-scanner-clean.json", exit_code, line)
-    return f"{CLEAN_SCANS.get(name, nothing_said)}\n{shouting([line])}; exit {exit_code}"
+    return f"{CLEAN_SCANS.get(name, CLEAN_SCANS[scanners.ACTIONLINT])}\n{shouting([line])}; exit {exit_code}"
 
 
 def printing(report: Path, exit_code: int) -> str:
     return f"cat '{report}'; exit {exit_code}"
 
 
-def installing(served_scanners: Path, elsewhere: Path, bodies: dict[str, str], nothing_said: str = "echo '[]'") -> dict:
+def installing(served_scanners: Path, elsewhere: Path, bodies: dict[str, str]) -> dict:
     """The door's keywords for scanners that run `bodies` (name to shell); the others answer clean."""
+    nothing_said = CLEAN_SCANS[scanners.ACTIONLINT]
     for name in bodies.keys() - {scanners.ZIZMOR, scanners.RUFF}:
         fake_scanner(served_scanners, name, bodies[name])
     zizmor = fake_zizmor(elsewhere / "zizmor", bodies.get(scanners.ZIZMOR, nothing_said))
@@ -148,14 +149,6 @@ def test_a_report_never_stands_under_v(build_repo, served_scanners, elsewhere, e
     }
 
 
-@pytest.fixture
-def summary(tmp_path, monkeypatch) -> Path:
-    """The step summary the door would write; a run that quotes nothing leaves it absent."""
-    path = tmp_path / "summary.md"
-    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(path))
-    return path
-
-
 @pytest.mark.parametrize(
     ("name", "area"),
     [(scanners.ACTIONLINT, Area.WORKFLOWS), (scanners.ZIZMOR, Area.WORKFLOWS), (scanners.OSV_SCANNER, Area.DEPENDENCIES), (scanners.RUFF, Area.CODE)],
@@ -188,6 +181,7 @@ def test_a_value_above_the_last_five_lines_withholds_every_line(build_repo, serv
     _, out, err = streams(scanning_repository(build_repo), capsys, "-v", **keywords)
     assert [line for line in lines if line in out + err] == []
     assert [row for row in scanner_rows(out, area) if row[0] == name] == [(name, f"{exit_code} · 8 stderr lines withheld · not cleared by gitleaks", ())]
+    assert "8 stderr lines withheld" in area_fact(out, area)
     assert not summary.exists()
 
 
@@ -216,7 +210,7 @@ def test_a_vet_that_cannot_answer_withholds_the_lines_under_v(build_repo, served
 @pytest.mark.parametrize("opening", [r"\033[31m", r"\302\204"], ids=["ESC", "C1"])
 def test_a_terminal_code_is_withheld_under_v(build_repo, served_scanners, elsewhere, capsys, summary, opening):
     fake_gitleaks(served_scanners, on_scan=vetting(flagging(FAKE_KEY)))
-    keywords = installing(served_scanners, elsewhere, {scanners.ACTIONLINT: f"echo '[]'\nprintf '{opening}red\\nplain\\n' >&2"})
+    keywords = installing(served_scanners, elsewhere, {scanners.ACTIONLINT: f"{CLEAN_SCANS[scanners.ACTIONLINT]}\nprintf '{opening}red\\nplain\\n' >&2"})
     code, out, err = streams(build_repo({".github/workflows/w.yml": "on: push\n"}), capsys, "-v", **keywords)
     assert code == 0
     assert scanner_rows(out, Area.WORKFLOWS)[0] == (scanners.ACTIONLINT, "0 · 2 stderr lines withheld · not cleared by gitleaks", ())
@@ -247,7 +241,7 @@ def test_a_raw_line_stands_escaped_behind_the_marker(build_repo, served_scanners
         r"::warning::forged\nred\342\200\256\nbefore\342\200\250after\342\200\251last\013part\na\034b"
         r"\nfirst\nsecond\n\none\rtwo\n"
     )
-    keywords = installing(served_scanners, elsewhere, {scanners.ACTIONLINT: f"echo '[]'\nprintf '{raw}' >&2"})
+    keywords = installing(served_scanners, elsewhere, {scanners.ACTIONLINT: f"{CLEAN_SCANS[scanners.ACTIONLINT]}\nprintf '{raw}' >&2"})
     _, out, _ = streams(build_repo({".github/workflows/w.yml": "on: push\n"}), capsys, "-v", **keywords)
     assert [line for line in out.splitlines() if line.startswith("      |")] == [
         "      | ::warning::forged",
