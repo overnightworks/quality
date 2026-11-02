@@ -209,7 +209,7 @@ def area_row(verdict: AreaVerdict, extent: str) -> Row:
     facts = tuple(dict.fromkeys(reason.fact for reason in verdict.reasons))
     if facts:
         if len(facts) == 1:
-            return Row(Glyph.COULD_NOT_CHECK, verdict.area, AreaEvent.NOT_CHECKED, facts[0])
+            return Row(Glyph.COULD_NOT_CHECK, verdict.area, AreaEvent.NOT_CHECKED, facts[0], descriptive=True)
         sub_lines = tuple(SubLine(Glyph.COULD_NOT_CHECK, fact) for fact in facts)
         return Row(Glyph.COULD_NOT_CHECK, verdict.area, AreaEvent.NOT_CHECKED, f"{len(facts)} reasons", sub_lines=sub_lines)
     if verdict.findings:

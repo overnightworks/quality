@@ -150,7 +150,7 @@ def _failures_as_process_errors(command: list[str]) -> Iterator[None]:
     try:
         yield
     except UnicodeDecodeError as error:
-        raise ProcessError(f"{command[0]} printed output that is not UTF-8 ({error})") from error
+        raise ProcessError(f"{command[0]} printed output that is not UTF-8") from error
     except (OSError, ValueError) as error:  # ValueError: an argument the OS refuses, such as an embedded null byte
         raise ProcessError(f"cannot run {command[0]}: {error}") from error
 

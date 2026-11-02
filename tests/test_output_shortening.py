@@ -203,12 +203,12 @@ def test_the_verdict_and_the_pair_stand_whole():
 
 def test_a_wide_location_narrows_the_fact_by_its_cells():
     printed = findings_at(30, [finding("漢字.env", FindingEvent.TRACKED, "a fact that goes on and on")])
-    assert printed[0] == "    ! 漢字.env  tracked  a f…"
+    assert printed[0] == "    ! 漢字.env  tracked  a fa…"
 
 
 def test_a_wide_subject_and_event_narrow_a_rows_fact_by_their_cells():
     row = Row(Glyph.COULD_NOT_CHECK, "漢字", Event.WIDE, "abcdefghij", descriptive=True)
-    assert rows_at(40, row) == ["  ✗ 漢字          漢字漢字      abcdef…"]
+    assert rows_at(40, row) == ["  ✗ 漢字          漢字漢字       abcdef…"]
 
 
 def test_a_shortened_fact_is_painted_as_one_span():
@@ -273,7 +273,7 @@ def test_a_rows_subject_and_event_are_padded_by_their_cells():
     subject = Row(Glyph.CLEAN, "漢字", Event.CLEAN, "fact")
     event = Row(Glyph.CLEAN, "files", Event.WIDE, "fact")
     printed = piped(lambda channel: output.write_rows((subject, event), channel))
-    assert printed == ["  ✓ 漢字          clean          fact", "  ✓ files         漢字漢字      fact"]
+    assert printed == ["  ✓ 漢字          clean          fact", "  ✓ files         漢字漢字       fact"]
 
 
 @pytest.mark.parametrize(

@@ -4,6 +4,7 @@
 import os
 import secrets
 import sys
+import unicodedata
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
@@ -119,6 +120,8 @@ GLYPH_STYLE = {Glyph.CLEAN: GREEN, Glyph.NEEDS_YOU: YELLOW, Glyph.COULD_NOT_CHEC
 VERDICT_STYLE = {Glyph.CLEAN: BOLD, Glyph.NEEDS_YOU: f"{BOLD};{YELLOW}"}
 SECONDS_PER_MINUTE = 60
 ELLIPSIS = "…"
+ZERO_WIDTH_CATEGORIES = frozenset({"Mn", "Me"})
+WIDE_CLASSES = frozenset({"W", "F"})
 # Free text a terminal may cut; any other event, a new one included, stands whole.
 DESCRIPTIVE_FINDINGS = frozenset(
     {
@@ -180,8 +183,17 @@ class Channels:
     err: Channel
 
 
+def _window_width(stream: TextIO) -> int | None:
+    """The columns of `stream`'s terminal, else None, which shortens nothing."""
+    try:
+        return os.get_terminal_size(stream.fileno()).columns or None
+    except OSError:
+        return None
+
+
 def open_channel(stream: TextIO | None, environment: Mapping[str, str]) -> Channel:
-    return Channel(stream, style_is_on(stream, environment), None)
+    styled = style_is_on(stream, environment)
+    return Channel(stream, styled, _window_width(stream) if styled else None)
 
 
 def open_channels(environment: Mapping[str, str]) -> Channels:
@@ -194,6 +206,38 @@ def _paint(text: str, style: str, styled: bool) -> str:
     return f"\x1b[{style}m{text}{RESET}" if styled and text else text
 
 
+def _cell_width(character: str) -> int:
+    if unicodedata.category(character) in ZERO_WIDTH_CATEGORIES:
+        return 0
+    return 2 if unicodedata.east_asian_width(character) in WIDE_CLASSES else 1
+
+
+def _display_width(text: str) -> int:
+    return sum(_cell_width(character) for character in text)
+
+
+def _padded(text: str, width: int) -> str:
+    return text + " " * (width - _display_width(text))
+
+
+def _fitted(fact: str, prefix: str, width: int | None) -> str:
+    """`fact` escaped and, where it does not fit after `prefix` in a known `width`, cut at its end with `…`."""
+    escaped = printable(fact)
+    if width is None or not fact:
+        return escaped
+    room = width - _display_width(prefix)
+    if _display_width(escaped) <= room:
+        return escaped
+    kept, used = [], 0
+    for character in fact:
+        rendered = printable(character)
+        used += _display_width(rendered)
+        if used >= room:
+            break
+        kept.append(rendered)
+    return f"{''.join(kept)}{ELLIPSIS}"
+
+
 def _event_word(row: Row | Finding | Note) -> str:
     return printable(str(row.event))
 
@@ -203,15 +247,21 @@ def _event_text(row: Row) -> str:
     return event if row.count is None else counted(row.count, event)
 
 
-def _row_lines(row: Row, styled: bool) -> list[str]:
+def _row_lines(row: Row, channel: Channel) -> list[str]:
     """Each field is escaped and padded before it is painted, so the columns hold at a terminal as they do in a pipe."""
-    subject, fact = printable(row.subject).ljust(SUBJECT_WIDTH), printable(row.fact)
-    middle = f"{subject}  {_event_text(row).ljust(EVENT_WIDTH)} " if fact else f"{subject}  {_event_text(row)}"
+    styled = channel.styled
+    subject = _padded(printable(row.subject), SUBJECT_WIDTH)
+    middle = f"{subject}  {_padded(_event_text(row), EVENT_WIDTH)} " if row.fact else f"{subject}  {_event_text(row)}"
+    prefix = f"  {row.glyph} {middle}"
+    fact = _fitted(row.fact, prefix, channel.width if row.descriptive else None)
     if row.glyph is Glyph.NOTE:
-        lines = [_paint(f"  {row.glyph} {middle}{fact}", DIM, styled)]
+        lines = [_paint(f"{prefix}{fact}", DIM, styled)]
     else:
         lines = [f"  {_paint(row.glyph, GLYPH_STYLE[row.glyph], styled)} {middle}{_paint(fact, DIM, styled)}"]
-    return lines + [f"    {_paint(sub.glyph, GLYPH_STYLE[sub.glyph], styled)} {printable(sub.text)}" for sub in row.sub_lines]
+    for sub in row.sub_lines:
+        text = _fitted(sub.text, f"    {sub.glyph} ", channel.width)
+        lines.append(f"    {_paint(sub.glyph, GLYPH_STYLE[sub.glyph], styled)} {text}")
+    return lines
 
 
 def _verdict_parts(verdict: Verdict) -> tuple[Glyph, list[str]]:
@@ -231,7 +281,7 @@ def _print_lines(lines: list[str], channel: Channel) -> None:
 
 
 def write_rows(rows: tuple[Row, ...], channel: Channel) -> None:
-    _print_lines([line for row in rows for line in _row_lines(row, channel.styled)], channel)
+    _print_lines([line for row in rows for line in _row_lines(row, channel)], channel)
 
 
 # A line taken from another tool's rendering carries this, so no line the door prints starts with repository text.
@@ -245,7 +295,7 @@ FINDING_GAP = "  "
 def _row_columns(location: str, event: str, widths: tuple[int, int]) -> str:
     """The location and event columns of a row, each padded to its width and followed by the gap that opens the fact."""
     location_width, event_width = widths
-    return f"{location.ljust(location_width)}{FINDING_GAP}{event.ljust(event_width)}{FINDING_GAP}"
+    return f"{_padded(location, location_width)}{FINDING_GAP}{_padded(event, event_width)}{FINDING_GAP}"
 
 
 def _detail_line(text: str) -> str:
@@ -261,24 +311,29 @@ def _fix_lines(fix: str | Example) -> list[str]:
     return [f"{FIX_INDENT}{FIX_LABEL} {printable(fix.label)}:", *(f"{FIX_INDENT}  {printable(line)}" for line in fix.lines)]
 
 
-def _finding_lines(findings: Sequence[Finding], notes: Sequence[Note], styled: bool) -> list[str]:
-    """Each field is escaped before it is padded, so the columns hold in a pipe as at a terminal; they count characters.
-    The findings and the notes share one location column and one event column."""
+def _finding_lines(findings: Sequence[Finding], notes: Sequence[Note], channel: Channel) -> list[str]:
+    """Each field is escaped before it is padded, so the columns hold in a pipe as at a terminal; they count display
+    width. The findings and the notes share one location column and one event column."""
+    styled = channel.styled
     widths = (
-        max(len(row.location) for row in (*findings, *notes)),
-        max(len(_event_word(row)) for row in (*findings, *notes)),
+        max(_display_width(row.location) for row in (*findings, *notes)),
+        max(_display_width(_event_word(row)) for row in (*findings, *notes)),
     )
     lines = []
     for position, finding in enumerate(findings):
-        glyph = _paint(Glyph.NEEDS_YOU, GLYPH_STYLE[Glyph.NEEDS_YOU], styled)
+        glyph = Glyph.NEEDS_YOU
         columns = _row_columns(finding.location, _event_word(finding), widths)
-        lines.append(f"{FINDING_INDENT}{glyph} {columns}{_paint(printable(finding.fact), DIM, styled)}")
+        width = channel.width if finding.event in DESCRIPTIVE_FINDINGS else None
+        fact = _fitted(finding.fact, f"{FINDING_INDENT}{glyph} {columns}", width)
+        lines.append(f"{FINDING_INDENT}{_paint(glyph, GLYPH_STYLE[glyph], styled)} {columns}{_paint(fact, DIM, styled)}")
         lines += [_paint(_detail_line(text), DIM, styled) for text in finding.detail]
         if position + 1 == len(findings) or findings[position + 1].fix != finding.fix:
             lines += _fix_lines(finding.fix)
     for note in notes:
         columns = _row_columns(note.location, _event_word(note), widths)
-        lines.append(_paint(f"{FINDING_INDENT}{Glyph.NOTE} {columns}{printable(note.fact)}", DIM, styled))
+        width = channel.width if note.event in DESCRIPTIVE_NOTES else None
+        prefix = f"{FINDING_INDENT}{Glyph.NOTE} {columns}"
+        lines.append(_paint(f"{prefix}{_fitted(note.fact, prefix, width)}", DIM, styled))
     return lines
 
 
@@ -286,7 +341,7 @@ def write_findings_and_notes(findings: Sequence[Finding], notes: Sequence[Note],
     """The rows of one area that carry an event: each finding `! location  event  fact` with one `fix:` line after the
     last of each run of equal fixes, then each note `· location  event  fact`, the columns shared."""
     if findings or notes:
-        _print_lines(_finding_lines(findings, notes, channel.styled), channel)
+        _print_lines(_finding_lines(findings, notes, channel), channel)
 
 
 def write_verdict(verdict: Verdict, channel: Channel) -> None:
