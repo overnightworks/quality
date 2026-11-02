@@ -54,7 +54,7 @@ Exit codes: 0 yes, 1 no, 2 could not answer, 130 interrupted. Each block names i
 
 ### 1. `quality check`, all clean
 
-The first row names the release the gate pins. Every area gets a row, also when clean. Exit 0. Rows and verdict: stdout. The secrets row counts the commits gitleaks reads, not the tree: gitleaks reads committed history only, so „tree“ claimed more than was checked (head correction O30 of 1.11.2026, under the operator's instruction of 28.10.2026 to decide small wording questions alone).
+The first row names the release the gate pins. Every area gets a row, also when clean. Exit 0. Rows and verdict: stdout. The workflows row counts the workflow files the tree holds and says that only offline audits ran, in the row itself and in no note of its own (operator ruling of 1.11.2026, „In der Zeile selbst (Recommended)“). The secrets row counts the commits gitleaks reads, not the tree: gitleaks reads committed history only, so „tree“ claimed more than was checked (head correction O30 of 1.11.2026, under the operator's instruction of 28.10.2026 to decide small wording questions alone).
 
 ```text
 $ quality check
@@ -63,7 +63,7 @@ $ quality check
   ✓ debt          clean          ceiling held · 31 entries, 2 clone pairs
   ✓ imports       clean          1 contract
   ✓ secrets       clean          412 commits
-  ✓ workflows     clean          5 workflows
+  ✓ workflows     clean          5 workflows · offline audits only
   ✓ dependencies  clean          1 lockfile · 63 packages
   ✓ code          clean          2 rules · 41 Python files
 ✓ clean · 7 areas · 12s
@@ -93,7 +93,7 @@ $ quality check
       fix: bring it back to 64 lines or below
   ✓ imports       clean          1 contract
   ✓ secrets       clean          412 commits
-  ✓ workflows     clean          5 workflows
+  ✓ workflows     clean          5 workflows · offline audits only
   ! dependencies  1 finding
     ! uv.lock  affected  jinja2 3.1.4 · GHSA-q8x2-4m7c-9v3p · fixed in 3.1.6
       fix: uv lock --upgrade-package jinja2
@@ -101,7 +101,7 @@ $ quality check
 ! 5 findings in 3 areas · 4 areas clean · 14s
 ```
 
-No rule name stands in a row (`compose-port`, `env-file`); the event says it in words. The rule name appears only in a `fix:` line that asks for an `[[….allow]]` entry. No `next:` follows this verdict: the `fix:` lines carry the way. The events, facts and fixes of the `files` rows are head proposals O12 to O16, O18 and O19 of 30.10.2026, those of the `debt` rows O20 to O22 of 31.10.2026, those of the `imports` rows O23 to O27 of 31.10.2026, those of the `secrets` rows O28, O29 and O32 to O35 of 1.11.2026, their recommendations applied: one event word per kind of finding, shared across rules (`report.FindingEvent`); the env fix names the file for `.gitignore` only where it is its own shell word, else `it`; and the findings of an area in run order. Paths and events align per area by character count.
+No rule name stands in a row (`compose-port`, `env-file`); the event says it in words. The rule name appears only in a `fix:` line that asks for an `[[….allow]]` entry. No `next:` follows this verdict: the `fix:` lines carry the way. The events, facts and fixes of the `files` rows are head proposals O12 to O16, O18 and O19 of 30.10.2026, those of the `debt` rows O20 to O22 of 31.10.2026, those of the `imports` rows O23 to O27 of 31.10.2026, those of the `secrets` rows O28, O29 and O32 to O35 of 1.11.2026, those of the `workflows` rows O36 to O40 of 2.11.2026, their recommendations applied: one event word per kind of finding, shared across rules (`report.FindingEvent`); the env fix names the file for `.gitignore` only where it is its own shell word, else `it`; and the findings of an area in run order. Paths and events align per area by character count.
 
 ### 3. `quality check`, no git work tree
 
@@ -124,7 +124,7 @@ $ quality check
   ✓ debt          clean          ceiling held · 31 entries, 2 clone pairs
   ✓ imports       clean          1 contract
   ✗ secrets       not checked    mise could not locate gitleaks 8.30.1
-  ✓ workflows     clean          5 workflows
+  ✓ workflows     clean          5 workflows · offline audits only
   ! dependencies  1 finding
     ! uv.lock  affected  jinja2 3.1.4 · GHSA-q8x2-4m7c-9v3p · fixed in 3.1.6
       fix: uv lock --upgrade-package jinja2
@@ -218,7 +218,7 @@ $ quality check --fix --dry-run
     ~ src/shop/legacy.py   drop   file is gone · was 802 lines
   ✓ imports       clean          1 contract
   ✓ secrets       clean          412 commits
-  ✓ workflows     clean          5 workflows
+  ✓ workflows     clean          5 workflows · offline audits only
   ✓ dependencies  clean          1 lockfile · 63 packages
   ✓ code          clean          2 rules · 41 Python files
 ~ dry run · 3 ceiling entries would fall · nothing written · 12s
@@ -236,7 +236,7 @@ $ quality check --fix
     ✓ src/shop/legacy.py   dropped  file is gone
   ✓ imports       clean          1 contract
   ✓ secrets       clean          412 commits
-  ✓ workflows     clean          5 workflows
+  ✓ workflows     clean          5 workflows · offline audits only
   ✓ dependencies  clean          1 lockfile · 63 packages
   ✓ code          clean          2 rules · 41 Python files
 ✓ clean · ceiling lowered by 3 entries · 7 areas · 12s

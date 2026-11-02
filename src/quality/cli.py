@@ -86,7 +86,6 @@ HYGIENE_EXIT = {
 
 INSTALLED_RUFF = partial(installation.installed_executable, scanners.RUFF)
 INSTALLED_ZIZMOR = partial(installation.installed_executable, scanners.ZIZMOR)
-ONLINE_AUDITS_NOTE = f"{Rule.WORKFLOW_SECURITY} runs offline, so zizmor's online-only audits do not run"
 
 
 def main(
@@ -240,10 +239,15 @@ def _debt_extent(verdict: AreaVerdict, extents: Mapping[Rule, int | None]) -> st
             return f"{CEILING_HELD}{SEPARATOR}{entries}, {pairs}"
 
 
+def _workflows_extent(verdict: AreaVerdict, extents: Mapping[Rule, int | None]) -> str:
+    return SEPARATOR.join((counted(extents[Rule.WORKFLOW_LINT], "workflow"), OFFLINE_AUDITS))
+
+
 JUDGED_EXTENT: dict[Area, Callable[[AreaVerdict, Mapping[Rule, int | None]], str]] = {
     Area.DEBT: _debt_extent,
     Area.IMPORTS: _imports_extent,
     Area.SECRETS: _secrets_extent,
+    Area.WORKFLOWS: _workflows_extent,
 }
 
 
@@ -296,7 +300,7 @@ def run_hygiene_check(path: Path, locate_ruff: Callable[[], str], locate_zizmor:
     except CannotJudge as error:
         write_pair(error.reason.fact, error.reason.next_steps or (START_FAILURE_NEXT,))
         return EXIT_CANNOT_JUDGE
-    emit(*result.reports, ONLINE_AUDITS_NOTE)
+    emit(*result.reports)
     for verdict in result.areas:
         write_rows((area_row(verdict, area_extent(verdict, result.tracked_paths)),))
         write_findings_and_notes([finding for finding in verdict.findings if finding.event], verdict.notes)

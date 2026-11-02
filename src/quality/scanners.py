@@ -292,6 +292,9 @@ def scanner_findings(scanner: _Scanner, report_text: str, exit_code: int, stderr
     return [scanner.read_finding(entry) for entry in entries]
 
 
+WORKFLOW_LINT_FIX = "correct the workflow as the message says"
+
+
 def actionlint_finding(entry: object) -> Finding:
     try:
         message, path, line = entry["message"], entry["filepath"], entry["line"]
@@ -299,7 +302,7 @@ def actionlint_finding(entry: object) -> Finding:
         raise ScannerError(f"cannot read the {ACTIONLINT} report: {error!r}") from error
     if not (isinstance(message, str) and isinstance(path, str) and isinstance(line, int)):
         raise ScannerError(f"an {ACTIONLINT} finding has fields of the wrong type")
-    return Finding(Rule.WORKFLOW_LINT, path, line, f"{ACTIONLINT}: {message}", "correct the workflow as the message says.")
+    return Finding(Rule.WORKFLOW_LINT, path, line, ACTIONLINT, WORKFLOW_LINT_FIX, detail=(message,), event=FindingEvent.INVALID)
 
 
 def zizmor_finding(entry: object) -> Finding:
@@ -313,7 +316,9 @@ def zizmor_finding(entry: object) -> Finding:
     if not (isinstance(rule, str) and isinstance(description, str) and isinstance(url, str)
             and isinstance(path, str) and isinstance(row, int)):
         raise ScannerError(f"a {ZIZMOR} finding has fields of the wrong type")
-    return Finding(Rule.WORKFLOW_SECURITY, path, row + 1, f"{ZIZMOR} {rule}: {description}.", f"see {url}")
+    return Finding(
+        Rule.WORKFLOW_SECURITY, path, row + 1, SEPARATOR.join((f"{ZIZMOR} {rule}", description)), f"see {url}", event=FindingEvent.INSECURE
+    )
 
 
 WORKFLOW_SCANNERS = {

@@ -107,10 +107,10 @@ def check_secrets(root: Path, allow_lists: AllowLists | CannotJudge) -> RuleResu
         raise CannotJudge(str(error)) from error
 
 
-def check_workflows(root: Path, rule: Rule, tracked: list[str], locate_zizmor: Callable[[], str]) -> list[Finding]:
+def check_workflows(root: Path, rule: Rule, tracked: list[str], locate_zizmor: Callable[[], str]) -> RuleResult:
     workflows = checkout.on_disk(root, [name for name in tracked if checkout.is_workflow(PurePosixPath(name))])
     try:
-        return scanners.scan_workflows(root, rule, workflows, locate_zizmor)
+        return RuleResult(scanners.scan_workflows(root, rule, workflows, locate_zizmor), len(workflows), False)
     except process.ProcessError as error:
         raise CannotJudge(str(error)) from error
 
@@ -311,12 +311,13 @@ def run_hygiene(root: Path, locate_ruff: Callable[[], str], locate_zizmor: Calla
     }
     secrets = _attempt(lambda: check_secrets(root, allow_lists))
     advisory = _attempt(partial(check_advisories, root, tracked, allow_lists))
+    workflows = {rule: _attempt(partial(check_workflows, root, rule, tracked, locate_zizmor)) for rule in scanners.WORKFLOW_SCANNERS}
     outcomes |= {
         Rule.LEAK: _findings(secrets),
-        **{rule: _attempt(partial(check_workflows, root, rule, tracked, locate_zizmor)) for rule in scanners.WORKFLOW_SCANNERS},
+        **{rule: _findings(result) for rule, result in workflows.items()},
         Rule.ADVISORY: _findings(advisory),
     }
-    results = ((Rule.SIZE, size), (Rule.CLONE, clone), (Rule.IMPORT_CONTRACT, contracts), (Rule.LEAK, secrets))
+    results = ((Rule.SIZE, size), (Rule.CLONE, clone), (Rule.IMPORT_CONTRACT, contracts), (Rule.LEAK, secrets), *workflows.items())
     measuring = {rule for rule, result in results if _measures_only(result)}
     notes = {rule: () if isinstance(result, CannotJudge) else result.notes for rule, result in (*results, (Rule.PYTHON_FLOOR, floor))}
     extents = {rule: None if isinstance(result, CannotJudge) else result.extent for rule, result in results}
