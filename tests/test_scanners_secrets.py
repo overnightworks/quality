@@ -354,7 +354,8 @@ def test_nothing_about_secrets_prints_before_the_area_rows(build_repo, installed
     assert scan(repo) == 1
     streams = capsys.readouterr()
     lines = streams.out.splitlines()
-    assert FAKE_KEY not in streams.out + streams.err
+    printed = streams.out + streams.err
+    assert [key in printed for key in (FAKE_KEY, OTHER_KEY)] == [False, False]
     prelude = lines[:next(number for number, line in enumerate(lines) if line.split()[1:2] == ["files"])]
     assert [line for line in prelude if line.lstrip().startswith(Rule.LEAK)] == []
     found, notes = rule_findings(repo, Rule.LEAK), rule_notes(repo, Rule.LEAK)

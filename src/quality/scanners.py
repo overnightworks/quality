@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from quality import DISTRIBUTION, installation, process
-from quality.config import CONFIG_PATH, Allowance, secret_allowance_entry
+from quality.config import CONFIG_PATH, SECRETS_ALLOW, Allowance, entry_name, secret_allowance_entry
 from quality.output import SEPARATOR
 from quality.report import (
     CannotJudge,
@@ -200,7 +200,7 @@ def _split_by_allowance(leaks: list[Finding], allowances: dict[Allowance, str]) 
         for leak in leaks if leak.allowance in allowances
     ]
     unused = [
-        Note(CONFIG_PATH, NoteEvent.UNUSED, SEPARATOR.join((f"[secrets] allow entry {place} matches no secret", f"{entry.rule} in {entry.file}")))
+        Note(CONFIG_PATH, NoteEvent.UNUSED, SEPARATOR.join((f"{entry_name(SECRETS_ALLOW, place)} matches no secret", f"{entry.rule} in {entry.file}")))
         for place, entry in enumerate(allowances, start=1) if entry not in used
     ]
     return SecretScan([leak for leak in leaks if leak.allowance not in allowances], (*allowed, *unused))

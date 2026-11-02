@@ -158,7 +158,8 @@ def test_an_allowance_follows_the_value_in_the_staged_scan(
     assert [note.location for note in allowed] == ([] if expected_line is None else [expected_line])
     assert all(("aws-access-token" in note.fact, "test key" in note.fact) == (True, True) for note in allowed)
     assert_block_prints(decode_block(streams.out.splitlines()), result.findings, result.notes)
-    assert FAKE_KEY not in streams.out + streams.err
+    printed = streams.out + streams.err
+    assert [key in printed for key in (FAKE_KEY, OTHER_KEY)] == [False, False]
 
 
 @pytest.fixture

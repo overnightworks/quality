@@ -13,6 +13,7 @@ from quality.rules import Rule
 CONFIG_PATH = "quality/config.toml"
 GATE_KEYS = {"mandatory_jobs", "legacy", "loosened"}
 SECRETS_KEYS = {"allow"}
+SECRETS_ALLOW = "[secrets] allow"
 ADVISORIES_KEYS = {"allow"}
 ROOT_KEYS = {"allow"}
 LAYOUT_KEYS = {"allow"}
@@ -302,9 +303,14 @@ def _entries(table: dict, key: str, heading: str, example: ExampleLines, shape: 
     return enumerate(entries, start=1)
 
 
+def entry_name(heading: str, position: int) -> str:
+    """How a message names one entry of a list: its heading and 1-based position."""
+    return f"{heading} entry {position}"
+
+
 def _entry_refusal(heading: str, position: int, example: ExampleLines) -> Callable[[str], ConfigError]:
     def refuse(need: str) -> ConfigError:
-        return ConfigError(f"{CONFIG_PATH} {heading} entry {position} needs {need}", example)
+        return ConfigError(f"{CONFIG_PATH} {entry_name(heading, position)} needs {need}", example)
 
     return refuse
 
@@ -691,7 +697,7 @@ def _parse_allowances(secrets: dict) -> dict[Allowance, str]:
 
 
 def _read_allowance(entry: object, position: int) -> tuple[Allowance, str]:
-    refuse = _entry_refusal("[secrets] allow", position, ALLOWANCE_EXAMPLE)
+    refuse = _entry_refusal(SECRETS_ALLOW, position, ALLOWANCE_EXAMPLE)
     if not isinstance(entry, dict) or set(entry) != ALLOWANCE_KEYS:
         raise refuse("exactly a rule, a file, a secret_sha256 and a reason (the old fingerprint form is gone)")
     rule, file, secret_sha256, reason = (entry[key] for key in ("rule", "file", "secret_sha256", "reason"))
@@ -700,5 +706,5 @@ def _read_allowance(entry: object, position: int) -> tuple[Allowance, str]:
     if not (isinstance(secret_sha256, str) and SHA256_HEX.fullmatch(secret_sha256)):
         raise refuse("secret_sha256 as 64 lowercase hex digits")
     if _spans_lines(reason):
-        raise ConfigError(f"{CONFIG_PATH} [secrets] allow entry {position} needs a one-line reason")
+        raise ConfigError(f"{CONFIG_PATH} {entry_name(SECRETS_ALLOW, position)} needs a one-line reason")
     return Allowance(rule, file, secret_sha256), reason
