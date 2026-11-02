@@ -147,7 +147,9 @@ def test_an_interrupt_at_a_terminal_leaves_whole_lines(build_repo, served_scanne
         done = subprocess.run(
             door_argv("hygiene", repo), env=door_environment(TERM="xterm", SCANNER_PID=str(pid_file)), stdout=terminal.stream, stderr=terminal.stream, timeout=60, check=False,
         )
-        assert screen(terminal.read()) == printed_before(complete.stdout, Area.SECRETS)
+        printed = terminal.read()
+        assert "  ⠋ secrets       gitleaks" in printed
+        assert screen(printed) == printed_before(complete.stdout, Area.SECRETS)
         assert done.returncode == code
         assert process_is_gone(int(pid_file.read_text()))
     finally:
@@ -198,6 +200,43 @@ def test_a_reader_that_left_after_the_first_line_changes_neither_the_judging_nor
             door.wait(timeout=60)
         kill_recorded(pid_file)
         os.close(release_end)
+
+
+@pytest.mark.parametrize(("files", "code"), [pytest.param({"README.md": "x\n"}, 0, id="clean"), pytest.param({"src/.env": "A=1\n"}, 1, id="finding")])
+def test_a_terminal_that_hung_up_during_a_scan_leaves_the_run_s_own_exit(build_repo, served_scanners, tmp_path, window, files, code):
+    repo = build_repo(files)
+    pid_file, release, up = tmp_path / "scanner.pid", tmp_path / "release", tmp_path / "up"
+    os.mkfifo(release)
+    os.mkfifo(up)
+    release_end, up_end = os.open(release, os.O_RDWR), os.open(up, os.O_RDWR)
+    fake_scanner(served_scanners, scanners.GITLEAKS, f'echo $$ > "$SCANNER_PID"\necho up > "$UP"\nread -r _ < "$RELEASE"\n{CLEAN_SCANS[scanners.GITLEAKS]}')
+    terminal = window(80)
+    door = None
+    try:
+        door = subprocess.Popen(
+            door_argv("hygiene", repo), env=door_environment(TERM="xterm", SCANNER_PID=str(pid_file), RELEASE=str(release), UP=str(up)),
+            stdout=subprocess.DEVNULL, stderr=terminal.stream,
+        )
+        readable, _, _ = select.select([up_end], [], [], 30)
+        assert readable, "the scanner never started under the live line"
+        terminal.hang_up()
+        os.write(release_end, b"\n")
+        door.wait(timeout=60)
+        assert door.returncode == code
+    finally:
+        if door is not None and door.poll() is None:
+            door.kill()
+            door.wait(timeout=60)
+        kill_recorded(pid_file)
+        os.close(release_end)
+        os.close(up_end)
+
+
+def test_a_step_s_pipes_carry_the_stop_line_and_no_live_line(build_repo):
+    repo = build_repo({"README.md": "x\n"})
+    done = subprocess.run(door_argv("hygiene", repo), env=door_environment(TERM="xterm", GITHUB_ACTIONS="true"), capture_output=True, text=True, timeout=60, check=False)
+    lines = done.stderr.splitlines()
+    assert (len(lines), lines[0].startswith("::stop-commands::")) == (1, True)
 
 
 @pytest.mark.integration

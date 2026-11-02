@@ -454,3 +454,47 @@ def test_the_real_door_shortens_to_its_pseudo_terminals_window(build_repo, extra
     cut = f"    ! src/.env  tracked  {env_file.ENV_FACT[:34]}…"
     expected = [cut if line.startswith("    ! src/.env  tracked") else line for line in plain.stdout.splitlines()]
     assert (printed[:-1], done.stderr) == (expected[:-1], "")
+
+
+@pytest.mark.parametrize(
+    ("columns", "line"),
+    [
+        (31, "  ⠋ dependencies  osv-scanner"),
+        (30, "  ⠋ dependencies  osv-scanner"),
+        (29, "  ⠋ dependencies  osv-scann…"),
+        (20, "  ⠋ dependencies  …"),
+        (3, " …"),
+    ],
+    ids=["31 whole", "30 whole", "29", "20", "3"],
+)
+def test_the_live_line_keeps_the_last_column_of_its_window_free(columns, line):
+    terminal, channel = at_window(columns)
+    with output.live_line(channel)("dependencies", "osv-scanner"):
+        up = without_sgr(terminal.getvalue())
+    assert up == f"{line}\r"
+
+
+def test_the_live_line_is_one_dim_span():
+    row_terminal, row_channel = at_window(80)
+    output.write_rows((Row(Glyph.NOTE, "debt", Event.CLEAN),), row_channel)
+    painted_row = row_terminal.getvalue().splitlines()[0]
+    opening, closing = painted_row.split(without_sgr(painted_row))
+    terminal, channel = at_window(80)
+    with output.live_line(channel)("secrets", "gitleaks"):
+        up = terminal.getvalue()
+    assert up == f"{opening}  ⠋ secrets       gitleaks{closing}\r"
+
+
+def test_a_channel_with_no_width_gets_no_line():
+    terminal = Terminal()
+    with output.live_line(output.Channel(terminal, True, None))("secrets", "gitleaks"):
+        pass
+    assert terminal.getvalue() == ""
+
+
+def test_a_failed_erase_leaves_the_interrupt_in_flight(window):
+    terminal = window(80)
+    channel = output.Channel(terminal.stream, True, 80)
+    with pytest.raises(KeyboardInterrupt), output.live_line(channel)("secrets", "gitleaks"):
+        terminal.hang_up()
+        raise KeyboardInterrupt
