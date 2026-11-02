@@ -31,6 +31,7 @@ from tests.support.check import (
     BlockLine,
     FindingLine,
     FixLine,
+    NoteLine,
     area_block,
     area_fact,
     area_row,
@@ -155,11 +156,11 @@ def without_vulnerability_records(report: dict) -> None:
             found["vulnerabilities"] = []
 
 
-def copy_listed_as(name: str | None = None, ecosystem: str | None = None):
-    """Lists a copy of the first package again, under another name or in another ecosystem."""
+def copy_listed_as(name: str | None = None, ecosystem: str | None = None, version: str | None = None):
+    """Lists a copy of the first package again, under another name, in another ecosystem or at another version."""
     def edit(report: dict) -> None:
         copied = copy.deepcopy(package_of(report))
-        copied["package"].update({key: value for key, value in (("name", name), ("ecosystem", ecosystem)) if value})
+        copied["package"].update({key: value for key, value in (("name", name), ("ecosystem", ecosystem), ("version", version)) if value})
         report["results"][0]["packages"].append(copied)
     return edit
 
@@ -401,10 +402,12 @@ def test_a_refused_area_leaves_the_note_row_and_the_exact_pair(drive_advisories,
         ({"uv.lock": uv_lock()}, then(copy_listed_as(PACKAGE_NAME.upper()), no_advisories), [1, 1]),
         ({"uv.lock": uv_lock()}, then(add_second_package, listed_in_results((0,), (1,)), no_advisories), [1, 2]),
         ({"uv.lock": uv_lock()}, then(listed_in_results((0,), (0,)), no_advisories), [1, 1]),
+        ({"uv.lock": uv_lock()}, then(copy_listed_as(version=f"{VERSION}.1"), no_advisories), [1, 2]),
     ],
     ids=[
         "one package", "two packages", "one package listed twice", "a report listing nothing", "two npm spellings",
         "one name in two ecosystems", "two PyPI spellings", "two results listing different packages", "two results listing the same package",
+        "one package at two versions",
     ],
 )
 def test_a_clean_row_counts_the_lockfiles_and_the_packages_the_report_lists(drive_advisories, build_repo, files, edit, counts):
@@ -514,6 +517,9 @@ def test_an_allowed_advisory_stands_as_a_note_row_under_the_clean_row(drive_advi
     assert ALIAS not in run.out
     assert_block_prints(area_block(run.out, Area.DEPENDENCIES), (), run.area.notes)
     assert (run.code, run.err) == (0, "")
+    (run.repo / CONFIG_PATH).unlink()
+    (finding,) = run.area.findings
+    assert note.fact.startswith(f"{finding.reason}{SEPARATOR}")
 
 
 def test_two_allowed_advisories_stand_as_two_note_rows_and_the_row_counts_them(drive_advisories, edited_report):
@@ -577,5 +583,8 @@ def test_an_allowed_advisory_with_control_characters_prints_escaped_and_forges_n
 
     run = drive_advisories(repo, report_naming(repo, name, rename_group))
     assert_block_prints(area_block(run.out, Area.DEPENDENCIES), (), run.area.notes)
+    (printed,) = (line for line in area_block(run.out, Area.DEPENDENCIES) if isinstance(line, NoteLine))
+    assert printed.location == printable(name)
+    assert (printable(identifier) in printed.row.fact, printable(reason) in printed.row.fact) == (True, True)
     assert_every_line_starts_with_the_door((run.out + run.err).splitlines())
     assert (len(run.area.notes), run.code, run.err) == (1, 0, "")
