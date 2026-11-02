@@ -17,9 +17,9 @@ from tests.support.check import (
     assert_block_prints,
     assert_every_line_starts_with_the_door,
     assert_finding_vocabulary,
+    check_result,
+    check_streams,
     extent_counts,
-    hygiene_run,
-    hygiene_streams,
     installed_ruff,
 )
 from tests.support.python_lint import EVAL, EVAL_REASON, OWNER, PRINT, PRINT_REASON, fake_ruff, ruff_entry
@@ -35,7 +35,7 @@ class CodeRun:
 
     @property
     def areas(self) -> tuple[check.AreaVerdict, ...]:
-        return hygiene_run(self.repo, self.locate_ruff).areas
+        return check_result(self.repo, self.locate_ruff).areas
 
     @property
     def area(self) -> check.AreaVerdict:
@@ -44,11 +44,11 @@ class CodeRun:
 
 @pytest.fixture
 def drive_code(build_repo, capsys):
-    """`drive(files, locate_ruff=…)` runs `hygiene` over a repository tracking `files`; a `Path` is run as it stands."""
+    """`drive(files, locate_ruff=…)` runs the check over a repository tracking `files`; a `Path` is run as it stands."""
 
     def drive(files: dict[str, str] | Path, locate_ruff: Callable[[], str] = installed_ruff) -> CodeRun:
         repo = files if isinstance(files, Path) else build_repo(files)
-        return CodeRun(repo, locate_ruff, *hygiene_streams(capsys, repo, locate_ruff))
+        return CodeRun(repo, locate_ruff, *check_streams(capsys, repo, locate_ruff))
 
     return drive
 

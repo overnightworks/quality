@@ -661,7 +661,7 @@ def read_gate_settings(repo: Path) -> GateSettings:
 def load_allow_lists(text: str | None) -> AllowLists:
     """Every list the repository allows or declares; a missing config allows nothing.
 
-    The whole document is validated, as the gate does: hygiene and the verdict refuse an unknown key and a malformed
+    The whole document is validated, as the gate does: the check and the verdict refuse an unknown key and a malformed
     entry alike.
     """
     return AllowLists() if text is None else _validated_document(text).allow_lists

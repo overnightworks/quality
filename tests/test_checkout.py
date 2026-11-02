@@ -7,7 +7,8 @@ from pathlib import Path
 import pytest
 
 from quality import cli
-from tests.support.check import hygiene_output as run
+from tests.support.check import heard
+from tests.support.door import CHECK_WORD
 from tests.support.git_repositories import make_repo
 
 
@@ -25,7 +26,7 @@ def not_a_directory(tmp_path):
 )
 def test_a_path_that_is_no_repository_is_exit_2(tmp_path, capsys, bad_path):
     """#31 rule 1 (S8705): a path that is not a readable git repository is exit 2, never clean."""
-    code, output = run(capsys, bad_path(tmp_path))
+    code, output = cli.main(["hygiene", str(bad_path(tmp_path))]), heard(capsys)
     assert code == 2
     assert "error: " in output
 
@@ -89,7 +90,7 @@ def test_a_working_directory_that_was_removed_is_cannot_judge_not_a_traceback(tm
     gone.mkdir()
     monkeypatch.chdir(gone)
     gone.rmdir()
-    results = [(command, cli.main(command), capsys.readouterr().err) for command in (["hygiene", "."], ["baseline", "write", "."])]
+    results = [(command, cli.main(command), capsys.readouterr().err) for command in ([CHECK_WORD, "."], ["baseline", "write", "."])]
     assert [(code, ". is not a readable git repository: the working directory cannot be read ([Errno 2]" in err, "Traceback" in err) for _, code, err in results] == [(2, True, False)] * 2, results
 
 

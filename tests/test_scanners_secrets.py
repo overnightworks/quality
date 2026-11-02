@@ -2,7 +2,6 @@ import json
 import os
 import signal
 import subprocess
-import sys
 import tempfile
 import time
 import tomllib
@@ -10,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import cli, config, scanners, staged
+from quality import config, scanners, staged
 from quality.report import Example, FindingEvent, NoteEvent
 from quality.rules import Rule
 from tests.support.check import (
@@ -30,7 +29,8 @@ from tests.support.check import (
     rule_findings,
     rule_notes,
 )
-from tests.support.scanners import OUTPUTS, commit, fake_gitleaks, hygiene_exit_2, scan, serving
+from tests.support.door import CHECK_WORD, MODULE_DOOR, check_door, door_in
+from tests.support.scanners import OUTPUTS, check_exit_2, commit, fake_gitleaks, scan, serving
 from tests.support.secrets import FAKE_KEY, HOSTILE_FILE, OTHER_KEY, allow_config, assert_key_found, sha256_of
 
 RECORDED_SECRET = "PLACEHOLDER-SECRET-VALUE"  # the Secret in the recorded gitleaks-finding.json
@@ -73,7 +73,7 @@ def allowed_locations(repo: Path) -> list[str]:
 def test_a_secret_finding_is_allowed_only_by_rule_file_and_value(build_repo, served_scanners, capsys, config_text, code, found, allowed):
     """#24 rule 1: a finding is allowed only when rule, file and the hash of its value match one entry."""
     repo = recorded_leak_repo(build_repo, served_scanners, config_text)
-    exit_code = cli.main(["hygiene", str(repo)])
+    exit_code = check_door(repo)
     assert exit_code == code
     assert [finding.location for finding in rule_findings(repo, Rule.LEAK)] == found
     assert allowed_locations(repo) == allowed
@@ -101,7 +101,7 @@ def test_the_entry_to_copy_is_lines_that_read_as_one_allowance_once_a_reason_is_
 def test_one_value_on_two_lines_is_two_rows_and_one_fix(build_repo, installed_scanners, capsys):
     """Rule 7: one value on two lines of one file is two rows under one `fix:` and one entry."""
     repo = build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}\nsecond = {FAKE_KEY}\n"})
-    assert cli.main(["hygiene", str(repo)]) == 1
+    assert check_door(repo) == 1
     block = area_block(capsys.readouterr().out, "secrets")
     findings = rule_findings(repo, Rule.LEAK)
     assert_block_prints(block, findings, rule_notes(repo, Rule.LEAK))
@@ -117,7 +117,7 @@ def test_one_value_on_two_lines_is_two_rows_and_one_fix(build_repo, installed_sc
 def test_an_invalid_allow_entry_is_exit_2(build_repo, capsys, entry):
     """#24 rule 2: an allow entry that is not rule, file, hash and reason cannot be judged."""
     config = f'[gate]\nmandatory_jobs = ["checks"]\n[secrets]\nallow = [{entry}]\n'
-    assert "[secrets] allow entry" in hygiene_exit_2(build_repo({"quality/config.toml": config}), capsys)
+    assert "[secrets] allow entry" in check_exit_2(build_repo({"quality/config.toml": config}), capsys)
 
 
 @pytest.mark.parametrize(
@@ -129,7 +129,7 @@ def test_an_invalid_allow_entry_is_exit_2(build_repo, capsys, entry):
 def test_a_report_entry_without_a_string_secret_is_exit_2(build_repo, served_scanners, capsys, report):
     """#24 rule 5: a finding whose value cannot be hashed is never clean."""
     fake_gitleaks(served_scanners, on_scan=f"echo '{report}' > \"$report\"; exit 7")
-    hygiene_exit_2(build_repo({}), capsys)
+    check_exit_2(build_repo({}), capsys)
 
 
 def test_the_scan_passes_the_gates_own_config(build_repo, served_scanners):
@@ -227,15 +227,15 @@ FAILING_REPORTS = {
 }
 
 
-def leak_scan_command(command: str, repo: Path) -> list[str]:
-    """The argv of a command that scans `repo` for secrets; scan-staged gets a staged copy of the key to find."""
+def leak_scan_words(command: str, repo: Path) -> list[str]:
+    """The words of a command that scans `repo` for secrets; scan-staged gets a staged copy of the key to find."""
     if command == "scan-staged":
         (repo / "staged.txt").write_text(f"aws_access_key_id = {FAKE_KEY}\n")
         subprocess.run(["git", "-C", str(repo), "add", "staged.txt"], check=True)
-    return [command, str(repo)]
+    return [command]
 
 
-SECRET_COMMANDS = ["hygiene", "scan-staged"]
+SECRET_COMMANDS = [CHECK_WORD, "scan-staged"]
 
 
 @pytest.mark.scanner
@@ -255,7 +255,7 @@ def test_the_key_reaches_no_output_and_no_file_and_the_scratch_directory_is_gone
         failing.mkdir()
         fake_gitleaks(failing, on_scan=FAILING_REPORTS[failure])
         use_mise(serving(failing))
-    exit_code = cli.main(leak_scan_command(command, keyed_repo))
+    exit_code = door_in(keyed_repo, *leak_scan_words(command, keyed_repo))
     assert exit_code == (1 if failure == "none" else 2)
     heard = capsys.readouterr()
     assert FAKE_KEY not in heard.out + heard.err
@@ -269,8 +269,8 @@ def test_a_sigterm_mid_scan_leaves_no_scratch_directory(keyed_repo, served_scann
     scratch_parent = tmp_path / "scratch-parent"
     scratch_parent.mkdir()
     fake_gitleaks(served_scanners, on_scan=FAILING_REPORTS["gitleaks-stalls"])
-    argv = [sys.executable, "-m", "quality.cli", *leak_scan_command(command, keyed_repo)]
-    scanner = subprocess.Popen(argv, env=os.environ | {"TMPDIR": str(scratch_parent)}, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    argv = [*MODULE_DOOR, *leak_scan_words(command, keyed_repo)]
+    scanner = subprocess.Popen(argv, cwd=keyed_repo, env=os.environ | {"TMPDIR": str(scratch_parent)}, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
         deadline = time.monotonic() + 30
         while not list(scratch_parent.glob("*/report.json")):
@@ -292,12 +292,12 @@ STALE_FILE = "no\x1bthere.txt"
 def test_an_allowance_no_finding_used_is_one_unused_note_at_the_config(build_repo, installed_scanners, capsys, command):
     """#25 rule 1, quality#5 finding 34: an entry that matches nothing is named, not silent, in both doors."""
     repo = build_repo({"quality/config.toml": allow_config(("aws-access-token", "no\\u001bthere.txt", FAKE_KEY, "stale entry"))})
-    code = cli.main([command, str(repo)])
+    code = door_in(repo, command)
     streams = capsys.readouterr()
     printed = streams.out
-    hygiene = command == "hygiene"
-    notes = rule_notes(repo, Rule.LEAK) if hygiene else list(staged.scan_staged(repo).notes)
-    block = area_block(printed, "secrets") if hygiene else decode_block(printed.splitlines())
+    whole_run = command == CHECK_WORD
+    notes = rule_notes(repo, Rule.LEAK) if whole_run else list(staged.scan_staged(repo).notes)
+    block = area_block(printed, "secrets") if whole_run else decode_block(printed.splitlines())
     (note,) = notes
     assert (code, note.event, note.path) == (0, NoteEvent.UNUSED, config.CONFIG_PATH)
     assert ("aws-access-token" in note.fact, STALE_FILE in note.fact) == (True, True)
@@ -372,6 +372,6 @@ def test_a_commit_count_git_cannot_give_refuses_the_secret_rule_alone(build_repo
     """O30: the extent of a clean row is never guessed; the secret rule cannot judge, the other rows stand."""
     repo = build_repo({".env": "KEY=1\n"})
     fake_git(f'case "$*" in *rev-list*--count*) {answer};; esac')
-    out = hygiene_exit_2(repo, capsys)
+    out = check_exit_2(repo, capsys)
     assert set(refusals(repo)) == {Rule.LEAK}
     assert env_row_stands(out)

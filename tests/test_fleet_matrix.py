@@ -348,7 +348,7 @@ def test_a_rule_judging_every_python_project_needs_no_applicability_cell(rule_id
     ],
 )
 def test_a_pinned_gate_has_a_rule_from_the_tag_that_first_ships_it(rule_id, before, first):
-    """#249: the tags' hygiene wires each rule from its first tag on, unconditionally."""
+    """#249: the tags' check wires each rule from its first tag on, unconditionally."""
     tags = {before: "a" * 40, first: "b" * 40}
     rule = Rule(rule_id).release
     assert rule_cell(rule, gate_release((Call("a" * 40),), False, tags), declared()) == f"not in {before}"

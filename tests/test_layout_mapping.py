@@ -5,7 +5,7 @@ import pytest
 from quality import checkout, layout
 from quality.report import FindingEvent
 from quality.rules import Rule
-from tests.support.check import hygiene_output, rule_findings
+from tests.support.check import check_output, rule_findings
 from tests.support.layout import (
     CONFIG,
     GUIDANCE,
@@ -48,7 +48,7 @@ def case(identifier: str, paths: list[str], expected: list[str]):
         case("B7 an empty name", ["src/p/x.py", "src/p/_.py", "tests/test_.py"], ["tests/test_.py"]),
         case("B8 the package's own name", ["src/webauth/x.py", "tests/test_webauth_public_api.py"], []),
         case("B9 a mirrored folder", ["src/p/api/routes.py", "tests/api/test_routes.py"], []),
-        case("B9 a module is no folder", ["src/p/hygiene.py", "tests/hygiene/test_x.py"], ["tests/hygiene/test_x.py"]),
+        case("B9 a module is no folder", ["src/p/check.py", "tests/check/test_x.py"], ["tests/check/test_x.py"]),
         case("B10 a folder only above a package", ["src/p/api/v1/routes.py", "tests/test_api.py", "tests/api/v1/test_routes.py"], []),
         case("B10 a folder with no python", ["src/p/x.py", "src/p/static/logo.svg", "tests/test_static.py"],
              ["tests/test_static.py"]),
@@ -130,16 +130,16 @@ def test_a_member_maps_only_into_its_own_project(build_repo, files, expected):
 def test_each_failing_case_is_a_misplaced_finding_naming_its_own_values(build_repo, capsys):
     """#199 sentence 6 and E1, #283 O12: every case prints, sorted by path, and the fact names the folder or name at fault."""
     repo = build_repo(project(
-        "src/p/api/v1/routes.py", "tests/support/test_a.py", "tests/hygiene/test_b.py", "tests/test_c.py",
+        "src/p/api/v1/routes.py", "tests/support/test_a.py", "tests/check/test_b.py", "tests/test_c.py",
         "tests/workflows/test_d.py",
     ))
-    code, output = hygiene_output(capsys, repo)
+    code, output = check_output(capsys, repo)
     found = {finding.path: finding for finding in rule_findings(repo, RULE)}
     assert (code, red(repo, RULE)) == (1, [
-        "tests/hygiene/test_b.py", "tests/support/test_a.py", "tests/test_c.py", "tests/workflows/test_d.py",
+        "tests/check/test_b.py", "tests/support/test_a.py", "tests/test_c.py", "tests/workflows/test_d.py",
     ])
     named = {
-        "tests/hygiene/test_b.py": "src/p/hygiene",
+        "tests/check/test_b.py": "src/p/check",
         "tests/support/test_a.py": f"{layout.SUPPORT_DIRECTORY}/",
         "tests/test_c.py": "src/p",
         "tests/workflows/test_d.py": str(checkout.WORKFLOW_DIRECTORY),

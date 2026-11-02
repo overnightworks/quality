@@ -7,7 +7,7 @@ import pytest
 from quality import layout
 from quality.report import FindingEvent
 from quality.rules import Rule
-from tests.support.check import hygiene_output, rows_of, rule_findings
+from tests.support.check import check_output, rows_of, rule_findings
 from tests.support.layout import (
     CONFIG,
     GUIDANCE,
@@ -134,7 +134,7 @@ def test_every_finding_prints_sorted_by_path_with_its_own_kind_fact_and_fix(buil
         **PYTHON_PROJECT,
     }
     repo = build_repo(files)
-    code, output = hygiene_output(capsys, repo)
+    code, output = check_output(capsys, repo)
     spec, test, stray = found = rule_findings(repo, RULE)
     assert (code, [finding.location for finding in found]) == (1, ["packages/ui/src/spec.spec.ts", "packages/ui/src/z.svelte.test.ts", "tests/helpers.py"])
     assert_row_is_kind(output, spec, FindingEvent.MISPLACED, f"packages/ui/{layout.END_TO_END_DIRECTORY}/")
@@ -158,7 +158,7 @@ def test_a_root_spec_names_the_root_e2e_folder(build_repo, capsys):
 def test_a_test_with_no_subject_in_the_root_folder_does_not_name_the_folder_as_a_dot(build_repo, capsys):
     """#5 206a: the root folder is told apart from `src`, which a test there names as it is."""
     repo = build_repo(frontend("x.test.ts", "src/x.test.ts"))
-    output = hygiene_output(capsys, repo)[1]
+    output = check_output(capsys, repo)[1]
     found = {finding.path: finding for finding in rule_findings(repo, RULE)}
     assert_row_is_kind(output, found["x.test.ts"], FindingEvent.MISPLACED, "x")
     assert_row_is_kind(output, found["src/x.test.ts"], FindingEvent.MISPLACED, "src")

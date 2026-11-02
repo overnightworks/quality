@@ -6,8 +6,8 @@ import pytest
 
 from quality.report import FindingEvent
 from quality.rules import Rule
+from tests.support.check import check_output as run
 from tests.support.check import env_row_stands, is_clean, refusal_row, refusals, rows_of, rule_findings
-from tests.support.check import hygiene_output as run
 from tests.support.layout import assert_prints_as_kind, rule_ids_in
 
 GUIDANCE = {"AGENTS.md": "# guidance\n"}

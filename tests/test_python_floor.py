@@ -22,7 +22,7 @@ from tests.support.check import (
     rule_findings,
     rule_notes,
 )
-from tests.support.check import hygiene_output as run
+from tests.support.check import check_output as run
 from tests.support.config_refusals import ONE_LINE_NEED
 from tests.support.git_repositories import GIT_IDENTITY, head_commit, make_repo
 

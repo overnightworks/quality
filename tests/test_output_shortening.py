@@ -2,7 +2,6 @@
 outcome never does, and columns hold by display width in every stream."""
 
 import io
-import os
 import pty
 import re
 import subprocess
@@ -16,6 +15,7 @@ from quality import env_file, output
 from quality.output import Glyph, Row, SubLine, Verdict
 from quality.report import Command, Example, Finding, FindingEvent, Note, NoteEvent
 from tests.support.check import refusal_pair, refusal_row
+from tests.support.door import CHECK_WORD, MODULE_DOOR, door_environment
 from tests.support.python_lint import OWNER, PRINT
 from tests.support.terminal import SGR, Terminal, read_pseudo_terminal, run_on, screen, without_sgr
 
@@ -444,8 +444,8 @@ def test_a_door_that_may_not_shorten_prints_the_whole_fact(build_repo, window, o
 @pytest.mark.parametrize("extra_environment", [{}, {"COLUMNS": "30"}], ids=["no COLUMNS", "COLUMNS exported"])
 def test_the_real_door_shortens_to_its_pseudo_terminals_window(build_repo, extra_environment):
     repo = build_repo({"src/.env": "A=1\n"})
-    base = {key: value for key, value in os.environ.items() if key not in ("NO_COLOR", "GITHUB_ACTIONS", "TERM")}
-    door = [sys.executable, "-m", "quality.cli", "hygiene", "."]
+    base = door_environment()
+    door = [*MODULE_DOOR, CHECK_WORD]
     plain = subprocess.run(door, cwd=repo, env=base, capture_output=True, text=True, check=False)
     parent, child = pty.openpty()
     termios.tcsetwinsize(child, (24, 60))

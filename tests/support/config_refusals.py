@@ -36,7 +36,7 @@ class Refusal:
     directory: bool = False
 
     @property
-    def reaches_hygiene(self) -> bool:
+    def reaches_check(self) -> bool:
         return "allow_lists" in self.loaders
 
 

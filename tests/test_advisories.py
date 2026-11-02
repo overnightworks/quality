@@ -7,7 +7,7 @@ import urllib.request
 
 import pytest
 
-from quality import advisories, cli, process, scanners
+from quality import advisories, process, scanners
 from quality.config import CONFIG_PATH, AdvisoryAllowance
 from quality.output import SEPARATOR
 from quality.report import FindingEvent, LockExtent, NoteEvent
@@ -36,6 +36,7 @@ from tests.support.check import (
     is_clean,
     refused,
 )
+from tests.support.door import check_door
 from tests.support.scanners import OUTPUTS, fake_scanner, lacking
 
 # ---- the real osv-scanner against a fake file:// database (CI runs these; they download the binary) ----
@@ -406,7 +407,7 @@ def test_an_osv_binary_at_the_wrong_version_names_both_versions(build_repo, serv
     publish_database()
     (served_scanners / OSV).write_text('#!/bin/sh\necho "osv-scanner version: 9.9.9"\n')
     (served_scanners / OSV).chmod(0o755)
-    code = cli.main(["hygiene", str(tracked_lock_repo(build_repo))])
+    code = check_door(tracked_lock_repo(build_repo))
     captured = capsys.readouterr()
     output = captured.out + captured.err
     assert (code, f"{OSV} 9.9.9 found, the release pins {scanners.pinned_tool(OSV).version}" in output) == (2, True), output
@@ -603,7 +604,7 @@ def test_an_allowance_allows_its_advisory_in_its_lock_until_its_date(groups, all
         assert positions == sorted(positions)
 
 
-def test_hygiene_prints_an_allowance_that_ran_out_as_an_affected_row(build_repo, served_scanners, run_gate, publish_database):
+def test_check_prints_an_allowance_that_ran_out_as_an_affected_row(build_repo, served_scanners, run_gate, publish_database):
     """Once the date has passed the advisory is red with the date and item, in the upgrade's row."""
     publish_database()
     config = allowance_config(**UV_LOCK_ALLOWANCE, until=datetime.date(2000, 1, 1))
@@ -621,6 +622,6 @@ def test_an_allowance_without_a_tracked_lock_is_red_with_no_osv_scanner_and_no_d
     use_mise(lacking(served_scanners, OSV))
     monkeypatch.setattr(advisories, "DATABASE_ROOT", "file:///no/such/root")
     repo = build_repo({"README.md": "x\n", "quality/config.toml": allowance_config(**UV_LOCK_ALLOWANCE, until=datetime.date(2999, 12, 31))})
-    assert cli.main(["hygiene", str(repo)]) == 1
+    assert check_door(repo) == 1
     ((location, row),) = area_finding_rows(capsys.readouterr().out, Area.DEPENDENCIES)
     assert (location, row.event, ADVISORY_ID in row.fact, "uv.lock" in row.fact) == (CONFIG_PATH, FindingEvent.UNUSED, True, True)

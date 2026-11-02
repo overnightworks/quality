@@ -38,9 +38,10 @@ from tests.support.check import (
     assert_block_prints,
     assert_every_line_starts_with_the_door,
     assert_finding_vocabulary,
+    check_result,
     extent_counts,
-    hygiene_run,
 )
+from tests.support.door import check_door
 from tests.support.scanners import OUTPUTS, fake_scanner, lacking
 
 FINDING_REPORT = OUTPUTS / "osv-scanner-finding.json"
@@ -62,7 +63,7 @@ class AdvisoryRun:
 
     @property
     def areas(self) -> tuple[check.AreaVerdict, ...]:
-        return hygiene_run(self.repo).areas
+        return check_result(self.repo).areas
 
     @property
     def area(self) -> check.AreaVerdict:
@@ -71,13 +72,13 @@ class AdvisoryRun:
 
 @pytest.fixture
 def drive_advisories(build_repo, served_scanners, capsys):
-    """`drive(files, report, code=1, stderr="")` runs `hygiene` over a repository tracking `files` (or over the repository
+    """`drive(files, report, code=1, stderr="")` runs the check over a repository tracking `files` (or over the repository
     given), with a fake osv-scanner printing `report` and exiting `code`."""
 
     def drive(files: dict[str, str] | Path, report: Path = FINDING_REPORT, code: int = 1, stderr: str = "") -> AdvisoryRun:
         repo = files if isinstance(files, Path) else build_repo(files)
         fake_scanner(served_scanners, OSV, reporting(report, code, stderr))
-        exit_code = cli.main(["hygiene", str(repo)], clock=lambda: 0.0)
+        exit_code = check_door(repo, clock=lambda: 0.0)
         captured = capsys.readouterr()
         return AdvisoryRun(repo, exit_code, captured.out, captured.err)
 

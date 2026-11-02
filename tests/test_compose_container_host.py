@@ -7,7 +7,7 @@ import pytest
 from quality.config import COMPOSE_ALLOWANCE_EXAMPLE, CONFIG_PATH
 from quality.report import Finding, FindingEvent
 from quality.rules import Rule
-from tests.support.check import copy_block, hygiene_output, refused, rule_findings
+from tests.support.check import check_output, copy_block, refused, rule_findings
 from tests.support.config_refusals import KNOWN_KEYS, ONE_LINE_NEED
 from tests.support.merge import ONE_JOB
 
@@ -24,10 +24,10 @@ def declaring(file: str = "compose.yaml", service: str = "proxy", reason: str = 
 
 
 def judged(capsys, build_repo, files: dict[str, str], declarations: str = "") -> tuple[int, list[Finding]]:
-    """The exit code of `quality hygiene` over a fixture repository and the compose-port findings the rule runner returns for it."""
+    """The exit code of the check over a fixture repository and the compose-port findings the rule runner returns for it."""
     config = {CONFIG: ONE_JOB + declarations} if declarations else {}
     repo = build_repo({**files, **config})
-    code, _ = hygiene_output(capsys, repo)
+    code, _ = check_output(capsys, repo)
     return code, rule_findings(repo, Rule.COMPOSE_PORT)
 
 
@@ -141,7 +141,7 @@ COMPOSE_KEYS = f"{COMPOSE} entry 1 needs exactly a file, a service and a reason"
 )
 def test_a_malformed_compose_table_cannot_be_judged(build_repo, capsys, config, fact):
     """#188 sentence 3: each malformed entry is exit 2, names its fact on the files row and shows the example once."""
-    code, output = hygiene_output(capsys, build_repo({"compose.yaml": service_file("host"), CONFIG: ONE_JOB + config}))
+    code, output = check_output(capsys, build_repo({"compose.yaml": service_file("host"), CONFIG: ONE_JOB + config}))
     assert code == 2
     assert refused(output, "files")
     assert fact in output
@@ -150,7 +150,7 @@ def test_a_malformed_compose_table_cannot_be_judged(build_repo, capsys, config, 
 
 def test_the_unknown_table_message_lists_the_compose_table(build_repo, capsys):
     """#188 sentence 3: an unknown table names `[[compose.allow]]` among the tables that exist."""
-    code, output = hygiene_output(capsys, build_repo({CONFIG: ONE_JOB + "[nope]\nx = 1\n"}))
+    code, output = check_output(capsys, build_repo({CONFIG: ONE_JOB + "[nope]\nx = 1\n"}))
     assert code == 2
     assert "[[compose.allow]]" in output
 

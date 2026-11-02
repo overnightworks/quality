@@ -30,9 +30,9 @@ from tests.support.check import (
     assert_every_line_starts_with_the_door,
     assert_finding_vocabulary,
     assert_row_prints_finding,
+    check_output,
+    check_result,
     extent_counts,
-    hygiene_output,
-    hygiene_run,
     refusal_row,
     refusals,
     rows_of,
@@ -45,28 +45,28 @@ from tests.support.source_code import long_function
 from tests.support.verdict import ONLY_DECLARED, declaration, verdict_of
 from tests.support.verdict_renames import OLD_ENTRY, commit_all, entry, file_text, moved_in_head, moves_in_head, pulled
 
-FIRST_PAIR = ClonePair.of(Place("tests/test_a.py", "run"), Place("tests/test_b.py", "hygiene"))
+FIRST_PAIR = ClonePair.of(Place("tests/test_a.py", "run"), Place("tests/test_b.py", "check"))
 SECOND_PAIR = ClonePair.of(Place("tests/test_c.py", "walk"), Place("tests/test_d.py", "stroll"))
-FIRST_LABEL = "tests/test_a.py run <-> tests/test_b.py hygiene"
+FIRST_LABEL = "tests/test_a.py run <-> tests/test_b.py check"
 SECOND_LABEL = "tests/test_c.py walk <-> tests/test_d.py stroll"
-REVERSED = '[clones."tests/test_b.py"]\nhygiene = [["tests/test_a.py", "run"]]\n'
-FIRST = '[clones."tests/test_a.py"]\nrun = [["tests/test_b.py", "hygiene"]]\n'
+REVERSED = '[clones."tests/test_b.py"]\ncheck = [["tests/test_a.py", "run"]]\n'
+FIRST = '[clones."tests/test_a.py"]\nrun = [["tests/test_b.py", "check"]]\n'
 SECOND = '[clones."tests/test_c.py"]\nwalk = [["tests/test_d.py", "stroll"]]\n'
 EMPTY_CLONES = "[clones]\n"
 LONG_ONE = '[function_lines."src/a.py"]\n"long_one" = 70\n'
 SIZE = '[function_lines."src/quality/cli.py"]\n"main" = 82\n'
 SIZE_RAISED = SIZE.replace("82", "90")
 UNDECLARED = "loosened (undeclared): "
-TWO_FILES = {"tests/test_a.py": clone_function("run", "a", "b"), "tests/test_b.py": clone_function("hygiene", "c", "d")}
+TWO_FILES = {"tests/test_a.py": clone_function("run", "a", "b"), "tests/test_b.py": clone_function("check", "c", "d")}
 THREE_FILES = {**TWO_FILES, "tests/test_c.py": clone_function("walk", "e", "f")}
 THREE_PAIRS_WRITTEN = (
-    '\n[clones."tests/test_a.py"]\nrun = [["tests/test_b.py", "hygiene"], ["tests/test_c.py", "walk"]]\n'
-    '\n[clones."tests/test_b.py"]\nhygiene = [["tests/test_c.py", "walk"]]\n'
+    '\n[clones."tests/test_a.py"]\nrun = [["tests/test_b.py", "check"], ["tests/test_c.py", "walk"]]\n'
+    '\n[clones."tests/test_b.py"]\ncheck = [["tests/test_c.py", "walk"]]\n'
 )
 THREE_ADDS = [
-    "baseline: adds clone tests/test_a.py run <-> tests/test_b.py hygiene",
+    "baseline: adds clone tests/test_a.py run <-> tests/test_b.py check",
     "baseline: adds clone tests/test_a.py run <-> tests/test_c.py walk",
-    "baseline: adds clone tests/test_b.py hygiene <-> tests/test_c.py walk",
+    "baseline: adds clone tests/test_b.py check <-> tests/test_c.py walk",
 ]
 
 
@@ -104,7 +104,7 @@ def baseline_text(repo: Path) -> str:
         (FIRST, SIZE, 1, UNDECLARED + "clone baseline removed"),
         (FIRST, None, 1, UNDECLARED + f"{BASELINE_PATH} removed"),
         (None, FIRST, 0, "verdict: green"),
-        (FIRST, FIRST.replace("run", "run2"), 1, UNDECLARED + "clone baseline adds tests/test_a.py run2 <-> tests/test_b.py hygiene"),
+        (FIRST, FIRST.replace("run", "run2"), 1, UNDECLARED + "clone baseline adds tests/test_a.py run2 <-> tests/test_b.py check"),
         (FIRST, EMPTY_CLONES, 0, "verdict: green"),
         (REVERSED, FIRST, 0, "verdict: green"),
     ],
@@ -124,12 +124,12 @@ def test_the_clone_baseline_only_falls_against_the_base(pull_request, capsys, ba
 
 @pytest.mark.parametrize(
     ("moved_symbol", "expected"),
-    [("run", "verdict: green"), ("walk", UNDECLARED + "clone baseline adds tests/test_b.py hygiene <-> tests/test_e.py walk")],
+    [("run", "verdict: green"), ("walk", UNDECLARED + "clone baseline adds tests/test_b.py check <-> tests/test_e.py walk")],
     ids=["a pair whose side only moved is the same pair", "a moved side with a renamed function is a new pair"],
 )
 def test_a_pair_is_held_under_the_path_its_file_was_renamed_from(pull_request, capsys, moved_symbol, expected):
     """#149 R3: the moved side keeps its symbol, so only a renamed function makes a new pair."""
-    head = render_baseline(Baseline({}, frozenset({ClonePair.of(Place("tests/test_e.py", moved_symbol), Place("tests/test_b.py", "hygiene"))})))
+    head = render_baseline(Baseline({}, frozenset({ClonePair.of(Place("tests/test_e.py", moved_symbol), Place("tests/test_b.py", "check"))})))
     moved_in_head(pull_request, FIRST, head, old="tests/test_a.py", new="tests/test_e.py")
     _, output = verdict_of(pull_request[0], capsys)
     assert expected in output
@@ -139,9 +139,9 @@ def pairs_text(*pairs):
     return render_baseline(Baseline({}, frozenset(pairs)))
 
 
-MOVED_PAIR = ClonePair.of(Place("tests/test_e.py", "run"), Place("tests/test_b.py", "hygiene"))
-BOTH_MOVED_PAIR = ClonePair.of(Place("tests/test_z.py", "run"), Place("tests/test_y.py", "hygiene"))
-NEW_PAIR_LABEL = "tests/test_b.py hygiene <-> tests/test_e.py run"
+MOVED_PAIR = ClonePair.of(Place("tests/test_e.py", "run"), Place("tests/test_b.py", "check"))
+BOTH_MOVED_PAIR = ClonePair.of(Place("tests/test_z.py", "run"), Place("tests/test_y.py", "check"))
+NEW_PAIR_LABEL = "tests/test_b.py check <-> tests/test_e.py run"
 
 
 ONE_MOVE = [("tests/test_a.py", "tests/test_e.py")]
@@ -256,9 +256,9 @@ MALFORMED_IDS = ["not a table", "a path that is not a table", "a symbol that is 
 
 
 @pytest.mark.parametrize("text", MALFORMED, ids=MALFORMED_IDS)
-def test_a_malformed_clone_table_cannot_be_judged_by_hygiene(build_repo, capsys, text):
-    """#130 cell 16: hygiene."""
-    code, output = hygiene_output(capsys, build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: text}))
+def test_a_malformed_clone_table_cannot_be_judged_by_check(build_repo, capsys, text):
+    """#130 cell 16: check."""
+    code, output = check_output(capsys, build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: text}))
     assert (code, BASELINE_PATH in output, "Traceback" in output) == (2, True, False), output
 
 
@@ -335,7 +335,7 @@ def test_the_write_names_the_unknown_table_of_the_previous_baseline_without_advi
 
 
 def judged_rules(repo: Path) -> dict[Rule, RuleVerdict]:
-    return {verdict.rule: verdict for verdict in hygiene_run(repo).verdicts}
+    return {verdict.rule: verdict for verdict in check_result(repo).verdicts}
 
 
 def assert_the_debt_block_is_the_findings_in_run_order(repo: Path, output: str) -> None:
@@ -347,10 +347,10 @@ def assert_the_debt_block_is_the_findings_in_run_order(repo: Path, output: str) 
     assert all(finding.event for finding in findings)
 
 
-def test_hygiene_without_a_clone_table_holds_the_size_and_leaves_the_clone_rule_report_only(build_repo, capsys):
+def test_check_without_a_clone_table_holds_the_size_and_leaves_the_clone_rule_report_only(build_repo, capsys):
     """#136 cell 6 (E3, report half): size tables alone leave the clone rule counting."""
     repo = build_repo({"src/a.py": long_function(71), **TWO_FILES, BASELINE_PATH: LONG_ONE})
-    code, output = hygiene_output(capsys, repo)
+    code, output = check_output(capsys, repo)
     rules = judged_rules(repo)
     assert code == 1, output
     assert [finding.event for finding in rules[Rule.SIZE].findings] == [FindingEvent.GREW]
@@ -358,10 +358,10 @@ def test_hygiene_without_a_clone_table_holds_the_size_and_leaves_the_clone_rule_
     assert_the_debt_block_is_the_findings_in_run_order(repo, output)
 
 
-def test_hygiene_with_a_clone_table_holds_the_size_and_the_pairs_without_a_report_line(build_repo, capsys):
+def test_check_with_a_clone_table_holds_the_size_and_the_pairs_without_a_report_line(build_repo, capsys):
     """#136 E3, cell 2: a held pair that the tree has is clean, and the clone rule is enforced, not measured only, its extent the ceiling file's pairs."""
     repo = build_repo({"src/a.py": long_function(71), **TWO_FILES, BASELINE_PATH: LONG_ONE + FIRST})
-    code, output = hygiene_output(capsys, repo)
+    code, output = check_output(capsys, repo)
     clone = judged_rules(repo)[Rule.CLONE]
     assert code == 1, output
     assert (clone.findings, clone.measured_only, clone.extent) == ((), False, len(read_baseline(repo).clones))
@@ -407,9 +407,9 @@ def test_the_written_file_loads_back_with_each_pair_once_under_its_first_side_so
     first = baseline_text(repo)
     assert first.endswith(THREE_PAIRS_WRITTEN)
     pairs = frozenset({
-        ClonePair.of(Place("tests/test_a.py", "run"), Place("tests/test_b.py", "hygiene")),
+        ClonePair.of(Place("tests/test_a.py", "run"), Place("tests/test_b.py", "check")),
         ClonePair.of(Place("tests/test_a.py", "run"), Place("tests/test_c.py", "walk")),
-        ClonePair.of(Place("tests/test_b.py", "hygiene"), Place("tests/test_c.py", "walk")),
+        ClonePair.of(Place("tests/test_b.py", "check"), Place("tests/test_c.py", "walk")),
     })
     assert load_baseline(first) == Baseline({}, pairs)
     assert written(capsys, repo)[0] == 0
@@ -418,7 +418,7 @@ def test_the_written_file_loads_back_with_each_pair_once_under_its_first_side_so
 
 def test_a_reversed_or_repeated_hand_written_pair_loads_as_its_one_identity():
     """#130 E2, cell 15."""
-    repeated = REVERSED + '[clones."tests/test_a.py"]\nrun = [["tests/test_b.py", "hygiene"], ["tests/test_b.py", "hygiene"]]\n'
+    repeated = REVERSED + '[clones."tests/test_a.py"]\nrun = [["tests/test_b.py", "check"], ["tests/test_b.py", "check"]]\n'
     assert load_baseline(REVERSED) == Baseline({}, frozenset({FIRST_PAIR}))
     assert load_baseline(repeated) == Baseline({}, frozenset({FIRST_PAIR}))
     assert render_baseline(load_baseline(repeated)).endswith("\n" + FIRST)
@@ -470,7 +470,7 @@ def test_a_size_entry_and_a_pair_load_into_one_baseline():
 
 def enforced(capsys, build_repo, files, table=EMPTY_CLONES):
     repo = build_repo({**files, BASELINE_PATH: table})
-    return repo, *hygiene_output(capsys, repo)
+    return repo, *check_output(capsys, repo)
 
 
 def clone_findings(repo: Path) -> list[Finding]:
@@ -496,18 +496,18 @@ def test_an_empty_clone_table_makes_a_new_cross_file_pair_red_at_its_second_side
     repo, code, output = enforced(capsys, build_repo, TWO_FILES)
     (finding,) = clone_findings(repo)
     assert code == 1, output
-    assert_new_pair(finding, "tests/test_b.py:1", FIRST_PAIR.first, "hygiene")
+    assert_new_pair(finding, "tests/test_b.py:1", FIRST_PAIR.first, "check")
     (row,) = rows_of(output, finding)
     assert_row_prints_finding(row, finding)
 
 
 def test_a_pair_across_production_and_tests_is_judged_like_any_other(build_repo, capsys):
     """#136 cell 13."""
-    files = {"src/a.py": clone_function("run", "a", "b"), "tests/test_b.py": clone_function("hygiene", "c", "d")}
+    files = {"src/a.py": clone_function("run", "a", "b"), "tests/test_b.py": clone_function("check", "c", "d")}
     repo, code, output = enforced(capsys, build_repo, files)
     (finding,) = clone_findings(repo)
     assert code == 1, output
-    assert_new_pair(finding, "tests/test_b.py:1", Place("src/a.py", "run"), "hygiene")
+    assert_new_pair(finding, "tests/test_b.py:1", Place("src/a.py", "run"), "check")
 
 
 def test_a_held_pair_whose_side_file_was_deleted_is_red_at_the_first_side_and_its_fix_clears_it(build_repo, capsys, monkeypatch):
@@ -520,7 +520,7 @@ def test_a_held_pair_whose_side_file_was_deleted_is_red_at_the_first_side_and_it
     assert command[0] == cli.build_parser().prog
     monkeypatch.chdir(repo)
     assert cli.main(command[1:]) == 0
-    assert hygiene_output(capsys, repo)[0] == 0
+    assert check_output(capsys, repo)[0] == 0
 
 
 def test_a_renamed_function_makes_the_held_pair_stale_and_the_new_name_a_new_pair(build_repo, capsys):
@@ -548,7 +548,7 @@ def test_a_held_same_file_pair_and_a_held_self_pair_are_stale(build_repo, capsys
 
 def test_a_copy_fixed_in_place_leaves_the_held_pair_stale(build_repo, capsys):
     """#136 cell 16: both functions remain but are no longer similar."""
-    files = {**TWO_FILES, "tests/test_b.py": "def hygiene(a):\n    return a\n"}
+    files = {**TWO_FILES, "tests/test_b.py": "def check(a):\n    return a\n"}
     repo, code, output = enforced(capsys, build_repo, files, FIRST)
     (finding,) = clone_findings(repo)
     assert code == 1, output
@@ -561,7 +561,7 @@ def test_a_second_side_moved_down_is_named_at_its_new_line(build_repo, capsys):
     repo, code, output = enforced(capsys, build_repo, files)
     (finding,) = clone_findings(repo)
     assert code == 1, output
-    assert_new_pair(finding, "tests/test_b.py:4", FIRST_PAIR.first, "hygiene")
+    assert_new_pair(finding, "tests/test_b.py:4", FIRST_PAIR.first, "check")
 
 
 def test_new_pairs_print_in_sorted_order_across_locations_and_at_one_location(build_repo, capsys):
@@ -595,7 +595,7 @@ def test_a_size_can_fall_row_and_a_clone_can_fall_row_share_one_fix(build_repo, 
 def test_no_line_before_the_first_area_row_opens_with_a_rule_of_the_debt_area(build_repo, capsys):
     """O15: the size and clone counts are the debt row's extent, never a prelude line."""
     repo = build_repo(TWO_FILES)
-    _, output = hygiene_output(capsys, repo)
+    _, output = check_output(capsys, repo)
     lines = output.splitlines()
     prelude = lines[: next(number for number, line in enumerate(lines) if line.split()[1:2] == [Area.FILES])]
     assert [line for line in prelude if line.startswith(tuple(rule.value for rule in Rule if rule.area is Area.DEBT))] == []
@@ -605,7 +605,7 @@ def test_a_file_python_cannot_parse_leaves_the_enforced_clone_rule_unable_to_jud
     """#136 cell 8: the same file and wording as the size rule; size, clone, python-security (#219) and python-print
     (#225) count as unparsable."""
     repo = build_repo({**TWO_FILES, "src/broken.py": "def broken(:\n", BASELINE_PATH: EMPTY_CLONES})
-    code, output = hygiene_output(capsys, repo)
+    code, output = check_output(capsys, repo)
     refusing = refusals(repo)
     assert code == 2, output
     assert set(refusing) == {Rule.SIZE, Rule.CLONE, Rule.PYTHON_SECURITY, Rule.PYTHON_PRINT}
@@ -618,7 +618,7 @@ def test_a_file_python_cannot_parse_leaves_the_enforced_clone_rule_unable_to_jud
 def test_a_malformed_baseline_leaves_both_rules_unable_to_judge_naming_the_rewrite_once_on_next(build_repo, capsys, text):
     """#136 cell 9: one read, so even a file with no `[clones]` leaves clone's mode unknown."""
     repo = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: text})
-    code, output = hygiene_output(capsys, repo)
+    code, output = check_output(capsys, repo)
     assert code == 2, output
     assert set(refusals(repo)) == {Rule.SIZE, Rule.CLONE}
     assert (output.count(WRITE_COMMAND), "rewrite it with" in output) == (1, False), output
@@ -629,7 +629,7 @@ def test_the_write_and_the_rule_agree(build_repo, capsys):
     """#136 cell 11: after the write the clone rule finds nothing and the debt row counts what the write wrote."""
     repo = build_repo(THREE_FILES)
     assert written(capsys, repo)[0] == 0
-    code, output = hygiene_output(capsys, repo)
+    code, output = check_output(capsys, repo)
     held = read_baseline(repo)
     assert (code, clone_findings(repo)) == (0, []), output
     assert extent_counts(area_fact(output, Area.DEBT)) == [len(held.size), len(held.clones)] == [0, 3]
@@ -637,7 +637,7 @@ def test_the_write_and_the_rule_agree(build_repo, capsys):
 
 def test_a_control_character_and_undecodable_bytes_in_a_new_pair_print_escaped(build_repo, capsys):
     """#136 cell 17: a new pair can carry both."""
-    new = {"src/a\x01.py": clone_function("run", "a", "b"), "src/b\udcff.py": clone_function("hygiene", "c", "d")}
+    new = {"src/a\x01.py": clone_function("run", "a", "b"), "src/b\udcff.py": clone_function("check", "c", "d")}
     repo, code, output = enforced(capsys, build_repo, new)
     (finding,) = clone_findings(repo)
     assert code == 1, output
@@ -647,7 +647,7 @@ def test_a_control_character_and_undecodable_bytes_in_a_new_pair_print_escaped(b
 
 def test_a_control_character_in_a_held_pair_prints_escaped(build_repo, capsys):
     """#136 cell 17: a held pair carries only Unicode."""
-    pair = ClonePair.of(Place("src/a\x01.py", "run"), Place("src/b.py", "hygiene"))
+    pair = ClonePair.of(Place("src/a\x01.py", "run"), Place("src/b.py", "check"))
     stale = render_baseline(Baseline({}, frozenset({pair})))
     repo, code, output = enforced(capsys, build_repo, {"src/c.py": "x = 1\n"}, stale)
     (finding,) = clone_findings(repo)

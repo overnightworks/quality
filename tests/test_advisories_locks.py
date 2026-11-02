@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
-from quality import advisories, cli
+from quality import advisories
 from quality.config import CONFIG_PATH
 from quality.report import FindingEvent, NoteEvent
 from quality.rules import Area
@@ -29,6 +29,7 @@ from tests.support.advisories import (
     uv_lock,
 )
 from tests.support.check import area_fact, area_finding_rows, extent_counts, note_rows
+from tests.support.door import check_door
 from tests.support.scanners import OUTPUTS, fake_scanner
 
 LODASH = "GHSA-npm1-aaaa-bbbb"
@@ -345,20 +346,20 @@ def test_an_allowance_in_a_pnpm_lock_allows_its_advisory_until_its_date(
     config = allowance_config(**PNPM_ALLOWANCE, until=datetime.date(2999, 12, 31))
     repo = build_repo({FRONTEND_LOCK: pnpm_lock(), "quality/config.toml": config})
 
-    def hygiene() -> tuple[int, str, str]:
-        code = cli.main(["hygiene", str(repo)], clock=lambda: 0.0)
+    def door() -> tuple[int, str, str]:
+        code = check_door(repo, clock=lambda: 0.0)
         heard = capsys.readouterr()
         return code, heard.out, heard.err
 
     report = edited_report("osv-scanner-finding.json", npm_report("lodash", "lodash"))
     fake_scanner(served_scanners, OSV, reporting(report, 1))
-    code, out, err = hygiene()
+    code, out, err = door()
     (row,) = note_rows(out, FRONTEND_LOCK)
     assert (code, err, row.event) == (0, "", NoteEvent.ALLOWED), out
     words = ("lodash", "4.6.0", ADVISORY_ID, "2999-12-31", PNPM_ALLOWANCE["item"], PNPM_ALLOWANCE["reason"])
     assert all(word in row.fact for word in words), row.fact
     fake_scanner(served_scanners, OSV, reporting(OUTPUTS / "osv-scanner-clean.json", 0))
-    code, out, err = hygiene()
+    code, out, err = door()
     ((location, row),) = area_finding_rows(out, Area.DEPENDENCIES)
     assert (code, err, location, row.event, ADVISORY_ID in row.fact, FRONTEND_LOCK in row.fact) == (1, "", CONFIG_PATH, FindingEvent.UNUSED, True, True), out
 

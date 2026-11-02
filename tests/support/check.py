@@ -15,6 +15,7 @@ from quality.output import Glyph
 from quality.ratchet import BASELINE_PATH, load_baseline
 from quality.report import Example, Finding, FindingEvent, Note, NoteEvent, printable
 from quality.rules import Rule
+from tests.support.door import check_door
 
 installed_ruff = cli.INSTALLED_RUFF
 
@@ -333,7 +334,7 @@ def note_rows(printed: str, location: str) -> list[NoteRow]:
 
 def rule_notes(repo: Path, rule: Rule) -> list[Note]:
     """The notes `rule` returns over `repo` before the door prints them."""
-    return [note for verdict in hygiene_run(repo).verdicts if verdict.rule is rule for note in verdict.notes]
+    return [note for verdict in check_result(repo).verdicts if verdict.rule is rule for note in verdict.notes]
 
 
 def recorded_entries(repo: Path) -> int:
@@ -349,7 +350,7 @@ def rows_of(printed: str, finding: Finding) -> list[FindingRow]:
 
 def rule_findings(repo: Path, rule: Rule) -> list[Finding]:
     """The findings `rule` returns over `repo` before the door prints them."""
-    return [finding for verdict in hygiene_run(repo).verdicts if verdict.rule is rule for finding in verdict.findings]
+    return [finding for verdict in check_result(repo).verdicts if verdict.rule is rule for finding in verdict.findings]
 
 
 def fix_label_and_lines(finding: Finding) -> tuple[str, tuple[str, ...]]:
@@ -385,20 +386,20 @@ def env_row_stands(printed: str) -> bool:
     return any(row.event is FindingEvent.TRACKED and row.fact == printable(env_file.ENV_FACT) for row in finding_rows(printed, ".env"))
 
 
-def hygiene_streams(
+def check_streams(
     capsys: pytest.CaptureFixture[str], path: Path, locate_ruff: Callable[[], str] = installed_ruff
 ) -> tuple[int, str, str]:
-    """The exit code, stdout and stderr of `quality hygiene` over `path`, through the real door."""
-    code = cli.main(["hygiene", str(path)], locate_ruff=locate_ruff, clock=lambda: 0.0)
+    """The exit code, stdout and stderr of the check over `path`, through the real door."""
+    code = check_door(path, locate_ruff=locate_ruff, clock=lambda: 0.0)
     captured = capsys.readouterr()
     return code, captured.out, captured.err
 
 
-def hygiene_output(
+def check_output(
     capsys: pytest.CaptureFixture[str], path: Path, locate_ruff: Callable[[], str] = installed_ruff
 ) -> tuple[int, str]:
-    """The exit code and the whole output of `quality hygiene` over `path`, through the real door."""
-    code, out, err = hygiene_streams(capsys, path, locate_ruff)
+    """The exit code and the whole output of the check over `path`, through the real door."""
+    code, out, err = check_streams(capsys, path, locate_ruff)
     return code, out + err
 
 
@@ -412,24 +413,24 @@ def refusal_row(area: str) -> str:
     return f"  ✗ {area:<12}  {'not checked':<14} "
 
 
-def hygiene_run(repo: Path, locate_ruff: Callable[[], str] = installed_ruff, locate_zizmor: Callable[[], str] | None = None) -> check.HygieneResult:
+def check_result(repo: Path, locate_ruff: Callable[[], str] = installed_ruff, locate_zizmor: Callable[[], str] | None = None) -> check.CheckResult:
     """What the rule runner judged over `repo`, before the door prints it."""
-    return check.run_hygiene(repo, locate_ruff, locate_zizmor or cli.INSTALLED_ZIZMOR, lambda _verdict, _tracked_paths: None, lambda _area, _scanner: nullcontext())
+    return check.judge_repository(repo, locate_ruff, locate_zizmor or cli.INSTALLED_ZIZMOR, lambda _verdict, _tracked_paths: None, lambda _area, _scanner: nullcontext())
 
 
 def refusal_pair(repo: Path) -> str:
     """The pair a refused run ends with, as its owners spell it."""
-    return f"error: {cli.refusal_error(hygiene_run(repo).areas)}\nnext: {cli.REFUSED_AREAS_NEXT.text}\n"
+    return f"error: {cli.refusal_error(check_result(repo).areas)}\nnext: {cli.REFUSED_AREAS_NEXT.text}\n"
 
 
-def refusals_of(result: check.HygieneResult) -> dict[Rule, str]:
+def refusals_of(result: check.CheckResult) -> dict[Rule, str]:
     """Each rule that cannot judge, with its reason, as the rule runner reports it."""
     return {verdict.rule: str(verdict.refusal) for verdict in result.verdicts if verdict.refusal is not None}
 
 
 def refusals(repo: Path, locate_ruff: Callable[[], str] = installed_ruff, locate_zizmor: Callable[[], str] | None = None) -> dict[Rule, str]:
     """Each rule that cannot judge `repo`, with its reason, as the rule runner reports it."""
-    return refusals_of(hygiene_run(repo, locate_ruff, locate_zizmor))
+    return refusals_of(check_result(repo, locate_ruff, locate_zizmor))
 
 
 def copy_block(example: tuple[str, ...]) -> str:

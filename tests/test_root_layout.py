@@ -10,7 +10,7 @@ from quality.output import FIX_LABEL, Glyph
 from quality.report import FindingEvent
 from quality.root_layout import ROOT_BASE_DIRECTORIES, ROOT_BASE_ENTRIES, ROOT_BASE_FILES
 from quality.rules import Rule
-from tests.support.check import copy_block, env_row_stands, finding_rows, hygiene_output, rows_of, rule_findings
+from tests.support.check import check_output, copy_block, env_row_stands, finding_rows, rows_of, rule_findings
 from tests.support.config_refusals import KNOWN_KEYS, ONE_LINE_NEED
 from tests.support.git_repositories import put
 from tests.support.layout import (
@@ -34,7 +34,7 @@ def declaring(entry: str, reason: str = "built apart from the package") -> str:
 
 def test_two_strays_are_two_findings_and_a_directory_counts_once(build_repo, capsys):
     repo = build_repo({**GUIDANCE, "notes.txt": "x", "misc/a.py": "x", "misc/b.py": "x"})
-    code = hygiene_output(capsys, repo)[0]
+    code = check_output(capsys, repo)[0]
     assert (code, red(repo, Rule.ROOT_LAYOUT)) == (1, ["misc/", "notes.txt"])
 
 
@@ -65,7 +65,7 @@ ROOT_NAME_NEED = "entry as one name directly in the root, a directory with a tra
 )
 def test_an_invalid_declaration_cannot_be_judged_and_shows_an_example(build_repo, capsys, entry):
     repo = build_repo({**GUIDANCE, CONFIG: declaring(entry)})
-    code, output = hygiene_output(capsys, repo)
+    code, output = check_output(capsys, repo)
     assert code == 2
     assert f"{ROOT} entry 1 needs {ROOT_NAME_NEED}" in output
     assert output.count(copy_block(ROOT_ALLOWANCE_EXAMPLE)) == 1
@@ -84,7 +84,7 @@ def test_an_invalid_declaration_cannot_be_judged_and_shows_an_example(build_repo
     ids=["multi-line reason", "unknown key", "no reason", "entry not text", "unknown table key", "allow not a list"],
 )
 def test_a_malformed_root_table_cannot_be_judged(build_repo, capsys, config, fact):
-    code, output = hygiene_output(capsys, build_repo({**GUIDANCE, CONFIG: config}))
+    code, output = check_output(capsys, build_repo({**GUIDANCE, CONFIG: config}))
     assert code == 2
     assert fact in output
     assert output.count(copy_block(ROOT_ALLOWANCE_EXAMPLE)) == 1
@@ -118,7 +118,7 @@ def test_a_root_symlink_counts_by_its_own_name(build_repo):
 
 def test_the_same_entry_declared_twice_cannot_be_judged_and_is_named(build_repo, capsys):
     repo = build_repo({**GUIDANCE, "plans/a.md": "x", CONFIG: declaring("plans/") + declaring("plans/", "again")})
-    code, output = hygiene_output(capsys, repo)
+    code, output = check_output(capsys, repo)
     assert code == 2
     assert f'{ROOT} declares entry = "plans/" twice; one entry per root entry' in output
     assert output.count(copy_block(ROOT_ALLOWANCE_EXAMPLE)) == 1
@@ -131,12 +131,12 @@ def test_a_name_with_a_control_or_format_character_prints_escaped(build_repo, ca
 
 def test_no_key_of_the_root_table_switches_the_rule_off(build_repo, capsys):
     repo = build_repo({**GUIDANCE, "notes.txt": "x", CONFIG: ONE_JOB + "[root]\nenabled = false\n"})
-    assert hygiene_output(capsys, repo)[0] == 2
+    assert check_output(capsys, repo)[0] == 2
 
 
 def test_the_rule_is_on_in_a_repository_without_a_config(build_repo, capsys):
     repo = build_repo({**GUIDANCE, "notes.txt": "x"})
-    code = hygiene_output(capsys, repo)[0]
+    code = check_output(capsys, repo)[0]
     assert (code, red(repo, Rule.ROOT_LAYOUT)) == (1, ["notes.txt"])
 
 
@@ -147,7 +147,7 @@ def test_a_declared_entry_is_green_and_a_base_list_entry_may_be_declared(build_r
 
 def test_a_declaration_matching_no_tracked_entry_is_red_and_names_it(build_repo, capsys):
     repo = build_repo({**GUIDANCE, CONFIG: declaring("plans/")})
-    code = hygiene_output(capsys, repo)[0]
+    code = check_output(capsys, repo)[0]
     assert (code, red(repo, Rule.ROOT_LAYOUT)) == (1, ["plans/"])
     assert_prints_as_kind(capsys, repo, Rule.ROOT_LAYOUT, FindingEvent.UNUSED)
 
@@ -155,7 +155,7 @@ def test_a_declaration_matching_no_tracked_entry_is_red_and_names_it(build_repo,
 def test_a_directory_declared_without_its_slash_is_told_the_slash_is_what_is_tracked(build_repo, capsys):
     repo = build_repo({**GUIDANCE, "frontend/a.js": "x", CONFIG: declaring("frontend")})
     stale = next(finding for finding in rule_findings(repo, Rule.ROOT_LAYOUT) if finding.event is FindingEvent.UNUSED)
-    assert_row_is_kind(hygiene_output(capsys, repo)[1], stale, FindingEvent.UNUSED, "frontend/")
+    assert_row_is_kind(check_output(capsys, repo)[1], stale, FindingEvent.UNUSED, "frontend/")
 
 
 def test_a_finding_names_the_entry_and_both_ways_out_without_a_local_path(build_repo, capsys):
@@ -182,7 +182,7 @@ def test_moving_an_entry_without_its_declaration_leaves_the_declaration_red(buil
 def test_the_rule_writes_nothing_and_prints_no_command(build_repo, capsys):
     repo = build_repo({**GUIDANCE, "notes.txt": "x"})
     before = subprocess.run(["git", "-C", str(repo), "status", "--porcelain"], capture_output=True, check=True).stdout
-    output = hygiene_output(capsys, repo)[1]
+    output = check_output(capsys, repo)[1]
     after = subprocess.run(["git", "-C", str(repo), "status", "--porcelain"], capture_output=True, check=True).stdout
     assert (before, after) == (b"", b"")
     assert ["git " in row.fix for finding in rule_findings(repo, Rule.ROOT_LAYOUT) for row in rows_of(output, finding)] == [False]
@@ -190,7 +190,7 @@ def test_the_rule_writes_nothing_and_prints_no_command(build_repo, capsys):
 
 def test_a_tracked_env_file_is_red_under_env_file_and_under_root_layout(build_repo, capsys):
     repo = build_repo({**GUIDANCE, ".env": "A=1\n"})
-    assert (red(repo, Rule.ROOT_LAYOUT), env_row_stands(hygiene_output(capsys, repo)[1])) == ([".env"], True)
+    assert (red(repo, Rule.ROOT_LAYOUT), env_row_stands(check_output(capsys, repo)[1])) == ([".env"], True)
 
 
 def test_tsconfig_in_the_root_is_red_unless_declared(build_repo):
@@ -200,7 +200,7 @@ def test_tsconfig_in_the_root_is_red_unless_declared(build_repo):
 def test_a_hundred_strays_print_a_hundred_sorted_findings(build_repo, capsys):
     names = [f"stray{number:03d}.txt" for number in range(100)]
     repo = build_repo({**GUIDANCE, **{name: "x" for name in reversed(names)}})
-    output = hygiene_output(capsys, repo)[1]
+    output = check_output(capsys, repo)[1]
     printed = [match[0] for line in output.splitlines() if Glyph.NEEDS_YOU in line and (match := re.search(r"stray\d{3}\.txt", line))]
     rows = [row for name in names for row in finding_rows(output, name)]
     assert (red(repo, Rule.ROOT_LAYOUT), printed, len(rows), [row.fix_follows for row in rows]) == (names, names, 100, [False] * 99 + [True])

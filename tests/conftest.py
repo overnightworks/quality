@@ -18,6 +18,7 @@ from quality.ratchet import BASELINE_PATH
 pytest.register_assert_rewrite("tests.support")  # before the first import of a support module, so its asserts are rewritten
 
 from tests.support.advisories import advisory, zipped
+from tests.support.door import check_door
 from tests.support.fleet import GITHUB_BASE_VARIABLE, GITHUB_REDIRECT, RELEASES, TEST_OWNER, write_fleet
 from tests.support.git_repositories import GIT_IDENTITY, head_commit, make_repo, put
 from tests.support.scanners import CLEAN_SCANS, OUTPUTS, fake_scanner, serving, write_mise
@@ -396,7 +397,7 @@ def publish_database(database_root):
 def run_gate(capsys, served_scanners):
     """Runs the gate over a repository and returns (exit code, all output); no output names the checkout or the scanner directory (#53 cell 21)."""
     def run(repo: Path) -> tuple[int, str]:
-        code = cli.main(["hygiene", str(repo)])
+        code = check_door(repo)
         captured = capsys.readouterr()
         output = captured.out + captured.err
         assert str(repo) not in output

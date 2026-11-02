@@ -35,6 +35,7 @@ from tests.support.check import (
     note_rows,
     refusal_pair,
 )
+from tests.support.door import CHECK_WORD, MODULE_DOOR
 from tests.support.fleet import RELEASES, write_fleet
 from tests.support.terminal import Terminal, without_sgr
 from tests.support.verdict import CHECKS_GREEN
@@ -437,7 +438,6 @@ def test_a_notes_location_and_fact_are_escaped_before_they_are_padded():
 
 ENV_ROW = f"{Glyph.NEEDS_YOU} .env "
 FIX_LINE = f"{output.FIX_LABEL} "
-MODULE_DOOR = [sys.executable, "-m", "quality.cli"]
 CONSOLE_SCRIPT_DOOR = [str(Path(sys.executable).parent / "quality")]
 
 
@@ -455,10 +455,10 @@ def env_and_broken_compose(build_repo) -> Path:
 
 
 @pytest.mark.parametrize("door", [MODULE_DOOR, CONSOLE_SCRIPT_DOOR], ids=["module", "console script"])
-def test_a_merged_pipe_shows_the_hygiene_lines_in_run_order(env_and_broken_compose, door):
+def test_a_merged_pipe_shows_the_check_lines_in_run_order(env_and_broken_compose, door):
     """#86 rule 3, cells 10 and 12a: the area rows with their findings (`.env` as env-file's and root-layout's rows, each with its fix), then the pair."""
     done = quality_door(
-        "hygiene", ".", cwd=env_and_broken_compose, door=door, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+        CHECK_WORD, cwd=env_and_broken_compose, door=door, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
     )
     prefixes = [
         "  ✗ files", ENV_ROW, FIX_LINE, ENV_ROW, FIX_LINE,
@@ -471,14 +471,14 @@ def test_a_merged_pipe_shows_the_hygiene_lines_in_run_order(env_and_broken_compo
 
 def test_discarding_stderr_hides_exactly_the_pair(env_and_broken_compose):
     """#86 rule 3, cell 11: no line changes its stream; the exit stays 2."""
-    merged = quality_door("hygiene", ".", cwd=env_and_broken_compose, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    done = quality_door("hygiene", ".", cwd=env_and_broken_compose, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    merged = quality_door(CHECK_WORD, cwd=env_and_broken_compose, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    done = quality_door(CHECK_WORD, cwd=env_and_broken_compose, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     assert (done.returncode, merged.stdout.startswith(done.stdout), merged.stdout[len(done.stdout):]) == (2, True, refusal_pair(env_and_broken_compose))
 
 
 def test_discarding_stdout_leaves_exactly_the_pair(env_and_broken_compose):
     """#86 rule 3: the rows are results and the pair is not."""
-    done = quality_door("hygiene", ".", cwd=env_and_broken_compose, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    done = quality_door(CHECK_WORD, cwd=env_and_broken_compose, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     assert (done.returncode, done.stderr) == (2, refusal_pair(env_and_broken_compose))
 
 

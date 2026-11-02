@@ -19,7 +19,7 @@ from tests.support.check import (
     rule_findings,
     rule_notes,
 )
-from tests.support.check import hygiene_output as hygiene
+from tests.support.check import check_output as run
 from tests.support.generated_files import MANDATORY_JOB, TYPES_FILE, generated_config
 from tests.support.source_code import long_function, typescript_file
 
@@ -42,7 +42,7 @@ def test_a_declared_file_is_clean_at_any_size_and_the_same_file_undeclared_is_de
     path = next(iter(files))
     config = GATE + (generated_config(path=path) if declared else "")
     repo = build_repo({**files, CONFIG_PATH: config, BASELINE_PATH: baseline})
-    _, output = hygiene(capsys, repo)
+    _, output = run(capsys, repo)
     assert [(finding.location, finding.event) for finding in rule_findings(repo, Rule.SIZE)] == expected
     assert [(location, row.event) for location, row in area_finding_rows(output, "debt")] == expected
 
@@ -52,7 +52,7 @@ def test_the_not_recorded_count_leaves_a_declared_file_out(build_repo, capsys, d
     """#174 sentence 1: without a baseline the counted entries are those the size rule judges, and a recording writes."""
     config = GATE + (generated_config() if declared else "")
     repo = build_repo({TYPES_FILE: typescript_file(900), CONFIG_PATH: config})
-    _, output = hygiene(capsys, repo)
+    _, output = run(capsys, repo)
     assert leading_count(area_fact(output, "debt")) == recorded_entries(repo) == (0 if declared else 1)
 
 
@@ -72,7 +72,7 @@ def test_a_declaration_without_a_measured_file_is_one_size_finding_with_the_dele
     repo = build_repo({**files, CONFIG_PATH: GATE + generated_config(path=declared), **baseline})
     if arrange == "deleted from disk":
         (repo / TYPES_FILE).unlink()
-    code, output = hygiene(capsys, repo)
+    code, output = run(capsys, repo)
     (finding,) = rule_findings(repo, Rule.SIZE)
     assert (code, finding.location, finding.event) == (1, declared, FindingEvent.UNUSED), output
     assert_finding_vocabulary(finding)
@@ -88,7 +88,7 @@ def test_a_declared_python_file_python_cannot_parse_leaves_the_size_rule_judgeab
     seeded = '[clones."src/a.py"]\nlong_one = [["src/b.py", "long_one"]]\n'
     repo = build_repo({"gen/api.py": "def broken(:\n", CONFIG_PATH: GATE + generated_config(path="gen/api.py"), BASELINE_PATH: seeded})
     seeded_bytes = (repo / BASELINE_PATH).read_bytes()
-    _, output = hygiene(capsys, repo)
+    _, output = run(capsys, repo)
     assert rule_findings(repo, Rule.SIZE) == []
     assert area_finding_rows(output, "debt") == []
     assert Rule.SIZE not in refusals(repo)
