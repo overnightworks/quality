@@ -1,8 +1,0 @@
-claim_id = "10837b84e17e4332ab3fdf86a00e3a0c"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "3d3589e50d72016b97664db2b7cb69430846c973"
-branch = "claude/issue-325-sibling-of-a-known-layer"
-scope = ["docs/rules.md", "src/quality/architecture.py", "tests/support/architecture.py", "tests/test_architecture.py", "tests/test_architecture_layers.py"]
-opened_commit = "c2df0f8b0d020ee1c34ede1174b43c6bec04f05a"
-whole_reason = "One production function, about +5/-2, with the move of one parametrized test out of a module at 797 lines; the move is what makes room for the rows, so it does not split."
