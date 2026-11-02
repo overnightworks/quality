@@ -357,7 +357,8 @@ def test_the_run_hands_each_area_to_its_reporter_once_in_row_order(build_repo):
     assert reported == [(area, result.tracked_paths) for area in result.areas]
 
 
-def test_the_run_takes_each_scanner_s_line_down_before_it_reports_its_area(build_repo, tmp_path):
+def events_of_run(build_repo, tmp_path, **keywords) -> list[tuple]:
+    """Every live line raised and lowered and every row reported by one run over a repository holding all five scanned kinds."""
     repo = build_repo({".github/workflows/w.yml": "on: push\n", "uv.lock": uv_lock(), "src/a.py": "x = 1\n"})
     locate_zizmor = fake_zizmor(tmp_path / "zizmor", "echo '[]'")
     events = []
@@ -368,7 +369,11 @@ def test_the_run_takes_each_scanner_s_line_down_before_it_reports_its_area(build
         yield
         events.append(("down", area, scanner))
 
-    check.judge_repository(repo, installed_ruff, locate_zizmor, lambda verdict, _tracked_paths: events.append(("row", verdict.area)), running)
+    check.judge_repository(repo, installed_ruff, locate_zizmor, lambda verdict, _tracked_paths: events.append(("row", verdict.area)), running, **keywords)
+    return events
+
+
+def test_the_run_takes_each_scanner_s_line_down_before_it_reports_its_area(build_repo, tmp_path):
     workflow_scanners = [scanner.name for scanner in scanners.WORKFLOW_SCANNERS.values()]
     scanned = [
         (Area.SECRETS, [scanners.GITLEAKS]),
@@ -380,7 +385,19 @@ def test_the_run_takes_each_scanner_s_line_down_before_it_reports_its_area(build
     for area, names in scanned:
         expected += [event for name in names for event in (("up", area, name), ("down", area, name))]
         expected.append(("row", area))
-    assert events == expected
+    assert events_of_run(build_repo, tmp_path) == expected
+
+
+def test_the_run_holds_the_line_up_only_around_a_named_areas_scanners(build_repo, tmp_path):
+    expected = [
+        ("up", Area.SECRETS, scanners.GITLEAKS),
+        ("down", Area.SECRETS, scanners.GITLEAKS),
+        ("row", Area.SECRETS),
+        ("up", Area.CODE, scanners.RUFF),
+        ("down", Area.CODE, scanners.RUFF),
+        ("row", Area.CODE),
+    ]
+    assert events_of_run(build_repo, tmp_path, named=(Area.CODE, Area.SECRETS)) == expected
 
 
 def test_every_rule_a_malformed_config_refuses_carries_its_fact_and_its_example_as_fields(build_repo):
