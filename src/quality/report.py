@@ -138,8 +138,7 @@ class NoteEvent(StrEnum):
 
 @dataclass(frozen=True)
 class Finding:
-    """`reason` is the fact its row shows and the sentence of `headline`. `fix` is a sentence, or an `Example`: a label
-    with the lines a person copies."""
+    """`fix` is a sentence, or an `Example`: a label with the lines a person copies."""
 
     rule: str
     path: str
