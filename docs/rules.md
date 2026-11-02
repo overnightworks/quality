@@ -521,7 +521,8 @@ both kinds of row as well.
 
 The `workflow-lint` rule (actionlint) and the `workflow-security` rule (zizmor, `--offline`) judge every tracked `.yml` and
 `.yaml` file directly under `.github/workflows/` that the tree holds, with quality's own configs: a repository's scanner
-config and ignore comments change nothing. A lint finding is `! <path:line>  invalid  actionlint`, the message under it
+config and ignore comments change nothing; quality's configuration adds the hosted runner labels `ubuntu-26.04` and
+`ubuntu-26.04-arm`, which actionlint does not know yet. A lint finding is `! <path:line>  invalid  actionlint`, the message under it
 behind `| `, then `fix: correct the workflow as the message says`. A security finding is
 `! <path:line>  insecure  zizmor <audit> · <description>` with `fix: see <url>`. The clean row counts those files and says
 that only offline audits ran, so a workflow that only an online audit would flag is not read as fully audited:
