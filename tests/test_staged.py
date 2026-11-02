@@ -1,3 +1,5 @@
+import io
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -16,6 +18,7 @@ from tests.support.check import (
 from tests.support.config_refusals import CONFIG, all_refusals
 from tests.support.git_repositories import GIT_IDENTITY, head_commit
 from tests.support.secrets import FAKE_KEY, HOSTILE_FILE, OTHER_KEY, allow_config
+from tests.support.terminal import Terminal
 
 KEY_LINE = f"aws_access_key_id = {FAKE_KEY}\n"
 
@@ -40,6 +43,20 @@ def unborn_repo(tmp_path) -> Path:
     repo = tmp_path / "unborn"
     git(tmp_path, "init", "-q", str(repo))
     return repo
+
+
+@pytest.mark.scanner
+@pytest.mark.parametrize(("stream_kind", "painted"), [(Terminal, True), (io.StringIO, False)])
+def test_a_staged_row_is_painted_only_on_a_terminal(build_repo, installed_scanners, capsys, monkeypatch, stream_kind, painted):
+    repo = build_repo({"README": "hello\n"})
+    stage(repo, {"src/a.py": KEY_LINE})
+    stream = stream_kind()
+    monkeypatch.setattr(sys, "stdout", stream)
+    code = cli.main(["scan-staged", str(repo)], environment={"TERM": "xterm"})
+    lines = [re.sub(r"\x1b\[[0-9;]*m", "", line) for line in stream.getvalue().splitlines()]
+    assert (code, "\x1b" in stream.getvalue(), FAKE_KEY in stream.getvalue()) == (1, painted, False)
+    result = staged.scan_staged(repo)
+    assert (lines[-1], capsys.readouterr().err) == (f"scan-staged: {len(result.findings)} finding(s)", "")
 
 
 @pytest.mark.scanner

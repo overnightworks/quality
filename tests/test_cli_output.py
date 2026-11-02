@@ -42,6 +42,7 @@ from tests.support.merge import ONE_JOB
 from tests.support.processes import process_is_gone
 from tests.support.scanners import fake_scanner, lacking
 from tests.support.secrets import FAKE_KEY, allow_config
+from tests.support.terminal import Terminal
 
 DOOR = [sys.executable, "-m", "quality.cli"]
 STOP_LINE = re.compile(r"::stop-commands::([0-9a-f]{32})")
@@ -414,11 +415,6 @@ PRINTING = {"src/a.py": 'print("x")\n'}
 ZERO_SECONDS = "<1s"
 
 
-class Terminal(io.StringIO):
-    def isatty(self) -> bool:
-        return True
-
-
 def frame_run(capsys, path: Path, **keywords) -> tuple[int, list[str], list[str]]:
     code = cli.main(["hygiene", str(path)], clock=lambda: 0.0, **keywords)
     captured = capsys.readouterr()
@@ -646,8 +642,6 @@ def test_a_refusal_row_appears_exactly_when_the_exit_is_two_and_a_findings_row_w
 
 def terminal_streams(monkeypatch) -> tuple[Terminal, Terminal]:
     """Both streams terminals; set inside the test, because pytest's capture puts its own back when the test starts."""
-    monkeypatch.setenv("TERM", "xterm")
-    monkeypatch.delenv("NO_COLOR", raising=False)
     stdout, stderr = Terminal(), Terminal()
     monkeypatch.setattr(sys, "stdout", stdout)
     monkeypatch.setattr(sys, "stderr", stderr)
@@ -657,7 +651,7 @@ def terminal_streams(monkeypatch) -> tuple[Terminal, Terminal]:
 def test_at_a_terminal_a_refusal_from_repository_text_prints_as_escaped_text_between_quality_sgr_only(build_repo, monkeypatch):
     repo = build_repo({"a\x1b[35m\n\u202e.compose.yaml": "services: [\n"})
     stdout, stderr = terminal_streams(monkeypatch)
-    code = cli.main(["hygiene", str(repo)], clock=lambda: 0.0)
+    code = cli.main(["hygiene", str(repo)], clock=lambda: 0.0, environment={"TERM": "xterm"})
     stripped = re.sub(r"\x1b\[[0-9;]*m", "", stdout.getvalue() + stderr.getvalue())
     assert code == 2
     assert "\x1b[" in stdout.getvalue(), stderr.getvalue()
@@ -744,7 +738,8 @@ def test_the_real_door_prints_every_config_example_line_whole_in_each_stderr_for
     else:
         text = done.stderr
     stripped = re.sub(r"\x1b\[[0-9;]*m", "", text)
-    lines = stripped.replace("\r\n", "\n").splitlines()
+    example = [f"    {line}" for line in config.GENERATED_FILE_EXAMPLE]
+    expected = [f"error: {cli.refusal_error(hygiene_run(repo).areas)}", f"next: {check.CONFIG_EXAMPLE_LABEL}:", *example]
     assert done.returncode == 2
     assert ("\x1b[" in text) is coloured, text
-    assert [f"    {line}" for line in config.GENERATED_FILE_EXAMPLE] == lines[lines.index(f"next: {check.CONFIG_EXAMPLE_LABEL}:") + 1:][: len(config.GENERATED_FILE_EXAMPLE)]
+    assert stripped.replace("\r\n", "\n").splitlines() == expected

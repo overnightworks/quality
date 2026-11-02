@@ -125,6 +125,32 @@ def style_is_on(stream: TextIO | None, environment: Mapping[str, str]) -> bool:
     return not environment.get("NO_COLOR") and environment.get("TERM") != "dumb"
 
 
+@dataclass(frozen=True)
+class Channel:
+    """One output stream and its style, captured once when the run opened it; the writers do not probe it again."""
+
+    stream: TextIO | None
+    styled: bool
+
+
+@dataclass(frozen=True)
+class Channels:
+    """The door's two streams, each decided on its own."""
+
+    out: Channel
+    err: Channel
+
+
+def open_channel(stream: TextIO | None, environment: Mapping[str, str]) -> Channel:
+    return Channel(stream, style_is_on(stream, environment))
+
+
+def open_channels(environment: Mapping[str, str]) -> Channels:
+    """Each stream's style, decided once for the run from the environment the door is given; `output.py` reads the
+    process environment only for the step summary."""
+    return Channels(open_channel(sys.stdout, environment), open_channel(sys.stderr, environment))
+
+
 def _paint(text: str, style: str, styled: bool) -> str:
     return f"\x1b[{style}m{text}{RESET}" if styled and text else text
 
@@ -160,18 +186,13 @@ def _verdict_parts(verdict: Verdict) -> tuple[Glyph, list[str]]:
     return glyph, [*parts, *verdict.notes, format_duration(verdict.seconds)]
 
 
-def _stream(file: TextIO | None) -> TextIO | None:
-    return sys.stdout if file is None else file
-
-
-def _print_lines(lines: list[str], file: TextIO | None) -> None:
+def _print_lines(lines: list[str], channel: Channel) -> None:
     for line in lines:
-        print(line, file=file)
+        print(line, file=channel.stream)
 
 
-def write_rows(rows: tuple[Row, ...], file: TextIO | None = None) -> None:
-    styled = style_is_on(_stream(file), os.environ)
-    _print_lines([line for row in rows for line in _row_lines(row, styled)], file)
+def write_rows(rows: tuple[Row, ...], channel: Channel) -> None:
+    _print_lines([line for row in rows for line in _row_lines(row, channel.styled)], channel)
 
 
 # A line taken from another tool's rendering carries this, so no line the door prints starts with repository text.
@@ -222,19 +243,19 @@ def _finding_lines(findings: Sequence[Finding], notes: Sequence[Note], styled: b
     return lines
 
 
-def write_findings_and_notes(findings: Sequence[Finding], notes: Sequence[Note], file: TextIO | None = None) -> None:
+def write_findings_and_notes(findings: Sequence[Finding], notes: Sequence[Note], channel: Channel) -> None:
     """The rows of one area that carry an event: each finding `! location  event  fact` with one `fix:` line after the
     last of each run of equal fixes, then each note `· location  event  fact`, the columns shared."""
     if findings or notes:
-        _print_lines(_finding_lines(findings, notes, style_is_on(_stream(file), os.environ)), file)
+        _print_lines(_finding_lines(findings, notes, channel.styled), channel)
 
 
-def write_verdict(verdict: Verdict, file: TextIO | None = None) -> None:
-    styled = style_is_on(_stream(file), os.environ)
+def write_verdict(verdict: Verdict, channel: Channel) -> None:
+    styled = channel.styled
     glyph, parts = _verdict_parts(verdict)
     style = VERDICT_STYLE[glyph]
     painted = [_paint(f"{glyph} {parts[0]}", style, styled), *(_paint(part, DIM, styled) for part in parts[1:])]
-    _print_lines([SEPARATOR.join(painted)], file)
+    _print_lines([SEPARATOR.join(painted)], channel)
 
 
 INDENT = "    "
@@ -267,9 +288,8 @@ def _next_lines(next_steps: tuple[Step, ...], label: str) -> list[str]:
     return [label, *(f"{INDENT * (level + 1)}{printable(text)}" for step in lines for level, text in step)]
 
 
-def write_pair(error: str, next_steps: tuple[Step, ...], file: TextIO | None = None) -> None:
-    """`error:` and `next:`, the pair that ends a run that could not judge; stderr by default."""
-    stream = sys.stderr if file is None else file
-    styled = style_is_on(stream, os.environ)
-    _print_lines([f"{_paint('error:', f'{BOLD};{RED}', styled)} {printable(error)}"], stream)
-    _print_lines(_next_lines(next_steps, _paint("next:", CYAN, styled)), stream)
+def write_pair(error: str, next_steps: tuple[Step, ...], channel: Channel) -> None:
+    """`error:` and `next:`, the pair that ends a run that could not judge."""
+    styled = channel.styled
+    _print_lines([f"{_paint('error:', f'{BOLD};{RED}', styled)} {printable(error)}"], channel)
+    _print_lines(_next_lines(next_steps, _paint("next:", CYAN, styled)), channel)

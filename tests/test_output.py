@@ -33,7 +33,9 @@ from tests.support.check import (
     decode_block,
     finding_rows,
     note_rows,
+    refusal_pair,
 )
+from tests.support.terminal import Terminal
 
 OWN_SGR = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -43,22 +45,24 @@ class Event(StrEnum):
     FINDING = "finding"
 
 
-class Terminal(io.StringIO):
-    def isatty(self) -> bool:
-        return True
+def on(stream: io.StringIO, **environment: str) -> output.Channel:
+    """The channel a door opens on `stream` under a terminal's environment, overridden by `environment`."""
+    return output.open_channel(stream, {"TERM": "xterm"} | environment)
+
+
+def written(stream_kind: type[io.StringIO], write, **environment: str) -> str:
+    stream = stream_kind()
+    write(on(stream, **environment))
+    return stream.getvalue()
 
 
 def plain(rows: tuple[Row, ...]) -> str:
-    stream = io.StringIO()
-    output.write_rows(rows, file=stream)
-    return stream.getvalue()
+    return written(io.StringIO, lambda channel: output.write_rows(rows, channel))
 
 
 def verdict_line(**counts) -> str:
-    stream = io.StringIO()
     defaults = {"findings": 0, "areas_with_findings": 0, "clean_areas": 7, "areas": 7, "notes": (), "seconds": 0}
-    output.write_verdict(Verdict(**{**defaults, **counts}), file=stream)
-    return stream.getvalue()
+    return written(io.StringIO, lambda channel: output.write_verdict(Verdict(**{**defaults, **counts}), channel))
 
 
 @pytest.mark.parametrize(
@@ -137,15 +141,12 @@ COPY = Example("write it in a.toml like this", ("[[table]]", 'key = "value"', "o
     ids=["one step", "two steps", "labelled command", "choice alone", "example alone", "example after a command", "choice after a command"],
 )
 def test_the_pair_prints_a_lone_step_on_the_next_line_and_several_below_it(steps, expected):
-    stream = io.StringIO()
-    output.write_pair("e", steps, file=stream)
-    assert stream.getvalue() == f"error: e\n{expected}"
+    assert written(io.StringIO, lambda channel: output.write_pair("e", steps, channel)) == f"error: e\n{expected}"
 
 
 def test_the_pair_labels_and_escapes_each_text():
-    stream = io.StringIO()
-    output.write_pair("a\x1b[35mb", (Command("c\nd"), Instruction("e\x1b")), file=stream)
-    assert stream.getvalue() == "error: a\\x1b[35mb\nnext:\n    c\\x0ad\n    e\\x1b\n"
+    pair = written(io.StringIO, lambda channel: output.write_pair("a\x1b[35mb", (Command("c\nd"), Instruction("e\x1b")), channel))
+    assert pair == "error: a\\x1b[35mb\nnext:\n    c\\x0ad\n    e\\x1b\n"
 
 
 @pytest.mark.parametrize("closed", [False, True], ids=["open", "closed"])
@@ -165,54 +166,40 @@ def test_a_missing_stream_is_plain():
     assert output.style_is_on(None, {"TERM": "xterm"}) is False
 
 
-@pytest.fixture
-def at_a_terminal(monkeypatch):
-    monkeypatch.setenv("TERM", "xterm")
-    monkeypatch.delenv("NO_COLOR", raising=False)
-
-
-def written(stream_kind: type[io.StringIO], write) -> str:
-    stream = stream_kind()
-    write(stream)
-    return stream.getvalue()
-
-
-def test_styled_rows_hold_exactly_the_plain_words(at_a_terminal):
+def test_styled_rows_hold_exactly_the_plain_words():
     rows = (
         Row(Glyph.CLEAN, "files", Event.CLEAN, "ok"),
         Row(Glyph.NEEDS_YOU, "code", Event.FINDING, count=2, sub_lines=(SubLine(Glyph.COULD_NOT_CHECK, "why"),)),
         Row(Glyph.NOTE, "debt", Event.CLEAN, "measured only"),
     )
-    styled = written(Terminal, lambda stream: output.write_rows(rows, file=stream))
+    styled = written(Terminal, lambda channel: output.write_rows(rows, channel))
     assert "\x1b[" in styled
     assert OWN_SGR.sub("", styled) == plain(rows)
 
 
-def test_a_styled_verdict_and_pair_hold_exactly_the_plain_words(at_a_terminal):
+def test_a_styled_verdict_and_pair_hold_exactly_the_plain_words():
     verdict = Verdict(1, 1, 6, 7, ("debt measured, not enforced",), 3)
-    assert OWN_SGR.sub("", written(Terminal, lambda stream: output.write_verdict(verdict, file=stream))) == verdict_line(
+    assert OWN_SGR.sub("", written(Terminal, lambda channel: output.write_verdict(verdict, channel))) == verdict_line(
         findings=1, areas_with_findings=1, clean_areas=6, notes=("debt measured, not enforced",), seconds=3
     )
-    pair = written(Terminal, lambda stream: output.write_pair("e", (Command("n"),), file=stream))
+    pair = written(Terminal, lambda channel: output.write_pair("e", (Command("n"),), channel))
     assert ("\x1b[" in pair, OWN_SGR.sub("", pair)) == (True, "error: e\nnext: n\n")
 
 
-def test_repository_text_reaches_a_terminal_only_as_escaped_text(at_a_terminal):
+def test_repository_text_reaches_a_terminal_only_as_escaped_text():
     row = Row(Glyph.COULD_NOT_CHECK, "files", Event.CLEAN, "\x1b[35m\u202e")
-    styled = written(Terminal, lambda stream: output.write_rows((row,), file=stream))
+    styled = written(Terminal, lambda channel: output.write_rows((row,), channel))
     remaining = OWN_SGR.sub("", styled)
     assert "\\x1b[35m\\u202e" in remaining
     assert [character for character in remaining if unicodedata.category(character) in ("Cc", "Cf", "Zl", "Zp") and character != "\n"] == []
 
 
-@pytest.mark.parametrize("no_color", ["1", None], ids=["no color", "pipe"])
-def test_plain_output_holds_no_escape_byte(monkeypatch, no_color):
-    monkeypatch.setenv("TERM", "xterm")
-    stream = Terminal() if no_color else io.StringIO()
-    if no_color:
-        monkeypatch.setenv("NO_COLOR", no_color)
-    output.write_rows((Row(Glyph.CLEAN, "files", Event.CLEAN),), file=stream)
-    output.write_pair("e", (Command("n"),), file=stream)
+@pytest.mark.parametrize(("stream_kind", "environment"), [(Terminal, {"NO_COLOR": "1"}), (io.StringIO, {})], ids=["no color", "pipe"])
+def test_plain_output_holds_no_escape_byte(stream_kind, environment):
+    stream = stream_kind()
+    channel = on(stream, **environment)
+    output.write_rows((Row(Glyph.CLEAN, "files", Event.CLEAN),), channel)
+    output.write_pair("e", (Command("n"),), channel)
     assert "\x1b" not in stream.getvalue()
 
 
@@ -224,8 +211,8 @@ def note(path: str, fact: str = "a note") -> Note:
     return Note(path, NoteEvent.ALLOWED, fact)
 
 
-def findings_written(findings: list[Finding], stream_kind: type[io.StringIO] = io.StringIO, notes: list[Note] | None = None) -> str:
-    return written(stream_kind, lambda stream: output.write_findings_and_notes(findings, notes or [], file=stream))
+def findings_written(findings: list[Finding], stream_kind: type[io.StringIO] = io.StringIO, notes: list[Note] | None = None, **environment: str) -> str:
+    return written(stream_kind, lambda channel: output.write_findings_and_notes(findings, notes or [], channel), **environment)
 
 
 def area_row_indent() -> int:
@@ -273,7 +260,7 @@ def test_one_fix_follows_the_last_finding_of_each_run_of_equal_fixes(fixes, fix_
     assert printed.count(f"{output.FIX_LABEL} ") == len(fix_follows) - fix_follows.count(False)
 
 
-def test_an_event_findings_detail_prints_escaped_under_its_row_before_the_fix(at_a_terminal):
+def test_an_event_findings_detail_prints_escaped_under_its_row_before_the_fix():
     detail = ("one\n::error::d", "", "  two\x1b")
     found = Finding("some-rule", "a.env", None, "a fact", "a fix", detail=detail, event=FindingEvent.BROKEN)
     printed = findings_written([found])
@@ -315,7 +302,7 @@ def test_two_findings_with_equal_lines_to_copy_print_them_once():
     assert (sum(isinstance(line, FixLine) for line in block), sum(isinstance(line, CopyLine) for line in block)) == (1, len(ENTRY.lines))
 
 
-def test_at_a_terminal_the_fix_and_its_lines_to_copy_stay_plain_and_the_words_equal_the_plain_ones(at_a_terminal):
+def test_at_a_terminal_the_fix_and_its_lines_to_copy_stay_plain_and_the_words_equal_the_plain_ones():
     findings = [finding("a.env", FindingEvent.SECRET, fix=ENTRY)]
     styled = findings_written(findings, Terminal)
 
@@ -352,9 +339,9 @@ def test_wide_and_combining_characters_print_whole():
 
 
 @pytest.fixture
-def painted_like_an_area_row(at_a_terminal) -> tuple[str, str, str, str]:
+def painted_like_an_area_row() -> tuple[str, str, str, str]:
     """The paint an area row puts around its `!` and its fact, read from `write_rows` on a terminal."""
-    styled = written(Terminal, lambda stream: output.write_rows((Row(Glyph.NEEDS_YOU, "files", Event.FINDING, "FACT"),), file=stream))
+    styled = written(Terminal, lambda channel: output.write_rows((Row(Glyph.NEEDS_YOU, "files", Event.FINDING, "FACT"),), channel))
     glyph = re.search(r"(\x1b\[[\d;]*m)!(\x1b\[[\d;]*m)", styled)
     fact = re.search(r"(\x1b\[[\d;]*m)FACT(\x1b\[[\d;]*m)", styled)
     return glyph.group(1), glyph.group(2), fact.group(1), fact.group(2)
@@ -374,12 +361,9 @@ def test_at_a_terminal_the_glyph_and_the_fact_are_painted_as_an_area_row_paints_
 
 
 @pytest.mark.parametrize(("term", "no_color"), [("xterm", "1"), ("dumb", None)], ids=["NO_COLOR", "dumb"])
-def test_a_terminal_that_asks_for_no_style_prints_no_escape_byte(monkeypatch, term, no_color):
-    monkeypatch.setenv("TERM", term)
-    monkeypatch.delenv("NO_COLOR", raising=False)
-    if no_color:
-        monkeypatch.setenv("NO_COLOR", no_color)
-    assert "\x1b" not in findings_written([finding("a.env", FindingEvent.TRACKED)], Terminal)
+def test_a_terminal_that_asks_for_no_style_prints_no_escape_byte(term, no_color):
+    environment = {"TERM": term} | ({"NO_COLOR": no_color} if no_color else {})
+    assert "\x1b" not in findings_written([finding("a.env", FindingEvent.TRACKED)], Terminal, **environment)
 
 
 def test_no_findings_and_no_notes_print_nothing():
@@ -434,11 +418,11 @@ def test_notes_alone_print_their_rows_without_a_fix():
     assert (len(printed.splitlines()), output.FIX_LABEL in printed) == (1, False)
 
 
-def test_a_note_row_is_painted_dim_as_a_whole_as_an_area_note_row_is(at_a_terminal):
-    area = written(Terminal, lambda stream: output.write_rows((Row(Glyph.NOTE, "debt", Event.CLEAN, "FACT"),), file=stream))
-    dim = re.match(r"(\x1b\[[\d;]*m)", area).group(1)
-    styled = findings_written([], Terminal, notes=[note("b.toml", "FACT")])
-    assert (styled.startswith(dim), styled.rstrip("\n").endswith(output.RESET), OWN_SGR.sub("", styled)) == (True, True, findings_written([], notes=[note("b.toml", "FACT")]))
+def test_a_note_row_is_painted_dim_as_a_whole_as_an_area_note_row_is():
+    area = written(Terminal, lambda channel: output.write_rows((Row(Glyph.NOTE, "debt", Event.CLEAN, "FACT"),), channel))
+    opening, closing = re.fullmatch(r"(\x1b\[[\d;]*m).*(\x1b\[[\d;]*m)\n", area).groups()
+    plain_line = findings_written([], notes=[note("b.toml", "FACT")]).rstrip("\n")
+    assert findings_written([], Terminal, notes=[note("b.toml", "FACT")]) == f"{opening}{plain_line}{closing}\n"
 
 
 def test_a_notes_location_and_fact_are_escaped_before_they_are_padded():
@@ -489,13 +473,13 @@ def test_discarding_stderr_hides_exactly_the_pair(env_and_broken_compose):
     """#86 rule 3, cell 11: no line changes its stream; the exit stays 2."""
     merged = quality_door("hygiene", ".", cwd=env_and_broken_compose, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     done = quality_door("hygiene", ".", cwd=env_and_broken_compose, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    assert (done.returncode, merged.stdout.startswith(done.stdout), merged.stdout[len(done.stdout):].count("\n")) == (2, True, 2)
+    assert (done.returncode, merged.stdout.startswith(done.stdout), merged.stdout[len(done.stdout):]) == (2, True, refusal_pair(env_and_broken_compose))
 
 
 def test_discarding_stdout_leaves_exactly_the_pair(env_and_broken_compose):
     """#86 rule 3: the rows are results and the pair is not."""
     done = quality_door("hygiene", ".", cwd=env_and_broken_compose, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-    assert (done.returncode, [line.split(" ", 1)[0] for line in done.stderr.splitlines()]) == (2, ["error:", "next:"])
+    assert (done.returncode, done.stderr) == (2, refusal_pair(env_and_broken_compose))
 
 
 SONAR_FINDINGS_SCRIPT = """
@@ -542,35 +526,31 @@ def test_a_closed_stdout_object_still_prints_the_pair_on_stderr(tmp_path, capsys
     closed = io.TextIOWrapper(io.BytesIO())
     closed.close()
     with contextlib.redirect_stdout(closed):
-        code = cli.main(["hygiene", str(tmp_path / "missing")])
-    assert (code, "error: " in capsys.readouterr().err) == (2, True)
+        code = cli.main(["hygiene", str(tmp_path)])
+    assert (code, capsys.readouterr().err) == (2, f"error: not inside a git work tree · {tmp_path}\nnext: run quality hygiene inside a repository\n")
 
 
 @pytest.mark.integration
 def test_a_closed_stdout_fd_still_prints_the_pair_and_never_crashes(tmp_path):
     """#86 rule 3: with fd 1 closed the door still exits 2 with its cannot-judge line."""
     done = subprocess.run(
-        ["bash", "-c", '"$PY" -m quality.cli hygiene "$MISSING" >&-'],
-        env={**os.environ, "PY": sys.executable, "MISSING": str(tmp_path / "missing")},
+        ["bash", "-c", '"$PY" -m quality.cli hygiene "$FOLDER" >&-'],
+        env={**os.environ, "PY": sys.executable, "FOLDER": str(tmp_path)},
         text=True, check=False, stderr=subprocess.PIPE,
     )
-    assert (done.returncode, done.stderr.startswith("error: ")) == (2, True), done.stderr
+    assert (done.returncode, done.stderr) == (2, f"error: not inside a git work tree · {tmp_path}\nnext: run quality hygiene inside a repository\n")
 
 
 def test_an_example_line_prints_whole_however_long_and_escaped():
     long_line = 'reason = "' + "x" * 400 + '"'
-    stream = io.StringIO()
-    output.write_pair("e", (Example("write it", (long_line, "k = \x1b[35m\u202e")),), file=stream)
-    assert stream.getvalue() == f"error: e\nnext: write it:\n    {long_line}\n    k = \\x1b[35m\\u202e\n"
+    pair = written(io.StringIO, lambda channel: output.write_pair("e", (Example("write it", (long_line, "k = \x1b[35m\u202e")),), channel))
+    assert pair == f"error: e\nnext: write it:\n    {long_line}\n    k = \\x1b[35m\\u202e\n"
 
 
 @pytest.mark.parametrize(("term", "no_color"), [("xterm", None), ("xterm", "1"), ("dumb", None)], ids=["terminal", "NO_COLOR", "dumb"])
-def test_an_example_is_painted_by_its_label_only_at_a_terminal(monkeypatch, term, no_color):
-    monkeypatch.setenv("TERM", term)
-    monkeypatch.delenv("NO_COLOR", raising=False)
-    if no_color:
-        monkeypatch.setenv("NO_COLOR", no_color)
-    styled = written(Terminal, lambda stream: output.write_pair("e", (COPY,), file=stream))
+def test_an_example_is_painted_by_its_label_only_at_a_terminal(term, no_color):
+    environment = {"TERM": term} | ({"NO_COLOR": no_color} if no_color else {})
+    styled = written(Terminal, lambda channel: output.write_pair("e", (COPY,), channel), **environment)
     assert OWN_SGR.sub("", styled) == "error: e\nnext: write it in a.toml like this:\n    [[table]]\n    key = \"value\"\n    other = 1\n"
     assert ("\x1b[" in styled) is (term == "xterm" and no_color is None)
     assert not any("\x1b[" in line for line in styled.splitlines() if line.startswith("    "))
