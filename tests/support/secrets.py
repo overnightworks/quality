@@ -40,3 +40,9 @@ def assert_key_found(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
     rows = area_finding_rows(printed, "secrets")
     assert [(location, row.event) for location, row in rows] == [("config.txt:1", FindingEvent.SECRET)]
     assert FAKE_KEY not in printed
+
+
+def multi_line_key() -> str:
+    """A PEM private key over eight lines, assembled so quality's own scan stays green."""
+    body = ("MIIEowIBAAKCAQEA7bq3" + "x" * 44 + "\n") * 6
+    return "-----BEGIN " + "RSA PRIVATE KEY-----\n" + body + "-----END " + "RSA PRIVATE KEY-----\n"

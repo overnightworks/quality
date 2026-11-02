@@ -9,7 +9,7 @@ from pathlib import Path
 
 from quality import DISTRIBUTION, installation, process
 from quality.config import CONFIG_PATH, SECRETS_ALLOW, Allowance, entry_name, secret_allowance_entry
-from quality.output import SEPARATOR
+from quality.output import SEPARATOR, counted
 from quality.report import (
     CannotJudge,
     Choice,
@@ -50,6 +50,10 @@ MISE_CEILING_VARIABLE = "MISE_CEILING_PATHS"
 ACTIONLINT_CONFIG = Path(__file__).with_name("actionlint.yaml")
 ZIZMOR_CONFIG = Path(__file__).with_name("zizmor.yml")
 GITLEAKS_CONFIG = Path(__file__).with_name("gitleaks.toml")
+VET_TIMEOUT_SECONDS = 30  # a stalled gitleaks withholds the text and holds no refusal up
+# gitleaks answers clean for a text whose first bytes read as a binary type, so a text never opens with a scanner's bytes.
+VET_OPENING = "scanner stderr\n"
+NOT_CLEARED = "not cleared by gitleaks"
 
 
 REINSTALL = OneOf(
@@ -161,26 +165,68 @@ def scan_secrets(root: Path, allowances: dict[Allowance, str]) -> RuleResult:
         return RuleResult(scan.findings, int(commits), False, scan.notes)
 
 
+def _judging_arguments(scratch: Path, report: Path) -> list[str]:
+    """How gitleaks judges for quality in every run: the gate's own config, and no ignore file or inline
+    "gitleaks:allow" from what it reads, because only an allowance in quality/config.toml allows a finding."""
+    return [
+        "--config", str(GITLEAKS_CONFIG), "--gitleaks-ignore-path", str(scratch), "--ignore-gitleaks-allow",
+        "--exit-code", str(GITLEAKS_LEAKS_FOUND), "--report-format", "json", "--report-path", str(report),
+    ]
+
+
 def run_gitleaks(
     binary: Path, scratch: Path, git_environment: dict[str, str], source: Path, scope: list[str],
     allowances: dict[Allowance, str],
 ) -> SecretScan:
-    # The gate's own config, and no ignore file or inline "gitleaks:allow" from the scanned repository:
-    # only an allowance in quality/config.toml allows a finding.
     # No --redact: the report must carry Secret to be hashed. It lives only in the 0700 scratch directory.
     report = scratch / "report.json"
-    command = [
-        str(binary), "git", "--no-banner", "--no-color", *scope,
-        "--config", str(GITLEAKS_CONFIG), "--gitleaks-ignore-path", str(scratch), "--ignore-gitleaks-allow",
-        "--exit-code", str(GITLEAKS_LEAKS_FOUND),
-        "--report-format", "json", "--report-path", str(report), "--", str(source),
-    ]
+    command = [str(binary), "git", "--no-banner", "--no-color", *scope, *_judging_arguments(scratch, report), "--", str(source)]
     scan = process.run(command, env=git_environment, timeout=SECRET_SCAN_TIMEOUT_SECONDS)
     # gitleaks' stderr may echo what it scanned, so no refusal quotes it.
     if not report.is_file():
         raise ScannerError(f"{GITLEAKS} exited {scan.returncode} without writing its report")
     leaks = scanner_findings(GITLEAKS_SCANNER, _read_report(report), scan.returncode)
     return _split_by_allowance(leaks, allowances)
+
+
+# A terminal code can stand against a value without the word boundary gitleaks' rules need, and `printable` leaves the rest of it, so no scan can clear such a text.
+TERMINAL_CODE_OPENERS = frozenset(chr(code) for code in (0x1B, *range(0x80, 0xA0)))
+
+
+def _stderr_lines(stderr: str) -> list[str]:
+    """A scanner's stderr as it wrote its lines: split on the newline alone, so `printable` still sees every other separator."""
+    return stderr.removesuffix("\n").split("\n") if stderr else []
+
+
+def _cleared_by_gitleaks(text: str) -> bool:
+    """Whether quality's secret scan finds nothing in `text`, under the rules it judges a repository by; anything but
+    that clean answer is no."""
+    if not TERMINAL_CODE_OPENERS.isdisjoint(text):
+        return False
+    try:
+        binary = located(GITLEAKS)
+        with process.scratch_directory() as scratch:
+            report = scratch / "report.json"
+            # cwd: gitleaks reads .gitleaksignore from the folder it stands in, whatever --gitleaks-ignore-path names.
+            vet = process.run(
+                [str(binary), "stdin", "--no-banner", "--no-color", "--log-level", "error", "--redact", *_judging_arguments(scratch, report)],
+                cwd=scratch, timeout=VET_TIMEOUT_SECONDS, input_text=f"{VET_OPENING}{text}",
+            )
+            return not scanner_findings(GITLEAKS_SCANNER, _read_report(report), vet.returncode)
+    except (CannotJudge, process.ProcessError, OSError):
+        return False
+
+
+def vetted_quote(stderr: str, quote: str) -> str:
+    """`quote`, the part of `stderr` a fact would print, once gitleaks has cleared all of `stderr`, else how many lines
+    are withheld. All of it, so no line leaves unseen and a key across lines stays whole; no quote starts no process."""
+    if not quote or _cleared_by_gitleaks(stderr):
+        return quote
+    return SEPARATOR.join(("", f"{counted(len(_stderr_lines(stderr)), 'stderr line')} withheld", NOT_CLEARED))
+
+
+def vetted_tail(stderr: str) -> str:
+    return vetted_quote(stderr, process.stderr_tail(stderr))
 
 
 def _read_report(report: Path) -> str:
@@ -221,7 +267,9 @@ def require_git_floor() -> None:
 def verify_version(binary: Path, scanner_name: str, pinned: str) -> None:
     asked = process.run([str(binary), *VERSION_ARGUMENTS[scanner_name]], timeout=process.VERSION_TIMEOUT_SECONDS)
     if asked.returncode != 0:
-        raise ScannerError(f"{scanner_name} version exited {asked.returncode}{process.stderr_tail(asked.stderr)}")
+        # The vet is gitleaks itself, and no refusal quotes gitleaks' stderr.
+        said = "" if scanner_name == GITLEAKS else vetted_tail(asked.stderr)
+        raise ScannerError(f"{scanner_name} version exited {asked.returncode}{said}")
     reported = (asked.stdout.strip().splitlines() or [""])[0].split(" ")[-1]  # "zizmor 1.2.3", or just "1.2.3"
     if not reported:
         raise ScannerError(f"{scanner_name} reports no version, the release pins {pinned}")
@@ -280,7 +328,7 @@ def scan_workflows(root: Path, rule: Rule, workflows: list[str], locate_zizmor: 
 
 def scanner_findings(scanner: _Scanner, report_text: str, exit_code: int, stderr: str = "") -> list[Finding]:
     if exit_code != CLEAN_EXIT and exit_code not in scanner.finding_exits:
-        raise ScannerError(f"{scanner.name} exited {exit_code}, neither 'clean' nor 'findings'{process.stderr_tail(stderr)}")
+        raise ScannerError(f"{scanner.name} exited {exit_code}, neither 'clean' nor 'findings'{vetted_tail(stderr)}")
     try:
         entries = json.loads(report_text)
     except ValueError as error:
