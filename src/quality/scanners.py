@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import re
 import shutil
 import tomllib
 from collections.abc import Callable
@@ -189,6 +190,10 @@ def run_gitleaks(
     return _split_by_allowance(leaks, allowances)
 
 
+# A colour code sits against a value without a word boundary, which gitleaks' rules need; `printable` leaves the rest of it.
+COLOUR_SEQUENCE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
+
 def _stderr_lines(stderr: str) -> list[str]:
     """A scanner's stderr as it wrote its lines: split on the newline alone, so `printable` still sees every other separator."""
     return stderr.removesuffix("\n").split("\n") if stderr else []
@@ -204,7 +209,7 @@ def _cleared_by_gitleaks(text: str) -> bool:
             # cwd: gitleaks reads .gitleaksignore from the folder it stands in, whatever --gitleaks-ignore-path names.
             vet = process.run(
                 [str(binary), "stdin", "--no-banner", "--no-color", "--log-level", "error", "--redact", *_judging_arguments(scratch, report)],
-                cwd=scratch, timeout=VET_TIMEOUT_SECONDS, input_text=f"{VET_OPENING}{text}",
+                cwd=scratch, timeout=VET_TIMEOUT_SECONDS, input_text=f"{VET_OPENING}{COLOUR_SEQUENCE.sub("", text)}",
             )
             return not scanner_findings(GITLEAKS_SCANNER, _read_report(report), vet.returncode)
     except (CannotJudge, process.ProcessError, OSError):

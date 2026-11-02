@@ -14,8 +14,6 @@ from tests.support.python_lint import fake_ruff
 from tests.support.scanners import OUTPUTS, fake_gitleaks, fake_scanner, fake_zizmor, flagging, lacking, vetting
 from tests.support.secrets import FAKE_KEY, multi_line_key
 
-WORKFLOW = "on: push\npermissions: {}\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n"
-
 
 def shouting(lines: list[str]) -> str:
     """Shell that writes `lines` to stderr."""
@@ -30,7 +28,7 @@ def refused(repo: Path, capsys, **keywords) -> tuple[int, str, str]:
 
 
 def judged_repository(build_repo) -> Path:
-    return build_repo({".github/workflows/w.yml": WORKFLOW, "uv.lock": uv_lock(), "src/a.py": "x = 1\n"})
+    return build_repo({".github/workflows/w.yml": "on: push\npermissions: {}\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n", "uv.lock": uv_lock(), "src/a.py": "x = 1\n"})
 
 
 @pytest.mark.parametrize(
@@ -109,29 +107,35 @@ def test_a_cleared_stderr_stands_as_a_tail(build_repo, served_scanners, elsewher
 
 
 @pytest.mark.parametrize(
-    ("on_vet", "timeout"),
+    "on_vet",
     [
-        ("exit 1", 5),
-        ("exit 3", 5),
-        ("exit 0", 5),
-        ('echo x > "$report"; exit 0', 5),
-        (f'cp {OUTPUTS / "gitleaks-finding.json"} "$report"; exit 0', 5),
-        ('echo "[]" > "$report"; exit 7', 5),
-        ("exec sleep 30", 0.2),
-        (None, 5),
+        "exit 1",
+        "exit 3",
+        "exit 0",
+        'echo x > "$report"; exit 0',
+        f'cp {OUTPUTS / "gitleaks-finding.json"} "$report"; exit 0',
+        'echo "[]" > "$report"; exit 7',
+        None,
     ],
     ids=[
         "its own error", "another exit", "no report", "a report that is no JSON", "a clean exit beside a finding",
-        "a leak exit beside nothing", "a stall", "gitleaks missing",
+        "a leak exit beside nothing", "gitleaks missing",
     ],
 )
-def test_anything_but_a_clean_answer_withholds_the_text(
-    build_repo, served_scanners, elsewhere, use_mise, monkeypatch, capsys, on_vet, timeout
-):
+def test_anything_but_a_clean_answer_withholds_the_text(build_repo, served_scanners, elsewhere, use_mise, capsys, on_vet):
     fake_gitleaks(served_scanners, on_scan=vetting(on_vet or "exit 0"))
-    monkeypatch.setattr(scanners, "VET_TIMEOUT_SECONDS", timeout)
     if on_vet is None:
         use_mise(lacking(served_scanners, scanners.GITLEAKS))
+    ruff = fake_ruff(elsewhere, f"{shouting(['boom'])}; exit 2")
+    code, out, err = refused(build_repo({"src/a.py": "x = 1\n"}), capsys, locate_ruff=lambda: str(ruff))
+    assert code == 2
+    assert area_fact(out, "code") == "ruff exited 2 · 1 stderr line withheld · not cleared by gitleaks"
+    assert "boom" not in out + err
+
+
+def test_a_stalled_vet_withholds_the_text(build_repo, served_scanners, elsewhere, monkeypatch, capsys):
+    fake_gitleaks(served_scanners, on_scan=vetting('echo "[]" > "$report"; exec sleep 30'))
+    monkeypatch.setattr(scanners, "VET_TIMEOUT_SECONDS", 0.2)
     ruff = fake_ruff(elsewhere, f"{shouting(['boom'])}; exit 2")
     code, out, err = refused(build_repo({"src/a.py": "x = 1\n"}), capsys, locate_ruff=lambda: str(ruff))
     assert code == 2
@@ -195,12 +199,13 @@ def test_the_vet_judges_as_the_secret_scan_judges(build_repo, served_scanners, e
         (f"error:\t{FAKE_KEY}\nsecond\n", True, False),
         (multi_line_key() + "three\nmore\nlines\n", True, False),
         (f"{FAKE_KEY}\n" + "tidy\n" * 6, True, False),
+        (f"error: \x1b[1m{FAKE_KEY}\x1b[0m\nsecond\n", True, False),
         (f"aws_access_key_id = {FAKE_KEY}  # gitleaks:allow\nsecond\n", True, False),
         (f"%PDF-1.4\naws_access_key_id = {FAKE_KEY}\n", True, False),
         (f"aws_access_key_id = {FAKE_KEY}\nsecond\n", True, True),
     ],
     ids=[
-        "clean text", "a key", "a key after a tab", "a multi-line key", "a key above the tail", "a key beside gitleaks:allow",
+        "clean text", "a key", "a key after a tab", "a multi-line key", "a key above the tail", "a key wrapped in colour", "a key beside gitleaks:allow",
         "a binary type's first bytes", "a .gitleaksignore in the repository",
     ],
 )

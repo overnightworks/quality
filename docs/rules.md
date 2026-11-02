@@ -500,7 +500,7 @@ A missing `quality/config.toml` means no allowances: the scan still runs and its
 exists and cannot be read or parsed, or links out of the repository, is exit `2`; a link that leads nowhere or loops
 exists, so it is exit `2` too.
 
-Secret handling: quality runs gitleaks without `--redact` so the report carries each `Secret` to be hashed. gitleaks
+Secret handling: the secret scan runs gitleaks without `--redact` so the report carries each `Secret` to be hashed. gitleaks
 writes that report to a `tempfile` scratch directory (mode 0700); quality reads it, keeps only the hash, and deletes
 the directory on every exit path (success, gitleaks failure, parse error). The value reaches no stdout,
 stderr, log, exception text or retained file; gitleaks runs without `-v`. While the scan runs, the value exists in
