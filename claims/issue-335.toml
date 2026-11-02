@@ -1,7 +1,0 @@
-claim_id = "4ca83e96a7be4c2caaa44833edb544ad"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "b32890b6426415061ba4fbe78be29422d50ac2e8"
-branch = "claude/issue-335-ubuntu-26-labels"
-scope = ["docs/rules.md", "src/quality/actionlint.yaml", "tests/test_scanners.py"]
-opened_commit = "2ced6da5fdd504df6b6b46c9cf20619d64081d34"
