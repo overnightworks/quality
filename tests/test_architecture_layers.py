@@ -62,6 +62,6 @@ def test_a_layers_contract_is_compared_without_the_modules_the_base_does_not_nam
         "a known optional module made required beside a new one",
     ],
 )
-def test_a_new_module_beside_one_known_module_in_a_layer_loosens_nothing(base, head, expected):
+def test_a_new_sibling_loosens_nothing_unless_the_known_part_of_its_layer_changes(base, head, expected):
     """A layer left with one known module has no sibling, so its independence says nothing."""
     assert loosened({"pyproject.toml": contracts_toml(one(base))}, {"pyproject.toml": contracts_toml(one(head))}) == expected
