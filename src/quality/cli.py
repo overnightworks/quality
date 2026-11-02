@@ -32,13 +32,17 @@ from quality.checkout import OutsideWorkTree
 from quality.config import ConfigError, read_allow_lists, read_gate_settings
 from quality.merge import Ask, GhRunner, RemoteFor, github_remote, run_emergency_merge, run_gh
 from quality.output import (
+    SCANNER_ARGUMENTS_OUTPUT,
     SEPARATOR,
+    STEP_OUTPUT_VARIABLE,
+    STEP_SUMMARY_VARIABLE,
     Channel,
     Channels,
     Glyph,
     Row,
     SubLine,
     Verdict,
+    append_step_output,
     append_step_summary,
     counted,
     emit,
@@ -59,6 +63,7 @@ from quality.sonar import (
     analyse,
     check_properties,
     fetch_json,
+    scanner_exclusions,
     uncounted_rules,
 )
 from quality.verdict import (
@@ -390,20 +395,33 @@ def run_scan_staged(path: Path, out: Channel) -> int:
     return EXIT_FINDINGS if result.findings else EXIT_CLEAN
 
 
+def uncounted_rules_at(root: Path) -> frozenset[str]:
+    """The one place `.github/dependabot.yml` decides which rules the sonar doors do not count."""
+    return uncounted_rules(repository.is_on_disk(root, DEPENDABOT_CONFIG))
+
+
 def run_sonar_properties() -> int:
     try:
         check_properties(Path("."), os.environ)
-    except CannotJudge as error:
+        uncounted = uncounted_rules_at(Path("."))
+    except (CannotJudge, repository.RepositoryFileError) as error:
         emit(f"sonar: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
+    try:
+        append_step_output(SCANNER_ARGUMENTS_OUTPUT, scanner_exclusions(uncounted))
+    except OSError as error:
+        emit(f"sonar: cannot judge - {STEP_OUTPUT_VARIABLE} is not writable: {error}", file=sys.stderr)
+        return EXIT_CANNOT_JUDGE
     emit("sonar: properties clean")
+    if uncounted:
+        emit(f"sonar: the scan excludes {', '.join(sorted(uncounted))} ({DEPENDABOT_CONFIG} exists)")
     return EXIT_CLEAN
 
 
 def run_sonar_findings(transport: Transport, sleep: Sleep) -> int:
     try:
         legacy_mode = read_gate_settings(Path(".")).legacy
-        uncounted = uncounted_rules(repository.is_on_disk(Path("."), DEPENDABOT_CONFIG))
+        uncounted = uncounted_rules_at(Path("."))
         result = analyse(os.environ, legacy_mode, uncounted, transport, sleep)
     except (CannotJudge, ConfigError, repository.RepositoryFileError) as error:
         emit(f"sonar: cannot judge - {error}", file=sys.stderr)
@@ -416,6 +434,16 @@ def run_sonar_findings(transport: Transport, sleep: Sleep) -> int:
     emit(*disclosure)
     emit(result.summary(), file=sys.stderr if result.fails_the_run else sys.stdout)
     return EXIT_FINDINGS if result.fails_the_run else EXIT_CLEAN
+
+
+def summarised(door: str, report: tuple[str, ...]) -> bool:
+    """Whether the run summary took the report; an unwritable summary is a fact on stderr, not a traceback."""
+    try:
+        append_step_summary(report)
+    except OSError as error:
+        emit(f"{door}: cannot judge - {STEP_SUMMARY_VARIABLE} is not writable: {error}", file=sys.stderr)
+        return False
+    return True
 
 
 def run_verdict(path: Path, fetcher_for: Callable[[str], PageFetcher], sleep: Sleep) -> int:
@@ -441,8 +469,7 @@ def run_verdict(path: Path, fetcher_for: Callable[[str], PageFetcher], sleep: Sl
         report = settled.lines()
         code = EXIT_CLEAN if settled.verdict.green else EXIT_FINDINGS
     emit(*report, file=sys.stderr if code == EXIT_CANNOT_JUDGE else sys.stdout)
-    append_step_summary(report)
-    return code
+    return code if summarised("verdict", report) else EXIT_CANNOT_JUDGE
 
 
 def run_scoreboard(path: Path, release_tags: fleet.TagReader) -> int:
@@ -458,8 +485,9 @@ def run_scoreboard(path: Path, release_tags: fleet.TagReader) -> int:
         tags = error
     report = fleet.render(rows, datetime.now(UTC).date(), tags)
     emit(*report)
-    append_step_summary(report)
-    return EXIT_CANNOT_JUDGE if fleet.cannot_judge(rows, tags) else EXIT_CLEAN
+    if not summarised("scoreboard", report) or fleet.cannot_judge(rows, tags):
+        return EXIT_CANNOT_JUDGE
+    return EXIT_CLEAN
 
 
 def run(

@@ -75,7 +75,7 @@ mandatory_jobs = ["checks"]
 - `[gate] legacy` is described under [New and legacy findings](sonar.md#new-and-legacy-findings).
 
 The verdict prints `verdict: green` (exit `0`); each problem, then `verdict: red` (exit `1`); or
-`verdict: cannot judge - ...` (exit `2`). When it read the jobs more than once, a first line says so:
+`verdict: cannot judge - ...` (exit `2`); a run summary that cannot be written is the same cannot-judge line (`GITHUB_STEP_SUMMARY is not writable`), printed after the verdict. When it read the jobs more than once, a first line says so:
 `verdict: read the run's jobs 2 times - GitHub first listed "checks" (attempt 1) as in_progress`. A GitHub server error
 (5xx) is read again within the same budget; if it lasts, the verdict cannot judge and names it as GitHub's fault:
 `GitHub answered HTTP 502 Bad Gateway for … after 13 reads; this is GitHub's fault, not the caller's: re-run the verdict`.

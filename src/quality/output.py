@@ -1,5 +1,5 @@
-"""The one owner of what quality prints and of the step summary; argparse's help, usage errors and `--version`, and
-`input()`'s prompt on stdout, are the writers that remain outside it."""
+"""The one owner of what quality prints, of the step summary and of the step output; argparse's help, usage errors
+and `--version`, and `input()`'s prompt on stdout, are the writers that remain outside it."""
 
 import os
 import secrets
@@ -25,6 +25,11 @@ from quality.report import (
     render,
 )
 
+# The name gate.yml reads as `steps.<id>.outputs.scanner-arguments` from the properties step.
+SCANNER_ARGUMENTS_OUTPUT = "scanner-arguments"
+STEP_OUTPUT_VARIABLE = "GITHUB_OUTPUT"
+STEP_SUMMARY_VARIABLE = "GITHUB_STEP_SUMMARY"
+
 
 def emit(*lines: str, file: TextIO | None = None) -> None:
     """The one print boundary: every line the door prints leaves through `printable`, and the door never splits text,
@@ -40,10 +45,18 @@ def emit_finding(finding: Finding) -> None:
 
 def append_step_summary(report: tuple[str, ...]) -> None:
     """In a GitHub Actions step, the run summary gets the same escaped lines as the log."""
-    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    summary = os.environ.get(STEP_SUMMARY_VARIABLE)
     if summary:
         with open(summary, "a", encoding="utf-8") as handle:
             handle.write("".join(f"{printable(line)}\n" for line in report))
+
+
+def append_step_output(name: str, value: str) -> None:
+    """In a GitHub Actions step, later steps read the value as `steps.<id>.outputs.<name>`."""
+    step_output = os.environ.get(STEP_OUTPUT_VARIABLE)
+    if step_output:
+        with open(step_output, "a", encoding="utf-8") as handle:
+            handle.write(f"{name}={value}\n")
 
 
 def stop_workflow_commands() -> None:

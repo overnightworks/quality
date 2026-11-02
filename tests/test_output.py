@@ -35,7 +35,9 @@ from tests.support.check import (
     note_rows,
     refusal_pair,
 )
+from tests.support.fleet import RELEASES, write_fleet
 from tests.support.terminal import Terminal
+from tests.support.verdict import CHECKS_GREEN
 
 OWN_SGR = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -554,3 +556,30 @@ def test_an_example_is_painted_by_its_label_only_at_a_terminal(term, no_color):
     assert OWN_SGR.sub("", styled) == "error: e\nnext: write it in a.toml like this:\n    [[table]]\n    key = \"value\"\n    other = 1\n"
     assert ("\x1b[" in styled) is (term == "xterm" and no_color is None)
     assert not any("\x1b[" in line for line in styled.splitlines() if line.startswith("    "))
+
+
+def test_a_verdict_whose_step_summary_cannot_be_written_is_exit_2_with_the_fact_and_no_traceback(monkeypatch, capsys, run_env, tmp_path):
+    repo, _ = run_env
+    unwritable = tmp_path / "a-directory"
+    unwritable.mkdir()
+    monkeypatch.setenv(output.STEP_SUMMARY_VARIABLE, str(unwritable))
+    door = "verdict"
+    code = cli.main([door, str(repo)], fetcher_for=lambda token: lambda url: (CHECKS_GREEN, None))
+    assert code == 2
+    stderr = capsys.readouterr().err
+    assert stderr.startswith(f"{door}: ")
+    assert output.STEP_SUMMARY_VARIABLE in stderr
+
+
+@pytest.mark.integration
+def test_a_scoreboard_whose_step_summary_cannot_be_written_is_exit_2_with_the_fact_and_no_traceback(monkeypatch, capsys, public, tmp_path):
+    fleet = write_fleet(tmp_path / "fleet", [public("healthy", {"a.md": "text\n"})])
+    unwritable = tmp_path / "a-directory"
+    unwritable.mkdir()
+    monkeypatch.setenv(output.STEP_SUMMARY_VARIABLE, str(unwritable))
+    door = "scoreboard"
+    code = cli.main([door, str(fleet)], release_tags=lambda: RELEASES)
+    assert code == 2
+    stderr = capsys.readouterr().err
+    assert stderr.startswith(f"{door}: ")
+    assert output.STEP_SUMMARY_VARIABLE in stderr
