@@ -173,7 +173,10 @@ def test_a_python_file_with_a_non_utf8_name_the_size_rule_cannot_parse_is_one_es
 def test_a_run_without_flags_judges_every_rule(build_repo, capsys):
     """#228 rule 4: no scan is ever skipped, so a plain run judges every rule in run order."""
     verdicts = hygiene_run(build_repo({}), installed_ruff, never_located).verdicts
-    assert ([verdict.rule for verdict in verdicts], [verdict.refusal for verdict in verdicts]) == (list(Rule), [None] * len(Rule))
+    assert ([verdict.rule for verdict in verdicts], [verdict.refusal for verdict in verdicts]) == (
+        sorted(Rule, key=lambda rule: list(Area).index(rule.area)),
+        [None] * len(Rule),
+    )
 
 
 def test_a_finding_under_a_rule_its_check_does_not_judge_fails_loud(build_repo, monkeypatch):
@@ -342,6 +345,13 @@ def test_a_run_holds_one_area_verdict_per_area_in_area_order(build_repo):
     result = hygiene_run(build_repo({}), installed_ruff, never_located)
     assert [verdict.area for verdict in result.areas] == list(Area)
     assert [rule for area in result.areas for rule in (v.rule for v in area.verdicts)] == sorted(Rule, key=lambda rule: list(Area).index(rule.area))
+
+
+def test_the_run_hands_each_area_to_its_reporter_once_in_row_order(build_repo):
+    reported = []
+    result = check.run_hygiene(build_repo({}), installed_ruff, never_located, lambda verdict, tracked_paths: reported.append((verdict, tracked_paths)))
+    assert [verdict.area for verdict, _ in reported] == list(Area)
+    assert reported == [(area, result.tracked_paths) for area in result.areas]
 
 
 def test_every_rule_a_malformed_config_refuses_carries_its_fact_and_its_example_as_fields(build_repo):
