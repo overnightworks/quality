@@ -84,7 +84,7 @@ def test_quoted_tagged_port_is_read_as_the_string_it_wraps(build_repo, capsys):
     repo = build_repo(compose('- !override "22:22"'))
     code, _ = run(capsys, repo)
     (finding,) = rule_findings(repo, Rule.COMPOSE_PORT)
-    assert (code, finding.event, "22:22" in finding.reason) == (1, FindingEvent.PUBLISHED_PORT, True)
+    assert (code, finding.event, "22:22" in finding.fact) == (1, FindingEvent.PUBLISHED_PORT, True)
 
 
 @pytest.mark.parametrize(
@@ -302,8 +302,8 @@ def test_each_kind_of_finding_has_its_event_a_short_fact_and_a_fix_the_door_prin
     (finding,) = rule_findings(repo, Rule.COMPOSE_PORT)
     (row,) = finding_rows(output, finding.location)
     assert finding.event is event
-    assert "web" in finding.reason
-    assert not finding.reason.endswith(".")
+    assert "web" in finding.fact
+    assert not finding.fact.endswith(".")
     assert not finding.fix.endswith(".")
     assert_row_prints_finding(row, finding)
 

@@ -36,7 +36,7 @@ def test_a_host_networked_service_is_red(build_repo, capsys):
     code, findings = judged(capsys, build_repo, {"compose.yaml": service_file("host")})
     assert code == 1
     assert [(finding.path, finding.event) for finding in findings] == [("compose.yaml", FindingEvent.HOST_NETWORK)]
-    assert "proxy" in findings[0].reason
+    assert "proxy" in findings[0].fact
 
 
 @pytest.mark.parametrize("network_mode", ["none", "service:db", "bridge"])
@@ -69,7 +69,7 @@ def test_a_declaration_covers_its_file_and_service_only(build_repo, capsys):
     code, findings = judged(capsys, build_repo, files, declaring())
     assert code == 1
     assert [finding.path for finding in findings] == ["compose.yaml", "deploy/compose.prod.yaml"]
-    assert "other" in findings[0].reason
+    assert "other" in findings[0].fact
 
 
 def test_a_declared_service_still_has_its_ports_judged(build_repo, capsys):
@@ -83,7 +83,7 @@ def test_edge_stack_is_clean_once_its_traefik_is_declared(build_repo, capsys):
     """#188 sentence 3: edge's real file has one host-networked service; the others use `none`."""
     files = {"compose.yaml": EDGE_STACK}
     code, findings = judged(capsys, build_repo, files)
-    assert (code, [finding.event for finding in findings], "traefik" in findings[0].reason) == (1, [FindingEvent.HOST_NETWORK], True)
+    assert (code, [finding.event for finding in findings], "traefik" in findings[0].fact) == (1, [FindingEvent.HOST_NETWORK], True)
     assert judged(capsys, build_repo, files, declaring(service="traefik")) == (0, [])
 
 
@@ -162,4 +162,4 @@ def test_a_service_named_like_a_yaml_one_one_boolean_is_matched_by_its_name(buil
     assert judged(capsys, build_repo, files, declaring(service=name)) == (0, [])
     code, findings = judged(capsys, build_repo, files, declaring(service=name) + declaring(service="True"))
     assert code == 1
-    assert [finding for finding in findings if finding.event is FindingEvent.UNUSED and "True" in finding.reason]
+    assert [finding for finding in findings if finding.event is FindingEvent.UNUSED and "True" in finding.fact]

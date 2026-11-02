@@ -61,7 +61,7 @@ def test_a_broken_contract_named_like_a_command_keeps_its_chain_under_its_row(bu
     _, block, repo = broken_block(capsys, {**SHOP_DB_IMPORTS_WEB, "pyproject.toml": toml({**FORBIDDEN, "name": name})}, build_repo)
     (finding,) = rule_findings(repo, Rule.IMPORT_CONTRACT)
     row = only_finding(block).row
-    assert (row.fact, row.detail) == (printable(finding.reason), tuple(printable(line) for line in finding.detail))
+    assert (row.fact, row.detail) == (printable(finding.fact), tuple(printable(line) for line in finding.detail))
     assert name in row.fact
     assert any("shop.db -> shop.web (l.1)" in detail for detail in row.detail)
 
@@ -125,7 +125,7 @@ def test_two_broken_contracts_stand_in_config_order_with_their_lines_and_one_fix
     findings = rule_findings(repo, Rule.IMPORT_CONTRACT)
     assert_block_prints(block, findings, [])
     assert all(name in line.row.fact for line, name in zip([line for line in block if isinstance(line, FindingLine)], ("first", "second"), strict=True))
-    assert all(name in finding.reason for finding, name in zip(findings, ("first", "second"), strict=True))
+    assert all(name in finding.fact for finding, name in zip(findings, ("first", "second"), strict=True))
     assert all(line.row.detail for line in block if isinstance(line, FindingLine))
     fix_lines = [line for line in block if isinstance(line, FixLine)]
     assert len(fix_lines) == 1

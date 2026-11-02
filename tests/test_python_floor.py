@@ -53,7 +53,7 @@ def assert_findings_print_as_rows(repo: Path, printed: str) -> None:
     for finding in rule_findings(repo, Rule.PYTHON_FLOOR):
         (row,) = rows_of(printed, finding)
         assert_row_prints_finding(row, finding)
-        words = (finding.event.value, finding.reason, finding.fix)
+        words = (finding.event.value, finding.fact, finding.fix)
         assert [word.endswith(".") or any(rule.value in word for rule in FILES_RULES) for word in words] == [False, False, False]
 
 
@@ -82,7 +82,7 @@ def test_a_floor_below_python_3_14_names_the_value_and_the_floor(build_repo, cap
     code, output = run(capsys, repo)
     findings = rule_findings(repo, Rule.PYTHON_FLOOR)
     assert (code, [finding.path for finding in findings]) == (1, ["pyproject.toml"]), output
-    fact = findings[0].reason
+    fact = findings[0].fact
     assert [findings[0].event, requires_python in fact, floor in fact.replace(requires_python, "")] == [FindingEvent.BELOW_FLOOR, True, True], output
     assert_findings_print_as_rows(repo, output)
 
@@ -91,7 +91,7 @@ def test_a_no_floor_finding_names_the_value_it_found(build_repo):
     """F3, sentence 3: the fact of a project that sets no lower bound names the value it found."""
     repo = build_repo({"pyproject.toml": project("<3.15")})
     (finding,) = rule_findings(repo, Rule.PYTHON_FLOOR)
-    assert (finding.event, "<3.15" in finding.reason) == (FindingEvent.NO_FLOOR, True)
+    assert (finding.event, "<3.15" in finding.fact) == (FindingEvent.NO_FLOOR, True)
 
 
 @pytest.mark.parametrize(
@@ -141,7 +141,7 @@ def test_every_file_below_the_floor_is_a_finding_sorted_by_path(build_repo, caps
     assert (code, floor_paths(repo)) == (1, ["pyproject.toml", "src/a/pyproject.toml", "src/b/pyproject.toml"]), output
     findings = rule_findings(repo, Rule.PYTHON_FLOOR)
     rows = printed_finding_rows(output, [finding.location for finding in findings])
-    assert [(location, row.event, row.fact, row.fix_follows) for location, row in rows] == [(finding.location, finding.event, printable(finding.reason), finding.path == "src/b/pyproject.toml") for finding in findings], output
+    assert [(location, row.event, row.fact, row.fix_follows) for location, row in rows] == [(finding.location, finding.event, printable(finding.fact), finding.path == "src/b/pyproject.toml") for finding in findings], output
     assert output.count(rows[0][1].fix) == 1, output
 
 

@@ -186,7 +186,7 @@ def _family(lint: Lint, family: str) -> list[RuffFinding]:
 
 
 def _sorted(findings: list[Finding]) -> list[Finding]:
-    return sorted(findings, key=lambda finding: (finding.path, finding.line or 0, finding.reason))
+    return sorted(findings, key=lambda finding: (finding.path, finding.line or 0, finding.fact))
 
 
 def _comment_tokens(name: str, text: str) -> list[tokenize.TokenInfo]:

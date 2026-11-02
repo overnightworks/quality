@@ -166,7 +166,7 @@ def test_two_failures_on_one_file_give_one_finding_joining_the_single_failures(b
     (both / ".github" / "workflows" / "lint.yml").write_text("name: lint\n")
     in_index(both, "add", "--", ".github/workflows/lint.yml")
     (one,) = rule_findings(both, RULE)
-    assert two.reason.startswith(f"{one.reason}; ")
+    assert two.fact.startswith(f"{one.fact}; ")
     assert (two.fix.count(RULE), one.fix.count(RULE), one.fix in two.fix) == (1, 1, False)
 
 

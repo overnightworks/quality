@@ -100,8 +100,8 @@ def test_a_wrongly_cased_name_is_unlisted_and_its_fact_names_the_base_list_spell
     found = {finding.path: finding for finding in rule_findings(repo, Rule.ROOT_LAYOUT)}
     assert {path: finding.event for path, finding in found.items()} == dict.fromkeys(["SRC/", "readme.md"], FindingEvent.UNLISTED)
     spelling = {path: next(entry for entry in ROOT_BASE_ENTRIES if entry.casefold() == path.casefold()) for path in found}
-    assert [spelling[path] in found[path].reason for path in found] == [True, True]
-    assert [spelling[path] in found[other].reason for path, other in (("SRC/", "readme.md"), ("readme.md", "SRC/"))] == [False, False]
+    assert [spelling[path] in found[path].fact for path in found] == [True, True]
+    assert [spelling[path] in found[other].fact for path, other in (("SRC/", "readme.md"), ("readme.md", "SRC/"))] == [False, False]
 
 
 def test_a_file_named_like_an_allowed_directory_is_red(build_repo):
@@ -161,7 +161,7 @@ def test_a_directory_declared_without_its_slash_is_told_the_slash_is_what_is_tra
 def test_a_finding_names_the_entry_and_both_ways_out_without_a_local_path(build_repo, capsys):
     repo = build_repo({**GUIDANCE, "notes.txt": "x"})
     finding = assert_prints_as_kind(capsys, repo, Rule.ROOT_LAYOUT, FindingEvent.UNLISTED)
-    assert (finding.path, str(repo) in f"{finding.reason} {finding.fix}") == ("notes.txt", False)
+    assert (finding.path, str(repo) in f"{finding.fact} {finding.fix}") == ("notes.txt", False)
     assert rule_ids_in(finding.fix) == set()
     put(repo / CONFIG, ONE_JOB + declaring(finding.path))
     assert red(repo, Rule.ROOT_LAYOUT) == []

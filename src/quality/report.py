@@ -144,7 +144,7 @@ class Finding:
     rule: str
     path: str
     line: int | None
-    reason: str
+    fact: str
     fix: str | Example
     allowance: Allowance | None = None
     detail: tuple[str, ...] = ()
@@ -225,7 +225,7 @@ class RuleResult:
 
 
 def headline(finding: Finding) -> str:
-    return f"{finding.rule} {finding.location} - {printable(finding.reason)}"
+    return f"{finding.rule} {finding.location} - {printable(finding.fact)}"
 
 
 def render(finding: Finding) -> str:

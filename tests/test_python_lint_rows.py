@@ -58,7 +58,7 @@ def test_a_security_finding_stands_as_a_row_with_its_fix_under_the_code_row(driv
     run = drive_code({"src/p/a.py": f"x = 1\n{EVAL}"})
     (finding,) = run.area.findings
     assert (run.code, run.err) == (1, "")
-    assert (finding.location, finding.event, finding.reason) == ("src/p/a.py:2", FindingEvent.INSECURE, EVAL_REASON)
+    assert (finding.location, finding.event, finding.fact) == ("src/p/a.py:2", FindingEvent.INSECURE, EVAL_REASON)
     assert_block_prints(area_block(run.out, Area.CODE), run.area.findings, ())
 
 
@@ -77,7 +77,7 @@ def test_a_print_stands_as_a_row_with_its_fix_under_the_code_row(drive_code, pat
     run = drive_code({"pyproject.toml": "[project]\nname = 'x'\n", path: source})
     (finding,) = run.area.findings
     assert (run.code, run.err) == (1, "")
-    assert (finding.location, finding.event, finding.reason) == (location, FindingEvent.PRINT_CALL, reason)
+    assert (finding.location, finding.event, finding.fact) == (location, FindingEvent.PRINT_CALL, reason)
     assert_block_prints(area_block(run.out, Area.CODE), run.area.findings, ())
 
 
@@ -92,7 +92,7 @@ def test_an_owner_that_clears_no_finding_stands_as_an_unused_row_on_its_line(dri
     (finding,) = run.area.findings
     assert (run.code, run.err) == (1, "")
     assert (finding.location, finding.event) == ("src/p/a.py:2", FindingEvent.UNUSED)
-    assert all(code in finding.reason for code in codes)
+    assert all(code in finding.fact for code in codes)
     assert_block_prints(area_block(run.out, Area.CODE), run.area.findings, ())
 
 

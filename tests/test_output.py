@@ -247,7 +247,7 @@ def test_the_event_and_the_fact_start_at_one_column_after_the_longest_location_a
     ]
     rows = [line for line in findings_written(findings).splitlines() if line.lstrip().startswith("!")]
     event_columns = {line.index(finding.event.value) for line, finding in zip(rows, findings, strict=True)}
-    fact_columns = {line.index(finding.reason) for line, finding in zip(rows, findings, strict=True)}
+    fact_columns = {line.index(finding.fact) for line, finding in zip(rows, findings, strict=True)}
     longest_location = max(findings, key=lambda candidate: len(candidate.location)).location
     longest_event = max(findings, key=lambda candidate: len(candidate.event)).event
     assert (len(event_columns), len(fact_columns)) == (1, 1)

@@ -360,7 +360,7 @@ def fix_label_and_lines(finding: Finding) -> tuple[str, tuple[str, ...]]:
 
 def assert_row_prints_finding(row: FindingRow, finding: Finding) -> None:
     """The decoded row carries the finding's event, fact, fix and lines to copy as the owners escape them."""
-    assert (row.event, row.fact, (row.fix, row.copy)) == (finding.event, printable(finding.reason), fix_label_and_lines(finding))
+    assert (row.event, row.fact, (row.fix, row.copy)) == (finding.event, printable(finding.fact), fix_label_and_lines(finding))
 
 
 def _words(text: str) -> set[str]:
@@ -373,10 +373,10 @@ def assert_finding_vocabulary(finding: Finding) -> None:
     the label is a rule id that is an identifier by its shape (it holds `-`). The one-word ids are also ordinary words
     and are judged by review; the lines to copy hold repository values and are never judged."""
     label, _ = fix_label_and_lines(finding)
-    assert not finding.reason.endswith(".")
+    assert not finding.fact.endswith(".")
     assert not label.endswith(".")
     identifiers = {rule.value for rule in Rule if "-" in rule.value}
-    assert identifiers.isdisjoint(_words(f"{finding.reason} {label}"))
+    assert identifiers.isdisjoint(_words(f"{finding.fact} {label}"))
 
 
 def env_row_stands(printed: str) -> bool:

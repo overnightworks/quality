@@ -212,7 +212,7 @@ def _finding_lines(findings: Sequence[Finding], notes: Sequence[Note], styled: b
     for position, finding in enumerate(findings):
         glyph = _paint(Glyph.NEEDS_YOU, GLYPH_STYLE[Glyph.NEEDS_YOU], styled)
         columns = _row_columns(finding.location, _event_word(finding), widths)
-        lines.append(f"{FINDING_INDENT}{glyph} {columns}{_paint(printable(finding.reason), DIM, styled)}")
+        lines.append(f"{FINDING_INDENT}{glyph} {columns}{_paint(printable(finding.fact), DIM, styled)}")
         lines += [_paint(_detail_line(text), DIM, styled) for text in finding.detail]
         if position + 1 == len(findings) or findings[position + 1].fix != finding.fix:
             lines += _fix_lines(finding.fix)

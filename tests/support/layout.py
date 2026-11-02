@@ -43,10 +43,10 @@ def assert_row_is_kind(output: str, finding: Finding, event: FindingEvent, *name
     no rule id stands in event or fact, and `output` holds the one row equal to it."""
     (row,) = rows_of(output, finding)
     assert finding.event is event
-    assert [name for name in named if name not in finding.reason] == []
-    assert not finding.reason.endswith(".")
+    assert [name for name in named if name not in finding.fact] == []
+    assert not finding.fact.endswith(".")
     assert not finding.fix.endswith(".")
-    assert rule_ids_in(f"{finding.event} {finding.reason}") == set()
+    assert rule_ids_in(f"{finding.event} {finding.fact}") == set()
     assert_row_prints_finding(row, finding)
 
 
@@ -72,7 +72,7 @@ def assert_empty_name_has_its_own_fact(capsys, repo, rule: Rule, empty: str, nam
     """The fact for the path `empty` is of kind `misplaced` and is not the fact for `named` with its `name` taken out."""
     found = {finding.path: finding for finding in rule_findings(repo, rule)}
     assert_row_is_kind(hygiene_output(capsys, repo)[1], found[empty], FindingEvent.MISPLACED)
-    assert found[empty].reason != found[named].reason.replace(name, "")
+    assert found[empty].fact != found[named].fact.replace(name, "")
 
 
 def in_index(repo, *arguments: str) -> None:

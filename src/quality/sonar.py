@@ -571,7 +571,7 @@ def open_findings(analysis: Analysis, transport: Transport, uncounted: frozenset
             for issue in issues:
                 finding = finding_from_issue(issue)
                 if issue["rule"] in uncounted:
-                    set_aside.append(replace(finding, reason=finding.reason + SET_ASIDE_REASON))
+                    set_aside.append(replace(finding, fact=finding.fact + SET_ASIDE_REASON))
                 else:
                     listed.append(finding)
         except (KeyError, TypeError, ValueError) as error:
@@ -638,7 +638,7 @@ def finding_from_issue(issue: dict) -> Finding:
         rule=RULE,
         path=file_path,
         line=issue.get("line"),
-        reason=f"{issue['rule']}: {issue['message']}",
+        fact=f"{issue['rule']}: {issue['message']}",
         fix="Fix it in the code; an accepted or false-positive mark in SonarCloud still counts",
         event=FindingEvent.OPEN,
     )
