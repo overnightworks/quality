@@ -438,10 +438,11 @@ def test_a_clean_run_has_seven_clean_rows_in_area_order_and_the_verdict(build_re
     tracked = {**CLEAN_FILES, **KEPT_CONTRACT, BASELINE_PATH: '[file_lines]\n"src/gone.py" = 900\n\n[clones]\n'}
     repo = build_repo(tracked)
     code, out, err = frame_run(capsys, repo)
-    files_row, *_ = headers(out)
+    files_row = headers(out)[0]
     extent = [int(part.split()[0]) for part in files_row.partition(cli.AreaEvent.CLEAN)[2].split(SEPARATOR)]
     held = ratchet.read_baseline(repo)
     contracts = architecture.contracts_of({".importlinter": tracked[".importlinter"]}).contracts
+    assert [line.split()[1] for line in headers(out)] == list(Area)
     assert (code, out[0], out[-1], err) == (0, headers(out)[0], f"✓ clean · 7 areas · {ZERO_SECONDS}", [])
     assert area_row("\n".join(out), Area.CODE).glyph == Glyph.CLEAN
     assert extent_counts(area_fact("\n".join(out), Area.CODE)) == [sum(rule.area is Area.CODE for rule in Rule), sum(name.endswith(".py") for name in tracked)]
