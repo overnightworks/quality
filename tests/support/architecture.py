@@ -1,5 +1,7 @@
 import json
 
+from quality import architecture
+
 SHOP = {"src/shop/__init__.py": "", "src/shop/web.py": "", "src/shop/api.py": "", "src/shop/db.py": "x = 1\n"}
 
 
@@ -41,3 +43,14 @@ def contracts_toml(contracts: dict[str, dict], roots: tuple[str, ...] = ("shop",
 
 
 KEPT_CONTRACT = {**SHOP, ".importlinter": contracts_ini({"guarded": FORBIDDEN})}
+
+
+def loosened(base: dict[str, str], head: dict[str, str]) -> list[str]:
+    return architecture.contract_loosenings(architecture.contracts_of(base), architecture.contracts_of(head))
+
+
+def one(options: dict) -> dict[str, dict]:
+    return {"guarded": options}
+
+
+GUARDED_CHANGES = 'import contract "guarded" changes '
