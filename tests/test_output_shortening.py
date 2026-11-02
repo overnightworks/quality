@@ -397,7 +397,7 @@ def test_the_window_read_at_the_start_holds_for_every_row_after_a_resize(window)
 @pytest.mark.parametrize(
     ("files", "columns", "cuts", "code"),
     [
-        ({"src/.env": "A=1\n"}, 60, {"    ! src/.env  tracked": f"    ! src/.env  tracked  {env_file.ENV_FACT.partition(" often")[0]}…"}, 1),
+        ({"src/.env": "A=1\n"}, 60, {"    ! src/.env  tracked": f"    ! src/.env  tracked  {env_file.ENV_FACT[:34]}…"}, 1),
         ({"notes.txt": "x\n"}, 30, {}, 1),
         ({"compose.yaml": "services: [\n"}, 20, {"  ✗ files": f"{refusal_row('files')}…"}, 2),
         (
@@ -451,6 +451,6 @@ def test_the_real_door_shortens_to_its_pseudo_terminals_window(build_repo, extra
     termios.tcsetwinsize(child, (24, 60))
     done = subprocess.run(door, cwd=repo, env={**base, "TERM": "xterm", **extra_environment}, stdout=child, stderr=subprocess.PIPE, text=True, check=False)
     printed = without_sgr(read_pseudo_terminal(parent, child)).replace("\r\n", "\n").splitlines()
-    cut = f"    ! src/.env  tracked  {env_file.ENV_FACT.partition(" often")[0]}…"
+    cut = f"    ! src/.env  tracked  {env_file.ENV_FACT[:34]}…"
     expected = [cut if line.startswith("    ! src/.env  tracked") else line for line in plain.stdout.splitlines()]
     assert (printed[:-1], done.stderr) == (expected[:-1], "")
