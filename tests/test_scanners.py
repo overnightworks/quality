@@ -458,7 +458,7 @@ ONLY_AN_ONLINE_AUDIT_FLAGS_THIS = (
 
 @pytest.mark.scanner
 def test_a_clean_row_says_a_workflow_only_an_online_audit_would_flag_was_audited_offline_only(workflow_repo, installed_scanners, capsys):
-    """a workflow only zizmor's online audit (impostor-commit) would flag passes, and its row says offline audits only."""
+    """A workflow only zizmor's online audit (impostor-commit) would flag passes, and its row says offline audits only."""
     assert scan(workflow_repo(ONLY_AN_ONLINE_AUDIT_FLAGS_THIS)) == 0
     assert area_fact(capsys.readouterr().out, Area.WORKFLOWS).endswith(cli.OFFLINE_AUDITS)
 
@@ -595,7 +595,7 @@ def test_equal_zizmor_fixes_share_one_fix_line_and_different_ones_do_not(drive_w
         edit(report[1])
 
     report = edited_report("zizmor-finding.json", twice)
-    run = drive_workflows(workflow_pair, security=prints(report, 12))
+    run = drive_workflows(workflow_pair, security=prints(report, FINDING_EXIT["zizmor"]))
     block = area_block(run.out, Area.WORKFLOWS)
     assert_block_prints(block, run.area.findings, ())
     assert (sum(isinstance(line, FindingLine) for line in block), sum(isinstance(line, FixLine) for line in block)) == (2, fixes)
@@ -623,17 +623,17 @@ def test_a_workflows_row_with_a_finding_carries_no_extent(red_workflows):
 
 
 def test_a_workflows_row_that_could_not_check_carries_no_extent(drive_workflows, workflow_pair):
-    """O39, acceptance 7: a refusal names its reason and none of the clean row's words."""
+    """O39: a refusal names its reason and none of the clean row's words."""
     run = drive_workflows(workflow_pair, lint="echo boom >&2; exit 3")
     row = area_row(run.out, Area.WORKFLOWS)
     assert (run.code, row.event, cli.OFFLINE_AUDITS not in workflows_row(run.out)) == (2, cli.AreaEvent.NOT_CHECKED, True)
 
 
 def test_a_path_and_a_message_with_control_characters_print_escaped_and_forge_no_line(drive_workflows, workflow_pair, edited_report):
-    """the row's path and the detail line pass through `printable`."""
+    """The row's path and the detail line pass through `printable`."""
     path, message = ".github/workflows/a\x1b\u202eb.yml", "::error::\x1b[31mforged"
     report = edited_report("actionlint-finding.json", lambda entries: entries[0].update(filepath=path, message=message))
-    run = drive_workflows(workflow_pair, lint=prints(report, 1))
+    run = drive_workflows(workflow_pair, lint=prints(report, FINDING_EXIT["actionlint"]))
     (row,) = [line for line in area_block(run.out, Area.WORKFLOWS) if isinstance(line, FindingLine)]
     assert (row.location, row.row.detail) == (printable(f"{path}:{recorded_entry('actionlint')['line']}"), (printable(message),))
     assert_every_line_starts_with_the_door(run.out.splitlines())
