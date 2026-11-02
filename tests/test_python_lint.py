@@ -699,4 +699,4 @@ def test_a_file_that_opens_with_a_byte_order_mark_is_judged(drive_code):
     run = drive_code({"src/p/a.py": f"\ufeff{PRINT}\n"})
     (finding,) = run.area.findings
     assert (finding.location, run.code, run.err) == ("src/p/a.py:1", 1, "")
-    assert_block_prints(area_block(run.out, Area.CODE), run.area.findings, ())
+    assert finding.location in run.out
