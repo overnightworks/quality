@@ -1,8 +1,0 @@
-claim_id = "31c8d594d69f46fd986fa0c0c43b31b4"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "c7df7d707da86c7d76591525cd4379247acabf95"
-branch = "claude/issue-318-c3s2-shortening-display-width"
-scope = ["docs/output.md", "docs/rules.md", "src/quality/cli.py", "src/quality/output.py", "src/quality/process.py", "tests/conftest.py", "tests/support/terminal.py", "tests/test_architecture_output.py", "tests/test_cli_channels.py", "tests/test_cli_output.py", "tests/test_output_shortening.py", "tests/test_process.py", "tests/test_staged.py"]
-opened_commit = "d21ae95f2c4473182ae630ce2d2456ef93bc65dc"
-whole_reason = "Three production files, about +74/-16, inside the corridor; one measure serves the cut and the columns, one table the protection; the live line is C3h, argparse C3i."
