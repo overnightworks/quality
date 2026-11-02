@@ -17,7 +17,7 @@ from quality.output import Glyph, Row, SubLine, Verdict
 from quality.report import Command, Example, Finding, FindingEvent, Note, NoteEvent
 from tests.support.check import refusal_pair, refusal_row
 from tests.support.python_lint import OWNER, PRINT
-from tests.support.terminal import SGR, Terminal, read_pseudo_terminal, run_on, without_sgr
+from tests.support.terminal import SGR, Terminal, read_pseudo_terminal, run_on, screen, without_sgr
 
 
 class Event(StrEnum):
@@ -420,7 +420,7 @@ def test_a_run_cuts_exactly_the_descriptive_facts(build_repo, window, files, col
     expected = [next((cut for start, cut in cuts.items() if line.startswith(start)), line) for line in plain]
     assert sum(line != cut for line, cut in zip(plain, expected, strict=True)) == len(cuts)
     assert without_sgr(out.read()).splitlines() == expected
-    assert without_sgr(err.read()) == (refusal_pair(repo) if code == 2 else "")
+    assert screen(err.read()) == (refusal_pair(repo) if code == 2 else "")
 
 
 @pytest.mark.parametrize(
@@ -437,7 +437,7 @@ def test_a_door_that_may_not_shorten_prints_the_whole_fact(build_repo, window, o
     printed = out.read() if out else stdout.getvalue()
     lines = without_sgr(printed).splitlines()
     assert f"    ! src/.env  tracked  {env_file.ENV_FACT}" in lines
-    assert ("…" in printed, err.read(), code) == (False, "", 1)
+    assert ("…" in printed, screen(err.read()), code) == (False, "", 1)
 
 
 @pytest.mark.integration
@@ -454,3 +454,62 @@ def test_the_real_door_shortens_to_its_pseudo_terminals_window(build_repo, extra
     cut = f"    ! src/.env  tracked  {env_file.ENV_FACT[:34]}…"
     expected = [cut if line.startswith("    ! src/.env  tracked") else line for line in plain.stdout.splitlines()]
     assert (printed[:-1], done.stderr) == (expected[:-1], "")
+
+
+@pytest.mark.parametrize(
+    ("columns", "line"),
+    [
+        (31, "  ⠋ dependencies  osv-scanner"),
+        (30, "  ⠋ dependencies  osv-scanner"),
+        (29, "  ⠋ dependencies  osv-scann…"),
+        (20, "  ⠋ dependencies  …"),
+        (3, " …"),
+    ],
+    ids=["31 whole", "30 whole", "29", "20", "3"],
+)
+def test_the_live_line_keeps_the_last_column_of_its_window_free(columns, line):
+    terminal, channel = at_window(columns)
+    with output.live_line(channel)("dependencies", "osv-scanner"):
+        up = without_sgr(terminal.getvalue())
+    assert up == f"{line}\r"
+
+
+def test_the_live_line_is_one_dim_span():
+    row_terminal, row_channel = at_window(80)
+    output.write_rows((Row(Glyph.NOTE, "debt", Event.CLEAN),), row_channel)
+    painted_row = row_terminal.getvalue().splitlines()[0]
+    opening, closing = painted_row.split(without_sgr(painted_row))
+    terminal, channel = at_window(80)
+    with output.live_line(channel)("secrets", "gitleaks"):
+        up = terminal.getvalue()
+    assert up == f"{opening}  ⠋ secrets       gitleaks{closing}\r"
+
+
+def test_a_channel_with_no_width_gets_no_line():
+    terminal = Terminal()
+    with output.live_line(output.Channel(terminal, True, None))("secrets", "gitleaks"):
+        pass
+    assert terminal.getvalue() == ""
+
+
+def test_a_failed_erase_leaves_the_interrupt_in_flight(window):
+    terminal = window(80)
+    channel = output.Channel(terminal.stream, True, 80)
+    with pytest.raises(KeyboardInterrupt), output.live_line(channel)("secrets", "gitleaks"):
+        terminal.hang_up()
+        raise KeyboardInterrupt
+
+
+def test_an_interrupt_during_the_draw_still_erases_the_part_drawn():
+    class Interrupted(Terminal):
+        def write(self, text: str) -> int:
+            written = super().write(text)
+            if not self.getvalue().endswith("\x1b[K"):
+                raise KeyboardInterrupt
+            return written
+
+    terminal = Interrupted()
+    channel = output.Channel(terminal, True, 80)
+    with pytest.raises(KeyboardInterrupt), output.live_line(channel)("secrets", "gitleaks"):
+        pytest.fail("the block must not run once the draw was interrupted")
+    assert without_sgr(terminal.getvalue()) == "  ⠋ secrets       gitleaks\r\r\x1b[K"

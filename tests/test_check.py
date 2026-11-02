@@ -1,6 +1,7 @@
 import re
 import subprocess
 from collections import Counter
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 
 import pytest
@@ -9,6 +10,7 @@ from quality import check, cli, config, env_file, installation, scanners
 from quality.compose import is_compose_file
 from quality.report import CannotJudge, Command, Example, Finding, FindingEvent, Reason, Unparsable, printable
 from quality.rules import Area, Rule
+from tests.support.advisories import uv_lock
 from tests.support.architecture import KEPT_CONTRACT
 from tests.support.check import (
     CLEAN_VERDICT,
@@ -349,9 +351,35 @@ def test_a_run_holds_one_area_verdict_per_area_in_area_order(build_repo):
 
 def test_the_run_hands_each_area_to_its_reporter_once_in_row_order(build_repo):
     reported = []
-    result = check.run_hygiene(build_repo({}), installed_ruff, never_located, lambda verdict, tracked_paths: reported.append((verdict, tracked_paths)))
+    result = check.run_hygiene(build_repo({}), installed_ruff, never_located, lambda verdict, tracked_paths: reported.append((verdict, tracked_paths)), lambda _area, _scanner: nullcontext())
     assert [verdict.area for verdict, _ in reported] == list(Area)
     assert reported == [(area, result.tracked_paths) for area in result.areas]
+
+
+def test_the_run_takes_each_scanner_s_line_down_before_it_reports_its_area(build_repo, tmp_path):
+    repo = build_repo({".github/workflows/w.yml": "on: push\n", "uv.lock": uv_lock(), "src/a.py": "x = 1\n"})
+    locate_zizmor = fake_zizmor(tmp_path / "zizmor", "echo '[]'")
+    events = []
+
+    @contextmanager
+    def running(area, scanner):
+        events.append(("up", area, scanner))
+        yield
+        events.append(("down", area, scanner))
+
+    check.run_hygiene(repo, installed_ruff, locate_zizmor, lambda verdict, _tracked_paths: events.append(("row", verdict.area)), running)
+    workflow_scanners = [scanner.name for scanner in scanners.WORKFLOW_SCANNERS.values()]
+    scanned = [
+        (Area.SECRETS, [scanners.GITLEAKS]),
+        (Area.WORKFLOWS, workflow_scanners),
+        (Area.DEPENDENCIES, [scanners.OSV_SCANNER]),
+        (Area.CODE, [scanners.RUFF]),
+    ]
+    expected = [("row", Area.FILES), ("row", Area.DEBT), ("row", Area.IMPORTS)]
+    for area, names in scanned:
+        expected += [event for name in names for event in (("up", area, name), ("down", area, name))]
+        expected.append(("row", area))
+    assert events == expected
 
 
 def test_every_rule_a_malformed_config_refuses_carries_its_fact_and_its_example_as_fields(build_repo):

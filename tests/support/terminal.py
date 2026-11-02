@@ -28,6 +28,25 @@ def without_sgr(text: str) -> str:
     return re.sub(SGR, "", text)
 
 
+def screen(text: str) -> str:
+    """What a terminal shows of `text` once its escape sequences have acted: a carriage return goes back to the first
+    column, erasing to the row's end clears it and a character overwrites the one under it."""
+    rows: list[str] = [""]
+    column = 0
+    for token in re.split(r"(\r|\n|\x1b\[K)", without_sgr(text)):
+        if token == "\n":
+            rows.append("")
+            column = 0
+        elif token == "\r":
+            column = 0
+        elif token == "\x1b[K":
+            rows[-1] = rows[-1][:column]
+        else:
+            rows[-1] = rows[-1][:column] + token + rows[-1][column + len(token) :]
+            column += len(token)
+    return "\n".join(rows)
+
+
 def _drain(parent: int) -> str:
     chunks = []
     with contextlib.suppress(OSError):
@@ -65,6 +84,10 @@ class PseudoTerminal:
         text = _drain(self._parent)
         self._close_parent()
         return text.replace("\r\n", "\n")
+
+    def hang_up(self) -> None:
+        """Closes the parent end alone, so the next write to the stream fails as a terminal that hung up does."""
+        self._close_parent()
 
     def close(self) -> None:
         self.stream.close()

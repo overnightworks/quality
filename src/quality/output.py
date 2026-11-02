@@ -5,9 +5,11 @@ import os
 import secrets
 import sys
 import unicodedata
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from dataclasses import dataclass
 from enum import StrEnum
+from functools import partial
 from typing import TextIO
 
 from quality.report import (
@@ -133,6 +135,9 @@ GLYPH_STYLE = {Glyph.CLEAN: GREEN, Glyph.NEEDS_YOU: YELLOW, Glyph.COULD_NOT_CHEC
 VERDICT_STYLE = {Glyph.CLEAN: BOLD, Glyph.NEEDS_YOU: f"{BOLD};{YELLOW}"}
 SECONDS_PER_MINUTE = 60
 ELLIPSIS = "…"
+LIVE_MARK = "⠋"
+# A carriage return, then ECMA-48 "erase in line" from the cursor to the row's end.
+CLEAR_LINE = "\r\x1b[K"
 ZERO_WIDTH_CATEGORIES = frozenset({"Mn", "Me"})
 WIDE_CLASSES = frozenset({"W", "F"})
 # Free text a terminal may cut; any other event, a new one included, stands whole.
@@ -306,6 +311,34 @@ def _discard_further_writes(stream: TextIO) -> None:
 
 def write_rows(rows: tuple[Row, ...], channel: Channel) -> None:
     _print_lines([line for row in rows for line in _row_lines(row, channel)], channel)
+
+
+def _put(channel: Channel, text: str) -> None:
+    try:
+        print(text, end="", file=channel.stream, flush=True)
+    except OSError:
+        # The line only decorates the run: a terminal that hung up must not replace the exception or the exit it decorates.
+        _discard_further_writes(channel.stream)
+
+
+@contextmanager
+def _line_up(channel: Channel, subject: str, scanner: str) -> Iterator[None]:
+    """One line on `channel` while the block runs, gone on every way out Python still runs. It keeps the window's last
+    column free and parks the cursor at the first, so from three columns up neither it nor a key's echo wraps and
+    outlives the erase."""
+    line = _fitted(f"  {LIVE_MARK} {_padded(subject, SUBJECT_WIDTH)}  {scanner}", " ", channel.width)
+    try:
+        _put(channel, f"{_paint(line, DIM, channel.styled)}\r")
+        yield
+    finally:
+        _put(channel, CLEAR_LINE)
+
+
+def live_line(channel: Channel) -> Callable[[str, str], AbstractContextManager[None]]:
+    """The line of a stream that knows its window; a line that may wrap could not be erased, so any other stream gets none."""
+    if channel.width is None:
+        return lambda _subject, _scanner: nullcontext()
+    return partial(_line_up, channel)
 
 
 # A line taken from another tool's rendering carries this, so no line the door prints starts with repository text.

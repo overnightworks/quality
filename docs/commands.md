@@ -18,7 +18,7 @@ attribute-free environment as `hygiene`, with quality's config. The allow list i
 `quality/config.toml` (none staged: no allowances). `scan-staged` validates only the `[secrets]` table of that config and ignores other tables
 and keys, while `hygiene` and `verdict` stay strict, so schema growth never blocks a commit. Output and secret handling
 are `hygiene`'s: it prints the secrets finding rows and the note rows as `hygiene` does under its secrets row
-(`docs/rules.md`), without a commit in the fact, then `scan-staged: N finding(s)` or `scan-staged: clean`.
+(`docs/rules.md`), without a commit in the fact, then `scan-staged: N finding(s)` or `scan-staged: clean`. At a terminal stderr shows `hygiene`'s live line while gitleaks runs (`docs/rules.md`).
 
 gitleaks' staged mode sees only added and changed lines, so a known false positive blocks only the commits that touch
 its line, and then needs its allowance, as in CI. A key only in the work tree or only in `HEAD` is clean. Exit `2` (never
