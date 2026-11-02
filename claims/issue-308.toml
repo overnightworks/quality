@@ -1,0 +1,8 @@
+claim_id = "7b8bd480b7924e27bf5fd5bef95f3625"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "ef0ef9f6d7c0cb5ee0ffbfb771896851775f086f"
+branch = "claude/issue-308-c3f4-dependencies-row"
+scope = ["docs/output.md", "docs/rules.md", "src/quality/advisories.py", "src/quality/check.py", "src/quality/cli.py", "src/quality/report.py", "tests/test_advisories.py", "tests/test_advisories_locks.py", "tests/test_advisories_rows.py", "tests/test_cli_area_row.py", "tests/test_cli_output.py"]
+opened_commit = "94fd9b8683d52f426e4d10f0702bd1e8d2cea443"
+whole_reason = "Four production files, about +67/-50, one over the corridor's three, because the extent and the notes share the one return-type change; the finding rows were C3f3, code is C3g."
