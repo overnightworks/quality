@@ -4,11 +4,12 @@ import os
 import sys
 import time
 from collections import Counter
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from enum import StrEnum
 from functools import partial
 from pathlib import Path
+from typing import NoReturn, TextIO
 
 from quality import (
     __version__,
@@ -51,11 +52,12 @@ from quality.output import (
     open_channels,
     set_up_streams,
     write_findings_and_notes,
+    write_help,
     write_pair,
     write_rows,
     write_verdict,
 )
-from quality.report import CannotJudge, Extent, Instruction, NoteEvent, Step, headline
+from quality.report import CannotJudge, Command, Extent, Instruction, NoteEvent, Step, headline
 from quality.rules import Area, Rule
 from quality.sonar import (
     DEPENDABOT_CONFIG,
@@ -113,7 +115,11 @@ def main(
     environment: Mapping[str, str] = os.environ,
 ) -> int:
     channels = open_channels(environment)
-    arguments = build_parser().parse_args(argv)
+    try:
+        arguments = read_invocation(argv)
+    except CannotJudge as refusal:
+        write_pair(refusal.reason.fact, refusal.reason.next_steps, channels.err)
+        return EXIT_CANNOT_JUDGE
 
     if arguments.command == "emergency-merge":
         return run_emergency_merge(
@@ -143,25 +149,98 @@ def main(
     return run_hygiene_check(arguments.path, locate_ruff, locate_zizmor, clock, channels)
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="quality")
+QUALITY_HELP = f"""\
+usage: quality COMMAND
+
+Commands:
+  hygiene [PATH]
+      Check a repository against the fleet's rules.
+  baseline write [PATH]
+      Record the debt ceiling ({ratchet.BASELINE_PATH}): the measured size
+      debt and the clone pairs.
+  scan-staged [PATH]
+      Check exactly what the next commit records for secrets.
+  emergency-merge OWNER/REPO PR
+      Operator only: merge one pull request whose gate is red only for
+      legacy findings or loosenings he ruled, after he types ja.
+  scoreboard [PATH]
+      Measure every fleet repository: size, debt, the gate release it pins.
+
+Run by the gate, not by people:
+  verdict [PATH]
+      Decide whether this pull request may merge.
+  sonar properties
+      Refuse a properties file, token or coverage report the scan must not
+      start with.
+  sonar findings
+      Wait for this run's analysis, then count its open findings.
+
+Options:
+  --version   the installed version
+  -h, --help  show this help
+
+Exit codes: 0 yes, 1 no, 2 could not answer, 130 interrupted.
+"""
+
+
+class DoorParser(argparse.ArgumentParser):
+    """argparse reads the words and prints only `--version`: a wrong invocation leaves as the refusal `main` writes, and
+    help leaves through `output.py`."""
+
+    commands: Mapping[str, argparse.ArgumentParser] = {}
+    pictured_help: str | None = None
+
+    def add_subparsers(self, **options: str) -> argparse._SubParsersAction:
+        words = super().add_subparsers(metavar="COMMAND", required=True, **options)
+        self.commands = words.choices
+        return words
+
+    def parse_known_args(
+        self, args: Sequence[str] | None = None, namespace: argparse.Namespace | None = None
+    ) -> tuple[argparse.Namespace, list[str]]:
+        words = sys.argv[1:] if args is None else args
+        word = words[0] if words else ""
+        if self.commands and not word.startswith("-") and word not in self.commands:
+            asked = f"no command {word}" if word else "no command"
+            raise CannotJudge(f"{asked}{SEPARATOR}commands: {', '.join(self.commands)}", help_step(self.prog))
+        return super().parse_known_args(args, namespace)
+
+    def error(self, message: str) -> NoReturn:
+        raise CannotJudge(message, help_step(self.prog))
+
+    def print_help(self, file: TextIO | None = None) -> None:
+        write_help(self.pictured_help or self.format_help())
+
+
+def help_step(prog: str) -> tuple[Step, ...]:
+    return (Command(f"{prog} --help"),)
+
+
+def read_invocation(argv: list[str] | None) -> argparse.Namespace:
+    """The parsed invocation; whatever the command does not take is a refusal, which names that command's help."""
+    parser = build_parser()
+    arguments, stray = parser.parse_known_args(argv)
+    if stray:
+        raise CannotJudge(f"unknown argument{SEPARATOR}{' '.join(stray)}", help_step(f"{parser.prog} {arguments.command}"))
+    return arguments
+
+
+def build_parser() -> DoorParser:
+    parser = DoorParser(prog="quality", color=False)
+    parser.pictured_help = QUALITY_HELP
     parser.add_argument("--version", action="version", version=__version__)
-    commands = parser.add_subparsers(dest="command", required=True)
-    hygiene = commands.add_parser("hygiene", help="check a git repository for fleet hygiene")
+    commands = parser.add_subparsers(dest="command")
+    hygiene = commands.add_parser("hygiene")
     hygiene.add_argument("path", nargs="?", type=Path, default=Path("."))
-    baseline = commands.add_parser("baseline", help="manage the baseline").add_subparsers(
-        dest="baseline_command", required=True
-    )
+    baseline = commands.add_parser("baseline").add_subparsers(dest="baseline_command")
     baseline.add_parser("write", help=f"write the measured size debt and clone pairs to {ratchet.BASELINE_PATH}").add_argument(
         "path", nargs="?", type=Path, default=Path("."), help="a folder of the git repository to measure; its top level is measured (default: the current one)"
     )
-    scan_staged = commands.add_parser("scan-staged", help="scan the staged change of a repository for secrets")
+    scan_staged = commands.add_parser("scan-staged")
     scan_staged.add_argument("path", nargs="?", type=Path, default=Path("."))
-    verdict = commands.add_parser("verdict", help="judge the mandatory jobs of the running workflow run")
+    verdict = commands.add_parser("verdict")
     verdict.add_argument("path", nargs="?", type=Path, default=Path("."))
-    sonar = commands.add_parser("sonar", help="check SonarCloud for open findings").add_subparsers(
-        dest="sonar_command", required=True
-    )
+    sonar = commands.add_parser("sonar").add_subparsers(dest="sonar_command")
     sonar.add_parser(
         "properties",
         help=(
@@ -176,19 +255,10 @@ def build_parser() -> argparse.ArgumentParser:
             "needs quality/config.toml with [gate] mandatory_jobs, else exit 2"
         ),
     )
-    emergency = commands.add_parser(
-        "emergency-merge",
-        help="operator only: switch a repository's quality_gate off, merge one pull request with its head pinned, switch it on",
-    )
+    emergency = commands.add_parser("emergency-merge")
     emergency.add_argument("repository", help="<owner>/<repo>")
     emergency.add_argument("pull_request", type=int)
-    scoreboard = commands.add_parser(
-        "scoreboard",
-        help=(
-            "measure the size, the gate and CodeQL release and what each gate does with each rule"
-            " of the repositories in quality/fleet.toml into two tables"
-        ),
-    )
+    scoreboard = commands.add_parser("scoreboard")
     scoreboard.add_argument("path", nargs="?", type=Path, default=Path("."))
     return parser
 
