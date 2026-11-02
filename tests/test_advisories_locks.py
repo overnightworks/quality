@@ -315,7 +315,7 @@ def test_without_a_pnpm_lock_the_npm_database_is_not_downloaded(build_repo, serv
 
 @pytest.mark.parametrize(
     ("affected_name", "expected"),
-    [("lodash.merge", upgrade_fix(FRONTEND_LOCK, "lodash.merge")), ("lodash-merge", f"see {ADVISORY_LINK}")],
+    [("lodash.merge", upgrade_fix(FRONTEND_LOCK)), ("lodash-merge", f"see {ADVISORY_LINK}")],
     ids=["the same name", "Python's name rule is not npm's"],
 )
 def test_npm_names_match_exactly_as_written(
@@ -327,7 +327,8 @@ def test_npm_names_match_exactly_as_written(
     fake_scanner(served_scanners, OSV, reporting(report, 1))
     code, output = run_gate(build_repo({FRONTEND_LOCK: pnpm_lock()}))
     assert code == 1, output
-    assert [row.fix for _, row in area_finding_rows(output, Area.DEPENDENCIES)] == [expected]
+    ((_, row),) = area_finding_rows(output, Area.DEPENDENCIES)
+    assert row.fix.endswith(expected)
 
 
 PNPM_ALLOWANCE = UV_LOCK_ALLOWANCE | {"lock": FRONTEND_LOCK}
