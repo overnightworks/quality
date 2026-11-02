@@ -1,10 +1,9 @@
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import Enum, auto
 from functools import partial
 from pathlib import Path, PurePosixPath
-from typing import Protocol
 
 from quality import (
     advisories,
@@ -221,26 +220,25 @@ def _attempt[T](check: Callable[[], T]) -> T | CannotJudge:
         return refusal
 
 
-class _Judged(Protocol):
-    @property
-    def findings(self) -> Sequence[Finding]: ...
+type Judged = RuleResult | python_floor.FloorResult | list[Finding] | CannotJudge
+type AreaReport = Callable[[AreaVerdict, int], None]
 
 
-def _findings(judged: _Judged | CannotJudge) -> Sequence[Finding] | CannotJudge:
-    """What a rule's check found, or the reason it cannot judge."""
-    return judged if isinstance(judged, CannotJudge) else judged.findings
-
-
-def _verdict(
-    rule: Rule, outcome: Sequence[Finding] | CannotJudge, measured_only: bool, notes: tuple[Note, ...], extent: Extent | None
-) -> RuleVerdict:
+def _rule_verdict(rule: Rule, judged: Judged) -> RuleVerdict:
     """The verdict of the rule a check judges; a check that cannot judge leaves its rule unjudged."""
-    if isinstance(outcome, CannotJudge):
-        return RuleVerdict(rule, refusal=outcome)
-    foreign = sorted({finding.rule for finding in outcome} - {rule})
+    if isinstance(judged, CannotJudge):
+        return RuleVerdict(rule, refusal=judged)
+    findings = judged if isinstance(judged, list) else judged.findings
+    foreign = sorted({finding.rule for finding in findings} - {rule})
     if foreign:
         raise ValueError(f"a check judging {rule} returned findings under {', '.join(foreign)}")
-    return RuleVerdict(rule, tuple(outcome), measured_only=measured_only, notes=notes, extent=extent)
+    if isinstance(judged, RuleResult):
+        return RuleVerdict(rule, tuple(findings), measured_only=judged.measured_only, notes=judged.notes, extent=judged.extent)
+    return RuleVerdict(rule, tuple(findings), notes=() if isinstance(judged, list) else judged.notes)
+
+
+def _area_verdict(area: Area, judged: Mapping[Rule, Judged]) -> AreaVerdict:
+    return AreaVerdict(area, tuple(_rule_verdict(rule, judged[rule]) for rule in Rule if rule.area is area))
 
 
 def _judge_baseline_rules(
@@ -278,51 +276,52 @@ def _content_findings(
     return _attempt(judge)
 
 
-def run_hygiene(root: Path, locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str]) -> HygieneResult:
-    """Judges every active rule, in run order, over the repository `root` lies in; only one git cannot list stops the run."""
-    root = checkout.work_tree_top(root)
-    tracked = checkout.tracked_files(root)
+def _judged_areas(root: Path, tracked: list[str], locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str]) -> Iterator[AreaVerdict]:
+    """Each area as its last rule ends, in the order the rows stand."""
+    allow_lists = _attempt(lambda: _read_allow_lists(root))
+    modes = _attempt(lambda: checkout.index_modes(root))
+    yield _area_verdict(
+        Area.FILES,
+        {
+            Rule.ENV_FILE: env_file.check_env_files(tracked),
+            Rule.COMPOSE_PORT: _attempt(lambda: compose.check_compose_ports(root, tracked, _required(allow_lists).compose)),
+            Rule.CLAUDE_MD: _attempt(lambda: claude_md.check_claude_md(root, tracked)),
+            Rule.ROOT_LAYOUT: _attempt(lambda: root_layout.check_root_layout(tracked, _required(allow_lists).root)),
+            Rule.FILE_SUFFIX: _attempt(lambda: layout.check_file_suffix(_required(modes), _required(allow_lists).layout)),
+            Rule.SCRIPT_NAME: _content_findings(root, modes, allow_lists, layout.script_candidates, layout.check_script_name),
+            Rule.SCRIPT_HEADER: _content_findings(root, modes, allow_lists, layout.script_candidates, layout.check_script_header),
+            Rule.TEST_LAYOUT: _attempt(lambda: layout.check_test_layout(_required(modes), _required(allow_lists).layout)),
+            Rule.TEST_IMPORT: _content_findings(root, modes, allow_lists, layout.test_import_candidates, layout.check_test_import),
+            Rule.PYTHON_FLOOR: _attempt(lambda: _python_floor_result(root, modes, allow_lists)),
+        },
+    )
     sources = _attempt(lambda: ratchet.read_sources(root, tracked))
     baseline = sources if isinstance(sources, CannotJudge) else _attempt(lambda: judged_baseline(root))
-    allow_lists = _attempt(lambda: _read_allow_lists(root))
     size, clone = _judge_baseline_rules(sources, baseline, allow_lists)
-    contracts = _attempt(lambda: check_import_contract(root, tracked))
-    modes = _attempt(lambda: checkout.index_modes(root))
-    floor = _attempt(lambda: _python_floor_result(root, modes, allow_lists))
+    yield _area_verdict(Area.DEBT, {Rule.SIZE: size, Rule.CLONE: clone})
+    yield _area_verdict(Area.IMPORTS, {Rule.IMPORT_CONTRACT: _attempt(lambda: check_import_contract(root, tracked))})
+    yield _area_verdict(Area.SECRETS, {Rule.LEAK: _attempt(lambda: check_secrets(root, allow_lists))})
+    yield _area_verdict(
+        Area.WORKFLOWS, {rule: _attempt(partial(check_workflows, root, rule, tracked, locate_zizmor)) for rule in scanners.WORKFLOW_SCANNERS}
+    )
+    yield _area_verdict(Area.DEPENDENCIES, {Rule.ADVISORY: _attempt(partial(check_advisories, root, tracked, allow_lists))})
     lint = _attempt(lambda: lint_python(root, modes, locate_ruff))
-    security, printing = _judge_lint(lint, python_lint.judge_security), _judge_lint(lint, python_lint.judge_print)
-    outcomes: dict[Rule, Sequence[Finding] | CannotJudge] = {
-        Rule.ENV_FILE: env_file.check_env_files(tracked),
-        Rule.COMPOSE_PORT: _attempt(lambda: compose.check_compose_ports(root, tracked, _required(allow_lists).compose)),
-        Rule.SIZE: _findings(size),
-        Rule.CLONE: _findings(clone),
-        Rule.IMPORT_CONTRACT: _findings(contracts),
-        Rule.CLAUDE_MD: _attempt(lambda: claude_md.check_claude_md(root, tracked)),
-        Rule.ROOT_LAYOUT: _attempt(lambda: root_layout.check_root_layout(tracked, _required(allow_lists).root)),
-        Rule.FILE_SUFFIX: _attempt(lambda: layout.check_file_suffix(_required(modes), _required(allow_lists).layout)),
-        Rule.SCRIPT_NAME: _content_findings(root, modes, allow_lists, layout.script_candidates, layout.check_script_name),
-        Rule.SCRIPT_HEADER: _content_findings(root, modes, allow_lists, layout.script_candidates, layout.check_script_header),
-        Rule.TEST_LAYOUT: _attempt(lambda: layout.check_test_layout(_required(modes), _required(allow_lists).layout)),
-        Rule.TEST_IMPORT: _content_findings(root, modes, allow_lists, layout.test_import_candidates, layout.check_test_import),
-        Rule.PYTHON_FLOOR: _findings(floor),
-        Rule.PYTHON_SECURITY: _findings(security),
-        Rule.PYTHON_PRINT: _findings(printing),
-    }
-    secrets = _attempt(lambda: check_secrets(root, allow_lists))
-    advisory = _attempt(partial(check_advisories, root, tracked, allow_lists))
-    workflows = {rule: _attempt(partial(check_workflows, root, rule, tracked, locate_zizmor)) for rule in scanners.WORKFLOW_SCANNERS}
-    outcomes |= {
-        Rule.LEAK: _findings(secrets),
-        **{rule: _findings(result) for rule, result in workflows.items()},
-        Rule.ADVISORY: _findings(advisory),
-    }
-    results = ((Rule.SIZE, size), (Rule.CLONE, clone), (Rule.IMPORT_CONTRACT, contracts), (Rule.LEAK, secrets), *workflows.items(), (Rule.ADVISORY, advisory), (Rule.PYTHON_SECURITY, security), (Rule.PYTHON_PRINT, printing))
-    measuring = {rule for rule, result in results if _measures_only(result)}
-    notes = {rule: () if isinstance(result, CannotJudge) else result.notes for rule, result in (*results, (Rule.PYTHON_FLOOR, floor))}
-    extents = {rule: None if isinstance(result, CannotJudge) else result.extent for rule, result in results}
-    verdicts = [_verdict(rule, outcomes[rule], rule in measuring, notes.get(rule, ()), extents.get(rule)) for rule in Rule]
-    return HygieneResult(tuple(verdicts), len(set(tracked)))
+    yield _area_verdict(
+        Area.CODE,
+        {Rule.PYTHON_SECURITY: _judge_lint(lint, python_lint.judge_security), Rule.PYTHON_PRINT: _judge_lint(lint, python_lint.judge_print)},
+    )
 
 
-def _measures_only(result: RuleResult | CannotJudge) -> bool:
-    return not isinstance(result, CannotJudge) and result.measured_only
+def run_hygiene(
+    root: Path, locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str], report_area: AreaReport
+) -> HygieneResult:
+    """Judges every active rule over the repository `root` lies in, area by area in row order, and hands each finished
+    area and the count of tracked paths to `report_area`; only one git cannot list stops the run."""
+    root = checkout.work_tree_top(root)
+    tracked = checkout.tracked_files(root)
+    tracked_paths = len(set(tracked))
+    verdicts: list[RuleVerdict] = []
+    for area in _judged_areas(root, tracked, locate_ruff, locate_zizmor):
+        report_area(area, tracked_paths)
+        verdicts += area.verdicts
+    return HygieneResult(tuple(verdicts), tracked_paths)

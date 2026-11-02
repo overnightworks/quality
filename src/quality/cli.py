@@ -311,21 +311,23 @@ def next_steps(areas: tuple[AreaVerdict, ...]) -> tuple[Step, ...]:
     return steps if reasons and all(reason.next_steps for reason in reasons) else (*steps, REFUSED_AREAS_NEXT)
 
 
+def write_area(out: Channel, verdict: AreaVerdict, tracked_paths: int) -> None:
+    write_rows((area_row(verdict, area_extent(verdict, tracked_paths)),), out)
+    write_findings_and_notes(verdict.findings, verdict.notes, out)
+
+
 def run_hygiene_check(
     path: Path, locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str], clock: Callable[[], float], channels: Channels
 ) -> int:
     started = clock()
     try:
-        result = run_hygiene(path, locate_ruff, locate_zizmor)
+        result = run_hygiene(path, locate_ruff, locate_zizmor, partial(write_area, channels.out))
     except OutsideWorkTree as error:
         write_pair(f"not inside a git work tree · {error.path}", (Instruction("run quality hygiene inside a repository"),), channels.err)
         return EXIT_CANNOT_JUDGE
     except CannotJudge as error:
         write_pair(error.reason.fact, error.reason.next_steps or (START_FAILURE_NEXT,), channels.err)
         return EXIT_CANNOT_JUDGE
-    for verdict in result.areas:
-        write_rows((area_row(verdict, area_extent(verdict, result.tracked_paths)),), channels.out)
-        write_findings_and_notes(verdict.findings, verdict.notes, channels.out)
     exit_code = HYGIENE_EXIT[result.worst]
     if exit_code == EXIT_CANNOT_JUDGE:
         write_pair(refusal_error(result.areas), next_steps(result.areas), channels.err)
