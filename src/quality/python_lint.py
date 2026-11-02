@@ -15,7 +15,7 @@ from pathlib import Path
 from packaging.version import Version
 
 from quality import layout, process, ratchet, repository, scanners
-from quality.report import Finding
+from quality.report import Finding, FindingEvent
 from quality.rules import Rule
 
 SECURITY_FAMILY = "S"
@@ -32,7 +32,7 @@ LINT_FAILURE = "Failed to lint"
 NOQA_DIRECTIVE = re.compile(r"\s*noqa\b", re.IGNORECASE)
 REASONED_NOQA = re.compile(r" ?noqa: (?P<codes>[A-Z]+\d+(?:, [A-Z]+\d+)*) - (?P<reason>[^,]+)", re.ASCII)
 OWNER_PREFIX = "# ruff:"
-BYTE_ORDER_MARK = "﻿"
+BYTE_ORDER_MARK = "\ufeff"
 
 
 class LintError(Exception):
@@ -238,7 +238,8 @@ def _security_finding(record: RuffFinding) -> Finding:
     return Finding(
         Rule.PYTHON_SECURITY, record.path, record.line, f"{record.code} {record.message}",
         f"remove the cause, or where it is deliberate end line {record.noqa_line} with "
-        f"`# noqa: {record.code} - <reason>`, a reason with a letter and no comma.",
+        f"`# noqa: {record.code} - <reason>`, a reason with a letter and no comma",
+        event=FindingEvent.INSECURE,
     )
 
 
@@ -246,15 +247,16 @@ def _print_finding(record: RuffFinding) -> Finding:
     return Finding(
         Rule.PYTHON_PRINT, record.path, record.line, f"{record.code} {record.message}",
         f"write through the program's one output owner; in that owner's file, declare it on a line of its own with "
-        f"`# ruff: noqa: {record.code} - <reason>`, a reason with a letter and no comma.",
+        f"`# ruff: noqa: {record.code} - <reason>`, a reason with a letter and no comma",
+        event=FindingEvent.PRINT_CALL,
     )
 
 
 def _stale_owner(name: str, owner: OutputOwner) -> Finding:
     codes = ", ".join(sorted(owner.noqa.codes))
     return Finding(
-        Rule.PYTHON_PRINT, name, owner.line, f"declares an output owner for {codes}, but the file has no such finding.",
-        "delete the line.",
+        Rule.PYTHON_PRINT, name, owner.line, f"declares an output owner for {codes}, but the file has no such finding",
+        "delete the line", event=FindingEvent.UNUSED,
     )
 
 

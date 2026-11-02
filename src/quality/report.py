@@ -1,6 +1,6 @@
 import shlex
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 
 from quality.config import Allowance
@@ -138,8 +138,8 @@ class NoteEvent(StrEnum):
 
 @dataclass(frozen=True)
 class Finding:
-    """With an `event`, `reason` is the fact its row shows; without one, the sentence of `headline`. `fix` is a sentence,
-    or an `Example`: a label with the lines a person copies."""
+    """`reason` is the fact its row shows and the sentence of `headline`. `fix` is a sentence, or an `Example`: a label
+    with the lines a person copies."""
 
     rule: str
     path: str
@@ -148,7 +148,7 @@ class Finding:
     fix: str | Example
     allowance: Allowance | None = None
     detail: tuple[str, ...] = ()
-    event: FindingEvent | None = None
+    event: FindingEvent = field(kw_only=True)
 
     @property
     def location(self) -> str:
