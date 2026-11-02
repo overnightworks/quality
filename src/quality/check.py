@@ -352,9 +352,8 @@ def judge_repository(
     verbose: bool = False,
 ) -> CheckResult:
     """Judges every active rule over the repository `root` lies in, area by area in row order, and hands each finished
-    area and the count of tracked paths to `report_area`; `running` holds the live line up around each scanner, and `verbose` keeps
-    what each scanner said. Only
-    one git cannot list stops the run."""
+    area and the count of tracked paths to `report_area`; `running` holds the live line up around each scanner, and
+    `verbose` keeps what each scanner said. Only one git cannot list stops the run."""
     root = checkout.work_tree_top(root)
     tracked = checkout.tracked_files(root)
     tracked_paths = len(set(tracked))

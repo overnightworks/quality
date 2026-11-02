@@ -16,8 +16,8 @@ Before a fact quotes any of a scanner's stderr, the whole text goes through `git
 `gitleaks.toml`, the definition of a secret that `quality check` judges with. Only a clean answer clears the text: exit
 0 and an empty report. A flagged text and a vet that cannot answer (gitleaks missing, a timeout, any other exit, a
 missing or unreadable report, a report that disagrees with the exit) withhold it whole, never partly, and the fact says
-how many lines: `· N stderr lines withheld · not cleared by gitleaks`. The exit and the verdict never move. A run whose
-scanners refuse nothing, or write no stderr, starts no vet. No refusal quotes gitleaks' own stderr, because the vet
+how many lines: `· N stderr lines withheld · not cleared by gitleaks`. The exit and the verdict never move. Without `-v`, a run whose
+scanners refuse nothing starts no vet; under `-v`, a scan that wrote stderr starts one, as does a refusal's. No refusal quotes gitleaks' own stderr, because the vet
 cannot vet the tool that failed.
 
 A text holding ESC or a C1 control (U+0080 to U+009F) has no clean answer: a terminal code can stand against a value
