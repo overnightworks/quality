@@ -1,8 +1,0 @@
-claim_id = "fc593228724c421ca49424f4e759383f"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "b32890b6426415061ba4fbe78be29422d50ac2e8"
-branch = "claude/issue-337-c4a-vet-scanner-text"
-scope = ["AGENTS.md", "docs/decisions/5-scanner-stderr-goes-through-gitleaks.md", "docs/output.md", "docs/rules.md", "src/quality/advisories.py", "src/quality/process.py", "src/quality/python_lint.py", "src/quality/scanners.py", "tests/support/scanners.py", "tests/support/secrets.py", "tests/test_scanners_vet.py"]
-opened_commit = "91428e82e92d188ecc489841cd76792ee1ee429f"
-whole_reason = "Four production files, about +42/-10, one above the corridor: the vet needs stdin on process.run, and the three files that quote stderr are the routes it closes. It stands alone: the route exists today, without -v, and the vet has its caller on its first day."
