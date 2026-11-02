@@ -627,8 +627,11 @@ def test_the_former_sonar_command_is_refused_as_a_usage_error(capsys):
     """#228 rule 3: the old command name is not kept as an alias"""
     former = "pre" + "flight"
     commands = ", ".join(cli.build_parser().commands["sonar"].commands)
-    assert (cli.main(["sonar", former]), capsys.readouterr().err) == (
+    code = cli.main(["sonar", former])
+    printed = capsys.readouterr()
+    assert (code, printed.out, printed.err) == (
         2,
+        "",
         f"error: no command {former}{SEPARATOR}commands: {commands}\nnext: quality sonar --help\n",
     )
 

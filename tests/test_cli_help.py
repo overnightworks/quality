@@ -7,16 +7,15 @@ from pathlib import Path
 import pytest
 
 import quality
-from quality import cli, output, report
+from quality import cli, report
 from quality.output import SEPARATOR
-from tests.support.terminal import Terminal
-
-PLAIN_ENVIRONMENT_DROPS = ("GITHUB_ACTIONS", "NO_COLOR", "PYTHON_COLORS", "FORCE_COLOR")
+from tests.support.terminal import Terminal, without_sgr
 
 
 def door_environment(**extra: str) -> dict[str, str]:
     """The process environment without the variables that change how the door paints or stops commands."""
-    kept = {key: value for key, value in os.environ.items() if key not in PLAIN_ENVIRONMENT_DROPS}
+    dropped = ("GITHUB_ACTIONS", "NO_COLOR", "PYTHON_COLORS", "FORCE_COLOR")
+    kept = {key: value for key, value in os.environ.items() if key not in dropped}
     return kept | extra
 
 
@@ -120,9 +119,10 @@ def test_each_doors_help_goes_to_stdout_alone_and_exits_0(capsys, words):
 @pytest.mark.parametrize("words", [[], ["hygiene"], ["sonar", "properties"]], ids=["quality", "hygiene", "sonar properties"])
 def test_short_help_equals_long_help(capsys, words):
     long = help_of(capsys, words)
-    with pytest.raises(SystemExit):
+    with pytest.raises(SystemExit) as stopped:
         cli.main([*words, "-h"])
-    assert capsys.readouterr().out == long
+    printed = capsys.readouterr()
+    assert (stopped.value.code, printed.out, printed.err) == (0, long, "")
 
 
 @pytest.mark.integration
@@ -176,6 +176,7 @@ def test_a_closed_stdout_takes_no_help_and_exit_is_0(tmp_path):
         pytest.param(["hygiene", "a", "b"], (), "unknown argument{sep}b", "quality hygiene", id="stray argument"),
         pytest.param(["scan-staged", "--nonsense"], (), "unknown argument{sep}--nonsense", "quality scan-staged", id="stray option"),
         pytest.param(["baseline", "write", "a", "b"], (), "unknown argument{sep}b", "quality baseline", id="stray argument of a group's command"),
+        pytest.param(["hygiene", "a", "b", "c"], (), "unknown argument{sep}b c", "quality hygiene", id="two stray arguments"),
         pytest.param(["sonar", "properties", "x"], (), "unknown argument{sep}x", "quality sonar", id="stray argument of sonar"),
         pytest.param(["--nonsense", "scoreboard"], (), "unknown argument{sep}--nonsense", "quality scoreboard", id="stray option before a command"),
     ],
@@ -225,11 +226,8 @@ def test_the_pair_is_painted_by_the_doors_environment(environment, painted):
     written = Terminal()
     with contextlib.redirect_stderr(written):
         cli.main(["nonsense"], environment=environment)
-    expected = Terminal()
-    output.write_pair(
-        f"no command nonsense{SEPARATOR}commands: {commands_of()}", (report.Command("quality --help"),), output.open_channel(expected, environment)
-    )
-    assert (written.getvalue(), "\x1b[" in written.getvalue()) == (expected.getvalue(), painted)
+    plain = f"error: no command nonsense{SEPARATOR}commands: {commands_of()}\nnext: quality --help\n"
+    assert (without_sgr(written.getvalue()), "\x1b[" in written.getvalue()) == (plain, painted)
 
 
 def test_the_version_prints_the_installed_version_alone(capsys):

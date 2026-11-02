@@ -411,8 +411,11 @@ def test_a_url_given_as_the_path_is_a_missing_fleet_file_like_any_other_path(cap
 )
 def test_a_fleet_given_on_the_command_line_is_a_usage_error(capsys, arguments, stray):
     """#63 rule 1: `--private` and a second positional are usage errors."""
-    assert (cli.main(["scoreboard", *arguments]), capsys.readouterr().err) == (
+    code = cli.main(["scoreboard", *arguments])
+    printed = capsys.readouterr()
+    assert (code, printed.out, printed.err) == (
         2,
+        "",
         f"error: unknown argument{SEPARATOR}{stray}\nnext: quality scoreboard --help\n",
     )
 
