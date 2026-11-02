@@ -1,4 +1,4 @@
-"""`quality check -v`: under each area, each scanner's exit and its stderr, once gitleaks has cleared the text."""
+"""Under `quality check -v`, each area shows each scanner's exit and its stderr, once gitleaks has cleared the text."""
 
 import contextlib
 import io
@@ -14,7 +14,7 @@ from quality import scanners
 from quality.report import NoteEvent
 from quality.rules import Area
 from tests.support.advisories import reporting, uv_lock
-from tests.support.check import DetailLine, FindingLine, NoteLine, area_block, area_fact, decode_block
+from tests.support.check import DetailLine, FindingLine, NoteLine, area_block, decode_block
 from tests.support.door import CHECK_WORD, door_in
 from tests.support.python_lint import fake_ruff, ruff_entry
 from tests.support.scanners import (
@@ -27,10 +27,8 @@ from tests.support.scanners import (
     lacking,
     vetting,
 )
-from tests.support.secrets import FAKE_KEY
+from tests.support.secrets import FAKE_KEY, allow_config
 from tests.support.terminal import screen, without_sgr
-
-NOTHING_SAID = "echo '[]'"
 
 
 def streams(repo: Path, capsys, *flags: str, **keywords) -> tuple[int, str, str]:
@@ -45,24 +43,23 @@ def shouting(lines: list[str]) -> str:
     return f"printf '%s\\n' {shlex.join(lines)} >&2"
 
 
-def writing(name: str, line: str, exit_code: int = 0) -> str:
+def writing(name: str, line: str, exit_code: int = 0, nothing_said: str = "echo '[]'") -> str:
     """The body of scanner `name` that answers clean, then writes `line` to stderr and exits `exit_code`."""
     if name == scanners.OSV_SCANNER:
         return reporting(OUTPUTS / "osv-scanner-clean.json", exit_code, line)
-    return f"{CLEAN_SCANS.get(name, NOTHING_SAID)}\n{shouting([line])}; exit {exit_code}"
+    return f"{CLEAN_SCANS.get(name, nothing_said)}\n{shouting([line])}; exit {exit_code}"
 
 
 def printing(report: Path, exit_code: int) -> str:
     return f"cat '{report}'; exit {exit_code}"
 
 
-def installing(served_scanners: Path, elsewhere: Path, bodies: dict[str, str]) -> dict:
+def installing(served_scanners: Path, elsewhere: Path, bodies: dict[str, str], nothing_said: str = "echo '[]'") -> dict:
     """The door's keywords for scanners that run `bodies` (name to shell); the others answer clean."""
-    for name in (scanners.GITLEAKS, scanners.ACTIONLINT, scanners.OSV_SCANNER):
-        if name in bodies:
-            fake_scanner(served_scanners, name, bodies[name])
-    zizmor = fake_zizmor(elsewhere / "zizmor", bodies.get(scanners.ZIZMOR, NOTHING_SAID))
-    ruff = fake_ruff(elsewhere, bodies.get(scanners.RUFF, NOTHING_SAID))
+    for name in bodies.keys() - {scanners.ZIZMOR, scanners.RUFF}:
+        fake_scanner(served_scanners, name, bodies[name])
+    zizmor = fake_zizmor(elsewhere / "zizmor", bodies.get(scanners.ZIZMOR, nothing_said))
+    ruff = fake_ruff(elsewhere, bodies.get(scanners.RUFF, nothing_said))
     return {"locate_zizmor": zizmor, "locate_ruff": lambda: str(ruff)}
 
 
@@ -93,7 +90,7 @@ def without_scanner_rows(printed: str) -> str:
 
 
 def test_each_scanner_stands_under_its_area_with_its_exit_and_its_stderr(build_repo, served_scanners, elsewhere, capsys):
-    said = {name: f"{name} wrote this" for name in (scanners.GITLEAKS, scanners.ACTIONLINT, scanners.ZIZMOR, scanners.OSV_SCANNER, scanners.RUFF)}
+    said = {name: f"{name} wrote this" for name in scanners.VERSION_ARGUMENTS}
     keywords = installing(served_scanners, elsewhere, {name: writing(name, line) for name, line in said.items()})
     _, out, _ = streams(scanning_repository(build_repo), capsys, "-v", **keywords)
     assert {area: scanner_rows(out, area) for area in (Area.SECRETS, Area.WORKFLOWS, Area.DEPENDENCIES, Area.CODE)} == {
@@ -106,7 +103,7 @@ def test_each_scanner_stands_under_its_area_with_its_exit_and_its_stderr(build_r
 
 def test_a_run_without_v_prints_no_scanner_row(build_repo, served_scanners, elsewhere, capsys):
     said = "this stays unprinted"
-    keywords = installing(served_scanners, elsewhere, {name: writing(name, said) for name in (scanners.ACTIONLINT, scanners.ZIZMOR, scanners.OSV_SCANNER, scanners.RUFF)})
+    keywords = installing(served_scanners, elsewhere, {name: writing(name, said) for name in scanners.VERSION_ARGUMENTS if name != scanners.GITLEAKS})
     _, out, err = streams(scanning_repository(build_repo), capsys, **keywords)
     assert [line for line in decode_block(out.splitlines()) if isinstance(line, NoteLine) and line.row.event is NoteEvent.EXITED] == []
     assert said not in out + err
@@ -151,11 +148,19 @@ def test_a_report_never_stands_under_v(build_repo, served_scanners, elsewhere, e
     }
 
 
+@pytest.fixture
+def summary(tmp_path, monkeypatch) -> Path:
+    """The step summary the door would write; a run that quotes nothing leaves it absent."""
+    path = tmp_path / "summary.md"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(path))
+    return path
+
+
 @pytest.mark.parametrize(
     ("name", "area"),
     [(scanners.ACTIONLINT, Area.WORKFLOWS), (scanners.ZIZMOR, Area.WORKFLOWS), (scanners.OSV_SCANNER, Area.DEPENDENCIES), (scanners.RUFF, Area.CODE)],
 )
-def test_a_successful_scans_warning_is_vetted_too(build_repo, served_scanners, elsewhere, capsys, name, area):
+def test_a_successful_scans_warning_is_vetted_too(build_repo, served_scanners, elsewhere, capsys, summary, name, area):
     fake_gitleaks(served_scanners, on_scan=vetting(flagging(FAKE_KEY)))
     keywords = installing(served_scanners, elsewhere, {name: writing(name, f"aws_access_key_id = {FAKE_KEY}")})
     repo = scanning_repository(build_repo)
@@ -164,16 +169,26 @@ def test_a_successful_scans_warning_is_vetted_too(build_repo, served_scanners, e
     assert code == plain_code
     assert [row for row in scanner_rows(out, area) if row[0] == name] == [(name, "0 · 1 stderr line withheld · not cleared by gitleaks", ())]
     assert FAKE_KEY not in out + err
+    assert not summary.exists()
 
 
-def test_a_value_above_the_last_five_lines_withholds_every_line(build_repo, served_scanners, elsewhere, capsys):
+@pytest.mark.parametrize(
+    ("name", "area", "exit_code"),
+    [
+        (scanners.ACTIONLINT, Area.WORKFLOWS, 3),
+        (scanners.ZIZMOR, Area.WORKFLOWS, 3),
+        (scanners.OSV_SCANNER, Area.DEPENDENCIES, 127),
+        (scanners.RUFF, Area.CODE, 2),
+    ],
+)
+def test_a_value_above_the_last_five_lines_withholds_every_line(build_repo, served_scanners, elsewhere, capsys, summary, name, area, exit_code):
     fake_gitleaks(served_scanners, on_scan=vetting(flagging(FAKE_KEY)))
     lines = [f"aws_access_key_id = {FAKE_KEY}", *(f"line {number}" for number in range(2, 9))]
-    keywords = installing(served_scanners, elsewhere, {scanners.RUFF: f"{shouting(lines)}; exit 2"})
-    _, out, err = streams(build_repo({"src/a.py": "x = 1\n"}), capsys, "-v", **keywords)
-    withheld = "8 stderr lines withheld · not cleared by gitleaks"
+    keywords = installing(served_scanners, elsewhere, {name: writing(name, "\n".join(lines), exit_code)})
+    _, out, err = streams(scanning_repository(build_repo), capsys, "-v", **keywords)
     assert [line for line in lines if line in out + err] == []
-    assert (scanner_rows(out, Area.CODE), area_fact(out, Area.CODE)) == ([(scanners.RUFF, f"2 · {withheld}", ())], f"ruff exited 2 · {withheld}")
+    assert [row for row in scanner_rows(out, area) if row[0] == name] == [(name, f"{exit_code} · 8 stderr lines withheld · not cleared by gitleaks", ())]
+    assert not summary.exists()
 
 
 @pytest.mark.parametrize(
@@ -196,6 +211,35 @@ def test_a_vet_that_cannot_answer_withholds_the_lines_under_v(build_repo, served
     assert (exit_code, plain_code) == (code, code)
     assert scanner_rows(out, Area.WORKFLOWS)[0] == (scanners.ACTIONLINT, "0 · 1 stderr line withheld · not cleared by gitleaks", ())
     assert "boom" not in out + err
+
+
+@pytest.mark.parametrize("opening", [r"\033[31m", r"\302\204"], ids=["ESC", "C1"])
+def test_a_terminal_code_is_withheld_under_v(build_repo, served_scanners, elsewhere, capsys, summary, opening):
+    fake_gitleaks(served_scanners, on_scan=vetting(flagging(FAKE_KEY)))
+    keywords = installing(served_scanners, elsewhere, {scanners.ACTIONLINT: f"echo '[]'\nprintf '{opening}red\\nplain\\n' >&2"})
+    code, out, err = streams(build_repo({".github/workflows/w.yml": "on: push\n"}), capsys, "-v", **keywords)
+    assert code == 0
+    assert scanner_rows(out, Area.WORKFLOWS)[0] == (scanners.ACTIONLINT, "0 · 2 stderr lines withheld · not cleared by gitleaks", ())
+    assert [character for character in out + err if unicodedata.category(character) == "Cc" and character != "\n"] == []
+    assert not (served_scanners / "gitleaks.vetted").exists()
+    assert not summary.exists()
+
+
+def test_v_leaves_a_scanner_areas_findings_and_notes_as_they_are(build_repo, served_scanners, elsewhere, capsys):
+    fake_gitleaks(served_scanners, on_scan=f'cp {OUTPUTS / "gitleaks-finding.json"} "$report"; exit {scanners.GITLEAKS_LEAKS_FOUND}')
+    keywords = installing(served_scanners, elsewhere, {scanners.ACTIONLINT: printing(OUTPUTS / "actionlint-finding.json", scanners.ACTIONLINT_FINDINGS)})
+    repo = build_repo(
+        {
+            ".github/workflows/w.yml": "on: push\n",
+            "quality/config.toml": allow_config(("aws-access-token", "deploy/config.txt", "PLACEHOLDER-SECRET-VALUE", "recorded test value")),
+        }
+    )
+    plain = streams(repo, capsys, **keywords)
+    verbose = streams(repo, capsys, "-v", **keywords)
+    shown = [line for area in (Area.SECRETS, Area.WORKFLOWS) for line in area_block(plain[1], area)]
+    assert [isinstance(line, FindingLine) for line in shown].count(True) == 1
+    assert [line.row.event for line in shown if isinstance(line, NoteLine)] == [NoteEvent.ALLOWED]
+    assert (verbose[0], without_scanner_rows(verbose[1])) == (plain[0], plain[1])
 
 
 def test_a_raw_line_stands_escaped_behind_the_marker(build_repo, served_scanners, elsewhere, capsys):
@@ -227,7 +271,7 @@ def test_at_a_terminal_a_raw_line_is_dim_and_whole(build_repo, served_scanners, 
         door_in(build_repo({".github/workflows/w.yml": "on: push\n"}), CHECK_WORD, "-v", clock=lambda: 0.0, environment={"TERM": "xterm"}, **keywords)
     raw = terminal.read()
     assert f"\x1b[2m      | {line}\x1b[0m" in raw
-    assert "\x1b[2m    · actionlint  exited  0\x1b[0m" in raw
+    assert f"\x1b[2m    · {scanners.ACTIONLINT}  {NoteEvent.EXITED.value}  0\x1b[0m" in raw
     assert line in without_sgr(raw)
 
 

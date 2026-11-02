@@ -12,7 +12,7 @@ import pytest
 
 from quality import config, scanners, staged
 from quality.report import Example, FindingEvent, NoteEvent, printable
-from quality.rules import Rule
+from quality.rules import Area, Rule
 from tests.support.check import (
     CopyLine,
     DetailLine,
@@ -300,7 +300,7 @@ def test_an_allowance_no_finding_used_is_one_unused_note_at_the_config(build_rep
     printed = streams.out
     whole_run = command == CHECK_WORD
     notes = rule_notes(repo, Rule.LEAK) if whole_run else list(staged.scan_staged(repo).notes)
-    block = area_block(printed, "secrets") if whole_run else decode_block(printed.splitlines())
+    block = area_block(printed, Area.SECRETS) if whole_run else decode_block(printed.splitlines())
     (note,) = notes
     assert (code, note.event, note.path) == (0, NoteEvent.UNUSED, config.CONFIG_PATH)
     assert ("aws-access-token" in note.fact, STALE_FILE in note.fact) == (True, True)
@@ -388,7 +388,7 @@ def assert_no_value(value: str, printed: str, summary: Path) -> None:
 
 def gitleaks_exit_rows(printed: str) -> list[tuple[str, str]]:
     """Each `check` exit row under the secrets row, as its scanner and fact."""
-    return [(line.location, line.row.fact) for line in area_block(printed, "secrets") if isinstance(line, NoteLine) and line.row.event is NoteEvent.EXITED]
+    return [(line.location, line.row.fact) for line in area_block(printed, Area.SECRETS) if isinstance(line, NoteLine) and line.row.event is NoteEvent.EXITED]
 
 
 def recorded_leak_with(edited_report, **fields: str) -> Path:
@@ -401,17 +401,14 @@ def leak_with_stderr(report: Path, *lines: str) -> str:
     return f"cp '{report}' \"$report\"; printf '%s\\n' {shlex.join(lines)} >&2; exit {scanners.GITLEAKS_LEAKS_FOUND}"
 
 
-NOT_CLEARED_PAIR = "7 · 2 stderr lines withheld · not cleared by gitleaks"
-FAILING_PAIR = "3 · 1 stderr line withheld · a failing gitleaks is never quoted"
-
-
 @pytest.mark.parametrize(
     ("id_", "allowed", "expected", "vetted"),
     [
-        ("a finding", False, (1, NOT_CLEARED_PAIR), True),
-        ("an allowed finding", True, (0, NOT_CLEARED_PAIR), True),
-        ("gitleaks failing with stderr", False, (2, FAILING_PAIR), False),
-        ("stderr beside a report", False, (2, FAILING_PAIR), False),
+        ("a finding", False, (1, "7 · 2 stderr lines withheld · not cleared by gitleaks"), True),
+        ("an allowed finding", True, (0, "7 · 2 stderr lines withheld · not cleared by gitleaks"), True),
+        ("gitleaks failing with stderr", False, (2, "3 · 1 stderr line withheld · a failing gitleaks is never quoted"), False),
+        ("gitleaks failing silently", False, (2, "3"), False),
+        ("stderr beside a report", False, (2, "3 · 1 stderr line withheld · a failing gitleaks is never quoted"), False),
         ("a report that is not UTF-8", False, (2, "7"), False),
         ("a report that is no JSON", False, (2, "7"), False),
         ("the value on gitleaks' stdout", False, (0, "0"), False),
@@ -428,6 +425,7 @@ def test_a_planted_value_reaches_no_stream_of_a_verbose_run(
     git_scans = {
         "a finding": leak_with_stderr(leak, "3:14PM INF scanned", f"ERR [git] {FAKE_KEY}"),
         "gitleaks failing with stderr": FAILING_REPORTS["stderr-without-report"],
+        "gitleaks failing silently": "exit 3",
         "stderr beside a report": FAILING_REPORTS["stderr-beside-a-report"],
         "a report that is not UTF-8": FAILING_REPORTS["report-not-utf8"],
         "a report that is no JSON": f'printf \'[{{"Secret":"{FAKE_KEY}"\' > "$report"; exit 7',
@@ -489,7 +487,7 @@ def test_gitleaks_real_stderr_stands_whole_under_v(build_repo, installed_scanner
     """A bump of gitleaks that changes what it writes to stderr turns this red."""
     door_in(build_repo(files), CHECK_WORD, "-v", clock=lambda: 0.0)
     printed = capsys.readouterr()
-    block = area_block(printed.out, "secrets")
+    block = area_block(printed.out, Area.SECRETS)
     details = [line.detail for line in block if isinstance(line, DetailLine)]
     assert gitleaks_exit_rows(printed.out) == [(scanners.GITLEAKS, fact)]
     assert any(said in detail for detail in details)
