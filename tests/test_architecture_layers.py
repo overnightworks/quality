@@ -41,3 +41,27 @@ def exhaustive(*layers: str, **options) -> dict:
 def test_a_layers_contract_is_compared_without_the_modules_the_base_does_not_name(base, head, expected):
     """#217 (ruled 28.10.2026): the head's layers lose every module the base does not name, then compare as before."""
     assert loosened({"pyproject.toml": contracts_toml(one(base))}, {"pyproject.toml": contracts_toml(one(head))}) == expected
+
+
+@pytest.mark.parametrize(
+    ("base", "head", "expected"),
+    [
+        (exhaustive("a", "b"), exhaustive("a : new", "b"), []),
+        (exhaustive("(a)", "b"), exhaustive("(a) : (new)", "b"), []),
+        (exhaustive("a", "b"), exhaustive("a", "b : new"), []),
+        (exhaustive("a | b"), exhaustive("a : b : new"), [GUARDED_CHANGES + "layers"]),
+        (exhaustive("a", "b"), exhaustive("a : b : new"), [GUARDED_CHANGES + "layers"]),
+        (exhaustive("(a)", "b"), exhaustive("a : new", "b"), [GUARDED_CHANGES + "layers"]),
+    ],
+    ids=[
+        "a new module beside a known one in a layer of its own",
+        "a new optional module beside a known optional one",
+        "a new module beside the known bottom layer",
+        "two known independent modules turned dependent beside a new one",
+        "two known layers merged into one dependent layer beside a new one",
+        "a known optional module made required beside a new one",
+    ],
+)
+def test_a_new_module_beside_one_known_module_in_a_layer_loosens_nothing(base, head, expected):
+    """A layer left with one known module has no sibling, so its independence says nothing."""
+    assert loosened({"pyproject.toml": contracts_toml(one(base))}, {"pyproject.toml": contracts_toml(one(head))}) == expected
