@@ -272,6 +272,17 @@ def area_block(printed: str, area: str) -> list[BlockLine]:
     return decode_block(lines[start + 1:end], first_position=start + 1)
 
 
+def scanner_rows(printed: str, area: str) -> list[tuple[str, str, tuple[str, ...]]]:
+    """Each exit row under `area` with its fact and the marked lines directly below it."""
+    rows: list[tuple[str, str, list[str]]] = []
+    for line in area_block(printed, area):
+        if isinstance(line, NoteLine) and line.row.event is NoteEvent.EXITED:
+            rows.append((line.location, line.row.fact, []))
+        elif isinstance(line, DetailLine) and rows:
+            rows[-1][2].append(line.detail)
+    return [(scanner, fact, tuple(details)) for scanner, fact, details in rows]
+
+
 def area_finding_rows(printed: str, area: str) -> list[tuple[str, FindingRow]]:
     """Every finding row standing under `area`'s row, each with its location, in printed order."""
     return [(line.location, line.row) for line in area_block(printed, area) if isinstance(line, FindingLine)]

@@ -7,7 +7,7 @@ from quality.output import Glyph
 from quality.report import NoteEvent
 from quality.rules import Area
 from tests.support.advisories import uv_lock
-from tests.support.check import DetailLine, NoteLine, area_block, area_fact, area_row
+from tests.support.check import NoteLine, area_block, area_fact, area_row, scanner_rows
 from tests.support.door import CHECK_WORD, door_in
 from tests.support.python_lint import fake_ruff
 from tests.support.scanners import CLEAN_SCANS, fake_gitleaks, fake_scanner, fake_zizmor, flagging, vetting
@@ -136,16 +136,6 @@ def test_a_named_area_starts_no_shared_read_it_does_not_need(build_repo, served_
     assert rows_of(out) == [area]
 
 
-def placed_text(out: str, block, verbose: bool, as_detail: bool) -> tuple[str, str]:
-    """The glyph and the text where the diagnostic belongs: the detail line directly beneath actionlint's exit row, that
-    row's fact, or the workflows row's fact when the area is refused."""
-    if not verbose:
-        return area_row(out, Area.WORKFLOWS).glyph, area_fact(out, Area.WORKFLOWS)
-    index = next(number for number, line in enumerate(block) if isinstance(line, NoteLine) and line.location == scanners.ACTIONLINT)
-    beneath = block[index + 1] if index + 1 < len(block) else None
-    return Glyph.NOTE, beneath.detail if as_detail and isinstance(beneath, DetailLine) else block[index].row.fact
-
-
 @pytest.mark.parametrize(
     ("words", "exit_of_actionlint", "stderr_line", "vet_answer", "code", "shown"),
     [
@@ -169,17 +159,22 @@ def test_a_selected_scanner_vets_its_stderr_without_judging_another_area(
     verbose = "-v" in words
     block = area_block(out, Area.WORKFLOWS)
     exits = [line.location for line in block if isinstance(line, NoteLine) and line.row.event is NoteEvent.EXITED]
-    glyph, text = placed_text(out, block, verbose, as_detail=shown == stderr_line)
-    assert (done, rows_of(out), calls_of(calls), exits, glyph, shown in text, shown in err, FAKE_KEY in out + err) == (
+    assert (done, rows_of(out), calls_of(calls), exits, shown in err, FAKE_KEY in out + err) == (
         code,
         [Area.WORKFLOWS],
         [f"{scanners.GITLEAKS} stdin"],
         [scanners.ACTIONLINT, scanners.ZIZMOR] if verbose else [],
-        Glyph.NOTE if verbose else Glyph.COULD_NOT_CHECK,
-        True,
         False,
         False,
     )
+    rows = scanner_rows(out, Area.WORKFLOWS)
+    if not verbose:
+        assert (rows, area_row(out, Area.WORKFLOWS).glyph, shown in area_fact(out, Area.WORKFLOWS)) == ([], Glyph.COULD_NOT_CHECK, True)
+    elif shown == scanners.NOT_CLEARED:
+        actionlint, zizmor = rows
+        assert (actionlint[0], scanners.NOT_CLEARED in actionlint[1], actionlint[2], zizmor) == (scanners.ACTIONLINT, True, (), (scanners.ZIZMOR, "0", ()))
+    else:
+        assert rows == [(scanners.ACTIONLINT, "0", (shown,)), (scanners.ZIZMOR, "0", ())]
 
 
 @pytest.mark.parametrize(
