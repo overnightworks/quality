@@ -6,7 +6,7 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from quality import cli, sonar
+from quality import output, sonar
 from quality.merge import GhFailed
 from quality.report import FindingEvent, headline
 from quality.sonar import finding_from_issue
@@ -404,7 +404,7 @@ ARRANGEMENTS = [
 
 def written_arguments(step_output: Path) -> list[str]:
     """The values of every `scanner-arguments=` line the door appended."""
-    prefix = f"{cli.SCANNER_ARGUMENTS_OUTPUT}="
+    prefix = f"{output.SCANNER_ARGUMENTS_OUTPUT}="
     return [line.removeprefix(prefix) for line in step_output.read_text().splitlines() if line.startswith(prefix)]
 
 
@@ -455,7 +455,7 @@ def test_properties_keeps_the_lines_the_output_file_already_holds(monkeypatch, c
     run_properties(monkeypatch, capsys, build_repo, arrange=put_bot_config, step_output=step_output)
     lines = step_output.read_text().splitlines()
     assert (lines[0], len(lines)) == ("earlier=1", 2)
-    assert lines[1].startswith(f"{cli.SCANNER_ARGUMENTS_OUTPUT}=")
+    assert lines[1].startswith(f"{output.SCANNER_ARGUMENTS_OUTPUT}=")
 
 
 def test_properties_outside_a_workflow_step_prints_and_exits_clean(monkeypatch, capsys, build_repo):

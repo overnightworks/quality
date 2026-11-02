@@ -32,13 +32,17 @@ from quality.checkout import OutsideWorkTree
 from quality.config import ConfigError, read_allow_lists, read_gate_settings
 from quality.merge import Ask, GhRunner, RemoteFor, github_remote, run_emergency_merge, run_gh
 from quality.output import (
+    SCANNER_ARGUMENTS_OUTPUT,
     SEPARATOR,
+    STEP_OUTPUT_VARIABLE,
+    STEP_SUMMARY_VARIABLE,
     Channel,
     Channels,
     Glyph,
     Row,
     SubLine,
     Verdict,
+    append_step_output,
     append_step_summary,
     counted,
     emit,
@@ -79,8 +83,6 @@ from quality.web import Sleep
 EXIT_CLEAN = 0
 EXIT_FINDINGS = 1
 EXIT_CANNOT_JUDGE = 2
-# The name gate.yml reads as `steps.<id>.outputs.scanner-arguments` from the properties step.
-SCANNER_ARGUMENTS_OUTPUT = "scanner-arguments"
 HYGIENE_EXIT = {
     Outcome.CLEAN: EXIT_CLEAN,
     Outcome.MEASURED_ONLY: EXIT_CLEAN,
@@ -408,7 +410,7 @@ def run_sonar_properties() -> int:
     try:
         append_step_output(SCANNER_ARGUMENTS_OUTPUT, scanner_exclusions(uncounted))
     except OSError as error:
-        emit(f"sonar: cannot judge - GITHUB_OUTPUT is not writable: {error}", file=sys.stderr)
+        emit(f"sonar: cannot judge - {STEP_OUTPUT_VARIABLE} is not writable: {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     emit("sonar: properties clean")
     if uncounted:
@@ -434,6 +436,16 @@ def run_sonar_findings(transport: Transport, sleep: Sleep) -> int:
     return EXIT_FINDINGS if result.fails_the_run else EXIT_CLEAN
 
 
+def summarised(report: tuple[str, ...]) -> bool:
+    """Whether the run summary took the report; an unwritable summary is a fact on stderr, not a traceback."""
+    try:
+        append_step_summary(report)
+    except OSError as error:
+        emit(f"cannot judge - {STEP_SUMMARY_VARIABLE} is not writable: {error}", file=sys.stderr)
+        return False
+    return True
+
+
 def run_verdict(path: Path, fetcher_for: Callable[[str], PageFetcher], sleep: Sleep) -> int:
     try:
         head = read_head(path)
@@ -457,8 +469,7 @@ def run_verdict(path: Path, fetcher_for: Callable[[str], PageFetcher], sleep: Sl
         report = settled.lines()
         code = EXIT_CLEAN if settled.verdict.green else EXIT_FINDINGS
     emit(*report, file=sys.stderr if code == EXIT_CANNOT_JUDGE else sys.stdout)
-    append_step_summary(report)
-    return code
+    return code if summarised(report) else EXIT_CANNOT_JUDGE
 
 
 def run_scoreboard(path: Path, release_tags: fleet.TagReader) -> int:
@@ -474,16 +485,9 @@ def run_scoreboard(path: Path, release_tags: fleet.TagReader) -> int:
         tags = error
     report = fleet.render(rows, datetime.now(UTC).date(), tags)
     emit(*report)
-    append_step_summary(report)
-    return EXIT_CANNOT_JUDGE if fleet.cannot_judge(rows, tags) else EXIT_CLEAN
-
-
-def append_step_output(name: str, value: str) -> None:
-    """In a GitHub Actions step, later steps read the value as `steps.<id>.outputs.<name>`."""
-    step_output = os.environ.get("GITHUB_OUTPUT")
-    if step_output:
-        with open(step_output, "a", encoding="utf-8") as handle:
-            handle.write(f"{name}={value}\n")
+    if not summarised(report) or fleet.cannot_judge(rows, tags):
+        return EXIT_CANNOT_JUDGE
+    return EXIT_CLEAN
 
 
 def run(

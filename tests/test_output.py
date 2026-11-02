@@ -1,5 +1,6 @@
 import contextlib
 import io
+import json
 import os
 import re
 import subprocess
@@ -11,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import cli, output, sonar
+from quality import cli, fleet, output, sonar
 from quality.output import Glyph, Row, SubLine, Verdict
 from quality.report import (
     Choice,
@@ -554,3 +555,26 @@ def test_an_example_is_painted_by_its_label_only_at_a_terminal(term, no_color):
     assert OWN_SGR.sub("", styled) == "error: e\nnext: write it in a.toml like this:\n    [[table]]\n    key = \"value\"\n    other = 1\n"
     assert ("\x1b[" in styled) is (term == "xterm" and no_color is None)
     assert not any("\x1b[" in line for line in styled.splitlines() if line.startswith("    "))
+
+
+def drive_verdict(repo):
+    page = json.dumps({"total_count": 1, "jobs": [{"id": 1, "name": "checks", "run_attempt": 1, "status": "completed", "conclusion": "success"}]})
+    return cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (page, None))
+
+
+def drive_scoreboard(repo):
+    (repo / "quality").mkdir(exist_ok=True)
+    (repo / "quality" / "fleet.toml").write_text('repositories = ["o/none"]\n')
+    return cli.main(["scoreboard", str(repo)], release_tags=lambda: fleet.ReleaseTagsError("not asked"))
+
+
+@pytest.mark.parametrize("door", [drive_verdict, drive_scoreboard], ids=["verdict", "scoreboard"])
+def test_a_door_whose_step_summary_cannot_be_written_is_exit_2_with_the_fact_and_no_traceback(monkeypatch, capsys, run_env, tmp_path, door):
+    repo, _ = run_env
+    monkeypatch.setattr(fleet, "measure_fleet", lambda listed: [])
+    unwritable = tmp_path / "a-directory"
+    unwritable.mkdir()
+    monkeypatch.setenv(output.STEP_SUMMARY_VARIABLE, str(unwritable))
+    code = door(repo)
+    assert code == 2
+    assert f"{output.STEP_SUMMARY_VARIABLE} is not writable" in capsys.readouterr().err

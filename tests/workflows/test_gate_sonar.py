@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from quality import cli, sonar
+from quality import output, sonar
 
 ROOT = Path(__file__).parents[2]
 WORKFLOWS = ROOT / ".github" / "workflows"
@@ -59,7 +59,7 @@ def test_the_scan_pins_the_verified_scanner_and_the_sonarcloud_origin(sonar_step
     """#26 rule 4: removing scannerVersion or changing the host argument fails this test"""
     options = step_named(sonar_steps, "Scan")["with"]
     preflight_id = step_named(sonar_steps, "Refuse a token")["id"]
-    arguments = f"${{{{ steps.{preflight_id}.outputs.{cli.SCANNER_ARGUMENTS_OUTPUT} }}}}"
+    arguments = f"${{{{ steps.{preflight_id}.outputs.{output.SCANNER_ARGUMENTS_OUTPUT} }}}}"
     assert options["scannerVersion"] == VERIFIED_SCANNER_VERSION
     assert options["args"].split(" ", 2) == [
         f"-Dsonar.host.url={sonar.SONAR_ORIGIN}",
