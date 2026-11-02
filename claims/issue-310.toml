@@ -1,0 +1,8 @@
+claim_id = "6368541cee474c71b0865be73d95bc82"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "ff673d329a2ec541f5c25caf3844a1e99f9443c3"
+branch = "claude/issue-310-c3g1-code-rows"
+scope = ["docs/output.md", "docs/rules.md", "src/quality/cli.py", "src/quality/output.py", "src/quality/python_lint.py", "src/quality/report.py", "src/quality/sonar.py", "tests/support/check.py", "tests/test_check.py", "tests/test_cli_output.py", "tests/test_output.py", "tests/test_python_lint.py", "tests/test_report.py", "tests/test_sonar_exception.py"]
+opened_commit = "a3f4544ba5c8d5921f6321baeae46f1564dcf40c"
+whole_reason = "Five production files, about +24/-19, over the corridor's three files, because the required event crosses its last constructors and the branch it kills, and #5 282a is a one-column fold-in; the extent and the notes are C3g2, the rename C3g3."
