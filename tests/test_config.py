@@ -363,10 +363,10 @@ def test_a_malformed_advisory_allowance_cannot_be_judged_where_the_whole_config_
     assert (len(verdict), named in verdict[0]) == (1, True), verdict
     assert cli.main(["hygiene", str(repo)]) == 2
     capsys.readouterr()
-    assert [rule for rule, reason in refusals(repo).items() if named in reason] == [
+    assert {rule for rule, reason in refusals(repo).items() if named in reason} == {
         Rule.COMPOSE_PORT, Rule.SIZE, Rule.ROOT_LAYOUT, Rule.FILE_SUFFIX, Rule.SCRIPT_NAME, Rule.SCRIPT_HEADER, Rule.TEST_LAYOUT, Rule.TEST_IMPORT,
         Rule.PYTHON_FLOOR, Rule.LEAK, Rule.ADVISORY,
-    ]
+    }
 
 
 @pytest.mark.parametrize("entry", [allowance_config(reason=None), allowance_config(until="2027-01-31")])
