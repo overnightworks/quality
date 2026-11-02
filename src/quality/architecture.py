@@ -221,9 +221,15 @@ def _holds(tightening: Tightening, before: object, after: object) -> bool:
 
 def _without_modules_unknown_to(base_layers: Sequence[Layer], head_layers: Sequence[Layer]) -> list[Layer]:
     """The head's layers without the modules the base does not name, and without the layers that leaves empty."""
-    known = {tail.name for layer in base_layers for tail in layer.module_tails}
-    stripped = [replace(layer, module_tails={tail for tail in layer.module_tails if tail.name in known}) for layer in head_layers]
+    known = frozenset(tail.name for layer in base_layers for tail in layer.module_tails)
+    stripped = [_known_part(layer, known) for layer in head_layers]
     return [layer for layer in stripped if layer.module_tails]
+
+
+def _known_part(layer: Layer, known: frozenset[str]) -> Layer:
+    """A layer's modules the base names; one left alone has no sibling, so its independence says nothing."""
+    tails = {tail for tail in layer.module_tails if tail.name in known}
+    return replace(layer, module_tails=tails, is_independent=layer.is_independent or len(tails) == 1)
 
 
 def _fields_of(contract: Contract, contract_type: str) -> ContractFields:

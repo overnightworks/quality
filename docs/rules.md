@@ -458,7 +458,8 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   kept; a module added to the `modules` of an `independence` contract, the base's all kept; and a module newly placed
   in a `layers` contract (operator ruling 28.10.2026, #217: „ok“): the head's `layers` are compared with every module
   name the base's `layers` do not name stripped, and a layer left empty dropped. Base layers `a`, `b` against head
-  `a`, `new`, `b` is green. Everything else stays a loosening: a removed, renamed or replaced expression (`shop.web`
+  `a`, `new`, `b` is green. A layer left with one module has no sibling, so its independence says nothing: base `(game)`
+  against head `(game) : (agent)` is green, and base `a | b` against head `a : b : new` stays a loosening. Everything else stays a loosening: a removed, renamed or replaced expression (`shop.web`
   turned into `shop.*` included), a module dropped because it was deleted, an expression added and another removed in
   one field, `allow_indirect_imports` turned from false to true, `as_packages`,
   `unmatched_ignore_imports_alerting`, `containers`, `exhaustive`, `exhaustive_ignores` and every `protected` or
