@@ -26,6 +26,7 @@ from tests.support.check import (
     assert_every_line_starts_with_the_door,
     hygiene_output,
     hygiene_run,
+    hygiene_streams,
     leading_count,
     rule_findings,
     rule_notes,
@@ -136,8 +137,8 @@ def test_a_broken_and_an_unused_finding_keep_their_own_fixes(build_repo, capsys)
     assert_block_prints(block, rule_findings(repo, Rule.IMPORT_CONTRACT), [])
     fix_lines = [line for line in block if isinstance(line, FixLine)]
     assert len(fix_lines) == 2
-    has_lines = [bool(line.row.detail) for line in block if isinstance(line, FindingLine)]
-    assert has_lines == [True, False]
+    has_detail = [bool(line.row.detail) for line in block if isinstance(line, FindingLine)]
+    assert has_detail == [True, False]
 
 
 def test_the_notes_follow_the_final_fix_in_the_shared_columns_grimp_first(build_repo, capsys):
@@ -181,11 +182,9 @@ def test_warnings_stand_in_order_when_every_contract_is_kept(build_repo, capsys)
 def test_no_import_contract_line_stands_before_the_area_rows(build_repo, capsys, files):
     """O15: the notes leave the prelude."""
     repo = build_repo(files)
-    _, printed = hygiene_output(capsys, repo)
-    printed_lines = [line for line in printed.splitlines() if line.startswith(Rule.IMPORT_CONTRACT)]
-    reported_lines = [line for line in hygiene_run(repo).reports if line.startswith(Rule.IMPORT_CONTRACT)]
-    assert printed_lines == []
-    assert reported_lines == []
+    _, out, err = hygiene_streams(capsys, repo)
+    printed_lines = [line for line in out.splitlines() if line.startswith(Rule.IMPORT_CONTRACT)]
+    assert (printed_lines, err) == ([], "")
 
 
 def imports_verdict(repo: Path) -> check.RuleVerdict:

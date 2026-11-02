@@ -137,9 +137,15 @@ def test_a_judged_workflows_area_opens_its_extent_with_the_verdicts_extent_and_e
     assert (leading_count(fact), fact.endswith(cli.OFFLINE_AUDITS)) == (extent, True)
 
 
-@pytest.mark.parametrize(("lint", "security"), [(None, 5), (5, None), (None, None)], ids=["lint refuses", "security refuses", "both refuse"])
-def test_a_workflows_area_with_one_refusing_rule_has_no_extent_whatever_the_other_carries(lint, security):
-    assert cli.area_extent(workflows_area(lint, security), 0) == ""
+@pytest.mark.parametrize(
+    ("area", "first", "second"),
+    [(Area.WORKFLOWS, Rule.WORKFLOW_LINT, Rule.WORKFLOW_SECURITY), (Area.CODE, Rule.PYTHON_SECURITY, Rule.PYTHON_PRINT)],
+    ids=["workflows", "code"],
+)
+@pytest.mark.parametrize(("one", "other"), [(None, 5), (5, None), (None, None)], ids=["first refuses", "second refuses", "both refuse"])
+def test_an_area_with_one_refusing_rule_has_no_extent_whatever_the_other_carries(area, first, second, one, other):
+    verdict = check.AreaVerdict(area, (judging(first, one), judging(second, other)))
+    assert cli.area_extent(verdict, 0) == ""
 
 
 def dependencies_area(extent: LockExtent | None, refusal: CannotJudge | None = None) -> check.AreaVerdict:
@@ -155,5 +161,11 @@ def test_a_dependencies_area_that_could_not_check_has_no_extent():
     assert cli.area_extent(dependencies_area(None, CannotJudge("why")), 0) == ""
 
 
-def test_an_area_without_an_extent_of_its_own_has_none():
-    assert cli.area_extent(check.AreaVerdict(Area.CODE, (check.RuleVerdict(Rule.PYTHON_PRINT, extent=3),)), 0) == ""
+def code_area(rules: tuple[Rule, ...], extent: int) -> check.AreaVerdict:
+    return check.AreaVerdict(Area.CODE, tuple(judging(rule, extent) for rule in rules))
+
+
+@pytest.mark.parametrize("rules", [(Rule.PYTHON_SECURITY,), (Rule.PYTHON_SECURITY, Rule.PYTHON_PRINT)], ids=["one rule", "both rules"])
+@pytest.mark.parametrize("extent", [0, 1, 41])
+def test_a_judged_code_area_counts_its_rules_and_its_python_files(rules, extent):
+    assert extent_counts(cli.area_extent(code_area(rules, extent), 0)) == [len(rules), extent]

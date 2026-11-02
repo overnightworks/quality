@@ -7,7 +7,9 @@ from pathlib import Path
 import pytest
 
 from quality import check, installation, python_lint, scanners
+from quality.output import SEPARATOR
 from quality.python_lint import LintError, RuffFinding, UnparsablePython
+from quality.report import Note, NoteEvent
 from quality.rules import Rule
 from tests.support.check import (
     env_row_stands,
@@ -45,14 +47,14 @@ def linted(records: list[RuffFinding], texts: dict[str, str], test_files: frozen
 
 
 def judged(text: str, finding: RuffFinding, test_files: frozenset[str] = frozenset()) -> list[str]:
-    findings = python_lint.judge_security(linted([finding], {finding.path: text}, test_files))
+    findings = python_lint.judge_security(linted([finding], {finding.path: text}, test_files)).findings
     return [f"{item.location} {item.reason}" for item in findings]
 
 
-def judged_prints(text: str, records: list[RuffFinding]) -> tuple[list[str], tuple[str, ...]]:
-    """The python-print findings as `<location> <reason>`, and the report lines."""
+def judged_prints(text: str, records: list[RuffFinding]) -> tuple[list[str], tuple[Note, ...]]:
+    """The python-print findings as `<location> <reason>`, and the notes."""
     result = python_lint.judge_print(linted(records, {"src/p/a.py": text}))
-    return [f"{item.location} {item.reason}" for item in result.findings], result.reports
+    return [f"{item.location} {item.reason}" for item in result.findings], result.notes
 
 
 def rule_verdict(repo: Path, rule: Rule = Rule.PYTHON_SECURITY) -> check.RuleVerdict:
@@ -183,12 +185,17 @@ def test_only_an_own_line_reasoned_owner_naming_the_code_or_a_reasoned_line_noqa
     assert any(PRINT_REASON in finding for finding in findings) is is_red, findings
 
 
-def test_an_honoured_owner_is_reported_with_its_path_and_reason():
-    """#225 cell 8: `python-print: output owner <path> - <reason>`, and no finding."""
-    text = f"{OWNER}\n{PRINT}\n"
-    assert judged_prints(text, [print_record(text)]) == (
-        [], ("python-print: output owner src/p/a.py - the command line owns its output",)
-    )
+@pytest.mark.parametrize(
+    "directive",
+    [OWNER, "# ruff: noqa: T201 -  the command line owns its output   "],
+    ids=["plain reason", "spaces around the reason"],
+)
+def test_an_honoured_owner_is_a_note_on_its_line_with_its_reason(directive):
+    """The owner is no finding: it is an allowed note on its own line whose fact ends in its stripped reason."""
+    text = f"x = 1\n{directive}\n{PRINT}\n"
+    findings, (note,) = judged_prints(text, [print_record(text)])
+    assert (findings, note.location, note.event) == ([], "src/p/a.py:2", NoteEvent.ALLOWED)
+    assert note.fact.endswith(SEPARATOR + "the command line owns its output")
 
 
 @pytest.mark.parametrize(
@@ -198,8 +205,8 @@ def test_an_honoured_owner_is_reported_with_its_path_and_reason():
 )
 def test_an_owner_that_clears_no_finding_is_a_finding_on_its_line(text, records):
     """#225 cell 9: a directive kept where nothing it names is found is a finding; delete it."""
-    findings, reports = judged_prints(text, records)
-    assert (any(finding.startswith("src/p/a.py:2 ") for finding in findings), reports) == (True, ()), findings
+    findings, notes = judged_prints(text, records)
+    assert (any(finding.startswith("src/p/a.py:2 ") for finding in findings), notes) == (True, ()), findings
 
 
 def test_a_fix_names_the_code_found_and_the_line_its_noqa_must_stand_on():
@@ -207,8 +214,8 @@ def test_a_fix_names_the_code_found_and_the_line_its_noqa_must_stand_on():
     text = "run(argv)\n" * noqa_line
     (secured,) = python_lint.judge_security(
         linted([record(line=flagged_line, noqa_line=noqa_line)], {"src/p/a.py": text})
-    )
-    (other_secured,) = python_lint.judge_security(linted([record(code="S307")], {"src/p/a.py": text}))
+    ).findings
+    (other_secured,) = python_lint.judge_security(linted([record(code="S307")], {"src/p/a.py": text})).findings
     (printed,) = python_lint.judge_print(linted([record(code="T203")], {"src/p/a.py": text})).findings
     numbers_without_code = re.findall(r"\d+", secured.fix.replace("S603", ""))
     assert numbers_without_code == [str(noqa_line)]
@@ -225,7 +232,7 @@ def test_an_owner_clears_only_its_own_files_prints_and_never_a_security_finding(
         {"src/p/door.py": owner_text, "src/p/other.py": other_text},
     )
     printed = [finding.location for finding in python_lint.judge_print(lint).findings]
-    secured = [finding.location for finding in python_lint.judge_security(lint)]
+    secured = [finding.location for finding in python_lint.judge_security(lint).findings]
     assert (printed, secured) == (["src/p/other.py:1"], ["src/p/door.py:3"])
 
 
@@ -274,6 +281,7 @@ def test_untracked_linked_submodule_notebook_stub_and_suffixless_files_are_not_j
     (repo / "vendor").mkdir()
     (repo / "vendor" / "inside.py").write_text(EVAL)
     assert flagged_paths(repo) == []
+    assert [rule_verdict(repo, rule).extent for rule in (Rule.PYTHON_SECURITY, Rule.PYTHON_PRINT)] == [0, 0]
 
 
 @pytest.mark.integration

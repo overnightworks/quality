@@ -553,15 +553,16 @@ def test_an_allowance_that_ran_out_leaves_no_note(drive_advisories):
 def test_an_allowed_advisory_leaves_no_line_before_the_area_rows(drive_advisories):
     """The prelude holds no allowed line: the first line is the first area's row."""
     run = drive_advisories({"uv.lock": uv_lock(), "quality/config.toml": entry()})
-    assert (hygiene_run(run.repo).reports, run.out.splitlines()[0].split()[1], run.err) == ((), next(iter(Area)), "")
+    assert (run.out.splitlines()[0].split()[1], run.err) == (next(iter(Area)), "")
 
 
-def test_the_reports_hold_only_the_lines_of_python_print(drive_advisories):
-    """The prelude keeps the output owner of python-print, and the allowed advisory stands under its row."""
+def test_an_owner_and_an_allowed_advisory_stand_under_their_own_rows(drive_advisories):
+    """The output owner stands under the code row and the allowed advisory under its own, and no line stands before the rows."""
     owner = "# ruff: noqa: T201 - the command line owns its output\nprint(1)\n"
     run = drive_advisories({"src/door.py": owner, "uv.lock": uv_lock(), "quality/config.toml": entry()})
-    (report,) = hygiene_run(run.repo).reports
-    assert (report.startswith(Rule.PYTHON_PRINT), len(run.area.notes), run.err) == (True, 1, "")
+    (code_notes,) = [verdict.notes for verdict in run.areas if verdict.area is Area.CODE]
+    assert (len(code_notes), len(run.area.notes), run.out.splitlines()[0].split()[1], run.err) == (1, 1, next(iter(Area)), "")
+    assert_block_prints(area_block(run.out, Area.CODE), (), code_notes)
     assert_block_prints(area_block(run.out, Area.DEPENDENCIES), (), run.area.notes)
 
 
