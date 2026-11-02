@@ -33,6 +33,8 @@ from quality.config import ConfigError, read_allow_lists, read_gate_settings
 from quality.merge import Ask, GhRunner, RemoteFor, github_remote, run_emergency_merge, run_gh
 from quality.output import (
     SEPARATOR,
+    Channel,
+    Channels,
     Glyph,
     Row,
     SubLine,
@@ -41,6 +43,7 @@ from quality.output import (
     counted,
     emit,
     emit_finding,
+    open_channels,
     set_up_streams,
     write_findings_and_notes,
     write_pair,
@@ -101,7 +104,9 @@ def main(
     locate_ruff: Callable[[], str] = INSTALLED_RUFF,
     locate_zizmor: Callable[[], str] = INSTALLED_ZIZMOR,
     clock: Callable[[], float] = time.monotonic,
+    environment: Mapping[str, str] = os.environ,
 ) -> int:
+    channels = open_channels(environment)
     arguments = build_parser().parse_args(argv)
 
     if arguments.command == "emergency-merge":
@@ -113,7 +118,7 @@ def main(
             ask=ask,
             is_terminal=is_terminal(),
             now=lambda: datetime.now(UTC),
-            environment=os.environ,
+            environment=environment,
             say=emit,
             remote_for=remote_for,
         )
@@ -124,12 +129,12 @@ def main(
     if arguments.command == "baseline":
         return run_baseline_write(arguments.path)
     if arguments.command == "scan-staged":
-        return run_scan_staged(arguments.path)
+        return run_scan_staged(arguments.path, channels.out)
     if arguments.command == "sonar":
         if arguments.sonar_command == "properties":
             return run_sonar_properties()
         return run_sonar_findings(transport, sleep)
-    return run_hygiene_check(arguments.path, locate_ruff, locate_zizmor, clock)
+    return run_hygiene_check(arguments.path, locate_ruff, locate_zizmor, clock, channels)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -301,22 +306,24 @@ def next_steps(areas: tuple[AreaVerdict, ...]) -> tuple[Step, ...]:
     return steps if reasons and all(reason.next_steps for reason in reasons) else (*steps, REFUSED_AREAS_NEXT)
 
 
-def run_hygiene_check(path: Path, locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str], clock: Callable[[], float]) -> int:
+def run_hygiene_check(
+    path: Path, locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str], clock: Callable[[], float], channels: Channels
+) -> int:
     started = clock()
     try:
         result = run_hygiene(path, locate_ruff, locate_zizmor)
     except OutsideWorkTree as error:
-        write_pair(f"not inside a git work tree · {error.path}", (Instruction("run quality hygiene inside a repository"),))
+        write_pair(f"not inside a git work tree · {error.path}", (Instruction("run quality hygiene inside a repository"),), channels.err)
         return EXIT_CANNOT_JUDGE
     except CannotJudge as error:
-        write_pair(error.reason.fact, error.reason.next_steps or (START_FAILURE_NEXT,))
+        write_pair(error.reason.fact, error.reason.next_steps or (START_FAILURE_NEXT,), channels.err)
         return EXIT_CANNOT_JUDGE
     for verdict in result.areas:
-        write_rows((area_row(verdict, area_extent(verdict, result.tracked_paths)),))
-        write_findings_and_notes(verdict.findings, verdict.notes)
+        write_rows((area_row(verdict, area_extent(verdict, result.tracked_paths)),), channels.out)
+        write_findings_and_notes(verdict.findings, verdict.notes, channels.out)
     exit_code = HYGIENE_EXIT[result.worst]
     if exit_code == EXIT_CANNOT_JUDGE:
-        write_pair(refusal_error(result.areas), next_steps(result.areas))
+        write_pair(refusal_error(result.areas), next_steps(result.areas), channels.err)
         return exit_code
     outcomes = Counter(verdict.outcome for verdict in result.areas)
     write_verdict(
@@ -327,7 +334,8 @@ def run_hygiene_check(path: Path, locate_ruff: Callable[[], str], locate_zizmor:
             areas=len(result.areas),
             notes=measured_notes(result.areas),
             seconds=clock() - started,
-        )
+        ),
+        channels.out,
     )
     return exit_code
 
@@ -371,13 +379,13 @@ def describe_loosenings(path: Path, written: ratchet.Baseline) -> list[str]:
     return lines
 
 
-def run_scan_staged(path: Path) -> int:
+def run_scan_staged(path: Path, out: Channel) -> int:
     try:
         result = staged.scan_staged(path)
     except (process.ProcessError, ConfigError, CannotJudge) as error:
         emit(f"scan-staged: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
-    write_findings_and_notes(result.findings, result.notes)
+    write_findings_and_notes(result.findings, result.notes, out)
     emit(f"scan-staged: {len(result.findings)} finding(s)" if result.findings else "scan-staged: clean")
     return EXIT_FINDINGS if result.findings else EXIT_CLEAN
 
