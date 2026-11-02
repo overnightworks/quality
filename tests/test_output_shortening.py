@@ -233,13 +233,19 @@ def test_a_wide_subject_and_event_narrow_a_rows_fact_by_their_cells():
 def test_a_shortened_fact_is_painted_as_one_span():
     styles = Terminal()
     output.write_rows(
-        (Row(Glyph.NEEDS_YOU, "files", Event.FINDING, "FACT"), Row(Glyph.NOTE, "files", Event.CLEAN, "FACT")),
+        (
+            Row(Glyph.NEEDS_YOU, "files", Event.FINDING, "FACT"),
+            Row(Glyph.NOTE, "files", Event.CLEAN, "FACT"),
+            Row(Glyph.COULD_NOT_CHECK, "files", Event.CLEAN, "FACT", descriptive=True),
+        ),
         output.Channel(styles, True, None),
     )
-    finding_style, note_style = styles.getvalue().splitlines()
+    finding_style, note_style, reason_style = styles.getvalue().splitlines()
     glyph_opening, glyph_closing = re.search(rf"({SGR})!({SGR})", finding_style).groups()
     opening, closing = re.search(rf"({SGR})FACT({SGR})$", finding_style).groups()
     note_opening, note_closing = re.fullmatch(rf"({SGR}).*({SGR})", note_style).groups()
+    reason_glyph_opening, reason_glyph_closing = re.search(rf"({SGR})✗({SGR})", reason_style).groups()
+    reason_opening, reason_closing = re.search(rf"({SGR})FACT({SGR})$", reason_style).groups()
     explanation = "an explanation that goes on for far longer than any window"
     terminal, channel = at_window(30)
     output.write_findings_and_notes(
@@ -248,6 +254,11 @@ def test_a_shortened_fact_is_painted_as_one_span():
     painted_finding, _, painted_note = terminal.getvalue().splitlines()
     assert painted_finding == f"    {glyph_opening}!{glyph_closing} a.env  tracked  {opening}an expl…{closing}"
     assert painted_note == f"{note_opening}    · a.env  warning  an expl…{note_closing}"
+    reason_terminal = Terminal()
+    reason = Row(Glyph.COULD_NOT_CHECK, "files", Event.CLEAN, "a reason of many words", descriptive=True)
+    output.write_rows((reason,), output.Channel(reason_terminal, True, 40))
+    expected = f"  {reason_glyph_opening}✗{reason_glyph_closing} files         clean          {reason_opening}a reas…{reason_closing}"
+    assert reason_terminal.getvalue().splitlines() == [expected]
 
 
 @pytest.mark.parametrize(
