@@ -130,11 +130,15 @@ def then(*edits):
     return edit
 
 
+def distant() -> datetime.date:
+    return datetime.date(2999, 12, 31)
+
+
 def entry(
-    identifier: str = ADVISORY_ID, lock: str = "uv.lock", until: datetime.date = datetime.date(2999, 12, 31),
+    identifier: str = ADVISORY_ID, lock: str = "uv.lock", until: datetime.date | None = None,
     reason: str = UV_LOCK_ALLOWANCE["reason"],
 ) -> str:
-    return allowance_config(**UV_LOCK_ALLOWANCE | {"identifier": identifier, "lock": lock, "reason": reason}, until=until)
+    return allowance_config(**UV_LOCK_ALLOWANCE | {"identifier": identifier, "lock": lock, "reason": reason}, until=until or distant())
 
 
 def no_advisories(report: dict) -> None:
@@ -394,12 +398,13 @@ def test_a_refused_area_leaves_the_note_row_and_the_exact_pair(drive_advisories,
             then(npm_report("lodash.merge", "lodash.merge"), copy_listed_as("lodash-merge"), no_advisories), [1, 2],
         ),
         ({"uv.lock": uv_lock()}, then(copy_listed_as(ecosystem="npm"), no_advisories), [1, 2]),
+        ({"uv.lock": uv_lock()}, then(copy_listed_as(PACKAGE_NAME.upper()), no_advisories), [1, 1]),
         ({"uv.lock": uv_lock()}, then(add_second_package, listed_in_results((0,), (1,)), no_advisories), [1, 2]),
         ({"uv.lock": uv_lock()}, then(listed_in_results((0,), (0,)), no_advisories), [1, 1]),
     ],
     ids=[
         "one package", "two packages", "one package listed twice", "a report listing nothing", "two npm spellings",
-        "one name in two ecosystems", "two results listing different packages", "two results listing the same package",
+        "one name in two ecosystems", "two PyPI spellings", "two results listing different packages", "two results listing the same package",
     ],
 )
 def test_a_clean_row_counts_the_lockfiles_and_the_packages_the_report_lists(drive_advisories, build_repo, files, edit, counts):
@@ -408,6 +413,27 @@ def test_a_clean_row_counts_the_lockfiles_and_the_packages_the_report_lists(driv
     run = drive_advisories(repo, report_naming(repo, next(iter(files)), edit), code=0)
     assert (area_row(run.out, Area.DEPENDENCIES).glyph, extent_counts(area_fact(run.out, Area.DEPENDENCIES))) == (Glyph.CLEAN, counts)
     assert (run.code, run.err) == (0, "")
+
+
+def test_a_report_with_two_malformed_packages_refuses_with_the_fact_of_the_first(drive_advisories, build_repo):
+    """The packages are read in order: the first malformed one names the refusal, whatever a later one lacks."""
+    repo = build_repo({"uv.lock": uv_lock()})
+
+    def lists_vulnerabilities_without_groups(report: dict) -> None:
+        add_second_package(report)
+        first = report["results"][0]["packages"][0]
+        first["vulnerabilities"] = []
+        first.pop("groups")
+
+    def without_ecosystem(report: dict) -> None:
+        del report["results"][0]["packages"][1]["package"]["ecosystem"]
+
+    facts = []
+    for edit in (lists_vulnerabilities_without_groups, then(lists_vulnerabilities_without_groups, without_ecosystem)):
+        run = drive_advisories(repo, report_naming(repo, "uv.lock", edit), code=0)
+        facts.append(area_fact(run.out, Area.DEPENDENCIES))
+        assert run.code == 2
+    assert facts[0] == facts[1]
 
 
 def test_the_packages_of_two_lock_files_add_up(drive_advisories, build_repo):
@@ -426,6 +452,7 @@ def test_the_packages_of_two_lock_files_add_up(drive_advisories, build_repo):
     assert (run.code, run.err) == (0, "")
 
 
+@pytest.mark.integration
 def test_a_lock_reached_by_two_tracked_names_counts_for_each(drive_advisories, build_repo, edited_report):
     """O48: one resolved file under two tracked names is two lock files with a package each."""
     repo = build_repo({"uv.lock": uv_lock()})
@@ -458,10 +485,6 @@ def test_two_packages_that_differ_only_in_their_ecosystem_stay_two_findings(driv
     run = drive_advisories({"uv.lock": uv_lock()}, edited_report("osv-scanner-finding.json", edit))
     rows = [line for line in area_block(run.out, Area.DEPENDENCIES) if isinstance(line, FindingLine)]
     assert (len(run.area.findings), len(rows), run.code, run.err) == (2, 2, 1, "")
-
-
-def distant() -> datetime.date:
-    return datetime.date(2999, 12, 31)
 
 
 def second_group_id(report_file: Path) -> str:

@@ -330,13 +330,13 @@ def _read_report(
                 raise ScannerError(f"the {scanners.OSV_SCANNER} report names a lock file quality did not pass")
             packages = _dicts(result["packages"])
             listed[source] = {_name_and_version(package) for package in packages}
-            identities = {_package_identity(package) for package in packages}
-            for name in names_by_path[source]:
-                counted.setdefault(name, set()).update(identities)
             affected += [
                 group for name in names_by_path[source] for package in packages
                 for group in _package_findings(name, package)
             ]
+            identities = {_package_identity(package) for package in packages}
+            for name in names_by_path[source]:
+                counted.setdefault(name, set()).update(identities)
     except (ValueError, KeyError, TypeError, AttributeError) as error:
         raise ScannerError(f"cannot read the {scanners.OSV_SCANNER} report: {error!r}") from error
     for path, requirements in expected.items():
