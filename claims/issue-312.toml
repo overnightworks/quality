@@ -1,0 +1,8 @@
+claim_id = "3ad439d9c0b7496f831933e7b61feec7"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "3b2405a32e49409b1e5c8c1a92f7d3df68eca28f"
+branch = "claude/issue-312-c3g2-code-extent-notes"
+scope = ["docs/output.md", "docs/rules.md", "src/quality/check.py", "src/quality/cli.py", "src/quality/python_lint.py", "tests/support/check.py", "tests/support/python_lint.py", "tests/test_advisories_rows.py", "tests/test_architecture_output.py", "tests/test_cli_area_row.py", "tests/test_cli_output.py", "tests/test_output.py", "tests/test_python_lint.py", "tests/test_python_lint_rows.py"]
+opened_commit = "0deaae40777fba7c152b6c75203591e56eb833ab"
+whole_reason = "Three production files, about +29/-30, inside the corridor; the extent and the notes share the one return-type change; the finding rows were C3g1, the rename is C3g3."
