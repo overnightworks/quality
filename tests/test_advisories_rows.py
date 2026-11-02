@@ -234,6 +234,16 @@ def test_the_fix_of_each_lock_kind_holds_its_hint_and_its_folder(drive_advisorie
     assert (run.code, run.err) == (1, "")
 
 
+def test_a_nested_lock_keeps_its_folder_when_the_package_has_no_shell_word(drive_advisories, edited_report):
+    """O41, O43: the link replaces the command, and the folder stays."""
+    name, lock = "py\x1byaml", "src/speech/uv.lock"
+    run = drive_advisories({lock: uv_lock()}, edited_report("osv-scanner-finding.json", then(rename_package(name), add_fixed_version("6.0"))))
+    (finding,) = run.area.findings
+    assert (points_only_to_the_advisory(name)(finding.fix), str(PurePosixPath(lock).parent) in finding.fix) == (True, True)
+    assert_block_prints(area_block(run.out, Area.DEPENDENCIES), run.area.findings, ())
+    assert (run.code, run.err) == (1, "")
+
+
 def test_two_tracked_names_of_one_lock_print_one_row_each_and_align(drive_advisories, build_repo):
     """Decision 4: one row per tracked name, the events at one column."""
     run = drive_advisories(linked_lock_repo(build_repo))
