@@ -20,6 +20,12 @@ how many lines: `· N stderr lines withheld · not cleared by gitleaks`. The exi
 scanners refuse nothing, or write no stderr, starts no vet. No refusal quotes gitleaks' own stderr, because the vet
 cannot vet the tool that failed.
 
+A text holding ESC or a C1 control (U+0080 to U+009F) has no clean answer: a terminal code can stand against a value
+without the word boundary gitleaks' rules need, and the printed text escapes only the code, so the value would print
+whole. Such a text is withheld whole, and no vet starts. The cost: a scanner writes terminal codes on stderr only under
+forced colour (`FORCE_COLOR`, `CLICOLOR_FORCE`); then its refusal's reason is withheld, clean text too. It reopens if
+that hurts a dependent, by giving the scanners a plain environment.
+
 How the vet calls gitleaks, so it judges as the secret scan judges:
 
 - `--ignore-gitleaks-allow` and the scan's own config and exit code, from one list that feeds both calls: a key beside
@@ -27,9 +33,6 @@ How the vet calls gitleaks, so it judges as the secret scan judges:
 - gitleaks runs in the vet's scratch directory: with no source it reads `.gitleaksignore` from the folder it stands in,
   whatever `--gitleaks-ignore-path` names, and a repository could list the fingerprint of a stdin finding.
 - The text opens with a fixed line: gitleaks answers clean for a text whose first bytes read as a binary type.
-- The vetted text is the stderr as written, then with each terminal control code (CSI sequence) replaced by a space, then
-  with each removed, in one stdin (the printed text keeps them): a code against a value takes away the word boundary
-  gitleaks' rules need, and deleting it alone would join words or eat a key's first letter.
 - `--redact`: the report holds no value, and it lives in a 0700 directory removed on every exit.
 
 ## What passes
@@ -52,6 +55,9 @@ Quality's definition of a secret is what its secret scan recognises in the text 
 - **A search for the values the history scan found.** Keeps values in memory across areas and misses a transformed echo.
 - **A canary key on line 1 that the report must name.** It proves the scan read the text and closes every offset, but it
   inverts the clean answer, puts a key-shaped literal in production and makes every fake answer it.
+- **Vetting a normalised text.** Stripping a terminal code, or replacing it by a space, joins two words or eats the
+  first letter of a key, and each form tried left another route (a charset selection such as ESC `(B`, ESC `7`, the
+  8-bit CSI). Quality would own a terminal parser that grows with each case.
 - **A vet of the printed tail only.** A value above the tail, or a key across lines, passes.
 
 ## Consequences
