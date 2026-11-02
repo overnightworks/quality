@@ -1,8 +1,0 @@
-claim_id = "7e85f616e7ab46c4bffdb994ce3c4fca"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "402c97b6f8f3f8a1646df953e2714af29a868c8d"
-branch = "claude/issue-327-c3h2-live-line"
-scope = ["AGENTS.md", "docs/commands.md", "docs/output.md", "docs/rules.md", "src/quality/check.py", "src/quality/cli.py", "src/quality/output.py", "tests/support/check.py", "tests/support/terminal.py", "tests/test_check.py", "tests/test_cli_live_line.py", "tests/test_cli_stream.py", "tests/test_output_shortening.py"]
-opened_commit = "af1530353255f93ff2739c701aa2b1af6529ef43"
-whole_reason = "Three production files, about +64/-22 by count and at most about +99 additions at the overrun of C3s1 and C3s2: a required context manager the door passes, held in check.py around each scanner, and one line owned by output.py that draws only on a stream with a known window and erases on every way out Python still runs, its own write failure replacing no exception; HygieneResult holds the areas it reported. stdout, a pipe, a file and a runner step's log do not change by a byte."
