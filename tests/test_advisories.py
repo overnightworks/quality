@@ -153,16 +153,18 @@ def test_a_lock_no_advisory_affects_is_clean(build_repo, publish_database, insta
 
 @pytest.mark.scanner
 @pytest.mark.parametrize(
-    ("name", "text"), [("uv.lock", uv_lock()), ("tests/requirements.txt", "pyyaml==5.3.1 --hash=sha256:" + "ab" * 32 + "\n")],
+    ("name", "text", "folder"),
+    [("uv.lock", uv_lock(), None), ("tests/requirements.txt", "pyyaml==5.3.1 --hash=sha256:" + "ab" * 32 + "\n", "tests")],
     ids=["uv.lock", "tests/requirements.txt"],
 )
-def test_the_live_database_condemns_pyyaml_5_3_1(build_repo, installed_scanners, live_database, run_gate, name, text):
+def test_the_live_database_condemns_pyyaml_5_3_1(build_repo, installed_scanners, live_database, run_gate, name, text, folder):
     """#53 cell 4 and #176 canary: the real world, over the network."""
     code, output = run_gate(build_repo({name: text}))
     assert code == 1, output
+    hint = upgrade_fix(name)
     assert any(
         (location, row.event) == (name, FindingEvent.AFFECTED)
-        and row.fix == upgrade_fix(name)
+        and (row.fix == hint if folder is None else row.fix.endswith(hint) and folder in row.fix)
         and all(word in row.fact for word in (PACKAGE_NAME, "5.3.1", "5.4"))
         for location, row in area_finding_rows(output, Area.DEPENDENCIES)
     ), output
