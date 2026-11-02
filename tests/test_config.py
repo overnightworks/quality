@@ -34,6 +34,7 @@ from tests.support.config_refusals import (
     Refusal,
     all_refusals,
     secret_entry,
+    secrets_text,
 )
 from tests.support.generated_files import TYPES_FILE, generated_config
 
@@ -607,6 +608,17 @@ def test_the_secrets_example_holds_a_placeholder_hash_a_person_fills():
     assert tomllib.loads(text)["secrets"]["allow"][0]["rule"]
     with pytest.raises(ConfigError, match="secret_sha256 as 64 lowercase hex digits"):
         load_allow_lists(text)
+
+
+def test_the_array_of_tables_form_and_the_inline_form_of_the_same_entries_read_equal_allowances():
+    """O31: quality prints the block form; a file that holds the inline list reads the same."""
+    fields = [("aws-access-token", "a.py", "first"), ("generic-api-key", "b.py", "second")]
+    inline = secrets_text(*(secret_entry(rule=rule, file=file, reason=reason) for rule, file, reason in fields))
+    blocks = "".join(
+        f'{config.SECRETS_ALLOWANCE_HEADING}\nrule = "{rule}"\nfile = "{file}"\nsecret_sha256 = "{HASH}"\nreason = "{reason}"\n'
+        for rule, file, reason in fields
+    )
+    assert load_allow_lists(blocks).secrets == load_allow_lists(inline).secrets
 
 
 def toml_escaped(value: str) -> str:

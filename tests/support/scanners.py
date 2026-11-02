@@ -1,11 +1,14 @@
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 from typing import NoReturn
 
 import pytest
 
-from quality import installation, scanners
+from quality import cli, installation, scanners
 from tests.support.advisories import reporting
+from tests.support.check import heard
+from tests.support.git_repositories import GIT_IDENTITY
 
 Locator = Callable[[], str]
 OUTPUTS = Path(__file__).parents[1] / "fixtures" / "scanner-outputs"
@@ -78,3 +81,35 @@ def nothing_installed() -> NoReturn:
 def never_located() -> NoReturn:
     """A locator for a run that must locate nothing."""
     pytest.fail("a scanner was located where nothing needed one")
+
+
+PINNED = scanners.pinned_tool(scanners.GITLEAKS).version
+
+
+def fake_gitleaks(served: Path, version: str = PINNED, on_scan: str = "exit 0", on_version: str = "exit 0") -> Path:
+    """Replaces the served gitleaks by one that prints `version`, and on any other command runs `on_scan`."""
+    binary = served / "gitleaks"
+    binary.write_text(
+        "#!/bin/sh\n"
+        f'if [ "$1" = version ]; then echo {version}; {on_version}; fi\n'
+        'printf "%s\\n" "$@" > "$0.arguments"\n'
+        'while [ $# -gt 0 ]; do [ "$1" = --report-path ] && report=$2; shift; done\n'
+        f"{on_scan}\n"
+    )
+    binary.chmod(0o755)
+    return binary.parent
+
+
+def hygiene_exit_2(repo: Path, capsys, locate_zizmor=never_located) -> str:
+    assert cli.main(["hygiene", str(repo)], locate_zizmor=locate_zizmor) == 2
+    return heard(capsys)
+
+
+def scan(repo: Path) -> int:
+    return cli.main(["hygiene", str(repo)])
+
+
+def commit(repo: Path, message: str) -> None:
+    git = ["git", "-C", str(repo), *GIT_IDENTITY]
+    subprocess.run([*git, "add", "-A"], check=True)
+    subprocess.run([*git, "commit", "-q", "-m", message], check=True)

@@ -4,9 +4,18 @@ from pathlib import Path
 
 import pytest
 
-from quality import cli
-from tests.support.git_repositories import GIT_IDENTITY
-from tests.support.secrets import FAKE_KEY, OTHER_KEY, allow_config
+from quality import cli, config, staged
+from quality.report import FindingEvent, NoteEvent, printable
+from tests.support.check import (
+    CopyLine,
+    FindingLine,
+    assert_block_prints,
+    assert_finding_vocabulary,
+    decode_block,
+)
+from tests.support.config_refusals import CONFIG, all_refusals
+from tests.support.git_repositories import GIT_IDENTITY, head_commit
+from tests.support.secrets import FAKE_KEY, HOSTILE_FILE, OTHER_KEY, allow_config
 
 KEY_LINE = f"aws_access_key_id = {FAKE_KEY}\n"
 
@@ -34,14 +43,21 @@ def unborn_repo(tmp_path) -> Path:
 
 
 @pytest.mark.scanner
-def test_a_staged_key_is_red_and_its_value_is_not_printed(build_repo, installed_scanners, capsys):
-    """#25 rule 1: the staged change is judged; the output names the hash, never the value."""
+def test_a_staged_key_is_one_secret_row_with_its_entry_and_its_value_is_not_printed(build_repo, installed_scanners, capsys):
+    """#25 rule 1, O32: the staged change is judged; the row names no commit, the entry follows, the value is never printed."""
     repo = build_repo({"README": "hello\n"})
     stage(repo, {"src/a.py": KEY_LINE})
     assert scan_staged(repo) == 1
-    out = capsys.readouterr().out
-    assert "secret src/a.py:1 - gitleaks rule aws-access-token matched in the staged change (sha256 " in out
-    assert FAKE_KEY not in out
+    lines = capsys.readouterr().out.splitlines()
+    result = staged.scan_staged(repo)
+    block = decode_block(lines[:-1])
+    assert_block_prints(block, result.findings, list(result.notes))
+    (finding,) = result.findings
+    assert (finding.location, finding.event) == ("src/a.py:1", FindingEvent.SECRET)
+    assert head_commit(repo)[:8] not in finding.reason
+    assert_finding_vocabulary(finding)
+    assert lines[-1] == f"scan-staged: {len(result.findings)} finding(s)"
+    assert FAKE_KEY not in "\n".join(lines)
 
 
 @pytest.mark.scanner
@@ -123,7 +139,7 @@ def test_the_allow_list_is_the_one_of_the_staged_tree(build_repo, installed_scan
         (
             f"# one\n# two\nrenamed_key = {FAKE_KEY}\n",
             0,
-            "allowed config.txt:3 - gitleaks rule aws-access-token allowed: test key",
+            "config.txt:3",
         ),
         (f"aws_access_key_id = {OTHER_KEY}\n", 1, None),
     ],
@@ -137,8 +153,14 @@ def test_an_allowance_follows_the_value_in_the_staged_scan(
     repo = build_repo({"config.txt": KEY_LINE, "quality/config.toml": config})
     stage(repo, {"config.txt": staged_change})
     assert scan_staged(repo) == exit_code
-    if expected_line is not None:
-        assert expected_line in capsys.readouterr().out
+    streams = capsys.readouterr()
+    result = staged.scan_staged(repo)
+    allowed = [note for note in result.notes if note.event is NoteEvent.ALLOWED]
+    assert [note.location for note in allowed] == ([] if expected_line is None else [expected_line])
+    assert all(("aws-access-token" in note.fact, "test key" in note.fact) == (True, True) for note in allowed)
+    assert_block_prints(decode_block(streams.out.splitlines()), result.findings, result.notes)
+    printed = streams.out + streams.err
+    assert [key in printed for key in (FAKE_KEY, OTHER_KEY)] == [False, False]
 
 
 @pytest.fixture
@@ -160,6 +182,12 @@ def commit_attempt(repo: Path, how: str) -> subprocess.CompletedProcess[str]:
     return git(repo, *arguments[how], check=False)
 
 
+def secret_rows_of(attempt: subprocess.CompletedProcess[str]) -> list[tuple[str, FindingEvent]]:
+    """The finding rows a refused commit printed, each with its location."""
+    block = decode_block((attempt.stdout + attempt.stderr).splitlines())
+    return [(line.location, line.row.event) for line in block if isinstance(line, FindingLine)]
+
+
 @pytest.mark.scanner
 @pytest.mark.parametrize("how", ["plain", "commit -a", "commit <path>"])
 def test_a_real_commit_is_refused_through_the_hook(refusing_hook, how):
@@ -167,7 +195,7 @@ def test_a_real_commit_is_refused_through_the_hook(refusing_hook, how):
     before = git(refusing_hook, "rev-parse", "HEAD").stdout
     attempt = commit_attempt(refusing_hook, how)
     assert attempt.returncode != 0
-    assert "matched in the staged change" in attempt.stdout + attempt.stderr
+    assert secret_rows_of(attempt) == [("tracked.txt:1", FindingEvent.SECRET)]
     assert git(refusing_hook, "rev-parse", "HEAD").stdout == before
 
 
@@ -179,7 +207,7 @@ def test_a_commit_from_a_linked_worktree_is_refused_through_the_hook(refusing_ho
     stage(linked, {"tracked.txt": KEY_LINE})
     attempt = git(linked, "commit", "-q", "-m", "x", check=False)
     assert attempt.returncode != 0
-    assert "matched in the staged change" in attempt.stdout + attempt.stderr
+    assert secret_rows_of(attempt) == [("tracked.txt:1", FindingEvent.SECRET)]
 
 
 @pytest.mark.scanner
@@ -265,6 +293,29 @@ def test_git_failing_on_the_staged_allow_list_is_exit_2_in_its_words(
     assert f"scan-staged: cannot judge - {expected}: git exited 1" in capsys.readouterr().err
 
 
+STAGED_EXAMPLE_REFUSALS = [
+    refusal
+    for refusal in all_refusals()
+    if "staged" in refusal.loaders and refusal.example is not None and refusal.text is not None and not refusal.directory
+]
+
+
+@pytest.mark.scanner
+@pytest.mark.parametrize("refusal", STAGED_EXAMPLE_REFUSALS, ids=[refusal.id for refusal in STAGED_EXAMPLE_REFUSALS])
+def test_a_staged_config_refusal_prints_its_example_on_the_one_stderr_line_with_escaped_separators(
+    build_repo, installed_scanners, capsys, refusal
+):
+    """Acceptance 2: `scan-staged` prints the refusal as `<fact>, like:` and the example's lines on the same
+    stderr line, each separated by the literal `\\x0a`."""
+    repo = build_repo({"README": "hello\n"})
+    stage(repo, {CONFIG: refusal.text})
+    assert scan_staged(repo) == 2
+    captured = capsys.readouterr()
+    example = [printable(line) for line in refusal.example]
+    assert captured.err.splitlines() == ["\\x0a".join([f"scan-staged: cannot judge - {printable(refusal.fact)}, like:", *example])]
+    assert not set(example) & set(captured.err.splitlines())
+
+
 @pytest.mark.scanner
 @pytest.mark.parametrize("kind", ["a missing path", "a regular file"])
 def test_a_path_that_is_not_a_directory_is_exit_2_and_named(kind, tmp_path, installed_scanners, capsys):
@@ -285,3 +336,24 @@ def test_a_repository_path_that_starts_with_a_dash_is_scanned_as_a_path(
     stage(tmp_path / "-C", {"config.txt": KEY_LINE})
     monkeypatch.chdir(tmp_path)
     assert cli.main(["scan-staged", "--", "-C"]) == 1
+
+
+@pytest.mark.scanner
+@pytest.mark.parametrize("name", ["src/a.py", HOSTILE_FILE], ids=["plain-path", "esc-quote-and-bidi-path"])
+def test_the_printed_entry_with_a_reason_allows_the_staged_key_with_head_unchanged(build_repo, installed_scanners, capsys, name):
+    """O31, acceptance 3: the printed lines with a reason, staged beside the key, allow exactly it; nothing is committed."""
+    repo = build_repo({"README": "hello\n"})
+    stage(repo, {name: KEY_LINE})
+    before = head_commit(repo)
+    assert scan_staged(repo) == 1
+    first = capsys.readouterr()
+    (finding,) = staged.scan_staged(repo).findings
+    entry = [line.copy for line in decode_block(first.out.splitlines()) if isinstance(line, CopyLine)]
+    stage(repo, {config.CONFIG_PATH: '[gate]\nmandatory_jobs = ["checks"]\n' + "\n".join(entry) + '\nreason = "scenario reason"\n'})
+    assert scan_staged(repo) == 0
+    second = capsys.readouterr()
+    result = staged.scan_staged(repo)
+    assert (head_commit(repo), result.findings, [(note.location, note.event) for note in result.notes]) == (
+        before, [], [(finding.location, NoteEvent.ALLOWED)],
+    )
+    assert FAKE_KEY not in first.out + first.err + second.out + second.err

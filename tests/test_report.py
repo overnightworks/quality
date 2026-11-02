@@ -7,6 +7,8 @@ from quality.report import (
     Example,
     Finding,
     Instruction,
+    Note,
+    NoteEvent,
     OneOf,
     Reason,
     Unparsable,
@@ -85,3 +87,8 @@ def test_an_example_holds_its_label_and_lines_and_equal_examples_hash_alike():
     assert (example.label, example.lines, example == same, hash(example) == hash(same)) == (
         "write it in a file like this", ("[table]", "key = 1"), True, True,
     )
+
+
+@pytest.mark.parametrize(("line", "expected"), [(None, "a\\x1bb.txt"), (7, "a\\x1bb.txt:7")], ids=["no-line", "with-line"])
+def test_a_note_locates_itself_by_its_escaped_path_and_its_line_where_it_has_one(line, expected):
+    assert Note("a\x1bb.txt", NoteEvent.ALLOWED, "a fact", line).location == expected

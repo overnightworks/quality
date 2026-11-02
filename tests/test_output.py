@@ -25,7 +25,15 @@ from quality.report import (
     OneOf,
     printable,
 )
-from tests.support.check import FindingLine, assert_block_order, decode_block, finding_rows, note_rows
+from tests.support.check import (
+    CopyLine,
+    FindingLine,
+    FixLine,
+    assert_block_order,
+    decode_block,
+    finding_rows,
+    note_rows,
+)
 
 OWN_SGR = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -276,6 +284,38 @@ def test_an_event_findings_detail_prints_escaped_under_its_row_before_the_fix(at
     assert f"{output.FIX_INDENT}{output.DETAIL_MARKER}" in printed.splitlines()
     assert_block_order(block)
     assert OWN_SGR.sub("", findings_written([found], Terminal)) == printed
+
+
+ENTRY = Example("copy this", ("[[table]]", 'key = "esc\x1b"'))
+
+
+def test_a_fix_with_lines_to_copy_prints_its_label_then_each_line_deeper_and_escaped():
+    found = finding("a.env", FindingEvent.SECRET, fix=ENTRY)
+    block = decode_block(findings_written([found]).splitlines())
+    (row,) = [line for line in block if isinstance(line, FindingLine)]
+    copied = [line for line in block if isinstance(line, CopyLine)]
+    (fix_line,) = [line for line in block if isinstance(line, FixLine)]
+    assert (row.row.fix, row.row.copy) == (ENTRY.label, tuple(printable(text) for text in ENTRY.lines))
+    assert len({len(line.text) - len(line.copy) for line in copied}) == 1
+    assert len(copied[0].text) - len(copied[0].copy) > len(fix_line.text) - len(fix_line.text.lstrip())
+    assert_block_order(block)
+
+
+def test_two_findings_with_equal_lines_to_copy_print_them_once():
+    printed = findings_written([finding(f"{number}.env", FindingEvent.SECRET, fix=ENTRY) for number in range(2)])
+    block = decode_block(printed.splitlines())
+    assert (sum(isinstance(line, FixLine) for line in block), sum(isinstance(line, CopyLine) for line in block)) == (1, len(ENTRY.lines))
+
+
+def test_at_a_terminal_the_fix_and_its_lines_to_copy_stay_plain_and_the_words_equal_the_plain_ones(at_a_terminal):
+    findings = [finding("a.env", FindingEvent.SECRET, fix=ENTRY)]
+    styled = findings_written(findings, Terminal)
+
+    def fix_and_copy_lines(printed: str) -> list[str]:
+        return [line.text for line in decode_block(printed.splitlines()) if isinstance(line, FixLine | CopyLine)]
+
+    assert fix_and_copy_lines(styled) == fix_and_copy_lines(findings_written(findings))
+    assert OWN_SGR.sub("", styled) == findings_written(findings)
 
 
 def test_a_finding_with_a_line_shows_its_location():

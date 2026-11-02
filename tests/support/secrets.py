@@ -4,9 +4,12 @@ from pathlib import Path
 import pytest
 
 from quality import cli
+from quality.report import FindingEvent
+from tests.support.check import area_finding_rows
 
 FAKE_KEY = "AKIA" + "QYLPMTYX3QZ5ABCD"  # assembled so quality's own scan stays green
 OTHER_KEY = "AKIA" + "QYLPMTYX3QZ5WXYZ"  # a second assembled key, to prove another value stays red
+HOSTILE_FILE = 'k\x1b"\u202e.txt'  # a file name with an escape, a quote and a bidi override
 UNKNOWN_KEY_CONFIGS = pytest.mark.parametrize(
     "config",
     [
@@ -31,6 +34,9 @@ def allow_config(*entries: tuple[str, str, str, str]) -> str:
 
 
 def assert_key_found(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """Exit 1 alone proves nothing, other rules can fail it too: the secret finding itself is asserted."""
+    """Exit 1 alone proves nothing, other rules can fail it too: one secret row at the key's place is asserted."""
     assert cli.main(["hygiene", str(repo)]) == 1
-    assert "secret config.txt:1" in capsys.readouterr().out
+    printed = capsys.readouterr().out
+    rows = area_finding_rows(printed, "secrets")
+    assert [(location, row.event) for location, row in rows] == [("config.txt:1", FindingEvent.SECRET)]
+    assert FAKE_KEY not in printed

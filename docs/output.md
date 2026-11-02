@@ -54,7 +54,7 @@ Exit codes: 0 yes, 1 no, 2 could not answer, 130 interrupted. Each block names i
 
 ### 1. `quality check`, all clean
 
-The first row names the release the gate pins. Every area gets a row, also when clean. Exit 0. Rows and verdict: stdout.
+The first row names the release the gate pins. Every area gets a row, also when clean. Exit 0. Rows and verdict: stdout. The secrets row counts the commits gitleaks reads, not the tree: gitleaks reads committed history only, so „tree“ claimed more than was checked (head correction O30 of 1.11.2026, under the operator's instruction of 28.10.2026 to decide small wording questions alone).
 
 ```text
 $ quality check
@@ -62,7 +62,7 @@ $ quality check
   ✓ files         clean          10 rules · 214 files
   ✓ debt          clean          ceiling held · 31 entries, 2 clone pairs
   ✓ imports       clean          1 contract
-  ✓ secrets       clean          tree and 412 commits
+  ✓ secrets       clean          412 commits
   ✓ workflows     clean          5 workflows
   ✓ dependencies  clean          1 lockfile · 63 packages
   ✓ code          clean          2 rules · 41 Python files
@@ -92,7 +92,7 @@ $ quality check
     ! src/shop/parse.py:88  grew  function read_rows has 71 lines · ceiling 64
       fix: bring it back to 64 lines or below
   ✓ imports       clean          1 contract
-  ✓ secrets       clean          tree and 412 commits
+  ✓ secrets       clean          412 commits
   ✓ workflows     clean          5 workflows
   ! dependencies  1 finding
     ! uv.lock  affected  jinja2 3.1.4 · GHSA-q8x2-4m7c-9v3p · fixed in 3.1.6
@@ -101,7 +101,7 @@ $ quality check
 ! 5 findings in 3 areas · 4 areas clean · 14s
 ```
 
-No rule name stands in a row (`compose-port`, `env-file`); the event says it in words. The rule name appears only in a `fix:` line that asks for an `[[….allow]]` entry. No `next:` follows this verdict: the `fix:` lines carry the way. The events, facts and fixes of the `files` rows are head proposals O12 to O16, O18 and O19 of 30.10.2026, those of the `debt` rows O20 to O22 of 31.10.2026, those of the `imports` rows O23 to O27 of 31.10.2026, their recommendations applied: one event word per kind of finding, shared across rules (`report.FindingEvent`); the env fix names the file for `.gitignore` only where it is its own shell word, else `it`; and the findings of an area in run order. Paths and events align per area by character count.
+No rule name stands in a row (`compose-port`, `env-file`); the event says it in words. The rule name appears only in a `fix:` line that asks for an `[[….allow]]` entry. No `next:` follows this verdict: the `fix:` lines carry the way. The events, facts and fixes of the `files` rows are head proposals O12 to O16, O18 and O19 of 30.10.2026, those of the `debt` rows O20 to O22 of 31.10.2026, those of the `imports` rows O23 to O27 of 31.10.2026, those of the `secrets` rows O28, O29 and O32 to O35 of 1.11.2026, their recommendations applied: one event word per kind of finding, shared across rules (`report.FindingEvent`); the env fix names the file for `.gitignore` only where it is its own shell word, else `it`; and the findings of an area in run order. Paths and events align per area by character count.
 
 ### 3. `quality check`, no git work tree
 
@@ -217,7 +217,7 @@ $ quality check --fix --dry-run
     ~ src/shop/cart.py:63  lower  function total CCN 12 → 9
     ~ src/shop/legacy.py   drop   file is gone · was 802 lines
   ✓ imports       clean          1 contract
-  ✓ secrets       clean          tree and 412 commits
+  ✓ secrets       clean          412 commits
   ✓ workflows     clean          5 workflows
   ✓ dependencies  clean          1 lockfile · 63 packages
   ✓ code          clean          2 rules · 41 Python files
@@ -235,7 +235,7 @@ $ quality check --fix
     ✓ src/shop/cart.py:63  lowered  function total CCN 12 → 9
     ✓ src/shop/legacy.py   dropped  file is gone
   ✓ imports       clean          1 contract
-  ✓ secrets       clean          tree and 412 commits
+  ✓ secrets       clean          412 commits
   ✓ workflows     clean          5 workflows
   ✓ dependencies  clean          1 lockfile · 63 packages
   ✓ code          clean          2 rules · 41 Python files
@@ -292,10 +292,14 @@ $ quality check secrets --staged
   ! secrets       1 finding      staged change · 4 files
     ! src/shop/settings.py:12  secret  gitleaks rule generic-api-key · value not shown
       fix: rotate it; if it is no secret, allow it in quality/config.toml with a reason:
-        [[secrets.allow]] rule = "generic-api-key", file = "src/shop/settings.py",
-        sha256 = "3b1f0c9a6e2d47b8a5c91f03d6e8b2a47c5d9e1f0a3b6c8d2e4f7a9b1c3d5e7f"
+        [[secrets.allow]]
+        rule = "generic-api-key"
+        file = "src/shop/settings.py"
+        secret_sha256 = "3b1f3b1f3b1f3b1f3b1f3b1f3b1f3b1f3b1f3b1f3b1f3b1f3b1f3b1f3b1f3b1f"
 ! 1 finding in 1 area · <1s
 ```
+
+The entry is the four lines a reader takes, whole and never shortened; the person adds `reason` (head correction O31 of 1.11.2026, under the operator's instruction of 28.10.2026 to decide small wording questions alone: the earlier picture's `sha256` is a key no reader takes, the allowance contract is unchanged).
 
 `--staged` with another area. Exit 2. stderr.
 

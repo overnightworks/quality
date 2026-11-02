@@ -98,6 +98,19 @@ def test_a_judged_imports_area_opens_its_extent_with_the_verdicts_extent(extent)
     assert leading_count(cli.area_extent(imports_area(extent=extent), 0)) == extent
 
 
+def secrets_area(extent: int | None, refusal: CannotJudge | None = None) -> check.AreaVerdict:
+    return check.AreaVerdict(Area.SECRETS, (check.RuleVerdict(Rule.LEAK, extent=extent, refusal=refusal),))
+
+
+@pytest.mark.parametrize("extent", [0, 1, 412])
+def test_a_judged_secrets_area_opens_its_extent_with_the_verdicts_extent(extent):
+    assert leading_count(cli.area_extent(secrets_area(extent), 0)) == extent
+
+
+def test_a_secrets_area_that_could_not_check_has_no_extent():
+    assert cli.area_extent(secrets_area(None, CannotJudge("why")), 0) == ""
+
+
 def test_an_imports_area_that_could_not_check_has_no_extent():
     area = check.AreaVerdict(Area.IMPORTS, (check.RuleVerdict(Rule.IMPORT_CONTRACT, refusal=CannotJudge("why")),))
     assert cli.area_extent(area, 0) == ""

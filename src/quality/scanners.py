@@ -4,16 +4,33 @@ import os
 import shutil
 import tomllib
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 
 from quality import DISTRIBUTION, installation, process
-from quality.config import Allowance
-from quality.report import CannotJudge, Choice, Command, Finding, Instruction, OneOf, printable, shell_word
+from quality.config import CONFIG_PATH, SECRETS_ALLOW, Allowance, entry_name, secret_allowance_entry
+from quality.output import SEPARATOR
+from quality.report import (
+    CannotJudge,
+    Choice,
+    Command,
+    Example,
+    Finding,
+    FindingEvent,
+    Instruction,
+    Note,
+    NoteEvent,
+    OneOf,
+    RuleResult,
+    printable,
+    shell_word,
+)
 from quality.rules import Rule
 
 GITLEAKS = "gitleaks"
 CLEAN_EXIT = 0
+SECRET_FIX_LABEL = f"rotate it; if it is no secret, allow it in {CONFIG_PATH} with a reason"
+COMMIT_COUNT_FAILURE = "cannot count the commits gitleaks scans"
 GITLEAKS_LEAKS_FOUND = 7  # gitleaks exits 1 on its own errors too, so leaks get a code of their own
 SECRET_SCAN_TIMEOUT_SECONDS = 1800  # bounds the scan so the scratch directory and its mirror are always deleted
 LEAK_FIELDS = ("File", "StartLine", "RuleID", "Commit", "Secret")
@@ -111,9 +128,10 @@ class _Scanner:
 
 @dataclass(frozen=True)
 class SecretScan:
+    """The leaks gitleaks reported that no allowance covers, and the notes for the allowed ones and the entries no leak used."""
+
     findings: list[Finding]
-    allowed: list[Finding]
-    unused_allowances: dict[Allowance, str]  # entries of quality/config.toml that no finding used, with their reasons
+    notes: tuple[Note, ...]
 
 
 def prepare_gitleaks() -> Path:
@@ -123,7 +141,7 @@ def prepare_gitleaks() -> Path:
     return binary
 
 
-def scan_secrets(root: Path, allowances: dict[Allowance, str]) -> SecretScan:
+def scan_secrets(root: Path, allowances: dict[Allowance, str]) -> RuleResult:
     binary = prepare_gitleaks()
     with process.scratch_directory() as scratch:
         git_environment = process.attribute_free_git_environment(scratch / "home")
@@ -136,7 +154,11 @@ def scan_secrets(root: Path, allowances: dict[Allowance, str]) -> SecretScan:
         head = process.unborn_aware_head_commit(source, git_environment)
         if head is None:
             raise ScannerError(f"cannot resolve HEAD of {source}: it has no commit")
-        return run_gitleaks(binary, scratch, git_environment, source, [f"--log-opts={head}"], allowances)
+        commits = process.git(["-C", str(source), "rev-list", "--count", head, "--"], COMMIT_COUNT_FAILURE, git_environment).strip()
+        if not (commits.isascii() and commits.isdigit()):
+            raise ScannerError(f"{COMMIT_COUNT_FAILURE}: git printed no number")
+        scan = run_gitleaks(binary, scratch, git_environment, source, [f"--log-opts={head}"], allowances)
+        return RuleResult(scan.findings, int(commits), False, scan.notes)
 
 
 def run_gitleaks(
@@ -154,9 +176,10 @@ def run_gitleaks(
         "--report-format", "json", "--report-path", str(report), "--", str(source),
     ]
     scan = process.run(command, env=git_environment, timeout=SECRET_SCAN_TIMEOUT_SECONDS)
+    # gitleaks' stderr may echo what it scanned, so no refusal quotes it.
     if not report.is_file():
-        raise ScannerError(f"{GITLEAKS} exited {scan.returncode} without writing its report{process.stderr_tail(scan.stderr)}")
-    leaks = scanner_findings(GITLEAKS_SCANNER, _read_report(report), scan.returncode, scan.stderr)
+        raise ScannerError(f"{GITLEAKS} exited {scan.returncode} without writing its report")
+    leaks = scanner_findings(GITLEAKS_SCANNER, _read_report(report), scan.returncode)
     return _split_by_allowance(leaks, allowances)
 
 
@@ -172,14 +195,15 @@ def _read_report(report: Path) -> str:
 
 def _split_by_allowance(leaks: list[Finding], allowances: dict[Allowance, str]) -> SecretScan:
     used = {leak.allowance for leak in leaks}
-    return SecretScan(
-        findings=[leak for leak in leaks if leak.allowance not in allowances],
-        allowed=[
-            replace(leak, reason=f"{GITLEAKS} rule {leak.allowance.rule} allowed: {allowances[leak.allowance]}")
-            for leak in leaks if leak.allowance in allowances
-        ],
-        unused_allowances={entry: reason for entry, reason in allowances.items() if entry not in used},
-    )
+    allowed = [
+        Note(leak.path, NoteEvent.ALLOWED, f"{leak.allowance.rule}{SEPARATOR}{allowances[leak.allowance]}", leak.line)
+        for leak in leaks if leak.allowance in allowances
+    ]
+    unused = [
+        Note(CONFIG_PATH, NoteEvent.UNUSED, SEPARATOR.join((f"{entry_name(SECRETS_ALLOW, place)} matches no secret", f"{entry.rule} in {entry.file}")))
+        for place, entry in enumerate(allowances, start=1) if entry not in used
+    ]
+    return SecretScan([leak for leak in leaks if leak.allowance not in allowances], (*allowed, *unused))
 
 
 def require_git_floor() -> None:
@@ -218,13 +242,11 @@ def _read_leak(entry: object) -> tuple[str, int, str, str, str]:
 
 def _leak_finding(entry: object) -> Finding:
     path, line, rule, commit, secret = _read_leak(entry)
-    secret_sha256 = hashlib.sha256(secret.encode("utf-8")).hexdigest()
-    return Finding(
-        Rule.LEAK, path, line,
-        f"{GITLEAKS} rule {rule} matched {f'at {commit[:8]}' if commit else 'in the staged change'} (sha256 {secret_sha256}, value not shown).",
-        "rotate the secret; for a false positive, allow this rule, file and sha256 with a reason in quality/config.toml.",
-        Allowance(rule, path, secret_sha256),
-    )
+    allowance = Allowance(rule, path, hashlib.sha256(secret.encode("utf-8")).hexdigest())
+    where = (f"commit {commit[:8]}",) if commit else ()
+    fact = SEPARATOR.join((f"{GITLEAKS} rule {rule}", *where, "value not shown"))
+    fix = Example(SECRET_FIX_LABEL, secret_allowance_entry(allowance))
+    return Finding(Rule.LEAK, path, line, fact, fix, allowance, event=FindingEvent.SECRET)
 
 
 GITLEAKS_SCANNER = _Scanner(GITLEAKS, (GITLEAKS_LEAKS_FOUND,), _leak_finding)
@@ -256,7 +278,7 @@ def scan_workflows(root: Path, rule: Rule, workflows: list[str], locate_zizmor: 
     return scanner_findings(scanner, scan.stdout, scan.returncode, scan.stderr)
 
 
-def scanner_findings(scanner: _Scanner, report_text: str, exit_code: int, stderr: str) -> list[Finding]:
+def scanner_findings(scanner: _Scanner, report_text: str, exit_code: int, stderr: str = "") -> list[Finding]:
     if exit_code != CLEAN_EXIT and exit_code not in scanner.finding_exits:
         raise ScannerError(f"{scanner.name} exited {exit_code}, neither 'clean' nor 'findings'{process.stderr_tail(stderr)}")
     try:
