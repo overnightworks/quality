@@ -455,7 +455,7 @@ def env_and_broken_compose(build_repo) -> Path:
 
 
 @pytest.mark.parametrize("door", [MODULE_DOOR, CONSOLE_SCRIPT_DOOR], ids=["module", "console script"])
-def test_a_merged_pipe_shows_the_hygiene_lines_in_run_order(env_and_broken_compose, door):
+def test_a_merged_pipe_shows_the_check_lines_in_run_order(env_and_broken_compose, door):
     """#86 rule 3, cells 10 and 12a: the area rows with their findings (`.env` as env-file's and root-layout's rows, each with its fix), then the pair."""
     done = quality_door(
         "hygiene", ".", cwd=env_and_broken_compose, door=door, stdout=subprocess.PIPE, stderr=subprocess.STDOUT

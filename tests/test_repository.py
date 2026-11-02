@@ -235,7 +235,7 @@ def test_an_unusable_config_is_exit_2_with_one_reason_in_every_command(
     git_repo, monkeypatch, capsys, command, arrange, reason
 ):
     """#52 rules 2-5, cells 1-9: every command that reads the config refuses it with the same reason after its own
-    prefix, names no checkout path, and sonar sends no request; hygiene reads it before any scanner runs."""
+    prefix, names no checkout path, and sonar sends no request; the check reads it before any scanner runs."""
     repo, scratch = git_repo
     arrange(repo, scratch)
     code, output = run_command(command, repo, scratch, monkeypatch, capsys)
@@ -254,7 +254,7 @@ def test_an_unusable_config_is_exit_2_with_one_reason_in_every_command(
         ("verdict", f"verdict: cannot judge - {NAME} at the head: {DENIED}"),
         ("sonar findings", f"sonar: cannot judge - {DENIED}"),
     ],
-    ids=["cell 12 hygiene", "cell 13 baseline write", "cell 4 verdict", "sonar findings"],
+    ids=["cell 12 check", "cell 13 baseline write", "cell 4 verdict", "sonar findings"],
 )
 def test_a_quality_directory_without_search_permission_is_exit_2_in_every_command(
     git_repo, monkeypatch, capsys, command, refusal

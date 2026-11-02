@@ -11,16 +11,16 @@ from quality.output import SEPARATOR
 from quality.python_lint import LintError, RuffFinding, UnparsablePython
 from quality.report import Note, NoteEvent
 from quality.rules import Rule
+from tests.support.check import check_output as run
 from tests.support.check import (
+    check_result,
     env_row_stands,
-    hygiene_run,
     installed_ruff,
     is_clean,
     loosen_requirement,
     refusal_row,
     refusals,
 )
-from tests.support.check import hygiene_output as run
 from tests.support.layout import in_index
 from tests.support.python_lint import EVAL, OWNER, PRINT, PRINT_REASON, fake_ruff, ruff_entry
 from tests.support.scanners import never_located, nothing_installed
@@ -59,7 +59,7 @@ def judged_prints(text: str, records: list[RuffFinding]) -> tuple[list[str], tup
 
 
 def rule_verdict(repo: Path, rule: Rule = Rule.PYTHON_SECURITY) -> check.RuleVerdict:
-    return next(verdict for verdict in hygiene_run(repo, installed_ruff, never_located).verdicts if verdict.rule == rule)
+    return next(verdict for verdict in check_result(repo, installed_ruff, never_located).verdicts if verdict.rule == rule)
 
 
 def flagged_paths(repo: Path, rule: Rule = Rule.PYTHON_SECURITY) -> list[str]:

@@ -7,7 +7,7 @@ from quality import layout
 from quality.output import FIX_LABEL
 from quality.report import FindingEvent
 from quality.rules import Rule
-from tests.support.check import hygiene_output, refusals, rows_of, rule_findings
+from tests.support.check import check_output, refusals, rows_of, rule_findings
 from tests.support.git_repositories import put
 from tests.support.layout import (
     CONFIG,
@@ -28,7 +28,7 @@ from tests.support.merge import ONE_JOB
 def test_a_file_without_a_suffix_is_red(build_repo, capsys):
     """#184 sentence 1: a tracked file without a suffix is a finding."""
     repo = build_repo({**GUIDANCE, "EDGE_SHA": "abc\n"})
-    code = hygiene_output(capsys, repo)[0]
+    code = check_output(capsys, repo)[0]
     assert (code, red(repo)) == (1, ["EDGE_SHA"])
 
 
@@ -74,7 +74,7 @@ def test_the_mode_comes_from_the_index_not_the_disk(build_repo):
 def test_findings_are_all_printed_sorted_by_path_with_both_ways_out(build_repo, capsys):
     """#184 sentence 4: all findings, sorted by path, naming both ways out."""
     repo = build_repo({**GUIDANCE, "z/NOTES": "x", "EDGE_SHA": "x", "a/b/TODO": "x"})
-    code, output = hygiene_output(capsys, repo)
+    code, output = check_output(capsys, repo)
     found = rule_findings(repo, Rule.FILE_SUFFIX)
     rows = [row for finding in found for row in rows_of(output, finding)]
     assert (code, red(repo)) == (1, ["EDGE_SHA", "a/b/TODO", "z/NOTES"])
@@ -94,7 +94,7 @@ def test_a_declared_file_is_clean_and_a_declaration_for_a_compliant_file_stays_c
 def test_a_declaration_for_an_untracked_path_is_a_finding(build_repo, capsys):
     """#184 sentence 3: a declared path that is not tracked is a finding."""
     repo = build_repo({**GUIDANCE, CONFIG: ONE_JOB + declaring("gone/NOTES")})
-    code = hygiene_output(capsys, repo)[0]
+    code = check_output(capsys, repo)[0]
     assert (code, red(repo)) == (1, ["gone/NOTES"])
     assert_prints_as_kind(capsys, repo, Rule.FILE_SUFFIX, FindingEvent.UNUSED)
 
@@ -112,7 +112,7 @@ def test_a_declaration_is_exact_so_another_case_is_not_it(build_repo):
 )
 def test_an_invalid_declared_path_cannot_be_judged_and_shows_an_example(build_repo, capsys, path):
     """#184 sentence 3: a folder, pattern, `..` or absolute path is exit 2."""
-    code, output = hygiene_output(capsys, build_repo({**GUIDANCE, CONFIG: ONE_JOB + declaring(path)}))
+    code, output = check_output(capsys, build_repo({**GUIDANCE, CONFIG: ONE_JOB + declaring(path)}))
     assert code == 2
     assert "[[layout.allow]]" in output
     assert 'rule = "file-suffix"' in output
@@ -148,7 +148,7 @@ def test_an_invalid_declared_path_cannot_be_judged_and_shows_an_example(build_re
 def test_a_malformed_layout_table_cannot_be_judged(build_repo, capsys, config):
     """#184 sentence 3: a duplicate, unknown rule or key, or a reason that is not one-line text is exit 2."""
     repo = build_repo({**GUIDANCE, "NOTES": "x", CONFIG: ONE_JOB + config})
-    code, output = hygiene_output(capsys, repo)
+    code, output = check_output(capsys, repo)
     assert code == 2
     assert Rule.FILE_SUFFIX in refusals(repo)
     assert "[[layout.allow]]" in output
@@ -171,7 +171,7 @@ def test_an_index_record_that_cannot_be_read_cannot_be_judged(build_repo, capsys
     """#184 sentence 2: index data that cannot be read is exit 2."""
     repo = build_repo(GUIDANCE)
     fake_git(r"""case " $* " in *" -s "*) printf 'not-a-mode abc 0\tAGENTS.md\0'; exit 0;; esac""")
-    code, _ = hygiene_output(capsys, repo)
+    code, _ = check_output(capsys, repo)
     assert (code, Rule.FILE_SUFFIX in refusals(repo)) == (2, True)
 
 
@@ -317,7 +317,7 @@ def test_a_script_header_declaration_covers_only_the_header(build_repo):
 def test_a_declaration_for_an_untracked_script_names_its_own_rule(build_repo, capsys, rule):
     """#190 sentence 6: a declared path that is not tracked is a finding naming its own rule."""
     repo = build_repo({**GUIDANCE, CONFIG: ONE_JOB + declaring("scripts/gone.sh", rule=rule)})
-    code = hygiene_output(capsys, repo)[0]
+    code = check_output(capsys, repo)[0]
     assert (code, red(repo, rule), red(repo)) == (1, ["scripts/gone.sh"], [])
     assert_prints_as_kind(capsys, repo, rule, FindingEvent.UNUSED)
 
@@ -326,13 +326,13 @@ def test_a_declaration_for_a_compliant_script_stays_clean(build_repo, capsys):
     """#190 sentence 6: a declaration for a file that already complies is clean."""
     config = ONE_JOB + declaring("scripts/run_it.sh", rule="script-name") + declaring("scripts/run_it.sh", rule="script-header")
     repo = build_repo({**GUIDANCE, "scripts/run_it.sh": SHELL_HEADER, CONFIG: config})
-    assert hygiene_output(capsys, repo)[0] == 0
+    assert check_output(capsys, repo)[0] == 0
 
 
 def test_script_findings_are_all_printed_sorted_by_path_in_exact_case(build_repo, capsys):
     """#190 sentence 7: all findings, sorted by path, exact case."""
     repo = build_repo({**GUIDANCE, "scripts/b.sh": "x\n", "scripts/B.sh": "x\n", "a/scripts/c.py": "x = 1\n"})
-    code = hygiene_output(capsys, repo)[0]
+    code = check_output(capsys, repo)[0]
     paths = ["a/scripts/c.py", "scripts/B.sh", "scripts/b.sh"]
     assert (code, script_findings(repo)) == (1, {Rule.SCRIPT_NAME: paths, Rule.SCRIPT_HEADER: paths})
 
@@ -341,7 +341,7 @@ def test_a_script_that_cannot_be_read_cannot_be_judged(build_repo, capsys):
     """#190 sentence 5: a file that cannot be read is exit 2."""
     repo = build_repo({**GUIDANCE, "scripts/run_it.sh": SHELL_HEADER})
     (repo / "scripts" / "run_it.sh").chmod(0)
-    code, _ = hygiene_output(capsys, repo)
+    code, _ = check_output(capsys, repo)
     assert (code, Rule.SCRIPT_HEADER in refusals(repo)) == (2, True)
 
 
@@ -349,7 +349,7 @@ def test_a_file_under_tests_is_not_read_for_a_shebang(build_repo, capsys):
     """#190 sentence 5: the content is read only for the files that need it, and a tests/ path never does."""
     repo = build_repo({**GUIDANCE, "tests/data.bin": "x\n"})
     (repo / "tests" / "data.bin").chmod(0)
-    assert hygiene_output(capsys, repo)[0] == 0
+    assert check_output(capsys, repo)[0] == 0
 
 
 def test_a_suffixless_file_is_a_tracked_finding_the_door_prints_as_its_row(build_repo, capsys):
@@ -360,7 +360,7 @@ def test_a_suffixless_file_is_a_tracked_finding_the_door_prints_as_its_row(build
 def test_three_suffixless_files_print_three_rows_and_one_fix_after_the_third(build_repo, capsys):
     """#228 rule 7, decision 4: a fix shared by consecutive findings prints once, under the last."""
     repo = build_repo({**GUIDANCE, "docs/EDGE_SHA": "x", "docs/b/TODO": "x", "docs/NOTES": "x"})
-    output = hygiene_output(capsys, repo)[1]
+    output = check_output(capsys, repo)[1]
     rows = [row for finding in rule_findings(repo, Rule.FILE_SUFFIX) for row in rows_of(output, finding)]
     assert ([row.fix_follows for row in rows], output.count(f" {FIX_LABEL} ")) == ([False, False, True], 1)
 
@@ -389,7 +389,7 @@ def test_a_path_declared_under_two_rules_and_untracked_is_one_equal_stale_row_pe
     config = ONE_JOB + declaring("scripts/gone.sh", rule=Rule.SCRIPT_NAME) + declaring("scripts/gone.sh", rule=Rule.SCRIPT_HEADER)
     repo = build_repo({**GUIDANCE, CONFIG: config})
     found = [finding for rule in SCRIPT_RULES for finding in rule_findings(repo, rule)]
-    output = hygiene_output(capsys, repo)[1]
+    output = check_output(capsys, repo)[1]
     assert [(finding.rule, finding.event) for finding in found] == [(rule, FindingEvent.UNUSED) for rule in SCRIPT_RULES]
     assert (len({(finding.fact, finding.fix) for finding in found}), rule_ids_in(found[0].fix)) == (1, set())
     assert [len(rows_of(output, finding)) for finding in found] == [2, 2]
@@ -404,7 +404,7 @@ def test_script_name_is_misnamed_where_the_shape_breaks_and_misplaced_where_only
     for path in paths[1:]:
         in_index(repo, "update-index", "--chmod=+x", path)
     found = {finding.path: finding for finding in rule_findings(repo, Rule.SCRIPT_NAME)}
-    output = hygiene_output(capsys, repo)[1]
+    output = check_output(capsys, repo)[1]
     assert [found[path].event for path in paths] == [FindingEvent.MISNAMED, FindingEvent.MISNAMED, FindingEvent.MISPLACED]
     assert found["tools/entry_point.sh"].fact in found["tools/Entry.sh"].fact
     assert len({finding.fix for finding in found.values()}) == 1

@@ -17,7 +17,7 @@ from tests.support.check import (
     rows_of,
     rule_findings,
 )
-from tests.support.check import hygiene_output as run
+from tests.support.check import check_output as run
 from tests.support.git_repositories import make_repo
 from tests.support.merge import ONE_JOB
 

@@ -27,7 +27,7 @@ from quality.check import (
     AreaVerdict,
     Measurement,
     Outcome,
-    run_hygiene,
+    judge_repository,
 )
 from quality.checkout import OutsideWorkTree
 from quality.config import ConfigError, read_allow_lists, read_gate_settings
@@ -86,7 +86,7 @@ from quality.web import Sleep
 EXIT_CLEAN = 0
 EXIT_FINDINGS = 1
 EXIT_CANNOT_JUDGE = 2
-HYGIENE_EXIT = {
+CHECK_EXIT = {
     Outcome.CLEAN: EXIT_CLEAN,
     Outcome.MEASURED_ONLY: EXIT_CLEAN,
     Outcome.FINDINGS: EXIT_FINDINGS,
@@ -146,7 +146,7 @@ def main(
         if arguments.sonar_command == "properties":
             return run_sonar_properties()
         return run_sonar_findings(transport, sleep)
-    return run_hygiene_check(arguments.path, locate_ruff, locate_zizmor, clock, channels)
+    return run_check(arguments.path, locate_ruff, locate_zizmor, clock, channels)
 
 
 QUALITY_HELP = f"""\
@@ -230,8 +230,8 @@ def build_parser() -> DoorParser:
     parser.pictured_help = QUALITY_HELP
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command")
-    hygiene = commands.add_parser("hygiene")
-    hygiene.add_argument("path", nargs="?", type=Path, default=Path("."))
+    check_parser = commands.add_parser("hygiene")
+    check_parser.add_argument("path", nargs="?", type=Path, default=Path("."))
     baseline = commands.add_parser("baseline").add_subparsers(dest="baseline_command")
     baseline.add_parser("write", help=f"write the measured size debt and clone pairs to {ratchet.BASELINE_PATH}").add_argument(
         "path", nargs="?", type=Path, default=Path("."), help="a folder of the git repository to measure; its top level is measured (default: the current one)"
@@ -387,19 +387,19 @@ def write_area(out: Channel, verdict: AreaVerdict, tracked_paths: int) -> None:
     write_findings_and_notes(verdict.findings, verdict.notes, out)
 
 
-def run_hygiene_check(
+def run_check(
     path: Path, locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str], clock: Callable[[], float], channels: Channels
 ) -> int:
     started = clock()
     try:
-        result = run_hygiene(path, locate_ruff, locate_zizmor, partial(write_area, channels.out), live_line(channels.err))
+        result = judge_repository(path, locate_ruff, locate_zizmor, partial(write_area, channels.out), live_line(channels.err))
     except OutsideWorkTree as error:
         write_pair(f"not inside a git work tree · {error.path}", (Instruction("run quality hygiene inside a repository"),), channels.err)
         return EXIT_CANNOT_JUDGE
     except CannotJudge as error:
         write_pair(error.reason.fact, error.reason.next_steps or (START_FAILURE_NEXT,), channels.err)
         return EXIT_CANNOT_JUDGE
-    exit_code = HYGIENE_EXIT[result.worst]
+    exit_code = CHECK_EXIT[result.worst]
     if exit_code == EXIT_CANNOT_JUDGE:
         write_pair(refusal_error(result.areas), next_steps(result.areas), channels.err)
         return exit_code

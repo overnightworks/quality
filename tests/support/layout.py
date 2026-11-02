@@ -10,8 +10,8 @@ from quality.rules import Area, Rule
 from tests.support.check import (
     assert_every_line_starts_with_the_door,
     assert_row_prints_finding,
-    hygiene_output,
-    hygiene_run,
+    check_output,
+    check_result,
     rows_of,
     rule_findings,
 )
@@ -53,7 +53,7 @@ def assert_row_is_kind(output: str, finding: Finding, event: FindingEvent, *name
 def assert_prints_as_kind(capsys, repo, rule: Rule, event: FindingEvent, *named: str) -> Finding:
     """The one finding of `rule` over `repo` is of kind `event` and the door prints it as its row (`assert_row_is_kind`)."""
     (finding,) = rule_findings(repo, rule)
-    assert_row_is_kind(hygiene_output(capsys, repo)[1], finding, event, *named)
+    assert_row_is_kind(check_output(capsys, repo)[1], finding, event, *named)
     return finding
 
 
@@ -63,7 +63,7 @@ def assert_prints_escaped_row(capsys, build_repo, rule: Rule, character: str, es
     repo = build_repo({**GUIDANCE, f"bad{character}name": "x"})
     location = f"bad{escaped}name"
     (finding,) = rule_findings(repo, rule)
-    output = hygiene_output(capsys, repo)[1]
+    output = check_output(capsys, repo)[1]
     assert (finding.location, len(rows_of(output, finding))) == (location, 1)
     assert_every_line_starts_with_the_door(output.splitlines())
 
@@ -71,7 +71,7 @@ def assert_prints_escaped_row(capsys, build_repo, rule: Rule, character: str, es
 def assert_empty_name_has_its_own_fact(capsys, repo, rule: Rule, empty: str, named: str, name: str) -> None:
     """The fact for the path `empty` is of kind `misplaced` and is not the fact for `named` with its `name` taken out."""
     found = {finding.path: finding for finding in rule_findings(repo, rule)}
-    assert_row_is_kind(hygiene_output(capsys, repo)[1], found[empty], FindingEvent.MISPLACED)
+    assert_row_is_kind(check_output(capsys, repo)[1], found[empty], FindingEvent.MISPLACED)
     assert found[empty].fact != found[named].fact.replace(name, "")
 
 
@@ -81,7 +81,7 @@ def in_index(repo, *arguments: str) -> None:
 
 def red(repo, rule: Rule = Rule.FILE_SUFFIX) -> list[str]:
     """The locations of the findings the rule runner returns for `rule` over `repo`; a run that cannot judge `rule` fails the test."""
-    (verdict,) = (verdict for verdict in hygiene_run(repo).verdicts if verdict.rule is rule)
+    (verdict,) = (verdict for verdict in check_result(repo).verdicts if verdict.rule is rule)
     assert verdict.refusal is None
     return [finding.location for finding in verdict.findings]
 

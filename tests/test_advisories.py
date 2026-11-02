@@ -603,7 +603,7 @@ def test_an_allowance_allows_its_advisory_in_its_lock_until_its_date(groups, all
         assert positions == sorted(positions)
 
 
-def test_hygiene_prints_an_allowance_that_ran_out_as_an_affected_row(build_repo, served_scanners, run_gate, publish_database):
+def test_check_prints_an_allowance_that_ran_out_as_an_affected_row(build_repo, served_scanners, run_gate, publish_database):
     """Once the date has passed the advisory is red with the date and item, in the upgrade's row."""
     publish_database()
     config = allowance_config(**UV_LOCK_ALLOWANCE, until=datetime.date(2000, 1, 1))

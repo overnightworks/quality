@@ -195,7 +195,7 @@ class AreaVerdict:
 
 
 @dataclass(frozen=True)
-class HygieneResult:
+class CheckResult:
     areas: tuple[AreaVerdict, ...]
     tracked_paths: int
 
@@ -331,9 +331,9 @@ def _judged_areas(
     )
 
 
-def run_hygiene(
+def judge_repository(
     root: Path, locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str], report_area: AreaReport, running: Running
-) -> HygieneResult:
+) -> CheckResult:
     """Judges every active rule over the repository `root` lies in, area by area in row order, and hands each finished
     area and the count of tracked paths to `report_area`; `running` holds the live line up around each scanner. Only
     one git cannot list stops the run."""
@@ -344,4 +344,4 @@ def run_hygiene(
     for area in _judged_areas(root, tracked, locate_ruff, locate_zizmor, running):
         report_area(area, tracked_paths)
         areas.append(area)
-    return HygieneResult(tuple(areas), tracked_paths)
+    return CheckResult(tuple(areas), tracked_paths)

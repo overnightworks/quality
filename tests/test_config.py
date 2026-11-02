@@ -235,7 +235,7 @@ QWEN_ALLOWANCE = AdvisoryAllowance(
 
 def test_an_advisory_allowance_is_read_by_every_loader_that_reads_the_whole_config(tmp_path):
     """#116 E1, E3: each [[advisories.allow]] entry is one allowance with its id, lock, until, date, item and reason,
-    read alike by the gate and by hygiene."""
+    read alike by the gate and by the check."""
     text = f'[gate]\nmandatory_jobs = ["checks"]\n{allowance_config()}'
     (tmp_path / "quality").mkdir()
     (tmp_path / CONFIG_PATH).write_text(text)
@@ -277,7 +277,7 @@ def test_a_config_without_declarations_declares_nothing():
     assert load_gate_settings('[gate]\nmandatory_jobs = ["checks"]').loosened == ()
 
 
-HYGIENE = ["hygiene", "{repo}"]
+CHECK = ["hygiene", "{repo}"]
 SCAN_STAGED = ["scan-staged", "{repo}"]
 TEXT_DATE_DECLARATION = SONGMAKER_DECLARATION.replace("2026-10-20", '"20.10.2026"')
 
@@ -285,9 +285,9 @@ TEXT_DATE_DECLARATION = SONGMAKER_DECLARATION.replace("2026-10-20", '"20.10.2026
 @pytest.mark.parametrize(
     ("command", "config", "code", "line"),
     [
-        (HYGIENE, SONGMAKER_DECLARATION, 0, CLEAN_VERDICT),
+        (CHECK, SONGMAKER_DECLARATION, 0, CLEAN_VERDICT),
         (SCAN_STAGED, SONGMAKER_DECLARATION, 0, "scan-staged: clean"),
-        (HYGIENE, TEXT_DATE_DECLARATION, 2, f"{refusal_row('secrets')}quality/config.toml [[gate.loosened]] entry"),
+        (CHECK, TEXT_DATE_DECLARATION, 2, f"{refusal_row('secrets')}quality/config.toml [[gate.loosened]] entry"),
         (SCAN_STAGED, TEXT_DATE_DECLARATION, 0, "scan-staged: clean"),
         (SCAN_STAGED, allowance_config(), 0, "scan-staged: clean"),
         (SCAN_STAGED, "[advisories]\nextra = 1\n" + allowance_config(until="2027-01-31"), 0, "scan-staged: clean"),
@@ -297,11 +297,11 @@ TEXT_DATE_DECLARATION = SONGMAKER_DECLARATION.replace("2026-10-20", '"20.10.2026
         "#116 cell 13 scan-staged, an allowance", "#116 cell 13 scan-staged, a malformed allowance",
     ],
 )
-def test_hygiene_judges_a_declaration_as_the_verdict_does_and_the_commit_hook_reads_only_secrets(
+def test_check_judges_a_declaration_as_the_verdict_does_and_the_commit_hook_reads_only_secrets(
     build_repo, capsys, command, config, code, line
 ):
-    """#103 rule 1, cells 11 and 12: a [[gate.loosened]] entry is no unknown key for hygiene or the commit hook; a
-    malformed one is exit 2 under hygiene, as in the verdict, and the commit hook never reads it."""
+    """#103 rule 1, cells 11 and 12: a [[gate.loosened]] entry is no unknown key for the check or the commit hook; a
+    malformed one is exit 2 under the check, as in the verdict, and the commit hook never reads it."""
     repo = build_repo({CONFIG_PATH: config})
     assert cli.main([part.format(repo=repo) for part in command]) == code
     captured = capsys.readouterr()
@@ -355,7 +355,7 @@ def test_a_malformed_advisory_allowance_cannot_be_judged_where_the_whole_config_
     capsys, run_env, entry, named
 ):
     """#116 cell 12: a malformed [advisories] entry is exit 2 in the verdict and in the secret and advisory rules of
-    hygiene, one line each naming the entry."""
+    the check, one line each naming the entry."""
     repo, _ = run_env
     (repo / CONFIG_PATH).write_text(entry + '[gate]\nmandatory_jobs = ["checks"]\n')
     assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: ("{}", None)) == 2
@@ -377,7 +377,7 @@ def test_a_malformed_advisory_allowance_shows_the_example(entry):
     assert refused.value.example == config.ADVISORY_ALLOWANCE_EXAMPLE
 
 
-def test_the_verdict_refuses_a_malformed_secret_allowance_as_hygiene_does(capsys, run_env):
+def test_the_verdict_refuses_a_malformed_secret_allowance_as_check_does(capsys, run_env):
     """#116 cell 12 (the plan review's consequence): one validator reads the whole config, so the verdict refuses a
     malformed [secrets] entry too."""
     repo, _ = run_env
@@ -422,7 +422,7 @@ TYPES_DECLARATION = GeneratedFile(
 
 def test_a_generated_file_is_read_by_every_loader_that_reads_the_whole_config(tmp_path):
     """#174 sentence 1: each [[size.generated]] entry is one declaration with its path, job, item, date and reason,
-    read alike by the gate and by hygiene."""
+    read alike by the gate and by the check."""
     text = GATE_WITH_CHECKS + generated_config()
     (tmp_path / "quality").mkdir()
     (tmp_path / CONFIG_PATH).write_text(text)
@@ -502,7 +502,7 @@ def test_a_generated_file_needs_mandatory_jobs_that_are_non_empty_names(jobs, jo
     ids=["hygiene", "baseline write"],
 )
 def test_a_malformed_generated_file_stops_the_size_rule_and_the_baseline_write(build_repo, capsys, command, refusal):
-    """#174 sentence 3: hygiene cannot judge size and baseline write writes nothing."""
+    """#174 sentence 3: the check cannot judge size and baseline write writes nothing."""
     repo = build_repo({CONFIG_PATH: GATE_WITH_CHECKS + generated_config(job="other")})
     assert cli.main([part.format(repo=repo) for part in command]) == 2
     captured = capsys.readouterr()

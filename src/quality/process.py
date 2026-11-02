@@ -50,7 +50,7 @@ def attribute_free_git_environment(empty_home: Path) -> dict[str, str]:
     This cuts off the repository and tree attributes, the system file, the user's global file
     (`$XDG_CONFIG_HOME/git/attributes`) and any `core.attributesFile`, the repository's own config included, since
     the forced command-line value wins. It does not cut off `$GIT_DIR/info/attributes`: git reads it from disk whatever
-    the environment says. The hygiene scan stays clear of it by scanning a fresh template-less mirror, which copies
+    the environment says. The secret scan stays clear of it by scanning a fresh template-less mirror, which copies
     none; a caller that runs git in the real repository must deal with it itself.
     """
     empty_home.mkdir(parents=True)

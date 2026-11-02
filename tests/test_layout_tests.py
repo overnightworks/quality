@@ -5,7 +5,7 @@ import pytest
 from quality.output import FIX_LABEL
 from quality.report import FindingEvent
 from quality.rules import Rule
-from tests.support.check import hygiene_output, refusals, rows_of, rule_findings
+from tests.support.check import check_output, refusals, rows_of, rule_findings
 from tests.support.layout import CONFIG, GUIDANCE, assert_row_is_kind, declaring, in_index, red
 from tests.support.merge import ONE_JOB
 
@@ -52,7 +52,7 @@ def test_an_init_file_under_tests_is_red_unless_it_is_fixture_data(build_repo, i
 def test_an_init_file_and_a_stray_helper_are_strays_with_a_fix_line_each(build_repo, capsys):
     """#196 sentence 6, E1 and #283 O12: all printed, sorted by path, both ways out in each fix; unequal fixes print apiece."""
     repo = build_repo({**ROOT_PROJECT, "tests/__init__.py": "", "tests/helpers.py": ""})
-    code, output = hygiene_output(capsys, repo)
+    code, output = check_output(capsys, repo)
     init, helper = rule_findings(repo, RULE)
     assert_row_is_kind(output, init, FindingEvent.STRAY)
     rows = [row for finding in (init, helper) for row in rows_of(output, finding)]
@@ -125,7 +125,7 @@ def test_a_malformed_layout_table_cannot_be_judged_for_test_layout(build_repo, c
     """#196 sentence 7, D6."""
     duplicate = declaring("tests/helpers.py", rule=RULE) * 2
     repo = build_repo({**ROOT_PROJECT, "tests/helpers.py": "", CONFIG: ONE_JOB + duplicate})
-    code, _ = hygiene_output(capsys, repo)
+    code, _ = check_output(capsys, repo)
     assert (code, RULE in refusals(repo)) == (2, True)
 
 
@@ -133,5 +133,5 @@ def test_an_index_record_that_cannot_be_read_cannot_be_judged(build_repo, capsys
     """#196 sentence 8, D7."""
     repo = build_repo(GUIDANCE)
     fake_git(r"""case " $* " in *" -s "*) printf 'not-a-mode abc 0\tAGENTS.md\0'; exit 0;; esac""")
-    code, _ = hygiene_output(capsys, repo)
+    code, _ = check_output(capsys, repo)
     assert (code, RULE in refusals(repo)) == (2, True)

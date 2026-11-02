@@ -27,10 +27,10 @@ from tests.support.check import (
     area_row,
     assert_every_line_starts_with_the_door,
     assert_row_prints_finding,
+    check_result,
     env_row_stands,
     extent_counts,
     finding_rows,
-    hygiene_run,
     leading_count,
     recorded_entries,
     rows_of,
@@ -511,7 +511,7 @@ def test_the_files_block_lists_every_finding_in_run_order_python_floor_last_then
                "src/s/pyproject.toml": floor, "quality/config.toml": ONE_JOB + allowance}
     repo = build_repo(tracked)
     code, out, _ = frame_run(capsys, repo)
-    files = next(verdict for verdict in hygiene_run(repo, cli.INSTALLED_RUFF, cli.INSTALLED_ZIZMOR).areas if verdict.area is Area.FILES)
+    files = next(verdict for verdict in check_result(repo, cli.INSTALLED_RUFF, cli.INSTALLED_ZIZMOR).areas if verdict.area is Area.FILES)
     printed = "\n".join(out)
     start = next(number for number, line in enumerate(out) if line.startswith("  ! files  "))
     end = next(number for number, line in enumerate(out) if number > start and line in headers(out))
@@ -533,7 +533,7 @@ def test_an_area_that_cannot_check_ends_the_run_with_the_pair_and_no_verdict(bui
     assert unchecked[0].endswith(f"not checked    mise could not locate {scanners.GITLEAKS} {scanners.pinned_tool(scanners.GITLEAKS).version}")
     assert header(Area.CODE, "!", "1 finding") in out
     assert [location for location, _ in area_finding_rows("\n".join(out), Area.CODE)] == ["src/a.py:1"]
-    assert err == [f"error: {cli.refusal_error(hygiene_run(repo).areas)}", f"next: {scanners.install_command()}"]
+    assert err == [f"error: {cli.refusal_error(check_result(repo).areas)}", f"next: {scanners.install_command()}"]
     assert scanners.install_command() not in "\n".join(out)
 
 
@@ -727,7 +727,7 @@ def test_the_real_door_prints_every_config_example_line_whole_in_each_stderr_for
         text = done.stderr
     stripped = without_sgr(text)
     example = [f"    {line}" for line in config.GENERATED_FILE_EXAMPLE]
-    expected = [f"error: {cli.refusal_error(hygiene_run(repo).areas)}", f"next: {check.CONFIG_EXAMPLE_LABEL}:", *example]
+    expected = [f"error: {cli.refusal_error(check_result(repo).areas)}", f"next: {check.CONFIG_EXAMPLE_LABEL}:", *example]
     assert done.returncode == 2
     assert ("\x1b[" in text) is coloured, text
     assert stripped.replace("\r\n", "\n").splitlines() == expected

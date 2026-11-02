@@ -1,4 +1,4 @@
-"""#61 (Q1b-6a): hygiene's import-contract rule judges a repository's import-linter contracts.
+"""#61 (Q1b-6a): the import-contract rule judges a repository's import-linter contracts.
 
 Every cell runs through `cli.main(["hygiene", ...])`; the cell numbers are the item's scenario matrix.
 """
@@ -35,15 +35,15 @@ from tests.support.check import (
     area_fact,
     assert_every_line_starts_with_the_door,
     assert_finding_vocabulary,
+    check_result,
     env_row_stands,
-    hygiene_run,
     is_clean,
     leading_count,
     refusal_row,
     rule_findings,
     rule_notes,
 )
-from tests.support.check import hygiene_output as run
+from tests.support.check import check_output as run
 from tests.support.merge import BASE_SHA, ONE_JOB, SHOWN, SONAR_GREEN, FakeGh, changed_nothing, declaring, drive
 
 QUALITY_ROOT = Path(__file__).resolve().parents[1]
@@ -258,7 +258,7 @@ def test_the_imports_row_counts_the_contracts_the_config_declares_and_the_judgem
     """O23 and decision 1: the extent is read from both owners; a config without contracts is clean with extent 0."""
     repo = build_repo({**SHOP, **configs})
     _, output = run(capsys, repo)
-    (verdict,) = [found for found in hygiene_run(repo).verdicts if found.rule is Rule.IMPORT_CONTRACT]
+    (verdict,) = [found for found in check_result(repo).verdicts if found.rule is Rule.IMPORT_CONTRACT]
     declared = len(architecture.contracts_of(configs).contracts)
     assert (verdict.findings, verdict.measured_only) == ((), False)
     assert (verdict.extent, leading_count(area_fact(output, Area.IMPORTS))) == (declared, declared)

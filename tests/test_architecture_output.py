@@ -24,9 +24,9 @@ from tests.support.check import (
     area_row,
     assert_block_prints,
     assert_every_line_starts_with_the_door,
-    hygiene_output,
-    hygiene_run,
-    hygiene_streams,
+    check_output,
+    check_result,
+    check_streams,
     leading_count,
     rule_findings,
     rule_notes,
@@ -44,7 +44,7 @@ DOOR = [sys.executable, "-m", "quality.cli"]
 def broken_block(capsys, files: dict[str, str], build_repo) -> tuple[list[str], list[BlockLine], Path]:
     """The lines the door printed for a repository whose contract is broken, and its decoded imports block."""
     repo = build_repo(files)
-    code, printed = hygiene_output(capsys, repo)
+    code, printed = check_output(capsys, repo)
     assert code == 1, printed
     lines = printed.split("\n")
     assert_every_line_starts_with_the_door(lines)
@@ -162,7 +162,7 @@ def test_warnings_stand_in_order_when_every_contract_is_kept(build_repo, capsys)
     files = {**SHOP, "src/shop/some.module.py": "",
              ".importlinter": contracts_ini({"first": {**STALE, **warned}, "second": {**STALE, **warned}})}
     repo = build_repo(files)
-    code, printed = hygiene_output(capsys, repo)
+    code, printed = check_output(capsys, repo)
     notes = rule_notes(repo, Rule.IMPORT_CONTRACT)
     note_events = [note.event for note in notes]
     assert code == 0
@@ -183,13 +183,13 @@ def test_warnings_stand_in_order_when_every_contract_is_kept(build_repo, capsys)
 def test_no_import_contract_line_stands_before_the_area_rows(build_repo, capsys, files):
     """O15: no stdout line opens with the rule's id, and stderr stays empty."""
     repo = build_repo(files)
-    _, out, err = hygiene_streams(capsys, repo)
+    _, out, err = check_streams(capsys, repo)
     printed_lines = [line for line in out.splitlines() if line.startswith(Rule.IMPORT_CONTRACT)]
     assert (printed_lines, out.splitlines()[0].split()[1], err) == ([], next(iter(Area)), "")
 
 
 def imports_verdict(repo: Path) -> check.RuleVerdict:
-    (verdict,) = [found for found in hygiene_run(repo).verdicts if found.rule is Rule.IMPORT_CONTRACT]
+    (verdict,) = [found for found in check_result(repo).verdicts if found.rule is Rule.IMPORT_CONTRACT]
     return verdict
 
 
@@ -207,11 +207,11 @@ def test_without_an_import_linter_config_the_row_is_a_grey_note_and_the_verdict_
     repo = build_repo(files)
     if arrange:
         arrange(repo)
-    code, printed = hygiene_output(capsys, repo)
+    code, printed = check_output(capsys, repo)
     verdict = imports_verdict(repo)
     row = area_row(printed, Area.IMPORTS)
     parts = printed.splitlines()[-1].split(SEPARATOR)
-    notes = cli.measured_notes(hygiene_run(repo).areas)
+    notes = cli.measured_notes(check_result(repo).areas)
     assert (code, verdict.measured_only, verdict.findings, verdict.notes, verdict.refusal) == (0, True, (), (), None)
     assert (row.glyph, row.event) == (Glyph.NOTE, cli.AreaEvent.NOT_SET_UP)
     printed_notes = parts[-1 - len(notes):-1]
@@ -224,8 +224,8 @@ def test_a_kept_contract_adds_one_clean_area_and_removes_exactly_the_imports_not
     runs = []
     for tracked in ({**SHOP, ".env": "A=1\n"}, {**KEPT_CONTRACT, ".env": "A=1\n"}):
         repo = build_repo(tracked)
-        code, printed = hygiene_output(capsys, repo)
-        runs.append((code, hygiene_run(repo), printed.splitlines()[-1].split(SEPARATOR), cli.measured_notes(hygiene_run(repo).areas)))
+        code, printed = check_output(capsys, repo)
+        runs.append((code, check_result(repo), printed.splitlines()[-1].split(SEPARATOR), cli.measured_notes(check_result(repo).areas)))
     (code_without, result_without, parts_without, notes_without), (code_with, result_with, parts_with, _) = runs
     imports_note = notes_without[-1]
     assert (code_without, code_with, result_without.findings) == (1, 1, result_with.findings)

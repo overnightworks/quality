@@ -25,9 +25,9 @@ from tests.support.check import (
     assert_block_prints,
     assert_every_line_starts_with_the_door,
     assert_finding_vocabulary,
+    check_result,
     env_row_stands,
     heard,
-    hygiene_run,
     leading_count,
     refusal_row,
     refusals,
@@ -37,11 +37,11 @@ from tests.support.scanners import (
     OUTPUTS,
     PINNED,
     Locator,
+    check_exit_2,
     commit,
     fake_gitleaks,
     fake_scanner,
     fake_zizmor,
-    hygiene_exit_2,
     lacking,
     recording,
     scan,
@@ -64,7 +64,7 @@ def test_a_version_command_that_fails_hangs_or_reports_no_version_is_exit_2(serv
     """#13 rule 2, #134 rule 1: a scanner whose version command exits non-zero, hangs or reports no version is not trusted."""
     monkeypatch.setattr(process, "VERSION_TIMEOUT_SECONDS", 0.2)
     fake_gitleaks(served_scanners, version, on_version=on_version)
-    assert expected in hygiene_exit_2(build_repo({}), capsys)
+    assert expected in check_exit_2(build_repo({}), capsys)
 
 
 @pytest.mark.parametrize(
@@ -82,7 +82,7 @@ def test_a_scanner_that_crashes_or_leaves_no_usable_report_is_exit_2(served_scan
     gitleaks' stderr reaches no printed line."""
     fake_gitleaks(served_scanners, on_scan=on_scan)
     repo = build_repo({})
-    printed = hygiene_exit_2(repo, capsys)
+    printed = check_exit_2(repo, capsys)
     assert set(refusals(repo)) == {Rule.LEAK}
     assert "boom" not in printed
 
@@ -122,8 +122,8 @@ def test_unreadable_or_inconsistent_gitleaks_result_cannot_be_judged(report, exi
 
 @pytest.mark.scanner
 @UNKNOWN_KEY_CONFIGS
-def test_hygiene_refuses_a_config_with_unknown_keys(build_repo, installed_scanners, capsys, config):
-    """#40 rule 2: hygiene keeps refusing unknown keys of quality/config.toml."""
+def test_check_refuses_a_config_with_unknown_keys(build_repo, installed_scanners, capsys, config):
+    """#40 rule 2: the check keeps refusing unknown keys of quality/config.toml."""
     assert scan(build_repo({"quality/config.toml": config})) == 2
     assert "unknown key" in heard(capsys)
 
@@ -389,7 +389,7 @@ def test_a_workflow_scanner_without_a_usable_report_is_exit_2(served_scanners, t
     """#15 rule 2: a scanner that exits 0 with no report, or errors out, is exit 2 and never clean."""
     repo = build_repo({".github/workflows/w.yml": "on: push\n"})
     locate_zizmor = fake_workflow_scanners(served_scanners, tmp_path / "zizmor", on_scan)
-    assert expected in hygiene_exit_2(repo, capsys, locate_zizmor)
+    assert expected in check_exit_2(repo, capsys, locate_zizmor)
 
 
 @pytest.fixture
@@ -523,7 +523,7 @@ class WorkflowRun:
 
     @property
     def area(self) -> check.AreaVerdict:
-        return next(verdict for verdict in hygiene_run(self.repo, locate_zizmor=self.locate_zizmor).areas if verdict.area is Area.WORKFLOWS)
+        return next(verdict for verdict in check_result(self.repo, locate_zizmor=self.locate_zizmor).areas if verdict.area is Area.WORKFLOWS)
 
 
 @pytest.fixture
@@ -533,7 +533,7 @@ def workflow_pair() -> dict[str, str]:
 
 @pytest.fixture
 def drive_workflows(build_repo, served_scanners, elsewhere, capsys):
-    """`drive(files, lint=…, security=…)` runs `hygiene` over a repository tracking `files`, with a fake actionlint and zizmor
+    """`drive(files, lint=…, security=…)` runs the check over a repository tracking `files`, with a fake actionlint and zizmor
     running the given shell (clean by default); `deleted` names tracked files taken from the tree before the run."""
 
     def drive(files: dict[str, str], lint: str = "echo '[]'", security: str = "echo '[]'", deleted: tuple[str, ...] = ()) -> WorkflowRun:

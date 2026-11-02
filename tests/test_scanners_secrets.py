@@ -30,7 +30,7 @@ from tests.support.check import (
     rule_findings,
     rule_notes,
 )
-from tests.support.scanners import OUTPUTS, commit, fake_gitleaks, hygiene_exit_2, scan, serving
+from tests.support.scanners import OUTPUTS, check_exit_2, commit, fake_gitleaks, scan, serving
 from tests.support.secrets import FAKE_KEY, HOSTILE_FILE, OTHER_KEY, allow_config, assert_key_found, sha256_of
 
 RECORDED_SECRET = "PLACEHOLDER-SECRET-VALUE"  # the Secret in the recorded gitleaks-finding.json
@@ -117,7 +117,7 @@ def test_one_value_on_two_lines_is_two_rows_and_one_fix(build_repo, installed_sc
 def test_an_invalid_allow_entry_is_exit_2(build_repo, capsys, entry):
     """#24 rule 2: an allow entry that is not rule, file, hash and reason cannot be judged."""
     config = f'[gate]\nmandatory_jobs = ["checks"]\n[secrets]\nallow = [{entry}]\n'
-    assert "[secrets] allow entry" in hygiene_exit_2(build_repo({"quality/config.toml": config}), capsys)
+    assert "[secrets] allow entry" in check_exit_2(build_repo({"quality/config.toml": config}), capsys)
 
 
 @pytest.mark.parametrize(
@@ -129,7 +129,7 @@ def test_an_invalid_allow_entry_is_exit_2(build_repo, capsys, entry):
 def test_a_report_entry_without_a_string_secret_is_exit_2(build_repo, served_scanners, capsys, report):
     """#24 rule 5: a finding whose value cannot be hashed is never clean."""
     fake_gitleaks(served_scanners, on_scan=f"echo '{report}' > \"$report\"; exit 7")
-    hygiene_exit_2(build_repo({}), capsys)
+    check_exit_2(build_repo({}), capsys)
 
 
 def test_the_scan_passes_the_gates_own_config(build_repo, served_scanners):
@@ -295,9 +295,9 @@ def test_an_allowance_no_finding_used_is_one_unused_note_at_the_config(build_rep
     code = cli.main([command, str(repo)])
     streams = capsys.readouterr()
     printed = streams.out
-    hygiene = command == "hygiene"
-    notes = rule_notes(repo, Rule.LEAK) if hygiene else list(staged.scan_staged(repo).notes)
-    block = area_block(printed, "secrets") if hygiene else decode_block(printed.splitlines())
+    whole_run = command == "hygiene"
+    notes = rule_notes(repo, Rule.LEAK) if whole_run else list(staged.scan_staged(repo).notes)
+    block = area_block(printed, "secrets") if whole_run else decode_block(printed.splitlines())
     (note,) = notes
     assert (code, note.event, note.path) == (0, NoteEvent.UNUSED, config.CONFIG_PATH)
     assert ("aws-access-token" in note.fact, STALE_FILE in note.fact) == (True, True)
@@ -372,6 +372,6 @@ def test_a_commit_count_git_cannot_give_refuses_the_secret_rule_alone(build_repo
     """O30: the extent of a clean row is never guessed; the secret rule cannot judge, the other rows stand."""
     repo = build_repo({".env": "KEY=1\n"})
     fake_git(f'case "$*" in *rev-list*--count*) {answer};; esac')
-    out = hygiene_exit_2(repo, capsys)
+    out = check_exit_2(repo, capsys)
     assert set(refusals(repo)) == {Rule.LEAK}
     assert env_row_stands(out)

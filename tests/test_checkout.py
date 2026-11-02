@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from quality import cli
-from tests.support.check import hygiene_output as run
+from tests.support.check import check_output as run
 from tests.support.git_repositories import make_repo
 
 

@@ -5,8 +5,8 @@ import pytest
 from quality import clones
 from quality.ratchet import Area, ClonePair, Place, read_baseline
 from quality.rules import Rule
-from tests.support.check import area_fact, extent_counts, hygiene_run, refusal_row, refusals
-from tests.support.check import hygiene_output as hygiene
+from tests.support.check import area_fact, check_result, extent_counts, refusal_row, refusals
+from tests.support.check import check_output as run
 from tests.support.clones import function
 
 QUALITY_ITSELF = Path(__file__).parents[1]
@@ -110,8 +110,8 @@ def test_a_file_python_cannot_parse_has_no_pair_and_leaves_the_clone_rule_clean_
     make the run exit 2."""
     files = {"src/a.py": function("first", "a", "b"), "src/broken.py": "def broken(:\n"}
     repo = build_repo(files)
-    code, output = hygiene(capsys, repo)
-    (clone,) = (verdict for verdict in hygiene_run(repo).verdicts if verdict.rule is Rule.CLONE)
+    code, output = run(capsys, repo)
+    (clone,) = (verdict for verdict in check_result(repo).verdicts if verdict.rule is Rule.CLONE)
     assert (code, Rule.CLONE in refusals(repo), clone.extent) == (2, False, 0), output
     assert f"{refusal_row('code')}ruff cannot parse src/broken.py" in output
 
@@ -119,6 +119,6 @@ def test_a_file_python_cannot_parse_has_no_pair_and_leaves_the_clone_rule_clean_
 @pytest.mark.integration
 def test_quality_holds_its_own_clone_table_and_its_clean_debt_row_counts_the_ceiling_file(capsys):
     """#136 cell 12: quality enforces its `[clones]`, so a copied helper in its tree turns its own gate red."""
-    code, output = hygiene(capsys, QUALITY_ITSELF)
+    code, output = run(capsys, QUALITY_ITSELF)
     held = read_baseline(QUALITY_ITSELF)
     assert (code, extent_counts(area_fact(output, "debt"))) == (0, [len(held.size), len(held.clones)]), output

@@ -38,8 +38,8 @@ from tests.support.check import (
     assert_block_prints,
     assert_every_line_starts_with_the_door,
     assert_finding_vocabulary,
+    check_result,
     extent_counts,
-    hygiene_run,
 )
 from tests.support.scanners import OUTPUTS, fake_scanner, lacking
 
@@ -62,7 +62,7 @@ class AdvisoryRun:
 
     @property
     def areas(self) -> tuple[check.AreaVerdict, ...]:
-        return hygiene_run(self.repo).areas
+        return check_result(self.repo).areas
 
     @property
     def area(self) -> check.AreaVerdict:
@@ -71,7 +71,7 @@ class AdvisoryRun:
 
 @pytest.fixture
 def drive_advisories(build_repo, served_scanners, capsys):
-    """`drive(files, report, code=1, stderr="")` runs `hygiene` over a repository tracking `files` (or over the repository
+    """`drive(files, report, code=1, stderr="")` runs the check over a repository tracking `files` (or over the repository
     given), with a fake osv-scanner printing `report` and exiting `code`."""
 
     def drive(files: dict[str, str] | Path, report: Path = FINDING_REPORT, code: int = 1, stderr: str = "") -> AdvisoryRun:

@@ -100,7 +100,7 @@ def fake_gitleaks(served: Path, version: str = PINNED, on_scan: str = "exit 0", 
     return binary.parent
 
 
-def hygiene_exit_2(repo: Path, capsys, locate_zizmor=never_located) -> str:
+def check_exit_2(repo: Path, capsys, locate_zizmor=never_located) -> str:
     assert cli.main(["hygiene", str(repo)], locate_zizmor=locate_zizmor) == 2
     return heard(capsys)
 
