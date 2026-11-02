@@ -45,10 +45,14 @@ MAXIMUM_FINDINGS_PAGES = FINDINGS_SEARCH_LIMIT // FINDINGS_PAGE_SIZE
 # or marked false positive in the SonarCloud interface.
 OPEN_ISSUE_STATUSES = "OPEN,CONFIRMED,ACCEPTED,FALSE_POSITIVE"
 
-# Sonar itself drops this rule on a branch analysis when the bot config exists, by existence alone; its pull-request
-# analysis cannot see an unchanged file and keeps the finding, so the gate applies the same test everywhere.
+# Sonar's own sensor drops this rule only when its scanner has indexed a bot config, which a pull-request analysis
+# of an unchanged file and a repository that leaves `.github` out of `sonar.sources` do not do. The gate applies
+# the same test everywhere, in its count and, through the scan's arguments, in the analysis itself.
 DEPENDABOT_CONFIG = ".github/dependabot.yml"
 DEPENDABOT_EXCEPTION_RULE = "docker:S8431"
+IGNORE_CRITERIA_KEY = "sonar.issue.ignore.multicriteria"
+IGNORE_CRITERION_PREFIX = "e"
+ALL_FILES_PATTERN = "**/*"
 SET_ASIDE_REASON = f" (does not count: {DEPENDABOT_CONFIG} exists, Sonar's own exception, which its pull-request analysis misses)"
 
 PULL_REQUEST_EVENT = "pull_request"
@@ -215,6 +219,17 @@ class OpenFindings:
 def uncounted_rules(dependabot_config_exists: bool) -> frozenset[str]:
     """The rules whose findings the gate prints but does not count; a rule's file path is no input."""
     return frozenset({DEPENDABOT_EXCEPTION_RULE}) if dependabot_config_exists else frozenset()
+
+
+def scanner_exclusions(rules: frozenset[str]) -> str:
+    """The scan arguments that make the analysis itself drop `rules` in every file; empty for no rule."""
+    criteria = {f"{IGNORE_CRITERION_PREFIX}{number}": rule for number, rule in enumerate(sorted(rules), 1)}
+    if not criteria:
+        return ""
+    arguments = [f"{IGNORE_CRITERIA_KEY}={','.join(criteria)}"]
+    for criterion, rule in criteria.items():
+        arguments += [f"{IGNORE_CRITERIA_KEY}.{criterion}.ruleKey={rule}", f"{IGNORE_CRITERIA_KEY}.{criterion}.resourceKey={ALL_FILES_PATTERN}"]
+    return " ".join(f"-D{argument}" for argument in arguments)
 
 
 def legacy_unknown(default_branch: str) -> str:
