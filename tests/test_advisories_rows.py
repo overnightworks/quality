@@ -221,7 +221,7 @@ def test_each_kind_of_advisory_finding_carries_its_event_fact_and_fix(drive_advi
     """Decision 3, O41: the event, the fact from the report's own values and the fix per kind."""
     run = drive_advisories({"uv.lock": uv_lock()}, edited_report("osv-scanner-finding.json", edit))
     (finding,) = run.area.findings
-    package, identifier, *state = finding.reason.split(SEPARATOR)
+    package, identifier, *state = finding.fact.split(SEPARATOR)
     assert (finding.location, finding.event, package, identifier) == ("uv.lock", FindingEvent.AFFECTED, f"{name} {VERSION}", FIRST_ID)
     if fixed is None:
         assert state == []
@@ -338,7 +338,7 @@ def test_each_allowance_finding_stands_as_a_row(drive_advisories, with_lock, con
     run = drive_advisories(files)
     findings = run.area.findings
     assert [(finding.location, finding.event) for finding in findings] == expected
-    assert all(word in findings[-1].reason for word in words)
+    assert all(word in findings[-1].fact for word in words)
     assert ADVISORY_ALLOWANCE_HEADING in findings[-1].fix or findings[-1].event is FindingEvent.AFFECTED
     for finding in findings:
         assert_finding_vocabulary(finding)
@@ -519,7 +519,7 @@ def test_an_allowed_advisory_stands_as_a_note_row_under_the_clean_row(drive_advi
     assert (run.code, run.err) == (0, "")
     (run.repo / CONFIG_PATH).unlink()
     (finding,) = run.area.findings
-    assert note.fact.startswith(f"{finding.reason}{SEPARATOR}")
+    assert note.fact.startswith(f"{finding.fact}{SEPARATOR}")
 
 
 def test_two_allowed_advisories_stand_as_two_note_rows_and_the_row_counts_them(drive_advisories, edited_report):

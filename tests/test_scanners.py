@@ -335,14 +335,14 @@ def test_a_workflow_finding_carries_the_event_of_its_kind_and_the_vocabulary(sca
 def test_an_actionlint_finding_names_the_scanner_and_holds_the_whole_message_as_its_one_detail_line():
     """O37: the message of the recorded report stands whole as the finding's detail."""
     (found,) = workflow_findings("actionlint", recorded("actionlint-finding.json"), FINDING_EXIT["actionlint"])
-    assert (found.reason, found.detail) == (scanners.ACTIONLINT, (recorded_entry("actionlint")["message"],))
+    assert (found.fact, found.detail) == (scanners.ACTIONLINT, (recorded_entry("actionlint")["message"],))
 
 
 def test_a_zizmor_finding_names_its_audit_and_description_and_its_fix_holds_the_audit_url():
     """O36: the scenario's own values stand in the fact and the fix."""
     (found,) = workflow_findings("zizmor", recorded("zizmor-finding.json"), FINDING_EXIT["zizmor"])
     entry = recorded_entry("zizmor")
-    assert (entry["ident"] in found.reason, entry["desc"] in found.reason, entry["url"] in found.fix) == (True, True, True)
+    assert (entry["ident"] in found.fact, entry["desc"] in found.fact, entry["url"] in found.fix) == (True, True, True)
 
 
 @pytest.mark.parametrize("scanner", ["actionlint", "zizmor"])

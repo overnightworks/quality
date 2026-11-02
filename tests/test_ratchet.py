@@ -191,7 +191,7 @@ def test_against_a_baseline_new_grown_and_stale_entries_are_red(build_repo, caps
     assert finding.path == path
     assert finding.line == line
     assert finding.event is event
-    assert all(value in finding.reason for value in values), finding.reason
+    assert all(value in finding.fact for value in values), finding.fact
     assert_finding_vocabulary(finding)
     (row,) = rows_of(output, finding)
     assert_row_prints_finding(row, finding)
@@ -345,7 +345,7 @@ def test_the_shorter_of_two_same_named_functions_cannot_grow_under_the_baseline(
     code, output = hygiene(capsys, repo)
     assert code == 1, output
     (finding,) = rule_findings(repo, Rule.SIZE)
-    assert (finding.event, "65" in finding.reason, "62" in finding.reason) == (FindingEvent.GREW, True, True)
+    assert (finding.event, "65" in finding.fact, "62" in finding.fact) == (FindingEvent.GREW, True, True)
 
 
 def test_baseline_write_records_the_measured_debt_sorted_and_hygiene_then_holds_it(build_repo, capsys):
@@ -700,7 +700,7 @@ def test_a_file_of_every_table_language_is_new_debt_from_800_lines_against_a_bas
     repo = build_repo({"src/a.py": "x = 1\n", path: typescript_file(1210), "frontend/small." + suffix: typescript_file(799), BASELINE_PATH: EMPTY_BASELINE})
     code, output = hygiene(capsys, repo)
     (finding,) = rule_findings(repo, Rule.SIZE)
-    assert (code, finding.path, finding.event, "1210" in finding.reason) == (1, path, FindingEvent.NEW_DEBT, True), output
+    assert (code, finding.path, finding.event, "1210" in finding.fact) == (1, path, FindingEvent.NEW_DEBT, True), output
     assert len(rows_of(output, finding)) == 1
 
 

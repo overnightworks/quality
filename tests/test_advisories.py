@@ -597,7 +597,7 @@ def test_an_allowance_allows_its_advisory_in_its_lock_until_its_date(groups, all
     assert [(note.location, note.event) for note in judged.notes] == [found[:2] for found in notes]
     assert judged.extent == extent
     for finding, (_, _, words) in zip(judged.findings, findings, strict=True):
-        assert all(word in finding.reason for word in words)
+        assert all(word in finding.fact for word in words)
     for note, (_, _, words) in zip(judged.notes, notes, strict=True):
         positions = [note.fact.index(word) for word in words]
         assert positions == sorted(positions)

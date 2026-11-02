@@ -343,7 +343,7 @@ def assert_the_debt_block_is_the_findings_in_run_order(repo: Path, output: str) 
     is exactly the size findings then the clone findings the rule runner returned."""
     findings = [finding for rule, verdict in judged_rules(repo).items() if rule.area is Area.DEBT for finding in verdict.findings]
     decoded = [(location, row.event, row.fact, row.fix) for location, row in area_finding_rows(output, Area.DEBT)]
-    assert decoded == [(finding.location, finding.event, printable(finding.reason), printable(finding.fix)) for finding in findings]
+    assert decoded == [(finding.location, finding.event, printable(finding.fact), printable(finding.fix)) for finding in findings]
     assert all(finding.event for finding in findings)
 
 
@@ -480,14 +480,14 @@ def clone_findings(repo: Path) -> list[Finding]:
 def assert_new_pair(finding: Finding, location: str, other: Place, symbol: str) -> None:
     """A near copy at its second side, naming its own symbol and the other side's path and symbol."""
     assert (finding.location, finding.event) == (location, FindingEvent.NEAR_COPY)
-    assert all(word in finding.reason for word in (symbol, other.path, other.symbol)), finding.reason
+    assert all(word in finding.fact for word in (symbol, other.path, other.symbol)), finding.fact
     assert_finding_vocabulary(finding)
 
 
 def assert_gone_pair(finding: Finding, pair: ClonePair) -> None:
     """A held pair the tree lost, named by the one wording of write and verdict, at its first side."""
     assert (finding.path, finding.event) == (pair.first.path, FindingEvent.CAN_FALL)
-    assert pair.label in finding.reason, finding.reason
+    assert pair.label in finding.fact, finding.fact
     assert_finding_vocabulary(finding)
 
 
@@ -571,8 +571,8 @@ def test_new_pairs_print_in_sorted_order_across_locations_and_at_one_location(bu
     findings = clone_findings(repo)
     assert [finding.location for finding in findings] == ["tests/test_b.py:1", "tests/test_c.py:1", "tests/test_c.py:1"]
     first_at_c, second_at_c = findings[1:]
-    assert ("tests/test_a.py" in first_at_c.reason, "tests/test_b.py" in first_at_c.reason) == (True, False)
-    assert ("tests/test_a.py" in second_at_c.reason, "tests/test_b.py" in second_at_c.reason) == (False, True)
+    assert ("tests/test_a.py" in first_at_c.fact, "tests/test_b.py" in first_at_c.fact) == (True, False)
+    assert ("tests/test_a.py" in second_at_c.fact, "tests/test_b.py" in second_at_c.fact) == (False, True)
     assert_the_debt_block_is_the_findings_in_run_order(repo, output)
 
 
@@ -641,7 +641,7 @@ def test_a_control_character_and_undecodable_bytes_in_a_new_pair_print_escaped(b
     repo, code, output = enforced(capsys, build_repo, new)
     (finding,) = clone_findings(repo)
     assert code == 1, output
-    assert (finding.location, rows_of(output, finding)[0].fact) == ("src/b\\udcff.py:1", printable(finding.reason))
+    assert (finding.location, rows_of(output, finding)[0].fact) == ("src/b\\udcff.py:1", printable(finding.fact))
     assert_every_line_starts_with_the_door(output.splitlines())
 
 
@@ -653,7 +653,7 @@ def test_a_control_character_in_a_held_pair_prints_escaped(build_repo, capsys):
     (finding,) = clone_findings(repo)
     assert code == 1, output
     assert_gone_pair(finding, pair)
-    assert (finding.location, rows_of(output, finding)[0].fact) == ("src/a\\x01.py", printable(finding.reason))
+    assert (finding.location, rows_of(output, finding)[0].fact) == ("src/a\\x01.py", printable(finding.fact))
     assert_every_line_starts_with_the_door(output.splitlines())
 
 

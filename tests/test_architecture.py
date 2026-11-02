@@ -105,7 +105,7 @@ def test_a_contract_that_does_not_hold_is_one_finding_at_its_config(build_repo, 
     (finding,) = rule_findings(repo, Rule.IMPORT_CONTRACT)
     assert code == 1, output
     assert finding.location == location
-    assert named in finding.reason
+    assert named in finding.fact
     assert [line for line in chain if line not in "\n".join(finding.detail)] == []
     assert str(repo) not in output
 

@@ -80,7 +80,7 @@ def test_claude_md_that_is_absent_or_exactly_the_import_is_clean(build_repo, cap
 def test_claude_md_that_is_not_the_import_is_one_finding_of_its_kind_at_the_file(build_repo, capsys, tracked, links, name, event):
     """#95 E1/E17/E20 and #283 O12: the finding's location is the file and its fact never names the file; the fix is never a command."""
     finding = assert_prints_as_kind(capsys, claude_repo(build_repo, tracked, links), Rule.CLAUDE_MD, event)
-    assert (finding.path, name in finding.reason, "git " in finding.fix, rule_ids_in(finding.fix)) == (name, False, False, set())
+    assert (finding.path, name in finding.fact, "git " in finding.fix, rule_ids_in(finding.fix)) == (name, False, False, set())
 
 
 def test_claude_md_finding_never_prints_the_files_content(build_repo, capsys):

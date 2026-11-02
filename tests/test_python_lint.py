@@ -48,13 +48,13 @@ def linted(records: list[RuffFinding], texts: dict[str, str], test_files: frozen
 
 def judged(text: str, finding: RuffFinding, test_files: frozenset[str] = frozenset()) -> list[str]:
     findings = python_lint.judge_security(linted([finding], {finding.path: text}, test_files)).findings
-    return [f"{item.location} {item.reason}" for item in findings]
+    return [f"{item.location} {item.fact}" for item in findings]
 
 
 def judged_prints(text: str, records: list[RuffFinding]) -> tuple[list[str], tuple[Note, ...]]:
     """The python-print findings as `<location> <reason>`, and the notes."""
     result = python_lint.judge_print(linted(records, {"src/p/a.py": text}))
-    return [f"{item.location} {item.reason}" for item in result.findings], result.notes
+    return [f"{item.location} {item.fact}" for item in result.findings], result.notes
 
 
 def rule_verdict(repo: Path, rule: Rule = Rule.PYTHON_SECURITY) -> check.RuleVerdict:

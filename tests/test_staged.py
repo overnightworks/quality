@@ -54,7 +54,7 @@ def test_a_staged_key_is_one_secret_row_with_its_entry_and_its_value_is_not_prin
     assert_block_prints(block, result.findings, list(result.notes))
     (finding,) = result.findings
     assert (finding.location, finding.event) == ("src/a.py:1", FindingEvent.SECRET)
-    assert head_commit(repo)[:8] not in finding.reason
+    assert head_commit(repo)[:8] not in finding.fact
     assert_finding_vocabulary(finding)
     assert lines[-1] == f"scan-staged: {len(result.findings)} finding(s)"
     assert FAKE_KEY not in "\n".join(lines)

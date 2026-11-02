@@ -391,7 +391,7 @@ def test_a_path_declared_under_two_rules_and_untracked_is_one_equal_stale_row_pe
     found = [finding for rule in SCRIPT_RULES for finding in rule_findings(repo, rule)]
     output = hygiene_output(capsys, repo)[1]
     assert [(finding.rule, finding.event) for finding in found] == [(rule, FindingEvent.UNUSED) for rule in SCRIPT_RULES]
-    assert (len({(finding.reason, finding.fix) for finding in found}), rule_ids_in(found[0].fix)) == (1, set())
+    assert (len({(finding.fact, finding.fix) for finding in found}), rule_ids_in(found[0].fix)) == (1, set())
     assert [len(rows_of(output, finding)) for finding in found] == [2, 2]
     put(repo / CONFIG, ONE_JOB)
     assert script_findings(repo) == CLEAN_SCRIPTS
@@ -406,7 +406,7 @@ def test_script_name_is_misnamed_where_the_shape_breaks_and_misplaced_where_only
     found = {finding.path: finding for finding in rule_findings(repo, Rule.SCRIPT_NAME)}
     output = hygiene_output(capsys, repo)[1]
     assert [found[path].event for path in paths] == [FindingEvent.MISNAMED, FindingEvent.MISNAMED, FindingEvent.MISPLACED]
-    assert found["tools/entry_point.sh"].reason in found["tools/Entry.sh"].reason
+    assert found["tools/entry_point.sh"].fact in found["tools/Entry.sh"].fact
     assert len({finding.fix for finding in found.values()}) == 1
     rows = [row for path in paths for row in rows_of(output, found[path])]
     assert [row.fix_follows for row in rows] == [False, False, True]
@@ -418,4 +418,4 @@ def test_a_script_without_a_header_is_a_no_header_finding(build_repo, capsys):
     """#283 O12: the fact names the window it checks, never the file."""
     repo = build_repo({**GUIDANCE, "scripts/run_it.sh": "set -e\n"})
     finding = assert_prints_as_kind(capsys, repo, Rule.SCRIPT_HEADER, FindingEvent.NO_HEADER, str(layout.HEADER_LINES))
-    assert finding.path not in finding.reason
+    assert finding.path not in finding.fact

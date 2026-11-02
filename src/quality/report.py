@@ -138,13 +138,12 @@ class NoteEvent(StrEnum):
 
 @dataclass(frozen=True)
 class Finding:
-    """`reason` is the fact its row shows and the sentence of `headline`. `fix` is a sentence, or an `Example`: a label
-    with the lines a person copies."""
+    """`fix` is a sentence, or an `Example`: a label with the lines a person copies."""
 
     rule: str
     path: str
     line: int | None
-    reason: str
+    fact: str
     fix: str | Example
     allowance: Allowance | None = None
     detail: tuple[str, ...] = ()
@@ -225,7 +224,7 @@ class RuleResult:
 
 
 def headline(finding: Finding) -> str:
-    return f"{finding.rule} {finding.location} - {printable(finding.reason)}"
+    return f"{finding.rule} {finding.location} - {printable(finding.fact)}"
 
 
 def render(finding: Finding) -> str:

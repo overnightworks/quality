@@ -162,4 +162,4 @@ def test_a_test_with_no_subject_in_the_root_folder_does_not_name_the_folder_as_a
     found = {finding.path: finding for finding in rule_findings(repo, RULE)}
     assert_row_is_kind(output, found["x.test.ts"], FindingEvent.MISPLACED, "x")
     assert_row_is_kind(output, found["src/x.test.ts"], FindingEvent.MISPLACED, "src")
-    assert re.search(r"(?<!\w)\.(?!\w)", found["x.test.ts"].reason) is None
+    assert re.search(r"(?<!\w)\.(?!\w)", found["x.test.ts"].fact) is None

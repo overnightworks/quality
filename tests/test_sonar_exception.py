@@ -287,7 +287,7 @@ def test_the_emergency_door_sets_the_dependabot_rule_aside_and_shows_it_before_a
         when_asked=lambda: shown_before_asking.append(capsys.readouterr().out),
     )
     (shown,) = shown_before_asking
-    expected = replace(finding_from_issue(bot_issue()), reason=finding_from_issue(bot_issue()).reason + sonar.SET_ASIDE_REASON)
+    expected = replace(finding_from_issue(bot_issue()), fact=finding_from_issue(bot_issue()).fact + sonar.SET_ASIDE_REASON)
     assert code == 0
     assert headline(expected) in shown.splitlines()
     assert f"{legacy - set_aside} legacy finding(s)" in shown

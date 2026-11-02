@@ -84,7 +84,7 @@ def test_a_recorded_leak_is_one_secret_finding_naming_its_rule_and_commit_and_ne
     """#24 rule 4, O28: the finding carries the secret event, a fact with the rule and the commit's first eight characters."""
     (finding,) = rule_findings(recorded_leak_repo(build_repo, served_scanners, None), Rule.LEAK)
     assert finding.event is FindingEvent.SECRET
-    assert (RECORDED_RULE in finding.reason, RECORDED_COMMIT[:8] in finding.reason) == (True, True)
+    assert (RECORDED_RULE in finding.fact, RECORDED_COMMIT[:8] in finding.fact) == (True, True)
     assert RECORDED_SECRET not in repr(finding)
     assert_finding_vocabulary(finding)
 
