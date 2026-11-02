@@ -8,6 +8,7 @@ import pytest
 import quality
 from quality import cli, report
 from quality.output import SEPARATOR
+from quality.rules import Area
 from tests.support.door import MODULE_DOOR, door_environment
 from tests.support.terminal import Terminal, without_sgr
 
@@ -72,20 +73,38 @@ def test_the_help_stands_in_the_pictures_frame(capsys):
 
 def test_the_check_help_stands_in_the_pictures_frame(capsys):
     lines = help_of(capsys, ["check"]).splitlines()
+    areas = lines[lines.index("Areas (default: all):") + 1 : lines.index("Options:") - 1]
     options = lines[lines.index("Options:") + 1 : -2]
-    assert (lines[0], lines[2], headings(lines), options, lines[-1], max(len(line) for line in lines) <= 80) == (
-        "usage: quality check [-v]",
+    assert (lines[0], lines[2], headings(lines), areas, options, lines[-1], max(len(line) for line in lines) <= 80) == (
+        "usage: quality check [AREA ...] [-v]",
         "Check this repository against the fleet's rules.",
-        ["Options:"],
+        ["Areas (default: all):", "Options:"],
+        [
+            "  files         what the repository tracks: layout, tests, env files,",
+            "                compose ports, the Python floor",
+            "  debt          size and near copies against the debt ceiling",
+            "                (quality/baseline.toml)",
+            "  imports       the import contracts",
+            "  secrets       secrets in the committed history",
+            "  workflows     GitHub workflows: lint and security",
+            "  dependencies  known advisories in the lockfiles",
+            "  code          Python source: security findings and print calls",
+        ],
         ["  -v          show the raw scanner output, never a secret", "  -h, --help  show this help"],
         "Exit codes: 0 clean, 1 findings, 2 could not check, 130 interrupted.",
         True,
     )
 
 
-def test_the_check_entry_takes_no_path_in_the_top_level_help(capsys):
+def test_each_area_has_one_entry_in_the_check_help(capsys):
+    lines = help_of(capsys, ["check"]).splitlines()
+    entries = entries_under(lines, "Areas (default: all):")
+    assert [entry.split()[0] for entry in entries if not entry.startswith("   ")] == list(Area)
+
+
+def test_the_check_entry_names_its_areas_in_the_top_level_help(capsys):
     lines = help_of(capsys, []).splitlines()
-    assert "  check" in entries_under(lines, "Commands:")
+    assert "  check [AREA ...]" in entries_under(lines, "Commands:")
 
 
 def test_every_command_path_stands_in_the_help_once_and_every_entry_is_one(capsys):
@@ -180,22 +199,25 @@ def test_a_closed_stdout_takes_no_help_and_exit_is_0(tmp_path):
         pytest.param(["nonsense"], (), "no command nonsense{sep}commands: {commands}", "quality", id="unknown command"),
         pytest.param(["sonar"], ("sonar",), "no command{sep}commands: {commands}", "quality sonar", id="no sonar command"),
         pytest.param(["baseline", "nonsense"], ("baseline",), "no command nonsense{sep}commands: {commands}", "quality baseline", id="unknown baseline command"),
-        pytest.param(["check", "a", "b"], (), "unknown argument{sep}a b", "quality check", id="stray argument"),
-        pytest.param(["check", "."], (), "unknown argument{sep}.", "quality check", id="a path of the old form"),
-        pytest.param(["check", "src"], (), "unknown argument{sep}src", "quality check", id="a folder name"),
-        pytest.param(["check", "-v", "."], (), "unknown argument{sep}.", "quality check", id="a path after the flag"),
+        pytest.param(["check", "a", "b"], (), "no area a{sep}areas: {areas}", "quality check", id="the first of two words"),
+        pytest.param(["check", "."], (), "no area .{sep}areas: {areas}", "quality check", id="a path of the old form"),
+        pytest.param(["check", "src"], (), "no area src{sep}areas: {areas}", "quality check", id="a folder name"),
+        pytest.param(["check", "-v", "."], (), "no area .{sep}areas: {areas}", "quality check", id="a path after the flag"),
+        pytest.param(["check", "files", "docs"], (), "no area docs{sep}areas: {areas}", "quality check", id="a wrong area after a right one"),
+        pytest.param(["check", "docs", "--nonsense"], (), "no area docs{sep}areas: {areas}", "quality check", id="a wrong area before a stray option"),
+        pytest.param(["check", "files", "--nonsense"], (), "unknown argument{sep}--nonsense", "quality check", id="a stray option after an area"),
+        pytest.param(["check", "--nonsense"], (), "unknown argument{sep}--nonsense", "quality check", id="a stray option of check"),
         pytest.param(["check", "--verbose"], (), "unknown argument{sep}--verbose", "quality check", id="the long form of the flag"),
         pytest.param(["-v", "check"], (), "unknown argument{sep}-v", "quality check", id="the flag before the command"),
         pytest.param(["scan-staged", "-v"], (), "unknown argument{sep}-v", "quality scan-staged", id="the flag on the staged door"),
         pytest.param(["scan-staged", "--nonsense"], (), "unknown argument{sep}--nonsense", "quality scan-staged", id="stray option"),
         pytest.param(["baseline", "write", "a", "b"], (), "unknown argument{sep}b", "quality baseline", id="stray argument of a group's command"),
-        pytest.param(["check", "a", "b", "c"], (), "unknown argument{sep}a b c", "quality check", id="two stray arguments"),
         pytest.param(["sonar", "properties", "x"], (), "unknown argument{sep}x", "quality sonar", id="stray argument of sonar"),
         pytest.param(["--nonsense", "scoreboard"], (), "unknown argument{sep}--nonsense", "quality scoreboard", id="stray option before a command"),
     ],
 )
 def test_a_wrong_invocation_is_the_pair_on_stderr_and_exit_2(capsys, argv, group, fact, help_owner):
-    wording = fact.format(sep=SEPARATOR, commands=commands_of(*group))
+    wording = fact.format(sep=SEPARATOR, commands=commands_of(*group), areas=", ".join(Area))
     code = cli.main(argv, environment={})
     printed = capsys.readouterr()
     assert (code, printed.out, printed.err) == (2, "", f"error: {wording}\nnext: {help_owner} --help\n")
@@ -248,3 +270,38 @@ def test_the_version_prints_the_installed_version_alone(capsys):
         cli.main(["--version"])
     printed = capsys.readouterr()
     assert (stopped.value.code, printed.out, printed.err) == (0, f"{quality.__version__}\n", "")
+
+
+def test_the_unknown_area_pair_stands_as_the_picture_draws_it(capsys):
+    code = cli.main(["check", "docs"], environment={})
+    printed = capsys.readouterr()
+    assert (code, printed.out, printed.err) == (
+        2,
+        "",
+        "error: no area docs · areas: files, debt, imports, secrets, workflows, dependencies, code\nnext: quality check --help\n",
+    )
+
+
+def test_a_wrong_area_stands_escaped_in_the_pair(capsys):
+    word = f"{chr(0x1B)}[31m{chr(0x202E)}letters"
+    cli.main(["check", word], environment={})
+    err = capsys.readouterr().err
+    assert (err.splitlines()[0].startswith("error: no area \\x1b[31m\\u202eletters"), "\x1b" in err, "\u202e" in err) == (True, False, False)
+
+
+@pytest.mark.parametrize(
+    "words",
+    [
+        pytest.param(["-v", "debt", "secrets"], id="first"),
+        pytest.param(["debt", "-v", "secrets"], id="between"),
+        pytest.param(["debt", "secrets", "-v"], id="last"),
+        pytest.param(["-v", "--", "debt", "secrets"], id="after --"),
+    ],
+)
+def test_options_may_stand_between_the_named_areas(words):
+    arguments = cli.read_invocation(["check", *words])
+    assert (arguments.areas, arguments.verbose) == ([Area.DEBT, Area.SECRETS], True)
+
+
+def test_no_area_named_leaves_the_invocation_empty():
+    assert cli.read_invocation(["check"]).areas == []

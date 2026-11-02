@@ -9,7 +9,7 @@ runs `quality emergency-merge`, or reads `quality --help` or a wrong invocation'
 true today; every other `quality <command> --help` prints that command's arguments; `--version` prints the installed version. Help goes to
 stdout with exit `0`, plain and whole in every stream. A wrong invocation runs nothing, prints the `error:`/`next:` pair
 on stderr and exits `2`: `no command <word> · commands: …` for a first word that names no command, `no command ·
-commands: …` for none, `unknown argument · <what is left over>` for what the command does not take, and otherwise the
+commands: …` for none, `no area <word> · areas: …` for the first word `quality check` does not know as an area, `unknown argument · <what is left over>` for what the command does not take, and otherwise the
 parser's own sentence; `next:` names the help of the command, of its group for a command inside one, or of the parser
 that refused.
 
@@ -26,7 +26,7 @@ has an empty work tree and none of the live repository's config or `info/attribu
 `.gitleaks.toml`, `.gitattributes` with `-diff`, or a `gitleaks:allow` comment changes nothing. gitleaks runs in the same
 attribute-free environment as `check`, with quality's config. The allow list is the staged tree's own
 `quality/config.toml` (none staged: no allowances). `scan-staged` validates only the `[secrets]` table of that config and ignores other tables
-and keys, while `check` and `verdict` stay strict, so schema growth never blocks a commit. Output and secret handling
+and keys, while `check` (when a selected area needs the config, validating the whole of it) and `verdict` stay strict, so schema growth never blocks a commit. Output and secret handling
 are `check`'s, and it takes no `-v`: it prints the secrets finding rows and the note rows as `check` does under its secrets row
 (`docs/rules.md`), without a commit in the fact, then `scan-staged: N finding(s)` or `scan-staged: clean`. At a terminal stderr shows `check`'s live line while gitleaks runs (`docs/rules.md`).
 

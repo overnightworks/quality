@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import sys
+import textwrap
 import time
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
@@ -147,14 +148,14 @@ def main(
         if arguments.sonar_command == "properties":
             return run_sonar_properties()
         return run_sonar_findings(transport, sleep)
-    return run_check(locate_ruff, locate_zizmor, clock, channels, arguments.verbose)
+    return run_check(locate_ruff, locate_zizmor, clock, channels, arguments.verbose, arguments.areas)
 
 
 QUALITY_HELP = f"""\
 usage: quality COMMAND
 
 Commands:
-  check
+  check [AREA ...]
       Check this repository against the fleet's rules.
   baseline write [PATH]
       Record the debt ceiling ({ratchet.BASELINE_PATH}): the measured size
@@ -183,10 +184,23 @@ Options:
 Exit codes: 0 yes, 1 no, 2 could not answer, 130 interrupted.
 """
 
-CHECK_HELP = """\
-usage: quality check [-v]
+AREA_COLUMN = max(map(len, Area))
+AREA_HELP_WIDTH = 76
+
+
+def _area_entry(area: Area) -> str:
+    return textwrap.fill(area.help_line, AREA_HELP_WIDTH, initial_indent=f"  {area:<{AREA_COLUMN}}  ", subsequent_indent=" " * (AREA_COLUMN + 4))
+
+
+AREA_ENTRIES = "\n".join(map(_area_entry, Area))
+
+CHECK_HELP = f"""\
+usage: quality check [AREA ...] [-v]
 
 Check this repository against the fleet's rules.
+
+Areas (default: all):
+{AREA_ENTRIES}
 
 Options:
   -v          show the raw scanner output, never a secret
@@ -202,6 +216,7 @@ class DoorParser(argparse.ArgumentParser):
 
     commands: Mapping[str, argparse.ArgumentParser] = {}
     pictured_help: str | None = None
+    intermixed: bool = False
 
     def add_subparsers(self, **options: str) -> argparse._SubParsersAction:
         words = super().add_subparsers(metavar="COMMAND", required=True, **options)
@@ -216,6 +231,8 @@ class DoorParser(argparse.ArgumentParser):
         if self.commands and not word.startswith("-") and word not in self.commands:
             asked = f"no command {word}" if word else "no command"
             raise CannotJudge(f"{asked}{SEPARATOR}commands: {', '.join(self.commands)}", help_step(self.prog))
+        if self.intermixed:
+            return self.parse_known_intermixed_args(args, namespace)
         return super().parse_known_args(args, namespace)
 
     def error(self, message: str) -> NoReturn:
@@ -227,6 +244,14 @@ class DoorParser(argparse.ArgumentParser):
 
 def help_step(prog: str) -> tuple[Step, ...]:
     return (Command(f"{prog} --help"),)
+
+
+def named_area(word: str) -> Area:
+    """The area `word` names; a word that names none is the refusal `main` writes, with the registry's areas."""
+    try:
+        return Area(word)
+    except ValueError as error:
+        raise CannotJudge(f"no area {word}{SEPARATOR}areas: {', '.join(Area)}", help_step("quality check")) from error
 
 
 def read_invocation(argv: list[str] | None) -> argparse.Namespace:
@@ -245,6 +270,8 @@ def build_parser() -> DoorParser:
     commands = parser.add_subparsers(dest="command")
     check_parser = commands.add_parser("check")
     check_parser.pictured_help = CHECK_HELP
+    check_parser.intermixed = True
+    check_parser.add_argument("areas", nargs="*", type=named_area, metavar="AREA")
     check_parser.add_argument("-v", dest="verbose", action="store_true")
     baseline = commands.add_parser("baseline").add_subparsers(dest="baseline_command")
     baseline.add_parser("write", help=f"write the measured size debt and clone pairs to {ratchet.BASELINE_PATH}").add_argument(
@@ -382,7 +409,7 @@ def refusal_error(areas: tuple[AreaVerdict, ...]) -> str:
     refused = [verdict for verdict in areas if verdict.reasons]
     found = sum(len(verdict.findings) for verdict in areas)
     held = sum(len(verdict.findings) for verdict in refused)
-    error = f"{len(refused)} of {len(areas)} areas could not check"
+    error = f"{len(refused)} of {counted(len(areas), 'area')} could not check"
     if not found:
         return error
     return f"{error} · {counted(found, 'finding')}, {held} of them in those areas" if held else f"{error} · {counted(found, 'finding')} in the others"
@@ -408,12 +435,17 @@ def _spoken_folder(folder: Path) -> str:
 
 
 def run_check(
-    locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str], clock: Callable[[], float], channels: Channels, verbose: bool
+    locate_ruff: Callable[[], str],
+    locate_zizmor: Callable[[], str],
+    clock: Callable[[], float],
+    channels: Channels,
+    verbose: bool,
+    areas: Sequence[Area],
 ) -> int:
     started = clock()
     try:
         result = judge_repository(
-            Path("."), locate_ruff, locate_zizmor, partial(write_area, channels.out), live_line(channels.err), verbose
+            Path("."), locate_ruff, locate_zizmor, partial(write_area, channels.out), live_line(channels.err), verbose, areas
         )
     except OutsideWorkTree as error:
         write_pair(f"not inside a git work tree · {_spoken_folder(error.path.absolute())}", (Instruction("run quality check inside a repository"),), channels.err)

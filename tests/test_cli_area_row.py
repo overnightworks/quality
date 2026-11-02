@@ -169,3 +169,14 @@ def code_area(rules: tuple[Rule, ...], extent: int) -> check.AreaVerdict:
 @pytest.mark.parametrize("extent", [0, 1, 41])
 def test_a_judged_code_area_counts_its_rules_and_its_python_files(rules, extent):
     assert extent_counts(cli.area_extent(code_area(rules, extent), 0)) == [len(rules), extent]
+
+
+@pytest.mark.parametrize(
+    ("judged", "expected"),
+    [
+        pytest.param(1, "1 of 1 area could not check", id="one area"),
+        pytest.param(2, "1 of 2 areas could not check", id="two areas"),
+    ],
+)
+def test_the_refusal_counts_the_areas_the_run_judged(judged, expected):
+    assert cli.refusal_error(areas_refusing((CannotJudge("a"),), *[()] * (judged - 1))) == expected

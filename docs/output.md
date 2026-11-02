@@ -606,7 +606,7 @@ Areas (default: all):
   debt          size and near copies against the debt ceiling
                 (quality/baseline.toml)
   imports       the import contracts
-  secrets       secrets in the tree and its history
+  secrets       secrets in the committed history
   workflows     GitHub workflows: lint and security
   dependencies  known advisories in the lockfiles
   code          Python source: security findings and print calls
@@ -622,6 +622,8 @@ Options:
 
 Exit codes: 0 clean, 1 findings, 2 could not check, 130 interrupted.
 ```
+
+Built: `usage: quality check [AREA ...] [-v]`, the `Areas` block from `Area` (`rules.py`) and the options that exist.
 
 Wrong invocation: the pair instead of argparse text. Exit 2. stderr.
 
@@ -648,9 +650,11 @@ next: quality check --help
 
 Adopted O88 and O89 of 2.11.2026: a first word that names no command, none at all, and what a command does not take; what only the parser can word stands in the pair as its own sentence.
 
+Built: the first word that names no area stands in the pair (O123); an option may stand between areas (O124).
+
 ## Areas
 
-Seven, as ruled: `files`, `debt`, `imports`, `secrets`, `workflows`, `dependencies`, `code`. The areas replace the rule names in the verdict; `quality check --help` says which rules an area holds. `code` holds `python-security` and `python-print`.
+Seven, as ruled: `files`, `debt`, `imports`, `secrets`, `workflows`, `dependencies`, `code`. The areas replace the rule names in the verdict; `quality check --help` says which rules an area holds. `code` holds `python-security` and `python-print`. A run that names areas judges and prints only those, in this order, each once (O119, O120). The `code` line is the operator's (O130, 2.11.2026); the `secrets` line reads `secrets in the committed history` by his ruling O131 of 2.11.2026.
 
 ## Decisions
 

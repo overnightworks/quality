@@ -14,7 +14,7 @@ from quality import scanners
 from quality.report import NoteEvent
 from quality.rules import Area
 from tests.support.advisories import reporting, uv_lock
-from tests.support.check import DetailLine, FindingLine, NoteLine, area_block, area_fact, decode_block
+from tests.support.check import DetailLine, FindingLine, NoteLine, area_block, area_fact, decode_block, scanner_rows
 from tests.support.door import CHECK_WORD, door_in
 from tests.support.python_lint import fake_ruff, ruff_entry
 from tests.support.scanners import (
@@ -66,17 +66,6 @@ def installing(served_scanners: Path, elsewhere: Path, bodies: dict[str, str]) -
 
 def scanning_repository(build_repo) -> Path:
     return build_repo({".github/workflows/w.yml": "on: push\n", "uv.lock": uv_lock(), "src/a.py": "x = 1\n"})
-
-
-def scanner_rows(printed: str, area: str) -> list[tuple[str, str, tuple[str, ...]]]:
-    """Each exit row under `area` with its fact and the marked lines directly below it."""
-    rows: list[tuple[str, str, list[str]]] = []
-    for line in area_block(printed, area):
-        if isinstance(line, NoteLine) and line.row.event is NoteEvent.EXITED:
-            rows.append((line.location, line.row.fact, []))
-        elif isinstance(line, DetailLine) and rows:
-            rows[-1][2].append(line.detail)
-    return [(scanner, fact, tuple(details)) for scanner, fact, details in rows]
 
 
 def without_scanner_rows(printed: str) -> str:

@@ -39,15 +39,24 @@ RELEASE_0_7 = "v0.7.0"
 
 
 class Area(StrEnum):
-    """What a run judges and reports on, in the order its areas run and its rows stand; every rule belongs to one."""
+    """What a run judges and reports on, in the order its areas run and its rows stand; every rule belongs to one, and
+    each says in a sentence what `quality check --help` shows of it."""
 
-    FILES = "files"
-    DEBT = "debt"
-    IMPORTS = "imports"
-    SECRETS = "secrets"
-    WORKFLOWS = "workflows"
-    DEPENDENCIES = "dependencies"
-    CODE = "code"
+    help_line: str
+
+    FILES = "files", "what the repository tracks: layout, tests, env files, compose ports, the Python floor"
+    DEBT = "debt", "size and near copies against the debt ceiling (quality/baseline.toml)"
+    IMPORTS = "imports", "the import contracts"
+    SECRETS = "secrets", "secrets in the committed history"
+    WORKFLOWS = "workflows", "GitHub workflows: lint and security"
+    DEPENDENCIES = "dependencies", "known advisories in the lockfiles"
+    CODE = "code", "Python source: security findings and print calls"
+
+    def __new__(cls, word: str, help_line: str) -> Self:
+        member = str.__new__(cls, word)
+        member._value_ = word
+        member.help_line = help_line
+        return member
 
 
 class Rule(StrEnum):
