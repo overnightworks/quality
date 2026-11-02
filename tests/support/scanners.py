@@ -1,3 +1,4 @@
+import shlex
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
@@ -99,6 +100,20 @@ def fake_gitleaks(served: Path, version: str = PINNED, on_scan: str = "exit 0", 
     )
     binary.chmod(0o755)
     return binary.parent
+
+
+def vetting(on_vet: str) -> str:
+    """The `on_scan` of a `fake_gitleaks` whose history scan is clean and whose `gitleaks stdin` keeps what it read in
+    `$0.vetted`, then runs `on_vet` (shell)."""
+    return f'if grep -qx stdin "$0.arguments"; then cat > "$0.vetted"; {on_vet}; fi\necho "[]" > "$report"'
+
+
+def flagging(value: str) -> str:
+    """The `on_vet` of a gitleaks that reports a recorded leak for a text holding `value` and clears any other."""
+    return (
+        f'if grep -q -F -e {shlex.quote(value)} "$0.vetted"; then cp {OUTPUTS / "gitleaks-finding.json"} "$report"; exit 7; fi\n'
+        'echo "[]" > "$report"; exit 0'
+    )
 
 
 def check_exit_2(repo: Path, capsys, locate_zizmor=never_located) -> str:
