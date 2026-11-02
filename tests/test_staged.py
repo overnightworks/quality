@@ -305,14 +305,14 @@ STAGED_EXAMPLE_REFUSALS = [
 def test_a_staged_config_refusal_prints_its_example_on_the_one_stderr_line_with_escaped_separators(
     build_repo, installed_scanners, capsys, refusal
 ):
-    """#302 acceptance 2: `scan-staged` prints the refusal as `<fact>, like:` and the example's lines on the same
+    """Acceptance 2: `scan-staged` prints the refusal as `<fact>, like:` and the example's lines on the same
     stderr line, each separated by the literal `\\x0a`."""
     repo = build_repo({"README": "hello\n"})
     stage(repo, {CONFIG: refusal.text})
     assert scan_staged(repo) == 2
     captured = capsys.readouterr()
     example = [printable(line) for line in refusal.example]
-    assert captured.err.splitlines() == [f"scan-staged: cannot judge - {printable(refusal.fact)}, like:" + "\\x0a".join(example)]
+    assert captured.err.splitlines() == ["\\x0a".join([f"scan-staged: cannot judge - {printable(refusal.fact)}, like:", *example])]
     assert not set(example) & set(captured.err.splitlines())
 
 
