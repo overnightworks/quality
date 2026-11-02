@@ -7,7 +7,7 @@ from pathlib import Path
 
 from quality import cli
 
-CHECK_WORD = "hygiene"
+CHECK_WORD = "check"
 MODULE_DOOR = [sys.executable, "-m", "quality.cli"]
 
 

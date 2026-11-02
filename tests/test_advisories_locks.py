@@ -367,8 +367,8 @@ def test_an_allowance_in_a_pnpm_lock_allows_its_advisory_until_its_date(
 SETUP_AND_OTHER_RULES_MINUTES = 10
 
 
-def test_the_hygiene_job_outlasts_the_downloads_and_the_scan_so_cannot_judge_is_what_the_run_shows():
+def test_the_check_job_outlasts_the_downloads_and_the_scan_so_cannot_judge_is_what_the_run_shows():
     """#145 S4: GitHub cancelling the job would show nothing; quality's own limits must expire first."""
     gate = yaml.safe_load((Path(__file__).parent.parent / ".github/workflows/gate.yml").read_text(encoding="utf-8"))
     limits_minutes = (advisories.DATABASE_DOWNLOAD_DEADLINE_SECONDS + advisories.ADVISORY_SCAN_TIMEOUT_SECONDS) / 60
-    assert gate["jobs"]["hygiene"]["timeout-minutes"] >= limits_minutes + SETUP_AND_OTHER_RULES_MINUTES
+    assert gate["jobs"]["check"]["timeout-minutes"] >= limits_minutes + SETUP_AND_OTHER_RULES_MINUTES

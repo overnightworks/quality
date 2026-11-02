@@ -20,9 +20,9 @@ def the_mise_step(workflow: str, job: str) -> dict:
     return steps[0]
 
 
-def test_the_hygiene_job_installs_the_scanners_through_one_pinned_mise_step():
+def test_the_check_job_installs_the_scanners_through_one_pinned_mise_step():
     """#228 rule 4: one mise-action pinned by commit, a release and its binary's checksum, installing from the lock."""
-    gate_step = the_mise_step("gate.yml", "hygiene")
+    gate_step = the_mise_step("gate.yml", "check")
     given = gate_step["with"]
     assert MISE_ACTION.fullmatch(gate_step["uses"].split(" ")[0]), gate_step["uses"]
     assert re.fullmatch(r"[0-9a-f]{64}", given["sha256"])
@@ -52,7 +52,7 @@ def rendered(expression: str, tool_dir: str) -> str:
     return re.sub(r"\$\{\{ (.*?) \}\}", evaluate, expression)
 
 
-@pytest.mark.parametrize(("workflow", "job", "tool_dir"), [("gate.yml", "hygiene", "."), ("gate.yml", "hygiene", ".gate-tool"), ("ci.yml", "tests", ".")])
+@pytest.mark.parametrize(("workflow", "job", "tool_dir"), [("gate.yml", "check", "."), ("gate.yml", "check", ".gate-tool"), ("ci.yml", "tests", ".")])
 def test_the_ceiling_of_mise_is_the_normalised_parent_of_the_manifest_directory(workflow, job, tool_dir):
     """#265 B1: trust protects nothing in CI, so mise must never read above the manifest's parent, whatever spelling of the path it compares."""
     step = the_mise_step(workflow, job)
@@ -61,14 +61,14 @@ def test_the_ceiling_of_mise_is_the_normalised_parent_of_the_manifest_directory(
     assert rendered(step["env"]["MISE_CEILING_PATHS"], tool_dir) == expected
 
 
-def test_the_tests_job_installs_the_same_scanners_as_the_gate_and_runs_no_hygiene():
-    """#265 D8: the pin stands twice and is held equal; the gate's hygiene job is quality's own check."""
-    gate_step, tests_step = the_mise_step("gate.yml", "hygiene"), the_mise_step("ci.yml", "tests")
+def test_the_tests_job_installs_the_same_scanners_as_the_gate_and_runs_no_check():
+    """#265 D8: the pin stands twice and is held equal; the gate's check job is quality's own check."""
+    gate_step, tests_step = the_mise_step("gate.yml", "check"), the_mise_step("ci.yml", "tests")
     assert {key: value for key, value in tests_step["with"].items() if key != "working_directory"} == {
         key: value for key, value in gate_step["with"].items() if key != "working_directory"
     }
     assert tests_step["uses"] == gate_step["uses"]
-    assert [step for step in load("ci.yml")["jobs"]["tests"]["steps"] if "quality hygiene" in step.get("run", "")] == []
+    assert [step for step in load("ci.yml")["jobs"]["tests"]["steps"] if "quality check" in step.get("run", "")] == []
 
 
 @pytest.mark.parametrize("workflow", sorted(path.name for path in WORKFLOWS.glob("*.yml")))

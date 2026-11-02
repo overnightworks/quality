@@ -640,22 +640,11 @@ def repo_with_debt_below_src(build_repo, monkeypatch) -> Path:
     return repo
 
 
-@pytest.mark.parametrize("path_argument", [[], ["."]], ids=["default path", "explicit path"])
-def test_hygiene_from_a_subfolder_judges_the_whole_repository_by_its_root_baseline(
-    repo_with_debt_below_src, capsys, path_argument
-):
+def test_check_from_a_subfolder_judges_the_whole_repository_by_its_root_baseline(repo_with_debt_below_src, capsys):
     """#76 rule 1, cells 1-2, 20: the size debt is found from src, named from the top, and no line names the checkout."""
-    code = cli.main(["hygiene", *path_argument])
+    code = cli.main([CHECK_WORD])
     output = (captured := capsys.readouterr()).out + captured.err
     assert (code, [row.event for row in finding_rows(output, "src/big.py")], str(repo_with_debt_below_src) in output) == (1, [FindingEvent.NEW_DEBT], False), output
-
-
-def test_hygiene_given_a_subfolder_by_name_judges_the_repository_from_its_top(build_repo, monkeypatch, capsys):
-    """#76 rule 1, cell 2 (E1): `quality hygiene src` from the top is the run from src."""
-    repo = build_repo({BASELINE_PATH: EMPTY_BASELINE, "src/big.py": long_file(900)})
-    monkeypatch.chdir(repo)
-    code = cli.main(["hygiene", "src"])
-    assert (code, [row.event for row in finding_rows(capsys.readouterr().out, "src/big.py")]) == (1, [FindingEvent.NEW_DEBT])
 
 
 def test_baseline_write_from_a_subfolder_writes_the_root_baseline(repo_with_debt_below_src, capsys):

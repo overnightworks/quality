@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from quality import cli
-from tests.support.door import CHECK_WORD
+from tests.support.door import CHECK_WORD, check_door
 from tests.support.git_repositories import make_repo
 
 
@@ -83,7 +83,7 @@ def test_a_working_directory_that_was_removed_is_cannot_judge_not_a_traceback(tm
     gone.mkdir()
     monkeypatch.chdir(gone)
     gone.rmdir()
-    results = [(command, cli.main(command), capsys.readouterr().err) for command in ([CHECK_WORD, "."], ["baseline", "write", "."])]
+    results = [(command, cli.main(command), capsys.readouterr().err) for command in ([CHECK_WORD], ["baseline", "write", "."])]
     assert [(code, ". is not a readable git repository: the working directory cannot be read ([Errno 2]" in err, "Traceback" in err) for _, code, err in results] == [(2, True, False)] * 2, results
 
 
@@ -94,9 +94,9 @@ def test_a_machine_without_git_is_cannot_judge_not_a_traceback(tmp_path, monkeyp
     nowhere = tmp_path / "empty-bin"
     nowhere.mkdir()
     monkeypatch.setenv("PATH", str(nowhere))
-    code = cli.main(["hygiene", str(repo)])
+    code = check_door(repo)
     err = capsys.readouterr().err
-    assert (code, f"{repo} is not a readable git repository: git did not run ([Errno 2]" in err, "Traceback" in err) == (2, True, False), err
+    assert (code, ". is not a readable git repository: git did not run ([Errno 2]" in err, "Traceback" in err) == (2, True, False), err
 
 
 def make_submodule_path(tmp_path: Path) -> tuple[Path, Path]:
@@ -149,9 +149,9 @@ def test_a_git_that_refuses_the_index_listing_after_the_run_started_names_one_st
     wrapper.write_text(f'#!/bin/sh\ncase "$*" in *"ls-files -z -s"*) exit 3;; esac\nexec {real_git} "$@"\n')
     wrapper.chmod(0o755)
     monkeypatch.setenv("PATH", f"{wrapper.parent}{os.pathsep}{os.environ['PATH']}")
-    code = cli.main(["hygiene", str(repo)])
+    code = check_door(repo)
     captured = capsys.readouterr()
-    command = f"git -C {repo} status"
+    command = "git -C . status"
     rows = [line for line in captured.out.splitlines() if line.startswith("  ✗")]
     assert (code, len(rows) >= 2, captured.err.count(command), captured.out.count(command)) == (2, True, 1, 0), captured
     assert all("git ls-files exited 3" in row or "reasons" in row for row in rows), rows

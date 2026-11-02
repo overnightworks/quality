@@ -44,7 +44,7 @@
       "created_at": "2026-10-16T07:57:53Z",
       "started_at": "2026-10-16T07:57:55Z",
       "completed_at": "2026-10-16T07:58:03Z",
-      "name": "quality / hygiene",
+      "name": "quality / check",
       "steps": [],
       "check_run_url": "https://api.github.com/repos/overnightworks/quality/check-runs/116873331207",
       "labels": [
