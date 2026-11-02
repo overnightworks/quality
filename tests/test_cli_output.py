@@ -432,15 +432,16 @@ def headers(lines: list[str]) -> list[str]:
 
 
 def test_a_clean_run_has_seven_clean_rows_in_area_order_and_the_verdict(build_repo, capsys):
-    """O16, O21, O30, O38: the two rows after the workflows row carry no fact, and the workflows row the workflow files the tree holds and the offline audits; the files row holds the rules and the tracked paths, the debt row the entries and pairs of the ceiling file, the imports row the contracts of the config."""
+    """O16, O21, O30, O38: the one row after the dependencies row carries no fact, the dependencies row the lock files and packages of a tree with none, and the workflows row the workflow files the tree holds and the offline audits; the files row holds the rules and the tracked paths, the debt row the entries and pairs of the ceiling file, the imports row the contracts of the config."""
     tracked = {**CLEAN_FILES, **KEPT_CONTRACT, BASELINE_PATH: '[file_lines]\n"src/gone.py" = 900\n\n[clones]\n'}
     repo = build_repo(tracked)
     code, out, err = frame_run(capsys, repo)
-    files_row, _, _, _, _, *others = headers(out)
+    files_row, _, _, _, _, _, code_row = headers(out)
     extent = [int(part.split()[0]) for part in files_row.partition(cli.AreaEvent.CLEAN)[2].split(SEPARATOR)]
     held = ratchet.read_baseline(repo)
     contracts = architecture.contracts_of({".importlinter": tracked[".importlinter"]}).contracts
-    assert (code, out[0], others, out[-1], err) == (0, headers(out)[0], [header(area, "✓", "clean") for area in list(Area)[5:]], f"✓ clean · 7 areas · {ZERO_SECONDS}", [])
+    assert (code, out[0], code_row, out[-1], err) == (0, headers(out)[0], header(Area.CODE, "✓", "clean"), f"✓ clean · 7 areas · {ZERO_SECONDS}", [])
+    assert extent_counts(area_fact("\n".join(out), Area.DEPENDENCIES)) == [0, 0]
     workflows = area_fact("\n".join(out), Area.WORKFLOWS)
     assert (leading_count(workflows), workflows.endswith(cli.OFFLINE_AUDITS)) == (0, True)
     assert extent == [sum(rule.area is Area.FILES for rule in Rule), len(tracked)]

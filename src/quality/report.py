@@ -201,12 +201,23 @@ def shell_word(text: str) -> str | None:
 
 
 @dataclass(frozen=True)
+class LockExtent:
+    """How much the advisory rule judged: the tracked lock files, and the packages osv-scanner lists for them."""
+
+    lockfiles: int
+    packages: int
+
+
+type Extent = int | LockExtent
+
+
+@dataclass(frozen=True)
 class RuleResult:
     """What a rule judged: its `findings`, its `extent` (how much its area row says it covered), `measured_only` when
     it judged without enforcing, and the `notes` it reports without asking for a change."""
 
     findings: list[Finding]
-    extent: int
+    extent: Extent
     measured_only: bool
     notes: tuple[Note, ...] = ()
 
