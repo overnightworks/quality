@@ -43,6 +43,7 @@ from tests.support.check import (
     rule_notes,
 )
 from tests.support.check import check_output as run
+from tests.support.door import CHECK_WORD, check_door, door_in
 from tests.support.git_repositories import make_repo
 from tests.support.source_code import (
     branchy_function,
@@ -287,7 +288,7 @@ def test_a_tracked_file_missing_from_disk_is_gone_for_the_size_rule_and_only_the
     ids=["directory", "cell 17 file"],
 )
 @pytest.mark.parametrize("file", ["locked/b.py", "locked/b.ts", "locked/b.svelte"], ids=["Python", "#119 cell 21 TypeScript", "#119 cell 21 Svelte"])
-@pytest.mark.parametrize("command", ["hygiene", "baseline write"])
+@pytest.mark.parametrize("command", [CHECK_WORD, "baseline write"])
 def test_a_tracked_file_the_filesystem_refuses_to_reach_cannot_be_judged(build_repo, capsys, command, file, locked, reason):
     """#46 rule 3/5 and #52 rule 5, cell 17: a tracked file the rule may not reach or read is exit 2, never gone,
     never a traceback, and its reason names no checkout path. #119 cell 21: a file of any table language likewise."""
@@ -295,11 +296,11 @@ def test_a_tracked_file_the_filesystem_refuses_to_reach_cannot_be_judged(build_r
     locked, reason = locked.format(file=file), reason.format(file=file)
     (repo / locked).chmod(0)
     try:
-        code = cli.main([*command.split(), str(repo)])
+        code = door_in(repo, *command.split())
     finally:
         (repo / locked).chmod(0o755)
     assert code == 2
-    prefix = f"{refusal_row('debt')}" if command == "hygiene" else "baseline: not written - "
+    prefix = f"{refusal_row('debt')}" if command == CHECK_WORD else "baseline: not written - "
     captured = capsys.readouterr()
     output = captured.out + captured.err
     assert (prefix + reason in output, str(repo) in output) == (True, False), output
@@ -313,7 +314,7 @@ def test_a_tracked_file_the_filesystem_refuses_to_reach_cannot_be_judged(build_r
 def test_a_size_baseline_the_toml_reader_gives_up_on_cannot_be_judged(build_repo, capsys, content):
     """#218 sentence 1: an integer or a nesting tomllib refuses is exit 2 with the ruled message, not a traceback."""
     repo = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: content})
-    assert cli.main(["hygiene", str(repo)]) == 2
+    assert check_door(repo) == 2
     assert f"{BASELINE_PATH} is not valid TOML" in capsys.readouterr().out
 
 

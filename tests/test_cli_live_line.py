@@ -10,8 +10,9 @@ from typing import TextIO
 
 import pytest
 
-from quality import check, cli, scanners
+from quality import check, scanners
 from tests.support.advisories import uv_lock
+from tests.support.door import check_door, door_in
 from tests.support.git_repositories import GIT_IDENTITY
 from tests.support.python_lint import fake_ruff
 from tests.support.scanners import CLEAN_SCANS, OUTPUTS, fake_gitleaks, fake_scanner, fake_zizmor, lacking
@@ -30,7 +31,7 @@ def showing(name: str, answer: str) -> str:
 
 def scan_staged_on(repo: Path, stdout: TextIO, stderr: TextIO, environment: dict[str, str]) -> int:
     with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-        return cli.main(["scan-staged", str(repo)], environment=environment)
+        return door_in(repo, "scan-staged", environment=environment)
 
 
 def test_each_scanner_runs_under_its_own_live_line(build_repo, served_scanners, window, tmp_path, monkeypatch, xterm):
@@ -43,7 +44,7 @@ def test_each_scanner_runs_under_its_own_live_line(build_repo, served_scanners, 
     locate_zizmor = fake_zizmor(tmp_path / "zizmor", showing(scanners.ZIZMOR, "echo '[]'"))
     locate_ruff = str(fake_ruff(tmp_path, showing(scanners.RUFF, "echo '[]'")))
     with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(terminal.stream):
-        cli.main(["hygiene", str(repo)], locate_ruff=lambda: locate_ruff, locate_zizmor=locate_zizmor, clock=lambda: 0.0, environment=xterm)
+        check_door(repo, locate_ruff=lambda: locate_ruff, locate_zizmor=locate_zizmor, clock=lambda: 0.0, environment=xterm)
     assert without_sgr(terminal.read()).split("\r\x1b[K") == [
         "  ⠋ secrets       gitleaks\rgitleaks",
         "  ⠋ workflows     actionlint\ractionlint",

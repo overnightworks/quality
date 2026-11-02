@@ -15,6 +15,7 @@ from quality.output import Glyph
 from quality.ratchet import BASELINE_PATH, load_baseline
 from quality.report import Example, Finding, FindingEvent, Note, NoteEvent, printable
 from quality.rules import Rule
+from tests.support.door import check_door
 
 installed_ruff = cli.INSTALLED_RUFF
 
@@ -388,8 +389,8 @@ def env_row_stands(printed: str) -> bool:
 def check_streams(
     capsys: pytest.CaptureFixture[str], path: Path, locate_ruff: Callable[[], str] = installed_ruff
 ) -> tuple[int, str, str]:
-    """The exit code, stdout and stderr of `quality hygiene` over `path`, through the real door."""
-    code = cli.main(["hygiene", str(path)], locate_ruff=locate_ruff, clock=lambda: 0.0)
+    """The exit code, stdout and stderr of the check over `path`, through the real door."""
+    code = check_door(path, locate_ruff=locate_ruff, clock=lambda: 0.0)
     captured = capsys.readouterr()
     return code, captured.out, captured.err
 
@@ -397,7 +398,7 @@ def check_streams(
 def check_output(
     capsys: pytest.CaptureFixture[str], path: Path, locate_ruff: Callable[[], str] = installed_ruff
 ) -> tuple[int, str]:
-    """The exit code and the whole output of `quality hygiene` over `path`, through the real door."""
+    """The exit code and the whole output of the check over `path`, through the real door."""
     code, out, err = check_streams(capsys, path, locate_ruff)
     return code, out + err
 

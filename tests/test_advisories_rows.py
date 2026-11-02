@@ -41,6 +41,7 @@ from tests.support.check import (
     check_result,
     extent_counts,
 )
+from tests.support.door import check_door
 from tests.support.scanners import OUTPUTS, fake_scanner, lacking
 
 FINDING_REPORT = OUTPUTS / "osv-scanner-finding.json"
@@ -77,7 +78,7 @@ def drive_advisories(build_repo, served_scanners, capsys):
     def drive(files: dict[str, str] | Path, report: Path = FINDING_REPORT, code: int = 1, stderr: str = "") -> AdvisoryRun:
         repo = files if isinstance(files, Path) else build_repo(files)
         fake_scanner(served_scanners, OSV, reporting(report, code, stderr))
-        exit_code = cli.main(["hygiene", str(repo)], clock=lambda: 0.0)
+        exit_code = check_door(repo, clock=lambda: 0.0)
         captured = capsys.readouterr()
         return AdvisoryRun(repo, exit_code, captured.out, captured.err)
 

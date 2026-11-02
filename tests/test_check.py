@@ -30,6 +30,7 @@ from tests.support.check import (
 )
 from tests.support.check import check_output as run
 from tests.support.config_refusals import GATE, Refusal, all_refusals
+from tests.support.door import check_door
 from tests.support.generated_files import generated_config
 from tests.support.scanners import fake_scanner, fake_zizmor, lacking, never_located, nothing_installed
 
@@ -81,7 +82,7 @@ def test_quality_tracks_no_env_or_compose_file():
     """#3 rule 5: the quality repository passes its own check and tracks no env or compose file."""
     root = Path(__file__).resolve().parents[1]
     tracked = subprocess.run(["git", "-C", str(root), "ls-files"], capture_output=True, text=True, check=True).stdout
-    assert cli.main(["hygiene", str(root)]) == 0
+    assert check_door(root) == 0
     assert not [name for name in tracked.splitlines() if is_compose_file(name)]
     assert ".env" not in tracked
 
@@ -91,7 +92,7 @@ def test_a_tracked_workflow_missing_from_disk_is_never_handed_to_a_scanner(build
     use_mise(lacking(served_scanners, scanners.ACTIONLINT))
     repo = build_repo({".github/workflows/w.yml": "on: push\n"})
     (repo / ".github/workflows/w.yml").unlink()
-    code = cli.main(["hygiene", str(repo)])
+    code = check_door(repo)
     captured = capsys.readouterr()
     assert (code, is_clean(captured.out)) == (0, True), captured.err
 
@@ -154,7 +155,7 @@ def test_every_rule_is_judged_and_the_exit_is_the_worst(
     verdict, one rule's refusal hides no other rule's, the exit is the worst verdict's, the clean line names the
     rules, and every path prints backslash-escaped."""
     repo = arrange(build_repo, elsewhere)
-    code = cli.main(["hygiene", str(repo)], clock=lambda: 0.0)
+    code = check_door(repo, clock=lambda: 0.0)
     captured = capsys.readouterr()
     output = captured.out + captured.err
     assert code == expected_code, output
@@ -185,9 +186,9 @@ def test_a_finding_under_a_rule_its_check_does_not_judge_fails_loud(build_repo, 
     """#55 rule 2: a finding under a rule the check was not given is never dropped into a clean exit."""
     foreign = Finding("workflow-other", ".env", None, "an unlisted rule", "none", event=FindingEvent.TRACKED)
     monkeypatch.setattr(env_file, "check_env_files", lambda tracked: [foreign])
-    arguments = ["hygiene", str(build_repo({}))]
+    repo = build_repo({})
     with pytest.raises(ValueError, match="workflow-other"):
-        cli.main(arguments)
+        check_door(repo)
 
 
 def test_a_refusing_workflow_scanner_stops_no_other_workflow_rule(build_repo, served_scanners, elsewhere, capsys):
@@ -197,7 +198,7 @@ def test_a_refusing_workflow_scanner_stops_no_other_workflow_rule(build_repo, se
     fake_scanner(served_scanners, scanners.ACTIONLINT, "echo boom >&2; exit 3")
     locate_zizmor = fake_zizmor(elsewhere, on_scan=f"cat '{zizmor_report}'; exit 12")
     repo = build_repo({".github/workflows/w.yml": "on: push\n"})
-    code = cli.main(["hygiene", str(repo)], locate_zizmor=locate_zizmor)
+    code = check_door(repo, locate_zizmor=locate_zizmor)
     captured = capsys.readouterr()
     assert code == 2
     assert f"{refusal_row('workflows')}actionlint exited 3" in captured.out
@@ -242,7 +243,7 @@ def test_a_zizmor_quality_cannot_find_or_trust_refuses_only_workflow_security(
         loosen_requirement(elsewhere / "metadata", monkeypatch, "zizmor")
     refusing = [verdict.rule for verdict in check_result(repo, installed_ruff, locators[case]).verdicts if verdict.refusal]
     assert refusing == [Rule.WORKFLOW_SECURITY]
-    code = cli.main(["hygiene", str(repo)], locate_zizmor=locators[case])
+    code = check_door(repo, locate_zizmor=locators[case])
     captured = capsys.readouterr()
     output = captured.out + captured.err
     assert code == 2, output
@@ -263,7 +264,7 @@ def test_a_zizmor_planted_in_the_scanner_directory_is_never_run(build_repo, serv
     planted.chmod(0o755)
     (elsewhere / "installed").mkdir()
     repo = build_repo({".github/workflows/w.yml": "on: push\n"})
-    code = cli.main(["hygiene", str(repo)], locate_zizmor=fake_zizmor(elsewhere / "installed", "echo '[]'"))
+    code = check_door(repo, locate_zizmor=fake_zizmor(elsewhere / "installed", "echo '[]'"))
     assert (code, marker.exists()) == (0, False), capsys.readouterr()
 
 
@@ -406,7 +407,7 @@ def check_over(build_repo, capsys, refusal: Refusal) -> tuple[int, list[str], li
     repo = build_repo({".env": "A=1\n", **({} if refusal.directory else {"quality/config.toml": refusal.text})})
     if refusal.directory:
         (repo / "quality" / "config.toml").mkdir(parents=True)
-    code = cli.main(["hygiene", str(repo)], clock=lambda: 0.0)
+    code = check_door(repo, clock=lambda: 0.0)
     captured = capsys.readouterr()
     return code, captured.out.splitlines(), captured.err.splitlines()
 

@@ -24,7 +24,7 @@ def declaring(file: str = "compose.yaml", service: str = "proxy", reason: str = 
 
 
 def judged(capsys, build_repo, files: dict[str, str], declarations: str = "") -> tuple[int, list[Finding]]:
-    """The exit code of `quality hygiene` over a fixture repository and the compose-port findings the rule runner returns for it."""
+    """The exit code of the check over a fixture repository and the compose-port findings the rule runner returns for it."""
     config = {CONFIG: ONE_JOB + declarations} if declarations else {}
     repo = build_repo({**files, **config})
     code, _ = check_output(capsys, repo)

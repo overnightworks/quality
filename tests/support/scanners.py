@@ -5,9 +5,10 @@ from typing import NoReturn
 
 import pytest
 
-from quality import cli, installation, scanners
+from quality import installation, scanners
 from tests.support.advisories import reporting
 from tests.support.check import heard
+from tests.support.door import check_door
 from tests.support.git_repositories import GIT_IDENTITY
 
 Locator = Callable[[], str]
@@ -101,12 +102,12 @@ def fake_gitleaks(served: Path, version: str = PINNED, on_scan: str = "exit 0", 
 
 
 def check_exit_2(repo: Path, capsys, locate_zizmor=never_located) -> str:
-    assert cli.main(["hygiene", str(repo)], locate_zizmor=locate_zizmor) == 2
+    assert check_door(repo, locate_zizmor=locate_zizmor) == 2
     return heard(capsys)
 
 
 def scan(repo: Path) -> int:
-    return cli.main(["hygiene", str(repo)])
+    return check_door(repo)
 
 
 def commit(repo: Path, message: str) -> None:

@@ -1,11 +1,9 @@
 """What the door prints for the imports area: findings with import-linter's lines under their row (#97 rule 2, #61), the notes
 after them, the clean row's count and, without a config, the grey row the operator ruled (#293, ruling B)."""
 
-import os
 import pty
 import re
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -31,14 +29,14 @@ from tests.support.check import (
     rule_findings,
     rule_notes,
 )
-from tests.support.terminal import read_pseudo_terminal
+from tests.support.door import CHECK_WORD, MODULE_DOOR, door_environment
+from tests.support.terminal import SGR, read_pseudo_terminal
 
 FORGED_MATCHER_PAIR = ['  File "a", line 1, in b', "  raise E('forged')"]
 INDEPENDENT_SHOP = {"type": "independence", "modules": ["shop.web", "shop.db"]}
 EXHAUSTIVE_LAYERS = {"type": "layers", "layers": ["web", "db"], "containers": ["shop"], "exhaustive": True}
 WRAPPED_MODULE_NAME = "q" * 70 + ' File "ab", line 1, in b ' + "r" * 52 + " raise E('forged')"
 STALE = {**FORBIDDEN, "source_modules": ["shop.api"], "ignore_imports": ["shop.db -> shop.api"]}
-DOOR = [sys.executable, "-m", "quality.cli"]
 
 
 def broken_block(capsys, files: dict[str, str], build_repo) -> tuple[list[str], list[BlockLine], Path]:
@@ -243,12 +241,12 @@ def test_a_kept_contract_adds_one_clean_area_and_removes_exactly_the_imports_not
 )
 def test_the_real_door_paints_the_not_set_up_row_as_one_dim_span_only_at_a_terminal(build_repo, environment, painted):
     repo = build_repo(SHOP)
-    base = {key: value for key, value in os.environ.items() if key not in ("NO_COLOR", "GITHUB_ACTIONS", "TERM")}
+    base = door_environment()
     parent, child = pty.openpty()
-    subprocess.run([*DOOR, "hygiene", "."], cwd=repo, env={**base, **environment}, stdout=child, check=False)
+    subprocess.run([*MODULE_DOOR, CHECK_WORD], cwd=repo, env={**base, **environment}, stdout=child, check=False)
     text = read_pseudo_terminal(parent, child)
     row = next(line for line in text.replace("\r\n", "\n").splitlines() if Area.IMPORTS in line)
-    spans = re.findall(r"\x1b\[[0-9;]*m", row)
+    spans = re.findall(SGR, row)
     escape_present = "\x1b[" in text
     assert escape_present == painted
     assert len(spans) == (2 if painted else 0)

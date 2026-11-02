@@ -1,7 +1,6 @@
 import contextlib
 import os
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -9,23 +8,13 @@ import pytest
 import quality
 from quality import cli, report
 from quality.output import SEPARATOR
+from tests.support.door import MODULE_DOOR, door_environment
 from tests.support.terminal import Terminal, without_sgr
-
-
-def door_environment(**extra: str) -> dict[str, str]:
-    """The process environment without the variables that change how the door paints or stops commands."""
-    dropped = ("GITHUB_ACTIONS", "NO_COLOR", "PYTHON_COLORS", "FORCE_COLOR")
-    kept = {key: value for key, value in os.environ.items() if key not in dropped}
-    return kept | extra
-
-
-def door_argv(*arguments: str) -> list[str]:
-    return [sys.executable, "-m", "quality.cli", *arguments]
 
 
 def run_door(arguments: list[str], folder: Path, **extra: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        door_argv(*arguments), cwd=folder, env=door_environment(**extra), capture_output=True, text=True, timeout=60, check=False
+        [*MODULE_DOOR, *arguments], cwd=folder, env=door_environment(**extra), capture_output=True, text=True, timeout=60, check=False
     )
 
 
@@ -138,7 +127,7 @@ def test_no_door_paints_its_help_where_python_would(tmp_path, words):
 def test_a_help_at_a_terminal_carries_no_escape_and_stands_whole(tmp_path, window, words, columns):
     terminal = window(columns)
     done = subprocess.run(
-        door_argv(*words), cwd=tmp_path, env=door_environment(TERM="xterm"), stdout=terminal.stream, stderr=terminal.stream, timeout=60, check=False
+        [*MODULE_DOOR, *words], cwd=tmp_path, env=door_environment(TERM="xterm"), stdout=terminal.stream, stderr=terminal.stream, timeout=60, check=False
     )
     printed = terminal.read()
     assert (done.returncode, "\x1b" in printed) == (0, False)
@@ -151,7 +140,7 @@ def test_a_reader_that_left_before_the_help_keeps_exit_0_and_stderr_empty(tmp_pa
     read_end, write_end = os.pipe()
     os.close(read_end)
     try:
-        done = subprocess.run(door_argv("--help"), cwd=tmp_path, env=door_environment(), stdout=write_end, stderr=subprocess.PIPE, text=True, timeout=60, check=False)
+        done = subprocess.run([*MODULE_DOOR, "--help"], cwd=tmp_path, env=door_environment(), stdout=write_end, stderr=subprocess.PIPE, text=True, timeout=60, check=False)
     finally:
         os.close(write_end)
     assert (done.returncode, done.stderr) == (0, "")
@@ -160,7 +149,7 @@ def test_a_reader_that_left_before_the_help_keeps_exit_0_and_stderr_empty(tmp_pa
 @pytest.mark.integration
 def test_a_closed_stdout_takes_no_help_and_exit_is_0(tmp_path):
     done = subprocess.run(
-        ["sh", "-c", 'exec "$@" >&-', "sh", *door_argv("--help")],
+        ["sh", "-c", 'exec "$@" >&-', "sh", *MODULE_DOOR, "--help"],
         cwd=tmp_path, env=door_environment(), stderr=subprocess.PIPE, text=True, timeout=60, check=False,
     )
     assert (done.returncode, done.stderr) == (0, "")

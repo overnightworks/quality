@@ -14,6 +14,7 @@ import pytest
 from quality import advisories, cli
 from quality import fleet as fleet_module
 from quality.ratchet import BASELINE_PATH
+from tests.support.door import check_door
 
 pytest.register_assert_rewrite("tests.support")  # before the first import of a support module, so its asserts are rewritten
 
@@ -396,7 +397,7 @@ def publish_database(database_root):
 def run_gate(capsys, served_scanners):
     """Runs the gate over a repository and returns (exit code, all output); no output names the checkout or the scanner directory (#53 cell 21)."""
     def run(repo: Path) -> tuple[int, str]:
-        code = cli.main(["hygiene", str(repo)])
+        code = check_door(repo)
         captured = capsys.readouterr()
         output = captured.out + captured.err
         assert str(repo) not in output

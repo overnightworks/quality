@@ -7,6 +7,7 @@ import pytest
 from quality import cli, repository
 from quality.repository import RepositoryFileError, TomlError, parse_toml
 from tests.support.check import refusal_row
+from tests.support.door import CHECK_WORD, door_in
 
 NAME = "quality/config.toml"
 VALID_CONFIG = '[gate]\nmandatory_jobs = ["checks"]\n'
@@ -209,12 +210,7 @@ def run_command(command: str, repo: Path, scratch: Path, monkeypatch, capsys) ->
     summary = scratch / "summary.md"
     monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
     requests: list[str] = []
-    if command == "sonar findings":
-        monkeypatch.chdir(repo)
-        argv = ["sonar", "findings"]
-    else:
-        argv = [*command.split(), str(repo)]
-    code = cli.main(argv, transport=lambda url, token: requests.append(url))
+    code = door_in(repo, *command.split(), transport=lambda url, token: requests.append(url))
     captured = capsys.readouterr()
     assert requests == [], "a config that cannot be judged is refused before any request"
     written = summary.read_text() if summary.exists() else ""
@@ -222,7 +218,7 @@ def run_command(command: str, repo: Path, scratch: Path, monkeypatch, capsys) ->
 
 
 PREFIXES = {
-    "hygiene": f"{refusal_row('secrets')}",
+    CHECK_WORD: f"{refusal_row('secrets')}",
     "baseline write": "baseline: not written - ",
     "verdict": f"verdict: cannot judge - {NAME} at the head: ",
     "sonar findings": "sonar: cannot judge - ",
@@ -249,7 +245,7 @@ def test_an_unusable_config_is_exit_2_with_one_reason_in_every_command(
 @pytest.mark.parametrize(
     ("command", "refusal"),
     [
-        ("hygiene", f"{refusal_row('debt')}cannot read quality/baseline.toml: [Errno 13] Permission denied"),
+        (CHECK_WORD, f"{refusal_row('debt')}cannot read quality/baseline.toml: [Errno 13] Permission denied"),
         ("baseline write", "baseline: not written - cannot read quality/config.toml: [Errno 13] Permission denied"),
         ("verdict", f"verdict: cannot judge - {NAME} at the head: {DENIED}"),
         ("sonar findings", f"sonar: cannot judge - {DENIED}"),
@@ -284,11 +280,11 @@ def point_git_dir_at_a_file(repo: Path, monkeypatch) -> None:
 @pytest.mark.parametrize(
     ("argv", "prefix"),
     [
-        (["hygiene", "."], "error: "),
+        ([CHECK_WORD], "error: "),
         (["baseline", "write", "."], "baseline: not written - "),
         (["sonar", "properties"], "sonar: cannot judge - "),
     ],
-    ids=["hygiene", "baseline write", "sonar properties"],
+    ids=["check", "baseline write", "sonar properties"],
 )
 def test_a_git_refusal_names_the_path_as_given_and_never_the_checkout(
     git_repo, monkeypatch, capsys, git_refusal, argv, prefix

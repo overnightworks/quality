@@ -1,6 +1,6 @@
 """#61 (Q1b-6a): the import-contract rule judges a repository's import-linter contracts.
 
-Every cell runs through `cli.main(["hygiene", ...])`; the cell numbers are the item's scenario matrix.
+Every cell runs through `check_door`; the cell numbers are the item's scenario matrix.
 """
 
 import os

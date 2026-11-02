@@ -36,6 +36,7 @@ from tests.support.config_refusals import (
     secret_entry,
     secrets_text,
 )
+from tests.support.door import CHECK_WORD, check_door, door_in
 from tests.support.generated_files import TYPES_FILE, generated_config
 
 
@@ -90,7 +91,7 @@ def test_a_config_file_that_cannot_be_decoded_is_refused(tmp_path):
 def test_a_config_the_toml_reader_gives_up_on_cannot_be_judged_by_any_rule_that_reads_it(build_repo, capsys, content):
     """sentence 4: a config the TOML reader gives up on is cannot-judge, not a traceback."""
     repo = build_repo({CONFIG_PATH: content})
-    assert cli.main(["hygiene", str(repo)]) == 2
+    assert check_door(repo) == 2
     capsys.readouterr()
     assert {Rule.PYTHON_FLOOR, Rule.ROOT_LAYOUT} <= {rule for rule, reason in refusals(repo).items() if "is not valid TOML" in reason}
 
@@ -277,8 +278,8 @@ def test_a_config_without_declarations_declares_nothing():
     assert load_gate_settings('[gate]\nmandatory_jobs = ["checks"]').loosened == ()
 
 
-CHECK = ["hygiene", "{repo}"]
-SCAN_STAGED = ["scan-staged", "{repo}"]
+CHECK = [CHECK_WORD]
+SCAN_STAGED = ["scan-staged"]
 TEXT_DATE_DECLARATION = SONGMAKER_DECLARATION.replace("2026-10-20", '"20.10.2026"')
 
 
@@ -293,7 +294,7 @@ TEXT_DATE_DECLARATION = SONGMAKER_DECLARATION.replace("2026-10-20", '"20.10.2026
         (SCAN_STAGED, "[advisories]\nextra = 1\n" + allowance_config(until="2027-01-31"), 0, "scan-staged: clean"),
     ],
     ids=[
-        "hygiene", "scan-staged", "hygiene, text date", "scan-staged, text date",
+        "check", "scan-staged", "check, text date", "scan-staged, text date",
         "#116 cell 13 scan-staged, an allowance", "#116 cell 13 scan-staged, a malformed allowance",
     ],
 )
@@ -303,7 +304,7 @@ def test_check_judges_a_declaration_as_the_verdict_does_and_the_commit_hook_read
     """#103 rule 1, cells 11 and 12: a [[gate.loosened]] entry is no unknown key for the check or the commit hook; a
     malformed one is exit 2 under the check, as in the verdict, and the commit hook never reads it."""
     repo = build_repo({CONFIG_PATH: config})
-    assert cli.main([part.format(repo=repo) for part in command]) == code
+    assert door_in(repo, *command) == code
     captured = capsys.readouterr()
     output = captured.out + captured.err
     assert "unknown key" not in output
@@ -361,7 +362,7 @@ def test_a_malformed_advisory_allowance_cannot_be_judged_where_the_whole_config_
     assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: ("{}", None)) == 2
     verdict = capsys.readouterr().err.splitlines()
     assert (len(verdict), named in verdict[0]) == (1, True), verdict
-    assert cli.main(["hygiene", str(repo)]) == 2
+    assert check_door(repo) == 2
     capsys.readouterr()
     assert {rule for rule, reason in refusals(repo).items() if named in reason} == {
         Rule.COMPOSE_PORT, Rule.SIZE, Rule.ROOT_LAYOUT, Rule.FILE_SUFFIX, Rule.SCRIPT_NAME, Rule.SCRIPT_HEADER, Rule.TEST_LAYOUT, Rule.TEST_IMPORT,
@@ -498,13 +499,13 @@ def test_a_generated_file_needs_mandatory_jobs_that_are_non_empty_names(jobs, jo
 
 @pytest.mark.parametrize(
     ("command", "refusal"),
-    [(["hygiene", "{repo}"], f"{refusal_row('debt')}"), (["baseline", "write", "{repo}"], "baseline: not written - ")],
-    ids=["hygiene", "baseline write"],
+    [([CHECK_WORD], f"{refusal_row('debt')}"), (["baseline", "write"], "baseline: not written - ")],
+    ids=["check", "baseline write"],
 )
 def test_a_malformed_generated_file_stops_the_size_rule_and_the_baseline_write(build_repo, capsys, command, refusal):
     """#174 sentence 3: the check cannot judge size and baseline write writes nothing."""
     repo = build_repo({CONFIG_PATH: GATE_WITH_CHECKS + generated_config(job="other")})
-    assert cli.main([part.format(repo=repo) for part in command]) == 2
+    assert door_in(repo, *command) == 2
     captured = capsys.readouterr()
     output = captured.out + captured.err
     assert refusal in output

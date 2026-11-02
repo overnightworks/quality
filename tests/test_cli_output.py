@@ -37,13 +37,13 @@ from tests.support.check import (
     rule_findings,
 )
 from tests.support.clones import function
+from tests.support.door import CHECK_WORD, MODULE_DOOR, check_door, door_environment, door_in
 from tests.support.merge import ONE_JOB
 from tests.support.processes import process_is_gone
 from tests.support.scanners import fake_scanner, lacking
 from tests.support.secrets import FAKE_KEY, allow_config
 from tests.support.terminal import Terminal, read_pseudo_terminal, without_sgr
 
-DOOR = [sys.executable, "-m", "quality.cli"]
 STOP_LINE = re.compile(r"::stop-commands::([0-9a-f]{32})")
 CLOSED_STDOUT = 'exec "$@" >&-'
 CLOSED_STDERR = 'exec "$@" 2>&-'
@@ -53,7 +53,7 @@ def run_door(*arguments: str, cwd: Path, actions: str | None = "true", shell: st
     environment = {key: value for key, value in os.environ.items() if key != "GITHUB_ACTIONS"}
     if actions is not None:
         environment["GITHUB_ACTIONS"] = actions
-    command = [*DOOR, *arguments] if shell is None else ["sh", "-c", shell, "sh", *DOOR, *arguments]
+    command = [*MODULE_DOOR, *arguments] if shell is None else ["sh", "-c", shell, "sh", *MODULE_DOOR, *arguments]
     return subprocess.run(command, cwd=cwd, env=environment, capture_output=True, text=True, check=False)
 
 
@@ -76,8 +76,8 @@ def stop_token(stream: str) -> str:
 
 def test_both_streams_start_with_the_same_stop_and_nothing_resumes_it(clean_repo):
     """#89 rule 1, cell 1."""
-    local = run_door("hygiene", ".", cwd=clean_repo, actions=None)
-    actions = run_door("hygiene", ".", cwd=clean_repo)
+    local = run_door(CHECK_WORD, cwd=clean_repo, actions=None)
+    actions = run_door(CHECK_WORD, cwd=clean_repo)
     token = stop_token(actions.stdout)
     assert stop_token(actions.stderr) == token
     *actions_lines, actions_verdict = actions.stdout.split("\n", 1)[1].splitlines()
@@ -92,36 +92,36 @@ def test_both_streams_start_with_the_same_stop_and_nothing_resumes_it(clean_repo
 
 def test_every_run_draws_a_new_token(clean_repo):
     """#89 rule 1, cell 2 (E8)."""
-    tokens = {stop_token(run_door("hygiene", ".", cwd=clean_repo).stdout) for _ in range(2)}
+    tokens = {stop_token(run_door(CHECK_WORD, cwd=clean_repo).stdout) for _ in range(2)}
     assert len(tokens) == 2
 
 
 @pytest.mark.parametrize("actions", [None, "false", "TRUE", ""], ids=["unset", "false", "upper case", "empty"])
 def test_outside_actions_the_door_prints_no_stop(clean_repo, actions):
     """#89 rule 1, cell 3 (E2)."""
-    done = run_door("hygiene", ".", cwd=clean_repo, actions=actions)
+    done = run_door(CHECK_WORD, cwd=clean_repo, actions=actions)
     assert "stop-commands" not in done.stdout + done.stderr
 
 
 def test_main_alone_prints_no_stop(clean_repo, monkeypatch, capsys):
     """#89 rule 1, cell 4: the stop belongs to the process entry."""
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
-    cli.main(["hygiene", str(clean_repo)])
+    check_door(clean_repo)
     captured = capsys.readouterr()
     assert "stop-commands" not in captured.out + captured.err
 
 
 def test_a_closed_stdout_leaves_the_stop_and_the_verdict_on_stderr(broken_compose_repo):
     """#89 rule 1, cell 5: fd 1 closed."""
-    done = run_door("hygiene", ".", cwd=broken_compose_repo, shell=CLOSED_STDOUT)
+    done = run_door(CHECK_WORD, cwd=broken_compose_repo, shell=CLOSED_STDOUT)
     stop_token(done.stderr)
     assert (done.returncode, "error: 1 of 7 areas could not check" in done.stderr) == (2, True)
 
 
 def test_a_closed_stderr_keeps_the_stop_on_stdout_and_the_exit(broken_compose_repo):
     """#89 rule 1, cell 5: fd 2 closed."""
-    local = run_door("hygiene", ".", cwd=broken_compose_repo, actions=None, shell=CLOSED_STDERR)
-    done = run_door("hygiene", ".", cwd=broken_compose_repo, shell=CLOSED_STDERR)
+    local = run_door(CHECK_WORD, cwd=broken_compose_repo, actions=None, shell=CLOSED_STDERR)
+    done = run_door(CHECK_WORD, cwd=broken_compose_repo, shell=CLOSED_STDERR)
     stop_token(done.stdout)
     assert done.stdout.split("\n", 1)[1] == local.stdout
     assert done.returncode == local.returncode == 2
@@ -209,9 +209,9 @@ def test_run_writes_and_flushes_the_stop_on_stderr_then_stdout_before_the_door_i
     assert stdout_stop == stderr_stop
 
 
-def door_lines(capsys, *arguments: str) -> tuple[int, list[str]]:
+def door_lines(capsys, *arguments: str, cwd: Path = Path(".")) -> tuple[int, list[str]]:
     """The exit code and every line the door printed to either stream, split on the line feed only."""
-    code = cli.main(list(arguments))
+    code = door_in(cwd, *arguments)
     captured = capsys.readouterr()
     return code, (captured.out + captured.err).split("\n")
 
@@ -237,7 +237,7 @@ ENV_NAME_CASES = [
 def test_an_env_name_with_a_control_format_or_separator_character_prints_as_one_escaped_line(build_repo, capsys, name, escaped):
     """#97 rule 2, cell 7 (E4) and #228 rule 7: one row with the name escaped, equal to the rule runner's finding."""
     repo = build_repo({name: "A=1\n"})
-    code, lines = door_lines(capsys, "hygiene", str(repo))
+    code, lines = door_lines(capsys, CHECK_WORD, cwd=repo)
     (finding,) = rule_findings(repo, Rule.ENV_FILE)
     assert (code, finding.location) == (1, escaped)
     assert_row_prints_finding(*rows_of("\n".join(lines), finding), finding)
@@ -259,7 +259,7 @@ FILE_AND_RAISE = "web\n  File \"a.py\", line 1, in b\n  raise E('forged')\nx"
 def test_a_compose_finding_with_a_control_character_is_one_escaped_row(build_repo, capsys, services, escaped_text):
     """#97 rule 2, cell 8 (E4): the service and the port text print escaped in the finding's own row."""
     repo = build_repo(compose_services(*services))
-    code, lines = door_lines(capsys, "hygiene", str(repo))
+    code, lines = door_lines(capsys, CHECK_WORD, cwd=repo)
     (finding,) = rule_findings(repo, Rule.COMPOSE_PORT)
     (row,) = finding_rows("\n".join(lines), finding.location)
     assert code == 1
@@ -281,7 +281,7 @@ def test_a_compose_finding_with_a_control_character_is_one_escaped_row(build_rep
 )
 def test_a_refusal_is_one_escaped_line(build_repo, capsys, files, refusal_start):
     """#97 rule 2, cell 9 (E5): a refusal naming repository text is one line and exit 2."""
-    code, lines = door_lines(capsys, "hygiene", str(build_repo(files)))
+    code, lines = door_lines(capsys, CHECK_WORD, cwd=build_repo(files))
     refusals = [line for line in lines if line.startswith(refusal_start)]
     assert (code, len(refusals)) == (2, 1), lines
     assert_every_line_starts_with_the_door(lines)
@@ -293,7 +293,7 @@ def test_a_refusal_is_one_escaped_line(build_repo, capsys, files, refusal_start)
 def test_a_source_name_that_is_not_utf8_is_still_refused_as_one_line(build_repo, capsys):
     """#97 rule 2, cell 12: invalid UTF-8 in a tracked source name is refused before import-linter renders it."""
     files = {**SHOP_DB_IMPORTS_WEB, "src/shop/lat\udce9.py": "import shop.web\n", "pyproject.toml": toml(FORBIDDEN)}
-    code, lines = door_lines(capsys, "hygiene", str(build_repo(files)))
+    code, lines = door_lines(capsys, CHECK_WORD, cwd=build_repo(files))
     refusals = [line for line in lines if line.startswith("  ✗ imports       not checked    ")]
     assert (code, len(refusals)) == (2, 1), lines
     assert_every_line_starts_with_the_door(lines)
@@ -303,7 +303,7 @@ def test_a_scanner_stderr_with_several_lines_prints_as_one_escaped_line(build_re
     """#97 rule 2, cell 14 (E5): the stderr tail of a failing scanner joins on `\\x0a`, never a line of its own."""
     fake_scanner(served_scanners, "actionlint", on_scan="echo first >&2; echo '::error::second' >&2; exit 2")
     repo = build_repo({"README.md": "x\n", ".github/workflows/w.yml": "on: push\n"})
-    code, lines = door_lines(capsys, "hygiene", str(repo))
+    code, lines = door_lines(capsys, CHECK_WORD, cwd=repo)
     workflows = area_row("\n".join(lines), Area.WORKFLOWS)
     assert (code, workflows.glyph, workflows.event) == (2, Glyph.COULD_NOT_CHECK, cli.AreaEvent.NOT_CHECKED), lines
     assert [line for line in lines if "first\\x0a::error::second" in line] != []
@@ -314,7 +314,7 @@ def test_an_unused_allowance_with_a_control_character_prints_escaped(build_repo,
     """#97 rule 2, cell 13 (E4): the unused allowance line names its file escaped."""
     config = allow_config(("aws-access-token", "no\\u001bthere.txt", FAKE_KEY, "stale entry"))
     repo = build_repo({"quality/config.toml": config})
-    code, lines = door_lines(capsys, "hygiene", str(repo))
+    code, lines = door_lines(capsys, CHECK_WORD, cwd=repo)
     assert code == 0
     (note,) = (line.row for line in area_block("\n".join(lines), "secrets") if isinstance(line, NoteLine))
     assert (note.event, printable("no\x1bthere.txt") in note.fact) == (NoteEvent.UNUSED, True)
@@ -392,10 +392,10 @@ def test_ctrl_c_during_a_scan_ends_the_run_as_interrupted_without_a_traceback(cl
         served_scanners, "gitleaks",
         on_scan='echo $$ > "$SCANNER_PID"; head -c 1048576 /dev/zero; kill -INT $PPID; exec sleep 60',
     )
-    door = [*DOOR, "hygiene", str(clean_repo)]
+    door = [*MODULE_DOOR, CHECK_WORD]
     command = ["sh", "-c", '"$@"; echo "exit $?" >&2', "sh", *door] if under_shell else door
     environment = os.environ | {"SCANNER_PID": str(scanner_pid), "TMPDIR": str(scratch_parent)}
-    interrupted = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=60, check=False)
+    interrupted = subprocess.run(command, cwd=clean_repo, env=environment, capture_output=True, text=True, timeout=60, check=False)
     if under_shell:
         assert interrupted.stderr.rstrip().endswith("exit 130")
     else:
@@ -650,7 +650,7 @@ def terminal_streams(monkeypatch) -> tuple[Terminal, Terminal]:
 def test_at_a_terminal_a_refusal_from_repository_text_prints_as_escaped_text_between_quality_sgr_only(build_repo, monkeypatch):
     repo = build_repo({"a\x1b[35m\n\u202e.compose.yaml": "services: [\n"})
     stdout, stderr = terminal_streams(monkeypatch)
-    code = cli.main(["hygiene", str(repo)], clock=lambda: 0.0, environment={"TERM": "xterm"})
+    code = check_door(repo, clock=lambda: 0.0, environment={"TERM": "xterm"})
     stripped = without_sgr(stdout.getvalue() + stderr.getvalue())
     assert code == 2
     assert "\x1b[" in stdout.getvalue(), stderr.getvalue()
@@ -663,7 +663,7 @@ def test_at_a_terminal_a_refusal_from_repository_text_prints_as_escaped_text_bet
 def test_the_real_door_colours_a_pseudo_terminal_only_without_no_color(clean_repo, environment, coloured):
     parent, child = pty.openpty()
     base = {key: value for key, value in os.environ.items() if key not in ("NO_COLOR", "GITHUB_ACTIONS")}
-    done = subprocess.run([*DOOR, "hygiene", "."], cwd=clean_repo, env={**base, **environment}, stdout=child, stderr=subprocess.PIPE, check=False)
+    done = subprocess.run([*MODULE_DOOR, CHECK_WORD], cwd=clean_repo, env={**base, **environment}, stdout=child, stderr=subprocess.PIPE, check=False)
     text = read_pseudo_terminal(parent, child)
     assert (done.returncode, "\x1b[" in text, "✓" in text) == (0, coloured, True), text
 
@@ -673,10 +673,10 @@ def test_the_real_door_colours_a_pseudo_terminal_only_without_no_color(clean_rep
 def test_the_real_door_paints_the_files_block_only_at_a_terminal_and_prints_the_same_words(build_repo, environment):
     """#281 acceptance 6: SGR only in the first form; stripped of it, the lines equal the piped ones."""
     repo = build_repo({**CASE_TWO, **ROOT_ALLOWS_ENV})
-    base = {key: value for key, value in os.environ.items() if key not in ("NO_COLOR", "GITHUB_ACTIONS", "TERM")}
-    piped = subprocess.run([*DOOR, "hygiene", "."], cwd=repo, env=base, capture_output=True, text=True, check=False)
+    base = door_environment()
+    piped = subprocess.run([*MODULE_DOOR, CHECK_WORD], cwd=repo, env=base, capture_output=True, text=True, check=False)
     parent, child = pty.openpty() if environment else (None, subprocess.PIPE)
-    done = subprocess.run([*DOOR, "hygiene", "."], cwd=repo, env={**base, **(environment or {})}, stdout=child, stderr=subprocess.PIPE, check=False, text=True)
+    done = subprocess.run([*MODULE_DOOR, CHECK_WORD], cwd=repo, env={**base, **(environment or {})}, stdout=child, stderr=subprocess.PIPE, check=False, text=True)
     text = read_pseudo_terminal(parent, child) if environment else done.stdout
     words = [without_sgr(line) for line in text.replace("\r\n", "\n").splitlines()]
     assert ("\x1b[" in text) is (environment == {"TERM": "xterm"}), text
@@ -717,9 +717,9 @@ def test_the_real_door_prints_every_config_example_line_whole_in_each_stderr_for
     """#279 acceptance 6: after removing quality's SGR, each example line stands whole on its own line in all four
     forms; colour only at a terminal."""
     repo = build_repo(REFUSED_CONFIG)
-    base = {key: value for key, value in os.environ.items() if key not in ("NO_COLOR", "GITHUB_ACTIONS", "TERM")}
+    base = door_environment()
     parent, child = pty.openpty() if environment else (None, subprocess.PIPE)
-    done = subprocess.run([*DOOR, "hygiene", "."], cwd=repo, env={**base, **(environment or {})}, stdout=subprocess.DEVNULL,
+    done = subprocess.run([*MODULE_DOOR, CHECK_WORD], cwd=repo, env={**base, **(environment or {})}, stdout=subprocess.DEVNULL,
                           stderr=child, check=False, text=environment is None)
     if environment:
         text = read_pseudo_terminal(parent, child)

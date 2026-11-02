@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
-from quality import advisories, cli
+from quality import advisories
 from quality.config import CONFIG_PATH
 from quality.report import FindingEvent, NoteEvent
 from quality.rules import Area
@@ -29,6 +29,7 @@ from tests.support.advisories import (
     uv_lock,
 )
 from tests.support.check import area_fact, area_finding_rows, extent_counts, note_rows
+from tests.support.door import check_door
 from tests.support.scanners import OUTPUTS, fake_scanner
 
 LODASH = "GHSA-npm1-aaaa-bbbb"
@@ -346,7 +347,7 @@ def test_an_allowance_in_a_pnpm_lock_allows_its_advisory_until_its_date(
     repo = build_repo({FRONTEND_LOCK: pnpm_lock(), "quality/config.toml": config})
 
     def door() -> tuple[int, str, str]:
-        code = cli.main(["hygiene", str(repo)], clock=lambda: 0.0)
+        code = check_door(repo, clock=lambda: 0.0)
         heard = capsys.readouterr()
         return code, heard.out, heard.err
 

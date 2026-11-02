@@ -6,7 +6,7 @@ import termios
 from pathlib import Path
 from typing import TextIO
 
-from quality import cli
+from tests.support.door import check_door
 
 
 class Terminal(io.StringIO):
@@ -18,7 +18,7 @@ class Terminal(io.StringIO):
 
 def run_on(repo: Path, stdout: TextIO, stderr: TextIO, environment: dict[str, str]) -> int:
     with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-        return cli.main(["hygiene", str(repo)], clock=lambda: 0.0, environment=environment)
+        return check_door(repo, clock=lambda: 0.0, environment=environment)
 
 
 SGR = r"\x1b\[[0-9;]*m"
