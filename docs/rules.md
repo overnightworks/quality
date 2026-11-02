@@ -527,9 +527,9 @@ The `workflow-lint` rule (actionlint) and the `workflow-security` rule (zizmor, 
 config and ignore comments change nothing; quality's configuration adds the hosted runner labels `ubuntu-26.04` and
 `ubuntu-26.04-arm`, which actionlint does not know yet, and accepts GitHub's `uses: $/…` form of a local action or reusable
 workflow, which actionlint does not know yet either. `workflow-security` also judges every tracked `action.yml` and
-`action.yaml`, wherever it lies; actionlint is never handed one, and the clean row counts the workflows alone. A lint finding is `! <path:line>  invalid  actionlint`, the message under it
-behind `| `, then `fix: correct the workflow as the message says`. A security finding is
-`! <path:line>  insecure  zizmor <audit> · <description>` with `fix: see <url>`. The clean row counts those files and says
+`action.yaml`, wherever it lies; actionlint is never handed one, and the clean row counts the workflows alone. A lint finding is
+`! <path:line>  invalid  actionlint`, the message under it behind `| `, then `fix: correct the workflow as the message says`.
+A security finding is `! <path:line>  insecure  zizmor <audit> · <description>` with `fix: see <url>`. The clean row counts those files and says
 that only offline audits ran, so a workflow that only an online audit would flag is not read as fully audited:
 `✓ workflows  clean  5 workflows · offline audits only` (operator ruling 1.11.2026, „In der Zeile selbst (Recommended)“).
 
