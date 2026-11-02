@@ -27,8 +27,9 @@ How the vet calls gitleaks, so it judges as the secret scan judges:
 - gitleaks runs in the vet's scratch directory: with no source it reads `.gitleaksignore` from the folder it stands in,
   whatever `--gitleaks-ignore-path` names, and a repository could list the fingerprint of a stdin finding.
 - The text opens with a fixed line: gitleaks answers clean for a text whose first bytes read as a binary type.
-- Terminal colour codes are removed from the vetted text (the printed text keeps them): a code against a value takes away
-  the word boundary gitleaks' rules need.
+- The vetted text is the stderr as written, then with each terminal control code (CSI sequence) replaced by a space, then
+  with each removed, in one stdin (the printed text keeps them): a code against a value takes away the word boundary
+  gitleaks' rules need, and deleting it alone would join words or eat a key's first letter.
 - `--redact`: the report holds no value, and it lives in a 0700 directory removed on every exit.
 
 ## What passes

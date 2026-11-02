@@ -190,8 +190,14 @@ def run_gitleaks(
     return _split_by_allowance(leaks, allowances)
 
 
-# A colour code sits against a value without a word boundary, which gitleaks' rules need; `printable` leaves the rest of it.
-COLOUR_SEQUENCE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+# A terminal control code sits against a value without a word boundary, which gitleaks' rules need; `printable` leaves the rest of it.
+CONTROL_SEQUENCE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
+
+def _vetted_text(text: str) -> str:
+    """The text as written, with each control code as a space, and without them: a code is a boundary and joins or eats
+    nothing, whichever form a value was written in."""
+    return "\n".join((VET_OPENING + text, CONTROL_SEQUENCE.sub(" ", text), CONTROL_SEQUENCE.sub("", text)))
 
 
 def _stderr_lines(stderr: str) -> list[str]:
@@ -209,7 +215,7 @@ def _cleared_by_gitleaks(text: str) -> bool:
             # cwd: gitleaks reads .gitleaksignore from the folder it stands in, whatever --gitleaks-ignore-path names.
             vet = process.run(
                 [str(binary), "stdin", "--no-banner", "--no-color", "--log-level", "error", "--redact", *_judging_arguments(scratch, report)],
-                cwd=scratch, timeout=VET_TIMEOUT_SECONDS, input_text=f"{VET_OPENING}{COLOUR_SEQUENCE.sub("", text)}",
+                cwd=scratch, timeout=VET_TIMEOUT_SECONDS, input_text=_vetted_text(text),
             )
             return not scanner_findings(GITLEAKS_SCANNER, _read_report(report), vet.returncode)
     except (CannotJudge, process.ProcessError, OSError):

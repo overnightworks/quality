@@ -200,12 +200,15 @@ def test_the_vet_judges_as_the_secret_scan_judges(build_repo, served_scanners, e
         (multi_line_key() + "three\nmore\nlines\n", True, False),
         (f"{FAKE_KEY}\n" + "tidy\n" * 6, True, False),
         (f"error: \x1b[1m{FAKE_KEY}\x1b[0m\nsecond\n", True, False),
+        (f"error: {FAKE_KEY}\x1b[0mword\nsecond\n", True, False),
+        (f"error: \x1b[1m{FAKE_KEY}\x1b[0m \x1b[2mat line 3\nsecond\n", True, False),
+        (f"error: \x1b[{FAKE_KEY}\nsecond\n", True, False),
         (f"aws_access_key_id = {FAKE_KEY}  # gitleaks:allow\nsecond\n", True, False),
         (f"%PDF-1.4\naws_access_key_id = {FAKE_KEY}\n", True, False),
         (f"aws_access_key_id = {FAKE_KEY}\nsecond\n", True, True),
     ],
     ids=[
-        "clean text", "a key", "a key after a tab", "a multi-line key", "a key above the tail", "a key wrapped in colour", "a key beside gitleaks:allow",
+        "clean text", "a key", "a key after a tab", "a multi-line key", "a key above the tail", "a key wrapped in colour", "a key before a colour reset", "colour on both sides of a key", "a key after an escape bracket", "a key beside gitleaks:allow",
         "a binary type's first bytes", "a .gitleaksignore in the repository",
     ],
 )
