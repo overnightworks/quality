@@ -93,3 +93,13 @@ def test_actionlint_is_never_handed_an_action_file(build_repo, served_scanners, 
     assert check_door(repo, locate_zizmor=fake_zizmor(tmp_path / "zizmor", "echo '[]'")) == 0
     handed = record.read_text()
     assert (workflow in handed, action in handed) == (True, False)
+
+
+@pytest.mark.scanner
+def test_an_action_file_under_a_name_like_an_option_is_judged(build_repo, installed_scanners, capsys):
+    """A tracked name that begins like an option reaches zizmor as a file, so its finding is not lost."""
+    action = "--gh-token=x/action.yml"
+    declared = '[[root.allow]]\nentry = "--gh-token=x/"\nreason = "a name zizmor must not read as an option"\n'
+    repo = build_repo({action: action_using("actions/checkout@v4"), "quality/config.toml": declared})
+    assert check_door(repo) == 1
+    assert (f"{action}:6", FindingEvent.INSECURE) in workflow_rows(capsys)
