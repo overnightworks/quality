@@ -1,8 +1,0 @@
-claim_id = "b8b1e19607564258b0a6a2afe858e779"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "3ad2147c17be6c4a6e6c662f603d0f546df03923"
-branch = "claude/issue-344-local-action"
-scope = ["docs/rules.md", "src/quality/actionlint.yaml", "src/quality/check.py", "src/quality/checkout.py", "src/quality/scanners.py", "tests/test_scanners_local_actions.py"]
-opened_commit = "f16b973d418d76d3e6f552691bd1e82acba1c000"
-whole_reason = "One configuration line and one file set, each with the test and the doc paragraph that say it; apart, a repository would either stay refused or lose its action file unread."
