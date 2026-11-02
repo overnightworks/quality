@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -256,12 +257,15 @@ def test_an_owner_that_clears_no_finding_is_a_finding_on_its_line(text, records)
 
 
 def test_a_fix_names_the_code_found_and_the_line_its_noqa_must_stand_on():
-    text = "run(argv)\n" * 9
-    (secured,) = python_lint.judge_security(linted([record(line=7, noqa_line=9)], {"src/p/a.py": text}))
+    flagged_line, noqa_line = 7, 9
+    text = "run(argv)\n" * noqa_line
+    (secured,) = python_lint.judge_security(
+        linted([record(line=flagged_line, noqa_line=noqa_line)], {"src/p/a.py": text})
+    )
     (other_secured,) = python_lint.judge_security(linted([record(code="S307")], {"src/p/a.py": text}))
     (printed,) = python_lint.judge_print(linted([record(code="T203")], {"src/p/a.py": text})).findings
-    without_code = secured.fix.replace("S603", "")
-    assert ("9" in without_code, "7" in without_code) == (True, False)
+    numbers_without_code = re.findall(r"\d+", secured.fix.replace("S603", ""))
+    assert numbers_without_code == [str(noqa_line)]
     assert ("S307" in other_secured.fix, "S603" in other_secured.fix) == (True, False)
     assert ("T203" in printed.fix, "T201" in printed.fix) == (True, False)
 
