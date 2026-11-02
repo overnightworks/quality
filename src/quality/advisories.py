@@ -309,7 +309,7 @@ def _findings(
     expected: Mapping[str, tuple[Requirement, ...]],
 ) -> OsvReport:
     if exit_code not in (scanners.CLEAN_EXIT, OSV_FINDINGS_FOUND):
-        raise ScannerError(f"{scanners.OSV_SCANNER} exited {exit_code}, neither 'clean' nor 'findings'{process.stderr_tail(stderr)}")
+        raise ScannerError(f"{scanners.OSV_SCANNER} exited {exit_code}, neither 'clean' nor 'findings'{scanners.vetted_tail(stderr)}")
     report = _read_report(report_text, names_by_path, expected)
     if bool(report.affected) != (exit_code == OSV_FINDINGS_FOUND):
         raise ScannerError(f"{scanners.OSV_SCANNER} exited {exit_code} but its report holds {len(report.affected)} finding(s)")

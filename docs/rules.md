@@ -655,3 +655,5 @@ carriage return, ESC, tab, DEL, C1) as `\xNN`, and U+2028, U+2029 and every form
 In GitHub Actions (`GITHUB_ACTIONS=true`) the door first prints `::stop-commands::<token>` on stderr and on stdout, a new random token per run, so no
 workflow command in repository text runs (operator ruling 20.10.2026, asked whether to stop the commands, escape the
 text, or both: „Beides (empfohlen)“): no `::warning::` or `##[warning]` annotation, no `add-mask`, no `add-matcher`; the stop lasts for the rest of the step, and the door never prints the line that lifts it. Problem matchers registered in the job still read the log (the stop does not reach them). The gate's jobs register only setup-uv's python matcher, which is anchored at the line start and so cannot match repository text; a matcher another step registers may still match a door line that holds repository text, and the door cannot prevent that.
+
+A scanner's stderr reaches a `✗` fact only once gitleaks has cleared all of it ([decision 5](decisions/5-scanner-stderr-goes-through-gitleaks.md)).

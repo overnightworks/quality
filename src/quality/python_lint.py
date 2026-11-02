@@ -303,10 +303,10 @@ def _ruff_report(binary: str, root: Path, names: Sequence[str], target: Version)
     ]
     done = _ruff(binary, arguments, Path(os.path.realpath(root)), RUN_TIMEOUT_SECONDS)
     if done.returncode not in JUDGED_EXIT_CODES:
-        raise LintError(f"ruff exited {done.returncode}{process.stderr_tail(done.stderr)}")
+        raise LintError(f"ruff exited {done.returncode}{scanners.vetted_tail(done.stderr)}")
     failures = [line for line in done.stderr.splitlines() if LINT_FAILURE in line]
     if failures:
-        raise LintError(f"ruff could not lint every file: {failures[0]}")
+        raise LintError(f"ruff could not lint every file{scanners.vetted_quote(done.stderr, f': {failures[0]}')}")
     return done.stdout
 
 

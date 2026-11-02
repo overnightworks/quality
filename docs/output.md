@@ -172,6 +172,12 @@ The `next:` form is decision 11. A scanner that reports another version than the
   ✗ secrets       not checked    gitleaks 8.28.0 found, the release pins 8.30.1
 ```
 
+Built: a scanner's stderr reaches a fact only once gitleaks has cleared all of it ([decision 5](decisions/5-scanner-stderr-goes-through-gitleaks.md)): else the fact ends in `· N stderr lines withheld · not cleared by gitleaks`, also when gitleaks cannot answer. No refusal quotes gitleaks' own stderr. The exit and the verdict do not change.
+
+```text
+  ✗ workflows     not checked    actionlint exited 3, neither 'clean' nor 'findings' · 2 stderr lines withheld · not cleared by gitleaks
+```
+
 Several areas can fail, and an area can fail for more than one reason. Head proposals of 30.10.2026 (O1 to O3), built unless the operator rules otherwise. A reason that several rules of one area share stands once; distinct reasons make the row name their count and stand on `✗` lines below it, and findings of an area that also cannot check stay under its `✗` row and are counted in the error line. `next:` names each distinct step of the run's refusals once, in row order (head proposals O6 to O9 of 30.10.2026): one step stands on the `next:` line, several each below a bare `next:` (O7), and the general instruction is the last line when a refusal carries no step and the only one when none does. A fact of a few words says what is missing (`mise could not locate gitleaks 8.30.1`, true for every non-zero answer of mise, O8). Without mise the first step is `install mise: <page>` and the second the install command (O6). Alternative commands stand under a label ending `, one of:`, each choice's label on a line and its command one level deeper (O9).
 
 ```text

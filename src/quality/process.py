@@ -157,13 +157,15 @@ def _failures_as_process_errors(command: list[str]) -> Iterator[None]:
 
 def run(
     command: list[str], cwd: Path | None = None, env: dict[str, str] | None = None, timeout: float | None = None,
-    encoding: str | None = "utf-8",
+    encoding: str | None = "utf-8", *, input_text: str | None = None,
 ) -> subprocess.CompletedProcess:
-    """`command`'s exit and output, decoded as UTF-8 whatever the locale; `encoding=None` keeps the bytes."""
+    """`command`'s exit and output, decoded as UTF-8 whatever the locale; `encoding=None` keeps the bytes; `input_text`
+    is written to its stdin."""
     with _failures_as_process_errors(command):
         try:
             return subprocess.run(  # noqa: S603 - callers pass an argv list and never a shell
-                command, capture_output=True, encoding=encoding, check=False, cwd=cwd, env=env, timeout=timeout
+                command, capture_output=True, encoding=encoding, check=False, cwd=cwd, env=env, timeout=timeout,
+                input=input_text,
             )
         except subprocess.TimeoutExpired:
             raise ProcessError(f"{command[0]} did not finish within {timeout} seconds") from None
