@@ -220,20 +220,15 @@ def area_row(verdict: AreaVerdict, extent: str) -> Row:
     return Row(Glyph.CLEAN, verdict.area, AreaEvent.CLEAN, SEPARATOR.join(fact for fact in facts if fact))
 
 
-def area_extent(verdict: AreaVerdict, tracked_paths: int) -> str:
-    """What an area's row says it covered: the rules and files of `files`, the ceiling file's entries and pairs of
-    `debt` (what is measured, where it is not recorded); nothing for an area that could not check or has no extent."""
-    if verdict.area is Area.FILES:
-        return SEPARATOR.join((counted(len(verdict.verdicts), "rule"), counted(tracked_paths, "file")))
-    extents = {rule_verdict.rule: rule_verdict.extent for rule_verdict in verdict.verdicts}
-    if verdict.reasons or None in extents.values():
-        return ""
-    if verdict.area is Area.IMPORTS:
-        return NO_CONFIG_FACT if verdict.measurement is Measurement.MEASURED_ONLY else counted(extents[Rule.IMPORT_CONTRACT], "contract")
-    if verdict.area is Area.SECRETS:
-        return counted(extents[Rule.LEAK], "commit")
-    if verdict.area is not Area.DEBT:
-        return ""
+def _imports_extent(verdict: AreaVerdict, extents: Mapping[Rule, int | None]) -> str:
+    return NO_CONFIG_FACT if verdict.measurement is Measurement.MEASURED_ONLY else counted(extents[Rule.IMPORT_CONTRACT], "contract")
+
+
+def _secrets_extent(verdict: AreaVerdict, extents: Mapping[Rule, int | None]) -> str:
+    return counted(extents[Rule.LEAK], "commit")
+
+
+def _debt_extent(verdict: AreaVerdict, extents: Mapping[Rule, int | None]) -> str:
     entries, pairs = counted(extents[Rule.SIZE], "entry", "entries"), counted(extents[Rule.CLONE], "clone pair")
     match verdict.measurement:
         case Measurement.MEASURED_ONLY:
@@ -242,6 +237,24 @@ def area_extent(verdict: AreaVerdict, tracked_paths: int) -> str:
             return pairs
         case Measurement.ENFORCED:
             return f"{CEILING_HELD}{SEPARATOR}{entries}, {pairs}"
+
+
+JUDGED_EXTENT: dict[Area, Callable[[AreaVerdict, Mapping[Rule, int | None]], str]] = {
+    Area.DEBT: _debt_extent,
+    Area.IMPORTS: _imports_extent,
+    Area.SECRETS: _secrets_extent,
+}
+
+
+def area_extent(verdict: AreaVerdict, tracked_paths: int) -> str:
+    """What an area's row says it covered: the rules and files of `files`, then what the area's rules judged;
+    nothing for an area that could not check or has no extent."""
+    if verdict.area is Area.FILES:
+        return SEPARATOR.join((counted(len(verdict.verdicts), "rule"), counted(tracked_paths, "file")))
+    extents = {rule_verdict.rule: rule_verdict.extent for rule_verdict in verdict.verdicts}
+    if verdict.reasons or None in extents.values() or verdict.area not in JUDGED_EXTENT:
+        return ""
+    return JUDGED_EXTENT[verdict.area](verdict, extents)
 
 
 def measured_notes(areas: tuple[AreaVerdict, ...]) -> tuple[str, ...]:
