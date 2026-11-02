@@ -71,7 +71,7 @@ class Reason:
 
 
 class CannotJudge(Exception):
-    """The repository cannot be examined; this is never a clean result."""
+    """The repository cannot be examined or the invocation is wrong; this is never a clean result."""
 
     label = "cannot judge"
 

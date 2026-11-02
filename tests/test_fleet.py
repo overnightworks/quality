@@ -19,6 +19,7 @@ import yaml
 
 from quality import __version__, cli
 from quality.fleet import FLEET_EXAMPLE, FleetError, parse_fleet, read_fleet
+from quality.output import SEPARATOR
 from tests.support.clones import function as clone_function
 from tests.support.fleet import (
     GITHUB_BASE_VARIABLE,
@@ -404,16 +405,19 @@ def test_a_url_given_as_the_path_is_a_missing_fleet_file_like_any_other_path(cap
 
 
 @pytest.mark.parametrize(
-    "arguments",
-    [["--private", "https://github.com/o/p"], ["checkout", "https://github.com/o/r"]],
+    ("arguments", "stray"),
+    [(["--private", "https://github.com/o/p"], "--private"), (["checkout", "https://github.com/o/r"], "https://github.com/o/r")],
     ids=["--private", "second positional"],
 )
-def test_a_fleet_given_on_the_command_line_is_a_usage_error(capsys, arguments):
-    """#63 rule 1: `--private` and a second positional are argparse usage errors."""
-    with pytest.raises(SystemExit) as stopped:
-        cli.main(["scoreboard", *arguments])
-    assert stopped.value.code == 2
-    assert "scoreboard" in capsys.readouterr().err
+def test_a_fleet_given_on_the_command_line_is_a_usage_error(capsys, arguments, stray):
+    """#63 rule 1: `--private` and a second positional are usage errors."""
+    code = cli.main(["scoreboard", *arguments])
+    printed = capsys.readouterr()
+    assert (code, printed.out, printed.err) == (
+        2,
+        "",
+        f"error: unknown argument{SEPARATOR}{stray}\nnext: quality scoreboard --help\n",
+    )
 
 
 def test_the_fleet_file_is_read_from_the_working_directory_by_default(capsys, public, tmp_path, monkeypatch):

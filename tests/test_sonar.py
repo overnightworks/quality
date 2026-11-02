@@ -7,6 +7,7 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 
 from quality import cli, sonar
+from quality.output import SEPARATOR
 from quality.report import CannotJudge
 from tests.support.sonar import (
     ANALYSED_MAIN,
@@ -624,9 +625,15 @@ def test_properties_refuses_a_repository_without_properties(monkeypatch, capsys,
 
 def test_the_former_sonar_command_is_refused_as_a_usage_error(capsys):
     """#228 rule 3: the old command name is not kept as an alias"""
-    with pytest.raises(SystemExit) as exited:
-        cli.main(["sonar", "pre" + "flight"])
-    assert exited.value.code == 2
+    former = "pre" + "flight"
+    commands = ", ".join(cli.build_parser().commands["sonar"].commands)
+    code = cli.main(["sonar", former])
+    printed = capsys.readouterr()
+    assert (code, printed.out, printed.err) == (
+        2,
+        "",
+        f"error: no command {former}{SEPARATOR}commands: {commands}\nnext: quality sonar --help\n",
+    )
 
 
 def properties_link_outside(repo: Path, elsewhere: Path) -> None:

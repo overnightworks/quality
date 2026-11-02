@@ -596,6 +596,20 @@ error: --dry-run needs --fix · nothing checked
 next: quality check --fix --dry-run
 ```
 
+```text
+$ quality hgyiene
+error: no command hgyiene · commands: check, merge, report, verdict, sonar
+next: quality --help
+$ quality
+error: no command · commands: check, merge, report, verdict, sonar
+next: quality --help
+$ quality check --nonsense
+error: unknown argument · --nonsense
+next: quality check --help
+```
+
+Adopted O88 and O89 of 2.11.2026: a first word that names no command, none at all, and what a command does not take; what only the parser can word stands in the pair as its own sentence.
+
 ## Areas
 
 Seven, as ruled: `files`, `debt`, `imports`, `secrets`, `workflows`, `dependencies`, `code`. The areas replace the rule names in the verdict; `quality check --help` says which rules an area holds. `code` holds `python-security` and `python-print`.

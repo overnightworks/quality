@@ -1,7 +1,17 @@
 # Commands
 
-Reference for the engineer or operator who runs `quality scan-staged`, `quality scoreboard`, installs the scanners or
-runs `quality emergency-merge`.
+Reference for the engineer or operator who runs `quality scan-staged`, `quality scoreboard`, installs the scanners,
+runs `quality emergency-merge`, or reads `quality --help` or a wrong invocation's pair.
+
+## Help and wrong invocations
+
+`quality --help` lists the commands in the frame of [the output picture](output.md), case 11, and
+`quality <command> --help` prints that command's arguments; `--version` prints the installed version. Help goes to
+stdout with exit `0`, plain and whole in every stream. A wrong invocation runs nothing, prints the `error:`/`next:` pair
+on stderr and exits `2`: `no command <word> · commands: …` for a first word that names no command, `no command ·
+commands: …` for none, `unknown argument · <what is left over>` for what the command does not take, and otherwise the
+parser's own sentence; `next:` names the help of the command, of its group for a command inside one, or of the parser
+that refused.
 
 ## `quality scan-staged`
 

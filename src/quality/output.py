@@ -1,5 +1,5 @@
-"""The one owner of what quality prints, of the step summary and of the step output; argparse's help, usage errors
-and `--version`, and `input()`'s prompt on stdout, are the writers that remain outside it."""
+"""The one owner of what quality prints, of the step summary and of the step output; argparse's `--version` and
+`input()`'s prompt on stdout are the writers that remain outside it."""
 
 import os
 import secrets
@@ -437,6 +437,11 @@ def _next_lines(next_steps: tuple[Step, ...], label: str) -> list[str]:
         (_, first), *rest = lines[0]
         return [f"{label} {printable(first)}", *(f"{INDENT * level}{printable(text)}" for level, text in rest)]
     return [label, *(f"{INDENT * (level + 1)}{printable(text)}" for step in lines for level, text in step)]
+
+
+def write_help(text: str) -> None:
+    """Help reads the same in every stream: plain, whole, on stdout; a closed stdout takes nothing."""
+    _print_lines(text.splitlines(), Channel(sys.stdout, False, None))
 
 
 def write_pair(error: str, next_steps: tuple[Step, ...], channel: Channel) -> None:

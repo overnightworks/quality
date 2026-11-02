@@ -36,10 +36,8 @@ from tests.support.check import (
     refusal_pair,
 )
 from tests.support.fleet import RELEASES, write_fleet
-from tests.support.terminal import Terminal
+from tests.support.terminal import Terminal, without_sgr
 from tests.support.verdict import CHECKS_GREEN
-
-OWN_SGR = re.compile(r"\x1b\[[0-9;]*m")
 
 
 class Event(StrEnum):
@@ -176,22 +174,22 @@ def test_styled_rows_hold_exactly_the_plain_words():
     )
     styled = written(Terminal, lambda channel: output.write_rows(rows, channel))
     assert "\x1b[" in styled
-    assert OWN_SGR.sub("", styled) == plain(rows)
+    assert without_sgr(styled) == plain(rows)
 
 
 def test_a_styled_verdict_and_pair_hold_exactly_the_plain_words():
     verdict = Verdict(1, 1, 6, 7, ("debt measured, not enforced",), 3)
-    assert OWN_SGR.sub("", written(Terminal, lambda channel: output.write_verdict(verdict, channel))) == verdict_line(
+    assert without_sgr(written(Terminal, lambda channel: output.write_verdict(verdict, channel))) == verdict_line(
         findings=1, areas_with_findings=1, clean_areas=6, notes=("debt measured, not enforced",), seconds=3
     )
     pair = written(Terminal, lambda channel: output.write_pair("e", (Command("n"),), channel))
-    assert ("\x1b[" in pair, OWN_SGR.sub("", pair)) == (True, "error: e\nnext: n\n")
+    assert ("\x1b[" in pair, without_sgr(pair)) == (True, "error: e\nnext: n\n")
 
 
 def test_repository_text_reaches_a_terminal_only_as_escaped_text():
     row = Row(Glyph.COULD_NOT_CHECK, "files", Event.CLEAN, "\x1b[35m\u202e")
     styled = written(Terminal, lambda channel: output.write_rows((row,), channel))
-    remaining = OWN_SGR.sub("", styled)
+    remaining = without_sgr(styled)
     assert "\\x1b[35m\\u202e" in remaining
     assert [character for character in remaining if unicodedata.category(character) in ("Cc", "Cf", "Zl", "Zp") and character != "\n"] == []
 
@@ -272,7 +270,7 @@ def test_an_event_findings_detail_prints_escaped_under_its_row_before_the_fix():
     assert (row.row.fix, row.row.fix_follows) == ("a fix", True)
     assert f"{output.FIX_INDENT}{output.DETAIL_MARKER}" in printed.splitlines()
     assert_block_order(block)
-    assert OWN_SGR.sub("", findings_written([found], Terminal)) == printed
+    assert without_sgr(findings_written([found], Terminal)) == printed
 
 
 def test_at_a_terminal_each_detail_line_is_painted_as_an_area_rows_fact_is(painted_like_an_area_row):
@@ -312,7 +310,7 @@ def test_at_a_terminal_the_fix_and_its_lines_to_copy_stay_plain_and_the_words_eq
         return [line.text for line in decode_block(printed.splitlines()) if isinstance(line, FixLine | CopyLine)]
 
     assert fix_and_copy_lines(styled) == fix_and_copy_lines(findings_written(findings))
-    assert OWN_SGR.sub("", styled) == findings_written(findings)
+    assert without_sgr(styled) == findings_written(findings)
 
 
 def test_a_finding_with_a_line_shows_its_location():
@@ -359,7 +357,7 @@ def test_at_a_terminal_the_glyph_and_the_fact_are_painted_as_an_area_row_paints_
     unpainted = row_line.replace(f"{glyph_start}!{glyph_end}", "").replace(f"{fact_start}FACT{fact_end}", "")
     assert "\x1b" not in unpainted
     assert "\x1b" not in next(line for line in styled.splitlines() if "the fix" in line)
-    assert OWN_SGR.sub("", styled) == findings_written(findings)
+    assert without_sgr(styled) == findings_written(findings)
 
 
 @pytest.mark.parametrize(("term", "no_color"), [("xterm", "1"), ("dumb", None)], ids=["NO_COLOR", "dumb"])
@@ -553,7 +551,7 @@ def test_an_example_line_prints_whole_however_long_and_escaped():
 def test_an_example_is_painted_by_its_label_only_at_a_terminal(term, no_color):
     environment = {"TERM": term} | ({"NO_COLOR": no_color} if no_color else {})
     styled = written(Terminal, lambda channel: output.write_pair("e", (COPY,), channel), **environment)
-    assert OWN_SGR.sub("", styled) == "error: e\nnext: write it in a.toml like this:\n    [[table]]\n    key = \"value\"\n    other = 1\n"
+    assert without_sgr(styled) == "error: e\nnext: write it in a.toml like this:\n    [[table]]\n    key = \"value\"\n    other = 1\n"
     assert ("\x1b[" in styled) is (term == "xterm" and no_color is None)
     assert not any("\x1b[" in line for line in styled.splitlines() if line.startswith("    "))
 
