@@ -1,8 +1,0 @@
-claim_id = "50a44e6c148848658ec89042d511386f"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "3c5f83feaa76ca69dacb7ab5579a2b971d586e59"
-branch = "claude/issue-330-c3i3-check-word"
-scope = [".github/workflows/gate.yml", "AGENTS.md", "README.md", "docs/commands.md", "docs/gate.md", "docs/rules.md", "quality/config.toml", "src/quality/cli.py", "tests/conftest.py", "tests/fixtures/jobs-page1.json", "tests/support/door.py", "tests/support/verdict.py", "tests/test_advisories_locks.py", "tests/test_check.py", "tests/test_checkout.py", "tests/test_cli_help.py", "tests/test_cli_output.py", "tests/test_cli_workflow_invocations.py", "tests/test_output.py", "tests/test_ratchet.py", "tests/test_verdict.py", "tests/workflows/test_gate_scanners.py"]
-opened_commit = "f2237bfd4a4c11d1aa29b0c79b3d98ba3089c308"
-whole_reason = "Three production files, about +29/-20, about 95 test lines in 14 files and about 35 doc lines: the word, the path, the job and the help leave or arrive together, because invariant 4 binds the parser and gate.yml to one commit and invariant 7 binds a word to its replacement. It does not split: check --help alone would buy one more landing in the freeze for ten lines."
