@@ -347,8 +347,9 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   quality's installation, never one on `PATH`, at the pinned version, runs `ruff check --isolated --no-cache
   --ignore-noqa --select S,T20 --target-version py314 --output-format json -- <files>`, in batches below the argument
   limit, and writes nothing into the checkout. That one run serves `python-print` too. With no tracked `.py` file ruff
-  is not started. Not judged: untracked files, a link, anything inside a gitlink, notebooks, `.pyi` files and suffixless scripts. The repository's own ruff
-  `select`, `ignore`, `per-file-ignores`, `exclude`, `extend` and noqa have no effect. Each finding stands as a row under the `code` row,
+  is not started. Not judged: untracked files, a link, anything inside a gitlink, notebooks, `.pyi` files and
+  suffixless scripts. The repository's own ruff `select`, `ignore`, `per-file-ignores`, `exclude`, `extend` and noqa
+  have no effect. Each finding stands as a row under the `code` row,
   `! src/a.py:12  insecure  S307 Use of possibly insecure function; ...`, and its `fix:` names the line its noqa must
   stand on, ruff's `noqa_row` (O51, O52 of 2.11.2026). In the files
   `test-import` judges (every `.py` under a Python project's `tests/`, outside `fixtures/`) S101, S105 to S107, S603
@@ -395,8 +396,8 @@ src/big.py`). A `PATH` in a submodule or a linked worktree means that work tree'
   No configuration switches the rule off, and an owner or noqa asks `quality verdict` for no `[[gate.loosened]]`
   entry. Not judged, and waiting for usage evidence: `sys.stdout.write` and `sys.stderr.write` (ruff's TID251 would
   flag every reference to the streams, `logging.StreamHandler(sys.stderr)` included, for a bypass nobody has used;
-  reopened when a landing outside `tests/` replaces a `print` with a direct stream write), and `print(..., file=<variable>)`, which
-  ruff 0.17.1 does not report as T201. (#214, #225)
+  reopened when a landing outside `tests/` replaces a `print` with a direct stream write), and `print(...,
+  file=<variable>)`, which ruff 0.17.1 does not report as T201. (#214, #225)
 - The baseline only falls: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the
   base commit's, so growing a function and rewriting the baseline stays red. Each loosening is one line, named with the
   baseline's own metric, path and symbol (a file entry has no symbol):
