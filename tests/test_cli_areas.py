@@ -1,8 +1,8 @@
-"""`quality check AREA ...` judges, prints, counts and starts only the areas it names."""
+"""A run of `quality check AREA ...` judges, prints, counts and starts only the areas it names."""
 
 import pytest
 
-from quality import check, checkout, ratchet, scanners
+from quality import check, checkout, cli, ratchet, scanners
 from quality.report import NoteEvent
 from quality.rules import Area
 from tests.support.advisories import uv_lock
@@ -92,19 +92,23 @@ def test_a_selected_run_counts_what_it_judged_and_nothing_else(build_repo, capsy
     assert (done, out.splitlines()[-1]) == (code, last_line)
 
 
+def refused_stderr(areas_refused: str) -> str:
+    return f"error: {areas_refused} could not check\nnext: {cli.REFUSED_AREAS_NEXT.text}\n"
+
+
 @pytest.mark.parametrize(
-    ("files", "words", "code", "has_refused_row", "first_error_line"),
+    ("files", "words", "code", "has_refused_row", "stderr"),
     [
-        pytest.param({"compose.yaml": "services: ["}, ["debt"], 0, False, [], id="a refused files rule beside debt"),
-        pytest.param({"compose.yaml": "services: ["}, ["files"], 2, True, ["error: 1 of 1 area could not check"], id="the refused area alone"),
-        pytest.param({"compose.yaml": "services: ["}, ["files", "debt"], 2, True, ["error: 1 of 2 areas could not check"], id="the refused area and another"),
-        pytest.param({"quality/config.toml": "[secrets]\nignore = []\n"}, ["imports"], 0, False, [], id="a refused config beside imports"),
-        pytest.param({"quality/config.toml": "[secrets]\nignore = []\n"}, ["secrets"], 2, True, ["error: 1 of 1 area could not check"], id="a refused config read by the area"),
+        pytest.param({"compose.yaml": "services: ["}, ["debt"], 0, False, "", id="a refused files rule beside debt"),
+        pytest.param({"compose.yaml": "services: ["}, ["files"], 2, True, refused_stderr("1 of 1 area"), id="the refused area alone"),
+        pytest.param({"compose.yaml": "services: ["}, ["files", "debt"], 2, True, refused_stderr("1 of 2 areas"), id="the refused area and another"),
+        pytest.param({"quality/config.toml": "[secrets]\nignore = []\n"}, ["imports"], 0, False, "", id="a refused config beside imports"),
+        pytest.param({"quality/config.toml": "[secrets]\nignore = []\n"}, ["secrets"], 2, True, refused_stderr("1 of 1 area"), id="a refused config read by the area"),
     ],
 )
-def test_a_refusal_outside_the_named_areas_changes_nothing(build_repo, capsys, files, words, code, has_refused_row, first_error_line):
+def test_a_refusal_outside_the_named_areas_changes_nothing(build_repo, capsys, files, words, code, has_refused_row, stderr):
     done, out, err = run_check_of(build_repo(files), capsys, *words)
-    assert (done, "✗" in out, err.splitlines()[:1]) == (code, has_refused_row, first_error_line)
+    assert (done, "✗" in out, err) == (code, has_refused_row, stderr)
 
 
 @pytest.mark.parametrize(
@@ -131,13 +135,24 @@ def test_a_named_area_starts_no_shared_read_it_does_not_need(build_repo, served_
     assert rows_of(out) == [area]
 
 
+def under_scanner(block, scanner: str) -> list[str]:
+    """The lines of `block` from `scanner`'s exit row to the next exit row."""
+    placed, inside = [], False
+    for line in block:
+        if isinstance(line, NoteLine):
+            inside = line.location == scanner
+        if inside:
+            placed.append(line.text)
+    return placed
+
+
 @pytest.mark.parametrize(
     ("words", "exit_of_actionlint", "stderr_line", "vet_answer", "code", "shown"),
     [
         pytest.param(["workflows", "-v"], 0, "a harmless note", 'echo "[]" > "$report"; exit 0', 0, "a harmless note", id="cleared"),
-        pytest.param(["workflows", "-v"], 0, f"aws_access_key_id = {FAKE_KEY}", flagging(FAKE_KEY), 0, "1 stderr line withheld", id="not cleared"),
+        pytest.param(["workflows", "-v"], 0, f"aws_access_key_id = {FAKE_KEY}", flagging(FAKE_KEY), 0, scanners.NOT_CLEARED, id="not cleared"),
         pytest.param(["workflows"], 3, "a harmless note", 'echo "[]" > "$report"; exit 0', 2, "a harmless note", id="refused cleared"),
-        pytest.param(["workflows"], 3, f"aws_access_key_id = {FAKE_KEY}", flagging(FAKE_KEY), 2, "1 stderr line withheld", id="refused not cleared"),
+        pytest.param(["workflows"], 3, f"aws_access_key_id = {FAKE_KEY}", flagging(FAKE_KEY), 2, scanners.NOT_CLEARED, id="refused not cleared"),
     ],
 )
 def test_a_selected_scanner_vets_its_stderr_without_judging_another_area(
@@ -146,12 +161,25 @@ def test_a_selected_scanner_vets_its_stderr_without_judging_another_area(
     calls = elsewhere / "calls"
     fake_gitleaks(
         served_scanners,
-        on_scan=vetting(f"echo gitleaks stdin >> {calls}; {vet_answer}", f'echo gitleaks git >> {calls}; echo "[]" > "$report"'),
+        on_scan=vetting(f"echo {scanners.GITLEAKS} stdin >> {calls}; {vet_answer}", f'echo {scanners.GITLEAKS} git >> {calls}; echo "[]" > "$report"'),
     )
     fake_scanner(served_scanners, scanners.ACTIONLINT, f"echo '[]'\necho '{stderr_line}' >&2\nexit {exit_of_actionlint}")
     keywords = {"locate_zizmor": fake_zizmor(elsewhere / "zizmor", "echo '[]'")}
     done, out, err = run_check_of(scanned_repo(build_repo), capsys, *words, **keywords)
-    assert (done, rows_of(out), calls_of(calls), shown in out + err, FAKE_KEY in out + err) == (code, ["workflows"], ["gitleaks stdin"], True, False)
+    verbose = "-v" in words
+    block = area_block(out, Area.WORKFLOWS)
+    exits = [line.location for line in block if isinstance(line, NoteLine) and line.row.event is NoteEvent.EXITED]
+    area_row = next(line for line in out.splitlines() if line.split()[1:2] == [Area.WORKFLOWS])
+    placed = under_scanner(block, scanners.ACTIONLINT) if verbose else [area_row]
+    assert (done, rows_of(out), calls_of(calls), exits, any(shown in text for text in placed), shown in err, FAKE_KEY in out + err) == (
+        code,
+        [Area.WORKFLOWS],
+        [f"{scanners.GITLEAKS} stdin"],
+        [scanners.ACTIONLINT, scanners.ZIZMOR] if verbose else [],
+        True,
+        False,
+        False,
+    )
 
 
 @pytest.mark.parametrize(
