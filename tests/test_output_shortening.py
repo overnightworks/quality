@@ -17,9 +17,7 @@ from quality.output import Glyph, Row, SubLine, Verdict
 from quality.report import Command, Example, Finding, FindingEvent, Note, NoteEvent
 from tests.support.check import refusal_pair, refusal_row
 from tests.support.python_lint import OWNER, PRINT
-from tests.support.terminal import Terminal, read_pseudo_terminal, run_on, without_sgr
-
-SGR = r"\x1b\[[0-9;]*m"
+from tests.support.terminal import SGR, Terminal, read_pseudo_terminal, run_on, without_sgr
 
 
 class Event(StrEnum):
@@ -172,7 +170,7 @@ def test_each_row_keeps_what_it_protects():
             "a fix sentence that runs on and on and on and on and past it",
             ["      fix: a fix sentence that runs on and on and on and on and past it"],
         ),
-        (Example("copy these", ("0" * 64,)), ["      fix: copy these:", "        " + "0" * 64]),
+        (Example("copy these lines into the file and run it", ("0" * 64,)), ["      fix: copy these lines into the file and run it:", "        " + "0" * 64]),
     ],
     ids=["a sentence", "lines to copy"],
 )
