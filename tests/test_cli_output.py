@@ -41,7 +41,7 @@ from tests.support.merge import ONE_JOB
 from tests.support.processes import process_is_gone
 from tests.support.scanners import fake_scanner, lacking
 from tests.support.secrets import FAKE_KEY, allow_config
-from tests.support.terminal import Terminal, read_pseudo_terminal
+from tests.support.terminal import Terminal, read_pseudo_terminal, without_sgr
 
 DOOR = [sys.executable, "-m", "quality.cli"]
 STOP_LINE = re.compile(r"::stop-commands::([0-9a-f]{32})")
@@ -511,7 +511,7 @@ def test_the_files_block_lists_every_finding_in_run_order_python_floor_last_then
                "src/s/pyproject.toml": floor, "quality/config.toml": ONE_JOB + allowance}
     repo = build_repo(tracked)
     code, out, _ = frame_run(capsys, repo)
-    files = next(verdict for verdict in check.run_hygiene(repo, cli.INSTALLED_RUFF, cli.INSTALLED_ZIZMOR).areas if verdict.area is Area.FILES)
+    files = next(verdict for verdict in hygiene_run(repo, cli.INSTALLED_RUFF, cli.INSTALLED_ZIZMOR).areas if verdict.area is Area.FILES)
     printed = "\n".join(out)
     start = next(number for number, line in enumerate(out) if line.startswith("  ! files  "))
     end = next(number for number, line in enumerate(out) if number > start and line in headers(out))
@@ -651,7 +651,7 @@ def test_at_a_terminal_a_refusal_from_repository_text_prints_as_escaped_text_bet
     repo = build_repo({"a\x1b[35m\n\u202e.compose.yaml": "services: [\n"})
     stdout, stderr = terminal_streams(monkeypatch)
     code = cli.main(["hygiene", str(repo)], clock=lambda: 0.0, environment={"TERM": "xterm"})
-    stripped = re.sub(r"\x1b\[[0-9;]*m", "", stdout.getvalue() + stderr.getvalue())
+    stripped = without_sgr(stdout.getvalue() + stderr.getvalue())
     assert code == 2
     assert "\x1b[" in stdout.getvalue(), stderr.getvalue()
     assert "a\\x1b[35m\\x0a\\u202e.compose.yaml" in stripped
@@ -678,7 +678,7 @@ def test_the_real_door_paints_the_files_block_only_at_a_terminal_and_prints_the_
     parent, child = pty.openpty() if environment else (None, subprocess.PIPE)
     done = subprocess.run([*DOOR, "hygiene", "."], cwd=repo, env={**base, **(environment or {})}, stdout=child, stderr=subprocess.PIPE, check=False, text=True)
     text = read_pseudo_terminal(parent, child) if environment else done.stdout
-    words = [re.sub(r"\x1b\[[0-9;]*m", "", line) for line in text.replace("\r\n", "\n").splitlines()]
+    words = [without_sgr(line) for line in text.replace("\r\n", "\n").splitlines()]
     assert ("\x1b[" in text) is (environment == {"TERM": "xterm"}), text
     assert [line for line in words if not line.startswith(("!", "✓")) or " · " not in line] == [line for line in piped.stdout.splitlines() if not line.startswith(("!", "✓")) or " · " not in line]
     assert (piped.stderr, done.stderr) == ("", "")
@@ -725,7 +725,7 @@ def test_the_real_door_prints_every_config_example_line_whole_in_each_stderr_for
         text = read_pseudo_terminal(parent, child)
     else:
         text = done.stderr
-    stripped = re.sub(r"\x1b\[[0-9;]*m", "", text)
+    stripped = without_sgr(text)
     example = [f"    {line}" for line in config.GENERATED_FILE_EXAMPLE]
     expected = [f"error: {cli.refusal_error(hygiene_run(repo).areas)}", f"next: {check.CONFIG_EXAMPLE_LABEL}:", *example]
     assert done.returncode == 2

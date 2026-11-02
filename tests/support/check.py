@@ -413,7 +413,7 @@ def refusal_row(area: str) -> str:
 
 def hygiene_run(repo: Path, locate_ruff: Callable[[], str] = installed_ruff, locate_zizmor: Callable[[], str] | None = None) -> check.HygieneResult:
     """What the rule runner judged over `repo`, before the door prints it."""
-    return check.run_hygiene(repo, locate_ruff, locate_zizmor or cli.INSTALLED_ZIZMOR)
+    return check.run_hygiene(repo, locate_ruff, locate_zizmor or cli.INSTALLED_ZIZMOR, lambda _verdict, _tracked_paths: None)
 
 
 def refusal_pair(repo: Path) -> str:

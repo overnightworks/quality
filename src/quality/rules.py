@@ -39,7 +39,7 @@ RELEASE_0_7 = "v0.7.0"
 
 
 class Area(StrEnum):
-    """What a run reports on, in the order its rows stand; every rule belongs to one."""
+    """What a run judges and reports on, in the order its areas run and its rows stand; every rule belongs to one."""
 
     FILES = "files"
     DEBT = "debt"
@@ -51,7 +51,7 @@ class Area(StrEnum):
 
 
 class Rule(StrEnum):
-    """Every rule quality judges, in run order, with its release facts."""
+    """Every rule quality judges, with its release facts, in its area's order."""
 
     area: Area
     release: RuleRelease

@@ -289,8 +289,19 @@ def _verdict_parts(verdict: Verdict) -> tuple[Glyph, list[str]]:
 
 
 def _print_lines(lines: list[str], channel: Channel) -> None:
-    for line in lines:
-        print(line, file=channel.stream)
+    try:
+        for line in lines:
+            print(line, file=channel.stream)
+    except BrokenPipeError:
+        # A closed stderr's channel prints to stdout, as `print(file=None)` does.
+        _discard_further_writes(sys.stdout if channel.stream is None else channel.stream)
+
+
+def _discard_further_writes(stream: TextIO) -> None:
+    """The reader of `stream` left: its descriptor now leads to the null device, so the rest of the run's lines and the
+    flush at exit succeed and the run ends with its own exit."""
+    with open(os.devnull, "wb") as null_device:
+        os.dup2(null_device.fileno(), stream.fileno())
 
 
 def write_rows(rows: tuple[Row, ...], channel: Channel) -> None:
