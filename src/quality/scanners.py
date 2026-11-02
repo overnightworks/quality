@@ -411,7 +411,7 @@ WORKFLOW_SCANNERS = {
         name=ZIZMOR, finding_exits=ZIZMOR_FINDINGS, read_finding=zizmor_finding,
         arguments=(
             "--config", str(ZIZMOR_CONFIG), "--no-ignores",
-            "--format", "json", "--offline", "--strict-collection", "--no-progress",
+            "--format", "json", "--offline", "--strict-collection", "--no-progress", "--",
         ),
     ),
 }

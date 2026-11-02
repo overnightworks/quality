@@ -12,6 +12,7 @@ from quality.report import CannotJudge, Command, Instruction, Step, shell_word
 
 WORKFLOW_DIRECTORY = PurePosixPath(".github/workflows")
 YAML_SUFFIXES = frozenset({".yml", ".yaml"})
+ACTION_FILES = frozenset({"action.yml", "action.yaml"})
 INDEX_MODE = re.compile(r"[0-7]{6}")
 # git's sentence when the search up from the path finds no repository, read in the C locale; a git that words it
 # differently leaves the refusal general, which stays true.
@@ -108,3 +109,7 @@ def read_existing[T](read: Callable[[Path, str], T | None], root: Path, names: S
 
 def is_workflow(path: PurePosixPath) -> bool:
     return path.parent == WORKFLOW_DIRECTORY and path.suffix in YAML_SUFFIXES
+
+
+def is_action(path: PurePosixPath) -> bool:
+    return path.name in ACTION_FILES

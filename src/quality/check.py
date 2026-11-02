@@ -113,8 +113,11 @@ def check_workflows(
     root: Path, rule: Rule, tracked: list[str], locate_zizmor: Callable[[], str], log: scanners.ScannerLog
 ) -> RuleResult:
     workflows = checkout.on_disk(root, [name for name in tracked if checkout.is_workflow(PurePosixPath(name))])
+    judged = workflows
+    if rule is Rule.WORKFLOW_SECURITY:
+        judged = [*workflows, *checkout.on_disk(root, [name for name in tracked if checkout.is_action(PurePosixPath(name))])]
     try:
-        return RuleResult(scanners.scan_workflows(root, rule, workflows, locate_zizmor, log), len(workflows), False)
+        return RuleResult(scanners.scan_workflows(root, rule, judged, locate_zizmor, log), len(workflows), False)
     except process.ProcessError as error:
         raise CannotJudge(str(error)) from error
 

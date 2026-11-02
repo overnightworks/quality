@@ -1,13 +1,14 @@
 # The one actionlint configuration, owned by the tool: an adopter's .github/actionlint.yaml never reaches it.
 # Two runner labels: actionlint's table of GitHub's hosted labels stops at 24.04 (rhysd/actionlint#682, open), so these stand
 # under `self-hosted-runner`, the one key where actionlint takes more labels. Remove them when actionlint knows them.
-# The one ignore matches only actionlint's false error for GitHub's `uses: $/…` form of a workflow
-# in the same repository (rhysd/actionlint#711, open); zizmor's self-repository audit asks for exactly that form.
-# Remove it when actionlint understands `$/`.
+# The two ignores match only actionlint's false errors for GitHub's `uses: $/…` form in the same repository:
+# a reusable workflow call and a step's action (rhysd/actionlint#711, open); zizmor's self-repository audit asks for
+# exactly that form. Remove both when actionlint understands `$/`.
 paths:
   "**/*.{yml,yaml}":
     ignore:
       - 'reusable workflow call "\$/[^"]*" at "uses" is not following the format'
+      - 'specifying action "\$/[^"]*" in invalid format because ref is missing'
 self-hosted-runner:
   labels:
     - ubuntu-26.04
