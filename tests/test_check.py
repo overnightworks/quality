@@ -15,6 +15,7 @@ from tests.support.check import (
     area_finding_rows,
     compose,
     env_row_stands,
+    hygiene_run,
     installed_ruff,
     is_clean,
     loosen_requirement,
@@ -185,8 +186,8 @@ def test_a_finding_under_a_rule_its_check_does_not_judge_fails_loud(build_repo, 
 
 
 def test_a_refusing_workflow_scanner_stops_no_other_workflow_rule(build_repo, served_scanners, elsewhere, capsys):
-    """#55 rule 1: actionlint cannot judge, yet zizmor still runs and its finding prints under its own rule; stderr holds the
-    refusal pair alone, its counts the scenario's one refused area and one finding in it."""
+    """When actionlint cannot judge, zizmor still runs and its finding prints under its own rule; stderr holds the refusal
+    pair alone, its counts the scenario's one refused area and one finding in it."""
     zizmor_report = Path(__file__).parent / "fixtures" / "scanner-outputs" / "zizmor-finding.json"
     fake_scanner(served_scanners, scanners.ACTIONLINT, "echo boom >&2; exit 3")
     locate_zizmor = fake_zizmor(elsewhere, on_scan=f"cat '{zizmor_report}'; exit 12")
@@ -198,8 +199,10 @@ def test_a_refusing_workflow_scanner_stops_no_other_workflow_rule(build_repo, se
     assert [(location, row.event) for location, row in area_finding_rows(captured.out, Area.WORKFLOWS)] == [
         (".github/workflows/w.yml:7", FindingEvent.INSECURE)
     ]
+    areas = hygiene_run(repo, locate_zizmor=locate_zizmor).areas
     error, next_line = captured.err.splitlines()
-    assert ([int(number) for number in re.findall(r"\d+", error)], error.startswith("error:"), next_line) == ([1, len(Area), 1, 1], True, f"next: {cli.REFUSED_AREAS_NEXT.text}")
+    assert (error, next_line) == (f"error: {cli.refusal_error(areas)}", f"next: {cli.REFUSED_AREAS_NEXT.text}")
+    assert [int(number) for number in re.findall(r"\d+", error)] == [1, len(Area), 1, 1]
 
 
 @pytest.mark.parametrize(
