@@ -6,15 +6,20 @@ import subprocess
 import zipfile
 from pathlib import Path
 
-from quality import scanners
+from quality import advisories, scanners
 
 OSV = scanners.OSV_SCANNER
 ADVISORY_ID = "GHSA-aaaa-bbbb-cccc"
 UV_LOCK_ALLOWANCE = {"identifier": ADVISORY_ID, "lock": "uv.lock", "item": "#116", "reason": "fixture"}
-AFFECTED_LINE = f"osv-scanner {ADVISORY_ID} (CVE-2020-1): PyPI pyyaml 5.3.1 is affected."
-UPGRADE_LINE = "Fix: upgrade pyyaml to >= 5.4 (uv lock --upgrade-package pyyaml)"
-VULNERABLE = (("pyyaml", "5.3.1"),)
+ADVISORY_LINK = f"{advisories.OSV_URL}{ADVISORY_ID}"
+PACKAGE_NAME = "pyyaml"
+VULNERABLE = ((PACKAGE_NAME, "5.3.1"),)
 SAFE = (("pyyaml", "6.0.2"),)
+
+
+def upgrade_fix(lock: str = "uv.lock", package: str = PACKAGE_NAME) -> str:
+    """The hint of `lock`'s kind for `package`, which is the fix of a lock at the repository root."""
+    return advisories.lock_kind(lock).upgrade_hint.format(package=package)
 
 
 def uv_lock(packages=VULNERABLE) -> str:

@@ -8,14 +8,16 @@ import urllib.request
 import pytest
 
 from quality import advisories, cli, process, scanners
-from quality.config import AdvisoryAllowance
-from quality.report import headline
+from quality.config import CONFIG_PATH, AdvisoryAllowance
+from quality.output import SEPARATOR
+from quality.report import FindingEvent
+from quality.rules import Area
 from tests.support.advisories import (
     ADVISORY_ID,
-    AFFECTED_LINE,
+    ADVISORY_LINK,
     OSV,
+    PACKAGE_NAME,
     SAFE,
-    UPGRADE_LINE,
     UV_LOCK_ALLOWANCE,
     VIRTUAL_ROOT_ONLY,
     advisory,
@@ -25,10 +27,17 @@ from tests.support.advisories import (
     package_of,
     reporting,
     tracked_lock_repo,
+    upgrade_fix,
     uv_lock,
     zipped,
 )
-from tests.support.check import CLEAN_VERDICT, assert_every_line_starts_with_the_door, is_clean, refused
+from tests.support.check import (
+    CLEAN_VERDICT,
+    area_finding_rows,
+    assert_every_line_starts_with_the_door,
+    is_clean,
+    refused,
+)
 from tests.support.scanners import OUTPUTS, fake_scanner, lacking
 
 # ---- the real osv-scanner against a fake file:// database (CI runs these; they download the binary) ----
@@ -39,25 +48,30 @@ def test_an_affected_lock_is_red_and_names_the_advisory_and_the_fix(build_repo, 
     publish_database()
     code, output = run_gate(tracked_lock_repo(build_repo))
     assert code == 1, output
-    assert f"advisory uv.lock - {AFFECTED_LINE}\n  {UPGRADE_LINE}" in output
+    ((location, row),) = area_finding_rows(output, Area.DEPENDENCIES)
+    assert (location, row.event, row.fix, (PACKAGE_NAME in row.fact, ADVISORY_ID in row.fact)) == ("uv.lock", FindingEvent.AFFECTED, upgrade_fix(), (True, True))
 
 
 @pytest.mark.scanner
 @pytest.mark.parametrize(
-    ("records", "expected"),
+    ("records", "in_fact", "fix_is"),
     [
-        ([advisory(fixed=("5.4", "6.0"))], "Fix: upgrade pyyaml to a fixed version: 5.4, 6.0"),
-        ([advisory(fixed=())], f"Fix: osv lists no fixed version: remove or replace pyyaml; see https://osv.dev/vulnerability/{ADVISORY_ID}"),
-        ([advisory(also_affected=[{"package": {"name": "x", "ecosystem": "Zorkland"}, "ranges": [{"type": "ECOSYSTEM", "events": [{"introduced": "0"}, {"fixed": "1"}]}]}])], UPGRADE_LINE),
+        ([advisory(fixed=("5.4", "6.0"))], ("5.4", "6.0"), lambda fix: fix == upgrade_fix()),
+        ([advisory(fixed=())], (advisories.NO_FIXED_VERSION,), lambda fix: PACKAGE_NAME in fix and fix.endswith(ADVISORY_LINK)),
+        (
+            [advisory(also_affected=[{"package": {"name": "x", "ecosystem": "Zorkland"}, "ranges": [{"type": "ECOSYSTEM", "events": [{"introduced": "0"}, {"fixed": "1"}]}]}])],
+            ("5.4",), lambda fix: fix == upgrade_fix(),
+        ),
     ],
     ids=["rule 2 several fixed versions", "cell 5 no fixed event", "cell 26 an unknown ecosystem beside PyPI"],
 )
-def test_the_fix_follows_what_osv_lists(build_repo, publish_database, installed_scanners, run_gate, records, expected):
-    """#53 rule 2, cells 5 and 26: the fix line is built from the affected entries osv lists for the package."""
+def test_the_fix_follows_what_osv_lists(build_repo, publish_database, installed_scanners, run_gate, records, in_fact, fix_is):
+    """#53 rule 2, cells 5 and 26: the row and its fix are built from the affected entries osv lists for the package."""
     publish_database(records)
     code, output = run_gate(tracked_lock_repo(build_repo))
     assert code == 1, output
-    assert expected in output
+    ((_, row),) = area_finding_rows(output, Area.DEPENDENCIES)
+    assert (all(word in row.fact for word in in_fact), fix_is(row.fix)) == (True, True), output
 
 
 def test_a_record_naming_a_pypi_package_in_other_spelling_still_supplies_the_fix(
@@ -72,7 +86,7 @@ def test_a_record_naming_a_pypi_package_in_other_spelling_still_supplies_the_fix
     fake_scanner(served_scanners, OSV, reporting(report, 1))
     code, output = run_gate(tracked_lock_repo(build_repo))
     assert code == 1, output
-    assert UPGRADE_LINE in output
+    assert [row.fix for _, row in area_finding_rows(output, Area.DEPENDENCIES)] == [upgrade_fix()]
 
 
 @pytest.mark.scanner
@@ -82,7 +96,8 @@ def test_two_advisories_that_alias_each_other_are_one_finding(build_repo, publis
     code, output = run_gate(tracked_lock_repo(build_repo))
     assert code == 1
     assert "! 1 finding in 1 area" in output
-    assert "GHSA-aaaa-bbbb-cccc (PYSEC-1)" in output or "PYSEC-1 (GHSA-aaaa-bbbb-cccc)" in output
+    ((_, row),) = area_finding_rows(output, Area.DEPENDENCIES)
+    assert sum(identifier in row.fact for identifier in ("GHSA-aaaa-bbbb-cccc", "PYSEC-1")) == 1
 
 
 @pytest.mark.scanner
@@ -97,10 +112,10 @@ def test_every_tracked_lock_is_judged_with_its_relative_name(build_repo, publish
     publish_database()
     code, output = run_gate(repo)
     assert code == 1
-    for name in ("uv.lock", "speech/uv.lock", "a:b/uv.lock", "-dash/uv.lock"):
-        assert f"advisory {name} - " in output
+    rows = dict(area_finding_rows(output, Area.DEPENDENCIES))
+    assert sorted(rows) == sorted(("uv.lock", "speech/uv.lock", "a:b/uv.lock", "-dash/uv.lock"))
     assert "extra/uv.lock" not in output
-    assert "(in speech/: uv lock --upgrade-package pyyaml)" in output
+    assert (rows["speech/uv.lock"].fix.endswith(upgrade_fix()), "speech" in rows["speech/uv.lock"].fix) == (True, True)
 
 
 @pytest.mark.scanner
@@ -120,7 +135,7 @@ def test_a_repository_osv_scanner_config_changes_nothing(
     repo = build_repo({name: text, "osv-scanner.toml": repository_config})
     code, output = run_gate(repo)
     assert code == 1
-    assert f"advisory {name} - " in output
+    assert [location for location, _ in area_finding_rows(output, Area.DEPENDENCIES)] == [name]
 
 
 @pytest.mark.scanner
@@ -370,8 +385,7 @@ def test_two_tracked_names_for_one_lock_are_each_judged(build_repo, served_scann
     fake_scanner(served_scanners, OSV, reporting(OUTPUTS / "osv-scanner-finding.json", 1))
     code, output = run_gate(linked_lock_repo(build_repo))
     assert code == 1, output
-    assert "advisory uv.lock - " in output
-    assert "advisory speech/uv.lock - " in output
+    assert sorted(location for location, _ in area_finding_rows(output, Area.DEPENDENCIES)) == ["speech/uv.lock", "uv.lock"]
 
 
 @pytest.mark.scanner
@@ -380,8 +394,7 @@ def test_two_tracked_names_for_one_lock_are_each_judged_by_the_real_osv(build_re
     publish_database()
     code, output = run_gate(linked_lock_repo(build_repo))
     assert code == 1, output
-    assert "advisory uv.lock - " in output
-    assert "advisory speech/uv.lock - " in output
+    assert sorted(location for location, _ in area_finding_rows(output, Area.DEPENDENCIES)) == ["speech/uv.lock", "uv.lock"]
 
 
 def test_an_osv_binary_at_the_wrong_version_names_both_versions(build_repo, served_scanners, capsys, publish_database):
@@ -485,7 +498,7 @@ def test_a_package_osv_cannot_match_to_the_advisory_gets_only_the_advisory_link(
     fake_scanner(served_scanners, OSV, reporting(report, 1))
     code, output = run_gate(tracked_lock_repo(build_repo))
     assert code == 1
-    assert f"Fix: see https://osv.dev/vulnerability/{ADVISORY_ID}" in output
+    assert [row.fix for _, row in area_finding_rows(output, Area.DEPENDENCIES)] == [f"see {ADVISORY_LINK}"]
 
 
 def test_a_hanging_osv_is_cannot_judge_within_its_time_limit(
@@ -515,7 +528,7 @@ PILLOW = "GHSA-462x-pgg6-55fp (CVE-2026-112395): PyPI pillow 12.3.0"
 
 
 def affected(lock=QWEN, subject=PILLOW, ids=("GHSA-462x-pgg6-55fp", "CVE-2026-112395")) -> advisories.Affected:
-    return advisories.Affected(lock, subject, frozenset(ids), "upgrade pillow")
+    return advisories.Affected(lock, subject, frozenset(ids), SEPARATOR.join(("pillow 12.3.0", ids[0])), "upgrade pillow")
 
 
 def allowing(identifier="GHSA-462x-pgg6-55fp", lock=QWEN, until=TODAY) -> AdvisoryAllowance:
@@ -526,12 +539,12 @@ def allowed_line(lock=QWEN, subject=PILLOW, until=TODAY) -> str:
     return f"  allowed {lock} {subject} until {until.isoformat()} (#371) - no image input"
 
 
-def red(lock=QWEN, subject=PILLOW) -> str:
-    return f"advisory {lock} - osv-scanner {subject} is affected."
+def red(lock=QWEN, *words) -> tuple[str, FindingEvent, tuple[str, ...]]:
+    return lock, FindingEvent.AFFECTED, words
 
 
-def orphaned(identifier="GHSA-462x-pgg6-55fp", lock=QWEN) -> str:
-    return f"advisory quality/config.toml - the allowance for {identifier} in {lock} matches no advisory."
+def orphaned(identifier="GHSA-462x-pgg6-55fp", lock=QWEN) -> tuple[str, FindingEvent, tuple[str, ...]]:
+    return CONFIG_PATH, FindingEvent.UNUSED, (identifier, lock)
 
 
 YESTERDAY = TODAY - datetime.timedelta(days=1)
@@ -547,7 +560,7 @@ TORCH = "GHSA-462x-pgg6-55fp (CVE-2026-112395): PyPI torch 2.6.0"
          [allowed_line(until=TODAY + datetime.timedelta(days=90))]),
         ([affected()], [allowing()], [], [allowed_line()]),
         ([affected()], [allowing(until=YESTERDAY)],
-         [f"advisory {QWEN} - osv-scanner {PILLOW} is affected; its allowance ran out on 2027-01-30 (#371)."], []),
+         [red(QWEN, "2027-01-30", "#371")], []),
         ([affected()], [allowing("CVE-2026-112395")], [], [allowed_line()]),
         ([affected(), affected(VOXCPM)], [allowing()], [red(VOXCPM)], [allowed_line()]),
         ([affected()], [allowing(lock=VOXCPM)], [red(), orphaned(lock=VOXCPM)], []),
@@ -555,10 +568,7 @@ TORCH = "GHSA-462x-pgg6-55fp (CVE-2026-112395): PyPI torch 2.6.0"
         ([affected(), affected(LINKED)], [allowing()], [red(LINKED)], [allowed_line()]),
         ([affected(), affected(subject=TORCH)], [allowing()], [], [allowed_line(), allowed_line(subject=TORCH)]),
         ([affected(), affected(subject=TORCH)], [allowing(), allowing("CVE-2026-112395")],
-         [red(), red(subject=TORCH), (
-             f"advisory quality/config.toml - the allowances for GHSA-462x-pgg6-55fp and CVE-2026-112395 in {QWEN} "
-             "match one advisory group, so neither allows it."
-         )], []),
+         [red(), red(), (CONFIG_PATH, FindingEvent.CONFLICT, ("GHSA-462x-pgg6-55fp", "CVE-2026-112395", QWEN))], []),
         ([affected()], [], [red()], []),
     ],
     ids=[
@@ -573,7 +583,9 @@ def test_an_allowance_allows_its_advisory_in_its_lock_until_its_date(groups, all
     (inclusive), then it is red with its date and item; one matching nothing is red, and two on one group allow it
     for neither."""
     judged = advisories.apply_allowances(groups, allowances, TODAY)
-    assert ([headline(finding) for finding in judged.findings], list(judged.allowed)) == (findings, allowed)
+    assert ([(finding.location, finding.event) for finding in judged.findings], list(judged.allowed)) == ([found[:2] for found in findings], allowed)
+    for finding, (_, _, words) in zip(judged.findings, findings, strict=True):
+        assert all(word in finding.reason for word in words)
 
 
 @pytest.mark.parametrize(
@@ -582,20 +594,17 @@ def test_an_allowance_allows_its_advisory_in_its_lock_until_its_date(groups, all
         ("2999-12-31", lambda report: None, 0,
          ["advisory: 1 allowed",
           f"  allowed uv.lock {ADVISORY_ID} (CVE-2020-1): PyPI pyyaml 5.3.1 until 2999-12-31 (#116) - fixture"]),
-        ("2000-01-01", lambda report: None, 1,
-         [(f"advisory uv.lock - osv-scanner {ADVISORY_ID} (CVE-2020-1): PyPI pyyaml 5.3.1 is affected; its allowance "
-           "ran out on 2000-01-01 (#116)."), f"  {UPGRADE_LINE}"]),
         ("2999-12-31", drop_fixed_versions, 0,
          ["advisory: 1 allowed",
           f"  allowed uv.lock {ADVISORY_ID} (CVE-2020-1): PyPI pyyaml 5.3.1 until 2999-12-31 (#116) - fixture"]),
     ],
-    ids=["cell 1 allowed until 2999", "cell 3 ran out in 2000", "cell 11 no fixed version"],
+    ids=["cell 1 allowed until 2999", "cell 11 no fixed version"],
 )
 def test_hygiene_prints_each_allowed_advisory_before_the_verdict(
     build_repo, served_scanners, run_gate, publish_database, edited_report, until, edit, code, expected
 ):
     """#116 R3, E4, E10, E11: through hygiene, an allowed advisory is printed with its date, item and reason
-    and leaves the rule clean; once its date has passed it is red with the date and item."""
+    and leaves the rule clean."""
     publish_database()
     report = edited_report("osv-scanner-finding.json", edit)
     repo = build_repo({"uv.lock": uv_lock(), "quality/config.toml": allowance_config(**UV_LOCK_ALLOWANCE, until=datetime.date.fromisoformat(until))})
@@ -605,6 +614,17 @@ def test_hygiene_prints_each_allowed_advisory_before_the_verdict(
     assert code_seen == code, output
     assert lines[lines.index(expected[0]):][:len(expected)] == expected, output
     assert is_clean(lines[-1]) == (code == 0), output
+
+
+def test_hygiene_prints_an_allowance_that_ran_out_as_an_affected_row(build_repo, served_scanners, run_gate, publish_database):
+    """#116 R3, E4: once the date has passed the advisory is red with the date and item, in the upgrade's row."""
+    publish_database()
+    config = allowance_config(**UV_LOCK_ALLOWANCE, until=datetime.date(2000, 1, 1))
+    fake_scanner(served_scanners, OSV, reporting(OUTPUTS / "osv-scanner-finding.json", 1))
+    code, output = run_gate(build_repo({"uv.lock": uv_lock(), "quality/config.toml": config}))
+    ((location, row),) = area_finding_rows(output, Area.DEPENDENCIES)
+    assert (code, location, row.event, row.fix) == (1, "uv.lock", FindingEvent.AFFECTED, upgrade_fix()), output
+    assert all(word in row.fact for word in ("2000-01-01", UV_LOCK_ALLOWANCE["item"]))
 
 
 def test_hygiene_escapes_the_allowance_in_its_allowed_line(
@@ -634,4 +654,5 @@ def test_an_allowance_without_a_tracked_lock_is_red_with_no_osv_scanner_and_no_d
     monkeypatch.setattr(advisories, "DATABASE_ROOT", "file:///no/such/root")
     repo = build_repo({"README.md": "x\n", "quality/config.toml": allowance_config(**UV_LOCK_ALLOWANCE, until=datetime.date(2999, 12, 31))})
     assert cli.main(["hygiene", str(repo)]) == 1
-    assert f"advisory quality/config.toml - the allowance for {ADVISORY_ID} in uv.lock matches no advisory." in capsys.readouterr().out
+    ((location, row),) = area_finding_rows(capsys.readouterr().out, Area.DEPENDENCIES)
+    assert (location, row.event, ADVISORY_ID in row.fact, "uv.lock" in row.fact) == (CONFIG_PATH, FindingEvent.UNUSED, True, True)

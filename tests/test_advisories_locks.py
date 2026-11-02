@@ -11,9 +11,13 @@ import pytest
 import yaml
 
 from quality import advisories
+from quality.config import CONFIG_PATH
+from quality.report import FindingEvent
+from quality.rules import Area
 from quality.scanners import ScannerError
 from tests.support.advisories import (
     ADVISORY_ID,
+    ADVISORY_LINK,
     OSV,
     SAFE,
     UV_LOCK_ALLOWANCE,
@@ -21,13 +25,13 @@ from tests.support.advisories import (
     allowance_config,
     npm_report,
     reporting,
+    upgrade_fix,
     uv_lock,
 )
+from tests.support.check import area_finding_rows
 from tests.support.scanners import OUTPUTS, fake_scanner
 
 LODASH = "GHSA-npm1-aaaa-bbbb"
-NPM_AFFECTED_LINE = f"osv-scanner {LODASH} (CVE-2020-2): npm lodash 4.17.15 is affected."
-PNPM_FIX = "upgrade it, or its parent when it is transitive, or set a pnpm override in package.json"
 LODASH_ADVISORY = advisory(LODASH, fixed=("4.17.21",), aliases=("CVE-2020-2",), package="lodash", ecosystem="npm")
 FRONTEND_LOCK = "src/frontend/pnpm-lock.yaml"
 
@@ -52,7 +56,9 @@ def test_a_pnpm_lock_is_judged_with_its_development_packages_and_names_the_folde
     publish_database([LODASH_ADVISORY], ecosystem="npm")
     code, output = run_gate(build_repo({FRONTEND_LOCK: pnpm_lock()}))
     assert code == 1, output
-    assert f"advisory {FRONTEND_LOCK} - {NPM_AFFECTED_LINE}\n  Fix: upgrade lodash to >= 4.17.21 (in src/frontend/: {PNPM_FIX})" in output
+    ((location, row),) = area_finding_rows(output, Area.DEPENDENCIES)
+    assert (location, row.event, row.fix.endswith(upgrade_fix(FRONTEND_LOCK)), "src/frontend" in row.fix) == (FRONTEND_LOCK, FindingEvent.AFFECTED, True, True)
+    assert all(word in row.fact for word in ("lodash", "4.17.15", LODASH, "4.17.21")), output
 
 
 @pytest.mark.scanner
@@ -65,8 +71,8 @@ def test_two_vulnerable_versions_of_one_package_in_a_pnpm_lock_are_two_findings(
     code, output = run_gate(build_repo({FRONTEND_LOCK: lock}))
     assert code == 1, output
     assert "! 2 findings in 1 area" in output
-    assert "npm lodash 4.17.15 is affected." in output
-    assert "npm lodash 4.17.19 is affected." in output
+    assert ["4.17.15" in row.fact for _, row in area_finding_rows(output, Area.DEPENDENCIES)] == [True, False]
+    assert ["4.17.19" in row.fact for _, row in area_finding_rows(output, Area.DEPENDENCIES)] == [False, True]
 
 
 @pytest.mark.scanner
@@ -75,8 +81,8 @@ def test_several_fixed_versions_keep_the_guidance_of_the_pnpm_lock(build_repo, p
     publish_database([advisory(LODASH, fixed=("4.17.21", "5.0.0"), package="lodash", ecosystem="npm")], ecosystem="npm")
     code, output = run_gate(build_repo({FRONTEND_LOCK: pnpm_lock()}))
     assert code == 1, output
-    assert "to a fixed version: " in output
-    assert PNPM_FIX in output
+    ((_, row),) = area_finding_rows(output, Area.DEPENDENCIES)
+    assert (row.fix.endswith(upgrade_fix(FRONTEND_LOCK)), "4.17.21" in row.fact, "5.0.0" in row.fact) == (True, True, True)
 
 
 HASH = "--hash=sha256:" + "ab" * 32
@@ -104,9 +110,10 @@ def test_a_requirements_file_shaped_like_agent_runtimes_is_judged_26_of_26(
     publish_database([advisory(fixed=("0.21.0",), aliases=(), package=WEBAUTH)])
     code, output = run_gate(repo)
     assert code == 1, output
-    assert f"advisory tests/keycloak/requirements.txt - osv-scanner {ADVISORY_ID}: PyPI {WEBAUTH} 0.20.1 is affected." in output
+    ((location, row),) = area_finding_rows(output, Area.DEPENDENCIES)
+    assert (location, row.event, row.fix.endswith(upgrade_fix("tests/keycloak/requirements.txt"))) == ("tests/keycloak/requirements.txt", FindingEvent.AFFECTED, True)
+    assert all(word in row.fact for word in (WEBAUTH, "0.20.1", ADVISORY_ID))
     assert "package-" not in output
-    assert "raise its pin, and compile the file again when it is generated" in output
 
 
 @pytest.mark.scanner
@@ -115,7 +122,7 @@ def test_every_tracked_requirements_file_is_judged_against_pypi(build_repo, publ
     """#176 C2."""
     publish_database()
     code, output = run_gate(build_repo({name: "pyyaml==5.3.1\n"}))
-    assert (code, f"advisory {name} - osv-scanner {ADVISORY_ID}" in output) == (1, True), output
+    assert (code, [(location, ADVISORY_ID in row.fact) for location, row in area_finding_rows(output, Area.DEPENDENCIES)]) == (1, [(name, True)]), output
 
 
 @pytest.mark.scanner
@@ -194,7 +201,7 @@ def test_nothing_a_repository_writes_silences_an_npm_advisory(build_repo, publis
     publish_database([LODASH_ADVISORY], ecosystem="npm")
     code, output = run_gate(build_repo({FRONTEND_LOCK: pnpm_lock(), **files}))
     assert code == 1, output
-    assert f"advisory {FRONTEND_LOCK} - " in output
+    assert [location for location, _ in area_finding_rows(output, Area.DEPENDENCIES)] == [FRONTEND_LOCK]
 
 
 @pytest.mark.scanner
@@ -217,8 +224,9 @@ def test_a_package_listed_as_malicious_is_red_and_the_fix_is_to_remove_or_replac
     publish_database([malicious], ecosystem="npm")
     code, output = run_gate(build_repo({FRONTEND_LOCK: pnpm_lock([("evil-package", "1.0.0")])}))
     assert code == 1, output
-    assert "MAL-2026-1: npm evil-package 1.0.0 is affected." in output
-    assert "osv lists no fixed version: remove or replace evil-package" in output
+    ((_, row),) = area_finding_rows(output, Area.DEPENDENCIES)
+    assert all(word in row.fact for word in ("MAL-2026-1", "evil-package", "1.0.0")) and row.fact.endswith(advisories.NO_FIXED_VERSION)
+    assert "evil-package" in row.fix and row.fix.endswith(f"{advisories.OSV_URL}MAL-2026-1")
 
 
 @pytest.fixture
@@ -262,9 +270,10 @@ def test_a_repository_with_both_kinds_downloads_each_database_once_and_judges_bo
     repo = build_repo({FRONTEND_LOCK: pnpm_lock(), "src/admin/pnpm-lock.yaml": pnpm_lock(), "uv.lock": uv_lock(), "tests/requirements.txt": "pyyaml==5.3.1\n"})
     code, output = run_gate(repo)
     assert code == 1, output
-    assert "advisory tests/requirements.txt - " in output
     assert sorted(served_databases.requested) == ["/PyPI/all.zip", "/npm/all.zip"]
-    assert (FRONTEND_LOCK in output, "src/admin/pnpm-lock.yaml" in output, "advisory uv.lock - " in output) == (True, True, True)
+    assert sorted(location for location, _ in area_finding_rows(output, Area.DEPENDENCIES)) == sorted(
+        (FRONTEND_LOCK, "src/admin/pnpm-lock.yaml", "uv.lock", "tests/requirements.txt")
+    )
 
 
 def test_one_deadline_spans_every_database_download(build_repo, publish_database, served_databases):
@@ -306,7 +315,7 @@ def test_without_a_pnpm_lock_the_npm_database_is_not_downloaded(build_repo, serv
 
 @pytest.mark.parametrize(
     ("affected_name", "expected"),
-    [("lodash.merge", "Fix: upgrade lodash.merge to >= 5.4"), ("lodash-merge", f"Fix: see https://osv.dev/vulnerability/{ADVISORY_ID}")],
+    [("lodash.merge", upgrade_fix(FRONTEND_LOCK, "lodash.merge")), ("lodash-merge", f"see {ADVISORY_LINK}")],
     ids=["the same name", "Python's name rule is not npm's"],
 )
 def test_npm_names_match_exactly_as_written(
@@ -318,7 +327,7 @@ def test_npm_names_match_exactly_as_written(
     fake_scanner(served_scanners, OSV, reporting(report, 1))
     code, output = run_gate(build_repo({FRONTEND_LOCK: pnpm_lock()}))
     assert code == 1, output
-    assert expected in output
+    assert [row.fix for _, row in area_finding_rows(output, Area.DEPENDENCIES)] == [expected]
 
 
 PNPM_ALLOWANCE = UV_LOCK_ALLOWANCE | {"lock": FRONTEND_LOCK}
@@ -339,7 +348,8 @@ def test_an_allowance_in_a_pnpm_lock_allows_its_advisory_until_its_date(
     assert f"  allowed {FRONTEND_LOCK} {ADVISORY_ID} (CVE-2020-1): npm lodash 4.6.0 until 2999-12-31 (#116) - fixture" in output
     fake_scanner(served_scanners, OSV, reporting(OUTPUTS / "osv-scanner-clean.json", 0))
     code, output = run_gate(repo)
-    assert (code, f"advisory quality/config.toml - the allowance for {ADVISORY_ID} in {FRONTEND_LOCK} matches no advisory." in output) == (1, True), output
+    ((location, row),) = area_finding_rows(output, Area.DEPENDENCIES)
+    assert (code, location, row.event, ADVISORY_ID in row.fact, FRONTEND_LOCK in row.fact) == (1, CONFIG_PATH, FindingEvent.UNUSED, True, True), output
 
 
 SETUP_AND_OTHER_RULES_MINUTES = 10

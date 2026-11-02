@@ -29,6 +29,7 @@ OSV_FINDINGS_FOUND = 1
 RANGE_TYPES_WITH_VERSIONS = ("ECOSYSTEM", "SEMVER")  # a GIT range's `fixed` is a commit, not a version
 DOWNLOAD_FAILURES = (OSError, ValueError, http.client.HTTPException)
 OSV_URL = "https://osv.dev/vulnerability/"
+NO_FIXED_VERSION = "no fixed version listed"  # what osv lists, not a claim that no fix exists
 
 
 @dataclass(frozen=True)
@@ -58,6 +59,7 @@ class Affected:
     lock: str
     subject: str
     ids: frozenset[str]
+    fact: str
     fix: str
 
     def finding(self, note: str = "") -> Finding:
@@ -377,7 +379,7 @@ def _package_findings(lock: str, package: dict) -> list[Affected]:
         records_of_group = [records[identifier] for identifier in [named, *others] if identifier in records]
         listed = f" ({', '.join(aliases)})" if aliases else ""
         groups.append(Affected(
-            lock, f"{named}{listed}: {ecosystem} {name} {version}", frozenset({named, *aliases}),
+            lock, f"{named}{listed}: {ecosystem} {name} {version}", frozenset({named, *aliases}), "",
             _fix(lock, name, named, ecosystem, records_of_group),
         ))
     return groups
