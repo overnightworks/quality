@@ -15,7 +15,8 @@ from pathlib import Path
 from packaging.version import Version
 
 from quality import layout, process, ratchet, repository, scanners
-from quality.report import Finding, FindingEvent
+from quality.output import SEPARATOR
+from quality.report import Finding, FindingEvent, Note, NoteEvent, RuleResult
 from quality.rules import Rule
 
 SECURITY_FAMILY = "S"
@@ -85,14 +86,6 @@ class OutputOwner:
     noqa: ReasonedNoqa
 
 
-@dataclass(frozen=True)
-class PrintResult:
-    """The python-print findings and one report line per honoured output owner."""
-
-    findings: list[Finding]
-    reports: tuple[str, ...]
-
-
 def candidates(modes: Mapping[str, str]) -> list[str]:
     """Every tracked regular `.py` file: no link, and nothing inside a gitlink, which the index never lists."""
     return [path for path, mode in modes.items() if mode in process.REGULAR_FILE_MODES and path.endswith(PYTHON_SUFFIX)]
@@ -137,9 +130,9 @@ def lint(root: Path, modes: Mapping[str, str], target: Version, locate_ruff: Cal
     return Lint(tuple(_run_ruff(root, {name: file.path for name, file in files.items()}, target, locate_ruff)), texts, test_files)
 
 
-def judge_security(lint: Lint) -> list[Finding]:
+def judge_security(lint: Lint) -> RuleResult:
     """The `S` records that stay red: an exempt code in a test file is green, and so is one whose noqa_row carries a
-    reasoned noqa naming it. Findings are sorted by path, line and code."""
+    reasoned noqa naming it. Findings are sorted by path, line and code; the extent counts every file ruff judged."""
     comments: dict[str, dict[int, str]] = {}
     findings = []
     for record in _family(lint, SECURITY_FAMILY):
@@ -149,27 +142,27 @@ def judge_security(lint: Lint) -> list[Finding]:
             comments[record.path] = _line_comments(_comment_tokens(record.path, lint.texts[record.path]))
         if not _cleared_by_noqa(record.code, comments[record.path].get(record.noqa_line, "")):
             findings.append(_security_finding(record))
-    return _sorted(findings)
+    return RuleResult(_sorted(findings), len(lint.texts), False)
 
 
-def judge_print(lint: Lint) -> PrintResult:
+def judge_print(lint: Lint) -> RuleResult:
     """The `T20` records an output owner of their file or a reasoned noqa at noqa_row does not clear, and each owner:
-    reported where it clears a finding, a finding where it clears none. Only a file with a print record or an owner
+    a note where it clears a finding, a finding where it clears none. Only a file with a print record or an owner
     prefix is tokenized."""
     records: dict[str, list[RuffFinding]] = {}
     for record in _family(lint, PRINT_FAMILY):
         records.setdefault(record.path, []).append(record)
     owning = {name for name, text in lint.texts.items() if OWNER_PREFIX in text}
     findings: list[Finding] = []
-    reports: list[str] = []
+    notes: list[Note] = []
     for name in sorted(records.keys() | owning):
-        file_findings, file_reports = _judge_prints(name, _comment_tokens(name, lint.texts[name]), records.get(name, []))
+        file_findings, file_notes = _judge_prints(name, _comment_tokens(name, lint.texts[name]), records.get(name, []))
         findings += file_findings
-        reports += file_reports
-    return PrintResult(_sorted(findings), tuple(reports))
+        notes += file_notes
+    return RuleResult(_sorted(findings), len(lint.texts), False, tuple(notes))
 
 
-def _judge_prints(name: str, tokens: Sequence[tokenize.TokenInfo], records: Sequence[RuffFinding]) -> tuple[list[Finding], list[str]]:
+def _judge_prints(name: str, tokens: Sequence[tokenize.TokenInfo], records: Sequence[RuffFinding]) -> tuple[list[Finding], list[Note]]:
     owners = [owner for token in tokens if (owner := _output_owner(token)) is not None]
     owned = {code for owner in owners for code in owner.noqa.codes}
     comments = _line_comments(tokens)
@@ -179,9 +172,13 @@ def _judge_prints(name: str, tokens: Sequence[tokenize.TokenInfo], records: Sequ
         if record.code not in owned and not _cleared_by_noqa(record.code, comments.get(record.noqa_line, ""))
     ]
     found = {record.code for record in records}
-    reports = [f"{Rule.PYTHON_PRINT}: output owner {name} - {owner.noqa.reason.strip()}" for owner in owners if owner.noqa.codes & found]
+    notes = [_owner_note(name, owner) for owner in owners if owner.noqa.codes & found]
     findings += [_stale_owner(name, owner) for owner in owners if not owner.noqa.codes & found]
-    return findings, reports
+    return findings, notes
+
+
+def _owner_note(name: str, owner: OutputOwner) -> Note:
+    return Note(name, NoteEvent.ALLOWED, SEPARATOR.join(("output owner", owner.noqa.reason.strip())), owner.line)
 
 
 def _family(lint: Lint, family: str) -> list[RuffFinding]:

@@ -54,7 +54,7 @@ Exit codes: 0 yes, 1 no, 2 could not answer, 130 interrupted. Each block names i
 
 ### 1. `quality check`, all clean
 
-The first row names the release the gate pins. Every area gets a row, also when clean. Exit 0. Rows and verdict: stdout. The workflows row counts the workflow files the tree holds and says that only offline audits ran, in the row itself and in no note of its own (operator ruling of 1.11.2026, „In der Zeile selbst (Recommended)“). The dependencies row counts the tracked lockfiles and the packages osv-scanner lists for them, `0 lockfiles · 0 packages` with none (head proposals O47, O48 and O50 of 2.11.2026). The secrets row counts the commits gitleaks reads, not the tree: gitleaks reads committed history only, so „tree“ claimed more than was checked (head correction O30 of 1.11.2026, under the operator's instruction of 28.10.2026 to decide small wording questions alone).
+The first row names the release the gate pins. Every area gets a row, also when clean. Exit 0. Rows and verdict: stdout. The workflows row counts the workflow files the tree holds and says that only offline audits ran, in the row itself and in no note of its own (operator ruling of 1.11.2026, „In der Zeile selbst (Recommended)“). The dependencies row counts the tracked lockfiles and the packages osv-scanner lists for them, `0 lockfiles · 0 packages` with none (head proposals O47, O48 and O50 of 2.11.2026). The code row counts the area's rules and the Python files ruff judged, `0 Python files` with none (head proposal O56 of 2.11.2026). The secrets row counts the commits gitleaks reads, not the tree: gitleaks reads committed history only, so „tree“ claimed more than was checked (head correction O30 of 1.11.2026, under the operator's instruction of 28.10.2026 to decide small wording questions alone).
 
 ```text
 $ quality check
@@ -74,6 +74,13 @@ An allowed advisory stands as a `·` row under the dependencies row, after the a
 ```text
   ✓ dependencies  clean          1 lockfile · 63 packages · 1 allowed
     · uv.lock  allowed  jinja2 3.1.4 · GHSA-q8x2-4m7c-9v3p · fixed in 3.1.6 · until 2027-01-31 (#412) · no template input
+```
+
+An honoured output owner stands as a `·` row under the code row, after the area's findings, and the clean row counts it (head proposals O15, O57):
+
+```text
+  ✓ code          clean          2 rules · 41 Python files · 1 allowed
+    · src/shop/cli.py:3  allowed  output owner · the command line owns its output
 ```
 
 Live line while the secrets scan runs (stderr, terminal only, replaced by the row below it):

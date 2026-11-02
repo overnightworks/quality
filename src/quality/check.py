@@ -90,7 +90,7 @@ def lint_python(root: Path, modes: dict[str, str] | CannotJudge, locate_ruff: Ca
         raise CannotJudge(str(error)) from error
 
 
-def _judge_lint[T](lint: python_lint.Lint | CannotJudge, judge: Callable[[python_lint.Lint], T]) -> T | CannotJudge:
+def _judge_lint(lint: python_lint.Lint | CannotJudge, judge: Callable[[python_lint.Lint], RuleResult]) -> RuleResult | CannotJudge:
     """One rule's verdict on the shared run; a run that cannot judge refuses both rules, a judge's own refusal only its rule."""
     if isinstance(lint, CannotJudge):
         return lint
@@ -197,7 +197,6 @@ class AreaVerdict:
 @dataclass(frozen=True)
 class HygieneResult:
     verdicts: tuple[RuleVerdict, ...]
-    reports: tuple[str, ...]
     tracked_paths: int
 
     @property
@@ -291,7 +290,7 @@ def run_hygiene(root: Path, locate_ruff: Callable[[], str], locate_zizmor: Calla
     modes = _attempt(lambda: checkout.index_modes(root))
     floor = _attempt(lambda: _python_floor_result(root, modes, allow_lists))
     lint = _attempt(lambda: lint_python(root, modes, locate_ruff))
-    printing = _judge_lint(lint, python_lint.judge_print)
+    security, printing = _judge_lint(lint, python_lint.judge_security), _judge_lint(lint, python_lint.judge_print)
     outcomes: dict[Rule, Sequence[Finding] | CannotJudge] = {
         Rule.ENV_FILE: env_file.check_env_files(tracked),
         Rule.COMPOSE_PORT: _attempt(lambda: compose.check_compose_ports(root, tracked, _required(allow_lists).compose)),
@@ -306,7 +305,7 @@ def run_hygiene(root: Path, locate_ruff: Callable[[], str], locate_zizmor: Calla
         Rule.TEST_LAYOUT: _attempt(lambda: layout.check_test_layout(_required(modes), _required(allow_lists).layout)),
         Rule.TEST_IMPORT: _content_findings(root, modes, allow_lists, layout.test_import_candidates, layout.check_test_import),
         Rule.PYTHON_FLOOR: _findings(floor),
-        Rule.PYTHON_SECURITY: _judge_lint(lint, python_lint.judge_security),
+        Rule.PYTHON_SECURITY: _findings(security),
         Rule.PYTHON_PRINT: _findings(printing),
     }
     secrets = _attempt(lambda: check_secrets(root, allow_lists))
@@ -317,13 +316,12 @@ def run_hygiene(root: Path, locate_ruff: Callable[[], str], locate_zizmor: Calla
         **{rule: _findings(result) for rule, result in workflows.items()},
         Rule.ADVISORY: _findings(advisory),
     }
-    results = ((Rule.SIZE, size), (Rule.CLONE, clone), (Rule.IMPORT_CONTRACT, contracts), (Rule.LEAK, secrets), *workflows.items(), (Rule.ADVISORY, advisory))
+    results = ((Rule.SIZE, size), (Rule.CLONE, clone), (Rule.IMPORT_CONTRACT, contracts), (Rule.LEAK, secrets), *workflows.items(), (Rule.ADVISORY, advisory), (Rule.PYTHON_SECURITY, security), (Rule.PYTHON_PRINT, printing))
     measuring = {rule for rule, result in results if _measures_only(result)}
     notes = {rule: () if isinstance(result, CannotJudge) else result.notes for rule, result in (*results, (Rule.PYTHON_FLOOR, floor))}
     extents = {rule: None if isinstance(result, CannotJudge) else result.extent for rule, result in results}
     verdicts = [_verdict(rule, outcomes[rule], rule in measuring, notes.get(rule, ()), extents.get(rule)) for rule in Rule]
-    reports = () if isinstance(printing, CannotJudge) else printing.reports
-    return HygieneResult(tuple(verdicts), reports, len(set(tracked)))
+    return HygieneResult(tuple(verdicts), len(set(tracked)))
 
 
 def _measures_only(result: RuleResult | CannotJudge) -> bool:
