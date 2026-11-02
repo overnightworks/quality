@@ -195,16 +195,16 @@ class AreaVerdict:
 
 @dataclass(frozen=True)
 class HygieneResult:
-    verdicts: tuple[RuleVerdict, ...]
+    areas: tuple[AreaVerdict, ...]
     tracked_paths: int
+
+    @property
+    def verdicts(self) -> tuple[RuleVerdict, ...]:
+        return tuple(verdict for area in self.areas for verdict in area.verdicts)
 
     @property
     def findings(self) -> list[Finding]:
         return [finding for verdict in self.verdicts for finding in verdict.findings]
-
-    @property
-    def areas(self) -> tuple[AreaVerdict, ...]:
-        return tuple(AreaVerdict(area, tuple(verdict for verdict in self.verdicts if verdict.rule.area is area)) for area in Area)
 
     @property
     def worst(self) -> Outcome:
@@ -320,8 +320,8 @@ def run_hygiene(
     root = checkout.work_tree_top(root)
     tracked = checkout.tracked_files(root)
     tracked_paths = len(set(tracked))
-    verdicts: list[RuleVerdict] = []
+    areas: list[AreaVerdict] = []
     for area in _judged_areas(root, tracked, locate_ruff, locate_zizmor):
         report_area(area, tracked_paths)
-        verdicts += area.verdicts
-    return HygieneResult(tuple(verdicts), tracked_paths)
+        areas.append(area)
+    return HygieneResult(tuple(areas), tracked_paths)

@@ -17,7 +17,7 @@ from quality.output import Glyph, Row, SubLine, Verdict
 from quality.report import Command, Example, Finding, FindingEvent, Note, NoteEvent
 from tests.support.check import refusal_pair, refusal_row
 from tests.support.python_lint import OWNER, PRINT
-from tests.support.terminal import SGR, Terminal, read_pseudo_terminal, run_on, without_sgr
+from tests.support.terminal import SGR, Terminal, read_pseudo_terminal, run_on, screen, without_sgr
 
 
 class Event(StrEnum):
@@ -420,7 +420,7 @@ def test_a_run_cuts_exactly_the_descriptive_facts(build_repo, window, files, col
     expected = [next((cut for start, cut in cuts.items() if line.startswith(start)), line) for line in plain]
     assert sum(line != cut for line, cut in zip(plain, expected, strict=True)) == len(cuts)
     assert without_sgr(out.read()).splitlines() == expected
-    assert without_sgr(err.read()) == (refusal_pair(repo) if code == 2 else "")
+    assert screen(err.read()) == (refusal_pair(repo) if code == 2 else "")
 
 
 @pytest.mark.parametrize(
@@ -437,7 +437,7 @@ def test_a_door_that_may_not_shorten_prints_the_whole_fact(build_repo, window, o
     printed = out.read() if out else stdout.getvalue()
     lines = without_sgr(printed).splitlines()
     assert f"    ! src/.env  tracked  {env_file.ENV_FACT}" in lines
-    assert ("…" in printed, err.read(), code) == (False, "", 1)
+    assert ("…" in printed, screen(err.read()), code) == (False, "", 1)
 
 
 @pytest.mark.integration

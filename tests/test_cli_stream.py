@@ -18,7 +18,7 @@ from tests.support.git_repositories import GIT_IDENTITY
 from tests.support.processes import process_is_gone
 from tests.support.python_lint import fake_ruff
 from tests.support.scanners import CLEAN_SCANS, OUTPUTS, fake_gitleaks, fake_scanner, fake_zizmor
-from tests.support.terminal import without_sgr
+from tests.support.terminal import screen
 
 
 def door_argv(command: str, target: Path) -> list[str]:
@@ -133,18 +133,22 @@ def test_an_interrupt_during_a_scan_leaves_the_rows_of_the_finished_areas_whole(
         kill_recorded(pid_file)
 
 
-def test_ctrl_c_at_a_terminal_leaves_whole_lines(build_repo, served_scanners, tmp_path, window):
+@pytest.mark.parametrize(
+    ("sent", "code"),
+    [pytest.param(signal.SIGINT, -signal.SIGINT, id="Ctrl-C"), pytest.param(signal.SIGTERM, 128 + signal.SIGTERM, id="SIGTERM")],
+)
+def test_an_interrupt_at_a_terminal_leaves_whole_lines(build_repo, served_scanners, tmp_path, window, sent, code):
     repo = build_repo({"README.md": "x\n"})
     complete = subprocess.run(door_argv("hygiene", repo), env=door_environment(), capture_output=True, text=True, timeout=60, check=False)
     pid_file = tmp_path / "scanner.pid"
-    interrupting_gitleaks(served_scanners, "INT")
+    interrupting_gitleaks(served_scanners, signal.Signals(sent).name.removeprefix("SIG"))
     terminal = window(200)
     try:
         done = subprocess.run(
             door_argv("hygiene", repo), env=door_environment(TERM="xterm", SCANNER_PID=str(pid_file)), stdout=terminal.stream, stderr=terminal.stream, timeout=60, check=False,
         )
-        assert without_sgr(terminal.read()) == printed_before(complete.stdout, Area.SECRETS)
-        assert done.returncode == -signal.SIGINT
+        assert screen(terminal.read()) == printed_before(complete.stdout, Area.SECRETS)
+        assert done.returncode == code
         assert process_is_gone(int(pid_file.read_text()))
     finally:
         kill_recorded(pid_file)
