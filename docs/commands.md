@@ -5,8 +5,8 @@ runs `quality emergency-merge`, or reads `quality --help` or a wrong invocation'
 
 ## Help and wrong invocations
 
-`quality --help` lists the commands in the frame of [the output picture](output.md), case 11, and
-`quality <command> --help` prints that command's arguments; `--version` prints the installed version. Help goes to
+`quality --help` and `quality check --help` stand in the frame of [the output picture](output.md), case 11, with what is
+true today; every other `quality <command> --help` prints that command's arguments; `--version` prints the installed version. Help goes to
 stdout with exit `0`, plain and whole in every stream. A wrong invocation runs nothing, prints the `error:`/`next:` pair
 on stderr and exits `2`: `no command <word> · commands: …` for a first word that names no command, `no command ·
 commands: …` for none, `unknown argument · <what is left over>` for what the command does not take, and otherwise the
@@ -24,11 +24,11 @@ The index is written as a tree (`git write-tree`, only tree objects a commit wri
 repository inside a 0700 scratch directory. The scratch repository borrows the objects (`objects/info/alternates`),
 has an empty work tree and none of the live repository's config or `info/attributes`, so a staged `.gitleaksignore`,
 `.gitleaks.toml`, `.gitattributes` with `-diff`, or a `gitleaks:allow` comment changes nothing. gitleaks runs in the same
-attribute-free environment as `hygiene`, with quality's config. The allow list is the staged tree's own
+attribute-free environment as `check`, with quality's config. The allow list is the staged tree's own
 `quality/config.toml` (none staged: no allowances). `scan-staged` validates only the `[secrets]` table of that config and ignores other tables
-and keys, while `hygiene` and `verdict` stay strict, so schema growth never blocks a commit. Output and secret handling
-are `hygiene`'s: it prints the secrets finding rows and the note rows as `hygiene` does under its secrets row
-(`docs/rules.md`), without a commit in the fact, then `scan-staged: N finding(s)` or `scan-staged: clean`. At a terminal stderr shows `hygiene`'s live line while gitleaks runs (`docs/rules.md`).
+and keys, while `check` and `verdict` stay strict, so schema growth never blocks a commit. Output and secret handling
+are `check`'s: it prints the secrets finding rows and the note rows as `check` does under its secrets row
+(`docs/rules.md`), without a commit in the fact, then `scan-staged: N finding(s)` or `scan-staged: clean`. At a terminal stderr shows `check`'s live line while gitleaks runs (`docs/rules.md`).
 
 gitleaks' staged mode sees only added and changed lines, so a known false positive blocks only the commits that touch
 its line, and then needs its allowance, as in CI. A key only in the work tree or only in `HEAD` is clean. Exit `2` (never
@@ -97,13 +97,13 @@ linux-x64`, never by hand). The command that installs them from the lock is
 
     mise --cd <quality's installation>/quality/mise install --locked
 
-and `hygiene` names it once, on its own line after `next:`, however many rules lack a scanner, the path filled in; `scan-staged`'s refusal ends with `; next: ` and the steps. A scan finds a scanner by asking
+and `check` names it once, on its own line after `next:`, however many rules lack a scanner, the path filled in; `scan-staged`'s refusal ends with `; next: ` and the steps. A scan finds a scanner by asking
 `mise which` in that directory, for exactly the manifest's version, and runs it only when it reports that version. A
 scanner on `PATH` is never used. mise reads only the manifest directory and the operator's own user and system configuration: it starts in that
 directory under `MISE_CEILING_PATHS` set to the directory above it, so a `mise.toml` or `.miserc.toml` in the scanned
 repository (or in the checkout the gate holds the manifest in) takes no part in which binary runs.
 
-`hygiene` and `scan-staged` exit `2` for a scanner mise cannot locate, that is at another version, or whose
+`check` and `scan-staged` exit `2` for a scanner mise cannot locate, that is at another version, or whose
 answer names no executable, and for a machine without mise, which names mise's install page and the command; only the
 rule that needs the scanner cannot judge. A repository with no workflow needs no actionlint and one with no lock file
 no osv-scanner.
