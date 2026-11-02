@@ -450,6 +450,18 @@ def test_a_local_reusable_call_in_the_dollar_slash_form_passes_both_scanners(wor
     assert scan(workflow_repo(local_reusable_call("$"))) == 0
 
 
+def runs_on(label: str) -> str:
+    return f"on: push\npermissions: {{}}\njobs:\n  j:\n    runs-on: {label}\n    steps:\n      - run: 'true'\n"
+
+
+@pytest.mark.scanner
+@pytest.mark.parametrize(("label", "exit_code"), [("ubuntu-26.04", 0), ("ubuntu-26.04-arm", 0), ("ubuntu-26.4", 1)])
+def test_a_runner_label_github_hosts_passes_and_a_misspelt_one_stays_a_finding(workflow_repo, installed_scanners, capsys, label, exit_code):
+    """#335: GitHub's ubuntu-26.04 images are accepted although actionlint does not know them; a misspelt label is still `invalid`."""
+    assert scan(workflow_repo(runs_on(label))) == exit_code
+    assert ((".github/workflows/w.yml:5", FindingEvent.INVALID) in [(found, kind) for found, kind, _ in workflow_rows(capsys)]) == bool(exit_code)
+
+
 ONLY_AN_ONLINE_AUDIT_FLAGS_THIS = (
     "on: push\npermissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n"
     "      - uses: actions/checkout@0000000000000000000000000000000000000000\n"
