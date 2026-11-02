@@ -499,4 +499,4 @@ def test_a_refused_properties_file_is_exit_2_and_writes_nothing_even_with_a_bot_
 def test_properties_with_an_unwritable_step_output_is_exit_2_and_claims_no_success(monkeypatch, capsys, build_repo, elsewhere, arrange):
     code, out, err = run_properties(monkeypatch, capsys, build_repo, arrange=arrange, step_output=elsewhere)
     assert (code, out) == (2, "")
-    assert "GITHUB_OUTPUT" in err
+    assert output.STEP_OUTPUT_VARIABLE in err

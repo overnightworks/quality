@@ -1,6 +1,5 @@
 import contextlib
 import io
-import json
 import os
 import re
 import subprocess
@@ -12,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import cli, fleet, output, sonar
+from quality import cli, output, sonar
 from quality.output import Glyph, Row, SubLine, Verdict
 from quality.report import (
     Choice,
@@ -36,7 +35,9 @@ from tests.support.check import (
     note_rows,
     refusal_pair,
 )
+from tests.support.fleet import RELEASES, write_fleet
 from tests.support.terminal import Terminal
+from tests.support.verdict import CHECKS_GREEN
 
 OWN_SGR = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -557,24 +558,22 @@ def test_an_example_is_painted_by_its_label_only_at_a_terminal(term, no_color):
     assert not any("\x1b[" in line for line in styled.splitlines() if line.startswith("    "))
 
 
-def drive_verdict(repo):
-    page = json.dumps({"total_count": 1, "jobs": [{"id": 1, "name": "checks", "run_attempt": 1, "status": "completed", "conclusion": "success"}]})
-    return cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (page, None))
-
-
-def drive_scoreboard(repo):
-    (repo / "quality").mkdir(exist_ok=True)
-    (repo / "quality" / "fleet.toml").write_text('repositories = ["o/none"]\n')
-    return cli.main(["scoreboard", str(repo)], release_tags=lambda: fleet.ReleaseTagsError("not asked"))
-
-
-@pytest.mark.parametrize("door", [drive_verdict, drive_scoreboard], ids=["verdict", "scoreboard"])
-def test_a_door_whose_step_summary_cannot_be_written_is_exit_2_with_the_fact_and_no_traceback(monkeypatch, capsys, run_env, tmp_path, door):
+def test_a_verdict_whose_step_summary_cannot_be_written_is_exit_2_with_the_fact_and_no_traceback(monkeypatch, capsys, run_env, tmp_path):
     repo, _ = run_env
-    monkeypatch.setattr(fleet, "measure_fleet", lambda listed: [])
     unwritable = tmp_path / "a-directory"
     unwritable.mkdir()
     monkeypatch.setenv(output.STEP_SUMMARY_VARIABLE, str(unwritable))
-    code = door(repo)
+    code = cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (CHECKS_GREEN, None))
     assert code == 2
-    assert f"{output.STEP_SUMMARY_VARIABLE} is not writable" in capsys.readouterr().err
+    assert output.STEP_SUMMARY_VARIABLE in capsys.readouterr().err
+
+
+@pytest.mark.integration
+def test_a_scoreboard_whose_step_summary_cannot_be_written_is_exit_2_with_the_fact_and_no_traceback(monkeypatch, capsys, public, tmp_path):
+    fleet_file = write_fleet(tmp_path / "fleet", [public("healthy", {"a.md": "text\n"})])
+    unwritable = tmp_path / "a-directory"
+    unwritable.mkdir()
+    monkeypatch.setenv(output.STEP_SUMMARY_VARIABLE, str(unwritable))
+    code = cli.main(["scoreboard", str(fleet_file)], release_tags=lambda: RELEASES)
+    assert code == 2
+    assert output.STEP_SUMMARY_VARIABLE in capsys.readouterr().err

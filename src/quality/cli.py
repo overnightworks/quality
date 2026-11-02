@@ -436,12 +436,12 @@ def run_sonar_findings(transport: Transport, sleep: Sleep) -> int:
     return EXIT_FINDINGS if result.fails_the_run else EXIT_CLEAN
 
 
-def summarised(report: tuple[str, ...]) -> bool:
+def summarised(door: str, report: tuple[str, ...]) -> bool:
     """Whether the run summary took the report; an unwritable summary is a fact on stderr, not a traceback."""
     try:
         append_step_summary(report)
     except OSError as error:
-        emit(f"cannot judge - {STEP_SUMMARY_VARIABLE} is not writable: {error}", file=sys.stderr)
+        emit(f"{door}: cannot judge - {STEP_SUMMARY_VARIABLE} is not writable: {error}", file=sys.stderr)
         return False
     return True
 
@@ -469,7 +469,7 @@ def run_verdict(path: Path, fetcher_for: Callable[[str], PageFetcher], sleep: Sl
         report = settled.lines()
         code = EXIT_CLEAN if settled.verdict.green else EXIT_FINDINGS
     emit(*report, file=sys.stderr if code == EXIT_CANNOT_JUDGE else sys.stdout)
-    return code if summarised(report) else EXIT_CANNOT_JUDGE
+    return code if summarised("verdict", report) else EXIT_CANNOT_JUDGE
 
 
 def run_scoreboard(path: Path, release_tags: fleet.TagReader) -> int:
@@ -485,7 +485,7 @@ def run_scoreboard(path: Path, release_tags: fleet.TagReader) -> int:
         tags = error
     report = fleet.render(rows, datetime.now(UTC).date(), tags)
     emit(*report)
-    if not summarised(report) or fleet.cannot_judge(rows, tags):
+    if not summarised("scoreboard", report) or fleet.cannot_judge(rows, tags):
         return EXIT_CANNOT_JUDGE
     return EXIT_CLEAN
 
