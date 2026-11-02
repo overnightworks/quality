@@ -24,12 +24,14 @@ from tests.support.check import (
     NoteLine,
     area_block,
     area_fact,
+    area_finding_rows,
     area_row,
     assert_every_line_starts_with_the_door,
     assert_row_prints_finding,
     env_row_stands,
     extent_counts,
     finding_rows,
+    hygiene_run,
     leading_count,
     recorded_entries,
     rows_of,
@@ -478,7 +480,7 @@ def test_findings_in_two_areas_follow_their_rows_and_end_in_the_counted_verdict(
     assert (code, err) == (1, [])
     assert out[files_row + 1].split()[:2] == [Glyph.NEEDS_YOU, ".env"]
     assert env_row_stands("\n".join(out))
-    assert out[code_row + 1].startswith("python-print src/a.py:1 - ")
+    assert out[code_row + 1].split()[:2] == [Glyph.NEEDS_YOU, "src/a.py:1"]
     assert out[-1] == f"! 3 findings in 2 areas · 5 areas clean · {ZERO_SECONDS}"
 
 
@@ -526,12 +528,14 @@ def test_the_files_block_lists_every_finding_in_run_order_python_floor_last_then
 
 def test_an_area_that_cannot_check_ends_the_run_with_the_pair_and_no_verdict(build_repo, use_mise, served_scanners, capsys):
     use_mise(lacking(served_scanners, scanners.GITLEAKS))
-    code, out, err = frame_run(capsys, build_repo({**CLONES_BASELINE, **PRINTING}))
+    repo = build_repo({**CLONES_BASELINE, **PRINTING})
+    code, out, err = frame_run(capsys, repo)
     unchecked = [line for line in out if line.startswith("  ✗ secrets  ")]
     assert (code, len(unchecked), [line for line in out if "areas clean" in line or " · 7 areas" in line]) == (2, 1, [])
     assert unchecked[0].endswith(f"not checked    mise could not locate {scanners.GITLEAKS} {scanners.pinned_tool(scanners.GITLEAKS).version}")
     assert header(Area.CODE, "!", "1 finding") in out
-    assert err == ["error: 1 of 7 areas could not check · 1 finding in the others", f"next: {scanners.install_command()}"]
+    assert [location for location, _ in area_finding_rows("\n".join(out), Area.CODE)] == ["src/a.py:1"]
+    assert err == [f"error: {cli.refusal_error(hygiene_run(repo).areas)}", f"next: {scanners.install_command()}"]
     assert scanners.install_command() not in "\n".join(out)
 
 

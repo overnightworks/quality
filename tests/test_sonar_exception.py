@@ -7,7 +7,7 @@ import pytest
 
 from quality import sonar
 from quality.merge import GhFailed
-from quality.report import headline
+from quality.report import FindingEvent, headline
 from quality.sonar import finding_from_issue
 from tests.support.merge import (
     B_REMOVED,
@@ -250,6 +250,10 @@ def test_a_link_or_directory_counts_exactly_when_it_leads_to_something(monkeypat
     arrange()
     code, out, _, _ = run_cli(monkeypatch, capsys, findings_of(bot_issue()))
     assert (code, "does not count" in out) == (0 if set_aside else 1, set_aside)
+
+
+def test_a_sonar_finding_carries_the_open_event():
+    assert finding_from_issue(bot_issue()).event is FindingEvent.OPEN
 
 
 def test_without_the_exception_nothing_is_set_aside(monkeypatch, capsys):

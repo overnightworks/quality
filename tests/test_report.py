@@ -6,6 +6,7 @@ from quality.report import (
     Command,
     Example,
     Finding,
+    FindingEvent,
     Instruction,
     Note,
     NoteEvent,
@@ -18,10 +19,15 @@ from quality.report import (
 )
 
 
-def test_an_event_less_finding_prints_its_headline_and_fix_escaped():
-    """#97 rule 2: every field of a finding, fix included, prints without a raw control character."""
-    finding = Finding("r", "p", None, "why\x1b", "fix\x1b[31m\n::error::f")
+def test_a_finding_renders_its_headline_and_fix_escaped():
+    """Every field of a finding, fix included, renders without a raw control character."""
+    finding = Finding("r", "p", None, "why\x1b", "fix\x1b[31m\n::error::f", event=FindingEvent.OPEN)
     assert render(finding) == "r p - why\\x1b\n  Fix: fix\\x1b[31m\\x0a::error::f"
+
+
+def test_a_finding_without_an_event_cannot_be_built():
+    with pytest.raises(TypeError, match="event"):
+        Finding("r", "p", None, "why", "fix")
 
 
 @pytest.mark.parametrize(

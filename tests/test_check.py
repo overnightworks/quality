@@ -178,7 +178,7 @@ def test_a_run_without_flags_judges_every_rule(build_repo, capsys):
 
 def test_a_finding_under_a_rule_its_check_does_not_judge_fails_loud(build_repo, monkeypatch):
     """#55 rule 2: a finding under a rule the check was not given is never dropped into a clean exit."""
-    foreign = Finding("workflow-other", ".env", None, "an unlisted rule", "none")
+    foreign = Finding("workflow-other", ".env", None, "an unlisted rule", "none", event=FindingEvent.TRACKED)
     monkeypatch.setattr(env_file, "check_env_files", lambda tracked: [foreign])
     arguments = ["hygiene", str(build_repo({}))]
     with pytest.raises(ValueError, match="workflow-other"):
@@ -274,7 +274,7 @@ def test_an_index_record_quality_cannot_read_refuses_exactly_the_rules_that_read
 
 
 def finding_of(rule: Rule) -> Finding:
-    return Finding(rule, "a", None, "reason", "fix")
+    return Finding(rule, "a", None, "reason", "fix", event=FindingEvent.TRACKED)
 
 
 def area_of(*verdicts: check.RuleVerdict) -> check.AreaVerdict:

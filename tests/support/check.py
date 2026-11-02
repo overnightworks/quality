@@ -109,7 +109,7 @@ class NoteLine(BlockLine):
 
 @dataclass(frozen=True)
 class OtherLine(BlockLine):
-    """Any line that is none of these: until the other areas move to rows, an event-less finding's text."""
+    """Any line that is none of these, such as a refused area's `✗` line."""
 
 
 def _event_of[Event: StrEnum](remainder: str, events: type[Event]) -> Event | None:

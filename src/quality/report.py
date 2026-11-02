@@ -123,6 +123,8 @@ class FindingEvent(StrEnum):
     AFFECTED = "affected"
     CONFLICT = "conflict"
     SECRET = "secret"  # noqa: S105 - the event word of a secret finding and no password
+    PRINT_CALL = "print call"
+    OPEN = "open"
 
 
 class NoteEvent(StrEnum):

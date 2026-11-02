@@ -402,6 +402,24 @@ def test_findings_and_notes_share_one_location_column_and_one_event_column(event
     assert finding_line.index(event.value) > len(notes[0].location)
 
 
+@pytest.mark.parametrize("on_a_note", [False, True], ids=["finding", "note"])
+def test_an_event_prints_escaped_and_its_column_holds(on_a_note):
+    class Hostile(StrEnum):
+        ESCAPES = "\x1b\x1b"
+
+    assert len(printable(Hostile.ESCAPES)) > len(FindingEvent.TRACKED)
+    companion = finding("b.env", FindingEvent.TRACKED, "second fact")
+    if on_a_note:
+        findings, notes = [companion], [Note("a.toml", Hostile.ESCAPES, "first fact")]
+    else:
+        findings, notes = [finding("a.env", Hostile.ESCAPES, "first fact"), companion], []
+    printed = findings_written(findings, notes=notes)
+    first, second = (next(line for line in printed.splitlines() if marker in line) for marker in ("first fact", "second fact"))
+    assert printable(Hostile.ESCAPES) in printed
+    assert "\x1b" not in printed
+    assert first.index("first fact") == second.index("second fact")
+
+
 def test_a_note_row_follows_the_last_fix_and_has_no_fix_of_its_own():
     printed = findings_written([finding("a.env", FindingEvent.TRACKED)], notes=[note("b.toml"), note("c.toml")])
     lines = printed.splitlines()
