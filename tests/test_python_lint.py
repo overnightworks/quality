@@ -426,18 +426,26 @@ def test_a_code_finding_ends_in_no_full_stop_and_names_no_rule_id(drive_code):
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    ("source", "fix_follows"),
+    ("files", "fix_follows"),
     [
-        (f"{PRINT}\n{PRINT}\n", [False, True]),
-        (f"{PRINT}\nfrom pprint import pprint\npprint(1)\n", [True, True]),
-        (f"{EVAL}{EVAL}", [True, True]),
-        ('eval("1"); eval("2")\n', [False, True]),
+        ({"src/p/a.py": f"{PRINT}\n{PRINT}\n"}, [False, True]),
+        ({"src/p/a.py": f"{PRINT}\nfrom pprint import pprint\npprint(1)\n"}, [True, True]),
+        ({"src/p/a.py": f"{EVAL}{EVAL}"}, [True, True]),
+        ({"src/p/a.py": 'eval("1"); eval("2")\n'}, [False, True]),
         ({"src/p/a.py": EVAL, "src/p/b.py": EVAL}, [False, True]),
+        ({"src/p/a.py": f"{PRINT}\n", "src/p/b.py": f"{PRINT}\n"}, [False, True]),
     ],
-    ids=["print twice", "print and pprint", "eval on two lines", "eval twice on one line", "eval on line one of two files"],
+    ids=[
+        "print twice",
+        "print and pprint",
+        "eval on two lines",
+        "eval twice on one line",
+        "eval on line one of two files",
+        "print on line one of two files",
+    ],
 )
-def test_equal_fixes_in_the_code_area_print_once(drive_code, source, fix_follows):
-    run = drive_code(source if isinstance(source, dict) else {"src/p/a.py": source})
+def test_equal_fixes_in_the_code_area_print_once(drive_code, files, fix_follows):
+    run = drive_code(files)
     assert [row.fix_follows for _, row in area_finding_rows(run.out, Area.CODE)] == fix_follows
     assert run.err == ""
 
