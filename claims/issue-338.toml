@@ -3,6 +3,6 @@ agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
 role = "builder"
 base = "b42a699c484564b546ad16508748aba8947a7840"
 branch = "claude/issue-338-c4b-verbose"
-scope = ["AGENTS.md", "README.md", "docs/commands.md", "docs/decisions/5-scanner-stderr-goes-through-gitleaks.md", "docs/output.md", "docs/rules.md", "src/quality/advisories.py", "src/quality/check.py", "src/quality/cli.py", "src/quality/output.py", "src/quality/python_lint.py", "src/quality/report.py", "src/quality/scanners.py", "tests/support/scanners.py", "tests/test_cli_help.py", "tests/test_cli_raw_output.py", "tests/test_scanners_secrets.py"]
+scope = ["AGENTS.md", "README.md", "docs/commands.md", "docs/decisions/5-scanner-stderr-goes-through-gitleaks.md", "docs/output.md", "docs/rules.md", "src/quality/advisories.py", "src/quality/check.py", "src/quality/cli.py", "src/quality/output.py", "src/quality/python_lint.py", "src/quality/report.py", "src/quality/scanners.py", "tests/conftest.py", "tests/support/scanners.py", "tests/test_cli_help.py", "tests/test_cli_raw_output.py", "tests/test_scanners_secrets.py", "tests/test_scanners_vet.py"]
 opened_commit = "55178b3ec8e265f880219a21e4681e8a36c3d892"
 whole_reason = "Seven production files, about +90/-23: one log parameter crosses the places a scanner runs and those that carry and print its record; a further cut by scanner makes -v's help untrue between two landings."
