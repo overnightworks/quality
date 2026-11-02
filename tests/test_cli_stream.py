@@ -124,7 +124,8 @@ def test_an_interrupt_during_a_scan_leaves_the_rows_of_the_finished_areas_whole(
         done = subprocess.run(command, env=door_environment(SCANNER_PID=str(pid_file), TMPDIR=str(scratch_parent)), capture_output=True, text=True, timeout=60, check=False)
         assert done.stdout == printed_before(complete.stdout, Area.SECRETS)
         if under_shell:
-            assert done.stderr == f"exit {128 + signal.SIGINT}\n"
+            expected_stderr = f"exit {128 + signal.SIGINT}\n"
+            assert done.stderr == expected_stderr
         else:
             assert (done.returncode, done.stderr) == (-signal.SIGINT if sent == signal.SIGINT else 128 + signal.SIGTERM, "")
         assert list(scratch_parent.iterdir()) == []
@@ -173,7 +174,7 @@ def test_a_reader_that_left_after_the_first_line_changes_neither_the_judging_nor
         with open(stderr_file, "w", encoding="utf-8") as errors:
             door = subprocess.Popen(
                 door_argv("hygiene", repo), env=door_environment(SCANNER_PID=str(pid_file), RELEASE=str(release)),
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT if one_pipe else errors, text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT if one_pipe else errors,
             )
             printed = b""
             while b"\n" not in printed:
