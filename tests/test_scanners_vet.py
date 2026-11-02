@@ -11,7 +11,16 @@ from tests.support.advisories import reporting, uv_lock
 from tests.support.check import area_fact
 from tests.support.door import check_door
 from tests.support.python_lint import fake_ruff
-from tests.support.scanners import OUTPUTS, fake_gitleaks, fake_scanner, fake_zizmor, flagging, lacking, vetting
+from tests.support.scanners import (
+    OUTPUTS,
+    fake_gitleaks,
+    fake_scanner,
+    fake_zizmor,
+    flagging,
+    lacking,
+    noting_on_every_call,
+    vetting,
+)
 from tests.support.secrets import FAKE_KEY, multi_line_key
 
 
@@ -150,12 +159,14 @@ def test_a_stalled_vet_withholds_the_text(build_repo, served_scanners, elsewhere
         f"\x1b[{FAKE_KEY}\n",
         f"\x1b(B{FAKE_KEY}\n",
         f"\x9b1m{FAKE_KEY}\n",
+        f"\x801m{FAKE_KEY}\n",
+        f"\x9f1m{FAKE_KEY}\n",
         "\x1b[31mboom\x1b[0m\n",
     ],
-    ids=["colour around a key", "a cursor code before a key", "a charset selection", "an 8-bit control", "a clean coloured line"],
+    ids=["colour around a key", "a cursor code before a key", "a charset selection", "an 8-bit control", "the first 8-bit control", "the last 8-bit control", "a clean coloured line"],
 )
 def test_a_text_holding_a_terminal_code_is_withheld_without_a_vet(build_repo, served_scanners, elsewhere, capsys, stderr):
-    fake_gitleaks(served_scanners, on_scan=vetting("exit 0"))
+    fake_gitleaks(served_scanners, on_scan=vetting('echo "[]" > "$report"; exit 0'))
     ruff = fake_ruff(elsewhere, f"printf '%s' {shlex.quote(stderr)} >&2; exit 2")
     code, out, err = refused(build_repo({"src/a.py": "x = 1\n"}), capsys, locate_ruff=lambda: str(ruff))
     assert code == 2
@@ -173,13 +184,13 @@ def test_no_scratch_directory_withholds_the_text(tmp_path, monkeypatch):
 
 def test_a_clean_run_starts_no_vet(build_repo, served_scanners, elsewhere, capsys):
     fake_gitleaks(served_scanners, on_scan=vetting(flagging(FAKE_KEY)))
-    noted = shouting(["noted"])
-    fake_scanner(served_scanners, scanners.ACTIONLINT, f"{noted}; echo '[]'")
-    fake_scanner(served_scanners, scanners.OSV_SCANNER, reporting(OUTPUTS / "osv-scanner-clean.json", 0, "noted"))
-    ruff = fake_ruff(elsewhere, f"{noted}; echo '[]'")
-    zizmor = fake_zizmor(elsewhere / "zizmor", f"{noted}; echo '[]'")
-    for binary in (served_scanners / scanners.ACTIONLINT, served_scanners / scanners.OSV_SCANNER, ruff, elsewhere / "zizmor" / scanners.ZIZMOR):
-        binary.write_text(binary.read_text().replace("#!/bin/sh\n", "#!/bin/sh\necho noted >&2\n", 1))
+    fake_scanner(served_scanners, scanners.ACTIONLINT, "echo '[]'")
+    noting_on_every_call(served_scanners / scanners.ACTIONLINT)
+    fake_scanner(served_scanners, scanners.OSV_SCANNER, reporting(OUTPUTS / "osv-scanner-clean.json", 0))
+    noting_on_every_call(served_scanners / scanners.OSV_SCANNER)
+    ruff = noting_on_every_call(fake_ruff(elsewhere, "echo '[]'"))
+    zizmor = fake_zizmor(elsewhere / "zizmor", "echo '[]'")
+    noting_on_every_call(Path(zizmor()))
     code, _, _ = refused(judged_repository(build_repo), capsys, locate_ruff=lambda: str(ruff), locate_zizmor=zizmor)
     assert code == 0
     assert not (served_scanners / "gitleaks.vetted").exists()

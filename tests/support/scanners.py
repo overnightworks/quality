@@ -34,6 +34,16 @@ def fake_scanner(directory: Path, name: str, on_scan: str, version: str | None =
     return binary
 
 
+def noting_on_every_call(binary: Path) -> Path:
+    """Makes the fake `binary` write `noted` to stderr first, on every call, its version call included; fails loud
+    when it has no shell header to extend."""
+    header = "#!/bin/sh\n"
+    text = binary.read_text()
+    assert text.startswith(header), f"{binary.name} has no shell header to extend"
+    binary.write_text(f"{header}echo noted >&2\n{text.removeprefix(header)}")
+    return binary
+
+
 def write_mise(directory: Path, body: str) -> Path:
     """Writes a `mise` that runs `body` (shell) for any call; the arguments of `mise --cd DIR which NAME --tool TOOL`
     are $1 to $6."""
