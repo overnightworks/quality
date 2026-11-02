@@ -3,6 +3,6 @@ agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
 role = "builder"
 base = "6b6cb6ae00435087b09e172b09182303bf6a9ceb"
 branch = "claude/issue-340-c5-areas"
-scope = ["AGENTS.md", "README.md", "docs/commands.md", "docs/gate.md", "docs/output.md", "docs/rules.md", "src/quality/check.py", "src/quality/cli.py", "src/quality/rules.py", "tests/test_check.py", "tests/test_cli_area_row.py", "tests/test_cli_areas.py", "tests/test_cli_help.py", "tests/test_cli_workflow_invocations.py", "tests/test_rules.py"]
+scope = ["AGENTS.md", "README.md", "docs/commands.md", "docs/gate.md", "docs/output.md", "docs/rules.md", "src/quality/check.py", "src/quality/cli.py", "src/quality/rules.py", "tests/support/check.py", "tests/test_check.py", "tests/test_cli_area_row.py", "tests/test_cli_areas.py", "tests/test_cli_help.py", "tests/test_cli_raw_output.py", "tests/test_cli_workflow_invocations.py", "tests/test_rules.py"]
 opened_commit = "db753289a84faf79752e62258fadf5ed3a9ce441"
 whole_reason = "Three production files, about +131/-45, half of it one move: selecting inside the generator reaches the size rule; the extraction can land independently and stays here to avoid a separate landing and keep one review of the dispatch."
