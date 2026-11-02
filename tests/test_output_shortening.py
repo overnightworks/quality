@@ -498,3 +498,18 @@ def test_a_failed_erase_leaves_the_interrupt_in_flight(window):
     with pytest.raises(KeyboardInterrupt), output.live_line(channel)("secrets", "gitleaks"):
         terminal.hang_up()
         raise KeyboardInterrupt
+
+
+def test_an_interrupt_during_the_draw_still_erases_the_part_drawn():
+    class Interrupted(Terminal):
+        def write(self, text: str) -> int:
+            written = super().write(text)
+            if not self.getvalue().endswith("\x1b[K"):
+                raise KeyboardInterrupt
+            return written
+
+    terminal = Interrupted()
+    channel = output.Channel(terminal, True, 80)
+    with pytest.raises(KeyboardInterrupt), output.live_line(channel)("secrets", "gitleaks"):
+        pytest.fail("the block must not run once the draw was interrupted")
+    assert without_sgr(terminal.getvalue()) == "  ⠋ secrets       gitleaks\r\r\x1b[K"
