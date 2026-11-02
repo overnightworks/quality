@@ -18,7 +18,7 @@ from tests.support.check import (
 from tests.support.config_refusals import CONFIG, all_refusals
 from tests.support.git_repositories import GIT_IDENTITY, head_commit
 from tests.support.secrets import FAKE_KEY, HOSTILE_FILE, OTHER_KEY, allow_config
-from tests.support.terminal import Terminal
+from tests.support.terminal import Terminal, without_sgr
 
 KEY_LINE = f"aws_access_key_id = {FAKE_KEY}\n"
 
@@ -57,6 +57,19 @@ def test_a_staged_row_is_painted_only_on_a_terminal(build_repo, installed_scanne
     assert (code, "\x1b" in stream.getvalue(), FAKE_KEY in stream.getvalue()) == (1, painted, False)
     result = staged.scan_staged(repo)
     assert (lines[-1], capsys.readouterr().err) == (f"scan-staged: {len(result.findings)} finding(s)", "")
+
+
+@pytest.mark.scanner
+def test_a_staged_door_prints_its_rows_and_last_line_whole_at_a_narrow_terminal(build_repo, installed_scanners, window, capsys, monkeypatch):
+    repo = build_repo({"README": "hello\n"})
+    stage(repo, {"src/a.py": KEY_LINE})
+    terminal = window(20)
+    monkeypatch.setattr(sys, "stdout", terminal.stream)
+    cli.main(["scan-staged", str(repo)], environment={"TERM": "xterm"})
+    (finding,) = staged.scan_staged(repo).findings
+    printed = without_sgr(terminal.read())
+    assert f"    ! src/a.py:1  secret  {finding.fact}" in printed.splitlines()
+    assert (printed.splitlines()[-1], "…" in printed, FAKE_KEY in printed, capsys.readouterr().err) == ("scan-staged: 1 finding(s)", False, False, "")
 
 
 @pytest.mark.scanner

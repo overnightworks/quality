@@ -127,3 +127,10 @@ def test_the_git_environment_cuts_off_every_attributes_source(tmp_path, monkeypa
 def test_the_git_version_is_the_first_dotted_number_in_the_output(version_output, expected):
     """#31 rule 2 (S8786): the version is found as the old pattern found it, in any word, and on any digit length."""
     assert process.parse_git_version(version_output) == expected
+
+
+@pytest.mark.integration
+def test_output_that_is_not_utf8_is_named_without_the_decoders_words():
+    with pytest.raises(ProcessError) as raised:
+        process.run(["sh", "-c", "printf '\\377'"])
+    assert str(raised.value) == "sh printed output that is not UTF-8"

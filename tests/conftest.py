@@ -6,7 +6,7 @@ import subprocess
 import sys
 import tempfile
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path, PosixPath, PurePosixPath
 
 import pytest
@@ -22,6 +22,7 @@ from tests.support.fleet import GITHUB_BASE_VARIABLE, GITHUB_REDIRECT, RELEASES,
 from tests.support.git_repositories import GIT_IDENTITY, head_commit, make_repo, put
 from tests.support.scanners import CLEAN_SCANS, OUTPUTS, fake_scanner, serving, write_mise
 from tests.support.secrets import FAKE_KEY
+from tests.support.terminal import PseudoTerminal
 
 PROCESS_OR_SOCKET_FIXTURES = frozenset(
     {
@@ -72,7 +73,7 @@ RepoBuilder = Callable[[dict[str, str]], Path]
 Responder = Callable[[http.server.BaseHTTPRequestHandler], None]
 
 
-# Exact built-in types whose repr cannot raise; any other type, subclasses included, prints as its name.
+# Exact built-in types whose repr is safe for the values these events carry; any other type, subclasses included, prints as its name.
 REPRESENTABLE_TYPES = frozenset({int, float, bool, bytes, type(None), PurePosixPath, PosixPath})
 
 _recording: list[tuple[str, tuple]] | None = None
@@ -427,3 +428,17 @@ def gate_clone(public):
         return public(name, files, owner=owner)
 
     return build
+
+
+@pytest.fixture
+def window() -> Iterator[Callable[[int], PseudoTerminal]]:
+    """Opens a pseudo-terminal of the given width; every one still open is closed at teardown."""
+    opened: list[PseudoTerminal] = []
+
+    def open_window(columns: int) -> PseudoTerminal:
+        opened.append(PseudoTerminal(columns))
+        return opened[-1]
+
+    yield open_window
+    for terminal in opened:
+        terminal.close()

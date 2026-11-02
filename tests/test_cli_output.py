@@ -1,4 +1,3 @@
-import contextlib
 import io
 import json
 import os
@@ -42,7 +41,7 @@ from tests.support.merge import ONE_JOB
 from tests.support.processes import process_is_gone
 from tests.support.scanners import fake_scanner, lacking
 from tests.support.secrets import FAKE_KEY, allow_config
-from tests.support.terminal import Terminal
+from tests.support.terminal import Terminal, read_pseudo_terminal
 
 DOOR = [sys.executable, "-m", "quality.cli"]
 STOP_LINE = re.compile(r"::stop-commands::([0-9a-f]{32})")
@@ -657,17 +656,6 @@ def test_at_a_terminal_a_refusal_from_repository_text_prints_as_escaped_text_bet
     assert "\x1b[" in stdout.getvalue(), stderr.getvalue()
     assert "a\\x1b[35m\\x0a\\u202e.compose.yaml" in stripped
     assert [c for c in stripped if unicodedata.category(c) in ("Cc", "Cf", "Zl", "Zp") and c != "\n"] == []
-
-
-def read_pseudo_terminal(parent: int, child: int) -> str:
-    """Everything the finished process wrote to the pseudo-terminal, which `parent` and `child` are closed after."""
-    os.close(child)
-    chunks = []
-    with contextlib.suppress(OSError):
-        while chunk := os.read(parent, 4096):
-            chunks.append(chunk)
-    os.close(parent)
-    return b"".join(chunks).decode()
 
 
 @pytest.mark.integration

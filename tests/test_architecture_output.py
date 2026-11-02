@@ -31,6 +31,7 @@ from tests.support.check import (
     rule_findings,
     rule_notes,
 )
+from tests.support.terminal import read_pseudo_terminal
 
 FORGED_MATCHER_PAIR = ['  File "a", line 1, in b', "  raise E('forged')"]
 INDEPENDENT_SHOP = {"type": "independence", "modules": ["shop.web", "shop.db"]}
@@ -184,7 +185,7 @@ def test_no_import_contract_line_stands_before_the_area_rows(build_repo, capsys,
     repo = build_repo(files)
     _, out, err = hygiene_streams(capsys, repo)
     printed_lines = [line for line in out.splitlines() if line.startswith(Rule.IMPORT_CONTRACT)]
-    assert (printed_lines, err) == ([], "")
+    assert (printed_lines, out.splitlines()[0].split()[1], err) == ([], next(iter(Area)), "")
 
 
 def imports_verdict(repo: Path) -> check.RuleVerdict:
@@ -232,18 +233,6 @@ def test_a_kept_contract_adds_one_clean_area_and_removes_exactly_the_imports_not
     without_the_note = [part for part in parts_without[2:-1] if part != imports_note]
     assert parts_with[2:-1] == without_the_note
     assert imports_note in parts_without
-
-
-def read_pseudo_terminal(parent: int, child: int) -> str:
-    os.close(child)
-    chunks = []
-    try:
-        while chunk := os.read(parent, 4096):
-            chunks.append(chunk)
-    except OSError:
-        pass
-    os.close(parent)
-    return b"".join(chunks).decode()
 
 
 @pytest.mark.integration

@@ -48,6 +48,12 @@ The same row for the three readers, and foreign text:
     ! deploy/\u202eEDGE_SHA  tracked  a file without a suffix that is no executable
 ```
 
+At a terminal the free text of a fact ends at the window with `…` (decision 3): the reason on a `✗` row or line, and the fact of a finding or a note whose event is free text (a tracked file, a layout reason, a tool's message; `output.py` lists them, and a new event stands whole until it is listed). A count, a measurement or an outcome is never cut (`N findings`, `ceiling 64`, `none allows it`, `value not shown`), nor are the lines under a finding, `fix:`, lines to copy, the verdict, `error:` and `next:`; a long line wraps. The cut is at the end, never inside an escape `printable` creates; in a window at or below the text before the fact it is `…`. The window is what the stream's own terminal answers, read once at the start; `COLUMNS` is not read, and an unknown window shortens nothing. At 60 columns:
+
+```text
+    ! .env          tracked         an env file carries con…
+```
+
 ## Cases
 
 Exit codes: 0 yes, 1 no, 2 could not answer, 130 interrupted. Each block names its stream; an `error:`/`next:` pair and a prompt are stderr, everything else stdout, unless the block says otherwise.
@@ -115,7 +121,7 @@ $ quality check
 ! 5 findings in 3 areas · 4 areas clean · 14s
 ```
 
-No rule name stands in a row (`compose-port`, `env-file`); the event says it in words. The rule name appears only in a `fix:` line that asks for an `[[….allow]]` entry. No `next:` follows this verdict: the `fix:` lines carry the way. The events, facts and fixes of the `files` rows are head proposals O12 to O16, O18 and O19 of 30.10.2026, those of the `debt` rows O20 to O22 of 31.10.2026, those of the `imports` rows O23 to O27 of 31.10.2026, those of the `secrets` rows O28, O29 and O32 to O35 of 1.11.2026, those of the `workflows` rows O36 to O40 of 2.11.2026, those of the `dependencies` rows O41 to O46 of 2.11.2026, those of the `code` rows O51 and O52 of 2.11.2026, their recommendations applied: one event word per kind of finding, shared across rules (`report.FindingEvent`); the env fix names the file for `.gitignore` only where it is its own shell word, else `it`; and the findings of an area in run order. Paths and events align per area by character count.
+No rule name stands in a row (`compose-port`, `env-file`); the event says it in words. The rule name appears only in a `fix:` line that asks for an `[[….allow]]` entry. No `next:` follows this verdict: the `fix:` lines carry the way. The events, facts and fixes of the `files` rows are head proposals O12 to O16, O18 and O19 of 30.10.2026, those of the `debt` rows O20 to O22 of 31.10.2026, those of the `imports` rows O23 to O27 of 31.10.2026, those of the `secrets` rows O28, O29 and O32 to O35 of 1.11.2026, those of the `workflows` rows O36 to O40 of 2.11.2026, those of the `dependencies` rows O41 to O46 of 2.11.2026, those of the `code` rows O51 and O52 of 2.11.2026, their recommendations applied: one event word per kind of finding, shared across rules (`report.FindingEvent`); the env fix names the file for `.gitignore` only where it is its own shell word, else `it`; and the findings of an area in run order. Paths and events align per area by display width, in every stream: an East Asian wide character takes two cells and a combining mark none; spacing marks, Hangul conjoining letters, skin-tone modifiers and emoji sequences are not measured (#5).
 
 The fix of a security finding names the line its noqa must stand on, so each stands under its row, and a code and ruff's message are the fact:
 
