@@ -75,9 +75,9 @@ unreadable is exit `2`.
 `gate.yml` passes the repository's default branch (`github.event.repository.default_branch`) as `DEFAULT_BRANCH`; it is
 never assumed to be `main`, and a missing or empty value is exit `2`. "Legacy" means the open findings of that branch,
 counted by the same `issues/search` with the same open statuses, and only counted, never listed.
-- **Pull request:** new findings are listed and make the run exit `1` Both counts always print, for example
+- **Pull request:** new findings are listed and make the run exit `1`. Both counts always print, for example
   `sonar: new 0 · legacy 17 (overnightworks_webauth, main)`.
-- **Default branch:** a run on the default branch exits `1` on any open finding lists them and prints
+- **Default branch:** a run on the default branch exits `1` on any open finding, lists them and prints
   `sonar: N open on <default>`.
 - **Any other branch:** report only, exit `0`: `sonar: N open on <branch> (report only)`.
 
@@ -146,8 +146,7 @@ SONARIAC-3096). A pull-request analysis does not see an unchanged `.github/depen
 `sonar.sources` leaves `.github` out keeps the finding on its default branch too. The gate therefore keeps the rule out of the analysis:
 
 - **In the analysis:** where `.github/dependabot.yml` exists, the properties check hands the scan a multi-criteria issue exclusion
-  for `docker:S8431` over every file, so no analysis, pull request or branch, raises the finding and SonarCloud's own
-  quality gate agrees with the count. A finding an earlier analysis raised is closed by the next analysis of its branch. The exclusion replaces a multi-criteria exclusion set in SonarCloud's interface
+  for `docker:S8431` over every file, so no analysis, pull request or branch, raises the finding. A finding an earlier analysis raised is closed by the next analysis of its branch. The exclusion replaces a multi-criteria exclusion set in SonarCloud's interface
   on such a repository, because a value given to the scanner takes precedence over the interface's.
 - **The rule:** `quality sonar properties` tests whether `.github/dependabot.yml` exists. Its content is never read, so
   an empty or broken file counts as existing; a link to a file counts and a link to nowhere does not; a directory named
@@ -158,10 +157,10 @@ SONARIAC-3096). A pull-request analysis does not see an unchanged `.github/depen
   `Fix:` line, counts in `new` and in the legacy number, and fails the run.
 - **An unreachable file:** a `.github` the filesystem refuses access to is exit `2` from `quality sonar properties`
   with a line naming the file, before it writes the step output.
-- **Only this rule** has the exclusion; every other finding and rule is analysed as before.
+- **Only this rule** has the exception; every other finding and rule counts as before.
 - **Gaps:** the file's existence does not say that Dependabot maintains the Dockerfile's folder for Docker; a repository
   that has only `.github/dependabot.yaml` stays red on pull requests; Renovate is not judged.
 
 (operator rulings 21.10.2026 and 23.10.2026: Sonar's exception applies on pull requests too, „Sonars Ausnahme anwenden (empfohlen)“, and
 holds when the file exists, „Wenn dependabot.yml existiert (empfohlen)“; the rejected per-line entries stand in
-[decision 2](decisions/2-dependabot-exception.md); 23.10.2026, „ja A“, relayed by edge's head, applied the same exception to the legacy count (re-ruling E3 of #98); 1.11.2026, „Bis hal umgestellt hat (Recommended)“, ended that count side when hal moved to v0.9.2.)
+[decision 2](decisions/2-dependabot-exception.md). 23.10.2026, „ja A“, relayed by edge's head, applied the same exception to the legacy count (re-ruling E3 of #98); 1.11.2026, „Bis hal umgestellt hat (Recommended)“, ended that count side when hal moved to v0.9.2.)
