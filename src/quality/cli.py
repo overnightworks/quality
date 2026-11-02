@@ -194,6 +194,7 @@ class AreaEvent(StrEnum):
 
 
 CEILING_HELD = "ceiling held"
+OFFLINE_AUDITS = "offline audits only"
 NO_CONFIG_FACT = "no import-linter config"
 MEASURED_ONLY_EVENT = {Area.DEBT: AreaEvent.NOT_RECORDED, Area.IMPORTS: AreaEvent.NOT_SET_UP}
 START_FAILURE_NEXT = Instruction("fix what the error names, then run quality hygiene again")

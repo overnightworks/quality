@@ -6,11 +6,12 @@ import pytest
 
 from quality import check, cli, config, env_file, installation, scanners
 from quality.compose import is_compose_file
-from quality.report import CannotJudge, Command, Example, Finding, Reason, Unparsable, printable
+from quality.report import CannotJudge, Command, Example, Finding, FindingEvent, Reason, Unparsable, printable
 from quality.rules import Area, Rule
 from tests.support.architecture import KEPT_CONTRACT
 from tests.support.check import (
     CLEAN_VERDICT,
+    area_finding_rows,
     compose,
     env_row_stands,
     installed_ruff,
@@ -192,7 +193,9 @@ def test_a_refusing_workflow_scanner_stops_no_other_workflow_rule(build_repo, se
     captured = capsys.readouterr()
     assert code == 2
     assert f"{refusal_row('workflows')}actionlint exited 3" in captured.out
-    assert "workflow-security .github/workflows/w.yml:7 - zizmor unpinned-uses" in captured.out
+    assert [(location, row.event) for location, row in area_finding_rows(captured.out, Area.WORKFLOWS)] == [
+        (".github/workflows/w.yml:7", FindingEvent.INSECURE)
+    ]
 
 
 @pytest.mark.parametrize(

@@ -451,7 +451,7 @@ def test_a_merged_pipe_shows_the_hygiene_lines_in_run_order(env_and_broken_compo
         "hygiene", ".", cwd=env_and_broken_compose, door=door, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
     )
     prefixes = [
-        "workflow-security runs offline", "  ✗ files", ENV_ROW, FIX_LINE, ENV_ROW, FIX_LINE,
+        "  ✗ files", ENV_ROW, FIX_LINE, ENV_ROW, FIX_LINE,
         "  · debt", "  · imports", "  ✓ secrets", "  ✓ workflows", "  ✓ dependencies", "  ✓ code", "error: ", "next: ",
     ]
     lines = done.stdout.splitlines()
