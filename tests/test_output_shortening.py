@@ -141,6 +141,27 @@ def test_a_fact_of_counts_or_an_outcome_stands_whole_and_free_text_is_cut(entry,
     assert findings_at(30, findings, notes)[0] == line
 
 
+CUT_FINDINGS = {
+    FindingEvent.TRACKED, FindingEvent.UNREADABLE_PORT, FindingEvent.HOST_NETWORK, FindingEvent.CLAUDE_ONLY,
+    FindingEvent.SYMLINK, FindingEvent.DIVERGES, FindingEvent.NO_AGENTS_FILE, FindingEvent.MISNAMED,
+    FindingEvent.MISPLACED, FindingEvent.NO_HEADER, FindingEvent.STRAY, FindingEvent.INSECURE,
+    FindingEvent.PRINT_CALL, FindingEvent.OPEN,
+}  # fmt: skip
+CUT_NOTES = {NoteEvent.WARNING}
+
+
+@pytest.mark.parametrize(
+    ("entry", "is_cut"),
+    [(finding("a.env", event, "x" * 60), event in CUT_FINDINGS) for event in FindingEvent]
+    + [(note("a.env", event, "x" * 60), event in CUT_NOTES) for event in NoteEvent],
+    ids=[f"finding {event.name}" for event in FindingEvent] + [f"note {event.name}" for event in NoteEvent],
+)
+def test_every_event_is_cut_or_stands_whole_as_decided(entry, is_cut):
+    findings, notes = ([entry], []) if isinstance(entry, Finding) else ([], [entry])
+    (line, *_) = findings_at(40, findings, notes)
+    assert (line.endswith("…"), "x" * 60 in line) == (is_cut, not is_cut)
+
+
 def test_a_descriptive_row_and_its_sub_lines_end_at_the_window():
     reason = Row(Glyph.COULD_NOT_CHECK, "files", Event.CLEAN, "a reason of many words", descriptive=True)
     sub_line = Row(Glyph.COULD_NOT_CHECK, "files", Event.CLEAN, sub_lines=(SubLine(Glyph.COULD_NOT_CHECK, "a long reason"),))
