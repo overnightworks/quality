@@ -59,7 +59,7 @@ from quality.output import (
     write_scanner_runs,
     write_verdict,
 )
-from quality.report import CannotJudge, Command, Extent, Instruction, NoteEvent, Step, headline
+from quality.report import CannotJudge, Command, Extent, Instruction, NoteEvent, Step
 from quality.rules import Area, Rule
 from quality.sonar import (
     DEPENDABOT_CONFIG,
@@ -67,9 +67,9 @@ from quality.sonar import (
     Transport,
     analyse,
     check_properties,
+    excluded_rules,
     fetch_json,
     scanner_exclusions,
-    uncounted_rules,
 )
 from quality.verdict import (
     PageFetcher,
@@ -523,40 +523,33 @@ def run_scan_staged(path: Path, channels: Channels) -> int:
     return EXIT_FINDINGS if result.findings else EXIT_CLEAN
 
 
-def uncounted_rules_at(root: Path) -> frozenset[str]:
-    """The one place `.github/dependabot.yml` decides which rules the sonar doors do not count."""
-    return uncounted_rules(repository.is_on_disk(root, DEPENDABOT_CONFIG))
-
-
 def run_sonar_properties() -> int:
     try:
         check_properties(Path("."), os.environ)
-        uncounted = uncounted_rules_at(Path("."))
+        excluded = excluded_rules(repository.is_on_disk(Path("."), DEPENDABOT_CONFIG))
     except (CannotJudge, repository.RepositoryFileError) as error:
         emit(f"sonar: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     try:
-        append_step_output(SCANNER_ARGUMENTS_OUTPUT, scanner_exclusions(uncounted))
+        append_step_output(SCANNER_ARGUMENTS_OUTPUT, scanner_exclusions(excluded))
     except OSError as error:
         emit(f"sonar: cannot judge - {STEP_OUTPUT_VARIABLE} is not writable: {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     emit("sonar: properties clean")
-    if uncounted:
-        emit(f"sonar: the scan excludes {', '.join(sorted(uncounted))} ({DEPENDABOT_CONFIG} exists)")
+    if excluded:
+        emit(f"sonar: the scan excludes {', '.join(sorted(excluded))} ({DEPENDABOT_CONFIG} exists)")
     return EXIT_CLEAN
 
 
 def run_sonar_findings(transport: Transport, sleep: Sleep) -> int:
     try:
         legacy_mode = read_gate_settings(Path(".")).legacy
-        uncounted = uncounted_rules_at(Path("."))
-        result = analyse(os.environ, legacy_mode, uncounted, transport, sleep)
+        result = analyse(os.environ, legacy_mode, transport, sleep)
     except (CannotJudge, ConfigError, repository.RepositoryFileError) as error:
         emit(f"sonar: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
     for finding in result.findings.listed:
         emit_finding(finding)
-    emit(*(headline(finding) for finding in result.findings.set_aside))
     failed_conditions, disclosure = result.gate_lines()
     emit(*failed_conditions, file=sys.stderr)
     emit(*disclosure)
