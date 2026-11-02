@@ -50,6 +50,10 @@ def findings_at(columns: int, findings: list[Finding], notes: list[Note] | None 
     return lines_at(columns, lambda channel: output.write_findings_and_notes(findings, notes or [], channel))
 
 
+def entry_lists(entry: Finding | Note) -> tuple[list[Finding], list[Note]]:
+    return ([entry], []) if isinstance(entry, Finding) else ([], [entry])
+
+
 def rows_at(columns: int, *rows: Row) -> list[str]:
     return lines_at(columns, lambda channel: output.write_rows(rows, channel))
 
@@ -137,28 +141,30 @@ def test_a_findings_fact_fills_what_the_window_leaves(fact, columns, expected_fa
     ids=["grew", "conflict", "secret", "allowed", "tracked", "warning"],
 )
 def test_a_fact_of_counts_or_an_outcome_stands_whole_and_free_text_is_cut(entry, line):
-    findings, notes = ([entry], []) if isinstance(entry, Finding) else ([], [entry])
-    assert findings_at(30, findings, notes)[0] == line
-
-
-CUT_FINDINGS = {
-    FindingEvent.TRACKED, FindingEvent.UNREADABLE_PORT, FindingEvent.HOST_NETWORK, FindingEvent.CLAUDE_ONLY,
-    FindingEvent.SYMLINK, FindingEvent.DIVERGES, FindingEvent.NO_AGENTS_FILE, FindingEvent.MISNAMED,
-    FindingEvent.MISPLACED, FindingEvent.NO_HEADER, FindingEvent.STRAY, FindingEvent.INSECURE,
-    FindingEvent.PRINT_CALL, FindingEvent.OPEN,
-}  # fmt: skip
-CUT_NOTES = {NoteEvent.WARNING}
+    assert findings_at(30, *entry_lists(entry))[0] == line
 
 
 @pytest.mark.parametrize(
     ("entry", "is_cut"),
-    [(finding("a.env", event, "x" * 60), event in CUT_FINDINGS) for event in FindingEvent]
-    + [(note("a.env", event, "x" * 60), event in CUT_NOTES) for event in NoteEvent],
+    [
+        (
+            finding("a.env", event, "x" * 60),
+            event
+            in {
+                FindingEvent.TRACKED, FindingEvent.UNREADABLE_PORT, FindingEvent.HOST_NETWORK,
+                FindingEvent.CLAUDE_ONLY, FindingEvent.SYMLINK, FindingEvent.DIVERGES,
+                FindingEvent.NO_AGENTS_FILE, FindingEvent.MISNAMED, FindingEvent.MISPLACED,
+                FindingEvent.NO_HEADER, FindingEvent.STRAY, FindingEvent.INSECURE,
+                FindingEvent.PRINT_CALL, FindingEvent.OPEN,
+            },
+        )
+        for event in FindingEvent
+    ]
+    + [(note("a.env", event, "x" * 60), event in {NoteEvent.WARNING}) for event in NoteEvent],
     ids=[f"finding {event.name}" for event in FindingEvent] + [f"note {event.name}" for event in NoteEvent],
 )
-def test_every_event_is_cut_or_stands_whole_as_decided(entry, is_cut):
-    findings, notes = ([entry], []) if isinstance(entry, Finding) else ([], [entry])
-    (line, *_) = findings_at(40, findings, notes)
+def test_only_the_free_text_events_are_cut_at_a_terminal(entry, is_cut):
+    (line, *_) = findings_at(40, *entry_lists(entry))
     assert (line.endswith("…"), "x" * 60 in line) == (is_cut, not is_cut)
 
 
