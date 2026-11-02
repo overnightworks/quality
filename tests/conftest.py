@@ -14,11 +14,11 @@ import pytest
 from quality import advisories, cli
 from quality import fleet as fleet_module
 from quality.ratchet import BASELINE_PATH
-from tests.support.door import check_door
 
 pytest.register_assert_rewrite("tests.support")  # before the first import of a support module, so its asserts are rewritten
 
 from tests.support.advisories import advisory, zipped
+from tests.support.door import check_door
 from tests.support.fleet import GITHUB_BASE_VARIABLE, GITHUB_REDIRECT, RELEASES, TEST_OWNER, write_fleet
 from tests.support.git_repositories import GIT_IDENTITY, head_commit, make_repo, put
 from tests.support.scanners import CLEAN_SCANS, OUTPUTS, fake_scanner, serving, write_mise
