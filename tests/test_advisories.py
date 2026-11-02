@@ -543,6 +543,10 @@ def affected(
     return advisories.Affected(lock, subject, frozenset(ids), fact, "upgrade pillow")
 
 
+def torch() -> advisories.Affected:
+    return affected(subject=TORCH, fact=SEPARATOR.join(("torch 2.6.0", "GHSA-462x-pgg6-55fp")))
+
+
 def allowing(identifier="GHSA-462x-pgg6-55fp", lock=QWEN, until=TODAY) -> AdvisoryAllowance:
     return AdvisoryAllowance(identifier, lock, until, datetime.date(2026, 10, 21), "#371", "no image input")
 
@@ -563,7 +567,6 @@ YESTERDAY = TODAY - datetime.timedelta(days=1)
 VOXCPM = "speech/providers/voxcpm/uv.lock"
 LINKED = "speech/providers/linked/uv.lock"
 TORCH = "GHSA-462x-pgg6-55fp (CVE-2026-112395): PyPI torch 2.6.0"
-TORCH_FACT = SEPARATOR.join(("torch 2.6.0", "GHSA-462x-pgg6-55fp"))
 
 
 @pytest.mark.parametrize(
@@ -579,8 +582,8 @@ TORCH_FACT = SEPARATOR.join(("torch 2.6.0", "GHSA-462x-pgg6-55fp"))
         ([affected()], [allowing(lock=VOXCPM)], [red(), orphaned(lock=VOXCPM)], []),
         ([], [allowing()], [orphaned()], []),
         ([affected(), affected(LINKED)], [allowing()], [red(LINKED)], [allowed_line()]),
-        ([affected(), affected(subject=TORCH, fact=TORCH_FACT)], [allowing()], [], [allowed_line(), allowed_line(subject=TORCH)]),
-        ([affected(), affected(subject=TORCH, fact=TORCH_FACT)], [allowing(), allowing("CVE-2026-112395")],
+        ([affected(), torch()], [allowing()], [], [allowed_line(), allowed_line(subject=TORCH)]),
+        ([affected(), torch()], [allowing(), allowing("CVE-2026-112395")],
          [red(), red(QWEN, "torch"), (CONFIG_PATH, FindingEvent.CONFLICT, ("GHSA-462x-pgg6-55fp", "CVE-2026-112395", QWEN))], []),
         ([affected()], [], [red()], []),
     ],
