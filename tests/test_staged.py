@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from quality import cli, config, staged
-from quality.report import FindingEvent, NoteEvent
+from quality.report import FindingEvent, NoteEvent, printable
 from tests.support.check import (
     CopyLine,
     FindingLine,
@@ -13,6 +13,7 @@ from tests.support.check import (
     assert_finding_vocabulary,
     decode_block,
 )
+from tests.support.config_refusals import CONFIG, all_refusals
 from tests.support.git_repositories import GIT_IDENTITY, head_commit
 from tests.support.secrets import FAKE_KEY, HOSTILE_FILE, OTHER_KEY, allow_config
 
@@ -55,7 +56,7 @@ def test_a_staged_key_is_one_secret_row_with_its_entry_and_its_value_is_not_prin
     assert (finding.location, finding.event) == ("src/a.py:1", FindingEvent.SECRET)
     assert head_commit(repo)[:8] not in finding.reason
     assert_finding_vocabulary(finding)
-    assert lines[-1].startswith("scan-staged:")
+    assert lines[-1] == f"scan-staged: {len(result.findings)} finding(s)"
     assert FAKE_KEY not in "\n".join(lines)
 
 
@@ -290,6 +291,29 @@ def test_git_failing_on_the_staged_allow_list_is_exit_2_in_its_words(
     fake_git(f'case " $* " in *" {failing} "*) echo "{failing} broke" >&2; exit 1;; esac')
     assert scan_staged(repo) == 2
     assert f"scan-staged: cannot judge - {expected}: git exited 1" in capsys.readouterr().err
+
+
+STAGED_EXAMPLE_REFUSALS = [
+    refusal
+    for refusal in all_refusals()
+    if "staged" in refusal.loaders and refusal.example is not None and refusal.text is not None and not refusal.directory
+]
+
+
+@pytest.mark.scanner
+@pytest.mark.parametrize("refusal", STAGED_EXAMPLE_REFUSALS, ids=[refusal.id for refusal in STAGED_EXAMPLE_REFUSALS])
+def test_a_staged_config_refusal_prints_its_example_on_the_one_stderr_line_with_escaped_separators(
+    build_repo, installed_scanners, capsys, refusal
+):
+    """#302 acceptance 2: `scan-staged` prints the refusal as `<fact>, like:` and the example's lines on the same
+    stderr line, each separated by the literal `\\x0a`."""
+    repo = build_repo({"README": "hello\n"})
+    stage(repo, {CONFIG: refusal.text})
+    assert scan_staged(repo) == 2
+    captured = capsys.readouterr()
+    example = [printable(line) for line in refusal.example]
+    assert captured.err.splitlines() == [f"scan-staged: cannot judge - {printable(refusal.fact)}, like:" + "\\x0a".join(example)]
+    assert not set(example) & set(captured.err.splitlines())
 
 
 @pytest.mark.scanner
