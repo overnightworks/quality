@@ -1,4 +1,8 @@
+import errno
 import os
+import stat
+import subprocess
+import sys
 from collections.abc import Callable
 from pathlib import Path
 
@@ -188,6 +192,183 @@ def test_a_write_through_a_symlink_is_refused_without_naming_its_target(repo, el
     assert str(raised.value).startswith(f"cannot write {NAME}: ")
     assert (str(repo) in str(raised.value), str(elsewhere) in str(raised.value)) == (False, False)
     assert (elsewhere / "victim.toml").read_text() == "kept\n"
+
+
+def read_only_file(repo: Path, elsewhere: Path) -> None:
+    config_at(repo).write_text("old\n")
+    config_at(repo).chmod(0o444)
+
+
+def read_only_folder(repo: Path, elsewhere: Path) -> None:
+    config_at(repo).write_text("old\n")
+    config_at(repo).parent.chmod(0o555)
+
+
+def raises(error: BaseException):
+    def raiser(*args, **kwargs):
+        raise error
+
+    return raiser
+
+
+def folder_listing(repo: Path) -> list[str]:
+    return sorted(path.name for path in config_at(repo).parent.iterdir())
+
+
+@pytest.fixture
+def set_umask():
+    original = os.umask(0)
+    os.umask(original)
+    yield os.umask
+    os.umask(original)
+
+
+@pytest.mark.parametrize(
+    ("call", "error", "surfaces_as"),
+    [
+        ("fsync", OSError(errno.ENOSPC, "No space left on device"), RepositoryFileError),
+        ("replace", OSError(errno.EACCES, "Permission denied"), RepositoryFileError),
+        ("fsync", KeyboardInterrupt(), KeyboardInterrupt),
+        ("replace", KeyboardInterrupt(), KeyboardInterrupt),
+    ],
+    ids=["sync fails", "replace fails", "interrupted at the sync", "interrupted before the replacement"],
+)
+def test_a_failed_write_keeps_the_old_file(repo, monkeypatch, call, error, surfaces_as):
+    """A failure or an interrupt before the replacement leaves the old bytes and no sibling."""
+    config_at(repo).write_text("old\n")
+    monkeypatch.setattr(repository.os, call, raises(error))
+    with pytest.raises(surfaces_as):
+        repository.write_text(repo, NAME, "new\n")
+    assert (config_at(repo).read_bytes(), folder_listing(repo)) == (b"old\n", ["config.toml"])
+
+
+def test_an_interrupt_as_the_file_is_created_leaves_no_sibling(repo, monkeypatch):
+    config_at(repo).write_text("old\n")
+    real_open = os.open
+
+    def create_then_interrupt(path, flags, *args, **kwargs):
+        if flags & os.O_CREAT:
+            os.close(real_open(path, flags, *args, **kwargs))
+            raise KeyboardInterrupt
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(repository.os, "open", create_then_interrupt)
+    with pytest.raises(KeyboardInterrupt):
+        repository.write_text(repo, NAME, "new\n")
+    assert (config_at(repo).read_bytes(), folder_listing(repo)) == (b"old\n", ["config.toml"])
+
+
+def test_an_interrupt_after_the_replacement_leaves_the_new_file(repo, monkeypatch):
+    config_at(repo).write_text("old\n")
+    real_replace = os.replace
+
+    def replace_then_interrupt(source, destination):
+        real_replace(source, destination)
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(repository.os, "replace", replace_then_interrupt)
+    with pytest.raises(KeyboardInterrupt):
+        repository.write_text(repo, NAME, "new\n")
+    assert (config_at(repo).read_bytes(), folder_listing(repo)) == (b"new\n", ["config.toml"])
+
+
+def test_a_foreign_file_under_the_scratch_name_stays(repo, monkeypatch):
+    config_at(repo).write_text("old\n")
+    foreign = config_at(repo).with_name(".config.toml.fixed.tmp")
+    foreign.write_bytes(b"foreign\n")
+    monkeypatch.setattr("secrets.token_hex", lambda nbytes=None: "fixed")
+    with pytest.raises(RepositoryFileError, match=r"\[Errno 17\]"):
+        repository.write_text(repo, NAME, "new\n")
+    assert (config_at(repo).read_bytes(), foreign.read_bytes()) == (b"old\n", b"foreign\n")
+
+
+@pytest.mark.parametrize("mode", [0o600, 0o640, 0o664, 0o755])
+def test_a_write_keeps_the_files_mode(repo, mode):
+    config_at(repo).write_text("old\n")
+    config_at(repo).chmod(mode)
+    repository.write_text(repo, NAME, "new\n")
+    assert stat.S_IMODE(config_at(repo).stat().st_mode) == mode
+
+
+def test_a_private_file_stays_private_until_it_is_whole(repo, monkeypatch, set_umask):
+    set_umask(0o022)
+    config_at(repo).write_text("old\n")
+    config_at(repo).chmod(0o644)
+    real_fchmod = os.fchmod
+    seen: list[tuple[int, int]] = []
+
+    def record_then_apply(descriptor, mode):
+        status = os.fstat(descriptor)
+        seen.append((stat.S_IMODE(status.st_mode), status.st_size))
+        real_fchmod(descriptor, mode)
+
+    monkeypatch.setattr(repository.os, "fchmod", record_then_apply)
+    repository.write_text(repo, NAME, "new text\n")
+    assert seen == [(0o600, len("new text\n"))]
+
+
+@pytest.mark.parametrize(("umask", "mode"), [(0o022, 0o644), (0o077, 0o600)], ids=["0o022", "0o077"])
+def test_a_new_file_takes_the_umasks_mode(repo, set_umask, umask, mode):
+    set_umask(umask)
+    repository.write_text(repo, NAME, "new\n")
+    assert stat.S_IMODE(config_at(repo).stat().st_mode) == mode
+
+
+@NEEDS_PERMISSIONS
+def test_a_read_only_file_stays_refused(arranged):
+    repo = arranged(read_only_file)
+    with pytest.raises(RepositoryFileError, match=r"\[Errno 13\]"):
+        repository.write_text(repo, NAME, "new\n")
+    assert (config_at(repo).read_bytes(), folder_listing(repo)) == (b"old\n", ["config.toml"])
+
+
+@NEEDS_PERMISSIONS
+def test_a_read_only_folder_refuses_the_write(arranged):
+    repo = arranged(read_only_folder)
+    with pytest.raises(RepositoryFileError, match=r"\[Errno 13\]"):
+        repository.write_text(repo, NAME, "new\n")
+    assert (config_at(repo).read_bytes(), folder_listing(repo)) == (b"old\n", ["config.toml"])
+
+
+def test_a_write_syncs_before_it_replaces(repo, monkeypatch):
+    """The order of the sync and the replacement is the contract."""
+    calls: list[str] = []
+    for name in ("fsync", "replace"):
+        real = getattr(os, name)
+        monkeypatch.setattr(
+            repository.os, name, lambda *args, real=real, name=name: (calls.append(name), real(*args))[1]
+        )
+    repository.write_text(repo, NAME, "new\n")
+    assert calls == ["fsync", "replace"]
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("moment", "bytes_left", "siblings_left"), [("before", b"old\n", 1), ("after", b"new\n", 0)]
+)
+def test_a_killed_write_leaves_one_whole_file(repo, moment, bytes_left, siblings_left):
+    config_at(repo).write_text("old\n")
+    child = """
+import os, signal, sys
+from pathlib import Path
+from quality import repository
+
+root, moment = Path(sys.argv[1]), sys.argv[2]
+real_replace = os.replace
+
+def replace_and_kill(source, destination):
+    if moment == "after":
+        real_replace(source, destination)
+    os.kill(os.getpid(), signal.SIGKILL)
+
+os.replace = replace_and_kill
+repository.write_text(root, "quality/config.toml", "new\\n")
+"""
+    finished = subprocess.run([sys.executable, "-I", "-c", child, str(repo), moment], timeout=60, check=False)
+    siblings = [path for path in config_at(repo).parent.iterdir() if path.name != "config.toml"]
+    assert finished.returncode == -9
+    assert (config_at(repo).read_bytes(), len(siblings)) == (bytes_left, siblings_left)
+    assert [path.read_bytes() for path in siblings] == [b"new\n"] * siblings_left
 
 
 def checkout_paths(repo: Path) -> tuple[str, ...]:
