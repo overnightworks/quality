@@ -114,6 +114,10 @@ It applies these rules:
   overwritten with `baseline: the previous quality/baseline.toml could not be read (...), so raises cannot be named`,
   but a symlink on its way is never written through: `baseline: not written - cannot write quality/baseline.toml: a
   symlink on its way would redirect the write`, exit `2`, as for any write the system refuses.
+  The write is whole or not at all: a hidden sibling takes the text and replaces the file in one step, so whatever
+  stops the process leaves the complete old file or the complete new one, the replacement being the commit point, so a
+  Ctrl-C just after it keeps the new file, and a killed process can leave that sibling. It keeps the file's mode,
+  stays refused on a read-only file and needs a writable folder. It promises nothing against a power loss.
   It also reads `quality/config.toml` for `[[size.generated]]` and refuses with `baseline: not written - ...`, exit `2`,
   a config it cannot read or finds malformed; a declared file Python cannot parse leaves the `size` rule, but the write
   still refuses it, because the clone pairs of the whole tree must be measured.

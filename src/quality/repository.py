@@ -9,12 +9,16 @@ entry from a dangling link, and os.stat raises the OSError whose errno decides, 
 
 import errno
 import os
+import secrets
 import stat
 import tomllib
+from functools import partial
 from pathlib import Path
 
 ABSENT_ERRNOS = frozenset({errno.ENOENT, errno.ENOTDIR})
 GONE_ERRNOS = ABSENT_ERRNOS | {errno.ELOOP}
+PRIVATE_MODE = 0o600
+NEW_FILE_MODE = 0o666
 
 
 class RepositoryFileError(Exception):
@@ -103,13 +107,46 @@ def is_symlink(root: Path, name: str) -> bool:
 
 
 def write_text(root: Path, name: str, text: str) -> None:
-    """Writes the repository's own `name` as UTF-8, never through a symlink, which could redirect it anywhere."""
+    """Writes the repository's own `name` as UTF-8, never through a symlink, which could redirect it anywhere. Whatever
+    stops the process leaves the complete old file or the complete new one: the successful replacement is the commit
+    point, and an interrupt can still arrive after it and before `os.replace` returns, leaving the new file. Nothing
+    is promised against a power loss."""
     repository = os.path.realpath(root)
     path = Path(repository, name)
     try:
         if os.path.realpath(path) != str(path):
             raise RepositoryFileError(f"cannot write {name}: a symlink on its way would redirect the write")
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text, encoding="utf-8")
+        _replace_whole(path, text.encode("utf-8"))
     except OSError as error:
         raise RepositoryFileError(f"cannot write {name}: {os_error_reason(error)}") from error
+
+
+def _mode_to_keep(path: Path) -> int | None:
+    """The mode of the file about to be replaced, None where there is none; the open keeps a read-only file refused."""
+    try:
+        with open(path, "r+b") as file:
+            return stat.S_IMODE(os.fstat(file.fileno()).st_mode)
+    except FileNotFoundError:
+        return None
+
+
+def _replace_whole(path: Path, content: bytes) -> None:
+    kept_mode = _mode_to_keep(path)
+    scratch = path.with_name(f".{path.name}.{secrets.token_hex(8)}.tmp")
+    # A `partial` of the C `os.open` runs no Python between the creation and the file object's ownership of the
+    # descriptor; a lambda would.
+    opener = partial(os.open, mode=NEW_FILE_MODE if kept_mode is None else PRIVATE_MODE)
+    try:
+        with open(scratch, "xb", opener=opener) as file:
+            file.write(content)
+            file.flush()
+            if kept_mode is not None:
+                os.fchmod(file.fileno(), kept_mode)
+            os.fsync(file.fileno())
+        os.replace(scratch, path)
+    except FileExistsError:  # `x` met a file this run did not create, so it is not this run's to delete
+        raise
+    except BaseException:
+        scratch.unlink(missing_ok=True)
+        raise
