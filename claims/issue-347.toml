@@ -1,0 +1,7 @@
+claim_id = "20e8b08ac888478083e58854d0ab0ebb"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "4d84b29fc04123cc2d2dc85a32f92e7ce12b6b56"
+branch = "claude/issue-347-c7a-atomic-write"
+scope = ["docs/rules.md", "src/quality/repository.py", "tests/test_repository.py"]
+opened_commit = "70322ddffe9044af71776e8aaff6b296710b1e9f"
