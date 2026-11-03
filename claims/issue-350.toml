@@ -1,0 +1,8 @@
+claim_id = "541ee58250ca4e61aa7667d148f32da6"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "bcc8573342335739a12dfd38039cfb1a737aafec"
+branch = "claude/issue-350-c7b-fix"
+scope = ["AGENTS.md", "README.md", "docs/commands.md", "docs/output.md", "docs/rules.md", "quality/baseline.toml", "src/quality/check.py", "src/quality/checkout.py", "src/quality/cli.py", "src/quality/clones.py", "src/quality/output.py", "src/quality/ratchet.py", "src/quality/report.py", "src/quality/verdict.py", "tests/support/check.py", "tests/support/door.py", "tests/test_checkout.py", "tests/test_cli_fix.py", "tests/test_cli_help.py", "tests/test_cli_output.py", "tests/test_cli_workflow_invocations.py", "tests/test_clones_baseline.py", "tests/test_config.py", "tests/test_output.py", "tests/test_ratchet.py", "tests/test_ratchet_fix.py", "tests/test_ratchet_generated.py", "tests/test_repository.py", "tests/test_verdict.py", "tests/test_verdict_renames.py"]
+opened_commit = "e17b2495200ccebb56a531f21e24a25a08bba2fe"
+whole_reason = "Eight production files, about +180/-75: one public word replaced end to end crosses its parser, frame, judge and ceiling logic, and rules 3 and 5 keep the word and its replacement together."
