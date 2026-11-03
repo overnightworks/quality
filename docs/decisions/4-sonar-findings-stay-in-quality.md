@@ -31,5 +31,7 @@ quality keeps judging the findings; the pre-scan check is now named `quality son
 
 ## Consequences
 
-The count, the legacy path and the door stay. Reopen when the hosted gate can fail on a finding on an unchanged line, the
-Docker rule is excluded in SonarCloud, and the scanner no longer lets a properties file reach the token.
+The count, the legacy path and the door stay. Reopen when the hosted gate can fail on a finding on an unchanged line and the
+scanner no longer lets a properties file reach the token. The third precondition, the Docker rule's exclusion, has been met
+since v0.9.2 by the scan's own arguments (set where `.github/dependabot.yml` exists, not a SonarCloud setting; see
+[sonar.md](../sonar.md#a-dependabot-exception-for-dockers8431)); the bullet above is the measurement of 29.10.2026.

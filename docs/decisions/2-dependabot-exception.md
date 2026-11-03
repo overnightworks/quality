@@ -1,6 +1,6 @@
 # Decision 2: Sonar's Dependabot exception applies on pull requests, once per rule
 
-Status: accepted, 21.10.2026. Reader: an engineer who sees `docker:S8431` red on a pull request, or wants a per-image
+Status: accepted, 21.10.2026; the count side ended 3.11.2026, see Outcome. Reader: an engineer who sees `docker:S8431` red on a pull request, or wants a per-image
 exception.
 
 ## Context
@@ -37,6 +37,15 @@ An empty or broken `dependabot.yml` counts as existing, a repository with only `
 Where the file exists, the properties check also hands the scan an issue exclusion for the rule (#298), so no analysis raises the
 finding and SonarCloud's own quality gate agrees with the count; a repository's multi-criteria exclusion set in
 SonarCloud's interface is replaced there. The count still sets aside a finding an earlier analysis raised.
+
+## Outcome
+
+The scan exclusion of the properties check (v0.9.2) left no finding of the rule for the count to set aside, and the count
+side was removed: the set-aside print, the legacy subtraction and the emergency door's read of `.github/dependabot.yml`.
+Today only `quality sonar properties` tests the file, by existence, and excludes `docker:S8431` from the scan; every open
+finding counts everywhere, so a finding of that rule that an analysis raises anyway is an ordinary finding. The operator's
+ruling of 1.11.2026, „Bis hal umgestellt hat (Recommended)“, set when the count side went. The rejected alternatives above
+stand.
 
 ## The operator's words
 

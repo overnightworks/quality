@@ -6,7 +6,7 @@ import re
 import urllib.error
 import urllib.parse
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
@@ -44,13 +44,12 @@ OPEN_ISSUE_STATUSES = "OPEN,CONFIRMED,ACCEPTED,FALSE_POSITIVE"
 
 # Sonar's own sensor drops this rule only when its scanner has indexed a bot config, which a pull-request analysis
 # of an unchanged file and a repository that leaves `.github` out of `sonar.sources` do not do. The gate applies
-# the same test everywhere, in its count and, through the scan's arguments, in the analysis itself.
+# the same test everywhere, through the scan's arguments.
 DEPENDABOT_CONFIG = ".github/dependabot.yml"
 DEPENDABOT_EXCEPTION_RULE = "docker:S8431"
 IGNORE_CRITERIA_KEY = "sonar.issue.ignore.multicriteria"
 IGNORE_CRITERION_PREFIX = "e"
 ALL_FILES_PATTERN = "**/*"
-SET_ASIDE_REASON = f" (does not count: {DEPENDABOT_CONFIG} exists, Sonar's own exception, which its pull-request analysis misses)"
 
 PULL_REQUEST_EVENT = "pull_request"
 TOKEN_VARIABLE = "SONAR_TOKEN"  # noqa: S105 - the name of an environment variable and not a secret
@@ -178,7 +177,6 @@ class Analysis:
 class OpenFindings:
     total: int
     listed: tuple[Finding, ...]
-    set_aside: tuple[Finding, ...] = ()
 
     @property
     def count(self) -> int:
@@ -186,8 +184,8 @@ class OpenFindings:
         return max(self.total, len(self.listed))
 
 
-def uncounted_rules(dependabot_config_exists: bool) -> frozenset[str]:
-    """The rules whose findings the gate prints but does not count; a rule's file path is no input."""
+def excluded_rules(dependabot_config_exists: bool) -> frozenset[str]:
+    """The rules the scan drops in every file; a rule's file path is no input."""
     return frozenset({DEPENDABOT_EXCEPTION_RULE}) if dependabot_config_exists else frozenset()
 
 
@@ -232,7 +230,7 @@ class GateStatus:
 
 @dataclass(frozen=True)
 class SonarResult:
-    """`legacy` is the default branch's open count less the rules its own run sets aside, asked for on pull requests only."""
+    """`legacy` is the default branch's open count, asked for on pull requests only."""
 
     analysis: Analysis
     findings: OpenFindings
@@ -387,7 +385,6 @@ def decode_property_text(line: str, position: int, stop_at: str = "") -> tuple[s
 def analyse(
     environment: Mapping[str, str],
     legacy_mode: LegacyMode,
-    uncounted: frozenset[str],
     transport: Transport,
     sleep: Sleep,
 ) -> SonarResult:
@@ -401,10 +398,10 @@ def analyse(
     unknown = kind.judges_legacy and not default_analysed
     if unknown and legacy_mode is LegacyMode.FAIL:
         raise CannotJudge(legacy_unknown(analysis.default_branch))
-    findings = open_findings(analysis, transport, uncounted)
+    findings = open_findings(analysis, transport)
     legacy = None
     if kind is RunKind.PULL_REQUEST and default_analysed:
-        legacy = legacy_count(analysis, uncounted, transport)
+        legacy = legacy_count(analysis, transport)
     return SonarResult(analysis, findings, legacy_mode, unknown, legacy, gate)
 
 
@@ -532,34 +529,25 @@ def default_branch_analysed(analysis: Analysis, transport: Transport) -> bool:
     return bool(branches[0].get("analysisDate"))
 
 
-def issues_search_url(analysis: Analysis, scope: Scope, page: int, page_size: int, rule: str | None = None) -> str:
-    rule_filter = {} if rule is None else {"rules": rule}
+def issues_search_url(analysis: Analysis, scope: Scope, page: int, page_size: int) -> str:
     return api_url(
         "issues/search",
         componentKeys=analysis.project.key,
         issueStatuses=OPEN_ISSUE_STATUSES,
         ps=page_size,
         p=page,
-        **rule_filter,
         **scope_query(scope),
     )
 
 
-def legacy_count(analysis: Analysis, uncounted: frozenset[str], transport: Transport) -> int:
-    """The default branch's open total less the findings of the rules its own run sets aside."""
-    scope = Scope("branch", analysis.default_branch)
-    total = open_total(analysis, scope, transport)
-    for rule in sorted(uncounted):
-        set_aside = open_total(analysis, scope, transport, rule)
-        if set_aside > total:
-            raise CannotJudge(f"SonarCloud counts {set_aside} open {rule} findings on {analysis.default_branch} but only {total} open findings in all")
-        total -= set_aside
-    return total
+def legacy_count(analysis: Analysis, transport: Transport) -> int:
+    """The default branch's open total."""
+    return open_total(analysis, Scope("branch", analysis.default_branch), transport)
 
 
-def open_total(analysis: Analysis, scope: Scope, transport: Transport, rule: str | None = None) -> int:
+def open_total(analysis: Analysis, scope: Scope, transport: Transport) -> int:
     """The answer's total alone: findings counted, never listed."""
-    url = issues_search_url(analysis, scope, 1, 1, rule)
+    url = issues_search_url(analysis, scope, 1, 1)
     unreadable = CannotJudge(f"SonarCloud answered {url.partition('?')[0]} with an unreadable body")
     try:
         total = answer_object(transport(url, analysis.authorization), None, url)["total"]
@@ -570,9 +558,8 @@ def open_total(analysis: Analysis, scope: Scope, transport: Transport, rule: str
     return total
 
 
-def open_findings(analysis: Analysis, transport: Transport, uncounted: frozenset[str] = frozenset()) -> OpenFindings:
+def open_findings(analysis: Analysis, transport: Transport) -> OpenFindings:
     listed: list[Finding] = []
-    set_aside: list[Finding] = []
     fetched = 0
     total = 0
     for page in range(1, MAXIMUM_FINDINGS_PAGES + 1):
@@ -583,18 +570,13 @@ def open_findings(analysis: Analysis, transport: Transport, uncounted: frozenset
             issues = report["issues"]
             if not isinstance(issues, list):
                 raise CannotJudge(f"SonarCloud answered {url.partition('?')[0]} with issues that are not a list")
-            for issue in issues:
-                finding = finding_from_issue(issue)
-                if issue["rule"] in uncounted:
-                    set_aside.append(replace(finding, fact=finding.fact + SET_ASIDE_REASON))
-                else:
-                    listed.append(finding)
+            listed.extend(map(finding_from_issue, issues))
         except (KeyError, TypeError, ValueError) as error:
             raise CannotJudge(f"SonarCloud answered {url.partition('?')[0]} with an unreadable body") from error
         fetched += len(issues)
         if not issues or fetched >= total:
             break
-    return OpenFindings(max(0, total - len(set_aside)), tuple(listed), tuple(set_aside))
+    return OpenFindings(max(0, total), tuple(listed))
 
 
 def analysed_pull_request_commit(analysis: Analysis, transport: Transport) -> str | None:

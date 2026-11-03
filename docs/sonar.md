@@ -60,7 +60,7 @@ The scanner's transport, verified at sonar-scanner-java-library 4.1.1.1633 (the 
 - Re-verify all of this on any bump of the scan action or `scannerVersion`.
 - Sources at 4.1.1.1633: [HttpClientFactory.java:72](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/http/HttpClientFactory.java#L72), [ScannerHttpClient.java:162-170](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/http/ScannerHttpClient.java#L162-L170), [ScannerHttpClient.java:231-233](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/http/ScannerHttpClient.java#L231-L233), [ScannerEndpointResolver.java:40](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/endpoint/ScannerEndpointResolver.java#L40), [ScannerEngineLauncherFactory.java](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/facade/forked/ScannerEngineLauncherFactory.java).
 
-`quality sonar findings` is the SonarCloud zero-findings rule, except the findings the [Dependabot exception](#a-dependabot-exception-for-dockers8431) sets aside. It reads the scanner's `.scannerwork/report-task.txt` relative to the working directory (no other path can be given); a missing or unreadable file is exit 2.
+`quality sonar findings` is the SonarCloud zero-findings rule: every open finding counts. Where `.github/dependabot.yml` exists the scan itself excludes one rule, see the [Dependabot exception](#a-dependabot-exception-for-dockers8431). It reads the scanner's `.scannerwork/report-task.txt` relative to the working directory (no other path can be given); a missing or unreadable file is exit 2.
 The zero is the operator's (operator ruling 16.10.2026: „0 Findings Toleranz für alle Repos“; SonarCloud belongs in
 the minimum profile: „sollte das da nicht mit rein?“).
 
@@ -74,11 +74,10 @@ unreadable is exit `2`.
 
 `gate.yml` passes the repository's default branch (`github.event.repository.default_branch`) as `DEFAULT_BRANCH`; it is
 never assumed to be `main`, and a missing or empty value is exit `2`. "Legacy" means the open findings of that branch,
-counted by the same `issues/search` with the same open statuses, and only counted, never listed; the findings the
-[Dependabot exception](#a-dependabot-exception-for-dockers8431) sets aside are subtracted, one more count per such rule.
-- **Pull request:** new findings are listed and make the run exit `1` (except the findings the [Dependabot exception](#a-dependabot-exception-for-dockers8431) sets aside). Both counts always print, for example
+counted by the same `issues/search` with the same open statuses, and only counted, never listed.
+- **Pull request:** new findings are listed and make the run exit `1`. Both counts always print, for example
   `sonar: new 0 · legacy 17 (overnightworks_webauth, main)`.
-- **Default branch:** a run on the default branch exits `1` on any open finding (except the findings the [Dependabot exception](#a-dependabot-exception-for-dockers8431) sets aside), lists them and prints
+- **Default branch:** a run on the default branch exits `1` on any open finding, lists them and prints
   `sonar: N open on <default>`.
 - **Any other branch:** report only, exit `0`: `sonar: N open on <branch> (report only)`.
 
@@ -144,30 +143,24 @@ Sonar's rule `docker:S8431` ("Use either the version tag or the digest for the i
 indexed a Dependabot config
 ([DockerSensor.java](https://github.com/SonarSource/sonar-iac/blob/2bb050011ed1a224b74d23182edcc82afca8695b/iac-extensions/docker/src/main/java/org/sonar/iac/docker/plugin/DockerSensor.java#L204-L226),
 SONARIAC-3096). A pull-request analysis does not see an unchanged `.github/dependabot.yml`, and a repository whose
-`sonar.sources` leaves `.github` out keeps the finding on its default branch too. The gate therefore judges a pull
-request the way Sonar judges main:
+`sonar.sources` leaves `.github` out keeps the finding on its default branch too. The gate therefore keeps the rule out of the analysis:
 
 - **In the analysis:** where `.github/dependabot.yml` exists, the properties check hands the scan a multi-criteria issue exclusion
-  for `docker:S8431` over every file, so no analysis, pull request or branch, raises the finding and SonarCloud's own
-  quality gate agrees with the count. The exclusion replaces a multi-criteria exclusion set in SonarCloud's interface
+  for `docker:S8431` over every file, so no analysis, pull request or branch, raises the finding. A finding an earlier analysis raised is closed by the next analysis of its branch. The exclusion replaces a multi-criteria exclusion set in SonarCloud's interface
   on such a repository, because a value given to the scanner takes precedence over the interface's.
-- **The rule:** when `.github/dependabot.yml` exists in the checkout, `docker:S8431` does not count. Its content is
-  never read, so an empty or broken file counts as existing; a link to a file counts and a link to nowhere does not; a directory named `.github/dependabot.yml` counts too, unlike
-  Sonar, which needs a file.
-  `.github/dependabot.yaml` is not looked at. The rule applies in every run kind.
-- **What prints:** the finding still prints, on stdout after the counted findings and before the summary, without a
-  `Fix:` line, for a finding an earlier analysis raised: `sonar Dockerfile:3 - docker:S8431: <message> (does not count: .github/dependabot.yml exists, Sonar's
-  own exception, which its pull-request analysis misses)`. The summary line does not count it, and the legacy number
-  leaves it out too: the default branch's open total less that rule's open count on the default branch. A rule count
-  above the total is exit `2`.
-- **An unreachable file:** a `.github` the filesystem refuses access to is exit `2` with a line naming the file, before
-  any request.
+- **The rule:** `quality sonar properties` tests whether `.github/dependabot.yml` exists. Its content is never read, so
+  an empty or broken file counts as existing; a link to a file counts and a link to nowhere does not; a directory named
+  `.github/dependabot.yml` counts too, unlike Sonar, which needs a file. `.github/dependabot.yaml` is not looked at.
+- **What counts:** `quality sonar findings` and `quality emergency-merge` count every open finding and read no
+  `dependabot.yml`. A `docker:S8431` finding that an analysis raises anyway (no `.github/dependabot.yml`, only
+  `.github/dependabot.yaml`, or an analysis that predates the exclusion) is an ordinary finding: it prints with its
+  `Fix:` line, counts in `new` and in the legacy number, and fails the run.
+- **An unreachable file:** a `.github` the filesystem refuses access to is exit `2` from `quality sonar properties`
+  with a line naming the file, before it writes the step output.
 - **Only this rule** has the exception; every other finding and rule counts as before.
-- **The emergency door** reads the file at the pull request's merge commit (the commit the gate's checkout stands on) and counts and shows as the gate does.
 - **Gaps:** the file's existence does not say that Dependabot maintains the Dockerfile's folder for Docker; a repository
   that has only `.github/dependabot.yaml` stays red on pull requests; Renovate is not judged.
 
 (operator rulings 21.10.2026 and 23.10.2026: Sonar's exception applies on pull requests too, „Sonars Ausnahme anwenden (empfohlen)“, and
 holds when the file exists, „Wenn dependabot.yml existiert (empfohlen)“; the rejected per-line entries stand in
-[decision 2](decisions/2-dependabot-exception.md); 23.10.2026, „ja A“, relayed by edge's head: the legacy count sets
-aside the same findings, re-ruling E3 of #98.)
+[decision 2](decisions/2-dependabot-exception.md). 23.10.2026, „ja A“, relayed by edge's head, applied the same exception to the legacy count (re-ruling E3 of #98); 1.11.2026, „Bis hal umgestellt hat (Recommended)“, ended that count side when hal moved to v0.9.2.)
