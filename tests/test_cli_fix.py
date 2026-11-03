@@ -287,3 +287,26 @@ def test_an_interrupted_fix_leaves_the_old_file_or_the_new_one(build_repo, monke
         door_in(repo, *FIX_WORDS)
     assert ((repo / BASELINE_PATH).read_bytes() == before) == (when == "before")
     assert "debt" not in capsys.readouterr().out
+
+
+def test_a_clones_table_only_the_index_holds_is_not_recorded_again(build_repo, capsys):
+    repo = build_repo({"src/a.py": long_function(62)})
+    (repo / BASELINE_PATH).parent.mkdir()
+    (repo / BASELINE_PATH).write_text(ENTRY + "\n[clones]\n")
+    git(repo, "add", BASELINE_PATH)
+    (repo / BASELINE_PATH).write_text(ENTRY)
+    before = digest(repo)
+    code, out, _ = fixed(capsys, repo, *FIX_WORDS)
+    assert (code, "quality/baseline.toml lost its [clones] table, which git holds" in out, digest(repo)) == (2, True, before)
+
+
+def test_a_ceiling_the_root_commit_held_is_no_first_recording_under_log_show_root_false(build_repo, capsys):
+    repo = build_repo({"src/a.py": long_function(62), BASELINE_PATH: ENTRY + "\n[clones]\n"})
+    git(repo, "config", "log.showRoot", "false")
+    (repo / "other").write_text("x\n")
+    git(repo, "add", "other")
+    git(repo, "commit", "-q", "-m", "other")
+    commit_the_removal(repo)
+    code, out, _ = fixed(capsys, repo, *FIX_WORDS)
+    assert (code, "quality/baseline.toml is gone from the tree but git holds it" in out) == (2, True)
+    assert not (repo / BASELINE_PATH).exists()
