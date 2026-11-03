@@ -1,8 +1,0 @@
-claim_id = "2e1ed232299946b4a5f1bdc8cf830b17"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "3ad2147c17be6c4a6e6c662f603d0f546df03923"
-branch = "claude/issue-321-dependabot-count"
-scope = ["docs/commands.md", "docs/decisions/2-dependabot-exception.md", "docs/decisions/4-sonar-findings-stay-in-quality.md", "docs/runbook-emergency-merge.md", "docs/sonar.md", "src/quality/cli.py", "src/quality/merge.py", "src/quality/sonar.py", "tests/support/merge.py", "tests/support/sonar.py", "tests/test_sonar_exception.py"]
-opened_commit = "ca55558ad7d3d85bfa07fd892c126ddd9d177c7c"
-whole_reason = "The count side's three readers (the findings door's set-aside and subtraction, the emergency door's file read) and their tests, support and docs go together, or a half-removed count disagrees with the door."
