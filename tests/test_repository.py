@@ -15,7 +15,9 @@ from tests.support.door import CHECK_WORD, door_in
 
 NAME = "quality/config.toml"
 VALID_CONFIG = '[gate]\nmandatory_jobs = ["checks"]\n'
-NEEDS_PERMISSIONS = pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-0 path, so no permission is refused")
+NEEDS_PERMISSIONS = pytest.mark.skipif(
+    os.geteuid() == 0, reason="root reads a mode-0 path, so no permission is refused"
+)
 Arrange = Callable[[Path, Path], None]
 
 
@@ -135,7 +137,10 @@ def test_a_name_the_tree_does_not_hold_reads_as_absent(arranged, arrange):
 
 @pytest.mark.parametrize(
     ("arrange", "reason"),
-    [*UNUSABLE_CONFIGS, pytest.param(directory_without_permission, DENIED, id="quality/ mode 0", marks=NEEDS_PERMISSIONS)],
+    [
+        *UNUSABLE_CONFIGS,
+        pytest.param(directory_without_permission, DENIED, id="quality/ mode 0", marks=NEEDS_PERMISSIONS),
+    ],
 )
 def test_an_unusable_file_is_one_repository_relative_error(arranged, repo, elsewhere, arrange, reason):
     """#52 rules 1, 3 and 5: an unusable name is an error that names it as given, never a resolved path."""
@@ -274,12 +279,18 @@ def test_an_interrupt_after_the_replacement_leaves_the_new_file(repo, monkeypatc
 
 def test_a_foreign_file_under_the_scratch_name_stays(repo, monkeypatch):
     config_at(repo).write_text("old\n")
-    foreign = config_at(repo).with_name(".config.toml.fixed.tmp")
-    foreign.write_bytes(b"foreign\n")
-    monkeypatch.setattr("secrets.token_hex", lambda nbytes=None: "fixed")
+    real_open = os.open
+    foreign: list[Path] = []
+
+    def occupy_the_scratch_name_then_open(path, *args, **kwargs):
+        foreign.append(Path(path))
+        Path(path).write_bytes(b"foreign\n")
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(repository.os, "open", occupy_the_scratch_name_then_open)
     with pytest.raises(RepositoryFileError, match=r"\[Errno 17\]"):
         repository.write_text(repo, NAME, "new\n")
-    assert (config_at(repo).read_bytes(), foreign.read_bytes()) == (b"old\n", b"foreign\n")
+    assert (config_at(repo).read_bytes(), foreign[0].read_bytes()) == (b"old\n", b"foreign\n")
 
 
 @pytest.mark.parametrize("mode", [0o600, 0o640, 0o664, 0o755])
@@ -307,7 +318,9 @@ def test_a_private_file_stays_private_until_it_is_whole(repo, monkeypatch, set_u
     assert seen == [(0o600, len("new text\n"))]
 
 
-@pytest.mark.parametrize(("umask", "mode"), [(0o022, 0o644), (0o077, 0o600)], ids=["0o022", "0o077"])
+@pytest.mark.parametrize(
+    ("umask", "mode"), [(0o022, 0o644), (0o077, 0o600), (0o002, 0o664)], ids=["0o022", "0o077", "0o002"]
+)
 def test_a_new_file_takes_the_umasks_mode(repo, set_umask, umask, mode):
     set_umask(umask)
     repository.write_text(repo, NAME, "new\n")
@@ -315,36 +328,39 @@ def test_a_new_file_takes_the_umasks_mode(repo, set_umask, umask, mode):
 
 
 @NEEDS_PERMISSIONS
-def test_a_read_only_file_stays_refused(arranged):
-    repo = arranged(read_only_file)
+@pytest.mark.parametrize("how", [read_only_file, read_only_folder], ids=["file", "folder"])
+def test_a_read_only_target_refuses_the_write(arranged, how):
+    repo = arranged(how)
     with pytest.raises(RepositoryFileError, match=r"\[Errno 13\]"):
         repository.write_text(repo, NAME, "new\n")
     assert (config_at(repo).read_bytes(), folder_listing(repo)) == (b"old\n", ["config.toml"])
 
 
-@NEEDS_PERMISSIONS
-def test_a_read_only_folder_refuses_the_write(arranged):
-    repo = arranged(read_only_folder)
-    with pytest.raises(RepositoryFileError, match=r"\[Errno 13\]"):
-        repository.write_text(repo, NAME, "new\n")
-    assert (config_at(repo).read_bytes(), folder_listing(repo)) == (b"old\n", ["config.toml"])
+def test_a_write_syncs_the_whole_content_before_it_replaces(repo, monkeypatch):
+    """The order of the sync and the replacement is the contract, and the sync covers the finished content."""
+    text = "new text\n"
+    events: list[tuple[str, int | None]] = []
+    real_fsync, real_replace = os.fsync, os.replace
 
+    def record_size_then_sync(descriptor):
+        events.append(("fsync", os.fstat(descriptor).st_size))
+        real_fsync(descriptor)
 
-def test_a_write_syncs_before_it_replaces(repo, monkeypatch):
-    """The order of the sync and the replacement is the contract."""
-    calls: list[str] = []
-    for name in ("fsync", "replace"):
-        real = getattr(os, name)
-        monkeypatch.setattr(
-            repository.os, name, lambda *args, real=real, name=name: (calls.append(name), real(*args))[1]
-        )
-    repository.write_text(repo, NAME, "new\n")
-    assert calls == ["fsync", "replace"]
+    def record_then_replace(source, destination):
+        events.append(("replace", None))
+        real_replace(source, destination)
+
+    monkeypatch.setattr(repository.os, "fsync", record_size_then_sync)
+    monkeypatch.setattr(repository.os, "replace", record_then_replace)
+    repository.write_text(repo, NAME, text)
+    assert events == [("fsync", len(text)), ("replace", None)]
 
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    ("moment", "bytes_left", "siblings_left"), [("before", b"old\n", 1), ("after", b"new\n", 0)]
+    ("moment", "bytes_left", "siblings_left"),
+    [("before", b"old\n", 1), ("after", b"new\n", 0)],
+    ids=["before", "after"],
 )
 def test_a_killed_write_leaves_one_whole_file(repo, moment, bytes_left, siblings_left):
     config_at(repo).write_text("old\n")
@@ -353,7 +369,7 @@ import os, signal, sys
 from pathlib import Path
 from quality import repository
 
-root, moment = Path(sys.argv[1]), sys.argv[2]
+root, name, moment = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
 real_replace = os.replace
 
 def replace_and_kill(source, destination):
@@ -362,13 +378,13 @@ def replace_and_kill(source, destination):
     os.kill(os.getpid(), signal.SIGKILL)
 
 os.replace = replace_and_kill
-repository.write_text(root, "quality/config.toml", "new\\n")
+repository.write_text(root, name, "new\\n")
 """
-    finished = subprocess.run([sys.executable, "-I", "-c", child, str(repo), moment], timeout=60, check=False)
+    finished = subprocess.run([sys.executable, "-I", "-c", child, str(repo), NAME, moment], timeout=60, check=False)
     siblings = [path for path in config_at(repo).parent.iterdir() if path.name != "config.toml"]
     assert finished.returncode == -9
     assert (config_at(repo).read_bytes(), len(siblings)) == (bytes_left, siblings_left)
-    assert [path.read_bytes() for path in siblings] == [b"new\n"] * siblings_left
+    assert [(path.name.startswith("."), path.read_bytes()) for path in siblings] == [(True, b"new\n")] * siblings_left
 
 
 def checkout_paths(repo: Path) -> tuple[str, ...]:
@@ -480,7 +496,9 @@ def test_a_git_refusal_names_the_path_as_given_and_never_the_checkout(
     code = cli.main(argv)
     captured = capsys.readouterr()
     output = captured.out + captured.err
-    assert (code, f"{prefix}. is not a readable git repository" in output, "Traceback" in output) == (2, True, False), output
+    assert (code, f"{prefix}. is not a readable git repository" in output, "Traceback" in output) == (2, True, False), (
+        output
+    )
     assert not any(path in output for path in checkout_paths(repo)), output
 
 
