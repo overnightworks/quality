@@ -55,20 +55,16 @@ def test_a_staged_finding_stands_in_the_pictures_frame(build_repo, served_scanne
         pytest.param({"a": "1\n"}, lambda repo: stage(repo, {"line\nbreak.txt": "1\n"}), "1 file", id="a name with a newline"),
         pytest.param({"a": "1\n"}, lambda repo: stage(repo, {os.fsdecode(b"caf\xe9.txt"): "1\n"}), "1 file", id="a name that is no UTF-8"),
         pytest.param({"a": "1\n"}, lambda repo: None, "0 files", id="nothing"),
+        pytest.param(None, lambda repo: stage(repo, {"a": "1\n"}), "1 file", id="no commit yet"),
     ],
 )
-def test_a_staged_run_counts_what_the_next_commit_changes(build_repo, capsys, committed, change, counted):
-    repo = build_repo(committed)
+def test_a_staged_run_counts_what_the_next_commit_changes(build_repo, tmp_path, capsys, committed, change, counted):
+    if committed is None:
+        git(tmp_path, "init", "-q")
+    repo = tmp_path if committed is None else build_repo(committed)
     change(repo)
     assert staged_door(repo, clock=lambda: 0.0) == 0
     assert capsys.readouterr().out == CLEAN_ROW.format(files=counted)
-
-
-def test_a_staged_run_counts_a_first_commit(tmp_path, capsys):
-    git(tmp_path, "init", "-q")
-    stage(tmp_path, {"a": "1\n"})
-    assert staged_door(tmp_path, clock=lambda: 0.0) == 0
-    assert capsys.readouterr().out == CLEAN_ROW.format(files="1 file")
 
 
 def test_a_staged_run_prints_no_unused_row(build_repo, capsys):
@@ -158,6 +154,7 @@ def test_a_staged_config_is_read_from_the_tree_the_commit_records(build_repo, ca
     assert staged_door(repo) == 0
 
 
+@pytest.mark.integration
 def test_a_staged_run_outside_a_repository_is_the_start_failure(elsewhere, capsys):
     code = staged_door(elsewhere)
     printed = capsys.readouterr()

@@ -4,9 +4,8 @@
 SonarCloud findings, and the fail-closed pull request verdict. It is for the engineer who adds the gate to a
 repository and for the operator who merges past it.
 
-    quality check [AREA ...] [-v]
+    quality check [AREA ...] [--staged] [-v]
     quality baseline write [PATH]
-    quality scan-staged [PATH]
     quality sonar properties
     quality sonar findings
     quality verdict [PATH]
@@ -21,7 +20,7 @@ Exit codes: `0` clean, `1` findings, `2` cannot judge (never clean), `130` inter
 
 `--python 3.14` matters because `uv tool install --force` keeps an existing tool environment's older interpreter, which then refuses v0.3.0 or later.
 
-The gitleaks paths (`check`, `scan-staged`) need git 2.41 or newer; with an older git they exit `2`.
+The gitleaks paths (`check`, `check secrets --staged`) need git 2.41 or newer; with an older git they exit `2`.
 
 gitleaks, actionlint and osv-scanner come through [mise](https://mise.jdx.dev/installing-mise.html), from the manifest
 and lock inside quality's installation; a scanner that is missing exits `2` and names the command that installs it:
@@ -41,7 +40,7 @@ Locally, `quality check` runs every rule the gate runs, the secret, workflow and
 
 - [docs/rules.md](docs/rules.md): the `check` rules, the secret and advisory scans, the output contract.
 - [docs/output.md](docs/output.md): the picture of what the commands print; `check` prints its frame today.
-- [docs/commands.md](docs/commands.md): `scan-staged`, the scanners, `scoreboard` and `emergency-merge`.
+- [docs/commands.md](docs/commands.md): `check secrets --staged`, the scanners, `scoreboard` and `emergency-merge`.
 - [docs/gate.md](docs/gate.md): the `gate.yml` caller contract, the verdict, declared loosenings, `codeql.yml`.
 - [docs/sonar.md](docs/sonar.md): `sonar findings`, coverage on new code, new and legacy findings, the quality gate, the Dependabot exception.
 - [docs/runbook-emergency-merge.md](docs/runbook-emergency-merge.md): the operator's door past a red gate.

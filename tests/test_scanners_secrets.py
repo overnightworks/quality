@@ -474,7 +474,8 @@ def test_a_planted_value_reaches_no_stream_of_the_staged_door(
     stage(repo, {"docs/a.md": "a\n"})
     exit_code = door_in(repo, *STAGED_WORDS, *flags, clock=lambda: 0.0)
     printed = capsys.readouterr()
-    assert (exit_code, fragment in area_fact(printed.out, Area.SECRETS)) == (code, True)
+    (row,) = [line for line in printed.out.splitlines() if line.split()[1:2] == [Area.SECRETS]]
+    assert (exit_code, fragment in row) == (code, True)
     assert_no_value(FAKE_KEY, printed.out + printed.err, summary)
     if flags and id_ in {"a finding", "an allowed finding"}:
         assert gitleaks_exit_rows(printed.out) == [(scanners.GITLEAKS, "7 · 2 stderr lines withheld · not cleared by gitleaks")]
