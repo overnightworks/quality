@@ -282,10 +282,11 @@ def test_a_foreign_file_under_the_scratch_name_stays(repo, monkeypatch):
     real_open = os.open
     foreign: list[Path] = []
 
-    def occupy_the_scratch_name_then_open(path, *args, **kwargs):
-        foreign.append(Path(path))
-        Path(path).write_bytes(b"foreign\n")
-        return real_open(path, *args, **kwargs)
+    def occupy_the_scratch_name_then_open(path, flags, *args, **kwargs):
+        if flags & os.O_CREAT:
+            foreign.append(Path(path))
+            Path(path).write_bytes(b"foreign\n")
+        return real_open(path, flags, *args, **kwargs)
 
     monkeypatch.setattr(repository.os, "open", occupy_the_scratch_name_then_open)
     with pytest.raises(RepositoryFileError, match=r"\[Errno 17\]"):
