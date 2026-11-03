@@ -57,7 +57,7 @@ def test_an_init_file_and_a_stray_helper_are_strays_with_a_fix_line_each(build_r
     assert_row_is_kind(output, init, FindingEvent.STRAY)
     rows = [row for finding in (init, helper) for row in rows_of(output, finding)]
     assert (code, [finding.event for finding in (init, helper)]) == (1, [FindingEvent.STRAY] * 2)
-    assert ([row.fix_follows for row in rows], output.count(f" {FIX_LABEL} ")) == ([True, True], 2)
+    assert ([row.fix_follows for row in rows], sum(output.count(f" {FIX_LABEL} {finding.fix}") for finding in (init, helper))) == ([True, True], 2)
     assert init.fix != helper.fix
 
 

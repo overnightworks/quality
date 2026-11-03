@@ -315,7 +315,7 @@ $ quality check --fix
 
 A fall below a metric's threshold drops the entry (`dropped  file 805 → 790 lines · debt from 800 lines`); operator ruling of 3.11.2026 („Eintrag fällt weg“). That is why the examples fall to 812 lines and CCN 17, above their thresholds.
 
-Built: every frame but the gone row (C7c) and the dry run (C7d). `--fix` takes neither `--staged` nor an area but `debt`.
+Built: every frame but the gone row (C7c) and the dry run (C7d). `--fix` takes no `--staged` and needs `debt` among the named areas, or none named.
 
 No ceiling yet: first a note, then the first recording. Both exit 0. stdout.
 

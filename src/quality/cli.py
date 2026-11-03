@@ -351,7 +351,7 @@ def _ceiling_row(area: Area, fix: ratchet.CeilingFix) -> Row | None:
         return Row(Glyph.CLEAN, area, AreaEvent.RECORDED, SEPARATOR.join((recorded, f"{ratchet.BASELINE_PATH} is new")))
     if fix.fell:
         return Row(Glyph.CLEAN, area, AreaEvent.LOWERED, _in_file(counted(fix.fell, "entry", "entries")))
-    return Row(Glyph.CLEAN, area, AreaEvent.RECORDED, _in_file(pairs)) if fix.changes else None
+    return Row(Glyph.CLEAN, area, AreaEvent.RECORDED, _in_file(pairs)) if fix.changed else None
 
 
 def _ceiling_words(fix: ratchet.CeilingFix | None, findings: int) -> str:
@@ -359,7 +359,7 @@ def _ceiling_words(fix: ratchet.CeilingFix | None, findings: int) -> str:
         return ""
     if fix.fell:
         return f"ceiling lowered by {counted(fix.fell, 'entry', 'entries')}"
-    if fix.first or fix.changes:
+    if fix.changed:
         return "ceiling recorded"
     return "" if findings else "nothing to lower"
 

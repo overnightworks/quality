@@ -361,8 +361,9 @@ def test_three_suffixless_files_print_three_rows_and_one_fix_after_the_third(bui
     """#228 rule 7, decision 4: a fix shared by consecutive findings prints once, under the last."""
     repo = build_repo({**GUIDANCE, "docs/EDGE_SHA": "x", "docs/b/TODO": "x", "docs/NOTES": "x"})
     output = check_output(capsys, repo)[1]
-    rows = [row for finding in rule_findings(repo, Rule.FILE_SUFFIX) for row in rows_of(output, finding)]
-    assert ([row.fix_follows for row in rows], output.count(f" {FIX_LABEL} ")) == ([False, False, True], 1)
+    found = rule_findings(repo, Rule.FILE_SUFFIX)
+    rows = [row for finding in found for row in rows_of(output, finding)]
+    assert ([row.fix_follows for row in rows], output.count(f" {FIX_LABEL} {found[0].fix}")) == ([False, False, True], 1)
 
 
 LAYOUT_ALLOWANCE_SCENARIOS = [

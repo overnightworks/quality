@@ -430,6 +430,10 @@ class CeilingFix:
     first: bool = False
 
     @property
+    def changed(self) -> bool:
+        return self.first or bool(self.changes)
+
+    @property
     def fell(self) -> int:
         return sum(change.event in FELL for change in self.changes)
 

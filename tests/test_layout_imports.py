@@ -96,8 +96,9 @@ def test_two_importing_lines_print_two_rows_and_one_fix_after_the_second(build_r
     content = "import conftest\nfrom tests.test_x import a\n"
     repo = build_repo(project({"tests/conftest.py": "", "tests/test_x.py": "", "tests/support/y.py": content}))
     output = check_output(capsys, repo)[1]
-    rows = [row for finding in rule_findings(repo, RULE) for row in rows_of(output, finding)]
-    assert ([row.fix_follows for row in rows], output.count(f" {FIX_LABEL} ")) == ([False, True], 1)
+    found = rule_findings(repo, RULE)
+    rows = [row for finding in found for row in rows_of(output, finding)]
+    assert ([row.fix_follows for row in rows], output.count(f" {FIX_LABEL} {found[0].fix}")) == ([False, True], 1)
     put(repo / CONFIG, ONE_JOB + declaring("tests/support/y.py", rule=RULE))
     assert red(repo, RULE) == []
 

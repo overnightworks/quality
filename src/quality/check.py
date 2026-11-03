@@ -389,7 +389,7 @@ def _require_no_clones_table_in_git(inputs: RunInputs) -> None:
 
 
 def _written(root: Path, fix: ratchet.CeilingFix) -> ratchet.CeilingFix:
-    if fix.first or fix.changes:
+    if fix.changed:
         try:
             repository.write_text(root, ratchet.BASELINE_PATH, ratchet.render_baseline(fix.ceiling))
         except (repository.RepositoryFileError, ratchet.SizeError) as error:

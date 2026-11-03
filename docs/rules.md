@@ -101,7 +101,7 @@ It applies these rules:
   fix: split the file below 800 lines), `grew` (`function read_rows has 71 lines · ceiling 64`, fix: bring it back to 64 lines or below) and `can fall`
   (`file has 742 lines · ceiling 766`, fix: `quality check --fix`); an entry whose file or function is gone is
   fine and still counts in the clean row's `ceiling held · N entries, M clone pairs`. Vocabulary: O20, extents: O21.
-  `quality check debt --fix` (`--fix` takes no `--staged` and no area but `debt`; no workflow runs it)
+  `quality check debt --fix` (`--fix` takes no `--staged` and needs `debt` among the named areas, or none named; no workflow runs it)
   changes `quality/baseline.toml` at the top of the repository it is started in (a stray `src/quality/baseline.toml` is
   neither read nor removed) and then judges the tree against the new file. It only lowers: each held entry falls to its
   measured value (`lowered`, `function total CCN 19 → 17`) and goes where the measured value is no longer debt (`dropped`,

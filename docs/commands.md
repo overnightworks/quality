@@ -20,7 +20,7 @@ ceiling lies on disk, in the index or in any commit `HEAD` reaches, and then jud
 never raises an entry and never adds one: what grew or is new stays a finding, and a raise is a hand edit with a declared
 loosening. An entry whose file is gone stands as it was; a held pair the tree lost goes. A ceiling or `[clones]` table git
 holds and the tree lacks refuses with the restore step, and a shallow clone that cannot prove a first recording names
-`git fetch --unshallow`. It takes no `--staged` and no area but `debt`. Exit `0` clean, `1` findings, `2` could not fix.
+`git fetch --unshallow`. It takes no `--staged` and needs `debt` among the named areas, or no area named. Exit `0` clean, `1` findings, `2` could not fix.
 The rows and rules are in `docs/rules.md`, the frames in `docs/output.md`.
 
 ## `quality check secrets --staged`
