@@ -61,7 +61,8 @@ def test_each_held_entry_falls_goes_or_stays(key, held, measured, expected):
 @pytest.mark.parametrize(("offset", "written_offset"), [(-1, -1), (0, 0), (1, 0)], ids=["one below", "at it", "one above"])
 def test_no_entry_ever_rises(key, held, offset, written_offset):
     fix = fixed({key: held}, {key: held + offset})
-    assert (fix.ceiling.size, load_baseline(render_baseline(fix.ceiling)).size) == ({key: held + written_offset},) * 2
+    expected = {key: held + written_offset}
+    assert (fix.ceiling.size, load_baseline(render_baseline(fix.ceiling)).size) == (expected, expected)
 
 
 def test_a_new_key_never_enters():
