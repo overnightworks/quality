@@ -1,3 +1,5 @@
+import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -55,6 +57,24 @@ def test_a_machine_without_git_is_cannot_judge_not_a_traceback(tmp_path, monkeyp
     assert (code, ". is not a readable git repository: git did not run ([Errno 2]" in err, "Traceback" in err) == (2, True, False), err
 
 
+@pytest.mark.integration
+def test_a_git_that_refuses_the_index_listing_after_the_run_started_names_one_step_on_next(build_repo, tmp_path, monkeypatch, capsys):
+    """The files and code rows carry the fact; the `git -C` command stands once, on `next:`."""
+    repo = build_repo({"src/a.py": "x = 1\n"})
+    real_git = shutil.which("git")
+    wrapper = tmp_path / "bin" / "git"
+    wrapper.parent.mkdir()
+    wrapper.write_text(f'#!/bin/sh\ncase "$*" in *"ls-files -z -s"*) exit 3;; esac\nexec {real_git} "$@"\n')
+    wrapper.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{wrapper.parent}{os.pathsep}{os.environ['PATH']}")
+    code = check_door(repo)
+    captured = capsys.readouterr()
+    command = "git -C . status"
+    rows = [line for line in captured.out.splitlines() if line.startswith("  ✗")]
+    assert (code, len(rows) >= 2, captured.err.count(command), captured.out.count(command)) == (2, True, 1, 0), captured
+    assert all("git ls-files exited 3" in row or "reasons" in row for row in rows), rows
+
+
 def make_submodule_path(tmp_path: Path) -> tuple[Path, Path]:
     (tmp_path / "inner").mkdir()
     (tmp_path / "outer").mkdir()
@@ -83,7 +103,7 @@ def test_a_path_in_a_submodule_or_linked_worktree_means_its_own_top(tmp_path, ca
 
 
 def hash_of(repo: Path, content: str) -> str:
-    done = subprocess.run(["git", "-C", str(repo), "hash-object", "--stdin"], input=content, capture_output=True, text=True, check=True)
+    done = subprocess.run(["git", "-C", str(repo), "hash-object", "--stdin"], input=content, capture_output=True, text=True, check=True, timeout=60)
     return done.stdout.strip()
 
 
@@ -176,5 +196,5 @@ def test_a_shallow_clone_is_shallow_and_a_whole_one_is_not(build_repo, tmp_path)
     repo = build_repo({"f.toml": "one\n"})
     committed(repo, "f.toml", "two\n")
     clone = tmp_path / "clone"
-    subprocess.run(["git", "clone", "-q", "--depth", "1", f"file://{repo}", str(clone)], check=True, capture_output=True)
+    subprocess.run(["git", "clone", "-q", "--depth", "1", f"file://{repo}", str(clone)], check=True, capture_output=True, timeout=60)
     assert (checkout.is_shallow(clone), checkout.is_shallow(repo)) == (True, False)
