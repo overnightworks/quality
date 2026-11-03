@@ -11,15 +11,19 @@ from quality.ratchet import (
     Place,
     SizeError,
     holds_clones_table,
+    load_baseline,
     lower_ceiling,
+    render_baseline,
 )
 from quality.report import Note, NoteEvent
 
-FILE = Key(Metric.FILE_LINES, "src/a.py")
-FUNCTION = Key(Metric.FUNCTION_LINES, "src/a.py", "work")
-COMPLEXITY = Key(Metric.CCN, "src/a.py", "work")
-PAIR = ClonePair.of(Place("src/a.py", "work"), Place("src/b.py", "work"))
-OTHER_PAIR = ClonePair.of(Place("src/a.py", "rest"), Place("src/c.py", "rest"))
+
+def size_key(metric: Metric, symbol: str = "") -> Key:
+    return Key(metric, "src/a.py", symbol)
+
+
+def pair(first: str, second: str) -> ClonePair:
+    return ClonePair.of(Place("src/a.py", first), Place(f"src/{second}.py", first))
 
 
 def fixed(held: dict[Key, int], measured: dict[Key, int | None], pairs=frozenset(), held_pairs=frozenset()):
@@ -30,15 +34,15 @@ def fixed(held: dict[Key, int], measured: dict[Key, int | None], pairs=frozenset
 @pytest.mark.parametrize(
     ("key", "held", "measured", "expected"),
     [
-        pytest.param(FILE, 826, 812, 812, id="fell"),
-        pytest.param(FILE, 826, 826, 826, id="equal"),
-        pytest.param(FILE, 826, 900, 826, id="grew"),
-        pytest.param(FILE, 826, None, 826, id="gone"),
-        pytest.param(FILE, 826, 790, None, id="below the threshold"),
-        pytest.param(FILE, 826, 0, None, id="zero"),
-        pytest.param(COMPLEXITY, 19, 17, 17, id="ccn"),
-        pytest.param(COMPLEXITY, 17, 15, None, id="ccn below the threshold"),
-        pytest.param(FUNCTION, 70, 62, 62, id="a function"),
+        pytest.param(size_key(Metric.FILE_LINES), 826, 812, 812, id="fell"),
+        pytest.param(size_key(Metric.FILE_LINES), 826, 826, 826, id="equal"),
+        pytest.param(size_key(Metric.FILE_LINES), 826, 900, 826, id="grew"),
+        pytest.param(size_key(Metric.FILE_LINES), 826, None, 826, id="gone"),
+        pytest.param(size_key(Metric.FILE_LINES), 826, 790, None, id="below the threshold"),
+        pytest.param(size_key(Metric.FILE_LINES), 826, 0, None, id="zero"),
+        pytest.param(size_key(Metric.CCN, "work"), 19, 17, 17, id="ccn"),
+        pytest.param(size_key(Metric.CCN, "work"), 17, 15, None, id="ccn below the threshold"),
+        pytest.param(size_key(Metric.FUNCTION_LINES, "work"), 70, 62, 62, id="a function"),
     ],
 )
 def test_each_held_entry_falls_goes_or_stays(key, held, measured, expected):
@@ -46,31 +50,40 @@ def test_each_held_entry_falls_goes_or_stays(key, held, measured, expected):
     assert entries == ({} if expected is None else {key: expected})
 
 
-@pytest.mark.parametrize("value", [799, 800, 801])
-def test_no_entry_ever_rises(value):
-    entries = fixed({FILE: 800}, {FILE: value}).ceiling.size
-    assert entries.get(FILE, 0) <= 800
+@pytest.mark.parametrize(
+    ("key", "held"),
+    [
+        pytest.param(size_key(Metric.FILE_LINES), 826, id="a file"),
+        pytest.param(size_key(Metric.FUNCTION_LINES, "work"), 70, id="a function"),
+        pytest.param(size_key(Metric.CCN, "work"), 19, id="ccn"),
+    ],
+)
+@pytest.mark.parametrize(("offset", "written_offset"), [(-1, -1), (0, 0), (1, 0)], ids=["one below", "at it", "one above"])
+def test_no_entry_ever_rises(key, held, offset, written_offset):
+    fix = fixed({key: held}, {key: held + offset})
+    assert (fix.ceiling.size, load_baseline(render_baseline(fix.ceiling)).size) == ({key: held + written_offset},) * 2
 
 
 def test_a_new_key_never_enters():
-    entries = fixed({FILE: 826}, {FILE: 812, FUNCTION: 90}).ceiling.size
-    assert entries == {FILE: 812}
+    file, function = size_key(Metric.FILE_LINES), size_key(Metric.FUNCTION_LINES, "work")
+    assert fixed({file: 826}, {file: 812, function: 90}).ceiling.size == {file: 812}
 
 
 def test_a_pair_the_tree_lost_goes_and_a_new_one_stays_out():
-    fix = fixed({}, {}, pairs=frozenset({OTHER_PAIR}), held_pairs=frozenset({PAIR}))
+    fix = fixed({}, {}, pairs=frozenset({pair("rest", "c")}), held_pairs=frozenset({pair("work", "b")}))
     assert fix.ceiling.clones == frozenset()
     assert Note("src/a.py", NoteEvent.DROPPED, "pair src/a.py work <-> src/b.py work is gone") in fix.changes
 
 
 def test_a_file_without_clones_records_its_pairs():
-    fix = lower_ceiling(Baseline({}, None), {}, frozenset({PAIR}))
-    assert fix.ceiling.clones == frozenset({PAIR})
+    fix = lower_ceiling(Baseline({}, None), {}, frozenset({pair("work", "b")}))
+    assert fix.ceiling.clones == frozenset({pair("work", "b")})
     assert [change.event for change in fix.changes] == [NoteEvent.RECORDED]
 
 
 def test_a_lowered_entry_is_noted_with_its_fall_and_a_dropped_one_with_its_threshold():
-    fix = fixed({FILE: 826, COMPLEXITY: 19}, {FILE: 790, COMPLEXITY: 17}, held_pairs=frozenset())
+    file, complexity = size_key(Metric.FILE_LINES), size_key(Metric.CCN, "work")
+    fix = fixed({file: 826, complexity: 19}, {file: 790, complexity: 17}, held_pairs=frozenset())
     assert [(note.event, note.fact) for note in fix.changes] == [
         (NoteEvent.LOWERED, "function work CCN 19 → 17"),
         (NoteEvent.DROPPED, "file 826 → 790 lines · debt from 800 lines"),

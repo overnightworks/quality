@@ -417,11 +417,11 @@ def link_the_quality_directory_elsewhere(repo: Path, elsewhere: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    "arrange",
-    [link_the_baseline_elsewhere, link_the_quality_directory_elsewhere],
+    ("arrange", "event"),
+    [(link_the_baseline_elsewhere, "not checked"), (link_the_quality_directory_elsewhere, "not fixed")],
     ids=["baseline-symlink", "quality-directory-symlink"],
 )
-def test_a_fix_to_a_destination_it_cannot_own_cannot_be_judged(build_repo, capsys, arrange):
+def test_a_fix_to_a_destination_it_cannot_own_cannot_be_judged(build_repo, capsys, arrange, event):
     """The baseline is written to the repository's own quality/baseline.toml, never through a symlink."""
     repo = build_repo({"src/a.py": long_function(62)})
     elsewhere = repo / "untracked-elsewhere"
@@ -430,7 +430,7 @@ def test_a_fix_to_a_destination_it_cannot_own_cannot_be_judged(build_repo, capsy
     arrange(repo, elsewhere)
     code = door_in(repo, *FIX_WORDS)
     refusal = capsys.readouterr().out
-    assert (code, "not checked" in refusal or "not fixed" in refusal) == (2, True), refusal
+    assert (code, f"  ✗ debt          {event:<14} " in refusal) == (2, True), refusal
     assert str(repo) not in refusal, "the refusal names no resolved path"
     assert sorted(path.name for path in elsewhere.iterdir()) == ["victim.toml"]
     assert (elsewhere / "victim.toml").read_text() == "kept\n"
