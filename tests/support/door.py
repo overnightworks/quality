@@ -9,6 +9,7 @@ from quality import cli
 
 CHECK_WORD = "check"
 MODULE_DOOR = [sys.executable, "-m", "quality.cli"]
+STAGED_WORDS = (CHECK_WORD, "secrets", "--staged")
 
 
 def door_in(folder: Path, *words: str, **keywords) -> int:
@@ -19,6 +20,11 @@ def door_in(folder: Path, *words: str, **keywords) -> int:
 
 def check_door(repository: Path, **keywords) -> int:
     return door_in(repository, CHECK_WORD, **keywords)
+
+
+def staged_door(repository: Path, *words: str, **keywords) -> int:
+    """The exit of `quality check secrets --staged <words>` started in `repository`."""
+    return door_in(repository, *STAGED_WORDS, *words, **keywords)
 
 
 def door_environment(**extra: str) -> dict[str, str]:

@@ -140,10 +140,12 @@ class _Scanner:
 
 @dataclass(frozen=True)
 class SecretScan:
-    """The leaks gitleaks reported that no allowance covers, and the notes for the allowed ones and the entries no leak used."""
+    """The leaks gitleaks reported that no allowance covers, the notes for the allowed ones, and the notes for the entries
+    no leak used, which only a scan of the whole history may report."""
 
     findings: list[Finding]
     notes: tuple[Note, ...]
+    unused: tuple[Note, ...]
 
 
 def prepare_gitleaks() -> Path:
@@ -170,7 +172,7 @@ def scan_secrets(root: Path, allowances: dict[Allowance, str], log: ScannerLog =
         if not (commits.isascii() and commits.isdigit()):
             raise ScannerError(f"{COMMIT_COUNT_FAILURE}: git printed no number")
         scan = run_gitleaks(binary, scratch, git_environment, source, [f"--log-opts={head}"], allowances, log)
-        return RuleResult(scan.findings, int(commits), False, scan.notes)
+        return RuleResult(scan.findings, int(commits), False, (*scan.notes, *scan.unused))
 
 
 def _judging_arguments(scratch: Path, report: Path) -> list[str]:
@@ -277,7 +279,7 @@ def _split_by_allowance(leaks: list[Finding], allowances: dict[Allowance, str]) 
         Note(CONFIG_PATH, NoteEvent.UNUSED, SEPARATOR.join((f"{entry_name(SECRETS_ALLOW, place)} matches no secret", f"{entry.rule} in {entry.file}")))
         for place, entry in enumerate(allowances, start=1) if entry not in used
     ]
-    return SecretScan([leak for leak in leaks if leak.allowance not in allowances], (*allowed, *unused))
+    return SecretScan([leak for leak in leaks if leak.allowance not in allowances], tuple(allowed), tuple(unused))
 
 
 def require_git_floor() -> None:

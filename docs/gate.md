@@ -112,7 +112,7 @@ reason = "the operator ruled the requirement shelf machinery out"
 - `item` is `#<n>` or `<owner>/<repo>#<n>` (ASCII letters, digits, `_`, `.` and `-`), `date` a TOML date without a
   time, `reason` one non-empty line. A missing or extra key, a text date, two entries with one `what` or any other
   malformed entry is exit `2` in `verdict` and in `check` (the `secret` and `advisory` rules), naming the
-  entry and showing this example; `scan-staged` reads only `[secrets]`.
+  entry and showing this example; `check secrets --staged` reads only `[secrets]`.
 - Only new entries declare: those the head holds and the base does not, compared as a whole entry. An inherited entry
   is never red and declares nothing, so a later pull request that loosens the same way again needs its own entry with
   its own `item` and `date`; deleting an inherited entry is no loosening. A new entry that matches no loosening of the

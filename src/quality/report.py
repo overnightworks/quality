@@ -3,7 +3,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from quality.config import Allowance
+from quality.config import CONFIG_PATH, Allowance, ConfigError
 
 
 @dataclass(frozen=True)
@@ -61,6 +61,8 @@ class Example:
 
 type Step = Command | Instruction | OneOf | Example
 
+CONFIG_EXAMPLE_LABEL = f"write it in {CONFIG_PATH} like this"
+
 
 @dataclass(frozen=True)
 class Reason:
@@ -85,6 +87,13 @@ class CannotJudge(Exception):
             return fact
         first, *later = next_steps
         return "; ".join([fact, f"next: {first}", *(f"then: {step}" for step in later)])
+
+
+def config_refusal(error: ConfigError, *then: Step) -> CannotJudge:
+    """A config refusal with its fact and example apart, never read back from `str(error)`; `then` is what the config's
+    place asks of a person next."""
+    example = () if error.example is None else (Example(CONFIG_EXAMPLE_LABEL, error.example),)
+    return CannotJudge(error.fact, (*example, *then))
 
 
 class Unparsable(CannotJudge):
@@ -220,7 +229,14 @@ class LockExtent:
     packages: int
 
 
-type Extent = int | LockExtent
+@dataclass(frozen=True)
+class StagedExtent:
+    """How much a staged run judged: the files the next commit changes."""
+
+    files: int
+
+
+type Extent = int | LockExtent | StagedExtent
 
 
 @dataclass(frozen=True)

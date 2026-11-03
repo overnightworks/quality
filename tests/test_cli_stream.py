@@ -14,10 +14,9 @@ from quality.rules import Area
 from tests.support.advisories import uv_lock
 from tests.support.check import area_row, refusal_pair
 from tests.support.door import CHECK_WORD, MODULE_DOOR, check_door, door_environment
-from tests.support.git_repositories import GIT_IDENTITY
 from tests.support.processes import process_is_gone
 from tests.support.python_lint import fake_ruff
-from tests.support.scanners import CLEAN_SCANS, OUTPUTS, fake_gitleaks, fake_scanner, fake_zizmor
+from tests.support.scanners import CLEAN_SCANS, fake_scanner, fake_zizmor
 from tests.support.terminal import screen
 
 
@@ -241,18 +240,3 @@ def test_a_start_failure_printed_on_stdout_because_stderr_is_closed_survives_a_r
     finally:
         os.close(write_end)
     assert done.returncode == complete.returncode
-
-
-def test_a_reader_that_left_before_the_staged_findings_silences_them_and_the_closing_line(build_repo, served_scanners, tmp_path):
-    repo = build_repo({"README.md": "x\n"})
-    (repo / "staged.txt").write_text("x\n", encoding="utf-8")
-    subprocess.run(["git", "-C", str(repo), *GIT_IDENTITY, "add", "staged.txt"], check=True, timeout=60)
-    fake_gitleaks(served_scanners, on_scan=f'cp "{OUTPUTS / "gitleaks-finding.json"}" "$report"; exit 7')
-    read_end, write_end = os.pipe()
-    os.close(read_end)
-    try:
-        with open(tmp_path / "stderr", "w", encoding="utf-8") as errors:
-            done = subprocess.run([*MODULE_DOOR, "scan-staged"], cwd=repo, env=door_environment(), stdout=write_end, stderr=errors, timeout=60, check=False)
-    finally:
-        os.close(write_end)
-    assert (done.returncode, (tmp_path / "stderr").read_text(encoding="utf-8")) == (1, "")

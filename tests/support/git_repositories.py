@@ -19,6 +19,18 @@ def make_repo(directory: Path, files: dict[str, str]) -> Path:
     return directory
 
 
+def git(repo: Path, *arguments: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(["git", "-C", str(repo), *GIT_IDENTITY, *arguments], check=check, capture_output=True, text=True, timeout=60)
+
+
+def stage(repo: Path, files: dict[str, str]) -> None:
+    """Writes `files` into the work tree of `repo` and stages them, ignored names included."""
+    for name, content in files.items():
+        (repo / name).parent.mkdir(parents=True, exist_ok=True)
+        (repo / name).write_text(content)
+    git(repo, "add", "-f", *files)
+
+
 def head_commit(repo: Path) -> str:
     return subprocess.run(
         ["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True, check=True

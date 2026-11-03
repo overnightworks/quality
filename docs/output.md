@@ -370,6 +370,8 @@ $ quality check secrets --staged
 ! 1 finding in 1 area · <1s
 ```
 
+Built: both frames without the release row (C10); `N files` counts the paths the staged diff lists; a refused run is the `✗` row and the pair, its rerun `next:` names this command; no unused row, the history scan keeps it; `-v` stands under the row.
+
 The entry is the four lines a reader takes, whole and never shortened; the person adds `reason` (head correction O31 of 1.11.2026, under the operator's instruction of 28.10.2026 to decide small wording questions alone: the earlier picture's `sha256` is a key no reader takes, the allowance contract is unchanged).
 
 `--staged` with another area. Exit 2. stderr.
@@ -379,6 +381,8 @@ $ quality check debt --staged
 error: --staged checks only secrets · nothing checked
 next: quality check secrets --staged
 ```
+
+Built: `--staged` needs exactly `secrets`; no area counts as all.
 
 ### 7. `quality verdict` in CI
 
@@ -623,7 +627,7 @@ Options:
 Exit codes: 0 clean, 1 findings, 2 could not check, 130 interrupted.
 ```
 
-Built: `usage: quality check [AREA ...] [-v]`, the `Areas` block from `Area` (`rules.py`) and the options that exist.
+Built: `usage: quality check [AREA ...] [--staged] [-v]`, the `Areas` block from `Area` (`rules.py`) and the options that exist; `--staged` is built.
 
 Wrong invocation: the pair instead of argparse text. Exit 2. stderr.
 

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import check, cli, config, env_file, installation, scanners
+from quality import check, cli, config, env_file, installation, report, scanners
 from quality.compose import is_compose_file
 from quality.report import CannotJudge, Command, Example, Finding, FindingEvent, Reason, Unparsable, printable
 from quality.rules import Area, Rule
@@ -406,7 +406,7 @@ def test_every_rule_a_malformed_config_refuses_carries_its_fact_and_its_example_
     repo = build_repo({"quality/config.toml": GATE + generated_config(job="other")})
     reasons = {verdict.refusal.reason for area in check_result(repo, installed_ruff, never_located).areas for verdict in area.verdicts if verdict.refusal}
     fact = f"{config.CONFIG_PATH} [[size.generated]] entry 1 needs job as one of [gate] mandatory_jobs, the job whose generator check proves the file"
-    assert reasons == {Reason(fact, (Example(check.CONFIG_EXAMPLE_LABEL, config.GENERATED_FILE_EXAMPLE),))}
+    assert reasons == {Reason(fact, (Example(report.CONFIG_EXAMPLE_LABEL, config.GENERATED_FILE_EXAMPLE),))}
 
 
 def test_a_config_refusal_without_an_example_carries_no_step(build_repo):
@@ -437,7 +437,7 @@ def test_check_names_a_config_refusal_on_its_rows_and_shows_the_example_once_und
     assert code == 2
     assert [f"{refusal_row(area)}{refusal.fact}" in out for area in CONFIG_AREAS] == [True] * 4, out
     assert env_row_stands("\n".join(out))
-    label = f"next: {check.CONFIG_EXAMPLE_LABEL}:"
+    label = f"next: {report.CONFIG_EXAMPLE_LABEL}:"
     if refusal.example is None:
         assert f"next: {cli.REFUSED_AREAS_NEXT.text}" in err
         assert label not in err

@@ -1,6 +1,6 @@
 # Commands
 
-Reference for the engineer or operator who runs `quality scan-staged`, `quality scoreboard`, installs the scanners,
+Reference for the engineer or operator who runs `quality check secrets --staged`, `quality scoreboard`, installs the scanners,
 runs `quality emergency-merge`, or reads `quality --help` or a wrong invocation's pair.
 
 ## Help and wrong invocations
@@ -10,30 +10,37 @@ true today; every other `quality <command> --help` prints that command's argumen
 stdout with exit `0`, plain and whole in every stream. A wrong invocation runs nothing, prints the `error:`/`next:` pair
 on stderr and exits `2`: `no command <word> · commands: …` for a first word that names no command, `no command ·
 commands: …` for none, `no area <word> · areas: …` for the first word `quality check` does not know as an area, `unknown argument · <what is left over>` for what the command does not take, and otherwise the
-parser's own sentence; `next:` names the help of the command, of its group for a command inside one, or of the parser
+parser's own sentence; `--staged checks only secrets · nothing checked` for `--staged` with other areas or none (`next:` names `quality check secrets --staged`); `next:` otherwise names the help of the command, of its group for a command inside one, or of the parser
 that refused.
 
-## `quality scan-staged`
+## `quality check secrets --staged`
 
-`quality scan-staged [PATH]` scans exactly what the next commit records: the effective index of the
-repository at `PATH` (default `.`) compared with `HEAD`. It is meant for a pre-commit hook, which runs it in the
-work-tree top. A relative `GIT_INDEX_FILE` is resolved against the working directory, as git does, so `git commit -a`,
-`git commit <path>` and a linked worktree scan the index git is committing.
+`quality check secrets --staged` scans exactly what the next commit records: the effective index of the
+repository it runs in, compared with `HEAD`, with no path argument. It is meant for a pre-commit hook, which runs it in the
+work-tree top or below it. A relative `GIT_INDEX_FILE` is resolved against the working directory, as git does, so `git commit -a`,
+`git commit <path>` and a linked worktree scan the index git is committing. `--staged` takes exactly the area `secrets`;
+any other set of areas, or none, is `--staged checks only secrets · nothing checked` and exit `2`.
 
 The index is written as a tree (`git write-tree`, only tree objects a commit writes anyway) and read into a scratch
 repository inside a 0700 scratch directory. The scratch repository borrows the objects (`objects/info/alternates`),
 has an empty work tree and none of the live repository's config or `info/attributes`, so a staged `.gitleaksignore`,
 `.gitleaks.toml`, `.gitattributes` with `-diff`, or a `gitleaks:allow` comment changes nothing. gitleaks runs in the same
 attribute-free environment as `check`, with quality's config. The allow list is the staged tree's own
-`quality/config.toml` (none staged: no allowances). `scan-staged` validates only the `[secrets]` table of that config and ignores other tables
-and keys, while `check` (when a selected area needs the config, validating the whole of it) and `verdict` stay strict, so schema growth never blocks a commit. Output and secret handling
-are `check`'s, and it takes no `-v`: it prints the secrets finding rows and the note rows as `check` does under its secrets row
-(`docs/rules.md`), without a commit in the fact, then `scan-staged: N finding(s)` or `scan-staged: clean`. At a terminal stderr shows `check`'s live line while gitleaks runs (`docs/rules.md`).
+`quality/config.toml` (none staged: no allowances). The staged run validates only the `[secrets]` table of that config and ignores other tables
+and keys, while `check` (when a selected area needs the config, validating the whole of it) and `verdict` stay strict, so schema growth never blocks a commit.
+
+The output is `check`'s frame: the `secrets` row with `staged change · N files` (the paths the staged diff lists, each added,
+changed, deleted or renamed path one file), the finding rows and the allowed notes under it, and the verdict. It prints no unused
+allowance: one change cannot tell a stale entry from one the history still needs, so `quality check secrets` reports them.
+`-v` is `check`'s: it shows the raw scanner output under the row, never a secret. At a terminal stderr shows `check`'s
+live line while gitleaks runs (`docs/rules.md`). A refused staged config names the fact on the row and the example under `next:`,
+followed by `stage the fix, then run quality check secrets --staged again`: the refused file is the staged one, so an
+edit alone changes nothing.
 
 gitleaks' staged mode sees only added and changed lines, so a known false positive blocks only the commits that touch
 its line, and then needs its allowance, as in CI. A key only in the work tree or only in `HEAD` is clean. Exit `2` (never
 clean): a scanner missing or at another version, with the command that installs it, git older than 2.41, an unreadable allow list, an index with unmerged
-entries, a path that is not a repository, or a gitleaks run without a report.
+entries, a folder that is not a repository, or a gitleaks run without a report.
 
 ## `quality scoreboard`
 
@@ -97,13 +104,13 @@ linux-x64`, never by hand). The command that installs them from the lock is
 
     mise --cd <quality's installation>/quality/mise install --locked
 
-and `check` names it once, on its own line after `next:`, however many rules lack a scanner, the path filled in; `scan-staged`'s refusal ends with `; next: ` and the steps. A scan finds a scanner by asking
+and `check` names it once, on its own line after `next:`, however many rules lack a scanner, the path filled in. A scan finds a scanner by asking
 `mise which` in that directory, for exactly the manifest's version, and runs it only when it reports that version. A
 scanner on `PATH` is never used. mise reads only the manifest directory and the operator's own user and system configuration: it starts in that
 directory under `MISE_CEILING_PATHS` set to the directory above it, so a `mise.toml` or `.miserc.toml` in the scanned
 repository (or in the checkout the gate holds the manifest in) takes no part in which binary runs.
 
-`check` and `scan-staged` exit `2` for a scanner mise cannot locate, that is at another version, or whose
+`check` and `check secrets --staged` exit `2` for a scanner mise cannot locate, that is at another version, or whose
 answer names no executable, and for a machine without mise, which names mise's install page and the command; only the
 rule that needs the scanner cannot judge. A repository with no workflow needs no actionlint and one with no lock file
 no osv-scanner.

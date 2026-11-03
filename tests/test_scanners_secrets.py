@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import config, scanners, staged
+from quality import config, scanners
 from quality.report import Example, FindingEvent, NoteEvent, printable
 from quality.rules import Area, Rule
 from tests.support.check import (
@@ -23,7 +23,6 @@ from tests.support.check import (
     assert_block_prints,
     assert_every_line_starts_with_the_door,
     assert_finding_vocabulary,
-    decode_block,
     env_row_stands,
     extent_counts,
     heard,
@@ -32,7 +31,8 @@ from tests.support.check import (
     rule_findings,
     rule_notes,
 )
-from tests.support.door import CHECK_WORD, MODULE_DOOR, check_door, door_in
+from tests.support.door import CHECK_WORD, MODULE_DOOR, STAGED_WORDS, check_door, door_in
+from tests.support.git_repositories import stage
 from tests.support.scanners import OUTPUTS, check_exit_2, commit, fake_gitleaks, flagging, scan, serving, vetting
 from tests.support.secrets import FAKE_KEY, HOSTILE_FILE, OTHER_KEY, allow_config, assert_key_found, sha256_of
 
@@ -230,22 +230,21 @@ FAILING_REPORTS = {
 }
 
 
-def leak_scan_words(command: str, repo: Path) -> list[str]:
-    """The words of a command that scans `repo` for secrets; scan-staged gets a staged copy of the key to find."""
-    if command == "scan-staged":
-        (repo / "staged.txt").write_text(f"aws_access_key_id = {FAKE_KEY}\n")
-        subprocess.run(["git", "-C", str(repo), "add", "staged.txt"], check=True)
-    return [command]
+def leak_scan_words(words: tuple[str, ...], repo: Path) -> list[str]:
+    """The words of a command that scans `repo` for secrets; the staged one gets a staged copy of the key to find."""
+    if words == STAGED_WORDS:
+        stage(repo, {"staged.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
+    return list(words)
 
 
-SECRET_COMMANDS = [CHECK_WORD, "scan-staged"]
+SECRET_COMMANDS = [pytest.param((CHECK_WORD,), id="check"), pytest.param(STAGED_WORDS, id="staged")]
 
 
 @pytest.mark.scanner
-@pytest.mark.parametrize("command", SECRET_COMMANDS)
+@pytest.mark.parametrize("words", SECRET_COMMANDS)
 @pytest.mark.parametrize("failure", ["none", *FAILING_REPORTS])
 def test_the_key_reaches_no_output_and_no_file_and_the_scratch_directory_is_gone(
-    keyed_repo, installed_scanners, use_mise, tmp_path, monkeypatch, capsys, failure, command
+    keyed_repo, installed_scanners, use_mise, tmp_path, monkeypatch, capsys, failure, words
 ):
     """#24 rule 4, #25 rule 1: after a normal run, a gitleaks failure, a stall and a parse error nothing holds the key."""
     scratch_parent = tmp_path / "scratch-parent"
@@ -258,7 +257,7 @@ def test_the_key_reaches_no_output_and_no_file_and_the_scratch_directory_is_gone
         failing.mkdir()
         fake_gitleaks(failing, on_scan=FAILING_REPORTS[failure])
         use_mise(serving(failing))
-    exit_code = door_in(keyed_repo, *leak_scan_words(command, keyed_repo))
+    exit_code = door_in(keyed_repo, *leak_scan_words(words, keyed_repo))
     assert exit_code == (1 if failure == "none" else 2)
     heard = capsys.readouterr()
     assert FAKE_KEY not in heard.out + heard.err
@@ -266,13 +265,13 @@ def test_the_key_reaches_no_output_and_no_file_and_the_scratch_directory_is_gone
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize("command", SECRET_COMMANDS)
-def test_a_sigterm_mid_scan_leaves_no_scratch_directory(keyed_repo, served_scanners, tmp_path, command):
+@pytest.mark.parametrize("words", SECRET_COMMANDS)
+def test_a_sigterm_mid_scan_leaves_no_scratch_directory(keyed_repo, served_scanners, tmp_path, words):
     """#25 rule 1, quality#5 finding 44: a SIGTERM while gitleaks holds the unredacted report deletes the scratch directory."""
     scratch_parent = tmp_path / "scratch-parent"
     scratch_parent.mkdir()
     fake_gitleaks(served_scanners, on_scan=FAILING_REPORTS["gitleaks-stalls"])
-    argv = [*MODULE_DOOR, *leak_scan_words(command, keyed_repo)]
+    argv = [*MODULE_DOOR, *leak_scan_words(words, keyed_repo)]
     scanner = subprocess.Popen(argv, cwd=keyed_repo, env=os.environ | {"TMPDIR": str(scratch_parent)}, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
         deadline = time.monotonic() + 30
@@ -291,16 +290,14 @@ STALE_FILE = "no\x1bthere.txt"
 
 
 @pytest.mark.scanner
-@pytest.mark.parametrize("command", SECRET_COMMANDS)
-def test_an_allowance_no_finding_used_is_one_unused_note_at_the_config(build_repo, installed_scanners, capsys, command):
-    """#25 rule 1, quality#5 finding 34: an entry that matches nothing is named, not silent, in both doors."""
+def test_an_allowance_no_finding_used_is_one_unused_note_at_the_config(build_repo, installed_scanners, capsys):
+    """An entry that matches nothing is named, not silent, by the whole-history scan."""
     repo = build_repo({"quality/config.toml": allow_config(("aws-access-token", "no\\u001bthere.txt", FAKE_KEY, "stale entry"))})
-    code = door_in(repo, command)
+    code = door_in(repo, CHECK_WORD)
     streams = capsys.readouterr()
     printed = streams.out
-    whole_run = command == CHECK_WORD
-    notes = rule_notes(repo, Rule.LEAK) if whole_run else list(staged.scan_staged(repo).notes)
-    block = area_block(printed, Area.SECRETS) if whole_run else decode_block(printed.splitlines())
+    notes = rule_notes(repo, Rule.LEAK)
+    block = area_block(printed, Area.SECRETS)
     (note,) = notes
     assert (code, note.event, note.path) == (0, NoteEvent.UNUSED, config.CONFIG_PATH)
     assert ("aws-access-token" in note.fact, STALE_FILE in note.fact) == (True, True)
@@ -441,22 +438,47 @@ def test_a_planted_value_reaches_no_stream_of_a_verbose_run(
     assert (served_scanners / "gitleaks.vetted").exists() == vetted
 
 
+@pytest.mark.parametrize("flags", [(), ("-v",)], ids=["plain", "-v"])
 @pytest.mark.parametrize(
-    "id_", ["a finding", "gitleaks failing with stderr", "a report that is not UTF-8", "a staged key"]
+    ("id_", "allowed", "code", "fragment"),
+    [
+        ("a finding", False, 1, "1 finding"),
+        ("an allowed finding", True, 0, "clean"),
+        ("gitleaks failing with stderr", False, 2, "gitleaks exited 3 without writing its report"),
+        ("stderr beside a report", False, 2, "gitleaks exited 3, neither 'clean' nor 'findings'"),
+        ("a report that is not UTF-8", False, 2, "cannot read the gitleaks report: not UTF-8 at byte"),
+        ("a report that is no JSON", False, 2, "cannot read the gitleaks report: JSONDecodeError("),
+        ("the value on gitleaks' stdout", False, 0, "clean"),
+        ("git diff failing with stderr", False, 2, "git diff exited 129"),
+    ],
 )
-def test_a_planted_value_reaches_no_stream_of_the_staged_door(build_repo, served_scanners, edited_report, summary, capsys, id_):
-    """The staged door takes no `-v`: nothing a scanner writes to either stream reaches a stream of the door or a summary."""
-    on_scan = {
-        "a finding": leak_with_stderr(recorded_leak_with(edited_report, Secret=FAKE_KEY), f"ERR [git] {FAKE_KEY}"),
+def test_a_planted_value_reaches_no_stream_of_the_staged_door(
+    build_repo, served_scanners, edited_report, summary, fake_git, capsys, id_, allowed, code, fragment, flags
+):
+    """The value stands in no stream and no summary, with or without `-v`, whatever the staged scan or its file count writes."""
+    leak = recorded_leak_with(edited_report, Secret=FAKE_KEY)
+    on_git = {
+        "a finding": leak_with_stderr(leak, "3:14PM INF scanned", f"ERR [git] {FAKE_KEY}"),
         "gitleaks failing with stderr": FAILING_REPORTS["stderr-without-report"],
+        "stderr beside a report": FAILING_REPORTS["stderr-beside-a-report"],
         "a report that is not UTF-8": FAILING_REPORTS["report-not-utf8"],
-        "a staged key": f'echo "[]" > "$report"; echo {FAKE_KEY}; echo {FAKE_KEY} >&2',
-    }[id_]
-    fake_gitleaks(served_scanners, on_scan=on_scan)
-    repo = build_repo({})
-    door_in(repo, *leak_scan_words("scan-staged", repo))
+        "a report that is no JSON": f'printf \'[{{"Secret":"{FAKE_KEY}"\' > "$report"; exit 7',
+        "the value on gitleaks' stdout": f'echo "[]" > "$report"; echo {FAKE_KEY}',
+    }
+    on_git["an allowed finding"] = on_git["a finding"]
+    fake_gitleaks(served_scanners, on_scan=vetting(flagging(FAKE_KEY), on_git=on_git.get(id_, 'echo "[]" > "$report"')))
+    if id_ == "git diff failing with stderr":
+        fake_git(f'case "$3" in diff) echo "{FAKE_KEY}" >&2; exit 129;; esac')
+    config_text = allow_config((RECORDED_RULE, RECORDED_FILE, FAKE_KEY, "a planted value")) if allowed else None
+    repo = build_repo({"quality/config.toml": config_text} if config_text is not None else {"README.md": "x\n"})
+    stage(repo, {"docs/a.md": "a\n"})
+    exit_code = door_in(repo, *STAGED_WORDS, *flags, clock=lambda: 0.0)
     printed = capsys.readouterr()
+    (row,) = [line for line in printed.out.splitlines() if line.split()[1:2] == [Area.SECRETS]]
+    assert (exit_code, fragment in row, "1 allowed" in row or not allowed) == (code, True, True)
     assert_no_value(FAKE_KEY, printed.out + printed.err, summary)
+    if flags and id_ in {"a finding", "an allowed finding"}:
+        assert gitleaks_exit_rows(printed.out) == [(scanners.GITLEAKS, "7 · 2 stderr lines withheld · not cleared by gitleaks")]
 
 
 def test_a_value_in_a_file_name_stands_no_more_often_under_v(build_repo, served_scanners, edited_report, capsys):
@@ -473,15 +495,20 @@ def test_a_value_in_a_file_name_stands_no_more_often_under_v(build_repo, served_
 
 @pytest.mark.scanner
 @pytest.mark.parametrize(
-    ("files", "fact", "said"),
+    ("words", "files", "fact", "said"),
     [
-        pytest.param({"docs/a.md": "nothing\n"}, "0", "no leaks found", id="clean"),
-        pytest.param({"config.txt": f"aws_access_key_id = {FAKE_KEY}\n"}, "7", "leaks found: 1", id="a finding"),
+        pytest.param((CHECK_WORD,), {"docs/a.md": "nothing\n"}, "0", "no leaks found", id="clean"),
+        pytest.param((CHECK_WORD,), {"config.txt": f"aws_access_key_id = {FAKE_KEY}\n"}, "7", "leaks found: 1", id="a finding"),
+        pytest.param(STAGED_WORDS, {"docs/a.md": "nothing\n"}, "0", "no leaks found", id="staged clean"),
+        pytest.param(STAGED_WORDS, {"config.txt": f"aws_access_key_id = {FAKE_KEY}\n"}, "7", "leaks found: 1", id="staged finding"),
     ],
 )
-def test_gitleaks_real_stderr_stands_whole_under_v(build_repo, installed_scanners, capsys, files, fact, said):
+def test_gitleaks_real_stderr_stands_whole_under_v(build_repo, installed_scanners, capsys, words, files, fact, said):
     """A bump of gitleaks that changes what it writes to stderr turns this red."""
-    door_in(build_repo(files), CHECK_WORD, "-v", clock=lambda: 0.0)
+    repo = build_repo({"README.md": "x\n"} if words == STAGED_WORDS else files)
+    if words == STAGED_WORDS:
+        stage(repo, files)
+    door_in(repo, *words, "-v", clock=lambda: 0.0)
     printed = capsys.readouterr()
     block = area_block(printed.out, Area.SECRETS)
     details = [line.detail for line in block if isinstance(line, DetailLine)]

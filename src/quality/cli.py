@@ -25,10 +25,14 @@ from quality import (
     staged,
 )
 from quality.check import (
+    AreaReport,
     AreaVerdict,
+    CheckResult,
     Measurement,
     Outcome,
+    Running,
     judge_repository,
+    judge_staged_change,
 )
 from quality.checkout import OutsideWorkTree
 from quality.config import ConfigError, read_allow_lists, read_gate_settings
@@ -59,7 +63,7 @@ from quality.output import (
     write_scanner_runs,
     write_verdict,
 )
-from quality.report import CannotJudge, Command, Extent, Instruction, NoteEvent, Step
+from quality.report import CannotJudge, Command, Extent, Instruction, NoteEvent, StagedExtent, Step
 from quality.rules import Area, Rule
 from quality.sonar import (
     DEPENDABOT_CONFIG,
@@ -142,26 +146,26 @@ def main(
         return run_scoreboard(arguments.path, release_tags)
     if arguments.command == "baseline":
         return run_baseline_write(arguments.path)
-    if arguments.command == "scan-staged":
-        return run_scan_staged(arguments.path, channels)
     if arguments.command == "sonar":
         if arguments.sonar_command == "properties":
             return run_sonar_properties()
         return run_sonar_findings(transport, sleep)
-    return run_check(locate_ruff, locate_zizmor, clock, channels, arguments.verbose, arguments.areas)
+    if arguments.staged:
+        staged_run = partial(judge_staged_change, Path("."), staged.scan_change, verbose=arguments.verbose)
+        return run_check(staged_run, staged.COMMAND, clock, channels)
+    repository_run = partial(judge_repository, Path("."), locate_ruff, locate_zizmor, verbose=arguments.verbose, named=arguments.areas)
+    return run_check(repository_run, CHECK_COMMAND, clock, channels)
 
 
 QUALITY_HELP = f"""\
 usage: quality COMMAND
 
 Commands:
-  check [AREA ...]
+  check [AREA ...] [--staged]
       Check this repository against the fleet's rules.
   baseline write [PATH]
       Record the debt ceiling ({ratchet.BASELINE_PATH}): the measured size
       debt and the clone pairs.
-  scan-staged [PATH]
-      Check exactly what the next commit records for secrets.
   emergency-merge OWNER/REPO PR
       Operator only: merge one pull request whose gate is red only for
       legacy findings or loosenings he ruled, after he types ja.
@@ -195,7 +199,7 @@ def _area_entry(area: Area) -> str:
 AREA_ENTRIES = "\n".join(map(_area_entry, Area))
 
 CHECK_HELP = f"""\
-usage: quality check [AREA ...] [-v]
+usage: quality check [AREA ...] [--staged] [-v]
 
 Check this repository against the fleet's rules.
 
@@ -203,8 +207,10 @@ Areas (default: all):
 {AREA_ENTRIES}
 
 Options:
-  -v          show the raw scanner output, never a secret
-  -h, --help  show this help
+  --staged      secrets in exactly what the next commit records; the commit
+                hook runs: quality check secrets --staged
+  -v            show the raw scanner output, never a secret
+  -h, --help    show this help
 
 Exit codes: 0 clean, 1 findings, 2 could not check, 130 interrupted.
 """
@@ -260,6 +266,8 @@ def read_invocation(argv: list[str] | None) -> argparse.Namespace:
     arguments, stray = parser.parse_known_args(argv)
     if stray:
         raise CannotJudge(f"unknown argument{SEPARATOR}{' '.join(stray)}", help_step(f"{parser.prog} {arguments.command}"))
+    if arguments.command == "check" and arguments.staged and set(arguments.areas) != {Area.SECRETS}:
+        raise CannotJudge(f"--staged checks only secrets{SEPARATOR}nothing checked", (Command(staged.COMMAND),))
     return arguments
 
 
@@ -268,17 +276,16 @@ def build_parser() -> DoorParser:
     parser.pictured_help = QUALITY_HELP
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command")
-    check_parser = commands.add_parser("check")
+    check_parser = commands.add_parser("check", allow_abbrev=False)
     check_parser.pictured_help = CHECK_HELP
     check_parser.intermixed = True
     check_parser.add_argument("areas", nargs="*", type=named_area, metavar="AREA")
+    check_parser.add_argument("--staged", action="store_true")
     check_parser.add_argument("-v", dest="verbose", action="store_true")
     baseline = commands.add_parser("baseline").add_subparsers(dest="baseline_command")
     baseline.add_parser("write", help=f"write the measured size debt and clone pairs to {ratchet.BASELINE_PATH}").add_argument(
         "path", nargs="?", type=Path, default=Path("."), help="a folder of the git repository to measure; its top level is measured (default: the current one)"
     )
-    scan_staged = commands.add_parser("scan-staged")
-    scan_staged.add_argument("path", nargs="?", type=Path, default=Path("."))
     verdict = commands.add_parser("verdict")
     verdict.add_argument("path", nargs="?", type=Path, default=Path("."))
     sonar = commands.add_parser("sonar").add_subparsers(dest="sonar_command")
@@ -318,8 +325,15 @@ CEILING_HELD = "ceiling held"
 OFFLINE_AUDITS = "offline audits only"
 NO_CONFIG_FACT = "no import-linter config"
 MEASURED_ONLY_EVENT = {Area.DEBT: AreaEvent.NOT_RECORDED, Area.IMPORTS: AreaEvent.NOT_SET_UP}
-START_FAILURE_NEXT = Instruction("fix what the error names, then run quality check again")
-REFUSED_AREAS_NEXT = Instruction("fix what the ✗ rows name, then run quality check again")
+CHECK_COMMAND = "quality check"
+STAGED_CHANGE = "staged change"
+
+
+def refused_next(command: str) -> Instruction:
+    return Instruction(f"fix what the ✗ rows name, then run {command} again")
+
+
+REFUSED_AREAS_NEXT = refused_next(CHECK_COMMAND)
 
 
 def area_row(verdict: AreaVerdict, extent: str) -> Row:
@@ -330,7 +344,8 @@ def area_row(verdict: AreaVerdict, extent: str) -> Row:
         sub_lines = tuple(SubLine(Glyph.COULD_NOT_CHECK, fact) for fact in facts)
         return Row(Glyph.COULD_NOT_CHECK, verdict.area, AreaEvent.NOT_CHECKED, f"{len(facts)} reasons", sub_lines=sub_lines)
     if verdict.findings:
-        return Row(Glyph.NEEDS_YOU, verdict.area, AreaEvent.FINDING, count=len(verdict.findings))
+        fact = extent if _judged_a_staged_change(verdict) else ""
+        return Row(Glyph.NEEDS_YOU, verdict.area, AreaEvent.FINDING, fact, count=len(verdict.findings))
     if verdict.outcome is Outcome.MEASURED_ONLY:
         if MEASURED_ONLY_EVENT[verdict.area] is AreaEvent.NOT_SET_UP:
             return Row(Glyph.NOTE, verdict.area, AreaEvent.NOT_SET_UP, extent)
@@ -342,12 +357,19 @@ def area_row(verdict: AreaVerdict, extent: str) -> Row:
     return Row(Glyph.CLEAN, verdict.area, AreaEvent.CLEAN, SEPARATOR.join(fact for fact in facts if fact))
 
 
+def _judged_a_staged_change(verdict: AreaVerdict) -> bool:
+    return any(isinstance(judged.extent, StagedExtent) for judged in verdict.verdicts)
+
+
 def _imports_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | None]) -> str:
     return NO_CONFIG_FACT if verdict.measurement is Measurement.MEASURED_ONLY else counted(extents[Rule.IMPORT_CONTRACT], "contract")
 
 
 def _secrets_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | None]) -> str:
-    return counted(extents[Rule.LEAK], "commit")
+    judged = extents[Rule.LEAK]
+    if isinstance(judged, StagedExtent):
+        return SEPARATOR.join((STAGED_CHANGE, counted(judged.files, "file")))
+    return counted(judged, "commit")
 
 
 def _dependencies_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | None]) -> str:
@@ -415,12 +437,12 @@ def refusal_error(areas: tuple[AreaVerdict, ...]) -> str:
     return f"{error} · {counted(found, 'finding')}, {held} of them in those areas" if held else f"{error} · {counted(found, 'finding')} in the others"
 
 
-def next_steps(areas: tuple[AreaVerdict, ...]) -> tuple[Step, ...]:
+def next_steps(areas: tuple[AreaVerdict, ...], general: Instruction = REFUSED_AREAS_NEXT) -> tuple[Step, ...]:
     """Each distinct step of the run's refusals once, in row order; the general instruction last where a refusal carries
     no step, and alone where none does."""
     reasons = [reason for verdict in areas for reason in verdict.reasons]
     steps = tuple(dict.fromkeys(step for reason in reasons for step in reason.next_steps))
-    return steps if reasons and all(reason.next_steps for reason in reasons) else (*steps, REFUSED_AREAS_NEXT)
+    return steps if reasons and all(reason.next_steps for reason in reasons) else (*steps, general)
 
 
 def write_area(out: Channel, verdict: AreaVerdict, tracked_paths: int) -> None:
@@ -434,28 +456,21 @@ def _spoken_folder(folder: Path) -> str:
     return str(Path("~", folder.relative_to(home))) if folder.is_relative_to(home) else str(folder)
 
 
-def run_check(
-    locate_ruff: Callable[[], str],
-    locate_zizmor: Callable[[], str],
-    clock: Callable[[], float],
-    channels: Channels,
-    verbose: bool,
-    areas: Sequence[Area],
-) -> int:
+def run_check(judged: Callable[[AreaReport, Running], CheckResult], command: str, clock: Callable[[], float], channels: Channels) -> int:
+    """Runs `judged`, the repository's judging or the staged change's, and writes its rows, its verdict and its pair;
+    `command` is what a person runs to ask again."""
     started = clock()
     try:
-        result = judge_repository(
-            Path("."), locate_ruff, locate_zizmor, partial(write_area, channels.out), live_line(channels.err), verbose, areas
-        )
+        result = judged(partial(write_area, channels.out), live_line(channels.err))
     except OutsideWorkTree as error:
-        write_pair(f"not inside a git work tree · {_spoken_folder(error.path.absolute())}", (Instruction("run quality check inside a repository"),), channels.err)
+        write_pair(f"not inside a git work tree · {_spoken_folder(error.path.absolute())}", (Instruction(f"run {command} inside a repository"),), channels.err)
         return EXIT_CANNOT_JUDGE
     except CannotJudge as error:
-        write_pair(error.reason.fact, error.reason.next_steps or (START_FAILURE_NEXT,), channels.err)
+        write_pair(error.reason.fact, error.reason.next_steps or (Instruction(f"fix what the error names, then run {command} again"),), channels.err)
         return EXIT_CANNOT_JUDGE
     exit_code = CHECK_EXIT[result.worst]
     if exit_code == EXIT_CANNOT_JUDGE:
-        write_pair(refusal_error(result.areas), next_steps(result.areas), channels.err)
+        write_pair(refusal_error(result.areas), next_steps(result.areas, refused_next(command)), channels.err)
         return exit_code
     outcomes = Counter(verdict.outcome for verdict in result.areas)
     write_verdict(
@@ -509,18 +524,6 @@ def describe_loosenings(path: Path, written: ratchet.Baseline) -> list[str]:
     if previous.clones is not None:
         lines += [f"adds clone {pair.label}" for pair in ratchet.added_pairs(previous.clones, written.clones)]
     return lines
-
-
-def run_scan_staged(path: Path, channels: Channels) -> int:
-    try:
-        with live_line(channels.err)(Area.SECRETS, scanners.GITLEAKS):
-            result = staged.scan_staged(path)
-    except (process.ProcessError, ConfigError, CannotJudge) as error:
-        emit(f"scan-staged: cannot judge - {error}", file=sys.stderr)
-        return EXIT_CANNOT_JUDGE
-    write_findings_and_notes(result.findings, result.notes, channels.out)
-    emit(f"scan-staged: {len(result.findings)} finding(s)" if result.findings else "scan-staged: clean")
-    return EXIT_FINDINGS if result.findings else EXIT_CLEAN
 
 
 def run_sonar_properties() -> int:

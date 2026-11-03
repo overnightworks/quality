@@ -24,15 +24,22 @@ from quality import (
     scanners,
 )
 from quality.config import (
-    CONFIG_PATH,
     AllowLists,
     ConfigError,
     read_allow_lists,
 )
-from quality.report import CannotJudge, Example, Extent, Finding, Note, Reason, RuleResult, ScannerRun, Unparsable
+from quality.report import (
+    CannotJudge,
+    Extent,
+    Finding,
+    Note,
+    Reason,
+    RuleResult,
+    ScannerRun,
+    Unparsable,
+    config_refusal,
+)
 from quality.rules import Area, Rule
-
-CONFIG_EXAMPLE_LABEL = f"write it in {CONFIG_PATH} like this"
 
 
 def _python_floor_result(root: Path, modes: dict[str, str] | CannotJudge, allow_lists: AllowLists | CannotJudge) -> python_floor.FloorResult:
@@ -47,8 +54,7 @@ def _read_allow_lists(root: Path) -> AllowLists:
     try:
         return read_allow_lists(root)
     except ConfigError as error:
-        steps = () if error.example is None else (Example(CONFIG_EXAMPLE_LABEL, error.example),)
-        raise CannotJudge(error.fact, steps) from error
+        raise config_refusal(error) from error
 
 
 def _required[T](read: T | CannotJudge) -> T:
@@ -415,3 +421,26 @@ def judge_repository(
         report_area(area, tracked_paths)
         areas.append(area)
     return CheckResult(tuple(areas), tracked_paths)
+
+
+type StagedScan = Callable[[Path, scanners.ScannerLog], RuleResult]
+
+
+def _check_staged_change(scan: StagedScan, root: Path, log: scanners.ScannerLog) -> RuleResult:
+    try:
+        return scan(root, log)
+    except process.ProcessError as error:
+        raise CannotJudge(str(error)) from error
+
+
+def judge_staged_change(
+    root: Path, scan: StagedScan, report_area: AreaReport, running: Running, verbose: bool = False
+) -> CheckResult:
+    """Judges the secrets of what the next commit records and nothing else: `scan` comes from the door, because `staged`
+    lies beside this module. Its one area counts no tracked path, which only `files` prints."""
+    checkout.work_tree_top(root)  # the start check alone: a relative GIT_DIR names itself from the folder the hook stands in, so `scan` gets that folder
+    runs, log = _run_log(verbose)
+    leak = _scanned(running, Area.SECRETS, scanners.GITLEAKS, lambda: _check_staged_change(scan, root, log))
+    area = _area_verdict(Area.SECRETS, {Rule.LEAK: leak}, runs)
+    report_area(area, 0)
+    return CheckResult((area,), 0)

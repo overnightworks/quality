@@ -3,17 +3,16 @@
 import contextlib
 import io
 import os
-import subprocess
 from collections.abc import Callable
 from pathlib import Path
 from typing import TextIO
 
 import pytest
 
-from quality import check, scanners
+from quality import check, cli, scanners
 from tests.support.advisories import uv_lock
-from tests.support.door import check_door, door_in
-from tests.support.git_repositories import GIT_IDENTITY
+from tests.support.door import check_door, staged_door
+from tests.support.git_repositories import stage
 from tests.support.python_lint import fake_ruff
 from tests.support.scanners import CLEAN_SCANS, OUTPUTS, fake_gitleaks, fake_scanner, fake_zizmor, lacking
 from tests.support.terminal import PseudoTerminal, Terminal, run_on, screen, without_sgr
@@ -29,9 +28,9 @@ def showing(name: str, answer: str) -> str:
     return f'printf {name} > "$LIVE_TERMINAL"\n{answer}'
 
 
-def scan_staged_on(repo: Path, stdout: TextIO, stderr: TextIO, environment: dict[str, str]) -> int:
+def staged_door_on(repo: Path, stdout: TextIO, stderr: TextIO, environment: dict[str, str]) -> int:
     with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-        return door_in(repo, "scan-staged", environment=environment)
+        return staged_door(repo, environment=environment, clock=lambda: 0.0)
 
 
 def test_each_scanner_runs_under_its_own_live_line(build_repo, served_scanners, window, tmp_path, monkeypatch, xterm):
@@ -162,8 +161,7 @@ def test_the_staged_door_shows_its_scanner_and_takes_the_line_down_before_its_an
     build_repo, served_scanners, use_mise, window, monkeypatch, xterm, outcome, marker
 ):
     repo = build_repo({"README.md": "x\n"})
-    (repo / "staged.txt").write_text("x\n", encoding="utf-8")
-    subprocess.run(["git", "-C", str(repo), *GIT_IDENTITY, "add", "staged.txt"], check=True, timeout=60)
+    stage(repo, {"staged.txt": "x\n"})
     if outcome == "finding":
         fake_gitleaks(served_scanners, on_scan=showing(scanners.GITLEAKS, f'cp "{OUTPUTS / "gitleaks-finding.json"}" "$report"; exit 7'))
     else:
@@ -172,11 +170,12 @@ def test_the_staged_door_shows_its_scanner_and_takes_the_line_down_before_its_an
         use_mise(lacking(served_scanners, scanners.GITLEAKS))
     monkeypatch.setenv("LIVE_TERMINAL", os.devnull)
     plain_out, plain_err = io.StringIO(), io.StringIO()
-    scan_staged_on(repo, plain_out, plain_err, xterm)
+    plain_code = staged_door_on(repo, plain_out, plain_err, xterm)
     terminal = window(200)
     terminal.stream.reconfigure(line_buffering=False)
     monkeypatch.setenv("LIVE_TERMINAL", os.ttyname(terminal.stream.fileno()))
-    stdout = io.StringIO() if outcome == "refused" else terminal.stream
-    scan_staged_on(repo, stdout, terminal.stream, xterm)
+    code = staged_door_on(repo, terminal.stream, terminal.stream, xterm)
     answer = plain_out.getvalue() + plain_err.getvalue()
+    expected = {"clean": cli.EXIT_CLEAN, "finding": cli.EXIT_FINDINGS, "refused": cli.EXIT_CANNOT_JUDGE}[outcome]
+    assert (plain_code, code) == (expected, expected)
     assert without_sgr(terminal.read()) == f"  ⠋ secrets       gitleaks\r{marker}\r\x1b[K{answer}"
