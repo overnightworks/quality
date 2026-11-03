@@ -1,10 +1,9 @@
-"""#174: a file `quality/config.toml` declares generated leaves the size rule and the baseline write."""
+"""A file `quality/config.toml` declares generated leaves the size rule and the fix."""
 
 import pytest
 
-from quality import cli
 from quality.config import CONFIG_PATH
-from quality.ratchet import BASELINE_PATH
+from quality.ratchet import BASELINE_PATH, Key, Metric, load_baseline
 from quality.report import FindingEvent
 from quality.rules import Rule
 from tests.support.check import (
@@ -20,6 +19,7 @@ from tests.support.check import (
     rule_notes,
 )
 from tests.support.check import check_output as run
+from tests.support.door import FIX_WORDS, door_in
 from tests.support.generated_files import MANDATORY_JOB, TYPES_FILE, generated_config
 from tests.support.source_code import long_function, typescript_file
 
@@ -82,9 +82,8 @@ def test_a_declaration_without_a_measured_file_is_one_size_finding_with_the_dele
     assert rule_findings(repo, Rule.SIZE) == []
 
 
-def test_a_declared_python_file_python_cannot_parse_leaves_the_size_rule_judgeable_but_not_the_baseline_write(build_repo, capsys):
-    """#174 Design: the size rule leaves a declared file's unparsable entry out; the baseline write still refuses
-    a tree whose clones it could not measure."""
+def test_a_declared_python_file_python_cannot_parse_leaves_the_size_rule_judgeable_but_not_the_fix(build_repo, capsys):
+    """The size rule leaves a declared file's unparsable entry out; the fix still refuses a tree whose clones it could not measure."""
     seeded = '[clones."src/a.py"]\nlong_one = [["src/b.py", "long_one"]]\n'
     repo = build_repo({"gen/api.py": "def broken(:\n", CONFIG_PATH: GATE + generated_config(path="gen/api.py"), BASELINE_PATH: seeded})
     seeded_bytes = (repo / BASELINE_PATH).read_bytes()
@@ -92,8 +91,9 @@ def test_a_declared_python_file_python_cannot_parse_leaves_the_size_rule_judgeab
     assert rule_findings(repo, Rule.SIZE) == []
     assert area_finding_rows(output, "debt") == []
     assert Rule.SIZE not in refusals(repo)
-    assert cli.main(["baseline", "write", str(repo)]) == 2
-    assert "baseline: not written - gen/api.py is not valid Python" in capsys.readouterr().err
+    capsys.readouterr()
+    assert door_in(repo, *FIX_WORDS) == 2
+    assert "  ✗ debt          not fixed      gen/api.py is not valid Python" in capsys.readouterr().out
     assert (repo / BASELINE_PATH).read_bytes() == seeded_bytes
 
 
@@ -103,14 +103,10 @@ def test_a_declared_file_python_cannot_parse_is_no_note_without_a_baseline(build
     assert rule_notes(repo, Rule.SIZE) == []
 
 
-def test_baseline_write_leaves_a_declared_file_out_and_names_no_raise_for_it(build_repo, capsys):
-    """#174 sentence 1, acceptance 2: the written baseline holds nothing of the declared file, and its count line
-    counts only what was written."""
+def test_a_fix_leaves_the_entry_of_a_declared_file_as_it_stands(build_repo, capsys):
+    """A declared file is left out of the measurement, so its held entry has none to fall to and stays."""
     files = {TYPES_FILE: typescript_file(900), "gen/api.py": long_function(70), CONFIG_PATH: GATE + generated_config(path="gen/api.py") + generated_config(path=TYPES_FILE)}
     repo = build_repo({**files, BASELINE_PATH: f'[file_lines]\n"{TYPES_FILE}" = 850\n'})
-    assert cli.main(["baseline", "write", str(repo)]) == 0
-    output = capsys.readouterr().out
-    assert "raises" not in output
-    assert "adds" not in output
-    assert "baseline: wrote 0 entries and 0 clone pairs" in output
-    assert TYPES_FILE not in (repo / BASELINE_PATH).read_text()
+    assert door_in(repo, *FIX_WORDS) == 0
+    capsys.readouterr()
+    assert load_baseline((repo / BASELINE_PATH).read_text()).size == {Key(Metric.FILE_LINES, TYPES_FILE): 850}

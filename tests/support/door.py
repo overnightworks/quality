@@ -10,6 +10,7 @@ from quality import cli
 CHECK_WORD = "check"
 MODULE_DOOR = [sys.executable, "-m", "quality.cli"]
 STAGED_WORDS = (CHECK_WORD, "secrets", "--staged")
+FIX_WORDS = (CHECK_WORD, "debt", "--fix")
 
 
 def door_in(folder: Path, *words: str, **keywords) -> int:

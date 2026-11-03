@@ -6,10 +6,10 @@ from pathlib import Path
 import pytest
 
 import quality
-from quality import cli, report, staged
+from quality import cli, ratchet, report, staged
 from quality.output import SEPARATOR
 from quality.rules import Area
-from tests.support.door import MODULE_DOOR, STAGED_WORDS, door_environment
+from tests.support.door import CHECK_WORD, FIX_WORDS, MODULE_DOOR, STAGED_WORDS, door_environment
 from tests.support.terminal import Terminal, without_sgr
 
 
@@ -76,7 +76,7 @@ def test_the_check_help_stands_in_the_pictures_frame(capsys):
     areas = lines[lines.index("Areas (default: all):") + 1 : lines.index("Options:") - 1]
     options = lines[lines.index("Options:") + 1 : -2]
     assert (lines[0], lines[2], headings(lines), areas, options, lines[-1], max(len(line) for line in lines) <= 80) == (
-        "usage: quality check [AREA ...] [--staged] [-v]",
+        "usage: quality check [AREA ...] [--staged] [--fix] [-v]",
         "Check this repository against the fleet's rules.",
         ["Areas (default: all):", "Options:"],
         [
@@ -93,6 +93,8 @@ def test_the_check_help_stands_in_the_pictures_frame(capsys):
         [
             "  --staged      secrets in exactly what the next commit records; the commit",
             "                hook runs: quality check secrets --staged",
+            "  --fix         lower the debt ceiling (quality/baseline.toml) where code",
+            "                shrank, or record it the first time; never raises it",
             "  -v            show the raw scanner output, never a secret",
             "  -h, --help    show this help",
         ],
@@ -109,7 +111,7 @@ def test_each_area_has_one_entry_in_the_check_help(capsys):
 
 def test_the_check_entry_names_its_areas_in_the_top_level_help(capsys):
     lines = help_of(capsys, []).splitlines()
-    assert "  check [AREA ...] [--staged]" in entries_under(lines, "Commands:")
+    assert "  check [AREA ...] [--staged] [--fix]" in entries_under(lines, "Commands:")
 
 
 def test_every_command_path_stands_in_the_help_once_and_every_entry_is_one(capsys):
@@ -130,8 +132,6 @@ def test_verdict_and_sonar_stand_apart_under_run_by_the_gate(capsys):
     [
         pytest.param([], id="quality"),
         pytest.param(["check"], id="check"),
-        pytest.param(["baseline"], id="baseline"),
-        pytest.param(["baseline", "write"], id="baseline write"),
         pytest.param(["verdict"], id="verdict"),
         pytest.param(["sonar"], id="sonar"),
         pytest.param(["sonar", "properties"], id="sonar properties"),
@@ -202,7 +202,7 @@ def test_a_closed_stdout_takes_no_help_and_exit_is_0(tmp_path):
         pytest.param([], (), "no command{sep}commands: {commands}", "quality", id="no command"),
         pytest.param(["nonsense"], (), "no command nonsense{sep}commands: {commands}", "quality", id="unknown command"),
         pytest.param(["sonar"], ("sonar",), "no command{sep}commands: {commands}", "quality sonar", id="no sonar command"),
-        pytest.param(["baseline", "nonsense"], ("baseline",), "no command nonsense{sep}commands: {commands}", "quality baseline", id="unknown baseline command"),
+        pytest.param(["sonar", "nonsense"], ("sonar",), "no command nonsense{sep}commands: {commands}", "quality sonar", id="unknown sonar command"),
         pytest.param(["check", "a", "b"], (), "no area a{sep}areas: {areas}", "quality check", id="the first of two words"),
         pytest.param(["check", "."], (), "no area .{sep}areas: {areas}", "quality check", id="a path of the old form"),
         pytest.param(["check", "src"], (), "no area src{sep}areas: {areas}", "quality check", id="a folder name"),
@@ -219,7 +219,6 @@ def test_a_closed_stdout_takes_no_help_and_exit_is_0(tmp_path):
         pytest.param(["check", "--stag"], (), "unknown argument{sep}--stag", "quality check", id="check --stag"),
         pytest.param(["check", "secrets", "--staged", "--nonsense"], (), "unknown argument{sep}--nonsense", "quality check", id="a stray option beside the staged flag"),
         pytest.param(["check", "docs", "--staged"], (), "no area docs{sep}areas: {areas}", "quality check", id="a wrong area beside the staged flag"),
-        pytest.param(["baseline", "write", "a", "b"], (), "unknown argument{sep}b", "quality baseline", id="stray argument of a group's command"),
         pytest.param(["sonar", "properties", "x"], (), "unknown argument{sep}x", "quality sonar", id="stray argument of sonar"),
         pytest.param(["--nonsense", "scoreboard"], (), "unknown argument{sep}--nonsense", "quality scoreboard", id="stray option before a command"),
     ],
@@ -329,6 +328,37 @@ def test_staged_outside_secrets_is_the_pair_and_runs_nothing(capsys, words):
     code = cli.main(["check", *words], environment={})
     printed = capsys.readouterr()
     assert (code, printed.out, printed.err) == (2, "", "error: --staged checks only secrets · nothing checked\nnext: quality check secrets --staged\n")
+
+
+@pytest.mark.parametrize(
+    ("words", "fact", "step"),
+    [
+        pytest.param(["--fix", "--staged"], "--fix does not take --staged", "quality check --fix", id="staged"),
+        pytest.param(["--fix", "secrets"], "--fix changes only the debt ceiling", "quality check debt --fix", id="an area other than debt"),
+        pytest.param(["--fix", "files", "secrets"], "--fix changes only the debt ceiling", "quality check debt --fix", id="two other areas"),
+    ],
+)
+def test_a_fix_beside_what_it_cannot_change_is_the_pair_and_runs_nothing(capsys, words, fact, step):
+    code = cli.main(["check", *words], environment={})
+    printed = capsys.readouterr()
+    assert (code, printed.out, printed.err) == (2, "", f"error: {fact} · nothing checked\nnext: {step}\n")
+
+
+@pytest.mark.parametrize(
+    ("words", "pair"),
+    [
+        pytest.param(["check", "--dry-run"], "error: unknown argument · --dry-run\nnext: quality check --help\n", id="the dry run"),
+        pytest.param(["baseline", "write", "."], "error: no command baseline · commands: {commands}\nnext: quality --help\n", id="the word that left"),
+    ],
+)
+def test_the_words_that_are_not_the_fix_are_refused(capsys, words, pair):
+    code = cli.main(words, environment={})
+    printed = capsys.readouterr()
+    assert (code, printed.out, printed.err) == (2, "", pair.format(commands=commands_of()))
+
+
+def test_the_fix_words_are_the_commands_words():
+    assert ratchet.FIX_COMMAND.replace(CHECK_WORD, " ".join(FIX_WORDS[:2])) == f"quality {' '.join(FIX_WORDS)}"
 
 
 def test_the_staged_words_are_the_commands_words():

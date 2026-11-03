@@ -499,11 +499,11 @@ def test_a_generated_file_needs_mandatory_jobs_that_are_non_empty_names(jobs, jo
 
 @pytest.mark.parametrize(
     ("command", "refusal"),
-    [([CHECK_WORD], f"{refusal_row('debt')}"), (["baseline", "write"], "baseline: not written - ")],
-    ids=["check", "baseline write"],
+    [([CHECK_WORD], f"{refusal_row('debt')}"), (["check", "debt", "--fix"], f"{refusal_row('debt')}")],
+    ids=["check", "check debt --fix"],
 )
-def test_a_malformed_generated_file_stops_the_size_rule_and_the_baseline_write(build_repo, capsys, command, refusal):
-    """#174 sentence 3: the check cannot judge size and baseline write writes nothing."""
+def test_a_malformed_generated_file_stops_the_size_rule_and_the_fix(build_repo, capsys, command, refusal):
+    """The check cannot judge size and the fix writes nothing."""
     repo = build_repo({CONFIG_PATH: GATE_WITH_CHECKS + generated_config(job="other")})
     assert door_in(repo, *command) == 2
     captured = capsys.readouterr()

@@ -10,7 +10,6 @@ import pytest
 from quality import __version__, cli
 from quality.ratchet import (
     BASELINE_PATH,
-    WRITE_COMMAND,
     Baseline,
     ClonePair,
     Key,
@@ -43,7 +42,7 @@ from tests.support.check import (
     rule_notes,
 )
 from tests.support.check import check_output as run
-from tests.support.door import CHECK_WORD, check_door, door_in
+from tests.support.door import CHECK_WORD, FIX_WORDS, check_door, door_in
 from tests.support.git_repositories import make_repo
 from tests.support.source_code import (
     branchy_function,
@@ -161,11 +160,11 @@ def test_against_a_baseline_a_file_python_cannot_read_is_unparsable(build_repo, 
 
 
 @NOT_PYTHON
-def test_baseline_write_refuses_a_file_python_cannot_read(build_repo, capsys, source):
-    """#46 rule 5: a baseline holds every function, so one written with a file unmeasured would hide its debt."""
+def test_a_fix_refuses_a_file_python_cannot_read(build_repo, capsys, source):
+    """A baseline holds every function, so one recorded with a file unmeasured would hide its debt."""
     repo = build_repo_with_source(build_repo, {}, SOURCE_NAME, source)
-    assert cli.main(["baseline", "write", str(repo)]) == 2
-    assert f"baseline: not written - {SOURCE_NAME} is not valid Python" in capsys.readouterr().err
+    assert door_in(repo, *FIX_WORDS) == 2
+    assert f"{refusal_row('debt')}{SOURCE_NAME} is not valid Python" in capsys.readouterr().out
     assert not (repo / BASELINE_PATH).exists()
 
 
@@ -288,7 +287,7 @@ def test_a_tracked_file_missing_from_disk_is_gone_for_the_size_rule_and_only_the
     ids=["directory", "cell 17 file"],
 )
 @pytest.mark.parametrize("file", ["locked/b.py", "locked/b.ts", "locked/b.svelte"], ids=["Python", "#119 cell 21 TypeScript", "#119 cell 21 Svelte"])
-@pytest.mark.parametrize("command", [CHECK_WORD, "baseline write"])
+@pytest.mark.parametrize("command", [CHECK_WORD, "check debt --fix"])
 def test_a_tracked_file_the_filesystem_refuses_to_reach_cannot_be_judged(build_repo, capsys, command, file, locked, reason):
     """#46 rule 3/5 and #52 rule 5, cell 17: a tracked file the rule may not reach or read is exit 2, never gone,
     never a traceback, and its reason names no checkout path. #119 cell 21: a file of any table language likewise."""
@@ -300,7 +299,7 @@ def test_a_tracked_file_the_filesystem_refuses_to_reach_cannot_be_judged(build_r
     finally:
         (repo / locked).chmod(0o755)
     assert code == 2
-    prefix = f"{refusal_row('debt')}" if command == CHECK_WORD else "baseline: not written - "
+    prefix = refusal_row("debt")
     captured = capsys.readouterr()
     output = captured.out + captured.err
     assert (prefix + reason in output, str(repo) in output) == (True, False), output
@@ -341,7 +340,7 @@ def test_two_functions_sharing_a_qualified_name_count_as_two(build_repo, capsys,
 def test_the_shorter_of_two_same_named_functions_cannot_grow_under_the_baseline(build_repo, capsys):
     """#46 rule 4: each function keeps its own entry, so the shorter twin growing is red, not hidden by the longer."""
     repo = build_repo({"src/a.py": long_function(62) + long_function(70)})
-    assert cli.main(["baseline", "write", str(repo)]) == 0
+    assert door_in(repo, *FIX_WORDS) == 0
     (repo / "src/a.py").write_text(long_function(65) + long_function(70))
     code, output = run(capsys, repo)
     assert code == 1, output
@@ -349,8 +348,8 @@ def test_the_shorter_of_two_same_named_functions_cannot_grow_under_the_baseline(
     assert (finding.event, "65" in finding.fact, "62" in finding.fact) == (FindingEvent.GREW, True, True)
 
 
-def test_baseline_write_records_the_measured_debt_sorted_and_check_then_holds_it(build_repo, capsys):
-    """#46 rule 5: `quality baseline write` writes sorted TOML keyed by path and qualified symbol."""
+def test_a_first_recording_writes_the_measured_debt_sorted_and_check_then_holds_it(build_repo, capsys):
+    """The first `quality check debt --fix` writes sorted TOML keyed by path and qualified symbol."""
     repo = build_repo(
         {
             "src/b.py": long_file(810) + method(61),
@@ -358,7 +357,7 @@ def test_baseline_write_records_the_measured_debt_sorted_and_check_then_holds_it
             "src/small.py": "x = 1\n",
         }
     )
-    assert cli.main(["baseline", "write", str(repo)]) == 0
+    assert door_in(repo, *FIX_WORDS) == 0
     written = (repo / BASELINE_PATH).read_text(encoding="utf-8")
     assert tomllib.loads(written) == {
         "ccn": {"src/a.py": {"branchy": 17}},
@@ -373,67 +372,13 @@ def test_baseline_write_records_the_measured_debt_sorted_and_check_then_holds_it
     assert (code, is_clean(output)) == (0, True), output
 
 
-def test_writing_the_baseline_twice_yields_the_same_file(build_repo):
-    """#46 rule 5: the written baseline is the measurement, so writing it again changes nothing."""
+def test_fixing_twice_yields_the_same_file(build_repo):
+    """The recorded baseline is the measurement, so fixing again changes nothing."""
     repo = build_repo({"src/a.py": long_function(62)})
-    cli.main(["baseline", "write", str(repo)])
+    door_in(repo, *FIX_WORDS)
     first = (repo / BASELINE_PATH).read_text(encoding="utf-8")
-    cli.main(["baseline", "write", str(repo)])
+    door_in(repo, *FIX_WORDS)
     assert (repo / BASELINE_PATH).read_text(encoding="utf-8") == first
-
-
-def baseline_write(capsys: pytest.CaptureFixture[str], repo: Path) -> tuple[int, list[str]]:
-    code = cli.main(["baseline", "write", str(repo)])
-    captured = capsys.readouterr()
-    return code, (captured.out + captured.err).splitlines()
-
-
-def wrote_line(repo: Path, count: str) -> str:
-    return f"baseline: wrote {count} and 0 clone pairs to {repo / BASELINE_PATH}"
-
-
-@pytest.mark.parametrize(
-    ("previous", "named"),
-    [
-        (
-            '[function_lines."src/a.py"]\nlong_one = 62\n',
-            ["baseline: raises function_lines src/a.py long_one 62 -> 70"],
-        ),
-        (EMPTY_BASELINE, ["baseline: adds function_lines src/a.py long_one 70"]),
-        ('[function_lines."src/a.py"]\nlong_one = 82\n', []),
-        ('[function_lines."src/a.py"]\nlong_one = 70\n[file_lines]\n"src/gone.py" = 900\n', []),
-        (None, []),
-    ],
-    ids=["cell-1-raised", "cell-2-added", "cell-3-lowered", "cell-4-file-gone", "cell-5-adoption"],
-)
-def test_baseline_write_names_each_raised_or_added_entry_before_the_count(build_repo, capsys, previous, named):
-    """#50 rules 1-3 and 5, cells 1-5: raises and adds are named in the verdict's wording; a fall, a gone entry
-    and an adoption name nothing; the write still happens and exits 0."""
-    files = {"src/a.py": long_function(70)}
-    repo = build_repo(files if previous is None else {**files, BASELINE_PATH: previous})
-    assert baseline_write(capsys, repo) == (0, [*named, wrote_line(repo, "1 entry")])
-    assert load_baseline((repo / BASELINE_PATH).read_text(encoding="utf-8")) == Baseline(
-        {Key(Metric.FUNCTION_LINES, "src/a.py", "long_one"): 70}, frozenset()
-    )
-
-
-@pytest.mark.parametrize(
-    "previous",
-    ["[file_lines\n", '[file_lines]\n"src/a.py" = "many"\n'],
-    ids=["not-toml", "not-a-count"],
-)
-def test_baseline_write_overwrites_an_unreadable_previous_baseline_with_a_note(build_repo, capsys, previous):
-    """#50 rules 4 and 5, cell 6: an unreadable previous baseline is overwritten, the write says raises cannot be
-    named, and it exits 0."""
-    repo = build_repo({"src/a.py": long_function(70), BASELINE_PATH: previous})
-    code, (note, wrote) = baseline_write(capsys, repo)
-    assert (code, wrote) == (0, wrote_line(repo, "1 entry"))
-    assert note.startswith(f"baseline: the previous {BASELINE_PATH} could not be read (")
-    assert note.endswith("), so raises cannot be named")
-    assert "rewrite it" not in note, "#52 rule 7, cell 15: the write is the rewrite, so its note carries no hint"
-    assert load_baseline((repo / BASELINE_PATH).read_text(encoding="utf-8")) == Baseline(
-        {Key(Metric.FUNCTION_LINES, "src/a.py", "long_one"): 70}, frozenset()
-    )
 
 
 @pytest.mark.parametrize(
@@ -448,8 +393,8 @@ def test_an_unreadable_baseline_cannot_be_judged(build_repo, capsys, baseline):
     code, output = run(capsys, repo)
     assert code == 2
     assert list(refusals(repo)) == [Rule.SIZE, Rule.CLONE]
-    assert (output.count(WRITE_COMMAND), "rewrite it with" in output) == (1, False), output  # both rules, one reason: the run names it once, on next:
-    assert f"next: {WRITE_COMMAND}" in output.splitlines()
+    assert (output.count("restore quality/baseline.toml from git, or repair it by hand"), "rewrite it with" in output) == (1, False), output  # both rules, one reason: the run names it once, on next:
+    assert "next: restore quality/baseline.toml from git, or repair it by hand" in output.splitlines()
 
 
 def test_an_unknown_baseline_table_states_the_fact_and_sends_the_head_to_its_pinned_release(build_repo, capsys):
@@ -458,7 +403,7 @@ def test_an_unknown_baseline_table_states_the_fact_and_sends_the_head_to_its_pin
     code, output = run(capsys, repo)
     assert (code, list(refusals(repo))) == (2, [Rule.SIZE, Rule.CLONE])
     assert f"{BASELINE_PATH} has an unknown table [future]; quality {__version__} knows ccn, file_lines, function_lines, clones" in output
-    assert output.count("write the baseline with the quality release your gate pins") == 1, output
+    assert output.count("run the quality release your gate pins") == 1, output
     assert "rewrite it" not in output
 
 
@@ -476,17 +421,17 @@ def link_the_quality_directory_elsewhere(repo: Path, elsewhere: Path) -> None:
     [link_the_baseline_elsewhere, link_the_quality_directory_elsewhere],
     ids=["baseline-symlink", "quality-directory-symlink"],
 )
-def test_baseline_write_to_a_destination_it_cannot_own_cannot_be_judged(build_repo, capsys, arrange):
-    """#46 rule 5 and #50 rule 4, cell 7: the baseline is written to the repository's own quality/baseline.toml,
-    never through a symlink, and a refused write names nothing but the refusal."""
+def test_a_fix_to_a_destination_it_cannot_own_cannot_be_judged(build_repo, capsys, arrange):
+    """The baseline is written to the repository's own quality/baseline.toml, never through a symlink."""
     repo = build_repo({"src/a.py": long_function(62)})
     elsewhere = repo / "untracked-elsewhere"
     elsewhere.mkdir()
     (elsewhere / "victim.toml").write_text("kept\n")
     arrange(repo, elsewhere)
-    code, (refusal,) = baseline_write(capsys, repo)
-    assert (code, refusal.startswith("baseline: not written - ")) == (2, True), refusal
-    assert str(repo) not in refusal, "#52 rule 5, cell 20: the refusal names no resolved path"
+    code = door_in(repo, *FIX_WORDS)
+    refusal = capsys.readouterr().out
+    assert (code, "not checked" in refusal or "not fixed" in refusal) == (2, True), refusal
+    assert str(repo) not in refusal, "the refusal names no resolved path"
     assert sorted(path.name for path in elsewhere.iterdir()) == ["victim.toml"]
     assert (elsewhere / "victim.toml").read_text() == "kept\n"
 
@@ -496,11 +441,11 @@ def test_baseline_write_to_a_destination_it_cannot_own_cannot_be_judged(build_re
     [{"quality": "a file\n"}, {f"{BASELINE_PATH}/inside.txt": "a directory\n"}],
     ids=["quality-is-a-file", "baseline-is-a-directory"],
 )
-def test_baseline_write_that_the_filesystem_refuses_cannot_be_judged(build_repo, capsys, blocker):
-    """#46 rule 5: exit 2, not a traceback: a baseline that cannot be written is never a clean result."""
+def test_a_fix_the_filesystem_refuses_cannot_be_judged(build_repo, capsys, blocker):
+    """Exit 2, not a traceback: a baseline that cannot be written is never a clean result."""
     repo = build_repo({"src/a.py": long_function(62), **blocker})
-    assert cli.main(["baseline", "write", str(repo)]) == 2
-    assert "baseline: not written - cannot write quality/baseline.toml" in capsys.readouterr().err
+    assert door_in(repo, *FIX_WORDS) == 2
+    assert "cannot write quality/baseline.toml" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(
@@ -511,7 +456,7 @@ def test_baseline_write_that_the_filesystem_refuses_cannot_be_judged(build_repo,
 def test_a_written_baseline_holds_any_utf8_path(build_repo, capsys, path):
     """#46 rule 5: whatever the path, the written baseline is TOML that the check then holds."""
     repo = build_repo({path: long_file(810) + long_function(62)})
-    assert cli.main(["baseline", "write", str(repo)]) == 0
+    assert door_in(repo, *FIX_WORDS) == 0
     assert tomllib.loads((repo / BASELINE_PATH).read_text(encoding="utf-8")) == {
         "file_lines": {path: 810 + 62},
         "function_lines": {path: {"long_one": 62}},
@@ -525,8 +470,8 @@ def test_a_written_baseline_holds_any_utf8_path(build_repo, capsys, path):
 def test_a_path_that_is_not_utf8_cannot_be_written_into_the_baseline(build_repo, capsys):
     """#46 rule 5: TOML holds only Unicode, so a non-UTF-8 file name is exit 2, never a baseline the check cannot read."""
     repo = build_repo({"src/latin\udce9.py": long_file(810)})
-    assert cli.main(["baseline", "write", str(repo)]) == 2
-    assert "baseline: not written - src/latin\\udce9.py is not valid UTF-8" in capsys.readouterr().err
+    assert door_in(repo, *FIX_WORDS) == 2
+    assert "src/latin\\udce9.py is not valid UTF-8" in capsys.readouterr().out
     assert not (repo / BASELINE_PATH).exists()
 
 
@@ -647,14 +592,12 @@ def test_check_from_a_subfolder_judges_the_whole_repository_by_its_root_baseline
     assert (code, [row.event for row in finding_rows(output, "src/big.py")], str(repo_with_debt_below_src) in output) == (1, [FindingEvent.NEW_DEBT], False), output
 
 
-def test_baseline_write_from_a_subfolder_writes_the_root_baseline(repo_with_debt_below_src, capsys):
-    """#76 rule 1, cell 3 (E2, E11): the root file is written and named from where the command ran; a stray
-    src/quality/baseline.toml is neither read nor touched."""
+def test_a_fix_from_a_subfolder_writes_the_root_baseline(repo_with_debt_below_src, capsys):
+    """The root file is written from a subfolder; a stray src/quality/baseline.toml is neither read nor touched."""
     stray = repo_with_debt_below_src / "src/quality/baseline.toml"
     stray.parent.mkdir()
     stray.write_text("# stray\n")
-    assert cli.main(["baseline", "write"]) == 0
-    assert "baseline: wrote 1 entry and 0 clone pairs to ../quality/baseline.toml" in capsys.readouterr().out
+    assert cli.main([*FIX_WORDS]) == 0
     assert ("src/big.py" in (repo_with_debt_below_src / BASELINE_PATH).read_text(), stray.read_text()) == (True, "# stray\n")
 
 
@@ -673,14 +616,7 @@ def test_a_baseline_that_is_not_utf8_is_malformed_and_names_the_rewrite_once_per
     code, output = run(capsys, repo)
     assert (code, list(refusals(repo))) == (2, [Rule.SIZE, Rule.CLONE])
     assert f"{BASELINE_PATH} is not valid UTF-8" in output
-    assert (output.count(WRITE_COMMAND), "rewrite it with" in output) == (1, False), output
-
-
-def test_baseline_write_overwrites_a_baseline_that_is_not_utf8_without_a_rewrite_hint(build_repo, capsys):
-    """#76 rule 6, cell 18: the write is the rewrite, so its note carries no hint."""
-    code, lines = baseline_write(capsys, not_utf8_baseline_repo(build_repo))
-    note = next(line for line in lines if "could not be read" in line)
-    assert (code, "is not valid UTF-8" in note, "rewrite it" in note) == (0, True, False), lines
+    assert (output.count("restore quality/baseline.toml from git, or repair it by hand"), "rewrite it with" in output) == (1, False), output
 
 
 @pytest.mark.parametrize("suffix", ["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs", "svelte", "vue"])
@@ -721,14 +657,12 @@ def test_a_minified_file_is_counted_by_its_lines_like_any_other(build_repo, caps
     assert (result, [finding.path for finding in rule_findings(repo, Rule.SIZE)]) == (expected_code, ["src/dist/index.js"] * expected_named), output
 
 
-def test_baseline_write_records_a_file_of_another_language_and_names_it_as_added(build_repo, capsys):
-    """#119 E6, cells 17 and 18: the entry is an ordinary [file_lines] one; against a baseline it is named as added."""
+def test_a_first_recording_holds_a_file_of_another_language_as_an_ordinary_entry(build_repo):
+    """The entry of a file of another language is an ordinary [file_lines] one."""
     path = "frontend/src/lib/api/types.ts"
     repo = build_repo({"src/a.py": long_function(70), path: typescript_file(1210)})
-    assert baseline_write(capsys, repo) == (0, [wrote_line(repo, "2 entries")])
+    assert door_in(repo, *FIX_WORDS) == 0
     assert tomllib.loads((repo / BASELINE_PATH).read_text(encoding="utf-8"))["file_lines"] == {path: 1210}
-    (repo / BASELINE_PATH).write_text('[function_lines."src/a.py"]\nlong_one = 70\n', encoding="utf-8")
-    assert baseline_write(capsys, repo) == (0, [f"baseline: adds file_lines {path} 1210", wrote_line(repo, "2 entries")])
 
 
 @pytest.mark.integration
@@ -740,6 +674,6 @@ def test_a_tree_with_typescript_holds_the_same_python_baseline(tmp_path):
     for name, files in (("python", python_only), ("mixed", mixed)):
         (tmp_path / name).mkdir()
         repo = make_repo(tmp_path / name, files)
-        assert cli.main(["baseline", "write", str(repo)]) == 0
+        assert door_in(repo, *FIX_WORDS) == 0
         written.append((repo / BASELINE_PATH).read_text(encoding="utf-8"))
     assert written[0] == written[1]

@@ -15,7 +15,7 @@ from quality.output import Glyph
 from quality.ratchet import BASELINE_PATH, load_baseline
 from quality.report import Example, Finding, FindingEvent, Note, NoteEvent, printable
 from quality.rules import Rule
-from tests.support.door import check_door
+from tests.support.door import FIX_WORDS, check_door, door_in
 
 installed_ruff = cli.INSTALLED_RUFF
 
@@ -349,8 +349,8 @@ def rule_notes(repo: Path, rule: Rule) -> list[Note]:
 
 
 def recorded_entries(repo: Path) -> int:
-    """How many entries a first `quality baseline write` records for `repo`."""
-    assert cli.main(["baseline", "write", str(repo)]) == 0
+    """How many entries a first `quality check debt --fix` records for `repo`."""
+    assert door_in(repo, *FIX_WORDS) == 0
     return len(load_baseline((repo / BASELINE_PATH).read_text(encoding="utf-8")).size)
 
 

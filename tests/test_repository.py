@@ -417,7 +417,7 @@ def run_command(command: str, repo: Path, scratch: Path, monkeypatch, capsys) ->
 
 PREFIXES = {
     CHECK_WORD: f"{refusal_row('secrets')}",
-    "baseline write": "baseline: not written - ",
+    "check debt --fix": f"{refusal_row('debt')}",
     "verdict": f"verdict: cannot judge - {NAME} at the head: ",
     "sonar findings": "sonar: cannot judge - ",
 }
@@ -444,11 +444,11 @@ def test_an_unusable_config_is_exit_2_with_one_reason_in_every_command(
     ("command", "refusal"),
     [
         (CHECK_WORD, f"{refusal_row('debt')}cannot read quality/baseline.toml: [Errno 13] Permission denied"),
-        ("baseline write", "baseline: not written - cannot read quality/config.toml: [Errno 13] Permission denied"),
+        ("check debt --fix", f"{refusal_row('debt')}cannot read quality/baseline.toml: [Errno 13] Permission denied"),
         ("verdict", f"verdict: cannot judge - {NAME} at the head: {DENIED}"),
         ("sonar findings", f"sonar: cannot judge - {DENIED}"),
     ],
-    ids=["cell 12 check", "cell 13 baseline write", "cell 4 verdict", "sonar findings"],
+    ids=["cell 12 check", "cell 13 check debt --fix", "cell 4 verdict", "sonar findings"],
 )
 def test_a_quality_directory_without_search_permission_is_exit_2_in_every_command(
     git_repo, monkeypatch, capsys, command, refusal
@@ -479,10 +479,10 @@ def point_git_dir_at_a_file(repo: Path, monkeypatch) -> None:
     ("argv", "prefix"),
     [
         ([CHECK_WORD], "error: "),
-        (["baseline", "write", "."], "baseline: not written - "),
+        (["check", "debt", "--fix"], "error: "),
         (["sonar", "properties"], "sonar: cannot judge - "),
     ],
-    ids=["check", "baseline write", "sonar properties"],
+    ids=["check", "check debt --fix", "sonar properties"],
 )
 def test_a_git_refusal_names_the_path_as_given_and_never_the_checkout(
     git_repo, monkeypatch, capsys, git_refusal, argv, prefix
