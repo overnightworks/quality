@@ -291,7 +291,7 @@ STALE_FILE = "no\x1bthere.txt"
 
 @pytest.mark.scanner
 def test_an_allowance_no_finding_used_is_one_unused_note_at_the_config(build_repo, installed_scanners, capsys):
-    """#25 rule 1, quality#5 finding 34: an entry that matches nothing is named, not silent, by the whole-history scan."""
+    """An entry that matches nothing is named, not silent, by the whole-history scan."""
     repo = build_repo({"quality/config.toml": allow_config(("aws-access-token", "no\\u001bthere.txt", FAKE_KEY, "stale entry"))})
     code = door_in(repo, CHECK_WORD)
     streams = capsys.readouterr()

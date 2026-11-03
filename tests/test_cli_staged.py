@@ -107,7 +107,7 @@ def stage_a_config_link(repo: Path) -> None:
     [
         pytest.param(
             lambda repo, served, use_mise, fake_git: use_mise(lacking(served, scanners.GITLEAKS)),
-            "mise could not locate gitleaks", f"error: 1 of 1 area could not check\nnext: {scanners.install_command()}\n", id="a scanner missing",
+            "mise could not locate gitleaks", refused_pair_for_missing_scanner(), id="a scanner missing",
         ),
         pytest.param(lambda repo, served, use_mise, fake_git: fake_gitleaks(served, on_scan="exit 3"), "gitleaks exited 3 without writing its report", refused_pair(), id="gitleaks exits 3"),
         pytest.param(
@@ -189,8 +189,8 @@ def test_under_v_gitleaks_stands_under_the_staged_row(build_repo, served_scanner
     fake_gitleaks(served_scanners, on_scan='echo "one line" >&2\n' + vetting(flagging(FAKE_KEY)))
     assert staged_door(repo, *(("-v",) if verbose else ()), clock=lambda: 0.0) == 0
     printed = capsys.readouterr().out
-    expected = ([(scanners.GITLEAKS, "0", ("one line",))], True) if verbose else ([], False)
-    assert (scanner_rows(printed, Area.SECRETS), (served_scanners / "gitleaks.vetted").exists()) == expected
+    assert scanner_rows(printed, Area.SECRETS) == ([(scanners.GITLEAKS, "0", ("one line",))] if verbose else [])
+    assert (served_scanners / "gitleaks.vetted").exists() == verbose
 
 
 @pytest.mark.integration
