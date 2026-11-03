@@ -20,7 +20,7 @@ def make_repo(directory: Path, files: dict[str, str]) -> Path:
 
 
 def git(repo: Path, *arguments: str, check: bool = True) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["git", "-C", str(repo), *GIT_IDENTITY, *arguments], check=check, capture_output=True, text=True)
+    return subprocess.run(["git", "-C", str(repo), *GIT_IDENTITY, *arguments], check=check, capture_output=True, text=True, timeout=60)
 
 
 def stage(repo: Path, files: dict[str, str]) -> None:

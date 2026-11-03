@@ -337,7 +337,7 @@ def test_a_staged_run_in_a_subfolder_judges_the_index_the_environment_names(buil
     alternate_index = repo / ".git" / "alternate-index"
     subprocess.run(
         ["git", "-C", str(repo), *GIT_IDENTITY, "add", "docs/key.txt"], check=True, capture_output=True,
-        env=os.environ | {"GIT_INDEX_FILE": str(alternate_index)},
+        env=os.environ | {"GIT_INDEX_FILE": str(alternate_index)}, timeout=60,
     )
     monkeypatch.setenv("GIT_DIR", "../.git")
     monkeypatch.setenv("GIT_WORK_TREE", str(repo))
