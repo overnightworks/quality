@@ -467,7 +467,7 @@ def after_fix(result: RuleResult, fix: CeilingFix) -> RuleResult:
         replace(finding, fix=f"{finding.fix}; {RAISE_IS_BY_HAND}") if finding.event is FindingEvent.GREW else finding
         for finding in result.findings
     ]
-    return replace(result, findings=findings, notes=(*result.notes, *fix.changes))
+    return RuleResult(findings, result.extent, result.measured_only, (*result.notes, *fix.changes))
 
 
 def render_baseline(baseline: Baseline) -> str:
