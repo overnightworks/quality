@@ -29,7 +29,7 @@ from tests.support.check import (
     rule_notes,
 )
 from tests.support.check import check_output as run
-from tests.support.config_refusals import GATE, Refusal, all_refusals
+from tests.support.config_refusals import GATE, Refusal, check_refusals
 from tests.support.door import check_door
 from tests.support.generated_files import generated_config
 from tests.support.scanners import fake_scanner, fake_zizmor, lacking, never_located, nothing_installed
@@ -416,7 +416,6 @@ def test_a_config_refusal_without_an_example_carries_no_step(build_repo):
     assert reasons == {Reason(f"{config.CONFIG_PATH} has unknown key ignore in [secrets] - only allow exists")}
 
 
-CHECK_REFUSALS = [refusal for refusal in all_refusals() if refusal.reaches_check]
 CONFIG_AREAS = ("files", "debt", "secrets", "dependencies")
 
 
@@ -429,7 +428,7 @@ def check_over(build_repo, capsys, refusal: Refusal) -> tuple[int, list[str], li
     return code, captured.out.splitlines(), captured.err.splitlines()
 
 
-@pytest.mark.parametrize("refusal", CHECK_REFUSALS, ids=[refusal.id for refusal in CHECK_REFUSALS])
+@pytest.mark.parametrize("refusal", check_refusals(), ids=lambda refusal: refusal.id)
 def test_check_names_a_config_refusal_on_its_rows_and_shows_the_example_once_under_next(build_repo, capsys, refusal):
     """#279 O10, acceptance 4: each refused area's row ends in the fact; the example's label and lines stand once on
     stderr, four spaces deep; a refusal without one gets the general instruction and no label."""

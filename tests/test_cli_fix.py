@@ -13,7 +13,7 @@ from quality.ratchet import BASELINE_PATH, Key, Metric, load_baseline
 from tests.support.architecture import FORBIDDEN, SHOP, contracts_ini
 from tests.support.check import copy_block, refusal_row
 from tests.support.clones import function as clone_function
-from tests.support.config_refusals import all_refusals
+from tests.support.config_refusals import check_refusals
 from tests.support.door import FIX_WORDS, door_in
 from tests.support.generated_files import MANDATORY_JOB, generated_config
 from tests.support.git_repositories import git, put
@@ -143,7 +143,6 @@ def test_a_held_pair_the_tree_lost_is_dropped(build_repo, capsys):
     code, out, _ = fixed(capsys, repo, *FIX_WORDS)
     assert (code, "dropped" in out) == (0, True)
     assert load_baseline((repo / BASELINE_PATH).read_text()).clones == frozenset()
-
 
 
 
@@ -529,7 +528,7 @@ def test_every_refused_fix_writes_nothing(build_repo, elsewhere, capsys, arrange
 def a_size_config_and_a_near_copy(build_repo, elsewhere) -> Path:
     near_copies = {"tests/test_a.py": clone_function("run", "a", "b"), "tests/test_b.py": clone_function("check", "c", "d")}
     return build_repo({
-        "src/a.py": long_function(62), **near_copies, CONFIG_PATH: declared_generated("gen/api.py").replace("job =", "nope ="),
+        "src/a.py": long_function(62), **near_copies, CONFIG_PATH: generated_config(path="gen/api.py", job=None),
         BASELINE_PATH: held_ceiling(value=80),
     })
 
@@ -587,10 +586,7 @@ def test_a_refused_fix_keeps_what_each_rule_judged(build_repo, elsewhere, capsys
     assert (code, [row in out for row in rows], tree_of(repo)) == (2, [True] * len(rows), before)
 
 
-CONFIG_REFUSALS = [refusal for refusal in all_refusals() if refusal.reaches_check]
-
-
-@pytest.mark.parametrize("refusal", CONFIG_REFUSALS, ids=[refusal.id for refusal in CONFIG_REFUSALS])
+@pytest.mark.parametrize("refusal", check_refusals(), ids=lambda refusal: refusal.id)
 def test_a_config_refusal_keeps_its_fact_and_its_example_apart(build_repo, capsys, refusal):
     repo = build_repo({"src/a.py": long_function(62), BASELINE_PATH: held_ceiling(value=80)})
     if refusal.directory:

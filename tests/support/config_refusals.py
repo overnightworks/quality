@@ -249,3 +249,7 @@ def all_refusals() -> list[Refusal]:
         refusals.extend(_array_table_refusals(table))
         refusals.append(second_entry_refusal(table))
     return refusals
+
+
+def check_refusals() -> list[Refusal]:
+    return [refusal for refusal in all_refusals() if refusal.reaches_check]
