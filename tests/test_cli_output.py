@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import architecture, check, cli, config, ratchet, scanners
+from quality import architecture, check, cli, config, ratchet, report, scanners
 from quality.output import SEPARATOR, Glyph
 from quality.ratchet import BASELINE_PATH
 from quality.report import FindingEvent, NoteEvent, printable
@@ -743,7 +743,7 @@ def test_the_real_door_prints_every_config_example_line_whole_in_each_stderr_for
         text = done.stderr
     stripped = without_sgr(text)
     example = [f"    {line}" for line in config.GENERATED_FILE_EXAMPLE]
-    expected = [f"error: {cli.refusal_error(check_result(repo).areas)}", f"next: {check.CONFIG_EXAMPLE_LABEL}:", *example]
+    expected = [f"error: {cli.refusal_error(check_result(repo).areas)}", f"next: {report.CONFIG_EXAMPLE_LABEL}:", *example]
     assert done.returncode == 2
     assert ("\x1b[" in text) is coloured, text
     assert stripped.replace("\r\n", "\n").splitlines() == expected
