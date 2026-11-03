@@ -472,7 +472,7 @@ def test_a_merged_pipe_shows_the_check_lines_in_run_order(env_and_broken_compose
     )
     prefixes = [
         "  ✗ files", ENV_ROW, FIX_LINE, ENV_ROW, FIX_LINE,
-        "  · debt", "  · imports", "  ✓ secrets", "  ✓ workflows", "  ✓ dependencies", "  ✓ code", "error: ", "next: ",
+        "  · debt", FIX_LINE, "  · imports", "  ✓ secrets", "  ✓ workflows", "  ✓ dependencies", "  ✓ code", "error: ", "next: ",
     ]
     lines = done.stdout.splitlines()
     indented = (ENV_ROW, FIX_LINE)

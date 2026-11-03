@@ -8,8 +8,9 @@ from collections.abc import Callable, Sequence
 from pathlib import Path, PurePosixPath
 
 from quality import process, repository
-from quality.report import CannotJudge, Command, Instruction, Step, shell_word
+from quality.report import CannotJudge, Command, Step, shell_word
 
+UNSHALLOW_STEP = Command("git fetch --unshallow")
 WORKFLOW_DIRECTORY = PurePosixPath(".github/workflows")
 YAML_SUFFIXES = frozenset({".yml", ".yaml"})
 ACTION_FILES = frozenset({"action.yml", "action.yaml"})
@@ -28,9 +29,7 @@ class OutsideWorkTree(CannotJudge):
 
 
 def _refusal_reason(path: Path, because: str) -> tuple[str, tuple[Step, ...]]:
-    word = shell_word(str(path))
-    step = Command(f"git -C {word} status") if word else Instruction("run git status inside the folder named above")
-    return f"{path} is not a readable git repository: {because}", (step,)
+    return f"{path} is not a readable git repository: {because}", (Command(f"git -C {shell_word(str(path))} status"),)
 
 
 def _refusal(path: Path, because: str) -> CannotJudge:
@@ -87,6 +86,22 @@ def index_modes(root: Path) -> dict[str, str]:
             raise CannotJudge(f"git ls-files -s printed an index record quality cannot read in {root}")
         modes[name] = parts[0]
     return modes
+
+
+def blobs_of(root: Path, name: str) -> tuple[str, ...]:
+    """Each version of `name` any commit HEAD reaches recorded, as blob ids; empty where none did or no commit exists."""
+    command = ["log", "--format=", "--raw", "--root", "--no-abbrev", "--full-history", "--diff-merges=separate", "--ignore-missing", "HEAD", "--", name]
+    lines = _git_listing(root, command).stdout.splitlines()
+    blobs = dict.fromkeys(line.split(b" ")[3].decode() for line in lines if line.startswith(b":"))
+    return tuple(blob for blob in blobs if blob.strip("0"))
+
+
+def blob(root: Path, revision: str) -> bytes:
+    return _git_listing(root, ["cat-file", "blob", revision]).stdout
+
+
+def is_shallow(root: Path) -> bool:
+    return _git_listing(root, ["rev-parse", "--is-shallow-repository"]).stdout.strip() == b"true"
 
 
 def judged[T](ask: Callable[[Path, str], T], root: Path, name: str) -> T:

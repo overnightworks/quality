@@ -1,6 +1,6 @@
 # Commands
 
-Reference for the engineer or operator who runs `quality check secrets --staged`, `quality scoreboard`, installs the scanners,
+Reference for the engineer or operator who runs `quality check --fix`, `quality check secrets --staged`, `quality scoreboard`, installs the scanners,
 runs `quality emergency-merge`, or reads `quality --help` or a wrong invocation's pair.
 
 ## Help and wrong invocations
@@ -12,6 +12,16 @@ on stderr and exits `2`: `no command <word> · commands: …` for a first word t
 commands: …` for none, `no area <word> · areas: …` for the first word `quality check` does not know as an area, `unknown argument · <what is left over>` for what the command does not take, and otherwise the
 parser's own sentence; `--staged checks only secrets · nothing checked` for `--staged` with other areas or none (`next:` names `quality check secrets --staged`); `next:` otherwise names the help of the command, of its group for a command inside one, or of the parser
 that refused.
+
+## `quality check --fix`
+
+`quality check debt --fix` lowers the debt ceiling (`quality/baseline.toml`) where code shrank, or records it where no
+ceiling lies on disk, in the index or in any commit `HEAD` reaches, and then judges the tree against the new file. It
+never raises an entry and never adds one: what grew or is new stays a finding, and a raise is a hand edit with a declared
+loosening. An entry whose file is gone stands as it was; a held pair the tree lost goes. A ceiling or `[clones]` table git
+holds and the tree lacks refuses with the restore step, and a shallow clone that cannot prove a first recording names
+`git fetch --unshallow`. It takes no `--staged` and no area but `debt`. Exit `0` clean, `1` findings, `2` could not fix.
+The rows and rules are in `docs/rules.md`, the frames in `docs/output.md`.
 
 ## `quality check secrets --staged`
 

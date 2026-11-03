@@ -145,6 +145,7 @@ def the_root_commit_then_removed(repo: Path) -> None:
     committed(repo, "f.toml", None)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("arrange", "held"),
     [
@@ -170,6 +171,7 @@ def test_a_blob_is_the_bytes_of_a_revision(build_repo):
     assert checkout.blob(repo, ":f.toml") == b"one\n"
 
 
+@pytest.mark.integration
 def test_a_shallow_clone_is_shallow_and_a_whole_one_is_not(build_repo, tmp_path):
     repo = build_repo({"f.toml": "one\n"})
     committed(repo, "f.toml", "two\n")

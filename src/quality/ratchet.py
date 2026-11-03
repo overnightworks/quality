@@ -14,7 +14,7 @@ import re
 import tokenize
 from collections import Counter
 from collections.abc import Collection, Iterator, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from operator import attrgetter
 from pathlib import Path, PurePosixPath
@@ -24,13 +24,15 @@ import lizard
 
 from quality import __version__, checkout, repository
 from quality.config import CONFIG_PATH, GENERATED_FILE_HEADING, GeneratedFile
-from quality.output import SEPARATOR
-from quality.report import Command, Finding, FindingEvent, Instruction, Note, NoteEvent, RuleResult, Unparsable
+from quality.output import SEPARATOR, counted
+from quality.report import Finding, FindingEvent, Instruction, Note, NoteEvent, RuleResult, Unparsable
 from quality.rules import Rule
 
 BASELINE_PATH = "quality/baseline.toml"
-WRITE_COMMAND = "quality baseline write"
-UNKNOWN_TABLE_HINT = "write the baseline with the quality release your gate pins"
+FIX_COMMAND = "quality check --fix"
+RESTORE_STEP = Instruction(f"restore {BASELINE_PATH} from git, or repair it by hand")
+UNKNOWN_TABLE_HINT = "run the quality release your gate pins"
+RAISE_IS_BY_HAND = "a raise is a hand edit and a declared loosening"
 OCCURRENCE_MARK = "#"
 PARSE_ERRORS = (SyntaxError, ValueError, LookupError)
 TEST_DIRECTORIES = frozenset({"test", "tests"})
@@ -38,7 +40,7 @@ RUNNER_TEST_DIRECTORIES = TEST_DIRECTORIES | {"__tests__"}
 RUNNER_TEST_WORDS = frozenset({"test", "spec", "test-d", "spec-d"})
 CLONES = "clones"
 BARE_KEY = re.compile(r"[A-Za-z0-9_-]+")
-BASELINE_HEADER = f"# Measured by `{WRITE_COMMAND}`. Entries only ever go down.\n"
+BASELINE_HEADER = f"# Measured by `{FIX_COMMAND}`. Entries only ever go down.\n"
 
 FILE_LINES_FROM = 800
 FUNCTION_LINES_FROM = 60
@@ -160,7 +162,7 @@ class ClonePair:
 
     @property
     def label(self) -> str:
-        """The pair as a person reads it, one wording for the write and the verdict."""
+        """The pair as a person reads it, one wording for the fix and the verdict."""
         return f"{self.first.path} {self.first.symbol} <-> {self.second.path} {self.second.symbol}"
 
 
@@ -323,7 +325,7 @@ def compare(measurements: Measurements, baseline: SizeEntries) -> list[Finding]:
             fix = f"bring it back to {key.metric.describe(held)} or below"
             findings.append(_finding(key, measured, FindingEvent.GREW, f"ceiling {held}", fix))
         elif held is not None and measured.value < held:
-            findings.append(_finding(key, measured, FindingEvent.CAN_FALL, f"ceiling {held}", WRITE_COMMAND))
+            findings.append(_finding(key, measured, FindingEvent.CAN_FALL, f"ceiling {held}", FIX_COMMAND))
     return findings
 
 
@@ -336,7 +338,7 @@ class RaisedEntry:
     head: int
 
     def describe(self) -> str:
-        """The raise as a person reads it, one wording for the write and the verdict."""
+        """The raise as a person reads it, one wording for the fix and the verdict."""
         if self.base is None:
             return f"adds {self.key.label} {self.head}"
         return f"raises {self.key.label} {self.base} -> {self.head}"
@@ -399,13 +401,69 @@ def added_pairs(base: frozenset[ClonePair], head: frozenset[ClonePair]) -> list[
 
 
 def _finding(key: Key, measured: Measured, event: FindingEvent, limit: str, fix: str) -> Finding:
-    subject = "file" if key.metric is Metric.FILE_LINES else f"function {key.symbol}"
-    fact = SEPARATOR.join((f"{subject} has {key.metric.describe(measured.value)}", limit))
+    fact = SEPARATOR.join((f"{_subject(key)} has {key.metric.describe(measured.value)}", limit))
     return Finding(Rule.SIZE, key.path, measured.line, fact, fix, event=event)
 
 
 def _order(key: Key) -> tuple[str, str, str]:
     return key.metric.value, key.path, key.symbol
+
+
+def _subject(key: Key) -> str:
+    return "file" if key.metric is Metric.FILE_LINES else f"function {key.symbol}"
+
+
+def _fall(key: Key, held: int, value: int) -> str:
+    amounts = f"CCN {held} → {value}" if key.metric is Metric.CCN else f"{held} → {value} lines"
+    return f"{_subject(key)} {amounts}"
+
+
+FELL = frozenset({NoteEvent.LOWERED, NoteEvent.DROPPED})
+
+
+@dataclass(frozen=True)
+class CeilingFix:
+    """What `--fix` made of the ceiling; a first recording lists no change, because every entry is new."""
+
+    ceiling: Baseline
+    changes: tuple[Note, ...]
+    first: bool = False
+
+    @property
+    def fell(self) -> int:
+        return sum(change.event in FELL for change in self.changes)
+
+
+def lower_ceiling(held: Baseline, measurements: Measurements, pairs: frozenset[ClonePair]) -> CeilingFix:
+    """Each held entry falls to its measured value and goes where it is no debt; one with no measurement stands, and
+    nothing rises or enters. A held pair the tree lost goes. A file without `[clones]` records its pairs: the caller
+    has seen that git never held the table."""
+    size, changes = dict(held.size), []
+    for key in sorted(held.size, key=_order):
+        ceiling, measured = held.size[key], measurements.get(key)
+        if measured is None or measured.value >= ceiling:
+            continue
+        fall = _fall(key, ceiling, measured.value)
+        if key.metric.is_debt(measured.value):
+            size[key] = measured.value
+            changes.append(Note(key.path, NoteEvent.LOWERED, fall, measured.line))
+        else:
+            del size[key]
+            limit = f"debt from {key.metric.describe(key.metric.debt_from)}"
+            changes.append(Note(key.path, NoteEvent.DROPPED, SEPARATOR.join((fall, limit)), measured.line))
+    if held.clones is None:
+        recorded = Note(BASELINE_PATH, NoteEvent.RECORDED, counted(len(pairs), "clone pair"))
+        return CeilingFix(Baseline(size, pairs), (*changes, recorded))
+    changes += [Note(pair.first.path, NoteEvent.DROPPED, f"pair {pair.label} is gone") for pair in sorted(held.clones - pairs)]
+    return CeilingFix(Baseline(size, held.clones & pairs), tuple(changes))
+
+
+def after_fix(result: RuleResult, fix: CeilingFix) -> RuleResult:
+    findings = [
+        replace(finding, fix=f"{finding.fix}; {RAISE_IS_BY_HAND}") if finding.event is FindingEvent.GREW else finding
+        for finding in result.findings
+    ]
+    return replace(result, findings=findings, notes=(*result.notes, *fix.changes))
 
 
 def render_baseline(baseline: Baseline) -> str:
@@ -508,14 +566,17 @@ def _metric_named(name: str) -> Metric:
         raise UnknownTable(f"{BASELINE_PATH} has an unknown table [{name}]; quality {__version__} knows {known}") from None
 
 
-def head_step(error: SizeError) -> Command | Instruction:
+def head_step(error: SizeError) -> Instruction:
     """What the head can do about its own unreadable baseline; the base is not the pull request's to rewrite."""
-    return Instruction(UNKNOWN_TABLE_HINT) if isinstance(error, UnknownTable) else Command(WRITE_COMMAND)
+    return Instruction(UNKNOWN_TABLE_HINT) if isinstance(error, UnknownTable) else RESTORE_STEP
 
 
-def head_advice(error: SizeError) -> str:
-    step = head_step(error)
-    return f"rewrite it with `{step.text}`" if isinstance(step, Command) else step.text
+def holds_clones_table(version: bytes) -> bool:
+    """Whether a version has a top-level `clones` key; text no parser reads proves nothing."""
+    try:
+        return CLONES in repository.parse_toml(version.decode("utf-8"))
+    except (UnicodeDecodeError, repository.TomlError) as error:
+        raise SizeError(f"a version of {BASELINE_PATH} in git cannot be read") from error
 
 
 def _table(where: str, value: object) -> dict:

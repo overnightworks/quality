@@ -140,8 +140,11 @@ class NoteEvent(StrEnum):
     """What a note's row says; a separate enum, so a finding can never carry one of these."""
 
     ALLOWED = "allowed"
+    DROPPED = "dropped"
     EXITED = "exited"
+    LOWERED = "lowered"
     NOT_MEASURED = "not measured"
+    RECORDED = "recorded"
     UNUSED = "unused"
     WARNING = "warning"
 
@@ -167,7 +170,7 @@ class Finding:
 
 @dataclass(frozen=True)
 class Note:
-    """What a rule reports without asking for a change: a `·` row under its area, which counts as no finding."""
+    """What a rule reports without asking for a change: a row under its area, which counts as no finding."""
 
     path: str
     event: NoteEvent

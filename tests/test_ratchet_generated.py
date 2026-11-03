@@ -93,7 +93,7 @@ def test_a_declared_python_file_python_cannot_parse_leaves_the_size_rule_judgeab
     assert Rule.SIZE not in refusals(repo)
     capsys.readouterr()
     assert door_in(repo, *FIX_WORDS) == 2
-    assert "  ✗ debt          not fixed      gen/api.py is not valid Python" in capsys.readouterr().out
+    assert "  ✗ debt          not checked    gen/api.py is not valid Python" in capsys.readouterr().out
     assert (repo / BASELINE_PATH).read_bytes() == seeded_bytes
 
 

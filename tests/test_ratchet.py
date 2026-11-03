@@ -164,7 +164,7 @@ def test_a_fix_refuses_a_file_python_cannot_read(build_repo, capsys, source):
     """A baseline holds every function, so one recorded with a file unmeasured would hide its debt."""
     repo = build_repo_with_source(build_repo, {}, SOURCE_NAME, source)
     assert door_in(repo, *FIX_WORDS) == 2
-    assert f"{refusal_row('debt')}{SOURCE_NAME} is not valid Python" in capsys.readouterr().out
+    assert f"{refusal_row('debt', 'not fixed')}{SOURCE_NAME} is not valid Python" in capsys.readouterr().out
     assert not (repo / BASELINE_PATH).exists()
 
 
@@ -437,15 +437,15 @@ def test_a_fix_to_a_destination_it_cannot_own_cannot_be_judged(build_repo, capsy
 
 
 @pytest.mark.parametrize(
-    "blocker",
-    [{"quality": "a file\n"}, {f"{BASELINE_PATH}/inside.txt": "a directory\n"}],
+    ("blocker", "fact"),
+    [({"quality": "a file\n"}, "cannot write quality/baseline.toml"), ({f"{BASELINE_PATH}/inside.txt": "a directory\n"}, "quality/baseline.toml is not a file")],
     ids=["quality-is-a-file", "baseline-is-a-directory"],
 )
-def test_a_fix_the_filesystem_refuses_cannot_be_judged(build_repo, capsys, blocker):
+def test_a_fix_the_filesystem_refuses_cannot_be_judged(build_repo, capsys, blocker, fact):
     """Exit 2, not a traceback: a baseline that cannot be written is never a clean result."""
     repo = build_repo({"src/a.py": long_function(62), **blocker})
     assert door_in(repo, *FIX_WORDS) == 2
-    assert "cannot write quality/baseline.toml" in capsys.readouterr().out
+    assert fact in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(
@@ -592,13 +592,15 @@ def test_check_from_a_subfolder_judges_the_whole_repository_by_its_root_baseline
     assert (code, [row.event for row in finding_rows(output, "src/big.py")], str(repo_with_debt_below_src) in output) == (1, [FindingEvent.NEW_DEBT], False), output
 
 
-def test_a_fix_from_a_subfolder_writes_the_root_baseline(repo_with_debt_below_src, capsys):
-    """The root file is written from a subfolder; a stray src/quality/baseline.toml is neither read nor touched."""
-    stray = repo_with_debt_below_src / "src/quality/baseline.toml"
+def test_a_fix_from_a_subfolder_lowers_the_root_baseline(build_repo, monkeypatch, capsys):
+    """The root file is lowered from a subfolder; a stray src/quality/baseline.toml is neither read nor touched."""
+    repo = build_repo({BASELINE_PATH: '[file_lines]\n"src/big.py" = 950\n\n[clones]\n', "src/big.py": long_file(900)})
+    stray = repo / "src/quality/baseline.toml"
     stray.parent.mkdir()
     stray.write_text("# stray\n")
+    monkeypatch.chdir(repo / "src")
     assert cli.main([*FIX_WORDS]) == 0
-    assert ("src/big.py" in (repo_with_debt_below_src / BASELINE_PATH).read_text(), stray.read_text()) == (True, "# stray\n")
+    assert (load_baseline((repo / BASELINE_PATH).read_text()).size, stray.read_text()) == ({Key(Metric.FILE_LINES, "src/big.py"): 900}, "# stray\n")
 
 
 NOT_UTF8 = b"\xff"

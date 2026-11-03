@@ -170,7 +170,7 @@ def _new_pair_finding(pair: ClonePair, line: int) -> Finding:
 
 def _stale_pair_finding(pair: ClonePair) -> Finding:
     fact = f"pair {pair.label} is gone"
-    return Finding(Rule.CLONE, pair.first.path, None, fact, ratchet.WRITE_COMMAND, event=FindingEvent.CAN_FALL)
+    return Finding(Rule.CLONE, pair.first.path, None, fact, ratchet.FIX_COMMAND, event=FindingEvent.CAN_FALL)
 
 
 def check_clones(tree: ratchet.TreeMeasurement, sources: dict[str, bytes], baseline: ratchet.Baseline | None) -> RuleResult:

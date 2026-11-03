@@ -7,9 +7,10 @@ from pathlib import Path
 
 import pytest
 
+from quality import repository
 from quality.ratchet import BASELINE_PATH, Key, Metric, load_baseline
 from tests.support.door import FIX_WORDS, door_in
-from tests.support.git_repositories import git, make_repo, put
+from tests.support.git_repositories import git, put
 from tests.support.source_code import branchy_function, long_file, long_function
 
 RESTORE_STEP = "restore quality/baseline.toml from git, or repair it by hand"
@@ -31,8 +32,8 @@ def test_a_lowered_ceiling_stands_in_the_pictures_frame(build_repo, capsys):
     repo = build_repo({"src/cart.py": branchy_function(17), "src/orders.py": long_file(812), BASELINE_PATH: held})
     printed = (
         "  ✓ debt          lowered        2 entries · quality/baseline.toml\n"
-        "    ✓ src/cart.py:1   lowered  function branchy CCN 19 → 17\n"
-        "    ✓ src/orders.py   lowered  file 826 → 812 lines\n"
+        "    ✓ src/cart.py:1  lowered  function branchy CCN 19 → 17\n"
+        "    ✓ src/orders.py  lowered  file 826 → 812 lines\n"
         "✓ clean · ceiling lowered by 2 entries · 1 area · <1s\n"
     )
     assert fixed(capsys, repo, *FIX_WORDS) == (0, printed, "")
@@ -169,8 +170,8 @@ def test_another_areas_refusal_leaves_the_fix_standing(build_repo, capsys):
     assert load_baseline((repo / BASELINE_PATH).read_text()).size == {Key(Metric.FUNCTION_LINES, "src/a.py", "long_one"): 62}
 
 
-def test_a_moved_file_stays_new_debt(tmp_path, capsys):
-    repo = make_repo(tmp_path, {"src/old.py": long_function(70), BASELINE_PATH: '[function_lines."src/old.py"]\nlong_one = 70\n\n[clones]\n'})
+def test_a_moved_file_stays_new_debt(build_repo, capsys):
+    repo = build_repo({"src/old.py": long_function(70), BASELINE_PATH: '[function_lines."src/old.py"]\nlong_one = 70\n\n[clones]\n'})
     git(repo, "mv", "src/old.py", "src/new.py")
     code, out, _ = fixed(capsys, repo, *FIX_WORDS)
     assert (code, "src/new.py:1  new debt" in out) == (1, True)
@@ -187,8 +188,8 @@ def test_a_failing_git_quotes_nothing(build_repo, fake_git, capsys):
     assert ("git log exited 9" in out, "SECRET-OF-GIT" in out + err) == (True, False)
 
 
-def test_a_ceiling_staged_and_never_committed_is_held_by_git(tmp_path, capsys):
-    repo = make_repo(tmp_path, {"src/a.py": long_function(62)})
+def test_a_ceiling_staged_and_never_committed_is_held_by_git(build_repo, capsys):
+    repo = build_repo({"src/a.py": long_function(62)})
     (repo / BASELINE_PATH).parent.mkdir()
     (repo / BASELINE_PATH).write_text(ENTRY + "\n[clones]\n")
     git(repo, "add", BASELINE_PATH)
@@ -211,6 +212,7 @@ def test_a_restored_ceiling_lowers_and_keeps_what_grew(build_repo, capsys):
     }
 
 
+@pytest.mark.integration
 def test_a_repository_without_a_commit_takes_a_first_recording(tmp_path, capsys):
     repo = tmp_path / "fresh"
     repo.mkdir()
@@ -255,18 +257,16 @@ def test_a_ceiling_a_link_points_out_of_the_repository_is_refused_and_writes_not
     assert (code, "  ✗ debt" in out, outside.read_text()) == (2, True, ENTRY)
 
 
-def test_a_refused_write_keeps_what_each_rule_judged(build_repo, capsys):
+def test_a_refused_write_keeps_what_each_rule_judged(build_repo, monkeypatch, capsys):
     repo = build_repo({"src/a.py": long_function(62), BASELINE_PATH: '[function_lines."src/a.py"]\nlong_one = 80\n\n[clones]\n'})
-    os.chmod(repo / BASELINE_PATH, 0o444)
-    os.chmod(repo / "quality", 0o555)
-    try:
-        code, out, _ = fixed(capsys, repo, *FIX_WORDS)
-    finally:
-        os.chmod(repo / "quality", 0o755)
-    if os.geteuid() == 0:
-        pytest.skip("root writes through a read-only directory")
+
+    def refuse(root, name, text):
+        raise repository.RepositoryFileError(f"cannot write {name}: [Errno 13] Permission denied")
+
+    monkeypatch.setattr(repository, "write_text", refuse)
+    code, out, _ = fixed(capsys, repo, *FIX_WORDS)
     assert code == 2
-    assert "  ✗ debt          not fixed      cannot write quality/baseline.toml" in out
+    assert "  ✗ debt          not fixed      cannot write quality/baseline.toml: [Errno 13] Permission denied" in out
     assert "can fall" in out
 
 

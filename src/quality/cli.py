@@ -14,8 +14,6 @@ from typing import NoReturn, TextIO
 
 from quality import (
     __version__,
-    checkout,
-    clones,
     fleet,
     installation,
     process,
@@ -35,7 +33,7 @@ from quality.check import (
     judge_staged_change,
 )
 from quality.checkout import OutsideWorkTree
-from quality.config import ConfigError, read_allow_lists, read_gate_settings
+from quality.config import ConfigError, read_gate_settings
 from quality.merge import Ask, GhRunner, RemoteFor, github_remote, run_emergency_merge, run_gh
 from quality.output import (
     SCANNER_ARGUMENTS_OUTPUT,
@@ -144,8 +142,6 @@ def main(
         return run_verdict(arguments.path, fetcher_for, sleep)
     if arguments.command == "scoreboard":
         return run_scoreboard(arguments.path, release_tags)
-    if arguments.command == "baseline":
-        return run_baseline_write(arguments.path)
     if arguments.command == "sonar":
         if arguments.sonar_command == "properties":
             return run_sonar_properties()
@@ -153,19 +149,16 @@ def main(
     if arguments.staged:
         staged_run = partial(judge_staged_change, Path("."), staged.scan_change, verbose=arguments.verbose)
         return run_check(staged_run, staged.COMMAND, clock, channels)
-    repository_run = partial(judge_repository, Path("."), locate_ruff, locate_zizmor, verbose=arguments.verbose, named=arguments.areas)
-    return run_check(repository_run, CHECK_COMMAND, clock, channels)
+    repository_run = partial(judge_repository, Path("."), locate_ruff, locate_zizmor, verbose=arguments.verbose, named=arguments.areas, fix=arguments.fix)
+    return run_check(repository_run, ratchet.FIX_COMMAND if arguments.fix else CHECK_COMMAND, clock, channels)
 
 
-QUALITY_HELP = f"""\
+QUALITY_HELP = """\
 usage: quality COMMAND
 
 Commands:
-  check [AREA ...] [--staged]
+  check [AREA ...] [--staged] [--fix]
       Check this repository against the fleet's rules.
-  baseline write [PATH]
-      Record the debt ceiling ({ratchet.BASELINE_PATH}): the measured size
-      debt and the clone pairs.
   emergency-merge OWNER/REPO PR
       Operator only: merge one pull request whose gate is red only for
       legacy findings or loosenings he ruled, after he types ja.
@@ -199,7 +192,7 @@ def _area_entry(area: Area) -> str:
 AREA_ENTRIES = "\n".join(map(_area_entry, Area))
 
 CHECK_HELP = f"""\
-usage: quality check [AREA ...] [--staged] [-v]
+usage: quality check [AREA ...] [--staged] [--fix] [-v]
 
 Check this repository against the fleet's rules.
 
@@ -209,6 +202,8 @@ Areas (default: all):
 Options:
   --staged      secrets in exactly what the next commit records; the commit
                 hook runs: quality check secrets --staged
+  --fix         lower the debt ceiling ({ratchet.BASELINE_PATH}) where code
+                shrank, or record it the first time; never raises it
   -v            show the raw scanner output, never a secret
   -h, --help    show this help
 
@@ -266,6 +261,11 @@ def read_invocation(argv: list[str] | None) -> argparse.Namespace:
     arguments, stray = parser.parse_known_args(argv)
     if stray:
         raise CannotJudge(f"unknown argument{SEPARATOR}{' '.join(stray)}", help_step(f"{parser.prog} {arguments.command}"))
+    if arguments.command == "check" and arguments.fix:
+        if arguments.staged:
+            raise CannotJudge(f"--fix does not take --staged{SEPARATOR}nothing checked", (Command(ratchet.FIX_COMMAND),))
+        if arguments.areas and Area.DEBT not in arguments.areas:
+            raise CannotJudge(f"--fix changes only the debt ceiling{SEPARATOR}nothing checked", (Command("quality check debt --fix"),))
     if arguments.command == "check" and arguments.staged and set(arguments.areas) != {Area.SECRETS}:
         raise CannotJudge(f"--staged checks only secrets{SEPARATOR}nothing checked", (Command(staged.COMMAND),))
     return arguments
@@ -281,11 +281,8 @@ def build_parser() -> DoorParser:
     check_parser.intermixed = True
     check_parser.add_argument("areas", nargs="*", type=named_area, metavar="AREA")
     check_parser.add_argument("--staged", action="store_true")
+    check_parser.add_argument("--fix", action="store_true")
     check_parser.add_argument("-v", dest="verbose", action="store_true")
-    baseline = commands.add_parser("baseline").add_subparsers(dest="baseline_command")
-    baseline.add_parser("write", help=f"write the measured size debt and clone pairs to {ratchet.BASELINE_PATH}").add_argument(
-        "path", nargs="?", type=Path, default=Path("."), help="a folder of the git repository to measure; its top level is measured (default: the current one)"
-    )
     verdict = commands.add_parser("verdict")
     verdict.add_argument("path", nargs="?", type=Path, default=Path("."))
     sonar = commands.add_parser("sonar").add_subparsers(dest="sonar_command")
@@ -316,9 +313,12 @@ class AreaEvent(StrEnum):
 
     CLEAN = "clean"
     FINDING = "finding"
+    LOWERED = "lowered"
     NOT_CHECKED = "not checked"
+    NOT_FIXED = "not fixed"
     NOT_RECORDED = "not recorded"
     NOT_SET_UP = "not set up"
+    RECORDED = "recorded"
 
 
 CEILING_HELD = "ceiling held"
@@ -336,22 +336,63 @@ def refused_next(command: str) -> Instruction:
 REFUSED_AREAS_NEXT = refused_next(CHECK_COMMAND)
 
 
+def _in_file(fact: str) -> str:
+    return SEPARATOR.join((fact, ratchet.BASELINE_PATH))
+
+
+def _lowered_fact(fix: ratchet.CeilingFix) -> str:
+    return _in_file(f"{counted(fix.fell, 'entry', 'entries')} lowered") if fix.fell else "nothing lowered"
+
+
+def _ceiling_row(area: Area, fix: ratchet.CeilingFix) -> Row | None:
+    pairs = counted(len(fix.ceiling.clones), "clone pair")
+    if fix.first:
+        recorded = f"{counted(len(fix.ceiling.size), 'entry', 'entries')}, {pairs}"
+        return Row(Glyph.CLEAN, area, AreaEvent.RECORDED, SEPARATOR.join((recorded, f"{ratchet.BASELINE_PATH} is new")))
+    if fix.fell:
+        return Row(Glyph.CLEAN, area, AreaEvent.LOWERED, _in_file(counted(fix.fell, "entry", "entries")))
+    return Row(Glyph.CLEAN, area, AreaEvent.RECORDED, _in_file(pairs)) if fix.changes else None
+
+
+def _ceiling_words(fix: ratchet.CeilingFix | None, findings: int) -> str:
+    if fix is None:
+        return ""
+    if fix.fell:
+        return f"ceiling lowered by {counted(fix.fell, 'entry', 'entries')}"
+    if fix.first or fix.changes:
+        return "ceiling recorded"
+    return "" if findings else "nothing to lower"
+
+
+def _refused_row(verdict: AreaVerdict, facts: tuple[str, ...]) -> Row:
+    if len(facts) == 1:
+        event = AreaEvent.NOT_FIXED if verdict.only_the_fix_refused else AreaEvent.NOT_CHECKED
+        return Row(Glyph.COULD_NOT_CHECK, verdict.area, event, facts[0], descriptive=True)
+    sub_lines = tuple(SubLine(Glyph.COULD_NOT_CHECK, fact) for fact in facts)
+    return Row(Glyph.COULD_NOT_CHECK, verdict.area, AreaEvent.NOT_CHECKED, f"{len(facts)} reasons", sub_lines=sub_lines)
+
+
+def _finding_row(verdict: AreaVerdict, extent: str) -> Row:
+    fact = extent if _judged_a_staged_change(verdict) else ""
+    if isinstance(verdict.ceiling, ratchet.CeilingFix):
+        fact = _lowered_fact(verdict.ceiling)
+    return Row(Glyph.NEEDS_YOU, verdict.area, AreaEvent.FINDING, fact, count=len(verdict.findings))
+
+
 def area_row(verdict: AreaVerdict, extent: str) -> Row:
     facts = tuple(dict.fromkeys(reason.fact for reason in verdict.reasons))
     if facts:
-        if len(facts) == 1:
-            return Row(Glyph.COULD_NOT_CHECK, verdict.area, AreaEvent.NOT_CHECKED, facts[0], descriptive=True)
-        sub_lines = tuple(SubLine(Glyph.COULD_NOT_CHECK, fact) for fact in facts)
-        return Row(Glyph.COULD_NOT_CHECK, verdict.area, AreaEvent.NOT_CHECKED, f"{len(facts)} reasons", sub_lines=sub_lines)
+        return _refused_row(verdict, facts)
     if verdict.findings:
-        fact = extent if _judged_a_staged_change(verdict) else ""
-        return Row(Glyph.NEEDS_YOU, verdict.area, AreaEvent.FINDING, fact, count=len(verdict.findings))
+        return _finding_row(verdict, extent)
+    if isinstance(verdict.ceiling, ratchet.CeilingFix) and (row := _ceiling_row(verdict.area, verdict.ceiling)):
+        return row
     if verdict.outcome is Outcome.MEASURED_ONLY:
         if MEASURED_ONLY_EVENT[verdict.area] is AreaEvent.NOT_SET_UP:
             return Row(Glyph.NOTE, verdict.area, AreaEvent.NOT_SET_UP, extent)
         partly = "" if verdict.measurement is Measurement.MEASURED_ONLY else "partly "
         mode = f"{partly}{Outcome.MEASURED_ONLY.value}"
-        return Row(Glyph.NOTE, verdict.area, AreaEvent.NOT_RECORDED, SEPARATOR.join(filter(None, (extent, mode))))
+        return Row(Glyph.NOTE, verdict.area, AreaEvent.NOT_RECORDED, SEPARATOR.join(filter(None, (extent, mode))), fix=ratchet.FIX_COMMAND)
     allowed = sum(note.event is NoteEvent.ALLOWED for note in verdict.notes)
     facts = [extent, f"{allowed} {NoteEvent.ALLOWED}" if allowed else ""]
     return Row(Glyph.CLEAN, verdict.area, AreaEvent.CLEAN, SEPARATOR.join(fact for fact in facts if fact))
@@ -481,49 +522,11 @@ def run_check(judged: Callable[[AreaReport, Running], CheckResult], command: str
             areas=len(result.areas),
             notes=measured_notes(result.areas),
             seconds=clock() - started,
+            ceiling=_ceiling_words(result.ceiling, len(result.findings)),
         ),
         channels.out,
     )
     return exit_code
-
-
-def run_baseline_write(path: Path) -> int:
-    try:
-        top = checkout.work_tree_top(path)
-        sources = ratchet.read_sources(top, checkout.tracked_files(top))
-        generated = read_allow_lists(top).generated
-        tree = ratchet.measure(sources)
-        ratchet.complete(tree)
-        measured = ratchet.without_generated(tree, generated).complete()
-        written = ratchet.Baseline(ratchet.debt(measured), clones.find_pairs(sources).pairs)
-        loosenings = describe_loosenings(top, written)
-        repository.write_text(top, ratchet.BASELINE_PATH, ratchet.render_baseline(written))
-    except (CannotJudge, ConfigError, repository.RepositoryFileError, ratchet.SizeError) as error:
-        emit(f"baseline: not written - {error}", file=sys.stderr)
-        return EXIT_CANNOT_JUDGE
-    for loosening in loosenings:
-        emit(f"baseline: {loosening}")
-    entries = "1 entry" if len(written.size) == 1 else f"{len(written.size)} entries"
-    pairs = "1 clone pair" if len(written.clones) == 1 else f"{len(written.clones)} clone pairs"
-    emit(f"baseline: wrote {entries} and {pairs} to {top / ratchet.BASELINE_PATH}")
-    return EXIT_CLEAN
-
-
-def describe_loosenings(path: Path, written: ratchet.Baseline) -> list[str]:
-    """Each entry and clone pair the write raises or adds against the previous baseline; an adoption has none to name.
-
-    An unreadable previous baseline is overwritten, so the write can only say it cannot name the raises.
-    """
-    try:
-        previous = ratchet.read_baseline(path)
-    except (CannotJudge, ratchet.SizeError) as error:
-        return [f"the previous {ratchet.BASELINE_PATH} could not be read ({error}), so raises cannot be named"]
-    if previous is None:
-        return []
-    lines = [entry.describe() for entry in ratchet.raised_entries(previous.size, written.size)]
-    if previous.clones is not None:
-        lines += [f"adds clone {pair.label}" for pair in ratchet.added_pairs(previous.clones, written.clones)]
-    return lines
 
 
 def run_sonar_properties() -> int:

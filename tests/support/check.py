@@ -419,9 +419,9 @@ def compose(*port_lines: str) -> dict[str, str]:
     return {"compose.yaml": f"services:\n  web:\n    image: x\n    ports:\n{body}"}
 
 
-def refusal_row(area: str) -> str:
+def refusal_row(area: str, event: str = "not checked") -> str:
     """What an area row that could not check says before its reason (docs/output.md, case 4)."""
-    return f"  ✗ {area:<12}  {'not checked':<14} "
+    return f"  ✗ {area:<12}  {event:<14} "
 
 
 def check_result(repo: Path, locate_ruff: Callable[[], str] = installed_ruff, locate_zizmor: Callable[[], str] | None = None) -> check.CheckResult:

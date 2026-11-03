@@ -4,8 +4,7 @@
 SonarCloud findings, and the fail-closed pull request verdict. It is for the engineer who adds the gate to a
 repository and for the operator who merges past it.
 
-    quality check [AREA ...] [--staged] [-v]
-    quality baseline write [PATH]
+    quality check [AREA ...] [--staged] [--fix] [-v]
     quality sonar properties
     quality sonar findings
     quality verdict [PATH]
