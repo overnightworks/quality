@@ -6,10 +6,10 @@ from pathlib import Path
 import pytest
 
 import quality
-from quality import cli, report
+from quality import cli, report, staged
 from quality.output import SEPARATOR
 from quality.rules import Area
-from tests.support.door import MODULE_DOOR, door_environment
+from tests.support.door import MODULE_DOOR, STAGED_WORDS, door_environment
 from tests.support.terminal import Terminal, without_sgr
 
 
@@ -76,7 +76,7 @@ def test_the_check_help_stands_in_the_pictures_frame(capsys):
     areas = lines[lines.index("Areas (default: all):") + 1 : lines.index("Options:") - 1]
     options = lines[lines.index("Options:") + 1 : -2]
     assert (lines[0], lines[2], headings(lines), areas, options, lines[-1], max(len(line) for line in lines) <= 80) == (
-        "usage: quality check [AREA ...] [-v]",
+        "usage: quality check [AREA ...] [--staged] [-v]",
         "Check this repository against the fleet's rules.",
         ["Areas (default: all):", "Options:"],
         [
@@ -90,7 +90,12 @@ def test_the_check_help_stands_in_the_pictures_frame(capsys):
             "  dependencies  known advisories in the lockfiles",
             "  code          Python source: security findings and print calls",
         ],
-        ["  -v          show the raw scanner output, never a secret", "  -h, --help  show this help"],
+        [
+            "  --staged      secrets in exactly what the next commit records; the commit",
+            "                hook runs: quality check secrets --staged",
+            "  -v            show the raw scanner output, never a secret",
+            "  -h, --help    show this help",
+        ],
         "Exit codes: 0 clean, 1 findings, 2 could not check, 130 interrupted.",
         True,
     )
@@ -104,7 +109,7 @@ def test_each_area_has_one_entry_in_the_check_help(capsys):
 
 def test_the_check_entry_names_its_areas_in_the_top_level_help(capsys):
     lines = help_of(capsys, []).splitlines()
-    assert "  check [AREA ...]" in entries_under(lines, "Commands:")
+    assert "  check [AREA ...] [--staged]" in entries_under(lines, "Commands:")
 
 
 def test_every_command_path_stands_in_the_help_once_and_every_entry_is_one(capsys):
@@ -127,7 +132,6 @@ def test_verdict_and_sonar_stand_apart_under_run_by_the_gate(capsys):
         pytest.param(["check"], id="check"),
         pytest.param(["baseline"], id="baseline"),
         pytest.param(["baseline", "write"], id="baseline write"),
-        pytest.param(["scan-staged"], id="scan-staged"),
         pytest.param(["verdict"], id="verdict"),
         pytest.param(["sonar"], id="sonar"),
         pytest.param(["sonar", "properties"], id="sonar properties"),
@@ -152,7 +156,7 @@ def test_short_help_equals_long_help(capsys, words):
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize("words", [["--help"], ["scan-staged", "--help"], ["sonar", "properties", "--help"]], ids=["--help", "scan-staged --help", "sonar properties --help"])
+@pytest.mark.parametrize("words", [["--help"], ["verdict", "--help"], ["sonar", "properties", "--help"]], ids=["--help", "verdict --help", "sonar properties --help"])
 def test_no_door_paints_its_help_where_python_would(tmp_path, words):
     forced = run_door(words, tmp_path, FORCE_COLOR="1", TERM="xterm")
     refused = run_door(words, tmp_path, NO_COLOR="1", TERM="xterm")
@@ -160,7 +164,7 @@ def test_no_door_paints_its_help_where_python_would(tmp_path, words):
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize(("words", "columns"), [(["--help"], 40), (["scan-staged", "--help"], 200)], ids=["quality --help", "scan-staged --help"])
+@pytest.mark.parametrize(("words", "columns"), [(["--help"], 40), (["verdict", "--help"], 200)], ids=["quality --help", "verdict --help"])
 def test_a_help_at_a_terminal_carries_no_escape_and_stands_whole(tmp_path, window, words, columns):
     terminal = window(columns)
     done = subprocess.run(
@@ -209,8 +213,12 @@ def test_a_closed_stdout_takes_no_help_and_exit_is_0(tmp_path):
         pytest.param(["check", "--nonsense"], (), "unknown argument{sep}--nonsense", "quality check", id="a stray option of check"),
         pytest.param(["check", "--verbose"], (), "unknown argument{sep}--verbose", "quality check", id="the long form of the flag"),
         pytest.param(["-v", "check"], (), "unknown argument{sep}-v", "quality check", id="the flag before the command"),
-        pytest.param(["scan-staged", "-v"], (), "unknown argument{sep}-v", "quality scan-staged", id="the flag on the staged door"),
-        pytest.param(["scan-staged", "--nonsense"], (), "unknown argument{sep}--nonsense", "quality scan-staged", id="stray option"),
+        pytest.param(["verdict", "--nonsense"], (), "unknown argument{sep}--nonsense", "quality verdict", id="stray option"),
+        pytest.param(["scan-staged"], (), "no command scan-staged{sep}commands: {commands}", "quality", id="the word that left"),
+        pytest.param(["scan-staged", "--engines", "x"], (), "no command scan-staged{sep}commands: {commands}", "quality", id="the word that left, with its option"),
+        pytest.param(["check", "--stag"], (), "unknown argument{sep}--stag", "quality check", id="check --stag"),
+        pytest.param(["check", "secrets", "--staged", "--nonsense"], (), "unknown argument{sep}--nonsense", "quality check", id="a stray option beside the staged flag"),
+        pytest.param(["check", "docs", "--staged"], (), "no area docs{sep}areas: {areas}", "quality check", id="a wrong area beside the staged flag"),
         pytest.param(["baseline", "write", "a", "b"], (), "unknown argument{sep}b", "quality baseline", id="stray argument of a group's command"),
         pytest.param(["sonar", "properties", "x"], (), "unknown argument{sep}x", "quality sonar", id="stray argument of sonar"),
         pytest.param(["--nonsense", "scoreboard"], (), "unknown argument{sep}--nonsense", "quality scoreboard", id="stray option before a command"),
@@ -305,3 +313,23 @@ def test_options_may_stand_between_the_named_areas(words):
 
 def test_no_area_named_leaves_the_invocation_empty():
     assert cli.read_invocation(["check"]).areas == []
+
+
+@pytest.mark.parametrize(
+    "words",
+    [
+        pytest.param(["--staged"], id="no area"),
+        pytest.param(["debt", "--staged"], id="debt"),
+        pytest.param(["--staged", "debt"], id="debt first"),
+        pytest.param(["secrets", "debt", "--staged"], id="two areas"),
+        pytest.param(["files", "secrets", "--staged"], id="secrets last"),
+    ],
+)
+def test_staged_outside_secrets_is_the_pair_and_runs_nothing(capsys, words):
+    code = cli.main(["check", *words], environment={})
+    printed = capsys.readouterr()
+    assert (code, printed.out, printed.err) == (2, "", "error: --staged checks only secrets · nothing checked\nnext: quality check secrets --staged\n")
+
+
+def test_the_staged_words_are_the_commands_words():
+    assert staged.COMMAND == f"quality {' '.join(STAGED_WORDS)}"

@@ -36,7 +36,7 @@ from tests.support.config_refusals import (
     secret_entry,
     secrets_text,
 )
-from tests.support.door import CHECK_WORD, check_door, door_in
+from tests.support.door import CHECK_WORD, STAGED_WORDS, check_door, door_in
 from tests.support.generated_files import TYPES_FILE, generated_config
 
 
@@ -279,7 +279,7 @@ def test_a_config_without_declarations_declares_nothing():
 
 
 CHECK = [CHECK_WORD]
-SCAN_STAGED = ["scan-staged"]
+STAGED = list(STAGED_WORDS)
 TEXT_DATE_DECLARATION = SONGMAKER_DECLARATION.replace("2026-10-20", '"20.10.2026"')
 
 
@@ -287,15 +287,15 @@ TEXT_DATE_DECLARATION = SONGMAKER_DECLARATION.replace("2026-10-20", '"20.10.2026
     ("command", "config", "code", "line"),
     [
         (CHECK, SONGMAKER_DECLARATION, 0, CLEAN_VERDICT),
-        (SCAN_STAGED, SONGMAKER_DECLARATION, 0, "scan-staged: clean"),
+        (STAGED, SONGMAKER_DECLARATION, 0, "✓ clean · 1 area"),
         (CHECK, TEXT_DATE_DECLARATION, 2, f"{refusal_row('secrets')}quality/config.toml [[gate.loosened]] entry"),
-        (SCAN_STAGED, TEXT_DATE_DECLARATION, 0, "scan-staged: clean"),
-        (SCAN_STAGED, allowance_config(), 0, "scan-staged: clean"),
-        (SCAN_STAGED, "[advisories]\nextra = 1\n" + allowance_config(until="2027-01-31"), 0, "scan-staged: clean"),
+        (STAGED, TEXT_DATE_DECLARATION, 0, "✓ clean · 1 area"),
+        (STAGED, allowance_config(), 0, "✓ clean · 1 area"),
+        (STAGED, "[advisories]\nextra = 1\n" + allowance_config(until="2027-01-31"), 0, "✓ clean · 1 area"),
     ],
     ids=[
-        "check", "scan-staged", "check, text date", "scan-staged, text date",
-        "#116 cell 13 scan-staged, an allowance", "#116 cell 13 scan-staged, a malformed allowance",
+        "check", "staged", "check, text date", "staged, text date",
+        "#116 cell 13 staged, an allowance", "#116 cell 13 staged, a malformed allowance",
     ],
 )
 def test_check_judges_a_declaration_as_the_verdict_does_and_the_commit_hook_reads_only_secrets(

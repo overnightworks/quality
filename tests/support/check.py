@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import DISTRIBUTION, check, cli, env_file, output
+from quality import DISTRIBUTION, check, cli, env_file, output, report
 from quality.output import Glyph
 from quality.ratchet import BASELINE_PATH, load_baseline
 from quality.report import Example, Finding, FindingEvent, Note, NoteEvent, printable
@@ -446,7 +446,7 @@ def refusals(repo: Path, locate_ruff: Callable[[], str] = installed_ruff, locate
 
 def copy_block(example: tuple[str, ...]) -> str:
     """The lone `next:` step that shows `example`, as the run's stderr holds it: the label, then each line four spaces deep."""
-    return "\n".join([f"next: {check.CONFIG_EXAMPLE_LABEL}:", *(f"    {line}" for line in example)]) + "\n"
+    return "\n".join([f"next: {report.CONFIG_EXAMPLE_LABEL}:", *(f"    {line}" for line in example)]) + "\n"
 
 
 def heard(capsys: pytest.CaptureFixture[str]) -> str:

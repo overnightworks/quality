@@ -1,5 +1,6 @@
 import pytest
 
+from quality.config import ConfigError
 from quality.report import (
     CannotJudge,
     Choice,
@@ -13,6 +14,7 @@ from quality.report import (
     OneOf,
     Reason,
     Unparsable,
+    config_refusal,
     printable,
     render,
     shell_word,
@@ -98,3 +100,17 @@ def test_an_example_holds_its_label_and_lines_and_equal_examples_hash_alike():
 @pytest.mark.parametrize(("line", "expected"), [(None, "a\\x1bb.txt"), (7, "a\\x1bb.txt:7")], ids=["no-line", "with-line"])
 def test_a_note_locates_itself_by_its_escaped_path_and_its_line_where_it_has_one(line, expected):
     assert Note("a\x1bb.txt", NoteEvent.ALLOWED, "a fact", line).location == expected
+
+
+def test_a_config_refusal_keeps_its_fact_and_its_example_apart():
+    error = ConfigError("a fact, like:\nwith a second line", ("[secrets]", "allow = []"))
+    refusal = config_refusal(error, Instruction("then this"))
+    assert (refusal.reason.fact, refusal.reason.next_steps) == (
+        "a fact, like:\nwith a second line",
+        (Example("write it in quality/config.toml like this", ("[secrets]", "allow = []")), Instruction("then this")),
+    )
+
+
+def test_a_config_refusal_without_an_example_is_its_steps_alone():
+    refusal = config_refusal(ConfigError("a fact"), Instruction("then this"))
+    assert (refusal.reason.fact, refusal.reason.next_steps) == ("a fact", (Instruction("then this"),))

@@ -32,7 +32,7 @@ from tests.support.check import (
     refusal_row,
     refusals,
 )
-from tests.support.door import CHECK_WORD, check_door, door_in
+from tests.support.door import CHECK_WORD, STAGED_WORDS, check_door, door_in
 from tests.support.scanners import (
     NOT_INSTALLED,
     OUTPUTS,
@@ -268,18 +268,18 @@ def test_a_template_directory_cannot_put_attributes_into_the_mirror(
 
 
 @pytest.mark.scanner
-@pytest.mark.parametrize(("command", "refusal"), [(CHECK_WORD, refusal_row("secrets")), ("scan-staged", "scan-staged: cannot judge - ")])
+@pytest.mark.parametrize("words", [(CHECK_WORD,), STAGED_WORDS], ids=["check", "staged"])
 @pytest.mark.parametrize("git_version", ["2.40.1", "1.9.0"])
 def test_a_git_older_than_2_41_is_exit_2_naming_the_version(
-    installed_scanners, build_repo, fake_git, capsys, git_version, command, refusal
+    installed_scanners, build_repo, fake_git, capsys, git_version, words
 ):
     """#21 rule 2, #25 rule 4: below the floor the scan cannot hide attributes, so it is exit 2 with one line.
 
     The git floor is checked right after gitleaks' version and before any scan, so the fake git alone decides this test.
     """
     fake_git(f'[ "$1" = "--version" ] && echo "git version {git_version}" && exit 0')
-    assert door_in(build_repo({}), command) == 2
-    assert f"{refusal}git {git_version} cannot hide .gitattributes from the gitleaks scan, it needs git 2.41" in heard(capsys)
+    assert door_in(build_repo({}), *words) == 2
+    assert f"{refusal_row('secrets')}git {git_version} cannot hide .gitattributes from the gitleaks scan, it needs git 2.41" in heard(capsys)
 
 
 @pytest.mark.scanner
@@ -658,26 +658,26 @@ def test_a_path_and_a_message_with_control_characters_print_escaped_and_forge_no
 
 WORKFLOW_AND_LOCK = {".github/workflows/w.yml": "on: push\n", "uv.lock": uv_lock()}
 SCANNER_COMMANDS = [
-    (CHECK_WORD, scanners.GITLEAKS, Rule.LEAK),
-    (CHECK_WORD, scanners.ACTIONLINT, Rule.WORKFLOW_LINT),
-    (CHECK_WORD, scanners.OSV_SCANNER, Rule.ADVISORY),
-    ("scan-staged", scanners.GITLEAKS, None),
+    ((CHECK_WORD,), scanners.GITLEAKS, Rule.LEAK),
+    ((CHECK_WORD,), scanners.ACTIONLINT, Rule.WORKFLOW_LINT),
+    ((CHECK_WORD,), scanners.OSV_SCANNER, Rule.ADVISORY),
+    (STAGED_WORDS, scanners.GITLEAKS, None),
 ]
 
 
-@pytest.mark.parametrize(("command", "name", "rule"), SCANNER_COMMANDS)
+@pytest.mark.parametrize(("words", "name", "rule"), SCANNER_COMMANDS, ids=["check gitleaks", "check actionlint", "check osv-scanner", "staged gitleaks"])
 def test_a_scanner_mise_has_not_installed_cannot_judge_and_names_the_install_command(
-    build_repo, use_mise, served_scanners, elsewhere, capsys, command, name, rule
+    build_repo, use_mise, served_scanners, elsewhere, capsys, words, name, rule
 ):
     """#228 rule 4: a missing scanner is exit 2 with the command that installs it, and no other rule is refused."""
     use_mise(lacking(served_scanners, name))
     repo, locate_zizmor = build_repo(WORKFLOW_AND_LOCK), fake_zizmor(elsewhere, "echo '[]'")
-    code, captured = door_in(repo, command, locate_zizmor=locate_zizmor), capsys.readouterr()
+    code, captured = door_in(repo, *words, locate_zizmor=locate_zizmor), capsys.readouterr()
     output, install = captured.out + captured.err, scanners.install_command()
     assert (code, captured.out.count(install), captured.err.count(install)) == (2, 0, 1), output
     assert f"mise could not locate {name} {scanners.pinned_tool(name).version}" in output
     if rule is None:
-        assert output.count("cannot judge") == 1, output
+        assert "error: 1 of 1 area could not check" in captured.err, output
     else:
         assert list(refusals(repo, locate_zizmor=locate_zizmor)) == [rule]
 
@@ -693,21 +693,21 @@ def test_without_mise_the_scanner_rules_cannot_judge_and_every_other_rule_still_
     assert env_row_stands(captured.out)
 
 
-@pytest.mark.parametrize("command", [CHECK_WORD, "scan-staged"])
+@pytest.mark.parametrize("words", [(CHECK_WORD,), STAGED_WORDS], ids=["check", "staged"])
 def test_a_scanner_that_reports_another_version_than_the_manifest_is_never_run(
-    build_repo, served_scanners, tmp_path, capsys, command
+    build_repo, served_scanners, tmp_path, capsys, words
 ):
     """#228 invariant 10: the exact pinned version runs; a binary at another version is exit 2 naming both versions."""
     marker = tmp_path / "scanned"
     fake_scanner(served_scanners, scanners.GITLEAKS, f"touch {marker}", version="9.9.9")
-    code = door_in(build_repo({}), command)
+    code = door_in(build_repo({}), *words)
     output = heard(capsys)
     assert (code, f"gitleaks 9.9.9 found, the release pins {PINNED}" in output) == (2, True), output
     assert not marker.exists()
 
 
-@pytest.mark.parametrize("command", [CHECK_WORD, "scan-staged"])
-def test_a_gitleaks_on_path_never_runs(build_repo, use_mise, tmp_path, monkeypatch, capsys, command):
+@pytest.mark.parametrize("words", [(CHECK_WORD,), STAGED_WORDS], ids=["check", "staged"])
+def test_a_gitleaks_on_path_never_runs(build_repo, use_mise, tmp_path, monkeypatch, capsys, words):
     """#228 invariant 10: when mise cannot locate gitleaks, one that PATH offers is never used in its place."""
     use_mise(NOT_INSTALLED)
     planted = tmp_path / "planted"
@@ -715,7 +715,7 @@ def test_a_gitleaks_on_path_never_runs(build_repo, use_mise, tmp_path, monkeypat
     marker = tmp_path / "ran"
     fake_scanner(planted, scanners.GITLEAKS, f"touch {marker}")
     monkeypatch.setenv("PATH", f"{planted}:{os.environ['PATH']}")
-    assert door_in(build_repo({}), command) == 2
+    assert door_in(build_repo({}), *words) == 2
     assert not marker.exists(), capsys.readouterr().err
 
 

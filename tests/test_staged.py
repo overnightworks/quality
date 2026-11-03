@@ -1,41 +1,28 @@
 import io
-import re
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
-from quality import cli, config, staged
-from quality.report import FindingEvent, NoteEvent, printable
+from quality import config, staged
+from quality.report import FindingEvent, NoteEvent
+from quality.rules import Area
 from tests.support.check import (
     CopyLine,
     FindingLine,
+    area_block,
     assert_block_prints,
     assert_finding_vocabulary,
     decode_block,
 )
-from tests.support.config_refusals import CONFIG, all_refusals
-from tests.support.git_repositories import GIT_IDENTITY, head_commit
+from tests.support.door import CHECK_WORD, STAGED_WORDS, door_in, staged_door
+from tests.support.git_repositories import GIT_IDENTITY, git, head_commit, stage
 from tests.support.secrets import FAKE_KEY, HOSTILE_FILE, OTHER_KEY, allow_config
 from tests.support.terminal import Terminal, without_sgr
 
 KEY_LINE = f"aws_access_key_id = {FAKE_KEY}\n"
-
-
-def git(repo: Path, *arguments: str, check: bool = True) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["git", "-C", str(repo), *GIT_IDENTITY, *arguments], check=check, capture_output=True, text=True)
-
-
-def stage(repo: Path, files: dict[str, str]) -> None:
-    for name, content in files.items():
-        (repo / name).parent.mkdir(parents=True, exist_ok=True)
-        (repo / name).write_text(content)
-    git(repo, "add", "-f", *files)
-
-
-def scan_staged(repo: Path) -> int:
-    return cli.main(["scan-staged", str(repo)])
 
 
 @pytest.fixture
@@ -52,24 +39,23 @@ def test_a_staged_row_is_painted_only_on_a_terminal(build_repo, installed_scanne
     stage(repo, {"src/a.py": KEY_LINE})
     stream = stream_kind()
     monkeypatch.setattr(sys, "stdout", stream)
-    code = cli.main(["scan-staged", str(repo)], environment={"TERM": "xterm"})
-    lines = [re.sub(r"\x1b\[[0-9;]*m", "", line) for line in stream.getvalue().splitlines()]
+    code = staged_door(repo, environment={"TERM": "xterm"}, clock=lambda: 0.0)
+    lines = without_sgr(stream.getvalue()).splitlines()
     assert (code, "\x1b" in stream.getvalue(), FAKE_KEY in stream.getvalue()) == (1, painted, False)
-    result = staged.scan_staged(repo)
-    assert (lines[-1], capsys.readouterr().err) == (f"scan-staged: {len(result.findings)} finding(s)", "")
+    assert (lines[-1], capsys.readouterr().err) == ("! 1 finding in 1 area · <1s", "")
 
 
 @pytest.mark.scanner
-def test_a_staged_door_prints_its_rows_and_last_line_whole_at_a_narrow_terminal(build_repo, installed_scanners, window, capsys, monkeypatch):
+def test_a_staged_door_prints_its_finding_row_and_verdict_whole_at_a_narrow_terminal(build_repo, installed_scanners, window, capsys, monkeypatch):
     repo = build_repo({"README": "hello\n"})
     stage(repo, {"src/a.py": KEY_LINE})
     terminal = window(20)
     monkeypatch.setattr(sys, "stdout", terminal.stream)
-    cli.main(["scan-staged", str(repo)], environment={"TERM": "xterm"})
-    (finding,) = staged.scan_staged(repo).findings
+    staged_door(repo, environment={"TERM": "xterm"}, clock=lambda: 0.0)
+    (finding,) = staged.scan_change(repo).findings
     printed = without_sgr(terminal.read())
     assert f"    ! src/a.py:1  secret  {finding.fact}" in printed.splitlines()
-    assert (printed.splitlines()[-1], "…" in printed, FAKE_KEY in printed, capsys.readouterr().err) == ("scan-staged: 1 finding(s)", False, False, "")
+    assert (printed.splitlines()[-1], FAKE_KEY in printed, capsys.readouterr().err) == ("! 1 finding in 1 area · <1s", False, "")
 
 
 @pytest.mark.scanner
@@ -77,17 +63,15 @@ def test_a_staged_key_is_one_secret_row_with_its_entry_and_its_value_is_not_prin
     """#25 rule 1, O32: the staged change is judged; the row names no commit, the entry follows, the value is never printed."""
     repo = build_repo({"README": "hello\n"})
     stage(repo, {"src/a.py": KEY_LINE})
-    assert scan_staged(repo) == 1
-    lines = capsys.readouterr().out.splitlines()
-    result = staged.scan_staged(repo)
-    block = decode_block(lines[:-1])
-    assert_block_prints(block, result.findings, list(result.notes))
+    assert staged_door(repo) == 1
+    printed = capsys.readouterr().out
+    result = staged.scan_change(repo)
+    assert_block_prints(area_block(printed, Area.SECRETS), result.findings, list(result.notes))
     (finding,) = result.findings
     assert (finding.location, finding.event) == ("src/a.py:1", FindingEvent.SECRET)
     assert head_commit(repo)[:8] not in finding.fact
     assert_finding_vocabulary(finding)
-    assert lines[-1] == f"scan-staged: {len(result.findings)} finding(s)"
-    assert FAKE_KEY not in "\n".join(lines)
+    assert FAKE_KEY not in printed
 
 
 @pytest.mark.scanner
@@ -101,16 +85,16 @@ def test_a_key_that_is_not_in_the_staged_change_is_green(build_repo, installed_s
         (repo / "new.txt").write_text(KEY_LINE)
     if where == "removed from HEAD":
         git(repo, "rm", "-q", "kept.txt")
-    assert scan_staged(repo) == 0
+    assert staged_door(repo) == 0
 
 
 @pytest.mark.scanner
 def test_a_repository_without_head_is_scanned(unborn_repo, installed_scanners):
     """#25 rule 1: no HEAD is an empty parent, so the whole index is the change."""
     stage(unborn_repo, {"clean.txt": "ok\n"})
-    assert scan_staged(unborn_repo) == 0
+    assert staged_door(unborn_repo) == 0
     stage(unborn_repo, {"config.txt": KEY_LINE})
-    assert scan_staged(unborn_repo) == 1
+    assert staged_door(unborn_repo) == 1
 
 
 @pytest.mark.scanner
@@ -126,7 +110,7 @@ def test_a_staged_ignore_attribute_or_config_file_changes_nothing(build_repo, in
     """#25 rule 1: the scratch work tree is empty, so no file of the scanned repository steers gitleaks or git."""
     repo = build_repo({"README": "hello\n"})
     stage(repo, {name: content, "config.txt": KEY_LINE})
-    assert scan_staged(repo) == 1
+    assert staged_door(repo) == 1
 
 
 @pytest.mark.scanner
@@ -134,7 +118,7 @@ def test_a_gitleaks_allow_comment_changes_nothing(build_repo, installed_scanners
     """#25 rule 1: an inline gitleaks:allow comment is ignored, the staged key is still red."""
     repo = build_repo({"README": "hello\n"})
     stage(repo, {"config.txt": f"aws_access_key_id = {FAKE_KEY}  # gitleaks:allow\n"})
-    assert scan_staged(repo) == 1
+    assert staged_door(repo) == 1
 
 
 @pytest.mark.scanner
@@ -144,7 +128,7 @@ def test_the_live_repositorys_info_attributes_cannot_hide_a_staged_key(build_rep
     (repo / ".git" / "info").mkdir(exist_ok=True)
     (repo / ".git" / "info" / "attributes").write_text("k.txt -diff\n")
     stage(repo, {"k.txt": KEY_LINE})
-    assert scan_staged(repo) == 1
+    assert staged_door(repo) == 1
 
 
 @pytest.mark.scanner
@@ -159,7 +143,7 @@ def test_the_allow_list_is_the_one_of_the_staged_tree(build_repo, installed_scan
     else:
         (repo / "quality").mkdir()
         (repo / "quality" / "config.toml").write_text(config)
-    assert scan_staged(repo) == (0 if staged_config else 1)
+    assert staged_door(repo) == (0 if staged_config else 1)
 
 
 @pytest.mark.scanner
@@ -182,23 +166,23 @@ def test_an_allowance_follows_the_value_in_the_staged_scan(
     config = allow_config(("aws-access-token", "config.txt", FAKE_KEY, "test key"))
     repo = build_repo({"config.txt": KEY_LINE, "quality/config.toml": config})
     stage(repo, {"config.txt": staged_change})
-    assert scan_staged(repo) == exit_code
+    assert staged_door(repo) == exit_code
     streams = capsys.readouterr()
-    result = staged.scan_staged(repo)
+    result = staged.scan_change(repo)
     allowed = [note for note in result.notes if note.event is NoteEvent.ALLOWED]
     assert [note.location for note in allowed] == ([] if expected_line is None else [expected_line])
     assert all(("aws-access-token" in note.fact, "test key" in note.fact) == (True, True) for note in allowed)
-    assert_block_prints(decode_block(streams.out.splitlines()), result.findings, result.notes)
+    assert_block_prints(area_block(streams.out, Area.SECRETS), result.findings, result.notes)
     printed = streams.out + streams.err
     assert [key in printed for key in (FAKE_KEY, OTHER_KEY)] == [False, False]
 
 
 @pytest.fixture
 def refusing_hook(build_repo, installed_scanners):
-    """A repository whose pre-commit hook runs `quality scan-staged`, with a committed clean file."""
+    """A repository whose pre-commit hook runs the staged scan, with a committed clean file."""
     repo = build_repo({"tracked.txt": "clean\n"})
     hook = repo / ".git" / "hooks" / "pre-commit"
-    hook.write_text(f"#!/bin/sh\nexec {sys.executable} -m quality.cli scan-staged .\n")
+    hook.write_text(f"#!/bin/sh\nexec {sys.executable} -m quality.cli {' '.join(STAGED_WORDS)}\n")
     hook.chmod(0o755)
     return repo
 
@@ -248,12 +232,12 @@ def test_a_clean_commit_goes_through_the_hook(refusing_hook):
 
 
 @pytest.mark.scanner
-def test_scan_staged_leaves_the_repository_as_it_found_it(build_repo, installed_scanners):
+def test_a_staged_run_leaves_the_repository_as_it_found_it(build_repo, installed_scanners):
     """#25 rule 1.1: write-tree only writes tree objects, so status is unchanged by the scan."""
     repo = build_repo({"README": "hello\n"})
     stage(repo, {"config.txt": KEY_LINE})
     before = git(repo, "status", "--porcelain=v2", "--branch").stdout
-    scan_staged(repo)
+    staged_door(repo)
     assert git(repo, "status", "--porcelain=v2", "--branch").stdout == before
 
 
@@ -268,15 +252,8 @@ def test_an_unmerged_index_is_exit_2(build_repo, installed_scanners, capsys):
     stage(repo, {"f.txt": "main\n"})
     git(repo, "commit", "-q", "-m", "main")
     git(repo, "merge", "other", check=False)
-    assert scan_staged(repo) == 2
-    assert capsys.readouterr().err.startswith("scan-staged: cannot judge - git write-tree failed")
-
-
-@pytest.mark.scanner
-def test_a_path_that_is_not_a_repository_is_exit_2(tmp_path, installed_scanners, capsys):
-    """#25 rule 4: a path that is not a repository is exit 2."""
-    assert scan_staged(tmp_path) == 2
-    assert capsys.readouterr().err.startswith("scan-staged: cannot judge - ")
+    assert staged_door(repo) == 2
+    assert "git write-tree failed" in capsys.readouterr().out
 
 
 @pytest.mark.scanner
@@ -292,7 +269,7 @@ def test_the_staged_scan_reads_only_the_secrets_table(build_repo, installed_scan
     """#40 rule 1: only [secrets] of the staged config is validated."""
     repo = build_repo({"README": "hello\n"})
     stage(repo, {"quality/config.toml": staged_config})
-    assert scan_staged(repo) == exit_code
+    assert staged_door(repo) == exit_code
 
 
 @pytest.mark.scanner
@@ -300,8 +277,8 @@ def test_an_unreadable_allow_list_is_exit_2(build_repo, installed_scanners, caps
     """#25 rule 4: a staged allow list that cannot be read is exit 2."""
     repo = build_repo({"README": "hello\n"})
     stage(repo, {"quality/config.toml": "not [valid toml"})
-    assert scan_staged(repo) == 2
-    assert "quality/config.toml" in capsys.readouterr().err
+    assert staged_door(repo) == 2
+    assert "quality/config.toml" in capsys.readouterr().out
 
 
 @pytest.mark.scanner
@@ -319,71 +296,68 @@ def test_git_failing_on_the_staged_allow_list_is_exit_2_in_its_words(
     repo = build_repo({"README": "hello\n"})
     stage(repo, {"quality/config.toml": "[secrets]\n"})
     fake_git(f'case " $* " in *" {failing} "*) echo "{failing} broke" >&2; exit 1;; esac')
-    assert scan_staged(repo) == 2
-    assert f"scan-staged: cannot judge - {expected}: git exited 1" in capsys.readouterr().err
-
-
-STAGED_EXAMPLE_REFUSALS = [
-    refusal
-    for refusal in all_refusals()
-    if "staged" in refusal.loaders and refusal.example is not None and refusal.text is not None and not refusal.directory
-]
+    assert staged_door(repo) == 2
+    assert f"{expected}: git exited 1" in capsys.readouterr().out
 
 
 @pytest.mark.scanner
-@pytest.mark.parametrize("refusal", STAGED_EXAMPLE_REFUSALS, ids=[refusal.id for refusal in STAGED_EXAMPLE_REFUSALS])
-def test_a_staged_config_refusal_prints_its_example_on_the_one_stderr_line_with_escaped_separators(
-    build_repo, installed_scanners, capsys, refusal
-):
-    """Acceptance 2: `scan-staged` prints the refusal as `<fact>, like:` and the example's lines on the same
-    stderr line, each separated by the literal `\\x0a`."""
-    repo = build_repo({"README": "hello\n"})
-    stage(repo, {CONFIG: refusal.text})
-    assert scan_staged(repo) == 2
-    captured = capsys.readouterr()
-    example = [printable(line) for line in refusal.example]
-    assert captured.err.splitlines() == ["\\x0a".join([f"scan-staged: cannot judge - {printable(refusal.fact)}, like:", *example])]
-    assert not set(example) & set(captured.err.splitlines())
-
-
-@pytest.mark.scanner
-@pytest.mark.parametrize("kind", ["a missing path", "a regular file"])
-def test_a_path_that_is_not_a_directory_is_exit_2_and_named(kind, tmp_path, installed_scanners, capsys):
-    """#25 rule 4: a path that is no directory is exit 2, and git's own error names the path (#58 rule 3)."""
-    path = tmp_path / "not-a-directory"
-    if kind == "a regular file":
-        path.write_text("content\n")
-    assert scan_staged(path) == 2
-    assert str(path) in capsys.readouterr().err
-
-
-@pytest.mark.scanner
-def test_a_repository_path_that_starts_with_a_dash_is_scanned_as_a_path(
-    tmp_path, installed_scanners, monkeypatch, capsys
-):
-    """#25 rule 4: `-C` reached by a relative path is a repository, never a git option, so its staged key is red."""
+def test_a_repository_folder_that_starts_with_a_dash_is_scanned_as_a_folder(tmp_path, installed_scanners):
+    """A folder named `-C` is a repository, never a git option, so its staged key is red."""
     git(tmp_path, "init", "-q", "--", "-C")
     stage(tmp_path / "-C", {"config.txt": KEY_LINE})
-    monkeypatch.chdir(tmp_path)
-    assert cli.main(["scan-staged", "--", "-C"]) == 1
+    assert door_in(tmp_path / "-C", *STAGED_WORDS) == 1
 
 
 @pytest.mark.scanner
 @pytest.mark.parametrize("name", ["src/a.py", HOSTILE_FILE], ids=["plain-path", "esc-quote-and-bidi-path"])
 def test_the_printed_entry_with_a_reason_allows_the_staged_key_with_head_unchanged(build_repo, installed_scanners, capsys, name):
-    """O31, acceptance 3: the printed lines with a reason, staged beside the key, allow exactly it; nothing is committed."""
+    """The printed lines with a reason, staged beside the key, allow exactly it; nothing is committed."""
     repo = build_repo({"README": "hello\n"})
     stage(repo, {name: KEY_LINE})
     before = head_commit(repo)
-    assert scan_staged(repo) == 1
+    assert staged_door(repo) == 1
     first = capsys.readouterr()
-    (finding,) = staged.scan_staged(repo).findings
-    entry = [line.copy for line in decode_block(first.out.splitlines()) if isinstance(line, CopyLine)]
+    (finding,) = staged.scan_change(repo).findings
+    entry = [line.copy for line in area_block(first.out, Area.SECRETS) if isinstance(line, CopyLine)]
     stage(repo, {config.CONFIG_PATH: '[gate]\nmandatory_jobs = ["checks"]\n' + "\n".join(entry) + '\nreason = "scenario reason"\n'})
-    assert scan_staged(repo) == 0
+    assert staged_door(repo) == 0
     second = capsys.readouterr()
-    result = staged.scan_staged(repo)
+    result = staged.scan_change(repo)
     assert (head_commit(repo), result.findings, [(note.location, note.event) for note in result.notes]) == (
         before, [], [(finding.location, NoteEvent.ALLOWED)],
     )
     assert FAKE_KEY not in first.out + first.err + second.out + second.err
+
+
+@pytest.mark.scanner
+def test_a_staged_run_in_a_subfolder_judges_the_index_the_environment_names(build_repo, installed_scanners, monkeypatch, capsys):
+    """The hook stands in a subfolder with a relative git directory, an explicit work tree and an alternate index."""
+    repo = build_repo({"docs/README": "hello\n"})
+    (repo / "docs" / "key.txt").write_text(KEY_LINE)
+    alternate_index = repo / ".git" / "alternate-index"
+    subprocess.run(
+        ["git", "-C", str(repo), *GIT_IDENTITY, "add", "docs/key.txt"], check=True, capture_output=True,
+        env=os.environ | {"GIT_INDEX_FILE": str(alternate_index)},
+    )
+    monkeypatch.setenv("GIT_DIR", "../.git")
+    monkeypatch.setenv("GIT_WORK_TREE", str(repo))
+    monkeypatch.setenv("GIT_INDEX_FILE", "../.git/alternate-index")
+    assert door_in(repo / "docs", *STAGED_WORDS) == 1
+    printed = capsys.readouterr().out
+    rows = [(line.location, line.row.event) for line in area_block(printed, Area.SECRETS) if isinstance(line, FindingLine)]
+    assert rows == [("docs/key.txt:1", FindingEvent.SECRET)]
+
+
+@pytest.mark.scanner
+@pytest.mark.parametrize("change", ["another file", "the allowed line removed"])
+def test_a_commit_that_touches_no_allowed_line_prints_no_unused_row(build_repo, installed_scanners, capsys, change):
+    """One change cannot tell a stale entry from one the history still needs, so only the whole-history scan reports it."""
+    entry = ("aws-access-token", "docs/key.txt", FAKE_KEY, "a test key")
+    repo = build_repo({"docs/key.txt": KEY_LINE, config.CONFIG_PATH: allow_config(entry)})
+    stage(repo, {"docs/key.txt": "removed\n"} if change == "the allowed line removed" else {"docs/other.md": "text\n"})
+    assert staged_door(repo) == 0
+    staged_out = capsys.readouterr().out
+    git(repo, "commit", "-q", "-m", "next")
+    assert door_in(repo, CHECK_WORD, "secrets") == 0
+    whole_out = capsys.readouterr().out
+    assert ("unused" in staged_out, "unused" in whole_out, "1 allowed" in whole_out) == (False, False, True)
