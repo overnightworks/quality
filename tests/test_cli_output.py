@@ -591,10 +591,14 @@ def test_the_folder_is_spoken_with_the_home_folder_as_a_tilde(own_home, monkeypa
     assert (code, out, err) == (2, [], [f"error: not inside a git work tree · {tail_of(folder)}", "next: run quality check inside a repository"])
 
 
+def unknown_user(uid: int):
+    raise KeyError(uid)
+
+
 @pytest.mark.integration
 def test_an_unknown_home_folder_speaks_the_absolute_folder_and_never_a_traceback(tmp_path, monkeypatch, capsys):
-    monkeypatch.delenv("HOME")
-    monkeypatch.setattr("pwd.getpwuid", lambda _uid: (_ for _ in ()).throw(KeyError("uid")))
+    monkeypatch.delenv("HOME", raising=False)
+    monkeypatch.setattr("pwd.getpwuid", unknown_user)
     code, out, err = frame_run(capsys, tmp_path)
     assert (code, out, err) == (2, [], [f"error: not inside a git work tree · {tmp_path}", "next: run quality check inside a repository"])
 
