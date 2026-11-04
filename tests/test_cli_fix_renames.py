@@ -391,6 +391,7 @@ def test_no_committed_ceiling_follows_nothing(pull_request, capsys):
     code, out, _ = fixed(capsys, repo, *FIX_WORDS)
     printed = " ".join(out.split())
     assert (code, digest(repo) == before, "moved" in out, "dropped function long_one is gone" in printed, "new debt" in out) == (1, False, False, True, True)
+    assert "src/old.py" not in (repo / BASELINE_PATH).read_text()
 
 
 def test_a_ceiling_whose_last_commit_does_not_parse_refuses(pull_request, capsys):
