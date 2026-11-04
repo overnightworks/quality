@@ -118,36 +118,75 @@ def written_as(path: str, value: int = 70) -> str:
     return f'[function_lines."{path}"]\n"long_one" = {value}\n\n[clones]\n'
 
 
+def moved_note(target: str, source: str) -> str:
+    return f"{target}  moved  function long_one 70 lines from {source}\n"
+
+
 @pytest.mark.parametrize(
-    ("arrange", "written"),
+    ("arrange", "written", "note"),
     [
-        pytest.param(moved_with_git, written_as("src/new.py"), id="git mv, uncommitted"),
-        pytest.param(moved_and_committed, written_as("src/new.py"), id="committed move"),
-        pytest.param(moved_and_staged_with_add_all, written_as("src/new.py"), id="staged with git add -A"),
-        pytest.param(moved_and_shrunk, written_as("src/new.py", 65), id="moved and shrunk"),
-        pytest.param(a_directory_moved, written_as("src/lib/old.py"), id="a directory move"),
-        pytest.param(moved_twice_and_committed, written_as("src/c.py"), id="successive committed moves"),
         pytest.param(
-            fixed_and_committed_between_two_moves, written_as("src/c.py"), id="fixed and committed between two moves"
+            moved_with_git, written_as("src/new.py"), moved_note("src/new.py", "src/old.py"), id="git mv, uncommitted"
+        ),
+        pytest.param(
+            moved_and_committed, written_as("src/new.py"), moved_note("src/new.py", "src/old.py"), id="committed move"
+        ),
+        pytest.param(
+            moved_and_staged_with_add_all,
+            written_as("src/new.py"),
+            moved_note("src/new.py", "src/old.py"),
+            id="staged with git add -A",
+        ),
+        pytest.param(
+            moved_and_shrunk,
+            written_as("src/new.py", 65),
+            "src/new.py    moved    function long_one 70 lines from src/old.py\n",
+            id="moved and shrunk",
+        ),
+        pytest.param(
+            a_directory_moved,
+            written_as("src/lib/old.py"),
+            moved_note("src/lib/old.py", "src/pkg/old.py"),
+            id="a directory move",
+        ),
+        pytest.param(
+            moved_twice_and_committed,
+            written_as("src/c.py"),
+            moved_note("src/c.py", "src/a.py"),
+            id="successive committed moves",
+        ),
+        pytest.param(
+            fixed_and_committed_between_two_moves,
+            written_as("src/c.py"),
+            moved_note("src/c.py", "src/b.py"),
+            id="fixed and committed between two moves",
         ),
         pytest.param(
             a_clone_pair_moved,
             '[clones."tests/test_a.py"]\nrun = [["tests/test_c.py", "check"]]\n',
+            "tests/test_a.py  moved  pair tests/test_a.py run <-> tests/test_c.py check"
+            " · was tests/test_a.py run <-> tests/test_b.py check\n",
             id="a moved clone pair",
         ),
         pytest.param(
             the_ceiling_changed_on_a_merged_side_branch,
             written_as("src/new.py"),
+            moved_note("src/new.py", "src/old.py"),
             id="the ceiling last changed on a merged side branch",
         ),
-        pytest.param(moved_where_git_renames_nothing_by_default, written_as("src/new.py"), id="diff.renames off"),
+        pytest.param(
+            moved_where_git_renames_nothing_by_default,
+            written_as("src/new.py"),
+            moved_note("src/new.py", "src/old.py"),
+            id="diff.renames off",
+        ),
     ],
 )
-def test_a_fixed_move_passes_check_and_the_verdict(pull_request, capsys, arrange, written):
+def test_a_fixed_move_passes_check_and_the_verdict(pull_request, capsys, arrange, written, note):
     repo = arrange(pull_request)
     capsys.readouterr()
-    code, _, _ = fixed(capsys, repo, *FIX_WORDS)
-    assert (code, (repo / BASELINE_PATH).read_text().endswith(written)) == (0, True)
+    code, fix_out, _ = fixed(capsys, repo, *FIX_WORDS)
+    assert (code, (repo / BASELINE_PATH).read_text().endswith(written), note in fix_out) == (0, True, True), fix_out
     assert checked(capsys, repo)[0] == 0
     commit_all(repo, "fixed")
     verdict_code, output = verdict_of(repo, capsys)
