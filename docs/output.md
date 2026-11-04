@@ -259,8 +259,8 @@ The debt ceiling is `quality/baseline.toml`. Where code shrank it can fall; `--f
 $ quality check debt
   · release       v0.9.0         pinned in .github/workflows/ci.yml
   ! debt          3 findings
-    ! src/shop/orders.py   can fall  file has 742 lines · ceiling 766
-    ! src/shop/cart.py:63  can fall  function total has CCN 9 · ceiling 12
+    ! src/shop/orders.py   can fall  file has 812 lines · ceiling 826
+    ! src/shop/cart.py:63  can fall  function total has CCN 17 · ceiling 19
     ! src/shop/legacy.py   can fall  file is gone · ceiling 802 lines
       fix: quality check --fix
 ! 3 findings in 1 area · 2s
@@ -284,8 +284,8 @@ $ quality check --fix --dry-run
   · release       v0.9.0         pinned in .github/workflows/ci.yml
   ✓ files         clean          10 rules · 214 files
   ~ debt          3 to lower     quality/baseline.toml
-    ~ src/shop/orders.py   lower  file 766 → 742 lines
-    ~ src/shop/cart.py:63  lower  function total CCN 12 → 9
+    ~ src/shop/cart.py:63  lower  function total CCN 19 → 17
+    ~ src/shop/orders.py   lower  file 826 → 812 lines
     ~ src/shop/legacy.py   drop   file is gone · was 802 lines
   ✓ imports       clean          1 contract
   ✓ secrets       clean          412 commits
@@ -302,8 +302,8 @@ $ quality check --fix
   · release       v0.9.0         pinned in .github/workflows/ci.yml
   ✓ files         clean          10 rules · 214 files
   ✓ debt          lowered        3 entries · quality/baseline.toml
-    ✓ src/shop/orders.py   lowered  file 766 → 742 lines
-    ✓ src/shop/cart.py:63  lowered  function total CCN 12 → 9
+    ✓ src/shop/cart.py:63  lowered  function total CCN 19 → 17
+    ✓ src/shop/orders.py   lowered  file 826 → 812 lines
     ✓ src/shop/legacy.py   dropped  file is gone
   ✓ imports       clean          1 contract
   ✓ secrets       clean          412 commits
@@ -312,6 +312,10 @@ $ quality check --fix
   ✓ code          clean          2 rules · 41 Python files
 ✓ clean · ceiling lowered by 3 entries · 7 areas · 12s
 ```
+
+A fall below a metric's threshold drops the entry (`dropped  file 805 → 790 lines · debt from 800 lines`); operator ruling of 3.11.2026 („Eintrag fällt weg“). That is why the examples fall to 812 lines and CCN 17, above their thresholds.
+
+Built: every frame but the gone row (C7c) and the dry run (C7d). `--fix` takes no `--staged` and needs `debt` among the named areas, or none named.
 
 No ceiling yet: first a note, then the first recording. Both exit 0. stdout.
 
@@ -331,6 +335,7 @@ A ceiling file without a `[clones]` table is the partly recorded form. Head prop
 
 ```text
   · debt          not recorded   2 clone pairs · partly measured only
+      fix: quality check --fix
 ✓ clean · 7 areas · debt partly measured, not enforced · 2s
 ```
 

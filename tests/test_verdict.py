@@ -353,7 +353,7 @@ def test_only_the_head_baseline_is_told_to_rewrite_itself(capsys, pull_request, 
     commit_base(base)
     put(repo / BASELINE_PATH, head)
     code, output = verdict_of(repo, capsys)
-    assert (code, output.count("rewrite it with `quality baseline write`")) == (2, hints), output
+    assert (code, output.count("restore quality/baseline.toml from git, or repair it by hand")) == (2, hints), output
 
 
 UNKNOWN_TABLE_FACT = f"has an unknown table [future]; quality {__version__} knows ccn, file_lines, function_lines, clones"
@@ -372,7 +372,7 @@ def test_an_unknown_baseline_table_states_its_fact_and_advises_only_the_head(cap
     code, output = verdict_of(repo, capsys)
     assert code == 2
     assert UNKNOWN_TABLE_FACT in output
-    assert output.count("write the baseline with the quality release your gate pins") == advice, output
+    assert output.count("run the quality release your gate pins") == advice, output
     assert "rewrite it" not in output
 
 

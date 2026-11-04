@@ -8,13 +8,12 @@ import time
 
 import pytest
 
-from quality import cli, merge, verdict
+from quality import merge, verdict
 from quality.ratchet import BASELINE_PATH, Baseline, Key, Metric, Renames, render_baseline
 from quality.report import CannotJudge
 from tests.support.git_repositories import head_commit, put
 from tests.support.merge import GATE_CONFIG, ONE_JOB, SONAR_GREEN, changed_nothing, declaring, drive
 from tests.support.processes import process_is_gone
-from tests.support.source_code import long_function
 from tests.support.verdict import verdict_of
 from tests.support.verdict_renames import MOVABLE_FILE, OLD_ENTRY, commit_all, entry, moved_in_head, pulled
 
@@ -84,14 +83,6 @@ def test_a_commit_that_renames_the_baseline_file_removes_it(capsys, pull_request
     commit_all(repo, "renames the baseline")
     code, output = verdict_of(repo, capsys)
     assert (code, f"loosened (undeclared): {BASELINE_PATH} removed" in output) == (1, True)
-
-
-def test_the_baseline_write_after_a_move_still_names_the_moved_entries_as_adds(build_repo, capsys):
-    """#149 cell 27: the write is informational and unmapped."""
-    repo = build_repo({"src/old.py": long_function(70), BASELINE_PATH: entry("src/old.py", 70, "long_one")})
-    subprocess.run(["git", "-C", str(repo), "mv", "src/old.py", "src/new.py"], check=True)
-    assert cli.main(["baseline", "write", str(repo)]) == 0
-    assert "baseline: adds function_lines src/new.py long_one 70" in capsys.readouterr().out
 
 
 NEW_ENTRY = OLD_ENTRY.replace("old", "new")

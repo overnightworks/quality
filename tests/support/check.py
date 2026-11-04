@@ -15,7 +15,7 @@ from quality.output import Glyph
 from quality.ratchet import BASELINE_PATH, load_baseline
 from quality.report import Example, Finding, FindingEvent, Note, NoteEvent, printable
 from quality.rules import Rule
-from tests.support.door import check_door
+from tests.support.door import FIX_WORDS, check_door, door_in
 
 installed_ruff = cli.INSTALLED_RUFF
 
@@ -349,8 +349,8 @@ def rule_notes(repo: Path, rule: Rule) -> list[Note]:
 
 
 def recorded_entries(repo: Path) -> int:
-    """How many entries a first `quality baseline write` records for `repo`."""
-    assert cli.main(["baseline", "write", str(repo)]) == 0
+    """How many entries a first `quality check debt --fix` records for `repo`."""
+    assert door_in(repo, *FIX_WORDS) == 0
     return len(load_baseline((repo / BASELINE_PATH).read_text(encoding="utf-8")).size)
 
 
@@ -419,9 +419,9 @@ def compose(*port_lines: str) -> dict[str, str]:
     return {"compose.yaml": f"services:\n  web:\n    image: x\n    ports:\n{body}"}
 
 
-def refusal_row(area: str) -> str:
+def refusal_row(area: str, event: str = "not checked") -> str:
     """What an area row that could not check says before its reason (docs/output.md, case 4)."""
-    return f"  ✗ {area:<12}  {'not checked':<14} "
+    return f"  ✗ {area:<12}  {event:<14} "
 
 
 def check_result(repo: Path, locate_ruff: Callable[[], str] = installed_ruff, locate_zizmor: Callable[[], str] | None = None) -> check.CheckResult:

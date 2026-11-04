@@ -181,11 +181,19 @@ class AreaVerdict:
     area: Area
     verdicts: tuple[RuleVerdict, ...]
     scanner_runs: tuple[ScannerRun, ...] = ()
+    ceiling: ratchet.CeilingFix | CannotJudge | None = None
 
     @property
     def outcome(self) -> Outcome:
         severity = list(Outcome)
-        return max((verdict.outcome for verdict in self.verdicts), key=severity.index, default=Outcome.CLEAN)
+        outcomes = [verdict.outcome for verdict in self.verdicts]
+        if isinstance(self.ceiling, CannotJudge):
+            outcomes.append(Outcome(self.ceiling.label))
+        return max(outcomes, key=severity.index, default=Outcome.CLEAN)
+
+    @property
+    def only_the_fix_refused(self) -> bool:
+        return isinstance(self.ceiling, CannotJudge) and all(verdict.refusal is None for verdict in self.verdicts)
 
     @property
     def findings(self) -> tuple[Finding, ...]:
@@ -198,7 +206,10 @@ class AreaVerdict:
     @property
     def reasons(self) -> tuple[Reason, ...]:
         """The distinct reasons its rules could not judge, equal reasons once, in run order."""
-        return tuple(dict.fromkeys(verdict.refusal.reason for verdict in self.verdicts if verdict.refusal is not None))
+        reasons = [verdict.refusal.reason for verdict in self.verdicts if verdict.refusal is not None]
+        if isinstance(self.ceiling, CannotJudge):
+            reasons.append(self.ceiling.reason)
+        return tuple(dict.fromkeys(reasons))
 
     @property
     def measurement(self) -> Measurement:
@@ -222,9 +233,13 @@ class CheckResult:
         return [finding for verdict in self.verdicts for finding in verdict.findings]
 
     @property
+    def ceiling(self) -> ratchet.CeilingFix | None:
+        return next((area.ceiling for area in self.areas if isinstance(area.ceiling, ratchet.CeilingFix)), None)
+
+    @property
     def worst(self) -> Outcome:
         severity = list(Outcome)
-        return max((verdict.outcome for verdict in self.verdicts), key=severity.index, default=Outcome.CLEAN)
+        return max((area.outcome for area in self.areas), key=severity.index, default=Outcome.CLEAN)
 
 
 def _attempt[T](check: Callable[[], T]) -> T | CannotJudge:
@@ -261,8 +276,10 @@ def _rule_verdict(rule: Rule, judged: Judged) -> RuleVerdict:
     return RuleVerdict(rule, tuple(findings), notes=() if isinstance(judged, list) else judged.notes)
 
 
-def _area_verdict(area: Area, judged: Mapping[Rule, Judged], runs: Sequence[ScannerRun] = ()) -> AreaVerdict:
-    return AreaVerdict(area, tuple(_rule_verdict(rule, judged[rule]) for rule in Rule if rule.area is area), tuple(runs))
+def _area_verdict(
+    area: Area, judged: Mapping[Rule, Judged], runs: Sequence[ScannerRun] = (), ceiling: ratchet.CeilingFix | CannotJudge | None = None
+) -> AreaVerdict:
+    return AreaVerdict(area, tuple(_rule_verdict(rule, judged[rule]) for rule in Rule if rule.area is area), tuple(runs), ceiling)
 
 
 def _run_log(verbose: bool) -> tuple[list[ScannerRun], scanners.ScannerLog]:
@@ -317,6 +334,7 @@ class RunInputs:
     locate_zizmor: Callable[[], str]
     running: Running
     verbose: bool
+    fix: bool
 
     @cached_property
     def allow_lists(self) -> AllowLists | CannotJudge:
@@ -346,11 +364,64 @@ def _judge_files(inputs: RunInputs) -> AreaVerdict:
     )
 
 
+def _require_whole_history(inputs: RunInputs) -> None:
+    if checkout.is_shallow(inputs.root):
+        raise CannotJudge("this clone is shallow, so git cannot show the ceiling is new", (checkout.UNSHALLOW_STEP,))
+
+
+def _require_no_ceiling_in_git(inputs: RunInputs) -> None:
+    if ratchet.BASELINE_PATH in inputs.tracked or checkout.blobs_of(inputs.root, ratchet.BASELINE_PATH):
+        raise CannotJudge(f"{ratchet.BASELINE_PATH} is gone from the tree but git holds it", (ratchet.RESTORE_STEP,))
+    _require_whole_history(inputs)
+
+
+def _require_no_clones_table_in_git(inputs: RunInputs) -> None:
+    name = ratchet.BASELINE_PATH
+    revisions = [f":{name}"] if name in inputs.tracked else []
+    revisions += checkout.blobs_of(inputs.root, name)
+    try:
+        held = any(ratchet.holds_clones_table(checkout.blob(inputs.root, revision)) for revision in revisions)
+    except ratchet.SizeError as error:
+        raise CannotJudge(str(error), (ratchet.RESTORE_STEP,)) from error
+    if held:
+        raise CannotJudge(f"{name} lost its [clones] table, which git holds", (ratchet.RESTORE_STEP,))
+    _require_whole_history(inputs)
+
+
+def _written(root: Path, fix: ratchet.CeilingFix) -> ratchet.CeilingFix:
+    if fix.changed:
+        try:
+            repository.write_text(root, ratchet.BASELINE_PATH, ratchet.render_baseline(fix.ceiling))
+        except (repository.RepositoryFileError, ratchet.SizeError) as error:
+            raise CannotJudge(str(error)) from error
+    return fix
+
+
+def _fix_ceiling(inputs: RunInputs, sources: dict[str, bytes], held: ratchet.Baseline | None) -> ratchet.CeilingFix:
+    """The ceiling lowered, or recorded where git never held one, and written when it changed."""
+    tree = ratchet.measure(sources)
+    ratchet.complete(tree)
+    measurements = ratchet.without_generated(tree, _required(inputs.allow_lists).generated).measurements
+    pairs = clones.find_pairs(sources).pairs
+    if held is None:
+        _require_no_ceiling_in_git(inputs)
+        return _written(inputs.root, ratchet.CeilingFix(ratchet.Baseline(ratchet.debt(measurements), pairs), (), first=True))
+    if held.clones is None:
+        _require_no_clones_table_in_git(inputs)
+    return _written(inputs.root, ratchet.lower_ceiling(held, measurements, pairs))
+
+
 def _judge_debt(inputs: RunInputs) -> AreaVerdict:
     sources = _attempt(lambda: ratchet.read_sources(inputs.root, inputs.tracked))
     baseline = sources if isinstance(sources, CannotJudge) else _attempt(lambda: judged_baseline(inputs.root))
-    size, clone = _judge_baseline_rules(sources, baseline, inputs.allow_lists)
-    return _area_verdict(Area.DEBT, {Rule.SIZE: size, Rule.CLONE: clone})
+    fix = None
+    if inputs.fix and not isinstance(baseline, CannotJudge):
+        fix = _attempt(lambda: _fix_ceiling(inputs, sources, baseline))
+    fixed = isinstance(fix, ratchet.CeilingFix)
+    size, clone = _judge_baseline_rules(sources, fix.ceiling if fixed else baseline, inputs.allow_lists)
+    if fixed:
+        size = ratchet.after_fix(_required(size), fix)  # the config was read and the tree is complete
+    return _area_verdict(Area.DEBT, {Rule.SIZE: size, Rule.CLONE: clone}, ceiling=fix)
 
 
 def _judge_imports(inputs: RunInputs) -> AreaVerdict:
@@ -407,6 +478,7 @@ def judge_repository(
     root: Path, locate_ruff: Callable[[], str], locate_zizmor: Callable[[], str], report_area: AreaReport, running: Running,
     verbose: bool = False,
     named: Iterable[Area] = (),
+    fix: bool = False,
 ) -> CheckResult:
     """Judges every active rule of the areas `named`, of all of them where none is, over the repository `root` lies
     in, area by area in row order, and hands each finished area and the count of tracked paths to `report_area`;
@@ -415,7 +487,7 @@ def judge_repository(
     root = checkout.work_tree_top(root)
     tracked = checkout.tracked_files(root)
     tracked_paths = len(set(tracked))
-    inputs = RunInputs(root, tracked, locate_ruff, locate_zizmor, running, verbose)
+    inputs = RunInputs(root, tracked, locate_ruff, locate_zizmor, running, verbose, fix)
     areas: list[AreaVerdict] = []
     for area in _judged_areas(inputs, frozenset(named) or frozenset(Area)):
         report_area(area, tracked_paths)

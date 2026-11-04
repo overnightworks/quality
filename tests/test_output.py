@@ -86,6 +86,11 @@ def test_sub_lines_stand_under_their_row_with_their_own_glyph():
     assert plain((row,)).splitlines()[1:] == ["    ✗ first", "    ✗ second"]
 
 
+def test_a_row_with_a_fix_ends_in_its_fix_line():
+    row = Row(Glyph.NOTE, "debt", Event.CLEAN, "not recorded", fix="run it like this")
+    assert plain((row,)).splitlines() == ["  · debt          clean          not recorded", "      fix: run it like this"]
+
+
 def test_repository_text_in_a_row_is_escaped_before_it_is_padded():
     row = Row(Glyph.CLEAN, "fi\nles", Event.CLEAN, "a\x1b[35mb")
     text = plain((row,))
@@ -112,8 +117,13 @@ def test_a_duration_is_whole_seconds_rounded_down(seconds, expected):
             {"findings": 2, "areas_with_findings": 2, "clean_areas": 4, "notes": ("debt partly measured, not enforced",)},
             "! 2 findings in 2 areas · 4 areas clean · debt partly measured, not enforced · <1s\n",
         ),
+        ({"ceiling": "ceiling lowered by 2 entries", "seconds": 2}, "✓ clean · ceiling lowered by 2 entries · 7 areas · 2s\n"),
+        (
+            {"findings": 1, "areas_with_findings": 1, "clean_areas": 6, "ceiling": "ceiling lowered by 1 entry"},
+            "! 1 finding in 1 area · 6 areas clean · ceiling lowered by 1 entry · <1s\n",
+        ),
     ],
-    ids=["clean", "one finding", "several", "no clean area is left out", "measured only", "partly measured with findings"],
+    ids=["clean", "one finding", "several", "no clean area is left out", "measured only", "partly measured with findings", "a lowered ceiling", "a lowered ceiling beside a finding"],
 )
 def test_the_verdict_line_counts_and_ends_with_the_duration(counts, expected):
     assert verdict_line(**counts) == expected
@@ -462,7 +472,7 @@ def test_a_merged_pipe_shows_the_check_lines_in_run_order(env_and_broken_compose
     )
     prefixes = [
         "  ✗ files", ENV_ROW, FIX_LINE, ENV_ROW, FIX_LINE,
-        "  · debt", "  · imports", "  ✓ secrets", "  ✓ workflows", "  ✓ dependencies", "  ✓ code", "error: ", "next: ",
+        "  · debt", FIX_LINE, "  · imports", "  ✓ secrets", "  ✓ workflows", "  ✓ dependencies", "  ✓ code", "error: ", "next: ",
     ]
     lines = done.stdout.splitlines()
     indented = (ENV_ROW, FIX_LINE)

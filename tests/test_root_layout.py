@@ -204,7 +204,7 @@ def test_a_hundred_strays_print_a_hundred_sorted_findings(build_repo, capsys):
     printed = [match[0] for line in output.splitlines() if Glyph.NEEDS_YOU in line and (match := re.search(r"stray\d{3}\.txt", line))]
     rows = [row for name in names for row in finding_rows(output, name)]
     assert (red(repo, Rule.ROOT_LAYOUT), printed, len(rows), [row.fix_follows for row in rows]) == (names, names, 100, [False] * 99 + [True])
-    assert output.count(f" {FIX_LABEL} ") == 1
+    assert output.count(f" {FIX_LABEL} {rule_findings(repo, Rule.ROOT_LAYOUT)[0].fix}") == 1
 
 
 def test_a_declaration_is_no_loosening_at_the_verdict(pull_request, capsys):

@@ -1,4 +1,4 @@
-"""#130: the clone pairs in quality/baseline.toml, the write that names a new pair and the verdict that lets the table only fall."""
+"""The clone pairs in quality/baseline.toml: the fix that records or drops a pair and the verdict that lets the table only fall."""
 
 import re
 import shlex
@@ -11,7 +11,6 @@ from quality import __version__, cli
 from quality.check import RuleVerdict
 from quality.ratchet import (
     BASELINE_PATH,
-    WRITE_COMMAND,
     Baseline,
     ClonePair,
     Key,
@@ -39,6 +38,7 @@ from tests.support.check import (
     rule_findings,
 )
 from tests.support.clones import function as clone_function
+from tests.support.door import FIX_WORDS, door_in
 from tests.support.git_repositories import head_commit, put
 from tests.support.merge import ONE_JOB, SONAR_GREEN, declaring, drive
 from tests.support.source_code import long_function
@@ -63,15 +63,6 @@ THREE_PAIRS_WRITTEN = (
     '\n[clones."tests/test_a.py"]\nrun = [["tests/test_b.py", "check"], ["tests/test_c.py", "walk"]]\n'
     '\n[clones."tests/test_b.py"]\ncheck = [["tests/test_c.py", "walk"]]\n'
 )
-THREE_ADDS = [
-    "baseline: adds clone tests/test_a.py run <-> tests/test_b.py check",
-    "baseline: adds clone tests/test_a.py run <-> tests/test_c.py walk",
-    "baseline: adds clone tests/test_b.py check <-> tests/test_c.py walk",
-]
-
-
-def wrote(repo: Path, entries: str, pairs: str) -> str:
-    return f"baseline: wrote {entries} and {pairs} to {repo / BASELINE_PATH}"
 
 
 def judged(pull_request, capsys, base, head, head_config=None):
@@ -86,7 +77,7 @@ def judged(pull_request, capsys, base, head, head_config=None):
 
 
 def written(capsys, repo: Path) -> tuple[int, list[str]]:
-    code = cli.main(["baseline", "write", str(repo)])
+    code = door_in(repo, *FIX_WORDS)
     captured = capsys.readouterr()
     return code, (captured.out + captured.err).splitlines()
 
@@ -268,7 +259,7 @@ def test_a_malformed_clone_table_cannot_be_judged_by_the_verdict(pull_request, c
     code, output = judged(pull_request, capsys, FIRST, text)
     assert code == 2
     assert f"cannot judge - {BASELINE_PATH} at the head: " in output
-    assert "rewrite it with `quality baseline write`" in output
+    assert f"restore {BASELINE_PATH} from git, or repair it by hand" in output
 
 
 def test_a_malformed_clone_table_at_the_base_names_the_base_commit_without_a_rewrite_hint(pull_request, capsys):
@@ -282,56 +273,10 @@ def test_a_malformed_clone_table_at_the_base_names_the_base_commit_without_a_rew
     assert "rewrite it" not in output
 
 
-OVERWRITTEN_PREVIOUS_FILES = [
-    ("clones = 1\n", "needs clones as a table"),
-    ('[clones]\n"tests/test_a.py" = 1\n', "needs clones.tests/test_a.py as a table"),
-    ('[clones."tests/test_a.py"]\nrun = 1\n', "needs clones.tests/test_a.py.run as a list of [path, symbol] pairs"),
-    (
-        '[clones."tests/test_a.py"]\nrun = [["tests/test_b.py"]]\n',
-        "needs clones.tests/test_a.py.run as a list of [path, symbol] pairs of two strings, not ['tests/test_b.py']",
-    ),
-    (
-        '[clones."tests/test_a.py"]\nrun = [["tests/test_b.py", 1]]\n',
-        "needs clones.tests/test_a.py.run as a list of [path, symbol] pairs of two strings, not ['tests/test_b.py', 1]",
-    ),
-    (
-        '[clones."tests/test_a.py"]\nrun = ["tests/test_b.py"]\n',
-        "needs clones.tests/test_a.py.run as a list of [path, symbol] pairs of two strings, not 'tests/test_b.py'",
-    ),
-    (f"[file_lines]\n\"src/a.py\" = {'9' * 5000}\n", "is not valid TOML (Exceeds the limit (4300 digits)"),
-    (f"a = {'[' * 5000}{']' * 5000}\n", "is not valid TOML (maximum recursion depth exceeded)"),
-]
-
-
-@pytest.mark.parametrize(
-    ("text", "reason"),
-    OVERWRITTEN_PREVIOUS_FILES,
-    ids=[*MALFORMED_IDS, "oversized integer", "nested too deep"],
-)
-def test_the_write_overwrites_an_unreadable_previous_baseline_with_the_note_naming_why(build_repo, capsys, text, reason):
-    """#130 cell 16, #218 sentence 1: the write's previous-file note names the reason, whoever refuses the file."""
-    repo = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: text})
-    code, (note, _) = written(capsys, repo)
-    assert code == 0
-    assert note.startswith(f"baseline: the previous {BASELINE_PATH} could not be read ({BASELINE_PATH} {reason}")
-    assert note.endswith("), so raises cannot be named")
-
-
 def test_an_unknown_table_names_the_tool_version_and_every_known_table_with_clones():
     """#130 cell 17, #153 cell 14."""
     with pytest.raises(SizeError, match=rf"unknown table \[future\]; quality {re.escape(__version__)} knows ccn, .*, clones$"):
         load_baseline("[future]\n")
-
-
-def test_the_write_names_the_unknown_table_of_the_previous_baseline_without_advice(build_repo, capsys):
-    """#153 cell 16: the wrapper is unchanged, the embedded diagnostic is the new one, and no advice follows."""
-    repo = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: "[future]\n"})
-    code, (note, _) = written(capsys, repo)
-    assert code == 0
-    assert note == (
-        f"baseline: the previous {BASELINE_PATH} could not be read ({BASELINE_PATH} has an unknown table [future]; "
-        f"quality {__version__} knows ccn, file_lines, function_lines, clones), so raises cannot be named"
-    )
 
 
 def judged_rules(repo: Path) -> dict[Rule, RuleVerdict]:
@@ -368,36 +313,25 @@ def test_check_with_a_clone_table_holds_the_size_and_the_pairs_without_a_report_
     assert_the_debt_block_is_the_findings_in_run_order(repo, output)
 
 
-def test_the_write_with_no_previous_file_writes_both_and_names_no_pair(build_repo, capsys):
-    """#130 E3, E6, cell 11: nothing to compare against, so nothing is named; the count line counts the pairs."""
+def test_a_first_recording_writes_both(build_repo, capsys):
+    """With no ceiling yet, the fix records the size entries and the pairs."""
     repo = build_repo({"src/a.py": long_function(70), **TWO_FILES})
-    assert written(capsys, repo) == (0, [wrote(repo, "1 entry", "1 clone pair")])
+    assert written(capsys, repo)[0] == 0
     assert baseline_text(repo).endswith(LONG_ONE + "\n" + FIRST)
 
 
-def test_the_write_over_a_file_without_a_clone_table_is_an_adoption_and_names_no_pair(build_repo, capsys):
-    """#130 E3, cell 12."""
+def test_a_fix_over_a_file_without_a_clone_table_records_the_pairs_and_keeps_the_entries(build_repo, capsys):
+    """A ceiling git never held a `[clones]` table in takes the pairs and no new entry."""
     repo = build_repo({"src/a.py": "x = 1\n", **TWO_FILES, BASELINE_PATH: SIZE})
-    assert written(capsys, repo) == (0, [wrote(repo, "0 entries", "1 clone pair")])
+    assert written(capsys, repo)[0] == 0
+    assert load_baseline(baseline_text(repo)) == Baseline({Key(Metric.FUNCTION_LINES, "src/quality/cli.py", "main"): 82}, frozenset({FIRST_PAIR}))
 
 
-def test_the_write_names_each_new_pair_before_the_count_line(build_repo, capsys):
-    """#130 E6, cell 13."""
-    repo = build_repo({**THREE_FILES, BASELINE_PATH: FIRST})
-    code, lines = written(capsys, repo)
-    assert (code, lines) == (0, [*THREE_ADDS[1:], wrote(repo, "0 entries", "3 clone pairs")])
-
-
-def test_two_new_pairs_are_named_in_sorted_order_in_the_write(build_repo, capsys):
-    """#130 E6, cell 22: the write."""
-    repo = build_repo({**THREE_FILES, BASELINE_PATH: EMPTY_CLONES})
-    assert written(capsys, repo) == (0, [*THREE_ADDS, wrote(repo, "0 entries", "3 clone pairs")])
-
-
-def test_a_pair_falling_out_of_the_tree_is_named_by_nothing(build_repo, capsys):
-    """#130 E6, cell 21."""
-    repo = build_repo({**TWO_FILES, BASELINE_PATH: FIRST + SECOND})
-    assert written(capsys, repo) == (0, [wrote(repo, "0 entries", "1 clone pair")])
+def test_a_pair_the_tree_lost_leaves_the_ceiling_and_no_new_pair_enters(build_repo, capsys):
+    """A held pair the tree lost goes, and a pair the tree gained stays a finding instead of coming in."""
+    repo = build_repo({**THREE_FILES, BASELINE_PATH: FIRST + SECOND})
+    assert written(capsys, repo)[0] == 1
+    assert load_baseline(baseline_text(repo)) == Baseline({}, frozenset({FIRST_PAIR}))
 
 
 def test_the_written_file_loads_back_with_each_pair_once_under_its_first_side_sorted(build_repo, capsys):
@@ -430,7 +364,7 @@ def test_an_empty_clone_table_is_the_empty_set_and_renders_back_as_the_table(bui
     assert load_baseline("") == Baseline({}, None)
     assert render_baseline(Baseline({}, frozenset())).endswith("\n" + EMPTY_CLONES)
     repo = build_repo({"src/a.py": "x = 1\n"})
-    assert written(capsys, repo) == (0, [wrote(repo, "0 entries", "0 clone pairs")])
+    assert written(capsys, repo)[0] == 0
     assert baseline_text(repo).endswith("\n" + EMPTY_CLONES)
 
 
@@ -621,8 +555,8 @@ def test_a_malformed_baseline_leaves_both_rules_unable_to_judge_naming_the_rewri
     code, output = check_output(capsys, repo)
     assert code == 2, output
     assert set(refusals(repo)) == {Rule.SIZE, Rule.CLONE}
-    assert (output.count(WRITE_COMMAND), "rewrite it with" in output) == (1, False), output
-    assert f"next: {WRITE_COMMAND}" in output.splitlines()
+    assert (output.count(f"restore {BASELINE_PATH} from git, or repair it by hand"), "rewrite it with" in output) == (1, False), output
+    assert f"next: restore {BASELINE_PATH} from git, or repair it by hand" in output.splitlines()
 
 
 def test_the_write_and_the_rule_agree(build_repo, capsys):

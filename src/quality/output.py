@@ -113,6 +113,7 @@ class Row:
     count: int | None = None
     sub_lines: tuple[SubLine, ...] = ()
     descriptive: bool = False
+    fix: str = ""
 
 
 @dataclass(frozen=True)
@@ -125,6 +126,7 @@ class Verdict:
     areas: int
     notes: tuple[str, ...]
     seconds: float
+    ceiling: str = ""
 
 
 SUBJECT_WIDTH = 12
@@ -161,6 +163,7 @@ DESCRIPTIVE_FINDINGS = frozenset(
     }
 )
 DESCRIPTIVE_NOTES = frozenset({NoteEvent.WARNING})
+NOTE_GLYPHS = dict.fromkeys((NoteEvent.LOWERED, NoteEvent.DROPPED, NoteEvent.RECORDED), Glyph.CLEAN)
 
 
 def counted(count: int, noun: str, plural: str | None = None) -> str:
@@ -280,17 +283,20 @@ def _row_lines(row: Row, channel: Channel) -> list[str]:
     for sub in row.sub_lines:
         text = _fitted(sub.text, f"    {sub.glyph} ", channel.width)
         lines.append(f"    {_paint(sub.glyph, GLYPH_STYLE[sub.glyph], styled)} {text}")
+    if row.fix:
+        lines += _fix_lines(row.fix)
     return lines
 
 
 def _verdict_parts(verdict: Verdict) -> tuple[Glyph, list[str]]:
     if verdict.findings == 0:
-        glyph, parts = Glyph.CLEAN, ["clean", counted(verdict.areas, "area")]
+        glyph, parts = Glyph.CLEAN, ["clean", *filter(None, [verdict.ceiling]), counted(verdict.areas, "area")]
     else:
         glyph = Glyph.NEEDS_YOU
         parts = [f"{counted(verdict.findings, 'finding')} in {counted(verdict.areas_with_findings, 'area')}"]
         if verdict.clean_areas:
             parts.append(f"{counted(verdict.clean_areas, 'area')} clean")
+        parts += filter(None, [verdict.ceiling])
     return glyph, [*parts, *verdict.notes, format_duration(verdict.seconds)]
 
 
@@ -390,6 +396,11 @@ def _finding_lines(findings: Sequence[Finding], notes: Sequence[Note], channel: 
     for note in notes:
         columns = _row_columns(note.location, _event_word(note), widths)
         width = channel.width if note.event in DESCRIPTIVE_NOTES else None
+        glyph = NOTE_GLYPHS.get(note.event)
+        if glyph:
+            fact = _fitted(note.fact, f"{FINDING_INDENT}{glyph} {columns}", width)
+            lines.append(f"{FINDING_INDENT}{_paint(glyph, GLYPH_STYLE[glyph], styled)} {columns}{_paint(fact, DIM, styled)}")
+            continue
         prefix = f"{FINDING_INDENT}{Glyph.NOTE} {columns}"
         lines.append(_paint(f"{prefix}{_fitted(note.fact, prefix, width)}", DIM, styled))
     return lines

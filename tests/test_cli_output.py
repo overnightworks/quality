@@ -37,7 +37,7 @@ from tests.support.check import (
     rule_findings,
 )
 from tests.support.clones import function
-from tests.support.door import CHECK_WORD, MODULE_DOOR, check_door, door_environment, door_in
+from tests.support.door import CHECK_WORD, FIX_WORDS, MODULE_DOOR, check_door, door_environment, door_in
 from tests.support.merge import ONE_JOB
 from tests.support.processes import process_is_gone
 from tests.support.scanners import fake_scanner, lacking
@@ -129,8 +129,8 @@ def test_a_closed_stderr_keeps_the_stop_on_stdout_and_the_exit(broken_compose_re
 
 @pytest.mark.parametrize(
     "arguments",
-    [("baseline", "write", "."), ("sonar", "properties")],
-    ids=["baseline write", "sonar properties"],
+    [("sonar", "properties")],
+    ids=["sonar properties"],
 )
 def test_other_doors_start_with_the_stop_too(clean_repo, arguments):
     """#89 rule 1, cell 6."""
@@ -343,23 +343,23 @@ def test_a_door_outside_the_picture_prints_a_config_refusal_as_its_fact_then_the
     assert_every_line_starts_with_the_door(lines)
 
 
-def test_a_raised_baseline_entry_for_a_file_with_a_control_character_prints_escaped(build_repo, capsys):
-    """#97 rule 2, cell 16 (E4): the raise line names the file escaped."""
-    long_file = "x = 1\n" * 810
-    repo = build_repo({"src/esc\x1bape.py": long_file, BASELINE_PATH: "[file_lines]\n\"src/gone.py\" = 900\n"})
-    code, lines = door_lines(capsys, "baseline", "write", str(repo))
+def test_a_lowered_entry_for_a_file_with_a_control_character_prints_escaped(build_repo, capsys):
+    """The lowered row names the file escaped."""
+    held = '[file_lines]\n"src/esc\\u001bape.py" = 900\n\n[clones]\n'
+    repo = build_repo({"src/esc\x1bape.py": "x = 1\n" * 810, BASELINE_PATH: held})
+    code, lines = door_lines(capsys, *FIX_WORDS, cwd=repo)
     assert code == 0
-    assert "baseline: adds file_lines src/esc\\x1bape.py 810" in lines
+    assert "    ✓ src/esc\\x1bape.py  lowered  file 900 → 810 lines" in lines
     assert_every_line_starts_with_the_door(lines)
 
 
-def test_a_baseline_refusal_for_a_file_that_is_not_utf8_prints_its_surrogate_escaped(build_repo, capsys):
-    """#97 rule 2, cell 16: the invalid-UTF-8 branch is one escaped refusal line, exit 2."""
-    repo = build_repo({"src/lat\udce9.py": "x = 1\n" * 810, BASELINE_PATH: "[file_lines]\n\"src/gone.py\" = 900\n"})
-    code, lines = door_lines(capsys, "baseline", "write", str(repo))
+def test_a_fix_refusal_for_a_file_that_is_not_utf8_prints_its_surrogate_escaped(build_repo, capsys):
+    """The invalid-UTF-8 branch is one escaped refusal row, exit 2."""
+    repo = build_repo({"src/lat\udce9.py": "x = 1\n" * 810})
+    code, lines = door_lines(capsys, *FIX_WORDS, cwd=repo)
     assert code == 2
-    assert lines[0] == "baseline: not written - src/lat\\udce9.py is not valid UTF-8, so quality/baseline.toml cannot hold it"
-    assert_every_line_starts_with_the_door(lines)
+    assert "  ✗ debt          not fixed      src/lat\\udce9.py is not valid UTF-8, so quality/baseline.toml cannot hold it" in lines
+    assert not (repo / BASELINE_PATH).exists()
 
 
 def test_ctrl_c_in_the_door_ends_the_run_as_interrupted_through_the_injected_sender(capsys):
@@ -467,7 +467,7 @@ def test_a_baseline_without_clones_is_partly_measured_only(build_repo, capsys):
     mode = fact.split(SEPARATOR)[-1]
     assert mode.endswith(check.Outcome.MEASURED_ONLY.value)
     assert mode != check.Outcome.MEASURED_ONLY.value
-    assert cli.main(["baseline", "write", str(repo)]) == 0
+    assert door_in(repo, *FIX_WORDS) == 0
     assert leading_count(fact) == len(ratchet.read_baseline(repo).clones) == 1
     assert out[-1] == f"✓ clean · 7 areas · debt partly measured, not enforced · {ZERO_SECONDS}"
 
@@ -715,8 +715,8 @@ def test_a_malformed_baseline_beside_a_missing_scanner_names_the_baseline_step_t
     use_mise(lacking(served_scanners, scanners.GITLEAKS))
     code, out, err = frame_run(capsys, build_repo({BASELINE_PATH: "x = [\n"}))
     assert code == 2
-    assert err[1:] == ["next:", f"    {ratchet.WRITE_COMMAND}", f"    {scanners.install_command()}"]
-    assert ratchet.WRITE_COMMAND not in "\n".join(out)
+    assert err[1:] == ["next:", "    restore quality/baseline.toml from git, or repair it by hand", f"    {scanners.install_command()}"]
+    assert "restore quality/baseline.toml" not in "\n".join(out)
 
 
 REFUSED_CONFIG = {"quality/config.toml": '[gate]\nmandatory_jobs = ["checks"]\n[[size.generated]]\npath = "x.ts"\njob = "other"\n'

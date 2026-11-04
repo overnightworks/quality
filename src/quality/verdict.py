@@ -23,7 +23,7 @@ from quality.ratchet import (
     SizeError,
     added_pairs,
     carried_base,
-    head_advice,
+    head_step,
     load_baseline,
     raised_entries,
     read_baseline,
@@ -440,7 +440,7 @@ def _require_safe_ref(ref: str, role: str) -> None:
 def read_head(repo: Path) -> Side:
     """The gate's settings and baseline in the checked-out tree; an unusable file names the head.
 
-    Only the head's malformed baseline says how to rewrite it: the pull request cannot rewrite its base.
+    Only the head's malformed baseline says how to restore it: the pull request cannot rewrite its base.
     """
     try:
         settings = read_gate_settings(repo)
@@ -449,7 +449,7 @@ def read_head(repo: Path) -> Side:
     try:
         baseline = read_baseline(repo)
     except SizeError as error:
-        raise _unusable(BASELINE_PATH, HEAD, f"{error}; {head_advice(error)}") from error
+        raise _unusable(BASELINE_PATH, HEAD, f"{error}; {head_step(error).text}") from error
     except CannotJudge as error:
         raise _unusable(BASELINE_PATH, HEAD, error) from error
     try:
