@@ -320,6 +320,21 @@ def test_an_entry_git_cannot_place_refuses_and_a_restored_ceiling_is_followed(pu
     assert (code, "src/c.py  moved  function long_one 70 lines from src/a.py" in out) == (0, True)
 
 
+def test_a_stale_committed_entry_for_a_deleted_file_does_not_stop_a_move_from_being_followed(pull_request, capsys):
+    repo = based(pull_request, {"src/old.py": long_function(70)}, ceiling(("src/gone.py", 90), ("src/old.py", 70)))
+    git(repo, "mv", "src/old.py", "src/new.py")
+    code, out, _ = fixed(capsys, repo, *FIX_WORDS)
+    held = (repo / BASELINE_PATH).read_text()
+    assert (code, moved_note("src/new.py", "src/old.py") in out, "src/gone.py" in held) == (0, True, True)
+
+
+def test_a_ceiling_committed_in_the_root_commit_of_a_whole_repository_is_followed(build_repo, capsys):
+    repo = build_repo({"src/old.py": long_function(70), BASELINE_PATH: ceiling(("src/old.py", 70))})
+    git(repo, "mv", "src/old.py", "src/new.py")
+    code, out, _ = fixed(capsys, repo, *FIX_WORDS)
+    assert (code, moved_note("src/new.py", "src/old.py") in out) == (0, True)
+
+
 @pytest.mark.parametrize(
     ("depth", "fillers", "refused"),
     [pytest.param(1, 0, True, id="depth 1"), pytest.param(3, 1, False, id="deep enough")],
