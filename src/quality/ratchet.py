@@ -527,6 +527,10 @@ def _unexplained(path: str) -> CannotJudge:
     return CannotJudge(f"{BASELINE_PATH} holds entries under {path} its last commit does not explain", (RESTORE_STEP,))
 
 
+def _source_first(entries: SizeEntries, source: str | None) -> list[Key]:
+    return sorted(entries, key=lambda key: (key.path != source, _order(key)))
+
+
 def _require_placed(size: SizeEntries, committed: SizeEntries, tracked: frozenset[str]) -> None:
     """An entry the committed ceiling lacks under a path git no longer tracks has no lineage."""
     unplaced = sorted({key.path for key in size if key.path not in tracked and key not in committed})
@@ -554,7 +558,7 @@ def follow_renames(held: Baseline, committed: Baseline, renames: Renames, tracke
         for key in mine:
             del size[key]
         size.update({key._replace(path=target): value for key, value in mine.items() if key.path == source})
-        moved_first = sorted(mine, key=lambda key: (key.path != source, _order(key)))
+        moved_first = _source_first(mine, source)
         changes += [_followed_note(key, mine[key], source, target) for key in moved_first]
     _require_placed(size, committed.size, tracked)
     if held.clones is None:

@@ -201,8 +201,9 @@ def test_the_verdict_names_nothing_the_fix_carried(held, committed, renames, exp
     ],
 )
 def test_an_entry_without_lineage_refuses(held, committed, tracked, path):
+    renames, still_tracked = renamed({"a.py": "b.py"}), frozenset(tracked)
     with pytest.raises(CannotJudge) as refusal:
-        follow_renames(held, committed, renamed({"a.py": "b.py"}), frozenset(tracked))
+        follow_renames(held, committed, renames, still_tracked)
     fact = refusal.value.reason.fact
     assert ({name for name in ("a.py", "b.py", "z.py") if name in fact}, refusal.value.reason.next_steps) == (
         {path},
