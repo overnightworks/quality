@@ -7,7 +7,7 @@ import pytest
 
 from quality.config import CONFIG_PATH, GeneratedFile
 from quality.ratchet import BASELINE_PATH, Key, Measured, Metric, gone_entries, load_baseline
-from tests.support.door import CHECK_WORD, FIX_WORDS, digest, door_in, fixed
+from tests.support.door import CHECK_WORD, FIX_WORDS, digest, fixed
 from tests.support.generated_files import MANDATORY_JOB, generated_config
 from tests.support.git_repositories import git, put
 from tests.support.source_code import branchy_function, long_file, long_function
@@ -92,61 +92,83 @@ def checked(capsys, repo: Path) -> tuple[int, str, str]:
         pytest.param(entry(Metric.FILE_LINES, "src/a.py"), [entry(Metric.FILE_LINES, "src/a.py")], {"src/a.py"}, [], None, id="a measured entry is not gone"),
     ],
 )
-def test_gone_entries(held, measured, tracked, generated, expected):
+def test_a_held_entry_without_a_measurement_is_gone_left_out_or_stands_by_the_index_and_the_declarations(held, measured, tracked, generated, expected):
     measurements = {key: Measured(90, 1) for key in measured}
     gone = gone_entries({held: 900}, measurements, frozenset(tracked), generated)
     assert gone == ({} if expected is None else {held: expected})
 
 
 @pytest.mark.parametrize(
-    ("files", "held", "check_rows", "fix_rows"),
+    ("files", "held", "checking", "fixing"),
     [
         pytest.param(
             {"src/a.py": "x = 1\n"},
             '[file_lines]\n"src/legacy.py" = 802\n',
-            "    ! src/legacy.py  can fall  file is gone · ceiling 802 lines\n",
-            "    ✓ src/legacy.py  dropped  file is gone\n",
+            "  ! debt          1 finding\n"
+            "    ! src/legacy.py  can fall  file is gone · ceiling 802 lines\n"
+            "      fix: quality check --fix\n"
+            "! 1 finding in 1 area · <1s\n",
+            "  ✓ debt          lowered        1 entry · quality/baseline.toml\n"
+            "    ✓ src/legacy.py  dropped  file is gone\n"
+            "✓ clean · ceiling lowered by 1 entry · 1 area · <1s\n",
             id="file",
         ),
         pytest.param(
             {"src/a.py": "x = 1\n"},
             '[function_lines."src/a.py"]\nlong_one = 70\n',
-            "    ! src/a.py  can fall  function long_one is gone · ceiling 70 lines\n",
-            "    ✓ src/a.py  dropped  function long_one is gone\n",
+            "  ! debt          1 finding\n"
+            "    ! src/a.py  can fall  function long_one is gone · ceiling 70 lines\n"
+            "      fix: quality check --fix\n"
+            "! 1 finding in 1 area · <1s\n",
+            "  ✓ debt          lowered        1 entry · quality/baseline.toml\n"
+            "    ✓ src/a.py  dropped  function long_one is gone\n"
+            "✓ clean · ceiling lowered by 1 entry · 1 area · <1s\n",
             id="function",
         ),
         pytest.param(
             {"src/a.py": "x = 1\n"},
             '[ccn."src/a.py"]\nbranchy = 19\n',
-            "    ! src/a.py  can fall  function branchy is gone · ceiling CCN 19\n",
-            "    ✓ src/a.py  dropped  function branchy is gone\n",
+            "  ! debt          1 finding\n"
+            "    ! src/a.py  can fall  function branchy is gone · ceiling CCN 19\n"
+            "      fix: quality check --fix\n"
+            "! 1 finding in 1 area · <1s\n",
+            "  ✓ debt          lowered        1 entry · quality/baseline.toml\n"
+            "    ✓ src/a.py  dropped  function branchy is gone\n"
+            "✓ clean · ceiling lowered by 1 entry · 1 area · <1s\n",
             id="ccn",
         ),
         pytest.param(
             {"gen/types.ts": "export {};\n" * 900, CONFIG_PATH: gate_declaring("gen/types.ts")},
             '[file_lines]\n"gen/types.ts" = 850\n',
-            "    ! gen/types.ts  can fall  file is left out as generated · ceiling 850 lines\n",
-            "    ✓ gen/types.ts  dropped  file is left out as generated\n",
+            "  ! debt          1 finding\n"
+            "    ! gen/types.ts  can fall  file is left out as generated · ceiling 850 lines\n"
+            "      fix: quality check --fix\n"
+            "! 1 finding in 1 area · <1s\n",
+            "  ✓ debt          lowered        1 entry · quality/baseline.toml\n"
+            "    ✓ gen/types.ts  dropped  file is left out as generated\n"
+            "✓ clean · ceiling lowered by 1 entry · 1 area · <1s\n",
             id="generated file",
         ),
         pytest.param(
             {"gen/api.py": long_function(70), CONFIG_PATH: gate_declaring("gen/api.py")},
             '[function_lines."gen/api.py"]\nlong_one = 70\n',
-            "    ! gen/api.py  can fall  function long_one is left out as generated · ceiling 70 lines\n",
-            "    ✓ gen/api.py  dropped  function long_one is left out as generated\n",
+            "  ! debt          1 finding\n"
+            "    ! gen/api.py  can fall  function long_one is left out as generated · ceiling 70 lines\n"
+            "      fix: quality check --fix\n"
+            "! 1 finding in 1 area · <1s\n",
+            "  ✓ debt          lowered        1 entry · quality/baseline.toml\n"
+            "    ✓ gen/api.py  dropped  function long_one is left out as generated\n"
+            "✓ clean · ceiling lowered by 1 entry · 1 area · <1s\n",
             id="generated function",
         ),
     ],
 )
-def test_a_gone_entry_can_fall_and_the_fix_drops_it(build_repo, capsys, files, held, check_rows, fix_rows):
+def test_a_gone_entry_can_fall_and_the_fix_drops_it(build_repo, capsys, files, held, checking, fixing):
     repo = build_repo({**files, BASELINE_PATH: ceiling(held)})
-    checking = checked(capsys, repo)
-    assert (checking[0], checking[2], check_rows in checking[1], "      fix: quality check --fix\n" in checking[1]) == (1, "", True, True)
-    fixing = fixed(capsys, repo, *FIX_WORDS)
-    assert (fixing[0], fixing[2], fix_rows in fixing[1]) == (0, "", True)
-    assert load_baseline((repo / BASELINE_PATH).read_text()).size == {}
-    code, out, _ = checked(capsys, repo)
-    assert (code, "can fall" in out) == (0, False)
+    assert checked(capsys, repo) == (1, checking, "")
+    assert fixed(capsys, repo, *FIX_WORDS) == (0, fixing, "")
+    assert (repo / BASELINE_PATH).read_text() == "# Measured by `quality check --fix`. Entries only ever go down.\n\n[clones]\n"
+    assert checked(capsys, repo) == (0, "  ✓ debt          clean          ceiling held · 0 entries, 0 clone pairs\n✓ clean · 1 area · <1s\n", "")
 
 
 def test_the_pictures_gone_rows(build_repo, capsys):
@@ -263,8 +285,8 @@ def test_a_dropped_generated_entry_beside_its_new_declaration_prints_only_the_de
     put(repo / "gen/api.py", long_function(70))
     commit_base(ceiling('[function_lines."gen/api.py"]\nlong_one = 70\n'))
     put(repo / CONFIG_PATH, gate_config(MANDATORY_JOB) + generated_config(path="gen/api.py"))
-    assert door_in(repo, *FIX_WORDS, clock=lambda: 0.0) == 0
-    capsys.readouterr()
+    assert fixed(capsys, repo, *FIX_WORDS)[0] == 0
+    assert "gen/api.py" not in (repo / BASELINE_PATH).read_text()
     commit_all(repo, "declare and drop")
     code, out, err = verdict_streams(repo, capsys)
     lines = out.splitlines()
