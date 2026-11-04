@@ -1,8 +1,0 @@
-claim_id = "d7094b11ffef4f33a1ee9ef086daef9d"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "e817d1370ff8da74ee862c4f3ddf2605ea55b2eb"
-branch = "claude/issue-356-c7c2-a-gone-ceiling-entry-can-fall"
-scope = ["docs/commands.md", "docs/output.md", "docs/rules.md", "src/quality/check.py", "src/quality/ratchet.py", "tests/test_cli_fix.py", "tests/test_cli_fix_renames.py", "tests/test_cli_output.py", "tests/test_clones_baseline.py", "tests/test_ratchet.py", "tests/test_ratchet_fix.py", "tests/test_ratchet_generated.py", "tests/test_ratchet_gone.py"]
-opened_commit = "21c9563f0783097ce5eb6c6dc597bf82347b546e"
-whole_reason = "One rule's change in two production files, its docs and the tests that pin C7b's predecessor sentence that a gone entry stands; a split would leave the docs or those pins contradicting the code."
