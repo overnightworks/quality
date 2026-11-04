@@ -16,7 +16,7 @@ from tests.support.door import FIX_WORDS, digest, door_in, fixed, restore_step
 from tests.support.generated_files import MANDATORY_JOB, generated_config
 from tests.support.git_repositories import git, put, shallow_clone
 from tests.support.source_code import branchy_function, long_file, long_function
-from tests.support.verdict import verdict_of
+from tests.support.verdict import verdict_streams
 
 
 def held_ceiling(value: int = 62, clones: bool = True) -> str:
@@ -624,42 +624,47 @@ def test_under_v_a_fix_keeps_its_write_and_exit(build_repo, capsys, verbosity):
 
 
 @pytest.mark.parametrize(
-    ("sources", "base", "head"),
+    ("sources", "base", "head", "exit_code"),
     [
-        pytest.param({"src/a.py": long_function(62)}, held_ceiling(value=80), '"long_one" = 62\n\n[clones]\n', id="lowered"),
+        pytest.param({"src/a.py": long_function(62)}, held_ceiling(value=80), '"long_one" = 62\n\n[clones]\n', 0, id="lowered"),
         pytest.param(
             {"src/a.py": long_function(62), "src/orders.py": long_file(850)},
             held_ceiling(value=80) + '\n[file_lines]\n"src/orders.py" = 840\n',
             '[file_lines]\n"src/orders.py" = 840\n\n[function_lines."src/a.py"]\n"long_one" = 62\n\n[clones]\n',
+            1,
             id="grew beside a fall",
         ),
-        pytest.param({"src/a.py": long_function(62)}, None, '[function_lines."src/a.py"]\n"long_one" = 62\n\n[clones]\n', id="first recording"),
+        pytest.param({"src/a.py": long_function(62)}, None, '[function_lines."src/a.py"]\n"long_one" = 62\n\n[clones]\n', 0, id="first recording"),
         pytest.param(
             {"src/a.py": "x = 1\n", "tests/test_a.py": clone_function("run", "a", "b"), "tests/test_b.py": clone_function("check", "c", "d")},
             "[file_lines]\n",
             '[clones."tests/test_a.py"]\nrun = [["tests/test_b.py", "check"]]\n',
+            0,
             id="clones recorded",
         ),
         pytest.param(
             {"src/a.py": "x = 1\n"},
             '[clones."tests/test_a.py"]\nrun = [["tests/test_b.py", "check"]]\n',
             "[clones]\n",
+            0,
             id="a pair dropped",
         ),
         pytest.param(
             {"src/a.py": long_function(62)},
             held_ceiling(62, clones=False) + '\n[file_lines]\n"src/gone.py" = 900\n\n[clones]\n',
             '[function_lines."src/a.py"]\n"long_one" = 62\n\n[clones]\n',
+            0,
             id="a gone entry dropped",
         ),
     ],
 )
-def test_a_fix_passes_the_verdict(pull_request, capsys, sources, base, head):
+def test_a_fix_passes_the_verdict(pull_request, capsys, sources, base, head, exit_code):
     repo, commit_base = pull_request
     for name, text in sources.items():
         put(repo / name, text)
     commit_base(base)
-    fixed(capsys, repo, *FIX_WORDS)
-    assert (repo / BASELINE_PATH).read_text().endswith(head)
-    code, output = verdict_of(repo, capsys)
-    assert (code, "verdict: green" in output) == (0, True), output
+    assert fixed(capsys, repo, *FIX_WORDS)[0] == exit_code
+    written = (repo / BASELINE_PATH).read_text()
+    assert (written.endswith(head), "src/gone.py" in written) == (True, False)
+    code, out, err = verdict_streams(repo, capsys)
+    assert (code, "verdict: green" in out, err) == (0, True, ""), out
