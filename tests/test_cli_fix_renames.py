@@ -9,7 +9,7 @@ from tests.support.clones import function as clone_function
 from tests.support.door import CHECK_WORD, FIX_WORDS, digest, door_in, fixed, restore_step
 from tests.support.git_repositories import git, head_commit, put, shallow_clone
 from tests.support.source_code import long_function
-from tests.support.verdict import verdict_of
+from tests.support.verdict import verdict_streams
 from tests.support.verdict_renames import commit_all
 
 
@@ -189,8 +189,8 @@ def test_a_fixed_move_passes_check_and_the_verdict(pull_request, capsys, arrange
     assert (code, (repo / BASELINE_PATH).read_text().endswith(written), note in fix_out) == (0, True, True), fix_out
     assert checked(capsys, repo)[0] == 0
     commit_all(repo, "fixed")
-    verdict_code, output = verdict_of(repo, capsys)
-    assert (verdict_code, "verdict: green" in output) == (0, True), output
+    verdict_code, verdict_out, verdict_err = verdict_streams(repo, capsys)
+    assert (verdict_code, "verdict: green" in verdict_out, verdict_err) == (0, True, ""), verdict_out
 
 
 def test_a_moved_entry_stands_in_the_pictures_frame(pull_request, capsys):
@@ -267,8 +267,8 @@ def test_the_stale_target_case(pull_request, capsys, lines, fix_out, check_out, 
     assert ((code, out), err, (repo / BASELINE_PATH).read_text().endswith(written)) == (fix_out, "", True)
     assert checked(capsys, repo) == check_out
     commit_all(repo, "fixed")
-    verdict_code, output = verdict_of(repo, capsys)
-    assert (verdict_code, "verdict: green" in output) == (0, True), output
+    verdict_code, verdict_out, verdict_err = verdict_streams(repo, capsys)
+    assert (verdict_code, "verdict: green" in verdict_out, verdict_err) == (0, True, ""), verdict_out
 
 
 @pytest.mark.parametrize(
