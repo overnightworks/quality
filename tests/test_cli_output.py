@@ -430,7 +430,7 @@ def headers(lines: list[str]) -> list[str]:
 
 def test_a_clean_run_has_seven_clean_rows_in_area_order_and_the_verdict(build_repo, capsys):
     """O16, O21, O30, O38: the dependencies row the lock files and packages of a tree with none, the workflows row the workflow files the tree holds and the offline audits, the code row the area's rules and the Python files ruff judged; the files row holds the rules and the tracked paths, the debt row the entries and pairs of the ceiling file, the imports row the contracts of the config."""
-    tracked = {**CLEAN_FILES, **KEPT_CONTRACT, BASELINE_PATH: '[file_lines]\n"src/gone.py" = 900\n\n[clones]\n'}
+    tracked = {**CLEAN_FILES, **KEPT_CONTRACT, "src/big.py": "x = 1\n" * 800, BASELINE_PATH: '[file_lines]\n"src/big.py" = 800\n\n[clones]\n'}
     repo = build_repo(tracked)
     code, out, err = frame_run(capsys, repo)
     files_row = headers(out)[0]

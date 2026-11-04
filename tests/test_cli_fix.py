@@ -92,25 +92,6 @@ def test_nothing_to_lower_leaves_the_files_bytes(build_repo, capsys):
     assert (code, out.splitlines()[-1], (repo / BASELINE_PATH).read_bytes()) == (0, "✓ clean · nothing to lower · 1 area · <1s", before)
 
 
-@pytest.mark.parametrize(
-    ("files", "held"),
-    [
-        pytest.param({"src/a.py": "x = 1\n"}, '[file_lines]\n"src/gone.py" = 900\n', id="file"),
-        pytest.param({"src/a.py": "x = 1\n"}, '[function_lines."src/gone.py"]\nlong_one = 90\n', id="function"),
-        pytest.param(
-            {"gen/api.py": long_function(70), CONFIG_PATH: declared_generated("gen/api.py")},
-            '[function_lines."gen/api.py"]\nlong_one = 90\n',
-            id="generated",
-        ),
-    ],
-)
-def test_a_gone_entry_stands_as_it_stands(build_repo, capsys, files, held):
-    repo = build_repo({**files, BASELINE_PATH: held + "\n[clones]\n"})
-    before = (repo / BASELINE_PATH).read_bytes()
-    assert fixed(capsys, repo, *FIX_WORDS)[0] == 0
-    assert (repo / BASELINE_PATH).read_bytes() == before
-
-
 def test_a_new_entry_is_never_added_to_a_held_ceiling(build_repo, capsys):
     repo = build_repo({"src/a.py": long_function(62), "src/b.py": long_file(850), BASELINE_PATH: held_ceiling()})
     code, out, _ = fixed(capsys, repo, *FIX_WORDS)
@@ -664,6 +645,12 @@ def test_under_v_a_fix_keeps_its_write_and_exit(build_repo, capsys, verbosity):
             '[clones."tests/test_a.py"]\nrun = [["tests/test_b.py", "check"]]\n',
             "[clones]\n",
             id="a pair dropped",
+        ),
+        pytest.param(
+            {"src/a.py": long_function(62)},
+            held_ceiling(62, clones=False) + '\n[file_lines]\n"src/gone.py" = 900\n\n[clones]\n',
+            held_ceiling(62),
+            id="a gone entry dropped",
         ),
     ],
 )

@@ -325,7 +325,7 @@ def test_a_stale_committed_entry_for_a_deleted_file_does_not_stop_a_move_from_be
     git(repo, "mv", "src/old.py", "src/new.py")
     code, out, _ = fixed(capsys, repo, *FIX_WORDS)
     held = (repo / BASELINE_PATH).read_text()
-    assert (code, moved_note("src/new.py", "src/old.py") in out, "src/gone.py" in held) == (0, True, True)
+    assert (code, moved_note("src/new.py", "src/old.py") in out, "dropped  function long_one is gone" in out, "src/gone.py" in held) == (0, True, True, False)
 
 
 def test_a_ceiling_committed_in_the_root_commit_of_a_whole_repository_is_followed(build_repo, capsys):
@@ -387,7 +387,7 @@ def test_no_committed_ceiling_follows_nothing(pull_request, capsys):
     git(repo, "mv", "src/old.py", "src/new.py")
     before = digest(repo)
     code, out, _ = fixed(capsys, repo, *FIX_WORDS)
-    assert (code, digest(repo), "moved" in out, "new debt" in out) == (1, before, False, True)
+    assert (code, digest(repo) == before, "moved" in out, "dropped  function long_one is gone" in out, "new debt" in out) == (1, False, False, True, True)
 
 
 def test_a_ceiling_whose_last_commit_does_not_parse_refuses(pull_request, capsys):

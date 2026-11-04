@@ -26,9 +26,9 @@ def pair(first: str, second: str) -> ClonePair:
     return ClonePair.of(Place("src/a.py", first), Place(f"src/{second}.py", first))
 
 
-def fixed(held: dict[Key, int], measured: dict[Key, int | None], pairs=frozenset(), held_pairs=frozenset()):
+def fixed(held: dict[Key, int], measured: dict[Key, int | None], pairs=frozenset(), held_pairs=frozenset(), gone=None):
     measurements = {key: Measured(value, 3) for key, value in measured.items() if value is not None}
-    return lower_ceiling(Baseline(held, held_pairs), measurements, pairs)
+    return lower_ceiling(Baseline(held, held_pairs), measurements, pairs, gone or {})
 
 
 @pytest.mark.parametrize(
@@ -37,7 +37,7 @@ def fixed(held: dict[Key, int], measured: dict[Key, int | None], pairs=frozenset
         pytest.param(size_key(Metric.FILE_LINES), 826, 812, 812, id="fell"),
         pytest.param(size_key(Metric.FILE_LINES), 826, 826, 826, id="equal"),
         pytest.param(size_key(Metric.FILE_LINES), 826, 900, 826, id="grew"),
-        pytest.param(size_key(Metric.FILE_LINES), 826, None, 826, id="gone"),
+        pytest.param(size_key(Metric.FILE_LINES), 826, None, 826, id="no measurement, not gone, stands"),
         pytest.param(size_key(Metric.FILE_LINES), 826, 790, None, id="below the threshold"),
         pytest.param(size_key(Metric.FILE_LINES), 826, 0, None, id="zero"),
         pytest.param(size_key(Metric.CCN, "work"), 19, 17, 17, id="ccn"),
@@ -63,6 +63,22 @@ def test_no_entry_ever_rises(key, held, offset, written_offset):
     fix = fixed({key: held}, {key: held + offset})
     expected = {key: held + written_offset}
     assert (fix.ceiling.size, load_baseline(render_baseline(fix.ceiling)).size) == (expected, expected)
+
+
+def test_a_gone_entry_is_dropped_and_noted_with_its_reason():
+    file = size_key(Metric.FILE_LINES)
+    fix = fixed({file: 826}, {}, gone={file: "file is gone"})
+    assert (fix.ceiling.size, fix.changes) == ({}, (Note("src/a.py", NoteEvent.DROPPED, "file is gone"),))
+
+
+def test_a_dropped_note_follows_the_lowered_ones_and_precedes_the_pairs():
+    file, function = size_key(Metric.FILE_LINES), size_key(Metric.FUNCTION_LINES, "work")
+    fix = fixed({file: 826, function: 90}, {function: 62}, held_pairs=frozenset({pair("work", "b")}), gone={file: "file is gone"})
+    assert [(note.event, note.fact) for note in fix.changes] == [
+        (NoteEvent.LOWERED, "function work 90 → 62 lines"),
+        (NoteEvent.DROPPED, "file is gone"),
+        (NoteEvent.DROPPED, "pair src/a.py work <-> src/b.py work is gone"),
+    ]
 
 
 def test_a_new_key_never_enters():

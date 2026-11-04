@@ -322,9 +322,9 @@ def test_a_first_recording_writes_both(build_repo, capsys):
 
 def test_a_fix_over_a_file_without_a_clone_table_records_the_pairs_and_keeps_the_entries(build_repo, capsys):
     """A ceiling git never held a `[clones]` table in takes the pairs and no new entry."""
-    repo = build_repo({"src/a.py": "x = 1\n", **TWO_FILES, BASELINE_PATH: SIZE})
+    repo = build_repo({"src/a.py": long_function(70), **TWO_FILES, BASELINE_PATH: LONG_ONE})
     assert written(capsys, repo)[0] == 0
-    assert load_baseline(baseline_text(repo)) == Baseline({Key(Metric.FUNCTION_LINES, "src/quality/cli.py", "main"): 82}, frozenset({FIRST_PAIR}))
+    assert load_baseline(baseline_text(repo)) == Baseline({Key(Metric.FUNCTION_LINES, "src/a.py", "long_one"): 70}, frozenset({FIRST_PAIR}))
 
 
 def test_a_pair_the_tree_lost_leaves_the_ceiling_and_no_new_pair_enters(build_repo, capsys):

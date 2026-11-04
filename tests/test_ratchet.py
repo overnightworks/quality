@@ -226,14 +226,12 @@ def test_bringing_a_grown_function_back_to_its_held_value_clears_the_finding(bui
     [
         {"src/a.py": long_file(799)},
         {"src/a.py": long_function(59) + branchy_function(15)},
-        {"src/other.py": "x = 1\n"},
     ],
-    ids=["file-just-below-800-lines", "functions-just-below-60-lines-and-ccn-15", "baselined-file-is-gone"],
+    ids=["file-just-below-800-lines", "functions-just-below-60-lines-and-ccn-15"],
 )
-def test_below_the_thresholds_or_with_a_fixed_entry_gone_is_clean(build_repo, capsys, files):
-    """#46 rule 2/4: values below the thresholds are no debt, and a fixed entry that is gone is fine."""
-    baseline = '[file_lines]\n"src/gone.py" = 900\n'
-    code, output = run(capsys, build_repo({**files, BASELINE_PATH: baseline}))
+def test_below_the_thresholds_is_clean(build_repo, capsys, files):
+    """#46 rule 2: values below the thresholds are no debt."""
+    code, output = run(capsys, build_repo({**files, BASELINE_PATH: ""}))
     assert code == 0, output
     assert is_clean(output)
 
@@ -258,13 +256,13 @@ def remove(request, elsewhere) -> Callable[[Path], None]:
 @pytest.mark.parametrize(
     "baseline",
     [None, '[function_lines."src/b.py"]\nlong_one = 62\n'],
-    ids=["no-baseline", "baseline-holds-the-gone-file"],
+    ids=["no-baseline", "baseline-holds-the-unmeasured-file"],
 )
-def test_a_tracked_file_missing_from_disk_is_gone_for_the_size_rule_and_only_the_python_rules_refuse_it(
+def test_a_tracked_file_missing_from_disk_is_unmeasured_for_the_size_rule_and_only_the_python_rules_refuse_it(
     build_repo, capsys, remove, baseline
 ):
-    """#46 rule 3/4 and #52 cell 18: the size rule judges the tree on disk; a tracked file absent from it is gone,
-    which is fine, wherever a dangling link points. python-security (#219) and python-print (#225) must read every
+    """#46 rule 3/4 and #52 cell 18: the size rule judges the tree on disk; a tracked file absent from it is unmeasured,
+    its entry stands, wherever a dangling link points. python-security (#219) and python-print (#225) must read every
     tracked `.py` file, so they alone refuse the run."""
     files = {"src/a.py": "x = 1\n", "src/b.py": long_function(62)}
     repo = build_repo(files if baseline is None else {**files, BASELINE_PATH: baseline})
