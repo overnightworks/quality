@@ -226,6 +226,11 @@ def findings_written(findings: list[Finding], stream_kind: type[io.StringIO] = i
     return written(stream_kind, lambda channel: output.write_findings_and_notes(findings, notes or [], channel), **environment)
 
 
+def test_a_moved_note_row_is_a_clean_row():
+    printed = findings_written([], notes=[Note("src/new.py", NoteEvent.MOVED, "a fact")])
+    assert printed.lstrip().startswith(Glyph.CLEAN)
+
+
 def area_row_indent() -> int:
     row = plain((Row(Glyph.NEEDS_YOU, "files", Event.FINDING, count=1),))
     return len(row) - len(row.lstrip(" "))

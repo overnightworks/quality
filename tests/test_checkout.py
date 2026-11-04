@@ -7,7 +7,7 @@ import pytest
 
 from quality import checkout, cli
 from tests.support.door import CHECK_WORD, FIX_WORDS, check_door, door_in
-from tests.support.git_repositories import git, make_repo
+from tests.support.git_repositories import git, head_commit, make_repo
 
 
 def bare_repository(build_repo, tmp_path):
@@ -198,3 +198,67 @@ def test_a_shallow_clone_is_shallow_and_a_whole_one_is_not(build_repo, tmp_path)
     clone = tmp_path / "clone"
     subprocess.run(["git", "clone", "-q", "--depth", "1", f"file://{repo}", str(clone)], check=True, capture_output=True, timeout=60)
     assert (checkout.is_shallow(clone), checkout.is_shallow(repo)) == (True, False)
+
+
+def a_root_commit(repo: Path) -> checkout.Change:
+    committed(repo, "f.toml", "one\n")
+    return checkout.Change(head_commit(repo), has_parent=False)
+
+
+def a_later_commit(repo: Path) -> checkout.Change:
+    committed(repo, "f.toml", "one\n")
+    committed(repo, "f.toml", "two\n")
+    change = checkout.Change(head_commit(repo), has_parent=True)
+    committed(repo, "other", "base\n")
+    return change
+
+
+def a_merged_side_branch(repo: Path) -> checkout.Change:
+    committed(repo, "other", "base\n")
+    git(repo, "checkout", "-q", "-b", "side")
+    committed(repo, "f.toml", "one\n")
+    change = checkout.Change(head_commit(repo), has_parent=True)
+    git(repo, "checkout", "-q", "main")
+    committed(repo, "main", "main\n")
+    git(repo, "merge", "-q", "--no-ff", "-m", "merge", "side")
+    return change
+
+
+def no_commit(repo: Path) -> None:
+    return None
+
+
+def never_changed(repo: Path) -> None:
+    committed(repo, "other", "base\n")
+
+
+def under_log_follow(repo: Path) -> checkout.Change:
+    git(repo, "config", "log.follow", "true")
+    return a_root_commit(repo)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "arrange",
+    [a_root_commit, a_later_commit, a_merged_side_branch, no_commit, never_changed, under_log_follow],
+    ids=["root commit", "a later commit", "a merged side branch", "no commit", "never changed", "under log.follow"],
+)
+def test_the_last_change_of_a_name_is_the_newest_commit_head_reaches_that_changed_it(tmp_path, arrange):
+    repo = started(tmp_path)
+    expected = arrange(repo)
+    assert checkout.last_change(repo, "f.toml") == expected
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("move", "listed"),
+    [
+        (lambda repo: git(repo, "mv", "old.txt", "new.txt"), b"R100\0old.txt\0new.txt\0"),
+        (lambda repo: (repo / "old.txt").rename(repo / "new.txt"), b""),
+    ],
+    ids=["git mv", "plain mv"],
+)
+def test_the_renames_since_a_commit_are_what_the_index_would_record(build_repo, move, listed):
+    repo = build_repo({"old.txt": "".join(f"row {number} of a file git can match to its move\n" for number in range(30))})
+    move(repo)
+    assert checkout.renamed_since(repo, head_commit(repo)) == listed

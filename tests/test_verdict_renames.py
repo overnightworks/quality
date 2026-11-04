@@ -8,8 +8,8 @@ import time
 
 import pytest
 
-from quality import merge, verdict
-from quality.ratchet import BASELINE_PATH, Baseline, Key, Metric, Renames, render_baseline
+from quality import merge
+from quality.ratchet import BASELINE_PATH, Baseline, Key, Metric, Renames, renames_of, render_baseline
 from quality.report import CannotJudge
 from tests.support.git_repositories import head_commit, put
 from tests.support.merge import GATE_CONFIG, ONE_JOB, SONAR_GREEN, changed_nothing, declaring, drive
@@ -235,7 +235,7 @@ def test_without_a_base_commit_no_renames_are_read(capsys, pull_request, monkeyp
 )
 def test_the_rename_list_reads_only_complete_renames(listing, renames):
     """#149 cell 20: the parser."""
-    assert verdict.renames_of(listing) == renames
+    assert renames_of(listing) == renames
 
 
 @pytest.mark.parametrize(
@@ -252,7 +252,7 @@ def test_the_rename_list_reads_only_complete_renames(listing, renames):
 def test_a_rename_list_git_did_not_finish_cannot_be_judged(listing):
     """#149 cell 20: fail closed, never an empty map."""
     with pytest.raises(CannotJudge):
-        verdict.renames_of(listing)
+        renames_of(listing)
 
 
 def test_a_rename_map_git_cannot_list_cannot_be_judged(capsys, pull_request, fake_git):
