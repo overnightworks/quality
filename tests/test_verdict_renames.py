@@ -8,13 +8,13 @@ import time
 
 import pytest
 
-from quality import merge, verdict
-from quality.ratchet import BASELINE_PATH, Baseline, Key, Metric, Renames, render_baseline
+from quality import merge
+from quality.ratchet import BASELINE_PATH, Baseline, Key, Metric, Renames, renames_of, render_baseline
 from quality.report import CannotJudge
 from tests.support.git_repositories import head_commit, put
 from tests.support.merge import GATE_CONFIG, ONE_JOB, SONAR_GREEN, changed_nothing, declaring, drive
 from tests.support.processes import process_is_gone
-from tests.support.verdict import verdict_of
+from tests.support.verdict import verdict_of, verdict_streams
 from tests.support.verdict_renames import MOVABLE_FILE, OLD_ENTRY, commit_all, entry, moved_in_head, pulled
 
 OTHER_FILE = "".join(f"nothing like the movable file, row {number}\n" for number in range(30))
@@ -104,8 +104,8 @@ NEW_ENTRY = OLD_ENTRY.replace("old", "new")
 def test_a_leftover_does_not_count_and_the_allowance_moves_rather_than_copies(capsys, pull_request, base, head, code, expected):
     """#149 cells 7, 12, 13: rule 2 and rule 1."""
     moved_in_head(pull_request, base, head)
-    actual_code, output = verdict_of(pull_request[0], capsys)
-    assert (actual_code, expected in output, output.count("loosened (undeclared)")) == (code, True, 0 if code == 0 else 1)
+    actual_code, out, err = verdict_streams(pull_request[0], capsys)
+    assert (actual_code, expected in out, out.count("loosened (undeclared)"), err) == (code, True, 0 if code == 0 else 1, "")
 
 
 UNNAMEABLE_SOURCE = os.fsdecode(b"legacy/\xff.txt")
@@ -235,7 +235,7 @@ def test_without_a_base_commit_no_renames_are_read(capsys, pull_request, monkeyp
 )
 def test_the_rename_list_reads_only_complete_renames(listing, renames):
     """#149 cell 20: the parser."""
-    assert verdict.renames_of(listing) == renames
+    assert renames_of(listing) == renames
 
 
 @pytest.mark.parametrize(
@@ -252,7 +252,7 @@ def test_the_rename_list_reads_only_complete_renames(listing, renames):
 def test_a_rename_list_git_did_not_finish_cannot_be_judged(listing):
     """#149 cell 20: fail closed, never an empty map."""
     with pytest.raises(CannotJudge):
-        verdict.renames_of(listing)
+        renames_of(listing)
 
 
 def test_a_rename_map_git_cannot_list_cannot_be_judged(capsys, pull_request, fake_git):

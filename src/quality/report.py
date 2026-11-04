@@ -143,6 +143,7 @@ class NoteEvent(StrEnum):
     DROPPED = "dropped"
     EXITED = "exited"
     LOWERED = "lowered"
+    MOVED = "moved"
     NOT_MEASURED = "not measured"
     RECORDED = "recorded"
     UNUSED = "unused"

@@ -1,8 +1,6 @@
 """The door of `quality check debt --fix`: the frames it prints, what it writes and what it refuses."""
 
-import hashlib
 import os
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -14,9 +12,9 @@ from tests.support.architecture import FORBIDDEN, SHOP, contracts_ini
 from tests.support.check import copy_block, refusal_row
 from tests.support.clones import function as clone_function
 from tests.support.config_refusals import check_refusals
-from tests.support.door import FIX_WORDS, door_in
+from tests.support.door import FIX_WORDS, digest, door_in, fixed, restore_step
 from tests.support.generated_files import MANDATORY_JOB, generated_config
-from tests.support.git_repositories import git, put
+from tests.support.git_repositories import git, put, shallow_clone
 from tests.support.source_code import branchy_function, long_file, long_function
 from tests.support.verdict import verdict_of
 
@@ -27,16 +25,6 @@ def held_ceiling(value: int = 62, clones: bool = True) -> str:
 
 def declared_generated(path: str) -> str:
     return f'[gate]\nmandatory_jobs = ["{MANDATORY_JOB}"]\n' + generated_config(path=path)
-
-
-def fixed(capsys, repo: Path, *words: str) -> tuple[int, str, str]:
-    code = door_in(repo, *words, clock=lambda: 0.0)
-    printed = capsys.readouterr()
-    return code, printed.out, printed.err
-
-
-def digest(repo: Path) -> str:
-    return hashlib.sha256((repo / BASELINE_PATH).read_bytes()).hexdigest()
 
 
 def test_a_lowered_ceiling_stands_in_the_pictures_frame(build_repo, capsys):
@@ -243,16 +231,12 @@ def the_root_commit_then_removed(build_repo) -> Path:
     return repo
 
 
-def restore_step() -> str:
-    return "restore quality/baseline.toml from git, or repair it by hand"
-
-
 def fix_rows_step() -> str:
     return "fix what the ✗ rows name, then run quality check --fix again"
 
 
-def refused_pair(next_step: str) -> str:
-    return f"error: 1 of 1 area could not check\nnext: {next_step}\n"
+def refused_pair(next_step: str, found: str = "") -> str:
+    return f"error: 1 of 1 area could not check{found}\nnext: {next_step}\n"
 
 
 @pytest.mark.parametrize(
@@ -328,17 +312,11 @@ def test_a_clones_table_git_holds_is_not_recorded_again(build_repo, capsys, arra
     assert (err, digest(repo)) == (refused_pair(restore_step()), before)
 
 
-def shallow_clone_of(origin: Path, elsewhere: Path) -> Path:
-    clone = elsewhere / "shallow"
-    subprocess.run(["git", "clone", "-q", "--depth", "1", f"file://{origin}", str(clone)], check=True, capture_output=True, timeout=60)
-    return clone
-
-
 @pytest.mark.parametrize("held", [None, held_ceiling(value=80, clones=False)], ids=["no ceiling", "no table"])
 def test_a_shallow_clone_cannot_prove_a_first_recording(build_repo, elsewhere, capsys, held):
     origin = build_repo({"src/a.py": long_function(62), **({} if held is None else {BASELINE_PATH: held})})
     commit_file(origin, "second", "2\n")
-    clone = shallow_clone_of(origin, elsewhere)
+    clone = shallow_clone(origin, elsewhere)
     code, out, err = fixed(capsys, clone, *FIX_WORDS)
     assert (code, "  ✗ debt          not fixed      this clone is shallow, so git cannot show the ceiling is new\n" in out) == (2, True)
     assert err.endswith("next: git fetch --unshallow\n")
@@ -349,17 +327,13 @@ def test_a_shallow_clone_cannot_prove_a_first_recording(build_repo, elsewhere, c
 
 
 def test_a_shallow_clone_lowers_a_ceiling_that_holds_its_table(build_repo, elsewhere, capsys):
-    clone = shallow_clone_of(build_repo({"src/a.py": long_function(62), BASELINE_PATH: held_ceiling(value=80)}), elsewhere)
+    origin = build_repo({"src/a.py": long_function(62)})
+    commit_file(origin, "second", "2\n")
+    commit_file(origin, BASELINE_PATH, held_ceiling(value=80))
+    commit_file(origin, "third", "3\n")
+    clone = shallow_clone(origin, elsewhere, depth=3)
     assert fixed(capsys, clone, *FIX_WORDS)[0] == 0
     assert load_baseline((clone / BASELINE_PATH).read_text()).size == {Key(Metric.FUNCTION_LINES, "src/a.py", "long_one"): 62}
-
-
-def test_a_moved_file_stays_new_debt(build_repo, capsys):
-    repo = build_repo({"src/old.py": long_function(70), BASELINE_PATH: '[function_lines."src/old.py"]\nlong_one = 70\n\n[clones]\n'})
-    git(repo, "mv", "src/old.py", "src/new.py")
-    code, out, _ = fixed(capsys, repo, *FIX_WORDS)
-    assert (code, "src/new.py:1  new debt" in out) == (1, True)
-    assert load_baseline((repo / BASELINE_PATH).read_text()).size == {Key(Metric.FUNCTION_LINES, "src/old.py", "long_one"): 70}
 
 
 def an_unlisted_history(build_repo) -> tuple[Path, str]:
@@ -512,28 +486,27 @@ def a_path_that_is_no_utf8(build_repo, elsewhere) -> Path:
 
 
 @pytest.mark.parametrize(
-    ("arrange", "next_step"),
+    ("arrange", "refusal"),
     [
-        pytest.param(a_ceiling_with(b"[file_lines\n"), restore_step(), id="no TOML"),
-        pytest.param(a_ceiling_with(b"\xff\xfe"), restore_step(), id="not UTF-8"),
-        pytest.param(a_ceiling_with(b'[file_lines]\n"src/a.py" = "many"\n'), restore_step(), id="not a count"),
-        pytest.param(a_ceiling_with(b"[future]\n"), "run the quality release your gate pins", id="an unknown table"),
-        pytest.param(a_link_out, fix_rows_step(), id="a link out"),
-        pytest.param(a_directory, fix_rows_step(), id="a directory"),
-        pytest.param(a_file_that_does_not_parse, fix_rows_step(), id="a file that does not parse"),
-        pytest.param(a_generated_file_python_cannot_parse, fix_rows_step(), id="a generated file python cannot parse"),
-        pytest.param(a_config_refusal, fix_rows_step(), id="a config refusal"),
-        pytest.param(quality_is_a_file, fix_rows_step(), id="quality is a file"),
-        pytest.param(a_path_that_is_no_utf8, fix_rows_step(), id="a path that is no UTF-8"),
+        pytest.param(a_ceiling_with(b"[file_lines\n"), refused_pair(restore_step()), id="no TOML"),
+        pytest.param(a_ceiling_with(b"\xff\xfe"), refused_pair(restore_step()), id="not UTF-8"),
+        pytest.param(a_ceiling_with(b'[file_lines]\n"src/a.py" = "many"\n'), refused_pair(restore_step()), id="not a count"),
+        pytest.param(a_ceiling_with(b"[future]\n"), refused_pair("run the quality release your gate pins"), id="an unknown table"),
+        pytest.param(a_link_out, refused_pair(fix_rows_step()), id="a link out"),
+        pytest.param(a_directory, refused_pair(fix_rows_step()), id="a directory"),
+        pytest.param(a_file_that_does_not_parse, refused_pair(fix_rows_step()), id="a file that does not parse"),
+        pytest.param(a_generated_file_python_cannot_parse, refused_pair(fix_rows_step(), " · 1 finding, 1 of them in those areas"), id="a generated file python cannot parse"),
+        pytest.param(a_config_refusal, refused_pair(fix_rows_step()), id="a config refusal"),
+        pytest.param(quality_is_a_file, refused_pair(fix_rows_step()), id="quality is a file"),
+        pytest.param(a_path_that_is_no_utf8, refused_pair(fix_rows_step()), id="a path that is no UTF-8"),
     ],
 )
-def test_every_refused_fix_writes_nothing(build_repo, elsewhere, capsys, arrange, next_step):
+def test_every_refused_fix_writes_nothing_and_names_its_next_step(build_repo, elsewhere, capsys, arrange, refusal):
     repo = arrange(build_repo, elsewhere)
     before = (tree_of(repo), tree_of(elsewhere))
     code, out, err = fixed(capsys, repo, *FIX_WORDS)
-    refusal = err.splitlines()
     assert (code, "  ✗ debt          not " in out, (tree_of(repo), tree_of(elsewhere))) == (2, True, before)
-    assert (refusal[0].startswith("error: 1 of 1 area could not check"), refusal[1:]) == (True, [f"next: {next_step}"])
+    assert err == refusal
 
 
 def a_size_config_and_a_near_copy(build_repo, elsewhere) -> Path:
@@ -558,7 +531,7 @@ def a_refused_write_and_an_entry_that_can_fall(build_repo, elsewhere) -> Path:
 
 
 def a_shallow_clone_and_a_grown_entry(build_repo, elsewhere) -> Path:
-    return shallow_clone_of(build_repo({"src/a.py": long_function(71), BASELINE_PATH: held_ceiling(value=60, clones=False)}), elsewhere)
+    return shallow_clone(build_repo({"src/a.py": long_function(71), BASELINE_PATH: held_ceiling(value=60, clones=False)}), elsewhere)
 
 
 @pytest.mark.parametrize(

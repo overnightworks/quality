@@ -163,7 +163,7 @@ DESCRIPTIVE_FINDINGS = frozenset(
     }
 )
 DESCRIPTIVE_NOTES = frozenset({NoteEvent.WARNING})
-NOTE_GLYPHS = dict.fromkeys((NoteEvent.LOWERED, NoteEvent.DROPPED, NoteEvent.RECORDED), Glyph.CLEAN)
+NOTE_GLYPHS = dict.fromkeys((NoteEvent.LOWERED, NoteEvent.DROPPED, NoteEvent.MOVED, NoteEvent.RECORDED), Glyph.CLEAN)
 
 
 def counted(count: int, noun: str, plural: str | None = None) -> str:

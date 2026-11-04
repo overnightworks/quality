@@ -69,3 +69,9 @@ def git_pull(directory, base_baseline, merge_baseline, moves=()):
     remote = directory / "remote.git"
     subprocess.run(["git", "clone", "-q", "--bare", str(work), str(remote)], check=True)
     return str(remote), base_sha, merge_sha
+
+
+def shallow_clone(origin: Path, elsewhere: Path, depth: int = 1) -> Path:
+    clone = elsewhere / "shallow"
+    subprocess.run(["git", "clone", "-q", "--depth", str(depth), f"file://{origin}", str(clone)], check=True, capture_output=True, timeout=60)
+    return clone

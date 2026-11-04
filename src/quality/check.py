@@ -1,6 +1,6 @@
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from enum import Enum, auto
 from functools import cached_property, partial
@@ -397,6 +397,33 @@ def _written(root: Path, fix: ratchet.CeilingFix) -> ratchet.CeilingFix:
     return fix
 
 
+def _ceiling_lineage(inputs: RunInputs) -> tuple[ratchet.Baseline, ratchet.Renames] | None:
+    """The ceiling at its last commit and what git renamed from there to the index; None where no commit holds it."""
+    change = checkout.last_change(inputs.root, ratchet.BASELINE_PATH)
+    if change is None:
+        return None
+    if not change.has_parent and checkout.is_shallow(inputs.root):
+        fact = f"this clone is shallow, so git cannot show where {ratchet.BASELINE_PATH} last changed"
+        raise CannotJudge(fact, (checkout.UNSHALLOW_STEP,))
+    where = f"{ratchet.BASELINE_PATH} at its last commit {change.commit}"
+    try:
+        text = process.read_blob(inputs.root, change.commit, ratchet.BASELINE_PATH, f"cannot read {where}", f"cannot read {where}")
+    except process.ProcessError as error:
+        raise CannotJudge(str(error)) from error
+    if text is None:
+        return None
+    try:
+        committed = ratchet.load_baseline(text)
+    except ratchet.SizeError as error:
+        raise CannotJudge(f"the ceiling at its last commit {change.commit}: {error}", (ratchet.COMMIT_REPAIR_STEP,)) from error
+    return committed, ratchet.renames_of(checkout.renamed_since(inputs.root, change.commit))
+
+
+def _followed(inputs: RunInputs, held: ratchet.Baseline) -> ratchet.CeilingFix:
+    lineage = _ceiling_lineage(inputs)
+    return ratchet.CeilingFix(held, ()) if lineage is None else ratchet.follow_renames(held, *lineage, frozenset(inputs.tracked))
+
+
 def _fix_ceiling(inputs: RunInputs, sources: dict[str, bytes], held: ratchet.Baseline | None) -> ratchet.CeilingFix:
     """The ceiling lowered, or recorded where git never held one, and written when it changed."""
     tree = ratchet.measure(sources)
@@ -408,7 +435,9 @@ def _fix_ceiling(inputs: RunInputs, sources: dict[str, bytes], held: ratchet.Bas
         return _written(inputs.root, ratchet.CeilingFix(ratchet.Baseline(ratchet.debt(measurements), pairs), (), first=True))
     if held.clones is None:
         _require_no_clones_table_in_git(inputs)
-    return _written(inputs.root, ratchet.lower_ceiling(held, measurements, pairs))
+    followed = _followed(inputs, held)
+    lowered = ratchet.lower_ceiling(followed.ceiling, measurements, pairs)
+    return _written(inputs.root, replace(lowered, changes=(*followed.changes, *lowered.changes)))
 
 
 def _judge_debt(inputs: RunInputs) -> AreaVerdict:

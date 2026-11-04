@@ -1,12 +1,12 @@
 import json
 import re
 import urllib.error
-from collections.abc import Callable, Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 
-from quality import architecture, process, repository, web
+from quality import architecture, checkout, process, repository, web
 from quality.config import (
     CONFIG_PATH,
     ConfigError,
@@ -25,8 +25,10 @@ from quality.ratchet import (
     carried_base,
     head_step,
     load_baseline,
+    named_paths,
     raised_entries,
     read_baseline,
+    renames_of,
 )
 from quality.report import CannotJudge
 
@@ -225,7 +227,7 @@ def _baseline_loosenings(base: Baseline | None, head: Baseline | None, renames: 
         return []
     if head is None:
         return [f"{BASELINE_PATH} removed"]
-    base = carried_base(base, head, renames)
+    base = carried_base(base, renames, named_paths(head))
     lines = [f"size baseline {entry.describe()}" for entry in raised_entries(base.size, head.size)]
     if base.clones is None:
         return lines
@@ -489,10 +491,7 @@ def read_renames(
     _require_safe_ref(head, "head")
     try:
         listed = process.git(
-            [
-                "-C", str(repo.resolve()), "diff", "-M50%", "-l1000", "--no-color", "--name-status", "-z",
-                "--end-of-options", base, head, "--",
-            ],
+            ["-C", str(repo.resolve()), "diff", *checkout.RENAME_LISTING, "--end-of-options", base, head, "--"],
             f"cannot list the files renamed between {base} and {head}",
             env,
             bound,
@@ -501,47 +500,6 @@ def read_renames(
     except process.ProcessError as error:
         raise CannotJudge(str(error)) from error
     return renames_of(listed)
-
-
-def renames_of(name_status: bytes) -> Renames:
-    """`git diff --name-status -z` records: a status, then one path, or two for a rename or a copy.
-
-    Only a rename counts, and a source git lists as renamed twice cannot be judged. Only a rename's two paths are decoded,
-    as UTF-8 without newline translation, so a path holding a carriage return stays the path git named. A rename whose
-    target is not UTF-8 is skipped, since no baseline key can name it; one whose source is not UTF-8 still clears its
-    target of leftovers and carries nothing.
-    """
-    renamed = list(_renamed_paths(name_status))
-    sources = [old_bytes for old_bytes, _ in renamed]
-    if len(set(sources)) != len(sources):
-        raise CannotJudge("git listed one source as renamed twice")
-    moves: dict[str, str] = {}
-    unnamed_sources: set[str] = set()
-    for old_bytes, new_bytes in renamed:
-        try:
-            new = new_bytes.decode("utf-8")
-        except UnicodeDecodeError:
-            continue
-        try:
-            moves[old_bytes.decode("utf-8")] = new
-        except UnicodeDecodeError:
-            unnamed_sources.add(new)
-    return Renames(moves, frozenset(moves.values()) | unnamed_sources)
-
-
-def _renamed_paths(name_status: bytes) -> Iterator[tuple[bytes, bytes]]:
-    """The (source, target) bytes of each rename record; a record cut short cannot be judged."""
-    fields = name_status.split(b"\0")
-    if fields.pop() != b"":
-        raise CannotJudge("git's list of renamed files ended inside a record")
-    records = iter(fields)
-    for status in records:
-        try:
-            paths = [next(records), *([next(records)] if status.startswith((b"R", b"C")) else [])]
-        except StopIteration:
-            raise CannotJudge("git's list of renamed files ended inside a record") from None
-        if status.startswith(b"R"):
-            yield paths[0], paths[1]
 
 
 def side_of(config: str | None, baseline: str | None, where: str, import_configs: Mapping[str, str | None] = MappingProxyType({})) -> Side:

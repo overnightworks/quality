@@ -17,10 +17,15 @@ CHECKS_GREEN = json.dumps(
 )
 
 
-def verdict_of(repo: Path, capsys) -> tuple[int, str]:
+def verdict_streams(repo: Path, capsys) -> tuple[int, str, str]:
     code = cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (CHECKS_GREEN, None))
     captured = capsys.readouterr()
-    return code, captured.out + captured.err
+    return code, captured.out, captured.err
+
+
+def verdict_of(repo: Path, capsys) -> tuple[int, str]:
+    code, out, err = verdict_streams(repo, capsys)
+    return code, out + err
 
 
 def fetch_jobs(origin: str) -> str:
