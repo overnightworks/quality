@@ -415,7 +415,7 @@ def _ceiling_lineage(inputs: RunInputs) -> tuple[ratchet.Baseline, ratchet.Renam
     try:
         committed = ratchet.load_baseline(text)
     except ratchet.SizeError as error:
-        raise CannotJudge(f"{where}: {error}") from error
+        raise CannotJudge(f"the ceiling at its last commit {change.commit}: {error}", (ratchet.COMMIT_REPAIR_STEP,)) from error
     return committed, ratchet.renames_of(checkout.renamed_since(inputs.root, change.commit))
 
 

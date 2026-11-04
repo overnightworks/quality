@@ -381,10 +381,11 @@ def test_a_ceiling_whose_last_commit_does_not_parse_refuses(pull_request, capsys
     before = digest(repo)
     code, out, err = fixed(capsys, repo, *FIX_WORDS)
     commit = head_commit(repo)
-    assert (code, f"{BASELINE_PATH} at its last commit {commit}" in out, digest(repo)) == (2, True, before)
-    assert (
-        err
-        == "error: 1 of 1 area could not check\nnext: fix what the ✗ rows name, then run quality check --fix again\n"
+    assert (code, digest(repo)) == (2, before)
+    assert f"the ceiling at its last commit {commit}: quality/baseline.toml is not valid TOML" in out
+    assert err == (
+        "error: 1 of 1 area could not check\n"
+        "next: commit the repaired quality/baseline.toml, then run quality check --fix again\n"
     )
 
 
