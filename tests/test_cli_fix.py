@@ -243,6 +243,18 @@ def the_root_commit_then_removed(build_repo) -> Path:
     return repo
 
 
+def restore_step() -> str:
+    return "restore quality/baseline.toml from git, or repair it by hand"
+
+
+def fix_rows_step() -> str:
+    return "fix what the ✗ rows name, then run quality check --fix again"
+
+
+def refused_pair(next_step: str) -> str:
+    return f"error: 1 of 1 area could not check\nnext: {next_step}\n"
+
+
 @pytest.mark.parametrize(
     "arrange",
     [
@@ -263,7 +275,7 @@ def test_a_ceiling_git_holds_is_no_first_recording(build_repo, capsys, arrange):
     git(repo, "config", "log.showRoot", "false")
     code, out, err = fixed(capsys, repo, *FIX_WORDS)
     assert (code, "  ✗ debt          not fixed      quality/baseline.toml is gone from the tree but git holds it\n" in out) == (2, True)
-    assert err == "error: 1 of 1 area could not check\nnext: restore quality/baseline.toml from git, or repair it by hand\n"
+    assert err == refused_pair(restore_step())
     assert not (repo / BASELINE_PATH).exists()
 
 
@@ -313,7 +325,7 @@ def test_a_clones_table_git_holds_is_not_recorded_again(build_repo, capsys, arra
     code, out, err = fixed(capsys, repo, *FIX_WORDS)
     assert code == 2
     assert "quality/baseline.toml lost its [clones] table, which git holds" in out
-    assert (err, digest(repo)) == ("error: 1 of 1 area could not check\nnext: restore quality/baseline.toml from git, or repair it by hand\n", before)
+    assert (err, digest(repo)) == (refused_pair(restore_step()), before)
 
 
 def shallow_clone_of(origin: Path, elsewhere: Path) -> Path:
@@ -433,7 +445,7 @@ def test_a_version_no_parser_reads_refuses_and_a_clones_table_by_hand_runs_the_f
     before = digest(repo)
     code, out, err = fixed(capsys, repo, *FIX_WORDS)
     assert (code, "a version of quality/baseline.toml in git cannot be read" in out, digest(repo)) == (2, True, before)
-    assert err.endswith("next: restore quality/baseline.toml from git, or repair it by hand\n")
+    assert err.endswith(f"next: {restore_step()}\n")
     put(repo / BASELINE_PATH, held_ceiling())
     assert fixed(capsys, repo, *FIX_WORDS)[0] == 0
 
@@ -499,24 +511,20 @@ def a_path_that_is_no_utf8(build_repo, elsewhere) -> Path:
     return repo
 
 
-RESTORE = "restore quality/baseline.toml from git, or repair it by hand"
-FIX_ROWS = "fix what the ✗ rows name, then run quality check --fix again"
-
-
 @pytest.mark.parametrize(
     ("arrange", "next_step"),
     [
-        pytest.param(a_ceiling_with(b"[file_lines\n"), RESTORE, id="no TOML"),
-        pytest.param(a_ceiling_with(b"\xff\xfe"), RESTORE, id="not UTF-8"),
-        pytest.param(a_ceiling_with(b'[file_lines]\n"src/a.py" = "many"\n'), RESTORE, id="not a count"),
+        pytest.param(a_ceiling_with(b"[file_lines\n"), restore_step(), id="no TOML"),
+        pytest.param(a_ceiling_with(b"\xff\xfe"), restore_step(), id="not UTF-8"),
+        pytest.param(a_ceiling_with(b'[file_lines]\n"src/a.py" = "many"\n'), restore_step(), id="not a count"),
         pytest.param(a_ceiling_with(b"[future]\n"), "run the quality release your gate pins", id="an unknown table"),
-        pytest.param(a_link_out, FIX_ROWS, id="a link out"),
-        pytest.param(a_directory, FIX_ROWS, id="a directory"),
-        pytest.param(a_file_that_does_not_parse, FIX_ROWS, id="a file that does not parse"),
-        pytest.param(a_generated_file_python_cannot_parse, FIX_ROWS, id="a generated file python cannot parse"),
-        pytest.param(a_config_refusal, FIX_ROWS, id="a config refusal"),
-        pytest.param(quality_is_a_file, FIX_ROWS, id="quality is a file"),
-        pytest.param(a_path_that_is_no_utf8, FIX_ROWS, id="a path that is no UTF-8"),
+        pytest.param(a_link_out, fix_rows_step(), id="a link out"),
+        pytest.param(a_directory, fix_rows_step(), id="a directory"),
+        pytest.param(a_file_that_does_not_parse, fix_rows_step(), id="a file that does not parse"),
+        pytest.param(a_generated_file_python_cannot_parse, fix_rows_step(), id="a generated file python cannot parse"),
+        pytest.param(a_config_refusal, fix_rows_step(), id="a config refusal"),
+        pytest.param(quality_is_a_file, fix_rows_step(), id="quality is a file"),
+        pytest.param(a_path_that_is_no_utf8, fix_rows_step(), id="a path that is no UTF-8"),
     ],
 )
 def test_every_refused_fix_writes_nothing(build_repo, elsewhere, capsys, arrange, next_step):
