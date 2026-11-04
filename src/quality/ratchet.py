@@ -515,20 +515,11 @@ def lower_ceiling(held: Baseline, measurements: Measurements, pairs: frozenset[C
     return CeilingFix(Baseline(size, held.clones & pairs), tuple(changes))
 
 
-def _within(entries: SizeEntries, bound: SizeEntries) -> bool:
-    return all(key in bound and value <= bound[key] for key, value in entries.items())
-
-
 def _followed_note(key: Key, value: int, source: str | None, target: str) -> Note:
     held = f"{_subject(key)} {key.metric.describe(value)}"
     if key.path == source:
         return Note(target, NoteEvent.MOVED, f"{held} from {source}")
     return Note(target, NoteEvent.DROPPED, SEPARATOR.join((held, LEFT_BEHIND)))
-
-
-def _first_outside(entries: SizeEntries, bound: SizeEntries) -> str:
-    """The path of the first entry `bound` does not hold at or above its value."""
-    return next(key.path for key in sorted(entries, key=_order) if not _within({key: entries[key]}, bound))
 
 
 def _unexplained(path: str) -> CannotJudge:
@@ -555,10 +546,10 @@ def follow_renames(held: Baseline, committed: Baseline, renames: Renames, tracke
     for target in sorted(renames.targets):
         source = sources.get(target)
         mine = {key: value for key, value in held.size.items() if key.path in (source, target)}
-        if _within(mine, carried.size):
+        if not raised_entries(carried.size, mine):
             continue
-        if not _within(mine, committed.size):
-            raise _unexplained(_first_outside(mine, committed.size))
+        if outside := raised_entries(committed.size, mine):
+            raise _unexplained(outside[0].key.path)
         for key in mine:
             del size[key]
         size.update({key._replace(path=target): value for key, value in mine.items() if key.path == source})

@@ -1,8 +1,6 @@
 """The door of `quality check debt --fix`: the frames it prints, what it writes and what it refuses."""
 
-import hashlib
 import os
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -14,9 +12,9 @@ from tests.support.architecture import FORBIDDEN, SHOP, contracts_ini
 from tests.support.check import copy_block, refusal_row
 from tests.support.clones import function as clone_function
 from tests.support.config_refusals import check_refusals
-from tests.support.door import FIX_WORDS, door_in
+from tests.support.door import FIX_WORDS, digest, door_in, fixed, restore_step
 from tests.support.generated_files import MANDATORY_JOB, generated_config
-from tests.support.git_repositories import git, put
+from tests.support.git_repositories import git, put, shallow_clone
 from tests.support.source_code import branchy_function, long_file, long_function
 from tests.support.verdict import verdict_of
 
@@ -27,16 +25,6 @@ def held_ceiling(value: int = 62, clones: bool = True) -> str:
 
 def declared_generated(path: str) -> str:
     return f'[gate]\nmandatory_jobs = ["{MANDATORY_JOB}"]\n' + generated_config(path=path)
-
-
-def fixed(capsys, repo: Path, *words: str) -> tuple[int, str, str]:
-    code = door_in(repo, *words, clock=lambda: 0.0)
-    printed = capsys.readouterr()
-    return code, printed.out, printed.err
-
-
-def digest(repo: Path) -> str:
-    return hashlib.sha256((repo / BASELINE_PATH).read_bytes()).hexdigest()
 
 
 def test_a_lowered_ceiling_stands_in_the_pictures_frame(build_repo, capsys):
@@ -243,10 +231,6 @@ def the_root_commit_then_removed(build_repo) -> Path:
     return repo
 
 
-def restore_step() -> str:
-    return "restore quality/baseline.toml from git, or repair it by hand"
-
-
 def fix_rows_step() -> str:
     return "fix what the ✗ rows name, then run quality check --fix again"
 
@@ -328,17 +312,11 @@ def test_a_clones_table_git_holds_is_not_recorded_again(build_repo, capsys, arra
     assert (err, digest(repo)) == (refused_pair(restore_step()), before)
 
 
-def shallow_clone_of(origin: Path, elsewhere: Path, depth: int = 1) -> Path:
-    clone = elsewhere / "shallow"
-    subprocess.run(["git", "clone", "-q", "--depth", str(depth), f"file://{origin}", str(clone)], check=True, capture_output=True, timeout=60)
-    return clone
-
-
 @pytest.mark.parametrize("held", [None, held_ceiling(value=80, clones=False)], ids=["no ceiling", "no table"])
 def test_a_shallow_clone_cannot_prove_a_first_recording(build_repo, elsewhere, capsys, held):
     origin = build_repo({"src/a.py": long_function(62), **({} if held is None else {BASELINE_PATH: held})})
     commit_file(origin, "second", "2\n")
-    clone = shallow_clone_of(origin, elsewhere)
+    clone = shallow_clone(origin, elsewhere)
     code, out, err = fixed(capsys, clone, *FIX_WORDS)
     assert (code, "  ✗ debt          not fixed      this clone is shallow, so git cannot show the ceiling is new\n" in out) == (2, True)
     assert err.endswith("next: git fetch --unshallow\n")
@@ -353,7 +331,7 @@ def test_a_shallow_clone_lowers_a_ceiling_that_holds_its_table(build_repo, elsew
     commit_file(origin, "second", "2\n")
     commit_file(origin, BASELINE_PATH, held_ceiling(value=80))
     commit_file(origin, "third", "3\n")
-    clone = shallow_clone_of(origin, elsewhere, depth=3)
+    clone = shallow_clone(origin, elsewhere, depth=3)
     assert fixed(capsys, clone, *FIX_WORDS)[0] == 0
     assert load_baseline((clone / BASELINE_PATH).read_text()).size == {Key(Metric.FUNCTION_LINES, "src/a.py", "long_one"): 62}
 
@@ -553,7 +531,7 @@ def a_refused_write_and_an_entry_that_can_fall(build_repo, elsewhere) -> Path:
 
 
 def a_shallow_clone_and_a_grown_entry(build_repo, elsewhere) -> Path:
-    return shallow_clone_of(build_repo({"src/a.py": long_function(71), BASELINE_PATH: held_ceiling(value=60, clones=False)}), elsewhere)
+    return shallow_clone(build_repo({"src/a.py": long_function(71), BASELINE_PATH: held_ceiling(value=60, clones=False)}), elsewhere)
 
 
 @pytest.mark.parametrize(

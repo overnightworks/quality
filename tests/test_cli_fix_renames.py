@@ -1,15 +1,13 @@
 """`quality check debt --fix` follows a rename the index records since the ceiling's last commit."""
 
-import hashlib
-import subprocess
 from pathlib import Path
 
 import pytest
 
 from quality.ratchet import BASELINE_PATH
 from tests.support.clones import function as clone_function
-from tests.support.door import CHECK_WORD, FIX_WORDS, door_in
-from tests.support.git_repositories import git, head_commit, put
+from tests.support.door import CHECK_WORD, FIX_WORDS, digest, door_in, fixed, restore_step
+from tests.support.git_repositories import git, head_commit, put, shallow_clone
 from tests.support.source_code import long_function
 from tests.support.verdict import verdict_of
 from tests.support.verdict_renames import commit_all
@@ -21,23 +19,9 @@ def ceiling(*entries: tuple[str, int]) -> str:
     return f"{tables}[clones]\n"
 
 
-def fixed(capsys, repo: Path) -> tuple[int, str, str]:
-    code = door_in(repo, *FIX_WORDS, clock=lambda: 0.0)
-    out, err = capsys.readouterr()
-    return code, out, err
-
-
 def checked(capsys, repo: Path) -> tuple[int, str]:
     code = door_in(repo, CHECK_WORD, "debt", clock=lambda: 0.0)
     return code, capsys.readouterr().out
-
-
-def digest(repo: Path) -> str:
-    return hashlib.sha256((repo / BASELINE_PATH).read_bytes()).hexdigest()
-
-
-def restore_step() -> str:
-    return "restore quality/baseline.toml from git, or repair it by hand"
 
 
 def based(pull_request, files: dict[str, str], held: str) -> Path:
@@ -162,7 +146,7 @@ def written_as(path: str, value: int = 70) -> str:
 def test_a_fixed_move_passes_check_and_the_verdict(pull_request, capsys, arrange, written):
     repo = arrange(pull_request)
     capsys.readouterr()
-    code, _, _ = fixed(capsys, repo)
+    code, _, _ = fixed(capsys, repo, *FIX_WORDS)
     assert (code, (repo / BASELINE_PATH).read_text().endswith(written)) == (0, True)
     assert checked(capsys, repo)[0] == 0
     commit_all(repo, "fixed")
@@ -177,7 +161,7 @@ def test_a_moved_entry_stands_in_the_pictures_frame(pull_request, capsys):
         "    ✓ src/new.py  moved  function long_one 70 lines from src/old.py\n"
         "✓ clean · ceiling moved 1 entry · 1 area · <1s\n"
     )
-    assert fixed(capsys, repo) == (0, printed, "")
+    assert fixed(capsys, repo, *FIX_WORDS) == (0, printed, "")
 
 
 def grown_stale_target(pull_request) -> Path:
@@ -240,7 +224,7 @@ def stale_target_repo(pull_request, lines: int) -> Path:
 )
 def test_the_stale_target_case(pull_request, capsys, lines, fix_out, check_out, written):
     repo = stale_target_repo(pull_request, lines)
-    code, out, err = fixed(capsys, repo)
+    code, out, err = fixed(capsys, repo, *FIX_WORDS)
     assert ((code, out), err, (repo / BASELINE_PATH).read_text().endswith(written)) == (fix_out, "", True)
     assert checked(capsys, repo) == check_out
     commit_all(repo, "fixed")
@@ -255,9 +239,9 @@ def test_the_stale_target_case(pull_request, capsys, lines, fix_out, check_out, 
 )
 def test_a_second_fix_changes_nothing(pull_request, capsys, arrange):
     repo = arrange(pull_request)
-    first = fixed(capsys, repo)
+    first = fixed(capsys, repo, *FIX_WORDS)
     written = digest(repo)
-    second = fixed(capsys, repo)
+    second = fixed(capsys, repo, *FIX_WORDS)
     assert (digest(repo), second[0]) == (written, first[0])
 
 
@@ -289,23 +273,12 @@ def test_an_entry_git_cannot_place_refuses_and_a_restored_ceiling_is_followed(pu
     repo = arrange(pull_request)
     capsys.readouterr()
     before = digest(repo)
-    code, out, err = fixed(capsys, repo)
+    code, out, err = fixed(capsys, repo, *FIX_WORDS)
     assert (code, "  ✗ debt          not fixed      " in out, left_over in out, digest(repo)) == (2, True, True, before)
     assert err == f"error: 1 of 1 area could not check · 1 finding, 1 of them in those areas\nnext: {restore_step()}\n"
     git(repo, "checkout", "HEAD", "--", BASELINE_PATH)
-    code, out, _ = fixed(capsys, repo)
+    code, out, _ = fixed(capsys, repo, *FIX_WORDS)
     assert (code, "src/c.py  moved  function long_one 70 lines from src/a.py" in out) == (0, True)
-
-
-def shallow_clone(origin: Path, elsewhere: Path, depth: int) -> Path:
-    clone = elsewhere / "shallow"
-    subprocess.run(
-        ["git", "clone", "-q", "--depth", str(depth), f"file://{origin}", str(clone)],
-        check=True,
-        capture_output=True,
-        timeout=60,
-    )
-    return clone
 
 
 @pytest.mark.parametrize(
@@ -324,7 +297,7 @@ def test_a_shallow_clone_cannot_show_the_ceilings_last_commit(build_repo, elsewh
     clone = shallow_clone(origin, elsewhere, depth)
     git(clone, "mv", "src/old.py", "src/new.py")
     before = digest(clone)
-    code, _, err = fixed(capsys, clone)
+    code, _, err = fixed(capsys, clone, *FIX_WORDS)
     assert (code, err.endswith("next: git fetch --unshallow\n"), digest(clone) == before) == (
         2 if refused else 0,
         refused,
@@ -347,7 +320,7 @@ def test_a_move_the_index_does_not_record_is_not_followed(pull_request, capsys, 
     repo = old_file_held(pull_request)
     move(repo)
     before = digest(repo)
-    code, out, _ = fixed(capsys, repo)
+    code, out, _ = fixed(capsys, repo, *FIX_WORDS)
     assert ((code, "moved" in out, "new debt" in out), digest(repo)) == (expected, before)
 
 
@@ -359,7 +332,7 @@ def test_no_committed_ceiling_follows_nothing(pull_request, capsys):
     git(repo, "add", "-f", BASELINE_PATH)
     git(repo, "mv", "src/old.py", "src/new.py")
     before = digest(repo)
-    code, out, _ = fixed(capsys, repo)
+    code, out, _ = fixed(capsys, repo, *FIX_WORDS)
     assert (code, digest(repo), "moved" in out, "new debt" in out) == (1, before, False, True)
 
 
@@ -367,7 +340,7 @@ def test_a_ceiling_whose_last_commit_does_not_parse_refuses(pull_request, capsys
     repo = based(pull_request, {"src/old.py": long_function(70)}, "[function_lines\n")
     put(repo / BASELINE_PATH, ceiling(("src/old.py", 70)))
     before = digest(repo)
-    code, out, err = fixed(capsys, repo)
+    code, out, err = fixed(capsys, repo, *FIX_WORDS)
     commit = head_commit(repo)
     assert (code, f"{BASELINE_PATH} at its last commit {commit}" in out, digest(repo)) == (2, True, before)
     assert (
@@ -388,5 +361,5 @@ def test_a_ceiling_whose_last_commit_does_not_parse_refuses(pull_request, capsys
 def test_a_failing_git_quotes_nothing(pull_request, fake_git, capsys, command, said):
     repo = moved_with_git(pull_request)
     fake_git(f'case " $* " in *" {command} "*) echo "SECRET-OF-GIT" >&2; exit 9;; esac')
-    code, out, err = fixed(capsys, repo)
+    code, out, err = fixed(capsys, repo, *FIX_WORDS)
     assert (code, said in out, "SECRET-OF-GIT" in out + err) == (2, True, False)
