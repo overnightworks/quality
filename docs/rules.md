@@ -87,8 +87,8 @@ It applies these rules:
   Python 3.14 cannot decode or parse is named as not valid Python: without a baseline it stands as a note row under the debt row
   (`· bad.py  not measured  not valid Python`, O22) and the size verdict is unchanged, while `python-security` judges
   the file unparsable or cannot judge it (exit `2`); with a baseline the `debt` row is `✗ not checked` with
-  `bad.py is not valid Python (...)`, and `quality check --fix` refuses with the `debt` row `✗ not fixed`
-  and `bad.py is not valid Python (...)`, writing nothing; both exit `2`. A tracked file the operating system refuses to read makes the
+  `bad.py is not valid Python (...)`, and `quality check --fix` refuses the same way, writing nothing; both exit `2`.
+  Only where no baseline is held does `--fix` refuse with `✗ not fixed`, since only recording the first ceiling is refused. A tracked file the operating system refuses to read makes the
   `debt` row `✗ not checked` with or without a baseline, and `quality check --fix` refuses likewise, writing nothing; both exit `2`.
   The reason names the case: a file without read permission is `cannot read locked.py: [Errno 13] ...`, a file behind
   a directory without permission is `cannot reach pkg/m.py: [Errno 13] ...`. A tracked file missing from disk
@@ -105,8 +105,8 @@ It applies these rules:
   changes `quality/baseline.toml` at the top of the repository it is started in (a stray `src/quality/baseline.toml` is
   neither read nor removed) and then judges the tree against the new file. It only lowers: each held entry falls to its
   measured value (`lowered`, `function total CCN 19 → 17`) and goes where the measured value is no longer debt (`dropped`,
-  `file 805 → 790 lines · debt from 800 lines`); an entry that grew or is new stays a finding, its `fix:` adding `a raise is
-  a hand edit and a declared loosening`, and the rest still falls. An entry whose file or function is gone, or which
+  `file 805 → 790 lines · debt from 800 lines`); an entry that grew stays a finding, its `fix:` adding `a raise is
+  a hand edit and a declared loosening`, a new one stays a finding with its usual `fix:`, and the rest still falls. An entry whose file or function is gone, or which
   `[[size.generated]]` excludes, stands as it was; a held pair the tree lost goes (`dropped`, `pair ... is gone`). It
   records a ceiling (`recorded`, `N entries, M clone pairs · quality/baseline.toml is new`) only where none lies on disk,
   in the index or in any commit `HEAD` reaches; a ceiling or a `[clones]` table git holds and the tree lacks is `✗ not

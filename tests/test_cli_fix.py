@@ -145,7 +145,6 @@ def test_a_held_pair_the_tree_lost_is_dropped(build_repo, capsys):
     assert load_baseline((repo / BASELINE_PATH).read_text()).clones == frozenset()
 
 
-
 def commit_file(repo: Path, name: str, text: str) -> None:
     put(repo / name, text)
     git(repo, "add", "-f", name)
@@ -500,29 +499,33 @@ def a_path_that_is_no_utf8(build_repo, elsewhere) -> Path:
     return repo
 
 
+RESTORE = "restore quality/baseline.toml from git, or repair it by hand"
+FIX_ROWS = "fix what the ✗ rows name, then run quality check --fix again"
+
+
 @pytest.mark.parametrize(
-    "arrange",
+    ("arrange", "next_step"),
     [
-        a_ceiling_with(b"[file_lines\n"),
-        a_ceiling_with(b"\xff\xfe"),
-        a_ceiling_with(b'[file_lines]\n"src/a.py" = "many"\n'),
-        a_ceiling_with(b"[future]\n"),
-        a_link_out,
-        a_directory,
-        a_file_that_does_not_parse,
-        a_generated_file_python_cannot_parse,
-        a_config_refusal,
-        quality_is_a_file,
-        a_path_that_is_no_utf8,
+        pytest.param(a_ceiling_with(b"[file_lines\n"), RESTORE, id="no TOML"),
+        pytest.param(a_ceiling_with(b"\xff\xfe"), RESTORE, id="not UTF-8"),
+        pytest.param(a_ceiling_with(b'[file_lines]\n"src/a.py" = "many"\n'), RESTORE, id="not a count"),
+        pytest.param(a_ceiling_with(b"[future]\n"), "run the quality release your gate pins", id="an unknown table"),
+        pytest.param(a_link_out, FIX_ROWS, id="a link out"),
+        pytest.param(a_directory, FIX_ROWS, id="a directory"),
+        pytest.param(a_file_that_does_not_parse, FIX_ROWS, id="a file that does not parse"),
+        pytest.param(a_generated_file_python_cannot_parse, FIX_ROWS, id="a generated file python cannot parse"),
+        pytest.param(a_config_refusal, FIX_ROWS, id="a config refusal"),
+        pytest.param(quality_is_a_file, FIX_ROWS, id="quality is a file"),
+        pytest.param(a_path_that_is_no_utf8, FIX_ROWS, id="a path that is no UTF-8"),
     ],
-    ids=["no TOML", "not UTF-8", "not a count", "an unknown table", "a link out", "a directory", "a file that does not parse",
-         "a generated file python cannot parse", "a config refusal", "quality is a file", "a path that is no UTF-8"],
 )
-def test_every_refused_fix_writes_nothing(build_repo, elsewhere, capsys, arrange):
+def test_every_refused_fix_writes_nothing(build_repo, elsewhere, capsys, arrange, next_step):
     repo = arrange(build_repo, elsewhere)
     before = (tree_of(repo), tree_of(elsewhere))
-    code, out, _ = fixed(capsys, repo, *FIX_WORDS)
+    code, out, err = fixed(capsys, repo, *FIX_WORDS)
+    refusal = err.splitlines()
     assert (code, "  ✗ debt          not " in out, (tree_of(repo), tree_of(elsewhere))) == (2, True, before)
+    assert (refusal[0].startswith("error: 1 of 1 area could not check"), refusal[1:]) == (True, [f"next: {next_step}"])
 
 
 def a_size_config_and_a_near_copy(build_repo, elsewhere) -> Path:
