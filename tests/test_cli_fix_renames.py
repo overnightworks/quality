@@ -420,15 +420,15 @@ def test_a_failing_git_quotes_nothing(pull_request, fake_git, capsys, command, s
     assert (code, said in out, "SECRET-OF-GIT" in out + err) == (2, True, False)
 
 
-def unrelated_function(lines: int) -> str:
-    return "def unrelated_one():\n" + "".join(f"    print({number})\n" for number in range(lines - 1))
+def printing_long_one(lines: int) -> str:
+    return "def long_one():\n" + "".join(f"    print({number})\n" for number in range(lines - 1))
 
 
 def moved_beside_a_grown_file(pull_request) -> Path:
     held = ceiling(("src/old.py", 70), ("src/other.py", 70))
-    repo = based(pull_request, {"src/old.py": long_function(70), "src/other.py": unrelated_function(70)}, held)
+    repo = based(pull_request, {"src/old.py": long_function(70), "src/other.py": printing_long_one(70)}, held)
     git(repo, "mv", "src/old.py", "src/new.py")
-    put(repo / "src/other.py", unrelated_function(80))
+    put(repo / "src/other.py", printing_long_one(80))
     return repo
 
 
