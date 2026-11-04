@@ -124,7 +124,7 @@ It applies these rules:
   pairs of the whole tree must be measured), refuses it: the `debt` row is `✗ not checked` or `✗ not fixed`, exit `2`,
   and nothing is written. A refused fix leaves each rule the verdict it reached against the unchanged file. Another
   area's refusal does not undo a finished fix: the file is written, the `✓` row stands, the exit is `2`.
-  A moved file is `new debt` until its key moves by hand, and an entry gone from the tree stays until it is removed by hand.
+  `--fix` follows renames as the verdict carries them: from the ceiling's last commit it reads what git renamed into the index (`git diff --cached -M50% -l1000`), moves a renamed file's entries and pairs to the new path at their values (`moved`) and drops what the ceiling held under that path before the move (`dropped ... left from before the move`); a ceiling it already moved stays, an entry it cannot place refuses with the restore step, a shallow clone whose ceiling's last commit is its edge, which is every depth-1 clone that holds a ceiling, refuses `--fix` with `git fetch --unshallow`, and a move the index does not record is not followed. An entry gone from the tree stays until it is removed by hand.
 - `clone`: a pair is two functions (methods and nested functions too) in two different tracked `*.py` files, each of at
   least 40 tokens without its docstring, whose structure is at least 90 % the same once every name and literal is
   renamed; tests count like code, and a copy inside one file is no pair. A pair is named by the path and qualified
@@ -432,7 +432,7 @@ It applies these rules:
   its new path of leftovers; a rename to a path that is not UTF-8 is not read. The allowance moves rather than being copied: while the
   head baseline still names the old path, nothing moves and the new path's entries are adds. A pair whose files moved
   is the same pair, and a renamed function is a new entry. Renames are read only when the base and the head both hold a baseline: without a base, or without a baseline on
-  either side, nothing is read. `emergency-merge` fetches the same two commits and reads the same renames. `quality check --fix` and `check` name entries and pairs by their current path.
+  either side, nothing is read. `emergency-merge` fetches the same two commits and reads the same renames. `check` names entries and pairs by their current path; `check --fix` follows the renames since the ceiling's last commit.
 
   A lowered, equal or removed entry or pair is green, and so is adopting a baseline (the base has none) or having none
   on either side. A `[clones]` table the base lacks is an adoption too: its pairs are not compared, while the size

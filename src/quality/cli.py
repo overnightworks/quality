@@ -314,6 +314,7 @@ class AreaEvent(StrEnum):
     CLEAN = "clean"
     FINDING = "finding"
     LOWERED = "lowered"
+    MOVED = "moved"
     NOT_CHECKED = "not checked"
     NOT_FIXED = "not fixed"
     NOT_RECORDED = "not recorded"
@@ -341,7 +342,9 @@ def _in_file(fact: str) -> str:
 
 
 def _lowered_fact(fix: ratchet.CeilingFix) -> str:
-    return _in_file(f"{counted(fix.fell, 'entry', 'entries')} lowered") if fix.fell else "nothing lowered"
+    if fix.fell:
+        return _in_file(f"{counted(fix.fell, 'entry', 'entries')} lowered")
+    return _in_file(f"{counted(fix.moved, 'entry', 'entries')} moved") if fix.moved else "nothing lowered"
 
 
 def _ceiling_row(area: Area, fix: ratchet.CeilingFix) -> Row | None:
@@ -351,7 +354,9 @@ def _ceiling_row(area: Area, fix: ratchet.CeilingFix) -> Row | None:
         return Row(Glyph.CLEAN, area, AreaEvent.RECORDED, SEPARATOR.join((recorded, f"{ratchet.BASELINE_PATH} is new")))
     if fix.fell:
         return Row(Glyph.CLEAN, area, AreaEvent.LOWERED, _in_file(counted(fix.fell, "entry", "entries")))
-    return Row(Glyph.CLEAN, area, AreaEvent.RECORDED, _in_file(pairs)) if fix.changed else None
+    if fix.moved:
+        return Row(Glyph.CLEAN, area, AreaEvent.MOVED, _in_file(counted(fix.moved, "entry", "entries")))
+    return Row(Glyph.CLEAN, area, AreaEvent.RECORDED, _in_file(pairs)) if fix.recorded else None
 
 
 def _ceiling_words(fix: ratchet.CeilingFix | None, findings: int) -> str:
@@ -359,7 +364,9 @@ def _ceiling_words(fix: ratchet.CeilingFix | None, findings: int) -> str:
         return ""
     if fix.fell:
         return f"ceiling lowered by {counted(fix.fell, 'entry', 'entries')}"
-    if fix.changed:
+    if fix.moved:
+        return f"ceiling moved {counted(fix.moved, 'entry', 'entries')}"
+    if fix.first or fix.recorded:
         return "ceiling recorded"
     return "" if findings else "nothing to lower"
 

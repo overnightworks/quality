@@ -5,12 +5,14 @@ import os
 import re
 import subprocess
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from quality import process, repository
 from quality.report import CannotJudge, Command, Step, shell_word
 
 UNSHALLOW_STEP = Command("git fetch --unshallow")
+RENAME_LISTING = ("-M50%", "-l1000", "--no-color", "--name-status", "-z")
 WORKFLOW_DIRECTORY = PurePosixPath(".github/workflows")
 YAML_SUFFIXES = frozenset({".yml", ".yaml"})
 ACTION_FILES = frozenset({"action.yml", "action.yaml"})
@@ -98,6 +100,27 @@ def blobs_of(root: Path, name: str) -> tuple[str, ...]:
 
 def blob(root: Path, revision: str) -> bytes:
     return _git_listing(root, ["cat-file", "blob", revision]).stdout
+
+
+@dataclass(frozen=True)
+class Change:
+    """A commit that changed a file; a root commit and the edge of a shallow clone have no parent git holds."""
+
+    commit: str
+    has_parent: bool
+
+
+def last_change(root: Path, name: str) -> Change | None:
+    """The newest commit HEAD reaches that changed `name`, None where none did or no commit exists; `rev-list` reads no
+    `log.*` setting."""
+    command = ["rev-list", "-1", "--no-commit-header", "--format=%H %P", "--ignore-missing", "HEAD", "--", name]
+    fields = _git_listing(root, command).stdout.split()
+    return Change(fields[0].decode(), len(fields) > 1) if fields else None
+
+
+def renamed_since(root: Path, commit: str) -> bytes:
+    """git's renames from `commit` to the index, what the next commit records."""
+    return _git_listing(root, ["diff", "--cached", *RENAME_LISTING, commit, "--"]).stdout
 
 
 def is_shallow(root: Path) -> bool:

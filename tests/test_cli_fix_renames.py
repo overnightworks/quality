@@ -23,8 +23,8 @@ def ceiling(*entries: tuple[str, int]) -> str:
 
 def fixed(capsys, repo: Path) -> tuple[int, str, str]:
     code = door_in(repo, *FIX_WORDS, clock=lambda: 0.0)
-    printed = capsys.readouterr()
-    return code, printed.out, printed.err
+    out, err = capsys.readouterr()
+    return code, out, err
 
 
 def checked(capsys, repo: Path) -> tuple[int, str]:
@@ -232,7 +232,7 @@ def stale_target_repo(pull_request, lines: int) -> Path:
                     "✓ clean · ceiling lowered by 2 entries · 1 area · <1s\n"
                 ),
             ),
-            (0, "  ✓ debt          clean          ceiling held\n✓ clean · 1 area · <1s\n"),
+            (0, "  ✓ debt          clean          ceiling held · 1 entry, 0 clone pairs\n✓ clean · 1 area · <1s\n"),
             written_as("src/new.py", 90),
             id="shrunk to 90",
         ),
@@ -291,7 +291,7 @@ def test_an_entry_git_cannot_place_refuses_and_a_restored_ceiling_is_followed(pu
     before = digest(repo)
     code, out, err = fixed(capsys, repo)
     assert (code, "  ✗ debt          not fixed      " in out, left_over in out, digest(repo)) == (2, True, True, before)
-    assert err == f"error: 1 of 1 area could not check\nnext: {restore_step()}\n"
+    assert err == f"error: 1 of 1 area could not check · 1 finding, 1 of them in those areas\nnext: {restore_step()}\n"
     git(repo, "checkout", "HEAD", "--", BASELINE_PATH)
     code, out, _ = fixed(capsys, repo)
     assert (code, "src/c.py  moved  function long_one 70 lines from src/a.py" in out) == (0, True)
@@ -370,7 +370,10 @@ def test_a_ceiling_whose_last_commit_does_not_parse_refuses(pull_request, capsys
     code, out, err = fixed(capsys, repo)
     commit = head_commit(repo)
     assert (code, f"{BASELINE_PATH} at its last commit {commit}" in out, digest(repo)) == (2, True, before)
-    assert err.endswith(f"next: {restore_step()}\n")
+    assert (
+        err
+        == "error: 1 of 1 area could not check\nnext: fix what the ✗ rows name, then run quality check --fix again\n"
+    )
 
 
 @pytest.mark.parametrize(

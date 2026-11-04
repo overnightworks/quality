@@ -315,7 +315,29 @@ $ quality check --fix
 
 A fall below a metric's threshold drops the entry (`dropped  file 805 → 790 lines · debt from 800 lines`); operator ruling of 3.11.2026 („Eintrag fällt weg“). That is why the examples fall to 812 lines and CCN 17, above their thresholds.
 
-Built: every frame but the gone row (C7c) and the dry run (C7d). `--fix` takes no `--staged` and needs `debt` among the named areas, or none named.
+A file git renamed into the index since the ceiling's last commit takes its entries and pairs with it (`moved`); what the ceiling held under the new path before the move goes (`dropped`, `left from before the move`), and what grew stays a finding. Exit 0 when nothing else is open, stdout.
+
+```text
+$ git mv src/shop/orders.py src/shop/order_book.py
+$ quality check debt --fix
+  ✓ debt          moved          1 entry · quality/baseline.toml
+    ✓ src/shop/order_book.py  moved  file 826 lines from src/shop/orders.py
+✓ clean · ceiling moved 1 entry · 1 area · 2s
+```
+
+The stale-target case, an old entry beside a file the ceiling still holds under the new path. Exit 1.
+
+```text
+$ quality check debt --fix
+  ! debt          1 finding      1 entry lowered · quality/baseline.toml
+    ! src/new.py:1  grew     function f has 150 lines · ceiling 100
+      fix: bring it back to 100 lines or below; a raise is a hand edit and a declared loosening
+    ✓ src/new.py    moved    function f 100 lines from src/old.py
+    ✓ src/new.py    dropped  function f 200 lines · left from before the move
+! 1 finding in 1 area · ceiling lowered by 1 entry · 2s
+```
+
+Built: every frame but the gone row (C7c2) and the dry run (C7d). `--fix` takes no `--staged` and needs `debt` among the named areas, or none named.
 
 No ceiling yet: first a note, then the first recording. Both exit 0. stdout.
 

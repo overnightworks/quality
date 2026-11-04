@@ -31,120 +31,133 @@ def renamed(moves, unnamed_sources=()):
 
 
 def tracked_after(held, committed, renames):
-    """Every path either ceiling names, but the sources git moved away."""
-    paths = named_paths(held) | named_paths(committed)
-    return paths - set(renames.moves)
+    """Every path either ceiling names or a rename targets, but the sources git moved away."""
+    return (named_paths(held) | named_paths(committed) | renames.targets) - set(renames.moves)
+
+
+def moved_entry_cases():
+    return [
+        pytest.param(
+            Baseline({sized("a.py"): 16}, None),
+            Baseline({sized("a.py"): 16}, None),
+            renamed({"a.py": "b.py"}),
+            Baseline({sized("b.py"): 16}, None),
+            [NoteEvent.MOVED],
+            id="as committed moves",
+        ),
+        pytest.param(
+            Baseline({sized("a.py"): 15}, None),
+            Baseline({sized("a.py"): 16}, None),
+            renamed({"a.py": "b.py"}),
+            Baseline({sized("b.py"): 15}, None),
+            [NoteEvent.MOVED],
+            id="held lower than committed moves lower",
+        ),
+        pytest.param(
+            Baseline({sized("a.py"): 100, sized("b.py"): 200}, None),
+            Baseline({sized("a.py"): 100, sized("b.py"): 200}, None),
+            renamed({"a.py": "b.py"}),
+            Baseline({sized("b.py"): 100}, None),
+            [NoteEvent.MOVED, NoteEvent.DROPPED],
+            id="the stale leftover goes",
+        ),
+        pytest.param(
+            Baseline({sized("a.py"): 100, sized("b.py", "g"): 200}, None),
+            Baseline({sized("a.py"): 100, sized("b.py", "g"): 200}, None),
+            renamed({"a.py": "b.py"}),
+            Baseline({sized("b.py"): 100}, None),
+            [NoteEvent.MOVED, NoteEvent.DROPPED],
+            id="a leftover the source lacks",
+        ),
+    ]
+
+
+def followed_entry_cases():
+    return [
+        pytest.param(
+            Baseline({sized("b.py"): 16}, None),
+            Baseline({sized("a.py"): 16}, None),
+            renamed({"a.py": "b.py"}),
+            Baseline({sized("b.py"): 16}, None),
+            [],
+            id="already followed stays",
+        ),
+        pytest.param(
+            Baseline({sized("b.py"): 15}, None),
+            Baseline({sized("a.py"): 16}, None),
+            renamed({"a.py": "b.py"}),
+            Baseline({sized("b.py"): 15}, None),
+            [],
+            id="already followed and lowered stays",
+        ),
+        pytest.param(
+            Baseline({}, None),
+            Baseline({sized("a.py"): 16}, None),
+            renamed({"a.py": "b.py"}),
+            Baseline({}, None),
+            [],
+            id="nothing held stays empty",
+        ),
+        pytest.param(
+            Baseline({sized("b.py"): 200}, None),
+            Baseline({sized("b.py"): 200}, None),
+            renamed({}, unnamed_sources=["b.py"]),
+            Baseline({}, None),
+            [NoteEvent.DROPPED],
+            id="a source that is not UTF-8 drops the leftover",
+        ),
+        pytest.param(
+            Baseline({sized("a.py"): 16, sized("c.py"): 17}, None),
+            Baseline({sized("a.py"): 16, sized("c.py"): 17}, None),
+            renamed({"a.py": "b.py"}),
+            Baseline({sized("b.py"): 16, sized("c.py"): 17}, None),
+            [NoteEvent.MOVED],
+            id="an untouched entry stays",
+        ),
+    ]
+
+
+def pair_cases():
+    return [
+        pytest.param(
+            Baseline({}, frozenset({paired("a.py", "z.py")})),
+            Baseline({}, frozenset({paired("a.py", "z.py")})),
+            renamed({"a.py": "b.py"}),
+            Baseline({}, frozenset({paired("b.py", "z.py")})),
+            [NoteEvent.MOVED],
+            id="a pair moves",
+        ),
+        pytest.param(
+            Baseline({}, frozenset({paired("a.py", "z.py"), paired("b.py", "y.py")})),
+            Baseline({}, frozenset({paired("a.py", "z.py"), paired("b.py", "y.py")})),
+            renamed({"a.py": "b.py"}),
+            Baseline({}, frozenset({paired("b.py", "z.py")})),
+            [NoteEvent.MOVED, NoteEvent.DROPPED],
+            id="a leftover pair goes",
+        ),
+        pytest.param(
+            Baseline({}, frozenset({paired("a.py", "z.py")})),
+            Baseline({}, None),
+            renamed({"a.py": "b.py"}),
+            Baseline({}, frozenset({paired("b.py", "z.py")})),
+            [NoteEvent.MOVED],
+            id="pairs without a committed table move",
+        ),
+        pytest.param(
+            Baseline({}, frozenset({paired("a.py", "b.py")})),
+            Baseline({}, frozenset({paired("a.py", "b.py")})),
+            renamed({"a.py": "c.py", "b.py": "d.py"}),
+            Baseline({}, frozenset({paired("c.py", "d.py")})),
+            [NoteEvent.MOVED],
+            id="a pair touching two renames",
+        ),
+    ]
 
 
 def follow_cases():
     return pytest.mark.parametrize(
         ("held", "committed", "renames", "expected", "events"),
-        [
-            pytest.param(
-                Baseline({sized("a.py"): 16}, None),
-                Baseline({sized("a.py"): 16}, None),
-                renamed({"a.py": "b.py"}),
-                Baseline({sized("b.py"): 16}, None),
-                [NoteEvent.MOVED],
-                id="as committed moves",
-            ),
-            pytest.param(
-                Baseline({sized("a.py"): 15}, None),
-                Baseline({sized("a.py"): 16}, None),
-                renamed({"a.py": "b.py"}),
-                Baseline({sized("b.py"): 15}, None),
-                [NoteEvent.MOVED],
-                id="held lower than committed moves lower",
-            ),
-            pytest.param(
-                Baseline({sized("a.py"): 100, sized("b.py"): 200}, None),
-                Baseline({sized("a.py"): 100, sized("b.py"): 200}, None),
-                renamed({"a.py": "b.py"}),
-                Baseline({sized("b.py"): 100}, None),
-                [NoteEvent.MOVED, NoteEvent.DROPPED],
-                id="the stale leftover goes",
-            ),
-            pytest.param(
-                Baseline({sized("a.py"): 100, sized("b.py", "g"): 200}, None),
-                Baseline({sized("a.py"): 100, sized("b.py", "g"): 200}, None),
-                renamed({"a.py": "b.py"}),
-                Baseline({sized("b.py"): 100}, None),
-                [NoteEvent.MOVED, NoteEvent.DROPPED],
-                id="a leftover the source lacks",
-            ),
-            pytest.param(
-                Baseline({sized("b.py"): 16}, None),
-                Baseline({sized("a.py"): 16}, None),
-                renamed({"a.py": "b.py"}),
-                Baseline({sized("b.py"): 16}, None),
-                [],
-                id="already followed stays",
-            ),
-            pytest.param(
-                Baseline({sized("b.py"): 15}, None),
-                Baseline({sized("a.py"): 16}, None),
-                renamed({"a.py": "b.py"}),
-                Baseline({sized("b.py"): 15}, None),
-                [],
-                id="already followed and lowered stays",
-            ),
-            pytest.param(
-                Baseline({}, None),
-                Baseline({sized("a.py"): 16}, None),
-                renamed({"a.py": "b.py"}),
-                Baseline({}, None),
-                [],
-                id="nothing held stays empty",
-            ),
-            pytest.param(
-                Baseline({sized("b.py"): 200}, None),
-                Baseline({sized("b.py"): 200}, None),
-                renamed({}, unnamed_sources=["b.py"]),
-                Baseline({}, None),
-                [NoteEvent.DROPPED],
-                id="a source that is not UTF-8 drops the leftover",
-            ),
-            pytest.param(
-                Baseline({sized("a.py"): 16, sized("c.py"): 17}, None),
-                Baseline({sized("a.py"): 16, sized("c.py"): 17}, None),
-                renamed({"a.py": "b.py"}),
-                Baseline({sized("b.py"): 16, sized("c.py"): 17}, None),
-                [NoteEvent.MOVED],
-                id="an untouched entry stays",
-            ),
-            pytest.param(
-                Baseline({}, frozenset({paired("a.py", "z.py")})),
-                Baseline({}, frozenset({paired("a.py", "z.py")})),
-                renamed({"a.py": "b.py"}),
-                Baseline({}, frozenset({paired("b.py", "z.py")})),
-                [NoteEvent.MOVED],
-                id="a pair moves",
-            ),
-            pytest.param(
-                Baseline({}, frozenset({paired("a.py", "z.py"), paired("b.py", "y.py")})),
-                Baseline({}, frozenset({paired("a.py", "z.py"), paired("b.py", "y.py")})),
-                renamed({"a.py": "b.py"}),
-                Baseline({}, frozenset({paired("b.py", "z.py")})),
-                [NoteEvent.MOVED, NoteEvent.DROPPED],
-                id="a leftover pair goes",
-            ),
-            pytest.param(
-                Baseline({}, frozenset({paired("a.py", "z.py")})),
-                Baseline({}, None),
-                renamed({"a.py": "b.py"}),
-                Baseline({}, frozenset({paired("b.py", "z.py")})),
-                [NoteEvent.MOVED],
-                id="pairs without a committed table move",
-            ),
-            pytest.param(
-                Baseline({}, frozenset({paired("a.py", "b.py")})),
-                Baseline({}, frozenset({paired("a.py", "b.py")})),
-                renamed({"a.py": "c.py", "b.py": "d.py"}),
-                Baseline({}, frozenset({paired("c.py", "d.py")})),
-                [NoteEvent.MOVED],
-                id="a pair touching two renames",
-            ),
-        ],
+        [*moved_entry_cases(), *followed_entry_cases(), *pair_cases()],
     )
 
 

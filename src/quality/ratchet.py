@@ -25,7 +25,7 @@ import lizard
 from quality import __version__, checkout, repository
 from quality.config import CONFIG_PATH, GENERATED_FILE_HEADING, GeneratedFile
 from quality.output import SEPARATOR, counted
-from quality.report import Finding, FindingEvent, Instruction, Note, NoteEvent, RuleResult, Unparsable
+from quality.report import CannotJudge, Finding, FindingEvent, Instruction, Note, NoteEvent, RuleResult, Unparsable
 from quality.rules import Rule
 
 BASELINE_PATH = "quality/baseline.toml"
@@ -358,16 +358,60 @@ class Renames:
 NO_RENAMES = Renames({}, frozenset())
 
 
-def carried_base(base: Baseline, head: Baseline, renames: Renames) -> Baseline:
-    """The base as the head's renames read it.
+def renames_of(name_status: bytes) -> Renames:
+    """`git diff --name-status -z` records: a status, then one path, or two for a rename or a copy.
+
+    Only a rename counts, and a source git lists as renamed twice cannot be judged. Only a rename's two paths are decoded,
+    as UTF-8 without newline translation, so a path holding a carriage return stays the path git named. A rename whose
+    target is not UTF-8 is skipped, since no baseline key can name it; one whose source is not UTF-8 still clears its
+    target of leftovers and carries nothing.
+    """
+    renamed = list(_renamed_paths(name_status))
+    sources = [old_bytes for old_bytes, _ in renamed]
+    if len(set(sources)) != len(sources):
+        raise CannotJudge("git listed one source as renamed twice")
+    moves: dict[str, str] = {}
+    unnamed_sources: set[str] = set()
+    for old_bytes, new_bytes in renamed:
+        try:
+            new = new_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        try:
+            moves[old_bytes.decode("utf-8")] = new
+        except UnicodeDecodeError:
+            unnamed_sources.add(new)
+    return Renames(moves, frozenset(moves.values()) | unnamed_sources)
+
+
+def _renamed_paths(name_status: bytes) -> Iterator[tuple[bytes, bytes]]:
+    """The (source, target) bytes of each rename record; a record cut short cannot be judged."""
+    fields = name_status.split(b"\0")
+    if fields.pop() != b"":
+        raise CannotJudge("git's list of renamed files ended inside a record")
+    records = iter(fields)
+    for status in records:
+        try:
+            paths = [next(records), *([next(records)] if status.startswith((b"R", b"C")) else [])]
+        except StopIteration:
+            raise CannotJudge("git's list of renamed files ended inside a record") from None
+        if status.startswith(b"R"):
+            yield paths[0], paths[1]
+
+
+def named_paths(baseline: Baseline) -> frozenset[str]:
+    """Every path a baseline names, by a size entry or a pair side."""
+    sides = {place.path for pair in baseline.clones or () for place in (pair.first, pair.second)}
+    return frozenset({key.path for key in baseline.size} | sides)
+
+
+def carried_base(base: Baseline, renames: Renames, kept: Collection[str]) -> Baseline:
+    """The base as `renames` read it.
 
     An entry under a rename's target is a leftover of a file the base no longer has and is dropped. The entries under
-    the old path move to the target unless the head still holds something under the old path.
+    the old path move to the target unless `kept`, the paths the head still names, holds the old path.
     """
-    held = {key.path for key in head.size} | {
-        place.path for pair in head.clones or () for place in (pair.first, pair.second)
-    }
-    moves = {old: new for old, new in renames.moves.items() if old not in held}
+    moves = {old: new for old, new in renames.moves.items() if old not in kept}
 
     def new_path(path: str) -> str | None:
         """Where the base's entries under `path` go in the head's reading, None when they are dropped."""
@@ -419,6 +463,7 @@ def _fall(key: Key, held: int, value: int) -> str:
 
 
 FELL = frozenset({NoteEvent.LOWERED, NoteEvent.DROPPED})
+LEFT_BEHIND = "left from before the move"
 
 
 @dataclass(frozen=True)
@@ -436,6 +481,14 @@ class CeilingFix:
     @property
     def fell(self) -> int:
         return sum(change.event in FELL for change in self.changes)
+
+    @property
+    def moved(self) -> int:
+        return sum(change.event is NoteEvent.MOVED for change in self.changes)
+
+    @property
+    def recorded(self) -> bool:
+        return any(change.event is NoteEvent.RECORDED for change in self.changes)
 
 
 def lower_ceiling(held: Baseline, measurements: Measurements, pairs: frozenset[ClonePair]) -> CeilingFix:
@@ -460,6 +513,84 @@ def lower_ceiling(held: Baseline, measurements: Measurements, pairs: frozenset[C
         return CeilingFix(Baseline(size, pairs), (*changes, recorded))
     changes += [Note(pair.first.path, NoteEvent.DROPPED, f"pair {pair.label} is gone") for pair in sorted(held.clones - pairs)]
     return CeilingFix(Baseline(size, held.clones & pairs), tuple(changes))
+
+
+def _within(entries: SizeEntries, bound: SizeEntries) -> bool:
+    return all(key in bound and value <= bound[key] for key, value in entries.items())
+
+
+def _followed_note(key: Key, value: int, source: str | None, target: str) -> Note:
+    held = f"{_subject(key)} {key.metric.describe(value)}"
+    if key.path == source:
+        return Note(target, NoteEvent.MOVED, f"{held} from {source}")
+    return Note(target, NoteEvent.DROPPED, SEPARATOR.join((held, LEFT_BEHIND)))
+
+
+def _first_outside(entries: SizeEntries, bound: SizeEntries) -> str:
+    """The path of the first entry `bound` does not hold at or above its value."""
+    return next(key.path for key in sorted(entries, key=_order) if not _within({key: entries[key]}, bound))
+
+
+def _unexplained(path: str) -> CannotJudge:
+    return CannotJudge(f"{BASELINE_PATH} holds entries under {path} its last commit does not explain", (RESTORE_STEP,))
+
+
+def _require_placed(size: SizeEntries, committed: SizeEntries, tracked: frozenset[str]) -> None:
+    """An entry the committed ceiling lacks under a path git no longer tracks has no lineage."""
+    unplaced = sorted({key.path for key in size if key.path not in tracked and key not in committed})
+    if unplaced:
+        raise _unexplained(unplaced[0])
+
+
+def follow_renames(held: Baseline, committed: Baseline, renames: Renames, tracked: frozenset[str]) -> CeilingFix:
+    """The held ceiling as the verdict will carry the committed one.
+
+    Per rename, held entries still in the committed form leave their source for its target, and the target's leftovers
+    go; entries the carry already holds, no higher, stay. Anything else under a renamed path, and an entry the committed
+    ceiling lacks under a path git no longer tracks, has no lineage git can show: the fix refuses before it writes.
+    """
+    carried = carried_base(committed, renames, ())  # git renamed every source out of the index, so the fix keeps none
+    sources = {target: source for source, target in renames.moves.items()}
+    size, changes = dict(held.size), []
+    for target in sorted(renames.targets):
+        source = sources.get(target)
+        mine = {key: value for key, value in held.size.items() if key.path in (source, target)}
+        if _within(mine, carried.size):
+            continue
+        if not _within(mine, committed.size):
+            raise _unexplained(_first_outside(mine, committed.size))
+        for key in mine:
+            del size[key]
+        size.update({key._replace(path=target): value for key, value in mine.items() if key.path == source})
+        moved_first = sorted(mine, key=lambda key: (key.path != source, _order(key)))
+        changes += [_followed_note(key, mine[key], source, target) for key in moved_first]
+    _require_placed(size, committed.size, tracked)
+    if held.clones is None:
+        return CeilingFix(Baseline(size, None), tuple(changes))
+    pairs, pair_changes = _followed_pairs(held.clones, carried.clones, renames)
+    return CeilingFix(Baseline(size, pairs), (*changes, *pair_changes))
+
+
+def _followed_pairs(
+    held: frozenset[ClonePair], carried: frozenset[ClonePair] | None, renames: Renames
+) -> tuple[frozenset[ClonePair], list[Note]]:
+    """Each held pair a rename touches, under its sides' new paths where the carry holds it so (any, without a
+    committed table, which the verdict does not compare); one the carry lacks is a leftover and goes."""
+    touched = {*renames.moves, *renames.targets}
+    pairs, notes = set(), []
+    for pair in sorted(held):
+        if not touched & {pair.first.path, pair.second.path}:
+            pairs.add(pair)
+            continue
+        sides = (place._replace(path=renames.moves.get(place.path, place.path)) for place in (pair.first, pair.second))
+        followed = ClonePair.of(*sides)
+        if carried is not None and followed not in carried:
+            notes.append(Note(pair.first.path, NoteEvent.DROPPED, SEPARATOR.join((f"pair {pair.label}", LEFT_BEHIND))))
+            continue
+        pairs.add(followed)
+        if followed != pair:
+            notes.append(Note(followed.first.path, NoteEvent.MOVED, f"pair {followed.label} · was {pair.label}"))
+    return frozenset(pairs), notes
 
 
 def after_fix(result: RuleResult, fix: CeilingFix) -> RuleResult:
