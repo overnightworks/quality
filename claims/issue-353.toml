@@ -3,6 +3,6 @@ agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
 role = "builder"
 base = "b9c8c37ff93e3a688f20d04c7001321bb01fed4b"
 branch = "claude/issue-353-c7c1-quality-check-fix-follows-renames"
-scope = ["AGENTS.md", "docs/commands.md", "docs/output.md", "docs/rules.md", "src/quality/check.py", "src/quality/checkout.py", "src/quality/cli.py", "src/quality/output.py", "src/quality/ratchet.py", "src/quality/report.py", "src/quality/verdict.py", "tests/test_checkout.py", "tests/test_cli_fix.py", "tests/test_cli_fix_renames.py", "tests/test_output.py", "tests/test_ratchet.py", "tests/test_ratchet_follow.py", "tests/test_verdict_renames.py"]
+scope = ["AGENTS.md", "docs/commands.md", "docs/output.md", "docs/rules.md", "src/quality/check.py", "src/quality/checkout.py", "src/quality/cli.py", "src/quality/output.py", "src/quality/ratchet.py", "src/quality/report.py", "src/quality/verdict.py", "tests/support/door.py", "tests/support/git_repositories.py", "tests/test_checkout.py", "tests/test_cli_fix.py", "tests/test_cli_fix_renames.py", "tests/test_output.py", "tests/test_ratchet.py", "tests/test_ratchet_follow.py", "tests/test_verdict_renames.py"]
 opened_commit = "a03a333d7bc2ec68cd93abdc2ad72e8e3ca4eb35"
 whole_reason = "Seven production files, about +170/-50 with 40 lines moved: following a rename needs the lineage read (checkout), the verdict's carry through its one owner (ratchet, verdict), the fix flow (check) and its rows (cli, report, output) together; a partial landing prints a frame that lies or builds a refusal the carry replaces."
