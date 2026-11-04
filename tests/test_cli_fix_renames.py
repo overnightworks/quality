@@ -314,7 +314,7 @@ def test_an_entry_git_cannot_place_refuses_and_a_restored_ceiling_is_followed(pu
     before = digest(repo)
     code, out, err = fixed(capsys, repo, *FIX_WORDS)
     assert (code, "  ✗ debt          not fixed      " in out, left_over in out, digest(repo)) == (2, True, True, before)
-    assert err == f"error: 1 of 1 area could not check · 1 finding, 1 of them in those areas\nnext: {restore_step()}\n"
+    assert err == f"error: 1 of 1 area could not check · 2 findings, 2 of them in those areas\nnext: {restore_step()}\n"
     git(repo, "checkout", "HEAD", "--", BASELINE_PATH)
     code, out, _ = fixed(capsys, repo, *FIX_WORDS)
     assert (code, "src/c.py  moved  function long_one 70 lines from src/a.py" in out) == (0, True)
@@ -325,7 +325,9 @@ def test_a_stale_committed_entry_for_a_deleted_file_does_not_stop_a_move_from_be
     git(repo, "mv", "src/old.py", "src/new.py")
     code, out, _ = fixed(capsys, repo, *FIX_WORDS)
     held = (repo / BASELINE_PATH).read_text()
-    assert (code, moved_note("src/new.py", "src/old.py") in out, "dropped  function long_one is gone" in out, "src/gone.py" in held) == (0, True, True, False)
+    printed = " ".join(out.split())
+    moved, dropped = " ".join(moved_note("src/new.py", "src/old.py").split()), "src/gone.py dropped function long_one is gone"
+    assert (code, moved in printed, dropped in printed, "src/gone.py" in held) == (0, True, True, False)
 
 
 def test_a_ceiling_committed_in_the_root_commit_of_a_whole_repository_is_followed(build_repo, capsys):
@@ -387,7 +389,8 @@ def test_no_committed_ceiling_follows_nothing(pull_request, capsys):
     git(repo, "mv", "src/old.py", "src/new.py")
     before = digest(repo)
     code, out, _ = fixed(capsys, repo, *FIX_WORDS)
-    assert (code, digest(repo) == before, "moved" in out, "dropped  function long_one is gone" in out, "new debt" in out) == (1, False, False, True, True)
+    printed = " ".join(out.split())
+    assert (code, digest(repo) == before, "moved" in out, "dropped function long_one is gone" in printed, "new debt" in out) == (1, False, False, True, True)
 
 
 def test_a_ceiling_whose_last_commit_does_not_parse_refuses(pull_request, capsys):

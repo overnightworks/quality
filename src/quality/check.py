@@ -292,6 +292,7 @@ def _judge_baseline_rules(
     sources: dict[str, bytes] | CannotJudge,
     baseline: ratchet.Baseline | None | CannotJudge,
     allow_lists: AllowLists | CannotJudge,
+    tracked: frozenset[str],
 ) -> tuple[RuleResult | CannotJudge, RuleResult | CannotJudge]:
     """The size and clone verdicts, both from one measurement of the tree and one read of the baseline."""
     if isinstance(sources, CannotJudge):
@@ -299,7 +300,7 @@ def _judge_baseline_rules(
     if isinstance(baseline, CannotJudge):
         return baseline, baseline
     tree = ratchet.measure(sources)
-    size = _attempt(lambda: ratchet.check_size(tree, baseline, _required(allow_lists).generated))
+    size = _attempt(lambda: ratchet.check_size(tree, baseline, _required(allow_lists).generated, tracked))
     return size, _attempt(lambda: clones.check_clones(tree, sources, baseline))
 
 
@@ -428,15 +429,17 @@ def _fix_ceiling(inputs: RunInputs, sources: dict[str, bytes], held: ratchet.Bas
     """The ceiling lowered, or recorded where git never held one, and written when it changed."""
     tree = ratchet.measure(sources)
     ratchet.complete(tree)
-    measurements = ratchet.without_generated(tree, _required(inputs.allow_lists).generated).measurements
+    generated = _required(inputs.allow_lists).generated
+    measurements = ratchet.without_generated(tree, generated).measurements
     pairs = clones.find_pairs(sources).pairs
     if held is None:
         _require_no_ceiling_in_git(inputs)
         return _written(inputs.root, ratchet.CeilingFix(ratchet.Baseline(ratchet.debt(measurements), pairs), (), first=True))
     if held.clones is None:
         _require_no_clones_table_in_git(inputs)
-    followed = _followed(inputs, held)
-    lowered = ratchet.lower_ceiling(followed.ceiling, measurements, pairs)
+    followed = _followed(inputs, held)  # renames first, so a renamed file's entries move instead of falling as gone
+    gone = ratchet.gone_entries(followed.ceiling.size, measurements, frozenset(inputs.tracked), generated)
+    lowered = ratchet.lower_ceiling(followed.ceiling, measurements, pairs, gone)
     return _written(inputs.root, replace(lowered, changes=(*followed.changes, *lowered.changes)))
 
 
@@ -447,7 +450,9 @@ def _judge_debt(inputs: RunInputs) -> AreaVerdict:
     if inputs.fix and not isinstance(baseline, CannotJudge):
         fix = _attempt(lambda: _fix_ceiling(inputs, sources, baseline))
     fixed = isinstance(fix, ratchet.CeilingFix)
-    size, clone = _judge_baseline_rules(sources, fix.ceiling if fixed else baseline, inputs.allow_lists)
+    size, clone = _judge_baseline_rules(
+        sources, fix.ceiling if fixed else baseline, inputs.allow_lists, frozenset(inputs.tracked)
+    )
     if fixed:
         size = ratchet.after_fix(_required(size), fix)  # the config was read and the tree is complete
     return _area_verdict(Area.DEBT, {Rule.SIZE: size, Rule.CLONE: clone}, ceiling=fix)

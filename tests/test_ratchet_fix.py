@@ -93,7 +93,7 @@ def test_a_pair_the_tree_lost_goes_and_a_new_one_stays_out():
 
 
 def test_a_file_without_clones_records_its_pairs():
-    fix = lower_ceiling(Baseline({}, None), {}, frozenset({pair("work", "b")}))
+    fix = lower_ceiling(Baseline({}, None), {}, frozenset({pair("work", "b")}), {})
     assert fix.ceiling.clones == frozenset({pair("work", "b")})
     assert [change.event for change in fix.changes] == [NoteEvent.RECORDED]
 

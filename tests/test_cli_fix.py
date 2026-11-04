@@ -649,7 +649,7 @@ def test_under_v_a_fix_keeps_its_write_and_exit(build_repo, capsys, verbosity):
         pytest.param(
             {"src/a.py": long_function(62)},
             held_ceiling(62, clones=False) + '\n[file_lines]\n"src/gone.py" = 900\n\n[clones]\n',
-            held_ceiling(62),
+            '[function_lines."src/a.py"]\n"long_one" = 62\n\n[clones]\n',
             id="a gone entry dropped",
         ),
     ],
