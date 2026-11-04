@@ -418,3 +418,17 @@ def test_a_failing_git_quotes_nothing(pull_request, fake_git, capsys, command, s
     fake_git(f'case " $* " in *" {command} "*) echo "SECRET-OF-GIT" >&2; exit 9;; esac')
     code, out, err = fixed(capsys, repo, *FIX_WORDS)
     assert (code, said in out, "SECRET-OF-GIT" in out + err) == (2, True, False)
+
+
+def moved_beside_a_grown_file(pull_request) -> Path:
+    held = ceiling(("src/old.py", 70), ("src/other.py", 70))
+    repo = based(pull_request, {"src/old.py": long_function(70), "src/other.py": long_function(70)}, held)
+    git(repo, "mv", "src/old.py", "src/new.py")
+    put(repo / "src/other.py", long_function(80))
+    return repo
+
+
+def test_a_move_beside_a_finding_is_named_in_the_debt_row(pull_request, capsys):
+    code, out, err = fixed(capsys, moved_beside_a_grown_file(pull_request), *FIX_WORDS)
+    assert (code, err) == (1, "")
+    assert "  ! debt          2 findings     1 entry moved · quality/baseline.toml\n" in out
