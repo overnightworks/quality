@@ -259,8 +259,8 @@ The debt ceiling is `quality/baseline.toml`. Where code shrank it can fall; `--f
 $ quality check debt
   · release       v0.9.0         pinned in .github/workflows/ci.yml
   ! debt          3 findings
-    ! src/shop/orders.py   can fall  file has 812 lines · ceiling 826
     ! src/shop/cart.py:63  can fall  function total has CCN 17 · ceiling 19
+    ! src/shop/orders.py   can fall  file has 812 lines · ceiling 826
     ! src/shop/legacy.py   can fall  file is gone · ceiling 802 lines
       fix: quality check --fix
 ! 3 findings in 1 area · 2s
@@ -337,7 +337,7 @@ $ quality check debt --fix
 ! 1 finding in 1 area · ceiling lowered by 1 entry · 2s
 ```
 
-Built: every frame but the gone row (C7c2) and the dry run (C7d). `--fix` takes no `--staged` and needs `debt` among the named areas, or none named.
+Built: every frame but the dry run (C7d). `--fix` takes no `--staged` and needs `debt` among the named areas, or none named.
 
 No ceiling yet: first a note, then the first recording. Both exit 0. stdout.
 

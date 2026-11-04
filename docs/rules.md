@@ -66,7 +66,8 @@ It applies these rules:
   ```
 
   A declared file's lines, functions and CCN are neither judged, counted in the not-recorded row's count nor recorded by
-  `quality check --fix`; a baseline entry left under its path is gone, as for a deleted file. `path` is the exact
+  `quality check --fix`; a baseline entry left under its path can fall (`file is left out as generated · ceiling 850 lines`) until
+  `quality check --fix` drops it (`dropped  file is left out as generated`). `path` is the exact
   tracked path of one file, `job` one of `[gate] mandatory_jobs`, the job whose generator check proves the file (quality
   cannot see what that job runs; the operator checks it once, at the door). A missing or extra key, a folder, a pattern,
   `..`, an absolute path, a `job` the gate does not list (a config without `mandatory_jobs` included), a malformed `item`
@@ -92,22 +93,25 @@ It applies these rules:
   `debt` row `✗ not checked` with or without a baseline, and `quality check --fix` refuses likewise, writing nothing; both exit `2`.
   The reason names the case: a file without read permission is `cannot read locked.py: [Errno 13] ...`, a file behind
   a directory without permission is `cannot reach pkg/m.py: [Errno 13] ...`. A tracked file missing from disk
-  (deleted, or a dangling symlink) is skipped. A `quality/baseline.toml` that is not UTF-8 is malformed like invalid
+  (deleted but not staged, left out by a sparse checkout, or a dangling symlink) is skipped, and its entries stand,
+  unjudged, while the index tracks it. A `quality/baseline.toml` that is not UTF-8 is malformed like invalid
   TOML and says to restore it from git or repair it by hand. A baseline with a table this quality does not know
   (`has an unknown table [future]; quality <version> knows ccn, file_lines, function_lines, clones`) is not told that:
   a newer quality may have written it, so the head is told to run the quality release its gate pins.
   With `quality/baseline.toml`, the tree on disk must hold the baseline: a new violation, an entry that grew and an
   entry above its measured value are findings, each a row under the debt row: `new debt` (`file has 800 lines · debt from 800 lines`,
   fix: split the file below 800 lines), `grew` (`function read_rows has 71 lines · ceiling 64`, fix: bring it back to 64 lines or below) and `can fall`
-  (`file has 742 lines · ceiling 766`, fix: `quality check --fix`); an entry whose file or function is gone is
-  fine and still counts in the clean row's `ceiling held · N entries, M clone pairs`. Vocabulary: O20, extents: O21.
+  (`file has 742 lines · ceiling 766`, fix: `quality check --fix`); an entry whose path the index no longer tracks, or whose Python
+  file is measured without the function, can fall after the measured rows, with no line (`file is gone · ceiling 802 lines`,
+  `function total is gone · ceiling CCN 19`, fix: `quality check --fix`); an entry with no measurement otherwise (a tracked
+  file missing from disk, a function entry under a file of another language) stands and counts in the clean row's `ceiling held · N entries, M clone pairs`. Vocabulary: O20, extents: O21.
   `quality check debt --fix` (`--fix` takes no `--staged` and needs `debt` among the named areas, or none named; no workflow runs it)
   changes `quality/baseline.toml` at the top of the repository it is started in (a stray `src/quality/baseline.toml` is
   neither read nor removed) and then judges the tree against the new file. It only lowers: each held entry falls to its
   measured value (`lowered`, `function total CCN 19 → 17`) and goes where the measured value is no longer debt (`dropped`,
   `file 805 → 790 lines · debt from 800 lines`); an entry that grew stays a finding, its `fix:` adding `a raise is
-  a hand edit and a declared loosening`, a new one stays a finding with its usual `fix:`, and the rest still falls. An entry whose file or function is gone, or which
-  `[[size.generated]]` excludes, stands as it was; a held pair the tree lost goes (`dropped`, `pair ... is gone`). It
+  a hand edit and a declared loosening`, a new one stays a finding with its usual `fix:`, and the rest still falls. An entry `check` calls gone or left out as generated goes
+  (`dropped  file is gone`), counted among the lowered; a held pair the tree lost goes (`dropped`, `pair ... is gone`). It
   records a ceiling (`recorded`, `N entries, M clone pairs · quality/baseline.toml is new`) only where none lies on disk,
   in the index or in any commit `HEAD` reaches; a ceiling or a `[clones]` table git holds and the tree lacks is `✗ not
   fixed` with `restore quality/baseline.toml from git, or repair it by hand` (a version no TOML parser reads refuses
@@ -124,7 +128,7 @@ It applies these rules:
   pairs of the whole tree must be measured), refuses it: the `debt` row is `✗ not checked` or `✗ not fixed`, exit `2`,
   and nothing is written. A refused fix leaves each rule the verdict it reached against the unchanged file. Another
   area's refusal does not undo a finished fix: the file is written, the `✓` row stands, the exit is `2`.
-  `--fix` follows renames as the verdict carries them: from the ceiling's last commit it reads what git renamed into the index (`git diff --cached -M50% -l1000`), moves a renamed file's entries and pairs to the new path at their values (`moved`) and drops what the ceiling held under that path before the move (`dropped ... left from before the move`); a ceiling it already moved stays, an entry it cannot place refuses with the restore step, a shallow clone whose ceiling's last commit is its edge, which is every depth-1 clone that holds a ceiling, refuses `--fix` with `git fetch --unshallow`, and a move the index does not record is not followed. An entry gone from the tree stays until it is removed by hand.
+  `--fix` follows renames as the verdict carries them: from the ceiling's last commit it reads what git renamed into the index (`git diff --cached -M50% -l1000`), moves a renamed file's entries and pairs to the new path at their values (`moved`) and drops what the ceiling held under that path before the move (`dropped ... left from before the move`); a ceiling it already moved stays, an entry it cannot place refuses with the restore step, a shallow clone whose ceiling's last commit is its edge, which is every depth-1 clone that holds a ceiling, refuses `--fix` with `git fetch --unshallow`, and a move the index does not record is not followed. Renames are followed before anything is judged gone, so a renamed file's entries move and never fall; with no committed ceiling a moved file's entries are gone. `check` reads no history: after a staged move it names the new path `new debt` and the old one `can fall … is gone`, and one `--fix` clears both.
 - `clone`: a pair is two functions (methods and nested functions too) in two different tracked `*.py` files, each of at
   least 40 tokens without its docstring, whose structure is at least 90 % the same once every name and literal is
   renamed; tests count like code, and a copy inside one file is no pair. A pair is named by the path and qualified

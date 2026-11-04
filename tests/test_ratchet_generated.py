@@ -3,7 +3,7 @@
 import pytest
 
 from quality.config import CONFIG_PATH
-from quality.ratchet import BASELINE_PATH, Key, Metric, load_baseline
+from quality.ratchet import BASELINE_PATH, load_baseline
 from quality.report import FindingEvent
 from quality.rules import Rule
 from tests.support.check import (
@@ -31,7 +31,7 @@ GATE = f'[gate]\nmandatory_jobs = ["{MANDATORY_JOB}"]\n'
     [
         ({TYPES_FILE: typescript_file(900)}, True, "", []),
         ({TYPES_FILE: typescript_file(900)}, False, "", [(TYPES_FILE, FindingEvent.NEW_DEBT)]),
-        ({TYPES_FILE: typescript_file(900)}, True, f'[file_lines]\n"{TYPES_FILE}" = 850\n', []),
+        ({TYPES_FILE: typescript_file(900)}, True, f'[file_lines]\n"{TYPES_FILE}" = 850\n', [(TYPES_FILE, FindingEvent.CAN_FALL)]),
         ({"gen/api.py": long_function(70)}, True, "", []),
         ({"gen/api.py": long_function(70)}, False, "", [("gen/api.py:1", FindingEvent.NEW_DEBT)]),
     ],
@@ -103,10 +103,10 @@ def test_a_declared_file_python_cannot_parse_is_no_note_without_a_baseline(build
     assert rule_notes(repo, Rule.SIZE) == []
 
 
-def test_a_fix_leaves_the_entry_of_a_declared_file_as_it_stands(build_repo, capsys):
-    """A declared file is left out of the measurement, so its held entry has none to fall to and stays."""
+def test_a_fix_drops_the_entry_of_a_declared_file(build_repo, capsys):
+    """A declared file is left out of the measurement, so its held entry can fall and the fix drops it."""
     files = {TYPES_FILE: typescript_file(900), "gen/api.py": long_function(70), CONFIG_PATH: GATE + generated_config(path="gen/api.py") + generated_config(path=TYPES_FILE)}
     repo = build_repo({**files, BASELINE_PATH: f'[file_lines]\n"{TYPES_FILE}" = 850\n'})
     assert door_in(repo, *FIX_WORDS) == 0
     capsys.readouterr()
-    assert load_baseline((repo / BASELINE_PATH).read_text()).size == {Key(Metric.FILE_LINES, TYPES_FILE): 850}
+    assert load_baseline((repo / BASELINE_PATH).read_text()).size == {}

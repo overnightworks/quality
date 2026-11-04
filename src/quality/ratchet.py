@@ -193,7 +193,7 @@ def language_of(name: str) -> Language | None:
 
 def read_sources(root: Path, tracked: list[str]) -> dict[str, bytes]:
     """The tracked files of a table language on disk: a tracked file absent from it (deleted, sparse, a dangling link)
-    is gone."""
+    is not read."""
     on_disk = checkout.on_disk(root, [name for name in tracked if language_of(name)])
     return checkout.read_existing(repository.read_bytes, root, on_disk)
 
@@ -314,8 +314,24 @@ def language_lines(tree: TreeMeasurement) -> dict[Language, int]:
     return dict(sorted(lines.items(), key=lambda entry: (-entry[1], entry[0].value)))
 
 
-def compare(measurements: Measurements, baseline: SizeEntries) -> list[Finding]:
-    """The tree on disk against the baseline; an entry whose file or function is gone is fine."""
+def gone_entries(
+    held: SizeEntries, measurements: Measurements, tracked: frozenset[str], generated: Collection[GeneratedFile]
+) -> dict[Key, str]:
+    """Each held entry with no measurement that can fall, and what became of its subject; any other entry with no
+    measurement stands unjudged: a path the index tracks and the disk lacks, a key no measurement makes."""
+    declared = {file.path for file in generated}
+    gone = {}
+    for key in held.keys() - measurements.keys():
+        python = language_of(key.path) is Language.PYTHON
+        if key.path not in tracked or (python and Key(Metric.FILE_LINES, key.path) in measurements):
+            gone[key] = f"{_subject(key)} is gone"
+        elif key.path in declared:
+            gone[key] = f"{_subject(key)} is left out as generated"
+    return gone
+
+
+def compare(measurements: Measurements, baseline: SizeEntries, gone: Mapping[Key, str]) -> list[Finding]:
+    """The tree on disk against the baseline; after the measured findings, each entry `gone` names can fall."""
     findings = []
     for key in sorted(measurements, key=_order):
         measured, held = measurements[key], baseline.get(key)
@@ -327,6 +343,9 @@ def compare(measurements: Measurements, baseline: SizeEntries) -> list[Finding]:
             findings.append(_finding(key, measured, FindingEvent.GREW, f"ceiling {held}", fix))
         elif held is not None and measured.value < held:
             findings.append(_finding(key, measured, FindingEvent.CAN_FALL, f"ceiling {held}", FIX_COMMAND))
+    for key in sorted(gone, key=_order):
+        fact = SEPARATOR.join((gone[key], f"ceiling {key.metric.describe(baseline[key])}"))
+        findings.append(Finding(Rule.SIZE, key.path, None, fact, FIX_COMMAND, event=FindingEvent.CAN_FALL))
     return findings
 
 
@@ -492,11 +511,13 @@ class CeilingFix:
         return any(change.event is NoteEvent.RECORDED for change in self.changes)
 
 
-def lower_ceiling(held: Baseline, measurements: Measurements, pairs: frozenset[ClonePair]) -> CeilingFix:
-    """Each held entry falls to its measured value and goes where it is no debt; one with no measurement stands, and
-    nothing rises or enters. A held pair the tree lost goes. A file without `[clones]` records its pairs: the caller
-    has seen that git never held the table."""
-    size, changes = dict(held.size), []
+def lower_ceiling(
+    held: Baseline, measurements: Measurements, pairs: frozenset[ClonePair], gone: Mapping[Key, str]
+) -> CeilingFix:
+    """Each held entry falls to its measured value and goes where it is no debt; one `gone` names goes, any other with
+    no measurement stands, and nothing rises or enters. A held pair the tree lost goes. A file without `[clones]`
+    records its pairs: the caller has seen that git never held the table."""
+    size, changes = {key: value for key, value in held.size.items() if key not in gone}, []
     for key in sorted(held.size, key=_order):
         ceiling, measured = held.size[key], measurements.get(key)
         if measured is None or measured.value >= ceiling:
@@ -509,6 +530,7 @@ def lower_ceiling(held: Baseline, measurements: Measurements, pairs: frozenset[C
             del size[key]
             limit = f"debt from {key.metric.describe(key.metric.debt_from)}"
             changes.append(Note(key.path, NoteEvent.DROPPED, SEPARATOR.join((fall, limit)), measured.line))
+    changes += [Note(key.path, NoteEvent.DROPPED, gone[key]) for key in sorted(gone, key=_order)]
     if held.clones is None:
         recorded = Note(BASELINE_PATH, NoteEvent.RECORDED, counted(len(pairs), "clone pair"))
         return CeilingFix(Baseline(size, pairs), (*changes, recorded))
@@ -759,11 +781,15 @@ def _unmeasured_notes(unparsable: Mapping[str, str]) -> tuple[Note, ...]:
     return tuple(Note(path, NoteEvent.NOT_MEASURED, "not valid Python") for path in sorted(unparsable))
 
 
-def check_size(tree: TreeMeasurement, baseline: Baseline | None, generated: Collection[GeneratedFile]) -> RuleResult:
+def check_size(
+    tree: TreeMeasurement, baseline: Baseline | None, generated: Collection[GeneratedFile], tracked: frozenset[str]
+) -> RuleResult:
     """Report-only without a baseline; with one, the tree on disk must hold it. A declared file is left out of
     either, and a declaration without a measured file is a finding."""
     stale = _stale_declarations(tree, generated)
     judged = without_generated(tree, generated)
     if baseline is None:
         return RuleResult(stale, len(debt(judged.measurements)), True, _unmeasured_notes(judged.unparsable))
-    return RuleResult([*stale, *compare(complete(judged), baseline.size)], len(baseline.size), False)
+    measurements = complete(judged)
+    gone = gone_entries(baseline.size, measurements, tracked, generated)
+    return RuleResult([*stale, *compare(measurements, baseline.size, gone)], len(baseline.size), False)

@@ -430,7 +430,7 @@ def headers(lines: list[str]) -> list[str]:
 
 def test_a_clean_run_has_seven_clean_rows_in_area_order_and_the_verdict(build_repo, capsys):
     """O16, O21, O30, O38: the dependencies row the lock files and packages of a tree with none, the workflows row the workflow files the tree holds and the offline audits, the code row the area's rules and the Python files ruff judged; the files row holds the rules and the tracked paths, the debt row the entries and pairs of the ceiling file, the imports row the contracts of the config."""
-    tracked = {**CLEAN_FILES, **KEPT_CONTRACT, BASELINE_PATH: '[file_lines]\n"src/gone.py" = 900\n\n[clones]\n'}
+    tracked = {**CLEAN_FILES, **KEPT_CONTRACT, "src/big.py": "x = 1\n" * 800, BASELINE_PATH: '[file_lines]\n"src/big.py" = 800\n\n[clones]\n'}
     repo = build_repo(tracked)
     code, out, err = frame_run(capsys, repo)
     files_row = headers(out)[0]
@@ -591,10 +591,14 @@ def test_the_folder_is_spoken_with_the_home_folder_as_a_tilde(own_home, monkeypa
     assert (code, out, err) == (2, [], [f"error: not inside a git work tree · {tail_of(folder)}", "next: run quality check inside a repository"])
 
 
+def unknown_user(uid: int):
+    raise KeyError(uid)
+
+
 @pytest.mark.integration
 def test_an_unknown_home_folder_speaks_the_absolute_folder_and_never_a_traceback(tmp_path, monkeypatch, capsys):
-    monkeypatch.delenv("HOME")
-    monkeypatch.setattr("pwd.getpwuid", lambda _uid: (_ for _ in ()).throw(KeyError("uid")))
+    monkeypatch.delenv("HOME", raising=False)
+    monkeypatch.setattr("pwd.getpwuid", unknown_user)
     code, out, err = frame_run(capsys, tmp_path)
     assert (code, out, err) == (2, [], [f"error: not inside a git work tree · {tmp_path}", "next: run quality check inside a repository"])
 
