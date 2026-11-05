@@ -10,7 +10,7 @@ true today; every other `quality <command> --help` prints that command's argumen
 stdout with exit `0`, plain and whole in every stream. A wrong invocation runs nothing, prints the `error:`/`next:` pair
 on stderr and exits `2`: `no command <word> · commands: …` for a first word that names no command, `no command ·
 commands: …` for none, `no area <word> · areas: …` for the first word `quality check` does not know as an area, `unknown argument · <what is left over>` for what the command does not take, and otherwise the
-parser's own sentence; `--dry-run needs --fix · nothing checked` for `--dry-run` without `--fix`; `--staged checks only secrets · nothing checked` for `--staged` with other areas or none (`next:` names `quality check secrets --staged`); `next:` otherwise names the help of the command, of its group for a command inside one, or of the parser
+parser's own sentence; `--dry-run needs --fix · nothing checked` for `--dry-run` without `--fix` (`next:` names `quality check --fix --dry-run`); `--staged checks only secrets · nothing checked` for `--staged` with other areas or none (`next:` names `quality check secrets --staged`); `next:` otherwise names the help of the command, of its group for a command inside one, or of the parser
 that refused.
 
 ## `quality check --fix`
