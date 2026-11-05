@@ -152,9 +152,15 @@ def main(
     if arguments.staged:
         staged_run = partial(judge_staged_change, Path("."), staged.scan_change, verbose=arguments.verbose)
         return run_check(staged_run, staged.COMMAND, clock, channels)
-    fix = Fix.DRY_RUN if arguments.dry_run else Fix.WRITE if arguments.fix else None
+    fix = _fix_mode(arguments)
     repository_run = partial(judge_repository, Path("."), locate_ruff, locate_zizmor, verbose=arguments.verbose, named=arguments.areas, fix=fix)
     return run_check(repository_run, RERUN_COMMAND[fix], clock, channels)
+
+
+def _fix_mode(arguments: argparse.Namespace) -> Fix | None:
+    if arguments.dry_run:
+        return Fix.DRY_RUN
+    return Fix.WRITE if arguments.fix else None
 
 
 QUALITY_HELP = """\
@@ -347,6 +353,7 @@ CHECK_COMMAND = "quality check"
 DRY_RUN_WORD = "--dry-run"
 DRY_RUN_COMMAND = f"{ratchet.FIX_COMMAND} {DRY_RUN_WORD}"
 RERUN_COMMAND = {None: CHECK_COMMAND, Fix.WRITE: ratchet.FIX_COMMAND, Fix.DRY_RUN: DRY_RUN_COMMAND}
+CLONE_PAIR = "clone pair"
 STAGED_CHANGE = "staged change"
 
 
@@ -387,7 +394,7 @@ def _planned_row(area: Area, fix: ratchet.CeilingFix) -> Row | None:
     if fix.first:
         new = SEPARATOR.join((_recorded_extent(fix), f"{ratchet.BASELINE_PATH} would be new"))
         return Row(Glyph.WILL_CHANGE, area, AreaEvent.TO_RECORD, new)
-    pairs = _in_file(counted(len(fix.ceiling.clones), "clone pair"))
+    pairs = _in_file(counted(len(fix.ceiling.clones), CLONE_PAIR))
     return Row(Glyph.WILL_CHANGE, area, AreaEvent.TO_RECORD, pairs) if fix.recorded else None
 
 
@@ -395,7 +402,7 @@ def _ceiling_row(area: Area, ceiling: ratchet.CeilingFix | DryRun) -> Row | None
     fix, planned = _made(ceiling)
     if planned:
         return _planned_row(area, fix)
-    pairs = counted(len(fix.ceiling.clones), "clone pair")
+    pairs = counted(len(fix.ceiling.clones), CLONE_PAIR)
     if fix.first:
         return Row(Glyph.CLEAN, area, AreaEvent.RECORDED, SEPARATOR.join((_recorded_extent(fix), f"{ratchet.BASELINE_PATH} is new")))
     if fix.fell:
@@ -474,7 +481,7 @@ def _dependencies_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | N
 
 
 def _debt_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | None]) -> str:
-    entries, pairs = counted(extents[Rule.SIZE], "entry", "entries"), counted(extents[Rule.CLONE], "clone pair")
+    entries, pairs = counted(extents[Rule.SIZE], "entry", "entries"), counted(extents[Rule.CLONE], CLONE_PAIR)
     match verdict.measurement:
         case Measurement.MEASURED_ONLY:
             return f"{entries} over the thresholds"

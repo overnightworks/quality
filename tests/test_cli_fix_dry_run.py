@@ -40,6 +40,14 @@ def moved_with_git(build_repo) -> Path:
     return repo
 
 
+def a_fall_beside_a_move(build_repo) -> Path:
+    held = ceiling('[function_lines."src/old.py"]\nlong_one = 70\n\n[file_lines]\n"src/big.py" = 850\n')
+    repo = build_repo({"src/old.py": long_function(70), "src/big.py": long_file(850), BASELINE_PATH: held})
+    git(repo, "mv", "src/old.py", "src/new.py")
+    put(repo / "src/big.py", long_file(830))
+    return repo
+
+
 def a_stale_target(build_repo) -> Path:
     held = ceiling('[function_lines."src/old.py"]\nlong_one = 100\n\n[function_lines."src/new.py"]\nlong_one = 200\n')
     repo = build_repo({"src/old.py": long_function(100), BASELINE_PATH: held})
@@ -109,6 +117,14 @@ def a_move_beside_a_grown_entry(build_repo) -> Path:
             "    ~ src/new.py  move  function long_one 70 lines from src/old.py\n"
             "~ dry run · 1 ceiling entry would move · nothing written · <1s\n",
             id="moved",
+        ),
+        pytest.param(
+            a_fall_beside_a_move,
+            "  ~ debt          1 to lower     quality/baseline.toml\n"
+            "    ~ src/new.py  move   function long_one 70 lines from src/old.py\n"
+            "    ~ src/big.py  lower  file 850 → 830 lines\n"
+            "~ dry run · 1 ceiling entry would fall · nothing written · <1s\n",
+            id="a fall beside a move",
         ),
         pytest.param(
             a_stale_target,
@@ -189,12 +205,18 @@ def test_a_dry_run_with_nothing_to_change_is_clean(build_repo, capsys, words):
     assert (*fixed(capsys, repo, *words), untouched(repo)) == (0, clean, "", before)
 
 
-def a_shallow_clone(build_repo, elsewhere) -> Path:
-    origin = build_repo({"src/a.py": long_function(62)})
-    put(origin / "second", "2\n")
-    git(origin, "add", "second")
-    git(origin, "commit", "-q", "-m", "second")
-    return shallow_clone(origin, elsewhere)
+def shallow_clone_holding(files: dict[str, str]):
+    def arrange(build_repo, elsewhere) -> Path:
+        origin = build_repo(files)
+        put(origin / "second", "2\n")
+        git(origin, "add", "second")
+        git(origin, "commit", "-q", "-m", "second")
+        return shallow_clone(origin, elsewhere)
+
+    return arrange
+
+
+a_shallow_clone = shallow_clone_holding({"src/a.py": long_function(62)})
 
 
 def a_ceiling_git_holds(build_repo, elsewhere) -> Path:
@@ -217,20 +239,10 @@ def a_clones_table_git_holds(build_repo, elsewhere) -> Path:
     return repo
 
 
-def a_shallow_clone_whose_ceiling_has_no_table(build_repo, elsewhere) -> Path:
-    origin = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: "[file_lines]\n"})
-    put(origin / "second", "2\n")
-    git(origin, "add", "second")
-    git(origin, "commit", "-q", "-m", "second")
-    return shallow_clone(origin, elsewhere)
-
-
-def a_shallow_clone_whose_ceiling_was_last_changed_at_its_root(build_repo, elsewhere) -> Path:
-    origin = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: ceiling("[file_lines]\n")})
-    put(origin / "second", "2\n")
-    git(origin, "add", "second")
-    git(origin, "commit", "-q", "-m", "second")
-    return shallow_clone(origin, elsewhere)
+a_shallow_clone_whose_ceiling_has_no_table = shallow_clone_holding({"src/a.py": "x = 1\n", BASELINE_PATH: "[file_lines]\n"})
+a_shallow_clone_whose_ceiling_was_last_changed_at_its_root = shallow_clone_holding(
+    {"src/a.py": "x = 1\n", BASELINE_PATH: ceiling("[file_lines]\n")}
+)
 
 
 def a_path_no_ceiling_can_hold(build_repo, elsewhere) -> Path:
