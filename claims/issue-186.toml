@@ -1,0 +1,8 @@
+claim_id = "6801c302e5e74bd78994bf28afadf0d1"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "3dd92ab015eeb039f74a72b7f251b73ca3e7a4b6"
+branch = "claude/issue-186-emergency-merge-s-merge-commit-ends-with"
+scope = ["docs/commands.md", "docs/runbook-emergency-merge.md", "src/quality/merge.py", "tests/support/merge.py", "tests/test_merge.py", "tests/test_merge_landing.py"]
+opened_commit = "ebc4a8b7be5853d09ac5779fade12ffa327a53bf"
+whole_reason = "One production file, its tests, the support fake and the two door documents: the merge commit's message, the shown line, the refusal and the printed last line are one door contract."
