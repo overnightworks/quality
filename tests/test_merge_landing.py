@@ -61,7 +61,7 @@ def test_a_squash_ends_with_the_same_line():
         ("Work-Item: 9", f"{REFUSED} carries Work-Item: 9; a work item reads OWNER/REPO#n or #n"),
         ("No-Item: chore", f"{REFUSED} carries No-Item: chore; an issue-less pull request is deps, docs, fix"),
         ("Work-Item: acme/other#9", f"{REFUSED} names work item acme/other#9 of another repository, not of acme/widgets"),
-        ("Work-Item: #9\x1b[8m‮", f"{REFUSED} carries Work-Item: #9\\x1b[8m\\u202e; a work item reads OWNER/REPO#n or #n"),
+        ("Work-Item: #9\x1b[8m\N{RIGHT-TO-LEFT OVERRIDE}", f"{REFUSED} carries Work-Item: #9\\x1b[8m\\u202e; a work item reads OWNER/REPO#n or #n"),
     ],
     ids=[
         "empty", "null", "only fenced", "indented", "two work items", "a work item and a no item", "malformed work item",
