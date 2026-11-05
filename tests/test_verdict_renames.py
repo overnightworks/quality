@@ -381,7 +381,10 @@ def test_the_fetched_repository_is_removed(tmp_path, monkeypatch, fails):
 
 @pytest.mark.parametrize(
     ("stalls", "refusal"),
-    [("fetch", "git did not finish within 0.5 seconds"), ("diff", "cannot list the files git renamed between")],
+    [
+        ("fetch", "cannot fetch the pull request's commits to compare renamed files (git did not finish within 0.5 seconds)"),
+        ("diff", "cannot list the files git renamed between the pull request's commits"),
+    ],
 )
 def test_a_step_that_does_not_finish_in_time_cannot_be_judged_and_leaves_no_child(
     capsys, tmp_path, monkeypatch, fake_git, stalls, refusal
@@ -391,8 +394,9 @@ def test_a_step_that_does_not_finish_in_time_cannot_be_judged_and_leaves_no_chil
     child = tmp_path / "child-pid"
     gh = failing_fetch(tmp_path)
     fake_git(f'case "$*" in *" {stalls} "*) sleep 300 & echo $! > "{child}"; wait;; esac')
-    assert drive(gh)[0] == 2
-    assert refusal in capsys.readouterr().out
+    code, _ = drive(gh)
+    streams = capsys.readouterr()
+    assert (code, streams.out, streams.err) == (2, loosenings_not_judged(refusal), not_judged_pair())
     assert process_is_gone(int(child.read_text()))
     changed_nothing(gh)
 
