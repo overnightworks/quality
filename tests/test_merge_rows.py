@@ -102,7 +102,7 @@ def test_a_draft_stops_the_door_before_its_body_or_any_check_is_read(gh_kwargs, 
     gh = FakeGh(**gh_kwargs)
     code, out, err, answers = run(gh, capsys)
     assert (code, out, err, answers) == (1, frame(row), pair, [])
-    assert gh.calls == [("api", REPO), ("api", f"repos/{REPO}/pulls/7")]
+    assert gh.calls == [("api", f"repos/{REPO}"), ("api", f"repos/{REPO}/pulls/7")]
     changed_nothing(gh)
 
 
@@ -150,7 +150,7 @@ LOOSENINGS_NONE = "  ✓ loosenings    none"
         ),
         (
             {"checks": SONAR_GREEN, "base_config": TWO_JOBS, "head_config": ONE_JOB}, {},
-            [pull_row(), checks_row("quality / verdict is"), "  ! loosenings    red", f"    ! loosened (undeclared): {B_REMOVED}"],
+            [pull_row(), checks_row("quality / verdict is"), "  ! loosenings    red", f"    ! loosened (undeclared): {B_REMOVED}", '    ! mandatory job "B" is missing from the run'],
         ),
         (
             {}, {"new": 1},
@@ -250,7 +250,7 @@ def at_a_terminal(gh, window, columns, transport=None):
 def test_what_the_operator_must_read_stands_whole_at_a_terminal(gh_kwargs, sonar_kwargs, lines, window):
     shown = at_a_terminal(FakeGh(**gh_kwargs), window, 40, sonar(**sonar_kwargs))
     assert all(line in shown for line in lines)
-    assert not [line for line in shown if line.endswith("…") and line.lstrip().startswith(("! loos", "! sonar", "reason"))]
+    assert not [line for line in shown if line.endswith("…") and line.startswith("    ")]
 
 
 @pytest.mark.parametrize(

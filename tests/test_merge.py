@@ -145,6 +145,7 @@ def test_shows_repository_head_and_legacy_count_before_asking(capsys):
     assert (shown[0].out, shown[0].err) == (
         ("  · #7            open           head aaaaaaa · into main\n"
         "  ✓ checks        ok             only quality / sonar and quality / verdict are red\n"
+        "  ✓ loosenings    none\n"
         "  ! sonar         4 legacy findings on main\n"
         "  · merge         merge commit   allowed on main\n"
         "the merge commit ends with Work-Item: #3\n"),
@@ -573,7 +574,7 @@ def test_every_line_the_door_prints_is_escaped(capsys, base_config, merge_config
 
 @pytest.mark.parametrize(
     ("gh_kwargs", "event", "sentence"),
-    [({}, "merge commit", "merges with a merge commit"), ({"rules": [[pull_request_rule("squash")]]}, "squash        ", "merges with a squash")],
+    [({}, "merge commit", "merges with a merge commit"), ({"rules": [[pull_request_rule("squash")]]}, "squash      ", "merges with a squash")],
     ids=["a merge commit", "a squash"],
 )
 def test_the_operator_reads_the_method_before_ja_and_the_log_comment_names_it(gh_kwargs, event, sentence, capsys):

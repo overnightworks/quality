@@ -97,10 +97,13 @@ class Glyph(StrEnum):
 
 @dataclass(frozen=True)
 class SubLine:
-    """A reason under a `✗` row; at a terminal its text may be shortened."""
+    """A reason under a row; at a terminal its text is shortened unless it is `whole`, and each of `below` stands beneath
+    it, deeper and dim."""
 
     glyph: Glyph
     text: str
+    whole: bool = False
+    below: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -291,8 +294,9 @@ def _row_lines(row: Row, channel: Channel) -> list[str]:
     else:
         lines = [f"  {_paint(row.glyph, GLYPH_STYLE[row.glyph], styled)} {middle}{_paint(fact, DIM, styled)}"]
     for sub in row.sub_lines:
-        text = _fitted(sub.text, f"    {sub.glyph} ", channel.width)
+        text = _fitted(sub.text, f"    {sub.glyph} ", None if sub.whole else channel.width)
         lines.append(f"    {_paint(sub.glyph, GLYPH_STYLE[sub.glyph], styled)} {text}")
+        lines += [_paint(f"        {printable(line)}", DIM, styled) for line in sub.below]
     if row.fix:
         lines += _fix_lines(row.fix)
     return lines

@@ -154,7 +154,7 @@ def test_the_operator_reads_the_merge_commits_last_line_before_ja(body, line, ca
     drive(FakeGh(body=body), when_asked=lambda: shown.append(capsys.readouterr()))
     assert (shown[0].out, shown[0].err) == (
         (f"{pull_row()}  ✓ checks        ok             only quality / sonar and quality / verdict are red\n"
-        f"  ! sonar         4 legacy findings on main\n  · merge         merge commit   allowed on main\nthe merge commit ends with {line}\n"),
+        f"  ✓ loosenings    none\n  ! sonar         4 legacy findings on main\n  · merge         merge commit   allowed on main\nthe merge commit ends with {line}\n"),
         "",
     )
 

@@ -146,7 +146,7 @@ take are in [the runbook](runbook-emergency-merge.md); this is what the command 
   terminal. This is the agent contract, not a lock: agents on the operator's machine share his `gh` login, so to an
   agent the terminal is a hurdle, and that login could switch `quality_gate` directly. A real lock (agents with a token
   without admin rights) belongs to the machine's setup, not to quality; it is a known residual risk.
-- **It refuses unless the door is the only way** (exit `1`, nothing changed): no check is still running; every check run
+- **It refuses unless the door is the only way** (exit `1`, nothing changed): the pull request is open and no draft (a draft is refused before its body or any check is read, `next:` naming `gh pr ready`); no check is still running; every check run
   and commit status other than `quality / sonar` and `quality / verdict` is green; `quality / verdict` has failed; and
   `quality / sonar` is green or has failed (it did not run, or it ended `timed_out`, `cancelled` or anything else: refused).
   The verdict is then judged again by its own decider, with the config, baseline and import-linter configs read at the pull request's
@@ -161,8 +161,8 @@ take are in [the runbook](runbook-emergency-merge.md); this is what the command 
   never prompts and an askpass program is never run. The fetch and the rename list share one limit of 120 seconds each,
   and each of these git commands runs in its own process group, which is killed with it at that limit or when the
   command is interrupted (every other command stays in quality's own group). git's own output is never printed: a fetch or rename list
-  that fails is a refusal in the door's words (exit `1`), never an empty rename list.
-- **The landing line.** The pull request body carries exactly one `Work-Item:` or `No-Item:` line outside a fenced code block, as the fleet's landings read it: `Work-Item: #<n>` or `Work-Item: <owner>/<repo>#<n>` of this repository, or `No-Item: docs`, `fix` or `deps`. Otherwise it is refused, naming why (exit `1`, nothing changed). The merge commit's message is the body without that line, a blank line, then the line as `Work-Item: #<n>` or `No-Item: <kind>`, the last paragraph, the trailer a landing is read from. The body is the one read with the head.
+  that fails could not be checked, and its `✗ loosenings` row says so in the door's words (exit `2`), never an empty rename list.
+- **The landing line.** The pull request body carries exactly one `Work-Item:` or `No-Item:` line outside a fenced code block, as the fleet's landings read it: `Work-Item: #<n>` or `Work-Item: <owner>/<repo>#<n>` of this repository, or `No-Item: docs`, `fix` or `deps`. Otherwise its `! landing` row names why and `next:` asks for the one line (exit `1`, nothing changed). The merge commit's message is the body without that line, a blank line, then the line as `Work-Item: #<n>` or `No-Item: <kind>`, the last paragraph, the trailer a landing is read from. The body is the one read with the head.
 - **Sonar green: declared loosenings.** The re-derived verdict must hold at least one declared loosening (otherwise
   `re-run the verdict`). SonarCloud is not asked and `SONAR_TOKEN` is not needed.
 - **Sonar failed: legacy findings,** next to any declared loosening: `[gate] legacy` is `fail` at the merge
@@ -172,14 +172,11 @@ take are in [the runbook](runbook-emergency-merge.md); this is what the command 
   the project needs one: without it the door reads a public project anonymously, with no Authorization header, and an
   anonymous read that SonarCloud refuses (a private project answers 404) is exit `2`, naming `SONAR_TOKEN`; with a token, a 401 or 403
   says the token was rejected.
-- **It shows, then asks:** repository, pull request and head SHA with the legacy count (where Sonar failed) and the
-  number of declared loosenings, then one line per declaration with its `item`,
-  `date`, `what` and `reason`, then the merge method and `the merge commit ends with <line>`, then the typed word `ja`. Anything else changes nothing. Every line it prints is
-  escaped as the other doors' lines are, so a `reason` cannot hide anything before `ja` or forge a line.
+- **It shows, then asks:** on stdout a row as each step passes: the pull request (`open`, head, base), the checks, the declared loosenings, each whole with its `item` and `date` and its `reason` on the line below, the legacy count where Sonar failed, the merge method; then `the merge commit ends with <line>` and the typed word `ja`. Anything else changes nothing. A refusal is its `!` row and the `error:`/`next:` pair on stderr (exit `1`), each blocking line of the verdict whole below the `loosenings` row; a step that cannot be judged is its `✗` row and the pair (exit `2`); no terminal on stdin or a malformed name is the pair alone (exit `1`). Every line it prints is escaped as the other doors' lines are, so a `reason` cannot hide anything before `ja` or forge a line.
 - **Off, merge, on:** it sets the repository's `quality_gate` property to `false` (this takes the fleet's ruleset off it),
   runs `gh pr merge <pr> --merge --match-head-commit <sha> --body-file -`, the message on its stdin (`--squash` where the repository settings or a rule on the
   pull request's base branch exclude a merge commit but allow a squash; when neither is allowed, or the settings or rules
-  cannot be read or are malformed (an answer or a page that is no array, a rule that is no object, or whose `parameters` are present but no object), it is refused before the gate is touched; the shown text and the log comment name the
+  cannot be read or are malformed (an answer or a page that is no array, a rule that is no object, or whose `parameters` are present but no object), its `✗ merge` row ends the run before the gate is touched (exit `2`); the shown text and the log comment name the
   method), and sets the property back to `true` in every case: merged,
   merge failed, Ctrl-C. A property that cannot be restored is exit `2` with one line naming what to set by hand and the
   merge outcome as far as it is known, printed before any further GitHub request; a re-read that settles an open

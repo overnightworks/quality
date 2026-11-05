@@ -501,6 +501,8 @@ next:
     echo '{"properties":[{"property_name":"quality_gate","value":"true"}]}' | gh api -X PATCH repos/overnightworks/shop/properties/values --input -
 ```
 
+Built (C8a1): the rows before the prompt and the refused frame, without the release row (C10). A declaration reads `what · item of date` with `reason:` below until C9's typed loosenings; a red Sonar adds `! sonar  N legacy findings  on <branch>` and the error names declared loosenings and legacy findings (decision 4); the method row reads `allowed on <base>`; a draft is `! #N  draft` with `next: gh pr ready N --repo R`. Until C8a2 the old prompt follows on stdout, after a line naming the merge commit's last line.
+
 ### 9. `quality report`
 
 The two markdown tables are an artifact and go alone to stdout. The row per repository and the verdict go to stderr, so `quality report > fleet.md` writes a clean file.
