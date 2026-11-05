@@ -111,10 +111,7 @@ class FakeGh:
 
     def answer(self, step, arguments, stdin):
         if step == "pull":
-            body = self.later_body if self.pulls_read and self.later_body is not None else self.body
-            self.pulls_read += 1
-            pull = {"state": self.state, "merged": self.merged, "head": {"sha": SHA}, "base": {"sha": self.base_sha, "ref": self.base_ref}, "merge_commit_sha": self.merge_sha}
-            return json.dumps(pull if body is NO_BODY else {"body": body, **pull})
+            return self.pull_answer()
         if step == "checks":
             return "\n".join(
                 json.dumps({"name": name, "status": "in_progress" if result is None else "completed", "conclusion": result})
@@ -137,6 +134,12 @@ class FakeGh:
             return "felix\n"
         self.record(step, arguments, stdin)
         return ""
+
+    def pull_answer(self):
+        body = self.later_body if self.pulls_read and self.later_body is not None else self.body
+        self.pulls_read += 1
+        pull = {"state": self.state, "merged": self.merged, "head": {"sha": SHA}, "base": {"sha": self.base_sha, "ref": self.base_ref}, "merge_commit_sha": self.merge_sha}
+        return json.dumps(pull if body is NO_BODY else {"body": body, **pull})
 
     def rules_answer(self):
         if self.rules_error:
