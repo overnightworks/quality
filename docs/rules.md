@@ -117,7 +117,7 @@ It applies these rules:
   fixed` with `restore quality/baseline.toml from git, or repair it by hand` (a version no TOML parser reads refuses
   likewise), and a shallow clone that cannot prove it names `git fetch --unshallow`. A file without `[clones]` that git
   never held it in records the pairs and keeps its entries. The verdict line adds `ceiling lowered by N entries`,
-  `ceiling recorded` or `nothing to lower`. Under `--dry-run` the same ceiling is made, judged and rendered and nothing is written: each change is a `~` row worded as what the fix would do, the `~` debt row (`N to lower`, `N to move` or `to record`) and the verdict (`~ dry run · … would fall · nothing written`), the exit `1` while the fix would change the file.
+  `ceiling recorded` or `nothing to lower`. Under `--dry-run` the same ceiling is made, judged and rendered and nothing is written: each change is a `~` row worded as what the fix would do, the `~` debt row (`N to lower`, `N to move` or `to record`) and the verdict (`~ dry run · N ceiling entries would fall`, `N ceiling entries would move` or `ceiling would be recorded`, then `· nothing written`), the exit `1` while the fix would change the file.
   The file is written whole or not at all: a hidden sibling takes the text and replaces the file in one step, so whatever
   stops the process leaves the complete old file or the complete new one, the replacement being the commit point, so a
   Ctrl-C just after it keeps the new file, and a killed process can leave that sibling. It keeps the file's mode,

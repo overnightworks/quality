@@ -33,6 +33,10 @@ def holding(files: dict[str, str]):
     return lambda build_repo: build_repo(files)
 
 
+def held_above(build_repo) -> Path:
+    return build_repo({"src/a.py": long_function(62), BASELINE_PATH: ceiling('[function_lines."src/a.py"]\nlong_one = 80\n')})
+
+
 def moved_with_git(build_repo) -> Path:
     held = ceiling('[function_lines."src/old.py"]\nlong_one = 70\n')
     repo = build_repo({"src/old.py": long_function(70), BASELINE_PATH: held})
@@ -67,7 +71,7 @@ def a_move_beside_a_grown_entry(build_repo) -> Path:
     ("arrange", "printed"),
     [
         pytest.param(
-            holding({"src/a.py": long_function(62), BASELINE_PATH: ceiling('[function_lines."src/a.py"]\nlong_one = 80\n')}),
+            held_above,
             "  ~ debt          1 to lower     quality/baseline.toml\n"
             "    ~ src/a.py:1  lower  function long_one 80 → 62 lines\n"
             "~ dry run · 1 ceiling entry would fall · nothing written · <1s\n",
@@ -217,7 +221,7 @@ def shallow_clone_holding(files: dict[str, str]):
 
 
 def a_ceiling_git_holds(build_repo, elsewhere) -> Path:
-    repo = build_repo({"src/a.py": long_function(62), BASELINE_PATH: ceiling('[function_lines."src/a.py"]\nlong_one = 80\n')})
+    repo = held_above(build_repo)
     (repo / BASELINE_PATH).unlink()
     return repo
 
@@ -287,7 +291,7 @@ def test_a_dry_run_refuses_where_the_fix_refuses_before_writing(build_repo, else
     ("arrange", "printed", "refusal"),
     [
         pytest.param(
-            holding({"src/a.py": long_function(62), BASELINE_PATH: ceiling('[function_lines."src/a.py"]\nlong_one = 80\n')}),
+            held_above,
             "  ~ debt          1 to lower     quality/baseline.toml\n"
             "    ~ src/a.py:1  lower  function long_one 80 → 62 lines\n"
             "~ dry run · 1 ceiling entry would fall · nothing written · <1s\n",
@@ -317,7 +321,7 @@ def test_a_dry_run_attempts_no_write(build_repo, capsys, request, arrange, print
 
 
 def test_another_areas_refusal_leaves_the_dry_run_standing(build_repo, capsys):
-    repo = build_repo({"src/a.py": long_function(62), BASELINE_PATH: ceiling('[function_lines."src/a.py"]\nlong_one = 80\n')})
+    repo = held_above(build_repo)
     put(repo / "compose.yaml", "services: [\n")
     git(repo, "add", "compose.yaml")
     before = untouched(repo)
@@ -327,7 +331,7 @@ def test_another_areas_refusal_leaves_the_dry_run_standing(build_repo, capsys):
 
 
 def test_at_a_terminal_a_dry_run_paints_its_glyphs_and_keeps_the_plain_words(build_repo, capsys):
-    repo = build_repo({"src/a.py": long_function(62), BASELINE_PATH: ceiling('[function_lines."src/a.py"]\nlong_one = 80\n')})
+    repo = held_above(build_repo)
     piped = fixed(capsys, repo, *DRY_RUN_WORDS)
     stdout = Terminal()
     with contextlib.redirect_stdout(stdout):
@@ -350,15 +354,11 @@ def test_a_dry_run_beside_a_grown_entry_with_nothing_to_change_says_so_and_write
 
 
 def test_a_debt_row_that_would_change_is_not_counted_among_the_clean_areas(build_repo, capsys):
-    repo = build_repo({"src/a.py": long_function(62), BASELINE_PATH: ceiling('[function_lines."src/a.py"]\nlong_one = 80\n')})
+    repo = held_above(build_repo)
     put(repo / ".env", "SECRET=1\n")
     git(repo, "add", ".env")
     code, out, _ = fixed(capsys, repo, "check", "files", "debt", "--fix", "--dry-run")
     assert (code, out.splitlines()[-1]) == (1, "! 2 findings in 1 area · 1 ceiling entry would fall · nothing written · <1s")
-
-
-def held_above(build_repo) -> Path:
-    return build_repo({"src/a.py": long_function(62), BASELINE_PATH: ceiling('[function_lines."src/a.py"]\nlong_one = 80\n')})
 
 
 def test_a_dry_run_that_would_change_the_file_exits_one_beside_an_area_that_only_measures(build_repo, capsys):
