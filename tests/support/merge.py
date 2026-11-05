@@ -12,6 +12,9 @@ REPO = "acme/widgets"
 SHA = "a" * 40
 
 
+NO_BODY = object()
+
+
 BASE_SHA = "b" * 40
 
 
@@ -110,7 +113,8 @@ class FakeGh:
         if step == "pull":
             body = self.later_body if self.pulls_read and self.later_body is not None else self.body
             self.pulls_read += 1
-            return json.dumps({"body": body, "state": self.state, "merged": self.merged, "head": {"sha": SHA}, "base": {"sha": self.base_sha, "ref": self.base_ref}, "merge_commit_sha": self.merge_sha})
+            pull = {"state": self.state, "merged": self.merged, "head": {"sha": SHA}, "base": {"sha": self.base_sha, "ref": self.base_ref}, "merge_commit_sha": self.merge_sha}
+            return json.dumps(pull if body is NO_BODY else {"body": body, **pull})
         if step == "checks":
             return "\n".join(
                 json.dumps({"name": name, "status": "in_progress" if result is None else "completed", "conclusion": result})

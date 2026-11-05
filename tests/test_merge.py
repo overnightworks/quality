@@ -124,10 +124,12 @@ def test_the_token_never_appears_when_sonar_refuses_it(monkeypatch, capsys):
 def test_gate_goes_off_then_merge_then_on_then_log(capsys):
     """#37 rule 4, #73 rule 4: off, merge, on, in this order, and the closing line names the release that works."""
     gh = FakeGh()
-    assert drive(gh)[0] == 0
+    shown = []
+    assert drive(gh, when_asked=lambda: shown.append(capsys.readouterr()))[0] == 0
     assert gh.sequence == ["gate false", "merge", "gate true", "comment"]
     assert gh.merge_calls == [("pr", "merge", "7", "--repo", REPO, "--merge", "--match-head-commit", SHA, "--body-file", "-")]
-    assert capsys.readouterr().out.splitlines()[-1] == "merged."
+    after = capsys.readouterr()
+    assert (after.out, after.err) == ("merged.\n", "")
 
 
 def test_logs_who_and_the_legacy_count_on_the_pull_request():
@@ -545,7 +547,7 @@ def test_every_line_the_door_prints_is_escaped(capsys, base_config, merge_config
     ids=["a merge commit", "a squash"],
 )
 def test_the_operator_reads_the_method_before_ja_and_the_log_comment_names_it(gh_kwargs, sentence, capsys):
-    """the shown text holds the method line, and the log comment carries it."""
+    """The shown text holds the method line, and the log comment carries it."""
     gh = FakeGh(**gh_kwargs)
     drive(gh)
     assert sentence in capsys.readouterr().out.splitlines()
