@@ -22,6 +22,14 @@ def landing_pair():
     )
 
 
+def landing_sentence(count="no"):
+    return f"the pull request body carries {count} Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"
+
+
+def no_body_text():
+    return "GitHub's answer for the pull request holds no body text"
+
+
 @pytest.mark.parametrize(
     ("body", "message"),
     [
@@ -87,16 +95,16 @@ def test_a_squash_ends_with_the_same_line():
 @pytest.mark.parametrize(
     ("body", "line"),
     [
-        ("", "the pull request body carries no Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"),
-        (None, "the pull request body carries no Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"),
-        ("```\nWork-Item: #9\n```", "the pull request body carries no Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"),
-        ("  Work-Item: #9", "the pull request body carries no Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"),
-        ("```\nWork-Item: #1\n    ```\nWork-Item: #9", "the pull request body carries no Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"),
-        ("```\nWork-Item: #1\n```\N{NO-BREAK SPACE}\nWork-Item: #9", "the pull request body carries no Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"),
-        ("~~~~\nWork-Item: #1\n~~~\nWork-Item: #9", "the pull request body carries no Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"),
-        ("Work-Item: #9\nWork-Item: #8", "the pull request body carries 2 Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"),
-        ("Work-Item: #9\nNo-Item: fix", "the pull request body carries 2 Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"),
-        ("Work-Item:\nWork-Item: #9", "the pull request body carries 2 Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"),
+        ("", landing_sentence()),
+        (None, landing_sentence()),
+        ("```\nWork-Item: #9\n```", landing_sentence()),
+        ("  Work-Item: #9", landing_sentence()),
+        ("```\nWork-Item: #1\n    ```\nWork-Item: #9", landing_sentence()),
+        ("```\nWork-Item: #1\n```\N{NO-BREAK SPACE}\nWork-Item: #9", landing_sentence()),
+        ("~~~~\nWork-Item: #1\n~~~\nWork-Item: #9", landing_sentence()),
+        ("Work-Item: #9\nWork-Item: #8", landing_sentence("2")),
+        ("Work-Item: #9\nNo-Item: fix", landing_sentence("2")),
+        ("Work-Item:\nWork-Item: #9", landing_sentence("2")),
         ("Work-Item: 9", "the pull request body carries Work-Item: 9; a work item reads OWNER/REPO#n or #n"),
         ("Work-Item: #9\N{NO-BREAK SPACE}", "the pull request body carries Work-Item: #9\N{NO-BREAK SPACE}; a work item reads OWNER/REPO#n or #n"),
         ("No-Item: chore", "the pull request body carries No-Item: chore; an issue-less pull request is deps, docs, fix"),
@@ -120,11 +128,11 @@ def test_a_body_without_one_valid_line_keeps_the_door_shut(body, line, capsys):
 @pytest.mark.parametrize(
     ("body", "line"),
     [
-        (5, "GitHub's answer for the pull request holds no body text"),
-        (False, "GitHub's answer for the pull request holds no body text"),
-        (0, "GitHub's answer for the pull request holds no body text"),
-        ([], "GitHub's answer for the pull request holds no body text"),
-        ({}, "GitHub's answer for the pull request holds no body text"),
+        (5, no_body_text()),
+        (False, no_body_text()),
+        (0, no_body_text()),
+        ([], no_body_text()),
+        ({}, no_body_text()),
     ],
     ids=["a number", "false", "zero", "an empty list", "an empty object"],
 )
