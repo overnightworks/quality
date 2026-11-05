@@ -48,6 +48,53 @@ def settings_allowing(*methods):
     return {f"allow_{name}": method in methods for method, name in (("merge", "merge_commit"), ("squash", "squash_merge"), ("rebase", "rebase_merge"))}
 
 
+def pull_row():
+    return "  · #7            open           head aaaaaaa · into main\n"
+
+
+def checks_row(red="quality / sonar and quality / verdict are"):
+    return f"  ✓ checks        ok             only {red} red\n"
+
+
+def loosenings_none():
+    return "  ✓ loosenings    none\n"
+
+
+def legacy_row():
+    return "  ! sonar         4 legacy findings on main\n"
+
+
+def merge_row(event="merge commit"):
+    return f"  · merge         {event}   allowed on main\n"
+
+
+def songmaker_ruling():
+    return "overnightworks/songmaker#1345 of 2026-10-20"
+
+
+def presentator_ruling():
+    return "overnightworks/agent-presentator#371 of 2026-10-21"
+
+
+def removed_b_lines():
+    return f"    ! {B_REMOVED} · {songmaker_ruling()}\n        reason: ruled\n"
+
+
+def removed_b():
+    return (B_REMOVED, songmaker_ruling(), "ruled")
+
+
+def malformed_rules():
+    return "the branch rules of main are malformed"
+
+
+def not_judged_pair():
+    return (
+        "error: could not judge · nothing changed\n"
+        "next: fix what the ✗ row names, then run quality emergency-merge acme/widgets 7 again\n"
+    )
+
+
 def recording(transport):
     sent = []
 
@@ -143,12 +190,7 @@ def test_shows_repository_head_and_legacy_count_before_asking(capsys):
     shown = []
     drive(FakeGh(), when_asked=lambda: shown.append(capsys.readouterr()))
     assert (shown[0].out, shown[0].err) == (
-        ("  · #7            open           head aaaaaaa · into main\n"
-        "  ✓ checks        ok             only quality / sonar and quality / verdict are red\n"
-        "  ✓ loosenings    none\n"
-        "  ! sonar         4 legacy findings on main\n"
-        "  · merge         merge commit   allowed on main\n"
-        "the merge commit ends with Work-Item: #3\n"),
+        pull_row() + checks_row() + loosenings_none() + legacy_row() + merge_row() + "the merge commit ends with Work-Item: #3\n",
         "",
     )
 
@@ -455,26 +497,26 @@ def test_a_malformed_baseline_at_the_merge_commit_cannot_be_judged(capsys):
     changed_nothing(gh)
 
 
-def declared_rows(*declarations):
-    """The loosenings row of a run with these declarations, each as (what, ruling, reason)."""
-    lines = [f"  ! loosenings    {len(declarations)} declared\n"]
-    for what, ruling, reason in declarations:
-        lines += [f"    ! {what} · {ruling}\n", f"        reason: {reason}\n"]
-    return "".join(lines)
-
-
-REMOVED_B = (B_REMOVED, "overnightworks/songmaker#1345 of 2026-10-20", "ruled")
-LEGACY_REPORT = ("legacy fail → report", "overnightworks/songmaker#1345 of 2026-10-20", "ruled")
-QWEN_ALLOWANCE = (ADDS_QWEN, "overnightworks/agent-presentator#371 of 2026-10-21", "no image input")
-
-
 @pytest.mark.parametrize(
-    ("base_config", "merge_config", "declared"),
+    ("base_config", "merge_config", "declared", "rows"),
     [
-        (TWO_JOBS, ONE_JOB + declaring(B_REMOVED), (REMOVED_B,)),
-        (GATE_CONFIG, REPORT_CONFIG + declaring("legacy fail → report"), (LEGACY_REPORT,)),
-        (ONE_JOB, ONE_JOB + allowance_config(reason="no image input"), (QWEN_ALLOWANCE,)),
-        (TWO_JOBS, ONE_JOB + declaring(B_REMOVED) + allowance_config(reason="no image input"), (REMOVED_B, QWEN_ALLOWANCE)),
+        (TWO_JOBS, ONE_JOB + declaring(B_REMOVED), (removed_b(),), "  ! loosenings    1 declared\n" + removed_b_lines()),
+        (
+            GATE_CONFIG, REPORT_CONFIG + declaring("legacy fail → report"),
+            (("legacy fail → report", songmaker_ruling(), "ruled"),),
+            f"  ! loosenings    1 declared\n    ! legacy fail → report · {songmaker_ruling()}\n        reason: ruled\n",
+        ),
+        (
+            ONE_JOB, ONE_JOB + allowance_config(reason="no image input"),
+            ((ADDS_QWEN, presentator_ruling(), "no image input"),),
+            f"  ! loosenings    1 declared\n    ! {ADDS_QWEN} · {presentator_ruling()}\n        reason: no image input\n",
+        ),
+        (
+            TWO_JOBS, ONE_JOB + declaring(B_REMOVED) + allowance_config(reason="no image input"),
+            (removed_b(), (ADDS_QWEN, presentator_ruling(), "no image input")),
+            "  ! loosenings    2 declared\n" + removed_b_lines()
+            + f"    ! {ADDS_QWEN} · {presentator_ruling()}\n        reason: no image input\n",
+        ),
     ],
     ids=[
         "cell 14 songmaker's removed job", "cell 27 a declared legacy fail → report", "#116 cell 23 an allowance",
@@ -482,7 +524,7 @@ QWEN_ALLOWANCE = (ADDS_QWEN, "overnightworks/agent-presentator#371 of 2026-10-21
     ],
 )
 def test_a_declared_loosening_merges_through_the_door_without_sonar(
-    capsys, monkeypatch, base_config, merge_config, declared
+    capsys, monkeypatch, base_config, merge_config, declared, rows
 ):
     """#103 rule 4 (E6, E7), cells 14 and 27, and #116 R2, E7: with Sonar green and only declared loosenings at the
     merge commit, an allowance's own among them, the door shows each declaration whole with its reason below, then
@@ -497,11 +539,7 @@ def test_a_declared_loosening_merges_through_the_door_without_sonar(
     code = cli.main(["emergency-merge", REPO, "7"], gh=gh, transport=transport, ask=ask, is_terminal=lambda: True)
     assert (code, transport.sent, gh.sequence) == (0, [], ["gate false", "merge", "gate true", "comment"])
     assert (shown[0].out, shown[0].err) == (
-        ("  · #7            open           head aaaaaaa · into main\n"
-        "  ✓ checks        ok             only quality / verdict is red\n"
-        f"{declared_rows(*declared)}"
-        "  · merge         merge commit   allowed on main\n"
-        "the merge commit ends with Work-Item: #9\n"),
+        pull_row() + checks_row("quality / verdict is") + rows + merge_row() + "the merge commit ends with Work-Item: #9\n",
         "",
     )
     assert gh.merge_calls == [("pr", "merge", "7", "--repo", REPO, "--merge", "--match-head-commit", SHA, "--body-file", "-")]
@@ -529,21 +567,17 @@ def test_legacy_findings_and_a_declared_loosening_merge_in_one_run(capsys):
     shown = []
     assert drive(gh, when_asked=lambda: shown.append(capsys.readouterr()))[0] == 0
     assert (shown[0].out, shown[0].err) == (
-        ("  · #7            open           head aaaaaaa · into main\n"
-        "  ✓ checks        ok             only quality / sonar and quality / verdict are red\n"
-        f"{declared_rows(REMOVED_B)}"
-        "  ! sonar         4 legacy findings on main\n"
-        "  · merge         merge commit   allowed on main\n"
-        "the merge commit ends with Work-Item: #3\n"),
+        pull_row() + checks_row() + "  ! loosenings    1 declared\n" + removed_b_lines() + legacy_row() + merge_row()
+        + "the merge commit ends with Work-Item: #3\n",
         "",
     )
-    assert f'4 legacy finding(s); declared loosening ({REMOVED_B[1]}): {B_REMOVED}' in gh.comments[0]
+    assert f'4 legacy finding(s); declared loosening ({removed_b()[1]}): {B_REMOVED}' in gh.comments[0]
 
 
 def test_a_red_sonar_run_next_to_a_green_one_takes_the_legacy_path(capsys):
     """#103 rule 4, cell 28: Sonar is green only when every run is green, so one red run is judged for legacy findings."""
     assert drive(FakeGh(extra_runs=[("quality / sonar", "success")]))[0] == 0
-    assert "  ! sonar         4 legacy findings on main\n" in capsys.readouterr().out
+    assert legacy_row() in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(
@@ -555,7 +589,7 @@ def test_a_red_sonar_run_next_to_a_green_one_takes_the_legacy_path(capsys):
         (TWO_JOBS, ONE_JOB + declaring(B_REMOVED, reason="ok\nforged"), 2, "needs a non-empty one-line reason"),
         (ONE_JOB, '[gate]\nmandatory_jobs = ["checks", "a\\n::error::b"]\n', 1, 'mandatory job "a\\x0a::error::b" is missing'),
         (ONE_JOB, ONE_JOB + allowance_config("GHSA-\x1b[8m", "a\tb/uv.lock", reason="ok\x1b[8m versteckt"), 0,
-         "    ! advisory allowance adds GHSA-\\x1b[8m in a\\x09b/uv.lock until 2027-01-31 · overnightworks/agent-presentator#371 of 2026-10-21"),
+         f"    ! advisory allowance adds GHSA-\\x1b[8m in a\\x09b/uv.lock until 2027-01-31 · {presentator_ruling()}"),
     ],
     ids=[
         "ESC in the reason", "bidi override in the reason", "carriage return in the reason", "line feed in the reason", "line feed in a refused job",
@@ -579,9 +613,12 @@ def test_every_line_the_door_prints_is_escaped(capsys, base_config, merge_config
 )
 def test_the_operator_reads_the_method_before_ja_and_the_log_comment_names_it(gh_kwargs, event, sentence, capsys):
     """The method row says what the door lands with on the base branch, and the log comment carries the method."""
-    gh = FakeGh(**gh_kwargs)
-    drive(gh)
-    assert f"  · merge         {event}   allowed on main\n" in capsys.readouterr().out
+    gh, shown = FakeGh(**gh_kwargs), []
+    drive(gh, when_asked=lambda: shown.append(capsys.readouterr()))
+    assert (shown[0].out, shown[0].err) == (
+        pull_row() + checks_row() + loosenings_none() + legacy_row() + merge_row(event) + "the merge commit ends with Work-Item: #3\n",
+        "",
+    )
     assert f"; {sentence}; " in gh.comments[0]
 
 
@@ -631,27 +668,27 @@ def test_the_door_merges_with_a_method_the_settings_and_every_rule_allow(gh_kwar
         ({"rules": [[pull_request_rule("rebase")]]}, NO_USABLE_METHOD),
         ({"rules": [[pull_request_rule()]]}, NO_USABLE_METHOD),
         ({"settings": settings_allowing()}, NO_USABLE_METHOD),
-        ({"settings": {}}, "the repository settings withhold or malform"),
-        ({"settings": {**ALL_METHODS_ALLOWED, "allow_squash_merge": "yes"}}, "the repository settings withhold or malform"),
-        ({"rules": [["not a rule"]]}, "the branch rules of main are malformed"),
-        ({"rules": [[{"type": "pull_request", "parameters": "x"}]]}, "the branch rules of main are malformed"),
-        ({"rules": [[{"type": "pull_request", "parameters": {"allowed_merge_methods": "squash"}}]]}, "the branch rules of main are malformed"),
-        ({"rules": [[pull_request_rule("fast-forward")]]}, "the branch rules of main are malformed"),
-        ({"rules": [[{"parameters": {"allowed_merge_methods": ["merge"]}}]]}, "the branch rules of main are malformed"),
-        ({"rules": [[{"type": 5}]]}, "the branch rules of main are malformed"),
-        ({"rules": [[{"type": "pull_request", "parameters": None}]]}, "the branch rules of main are malformed"),
-        ({"rules": [[{"type": "required_linear_history", "parameters": None}]]}, "the branch rules of main are malformed"),
-        ({"rules": [[{"type": "deletion", "parameters": "x"}]]}, "the branch rules of main are malformed"),
-        ({"rules": [[{"type": "pull_request", "parameters": {"allowed_merge_methods": None}}]]}, "the branch rules of main are malformed"),
-        ({"rules_raw": "not json"}, "the branch rules of main are malformed"),
-        ({"rules_raw": json.dumps({"type": "creation"})}, "the branch rules of main are malformed"),
-        ({"rules_raw": json.dumps([{"type": "creation"}])}, "the branch rules of main are malformed"),
-        ({"rules_raw": json.dumps([['{"type":"creation"}']])}, "the branch rules of main are malformed"),
-        ({"rules_raw": json.dumps([[5]])}, "the branch rules of main are malformed"),
-        ({"rules_error": "gh api failed: HTTP 403: Resource not accessible"}, "cannot read the branch rules of main"),
+        ({"settings": {}}, "the repository settings withhold or malform which merge methods they allow"),
+        ({"settings": {**ALL_METHODS_ALLOWED, "allow_squash_merge": "yes"}}, "the repository settings withhold or malform which merge methods they allow"),
+        ({"rules": [["not a rule"]]}, malformed_rules()),
+        ({"rules": [[{"type": "pull_request", "parameters": "x"}]]}, malformed_rules()),
+        ({"rules": [[{"type": "pull_request", "parameters": {"allowed_merge_methods": "squash"}}]]}, malformed_rules()),
+        ({"rules": [[pull_request_rule("fast-forward")]]}, malformed_rules()),
+        ({"rules": [[{"parameters": {"allowed_merge_methods": ["merge"]}}]]}, malformed_rules()),
+        ({"rules": [[{"type": 5}]]}, malformed_rules()),
+        ({"rules": [[{"type": "pull_request", "parameters": None}]]}, malformed_rules()),
+        ({"rules": [[{"type": "required_linear_history", "parameters": None}]]}, malformed_rules()),
+        ({"rules": [[{"type": "deletion", "parameters": "x"}]]}, malformed_rules()),
+        ({"rules": [[{"type": "pull_request", "parameters": {"allowed_merge_methods": None}}]]}, malformed_rules()),
+        ({"rules_raw": "not json"}, malformed_rules()),
+        ({"rules_raw": json.dumps({"type": "creation"})}, malformed_rules()),
+        ({"rules_raw": json.dumps([{"type": "creation"}])}, malformed_rules()),
+        ({"rules_raw": json.dumps([['{"type":"creation"}']])}, malformed_rules()),
+        ({"rules_raw": json.dumps([[5]])}, malformed_rules()),
+        ({"rules_error": "gh api failed: HTTP 403: Resource not accessible"}, "cannot read the branch rules of main: gh api failed: HTTP 403: Resource not accessible"),
         (
             {"rules_error": "gh api failed: HTTP 403: Upgrade to GitHub Pro or Team to enable this feature."},
-            "cannot read the branch rules of main",
+            "cannot read the branch rules of main: gh api failed: HTTP 403: Upgrade to GitHub Pro or Team to enable this feature.",
         ),
     ],
     ids=[
@@ -670,15 +707,14 @@ def test_the_door_refuses_before_the_gate_when_no_method_is_usable(gh_kwargs, li
     named line, and neither the gate nor the merge is touched."""
     gh = FakeGh(**gh_kwargs)
     code, answers = drive(gh)
-    assert code == 2
     streams = capsys.readouterr()
-    assert [shown for shown in streams.out.splitlines() if shown.startswith(f"  ✗ merge         not judged     {line}")] != []
-    assert streams.err == (
-        "error: could not judge · nothing changed\n"
-        "next: fix what the ✗ row names, then run quality emergency-merge acme/widgets 7 again\n"
+    assert (code, streams.out, streams.err, answers) == (
+        2,
+        pull_row() + checks_row() + loosenings_none() + legacy_row() + f"  ✗ merge         not judged     {line}\n",
+        not_judged_pair(),
+        [],
     )
     changed_nothing(gh)
-    assert answers == []
 
 
 def test_a_method_github_refuses_at_merge_time_leaves_the_gate_on_and_the_pull_request_unmerged(capsys):
