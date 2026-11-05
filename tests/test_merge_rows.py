@@ -9,9 +9,12 @@ from quality import cli
 from tests.support.merge import (
     ABSENT,
     B_REMOVED,
+    GATE_CONFIG,
     LEGACY_RED,
+    LOGIN_REQUEST,
     ONE_JOB,
     REPO,
+    SHA,
     SONAR_GREEN,
     TWO_JOBS,
     FakeGh,
@@ -23,6 +26,8 @@ from tests.support.merge import (
 )
 from tests.support.terminal import screen
 
+REPORT_CONFIG = GATE_CONFIG.replace("fail", "report")
+
 
 def frame(*lines):
     return "".join(f"{line}\n" for line in lines)
@@ -30,6 +35,9 @@ def frame(*lines):
 
 def pull_row():
     return "  · #7            open           head aaaaaaa · into main"
+
+
+JSON_FACT = "  ✗ {subject:<14}not judged     Expecting value: line 1 column 1 (char 0)"
 
 
 def loosenings_none():
@@ -110,8 +118,20 @@ def test_a_draft_stops_the_door_before_its_body_or_any_check_is_read(gh_kwargs, 
     gh = FakeGh(**gh_kwargs)
     code, out, err, answers = run(gh, capsys)
     assert (code, out, err, answers) == (1, frame(row), pair, [])
-    assert gh.calls == [("api", f"repos/{REPO}"), ("api", f"repos/{REPO}/pulls/7")]
+    assert gh.requests == [(("api", f"repos/{REPO}"), None), (("api", f"repos/{REPO}/pulls/7"), None)]
     changed_nothing(gh)
+
+
+def test_the_door_asks_for_the_head_commits_checks_and_statuses_and_the_login_by_these_requests(capsys):
+    gh = FakeGh()
+    assert run(gh, capsys)[0] == 0
+    assert gh.requests[:4] == [
+        (("api", f"repos/{REPO}"), None),
+        (("api", f"repos/{REPO}/pulls/7"), None),
+        (("api", "--paginate", f"repos/{REPO}/commits/{SHA}/check-runs?per_page=100", "--jq", ".check_runs[]"), None),
+        (("api", "--paginate", f"repos/{REPO}/commits/{SHA}/status?per_page=100", "--jq", ".statuses[]"), None),
+    ]
+    assert [request for request in gh.requests if request[0][:2] == ("api", "user")] == [(tuple(LOGIN_REQUEST), None)]
 
 
 @pytest.mark.parametrize("draft", [ABSENT, None, "false"], ids=["missing", "null", "a string"])
@@ -129,6 +149,15 @@ def test_a_draft_flag_that_is_no_boolean_cannot_be_judged(draft, capsys):
     [
         ({"checks": {**LEGACY_RED, "tests": "failure"}}, {}, [pull_row(), "  ! checks        red            tests (failure) beside quality / verdict"]),
         ({"checks": {**LEGACY_RED, "tests": None}}, {}, [pull_row(), "  ! checks        running        tests"]),
+        ({"checks": {**LEGACY_RED, "tests": None, "lint": None}}, {}, [pull_row(), "  ! checks        running        tests, lint"]),
+        (
+            {"checks": {**LEGACY_RED, "tests": None}, "statuses": {"external-ci": "pending"}}, {},
+            [pull_row(), "  ! checks        running        tests, external-ci"],
+        ),
+        (
+            {"checks": {**LEGACY_RED, "tests": "failure", "lint": "failure"}}, {},
+            [pull_row(), "  ! checks        red            tests (failure), lint (failure) beside quality / verdict"],
+        ),
         (
             {"checks": {**LEGACY_RED, "tests": None, "lint": "failure"}}, {},
             [pull_row(), "  ! checks        running        tests"],
@@ -164,10 +193,21 @@ def test_a_draft_flag_that_is_no_boolean_cannot_be_judged(draft, capsys):
                 "    ! sonar a.py:3 - s1: bad",
             ],
         ),
+        (
+            {"base_config": GATE_CONFIG, "head_config": REPORT_CONFIG + declaring("legacy fail → report")}, {},
+            [
+                pull_row(), checks_row(), "  ! loosenings    1 declared",
+                "    ! legacy fail → report · overnightworks/songmaker#1345 of 2026-10-20", "        reason: ruled",
+                ("  ! sonar         refused        legacy = report at the pull request's current merge commit: "
+                 "quality / sonar cannot be red on legacy findings"),
+            ],
+        ),
     ],
     ids=[
-        "another red check", "a check running", "a check running beside a red one", "a pending status", "sonar did not run", "nothing red",
+        "another red check", "a check running", "two checks running", "a check and a status running", "two other red checks",
+        "a check running beside a red one", "a pending status", "sonar did not run", "nothing red",
         "the verdict not red", "nothing re-derived", "an undeclared loosening", "an added sonar finding",
+        "a declared fail to report loosening with legacy findings",
     ],
 )
 def test_each_refusal_is_its_row_and_the_pair(gh_kwargs, sonar_kwargs, rows, capsys):
@@ -204,14 +244,33 @@ def test_each_refusal_is_its_row_and_the_pair(gh_kwargs, sonar_kwargs, rows, cap
             ],
         ),
         ({"body": ABSENT}, {}, [pull_row(), "  ✗ landing       not judged     GitHub's answer holds no 'body'"]),
+        ({"raw_answers": {"repository": "not json"}}, {}, [JSON_FACT.format(subject="#7")]),
+        ({"raw_answers": {"pull": "not json"}}, {}, [JSON_FACT.format(subject="#7")]),
+        ({"raw_answers": {"checks": "not json"}}, {}, [pull_row(), JSON_FACT.format(subject="checks")]),
+        ({"raw_answers": {"statuses": "not json"}}, {}, [pull_row(), JSON_FACT.format(subject="checks")]),
     ],
-    ids=["no admin right", "gh fails on the pull request", "no merge commit", "sonar unreachable", "no method the door uses", "a pull answer without a body"],
+    ids=[
+        "no admin right", "gh fails on the pull request", "no merge commit", "sonar unreachable", "no method the door uses",
+        "a pull answer without a body", "a repository answer that is no JSON", "a pull answer that is no JSON",
+        "a check-run answer that is no JSON", "a status answer that is no JSON",
+    ],
 )
 def test_a_step_that_cannot_be_judged_is_its_cross_row_and_the_pair(gh_kwargs, sonar_kwargs, rows, capsys):
     gh = FakeGh(**gh_kwargs)
     code, out, err, answers = run(gh, capsys, transport=sonar(**sonar_kwargs))
     assert (code, out, err, answers) == (2, frame(*rows), not_judged_pair(), [])
     changed_nothing(gh)
+
+
+def test_the_rows_name_the_pull_requests_base_not_the_default_branch(capsys):
+    gh = FakeGh(base_ref="release/1")
+    code, out, err, _ = run(gh, capsys)
+    assert (code, err) == (0, "")
+    assert [line for line in out.splitlines() if "release/1" in line or "main" in line] == [
+        "  · #7            open           head aaaaaaa · into release/1",
+        "  ! sonar         4 legacy findings on main",
+        "  · merge         merge commit   allowed on release/1",
+    ]
 
 
 def at_a_terminal(gh, window, columns, transport=None):
@@ -271,8 +330,16 @@ def test_what_the_operator_must_read_stands_whole_at_a_terminal(gh_kwargs, sonar
     [
         ({"checks": {"quality / verdict": "failure"}}, 1, [pull_row(), "  ! checks        refused        qualit…"], refused_pair()),
         ({"admin": False}, 2, ["  ✗ #7            not judged     the gh…"], not_judged_pair()),
+        (
+            {"checks": {**LEGACY_RED, "a_long_running_check": None}}, 1,
+            [pull_row(), "  ! checks        running        a_long…"], refused_pair(),
+        ),
+        (
+            {"checks": {**LEGACY_RED, "a_long_red_check": "failure"}}, 1,
+            [pull_row(), "  ! checks        red            a_long…"], refused_pair(),
+        ),
     ],
-    ids=["a refused fact", "a cross fact"],
+    ids=["a refused fact", "a cross fact", "a running check", "a red check"],
 )
 def test_a_refused_or_cross_fact_ends_at_the_window(gh_kwargs, code, lines, err, window):
     assert at_a_terminal(FakeGh(**gh_kwargs), window, 40) == (code, lines, err)

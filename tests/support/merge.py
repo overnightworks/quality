@@ -27,6 +27,9 @@ GATE_CONFIG = '[gate]\nmandatory_jobs = ["checks"]\nlegacy = "fail"\n'
 LEGACY_RED = {"quality / sonar": "failure", "quality / verdict": "failure"}
 
 
+LOGIN_REQUEST = ["api", "user", "--jq", ".login"]
+
+
 ALL_METHODS_ALLOWED = {"allow_merge_commit": True, "allow_squash_merge": True, "allow_rebase_merge": True}
 
 
@@ -55,7 +58,7 @@ class FakeGh:
         self, admin=True, checks=None, statuses=None, state="open", fail_on=(), interrupt_on=(), merge_lands=False,
         head_config=GATE_CONFIG, base_config=GATE_CONFIG, merge_config=None, merge_sha=MERGE_SHA,
         base_baseline=None, merge_baseline=None, base_sha=BASE_SHA, remote=None, extra_runs=(), settings=None, rules=((),), base_ref="main", rules_error=None, rules_raw=None,
-        body="Work-Item: #3\n\nCloses #3", later_body=None, draft=False,
+        body="Work-Item: #3\n\nCloses #3", later_body=None, draft=False, raw_answers=None,
     ):
         self.admin, self.state, self.fail_on, self.merge_lands = admin, state, set(fail_on), merge_lands
         self.interrupt_on = list(interrupt_on)
@@ -74,7 +77,9 @@ class FakeGh:
         self.statuses = statuses or {}
         self.body, self.later_body, self.draft, self.pulls_read = body, later_body, draft, 0
         self.merged = False
+        self.raw_answers = raw_answers or {}
         self.calls: list[tuple[str, ...]] = []
+        self.requests: list[tuple[tuple[str, ...], str | None]] = []
         self.sequence: list[str] = []
         self.gate_values: list[str] = []
         self.comments: list[str] = []
@@ -82,6 +87,7 @@ class FakeGh:
 
     def __call__(self, arguments, stdin=None):
         self.calls.append(tuple(arguments))
+        self.requests.append((tuple(arguments), stdin))
         step = self.step_of(arguments)
         if step == "merge" and self.merge_lands:
             self.merged = True
@@ -96,11 +102,11 @@ class FakeGh:
         text = " ".join(arguments)
         for marker, step in (
             ("check-runs", "checks"), ("/status", "statuses"), ("contents/", "config"), ("/pulls/", "pull"),
-            ("/rules/branches/", "rules"), ("properties/values", "gate"), ("pr merge", "merge"), ("/comments", "comment"), ("--jq .login", "login"),
+            ("/rules/branches/", "rules"), ("properties/values", "gate"), ("pr merge", "merge"), ("/comments", "comment"),
         ):
             if marker in text:
                 return step
-        return "repository"
+        return "login" if list(arguments) == LOGIN_REQUEST else "repository"
 
     @staticmethod
     def file_of(arguments):
@@ -109,6 +115,9 @@ class FakeGh:
         return path, sha
 
     def answer(self, step, arguments, stdin):
+        fixed = self.fixed_answer(step, arguments)
+        if fixed is not None:
+            return fixed
         if step == "pull":
             return self.pull_answer()
         if step == "checks":
@@ -133,6 +142,14 @@ class FakeGh:
             return "felix\n"
         self.record(step, arguments, stdin)
         return ""
+
+    def fixed_answer(self, step, arguments):
+        """A raw answer the test planted, or nothing for a check or status read of any commit but the head's own."""
+        if step in self.raw_answers:
+            return self.raw_answers[step]
+        if step in ("checks", "statuses") and f"/commits/{SHA}/" not in " ".join(arguments):
+            return ""
+        return None
 
     def pull_answer(self):
         body = self.later_body if self.pulls_read and self.later_body is not None else self.body
