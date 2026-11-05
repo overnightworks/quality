@@ -53,6 +53,7 @@ class FakeGh:
         self, admin=True, checks=None, statuses=None, state="open", fail_on=(), interrupt_on=(), merge_lands=False,
         head_config=GATE_CONFIG, base_config=GATE_CONFIG, merge_config=None, merge_sha=MERGE_SHA,
         base_baseline=None, merge_baseline=None, base_sha=BASE_SHA, remote=None, extra_runs=(), settings=None, rules=((),), base_ref="main", rules_error=None, rules_raw=None,
+        body="Work-Item: #3\n\nCloses #3", later_body=None,
     ):
         self.admin, self.state, self.fail_on, self.merge_lands = admin, state, set(fail_on), merge_lands
         self.interrupt_on = list(interrupt_on)
@@ -69,11 +70,13 @@ class FakeGh:
         self.checks = {"checks": "success", **(LEGACY_RED if checks is None else checks)}
         self.extra_runs = list(extra_runs)
         self.statuses = statuses or {}
+        self.body, self.later_body, self.pulls_read = body, later_body, 0
         self.merged = False
         self.calls: list[tuple[str, ...]] = []
         self.sequence: list[str] = []
         self.gate_values: list[str] = []
         self.comments: list[str] = []
+        self.merge_messages: list[str | None] = []
 
     def __call__(self, arguments, stdin=None):
         self.calls.append(tuple(arguments))
@@ -105,7 +108,9 @@ class FakeGh:
 
     def answer(self, step, arguments, stdin):
         if step == "pull":
-            return json.dumps({"state": self.state, "merged": self.merged, "head": {"sha": SHA}, "base": {"sha": self.base_sha, "ref": self.base_ref}, "merge_commit_sha": self.merge_sha})
+            body = self.later_body if self.pulls_read and self.later_body is not None else self.body
+            self.pulls_read += 1
+            return json.dumps({"body": body, "state": self.state, "merged": self.merged, "head": {"sha": SHA}, "base": {"sha": self.base_sha, "ref": self.base_ref}, "merge_commit_sha": self.merge_sha})
         if step == "checks":
             return "\n".join(
                 json.dumps({"name": name, "status": "in_progress" if result is None else "completed", "conclusion": result})
@@ -139,6 +144,7 @@ class FakeGh:
     def record(self, step, arguments, stdin):
         if step == "merge":
             self.merged = True
+            self.merge_messages.append(stdin)
             self.sequence.append("merge")
         if step == "gate":
             self.gate_values.append(json.loads(stdin)["properties"][0]["value"])
