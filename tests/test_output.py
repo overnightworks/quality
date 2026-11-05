@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import check, cli, output, sonar
+from quality import cli, output, sonar
 from quality.output import Glyph, Row, SubLine, Verdict
 from quality.report import (
     Choice,
@@ -37,7 +37,7 @@ from tests.support.check import (
 )
 from tests.support.door import CHECK_WORD, MODULE_DOOR, door_in
 from tests.support.fleet import RELEASES, write_fleet
-from tests.support.terminal import Terminal, without_sgr
+from tests.support.terminal import Terminal, by_role, without_sgr
 from tests.support.verdict import CHECKS_GREEN
 
 
@@ -243,10 +243,22 @@ def test_a_moved_note_row_is_a_clean_row():
     assert printed.lstrip().startswith(Glyph.CLEAN)
 
 
-@pytest.mark.parametrize("planned", check.PLANNED_EVENT.values(), ids=str)
-def test_each_word_a_dry_run_says_is_a_will_change_row(planned):
-    printed = findings_written([], notes=[Note("src/a.py", planned, "a fact")])
-    assert printed.lstrip().startswith(Glyph.WILL_CHANGE)
+@pytest.mark.parametrize(
+    ("planned", "printed"),
+    [
+        pytest.param(NoteEvent.LOWER, "    ~ src/a.py  lower  a fact\n", id="lower"),
+        pytest.param(NoteEvent.DROP, "    ~ src/a.py  drop  a fact\n", id="drop"),
+        pytest.param(NoteEvent.MOVE, "    ~ src/a.py  move  a fact\n", id="move"),
+        pytest.param(NoteEvent.RECORD, "    ~ src/a.py  record  a fact\n", id="record"),
+    ],
+)
+def test_each_word_a_dry_run_says_is_a_will_change_row(planned, printed):
+    assert findings_written([], notes=[Note("src/a.py", planned, "a fact")]) == printed
+
+
+def test_a_will_change_row_at_a_terminal_paints_its_glyph_and_its_fact():
+    printed = findings_written([], Terminal, notes=[Note("src/a.py", NoteEvent.LOWER, "a fact")])
+    assert by_role(printed, Glyph.WILL_CHANGE) == "    {glyph}~{reset} src/a.py  lower  {other}a fact{reset}\n"
 
 
 def test_a_dry_runs_glyph_has_a_colour_of_its_own():

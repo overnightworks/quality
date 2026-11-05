@@ -62,45 +62,62 @@ def commands_of(*group: str) -> str:
 
 
 def test_the_help_stands_in_the_pictures_frame(capsys):
-    lines = help_of(capsys, []).splitlines()
-    assert (lines[0], headings(lines), lines[-1], max(len(line) for line in lines) <= 80) == (
-        "usage: quality COMMAND",
-        ["Commands:", "Run by the gate, not by people:", "Options:"],
-        "Exit codes: 0 yes, 1 no, 2 could not answer, 130 interrupted.",
-        True,
+    assert help_of(capsys, []) == (
+        "usage: quality COMMAND\n"
+        "\n"
+        "Commands:\n"
+        "  check [AREA ...] [--staged] [--fix] [--dry-run]\n"
+        "      Check this repository against the fleet's rules.\n"
+        "  emergency-merge OWNER/REPO PR\n"
+        "      Operator only: merge one pull request whose gate is red only for\n"
+        "      legacy findings or loosenings he ruled, after he types ja.\n"
+        "  scoreboard [PATH]\n"
+        "      Measure every fleet repository: size, debt, the gate release it pins.\n"
+        "\n"
+        "Run by the gate, not by people:\n"
+        "  verdict [PATH]\n"
+        "      Decide whether this pull request may merge.\n"
+        "  sonar properties\n"
+        "      Refuse a properties file, token or coverage report the scan must not\n"
+        "      start with.\n"
+        "  sonar findings\n"
+        "      Wait for this run's analysis, then count its open findings.\n"
+        "\n"
+        "Options:\n"
+        "  --version   the installed version\n"
+        "  -h, --help  show this help\n"
+        "\n"
+        "Exit codes: 0 yes, 1 no, 2 could not answer, 130 interrupted.\n"
     )
 
 
 def test_the_check_help_stands_in_the_pictures_frame(capsys):
-    lines = help_of(capsys, ["check"]).splitlines()
-    areas = lines[lines.index("Areas (default: all):") + 1 : lines.index("Options:") - 1]
-    options = lines[lines.index("Options:") + 1 : -2]
-    assert (lines[0], lines[2], headings(lines), areas, options, lines[-1], max(len(line) for line in lines) <= 80) == (
-        "usage: quality check [AREA ...] [--staged] [--fix] [--dry-run] [-v]",
-        "Check this repository against the fleet's rules.",
-        ["Areas (default: all):", "Options:"],
-        [
-            "  files         what the repository tracks: layout, tests, env files,",
-            "                compose ports, the Python floor",
-            "  debt          size and near copies against the debt ceiling",
-            "                (quality/baseline.toml)",
-            "  imports       the import contracts",
-            "  secrets       secrets in the committed history",
-            "  workflows     GitHub workflows: lint and security",
-            "  dependencies  known advisories in the lockfiles",
-            "  code          Python source: security findings and print calls",
-        ],
-        [
-            "  --staged      secrets in exactly what the next commit records; the commit",
-            "                hook runs: quality check secrets --staged",
-            "  --fix         lower the debt ceiling (quality/baseline.toml) where code",
-            "                shrank, or record it the first time; never raises it",
-            "  --dry-run     with --fix: show what would change, write nothing",
-            "  -v            show the raw scanner output, never a secret",
-            "  -h, --help    show this help",
-        ],
-        "Exit codes: 0 clean, 1 findings, 2 could not check, 130 interrupted.",
-        True,
+    assert help_of(capsys, ["check"]) == (
+        "usage: quality check [AREA ...] [--staged] [--fix] [--dry-run] [-v]\n"
+        "\n"
+        "Check this repository against the fleet's rules.\n"
+        "\n"
+        "Areas (default: all):\n"
+        "  files         what the repository tracks: layout, tests, env files,\n"
+        "                compose ports, the Python floor\n"
+        "  debt          size and near copies against the debt ceiling\n"
+        "                (quality/baseline.toml)\n"
+        "  imports       the import contracts\n"
+        "  secrets       secrets in the committed history\n"
+        "  workflows     GitHub workflows: lint and security\n"
+        "  dependencies  known advisories in the lockfiles\n"
+        "  code          Python source: security findings and print calls\n"
+        "\n"
+        "Options:\n"
+        "  --staged      secrets in exactly what the next commit records; the commit\n"
+        "                hook runs: quality check secrets --staged\n"
+        "  --fix         lower the debt ceiling (quality/baseline.toml) where code\n"
+        "                shrank, or record it the first time; never raises it\n"
+        "  --dry-run     with --fix: show what would change, write nothing\n"
+        "  -v            show the raw scanner output, never a secret\n"
+        "  -h, --help    show this help\n"
+        "\n"
+        "Exit codes: 0 clean, 1 findings, 2 could not check, 130 interrupted.\n"
     )
 
 
