@@ -122,7 +122,7 @@ def test_the_token_never_appears_when_sonar_refuses_it(monkeypatch, capsys):
 
 
 def test_gate_goes_off_then_merge_then_on_then_log(capsys):
-    """#37 rule 4, #73 rule 4: off, merge, on, in this order, and the closing line names the release that works."""
+    """Off, merge, on, in this order, and the door's last word is merged."""
     gh = FakeGh()
     assert drive(gh, when_asked=capsys.readouterr)[0] == 0
     assert gh.sequence == ["gate false", "merge", "gate true", "comment"]
