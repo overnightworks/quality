@@ -142,6 +142,7 @@ def main(
             now=lambda: datetime.now(UTC),
             environment=environment,
             say=emit,
+            channels=channels,
             remote_for=remote_for,
         )
     if arguments.command == "verdict":

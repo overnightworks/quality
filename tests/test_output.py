@@ -90,6 +90,21 @@ def test_sub_lines_stand_under_their_row_with_their_own_glyph():
     assert plain((row,)).splitlines()[1:] == ["    ✗ first", "    ✗ second"]
 
 
+def test_the_lines_below_a_sub_line_stand_deeper_and_escaped():
+    row = Row(Glyph.NEEDS_YOU, "loosenings", Event.CLEAN, sub_lines=(SubLine(Glyph.NEEDS_YOU, "what", whole=True, below=("reason: a\x1b[8mb", "second")),))
+    assert plain((row,)).splitlines() == ["  ! loosenings    clean", "    ! what", "        reason: a\\x1b[8mb", "        second"]
+
+
+@pytest.mark.parametrize("whole", [False, True], ids=["fitted", "whole"])
+def test_a_line_below_a_sub_line_is_painted_as_a_rows_fact_is(whole):
+    fact_row = Row(Glyph.NEEDS_YOU, "loosenings", Event.CLEAN, "reason")
+    below_row = Row(Glyph.NEEDS_YOU, "loosenings", Event.CLEAN, sub_lines=(SubLine(Glyph.NEEDS_YOU, "what", whole=whole, below=("reason",)),))
+    fact_channel = written(Terminal, lambda channel: output.write_rows((fact_row,), channel))
+    below_channel = written(Terminal, lambda channel: output.write_rows((below_row,), channel))
+    glyph, start, end = re.fullmatch(r"  (\x1b\[[0-9;]*m!\x1b\[[0-9;]*m) loosenings    clean          (\x1b\[[0-9;]*m)reason(\x1b\[[0-9;]*m)\n", fact_channel).groups()
+    assert below_channel == f"  {glyph} loosenings    clean\n    {glyph} what\n{start}        reason{end}\n"
+
+
 def test_a_row_with_a_fix_ends_in_its_fix_line():
     row = Row(Glyph.NOTE, "debt", Event.CLEAN, "not recorded", fix="run it like this")
     assert plain((row,)).splitlines() == ["  · debt          clean          not recorded", "      fix: run it like this"]

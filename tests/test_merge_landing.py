@@ -1,9 +1,33 @@
-import re
-
 import pytest
 
 from tests.support.check import assert_every_line_starts_with_the_door
-from tests.support.merge import NO_BODY, REPO, SHA, FakeGh, changed_nothing, drive
+from tests.support.merge import ABSENT, SHA, FakeGh, changed_nothing, drive
+
+
+def not_judged_pair():
+    return (
+        "error: could not judge · nothing changed\n"
+        "next: fix what the ✗ row names, then run quality emergency-merge acme/widgets 7 again\n"
+    )
+
+
+def pull_row():
+    return "  · #7            open           head aaaaaaa · into main\n"
+
+
+def landing_pair():
+    return (
+        "error: not merged · the operator's merge ends the merge commit with the pull request body's one Work-Item: or No-Item: line · nothing changed\n"
+        "next: give the pull request body exactly one Work-Item: or No-Item: line outside code blocks, then run quality emergency-merge acme/widgets 7 again\n"
+    )
+
+
+def landing_sentence(count="no"):
+    return f"the pull request body carries {count} Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"
+
+
+def no_body_text():
+    return "GitHub's answer for the pull request holds no body text"
 
 
 @pytest.mark.parametrize(
@@ -71,21 +95,21 @@ def test_a_squash_ends_with_the_same_line():
 @pytest.mark.parametrize(
     ("body", "line"),
     [
-        ("", "emergency-merge: refused - the pull request body carries no Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"),
-        (None, "emergency-merge: refused - the pull request body carries no Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"),
-        ("```\nWork-Item: #9\n```", "emergency-merge: refused - the pull request body carries no Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"),
-        ("  Work-Item: #9", "emergency-merge: refused - the pull request body carries no Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"),
-        ("```\nWork-Item: #1\n    ```\nWork-Item: #9", "emergency-merge: refused - the pull request body carries no Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"),
-        ("```\nWork-Item: #1\n```\N{NO-BREAK SPACE}\nWork-Item: #9", "emergency-merge: refused - the pull request body carries no Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"),
-        ("~~~~\nWork-Item: #1\n~~~\nWork-Item: #9", "emergency-merge: refused - the pull request body carries no Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"),
-        ("Work-Item: #9\nWork-Item: #8", "emergency-merge: refused - the pull request body carries 2 Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"),
-        ("Work-Item: #9\nNo-Item: fix", "emergency-merge: refused - the pull request body carries 2 Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"),
-        ("Work-Item:\nWork-Item: #9", "emergency-merge: refused - the pull request body carries 2 Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"),
-        ("Work-Item: 9", "emergency-merge: refused - the pull request body carries Work-Item: 9; a work item reads OWNER/REPO#n or #n"),
-        ("Work-Item: #9\N{NO-BREAK SPACE}", "emergency-merge: refused - the pull request body carries Work-Item: #9\N{NO-BREAK SPACE}; a work item reads OWNER/REPO#n or #n"),
-        ("No-Item: chore", "emergency-merge: refused - the pull request body carries No-Item: chore; an issue-less pull request is deps, docs, fix"),
-        ("Work-Item: acme/other#9", "emergency-merge: refused - the pull request body names work item acme/other#9 of another repository, not of acme/widgets"),
-        ("Work-Item: #9\x1b[8m\N{RIGHT-TO-LEFT OVERRIDE}", "emergency-merge: refused - the pull request body carries Work-Item: #9\\x1b[8m\\u202e; a work item reads OWNER/REPO#n or #n"),
+        ("", landing_sentence()),
+        (None, landing_sentence()),
+        ("```\nWork-Item: #9\n```", landing_sentence()),
+        ("  Work-Item: #9", landing_sentence()),
+        ("```\nWork-Item: #1\n    ```\nWork-Item: #9", landing_sentence()),
+        ("```\nWork-Item: #1\n```\N{NO-BREAK SPACE}\nWork-Item: #9", landing_sentence()),
+        ("~~~~\nWork-Item: #1\n~~~\nWork-Item: #9", landing_sentence()),
+        ("Work-Item: #9\nWork-Item: #8", landing_sentence("2")),
+        ("Work-Item: #9\nNo-Item: fix", landing_sentence("2")),
+        ("Work-Item:\nWork-Item: #9", landing_sentence("2")),
+        ("Work-Item: 9", "the pull request body carries Work-Item: 9; a work item reads OWNER/REPO#n or #n"),
+        ("Work-Item: #9\N{NO-BREAK SPACE}", "the pull request body carries Work-Item: #9\N{NO-BREAK SPACE}; a work item reads OWNER/REPO#n or #n"),
+        ("No-Item: chore", "the pull request body carries No-Item: chore; an issue-less pull request is deps, docs, fix"),
+        ("Work-Item: acme/other#9", "the pull request body names work item acme/other#9 of another repository, not of acme/widgets"),
+        ("Work-Item: #9\x1b[8m\N{RIGHT-TO-LEFT OVERRIDE}", "the pull request body carries Work-Item: #9\\x1b[8m\\u202e; a work item reads OWNER/REPO#n or #n"),
     ],
     ids=[
         "empty", "null", "only fenced", "indented", "a four space run closes nothing", "a closing run followed by a no-break space closes nothing", "a shorter tilde run closes nothing", "two work items", "a work item and a no item", "an empty value counts as a line", "malformed work item",
@@ -96,38 +120,31 @@ def test_a_body_without_one_valid_line_keeps_the_door_shut(body, line, capsys):
     gh = FakeGh(body=body)
     code, answers = drive(gh)
     output = capsys.readouterr()
-    assert (code, output.out, output.err, answers) == (1, f"{line}\n", "", [])
+    assert (code, output.out, output.err, answers) == (1, f"{pull_row()}  ! landing       refused        {line}\n", landing_pair(), [])
     assert_every_line_starts_with_the_door(output.out.splitlines())
     changed_nothing(gh)
 
 
 @pytest.mark.parametrize(
-    ("body", "line"),
-    [
-        (5, "GitHub's answer for the pull request holds no body text"),
-        (False, "GitHub's answer for the pull request holds no body text"),
-        (0, "GitHub's answer for the pull request holds no body text"),
-        ([], "GitHub's answer for the pull request holds no body text"),
-        ({}, "GitHub's answer for the pull request holds no body text"),
-    ],
+    "body",
+    [5, False, 0, [], {}],
     ids=["a number", "false", "zero", "an empty list", "an empty object"],
 )
-def test_a_body_that_is_no_text_cannot_be_judged(body, line, capsys):
+def test_a_body_that_is_no_text_cannot_be_judged(body, capsys):
     gh = FakeGh(body=body)
-    assert drive(gh)[0] == 2
+    code, answers = drive(gh)
     output = capsys.readouterr()
-    assert (output.out, output.err) == (f"emergency-merge: cannot judge - {line}; nothing was changed\n", "")
+    assert (code, output.out, output.err, answers) == (2, f"{pull_row()}  ✗ landing       not judged     {no_body_text()}\n", not_judged_pair(), [])
     changed_nothing(gh)
 
 
 def test_a_pull_answer_without_a_body_field_cannot_be_judged(capsys):
-    """A pull answer that holds no body field is cannot judge and changes nothing."""
-    gh = FakeGh(body=NO_BODY)
-    code = drive(gh)[0]
+    gh = FakeGh(body=ABSENT)
+    code, answers = drive(gh)
     output = capsys.readouterr()
-    assert code == 2
-    assert output.err == ""
-    assert re.fullmatch(r"emergency-merge: cannot judge - .+; nothing was changed\n", output.out)
+    assert (code, output.out, output.err, answers) == (
+        2, f"{pull_row()}  ✗ landing       not judged     GitHub's answer holds no 'body'\n", not_judged_pair(), []
+    )
     changed_nothing(gh)
 
 
@@ -138,7 +155,8 @@ def test_the_operator_reads_the_merge_commits_last_line_before_ja(body, line, ca
     shown = []
     drive(FakeGh(body=body), when_asked=lambda: shown.append(capsys.readouterr()))
     assert (shown[0].out, shown[0].err) == (
-        f"{REPO} #7 head {SHA}: 4 legacy finding(s)\nmerges with a merge commit\nthe merge commit ends with {line}\n",
+        (f"{pull_row()}  ✓ checks        ok             only quality / sonar and quality / verdict are red\n"
+        f"  ✓ loosenings    none\n  ! sonar         4 legacy findings on main\n  · merge         merge commit   allowed on main\nthe merge commit ends with {line}\n"),
         "",
     )
 

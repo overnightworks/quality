@@ -6,15 +6,16 @@ import subprocess
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
+from enum import Enum, StrEnum
 from functools import partial
 from pathlib import Path
 from urllib.parse import quote
 
 from quality import architecture, process
 from quality.config import CONFIG_PATH, ITEM_REFERENCE, REPOSITORY_NAME, Declaration, GateSettings, LegacyMode
+from quality.output import SEPARATOR, Channels, Glyph, Row, SubLine, write_pair, write_rows
 from quality.ratchet import BASELINE_PATH, NO_RENAMES, Renames
-from quality.report import CannotJudge, printable, render
+from quality.report import CannotJudge, Command, Instruction, Step, headline, printable
 from quality.sonar import (
     Analysis,
     Scope,
@@ -57,7 +58,7 @@ class GhFailed(Exception):
 
 
 class Refused(Exception):
-    """The door stays shut; each of `lines` is one line the operator reads."""
+    """A step refuses: the first of `lines` is the fact, each further line stands whole below the step's row."""
 
     def __init__(self, *lines: str) -> None:
         super().__init__(*lines)
@@ -84,12 +85,58 @@ class MergeMethod(Enum):
     def flag(self) -> str:
         return f"--{self.value}"
 
+    @property
+    def event(self) -> DoorEvent:
+        return {"merge": DoorEvent.MERGE_COMMIT, "squash": DoorEvent.SQUASH}[self.value]
+
 
 RULE_METHOD_NAMES = ("merge", "squash", "rebase")
 
 
-class NoMergeMethod(Exception):
-    """The repository and its branch rules leave the door no method it lands with."""
+class DoorEvent(StrEnum):
+    """What a row of the operator's door says."""
+
+    OPEN = "open"
+    DRAFT = "draft"
+    CLOSED = "closed"
+    OK = "ok"
+    RED = "red"
+    RUNNING = "running"
+    REFUSED = "refused"
+    DECLARED = "declared"
+    NONE = "none"
+    LEGACY_FINDING = "legacy finding"
+    MERGE_COMMIT = "merge commit"
+    SQUASH = "squash"
+    NOT_JUDGED = "not judged"
+
+
+NOTHING_CHANGED = "nothing changed"
+NOT_JUDGED_ERROR = f"could not judge{SEPARATOR}{NOTHING_CHANGED}"
+
+
+def not_merged(why: str) -> str:
+    return f"not merged{SEPARATOR}{why}{SEPARATOR}{NOTHING_CHANGED}"
+
+
+REFUSED_ERROR = not_merged("the operator's merge lands only declared loosenings and legacy findings")
+LANDING = "landing"
+
+type Pair = tuple[str, tuple[Step, ...]]
+type Judged[T] = tuple[T, tuple[Row, ...]]
+Show = Callable[[tuple[Row, ...]], None]
+
+
+class Stopped(Exception):
+    """The door stops at `row` with the pair after it; a `✗` row could not judge (exit 2), any other refused (exit 1)."""
+
+    def __init__(self, row: Row, error: str, next_steps: tuple[Step, ...]) -> None:
+        super().__init__(error)
+        self.row, self.error, self.next_steps = row, error, next_steps
+
+    @property
+    def exit_code(self) -> int:
+        return EXIT_NOT_RESTORED if self.row.glyph is Glyph.COULD_NOT_CHECK else EXIT_REFUSED
 
 
 class Outcome(Enum):
@@ -137,8 +184,8 @@ def described(declaration: Declaration) -> str:
 
 @dataclass(frozen=True)
 class Door:
-    """What the operator is shown before typing the word: the declared loosenings and, where Sonar failed, the legacy
-    count."""
+    """What the door settled before the word: the pull request, its declared loosenings, the legacy count where Sonar
+    failed, the method and the landing."""
 
     repository: str
     pull_request: int
@@ -155,26 +202,6 @@ class Door:
     def reasons(self) -> list[str]:
         """Why the door merges, as the log comment names it."""
         return [*self.legacy_count, *map(described, self.declared)]
-
-    def shown(self) -> tuple[str, ...]:
-        """What the operator reads before typing the word: the counts, each declaration, the merge method, then the merge commit's last line."""
-        declared = [f"{len(self.declared)} declared loosening(s)"] if self.declared else []
-        heading = f"{self.repository} #{self.pull_request} head {self.head_sha}: {', '.join([*self.legacy_count, *declared])}"
-        return (heading, *map(described, self.declared), self.merge_method.description, f"the merge commit ends with {self.landing.trailer}")
-
-
-def refusal_of_checks(checks: Sequence[Check]) -> str | None:
-    pending = [check.name for check in checks if check.pending]
-    if pending:
-        return f"checks still running: {', '.join(pending)}"
-    other_red = [f"{check.name} ({check.conclusion})" for check in checks if not check.green and check.name not in LEGACY_CHECKS]
-    if other_red:
-        return f"checks other than {' and '.join(LEGACY_CHECKS)} are red: {', '.join(other_red)}"
-    if all(check.green for check in checks):
-        return "no check is red: the door is not the only way, land the pull request normally"
-    if not any(check.name == VERDICT_CHECK and check.conclusion == RED for check in checks):
-        return f"{VERDICT_CHECK} must have failed for the door to be the only way"
-    return None
 
 
 def sonar_failed(checks: Sequence[Check]) -> bool:
@@ -227,32 +254,21 @@ def read_renames_of_pull(remote: str, base_sha: str, merge_sha: str, environment
             try:
                 done = process.run_bounded_in_own_group(command, FETCH_TIMEOUT_SECONDS, isolated)
             except process.ProcessError as error:
-                raise Refused(f"cannot fetch the pull request's commits to compare renamed files ({error})") from None
+                raise CannotJudge(f"cannot fetch the pull request's commits to compare renamed files ({error})") from None
             if done.returncode != 0:
-                raise Refused(
+                raise CannotJudge(
                     f"cannot fetch the pull request's commits to compare renamed files (git exited {done.returncode})"
                 )
         try:
             return read_renames(repository, base_sha, merge_sha, isolated, bound=FETCH_TIMEOUT_SECONDS)
         except CannotJudge:
-            raise Refused("cannot list the files git renamed between the pull request's commits") from None
+            raise CannotJudge("cannot list the files git renamed between the pull request's commits") from None
 
 
 def rederived_verdict(head: Side, base: Side, check_runs: Sequence[Check], renames: Renames) -> Verdict:
     """The verdict's own decider at the merge commit, with the Sonar job taken as green: the door judges Sonar itself."""
     jobs = [Job(run.name, 1, run.status, SUCCESS if run.name == SONAR_CHECK else run.conclusion) for run in check_runs]
     return judge(head, base, jobs, {"sonar": SUCCESS}, 1, renames)
-
-
-def refusal_of_verdict(verdict: Verdict, sonar_red: bool) -> str | None:
-    """The door merges legacy findings and declared loosenings, nothing else, and with Sonar green it needs a declared one."""
-    if verdict.blocking:
-        return (
-            f"{VERDICT_CHECK} is red for more than legacy findings and declared loosenings: {'; '.join(verdict.blocking)}"
-        )
-    if not sonar_red and not verdict.declared:
-        return f"{VERDICT_CHECK} is red, but judged again at the merge commit it finds nothing: re-run the verdict"
-    return None
 
 
 def refusal_of_legacy_mode(settings: GateSettings) -> str | None:
@@ -315,9 +331,7 @@ def judge_sonar(
         raise Refused(f"Sonar analysed {analysed or 'nothing'}, head is {head_sha}")
     findings = open_findings(analysis, transport)
     if findings.count:
-        # Every field of a rendering is escaped, so its line feeds are the rendering's own.
-        rendered = (line for finding in findings.listed for line in render(finding).split("\n"))
-        raise Refused("the pull request adds findings:", *rendered)
+        raise Refused("the pull request adds findings:", *map(headline, findings.listed))
     if not default_branch_analysed(analysis, transport):
         raise Refused(legacy_unknown(default_branch))
     legacy = legacy_count(analysis, transport)
@@ -391,7 +405,7 @@ def choose_merge_method(gh: GhRunner, repository: str, repository_facts: Mapping
         allowed = allowed if left_open is None else allowed & left_open
     chosen = next((method for method in MergeMethod if method in allowed), None)
     if chosen is None:
-        raise NoMergeMethod("the repository and its branch rules allow no merge method the door uses (a merge commit or a squash)")
+        raise CannotJudge("the repository and its branch rules allow no merge method the door uses (a merge commit or a squash)")
     return chosen
 
 
@@ -561,6 +575,122 @@ def landing_of(body: object, repository: str) -> Landing:
     return Landing(trailer, f"{rest}\n\n{trailer}" if rest else trailer)
 
 
+def gh_command(repository: str, pull_request: int, word: str) -> Command:
+    return Command(f"gh pr {word} {pull_request} --repo {repository}")
+
+
+def unanswered(error: GhFailed | KeyError | ValueError) -> str:
+    return f"GitHub's answer holds no {error}" if isinstance(error, KeyError) else str(error)
+
+
+def judged[T](subject: str, step: Callable[[], Judged[T]], refusal: Pair, again: Step, show: Show) -> T:
+    """What `step` answers, its rows shown; a refusal stops the door at `subject`'s `!` row, a read not judged at its `✗` row."""
+    try:
+        value, rows = step()
+    except Refused as refused:
+        fact, *lines = refused.lines
+        below = tuple(SubLine(Glyph.NEEDS_YOU, line, whole=True) for line in lines)
+        raise Stopped(Row(Glyph.NEEDS_YOU, subject, DoorEvent.REFUSED, fact, sub_lines=below, descriptive=True), *refusal) from None
+    except (CannotJudge, GhFailed, KeyError, ValueError) as error:
+        fact = str(error) if isinstance(error, CannotJudge) else unanswered(error)
+        raise Stopped(Row(Glyph.COULD_NOT_CHECK, subject, DoorEvent.NOT_JUDGED, fact, descriptive=True), NOT_JUDGED_ERROR, (again,)) from error
+    show(rows)
+    return value
+
+
+def pull_request_row(repository: str, pull_request: int, state: object, draft: object, fact: str) -> Row:
+    """A closed pull request, then a draft, stops the door before its body or a check is read."""
+    subject = f"#{pull_request}"
+    if state != "open":
+        closed = not_merged(f"{subject} is closed")
+        raise Stopped(Row(Glyph.NEEDS_YOU, subject, DoorEvent.CLOSED, fact), closed, (gh_command(repository, pull_request, "view"),))
+    if not isinstance(draft, bool):
+        raise CannotJudge("GitHub's answer for the pull request holds no draft flag")
+    if draft:
+        drafted = not_merged("a draft does not land")
+        raise Stopped(Row(Glyph.NEEDS_YOU, subject, DoorEvent.DRAFT, fact), drafted, (gh_command(repository, pull_request, "ready"),))
+    return Row(Glyph.NOTE, subject, DoorEvent.OPEN, fact)
+
+
+def read_pull_request(gh: GhRunner, repository: str, pull_request: int) -> Judged[tuple[Mapping[str, object], Mapping[str, object]]]:
+    facts = json.loads(gh(["api", f"repos/{repository}"], None))
+    require_admin_permission(facts, repository)
+    pull = json.loads(gh(["api", f"repos/{repository}/pulls/{pull_request}"], None))
+    fact = f"head {pull['head']['sha'][:7]}{SEPARATOR}into {pull['base']['ref']}"
+    return (facts, pull), (pull_request_row(repository, pull_request, pull["state"], pull.get("draft"), fact),)
+
+
+def unsettled_row(checks: Sequence[Check]) -> Row | None:
+    """The row of checks still running, else of checks other than the two the door judges that are red."""
+    pending = [check.name for check in checks if check.pending]
+    if pending:
+        return Row(Glyph.NEEDS_YOU, "checks", DoorEvent.RUNNING, ", ".join(pending), descriptive=True)
+    other_red = [f"{check.name} ({check.conclusion})" for check in checks if not check.green and check.name not in LEGACY_CHECKS]
+    if other_red:
+        return Row(Glyph.NEEDS_YOU, "checks", DoorEvent.RED, f"{', '.join(other_red)} beside {VERDICT_CHECK}", descriptive=True)
+    return None
+
+
+def checks_row(checks: Sequence[Check], refused: Pair) -> Row:
+    unsettled = unsettled_row(checks)
+    if unsettled:
+        raise Stopped(unsettled, *refused)
+    if all(check.green for check in checks):
+        raise Refused("no check is red: the door is not the only way, land the pull request normally")
+    red = [name for name in LEGACY_CHECKS if any(check.name == name and check.conclusion == RED for check in checks)]
+    if VERDICT_CHECK not in red:
+        raise Refused(f"{VERDICT_CHECK} must have failed for the door to be the only way")
+    return Row(Glyph.CLEAN, "checks", DoorEvent.OK, f"only {' and '.join(red)} {'is' if len(red) == 1 else 'are'} red")
+
+
+def read_checks(gh: GhRunner, repository: str, head_sha: str, refused: Pair) -> Judged[tuple[list[Check], bool]]:
+    check_runs = read_check_runs(gh, repository, head_sha)
+    checks = [*check_runs, *read_statuses(gh, repository, head_sha)]
+    row = checks_row(checks, refused)
+    return (check_runs, sonar_failed(checks)), (row,)
+
+
+def declaration_line(declaration: Declaration) -> SubLine:
+    return SubLine(Glyph.NEEDS_YOU, f"{declaration.what}{SEPARATOR}{declaration.ruling()}", whole=True, below=(f"reason: {declaration.reason}",))
+
+
+def loosenings_row(verdict: Verdict, sonar_red: bool, refused: Pair) -> Row:
+    """The door merges legacy findings and declared loosenings, nothing else, and with Sonar green it needs a declared one."""
+    if verdict.blocking:
+        blocking = tuple(SubLine(Glyph.NEEDS_YOU, line, whole=True) for line in verdict.blocking)
+        raise Stopped(Row(Glyph.NEEDS_YOU, "loosenings", DoorEvent.RED, sub_lines=blocking), *refused)
+    if not sonar_red and not verdict.declared:
+        raise Refused(f"{VERDICT_CHECK} is red, but judged again at the merge commit it finds nothing: re-run the verdict")
+    if not verdict.declared:
+        return Row(Glyph.CLEAN, "loosenings", DoorEvent.NONE)
+    lines = tuple(map(declaration_line, verdict.declared))
+    return Row(Glyph.NEEDS_YOU, "loosenings", DoorEvent.DECLARED, count=len(lines), counts_plural=False, sub_lines=lines)
+
+
+def read_loosenings(
+    gh: GhRunner, repository: str, pull: Mapping[str, object], check_runs: Sequence[Check], sonar_red: bool,
+    environment: Mapping[str, str], remote_for: RemoteFor, refused: Pair,
+) -> Judged[tuple[Verdict, GateSettings]]:
+    merge_commit_sha, base_sha = pull["merge_commit_sha"], pull["base"]["sha"]
+    if not merge_commit_sha:
+        raise CannotJudge("GitHub has no merge commit for the pull request yet, so the config the jobs ran on is unknown")
+    head, base = read_side_at(gh, repository, merge_commit_sha), read_side_at(gh, repository, base_sha)
+    renames = read_renames_of_pull(remote_for(repository), base_sha, merge_commit_sha, environment) if compares_baselines(base, head) else NO_RENAMES
+    verdict = rederived_verdict(head, base, check_runs, renames)
+    return (verdict, head.settings), (loosenings_row(verdict, sonar_red, refused),)
+
+
+def read_legacy(count: Callable[[], int], settings: GateSettings, default_branch: str) -> Judged[int]:
+    legacy = judge_legacy(settings, count)
+    return legacy, (Row(Glyph.NEEDS_YOU, "sonar", DoorEvent.LEGACY_FINDING, f"on {default_branch}", count=legacy),)
+
+
+def read_method(gh: GhRunner, repository: str, facts: Mapping[str, object], base: str) -> Judged[tuple[MergeMethod, str]]:
+    method = choose_merge_method(gh, repository, facts, base)
+    login = gh(["api", "user", "--jq", ".login"], None).strip()
+    return (method, login), (Row(Glyph.NOTE, "merge", method.event, f"allowed on {base}"),)
+
+
 def judge_pull_request(
     repository: str,
     pull_request: int,
@@ -568,44 +698,33 @@ def judge_pull_request(
     transport: Transport,
     environment: Mapping[str, str],
     remote_for: RemoteFor,
+    show: Show,
 ) -> tuple[Door, str]:
-    repository_facts = json.loads(gh(["api", f"repos/{repository}"], None))
-    require_admin_permission(repository_facts, repository)
-    pull = json.loads(gh(["api", f"repos/{repository}/pulls/{pull_request}"], None))
-    if pull["state"] != "open":
-        raise Refused(f"the pull request is {pull['state']}")
-    landing = landing_of(pull["body"], repository)
-    head_sha = pull["head"]["sha"]
-    check_runs = read_check_runs(gh, repository, head_sha)
-    checks = [*check_runs, *read_statuses(gh, repository, head_sha)]
-    refusal = refusal_of_checks(checks)
-    if refusal:
-        raise Refused(refusal)
-    sonar_red = sonar_failed(checks)
-    merge_commit_sha = pull["merge_commit_sha"]
-    if not merge_commit_sha:
-        raise CannotJudge("GitHub has no merge commit for the pull request yet, so the config the jobs ran on is unknown")
-    head = read_side_at(gh, repository, merge_commit_sha)
-    base = read_side_at(gh, repository, pull["base"]["sha"])
-    renames = (
-        read_renames_of_pull(remote_for(repository), pull["base"]["sha"], merge_commit_sha, environment)
-        if compares_baselines(base, head)
-        else NO_RENAMES
+    """Each step in the door's order, its rows shown as it passes; the first that does not pass stops the door."""
+    rerun = f"quality emergency-merge {repository} {pull_request}"
+    refused: Pair = (REFUSED_ERROR, (gh_command(repository, pull_request, "checks"),))
+    item_line = f"{WORK_ITEM_KEY}: or {NO_ITEM_KEY}: line"
+    landing_refused: Pair = (
+        not_merged(f"the operator's merge ends the merge commit with the pull request body's one {item_line}"),
+        (Instruction(f"give the pull request body exactly one {item_line} outside code blocks, then run {rerun} again"),),
     )
-    verdict = rederived_verdict(head, base, check_runs, renames)
-    refusal = refusal_of_verdict(verdict, sonar_red)
-    if refusal:
-        raise Refused(refusal)
+    step = partial(judged, again=Instruction(f"fix what the ✗ row names, then run {rerun} again"), show=show)
+    facts, pull = step(f"#{pull_request}", lambda: read_pull_request(gh, repository, pull_request), refused)
+    landing = step(LANDING, lambda: (landing_of(pull["body"], repository), ()), landing_refused)
+    check_runs, sonar_red = step("checks", lambda: read_checks(gh, repository, pull["head"]["sha"], refused), refused)
+    verdict, settings = step("loosenings", lambda: read_loosenings(gh, repository, pull, check_runs, sonar_red, environment, remote_for, refused), refused)
     legacy = None
     if sonar_red:
-        count = partial(
-            judge_sonar, repository, pull_request, head_sha, repository_facts["default_branch"], transport,
-            environment.get("SONAR_TOKEN", ""),
-        )
-        legacy = judge_legacy(head.settings, count)
-    merge_method = choose_merge_method(gh, repository, repository_facts, pull["base"]["ref"])
-    login = gh(["api", "user", "--jq", ".login"], None).strip()
-    return Door(repository, pull_request, head_sha, verdict.declared, legacy, merge_method, landing), login
+        token = environment.get("SONAR_TOKEN", "")
+
+        def sonar_step() -> Judged[int]:
+            default_branch = facts["default_branch"]
+            count = partial(judge_sonar, repository, pull_request, pull["head"]["sha"], default_branch, transport, token)
+            return read_legacy(count, settings, default_branch)
+
+        legacy = step("sonar", sonar_step, refused)
+    merge_method, login = step("merge", lambda: read_method(gh, repository, facts, pull["base"]["ref"]), refused)
+    return Door(repository, pull_request, pull["head"]["sha"], verdict.declared, legacy, merge_method, landing), login
 
 
 def merge_outcome(attempt: Attempt, pull_request: int) -> str:
@@ -639,30 +758,23 @@ def run_emergency_merge(
     now: Callable[[], datetime],
     environment: Mapping[str, str],
     say: Say,
+    channels: Channels,
     remote_for: RemoteFor = github_remote,
 ) -> int:
-    """Every line it prints leaves through `say`, which escapes it."""
+    """Its rows and pairs before the prompt leave through `channels`, every later line through `say`; both escape it."""
     if not REPOSITORY_NAME.fullmatch(repository):
-        say(f"emergency-merge: {repository!r} is not <owner>/<repo>")
+        write_pair(not_merged(f"{repository!r} is not <owner>/<repo>"), (Instruction("name the repository as <owner>/<repo>"),), channels.err)
         return EXIT_REFUSED
     if not is_terminal:
-        say("emergency-merge: refused - this is the operator's command, it needs a terminal on stdin")
+        write_pair(not_merged("the operator's merge needs a terminal on stdin"), (Instruction("the operator runs it in his own terminal"),), channels.err)
         return EXIT_REFUSED
     try:
-        door, login = judge_pull_request(repository, pull_request, gh, transport, environment, remote_for)
-    except Refused as refusal:
-        first, *rest = refusal.lines
-        for line in (f"emergency-merge: refused - {first}", *rest):
-            say(line)
-        return EXIT_REFUSED
-    except NoMergeMethod as refusal:
-        say(f"emergency-merge: not merged - {refusal}")
-        return EXIT_NOT_RESTORED
-    except (CannotJudge, GhFailed, KeyError, ValueError) as error:
-        say(f"emergency-merge: cannot judge - {error}; nothing was changed")
-        return EXIT_NOT_RESTORED
-    for line in door.shown():
-        say(line)
+        door, login = judge_pull_request(repository, pull_request, gh, transport, environment, remote_for, partial(write_rows, channel=channels.out))
+    except Stopped as stop:
+        write_rows((stop.row,), channels.out)
+        write_pair(stop.error, stop.next_steps, channels.err)
+        return stop.exit_code
+    say(f"the merge commit ends with {door.landing.trailer}")
     if not confirmed(ask, say):
         say("emergency-merge: not confirmed, nothing was changed")
         return EXIT_REFUSED
