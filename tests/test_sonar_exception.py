@@ -119,7 +119,7 @@ def test_the_findings_door_never_reads_the_bot_config(monkeypatch, capsys):
     ids=["no total", "not a number", "list", "null", "boolean", "fraction", "negative", "numeral string"],
 )
 def test_an_unreadable_legacy_count_is_exit_2(monkeypatch, capsys, answer):
-    fake = findings_of(legacy=5)
+    fake = findings_of()
     fake.answers[LEGACY_COUNT] = [answer]
     code, out, err, _ = run_cli(monkeypatch, capsys, fake, config_text=legacy_config("report"))
     assert (code, out, err.startswith("sonar: cannot judge - ")) == (2, "", True)
@@ -149,7 +149,7 @@ def test_the_emergency_door_names_every_added_finding_where_the_bot_config_exist
 def test_the_emergency_door_cannot_judge_when_a_config_read_fails_other_than_not_found(capsys):
     gh = FakeGh()
     gh.files[(CONFIG_PATH, MERGE_SHA)] = GhFailed("gh api failed: HTTP 500")
-    code, answers = drive(gh, emergency_sonar(legacy=12))
+    code, answers = drive(gh)
     assert code == 2
     assert "not judged" in capsys.readouterr().out
     changed_nothing(gh)
