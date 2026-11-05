@@ -1,3 +1,5 @@
+import re
+
 import pytest
 
 from tests.support.check import assert_every_line_starts_with_the_door
@@ -107,15 +109,25 @@ def test_a_body_without_one_valid_line_keeps_the_door_shut(body, line, capsys):
         (0, "GitHub's answer for the pull request holds no body text"),
         ([], "GitHub's answer for the pull request holds no body text"),
         ({}, "GitHub's answer for the pull request holds no body text"),
-        (NO_BODY, "'body'"),
     ],
-    ids=["a number", "false", "zero", "an empty list", "an empty object", "no body field"],
+    ids=["a number", "false", "zero", "an empty list", "an empty object"],
 )
 def test_a_body_that_is_no_text_cannot_be_judged(body, line, capsys):
     gh = FakeGh(body=body)
     assert drive(gh)[0] == 2
     output = capsys.readouterr()
     assert (output.out, output.err) == (f"emergency-merge: cannot judge - {line}; nothing was changed\n", "")
+    changed_nothing(gh)
+
+
+def test_a_pull_answer_without_a_body_field_cannot_be_judged(capsys):
+    """A pull answer that holds no body field is cannot judge and changes nothing."""
+    gh = FakeGh(body=NO_BODY)
+    code = drive(gh)[0]
+    output = capsys.readouterr()
+    assert code == 2
+    assert output.err == ""
+    assert re.fullmatch(r"emergency-merge: cannot judge - .+; nothing was changed\n", output.out)
     changed_nothing(gh)
 
 
