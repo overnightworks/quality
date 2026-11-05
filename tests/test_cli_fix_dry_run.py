@@ -2,6 +2,7 @@
 
 import contextlib
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -47,7 +48,11 @@ def a_stale_target(build_repo) -> Path:
     return repo
 
 
-NEAR_COPIES = {"tests/test_a.py": clone_function("run", "a", "b"), "tests/test_b.py": clone_function("check", "c", "d")}
+def a_move_beside_a_grown_entry(build_repo) -> Path:
+    held = ceiling('[function_lines."src/old.py"]\nlong_one = 70\n\n[file_lines]\n"src/other.py" = 810\n')
+    repo = build_repo({"src/old.py": long_function(70), "src/other.py": long_file(850), BASELINE_PATH: held})
+    git(repo, "mv", "src/old.py", "src/new.py")
+    return repo
 
 
 @pytest.mark.parametrize(
@@ -116,7 +121,19 @@ NEAR_COPIES = {"tests/test_a.py": clone_function("run", "a", "b"), "tests/test_b
             id="the stale target",
         ),
         pytest.param(
-            holding({"src/a.py": "x = 1\n", **NEAR_COPIES, BASELINE_PATH: "[file_lines]\n"}),
+            a_move_beside_a_grown_entry,
+            "  ! debt          1 finding      1 to move · quality/baseline.toml\n"
+            "    ! src/other.py  grew  file has 850 lines · ceiling 810\n"
+            "      fix: bring it back to 810 lines or below; a raise is a hand edit and a declared loosening\n"
+            "    ~ src/new.py    move  function long_one 70 lines from src/old.py\n"
+            "! 1 finding in 1 area · 1 ceiling entry would move · nothing written · <1s\n",
+            id="a move beside a finding",
+        ),
+        pytest.param(
+            holding({
+                "src/a.py": "x = 1\n", BASELINE_PATH: "[file_lines]\n",
+                "tests/test_a.py": clone_function("run", "a", "b"), "tests/test_b.py": clone_function("check", "c", "d"),
+            }),
             "  ~ debt          to record      1 clone pair · quality/baseline.toml\n"
             "    ~ quality/baseline.toml  record  1 clone pair\n"
             "~ dry run · ceiling would be recorded · nothing written · <1s\n",
@@ -144,7 +161,7 @@ def the_pictures_state(build_repo) -> Path:
     return build_repo({"src/cart.py": branchy_function(17), "src/orders.py": long_file(812), BASELINE_PATH: held})
 
 
-def test_the_pictures_dry_run(build_repo, capsys):
+def test_a_dry_run_stands_in_the_pictures_frame_and_the_fix_after_it_lowers(build_repo, capsys):
     repo = the_pictures_state(build_repo)
     planned = (
         "  ~ debt          3 to lower     quality/baseline.toml\n"
@@ -194,6 +211,28 @@ def a_file_that_does_not_parse(build_repo, elsewhere) -> Path:
     return build_repo({"src/a.py": long_function(62), "src/broken.py": "def broken(:\n", BASELINE_PATH: ceiling("[file_lines]\n")})
 
 
+def a_clones_table_git_holds(build_repo, elsewhere) -> Path:
+    repo = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: ceiling("[file_lines]\n")})
+    put(repo / BASELINE_PATH, "[file_lines]\n")
+    return repo
+
+
+def a_shallow_clone_whose_ceiling_has_no_table(build_repo, elsewhere) -> Path:
+    origin = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: "[file_lines]\n"})
+    put(origin / "second", "2\n")
+    git(origin, "add", "second")
+    git(origin, "commit", "-q", "-m", "second")
+    return shallow_clone(origin, elsewhere)
+
+
+def a_shallow_clone_whose_ceiling_was_last_changed_at_its_root(build_repo, elsewhere) -> Path:
+    origin = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: ceiling("[file_lines]\n")})
+    put(origin / "second", "2\n")
+    git(origin, "add", "second")
+    git(origin, "commit", "-q", "-m", "second")
+    return shallow_clone(origin, elsewhere)
+
+
 def a_path_no_ceiling_can_hold(build_repo, elsewhere) -> Path:
     return build_repo({"src/a.py": "x = 1\n", os.fsdecode(b"src/\xff.py"): long_file(850)})
 
@@ -208,6 +247,9 @@ def a_config_refusal(build_repo, elsewhere) -> Path:
         pytest.param(a_shallow_clone, "git fetch --unshallow", id="shallow"),
         pytest.param(a_ceiling_git_holds, restore_step(), id="the ceiling git holds"),
         pytest.param(a_ceiling_that_is_no_toml, restore_step(), id="no TOML"),
+        pytest.param(a_clones_table_git_holds, restore_step(), id="a clones table git holds"),
+        pytest.param(a_shallow_clone_whose_ceiling_has_no_table, "git fetch --unshallow", id="shallow, a ceiling without a table"),
+        pytest.param(a_shallow_clone_whose_ceiling_was_last_changed_at_its_root, "git fetch --unshallow", id="shallow, the lineage"),
         pytest.param(a_file_that_does_not_parse, "fix what the ✗ rows name, then run quality check --fix --dry-run again", id="a file that does not parse"),
         pytest.param(a_path_no_ceiling_can_hold, "fix what the ✗ rows name, then run quality check --fix --dry-run again", id="a path no ceiling can hold"),
         pytest.param(a_config_refusal, "fix what the ✗ rows name, then run quality check --fix --dry-run again", id="a config refusal"),
@@ -271,4 +313,17 @@ def test_at_a_terminal_a_dry_run_paints_its_glyphs_and_keeps_the_plain_words(bui
     stdout = Terminal()
     with contextlib.redirect_stdout(stdout):
         code = door_in(repo, *DRY_RUN_WORDS, clock=lambda: 0.0, environment={"TERM": "xterm"})
-    assert ("\x1b[" in stdout.getvalue(), (code, without_sgr(stdout.getvalue()), "")) == (True, piped)
+    foreground_colour_before_the_glyph = re.search(r"\x1b\[3[0-7]m~", stdout.getvalue())
+    assert (foreground_colour_before_the_glyph is not None, (code, without_sgr(stdout.getvalue()), "")) == (True, piped)
+
+
+def test_a_dry_run_beside_a_grown_entry_with_nothing_to_change_says_so_and_writes_nothing(build_repo, capsys):
+    repo = build_repo({"src/a.py": long_function(150), BASELINE_PATH: ceiling('[function_lines."src/a.py"]\nlong_one = 100\n')})
+    before = untouched(repo)
+    printed = (
+        "  ! debt          1 finding      nothing to lower\n"
+        "    ! src/a.py:1  grew  function long_one has 150 lines · ceiling 100\n"
+        "      fix: bring it back to 100 lines or below; a raise is a hand edit and a declared loosening\n"
+        "! 1 finding in 1 area · <1s\n"
+    )
+    assert (*fixed(capsys, repo, *DRY_RUN_WORDS), untouched(repo)) == (1, printed, "", before)

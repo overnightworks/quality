@@ -44,7 +44,6 @@ from tests.support.verdict import CHECKS_GREEN
 class Event(StrEnum):
     CLEAN = "clean"
     FINDING = "finding"
-    PLANNED = "to lower"
 
 
 def on(stream: io.StringIO, **environment: str) -> output.Channel:
@@ -76,7 +75,7 @@ def verdict_line(**counts) -> str:
         (Row(Glyph.NEEDS_YOU, "code", Event.FINDING, "see below", count=3), "  ! code          3 findings     see below\n"),
         (Row(Glyph.NOTE, "debt", Event.CLEAN, "measured only"), "  · debt          clean          measured only\n"),
         (
-            Row(Glyph.WILL_CHANGE, "debt", Event.PLANNED, "quality/baseline.toml", count=3, counts_plural=False),
+            Row(Glyph.WILL_CHANGE, "debt", cli.AreaEvent.TO_LOWER, "quality/baseline.toml", count=3, counts_plural=False),
             "  ~ debt          3 to lower     quality/baseline.toml\n",
         ),
     ],
@@ -252,7 +251,13 @@ def test_each_word_a_dry_run_says_is_a_will_change_row(planned):
 
 def test_a_dry_runs_glyph_has_a_colour_of_its_own():
     others = {style for glyph, style in output.GLYPH_STYLE.items() if glyph is not Glyph.WILL_CHANGE}
+    foreground_colours = range(30, 38)
     assert output.GLYPH_STYLE[Glyph.WILL_CHANGE] not in others
+    assert int(output.GLYPH_STYLE[Glyph.WILL_CHANGE]) in foreground_colours
+
+
+def test_a_dry_runs_verdict_is_painted_in_its_glyphs_colour():
+    assert output.VERDICT_STYLE[Glyph.WILL_CHANGE].endswith(output.GLYPH_STYLE[Glyph.WILL_CHANGE])
 
 
 def area_row_indent() -> int:

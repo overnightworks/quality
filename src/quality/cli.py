@@ -276,7 +276,8 @@ def _refuse_what_check_does_not_take(arguments: argparse.Namespace) -> None:
         raise CannotJudge(f"{DRY_RUN_WORD} needs --fix{SEPARATOR}nothing checked", (Command(DRY_RUN_COMMAND),))
     dry_run = f" {DRY_RUN_WORD}" if arguments.dry_run else ""
     if arguments.fix and arguments.staged:
-        raise CannotJudge(f"--fix does not take --staged{SEPARATOR}nothing checked", (Command(f"{ratchet.FIX_COMMAND}{dry_run}"),))
+        rerun = RERUN_COMMAND[Fix.DRY_RUN if arguments.dry_run else Fix.WRITE]
+        raise CannotJudge(f"--fix does not take --staged{SEPARATOR}nothing checked", (Command(rerun),))
     if arguments.fix and arguments.areas and Area.DEBT not in arguments.areas:
         raise CannotJudge(f"--fix changes only the debt ceiling{SEPARATOR}nothing checked", (Command(f"quality check debt --fix{dry_run}"),))
     if arguments.staged and set(arguments.areas) != {Area.SECRETS}:
