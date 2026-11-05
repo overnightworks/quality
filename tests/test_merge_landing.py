@@ -126,21 +126,15 @@ def test_a_body_without_one_valid_line_keeps_the_door_shut(body, line, capsys):
 
 
 @pytest.mark.parametrize(
-    ("body", "line"),
-    [
-        (5, no_body_text()),
-        (False, no_body_text()),
-        (0, no_body_text()),
-        ([], no_body_text()),
-        ({}, no_body_text()),
-    ],
+    "body",
+    [5, False, 0, [], {}],
     ids=["a number", "false", "zero", "an empty list", "an empty object"],
 )
-def test_a_body_that_is_no_text_cannot_be_judged(body, line, capsys):
+def test_a_body_that_is_no_text_cannot_be_judged(body, capsys):
     gh = FakeGh(body=body)
     code, answers = drive(gh)
     output = capsys.readouterr()
-    assert (code, output.out, output.err, answers) == (2, f"{pull_row()}  ✗ landing       not judged     {line}\n", not_judged_pair(), [])
+    assert (code, output.out, output.err, answers) == (2, f"{pull_row()}  ✗ landing       not judged     {no_body_text()}\n", not_judged_pair(), [])
     changed_nothing(gh)
 
 

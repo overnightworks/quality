@@ -68,6 +68,22 @@ def merge_row(event="merge commit"):
     return f"  · merge         {event}   allowed on main\n"
 
 
+def landing_line(item):
+    return f"the merge commit ends with Work-Item: {item}\n"
+
+
+def declared_row(count):
+    return f"  ! loosenings    {count} declared\n"
+
+
+def qwen_reason():
+    return "no image input"
+
+
+def qwen_lines():
+    return f"    ! {ADDS_QWEN} · {presentator_ruling()}\n        reason: {qwen_reason()}\n"
+
+
 def songmaker_ruling():
     return "overnightworks/songmaker#1345 of 2026-10-20"
 
@@ -190,7 +206,7 @@ def test_shows_repository_head_and_legacy_count_before_asking(capsys):
     shown = []
     drive(FakeGh(), when_asked=lambda: shown.append(capsys.readouterr()))
     assert (shown[0].out, shown[0].err) == (
-        pull_row() + checks_row() + loosenings_none() + legacy_row() + merge_row() + "the merge commit ends with Work-Item: #3\n",
+        pull_row() + checks_row() + loosenings_none() + legacy_row() + merge_row() + landing_line("#3"),
         "",
     )
 
@@ -237,7 +253,7 @@ def test_anything_but_ja_changes_nothing(typed, capsys):
             {}, f"loosened (undeclared): {B_REMOVED}",
         ),
         (
-            {"checks": SONAR_GREEN, "base_config": ONE_JOB, "head_config": ONE_JOB + declaring(ADDS_QWEN) + allowance_config(reason="no image input")},
+            {"checks": SONAR_GREEN, "base_config": ONE_JOB, "head_config": ONE_JOB + declaring(ADDS_QWEN) + allowance_config(reason=qwen_reason())},
             {}, f"declared loosening matches nothing: {ADDS_QWEN}",
         ),
         ({"head_config": GATE_CONFIG.replace("fail", "report")}, {}, "loosened (undeclared): legacy fail"),
@@ -500,22 +516,22 @@ def test_a_malformed_baseline_at_the_merge_commit_cannot_be_judged(capsys):
 @pytest.mark.parametrize(
     ("base_config", "merge_config", "declared", "rows"),
     [
-        (TWO_JOBS, ONE_JOB + declaring(B_REMOVED), (removed_b(),), "  ! loosenings    1 declared\n" + removed_b_lines()),
+        (TWO_JOBS, ONE_JOB + declaring(B_REMOVED), (removed_b(),), declared_row(1) + removed_b_lines()),
         (
             GATE_CONFIG, REPORT_CONFIG + declaring("legacy fail → report"),
             (("legacy fail → report", songmaker_ruling(), "ruled"),),
-            f"  ! loosenings    1 declared\n    ! legacy fail → report · {songmaker_ruling()}\n        reason: ruled\n",
+            declared_row(1) + f"    ! legacy fail → report · {songmaker_ruling()}\n        reason: ruled\n",
         ),
         (
-            ONE_JOB, ONE_JOB + allowance_config(reason="no image input"),
-            ((ADDS_QWEN, presentator_ruling(), "no image input"),),
-            f"  ! loosenings    1 declared\n    ! {ADDS_QWEN} · {presentator_ruling()}\n        reason: no image input\n",
+            ONE_JOB, ONE_JOB + allowance_config(reason=qwen_reason()),
+            ((ADDS_QWEN, presentator_ruling(), qwen_reason()),),
+            declared_row(1) + qwen_lines(),
         ),
         (
-            TWO_JOBS, ONE_JOB + declaring(B_REMOVED) + allowance_config(reason="no image input"),
-            (removed_b(), (ADDS_QWEN, presentator_ruling(), "no image input")),
-            "  ! loosenings    2 declared\n" + removed_b_lines()
-            + f"    ! {ADDS_QWEN} · {presentator_ruling()}\n        reason: no image input\n",
+            TWO_JOBS, ONE_JOB + declaring(B_REMOVED) + allowance_config(reason=qwen_reason()),
+            (removed_b(), (ADDS_QWEN, presentator_ruling(), qwen_reason())),
+            declared_row(2) + removed_b_lines()
+            + qwen_lines(),
         ),
     ],
     ids=[
@@ -539,7 +555,7 @@ def test_a_declared_loosening_merges_through_the_door_without_sonar(
     code = cli.main(["emergency-merge", REPO, "7"], gh=gh, transport=transport, ask=ask, is_terminal=lambda: True)
     assert (code, transport.sent, gh.sequence) == (0, [], ["gate false", "merge", "gate true", "comment"])
     assert (shown[0].out, shown[0].err) == (
-        pull_row() + checks_row("quality / verdict is") + rows + merge_row() + "the merge commit ends with Work-Item: #9\n",
+        pull_row() + checks_row("quality / verdict is") + rows + merge_row() + landing_line("#9"),
         "",
     )
     assert gh.merge_calls == [("pr", "merge", "7", "--repo", REPO, "--merge", "--match-head-commit", SHA, "--body-file", "-")]
@@ -567,11 +583,11 @@ def test_legacy_findings_and_a_declared_loosening_merge_in_one_run(capsys):
     shown = []
     assert drive(gh, when_asked=lambda: shown.append(capsys.readouterr()))[0] == 0
     assert (shown[0].out, shown[0].err) == (
-        pull_row() + checks_row() + "  ! loosenings    1 declared\n" + removed_b_lines() + legacy_row() + merge_row()
-        + "the merge commit ends with Work-Item: #3\n",
+        pull_row() + checks_row() + declared_row(1) + removed_b_lines() + legacy_row() + merge_row()
+        + landing_line("#3"),
         "",
     )
-    assert f'4 legacy finding(s); declared loosening ({removed_b()[1]}): {B_REMOVED}' in gh.comments[0]
+    assert f'4 legacy finding(s); declared loosening ({songmaker_ruling()}): {B_REMOVED}' in gh.comments[0]
 
 
 def test_a_red_sonar_run_next_to_a_green_one_takes_the_legacy_path(capsys):
@@ -616,7 +632,7 @@ def test_the_operator_reads_the_method_before_ja_and_the_log_comment_names_it(gh
     gh, shown = FakeGh(**gh_kwargs), []
     drive(gh, when_asked=lambda: shown.append(capsys.readouterr()))
     assert (shown[0].out, shown[0].err) == (
-        pull_row() + checks_row() + loosenings_none() + legacy_row() + merge_row(event) + "the merge commit ends with Work-Item: #3\n",
+        pull_row() + checks_row() + loosenings_none() + legacy_row() + merge_row(event) + landing_line("#3"),
         "",
     )
     assert f"; {sentence}; " in gh.comments[0]

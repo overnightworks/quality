@@ -40,6 +40,10 @@ def checks_row(red="quality / sonar and quality / verdict are"):
     return f"  ✓ checks        ok             only {red} red"
 
 
+def verdict_only_checks_row():
+    return checks_row("quality / verdict is")
+
+
 def refused_pair():
     return frame(
         "error: not merged · the operator's merge lands only declared loosenings and legacy findings · nothing changed",
@@ -145,13 +149,13 @@ def test_a_draft_flag_that_is_no_boolean_cannot_be_judged(draft, capsys):
         (
             {"checks": SONAR_GREEN}, {},
             [
-                pull_row(), checks_row("quality / verdict is"),
+                pull_row(), verdict_only_checks_row(),
                 "  ! loosenings    refused        quality / verdict is red, but judged again at the merge commit it finds nothing: re-run the verdict",
             ],
         ),
         (
             {"checks": SONAR_GREEN, "base_config": TWO_JOBS, "head_config": ONE_JOB}, {},
-            [pull_row(), checks_row("quality / verdict is"), "  ! loosenings    red", f"    ! loosened (undeclared): {B_REMOVED}", '    ! mandatory job "B" is missing from the run'],
+            [pull_row(), verdict_only_checks_row(), "  ! loosenings    red", f"    ! loosened (undeclared): {B_REMOVED}", '    ! mandatory job "B" is missing from the run'],
         ),
         (
             {}, {"new": 1},
@@ -229,7 +233,7 @@ def at_a_terminal(gh, window, columns, transport=None):
             {"checks": SONAR_GREEN, "base_config": TWO_JOBS, "head_config": ONE_JOB + declaring(B_REMOVED, reason="a reason that runs on past the window")},
             {}, 1,
             [
-                pull_row(), checks_row("quality / verdict is"), "  ! loosenings    1 declared",
+                pull_row(), verdict_only_checks_row(), "  ! loosenings    1 declared",
                 f'    ! {B_REMOVED} · overnightworks/songmaker#1345 of 2026-10-20',
                 "        reason: a reason that runs on past the window",
                 "  · merge         merge commit   allowed on main", "the merge commit ends with Work-Item: #3",
@@ -241,7 +245,7 @@ def at_a_terminal(gh, window, columns, transport=None):
             {"checks": SONAR_GREEN, "base_config": TWO_JOBS, "head_config": ONE_JOB},
             {}, 1,
             [
-                pull_row(), checks_row("quality / verdict is"), "  ! loosenings    red", f"    ! loosened (undeclared): {B_REMOVED}",
+                pull_row(), verdict_only_checks_row(), "  ! loosenings    red", f"    ! loosened (undeclared): {B_REMOVED}",
                 '    ! mandatory job "B" is missing from the run',
             ],
             refused_pair(),
