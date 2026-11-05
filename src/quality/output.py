@@ -86,12 +86,13 @@ def set_up_streams(environment: Mapping[str, str]) -> None:
 
 
 class Glyph(StrEnum):
-    """What a row's first mark says: nothing to do, needs you, could not check, or a note."""
+    """What a row's first mark says: nothing to do, needs you, could not check, a note, or what a dry run would change."""
 
     CLEAN = "✓"
     NEEDS_YOU = "!"
     COULD_NOT_CHECK = "✗"
     NOTE = "·"
+    WILL_CHANGE = "~"
 
 
 @dataclass(frozen=True)
@@ -114,6 +115,7 @@ class Row:
     sub_lines: tuple[SubLine, ...] = ()
     descriptive: bool = False
     fix: str = ""
+    counts_plural: bool = True
 
 
 @dataclass(frozen=True)
@@ -127,6 +129,7 @@ class Verdict:
     notes: tuple[str, ...]
     seconds: float
     ceiling: str = ""
+    would_change: bool = False
 
 
 SUBJECT_WIDTH = 12
@@ -134,8 +137,8 @@ EVENT_WIDTH = 14
 SEPARATOR = " · "
 RESET = "\x1b[0m"
 BOLD, DIM, RED, GREEN, YELLOW, CYAN = "1", "2", "31", "32", "33", "36"
-GLYPH_STYLE = {Glyph.CLEAN: GREEN, Glyph.NEEDS_YOU: YELLOW, Glyph.COULD_NOT_CHECK: RED, Glyph.NOTE: DIM}
-VERDICT_STYLE = {Glyph.CLEAN: BOLD, Glyph.NEEDS_YOU: f"{BOLD};{YELLOW}"}
+GLYPH_STYLE = {Glyph.CLEAN: GREEN, Glyph.NEEDS_YOU: YELLOW, Glyph.COULD_NOT_CHECK: RED, Glyph.NOTE: DIM, Glyph.WILL_CHANGE: CYAN}
+VERDICT_STYLE = {Glyph.CLEAN: BOLD, Glyph.NEEDS_YOU: f"{BOLD};{YELLOW}", Glyph.WILL_CHANGE: f"{BOLD};{CYAN}"}
 SECONDS_PER_MINUTE = 60
 ELLIPSIS = "…"
 LIVE_MARK = "⠋"
@@ -163,7 +166,12 @@ DESCRIPTIVE_FINDINGS = frozenset(
     }
 )
 DESCRIPTIVE_NOTES = frozenset({NoteEvent.WARNING})
-NOTE_GLYPHS = dict.fromkeys((NoteEvent.LOWERED, NoteEvent.DROPPED, NoteEvent.MOVED, NoteEvent.RECORDED), Glyph.CLEAN)
+NOTE_GLYPHS = {
+    **dict.fromkeys((NoteEvent.LOWERED, NoteEvent.DROPPED, NoteEvent.MOVED, NoteEvent.RECORDED), Glyph.CLEAN),
+    **dict.fromkeys((NoteEvent.LOWER, NoteEvent.DROP, NoteEvent.MOVE, NoteEvent.RECORD), Glyph.WILL_CHANGE),
+}
+DRY_RUN = "dry run"
+NOTHING_WRITTEN = "nothing written"
 
 
 def counted(count: int, noun: str, plural: str | None = None) -> str:
@@ -266,7 +274,9 @@ def _event_word(row: Row | Finding | Note) -> str:
 
 def _event_text(row: Row) -> str:
     event = _event_word(row)
-    return event if row.count is None else counted(row.count, event)
+    if row.count is None:
+        return event
+    return counted(row.count, event, None if row.counts_plural else event)
 
 
 def _row_lines(row: Row, channel: Channel) -> list[str]:
@@ -289,14 +299,17 @@ def _row_lines(row: Row, channel: Channel) -> list[str]:
 
 
 def _verdict_parts(verdict: Verdict) -> tuple[Glyph, list[str]]:
-    if verdict.findings == 0:
-        glyph, parts = Glyph.CLEAN, ["clean", *filter(None, [verdict.ceiling]), counted(verdict.areas, "area")]
-    else:
+    ceiling = [part for part in (verdict.ceiling, NOTHING_WRITTEN if verdict.would_change else "") if part]
+    if verdict.findings:
         glyph = Glyph.NEEDS_YOU
         parts = [f"{counted(verdict.findings, 'finding')} in {counted(verdict.areas_with_findings, 'area')}"]
         if verdict.clean_areas:
             parts.append(f"{counted(verdict.clean_areas, 'area')} clean")
-        parts += filter(None, [verdict.ceiling])
+        parts += ceiling
+    elif verdict.would_change:
+        glyph, parts = Glyph.WILL_CHANGE, [DRY_RUN, *ceiling]
+    else:
+        glyph, parts = Glyph.CLEAN, ["clean", *ceiling, counted(verdict.areas, "area")]
     return glyph, [*parts, *verdict.notes, format_duration(verdict.seconds)]
 
 

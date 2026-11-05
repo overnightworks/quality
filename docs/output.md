@@ -337,7 +337,7 @@ $ quality check debt --fix
 ! 1 finding in 1 area · ceiling lowered by 1 entry · 2s
 ```
 
-Built: every frame but the dry run (C7d). `--fix` takes no `--staged` and needs `debt` among the named areas, or none named.
+Built: every frame, without the release row (C10). `--fix` takes no `--staged` and needs `debt` among the named areas, or none named; `--dry-run` needs `--fix`. Head proposals O244 to O246 of 4.11.2026 beside the frames: a gone or generated drop names the value it held; the debt row reads `N to lower`, `N to move` or `to record`; the dry run exits 1 while the fix would change the file, 0 when not; `~` is cyan at a terminal.
 
 No ceiling yet: first a note, then the first recording. Both exit 0. stdout.
 
@@ -654,7 +654,7 @@ Options:
 Exit codes: 0 clean, 1 findings, 2 could not check, 130 interrupted.
 ```
 
-Built: `usage: quality check [AREA ...] [--staged] [-v]`, the `Areas` block from `Area` (`rules.py`) and the options that exist; `--staged` is built.
+Built: `usage: quality check [AREA ...] [--staged] [--fix] [--dry-run] [-v]`, the `Areas` block from `Area` (`rules.py`) and the options that exist; `--staged`, `--fix` and `--dry-run` are built.
 
 Wrong invocation: the pair instead of argparse text. Exit 2. stderr.
 
@@ -681,7 +681,7 @@ next: quality check --help
 
 Adopted O88 and O89 of 2.11.2026: a first word that names no command, none at all, and what a command does not take; what only the parser can word stands in the pair as its own sentence.
 
-Built: the first word that names no area stands in the pair (O123); an option may stand between areas (O124).
+Built: the first word that names no area stands in the pair (O123); an option may stand between areas (O124); `--dry-run` without `--fix` is the pair drawn above, and a refused `--fix` beside `--dry-run` keeps it in `next:` (O240).
 
 ## Areas
 

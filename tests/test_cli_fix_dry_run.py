@@ -138,9 +138,14 @@ def test_a_dry_run_names_each_change_and_writes_nothing(build_repo, capsys, arra
     assert untouched(repo) != before
 
 
+def the_pictures_state(build_repo) -> Path:
+    """A function that shrank, a file that shrank and a file that is gone."""
+    held = ceiling('[ccn."src/cart.py"]\nbranchy = 19\n\n[file_lines]\n"src/orders.py" = 826\n"src/legacy.py" = 802\n')
+    return build_repo({"src/cart.py": branchy_function(17), "src/orders.py": long_file(812), BASELINE_PATH: held})
+
+
 def test_the_pictures_dry_run(build_repo, capsys):
-    held = '[ccn."src/cart.py"]\nbranchy = 19\n\n[file_lines]\n"src/orders.py" = 826\n"src/legacy.py" = 802\n'
-    repo = build_repo({"src/cart.py": branchy_function(17), "src/orders.py": long_file(812), BASELINE_PATH: ceiling(held)})
+    repo = the_pictures_state(build_repo)
     planned = (
         "  ~ debt          3 to lower     quality/baseline.toml\n"
         "    ~ src/cart.py:1  lower  function branchy CCN 19 → 17\n"
@@ -190,10 +195,7 @@ def a_file_that_does_not_parse(build_repo, elsewhere) -> Path:
 
 
 def a_path_no_ceiling_can_hold(build_repo, elsewhere) -> Path:
-    repo = build_repo({"src/a.py": "x = 1\n"})
-    put(repo / os.fsdecode(b"src/\xff.py"), long_file(850))
-    git(repo, "add", "-A", "-f")
-    return repo
+    return build_repo({"src/a.py": "x = 1\n", os.fsdecode(b"src/\xff.py"): long_file(850)})
 
 
 def a_config_refusal(build_repo, elsewhere) -> Path:

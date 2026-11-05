@@ -26,6 +26,8 @@ from quality.check import (
     AreaReport,
     AreaVerdict,
     CheckResult,
+    DryRun,
+    Fix,
     Measurement,
     Outcome,
     Running,
@@ -93,6 +95,7 @@ EXIT_CANNOT_JUDGE = 2
 CHECK_EXIT = {
     Outcome.CLEAN: EXIT_CLEAN,
     Outcome.MEASURED_ONLY: EXIT_CLEAN,
+    Outcome.WOULD_CHANGE: EXIT_FINDINGS,
     Outcome.FINDINGS: EXIT_FINDINGS,
     Outcome.UNPARSABLE: EXIT_CANNOT_JUDGE,
     Outcome.CANNOT_JUDGE: EXIT_CANNOT_JUDGE,
@@ -149,15 +152,16 @@ def main(
     if arguments.staged:
         staged_run = partial(judge_staged_change, Path("."), staged.scan_change, verbose=arguments.verbose)
         return run_check(staged_run, staged.COMMAND, clock, channels)
-    repository_run = partial(judge_repository, Path("."), locate_ruff, locate_zizmor, verbose=arguments.verbose, named=arguments.areas, fix=arguments.fix)
-    return run_check(repository_run, ratchet.FIX_COMMAND if arguments.fix else CHECK_COMMAND, clock, channels)
+    fix = Fix.DRY_RUN if arguments.dry_run else Fix.WRITE if arguments.fix else None
+    repository_run = partial(judge_repository, Path("."), locate_ruff, locate_zizmor, verbose=arguments.verbose, named=arguments.areas, fix=fix)
+    return run_check(repository_run, RERUN_COMMAND[fix], clock, channels)
 
 
 QUALITY_HELP = """\
 usage: quality COMMAND
 
 Commands:
-  check [AREA ...] [--staged] [--fix]
+  check [AREA ...] [--staged] [--fix] [--dry-run]
       Check this repository against the fleet's rules.
   emergency-merge OWNER/REPO PR
       Operator only: merge one pull request whose gate is red only for
@@ -192,7 +196,7 @@ def _area_entry(area: Area) -> str:
 AREA_ENTRIES = "\n".join(map(_area_entry, Area))
 
 CHECK_HELP = f"""\
-usage: quality check [AREA ...] [--staged] [--fix] [-v]
+usage: quality check [AREA ...] [--staged] [--fix] [--dry-run] [-v]
 
 Check this repository against the fleet's rules.
 
@@ -204,6 +208,7 @@ Options:
                 hook runs: quality check secrets --staged
   --fix         lower the debt ceiling ({ratchet.BASELINE_PATH}) where code
                 shrank, or record it the first time; never raises it
+  --dry-run     with --fix: show what would change, write nothing
   -v            show the raw scanner output, never a secret
   -h, --help    show this help
 
@@ -261,14 +266,21 @@ def read_invocation(argv: list[str] | None) -> argparse.Namespace:
     arguments, stray = parser.parse_known_args(argv)
     if stray:
         raise CannotJudge(f"unknown argument{SEPARATOR}{' '.join(stray)}", help_step(f"{parser.prog} {arguments.command}"))
-    if arguments.command == "check" and arguments.fix:
-        if arguments.staged:
-            raise CannotJudge(f"--fix does not take --staged{SEPARATOR}nothing checked", (Command(ratchet.FIX_COMMAND),))
-        if arguments.areas and Area.DEBT not in arguments.areas:
-            raise CannotJudge(f"--fix changes only the debt ceiling{SEPARATOR}nothing checked", (Command("quality check debt --fix"),))
-    if arguments.command == "check" and arguments.staged and set(arguments.areas) != {Area.SECRETS}:
-        raise CannotJudge(f"--staged checks only secrets{SEPARATOR}nothing checked", (Command(staged.COMMAND),))
+    if arguments.command == "check":
+        _refuse_what_check_does_not_take(arguments)
     return arguments
+
+
+def _refuse_what_check_does_not_take(arguments: argparse.Namespace) -> None:
+    if arguments.dry_run and not arguments.fix:
+        raise CannotJudge(f"{DRY_RUN_WORD} needs --fix{SEPARATOR}nothing checked", (Command(DRY_RUN_COMMAND),))
+    dry_run = f" {DRY_RUN_WORD}" if arguments.dry_run else ""
+    if arguments.fix and arguments.staged:
+        raise CannotJudge(f"--fix does not take --staged{SEPARATOR}nothing checked", (Command(f"{ratchet.FIX_COMMAND}{dry_run}"),))
+    if arguments.fix and arguments.areas and Area.DEBT not in arguments.areas:
+        raise CannotJudge(f"--fix changes only the debt ceiling{SEPARATOR}nothing checked", (Command(f"quality check debt --fix{dry_run}"),))
+    if arguments.staged and set(arguments.areas) != {Area.SECRETS}:
+        raise CannotJudge(f"--staged checks only secrets{SEPARATOR}nothing checked", (Command(staged.COMMAND),))
 
 
 def build_parser() -> DoorParser:
@@ -282,6 +294,7 @@ def build_parser() -> DoorParser:
     check_parser.add_argument("areas", nargs="*", type=named_area, metavar="AREA")
     check_parser.add_argument("--staged", action="store_true")
     check_parser.add_argument("--fix", action="store_true")
+    check_parser.add_argument(DRY_RUN_WORD, dest="dry_run", action="store_true")
     check_parser.add_argument("-v", dest="verbose", action="store_true")
     verdict = commands.add_parser("verdict")
     verdict.add_argument("path", nargs="?", type=Path, default=Path("."))
@@ -320,6 +333,9 @@ class AreaEvent(StrEnum):
     NOT_RECORDED = "not recorded"
     NOT_SET_UP = "not set up"
     RECORDED = "recorded"
+    TO_LOWER = "to lower"
+    TO_MOVE = "to move"
+    TO_RECORD = "to record"
 
 
 CEILING_HELD = "ceiling held"
@@ -327,6 +343,9 @@ OFFLINE_AUDITS = "offline audits only"
 NO_CONFIG_FACT = "no import-linter config"
 MEASURED_ONLY_EVENT = {Area.DEBT: AreaEvent.NOT_RECORDED, Area.IMPORTS: AreaEvent.NOT_SET_UP}
 CHECK_COMMAND = "quality check"
+DRY_RUN_WORD = "--dry-run"
+DRY_RUN_COMMAND = f"{ratchet.FIX_COMMAND} {DRY_RUN_WORD}"
+RERUN_COMMAND = {None: CHECK_COMMAND, Fix.WRITE: ratchet.FIX_COMMAND, Fix.DRY_RUN: DRY_RUN_COMMAND}
 STAGED_CHANGE = "staged change"
 
 
@@ -341,17 +360,43 @@ def _in_file(fact: str) -> str:
     return SEPARATOR.join((fact, ratchet.BASELINE_PATH))
 
 
-def _lowered_fact(fix: ratchet.CeilingFix) -> str:
+def _made(ceiling: ratchet.CeilingFix | DryRun) -> tuple[ratchet.CeilingFix, bool]:
+    """The fix the run made of the ceiling, and whether a dry run only planned it."""
+    return (ceiling.fix, True) if isinstance(ceiling, DryRun) else (ceiling, False)
+
+
+def _lowered_fact(ceiling: ratchet.CeilingFix | DryRun) -> str:
+    fix, planned = _made(ceiling)
     if fix.fell:
-        return _in_file(f"{counted(fix.fell, 'entry', 'entries')} lowered")
-    return _in_file(f"{counted(fix.moved, 'entry', 'entries')} moved") if fix.moved else "nothing lowered"
+        return _in_file(f"{fix.fell} to lower" if planned else f"{counted(fix.fell, 'entry', 'entries')} lowered")
+    if fix.moved:
+        return _in_file(f"{fix.moved} to move" if planned else f"{counted(fix.moved, 'entry', 'entries')} moved")
+    return "nothing to lower" if planned else "nothing lowered"
 
 
-def _ceiling_row(area: Area, fix: ratchet.CeilingFix) -> Row | None:
+def _recorded_extent(fix: ratchet.CeilingFix) -> str:
+    return f"{counted(len(fix.ceiling.size), 'entry', 'entries')}, {counted(len(fix.ceiling.clones), 'clone pair')}"
+
+
+def _planned_row(area: Area, fix: ratchet.CeilingFix) -> Row | None:
+    """A dry run's debt row: what would fall, counted, else what would move, else the recording it would write."""
+    for count, event in ((fix.fell, AreaEvent.TO_LOWER), (fix.moved, AreaEvent.TO_MOVE)):
+        if count:
+            return Row(Glyph.WILL_CHANGE, area, event, ratchet.BASELINE_PATH, count=count, counts_plural=False)
+    if fix.first:
+        new = SEPARATOR.join((_recorded_extent(fix), f"{ratchet.BASELINE_PATH} would be new"))
+        return Row(Glyph.WILL_CHANGE, area, AreaEvent.TO_RECORD, new)
+    pairs = _in_file(counted(len(fix.ceiling.clones), "clone pair"))
+    return Row(Glyph.WILL_CHANGE, area, AreaEvent.TO_RECORD, pairs) if fix.recorded else None
+
+
+def _ceiling_row(area: Area, ceiling: ratchet.CeilingFix | DryRun) -> Row | None:
+    fix, planned = _made(ceiling)
+    if planned:
+        return _planned_row(area, fix)
     pairs = counted(len(fix.ceiling.clones), "clone pair")
     if fix.first:
-        recorded = f"{counted(len(fix.ceiling.size), 'entry', 'entries')}, {pairs}"
-        return Row(Glyph.CLEAN, area, AreaEvent.RECORDED, SEPARATOR.join((recorded, f"{ratchet.BASELINE_PATH} is new")))
+        return Row(Glyph.CLEAN, area, AreaEvent.RECORDED, SEPARATOR.join((_recorded_extent(fix), f"{ratchet.BASELINE_PATH} is new")))
     if fix.fell:
         return Row(Glyph.CLEAN, area, AreaEvent.LOWERED, _in_file(counted(fix.fell, "entry", "entries")))
     if fix.moved:
@@ -359,15 +404,17 @@ def _ceiling_row(area: Area, fix: ratchet.CeilingFix) -> Row | None:
     return Row(Glyph.CLEAN, area, AreaEvent.RECORDED, _in_file(pairs)) if fix.recorded else None
 
 
-def _ceiling_words(fix: ratchet.CeilingFix | None, findings: int) -> str:
-    if fix is None:
+def _ceiling_words(ceiling: ratchet.CeilingFix | DryRun | None, findings: int) -> str:
+    """The verdict's words for the ceiling, done or, under a dry run, what would be done."""
+    if ceiling is None:
         return ""
+    fix, planned = _made(ceiling)
     if fix.fell:
-        return f"ceiling lowered by {counted(fix.fell, 'entry', 'entries')}"
+        return f"{counted(fix.fell, 'ceiling entry', 'ceiling entries')} would fall" if planned else f"ceiling lowered by {counted(fix.fell, 'entry', 'entries')}"
     if fix.moved:
-        return f"ceiling moved {counted(fix.moved, 'entry', 'entries')}"
-    if fix.first or fix.recorded:
-        return "ceiling recorded"
+        return f"{counted(fix.moved, 'ceiling entry', 'ceiling entries')} would move" if planned else f"ceiling moved {counted(fix.moved, 'entry', 'entries')}"
+    if fix.changed:
+        return "ceiling would be recorded" if planned else "ceiling recorded"
     return "" if findings else "nothing to lower"
 
 
@@ -381,7 +428,7 @@ def _refused_row(verdict: AreaVerdict, facts: tuple[str, ...]) -> Row:
 
 def _finding_row(verdict: AreaVerdict, extent: str) -> Row:
     fact = extent if _judged_a_staged_change(verdict) else ""
-    if isinstance(verdict.ceiling, ratchet.CeilingFix):
+    if isinstance(verdict.ceiling, ratchet.CeilingFix | DryRun):
         fact = _lowered_fact(verdict.ceiling)
     return Row(Glyph.NEEDS_YOU, verdict.area, AreaEvent.FINDING, fact, count=len(verdict.findings))
 
@@ -392,7 +439,7 @@ def area_row(verdict: AreaVerdict, extent: str) -> Row:
         return _refused_row(verdict, facts)
     if verdict.findings:
         return _finding_row(verdict, extent)
-    if isinstance(verdict.ceiling, ratchet.CeilingFix) and (row := _ceiling_row(verdict.area, verdict.ceiling)):
+    if isinstance(verdict.ceiling, ratchet.CeilingFix | DryRun) and (row := _ceiling_row(verdict.area, verdict.ceiling)):
         return row
     if verdict.outcome is Outcome.MEASURED_ONLY:
         if MEASURED_ONLY_EVENT[verdict.area] is AreaEvent.NOT_SET_UP:
@@ -530,6 +577,7 @@ def run_check(judged: Callable[[AreaReport, Running], CheckResult], command: str
             notes=measured_notes(result.areas),
             seconds=clock() - started,
             ceiling=_ceiling_words(result.ceiling, len(result.findings)),
+            would_change=isinstance(result.ceiling, DryRun) and result.ceiling.would_change,
         ),
         channels.out,
     )

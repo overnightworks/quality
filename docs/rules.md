@@ -105,7 +105,7 @@ It applies these rules:
   file is measured without the function, can fall after the measured rows, with no line (`file is gone · ceiling 802 lines`,
   `function total is gone · ceiling CCN 19`, fix: `quality check --fix`); an entry with no measurement otherwise (a tracked
   file missing from disk, a function entry under a file of another language) stands and counts in the clean row's `ceiling held · N entries, M clone pairs`. Vocabulary: O20, extents: O21.
-  `quality check debt --fix` (`--fix` takes no `--staged` and needs `debt` among the named areas, or none named; no workflow runs it)
+  `quality check debt --fix` (`--fix` takes no `--staged` and needs `debt` among the named areas, or none named; `--dry-run` needs `--fix`; no workflow runs either)
   changes `quality/baseline.toml` at the top of the repository it is started in (a stray `src/quality/baseline.toml` is
   neither read nor removed) and then judges the tree against the new file. It only lowers: each held entry falls to its
   measured value (`lowered`, `function total CCN 19 → 17`) and goes where the measured value is no longer debt (`dropped`,
@@ -117,7 +117,7 @@ It applies these rules:
   fixed` with `restore quality/baseline.toml from git, or repair it by hand` (a version no TOML parser reads refuses
   likewise), and a shallow clone that cannot prove it names `git fetch --unshallow`. A file without `[clones]` that git
   never held it in records the pairs and keeps its entries. The verdict line adds `ceiling lowered by N entries`,
-  `ceiling recorded` or `nothing to lower`.
+  `ceiling recorded` or `nothing to lower`. Under `--dry-run` the same ceiling is made, judged and rendered and nothing is written: each change is a `~` row worded as what the fix would do, the debt row and verdict as O245 words them, the exit `1` while the fix would change the file.
   The file is written whole or not at all: a hidden sibling takes the text and replaces the file in one step, so whatever
   stops the process leaves the complete old file or the complete new one, the replacement being the commit point, so a
   Ctrl-C just after it keeps the new file, and a killed process can leave that sibling. It keeps the file's mode,
