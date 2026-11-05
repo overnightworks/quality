@@ -138,7 +138,7 @@ def test_the_emergency_door_names_every_added_finding_where_the_bot_config_exist
     gh = FakeGh()
     if served:
         serve_config_at_merge_commit(gh)
-    code, answers = drive(gh, emergency_sonar(added=[bot_issue(), bot_issue("python:S1")], legacy=12))
+    code, answers = drive(gh, emergency_sonar(added=[bot_issue(), bot_issue("python:S1")]))
     refusal = capsys.readouterr().out
     assert code == 1
     assert (sonar.DEPENDABOT_EXCEPTION_RULE in refusal, "python:S1" in refusal) == (True, True)
