@@ -92,7 +92,7 @@ def test_sub_lines_stand_under_their_row_with_their_own_glyph():
 
 def test_the_lines_below_a_sub_line_stand_deeper_and_escaped():
     row = Row(Glyph.NEEDS_YOU, "loosenings", Event.CLEAN, sub_lines=(SubLine(Glyph.NEEDS_YOU, "what", whole=True, below=("reason: a\x1b[8mb", "second")),))
-    assert plain((row,)).splitlines()[1:] == ["    ! what", "        reason: a\\x1b[8mb", "        second"]
+    assert plain((row,)).splitlines() == ["  ! loosenings    clean", "    ! what", "        reason: a\\x1b[8mb", "        second"]
 
 
 def test_a_line_below_a_sub_line_is_painted_as_a_rows_fact_is():

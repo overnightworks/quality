@@ -177,7 +177,7 @@ def test_a_descriptive_row_and_its_sub_lines_end_at_the_window():
 
 def test_a_whole_sub_line_and_the_lines_below_it_stand_whole_at_a_terminal():
     whole = Row(Glyph.NEEDS_YOU, "files", Event.CLEAN, sub_lines=(SubLine(Glyph.NEEDS_YOU, "a long reason", whole=True, below=("reason: a long reason",)),))
-    assert rows_at(15, whole)[1:] == ["    ! a long reason", "        reason: a long reason"]
+    assert rows_at(15, whole) == ["  ! files         clean", "    ! a long reason", "        reason: a long reason"]
 
 
 def test_each_row_keeps_what_it_protects():

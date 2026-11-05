@@ -32,6 +32,10 @@ def pull_row():
     return "  · #7            open           head aaaaaaa · into main"
 
 
+def loosenings_none():
+    return "  ✓ loosenings    none"
+
+
 def checks_row(red="quality / sonar and quality / verdict are"):
     return f"  ✓ checks        ok             only {red} red"
 
@@ -116,9 +120,6 @@ def test_a_draft_flag_that_is_no_boolean_cannot_be_judged(draft, capsys):
     changed_nothing(gh)
 
 
-LOOSENINGS_NONE = "  ✓ loosenings    none"
-
-
 @pytest.mark.parametrize(
     ("gh_kwargs", "sonar_kwargs", "rows"),
     [
@@ -155,7 +156,7 @@ LOOSENINGS_NONE = "  ✓ loosenings    none"
         (
             {}, {"new": 1},
             [
-                pull_row(), checks_row(), LOOSENINGS_NONE, "  ! sonar         refused        the pull request adds findings:",
+                pull_row(), checks_row(), loosenings_none(), "  ! sonar         refused        the pull request adds findings:",
                 "    ! sonar a.py:3 - s1: bad",
             ],
         ),
@@ -170,9 +171,6 @@ def test_each_refusal_is_its_row_and_the_pair(gh_kwargs, sonar_kwargs, rows, cap
     code, out, err, answers = run(gh, capsys, transport=sonar(**sonar_kwargs))
     assert (code, out, err, answers) == (1, frame(*rows), refused_pair(), [])
     changed_nothing(gh)
-
-
-NO_METHOD = "the repository and its branch rules allow no merge method the door uses (a merge commit or a squash)"
 
 
 @pytest.mark.parametrize(
@@ -192,13 +190,13 @@ NO_METHOD = "the repository and its branch rules allow no merge method the door 
         ),
         (
             {}, {"unreachable": True},
-            [pull_row(), checks_row(), LOOSENINGS_NONE, "  ✗ sonar         not judged     SonarCloud is down"],
+            [pull_row(), checks_row(), loosenings_none(), "  ✗ sonar         not judged     SonarCloud is down"],
         ),
         (
             {"settings": {"allow_merge_commit": False, "allow_squash_merge": False, "allow_rebase_merge": True}}, {},
             [
-                pull_row(), checks_row(), LOOSENINGS_NONE, "  ! sonar         4 legacy findings on main",
-                f"  ✗ merge         not judged     {NO_METHOD}",
+                pull_row(), checks_row(), loosenings_none(), "  ! sonar         4 legacy findings on main",
+                "  ✗ merge         not judged     the repository and its branch rules allow no merge method the door uses (a merge commit or a squash)",
             ],
         ),
         ({"body": ABSENT}, {}, [pull_row(), "  ✗ landing       not judged     GitHub's answer holds no 'body'"]),
@@ -213,51 +211,64 @@ def test_a_step_that_cannot_be_judged_is_its_cross_row_and_the_pair(gh_kwargs, s
 
 
 def at_a_terminal(gh, window, columns, transport=None):
-    """What the door shows on a terminal of `columns` before it asks, read off the screen."""
+    """What the door shows on a terminal of `columns` before it asks, read off the screen, with its exit and stderr."""
     terminal = window(columns)
-    with contextlib.redirect_stdout(terminal.stream), contextlib.redirect_stderr(io.StringIO()):
-        cli.main(
+    errors = io.StringIO()
+    with contextlib.redirect_stdout(terminal.stream), contextlib.redirect_stderr(errors):
+        code = cli.main(
             ["emergency-merge", REPO, "7"], gh=gh, transport=transport or sonar(), ask=lambda prompt: "no", is_terminal=lambda: True,
             remote_for=no_network, environment={"TERM": "xterm"},
         )
-    return screen(terminal.read()).splitlines()
+    return code, screen(terminal.read()).splitlines(), errors.getvalue()
 
 
 @pytest.mark.parametrize(
-    ("gh_kwargs", "sonar_kwargs", "lines"),
+    ("gh_kwargs", "sonar_kwargs", "code", "lines", "err"),
     [
         (
             {"checks": SONAR_GREEN, "base_config": TWO_JOBS, "head_config": ONE_JOB + declaring(B_REMOVED, reason="a reason that runs on past the window")},
-            {},
+            {}, 1,
             [
+                pull_row(), checks_row("quality / verdict is"), "  ! loosenings    1 declared",
                 f'    ! {B_REMOVED} · overnightworks/songmaker#1345 of 2026-10-20',
                 "        reason: a reason that runs on past the window",
+                "  · merge         merge commit   allowed on main", "the merge commit ends with Work-Item: #3",
+                "emergency-merge: not confirmed, nothing was changed",
             ],
+            "",
         ),
         (
             {"checks": SONAR_GREEN, "base_config": TWO_JOBS, "head_config": ONE_JOB},
-            {},
-            [f"    ! loosened (undeclared): {B_REMOVED}"],
+            {}, 1,
+            [
+                pull_row(), checks_row("quality / verdict is"), "  ! loosenings    red", f"    ! loosened (undeclared): {B_REMOVED}",
+                '    ! mandatory job "B" is missing from the run',
+            ],
+            refused_pair(),
         ),
         (
             {},
-            {"added": [{"component": "k:a.py", "line": 3, "rule": "s1", "message": "a message that runs on past the window"}]},
-            ["    ! sonar a.py:3 - s1: a message that runs on past the window"],
+            {"added": [{"component": "k:a.py", "line": 3, "rule": "s1", "message": "a message that runs on past the window"}]}, 1,
+            [
+                pull_row(), checks_row(), loosenings_none(), "  ! sonar         refused        the pu…",
+                "    ! sonar a.py:3 - s1: a message that runs on past the window",
+            ],
+            refused_pair(),
         ),
     ],
     ids=["a declaration", "an undeclared loosening", "an added finding"],
 )
-def test_what_the_operator_must_read_stands_whole_at_a_terminal(gh_kwargs, sonar_kwargs, lines, window):
-    shown = at_a_terminal(FakeGh(**gh_kwargs), window, 40, sonar(**sonar_kwargs))
-    assert all(line in shown for line in lines)
-    assert not [line for line in shown if line.endswith("…") and line.startswith("    ")]
+def test_what_the_operator_must_read_stands_whole_at_a_terminal(gh_kwargs, sonar_kwargs, code, lines, err, window):
+    assert at_a_terminal(FakeGh(**gh_kwargs), window, 40, sonar(**sonar_kwargs)) == (code, lines, err)
 
 
 @pytest.mark.parametrize(
-    ("gh_kwargs", "subject"),
-    [({"checks": {"quality / verdict": "failure"}}, "  ! checks"), ({"admin": False}, "  ✗ #7")],
+    ("gh_kwargs", "code", "lines", "err"),
+    [
+        ({"checks": {"quality / verdict": "failure"}}, 1, [pull_row(), "  ! checks        refused        qualit…"], refused_pair()),
+        ({"admin": False}, 2, ["  ✗ #7            not judged     the gh…"], not_judged_pair()),
+    ],
     ids=["a refused fact", "a cross fact"],
 )
-def test_a_refused_or_cross_fact_ends_at_the_window(gh_kwargs, subject, window):
-    shown = at_a_terminal(FakeGh(**gh_kwargs), window, 40)
-    assert next(line for line in shown if line.startswith(subject)).endswith("…")
+def test_a_refused_or_cross_fact_ends_at_the_window(gh_kwargs, code, lines, err, window):
+    assert at_a_terminal(FakeGh(**gh_kwargs), window, 40) == (code, lines, err)
