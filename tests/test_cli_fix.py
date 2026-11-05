@@ -48,6 +48,25 @@ def test_a_first_recording_stands_in_the_pictures_frame(build_repo, capsys):
     assert fixed(capsys, repo, *FIX_WORDS) == (0, printed, "")
 
 
+def test_a_first_recording_counts_the_clone_pairs_it_records(build_repo, capsys):
+    repo = build_repo({"src/a.py": long_function(62), "tests/test_a.py": clone_function("run", "a", "b"), "tests/test_b.py": clone_function("check", "c", "d")})
+    printed = (
+        "  ✓ debt          recorded       1 entry, 1 clone pair · quality/baseline.toml is new\n"
+        "✓ clean · ceiling recorded · 1 area · <1s\n"
+    )
+    assert fixed(capsys, repo, *FIX_WORDS) == (0, printed, "")
+
+
+def test_adopting_the_clones_table_says_the_ceiling_was_recorded(build_repo, capsys):
+    repo = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: "[file_lines]\n", "tests/test_a.py": clone_function("run", "a", "b"), "tests/test_b.py": clone_function("check", "c", "d")})
+    printed = (
+        "  ✓ debt          recorded       1 clone pair · quality/baseline.toml\n"
+        "    ✓ quality/baseline.toml  recorded  1 clone pair\n"
+        "✓ clean · ceiling recorded · 1 area · <1s\n"
+    )
+    assert fixed(capsys, repo, *FIX_WORDS) == (0, printed, "")
+
+
 @pytest.mark.parametrize(
     ("files", "held", "printed", "written"),
     [
