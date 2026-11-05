@@ -99,13 +99,10 @@ def test_the_lines_below_a_sub_line_stand_deeper_and_escaped():
 def test_a_line_below_a_sub_line_is_painted_as_a_rows_fact_is(whole):
     fact_row = Row(Glyph.NEEDS_YOU, "loosenings", Event.CLEAN, "reason")
     below_row = Row(Glyph.NEEDS_YOU, "loosenings", Event.CLEAN, sub_lines=(SubLine(Glyph.NEEDS_YOU, "what", whole=whole, below=("reason",)),))
-    paint = r"(\x1b\[[0-9;]*m)"
-    fact_line = written(Terminal, lambda channel: output.write_rows((fact_row,), channel)).splitlines()[0]
-    below_line = written(Terminal, lambda channel: output.write_rows((below_row,), channel)).splitlines()[-1]
-    fact_paint = re.search(f"{paint}reason{paint}$", fact_line)
-    below_paint = re.fullmatch(f"{paint} {{8}}reason{paint}", below_line)
-    assert fact_paint and below_paint
-    assert below_paint.groups() == fact_paint.groups()
+    fact_channel = written(Terminal, lambda channel: output.write_rows((fact_row,), channel))
+    below_channel = written(Terminal, lambda channel: output.write_rows((below_row,), channel))
+    start, end = re.fullmatch(r"  .*loosenings    clean          (\x1b\[[0-9;]*m)reason(\x1b\[[0-9;]*m)\n", fact_channel).groups()
+    assert below_channel == f"  \x1b[33m!\x1b[0m loosenings    clean\n    \x1b[33m!\x1b[0m what\n{start}        reason{end}\n"
 
 
 def test_a_row_with_a_fix_ends_in_its_fix_line():
