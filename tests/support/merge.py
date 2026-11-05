@@ -27,9 +27,6 @@ GATE_CONFIG = '[gate]\nmandatory_jobs = ["checks"]\nlegacy = "fail"\n'
 LEGACY_RED = {"quality / sonar": "failure", "quality / verdict": "failure"}
 
 
-LOGIN_REQUEST = ["api", "user", "--jq", ".login"]
-
-
 ALL_METHODS_ALLOWED = {"allow_merge_commit": True, "allow_squash_merge": True, "allow_rebase_merge": True}
 
 
@@ -78,7 +75,6 @@ class FakeGh:
         self.body, self.later_body, self.draft, self.pulls_read = body, later_body, draft, 0
         self.merged = False
         self.raw_answers = raw_answers or {}
-        self.calls: list[tuple[str, ...]] = []
         self.requests: list[tuple[tuple[str, ...], str | None]] = []
         self.sequence: list[str] = []
         self.gate_values: list[str] = []
@@ -86,7 +82,6 @@ class FakeGh:
         self.merge_messages: list[str | None] = []
 
     def __call__(self, arguments, stdin=None):
-        self.calls.append(tuple(arguments))
         self.requests.append((tuple(arguments), stdin))
         step = self.step_of(arguments)
         if step == "merge" and self.merge_lands:
@@ -106,7 +101,7 @@ class FakeGh:
         ):
             if marker in text:
                 return step
-        return "login" if list(arguments) == LOGIN_REQUEST else "repository"
+        return "login" if list(arguments) == ["api", "user", "--jq", ".login"] else "repository"
 
     @staticmethod
     def file_of(arguments):
@@ -178,6 +173,10 @@ class FakeGh:
         if step == "comment":
             self.comments.append(next(a for a in arguments if a.startswith("body=")))
             self.sequence.append("comment")
+
+    @property
+    def calls(self):
+        return [argv for argv, _ in self.requests]
 
     @property
     def merge_calls(self):

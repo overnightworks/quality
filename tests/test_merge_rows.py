@@ -11,7 +11,6 @@ from tests.support.merge import (
     B_REMOVED,
     GATE_CONFIG,
     LEGACY_RED,
-    LOGIN_REQUEST,
     ONE_JOB,
     REPO,
     SHA,
@@ -26,8 +25,6 @@ from tests.support.merge import (
 )
 from tests.support.terminal import screen
 
-REPORT_CONFIG = GATE_CONFIG.replace("fail", "report")
-
 
 def frame(*lines):
     return "".join(f"{line}\n" for line in lines)
@@ -37,7 +34,8 @@ def pull_row():
     return "  · #7            open           head aaaaaaa · into main"
 
 
-JSON_FACT = "  ✗ {subject:<14}not judged     Expecting value: line 1 column 1 (char 0)"
+def not_json_row(subject):
+    return f"  ✗ {subject:<14}not judged     Expecting value: line 1 column 1 (char 0)"
 
 
 def loosenings_none():
@@ -131,7 +129,7 @@ def test_the_door_asks_for_the_head_commits_checks_and_statuses_and_the_login_by
         (("api", "--paginate", f"repos/{REPO}/commits/{SHA}/check-runs?per_page=100", "--jq", ".check_runs[]"), None),
         (("api", "--paginate", f"repos/{REPO}/commits/{SHA}/status?per_page=100", "--jq", ".statuses[]"), None),
     ]
-    assert [request for request in gh.requests if request[0][:2] == ("api", "user")] == [(tuple(LOGIN_REQUEST), None)]
+    assert [request for request in gh.requests if request[0][:2] == ("api", "user")] == [(("api", "user", "--jq", ".login"), None)]
 
 
 @pytest.mark.parametrize("draft", [ABSENT, None, "false"], ids=["missing", "null", "a string"])
@@ -194,7 +192,7 @@ def test_a_draft_flag_that_is_no_boolean_cannot_be_judged(draft, capsys):
             ],
         ),
         (
-            {"base_config": GATE_CONFIG, "head_config": REPORT_CONFIG + declaring("legacy fail → report")}, {},
+            {"base_config": GATE_CONFIG, "head_config": '[gate]\nmandatory_jobs = ["checks"]\nlegacy = "report"\n' + declaring("legacy fail → report")}, {},
             [
                 pull_row(), checks_row(), "  ! loosenings    1 declared",
                 "    ! legacy fail → report · overnightworks/songmaker#1345 of 2026-10-20", "        reason: ruled",
@@ -244,10 +242,10 @@ def test_each_refusal_is_its_row_and_the_pair(gh_kwargs, sonar_kwargs, rows, cap
             ],
         ),
         ({"body": ABSENT}, {}, [pull_row(), "  ✗ landing       not judged     GitHub's answer holds no 'body'"]),
-        ({"raw_answers": {"repository": "not json"}}, {}, [JSON_FACT.format(subject="#7")]),
-        ({"raw_answers": {"pull": "not json"}}, {}, [JSON_FACT.format(subject="#7")]),
-        ({"raw_answers": {"checks": "not json"}}, {}, [pull_row(), JSON_FACT.format(subject="checks")]),
-        ({"raw_answers": {"statuses": "not json"}}, {}, [pull_row(), JSON_FACT.format(subject="checks")]),
+        ({"raw_answers": {"repository": "not json"}}, {}, [not_json_row("#7")]),
+        ({"raw_answers": {"pull": "not json"}}, {}, [not_json_row("#7")]),
+        ({"raw_answers": {"checks": "not json"}}, {}, [pull_row(), not_json_row("checks")]),
+        ({"raw_answers": {"statuses": "not json"}}, {}, [pull_row(), not_json_row("checks")]),
     ],
     ids=[
         "no admin right", "gh fails on the pull request", "no merge commit", "sonar unreachable", "no method the door uses",
@@ -264,13 +262,20 @@ def test_a_step_that_cannot_be_judged_is_its_cross_row_and_the_pair(gh_kwargs, s
 
 def test_the_rows_name_the_pull_requests_base_not_the_default_branch(capsys):
     gh = FakeGh(base_ref="release/1")
-    code, out, err, _ = run(gh, capsys)
-    assert (code, err) == (0, "")
-    assert [line for line in out.splitlines() if "release/1" in line or "main" in line] == [
-        "  · #7            open           head aaaaaaa · into release/1",
-        "  ! sonar         4 legacy findings on main",
-        "  · merge         merge commit   allowed on release/1",
-    ]
+    assert run(gh, capsys) == (
+        0,
+        frame(
+            "  · #7            open           head aaaaaaa · into release/1",
+            checks_row(),
+            loosenings_none(),
+            "  ! sonar         4 legacy findings on main",
+            "  · merge         merge commit   allowed on release/1",
+            "the merge commit ends with Work-Item: #3",
+            "merged.",
+        ),
+        "",
+        ["Switch quality_gate off, merge, switch it on? Type 'ja': "],
+    )
 
 
 def at_a_terminal(gh, window, columns, transport=None):
