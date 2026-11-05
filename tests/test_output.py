@@ -37,7 +37,7 @@ from tests.support.check import (
 )
 from tests.support.door import CHECK_WORD, MODULE_DOOR, door_in
 from tests.support.fleet import RELEASES, write_fleet
-from tests.support.terminal import Terminal, without_sgr
+from tests.support.terminal import Terminal, by_role, without_sgr
 from tests.support.verdict import CHECKS_GREEN
 
 
@@ -74,8 +74,12 @@ def verdict_line(**counts) -> str:
         (Row(Glyph.NEEDS_YOU, "files", Event.FINDING, count=1), "  ! files         1 finding\n"),
         (Row(Glyph.NEEDS_YOU, "code", Event.FINDING, "see below", count=3), "  ! code          3 findings     see below\n"),
         (Row(Glyph.NOTE, "debt", Event.CLEAN, "measured only"), "  · debt          clean          measured only\n"),
+        (
+            Row(Glyph.WILL_CHANGE, "debt", cli.AreaEvent.TO_LOWER, "quality/baseline.toml", count=3, counts_plural=False),
+            "  ~ debt          3 to lower     quality/baseline.toml\n",
+        ),
     ],
-    ids=["fact", "empty fact is stripped", "one", "several", "note"],
+    ids=["fact", "empty fact is stripped", "one", "several", "note", "a count that takes no plural"],
 )
 def test_a_row_stands_in_the_pictures_columns(row, expected):
     assert plain((row,)) == expected
@@ -122,8 +126,16 @@ def test_a_duration_is_whole_seconds_rounded_down(seconds, expected):
             {"findings": 1, "areas_with_findings": 1, "clean_areas": 6, "ceiling": "ceiling lowered by 1 entry"},
             "! 1 finding in 1 area · 6 areas clean · ceiling lowered by 1 entry · <1s\n",
         ),
+        (
+            {"would_change": True, "clean_areas": 0, "areas": 1, "ceiling": "1 ceiling entry would fall"},
+            "~ dry run · 1 ceiling entry would fall · nothing written · <1s\n",
+        ),
+        (
+            {"findings": 1, "areas_with_findings": 1, "clean_areas": 5, "would_change": True, "ceiling": "1 ceiling entry would fall"},
+            "! 1 finding in 1 area · 5 areas clean · 1 ceiling entry would fall · nothing written · <1s\n",
+        ),
     ],
-    ids=["clean", "one finding", "several", "no clean area is left out", "measured only", "partly measured with findings", "a lowered ceiling", "a lowered ceiling beside a finding"],
+    ids=["clean", "one finding", "several", "no clean area is left out", "measured only", "partly measured with findings", "a lowered ceiling", "a lowered ceiling beside a finding", "a dry run", "a dry run beside a finding"],
 )
 def test_the_verdict_line_counts_and_ends_with_the_duration(counts, expected):
     assert verdict_line(**counts) == expected
@@ -229,6 +241,35 @@ def findings_written(findings: list[Finding], stream_kind: type[io.StringIO] = i
 def test_a_moved_note_row_is_a_clean_row():
     printed = findings_written([], notes=[Note("src/new.py", NoteEvent.MOVED, "a fact")])
     assert printed.lstrip().startswith(Glyph.CLEAN)
+
+
+@pytest.mark.parametrize(
+    ("planned", "printed"),
+    [
+        pytest.param(NoteEvent.LOWER, "    ~ src/a.py  lower  a fact\n", id="lower"),
+        pytest.param(NoteEvent.DROP, "    ~ src/a.py  drop  a fact\n", id="drop"),
+        pytest.param(NoteEvent.MOVE, "    ~ src/a.py  move  a fact\n", id="move"),
+        pytest.param(NoteEvent.RECORD, "    ~ src/a.py  record  a fact\n", id="record"),
+    ],
+)
+def test_each_word_a_dry_run_says_is_a_will_change_row(planned, printed):
+    assert findings_written([], notes=[Note("src/a.py", planned, "a fact")]) == printed
+
+
+def test_a_will_change_row_at_a_terminal_paints_its_glyph_and_its_fact():
+    printed = findings_written([], Terminal, notes=[Note("src/a.py", NoteEvent.LOWER, "a fact")])
+    assert by_role(printed, Glyph.WILL_CHANGE) == "    {glyph}~{reset} src/a.py  lower  {other}a fact{reset}\n"
+
+
+def test_a_dry_runs_glyph_has_a_colour_of_its_own():
+    others = {style for glyph, style in output.GLYPH_STYLE.items() if glyph is not Glyph.WILL_CHANGE}
+    foreground_colours = range(30, 38)
+    assert output.GLYPH_STYLE[Glyph.WILL_CHANGE] not in others
+    assert int(output.GLYPH_STYLE[Glyph.WILL_CHANGE]) in foreground_colours
+
+
+def test_a_dry_runs_verdict_is_painted_in_its_glyphs_colour():
+    assert output.VERDICT_STYLE[Glyph.WILL_CHANGE].endswith(output.GLYPH_STYLE[Glyph.WILL_CHANGE])
 
 
 def area_row_indent() -> int:

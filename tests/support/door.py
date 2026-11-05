@@ -13,6 +13,7 @@ CHECK_WORD = "check"
 MODULE_DOOR = [sys.executable, "-m", "quality.cli"]
 STAGED_WORDS = (CHECK_WORD, "secrets", "--staged")
 FIX_WORDS = (CHECK_WORD, "debt", "--fix")
+DRY_RUN_WORDS = (*FIX_WORDS, "--dry-run")
 
 
 def door_in(folder: Path, *words: str, **keywords) -> int:
@@ -50,3 +51,15 @@ def digest(repo: Path) -> str:
 
 def restore_step() -> str:
     return "restore quality/baseline.toml from git, or repair it by hand"
+
+
+def tree_of(root: Path) -> dict[str, bytes | str | None]:
+    """Every entry under `root` outside `.git`: a file's bytes, a link's target, a folder as None."""
+    found: dict[str, bytes | str | None] = {}
+    for current, folders, files in os.walk(root):
+        folders[:] = [folder for folder in folders if folder != ".git"]
+        for name in (*folders, *files):
+            path = Path(current) / name
+            key = os.fsdecode(path.relative_to(root))
+            found[key] = os.readlink(path) if path.is_symlink() else None if path.is_dir() else path.read_bytes()
+    return found

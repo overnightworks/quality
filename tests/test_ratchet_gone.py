@@ -8,7 +8,7 @@ import pytest
 from quality.config import CONFIG_PATH, GeneratedFile
 from quality.ratchet import BASELINE_PATH, Key, Measured, Metric, gone_entries, load_baseline
 from tests.support.door import CHECK_WORD, FIX_WORDS, digest, fixed
-from tests.support.generated_files import MANDATORY_JOB, generated_config
+from tests.support.generated_files import MANDATORY_JOB, gate_declaring, generated_config
 from tests.support.git_repositories import git, put
 from tests.support.source_code import branchy_function, long_file, long_function
 from tests.support.verdict import ONLY_DECLARED, gate_config, verdict_streams
@@ -21,10 +21,6 @@ def entry(metric: Metric, path: str, symbol: str = "") -> Key:
 
 def declared(*paths: str) -> list[GeneratedFile]:
     return [GeneratedFile(path, MANDATORY_JOB, "#1", datetime.date(2026, 1, 1), "written by a generator") for path in paths]
-
-
-def gate_declaring(path: str) -> str:
-    return f'[gate]\nmandatory_jobs = ["{MANDATORY_JOB}"]\n' + generated_config(path=path)
 
 
 def ceiling(table: str) -> str:

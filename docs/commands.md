@@ -10,7 +10,7 @@ true today; every other `quality <command> --help` prints that command's argumen
 stdout with exit `0`, plain and whole in every stream. A wrong invocation runs nothing, prints the `error:`/`next:` pair
 on stderr and exits `2`: `no command <word> · commands: …` for a first word that names no command, `no command ·
 commands: …` for none, `no area <word> · areas: …` for the first word `quality check` does not know as an area, `unknown argument · <what is left over>` for what the command does not take, and otherwise the
-parser's own sentence; `--staged checks only secrets · nothing checked` for `--staged` with other areas or none (`next:` names `quality check secrets --staged`); `next:` otherwise names the help of the command, of its group for a command inside one, or of the parser
+parser's own sentence; `--dry-run needs --fix · nothing checked` for `--dry-run` without `--fix` (`next:` names `quality check --fix --dry-run`); `--staged checks only secrets · nothing checked` for `--staged` with other areas or none (`next:` names `quality check secrets --staged`); `next:` otherwise names the help of the command, of its group for a command inside one, or of the parser
 that refused.
 
 ## `quality check --fix`
@@ -20,7 +20,7 @@ ceiling lies on disk, in the index or in any commit `HEAD` reaches, and then jud
 never raises an entry and never adds one: what grew or is new stays a finding, and a raise is a hand edit with a declared
 loosening. A file git renamed into the index since the ceiling's last commit takes its entries with it (`docs/rules.md`). An entry whose path the index no longer tracks, whose Python function is gone or whose file is declared generated goes; one only missing from disk stands; a held pair the tree lost goes. A ceiling or `[clones]` table git
 holds and the tree lacks refuses with the restore step, and a shallow clone that cannot prove a first recording names
-`git fetch --unshallow`. It takes no `--staged` and needs `debt` among the named areas, or no area named. Exit `0` clean, `1` findings, `2` could not fix.
+`git fetch --unshallow`. It takes no `--staged` and needs `debt` among the named areas, or no area named; either refusal keeps a `--dry-run` in its `next:`. `quality check --fix --dry-run` makes, judges and renders the same ceiling, refuses where the fix refuses before its write, writes nothing, and exits `1` while the fix would change the file, `0` when not; a refusal only the write meets shows at the fix alone. Exit `0` clean, `1` findings, `2` could not fix.
 The rows and rules are in `docs/rules.md`, the frames in `docs/output.md`.
 
 ## `quality check secrets --staged`

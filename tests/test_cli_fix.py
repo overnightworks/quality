@@ -12,8 +12,8 @@ from tests.support.architecture import FORBIDDEN, SHOP, contracts_ini
 from tests.support.check import copy_block, refusal_row
 from tests.support.clones import function as clone_function
 from tests.support.config_refusals import check_refusals
-from tests.support.door import FIX_WORDS, digest, door_in, fixed, restore_step
-from tests.support.generated_files import MANDATORY_JOB, generated_config
+from tests.support.door import FIX_WORDS, digest, door_in, fixed, restore_step, tree_of
+from tests.support.generated_files import gate_declaring, generated_config
 from tests.support.git_repositories import git, put, shallow_clone
 from tests.support.source_code import branchy_function, long_file, long_function
 from tests.support.verdict import verdict_streams
@@ -21,10 +21,6 @@ from tests.support.verdict import verdict_streams
 
 def held_ceiling(value: int = 62, clones: bool = True) -> str:
     return f'[function_lines."src/a.py"]\nlong_one = {value}\n' + ("\n[clones]\n" if clones else "")
-
-
-def declared_generated(path: str) -> str:
-    return f'[gate]\nmandatory_jobs = ["{MANDATORY_JOB}"]\n' + generated_config(path=path)
 
 
 def test_a_lowered_ceiling_stands_in_the_pictures_frame(build_repo, capsys):
@@ -47,6 +43,25 @@ def test_a_first_recording_stands_in_the_pictures_frame(build_repo, capsys):
     repo = build_repo({"src/a.py": long_function(62)})
     printed = (
         "  ✓ debt          recorded       1 entry, 0 clone pairs · quality/baseline.toml is new\n"
+        "✓ clean · ceiling recorded · 1 area · <1s\n"
+    )
+    assert fixed(capsys, repo, *FIX_WORDS) == (0, printed, "")
+
+
+def test_a_first_recording_counts_the_clone_pairs_it_records(build_repo, capsys):
+    repo = build_repo({"src/a.py": long_function(62), "tests/test_a.py": clone_function("run", "a", "b"), "tests/test_b.py": clone_function("check", "c", "d")})
+    printed = (
+        "  ✓ debt          recorded       1 entry, 1 clone pair · quality/baseline.toml is new\n"
+        "✓ clean · ceiling recorded · 1 area · <1s\n"
+    )
+    assert fixed(capsys, repo, *FIX_WORDS) == (0, printed, "")
+
+
+def test_adopting_the_clones_table_says_the_ceiling_was_recorded(build_repo, capsys):
+    repo = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: "[file_lines]\n", "tests/test_a.py": clone_function("run", "a", "b"), "tests/test_b.py": clone_function("check", "c", "d")})
+    printed = (
+        "  ✓ debt          recorded       1 clone pair · quality/baseline.toml\n"
+        "    ✓ quality/baseline.toml  recorded  1 clone pair\n"
         "✓ clean · ceiling recorded · 1 area · <1s\n"
     )
     assert fixed(capsys, repo, *FIX_WORDS) == (0, printed, "")
@@ -405,18 +420,6 @@ def test_a_version_no_parser_reads_refuses_and_a_clones_table_by_hand_runs_the_f
     assert fixed(capsys, repo, *FIX_WORDS)[0] == 0
 
 
-def tree_of(root: Path) -> dict[str, bytes | str | None]:
-    """Every entry under `root` outside `.git`: a file's bytes, a link's target, a folder as None."""
-    found: dict[str, bytes | str | None] = {}
-    for current, folders, files in os.walk(root):
-        folders[:] = [folder for folder in folders if folder != ".git"]
-        for name in (*folders, *files):
-            path = Path(current) / name
-            key = os.fsdecode(path.relative_to(root))
-            found[key] = os.readlink(path) if path.is_symlink() else None if path.is_dir() else path.read_bytes()
-    return found
-
-
 def a_ceiling_with(content: bytes):
     def arrange(build_repo, elsewhere) -> Path:
         repo = build_repo({"src/a.py": long_function(62)})
@@ -446,7 +449,7 @@ def a_file_that_does_not_parse(build_repo, elsewhere) -> Path:
 
 def a_generated_file_python_cannot_parse(build_repo, elsewhere) -> Path:
     return build_repo({
-        "src/a.py": long_function(62), "gen/api.py": "def broken(:\n", CONFIG_PATH: declared_generated("gen/api.py"),
+        "src/a.py": long_function(62), "gen/api.py": "def broken(:\n", CONFIG_PATH: gate_declaring("gen/api.py"),
         BASELINE_PATH: held_ceiling(value=80),
     })
 
@@ -500,7 +503,7 @@ def a_size_config_and_a_near_copy(build_repo, elsewhere) -> Path:
 
 def a_generated_file_and_a_grown_entry(build_repo, elsewhere) -> Path:
     return build_repo({
-        "src/a.py": long_function(71), "gen/api.py": "def broken(:\n", CONFIG_PATH: declared_generated("gen/api.py"),
+        "src/a.py": long_function(71), "gen/api.py": "def broken(:\n", CONFIG_PATH: gate_declaring("gen/api.py"),
         BASELINE_PATH: held_ceiling(value=60),
     })
 
