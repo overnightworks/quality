@@ -113,9 +113,13 @@ class DoorEvent(StrEnum):
 
 NOTHING_CHANGED = "nothing changed"
 NOT_JUDGED_ERROR = f"could not judge{SEPARATOR}{NOTHING_CHANGED}"
-REFUSED_ERROR = (
-    f"not merged{SEPARATOR}the operator's merge lands only declared loosenings and legacy findings{SEPARATOR}{NOTHING_CHANGED}"
-)
+
+
+def not_merged(why: str) -> str:
+    return f"not merged{SEPARATOR}{why}{SEPARATOR}{NOTHING_CHANGED}"
+
+
+REFUSED_ERROR = not_merged("the operator's merge lands only declared loosenings and legacy findings")
 LANDING = "landing"
 
 type Pair = tuple[str, tuple[Step, ...]]
@@ -598,12 +602,12 @@ def pull_request_row(repository: str, pull_request: int, state: object, draft: o
     """A closed pull request, then a draft, stops the door before its body or a check is read."""
     subject = f"#{pull_request}"
     if state != "open":
-        closed = f"not merged{SEPARATOR}{subject} is closed{SEPARATOR}{NOTHING_CHANGED}"
+        closed = not_merged(f"{subject} is closed")
         raise Stopped(Row(Glyph.NEEDS_YOU, subject, DoorEvent.CLOSED, fact), closed, (gh_command(repository, pull_request, "view"),))
     if not isinstance(draft, bool):
         raise CannotJudge("GitHub's answer for the pull request holds no draft flag")
     if draft:
-        drafted = f"not merged{SEPARATOR}a draft does not land{SEPARATOR}{NOTHING_CHANGED}"
+        drafted = not_merged("a draft does not land")
         raise Stopped(Row(Glyph.NEEDS_YOU, subject, DoorEvent.DRAFT, fact), drafted, (gh_command(repository, pull_request, "ready"),))
     return Row(Glyph.NOTE, subject, DoorEvent.OPEN, fact)
 
@@ -701,7 +705,7 @@ def judge_pull_request(
     refused: Pair = (REFUSED_ERROR, (gh_command(repository, pull_request, "checks"),))
     item_line = f"{WORK_ITEM_KEY}: or {NO_ITEM_KEY}: line"
     landing_refused: Pair = (
-        f"not merged{SEPARATOR}the operator's merge ends the merge commit with the pull request body's one {item_line}{SEPARATOR}{NOTHING_CHANGED}",
+        not_merged(f"the operator's merge ends the merge commit with the pull request body's one {item_line}"),
         (Instruction(f"give the pull request body exactly one {item_line} outside code blocks, then run {rerun} again"),),
     )
     step = partial(judged, again=Instruction(f"fix what the ✗ row names, then run {rerun} again"), show=show)
@@ -759,10 +763,10 @@ def run_emergency_merge(
 ) -> int:
     """Its rows and pairs before the prompt leave through `channels`, every later line through `say`; both escape it."""
     if not REPOSITORY_NAME.fullmatch(repository):
-        write_pair(f"not merged{SEPARATOR}{repository!r} is not <owner>/<repo>{SEPARATOR}{NOTHING_CHANGED}", (Instruction("name the repository as <owner>/<repo>"),), channels.err)
+        write_pair(not_merged(f"{repository!r} is not <owner>/<repo>"), (Instruction("name the repository as <owner>/<repo>"),), channels.err)
         return EXIT_REFUSED
     if not is_terminal:
-        write_pair(f"not merged{SEPARATOR}the operator's merge needs a terminal on stdin{SEPARATOR}{NOTHING_CHANGED}", (Instruction("the operator runs it in his own terminal"),), channels.err)
+        write_pair(not_merged("the operator's merge needs a terminal on stdin"), (Instruction("the operator runs it in his own terminal"),), channels.err)
         return EXIT_REFUSED
     try:
         door, login = judge_pull_request(repository, pull_request, gh, transport, environment, remote_for, partial(write_rows, channel=channels.out))
