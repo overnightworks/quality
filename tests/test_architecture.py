@@ -44,7 +44,7 @@ from tests.support.check import (
     rule_notes,
 )
 from tests.support.check import check_output as run
-from tests.support.merge import BASE_SHA, ONE_JOB, SHOWN, SONAR_GREEN, FakeGh, changed_nothing, declaring, drive
+from tests.support.merge import BASE_SHA, ONE_JOB, SONAR_GREEN, FakeGh, changed_nothing, declaring, drive
 
 QUALITY_ROOT = Path(__file__).resolve().parents[1]
 SHOP_CYCLE = {**SHOP_DB_IMPORTS_WEB, "src/shop/web.py": "import shop.db\n"}
@@ -740,7 +740,7 @@ def test_a_declared_import_contract_loosening_merges_through_the_door(gh_kwargs,
     is left, and the door shows the declaration and merges."""
     gh = GhWithImportConfigs(checks=SONAR_GREEN, base_config=ONE_JOB, merge_config=ONE_JOB + declaring(what), **gh_kwargs)
     assert drive(gh)[0] == 0
-    assert f"{SHOWN}{what} - reason: ruled" in capsys.readouterr().out
+    assert f"    ! {what} · overnightworks/songmaker#1345 of 2026-10-20\n        reason: ruled\n" in capsys.readouterr().out
     assert gh.sequence == ["gate false", "merge", "gate true", "comment"]
 
 

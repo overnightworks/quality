@@ -12,7 +12,7 @@ REPO = "acme/widgets"
 SHA = "a" * 40
 
 
-NO_BODY = object()
+ABSENT = object()
 
 
 BASE_SHA = "b" * 40
@@ -38,7 +38,6 @@ SONAR_GREEN = {"quality / sonar": "success", "quality / verdict": "failure"}
 
 TWO_JOBS = '[gate]\nmandatory_jobs = ["checks", "B"]\n'
 B_REMOVED = 'mandatory job "B" removed'
-SHOWN = "declared loosening (overnightworks/songmaker#1345 of 2026-10-20): "
 
 
 def declaring(what, reason="ruled"):
@@ -56,7 +55,7 @@ class FakeGh:
         self, admin=True, checks=None, statuses=None, state="open", fail_on=(), interrupt_on=(), merge_lands=False,
         head_config=GATE_CONFIG, base_config=GATE_CONFIG, merge_config=None, merge_sha=MERGE_SHA,
         base_baseline=None, merge_baseline=None, base_sha=BASE_SHA, remote=None, extra_runs=(), settings=None, rules=((),), base_ref="main", rules_error=None, rules_raw=None,
-        body="Work-Item: #3\n\nCloses #3", later_body=None,
+        body="Work-Item: #3\n\nCloses #3", later_body=None, draft=False,
     ):
         self.admin, self.state, self.fail_on, self.merge_lands = admin, state, set(fail_on), merge_lands
         self.interrupt_on = list(interrupt_on)
@@ -73,7 +72,7 @@ class FakeGh:
         self.checks = {"checks": "success", **(LEGACY_RED if checks is None else checks)}
         self.extra_runs = list(extra_runs)
         self.statuses = statuses or {}
-        self.body, self.later_body, self.pulls_read = body, later_body, 0
+        self.body, self.later_body, self.draft, self.pulls_read = body, later_body, draft, 0
         self.merged = False
         self.calls: list[tuple[str, ...]] = []
         self.sequence: list[str] = []
@@ -139,7 +138,10 @@ class FakeGh:
         body = self.later_body if self.pulls_read and self.later_body is not None else self.body
         self.pulls_read += 1
         pull = {"state": self.state, "merged": self.merged, "head": {"sha": SHA}, "base": {"sha": self.base_sha, "ref": self.base_ref}, "merge_commit_sha": self.merge_sha}
-        return json.dumps(pull if body is NO_BODY else {"body": body, **pull})
+        for name, value in (("body", body), ("draft", self.draft)):
+            if value is not ABSENT:
+                pull[name] = value
+        return json.dumps(pull)
 
     def rules_answer(self):
         if self.rules_error:

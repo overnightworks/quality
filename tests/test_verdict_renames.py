@@ -296,11 +296,11 @@ def failing_fetch(tmp_path):
 
 
 @pytest.mark.integration
-def test_a_fetch_that_fails_refuses_before_anything_is_touched(capsys, tmp_path):
+def test_a_fetch_that_fails_cannot_be_judged_before_anything_is_touched(capsys, tmp_path):
     """#149 cell 24: no empty rename map is substituted, so a move is never read as an add by guess."""
     gh = failing_fetch(tmp_path)
     gh.remote = str(tmp_path / "missing.git")
-    assert drive(gh)[0] == 1
+    assert drive(gh)[0] == 2
     output = capsys.readouterr().out
     assert "cannot fetch the pull request's commits to compare renamed files (git exited 128)" in output
     assert "missing.git" not in output
@@ -331,7 +331,7 @@ def test_a_fetch_that_needs_a_password_never_asks_for_one(capsys, tmp_path, monk
     (no_credentials / "gh").write_text("#!/bin/sh\nexit 1\n")
     (no_credentials / "gh").chmod(0o755)
     monkeypatch.setenv("PATH", f"{no_credentials}:{os.environ['PATH']}")
-    assert drive(gh)[0] == 1
+    assert drive(gh)[0] == 2
     assert "cannot fetch the pull request's commits" in capsys.readouterr().out
     assert heard
     assert not asked.exists()
@@ -366,7 +366,7 @@ def test_the_fetched_repository_is_removed(tmp_path, monkeypatch, fails):
     ("stalls", "refusal"),
     [("fetch", "git did not finish within 0.5 seconds"), ("diff", "cannot list the files git renamed between")],
 )
-def test_a_step_that_does_not_finish_in_time_refuses_and_leaves_no_child(
+def test_a_step_that_does_not_finish_in_time_cannot_be_judged_and_leaves_no_child(
     capsys, tmp_path, monkeypatch, fake_git, stalls, refusal
 ):
     """#149 fetch boundary: the fetch and the diff share the bound, and the whole process group dies with it."""
@@ -374,19 +374,19 @@ def test_a_step_that_does_not_finish_in_time_refuses_and_leaves_no_child(
     child = tmp_path / "child-pid"
     gh = failing_fetch(tmp_path)
     fake_git(f'case "$*" in *" {stalls} "*) sleep 300 & echo $! > "{child}"; wait;; esac')
-    assert drive(gh)[0] == 1
+    assert drive(gh)[0] == 2
     assert refusal in capsys.readouterr().out
     assert process_is_gone(int(child.read_text()))
     changed_nothing(gh)
 
 
 def test_git_output_of_a_failed_rename_list_never_reaches_the_operator(capsys, tmp_path, fake_git):
-    """#149 fetch boundary: the door refuses in its own words."""
+    """#149 fetch boundary: the door says it could not judge in its own words."""
     gh = failing_fetch(tmp_path)
     fake_git('case "$*" in *" diff "*) echo STDERR_SENTINEL >&2; exit 1;; esac')
-    assert drive(gh)[0] == 1
+    assert drive(gh)[0] == 2
     output = capsys.readouterr().out
-    assert ("refused - cannot list the files git renamed" in output, "STDERR_SENTINEL" in output) == (True, False)
+    assert ("cannot list the files git renamed" in output, "STDERR_SENTINEL" in output) == (True, False)
     changed_nothing(gh)
 
 
@@ -441,7 +441,7 @@ def test_a_netrc_in_the_home_is_never_sent_and_gh_finds_its_login_from_the_empty
         monkeypatch.delenv(name, raising=False)
     gh = failing_fetch(tmp_path)
     gh.remote = f"{origin}/acme/widgets.git"
-    assert drive(gh)[0] == 1
+    assert drive(gh)[0] == 2
     assert heard
     assert all("Authorization" not in headers for headers in heard)
     configuration, helper_home = helper_saw.read_text().split()
@@ -534,10 +534,10 @@ def test_a_rename_list_git_did_not_finish_is_exit_two_at_the_verdict(capsys, pul
 
 
 @pytest.mark.parametrize(("printed", "cause"), UNFINISHED_LISTS, ids=["cut off", "a source renamed twice"])
-def test_a_rename_list_git_did_not_finish_is_a_refusal_at_the_door(capsys, tmp_path, fake_git, printed, cause):
+def test_a_rename_list_git_did_not_finish_cannot_be_judged_at_the_door(capsys, tmp_path, fake_git, printed, cause):
     """#149 cell 20: the door never substitutes an empty map."""
     gh = pulled(tmp_path, OLD_ENTRY, NEW_ENTRY, MOVE)
     fake_git(listing_script(printed))
-    assert drive(gh)[0] == 1
-    assert "refused - cannot list the files git renamed between the pull request's commits" in capsys.readouterr().out
+    assert drive(gh)[0] == 2
+    assert "cannot list the files git renamed between the pull request's commits" in capsys.readouterr().out
     changed_nothing(gh)

@@ -151,7 +151,7 @@ def test_the_emergency_door_cannot_judge_when_a_config_read_fails_other_than_not
     gh.files[(CONFIG_PATH, MERGE_SHA)] = GhFailed("gh api failed: HTTP 500")
     code, answers = drive(gh, emergency_sonar(legacy=12))
     assert code == 2
-    assert "cannot judge" in capsys.readouterr().out
+    assert "not judged" in capsys.readouterr().out
     changed_nothing(gh)
     assert answers == []
 
@@ -165,7 +165,7 @@ def test_the_emergency_door_shows_main_whole_and_reads_no_bot_config(capsys):
     )
     (shown,) = shown_before_asking
     assert code == 0
-    assert "12 legacy finding(s)" in shown
+    assert "  ! sonar         12 legacy findings on main\n" in shown
     assert [call for call in gh.calls if sonar.DEPENDABOT_CONFIG in " ".join(call)] == []
 
 
