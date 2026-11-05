@@ -162,6 +162,7 @@ take are in [the runbook](runbook-emergency-merge.md); this is what the command 
   and each of these git commands runs in its own process group, which is killed with it at that limit or when the
   command is interrupted (every other command stays in quality's own group). git's own output is never printed: a fetch or rename list
   that fails is a refusal in the door's words (exit `1`), never an empty rename list.
+- **The landing line.** The pull request body carries exactly one `Work-Item:` or `No-Item:` line outside a fenced code block, as the fleet's landings read it: `Work-Item: #<n>` or `Work-Item: <owner>/<repo>#<n>` of this repository, or `No-Item: docs`, `fix` or `deps`. Otherwise it is refused, naming why (exit `1`, nothing changed). The merge commit's message is the body without that line, a blank line, then the line as `Work-Item: #<n>` or `No-Item: <kind>`, the last paragraph, the trailer a landing is read from. The body is the one read with the head.
 - **Sonar green: declared loosenings.** The re-derived verdict must hold at least one declared loosening (otherwise
   `re-run the verdict`). SonarCloud is not asked and `SONAR_TOKEN` is not needed.
 - **Sonar failed: legacy findings,** next to any declared loosening: `[gate] legacy` is `fail` at the merge
@@ -173,10 +174,10 @@ take are in [the runbook](runbook-emergency-merge.md); this is what the command 
   says the token was rejected.
 - **It shows, then asks:** repository, pull request and head SHA with the legacy count (where Sonar failed) and the
   number of declared loosenings, then one line per declaration with its `item`,
-  `date`, `what` and `reason`, then the typed word `ja`. Anything else changes nothing. Every line it prints is
+  `date`, `what` and `reason`, then the merge method and `the merge commit ends with <line>`, then the typed word `ja`. Anything else changes nothing. Every line it prints is
   escaped as the other doors' lines are, so a `reason` cannot hide anything before `ja` or forge a line.
 - **Off, merge, on:** it sets the repository's `quality_gate` property to `false` (this takes the fleet's ruleset off it),
-  runs `gh pr merge <pr> --merge --match-head-commit <sha>` (`--squash` where the repository settings or a rule on the
+  runs `gh pr merge <pr> --merge --match-head-commit <sha> --body-file -`, the message on its stdin (`--squash` where the repository settings or a rule on the
   pull request's base branch exclude a merge commit but allow a squash; when neither is allowed, or the settings or rules
   cannot be read or are malformed (an answer or a page that is no array, a rule that is no object, or whose `parameters` are present but no object), it is refused before the gate is touched; the shown text and the log comment name the
   method), and sets the property back to `true` in every case: merged,
@@ -187,6 +188,4 @@ take are in [the runbook](runbook-emergency-merge.md); this is what the command 
   `2` with `merge state unknown`.
 - **Logged:** one comment on the pull request (who, when, the legacy count and each declaration,
   `quality_gate off → <outcome> → on`, or `quality_gate not switched off → no merge → on` when switching off failed),
-  also when the restore failed. The command prints `aco release <n> --abandoned "landed as PR #<pr> by emergency-merge"`
-  for the head, because `aco land` refuses any non-green check and `--merged` refuses a merge commit without a
-  `Work-Item:` trailer.
+  also when the restore failed. A merge ends with `merged.`.

@@ -122,12 +122,13 @@ def test_the_token_never_appears_when_sonar_refuses_it(monkeypatch, capsys):
 
 
 def test_gate_goes_off_then_merge_then_on_then_log(capsys):
-    """#37 rule 4, #73 rule 4: off, merge, on, in this order, and the closing line names the release that works."""
+    """Off, merge, on, in this order, and the door's last word is merged."""
     gh = FakeGh()
-    assert drive(gh)[0] == 0
+    assert drive(gh, when_asked=capsys.readouterr)[0] == 0
     assert gh.sequence == ["gate false", "merge", "gate true", "comment"]
-    assert gh.merge_calls == [("pr", "merge", "7", "--repo", REPO, "--merge", "--match-head-commit", SHA)]
-    assert 'aco release <n> --abandoned "landed as PR #7 by emergency-merge"' in capsys.readouterr().out
+    assert gh.merge_calls == [("pr", "merge", "7", "--repo", REPO, "--merge", "--match-head-commit", SHA, "--body-file", "-")]
+    after = capsys.readouterr()
+    assert (after.out, after.err) == ("merged.\n", "")
 
 
 def test_logs_who_and_the_legacy_count_on_the_pull_request():
@@ -325,7 +326,7 @@ def test_exit_2_loud_line_and_log_when_the_gate_cannot_be_restored(restore_failu
     original = gh.__call__
 
     def cannot_restore(arguments, stdin=None):
-        if stdin and json.loads(stdin)["properties"][0]["value"] == "true":
+        if FakeGh.step_of(arguments) == "gate" and json.loads(stdin)["properties"][0]["value"] == "true":
             raise restore_failure
         return original(arguments, stdin)
 
@@ -339,11 +340,11 @@ def test_exit_2_loud_line_and_log_when_the_gate_cannot_be_restored(restore_failu
 @pytest.mark.parametrize(
     ("gh_kwargs", "read_back_failure", "expected"),
     [
-        ({"merge_lands": True}, None, 'aco release <n> --abandoned "landed as PR #7 by emergency-merge"'),
+        ({"merge_lands": True}, None, "merged."),
         ({"fail_on": ["merge"]}, GhFailed("pull broke"), ") - check #7 on GitHub"),
         ({"fail_on": ["merge"]}, KeyboardInterrupt(), ") - check #7 on GitHub"),
         ({"fail_on": ["merge"]}, None, "not merged"),
-        ({"merge_lands": True, "fail_on": ["comment"]}, None, 'aco release <n> --abandoned "landed as PR #7 by emergency-merge"'),
+        ({"merge_lands": True, "fail_on": ["comment"]}, None, "merged."),
         ({"fail_on": ["merge", "comment"]}, None, "not merged"),
     ],
     ids=["merged", "unknown", "unknown, Ctrl-C", "not merged", "merged, comment fails", "not merged, comment fails"],
@@ -360,7 +361,7 @@ def test_names_the_merge_outcome_when_the_gate_cannot_be_restored(gh_kwargs, rea
         step = FakeGh.step_of(arguments)
         if step == "comment" or (gh.merge_calls and step == "pull"):
             warned_before_request.append("MAY STILL BE OFF" in "".join(printed))
-        if stdin and json.loads(stdin)["properties"][0]["value"] == "true":
+        if FakeGh.step_of(arguments) == "gate" and json.loads(stdin)["properties"][0]["value"] == "true":
             raise GhFailed("denied")
         if read_back_failure and gh.merge_calls and step == "pull":
             raise read_back_failure
@@ -397,7 +398,7 @@ def test_ctrl_c_while_posting_the_log_comment_is_reported(restore_fails, capsys)
     original = gh.__call__
 
     def cannot_restore(arguments, stdin=None):
-        if restore_fails and stdin and json.loads(stdin)["properties"][0]["value"] == "true":
+        if restore_fails and FakeGh.step_of(arguments) == "gate" and json.loads(stdin)["properties"][0]["value"] == "true":
             raise GhFailed("denied")
         return original(arguments, stdin)
 
@@ -471,7 +472,7 @@ def test_a_declared_loosening_merges_through_the_door_without_sonar(
     merge commit, an allowance's own among them, the door shows each declaration, then asks, merges with the head
     pinned, and logs it, with no SonarCloud request."""
     monkeypatch.delenv("SONAR_TOKEN", raising=False)
-    gh, transport, shown = FakeGh(checks=SONAR_GREEN, base_config=base_config, merge_config=merge_config), recording(sonar()), []
+    gh, transport, shown = FakeGh(checks=SONAR_GREEN, base_config=base_config, merge_config=merge_config, body="Work-Item: #9"), recording(sonar()), []
 
     def ask(prompt):
         shown.append(capsys.readouterr().out)
@@ -479,8 +480,8 @@ def test_a_declared_loosening_merges_through_the_door_without_sonar(
 
     code = cli.main(["emergency-merge", REPO, "7"], gh=gh, transport=transport, ask=ask, is_terminal=lambda: True)
     assert (code, transport.sent, gh.sequence) == (0, [], ["gate false", "merge", "gate true", "comment"])
-    assert shown[0].splitlines() == [f"{REPO} #7 head {SHA}: {len(declared)} declared loosening(s)", *declared, "merges with a merge commit"]
-    assert gh.merge_calls == [("pr", "merge", "7", "--repo", REPO, "--merge", "--match-head-commit", SHA)]
+    assert shown[0].splitlines() == [f"{REPO} #7 head {SHA}: {len(declared)} declared loosening(s)", *declared, "merges with a merge commit", "the merge commit ends with Work-Item: #9"]
+    assert gh.merge_calls == [("pr", "merge", "7", "--repo", REPO, "--merge", "--match-head-commit", SHA, "--body-file", "-")]
     assert f"{'; '.join(declared)}; merges with a merge commit; quality_gate off → merge → on." in gh.comments[0]
 
 
@@ -545,7 +546,7 @@ def test_every_line_the_door_prints_is_escaped(capsys, base_config, merge_config
     ids=["a merge commit", "a squash"],
 )
 def test_the_operator_reads_the_method_before_ja_and_the_log_comment_names_it(gh_kwargs, sentence, capsys):
-    """#146: the shown text ends with the method line, and the log comment carries it."""
+    """The shown text holds the method line, and the log comment carries it."""
     gh = FakeGh(**gh_kwargs)
     drive(gh)
     assert sentence in capsys.readouterr().out.splitlines()
@@ -553,7 +554,7 @@ def test_the_operator_reads_the_method_before_ja_and_the_log_comment_names_it(gh
 
 
 def merge_call(flag):
-    return ("pr", "merge", "7", "--repo", REPO, flag, "--match-head-commit", SHA)
+    return ("pr", "merge", "7", "--repo", REPO, flag, "--match-head-commit", SHA, "--body-file", "-")
 
 
 @pytest.mark.parametrize(
