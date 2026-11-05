@@ -38,6 +38,10 @@ def not_json_row(subject):
     return f"  ✗ {subject:<14}not judged     Expecting value: line 1 column 1 (char 0)"
 
 
+def not_json_answer(step):
+    return {"raw_answers": {step: "not json"}}
+
+
 def loosenings_none():
     return "  ✓ loosenings    none"
 
@@ -242,10 +246,10 @@ def test_each_refusal_is_its_row_and_the_pair(gh_kwargs, sonar_kwargs, rows, cap
             ],
         ),
         ({"body": ABSENT}, {}, [pull_row(), "  ✗ landing       not judged     GitHub's answer holds no 'body'"]),
-        ({"raw_answers": {"repository": "not json"}}, {}, [not_json_row("#7")]),
-        ({"raw_answers": {"pull": "not json"}}, {}, [not_json_row("#7")]),
-        ({"raw_answers": {"checks": "not json"}}, {}, [pull_row(), not_json_row("checks")]),
-        ({"raw_answers": {"statuses": "not json"}}, {}, [pull_row(), not_json_row("checks")]),
+        (not_json_answer("repository"), {}, [not_json_row("#7")]),
+        (not_json_answer("pull"), {}, [not_json_row("#7")]),
+        (not_json_answer("checks"), {}, [pull_row(), not_json_row("checks")]),
+        (not_json_answer("statuses"), {}, [pull_row(), not_json_row("checks")]),
     ],
     ids=[
         "no admin right", "gh fails on the pull request", "no merge commit", "sonar unreachable", "no method the door uses",
@@ -262,7 +266,8 @@ def test_a_step_that_cannot_be_judged_is_its_cross_row_and_the_pair(gh_kwargs, s
 
 def test_the_rows_name_the_pull_requests_base_not_the_default_branch(capsys):
     gh = FakeGh(base_ref="release/1")
-    assert run(gh, capsys) == (
+    shown = run(gh, capsys)
+    assert shown == (
         0,
         frame(
             "  · #7            open           head aaaaaaa · into release/1",

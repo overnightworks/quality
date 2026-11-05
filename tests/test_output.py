@@ -101,8 +101,8 @@ def test_a_line_below_a_sub_line_is_painted_as_a_rows_fact_is(whole):
     below_row = Row(Glyph.NEEDS_YOU, "loosenings", Event.CLEAN, sub_lines=(SubLine(Glyph.NEEDS_YOU, "what", whole=whole, below=("reason",)),))
     fact_channel = written(Terminal, lambda channel: output.write_rows((fact_row,), channel))
     below_channel = written(Terminal, lambda channel: output.write_rows((below_row,), channel))
-    start, end = re.fullmatch(r"  .*loosenings    clean          (\x1b\[[0-9;]*m)reason(\x1b\[[0-9;]*m)\n", fact_channel).groups()
-    assert below_channel == f"  \x1b[33m!\x1b[0m loosenings    clean\n    \x1b[33m!\x1b[0m what\n{start}        reason{end}\n"
+    glyph, start, end = re.fullmatch(r"  (\x1b\[[0-9;]*m!\x1b\[[0-9;]*m) loosenings    clean          (\x1b\[[0-9;]*m)reason(\x1b\[[0-9;]*m)\n", fact_channel).groups()
+    assert below_channel == f"  {glyph} loosenings    clean\n    {glyph} what\n{start}        reason{end}\n"
 
 
 def test_a_row_with_a_fix_ends_in_its_fix_line():
