@@ -447,7 +447,8 @@ def test_at_a_terminal_a_dry_run_keeps_the_plain_words(build_repo, capsys):
     repo = held_above(build_repo)
     piped = fixed(capsys, repo, *DRY_RUN_WORDS)
     code, frame = painted(repo)
-    assert (code, without_sgr(frame), capsys.readouterr().err) == piped
+    painted_run = (code, without_sgr(frame), capsys.readouterr().err)
+    assert painted_run == piped
 
 
 def test_a_dry_run_beside_a_grown_entry_with_nothing_to_change_says_so_and_writes_nothing(build_repo, capsys):
