@@ -157,7 +157,7 @@ class Door:
         return [*self.legacy_count, *map(described, self.declared)]
 
     def shown(self) -> tuple[str, ...]:
-        """What the operator reads before typing the word: the counts, each declaration, then the merge method."""
+        """What the operator reads before typing the word: the counts, each declaration, the merge method, then the merge commit's last line."""
         declared = [f"{len(self.declared)} declared loosening(s)"] if self.declared else []
         heading = f"{self.repository} #{self.pull_request} head {self.head_sha}: {', '.join([*self.legacy_count, *declared])}"
         return (heading, *map(described, self.declared), self.merge_method.description, f"the merge commit ends with {self.landing.trailer}")

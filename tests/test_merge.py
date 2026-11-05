@@ -545,7 +545,7 @@ def test_every_line_the_door_prints_is_escaped(capsys, base_config, merge_config
     ids=["a merge commit", "a squash"],
 )
 def test_the_operator_reads_the_method_before_ja_and_the_log_comment_names_it(gh_kwargs, sentence, capsys):
-    """#146: the shown text holds the method line, and the log comment carries it."""
+    """the shown text holds the method line, and the log comment carries it."""
     gh = FakeGh(**gh_kwargs)
     drive(gh)
     assert sentence in capsys.readouterr().out.splitlines()
