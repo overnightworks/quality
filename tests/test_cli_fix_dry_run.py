@@ -249,6 +249,17 @@ def a_path_no_ceiling_can_hold(build_repo, elsewhere) -> Path:
     return build_repo({"src/a.py": "x = 1\n", os.fsdecode(b"src/\xff.py"): long_file(850)})
 
 
+def a_path_no_ceiling_can_hold_beside_a_held_ceiling(build_repo, elsewhere) -> Path:
+    return build_repo(
+        {
+            "src/a.py": "x = 1\n",
+            "tests/test_a.py": clone_function("run", "a", "b"),
+            os.fsdecode(b"tests/test_b\xff.py"): clone_function("check", "c", "d"),
+            BASELINE_PATH: "[file_lines]\n",
+        }
+    )
+
+
 def a_config_refusal(build_repo, elsewhere) -> Path:
     return build_repo({"src/a.py": long_function(62), CONFIG_PATH: "nope = 1\n", BASELINE_PATH: ceiling("[file_lines]\n")})
 
@@ -264,6 +275,11 @@ def a_config_refusal(build_repo, elsewhere) -> Path:
         pytest.param(a_shallow_clone_whose_ceiling_was_last_changed_at_its_root, "git fetch --unshallow", id="shallow, the lineage"),
         pytest.param(a_file_that_does_not_parse, "fix what the ✗ rows name, then run quality check --fix --dry-run again", id="a file that does not parse"),
         pytest.param(a_path_no_ceiling_can_hold, "fix what the ✗ rows name, then run quality check --fix --dry-run again", id="a path no ceiling can hold"),
+        pytest.param(
+            a_path_no_ceiling_can_hold_beside_a_held_ceiling,
+            "fix what the ✗ rows name, then run quality check --fix --dry-run again",
+            id="a path no ceiling can hold beside a held ceiling",
+        ),
         pytest.param(a_config_refusal, "fix what the ✗ rows name, then run quality check --fix --dry-run again", id="a config refusal"),
     ],
 )
@@ -339,3 +355,11 @@ def test_a_dry_run_beside_a_grown_entry_with_nothing_to_change_says_so_and_write
         "! 1 finding in 1 area · <1s\n"
     )
     assert (*fixed(capsys, repo, *DRY_RUN_WORDS), untouched(repo)) == (1, printed, "", before)
+
+
+def test_a_debt_row_that_would_change_is_not_counted_among_the_clean_areas(build_repo, capsys):
+    repo = build_repo({"src/a.py": long_function(62), BASELINE_PATH: ceiling('[function_lines."src/a.py"]\nlong_one = 80\n')})
+    put(repo / ".env", "SECRET=1\n")
+    git(repo, "add", ".env")
+    code, out, _ = fixed(capsys, repo, "check", "files", "debt", "--fix", "--dry-run")
+    assert (code, out.splitlines()[-1]) == (1, "! 2 findings in 1 area · 1 ceiling entry would fall · nothing written · <1s")

@@ -282,7 +282,7 @@ def _refuse_what_check_does_not_take(arguments: argparse.Namespace) -> None:
         raise CannotJudge(f"{DRY_RUN_WORD} needs --fix{SEPARATOR}nothing checked", (Command(DRY_RUN_COMMAND),))
     dry_run = f" {DRY_RUN_WORD}" if arguments.dry_run else ""
     if arguments.fix and arguments.staged:
-        rerun = RERUN_COMMAND[Fix.DRY_RUN if arguments.dry_run else Fix.WRITE]
+        rerun = RERUN_COMMAND[_fix_mode(arguments)]
         raise CannotJudge(f"--fix does not take --staged{SEPARATOR}nothing checked", (Command(rerun),))
     if arguments.fix and arguments.areas and Area.DEBT not in arguments.areas:
         raise CannotJudge(f"--fix changes only the debt ceiling{SEPARATOR}nothing checked", (Command(f"quality check debt --fix{dry_run}"),))
@@ -383,7 +383,7 @@ def _lowered_fact(ceiling: ratchet.CeilingFix | DryRun) -> str:
 
 
 def _recorded_extent(fix: ratchet.CeilingFix) -> str:
-    return f"{counted(len(fix.ceiling.size), 'entry', 'entries')}, {counted(len(fix.ceiling.clones), 'clone pair')}"
+    return f"{counted(len(fix.ceiling.size), 'entry', 'entries')}, {counted(len(fix.ceiling.clones), CLONE_PAIR)}"
 
 
 def _planned_row(area: Area, fix: ratchet.CeilingFix) -> Row | None:
