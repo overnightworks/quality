@@ -19,3 +19,8 @@ def generated_config(
         for key, value in values.items() if value is not None
     )
     return "[[size.generated]]\n" + entries
+
+
+def gate_declaring(path: str) -> str:
+    """A config whose gate names the mandatory job and declares `path` generated."""
+    return f'[gate]\nmandatory_jobs = ["{MANDATORY_JOB}"]\n' + generated_config(path=path)

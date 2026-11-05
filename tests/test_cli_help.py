@@ -9,7 +9,7 @@ import quality
 from quality import cli, ratchet, report, staged
 from quality.output import SEPARATOR
 from quality.rules import Area
-from tests.support.door import CHECK_WORD, FIX_WORDS, MODULE_DOOR, STAGED_WORDS, door_environment
+from tests.support.door import CHECK_WORD, DRY_RUN_WORDS, FIX_WORDS, MODULE_DOOR, STAGED_WORDS, door_environment
 from tests.support.terminal import Terminal, without_sgr
 
 
@@ -76,7 +76,7 @@ def test_the_check_help_stands_in_the_pictures_frame(capsys):
     areas = lines[lines.index("Areas (default: all):") + 1 : lines.index("Options:") - 1]
     options = lines[lines.index("Options:") + 1 : -2]
     assert (lines[0], lines[2], headings(lines), areas, options, lines[-1], max(len(line) for line in lines) <= 80) == (
-        "usage: quality check [AREA ...] [--staged] [--fix] [-v]",
+        "usage: quality check [AREA ...] [--staged] [--fix] [--dry-run] [-v]",
         "Check this repository against the fleet's rules.",
         ["Areas (default: all):", "Options:"],
         [
@@ -95,6 +95,7 @@ def test_the_check_help_stands_in_the_pictures_frame(capsys):
             "                hook runs: quality check secrets --staged",
             "  --fix         lower the debt ceiling (quality/baseline.toml) where code",
             "                shrank, or record it the first time; never raises it",
+            "  --dry-run     with --fix: show what would change, write nothing",
             "  -v            show the raw scanner output, never a secret",
             "  -h, --help    show this help",
         ],
@@ -111,7 +112,7 @@ def test_each_area_has_one_entry_in_the_check_help(capsys):
 
 def test_the_check_entry_names_its_areas_in_the_top_level_help(capsys):
     lines = help_of(capsys, []).splitlines()
-    assert "  check [AREA ...] [--staged] [--fix]" in entries_under(lines, "Commands:")
+    assert "  check [AREA ...] [--staged] [--fix] [--dry-run]" in entries_under(lines, "Commands:")
 
 
 def test_every_command_path_stands_in_the_help_once_and_every_entry_is_one(capsys):
@@ -334,7 +335,11 @@ def test_staged_outside_secrets_is_the_pair_and_runs_nothing(capsys, words):
     ("words", "fact", "step"),
     [
         pytest.param(["--fix", "--staged"], "--fix does not take --staged", "quality check --fix", id="staged"),
+        pytest.param(["--fix", "--dry-run", "--staged"], "--fix does not take --staged", "quality check --fix --dry-run", id="staged, dry run"),
         pytest.param(["--fix", "secrets"], "--fix changes only the debt ceiling", "quality check debt --fix", id="an area other than debt"),
+        pytest.param(
+            ["--fix", "--dry-run", "secrets"], "--fix changes only the debt ceiling", "quality check debt --fix --dry-run", id="another area, dry run"
+        ),
         pytest.param(["--fix", "files", "secrets"], "--fix changes only the debt ceiling", "quality check debt --fix", id="two other areas"),
     ],
 )
@@ -347,7 +352,6 @@ def test_a_fix_beside_what_it_cannot_change_is_the_pair_and_runs_nothing(capsys,
 @pytest.mark.parametrize(
     ("words", "pair"),
     [
-        pytest.param(["check", "--dry-run"], "error: unknown argument · --dry-run\nnext: quality check --help\n", id="the dry run"),
         pytest.param(["baseline", "write", "."], "error: no command baseline · commands: {commands}\nnext: quality --help\n", id="the word that left"),
     ],
 )
@@ -355,6 +359,25 @@ def test_the_words_that_are_not_the_fix_are_refused(capsys, words, pair):
     code = cli.main(words, environment={})
     printed = capsys.readouterr()
     assert (code, printed.out, printed.err) == (2, "", pair.format(commands=commands_of()))
+
+
+@pytest.mark.parametrize(
+    "words",
+    [
+        pytest.param(["--dry-run"], id="alone"),
+        pytest.param(["debt", "--dry-run"], id="beside debt"),
+        pytest.param(["secrets", "--staged", "--dry-run"], id="beside secrets --staged"),
+        pytest.param(["--dry-run", "--staged"], id="before --staged"),
+    ],
+)
+def test_a_dry_run_without_the_fix_is_the_pair_and_runs_nothing(capsys, words):
+    code = cli.main(["check", *words], environment={})
+    printed = capsys.readouterr()
+    assert (code, printed.out, printed.err) == (2, "", "error: --dry-run needs --fix · nothing checked\nnext: quality check --fix --dry-run\n")
+
+
+def test_the_dry_run_words_are_the_commands_words():
+    assert cli.DRY_RUN_COMMAND.replace(CHECK_WORD, " ".join(DRY_RUN_WORDS[:2])) == f"quality {' '.join(DRY_RUN_WORDS)}"
 
 
 def test_the_fix_words_are_the_commands_words():
