@@ -28,6 +28,8 @@ from tests.support.merge import NO_BODY, REPO, SHA, FakeGh, changed_nothing, dri
         ("```\nWork-Item: #1\n   ```\nWork-Item: #9", "```\nWork-Item: #1\n   ```\n\nWork-Item: #9"),
         ("```\nWork-Item: #1\n```  \t\nWork-Item: #9", "```\nWork-Item: #1\n```\n\nWork-Item: #9"),
         ("``\nWork-Item: #9", "``\n\nWork-Item: #9"),
+        ("~~\nWork-Item: #9", "~~\n\nWork-Item: #9"),
+        ("    ```\nWork-Item: #9", "```\n\nWork-Item: #9"),
         ("Why.\r\nWork-Item: #9\r\nCloses #9", "Why.\nCloses #9\n\nWork-Item: #9"),
         ("Why.\n \t\nWork-Item: #9\n\nCloses #9", "Why.\n \t\nCloses #9\n\nWork-Item: #9"),
         ("Why.\n\nWork-Item: #9\n \t\nCloses #9", "Why.\n\nCloses #9\n\nWork-Item: #9"),
@@ -46,7 +48,7 @@ from tests.support.merge import NO_BODY, REPO, SHA, FakeGh, changed_nothing, dri
         "key and kind in any case", "a fenced example beside the live line", "a shorter run inside a longer fence",
         "a tilde fence a backtick run does not close", "a closing run with an info string closes nothing",
         "a fence left open runs to the end", "a longer closing run closes", "a fence opened three spaces in", "a fence closed three spaces in",
-        "a closing run followed by blanks closes", "a two character run opens no fence", "carriage returns end lines like line feeds",
+        "a closing run followed by blanks closes", "a two character run opens no fence", "a two character tilde run opens no fence", "a four space run opens no fence", "carriage returns end lines like line feeds",
         "a whitespace-only line before the line counts as blank", "a whitespace-only line after the line counts as blank", "outer spaces of the rest are dropped",
         "a multi-digit item", "a multi-digit item of this repository", "no item docs", "no item deps", "a body ending in a trailer paragraph",
     ],
@@ -63,20 +65,19 @@ def test_a_squash_ends_with_the_same_line():
     assert gh.merge_calls[0][5:] == ("--squash", "--match-head-commit", SHA, "--body-file", "-")
 
 
-REFUSED_NO_LINE = "emergency-merge: refused - the pull request body carries no Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"
-REFUSED_TWO_LINES = "emergency-merge: refused - the pull request body carries 2 Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"
-
 
 @pytest.mark.parametrize(
     ("body", "line"),
     [
-        ("", REFUSED_NO_LINE),
-        (None, REFUSED_NO_LINE),
-        ("```\nWork-Item: #9\n```", REFUSED_NO_LINE),
-        ("  Work-Item: #9", REFUSED_NO_LINE),
-        ("Work-Item: #9\nWork-Item: #8", REFUSED_TWO_LINES),
-        ("Work-Item: #9\nNo-Item: fix", REFUSED_TWO_LINES),
-        ("Work-Item:\nWork-Item: #9", REFUSED_TWO_LINES),
+        ("", "emergency-merge: refused - the pull request body carries no Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"),
+        (None, "emergency-merge: refused - the pull request body carries no Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"),
+        ("```\nWork-Item: #9\n```", "emergency-merge: refused - the pull request body carries no Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"),
+        ("  Work-Item: #9", "emergency-merge: refused - the pull request body carries no Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"),
+        ("```\nWork-Item: #1\n    ```\nWork-Item: #9", "emergency-merge: refused - the pull request body carries no Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"),
+        ("```\nWork-Item: #1\n```\N{NO-BREAK SPACE}\nWork-Item: #9", "emergency-merge: refused - the pull request body carries no Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"),
+        ("Work-Item: #9\nWork-Item: #8", "emergency-merge: refused - the pull request body carries 2 Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"),
+        ("Work-Item: #9\nNo-Item: fix", "emergency-merge: refused - the pull request body carries 2 Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"),
+        ("Work-Item:\nWork-Item: #9", "emergency-merge: refused - the pull request body carries 2 Work-Item: or No-Item: lines outside code blocks; the merge commit ends with exactly one"),
         ("Work-Item: 9", "emergency-merge: refused - the pull request body carries Work-Item: 9; a work item reads OWNER/REPO#n or #n"),
         ("Work-Item: #9\N{NO-BREAK SPACE}", "emergency-merge: refused - the pull request body carries Work-Item: #9\N{NO-BREAK SPACE}; a work item reads OWNER/REPO#n or #n"),
         ("No-Item: chore", "emergency-merge: refused - the pull request body carries No-Item: chore; an issue-less pull request is deps, docs, fix"),
@@ -84,7 +85,7 @@ REFUSED_TWO_LINES = "emergency-merge: refused - the pull request body carries 2 
         ("Work-Item: #9\x1b[8m\N{RIGHT-TO-LEFT OVERRIDE}", "emergency-merge: refused - the pull request body carries Work-Item: #9\\x1b[8m\\u202e; a work item reads OWNER/REPO#n or #n"),
     ],
     ids=[
-        "empty", "null", "only fenced", "indented", "two work items", "a work item and a no item", "an empty value counts as a line", "malformed work item",
+        "empty", "null", "only fenced", "indented", "a four space run closes nothing", "a closing run followed by a no-break space closes nothing", "two work items", "a work item and a no item", "an empty value counts as a line", "malformed work item",
         "a no-break space is no trimmed whitespace", "unknown kind", "another repository", "a control character in the value",
     ],
 )
