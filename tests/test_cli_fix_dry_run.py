@@ -2,7 +2,6 @@
 
 import contextlib
 import os
-import re
 from pathlib import Path
 
 import pytest
@@ -12,9 +11,9 @@ from quality.ratchet import BASELINE_PATH
 from tests.support.clones import function as clone_function
 from tests.support.door import DRY_RUN_WORDS, FIX_WORDS, door_in, fixed, restore_step, tree_of
 from tests.support.generated_files import gate_declaring
-from tests.support.git_repositories import git, put, shallow_clone
+from tests.support.git_repositories import git, head_commit, put, shallow_clone
 from tests.support.source_code import branchy_function, long_file, long_function
-from tests.support.terminal import Terminal, without_sgr
+from tests.support.terminal import Terminal, by_role, without_sgr
 
 
 def ceiling(table: str) -> str:
@@ -57,6 +56,13 @@ def a_stale_target(build_repo) -> Path:
     repo = build_repo({"src/old.py": long_function(100), BASELINE_PATH: held})
     git(repo, "mv", "src/old.py", "src/new.py")
     put(repo / "src/new.py", long_function(150))
+    return repo
+
+
+def a_rename_over_a_stale_target_that_is_generated(build_repo) -> Path:
+    held = ceiling('[function_lines."src/old.py"]\nlong_one = 100\n\n[function_lines."src/new.py"]\nlong_one = 200\n')
+    repo = build_repo({"src/old.py": long_function(100), CONFIG_PATH: gate_declaring("src/new.py"), BASELINE_PATH: held})
+    git(repo, "mv", "src/old.py", "src/new.py")
     return repo
 
 
@@ -141,6 +147,15 @@ def a_move_beside_a_grown_entry(build_repo) -> Path:
             id="the stale target",
         ),
         pytest.param(
+            a_rename_over_a_stale_target_that_is_generated,
+            "  ~ debt          2 to lower     quality/baseline.toml\n"
+            "    ~ src/new.py  move  function long_one 100 lines from src/old.py\n"
+            "    ~ src/new.py  drop  function long_one 200 lines · left from before the move\n"
+            "    ~ src/new.py  drop  function long_one is left out as generated · was 100 lines\n"
+            "~ dry run · 2 ceiling entries would fall · nothing written · <1s\n",
+            id="a rename over a stale target that is generated",
+        ),
+        pytest.param(
             a_move_beside_a_grown_entry,
             "  ! debt          1 finding      1 to move · quality/baseline.toml\n"
             "    ! src/other.py  grew  file has 850 lines · ceiling 810\n"
@@ -164,6 +179,12 @@ def a_move_beside_a_grown_entry(build_repo) -> Path:
             "  ~ debt          to record      1 entry, 0 clone pairs · quality/baseline.toml would be new\n"
             "~ dry run · ceiling would be recorded · nothing written · <1s\n",
             id="a first recording",
+        ),
+        pytest.param(
+            holding({"src/a.py": long_function(62), "tests/test_a.py": clone_function("run", "a", "b"), "tests/test_b.py": clone_function("check", "c", "d")}),
+            "  ~ debt          to record      1 entry, 1 clone pair · quality/baseline.toml would be new\n"
+            "~ dry run · ceiling would be recorded · nothing written · <1s\n",
+            id="a first recording with a clone pair",
         ),
     ],
 )
@@ -259,43 +280,103 @@ def a_config_refusal(build_repo, elsewhere) -> Path:
     return build_repo({"src/a.py": long_function(62), CONFIG_PATH: "nope = 1\n", BASELINE_PATH: ceiling("[file_lines]\n")})
 
 
+def a_committed_ceiling_that_does_not_parse_repaired_in_the_tree(build_repo, elsewhere) -> Path:
+    repo = build_repo({"src/a.py": long_function(62), BASELINE_PATH: "[file_lines\n"})
+    put(repo / BASELINE_PATH, ceiling("[file_lines]\n"))
+    return repo
+
+
+UNSHALLOW = "error: 1 of 1 area could not check\nnext: git fetch --unshallow\n"
+RESTORE = f"error: 1 of 1 area could not check\nnext: {restore_step()}\n"
+REPAIR_ROWS = "error: 1 of 1 area could not check\nnext: fix what the ✗ rows name, then run quality check --fix --dry-run again\n"
+SHALLOW_NEW = "  ✗ debt          not fixed      this clone is shallow, so git cannot show the ceiling is new\n"
+NO_TOML = "  ✗ debt          not checked    quality/baseline.toml is not valid TOML (Expected ']' at the end of a table declaration (at line 1, column 12))\n"
+
+
 @pytest.mark.parametrize(
-    ("arrange", "step"),
+    ("arrange", "out", "err"),
     [
-        pytest.param(shallow_clone_holding({"src/a.py": long_function(62)}), "git fetch --unshallow", id="shallow"),
-        pytest.param(a_ceiling_git_holds, restore_step(), id="the ceiling git holds"),
-        pytest.param(a_ceiling_that_is_no_toml, restore_step(), id="no TOML"),
-        pytest.param(a_clones_table_git_holds, restore_step(), id="a clones table git holds"),
-        pytest.param(shallow_clone_holding({"src/a.py": "x = 1\n", BASELINE_PATH: "[file_lines]\n"}), "git fetch --unshallow", id="shallow, a ceiling without a table"),
-        pytest.param(shallow_clone_holding({"src/a.py": "x = 1\n", BASELINE_PATH: ceiling("[file_lines]\n")}), "git fetch --unshallow", id="shallow, the lineage"),
-        pytest.param(a_file_that_does_not_parse, "fix what the ✗ rows name, then run quality check --fix --dry-run again", id="a file that does not parse"),
-        pytest.param(a_path_no_ceiling_can_hold, "fix what the ✗ rows name, then run quality check --fix --dry-run again", id="a path no ceiling can hold"),
+        pytest.param(shallow_clone_holding({"src/a.py": long_function(62)}), SHALLOW_NEW, UNSHALLOW, id="shallow"),
+        pytest.param(
+            a_ceiling_git_holds,
+            "  ✗ debt          not fixed      quality/baseline.toml is gone from the tree but git holds it\n", RESTORE, id="the ceiling git holds",
+        ),
+        pytest.param(a_ceiling_that_is_no_toml, NO_TOML, RESTORE, id="no TOML"),
+        pytest.param(
+            a_clones_table_git_holds,
+            "  ✗ debt          not fixed      quality/baseline.toml lost its [clones] table, which git holds\n", RESTORE, id="a clones table git holds",
+        ),
+        pytest.param(shallow_clone_holding({"src/a.py": "x = 1\n", BASELINE_PATH: "[file_lines]\n"}), SHALLOW_NEW, UNSHALLOW, id="shallow, a ceiling without a table"),
+        pytest.param(
+            shallow_clone_holding({"src/a.py": "x = 1\n", BASELINE_PATH: ceiling("[file_lines]\n")}),
+            "  ✗ debt          not fixed      this clone is shallow, so git cannot show where quality/baseline.toml last changed\n",
+            UNSHALLOW,
+            id="shallow, the lineage",
+        ),
+        pytest.param(
+            a_file_that_does_not_parse,
+            "  ✗ debt          not checked    src/broken.py is not valid Python (invalid syntax (broken.py, line 1))\n",
+            REPAIR_ROWS,
+            id="a file that does not parse",
+        ),
+        pytest.param(
+            a_path_no_ceiling_can_hold,
+            "  ✗ debt          not fixed      src/\\udcff.py is not valid UTF-8, so quality/baseline.toml cannot hold it\n",
+            REPAIR_ROWS,
+            id="a path no ceiling can hold",
+        ),
         pytest.param(
             a_path_no_ceiling_can_hold_beside_a_held_ceiling,
-            "fix what the ✗ rows name, then run quality check --fix --dry-run again",
+            "  ✗ debt          not fixed      tests/test_b\\udcff.py is not valid UTF-8, so quality/baseline.toml cannot hold it\n",
+            REPAIR_ROWS,
             id="a path no ceiling can hold beside a held ceiling",
         ),
-        pytest.param(a_config_refusal, "fix what the ✗ rows name, then run quality check --fix --dry-run again", id="a config refusal"),
+        pytest.param(
+            a_config_refusal,
+            "  ✗ debt          not checked    quality/config.toml has unknown key nope - only [gate] mandatory_jobs, [gate] legacy, [[gate.loosened]], "
+            "[secrets] allow, [[advisories.allow]], [[root.allow]], [[layout.allow]], [[python.allow]], [[compose.allow]] and [[size.generated]] exist\n",
+            REPAIR_ROWS,
+            id="a config refusal",
+        ),
+        pytest.param(
+            a_committed_ceiling_that_does_not_parse_repaired_in_the_tree,
+            "  ✗ debt          not fixed      the ceiling at its last commit {commit}: quality/baseline.toml is not valid TOML "
+            "(Expected ']' at the end of a table declaration (at line 1, column 12))\n"
+            "    ! src/a.py:1  new debt  function long_one has 62 lines · debt from 60 lines\n"
+            "      fix: split the function below 60 lines\n",
+            "error: 1 of 1 area could not check · 1 finding, 1 of them in those areas\n"
+            "next: commit the repaired quality/baseline.toml, then run quality check --fix --dry-run again\n",
+            id="a committed ceiling that does not parse",
+        ),
     ],
 )
-def test_a_dry_run_refuses_where_the_fix_refuses_before_writing(build_repo, elsewhere, capsys, arrange, step):
+def test_a_dry_run_refuses_where_the_fix_refuses_before_writing(build_repo, elsewhere, capsys, arrange, out, err):
     repo = arrange(build_repo, elsewhere)
     before = untouched(repo)
-    code, out, err = fixed(capsys, repo, *DRY_RUN_WORDS)
-    assert (code, err, untouched(repo)) == (2, f"error: 1 of 1 area could not check\nnext: {step}\n", before)
-    refused = fixed(capsys, repo, *FIX_WORDS)
-    assert (refused[0], refused[1]) == (2, out)
+    expected_out = out.replace("{commit}", head_commit(repo))
+    assert (*fixed(capsys, repo, *DRY_RUN_WORDS), untouched(repo)) == (2, expected_out, err, before)
+    assert fixed(capsys, repo, *FIX_WORDS)[:2] == (2, expected_out)
 
 
 @pytest.mark.parametrize(
-    ("arrange", "printed", "refusal"),
+    ("arrange", "printed", "refused"),
     [
         pytest.param(
             held_above,
             "  ~ debt          1 to lower     quality/baseline.toml\n"
             "    ~ src/a.py:1  lower  function long_one 80 → 62 lines\n"
             "~ dry run · 1 ceiling entry would fall · nothing written · <1s\n",
-            "[Errno 13]",
+            (
+                (
+                    "  ✗ debt          not fixed      cannot write quality/baseline.toml: [Errno 13] Permission denied\n"
+                    "    ! src/a.py:1  can fall  function long_one has 62 lines · ceiling 80\n"
+                    "      fix: quality check --fix\n"
+                ),
+                (
+                    "error: 1 of 1 area could not check · 1 finding, 1 of them in those areas\n"
+                    "next: fix what the ✗ rows name, then run quality check --fix again\n"
+                ),
+            ),
             marks=pytest.mark.skipif(os.geteuid() == 0, reason="root writes a mode-0444 file"),
             id="a read-only ceiling and folder",
         ),
@@ -303,12 +384,15 @@ def test_a_dry_run_refuses_where_the_fix_refuses_before_writing(build_repo, else
             holding({"src/a.py": long_function(62), "quality": "not a folder\n"}),
             "  ~ debt          to record      1 entry, 0 clone pairs · quality/baseline.toml would be new\n"
             "~ dry run · ceiling would be recorded · nothing written · <1s\n",
-            "[Errno 17]",
+            (
+                "  ✗ debt          not fixed      cannot write quality/baseline.toml: [Errno 17] File exists\n",
+                "error: 1 of 1 area could not check\nnext: fix what the ✗ rows name, then run quality check --fix again\n",
+            ),
             id="quality is a file",
         ),
     ],
 )
-def test_a_dry_run_attempts_no_write(build_repo, capsys, request, arrange, printed, refusal):
+def test_a_dry_run_attempts_no_write(build_repo, capsys, request, arrange, printed, refused):
     repo = arrange(build_repo)
     if (repo / BASELINE_PATH).exists():
         (repo / BASELINE_PATH).chmod(0o444)
@@ -316,8 +400,7 @@ def test_a_dry_run_attempts_no_write(build_repo, capsys, request, arrange, print
         request.addfinalizer(lambda: (repo / BASELINE_PATH).parent.chmod(0o755))
     before = untouched(repo)
     assert (*fixed(capsys, repo, *DRY_RUN_WORDS), untouched(repo)) == (1, printed, "", before)
-    code, out, _ = fixed(capsys, repo, *FIX_WORDS)
-    assert (code, refusal in out, untouched(repo)) == (2, True, before)
+    assert (*fixed(capsys, repo, *FIX_WORDS), untouched(repo)) == (2, *refused, before)
 
 
 def test_another_areas_refusal_leaves_the_dry_run_standing(build_repo, capsys):
@@ -325,20 +408,27 @@ def test_another_areas_refusal_leaves_the_dry_run_standing(build_repo, capsys):
     put(repo / "compose.yaml", "services: [\n")
     git(repo, "add", "compose.yaml")
     before = untouched(repo)
-    code, out, err = fixed(capsys, repo, "check", "files", "debt", "--fix", "--dry-run")
-    assert (code, "  ~ debt          1 to lower     quality/baseline.toml\n" in out, untouched(repo)) == (2, True, before)
-    assert err.endswith("next: fix what the ✗ rows name, then run quality check --fix --dry-run again\n")
+    printed = (
+        "  ✗ files         not checked    cannot read compose.yaml: line 2, column 1: while parsing a flow node, expected the node content, but found '<stream end>'\n"
+        "  ~ debt          1 to lower     quality/baseline.toml\n"
+        "    ~ src/a.py:1  lower  function long_one 80 → 62 lines\n"
+    )
+    err = "error: 1 of 2 areas could not check\nnext: fix what the ✗ rows name, then run quality check --fix --dry-run again\n"
+    assert (*fixed(capsys, repo, "check", "files", "debt", "--fix", "--dry-run"), untouched(repo)) == (2, printed, err, before)
 
 
-def test_at_a_terminal_a_dry_run_paints_its_glyphs_and_keeps_the_plain_words(build_repo, capsys):
-    repo = held_above(build_repo)
-    piped = fixed(capsys, repo, *DRY_RUN_WORDS)
+def painted(repo: Path) -> tuple[int, str]:
     stdout = Terminal()
     with contextlib.redirect_stdout(stdout):
         code = door_in(repo, *DRY_RUN_WORDS, clock=lambda: 0.0, environment={"TERM": "xterm"})
-    foreground_colour_before_the_glyph = re.search(r"\x1b\[3[0-7]m~", stdout.getvalue())
-    terminal = (code, without_sgr(stdout.getvalue()), capsys.readouterr().err)
-    assert (foreground_colour_before_the_glyph is not None, terminal) == (True, piped)
+    return code, stdout.getvalue()
+
+
+def test_at_a_terminal_a_dry_run_keeps_the_plain_words(build_repo, capsys):
+    repo = held_above(build_repo)
+    piped = fixed(capsys, repo, *DRY_RUN_WORDS)
+    code, frame = painted(repo)
+    assert (code, without_sgr(frame), capsys.readouterr().err) == piped
 
 
 def test_a_dry_run_beside_a_grown_entry_with_nothing_to_change_says_so_and_writes_nothing(build_repo, capsys):
@@ -357,20 +447,35 @@ def test_a_debt_row_that_would_change_is_not_counted_among_the_clean_areas(build
     repo = held_above(build_repo)
     put(repo / ".env", "SECRET=1\n")
     git(repo, "add", ".env")
-    code, out, _ = fixed(capsys, repo, "check", "files", "debt", "--fix", "--dry-run")
-    assert (code, out.splitlines()[-1]) == (1, "! 2 findings in 1 area · 1 ceiling entry would fall · nothing written · <1s")
+    printed = (
+        "  ! files         2 findings\n"
+        "    ! .env  tracked   an env file carries configuration, often secrets\n"
+        "      fix: git --literal-pathspecs rm --cached -- .env, then add .env to .gitignore\n"
+        "    ! .env  unlisted  not on quality's base list\n"
+        "      fix: move it to its owner's directory, or declare it in quality/config.toml with [[root.allow]], an entry and a reason\n"
+        "  ~ debt          1 to lower     quality/baseline.toml\n"
+        "    ~ src/a.py:1  lower  function long_one 80 → 62 lines\n"
+        "! 2 findings in 1 area · 1 ceiling entry would fall · nothing written · <1s\n"
+    )
+    assert fixed(capsys, repo, "check", "files", "debt", "--fix", "--dry-run") == (1, printed, "")
 
 
 def test_a_dry_run_that_would_change_the_file_exits_one_beside_an_area_that_only_measures(build_repo, capsys):
     repo = held_above(build_repo)
-    code, out, _ = fixed(capsys, repo, "check", "imports", "debt", "--fix", "--dry-run")
-    assert (code, out.splitlines()[-1]) == (1, "~ dry run · 1 ceiling entry would fall · nothing written · imports not enforced · <1s")
+    printed = (
+        "  ~ debt          1 to lower     quality/baseline.toml\n"
+        "    ~ src/a.py:1  lower  function long_one 80 → 62 lines\n"
+        "  · imports       not set up     no import-linter config\n"
+        "~ dry run · 1 ceiling entry would fall · nothing written · imports not enforced · <1s\n"
+    )
+    assert fixed(capsys, repo, "check", "imports", "debt", "--fix", "--dry-run") == (1, printed, "")
 
 
-def test_at_a_terminal_a_dry_runs_verdict_is_bold_cyan_and_its_sub_lines_cyan(build_repo):
-    repo = held_above(build_repo)
-    stdout = Terminal()
-    with contextlib.redirect_stdout(stdout):
-        door_in(repo, *DRY_RUN_WORDS, clock=lambda: 0.0, environment={"TERM": "xterm"})
-    lines = stdout.getvalue().splitlines()
-    assert ("\x1b[1;36m~ dry run" in lines[-1], "\x1b[36m~\x1b[0m src/a.py:1" in lines[1]) == (True, True)
+def test_at_a_terminal_a_dry_run_paints_each_glyph_and_the_verdict_in_one_colour_and_the_rest_in_others(build_repo):
+    code, frame = painted(held_above(build_repo))
+    printed = (
+        "  {glyph}~{reset} debt          1 to lower     {other}quality/baseline.toml{reset}\n"
+        "    {glyph}~{reset} src/a.py:1  lower  {other}function long_one 80 → 62 lines{reset}\n"
+        "{verdict}~ dry run{reset} · {other}1 ceiling entry would fall{reset} · {other}nothing written{reset} · {other}<1s{reset}\n"
+    )
+    assert (code, by_role(frame, "~")) == (1, printed)

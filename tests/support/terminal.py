@@ -6,6 +6,7 @@ import termios
 from pathlib import Path
 from typing import TextIO
 
+from quality.output import RESET
 from tests.support.door import check_door
 
 
@@ -97,3 +98,12 @@ class PseudoTerminal:
         if self._parent is not None:
             os.close(self._parent)
             self._parent = None
+
+
+def by_role(frame: str, glyph: str) -> str:
+    """`frame` with each escape sequence named for its role, read off the frame: the one before the first `glyph` is the
+    glyph's, the same foreground in bold is the verdict's, a reset is a reset and any other is another."""
+    foreground = re.search(rf"({SGR}){re.escape(glyph)}", frame)
+    assert foreground, "no painted glyph in the frame"
+    roles = {foreground[1]: "{glyph}", f"\x1b[1;{foreground[1][2:]}": "{verdict}", RESET: "{reset}"}
+    return re.sub(SGR, lambda sequence: roles.get(sequence[0], "{other}"), frame)

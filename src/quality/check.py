@@ -33,6 +33,7 @@ from quality.report import (
     CannotJudge,
     Extent,
     Finding,
+    Instruction,
     Note,
     NoteEvent,
     Reason,
@@ -156,6 +157,11 @@ class Fix(Enum):
 
     WRITE = auto()
     DRY_RUN = auto()
+
+
+DRY_RUN_WORD = "--dry-run"
+DRY_RUN_COMMAND = f"{ratchet.FIX_COMMAND} {DRY_RUN_WORD}"
+FIX_RUN_COMMAND = {Fix.WRITE: ratchet.FIX_COMMAND, Fix.DRY_RUN: DRY_RUN_COMMAND}
 
 
 PLANNED_EVENT = {
@@ -437,6 +443,10 @@ def _with_what_they_held(gone: dict[ratchet.Key, str], held: ratchet.SizeEntries
     return {key: SEPARATOR.join((why, f"was {key.metric.describe(held[key])}")) for key, why in gone.items()}
 
 
+def _commit_repair_step(fix: Fix | None) -> Instruction:
+    return Instruction(f"commit the repaired {ratchet.BASELINE_PATH}, then run {FIX_RUN_COMMAND.get(fix, ratchet.FIX_COMMAND)} again")
+
+
 def _ceiling_lineage(inputs: RunInputs) -> tuple[ratchet.Baseline, ratchet.Renames] | None:
     """The ceiling at its last commit and what git renamed from there to the index; None where no commit holds it."""
     change = checkout.last_change(inputs.root, ratchet.BASELINE_PATH)
@@ -455,7 +465,7 @@ def _ceiling_lineage(inputs: RunInputs) -> tuple[ratchet.Baseline, ratchet.Renam
     try:
         committed = ratchet.load_baseline(text)
     except ratchet.SizeError as error:
-        raise CannotJudge(f"the ceiling at its last commit {change.commit}: {error}", (ratchet.COMMIT_REPAIR_STEP,)) from error
+        raise CannotJudge(f"the ceiling at its last commit {change.commit}: {error}", (_commit_repair_step(inputs.fix),)) from error
     return committed, ratchet.renames_of(checkout.renamed_since(inputs.root, change.commit))
 
 

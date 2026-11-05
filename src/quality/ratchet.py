@@ -31,7 +31,6 @@ from quality.rules import Rule
 BASELINE_PATH = "quality/baseline.toml"
 FIX_COMMAND = "quality check --fix"
 RESTORE_STEP = Instruction(f"restore {BASELINE_PATH} from git, or repair it by hand")
-COMMIT_REPAIR_STEP = Instruction(f"commit the repaired {BASELINE_PATH}, then run {FIX_COMMAND} again")
 UNKNOWN_TABLE_HINT = "run the quality release your gate pins"
 RAISE_IS_BY_HAND = "a raise is a hand edit and a declared loosening"
 OCCURRENCE_MARK = "#"

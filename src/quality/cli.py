@@ -23,6 +23,9 @@ from quality import (
     staged,
 )
 from quality.check import (
+    DRY_RUN_COMMAND,
+    DRY_RUN_WORD,
+    FIX_RUN_COMMAND,
     AreaReport,
     AreaVerdict,
     CheckResult,
@@ -350,9 +353,7 @@ OFFLINE_AUDITS = "offline audits only"
 NO_CONFIG_FACT = "no import-linter config"
 MEASURED_ONLY_EVENT = {Area.DEBT: AreaEvent.NOT_RECORDED, Area.IMPORTS: AreaEvent.NOT_SET_UP}
 CHECK_COMMAND = "quality check"
-DRY_RUN_WORD = "--dry-run"
-DRY_RUN_COMMAND = f"{ratchet.FIX_COMMAND} {DRY_RUN_WORD}"
-RERUN_COMMAND = {None: CHECK_COMMAND, Fix.WRITE: ratchet.FIX_COMMAND, Fix.DRY_RUN: DRY_RUN_COMMAND}
+RERUN_COMMAND = {None: CHECK_COMMAND, **FIX_RUN_COMMAND}
 CLONE_PAIR = "clone pair"
 STAGED_CHANGE = "staged change"
 
