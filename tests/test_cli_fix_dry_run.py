@@ -286,56 +286,74 @@ def a_committed_ceiling_that_does_not_parse_repaired_in_the_tree(build_repo, els
     return repo
 
 
-UNSHALLOW = "error: 1 of 1 area could not check\nnext: git fetch --unshallow\n"
-RESTORE = f"error: 1 of 1 area could not check\nnext: {restore_step()}\n"
-REPAIR_ROWS = "error: 1 of 1 area could not check\nnext: fix what the ✗ rows name, then run quality check --fix --dry-run again\n"
-SHALLOW_NEW = "  ✗ debt          not fixed      this clone is shallow, so git cannot show the ceiling is new\n"
-NO_TOML = "  ✗ debt          not checked    quality/baseline.toml is not valid TOML (Expected ']' at the end of a table declaration (at line 1, column 12))\n"
+def refused_asking_to(step: str) -> str:
+    return f"error: 1 of 1 area could not check\nnext: {step}\n"
+
+
+def unshallow_error() -> str:
+    return refused_asking_to("git fetch --unshallow")
+
+
+def restore_error() -> str:
+    return refused_asking_to(restore_step())
+
+
+def repair_rows_error() -> str:
+    return refused_asking_to("fix what the ✗ rows name, then run quality check --fix --dry-run again")
+
+
+def shallow_new_row() -> str:
+    return "  ✗ debt          not fixed      this clone is shallow, so git cannot show the ceiling is new\n"
 
 
 @pytest.mark.parametrize(
     ("arrange", "out", "err"),
     [
-        pytest.param(shallow_clone_holding({"src/a.py": long_function(62)}), SHALLOW_NEW, UNSHALLOW, id="shallow"),
+        pytest.param(shallow_clone_holding({"src/a.py": long_function(62)}), shallow_new_row(), unshallow_error(), id="shallow"),
         pytest.param(
             a_ceiling_git_holds,
-            "  ✗ debt          not fixed      quality/baseline.toml is gone from the tree but git holds it\n", RESTORE, id="the ceiling git holds",
+            "  ✗ debt          not fixed      quality/baseline.toml is gone from the tree but git holds it\n", restore_error(), id="the ceiling git holds",
         ),
-        pytest.param(a_ceiling_that_is_no_toml, NO_TOML, RESTORE, id="no TOML"),
+        pytest.param(
+            a_ceiling_that_is_no_toml,
+            "  ✗ debt          not checked    quality/baseline.toml is not valid TOML (Expected ']' at the end of a table declaration (at line 1, column 12))\n",
+            restore_error(),
+            id="no TOML",
+        ),
         pytest.param(
             a_clones_table_git_holds,
-            "  ✗ debt          not fixed      quality/baseline.toml lost its [clones] table, which git holds\n", RESTORE, id="a clones table git holds",
+            "  ✗ debt          not fixed      quality/baseline.toml lost its [clones] table, which git holds\n", restore_error(), id="a clones table git holds",
         ),
-        pytest.param(shallow_clone_holding({"src/a.py": "x = 1\n", BASELINE_PATH: "[file_lines]\n"}), SHALLOW_NEW, UNSHALLOW, id="shallow, a ceiling without a table"),
+        pytest.param(shallow_clone_holding({"src/a.py": "x = 1\n", BASELINE_PATH: "[file_lines]\n"}), shallow_new_row(), unshallow_error(), id="shallow, a ceiling without a table"),
         pytest.param(
             shallow_clone_holding({"src/a.py": "x = 1\n", BASELINE_PATH: ceiling("[file_lines]\n")}),
             "  ✗ debt          not fixed      this clone is shallow, so git cannot show where quality/baseline.toml last changed\n",
-            UNSHALLOW,
+            unshallow_error(),
             id="shallow, the lineage",
         ),
         pytest.param(
             a_file_that_does_not_parse,
             "  ✗ debt          not checked    src/broken.py is not valid Python (invalid syntax (broken.py, line 1))\n",
-            REPAIR_ROWS,
+            repair_rows_error(),
             id="a file that does not parse",
         ),
         pytest.param(
             a_path_no_ceiling_can_hold,
             "  ✗ debt          not fixed      src/\\udcff.py is not valid UTF-8, so quality/baseline.toml cannot hold it\n",
-            REPAIR_ROWS,
+            repair_rows_error(),
             id="a path no ceiling can hold",
         ),
         pytest.param(
             a_path_no_ceiling_can_hold_beside_a_held_ceiling,
             "  ✗ debt          not fixed      tests/test_b\\udcff.py is not valid UTF-8, so quality/baseline.toml cannot hold it\n",
-            REPAIR_ROWS,
+            repair_rows_error(),
             id="a path no ceiling can hold beside a held ceiling",
         ),
         pytest.param(
             a_config_refusal,
             "  ✗ debt          not checked    quality/config.toml has unknown key nope - only [gate] mandatory_jobs, [gate] legacy, [[gate.loosened]], "
             "[secrets] allow, [[advisories.allow]], [[root.allow]], [[layout.allow]], [[python.allow]], [[compose.allow]] and [[size.generated]] exist\n",
-            REPAIR_ROWS,
+            repair_rows_error(),
             id="a config refusal",
         ),
         pytest.param(
@@ -414,7 +432,8 @@ def test_another_areas_refusal_leaves_the_dry_run_standing(build_repo, capsys):
         "    ~ src/a.py:1  lower  function long_one 80 → 62 lines\n"
     )
     err = "error: 1 of 2 areas could not check\nnext: fix what the ✗ rows name, then run quality check --fix --dry-run again\n"
-    assert (*fixed(capsys, repo, "check", "files", "debt", "--fix", "--dry-run"), untouched(repo)) == (2, printed, err, before)
+    words = ("check", "files", "debt", "--fix", "--dry-run")
+    assert (*fixed(capsys, repo, *words), untouched(repo)) == (2, printed, err, before)
 
 
 def painted(repo: Path) -> tuple[int, str]:
@@ -457,7 +476,8 @@ def test_a_debt_row_that_would_change_is_not_counted_among_the_clean_areas(build
         "    ~ src/a.py:1  lower  function long_one 80 → 62 lines\n"
         "! 2 findings in 1 area · 1 ceiling entry would fall · nothing written · <1s\n"
     )
-    assert fixed(capsys, repo, "check", "files", "debt", "--fix", "--dry-run") == (1, printed, "")
+    words = ("check", "files", "debt", "--fix", "--dry-run")
+    assert fixed(capsys, repo, *words) == (1, printed, "")
 
 
 def test_a_dry_run_that_would_change_the_file_exits_one_beside_an_area_that_only_measures(build_repo, capsys):
@@ -468,7 +488,8 @@ def test_a_dry_run_that_would_change_the_file_exits_one_beside_an_area_that_only
         "  · imports       not set up     no import-linter config\n"
         "~ dry run · 1 ceiling entry would fall · nothing written · imports not enforced · <1s\n"
     )
-    assert fixed(capsys, repo, "check", "imports", "debt", "--fix", "--dry-run") == (1, printed, "")
+    words = ("check", "imports", "debt", "--fix", "--dry-run")
+    assert fixed(capsys, repo, *words) == (1, printed, "")
 
 
 def test_at_a_terminal_a_dry_run_paints_each_glyph_and_the_verdict_in_one_colour_and_the_rest_in_others(build_repo):
@@ -478,4 +499,5 @@ def test_at_a_terminal_a_dry_run_paints_each_glyph_and_the_verdict_in_one_colour
         "    {glyph}~{reset} src/a.py:1  lower  {other}function long_one 80 → 62 lines{reset}\n"
         "{verdict}~ dry run{reset} · {other}1 ceiling entry would fall{reset} · {other}nothing written{reset} · {other}<1s{reset}\n"
     )
-    assert (code, by_role(frame, "~")) == (1, printed)
+    roles = by_role(frame, "~")
+    assert (code, roles) == (1, printed)
