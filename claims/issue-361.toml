@@ -3,6 +3,6 @@ agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
 role = "builder"
 base = "299bd3af5aa3589161ad58b337b9dae35ec93d03"
 branch = "claude/issue-361-c7d-quality-check-fix-dry-run-shows-what"
-scope = ["AGENTS.md", "README.md", "docs/commands.md", "docs/output.md", "docs/rules.md", "src/quality/check.py", "src/quality/cli.py", "src/quality/output.py", "src/quality/report.py", "tests/support/door.py", "tests/support/generated_files.py", "tests/test_cli_fix.py", "tests/test_cli_fix_dry_run.py", "tests/test_cli_help.py", "tests/test_output.py", "tests/test_ratchet_gone.py"]
+scope = ["AGENTS.md", "README.md", "docs/commands.md", "docs/output.md", "docs/rules.md", "src/quality/check.py", "src/quality/cli.py", "src/quality/output.py", "src/quality/ratchet.py", "src/quality/report.py", "tests/support/door.py", "tests/support/generated_files.py", "tests/support/terminal.py", "tests/test_cli_fix.py", "tests/test_cli_fix_dry_run.py", "tests/test_cli_help.py", "tests/test_output.py", "tests/test_ratchet_gone.py"]
 opened_commit = "f11fcab02b475f4644e99424d5d0bd1ce8546ad9"
 whole_reason = "One word through its four owners (vocabulary, glyph, write decision, frame), its docs and the pins of the old refusal and the help; a split would print a dry run's rows as done or leave the vocabulary without a caller."
