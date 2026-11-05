@@ -291,6 +291,21 @@ def test_the_door_reads_a_move_as_the_verdict_does(capsys, tmp_path, base, head,
     assert (len(gh.merge_calls) == 1) == (code == 0)
 
 
+def loosenings_not_judged(fact):
+    return (
+        "  · #7            open           head aaaaaaa · into main\n"
+        "  ✓ checks        ok             only quality / sonar and quality / verdict are red\n"
+        f"  ✗ loosenings    not judged     {fact}\n"
+    )
+
+
+def not_judged_pair():
+    return (
+        "error: could not judge · nothing changed\n"
+        "next: fix what the ✗ row names, then run quality emergency-merge acme/widgets 7 again\n"
+    )
+
+
 def failing_fetch(tmp_path):
     return pulled(tmp_path, OLD_ENTRY, NEW_ENTRY, MOVE)
 
@@ -300,10 +315,12 @@ def test_a_fetch_that_fails_cannot_be_judged_before_anything_is_touched(capsys, 
     """#149 cell 24: no empty rename map is substituted, so a move is never read as an add by guess."""
     gh = failing_fetch(tmp_path)
     gh.remote = str(tmp_path / "missing.git")
-    assert drive(gh)[0] == 2
-    output = capsys.readouterr().out
-    assert "cannot fetch the pull request's commits to compare renamed files (git exited 128)" in output
-    assert "missing.git" not in output
+    code, _ = drive(gh)
+    streams = capsys.readouterr()
+    assert (code, streams.out, streams.err) == (
+        2, loosenings_not_judged("cannot fetch the pull request's commits to compare renamed files (git exited 128)"), not_judged_pair(),
+    )
+    assert "missing.git" not in streams.out + streams.err
     changed_nothing(gh)
     assert gh.sequence == []
 
@@ -538,6 +555,9 @@ def test_a_rename_list_git_did_not_finish_cannot_be_judged_at_the_door(capsys, t
     """#149 cell 20: the door never substitutes an empty map."""
     gh = pulled(tmp_path, OLD_ENTRY, NEW_ENTRY, MOVE)
     fake_git(listing_script(printed))
-    assert drive(gh)[0] == 2
-    assert "cannot list the files git renamed between the pull request's commits" in capsys.readouterr().out
+    code, _ = drive(gh)
+    streams = capsys.readouterr()
+    assert (code, streams.out, streams.err) == (
+        2, loosenings_not_judged("cannot list the files git renamed between the pull request's commits"), not_judged_pair(),
+    )
     changed_nothing(gh)
