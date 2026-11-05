@@ -1,8 +1,0 @@
-claim_id = "0b3141f0f0b04ebf883ac6315a8a61a2"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "32687dbe2e884184a19e2de224e68490de078879"
-branch = "claude/issue-351-c8a1-the-merge-door-s-rows-and-refusals"
-scope = ["AGENTS.md", "docs/commands.md", "docs/output.md", "docs/runbook-emergency-merge.md", "src/quality/cli.py", "src/quality/merge.py", "src/quality/output.py", "tests/support/merge.py", "tests/test_architecture.py", "tests/test_clones_baseline.py", "tests/test_merge.py", "tests/test_merge_landing.py", "tests/test_merge_rows.py", "tests/test_output.py", "tests/test_output_shortening.py", "tests/test_sonar_exception.py", "tests/test_verdict_renames.py"]
-opened_commit = "0c384dd572908cd1b3b80d1d6a537b32f0d7d6e3"
-whole_reason = "Three production files, about +190/-105: everything the door prints before the prompt is one contract built by one judge of steps; split, refusals and rows would print in two styles and the same pins be rewritten twice."
