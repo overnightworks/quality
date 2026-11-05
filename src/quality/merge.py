@@ -1,6 +1,7 @@
 """The operator's emergency door: switch a repository's gate off, merge one pull request, switch it on again."""
 
 import json
+import re
 import subprocess
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -11,7 +12,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from quality import architecture, process
-from quality.config import CONFIG_PATH, REPOSITORY_NAME, Declaration, GateSettings, LegacyMode
+from quality.config import CONFIG_PATH, ITEM_REFERENCE, REPOSITORY_NAME, Declaration, GateSettings, LegacyMode
 from quality.ratchet import BASELINE_PATH, NO_RENAMES, Renames
 from quality.report import CannotJudge, printable, render
 from quality.sonar import (
@@ -145,6 +146,7 @@ class Door:
     declared: tuple[Declaration, ...]
     legacy: int | None
     merge_method: MergeMethod
+    landing: Landing
 
     @property
     def legacy_count(self) -> list[str]:
@@ -158,7 +160,7 @@ class Door:
         """What the operator reads before typing the word: the counts, each declaration, then the merge method."""
         declared = [f"{len(self.declared)} declared loosening(s)"] if self.declared else []
         heading = f"{self.repository} #{self.pull_request} head {self.head_sha}: {', '.join([*self.legacy_count, *declared])}"
-        return (heading, *map(described, self.declared), self.merge_method.description)
+        return (heading, *map(described, self.declared), self.merge_method.description, f"the merge commit ends with {self.landing.trailer}")
 
 
 def refusal_of_checks(checks: Sequence[Check]) -> str | None:
@@ -438,8 +440,8 @@ def switch_off_merge_switch_on(gh: GhRunner, door: Door, say: Say) -> Attempt:
         set_gate(gh, door.repository, False)
         outcome = Outcome.UNKNOWN
         gh(
-            ["pr", "merge", str(door.pull_request), "--repo", door.repository, door.merge_method.flag, "--match-head-commit", door.head_sha],
-            None,
+            ["pr", "merge", str(door.pull_request), "--repo", door.repository, door.merge_method.flag, "--match-head-commit", door.head_sha, "--body-file", "-"],
+            door.landing.message,
         )
         outcome = Outcome.MERGED
     except (GhFailed, KeyboardInterrupt) as stop:
@@ -491,6 +493,74 @@ def confirmed(ask: Ask, say: Say) -> bool:
         return False
 
 
+WORK_ITEM_KEY = "Work-Item"
+NO_ITEM_KEY = "No-Item"
+NO_ITEM_KINDS = frozenset({"docs", "fix", "deps"})
+CLASSIFICATION_LINE = re.compile(rf"(?i)(?P<key>{WORK_ITEM_KEY}|{NO_ITEM_KEY}):(?P<value>[^\n]*)")
+FENCE_OPENING = re.compile(r" {0,3}(?P<run>`{3,}|~{3,})")
+FENCE_CLOSING = re.compile(r" {0,3}(?P<run>`{3,}|~{3,})[ \t]*")
+
+
+@dataclass(frozen=True)
+class Landing:
+    """The merge commit's message: the body without its classification line, then that line as the last paragraph."""
+
+    trailer: str
+    message: str
+
+
+def live_line_indexes(lines: Sequence[str]) -> list[int]:
+    """The lines outside fenced code blocks: a fence closes on a run of its own character at least as long, nothing after it."""
+    live: list[int] = []
+    fence = ""
+    for index, line in enumerate(lines):
+        if not fence:
+            opening = FENCE_OPENING.match(line)
+            if opening:
+                fence = opening["run"]
+            else:
+                live.append(index)
+        elif (closing := FENCE_CLOSING.fullmatch(line)) and closing["run"][0] == fence[0] and len(closing["run"]) >= len(fence):
+            fence = ""
+    return live
+
+
+def trunk_trailer(key: str, value: str, repository: str) -> str:
+    """The classification in the trunk's trailer form; any other value keeps the door shut, since a trailer cannot be rewritten."""
+    if key.lower() == NO_ITEM_KEY.lower():
+        if value.lower() not in NO_ITEM_KINDS:
+            raise Refused(f"the pull request body carries {NO_ITEM_KEY}: {value}; an issue-less pull request is {', '.join(sorted(NO_ITEM_KINDS))}")
+        return f"{NO_ITEM_KEY}: {value.lower()}"
+    if not ITEM_REFERENCE.fullmatch(value):
+        raise Refused(f"the pull request body carries {WORK_ITEM_KEY}: {value}; a work item reads OWNER/REPO#n or #n")
+    named, _, number = value.rpartition("#")
+    if named not in ("", repository):
+        raise Refused(f"the pull request body names work item {value} of another repository, not of {repository}")
+    return f"{WORK_ITEM_KEY}: #{number}"
+
+
+def landing_of(body: object, repository: str) -> Landing:
+    """The landing of the body judged with the head: exactly one classification line outside code blocks. GitHub answers an empty body as null."""
+    if body is None:
+        body = ""
+    if not isinstance(body, str):
+        raise CannotJudge("GitHub's answer for the pull request holds no body text")
+    lines = body.splitlines()
+    found = [(index, match) for index in live_line_indexes(lines) if (match := CLASSIFICATION_LINE.fullmatch(lines[index]))]
+    if len(found) != 1:
+        raise Refused(
+            f"the pull request body carries {len(found) or 'no'} {WORK_ITEM_KEY}: or {NO_ITEM_KEY}: lines outside code "
+            "blocks; the merge commit ends with exactly one"
+        )
+    index, match = found[0]
+    trailer = trunk_trailer(match["key"], match["value"].strip(" \t"), repository)
+    kept = [*lines[:index], *lines[index + 1 :]]
+    if 0 < index < len(kept) and not kept[index - 1].strip() and not kept[index].strip():
+        del kept[index]
+    rest = "\n".join(kept).strip()
+    return Landing(trailer, f"{rest}\n\n{trailer}" if rest else trailer)
+
+
 def judge_pull_request(
     repository: str,
     pull_request: int,
@@ -504,6 +574,7 @@ def judge_pull_request(
     pull = json.loads(gh(["api", f"repos/{repository}/pulls/{pull_request}"], None))
     if pull["state"] != "open":
         raise Refused(f"the pull request is {pull['state']}")
+    landing = landing_of(pull["body"], repository)
     head_sha = pull["head"]["sha"]
     check_runs = read_check_runs(gh, repository, head_sha)
     checks = [*check_runs, *read_statuses(gh, repository, head_sha)]
@@ -534,14 +605,14 @@ def judge_pull_request(
         legacy = judge_legacy(head.settings, count)
     merge_method = choose_merge_method(gh, repository, repository_facts, pull["base"]["ref"])
     login = gh(["api", "user", "--jq", ".login"], None).strip()
-    return Door(repository, pull_request, head_sha, verdict.declared, legacy, merge_method), login
+    return Door(repository, pull_request, head_sha, verdict.declared, legacy, merge_method, landing), login
 
 
 def merge_outcome(attempt: Attempt, pull_request: int) -> str:
     if attempt.outcome is Outcome.UNKNOWN:
         return f"merge state unknown ({attempt.detail or 'no answer'}) - check #{pull_request} on GitHub"
     if attempt.outcome is Outcome.MERGED:
-        return f'merged. For the head: aco release <n> --abandoned "landed as PR #{pull_request} by emergency-merge"'
+        return "merged."
     return f"not merged - {attempt.detail}"
 
 

@@ -325,7 +325,7 @@ def test_exit_2_loud_line_and_log_when_the_gate_cannot_be_restored(restore_failu
     original = gh.__call__
 
     def cannot_restore(arguments, stdin=None):
-        if stdin and json.loads(stdin)["properties"][0]["value"] == "true":
+        if FakeGh.step_of(arguments) == "gate" and json.loads(stdin)["properties"][0]["value"] == "true":
             raise restore_failure
         return original(arguments, stdin)
 
@@ -360,7 +360,7 @@ def test_names_the_merge_outcome_when_the_gate_cannot_be_restored(gh_kwargs, rea
         step = FakeGh.step_of(arguments)
         if step == "comment" or (gh.merge_calls and step == "pull"):
             warned_before_request.append("MAY STILL BE OFF" in "".join(printed))
-        if stdin and json.loads(stdin)["properties"][0]["value"] == "true":
+        if FakeGh.step_of(arguments) == "gate" and json.loads(stdin)["properties"][0]["value"] == "true":
             raise GhFailed("denied")
         if read_back_failure and gh.merge_calls and step == "pull":
             raise read_back_failure
@@ -397,7 +397,7 @@ def test_ctrl_c_while_posting_the_log_comment_is_reported(restore_fails, capsys)
     original = gh.__call__
 
     def cannot_restore(arguments, stdin=None):
-        if restore_fails and stdin and json.loads(stdin)["properties"][0]["value"] == "true":
+        if restore_fails and FakeGh.step_of(arguments) == "gate" and json.loads(stdin)["properties"][0]["value"] == "true":
             raise GhFailed("denied")
         return original(arguments, stdin)
 

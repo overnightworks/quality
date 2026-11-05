@@ -18,13 +18,13 @@ Impact: the pull request cannot merge through `aco land` or the ruleset.
    none is running.
 2. Read the verdict's lines in the failed `quality / verdict` job. In the second case each declared loosening is the one
    you ruled; if it is not, send the pull request back instead.
+3. The pull request body carries its one `Work-Item:` or `No-Item:` line outside a code block; the command refuses otherwise.
 
 ## Fix
 
 1. In a terminal, under your own `gh` login: `quality emergency-merge <owner/repo> <pr>`.
-2. Read what it shows (head SHA, legacy count, each declared loosening with its item, date and reason) and type `ja`.
+2. Read what it shows (head SHA, legacy count, each declared loosening with its item, date and reason, the line the merge commit ends with) and type `ja`.
    Anything else changes nothing.
-3. The head releases the claim with the line the command prints (`aco release <n> --abandoned "landed as PR #<pr> by emergency-merge"`).
 
 Rollback: the command switches the repository's `quality_gate` property off for the merge and back on in every case. To
 undo the merge, revert it with a new pull request. If the property could not be restored the command exits `2` and
