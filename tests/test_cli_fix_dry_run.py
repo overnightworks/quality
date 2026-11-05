@@ -216,9 +216,6 @@ def shallow_clone_holding(files: dict[str, str]):
     return arrange
 
 
-a_shallow_clone = shallow_clone_holding({"src/a.py": long_function(62)})
-
-
 def a_ceiling_git_holds(build_repo, elsewhere) -> Path:
     repo = build_repo({"src/a.py": long_function(62), BASELINE_PATH: ceiling('[function_lines."src/a.py"]\nlong_one = 80\n')})
     (repo / BASELINE_PATH).unlink()
@@ -237,12 +234,6 @@ def a_clones_table_git_holds(build_repo, elsewhere) -> Path:
     repo = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: ceiling("[file_lines]\n")})
     put(repo / BASELINE_PATH, "[file_lines]\n")
     return repo
-
-
-a_shallow_clone_whose_ceiling_has_no_table = shallow_clone_holding({"src/a.py": "x = 1\n", BASELINE_PATH: "[file_lines]\n"})
-a_shallow_clone_whose_ceiling_was_last_changed_at_its_root = shallow_clone_holding(
-    {"src/a.py": "x = 1\n", BASELINE_PATH: ceiling("[file_lines]\n")}
-)
 
 
 def a_path_no_ceiling_can_hold(build_repo, elsewhere) -> Path:
@@ -267,12 +258,12 @@ def a_config_refusal(build_repo, elsewhere) -> Path:
 @pytest.mark.parametrize(
     ("arrange", "step"),
     [
-        pytest.param(a_shallow_clone, "git fetch --unshallow", id="shallow"),
+        pytest.param(shallow_clone_holding({"src/a.py": long_function(62)}), "git fetch --unshallow", id="shallow"),
         pytest.param(a_ceiling_git_holds, restore_step(), id="the ceiling git holds"),
         pytest.param(a_ceiling_that_is_no_toml, restore_step(), id="no TOML"),
         pytest.param(a_clones_table_git_holds, restore_step(), id="a clones table git holds"),
-        pytest.param(a_shallow_clone_whose_ceiling_has_no_table, "git fetch --unshallow", id="shallow, a ceiling without a table"),
-        pytest.param(a_shallow_clone_whose_ceiling_was_last_changed_at_its_root, "git fetch --unshallow", id="shallow, the lineage"),
+        pytest.param(shallow_clone_holding({"src/a.py": "x = 1\n", BASELINE_PATH: "[file_lines]\n"}), "git fetch --unshallow", id="shallow, a ceiling without a table"),
+        pytest.param(shallow_clone_holding({"src/a.py": "x = 1\n", BASELINE_PATH: ceiling("[file_lines]\n")}), "git fetch --unshallow", id="shallow, the lineage"),
         pytest.param(a_file_that_does_not_parse, "fix what the ✗ rows name, then run quality check --fix --dry-run again", id="a file that does not parse"),
         pytest.param(a_path_no_ceiling_can_hold, "fix what the ✗ rows name, then run quality check --fix --dry-run again", id="a path no ceiling can hold"),
         pytest.param(
@@ -342,7 +333,8 @@ def test_at_a_terminal_a_dry_run_paints_its_glyphs_and_keeps_the_plain_words(bui
     with contextlib.redirect_stdout(stdout):
         code = door_in(repo, *DRY_RUN_WORDS, clock=lambda: 0.0, environment={"TERM": "xterm"})
     foreground_colour_before_the_glyph = re.search(r"\x1b\[3[0-7]m~", stdout.getvalue())
-    assert (foreground_colour_before_the_glyph is not None, (code, without_sgr(stdout.getvalue()), "")) == (True, piped)
+    terminal = (code, without_sgr(stdout.getvalue()), capsys.readouterr().err)
+    assert (foreground_colour_before_the_glyph is not None, terminal) == (True, piped)
 
 
 def test_a_dry_run_beside_a_grown_entry_with_nothing_to_change_says_so_and_writes_nothing(build_repo, capsys):
@@ -363,3 +355,22 @@ def test_a_debt_row_that_would_change_is_not_counted_among_the_clean_areas(build
     git(repo, "add", ".env")
     code, out, _ = fixed(capsys, repo, "check", "files", "debt", "--fix", "--dry-run")
     assert (code, out.splitlines()[-1]) == (1, "! 2 findings in 1 area · 1 ceiling entry would fall · nothing written · <1s")
+
+
+def held_above(build_repo) -> Path:
+    return build_repo({"src/a.py": long_function(62), BASELINE_PATH: ceiling('[function_lines."src/a.py"]\nlong_one = 80\n')})
+
+
+def test_a_dry_run_that_would_change_the_file_exits_one_beside_an_area_that_only_measures(build_repo, capsys):
+    repo = held_above(build_repo)
+    code, out, _ = fixed(capsys, repo, "check", "imports", "debt", "--fix", "--dry-run")
+    assert (code, out.splitlines()[-1]) == (1, "~ dry run · 1 ceiling entry would fall · nothing written · imports not enforced · <1s")
+
+
+def test_at_a_terminal_a_dry_runs_verdict_is_bold_cyan_and_its_sub_lines_cyan(build_repo):
+    repo = held_above(build_repo)
+    stdout = Terminal()
+    with contextlib.redirect_stdout(stdout):
+        door_in(repo, *DRY_RUN_WORDS, clock=lambda: 0.0, environment={"TERM": "xterm"})
+    lines = stdout.getvalue().splitlines()
+    assert ("\x1b[1;36m~ dry run" in lines[-1], "\x1b[36m~\x1b[0m src/a.py:1" in lines[1]) == (True, True)
