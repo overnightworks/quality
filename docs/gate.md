@@ -55,6 +55,7 @@ Each line has a reason:
 - **`uses:` pins a commit** (`@<commit sha> # v<tag>`), and Dependabot bumps it where the repository's `.github/dependabot.yml` enables the `github-actions` ecosystem. There is no copier and no own token that writes to all repositories: quality
   carries plain version tags and Dependabot opens the bump pull requests (operator, 15.10.2026: „kein copier! … copier
   ist shice! …“; the points agreed with the operator's 15.10.2026 answer, quoted in [commands.md](commands.md#scanners), add the token).
+  quality's own action pins move the same way, so a caller receives current actions with each quality tag.
 
 The verdict judges the jobs named in `quality/config.toml`:
 
