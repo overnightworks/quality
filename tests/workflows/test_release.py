@@ -30,6 +30,7 @@ def release() -> dict:
 
 
 def run_verify_step(release: dict, directory: Path, version: str, failing: str = "") -> tuple[object, Path, str]:
+    (directory / "checkout").mkdir()
     checkout = make_repo(directory / "checkout", {"README": "the gated commit\n"})
     commit = head_commit(checkout)
     tools = directory / "tools"

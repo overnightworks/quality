@@ -118,16 +118,8 @@ def green_answers(dispatch: Dispatch, other_repository: str | None = None, **rep
 
 
 def run_gate_step(gate: dict, name: str, dispatch: Dispatch, directory: Path, answers: dict | None = None, **scenario: str) -> StepRun:
-    environment = step_environment(
-        gate,
-        "gate",
-        name,
-        GH_TOKEN="token",
-        VERSION=dispatch.version,
-        COMMIT=dispatch.commit,
-        GITHUB_REPOSITORY=dispatch.repository,
-        **scenario,
-    )
+    defaults = {"GH_TOKEN": "token", "VERSION": dispatch.version, "COMMIT": dispatch.commit, "GITHUB_REPOSITORY": dispatch.repository}
+    environment = step_environment(gate, "gate", name, **(defaults | scenario))
     fake = FakeGh(directory / "tools", green_answers(dispatch) if answers is None else answers)
     work = directory / "work"
     work.mkdir()
