@@ -1,7 +1,0 @@
-claim_id = "99cf42e3c6c44d4f98fac0c6665dca51"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "7359a676902dbbf81ba807a621b3bd6661e0e719"
-branch = "claude/issue-414-image-submodules"
-scope = [".github/workflows/image.yml", "docs/release.md", "tests/workflows/test_image.py"]
-opened_commit = "e151b1e566d3dd24a6d91c2ab38a5ca691c0a072"
