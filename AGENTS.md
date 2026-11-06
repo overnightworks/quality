@@ -24,7 +24,7 @@ Door commands:
 
 `.github/workflows/gate.yml` is the reusable gate; its caller contract stands in `docs/gate.md` and in the file's header.
 
-`.github/workflows/release-gate.yml` is the fleet's reusable release gate and `release.yml` quality's own caller, which gates and builds; their caller contract and the standard stand in `docs/release.md`.
+`.github/workflows/release-gate.yml` and `release-tag.yml` are the fleet's reusable release path, and `release.yml` is quality's own caller; their caller contract and the standard stand in `docs/release.md`.
 
 quality's own layers are an import-linter contract in `pyproject.toml` (`[tool.importlinter]`); `quality check`
 enforces it, so a module imports only from the layers below its own.
@@ -46,9 +46,7 @@ Checks (all targeted, run from the repo root):
 - `uv run quality check` (needs mise, the three scanners and network: no scan is skipped, so each run downloads the PyPI advisory database, about 37 MB)
 
 The version comes from git (hatch-vcs): a tag build prints the tag, any later commit `<next>.devN+g<sha>`, so a checkout
-that installs quality needs its tags (`fetch-depth: 0`). Release: tag the merge commit locally, `uv sync --reinstall-package overnightworks-quality` (a checkout dirty at its last sync
-otherwise keeps a `.dYYYYMMDD` version), then `uv run python scripts/verify_release.py`, and push the tag only when it exits 0; tags are immutable on the remote.
-A minor release `vX.Y.0` is tagged on main. A patch `vX.Y.Z` is tagged on main or, while main takes no tag, on `release/vX.Y`, cut from the last `vX.Y` tag: its
+that installs quality needs its tags (`fetch-depth: 0`). Release: the operator dispatches `gh workflow run release.yml -R overnightworks/quality -f version=X.Y.Z` once main's CI push run is green; its build tags the gated commit in its own checkout, reinstalls and runs `scripts/verify_release.py`, and only then the API creates the tag. A minor release `vX.Y.0` is dispatched from main. A patch `vX.Y.Z` is dispatched from main or, while main takes no tag, tagged by hand on `release/vX.Y`, cut from the last `vX.Y` tag: tag its merge commit locally, `uv sync --reinstall-package overnightworks-quality` (a checkout dirty at its last sync otherwise keeps a `.dYYYYMMDD` version), `uv run python scripts/verify_release.py`, and push the tag only when it exits 0; tags are immutable on the remote. Its
 pull requests target that branch, pass the same gate and merge with `gh pr merge --merge --match-head-commit <sha>` once `quality / verdict` is green (`aco land` lands only
 into main); after the tag the branch is merged into main and deleted.
 

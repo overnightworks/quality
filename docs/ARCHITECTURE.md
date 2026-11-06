@@ -100,7 +100,7 @@ reusable `gate.yml` at the tag it pins; that workflow checks out quality and ins
 `src/quality/mise/`. `codeql.yml` is the reusable CodeQL workflow and `code-scanning.yml` quality's own caller of it.
 quality's CI runs its suite with coverage and calls its local `gate.yml`. `scoreboard.yml` runs the fleet report weekly
 and writes to no repository. `release.yml`, dispatched with a version, calls the reusable `release-gate.yml`, then builds
-and runs `scripts/verify_release.py`, with no write ([release](release.md)).
+and runs `scripts/verify_release.py`, and its tag job calls `release-tag.yml`, the only job that writes ([release](release.md)).
 
 ## 5. Crosscutting Concepts
 

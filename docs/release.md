@@ -5,8 +5,8 @@ Reference for the engineer who adds a repository's `release.yml` or reads a refu
 ## The path
 
 A release is dispatched on `main` with the version alone. `release-gate.yml` (quality's reusable workflow) only reads and
-refuses before any tag exists; the caller's own build then proves its source carries the version. The tag job is not part
-of the path yet.
+refuses before any tag exists; the caller's own build then proves its source carries the version; `release-tag.yml`
+(quality's reusable workflow) then creates the tag at the gated commit and publishes the release.
 
 ## A caller's `release.yml`
 
@@ -52,6 +52,18 @@ jobs:
           ref: ${{ needs.gate.outputs.commit }}
           persist-credentials: false
       # the caller's own proof that the source carries "$VERSION"
+      # a build that makes release files uploads them with actions/upload-artifact
+
+  tag:
+    needs: [gate, build]
+    permissions:
+      contents: write
+    uses: overnightworks/quality/.github/workflows/release-tag.yml@<commit sha> # v<tag>
+    with:
+      version: ${{ inputs.version }}
+      commit: ${{ needs.gate.outputs.commit }}
+      artifact: <the build's artifact name, or omit for a release without files>
+      notes: <optional Markdown that opens the release notes>
 ```
 
 Each line has a reason:
@@ -62,8 +74,16 @@ Each line has a reason:
 - `version` is the only input and reaches a step only through `env`, never inside a `run` script.
 - `needs: gate` makes the build wait for the gate; without it the build runs even when the gate refuses.
 - The build checks out `needs.gate.outputs.commit`, the commit the gate judged, never `main`, which may have moved.
-- `quality`'s own release uses GitHub's same-repository form, `uses: $/.github/workflows/release-gate.yml`, so it calls
-  the gate of its own commit. Every other repository pins the commit sha of a quality tag and names the tag in a comment.
+- `needs: [gate, build]` makes the tag wait for both; `contents: write` is granted to the tag job only, so no other job
+  can write, and nothing dispatches the tag job apart from the release run.
+- `commit` is the gate's output, never `github.sha`, which may have moved.
+- `artifact` names an artifact of the same run. Its regular top-level files, dotfiles included, are the release's files and
+  nothing else is uploaded; a file name carries no `#`, which gh reads as the start of an asset label. A build that makes
+  release files turns its caches off. Omit it for a release without files.
+- `notes` is optional; GitHub's generated notes follow it. A build that writes notes computes each hash from the very file
+  it uploads. A head may edit the notes after publishing: an immutable release still accepts edited notes.
+- `quality`'s own release uses GitHub's same-repository form, `uses: $/.github/workflows/release-gate.yml` and
+  `release-tag.yml`, so it calls the workflows of its own commit. Every other repository pins the commit sha of a quality tag and names the tag in a comment.
 - quality's build also tags the gated commit in its own checkout (the tag never leaves the runner) and runs
   `scripts/verify_release.py`, which proves the installed version equals the tag.
 
@@ -75,7 +95,7 @@ neither judges nor counts that tag.
 
 ## Refusals
 
-Each refusal prints one line on stderr and fails the gate; no tag exists yet.
+Each refusal of the gate prints one line on stderr and fails the gate; no tag exists yet.
 
 | Line | What to do |
 |---|---|
@@ -94,6 +114,20 @@ Each refusal prints one line on stderr and fails the gate; no tag exists yet.
 The check name `quality / verdict` and the CI file name `ci.yml` are fleet contracts: the caller job of
 [`gate.yml`](gate.md) is named `quality`.
 
+The tag job's refusals leave no tag when they stand before the tag step:
+
+| Line | What to do |
+|---|---|
+| `Refused: files were fetched, but no artifact was named.` | Name the artifact, or fetch nothing. |
+| `Refused: the artifact <name> brought no file.` | The build uploaded nothing under that name; fix the build. |
+| `Refused: the artifact <name> holds <entry>, which is not a regular top-level file.` | Upload regular top-level files only. |
+| `Refused: the file <name> has a # in its name, which gh reads as the start of an asset label.` | Rename the file in the build. |
+| `Refused: the tag v<version> exists at <sha>, not at the gated commit <sha>.` | Choose the next version; a tag is never moved. |
+
+Re-run the failed jobs after a failed publish: the tag job runs whole again, keeps the tag at the commit and completes the
+release. "Re-run all jobs" runs the gate again, which refuses the existing tag. A tag left without a release by a defective
+publish step is completed by hand with `gh release create v<version> <files> --verify-tag`.
+
 ## Concurrency
 
 One group, `cancel-in-progress: false`: a release never cancels a running release. GitHub keeps at most one pending run
@@ -104,9 +138,14 @@ per group, and a newer pending dispatch cancels the older.
 The gate is no boundary. A `v*` tag can still be created without it: the organisation ruleset restricts deletion and update
 of tags, not creation.
 
+While the draft release is open, users and workflows with write permission can change it and its assets, so "exactly the
+build's files" holds against cooperative writers only. A killed runner can leave a stale draft, and gh can refuse after a
+completed publish; both are completed or deleted by hand.
+
 ## quality's own release
 
-A dispatch of quality's `release.yml` gates and builds and creates no tag; quality tags by hand (see `AGENTS.md`). The operator dispatches with:
+A dispatch of quality's `release.yml` gates, builds, tags and publishes a release without files, with GitHub's generated
+notes. A patch on a release branch is still tagged by hand (see `AGENTS.md`). The operator dispatches with:
 
 ```sh
 gh workflow run release.yml -R overnightworks/quality -f version=X.Y.Z
