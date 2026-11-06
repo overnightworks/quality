@@ -142,16 +142,14 @@ def green_answers(dispatch: Dispatch, **replaced: object) -> dict[tuple[str, ...
     return answers
 
 
-VALID_VERSIONS = {"X.Y.Z": "1.2.3", "YYYY.MM.DD.N": "2026.11.06.1"}
-
-
 def default_form(gate: dict) -> str:
     return gate[True]["workflow_call"]["inputs"]["form"]["default"]
 
 
 def grammar_for(gate: dict, dispatch: Dispatch, directory: Path, form: str) -> str:
     """The grammar the format step hands on for `form`, read from its output."""
-    result = run_gate_step(gate, FORMAT_STEP, dispatch, directory / "form", VERSION=VALID_VERSIONS[form], FORM=form)
+    valid_version = {"X.Y.Z": "1.2.3", "YYYY.MM.DD.N": "2026.11.06.1"}[form]
+    result = run_gate_step(gate, FORMAT_STEP, dispatch, directory / "form", VERSION=valid_version, FORM=form)
     assert result.outputs.startswith("grammar=")
     return result.outputs.removeprefix("grammar=").removesuffix("\n")
 
@@ -191,12 +189,6 @@ def test_no_gate_job_or_step_is_skippable(gate):
 
 def refused(line: str) -> str:
     return f"Refused: {line}\n"
-
-
-X_Y_Z_REFUSAL = "the version is not X.Y.Z, each part a number without leading zeros."
-DATED_REFUSAL = (
-    "the version is not YYYY.MM.DD.N, month 01 to 12, day 01 to 31, N a number from 1 without leading zeros."
-)
 
 
 @pytest.mark.parametrize(
@@ -270,8 +262,8 @@ def test_only_a_dispatch_from_main_passes_the_ref_gate(gate, dispatch, tmp_path,
     ],
 )
 def test_a_malformed_version_is_refused(gate, dispatch, tmp_path, version):
-    result = run_gate_step(gate, FORMAT_STEP, dispatch, tmp_path, VERSION=version, FORM="X.Y.Z")
-    assert outcome(result) == (1, refused(X_Y_Z_REFUSAL), "")
+    result = run_gate_step(gate, FORMAT_STEP, dispatch, tmp_path, VERSION=version)
+    assert outcome(result) == (1, refused("the version is not X.Y.Z, each part a number without leading zeros."), "")
     assert not (tmp_path / "work" / "planted").exists()
 
 
@@ -302,9 +294,7 @@ def test_a_release_tag_with_every_digit_in_every_part_is_recognised(gate, dispat
     assert outcome(result) == (1, refused(f"{dispatch.commit} already carries the release tag v{version}."), "")
 
 
-@pytest.mark.parametrize(
-    "version", ["2026.11.06.1", "2026.12.31.12", "2026.01.01.10", "2026.10.20.1", "2026.11.30.1"]
-)
+@pytest.mark.parametrize("version", ["2026.11.06.1", "2026.12.31.12", "2026.01.01.10", "2026.10.20.1", "2026.11.30.1"])
 def test_a_dated_version_passes_the_format_gate(gate, dispatch, tmp_path, version):
     result = run_gate_step(gate, FORMAT_STEP, dispatch, tmp_path / "run", VERSION=version, FORM="YYYY.MM.DD.N")
     assert outcome(result) == (0, "", f"grammar={grammar_for(gate, dispatch, tmp_path, 'YYYY.MM.DD.N')}\n")
@@ -326,7 +316,9 @@ def test_a_dated_version_passes_the_format_gate(gate, dispatch, tmp_path, versio
         "2026.11.06",
         "1.2.3",
         "2026.11.06.1$(touch planted)",
-        "\u0662026.11.06.1",
+        "\u0966026.11.06.1",
+        "026.11.06.1",
+        "02026.11.06.1",
         "2026.11.06.1\n2026.11.06.1",
     ],
     ids=[
@@ -344,24 +336,40 @@ def test_a_dated_version_passes_the_format_gate(gate, dispatch, tmp_path, versio
         "an X.Y.Z version",
         "a substitution",
         "a Devanagari digit in the year",
+        "a three-digit year",
+        "a five-digit year",
         "two lines",
     ],
 )
 def test_a_malformed_dated_version_is_refused(gate, dispatch, tmp_path, version):
     result = run_gate_step(gate, FORMAT_STEP, dispatch, tmp_path, VERSION=version, FORM="YYYY.MM.DD.N")
-    assert outcome(result) == (1, refused(DATED_REFUSAL), "")
+    assert outcome(result) == (
+        1,
+        refused(
+            "the version is not YYYY.MM.DD.N, month 01 to 12, day 01 to 31, N a number from 1 without leading zeros."
+        ),
+        "",
+    )
     assert not (tmp_path / "work" / "planted").exists()
 
 
 def test_a_dated_version_is_refused_under_the_default_form(gate, dispatch, tmp_path):
     result = run_gate_step(gate, FORMAT_STEP, dispatch, tmp_path, VERSION="2026.11.06.1")
-    assert outcome(result) == (1, refused(X_Y_Z_REFUSAL), "")
+    assert outcome(result) == (1, refused("the version is not X.Y.Z, each part a number without leading zeros."), "")
 
 
 @pytest.mark.parametrize("form", ["x.y.z", "", "^.*$"], ids=["lower case", "empty", "a regex"])
 def test_an_unknown_form_is_refused(gate, dispatch, tmp_path, form):
     result = run_gate_step(gate, FORMAT_STEP, dispatch, tmp_path, FORM=form)
     assert outcome(result) == (1, refused(f"the form {form} is neither X.Y.Z nor YYYY.MM.DD.N."), "")
+    assert result.calls == []
+
+
+def test_the_form_is_judged_before_any_step_reads_the_repository(gate):
+    names = step_names(gate, "gate")
+    reading = [name for name in names if "gh " in step_script(gate, "gate", name)]
+    assert reading
+    assert all(names.index(FORMAT_STEP) < names.index(name) for name in reading)
 
 
 def dated_versions_with_every_digit() -> list[str]:
