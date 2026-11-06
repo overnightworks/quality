@@ -123,8 +123,8 @@ The operator ruled on 6.11.2026 (overnightworks/quality#364, option A):
 > der Version.“
 
 The ruled standard: gate, then the project's own build, then tag; the gate exists once, in quality. Covered are every
-repository that publishes a release (agent-runtime, aco, appkit, quality, speech-runtime, webauth) and every app that ships
-an image. The trigger is a repository's first release after the quality tag that ships the workflows it needs.
+repository that publishes a release (agent-runtime, aco, appkit, quality, speech-runtime, webauth) and, under platform#1, every
+app that ships an image (hopin, presentator, speech-runtime, songmaker, platform's Keycloak image). The trigger is a repository's first release after the quality tag that ships the workflows it needs.
 
 A deviation is asked as marketplace `docs/standards.md` says: the covered head names the enduring harm with its
 uncertainty, quality's head reviews it, the operator rules it, and the ruling is recorded here.

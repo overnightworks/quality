@@ -1,11 +1,14 @@
 import re
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from urllib.parse import quote
 
 import pytest
 import yaml
 
 from tests.support.workflow_steps import (
+    FORMAT_STEP,
     WORKFLOWS,
     Answer,
     FakeGh,
@@ -21,16 +24,16 @@ from tests.support.workflow_steps import (
 pytestmark = pytest.mark.integration
 
 REF_STEP = "Refuse any ref but main"
-FORMAT_STEP = "Refuse a malformed version"
 HEAD_STEP = "Refuse unless the commit is still main's head"
 TAG_STEP = "Refuse a tag that exists"
 TAGGED_STEP = "Refuse a commit that already carries a release tag"
 CI_STEP = "Refuse unless CI's newest push run on the commit is green with a green quality verdict"
 MERGED_STEP = "Refuse a commit its pull request merged without a green quality verdict"
-MERGED_AT = "2026-11-06T10:00:00Z"
-BEFORE_THE_MERGE = "2026-11-06T09:00:00Z"
-NEARER_THE_MERGE = "2026-11-06T09:30:00Z"
-AFTER_THE_MERGE = "2026-11-06T10:30:00Z"
+
+
+def around_the_merge(minutes: int = 0) -> str:
+    """A GitHub timestamp this many minutes after the merge (before it when negative)."""
+    return (datetime(2026, 11, 6, 10, tzinfo=UTC) + timedelta(minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 @dataclass(frozen=True)
@@ -61,12 +64,18 @@ def gate_caller() -> tuple[str, str]:
 
 def verdict_check_name() -> str:
     jobs = workflow("gate.yml")["jobs"]
-    verdict_job = next(job_id for job_id, job in jobs.items() if any("quality verdict" in step.get("run", "") for step in job["steps"]))
+    verdict_job = next(
+        job_id for job_id, job in jobs.items() if any("quality verdict" in step.get("run", "") for step in job["steps"])
+    )
     return f"{gate_caller()[1]} / {jobs[verdict_job].get('name', verdict_job)}"
 
 
 def ci_runs(*id_status_conclusion: tuple[int, str, str | None]) -> dict:
-    return {"workflow_runs": [{"id": run, "status": status, "conclusion": conclusion} for run, status, conclusion in id_status_conclusion]}
+    return {
+        "workflow_runs": [
+            {"id": run, "status": status, "conclusion": conclusion} for run, status, conclusion in id_status_conclusion
+        ]
+    }
 
 
 def run_jobs(*name_conclusion: tuple[str, str | None]) -> dict:
@@ -78,7 +87,12 @@ def merged_pull(number: int, head: str, merged_at: str | None, base: str = "main
 
 
 def check_runs(*id_conclusion_completed_at: tuple[int, str | None, str | None]) -> dict:
-    return {"check_runs": [{"id": run, "conclusion": conclusion, "completed_at": completed} for run, conclusion, completed in id_conclusion_completed_at]}
+    return {
+        "check_runs": [
+            {"id": run, "conclusion": conclusion, "completed_at": completed}
+            for run, conclusion, completed in id_conclusion_completed_at
+        ]
+    }
 
 
 def tags(*name_commit: tuple[str, str]) -> list[dict]:
@@ -91,14 +105,22 @@ def requests_of(dispatch: Dispatch, repository: str | None = None) -> dict[str, 
         "main": ("api", f"{api}/commits/main"),
         "refs": ("api", f"{api}/git/matching-refs/tags/v{dispatch.version}"),
         "tags": ("api", "--paginate", f"{api}/tags?per_page=100"),
-        "runs": ("api", f"{api}/actions/workflows/{gate_caller()[0]}/runs?event=push&branch=main&head_sha={dispatch.commit}&per_page=100"),
+        "runs": (
+            "api",
+            f"{api}/actions/workflows/{gate_caller()[0]}/runs?event=push&branch=main&head_sha={dispatch.commit}&per_page=100",
+        ),
         "pulls": ("api", f"{api}/commits/{dispatch.commit}/pulls"),
-        "check_runs": ("api", f"{api}/commits/{{head}}/check-runs?check_name=quality%20%2F%20verdict&filter=all&per_page=100"),
+        "check_runs": (
+            "api",
+            f"{api}/commits/{{head}}/check-runs?check_name={quote(verdict_check_name(), safe='')}&filter=all&per_page=100",
+        ),
         "jobs": ("api", f"{api}/actions/runs/{{run}}/jobs?per_page=100"),
     }
 
 
-def green_answers(dispatch: Dispatch, other_repository: str | None = None, **replaced: object) -> dict[tuple[str, ...], Answer]:
+def green_answers(
+    dispatch: Dispatch, other_repository: str | None = None, **replaced: object
+) -> dict[tuple[str, ...], Answer]:
     """Every read a passing gate makes. `replaced` swaps one body by name; `jobs` and `check_runs` take {id: body}."""
     head = "b2" * 20
     bodies = {
@@ -106,24 +128,40 @@ def green_answers(dispatch: Dispatch, other_repository: str | None = None, **rep
         "refs": [],
         "tags": tags(("v1.2.2", "c3" * 20)),
         "runs": ci_runs((7, "completed", "success")),
-        "pulls": [merged_pull(9, head, MERGED_AT)],
+        "pulls": [merged_pull(9, head, around_the_merge())],
         "jobs": {7: run_jobs((verdict_check_name(), "success"))},
-        "check_runs": {head: check_runs((1, "success", BEFORE_THE_MERGE))},
+        "check_runs": {head: check_runs((1, "success", around_the_merge(-60)))},
     } | replaced
     requests = requests_of(dispatch, other_repository)
     answers = {requests[name]: Answer(body) for name, body in bodies.items() if name not in {"jobs", "check_runs"}}
-    answers |= {tuple(part.format(run=run) for part in requests["jobs"]): Answer(body) for run, body in bodies["jobs"].items()}
-    answers |= {tuple(part.format(head=pull_head) for part in requests["check_runs"]): Answer(body) for pull_head, body in bodies["check_runs"].items()}
+    answers |= {
+        tuple(part.format(run=run) for part in requests["jobs"]): Answer(body) for run, body in bodies["jobs"].items()
+    }
+    answers |= {
+        tuple(part.format(head=pull_head) for part in requests["check_runs"]): Answer(body)
+        for pull_head, body in bodies["check_runs"].items()
+    }
     return answers
 
 
-def run_gate_step(gate: dict, name: str, dispatch: Dispatch, directory: Path, answers: dict | None = None, **scenario: str) -> StepRun:
-    defaults = {"GH_TOKEN": "token", "VERSION": dispatch.version, "COMMIT": dispatch.commit, "GITHUB_REPOSITORY": dispatch.repository}
+def run_gate_step(
+    gate: dict, name: str, dispatch: Dispatch, directory: Path, answers: dict | None = None, **scenario: str
+) -> StepRun:
+    defaults = {
+        "GH_TOKEN": "token",
+        "VERSION": dispatch.version,
+        "COMMIT": dispatch.commit,
+        "GITHUB_REPOSITORY": dispatch.repository,
+    }
     environment = step_environment(gate, "gate", name, **(defaults | scenario))
     fake = FakeGh(directory / "tools", green_answers(dispatch) if answers is None else answers)
     work = directory / "work"
     work.mkdir()
     return run_step(step_script(gate, "gate", name), work, environment, fake.directory)
+
+
+def outcome(result: StepRun) -> tuple[int, str, str]:
+    return result.returncode, result.stderr, result.outputs
 
 
 def refused(line: str) -> str:
@@ -132,30 +170,59 @@ def refused(line: str) -> str:
 
 @pytest.mark.parametrize(
     ("reference", "passes"),
-    [("refs/heads/main", True), ("refs/heads/feature", False), ("refs/tags/v1.2.3", False), ("refs/pull/7/merge", False)],
+    [
+        ("refs/heads/main", True),
+        ("refs/heads/feature", False),
+        ("refs/tags/v1.2.3", False),
+        ("refs/pull/7/merge", False),
+    ],
     ids=["main", "another branch", "a tag", "a pull request ref"],
 )
 def test_only_a_dispatch_from_main_passes_the_ref_gate(gate, dispatch, tmp_path, reference, passes):
     result = run_gate_step(gate, REF_STEP, dispatch, tmp_path, DISPATCH_REF=reference)
-    expected = (0, "") if passes else (1, refused(f"dispatched from {reference}, a release is dispatched from main."))
-    assert (result.returncode, result.stderr) == expected
+    expected = (
+        (0, "", "") if passes else (1, refused(f"dispatched from {reference}, a release is dispatched from main."), "")
+    )
+    assert outcome(result) == expected
 
 
 @pytest.mark.parametrize(
     "version",
-    ["0.21", "v0.21.0", "0.21.0-rc1", "01.2.3", "1.02.3", "1.2.03", "0.21.0; touch planted", "$(touch planted)", "", "0.21.0\n0.21.0"],
-    ids=["two parts", "a v", "a suffix", "leading zero major", "leading zero minor", "leading zero patch", "a command after", "a substitution", "empty", "two lines"],
+    [
+        "0.21",
+        "v0.21.0",
+        "0.21.0-rc1",
+        "01.2.3",
+        "1.02.3",
+        "1.2.03",
+        "0.21.0; touch planted",
+        "$(touch planted)",
+        "",
+        "0.21.0\n0.21.0",
+    ],
+    ids=[
+        "two parts",
+        "a v",
+        "a suffix",
+        "leading zero major",
+        "leading zero minor",
+        "leading zero patch",
+        "a command after",
+        "a substitution",
+        "empty",
+        "two lines",
+    ],
 )
 def test_a_malformed_version_is_refused(gate, dispatch, tmp_path, version):
     result = run_gate_step(gate, FORMAT_STEP, dispatch, tmp_path, VERSION=version)
-    assert (result.returncode, result.stderr) == (1, refused("the version is not X.Y.Z, each part a number without leading zeros."))
+    assert outcome(result) == (1, refused("the version is not X.Y.Z, each part a number without leading zeros."), "")
     assert not (tmp_path / "work" / "planted").exists()
 
 
 @pytest.mark.parametrize("version", ["0.0.0", "0.21.0", "10.200.3000"])
 def test_a_full_version_passes_the_format_gate(gate, dispatch, tmp_path, version):
     result = run_gate_step(gate, FORMAT_STEP, dispatch, tmp_path, VERSION=version)
-    assert (result.returncode, result.stderr) == (0, "")
+    assert outcome(result) == (0, "", "")
 
 
 @pytest.mark.parametrize("case", ["pass", "main moved", "another repository's main"])
@@ -164,15 +231,16 @@ def test_the_commit_must_still_be_main_s_head(gate, dispatch, tmp_path, case):
     answers = {
         "pass": green_answers(dispatch),
         "main moved": green_answers(dispatch, main={"sha": moved_to}),
-        "another repository's main": green_answers(dispatch, "other/repo"),
+        "another repository's main": green_answers(dispatch),
     }[case]
-    result = run_gate_step(gate, HEAD_STEP, dispatch, tmp_path, answers)
+    foreign = {"GITHUB_REPOSITORY": "other/repo"} if case == "another repository's main" else {}
+    result = run_gate_step(gate, HEAD_STEP, dispatch, tmp_path, answers, **foreign)
     expected = {
-        "pass": (0, ""),
-        "main moved": (1, refused(f"main moved from {dispatch.commit} to {moved_to} after the dispatch.")),
-        "another repository's main": (1, "gh: Not Found (HTTP 404)\n"),
+        "pass": (0, "", ""),
+        "main moved": (1, refused(f"main moved from {dispatch.commit} to {moved_to} after the dispatch."), ""),
+        "another repository's main": (1, "gh: Not Found (HTTP 404)\n", ""),
     }[case]
-    assert (result.returncode, result.stderr) == expected
+    assert outcome(result) == expected
 
 
 @pytest.mark.parametrize(
@@ -181,24 +249,30 @@ def test_the_commit_must_still_be_main_s_head(gate, dispatch, tmp_path, case):
     ids=["no tag", "a longer tag name", "the tag exists"],
 )
 def test_a_version_whose_tag_exists_is_refused(gate, dispatch, tmp_path, existing, passes):
-    result = run_gate_step(gate, TAG_STEP, dispatch, tmp_path, green_answers(dispatch, refs=[{"ref": ref} for ref in existing]))
-    expected = (0, "") if passes else (1, refused(f"the tag v{dispatch.version} exists."))
-    assert (result.returncode, result.stderr) == expected
+    result = run_gate_step(
+        gate, TAG_STEP, dispatch, tmp_path, green_answers(dispatch, refs=[{"ref": ref} for ref in existing])
+    )
+    expected = (0, "", "") if passes else (1, refused(f"the tag v{dispatch.version} exists."), "")
+    assert outcome(result) == expected
 
 
 @pytest.mark.parametrize(
     ("listed", "refused_tag"),
     [
         ([], None),
-        ([("v1.2.2", "a1")], "v1.2.2"),
-        ([("v1.2.2", "c3")], None),
-        ([("v2026.11.05.1", "a1")], None),
-        ([("1.2.2", "a1")], None),
-        ([("v1.02.2", "a1")], None),
+        ([("v1.2.2", True)], "v1.2.2"),
+        ([("v2026.11.06.1", True), ("v1.2.2", True)], "v1.2.2"),
+        ([("v1.2.2", True), ("v2026.11.06.1", True)], "v1.2.2"),
+        ([("v1.2.2", False)], None),
+        ([("v2026.11.05.1", True)], None),
+        ([("1.2.2", True)], None),
+        ([("v1.02.2", True)], None),
     ],
     ids=[
         "no tag at the commit",
         "a release tag at the commit",
+        "a dated deploy tag then a release tag at the commit",
+        "a release tag then a dated deploy tag at the commit",
         "a release tag at another commit",
         "only a dated deploy tag at the commit",
         "a tag without v",
@@ -206,10 +280,16 @@ def test_a_version_whose_tag_exists_is_refused(gate, dispatch, tmp_path, existin
     ],
 )
 def test_a_commit_that_already_carries_a_release_tag_is_refused(gate, dispatch, tmp_path, listed, refused_tag):
-    answers = green_answers(dispatch, tags=tags(*((name, commit * 20) for name, commit in listed)))
+    answers = green_answers(
+        dispatch, tags=tags(*((name, dispatch.commit if at_commit else "c3" * 20) for name, at_commit in listed))
+    )
     result = run_gate_step(gate, TAGGED_STEP, dispatch, tmp_path, answers)
-    expected = (1, refused(f"{dispatch.commit} already carries the release tag {refused_tag}.")) if refused_tag else (0, "")
-    assert (result.returncode, result.stderr) == expected
+    expected = (
+        (1, refused(f"{dispatch.commit} already carries the release tag {refused_tag}."), "")
+        if refused_tag
+        else (0, "", "")
+    )
+    assert outcome(result) == expected
 
 
 def ci_scenarios(verdict: str) -> dict[str, tuple[dict, str | None]]:
@@ -230,10 +310,22 @@ def ci_scenarios(verdict: str) -> dict[str, tuple[dict, str | None]]:
         "the verdict missing": (scenario(green, None), "the quality / verdict of CI's push run 7 is missing."),
         "the verdict failed": (scenario(green, "failure"), "the quality / verdict of CI's push run 7 is failure."),
         "the verdict skipped": (scenario(green, "skipped"), "the quality / verdict of CI's push run 7 is skipped."),
-        "the newest run decides, failed run first": (scenario(ci_runs((8, "completed", "failure"), (7, "completed", "success"))), "CI's push run 8 concluded failure."),
-        "the newest run decides, failed run last": (scenario(ci_runs((7, "completed", "success"), (8, "completed", "failure"))), "CI's push run 8 concluded failure."),
-        "the newest run decides, green run first": (scenario(ci_runs((8, "completed", "success"), (7, "completed", "failure")), run=8), None),
-        "the newest run decides, green run last": (scenario(ci_runs((7, "completed", "failure"), (8, "completed", "success")), run=8), None),
+        "the newest run decides, failed run first": (
+            scenario(ci_runs((8, "completed", "failure"), (7, "completed", "success"))),
+            "CI's push run 8 concluded failure.",
+        ),
+        "the newest run decides, failed run last": (
+            scenario(ci_runs((7, "completed", "success"), (8, "completed", "failure"))),
+            "CI's push run 8 concluded failure.",
+        ),
+        "the newest run decides, green run first": (
+            scenario(ci_runs((8, "completed", "success"), (7, "completed", "failure")), run=8),
+            None,
+        ),
+        "the newest run decides, green run last": (
+            scenario(ci_runs((7, "completed", "failure"), (8, "completed", "success")), run=8),
+            None,
+        ),
     }
 
 
@@ -241,8 +333,8 @@ def ci_scenarios(verdict: str) -> dict[str, tuple[dict, str | None]]:
 def test_the_newest_push_run_must_be_green_with_a_green_verdict(gate, dispatch, tmp_path, case):
     replaced, refusal = ci_scenarios(verdict_check_name())[case]
     result = run_gate_step(gate, CI_STEP, dispatch, tmp_path, green_answers(dispatch, **replaced))
-    expected = (1, refused(refusal.format(commit=dispatch.commit))) if refusal else (0, "")
-    assert (result.returncode, result.stderr) == expected
+    expected = (1, refused(refusal.format(commit=dispatch.commit)), "") if refusal else (0, "", "")
+    assert outcome(result) == expected
 
 
 @pytest.mark.parametrize("ignored_run", ["another commit's run", "a pull request run"])
@@ -252,35 +344,66 @@ def test_a_run_of_another_commit_or_event_is_no_push_run_on_the_commit(gate, dis
         "another commit's run": requests["runs"][1].replace(dispatch.commit, "e5" * 20),
         "a pull request run": requests["runs"][1].replace("event=push", "event=pull_request"),
     }[ignored_run]
-    answers = green_answers(dispatch, runs=ci_runs()) | {("api", other_query): Answer(ci_runs((7, "completed", "success")))}
+    answers = green_answers(dispatch, runs=ci_runs()) | {
+        ("api", other_query): Answer(ci_runs((7, "completed", "success")))
+    }
     result = run_gate_step(gate, CI_STEP, dispatch, tmp_path, answers)
-    assert (result.returncode, result.stderr) == (1, refused(f"CI has no push run on {dispatch.commit}."))
+    assert outcome(result) == (1, refused(f"CI has no push run on {dispatch.commit}."), "")
 
 
 def merge_scenarios() -> dict[str, tuple[dict, str | None]]:
     """Each id: what replaces the green reads, and the refusal line (None when the step passes)."""
     head = "b2" * 20
 
-    def scenario(pulls: list[dict] | None = None, runs: tuple = ((1, "success", BEFORE_THE_MERGE),)) -> dict:
-        return {"pulls": [merged_pull(9, head, MERGED_AT)] if pulls is None else pulls, "check_runs": {head: check_runs(*runs)}}
+    def scenario(pulls: list[dict] | None = None, runs: tuple = ((1, "success", around_the_merge(-60)),)) -> dict:
+        return {
+            "pulls": [merged_pull(9, head, around_the_merge())] if pulls is None else pulls,
+            "check_runs": {head: check_runs(*runs)},
+        }
 
     no_single_pull = "no single pull request merged {commit} into main."
-    red = "pull request #9 merged with quality / verdict {verdict}; release the next commit merged with a green verdict."
+    red = (
+        "pull request #9 merged with quality / verdict {verdict}; release the next commit merged with a green verdict."
+    )
     return {
         "green": (scenario(), None),
         "no pull request": (scenario([]), no_single_pull),
         "an open pull request only": (scenario([merged_pull(9, head, None)]), no_single_pull),
-        "merged into another base": (scenario([merged_pull(9, head, MERGED_AT, base="develop")]), no_single_pull),
-        "two merged pull requests": (scenario([merged_pull(9, head, MERGED_AT), merged_pull(10, head, MERGED_AT)]), no_single_pull),
-        "the verdict failed": (scenario(runs=((1, "failure", BEFORE_THE_MERGE),)), red.format(verdict="failure")),
+        "merged into another base": (
+            scenario([merged_pull(9, head, around_the_merge(), base="develop")]),
+            no_single_pull,
+        ),
+        "two merged pull requests": (
+            scenario([merged_pull(9, head, around_the_merge()), merged_pull(10, head, around_the_merge())]),
+            no_single_pull,
+        ),
+        "the verdict failed": (scenario(runs=((1, "failure", around_the_merge(-60)),)), red.format(verdict="failure")),
         "no verdict check run": (scenario(runs=()), red.format(verdict="missing")),
         "a re-run after the merge does not lift the refusal": (
-            scenario(runs=((1, "failure", BEFORE_THE_MERGE), (2, "success", AFTER_THE_MERGE))),
+            scenario(runs=((1, "failure", around_the_merge(-60)), (2, "success", around_the_merge(30)))),
             red.format(verdict="failure"),
         ),
-        "a re-run before the merge decides": (scenario(runs=((1, "failure", BEFORE_THE_MERGE), (2, "success", NEARER_THE_MERGE))), None),
-        "a run unfinished at the merge does not count": (scenario(runs=((1, "success", BEFORE_THE_MERGE), (2, None, None))), None),
-        "no check run finished by the merge": (scenario(runs=((1, "success", AFTER_THE_MERGE),)), red.format(verdict="missing")),
+        "a re-run before the merge decides": (
+            scenario(runs=((1, "failure", around_the_merge(-60)), (2, "success", around_the_merge(-30)))),
+            None,
+        ),
+        "a re-run before the merge decides, listed newest first": (
+            scenario(runs=((2, "success", around_the_merge(-30)), (1, "failure", around_the_merge(-60)))),
+            None,
+        ),
+        "a verdict completed at the merge counts": (scenario(runs=((1, "success", around_the_merge()),)), None),
+        "a failure completed at the merge overrides an earlier success": (
+            scenario(runs=((1, "success", around_the_merge(-60)), (2, "failure", around_the_merge()))),
+            red.format(verdict="failure"),
+        ),
+        "a run unfinished at the merge does not count": (
+            scenario(runs=((1, "success", around_the_merge(-60)), (2, None, None))),
+            None,
+        ),
+        "no check run finished by the merge": (
+            scenario(runs=((1, "success", around_the_merge(30)),)),
+            red.format(verdict="missing"),
+        ),
     }
 
 
@@ -289,27 +412,24 @@ def test_a_commit_its_pull_request_merged_red_is_never_released(gate, dispatch, 
     replaced, refusal = merge_scenarios()[case]
     result = run_gate_step(gate, MERGED_STEP, dispatch, tmp_path, green_answers(dispatch, **replaced))
     if refusal:
-        assert (result.returncode, result.stderr) == (1, refused(refusal.format(commit=dispatch.commit)))
+        assert outcome(result) == (1, refused(refusal.format(commit=dispatch.commit)), "")
     else:
-        assert (result.returncode, result.stderr, result.outputs) == (0, "", f"commit={dispatch.commit}\n")
-
-
-@pytest.mark.parametrize("case", [case for case, (_, refusal) in merge_scenarios().items() if refusal])
-def test_a_refused_gate_hands_on_no_commit(gate, dispatch, tmp_path, case):
-    result = run_gate_step(gate, MERGED_STEP, dispatch, tmp_path, green_answers(dispatch, **merge_scenarios()[case][0]))
-    assert (result.returncode, result.outputs) == (1, "")
+        assert outcome(result) == (0, "", f"commit={dispatch.commit}\n")
 
 
 def test_the_gate_asks_for_the_check_the_gate_s_caller_contract_names(gate, dispatch, tmp_path):
     only_that_name = {7: run_jobs((verdict_check_name(), "success"))}
     result = run_gate_step(gate, CI_STEP, dispatch, tmp_path, green_answers(dispatch, jobs=only_that_name))
-    assert (result.returncode, result.stderr) == (0, "")
+    assert outcome(result) == (0, "", "")
 
 
 def test_the_gate_takes_the_version_and_hands_on_the_commit(gate):
     call = gate[True]["workflow_call"]
     assert set(call["inputs"]) == {"version"}
-    assert {key: value for key, value in call["inputs"]["version"].items() if key != "description"} == {"required": True, "type": "string"}
+    assert {key: value for key, value in call["inputs"]["version"].items() if key != "description"} == {
+        "required": True,
+        "type": "string",
+    }
     assert set(call["outputs"]) == {"commit"}
     assert call["outputs"]["commit"]["value"] == "${{ jobs.gate.outputs.commit }}"
     descriptions = [call["inputs"]["version"]["description"], call["outputs"]["commit"]["description"]]
@@ -329,7 +449,11 @@ def test_the_gate_judges_the_dispatched_commit_and_version(gate):
     assert isinstance(environment["RELEASE_FORM"], str)
     for name in (FORMAT_STEP, TAGGED_STEP):
         assert "$RELEASE_FORM" in step_script(gate, "gate", name)
-    patterns = [pattern for name in step_names(gate, "gate") for pattern in re.findall(r"=~\s*(\S+)", step(gate, "gate", name).get("run", ""))]
+    patterns = [
+        pattern
+        for name in step_names(gate, "gate")
+        for pattern in re.findall(r"=~\s*(\S+)", step(gate, "gate", name).get("run", ""))
+    ]
     assert patterns == ["$RELEASE_FORM", "$RELEASE_FORM"]
 
 

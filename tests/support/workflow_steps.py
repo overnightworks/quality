@@ -8,6 +8,7 @@ from pathlib import Path
 import yaml
 
 WORKFLOWS = Path(__file__).parents[2] / ".github" / "workflows"
+FORMAT_STEP = "Refuse a malformed version"
 GITHUB_SHELL = ["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c"]
 FAKE_GH = """\
 #!{python}
