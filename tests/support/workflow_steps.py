@@ -64,7 +64,16 @@ def step(loaded: dict, job: str, name: str) -> dict:
 
 
 def step_script(loaded: dict, job: str, name: str) -> str:
-    return step(loaded, job, name)["run"]
+    candidate = step(loaded, job, name)
+    shell = (
+        candidate.get("shell")
+        or loaded["jobs"][job].get("defaults", {}).get("run", {}).get("shell")
+        or loaded.get("defaults", {}).get("run", {}).get("shell")
+    )
+    assert shell == "bash", (
+        f"{job}/{name} runs under shell {shell!r}: GitHub runs it without pipefail unless it is bash"
+    )
+    return candidate["run"]
 
 
 def step_names(loaded: dict, job: str) -> list[str]:
@@ -105,7 +114,7 @@ def recorded_calls(record: Path) -> list[list[str]]:
 
 
 def run_step(script: str, cwd: Path, environment: dict[str, str], tools: Path) -> StepRun:
-    """Runs `script` as GitHub's default shell does, with the fake tools first on PATH and a fresh `GITHUB_OUTPUT`."""
+    """Runs `script` as GitHub runs a step whose shell is `bash`, with the fake tools first on PATH and a fresh `GITHUB_OUTPUT`."""
     output = cwd / "github_output"
     output.write_text("")
     completed = subprocess.run(

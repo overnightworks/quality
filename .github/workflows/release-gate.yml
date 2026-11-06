@@ -20,6 +20,10 @@ on:
 
 permissions: {}
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   gate:
     runs-on: ubuntu-latest
