@@ -1,6 +1,6 @@
 import pytest
 
-from tests.support.workflow_steps import run_step, step, step_environment, step_script, workflow
+from tests.support.workflow_steps import run_step, step, step_environment, step_names, step_script, workflow
 
 pytestmark = pytest.mark.integration
 
@@ -43,9 +43,67 @@ def test_the_call_takes_exactly_the_image_interface(image):
     assert {name: spec["value"] for name, spec in call["outputs"].items()} == {
         name: f"${{{{ jobs.image.outputs.{name} }}}}" for name in ("digest", "ref")
     }
-    assert set(image["jobs"]["image"]["outputs"]) == {"digest", "ref"}
     assert image["jobs"]["image"]["outputs"] == {
-        name: f"${{{{ steps.pushed.outputs.{name} }}}}" for name in ("digest", "ref")
+        "digest": "${{ steps.pushed.outputs.digest }}",
+        "ref": "${{ steps.pushed.outputs.ref }}",
+    }
+    assert step(image, "image", PUSHED_STEP)["id"] == "pushed"
+    assert step(image, "image", NAME_STEP)["id"] == "name"
+
+
+def test_the_job_runs_hosted_with_the_inputs_in_its_environment(image):
+    job = image["jobs"]["image"]
+    assert job["runs-on"] == "ubuntu-latest"
+    assert job["timeout-minutes"] == 60
+    assert job["env"] == {
+        "IMAGE": "${{ inputs.image }}",
+        "VERSION": "${{ inputs.version }}",
+        "REPOSITORY": "${{ github.repository }}",
+    }
+
+
+def test_the_steps_run_in_the_order_that_lets_the_push_succeed(image):
+    assert step_names(image, "image") == [
+        NAME_STEP,
+        CHECKOUT_STEP,
+        "Set up Buildx",
+        LOGIN_STEP,
+        BUILD_STEP,
+        ATTEST_STEP,
+        PUSHED_STEP,
+    ]
+
+
+def test_every_action_is_pinned_to_its_commit(image):
+    assert {
+        name: step(image, "image", name)["uses"]
+        for name in (CHECKOUT_STEP, "Set up Buildx", LOGIN_STEP, BUILD_STEP, ATTEST_STEP)
+    } == {
+        CHECKOUT_STEP: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+        "Set up Buildx": "docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069",
+        LOGIN_STEP: "docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550",
+        BUILD_STEP: "docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc",
+        ATTEST_STEP: "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6",
+    }
+
+
+def test_the_checkout_is_the_dispatched_commit_without_credentials(image):
+    assert step(image, "image", CHECKOUT_STEP)["with"] == {"ref": "${{ github.sha }}", "persist-credentials": False}
+
+
+def test_buildx_reads_no_cache_binary_and_login_uses_the_actor_token(image):
+    assert step(image, "image", "Set up Buildx")["with"] == {"cache-binary": False}
+    assert step(image, "image", LOGIN_STEP)["with"] == {
+        "registry": "ghcr.io",
+        "username": "${{ github.actor }}",
+        "password": "${{ github.token }}",
+    }
+
+
+def test_the_naming_step_reads_the_name_and_the_built_digest(image):
+    assert step(image, "image", PUSHED_STEP)["env"] == {
+        "NAME": "${{ steps.name.outputs.name }}",
+        "DIGEST": "${{ steps.build.outputs.digest }}",
     }
 
 
@@ -100,10 +158,6 @@ def test_only_login_attest_and_naming_depend_on_push(image):
         PUSHED_STEP: "inputs.push",
     }
     assert all("continue-on-error" not in candidate for candidate in steps)
-
-
-def test_the_checkout_is_the_dispatched_commit_without_credentials(image):
-    assert step(image, "image", CHECKOUT_STEP)["with"] == {"ref": "${{ github.sha }}", "persist-credentials": False}
 
 
 @pytest.mark.parametrize(
