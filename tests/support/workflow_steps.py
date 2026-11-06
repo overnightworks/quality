@@ -36,16 +36,6 @@ if filter_ is None:
 else:
     sys.exit(subprocess.run(["jq", "-r", filter_], input=body, text=True).returncode)
 """
-RECORDING_COMMAND = """\
-#!{python}
-import json, sys
-from pathlib import Path
-
-home = Path(__file__).parent
-with (home / "{name}.calls.jsonl").open("a") as calls:
-    calls.write(json.dumps(sys.argv[1:]) + "\\n")
-sys.exit({exit_code} if sys.argv[1:2] == ["{failing}"] else 0)
-"""
 
 
 @dataclass(frozen=True)
@@ -108,13 +98,6 @@ class FakeGh:
 
     def calls(self) -> list[list[str]]:
         return recorded_calls(self.directory / "calls.jsonl")
-
-
-def recording_command(directory: Path, name: str, failing: str = "", exit_code: int = 1) -> Path:
-    """An executable `name` that records its arguments and exits `exit_code` when its first argument is `failing`."""
-    directory.mkdir(parents=True, exist_ok=True)
-    write_executable(directory / name, RECORDING_COMMAND.format(python=sys.executable, name=name, failing=failing, exit_code=exit_code))
-    return directory / f"{name}.calls.jsonl"
 
 
 def recorded_calls(record: Path) -> list[list[str]]:

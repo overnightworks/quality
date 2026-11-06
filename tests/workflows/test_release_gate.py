@@ -99,8 +99,8 @@ def tags(*name_commit: tuple[str, str]) -> list[dict]:
     return [{"name": name, "commit": {"sha": commit}} for name, commit in name_commit]
 
 
-def requests_of(dispatch: Dispatch, repository: str | None = None) -> dict[str, tuple[str, ...]]:
-    api = f"repos/{repository or dispatch.repository}"
+def requests_of(dispatch: Dispatch) -> dict[str, tuple[str, ...]]:
+    api = f"repos/{dispatch.repository}"
     return {
         "main": ("api", f"{api}/commits/main"),
         "refs": ("api", f"{api}/git/matching-refs/tags/v{dispatch.version}"),
@@ -118,9 +118,7 @@ def requests_of(dispatch: Dispatch, repository: str | None = None) -> dict[str, 
     }
 
 
-def green_answers(
-    dispatch: Dispatch, other_repository: str | None = None, **replaced: object
-) -> dict[tuple[str, ...], Answer]:
+def green_answers(dispatch: Dispatch, **replaced: object) -> dict[tuple[str, ...], Answer]:
     """Every read a passing gate makes. `replaced` swaps one body by name; `jobs` and `check_runs` take {id: body}."""
     head = "b2" * 20
     bodies = {
@@ -132,7 +130,7 @@ def green_answers(
         "jobs": {7: run_jobs((verdict_check_name(), "success"))},
         "check_runs": {head: check_runs((1, "success", around_the_merge(-60)))},
     } | replaced
-    requests = requests_of(dispatch, other_repository)
+    requests = requests_of(dispatch)
     answers = {requests[name]: Answer(body) for name, body in bodies.items() if name not in {"jobs", "check_runs"}}
     answers |= {
         tuple(part.format(run=run) for part in requests["jobs"]): Answer(body) for run, body in bodies["jobs"].items()
@@ -161,7 +159,14 @@ def run_gate_step(
 
 
 def outcome(result: StepRun) -> tuple[int, str, str]:
+    """The exit code, stderr and step outputs; the gate prints nothing to stdout in any scenario."""
+    assert result.stdout == ""
     return result.returncode, result.stderr, result.outputs
+
+
+def test_no_gate_job_or_step_is_skippable(gate):
+    assert "if" not in gate["jobs"]["gate"]
+    assert all("if" not in candidate and "continue-on-error" not in candidate for candidate in gate["jobs"]["gate"]["steps"])
 
 
 def refused(line: str) -> str:
