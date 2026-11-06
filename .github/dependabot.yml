@@ -6,9 +6,18 @@ updates:
       interval: daily
     cooldown:
       default-days: 7
+    groups:
+      actions:
+        patterns:
+          - "*"
   - package-ecosystem: uv
     directory: /
     schedule:
       interval: daily
     cooldown:
       default-days: 7
+    groups:
+      uv-minor-and-patch:
+        update-types:
+          - minor
+          - patch
