@@ -142,6 +142,7 @@ reason = "the operator ruled the requirement shelf machinery out"
   (the rule is in [rules](rules.md), "The import contracts only tighten"): `import contract "<name>" removed`,
   `import-linter config in <file> removed`, `import contract "<name>" ignores <expression>`,
   `import contract "<name>" changes <field>` and `import-linter changes <option>`.
+
 Ruled by the operator:
 
 - A loosening is declared and stays red, and only the operator's door merges it.

@@ -159,7 +159,8 @@ SONARIAC-3096). A pull-request analysis does not see an unchanged `.github/depen
 - **Only this rule** has the exception, because only it has the premise (Sonar's own exception that its pull-request
   analysis misses); every other finding and rule counts as before. There is no per-image entry in `quality/config.toml`
   and no reading of `dependabot.yml`: Sonar itself checks existence only, and a pull request is judged the way the default
-  branch is.
+  branch is. The Docker rule is no reason to move the zero rule to the hosted gate, because the scan's own exclusion keeps
+  `docker:S8431` out where `dependabot.yml` exists.
 - **Gaps:** the file's existence does not say that Dependabot maintains the Dockerfile's folder for Docker; a repository
   that has only `.github/dependabot.yaml` stays red on pull requests; Renovate is not judged.
 

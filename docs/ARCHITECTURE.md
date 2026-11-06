@@ -46,7 +46,7 @@ flowchart TB
     reports["sonar.py, fleet.py: SonarCloud findings, fleet report"]
     check["check.py, staged.py: areas in order, the commit hook"]
     rules["rule modules: one decision each"]
-    shared["shared layers: checkout, repository, config, report, output, web, process"]
+    shared["shared layers below the rules"]
     cli --> door
     cli --> verdict
     cli --> reports
@@ -117,7 +117,8 @@ setup, not to quality.
 test is marked `scanner`. Workflow tests sit in `tests/workflows/`. CI runs the whole suite with coverage and the gate on
 quality itself.
 
-**Errors.** The exit contract is 0 clean, 1 findings, 2 cannot judge, 130 interrupted. Cannot judge is never clean, and a rule that cannot judge refuses only itself.
+**Errors.** The exit contract is 0 clean, 1 findings, 2 cannot judge, 130 interrupted. Cannot judge is never clean,
+and a rule that cannot judge refuses only itself.
 
 ## 6. Constraints and reasons
 
