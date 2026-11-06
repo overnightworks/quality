@@ -36,7 +36,7 @@ EXIT_REFUSED = 1
 EXIT_NOT_RESTORED = 2
 
 GATE_PROPERTY = "quality_gate"
-CONFIRMATION_WORD = "ja"
+CONFIRMATION_WORD = "yes"
 SONAR_CHECK = "quality / sonar"
 VERDICT_CHECK = "quality / verdict"
 LEGACY_CHECKS = (SONAR_CHECK, VERDICT_CHECK)
@@ -502,7 +502,7 @@ def log_comment(login: str, moment: datetime, door: Door, attempt: Attempt) -> s
 
 
 def confirmed(ask: Ask, pull_request: int) -> bool:
-    """`ja` and nothing else: the end of input is no, and Ctrl-C at the prompt ends the run interrupted."""
+    """`yes` and nothing else: the end of input is no, and Ctrl-C at the prompt ends the run interrupted."""
     answer = ask(f"Switch {GATE_PROPERTY} off, merge #{pull_request}, switch it on? Type {CONFIRMATION_WORD}: ")
     return answer is not None and answer.strip() == CONFIRMATION_WORD
 

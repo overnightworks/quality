@@ -227,7 +227,7 @@ def rows_before_the_prompt():
 
 
 def prompt(pull_request=7):
-    return f"Switch quality_gate off, merge #{pull_request}, switch it on? Type ja: "
+    return f"Switch quality_gate off, merge #{pull_request}, switch it on? Type yes: "
 
 
 def not_confirmed_pair(pull_request=7, repository=REPO):
@@ -248,7 +248,7 @@ def terminal_pair():
     )
 
 
-def drive(gh, transport=None, typed="ja\n", terminal=True, repo=REPO, when_asked=lambda: None, pull_request="7"):
+def drive(gh, transport=None, typed="yes\n", terminal=True, repo=REPO, when_asked=lambda: None, pull_request="7"):
     """The `typed` argument is the line the terminal answers, its line end included (`""` the end of input); an exception is raised."""
     answers = []
 

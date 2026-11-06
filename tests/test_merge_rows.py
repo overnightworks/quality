@@ -285,7 +285,7 @@ def test_the_rows_name_the_pull_requests_base_not_the_default_branch(capsys):
             "merged.",
         ),
         prompt(),
-        ["ja\n"],
+        ["yes\n"],
     )
 
 
