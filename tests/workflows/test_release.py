@@ -100,6 +100,10 @@ def test_the_gate_call_is_this_repository_s_own_and_gets_the_version(release):
     assert call["permissions"] == {"actions": "read", "checks": "read", "contents": "read", "pull-requests": "read"}
 
 
+def test_the_build_sets_up_uv_with_pinned_inputs(release):
+    assert step(release, "build", "Set up uv")["with"] == {"version": "0.12.4", "python-version": "3.14"}
+
+
 def test_the_build_checks_out_and_verifies_the_gated_commit(release):
     assert release["jobs"]["build"]["env"] == {
         "VERSION": "${{ inputs.version }}",
