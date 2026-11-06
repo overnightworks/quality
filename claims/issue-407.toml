@@ -1,0 +1,8 @@
+claim_id = "03822183d7504a05bbc8b53ebd23d836"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "3469ac4f4ca5bf947d4f1b329f6bd7f55adc7e08"
+branch = "claude/issue-407-release-tag"
+scope = [".github/workflows/release-tag.yml", ".github/workflows/release.yml", "AGENTS.md", "README.md", "docs/ARCHITECTURE.md", "docs/release.md", "tests/workflows/test_release.py", "tests/workflows/test_release_tag.py"]
+opened_commit = "81bedc7fc183e99dd894d509a9b1f70cc1d0ce36"
+whole_reason = "One writing step: the shared tag workflow, its one caller in quality, their two test modules, and the caller contract with the three lines that list the release workflows; a tag workflow without its caller or contract is no honest end-to-end slice."
