@@ -83,7 +83,9 @@ def test_no_job_may_write(release):
 def test_a_release_never_cancels_a_running_release(release):
     group = release["concurrency"]["group"]
     assert release["concurrency"]["cancel-in-progress"] is False
-    assert isinstance(group, str) and group and "${{" not in group
+    assert isinstance(group, str)
+    assert group
+    assert "${{" not in group
 
 
 def test_the_gate_call_is_this_repository_s_own_and_gets_the_version(release):
