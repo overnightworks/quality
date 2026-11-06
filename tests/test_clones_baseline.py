@@ -40,7 +40,7 @@ from tests.support.check import (
 from tests.support.clones import function as clone_function
 from tests.support.door import FIX_WORDS, door_in
 from tests.support.git_repositories import head_commit, put
-from tests.support.merge import ONE_JOB, SONAR_GREEN, declaring, drive
+from tests.support.merge import ONE_JOB, SONAR_GREEN, closing_line, declaring, drive
 from tests.support.source_code import long_function
 from tests.support.verdict import ONLY_DECLARED, declaration, verdict_of
 from tests.support.verdict_renames import OLD_ENTRY, commit_all, entry, file_text, moved_in_head, moves_in_head, pulled
@@ -224,7 +224,7 @@ def test_a_declared_clone_add_merges_through_the_door(capsys, tmp_path):
         tmp_path, FIRST, FIRST + SECOND, checks=SONAR_GREEN, base_config=ONE_JOB, merge_config=ONE_JOB + declaring(what)
     )
     assert drive(gh)[0] == 0
-    assert "merged." in capsys.readouterr().out
+    assert closing_line() in capsys.readouterr().out
     assert len(gh.merge_calls) == 1
 
 
@@ -596,7 +596,7 @@ def test_a_control_character_in_a_held_pair_prints_escaped(build_repo, capsys):
     ("merge_config", "code", "expected"),
     [
         (ONE_JOB, 1, UNDECLARED + f"clone baseline adds {SECOND_LABEL}"),
-        (ONE_JOB + declaring(f"clone baseline adds {SECOND_LABEL}"), 0, "merged."),
+        (ONE_JOB + declaring(f"clone baseline adds {SECOND_LABEL}"), 0, closing_line()),
         (ONE_JOB + declaring(f"clone baseline adds {NEW_PAIR_LABEL}"), 1, UNDECLARED + f"clone baseline adds {SECOND_LABEL}"),
     ],
     ids=["undeclared is refused", "declared goes on", "a declaration of another pair is refused"],

@@ -123,6 +123,7 @@ def main(
     locate_ruff: Callable[[], str] = INSTALLED_RUFF,
     locate_zizmor: Callable[[], str] = INSTALLED_ZIZMOR,
     clock: Callable[[], float] = time.monotonic,
+    now: Callable[[], datetime] = lambda: datetime.now(UTC),
     environment: Mapping[str, str] = os.environ,
 ) -> int:
     channels = open_channels(environment)

@@ -17,12 +17,18 @@ from tests.support.merge import (
     SONAR_GREEN,
     TWO_JOBS,
     FakeGh,
+    attempt_rows,
     changed_nothing,
+    closing_line,
+    comment_line,
     declaring,
     drive,
+    frozen_now,
     no_network,
     not_confirmed_pair,
     prompt,
+    restore_line,
+    rows_before_the_prompt,
     sonar,
 )
 from tests.support.terminal import screen
@@ -282,21 +288,22 @@ def test_the_rows_name_the_pull_requests_base_not_the_default_branch(capsys):
             legacy_row(),
             "  · merge         merge commit   allowed on release/1",
             "  · landing       work item      #3",
-            "merged.",
+            *attempt_rows().splitlines(),
+            closing_line().rstrip("\n"),
         ),
         prompt(),
         ["yes\n"],
     )
 
 
-def at_a_terminal(gh, window, columns, transport=None):
+def at_a_terminal(gh, window, columns, transport=None, typed="no\n"):
     """What the door shows on a terminal of `columns` before it asks, read off the screen, with its exit and stderr."""
     terminal = window(columns)
     errors = io.StringIO()
     with contextlib.redirect_stdout(terminal.stream), contextlib.redirect_stderr(errors):
         code = cli.main(
-            ["emergency-merge", REPO, "7"], gh=gh, transport=transport or sonar(), read_line=lambda: "no\n", is_terminal=lambda: True,
-            remote_for=no_network, environment={"TERM": "xterm"},
+            ["emergency-merge", REPO, "7"], gh=gh, transport=transport or sonar(), read_line=lambda: typed, is_terminal=lambda: True,
+            remote_for=no_network, environment={"TERM": "xterm"}, now=frozen_now,
         )
     return code, screen(terminal.read()).splitlines(), errors.getvalue()
 
@@ -366,3 +373,48 @@ def test_what_the_operator_must_read_stands_whole_at_a_terminal(gh_kwargs, sonar
 )
 def test_a_refused_or_cross_fact_ends_at_the_window(gh_kwargs, code, lines, err, window):
     assert at_a_terminal(FakeGh(**gh_kwargs), window, 40) == (code, lines, err)
+
+
+@pytest.mark.parametrize(
+    ("gh_kwargs", "lines", "pair_end"),
+    [
+        (
+            {"fail_on": ["gate"]},
+            ["  ✗ quality_gate  off failed     gate b…", "  ✓ quality_gate  on", "  ✓ log comment   posted         on #7"],
+            ["error: quality_gate on again · #7 is not merged", "next: quality emergency-merge acme/widgets 7"],
+        ),
+        (
+            {"fail_on": ["merge"]},
+            [
+                "  ✓ quality_gate  off            acme/widgets", "  ✓ quality_gate  on",
+                "  ✗ #7            not merged     merge …", "  ✓ log comment   posted         on #7",
+            ],
+            ["error: quality_gate on again · #7 is not merged", "next: quality emergency-merge acme/widgets 7"],
+        ),
+        (
+            {"fail_on": ["restore"]},
+            [
+                "  ✓ quality_gate  off            acme/widgets", "  ✓ #7            merged         merge commit",
+                "  ✗ quality_gate  not restored   restor…", "  ✓ log comment   posted         on #7",
+            ],
+            [
+                "error: quality_gate MAY STILL BE OFF on acme/widgets · #7 is merged", "next:",
+                *restore_line().splitlines(),
+            ],
+        ),
+        (
+            {"fail_on": ["comment"]},
+            [
+                "  ✓ quality_gate  off            acme/widgets", "  ✓ #7            merged         merge commit",
+                "  ✓ quality_gate  on", "  ✗ log comment   not posted     commen…",
+            ],
+            ["error: quality_gate on again · #7 is merged · no log comment on #7", "next:", *comment_line().splitlines()],
+        ),
+    ],
+    ids=["the switch off fails", "the merge fails", "the restore fails", "the comment fails"],
+)
+def test_an_attempts_cross_fact_ends_at_the_window(gh_kwargs, lines, pair_end, window):
+    code, shown, err = at_a_terminal(FakeGh(**gh_kwargs), window, 40, typed="yes\n")
+    assert (code, shown[len(rows_before_the_prompt().splitlines()):], err) == (
+        2, lines, prompt() + "".join(f"{line}\n" for line in pair_end),
+    )

@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime
 
 from quality import cli
 from quality.config import CONFIG_PATH
@@ -84,13 +85,23 @@ class FakeGh:
     def __call__(self, arguments, stdin=None):
         self.requests.append((tuple(arguments), stdin))
         step = self.step_of(arguments)
+        moment = self.moment_of(arguments, stdin)
         if step == "merge" and self.merge_lands:
             self.merged = True
-        if step in self.interrupt_on:
+        if moment in self.interrupt_on:
             raise KeyboardInterrupt
-        if step in self.fail_on:
-            raise GhFailed(f"{step} broke")
-        return self.answer(step, arguments, stdin)
+        if moment in self.fail_on:
+            raise GhFailed(f"{moment} broke")
+        return self.answer(step, arguments, stdin, moment)
+
+    def moment_of(self, arguments, stdin):
+        """The step a call belongs to, a gate request switching it on `restore` and a pull read after a merge `read back`."""
+        step = self.step_of(arguments)
+        if step == "gate" and json.loads(stdin)["properties"][0]["value"] == "true":
+            return "restore"
+        if step == "pull" and self.merge_calls:
+            return "read back"
+        return step
 
     @staticmethod
     def step_of(arguments):
@@ -109,8 +120,8 @@ class FakeGh:
         path, _, sha = arguments[-1].partition("/contents/")[2].partition("?ref=")
         return path, sha
 
-    def answer(self, step, arguments, stdin):
-        fixed = self.fixed_answer(step, arguments)
+    def answer(self, step, arguments, stdin, moment):
+        fixed = self.fixed_answer(step, moment, arguments)
         if fixed is not None:
             return fixed
         if step == "pull":
@@ -138,10 +149,10 @@ class FakeGh:
         self.record(step, arguments, stdin)
         return ""
 
-    def fixed_answer(self, step, arguments):
+    def fixed_answer(self, step, moment, arguments):
         """A raw answer the test planted, or nothing for a check or status read of any commit but the head's own."""
-        if step in self.raw_answers:
-            return self.raw_answers[step]
+        if moment in self.raw_answers:
+            return self.raw_answers[moment]
         if step in ("checks", "statuses") and f"/commits/{SHA}/" not in " ".join(arguments):
             return ""
         return None
@@ -248,7 +259,40 @@ def terminal_pair():
     )
 
 
-def drive(gh, transport=None, typed="yes\n", terminal=True, repo=REPO, when_asked=lambda: None, pull_request="7"):
+def frozen_now():
+    return datetime(2026, 11, 6, 12, 0, tzinfo=UTC)
+
+
+def attempt_rows(method="merge commit"):
+    """The four step rows of a merge that goes through, on `acme/widgets#7`."""
+    return (
+        "  ✓ quality_gate  off            acme/widgets\n"
+        f"  ✓ #7            merged         {method}\n"
+        "  ✓ quality_gate  on\n"
+        "  ✓ log comment   posted         on #7\n"
+    )
+
+
+def closing_line():
+    return "✓ merged #7 · quality_gate on again · <1s\n"
+
+
+def restore_line():
+    return '    echo \'{"properties":[{"property_name":"quality_gate","value":"true"}]}\' | gh api -X PATCH repos/acme/widgets/properties/values --input -\n'
+
+
+def log_body(switched="off", outcome="merge", restored="on"):
+    return (
+        "body=Emergency door used by @felix at 2026-11-06T12:00:00+00:00: 4 legacy finding(s); merges with a merge commit; "
+        f"quality_gate {switched} → {outcome} → {restored}."
+    )
+
+
+def comment_line(**arguments):
+    return f"    gh api -X POST repos/acme/widgets/issues/7/comments -f '{log_body(**arguments)}'\n"
+
+
+def drive(gh, transport=None, typed="yes\n", terminal=True, repo=REPO, when_asked=lambda: None, pull_request="7", clock=lambda: 0.0):
     """The `typed` argument is the line the terminal answers, its line end included (`""` the end of input); an exception is raised."""
     answers = []
 
@@ -263,6 +307,7 @@ def drive(gh, transport=None, typed="yes\n", terminal=True, repo=REPO, when_aske
     code = cli.main(
         ["emergency-merge", repo, pull_request], gh=gh, transport=transport or sonar(), read_line=read_line,
         is_terminal=lambda: terminal, remote_for=no_network if remote is None else lambda repository: remote,
+        clock=clock, now=frozen_now,
     )
     return code, answers
 
