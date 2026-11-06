@@ -670,7 +670,7 @@ def test_ask_returns_the_line_a_person_ended_and_none_where_the_input_ended_firs
     assert (answer, stream.getvalue()) == (returned, shown)
 
 
-class _LineBufferedStream(io.StringIO):
+class _FlushRecordingStream(io.StringIO):
     """Holds what was written until flushed, as a terminal's stderr holds a prompt without a line end."""
 
     def __init__(self):
@@ -682,7 +682,7 @@ class _LineBufferedStream(io.StringIO):
 
 
 def test_ask_shows_the_prompt_before_it_reads_the_line():
-    stream = _LineBufferedStream()
+    stream = _FlushRecordingStream()
     shown_at_the_read = []
 
     def read_line():

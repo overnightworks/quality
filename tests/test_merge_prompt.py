@@ -49,23 +49,17 @@ def test_anything_but_ja_changes_nothing_and_says_so(typed, pair, capsys):
     assert gh.sequence == []
 
 
+@pytest.mark.parametrize("repository", [REPO, "acme/gadgets"], ids=["on the default repository", "on another repository"])
 @pytest.mark.parametrize(
-    ("repository", "gh_kwargs", "typed", "err"),
+    ("gh_kwargs", "typed", "pair"),
     [
-        ("acme/widgets", {}, "no\n", prompt(12) + not_confirmed_pair(12)),
-        ("acme/gadgets", {}, "no\n", prompt(12) + not_confirmed_pair(12, "acme/gadgets")),
-        (
-            "acme/widgets", {"body": "Work-Item: acme/other#9"}, "ja\n",
-            landing_pair(12, "acme/widgets"),
-        ),
-        (
-            "acme/gadgets", {"body": "Work-Item: acme/other#9"}, "ja\n",
-            landing_pair(12, "acme/gadgets"),
-        ),
+        ({}, "no\n", not_confirmed_pair),
+        ({"body": "Work-Item: acme/other#9"}, "ja\n", landing_pair),
     ],
-    ids=["not confirmed", "not confirmed on another repository", "a refused landing line", "a refused landing line on another repository"],
+    ids=["not confirmed", "a refused landing line"],
 )
-def test_the_prompt_and_the_pair_name_the_pull_request_asked_for(repository, gh_kwargs, typed, err, capsys):
+def test_the_prompt_and_the_pair_name_the_pull_request_asked_for(repository, gh_kwargs, typed, pair, capsys):
+    err = (prompt(12) if typed == "no\n" else "") + pair(12, repository)
     gh = FakeGh(checks=SONAR_GREEN, base_config=TWO_JOBS, head_config=ONE_JOB + declaring(B_REMOVED), **gh_kwargs)
     code, _ = drive(gh, repo=repository, pull_request="12", typed=typed)
     assert (code, capsys.readouterr().err) == (1, err)
