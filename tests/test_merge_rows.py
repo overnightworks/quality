@@ -21,6 +21,8 @@ from tests.support.merge import (
     declaring,
     drive,
     no_network,
+    not_confirmed_pair,
+    prompt,
     sonar,
 )
 from tests.support.terminal import screen
@@ -275,11 +277,11 @@ def test_the_rows_name_the_pull_requests_base_not_the_default_branch(capsys):
             loosenings_none(),
             "  ! sonar         4 legacy findings on main",
             "  · merge         merge commit   allowed on release/1",
-            "the merge commit ends with Work-Item: #3",
+            "  · landing       work item      #3",
             "merged.",
         ),
-        "",
-        ["Switch quality_gate off, merge, switch it on? Type 'ja': "],
+        prompt(),
+        ["ja\n"],
     )
 
 
@@ -289,7 +291,7 @@ def at_a_terminal(gh, window, columns, transport=None):
     errors = io.StringIO()
     with contextlib.redirect_stdout(terminal.stream), contextlib.redirect_stderr(errors):
         code = cli.main(
-            ["emergency-merge", REPO, "7"], gh=gh, transport=transport or sonar(), ask=lambda prompt: "no", is_terminal=lambda: True,
+            ["emergency-merge", REPO, "7"], gh=gh, transport=transport or sonar(), read_line=lambda: "no\n", is_terminal=lambda: True,
             remote_for=no_network, environment={"TERM": "xterm"},
         )
     return code, screen(terminal.read()).splitlines(), errors.getvalue()
@@ -305,10 +307,17 @@ def at_a_terminal(gh, window, columns, transport=None):
                 pull_row(), verdict_only_checks_row(), "  ! loosenings    1 declared",
                 f'    ! {B_REMOVED} · overnightworks/songmaker#1345 of 2026-10-20',
                 "        reason: a reason that runs on past the window",
-                "  · merge         merge commit   allowed on main", "the merge commit ends with Work-Item: #3",
-                "emergency-merge: not confirmed, nothing was changed",
+                "  · merge         merge commit   allowed on main", "  · landing       work item      #3",
             ],
-            "",
+            prompt() + not_confirmed_pair(),
+        ),
+        (
+            {"body": "Work-Item: #123456789"}, {}, 1,
+            [
+                pull_row(), checks_row(), loosenings_none(), "  ! sonar         4 legacy findings on main",
+                "  · merge         merge commit   allowed on main", "  · landing       work item      #123456789",
+            ],
+            prompt() + not_confirmed_pair(),
         ),
         (
             {"checks": SONAR_GREEN, "base_config": TWO_JOBS, "head_config": ONE_JOB},
@@ -329,7 +338,7 @@ def at_a_terminal(gh, window, columns, transport=None):
             refused_pair(),
         ),
     ],
-    ids=["a declaration", "an undeclared loosening", "an added finding"],
+    ids=["a declaration", "a long item number", "an undeclared loosening", "an added finding"],
 )
 def test_what_the_operator_must_read_stands_whole_at_a_terminal(gh_kwargs, sonar_kwargs, code, lines, err, window):
     assert at_a_terminal(FakeGh(**gh_kwargs), window, 40, sonar(**sonar_kwargs)) == (code, lines, err)

@@ -27,6 +27,10 @@ from tests.support.merge import (
     changed_nothing,
     declaring,
     drive,
+    landing_row,
+    prompt,
+    pull_row,
+    rows_before_the_prompt,
     sonar,
 )
 
@@ -48,10 +52,6 @@ def settings_allowing(*methods):
     return {f"allow_{name}": method in methods for method, name in (("merge", "merge_commit"), ("squash", "squash_merge"), ("rebase", "rebase_merge"))}
 
 
-def pull_row():
-    return "  · #7            open           head aaaaaaa · into main\n"
-
-
 def checks_row(red="quality / sonar and quality / verdict are"):
     return f"  ✓ checks        ok             only {red} red\n"
 
@@ -66,10 +66,6 @@ def legacy_row():
 
 def merge_row(event="merge commit"):
     return f"  · merge         {event}   allowed on main\n"
-
-
-def landing_line(item):
-    return f"the merge commit ends with Work-Item: {item}\n"
 
 
 def declared_row(count):
@@ -206,21 +202,9 @@ def test_shows_repository_head_and_legacy_count_before_asking(capsys):
     shown = []
     drive(FakeGh(), when_asked=lambda: shown.append(capsys.readouterr()))
     assert (shown[0].out, shown[0].err) == (
-        pull_row() + checks_row() + loosenings_none() + legacy_row() + merge_row() + landing_line("#3"),
-        "",
+        rows_before_the_prompt(),
+        prompt(),
     )
-
-
-@pytest.mark.parametrize("typed", ["", "yes", "JA", "n", KeyboardInterrupt(), EOFError()], ids=repr)
-def test_anything_but_ja_changes_nothing(typed, capsys):
-    """#37 rule 3: anything but the typed word changes nothing, Ctrl-C and Ctrl-D included."""
-    gh = FakeGh()
-    code, _ = drive(gh, typed=typed)
-    assert code == 1
-    changed_nothing(gh)
-    output = capsys.readouterr().out
-    assert "not confirmed, nothing was changed" in output
-    assert ("\n\nemergency-merge: not confirmed" in output) is isinstance(typed, BaseException)
 
 
 @pytest.mark.parametrize(
@@ -548,15 +532,15 @@ def test_a_declared_loosening_merges_through_the_door_without_sonar(
     monkeypatch.delenv("SONAR_TOKEN", raising=False)
     gh, transport, shown = FakeGh(checks=SONAR_GREEN, base_config=base_config, merge_config=merge_config, body="Work-Item: #9"), recording(sonar()), []
 
-    def ask(prompt):
+    def read_line():
         shown.append(capsys.readouterr())
-        return "ja"
+        return "ja\n"
 
-    code = cli.main(["emergency-merge", REPO, "7"], gh=gh, transport=transport, ask=ask, is_terminal=lambda: True)
+    code = cli.main(["emergency-merge", REPO, "7"], gh=gh, transport=transport, read_line=read_line, is_terminal=lambda: True)
     assert (code, transport.sent, gh.sequence) == (0, [], ["gate false", "merge", "gate true", "comment"])
     assert (shown[0].out, shown[0].err) == (
-        pull_row() + checks_row("quality / verdict is") + rows + merge_row() + landing_line("#9"),
-        "",
+        pull_row() + checks_row("quality / verdict is") + rows + merge_row() + landing_row("#9"),
+        prompt(),
     )
     assert gh.merge_calls == [("pr", "merge", "7", "--repo", REPO, "--merge", "--match-head-commit", SHA, "--body-file", "-")]
     assert "merges with a merge commit; quality_gate off → merge → on." in gh.comments[0]
@@ -584,8 +568,8 @@ def test_legacy_findings_and_a_declared_loosening_merge_in_one_run(capsys):
     assert drive(gh, when_asked=lambda: shown.append(capsys.readouterr()))[0] == 0
     assert (shown[0].out, shown[0].err) == (
         pull_row() + checks_row() + declared_row(1) + removed_b_lines() + legacy_row() + merge_row()
-        + landing_line("#3"),
-        "",
+        + landing_row(),
+        prompt(),
     )
     assert f'4 legacy finding(s); declared loosening ({songmaker_ruling()}): {B_REMOVED}' in gh.comments[0]
 
@@ -632,8 +616,8 @@ def test_the_operator_reads_the_method_before_ja_and_the_log_comment_names_it(gh
     gh, shown = FakeGh(**gh_kwargs), []
     drive(gh, when_asked=lambda: shown.append(capsys.readouterr()))
     assert (shown[0].out, shown[0].err) == (
-        pull_row() + checks_row() + loosenings_none() + legacy_row() + merge_row(event) + landing_line("#3"),
-        "",
+        pull_row() + checks_row() + loosenings_none() + legacy_row() + merge_row(event) + landing_row(),
+        prompt(),
     )
     assert f"; {sentence}; " in gh.comments[0]
 

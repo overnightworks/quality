@@ -652,3 +652,19 @@ def test_a_scoreboard_whose_step_summary_cannot_be_written_is_exit_2_with_the_fa
     stderr = capsys.readouterr().err
     assert stderr.startswith(f"{door}: ")
     assert output.STEP_SUMMARY_VARIABLE in stderr
+
+
+@pytest.mark.parametrize(
+    ("typed", "returned", "shown"),
+    [
+        ("ja\n", "ja", "Type \\x1b: "),
+        ("\n", "", "Type \\x1b: "),
+        ("", None, "Type \\x1b: \n"),
+        ("ja", None, "Type \\x1b: \n"),
+    ],
+    ids=["an ended line", "Enter alone", "end of input", "an unended line"],
+)
+def test_ask_returns_the_line_a_person_ended_and_none_where_the_input_ended_first(typed, returned, shown):
+    stream = io.StringIO()
+    answer = output.ask("Type \x1b: ", output.Channel(stream, False, None), lambda: typed)
+    assert (answer, stream.getvalue()) == (returned, shown)
