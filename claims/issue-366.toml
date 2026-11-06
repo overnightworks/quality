@@ -1,0 +1,8 @@
+claim_id = "8c538a05eb7b4e1c8978ded1ec98811a"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "a9b97327dee0c85c764981738069e54e737f655f"
+branch = "claude/issue-366-c8a2-the-merge-door-s-landing-row-its-pr"
+scope = ["AGENTS.md", "docs/commands.md", "docs/output.md", "docs/rules.md", "docs/runbook-emergency-merge.md", "src/quality/cli.py", "src/quality/merge.py", "src/quality/output.py", "tests/support/merge.py", "tests/test_cli_output.py", "tests/test_cli_stream.py", "tests/test_merge.py", "tests/test_merge_landing.py", "tests/test_merge_prompt.py", "tests/test_merge_rows.py", "tests/test_output.py", "tests/test_sonar_exception.py"]
+opened_commit = "b918f4136b58140be6a2c4129550eec10ddb6904"
+whole_reason = "Three production files, about +41/-22, and the pins of one seam: the frame before the answer (its last row, the prompt and the stream it writes to) is one contract the drive helper carries for every door test; split, every whole frame at the read would change twice, and the prompt would move to stderr while a closed stderr still spilled it onto stdout."
