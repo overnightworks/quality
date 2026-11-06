@@ -1,8 +1,0 @@
-claim_id = "f2dd431c754e40a98f9650d32d24568a"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "8cf8facd0e75db3c3f3fc218a2ef648a3f135330"
-branch = "claude/issue-394-c8b2-after-yes-the-door-prints-each-step"
-scope = ["AGENTS.md", "docs/commands.md", "docs/output.md", "docs/runbook-emergency-merge.md", "src/quality/cli.py", "src/quality/merge.py", "src/quality/output.py", "src/quality/report.py", "tests/support/merge.py", "tests/test_clones_baseline.py", "tests/test_merge.py", "tests/test_merge_attempt.py", "tests/test_merge_prompt.py", "tests/test_merge_rows.py", "tests/test_output.py", "tests/test_verdict_renames.py"]
-opened_commit = "d286e90640cf633daa4b8cab7d453b027b14b983"
-whole_reason = "Four production files: the rows, the closing line, the pair and decision 16's exits are one contract, as every run ends in exactly one of the closing line or the pair; the door's write decision, one DoorStream bound once, rides along because the rows stand between the switch off and the merge, where a raised write would skip the merge."
