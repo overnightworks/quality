@@ -1,7 +1,0 @@
-claim_id = "92d43bea1b354950bebf6796d092c7d0"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "a9b97327dee0c85c764981738069e54e737f655f"
-branch = "claude/issue-368-dependabot-keeps-quality-current"
-scope = [".aco/board.toml", ".github/dependabot.yml", "docs/gate.md"]
-opened_commit = "0827210130a1c030d016999cd8b33ed258c54ee2"
