@@ -156,7 +156,7 @@ Each refusal of the gate prints one line on stderr and fails the gate; no tag ex
 The check name `quality / verdict` and the CI file name `ci.yml` are fleet contracts: the caller job of
 [`gate.yml`](gate.md) is named `quality`.
 
-The tag job refuses before it publishes anything; no release exists after a refusal, and a tag exists only in the last case:
+These refusals stop the attempt before publishing; none creates or changes a tag or release:
 
 | Line | What to do |
 |---|---|
