@@ -229,7 +229,14 @@ def test_the_closing_line_counts_the_seconds_from_the_answer(capsys):
         capsys.readouterr()
 
     drive(merging, when_asked=asking, clock=lambda: seconds[0])
-    assert capsys.readouterr().out.endswith("· 14s\n")
+    actual = capsys.readouterr().out
+    assert actual == (
+        "  ✓ quality_gate  off            acme/widgets\n"
+        "  ✓ #7            merged         merge commit\n"
+        "  ✓ quality_gate  on\n"
+        "  ✓ log comment   posted         on #7\n"
+        "✓ merged #7 · quality_gate on again · 14s\n"
+    )
 
 
 @pytest.mark.parametrize(
