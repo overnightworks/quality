@@ -122,4 +122,4 @@ repository that publishes a release (agent-runtime, aco, appkit, quality, speech
 through the platform (hopin, presentator, speech-runtime, songmaker, platform's Keycloak image). The trigger is a repository's first release after the quality tag that ships the workflows it needs.
 
 A deviation is asked as marketplace `docs/standards.md` says: the covered head names the enduring harm with its
-uncertainty, quality's head reviews it, and the operator rules it; the ruling stays in the covered repository's item.
+uncertainty, quality's head reviews it, and the operator rules it; the ruling is recorded at the owner, overnightworks/quality.
