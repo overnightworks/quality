@@ -102,7 +102,7 @@ def door(gh, **ports):
 
 def test_the_door_reads_one_line_of_stdin(monkeypatch):
     monkeypatch.setattr("sys.stdin", io.StringIO("yes\nno\n"))
-    code = door(FakeGh(), is_terminal=lambda: True)
+    code = door(FakeGh(), terminal=cli.Terminal(sys.stdin.readline, lambda: True))
     left_unread = sys.stdin.read()
     assert (code, left_unread) == (0, "no\n")
 

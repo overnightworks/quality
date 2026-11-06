@@ -305,8 +305,7 @@ def drive(gh, transport=None, typed="yes\n", terminal=True, repo=REPO, when_aske
 
     remote = getattr(gh, "remote", None)
     code = cli.main(
-        ["emergency-merge", repo, pull_request], gh=gh, transport=transport or sonar(), read_line=read_line,
-        is_terminal=lambda: terminal, remote_for=no_network if remote is None else lambda repository: remote,
+        ["emergency-merge", repo, pull_request], gh=gh, transport=transport or sonar(), terminal=cli.Terminal(read_line, lambda: terminal), remote_for=no_network if remote is None else lambda repository: remote,
         clock=clock, now=frozen_now,
     )
     return code, answers

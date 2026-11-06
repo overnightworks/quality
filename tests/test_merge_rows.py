@@ -309,7 +309,7 @@ def at_a_terminal(gh, window, columns, transport=None, typed="no\n"):
     errors = io.StringIO()
     with contextlib.redirect_stdout(terminal.stream), contextlib.redirect_stderr(errors):
         code = cli.main(
-            ["emergency-merge", REPO, "7"], gh=gh, transport=transport or sonar(), read_line=lambda: typed, is_terminal=lambda: True,
+            ["emergency-merge", REPO, "7"], gh=gh, transport=transport or sonar(), terminal=cli.Terminal(lambda: typed, lambda: True),
             remote_for=no_network, environment={"TERM": "xterm"}, now=frozen_now,
         )
     return code, screen(terminal.read()).splitlines(), errors.getvalue()

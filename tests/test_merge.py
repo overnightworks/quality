@@ -383,7 +383,7 @@ def test_a_declared_loosening_merges_through_the_door_without_sonar(
         shown.append(capsys.readouterr())
         return "yes\n"
 
-    code = cli.main(["emergency-merge", REPO, "7"], gh=gh, transport=transport, read_line=read_line, is_terminal=lambda: True)
+    code = cli.main(["emergency-merge", REPO, "7"], gh=gh, transport=transport, terminal=cli.Terminal(read_line, lambda: True))
     assert (code, transport.sent, gh.sequence) == (0, [], ["gate false", "merge", "gate true", "comment"])
     assert (shown[0].out, shown[0].err) == (
         pull_row() + checks_row("quality / verdict is") + rows + merge_row() + landing_row("#9"),
