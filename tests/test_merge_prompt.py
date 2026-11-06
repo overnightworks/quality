@@ -26,6 +26,7 @@ from tests.support.merge import (
     sonar,
     terminal_pair,
 )
+from tests.support.terminal import Terminal
 
 
 @pytest.mark.parametrize(
@@ -92,38 +93,32 @@ def test_ctrl_c_at_the_prompt_ends_the_run_interrupted_and_changes_nothing(capsy
     assert gh.sequence == []
 
 
+def door(gh, **ports):
+    return cli.main(["emergency-merge", REPO, "7"], gh=gh, transport=sonar(), remote_for=no_network, **ports)
+
+
 def test_the_door_reads_one_line_of_stdin(monkeypatch):
     monkeypatch.setattr("sys.stdin", io.StringIO(" ja \nno\n"))
-    code = cli.main(["emergency-merge", REPO, "7"], gh=FakeGh(), transport=sonar(), is_terminal=lambda: True, remote_for=no_network)
+    code = door(FakeGh(), is_terminal=lambda: True)
     assert (code, sys.stdin.read()) == (0, "no\n")
 
 
-class Stream(io.StringIO):
-    def __init__(self, text: str, *, terminal: bool) -> None:
-        super().__init__(text)
-        self.terminal = terminal
-
-    def isatty(self) -> bool:
-        return self.terminal
-
-
 @pytest.mark.parametrize(
-    ("stdin_terminal", "stdout_terminal", "code"),
-    [(True, False, 0), (False, True, 1)],
+    ("stdin_stream", "stdout_stream", "code"),
+    [(Terminal, io.StringIO, 0), (io.StringIO, Terminal, 1)],
     ids=["terminal stdin alone", "terminal stdout alone"],
 )
-def test_only_stdin_decides_whether_the_door_has_a_terminal(stdin_terminal, stdout_terminal, code, monkeypatch):
-    monkeypatch.setattr("sys.stdin", Stream("ja\n", terminal=stdin_terminal))
-    monkeypatch.setattr("sys.stdout", Stream("", terminal=stdout_terminal))
-    result = cli.main(["emergency-merge", REPO, "7"], gh=FakeGh(), transport=sonar(), remote_for=no_network)
-    assert result == code
+def test_only_stdin_decides_whether_the_door_has_a_terminal(stdin_stream, stdout_stream, code, monkeypatch):
+    monkeypatch.setattr("sys.stdin", stdin_stream("ja\n"))
+    monkeypatch.setattr("sys.stdout", stdout_stream())
+    assert door(FakeGh()) == code
 
 
 @pytest.mark.parametrize("stdin", [None, io.StringIO("ja\n")], ids=["closed", "no terminal"])
 def test_a_stdin_that_is_no_terminal_is_the_pair_alone(stdin, monkeypatch, capsys):
     monkeypatch.setattr("sys.stdin", stdin)
     gh = FakeGh()
-    code = cli.main(["emergency-merge", REPO, "7"], gh=gh, transport=sonar(), remote_for=no_network)
+    code = door(gh)
     streams = capsys.readouterr()
     assert (code, streams.out, streams.err, gh.calls) == (1, "", terminal_pair(), [])
 
