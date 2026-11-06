@@ -66,7 +66,7 @@ def test_the_prompt_and_the_pair_name_the_pull_request_asked_for(repository, gh_
     changed_nothing(gh)
 
 
-@pytest.mark.parametrize("typed", ["ja\n", " ja \n"], ids=["ja", "spaces around"])
+@pytest.mark.parametrize("typed", ["ja\n", " ja \n", "\tja\t\n"], ids=["ja", "spaces around", "tabs around"])
 def test_ja_merges_with_or_without_whitespace_around_it(typed, capsys):
     gh = FakeGh()
     assert drive(gh, typed=typed)[0] == 0
@@ -93,9 +93,30 @@ def test_ctrl_c_at_the_prompt_ends_the_run_interrupted_and_changes_nothing(capsy
 
 
 def test_the_door_reads_one_line_of_stdin(monkeypatch):
-    monkeypatch.setattr("sys.stdin", io.StringIO("ja\nno\n"))
+    monkeypatch.setattr("sys.stdin", io.StringIO(" ja \nno\n"))
     code = cli.main(["emergency-merge", REPO, "7"], gh=FakeGh(), transport=sonar(), is_terminal=lambda: True, remote_for=no_network)
     assert (code, sys.stdin.read()) == (0, "no\n")
+
+
+class Stream(io.StringIO):
+    def __init__(self, text: str, *, terminal: bool) -> None:
+        super().__init__(text)
+        self.terminal = terminal
+
+    def isatty(self) -> bool:
+        return self.terminal
+
+
+@pytest.mark.parametrize(
+    ("stdin_terminal", "stdout_terminal", "code"),
+    [(True, False, 0), (False, True, 1)],
+    ids=["terminal stdin alone", "terminal stdout alone"],
+)
+def test_only_stdin_decides_whether_the_door_has_a_terminal(stdin_terminal, stdout_terminal, code, monkeypatch):
+    monkeypatch.setattr("sys.stdin", Stream("ja\n", terminal=stdin_terminal))
+    monkeypatch.setattr("sys.stdout", Stream("", terminal=stdout_terminal))
+    result = cli.main(["emergency-merge", REPO, "7"], gh=FakeGh(), transport=sonar(), remote_for=no_network)
+    assert result == code
 
 
 @pytest.mark.parametrize("stdin", [None, io.StringIO("ja\n")], ids=["closed", "no terminal"])
