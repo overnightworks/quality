@@ -111,7 +111,9 @@ def release_call(tag_call: TagCall, files: list[str], notes: str = "") -> tuple[
 def test_the_tag_takes_version_commit_artifact_and_notes(release_tag):
     inputs = release_tag[True]["workflow_call"]["inputs"]
     assert set(inputs) == {"version", "commit", "artifact", "notes"}
-    assert {name: {key: value for key, value in spec.items() if key != "description"} for name, spec in inputs.items()} == {
+    assert {
+        name: {key: value for key, value in spec.items() if key != "description"} for name, spec in inputs.items()
+    } == {
         "version": {"type": "string", "required": True},
         "commit": {"type": "string", "required": True},
         "artifact": {"type": "string", "required": False, "default": ""},
@@ -159,7 +161,10 @@ def test_a_file_name_with_a_hash_is_refused(release_tag, tag_call, tmp_path, nam
     planted(tmp_path / "work" / files_directory(release_tag), name, "b")
     result = run_tag_step(release_tag, tag_call, CHECK_STEP, tmp_path, {})
     assert result.returncode == 1
-    assert result.stderr == f"Refused: the file {name} has a # in its name, which gh reads as the start of an asset label.\n"
+    assert (
+        result.stderr
+        == f"Refused: the file {name} has a # in its name, which gh reads as the start of an asset label.\n"
+    )
     assert result.calls == []
 
 
@@ -181,7 +186,9 @@ def test_files_without_a_named_artifact_are_refused(release_tag, tag_call, tmp_p
     assert result.calls == []
 
 
-@pytest.mark.parametrize("entry", ["wheels", "link", "\n"], ids=["a subdirectory", "a symbolic link", "a directory named by line feeds"])
+@pytest.mark.parametrize(
+    "entry", ["wheels", "link", "\n"], ids=["a subdirectory", "a symbolic link", "a directory named by line feeds"]
+)
 def test_an_entry_that_is_not_a_regular_top_level_file_is_refused(release_tag, tag_call, tmp_path, entry):
     directory = tmp_path / "work" / files_directory(release_tag)
     planted(directory, "b")
@@ -203,14 +210,39 @@ def test_the_files_land_where_the_steps_read_them(release_tag, tag_call, tmp_pat
         release_tag, tag_call, PUBLISH_STEP, tmp_path, {release_call(tag_call, [f"{directory}/a"]): Answer()}
     )
     assert (checked.returncode, published.returncode) == (0, 0)
-    assert published.calls == [list(release_call(tag_call, [f"{directory}/a"]))]
+    assert published.calls == [
+        [
+            "release",
+            "create",
+            "v1.2.3",
+            f"{directory}/a",
+            "--verify-tag",
+            "--title",
+            "v1.2.3",
+            "--generate-notes",
+            "--notes",
+            "",
+        ]
+    ]
 
 
 def test_the_tag_is_created_at_the_gated_commit(release_tag, tag_call, tmp_path):
     answers = {tag_call.matching_refs: Answer(body=[]), tag_call.create_ref: Answer(body={})}
     result = run_tag_step(release_tag, tag_call, TAG_STEP, tmp_path, answers)
     assert result.returncode == 0
-    assert result.calls == [list(tag_call.matching_refs), list(tag_call.create_ref)]
+    assert result.calls == [
+        list(tag_call.matching_refs),
+        [
+            "api",
+            "-X",
+            "POST",
+            "repos/acme/widgets/git/refs",
+            "-f",
+            "ref=refs/tags/v1.2.3",
+            "-f",
+            "sha=c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
+        ],
+    ]
 
 
 def test_a_rerun_keeps_the_tag_that_already_points_at_the_commit(release_tag, tag_call, tmp_path):
@@ -236,7 +268,16 @@ def test_a_longer_tag_name_is_not_this_tag(release_tag, tag_call, tmp_path):
     }
     result = run_tag_step(release_tag, tag_call, TAG_STEP, tmp_path, answers)
     assert result.returncode == 0
-    assert result.calls[-1] == list(tag_call.create_ref)
+    assert result.calls[-1] == [
+        "api",
+        "-X",
+        "POST",
+        "repos/acme/widgets/git/refs",
+        "-f",
+        "ref=refs/tags/v1.2.3",
+        "-f",
+        "sha=c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
+    ]
 
 
 def test_the_release_carries_exactly_the_files_the_build_made(release_tag, tag_call, tmp_path):
@@ -245,14 +286,31 @@ def test_the_release_carries_exactly_the_files_the_build_made(release_tag, tag_c
     argv = release_call(tag_call, [f"{directory}/.c", f"{directory}/a", f"{directory}/b"], notes="Highlights")
     result = run_tag_step(release_tag, tag_call, PUBLISH_STEP, tmp_path, {argv: Answer()}, NOTES="Highlights")
     assert result.returncode == 0
-    assert result.calls == [list(argv)]
+    assert result.calls == [
+        [
+            "release",
+            "create",
+            "v1.2.3",
+            f"{directory}/.c",
+            f"{directory}/a",
+            f"{directory}/b",
+            "--verify-tag",
+            "--title",
+            "v1.2.3",
+            "--generate-notes",
+            "--notes",
+            "Highlights",
+        ]
+    ]
 
 
 def test_a_release_without_an_artifact_carries_no_file(release_tag, tag_call, tmp_path):
     argv = release_call(tag_call, [])
     result = run_tag_step(release_tag, tag_call, PUBLISH_STEP, tmp_path, {argv: Answer()}, ARTIFACT="")
     assert result.returncode == 0
-    assert result.calls == [list(argv)]
+    assert result.calls == [
+        ["release", "create", "v1.2.3", "--verify-tag", "--title", "v1.2.3", "--generate-notes", "--notes", ""]
+    ]
 
 
 def test_notes_reach_the_release_as_one_argument(release_tag, tag_call, tmp_path):
@@ -260,7 +318,9 @@ def test_notes_reach_the_release_as_one_argument(release_tag, tag_call, tmp_path
     argv = release_call(tag_call, [], notes=notes)
     result = run_tag_step(release_tag, tag_call, PUBLISH_STEP, tmp_path, {argv: Answer()}, ARTIFACT="", NOTES=notes)
     assert result.returncode == 0
-    assert result.calls == [list(argv)]
+    assert result.calls == [
+        ["release", "create", "v1.2.3", "--verify-tag", "--title", "v1.2.3", "--generate-notes", "--notes", notes]
+    ]
     assert not os.path.exists(tmp_path / "work" / "planted")
 
 
@@ -279,8 +339,39 @@ def test_the_tag_is_created_before_the_release_and_a_failed_publication_is_retri
     assert result.returncode == 0
     assert result.calls == [
         list(tag_call.matching_refs),
-        list(tag_call.create_ref),
-        list(argv),
+        [
+            "api",
+            "-X",
+            "POST",
+            "repos/acme/widgets/git/refs",
+            "-f",
+            "ref=refs/tags/v1.2.3",
+            "-f",
+            "sha=c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
+        ],
+        [
+            "release",
+            "create",
+            "v1.2.3",
+            f"{directory}/a",
+            "--verify-tag",
+            "--title",
+            "v1.2.3",
+            "--generate-notes",
+            "--notes",
+            "",
+        ],
         list(tag_call.matching_refs),
-        list(argv),
+        [
+            "release",
+            "create",
+            "v1.2.3",
+            f"{directory}/a",
+            "--verify-tag",
+            "--title",
+            "v1.2.3",
+            "--generate-notes",
+            "--notes",
+            "",
+        ],
     ]
