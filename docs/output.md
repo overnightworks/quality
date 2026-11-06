@@ -446,7 +446,7 @@ An undeclared loosening looks the same, with `undeclared` as the fact and withou
 
 ### 8. `quality merge owner/repo#n`: the operator's door
 
-First everything you approve, then the prompt (stderr), then the three steps as rows. At the end the gate is on again, or the run says loudly that it is not. The prompt names the number; `ja` stays the word.
+First everything you approve, then the prompt (stderr), then the three steps as rows. At the end the gate is on again, or the run says loudly that it is not. The prompt names the number; `ja` stays the word. The last row before the prompt is the line the merge commit ends with, `work item` and its number or `no item` and its kind; a body the door refuses for its line stops at `! landing  refused` under the pull request's row instead (operator ruling of 6.11.2026 on Q2, „2 ok“: the same row as the last one before the question).
 
 Approved and merged. Exit 0. Rows: stdout; the prompt line: stderr.
 
@@ -459,6 +459,7 @@ $ quality merge overnightworks/shop#232
     ! src/shop/orders.py  ceiling raised  766 → 790 lines · #231 of 2026-10-28
         reason: the order split lands with #233
   · merge         merge commit   the only method main allows
+  · landing       work item      #231
 Switch quality_gate off, merge #232, switch it on? Type ja: ja
   ✓ quality_gate  off            overnightworks/shop
   ✓ #232          merged         9a1b2c3 · merge commit
@@ -486,7 +487,7 @@ $ quality merge overnightworks/shop#232 --dry-run
 ~ dry run · would switch quality_gate off, merge #232, switch it on · nothing changed
 ```
 
-(`…` stands for the same rows as above, up to "merge".)
+(`…` stands for the same rows as above, up to "landing".)
 
 Broken: the gate could not be switched on again. Exit 2. Rows: stdout; pair: stderr. The restore command stands on its own line and is never shortened.
 
@@ -501,7 +502,7 @@ next:
     echo '{"properties":[{"property_name":"quality_gate","value":"true"}]}' | gh api -X PATCH repos/overnightworks/shop/properties/values --input -
 ```
 
-Built (C8a1): the rows before the prompt and the refused frame, without the release row (C10). A declaration reads `what · item of date` with `reason:` below until C9's typed loosenings; a red Sonar adds `! sonar  N legacy findings  on <branch>` and the error names declared loosenings and legacy findings (decision 4); the method row reads `allowed on <base>`; a draft is `! #N  draft` with `next: gh pr ready N --repo R`. Until C8a2 the old prompt follows on stdout, after a line naming the merge commit's last line.
+Built (C8a1): the rows before the prompt and the refused frame, without the release row (C10). A declaration reads `what · item of date` with `reason:` below until C9's typed loosenings; a red Sonar adds `! sonar  N legacy findings  on <branch>` and the error names declared loosenings and legacy findings (decision 4); the method row reads `allowed on <base>`; a draft is `! #N  draft` with `next: gh pr ready N --repo R`. Built (C8a2): the landing row last and the prompt on stderr with the picture's words. Anything but `ja` ended with Enter, the end of input included, is `error: not confirmed · nothing changed` with `next: quality emergency-merge <owner/repo> <n>`, exit 1; Ctrl-C at the prompt writes nothing, the shell ends the line, exit 130; a closed stderr takes the prompt and the pairs, and nothing moves to stdout.
 
 ### 9. `quality report`
 
