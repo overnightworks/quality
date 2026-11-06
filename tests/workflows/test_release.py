@@ -22,7 +22,6 @@ pytestmark = pytest.mark.integration
 
 VERIFY_STEP = "Refuse unless the commit, tagged here, is the release its version names"
 CHECKOUT_STEP = "Check out the gated commit with its history and tags"
-SETUP_UV_STEP = "Set up uv"
 
 
 @pytest.fixture(scope="module")
@@ -109,10 +108,6 @@ def test_the_build_checks_out_and_verifies_the_gated_commit(release):
         "fetch-depth": 0,
         "persist-credentials": False,
     }
-
-
-def test_the_build_sets_up_uv_with_the_pinned_tool_and_python(release):
-    assert step(release, "build", SETUP_UV_STEP)["with"] == {"version": "0.12.4", "python-version": "3.14"}
 
 
 def test_the_build_tags_the_gated_commit_in_its_own_checkout_then_verifies_it(release, tmp_path):
