@@ -63,7 +63,8 @@ def test_the_prompt_and_the_pair_name_the_pull_request_asked_for(repository, gh_
     err = (prompt(12) if typed == "no\n" else "") + pair(12, repository)
     gh = FakeGh(checks=SONAR_GREEN, base_config=TWO_JOBS, head_config=ONE_JOB + declaring(B_REMOVED), **gh_kwargs)
     code, _ = drive(gh, repo=repository, pull_request="12", typed=typed)
-    assert (code, capsys.readouterr().err) == (1, err)
+    shown = capsys.readouterr().err
+    assert (code, shown) == (1, err)
     changed_nothing(gh)
 
 
@@ -100,7 +101,8 @@ def door(gh, **ports):
 def test_the_door_reads_one_line_of_stdin(monkeypatch):
     monkeypatch.setattr("sys.stdin", io.StringIO(" ja \nno\n"))
     code = door(FakeGh(), is_terminal=lambda: True)
-    assert (code, sys.stdin.read()) == (0, "no\n")
+    left_unread = sys.stdin.read()
+    assert (code, left_unread) == (0, "no\n")
 
 
 @pytest.mark.parametrize(
@@ -126,4 +128,5 @@ def test_a_stdin_that_is_no_terminal_is_the_pair_alone(stdin, monkeypatch, capsy
 def test_a_closed_stderr_takes_the_prompt_and_the_pair(capsys, monkeypatch):
     monkeypatch.setattr("sys.stderr", None)
     code, _ = drive(FakeGh(), typed="no\n")
-    assert (code, capsys.readouterr().out) == (1, rows_before_the_prompt())
+    shown = capsys.readouterr().out
+    assert (code, shown) == (1, rows_before_the_prompt())
