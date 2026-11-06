@@ -206,20 +206,63 @@ def sonar(new=0, legacy=4, main_analysed=True, analysed=SHA, unreachable=False, 
     return transport
 
 
-def drive(gh, transport=None, typed="ja", terminal=True, repo=REPO, when_asked=lambda: None):
+def pull_row():
+    return "  · #7            open           head aaaaaaa · into main\n"
+
+
+def landing_row(item="#3"):
+    return f"  · landing       work item      {item}\n"
+
+
+def rows_before_the_prompt():
+    """What the default `FakeGh` shows the operator, the landing row last."""
+    return (
+        pull_row()
+        + "  ✓ checks        ok             only quality / sonar and quality / verdict are red\n"
+        + "  ✓ loosenings    none\n"
+        + "  ! sonar         4 legacy findings on main\n"
+        + "  · merge         merge commit   allowed on main\n"
+        + landing_row()
+    )
+
+
+def prompt(pull_request=7):
+    return f"Switch quality_gate off, merge #{pull_request}, switch it on? Type ja: "
+
+
+def not_confirmed_pair(pull_request=7, repository=REPO):
+    return f"error: not confirmed · nothing changed\nnext: quality emergency-merge {repository} {pull_request}\n"
+
+
+def landing_pair(pull_request=7, repository=REPO):
+    return (
+        "error: not merged · the operator's merge ends the merge commit with the pull request body's one Work-Item: or No-Item: line · nothing changed\n"
+        f"next: give the pull request body exactly one Work-Item: or No-Item: line outside code blocks, then run quality emergency-merge {repository} {pull_request} again\n"
+    )
+
+
+def terminal_pair():
+    return (
+        "error: not merged · the operator's merge needs a terminal on stdin · nothing changed\n"
+        "next: the operator runs it in his own terminal\n"
+    )
+
+
+def drive(gh, transport=None, typed="ja\n", terminal=True, repo=REPO, when_asked=lambda: None, pull_request="7"):
+    """The `typed` argument is the line the terminal answers, its line end included (`""` the end of input); an exception is raised."""
     answers = []
 
-    def ask(prompt):
+    def read_line():
         when_asked()
-        answers.append(prompt)
+        answers.append(typed)
         if isinstance(typed, BaseException):
             raise typed
         return typed
 
     remote = getattr(gh, "remote", None)
     code = cli.main(
-        ["emergency-merge", repo, "7"], gh=gh, transport=transport or sonar(), ask=ask, is_terminal=lambda: terminal,
-        remote_for=no_network if remote is None else lambda repository: remote,
+        ["emergency-merge", repo, pull_request], gh=gh, transport=transport or sonar(), read_line=read_line,
+        is_terminal=lambda: terminal, remote_for=no_network if remote is None else lambda repository: remote,
     )
     return code, answers
 

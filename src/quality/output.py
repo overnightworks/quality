@@ -1,5 +1,5 @@
-"""The one owner of what quality prints, of the step summary and of the step output; argparse's `--version` and
-`input()`'s prompt on stdout are the writers that remain outside it."""
+"""The one owner of what quality prints, of the step summary and of the step output; argparse's `--version` is the
+writer that remains outside it."""
 
 import os
 import secrets
@@ -318,12 +318,15 @@ def _verdict_parts(verdict: Verdict) -> tuple[Glyph, list[str]]:
 
 
 def _print_lines(lines: list[str], channel: Channel) -> None:
+    """A closed stream takes nothing: its lines never move to the other stream."""
+    stream = channel.stream
+    if stream is None:
+        return
     try:
         for line in lines:
-            print(line, file=channel.stream)
+            print(line, file=stream)
     except BrokenPipeError:
-        # A closed stderr's channel prints to stdout, as `print(file=None)` does.
-        _discard_further_writes(sys.stdout if channel.stream is None else channel.stream)
+        _discard_further_writes(stream)
 
 
 def _discard_further_writes(stream: TextIO) -> None:
@@ -338,11 +341,15 @@ def write_rows(rows: tuple[Row, ...], channel: Channel) -> None:
 
 
 def _put(channel: Channel, text: str) -> None:
+    stream = channel.stream
+    if stream is None:
+        return
     try:
-        print(text, end="", file=channel.stream, flush=True)
+        print(text, end="", file=stream, flush=True)
     except OSError:
-        # The line only decorates the run: a terminal that hung up must not replace the exception or the exit it decorates.
-        _discard_further_writes(channel.stream)
+        # A terminal that hung up must not replace the run's exception or exit: the live line only decorates the run,
+        # and a prompt nobody can read is still read: where it shows is the operator's setting.
+        _discard_further_writes(stream)
 
 
 @contextmanager
@@ -491,3 +498,15 @@ def write_pair(error: str, next_steps: tuple[Step, ...], channel: Channel) -> No
     styled = channel.styled
     _print_lines([f"{_paint('error:', f'{BOLD};{RED}', styled)} {printable(error)}"], channel)
     _print_lines(_next_lines(next_steps, _paint("next:", CYAN, styled)), channel)
+
+
+def ask(prompt: str, channel: Channel, read_line: Callable[[], str]) -> str | None:
+    """The prompt on `channel`, then the line a person ended with Enter, without its line end; None where the input
+    ends before Enter, after a line end on `channel`, so the next line starts on its own. The typed line is never
+    printed: the terminal's echo is its only copy. Ctrl-C passes through untouched: the shell ends that line."""
+    _put(channel, printable(prompt))
+    line = read_line()
+    if line.endswith("\n"):
+        return line.removesuffix("\n")
+    _put(channel, "\n")
+    return None

@@ -39,7 +39,7 @@ from quality.check import (
 )
 from quality.checkout import OutsideWorkTree
 from quality.config import ConfigError, read_gate_settings
-from quality.merge import Ask, GhRunner, RemoteFor, github_remote, run_emergency_merge, run_gh
+from quality.merge import GhRunner, RemoteFor, github_remote, run_emergency_merge, run_gh
 from quality.output import (
     SCANNER_ARGUMENTS_OUTPUT,
     SEPARATOR,
@@ -53,6 +53,7 @@ from quality.output import (
     Verdict,
     append_step_output,
     append_step_summary,
+    ask,
     counted,
     emit,
     emit_finding,
@@ -117,8 +118,8 @@ def main(
     sleep: Sleep = time.sleep,
     gh: GhRunner = run_gh,
     remote_for: RemoteFor = github_remote,
-    ask: Ask = input,
-    is_terminal: Callable[[], bool] = lambda: sys.stdin.isatty(),
+    read_line: Callable[[], str] = lambda: sys.stdin.readline(),
+    is_terminal: Callable[[], bool] = lambda: sys.stdin is not None and sys.stdin.isatty(),
     locate_ruff: Callable[[], str] = INSTALLED_RUFF,
     locate_zizmor: Callable[[], str] = INSTALLED_ZIZMOR,
     clock: Callable[[], float] = time.monotonic,
@@ -137,7 +138,7 @@ def main(
             arguments.pull_request,
             gh=gh,
             transport=transport,
-            ask=ask,
+            ask=partial(ask, channel=channels.err, read_line=read_line),
             is_terminal=is_terminal(),
             now=lambda: datetime.now(UTC),
             environment=environment,

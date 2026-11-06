@@ -1,24 +1,13 @@
 import pytest
 
 from tests.support.check import assert_every_line_starts_with_the_door
-from tests.support.merge import ABSENT, SHA, FakeGh, changed_nothing, drive
+from tests.support.merge import ABSENT, SHA, FakeGh, changed_nothing, drive, landing_pair, prompt, pull_row
 
 
 def not_judged_pair():
     return (
         "error: could not judge · nothing changed\n"
         "next: fix what the ✗ row names, then run quality emergency-merge acme/widgets 7 again\n"
-    )
-
-
-def pull_row():
-    return "  · #7            open           head aaaaaaa · into main\n"
-
-
-def landing_pair():
-    return (
-        "error: not merged · the operator's merge ends the merge commit with the pull request body's one Work-Item: or No-Item: line · nothing changed\n"
-        "next: give the pull request body exactly one Work-Item: or No-Item: line outside code blocks, then run quality emergency-merge acme/widgets 7 again\n"
     )
 
 
@@ -149,15 +138,22 @@ def test_a_pull_answer_without_a_body_field_cannot_be_judged(capsys):
 
 
 @pytest.mark.parametrize(
-    ("body", "line"), [("Work-Item: #9\n\nWhy.", "Work-Item: #9"), ("Why.\n\nNo-Item: fix", "No-Item: fix")], ids=["a work item", "no item"]
+    ("body", "row"),
+    [
+        ("Work-Item: #9\n\nWhy.", "work item      #9"),
+        ("Why.\n\nNo-Item: fix", "no item        fix"),
+        ("Work-Item: acme/widgets#12", "work item      #12"),
+        ("No-Item: DOCS", "no item        docs"),
+    ],
+    ids=["a work item", "no item", "this repository named whole", "a kind in capitals"],
 )
-def test_the_operator_reads_the_merge_commits_last_line_before_ja(body, line, capsys):
+def test_the_last_row_before_the_question_is_what_the_merge_commit_ends_with(body, row, capsys):
     shown = []
     drive(FakeGh(body=body), when_asked=lambda: shown.append(capsys.readouterr()))
     assert (shown[0].out, shown[0].err) == (
         (f"{pull_row()}  ✓ checks        ok             only quality / sonar and quality / verdict are red\n"
-        f"  ✓ loosenings    none\n  ! sonar         4 legacy findings on main\n  · merge         merge commit   allowed on main\nthe merge commit ends with {line}\n"),
-        "",
+        f"  ✓ loosenings    none\n  ! sonar         4 legacy findings on main\n  · merge         merge commit   allowed on main\n  · landing       {row}\n"),
+        prompt(),
     )
 
 

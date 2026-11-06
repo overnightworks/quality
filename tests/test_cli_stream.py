@@ -229,14 +229,8 @@ def test_a_step_s_pipes_carry_the_stop_line_and_no_live_line(build_repo):
 
 
 @pytest.mark.integration
-def test_a_start_failure_printed_on_stdout_because_stderr_is_closed_survives_a_reader_that_left(elsewhere, tmp_path):
+def test_a_start_failure_with_stderr_closed_prints_nothing_on_stdout(elsewhere, tmp_path):
     command = ["sh", "-c", 'exec "$@" 2>&-', "sh", *MODULE_DOOR, CHECK_WORD]
     with open(tmp_path / "stdout", "w", encoding="utf-8") as stdout:
-        complete = subprocess.run(command, cwd=elsewhere, env=door_environment(), stdout=stdout, timeout=60, check=False)
-    read_end, write_end = os.pipe()
-    os.close(read_end)
-    try:
-        done = subprocess.run(command, cwd=elsewhere, env=door_environment(), stdout=write_end, timeout=60, check=False)
-    finally:
-        os.close(write_end)
-    assert done.returncode == complete.returncode
+        done = subprocess.run(command, cwd=elsewhere, env=door_environment(), stdout=stdout, timeout=60, check=False)
+    assert (done.returncode, (tmp_path / "stdout").read_text(encoding="utf-8")) == (2, "")

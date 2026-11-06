@@ -48,7 +48,7 @@ CREDENTIAL_HELPER = "!gh auth git-credential"
 FETCH_TIMEOUT_SECONDS = 120
 
 GhRunner = Callable[[Sequence[str], str | None], str]
-Ask = Callable[[str], str]
+Ask = Callable[[str], str | None]
 RemoteFor = Callable[[str], str]
 Say = Callable[[str], None]
 
@@ -109,6 +109,8 @@ class DoorEvent(StrEnum):
     MERGE_COMMIT = "merge commit"
     SQUASH = "squash"
     NOT_JUDGED = "not judged"
+    WORK_ITEM = "work item"
+    NO_ITEM = "no item"
 
 
 NOTHING_CHANGED = "nothing changed"
@@ -499,12 +501,10 @@ def log_comment(login: str, moment: datetime, door: Door, attempt: Attempt) -> s
     )
 
 
-def confirmed(ask: Ask, say: Say) -> bool:
-    try:
-        return ask(f"Switch {GATE_PROPERTY} off, merge, switch it on? Type '{CONFIRMATION_WORD}': ").strip() == CONFIRMATION_WORD
-    except (KeyboardInterrupt, EOFError):
-        end_interrupted_line(say)
-        return False
+def confirmed(ask: Ask, pull_request: int) -> bool:
+    """`ja` and nothing else: the end of input is no, and Ctrl-C at the prompt ends the run interrupted."""
+    answer = ask(f"Switch {GATE_PROPERTY} off, merge #{pull_request}, switch it on? Type {CONFIRMATION_WORD}: ")
+    return answer is not None and answer.strip() == CONFIRMATION_WORD
 
 
 WORK_ITEM_KEY = "Work-Item"
@@ -573,6 +573,10 @@ def landing_of(body: object, repository: str) -> Landing:
         del kept[index]
     rest = "\n".join(kept).strip()
     return Landing(trailer, f"{rest}\n\n{trailer}" if rest else trailer)
+
+
+def rerun_command(repository: str, pull_request: int) -> str:
+    return f"quality emergency-merge {repository} {pull_request}"
 
 
 def gh_command(repository: str, pull_request: int, word: str) -> Command:
@@ -700,8 +704,9 @@ def judge_pull_request(
     remote_for: RemoteFor,
     show: Show,
 ) -> tuple[Door, str]:
-    """Each step in the door's order, its rows shown as it passes; the first that does not pass stops the door."""
-    rerun = f"quality emergency-merge {repository} {pull_request}"
+    """Each step in the door's order, its rows shown as it passes and the landing's row last, right before the question;
+    the first step that does not pass stops the door."""
+    rerun = rerun_command(repository, pull_request)
     refused: Pair = (REFUSED_ERROR, (gh_command(repository, pull_request, "checks"),))
     item_line = f"{WORK_ITEM_KEY}: or {NO_ITEM_KEY}: line"
     landing_refused: Pair = (
@@ -724,6 +729,8 @@ def judge_pull_request(
 
         legacy = step("sonar", sonar_step, refused)
     merge_method, login = step("merge", lambda: read_method(gh, repository, facts, pull["base"]["ref"]), refused)
+    item_key, _, item = landing.trailer.partition(": ")
+    show((Row(Glyph.NOTE, LANDING, DoorEvent.WORK_ITEM if item_key == WORK_ITEM_KEY else DoorEvent.NO_ITEM, item),))
     return Door(repository, pull_request, pull["head"]["sha"], verdict.declared, legacy, merge_method, landing), login
 
 
@@ -761,7 +768,7 @@ def run_emergency_merge(
     channels: Channels,
     remote_for: RemoteFor = github_remote,
 ) -> int:
-    """Its rows and pairs before the prompt leave through `channels`, every later line through `say`; both escape it."""
+    """Its rows, its prompt and its pairs up to the answer leave through `channels`, the attempt's lines through `say`; both escape them."""
     if not REPOSITORY_NAME.fullmatch(repository):
         write_pair(not_merged(f"{repository!r} is not <owner>/<repo>"), (Instruction("name the repository as <owner>/<repo>"),), channels.err)
         return EXIT_REFUSED
@@ -774,9 +781,8 @@ def run_emergency_merge(
         write_rows((stop.row,), channels.out)
         write_pair(stop.error, stop.next_steps, channels.err)
         return stop.exit_code
-    say(f"the merge commit ends with {door.landing.trailer}")
-    if not confirmed(ask, say):
-        say("emergency-merge: not confirmed, nothing was changed")
+    if not confirmed(ask, pull_request):
+        write_pair(f"not confirmed{SEPARATOR}{NOTHING_CHANGED}", (Command(rerun_command(repository, pull_request)),), channels.err)
         return EXIT_REFUSED
     attempt = switch_off_merge_switch_on(gh, door, say)
     try:
