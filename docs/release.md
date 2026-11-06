@@ -184,6 +184,10 @@ per group, and a newer pending dispatch cancels the older.
 The gate is no boundary. A `v*` tag can still be created without it: the organisation ruleset restricts deletion and update
 of tags, not creation.
 
+An app's build pushes its image before the tag job runs, so a failed tag job leaves the image in GHCR without a tag or
+release. quality builds no guard for this: platform's CI is the one guard, and merges a version bump only with the app's
+tag or release at that version and the image's attestation.
+
 While the draft release is open, users and workflows with write permission can change it and its assets, so "exactly the
 build's files" holds against cooperative writers only. A killed runner can leave a stale draft, and gh can refuse after a
 completed publish; both are completed or deleted by hand.
