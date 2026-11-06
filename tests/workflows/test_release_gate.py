@@ -387,17 +387,20 @@ def test_a_run_of_another_commit_or_event_is_no_push_run_on_the_commit(gate, dis
     assert outcome(result) == (1, refused(f"CI has no push run on {dispatch.commit}."), "")
 
 
-MERGED_HEAD = "b2" * 20
-NO_SINGLE_PULL = "no single pull request merged {commit} into main."
-RED_VERDICT = (
-    "pull request #9 merged with quality / verdict {verdict}; release the next commit merged with a green verdict."
-)
+def merged_head() -> str:
+    return "b2" * 20
+
+
+def red_verdict(verdict: str) -> str:
+    return (
+        f"pull request #9 merged with quality / verdict {verdict}; release the next commit merged with a green verdict."
+    )
 
 
 def merged_scenario(pulls: list[dict] | None = None, runs: tuple = ((1, "success", around_the_merge(-60)),)) -> dict:
     return {
-        "pulls": [merged_pull(9, MERGED_HEAD, around_the_merge())] if pulls is None else pulls,
-        "check_runs": {MERGED_HEAD: check_runs(*runs)},
+        "pulls": [merged_pull(9, merged_head(), around_the_merge())] if pulls is None else pulls,
+        "check_runs": {merged_head(): check_runs(*runs)},
     }
 
 
@@ -405,21 +408,20 @@ def newest_run_scenarios() -> dict[str, tuple[dict, str | None]]:
     return {
         "the newest check run is the highest number, not the last in text order": (
             merged_scenario(runs=((9, "success", around_the_merge(-60)), (10, "failure", around_the_merge(-30)))),
-            RED_VERDICT.format(verdict="failure"),
+            red_verdict("failure"),
         ),
         "the newest check run is the highest number, not the last to complete": (
             merged_scenario(runs=((1, "success", around_the_merge(-10)), (2, "failure", around_the_merge(-50)))),
-            RED_VERDICT.format(verdict="failure"),
+            red_verdict("failure"),
         ),
     }
 
 
 def merge_scenarios() -> dict[str, tuple[dict, str | None]]:
     """Each id: what replaces the green reads, and the refusal line (None when the step passes)."""
-    head = MERGED_HEAD
+    head = merged_head()
     scenario = merged_scenario
-    no_single_pull = NO_SINGLE_PULL
-    red = RED_VERDICT
+    no_single_pull = "no single pull request merged {commit} into main."
     return {
         "green": (scenario(), None),
         "no pull request": (scenario([]), no_single_pull),
@@ -432,11 +434,11 @@ def merge_scenarios() -> dict[str, tuple[dict, str | None]]:
             scenario([merged_pull(9, head, around_the_merge()), merged_pull(10, head, around_the_merge())]),
             no_single_pull,
         ),
-        "the verdict failed": (scenario(runs=((1, "failure", around_the_merge(-60)),)), red.format(verdict="failure")),
-        "no verdict check run": (scenario(runs=()), red.format(verdict="missing")),
+        "the verdict failed": (scenario(runs=((1, "failure", around_the_merge(-60)),)), red_verdict("failure")),
+        "no verdict check run": (scenario(runs=()), red_verdict("missing")),
         "a re-run after the merge does not lift the refusal": (
             scenario(runs=((1, "failure", around_the_merge(-60)), (2, "success", around_the_merge(30)))),
-            red.format(verdict="failure"),
+            red_verdict("failure"),
         ),
         "a re-run before the merge decides": (
             scenario(runs=((1, "failure", around_the_merge(-60)), (2, "success", around_the_merge(-30)))),
@@ -449,7 +451,7 @@ def merge_scenarios() -> dict[str, tuple[dict, str | None]]:
         "a verdict completed at the merge counts": (scenario(runs=((1, "success", around_the_merge()),)), None),
         "a failure completed at the merge overrides an earlier success": (
             scenario(runs=((1, "success", around_the_merge(-60)), (2, "failure", around_the_merge()))),
-            red.format(verdict="failure"),
+            red_verdict("failure"),
         ),
         "a run unfinished at the merge does not count": (
             scenario(runs=((1, "success", around_the_merge(-60)), (2, None, None))),
@@ -457,17 +459,14 @@ def merge_scenarios() -> dict[str, tuple[dict, str | None]]:
         ),
         "no check run finished by the merge": (
             scenario(runs=((1, "success", around_the_merge(30)),)),
-            red.format(verdict="missing"),
+            red_verdict("missing"),
         ),
     }
 
 
-ALL_MERGE_SCENARIOS = merge_scenarios() | newest_run_scenarios()
-
-
-@pytest.mark.parametrize("case", list(ALL_MERGE_SCENARIOS))
+@pytest.mark.parametrize("case", list(merge_scenarios() | newest_run_scenarios()))
 def test_a_commit_its_pull_request_merged_red_is_never_released(gate, dispatch, tmp_path, case):
-    replaced, refusal = ALL_MERGE_SCENARIOS[case]
+    replaced, refusal = (merge_scenarios() | newest_run_scenarios())[case]
     result = run_gate_step(gate, MERGED_STEP, dispatch, tmp_path, green_answers(dispatch, **replaced))
     if refusal:
         assert outcome(result) == (1, refused(refusal.format(commit=dispatch.commit)), "")
