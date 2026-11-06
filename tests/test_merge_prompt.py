@@ -3,6 +3,7 @@
 import io
 import os
 import signal
+import sys
 
 import pytest
 
@@ -22,11 +23,7 @@ from tests.support.merge import (
     prompt,
     rows_before_the_prompt,
     sonar,
-)
-
-TERMINAL_PAIR = (
-    "error: not merged · the operator's merge needs a terminal on stdin · nothing changed\n"
-    "next: the operator runs it in his own terminal\n"
+    terminal_pair,
 )
 
 
@@ -101,7 +98,7 @@ def test_ctrl_c_at_the_prompt_ends_the_run_interrupted_and_changes_nothing(capsy
 def test_the_door_reads_one_line_of_stdin(monkeypatch):
     monkeypatch.setattr("sys.stdin", io.StringIO("ja\nno\n"))
     code = cli.main(["emergency-merge", REPO, "7"], gh=FakeGh(), transport=sonar(), is_terminal=lambda: True, remote_for=no_network)
-    assert (code, cli.sys.stdin.read()) == (0, "no\n")
+    assert (code, sys.stdin.read()) == (0, "no\n")
 
 
 @pytest.mark.parametrize("stdin", [None, io.StringIO("ja\n")], ids=["closed", "no terminal"])
@@ -110,7 +107,7 @@ def test_a_stdin_that_is_no_terminal_is_the_pair_alone(stdin, monkeypatch, capsy
     gh = FakeGh()
     code = cli.main(["emergency-merge", REPO, "7"], gh=gh, transport=sonar(), remote_for=no_network)
     streams = capsys.readouterr()
-    assert (code, streams.out, streams.err, gh.calls) == (1, "", TERMINAL_PAIR, [])
+    assert (code, streams.out, streams.err, gh.calls) == (1, "", terminal_pair(), [])
 
 
 def test_a_closed_stderr_takes_the_prompt_and_the_pair(monkeypatch, capsys):

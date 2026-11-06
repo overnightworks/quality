@@ -48,6 +48,10 @@ def loosenings_none():
     return "  ✓ loosenings    none"
 
 
+def legacy_row():
+    return "  ! sonar         4 legacy findings on main"
+
+
 def checks_row(red="quality / sonar and quality / verdict are"):
     return f"  ✓ checks        ok             only {red} red"
 
@@ -243,7 +247,7 @@ def test_each_refusal_is_its_row_and_the_pair(gh_kwargs, sonar_kwargs, rows, cap
         (
             {"settings": {"allow_merge_commit": False, "allow_squash_merge": False, "allow_rebase_merge": True}}, {},
             [
-                pull_row(), checks_row(), loosenings_none(), "  ! sonar         4 legacy findings on main",
+                pull_row(), checks_row(), loosenings_none(), legacy_row(),
                 "  ✗ merge         not judged     the repository and its branch rules allow no merge method the door uses (a merge commit or a squash)",
             ],
         ),
@@ -275,7 +279,7 @@ def test_the_rows_name_the_pull_requests_base_not_the_default_branch(capsys):
             "  · #7            open           head aaaaaaa · into release/1",
             checks_row(),
             loosenings_none(),
-            "  ! sonar         4 legacy findings on main",
+            legacy_row(),
             "  · merge         merge commit   allowed on release/1",
             "  · landing       work item      #3",
             "merged.",
@@ -314,7 +318,7 @@ def at_a_terminal(gh, window, columns, transport=None):
         (
             {"body": "Work-Item: #123456789"}, {}, 1,
             [
-                pull_row(), checks_row(), loosenings_none(), "  ! sonar         4 legacy findings on main",
+                pull_row(), checks_row(), loosenings_none(), legacy_row(),
                 "  · merge         merge commit   allowed on main", "  · landing       work item      #123456789",
             ],
             prompt() + not_confirmed_pair(),

@@ -234,6 +234,13 @@ def not_confirmed_pair(pull_request=7):
     return f"error: not confirmed · nothing changed\nnext: quality emergency-merge acme/widgets {pull_request}\n"
 
 
+def terminal_pair():
+    return (
+        "error: not merged · the operator's merge needs a terminal on stdin · nothing changed\n"
+        "next: the operator runs it in his own terminal\n"
+    )
+
+
 def drive(gh, transport=None, typed="ja\n", terminal=True, repo=REPO, when_asked=lambda: None, pull_request="7"):
     """`typed` is the line the terminal answers, its line end included (`""` the end of input); an exception is raised."""
     answers = []
