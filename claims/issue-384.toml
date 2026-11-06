@@ -1,0 +1,8 @@
+claim_id = "f7d3192b7db948188404fbbcc8364ef1"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "46ef9354a5371ff7e9587de6576396b98aff00a5"
+branch = "claude/issue-384-fold-decision-records"
+scope = ["AGENTS.md", "README.md", "docs/decisions/1-loosening-door.md", "docs/decisions/2-dependabot-exception.md", "docs/decisions/3-clone-detector.md", "docs/decisions/4-sonar-findings-stay-in-quality.md", "docs/decisions/5-scanner-stderr-goes-through-gitleaks.md", "docs/gate.md", "docs/output.md", "docs/rules.md", "docs/sonar.md"]
+opened_commit = "0bb5367d63f717d2512d7ac58bf7b7bca6293417"
+whole_reason = "One documentation move: five records fold into the four reference documents that own their rules, and the two entry documents drop the folder; split, a citation would point at a deleted file."
