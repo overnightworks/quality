@@ -1,7 +1,7 @@
 # SonarCloud
 
 Reference for the engineer who reads SonarCloud findings through `quality sonar findings` or the gate. Why quality judges the
-findings itself and keeps the properties check, stated under "Why quality judges the findings" below.
+findings itself and keeps the properties check stands in [ARCHITECTURE](ARCHITECTURE.md).
 
 ## `quality sonar findings`
 
@@ -61,8 +61,8 @@ The scanner's transport, verified at sonar-scanner-java-library 4.1.1.1633 (the 
 - Sources at 4.1.1.1633: [HttpClientFactory.java:72](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/http/HttpClientFactory.java#L72), [ScannerHttpClient.java:162-170](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/http/ScannerHttpClient.java#L162-L170), [ScannerHttpClient.java:231-233](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/http/ScannerHttpClient.java#L231-L233), [ScannerEndpointResolver.java:40](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/endpoint/ScannerEndpointResolver.java#L40), [ScannerEngineLauncherFactory.java](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/facade/forked/ScannerEngineLauncherFactory.java).
 
 `quality sonar findings` is the SonarCloud zero-findings rule: every open finding counts. Where `.github/dependabot.yml` exists the scan itself excludes one rule, see the [Dependabot exception](#a-dependabot-exception-for-dockers8431). It reads the scanner's `.scannerwork/report-task.txt` relative to the working directory (no other path can be given); a missing or unreadable file is exit 2.
-The zero is the operator's (operator ruling 16.10.2026: „0 Findings Toleranz für alle Repos“; SonarCloud belongs in
-the minimum profile: „sollte das da nicht mit rein?“).
+
+Ruled by the operator: every open finding counts, in every repository; SonarCloud belongs to every repository's minimum gate.
 
 The project is the caller's repository: `GITHUB_REPOSITORY` gives the key `<owner>_<repo>` and the organization
 `<owner>`. The task file must name that `projectKey`, `organization=<owner>` and `serverUrl=https://sonarcloud.io`; the URLs inside it are never
@@ -131,27 +131,9 @@ scanner does not wait for the gate, this command reads it.
   unchanged. Branch coverage of a small change is therefore not judged.
 - **Joined coverage.** The gate judges the coverage SonarCloud holds, so it measures the 100 % branch rule only for a
   repository whose report joins every test layer and carries branches. For a repository that has not joined its layers
-  yet, the coverage gap is SonarCloud's figure and the gap list of #36.
+  yet, the coverage gap is SonarCloud's figure.
 
-Rulings L11, L6 and L5 (26.10.2026): the verdict takes over the gate status (L11), the gate result fails the job (L6),
-and the 100 % branch rule per repository follows later (L5).
-
-### Why quality judges the findings
-
-quality counts the open findings itself (`legacy = "fail"` on the default branch, the properties check, the door's legacy
-path) and does not move the zero-findings rule to SonarCloud's hosted gate, because the hosted gate cannot carry it for two reasons:
-
-- The hosted gate does not fail on new issues: the built-in "Sonar way" and the custom "presentator" gate have no
-  condition on `new_violations`, and SonarCloud backdates an issue raised on an unchanged line, so such a condition
-  would not catch it either.
-- The token boundary needs the properties check: at sonar-scanner-java-library 4.1.1.1633 a properties file can still set
-  proxy, truststore, Java executable, engine jar and Java option keys, and `${env.SONAR_TOKEN}` substitutions, none of
-  which `-Dsonar.host.url` pins.
-
-The hosted gate would replace the count only if it could fail on a finding on an unchanged line and the scanner no
-longer let a properties file reach the token (operator, #228, 28.10.2026, „der rest passt auch!“: the hosted gate alone
-applies when its preconditions hold, and they did not). The Docker rule is no reason: where `.github/dependabot.yml`
-exists, the scan's own exclusion below keeps `docker:S8431` out of the analysis.
+Ruled by the operator: the verdict takes over the gate status, and the gate's result fails the job.
 
 ### A Dependabot exception for `docker:S8431`
 
@@ -177,9 +159,9 @@ SONARIAC-3096). A pull-request analysis does not see an unchanged `.github/depen
 - **Only this rule** has the exception, because only it has the premise (Sonar's own exception that its pull-request
   analysis misses); every other finding and rule counts as before. There is no per-image entry in `quality/config.toml`
   and no reading of `dependabot.yml`: Sonar itself checks existence only, and a pull request is judged the way the default
-  branch is.
+  branch is. The Docker rule is no reason to move the zero rule to the hosted gate, because the scan's own exclusion keeps
+  `docker:S8431` out where `dependabot.yml` exists.
 - **Gaps:** the file's existence does not say that Dependabot maintains the Dockerfile's folder for Docker; a repository
   that has only `.github/dependabot.yaml` stays red on pull requests; Renovate is not judged.
 
-(operator rulings 21.10.2026 and 23.10.2026: Sonar's exception applies on pull requests too, „Sonars Ausnahme anwenden (empfohlen)“, and
-holds when the file exists, „Wenn dependabot.yml existiert (empfohlen)“; 20.10.2026, „Eng begrenzte Ausnahme (empfohlen)“, chose one exception per exact `FROM` line on the premise that Sonar applies its exception on the default branch only; the plan review corrected that premise and he re-ruled (#98). 23.10.2026, „ja A“, relayed by edge's head, applied the same exception to the legacy count (re-ruling E3 of #98); 1.11.2026, „Bis hal umgestellt hat (Recommended)“, ended that count side when hal moved to v0.9.2.)
+Ruled by the operator: Sonar's exception applies on pull requests too, and it holds when `.github/dependabot.yml` exists.
