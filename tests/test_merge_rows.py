@@ -61,11 +61,12 @@ def checks_row(red="quality / sonar and quality / verdict are"):
     return f"  ✓ checks        ok             only {red} red"
 
 
+def merge_and_landing_rows(work_item="#3"):
+    return ["  · merge         merge commit   allowed on main", f"  · landing       work item      {work_item}"]
+
+
 def rows_before_the_attempt():
-    return [
-        pull_row(), checks_row(), loosenings_none(), legacy_row(),
-        "  · merge         merge commit   allowed on main", "  · landing       work item      #3",
-    ]
+    return [pull_row(), checks_row(), loosenings_none(), legacy_row(), *merge_and_landing_rows()]
 
 
 def verdict_only_checks_row():
@@ -324,15 +325,14 @@ def at_a_terminal(gh, window, columns, transport=None, typed="no\n"):
                 pull_row(), verdict_only_checks_row(), "  ! loosenings    1 declared",
                 f'    ! {B_REMOVED} · overnightworks/songmaker#1345 of 2026-10-20',
                 "        reason: a reason that runs on past the window",
-                "  · merge         merge commit   allowed on main", "  · landing       work item      #3",
+                *merge_and_landing_rows(),
             ],
             prompt() + not_confirmed_pair(),
         ),
         (
             {"body": "Work-Item: #123456789"}, {}, 1,
             [
-                pull_row(), checks_row(), loosenings_none(), legacy_row(),
-                "  · merge         merge commit   allowed on main", "  · landing       work item      #123456789",
+                pull_row(), checks_row(), loosenings_none(), legacy_row(), *merge_and_landing_rows("#123456789"),
             ],
             prompt() + not_confirmed_pair(),
         ),

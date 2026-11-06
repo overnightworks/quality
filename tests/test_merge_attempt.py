@@ -62,8 +62,16 @@ def comment_failed_row(detail="comment broke"):
     return f"  ✗ log comment   not posted     {detail}\n"
 
 
+def not_restored():
+    return "NOT restored, it may still be off"
+
+
+def merge_failed():
+    return "merge failed"
+
+
 def unrestored_log_body(outcome="merge"):
-    return log_body(outcome=outcome, restored="NOT restored, it may still be off")
+    return log_body(outcome=outcome, restored=not_restored())
 
 
 def all_four():
@@ -183,7 +191,7 @@ def gadgets_requests(outcome, restored, *between_restore_and_comment):
                 'declared loosening (overnightworks/songmaker#1345 of 2026-10-20): mandatory job "B" removed - reason: ruled; '
                 "merges with a merge commit; quality_gate off → merge failed → NOT restored, it may still be off.'\n"
             ),
-            gadgets_requests("merge failed", "NOT restored, it may still be off", (("api", "repos/acme/gadgets/pulls/12"), None)),
+            gadgets_requests(merge_failed(), not_restored(), (("api", "repos/acme/gadgets/pulls/12"), None)),
         ),
     ],
     ids=["merged", "the restore, the merge and the comment fail"],
@@ -228,7 +236,7 @@ def test_the_closing_line_counts_the_seconds_from_the_answer(capsys):
         (
             {"fail_on": ["merge"]}, 2,
             off() + on() + merge_failed_row() + posted(),
-            rerun_pair("is not merged"), all_four_but("merge"), log_body(outcome="merge failed"),
+            rerun_pair("is not merged"), all_four_but("merge"), log_body(outcome=merge_failed()),
         ),
         (
             {"fail_on": ["merge"], "merge_lands": True}, 0,
@@ -277,7 +285,7 @@ def test_the_closing_line_counts_the_seconds_from_the_answer(capsys):
             {"fail_on": ["restore", "merge"]}, 2,
             off() + restore_failed_row() + merge_failed_row() + posted(),
             ("error: quality_gate MAY STILL BE OFF on acme/widgets · #7 is not merged\nnext:\n" + restore_line() + "    quality emergency-merge acme/widgets 7\n"),
-            all_four_but("merge", "gate true"), unrestored_log_body("merge failed"),
+            all_four_but("merge", "gate true"), unrestored_log_body(merge_failed()),
         ),
     ],
     ids=[
@@ -311,7 +319,7 @@ def test_each_way_the_attempt_ends_is_its_rows_and_the_pair(gh_kwargs, code, out
             (
                 "error: quality_gate MAY STILL BE OFF on acme/widgets · #7 is merged · no log comment on #7\nnext:\n"
                 + restore_line()
-                + comment_line(restored="NOT restored, it may still be off")
+                + comment_line(restored=not_restored())
             ),
         ),
     ],
