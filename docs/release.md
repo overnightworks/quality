@@ -116,7 +116,7 @@ An agent dispatches only on his explicit yes for that one version.
 
 ## The standard
 
-Every project is released on one checked path, and every release starts with the same command and only the version: gate,
+Ruled by the operator: every project is released on one checked path, and every release starts with the same command and only the version: gate,
 then the project's own build, then tag; the gate exists once, in quality. Covered are every
 repository that publishes a release (agent-runtime, aco, appkit, quality, speech-runtime, webauth) and every app that ships an image
 through the platform (hopin, presentator, speech-runtime, songmaker, platform's Keycloak image). The trigger is a repository's first release after the quality tag that ships the workflows it needs.
