@@ -230,8 +230,8 @@ def prompt(pull_request=7):
     return f"Switch quality_gate off, merge #{pull_request}, switch it on? Type ja: "
 
 
-def not_confirmed_pair(pull_request=7):
-    return f"error: not confirmed · nothing changed\nnext: quality emergency-merge acme/widgets {pull_request}\n"
+def not_confirmed_pair(pull_request=7, repository="acme/widgets"):
+    return f"error: not confirmed · nothing changed\nnext: quality emergency-merge {repository} {pull_request}\n"
 
 
 def terminal_pair():
@@ -242,7 +242,7 @@ def terminal_pair():
 
 
 def drive(gh, transport=None, typed="ja\n", terminal=True, repo=REPO, when_asked=lambda: None, pull_request="7"):
-    """`typed` is the line the terminal answers, its line end included (`""` the end of input); an exception is raised."""
+    """The `typed` argument is the line the terminal answers, its line end included (`""` the end of input); an exception is raised."""
     answers = []
 
     def read_line():

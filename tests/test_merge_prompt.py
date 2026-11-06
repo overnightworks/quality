@@ -49,22 +49,30 @@ def test_anything_but_ja_changes_nothing_and_says_so(typed, pair, capsys):
 
 
 @pytest.mark.parametrize(
-    ("gh_kwargs", "typed", "err"),
+    ("repository", "gh_kwargs", "typed", "err"),
     [
-        ({}, "no\n", prompt(12) + not_confirmed_pair(12)),
+        ("acme/widgets", {}, "no\n", prompt(12) + not_confirmed_pair(12)),
+        ("acme/gadgets", {}, "no\n", prompt(12) + not_confirmed_pair(12, "acme/gadgets")),
         (
-            {"body": "Work-Item: acme/other#9"}, "ja\n",
+            "acme/widgets", {"body": "Work-Item: acme/other#9"}, "ja\n",
             (
                 "error: not merged · the operator's merge ends the merge commit with the pull request body's one Work-Item: or No-Item: line · nothing changed\n"
                 "next: give the pull request body exactly one Work-Item: or No-Item: line outside code blocks, then run quality emergency-merge acme/widgets 12 again\n"
             ),
         ),
+        (
+            "acme/gadgets", {"body": "Work-Item: acme/other#9"}, "ja\n",
+            (
+                "error: not merged · the operator's merge ends the merge commit with the pull request body's one Work-Item: or No-Item: line · nothing changed\n"
+                "next: give the pull request body exactly one Work-Item: or No-Item: line outside code blocks, then run quality emergency-merge acme/gadgets 12 again\n"
+            ),
+        ),
     ],
-    ids=["not confirmed", "a refused landing line"],
+    ids=["not confirmed", "not confirmed on another repository", "a refused landing line", "a refused landing line on another repository"],
 )
-def test_the_prompt_and_the_pair_name_the_pull_request_asked_for(gh_kwargs, typed, err, capsys):
+def test_the_prompt_and_the_pair_name_the_pull_request_asked_for(repository, gh_kwargs, typed, err, capsys):
     gh = FakeGh(checks=SONAR_GREEN, base_config=TWO_JOBS, head_config=ONE_JOB + declaring(B_REMOVED), **gh_kwargs)
-    code, _ = drive(gh, pull_request="12", typed=typed)
+    code, _ = drive(gh, repo=repository, pull_request="12", typed=typed)
     assert (code, capsys.readouterr().err) == (1, err)
     changed_nothing(gh)
 
@@ -110,7 +118,7 @@ def test_a_stdin_that_is_no_terminal_is_the_pair_alone(stdin, monkeypatch, capsy
     assert (code, streams.out, streams.err, gh.calls) == (1, "", terminal_pair(), [])
 
 
-def test_a_closed_stderr_takes_the_prompt_and_the_pair(monkeypatch, capsys):
+def test_a_closed_stderr_takes_the_prompt_and_the_pair(capsys, monkeypatch):
     monkeypatch.setattr("sys.stderr", None)
     code, _ = drive(FakeGh(), typed="no\n")
     assert (code, capsys.readouterr().out) == (1, rows_before_the_prompt())
