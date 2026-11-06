@@ -281,9 +281,9 @@ def restore_line():
     return '    echo \'{"properties":[{"property_name":"quality_gate","value":"true"}]}\' | gh api -X PATCH repos/acme/widgets/properties/values --input -\n'
 
 
-def log_body(switched="off", outcome="merge", restored="on"):
+def log_body(switched="off", outcome="merge", restored="on", method="merge commit", findings="4 legacy finding(s)"):
     return (
-        "body=Emergency door used by @felix at 2026-11-06T12:00:00+00:00: 4 legacy finding(s); merges with a merge commit; "
+        f"body=Emergency door used by @felix at 2026-11-06T12:00:00+00:00: {findings}; merges with a {method}; "
         f"quality_gate {switched} → {outcome} → {restored}."
     )
 

@@ -740,5 +740,6 @@ def test_the_closing_line_is_its_glyph_and_parts_joined():
 @pytest.mark.parametrize("glyph", list(output.VERDICT_STYLE), ids=[str(glyph) for glyph in output.VERDICT_STYLE])
 def test_a_closing_line_paints_its_first_part_in_its_glyphs_verdict_style(glyph):
     styled = written(Terminal, lambda channel: output.write_closing_line(glyph, ("first", "then"), channel))
-    assert re.findall(r"\x1b\[([0-9;]*)m", styled) == [output.VERDICT_STYLE[glyph], "0", output.DIM, "0"]
+    reset = output.RESET.removeprefix("\x1b[").removesuffix("m")
+    assert re.findall(r"\x1b\[([0-9;]*)m", styled) == [output.VERDICT_STYLE[glyph], reset, output.DIM, reset]
     assert without_sgr(styled) == f"{glyph} first · then\n"

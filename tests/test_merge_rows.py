@@ -28,7 +28,6 @@ from tests.support.merge import (
     not_confirmed_pair,
     prompt,
     restore_line,
-    rows_before_the_prompt,
     sonar,
 )
 from tests.support.terminal import screen
@@ -60,6 +59,13 @@ def legacy_row():
 
 def checks_row(red="quality / sonar and quality / verdict are"):
     return f"  ✓ checks        ok             only {red} red"
+
+
+def rows_before_the_attempt():
+    return [
+        pull_row(), checks_row(), loosenings_none(), legacy_row(),
+        "  · merge         merge commit   allowed on main", "  · landing       work item      #3",
+    ]
 
 
 def verdict_only_checks_row():
@@ -415,6 +421,6 @@ def test_a_refused_or_cross_fact_ends_at_the_window(gh_kwargs, code, lines, err,
 )
 def test_an_attempts_cross_fact_ends_at_the_window(gh_kwargs, lines, pair_end, window):
     code, shown, err = at_a_terminal(FakeGh(**gh_kwargs), window, 40, typed="yes\n")
-    assert (code, shown[len(rows_before_the_prompt().splitlines()):], err) == (
-        2, lines, prompt() + "".join(f"{line}\n" for line in pair_end),
+    assert (code, shown, err) == (
+        2, rows_before_the_attempt() + lines, prompt() + "".join(f"{line}\n" for line in pair_end),
     )

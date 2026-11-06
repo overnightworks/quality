@@ -25,50 +25,76 @@ from tests.support.merge import (
     rows_before_the_prompt,
 )
 
-NOT_RESTORED = "NOT restored, it may still be off"
-ALL_FOUR = ["gate false", "merge", "gate true", "comment"]
-
-
-def row(subject, event="", fact="", glyph="✓"):
-    return f"  {glyph} {subject:<14}{event:<15}{fact}".rstrip() + "\n"
-
-
-def off(repository=REPO):
-    return row("quality_gate", "off", repository)
+def off():
+    return "  ✓ quality_gate  off            acme/widgets\n"
 
 
 def on():
-    return row("quality_gate", "on")
+    return "  ✓ quality_gate  on\n"
 
 
-def merged(pull_request=7, method="merge commit"):
-    return row(f"#{pull_request}", "merged", method)
+def merged():
+    return "  ✓ #7            merged         merge commit\n"
 
 
-def posted(pull_request=7):
-    return row("log comment", "posted", f"on #{pull_request}")
+def posted():
+    return "  ✓ log comment   posted         on #7\n"
 
 
-def crossed(subject, event, fact):
-    return row(subject, event, fact, glyph="✗")
+def off_failed_row(detail):
+    return f"  ✗ quality_gate  off failed     {detail}\n"
 
 
-def pair(error, *steps, bare=False):
-    if len(steps) == 1 and not bare:
-        return f"error: {error}\nnext: {steps[0]}\n"
-    return f"error: {error}\nnext:\n" + "".join(step if step.endswith("\n") else f"    {step}\n" for step in steps)
+def restore_failed_row(detail="restore broke"):
+    return f"  ✗ quality_gate  not restored   {detail}\n"
+
+
+def merge_failed_row():
+    return "  ✗ #7            not merged     merge broke\n"
+
+
+def unknown_row(detail):
+    return f"  ✗ #7            state unknown  {detail}\n"
+
+
+def comment_failed_row(detail="comment broke"):
+    return f"  ✗ log comment   not posted     {detail}\n"
+
+
+def unrestored_log_body(outcome="merge"):
+    return log_body(outcome=outcome, restored="NOT restored, it may still be off")
+
+
+def all_four():
+    return ["gate false", "merge", "gate true", "comment"]
+
+
+def all_four_but(*left_out):
+    return [step for step in all_four() if step not in left_out]
 
 
 def rerun_pair(fact):
-    return pair(f"quality_gate on again · #7 {fact}", "quality emergency-merge acme/widgets 7")
+    return f"error: quality_gate on again · #7 {fact}\nnext: quality emergency-merge acme/widgets 7\n"
 
 
 def unknown_pair():
-    return pair("quality_gate on again · #7 may be merged", "gh pr view 7 --repo acme/widgets")
+    return "error: quality_gate on again · #7 may be merged\nnext: gh pr view 7 --repo acme/widgets\n"
 
 
 def unrestored_unknown_pair():
-    return pair("quality_gate MAY STILL BE OFF on acme/widgets · #7 may be merged", restore_line(), "gh pr view 7 --repo acme/widgets", bare=True)
+    return (
+        "error: quality_gate MAY STILL BE OFF on acme/widgets · #7 may be merged\nnext:\n"
+        + restore_line()
+        + "    gh pr view 7 --repo acme/widgets\n"
+    )
+
+
+def merged_restore_pair():
+    return "error: quality_gate MAY STILL BE OFF on acme/widgets · #7 is merged\nnext:\n" + restore_line()
+
+
+def merged_comment_pair():
+    return "error: quality_gate on again · #7 is merged · no log comment on #7\nnext:\n" + comment_line()
 
 
 def after_the_question(gh, capsys, **arguments):
@@ -109,13 +135,27 @@ def test_a_merge_that_goes_through_is_four_rows_and_the_closing_line(settings, f
             gate_request(REPO, "false"),
             (("pr", "merge", "7", "--repo", REPO, flag, "--match-head-commit", SHA, "--body-file", "-"), "Closes #3\n\nWork-Item: #3"),
             gate_request(REPO, "true"),
-            (("api", "-X", "POST", "repos/acme/widgets/issues/7/comments", "-f", log_body().replace("a merge commit", f"a {method}")), None),
+            (("api", "-X", "POST", "repos/acme/widgets/issues/7/comments", "-f", log_body(method=method)), None),
         ],
     )
 
 
+def gadgets_requests(outcome, restored, *between_restore_and_comment):
+    findings = 'declared loosening (overnightworks/songmaker#1345 of 2026-10-20): mandatory job "B" removed - reason: ruled'
+    return [
+        gate_request("acme/gadgets", "false"),
+        (("pr", "merge", "12", "--repo", "acme/gadgets", "--merge", "--match-head-commit", SHA, "--body-file", "-"), "Closes #3\n\nWork-Item: #3"),
+        gate_request("acme/gadgets", "true"),
+        *between_restore_and_comment,
+        (
+            ("api", "-X", "POST", "repos/acme/gadgets/issues/12/comments", "-f", log_body(outcome=outcome, restored=restored, findings=findings)),
+            None,
+        ),
+    ]
+
+
 @pytest.mark.parametrize(
-    ("gh_kwargs", "code", "out", "err"),
+    ("gh_kwargs", "code", "out", "err", "requests"),
     [
         (
             {},
@@ -125,6 +165,7 @@ def test_a_merge_that_goes_through_is_four_rows_and_the_closing_line(settings, f
                 "  ✓ log comment   posted         on #12\n✓ merged #12 · quality_gate on again · <1s\n"
             ),
             "",
+            gadgets_requests("merge", "on"),
         ),
         (
             {"fail_on": ["restore", "merge", "comment"]},
@@ -141,19 +182,16 @@ def test_a_merge_that_goes_through_is_four_rows_and_the_closing_line(settings, f
                 'declared loosening (overnightworks/songmaker#1345 of 2026-10-20): mandatory job "B" removed - reason: ruled; '
                 "merges with a merge commit; quality_gate off → merge failed → NOT restored, it may still be off.'\n"
             ),
+            gadgets_requests("merge failed", "NOT restored, it may still be off", (("api", "repos/acme/gadgets/pulls/12"), None)),
         ),
     ],
     ids=["merged", "the restore, the merge and the comment fail"],
 )
-def test_the_attempt_names_the_pull_request_asked_for(gh_kwargs, code, out, err, capsys):
+def test_the_attempt_names_the_pull_request_asked_for(gh_kwargs, code, out, err, requests, capsys):
     gh = FakeGh(checks=SONAR_GREEN, base_config=TWO_JOBS, head_config=ONE_JOB + declaring(B_REMOVED), **gh_kwargs)
-    assert after_the_question(gh, capsys, repo="acme/gadgets", pull_request="12") == (code, out, err)
-    attempt = requests_of_the_attempt(gh, "acme/gadgets")
-    assert [argv for argv, _ in attempt if argv[0] == "pr"] == [
-        ("pr", "merge", "12", "--repo", "acme/gadgets", "--merge", "--match-head-commit", SHA, "--body-file", "-")
-    ]
-    if gh_kwargs:
-        assert (("api", "repos/acme/gadgets/pulls/12"), None) in attempt
+    actual = after_the_question(gh, capsys, repo="acme/gadgets", pull_request="12")
+    assert actual == (code, out, err)
+    assert requests_of_the_attempt(gh, "acme/gadgets") == requests
 
 
 def test_the_closing_line_counts_the_seconds_from_the_answer(capsys):
@@ -178,67 +216,67 @@ def test_the_closing_line_counts_the_seconds_from_the_answer(capsys):
     [
         (
             {"fail_on": ["gate"]}, 2,
-            crossed("quality_gate", "off failed", "gate broke") + on() + posted(),
-            rerun_pair("is not merged"), ["gate true", "comment"], log_body("not switched off", "no merge"),
+            off_failed_row("gate broke") + on() + posted(),
+            rerun_pair("is not merged"), all_four_but("gate false", "merge"), log_body("not switched off", "no merge"),
         ),
         (
             {"interrupt_on": ["gate"]}, 2,
-            "\n" + crossed("quality_gate", "off failed", "interrupted") + on() + posted(),
-            rerun_pair("is not merged"), ["gate true", "comment"], log_body("not switched off", "no merge"),
+            "\n" + off_failed_row("interrupted") + on() + posted(),
+            rerun_pair("is not merged"), all_four_but("gate false", "merge"), log_body("not switched off", "no merge"),
         ),
         (
             {"fail_on": ["merge"]}, 2,
-            off() + on() + crossed("#7", "not merged", "merge broke") + posted(),
-            rerun_pair("is not merged"), ["gate false", "gate true", "comment"], log_body(outcome="merge failed"),
+            off() + on() + merge_failed_row() + posted(),
+            rerun_pair("is not merged"), all_four_but("merge"), log_body(outcome="merge failed"),
         ),
         (
             {"fail_on": ["merge"], "merge_lands": True}, 0,
             off() + on() + merged() + posted() + closing_line(),
-            "", ["gate false", "gate true", "comment"], log_body(),
+            "", all_four_but("merge"), log_body(),
         ),
         (
             {"interrupt_on": ["merge"]}, 2,
-            off() + "\n" + on() + crossed("#7", "state unknown", "interrupted") + posted(),
-            unknown_pair(), ["gate false", "gate true", "comment"], log_body(outcome="merge state unknown"),
+            off() + "\n" + on() + unknown_row("interrupted") + posted(),
+            unknown_pair(), all_four_but("merge"), log_body(outcome="merge state unknown"),
         ),
         (
             {"interrupt_on": ["merge"], "merge_lands": True}, 0,
             off() + "\n" + on() + merged() + posted() + closing_line(),
-            "", ["gate false", "gate true", "comment"], log_body(),
+            "", all_four_but("merge"), log_body(),
         ),
         (
             {"fail_on": ["merge", "read back"]}, 2,
-            off() + on() + crossed("#7", "state unknown", "merge broke") + posted(),
-            unknown_pair(), ["gate false", "gate true", "comment"], log_body(outcome="merge state unknown"),
+            off() + on() + unknown_row("merge broke") + posted(),
+            unknown_pair(), all_four_but("merge"), log_body(outcome="merge state unknown"),
         ),
         (
             {"fail_on": ["merge"], "interrupt_on": ["read back"]}, 2,
-            off() + on() + "\n" + crossed("#7", "state unknown", "merge broke") + posted(),
-            unknown_pair(), ["gate false", "gate true", "comment"], log_body(outcome="merge state unknown"),
+            off() + on() + "\n" + unknown_row("merge broke") + posted(),
+            unknown_pair(), all_four_but("merge"), log_body(outcome="merge state unknown"),
         ),
         (
             {"fail_on": ["merge", "restore"], "raw_answers": {"read back": "[]"}}, 2,
-            off() + crossed("quality_gate", "not restored", "restore broke") + crossed("#7", "state unknown", "merge broke") + posted(),
-            unrestored_unknown_pair(), ["gate false", "comment"],
-            log_body(outcome="merge state unknown", restored=NOT_RESTORED),
+            off() + restore_failed_row() + unknown_row("merge broke") + posted(),
+            unrestored_unknown_pair(), all_four_but("merge", "gate true"),
+            unrestored_log_body("merge state unknown"),
         ),
         (
             {"fail_on": ["restore"]}, 2,
-            off() + merged() + crossed("quality_gate", "not restored", "restore broke") + posted(),
-            pair("quality_gate MAY STILL BE OFF on acme/widgets · #7 is merged", restore_line(), bare=True),
-            ["gate false", "merge", "comment"], log_body(restored=NOT_RESTORED),
+            off() + merged() + restore_failed_row() + posted(),
+            merged_restore_pair(),
+            all_four_but("gate true"), unrestored_log_body(),
         ),
         (
             {"interrupt_on": ["restore"]}, 2,
-            off() + merged() + "\n" + crossed("quality_gate", "not restored", "interrupted while switching it on") + posted(),
-            pair("quality_gate MAY STILL BE OFF on acme/widgets · #7 is merged", restore_line(), bare=True),
-            ["gate false", "merge", "comment"], log_body(restored=NOT_RESTORED),
+            off() + merged() + "\n" + restore_failed_row("interrupted while switching it on") + posted(),
+            merged_restore_pair(),
+            all_four_but("gate true"), unrestored_log_body(),
         ),
         (
             {"fail_on": ["restore", "merge"]}, 2,
-            off() + crossed("quality_gate", "not restored", "restore broke") + crossed("#7", "not merged", "merge broke") + posted(),
-            pair("quality_gate MAY STILL BE OFF on acme/widgets · #7 is not merged", restore_line(), "quality emergency-merge acme/widgets 7", bare=True),
-            ["gate false", "comment"], log_body(outcome="merge failed", restored=NOT_RESTORED),
+            off() + restore_failed_row() + merge_failed_row() + posted(),
+            ("error: quality_gate MAY STILL BE OFF on acme/widgets · #7 is not merged\nnext:\n" + restore_line() + "    quality emergency-merge acme/widgets 7\n"),
+            all_four_but("merge", "gate true"), unrestored_log_body("merge failed"),
         ),
     ],
     ids=[
@@ -258,20 +296,21 @@ def test_each_way_the_attempt_ends_is_its_rows_and_the_pair(gh_kwargs, code, out
     [
         (
             {"fail_on": ["comment"]},
-            off() + merged() + on() + crossed("log comment", "not posted", "comment broke"),
-            pair("quality_gate on again · #7 is merged · no log comment on #7", comment_line(), bare=True),
+            off() + merged() + on() + comment_failed_row(),
+            merged_comment_pair(),
         ),
         (
             {"interrupt_on": ["comment"]},
-            off() + merged() + on() + "\n" + crossed("log comment", "not posted", "interrupted"),
-            pair("quality_gate on again · #7 is merged · no log comment on #7", comment_line(), bare=True),
+            off() + merged() + on() + "\n" + comment_failed_row("interrupted"),
+            merged_comment_pair(),
         ),
         (
             {"fail_on": ["restore", "comment"]},
-            off() + merged() + crossed("quality_gate", "not restored", "restore broke") + crossed("log comment", "not posted", "comment broke"),
-            pair(
-                "quality_gate MAY STILL BE OFF on acme/widgets · #7 is merged · no log comment on #7",
-                restore_line(), comment_line(restored=NOT_RESTORED), bare=True,
+            off() + merged() + restore_failed_row() + comment_failed_row(),
+            (
+                "error: quality_gate MAY STILL BE OFF on acme/widgets · #7 is merged · no log comment on #7\nnext:\n"
+                + restore_line()
+                + comment_line(restored="NOT restored, it may still be off")
             ),
         ),
     ],
@@ -306,7 +345,7 @@ def test_the_gate_row_stands_before_any_further_request(gh_kwargs, capsys):
         return gh(arguments, stdin)
 
     drive(watching)
-    not_restored = crossed("quality_gate", "not restored", "restore broke")
+    not_restored = restore_failed_row()
     later = requests[[moment for moment, _ in requests].index("restore") + 1 :]
     assert later[0][1].endswith(not_restored)
     assert all(not_restored in text for _, text in later)
@@ -333,7 +372,7 @@ def test_a_closed_stdout_takes_the_rows_and_the_door_still_asks(capsys, monkeypa
     gh = FakeGh()
     monkeypatch.setattr(sys, "stdout", None)
     code, _ = drive(gh)
-    assert (code, capsys.readouterr().err, gh.sequence) == (0, prompt(), ALL_FOUR)
+    assert (code, capsys.readouterr().err, gh.sequence) == (0, prompt(), all_four())
 
 
 class RefusingGh(FakeGh):
@@ -354,20 +393,20 @@ class RefusingGh(FakeGh):
 @pytest.mark.parametrize(
     ("moment", "gh_kwargs", "code", "written", "err", "sequence"),
     [
-        ("gate", {}, 0, "", "", ALL_FOUR),
-        ("gate", {"fail_on": ["gate"]}, 2, "", rerun_pair("is not merged"), ["gate true", "comment"]),
-        ("merge", {}, 0, off(), "", ALL_FOUR),
-        ("merge", {"interrupt_on": ["merge"]}, 2, off(), unknown_pair(), ["gate false", "gate true", "comment"]),
-        ("restore", {}, 0, off() + merged(), "", ALL_FOUR),
+        ("gate", {}, 0, "", "", all_four()),
+        ("gate", {"fail_on": ["gate"]}, 2, "", rerun_pair("is not merged"), all_four_but("gate false", "merge")),
+        ("merge", {}, 0, off(), "", all_four()),
+        ("merge", {"interrupt_on": ["merge"]}, 2, off(), unknown_pair(), all_four_but("merge")),
+        ("restore", {}, 0, off() + merged(), "", all_four()),
         (
             "restore", {"fail_on": ["restore"]}, 2, off() + merged(),
-            pair("quality_gate MAY STILL BE OFF on acme/widgets · #7 is merged", restore_line(), bare=True), ["gate false", "merge", "comment"],
+            merged_restore_pair(), all_four_but("gate true"),
         ),
-        ("read back", {"fail_on": ["merge"], "merge_lands": True}, 0, off() + on(), "", ["gate false", "gate true", "comment"]),
-        ("comment", {}, 0, off() + merged() + on(), "", ALL_FOUR),
+        ("read back", {"fail_on": ["merge"], "merge_lands": True}, 0, off() + on(), "", all_four_but("merge")),
+        ("comment", {}, 0, off() + merged() + on(), "", all_four()),
         (
             "comment", {"fail_on": ["comment"]}, 2, off() + merged() + on(),
-            pair("quality_gate on again · #7 is merged · no log comment on #7", comment_line(), bare=True), ["gate false", "merge", "gate true"],
+            merged_comment_pair(), all_four_but("comment"),
         ),
     ],
     ids=[
@@ -381,6 +420,5 @@ def test_a_stdout_that_refuses_a_row_after_the_answer_leaves_the_attempt_whole(m
         monkeypatch.setattr(sys, "stdout", stream)
         gh = RefusingGh(moment, stream, **gh_kwargs)
         result, _ = drive(gh)
-    assert (result, shown.read_text(), capsys.readouterr().err, gh.sequence) == (
-        code, rows_before_the_prompt() + written, prompt() + err, sequence,
-    )
+    actual = (result, shown.read_text(), capsys.readouterr().err, gh.sequence)
+    assert actual == (code, rows_before_the_prompt() + written, prompt() + err, sequence)
