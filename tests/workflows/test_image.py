@@ -38,6 +38,7 @@ def test_the_call_takes_exactly_the_image_interface(image):
         "build-args": ("string", False, ""),
         "push": ("boolean", True, None),
         "cache": ("boolean", False, False),
+        "submodules": ("boolean", False, False),
     }
     assert {name: spec["required"] for name, spec in call["secrets"].items()} == {"build-secrets": False}
     assert {name: spec["value"] for name, spec in call["outputs"].items()} == {
@@ -89,7 +90,11 @@ def test_each_step_uses_its_named_action(image):
 
 
 def test_the_checkout_is_the_dispatched_commit_without_credentials(image):
-    assert step(image, "image", CHECKOUT_STEP)["with"] == {"ref": "${{ github.sha }}", "persist-credentials": False}
+    assert step(image, "image", CHECKOUT_STEP)["with"] == {
+        "ref": "${{ github.sha }}",
+        "persist-credentials": False,
+        "submodules": "${{ inputs.submodules }}",
+    }
 
 
 def test_buildx_reads_no_cache_binary_and_login_uses_the_actor_token(image):

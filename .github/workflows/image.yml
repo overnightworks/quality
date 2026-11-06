@@ -37,6 +37,10 @@ on:
         description: Read and write the GitHub Actions build cache
         type: boolean
         default: false
+      submodules:
+        description: Check out the commit's git submodules, one level, without credentials
+        type: boolean
+        default: false
     secrets:
       build-secrets:
         description: BuildKit secrets, one id=value per line, for RUN --mount=type=secret
@@ -91,6 +95,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+          submodules: ${{ inputs.submodules }}
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
