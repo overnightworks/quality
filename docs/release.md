@@ -121,6 +121,7 @@ The secret's name is illustrative.
 - The image is `ghcr.io/<owner>/<repository>`, lowercased; `image` adds a sub-name for a repository with several images
   (`worker` gives `ghcr.io/<owner>/<repository>/worker`).
 - `version` is the image tag as given; only a valid Docker tag passes.
+- The tag job names each image job in its `needs` (for example `needs: [gate, build, image]`), so the tag and the release follow only pushed images.
 - `context` (default `.`), `file` (default the context's `Dockerfile`) and `target` (default the last stage) select the
   build.
 - `build-args` holds `NAME=value` lines. The provenance records them, so a secret goes into `build-secrets` as
@@ -184,8 +185,8 @@ per group, and a newer pending dispatch cancels the older.
 The gate is no boundary. A `v*` tag can still be created without it: the organisation ruleset restricts deletion and update
 of tags, not creation.
 
-An app's build pushes its image before the tag job runs, so a failed tag job leaves the image in GHCR without a tag or
-release. quality builds no guard for this: platform's CI is the one guard, and merges a version bump only with the app's
+An app's tag job waits for its image jobs, so a failed tag job leaves a pushed image in GHCR without a tag or release.
+quality builds no guard for this: platform's CI is the one guard, and merges a version bump only with the app's
 tag or release at that version and the image's attestation.
 
 While the draft release is open, users and workflows with write permission can change it and its assets, so "exactly the
