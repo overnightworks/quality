@@ -1,0 +1,58 @@
+name: Release
+
+# The operator dispatches it: gh workflow run release.yml -R overnightworks/quality -f version=X.Y.Z (docs/release.md).
+# Until the tag job exists, a dispatch gates and builds and creates no tag.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The version to release, X.Y.Z
+        required: true
+        type: string
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  gate:
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+      pull-requests: read
+    uses: $/.github/workflows/release-gate.yml
+    with:
+      version: ${{ inputs.version }}
+
+  build:
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ inputs.version }}
+      COMMIT: ${{ needs.gate.outputs.commit }}
+    steps:
+      - name: Check out the gated commit with its history and tags
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ needs.gate.outputs.commit }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: '0.12.4'
+          python-version: '3.14'
+
+      # This tag never leaves the runner: the job's token only reads.
+      - name: Refuse unless the commit, tagged here, is the release its version names
+        run: |
+          git tag "v$VERSION" "$COMMIT"
+          uv sync --locked --reinstall-package overnightworks-quality
+          uv run --locked python scripts/verify_release.py
