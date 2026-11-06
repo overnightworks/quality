@@ -70,7 +70,7 @@ def test_the_prompt_and_the_pair_name_the_pull_request_asked_for(repository, gh_
     changed_nothing(gh)
 
 
-@pytest.mark.parametrize("typed", ["yes\n", " yes \n", "\tyes\t\n"], ids=["yes", "spaces around", "tabs around"])
+@pytest.mark.parametrize("typed", ["yes\n", " yes \n", "\tyes\t\n", "\u00a0yes\u00a0\n"], ids=["yes", "spaces around", "tabs around", "non-breaking spaces around"])
 def test_yes_merges_with_or_without_whitespace_around_it(typed, capsys):
     gh = FakeGh()
     assert drive(gh, typed=typed)[0] == 0
