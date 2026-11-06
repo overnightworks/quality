@@ -3,6 +3,6 @@ agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
 role = "builder"
 base = "46ef9354a5371ff7e9587de6576396b98aff00a5"
 branch = "claude/issue-383-release-gate-and-release-yml"
-scope = [".github/workflows/release-gate.yml", ".github/workflows/release.yml", "AGENTS.md", "README.md", "docs/release.md", "tests/support/workflow_steps.py", "tests/workflows/test_release.py", "tests/workflows/test_release_gate.py"]
+scope = [".github/workflows/release-gate.yml", ".github/workflows/release.yml", "AGENTS.md", "README.md", "docs/release.md", "tests/support/workflow_steps.py", "tests/test_cli_workflow_invocations.py", "tests/workflows/test_release.py", "tests/workflows/test_release_gate.py"]
 opened_commit = "0fc128ef3c40eb3e9a9dc23801f723f83df14714"
 whole_reason = "Two new production files, about +175: release-gate.yml has no caller without quality's release.yml, and release.yml without the gate gates nothing; together they are the thinnest dispatchable path, and they hold no write permission."
