@@ -1,8 +1,0 @@
-claim_id = "75a69c74f9e14252ae8231cffb8d2ea5"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "0f7b0f0999ab6b9a5381cc756183f1c4809c988a"
-branch = "claude/issue-393-c8b1-the-landing-grammar-moves-to-landin"
-scope = ["AGENTS.md", "pyproject.toml", "src/quality/landing.py", "src/quality/merge.py"]
-opened_commit = "57e78124911be5fc9ff5a775992bdb33a0233078"
-whole_reason = "One move: the grammar, its new module, the layer that admits it and the sentence that names its owner land together, since landing.py without its layers line fails the import contract and the AGENTS.md entry would name a module that does not exist."
