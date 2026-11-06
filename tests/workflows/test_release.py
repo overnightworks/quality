@@ -140,7 +140,10 @@ def test_a_failed_verification_fails_the_build(release, tmp_path):
 @pytest.mark.parametrize("version", ["0.0.0", "0.21.0", "10.200.3000"])
 def test_a_version_the_gate_accepts_is_a_tag_verify_release_accepts(tmp_path, version):
     gate = workflow("release-gate.yml")
-    environment = step_environment(gate, "gate", FORMAT_STEP, VERSION=version, GH_TOKEN="token", COMMIT="a1" * 20)
+    form = gate[True]["workflow_call"]["inputs"]["form"]["default"]
+    environment = step_environment(
+        gate, "gate", FORMAT_STEP, VERSION=version, FORM=form, GH_TOKEN="token", COMMIT="a1" * 20
+    )
     accepted = run_step(
         step_script(gate, "gate", FORMAT_STEP), tmp_path, environment, FakeGh(tmp_path / "tools", {}).directory
     )
