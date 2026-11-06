@@ -657,10 +657,10 @@ def test_a_scoreboard_whose_step_summary_cannot_be_written_is_exit_2_with_the_fa
 @pytest.mark.parametrize(
     ("typed", "returned", "shown"),
     [
-        ("ja\n", "ja", "Type \\x1b: "),
+        ("yes\n", "yes", "Type \\x1b: "),
         ("\n", "", "Type \\x1b: "),
         ("", None, "Type \\x1b: \n"),
-        ("ja", None, "Type \\x1b: \n"),
+        ("yes", None, "Type \\x1b: \n"),
     ],
     ids=["an ended line", "Enter alone", "end of input", "an unended line"],
 )
@@ -688,8 +688,8 @@ def test_ask_shows_the_prompt_before_it_reads_the_line():
 
     def read_line():
         shown_at_the_read.append(stream.flushed)
-        return "ja\n"
+        return "yes\n"
 
-    output.ask("Type ja: ", output.Channel(stream, False, None), read_line)
+    output.ask("Type yes: ", output.Channel(stream, False, None), read_line)
 
-    assert shown_at_the_read == ["Type ja: "]
+    assert shown_at_the_read == ["Type yes: "]

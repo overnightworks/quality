@@ -534,7 +534,7 @@ def test_a_declared_loosening_merges_through_the_door_without_sonar(
 
     def read_line():
         shown.append(capsys.readouterr())
-        return "ja\n"
+        return "yes\n"
 
     code = cli.main(["emergency-merge", REPO, "7"], gh=gh, transport=transport, read_line=read_line, is_terminal=lambda: True)
     assert (code, transport.sent, gh.sequence) == (0, [], ["gate false", "merge", "gate true", "comment"])
@@ -611,7 +611,7 @@ def test_every_line_the_door_prints_is_escaped(capsys, base_config, merge_config
     [({}, "merge commit", "merges with a merge commit"), ({"rules": [[pull_request_rule("squash")]]}, "squash      ", "merges with a squash")],
     ids=["a merge commit", "a squash"],
 )
-def test_the_operator_reads_the_method_before_ja_and_the_log_comment_names_it(gh_kwargs, event, sentence, capsys):
+def test_the_operator_reads_the_method_before_the_question_and_the_log_comment_names_it(gh_kwargs, event, sentence, capsys):
     """The method row says what the door lands with on the base branch, and the log comment carries the method."""
     gh, shown = FakeGh(**gh_kwargs), []
     drive(gh, when_asked=lambda: shown.append(capsys.readouterr()))
