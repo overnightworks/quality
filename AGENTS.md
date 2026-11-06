@@ -1,6 +1,6 @@
 # quality
 
-One door, `quality` (`src/quality/cli.py`); every line it prints, the step summary and the step output leave through `output.py`, apart from argparse's `--version` and `input()`'s prompt. Rules return `Finding`s (`report.py`) and never print; a finding's event is a `report.FindingEvent` member, a note's a `report.NoteEvent` member, never defined in `output.py`. A `CannotJudge` carries a few-word fact and, where its mechanism knows them, its next steps as typed values (`report.Reason`: a command, an instruction, alternative commands, or an example to copy), never inside the fact. A `ConfigError` carries its fact and its TOML example apart; `report.config_refusal` turns it into a refusal. Each rule's id, its area, its place among that area's rules and its facts are one member of `Rule` (`rules.py`); the areas run and print in `Area`'s order and an area's help sentence is its member of `Area`.
+One door, `quality` (`src/quality/cli.py`); every line it prints, the step summary and the step output leave through `output.py`, apart from argparse's `--version`. Rules return `Finding`s (`report.py`) and never print; a finding's event is a `report.FindingEvent` member, a note's a `report.NoteEvent` member, never defined in `output.py`. A `CannotJudge` carries a few-word fact and, where its mechanism knows them, its next steps as typed values (`report.Reason`: a command, an instruction, alternative commands, or an example to copy), never inside the fact. A `ConfigError` carries its fact and its TOML example apart; `report.config_refusal` turns it into a refusal. Each rule's id, its area, its place among that area's rules and its facts are one member of `Rule` (`rules.py`); the areas run and print in `Area`'s order and an area's help sentence is its member of `Area`.
 Exit 0 clean, 1 findings, 2 cannot judge (`CannotJudge` and `Unparsable` in `report.py`).
 
 Door commands:
@@ -18,7 +18,7 @@ Door commands:
 - Scanners (`scanners.py`): gitleaks, actionlint and osv-scanner come through mise from `src/quality/mise/` (`mise.toml` holds the versions, `mise.lock` the sha256); `scanners.py` asks `mise which` there under `MISE_CEILING_PATHS` and runs only the exact version. ruff and zizmor are pinned dependencies of quality's package: `installation.py` finds each in quality's own installation and reads its pin.
 - `quality sonar properties` and `quality sonar findings` (`sonar.py`). Their HTTP and the verdict's go through `web.py`, which follows no redirect and bounds every wait; the door injects the transport, the GitHub fetcher and the poll sleep, so tests need no network.
 - `quality emergency-merge <owner/repo> <pr>` (`merge.py`): the operator's door for legacy findings and declared
-  loosenings, it needs a terminal on stdin; its rows and pairs before the prompt leave through `output.py`, every later line through its injected `say`.
+  loosenings, it needs a terminal on stdin; its rows (the landing row last), its prompt (on stderr) and its pairs up to the answer leave through `output.py`'s writers, the attempt's lines through its injected `say`.
 
 `.github/workflows/codeql.yml` is the reusable CodeQL workflow (input `languages`); `code-scanning.yml` is quality's own caller of it.
 

@@ -57,8 +57,10 @@ def test_anything_but_ja_changes_nothing_and_says_so(typed, pair, capsys):
         ({}, "no\n", prompt(12) + not_confirmed_pair(12)),
         (
             {"body": "Work-Item: acme/other#9"}, "ja\n",
-            "error: not merged · the operator's merge ends the merge commit with the pull request body's one Work-Item: or No-Item: line · nothing changed\n"
-            "next: give the pull request body exactly one Work-Item: or No-Item: line outside code blocks, then run quality emergency-merge acme/widgets 12 again\n",
+            (
+                "error: not merged · the operator's merge ends the merge commit with the pull request body's one Work-Item: or No-Item: line · nothing changed\n"
+                "next: give the pull request body exactly one Work-Item: or No-Item: line outside code blocks, then run quality emergency-merge acme/widgets 12 again\n"
+            ),
         ),
     ],
     ids=["not confirmed", "a refused landing line"],
