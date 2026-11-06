@@ -206,6 +206,10 @@ def test_only_a_dispatch_from_main_passes_the_ref_gate(gate, dispatch, tmp_path,
         "$(touch planted)",
         "",
         "0.21.0\n0.21.0",
+        "1x2.3",
+        "1.2x3",
+        "\u0967.2.3",
+        "1.2.\u0969",
     ],
     ids=[
         "two parts",
@@ -218,10 +222,14 @@ def test_only_a_dispatch_from_main_passes_the_ref_gate(gate, dispatch, tmp_path,
         "a substitution",
         "empty",
         "two lines",
+        "a letter for the first dot",
+        "a letter for the second dot",
+        "a Devanagari digit as major",
+        "a Devanagari digit as patch",
     ],
 )
 def test_a_malformed_version_is_refused(gate, dispatch, tmp_path, version):
-    result = run_gate_step(gate, FORMAT_STEP, dispatch, tmp_path, VERSION=version)
+    result = run_gate_step(gate, FORMAT_STEP, dispatch, tmp_path, VERSION=version, LC_ALL="de_DE.utf8")
     assert outcome(result) == (1, refused("the version is not X.Y.Z, each part a number without leading zeros."), "")
     assert not (tmp_path / "work" / "planted").exists()
 
@@ -325,6 +333,10 @@ def ci_scenarios(verdict: str) -> dict[str, tuple[dict, str | None]]:
             scenario(ci_runs((7, "completed", "success"), (8, "completed", "failure"))),
             "CI's push run 8 concluded failure.",
         ),
+        "the newest run is the highest number, not the last in text order": (
+            scenario(ci_runs((9, "completed", "success"), (10, "completed", "failure")), run=9),
+            "CI's push run 10 concluded failure.",
+        ),
         "the newest run decides, green run first": (
             scenario(ci_runs((8, "completed", "success"), (7, "completed", "failure")), run=8),
             None,
@@ -397,6 +409,14 @@ def merge_scenarios() -> dict[str, tuple[dict, str | None]]:
         "a re-run before the merge decides, listed newest first": (
             scenario(runs=((2, "success", around_the_merge(-30)), (1, "failure", around_the_merge(-60)))),
             None,
+        ),
+        "the newest check run is the highest number, not the last in text order": (
+            scenario(runs=((9, "success", around_the_merge(-60)), (10, "failure", around_the_merge(-30)))),
+            red.format(verdict="failure"),
+        ),
+        "the newest check run is the highest number, not the last to complete": (
+            scenario(runs=((1, "success", around_the_merge(-10)), (2, "failure", around_the_merge(-50)))),
+            red.format(verdict="failure"),
         ),
         "a verdict completed at the merge counts": (scenario(runs=((1, "success", around_the_merge()),)), None),
         "a failure completed at the merge overrides an earlier success": (

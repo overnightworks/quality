@@ -3,6 +3,8 @@ from pathlib import Path
 
 import pytest
 import yaml
+from packaging.specifiers import SpecifierSet
+from packaging.version import Version
 from verify_release import RELEASE_TAG
 
 from tests.support.git_repositories import git, head_commit, make_repo
@@ -68,11 +70,19 @@ def test_the_build_runs_only_after_the_gate(release):
 
 
 def test_no_job_or_step_is_skippable(release):
-    assert all("if" not in job for job in release["jobs"].values())
+    assert all("if" not in job and "continue-on-error" not in job for job in release["jobs"].values())
     assert all(
         "if" not in candidate and "continue-on-error" not in candidate
         for candidate in release["jobs"]["build"]["steps"]
     )
+
+
+def test_the_build_s_python_satisfies_the_project_s_requires_python(release):
+    requires = tomllib.loads((WORKFLOWS.parents[1] / "pyproject.toml").read_text(encoding="utf-8"))["project"][
+        "requires-python"
+    ]
+    python = step(release, "build", "Set up uv")["with"]["python-version"]
+    assert Version(python) in SpecifierSet(requires)
 
 
 def test_no_job_may_write(release):
