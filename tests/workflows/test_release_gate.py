@@ -178,10 +178,12 @@ def refused(line: str) -> str:
     [
         ("refs/heads/main", True),
         ("refs/heads/feature", False),
+        ("refs/heads/main2", False),
+        ("refs/heads/maintenance", False),
         ("refs/tags/v1.2.3", False),
         ("refs/pull/7/merge", False),
     ],
-    ids=["main", "another branch", "a tag", "a pull request ref"],
+    ids=["main", "another branch", "a longer name starting with main", "a branch named maintenance", "a tag", "a pull request ref"],
 )
 def test_only_a_dispatch_from_main_passes_the_ref_gate(gate, dispatch, tmp_path, reference, passes):
     result = run_gate_step(gate, REF_STEP, dispatch, tmp_path, DISPATCH_REF=reference)
