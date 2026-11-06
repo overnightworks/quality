@@ -24,7 +24,7 @@ Door commands:
 
 `.github/workflows/gate.yml` is the reusable gate; its caller contract stands in `docs/gate.md` and in the file's header.
 
-`.github/workflows/release-gate.yml` and `release-tag.yml` are the fleet's reusable release path, and `release.yml` is quality's own caller; their caller contract and the standard stand in `docs/release.md`.
+`.github/workflows/release-gate.yml` and `release-tag.yml` are the fleet's reusable release path, `image.yml` its reusable image build, and `release.yml` is quality's own caller; their caller contract and the standard stand in `docs/release.md`.
 
 quality's own layers are an import-linter contract in `pyproject.toml` (`[tool.importlinter]`); `quality check`
 enforces it, so a module imports only from the layers below its own.

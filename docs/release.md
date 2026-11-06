@@ -90,8 +90,50 @@ Each line has a reason:
 ## The version
 
 A library or tool releases `X.Y.Z`, each part a number without leading zeros, tagged `vX.Y.Z`. An app's form is decided
-with the image workflow; until its cut-over an app keeps its dated tag `vYYYY.MM.DD.N` on a main commit, and the gate
-neither judges nor counts that tag.
+with the gate's app-form lane; until its cut-over an app keeps its dated tag `vYYYY.MM.DD.N` on a main commit, and the
+gate neither judges nor counts that tag. The image takes the version as a Docker tag.
+
+## An app's image
+
+An app's build calls `image.yml` once per image, after the gate, and pushes it to GHCR with an attestation:
+
+```yaml
+  image:
+    needs: gate
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+      packages: write
+    uses: overnightworks/quality/.github/workflows/image.yml@<commit sha> # v<tag>
+    with:
+      version: ${{ inputs.version }}
+      push: true
+    secrets:
+      build-secrets: ${{ secrets.HF_TOKEN_BUILD_SECRETS }}
+```
+
+The secret's name is illustrative.
+
+- The caller job grants all four permissions, even with `push: false`; GitHub refuses a call that grants less.
+- The image is `ghcr.io/<owner>/<repository>`, lowercased; `image` adds a sub-name for a repository with several images
+  (`worker` gives `ghcr.io/<owner>/<repository>/worker`).
+- `version` is the image tag as given; only a valid Docker tag passes.
+- `context` (default `.`), `file` (default the context's `Dockerfile`) and `target` (default the last stage) select the
+  build.
+- `build-args` holds `NAME=value` lines. The provenance records them, so a secret goes into `build-secrets` as
+  `id=value` lines and is read with `RUN --mount=type=secret,id=<id>`. Pass `build-secrets` by name; never
+  `secrets: inherit`.
+- The image is built for `linux/amd64` on a GitHub-hosted runner, from the dispatched commit, the one the gate judged.
+- BuildKit adds its provenance (`mode=max`) and an SBOM to the image; with `push`, `actions/attest` adds a signed SLSA
+  build provenance, signed by `image.yml`. A consumer verifies it with `gh attestation verify oci://<ref> --repo
+  <owner>/<repository> --signer-workflow overnightworks/quality/.github/workflows/image.yml --source-ref refs/heads/main
+  --predicate-type https://slsa.dev/provenance/v1`.
+- `cache: true` reads and writes the GitHub Actions build cache; it stays off for a release.
+- The outputs, set only with `push`: `digest` (`sha256:<hex>`) and `ref`
+  (`ghcr.io/<owner>/<repository>[/<image>]:<version>@<digest>`).
+- The package takes the access of the caller's repository; a deployment that pulls it needs read access set on the
+  package.
 
 ## Refusals
 
