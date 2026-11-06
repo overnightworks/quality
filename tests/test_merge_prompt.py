@@ -33,15 +33,17 @@ from tests.support.terminal import Terminal
     ("typed", "pair"),
     [
         ("", "\n" + not_confirmed_pair()),
-        ("ja", "\n" + not_confirmed_pair()),
+        ("yes", "\n" + not_confirmed_pair()),
         ("\n", not_confirmed_pair()),
-        ("yes\n", not_confirmed_pair()),
-        ("JA\n", not_confirmed_pair()),
-        ("ja ja\n", not_confirmed_pair()),
+        ("ja\n", not_confirmed_pair()),
+        ("Yes\n", not_confirmed_pair()),
+        ("YES\n", not_confirmed_pair()),
+        ("y\n", not_confirmed_pair()),
+        ("yes yes\n", not_confirmed_pair()),
     ],
-    ids=["end of input", "an unended ja", "Enter alone", "yes", "JA", "ja ja"],
+    ids=["end of input", "an unended yes", "Enter alone", "the old word", "a capital", "capitals", "the first letter", "twice"],
 )
-def test_anything_but_ja_changes_nothing_and_says_so(typed, pair, capsys):
+def test_anything_but_yes_changes_nothing_and_says_so(typed, pair, capsys):
     gh, at_the_read = FakeGh(), []
     code, answers = drive(gh, typed=typed, when_asked=lambda: at_the_read.append(list(gh.requests)))
     streams = capsys.readouterr()
@@ -52,15 +54,15 @@ def test_anything_but_ja_changes_nothing_and_says_so(typed, pair, capsys):
 
 @pytest.mark.parametrize("repository", [REPO, "acme/gadgets"], ids=["on the default repository", "on another repository"])
 @pytest.mark.parametrize(
-    ("gh_kwargs", "typed", "pair"),
+    ("gh_kwargs", "typed", "start", "pair"),
     [
-        ({}, "no\n", not_confirmed_pair),
-        ({"body": "Work-Item: acme/other#9"}, "ja\n", landing_pair),
+        ({}, "no\n", prompt(12), not_confirmed_pair),
+        ({"body": "Work-Item: acme/other#9"}, "yes\n", "", landing_pair),
     ],
     ids=["not confirmed", "a refused landing line"],
 )
-def test_the_prompt_and_the_pair_name_the_pull_request_asked_for(repository, gh_kwargs, typed, pair, capsys):
-    err = (prompt(12) if typed == "no\n" else "") + pair(12, repository)
+def test_the_prompt_and_the_pair_name_the_pull_request_asked_for(repository, gh_kwargs, typed, start, pair, capsys):
+    err = start + pair(12, repository)
     gh = FakeGh(checks=SONAR_GREEN, base_config=TWO_JOBS, head_config=ONE_JOB + declaring(B_REMOVED), **gh_kwargs)
     code, _ = drive(gh, repo=repository, pull_request="12", typed=typed)
     shown = capsys.readouterr().err
@@ -68,8 +70,8 @@ def test_the_prompt_and_the_pair_name_the_pull_request_asked_for(repository, gh_
     changed_nothing(gh)
 
 
-@pytest.mark.parametrize("typed", ["ja\n", " ja \n", "\tja\t\n"], ids=["ja", "spaces around", "tabs around"])
-def test_ja_merges_with_or_without_whitespace_around_it(typed, capsys):
+@pytest.mark.parametrize("typed", ["yes\n", " yes \n", "\tyes\t\n", "\u00a0yes\u00a0\n"], ids=["yes", "spaces around", "tabs around", "non-breaking spaces around"])
+def test_yes_merges_with_or_without_whitespace_around_it(typed, capsys):
     gh = FakeGh()
     assert drive(gh, typed=typed)[0] == 0
     assert gh.sequence == ["gate false", "merge", "gate true", "comment"]
@@ -99,7 +101,7 @@ def door(gh, **ports):
 
 
 def test_the_door_reads_one_line_of_stdin(monkeypatch):
-    monkeypatch.setattr("sys.stdin", io.StringIO(" ja \nno\n"))
+    monkeypatch.setattr("sys.stdin", io.StringIO("yes\nno\n"))
     code = door(FakeGh(), is_terminal=lambda: True)
     left_unread = sys.stdin.read()
     assert (code, left_unread) == (0, "no\n")
@@ -111,12 +113,12 @@ def test_the_door_reads_one_line_of_stdin(monkeypatch):
     ids=["terminal stdin alone", "terminal stdout alone"],
 )
 def test_only_stdin_decides_whether_the_door_has_a_terminal(stdin_stream, stdout_stream, code, monkeypatch):
-    monkeypatch.setattr("sys.stdin", stdin_stream("ja\n"))
+    monkeypatch.setattr("sys.stdin", stdin_stream("yes\n"))
     monkeypatch.setattr("sys.stdout", stdout_stream())
     assert door(FakeGh()) == code
 
 
-@pytest.mark.parametrize("stdin", [None, io.StringIO("ja\n")], ids=["closed", "no terminal"])
+@pytest.mark.parametrize("stdin", [None, io.StringIO("yes\n")], ids=["closed", "no terminal"])
 def test_a_stdin_that_is_no_terminal_is_the_pair_alone(stdin, monkeypatch, capsys):
     monkeypatch.setattr("sys.stdin", stdin)
     gh = FakeGh()

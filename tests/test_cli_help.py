@@ -70,7 +70,7 @@ def test_the_help_stands_in_the_pictures_frame(capsys):
         "      Check this repository against the fleet's rules.\n"
         "  emergency-merge OWNER/REPO PR\n"
         "      Operator only: merge one pull request whose gate is red only for\n"
-        "      legacy findings or loosenings he ruled, after he types ja.\n"
+        "      legacy findings or loosenings he ruled, after he types yes.\n"
         "  scoreboard [PATH]\n"
         "      Measure every fleet repository: size, debt, the gate release it pins.\n"
         "\n"

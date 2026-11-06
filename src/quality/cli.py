@@ -176,7 +176,7 @@ Commands:
       Check this repository against the fleet's rules.
   emergency-merge OWNER/REPO PR
       Operator only: merge one pull request whose gate is red only for
-      legacy findings or loosenings he ruled, after he types ja.
+      legacy findings or loosenings he ruled, after he types yes.
   scoreboard [PATH]
       Measure every fleet repository: size, debt, the gate release it pins.
 
