@@ -106,8 +106,7 @@ of tags, not creation.
 
 ## quality's own release
 
-Until the tag job lands, a dispatch of quality's `release.yml` gates and builds and creates no tag; quality still tags by
-hand (see `AGENTS.md`). The operator dispatches with:
+A dispatch of quality's `release.yml` gates and builds and creates no tag; quality tags by hand (see `AGENTS.md`). The operator dispatches with:
 
 ```sh
 gh workflow run release.yml -R overnightworks/quality -f version=X.Y.Z
@@ -117,14 +116,10 @@ An agent dispatches only on his explicit yes for that one version.
 
 ## The standard
 
-The operator ruled on 6.11.2026 (overnightworks/quality#364, option A):
-
-> „Jedes Projekt wird auf einem geprüften Weg veröffentlicht, und du startest jedes Release mit demselben Befehl und nur
-> der Version.“
-
-The ruled standard: gate, then the project's own build, then tag; the gate exists once, in quality. Covered are every
-repository that publishes a release (agent-runtime, aco, appkit, quality, speech-runtime, webauth) and, under platform#1, every
-app that ships an image (hopin, presentator, speech-runtime, songmaker, platform's Keycloak image). The trigger is a repository's first release after the quality tag that ships the workflows it needs.
+Every project is released on one checked path, and every release starts with the same command and only the version: gate,
+then the project's own build, then tag; the gate exists once, in quality. Covered are every
+repository that publishes a release (agent-runtime, aco, appkit, quality, speech-runtime, webauth) and every app that ships an image
+through the platform (hopin, presentator, speech-runtime, songmaker, platform's Keycloak image). The trigger is a repository's first release after the quality tag that ships the workflows it needs.
 
 A deviation is asked as marketplace `docs/standards.md` says: the covered head names the enduring harm with its
-uncertainty, quality's head reviews it, the operator rules it, and the ruling is recorded here.
+uncertainty, quality's head reviews it, and the operator rules it; the ruling stays in the covered repository's item.
