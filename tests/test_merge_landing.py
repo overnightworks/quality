@@ -1,20 +1,13 @@
 import pytest
 
 from tests.support.check import assert_every_line_starts_with_the_door
-from tests.support.merge import ABSENT, SHA, FakeGh, changed_nothing, drive, prompt, pull_row
+from tests.support.merge import ABSENT, SHA, FakeGh, changed_nothing, drive, landing_pair, prompt, pull_row
 
 
 def not_judged_pair():
     return (
         "error: could not judge · nothing changed\n"
         "next: fix what the ✗ row names, then run quality emergency-merge acme/widgets 7 again\n"
-    )
-
-
-def landing_pair():
-    return (
-        "error: not merged · the operator's merge ends the merge commit with the pull request body's one Work-Item: or No-Item: line · nothing changed\n"
-        "next: give the pull request body exactly one Work-Item: or No-Item: line outside code blocks, then run quality emergency-merge acme/widgets 7 again\n"
     )
 
 

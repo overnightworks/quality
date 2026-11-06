@@ -668,3 +668,27 @@ def test_ask_returns_the_line_a_person_ended_and_none_where_the_input_ended_firs
     stream = io.StringIO()
     answer = output.ask("Type \x1b: ", output.Channel(stream, False, None), lambda: typed)
     assert (answer, stream.getvalue()) == (returned, shown)
+
+
+class _LineBufferedStream(io.StringIO):
+    """Holds what was written until flushed, as a terminal's stderr holds a prompt without a line end."""
+
+    def __init__(self):
+        super().__init__()
+        self.flushed = ""
+
+    def flush(self):
+        self.flushed = self.getvalue()
+
+
+def test_ask_shows_the_prompt_before_it_reads_the_line():
+    stream = _LineBufferedStream()
+    shown_at_the_read = []
+
+    def read_line():
+        shown_at_the_read.append(stream.flushed)
+        return "ja\n"
+
+    output.ask("Type ja: ", output.Channel(stream, False, None), read_line)
+
+    assert shown_at_the_read == ["Type ja: "]

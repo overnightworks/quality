@@ -230,8 +230,15 @@ def prompt(pull_request=7):
     return f"Switch quality_gate off, merge #{pull_request}, switch it on? Type ja: "
 
 
-def not_confirmed_pair(pull_request=7, repository="acme/widgets"):
+def not_confirmed_pair(pull_request=7, repository=REPO):
     return f"error: not confirmed · nothing changed\nnext: quality emergency-merge {repository} {pull_request}\n"
+
+
+def landing_pair(pull_request=7, repository=REPO):
+    return (
+        "error: not merged · the operator's merge ends the merge commit with the pull request body's one Work-Item: or No-Item: line · nothing changed\n"
+        f"next: give the pull request body exactly one Work-Item: or No-Item: line outside code blocks, then run quality emergency-merge {repository} {pull_request} again\n"
+    )
 
 
 def terminal_pair():
