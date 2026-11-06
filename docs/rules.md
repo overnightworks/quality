@@ -706,5 +706,5 @@ vetted.
   recognises only by its context (`generic-api-key` needs its `api_key = `) when a scanner quotes the bare value; a value
   a scanner cut or spliced across lines; a binary type's mark at a fixed offset behind the first line (`ustar` at byte
   257), which needs a text built for it.
-- quality does not replace every refusal's stderr with a fixed text, because every person would lose the reason; it does not show the text and name
-  the risk, and it is not limited to a list of known lines per scanner (five lists that decay at each scanner bump).
+- quality does not replace every refusal's stderr with a fixed text, because every person would lose the reason; it does not show an uncleared text and name
+  the risk, because a secret's value never appears, and it is not limited to a list of known lines per scanner (five lists that decay at each scanner bump).

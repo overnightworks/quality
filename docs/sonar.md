@@ -149,9 +149,9 @@ path) and does not move the zero-findings rule to SonarCloud's hosted gate, beca
   which `-Dsonar.host.url` pins.
 
 The hosted gate would replace the count only if it could fail on a finding on an unchanged line and the scanner no
-longer let a properties file reach the token. The Docker rule is no reason: the scan's own exclusion below keeps
-`docker:S8431` out of every analysis (operator, #228, 29.10.2026, „der rest passt auch!“: the hosted gate alone applies when
-its preconditions hold, and they did not).
+longer let a properties file reach the token (operator, #228, 28.10.2026, „der rest passt auch!“: the hosted gate alone
+applies when its preconditions hold, and they did not). The Docker rule is no reason: where `.github/dependabot.yml`
+exists, the scan's own exclusion below keeps `docker:S8431` out of the analysis.
 
 ### A Dependabot exception for `docker:S8431`
 
