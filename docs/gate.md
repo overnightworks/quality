@@ -1,6 +1,6 @@
 # The gate
 
-Reference for the engineer who calls the reusable `gate.yml` or `codeql.yml` workflow, or reads its verdict.
+Reference for the engineer who calls the reusable `gate.yml` or `codeql.yml` workflow, or reads its verdict. The reasons behind its constraints stand in [ARCHITECTURE](ARCHITECTURE.md).
 
 ## `gate.yml`
 
@@ -30,8 +30,9 @@ Each line has a reason:
   refuses without a green `quality / verdict`, and `quality emergency-merge`, which looks for `quality / sonar` and
   `quality / verdict`.
 - **`needs:` lists the id of every job that a `mandatory_jobs` name belongs to.** The verdict then judges finished jobs,
-  and an answer in which GitHub still lists one as running is stale: the verdict reads the run's jobs again, every 10
-  seconds and at most 12 times: two minutes of waiting plus the time the reads take. Without `needs:`, a job still
+  and a job GitHub still lists as running is unsettled and never green (READ-1), so the answer is stale: the verdict
+  reads the run's jobs again, every 10 seconds (READ-2) and at most 12 times (READ-3): two minutes of waiting plus the
+  time the reads take. Without `needs:`, a job still
   running holds the verdict for that long, then it cannot judge:
   `GitHub still lists "checks" (attempt 1) as in_progress after 13 reads; …`.
 - **`if: always()` runs the gate when a needed job failed,** so the verdict names the failure. Without it, a failed needed
@@ -53,9 +54,7 @@ Each line has a reason:
 - **`secrets: SONAR_TOKEN`** and the optional **`with: coverage-artifact`** are described under
   [`quality sonar findings`](sonar.md#quality-sonar-findings) and [Coverage on new code](sonar.md#coverage-on-new-code).
 - **`uses:` pins a commit** (`@<commit sha> # v<tag>`), and Dependabot bumps it where the repository's `.github/dependabot.yml` enables the `github-actions` ecosystem. There is no copier and no own token that writes to all repositories: quality
-  carries plain version tags and Dependabot opens the bump pull requests (operator, 15.10.2026: „kein copier! … copier
-  ist shice! …“; the points agreed with the operator's 15.10.2026 answer, quoted in [commands.md](commands.md#scanners), add the token).
-  quality's own action pins move the same way, so a caller receives current actions with each quality tag.
+  carries plain version tags and Dependabot opens the bump pull requests, and quality's own action pins move the same way, so a caller receives current actions with each quality tag.
 
 The verdict judges the jobs named in `quality/config.toml`:
 
@@ -84,11 +83,11 @@ The verdict prints `verdict: green` (exit `0`); each problem, then `verdict: red
 A cannot-judge after a re-read still prints the last judged read's problems first. A timeout or an unreachable GitHub
 is not read again: re-run the verdict. The same text goes to the run's step summary.
 
-GitHub's jobs listing answers late per job, which is why the verdict reads again instead of failing at once (operator
-ruling 21.10.2026: at most two minutes, „Bis zu 2 Minuten (empfohlen)“; a job still running after the last read is exit
-`2`, „Exit 2: kann nicht urteilen (empfohlen)“). The first line that says the verdict read again, the reading of a 5xx and
-the permission hint only after a 403 or 404 were shown to the operator and left unanswered, so they stand at the head's
-proposed default (#85, E4 to E6); they are not his words.
+Ruled by the operator: the verdict reads the run's jobs again for at most two minutes, because GitHub's jobs listing
+answers late per job; a job still listed as running after the last read is exit `2`.
+
+Three defaults the operator never answered: the verdict says in a first line that it read again (READ-4), reads a 5xx
+again (READ-5), and adds the permission hint only after a 403 or 404 (READ-6).
 
 ### Declared loosenings
 
@@ -139,30 +138,27 @@ reason = "the operator ruled the requirement shelf machinery out"
   declaration of an adoption (a base without `quality/config.toml`) are new. An inherited or deleted declaration and a
   changed `job`, `reason`, `item` or `date` loosen nothing. A `[[gate.loosened]]` entry whose `what` is such a text
   matches nothing and is red. A malformed `[size]` entry is exit `2` in the verdict and the door, naming the side.
-- Removing, softening or bypassing an import-linter contract declares the same way, with one of these texts as `what`
+- Ruled by the operator: removing, softening or bypassing an import-linter contract declares the same way, with one of these texts as `what`
   (the rule is in [rules](rules.md), "The import contracts only tighten"): `import contract "<name>" removed`,
   `import-linter config in <file> removed`, `import contract "<name>" ignores <expression>`,
-  `import contract "<name>" changes <field>` and `import-linter changes <option>` (operator rulings 26.10.2026, #148).
-- The ruling (operator ruling 21.10.2026: „Erklären + deine Tür (empfohlen)“) is that a loosening is declared and stays
-  red, and that only the operator's door merges it; a declared removal of a mandatory job is no longer judged („Ja,
-  nicht mehr prüfen (empfohlen)“), and the door may merge legacy Sonar findings and a declared loosening in one run („Ja,
-  beides in einem Lauf (empfohlen)“). That agents share the operator's `gh` login is a known residual risk, „Bekanntes
-  Restrisiko (empfohlen)“: the door is the agreed path, not a lock. Why the gate is not simply loosened by the pull
-  request is that a pull request cannot approve its own loosening: an agent could write the declaration and the loosening
-  in one pull request, so the red and the door are the gate, not the declaration. Only the door moves an allowance's
-  `until` later, because that date is what brings the advisory back to red. An allowance is its own declaration, with no
-  second `[[gate.loosened]]` entry. A real lock (a token without admin rights) belongs to the machine's setup, not to
-  quality.
+  `import contract "<name>" changes <field>` and `import-linter changes <option>`.
+Ruled by the operator:
 
+- A loosening is declared and stays red, and only the operator's door merges it.
+- A declared removal of a mandatory job is no longer judged.
+- The door may merge legacy Sonar findings and a declared loosening in one run.
+- Only the door moves an allowance's `until` later, because that date is what brings the advisory back to red.
+- An allowance is its own declaration, with no second `[[gate.loosened]]` entry.
+
+The reason and the residual risk stand in [ARCHITECTURE](ARCHITECTURE.md), sections 6 and 8.
 
 ## `codeql.yml`
 
-A reusable workflow that runs CodeQL for the languages a caller names, one for the fleet instead of a copy per repository
-(operator ruling 18.10.2026: „b macht sinn“), with `build-mode: none` and CodeQL's default
-query suite and threat model. It uploads under the category `/language:<language>`, the Default Setup's category, so
-alerts carry over when a repository switches.
+Ruled by the operator: a reusable workflow that runs CodeQL for the languages a caller names, one for the fleet instead
+of a copy per repository, with `build-mode: none` and CodeQL's default query suite and threat model. It uploads under the
+category `/language:<language>`, the Default Setup's category, so alerts carry over when a repository switches.
 
-A private repository needs GitHub Code Security for code scanning (`code-scanning/default-setup` answers 403 without it); the operator declined to pay for it (operator ruling 22.10.2026), so private repositories run no CodeQL.
+A private repository needs GitHub Code Security for code scanning (`code-scanning/default-setup` answers 403 without it); quality's fleet does not pay for it, so private repositories run no CodeQL ([ARCHITECTURE](ARCHITECTURE.md)).
 
 A caller (`.github/workflows/code-scanning.yml`, workflow `name: CodeQL`):
 
@@ -207,9 +203,8 @@ jobs:
 
 A reusable-workflow call that GitHub refuses at startup (a caller job that grants less than the called workflow asks for,
 such as `security-events: write` or `actions: read`) ends its run without a check run for that job, so a ruleset or
-`aco land` waiting for the check never sees it. Measured on 18.10.2026 on a scratch pull request whose CodeQL callers
-were broken (commit 7a4173ae0cc52a62d5e00177fd3197a2c034102a of overnightworks/quality#70): its `CodeQL` run ended
-`startup_failure` and the commit has no `codeql / Analyze (…)` check run. It is measured for CodeQL
+`aco land` waiting for the check never sees it. Measured for CodeQL callers: such a run ends `startup_failure` and the commit has no
+`codeql / Analyze (…)` check run. It is measured for CodeQL
 callers; for `gate.yml` callers the same behaviour is expected and not measured
 here. To re-measure, break a caller's `permissions:` on a scratch pull request and read
 `gh run list --repo <owner/repo> --commit <full sha> --json workflowName,conclusion` and
