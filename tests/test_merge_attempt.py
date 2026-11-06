@@ -109,7 +109,7 @@ def test_a_merge_that_goes_through_is_four_rows_and_the_closing_line(settings, f
             gate_request(REPO, "false"),
             (("pr", "merge", "7", "--repo", REPO, flag, "--match-head-commit", SHA, "--body-file", "-"), "Closes #3\n\nWork-Item: #3"),
             gate_request(REPO, "true"),
-            (("api", "-X", "POST", "repos/acme/widgets/issues/7/comments", "-f", log_body()), None),
+            (("api", "-X", "POST", "repos/acme/widgets/issues/7/comments", "-f", log_body().replace("a merge commit", f"a {method}")), None),
         ],
     )
 

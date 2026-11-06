@@ -1,6 +1,7 @@
 """The operator's emergency door: switch a repository's gate off, merge one pull request, switch it on again."""
 
 import json
+import shlex
 import subprocess
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -13,7 +14,17 @@ from urllib.parse import quote
 from quality import architecture, process
 from quality.config import CONFIG_PATH, REPOSITORY_NAME, Declaration, GateSettings, LegacyMode
 from quality.landing import Landing, LandingKind, LandingRefused, landing_of
-from quality.output import SEPARATOR, Channels, Glyph, Row, SubLine, write_pair, write_rows
+from quality.output import (
+    SEPARATOR,
+    Channels,
+    DoorStream,
+    Glyph,
+    Row,
+    SubLine,
+    format_duration,
+    write_closing_line,
+    write_pair,
+)
 from quality.ratchet import BASELINE_PATH, NO_RENAMES, Renames
 from quality.report import CannotJudge, Command, Instruction, Step, headline, printable
 from quality.sonar import (
@@ -33,7 +44,7 @@ from quality.verdict import SUCCESS, Job, Side, Verdict, compares_baselines, jud
 
 EXIT_MERGED = 0
 EXIT_REFUSED = 1
-EXIT_NOT_RESTORED = 2
+EXIT_COULD_NOT_DO = 2
 
 GATE_PROPERTY = "quality_gate"
 CONFIRMATION_WORD = "yes"
@@ -50,7 +61,6 @@ FETCH_TIMEOUT_SECONDS = 120
 GhRunner = Callable[[Sequence[str], str | None], str]
 Ask = Callable[[str], str | None]
 RemoteFor = Callable[[str], str]
-Say = Callable[[str], None]
 
 
 class GhFailed(Exception):
@@ -111,6 +121,15 @@ class DoorEvent(StrEnum):
     NOT_JUDGED = "not judged"
     WORK_ITEM = "work item"
     NO_ITEM = "no item"
+    OFF = "off"
+    OFF_FAILED = "off failed"
+    ON = "on"
+    NOT_RESTORED = "not restored"
+    MERGED = "merged"
+    NOT_MERGED = "not merged"
+    STATE_UNKNOWN = "state unknown"
+    POSTED = "posted"
+    NOT_POSTED = "not posted"
 
 
 NOTHING_CHANGED = "nothing changed"
@@ -138,7 +157,7 @@ class Stopped(Exception):
 
     @property
     def exit_code(self) -> int:
-        return EXIT_NOT_RESTORED if self.row.glyph is Glyph.COULD_NOT_CHECK else EXIT_REFUSED
+        return EXIT_COULD_NOT_DO if self.row.glyph is Glyph.COULD_NOT_CHECK else EXIT_REFUSED
 
 
 class Outcome(Enum):
@@ -151,7 +170,6 @@ class Outcome(Enum):
 @dataclass(frozen=True)
 class Attempt:
     outcome: Outcome
-    detail: str | None
     restore_error: str | None
 
 
@@ -411,77 +429,86 @@ def choose_merge_method(gh: GhRunner, repository: str, repository_facts: Mapping
     return chosen
 
 
-def set_gate(gh: GhRunner, repository: str, enabled: bool) -> None:
+def gate_request(repository: str, enabled: bool) -> tuple[list[str], str]:
+    """The request that switches the gate: gh's arguments and the body on its stdin."""
     body = {"properties": [{"property_name": GATE_PROPERTY, "value": str(enabled).lower()}]}
-    gh(["api", "-X", "PATCH", f"repos/{repository}/properties/values", "--input", "-"], json.dumps(body))
+    return ["api", "-X", "PATCH", f"repos/{repository}/properties/values", "--input", "-"], json.dumps(body, separators=(",", ":"))
+
+
+def restore_command(repository: str) -> Command:
+    """The request that switches the gate on, as the one line a person copies whole."""
+    arguments, body = gate_request(repository, True)
+    return Command(f"echo {shlex.quote(body)} | {shlex.join(['gh', *arguments])}", own_line=True)
+
+
+def comment_request(repository: str, pull_request: int, comment: str) -> list[str]:
+    return ["api", "-X", "POST", f"repos/{repository}/issues/{pull_request}/comments", "-f", f"body={comment}"]
 
 
 def merged_on_github(gh: GhRunner, door: Door) -> bool | None:
     """What GitHub says now; None when it cannot be read."""
     try:
         return json.loads(gh(["api", f"repos/{door.repository}/pulls/{door.pull_request}"], None))["merged"] is True
-    except (GhFailed, KeyError, ValueError):
+    except (GhFailed, KeyError, TypeError, ValueError):
         return None
 
 
-def restore_gate(gh: GhRunner, repository: str, say: Say) -> str | None:
-    """The reason the gate could not be switched on, None when it is on."""
+def restore_gate(gh: GhRunner, repository: str, out: DoorStream) -> str | None:
+    """Its row the moment GitHub answers, before any further request, since gh has no timeout to end one; the reason
+    the gate could not be switched on, None when it is on."""
     try:
-        set_gate(gh, repository, True)
+        gh(*gate_request(repository, True))
     except GhFailed as error:
-        return str(error)
+        reason = str(error)
     except KeyboardInterrupt:
-        end_interrupted_line(say)
-        return "interrupted while switching it on"
-    return None
+        out.end_interrupted_line()
+        reason = "interrupted while switching it on"
+    else:
+        out.show((Row(Glyph.CLEAN, GATE_PROPERTY, DoorEvent.ON),))
+        return None
+    out.show((Row(Glyph.COULD_NOT_CHECK, GATE_PROPERTY, DoorEvent.NOT_RESTORED, reason, descriptive=True),))
+    return reason
 
 
-def not_restored_warning(door: Door, attempt: Attempt) -> str:
-    """One line for both manual checks, the gate and the pull request, with the merge outcome as far as it is known."""
-    return (
-        f"emergency-merge: {GATE_PROPERTY} MAY STILL BE OFF for {door.repository} - set it to true by hand now "
-        f"({attempt.restore_error}); {merge_outcome(attempt, door.pull_request)}"
-    )
+def merge_row(door: Door, outcome: Outcome, detail: str) -> Row:
+    subject = f"#{door.pull_request}"
+    if outcome is Outcome.MERGED:
+        return Row(Glyph.CLEAN, subject, DoorEvent.MERGED, str(door.merge_method.event))
+    event = DoorEvent.STATE_UNKNOWN if outcome is Outcome.UNKNOWN else DoorEvent.NOT_MERGED
+    return Row(Glyph.COULD_NOT_CHECK, subject, event, detail, descriptive=True)
 
 
-def end_interrupted_line(say: Say) -> None:
-    """Ctrl-C leaves the cursor behind the terminal's `^C`, so the next line starts on a line of its own."""
-    say("")
-
-
-def switch_off_merge_switch_on(gh: GhRunner, door: Door, say: Say) -> Attempt:
-    """A gate that stays off is said at once, before any further request, since gh has no timeout to end one."""
-    outcome, detail, interrupted = Outcome.NOT_STARTED, None, False
+def switch_off_merge_switch_on(gh: GhRunner, door: Door, out: DoorStream) -> Attempt:
+    """Each step's row as GitHub answers it; a merge whose answer was lost stands after the gate's row, read back."""
+    outcome, detail, interrupted = Outcome.NOT_STARTED, "", False
     try:
-        set_gate(gh, door.repository, False)
+        gh(*gate_request(door.repository, False))
         outcome = Outcome.UNKNOWN
+        out.show((Row(Glyph.CLEAN, GATE_PROPERTY, DoorEvent.OFF, door.repository),))
         gh(
             ["pr", "merge", str(door.pull_request), "--repo", door.repository, door.merge_method.flag, "--match-head-commit", door.head_sha, "--body-file", "-"],
             door.landing.message,
         )
         outcome = Outcome.MERGED
+        out.show((merge_row(door, outcome, detail),))
     except (GhFailed, KeyboardInterrupt) as stop:
         interrupted = isinstance(stop, KeyboardInterrupt)
         detail = "interrupted" if interrupted else str(stop)
         if interrupted:
-            end_interrupted_line(say)
+            out.end_interrupted_line()
+        if outcome is Outcome.NOT_STARTED:
+            out.show((Row(Glyph.COULD_NOT_CHECK, GATE_PROPERTY, DoorEvent.OFF_FAILED, detail, descriptive=True),))
     finally:
-        restore_error = restore_gate(gh, door.repository, say)
-        if restore_error:
-            say(not_restored_warning(door, Attempt(outcome, detail, restore_error)))
+        restore_error = restore_gate(gh, door.repository, out)
     if outcome is not Outcome.UNKNOWN:
-        return Attempt(outcome, detail, restore_error)
+        return Attempt(outcome, restore_error)
     try:
         outcome = settled_by_github(gh, door, interrupted)
     except KeyboardInterrupt:
-        end_interrupted_line(say)
-        outcome, interrupted_reading_back = Outcome.UNKNOWN, True
-    else:
-        interrupted_reading_back = False
-    attempt = Attempt(outcome, None if outcome is Outcome.MERGED else detail, restore_error)
-    if restore_error and (outcome is not Outcome.UNKNOWN or interrupted_reading_back):
-        say(not_restored_warning(door, attempt))
-    return attempt
+        out.end_interrupted_line()
+        outcome = Outcome.UNKNOWN
+    out.show((merge_row(door, outcome, detail),))
+    return Attempt(outcome, restore_error)
 
 
 def settled_by_github(gh: GhRunner, door: Door, interrupted: bool) -> Outcome:
@@ -676,24 +703,48 @@ def judge_pull_request(
     return Door(repository, pull_request, pull["head"]["sha"], verdict.declared, legacy, merge_method, landing), login
 
 
-def merge_outcome(attempt: Attempt, pull_request: int) -> str:
+MERGE_FACTS = {Outcome.MERGED: "is merged", Outcome.UNKNOWN: "may be merged"}
+
+
+def post_log_comment(gh: GhRunner, door: Door, comment: str, out: DoorStream) -> bool:
+    """Its row as GitHub answers; Ctrl-C while it posts is a comment not posted."""
+    try:
+        gh(comment_request(door.repository, door.pull_request, comment), None)
+    except GhFailed as error:
+        reason = str(error)
+    except KeyboardInterrupt:
+        out.end_interrupted_line()
+        reason = "interrupted"
+    else:
+        out.show((Row(Glyph.CLEAN, "log comment", DoorEvent.POSTED, f"on #{door.pull_request}"),))
+        return True
+    out.show((Row(Glyph.COULD_NOT_CHECK, "log comment", DoorEvent.NOT_POSTED, reason, descriptive=True),))
+    return False
+
+
+def unfinished_pair(door: Door, attempt: Attempt, unposted: str | None) -> Pair:
+    """What the run could not do, the gate first, and the steps that finish it in the order a person takes them."""
+    number = door.pull_request
+    gate = f"{GATE_PROPERTY} on again" if attempt.restore_error is None else f"{GATE_PROPERTY} MAY STILL BE OFF on {door.repository}"
+    facts = [gate, f"#{number} {MERGE_FACTS.get(attempt.outcome, 'is not merged')}"]
+    steps: list[Step] = [restore_command(door.repository)] if attempt.restore_error is not None else []
     if attempt.outcome is Outcome.UNKNOWN:
-        return f"merge state unknown ({attempt.detail or 'no answer'}) - check #{pull_request} on GitHub"
-    if attempt.outcome is Outcome.MERGED:
-        return "merged."
-    return f"not merged - {attempt.detail}"
+        steps.append(gh_command(door.repository, number, "view"))
+    elif attempt.outcome is not Outcome.MERGED:
+        steps.append(Command(rerun_command(door.repository, number)))
+    if unposted is not None:
+        facts.append(f"no log comment on #{number}")
+        steps.append(Command(shlex.join(["gh", *comment_request(door.repository, number, unposted)]), own_line=True))
+    return SEPARATOR.join(facts), tuple(steps)
 
 
-def report_attempt(attempt: Attempt, door: Door, say: Say) -> int:
-    if attempt.restore_error:
-        # Its line was said the moment the restore failed, and again after a failed log comment.
-        return EXIT_NOT_RESTORED
-    outcome = merge_outcome(attempt, door.pull_request)
-    if attempt.outcome is Outcome.MERGED:
-        say(outcome)
-        return EXIT_MERGED
-    say(f"emergency-merge: {outcome}; {GATE_PROPERTY} is on again")
-    return EXIT_NOT_RESTORED if attempt.outcome is Outcome.UNKNOWN else EXIT_REFUSED
+class Unshown(Exception):
+    """stdout refused a row before the question, so the operator would answer for rows he never read."""
+
+
+def shown_before_asking(rows: tuple[Row, ...], out: DoorStream) -> None:
+    if not out.show(rows):
+        raise Unshown
 
 
 def run_emergency_merge(
@@ -705,34 +756,40 @@ def run_emergency_merge(
     ask: Ask,
     is_terminal: bool,
     now: Callable[[], datetime],
+    clock: Callable[[], float],
     environment: Mapping[str, str],
-    say: Say,
     channels: Channels,
     remote_for: RemoteFor = github_remote,
 ) -> int:
-    """Its rows, its prompt and its pairs up to the answer leave through `channels`, the attempt's lines through `say`; both escape them."""
+    """Every line leaves through `channels`, escaped: rows and the closing line on stdout, the prompt and the pair on stderr."""
     if not REPOSITORY_NAME.fullmatch(repository):
         write_pair(not_merged(f"{repository!r} is not <owner>/<repo>"), (Instruction("name the repository as <owner>/<repo>"),), channels.err)
         return EXIT_REFUSED
     if not is_terminal:
         write_pair(not_merged("the operator's merge needs a terminal on stdin"), (Instruction("the operator runs it in his own terminal"),), channels.err)
         return EXIT_REFUSED
+    out = DoorStream(channels.out)
+    show = partial(shown_before_asking, out=out)
     try:
-        door, login = judge_pull_request(repository, pull_request, gh, transport, environment, remote_for, partial(write_rows, channel=channels.out))
-    except Stopped as stop:
-        write_rows((stop.row,), channels.out)
-        write_pair(stop.error, stop.next_steps, channels.err)
-        return stop.exit_code
+        try:
+            door, login = judge_pull_request(repository, pull_request, gh, transport, environment, remote_for, show)
+        except Stopped as stop:
+            show((stop.row,))
+            write_pair(stop.error, stop.next_steps, channels.err)
+            return stop.exit_code
+    except Unshown:
+        again = Instruction(f"send stdout where it can be written, then run {rerun_command(repository, pull_request)} again")
+        write_pair(f"stdout refused a row{SEPARATOR}{NOTHING_CHANGED}", (again,), channels.err)
+        return EXIT_COULD_NOT_DO
     if not confirmed(ask, pull_request):
         write_pair(f"not confirmed{SEPARATOR}{NOTHING_CHANGED}", (Command(rerun_command(repository, pull_request)),), channels.err)
         return EXIT_REFUSED
-    attempt = switch_off_merge_switch_on(gh, door, say)
-    try:
-        gh(["api", "-X", "POST", f"repos/{repository}/issues/{pull_request}/comments", "-f", f"body={log_comment(login, now(), door, attempt)}"], None)
-    except (GhFailed, KeyboardInterrupt) as error:
-        if isinstance(error, KeyboardInterrupt):
-            end_interrupted_line(say)
-        say(f"emergency-merge: the log comment on #{pull_request} was not posted, add it by hand ({error})")
-        if attempt.restore_error:
-            say(not_restored_warning(door, attempt))
-    return report_attempt(attempt, door, say)
+    started = clock()
+    attempt = switch_off_merge_switch_on(gh, door, out)
+    comment = log_comment(login, now(), door, attempt)
+    posted = post_log_comment(gh, door, comment, out)
+    if attempt.outcome is Outcome.MERGED and attempt.restore_error is None and posted:
+        write_closing_line(Glyph.CLEAN, (f"merged #{pull_request}", f"{GATE_PROPERTY} on again", format_duration(clock() - started)), channels.out)
+        return EXIT_MERGED
+    write_pair(*unfinished_pair(door, attempt, None if posted else comment), channels.err)
+    return EXIT_COULD_NOT_DO

@@ -141,9 +141,9 @@ def main(
             transport=transport,
             ask=partial(ask, channel=channels.err, read_line=read_line),
             is_terminal=is_terminal(),
-            now=lambda: datetime.now(UTC),
+            now=now,
             environment=environment,
-            say=emit,
+            clock=clock,
             channels=channels,
             remote_for=remote_for,
         )

@@ -18,7 +18,7 @@ Door commands:
 - Scanners (`scanners.py`): gitleaks, actionlint and osv-scanner come through mise from `src/quality/mise/` (`mise.toml` holds the versions, `mise.lock` the sha256); `scanners.py` asks `mise which` there under `MISE_CEILING_PATHS` and runs only the exact version. ruff and zizmor are pinned dependencies of quality's package: `installation.py` finds each in quality's own installation and reads its pin.
 - `quality sonar properties` and `quality sonar findings` (`sonar.py`). Their HTTP and the verdict's go through `web.py`, which follows no redirect and bounds every wait; the door injects the transport, the GitHub fetcher and the poll sleep, so tests need no network.
 - `quality emergency-merge <owner/repo> <pr>` (`merge.py`): the operator's door for legacy findings and declared
-  loosenings, it needs a terminal on stdin; its rows (the landing row last), its prompt (on stderr) and its pairs up to the answer leave through `output.py`'s writers, the attempt's lines through its injected `say`. The line its merge commit ends with is `landing.py`'s.
+  loosenings, it needs a terminal on stdin; every line it prints leaves through `output.py`'s writers: its rows and closing line on stdout, its prompt and pair on stderr. The line its merge commit ends with is `landing.py`'s.
 
 `.github/workflows/codeql.yml` is the reusable CodeQL workflow (input `languages`); `code-scanning.yml` is quality's own caller of it.
 
