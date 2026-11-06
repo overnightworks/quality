@@ -1,0 +1,8 @@
+claim_id = "f3974bd2ee194baa8c48a8f38da9d65a"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "3402662c19ec8da43c1afaebf5a7cc61c3a4c1cf"
+branch = "dependabot/github_actions/actions-ba10210c45"
+scope = [".github/workflows/ci.yml", ".github/workflows/codeql.yml", ".github/workflows/gate.yml", ".github/workflows/scoreboard.yml"]
+opened_commit = "7abb92e21ed9aa4ac77d9ad1e3ad8ff01b63ab48"
+whole_reason = "One grouped Dependabot bump of the actions every workflow pins; Dependabot opens it as one pull request."
