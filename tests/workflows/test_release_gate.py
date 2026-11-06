@@ -257,6 +257,27 @@ def test_a_full_version_passes_the_format_gate(gate, dispatch, tmp_path, version
     assert outcome(result) == (0, "", "")
 
 
+def versions_with_every_digit() -> list[str]:
+    """Each leading digit 1-9 followed by every continuation digit, in each of the three parts."""
+    parts = [f"{leading}0123456789" for leading in "123456789"]
+    return [
+        ".".join(part if position == index else "0" for index in range(3)) for position in range(3) for part in parts
+    ]
+
+
+@pytest.mark.parametrize("version", versions_with_every_digit())
+def test_every_digit_is_accepted_in_every_part_of_the_version(gate, dispatch, tmp_path, version):
+    result = run_gate_step(gate, FORMAT_STEP, dispatch, tmp_path, VERSION=version)
+    assert outcome(result) == (0, "", "")
+
+
+@pytest.mark.parametrize("version", versions_with_every_digit())
+def test_a_release_tag_with_every_digit_in_every_part_is_recognised(gate, dispatch, tmp_path, version):
+    answers = green_answers(dispatch, tags=tags((f"v{version}", dispatch.commit)))
+    result = run_gate_step(gate, TAGGED_STEP, dispatch, tmp_path, answers)
+    assert outcome(result) == (1, refused(f"{dispatch.commit} already carries the release tag v{version}."), "")
+
+
 @pytest.mark.parametrize("case", ["pass", "main moved", "another repository's main"])
 def test_the_commit_must_still_be_main_s_head(gate, dispatch, tmp_path, case):
     moved_to = "d4" * 20
