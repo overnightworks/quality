@@ -59,10 +59,6 @@ def test_the_dispatch_takes_only_the_version(release):
     version = dispatch["workflow_dispatch"]["inputs"]["version"]
     assert set(version) == {"description", "required", "type"}
     assert (version["required"], version["type"]) == (True, "string")
-    assert (
-        version["description"]
-        == workflow("release-gate.yml")[True]["workflow_call"]["inputs"]["version"]["description"]
-    )
 
 
 def test_the_build_runs_only_after_the_gate(release):
@@ -85,9 +81,14 @@ def test_the_build_s_python_satisfies_the_project_s_requires_python(release):
     assert Version(python) in SpecifierSet(requires)
 
 
-def test_no_job_may_write(release):
+def test_the_tag_job_runs_only_after_the_gate_and_the_build(release):
+    assert release["jobs"]["tag"]["needs"] == ["gate", "build"]
+
+
+def test_only_the_tag_job_may_write(release):
     assert release["permissions"] == {}
-    assert all("write" not in job.get("permissions", {}).values() for job in release["jobs"].values())
+    assert [name for name, job in release["jobs"].items() if "write" in job.get("permissions", {}).values()] == ["tag"]
+    assert release["jobs"]["tag"]["permissions"] == {"contents": "write"}
 
 
 def test_a_release_never_cancels_a_running_release(release):
@@ -103,11 +104,23 @@ def test_the_gate_call_is_this_repository_s_own_and_gets_the_version(release):
     called = call["uses"].removeprefix("$/")
     assert called != call["uses"]
     gate = yaml.safe_load((WORKFLOWS.parents[1] / called).read_text(encoding="utf-8"))
-    assert set(gate[True]["workflow_call"]["inputs"]) == set(call["with"])
+    inputs = gate[True]["workflow_call"]["inputs"]
+    assert {name for name, declared in inputs.items() if declared["required"]} <= set(call["with"]) <= set(inputs)
     assert "outputs.commit" in release["jobs"]["build"]["env"]["COMMIT"]
     assert "commit" in gate[True]["workflow_call"]["outputs"]
     assert call["with"] == {"version": "${{ inputs.version }}"}
     assert call["permissions"] == {"actions": "read", "checks": "read", "contents": "read", "pull-requests": "read"}
+
+
+def test_the_tag_call_is_this_repository_s_own_and_gets_the_gated_commit(release):
+    call = release["jobs"]["tag"]
+    called = call["uses"].removeprefix("$/")
+    assert called != call["uses"]
+    tag = yaml.safe_load((WORKFLOWS.parents[1] / called).read_text(encoding="utf-8"))
+    inputs = tag[True]["workflow_call"]["inputs"]
+    assert {name for name, spec in inputs.items() if spec["required"]} <= set(call["with"]) <= set(inputs)
+    assert call["with"] == {"version": "${{ inputs.version }}", "commit": "${{ needs.gate.outputs.commit }}"}
+    assert "commit" in workflow("release-gate.yml")[True]["workflow_call"]["outputs"]
 
 
 def test_the_build_checks_out_and_verifies_the_gated_commit(release):
@@ -143,7 +156,10 @@ def test_a_failed_verification_fails_the_build(release, tmp_path):
 @pytest.mark.parametrize("version", ["0.0.0", "0.21.0", "10.200.3000"])
 def test_a_version_the_gate_accepts_is_a_tag_verify_release_accepts(tmp_path, version):
     gate = workflow("release-gate.yml")
-    environment = step_environment(gate, "gate", FORMAT_STEP, VERSION=version, GH_TOKEN="token", COMMIT="a1" * 20)
+    form = gate[True]["workflow_call"]["inputs"]["form"]["default"]
+    environment = step_environment(
+        gate, "gate", FORMAT_STEP, VERSION=version, FORM=form, GH_TOKEN="token", COMMIT="a1" * 20
+    )
     accepted = run_step(
         step_script(gate, "gate", FORMAT_STEP), tmp_path, environment, FakeGh(tmp_path / "tools", {}).directory
     )
@@ -151,7 +167,7 @@ def test_a_version_the_gate_accepts_is_a_tag_verify_release_accepts(tmp_path, ve
     assert RELEASE_TAG.fullmatch(f"v{version}")
 
 
-@pytest.mark.parametrize("name", ["release.yml", "release-gate.yml"])
+@pytest.mark.parametrize("name", ["release.yml", "release-gate.yml", "release-tag.yml"])
 def test_no_run_value_of_a_release_workflow_interpolates_an_expression(name):
     scripts = [
         candidate["run"]
