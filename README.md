@@ -37,6 +37,7 @@ Locally, `quality check` runs every rule the gate runs, the secret, workflow and
 
 ## Read on
 
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): the parts, who talks to whom, the trust boundaries and the reasons behind the constraints.
 - [docs/rules.md](docs/rules.md): the `check` rules, the secret and advisory scans, the output contract.
 - [docs/output.md](docs/output.md): the picture of what the commands print; `check` prints its frame today.
 - [docs/commands.md](docs/commands.md): `check secrets --staged`, the scanners, `scoreboard` and `emergency-merge`.

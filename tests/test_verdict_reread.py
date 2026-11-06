@@ -65,14 +65,14 @@ def failed_reads():
 
 @pytest.mark.parametrize(("error", "kind", "line"), failed_reads())
 def test_a_failed_jobs_read_names_its_cause(error, kind, line):
-    """#85 rule 3, cells 13-16 (E5, E6): a 5xx is GitHub's, only 403 and 404 carry the actions hint, a timeout says
+    """READ-5 and READ-6: a 5xx is GitHub's, only 403 and 404 carry the actions hint, a timeout says
     re-run."""
     classified = verdict.unreadable_jobs("u", error)
     assert (type(classified), str(classified)) == (kind, line)
 
 
 def test_a_502_jobs_page_is_named_as_githubs(stub_server):
-    """#85 rule 3, cell 13 (E5): the real fetcher names GitHub's 502 as GitHub's answer, a type the re-read retries."""
+    """READ-5: the real fetcher names GitHub's 502 as GitHub's answer, a type the re-read retries."""
     origin, _ = stub_server(reply(502, b""))
     with pytest.raises(CannotJudge) as failed:
         fetch_jobs(origin)
@@ -83,7 +83,7 @@ def test_a_502_jobs_page_is_named_as_githubs(stub_server):
 
 
 def test_an_unsettled_job_prints_no_failure_and_is_never_green():
-    """#85 rule 1 (E1): a judged job GitHub lists as running is unsettled, adds no failure line, and is never green."""
+    """READ-1: a judged job GitHub lists as running is unsettled, adds no failure line, and is never green."""
     result = judge(Side(GateSettings(("checks",), LegacyMode.REPORT), None), None, [running()], GREEN_GATE, 1, NO_RENAMES)
     assert (result.unsettled, result.blocking, result.green) == (
         (verdict.Unsettled("checks", 1, "in_progress"),),
@@ -387,8 +387,8 @@ def reread(capsys, monkeypatch, run_env, pull_request):
 def test_the_verdict_judges_the_first_settled_read_and_never_lets_a_red_reason_go(
     reread, answers, options, code, expected, slept
 ):
-    """#85 rules 1, 2 and 4 (E1-E5): a stale answer or a 5xx is re-read every 10 s, at most 12 times; the first settled
-    read decides after E4's note; out of reads, or on any other failure, exit 2 keeps the last judged read's blocking
+    """READ-1 to READ-5: a stale answer or a 5xx is re-read every 10 s, at most 12 times; the first settled
+    read decides after the note of READ-4; out of reads, or on any other failure, exit 2 keeps the last judged read's blocking
     lines; a red read is never green and an unsettled job never prints a failure line."""
     assert reread(*answers, **options) == (code, expected, slept)
 
@@ -403,12 +403,12 @@ def test_the_verdict_judges_the_first_settled_read_and_never_lets_a_red_reason_g
     ],
 )
 def test_a_failed_read_that_is_not_githubs_server_error_ends_the_verdict_at_once(reread, error, line):
-    """#85 cells 14-16 (E6): only a server error is read again; any other failure exits 2 at once."""
+    """READ-5 and READ-6: only a server error is read again; any other failure exits 2 at once."""
     assert reread(verdict.unreadable_jobs("u", error)) == (2, [f"verdict: cannot judge - {line}"], 0)
 
 
 def test_a_body_that_is_not_utf_8_after_a_stale_read_keeps_the_note(reread, stub_server):
-    """#85 rule 3, cell 28: the real fetcher names a body that is not UTF-8 as unreadable, after E4's note."""
+    """READ-4: the real fetcher names a body that is not UTF-8 as unreadable, after the note."""
     origin, _ = stub_server(reply(200, b"\xff"))
     read_page = verdict.github_fetcher("t")
     assert reread(page(running()), lambda url: read_page(origin + "/jobs")) == (
