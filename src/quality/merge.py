@@ -1,7 +1,6 @@
 """The operator's emergency door: switch a repository's gate off, merge one pull request, switch it on again."""
 
 import json
-import re
 import subprocess
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -12,7 +11,8 @@ from pathlib import Path
 from urllib.parse import quote
 
 from quality import architecture, process
-from quality.config import CONFIG_PATH, ITEM_REFERENCE, REPOSITORY_NAME, Declaration, GateSettings, LegacyMode
+from quality.config import CONFIG_PATH, REPOSITORY_NAME, Declaration, GateSettings, LegacyMode
+from quality.landing import Landing, LandingKind, LandingRefused, landing_of
 from quality.output import SEPARATOR, Channels, Glyph, Row, SubLine, write_pair, write_rows
 from quality.ratchet import BASELINE_PATH, NO_RENAMES, Renames
 from quality.report import CannotJudge, Command, Instruction, Step, headline, printable
@@ -507,74 +507,6 @@ def confirmed(ask: Ask, pull_request: int) -> bool:
     return answer is not None and answer.strip() == CONFIRMATION_WORD
 
 
-WORK_ITEM_KEY = "Work-Item"
-NO_ITEM_KEY = "No-Item"
-NO_ITEM_KINDS = frozenset({"docs", "fix", "deps"})
-CLASSIFICATION_LINE = re.compile(rf"(?i)(?P<key>{WORK_ITEM_KEY}|{NO_ITEM_KEY}):(?P<value>[^\n]*)")
-FENCE_OPENING = re.compile(r" {0,3}(?P<run>`{3,}|~{3,})")
-FENCE_CLOSING = re.compile(r" {0,3}(?P<run>`{3,}|~{3,})[ \t]*")
-
-
-@dataclass(frozen=True)
-class Landing:
-    """The merge commit's message: the body without its classification line, then that line as the last paragraph."""
-
-    trailer: str
-    message: str
-
-
-def live_line_indexes(lines: Sequence[str]) -> list[int]:
-    """The lines outside fenced code blocks: a fence closes on a run of its own character at least as long, nothing after it."""
-    live: list[int] = []
-    fence = ""
-    for index, line in enumerate(lines):
-        if not fence:
-            opening = FENCE_OPENING.match(line)
-            if opening:
-                fence = opening["run"]
-            else:
-                live.append(index)
-        elif (closing := FENCE_CLOSING.fullmatch(line)) and closing["run"][0] == fence[0] and len(closing["run"]) >= len(fence):
-            fence = ""
-    return live
-
-
-def trunk_trailer(key: str, value: str, repository: str) -> str:
-    """The classification in the trunk's trailer form; any other value keeps the door shut, since a trailer cannot be rewritten."""
-    if key.lower() == NO_ITEM_KEY.lower():
-        if value.lower() not in NO_ITEM_KINDS:
-            raise Refused(f"the pull request body carries {NO_ITEM_KEY}: {value}; an issue-less pull request is {', '.join(sorted(NO_ITEM_KINDS))}")
-        return f"{NO_ITEM_KEY}: {value.lower()}"
-    if not ITEM_REFERENCE.fullmatch(value):
-        raise Refused(f"the pull request body carries {WORK_ITEM_KEY}: {value}; a work item reads OWNER/REPO#n or #n")
-    named, _, number = value.rpartition("#")
-    if named not in ("", repository):
-        raise Refused(f"the pull request body names work item {value} of another repository, not of {repository}")
-    return f"{WORK_ITEM_KEY}: #{number}"
-
-
-def landing_of(body: object, repository: str) -> Landing:
-    """The landing of the body judged with the head: exactly one classification line outside code blocks. GitHub answers an empty body as null."""
-    if body is None:
-        body = ""
-    if not isinstance(body, str):
-        raise CannotJudge("GitHub's answer for the pull request holds no body text")
-    lines = body.splitlines()
-    found = [(index, match) for index in live_line_indexes(lines) if (match := CLASSIFICATION_LINE.fullmatch(lines[index]))]
-    if len(found) != 1:
-        raise Refused(
-            f"the pull request body carries {len(found) or 'no'} {WORK_ITEM_KEY}: or {NO_ITEM_KEY}: lines outside code "
-            "blocks; the merge commit ends with exactly one"
-        )
-    index, match = found[0]
-    trailer = trunk_trailer(match["key"], match["value"].strip(" \t"), repository)
-    kept = [*lines[:index], *lines[index + 1 :]]
-    if 0 < index < len(kept) and not kept[index - 1].strip() and not kept[index].strip():
-        del kept[index]
-    rest = "\n".join(kept).strip()
-    return Landing(trailer, f"{rest}\n\n{trailer}" if rest else trailer)
-
-
 def rerun_command(repository: str, pull_request: int) -> str:
     return f"quality emergency-merge {repository} {pull_request}"
 
@@ -585,6 +517,17 @@ def gh_command(repository: str, pull_request: int, word: str) -> Command:
 
 def unanswered(error: GhFailed | KeyError | ValueError) -> str:
     return f"GitHub's answer holds no {error}" if isinstance(error, KeyError) else str(error)
+
+
+LANDING_EVENTS = {LandingKind.WORK_ITEM: DoorEvent.WORK_ITEM, LandingKind.NO_ITEM: DoorEvent.NO_ITEM}
+
+
+def read_landing(body: object, repository: str) -> Judged[Landing]:
+    """The landing step: a body the trunk cannot take refuses it."""
+    try:
+        return landing_of(body, repository), ()
+    except LandingRefused as refused:
+        raise Refused(str(refused)) from None
 
 
 def judged[T](subject: str, step: Callable[[], Judged[T]], refusal: Pair, again: Step, show: Show) -> T:
@@ -708,14 +651,14 @@ def judge_pull_request(
     the first step that does not pass stops the door."""
     rerun = rerun_command(repository, pull_request)
     refused: Pair = (REFUSED_ERROR, (gh_command(repository, pull_request, "checks"),))
-    item_line = f"{WORK_ITEM_KEY}: or {NO_ITEM_KEY}: line"
+    item_line = f"{LandingKind.WORK_ITEM}: or {LandingKind.NO_ITEM}: line"
     landing_refused: Pair = (
         not_merged(f"the operator's merge ends the merge commit with the pull request body's one {item_line}"),
         (Instruction(f"give the pull request body exactly one {item_line} outside code blocks, then run {rerun} again"),),
     )
     step = partial(judged, again=Instruction(f"fix what the ✗ row names, then run {rerun} again"), show=show)
     facts, pull = step(f"#{pull_request}", lambda: read_pull_request(gh, repository, pull_request), refused)
-    landing = step(LANDING, lambda: (landing_of(pull["body"], repository), ()), landing_refused)
+    landing = step(LANDING, lambda: read_landing(pull["body"], repository), landing_refused)
     check_runs, sonar_red = step("checks", lambda: read_checks(gh, repository, pull["head"]["sha"], refused), refused)
     verdict, settings = step("loosenings", lambda: read_loosenings(gh, repository, pull, check_runs, sonar_red, environment, remote_for, refused), refused)
     legacy = None
@@ -729,8 +672,7 @@ def judge_pull_request(
 
         legacy = step("sonar", sonar_step, refused)
     merge_method, login = step("merge", lambda: read_method(gh, repository, facts, pull["base"]["ref"]), refused)
-    item_key, _, item = landing.trailer.partition(": ")
-    show((Row(Glyph.NOTE, LANDING, DoorEvent.WORK_ITEM if item_key == WORK_ITEM_KEY else DoorEvent.NO_ITEM, item),))
+    show((Row(Glyph.NOTE, LANDING, LANDING_EVENTS[landing.kind], landing.value),))
     return Door(repository, pull_request, pull["head"]["sha"], verdict.declared, legacy, merge_method, landing), login
 
 

@@ -66,6 +66,7 @@ exhaustive = true
 layers = [
     "cli",
     "merge",
+    "landing",
     "verdict",
     "sonar | fleet",
     "check | staged",
