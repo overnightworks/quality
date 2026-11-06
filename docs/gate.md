@@ -148,7 +148,11 @@ reason = "the operator ruled the requirement shelf machinery out"
   nicht mehr prüfen (empfohlen)“), and the door may merge legacy Sonar findings and a declared loosening in one run („Ja,
   beides in einem Lauf (empfohlen)“). That agents share the operator's `gh` login is a known residual risk, „Bekanntes
   Restrisiko (empfohlen)“: the door is the agreed path, not a lock. Why the gate is not simply loosened by the pull
-  request stands in [decision 1](decisions/1-loosening-door.md).
+  request is that a pull request cannot approve its own loosening: an agent could write the declaration and the loosening
+  in one pull request, so the red and the door are the gate, not the declaration. Only the door moves an allowance's
+  `until` later, because that date is what brings the advisory back to red. An allowance is its own declaration, with no
+  second `[[gate.loosened]]` entry. A real lock (a token without admin rights) belongs to the machine's setup, not to
+  quality.
 
 
 ## `codeql.yml`

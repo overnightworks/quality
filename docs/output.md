@@ -204,7 +204,7 @@ The `next:` form is decision 11. A scanner that reports another version than the
   ✗ secrets       not checked    gitleaks 8.28.0 found, the release pins 8.30.1
 ```
 
-Built: a scanner's stderr reaches a fact only once gitleaks has cleared all of it ([decision 5](decisions/5-scanner-stderr-goes-through-gitleaks.md)): else the fact ends in `· N stderr lines withheld · not cleared by gitleaks`, also when gitleaks cannot answer. No refusal quotes gitleaks' own stderr. The exit and the verdict do not change.
+Built: a scanner's stderr reaches a fact only once gitleaks has cleared all of it ([rules.md](rules.md)): else the fact ends in `· N stderr lines withheld · not cleared by gitleaks`, also when gitleaks cannot answer. No refusal quotes gitleaks' own stderr. The exit and the verdict do not change.
 
 ```text
   ✗ workflows     not checked    actionlint exited 3, neither 'clean' nor 'findings' · 2 stderr lines withheld · not cleared by gitleaks
