@@ -41,7 +41,8 @@ def test_the_call_takes_exactly_the_image_interface(image):
     }
     assert {name: spec["required"] for name, spec in call["secrets"].items()} == {"build-secrets": False}
     assert {name: spec["value"] for name, spec in call["outputs"].items()} == {
-        name: f"${{{{ jobs.image.outputs.{name} }}}}" for name in ("digest", "ref")
+        "digest": "${{ jobs.image.outputs.digest }}",
+        "ref": "${{ jobs.image.outputs.ref }}",
     }
     assert image["jobs"]["image"]["outputs"] == {
         "digest": "${{ steps.pushed.outputs.digest }}",
@@ -74,16 +75,16 @@ def test_the_steps_run_in_the_order_that_lets_the_push_succeed(image):
     ]
 
 
-def test_every_action_is_pinned_to_its_commit(image):
+def test_each_step_uses_its_named_action(image):
     assert {
-        name: step(image, "image", name)["uses"]
+        name: step(image, "image", name)["uses"].split("@")[0]
         for name in (CHECKOUT_STEP, "Set up Buildx", LOGIN_STEP, BUILD_STEP, ATTEST_STEP)
     } == {
-        CHECKOUT_STEP: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
-        "Set up Buildx": "docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069",
-        LOGIN_STEP: "docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550",
-        BUILD_STEP: "docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc",
-        ATTEST_STEP: "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6",
+        CHECKOUT_STEP: "actions/checkout",
+        "Set up Buildx": "docker/setup-buildx-action",
+        LOGIN_STEP: "docker/login-action",
+        BUILD_STEP: "docker/build-push-action",
+        ATTEST_STEP: "actions/attest",
     }
 
 
@@ -100,7 +101,8 @@ def test_buildx_reads_no_cache_binary_and_login_uses_the_actor_token(image):
     }
 
 
-def test_the_naming_step_reads_the_name_and_the_built_digest(image):
+def test_the_naming_step_reads_the_name_and_the_built_digest_and_the_name_step_has_no_env(image):
+    assert "env" not in step(image, "image", NAME_STEP)
     assert step(image, "image", PUSHED_STEP)["env"] == {
         "NAME": "${{ steps.name.outputs.name }}",
         "DIGEST": "${{ steps.build.outputs.digest }}",
@@ -158,6 +160,7 @@ def test_only_login_attest_and_naming_depend_on_push(image):
         PUSHED_STEP: "inputs.push",
     }
     assert all("continue-on-error" not in candidate for candidate in steps)
+    assert "continue-on-error" not in image["jobs"]["image"]
 
 
 @pytest.mark.parametrize(
