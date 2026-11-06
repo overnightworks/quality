@@ -15,7 +15,7 @@ def quality_invocations() -> list[tuple[str, str, str, list[str]]]:
     for workflow in sorted(WORKFLOWS.glob("*.yml")):
         for job in yaml.safe_load(workflow.read_text(encoding="utf-8")).get("jobs", {}).values():
             for step in job.get("steps", []):
-                for line in step.get("run", "").splitlines():
+                for line in step.get("run", "").replace("\\\n", " ").splitlines():
                     tokens = shlex.split(line)
                     if "quality" in tokens:
                         invocations.append((workflow.name, step.get("name", ""), line.strip(), tokens[tokens.index("quality") + 1 :]))
