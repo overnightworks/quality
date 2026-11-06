@@ -693,3 +693,53 @@ def test_ask_shows_the_prompt_before_it_reads_the_line():
     output.ask("Type yes: ", output.Channel(stream, False, None), read_line)
 
     assert shown_at_the_read == ["Type yes: "]
+
+
+def a_stream_that_takes_the_rows(tmp_path):
+    return open(tmp_path / "rows", "w", buffering=1), True
+
+
+def a_full_device(tmp_path):
+    return open("/dev/full", "w", buffering=1), False
+
+
+def a_pipe_whose_reader_left(tmp_path):
+    reader, writer = os.pipe()
+    os.close(reader)
+    return os.fdopen(writer, "w", buffering=1), True
+
+
+@pytest.mark.parametrize(
+    "opened", [a_stream_that_takes_the_rows, a_full_device, a_pipe_whose_reader_left], ids=["a stream that takes them", "a full device", "a reader that left"],
+)
+def test_the_door_says_whether_its_stream_took_its_rows(opened, tmp_path):
+    stream, took = opened(tmp_path)
+    rows = (Row(Glyph.CLEAN, "files", Event.CLEAN),)
+    with stream:
+        door_stream = output.DoorStream(output.Channel(stream, False, None))
+        assert door_stream.show(rows) is took
+        assert door_stream.show(rows) is True
+
+
+def test_a_closed_stream_takes_the_rows_of_the_door():
+    assert output.DoorStream(output.Channel(None, False, None)).show((Row(Glyph.CLEAN, "files", Event.CLEAN),)) is True
+
+
+def test_a_command_on_its_own_line_stands_below_a_bare_next():
+    pair = written(io.StringIO, lambda channel: output.write_pair("e", (Command("c", own_line=True),), channel))
+    assert pair == "error: e\nnext:\n    c\n"
+    two = written(io.StringIO, lambda channel: output.write_pair("e", (Command("a"), Command("b", own_line=True)), channel))
+    assert two == "error: e\nnext:\n    a\n    b\n"
+
+
+def test_the_closing_line_is_its_glyph_and_parts_joined():
+    line = written(io.StringIO, lambda channel: output.write_closing_line(Glyph.CLEAN, ("merged #7", "quality_gate on again", "3s"), channel))
+    assert line == "✓ merged #7 · quality_gate on again · 3s\n"
+
+
+@pytest.mark.parametrize("glyph", list(output.VERDICT_STYLE), ids=[str(glyph) for glyph in output.VERDICT_STYLE])
+def test_a_closing_line_paints_its_first_part_in_its_glyphs_verdict_style(glyph):
+    styled = written(Terminal, lambda channel: output.write_closing_line(glyph, ("first", "then"), channel))
+    reset = output.RESET.removeprefix("\x1b[").removesuffix("m")
+    assert re.findall(r"\x1b\[([0-9;]*)m", styled) == [output.VERDICT_STYLE[glyph], reset, output.DIM, reset]
+    assert without_sgr(styled) == f"{glyph} first · then\n"

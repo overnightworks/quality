@@ -8,10 +8,12 @@ from quality.config import CONFIG_PATH, Allowance, ConfigError
 
 @dataclass(frozen=True)
 class Command:
-    """One line a person copies whole and runs; the label says where or when it applies."""
+    """One line a person copies whole and runs; the label says where or when it applies, and `own_line` stands it below
+    a bare `next:`, so selecting the line copies the command alone."""
 
     text: str
     label: str | None = None
+    own_line: bool = False
 
     def __str__(self) -> str:
         return self.text if self.label is None else f"{self.label}: {self.text}"

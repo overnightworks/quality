@@ -1,5 +1,6 @@
 """The question the operator's door asks after its rows, and what each way of answering it does."""
 
+import dataclasses
 import io
 import os
 import signal
@@ -102,7 +103,7 @@ def door(gh, **ports):
 
 def test_the_door_reads_one_line_of_stdin(monkeypatch):
     monkeypatch.setattr("sys.stdin", io.StringIO("yes\nno\n"))
-    code = door(FakeGh(), is_terminal=lambda: True)
+    code = door(FakeGh(), terminal=dataclasses.replace(cli.Terminal.standard_input(), is_terminal=lambda: True))
     left_unread = sys.stdin.read()
     assert (code, left_unread) == (0, "no\n")
 

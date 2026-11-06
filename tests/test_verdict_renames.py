@@ -12,7 +12,7 @@ from quality import merge
 from quality.ratchet import BASELINE_PATH, Baseline, Key, Metric, Renames, renames_of, render_baseline
 from quality.report import CannotJudge
 from tests.support.git_repositories import head_commit, put
-from tests.support.merge import GATE_CONFIG, ONE_JOB, SONAR_GREEN, changed_nothing, declaring, drive
+from tests.support.merge import GATE_CONFIG, ONE_JOB, SONAR_GREEN, changed_nothing, closing_line, declaring, drive
 from tests.support.processes import process_is_gone
 from tests.support.verdict import verdict_of, verdict_streams
 from tests.support.verdict_renames import MOVABLE_FILE, OLD_ENTRY, commit_all, entry, moved_in_head, pulled
@@ -275,11 +275,11 @@ def new_entry(size, path="src/new.py"):
 @pytest.mark.parametrize(
     ("base", "head", "options", "code", "expected"),
     [
-        (OLD_ENTRY, NEW_ENTRY, {}, 0, "merged."),
+        (OLD_ENTRY, NEW_ENTRY, {}, 0, closing_line()),
         (OLD_ENTRY, new_entry(90), {}, 1, "size baseline raises function_lines src/new.py f 70 -> 90"),
         (new_entry(200, "src/old.py") + new_entry(300), new_entry(250), {}, 1, "size baseline raises function_lines src/new.py f 200 -> 250"),
-        (new_entry(100, "src/old.py") + new_entry(80), new_entry(100), {}, 0, "merged."),
-        (OLD_ENTRY, new_entry(90), {"checks": SONAR_GREEN, "base_config": ONE_JOB, "merge_config": ONE_JOB + declaring("size baseline raises function_lines src/new.py f 70 -> 90")}, 0, "merged."),
+        (new_entry(100, "src/old.py") + new_entry(80), new_entry(100), {}, 0, closing_line()),
+        (OLD_ENTRY, new_entry(90), {"checks": SONAR_GREEN, "base_config": ONE_JOB, "merge_config": ONE_JOB + declaring("size baseline raises function_lines src/new.py f 70 -> 90")}, 0, closing_line()),
     ],
     ids=["cell 1 a pure move", "cell 3 a raise", "cell 12 a leftover is no allowance", "cell 12 a lower leftover", "cell 22 a declared raise"],
 )
@@ -421,7 +421,7 @@ def test_inherited_git_routing_and_configuration_do_not_reach_the_diff(capsys, t
     }.items():
         monkeypatch.setenv(name, value)
     assert drive(gh)[0] == 0
-    assert "merged." in capsys.readouterr().out
+    assert closing_line() in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(

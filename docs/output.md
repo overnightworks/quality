@@ -504,6 +504,8 @@ next:
 
 Built (C8a1): the rows before the prompt and the refused frame, without the release row (C10). A declaration reads `what · item of date` with `reason:` below until C9's typed loosenings; a red Sonar adds `! sonar  N legacy findings  on <branch>` and the error names declared loosenings and legacy findings (decision 4); the method row reads `allowed on <base>`; a draft is `! #N  draft` with `next: gh pr ready N --repo R`. Built (C8a2): the landing row last and the prompt on stderr with the picture's words. Anything but `yes` ended with Enter, the end of input included, is `error: not confirmed · nothing changed` with `next: quality emergency-merge <owner/repo> <n>`, exit 1; Ctrl-C at the prompt writes nothing, the shell ends the line, exit 130; a closed stderr takes the prompt and the pairs, and nothing moves to stdout.
 
+Built (C8b): after `yes` the rows, the closing line and the broken pair are drawn as above, the restore command read from the request the door sent. The merged row names the method, never a sha; the broken case also shows the `log comment` row the door posts; a merge whose answer was lost stands after `quality_gate  on`, once read back; after Ctrl-C the next row starts on a line of its own; the duration runs from the answer. Before the question a stdout that refuses a row stops the door: `error: stdout refused a row · nothing changed`, exit 2.
+
 ### 9. `quality report`
 
 The two markdown tables are an artifact and go alone to stdout. The row per repository and the verdict go to stderr, so `quality report > fleet.md` writes a clean file.

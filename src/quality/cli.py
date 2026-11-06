@@ -6,6 +6,7 @@ import textwrap
 import time
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from functools import partial
@@ -110,6 +111,18 @@ INSTALLED_RUFF = partial(installation.installed_executable, scanners.RUFF)
 INSTALLED_ZIZMOR = partial(installation.installed_executable, scanners.ZIZMOR)
 
 
+@dataclass(frozen=True)
+class Terminal:
+    """The door's standard input: where the operator types and whether anyone can."""
+
+    read_line: Callable[[], str]
+    is_terminal: Callable[[], bool]
+
+    @classmethod
+    def standard_input(cls) -> Terminal:
+        return cls(lambda: sys.stdin.readline(), lambda: sys.stdin is not None and sys.stdin.isatty())
+
+
 def main(
     argv: list[str] | None = None,
     fetcher_for: Callable[[str], PageFetcher] = github_fetcher,
@@ -118,14 +131,15 @@ def main(
     sleep: Sleep = time.sleep,
     gh: GhRunner = run_gh,
     remote_for: RemoteFor = github_remote,
-    read_line: Callable[[], str] = lambda: sys.stdin.readline(),
-    is_terminal: Callable[[], bool] = lambda: sys.stdin is not None and sys.stdin.isatty(),
+    terminal: Terminal | None = None,
     locate_ruff: Callable[[], str] = INSTALLED_RUFF,
     locate_zizmor: Callable[[], str] = INSTALLED_ZIZMOR,
     clock: Callable[[], float] = time.monotonic,
+    now: Callable[[], datetime] = lambda: datetime.now(UTC),
     environment: Mapping[str, str] = os.environ,
 ) -> int:
     channels = open_channels(environment)
+    standard_input = terminal or Terminal.standard_input()
     try:
         arguments = read_invocation(argv)
     except CannotJudge as refusal:
@@ -138,11 +152,11 @@ def main(
             arguments.pull_request,
             gh=gh,
             transport=transport,
-            ask=partial(ask, channel=channels.err, read_line=read_line),
-            is_terminal=is_terminal(),
-            now=lambda: datetime.now(UTC),
+            ask=partial(ask, channel=channels.err, read_line=standard_input.read_line),
+            is_terminal=standard_input.is_terminal(),
+            now=now,
             environment=environment,
-            say=emit,
+            clock=clock,
             channels=channels,
             remote_for=remote_for,
         )

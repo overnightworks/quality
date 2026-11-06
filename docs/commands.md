@@ -178,11 +178,15 @@ take are in [the runbook](runbook-emergency-merge.md); this is what the command 
   pull request's base branch exclude a merge commit but allow a squash; when neither is allowed, or the settings or rules
   cannot be read or are malformed (an answer or a page that is no array, a rule that is no object, or whose `parameters` are present but no object), its `✗ merge` row ends the run before the gate is touched (exit `2`); the shown text and the log comment name the
   method), and sets the property back to `true` in every case: merged,
-  merge failed, Ctrl-C. A property that cannot be restored is exit `2` with one line naming what to set by hand and the
-  merge outcome as far as it is known, printed before any further GitHub request; a re-read that settles an open
-  outcome prints that line again with it. After Ctrl-C the next line starts on a line of its own. A merge whose outcome
-  GitHub does not confirm (Ctrl-C, a lost answer) is re-read from the pull request; if that does not settle it, exit
-  `2` with `merge state unknown`.
+  merge failed, Ctrl-C. After `yes` each step is a row on stdout as GitHub answers it (`quality_gate  off`, `#<pr>  merged` with the method,
+  `quality_gate  on`, `log comment  posted`), ending `✓ merged #<pr> · quality_gate on again · <duration>` (exit `0`). A step
+  not done is a `✗` row (`off failed`, `not merged`, `state unknown`, `not restored`, `not posted`) and one pair on stderr, exit `2`,
+  the gate first (`quality_gate MAY STILL BE OFF on <owner/repo>` where it is not on), `next:` the commands that finish it, the
+  gate's first, alone on its line and never shortened. A gate not switched on is its row before any further request. After
+  Ctrl-C the next line starts on a line of its own. A merge whose outcome GitHub does not confirm (Ctrl-C, a lost answer) is
+  read back after the gate is on; if that does not settle it, the row is `state unknown` and the pair says `#<pr> may be merged`
+  with `gh pr view`. Before the question a stdout that refuses a row stops the door (exit `2`, nothing changed); after `yes` the
+  run keeps its exit.
 - **Logged:** one comment on the pull request (who, when, the legacy count and each declaration,
   `quality_gate off → <outcome> → on`, or `quality_gate not switched off → no merge → on` when switching off failed),
-  also when the restore failed. A merge ends with `merged.`.
+  also when the restore failed. A comment not posted is its `✗` row, its command under `next:`.

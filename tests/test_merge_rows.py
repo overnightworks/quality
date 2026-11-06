@@ -17,12 +17,17 @@ from tests.support.merge import (
     SONAR_GREEN,
     TWO_JOBS,
     FakeGh,
+    attempt_rows,
     changed_nothing,
+    closing_line,
+    comment_line,
     declaring,
     drive,
+    frozen_now,
     no_network,
     not_confirmed_pair,
     prompt,
+    restore_line,
     sonar,
 )
 from tests.support.terminal import screen
@@ -54,6 +59,14 @@ def legacy_row():
 
 def checks_row(red="quality / sonar and quality / verdict are"):
     return f"  ✓ checks        ok             only {red} red"
+
+
+def merge_and_landing_rows(work_item="#3"):
+    return ["  · merge         merge commit   allowed on main", f"  · landing       work item      {work_item}"]
+
+
+def rows_before_the_attempt():
+    return [pull_row(), checks_row(), loosenings_none(), legacy_row(), *merge_and_landing_rows()]
 
 
 def verdict_only_checks_row():
@@ -282,21 +295,22 @@ def test_the_rows_name_the_pull_requests_base_not_the_default_branch(capsys):
             legacy_row(),
             "  · merge         merge commit   allowed on release/1",
             "  · landing       work item      #3",
-            "merged.",
+            *attempt_rows().splitlines(),
+            closing_line().rstrip("\n"),
         ),
         prompt(),
         ["yes\n"],
     )
 
 
-def at_a_terminal(gh, window, columns, transport=None):
+def at_a_terminal(gh, window, columns, transport=None, typed="no\n"):
     """What the door shows on a terminal of `columns` before it asks, read off the screen, with its exit and stderr."""
     terminal = window(columns)
     errors = io.StringIO()
     with contextlib.redirect_stdout(terminal.stream), contextlib.redirect_stderr(errors):
         code = cli.main(
-            ["emergency-merge", REPO, "7"], gh=gh, transport=transport or sonar(), read_line=lambda: "no\n", is_terminal=lambda: True,
-            remote_for=no_network, environment={"TERM": "xterm"},
+            ["emergency-merge", REPO, "7"], gh=gh, transport=transport or sonar(), terminal=cli.Terminal(lambda: typed, lambda: True),
+            remote_for=no_network, environment={"TERM": "xterm"}, now=frozen_now,
         )
     return code, screen(terminal.read()).splitlines(), errors.getvalue()
 
@@ -311,15 +325,14 @@ def at_a_terminal(gh, window, columns, transport=None):
                 pull_row(), verdict_only_checks_row(), "  ! loosenings    1 declared",
                 f'    ! {B_REMOVED} · overnightworks/songmaker#1345 of 2026-10-20',
                 "        reason: a reason that runs on past the window",
-                "  · merge         merge commit   allowed on main", "  · landing       work item      #3",
+                *merge_and_landing_rows(),
             ],
             prompt() + not_confirmed_pair(),
         ),
         (
             {"body": "Work-Item: #123456789"}, {}, 1,
             [
-                pull_row(), checks_row(), loosenings_none(), legacy_row(),
-                "  · merge         merge commit   allowed on main", "  · landing       work item      #123456789",
+                pull_row(), checks_row(), loosenings_none(), legacy_row(), *merge_and_landing_rows("#123456789"),
             ],
             prompt() + not_confirmed_pair(),
         ),
@@ -366,3 +379,48 @@ def test_what_the_operator_must_read_stands_whole_at_a_terminal(gh_kwargs, sonar
 )
 def test_a_refused_or_cross_fact_ends_at_the_window(gh_kwargs, code, lines, err, window):
     assert at_a_terminal(FakeGh(**gh_kwargs), window, 40) == (code, lines, err)
+
+
+@pytest.mark.parametrize(
+    ("gh_kwargs", "lines", "pair_end"),
+    [
+        (
+            {"fail_on": ["gate"]},
+            ["  ✗ quality_gate  off failed     gate b…", "  ✓ quality_gate  on", "  ✓ log comment   posted         on #7"],
+            ["error: quality_gate on again · #7 is not merged", "next: quality emergency-merge acme/widgets 7"],
+        ),
+        (
+            {"fail_on": ["merge"]},
+            [
+                "  ✓ quality_gate  off            acme/widgets", "  ✓ quality_gate  on",
+                "  ✗ #7            not merged     merge …", "  ✓ log comment   posted         on #7",
+            ],
+            ["error: quality_gate on again · #7 is not merged", "next: quality emergency-merge acme/widgets 7"],
+        ),
+        (
+            {"fail_on": ["restore"]},
+            [
+                "  ✓ quality_gate  off            acme/widgets", "  ✓ #7            merged         merge commit",
+                "  ✗ quality_gate  not restored   restor…", "  ✓ log comment   posted         on #7",
+            ],
+            [
+                "error: quality_gate MAY STILL BE OFF on acme/widgets · #7 is merged", "next:",
+                *restore_line().splitlines(),
+            ],
+        ),
+        (
+            {"fail_on": ["comment"]},
+            [
+                "  ✓ quality_gate  off            acme/widgets", "  ✓ #7            merged         merge commit",
+                "  ✓ quality_gate  on", "  ✗ log comment   not posted     commen…",
+            ],
+            ["error: quality_gate on again · #7 is merged · no log comment on #7", "next:", *comment_line().splitlines()],
+        ),
+    ],
+    ids=["the switch off fails", "the merge fails", "the restore fails", "the comment fails"],
+)
+def test_an_attempts_cross_fact_ends_at_the_window(gh_kwargs, lines, pair_end, window):
+    code, shown, err = at_a_terminal(FakeGh(**gh_kwargs), window, 40, typed="yes\n")
+    assert (code, shown, err) == (
+        2, rows_before_the_attempt() + lines, prompt() + "".join(f"{line}\n" for line in pair_end),
+    )

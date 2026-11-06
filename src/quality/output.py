@@ -340,6 +340,34 @@ def write_rows(rows: tuple[Row, ...], channel: Channel) -> None:
     _print_lines([line for row in rows for line in _row_lines(row, channel)], channel)
 
 
+@dataclass(frozen=True)
+class DoorStream:
+    """The operator's door's stdout, its one writer. A line it refuses (a full disk) leads it to the null device, so
+    it takes nothing more and no later write of the door can stop a request; a closed stream and a reader that left
+    take the lines as every stream does. Its channel is private, so no caller reaches the raw stream past it."""
+
+    _channel: Channel
+
+    def show(self, rows: tuple[Row, ...]) -> bool:
+        """Whether the stream took `rows`; what that means is the door's to decide."""
+        return self._took([line for row in rows for line in _row_lines(row, self._channel)])
+
+    def end_interrupted_line(self) -> None:
+        """Ctrl-C leaves the cursor behind the terminal's `^C`, so the door's next line starts on a line of its own."""
+        self._took([""])
+
+    def _took(self, lines: list[str]) -> bool:
+        stream = self._channel.stream
+        if stream is None:
+            return True
+        try:
+            _print_lines(lines, self._channel)
+        except OSError:
+            _discard_further_writes(stream)
+            return False
+        return True
+
+
 def _put(channel: Channel, text: str) -> None:
     stream = channel.stream
     if stream is None:
@@ -450,12 +478,15 @@ def write_scanner_runs(runs: Sequence[ScannerRun], channel: Channel) -> None:
     _print_lines(lines, channel)
 
 
-def write_verdict(verdict: Verdict, channel: Channel) -> None:
+def write_closing_line(glyph: Glyph, parts: Sequence[str], channel: Channel) -> None:
+    """The line that ends a run: the glyph and the first part in the glyph's verdict style, each further part dim."""
     styled = channel.styled
-    glyph, parts = _verdict_parts(verdict)
-    style = VERDICT_STYLE[glyph]
-    painted = [_paint(f"{glyph} {parts[0]}", style, styled), *(_paint(part, DIM, styled) for part in parts[1:])]
+    painted = [_paint(f"{glyph} {parts[0]}", VERDICT_STYLE[glyph], styled), *(_paint(part, DIM, styled) for part in parts[1:])]
     _print_lines([SEPARATOR.join(painted)], channel)
+
+
+def write_verdict(verdict: Verdict, channel: Channel) -> None:
+    write_closing_line(*_verdict_parts(verdict), channel)
 
 
 INDENT = "    "
@@ -482,7 +513,7 @@ def _choice_lines(choice: Choice) -> list[tuple[int, str]]:
 def _next_lines(next_steps: tuple[Step, ...], label: str) -> list[str]:
     """One step begins on the `next:` line; several stand below a bare `next:`, four spaces per level."""
     lines = [_step_lines(step) for step in next_steps]
-    if len(lines) == 1:
+    if len(lines) == 1 and not any(isinstance(step, Command) and step.own_line for step in next_steps):
         (_, first), *rest = lines[0]
         return [f"{label} {printable(first)}", *(f"{INDENT * level}{printable(text)}" for level, text in rest)]
     return [label, *(f"{INDENT * (level + 1)}{printable(text)}" for step in lines for level, text in step)]
