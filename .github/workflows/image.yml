@@ -1,0 +1,143 @@
+name: image
+
+# Caller contract: docs/release.md. One image per call. The calling job grants all four permissions below, even with
+# push off: a called job never holds more than its caller grants, and GitHub refuses the call at startup otherwise.
+on:
+  workflow_call:
+    inputs:
+      context:
+        description: The build context, a path in the checkout
+        type: string
+        default: .
+      file:
+        description: The Dockerfile; empty means the context's Dockerfile
+        type: string
+        default: ''
+      target:
+        description: The Dockerfile stage to build; empty builds the last
+        type: string
+        default: ''
+      image:
+        description: The image's name below the calling repository's path; empty names the repository itself
+        type: string
+        default: ''
+      version:
+        description: The image tag, a valid Docker tag
+        type: string
+        required: true
+      build-args:
+        description: Build arguments, one NAME=value per line; the provenance records them, so never a secret
+        type: string
+        default: ''
+      push:
+        description: Push and attest the image; false only builds it
+        type: boolean
+        required: true
+      cache:
+        description: Read and write the GitHub Actions build cache
+        type: boolean
+        default: false
+    secrets:
+      build-secrets:
+        description: BuildKit secrets, one id=value per line, for RUN --mount=type=secret
+        required: false
+    outputs:
+      digest:
+        description: The pushed image's digest, sha256:<hex>; empty without push
+        value: ${{ jobs.image.outputs.digest }}
+      ref:
+        description: The pushed image, ghcr.io/<owner>/<repository>[/<image>]:<version>@<digest>; empty without push
+        value: ${{ jobs.image.outputs.ref }}
+
+permissions: {}
+
+# Without it GitHub runs a step as bash -e, without pipefail.
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      attestations: write # the provenance attestation
+      contents: read # the checkout
+      id-token: write # the attestation's signing certificate
+      packages: write # the push to GHCR
+    outputs:
+      digest: ${{ steps.pushed.outputs.digest }}
+      ref: ${{ steps.pushed.outputs.ref }}
+    env:
+      IMAGE: ${{ inputs.image }}
+      VERSION: ${{ inputs.version }}
+      REPOSITORY: ${{ github.repository }}
+    steps:
+      - name: Refuse a malformed image name or version
+        id: name
+        run: |
+          if [ -n "$IMAGE" ] && ! [[ "$IMAGE" =~ ^[a-z0-9]+([._-][a-z0-9]+)*(/[a-z0-9]+([._-][a-z0-9]+)*)*$ ]]; then
+            echo "Refused: the image $IMAGE is not lowercase path components." >&2
+            exit 1
+          fi
+          if ! [[ "$VERSION" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+            echo "Refused: the version $VERSION is not a valid Docker tag." >&2
+            exit 1
+          fi
+          echo "name=ghcr.io/${REPOSITORY,,}${IMAGE:+/$IMAGE}" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the dispatched commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          cache-binary: false
+
+      - name: Log in to GHCR
+        if: inputs.push
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build the image
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ inputs.context }}
+          file: ${{ inputs.file }}
+          target: ${{ inputs.target }}
+          build-args: ${{ inputs.build-args }}
+          secrets: ${{ secrets.build-secrets }}
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          platforms: linux/amd64
+          tags: ${{ steps.name.outputs.name }}:${{ inputs.version }}
+          push: ${{ inputs.push }}
+          provenance: mode=max
+          sbom: true
+          cache-from: ${{ inputs.cache && 'type=gha' || '' }}
+          cache-to: ${{ inputs.cache && 'type=gha,mode=max' || '' }}
+
+      - name: Attest the image's build provenance
+        if: inputs.push
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ steps.name.outputs.name }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false
+
+      - name: Name the pushed image
+        id: pushed
+        if: inputs.push
+        env:
+          NAME: ${{ steps.name.outputs.name }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "ref=$NAME:$VERSION@$DIGEST" >> "$GITHUB_OUTPUT"

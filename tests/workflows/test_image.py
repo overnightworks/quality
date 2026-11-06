@@ -164,7 +164,14 @@ def test_a_dated_or_semantic_version_is_accepted(image, tmp_path, version):
 def test_the_pushed_image_is_referred_to_by_tag_and_digest(image, tmp_path):
     digest = f"sha256:{'ab' * 32}"
     result = run_job_step(
-        image, PUSHED_STEP, tmp_path, NAME="ghcr.io/o/r/worker", DIGEST=digest, VERSION="v2026.11.06.2"
+        image,
+        PUSHED_STEP,
+        tmp_path,
+        REPOSITORY="o/r",
+        IMAGE="",
+        NAME="ghcr.io/o/r/worker",
+        DIGEST=digest,
+        VERSION="v2026.11.06.2",
     )
     assert result.returncode == 0
     assert result.outputs == f"digest={digest}\nref=ghcr.io/o/r/worker:v2026.11.06.2@{digest}\n"
