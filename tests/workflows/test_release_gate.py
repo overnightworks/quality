@@ -142,6 +142,18 @@ def green_answers(dispatch: Dispatch, **replaced: object) -> dict[tuple[str, ...
     return answers
 
 
+def default_form(gate: dict) -> str:
+    return gate[True]["workflow_call"]["inputs"]["form"]["default"]
+
+
+def grammar_for(gate: dict, dispatch: Dispatch, directory: Path, form: str) -> str:
+    """The grammar the format step hands on for `form`, read from its output."""
+    valid_version = {"X.Y.Z": "1.2.3", "YYYY.MM.DD.N": "2026.11.06.1"}[form]
+    result = run_gate_step(gate, FORMAT_STEP, dispatch, directory / "form", VERSION=valid_version, FORM=form)
+    assert result.outputs.startswith("grammar=")
+    return result.outputs.removeprefix("grammar=").removesuffix("\n")
+
+
 def run_gate_step(
     gate: dict, name: str, dispatch: Dispatch, directory: Path, answers: dict | None = None, **scenario: str
 ) -> StepRun:
@@ -150,7 +162,11 @@ def run_gate_step(
         "VERSION": dispatch.version,
         "COMMIT": dispatch.commit,
         "GITHUB_REPOSITORY": dispatch.repository,
+        "FORM": default_form(gate),
     }
+    if name == TAGGED_STEP and "RELEASE_FORM" not in scenario:
+        form = scenario.get("FORM", defaults["FORM"])
+        defaults["RELEASE_FORM"] = grammar_for(gate, dispatch, directory, form)
     environment = step_environment(gate, "gate", name, **(defaults | scenario))
     fake = FakeGh(directory / "tools", green_answers(dispatch) if answers is None else answers)
     work = directory / "work"
@@ -253,8 +269,8 @@ def test_a_malformed_version_is_refused(gate, dispatch, tmp_path, version):
 
 @pytest.mark.parametrize("version", ["0.0.0", "0.21.0", "10.200.3000"])
 def test_a_full_version_passes_the_format_gate(gate, dispatch, tmp_path, version):
-    result = run_gate_step(gate, FORMAT_STEP, dispatch, tmp_path, VERSION=version)
-    assert outcome(result) == (0, "", "")
+    result = run_gate_step(gate, FORMAT_STEP, dispatch, tmp_path / "run", VERSION=version)
+    assert outcome(result) == (0, "", f"grammar={grammar_for(gate, dispatch, tmp_path, 'X.Y.Z')}\n")
 
 
 def versions_with_every_digit() -> list[str]:
@@ -267,8 +283,8 @@ def versions_with_every_digit() -> list[str]:
 
 @pytest.mark.parametrize("version", versions_with_every_digit())
 def test_every_digit_is_accepted_in_every_part_of_the_version(gate, dispatch, tmp_path, version):
-    result = run_gate_step(gate, FORMAT_STEP, dispatch, tmp_path, VERSION=version)
-    assert outcome(result) == (0, "", "")
+    result = run_gate_step(gate, FORMAT_STEP, dispatch, tmp_path / "run", VERSION=version)
+    assert outcome(result) == (0, "", f"grammar={grammar_for(gate, dispatch, tmp_path, 'X.Y.Z')}\n")
 
 
 @pytest.mark.parametrize("version", versions_with_every_digit())
@@ -276,6 +292,99 @@ def test_a_release_tag_with_every_digit_in_every_part_is_recognised(gate, dispat
     answers = green_answers(dispatch, tags=tags((f"v{version}", dispatch.commit)))
     result = run_gate_step(gate, TAGGED_STEP, dispatch, tmp_path, answers)
     assert outcome(result) == (1, refused(f"{dispatch.commit} already carries the release tag v{version}."), "")
+
+
+@pytest.mark.parametrize("version", ["2026.11.06.1", "2026.12.31.12", "2026.01.01.10", "2026.10.20.1", "2026.11.30.1"])
+def test_a_dated_version_passes_the_format_gate(gate, dispatch, tmp_path, version):
+    result = run_gate_step(gate, FORMAT_STEP, dispatch, tmp_path / "run", VERSION=version, FORM="YYYY.MM.DD.N")
+    assert outcome(result) == (0, "", f"grammar={grammar_for(gate, dispatch, tmp_path, 'YYYY.MM.DD.N')}\n")
+
+
+@pytest.mark.parametrize(
+    "version",
+    [
+        "2026.11.06.0",
+        "2026.11.06.01",
+        "2026.1.06.1",
+        "2026.11.6.1",
+        "2026.00.06.1",
+        "2026.13.06.1",
+        "2026.11.00.1",
+        "2026.11.32.1",
+        "2026.11.40.1",
+        "v2026.11.06.1",
+        "2026.11.06",
+        "1.2.3",
+        "2026.11.06.1$(touch planted)",
+        "\u0966026.11.06.1",
+        "026.11.06.1",
+        "02026.11.06.1",
+        "2026.11.06.1\n2026.11.06.1",
+    ],
+    ids=[
+        "N is 0",
+        "N with a leading zero",
+        "a one-digit month",
+        "a one-digit day",
+        "month 00",
+        "month 13",
+        "day 00",
+        "day 32",
+        "day 40",
+        "a v",
+        "three parts",
+        "an X.Y.Z version",
+        "a substitution",
+        "a Devanagari digit in the year",
+        "a three-digit year",
+        "a five-digit year",
+        "two lines",
+    ],
+)
+def test_a_malformed_dated_version_is_refused(gate, dispatch, tmp_path, version):
+    result = run_gate_step(gate, FORMAT_STEP, dispatch, tmp_path, VERSION=version, FORM="YYYY.MM.DD.N")
+    assert outcome(result) == (
+        1,
+        refused(
+            "the version is not YYYY.MM.DD.N, month 01 to 12, day 01 to 31, N a number from 1 without leading zeros."
+        ),
+        "",
+    )
+    assert not (tmp_path / "work" / "planted").exists()
+
+
+def test_a_dated_version_is_refused_under_the_default_form(gate, dispatch, tmp_path):
+    result = run_gate_step(gate, FORMAT_STEP, dispatch, tmp_path, VERSION="2026.11.06.1")
+    assert outcome(result) == (1, refused("the version is not X.Y.Z, each part a number without leading zeros."), "")
+
+
+@pytest.mark.parametrize("form", ["x.y.z", "", "^.*$"], ids=["lower case", "empty", "a regex"])
+def test_an_unknown_form_is_refused(gate, dispatch, tmp_path, form):
+    result = run_gate_step(gate, FORMAT_STEP, dispatch, tmp_path, FORM=form)
+    assert outcome(result) == (1, refused(f"the form {form} is neither X.Y.Z nor YYYY.MM.DD.N."), "")
+    assert result.calls == []
+
+
+def test_the_form_is_judged_before_any_step_reads_the_repository(gate):
+    names = step_names(gate, "gate")
+    reading = [name for name in names if "gh " in step_script(gate, "gate", name)]
+    assert reading
+    assert all(names.index(FORMAT_STEP) < names.index(name) for name in reading)
+
+
+def dated_versions_with_every_digit() -> list[str]:
+    """Every digit in each year digit, the day's units and each position of N."""
+    digits = "0123456789"
+    years = [f"{digit * 4}.11.06.1" for digit in digits]
+    units = [f"2026.11.1{digit}.1" for digit in digits]
+    counts = [f"2026.11.06.{leading}{digit}" for leading in "123456789" for digit in digits]
+    return years + units + counts
+
+
+@pytest.mark.parametrize("version", dated_versions_with_every_digit())
+def test_every_digit_is_accepted_in_every_free_part_of_a_dated_version(gate, dispatch, tmp_path, version):
+    result = run_gate_step(gate, FORMAT_STEP, dispatch, tmp_path / "run", VERSION=version, FORM="YYYY.MM.DD.N")
+    assert outcome(result) == (0, "", f"grammar={grammar_for(gate, dispatch, tmp_path, 'YYYY.MM.DD.N')}\n")
 
 
 @pytest.mark.parametrize("case", ["pass", "main moved", "another repository's main"])
@@ -310,33 +419,39 @@ def test_a_version_whose_tag_exists_is_refused(gate, dispatch, tmp_path, existin
 
 
 @pytest.mark.parametrize(
-    ("listed", "refused_tag"),
+    ("form", "listed", "refused_tag"),
     [
-        ([], None),
-        ([("v1.2.2", True)], "v1.2.2"),
-        ([("v2026.11.06.1", True), ("v1.2.2", True)], "v1.2.2"),
-        ([("v1.2.2", True), ("v2026.11.06.1", True)], "v1.2.2"),
-        ([("v1.2.2", False)], None),
-        ([("v2026.11.05.1", True)], None),
-        ([("1.2.2", True)], None),
-        ([("v1.02.2", True)], None),
+        ("X.Y.Z", [], None),
+        ("X.Y.Z", [("v1.2.2", True)], "v1.2.2"),
+        ("X.Y.Z", [("v2026.11.06.1", True), ("v1.2.2", True)], "v1.2.2"),
+        ("X.Y.Z", [("v1.2.2", True), ("v2026.11.06.1", True)], "v1.2.2"),
+        ("X.Y.Z", [("v1.2.2", False)], None),
+        ("X.Y.Z", [("v2026.11.05.1", True)], None),
+        ("X.Y.Z", [("1.2.2", True)], None),
+        ("X.Y.Z", [("v1.02.2", True)], None),
+        ("YYYY.MM.DD.N", [("v2026.11.05.1", True)], "v2026.11.05.1"),
+        ("YYYY.MM.DD.N", [("v1.2.2", True)], None),
+        ("YYYY.MM.DD.N", [("v2026.11.05.0", True)], None),
     ],
     ids=[
         "no tag at the commit",
         "a release tag at the commit",
-        "a dated deploy tag then a release tag at the commit",
-        "a release tag then a dated deploy tag at the commit",
+        "a dated tag then a release tag at the commit",
+        "a release tag then a dated tag at the commit",
         "a release tag at another commit",
-        "only a dated deploy tag at the commit",
+        "only a dated tag at the commit",
         "a tag without v",
         "a release tag with a leading zero at the commit",
+        "a dated tag at the commit",
+        "only an X.Y.Z tag at the commit",
+        "a dated tag with N of 0",
     ],
 )
-def test_a_commit_that_already_carries_a_release_tag_is_refused(gate, dispatch, tmp_path, listed, refused_tag):
+def test_a_commit_that_already_carries_a_release_tag_is_refused(gate, dispatch, tmp_path, form, listed, refused_tag):
     answers = green_answers(
         dispatch, tags=tags(*((name, dispatch.commit if at_commit else "c3" * 20) for name, at_commit in listed))
     )
-    result = run_gate_step(gate, TAGGED_STEP, dispatch, tmp_path, answers)
+    result = run_gate_step(gate, TAGGED_STEP, dispatch, tmp_path, answers, FORM=form)
     expected = (
         (1, refused(f"{dispatch.commit} already carries the release tag {refused_tag}."), "")
         if refused_tag
@@ -503,40 +618,50 @@ def test_the_gate_asks_for_the_check_the_gate_s_caller_contract_names(gate, disp
 
 def test_the_gate_takes_the_version_and_hands_on_the_commit(gate):
     call = gate[True]["workflow_call"]
-    assert set(call["inputs"]) == {"version"}
+    assert set(call["inputs"]) == {"version", "form"}
     assert {key: value for key, value in call["inputs"]["version"].items() if key != "description"} == {
         "required": True,
         "type": "string",
     }
+    assert {key: value for key, value in call["inputs"]["form"].items() if key != "description"} == {
+        "required": False,
+        "type": "string",
+        "default": "X.Y.Z",
+    }
     assert set(call["outputs"]) == {"commit"}
     assert call["outputs"]["commit"]["value"] == "${{ jobs.gate.outputs.commit }}"
-    descriptions = [call["inputs"]["version"]["description"], call["outputs"]["commit"]["description"]]
+    descriptions = [
+        call["inputs"]["version"]["description"],
+        call["inputs"]["form"]["description"],
+        call["outputs"]["commit"]["description"],
+    ]
     assert all(isinstance(text, str) and text.strip() for text in descriptions)
     assert gate["jobs"]["gate"]["outputs"] == {"commit": "${{ steps.merged.outputs.commit }}"}
     assert gate["jobs"]["gate"]["steps"][-1]["id"] == "merged"
 
 
 def test_the_gate_judges_the_dispatched_commit_and_version(gate):
-    environment = gate["jobs"]["gate"]["env"]
-    assert set(environment) == {"GH_TOKEN", "VERSION", "COMMIT", "RELEASE_FORM"}
-    assert {key: value for key, value in environment.items() if key != "RELEASE_FORM"} == {
+    assert gate["jobs"]["gate"]["env"] == {
         "GH_TOKEN": "${{ github.token }}",
         "VERSION": "${{ inputs.version }}",
         "COMMIT": "${{ github.sha }}",
+        "FORM": "${{ inputs.form }}",
     }
-    assert isinstance(environment["RELEASE_FORM"], str)
-    for name in (FORMAT_STEP, TAGGED_STEP):
-        assert "$RELEASE_FORM" in step_script(gate, "gate", name)
+    assert step(gate, "gate", FORMAT_STEP)["id"] == "form"
+    assert step(gate, "gate", TAGGED_STEP)["env"] == {"RELEASE_FORM": "${{ steps.form.outputs.grammar }}"}
+    assert "$RELEASE_FORM" in step_script(gate, "gate", TAGGED_STEP)
     patterns = [
         pattern
         for name in step_names(gate, "gate")
         for pattern in re.findall(r"=~\s*(\S+)", step(gate, "gate", name).get("run", ""))
     ]
-    assert patterns == ["$RELEASE_FORM", "$RELEASE_FORM"]
+    assert patterns == ["$grammar", "$RELEASE_FORM"]
 
 
 def test_the_version_grammar_holds_no_range_whose_meaning_follows_the_locale(gate):
-    brackets = re.findall(r"\[[^\]]*\]", gate["jobs"]["gate"]["env"]["RELEASE_FORM"])
+    grammars = step(gate, "gate", FORMAT_STEP)["env"]
+    assert set(grammars) == {"X_Y_Z", "YYYY_MM_DD_N"}
+    brackets = [bracket for grammar in grammars.values() for bracket in re.findall(r"\[[^\]]*\]", grammar)]
     assert brackets
     assert not [bracket for bracket in brackets if "-" in bracket]
 

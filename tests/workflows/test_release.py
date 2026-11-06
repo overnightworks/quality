@@ -59,10 +59,6 @@ def test_the_dispatch_takes_only_the_version(release):
     version = dispatch["workflow_dispatch"]["inputs"]["version"]
     assert set(version) == {"description", "required", "type"}
     assert (version["required"], version["type"]) == (True, "string")
-    assert (
-        version["description"]
-        == workflow("release-gate.yml")[True]["workflow_call"]["inputs"]["version"]["description"]
-    )
 
 
 def test_the_build_runs_only_after_the_gate(release):
@@ -108,7 +104,8 @@ def test_the_gate_call_is_this_repository_s_own_and_gets_the_version(release):
     called = call["uses"].removeprefix("$/")
     assert called != call["uses"]
     gate = yaml.safe_load((WORKFLOWS.parents[1] / called).read_text(encoding="utf-8"))
-    assert set(gate[True]["workflow_call"]["inputs"]) == set(call["with"])
+    inputs = gate[True]["workflow_call"]["inputs"]
+    assert {name for name, declared in inputs.items() if declared["required"]} <= set(call["with"]) <= set(inputs)
     assert "outputs.commit" in release["jobs"]["build"]["env"]["COMMIT"]
     assert "commit" in gate[True]["workflow_call"]["outputs"]
     assert call["with"] == {"version": "${{ inputs.version }}"}
@@ -159,7 +156,10 @@ def test_a_failed_verification_fails_the_build(release, tmp_path):
 @pytest.mark.parametrize("version", ["0.0.0", "0.21.0", "10.200.3000"])
 def test_a_version_the_gate_accepts_is_a_tag_verify_release_accepts(tmp_path, version):
     gate = workflow("release-gate.yml")
-    environment = step_environment(gate, "gate", FORMAT_STEP, VERSION=version, GH_TOKEN="token", COMMIT="a1" * 20)
+    form = gate[True]["workflow_call"]["inputs"]["form"]["default"]
+    environment = step_environment(
+        gate, "gate", FORMAT_STEP, VERSION=version, FORM=form, GH_TOKEN="token", COMMIT="a1" * 20
+    )
     accepted = run_step(
         step_script(gate, "gate", FORMAT_STEP), tmp_path, environment, FakeGh(tmp_path / "tools", {}).directory
     )
