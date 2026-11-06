@@ -1,7 +1,7 @@
 # SonarCloud
 
 Reference for the engineer who reads SonarCloud findings through `quality sonar findings` or the gate. Why quality judges the
-findings itself and keeps the properties check: [decision 4](decisions/4-sonar-findings-stay-in-quality.md).
+findings itself and keeps the properties check, stated under "Why quality judges the findings" below.
 
 ## `quality sonar findings`
 
@@ -136,6 +136,23 @@ scanner does not wait for the gate, this command reads it.
 Rulings L11, L6 and L5 (26.10.2026): the verdict takes over the gate status (L11), the gate result fails the job (L6),
 and the 100 % branch rule per repository follows later (L5).
 
+### Why quality judges the findings
+
+quality counts the open findings itself (`legacy = "fail"` on the default branch, the properties check, the door's legacy
+path) and does not move the zero-findings rule to SonarCloud's hosted gate, because the hosted gate cannot carry it for two reasons:
+
+- The hosted gate does not fail on new issues: the built-in "Sonar way" and the custom "presentator" gate have no
+  condition on `new_violations`, and SonarCloud backdates an issue raised on an unchanged line, so such a condition
+  would not catch it either.
+- The token boundary needs the properties check: at sonar-scanner-java-library 4.1.1.1633 a properties file can still set
+  proxy, truststore, Java executable, engine jar and Java option keys, and `${env.SONAR_TOKEN}` substitutions, none of
+  which `-Dsonar.host.url` pins.
+
+The hosted gate would replace the count only if it could fail on a finding on an unchanged line and the scanner no
+longer let a properties file reach the token (operator, #228, 28.10.2026, „der rest passt auch!“: the hosted gate alone
+applies when its preconditions hold, and they did not). The Docker rule is no reason: where `.github/dependabot.yml`
+exists, the scan's own exclusion below keeps `docker:S8431` out of the analysis.
+
 ### A Dependabot exception for `docker:S8431`
 
 Sonar's rule `docker:S8431` ("Use either the version tag or the digest for the image instead of both") flags the
@@ -157,10 +174,12 @@ SONARIAC-3096). A pull-request analysis does not see an unchanged `.github/depen
   `Fix:` line, counts in `new` and in the legacy number, and fails the run.
 - **An unreachable file:** a `.github` the filesystem refuses access to is exit `2` from `quality sonar properties`
   with a line naming the file, before it writes the step output.
-- **Only this rule** has the exception; every other finding and rule counts as before.
+- **Only this rule** has the exception, because only it has the premise (Sonar's own exception that its pull-request
+  analysis misses); every other finding and rule counts as before. There is no per-image entry in `quality/config.toml`
+  and no reading of `dependabot.yml`: Sonar itself checks existence only, and a pull request is judged the way the default
+  branch is.
 - **Gaps:** the file's existence does not say that Dependabot maintains the Dockerfile's folder for Docker; a repository
   that has only `.github/dependabot.yaml` stays red on pull requests; Renovate is not judged.
 
 (operator rulings 21.10.2026 and 23.10.2026: Sonar's exception applies on pull requests too, „Sonars Ausnahme anwenden (empfohlen)“, and
-holds when the file exists, „Wenn dependabot.yml existiert (empfohlen)“; the rejected per-line entries stand in
-[decision 2](decisions/2-dependabot-exception.md). 23.10.2026, „ja A“, relayed by edge's head, applied the same exception to the legacy count (re-ruling E3 of #98); 1.11.2026, „Bis hal umgestellt hat (Recommended)“, ended that count side when hal moved to v0.9.2.)
+holds when the file exists, „Wenn dependabot.yml existiert (empfohlen)“; 20.10.2026, „Eng begrenzte Ausnahme (empfohlen)“, chose one exception per exact `FROM` line on the premise that Sonar applies its exception on the default branch only; the plan review corrected that premise and he re-ruled (#98). 23.10.2026, „ja A“, relayed by edge's head, applied the same exception to the legacy count (re-ruling E3 of #98); 1.11.2026, „Bis hal umgestellt hat (Recommended)“, ended that count side when hal moved to v0.9.2.)

@@ -44,5 +44,4 @@ Locally, `quality check` runs every rule the gate runs, the secret, workflow and
 - [docs/release.md](docs/release.md): the release path (`release-gate.yml`), its caller contract and the standard.
 - [docs/sonar.md](docs/sonar.md): `sonar findings`, coverage on new code, new and legacy findings, the quality gate, the Dependabot exception.
 - [docs/runbook-emergency-merge.md](docs/runbook-emergency-merge.md): the operator's door past a red gate.
-- [docs/decisions/](docs/decisions/): the decisions whose rejected alternatives keep coming back.
 - [AGENTS.md](AGENTS.md): the contract for agents working in this repository.
