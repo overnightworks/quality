@@ -8,6 +8,7 @@ repositories = [
     "overnightworks/hopin",
     "overnightworks/kiln",
     "overnightworks/marketplace",
+    "overnightworks/platform",
     "overnightworks/presentator",
     "overnightworks/quality",
     "overnightworks/songmaker",
