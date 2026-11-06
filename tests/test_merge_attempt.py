@@ -70,6 +70,18 @@ def merge_failed():
     return "merge failed"
 
 
+def merge_state_unknown():
+    return "merge state unknown"
+
+
+def not_merged():
+    return "is not merged"
+
+
+def merge_broke():
+    return "merge broke"
+
+
 def unrestored_log_body(outcome="merge"):
     return log_body(outcome=outcome, restored=not_restored())
 
@@ -226,17 +238,17 @@ def test_the_closing_line_counts_the_seconds_from_the_answer(capsys):
         (
             {"fail_on": ["gate"]}, 2,
             off_failed_row("gate broke") + on() + posted(),
-            rerun_pair("is not merged"), all_four_but("gate false", "merge"), log_body("not switched off", "no merge"),
+            rerun_pair(not_merged()), all_four_but("gate false", "merge"), log_body("not switched off", "no merge"),
         ),
         (
             {"interrupt_on": ["gate"]}, 2,
             "\n" + off_failed_row("interrupted") + on() + posted(),
-            rerun_pair("is not merged"), all_four_but("gate false", "merge"), log_body("not switched off", "no merge"),
+            rerun_pair(not_merged()), all_four_but("gate false", "merge"), log_body("not switched off", "no merge"),
         ),
         (
             {"fail_on": ["merge"]}, 2,
             off() + on() + merge_failed_row() + posted(),
-            rerun_pair("is not merged"), all_four_but("merge"), log_body(outcome=merge_failed()),
+            rerun_pair(not_merged()), all_four_but("merge"), log_body(outcome=merge_failed()),
         ),
         (
             {"fail_on": ["merge"], "merge_lands": True}, 0,
@@ -246,7 +258,7 @@ def test_the_closing_line_counts_the_seconds_from_the_answer(capsys):
         (
             {"interrupt_on": ["merge"]}, 2,
             off() + "\n" + on() + unknown_row("interrupted") + posted(),
-            unknown_pair(), all_four_but("merge"), log_body(outcome="merge state unknown"),
+            unknown_pair(), all_four_but("merge"), log_body(outcome=merge_state_unknown()),
         ),
         (
             {"interrupt_on": ["merge"], "merge_lands": True}, 0,
@@ -255,19 +267,19 @@ def test_the_closing_line_counts_the_seconds_from_the_answer(capsys):
         ),
         (
             {"fail_on": ["merge", "read back"]}, 2,
-            off() + on() + unknown_row("merge broke") + posted(),
-            unknown_pair(), all_four_but("merge"), log_body(outcome="merge state unknown"),
+            off() + on() + unknown_row(merge_broke()) + posted(),
+            unknown_pair(), all_four_but("merge"), log_body(outcome=merge_state_unknown()),
         ),
         (
             {"fail_on": ["merge"], "interrupt_on": ["read back"]}, 2,
-            off() + on() + "\n" + unknown_row("merge broke") + posted(),
-            unknown_pair(), all_four_but("merge"), log_body(outcome="merge state unknown"),
+            off() + on() + "\n" + unknown_row(merge_broke()) + posted(),
+            unknown_pair(), all_four_but("merge"), log_body(outcome=merge_state_unknown()),
         ),
         (
             {"fail_on": ["merge", "restore"], "raw_answers": {"read back": "[]"}}, 2,
-            off() + restore_failed_row() + unknown_row("merge broke") + posted(),
+            off() + restore_failed_row() + unknown_row(merge_broke()) + posted(),
             unrestored_unknown_pair(), all_four_but("merge", "gate true"),
-            unrestored_log_body("merge state unknown"),
+            unrestored_log_body(merge_state_unknown()),
         ),
         (
             {"fail_on": ["restore"]}, 2,
@@ -403,7 +415,7 @@ class RefusingGh(FakeGh):
     ("moment", "gh_kwargs", "code", "written", "err", "sequence"),
     [
         ("gate", {}, 0, "", "", all_four()),
-        ("gate", {"fail_on": ["gate"]}, 2, "", rerun_pair("is not merged"), all_four_but("gate false", "merge")),
+        ("gate", {"fail_on": ["gate"]}, 2, "", rerun_pair(not_merged()), all_four_but("gate false", "merge")),
         ("merge", {}, 0, off(), "", all_four()),
         ("merge", {"interrupt_on": ["merge"]}, 2, off(), unknown_pair(), all_four_but("merge")),
         ("restore", {}, 0, off() + merged(), "", all_four()),
