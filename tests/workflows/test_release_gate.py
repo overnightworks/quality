@@ -166,7 +166,9 @@ def outcome(result: StepRun) -> tuple[int, str, str]:
 
 def test_no_gate_job_or_step_is_skippable(gate):
     assert "if" not in gate["jobs"]["gate"]
-    assert all("if" not in candidate and "continue-on-error" not in candidate for candidate in gate["jobs"]["gate"]["steps"])
+    assert all(
+        "if" not in candidate and "continue-on-error" not in candidate for candidate in gate["jobs"]["gate"]["steps"]
+    )
 
 
 def refused(line: str) -> str:
@@ -183,7 +185,14 @@ def refused(line: str) -> str:
         ("refs/tags/v1.2.3", False),
         ("refs/pull/7/merge", False),
     ],
-    ids=["main", "another branch", "a longer name starting with main", "a branch named maintenance", "a tag", "a pull request ref"],
+    ids=[
+        "main",
+        "another branch",
+        "a longer name starting with main",
+        "a branch named maintenance",
+        "a tag",
+        "a pull request ref",
+    ],
 )
 def test_only_a_dispatch_from_main_passes_the_ref_gate(gate, dispatch, tmp_path, reference, passes):
     result = run_gate_step(gate, REF_STEP, dispatch, tmp_path, DISPATCH_REF=reference)
