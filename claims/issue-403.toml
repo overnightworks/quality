@@ -1,7 +1,0 @@
-claim_id = "7dcb3534198e4d6b8386c034f5df3ea2"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "3469ac4f4ca5bf947d4f1b329f6bd7f55adc7e08"
-branch = "claude/issue-403-release-steps-pipefail"
-scope = [".github/workflows/release-gate.yml", ".github/workflows/release.yml", "tests/support/workflow_steps.py"]
-opened_commit = "e7426c09e6c9b5d18194ac539f32c31aabd7bfb7"
