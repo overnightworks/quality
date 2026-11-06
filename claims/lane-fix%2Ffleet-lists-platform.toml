@@ -1,7 +1,0 @@
-claim_id = "a74e1aed8d384a7aaf0ff0e46ce2952e"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "a9b97327dee0c85c764981738069e54e737f655f"
-branch = "fix/fleet-lists-platform"
-scope = ["quality/fleet.toml"]
-opened_commit = "33828bb277de3ff95920d6dde83610e44e873291"
