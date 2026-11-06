@@ -1,0 +1,8 @@
+claim_id = "c900daca3a7644dba4f55c0586f25913"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "3469ac4f4ca5bf947d4f1b329f6bd7f55adc7e08"
+branch = "claude/issue-402-image-workflow"
+scope = [".github/workflows/image.yml", "AGENTS.md", "README.md", "docs/ARCHITECTURE.md", "docs/release.md", "tests/workflows/test_image.py"]
+opened_commit = "4c971941a6b516e4b8b107c69348a4119f6d3a4e"
+whole_reason = "One reusable workflow with its tests; docs/release.md holds its caller contract, and AGENTS.md, README.md and docs/ARCHITECTURE.md each name it in one line."
