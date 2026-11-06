@@ -132,6 +132,7 @@ The secret's name is illustrative.
   <owner>/<repository> --signer-workflow overnightworks/quality/.github/workflows/image.yml --source-ref refs/heads/main
   --predicate-type https://slsa.dev/provenance/v1`.
 - `cache: true` reads and writes the GitHub Actions build cache; it stays off for a release.
+- `submodules: true` checks out the commit's git submodules, one level and without credentials, so each is public and reached over https; the commit pins each one.
 - The outputs, set only with `push`: `digest` (`sha256:<hex>`) and `ref`
   (`ghcr.io/<owner>/<repository>[/<image>]:<version>@<digest>`).
 - The package takes the access of the caller's repository; a deployment that pulls it needs read access set on the
