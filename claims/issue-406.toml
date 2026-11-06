@@ -1,0 +1,8 @@
+claim_id = "3c469b0db5fa48a1a693031df1fd874c"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "3469ac4f4ca5bf947d4f1b329f6bd7f55adc7e08"
+branch = "claude/issue-406-gate-app-form"
+scope = [".github/workflows/release-gate.yml", "docs/release.md", "tests/workflows/test_release.py", "tests/workflows/test_release_gate.py"]
+opened_commit = "1b05f56a1520ef69a612f57c4b304df7b5a6c833"
+whole_reason = "One gate change: the workflow, its two test modules (the gate's and quality's caller, whose call pins the gate's inputs) and the reference rows that name its refusals; splitting the docs or the caller pin off would leave a red pin or a stale reference."
