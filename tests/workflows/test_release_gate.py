@@ -210,6 +210,10 @@ def test_only_a_dispatch_from_main_passes_the_ref_gate(gate, dispatch, tmp_path,
         "1.2x3",
         "\u0967.2.3",
         "1.2.\u0969",
+        "1.\u0967.3",
+        "1\u0967.2.3",
+        "1.2\u0967.3",
+        "1.2.3\u0967",
     ],
     ids=[
         "two parts",
@@ -226,10 +230,14 @@ def test_only_a_dispatch_from_main_passes_the_ref_gate(gate, dispatch, tmp_path,
         "a letter for the second dot",
         "a Devanagari digit as major",
         "a Devanagari digit as patch",
+        "a Devanagari digit as minor",
+        "a Devanagari digit after an ASCII digit in the major",
+        "a Devanagari digit after an ASCII digit in the minor",
+        "a Devanagari digit after an ASCII digit in the patch",
     ],
 )
 def test_a_malformed_version_is_refused(gate, dispatch, tmp_path, version):
-    result = run_gate_step(gate, FORMAT_STEP, dispatch, tmp_path, VERSION=version, LC_ALL="de_DE.utf8")
+    result = run_gate_step(gate, FORMAT_STEP, dispatch, tmp_path, VERSION=version)
     assert outcome(result) == (1, refused("the version is not X.Y.Z, each part a number without leading zeros."), "")
     assert not (tmp_path / "work" / "planted").exists()
 
@@ -370,20 +378,39 @@ def test_a_run_of_another_commit_or_event_is_no_push_run_on_the_commit(gate, dis
     assert outcome(result) == (1, refused(f"CI has no push run on {dispatch.commit}."), "")
 
 
+MERGED_HEAD = "b2" * 20
+NO_SINGLE_PULL = "no single pull request merged {commit} into main."
+RED_VERDICT = (
+    "pull request #9 merged with quality / verdict {verdict}; release the next commit merged with a green verdict."
+)
+
+
+def merged_scenario(pulls: list[dict] | None = None, runs: tuple = ((1, "success", around_the_merge(-60)),)) -> dict:
+    return {
+        "pulls": [merged_pull(9, MERGED_HEAD, around_the_merge())] if pulls is None else pulls,
+        "check_runs": {MERGED_HEAD: check_runs(*runs)},
+    }
+
+
+def newest_run_scenarios() -> dict[str, tuple[dict, str | None]]:
+    return {
+        "the newest check run is the highest number, not the last in text order": (
+            merged_scenario(runs=((9, "success", around_the_merge(-60)), (10, "failure", around_the_merge(-30)))),
+            RED_VERDICT.format(verdict="failure"),
+        ),
+        "the newest check run is the highest number, not the last to complete": (
+            merged_scenario(runs=((1, "success", around_the_merge(-10)), (2, "failure", around_the_merge(-50)))),
+            RED_VERDICT.format(verdict="failure"),
+        ),
+    }
+
+
 def merge_scenarios() -> dict[str, tuple[dict, str | None]]:
     """Each id: what replaces the green reads, and the refusal line (None when the step passes)."""
-    head = "b2" * 20
-
-    def scenario(pulls: list[dict] | None = None, runs: tuple = ((1, "success", around_the_merge(-60)),)) -> dict:
-        return {
-            "pulls": [merged_pull(9, head, around_the_merge())] if pulls is None else pulls,
-            "check_runs": {head: check_runs(*runs)},
-        }
-
-    no_single_pull = "no single pull request merged {commit} into main."
-    red = (
-        "pull request #9 merged with quality / verdict {verdict}; release the next commit merged with a green verdict."
-    )
+    head = MERGED_HEAD
+    scenario = merged_scenario
+    no_single_pull = NO_SINGLE_PULL
+    red = RED_VERDICT
     return {
         "green": (scenario(), None),
         "no pull request": (scenario([]), no_single_pull),
@@ -410,14 +437,6 @@ def merge_scenarios() -> dict[str, tuple[dict, str | None]]:
             scenario(runs=((2, "success", around_the_merge(-30)), (1, "failure", around_the_merge(-60)))),
             None,
         ),
-        "the newest check run is the highest number, not the last in text order": (
-            scenario(runs=((9, "success", around_the_merge(-60)), (10, "failure", around_the_merge(-30)))),
-            red.format(verdict="failure"),
-        ),
-        "the newest check run is the highest number, not the last to complete": (
-            scenario(runs=((1, "success", around_the_merge(-10)), (2, "failure", around_the_merge(-50)))),
-            red.format(verdict="failure"),
-        ),
         "a verdict completed at the merge counts": (scenario(runs=((1, "success", around_the_merge()),)), None),
         "a failure completed at the merge overrides an earlier success": (
             scenario(runs=((1, "success", around_the_merge(-60)), (2, "failure", around_the_merge()))),
@@ -434,9 +453,12 @@ def merge_scenarios() -> dict[str, tuple[dict, str | None]]:
     }
 
 
-@pytest.mark.parametrize("case", list(merge_scenarios()))
+ALL_MERGE_SCENARIOS = merge_scenarios() | newest_run_scenarios()
+
+
+@pytest.mark.parametrize("case", list(ALL_MERGE_SCENARIOS))
 def test_a_commit_its_pull_request_merged_red_is_never_released(gate, dispatch, tmp_path, case):
-    replaced, refusal = merge_scenarios()[case]
+    replaced, refusal = ALL_MERGE_SCENARIOS[case]
     result = run_gate_step(gate, MERGED_STEP, dispatch, tmp_path, green_answers(dispatch, **replaced))
     if refusal:
         assert outcome(result) == (1, refused(refusal.format(commit=dispatch.commit)), "")
@@ -482,6 +504,12 @@ def test_the_gate_judges_the_dispatched_commit_and_version(gate):
         for pattern in re.findall(r"=~\s*(\S+)", step(gate, "gate", name).get("run", ""))
     ]
     assert patterns == ["$RELEASE_FORM", "$RELEASE_FORM"]
+
+
+def test_the_version_grammar_holds_no_range_whose_meaning_follows_the_locale(gate):
+    brackets = re.findall(r"\[[^\]]*\]", gate["jobs"]["gate"]["env"]["RELEASE_FORM"])
+    assert brackets
+    assert not [bracket for bracket in brackets if "-" in bracket]
 
 
 def test_the_ref_gate_reads_the_dispatch_ref(gate):
