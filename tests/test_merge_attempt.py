@@ -25,6 +25,7 @@ from tests.support.merge import (
     rows_before_the_prompt,
 )
 
+
 def off():
     return "  ✓ quality_gate  off            acme/widgets\n"
 
