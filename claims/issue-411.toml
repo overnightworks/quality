@@ -1,0 +1,7 @@
+claim_id = "9181e79ed10448eb811ecfe2ad68ca60"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "7359a676902dbbf81ba807a621b3bd6661e0e719"
+branch = "claude/issue-411-release-docs-image-residual"
+scope = [".github/workflows/release-tag.yml", "docs/release.md"]
+opened_commit = "01abb888e65b418d99dd2a29504bb300fe2dd393"
