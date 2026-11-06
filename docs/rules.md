@@ -142,7 +142,9 @@ It applies these rules:
   (exit `2`), as for `size`. The baseline is read once for both rules: one that cannot be read leaves both
   unjudged (the `debt` row names the reason once, exit `2`), also when it has no `[clones]` table, since the mode is then unknown.
   quality owns this detector instead of calling jscpd or lizard (operator ruling 21.10.2026: „aco-Prüfer übernehmen
-  (empfohlen)“); the reasons stand in [decision 3](decisions/3-clone-detector.md). The threshold, what makes a pair, how
+  (empfohlen)“); the detector is aco's, a comparison of the functions' name-folded token streams, because a pair needs an identity that
+  survives unrelated changes (jscpd names a pair so that a neighbouring edit orphans the baseline entry, and leaves tests
+  out; lizard's duplicate mode returned import lists), and it judges Python only. The threshold, what makes a pair, how
   it is named, the report-only mode and the printed lines were shown to the operator and left unanswered, so they stand
   at the proposed default and are not his word (#113, O2 and E1 to E7). E2 stays for the rule itself: a renamed file or
   function orphans the held pair and names a new one. Only the verdict's comparison with the base treats a pair whose
@@ -520,7 +522,7 @@ the directory on every exit path (success, gitleaks failure, parse error). The v
 stderr, log, exception text or retained file; gitleaks itself runs without its `-v`. While the scan runs, the value exists in
 that report file and in quality's process memory. The boundary is the deletion and the absence of any other sink,
 not memory-only handling. The hash is safe to print: it appears only where the history already shows the content,
-and a real secret must be rotated anyway. gitleaks' scan stderr may echo scanned values, so no refusal quotes it and `quality check -v` prints it only for a finished scan that gitleaks cleared, and counts a failing gitleaks' lines unread (`docs/decisions/5-scanner-stderr-goes-through-gitleaks.md`); the missing-report and unexpected-exit refusals keep their exit code without those diagnostics.
+and a real secret must be rotated anyway. gitleaks' scan stderr may echo scanned values, so no refusal quotes it and `quality check -v` prints it only for a finished scan that gitleaks cleared, and counts a failing gitleaks' lines unread (the vet stands with the output rules); the missing-report and unexpected-exit refusals keep their exit code without those diagnostics.
 
 The scan runs git without any attributes (not the repository's `.gitattributes`, not `info/attributes`, not the
 system or global file), so a `-diff` or `binary` line cannot hide a key. That needs git 2.41 or newer; an older git
@@ -605,7 +607,7 @@ reason = "gradio caps pillow<13; no image input"
   makes itself, so only the operator's door merges it. The pull request writes the allowance, so its item, date and
   reason prove nothing alone: the verdict's red and the door are the gate. An `id` that is an alias covers every
   group carrying it in that lock, while the door names the `id` and the lock, not the packages.
-  Why only the operator's door merges it stands in [decision 1](decisions/1-loosening-door.md); his rulings on the
+  Why only the operator's door merges it stands in [gate.md](gate.md#declared-loosenings); his rulings on the
   allowance follow. The rest was shown to him and left unanswered, so it stands at the
   proposed default and is not his word: the entry's keys, the alias, the date format, the expiry line, the unmatched
   allowance, the adoption, no latest `until`, the printed lines, an advisory without a fixed version and the reach of an
@@ -672,4 +674,37 @@ In GitHub Actions (`GITHUB_ACTIONS=true`) the door first prints `::stop-commands
 workflow command in repository text runs (operator ruling 20.10.2026, asked whether to stop the commands, escape the
 text, or both: „Beides (empfohlen)“): no `::warning::` or `##[warning]` annotation, no `add-mask`, no `add-matcher`; the stop lasts for the rest of the step, and the door never prints the line that lifts it. Problem matchers registered in the job still read the log (the stop does not reach them). The gate's jobs register only setup-uv's python matcher, which is anchored at the line start and so cannot match repository text; a matcher another step registers may still match a door line that holds repository text, and the door cannot prevent that.
 
-A scanner's stderr reaches a `✗` fact only once gitleaks has cleared all of it ([decision 5](decisions/5-scanner-stderr-goes-through-gitleaks.md)). `quality check -v` and `quality check secrets --staged -v` add, under each area that ran a scanner, after its findings and notes, one `·` row per scanner run, `· <scanner>  exited  <n>`, and that scanner's stderr line by line behind the marker `| `, escaped and never shortened, split on line feeds alone; a text gitleaks does not clear is withheld whole, and the row counts its lines; a scanner that did not finish or printed no UTF-8 has no row. A scanner's report never stands there: it is what the rows are read from, and it can quote repository lines. `-v` changes no exit, no verdict and no scanner's arguments; a run without it keeps no stderr and adds no vet to a refusal's; `check` writes no step summary.
+A scanner's stderr reaches a `✗` fact only once gitleaks has cleared all of it (the vet below). `quality check -v` and `quality check secrets --staged -v` add, under each area that ran a scanner, after its findings and notes, one `·` row per scanner run, `· <scanner>  exited  <n>`, and that scanner's stderr line by line behind the marker `| `, escaped and never shortened, split on line feeds alone; a text gitleaks does not clear is withheld whole, and the row counts its lines; a scanner that did not finish or printed no UTF-8 has no row. A scanner's report never stands there: it is what the rows are read from, and it can quote repository lines. `-v` changes no exit, no verdict and no scanner's arguments; a run without it keeps no stderr and adds no vet to a refusal's; `check` writes no step summary.
+
+The vet exists because a secret's value never appears, and zizmor's schema refusal and osv-scanner's file error quote what
+they read, so a key in a workflow or a lock file could otherwise stand in a `✗` row and a CI log, on a run without `-v`.
+Before a fact quotes any of a scanner's stderr, the whole text goes through `gitleaks stdin` under quality's own
+`gitleaks.toml`, the definition of a secret that `quality check` judges with. Only exit `0` and an empty report clear
+it. A flagged text and a vet that cannot answer (gitleaks missing, a timeout, any other exit, a missing or unreadable
+report, a report that disagrees with the exit) withhold it whole, never partly, and the fact says how many lines:
+`· N stderr lines withheld · not cleared by gitleaks`. The exit and the verdict never move. Without `-v`, a run whose
+scanners refuse nothing starts no vet; under `-v`, a finished scan that wrote stderr starts one, as does a refusal that
+wrote any, and a refusal with no stderr starts none, so a refusal costs two gitleaks starts. No refusal quotes
+gitleaks' own stderr, because the vet cannot vet the tool that failed; `-v` counts a failing gitleaks (any exit but `0`
+and `7`) unread, `· N stderr lines withheld · a failing gitleaks is never quoted`, because that stream relays git's
+stderr line by line, where a value cut across two lines passes the vet. Report text in rows is not stderr and is not
+vetted.
+
+- A text holding ESC or a C1 control (U+0080 to U+009F) has no clean answer, because a terminal code can stand against
+  a value without the word boundary gitleaks' rules need and the printed text escapes only the code: it is withheld
+  whole and no vet starts. A scanner writes terminal codes on stderr only under forced colour (`FORCE_COLOR`,
+  `CLICOLOR_FORCE`); then its refusal's reason is withheld, clean text too. Giving the scanners a plain environment
+  would lift that if it hurts a dependent. A normalised text is not vetted instead: stripping a code joins two words or
+  eats the first letter of a key, and quality would own a terminal parser.
+- The vet judges as the secret scan judges: `--ignore-gitleaks-allow` and the scan's own config and exit code come from
+  one list that feeds both calls, so a key beside `gitleaks:allow` is a finding; gitleaks runs in the vet's scratch
+  directory, because with no source it reads `.gitleaksignore` from the folder it stands in and a repository could list
+  the fingerprint of a stdin finding; the text opens with a fixed line, because gitleaks answers clean for a text whose
+  first bytes read as a binary type; `--redact`, so the report holds no value, and it lives in a 0700 directory removed
+  on every exit.
+- What passes: a value gitleaks does not recognise, which `quality check` does not recognise either; a value gitleaks
+  recognises only by its context (`generic-api-key` needs its `api_key = `) when a scanner quotes the bare value; a value
+  a scanner cut or spliced across lines; a binary type's mark at a fixed offset behind the first line (`ustar` at byte
+  257), which needs a text built for it.
+- A refusal never shows a fixed text with no stderr (every person would lose the reason), never shows the text and names
+  the risk, and is not limited to a list of known lines per scanner (five lists that decay at each scanner bump).
