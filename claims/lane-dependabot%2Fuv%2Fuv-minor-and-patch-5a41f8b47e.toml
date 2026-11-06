@@ -1,0 +1,7 @@
+claim_id = "dbf0b42fff6f4120aa5e7a09ef95f0c4"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "c9be427f0f20155e6244a4333399e1d310b6ddea"
+branch = "dependabot/uv/uv-minor-and-patch-5a41f8b47e"
+scope = ["pyproject.toml", "uv.lock"]
+opened_commit = "d7b8c0167456cd9f0154c29fecef937c3128ede2"
