@@ -69,9 +69,11 @@ Each line has a reason:
 
 ## The version
 
-A library or tool releases `X.Y.Z`, each part a number without leading zeros, tagged `vX.Y.Z`. An app's form is decided
-with the gate's app-form lane; until its cut-over an app keeps its dated tag `vYYYY.MM.DD.N` on a main commit, and the
-gate neither judges nor counts that tag. The image takes the version as a Docker tag.
+A library or tool releases `X.Y.Z`, each part a number without leading zeros, tagged `vX.Y.Z`. An app releases
+`YYYY.MM.DD.N`, tagged `vYYYY.MM.DD.N`: a four-digit year, month `01` to `12`, day `01` to `31`, and `N` counting the day's
+releases from 1 without leading zeros. An app's call of the gate passes `form: YYYY.MM.DD.N` beside the version; without
+`form` the gate judges `X.Y.Z`. The gate counts only tags of the caller's form as release tags, so a tag of the other form
+on the commit never refuses it. The image takes the version as a Docker tag.
 
 ## An app's image
 
@@ -122,7 +124,9 @@ Each refusal prints one line on stderr and fails the gate; no tag exists yet.
 | Line | What to do |
 |---|---|
 | `Refused: dispatched from <ref>, a release is dispatched from main.` | Dispatch with `--ref main` (the default). |
-| `Refused: the version is not X.Y.Z, each part a number without leading zeros.` | Give `1.2.3`, not `v1.2.3`, `1.2` or `01.2.3`. |
+| `Refused: the version is not X.Y.Z, each part a number without leading zeros.` | Give `1.2.3`, not `v1.2.3`, `1.2` or `01.2.3`; an app's call passes `form: YYYY.MM.DD.N`. |
+| `Refused: the form <form> is neither X.Y.Z nor YYYY.MM.DD.N.` | Fix the `form` the caller's `release.yml` passes. |
+| `Refused: the version is not YYYY.MM.DD.N, month 01 to 12, day 01 to 31, N a number from 1 without leading zeros.` | Give `2026.11.06.1`, not `v2026.11.06.1`, `2026.11.6.1`, `2026.13.06.1` or `2026.11.06.0`. |
 | `Refused: main moved from <sha> to <sha> after the dispatch.` | Dispatch again; the release is of main's head at the dispatch. |
 | `Refused: the tag v<version> exists.` | Choose the next version; a tag is never moved. |
 | `Refused: <sha> already carries the release tag <tag>.` | The commit is released; release a later commit. |

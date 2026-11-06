@@ -5,9 +5,14 @@ on:
   workflow_call:
     inputs:
       version:
-        description: The version to release, X.Y.Z
+        description: The version to release, in the form that form names
         type: string
         required: true
+      form:
+        description: The version's form, X.Y.Z or YYYY.MM.DD.N
+        type: string
+        required: false
+        default: X.Y.Z
     outputs:
       commit:
         description: The gated commit, main's head when the release was dispatched
@@ -34,7 +39,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       VERSION: ${{ inputs.version }}
       COMMIT: ${{ github.sha }}
-      RELEASE_FORM: '^(0|[123456789][0123456789]*)\.(0|[123456789][0123456789]*)\.(0|[123456789][0123456789]*)$'
+      FORM: ${{ inputs.form }}
     steps:
       - name: Refuse any ref but main
         env:
@@ -46,11 +51,21 @@ jobs:
           fi
 
       - name: Refuse a malformed version
+        id: form
+        env:
+          X_Y_Z: '^(0|[123456789][0123456789]*)\.(0|[123456789][0123456789]*)\.(0|[123456789][0123456789]*)$'
+          YYYY_MM_DD_N: '^[0123456789]{4}\.(0[123456789]|1[012])\.(0[123456789]|[12][0123456789]|3[01])\.[123456789][0123456789]*$'
         run: |
-          if ! [[ "$VERSION" =~ $RELEASE_FORM ]]; then
-            echo "Refused: the version is not X.Y.Z, each part a number without leading zeros." >&2
+          case "$FORM" in
+            X.Y.Z) grammar=$X_Y_Z rule="each part a number without leading zeros" ;;
+            YYYY.MM.DD.N) grammar=$YYYY_MM_DD_N rule="month 01 to 12, day 01 to 31, N a number from 1 without leading zeros" ;;
+            *) echo "Refused: the form $FORM is neither X.Y.Z nor YYYY.MM.DD.N." >&2; exit 1 ;;
+          esac
+          if ! [[ "$VERSION" =~ $grammar ]]; then
+            echo "Refused: the version is not $FORM, $rule." >&2
             exit 1
           fi
+          echo "grammar=$grammar" >> "$GITHUB_OUTPUT"
 
       - name: Refuse unless the commit is still main's head
         run: |
@@ -70,6 +85,8 @@ jobs:
           fi
 
       - name: Refuse a commit that already carries a release tag
+        env:
+          RELEASE_FORM: ${{ steps.form.outputs.grammar }}
         run: |
           tagged=$(gh api --paginate "repos/$GITHUB_REPOSITORY/tags?per_page=100" \
             --jq '.[] | select(.commit.sha == env.COMMIT) | .name')
