@@ -1,7 +1,6 @@
 name: Release
 
 # The operator dispatches it: gh workflow run release.yml -R overnightworks/quality -f version=X.Y.Z (docs/release.md).
-# Until the tag job exists, a dispatch gates and builds and creates no tag.
 on:
   workflow_dispatch:
     inputs:
@@ -56,3 +55,12 @@ jobs:
           git tag "v$VERSION" "$COMMIT"
           uv sync --locked --reinstall-package overnightworks-quality
           uv run --locked python scripts/verify_release.py
+
+  tag:
+    needs: [gate, build]
+    permissions:
+      contents: write
+    uses: $/.github/workflows/release-tag.yml
+    with:
+      version: ${{ inputs.version }}
+      commit: ${{ needs.gate.outputs.commit }}

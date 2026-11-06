@@ -1,0 +1,95 @@
+name: release-tag
+
+# Caller contract: docs/release.md. The calling job grants contents: write; nothing else is needed.
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: The gated version, X.Y.Z
+        type: string
+        required: true
+      commit:
+        description: The gated commit, release-gate's output
+        type: string
+        required: true
+      artifact:
+        description: The artifact of this run whose regular top-level files the release carries; empty for a release without files
+        type: string
+        required: false
+        default: ''
+      notes:
+        description: Markdown that opens the release notes; GitHub's generated notes follow
+        type: string
+        required: false
+        default: ''
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # creates the tag and the release
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ inputs.version }}
+      COMMIT: ${{ inputs.commit }}
+      ARTIFACT: ${{ inputs.artifact }}
+      NOTES: ${{ inputs.notes }}
+    steps:
+      - name: Fetch the files the build made
+        if: inputs.artifact != ''
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ inputs.artifact }}
+          path: release-files
+
+      - name: Refuse files the release cannot carry exactly
+        run: |
+          if [ -z "$ARTIFACT" ]; then
+            if [ -e release-files ]; then
+              echo "Refused: files were fetched, but no artifact was named." >&2
+              exit 1
+            fi
+            exit 0
+          fi
+          if [ ! -d release-files ] || [ -z "$(find release-files -maxdepth 1 -type f -print -quit)" ]; then
+            echo "Refused: the artifact $ARTIFACT brought no file." >&2
+            exit 1
+          fi
+          other=$(find release-files -mindepth 1 ! -type f -printf '%P/' -quit)
+          if [ -n "$other" ]; then
+            echo "Refused: the artifact $ARTIFACT holds ${other%/}, which is not a regular top-level file." >&2
+            exit 1
+          fi
+          hashed=$(find release-files -maxdepth 1 -type f -name '*#*' -printf '%f\n' -quit)
+          if [ -n "$hashed" ]; then
+            echo "Refused: the file $hashed has a # in its name, which gh reads as the start of an asset label." >&2
+            exit 1
+          fi
+
+      - name: Create the tag at the gated commit
+        run: |
+          at=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/v$VERSION" \
+            --jq '[.[] | select(.ref == "refs/tags/v" + env.VERSION)][0].object.sha // empty')
+          if [ -z "$at" ]; then
+            gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/v$VERSION" -f "sha=$COMMIT"
+          elif [ "$at" != "$COMMIT" ]; then
+            echo "Refused: the tag v$VERSION exists at $at, not at the gated commit $COMMIT." >&2
+            exit 1
+          fi
+
+      - name: Publish the release on the tag with every file the build made
+        run: |
+          files=()
+          if [ -n "$ARTIFACT" ]; then
+            find release-files -maxdepth 1 -type f -print0 | sort -z > release-files.list
+            mapfile -d '' files < release-files.list
+          fi
+          gh release create "v$VERSION" "${files[@]}" --verify-tag --title "v$VERSION" --generate-notes --notes "$NOTES"
