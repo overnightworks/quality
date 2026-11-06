@@ -1,8 +1,0 @@
-claim_id = "1a231b2bb3634ca5bb67264e9be86e40"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "334876ebdd9d9fcc1e0fe9e512cac0d473855e15"
-branch = "claude/issue-390-c8a3-the-operator-s-door-asks-for-yes"
-scope = ["docs/commands.md", "docs/output.md", "docs/runbook-emergency-merge.md", "src/quality/cli.py", "src/quality/merge.py", "tests/support/merge.py", "tests/test_cli_help.py", "tests/test_merge.py", "tests/test_merge_prompt.py", "tests/test_merge_rows.py", "tests/test_output.py"]
-opened_commit = "ae8a6a28c989f2859a33539ae63a7bbcca1bef6b"
-whole_reason = "Two production lines and one docstring, and the pins of one literal: the word is read by the prompt builder and the drive helper every door test shares, so every pin changes in the same commit or the suite asks one word and types another."
