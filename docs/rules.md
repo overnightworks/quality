@@ -142,7 +142,7 @@ It applies these rules:
   (exit `2`), as for `size`. The baseline is read once for both rules: one that cannot be read leaves both
   unjudged (the `debt` row names the reason once, exit `2`), also when it has no `[clones]` table, since the mode is then unknown.
   quality owns this detector instead of calling jscpd or lizard (operator ruling 21.10.2026: „aco-Prüfer übernehmen
-  (empfohlen)“); the detector is aco's, a comparison of the functions' name-folded token streams, because a pair needs an identity that
+  (empfohlen)“); the detector, taken over from aco, compares the functions' name-folded token streams, because a pair needs an identity that
   survives unrelated changes (jscpd names a pair so that a neighbouring edit orphans the baseline entry, and leaves tests
   out; lizard's duplicate mode returned import lists), and it judges Python only. The threshold, what makes a pair, how
   it is named, the report-only mode and the printed lines were shown to the operator and left unanswered, so they stand
@@ -522,7 +522,7 @@ the directory on every exit path (success, gitleaks failure, parse error). The v
 stderr, log, exception text or retained file; gitleaks itself runs without its `-v`. While the scan runs, the value exists in
 that report file and in quality's process memory. The boundary is the deletion and the absence of any other sink,
 not memory-only handling. The hash is safe to print: it appears only where the history already shows the content,
-and a real secret must be rotated anyway. gitleaks' scan stderr may echo scanned values, so no refusal quotes it and `quality check -v` prints it only for a finished scan that gitleaks cleared, and counts a failing gitleaks' lines unread (the vet stands with the output rules); the missing-report and unexpected-exit refusals keep their exit code without those diagnostics.
+and a real secret must be rotated anyway. gitleaks' scan stderr may echo scanned values, so it is shown only as the vet allows (the vet stands with the output rules); the missing-report and unexpected-exit refusals keep their exit code without those diagnostics.
 
 The scan runs git without any attributes (not the repository's `.gitattributes`, not `info/attributes`, not the
 system or global file), so a `-diff` or `binary` line cannot hide a key. That needs git 2.41 or newer; an older git
@@ -706,5 +706,5 @@ vetted.
   recognises only by its context (`generic-api-key` needs its `api_key = `) when a scanner quotes the bare value; a value
   a scanner cut or spliced across lines; a binary type's mark at a fixed offset behind the first line (`ustar` at byte
   257), which needs a text built for it.
-- A refusal never shows a fixed text with no stderr (every person would lose the reason), never shows the text and names
-  the risk, and is not limited to a list of known lines per scanner (five lists that decay at each scanner bump).
+- quality does not replace every refusal's stderr with a fixed text, because every person would lose the reason; it does not show the text and name
+  the risk, and it is not limited to a list of known lines per scanner (five lists that decay at each scanner bump).

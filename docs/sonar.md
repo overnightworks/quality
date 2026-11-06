@@ -139,7 +139,7 @@ and the 100 % branch rule per repository follows later (L5).
 ### Why quality judges the findings
 
 quality counts the open findings itself (`legacy = "fail"` on the default branch, the properties check, the door's legacy
-path) and does not move the zero-findings rule to SonarCloud's hosted gate, because the hosted gate cannot carry it:
+path) and does not move the zero-findings rule to SonarCloud's hosted gate, because the hosted gate cannot carry it for two reasons:
 
 - The hosted gate does not fail on new issues: the built-in "Sonar way" and the custom "presentator" gate have no
   condition on `new_violations`, and SonarCloud backdates an issue raised on an unchanged line, so such a condition
@@ -147,12 +147,11 @@ path) and does not move the zero-findings rule to SonarCloud's hosted gate, beca
 - The token boundary needs the properties check: at sonar-scanner-java-library 4.1.1.1633 a properties file can still set
   proxy, truststore, Java executable, engine jar and Java option keys, and `${env.SONAR_TOKEN}` substitutions, none of
   which `-Dsonar.host.url` pins.
-- The Docker rule `docker:S8431` is active in the built-in Docker profile and no project sets
-  `sonar.issue.ignore.multicriteria`; the scan's own exclusion below handles it, not a SonarCloud setting.
 
 The hosted gate would replace the count only if it could fail on a finding on an unchanged line and the scanner no
-longer let a properties file reach the token (operator, #228, 29.10.2026: the hosted gate alone applies when its
-preconditions hold, and they did not).
+longer let a properties file reach the token. The Docker rule is no reason: the scan's own exclusion below keeps
+`docker:S8431` out of every analysis (operator, #228, 29.10.2026, „der rest passt auch!“: the hosted gate alone applies when
+its preconditions hold, and they did not).
 
 ### A Dependabot exception for `docker:S8431`
 
@@ -183,4 +182,4 @@ SONARIAC-3096). A pull-request analysis does not see an unchanged `.github/depen
   that has only `.github/dependabot.yaml` stays red on pull requests; Renovate is not judged.
 
 (operator rulings 21.10.2026 and 23.10.2026: Sonar's exception applies on pull requests too, „Sonars Ausnahme anwenden (empfohlen)“, and
-holds when the file exists, „Wenn dependabot.yml existiert (empfohlen)“; one exception per exact `FROM` line was re-ruled away on that premise. 23.10.2026, „ja A“, relayed by edge's head, applied the same exception to the legacy count (re-ruling E3 of #98); 1.11.2026, „Bis hal umgestellt hat (Recommended)“, ended that count side when hal moved to v0.9.2.)
+holds when the file exists, „Wenn dependabot.yml existiert (empfohlen)“; 20.10.2026, „Eng begrenzte Ausnahme (empfohlen)“, chose one exception per exact `FROM` line on the premise that Sonar applies its exception on the default branch only; the plan review corrected that premise and he re-ruled (#98). 23.10.2026, „ja A“, relayed by edge's head, applied the same exception to the legacy count (re-ruling E3 of #98); 1.11.2026, „Bis hal umgestellt hat (Recommended)“, ended that count side when hal moved to v0.9.2.)
