@@ -446,7 +446,7 @@ An undeclared loosening looks the same, with `undeclared` as the fact and withou
 
 ### 8. `quality merge owner/repo#n`: the operator's door
 
-First everything you approve, then the prompt (stderr), then the three steps as rows. At the end the gate is on again, or the run says loudly that it is not. The prompt names the number; the word is `yes`, in lower case (operator ruling of 6.11.2026: „ich will englisch! und professionelle log ausgabe!“). The last row before the prompt is the line the merge commit ends with, `work item` and its number or `no item` and its kind; a body the door refuses for its line stops at `! landing  refused` under the pull request's row instead (operator ruling of 6.11.2026 on Q2, „2 ok“: the same row as the last one before the question).
+First everything you approve, then the prompt (stderr), then the three steps as rows. At the end the gate is on again, or the run says loudly that it is not. The prompt names the number; the word is `yes`, in lower case. The last row before the prompt is the line the merge commit ends with, `work item` and its number or `no item` and its kind; a body the door refuses for its line stops at `! landing  refused` under the pull request's row instead (operator ruling of 6.11.2026 on Q2, „2 ok“: the same row as the last one before the question).
 
 Approved and merged. Exit 0. Rows: stdout; the prompt line: stderr.
 
