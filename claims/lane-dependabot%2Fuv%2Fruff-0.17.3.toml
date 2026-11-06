@@ -1,0 +1,7 @@
+claim_id = "889bfc3024a948e99c6cbff6b42f2c55"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "28ab7bd36db96dce30bbcbad556da42b6663f948"
+branch = "dependabot/uv/ruff-0.17.3"
+scope = ["pyproject.toml", "uv.lock"]
+opened_commit = "bf9706984eb0e948856f8c25601f8970e86fe38f"
