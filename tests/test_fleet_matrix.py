@@ -7,14 +7,12 @@ import subprocess
 import pytest
 
 from quality import ratchet
+from quality.checkout import GATE_REPOSITORY, Call
 from quality.fleet import (
     COLUMNS,
-    GATE_REPOSITORY,
     MATRIX_COLUMNS,
-    Call,
     Declared,
     ReleaseTagsError,
-    calls_of,
     gate_release,
     pin_cell,
     read_release_tags,
@@ -32,6 +30,11 @@ FIRST_RELEASES = {"v0.2.1": OLDER, "v0.3.1": NEWEST}
 CONFIG = "quality/config.toml"
 TWO_IMPORT_CONFIGS = {"pyproject.toml": toml(FORBIDDEN), ".importlinter": "[importlinter]\nroot_package = shop\n"}
 TWO_JOBS = '[gate]\nmandatory_jobs = ["checks", "tests"]\n'
+
+
+def gate_call(ref: str | None) -> Call:
+    """One job of `ci.yml` calling the gate at `ref`, or the repository's own file, its line naming no release."""
+    return Call(ref, ".github/workflows/ci.yml", None)
 
 
 def matrix_row(output: str, name: str) -> list[str]:
@@ -75,21 +78,9 @@ def test_without_a_caller_there_is_no_gate_and_a_step_level_uses_is_no_caller(fl
 
 def test_the_repositorys_own_workflow_file_is_self_only_in_the_gates_repository():
     """#123 E3, cell 6: `./` and `$/` name the gate's own file only where the repository is the gate's."""
-    own = (Call(None),)
+    own = (gate_call(None),)
     assert pin_cell(own, "no gate", True, RELEASES) == "self"
     assert pin_cell(own, "no gate", False, RELEASES) == "no gate"
-
-
-@pytest.mark.parametrize("workflow_file", ["gate.yml", "codeql.yml"])
-@pytest.mark.parametrize("prefix", ["./", "$/"])
-def test_a_local_reference_to_the_gates_own_file_is_a_call_without_a_ref(prefix, workflow_file):
-    """#123 E3, cell 6: `./` and `$/` both name the repository's own copy."""
-    assert calls_of(f"{prefix}.github/workflows/{workflow_file}", workflow_file) == [Call(None)]
-
-
-def test_the_gates_owner_and_repository_names_are_read_whatever_their_case():
-    """GitHub reads `uses:` owner and repository case-insensitively."""
-    assert calls_of("OvernightWorks/Quality/.github/workflows/gate.yml@v1", "gate.yml") == [Call("v1")]
 
 
 def test_a_commit_in_upper_case_is_a_commit(fleet_report, public):
@@ -281,7 +272,7 @@ CLONE = Rule.CLONE.release
 )
 def test_a_pinned_gate_reports_clones_whatever_the_clone_table_says(pin, words, has_clone_table):
     """#137 tests 1 and 4: no tag before the clone-table release enforces clone."""
-    release = gate_release((Call(pin),), False, CLONE_RELEASES)
+    release = gate_release((gate_call(pin),), False, CLONE_RELEASES)
     assert rule_cell(CLONE, release, declared(has_clone_table=has_clone_table)) == words
 
 
@@ -290,7 +281,7 @@ def test_a_pinned_gate_reports_clones_whatever_the_clone_table_says(pin, words, 
 )
 def test_a_gate_pinned_at_the_clone_table_release_enforces_clones_with_a_clone_table(has_clone_table, words):
     """#162: v0.5.0 is the first tag that enforces the clone table."""
-    release = gate_release((Call(CLONE_TABLE_PIN),), False, CLONE_RELEASES)
+    release = gate_release((gate_call(CLONE_TABLE_PIN),), False, CLONE_RELEASES)
     assert rule_cell(CLONE, release, declared(has_clone_table=has_clone_table)) == words
 
 
@@ -299,7 +290,7 @@ def test_a_gate_pinned_at_the_clone_table_release_enforces_clones_with_a_clone_t
 )
 def test_the_gates_own_repository_enforces_clones_with_a_clone_table(has_clone_table, words):
     """#137 test 2."""
-    release = gate_release((Call(None),), True, CLONE_RELEASES)
+    release = gate_release((gate_call(None),), True, CLONE_RELEASES)
     assert rule_cell(CLONE, release, declared(has_clone_table=has_clone_table)) == words
 
 
@@ -311,7 +302,7 @@ TEST_LAYOUT = Rule.TEST_LAYOUT.release
 )
 def test_main_enforces_test_layout_only_where_a_project_is_judged(has_judged_project, words):
     """#196 sentence 9: where the gate knows the rule, the cell says whether any project in the clone is judged."""
-    release = gate_release((Call(None),), True, CLONE_RELEASES)
+    release = gate_release((gate_call(None),), True, CLONE_RELEASES)
     assert rule_cell(TEST_LAYOUT, release, declared(has_judged_project=has_judged_project)) == words
 
 
@@ -323,14 +314,14 @@ def test_main_enforces_test_layout_only_where_a_project_is_judged(has_judged_pro
 def test_a_pinned_gate_judges_test_layout_from_the_tag_that_first_ships_it(pin, has_judged_project, words):
     """docs/commands.md rule cells, #249: v0.7.0 is the first tag that wires test-layout, for a judged project."""
     tags = {"v0.6.1": "e" * 40, "v0.7.0": "f" * 40}
-    release = gate_release((Call(tags[pin]),), False, tags)
+    release = gate_release((gate_call(tags[pin]),), False, tags)
     assert rule_cell(TEST_LAYOUT, release, declared(has_judged_project=has_judged_project)) == words
 
 
 @pytest.mark.parametrize("rule_id", ["test-import", "python-floor", "python-security", "python-print"])
 def test_a_rule_judging_every_python_project_needs_no_applicability_cell(rule_id):
     """docs/commands.md rule cells: the rule judges every Python project, so main enforces it with no applicability cell."""
-    release = gate_release((Call(None),), True, CLONE_RELEASES)
+    release = gate_release((gate_call(None),), True, CLONE_RELEASES)
     assert rule_cell(Rule(rule_id).release, release, declared()) == "enforced"
 
 
@@ -351,8 +342,8 @@ def test_a_pinned_gate_has_a_rule_from_the_tag_that_first_ships_it(rule_id, befo
     """#249: the tags' check wires each rule from its first tag on, unconditionally."""
     tags = {before: "a" * 40, first: "b" * 40}
     rule = Rule(rule_id).release
-    assert rule_cell(rule, gate_release((Call("a" * 40),), False, tags), declared()) == f"not in {before}"
-    assert rule_cell(rule, gate_release((Call("b" * 40),), False, tags), declared()) == "enforced"
+    assert rule_cell(rule, gate_release((gate_call("a" * 40),), False, tags), declared()) == f"not in {before}"
+    assert rule_cell(rule, gate_release((gate_call("b" * 40),), False, tags), declared()) == "enforced"
 
 
 @pytest.mark.parametrize(
@@ -386,14 +377,14 @@ def test_a_malformed_baseline_makes_the_gates_own_clone_cell_unreadable_and_the_
 def test_a_later_switch_applies_from_the_tag_that_names_it(pin, words):
     """#137 test 5."""
     rule = RuleRelease("future", "v0.1.0", Switch.REPORT_ONLY, SwitchChange("v0.5.0", Switch.CLONE_TABLE))
-    release = gate_release((Call("e" * 40),), False, {**FIRST_RELEASES, pin: "e" * 40})
+    release = gate_release((gate_call("e" * 40),), False, {**FIRST_RELEASES, pin: "e" * 40})
     assert rule_cell(rule, release, declared(has_clone_table=True)) == words
 
 
 def test_a_rule_without_a_release_is_not_released_on_a_pinned_gate():
     """#125 cell 18, E7."""
     unreleased = RuleRelease("future", None, Switch.REPORT_ONLY)
-    release = gate_release((Call(NEWEST),), False, FIRST_RELEASES)
+    release = gate_release((gate_call(NEWEST),), False, FIRST_RELEASES)
     assert rule_cell(unreleased, release, declared()) == "not released"
 
 

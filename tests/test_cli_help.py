@@ -6,10 +6,11 @@ from pathlib import Path
 import pytest
 
 import quality
-from quality import cli, ratchet, report, staged
+from quality import checkout, cli, ratchet, report, staged
 from quality.output import SEPARATOR
 from quality.rules import Area
 from tests.support.door import CHECK_WORD, DRY_RUN_WORDS, FIX_WORDS, MODULE_DOOR, STAGED_WORDS, door_environment
+from tests.support.git_repositories import git
 from tests.support.terminal import Terminal, without_sgr
 
 
@@ -84,7 +85,7 @@ def test_the_help_stands_in_the_pictures_frame(capsys):
         "      Wait for this run's analysis, then count its open findings.\n"
         "\n"
         "Options:\n"
-        "  --version   the installed version\n"
+        "  --version   the installed version and the release this repository's gate pins\n"
         "  -h, --help  show this help\n"
         "\n"
         "Every command takes -v: the raw scanner output, never a secret.\n"
@@ -267,10 +268,10 @@ def test_the_sonar_helps_stand_in_their_frames(capsys, words, frame):
     assert (stopped.value.code, printed.out, printed.err) == (0, frame, "")
 
 
-def test_every_command_path_stands_in_the_help_once_and_every_entry_is_one(capsys):
+def test_every_command_path_stands_in_the_help_once_in_the_parsers_order_and_every_entry_is_one(capsys):
     lines = help_of(capsys, []).splitlines()
     shown = [path_of(entry) for heading in headings(lines)[:2] for entry in entries_under(lines, heading)]
-    assert sorted(shown) == sorted(leaf_paths(cli.build_parser()))
+    assert shown == leaf_paths(cli.build_parser())
 
 
 def test_verdict_and_sonar_stand_apart_under_run_by_the_gate(capsys):
@@ -446,11 +447,77 @@ def test_the_pair_is_painted_by_the_doors_environment(environment, painted):
     assert (without_sgr(written.getvalue()), "\x1b[" in written.getvalue()) == (plain, painted)
 
 
-def test_the_version_prints_the_installed_version_alone(capsys):
-    with pytest.raises(SystemExit) as stopped:
-        cli.main(["--version"])
+def gate_workflow(commit: str, comment: str) -> dict[str, str]:
+    uses = f"{checkout.GATE_REPOSITORY}/.github/workflows/gate.yml@{commit}{comment}"
+    return {".github/workflows/ci.yml": f"on: push\njobs:\n  gate:\n    uses: {uses}\n"}
+
+
+def outside_a_work_tree(build_repo, elsewhere: Path) -> Path:
+    return elsewhere
+
+
+def no_gate_call(build_repo, elsewhere: Path) -> Path:
+    return build_repo({"README.md": "shop\n"})
+
+
+def quality_s_checkout(build_repo, elsewhere: Path) -> Path:
+    repo = build_repo({".github/workflows/ci.yml": "on: push\njobs:\n  gate:\n    uses: ./.github/workflows/gate.yml\n"})
+    git(repo, "remote", "add", "origin", f"https://github.com/{checkout.GATE_REPOSITORY}.git")
+    return repo
+
+
+def one_pin(build_repo, elsewhere: Path) -> Path:
+    return build_repo(gate_workflow("5e" * 20, " # v0.10.0"))
+
+
+def a_pin_without_its_release(build_repo, elsewhere: Path) -> Path:
+    return build_repo(gate_workflow("5e" * 20, ""))
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("arrange", "words"),
+    [
+        pytest.param(outside_a_work_tree, "not inside a repository", id="outside a work tree"),
+        pytest.param(no_gate_call, "no workflow here calls quality's gate.yml", id="no gate call"),
+        pytest.param(quality_s_checkout, "this checkout of quality judges itself", id="quality's checkout"),
+        pytest.param(one_pin, "this repository's gate pins v0.10.0", id="one pin"),
+        pytest.param(a_pin_without_its_release, "the gate pin in .github/workflows/ci.yml is not @<commit sha> # v<tag>", id="a pin without its release"),
+    ],
+)
+def test_the_version_line_names_the_installed_version_and_what_the_gate_pins(build_repo, elsewhere, monkeypatch, capsys, arrange, words):
+    monkeypatch.chdir(arrange(build_repo, elsewhere))
+    code = cli.main(["--version"])
     printed = capsys.readouterr()
-    assert (stopped.value.code, printed.out, printed.err) == (0, f"{quality.__version__}\n", "")
+    assert (code, printed.out, printed.err) == (0, f"quality {quality.__version__} · {words}\n", "")
+
+
+def test_the_version_line_escapes_a_workflow_name(build_repo, monkeypatch, capsys):
+    monkeypatch.chdir(build_repo({f".github/workflows/ci{chr(0x202E)}.yml": "jobs: [\n"}))
+    code = cli.main(["--version"])
+    printed = capsys.readouterr()
+    fact = "cannot read .github/workflows/ci\\u202e.yml, so the gate pin is unknown"
+    assert (code, printed.out, printed.err) == (0, f"quality {quality.__version__} · {fact}\n", "")
+
+
+def test_the_version_line_in_a_folder_that_was_removed_names_the_folder_git_cannot_read(tmp_path, monkeypatch, capsys):
+    gone = tmp_path / "gone"
+    gone.mkdir()
+    monkeypatch.chdir(gone)
+    gone.rmdir()
+    code = cli.main(["--version"])
+    printed = capsys.readouterr()
+    prefix = f"quality {quality.__version__} · . is not a readable git repository: the working directory cannot be read"
+    assert (code, printed.out.startswith(prefix), printed.out.count("\n"), printed.err) == (0, True, 1, ""), printed.out
+
+
+@pytest.mark.integration
+def test_a_closed_stdout_takes_no_version_line_and_exit_is_0(tmp_path):
+    done = subprocess.run(
+        ["sh", "-c", 'exec "$@" >&-', "sh", *MODULE_DOOR, "--version"],
+        cwd=tmp_path, env=door_environment(), stderr=subprocess.PIPE, text=True, timeout=60, check=False,
+    )
+    assert (done.returncode, done.stderr) == (0, "")
 
 
 def test_the_unknown_area_pair_stands_as_the_picture_draws_it(capsys):

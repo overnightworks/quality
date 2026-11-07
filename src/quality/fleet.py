@@ -11,14 +11,12 @@ anonymously readable is not measured: the table is published in a public run sum
 
 import re
 import subprocess
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import date
 from enum import Enum, StrEnum
 from functools import partial
-from pathlib import Path, PurePosixPath
-
-import yaml
+from pathlib import Path
 
 from quality import (
     __version__,
@@ -51,13 +49,7 @@ CLONE_TIMEOUT_SECONDS = 300
 LS_REMOTE_TIMEOUT_SECONDS = 60
 SHORT_COMMIT = 7
 DASH = "—"
-GATE_REPOSITORY = "overnightworks/quality"
-GATE_URL = repository_url(GATE_REPOSITORY)
-GATE_FILE = "gate.yml"
-CODEQL_FILE = "codeql.yml"
-LOCAL_PREFIXES = ("./", "$/")
-RELEASE_TAG = re.compile(r"v(\d+)\.(\d+)\.(\d+)")
-COMMIT_SHA = re.compile(r"[0-9a-f]{40}")
+GATE_URL = repository_url(checkout.GATE_REPOSITORY)
 SELF = "self"
 CALLER_SEPARATOR = " · "
 ANONYMOUS_GIT = ("git", "-c", "credential.helper=", "-c", "core.askPass=")
@@ -110,13 +102,8 @@ def fleet_refusal(fact: str) -> CannotJudge:
     return CannotJudge(fact, (FLEET_SHAPE,))
 
 
-def release_order(tag: str) -> tuple[int, ...]:
-    match = RELEASE_TAG.fullmatch(tag)
-    return tuple(int(number) for number in match.groups()) if match else ()
-
-
 RELEASES = tuple(rule.release for rule in Rule)
-OLDEST_RELEASE = min((rule.first_release for rule in RELEASES if rule.first_release), key=release_order)
+OLDEST_RELEASE = min((rule.first_release for rule in RELEASES if rule.first_release), key=checkout.release_order)
 EVERY_RELEASE_ENFORCES = tuple(
     rule for rule in RELEASES if rule.switch is Switch.ALWAYS and rule.first_release == OLDEST_RELEASE
 )
@@ -130,22 +117,6 @@ TagReader = Callable[[], ReleaseTags]
 
 class ReleaseTagsError(Exception):
     """The gate repository's release tags cannot be read."""
-
-
-@dataclass(frozen=True)
-class Call:
-    """One job-level `uses:` of a reusable workflow: the ref after `@`, None for the repository's own file."""
-
-    ref: str | None
-
-
-@dataclass(frozen=True)
-class Workflows:
-    """What a clone's workflow files say about the gate and CodeQL, read as data."""
-
-    gate: tuple[Call, ...]
-    codeql: tuple[Call, ...]
-    unreadable: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -190,7 +161,7 @@ class Measured:
     areas: dict[ratchet.Area, ratchet.AreaSummary]
     unparsable: int
     pairs: dict[ratchet.Area, int]
-    workflows: Workflows
+    workflows: checkout.Workflows
     declared: Declared
 
 
@@ -290,7 +261,7 @@ def release_tags_listed(listing: str) -> ReleaseTags:
         tag = reference.removeprefix("refs/tags/")
         target = peeled if tag.endswith("^{}") else tags
         target[tag.removesuffix("^{}")] = commit
-    return {tag: commit for tag, commit in {**tags, **peeled}.items() if RELEASE_TAG.fullmatch(tag)}
+    return {tag: commit for tag, commit in {**tags, **peeled}.items() if checkout.RELEASE_TAG.fullmatch(tag)}
 
 
 def measure_repository(name: str) -> Row:
@@ -313,7 +284,7 @@ def measure_repository(name: str) -> Row:
             sources = ratchet.read_sources(clone, tracked)
         except report.CannotJudge as error:
             return Unjudged(name, f"cannot measure ({str(error).replace(str(clone), name)})")
-        workflows = read_workflows(clone, tracked)
+        workflows = checkout.read_workflows(clone, tracked)
         declared = read_declared(clone, tracked)
     tree = ratchet.measure(sources)
     pairs = clones.summarise_pairs(clones.find_pairs(sources).pairs)
@@ -349,50 +320,6 @@ def read_declared(clone: Path, tracked: list[str]) -> Declared:
 def find_import_config(clone: Path, tracked: list[str]) -> bool:
     texts = {name: repository.read_text(clone, name) for name in tracked if name in architecture.CONFIG_FILES}
     return architecture.find_config({name: text for name, text in texts.items() if text is not None}) is not None
-
-
-def read_workflows(clone: Path, tracked: list[str]) -> Workflows:
-    """Parses each tracked workflow file as data, never running anything, and keeps its job-level reusable calls."""
-    gate: list[Call] = []
-    codeql: list[Call] = []
-    unreadable: list[str] = []
-    for name in tracked:
-        path = PurePosixPath(name)
-        if not checkout.is_workflow(path):
-            continue
-        try:
-            text = repository.read_text(clone, name)
-        except repository.RepositoryFileError:
-            unreadable.append(name)
-            continue
-        try:
-            # BaseLoader keeps scalars strings, so no conversion can fail; ValueError is the scanner's chr() on a \U escape past U+10FFFF
-            document = yaml.load(text, Loader=yaml.BaseLoader) if text is not None else None  # noqa: S506 - BaseLoader builds only strings and lists and mappings
-        except (yaml.YAMLError, RecursionError, ValueError):
-            unreadable.append(name)
-            continue
-        for uses in job_calls(document):
-            gate.extend(calls_of(uses, GATE_FILE))
-            codeql.extend(calls_of(uses, CODEQL_FILE))
-    return Workflows(tuple(gate), tuple(codeql), tuple(unreadable))
-
-
-def job_calls(document: object) -> Iterator[str]:
-    jobs = document.get("jobs") if isinstance(document, dict) else None
-    for job in jobs.values() if isinstance(jobs, dict) else ():
-        uses = job.get("uses") if isinstance(job, dict) else None
-        if isinstance(uses, str):
-            yield uses
-
-
-def calls_of(uses: str, workflow_file: str) -> list[Call]:
-    path = f"{checkout.WORKFLOW_DIRECTORY}/{workflow_file}"
-    if uses in (f"{prefix}{path}" for prefix in LOCAL_PREFIXES):
-        return [Call(None)]
-    file, _, ref = uses.partition("@")
-    owner_and_repository, _, workflow = file.partition(f"/{checkout.WORKFLOW_DIRECTORY}/")
-    matches = owner_and_repository.lower() == GATE_REPOSITORY and workflow == workflow_file
-    return [Call(ref)] if matches and ref else []
 
 
 def git(
@@ -503,7 +430,7 @@ def newest_release_words(tags: ReleaseTags | ReleaseTagsError) -> str:
 
 
 def newest_release(tags: ReleaseTags) -> str:
-    return max(tags, key=release_order)
+    return max(tags, key=checkout.release_order)
 
 
 def matrix_cells(row: Row, tags: ReleaseTags | None) -> tuple[Cell, ...]:
@@ -511,7 +438,7 @@ def matrix_cells(row: Row, tags: ReleaseTags | None) -> tuple[Cell, ...]:
         return (row.name, status_label(row), *("",) * (len(MATRIX_COLUMNS) - 2))
     if row.workflows.unreadable:
         return (row.name, *(CannotRead(row.workflows.unreadable),) * (len(MATRIX_COLUMNS) - 1))
-    is_gate = row.name == GATE_REPOSITORY
+    is_gate = row.name == checkout.GATE_REPOSITORY
     release = gate_release(row.workflows.gate, is_gate, tags)
     return (
         row.name,
@@ -532,7 +459,7 @@ def settings_cells(declared: Declared, release: Gate | str) -> tuple[Cell, Cell]
     return (str(len(declared.settings.mandatory_jobs)), declared.settings.legacy.value)
 
 
-def gate_release(calls: tuple[Call, ...], is_gate_repository: bool, tags: ReleaseTags | None) -> Gate | str:
+def gate_release(calls: tuple[checkout.Call, ...], is_gate_repository: bool, tags: ReleaseTags | None) -> Gate | str:
     """The oldest release the gate calls are: a tag, main for the gate's own file, else why there is none."""
     pins = [
         pin_release(call.ref, tags) if call.ref is not None else Gate.MAIN
@@ -544,17 +471,11 @@ def gate_release(calls: tuple[Call, ...], is_gate_repository: bool, tags: Releas
         return Gate.NONE
     if Gate.UNKNOWN in pins:
         return Gate.UNKNOWN
-    return min(tagged, key=release_order) if tagged else Gate.MAIN
-
-
-def commit_of(ref: str) -> str | None:
-    """The ref lowercased when it has the shape of a full commit, else None."""
-    commit = ref.lower()
-    return commit if COMMIT_SHA.fullmatch(commit) else None
+    return min(tagged, key=checkout.release_order) if tagged else Gate.MAIN
 
 
 def pin_release(ref: str, tags: ReleaseTags | None) -> Gate | str:
-    commit = commit_of(ref)
+    commit = checkout.commit_of(ref)
     if tags is None or commit is None:
         return Gate.UNKNOWN
     return released_tag(commit, tags) or Gate.UNKNOWN
@@ -569,7 +490,7 @@ def rule_cell(rule: RuleRelease, release: Gate | str, declared: Declared) -> Cel
     if isinstance(release, str):
         if rule.first_release is None:
             return NOT_RELEASED
-        if release_order(release) < release_order(rule.first_release):
+        if checkout.release_order(release) < checkout.release_order(rule.first_release):
             return f"not in {release}"
     return switch_words(switch_at(rule, release), declared)
 
@@ -583,7 +504,7 @@ def switch_at(rule: RuleRelease, release: Gate | str) -> Switch:
         after_change = True
     else:
         after_change = (
-            isinstance(release, str) and change.release is not None and release_order(release) >= release_order(change.release)
+            isinstance(release, str) and change.release is not None and checkout.release_order(release) >= checkout.release_order(change.release)
         )
     return change.switch if after_change else rule.switch
 
@@ -605,7 +526,7 @@ def switch_words(switch: Switch, declared: Declared) -> Cell:
     return ENFORCED if present else REPORT_ONLY
 
 
-def pin_cell(calls: tuple[Call, ...], absent: str, is_gate_repository: bool, tags: ReleaseTags | None) -> str:
+def pin_cell(calls: tuple[checkout.Call, ...], absent: str, is_gate_repository: bool, tags: ReleaseTags | None) -> str:
     """The repository's own file counts only in the gate's repository; a remote ref is named by its release tag."""
     own = [SELF for call in calls if call.ref is None and is_gate_repository]
     pins = [pin_words(call.ref, tags) for call in calls if call.ref is not None]
@@ -613,7 +534,7 @@ def pin_cell(calls: tuple[Call, ...], absent: str, is_gate_repository: bool, tag
 
 
 def pin_words(ref: str, tags: ReleaseTags | None) -> str:
-    commit = commit_of(ref)
+    commit = checkout.commit_of(ref)
     if commit is None:
         return f"{ref} (not a commit)"
     short = commit[:SHORT_COMMIT]
@@ -627,7 +548,7 @@ def pin_words(ref: str, tags: ReleaseTags | None) -> str:
 
 def released_tag(commit: str, tags: ReleaseTags) -> str | None:
     """The newest release tag that points at the commit."""
-    return max((tag for tag, tagged in tags.items() if tagged == commit), key=release_order, default=None)
+    return max((tag for tag, tagged in tags.items() if tagged == commit), key=checkout.release_order, default=None)
 
 
 def table_line(values: tuple[Cell, ...]) -> str:

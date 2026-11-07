@@ -3,7 +3,7 @@
 ## Owners
 
 - One door, `quality` (`src/quality/cli.py`). Every line it prints, the step summary and the step output leave
-  through `output.py`, apart from argparse's `--version`.
+  through `output.py`.
 - Rules return `Finding`s (`report.py`) and never print. A finding's event is a `report.FindingEvent` member, a note's
   a `report.NoteEvent` member, never defined in `output.py`.
 - A `CannotJudge` carries a few-word fact and, apart from it, the next steps its mechanism knows as typed values
@@ -11,8 +11,9 @@
   into a refusal.
 - Each rule's id, area, place among its area's rules and facts are one member of `Rule` (`rules.py`). Areas run and
   print in `Area`'s order, and an area's help sentence is its member of `Area`.
-- `checkout.py` lists the checkout through git, decides what a workflow file is and turns a refused read into cannot
-  judge. quality reads the checkout's own files through `repository.py`, which keeps each read inside the repository
+- `checkout.py` lists the checkout through git, decides what a workflow file is, which release the gate calls of the
+  workflows pin, and whether the checkout is quality's own (by its git remote), owns the full-commit form and turns a
+  refused read into cannot judge. quality reads the checkout's own files through `repository.py`, which keeps each read inside the repository
   and names the file repository-relative in every error; only `architecture.py` opens a source itself, for grimp.
 - A scanner's stderr reaches a fact or `-v` only through `scanners`' vet (`gitleaks stdin` under `gitleaks.toml`) and
   is withheld whole when gitleaks does not clear it. `check.py` keeps `report.ScannerRun`s only under `-v`,

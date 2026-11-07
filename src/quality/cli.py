@@ -38,7 +38,7 @@ from quality.check import (
     judge_repository,
     judge_staged_change,
 )
-from quality.checkout import OutsideWorkTree
+from quality.checkout import GatePin, NoGatePin, OutsideWorkTree, OwnGate, UnknownGatePin, gate_pin
 from quality.config import REPOSITORY_NAME
 from quality.merge import GhRunner, RemoteFor, github_remote, run_gh, run_merge
 from quality.output import (
@@ -61,7 +61,7 @@ from quality.output import (
     write_scanner_runs,
     write_verdict,
 )
-from quality.report import CannotJudge, Command, Extent, Instruction, NoteEvent, StagedExtent, Step
+from quality.report import CannotJudge, Command, Extent, Instruction, NoteEvent, StagedExtent, Step, printable
 from quality.rules import Area, Rule
 from quality.sonar import Transport, fetch_json
 from quality.verdict import MERGE_COMMAND, PageFetcher, github_fetcher, run_verdict
@@ -115,6 +115,9 @@ def main(
     standard_input = terminal or Terminal.standard_input()
     try:
         arguments = read_invocation(argv)
+    except VersionAsked:
+        write_help(version_line(Path(".")))
+        return EXIT_CLEAN
     except CannotJudge as refusal:
         write_pair(refusal.reason.fact, refusal.reason.next_steps, channels.err)
         return EXIT_CANNOT_JUDGE
@@ -178,7 +181,7 @@ Run by the gate, not by people:
       Wait for this run's analysis, then count its open findings.
 
 Options:
-  --version   the installed version
+  --version   the installed version and the release this repository's gate pins
   -h, --help  show this help
 
 Every command takes -v: the raw scanner output, never a secret.
@@ -310,9 +313,44 @@ Exit codes: 0 clean or report only, 1 findings, 2 could not judge,
 """
 
 
+class VersionAsked(Exception):
+    """`--version` stood among the words: `main` writes the version line in place of any command."""
+
+
+class VersionAction(argparse.Action):
+    def __init__(self, option_strings: Sequence[str], dest: str) -> None:
+        super().__init__(option_strings, dest, nargs=0)
+
+    def __call__(self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: object, option_string: str | None = None) -> NoReturn:
+        raise VersionAsked
+
+
+def version_line(folder: Path) -> str:
+    """The installed version and what the gate of the checkout `folder` lies in pins, escaped as repository text."""
+    return f"quality {__version__}{SEPARATOR}{printable(_gate_pin_words(folder))}"
+
+
+def _gate_pin_words(folder: Path) -> str:
+    try:
+        pin = gate_pin(folder)
+    except OutsideWorkTree:
+        return "not inside a repository"
+    except CannotJudge as refusal:
+        return refusal.reason.fact
+    match pin:
+        case NoGatePin():
+            return "no workflow here calls quality's gate.yml"
+        case OwnGate():
+            return "this checkout of quality judges itself"
+        case GatePin(release=release):
+            return f"this repository's gate pins {release}"
+        case UnknownGatePin(reason=reason):
+            return reason.fact
+
+
 class DoorParser(argparse.ArgumentParser):
-    """argparse reads the words and prints only `--version`: a wrong invocation leaves as the refusal `main` writes, and
-    help leaves through `output.py`."""
+    """argparse only reads the words: a wrong invocation leaves as the refusal `main` writes, and help and the version
+    line leave through `output.py`."""
 
     commands: Mapping[str, argparse.ArgumentParser] = {}
     pictured_help: str | None = None
@@ -404,7 +442,7 @@ def _refuse_what_check_does_not_take(arguments: argparse.Namespace) -> None:
 def build_parser() -> DoorParser:
     parser = DoorParser(prog="quality", color=False)
     parser.pictured_help = QUALITY_HELP
-    parser.add_argument("--version", action="version", version=__version__)
+    parser.add_argument("--version", action=VersionAction)
     commands = parser.add_subparsers(dest="command")
     check_parser = commands.add_parser("check", allow_abbrev=False)
     check_parser.pictured_help = CHECK_HELP
@@ -414,6 +452,14 @@ def build_parser() -> DoorParser:
     check_parser.add_argument("--fix", action="store_true")
     check_parser.add_argument(DRY_RUN_WORD, dest="dry_run", action="store_true")
     check_parser.add_argument("-v", dest="verbose", action="store_true")
+    merge_parser = commands.add_parser("merge", allow_abbrev=False)
+    merge_parser.pictured_help = MERGE_HELP
+    merge_parser.add_argument("pull_request", nargs="?", type=named_pull_request, metavar="OWNER/REPO#N")
+    merge_parser.add_argument(DRY_RUN_WORD, dest="dry_run", action="store_true")
+    merge_parser.add_argument("-v", dest="verbose", action="store_true")
+    report_parser = commands.add_parser("report", allow_abbrev=False)
+    report_parser.pictured_help = REPORT_HELP
+    report_parser.add_argument("-v", dest="verbose", action="store_true")
     verdict_parser = commands.add_parser("verdict", allow_abbrev=False)
     verdict_parser.pictured_help = VERDICT_HELP
     verdict_parser.add_argument("-v", dest="verbose", action="store_true")
@@ -424,14 +470,6 @@ def build_parser() -> DoorParser:
         step_parser = sonar_commands.add_parser(word, allow_abbrev=False)
         step_parser.pictured_help = pictured_help
         step_parser.add_argument("-v", dest="verbose", action="store_true")
-    merge_parser = commands.add_parser("merge", allow_abbrev=False)
-    merge_parser.pictured_help = MERGE_HELP
-    merge_parser.add_argument("pull_request", nargs="?", type=named_pull_request, metavar="OWNER/REPO#N")
-    merge_parser.add_argument(DRY_RUN_WORD, dest="dry_run", action="store_true")
-    merge_parser.add_argument("-v", dest="verbose", action="store_true")
-    report_parser = commands.add_parser("report", allow_abbrev=False)
-    report_parser.pictured_help = REPORT_HELP
-    report_parser.add_argument("-v", dest="verbose", action="store_true")
     return parser
 
 

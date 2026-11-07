@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from quality import checkout, cli
+from quality.report import Instruction, Reason
 from tests.support.door import CHECK_WORD, FIX_WORDS, check_door, door_in
 from tests.support.git_repositories import git, head_commit, make_repo
 
@@ -262,3 +263,202 @@ def test_the_renames_since_a_commit_are_what_the_index_would_record(build_repo, 
     repo = build_repo({"old.txt": "".join(f"row {number} of a file git can match to its move\n" for number in range(30))})
     move(repo)
     assert checkout.renamed_since(repo, head_commit(repo)) == listed
+
+
+@pytest.mark.parametrize("workflow_file", ["gate.yml", "codeql.yml"])
+@pytest.mark.parametrize("prefix", ["./", "$/"])
+def test_a_local_reference_to_the_gates_own_file_is_a_call_without_a_ref(prefix, workflow_file):
+    """`./` and `$/` both name the repository's own copy."""
+    uses = f"{prefix}.github/workflows/{workflow_file}"
+    assert checkout.calls_of(uses, workflow_file, ".github/workflows/ci.yml", None) == [checkout.Call(None, ".github/workflows/ci.yml", None)]
+
+
+def test_the_gates_owner_and_repository_names_are_read_whatever_their_case():
+    """GitHub reads `uses:` owner and repository case-insensitively."""
+    uses = "OvernightWorks/Quality/.github/workflows/gate.yml@v1"
+    assert checkout.calls_of(uses, "gate.yml", ".github/workflows/ci.yml", "v1.0.0") == [checkout.Call("v1", ".github/workflows/ci.yml", "v1.0.0")]
+
+
+def gate_uses(ref: str) -> str:
+    return f"{checkout.GATE_REPOSITORY}/.github/workflows/gate.yml@{ref}"
+
+
+def jobs(*uses_lines: str) -> str:
+    """A workflow whose jobs each call what one line names, the line written after `uses:` as it stands."""
+    return "on: push\njobs:\n" + "".join(f"  job{number}:\n    uses: {line}\n" for number, line in enumerate(uses_lines))
+
+
+def gate_calls_of(repo: Path, name: str) -> tuple[checkout.Call, ...]:
+    return checkout.read_workflows(repo, [name]).gate
+
+
+@pytest.mark.parametrize(
+    ("line", "ref", "release"),
+    [
+        pytest.param("{uses} # v0.10.0", "{commit}", "v0.10.0", id="one space before the comment"),
+        pytest.param("{uses}  # v0.10.0", "{commit}", "v0.10.0", id="two spaces before the comment"),
+        pytest.param("{uses} #v0.10.0", "{commit}", "v0.10.0", id="no space after the hash"),
+        pytest.param("{uses} # v0.10.0   ", "{commit}", "v0.10.0", id="trailing spaces"),
+        pytest.param('"{uses}" # v0.10.0', "{commit}", "v0.10.0", id="a quoted scalar"),
+        pytest.param("{upper} # v0.10.0", "{upper_commit}", "v0.10.0", id="upper-case hex"),
+        pytest.param("{uses}\n      continued # v0.10.0", "{commit} continued", "v0.10.0", id="the last line of a scalar that goes on"),
+    ],
+)
+def test_a_gate_call_is_its_ref_its_file_and_the_release_its_line_names(build_repo, line, ref, release):
+    commit = "5e" * 20
+    words = {"uses": gate_uses(commit), "upper": gate_uses(commit.upper()), "commit": commit, "upper_commit": commit.upper()}
+    repo = build_repo({".github/workflows/ci.yml": jobs(line.format(**words))})
+    assert gate_calls_of(repo, ".github/workflows/ci.yml") == (checkout.Call(ref.format(**words), ".github/workflows/ci.yml", release),)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        pytest.param("on: push\njobs:\n  gate:\n    uses: {uses}\n    # v0.10.0\n", id="on the next line"),
+        pytest.param('on: push\njobs:\n  gate:\n    uses: "{uses} # v0.10.0"\n', id="inside a quoted value"),
+        pytest.param("on: push\njobs:\n  gate:\n    uses: {uses} # pinned at v0.10.0\n", id="after other words"),
+        pytest.param("on: push\njobs:\n  gate:\n    uses: {uses} # v0.10.0 (old)\n", id="words after the tag"),
+        pytest.param("on: push\njobs:\n  gate:\n    uses: {uses} # v1.2\n", id="no release tag"),
+        pytest.param("on: push\njobs:\n  gate:\n    uses: |\n      {uses}\n    # v0.10.0\n", id="the line after a block scalar"),
+    ],
+)
+def test_a_comment_elsewhere_names_no_release(build_repo, text):
+    repo = build_repo({".github/workflows/ci.yml": text.format(uses=gate_uses("5e" * 20))})
+    assert [call.release for call in gate_calls_of(repo, ".github/workflows/ci.yml")] == [None]
+
+
+@pytest.mark.parametrize(
+    ("url", "names"),
+    [
+        pytest.param("https://github.com/{gate}", True, id="https"),
+        pytest.param("https://github.com/{gate}.git", True, id="https with .git"),
+        pytest.param("https://github.com/{gate}/", True, id="https with a trailing slash"),
+        pytest.param("ssh://git@github.com/{gate}.git", True, id="ssh"),
+        pytest.param("git@github.com:{gate}.git", True, id="scp"),
+        pytest.param("git@github.com:{gate}", True, id="scp without .git"),
+        pytest.param("https://github.com/{upper}", True, id="upper-case owner"),
+        pytest.param("https://github.com/someone/{name}", False, id="a fork"),
+        pytest.param("https://gitlab.com/{gate}", False, id="another host"),
+        pytest.param("https://github.com/{gate}-tools", False, id="another repository of the owner"),
+        pytest.param("/srv/git/{gate}.git", False, id="a local path"),
+    ],
+)
+def test_a_remote_names_quality_s_repository(url, names):
+    owner, name = checkout.GATE_REPOSITORY.split("/")
+    words = {"gate": checkout.GATE_REPOSITORY, "upper": f"{owner.upper()}/{name}", "name": name}
+    assert checkout.remote_names_quality(url.format(**words)) is names
+
+
+def unknown(fact: str, step: str) -> checkout.UnknownGatePin:
+    return checkout.UnknownGatePin(Reason(fact, (Instruction(step),)))
+
+
+def not_pinned(workflow: str) -> checkout.UnknownGatePin:
+    return unknown(f"the gate pin in {workflow} is not @<commit sha> # v<tag>", "pin the gate as docs/gate.md shows: @<commit sha> # v<tag>")
+
+
+def unreadable(workflow: str) -> checkout.UnknownGatePin:
+    return unknown(f"cannot read {workflow}, so the gate pin is unknown", f"fix {workflow}")
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("files", "remotes", "settings", "deleted", "expected"),
+    [
+        pytest.param({"ci.yml": "on: push\njobs:\n  build:\n    runs-on: ubuntu-latest\n"}, (), (), (), lambda commit: checkout.NoGatePin(), id="no gate call"),
+        pytest.param(
+            {"ci.yml": "on: push\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: {pin}\n"}, (), (), (),
+            lambda commit: checkout.NoGatePin(), id="a step-level uses",
+        ),
+        pytest.param(
+            {"ci.yml": "{own}"}, ("https://github.com/{gate}",), (), (), lambda commit: checkout.OwnGate(), id="quality's checkout, its own gate.yml",
+        ),
+        pytest.param(
+            {"ci.yml": "{own}"}, ("git@github.com:{gate}.git",), (), (), lambda commit: checkout.OwnGate(), id="quality's checkout by an ssh remote",
+        ),
+        pytest.param(
+            {"ci.yml": "{own_and_pin}"}, ("https://github.com/{gate}",), (), (), lambda commit: checkout.OwnGate(),
+            id="quality's checkout, own and remote",
+        ),
+        pytest.param(
+            {"ci.yml": "{own}"}, ("https://github.com/acme/shop",), (), (), lambda commit: checkout.NoGatePin(),
+            id="an unrelated repository's own gate.yml",
+        ),
+        pytest.param(
+            {"ci.yml": "{own_and_pin}"}, ("https://github.com/acme/shop",), (), (),
+            lambda commit: checkout.GatePin(commit, "v0.10.0", (".github/workflows/ci.yml",)), id="an unrelated own gate.yml beside a remote pin",
+        ),
+        pytest.param(
+            {"ci.yml": "{own}"}, ("https://github.com/someone/quality",), (), (), lambda commit: checkout.NoGatePin(), id="a fork's own gate.yml",
+        ),
+        pytest.param({"ci.yml": "{own}"}, (), (), (), lambda commit: checkout.NoGatePin(), id="no remote, own gate.yml"),
+        pytest.param(
+            {"ci.yml": "{own}"}, ("https://github.com/{gate}",), (("url./srv/mirror/quality.insteadOf", "https://github.com/{gate}"),), (),
+            lambda commit: checkout.OwnGate(), id="a remote rewritten by insteadOf",
+        ),
+        pytest.param(
+            {"ci.yml": "{pinned}"}, (), (), (), lambda commit: checkout.GatePin(commit, "v0.10.0", (".github/workflows/ci.yml",)), id="one pin",
+        ),
+        pytest.param(
+            {"nightly.yml": "{pinned}", "ci.yml": "{pinned}"}, (), (), (),
+            lambda commit: checkout.GatePin(commit, "v0.10.0", (".github/workflows/ci.yml", ".github/workflows/nightly.yml")),
+            id="one pin in two files",
+        ),
+        pytest.param(
+            {"ci.yml": "{pinned}", "nightly.yml": "{upper_pinned}"}, (), (), (),
+            lambda commit: checkout.GatePin(commit, "v0.10.0", (".github/workflows/ci.yml", ".github/workflows/nightly.yml")),
+            id="one pin in upper and lower case",
+        ),
+        pytest.param(
+            {"ci.yml": "{pinned}", "nightly.yml": "{older}"}, (), (), (),
+            lambda commit: unknown(
+                "the workflows pin v0.9.2 in .github/workflows/nightly.yml and v0.10.0 in .github/workflows/ci.yml", "pin one release in every workflow"
+            ),
+            id="two pins",
+        ),
+        pytest.param({"ci.yml": "{branch}"}, (), (), (), lambda commit: not_pinned(".github/workflows/ci.yml"), id="a branch ref"),
+        pytest.param({"ci.yml": "{bare}"}, (), (), (), lambda commit: not_pinned(".github/workflows/ci.yml"), id="no comment"),
+        pytest.param(
+            {"bad.yml": "jobs: [\n"}, (), (), (), lambda commit: unreadable(".github/workflows/bad.yml"), id="a workflow YAML cannot read",
+        ),
+        pytest.param(
+            {"bad.yml": "jobs: [\n", "ci.yml": "{own}"}, ("https://github.com/{gate}",), (), (),
+            lambda commit: unreadable(".github/workflows/bad.yml"), id="quality's checkout beside a workflow YAML cannot read",
+        ),
+        pytest.param({"ci.yml": "{pinned}"}, (), (), ("ci.yml",), lambda commit: unreadable(".github/workflows/ci.yml"), id="a workflow deleted from disk"),
+        pytest.param(
+            {"ci.yml": "{aliased}"}, (), (), (),
+            lambda commit: unknown(
+                "the workflows pin v0.9.2 in .github/workflows/ci.yml and v0.10.0 in .github/workflows/ci.yml", "pin one release in every workflow"
+            ),
+            id="an alias beside its anchor names its own release",
+        ),
+        pytest.param(
+            {"ci.yml": "{block_aliased}"}, (), (), (), lambda commit: checkout.GatePin(commit, "v0.9.2", (".github/workflows/ci.yml",)),
+            id="an alias of a block scalar names its own release",
+        ),
+    ],
+)
+def test_the_gate_pin_of_a_checkout_is_one_state(build_repo, files, remotes, settings, deleted, expected):
+    commit, older = "5e" * 20, "4d" * 20
+    words = {
+        "gate": checkout.GATE_REPOSITORY,
+        "pin": gate_uses(commit),
+        "own": jobs("./.github/workflows/gate.yml"),
+        "own_and_pin": jobs("$/.github/workflows/gate.yml", f"{gate_uses(commit)} # v0.10.0"),
+        "pinned": jobs(f"{gate_uses(commit)} # v0.10.0"),
+        "upper_pinned": jobs(f"{gate_uses(commit.upper())} # v0.10.0"),
+        "aliased": jobs(f"&pin {gate_uses(commit)} # v0.10.0", "*pin # v0.9.2"),
+        "block_aliased": f"on: push\nx-pin: &pin |-\n  {gate_uses(commit)}\njobs:\n  job0:\n    uses: *pin # v0.9.2\n",
+        "older": jobs(f"{gate_uses(older)} # v0.9.2"),
+        "branch": jobs(f"{gate_uses('main')} # v0.10.0"),
+        "bare": jobs(gate_uses(commit)),
+    }
+    repo = build_repo({f".github/workflows/{name}": text.format(**words) for name, text in files.items()})
+    for number, url in enumerate(remotes):
+        git(repo, "remote", "add", f"remote{number}", url.format(**words))
+    for key, value in settings:
+        git(repo, "config", key, value.format(**words))
+    for name in deleted:
+        (repo / ".github/workflows" / name).unlink()
+    assert checkout.gate_pin(repo) == expected(commit)

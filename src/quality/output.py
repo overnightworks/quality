@@ -1,5 +1,4 @@
-"""The one owner of what quality prints, of the step summary and of the step output; argparse's `--version` is the
-writer that remains outside it."""
+"""The one owner of what quality prints, of the step summary and of the step output."""
 
 import io
 import os
@@ -552,7 +551,7 @@ def rendered(write: Callable[[Channels], None]) -> tuple[str, ...]:
 
 
 def write_help(text: str) -> None:
-    """Help reads the same in every stream: plain, whole, on stdout; a closed stdout takes nothing."""
+    """Help and the version line read the same in every stream: plain, whole, on stdout; a closed stdout takes nothing."""
     _print_lines(text.splitlines(), Channel(sys.stdout, False, None))
 
 

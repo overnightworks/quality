@@ -11,7 +11,7 @@ from pathlib import Path, PosixPath, PurePosixPath
 
 import pytest
 
-from quality import advisories, cli
+from quality import advisories, checkout, cli
 from quality import fleet as fleet_module
 from quality.ratchet import BASELINE_PATH
 
@@ -435,7 +435,7 @@ def gate_clone(public):
     """The gate's own repository, served from a local repository holding `files`; returns its name."""
 
     def build(files: dict[str, str]) -> str:
-        owner, name = fleet_module.GATE_REPOSITORY.split("/")
+        owner, name = checkout.GATE_REPOSITORY.split("/")
         return public(name, files, owner=owner)
 
     return build
