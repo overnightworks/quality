@@ -1,6 +1,7 @@
 # The CodeQL workflow
 
-Reference for the engineer who calls the reusable `codeql.yml` workflow. The reasons behind its constraints stand in [ARCHITECTURE](ARCHITECTURE.md), sections 6 and 7.
+Reference for the engineer who calls the reusable `codeql.yml` workflow. The reasons behind its constraints stand in
+[ARCHITECTURE](ARCHITECTURE.md), sections 6 and 7.
 
 ## `codeql.yml`
 
@@ -37,8 +38,9 @@ jobs:
       languages: '["actions", "python"]'
 ```
 
-- **`languages`:** the one input, required, a string holding a JSON list; `'python'` or `'[]'` fails the run. List
-  every category the repository already analyses (aco also has `javascript-typescript`, which a list copied from the example above would drop).
+- **`languages`:** the one input, required, a string holding a JSON list; `'python'` or `'[]'` fails the run. List every
+  category the repository already analyses (aco also has `javascript-typescript`, which a list copied from the example
+  above would drop).
 - **Permissions:** the caller grants `security-events: write`, `contents: read` and `actions: read`, and the workflow
   asks for no more. A caller without `security-events: write` is refused at startup ([Startup failures](gate.md#startup-failures)).
 - **Updates:** pin a release's commit sha with its tag in a comment; Dependabot's `github-actions` ecosystem bumps both.
