@@ -1,6 +1,7 @@
 """How a test starts the door: in this process, where it injects what the door takes, or as a process from `MODULE_DOOR`."""
 
 import contextlib
+import dataclasses
 import hashlib
 import os
 import sys
@@ -56,8 +57,10 @@ class PinnedJudging:
 def door_in(folder: Path, *words: str, **keywords) -> int:
     """The exit of `quality <words>` started in `folder`, judged at `pinned_release` unless `judging` is passed: the door
     reads the folder it starts in, and the test's own folder comes back."""
+    port_names = {field.name for field in dataclasses.fields(cli.CheckPorts)}
+    ports = {name: keywords.pop(name) for name in port_names & keywords.keys()}
     with contextlib.chdir(folder):
-        return cli.main(list(words), **{"judging": judging_at_the_pin, **keywords})
+        return cli.main(list(words), check_ports=cli.CheckPorts(**{"judging": judging_at_the_pin, **ports}), **keywords)
 
 
 def check_door(repository: Path, **keywords) -> int:

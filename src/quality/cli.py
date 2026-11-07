@@ -97,6 +97,15 @@ class Terminal:
         return cls(lambda: sys.stdin.readline(), lambda: sys.stdin is not None and sys.stdin.isatty())
 
 
+@dataclass(frozen=True)
+class CheckPorts:
+    """What the check door judges with: the installed scanners' locators and the release that judges."""
+
+    locate_ruff: Callable[[], str] = INSTALLED_RUFF
+    locate_zizmor: Callable[[], str] = INSTALLED_ZIZMOR
+    judging: Callable[[Path, str, bool], pin.JudgingRelease] = pin.judge_here
+
+
 def main(
     argv: list[str] | None = None,
     fetcher_for: Callable[[str], PageFetcher] = github_fetcher,
@@ -106,12 +115,10 @@ def main(
     gh: GhRunner = run_gh,
     remote_for: RemoteFor = github_remote,
     terminal: Terminal | None = None,
-    locate_ruff: Callable[[], str] = INSTALLED_RUFF,
-    locate_zizmor: Callable[[], str] = INSTALLED_ZIZMOR,
+    check_ports: CheckPorts | None = None,
     clock: Callable[[], float] = time.monotonic,
     now: Callable[[], datetime] = lambda: datetime.now(UTC),
     environment: Mapping[str, str] = os.environ,
-    judging: Callable[[Path, str, bool], pin.JudgingRelease] = pin.judge_here,
 ) -> int:
     channels = open_channels(environment)
     standard_input = terminal or Terminal.standard_input()
@@ -147,13 +154,14 @@ def main(
         if arguments.sonar_command == "properties":
             return sonar.run_properties(environment, clock, channels)
         return sonar.run_findings(environment, transport, sleep, clock, channels)
+    ports = check_ports or CheckPorts()
     if arguments.staged:
         staged_run = partial(judge_staged_change, Path("."), staged.scan_change, verbose=arguments.verbose)
-        return run_check(partial(judging, Path("."), staged.COMMAND, True), staged_run, staged.COMMAND, clock, channels)
+        return run_check(partial(ports.judging, Path("."), staged.COMMAND, True), staged_run, staged.COMMAND, clock, channels)
     fix = _fix_mode(arguments)
-    repository_run = partial(judge_repository, Path("."), locate_ruff, locate_zizmor, verbose=arguments.verbose, named=arguments.areas, fix=fix)
+    repository_run = partial(judge_repository, Path("."), ports.locate_ruff, ports.locate_zizmor, verbose=arguments.verbose, named=arguments.areas, fix=fix)
     command = RERUN_COMMAND[fix]
-    return run_check(partial(judging, Path("."), command, False), repository_run, command, clock, channels)
+    return run_check(partial(ports.judging, Path("."), command, False), repository_run, command, clock, channels)
 
 
 def _fix_mode(arguments: argparse.Namespace) -> Fix | None:
