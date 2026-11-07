@@ -1,8 +1,0 @@
-claim_id = "b2112d93bffd4a5c9d485733652264e8"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "243a94df4cf7e9cf2b1c143edb4a81565abe7f4f"
-branch = "claude/issue-445-pinned-reexec"
-scope = ["AGENTS.md", "docs/ARCHITECTURE.md", "docs/commands.md", "docs/output.md", "src/quality/checkout.py", "src/quality/cli.py", "src/quality/fleet.py", "src/quality/output.py", "src/quality/pin.py", "src/quality/process.py", "tests/support/door.py", "tests/support/door_process.py", "tests/test_cli_release.py", "tests/test_fleet_matrix.py", "tests/test_output.py", "tests/test_pin.py", "tests/test_pin_reexecution.py", "tests/test_process.py"]
-opened_commit = "361270abdf2ad22af179e8456d077db6a84f6a69"
-whole_reason = "About +210/-24 in six production files, 14 lines of them moved: the release check, the record, the preparation, the exec with its flush and their failure pairs are one mechanism, and any part landed alone either runs code no check bounded, prints uv's words, loses or crashes on a stream, or ends an interrupt wrongly."
