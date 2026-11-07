@@ -26,7 +26,7 @@ from quality.output import (
     write_pair,
 )
 from quality.ratchet import BASELINE_PATH, NO_RENAMES, Renames
-from quality.report import CannotJudge, Command, Instruction, Reason, Step, config_refusal, headline, printable
+from quality.report import CannotJudge, Command, Instruction, Reason, Step, config_refusal, printable
 from quality.sides import Side, UnusableConfig, compares_baselines, read_renames_of_pull, side_of
 from quality.sonar import (
     Analysis,
@@ -318,7 +318,7 @@ def judge_sonar(
         raise Refused(f"Sonar analysed {analysed or 'nothing'}, head is {head_sha}")
     findings = open_findings(analysis, transport)
     if findings.count:
-        raise Refused("the pull request adds findings:", *map(headline, findings.listed))
+        raise Refused("the pull request adds findings:", *(f"{finding.location}{SEPARATOR}{finding.fact}" for finding in findings.listed))
     if not default_branch_analysed(analysis, transport):
         raise Refused(legacy_unknown(default_branch))
     legacy = legacy_count(analysis, transport)

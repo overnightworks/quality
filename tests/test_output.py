@@ -561,8 +561,8 @@ cli.run(lambda: cli.main(["sonar", "findings"], transport=sonar_answering(issues
 
 
 @pytest.mark.integration
-def test_a_merged_pipe_lists_the_sonar_findings_before_the_red_summary(tmp_path):
-    """#86 rule 3, cell 12: the findings precede the summary through `2>&1`."""
+def test_a_merged_pipe_lists_the_sonar_findings_before_the_closing_line(tmp_path):
+    """#86 rule 3, cell 12: the findings precede the closing line through `2>&1`."""
     from tests.support.sonar import PULL_REQUEST_ENVIRONMENT, TASK_FIXTURE, legacy_config_absent
 
     (tmp_path / "quality").mkdir()
@@ -575,7 +575,7 @@ def test_a_merged_pipe_lists_the_sonar_findings_before_the_red_summary(tmp_path)
         [sys.executable, str(script)], cwd=tmp_path, text=True, check=False, env={**os.environ, **PULL_REQUEST_ENVIRONMENT},
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
     )
-    prefixes = ["sonar src/a1.py:1 - ", "  Fix: ", "sonar src/a2.py:2 - ", "  Fix: ", "sonar: new 2"]
+    prefixes = ["  · analysis", "  ! new", "    ! src/a1.py:1", "    ! src/a2.py:2", "      fix:", "  · legacy", "  ✓ quality gate", "! red"]
     lines = done.stdout.splitlines()
     assert (done.returncode, all(line.startswith(prefix) for line, prefix in zip(lines, prefixes, strict=True))) == (1, True), done.stdout
 
@@ -762,6 +762,23 @@ def test_a_command_on_its_own_line_stands_below_a_bare_next():
 def test_the_closing_line_is_its_glyph_and_parts_joined():
     line = written(io.StringIO, lambda channel: output.write_closing_line(Glyph.CLEAN, ("merged #7", "quality_gate on again", "3s"), channel))
     assert line == "✓ merged #7 · quality_gate on again · 3s\n"
+
+
+@pytest.mark.parametrize(
+    ("parts", "expected"),
+    [(("feat/\u202ea",), "✓ feat/\\u202ea\n"), (("report only", "0 open on feat/\u202ea"), "✓ report only · 0 open on feat/\\u202ea\n")],
+    ids=["the first part", "a further part"],
+)
+def test_a_closing_line_prints_each_part_escaped(parts, expected):
+    assert written(io.StringIO, lambda channel: output.write_closing_line(Glyph.CLEAN, parts, channel)) == expected
+
+
+def test_the_step_output_is_the_one_the_given_environment_names(tmp_path, monkeypatch):
+    named, elsewhere = tmp_path / "named", tmp_path / "elsewhere"
+    output.append_step_output("sonar", "off", {"GITHUB_OUTPUT": str(named)})
+    monkeypatch.setenv("GITHUB_OUTPUT", str(elsewhere))
+    output.append_step_output("sonar", "off", {})
+    assert (named.read_text(), elsewhere.exists()) == ("sonar=off\n", False)
 
 
 @pytest.mark.parametrize("glyph", list(output.VERDICT_STYLE), ids=[str(glyph) for glyph in output.VERDICT_STYLE])

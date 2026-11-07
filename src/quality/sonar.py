@@ -1,4 +1,5 @@
-"""The SonarCloud zero-findings rule: wait for this run's own analysis, then count its open findings."""
+"""The SonarCloud job's two steps: `quality sonar properties` before the scan, `quality sonar findings` after it; each
+prints its rows and one closing line, or the pair."""
 
 import base64
 import json
@@ -7,18 +8,30 @@ import urllib.error
 import urllib.parse
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 
-from quality import repository
+from quality import output, repository
 from quality.checkout import tracked_files
-from quality.config import LegacyMode
-from quality.report import CannotJudge, Finding, FindingEvent
+from quality.config import CONFIG_PATH, ConfigError, LegacyMode, read_gate_settings, runs_sonar
+from quality.report import (
+    FIX_THEN_RERUN,
+    PUSH_THE_FIX,
+    CannotJudge,
+    Finding,
+    FindingEvent,
+    Instruction,
+    Note,
+    NoteEvent,
+    Reason,
+    config_refusal,
+)
 from quality.web import REQUEST_TIMEOUT_SECONDS, Sleep, fetch, timed_out
 
 SONAR_ORIGIN = "https://sonarcloud.io"
 SONAR_API_ROOT = f"{SONAR_ORIGIN}/api"
 RULE = "sonar"
+EXIT_CLEAN, EXIT_FINDINGS, EXIT_CANNOT_JUDGE = 0, 1, 2
 
 # 5 s x 120 stays below the job timeout the workflow gives this step.
 TASK_POLL_INTERVAL_SECONDS = 5
@@ -29,9 +42,7 @@ GATE_PASSED = "OK"
 GATE_FAILED = "ERROR"
 # SonarCloud's comparator names for a failed condition, and how the gate's demand reads.
 COMPARATOR_DEMANDS = {"LT": "at least", "GT": "at most"}
-IGNORED_CONDITIONS_LINE = (
-    f"{RULE}: quality gate ignored its coverage and duplication conditions on a small change (fewer than 20 new lines)"
-)
+IGNORED_CONDITIONS = "coverage and duplication not judged: fewer than 20 new lines"
 
 FINDINGS_PAGE_SIZE = 100
 # `issues/search` refuses a page past its ten-thousandth issue, so paging is bounded by that limit
@@ -53,6 +64,7 @@ ALL_FILES_PATTERN = "**/*"
 
 PULL_REQUEST_EVENT = "pull_request"
 TOKEN_VARIABLE = "SONAR_TOKEN"  # noqa: S105 - the name of an environment variable and not a secret
+TOKEN_STEP = Instruction(f"set the {TOKEN_VARIABLE} secret and pass it to gate.yml, then run the gate again")
 # gate.yml passes github.event.repository.default_branch; an absent expression renders as an empty string.
 DEFAULT_BRANCH_VARIABLE = "DEFAULT_BRANCH"
 
@@ -94,6 +106,20 @@ PROPERTY_ESCAPES = {"t": "\t", "n": "\n", "r": "\r", "f": "\f"}
 # The second argument is the Authorization header value; None sends the request anonymously.
 Transport = Callable[[str, str | None], object]
 TOKEN_REFUSALS = frozenset({401, 403})
+
+
+class SonarEvent(StrEnum):
+    """What a row of the two Sonar steps says."""
+
+    CLEAN = "clean"
+    EXCLUDES = "excludes"
+    OFF = "off"
+    NONE = "none"
+    FINDING = "finding"
+    OPEN = "open"
+    UNKNOWN = "unknown"
+    PASSED = "passed"
+    FAILED = "failed"
 
 
 class SonarHttpError(CannotJudge):
@@ -146,7 +172,7 @@ class Project:
     key: str
 
 
-class RunKind(Enum):
+class RunKind(StrEnum):
     """What the run is: the one answer to which findings fail it and whether legacy can be judged."""
 
     PULL_REQUEST = "pull request"
@@ -213,7 +239,7 @@ class GateCondition:
 
     @property
     def sentence(self) -> str:
-        return f"{RULE}: quality gate {GATE_FAILED} - {self.metric} is {self.actual}, the gate needs {COMPARATOR_DEMANDS[self.comparator]} {self.threshold}"
+        return f"{self.metric} is {self.actual}, the gate needs {COMPARATOR_DEMANDS[self.comparator]} {self.threshold}"
 
 
 @dataclass(frozen=True)
@@ -248,28 +274,6 @@ class SonarResult:
                 or (self.gate is not None and not self.gate.passed)
             )
         return self.analysis.kind is RunKind.DEFAULT_BRANCH and self.findings.count > 0
-
-    def gate_lines(self) -> tuple[tuple[str, ...], tuple[str, ...]]:
-        """The failed conditions (for stderr) and the small-change disclosure (for stdout)."""
-        if self.gate is None:
-            return (), ()
-        disclosure = (IGNORED_CONDITIONS_LINE,) if self.gate.conditions_ignored else ()
-        return tuple(condition.sentence for condition in self.gate.failed), disclosure
-
-    def summary(self) -> str:
-        count = self.findings.count
-        scope, key, default_branch = self.analysis.scope, self.analysis.project.key, self.analysis.default_branch
-        if self.analysis.kind is RunKind.PULL_REQUEST:
-            if self.legacy_unknown:
-                return f"{RULE}: new {count} · {legacy_unknown(default_branch)}"
-            return f"{RULE}: new {count} · legacy {self.legacy} ({key}, {default_branch})"
-        if count == 0:
-            line = f"{RULE}: clean for {key!r} ({scope.label}): 0 open finding(s)"
-        elif self.fails_the_run:
-            line = f"{RULE}: {count} open on {scope.value}"
-        else:
-            line = f"{RULE}: {count} open on {scope.value} (report only)"
-        return f"{line} · {legacy_unknown(default_branch)}" if self.legacy_unknown else line
 
 
 def check_properties(root: Path, environment: Mapping[str, str]) -> None:
@@ -315,7 +319,7 @@ def require_report_exists(root: Path, key: str, entry: str) -> None:
 
 def require_token(environment: Mapping[str, str]) -> None:
     if not environment.get(TOKEN_VARIABLE):
-        raise CannotJudge(f"{TOKEN_VARIABLE} is empty: an anonymous reader is told zero findings")
+        raise CannotJudge(f"{TOKEN_VARIABLE} is empty: an anonymous reader is told zero findings", (TOKEN_STEP,))
 
 
 def read_properties(root: Path) -> list[tuple[str, str]]:
@@ -403,6 +407,153 @@ def analyse(
     if kind is RunKind.PULL_REQUEST and default_analysed:
         legacy = legacy_count(analysis, transport)
     return SonarResult(analysis, findings, legacy_mode, unknown, legacy, gate)
+
+
+def run_properties(environment: Mapping[str, str], clock: Callable[[], float], channels: output.Channels) -> int:
+    """Runs before the scan: the properties and the token are checked, the scan's arguments or `sonar=off` reach the
+    step output, then the rows and the closing line; a refusal is the pair and writes no step output."""
+    started = clock()
+    try:
+        judged = _judged_properties(environment)
+    except CannotJudge as refusal:
+        return _refused(refusal.reason, PUSH_THE_FIX, channels)
+    try:
+        output.append_step_output(*judged.step_output, environment)
+    except OSError as error:
+        return _refused(Reason(f"{output.STEP_OUTPUT_VARIABLE} is not writable{output.SEPARATOR}{error}"), FIX_THEN_RERUN, channels)
+    output.write_rows(judged.rows, channels.out)
+    output.write_closing_line(output.Glyph.CLEAN, (*judged.closing, output.format_duration(clock() - started)), channels.out)
+    return EXIT_CLEAN
+
+
+def run_findings(
+    environment: Mapping[str, str], transport: Transport, sleep: Sleep, clock: Callable[[], float], channels: output.Channels
+) -> int:
+    """Runs after the scan: this run's own analysis, its findings, the legacy count and the quality gate as rows, then
+    the closing line; a refusal is the pair."""
+    started = clock()
+    try:
+        result = analyse(environment, _legacy_mode(), transport, sleep)
+    except CannotJudge as refusal:
+        return _refused(refusal.reason, FIX_THEN_RERUN, channels)
+    write_result(result, channels.out)
+    glyph, parts = closing(result)
+    output.write_closing_line(glyph, (*parts, output.format_duration(clock() - started)), channels.out)
+    return EXIT_FINDINGS if result.fails_the_run else EXIT_CLEAN
+
+
+def _refused(reason: Reason, general: Instruction, channels: output.Channels) -> int:
+    """The pair; a refusal that names no step of its own gets its door's general one."""
+    output.write_pair(reason.fact, reason.next_steps or (general,), channels.err)
+    return EXIT_CANNOT_JUDGE
+
+
+@dataclass(frozen=True)
+class JudgedProperties:
+    """What the properties step found: its rows, the step output it hands the scan and its closing line's parts."""
+
+    rows: tuple[output.Row, ...]
+    step_output: tuple[str, str]
+    closing: tuple[str, ...]
+
+
+def _judged_properties(environment: Mapping[str, str]) -> JudgedProperties:
+    root = Path(".")
+    try:
+        if not runs_sonar(root):
+            refuse_scan_wiring(environment)
+            off = output.Row(output.Glyph.NOTE, "sonar", SonarEvent.OFF, f"{CONFIG_PATH} sets [gate] sonar = false")
+            return JudgedProperties((off,), (output.SONAR_OUTPUT, output.SONAR_OFF), ("off", "nothing reaches SonarCloud"))
+        check_properties(root, environment)
+        excluded = excluded_rules(repository.is_on_disk(root, DEPENDABOT_CONFIG))
+    except ConfigError as error:
+        raise config_refusal(error, PUSH_THE_FIX) from error
+    except repository.RepositoryFileError as error:
+        raise CannotJudge(str(error)) from error
+    rows = [output.Row(output.Glyph.CLEAN, "properties", SonarEvent.CLEAN, PROPERTIES_FILE)]
+    if excluded:
+        dropped = f"{', '.join(sorted(excluded))}{output.SEPARATOR}{DEPENDABOT_CONFIG} exists"
+        rows.append(output.Row(output.Glyph.NOTE, "scan", SonarEvent.EXCLUDES, dropped))
+    return JudgedProperties(tuple(rows), (output.SCANNER_ARGUMENTS_OUTPUT, scanner_exclusions(excluded)), ("clean",))
+
+
+def refuse_scan_wiring(environment: Mapping[str, str]) -> None:
+    """With SonarCloud off, a properties file or a passed token would let an older gate scan."""
+    if repository.is_on_disk(Path("."), PROPERTIES_FILE):
+        raise CannotJudge(f"{PROPERTIES_FILE} exists while {CONFIG_PATH} sets [gate] sonar = false")
+    if environment.get(TOKEN_VARIABLE):
+        raise CannotJudge(f"{TOKEN_VARIABLE} is set while {CONFIG_PATH} sets [gate] sonar = false")
+
+
+def _legacy_mode() -> LegacyMode:
+    try:
+        return read_gate_settings(Path(".")).legacy
+    except ConfigError as error:
+        raise config_refusal(error, PUSH_THE_FIX) from error
+
+
+def write_result(result: SonarResult, channel: output.Channel) -> None:
+    """The analysis row and the findings row with what it lists, then the legacy and quality gate rows that apply."""
+    output.write_rows((_analysis_row(result.analysis), _findings_row(result)), channel)
+    listed = result.findings.listed
+    if result.analysis.kind is RunKind.OTHER_BRANCH:
+        output.write_findings_and_notes((), [Note(finding.path, NoteEvent.OPEN, finding.fact, finding.line) for finding in listed], channel)
+    else:
+        output.write_findings_and_notes(listed, (), channel)
+    output.write_rows((*_legacy_rows(result), *_gate_rows(result.gate)), channel)
+
+
+def _analysis_row(analysis: Analysis) -> output.Row:
+    scope = analysis.scope
+    where = f"#{scope.value}" if scope.is_pull_request else scope.value
+    return output.Row(output.Glyph.NOTE, "analysis", analysis.kind, f"{where}{output.SEPARATOR}{analysis.project.key}")
+
+
+def _findings_row(result: SonarResult) -> output.Row:
+    """`new` on a pull request, `open` on a branch; another branch's findings are reported, never asked of anyone."""
+    kind, count = result.analysis.kind, result.findings.count
+    subject = "new" if kind is RunKind.PULL_REQUEST else "open"
+    if not count:
+        return output.Row(output.Glyph.CLEAN, subject, SonarEvent.NONE)
+    if kind is RunKind.OTHER_BRANCH:
+        return output.Row(output.Glyph.NOTE, subject, SonarEvent.FINDING, "report only", count=count)
+    return output.Row(output.Glyph.NEEDS_YOU, subject, SonarEvent.FINDING, count=count)
+
+
+def _legacy_rows(result: SonarResult) -> list[output.Row]:
+    default_branch = result.analysis.default_branch
+    if result.legacy_unknown:
+        return [output.Row(output.Glyph.NOTE, "legacy", SonarEvent.UNKNOWN, f"{default_branch} not analysed yet")]
+    if result.legacy is None:
+        return []
+    fails = result.legacy_mode is LegacyMode.FAIL and result.legacy > 0
+    setting = f'{output.SEPARATOR}[gate] legacy = "{LegacyMode.FAIL.value}"' if fails else ""
+    glyph = output.Glyph.NEEDS_YOU if fails else output.Glyph.NOTE
+    return [output.Row(glyph, "legacy", SonarEvent.OPEN, f"on {default_branch}{setting}", count=result.legacy, counts_plural=False)]
+
+
+def _gate_rows(gate: GateStatus | None) -> list[output.Row]:
+    if gate is None:
+        return []
+    ignored = (IGNORED_CONDITIONS,) if gate.conditions_ignored else ()
+    if gate.passed:
+        return [output.Row(output.Glyph.CLEAN, "quality gate", SonarEvent.PASSED, output.SEPARATOR.join(ignored))]
+    conditions = tuple(output.SubLine(output.Glyph.NEEDS_YOU, condition.sentence, whole=True) for condition in gate.failed)
+    fact = output.SEPARATOR.join((output.counted(len(gate.failed), "condition"), *ignored))
+    return [output.Row(output.Glyph.NEEDS_YOU, "quality gate", SonarEvent.FAILED, fact, sub_lines=conditions)]
+
+
+def closing(result: SonarResult) -> tuple[output.Glyph, tuple[str, ...]]:
+    """The closing line's glyph and its parts before the duration."""
+    kind, count, branch = result.analysis.kind, result.findings.count, result.analysis.scope.value
+    if kind is RunKind.OTHER_BRANCH:
+        return output.Glyph.CLEAN, ("report only", f"{count} open on {branch}")
+    glyph, word = (output.Glyph.NEEDS_YOU, "red") if result.fails_the_run else (output.Glyph.CLEAN, "clean")
+    unknown = ("legacy unknown",) if result.legacy_unknown else ()
+    if kind is RunKind.DEFAULT_BRANCH:
+        return glyph, (word, f"{count} open on {branch}", *unknown)
+    gate_failed = ("quality gate failed",) if result.gate is not None and not result.gate.passed else ()
+    return glyph, (word, f"new {count}", *(unknown or (f"legacy {result.legacy}",)), *gate_failed)
 
 
 def read_analysis(environment: Mapping[str, str]) -> Analysis:
@@ -551,7 +702,7 @@ def open_total(analysis: Analysis, scope: Scope, transport: Transport) -> int:
     unreadable = CannotJudge(f"SonarCloud answered {url.partition('?')[0]} with an unreadable body")
     try:
         total = answer_object(transport(url, analysis.authorization), None, url)["total"]
-    except (KeyError, TypeError) as error:
+    except KeyError as error:
         raise unreadable from error
     if type(total) is not int or total < 0:
         raise unreadable
@@ -636,6 +787,6 @@ def finding_from_issue(issue: dict) -> Finding:
         path=file_path,
         line=issue.get("line"),
         fact=f"{issue['rule']}: {issue['message']}",
-        fix="Fix it in the code; an accepted or false-positive mark in SonarCloud still counts",
+        fix="fix it in the code; an accepted or false-positive mark in SonarCloud still counts",
         event=FindingEvent.OPEN,
     )

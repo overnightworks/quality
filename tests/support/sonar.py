@@ -143,7 +143,7 @@ def run_properties(
     monkeypatch.chdir(root)
     if arrange is not None:
         arrange(root)
-    code = cli.main(["sonar", "properties"])
+    code = cli.main(["sonar", "properties"], clock=lambda: 0.0)
     captured = capsys.readouterr()
     assert TOKEN not in captured.out + captured.err
     return code, captured.out, captured.err
@@ -172,7 +172,7 @@ def run_cli(
     sonar.TASK_FILE.parent.mkdir()
     sonar.TASK_FILE.write_text(TASK_FIXTURE.read_text() if task_text is None else task_text)
     sleeps: list[float] = []
-    code = cli.main(["sonar", "findings"], transport=fake, sleep=sleeps.append)
+    code = cli.main(["sonar", "findings"], transport=fake, sleep=sleeps.append, clock=lambda: 0.0)
     captured = capsys.readouterr()
     assert TOKEN not in captured.out + captured.err
     return code, captured.out, captured.err, sleeps

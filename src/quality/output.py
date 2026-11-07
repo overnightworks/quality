@@ -27,7 +27,6 @@ from quality.report import (
     ScannerRun,
     Step,
     printable,
-    render,
 )
 
 # The name gate.yml reads as `steps.<id>.outputs.scanner-arguments` from the properties step.
@@ -39,18 +38,6 @@ STEP_OUTPUT_VARIABLE = "GITHUB_OUTPUT"
 STEP_SUMMARY_VARIABLE = "GITHUB_STEP_SUMMARY"
 BACKTICK_RUN = re.compile("`+")
 MINIMUM_FENCE = 3
-
-
-def emit(*lines: str, file: TextIO | None = None) -> None:
-    """The one print boundary: every line the door prints leaves through `printable`, and the door never splits text,
-    so a line of repository text cannot become several lines."""
-    for line in lines:
-        print(printable(line), file=file)
-
-
-def emit_finding(finding: Finding) -> None:
-    """A finding's rendered lines; `render` escapes every newline of repository text, so the split finds only its own."""
-    emit(*render(finding).split("\n"))
 
 
 def append_step_summary(lines: Sequence[str], environment: Mapping[str, str]) -> None:
@@ -79,9 +66,9 @@ def code_block(lines: Sequence[str]) -> tuple[str, ...]:
     return (fence, *lines, fence)
 
 
-def append_step_output(name: str, value: str) -> None:
+def append_step_output(name: str, value: str, environment: Mapping[str, str]) -> None:
     """In a GitHub Actions step, later steps read the value as `steps.<id>.outputs.<name>`."""
-    step_output = os.environ.get(STEP_OUTPUT_VARIABLE)
+    step_output = environment.get(STEP_OUTPUT_VARIABLE)
     if step_output:
         with open(step_output, "a", encoding="utf-8") as handle:
             handle.write(f"{name}={value}\n")
@@ -193,7 +180,7 @@ DESCRIPTIVE_FINDINGS = frozenset(
         FindingEvent.OPEN,
     }
 )
-DESCRIPTIVE_NOTES = frozenset({NoteEvent.WARNING})
+DESCRIPTIVE_NOTES = frozenset({NoteEvent.WARNING, NoteEvent.OPEN})
 NOTE_GLYPHS = {
     **dict.fromkeys((NoteEvent.LOWERED, NoteEvent.DROPPED, NoteEvent.MOVED, NoteEvent.RECORDED), Glyph.CLEAN),
     **dict.fromkeys((NoteEvent.LOWER, NoteEvent.DROP, NoteEvent.MOVE, NoteEvent.RECORD), Glyph.WILL_CHANGE),
@@ -255,8 +242,8 @@ def open_channel(stream: TextIO | None, environment: Mapping[str, str]) -> Chann
 
 
 def open_channels(environment: Mapping[str, str]) -> Channels:
-    """Each stream's style, decided once for the run from the environment the door is given; `output.py` reads the
-    process environment only for the step output."""
+    """Each stream's style, decided once for the run from the environment the door is given; `output.py` never reads
+    the process environment."""
     return Channels(open_channel(sys.stdout, environment), open_channel(sys.stderr, environment))
 
 
@@ -509,9 +496,11 @@ def write_scanner_runs(runs: Sequence[ScannerRun], channel: Channel) -> None:
 
 
 def write_closing_line(glyph: Glyph, parts: Sequence[str], channel: Channel) -> None:
-    """The line that ends a run: the glyph and the first part in the glyph's verdict style, each further part dim."""
+    """The line that ends a run: each part escaped, the glyph and the first part in the glyph's verdict style, each
+    further part dim."""
     styled = channel.styled
-    painted = [_paint(f"{glyph} {parts[0]}", VERDICT_STYLE[glyph], styled), *(_paint(part, DIM, styled) for part in parts[1:])]
+    first, *further = map(printable, parts)
+    painted = [_paint(f"{glyph} {first}", VERDICT_STYLE[glyph], styled), *(_paint(part, DIM, styled) for part in further)]
     _print_lines([SEPARATOR.join(painted)], channel)
 
 

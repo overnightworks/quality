@@ -51,16 +51,16 @@ def scratch_working_directory(monkeypatch, tmp_path):
 def test_known_pass_fixture_is_clean_and_prints_the_proof(monkeypatch, capsys):
     """#22 kept row: known-pass fixture is clean and prints the proof line"""
     code, out, _, _ = run_cli(monkeypatch, capsys, sonar_answering())
-    assert (code, out) == (0, f"sonar: new 0 · legacy 0 ({KEY}, main)\n")
+    assert (code, out) == (0, "  · analysis      pull request   #7 · overnightworks_quality\n  ✓ new           none\n  · legacy        0 open         on main\n  ✓ quality gate  passed\n✓ clean · new 0 · legacy 0 · <1s\n")
 
 
 def test_known_fail_fixture_lists_every_open_finding_and_exits_one(monkeypatch, capsys):
     """#22 kept row: known-fail fixture lists every open finding and exits 1"""
     code, out, err, _ = run_cli(monkeypatch, capsys, sonar_answering(issues=issues_page(2, 1, 2)))
     assert code == 1
-    assert "sonar src/a1.py:1 - python:S1: m" in out
-    assert "sonar src/a2.py:2 - python:S1: m" in out
-    assert f"sonar: new 2 · legacy 0 ({KEY}, main)" in err
+    assert "    ! src/a1.py:1  open  python:S1: m\n    ! src/a2.py:2  open  python:S1: m\n" in out
+    assert (err, "      fix: fix it in the code; an accepted or false-positive mark in SonarCloud still counts\n" in out) == ("", True)
+    assert out.endswith("\n! red · new 2 · legacy 0 · <1s\n")
 
 
 @pytest.mark.parametrize(
@@ -77,9 +77,9 @@ def test_counts_findings_across_pages(monkeypatch, capsys, pages, expected_count
     """#22 kept row: findings are counted across pages, bounded by the search limit and never by the claimed total"""
     fake = sonar_answering()
     fake.answers["issues/search"] = pages
-    code, _, err, _ = run_cli(monkeypatch, capsys, fake)
+    code, out, _, _ = run_cli(monkeypatch, capsys, fake)
     assert (code, len(fake.urls_to("issues/search"))) == (1, expected_requests)
-    assert f"new {expected_count} " in err
+    assert f"new {expected_count} " in out
 
 
 def test_asks_for_statuses_a_person_may_have_accepted_and_encodes_the_scope(monkeypatch, capsys):
@@ -129,7 +129,7 @@ def test_an_unreadable_answer_is_exit_two_and_never_clean(monkeypatch, capsys, f
     """#22: anything unreadable is exit 2 with no findings printed, never a clean zero"""
     code, out, err, _ = run_cli(monkeypatch, capsys, fake)
     assert (code, out) == (2, "")
-    assert err.startswith("sonar: cannot judge - ")
+    assert err.startswith("error: ")
 
 
 @pytest.mark.parametrize(
@@ -276,11 +276,11 @@ def test_a_finished_task_that_is_not_this_runs_is_refused(monkeypatch, capsys, t
 @pytest.mark.parametrize(
     ("environment", "task", "findings", "code", "line", "asks_legacy"),
     [
-        (PULL_REQUEST_ENVIRONMENT, FINISHED_FOR_PR_7, 1, 1, f"sonar: new 1 · legacy 0 ({KEY}, main)", True),
-        (PUSH_ENVIRONMENT, FINISHED_FOR_MAIN, 25, 1, "sonar: 25 open on main", False),
-        (PUSH_ENVIRONMENT, FINISHED_FOR_MAIN, 0, 0, f"sonar: clean for '{KEY}' (branch=main): 0 open finding(s)", False),
-        ({**PUSH_ENVIRONMENT, "PULL_REQUEST_NUMBER": "7"}, FINISHED_FOR_MAIN, 1, 1, "sonar: 1 open on main", False),
-        (FEATURE_ENVIRONMENT, FINISHED_FOR_FEATURE, 3, 0, "sonar: 3 open on feat/a (report only)", False),
+        (PULL_REQUEST_ENVIRONMENT, FINISHED_FOR_PR_7, 1, 1, "\n! red · new 1 · legacy 0 · <1s\n", True),
+        (PUSH_ENVIRONMENT, FINISHED_FOR_MAIN, 25, 1, "\n! red · 25 open on main · <1s\n", False),
+        (PUSH_ENVIRONMENT, FINISHED_FOR_MAIN, 0, 0, "\n✓ clean · 0 open on main · <1s\n", False),
+        ({**PUSH_ENVIRONMENT, "PULL_REQUEST_NUMBER": "7"}, FINISHED_FOR_MAIN, 1, 1, "\n! red · 1 open on main · <1s\n", False),
+        (FEATURE_ENVIRONMENT, FINISHED_FOR_FEATURE, 3, 0, "\n✓ report only · 3 open on feat/a · <1s\n", False),
     ],
     ids=["pull request with a finding", "default branch with findings", "clean default branch", "push ignores a pull request number", "other branch with findings"],
 )
@@ -290,18 +290,18 @@ def test_findings_fail_a_pull_request_and_the_default_branch_but_only_report_on_
     fake.answers["issues/search"] = [issues_page(findings, *range(1, min(findings, 100) + 1)), issues_page(findings)]
     result = run_cli(monkeypatch, capsys, fake, environment)
     assert result[0] == code
-    assert line in result[1] + result[2]
+    assert line in result[1]
     assert bool(fake.urls_to(LEGACY_COUNT)) == asks_legacy
-    assert ("sonar src/a1.py:1" in result[1]) == bool(findings)
+    assert ("src/a1.py:1" in result[1]) == bool(findings)
 
 
 @pytest.mark.parametrize(
     ("config_text", "legacy", "code", "line"),
     [
-        (legacy_config_absent, 17, 0, f"sonar: new 0 · legacy 17 ({KEY}, main)"),
-        (legacy_config("report"), 17, 0, f"sonar: new 0 · legacy 17 ({KEY}, main)"),
-        (legacy_config("fail"), 1, 1, f"sonar: new 0 · legacy 1 ({KEY}, main)"),
-        (legacy_config("fail"), 0, 0, f"sonar: new 0 · legacy 0 ({KEY}, main)"),
+        (legacy_config_absent, 17, 0, "✓ clean · new 0 · legacy 17 · <1s"),
+        (legacy_config("report"), 17, 0, "✓ clean · new 0 · legacy 17 · <1s"),
+        (legacy_config("fail"), 1, 1, "! red · new 0 · legacy 1 · <1s"),
+        (legacy_config("fail"), 0, 0, "✓ clean · new 0 · legacy 0 · <1s"),
     ],
     ids=["absent key reports", "report", "fail with legacy findings", "fail without legacy findings"],
 )
@@ -366,10 +366,10 @@ def test_a_default_branch_never_analysed_leaves_legacy_unknown(monkeypatch, caps
     fake = sonar_answering(task=task, branches=branches)
     result = run_cli(monkeypatch, capsys, fake, environment, config_text=config_text)
     assert result[0] == code
-    assert "legacy unknown (main not analysed yet)" in result[1] + result[2]
+    assert ("  · legacy        unknown        main not analysed yet\n" in result[1]) == (code == 0)
     assert fake.urls_to(LEGACY_COUNT) == []
     if code == 2:
-        assert result[2].startswith("sonar: cannot judge - legacy unknown")
+        assert result[2].startswith("error: legacy unknown (main not analysed yet)\n")
         assert fake.urls_to("issues/search") == []
 
 
@@ -396,7 +396,7 @@ def test_an_unreadable_branch_list_is_exit_two(monkeypatch, capsys, answer):
     fake.answers["project_branches/list"] = [answer]
     code, _, err, _ = run_cli(monkeypatch, capsys, fake)
     assert (code, fake.urls_to("issues/search")) == (2, [])
-    assert err.startswith("sonar: cannot judge - ")
+    assert err.startswith("error: ")
 
 
 @pytest.mark.parametrize("default_branch", [None, ""], ids=["unset", "empty"])
@@ -416,7 +416,7 @@ def test_the_default_branch_comes_from_the_environment_not_from_the_name_main(mo
     trunk = {**ANALYSED_MAIN, "name": "trunk"}
     fake = sonar_answering(legacy=4, branches=(trunk,))
     code, out, _, _ = run_cli(monkeypatch, capsys, fake, {**PULL_REQUEST_ENVIRONMENT, "DEFAULT_BRANCH": "trunk"})
-    assert (code, f"legacy 4 ({KEY}, trunk)" in out) == (0, True)
+    assert (code, "  · legacy        4 open         on trunk\n" in out) == (0, True)
     assert parse_qs(urlparse(fake.urls_to(LEGACY_COUNT)[0]).query)["branch"] == ["trunk"]
 
 
@@ -689,7 +689,7 @@ def test_quality_with_its_own_config_fails_a_pull_request_on_legacy_findings(mon
     shipped = (Path(__file__).parent.parent / "quality" / "config.toml").read_text(encoding="utf-8")
     code, out, err, _ = run_cli(monkeypatch, capsys, sonar_answering(legacy=1), config_text=shipped)
     assert code == 1
-    assert f"sonar: new 0 · legacy 1 ({KEY}, main)" in out + err
+    assert (out.splitlines()[-1], err) == ("! red · new 0 · legacy 1 · <1s", "")
 
 
 def test_a_repository_without_a_config_is_refused_before_any_request(monkeypatch, capsys):
@@ -715,7 +715,7 @@ def test_properties_with_sonar_off_reads_no_token_and_writes_off(monkeypatch, ca
         monkeypatch, capsys, build_repo, properties=None, environment=environment_without_token(), extra_files=sonar_off_files(),
         step_output=step_output,
     )
-    off_line = "sonar: off - quality/config.toml sets [gate] sonar = false, so nothing reaches SonarCloud\n"
+    off_line = "  · sonar         off            quality/config.toml sets [gate] sonar = false\n✓ off · nothing reaches SonarCloud · <1s\n"
     assert (code, out, err, step_output.read_text()) == (0, off_line, "", "sonar=off\n")
 
 
@@ -735,7 +735,7 @@ def test_properties_with_sonar_off_refuses_the_wiring_of_a_scan(monkeypatch, cap
         environment=PULL_REQUEST_ENVIRONMENT if token_set else environment_without_token(), extra_files=sonar_off_files(),
         step_output=step_output,
     )
-    assert (code, out, err, step_output.exists()) == (2, "", f"sonar: cannot judge - {fact}\n", False)
+    assert (code, out, err, step_output.exists()) == (2, "", f"error: {fact}\nnext: push the fix; the gate judges the new commit\n", False)
 
 
 def test_properties_without_the_key_still_refuses_an_empty_token(monkeypatch, capsys, build_repo, tmp_path):
@@ -773,5 +773,5 @@ def test_properties_refuses_a_malformed_sonar_key(monkeypatch, capsys, build_rep
     files = {"quality/config.toml": '[gate]\nmandatory_jobs = ["check"]\nsonar = "no"\n'}
     code, _, err = run_properties(monkeypatch, capsys, build_repo, extra_files=files)
     assert (code, err) == (
-        2, "sonar: cannot judge - quality/config.toml [gate] sonar must be true or false, like:\\x0a[gate]\\x0asonar = false\n",
+        2, "error: quality/config.toml [gate] sonar must be true or false\nnext:\n    write it in quality/config.toml like this:\n        [gate]\n        sonar = false\n    push the fix; the gate judges the new commit\n",
     )

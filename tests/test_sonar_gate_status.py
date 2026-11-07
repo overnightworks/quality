@@ -29,7 +29,7 @@ def checkout(monkeypatch, tmp_path):
     (tmp_path / "quality").mkdir()
 
 
-COVERAGE_LINE = "sonar: quality gate ERROR - new_coverage is 70.0, the gate needs at least 80"
+COVERAGE_LINE = "    ! new_coverage is 70.0, the gate needs at least 80"
 
 
 def test_a_failed_gate_with_no_findings_exits_one_and_names_each_failed_condition(monkeypatch, capsys):
@@ -41,23 +41,23 @@ def test_a_failed_gate_with_no_findings_exits_one_and_names_each_failed_conditio
     )
     code, out, err, _ = run_cli(monkeypatch, capsys, sonar_answering(gate=gate))
     assert code == 1
-    assert err.splitlines()[:2] == [COVERAGE_LINE, "sonar: quality gate ERROR - new_duplicated_lines_density is 5.5, the gate needs at most 3"]
-    assert f"sonar: new 0 · legacy 0 ({KEY}, main)" in err
+    assert (out.splitlines()[3:-1], err) == (["  ! quality gate  failed         2 conditions", COVERAGE_LINE, "    ! new_duplicated_lines_density is 5.5, the gate needs at most 3"], "")
+    assert out.endswith("\n! red · new 0 · legacy 0 · quality gate failed · <1s\n")
     assert "new_bugs" not in out + err
 
 
 def test_a_passed_gate_leaves_the_summary_and_exit_unchanged(monkeypatch, capsys):
-    """#193 sentence 1, cell 2: OK prints no gate line"""
+    """#193 sentence 1, cell 2: OK prints the passed quality-gate row"""
     code, out, err, _ = run_cli(monkeypatch, capsys, sonar_answering(gate=GATE_OK))
-    assert (code, out, err) == (0, f"sonar: new 0 · legacy 0 ({KEY}, main)\n", "")
+    assert (code, out, err) == (0, f"  · analysis      pull request   #7 · {KEY}\n  ✓ new           none\n  · legacy        0 open         on main\n  ✓ quality gate  passed\n✓ clean · new 0 · legacy 0 · <1s\n", "")
 
 
 def test_a_failed_gate_and_new_findings_print_both(monkeypatch, capsys):
     """#193 cell 3"""
     code, out, err, _ = run_cli(monkeypatch, capsys, sonar_answering(issues=issues_page(1, 1), gate=gate_error(failed_condition())))
     assert code == 1
-    assert "sonar src/a1.py:1" in out
-    assert COVERAGE_LINE in err
+    assert ("    ! src/a1.py:1" in out, err) == (True, "")
+    assert COVERAGE_LINE in out
 
 
 @pytest.mark.parametrize(
@@ -81,7 +81,7 @@ def test_a_gate_answer_that_is_not_ok_or_a_readable_error_is_exit_two(monkeypatc
     """#193 sentence 1, cells 4, 5, 6: anything but OK and a readable ERROR is cannot-judge"""
     code, _, err, _ = run_cli(monkeypatch, capsys, sonar_answering(gate=gate))
     assert code == 2
-    assert "sonar: cannot judge" in err
+    assert err.startswith("error: ")
 
 
 def test_the_gate_is_read_by_the_tasks_analysis_id_and_not_by_project_and_pull_request(monkeypatch, capsys):
@@ -161,15 +161,15 @@ def test_ignored_conditions_are_disclosed_on_stdout_without_changing_the_exit(mo
     """#193 sentence 3, cells 14, 15"""
     result = run_cli(monkeypatch, capsys, sonar_answering(gate=gate))
     assert result[0] == code
-    assert (sonar.IGNORED_CONDITIONS_LINE + "\n" in result[1]) == in_stdout
-    assert sonar.IGNORED_CONDITIONS_LINE not in result[2]
-    assert "fewer than 20 new lines" in sonar.IGNORED_CONDITIONS_LINE
+    gate_row = next(line for line in result[1].splitlines() if line.startswith("  ") and "quality gate" in line)
+    assert gate_row.endswith("coverage and duplication not judged: fewer than 20 new lines") == in_stdout
+    assert result[2] == ""
 
 
 def test_an_adoption_pull_request_with_an_unanalysed_default_branch_is_judged_by_the_gate(monkeypatch, capsys):
     """#193 sentence 4, cell 16"""
     fake = sonar_answering(branches=(), gate=gate_error(failed_condition()))
-    code, _, err, _ = run_cli(monkeypatch, capsys, fake)
+    code, out, _, _ = run_cli(monkeypatch, capsys, fake)
     assert code == 1
-    assert COVERAGE_LINE in err
-    assert "legacy unknown" in err
+    assert COVERAGE_LINE in out
+    assert "legacy unknown" in out

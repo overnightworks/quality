@@ -8,8 +8,38 @@ findings itself and keeps the properties check stands in [ARCHITECTURE](ARCHITEC
 `gate.yml` runs SonarCloud's scanner in its `sonar` job and judges it through `verdict`; callers use `gate.yml`, never
 an action, because quality publishes none. A caller passes the Actions secret by name
 (`secrets: SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}`), has automatic analysis off in SonarCloud, and commits a root
-`sonar-project.properties`. A missing or empty token is red (`sonar: cannot judge - SONAR_TOKEN is empty`), never
+`sonar-project.properties`. A missing or empty token is red (`error: SONAR_TOKEN is empty: …`, with the step to set and pass the secret), never
 skipped while SonarCloud runs; `[gate] sonar = false` turns it off ([the gate](gate.md#gateyml)). Dependabot runs resolve the Dependabot secret of the same name.
+
+### What the two steps print
+
+Both commands print rows on stdout and end with one closing line: `✓ clean · <time>`, `✓ off · nothing reaches
+SonarCloud · <time>`, `✓ clean · new 0 · legacy N · <time>`, `! red · …` or `✓ report only · …`. When they cannot judge
+(exit `2`) they print the `error:`/`next:` pair on stderr instead. A refusal that knows its own step names it: a
+`quality/config.toml` it cannot read shows its example to copy and `push the fix; the gate judges the new commit`; an
+empty `SONAR_TOKEN` the step to set the secret and pass it to `gate.yml`; an unwritable `GITHUB_OUTPUT` `fix what the
+error names, then re-run this run's failed jobs`. Every other refusal falls back to its step's general step:
+`properties` the push step, `findings` the re-run step. `-v` adds nothing: neither step runs a scanner.
+
+```text
+$ quality sonar properties
+  ✓ properties    clean          sonar-project.properties
+  · scan          excludes       docker:S8431 · .github/dependabot.yml exists
+✓ clean · <1s
+```
+
+```text
+$ quality sonar findings        # a pull request
+  · analysis      pull request   #7 · overnightworks_quality
+  ! new           2 findings
+    ! src/a1.py:1  open  python:S1: m
+    ! src/a2.py:2  open  python:S1: m
+      fix: fix it in the code; an accepted or false-positive mark in SonarCloud still counts
+  · legacy        17 open        on main
+  ! quality gate  failed         1 condition
+    ! new_coverage is 70.0, the gate needs at least 80
+! red · new 2 · legacy 17 · quality gate failed · 4s
+```
 
 ### Coverage on new code
 
@@ -45,10 +75,12 @@ and every refusal names the file repository-relative. The check does not stop a 
 workflow, which holds the token itself.
 
 After its checks pass, the properties check also hands the scan its issue exclusion: it appends `scanner-arguments=<value>` to the
-file named by `$GITHUB_OUTPUT` (nothing outside a workflow step) and prints which rule the scan excludes. `gate.yml`
+file named by `$GITHUB_OUTPUT` (nothing outside a workflow step) and prints the
+`· scan  excludes  docker:S8431 · .github/dependabot.yml exists` row. `gate.yml`
 appends that step output to the scan's `args`. The value is empty unless `.github/dependabot.yml` exists, and the keys it
 sets are all `sonar.issue.ignore.multicriteria` keys (see the Dependabot exception below). With `[gate] sonar = false` the
-properties check refuses a properties file and a passed token and appends `sonar=off` instead of the scan's arguments.
+properties check refuses a properties file and a passed token, prints
+`· sonar  off  quality/config.toml sets [gate] sonar = false` instead and appends `sonar=off`.
 
 The scanner's transport, verified at sonar-scanner-java-library 4.1.1.1633 (the library of sonar-scanner-cli
 8.1.0.6389, which `gate.yml` pins through `scannerVersion`):
@@ -76,11 +108,12 @@ unreadable is exit `2`.
 `gate.yml` passes the repository's default branch (`github.event.repository.default_branch`) as `DEFAULT_BRANCH`; it is
 never assumed to be `main`, and a missing or empty value is exit `2`. "Legacy" means the open findings of that branch,
 counted by the same `issues/search` with the same open statuses, and only counted, never listed.
-- **Pull request:** new findings are listed and make the run exit `1`. Both counts always print, for example
-  `sonar: new 0 · legacy 17 (overnightworks_webauth, main)`.
-- **Default branch:** a run on the default branch exits `1` on any open finding, lists them and prints
-  `sonar: N open on <default>`.
-- **Any other branch:** report only, exit `0`: `sonar: N open on <branch> (report only)`.
+- **Pull request:** the rows `· analysis  pull request  #<n> · <key>`, `new`, `legacy` and `quality gate`; new
+  findings are listed below `! new  N findings` and make the run exit `1`. Both counts always stand in the closing
+  line, for example `✓ clean · new 0 · legacy 17 · 3s`.
+- **Default branch:** a run on the default branch exits `1` on any open finding and lists them below
+  `! open  N findings`.
+- **Any other branch:** report only, exit `0`: `· open  N findings  report only`, each finding a `·` note below it.
 
 `[gate] legacy` in `quality/config.toml` decides whether legacy findings fail a pull request. `quality sonar findings`
 reads that file like the verdict does: a missing file, or one without `[gate] mandatory_jobs`, is exit `2` before any request.
@@ -99,9 +132,9 @@ legacy = "fail"
 - `legacy = "fail"` beside `[gate] sonar = false` is a config error (exit `2`).
 
 On pull requests and default-branch runs `quality sonar findings` reads `api/project_branches/list` once before the counts.
-- The default branch has no entry, or one without `analysisDate` (a repository's first adoption pull request): the summary
-  prints `legacy unknown (<default> not analysed yet)`. With `"report"` the run exits `0`; with `"fail"` it is exit `2`
-  (`sonar: cannot judge - legacy unknown (<default> not analysed yet)`).
+- The default branch has no entry, or one without `analysisDate` (a repository's first adoption pull request): the run
+  prints `· legacy  unknown  <default> not analysed yet`. With `"report"` the run exits `0`; with `"fail"` it is exit `2`
+  (`error: legacy unknown (<default> not analysed yet)`).
 - The default branch is not SonarCloud's main branch: exit `2` in both modes, with the fix `set SonarCloud's main branch
   to <default>`. A non-main SonarCloud branch counts only changed code, so the legacy count would be too low.
 
@@ -114,10 +147,10 @@ to another gate changes the verdict with no change here. Default-branch and othe
 
 | SonarCloud answers | Exit | Output |
 | --- | --- | --- |
-| `OK` | by the findings, as before | the summary line, unchanged |
-| `ERROR` | `1` | one stderr line per failed condition: `sonar: quality gate ERROR - new_coverage is 70.0, the gate needs at least 80` (`LT` reads "at least", `GT` "at most"), then the summary |
-| `NONE`, `WARN`, any other word, no `projectStatus`, an unreadable body | `2` | `sonar: cannot judge` |
-| the task has no `analysisId`, HTTP 401, 403, 404 or 5xx, a timeout | `2` | `sonar: cannot judge`, before the findings are read |
+| `OK` | by the findings, as before | `✓ quality gate  passed` |
+| `ERROR` | `1` | `! quality gate  failed  N conditions`, each failed condition below it: `! new_coverage is 70.0, the gate needs at least 80` (`LT` reads "at least", `GT` "at most") |
+| `NONE`, `WARN`, any other word, no `projectStatus`, an unreadable body | `2` | `error:` and `next:` |
+| the task has no `analysisId`, HTTP 401, 403, 404 or 5xx, a timeout | `2` | `error:` and `next:`, before the findings are read |
 
 A failed gate fails the `sonar` job whatever the findings count says, and `legacy = "fail"` still fails it on its own;
 the verdict then prints the row `! quality / sonar  failure`. `-Dsonar.qualitygate.wait=false` stays in `gate.yml`: the
@@ -128,9 +161,8 @@ scanner does not wait for the gate, this command reads it.
 - **A new security hotspot** needs its review mark in the SonarCloud UI and a re-run before the gate is `OK`; unlike a
   finding, it is not fixed in code.
 - **A small change.** SonarCloud skips the coverage and duplication conditions for a change of fewer than 20 new lines.
-  When its answer says so (`ignoredConditions`), the job prints `sonar: quality gate ignored its coverage and
-  duplication conditions on a small change (fewer than 20 new lines)` on stdout, with `OK` and with `ERROR`; the exit is
-  unchanged. Branch coverage of a small change is therefore not judged.
+  When its answer says so (`ignoredConditions`), the quality gate row's fact reads `coverage and duplication not judged:
+  fewer than 20 new lines`, with `passed` and with `failed`; the exit is unchanged. Branch coverage of a small change is therefore not judged.
 - **Joined coverage.** The gate judges the coverage SonarCloud holds, so it measures the 100 % branch rule only for a
   repository whose report joins every test layer and carries branches. For a repository that has not joined its layers
   yet, the coverage gap is SonarCloud's figure.
@@ -154,8 +186,8 @@ SONARIAC-3096). A pull-request analysis does not see an unchanged `.github/depen
   `.github/dependabot.yml` counts too, unlike Sonar, which needs a file. `.github/dependabot.yaml` is not looked at.
 - **What counts:** `quality sonar findings` and `quality merge` count every open finding and read no
   `dependabot.yml`. A `docker:S8431` finding that an analysis raises anyway (no `.github/dependabot.yml`, only
-  `.github/dependabot.yaml`, or an analysis that predates the exclusion) is an ordinary finding: it prints with its
-  `Fix:` line, counts in `new` and in the legacy number, and fails the run.
+  `.github/dependabot.yaml`, or an analysis that predates the exclusion) is an ordinary finding: it prints as its row
+  with its `fix:` line, counts in `new` and in the legacy number, and fails the run.
 - **An unreachable file:** a `.github` the filesystem refuses access to is exit `2` from `quality sonar properties`
   with a line naming the file, before it writes the step output.
 - **Only this rule** has the exception, because only it has the premise (Sonar's own exception that its pull-request

@@ -31,8 +31,8 @@ from tests.support.sonar import (
 )
 
 MESSAGE = "Use either the version tag or the digest for the image instead of both"
-FIX = "Fix it in the code; an accepted or false-positive mark in SonarCloud still counts"
-COUNTED_LINE = f"sonar Dockerfile:3 - docker:S8431: {MESSAGE}\n  Fix: {FIX}\n"
+FIX = "fix it in the code; an accepted or false-positive mark in SonarCloud still counts"
+COUNTED_LINE = f"  ! new           1 finding\n    ! Dockerfile:3  open  docker:S8431: {MESSAGE}\n      fix: {FIX}\n"
 
 
 def bot_issue(rule: str = sonar.DEPENDABOT_EXCEPTION_RULE) -> dict:
@@ -64,33 +64,38 @@ def test_a_dependabot_rule_finding_counts_like_any_other(monkeypatch, capsys, ar
     """An analysis that raises the rule's finding anyway has it fail the run, with or without the config."""
     arrange()
     code, out, err, _ = run_cli(monkeypatch, capsys, findings_of(bot_issue()))
-    assert (code, out, err) == (1, COUNTED_LINE, f"sonar: new 1 · legacy 0 ({KEY}, main)\n")
+    analysis, legacy, gate = f"  · analysis      pull request   #7 · {KEY}\n", "  · legacy        0 open         on main\n", "  ✓ quality gate  passed\n"
+    assert (code, out, err) == (1, f"{analysis}{COUNTED_LINE}{legacy}{gate}! red · new 1 · legacy 0 · <1s\n", "")
 
 
 @pytest.mark.parametrize(
-    ("environment", "task", "code", "summary"),
+    ("environment", "task", "code", "listing", "summary"),
     [
-        (PUSH_ENVIRONMENT, FINISHED_FOR_MAIN, 1, "sonar: 1 open on main"),
-        (FEATURE_ENVIRONMENT, FINISHED_FOR_FEATURE, 0, "sonar: 1 open on feat/a (report only)"),
+        (PUSH_ENVIRONMENT, FINISHED_FOR_MAIN, 1, COUNTED_LINE.replace("new ", "open"), "\n! red · 1 open on main · <1s\n"),
+        (
+            FEATURE_ENVIRONMENT, FINISHED_FOR_FEATURE, 0,
+            f"  · open          1 finding      report only\n    · Dockerfile:3  open  docker:S8431: {MESSAGE}\n",
+            "\n✓ report only · 1 open on feat/a · <1s\n",
+        ),
     ],
     ids=["default branch", "another branch"],
 )
-def test_every_run_kind_counts_the_dependabot_rule_finding(monkeypatch, capsys, environment, task, code, summary):
+def test_every_run_kind_counts_the_dependabot_rule_finding(monkeypatch, capsys, environment, task, code, listing, summary):
     """The default branch and another branch list the finding as an ordinary one."""
     write_bot_config()
     result = run_cli(monkeypatch, capsys, findings_of(bot_issue(), task=task), environment)
-    assert (result[0], result[1].startswith(COUNTED_LINE), summary in result[1] + result[2]) == (code, True, True)
+    assert (result[0], listing in result[1], result[1].endswith(summary), result[2]) == (code, True, True, "")
 
 
 @pytest.mark.parametrize("has_bot_config", [True, False], ids=["bot config", "no bot config"])
-@pytest.mark.parametrize(("mode", "code"), [("fail", 1), ("report", 0)])
-def test_the_legacy_number_is_the_default_branchs_whole_total(monkeypatch, capsys, has_bot_config, mode, code):
+@pytest.mark.parametrize(("mode", "code", "verdict"), [("fail", 1, "! red"), ("report", 0, "✓ clean")])
+def test_the_legacy_number_is_the_default_branchs_whole_total(monkeypatch, capsys, has_bot_config, mode, code, verdict):
     """The fake answers the same total to every count request, so a rule-filtered count would lower the number."""
     if has_bot_config:
         write_bot_config()
     fake = findings_of(legacy=5)
     result = run_cli(monkeypatch, capsys, fake, config_text=legacy_config(mode))
-    assert (result[0], result[2] or result[1]) == (code, f"sonar: new 0 · legacy 5 ({KEY}, main)\n")
+    assert (result[0], result[1].splitlines()[-1], result[2]) == (code, f"{verdict} · new 0 · legacy 5 · <1s", "")
 
 
 def test_no_count_request_names_a_rule(monkeypatch, capsys):
@@ -122,7 +127,7 @@ def test_an_unreadable_legacy_count_is_exit_2(monkeypatch, capsys, answer):
     fake = findings_of()
     fake.answers[LEGACY_COUNT] = [answer]
     code, out, err, _ = run_cli(monkeypatch, capsys, fake, config_text=legacy_config("report"))
-    assert (code, out, err.startswith("sonar: cannot judge - ")) == (2, "", True)
+    assert (code, out, err.startswith("error: ")) == (2, "", True)
 
 
 def test_a_sonar_finding_carries_the_open_event():
