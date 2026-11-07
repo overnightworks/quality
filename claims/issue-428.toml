@@ -1,8 +1,0 @@
-claim_id = "cf5f3f9602364944b58ff0bb0399fb85"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "b9c340faebfd1d79c982478937fc3778b315bf08"
-branch = "claude/issue-428-codeql-reference"
-scope = ["README.md", "docs/ARCHITECTURE.md", "docs/codeql.md", "docs/gate.md"]
-opened_commit = "48219738fb92de40ad8a45c7bd451844a36a1fbb"
-whole_reason = "The contract leaves gate.md and arrives in codeql.md in one move, and the README and ARCHITECTURE lines that route readers to it must land with it, or the section has two owners or none."
