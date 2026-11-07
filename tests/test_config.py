@@ -220,6 +220,20 @@ def test_any_other_legacy_value_is_a_config_error(value):
         load_gate_settings(f'[gate]\nmandatory_jobs = ["checks"]\nlegacy = {value}')
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ('[gate]\nmandatory_jobs = ["checks"]', True),
+        ('[gate]\nmandatory_jobs = ["checks"]\nsonar = true', True),
+        ('[gate]\nmandatory_jobs = ["checks"]\nsonar = false', False),
+    ],
+    ids=["absent", "true", "false"],
+)
+def test_the_sonar_key_turns_sonar_off_and_defaults_to_on(text, expected):
+    """[gate] sonar is true unless the config says false."""
+    assert load_gate_settings(text).sonar is expected
+
+
 def test_one_read_of_the_config_gives_the_mandatory_jobs_and_the_legacy_mode(tmp_path):
     """#33 sentence 3: the gate settings of a repository come from its quality/config.toml in one read."""
     (tmp_path / "quality").mkdir()
@@ -560,7 +574,7 @@ def test_a_config_refusal_carries_its_whole_fact_and_its_example_apart(refusal, 
 def test_the_refusals_use_every_example_and_every_refusal_without_one():
     """#279 acceptance 1: the rows hold all ten example constants and the refusals the trace gives none."""
     assert {refusal.example for refusal in REFUSALS} == {
-        None, config.EXAMPLE, config.LEGACY_EXAMPLE, config.ALLOWANCE_EXAMPLE, config.LOOSENED_EXAMPLE,
+        None, config.EXAMPLE, config.LEGACY_EXAMPLE, config.SONAR_EXAMPLE, config.ALLOWANCE_EXAMPLE, config.LOOSENED_EXAMPLE,
         config.ADVISORY_ALLOWANCE_EXAMPLE, config.ROOT_ALLOWANCE_EXAMPLE, config.LAYOUT_ALLOWANCE_EXAMPLE,
         config.PYTHON_ALLOWANCE_EXAMPLE, config.COMPOSE_ALLOWANCE_EXAMPLE, config.GENERATED_FILE_EXAMPLE,
     }
@@ -573,7 +587,7 @@ def test_the_one_line_form_of_a_refusal_is_its_fact_then_like_and_the_example_li
 
 
 EXAMPLES = {
-    "gate": config.EXAMPLE, "legacy": config.LEGACY_EXAMPLE, "secrets": config.ALLOWANCE_EXAMPLE,
+    "gate": config.EXAMPLE, "legacy": config.LEGACY_EXAMPLE, "sonar": config.SONAR_EXAMPLE, "secrets": config.ALLOWANCE_EXAMPLE,
     **{table.name: table.example for table in ARRAY_TABLES},
 }
 

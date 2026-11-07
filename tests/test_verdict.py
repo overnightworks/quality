@@ -150,6 +150,33 @@ def test_switching_legacy_back_from_fail_is_a_loosening(base_legacy, legacy, exp
     assert (result.blocking, result.green) == (expected, not expected)
 
 
+@pytest.mark.parametrize(
+    ("base_sonar", "sonar", "expected"),
+    [
+        (True, False, ("loosened (undeclared): sonar true → false",)),
+        (True, True, ()),
+        (False, True, ()),
+        (False, False, ()),
+    ],
+    ids=["on to off", "on kept", "off to on", "off kept"],
+)
+def test_turning_sonar_off_is_a_loosening(base_sonar, sonar, expected):
+    """A head config that turns SonarCloud off under a base config that runs it shows as loosened and is red."""
+    head = Side(GateSettings(("checks",), LegacyMode.REPORT, sonar=sonar), None)
+    base = Side(GateSettings(("checks",), LegacyMode.REPORT, sonar=base_sonar), None)
+    result = judge(head, base, [job()], GREEN_GATE, 1, NO_RENAMES)
+    assert (result.blocking, result.green) == (expected, not expected)
+
+
+def test_an_adoption_may_start_with_sonar_off(build_repo):
+    """A base commit without the config holds no gate, so a head that adopts the gate with sonar off is green."""
+    repo = build_repo({"README.md": "x"})
+    base = read_base(repo, head_commit(repo))
+    head = Side(GateSettings(("checks",), LegacyMode.REPORT, sonar=False), None)
+    result = judge(head, base, [job()], GREEN_GATE, 1, NO_RENAMES)
+    assert (result.blocking, result.green) == ((), True)
+
+
 def test_a_base_without_the_config_contributes_nothing(build_repo):
     """#6 rule 3: a base without the config adds no mandatory jobs."""
     repo = build_repo({"README.md": "x"})
@@ -283,6 +310,19 @@ def test_a_valid_ref_name_is_still_a_readable_base(build_repo, ref, full_ref):
     repo = build_repo({"quality/config.toml": '[gate]\nmandatory_jobs = ["tests"]\n'})
     subprocess.run(["git", "-C", str(repo), "update-ref", full_ref, head_commit(repo)], check=True)
     assert read_base(repo, ref).settings == GateSettings(("tests",), LegacyMode.REPORT)
+
+
+def test_a_pull_request_that_turns_sonar_off_is_red_in_the_verdict(monkeypatch, capsys, run_env):
+    """At the real entry, a head config with sonar = false under a base that scans is red, naming the loosening."""
+    repo, _ = run_env
+    monkeypatch.setenv("GATE_BASE_SHA", head_commit(repo))
+    (repo / "quality" / "config.toml").write_text('[gate]\nmandatory_jobs = ["checks"]\nsonar = false\n')
+    page = json.dumps(
+        {"total_count": 1, "jobs": [{"id": 1, "name": "checks", "run_attempt": 1, "status": "completed", "conclusion": "success"}]}
+    )
+    assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (page, None)) == 1
+    printed = capsys.readouterr().out
+    assert ("loosened (undeclared): sonar true → false" in printed, "verdict: red" in printed) == (True, True)
 
 
 def test_a_pull_request_that_removes_legacy_fail_is_red_in_the_verdict(monkeypatch, capsys, run_env):
@@ -601,6 +641,8 @@ MAIN_RAISED = "size baseline raises function_lines src/quality/cli.py main 82 ->
          (main_lines(82), None), [DECLARED + "quality/baseline.toml removed", ONLY_DECLARED]),
         (gate_config("A", legacy="fail"), gate_config("A", declared=(declaration("legacy fail → report"),)), A_RAN,
          (None, None), [DECLARED + "legacy fail → report", ONLY_DECLARED]),
+        (gate_config("A"), gate_config("A") + "sonar = false\n" + declaration("sonar true → false"), A_RAN,
+         (None, None), [DECLARED + "sonar true → false", ONLY_DECLARED]),
         (gate_config("A", "a\n::error::b"), gate_config("A", declared=(declaration(LINE_FEED_JOB),)), A_RAN,
          (None, None), [DECLARED + 'mandatory job "a\\x0a::error::b" removed', ONLY_DECLARED]),
         (gate_config("A", "a\n::error::b"), gate_config("A", declared=(declaration(printable(LINE_FEED_JOB)),)), A_RAN,
@@ -622,7 +664,7 @@ MAIN_RAISED = "size baseline raises function_lines src/quality/cli.py main 82 ->
         "cell 1 undeclared removal", "cell 2 declared removal", "cell 3 declared removal, B still runs and fails",
         "cell 4 declared next to undeclared", "cell 5 declared next to A failed", "cell 6 a typo in what",
         "cell 7 inherited declaration", "cell 7 inherited declaration deleted", "cell 8 inherited declaration",
-        "cell 8 a new item and date", "cell 10 baseline raise", "cell 10 baseline removal", "cell 10 legacy",
+        "cell 8 a new item and date", "cell 10 baseline raise", "cell 10 baseline removal", "cell 10 legacy", "cell 10 sonar off declared",
         "cell 13 a line feed declared as the TOML escape", "cell 13 the printed form copied", "#228 rule 7 a format character declared as its TOML escape",
         "#228 rule 7 the printed form of a format character copied", "#228 rule 7 a name holding the escape text itself",
         "#228 rule 7 the escape text declared as a format character", "cell 26 adoption",
