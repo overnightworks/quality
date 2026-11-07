@@ -1,0 +1,7 @@
+claim_id = "01843cdde2cf47de974277f6390aa740"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "5c03edac4177ccb5d4b096e42daeacd20f166c5d"
+branch = "fix/fleet-archived-repositories"
+scope = ["quality/fleet.toml"]
+opened_commit = "452cec0e20e1393790976b997bc9d59a50cb8a1b"
