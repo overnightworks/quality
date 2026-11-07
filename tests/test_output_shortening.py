@@ -160,7 +160,7 @@ def test_a_fact_of_counts_or_an_outcome_stands_whole_and_free_text_is_cut(entry,
         )
         for event in FindingEvent
     ]
-    + [(note("a.env", event, "x" * 60), event in {NoteEvent.WARNING}) for event in NoteEvent],
+    + [(note("a.env", event, "x" * 60), event in {NoteEvent.WARNING, NoteEvent.OPEN}) for event in NoteEvent],
     ids=[f"finding {event.name}" for event in FindingEvent] + [f"note {event.name}" for event in NoteEvent],
 )
 def test_only_the_free_text_events_are_cut_at_a_terminal(entry, is_cut):

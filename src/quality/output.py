@@ -180,7 +180,7 @@ DESCRIPTIVE_FINDINGS = frozenset(
         FindingEvent.OPEN,
     }
 )
-DESCRIPTIVE_NOTES = frozenset({NoteEvent.WARNING})
+DESCRIPTIVE_NOTES = frozenset({NoteEvent.WARNING, NoteEvent.OPEN})
 NOTE_GLYPHS = {
     **dict.fromkeys((NoteEvent.LOWERED, NoteEvent.DROPPED, NoteEvent.MOVED, NoteEvent.RECORDED), Glyph.CLEAN),
     **dict.fromkeys((NoteEvent.LOWER, NoteEvent.DROP, NoteEvent.MOVE, NoteEvent.RECORD), Glyph.WILL_CHANGE),

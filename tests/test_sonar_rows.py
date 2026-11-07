@@ -32,7 +32,7 @@ def ticks(*seconds: float):
 
 
 def drive(capsys, words: list[str], environment: dict[str, str], fake: FakeSonar | None = None, clock=None):
-    """One run of a Sonar step through `cli.main`, with the given environment as the process's."""
+    """One run of a Sonar step through `cli.main`, with the given environment as the door's."""
     code = cli.main(
         ["sonar", *words], transport=fake or sonar_answering(), sleep=lambda seconds: None, clock=clock or ticks(5, 5),
         environment=environment,
