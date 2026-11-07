@@ -249,7 +249,7 @@ QWEN_ALLOWANCE = AdvisoryAllowance(
 
 
 def test_an_advisory_allowance_is_read_by_every_loader_that_reads_the_whole_config(tmp_path):
-    """#116 E1, E3: each [[advisories.allow]] entry is one allowance with its id, lock, until, date, item and reason,
+    """ALLOW-1, ALLOW-3: each [[advisories.allow]] entry is one allowance with its id, lock, until, date, item and reason,
     read alike by the gate and by the check."""
     text = f'[gate]\nmandatory_jobs = ["checks"]\n{allowance_config()}'
     (tmp_path / "quality").mkdir()
@@ -261,7 +261,7 @@ def test_an_advisory_allowance_is_read_by_every_loader_that_reads_the_whole_conf
 
 @pytest.mark.parametrize("text", [None, '[gate]\nmandatory_jobs = ["checks"]'], ids=["no config", "no allowance"])
 def test_a_config_without_advisory_allowances_allows_no_advisory(text):
-    """#116 E1: no config or no [[advisories.allow]] entry allows nothing."""
+    """ALLOW-1: no config or no [[advisories.allow]] entry allows nothing."""
     assert load_allow_lists(text).advisories == ()
 
 

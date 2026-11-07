@@ -146,6 +146,10 @@ quality itself.
   that `.github/dependabot.yml` exists. Reopens when Sonar's exception reads the file's content.
 - CodeQL on private repositories: it needs GitHub Code Security, which the fleet does not pay for. Reopens when the
   operator buys it.
+- jscpd or lizard's duplicate mode for clones: jscpd names a pair so that a neighbouring edit orphans its baseline entry
+  and leaves tests out, and lizard's duplicate mode returned import lists; quality's own detector names a pair by the path
+  and qualified symbol of both sides, which survives unrelated changes. Reopens when a tool names a pair that way and
+  judges tests.
 
 ## 8. Risks and Technical Debt
 

@@ -589,7 +589,7 @@ LINKED = "speech/providers/linked/uv.lock"
     ],
 )
 def test_an_allowance_allows_its_advisory_in_its_lock_until_its_date(groups, allowances, findings, notes):
-    """#116 R3, E2, E4, E5, E10, E12: an allowance matching any id of a group in its lock allows it until `until`
+    """ALLOW-8, ALLOW-2, ALLOW-4, ALLOW-5, ALLOW-6, ALLOW-7: an allowance matching any id of a group in its lock allows it until `until`
     (inclusive), then it is red with its date and item; one matching nothing is red, and two on one group allow it
     for neither."""
     extent = LockExtent(1, 1)
@@ -618,7 +618,7 @@ def test_check_prints_an_allowance_that_ran_out_as_an_affected_row(build_repo, s
 def test_an_allowance_without_a_tracked_lock_is_red_with_no_osv_scanner_and_no_download(
     build_repo, served_scanners, use_mise, capsys, monkeypatch
 ):
-    """#116 E5, cell 8: with no tracked lock an allowance matches nothing and is red, with no osv-scanner and no download."""
+    """ALLOW-5, cell 8: with no tracked lock an allowance matches nothing and is red, with no osv-scanner and no download."""
     use_mise(lacking(served_scanners, OSV))
     monkeypatch.setattr(advisories, "DATABASE_ROOT", "file:///no/such/root")
     repo = build_repo({"README.md": "x\n", "quality/config.toml": allowance_config(**UV_LOCK_ALLOWANCE, until=datetime.date(2999, 12, 31))})

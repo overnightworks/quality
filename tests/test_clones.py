@@ -30,12 +30,12 @@ def pairs_by_area(files: dict[str, str]) -> dict[Area, int]:
         ({"src/a.ts": function("first", "a", "b"), "src/b.ts": function("first", "a", "b")}, 0, 0),
     ],
     ids=[
-        "#113 E1 a renamed-locals copy across two files is one pair",
-        "#113 E1 a copy inside one file is no pair",
-        "#113 E1 a 39-token copy is no pair",
-        "#113 E1 a 40-token copy is one pair",
-        "#113 E7 a copy between two tests counts as tests",
-        "#113 E7 a test that copies production counts as production",
+        "CLONE-1 a renamed-locals copy across two files is one pair",
+        "CLONE-1 a copy inside one file is no pair",
+        "CLONE-1 a 39-token copy is no pair",
+        "CLONE-1 a 40-token copy is one pair",
+        "CLONE-3 a copy between two tests counts as tests",
+        "CLONE-3 a test that copies production counts as production",
         "#119 cell 22 a .ts copy of a Python function is no pair",
         "#119 cell 22 two identical .ts files are no pair",
     ],
@@ -46,7 +46,7 @@ def test_pairs_are_counted_by_area(files, production, tests):
 
 
 def test_a_docstring_does_not_count_towards_the_tokens():
-    """#113 E1: the 39-token body plus a docstring is still 39 tokens, so no pair."""
+    """CLONE-1: the 39-token body plus a docstring is still 39 tokens, so no pair."""
     documented = function("first", "a", "b", passes=1).replace(":\n", ':\n    """Says what it does."""\n', 1)
     files = {"src/a.py": documented, "src/b.py": function("second", "c", "d", passes=1)}
     assert pairs_by_area(files) == {Area.PRODUCTION: 0, Area.TESTS: 0}
@@ -70,12 +70,12 @@ def operator_chain(name: str, operators: int) -> str:
     ("longer", "shorter", "pairs"),
     [(9, 8, 1), (8, 7, 0)],
     ids=[
-        "#113 E1 a copy missing 1 of 9 statements is at the threshold and one pair",
-        "#113 E1 a copy missing 1 of 8 statements is below the threshold and no pair",
+        "CLONE-1 a copy missing 1 of 9 statements is at the threshold and one pair",
+        "CLONE-1 a copy missing 1 of 8 statements is below the threshold and no pair",
     ],
 )
 def test_the_similarity_threshold_is_ninety_percent(longer, shorter, pairs):
-    """#113 E1, counted by hand for n statements (3 + 9n tokens, so 9n - 1 windows).
+    """CLONE-1, counted by hand for n statements (3 + 9n tokens, so 9n - 1 windows).
 
     The windows holding operator i are 5, or 3 for the last operator, which the end of the function cuts short.
     The windows holding none are 3 at the start plus the 4 between two operators, 2 of them the same, so 7. That
@@ -88,7 +88,7 @@ def test_the_similarity_threshold_is_ninety_percent(longer, shorter, pairs):
 
 
 def test_a_pair_is_named_by_path_and_qualified_symbol_whatever_the_line():
-    """#113 E2: lines inserted above the copy and an edited neighbour leave the pair's name unchanged."""
+    """CLONE-2: lines inserted above the copy and an edited neighbour leave the pair's name unchanged."""
     first, second = function("first", "a", "b"), function("second", "c", "d")
     neighbour = "def neighbour(a):\n    return a\n"
     edited_neighbour = "def neighbour(a, b):\n    c = a\n    return b\n"
@@ -98,7 +98,7 @@ def test_a_pair_is_named_by_path_and_qualified_symbol_whatever_the_line():
 
 
 def test_methods_and_repeated_names_get_the_size_rules_symbols():
-    """#113 E2: `Class.method` and the `#2` of a name defined twice, as the size rule names them."""
+    """CLONE-2: `Class.method` and the `#2` of a name defined twice, as the size rule names them."""
     first = "class Holder:\n" + "".join(f"    {line}\n" for line in function("method", "self", "b").splitlines())
     second = function("method", "a", "b") + function("method", "c", "d")
     pairs = clones.find_pairs({"src/a.py": first.encode(), "src/b.py": second.encode()}).pairs

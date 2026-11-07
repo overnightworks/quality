@@ -487,7 +487,7 @@ def exhaustive_layers(*layers: str) -> dict:
     ],
 )
 def test_an_import_contract_loosening_is_a_loosening_the_verdict_names(judged_contracts, base, head, declared, expected):
-    """#148 R1 (ruled yes 26.10.2026): each import-contract loosening is red, declarable with its exact text, and
+    """LOOSE-1 (ruled yes 26.10.2026): each import-contract loosening is red, declarable with its exact text, and
     lands only through the door; moves and adoption stay green; a removed ignore and a new contract are no loosening."""
     assert judged_contracts(base, head, declared) == (0 if expected == ["verdict: green"] else 1, expected)
 
