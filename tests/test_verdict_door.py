@@ -97,9 +97,9 @@ def test_a_malformed_variable_is_its_pair_and_never_its_value(monkeypatch, run_e
     monkeypatch.setenv("GITHUB_TOKEN", token)
     monkeypatch.setenv("GATE_BASE_SHA", head_commit(repo))
     monkeypatch.setenv(name, value)
-    code, out, err, summary = door()
-    assert (code, out, err, summary) == refused(f"error: {fact}\n{SET_BY_THE_GATE}\n")
-    assert token not in out + err + summary
+    result = door()
+    assert result == refused(f"error: {fact}\n{SET_BY_THE_GATE}\n")
+    assert token not in "".join(result[1:])
 
 
 def test_a_base_branch_in_a_step_prints_escaped(monkeypatch, pull_request, door):
@@ -109,7 +109,8 @@ def test_a_base_branch_in_a_step_prints_escaped(monkeypatch, pull_request, door)
     monkeypatch.setenv("GITHUB_BASE_REF", "ma\u202ein")
     _, out, err, _ = door()
     step = "    fix it on ma\\u202ein first, then update the pull request's branch with ma\\u202ein"
-    assert (err.splitlines()[-1], "\u202e" in out + err) == (step, False)
+    assert err.splitlines()[-1] == step
+    assert "\u202e" not in out + err
 
 
 def test_a_head_baseline_that_cannot_be_read_names_its_restore_step_apart(run_env, door):
