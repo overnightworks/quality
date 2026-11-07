@@ -4,7 +4,6 @@ prepared through uv, which this process then becomes, once."""
 
 import os
 import shlex
-import time
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
@@ -326,9 +325,7 @@ def _prepare(command: list[str], environment: Mapping[str, str], every_second: C
     return executable
 
 
-def _check_release(
-    pin: ReleaseAtPin, environment: Mapping[str, str], records: Path | None, every_second: Callable[[int], None] | None = None
-) -> None:
+def _check_release(pin: ReleaseAtPin, environment: Mapping[str, str], records: Path | None, every_second: Callable[[int], None]) -> None:
     """quality's remote must show the comment's tag at the pinned commit before uv builds or runs any of it."""
     query = ["git", "ls-remote", "--tags", "--", checkout.GATE_URL]
     with process.scratch_directory() as scratch:
@@ -362,14 +359,19 @@ def _prepared_offline(reexecution: Reexecution, environment: Mapping[str, str], 
 def _prepared_online(reexecution: Reexecution, environment: Mapping[str, str], records: Path | None, live: output.LiveLine) -> Path:
     shown = reexecution.release.tag if isinstance(reexecution, ReleaseAtPin) else "this checkout"
     with live("release", "syncing" if isinstance(reexecution, ThisCheckout) else "fetching") as show:
-        started = time.monotonic()
+        queried = 0
 
-        def show_elapsed(_seconds: int) -> None:
-            show(f"{shown} · {round(time.monotonic() - started)}s")
+        def show_query(seconds: int) -> None:
+            nonlocal queried
+            queried = seconds
+            show(f"{shown} · {seconds}s")
+
+        def show_preparation(seconds: int) -> None:
+            show(f"{shown} · {queried + seconds}s")
 
         if isinstance(reexecution, ReleaseAtPin):
-            _check_release(reexecution, environment, records, show_elapsed)
-        return _prepare(preparation_command(reexecution, "--quiet"), environment, show_elapsed)
+            _check_release(reexecution, environment, records, show_query)
+        return _prepare(preparation_command(reexecution, "--quiet"), environment, show_preparation)
 
 
 def reexecute(reexecution: Reexecution, command: str, words: Sequence[str], environment: Mapping[str, str], live: output.LiveLine) -> NoReturn:

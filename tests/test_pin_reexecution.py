@@ -26,6 +26,7 @@ pytestmark = pytest.mark.integration
 
 RELEASE = "v0.10.1"
 QUALITY_URL = "https://github.com/overnightworks/quality"
+TERMINATION_SECONDS = 10
 PINNED_IN = "pinned in .github/workflows/ci.yml"
 OFFLINE_PAIR = [
     f"error: cannot fetch quality {RELEASE}, which the gate pins · github.com did not answer", "next: quality check, once online",
@@ -216,7 +217,7 @@ def test_the_child_gets_the_same_words_folder_environment_and_terminal(scene):
     )
 
 
-def test_the_child_sees_the_commit_s_own_index(scene):
+def test_the_commit_s_own_index_reaches_the_child_and_never_uv(scene):
     for name in ("a.txt", "b.txt"):
         (scene.judged / name).write_text(f"{name}\n")
     git(scene.judged, "add", "a.txt", "b.txt")
@@ -341,8 +342,9 @@ def test_a_vanished_environment_is_the_pair(scene):
 
 @contextmanager
 def launched(scene: Scene, command: list[str]) -> Iterator[subprocess.Popen]:
-    """`command` started once its readiness FIFO exists, yielded after it wrote `ready`; every process it left, uv's
-    group included, is killed on the way out."""
+    """`command` started once its readiness FIFO exists, yielded after it wrote `ready`; on the way out its group is
+    asked to end, so quality unwinds and kills the preparation groups it started, and what is left after
+    `TERMINATION_SECONDS`, uv's group included, is killed."""
     os.mkfifo(scene.root / "ready")
     ready = os.open(scene.root / "ready", os.O_RDONLY | os.O_NONBLOCK)
     try:
@@ -355,6 +357,10 @@ def launched(scene: Scene, command: list[str]) -> Iterator[subprocess.Popen]:
                 assert os.read(ready, 10) == b"ready"
                 yield started
             finally:
+                with suppress(OSError):
+                    os.killpg(started.pid, signal.SIGTERM)
+                with suppress(subprocess.TimeoutExpired):
+                    started.wait(timeout=TERMINATION_SECONDS)
                 with suppress(OSError, ValueError):
                     os.killpg(int((scene.root / "uv_group").read_text()), signal.SIGKILL)
                 with suppress(OSError):
@@ -509,19 +515,24 @@ def test_the_streams_flush_before_the_handover(tmp_path, monkeypatch, arrange):
     assert holds()
 
 
-def test_the_tag_query_counts_on_the_live_line(tmp_path, monkeypatch):
+def test_the_live_line_counts_on_through_both_preparation_steps(tmp_path, monkeypatch):
     shown = []
+    commit = "5e" * 20
 
     @contextmanager
     def live(_name, _fact):
         yield shown.append
 
-    def hears_a_second(command, _timeout, _environment, cwd=None, every_second=None):
+    def reports_seconds(command, _timeout, _environment, cwd=None, every_second=None):
         if every_second is not None:
             every_second(1)
-        raise process.ProcessError(f"{command[0]} did not answer")
+        if command[0] != "git":
+            raise process.ProcessError(f"{command[0]} did not answer")
+        every_second(2)
+        return subprocess.CompletedProcess(command, 0, f"{commit}\trefs/tags/{RELEASE}\n", "")
 
-    monkeypatch.setattr(process, "run_bounded_in_own_group", hears_a_second)
+    monkeypatch.setattr(process, "run_bounded_in_own_group", reports_seconds)
+    pinned = pin.ReleaseAtPin(Release(RELEASE), commit)
     with pytest.raises(CannotJudge):
-        pin.reexecute(pin.ReleaseAtPin(Release(RELEASE), "5e" * 20), "quality check", ["check"], {"XDG_CACHE_HOME": str(tmp_path)}, live)
-    assert shown == [f"{RELEASE} · 0s"]
+        pin.reexecute(pinned, "quality check", ["check"], {"XDG_CACHE_HOME": str(tmp_path)}, live)
+    assert shown == [f"{RELEASE} · {seconds}s" for seconds in (1, 2, 3)]
