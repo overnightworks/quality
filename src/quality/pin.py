@@ -22,8 +22,14 @@ RUN_AT_PIN_VARIABLE = "QUALITY_RUN_AT_PIN"
 PREPARE_TIMEOUT_SECONDS = 600
 TAGS_TIMEOUT_SECONDS = 60
 SCRIPTS_QUESTION = ("python", "-I", "-c", 'import sysconfig; print(sysconfig.get_path("scripts"))')
-# Variables that point git at a repository: a commit hook's point at the judged repository, which uv's git must never touch.
-REPOSITORY_VARIABLES = frozenset({"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_COMMON_DIR", "GIT_PREFIX"})
+# git's repository-local variables, which steer uv's git toward the judged repository when a commit hook exports them;
+# the three configuration variables stay out because they carry the operator's own configuration.
+REPOSITORY_VARIABLES = frozenset(
+    {
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_OBJECT_DIRECTORY", "GIT_DIR", "GIT_WORK_TREE", "GIT_IMPLICIT_WORK_TREE", "GIT_GRAFT_FILE",
+        "GIT_INDEX_FILE", "GIT_NO_REPLACE_OBJECTS", "GIT_REPLACE_REF_BASE", "GIT_PREFIX", "GIT_SHALLOW_FILE", "GIT_COMMON_DIR",
+    }
+)
 COMMENT_STEP = Instruction("make the pin's comment name its commit's own tag, as docs/gate.md shows")
 
 
@@ -360,6 +366,7 @@ def _prepared_online(reexecution: Reexecution, environment: Mapping[str, str], r
     shown = reexecution.release.tag if isinstance(reexecution, ReleaseAtPin) else "this checkout"
     with live("release", "syncing" if isinstance(reexecution, ThisCheckout) else "fetching") as show:
         queried = 0
+        show(f"{shown} · 0s")
 
         def show_query(seconds: int) -> None:
             nonlocal queried

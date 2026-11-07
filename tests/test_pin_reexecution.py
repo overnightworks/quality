@@ -10,6 +10,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
@@ -236,8 +237,11 @@ def test_the_commit_s_own_index_reaches_the_child_and_never_uv(scene):
 
 
 def test_the_child_is_the_process(scene):
-    started = subprocess.Popen(scene.parent("check", "files"), cwd=scene.judged, env=scene.environment(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    started.communicate(timeout=120)
+    with subprocess.Popen(scene.parent("check", "files"), cwd=scene.judged, env=scene.environment(), stdout=subprocess.PIPE, stderr=subprocess.PIPE) as started:
+        try:
+            started.communicate(timeout=120)
+        finally:
+            started.kill()
     child = scene.child()
     assert (child["pid"], child["ppid"]) == (started.pid, os.getpid())
 
@@ -323,10 +327,11 @@ def test_an_editable_installation_judges_at_the_pin_only_while_clean(scene):
 
 
 def test_uv_missing_is_the_pair(scene):
-    path = os.pathsep.join(str(Path(shutil.which(tool)).parent) for tool in ("git", "sh"))
-    if shutil.which("uv", path=path):
-        pytest.skip("uv stands beside git on this machine")
-    done = scene.run("check", "files", PATH=path)
+    bin_directory = scene.root / "uv-free-bin"
+    bin_directory.mkdir()
+    for tool in ("git", "sh"):
+        (bin_directory / tool).symlink_to(shutil.which(tool))
+    done = scene.run("check", "files", PATH=str(bin_directory))
     assert (done.returncode, done.stderr.splitlines()) == (
         2, [f"error: cannot fetch quality {RELEASE}, which the gate pins · uv is not installed", "next: install uv, then run quality check again"],
     )
@@ -338,6 +343,18 @@ def test_a_vanished_environment_is_the_pair(scene):
     assert (done.returncode, done.stderr.splitlines()) == (
         2, [f"error: cannot start quality {RELEASE} · No such file or directory", "next: quality check again"],
     )
+
+
+def wait_for_group_to_end(started: subprocess.Popen) -> None:
+    """Returns once no process of `started`'s group is left (reaping `started` itself), which is when quality, a member of it, has unwound its cleanup, or after `TERMINATION_SECONDS`."""
+    deadline = time.monotonic() + TERMINATION_SECONDS
+    while time.monotonic() < deadline:
+        started.poll()
+        try:
+            os.killpg(started.pid, 0)
+        except OSError:
+            return
+        time.sleep(0.05)
 
 
 @contextmanager
@@ -359,8 +376,7 @@ def launched(scene: Scene, command: list[str]) -> Iterator[subprocess.Popen]:
             finally:
                 with suppress(OSError):
                     os.killpg(started.pid, signal.SIGTERM)
-                with suppress(subprocess.TimeoutExpired):
-                    started.wait(timeout=TERMINATION_SECONDS)
+                wait_for_group_to_end(started)
                 with suppress(OSError, ValueError):
                     os.killpg(int((scene.root / "uv_group").read_text()), signal.SIGKILL)
                 with suppress(OSError):
@@ -417,10 +433,14 @@ def test_a_calling_shell_loop_stops(scene, moment):
         commit_python_file(scene)
         words = ("check", "code")
     loop = ["bash", "-c", 'for i in 1 2; do "$@"; echo next; done', "_", *scene.parent(*words)]
-    with watching_descendants(scene), launched(scene, loop) as started:
-        os.killpg(started.pid, signal.SIGINT)
-        stdout, _ = started.communicate(timeout=60)
-        assert (started.returncode, "next" in stdout) == (-signal.SIGINT, False)
+    with watching_descendants(scene) as held:
+        with launched(scene, loop) as started:
+            os.killpg(started.pid, signal.SIGINT)
+            stdout, _ = started.communicate(timeout=60)
+            assert (started.returncode, "next" in stdout) == (-signal.SIGINT, False)
+        if moment == "during preparation":
+            readable, _, _ = select.select([held], [], [], 5)
+            assert bool(readable) and os.read(held, 10) == b""
 
 
 def own_gate_ci() -> dict[str, str]:
@@ -535,4 +555,4 @@ def test_the_live_line_counts_on_through_both_preparation_steps(tmp_path, monkey
     pinned = pin.ReleaseAtPin(Release(RELEASE), commit)
     with pytest.raises(CannotJudge):
         pin.reexecute(pinned, "quality check", ["check"], {"XDG_CACHE_HOME": str(tmp_path)}, live)
-    assert shown == [f"{RELEASE} · {seconds}s" for seconds in (1, 2, 3)]
+    assert shown == [f"{RELEASE} · {seconds}s" for seconds in (0, 1, 2, 3)]
