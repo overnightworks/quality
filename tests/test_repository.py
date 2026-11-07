@@ -12,6 +12,7 @@ from quality import cli, repository
 from quality.repository import RepositoryFileError, TomlError, parse_toml
 from tests.support.check import refusal_row
 from tests.support.door import CHECK_WORD, door_in
+from tests.support.verdict import set_gate_variables
 
 NAME = "quality/config.toml"
 VALID_CONFIG = '[gate]\nmandatory_jobs = ["checks"]\n'
@@ -407,6 +408,8 @@ def run_command(command: str, repo: Path, scratch: Path, monkeypatch, capsys) ->
     """Drives one door command through cli.main and returns its exit code and everything it printed."""
     summary = scratch / "summary.md"
     monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    if command == "verdict":
+        set_gate_variables(monkeypatch)
     requests: list[str] = []
     code = door_in(repo, *command.split(), transport=lambda url, token: requests.append(url))
     captured = capsys.readouterr()
@@ -418,7 +421,7 @@ def run_command(command: str, repo: Path, scratch: Path, monkeypatch, capsys) ->
 PREFIXES = {
     CHECK_WORD: f"{refusal_row('secrets')}",
     "check debt --fix": f"{refusal_row('debt')}",
-    "verdict": f"verdict: cannot judge - {NAME} at the head: ",
+    "verdict": "error: ",
     "sonar findings": "sonar: cannot judge - ",
 }
 
@@ -445,7 +448,7 @@ def test_an_unusable_config_is_exit_2_with_one_reason_in_every_command(
     [
         (CHECK_WORD, f"{refusal_row('debt')}cannot read quality/baseline.toml: [Errno 13] Permission denied"),
         ("check debt --fix", f"{refusal_row('debt')}cannot read quality/baseline.toml: [Errno 13] Permission denied"),
-        ("verdict", f"verdict: cannot judge - {NAME} at the head: {DENIED}"),
+        ("verdict", f"error: {DENIED}"),
         ("sonar findings", f"sonar: cannot judge - {DENIED}"),
     ],
     ids=["cell 12 check", "cell 13 check debt --fix", "cell 4 verdict", "sonar findings"],

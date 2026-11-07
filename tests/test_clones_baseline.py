@@ -258,7 +258,7 @@ def test_a_malformed_clone_table_cannot_be_judged_by_the_verdict(pull_request, c
     """#130 cell 16: the verdict names the head's file and carries the rewrite hint (cell 25, head)."""
     code, output = judged(pull_request, capsys, FIRST, text)
     assert code == 2
-    assert f"cannot judge - {BASELINE_PATH} at the head: " in output
+    assert f"error: {BASELINE_PATH} at the head: " in output
     assert f"restore {BASELINE_PATH} from git, or repair it by hand" in output
 
 

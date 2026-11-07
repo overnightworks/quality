@@ -269,7 +269,7 @@ def test_a_rename_map_git_cannot_list_cannot_be_judged(capsys, pull_request, fak
     moved_in_head(pull_request, OLD_ENTRY, OLD_ENTRY.replace("old", "new"))
     fake_git('case "$*" in *" diff "*) echo boom >&2; exit 1;; esac')
     code, output = verdict_of(pull_request[0], capsys)
-    assert (code, "cannot judge - cannot list the files renamed between" in output, "Traceback" in output) == (2, True, False)
+    assert (code, "error: cannot list the files renamed between" in output, "Traceback" in output) == (2, True, False)
 
 
 MOVE = [("src/old.py", "src/new.py")]
@@ -553,7 +553,7 @@ def test_a_rename_list_git_did_not_finish_is_exit_two_at_the_verdict(capsys, pul
     moved_in_head(pull_request, OLD_ENTRY, NEW_ENTRY)
     fake_git(listing_script(printed))
     code, output = verdict_of(pull_request[0], capsys)
-    assert (code, f"cannot judge - {cause}" in output) == (2, True)
+    assert (code, f"error: {cause}" in output) == (2, True)
 
 
 @pytest.mark.parametrize(("printed", "cause"), UNFINISHED_LISTS, ids=["cut off", "a source renamed twice"])

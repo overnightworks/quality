@@ -24,6 +24,7 @@ from tests.support.git_repositories import GIT_IDENTITY, head_commit, make_repo,
 from tests.support.scanners import CLEAN_SCANS, OUTPUTS, fake_scanner, serving, write_mise
 from tests.support.secrets import FAKE_KEY
 from tests.support.terminal import PseudoTerminal
+from tests.support.verdict import set_gate_variables
 
 PROCESS_OR_SOCKET_FIXTURES = frozenset(
     {
@@ -273,16 +274,9 @@ def fake_git(tmp_path, monkeypatch):
 def run_env(monkeypatch, build_repo, tmp_path):
     repo = build_repo({"quality/config.toml": '[gate]\nmandatory_jobs = ["checks"]\n'})
     summary = tmp_path / "summary.md"
-    for key, value in {
-        "GITHUB_REPOSITORY": "o/r",
-        "GITHUB_RUN_ID": "1",
-        "GITHUB_RUN_ATTEMPT": "1",
-        "GITHUB_TOKEN": "t",
-        "GATE_NEEDS": json.dumps({"check": {"result": "success"}}),
-        "GITHUB_STEP_SUMMARY": str(summary),
-    }.items():
-        monkeypatch.setenv(key, value)
-    monkeypatch.delenv("GATE_BASE_SHA", raising=False)
+    set_gate_variables(monkeypatch)
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    monkeypatch.chdir(repo)
     return repo, summary
 
 
