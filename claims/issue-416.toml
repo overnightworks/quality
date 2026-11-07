@@ -1,8 +1,0 @@
-claim_id = "95bbdbd1a6734a58affad3fd3b91959b"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "31900fcd86975a1b657daded04f8fe439b2d1211"
-branch = "claude/issue-416-gate-without-sonar"
-scope = [".github/workflows/gate.yml", "README.md", "docs/ARCHITECTURE.md", "docs/gate.md", "docs/sonar.md", "src/quality/cli.py", "src/quality/config.py", "src/quality/output.py", "src/quality/verdict.py", "tests/support/config_refusals.py", "tests/test_cli_fix_dry_run.py", "tests/test_config.py", "tests/test_sonar.py", "tests/test_verdict.py", "tests/workflows/test_gate_sonar.py"]
-opened_commit = "656e327b680f20c8a4203e2c7369fad8f0e206dc"
-whole_reason = "One switch, Sonar off by config, crosses the config schema, the verdict's loosening, the properties door's step output and the workflow's skip; landed apart, a key would parse that nothing honours or a scan would skip that no verdict guards, and its pins and references move with it."
