@@ -35,6 +35,10 @@ class TagCall:
         return ("api", f"repos/{self.repository}/git/matching-refs/tags/v{self.version}")
 
     @property
+    def tags(self) -> tuple[str, ...]:
+        return ("api", "--paginate", f"repos/{self.repository}/tags?per_page=100")
+
+    @property
     def create_ref(self) -> tuple[str, ...]:
         return (
             "api",
@@ -76,7 +80,7 @@ def run_tag_step(
     release_tag: dict, tag_call: TagCall, name: str, directory: Path, answers: dict, **scenario: str
 ) -> StepRun:
     tools = directory / "tools"
-    FakeGh(tools, answers)
+    FakeGh(tools, {tag_call.tags: tag_listing(), **answers})
     work = directory / "work"
     work.mkdir(exist_ok=True)
     values = {
@@ -93,7 +97,13 @@ def run_tag_step(
     return run_step(step_script(release_tag, "tag", name), work, environment, tools)
 
 
-def release_call(tag_call: TagCall, files: list[str], notes: str = "") -> tuple[str, ...]:
+def tag_listing(*names: str) -> Answer:
+    return Answer(body=[{"name": name} for name in names])
+
+
+def release_call(
+    tag_call: TagCall, files: list[str], notes: str = "", start_tag: str | None = None
+) -> tuple[str, ...]:
     return (
         "release",
         "create",
@@ -103,6 +113,7 @@ def release_call(tag_call: TagCall, files: list[str], notes: str = "") -> tuple[
         "--title",
         f"v{tag_call.version}",
         "--generate-notes",
+        *(("--notes-start-tag", start_tag) if start_tag else ()),
         "--notes",
         notes,
     )
@@ -211,6 +222,7 @@ def test_the_files_land_where_the_steps_read_them(release_tag, tag_call, tmp_pat
     )
     assert (checked.returncode, published.returncode) == (0, 0)
     assert published.calls == [
+        list(tag_call.tags),
         [
             "release",
             "create",
@@ -287,6 +299,7 @@ def test_the_release_carries_exactly_the_files_the_build_made(release_tag, tag_c
     result = run_tag_step(release_tag, tag_call, PUBLISH_STEP, tmp_path, {argv: Answer()}, NOTES="Highlights")
     assert result.returncode == 0
     assert result.calls == [
+        list(tag_call.tags),
         [
             "release",
             "create",
@@ -309,7 +322,8 @@ def test_a_release_without_an_artifact_carries_no_file(release_tag, tag_call, tm
     result = run_tag_step(release_tag, tag_call, PUBLISH_STEP, tmp_path, {argv: Answer()}, ARTIFACT="")
     assert result.returncode == 0
     assert result.calls == [
-        ["release", "create", "v1.2.3", "--verify-tag", "--title", "v1.2.3", "--generate-notes", "--notes", ""]
+        list(tag_call.tags),
+        ["release", "create", "v1.2.3", "--verify-tag", "--title", "v1.2.3", "--generate-notes", "--notes", ""],
     ]
 
 
@@ -319,7 +333,8 @@ def test_notes_reach_the_release_as_one_argument(release_tag, tag_call, tmp_path
     result = run_tag_step(release_tag, tag_call, PUBLISH_STEP, tmp_path, {argv: Answer()}, ARTIFACT="", NOTES=notes)
     assert result.returncode == 0
     assert result.calls == [
-        ["release", "create", "v1.2.3", "--verify-tag", "--title", "v1.2.3", "--generate-notes", "--notes", notes]
+        list(tag_call.tags),
+        ["release", "create", "v1.2.3", "--verify-tag", "--title", "v1.2.3", "--generate-notes", "--notes", notes],
     ]
     assert not os.path.exists(tmp_path / "work" / "planted")
 
@@ -349,6 +364,7 @@ def test_the_tag_is_created_before_the_release_and_a_failed_publication_is_retri
             "-f",
             "sha=c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
         ],
+        list(tag_call.tags),
         [
             "release",
             "create",
@@ -362,6 +378,7 @@ def test_the_tag_is_created_before_the_release_and_a_failed_publication_is_retri
             "",
         ],
         list(tag_call.matching_refs),
+        list(tag_call.tags),
         [
             "release",
             "create",
@@ -375,3 +392,36 @@ def test_the_tag_is_created_before_the_release_and_a_failed_publication_is_retri
             "",
         ],
     ]
+
+
+@pytest.mark.parametrize(
+    ("version", "existing", "start_tag"),
+    [
+        ("1.2.3", ["v1.2.2", "v2026.11.06.1", "v1.1.9", "v1.2.4"], "v1.2.2"),
+        ("2026.11.07.1", ["v1.2.2", "v2026.11.06.1", "v2026.10.30.2", "v2026.11.08.1"], "v2026.11.06.1"),
+        ("1.10.0", ["v1.9.0", "v1.2.0", "v1.11.0"], "v1.9.0"),
+        ("2026.11.06.10", ["v2026.11.06.9", "v2026.11.06.2"], "v2026.11.06.9"),
+        ("1.2.3", ["v1.2.2", "v1.2.3", "v1.3.0"], "v1.2.2"),
+        ("1.2.3", ["v2026.11.06.1", "v1.2.4", "v1.2.30", "vx.y.z", "1.2.2"], None),
+        ("2026.11.07.1", ["v1.2.2", "v2026.11.08.1"], None),
+    ],
+    ids=[
+        "three parts skip the dated tag and a higher tag",
+        "four parts skip the three-part tag and a later tag",
+        "versions order by number, not by text",
+        "the last part orders by number",
+        "a rerun does not start at its own tag",
+        "no earlier tag of the form passes none",
+        "a dated version without an earlier dated tag passes none",
+    ],
+)
+def test_the_notes_start_at_the_previous_tag_of_the_versions_own_form(
+    release_tag, tag_call, tmp_path, version, existing, start_tag
+):
+    call = TagCall(repository=tag_call.repository, commit=tag_call.commit, version=version)
+    argv = release_call(call, [], start_tag=start_tag)
+    result = run_tag_step(
+        release_tag, call, PUBLISH_STEP, tmp_path, {call.tags: tag_listing(*existing), argv: Answer()}, ARTIFACT=""
+    )
+    assert result.returncode == 0
+    assert result.calls == [list(call.tags), list(argv)]

@@ -92,4 +92,14 @@ jobs:
             find release-files -maxdepth 1 -type f -print0 | sort -z > release-files.list
             mapfile -d '' files < release-files.list
           fi
-          gh release create "v$VERSION" "${files[@]}" --verify-tag --title "v$VERSION" --generate-notes --notes "$NOTES"
+          # The form follows from the version: three numbers or four, so the notes never start at a tag of the other form.
+          parts=${VERSION//[^.]/}
+          form="^v[0-9]+(\.[0-9]+){${#parts}}$"
+          start=()
+          previous=$(gh api --paginate "repos/$GITHUB_REPOSITORY/tags?per_page=100" --jq '.[].name' \
+            | { grep -E "$form" || true; } | { cat; echo "v$VERSION"; } | sort -Vu \
+            | awk -v version="v$VERSION" '$0 == version { exit } { previous = $0 } END { print previous }')
+          if [ -n "$previous" ]; then
+            start=(--notes-start-tag "$previous")
+          fi
+          gh release create "v$VERSION" "${files[@]}" --verify-tag --title "v$VERSION" --generate-notes "${start[@]}" --notes "$NOTES"

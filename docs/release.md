@@ -80,8 +80,10 @@ Each line has a reason:
 - `artifact` names an artifact of the same run. Its regular top-level files, dotfiles included, are the release's files and
   nothing else is uploaded; a file name carries no `#`, which gh reads as the start of an asset label. A build that makes
   release files turns its caches off. Omit it for a release without files.
-- `notes` is optional; GitHub's generated notes follow it. A build that writes notes computes each hash from the very file
-  it uploads. A head may edit the notes after publishing: an immutable release still accepts edited notes.
+- `notes` is optional; GitHub's generated notes follow it. A build that writes notes computes each hash from the very
+  file it uploads. The generated notes start at the highest earlier tag of the version's own form (three numbers or
+  four), so a repository with two forms gets no notes against the other form's release, and at GitHub's default when
+  none exists. A head may edit the notes after publishing: an immutable release still accepts edited notes.
 - `quality`'s own release uses GitHub's same-repository form, `uses: $/.github/workflows/release-gate.yml` and
   `release-tag.yml`, so it calls the workflows of its own commit. Every other repository pins the commit sha of a quality tag and names the tag in a comment.
 - quality's build also tags the gated commit in its own checkout (the tag never leaves the runner) and runs
