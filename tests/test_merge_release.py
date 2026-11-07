@@ -1,7 +1,7 @@
 """The release `quality merge` judges at: the one its target's gate pins at the pull request's merge commit, named in
 its first row; for quality itself the installed quality; a release it cannot take is the pair alone, nothing changed."""
 
-import subprocess
+import os
 
 import pytest
 
@@ -111,17 +111,28 @@ def test_a_release_the_door_cannot_take_is_the_pair_alone_and_nothing_changed(gh
     changed_nothing(gh)
 
 
+@pytest.fixture
+def gh_failing_with(tmp_path, monkeypatch):
+    def install(stderr):
+        executable = tmp_path / "gh"
+        executable.write_text(f"#!/bin/sh\necho '{stderr}' >&2\nexit 1\n")
+        executable.chmod(0o755)
+        monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
+
+    return install
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(("repository", "sha"), [("acme/app404", "d" * 40), ("acme/widgets", "a404" + "d" * 36)], ids=["a name with 404", "a sha with 404"])
-def test_a_listing_failure_that_is_no_404_is_cannot_read_even_when_its_request_names_404(repository, sha, monkeypatch):
-    refused = subprocess.CompletedProcess([], 1, "", "HTTP 403: Forbidden")
-    monkeypatch.setattr("quality.gh.subprocess.run", lambda *_, **__: refused)
+def test_a_listing_failure_that_is_no_404_is_cannot_read_even_when_its_request_names_404(repository, sha, gh_failing_with):
+    gh_failing_with("HTTP 403: Forbidden")
     with pytest.raises(CannotJudge, match="cannot read the workflows of"):
         workflow_texts_at(run_gh, repository, sha)
 
 
-def test_a_listing_that_gh_answers_with_404_is_no_workflow_directory(monkeypatch):
-    missing = subprocess.CompletedProcess([], 1, "", "gh: Not Found (HTTP 404)")
-    monkeypatch.setattr("quality.gh.subprocess.run", lambda *_, **__: missing)
+@pytest.mark.integration
+def test_a_listing_that_gh_answers_with_404_is_no_workflow_directory(gh_failing_with):
+    gh_failing_with("gh: Not Found (HTTP 404)")
     assert workflow_texts_at(run_gh, "acme/widgets", "d" * 40) == {}
 
 
