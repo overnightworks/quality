@@ -212,4 +212,4 @@ def test_a_declaration_is_no_loosening_at_the_verdict(pull_request, capsys):
     commit_base(None, ONE_JOB)
     put(repo / CONFIG, ONE_JOB + declaring("frontend/"))
     code, output = verdict_of(repo, capsys)
-    assert (code, "loosened" in output, "verdict: green" in output) == (0, False, True)
+    assert (code, "loosened" in output, "✓ green" in output) == (0, False, True)

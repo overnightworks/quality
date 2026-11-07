@@ -90,7 +90,6 @@ def read_head(repo: Path) -> Side:
 
 def read_base(repo: Path, base_sha: str) -> Side:
     """The gate's settings, baseline and import-linter configs at the base commit; a file the base lacks reads as absent."""
-    _require_safe_ref(base_sha, "base")
     where = f"the base commit {base_sha}"
     try:
         texts = {

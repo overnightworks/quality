@@ -55,6 +55,12 @@ def verdict_of(repo: Path, capsys) -> tuple[int, str]:
     return code, out + err
 
 
+def viewed(repo: Path, capsys) -> tuple[int, list[str]]:
+    """The verdict's exit and what its stdout says about the loosenings (`verdict_view`)."""
+    code, out, _ = verdict_streams(repo, capsys)
+    return code, verdict_view(out)
+
+
 def fetch_jobs(origin: str) -> str:
     body, _ = verdict.github_fetcher("t")(origin + "/jobs")
     return body
@@ -63,10 +69,23 @@ def fetch_jobs(origin: str) -> str:
 SONGMAKER = "overnightworks/songmaker#1345"
 
 
-DECLARED = f"loosened (declared, {SONGMAKER} of 2026-10-20): "
+GREEN = "✓ green"
+RED = "! red"
+ONLY_DECLARED = "! red · only declared loosenings · only the operator merges it"
 
 
-ONLY_DECLARED = "verdict: red - only declared loosenings: only the operator's quality merge lands this pull request"
+def declared(what: str, ruling: str = f"{SONGMAKER} of 2026-10-20") -> str:
+    """A declaration's line under the verdict's `loosenings` or `declarations` row."""
+    return f"    ! {what} · {ruling}"
+
+
+def verdict_view(out: str) -> list[str]:
+    """What a verdict's stdout says about its loosenings: each line under a row that needs you, then the closing
+    line's verdict, the only-declared one whole and any other up to its first part."""
+    lines = out.splitlines()
+    closing = lines[-1] if lines else ""
+    word = ONLY_DECLARED if closing.startswith(ONLY_DECLARED) else closing.split(" · ")[0]
+    return [*(line for line in lines if line.startswith("    ! ")), word]
 
 
 def declaration(what: str, item: str = SONGMAKER, date: str = "2026-10-20") -> str:

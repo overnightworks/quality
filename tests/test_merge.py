@@ -206,10 +206,10 @@ def test_shows_repository_head_and_legacy_count_before_asking(capsys):
         ({"checks": {"quality / sonar": "cancelled", "quality / verdict": "failure"}}, {}, "quality / sonar is cancelled"),
         ({"checks": {"quality / verdict": "failure"}}, {}, "quality / sonar did not run: the door needs it green or failed"),
         ({"checks": {"quality / sonar": "failure"}}, {}, "quality / verdict must have failed"),
-        ({"checks": SONAR_GREEN, "base_config": TWO_JOBS, "head_config": ONE_JOB}, {}, f"loosened (undeclared): {B_REMOVED}"),
+        ({"checks": SONAR_GREEN, "base_config": TWO_JOBS, "head_config": ONE_JOB}, {}, f"    ! {B_REMOVED}"),
         (
             {"checks": SONAR_GREEN, "base_config": TWO_JOBS, "head_config": ONE_JOB + declaring(B_REMOVED) + declaring("x")},
-            {}, "declared loosening matches nothing: x",
+            {}, "    ! x · overnightworks/songmaker#1345 of 2026-10-20\n",
         ),
         (
             {"checks": {**SONAR_GREEN, "B": "failure"}, "base_config": TWO_JOBS, "head_config": ONE_JOB + declaring(B_REMOVED)},
@@ -217,13 +217,13 @@ def test_shows_repository_head_and_legacy_count_before_asking(capsys):
         ),
         (
             {"checks": SONAR_GREEN, "base_config": TWO_JOBS, "head_config": ONE_JOB + declaring(B_REMOVED), "merge_config": ONE_JOB},
-            {}, f"loosened (undeclared): {B_REMOVED}",
+            {}, f"    ! {B_REMOVED}",
         ),
         (
             {"checks": SONAR_GREEN, "base_config": ONE_JOB, "head_config": ONE_JOB + declaring(ADDS_QWEN) + allowance_config(reason=qwen_reason())},
-            {}, f"declared loosening matches nothing: {ADDS_QWEN}",
+            {}, f"    ! {ADDS_QWEN} · overnightworks/songmaker#1345 of 2026-10-20\n",
         ),
-        ({"head_config": GATE_CONFIG.replace("fail", "report")}, {}, "loosened (undeclared): legacy fail"),
+        ({"head_config": GATE_CONFIG.replace("fail", "report")}, {}, "    ! legacy fail"),
         ({"head_config": REPORT_CONFIG, "base_config": REPORT_CONFIG}, {}, "legacy = report at the pull request's current merge commit"),
         ({"head_config": GATE_CONFIG, "base_config": REPORT_CONFIG, "merge_config": REPORT_CONFIG}, {}, "legacy = report at the pull request's current merge commit"),
         ({"head_config": REPORT_CONFIG, "base_config": REPORT_CONFIG}, {"unreachable": True}, "legacy = report"),
@@ -305,9 +305,9 @@ def test_names_the_missing_right(capsys):
 @pytest.mark.parametrize(
     ("base_baseline", "merge_baseline", "code", "message"),
     [
-        (BASELINE_82, BASELINE_90, 1, "loosened (undeclared): size baseline raises function_lines src/quality/cli.py main 82 -> 90"),
+        (BASELINE_82, BASELINE_90, 1, "    ! size baseline raises function_lines src/quality/cli.py main 82 -> 90"),
         (BASELINE_82, BASELINE_82, 0, closing_line()),
-        (BASELINE_82, None, 1, "loosened (undeclared): quality/baseline.toml removed"),
+        (BASELINE_82, None, 1, "    ! quality/baseline.toml removed"),
         (None, None, 0, closing_line()),
     ],
     ids=["cell 20 raised", "cell 21 equal", "cell 22 removed at the merge commit", "cell 23 absent at both"],
@@ -419,7 +419,7 @@ def test_a_red_sonar_run_next_to_a_green_one_takes_the_legacy_path(capsys):
         (TWO_JOBS, ONE_JOB + declaring(B_REMOVED, reason="ok\u202edetsurt"), 0, "        reason: ok\\u202edetsurt"),
         (TWO_JOBS, ONE_JOB + declaring(B_REMOVED, reason="ok\rforged"), 2, "needs a non-empty one-line reason"),
         (TWO_JOBS, ONE_JOB + declaring(B_REMOVED, reason="ok\nforged"), 2, "needs a non-empty one-line reason"),
-        (ONE_JOB, '[gate]\nmandatory_jobs = ["checks", "a\\n::error::b"]\n', 1, 'mandatory job "a\\x0a::error::b" is missing'),
+        (ONE_JOB, '[gate]\nmandatory_jobs = ["checks", "a\\n::error::b"]\n', 1, "    ! a\\x0a::error::b missing · not in the run"),
         (ONE_JOB, ONE_JOB + allowance_config("GHSA-\x1b[8m", "a\tb/uv.lock", reason="ok\x1b[8m versteckt"), 0,
          f"    ! advisory allowance adds GHSA-\\x1b[8m in a\\x09b/uv.lock until 2027-01-31 · {presentator_ruling()}"),
     ],

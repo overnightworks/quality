@@ -66,32 +66,42 @@ mandatory_jobs = ["checks"]
 - `mandatory_jobs` is a non-empty list of job names as the run lists them: the job's `name:`, else its id, and a matrix
   leg as `check (3.12)`. A missing file or key is exit `2`, and `next:` shows this example.
 - Each job must conclude `success` in its newest attempt up to the verdict's own. A job that is missing from the run is
-  `mandatory job "x" is missing from the run`; one that failed, was skipped or cancelled is red. One GitHub still lists
+  the row `! x  missing  not in the run`; one that failed, was skipped or cancelled is red. One GitHub still lists
   as running (`queued`, `in_progress`, `waiting`, `requested`, `pending`) is read again; after the last read the
   verdict cannot judge. Each read judges every entry any answer listed, at the furthest state an answer showed, so an
   answer that lists an entry late or drops one never hides a failure an earlier answer showed.
-- On a pull request, removing a job the base config holds is `loosened (undeclared): mandatory job "x" removed`, and the
+- On a pull request, removing a job the base config holds is the loosening `mandatory job "x" removed`, and the
   base's job is still judged; a declared removal (below) is no longer judged.
-- The gate's own jobs are judged through `needs` (`gate job "sonar" result failure`) and need no entry.
-- `[gate] sonar = false` turns SonarCloud off: the `sonar` job's properties step hands it `sonar=off`, prints `sonar: off - …`, and `gate.yml` skips the scan and the findings step, so the job is green and sends nothing. While off, a `sonar-project.properties` or a passed `SONAR_TOKEN` is exit `2`, so a later gate without the switch also stops before its scan. Absent or `true`, Sonar runs. Any other value, and `false` beside `legacy = "fail"`, is exit `2`. On a pull request, a head that turns Sonar off under a base that runs it is `loosened (undeclared): sonar true → false`; an adoption (a base without `quality/config.toml`) may start with Sonar off.
+- The gate's own jobs are judged through `needs` (the row `! quality / sonar  failure`, the check name GitHub shows)
+  and need no entry.
+- `[gate] sonar = false` turns SonarCloud off: the `sonar` job's properties step hands it `sonar=off`, prints `sonar: off - …`, and `gate.yml` skips the scan and the findings step, so the job is green and sends nothing. While off, a `sonar-project.properties` or a passed `SONAR_TOKEN` is exit `2`, so a later gate without the switch also stops before its scan. Absent or `true`, Sonar runs. Any other value, and `false` beside `legacy = "fail"`, is exit `2`. On a pull request, a head that turns Sonar off under a base that runs it is the loosening `sonar true → false`; an adoption (a base without `quality/config.toml`) may start with Sonar off.
 - `[gate] legacy` is described under [New and legacy findings](sonar.md#new-and-legacy-findings).
 
-`gate.yml`'s verdict step runs `quality verdict`, which takes no path and judges the checkout it runs in. It prints
-`verdict: green` (exit `0`), or each problem and then `verdict: red` (exit `1`), on stdout. When it cannot judge (exit
-`2`), it prints the `error:`/`next:` pair on stderr, with the steps apart from the fact:
+`gate.yml`'s verdict step runs `quality verdict`, which takes no path and judges the checkout it runs in. It prints rows
+on stdout, all sharing one subject column:
+
+- the base, `· base  compared  <branch> <base sha> · head <head sha>` with the pull request's head, or
+  `· base  none  a push or merge group: no loosening judged`;
+- the jobs, as one `✓ jobs  success  N mandatory jobs · M gate jobs` row when all are green, else one row each;
+- on a pull request the loosenings, `✓ loosenings  none` or `! loosenings` with each loosening below it;
+- `! declarations  N unmatched` where a new entry (below) matches nothing.
+
+One closing line follows, ending with the run's duration: `✓ green · N mandatory jobs · 4s` (exit `0`) or
+`! red · <what failed> · 4s` (exit `1`). When it cannot judge (exit `2`), it prints the `error:`/`next:` pair on stderr,
+with the steps apart from the fact:
 
 - a `quality/config.toml` it cannot read shows the example to copy, then `push the fix; the gate judges the new commit`
   at the head, or `fix it on <base branch> first, then update the pull request's branch with <base branch>` at the
   base, which is read first;
 - a variable the step sets that the run lacks, or holds in another form, is `<NAME> is not set` or `<NAME> is not …`,
-  its value never printed;
+  its value never printed; beside a base the step also sets the pull request's number and head;
 - a GitHub answer a re-run may clear names `re-run this run's failed jobs`.
 
-When it read the jobs more than once, a first line says so:
-`verdict: read the run's jobs 2 times - GitHub first listed "checks" (attempt 1) as in_progress`. A GitHub server error
+When it read the jobs more than once, a first row says so:
+`· run  2 reads  GitHub first listed "checks" (attempt 1) as in_progress`. A GitHub server error
 (5xx) is read again within the same budget, and if it lasts, the fact names it as GitHub's:
 `GitHub answered HTTP 502 Bad Gateway for … after 13 reads · GitHub's fault, not the caller's`. A timeout or an
-unreachable GitHub is not read again. A cannot-judge after a re-read still prints what the last judged read showed
+unreachable GitHub is not read again. A cannot-judge after a re-read still prints the rows of the last judged read
 first, on stdout. The run's step summary gets the same lines, stdout's and then the pair, in one fenced code block on a
 line of its own, whose fence is longer than every backtick run in them, so no job name or `what` renders as markdown. A
 summary that cannot be written adds `error: GITHUB_STEP_SUMMARY is not writable · <reason>` after them (exit `2`).
@@ -116,7 +126,8 @@ date = 2026-10-20
 reason = "the operator ruled the requirement shelf machinery out"
 ```
 
-- `what` is exactly the verdict's text after `loosened (undeclared): `, unescaped. The verdict prints a line feed in a
+- `what` is exactly the text the verdict prints after `! ` for an undeclared loosening under its `loosenings` row,
+  unescaped; a declared line is never copied, since its ` · <item> of <date>` is no part of the `what`. The verdict prints a line feed in a
   job name as `\x0a` and a format character as `\u202e` (`\U000e0041` above U+FFFF), and never escapes a backslash, so a
   printed backslash is either such an escape or one the name holds itself; the head's files show which. In a
   double-quoted TOML string, each escape the verdict added is written as its TOML escape (`\x0a` as `\n`; `\u202e` and
@@ -130,17 +141,17 @@ reason = "the operator ruled the requirement shelf machinery out"
 - Only new entries declare: those the head holds and the base does not, compared as a whole entry. An inherited entry
   is never red and declares nothing, so a later pull request that loosens the same way again needs its own entry with
   its own `item` and `date`; deleting an inherited entry is no loosening. A new entry that matches no loosening of the
-  pull request is red: `declared loosening matches nothing: <what>`. A base without `quality/config.toml` (the
+  pull request is red: it stands under `! declarations  1 unmatched` as the door shows it. A base without `quality/config.toml` (the
   adoption) holds no entry, so every entry there is new and matches nothing. Without a base (push, `merge_group`) no
   entry is judged.
-- A declared loosening stays red (exit `1`) and says so:
-  `loosened (declared, overnightworks/songmaker#1345 of 2026-10-20): mandatory job "…" removed`. When nothing else is
-  red, the last line is `verdict: red - only declared loosenings: only the operator's quality merge lands this
-  pull request`. No entry approves itself: an agent may write one, but the ruleset and `aco land` still need a green
+- A declared loosening stays red (exit `1`) and says so: below its row it stands as
+  `! mandatory job "…" removed · overnightworks/songmaker#1345 of 2026-10-20`, with `reason: …` beneath. When nothing
+  else is red, the closing line is `! red · only declared loosenings · only the operator merges it · 4s`, and stderr
+  names the one command: `next: quality merge <owner>/<repo>#<n>`. No entry approves itself: an agent may write one, but the ruleset and `aco land` still need a green
   `quality / verdict`, and only [the operator's door](commands.md#quality-merge) merges.
 - An advisory allowance (`[[advisories.allow]]`, see the `advisory` rule under `quality check`) declares its own
   loosening with its own `item` and `date`, so it needs no `[[gate.loosened]]` entry. An allowance whose `id` and
-  `lock` the base lacks prints `loosened (declared, <item> of <date>): advisory allowance adds <id> in <lock> until <until>`; one
+  `lock` the base lacks prints `advisory allowance adds <id> in <lock> until <until> · <item> of <date>`; one
   whose `until` the head moves later prints `… advisory allowance extends <id> in <lock> to <until>`. An earlier
   `until`, a changed `reason`, `item` or `date`, and a deleted allowance loosen nothing; a changed `id` or `lock` is a
   new allowance. A base without `quality/config.toml` holds no allowance, so every allowance of the adoption is new. A
@@ -148,7 +159,7 @@ reason = "the operator ruled the requirement shelf machinery out"
   whole config, so a malformed `[secrets]` or `[advisories]` entry is exit `2` there too.
 - A generated-file declaration (`[[size.generated]]`, see the `size` rule under `quality check`) declares its own
   loosening with its own `item` and `date`, like an allowance. A head `path` the base does not declare prints
-  `loosened (declared, <item> of <date>): size leaves out generated file <path>`, so a changed `path` and every
+  `size leaves out generated file <path> · <item> of <date>`, so a changed `path` and every
   declaration of an adoption (a base without `quality/config.toml`) are new. An inherited or deleted declaration and a
   changed `job`, `reason`, `item` or `date` loosen nothing. A `[[gate.loosened]]` entry whose `what` is such a text
   matches nothing and is red. A malformed `[size]` entry is exit `2` in the verdict and the door, naming the side.

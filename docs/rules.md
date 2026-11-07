@@ -442,15 +442,15 @@ It applies these rules:
 
   Ruled by the operator: a program's one output owner declares itself in its code, never in a path list.
 - The baseline only falls: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the
-  base commit's, so growing a function and rewriting the baseline stays red. Each loosening is one line, named with the
-  baseline's own metric, path and symbol (a file entry has no symbol):
-  - an entry raised: `loosened (undeclared): size baseline raises function_lines src/quality/cli.py main 82 -> 90`;
+  base commit's, so growing a function and rewriting the baseline stays red. Each loosening is one line under the
+  verdict's `loosenings` row, named with the baseline's own metric, path and symbol (a file entry has no symbol):
+  - an entry raised: `size baseline raises function_lines src/quality/cli.py main 82 -> 90`;
   - an entry the base does not hold (a function or class under another name included; a moved file is judged as below):
-    `loosened (undeclared): size baseline adds ccn src/a.py f 16`;
+    `size baseline adds ccn src/a.py f 16`;
   - a clone pair the base does not hold, when the base has a `[clones]` table:
-    `loosened (undeclared): clone baseline adds tests/test_a.py run <-> tests/test_b.py check`;
-  - the base's `[clones]` table gone from a head that still has the file: `loosened (undeclared): clone baseline removed`;
-  - the base's file deleted: `loosened (undeclared): quality/baseline.toml removed`.
+    `clone baseline adds tests/test_a.py run <-> tests/test_b.py check`;
+  - the base's `[clones]` table gone from a head that still has the file: `clone baseline removed`;
+  - the base's file deleted: `quality/baseline.toml removed`.
   - a `[[size.generated]]` declaration is judged as in [gate](gate.md), "Declared loosenings".
 
   Ruled by the operator: a file git recognises as renamed, a directory move included, is no loosening when its numbers do
@@ -481,18 +481,18 @@ It applies these rules:
   three config places at the head with the base's, as import-linter parses them (never the raw options, so moving a
   config between `.importlinter`, `setup.cfg` and `pyproject.toml` changes nothing), without building an import graph.
   A contract is the same on both sides when it has the same `name`; a rename is a removal plus a new contract.
-  Each loosening is one line, sorted:
-  - a contract the base holds and the head lacks: `loosened (undeclared): import contract "layers" removed`;
+  Each loosening is one line under the verdict's `loosenings` row, sorted:
+  - a contract the base holds and the head lacks: `import contract "layers" removed`;
   - the base's config gone, whatever it held, or only its section gone from a file that stays, once:
-    `loosened (undeclared): import-linter config in .importlinter removed`;
+    `import-linter config in .importlinter removed`;
   - an `ignore_imports` expression the base does not hold, one line each, compared as parsed (spacing around `->`
     does not count, a wildcard is a new expression):
-    `loosened (undeclared): import contract "domain" ignores app.domain -> app.web.*`;
+    `import contract "domain" ignores app.domain -> app.web.*`;
   - any other field of a contract that differs, `broken_contract_guidance` excepted, unless the change only forbids
-    more (below): `loosened (undeclared): import contract "layers" changes allow_indirect_imports` (a changed `type`
+    more (below): `import contract "layers" changes allow_indirect_imports` (a changed `type`
     reads `changes type`; a module dropped from a list reads as that list's field);
   - `root_packages` (as a set of names), `include_external_packages` or `exclude_type_checking_imports` changed:
-    `loosened (undeclared): import-linter changes root_packages`.
+    `import-linter changes root_packages`.
 
   Ruled by the operator:
 
