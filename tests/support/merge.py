@@ -210,14 +210,14 @@ class FakeGh:
         if isinstance(content, GhFailed):
             raise content
         if content is None:
-            raise GhFailed("gh api failed: HTTP 404")
+            raise GhFailed("gh api failed: HTTP 404", not_found=True)
         return content
 
     def listing_answer(self, sha):
         if self.listing is not None:
             return json.dumps(self.listing)
         if sha not in self.workflows:
-            raise GhFailed("gh api failed: HTTP 404")
+            raise GhFailed("gh api failed: HTTP 404", not_found=True)
         return json.dumps([{"name": name, "type": "file"} for name in self.workflows[sha]])
 
     def pull_answer(self):

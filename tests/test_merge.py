@@ -267,7 +267,7 @@ def test_cannot_judge_when_sonar_is_unreachable_under_legacy_fail(capsys):
 
 
 def test_cannot_judge_without_the_merge_commit_the_jobs_ran_on(capsys):
-    """#37 rule 2: the release and the config the jobs ran on are unknown, so exit 2 and nothing changed."""
+    """The release and the config the jobs ran on are unknown, so exit 2 and nothing changed."""
     gh = FakeGh(merge_sha=None)
     code, answers = drive(gh, sonar())
     assert code == 2

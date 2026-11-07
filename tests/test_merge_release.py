@@ -1,11 +1,14 @@
 """The release `quality merge` judges at: the one its target's gate pins at the pull request's merge commit, named in
 its first row; for quality itself the installed quality; a release it cannot take is the pair alone, nothing changed."""
 
+import subprocess
+
 import pytest
 
 from quality import checkout
+from quality.gh import run_gh, workflow_texts_at
 from quality.pin import RUN_AT_PIN_VARIABLE, ReleaseAtPin
-from quality.report import Release
+from quality.report import CannotJudge, Release
 from tests.support.door import RELEASE_ROW
 from tests.support.merge import (
     BASE_SHA,
@@ -85,6 +88,8 @@ def test_the_first_row_names_the_release_the_targets_gate_pins_at_the_merge_comm
             "error: GitHub has no merge commit for the pull request yet, so the release its gate ran at is unknown\n" + AGAIN,
             id="no merge commit",
         ),
+        pytest.param({"fail_on": ("listing",)}, "error: cannot read the workflows of acme/widgets at ddddddd: listing broke\n" + AGAIN, id="a listing gh cannot read"),
+        pytest.param({"fail_on": ("workflow",)}, "error: cannot read the workflows of acme/widgets at ddddddd: workflow broke\n" + AGAIN, id="a workflow gh cannot read"),
         pytest.param({"listing": {"name": "ci.yml"}}, listing_refused("is not a list of files"), id="not a list"),
         pytest.param({"listing": [{"type": "file"}]}, listing_refused("is not a list of files"), id="an entry without a name"),
         pytest.param(
@@ -104,6 +109,20 @@ def test_a_release_the_door_cannot_take_is_the_pair_alone_and_nothing_changed(gh
     gh = FakeGh(**gh_kwargs)
     assert door(capsys, gh) == (2, "", err)
     changed_nothing(gh)
+
+
+@pytest.mark.parametrize(("repository", "sha"), [("acme/app404", "d" * 40), ("acme/widgets", "a404" + "d" * 36)], ids=["a name with 404", "a sha with 404"])
+def test_a_listing_failure_that_is_no_404_is_cannot_read_even_when_its_request_names_404(repository, sha, monkeypatch):
+    refused = subprocess.CompletedProcess([], 1, "", "HTTP 403: Forbidden")
+    monkeypatch.setattr("quality.gh.subprocess.run", lambda *_, **__: refused)
+    with pytest.raises(CannotJudge, match="cannot read the workflows of"):
+        workflow_texts_at(run_gh, repository, sha)
+
+
+def test_a_listing_that_gh_answers_with_404_is_no_workflow_directory(monkeypatch):
+    missing = subprocess.CompletedProcess([], 1, "", "gh: Not Found (HTTP 404)")
+    monkeypatch.setattr("quality.gh.subprocess.run", lambda *_, **__: missing)
+    assert workflow_texts_at(run_gh, "acme/widgets", "d" * 40) == {}
 
 
 @pytest.mark.parametrize("merge_sha", ["main", None], ids=["a merge sha that is no commit", "no merge commit"])
@@ -149,8 +168,10 @@ def test_a_workflow_name_is_read_percent_encoded_at_the_merge_commit(capsys):
 )
 def test_a_pin_at_another_release_re_executes_into_it_before_any_row(gh_kwargs, repo, capsys):
     port = ReexecutionPort()
+    gh = FakeGh(**gh_kwargs)
+    ports = door_ports(reexecute=port)
     with pytest.raises(Reexecuted):
-        drive(FakeGh(**gh_kwargs), repo=repo, ports=door_ports(reexecute=port))
+        drive(gh, repo=repo, ports=ports)
     assert (port.asked, capsys.readouterr().out) == (
         [(ReleaseAtPin(Release("v0.10.1"), OTHER_COMMIT), f"quality merge {repo}#7", ["merge", f"{repo}#7"])], "",
     )

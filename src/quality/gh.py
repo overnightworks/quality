@@ -10,7 +10,7 @@ from quality import checkout
 from quality.checkout import Unread
 from quality.report import CannotJudge
 
-NOT_FOUND = "404"
+NOT_FOUND = "HTTP 404"
 # A character that could change the path or the query of the next request, beside every control character.
 REQUEST_CHARACTERS = frozenset("/\\%?#")
 
@@ -18,7 +18,9 @@ GhRunner = Callable[[Sequence[str], str | None], str]
 
 
 class GhFailed(Exception):
-    pass
+    def __init__(self, message: str, *, not_found: bool = False) -> None:
+        super().__init__(message)
+        self.not_found = not_found
 
 
 def run_gh(arguments: Sequence[str], stdin: str | None = None) -> str:
@@ -27,7 +29,7 @@ def run_gh(arguments: Sequence[str], stdin: str | None = None) -> str:
     except OSError as error:
         raise GhFailed(f"cannot run gh: {error}") from error
     if done.returncode != 0:
-        raise GhFailed(f"gh {' '.join(arguments[:3])} failed: {done.stderr.strip()}")
+        raise GhFailed(f"gh {' '.join(arguments[:3])} failed: {done.stderr.strip()}", not_found=NOT_FOUND in done.stderr)
     return done.stdout
 
 
@@ -35,7 +37,7 @@ def file_at(gh: GhRunner, repository: str, path: str, sha: str) -> str | None:
     try:
         return gh(["api", "-H", "Accept: application/vnd.github.raw", f"repos/{repository}/contents/{path}?ref={sha}"], None)
     except GhFailed as error:
-        if NOT_FOUND in str(error):
+        if error.not_found:
             return None
         raise
 
@@ -66,7 +68,7 @@ def workflow_texts_at(gh: GhRunner, repository: str, sha: str) -> dict[str, str 
 
 def _shapes_a_request(name: str) -> bool:
     """Whether a listed name, read raw, is no single path segment or could change the request's path or query."""
-    return name in {"", ".", ".."} or any(character in REQUEST_CHARACTERS or unicodedata.category(character) == "Cc" for character in name)
+    return name in {"", ".", ".."} or any(character in REQUEST_CHARACTERS or unicodedata.category(character) in {"Cc", "Cs"} for character in name)
 
 
 def _listing_at(gh: GhRunner, repository: str, sha: str, listing: str) -> list[tuple[str, str]]:
@@ -74,7 +76,7 @@ def _listing_at(gh: GhRunner, repository: str, sha: str, listing: str) -> list[t
     try:
         answer = gh(["api", f"repos/{repository}/contents/{checkout.WORKFLOW_DIRECTORY}?ref={sha}"], None)
     except GhFailed as error:
-        if NOT_FOUND in str(error):
+        if error.not_found:
             return []
         raise
     try:

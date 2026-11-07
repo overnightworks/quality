@@ -63,8 +63,9 @@ def test_a_dry_run_shows_the_release_row_first(capsys):
 def test_a_dry_run_re_executes_with_its_dry_run_word(capsys):
     port = ReexecutionPort()
     gh = FakeGh(workflows={MERGE_SHA: {"ci.yml": gate_workflow("v0.10.1", "7f" * 20)}})
+    ports = door_ports(reexecute=port)
     with pytest.raises(Reexecuted):
-        drive(gh, words=["--dry-run"], ports=door_ports(reexecute=port))
+        drive(gh, words=["--dry-run"], ports=ports)
     assert [words for _, _, words in port.asked] == [["merge", "acme/widgets#7", "--dry-run"]]
 
 
