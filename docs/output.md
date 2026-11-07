@@ -69,7 +69,7 @@ The dependencies row counts the tracked lockfiles and the packages osv-scanner l
 
 ```text
 $ quality check
-  · release       v0.9.0         pinned in .github/workflows/ci.yml
+  · release       v0.10.0        pinned in .github/workflows/ci.yml
   ✓ files         clean          10 rules · 214 files
   ✓ debt          clean          ceiling held · 31 entries, 2 clone pairs
   ✓ imports       clean          1 contract
@@ -140,7 +140,7 @@ Exit 1. stdout. Two findings in a row with the same fix: the fix stands once, un
 
 ```text
 $ quality check
-  · release       v0.9.0         pinned in .github/workflows/ci.yml
+  · release       v0.10.0        pinned in .github/workflows/ci.yml
   ! files         3 findings
     ! .env          tracked         an env file carries configuration, often secrets
       fix: git --literal-pathspecs rm --cached -- .env, then add .env to .gitignore
@@ -188,7 +188,7 @@ The other areas still judge and their findings stay. Because an answer is missin
 
 ```text
 $ quality check
-  · release       v0.9.0         pinned in .github/workflows/ci.yml
+  · release       v0.10.0        pinned in .github/workflows/ci.yml
   ✓ files         clean          10 rules · 214 files
   ✓ debt          clean          ceiling held · 31 entries, 2 clone pairs
   ✓ imports       clean          1 contract
@@ -261,7 +261,7 @@ The debt ceiling is `quality/baseline.toml`. Where code shrank it can fall; `--f
 
 ```text
 $ quality check debt
-  · release       v0.9.0         pinned in .github/workflows/ci.yml
+  · release       v0.10.0        pinned in .github/workflows/ci.yml
   ! debt          3 findings
     ! src/shop/cart.py:63  can fall  function total has CCN 17 · ceiling 19
     ! src/shop/orders.py   can fall  file has 812 lines · ceiling 826
@@ -274,7 +274,7 @@ $ quality check debt
 
 ```text
 $ quality check debt --fix
-  · release       v0.9.0         pinned in .github/workflows/ci.yml
+  · release       v0.10.0        pinned in .github/workflows/ci.yml
   ! debt          1 finding      nothing lowered
     ! src/shop/parse.py:88  grew  function read_rows has 71 lines · ceiling 64
       fix: bring it back to 64 lines or below; a raise is a hand edit and a declared loosening
@@ -285,7 +285,7 @@ Dry run over all areas: the ceiling shows what would fall, nothing is written. E
 
 ```text
 $ quality check --fix --dry-run
-  · release       v0.9.0         pinned in .github/workflows/ci.yml
+  · release       v0.10.0        pinned in .github/workflows/ci.yml
   ✓ files         clean          10 rules · 214 files
   ~ debt          3 to lower     quality/baseline.toml
     ~ src/shop/cart.py:63  lower  function total CCN 19 → 17
@@ -303,7 +303,7 @@ Written. Exit 0. stdout.
 
 ```text
 $ quality check --fix
-  · release       v0.9.0         pinned in .github/workflows/ci.yml
+  · release       v0.10.0        pinned in .github/workflows/ci.yml
   ✓ files         clean          10 rules · 214 files
   ✓ debt          lowered        3 entries · quality/baseline.toml
     ✓ src/shop/cart.py:63  lowered  function total CCN 19 → 17
@@ -349,12 +349,12 @@ No ceiling yet: first a note, then the first recording. Both exit 0. stdout.
 
 ```text
 $ quality check debt
-  · release       v0.9.0         pinned in .github/workflows/ci.yml
+  · release       v0.10.0        pinned in .github/workflows/ci.yml
   · debt          not recorded   31 entries over the thresholds · measured only
       fix: quality check --fix
 ✓ clean · 1 area · debt measured, not enforced · 2s
 $ quality check debt --fix
-  · release       v0.9.0         pinned in .github/workflows/ci.yml
+  · release       v0.10.0        pinned in .github/workflows/ci.yml
   ✓ debt          recorded       31 entries, 2 clone pairs · quality/baseline.toml is new
 ✓ clean · ceiling recorded · 1 area · 2s
 ```
@@ -384,7 +384,7 @@ Clean, one allowed finding as a note. Exit 0. stdout.
 
 ```text
 $ quality check secrets --staged
-  · release       v0.9.0         pinned in .github/workflows/ci.yml
+  · release       v0.10.0        pinned in .github/workflows/ci.yml
   ✓ secrets       clean          staged change · 4 files · 1 allowed
     · tests/fixtures/token.txt:1  allowed  generic-api-key · a test fixture, not a real key
 ✓ clean · 1 area · <1s
@@ -394,7 +394,7 @@ A finding: the commit stays out. Exit 1. stdout.
 
 ```text
 $ quality check secrets --staged
-  · release       v0.9.0         pinned in .github/workflows/ci.yml
+  · release       v0.10.0        pinned in .github/workflows/ci.yml
   ! secrets       1 finding      staged change · 4 files
     ! src/shop/settings.py:12  secret  gitleaks rule generic-api-key · value not shown
       fix: rotate it; if it is no secret, allow it in quality/config.toml with a reason:
@@ -427,7 +427,7 @@ Jobs stand one by one while one fails. Exit 1.
 
 ```text
 Run quality verdict
-  · release          v0.9.0         this gate run
+  · release          v0.10.0        this gate run
   · base             compared       main 4e1a9c2 · head 5d1e0b7
   ✓ lint             success
   ! test             failure        attempt 2
@@ -442,7 +442,7 @@ Red only because of a declared loosening: one line sums up the green jobs so the
 
 ```text
 Run quality verdict
-  · release       v0.9.0         this gate run
+  · release       v0.10.0        this gate run
   · base          compared       main 4e1a9c2 · head 5d1e0b7
   ✓ jobs          success        3 mandatory jobs · 2 gate jobs
   ! loosenings    1 declared
@@ -466,7 +466,7 @@ Approved and merged. Exit 0. Rows: stdout; the prompt line: stderr.
 
 ```text
 $ quality merge overnightworks/shop#232
-  · release       v0.9.0         pinned in .github/workflows/ci.yml
+  · release       v0.10.0        pinned in .github/workflows/ci.yml
   · #232          open           head 5d1e0b7 · into main
   ✓ checks        ok             only quality / verdict is red
   ! loosenings    1 declared
@@ -486,7 +486,7 @@ Refused, another check is red: nothing changed. Exit 1. Rows: stdout; pair: stde
 
 ```text
 $ quality merge overnightworks/shop#232
-  · release       v0.9.0         pinned in .github/workflows/ci.yml
+  · release       v0.10.0        pinned in .github/workflows/ci.yml
   · #232          open           head 5d1e0b7 · into main
   ! checks        red            test (failure) beside quality / verdict
 error: not merged · the operator's merge lands only declared loosenings · nothing changed
@@ -569,8 +569,8 @@ Fetched now (decision 8 A): quality fetches the release through uv and says so i
 
 ```text
 $ quality check
-  ⠋ release       fetching       v0.9.0 · 4s
-  · release       v0.9.0         fetched now · pinned in .github/workflows/ci.yml
+  ⠋ release       fetching       v0.10.0 · 4s
+  · release       v0.10.0        fetched now · pinned in .github/workflows/ci.yml
   ✓ files         clean          10 rules · 214 files
   …
 ```
@@ -579,7 +579,7 @@ Offline. Exit 2. stderr.
 
 ```text
 $ quality check
-error: cannot fetch quality v0.9.0, which the gate pins · github.com did not answer
+error: cannot fetch quality v0.10.0, which the gate pins · github.com did not answer
 next: quality check, once online
 ```
 
@@ -611,7 +611,7 @@ next: raise the gate pin to v0.10.0 or later
 In quality itself the checkout judges itself. stdout.
 
 ```text
-~/git/quality $ quality check
+~/git/quality $ uv run quality check
   · release       this checkout  0.9.1.dev4+g8c8121b · quality judges itself
   …
 ```
@@ -620,9 +620,9 @@ In quality itself the checkout judges itself. stdout.
 
 ```text
 $ quality --version
-quality 0.9.0 · this repository's gate pins v0.9.0
+quality 0.10.0 · this repository's gate pins v0.10.0
 ~/Downloads $ quality --version
-quality 0.9.0 · not inside a repository
+quality 0.10.0 · not inside a repository
 ```
 
 ### 11. `quality --help` and `quality check --help`
