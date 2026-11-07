@@ -1,0 +1,7 @@
+claim_id = "9a58629e883746a2b7278e1b0a3c7616"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "201376043c1eaa2f6b2986ee839defc83da285aa"
+branch = "claude/issue-418-image-submodule-credential-wording"
+scope = [".github/workflows/image.yml", "docs/release.md"]
+opened_commit = "2571392d8f0e82141fcbb5878987d33252722470"
