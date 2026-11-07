@@ -15,11 +15,15 @@ It applies these rules:
   the shell, so a copy untracks exactly that file; the second stands only where the name needs no quoting, else it
   reads `it`. A name without a slash, such as `.env`, also matches that name in every folder (`gitignore(5)`). A name
   that is not printable UTF-8 gets the hint to remove it by its bytes (`git ls-files -z` shows them) instead of a
-  command.
+  command. For an app repository it checks the rule of
+  [platform's app standard](https://github.com/overnightworks/platform/blob/main/docs/app.md)
+  that env files pass quality's rules.
 
   Ruled by the operator: the command runs exactly as printed, with no home-made encoder for the name.
 - `compose-port`: every published port in a tracked compose file binds loopback, `127.0.0.1` or `::1` (`"[::1]:HOST:CONTAINER"`,
-  `host_ip: ::1`); `[::]` and `0.0.0.0` are findings. A compose file is a `.yml` or `.yaml` file whose name holds the
+  `host_ip: ::1`); `[::]` and `0.0.0.0` are findings. For an app repository it checks the rule of
+  [platform's app standard](https://github.com/overnightworks/platform/blob/main/docs/app.md)
+  that published compose ports pass quality's rules. A compose file is a `.yml` or `.yaml` file whose name holds the
   word `compose` between `.`, `-` or `_`, in any case: `docker-compose.ci.yml` and `keycloak/bootstrap.compose.yaml` are
   judged, `composer.yml`, `compose2.yaml` and `compose.yaml.example` are not. Only tracked files count: an untracked
   `compose.yaml` is never judged, one added with `git add` is. Its rows say `published port`, `unreadable port`,
