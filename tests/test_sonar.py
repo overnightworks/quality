@@ -749,6 +749,16 @@ def test_properties_without_the_key_still_refuses_an_empty_token(monkeypatch, ca
     assert (code, "SONAR_TOKEN is empty" in err, step_output.exists()) == (2, True, False)
 
 
+def test_properties_without_a_config_still_refuses_an_empty_token(monkeypatch, capsys, build_repo, tmp_path):
+    """A repository without quality/config.toml runs SonarCloud, so a missing token is exit 2 and nothing is written."""
+    step_output = tmp_path / "github_output"
+    code, _, err = run_properties(
+        monkeypatch, capsys, build_repo, properties=None, environment=environment_without_token(), step_output=step_output,
+        arrange=lambda root: (root / "quality" / "config.toml").unlink(),
+    )
+    assert (code, "SONAR_TOKEN is empty" in err, step_output.exists()) == (2, True, False)
+
+
 def test_properties_with_sonar_off_and_an_unwritable_output_cannot_judge(monkeypatch, capsys, build_repo, tmp_path):
     """The off path fails loud when the job cannot be handed its output."""
     code, _, err = run_properties(
