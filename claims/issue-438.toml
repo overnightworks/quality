@@ -1,0 +1,8 @@
+claim_id = "a5ab812073f24b178a84f31907aeae46"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "5d1096c4b68a832eb47e3efcbf9b99eb9d4d60c1"
+branch = "claude/issue-438-verdict-case-7-frame"
+scope = [".github/workflows/gate.yml", "docs/gate.md", "docs/output.md", "docs/rules.md", "docs/runbooks/merge.md", "docs/sonar.md", "src/quality/cli.py", "src/quality/config.py", "src/quality/merge.py", "src/quality/output.py", "src/quality/verdict.py", "tests/conftest.py", "tests/support/verdict.py", "tests/test_architecture.py", "tests/test_cli_fix.py", "tests/test_cli_fix_renames.py", "tests/test_clones_baseline.py", "tests/test_merge.py", "tests/test_merge_rows.py", "tests/test_output.py", "tests/test_ratchet_gone.py", "tests/test_root_layout.py", "tests/test_verdict.py", "tests/test_verdict_door.py", "tests/test_verdict_frame.py", "tests/test_verdict_generated.py", "tests/test_verdict_loosenings.py", "tests/test_verdict_renames.py", "tests/test_verdict_reread.py", "tests/workflows/test_gate_sonar.py"]
+opened_commit = "24902e081e327f58d4dd45c31797d13dd7e5b2de"
+whole_reason = "The verdict's frame is one contract across verdict.py's model and rows, the door's red and declared rows, output.py's column and next: writers and gate.yml's two variables; every test module in scope pins today's judged words, which change once here. Under the ruled option A, architecture.py, report.py and tests/support/architecture.py stay untouched."
