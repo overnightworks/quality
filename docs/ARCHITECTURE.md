@@ -2,7 +2,7 @@
 
 For the engineer or agent about to change quality: the parts, who talks to whom, where the trust ends and why the
 constraints stand. The references ([gate](gate.md), [codeql](codeql.md), [sonar](sonar.md), [rules](rules.md),
-[commands](commands.md)) own the detail and are linked, never repeated.
+[output](output.md), [commands](commands.md)) own the detail and are linked, never repeated.
 
 ## 1. Context and Scope
 
@@ -118,7 +118,7 @@ directory.
 ## 5. Crosscutting Concepts
 
 **Trust.** The operator and his settings are trusted. A pull request's content and every repository text are untrusted
-input: output masks them and stops workflow commands ([rules](rules.md), the output contract). Reads stay inside the
+input: output masks them and stops workflow commands ([output](output.md#masking)). Reads stay inside the
 repository (`repository.py`). A scanner's stderr is shown only once gitleaks clears it. The GitHub transport follows no
 redirect. A workflow's pin selects which code runs locally. quality builds or runs a pinned commit only after quality's
 remote showed the comment's release tag at that commit: asked before every fetch, and remembered per machine by a record
@@ -144,6 +144,7 @@ quality itself.
   pins move the same way. One release then reaches every caller through a pull request it judges itself, with no token
   that writes to every repository.
 - A repository turns SonarCloud off only in `quality/config.toml`: the verdict holds the config against the base, so switching it off is a loosening only the operator's door merges, which a workflow input would not be.
+- Every line quality prints follows one grammar of rows, `glyph · subject · event · fact`, the principle hal's output follows too, so a reader or a script learns it once for the fleet.
 - One reusable CodeQL workflow serves the fleet and uploads under the Default Setup's category, so alerts carry over when
   a repository switches.
 
@@ -164,6 +165,8 @@ quality itself.
   and leaves tests out, and lizard's duplicate mode returned import lists; quality's own detector names a pair by the path
   and qualified symbol of both sides, which survives unrelated changes. Reopens when a tool names a pair that way and
   judges tests.
+
+- A check that exits 2 with the `uvx --from git+…` command for the pinned release instead of fetching it. Reopens when the operator rules it.
 
 ## 8. Risks and Technical Debt
 
