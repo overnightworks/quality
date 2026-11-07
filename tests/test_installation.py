@@ -76,3 +76,35 @@ def test_an_executable_the_installation_does_not_hold_is_not_found(tmp_path, mon
     monkeypatch.syspath_prepend(str(site))
     with pytest.raises(FileNotFoundError):
         installation.installed_executable("scanner")
+
+
+def recorded(tmp_path: Path, record: str | None) -> importlib.metadata.Distribution:
+    """A distribution whose metadata directory holds `record` as its `direct_url.json`, or no such file."""
+    metadata = tmp_path / "overnightworks_quality-0.10.0.dist-info"
+    metadata.mkdir()
+    (metadata / "METADATA").write_text("Metadata-Version: 2.1\nName: overnightworks-quality\nVersion: 0.10.0\n")
+    if record is not None:
+        (metadata / "direct_url.json").write_text(record)
+    return importlib.metadata.PathDistribution(metadata)
+
+
+@pytest.mark.parametrize(
+    ("record", "expected"),
+    [
+        pytest.param(
+            '{"url": "https://github.com/acme/tool", "vcs_info": {"vcs": "git", "commit_id": "07bdf7c478ac9cc9cd348b180abd3cbc9d873f23"}}',
+            installation.VcsOrigin("07bdf7c478ac9cc9cd348b180abd3cbc9d873f23"), id="a git install",
+        ),
+        pytest.param(
+            '{"url": "file:///home/someone/tool", "dir_info": {"editable": true}}', installation.DirectoryOrigin(Path("/home/someone/tool")),
+            id="an editable directory",
+        ),
+        pytest.param('{"url": "file:///srv/my%20tool", "dir_info": {}}', installation.DirectoryOrigin(Path("/srv/my tool")), id="a directory"),
+        pytest.param(None, None, id="no record"),
+        pytest.param('{"url": "https://example.invalid/tool.tar.gz", "archive_info": {}}', None, id="an archive URL"),
+        pytest.param('{"url": "https://hg.example.invalid/tool", "vcs_info": {"vcs": "hg", "commit_id": "abc"}}', None, id="another vcs"),
+        pytest.param("{not json", None, id="not JSON"),
+    ],
+)
+def test_the_origin_is_what_the_installer_recorded(tmp_path, record, expected):
+    assert installation.origin(recorded(tmp_path, record)) == expected
