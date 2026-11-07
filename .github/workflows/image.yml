@@ -38,7 +38,7 @@ on:
         type: boolean
         default: false
       submodules:
-        description: Check out the commit's git submodules, one level, without credentials
+        description: Check out the commit's git submodules, one level, with the job's token and without persisting it
         type: boolean
         default: false
     secrets:
