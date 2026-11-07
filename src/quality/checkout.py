@@ -189,7 +189,7 @@ class Workflows:
     gate: tuple[Call, ...]
     codeql: tuple[Call, ...]
     unreadable: tuple[str, ...]
-    absent: tuple[str, ...] = ()
+    absent: tuple[str, ...]
 
 
 def commit_of(ref: str) -> str | None:
@@ -355,4 +355,3 @@ def gate_pin(root: Path) -> NoGatePin | OwnGate | GatePin | UnknownGatePin:
         fact = f"the workflows pin {release} in {min(workflows_pinning)} and {other} in {min(other_workflows)}"
         return UnknownGatePin(Reason(fact, (Instruction("pin one release in every workflow"),)))
     return GatePin(commit, release, tuple(sorted(set(workflows_pinning))))
-
