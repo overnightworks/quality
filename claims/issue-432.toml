@@ -1,0 +1,8 @@
+claim_id = "060116d3780b4660bb1c8974f9114540"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "b9c340faebfd1d79c982478937fc3778b315bf08"
+branch = "claude/issue-432-merge-config-refusal"
+scope = ["docs/commands.md", "src/quality/merge.py", "src/quality/verdict.py", "tests/test_merge.py", "tests/test_merge_dry_run.py", "tests/test_merge_rows.py", "tests/test_verdict_config.py", "tests/test_verdict_renames.py"]
+opened_commit = "48433cc2d759cb6bd880eea5f4845965c2295c71"
+whole_reason = "The door's config refusal, the verdict's typed refusal it reads, the fetch moved to make room in merge.py, and the tests pinning each are one contract in two production files; split, the door would read a refusal the verdict does not yet raise."
