@@ -44,6 +44,8 @@ FIRST_SERVER_ERROR = 500
 PERMISSION_REFUSALS = frozenset({403, 404})
 PERMISSION_HINT = "(does the caller grant actions: read?)"
 NEEDS_HINT = " (a mandatory job missing from the caller's needs: must join it)"
+CREDENTIAL_HELPER = "!gh auth git-credential"
+FETCH_TIMEOUT_SECONDS = 120
 
 PageFetcher = Callable[[str], tuple[str, str | None]]
 
@@ -502,6 +504,52 @@ def read_renames(
     except process.ProcessError as error:
         raise CannotJudge(str(error)) from error
     return renames_of(listed)
+
+
+def gh_configuration_directory(environment: Mapping[str, str]) -> str:
+    """Where gh looks for its login: `GH_CONFIG_DIR`, else `$XDG_CONFIG_HOME/gh`, else `~/.config/gh`."""
+    if environment.get("GH_CONFIG_DIR"):
+        return environment["GH_CONFIG_DIR"]
+    if environment.get("XDG_CONFIG_HOME"):
+        return str(Path(environment["XDG_CONFIG_HOME"]) / "gh")
+    return str(Path(environment.get("HOME", "~")).expanduser() / ".config" / "gh")
+
+
+def fetch_environment(environment: Mapping[str, str], empty_home: Path) -> dict[str, str]:
+    """The environment of git around the fetch: no inherited git routing or configuration, an empty home so that
+    `.netrc` and every other file git reads there is absent, and no way to prompt for a password. gh is the only source
+    of credentials, and it keeps its login by being told where the real configuration directory is."""
+    isolated = process.attribute_free_git_environment(empty_home)
+    kept = {name: value for name, value in isolated.items() if name != "SSH_ASKPASS"}
+    return kept | {"GIT_TERMINAL_PROMPT": "0", "GH_CONFIG_DIR": gh_configuration_directory(environment)}
+
+
+def read_renames_of_pull(remote: str, base_sha: str, merge_sha: str, environment: Mapping[str, str]) -> Renames:
+    """The renames the verdict reads at the checkout, from the pull request's two commits fetched into a bare repository
+    that is removed afterwards. Credentials stay in gh's credential protocol; git's own words never reach the operator."""
+    with process.scratch_directory() as scratch:
+        isolated = fetch_environment(environment, scratch / "home")
+        repository = scratch / "repository"
+        commands = (
+            ["git", "init", "--bare", "--quiet", str(repository)],
+            [
+                "git", "-c", "credential.helper=", "-c", f"credential.helper={CREDENTIAL_HELPER}", "-c", "core.askPass=",
+                "-C", str(repository), "fetch", "--quiet", "--depth=1", "--no-tags", "--", remote, base_sha, merge_sha,
+            ],
+        )
+        for command in commands:
+            try:
+                done = process.run_bounded_in_own_group(command, FETCH_TIMEOUT_SECONDS, isolated)
+            except process.ProcessError as error:
+                raise CannotJudge(f"cannot fetch the pull request's commits to compare renamed files ({error})") from None
+            if done.returncode != 0:
+                raise CannotJudge(
+                    f"cannot fetch the pull request's commits to compare renamed files (git exited {done.returncode})"
+                )
+        try:
+            return read_renames(repository, base_sha, merge_sha, isolated, bound=FETCH_TIMEOUT_SECONDS)
+        except CannotJudge:
+            raise CannotJudge("cannot list the files git renamed between the pull request's commits") from None
 
 
 def side_of(config: str | None, baseline: str | None, where: str, import_configs: Mapping[str, str | None] = MappingProxyType({})) -> Side:
