@@ -39,7 +39,7 @@ SONGMAKER = "overnightworks/songmaker#1345"
 DECLARED = f"loosened (declared, {SONGMAKER} of 2026-10-20): "
 
 
-ONLY_DECLARED = "verdict: red - only declared loosenings: only the operator's quality emergency-merge lands this pull request"
+ONLY_DECLARED = "verdict: red - only declared loosenings: only the operator's quality merge lands this pull request"
 
 
 def declaration(what: str, item: str = SONGMAKER, date: str = "2026-10-20") -> str:

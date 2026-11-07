@@ -28,6 +28,7 @@ from tests.support.merge import (
     declaring,
     drive,
     landing_row,
+    not_judged_pair,
     prompt,
     pull_row,
     rows_before_the_prompt,
@@ -98,13 +99,6 @@ def removed_b():
 
 def malformed_rules():
     return "the branch rules of main are malformed"
-
-
-def not_judged_pair():
-    return (
-        "error: could not judge · nothing changed\n"
-        "next: fix what the ✗ row names, then run quality emergency-merge acme/widgets 7 again\n"
-    )
 
 
 def recording(transport):
@@ -290,7 +284,7 @@ def test_names_the_finding_a_pull_request_adds(capsys):
 @pytest.mark.parametrize(
     ("gh_kwargs", "terminal", "repo", "code"),
     [
-        ({}, False, REPO, 1), ({}, True, "not-a-repo", 1), ({}, True, "acme/widg\u0435ts", 1), ({"admin": False}, True, REPO, 2),
+        ({}, False, REPO, 1), ({}, True, "not-a-repo", 2), ({}, True, "acme/widg\u0435ts", 2), ({"admin": False}, True, REPO, 2),
         ({"fail_on": ["pull"]}, True, REPO, 2),
     ],
     ids=["no terminal", "bad name", "#103 rule 1 lookalike name", "missing admin permission", "gh down"],
@@ -383,7 +377,7 @@ def test_a_declared_loosening_merges_through_the_door_without_sonar(
         shown.append(capsys.readouterr())
         return "yes\n"
 
-    code = cli.main(["emergency-merge", REPO, "7"], gh=gh, transport=transport, terminal=cli.Terminal(read_line, lambda: True))
+    code = cli.main(["merge", f"{REPO}#7"], gh=gh, transport=transport, terminal=cli.Terminal(read_line, lambda: True))
     assert (code, transport.sent, gh.sequence) == (0, [], ["gate false", "merge", "gate true", "comment"])
     assert (shown[0].out, shown[0].err) == (
         pull_row() + checks_row("quality / verdict is") + rows + merge_row() + landing_row("#9"),

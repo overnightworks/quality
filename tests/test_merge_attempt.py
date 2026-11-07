@@ -95,7 +95,7 @@ def all_four_but(*left_out):
 
 
 def rerun_pair(fact):
-    return f"error: quality_gate on again · #7 {fact}\nnext: quality emergency-merge acme/widgets 7\n"
+    return f"error: quality_gate on again · #7 {fact}\nnext: quality merge acme/widgets#7\n"
 
 
 def unknown_pair():
@@ -198,8 +198,8 @@ def gadgets_requests(outcome, restored, *between_restore_and_comment):
             (
                 "error: quality_gate MAY STILL BE OFF on acme/gadgets · #12 is not merged · no log comment on #12\nnext:\n"
                 f"    echo '{gate_body('true')}' | gh api -X PATCH repos/acme/gadgets/properties/values --input -\n"
-                "    quality emergency-merge acme/gadgets 12\n"
-                "    gh api -X POST repos/acme/gadgets/issues/12/comments -f 'body=Emergency door used by @felix at 2026-11-06T12:00:00+00:00: "
+                "    quality merge acme/gadgets#12\n"
+                "    gh api -X POST repos/acme/gadgets/issues/12/comments -f 'body=quality merge run by @felix at 2026-11-06T12:00:00+00:00: "
                 'declared loosening (overnightworks/songmaker#1345 of 2026-10-20): mandatory job "B" removed - reason: ruled; '
                 "merges with a merge commit; quality_gate off → merge failed → NOT restored, it may still be off.'\n"
             ),
@@ -303,7 +303,7 @@ def test_the_closing_line_counts_the_seconds_from_the_answer(capsys):
         (
             {"fail_on": ["restore", "merge"]}, 2,
             off() + restore_failed_row() + merge_failed_row() + posted(),
-            ("error: quality_gate MAY STILL BE OFF on acme/widgets · #7 is not merged\nnext:\n" + restore_line() + "    quality emergency-merge acme/widgets 7\n"),
+            ("error: quality_gate MAY STILL BE OFF on acme/widgets · #7 is not merged\nnext:\n" + restore_line() + "    quality merge acme/widgets#7\n"),
             all_four_but("merge", "gate true"), unrestored_log_body(merge_failed()),
         ),
     ],
@@ -389,7 +389,7 @@ def test_a_stdout_that_refuses_a_row_stops_the_door_before_the_question(draft, c
         2,
         (
             "error: stdout refused a row · nothing changed\n"
-            "next: send stdout where it can be written, then run quality emergency-merge acme/widgets 7 again\n"
+            "next: send stdout where it can be written, then run quality merge acme/widgets#7 again\n"
         ),
         [],
         [("api", "repos/acme/widgets"), ("api", "repos/acme/widgets/pulls/7")],

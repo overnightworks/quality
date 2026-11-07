@@ -242,13 +242,20 @@ def prompt(pull_request=7):
 
 
 def not_confirmed_pair(pull_request=7, repository=REPO):
-    return f"error: not confirmed · nothing changed\nnext: quality emergency-merge {repository} {pull_request}\n"
+    return f"error: not confirmed · nothing changed\nnext: quality merge {repository}#{pull_request}\n"
 
 
 def landing_pair(pull_request=7, repository=REPO):
     return (
         "error: not merged · the operator's merge ends the merge commit with the pull request body's one Work-Item: or No-Item: line · nothing changed\n"
-        f"next: give the pull request body exactly one Work-Item: or No-Item: line outside code blocks, then run quality emergency-merge {repository} {pull_request} again\n"
+        f"next: give the pull request body exactly one Work-Item: or No-Item: line outside code blocks, then run quality merge {repository}#{pull_request} again\n"
+    )
+
+
+def not_judged_pair():
+    return (
+        "error: could not judge · nothing changed\n"
+        "next: fix what the ✗ row names, then run quality merge acme/widgets#7 again\n"
     )
 
 
@@ -283,7 +290,7 @@ def restore_line():
 
 def log_body(switched="off", outcome="merge", restored="on", method="merge commit", findings="4 legacy finding(s)"):
     return (
-        f"body=Emergency door used by @felix at 2026-11-06T12:00:00+00:00: {findings}; merges with a {method}; "
+        f"body=quality merge run by @felix at 2026-11-06T12:00:00+00:00: {findings}; merges with a {method}; "
         f"quality_gate {switched} → {outcome} → {restored}."
     )
 
@@ -292,7 +299,7 @@ def comment_line(**arguments):
     return f"    gh api -X POST repos/acme/widgets/issues/7/comments -f '{log_body(**arguments)}'\n"
 
 
-def drive(gh, transport=None, typed="yes\n", terminal=True, repo=REPO, when_asked=lambda: None, pull_request="7", clock=lambda: 0.0):
+def drive(gh, transport=None, typed="yes\n", terminal=True, repo=REPO, when_asked=lambda: None, pull_request="7", clock=lambda: 0.0, words=()):
     """The `typed` argument is the line the terminal answers, its line end included (`""` the end of input); an exception is raised."""
     answers = []
 
@@ -305,7 +312,7 @@ def drive(gh, transport=None, typed="yes\n", terminal=True, repo=REPO, when_aske
 
     remote = getattr(gh, "remote", None)
     code = cli.main(
-        ["emergency-merge", repo, pull_request], gh=gh, transport=transport or sonar(), terminal=cli.Terminal(read_line, lambda: terminal), remote_for=no_network if remote is None else lambda repository: remote,
+        ["merge", f"{repo}#{pull_request}", *words], gh=gh, transport=transport or sonar(), terminal=cli.Terminal(read_line, lambda: terminal), remote_for=no_network if remote is None else lambda repository: remote,
         clock=clock, now=frozen_now,
     )
     return code, answers

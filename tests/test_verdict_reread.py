@@ -172,7 +172,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
              "head": gate_config("checks", declared=(declaration('mandatory job "B" removed'),))},
             1,
             ['loosened (declared, overnightworks/songmaker#1345 of 2026-10-20): mandatory job "B" removed',
-             ("verdict: red - only declared loosenings: only the operator's quality emergency-merge lands this pull "
+             ("verdict: red - only declared loosenings: only the operator's quality merge lands this pull "
              "request")],
             0,
             id="cell 8",

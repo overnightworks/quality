@@ -16,7 +16,7 @@ from tests.support.merge import (
     changed_nothing,
     drive,
 )
-from tests.support.merge import sonar as emergency_sonar
+from tests.support.merge import sonar as merge_sonar
 from tests.support.sonar import (
     FEATURE_ENVIRONMENT,
     FINISHED_FOR_FEATURE,
@@ -134,11 +134,11 @@ def serve_config_at_merge_commit(gh: FakeGh) -> None:
 
 
 @pytest.mark.parametrize("served", [True, False], ids=["file at the merge commit", "not served"])
-def test_the_emergency_door_names_every_added_finding_where_the_bot_config_exists(served, capsys):
+def test_the_merge_door_names_every_added_finding_where_the_bot_config_exists(served, capsys):
     gh = FakeGh()
     if served:
         serve_config_at_merge_commit(gh)
-    code, answers = drive(gh, emergency_sonar(added=[bot_issue(), bot_issue("python:S1")]))
+    code, answers = drive(gh, merge_sonar(added=[bot_issue(), bot_issue("python:S1")]))
     refusal = capsys.readouterr().out
     assert code == 1
     assert (sonar.DEPENDABOT_EXCEPTION_RULE in refusal, "python:S1" in refusal) == (True, True)
@@ -146,7 +146,7 @@ def test_the_emergency_door_names_every_added_finding_where_the_bot_config_exist
     assert answers == []
 
 
-def test_the_emergency_door_cannot_judge_when_a_config_read_fails_other_than_not_found(capsys):
+def test_the_merge_door_cannot_judge_when_a_config_read_fails_other_than_not_found(capsys):
     gh = FakeGh()
     gh.files[(CONFIG_PATH, MERGE_SHA)] = GhFailed("gh api failed: HTTP 500")
     code, answers = drive(gh)
@@ -156,12 +156,12 @@ def test_the_emergency_door_cannot_judge_when_a_config_read_fails_other_than_not
     assert answers == []
 
 
-def test_the_emergency_door_shows_main_whole_and_reads_no_bot_config(capsys):
+def test_the_merge_door_shows_main_whole_and_reads_no_bot_config(capsys):
     gh = FakeGh(merge_lands=True)
     serve_config_at_merge_commit(gh)
     shown_before_asking = []
     code, _ = drive(
-        gh, emergency_sonar(legacy=12), when_asked=lambda: shown_before_asking.append(capsys.readouterr().out)
+        gh, merge_sonar(legacy=12), when_asked=lambda: shown_before_asking.append(capsys.readouterr().out)
     )
     (shown,) = shown_before_asking
     assert code == 0
