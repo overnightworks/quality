@@ -20,8 +20,8 @@ def ceiling(*entries: tuple[str, int]) -> str:
 
 
 def checked(capsys, repo: Path) -> tuple[int, str]:
-    code = door_in(repo, CHECK_WORD, "debt", clock=lambda: 0.0)
-    return code, capsys.readouterr().out
+    code, out, _ = fixed(capsys, repo, CHECK_WORD, "debt")
+    return code, out
 
 
 def based(pull_request, files: dict[str, str], held: str) -> Path:

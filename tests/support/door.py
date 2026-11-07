@@ -76,12 +76,13 @@ def door_environment(**extra: str) -> dict[str, str]:
     return kept | extra
 
 
-def fixed(capsys, repo: Path, *words: str, **keywords) -> tuple[int, str, str]:
-    """The exit, stdout after the release row and stderr of `quality <words>` started in `repo`."""
-    judging = PinnedJudging()
-    code = door_in(repo, *words, clock=lambda: 0.0, judging=judging, **keywords)
+def fixed(capsys, repo: Path, *words: str, judging=None, **keywords) -> tuple[int, str, str]:
+    """The exit, stdout and stderr of `quality <words>` started in `repo`; judged at `pinned_release`, its stdout comes
+    after the release row, and a passed `judging` keeps the whole stdout."""
+    pinned = PinnedJudging()
+    code = door_in(repo, *words, clock=lambda: 0.0, judging=judging or pinned, **keywords)
     printed = capsys.readouterr()
-    return code, judging.frame(printed.out), printed.err
+    return code, pinned.frame(printed.out), printed.err
 
 
 def digest(repo: Path) -> str:
