@@ -1,0 +1,8 @@
+claim_id = "28666253c5a9435b9efe0433faffb972"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "81bd9bc725865839a9e229797d7c0e43da43cd49"
+branch = "claude/issue-459-output-reference"
+scope = ["README.md", "docs/ARCHITECTURE.md", "docs/commands.md", "docs/gate.md", "docs/output.md", "docs/rules.md", "tests/support/check.py"]
+opened_commit = "1f9e40f2d9c8aa7b4b2ec6afd3f4481445656a26"
+whole_reason = "A mockup leaves whole: the picture's cases and decisions become one reference and their rules move to their owners in one change, so docs/output.md is never half target and half fact."
