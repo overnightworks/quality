@@ -1,0 +1,8 @@
+claim_id = "e38ee220f181411abbe4d51cc152510d"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "5c03edac4177ccb5d4b096e42daeacd20f166c5d"
+branch = "claude/issue-430-quality-report"
+scope = [".github/workflows/scoreboard.yml", "README.md", "docs/commands.md", "docs/output.md", "docs/rules.md", "src/quality/cli.py", "src/quality/fleet.py", "src/quality/output.py", "tests/conftest.py", "tests/test_cli_help.py", "tests/test_clones.py", "tests/test_fleet.py", "tests/test_fleet_matrix.py", "tests/test_fleet_report.py", "tests/test_output.py", "tests/test_ratchet_languages.py"]
+opened_commit = "7533b2f1c7066f505ec7745876f3dfaf7fa2c2a9"
+whole_reason = "Three production files and the workflow, about +135/-60: the word report, its two streams, its help and its refusal are one contract, since a word with no alias means the new door; the fixture rename in two test modules is #253 D2's mechanical part of the same word."
