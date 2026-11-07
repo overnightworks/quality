@@ -1,0 +1,7 @@
+claim_id = "9fa10896c6a54b0c900b2ca07af963b2"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "81bd9bc725865839a9e229797d7c0e43da43cd49"
+branch = "claude/issue-461-gate-refs-v0-10-0"
+scope = [".github/workflows/gate.yml"]
+opened_commit = "c6b86c3f7e6127286e0e34ffd80699e08b9ed9f3"
