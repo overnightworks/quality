@@ -15,8 +15,9 @@ It applies these rules:
   the shell, so a copy untracks exactly that file; the second stands only where the name needs no quoting, else it
   reads `it`. A name without a slash, such as `.env`, also matches that name in every folder (`gitignore(5)`). A name
   that is not printable UTF-8 gets the hint to remove it by its bytes (`git ls-files -z` shows them) instead of a
-  command. The command runs exactly as printed, with no home-made encoder for the name (operator ruling 19.10.2026:
-  „Immer exakt (empfohlen)“).
+  command.
+
+  Ruled by the operator: the command runs exactly as printed, with no home-made encoder for the name.
 - `compose-port`: every published port in a tracked compose file binds loopback, `127.0.0.1` or `::1` (`"[::1]:HOST:CONTAINER"`,
   `host_ip: ::1`); `[::]` and `0.0.0.0` are findings. A compose file is a `.yml` or `.yaml` file whose name holds the
   word `compose` between `.`, `-` or `_`, in any case: `docker-compose.ci.yml` and `keycloak/bootstrap.compose.yaml` are
@@ -47,14 +48,19 @@ It applies these rules:
   that is not one-line text makes the `files` row `✗ not checked` with the reason, and `next:` shows a `[[compose.allow]]` example, and a
   malformed other table in `quality/config.toml` is forwarded with its validation error. A declaration is no loosening,
   so `quality verdict` asks for no `[[gate.loosened]]` entry. A config reader older than the rule refuses `[compose]`
-  as an unknown key. (#45 row Q1b-3g, operator ruling 19.10.2026: „Erst Doku, dann Erlaubnisliste (empfohlen)“)
+  as an unknown key.
+
+  Ruled by the operator: a service with `network_mode: host`, or one whose `network_mode` holds a Compose interpolation,
+  is a finding unless `quality/config.toml` declares its file and service.
 - `size`: every tracked file of Python, TypeScript (`.ts` `.tsx` `.mts` `.cts`), JavaScript (`.js` `.jsx` `.mjs`
   `.cjs`), Svelte or Vue is measured by its lines, and every tracked `*.py` file also with
   [lizard](https://github.com/terryyin/lizard): a file from 800 lines, a Python function from 60 lines and a Python
   function with a CCN above 15 are debt, counted apart for production and tests (a path under `test/` or `tests/`;
   Python also `conftest.py`, `test_*.py`, `*_test.py`; TypeScript and JavaScript also `__tests__/`, `*.test.*`,
-  `*.spec.*`, `*.test-d.*` and `*.spec-d.*`). A minified or generated file is counted by its lines like any other,
-  unless the repository declares it generated:
+  `*.spec.*`, `*.test-d.*` and `*.spec-d.*`).
+
+  Ruled by the operator: a file that `quality/config.toml` declares generated is left out of the `size` rule; a minified
+  or generated file the repository does not declare is counted by its lines like any other:
 
   ```toml
   [[size.generated]]
@@ -66,27 +72,30 @@ It applies these rules:
   ```
 
   A declared file's lines, functions and CCN are neither judged, counted in the not-recorded row's count nor recorded by
-  `quality check --fix`; a baseline entry left under its path can fall (`file is left out as generated · ceiling 850 lines`) until
-  `quality check --fix` drops it (`dropped  file is left out as generated`). `path` is the exact
-  tracked path of one file, `job` one of `[gate] mandatory_jobs`, the job whose generator check proves the file (quality
-  cannot see what that job runs; the operator checks it once, at the door). A missing or extra key, a folder, a pattern,
+  `quality check --fix`. `path` is the exact tracked path of one file, `job` one of `[gate] mandatory_jobs`, the job
+  whose generator check proves the file. A missing or extra key, a folder, a pattern,
   `..`, an absolute path, a `job` the gate does not list (a config without `mandatory_jobs` included), a malformed `item`
   or `date`, a reason that is not one line or two entries for one path is exit `2` naming the entry with this
   example: in `check` as the `debt` row `✗ not checked` with the example under `next:`, in `quality check --fix` as the same row, and in the
   verdict and the door naming the side; `check secrets --staged` reads only `[secrets]`. A declaration whose path holds no tracked file in
   a measured language is an `unused` row (`[[size.generated]] matches no tracked file in a measured language`) on that path, fixed by deleting the entry from `quality/config.toml`. Only `quality/config.toml` declares:
-  `.gitattributes`, `linguist-generated` included, plays no part. Only the `size` rule leaves the file out: `clone` and
-  the report still read it. (Operator ruling 30.10.2026, #174: „ok“)
+  `.gitattributes`, `linguist-generated` included, plays no part.
+
+  A baseline entry left under a declared file's path can fall (`file is left out as generated · ceiling 850 lines`) until
+  `quality check --fix` drops it (`dropped  file is left out as generated`). Only the `size` rule leaves the file out:
+  `clone` and the report still read it. quality cannot see what the declared job runs; the operator checks it once, at
+  the door.
+
   Functions of the other languages are not measured: lizard misplaces their boundaries
-  ([terryyin/lizard#521](https://github.com/terryyin/lizard/issues/521)). Functions are named by their qualified
+  ([lizard's issue tracker](https://github.com/terryyin/lizard/issues/521)). Functions are named by their qualified
   symbol (`Class.method`); a second one of the same name, such as a property setter, is `Class.method#2`. Without
   `quality/baseline.toml` the debt row is `· debt  not recorded  N entries over the thresholds · measured only`, N the
   size entries over the thresholds that quality measured (a declared file left out); it equals what a first
   `quality check --fix` records only when every Python file parses, otherwise that fix refuses. The size debt
-  leaves the exit unchanged. The per-class and language counts leave `check`; the report keeps them (O22).
+  leaves the exit unchanged. The per-class and language counts leave `check`; the report keeps them.
   A `.py` file is read the way Python reads source (a PEP 263 coding cookie or a UTF-8 BOM decides the encoding). One
   Python 3.14 cannot decode or parse is named as not valid Python: without a baseline it stands as a note row under the debt row
-  (`· bad.py  not measured  not valid Python`, O22) and the size verdict is unchanged, while `python-security` judges
+  (`· bad.py  not measured  not valid Python`) and the size verdict is unchanged, while `python-security` judges
   the file unparsable or cannot judge it (exit `2`); with a baseline the `debt` row is `✗ not checked` with
   `bad.py is not valid Python (...)`, and `quality check --fix` refuses the same way, writing nothing; both exit `2`.
   Only where no baseline is held does `--fix` refuse with `✗ not fixed`, since only recording the first ceiling is refused. A tracked file the operating system refuses to read makes the
@@ -104,7 +113,7 @@ It applies these rules:
   (`file has 742 lines · ceiling 766`, fix: `quality check --fix`); an entry whose path the index no longer tracks, or whose Python
   file is measured without the function, can fall after the measured rows, with no line (`file is gone · ceiling 802 lines`,
   `function total is gone · ceiling CCN 19`, fix: `quality check --fix`); an entry with no measurement otherwise (a tracked
-  file missing from disk, a function entry under a file of another language) stands and counts in the clean row's `ceiling held · N entries, M clone pairs`. Vocabulary: O20, extents: O21.
+  file missing from disk, a function entry under a file of another language) stands and counts in the clean row's `ceiling held · N entries, M clone pairs`.
   `quality check debt --fix` (`--fix` takes no `--staged` and needs `debt` among the named areas, or none named; `--dry-run` needs `--fix`; no workflow runs either)
   changes `quality/baseline.toml` at the top of the repository it is started in (a stray `src/quality/baseline.toml` is
   neither read nor removed) and then judges the tree against the new file. It only lowers: each held entry falls to its
@@ -131,28 +140,34 @@ It applies these rules:
   `--fix` follows renames as the verdict carries them: from the ceiling's last commit it reads what git renamed into the index (`git diff --cached -M50% -l1000`), moves a renamed file's entries and pairs to the new path at their values (`moved`) and drops what the ceiling held under that path before the move (`dropped ... left from before the move`); a ceiling it already moved stays, an entry it cannot place refuses with the restore step, a shallow clone whose ceiling's last commit is its edge, which is every depth-1 clone that holds a ceiling, refuses `--fix` with `git fetch --unshallow`, and a move the index does not record is not followed. Renames are followed before anything is judged gone, so a renamed file's entries move and never fall; with no committed ceiling a moved file's entries are gone. `check` reads no history: after a staged move it names the new path `new debt` and the old one `can fall … is gone`, and one `--fix` clears both.
 - `clone`: a pair is two functions (methods and nested functions too) in two different tracked `*.py` files, each of at
   least 40 tokens without its docstring, whose structure is at least 90 % the same once every name and literal is
-  renamed; tests count like code, and a copy inside one file is no pair. A pair is named by the path and qualified
-  symbol of both sides, as `size` names a function; a pair counts as tests only when both files are tests. Without a
+  renamed (CLONE-1); tests count like code, and a copy inside one file is no pair. A pair is named by the path and qualified
+  symbol of both sides, as `size` names a function (CLONE-2); a pair counts as tests only when both files are tests (CLONE-3). Without a
   `[clones]` table in `quality/baseline.toml` the rule only measures: the pairs stand in the partly row
-  (`· debt  not recorded  2 clone pairs · partly measured only`, O21). With one, even an empty one, a new pair is a
+  (`· debt  not recorded  2 clone pairs · partly measured only`). With one, even an empty one, a new pair is a
   `near copy` row at its second side (`function check and tests/test_a.py run`, fix: give the shared body one owner and
   call it, or make the cases one parametrized test) and so is a held pair the tree lost, even when a side was deleted
   (`can fall` at its first side: `pair tests/test_a.py run <-> tests/test_b.py check is gone`, fix:
   `quality check --fix`). A Python file that cannot be parsed may hide a pair, so with a `[clones]` table the `debt` row is `✗ not checked`
   (exit `2`), as for `size`. The baseline is read once for both rules: one that cannot be read leaves both
   unjudged (the `debt` row names the reason once, exit `2`), also when it has no `[clones]` table, since the mode is then unknown.
-  quality owns this detector instead of calling jscpd or lizard (operator ruling 21.10.2026: „aco-Prüfer übernehmen
-  (empfohlen)“); the detector, taken over from aco, compares the functions' name-folded token streams, because a pair needs an identity that
-  survives unrelated changes (jscpd names a pair so that a neighbouring edit orphans the baseline entry, and leaves tests
-  out; lizard's duplicate mode returned import lists), and it judges Python only. The threshold, what makes a pair, how
-  it is named, the report-only mode and the printed lines were shown to the operator and left unanswered, so they stand
-  at the proposed default and are not his word (#113, O2 and E1 to E7). E2 stays for the rule itself: a renamed file or
-  function orphans the held pair and names a new one. Only the verdict's comparison with the base treats a pair whose
-  files git renamed as the same pair (see the baseline paragraph below).
+
+  Ruled by the operator: quality owns this detector instead of calling jscpd or lizard; it is the detector taken over
+  from aco.
+
+  The detector compares the functions' name-folded token streams and judges Python only. The threshold, what makes a
+  pair, how it is named, that tests count, the report-only mode and the printed lines are defaults the operator never
+  answered. A renamed file or function orphans the held pair and names a new one. Only the verdict's comparison with the
+  base treats a pair whose files git renamed as the same pair (see the baseline paragraph below).
 - `import-contract`: the repository's [import-linter](https://github.com/seddonym/import-linter) contracts must be
   kept. The config is the tracked `.importlinter` or `setup.cfg` (`[importlinter]`) or `pyproject.toml`
   (`[tool.importlinter]`), counted once its name exists in the tree: a tracked one deleted from disk is none, a symlink to
-  nowhere cannot be read (exit `2`); without one the rule only measures: the `imports` row reads `· imports  not set up  no import-linter config`, dim at a terminal, the exit stays `0`, the area is not counted among the clean areas, and the verdict line says `imports not enforced` before the duration, after debt's note (operator ruling 31.10.2026 on #293's card: „B“). A config with contracts that are kept is `✓ imports  clean  N contracts` (a config without a contract: `0 contracts`). import-linter 2.15 runs inside quality as a library, never its CLI, and writes nothing to
+  nowhere cannot be read (exit `2`).
+
+  Ruled by the operator: without one the rule only measures; the `imports` row is a grey note, the area is not counted
+  among the clean areas, and the verdict names it.
+
+  The `imports` row reads `· imports  not set up  no import-linter config`, dim at a terminal, the exit stays `0`, and the verdict line says `imports not enforced`
+  before the duration, after debt's note. A config with contracts that are kept is `✓ imports  clean  N contracts` (a config without a contract: `0 contracts`). import-linter 2.15 runs inside quality as a library, never its CLI, and writes nothing to
   the checkout (no `.import_linter_cache`). A broken contract is one finding `! <config>  broken  contract <name>`, with the lines import-linter renders for it (the chain, `shop.db -> shop.web (l.1)`, and the contract's guidance) under the row behind `| `, fix `change the import or the contract`, exit `1`. An `ignore_imports` entry no
   import matches follows the contract's `unmatched_ignore_imports_alerting`: `error` (the default) is a finding `unused  contract <name> ignores a -> b`, fix `delete it from the contract's ignore_imports`, `warn` a note row `· <config>  unused  contract <name> ignores a -> b`, `none` nothing. Each root
   package is the one tracked `<dir>/<name>/__init__.py` outside the tests. The rule cannot judge (exit `2`, before any
@@ -177,9 +192,9 @@ It applies these rules:
   in prose that never show its content; every fix is prose with no command, and for a file's own text it says to move
   the lines into `AGENTS.md`. A tracked file missing from disk is skipped; one the filesystem refuses to read
   makes the `files` row `✗ not checked` with the reason (exit `2`). No configuration switches the rule off.
-  (operator ruling 20.10.2026: „ich will kein auseinanderlaufen von claude.md und agents.md!“; answers of 21.10.2026:
-  the finding names only the file, „Nur Dateiname (empfohlen)“, and the fix is a sentence, „Satz, kein Befehl
-  (empfohlen)“)
+
+  Ruled by the operator: `CLAUDE.md` and `AGENTS.md` never diverge. A finding names only the file, and its fix is a
+  sentence, never a command.
 - `root-layout`: every entry directly in the root of the tracked tree is on quality's base list or declared. An entry is
   a file or a directory (written `frontend/`); a directory with many files is one entry. Names compare in exact case, and
   the finding for a name that differs only in case names the base-list spelling. A file and a directory of one name are
@@ -205,8 +220,11 @@ It applies these rules:
   inside the entry, `.`, `..`, `.git`, an empty entry, a multi-line reason, an unknown key, or one entry declared
   twice) makes the `files` row `✗ not checked` with the reason, and `next:` shows a `[[root.allow]]` example. Any other malformed table or
   allowance elsewhere in `quality/config.toml`, which plain `quality check` reads for this rule, refuses it too,
-  with that table's own message; the values of `[gate]` stay the verdict's to judge. Any pull request may add a declaration with a reason; the review judges whether the reason holds. A declaration is no loosening, so `quality verdict` asks for no
-  `[[gate.loosened]]` entry (operator ruling 23.10.2026: „jeder PR mit Grund, das Review urteilt, ohne deine Tür“).
+  with that table's own message; the values of `[gate]` stay the verdict's to judge.
+
+  Ruled by the operator: any pull request may add a declaration with a reason; the review judges whether the reason
+  holds. A declaration is no loosening, so `quality verdict` asks for no `[[gate.loosened]]` entry.
+
   The rule reads names, never content, and writes nothing. No configuration switches it off. A config reader older than
   the rule refuses `[root]` as an unknown key, so a declaration lands in the pull request that moves the repository to
   a quality version that knows it. Named gaps: a submodule in the root counts as a file entry and no case of it is
@@ -237,8 +255,9 @@ It applies these rules:
   text makes the `files` row `✗ not checked` with the reason, and `next:` shows a `[[layout.allow]]` example; a malformed `[layout]` table is
   the same, and another malformed table in `quality/config.toml` is forwarded with its validation error. A
   declaration is no loosening, so `quality verdict` asks for no `[[gate.loosened]]` entry. The rule writes nothing and
-  no configuration switches it off. A config reader older than the rule refuses `[layout]` as an unknown key. (#175,
-  operator ruling 24.10.2026: „ja das will ich“)
+  no configuration switches it off. A config reader older than the rule refuses `[layout]` as an unknown key.
+
+  Ruled by the operator: quality checks in CI where files sit below the root (`tests/`, `scripts/`, file names).
 - `script-name` and `script-header` judge a script: a tracked file with index mode 100755, whose content starts with
   `#!`, or that is a `.sh`, `.py` or `.mjs` file under a `scripts/` folder at any depth (`frontend/scripts/` too). A
   path with a `tests/` component is never a script, nor is a link (120000, 160000), nor data beside a script such as
@@ -256,7 +275,6 @@ It applies these rules:
     PEP 723 block; blank lines do not count. Comments are `#`, and `//` or `/*` for `.mjs`. A tool directive
     (`# shellcheck`, `# -*-`, `# noqa`, `# type:`, `# pyright:`, `# ruff:`, `// eslint`) and code such as
     `set -euo pipefail` do not count. Presence only, never content.
-  (#175, #190; head decisions of 27.10.2026: the `tests/` exemption and blank lines not counting)
 - `test-layout` judges what may lie under a Python project's `tests/` and where a frontend test lies. A project is the
   directory of any tracked `pyproject.toml`, the root or a member at any depth; the file's content is never read, and
   one inside the `tests/` of another project, of either kind, makes no project. A project is judged when it has a package: a directory directly under
@@ -285,8 +303,9 @@ It applies these rules:
   A member's tests map only into the member's own `src/` and `scripts/`. Each case has its own reason and fix, a
   file that breaks the folder and the name condition together gets one finding with both reasons, and every fix ends
   with declaring the path. A test module that mirrors nothing says `misplaced`, its fact joining the reasons by `; `.
-  (#175, #196, #199; operator rulings 24.10.2026: „ja das will ich“, D-A „ja beides a?“,
-  D-B „ja b!“; the details are head decisions of 27.10.2026)
+
+  Ruled by the operator: `tests/` mirrors `src/<package>/` by path, unit and integration tests are told apart by a
+  pytest marker, and only `e2e` has its own folder.
 
   Frontend tests. A frontend project is the directory of any tracked `package.json`, the root or a
   member at any depth; its content (`workspaces` included) is never read, a `package.json` inside the `tests/` of a
@@ -312,8 +331,7 @@ It applies these rules:
   and `spec` (judged as a spec), a test-named file outside any frontend project, where helpers, setup files and
   fixtures lie, a test whose subject lies outside its project (declare it), an `e2e/` folder that is its own
   workspace package (its specs are red), a `package.json` under a `fixtures/` folder outside any `tests/` (a project)
-  and a judged file in a frontend `fixtures/` folder (it needs a sibling). (#175; operator rulings 24.10.2026; the
-  details are head decisions of 27.10.2026)
+  and a judged file in a frontend `fixtures/` folder (it needs a sibling).
 - `test-import` judges every Python project, with or without a package, as `test-layout` finds projects. The importers
   are the tracked `.py` files under its `tests/` that are no link and lie in no `fixtures/` folder, `support/` modules
   and `e2e/` drivers included. The targets are the tracked `test_*.py` and `conftest.py` files there (a link is a target
@@ -332,7 +350,6 @@ It applies these rules:
   (`importlib.import_module`, `__import__`, `pytest.importorskip`), `pytest_plugins`, `sys.path` edits, `runpy`,
   source passed to a subprocess with `-c`, and `*_test.py` as a target. An import whose name matches a tracked test
   module is reported even when it means a third-party module; rename the test module or declare the importer.
-  (#175, #201)
 - `python-floor` judges every tracked `pyproject.toml` that `test-layout` finds as a project (the root or a member at
   any depth, none inside another project's `tests/`) and that holds a `[project]` table; one with only `[tool.*]`
   tables, or with `project` as a value, is not judged, and a gitlink is never entered. The floor is the highest lower
@@ -358,18 +375,20 @@ It applies these rules:
   waiting for usage evidence: workflows, `.python-version`, Dockerfiles, ruff's `target-version`, `setup.py`,
   `setup.cfg` and Poetry's `[tool.poetry]`; `!=` as a floor (`>=3.13,!=3.13.*` is red although it admits only 3.14 and
   up); a job that never installs the project, which runs old Python unnoticed; `uv sync` behind an older
-  setup-python, which fetches 3.14 and leaves a stale setter; and a Python project without a `pyproject.toml`. (#207)
+  setup-python, which fetches 3.14 and leaves a stale setter; and a Python project without a `pyproject.toml`.
+
+  Ruled by the operator: every tracked `pyproject.toml` that `test-layout` finds as a project is judged, the root and
+  each member alike.
 - `python-security` judges every tracked regular `.py` file in any directory with the `S` codes of quality's own ruff
   (`ruff==0.17.1`, an exact pin in quality's `pyproject.toml` that serves its own lint too): the ruff binary of
   quality's installation, never one on `PATH`, at the pinned version, runs `ruff check --isolated --no-cache
   --ignore-noqa --select S,T20 --target-version py314 --output-format json -- <files>`, in batches below the argument
   limit, and writes nothing into the checkout. That one run serves `python-print` too. With no tracked `.py` file ruff
   is not started. A clean `code` row counts what ruff judged: `✓ code  clean  2 rules · 41 Python files`, `0 Python
-  files` with none (O56 of 2.11.2026). Not judged: untracked files, a link, anything inside a gitlink, notebooks,
+  files` with none. Not judged: untracked files, a link, anything inside a gitlink, notebooks,
   `.pyi` files and suffixless scripts. The repository's own ruff `select`, `ignore`, `per-file-ignores`, `exclude`,
   `extend` and noqa have no effect. Each finding stands as a row under the `code` row, `! src/a.py:12  insecure  S307
-  Use of possibly insecure function; ...`, and its `fix:` names the line its noqa must stand on, ruff's `noqa_row`
-  (O51, O52 of 2.11.2026). In the files `test-import` judges (every `.py` under a Python project's `tests/`, outside
+  Use of possibly insecure function; ...`, and its `fix:` names the line its noqa must stand on, ruff's `noqa_row`. In the files `test-import` judges (every `.py` under a Python project's `tests/`, outside
   `fixtures/`)
   S101, S105 to S107, S603 and S607 are exempt; S108 (a shared path breaks test isolation), S310 and every other code
   stay red there, and `tests/fixtures/` and `src/` get no exemption. A finding is green only when the line at ruff's
@@ -394,13 +413,16 @@ It applies these rules:
   `.py` file is Python. No configuration switches the rule off, and a reasoned noqa asks `quality verdict` for no
   `[[gate.loosened]]` entry. Not judged, and waiting for usage evidence: notebooks, `.pyi` files and suffixless
   Python; judging a non-UTF-8 source (a latin-1 file with non-ASCII bytes stays `cannot judge`), since ruff reads
-  UTF-8 only; a stale reasoned noqa, which ruff's RUF100 finds. (#214, #219)
+  UTF-8 only; a stale reasoned noqa, which ruff's RUF100 finds.
+
+  Ruled by the operator: the rules are red from the release that ships them, with no report-only phase; `assert` (S101)
+  is exempt in tests; a rule-specific noqa with a reason is green.
 - `python-print` judges `T201` (`print`) and `T203` (`pprint`) from `python-security`'s run, over the same files,
   with the same deafness to the repository's ruff settings and the same refusals: a run quality cannot trust or a file
   ruff cannot parse leaves both rules `cannot judge` or `unparsable`. Each finding stands as a row
   (``! scripts/sync_agents.py:12  print call  T201 `print` found``), a print to `sys.stderr` included, and tests get no
   exemption. A reasoned `# noqa: T201 - <reason>` at `noqa_row` clears one line, as for `python-security`. A program's
-  one output owner declares itself in its code, never in a path list (operator ruling 27.10.2026): a file-level
+  one output owner declares itself with a file-level
   `# ruff: noqa: T201[, T203] - <reason>` on a line of its own, the form ruff honours too, clears the codes it names in
   its own file only; its reason holds a letter and no comma, and the comment holds no second `#`. A bare
   `# ruff: noqa`, one without a reason, a comma in the reason, one naming an S code
@@ -408,7 +430,7 @@ It applies these rules:
   directive clears an S code. The owner line is a tool directive, so it does not satisfy `script-header`: a script
   keeps its comment or docstring first and the owner below it, as `scripts/verify_release.py` does. Each honoured
   owner stands as a row under the `code` row, after its findings, `· scripts/verify_release.py:14  allowed  output
-  owner · <reason>`, and a clean row counts it (`· 1 allowed`, O57 of 2.11.2026); an owner that names no code found in
+  owner · <reason>`, and a clean row counts it (`· 1 allowed`); an owner that names no code found in
   its file is an `unused` row on its line, to delete. python-print reads the comments of each file with a print
   finding or the text `# ruff:`, and one whose comments Python's tokenizer cannot read leaves python-print alone
   `cannot judge`.
@@ -416,7 +438,9 @@ It applies these rules:
   entry. Not judged, and waiting for usage evidence: `sys.stdout.write` and `sys.stderr.write` (ruff's TID251 would
   flag every reference to the streams, `logging.StreamHandler(sys.stderr)` included, for a bypass nobody has used;
   reopened when a landing outside `tests/` replaces a `print` with a direct stream write), and `print(...,
-  file=<variable>)`, which ruff 0.17.1 does not report as T201. (#214, #225)
+  file=<variable>)`, which ruff 0.17.1 does not report as T201.
+
+  Ruled by the operator: a program's one output owner declares itself in its code, never in a path list.
 - The baseline only falls: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the
   base commit's, so growing a function and rewriting the baseline stays red. Each loosening is one line, named with the
   baseline's own metric, path and symbol (a file entry has no symbol):
@@ -429,8 +453,10 @@ It applies these rules:
   - the base's file deleted: `loosened (undeclared): quality/baseline.toml removed`.
   - a `[[size.generated]]` declaration is judged as in [gate](gate.md), "Declared loosenings".
 
-  A file git recognises as renamed, a directory move included, is no loosening when its numbers do not rise
-  (operator ruling 22.10.2026, #149: „ja ja“). The verdict reads the renames between the base and the head commit with `git diff -M50%
+  Ruled by the operator: a file git recognises as renamed, a directory move included, is no loosening when its numbers do
+  not rise.
+
+  The verdict reads the renames between the base and the head commit with `git diff -M50%
   -l1000` (git's default similarity, whatever the repository's git configuration says; a file git does not pair is new
   as before). The base's entries and clone sides under the old path then move to the new path, so the head is compared
   with the entries its predecessor held and a raise or an added symbol still names the head's path; an entry the base
@@ -455,7 +481,7 @@ It applies these rules:
   three config places at the head with the base's, as import-linter parses them (never the raw options, so moving a
   config between `.importlinter`, `setup.cfg` and `pyproject.toml` changes nothing), without building an import graph.
   A contract is the same on both sides when it has the same `name`; a rename is a removal plus a new contract.
-  Each loosening is one line, sorted (operator rulings 26.10.2026, #148: R1-R3 „ja“):
+  Each loosening is one line, sorted:
   - a contract the base holds and the head lacks: `loosened (undeclared): import contract "layers" removed`;
   - the base's config gone, whatever it held, or only its section gone from a file that stays, once:
     `loosened (undeclared): import-linter config in .importlinter removed`;
@@ -468,11 +494,18 @@ It applies these rules:
   - `root_packages` (as a set of names), `include_external_packages` or `exclude_type_checking_imports` changed:
     `loosened (undeclared): import-linter changes root_packages`.
 
-  A change that can only forbid more is no loosening (operator ruling 29.10.2026, #252: „Ja, Liste der
-  Verschärfungen“). Per contract type: `allow_indirect_imports` turned from true to false (also by dropping the line)
+  Ruled by the operator:
+
+  - Each of these loosenings is red, can be declared with a `[[gate.loosened]]` entry whose `what` is its line exactly,
+    and lands only through the operator's door (LOOSE-1).
+  - The door reads the import contracts at the merge state and at the base itself and refuses an undeclared loosening,
+    even when it was opened for Sonar's legacy findings (LOOSE-2).
+  - Removing the whole config file can be declared as well and goes through the door (LOOSE-3).
+
+  Ruled by the operator: a change that can only forbid more is no loosening. Per contract type: `allow_indirect_imports` turned from true to false (also by dropping the line)
   and a module added to `source_modules` or `forbidden_modules` of a `forbidden` contract, the base's expressions all
   kept; a module added to the `modules` of an `independence` contract, the base's all kept; and a module newly placed
-  in a `layers` contract (operator ruling 28.10.2026, #217: „ok“): the head's `layers` are compared with every module
+  in a `layers` contract: the head's `layers` are compared with every module
   name the base's `layers` do not name stripped, and a layer left empty dropped. Base layers `a`, `b` against head
   `a`, `new`, `b` is green. A layer left with one module has no sibling, so its independence says nothing: base `(game)`
   against head `(game) : (agent)` is green, and base `a | b` against head `a : b : new` stays a loosening. Everything else stays a loosening: a removed, renamed or replaced expression (`shop.web`
@@ -485,8 +518,7 @@ It applies these rules:
   A new contract, a removed `ignore_imports` entry, a reworded `broken_contract_guidance` and adopting import
   contracts (the base has no config) are green. Two contracts of one name on a side, two config places holding a
   section, or a config that cannot be read are exit `2`, naming the side (`import-linter config at the base commit
-  <sha>: ...`, `import-linter config at the head: ...`). Each line can be declared with a `[[gate.loosened]]` entry
-  and then lands only through the operator's door, which reads the same files at the base and the merge commit.
+  <sha>: ...`, `import-linter config at the head: ...`).
 
 The `secret` rule scans the whole history reachable from `HEAD` with gitleaks (a key removed later is still found; other branches the checkout fetched are not scanned), always with quality's own config
 (`src/quality/gitleaks.toml`): the repository's `.gitleaks.toml`, `.gitleaksignore` and `gitleaks:allow`
@@ -541,9 +573,11 @@ config and ignore comments change nothing; quality's configuration adds the host
 workflow, which actionlint does not know yet either. `workflow-security` also judges every tracked `action.yml` and
 `action.yaml`, wherever it lies; actionlint is never handed one, and the clean row counts the workflows alone. A lint finding is
 `! <path:line>  invalid  actionlint`, the message under it behind `| `, then `fix: correct the workflow as the message says`.
-A security finding is `! <path:line>  insecure  zizmor <audit> · <description>` with `fix: see <url>`. The clean row counts those files and says
-that only offline audits ran, so a workflow that only an online audit would flag is not read as fully audited:
-`✓ workflows  clean  5 workflows · offline audits only` (operator ruling 1.11.2026, „In der Zeile selbst (Recommended)“).
+A security finding is `! <path:line>  insecure  zizmor <audit> · <description>` with `fix: see <url>`.
+
+Ruled by the operator: the clean row counts those files and says in the row itself that only offline audits ran, so a
+workflow that only an online audit would flag is not read as fully audited:
+`✓ workflows  clean  5 workflows · offline audits only`.
 
 The `advisory` rule judges every tracked `uv.lock`, `pnpm-lock.yaml` and `requirements*.txt` (a name that starts
 with `requirements` and ends in `.txt`; `requirements.in` and `dev-requirements.txt` are not), root
@@ -555,7 +589,7 @@ osv-scanner (and none is located); a database is downloaded only for an ecosyste
 A lock that is tracked but missing on disk is skipped;
 one that links out of the repository, is not a regular file or is empty (zero bytes) is exit `2`. A lock listed in `.gitignore` is still judged.
 The clean row counts the lock files it judged and the packages osv-scanner lists for them: `✓ dependencies  clean  1 lockfile · 63 packages`, and `0 lockfiles · 0 packages` with none.
-A package counts once per tracked file, by its ecosystem, its name as the ecosystem compares it (Python's rule for PyPI, exact for npm, so `lodash.merge` and `lodash-merge` are two) and its version, so a requirements file's pin and the wheel line for the same package are one; every tracked name counts, so a lock reached by two names counts for each (head proposals O47, O48 and O50 of 2.11.2026).
+A package counts once per tracked file, by its ecosystem, its name as the ecosystem compares it (Python's rule for PyPI, exact for npm, so `lodash.merge` and `lodash-merge` are two) and its version, so a requirements file's pin and the wheel line for the same package are one; every tracked name counts, so a lock reached by two names counts for each.
 A finding is one per advisory group, package and lock file, named by the tracked relative path:
 `! uv.lock  affected  pyyaml 5.3.1 · GHSA-8q59-q68h-6hv4 · fixed in 5.4` with `fix: uv lock --upgrade-package pyyaml`.
 The row names the group's first id; an allowance matches every id and alias of the group.
@@ -573,7 +607,7 @@ package overrides), its `package.json` `pnpm.auditConfig`, its `.npmrc` and its 
 passes its own empty `src/quality/osv-scanner.toml` and each tracked lock explicitly, so only a real fix in the lock
 (an upgrade or an override) turns a finding green.
 
-An advisory the repository cannot fix is allowed in its own `quality/config.toml`, one entry per advisory and lock:
+An advisory the repository cannot fix is allowed in its own `quality/config.toml`, one entry per advisory and lock (ALLOW-1):
 
 ```toml
 [[advisories.allow]]
@@ -585,19 +619,18 @@ item = "overnightworks/agent-presentator#371"
 reason = "gradio caps pillow<13; no image input"
 ```
 
-- `id` is any id of the advisory group, GHSA, PYSEC or CVE alike. `lock` is the tracked relative path; the entry
+- `id` is any id of the advisory group, GHSA, PYSEC or CVE alike (ALLOW-2). `lock` is the tracked relative path; the entry
   allows the advisory on every package it affects in that lock and in no other, so a lock reached by two tracked names
-  needs an entry per name. Two entries matching one group in one lock (its GHSA and its CVE id) are a finding at
+  needs an entry per name (ALLOW-7). Two entries matching one group in one lock (its GHSA and its CVE id) are a finding at
   `quality/config.toml` naming both, and the group is allowed by neither:
   `! quality/config.toml  conflict  <id> and <id> in <lock> match one advisory · none allows it`.
-- `until` is the re-check date and `date` the day of the ruling, both TOML dates without a time; `item` and `reason`
+- `until` is the re-check date and `date` the day of the ruling, both TOML dates without a time (ALLOW-3); `item` and `reason`
   are as in a [declared loosening](gate.md#declared-loosenings). The allowance holds through `until` (in UTC) and the advisory
-  is red again from the next day: its row ends in `· allowance ran out on <until> (<item>)`. quality sets no latest `until`, and an advisory with no fixed
+  is red again from the next day: its row ends in `· allowance ran out on <until> (<item>)` (ALLOW-4). quality sets no latest `until`, and an advisory with no fixed
   version is allowed like any other.
-- Each allowed advisory stands as a row under the dependencies row, after the area's findings and their `fix:`, and the rule stays clean:
-  `· <lock>  allowed  <package> <version> · <id> · fixed in <versions> · until <until> (<item>) · <reason>`. The fact says what the `affected` row says of a fix
-  (head proposal O49 of 2.11.2026). A clean row counts them (`· 1 allowed`).
-- An entry no reported advisory matches is a finding: `! quality/config.toml  unused  <id> in <lock> matches no
+- Each allowed advisory stands as a row under the dependencies row, after the area's findings and their `fix:`, and the rule stays clean (ALLOW-6):
+  `· <lock>  allowed  <package> <version> · <id> · fixed in <versions> · until <until> (<item>) · <reason>`. The fact says what the `affected` row says of a fix. A clean row counts them (`· 1 allowed`).
+- An entry no reported advisory matches is a finding (ALLOW-5): `! quality/config.toml  unused  <id> in <lock> matches no
   advisory`. Deleting it is no loosening. With no tracked lock every entry matches nothing.
 - A malformed entry (a missing or extra key, an empty or multi-line `id`, `lock` or `reason`, an `item` that is not
   `#<n>` or `<owner>/<repo>#<n>`, an `until` or `date` that is text or carries a time, two entries for one `id` and
@@ -607,23 +640,19 @@ reason = "gradio caps pillow<13; no image input"
   makes itself, so only the operator's door merges it. The pull request writes the allowance, so its item, date and
   reason prove nothing alone: the verdict's red and the door are the gate. An `id` that is an alias covers every
   group carrying it in that lock, while the door names the `id` and the lock, not the packages.
-  Why only the operator's door merges it stands in [gate.md](gate.md#declared-loosenings); his rulings on the
-  allowance follow. The rest was shown to him and left unanswered, so it stands at the
-  proposed default and is not his word: the entry's keys, the alias, the date format, the expiry line, the unmatched
-  allowance, the adoption, no latest `until`, the printed lines, an advisory without a fixed version and the reach of an
-  allowance (#116, E1 to E5 and E8 to E12). The head decided on 21.10.2026 that the allowance carries a `date` (E1) and
-  that two entries on one group are red (E2).
+  Why only the operator's door merges it stands in [gate.md](gate.md#declared-loosenings). The entry's keys, the alias,
+  the date format, the expiry line, the unmatched allowance, the adoption (#116 E8), no latest `until`, the printed
+  lines, an advisory without a fixed version and the reach of an allowance are defaults the operator never answered.
 
-For advisories (#116, 21.10.2026), asked whether a repository may allow a known security hole it cannot escape, with a
-reason and a re-check date, and who approves: „Ja, aber nur du gibst frei (empfohlen)“. The ruled sentences:
+Ruled by the operator:
 
-- R1. Eine Ausnahme steht pro Lücke in `quality/config.toml`, mit Begründung, Item und Datum.
-- R2. Eine neue Ausnahme ist eine Lockerung: der PR bleibt rot, bis deine Tür ihn mergt.
-- R3. Ab dem Merge ist die Lücke grün bis zum Datum, danach wieder rot.
-- R4. Kein Agent kann eine Lücke allein stummschalten. (Bekanntes Restrisiko E10 von #103: Agenten teilen deinen `gh`-Login; die Tür ist der Vertrag, keine Sperre.)
-
-Asked whether a pull request may move the re-check date back without him: „Nein, nur über deine Tür (empfohlen)“. Asked
-whether each new allowance must also be entered as a declared loosening: „Ausnahme erklärt sich selbst (empfohlen)“.
+- An exception stands per advisory in `quality/config.toml`, with a reason, an item and a date.
+- #116 R2: a new exception is a loosening: the pull request stays red until the operator's door merges it.
+- From the merge on, the advisory is green until the date and red again after it (ALLOW-8).
+- No agent can silence an advisory alone.
+- A pull request cannot move the re-check date later without the operator: a later `until` for an existing exception is
+  a loosening like a new one.
+- A new exception declares itself: it needs no separate `[[gate.loosened]]` entry.
 
 quality downloads each needed database itself on every run (PyPI about 37 MB, npm about 219 MB;
 `https://osv-vulnerabilities.storage.googleapis.com/<ecosystem>/all.zip`)
@@ -640,7 +669,7 @@ request. Records the pinned osv-scanner cannot read are dropped by it silently; 
 
 The check job in `gate.yml` stops at 25 minutes: the 300-second download deadline and the 600-second scan limit take
 15, and setup and the other rules get the remaining 10, so quality's own `cannot judge` shows before GitHub cancels the job.
-Measured on 24.10.2026 (osv-scanner 2.7.0, 12 cores; the download at load 17 to 20): the npm archive is 219,026,863 bytes (230,735 files), the PyPI archive 37,064,024 bytes
+Measured with osv-scanner 2.7.0 on 12 cores (the download at load 17 to 20): the npm archive is 219,026,863 bytes (230,735 files), the PyPI archive 37,064,024 bytes
 (26,612 files); downloading npm took 34 s; a whole `check` run over a repository with one `pnpm-lock.yaml` and one hashed
 `requirements.txt` (one pin) under `--all-packages`, both databases included, took 63 s and 69 s wall and 640 MB resident (load 3 to 5).
 A `uv.lock` is judged against the same PyPI database; that setup was not measured.
@@ -658,21 +687,30 @@ each file must equal the pins quality read: a pin it did not list is exit `2` (`
 a package it lists that quality did not read. The grammar is an allowlist; `-r`, `-c`, `--index-url`, `-e`, git and sdist URLs and ranges
 wait for a caller that needs them. An advisory database zip with an entry that is not valid JSON is exit `2` too.
 
-An `[[advisories.allow]]` entry for an npm finding is the same entry with `lock` set to the file's tracked
-path (`id = "..."`, `lock = "frontend/pnpm-lock.yaml"`); it is a declared loosening and merges only through the operator's
-door like any other. When a repository's frontend and its lock are gone, the npm database is no longer downloaded and an
+Ruled by the operator:
+
+- An `[[advisories.allow]]` entry for an npm finding is the same entry with `lock` set to the file's tracked path
+  (`id = "..."`, `lock = "frontend/pnpm-lock.yaml"`); it is a declared loosening and merges only through the operator's
+  door like any other (NPM-1).
+- Nothing in the repository's own files silences an advisory; only a real fix in the lock, an upgrade or an override,
+  counts (NPM-2).
+- #145 R3: open npm advisories keep the bump pull request red.
+
+When a repository's frontend and its lock are gone, the npm database is no longer downloaded and an
 entry for it is a finding until it is deleted. A repository that falls back to an older quality leaves such an entry
 unmatched and red likewise. The predecessor `pnpm audit --prod` steps are retired by each repository's own head.
-Operator rulings of 24.10.2026 (#145): „ja“ to R1 to R3 (the same allowance, no silencing from the repository's files,
-open npm advisories keep the bump pull request red); the other lines stand at their proposed defaults.
 
 Every rule is judged, even when another cannot be, and gives one verdict: clean, findings, unparsable, or cannot judge.
 Each finding names the file, a fact and a fix. Repository text (a file name, a service, a port, a contract
 or job name, a configuration entry) prints escaped. In the door's own fields (a finding's location, fact and fix, refusals, notes), invalid UTF-8 prints as `\udcNN`, every control character (line feed,
-carriage return, ESC, tab, DEL, C1) as `\xNN`, and U+2028, U+2029 and every format character (Unicode category Cf: bidi overrides, isolates and marks, zero-width characters, the soft hyphen, the byte order mark, tag characters) as `\uNNNN` (`\UNNNNNNNN` above U+FFFF). A line taken from another tool's rendering (import-linter's broken contract chain and guidance, actionlint's message) prints under its finding row behind the marker `| `, six spaces deep; actionlint's message stays one escaped line, while rich may drop a carriage return, expand a tab, or start a new marked line at a line feed in import-linter's lines. Every line the door prints therefore starts with its own text, so a matcher anchored at the line start, such as setup-uv's python matcher, cannot match repository text. A refusal is one line; the lines the door means to print (an import chain, the verdict's problems, the report's tables) stay lines. The picture of the output is `docs/output.md`; a whole `quality check` prints its frame: one header row per area, in the order files, debt, imports, secrets, workflows, dependencies, code, also when it is clean, and under a row the findings of that area, whatever its glyph: every finding as `! <path[:line]>  <event>  <fact>` rows, path and event aligned per area by display width, with one `fix: <fix>` under the last of consecutive findings with the same fix (a finding's lines from another tool's rendering, import-linter's lines and actionlint's message, stand under its row, before the run's `fix:`; a fix that asks for an entry ends with `:` and the entry's lines stand under it, two spaces deeper, whole and never shortened), then the area's notes as `· <path[:line]>  <event>  <fact>` rows aligned with them (`allowed` for the file rules and for dependencies, for a Python file the size rule cannot parse without a ceiling file `not measured`, for import-contract `unused` and `warning`, and for secret `allowed` and `unused`, and for python-print `allowed`) (head proposals O12 to O16, O18 and O19 of 30.10.2026, their recommendations applied, O20 to O22 of 31.10.2026 for the `debt` rows, and O23 to O27 of 31.10.2026 for the `imports` rows, O28, O29 and O32 to O35 of 1.11.2026 for the `secrets` rows, with the corrections O30 and O31, and O36 to O40 of 2.11.2026 for the `workflows` rows, and O41 to O50 of 2.11.2026 for the `dependencies` rows, and O51 and O52 of 2.11.2026 for the `code` rows, and O56 and O57 of 2.11.2026 for the `code` row and its notes): `✓ <area>  clean  <extent>`, for files `✓ files  clean  N rules · M files`, for debt `✓ debt  clean  ceiling held · N entries, M clone pairs` (what the ceiling file holds), for imports `✓ imports  clean  N contracts`, for secrets `✓ secrets  clean  N commits` (`staged change · N files` for a staged run, whose finding row carries it and which prints its allowed notes and no unused note), for workflows `✓ workflows  clean  N workflows · offline audits only` (the workflow files the tree holds), for dependencies `✓ dependencies  clean  N lockfiles · M packages`, for code `✓ code  clean  2 rules · N Python files` (the tracked regular `.py` files ruff judged), with ` · K allowed` where files were allowed, or, on the secrets row, leaks were allowed, or, on the dependencies row, advisories were allowed, or, on the code row, output owners were honoured (N the area's rules, M the distinct paths git tracks); `! <area>  N findings`; `· debt  not recorded  N entries over the thresholds · measured only` (`M clone pairs · partly measured only` when the ceiling file has no `[clones]` table), with `fix: quality check --fix` under it; under `quality check debt --fix` the debt row is `✓ debt  lowered  N entries · quality/baseline.toml` with a `✓` row per lowered or dropped entry, `✓ debt  recorded  N entries, M clone pairs · quality/baseline.toml is new`, `! debt  N findings  nothing lowered` or `✗ debt  not fixed  <reason>`; `✗ <area>  not checked  <reason>`. An area whose rules cannot judge for several distinct reasons says `✗ <area>  not checked  N reasons` and names each reason on a `✗` line below the row, and an equal reason counts once. A rule that cannot judge refuses only itself, so the findings of the other rules, those of its own area included, still print, and a note stands under a `✗` row where its rule judged (head proposals O2 and O3 of 30.10.2026 and O59 of 2.11.2026, `docs/output.md`, case 4). Exit `0` or `1` ends with one verdict line on stdout: `✓ clean · 7 areas · <1s` or `! 5 findings in 3 areas · 4 areas clean · 14s`, with `debt measured, not enforced` (`partly measured, not enforced`) before the duration when no ceiling file holds the debt, then `imports not enforced` when the repository has no import-linter config (`· imports  not set up  no import-linter config`); the duration is `<1s`, `12s` or `1m12s`. Exit `2` ends instead with `error: K of N areas could not check` (`1 of 1 area` for one), N the areas judged, followed by ` · N findings in the others` or, when findings stand under a `✗` row, ` · N findings, M of them in those areas`, and `next:` on stderr, and prints no verdict line. `next:` names each distinct step the refusals carry once, in row order: one step on the `next:` line, several each below a bare `next:` (a command alone on its line, alternative commands under a label ending `, one of:`, one level of four spaces deeper per level), and the general instruction `fix what the ✗ rows name, then run quality check again` last when a refusal carries no step, and alone when none carries one (a staged run's rerun step names `quality check secrets --staged`) (head proposals O6 to O9 of 30.10.2026, `docs/output.md`, case 4). A config refusal adds an example to copy under a label ending `:`, its lines one level deeper, each whole and never shortened (O10); its fact names an entry by its table and 1-based position (`[[size.generated]] entry 2 needs …`) and quotes a repeated value as a TOML string (`entry = "plans/" twice`), so the printed value, copied into a TOML file, reads back as the value (O11, both head proposals of 30.10.2026, their recommendations applied). Operator ruling 30.10.2026 (O17, „A: Namen bleiben“): a config refusal's fact may name the values a config key takes, rule ids included, and the example to copy may hold the entry's rule line; this is the one exception to „no rule name outside an allowance `fix:`“. The lines come in run order, also through a pipe that merges stdout and stderr (`2>&1 | tee log`); each stays on its own stream. That is option (c) of #86 on 19.10.2026, `output.set_up_streams`, which `cli.run` calls, makes stdout line-buffered; the head's confirmation that it is the cleanest drew no objection, which is no spoken ruling. A run judges the areas in the rows' order and prints each area's lines as its last rule ends, so they stand while the next area runs; after Ctrl-C or SIGTERM during a scan the finished areas' lines stay, with neither verdict nor pair. While a scanner runs, a stderr that is a terminal with a known window shows one dim line, `  ⠋ <area>  <scanner>`, leaving the window's last column free, and erases it before the next line prints; Ctrl-C, a refusal and an exception erase it too, and so does SIGTERM while gitleaks or osv-scanner runs, while a SIGTERM during any other scanner ends quality on the spot and leaves the line standing (#5). A pipe, a file (a runner step's log is two pipes), `NO_COLOR` and `TERM=dumb` never show it, and stdout does not change; a pty a step opens for itself is a terminal and shows it. A window under three columns and a terminal that draws `…` two cells wide are not served: there the line may wrap (#5). The glyphs, the verdict and the `error:` and `next:` labels are coloured with the 16 base colours, and facts and notes are dim, only on a stream that is a terminal, with `NO_COLOR` unset or empty and `TERM` not `dumb`; a pipe, the CI log, `NO_COLOR` and `TERM=dumb` print the same words plain and whole; at a terminal the free text of a fact ends at the window with `…`, and no count, measurement or outcome is cut (`docs/output.md`). The exit is the worst verdict's: `2` if any rule is unparsable or cannot judge (never clean), otherwise `1` if any rule has findings, otherwise `0`; a rule that only measured is `0`. A reader that left (`| head`, a closed `less`) does not end the run: it is judged to the end, that stream prints nothing more, and the exit is its own. A stream closed before the run (`2>&-`) takes nothing; its lines never move to the other stream. A run that cannot start prints only the pair and exits `2` before any rule runs: `error: not inside a git work tree · <the folder, `~` for the home folder>` with `next: run quality check inside a repository` when git, asked in the C locale, says the folder lies outside any work tree (a folder outside any repository, a bare repository, the inside of `.git`), and otherwise (a folder without permission, a repository git refuses) `error: . is not a readable git repository: ...` with `next: git -C . status`, and with `next: fix what the error names, then run quality check again` where git did not run or the folder is gone (O5, O92).
+carriage return, ESC, tab, DEL, C1) as `\xNN`, and U+2028, U+2029 and every format character (Unicode category Cf: bidi overrides, isolates and marks, zero-width characters, the soft hyphen, the byte order mark, tag characters) as `\uNNNN` (`\UNNNNNNNN` above U+FFFF). A line taken from another tool's rendering (import-linter's broken contract chain and guidance, actionlint's message) prints under its finding row behind the marker `| `, six spaces deep; actionlint's message stays one escaped line, while rich may drop a carriage return, expand a tab, or start a new marked line at a line feed in import-linter's lines. Every line the door prints therefore starts with its own text, so a matcher anchored at the line start, such as setup-uv's python matcher, cannot match repository text. A refusal is one line; the lines the door means to print (an import chain, the verdict's problems, the report's tables) stay lines. The picture of the output is `docs/output.md`; a whole `quality check` prints its frame: one header row per area, in the order files, debt, imports, secrets, workflows, dependencies, code, also when it is clean, and under a row the findings of that area, whatever its glyph: every finding as `! <path[:line]>  <event>  <fact>` rows, path and event aligned per area by display width, with one `fix: <fix>` under the last of consecutive findings with the same fix (a finding's lines from another tool's rendering, import-linter's lines and actionlint's message, stand under its row, before the run's `fix:`; a fix that asks for an entry ends with `:` and the entry's lines stand under it, two spaces deeper, whole and never shortened), then the area's notes as `· <path[:line]>  <event>  <fact>` rows aligned with them (`allowed` for the file rules and for dependencies, for a Python file the size rule cannot parse without a ceiling file `not measured`, for import-contract `unused` and `warning`, and for secret `allowed` and `unused`, and for python-print `allowed`): `✓ <area>  clean  <extent>`, for files `✓ files  clean  N rules · M files`, for debt `✓ debt  clean  ceiling held · N entries, M clone pairs` (what the ceiling file holds), for imports `✓ imports  clean  N contracts`, for secrets `✓ secrets  clean  N commits` (`staged change · N files` for a staged run, whose finding row carries it and which prints its allowed notes and no unused note), for workflows `✓ workflows  clean  N workflows · offline audits only` (the workflow files the tree holds), for dependencies `✓ dependencies  clean  N lockfiles · M packages`, for code `✓ code  clean  2 rules · N Python files` (the tracked regular `.py` files ruff judged), with ` · K allowed` where files were allowed, or, on the secrets row, leaks were allowed, or, on the dependencies row, advisories were allowed, or, on the code row, output owners were honoured (N the area's rules, M the distinct paths git tracks); `! <area>  N findings`; `· debt  not recorded  N entries over the thresholds · measured only` (`M clone pairs · partly measured only` when the ceiling file has no `[clones]` table), with `fix: quality check --fix` under it; under `quality check debt --fix` the debt row is `✓ debt  lowered  N entries · quality/baseline.toml` with a `✓` row per lowered or dropped entry, `✓ debt  recorded  N entries, M clone pairs · quality/baseline.toml is new`, `! debt  N findings  nothing lowered` or `✗ debt  not fixed  <reason>`; `✗ <area>  not checked  <reason>`. An area whose rules cannot judge for several distinct reasons says `✗ <area>  not checked  N reasons` and names each reason on a `✗` line below the row, and an equal reason counts once. A rule that cannot judge refuses only itself, so the findings of the other rules, those of its own area included, still print, and a note stands under a `✗` row where its rule judged. Exit `0` or `1` ends with one verdict line on stdout: `✓ clean · 7 areas · <1s` or `! 5 findings in 3 areas · 4 areas clean · 14s`, with `debt measured, not enforced` (`partly measured, not enforced`) before the duration when no ceiling file holds the debt, then `imports not enforced` when the repository has no import-linter config (`· imports  not set up  no import-linter config`); the duration is `<1s`, `12s` or `1m12s`. Exit `2` ends instead with `error: K of N areas could not check` (`1 of 1 area` for one), N the areas judged, followed by ` · N findings in the others` or, when findings stand under a `✗` row, ` · N findings, M of them in those areas`, and `next:` on stderr, and prints no verdict line. `next:` names each distinct step the refusals carry once, in row order: one step on the `next:` line, several each below a bare `next:` (a command alone on its line, alternative commands under a label ending `, one of:`, one level of four spaces deeper per level), and the general instruction `fix what the ✗ rows name, then run quality check again` last when a refusal carries no step, and alone when none carries one (a staged run's rerun step names `quality check secrets --staged`). A config refusal adds an example to copy under a label ending `:`, its lines one level deeper, each whole and never shortened; its fact names an entry by its table and 1-based position (`[[size.generated]] entry 2 needs …`) and quotes a repeated value as a TOML string (`entry = "plans/" twice`), so the printed value, copied into a TOML file, reads back as the value. The lines come in run order, also through a pipe that merges stdout and stderr (`2>&1 | tee log`); each stays on its own stream. `output.set_up_streams`, which `cli.run` calls, makes stdout line-buffered. A run judges the areas in the rows' order and prints each area's lines as its last rule ends, so they stand while the next area runs; after Ctrl-C or SIGTERM during a scan the finished areas' lines stay, with neither verdict nor pair. While a scanner runs, a stderr that is a terminal with a known window shows one dim line, `  ⠋ <area>  <scanner>`, leaving the window's last column free, and erases it before the next line prints; Ctrl-C, a refusal and an exception erase it too, and so does SIGTERM while gitleaks or osv-scanner runs, while a SIGTERM during any other scanner ends quality on the spot and leaves the line standing. A pipe, a file (a runner step's log is two pipes), `NO_COLOR` and `TERM=dumb` never show it, and stdout does not change; a pty a step opens for itself is a terminal and shows it. A window under three columns and a terminal that draws `…` two cells wide are not served: there the line may wrap. The glyphs, the verdict and the `error:` and `next:` labels are coloured with the 16 base colours, and facts and notes are dim, only on a stream that is a terminal, with `NO_COLOR` unset or empty and `TERM` not `dumb`; a pipe, the CI log, `NO_COLOR` and `TERM=dumb` print the same words plain and whole; at a terminal the free text of a fact ends at the window with `…`, and no count, measurement or outcome is cut (`docs/output.md`). The exit is the worst verdict's: `2` if any rule is unparsable or cannot judge (never clean), otherwise `1` if any rule has findings, otherwise `0`; a rule that only measured is `0`. A reader that left (`| head`, a closed `less`) does not end the run: it is judged to the end, that stream prints nothing more, and the exit is its own. A stream closed before the run (`2>&-`) takes nothing; its lines never move to the other stream. A run that cannot start prints only the pair and exits `2` before any rule runs: `error: not inside a git work tree · <the folder, `~` for the home folder>` with `next: run quality check inside a repository` when git, asked in the C locale, says the folder lies outside any work tree (a folder outside any repository, a bare repository, the inside of `.git`), and otherwise (a folder without permission, a repository git refuses) `error: . is not a readable git repository: ...` with `next: git -C . status`, and with `next: fix what the error names, then run quality check again` where git did not run or the folder is gone.
+
+Ruled by the operator: a config refusal's fact may name the values a config key takes, rule ids included, and the example to copy may hold the entry's rule line; this is the one exception to the rule that no rule name stands outside an allowance's `fix:`.
+
+Ruled by the operator: in GitHub Actions the door both stops workflow commands and escapes repository text.
+
 In GitHub Actions (`GITHUB_ACTIONS=true`) the door first prints `::stop-commands::<token>` on stderr and on stdout, a new random token per run, so no
-workflow command in repository text runs (operator ruling 20.10.2026, asked whether to stop the commands, escape the
-text, or both: „Beides (empfohlen)“): no `::warning::` or `##[warning]` annotation, no `add-mask`, no `add-matcher`; the stop lasts for the rest of the step, and the door never prints the line that lifts it. Problem matchers registered in the job still read the log (the stop does not reach them). The gate's jobs register only setup-uv's python matcher, which is anchored at the line start and so cannot match repository text; a matcher another step registers may still match a door line that holds repository text, and the door cannot prevent that.
+workflow command in repository text runs: no `::warning::` or `##[warning]` annotation, no `add-mask`, no `add-matcher`; the stop lasts for the rest of the step, and the door never prints the line that lifts it. Problem matchers registered in the job still read the log (the stop does not reach them). The gate's jobs register only setup-uv's python matcher, which is anchored at the line start and so cannot match repository text; a matcher another step registers may still match a door line that holds repository text, and the door cannot prevent that.
 
 A scanner's stderr reaches a `✗` fact only once gitleaks has cleared all of it (the vet below). `quality check -v` and `quality check secrets --staged -v` add, under each area that ran a scanner, after its findings and notes, one `·` row per scanner run, `· <scanner>  exited  <n>`, and that scanner's stderr line by line behind the marker `| `, escaped and never shortened, split on line feeds alone; a text gitleaks does not clear is withheld whole, and the row counts its lines; a scanner that did not finish or printed no UTF-8 has no row. A scanner's report never stands there: it is what the rows are read from, and it can quote repository lines. `-v` changes no exit, no verdict and no scanner's arguments; a run without it keeps no stderr and adds no vet to a refusal's; `check` writes no step summary.
 

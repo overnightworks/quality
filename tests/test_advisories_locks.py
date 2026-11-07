@@ -198,7 +198,7 @@ def test_an_allowance_for_a_wheel_line_uses_the_tracked_requirements_path(
     ids=["pnpm.auditConfig", ".npmrc", "osv-scanner.toml"],
 )
 def test_nothing_a_repository_writes_silences_an_npm_advisory(build_repo, publish_database, installed_scanners, run_gate, files):
-    """#145 R2: only a real fix in the lock counts, never the repository's own ignore list."""
+    """NPM-2: only a real fix in the lock counts, never the repository's own ignore list."""
     publish_database([LODASH_ADVISORY], ecosystem="npm")
     code, output = run_gate(build_repo({FRONTEND_LOCK: pnpm_lock(), **files}))
     assert code == 1, output
@@ -340,7 +340,7 @@ PNPM_ALLOWANCE = UV_LOCK_ALLOWANCE | {"lock": FRONTEND_LOCK}
 def test_an_allowance_in_a_pnpm_lock_allows_its_advisory_until_its_date(
     build_repo, served_scanners, publish_database, edited_report, capsys
 ):
-    """#145 R1: the same [[advisories.allow]] entry, with the lock's path, allows an npm advisory; once the lock is
+    """NPM-1: the same [[advisories.allow]] entry, with the lock's path, allows an npm advisory; once the lock is
     fixed the entry matches nothing and is red until it is deleted (U1)."""
     publish_database(ecosystem="npm")
     config = allowance_config(**PNPM_ALLOWANCE, until=datetime.date(2999, 12, 31))

@@ -722,7 +722,7 @@ class GhWithImportConfigs(FakeGh):
     ids=["cell 3 a removed contract", "cell 7 the config removed", "cell 11 a new ignore"],
 )
 def test_the_door_refuses_an_undeclared_import_contract_loosening_next_to_legacy_red(gh_kwargs, line, capsys):
-    """#148 R2 (ruled yes 26.10.2026): the door reads the import-linter configs at the base and the merge commit and
+    """LOOSE-2 (ruled yes 26.10.2026): the door reads the import-linter configs at the base and the merge commit and
     refuses an undeclared loosening of them, even when it was opened for Sonar's legacy findings."""
     gh = GhWithImportConfigs(**gh_kwargs)
     assert drive(gh)[0] == 1
@@ -736,7 +736,7 @@ def test_the_door_refuses_an_undeclared_import_contract_loosening_next_to_legacy
     ids=["cell 4 a removed contract", "cell 7 the config removed"],
 )
 def test_a_declared_import_contract_loosening_merges_through_the_door(gh_kwargs, what, capsys):
-    """#148 R1, R3 (ruled yes 26.10.2026): with Sonar green, only the declared loosening of an import contract
+    """LOOSE-1, LOOSE-3 (ruled yes 26.10.2026): with Sonar green, only the declared loosening of an import contract
     is left, and the door shows the declaration and merges."""
     gh = GhWithImportConfigs(checks=SONAR_GREEN, base_config=ONE_JOB, merge_config=ONE_JOB + declaring(what), **gh_kwargs)
     assert drive(gh)[0] == 0
