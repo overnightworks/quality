@@ -11,7 +11,8 @@ from tests.support.door import CHECK_WORD, FIX_WORDS, digest, fixed
 from tests.support.generated_files import MANDATORY_JOB, gate_declaring, generated_config
 from tests.support.git_repositories import git, put
 from tests.support.source_code import branchy_function, long_file, long_function
-from tests.support.verdict import ONLY_DECLARED, gate_config, verdict_streams
+from tests.support.verdict import ONLY_DECLARED, gate_config, verdict_streams, verdict_view
+from tests.support.verdict import declared as declared_line_of
 from tests.support.verdict_renames import commit_all
 
 
@@ -285,6 +286,5 @@ def test_a_dropped_generated_entry_beside_its_new_declaration_prints_only_the_de
     assert "gen/api.py" not in (repo / BASELINE_PATH).read_text()
     commit_all(repo, "declare and drop")
     code, out, err = verdict_streams(repo, capsys)
-    lines = out.splitlines()
-    assert (code, len(lines), lines[-1], err) == (1, 2, ONLY_DECLARED, "")
-    assert lines[0].endswith("size leaves out generated file gen/api.py")
+    declared_line = declared_line_of("size leaves out generated file gen/api.py", "#174 of 2026-10-30")
+    assert (code, verdict_view(out), err) == (1, [declared_line, ONLY_DECLARED], "next: quality merge o/r#7\n")

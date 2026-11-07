@@ -42,10 +42,15 @@ from quality.sonar import (
     require_resolved,
 )
 from quality.verdict import (
+    CALLER_JOB,
+    MERGE_COMMAND,
     SUCCESS,
     Job,
     Verdict,
+    blocking_lines,
+    declaration_line,
     judge,
+    merge_command,
 )
 
 EXIT_YES = 0
@@ -54,8 +59,8 @@ EXIT_COULD_NOT_DO = 2
 
 GATE_PROPERTY = "quality_gate"
 CONFIRMATION_WORD = "yes"
-SONAR_CHECK = "quality / sonar"
-VERDICT_CHECK = "quality / verdict"
+SONAR_CHECK = f"{CALLER_JOB} / sonar"
+VERDICT_CHECK = f"{CALLER_JOB} / verdict"
 LEGACY_CHECKS = (SONAR_CHECK, VERDICT_CHECK)
 RED = "failure"
 COMPLETED = "completed"
@@ -485,7 +490,7 @@ def log_comment(login: str, moment: datetime, door: Door, attempt: Attempt) -> s
     restored = "on" if attempt.restore_error is None else "NOT restored, it may still be off"
     switched = "not switched off" if attempt.outcome is Outcome.NOT_STARTED else "off"
     return printable(
-        f"quality merge run by @{login} at {moment.isoformat(timespec='seconds')}: {'; '.join(door.reasons())}; {door.merge_method.description}; "
+        f"{MERGE_COMMAND} run by @{login} at {moment.isoformat(timespec='seconds')}: {'; '.join(door.reasons())}; {door.merge_method.description}; "
         f"{GATE_PROPERTY} {switched} → {attempt.outcome.value} → {restored}."
     )
 
@@ -494,10 +499,6 @@ def confirmed(ask: Ask, pull_request: int) -> bool:
     """`yes` and nothing else: the end of input is no, and Ctrl-C at the prompt ends the run interrupted."""
     answer = ask(f"Switch {GATE_PROPERTY} off, merge #{pull_request}, switch it on? Type {CONFIRMATION_WORD}: ")
     return answer is not None and answer.strip() == CONFIRMATION_WORD
-
-
-def rerun_command(repository: str, pull_request: int) -> str:
-    return f"quality merge {repository}#{pull_request}"
 
 
 def gh_command(repository: str, pull_request: int, word: str) -> Command:
@@ -587,15 +588,10 @@ def read_checks(gh: GhRunner, repository: str, head_sha: str, refused: Pair) -> 
     return (check_runs, sonar_failed(checks)), (row,)
 
 
-def declaration_line(declaration: Declaration) -> SubLine:
-    return SubLine(Glyph.NEEDS_YOU, f"{declaration.what}{SEPARATOR}{declaration.ruling()}", whole=True, below=(f"reason: {declaration.reason}",))
-
-
 def loosenings_row(verdict: Verdict, sonar_red: bool, refused: Pair) -> Row:
     """The door merges legacy findings and declared loosenings, nothing else, and with Sonar green it needs a declared one."""
-    if verdict.blocking:
-        blocking = tuple(SubLine(Glyph.NEEDS_YOU, line, whole=True) for line in verdict.blocking)
-        raise Stopped(Row(Glyph.NEEDS_YOU, "loosenings", DoorEvent.RED, sub_lines=blocking), *refused)
+    if verdict.blocked:
+        raise Stopped(Row(Glyph.NEEDS_YOU, "loosenings", DoorEvent.RED, sub_lines=blocking_lines(verdict)), *refused)
     if not sonar_red and not verdict.declared:
         raise Refused(f"{VERDICT_CHECK} is red, but judged again at the merge commit it finds nothing: re-run the verdict")
     if not verdict.declared:
@@ -641,7 +637,7 @@ def judge_pull_request(
 ) -> tuple[Door, str]:
     """Each step in the door's order, its rows shown as it passes and the landing's row last, right before the question;
     the first step that does not pass stops the door."""
-    rerun = rerun_command(repository, pull_request)
+    rerun = merge_command(repository, pull_request)
     refused: Pair = (REFUSED_ERROR, (gh_command(repository, pull_request, "checks"),))
     item_line = f"{LandingKind.WORK_ITEM}: or {LandingKind.NO_ITEM}: line"
     landing_refused: Pair = (
@@ -696,7 +692,7 @@ def unfinished_pair(door: Door, attempt: Attempt, unposted: str | None) -> Pair:
     if attempt.outcome is Outcome.UNKNOWN:
         steps.append(gh_command(door.repository, number, "view"))
     elif attempt.outcome is not Outcome.MERGED:
-        steps.append(Command(rerun_command(door.repository, number)))
+        steps.append(Command(merge_command(door.repository, number)))
     if unposted is not None:
         facts.append(f"no log comment on #{number}")
         steps.append(Command(shlex.join(["gh", *comment_request(door.repository, number, unposted)]), own_line=True))
@@ -741,14 +737,14 @@ def run_merge(
             write_pair(stop.error, stop.next_steps, channels.err)
             return stop.exit_code
     except Unshown:
-        again = Instruction(f"send stdout where it can be written, then run {rerun_command(repository, pull_request)} again")
+        again = Instruction(f"send stdout where it can be written, then run {merge_command(repository, pull_request)} again")
         write_pair(f"stdout refused a row{SEPARATOR}{NOTHING_CHANGED}", (again,), channels.err)
         return EXIT_COULD_NOT_DO
     if dry_run:
         write_closing_line(Glyph.WILL_CHANGE, (DRY_RUN, f"would switch {GATE_PROPERTY} off, merge #{pull_request}, switch it on", NOTHING_CHANGED), channels.out)
         return EXIT_YES
     if not confirmed(ask, pull_request):
-        write_pair(f"not confirmed{SEPARATOR}{NOTHING_CHANGED}", (Command(rerun_command(repository, pull_request)),), channels.err)
+        write_pair(f"not confirmed{SEPARATOR}{NOTHING_CHANGED}", (Command(merge_command(repository, pull_request)),), channels.err)
         return EXIT_REFUSED
     started = clock()
     attempt = switch_off_merge_switch_on(gh, door, out)

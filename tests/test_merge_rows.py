@@ -202,7 +202,7 @@ def test_a_draft_flag_that_is_no_boolean_cannot_be_judged(draft, capsys):
         ),
         (
             {"checks": SONAR_GREEN, "base_config": TWO_JOBS, "head_config": ONE_JOB}, {},
-            [pull_row(), verdict_only_checks_row(), "  ! loosenings    red", f"    ! loosened (undeclared): {B_REMOVED}", '    ! mandatory job "B" is missing from the run'],
+            [pull_row(), verdict_only_checks_row(), "  ! loosenings    red", f"    ! {B_REMOVED}", '    ! B missing · not in the run'],
         ),
         (
             {}, {"new": 1},
@@ -422,8 +422,8 @@ def at_a_terminal(gh, window, columns, transport=None, typed="no\n"):
             {"checks": SONAR_GREEN, "base_config": TWO_JOBS, "head_config": ONE_JOB},
             {}, 1,
             [
-                pull_row(), verdict_only_checks_row(), "  ! loosenings    red", f"    ! loosened (undeclared): {B_REMOVED}",
-                '    ! mandatory job "B" is missing from the run',
+                pull_row(), verdict_only_checks_row(), "  ! loosenings    red", f"    ! {B_REMOVED}",
+                '    ! B missing · not in the run',
             ],
             refused_pair(),
         ),

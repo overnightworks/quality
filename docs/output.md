@@ -427,14 +427,15 @@ Jobs stand one by one while one fails. Exit 1.
 
 ```text
 Run quality verdict
-  · release       v0.9.0         this gate run
-  · base          main 4e1a9c2   head 5d1e0b7
-  ✓ lint          success
-  ! test          failure        attempt 2
-  ✓ static        success
-  ✓ sonar         success
-  ✓ loosenings    none
-! red · 1 of 4 mandatory jobs failed
+  · release          v0.9.0         this gate run
+  · base             compared       main 4e1a9c2 · head 5d1e0b7
+  ✓ lint             success
+  ! test             failure        attempt 2
+  ✓ static           success
+  ✓ quality / check  success
+  ✓ quality / sonar  success
+  ✓ loosenings       none
+! red · 1 of 3 mandatory jobs failed · 4s
 ```
 
 Red only because of a declared loosening: one line sums up the green jobs so the loosening stands on top, and the one next command is named. Exit 1.
@@ -442,15 +443,18 @@ Red only because of a declared loosening: one line sums up the green jobs so the
 ```text
 Run quality verdict
   · release       v0.9.0         this gate run
-  · base          main 4e1a9c2   head 5d1e0b7
-  ✓ jobs          success        4 mandatory jobs
+  · base          compared       main 4e1a9c2 · head 5d1e0b7
+  ✓ jobs          success        3 mandatory jobs · 2 gate jobs
   ! loosenings    1 declared
-    ! src/shop/orders.py  ceiling raised  766 → 790 lines · #231 of 2026-10-28
-! red · only declared loosenings · only the operator merges it
+    ! size baseline raises file_lines src/shop/orders.py 766 -> 790 · overnightworks/shop#231 of 2026-10-28
+        reason: the operator ruled the import
+! red · only declared loosenings · only the operator merges it · 4s
 next: quality merge overnightworks/shop#232
 ```
 
 An undeclared loosening looks the same, with `undeclared` as the fact and without `next:`: the door is closed then.
+
+Built: subjects share a column as wide as the longest; the gate's own jobs stand as `quality / check` and `quality / sonar`; a conclusion GitHub adds later is `concluded <word>`; each loosening stands below its row as its `what`, a declared one with its ruling and reason as the door shows it; a declaration that matches nothing is `! declarations  N unmatched`; every closing line ends with its duration; without a base the base row says so.
 
 ### 8. `quality merge owner/repo#n`: the operator's door
 

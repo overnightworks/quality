@@ -14,7 +14,16 @@ from quality.verdict import GateSettings, judge
 from tests.support.architecture import FORBIDDEN, contracts_ini, contracts_toml, ini_section
 from tests.support.git_repositories import put
 from tests.support.sonar import reply
-from tests.support.verdict import DECLARED, GREEN_GATE, ONLY_DECLARED, declaration, fetch_jobs, gate_config, job
+from tests.support.verdict import (
+    GREEN_GATE,
+    ONLY_DECLARED,
+    declaration,
+    declared,
+    fetch_jobs,
+    gate_config,
+    job,
+    verdict_view,
+)
 
 
 def running(state="in_progress", name="checks", attempt=1, leg=1):
@@ -94,13 +103,20 @@ def test_a_502_jobs_page_is_named_as_githubs(stub_server):
 
 
 def test_an_unsettled_job_prints_no_failure_and_is_never_green():
-    """READ-1: a judged job GitHub lists as running is unsettled, adds no failure line, and is never green."""
+    """READ-1: a judged job GitHub lists as running is unsettled, adds no failure, and is never green."""
     result = judge(Side(GateSettings(("checks",), LegacyMode.REPORT), None), None, [running()], GREEN_GATE, 1, NO_RENAMES)
-    assert (result.unsettled, result.blocking, result.green) == (
+    assert (result.unsettled, result.failed, result.green) == (
         (verdict.Unsettled("checks", 1, "in_progress"),),
         (),
         False,
     )
+
+
+def shown(out):
+    """The verdict's stdout without the base row and the rows that need nothing, each other row's columns one space
+    apart; the lines below a row and the closing line stand as printed."""
+    kept = [line for line in out.splitlines() if not line.startswith(("  · base ", "  ✓ "))]
+    return [" ".join(line.split()) if line.startswith("  ") and not line.startswith("    ") else line for line in kept]
 
 
 @pytest.fixture
@@ -124,11 +140,10 @@ def reread(capsys, monkeypatch, run_env, pull_request):
                 raise answer
             return answer(url) if callable(answer) else answer
 
-        code = cli.main(["verdict"], fetcher_for=lambda token: fetch, sleep=slept.append)
+        code = cli.main(["verdict"], fetcher_for=lambda token: fetch, sleep=slept.append, clock=lambda: 0.0)
         out, err = capsys.readouterr()
-        stderr = "the pair" if err.startswith("error: ") else err
-        assert (next(script, None), stderr, summary.read_text()) == (None, "the pair" if code == 2 else "", f"```\n{out}{err}```\n")
-        return code, (out + err).splitlines(), sum(slept)
+        assert (next(script, None), err.startswith("error: "), summary.read_text()) == (None, code == 2, f"```\n{out}{err}```\n")
+        return code, [*shown(out), *err.splitlines()], sum(slept)
 
     return run
 
@@ -136,13 +151,13 @@ def reread(capsys, monkeypatch, run_env, pull_request):
 @pytest.mark.parametrize(
     ("answers", "options", "code", "expected", "slept"),
     [
-        pytest.param((page(job()),), {}, 0, ["verdict: green"], 0, id="cell 1"),
+        pytest.param((page(job()),), {}, 0, ["✓ green · 1 mandatory job · <1s"], 0, id="cell 1"),
         pytest.param(
             (page(running()), page(job())),
             {},
             0,
-            ['verdict: read the run\'s jobs 2 times - GitHub first listed "checks" (attempt 1) as in_progress',
-             "verdict: green"],
+            ['· run 2 reads GitHub first listed "checks" (attempt 1) as in_progress',
+             "✓ green · 1 mandatory job · <1s"],
             10,
             id="cell 2",
         ),
@@ -150,8 +165,8 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             (page(running("queued")), page(running()), page(job())),
             {},
             0,
-            ['verdict: read the run\'s jobs 3 times - GitHub first listed "checks" (attempt 1) as queued',
-             "verdict: green"],
+            ['· run 3 reads GitHub first listed "checks" (attempt 1) as queued',
+             "✓ green · 1 mandatory job · <1s"],
             20,
             id="cell 3",
         ),
@@ -159,9 +174,9 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             (page(running()), page(job(conclusion="failure"))),
             {},
             1,
-            ['verdict: read the run\'s jobs 2 times - GitHub first listed "checks" (attempt 1) as in_progress',
-             'mandatory job "checks" (attempt 1) concluded failure',
-             "verdict: red"],
+            ['· run 2 reads GitHub first listed "checks" (attempt 1) as in_progress',
+             '! checks failure attempt 1',
+             "! red · 1 of 1 mandatory job failed · <1s"],
             10,
             id="cell 4",
         ),
@@ -170,22 +185,21 @@ def reread(capsys, monkeypatch, run_env, pull_request):
                 (page(running(state)), page(job())),
                 {},
                 0,
-                [f'verdict: read the run\'s jobs 2 times - GitHub first listed "checks" (attempt 1) as {state}',
-                 "verdict: green"],
+                [f'· run 2 reads GitHub first listed "checks" (attempt 1) as {state}',
+                 "✓ green · 1 mandatory job · <1s"],
                 10,
                 id=f"cell 6 {state}",
             )
             for state in ("waiting", "pending", "requested")
         ),
-        pytest.param((page(running(name="quality / verdict"), job()),), {}, 0, ["verdict: green"], 0, id="cell 7"),
+        pytest.param((page(running(name="quality / verdict"), job()),), {}, 0, ["✓ green · 1 mandatory job · <1s"], 0, id="cell 7"),
         pytest.param(
             (page(job(), running(name="B")),),
             {"base": gate_config("checks", "B"),
              "head": gate_config("checks", declared=(declaration('mandatory job "B" removed'),))},
             1,
-            ['loosened (declared, overnightworks/songmaker#1345 of 2026-10-20): mandatory job "B" removed',
-             ("verdict: red - only declared loosenings: only the operator's quality merge lands this pull "
-             "request")],
+            ["! loosenings 1 declared", declared('mandatory job "B" removed'), "        reason: ruled",
+             f"{ONLY_DECLARED} · <1s", "next: quality merge o/r#7"],
             0,
             id="cell 8",
         ),
@@ -193,7 +207,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             (page(job(), running("queued", "B")), page(job(), job("B"))),
             {"base": gate_config("checks", "B"), "head": gate_config("checks", "B")},
             0,
-            ['verdict: read the run\'s jobs 2 times - GitHub first listed "B" (attempt 1) as queued', "verdict: green"],
+            ['· run 2 reads GitHub first listed "B" (attempt 1) as queued', "✓ green · 2 mandatory jobs · <1s"],
             10,
             id="cell 9",
         ),
@@ -201,8 +215,8 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             (page(job(), running(attempt=2)), page(job(), job(attempt=2), running(attempt=3))),
             {"attempt": 2},
             0,
-            ['verdict: read the run\'s jobs 2 times - GitHub first listed "checks" (attempt 2) as in_progress',
-             "verdict: green"],
+            ['· run 2 reads GitHub first listed "checks" (attempt 2) as in_progress',
+             "✓ green · 1 mandatory job · <1s"],
             10,
             id="cell 10",
         ),
@@ -210,8 +224,8 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             (page(job(), running(leg=2)), page(job(), job(leg=2))),
             {},
             0,
-            ['verdict: read the run\'s jobs 2 times - GitHub first listed "checks" (attempt 1) as in_progress',
-             "verdict: green"],
+            ['· run 2 reads GitHub first listed "checks" (attempt 1) as in_progress',
+             "✓ green · 1 mandatory job · <1s"],
             10,
             id="cell 11",
         ),
@@ -219,7 +233,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             (bad_gateway(), page(job())),
             {},
             0,
-            ["verdict: read the run's jobs 2 times - GitHub first answered HTTP 502 Bad Gateway", "verdict: green"],
+            ["· run 2 reads GitHub first answered HTTP 502 Bad Gateway", "✓ green · 1 mandatory job · <1s"],
             10,
             id="cell 12",
         ),
@@ -227,9 +241,9 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             (page(running()), page(job())),
             {"needs": {"sonar": "failure"}},
             1,
-            ['verdict: read the run\'s jobs 2 times - GitHub first listed "checks" (attempt 1) as in_progress',
-             'gate job "sonar" result failure',
-             "verdict: red"],
+            ['· run 2 reads GitHub first listed "checks" (attempt 1) as in_progress',
+             '! quality / sonar failure',
+             "! red · 1 gate job failed · <1s"],
             10,
             id="cell 18",
         ),
@@ -237,9 +251,9 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             (page(job(), running(attempt=2)), page(job()), page(job(), job(attempt=2, conclusion="failure"))),
             {"attempt": 2},
             1,
-            ['verdict: read the run\'s jobs 3 times - GitHub first listed "checks" (attempt 2) as in_progress',
-             'mandatory job "checks" (attempt 2) concluded failure',
-             "verdict: red"],
+            ['· run 3 reads GitHub first listed "checks" (attempt 2) as in_progress',
+             '! checks failure attempt 2',
+             "! red · 1 of 1 mandatory job failed · <1s"],
             20,
             id="cell 20",
         ),
@@ -252,7 +266,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             ),
             {},
             0,
-            ["verdict: read the run's jobs 2 times - GitHub first answered HTTP 502 Bad Gateway", "verdict: green"],
+            ["· run 2 reads GitHub first answered HTTP 502 Bad Gateway", "✓ green · 1 mandatory job · <1s"],
             10,
             id="cell 25",
         ),
@@ -260,9 +274,9 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             (page(job(), job(conclusion="failure", leg=2), running(name="X")), page(job(), job("X"))),
             {"head": gate_config("checks", "X")},
             1,
-            ['verdict: read the run\'s jobs 2 times - GitHub first listed "X" (attempt 1) as in_progress',
-             'mandatory job "checks" (attempt 1) has 2 entries, not all success',
-             "verdict: red"],
+            ['· run 2 reads GitHub first listed "X" (attempt 1) as in_progress',
+             '! checks several entries 2 entries in attempt 1, not all success',
+             "! red · 1 of 2 mandatory jobs failed · <1s"],
             10,
             id="cell 26",
         ),
@@ -270,9 +284,9 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             (page(job(conclusion="failure"), running(leg=2)), page(job(leg=2))),
             {},
             1,
-            ['verdict: read the run\'s jobs 2 times - GitHub first listed "checks" (attempt 1) as in_progress',
-             'mandatory job "checks" (attempt 1) has 2 entries, not all success',
-             "verdict: red"],
+            ['· run 2 reads GitHub first listed "checks" (attempt 1) as in_progress',
+             '! checks several entries 2 entries in attempt 1, not all success',
+             "! red · 1 of 1 mandatory job failed · <1s"],
             10,
             id="cell 27",
         ),
@@ -280,9 +294,9 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             (page(job(conclusion="failure"), running(name="X")), page(job(leg=2), job("X"))),
             {"head": gate_config("checks", "X")},
             1,
-            ['verdict: read the run\'s jobs 2 times - GitHub first listed "X" (attempt 1) as in_progress',
-             'mandatory job "checks" (attempt 1) has 2 entries, not all success',
-             "verdict: red"],
+            ['· run 2 reads GitHub first listed "X" (attempt 1) as in_progress',
+             '! checks several entries 2 entries in attempt 1, not all success',
+             "! red · 1 of 2 mandatory jobs failed · <1s"],
             10,
             id="cell 29",
         ),
@@ -290,7 +304,8 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             (page(running()),) * 13,
             {},
             2,
-            ['verdict: read the run\'s jobs 13 times - GitHub first listed "checks" (attempt 1) as in_progress',
+            ['· run 13 reads GitHub first listed "checks" (attempt 1) as in_progress',
+             '! checks running attempt 1 · in_progress',
              ('error: GitHub still lists "checks" (attempt 1) as in_progress after 13 reads · the gate starts after every '
               "mandatory job, so this answer is stale"), *STALE_STEPS],
             120,
@@ -300,7 +315,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             (bad_gateway(),) * 13,
             {},
             2,
-            ["verdict: read the run's jobs 13 times - GitHub first answered HTTP 502 Bad Gateway",
+            ["· run 13 reads GitHub first answered HTTP 502 Bad Gateway",
              "error: GitHub answered HTTP 502 Bad Gateway for u after 13 reads · GitHub's fault, not the caller's", *NEXT_LINES[(RERUN,)]],
             120,
             id="cell 13",
@@ -309,8 +324,8 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             (page(running()),) * 13,
             {"needs": {"sonar": "failure"}},
             2,
-            ['verdict: read the run\'s jobs 13 times - GitHub first listed "checks" (attempt 1) as in_progress',
-             'gate job "sonar" result failure',
+            ['· run 13 reads GitHub first listed "checks" (attempt 1) as in_progress',
+             '! checks running attempt 1 · in_progress', '! quality / sonar failure',
              ('error: GitHub still lists "checks" (attempt 1) as in_progress after 13 reads · the gate starts after every '
               "mandatory job, so this answer is stale"), *STALE_STEPS],
             120,
@@ -320,7 +335,8 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             (page(running()), *(bad_gateway(),) * 12),
             {},
             2,
-            ['verdict: read the run\'s jobs 13 times - GitHub first listed "checks" (attempt 1) as in_progress',
+            ['· run 13 reads GitHub first listed "checks" (attempt 1) as in_progress',
+             '! checks running attempt 1 · in_progress',
              "error: GitHub answered HTTP 502 Bad Gateway for u after 13 reads · GitHub's fault, not the caller's", *NEXT_LINES[(RERUN,)]],
             120,
             id="cell 22",
@@ -329,8 +345,8 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             (page(running()), *(bad_gateway(),) * 12),
             {"needs": {"sonar": "failure"}},
             2,
-            ['verdict: read the run\'s jobs 13 times - GitHub first listed "checks" (attempt 1) as in_progress',
-             'gate job "sonar" result failure',
+            ['· run 13 reads GitHub first listed "checks" (attempt 1) as in_progress',
+             '! checks running attempt 1 · in_progress', '! quality / sonar failure',
              "error: GitHub answered HTTP 502 Bad Gateway for u after 13 reads · GitHub's fault, not the caller's", *NEXT_LINES[(RERUN,)]],
             120,
             id="cell 22 with sonar red",
@@ -339,7 +355,8 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             (page(running(attempt=2)), *(page(),) * 12),
             {"attempt": 2},
             2,
-            ['verdict: read the run\'s jobs 13 times - GitHub first listed "checks" (attempt 2) as in_progress',
+            ['· run 13 reads GitHub first listed "checks" (attempt 2) as in_progress',
+             '! checks running attempt 2 · in_progress',
              ('error: GitHub still lists "checks" (attempt 2) as in_progress after 13 reads · the gate starts after every '
               "mandatory job, so this answer is stale"), *STALE_STEPS],
             120,
@@ -349,8 +366,8 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             (page(job(), job(conclusion="failure", leg=2), running(name="X")), *(page(job()),) * 12),
             {"head": gate_config("checks", "X")},
             2,
-            ['verdict: read the run\'s jobs 13 times - GitHub first listed "X" (attempt 1) as in_progress',
-             'mandatory job "checks" (attempt 1) has 2 entries, not all success',
+            ['· run 13 reads GitHub first listed "X" (attempt 1) as in_progress',
+             '! checks several entries 2 entries in attempt 1, not all success', '! X running attempt 1 · in_progress',
              ('error: GitHub still lists "X" (attempt 1) as in_progress after 13 reads · the gate starts after every '
               "mandatory job, so this answer is stale"), *STALE_STEPS],
             120,
@@ -363,7 +380,8 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             ),
             {},
             2,
-            ['verdict: read the run\'s jobs 2 times - GitHub first listed "checks" (attempt 1) as in_progress',
+            ['· run 2 reads GitHub first listed "checks" (attempt 1) as in_progress',
+             '! checks running attempt 1 · in_progress',
              "error: cannot read u: HTTP Error 403: Forbidden", *NEXT_LINES[()]],
             10,
             id="cell 23",
@@ -372,7 +390,8 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             (page(running()), ('{"jobs": []}', None)),
             {},
             2,
-            ['verdict: read the run\'s jobs 2 times - GitHub first listed "checks" (attempt 1) as in_progress',
+            ['· run 2 reads GitHub first listed "checks" (attempt 1) as in_progress',
+             '! checks running attempt 1 · in_progress',
              ("error: https://api.github.com/repos/o/r/actions/runs/1/jobs?filter=all&per_page=100 "
              "did not return the expected jobs page: KeyError('total_count')"), *NEXT_LINES[()]],
             10,
@@ -382,7 +401,8 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             (page(running()), page(job(), total=2)),
             {},
             2,
-            ['verdict: read the run\'s jobs 2 times - GitHub first listed "checks" (attempt 1) as in_progress',
+            ['· run 2 reads GitHub first listed "checks" (attempt 1) as in_progress',
+             '! checks running attempt 1 · in_progress',
              "error: read 1 jobs but the run has 2", *NEXT_LINES[()]],
             10,
             id="cell 24",
@@ -418,7 +438,7 @@ def test_a_body_that_is_not_utf_8_after_a_stale_read_keeps_the_note(reread, stub
     read_page = verdict.github_fetcher("t")
     assert reread(page(running()), lambda url: read_page(origin + "/jobs")) == (
         2,
-        ['verdict: read the run\'s jobs 2 times - GitHub first listed "checks" (attempt 1) as in_progress',
+        ['· run 2 reads GitHub first listed "checks" (attempt 1) as in_progress', "! checks running attempt 1 · in_progress",
          (f"error: cannot read {origin}/jobs: 'utf-8' codec can't decode byte 0xff in position 0: "
          "invalid start byte"), *NEXT_LINES[()]],
         10,
@@ -427,7 +447,8 @@ def test_a_body_that_is_not_utf_8_after_a_stale_read_keeps_the_note(reread, stub
 
 @pytest.fixture
 def judged_contracts(capsys, pull_request):
-    """Commits the base side's import-linter files, writes the head side's, and returns the verdict's exit code and lines."""
+    """Commits the base side's import-linter files, writes the head side's, and returns the verdict's exit code and
+    what its stdout says about the loosenings, or the refusal it printed instead."""
     repo, commit_base = pull_request
 
     def run(base_files, head_files, declared=()):
@@ -439,9 +460,9 @@ def judged_contracts(capsys, pull_request):
             put(repo / name, head_files.get(name))
         put(repo / CONFIG_PATH, gate_config("A", declared=tuple(declaration(what) for what in declared)))
         page = json.dumps({"total_count": 1, "jobs": [{"id": 1, "name": "A", "run_attempt": 1, "status": "completed", "conclusion": "success"}]})
-        code = cli.main(["verdict"], fetcher_for=lambda token: lambda url: (page, None))
-        captured = capsys.readouterr()
-        return code, (captured.out + captured.err).splitlines()
+        code = cli.main(["verdict"], fetcher_for=lambda token: lambda url: (page, None), clock=lambda: 0.0)
+        out, err = capsys.readouterr()
+        return code, verdict_view(out) if out else err.splitlines()
 
     return run
 
@@ -451,8 +472,7 @@ DUPLICATE_A = contracts_ini({"a": FORBIDDEN}) + ini_section("importlinter:contra
 B_CONTRACT_REMOVED = 'import contract "b" removed'
 FILE_REMOVED = "import-linter config in .importlinter removed"
 IGNORES_WEB = {**FORBIDDEN, "ignore_imports": ["shop.db -> shop.web"]}
-LOOSENED = "loosened (undeclared): "
-STALE = "declared loosening matches nothing: "
+LOOSENED = "    ! "
 
 
 def exhaustive_layers(*layers: str) -> dict:
@@ -463,26 +483,26 @@ def exhaustive_layers(*layers: str) -> dict:
     ("base", "head", "declared", "expected"),
     [
         ({".importlinter": contracts_ini(TWO_CONTRACTS)}, {".importlinter": contracts_ini({"a": FORBIDDEN})}, (),
-         [LOOSENED + B_CONTRACT_REMOVED, "verdict: red"]),
+         [LOOSENED + B_CONTRACT_REMOVED, "! red"]),
         ({"pyproject.toml": contracts_toml(TWO_CONTRACTS)}, {"pyproject.toml": contracts_toml({"a": FORBIDDEN})},
-         (B_CONTRACT_REMOVED,), [DECLARED + B_CONTRACT_REMOVED, ONLY_DECLARED]),
-        ({".importlinter": contracts_ini(TWO_CONTRACTS)}, {}, (), [LOOSENED + FILE_REMOVED, "verdict: red"]),
-        ({".importlinter": contracts_ini(TWO_CONTRACTS)}, {}, (FILE_REMOVED,), [DECLARED + FILE_REMOVED, ONLY_DECLARED]),
+         (B_CONTRACT_REMOVED,), [declared(B_CONTRACT_REMOVED), ONLY_DECLARED]),
+        ({".importlinter": contracts_ini(TWO_CONTRACTS)}, {}, (), [LOOSENED + FILE_REMOVED, "! red"]),
+        ({".importlinter": contracts_ini(TWO_CONTRACTS)}, {}, (FILE_REMOVED,), [declared(FILE_REMOVED), ONLY_DECLARED]),
         ({"setup.cfg": contracts_ini({"a": FORBIDDEN})}, {"setup.cfg": "[metadata]\nname = shop\n"}, (),
-         [LOOSENED + "import-linter config in setup.cfg removed", "verdict: red"]),
+         [LOOSENED + "import-linter config in setup.cfg removed", "! red"]),
         ({"pyproject.toml": contracts_toml({"a": FORBIDDEN})}, {"pyproject.toml": contracts_toml({"a": IGNORES_WEB})}, (),
-         [LOOSENED + 'import contract "a" ignores shop.db -> shop.web', "verdict: red"]),
+         [LOOSENED + 'import contract "a" ignores shop.db -> shop.web', "! red"]),
         ({".importlinter": contracts_ini({"a": FORBIDDEN})}, {".importlinter": contracts_ini({"a": FORBIDDEN}, roots=("shop", "x"))},
-         (), [LOOSENED + "import-linter changes root_packages", "verdict: red"]),
-        ({".importlinter": contracts_ini({"a": FORBIDDEN})}, {"pyproject.toml": contracts_toml({"a": FORBIDDEN})}, (), ["verdict: green"]),
-        ({}, {".importlinter": contracts_ini({"a": FORBIDDEN})}, (), ["verdict: green"]),
+         (), [LOOSENED + "import-linter changes root_packages", "! red"]),
+        ({".importlinter": contracts_ini({"a": FORBIDDEN})}, {"pyproject.toml": contracts_toml({"a": FORBIDDEN})}, (), ["✓ green"]),
+        ({}, {".importlinter": contracts_ini({"a": FORBIDDEN})}, (), ["✓ green"]),
         ({".importlinter": contracts_ini({"a": FORBIDDEN})}, {".importlinter": contracts_ini({"a": FORBIDDEN})}, (FILE_REMOVED,),
-         [STALE + FILE_REMOVED, "verdict: red"]),
+         [declared(FILE_REMOVED), "! red"]),
         ({".importlinter": contracts_ini(TWO_CONTRACTS)},
          {".importlinter": contracts_ini({"b": {**FORBIDDEN, "allow_indirect_imports": True}})}, (),
-         [LOOSENED + 'import contract "a" removed', LOOSENED + 'import contract "b" changes allow_indirect_imports', "verdict: red"]),
+         [LOOSENED + 'import contract "a" removed', LOOSENED + 'import contract "b" changes allow_indirect_imports', "! red"]),
         ({"pyproject.toml": contracts_toml(exhaustive_layers("a", "b"))}, {"pyproject.toml": contracts_toml(exhaustive_layers("a", "new", "b"))},
-         (), ["verdict: green"]),
+         (), ["✓ green"]),
     ],
     ids=[
         "cell 1 undeclared removal", "cell 2 declared removal in pyproject.toml", "cell 5 the file removed",
@@ -494,7 +514,7 @@ def exhaustive_layers(*layers: str) -> dict:
 def test_an_import_contract_loosening_is_a_loosening_the_verdict_names(judged_contracts, base, head, declared, expected):
     """LOOSE-1 (ruled yes 26.10.2026): each import-contract loosening is red, declarable with its exact text, and
     lands only through the door; moves and adoption stay green; a removed ignore and a new contract are no loosening."""
-    assert judged_contracts(base, head, declared) == (0 if expected == ["verdict: green"] else 1, expected)
+    assert judged_contracts(base, head, declared) == (0 if expected == ["✓ green"] else 1, expected)
 
 
 def forbidden_with(**fields) -> dict:
@@ -515,10 +535,10 @@ def toml_pair(base: dict, head: dict) -> tuple[dict, dict]:
 
 
 def changes(field: str) -> list[str]:
-    return [LOOSENED + f'import contract "a" changes {field}', "verdict: red"]
+    return [LOOSENED + f'import contract "a" changes {field}', "! red"]
 
 
-GREEN = ["verdict: green"]
+GREEN = ["✓ green"]
 
 
 @pytest.mark.parametrize(
@@ -544,7 +564,7 @@ GREEN = ["verdict: green"]
         (*toml_pair(contract_of("protected"), contract_of("protected", protected_modules=["shop.db", "shop.web"])), (), changes("protected_modules")),
         (*toml_pair(FORBIDDEN, forbidden_with(as_packages=False)), (), changes("as_packages")),
         (*toml_pair(FORBIDDEN, forbidden_with(source_modules=["shop.db", "shop.api"])), ('import contract "a" changes source_modules',),
-         [STALE + 'import contract "a" changes source_modules', "verdict: red"]),
+         [declared('import contract "a" changes source_modules'), "! red"]),
     ],
     ids=[
         "row 1 indirect imports forbidden", "row 2 the indirect line dropped in INI", "row 3 source module added",

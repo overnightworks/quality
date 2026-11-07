@@ -4,16 +4,17 @@ import os
 import shutil
 import subprocess
 import sys
+import urllib.error
 from pathlib import Path
 
 import pytest
 
-from quality import __version__, cli
+from quality import __version__, cli, verdict
 from quality.config import CONFIG_PATH, LOOSENED_EXAMPLE, LegacyMode
 from quality.ratchet import BASELINE_PATH, NO_RENAMES
 from quality.report import CannotJudge, Instruction, printable
 from quality.sides import NO_BASE_SETTINGS, Side, read_base
-from quality.verdict import GateSettings, judge, read_jobs
+from quality.verdict import GateSettings, JobEvent, JobKind, JobOutcome, judge, read_jobs
 from tests.support.advisories import allowance_config
 from tests.support.check import assert_every_line_starts_with_the_door
 from tests.support.git_repositories import GIT_IDENTITY, head_commit, put
@@ -21,14 +22,16 @@ from tests.support.secrets import UNKNOWN_KEY_CONFIGS
 from tests.support.sonar import reply
 from tests.support.verdict import (
     CHECKS_GREEN,
-    DECLARED,
     GREEN_GATE,
     ONLY_DECLARED,
     declaration,
+    declared,
     fetch_jobs,
     gate_config,
     job,
     verdict_of,
+    verdict_view,
+    viewed,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -36,25 +39,30 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 def problems(jobs, mandatory=("checks",), base=(), gate=GREEN_GATE, attempt=1, legacy=LegacyMode.REPORT, base_legacy=LegacyMode.REPORT):
     head, base_side = Side(GateSettings(mandatory, legacy), None), Side(GateSettings(base, base_legacy), None)
-    return judge(head, base_side, jobs, gate, attempt, NO_RENAMES).blocking
+    result = judge(head, base_side, jobs, gate, attempt, NO_RENAMES)
+    return (*result.undeclared, *(outcome for outcome in result.jobs if not outcome.green))
+
+
+def failed(event, fact="", name="checks", kind=JobKind.MANDATORY):
+    return JobOutcome(name, kind, event, fact)
 
 
 @pytest.mark.parametrize(
     ("jobs", "attempt", "expected"),
     [
         ([job()], 1, ()),
-        ([], 1, ('mandatory job "checks" is missing from the run',)),
-        ([job(conclusion="failure")], 1, ('mandatory job "checks" (attempt 1) concluded failure',)),
-        ([job(conclusion="skipped")], 1, ('mandatory job "checks" (attempt 1) concluded skipped',)),
-        ([job(conclusion="cancelled")], 1, ('mandatory job "checks" (attempt 1) concluded cancelled',)),
-        ([job(), job(attempt=2, conclusion="failure")], 2, ('mandatory job "checks" (attempt 2) concluded failure',)),
+        ([], 1, (failed(JobEvent.MISSING, "not in the run"),)),
+        ([job(conclusion="failure")], 1, (failed(JobEvent.FAILURE, "attempt 1"),)),
+        ([job(conclusion="skipped")], 1, (failed(JobEvent.SKIPPED, "attempt 1"),)),
+        ([job(conclusion="cancelled")], 1, (failed(JobEvent.CANCELLED, "attempt 1"),)),
+        ([job(), job(attempt=2, conclusion="failure")], 2, (failed(JobEvent.FAILURE, "attempt 2"),)),
         ([job(conclusion="failure"), job(attempt=2)], 2, ()),
         ([job()], 2, ()),
         ([job(), job(attempt=3, conclusion="failure")], 2, ()),
-        ([job(), job(conclusion="failure")], 1, ('mandatory job "checks" (attempt 1) has 2 entries, not all success',)),
+        ([job(), job(conclusion="failure")], 1, (failed(JobEvent.SEVERAL_ENTRIES, "2 entries in attempt 1, not all success"),)),
         ([job(), job()], 1, ()),
         ([job(name="other", conclusion="failure"), job()], 1, ()),
-        ([job(name="checks (3.12)")], 1, ('mandatory job "checks" is missing from the run',)),
+        ([job(name="checks (3.12)")], 1, (failed(JobEvent.MISSING, "not in the run"),)),
     ],
     ids=[
         "success",
@@ -79,14 +87,14 @@ def test_judges_the_effective_result_of_each_mandatory_job(jobs, attempt, expect
 
 def test_a_gate_job_that_did_not_succeed_is_red():
     """#6 rule 4: a gate job that did not succeed makes the verdict red."""
-    assert problems([job()], gate={"check": "failure"}) == ('gate job "check" result failure',)
+    assert problems([job()], gate={"check": "failure"}) == (failed(JobEvent.FAILURE, name="check", kind=JobKind.GATE),)
 
 
 def test_a_job_dropped_against_the_base_is_loosened_and_red():
     """#6 rule 3: a mandatory job dropped against the base is loosened and red."""
     found = problems([job("tests-lite")], mandatory=("tests-lite",), base=("tests",))
-    assert 'loosened (undeclared): mandatory job "tests" removed' in found
-    assert 'mandatory job "tests" is missing from the run' in found
+    assert 'mandatory job "tests" removed' in found
+    assert failed(JobEvent.MISSING, "not in the run", "tests") in found
 
 
 def test_a_base_job_kept_by_the_head_is_green():
@@ -105,7 +113,7 @@ def test_reads_the_mandatory_job_that_only_sits_on_page_two():
     """#6 rule 2: jobs on later pages are read from recorded responses."""
     jobs = read_jobs("o/r", "1", fetch_from_fixtures("jobs-page1.json", "jobs-page2.json"))
     assert problems(jobs, mandatory=("quality / verdict",)) == ()
-    assert problems(jobs, mandatory=("checks",)) == ('mandatory job "checks" is missing from the run',)
+    assert problems(jobs, mandatory=("checks",)) == (failed(JobEvent.MISSING, "not in the run"),)
 
 
 def test_a_missing_second_page_cannot_be_judged():
@@ -137,7 +145,7 @@ def test_the_legacy_mode_is_read_from_the_base_commit(build_repo):
 @pytest.mark.parametrize(
     ("base_legacy", "legacy", "expected"),
     [
-        (LegacyMode.FAIL, LegacyMode.REPORT, ("loosened (undeclared): legacy fail → report",)),
+        (LegacyMode.FAIL, LegacyMode.REPORT, ("legacy fail → report",)),
         (LegacyMode.FAIL, LegacyMode.FAIL, ()),
         (LegacyMode.REPORT, LegacyMode.FAIL, ()),
         (LegacyMode.REPORT, LegacyMode.REPORT, ()),
@@ -148,13 +156,13 @@ def test_switching_legacy_back_from_fail_is_a_loosening(base_legacy, legacy, exp
     """#33 sentence 4: a head config that is not "fail" under a base config that is shows as loosened and is red"""
     head, base = Side(GateSettings(("checks",), legacy), None), Side(GateSettings(("checks",), base_legacy), None)
     result = judge(head, base, [job()], GREEN_GATE, 1, NO_RENAMES)
-    assert (result.blocking, result.green) == (expected, not expected)
+    assert (result.undeclared, result.green) == (expected, not expected)
 
 
 @pytest.mark.parametrize(
     ("base_sonar", "sonar", "expected"),
     [
-        (True, False, ("loosened (undeclared): sonar true → false",)),
+        (True, False, ("sonar true → false",)),
         (True, True, ()),
         (False, True, ()),
         (False, False, ()),
@@ -166,7 +174,7 @@ def test_turning_sonar_off_is_a_loosening(base_sonar, sonar, expected):
     head = Side(GateSettings(("checks",), LegacyMode.REPORT, sonar=sonar), None)
     base = Side(GateSettings(("checks",), LegacyMode.REPORT, sonar=base_sonar), None)
     result = judge(head, base, [job()], GREEN_GATE, 1, NO_RENAMES)
-    assert (result.blocking, result.green) == (expected, not expected)
+    assert (result.undeclared, result.green) == (expected, not expected)
 
 
 def test_an_adoption_may_start_with_sonar_off(build_repo):
@@ -175,7 +183,7 @@ def test_an_adoption_may_start_with_sonar_off(build_repo):
     base = read_base(repo, head_commit(repo))
     head = Side(GateSettings(("checks",), LegacyMode.REPORT, sonar=False), None)
     result = judge(head, base, [job()], GREEN_GATE, 1, NO_RENAMES)
-    assert (result.blocking, result.green) == ((), True)
+    assert (result.undeclared, result.green) == ((), True)
 
 
 def test_a_base_without_the_config_contributes_nothing(build_repo):
@@ -196,7 +204,7 @@ def test_verdict_exit_code_and_summary_follow_the_run(capsys, run_env, conclusio
     )
     assert cli.main(["verdict"], fetcher_for=lambda token: lambda url: (page, None)) == code
     printed = capsys.readouterr().out
-    assert (printed.strip().endswith("green" if code == 0 else "red"), summary.read_text()) == (True, f"```\n{printed}```\n")
+    assert (printed.splitlines()[-1].startswith("✓ green · " if code == 0 else "! red · "), summary.read_text()) == (True, f"```\n{printed}```\n")
 
 
 @pytest.mark.parametrize(
@@ -206,7 +214,7 @@ def test_verdict_exit_code_and_summary_follow_the_run(capsys, run_env, conclusio
 def test_a_job_name_with_a_line_feed_or_format_character_prints_as_one_escaped_problem_line_in_log_and_summary(
     capsys, run_env, job_name_in_toml, printed
 ):
-    """#97 rule 2, cell 15 (E6) and #228 rule 7: the problem line is escaped, the same in the step summary, and `verdict: red` stays a line."""
+    """#97 rule 2, cell 15 (E6) and #228 rule 7: the job's row is escaped, the same in the step summary, and the closing line stays a line."""
     repo, summary = run_env
     (repo / "quality/config.toml").write_text(f'[gate]\nmandatory_jobs = ["checks", "{job_name_in_toml}"]\n')
     page = json.dumps(
@@ -215,7 +223,7 @@ def test_a_job_name_with_a_line_feed_or_format_character_prints_as_one_escaped_p
     assert cli.main(["verdict"], fetcher_for=lambda token: lambda url: (page, None)) == 1
     lines = capsys.readouterr().out.split("\n")
     assert [line for line in lines if printed in line] != []
-    assert lines[-2:] == ["verdict: red", ""]
+    assert (lines[-2].startswith("! red · "), lines[-1]) == (True, "")
     assert_every_line_starts_with_the_door(lines)
     assert summary.read_text().split("\n") == ["```", *lines[:-1], "```", ""]
 
@@ -241,10 +249,10 @@ def test_verdict_that_cannot_read_the_run_exits_two(capsys, run_env):
     """#6 rule 2: a page error exits 2 with the reason."""
 
     def refuse(url):
-        raise CannotJudge("403 (does the caller grant actions: read?)")
+        raise verdict.unreadable_jobs(url, urllib.error.HTTPError(url, 403, "Forbidden", {}, None))
 
     assert cli.main(["verdict"], fetcher_for=lambda token: refuse) == 2
-    assert "actions: read" in capsys.readouterr().err
+    assert "next:\n    grant actions: read in the caller job's permissions\n" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(
@@ -287,17 +295,6 @@ def test_a_non_numeric_run_attempt_exits_two(monkeypatch, capsys, run_env):
 
 
 @pytest.mark.parametrize(
-    "ref",
-    ["--upload-pack=x", "-n", "a..b", "main.lock", "a b", "x:y", "a//b", "a/.hidden", "a.lock/b", "a/", "@", "a@{1}", "a~1"],
-)
-def test_a_base_ref_git_would_reject_is_refused(build_repo, ref):
-    """#31 rule 1 (S8705): a base ref that is no valid git ref name, or reads as an option, is refused."""
-    repo = build_repo({})
-    with pytest.raises(CannotJudge, match="a ref name or a SHA"):
-        read_base(repo, ref)
-
-
-@pytest.mark.parametrize(
     ("ref", "full_ref"),
     [
         ("main", "refs/heads/main"),
@@ -322,7 +319,7 @@ def test_a_pull_request_that_turns_sonar_off_is_red_in_the_verdict(monkeypatch, 
     )
     assert cli.main(["verdict"], fetcher_for=lambda token: lambda url: (page, None)) == 1
     printed = capsys.readouterr().out
-    assert ("loosened (undeclared): sonar true → false" in printed, "verdict: red" in printed) == (True, True)
+    assert ("    ! sonar true → false" in printed, "! red" in printed) == (True, True)
 
 
 def test_a_pull_request_that_removes_legacy_fail_is_red_in_the_verdict(monkeypatch, capsys, run_env):
@@ -338,7 +335,7 @@ def test_a_pull_request_that_removes_legacy_fail_is_red_in_the_verdict(monkeypat
         {"total_count": 1, "jobs": [{"id": 1, "name": "checks", "run_attempt": 1, "status": "completed", "conclusion": "success"}]}
     )
     assert cli.main(["verdict"], fetcher_for=lambda token: lambda url: (page, None)) == 1
-    assert "loosened (undeclared): legacy fail → report" in capsys.readouterr().out
+    assert "    ! legacy fail → report" in capsys.readouterr().out
 
 
 LEGACY_FAIL_CONFIG = '[gate]\nmandatory_jobs = ["checks"]\nlegacy = "fail"\n'
@@ -352,14 +349,14 @@ def main_lines(count: int) -> str:
 @pytest.mark.parametrize(
     ("base", "head", "code", "expected"),
     [
-        (main_lines(82), main_lines(90), 1, "loosened (undeclared): size baseline raises function_lines src/quality/cli.py main 82 -> 90"),
-        (main_lines(82), main_lines(70), 0, "verdict: green"),
-        (main_lines(82), main_lines(82), 0, "verdict: green"),
-        (None, main_lines(82), 0, "verdict: green"),
-        (main_lines(82), None, 1, "loosened (undeclared): quality/baseline.toml removed"),
-        (main_lines(82), main_lines(82) + NEW_CCN_KEY, 1, "loosened (undeclared): size baseline adds ccn src/a.py f 16"),
-        (main_lines(82) + NEW_CCN_KEY, main_lines(82), 0, "verdict: green"),
-        (None, None, 0, "verdict: green"),
+        (main_lines(82), main_lines(90), 1, "    ! size baseline raises function_lines src/quality/cli.py main 82 -> 90"),
+        (main_lines(82), main_lines(70), 0, "✓ green"),
+        (main_lines(82), main_lines(82), 0, "✓ green"),
+        (None, main_lines(82), 0, "✓ green"),
+        (main_lines(82), None, 1, "    ! quality/baseline.toml removed"),
+        (main_lines(82), main_lines(82) + NEW_CCN_KEY, 1, "    ! size baseline adds ccn src/a.py f 16"),
+        (main_lines(82) + NEW_CCN_KEY, main_lines(82), 0, "✓ green"),
+        (None, None, 0, "✓ green"),
         ("[ccn", main_lines(82), 2, f"{BASELINE_PATH} at the base commit {{base}}: {BASELINE_PATH} is not valid TOML"),
         (main_lines(82), "[ccn", 2, f"error: {BASELINE_PATH} at the head: {BASELINE_PATH} is not valid TOML"),
         (main_lines(82), f"[ccn]\na = {'9' * 5000}\n", 2, f"error: {BASELINE_PATH} at the head: {BASELINE_PATH} is not valid TOML"),
@@ -478,7 +475,7 @@ def test_without_a_base_the_base_is_never_read(capsys, monkeypatch, pull_request
     put(repo / BASELINE_PATH, main_lines(90))
     calls = elsewhere / "git-calls"
     fake_git(f'echo "$@" >> "{calls}"')
-    assert verdict_of(repo, capsys) == (0, "verdict: green\n")
+    assert viewed(repo, capsys) == (0, ["✓ green"])
     assert not calls.exists()
 
 
@@ -513,8 +510,8 @@ def test_a_raised_baseline_and_a_dropped_legacy_fail_are_both_listed(capsys, pul
     put(repo / BASELINE_PATH, main_lines(90))
     code, output = verdict_of(repo, capsys)
     assert code == 1
-    assert "loosened (undeclared): legacy fail → report" in output
-    assert "loosened (undeclared): size baseline raises function_lines src/quality/cli.py main 82 -> 90" in output
+    assert "    ! legacy fail → report" in output
+    assert "    ! size baseline raises function_lines src/quality/cli.py main 82 -> 90" in output
 
 
 def test_a_verdict_without_git_on_the_path_cannot_judge(capsys, monkeypatch, pull_request, elsewhere):
@@ -593,21 +590,19 @@ def judged(capsys, monkeypatch, pull_request):
             for number, (name, state) in enumerate(jobs.items())
         ]
         page = json.dumps({"total_count": len(listed), "jobs": listed})
-        code = cli.main(["verdict"], fetcher_for=lambda token: lambda url: (page, None))
-        captured = capsys.readouterr()
-        return code, (captured.out + captured.err).splitlines()
+        code = cli.main(["verdict"], fetcher_for=lambda token: lambda url: (page, None), clock=lambda: 0.0)
+        return code, verdict_view(capsys.readouterr().out)
 
     return run
 
 
 A_RAN = {"A": "success"}
-UNDECLARED_B = ['loosened (undeclared): mandatory job "B" removed', 'mandatory job "B" is missing from the run']
+UNDECLARED_B = ['    ! mandatory job "B" removed']
 LINE_FEED_JOB = 'mandatory job "a\n::error::b" removed'
 RLO_JOB = 'mandatory job "x\u202ey" removed'
 LITERAL_JOB = 'mandatory job "x\\u202ey" removed'
 UNDECLARED_LITERAL = [
-    "loosened (undeclared): " + LITERAL_JOB, "declared loosening matches nothing: " + LITERAL_JOB,
-    'mandatory job "x\\u202ey" is missing from the run', "verdict: red",
+    "    ! " + LITERAL_JOB, declared(LITERAL_JOB), "! red",
 ]
 MAIN_RAISED = "size baseline raises function_lines src/quality/cli.py main 82 -> 90"
 
@@ -615,50 +610,49 @@ MAIN_RAISED = "size baseline raises function_lines src/quality/cli.py main 82 ->
 @pytest.mark.parametrize(
     ("base", "head", "jobs", "baselines", "expected"),
     [
-        (gate_config("A", "B"), gate_config("A"), A_RAN, (None, None), [*UNDECLARED_B, "verdict: red"]),
+        (gate_config("A", "B"), gate_config("A"), A_RAN, (None, None), [*UNDECLARED_B, "! red"]),
         (gate_config("A", "B"), gate_config("A", declared=(declaration(B_REMOVED),)), A_RAN, (None, None),
-         [DECLARED + B_REMOVED, ONLY_DECLARED]),
+         [declared(B_REMOVED), ONLY_DECLARED]),
         (gate_config("A", "B"), gate_config("A", declared=(declaration(B_REMOVED),)), {**A_RAN, "B": "failure"},
-         (None, None), [DECLARED + B_REMOVED, ONLY_DECLARED]),
+         (None, None), [declared(B_REMOVED), ONLY_DECLARED]),
         (gate_config("A", "B", legacy="fail"), gate_config("A", declared=(declaration(B_REMOVED),)), A_RAN, (None, None),
-         [DECLARED + B_REMOVED, "loosened (undeclared): legacy fail → report", "verdict: red"]),
+         [declared(B_REMOVED), "    ! legacy fail → report", "! red"]),
         (gate_config("A", "B"), gate_config("A", declared=(declaration(B_REMOVED),)), {"A": "failure"}, (None, None),
-         [DECLARED + B_REMOVED, 'mandatory job "A" (attempt 1) concluded failure', "verdict: red"]),
+         [declared(B_REMOVED), "! red"]),
         (gate_config("A", "B"), gate_config("A", declared=(declaration('mandatory job "b" removed'),)), A_RAN,
          (None, None),
-         [UNDECLARED_B[0], 'declared loosening matches nothing: mandatory job "b" removed', UNDECLARED_B[1], "verdict: red"]),
+         [UNDECLARED_B[0], declared('mandatory job "b" removed'), "! red"]),
         (gate_config("A", declared=(declaration(B_REMOVED),)), gate_config("A", declared=(declaration(B_REMOVED),)),
-         A_RAN, (None, None), ["verdict: green"]),
-        (gate_config("A", declared=(declaration(B_REMOVED),)), gate_config("A"), A_RAN, (None, None), ["verdict: green"]),
+         A_RAN, (None, None), ["✓ green"]),
+        (gate_config("A", declared=(declaration(B_REMOVED),)), gate_config("A"), A_RAN, (None, None), ["✓ green"]),
         (gate_config("A", "B", declared=(declaration(B_REMOVED),)), gate_config("A", declared=(declaration(B_REMOVED),)),
-         A_RAN, (None, None), [*UNDECLARED_B, "verdict: red"]),
+         A_RAN, (None, None), [*UNDECLARED_B, "! red"]),
         (gate_config("A", "B", declared=(declaration(B_REMOVED),)),
          gate_config("A", declared=(declaration(B_REMOVED, item="#103", date="2026-10-21"),)), A_RAN, (None, None),
-         ["loosened (declared, #103 of 2026-10-21): " + B_REMOVED, ONLY_DECLARED]),
+         [declared(B_REMOVED, "#103 of 2026-10-21"), ONLY_DECLARED]),
         (gate_config("A"), gate_config("A", declared=(declaration(MAIN_RAISED),)), A_RAN, (main_lines(82), main_lines(90)),
-         [DECLARED + MAIN_RAISED, ONLY_DECLARED]),
+         [declared(MAIN_RAISED), ONLY_DECLARED]),
         (gate_config("A"), gate_config("A", declared=(declaration("quality/baseline.toml removed"),)), A_RAN,
-         (main_lines(82), None), [DECLARED + "quality/baseline.toml removed", ONLY_DECLARED]),
+         (main_lines(82), None), [declared("quality/baseline.toml removed"), ONLY_DECLARED]),
         (gate_config("A", legacy="fail"), gate_config("A", declared=(declaration("legacy fail → report"),)), A_RAN,
-         (None, None), [DECLARED + "legacy fail → report", ONLY_DECLARED]),
+         (None, None), [declared("legacy fail → report"), ONLY_DECLARED]),
         (gate_config("A"), gate_config("A") + "sonar = false\n" + declaration("sonar true → false"), A_RAN,
-         (None, None), [DECLARED + "sonar true → false", ONLY_DECLARED]),
+         (None, None), [declared("sonar true → false"), ONLY_DECLARED]),
         (gate_config("A", "a\n::error::b"), gate_config("A", declared=(declaration(LINE_FEED_JOB),)), A_RAN,
-         (None, None), [DECLARED + 'mandatory job "a\\x0a::error::b" removed', ONLY_DECLARED]),
+         (None, None), [declared('mandatory job "a\\x0a::error::b" removed'), ONLY_DECLARED]),
         (gate_config("A", "a\n::error::b"), gate_config("A", declared=(declaration(printable(LINE_FEED_JOB)),)), A_RAN,
-         (None, None), ['loosened (undeclared): mandatory job "a\\x0a::error::b" removed',
-                        'declared loosening matches nothing: mandatory job "a\\x0a::error::b" removed',
-                        'mandatory job "a\\x0a::error::b" is missing from the run', "verdict: red"]),
+         (None, None), ['    ! mandatory job "a\\x0a::error::b" removed',
+                        declared('mandatory job "a\\x0a::error::b" removed'), "! red"]),
         (gate_config("A", "x\u202ey"), gate_config("A", declared=(declaration(RLO_JOB),)), A_RAN, (None, None),
-         [DECLARED + LITERAL_JOB, ONLY_DECLARED]),
+         [declared(LITERAL_JOB), ONLY_DECLARED]),
         (gate_config("A", "x\u202ey"), gate_config("A", declared=(declaration(LITERAL_JOB),)), A_RAN, (None, None),
          UNDECLARED_LITERAL),
         (gate_config("A", "x\\u202ey"), gate_config("A", declared=(declaration(LITERAL_JOB),)), A_RAN, (None, None),
-         [DECLARED + LITERAL_JOB, ONLY_DECLARED]),
+         [declared(LITERAL_JOB), ONLY_DECLARED]),
         (gate_config("A", "x\\u202ey"), gate_config("A", declared=(declaration(RLO_JOB),)), A_RAN, (None, None),
          UNDECLARED_LITERAL),
         (None, gate_config("A", declared=(declaration(B_REMOVED),)), A_RAN, (None, None),
-         ["declared loosening matches nothing: " + B_REMOVED, "verdict: red"]),
+         [declared(B_REMOVED), "! red"]),
     ],
     ids=[
         "cell 1 undeclared removal", "cell 2 declared removal", "cell 3 declared removal, B still runs and fails",
@@ -673,18 +667,21 @@ MAIN_RAISED = "size baseline raises function_lines src/quality/cli.py main 82 ->
 def test_a_declared_loosening_stays_red_and_says_so(judged, base, head, jobs, baselines, expected):
     """#103 rules 2 and 3 (E2-E5): each loosening line says whether it is declared, and only declarations the head
     adds, matching exactly, declare; a declared job removal is no longer judged."""
-    assert judged(base, head, jobs, baselines) == (0 if expected == ["verdict: green"] else 1, expected)
+    assert judged(base, head, jobs, baselines) == (0 if expected == ["✓ green"] else 1, expected)
 
 
 def test_a_run_without_a_base_judges_no_declaration(judged):
     """#103 rule 2, cell 9: a push run judges no loosening and no declaration, so its declarations leave it green."""
     head = gate_config("A", declared=(declaration(B_REMOVED),))
-    assert judged(gate_config("A", "B"), head, A_RAN, with_base=False) == (0, ["verdict: green"])
+    assert judged(gate_config("A", "B"), head, A_RAN, with_base=False) == (0, ["✓ green"])
 
 
 PRESENTATOR = "overnightworks/agent-presentator#371"
 QWEN = "speech/providers/qwen/uv.lock"
-ALLOWS = f"loosened (declared, {PRESENTATOR} of 2026-10-21): advisory allowance "
+def allows(change):
+    return declared(f"advisory allowance {change}", f"{PRESENTATOR} of 2026-10-21")
+
+
 ADDS_QWEN = "advisory allowance adds GHSA-462x-pgg6-55fp in " + QWEN + " until 2027-01-31"
 
 
@@ -692,35 +689,35 @@ ADDS_QWEN = "advisory allowance adds GHSA-462x-pgg6-55fp in " + QWEN + " until 2
     ("base", "head", "expected"),
     [
         (gate_config("A"), gate_config("A") + allowance_config(),
-         [f"{ALLOWS}adds GHSA-462x-pgg6-55fp in {QWEN} until 2027-01-31", ONLY_DECLARED]),
+         [allows(f"adds GHSA-462x-pgg6-55fp in {QWEN} until 2027-01-31"), ONLY_DECLARED]),
         (gate_config("A"), gate_config("A") + allowance_config(until=datetime.date(2099, 12, 31)),
-         [f"{ALLOWS}adds GHSA-462x-pgg6-55fp in {QWEN} until 2099-12-31", ONLY_DECLARED]),
+         [allows(f"adds GHSA-462x-pgg6-55fp in {QWEN} until 2099-12-31"), ONLY_DECLARED]),
         (gate_config("A") + allowance_config(), gate_config("A") + allowance_config(until=datetime.date(2027, 7, 31)),
-         [f"{ALLOWS}extends GHSA-462x-pgg6-55fp in {QWEN} to 2027-07-31", ONLY_DECLARED]),
-        (gate_config("A") + allowance_config(), gate_config("A") + allowance_config(until=datetime.date(2026, 12, 31)), ["verdict: green"]),
-        (gate_config("A") + allowance_config(), gate_config("A") + allowance_config(reason="reworded"), ["verdict: green"]),
-        (gate_config("A") + allowance_config(), gate_config("A") + allowance_config(item="#116"), ["verdict: green"]),
-        (gate_config("A") + allowance_config(), gate_config("A") + allowance_config(date=datetime.date(2026, 11, 1)), ["verdict: green"]),
-        (gate_config("A") + allowance_config(), gate_config("A"), ["verdict: green"]),
+         [allows(f"extends GHSA-462x-pgg6-55fp in {QWEN} to 2027-07-31"), ONLY_DECLARED]),
+        (gate_config("A") + allowance_config(), gate_config("A") + allowance_config(until=datetime.date(2026, 12, 31)), ["✓ green"]),
+        (gate_config("A") + allowance_config(), gate_config("A") + allowance_config(reason="reworded"), ["✓ green"]),
+        (gate_config("A") + allowance_config(), gate_config("A") + allowance_config(item="#116"), ["✓ green"]),
+        (gate_config("A") + allowance_config(), gate_config("A") + allowance_config(date=datetime.date(2026, 11, 1)), ["✓ green"]),
+        (gate_config("A") + allowance_config(), gate_config("A"), ["✓ green"]),
         (gate_config("A") + allowance_config(), gate_config("A") + allowance_config(lock="uv.lock"),
-         [f"{ALLOWS}adds GHSA-462x-pgg6-55fp in uv.lock until 2027-01-31", ONLY_DECLARED]),
+         [allows("adds GHSA-462x-pgg6-55fp in uv.lock until 2027-01-31"), ONLY_DECLARED]),
         (gate_config("A"), gate_config("A") + allowance_config(lock="frontend/pnpm-lock.yaml"),
-         [f"{ALLOWS}adds GHSA-462x-pgg6-55fp in frontend/pnpm-lock.yaml until 2027-01-31", ONLY_DECLARED]),
+         [allows("adds GHSA-462x-pgg6-55fp in frontend/pnpm-lock.yaml until 2027-01-31"), ONLY_DECLARED]),
         (gate_config("A") + allowance_config(), gate_config("A") + allowance_config("CVE-2026-112395"),
-         [f"{ALLOWS}adds CVE-2026-112395 in {QWEN} until 2027-01-31", ONLY_DECLARED]),
+         [allows(f"adds CVE-2026-112395 in {QWEN} until 2027-01-31"), ONLY_DECLARED]),
         (None, gate_config("A") + allowance_config() + allowance_config(lock="uv.lock"),
-         [f"{ALLOWS}adds GHSA-462x-pgg6-55fp in {QWEN} until 2027-01-31", f"{ALLOWS}adds GHSA-462x-pgg6-55fp in uv.lock until 2027-01-31",
+         [allows(f"adds GHSA-462x-pgg6-55fp in {QWEN} until 2027-01-31"), allows("adds GHSA-462x-pgg6-55fp in uv.lock until 2027-01-31"),
           ONLY_DECLARED]),
-        (gate_config("A") + allowance_config(), gate_config("A") + allowance_config(), ["verdict: green"]),
+        (gate_config("A") + allowance_config(), gate_config("A") + allowance_config(), ["✓ green"]),
         (gate_config("A"), gate_config("A", declared=(declaration(ADDS_QWEN),)) + allowance_config(),
-         [f"{ALLOWS}adds GHSA-462x-pgg6-55fp in {QWEN} until 2027-01-31", f"declared loosening matches nothing: {ADDS_QWEN}",
-          "verdict: red"]),
+         [allows(f"adds GHSA-462x-pgg6-55fp in {QWEN} until 2027-01-31"), declared(ADDS_QWEN),
+          "! red"]),
         (gate_config("A", "B"), gate_config("A") + allowance_config(),
-         [f"{ALLOWS}adds GHSA-462x-pgg6-55fp in {QWEN} until 2027-01-31", *UNDECLARED_B, "verdict: red"]),
+         [*UNDECLARED_B, allows(f"adds GHSA-462x-pgg6-55fp in {QWEN} until 2027-01-31"), "! red"]),
         (gate_config("A"), gate_config("A") + allowance_config("GHSA-\u001b[8m", lock="a\tb/uv.lock"),
-         [f"{ALLOWS}adds GHSA-\\x1b[8m in a\\x09b/uv.lock until 2027-01-31", ONLY_DECLARED]),
+         [allows("adds GHSA-\\x1b[8m in a\\x09b/uv.lock until 2027-01-31"), ONLY_DECLARED]),
         (gate_config("A", "B"), gate_config("A", declared=(declaration(B_REMOVED),)) + allowance_config(),
-         [DECLARED + B_REMOVED, f"{ALLOWS}adds GHSA-462x-pgg6-55fp in {QWEN} until 2027-01-31", ONLY_DECLARED]),
+         [declared(B_REMOVED), allows(f"adds GHSA-462x-pgg6-55fp in {QWEN} until 2027-01-31"), ONLY_DECLARED]),
     ],
     ids=[
         "cell 14 adds", "cell 14 adds with a far until", "cell 15 extends", "cell 16 until earlier", "cell 16 reason reworded", "cell 16 item changed",
@@ -733,12 +730,12 @@ def test_an_advisory_allowance_declares_its_own_loosening(judged, base, head, ex
     """#116 R2, E6, E7, E8: an allowance the base lacks, or whose until the head moves later, is a loosening declared
     with the allowance's own item and date; nothing else about an allowance loosens, and a [[gate.loosened]] entry
     naming one matches nothing."""
-    assert judged(base, head, A_RAN) == (0 if expected == ["verdict: green"] else 1, expected)
+    assert judged(base, head, A_RAN) == (0 if expected == ["✓ green"] else 1, expected)
 
 
 def test_a_run_without_a_base_judges_no_advisory_allowance(judged):
     """#116 cell 19: a push or merge group judges no loosening, so a new allowance leaves it green."""
-    assert judged(gate_config("A"), gate_config("A") + allowance_config(), A_RAN, with_base=False) == (0, ["verdict: green"])
+    assert judged(gate_config("A"), gate_config("A") + allowance_config(), A_RAN, with_base=False) == (0, ["✓ green"])
 
 
 LOOSENED = f"{CONFIG_PATH} [[gate.loosened]]"

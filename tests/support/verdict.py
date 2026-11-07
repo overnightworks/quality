@@ -18,8 +18,18 @@ CHECKS_GREEN = json.dumps(
 )
 
 
+def jobs_page(*jobs: tuple[str, str, str | None]) -> str:
+    """One page of a run's jobs, each `(name, status, conclusion)` in attempt 1."""
+    listed = [
+        {"id": number, "name": name, "run_attempt": 1, "status": status, "conclusion": conclusion}
+        for number, (name, status, conclusion) in enumerate(jobs, start=1)
+    ]
+    return json.dumps({"total_count": len(listed), "jobs": listed})
+
+
 def set_gate_variables(monkeypatch) -> None:
-    """The variables gate.yml's verdict step hands the verdict, outside a pull request: no base commit."""
+    """The variables gate.yml's verdict step hands the verdict, outside a pull request: no base commit. The pull
+    request's head is a sha of its own, never a commit of the fixture."""
     for name, value in {
         "GITHUB_REPOSITORY": "o/r",
         "GITHUB_RUN_ID": "1",
@@ -27,13 +37,15 @@ def set_gate_variables(monkeypatch) -> None:
         "GITHUB_TOKEN": "t",
         "GATE_NEEDS": json.dumps({"check": {"result": "success"}}),
         "GITHUB_BASE_REF": "main",
+        "GATE_PULL_REQUEST": "7",
+        "GATE_HEAD_SHA": "5d1e0b7" + "c" * 33,
     }.items():
         monkeypatch.setenv(name, value)
     monkeypatch.delenv("GATE_BASE_SHA", raising=False)
 
 
 def verdict_streams(repo: Path, capsys) -> tuple[int, str, str]:
-    code = door_in(repo, "verdict", fetcher_for=lambda token: lambda url: (CHECKS_GREEN, None))
+    code = door_in(repo, "verdict", fetcher_for=lambda token: lambda url: (CHECKS_GREEN, None), clock=lambda: 0.0)
     captured = capsys.readouterr()
     return code, captured.out, captured.err
 
@@ -41,6 +53,12 @@ def verdict_streams(repo: Path, capsys) -> tuple[int, str, str]:
 def verdict_of(repo: Path, capsys) -> tuple[int, str]:
     code, out, err = verdict_streams(repo, capsys)
     return code, out + err
+
+
+def viewed(repo: Path, capsys) -> tuple[int, list[str]]:
+    """The verdict's exit and what its stdout says about the loosenings (`verdict_view`)."""
+    code, out, _ = verdict_streams(repo, capsys)
+    return code, verdict_view(out)
 
 
 def fetch_jobs(origin: str) -> str:
@@ -51,10 +69,23 @@ def fetch_jobs(origin: str) -> str:
 SONGMAKER = "overnightworks/songmaker#1345"
 
 
-DECLARED = f"loosened (declared, {SONGMAKER} of 2026-10-20): "
+GREEN = "✓ green"
+RED = "! red"
+ONLY_DECLARED = "! red · only declared loosenings · only the operator merges it"
 
 
-ONLY_DECLARED = "verdict: red - only declared loosenings: only the operator's quality merge lands this pull request"
+def declared(what: str, ruling: str = f"{SONGMAKER} of 2026-10-20") -> str:
+    """A declaration's line under the verdict's `loosenings` or `declarations` row."""
+    return f"    ! {what} · {ruling}"
+
+
+def verdict_view(out: str) -> list[str]:
+    """What a verdict's stdout says about its loosenings: each line under a row that needs you, then the closing
+    line's verdict, the only-declared one whole and any other up to its first part."""
+    lines = out.splitlines()
+    closing = lines[-1] if lines else ""
+    word = ONLY_DECLARED if closing.startswith(ONLY_DECLARED) else closing.split(" · ")[0]
+    return [*(line for line in lines if line.startswith("    ! ")), word]
 
 
 def declaration(what: str, item: str = SONGMAKER, date: str = "2026-10-20") -> str:

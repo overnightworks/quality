@@ -196,3 +196,12 @@ def test_the_verdict_sees_a_base_only_on_a_pull_request(gate, event, expected):
     expression = BASE_SHA_EXPRESSION.fullmatch(verdict_step["env"]["GATE_BASE_SHA"])
     assert expression is not None
     assert (expression["value"] if event == expression["event"] else "") == expected
+
+
+@pytest.mark.parametrize("variable", ["GATE_PULL_REQUEST", "GATE_HEAD_SHA"])
+def test_the_pull_requests_number_and_head_share_the_base_shas_guard(gate, variable):
+    """The verdict reads the pull request's number and head only beside a base, so each is guarded by the same event
+    as GATE_BASE_SHA and names a field of that pull request."""
+    env = step_named(gate["jobs"]["verdict"]["steps"], "Verdict")["env"]
+    base, guarded = BASE_SHA_EXPRESSION.fullmatch(env["GATE_BASE_SHA"]), BASE_SHA_EXPRESSION.fullmatch(env[variable])
+    assert (guarded["event"], guarded["value"].startswith("github.event.pull_request.")) == (base["event"], True)

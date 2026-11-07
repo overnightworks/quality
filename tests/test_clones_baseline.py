@@ -42,7 +42,7 @@ from tests.support.door import FIX_WORDS, door_in
 from tests.support.git_repositories import head_commit, put
 from tests.support.merge import ONE_JOB, SONAR_GREEN, closing_line, declaring, drive
 from tests.support.source_code import long_function
-from tests.support.verdict import ONLY_DECLARED, declaration, verdict_of
+from tests.support.verdict import ONLY_DECLARED, declaration, declared, verdict_of
 from tests.support.verdict_renames import OLD_ENTRY, commit_all, entry, file_text, moved_in_head, moves_in_head, pulled
 
 FIRST_PAIR = ClonePair.of(Place("tests/test_a.py", "run"), Place("tests/test_b.py", "check"))
@@ -56,7 +56,7 @@ EMPTY_CLONES = "[clones]\n"
 LONG_ONE = '[function_lines."src/a.py"]\n"long_one" = 70\n'
 SIZE = '[function_lines."src/quality/cli.py"]\n"main" = 82\n'
 SIZE_RAISED = SIZE.replace("82", "90")
-UNDECLARED = "loosened (undeclared): "
+UNDECLARED = "    ! "
 TWO_FILES = {"tests/test_a.py": clone_function("run", "a", "b"), "tests/test_b.py": clone_function("check", "c", "d")}
 THREE_FILES = {**TWO_FILES, "tests/test_c.py": clone_function("walk", "e", "f")}
 THREE_PAIRS_WRITTEN = (
@@ -90,14 +90,14 @@ def baseline_text(repo: Path) -> str:
     ("base", "head", "code", "expected"),
     [
         (FIRST, FIRST + SECOND, 1, UNDECLARED + f"clone baseline adds {SECOND_LABEL}"),
-        (FIRST + SECOND, FIRST, 0, "verdict: green"),
-        (SIZE, SIZE + FIRST, 0, "verdict: green"),
+        (FIRST + SECOND, FIRST, 0, "✓ green"),
+        (SIZE, SIZE + FIRST, 0, "✓ green"),
         (FIRST, SIZE, 1, UNDECLARED + "clone baseline removed"),
         (FIRST, None, 1, UNDECLARED + f"{BASELINE_PATH} removed"),
-        (None, FIRST, 0, "verdict: green"),
+        (None, FIRST, 0, "✓ green"),
         (FIRST, FIRST.replace("run", "run2"), 1, UNDECLARED + "clone baseline adds tests/test_a.py run2 <-> tests/test_b.py check"),
-        (FIRST, EMPTY_CLONES, 0, "verdict: green"),
-        (REVERSED, FIRST, 0, "verdict: green"),
+        (FIRST, EMPTY_CLONES, 0, "✓ green"),
+        (REVERSED, FIRST, 0, "✓ green"),
     ],
     ids=[
         "cell 1 an added pair", "cell 2 a removed pair", "cell 3 adoption", "cell 4 the table removed",
@@ -115,7 +115,7 @@ def test_the_clone_baseline_only_falls_against_the_base(pull_request, capsys, ba
 
 @pytest.mark.parametrize(
     ("moved_symbol", "expected"),
-    [("run", "verdict: green"), ("walk", UNDECLARED + "clone baseline adds tests/test_b.py check <-> tests/test_e.py walk")],
+    [("run", "✓ green"), ("walk", UNDECLARED + "clone baseline adds tests/test_b.py check <-> tests/test_e.py walk")],
     ids=["a pair whose side only moved is the same pair", "a moved side with a renamed function is a new pair"],
 )
 def test_a_pair_is_held_under_the_path_its_file_was_renamed_from(pull_request, capsys, moved_symbol, expected):
@@ -142,8 +142,8 @@ BOTH_MOVES = [("tests/test_a.py", "tests/test_z.py"), ("tests/test_b.py", "tests
 @pytest.mark.parametrize(
     ("base", "head", "moves", "expected"),
     [
-        (FIRST, pairs_text(BOTH_MOVED_PAIR), BOTH_MOVES, "verdict: green"),
-        (entry("tests/test_e.py", 99, "run") + FIRST, pairs_text(MOVED_PAIR), ONE_MOVE, "verdict: green"),
+        (FIRST, pairs_text(BOTH_MOVED_PAIR), BOTH_MOVES, "✓ green"),
+        (entry("tests/test_e.py", 99, "run") + FIRST, pairs_text(MOVED_PAIR), ONE_MOVE, "✓ green"),
         (FIRST, pairs_text(MOVED_PAIR, SECOND_PAIR), ONE_MOVE, UNDECLARED + f"clone baseline adds {SECOND_LABEL}"),
         (FIRST, pairs_text(FIRST_PAIR, MOVED_PAIR), ONE_MOVE, UNDECLARED + f"clone baseline adds {NEW_PAIR_LABEL}"),
     ],
@@ -175,8 +175,8 @@ MOVED_RAISE = "size baseline raises function_lines src/new.py f 70 -> 90"
 @pytest.mark.parametrize(
     ("base", "head", "expected"),
     [
-        (None, MOVED_ENTRY, "verdict: green"),
-        (OLD_ENTRY, MOVED_ENTRY + FIRST, "verdict: green"),
+        (None, MOVED_ENTRY, "✓ green"),
+        (OLD_ENTRY, MOVED_ENTRY + FIRST, "✓ green"),
         (OLD_ENTRY + FIRST, MOVED_ENTRY, UNDECLARED + "clone baseline removed"),
     ],
     ids=["the baseline adopted", "the clone table adopted", "the clone table removed"],
@@ -210,10 +210,10 @@ def test_two_added_pairs_are_named_in_sorted_order_whatever_the_file_order(pull_
 
 
 def test_a_declared_clone_add_is_declared_in_the_verdict(pull_request, capsys):
-    """#130 E5, cell 8: `what` is the text after `loosened (undeclared): `."""
+    """#130 E5, cell 8: `what` is the text after `! ` on an undeclared line."""
     what = f"clone baseline adds {SECOND_LABEL}"
     code, output = judged(pull_request, capsys, FIRST, FIRST + SECOND, ONE_JOB + declaration(what))
-    assert (code, ONLY_DECLARED in output, UNDECLARED in output) == (1, True, False), output
+    assert (code, ONLY_DECLARED in output, f"{UNDECLARED}{what}\n" in output) == (1, True, False), output
 
 
 @pytest.mark.integration
@@ -232,7 +232,7 @@ def test_a_declaration_for_a_pair_the_head_does_not_add_matches_nothing(pull_req
     """#130 E5, cell 9."""
     what = f"clone baseline adds {SECOND_LABEL}"
     code, output = judged(pull_request, capsys, FIRST, FIRST, ONE_JOB + declaration(what))
-    assert (code, f"declared loosening matches nothing: {what}" in output) == (1, True), output
+    assert (code, declared(what) in output) == (1, True), output
 
 
 MALFORMED = [

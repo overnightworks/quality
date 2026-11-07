@@ -115,8 +115,8 @@ class LegacyMode(Enum):
 
 @dataclass(frozen=True)
 class Declaration:
-    """A loosening a pull request declares, with the ruling behind it; `what` is the verdict's text after
-    `loosened (undeclared): `, unescaped."""
+    """A loosening a pull request declares, with the ruling behind it; `what` is the text the verdict prints for the
+    loosening under its `loosenings` row, unescaped."""
 
     what: str
     item: str

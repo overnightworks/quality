@@ -23,7 +23,7 @@ from tests.support.merge import (
     not_judged_pair,
 )
 from tests.support.processes import process_is_gone
-from tests.support.verdict import verdict_of, verdict_streams
+from tests.support.verdict import verdict_of, verdict_streams, viewed
 from tests.support.verdict_renames import MOVABLE_FILE, OLD_ENTRY, commit_all, entry, moved_in_head, pulled
 
 OTHER_FILE = "".join(f"nothing like the movable file, row {number}\n" for number in range(30))
@@ -73,7 +73,7 @@ def test_a_new_symbol_or_metric_or_an_undetected_rename_is_an_add(capsys, pull_r
 def test_a_moved_file_edited_within_the_threshold_still_meets_its_predecessor(capsys, pull_request):
     """#149 cell 9, R4."""
     moved_in_head(pull_request, OLD_ENTRY, OLD_ENTRY.replace("old", "new"), MOVABLE_FILE + "an edit\n")
-    assert verdict_of(pull_request[0], capsys) == (0, "verdict: green\n")
+    assert viewed(pull_request[0], capsys) == (0, ["✓ green"])
 
 
 def test_a_file_split_off_beside_a_move_has_its_entries_as_adds(capsys, pull_request):
@@ -91,7 +91,7 @@ def test_a_commit_that_renames_the_baseline_file_removes_it(capsys, pull_request
     subprocess.run(["git", "-C", str(repo), "mv", BASELINE_PATH, "quality/baseline-moved.toml"], check=True)
     commit_all(repo, "renames the baseline")
     code, output = verdict_of(repo, capsys)
-    assert (code, f"loosened (undeclared): {BASELINE_PATH} removed" in output) == (1, True)
+    assert (code, f"    ! {BASELINE_PATH} removed" in output) == (1, True)
 
 
 NEW_ENTRY = OLD_ENTRY.replace("old", "new")
@@ -102,7 +102,7 @@ NEW_ENTRY = OLD_ENTRY.replace("old", "new")
     [
         (entry("src/old.py", 100) + entry("src/new.py", 200), entry("src/new.py", 150), 1,
          "size baseline raises function_lines src/new.py f 100 -> 150"),
-        (entry("src/old.py", 100) + entry("src/new.py", 80), entry("src/new.py", 100), 0, "verdict: green"),
+        (entry("src/old.py", 100) + entry("src/new.py", 80), entry("src/new.py", 100), 0, "✓ green"),
         (OLD_ENTRY, NEW_ENTRY + OLD_ENTRY, 1, "size baseline adds function_lines src/new.py f 70"),
         (OLD_ENTRY + entry("src/other.py", 5), NEW_ENTRY + entry("src/other.py", 5) + entry("src/fresh.py", 9), 1,
          "size baseline adds function_lines src/fresh.py f 9"),
@@ -114,7 +114,7 @@ def test_a_leftover_does_not_count_and_the_allowance_moves_rather_than_copies(ca
     """#149 cells 7, 12, 13: rule 2 and rule 1."""
     moved_in_head(pull_request, base, head)
     actual_code, out, err = verdict_streams(pull_request[0], capsys)
-    assert (actual_code, expected in out, out.count("loosened (undeclared)"), err) == (code, True, 0 if code == 0 else 1, "")
+    assert (actual_code, expected in out, out.count("\n    ! "), err) == (code, True, 0 if code == 0 else 1, "")
 
 
 UNNAMEABLE_SOURCE = os.fsdecode(b"legacy/\xff.txt")
@@ -184,7 +184,7 @@ def test_a_path_with_a_carriage_return_and_one_with_a_newline_each_meet_their_ow
         subprocess.run(["git", "-C", str(repo), "mv", old, new], check=True)
     put(repo / BASELINE_PATH, entry("src/n\rew.py", 70) + entry("src/n\new.py", 40))
     commit_all(repo, "moves both")
-    assert verdict_of(repo, capsys) == (0, "verdict: green\n")
+    assert viewed(repo, capsys) == (0, ["✓ green"])
 
 
 STRIP_THE_LIMIT = (
@@ -224,7 +224,7 @@ def test_without_a_base_commit_no_renames_are_read(capsys, pull_request, monkeyp
     monkeypatch.delenv("GATE_BASE_SHA")
     calls = tmp_path / "git-calls"
     fake_git(f'echo "$@" >> "{calls}"')
-    assert verdict_of(pull_request[0], capsys) == (0, "verdict: green\n")
+    assert viewed(pull_request[0], capsys) == (0, ["✓ green"])
     assert not calls.exists() or " diff " not in calls.read_text()
 
 
@@ -518,7 +518,7 @@ def test_a_pull_request_that_edits_a_path_that_is_not_utf8_is_judged_as_before(c
     commit_base(baseline)
     put(repo / NON_UTF8_PATH, "two\n")
     commit_all(repo, "edits the file")
-    assert verdict_of(repo, capsys) == (0, "verdict: green\n")
+    assert viewed(repo, capsys) == (0, ["✓ green"])
 
 
 @pytest.mark.parametrize(
