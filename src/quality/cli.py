@@ -103,7 +103,7 @@ class CheckPorts:
 
     locate_ruff: Callable[[], str] = INSTALLED_RUFF
     locate_zizmor: Callable[[], str] = INSTALLED_ZIZMOR
-    judging: Callable[[Path, str, bool], pin.JudgingRelease] = pin.judge_here
+    judging: Callable[[Path, str, bool, Mapping[str, str]], pin.JudgingRelease | pin.Reexecution] = pin.judge_here
 
 
 def main(
@@ -155,13 +155,15 @@ def main(
             return sonar.run_properties(environment, clock, channels)
         return sonar.run_findings(environment, transport, sleep, clock, channels)
     ports = check_ports or CheckPorts()
+    words = sys.argv[1:] if argv is None else argv
+    reexecute = partial(pin.reexecute, words=words, environment=environment, live=live_line(channels.err))
     if arguments.staged:
         staged_run = partial(judge_staged_change, Path("."), staged.scan_change, verbose=arguments.verbose)
-        return run_check(partial(ports.judging, Path("."), staged.COMMAND, True), staged_run, staged.COMMAND, clock, channels)
+        return run_check(partial(ports.judging, Path("."), staged.COMMAND, True, environment), staged_run, partial(reexecute, command=staged.COMMAND), staged.COMMAND, clock, channels)
     fix = _fix_mode(arguments)
     repository_run = partial(judge_repository, Path("."), ports.locate_ruff, ports.locate_zizmor, verbose=arguments.verbose, named=arguments.areas, fix=fix)
     command = RERUN_COMMAND[fix]
-    return run_check(partial(ports.judging, Path("."), command, False), repository_run, command, clock, channels)
+    return run_check(partial(ports.judging, Path("."), command, False, environment), repository_run, partial(reexecute, command=command), command, clock, channels)
 
 
 def _fix_mode(arguments: argparse.Namespace) -> Fix | None:
@@ -716,14 +718,17 @@ def _spoken_folder(folder: Path) -> str:
 
 
 def run_check(
-    judging: Callable[[], pin.JudgingRelease], judged: Callable[[AreaReport, Running], CheckResult], command: str, clock: Callable[[], float],
-    channels: Channels,
+    judging: Callable[[], pin.JudgingRelease | pin.Reexecution], judged: Callable[[AreaReport, Running], CheckResult],
+    reexecute: Callable[[pin.Reexecution], NoReturn], command: str, clock: Callable[[], float], channels: Channels,
 ) -> int:
     """Runs `judged`, the repository's judging or the staged change's, after `judging` names the release that judges,
-    and writes the release row, its rows, its verdict and its pair; `command` is what a person runs to ask again."""
+    or becomes the release `judging` names through `reexecute` before any row; it writes the release row, its rows, its
+    verdict and its pair; `command` is what a person runs to ask again."""
     started = clock()
     try:
         release = judging()
+        if not isinstance(release, pin.JudgingRelease):
+            reexecute(release)
         write_rows((Row(Glyph.NOTE, "release", release.event, release.fact),), channels.out)
         result = judged(partial(write_area, channels.out), live_line(channels.err))
     except OutsideWorkTree as error:

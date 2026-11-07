@@ -3,7 +3,8 @@ import re
 import signal
 import subprocess
 import tempfile
-from collections.abc import Callable, Iterator
+import time
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import NoReturn, overload
@@ -172,18 +173,20 @@ def run(
 
 
 def run_bounded_in_own_group(
-    command: list[str], timeout: float, env: dict[str, str] | None = None, encoding: str | None = "utf-8"
+    command: list[str], timeout: float, env: Mapping[str, str] | None = None, encoding: str | None = "utf-8", *,
+    cwd: Path | None = None, every_second: Callable[[int], None] | None = None,
 ) -> subprocess.CompletedProcess:
     """`run` for a command that must not outlive its bound or an interruption: it leads its own process group, which
     is killed when the bound passes or an exception (the SIGTERM of `scratch_directory`) unwinds the caller.
+    `every_second` hears the whole seconds passed, once a second while the command runs.
 
     Only inside `scratch_directory`: outside it a SIGTERM ends quality without unwinding, and the group would outlive it.
     """
     with _failures_as_process_errors(command), subprocess.Popen(  # noqa: S603 - callers pass an argv list and never a shell
-        command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding=encoding, env=env, start_new_session=True
+        command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding=encoding, env=env, cwd=cwd, start_new_session=True
     ) as process:
         try:
-            stdout, stderr = process.communicate(timeout=timeout)
+            stdout, stderr = _communicate(process, timeout, every_second)
         except subprocess.TimeoutExpired:
             _kill_group(process)
             process.wait()  # not communicate(): a descendant that left the group would hold the pipes open
@@ -192,6 +195,31 @@ def run_bounded_in_own_group(
             _kill_group(process)
             raise
         return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+
+
+def _communicate(process: subprocess.Popen, timeout: float, every_second: Callable[[int], None] | None) -> tuple:
+    """`communicate` in steps of at most a second where `every_second` listens; a retried `communicate` loses no output."""
+    if every_second is None:
+        return process.communicate(timeout=timeout)
+    started = time.monotonic()
+    while True:
+        left = timeout - (time.monotonic() - started)
+        try:
+            return process.communicate(timeout=max(0.0, min(1.0, left)))
+        except subprocess.TimeoutExpired:
+            if left <= 1.0:
+                raise
+            every_second(round(time.monotonic() - started))
+
+
+def replace_process(executable: Path, arguments: Sequence[str], environment: Mapping[str, str]) -> NoReturn:
+    """The process becomes `executable`: the same pid, process group, working directory, standard streams and terminal;
+    its exit and its death by a signal are the exit. Python opens every other descriptor close-on-exec (PEP 446), so
+    only the standard streams pass, each as it is. Nothing is flushed here: the caller's streams are the caller's."""
+    try:
+        os.execve(executable, [str(executable), *arguments], dict(environment))  # noqa: S606 - the process becomes the prepared quality by design
+    except OSError as error:
+        raise ProcessError(error.strerror or str(error)) from error
 
 
 def _kill_group(process: subprocess.Popen) -> None:

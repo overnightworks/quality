@@ -1,6 +1,7 @@
 """`quality check` where the gate pins another commit: the release check before uv, uv's preparation, and the process
 that becomes the prepared release's quality, run as processes against a fake uv and a local tag repository."""
 
+import io
 import json
 import os
 import select
@@ -14,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import pin
+from quality import output, pin
 from tests.support.door import LAUNCH_DRIVER, door_environment
 from tests.support.git_repositories import git, head_commit, make_repo
 
@@ -137,6 +138,11 @@ class Scene:
         )
 
 
+def new_repo(directory: Path, files: dict[str, str]) -> Path:
+    directory.mkdir()
+    return make_repo(directory, files)
+
+
 def gate_ci(commit: str, release: str = RELEASE) -> dict[str, str]:
     uses = f"overnightworks/quality/.github/workflows/gate.yml@{commit} # {release}"
     return {".github/workflows/ci.yml": f"on: push\njobs:\n  gate:\n    uses: {uses}\n"}
@@ -144,10 +150,10 @@ def gate_ci(commit: str, release: str = RELEASE) -> dict[str, str]:
 
 @pytest.fixture
 def scene(tmp_path) -> Scene:
-    tags = make_repo(tmp_path / "tags", {"src/quality/__init__.py": "VERSION = 1\n"})
+    tags = new_repo(tmp_path / "tags", {"src/quality/__init__.py": "VERSION = 1\n"})
     git(tags, "tag", RELEASE)
     commit = head_commit(tags)
-    judged = make_repo(tmp_path / "shop", {**gate_ci(commit), "README.md": "shop\n"})
+    judged = new_repo(tmp_path / "shop", {**gate_ci(commit), "README.md": "shop\n"})
     built = Scene(tmp_path, tags, commit, judged)
     (tmp_path / "bin").mkdir()
     fake_uv = tmp_path / "bin" / "uv"
@@ -198,7 +204,8 @@ def test_the_child_gets_the_same_words_folder_environment_and_terminal(scene):
     folder = scene.judged / "sub"
     folder.mkdir()
     words = ("check", "debt", "--fix", "--dry-run", "-v")
-    done = scene.run(cwd=folder, wrap=("script", "-qec", shlex.join(scene.parent(*words)), "/dev/null"), FOO="bar")
+    terminal = ["script", "-qec", shlex.join(scene.parent(*words)), "/dev/null"]
+    done = subprocess.run(terminal, cwd=folder, env=scene.environment(FOO="bar"), capture_output=True, text=True, check=False, timeout=120)
     child = scene.child()
     assert (done.returncode, child["argv"], child["cwd"], child["foo"], child["guard"], child["tty"]) == (
         0, list(words), str(folder), "bar", pin.Fetch.FETCHED, True,
@@ -213,7 +220,8 @@ def test_the_child_sees_the_commit_s_own_index(scene):
     hook.write_text(f"#!/bin/sh\nexec {shlex.join(scene.parent('check', 'secrets', '--staged'))}\n")
     hook.chmod(0o755)
     committed = subprocess.run(
-        ["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "x", "--", "a.txt"], cwd=scene.judged,
+        ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", f"core.hooksPath={hook.parent}", "commit", "-q", "-m", "x", "--", "a.txt"],
+        cwd=scene.judged,
         env=scene.environment(), capture_output=True, text=True, check=False,
     )
     child = scene.child()
@@ -344,9 +352,15 @@ def test_an_interrupt_during_preparation_ends_the_run_and_its_processes(scene):
     assert (started.returncode, bool(readable) and os.read(held, 10), "Traceback" in stderr) == (-signal.SIGINT, b"", False)
 
 
+def commit_python_file(scene: Scene) -> None:
+    (scene.judged / "main.py").write_text("print(1)\n")
+    git(scene.judged, "add", "main.py")
+    git(scene.judged, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "python")
+
+
 def test_an_interrupt_after_the_reexecution_ends_as_the_child_s(scene):
     scene.composed_child("--running", f"0.10.1:vcs:{scene.commit}", "--block-ruff", str(scene.root / "ready"))
-    (scene.judged / "main.py").write_text("print(1)\n")
+    commit_python_file(scene)
     started = subprocess.Popen(scene.parent("check", "code"), cwd=scene.judged, env=scene.environment(), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     wait_for_ready(scene.root / "ready")
     started.send_signal(signal.SIGINT)
@@ -363,7 +377,7 @@ def test_a_calling_shell_loop_stops(scene, moment):
         words = ("check", "files")
     else:
         scene.composed_child("--running", f"0.10.1:vcs:{scene.commit}", "--block-ruff", str(scene.root / "ready"))
-        (scene.judged / "main.py").write_text("print(1)\n")
+        commit_python_file(scene)
         words = ("check", "code")
     loop = ["bash", "-c", 'for i in 1 2; do "$@"; echo next; done', "_", *scene.parent(*words)]
     started = subprocess.Popen(loop, cwd=scene.judged, env=scene.environment(), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
@@ -378,7 +392,7 @@ def own_gate_ci() -> dict[str, str]:
 
 
 def test_quality_s_checkout_reexecutes_through_uv_run(scene):
-    checkout = make_repo(scene.root / "quality", own_gate_ci())
+    checkout = new_repo(scene.root / "quality", own_gate_ci())
     git(checkout, "remote", "add", "origin", QUALITY_URL)
     done = scene.run("check", "files", cwd=checkout)
     calls = [call["argv"][:6] for call in scene.uv_calls()]
@@ -388,9 +402,78 @@ def test_quality_s_checkout_reexecutes_through_uv_run(scene):
 
 
 def test_an_unrelated_checkout_never_runs_its_code(scene):
-    unrelated = make_repo(scene.root / "acme", own_gate_ci())
+    unrelated = new_repo(scene.root / "acme", own_gate_ci())
     git(unrelated, "remote", "add", "origin", "https://github.com/acme/shop")
     done = scene.run("check", "files", cwd=unrelated)
     assert (done.returncode, done.stderr.splitlines()[0], scene.uv_calls()) == (
         2, "error: no workflow here calls quality's gate.yml, so no release is pinned", [],
     )
+
+
+def test_the_live_line_shows_its_fact():
+    stream = io.StringIO()
+    with output.live_line(output.Channel(stream, False, 60))("release", "fetching") as show:
+        show("v0.10.1 · 4s")
+    assert stream.getvalue() == (
+        "  ⠋ release       fetching\r" "\r\x1b[K  ⠋ release       fetching       v0.10.1 · 4s\r" "\r\x1b[K"
+    )
+
+
+def test_a_stream_without_a_window_shows_no_fact():
+    stream = io.StringIO()
+    with output.live_line(output.Channel(stream, False, None))("release", "fetching") as show:
+        show("v0.10.1 · 4s")
+    assert stream.getvalue() == ""
+
+
+def leads_to_the_null_device(descriptor: int) -> bool:
+    return os.fstat(descriptor).st_rdev == os.stat(os.devnull).st_rdev
+
+
+def _missing(_tmp_path: Path):
+    return None, lambda: True
+
+
+def _closed_object(_tmp_path: Path):
+    stream = io.TextIOWrapper(io.BytesIO())
+    stream.close()
+    return stream, lambda: True
+
+
+def _reader_that_left(_tmp_path: Path):
+    read_end, write_end = os.pipe()
+    os.close(read_end)
+    stream = open(write_end, "w")  # noqa: SIM115 - the test owns the stream past this function
+    stream.write("a line\n")
+    return stream, lambda: leads_to_the_null_device(write_end)
+
+
+def _full_disk(_tmp_path: Path):
+    stream = open("/dev/full", "w")  # noqa: SIM115 - the test owns the stream past this function
+    stream.write("a line\n")
+    return stream, lambda: leads_to_the_null_device(stream.fileno())
+
+
+def _open_pipe(_tmp_path: Path):
+    read_end, write_end = os.pipe()
+    stream = open(write_end, "w")  # noqa: SIM115 - the test owns the stream past this function
+    stream.write("a line\n")
+    return stream, lambda: os.read(read_end, 100) == b"a line\n"
+
+
+@pytest.mark.parametrize(
+    "arrange",
+    [
+        pytest.param(_missing, id="missing"),
+        pytest.param(_closed_object, id="a closed object"),
+        pytest.param(_reader_that_left, id="a reader that left"),
+        pytest.param(_full_disk, id="a full disk"),
+        pytest.param(_open_pipe, id="a stream that takes the line"),
+    ],
+)
+def test_the_streams_flush_before_the_handover(tmp_path, monkeypatch, arrange):
+    stream, holds = arrange(tmp_path)
+    monkeypatch.setattr(sys, "stdout", stream)
+    monkeypatch.setattr(sys, "stderr", None)
+    output.flush_streams()
+    assert holds()

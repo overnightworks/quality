@@ -583,6 +583,12 @@ error: cannot fetch quality v0.10.0, which the gate pins · github.com did not a
 next: quality check, once online
 ```
 
+Built: offline, the pair stands for every release this machine cannot run without github.com: one it has not yet
+checked on quality's remote, even one uv holds, and a checked one whose environment uv no longer holds. github.com
+answered but uv could not prepare the release: `error: cannot prepare quality v0.9.0, which the gate pins · uv exited 1`
+/ `next: uv tool run --from '…@<commit>' quality --version`, then the run again; a pin whose comment's tag names another
+commit: the comment pair, nothing fetched or run.
+
 No workflow pins the gate. Exit 2. stderr.
 
 ```text
