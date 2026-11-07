@@ -268,7 +268,7 @@ def test_the_renames_since_a_commit_are_what_the_index_would_record(build_repo, 
 @pytest.mark.parametrize("workflow_file", ["gate.yml", "codeql.yml"])
 @pytest.mark.parametrize("prefix", ["./", "$/"])
 def test_a_local_reference_to_the_gates_own_file_is_a_call_without_a_ref(prefix, workflow_file):
-    """#123 E3, cell 6: `./` and `$/` both name the repository's own copy."""
+    """`./` and `$/` both name the repository's own copy."""
     uses = f"{prefix}.github/workflows/{workflow_file}"
     assert checkout.calls_of(uses, workflow_file, ".github/workflows/ci.yml", None) == [checkout.Call(None, ".github/workflows/ci.yml", None)]
 
@@ -425,7 +425,14 @@ def unreadable(workflow: str) -> checkout.UnknownGatePin:
             {"bad.yml": "jobs: [\n", "ci.yml": "{own}"}, ("https://github.com/{gate}",), (), (),
             lambda commit: unreadable(".github/workflows/bad.yml"), id="quality's checkout beside a workflow YAML cannot read",
         ),
-        pytest.param({"ci.yml": "{pinned}"}, (), (), ("ci.yml",), lambda commit: checkout.NoGatePin(), id="a workflow deleted from disk"),
+        pytest.param({"ci.yml": "{pinned}"}, (), (), ("ci.yml",), lambda commit: unreadable(".github/workflows/ci.yml"), id="a workflow deleted from disk"),
+        pytest.param(
+            {"ci.yml": "{aliased}"}, (), (), (),
+            lambda commit: unknown(
+                "the workflows pin v0.9.2 in .github/workflows/ci.yml and v0.10.0 in .github/workflows/ci.yml", "pin one release in every workflow"
+            ),
+            id="an alias beside its anchor names its own release",
+        ),
     ],
 )
 def test_the_gate_pin_of_a_checkout_is_one_state(build_repo, files, remotes, settings, deleted, expected):
@@ -437,6 +444,7 @@ def test_the_gate_pin_of_a_checkout_is_one_state(build_repo, files, remotes, set
         "own_and_pin": jobs("$/.github/workflows/gate.yml", f"{gate_uses(commit)} # v0.10.0"),
         "pinned": jobs(f"{gate_uses(commit)} # v0.10.0"),
         "upper_pinned": jobs(f"{gate_uses(commit.upper())} # v0.10.0"),
+        "aliased": jobs(f"&pin {gate_uses(commit)} # v0.10.0", "*pin # v0.9.2"),
         "older": jobs(f"{gate_uses(older)} # v0.9.2"),
         "branch": jobs(f"{gate_uses('main')} # v0.10.0"),
         "bare": jobs(gate_uses(commit)),

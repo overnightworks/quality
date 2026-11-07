@@ -268,7 +268,7 @@ def test_the_sonar_helps_stand_in_their_frames(capsys, words, frame):
     assert (stopped.value.code, printed.out, printed.err) == (0, frame, "")
 
 
-def test_every_command_path_stands_in_the_help_once_and_every_entry_is_one(capsys):
+def test_every_command_path_stands_in_the_help_once_in_the_parsers_order_and_every_entry_is_one(capsys):
     lines = help_of(capsys, []).splitlines()
     shown = [path_of(entry) for heading in headings(lines)[:2] for entry in entries_under(lines, heading)]
     assert shown == leaf_paths(cli.build_parser())

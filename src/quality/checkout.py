@@ -30,7 +30,7 @@ LOCAL_PREFIXES = ("./", "$/")
 RELEASE_TAG = re.compile(r"v(\d+)\.(\d+)\.(\d+)")
 COMMIT_SHA = re.compile(r"[0-9a-f]{40}")
 RELEASE_COMMENT = re.compile(rf"\s+# ?(?P<release>{RELEASE_TAG.pattern})\s*")
-QUALITY_REMOTE = re.compile(r"(?:https://github\.com/|ssh://git@github\.com/|git@github\.com:)(?P<name>[^/]+/[^/]+?)(?:\.git)?/?", re.IGNORECASE)
+QUALITY_REMOTE = re.compile(r"(?:https://github\.com/|ssh://git@github\.com/|git@github\.com:)(?P<name>[^/]+/[^/]+)", re.IGNORECASE)
 BLOCK_STYLES = frozenset({"|", ">"})
 LINE_BREAKS = re.compile("[\r\n\x85\u2028\u2029]")
 NOT_PINNED_STEP = Instruction("pin the gate as docs/gate.md shows: @<commit sha> # v<tag>")
@@ -189,6 +189,7 @@ class Workflows:
     gate: tuple[Call, ...]
     codeql: tuple[Call, ...]
     unreadable: tuple[str, ...]
+    absent: tuple[str, ...] = ()
 
 
 def commit_of(ref: str) -> str | None:
@@ -203,6 +204,7 @@ def read_workflows(clone: Path, tracked: list[str]) -> Workflows:
     gate: list[Call] = []
     codeql: list[Call] = []
     unreadable: list[str] = []
+    absent: list[str] = []
     for name in tracked:
         path = PurePosixPath(name)
         if not is_workflow(path):
@@ -213,6 +215,7 @@ def read_workflows(clone: Path, tracked: list[str]) -> Workflows:
             unreadable.append(name)
             continue
         if text is None:
+            absent.append(name)
             continue
         try:
             # BaseLoader keeps scalars strings, so no conversion can fail; ValueError is the scanner's chr() on a \U escape past U+10FFFF
@@ -224,12 +227,24 @@ def read_workflows(clone: Path, tracked: list[str]) -> Workflows:
             release = _release_after(text, uses)
             gate.extend(calls_of(uses.value, GATE_FILE, name, release))
             codeql.extend(calls_of(uses.value, CODEQL_FILE, name, release))
-    return Workflows(tuple(gate), tuple(codeql), tuple(unreadable))
+    return Workflows(tuple(gate), tuple(codeql), tuple(unreadable), tuple(absent))
+
+
+class _AliasMarkingLoader(yaml.BaseLoader):
+    """A loader whose alias to a scalar is a node of its own, standing where the alias stands, so a comment is read
+    after the alias and never after its anchor."""
+
+    def compose_node(self, parent: yaml.Node | None, index: object) -> yaml.Node | None:
+        alias = self.peek_event() if self.check_event(yaml.AliasEvent) else None
+        node = super().compose_node(parent, index)
+        if alias is not None and isinstance(node, yaml.ScalarNode):
+            return yaml.ScalarNode(node.tag, node.value, alias.start_mark, alias.end_mark, node.style)
+        return node
 
 
 def _composed(text: str) -> yaml.Node | None:
     """The document's node tree, constructed once so a document the loader refuses is refused here too."""
-    loader = yaml.BaseLoader(text)
+    loader = _AliasMarkingLoader(text)
     try:
         node = loader.get_single_node()
         if node is not None:
@@ -276,7 +291,7 @@ def calls_of(uses: str, workflow_file: str, caller: str, release: str | None) ->
 
 def remote_names_quality(url: str) -> bool:
     """Whether a remote URL, as configured, names quality's repository on GitHub in one of git's three forms."""
-    named = QUALITY_REMOTE.fullmatch(url)
+    named = QUALITY_REMOTE.fullmatch(url.removesuffix("/").removesuffix(".git"))
     return named is not None and named["name"].lower() == GATE_REPOSITORY
 
 
@@ -318,8 +333,8 @@ def gate_pin(root: Path) -> NoGatePin | OwnGate | GatePin | UnknownGatePin:
     """What the tracked workflows of the checkout at `root` pin of quality's gate."""
     top = work_tree_top(root)
     workflows = read_workflows(top, tracked_files(top))
-    if workflows.unreadable:
-        name = workflows.unreadable[0]
+    if workflows.unreadable or workflows.absent:
+        name = (*workflows.unreadable, *workflows.absent)[0]
         return UnknownGatePin(Reason(f"cannot read {name}, so the gate pin is unknown", (Instruction(f"fix {name}"),)))
     if any(call.ref is None for call in workflows.gate) and is_quality_checkout(top):
         return OwnGate()
