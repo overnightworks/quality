@@ -443,6 +443,15 @@ def _require_safe_ref(ref: str, role: str) -> None:
         raise CannotJudge(f"the {role} {ref!r} is not a ref name or a SHA")
 
 
+class UnusableConfig(CannotJudge):
+    """A side's config that cannot be read: `where` names the side and `error` keeps the config's fact and example
+    apart; the fact is the line the verdict prints for it."""
+
+    def __init__(self, where: str, error: ConfigError) -> None:
+        super().__init__(f"{CONFIG_PATH} at {where}: {error}")
+        self.where, self.error = where, error
+
+
 def read_head(repo: Path) -> Side:
     """The gate's settings and baseline in the checked-out tree; an unusable file names the head.
 
@@ -451,7 +460,7 @@ def read_head(repo: Path) -> Side:
     try:
         settings = read_gate_settings(repo)
     except ConfigError as error:
-        raise _unusable(CONFIG_PATH, HEAD, error) from error
+        raise UnusableConfig(HEAD, error) from error
     try:
         baseline = read_baseline(repo)
     except SizeError as error:
@@ -559,7 +568,7 @@ def side_of(config: str | None, baseline: str | None, where: str, import_configs
     try:
         settings = NO_BASE_SETTINGS if config is None else load_gate_settings(config)
     except ConfigError as error:
-        raise _unusable(CONFIG_PATH, where, error) from error
+        raise UnusableConfig(where, error) from error
     try:
         loaded = None if baseline is None else load_baseline(baseline)
     except SizeError as error:
