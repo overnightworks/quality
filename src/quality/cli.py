@@ -1,5 +1,4 @@
 import argparse
-import json
 import os
 import re
 import sys
@@ -48,7 +47,6 @@ from quality.output import (
     SONAR_OFF,
     SONAR_OUTPUT,
     STEP_OUTPUT_VARIABLE,
-    STEP_SUMMARY_VARIABLE,
     Channel,
     Channels,
     Glyph,
@@ -56,7 +54,6 @@ from quality.output import (
     SubLine,
     Verdict,
     append_step_output,
-    append_step_summary,
     ask,
     counted,
     emit,
@@ -85,18 +82,7 @@ from quality.sonar import (
     fetch_json,
     scanner_exclusions,
 )
-from quality.verdict import (
-    PageFetcher,
-    UnsettledRun,
-    compares_baselines,
-    github_fetcher,
-    judge,
-    read_base,
-    read_head,
-    read_jobs,
-    read_renames,
-    read_settled,
-)
+from quality.verdict import PageFetcher, github_fetcher, run_verdict
 from quality.web import Sleep
 
 EXIT_CLEAN = 0
@@ -167,7 +153,7 @@ def main(
             remote_for=remote_for,
         )
     if arguments.command == "verdict":
-        return run_verdict(arguments.path, fetcher_for, sleep)
+        return run_verdict(fetcher_for, sleep, channels, environment)
     if arguments.command == "report":
         return fleet.run_report(release_tags, clock, now().date(), channels, environment)
     if arguments.command == "sonar":
@@ -201,7 +187,7 @@ Commands:
       Measure every fleet repository: size, debt, the gate release it pins.
 
 Run by the gate, not by people:
-  verdict [PATH]
+  verdict
       Decide whether this pull request may merge.
   sonar properties
       Refuse a properties file, token or coverage report the scan must not
@@ -273,6 +259,21 @@ Options:
   -h, --help  show this help
 
 Exit codes: 0 every repository measured, 2 could not answer, 130 interrupted.
+"""
+
+
+VERDICT_HELP = """\
+usage: quality verdict [-v]
+
+Run by the gate, not by people: decide whether this pull request may merge,
+from the jobs of the running workflow and the loosenings of this checkout
+against the pull request's base.
+
+Options:
+  -v          show the raw scanner output; the verdict runs no scanner
+  -h, --help  show this help
+
+Exit codes: 0 green, 1 red, 2 could not judge, 130 interrupted.
 """
 
 
@@ -380,8 +381,9 @@ def build_parser() -> DoorParser:
     check_parser.add_argument("--fix", action="store_true")
     check_parser.add_argument(DRY_RUN_WORD, dest="dry_run", action="store_true")
     check_parser.add_argument("-v", dest="verbose", action="store_true")
-    verdict = commands.add_parser("verdict")
-    verdict.add_argument("path", nargs="?", type=Path, default=Path("."))
+    verdict_parser = commands.add_parser("verdict", allow_abbrev=False)
+    verdict_parser.pictured_help = VERDICT_HELP
+    verdict_parser.add_argument("-v", dest="verbose", action="store_true")
     sonar = commands.add_parser("sonar").add_subparsers(dest="sonar_command")
     sonar.add_parser(
         "properties",
@@ -725,42 +727,6 @@ def run_sonar_findings(transport: Transport, sleep: Sleep) -> int:
     emit(*disclosure)
     emit(result.summary(), file=sys.stderr if result.fails_the_run else sys.stdout)
     return EXIT_FINDINGS if result.fails_the_run else EXIT_CLEAN
-
-
-def summarised(door: str, report: tuple[str, ...]) -> bool:
-    """Whether the run summary took the report; an unwritable summary is a fact on stderr, not a traceback."""
-    try:
-        append_step_summary(report, os.environ)
-    except OSError as error:
-        emit(f"{door}: cannot judge - {STEP_SUMMARY_VARIABLE} is not writable: {error}", file=sys.stderr)
-        return False
-    return True
-
-
-def run_verdict(path: Path, fetcher_for: Callable[[str], PageFetcher], sleep: Sleep) -> int:
-    try:
-        head = read_head(path)
-        base_sha = os.environ.get("GATE_BASE_SHA", "")
-        base = read_base(path, base_sha) if base_sha else None
-        renames = read_renames(path, base_sha, "HEAD") if compares_baselines(base, head) else ratchet.NO_RENAMES
-        gate_results = {name: need["result"] for name, need in json.loads(os.environ["GATE_NEEDS"]).items()}
-        current_attempt = int(os.environ["GITHUB_RUN_ATTEMPT"])
-        repository_name, run_id = os.environ["GITHUB_REPOSITORY"], os.environ["GITHUB_RUN_ID"]
-        fetch = fetcher_for(os.environ["GITHUB_TOKEN"])
-        settled = read_settled(
-            lambda: read_jobs(repository_name, run_id, fetch),
-            lambda jobs: judge(head, base, jobs, gate_results, current_attempt, renames),
-            sleep,
-        )
-    except (CannotJudge, KeyError, ValueError) as error:
-        preceding = error.preceding_lines if isinstance(error, UnsettledRun) else ()
-        report = (*preceding, f"verdict: cannot judge - {error}")
-        code = EXIT_CANNOT_JUDGE
-    else:
-        report = settled.lines()
-        code = EXIT_CLEAN if settled.verdict.green else EXIT_FINDINGS
-    emit(*report, file=sys.stderr if code == EXIT_CANNOT_JUDGE else sys.stdout)
-    return code if summarised("verdict", report) else EXIT_CANNOT_JUDGE
 
 
 def run(

@@ -7,7 +7,7 @@ repository and for the operator who merges past it.
     quality check [AREA ...] [--staged] [--fix] [--dry-run] [-v]
     quality sonar properties
     quality sonar findings
-    quality verdict [PATH]
+    quality verdict [-v]
     quality report
     quality merge OWNER/REPO#N [--dry-run]
 

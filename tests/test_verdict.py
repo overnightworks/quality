@@ -484,9 +484,9 @@ def test_without_a_base_the_base_is_never_read(capsys, monkeypatch, pull_request
 @pytest.mark.parametrize(
     ("base_sha", "expected"),
     [
-        ("HEAD~1", "'HEAD~1' is not a ref name or a SHA"),
+        ("HEAD~1", "error: GATE_BASE_SHA is not a commit sha"),
         ("f" * 40, f"cannot read the base commit {'f' * 40}"),
-        ("-x", "'-x' is not a ref name or a SHA"),
+        ("-x", "error: GATE_BASE_SHA is not a commit sha"),
     ],
     ids=["cell 14 a revision expression", "cell 15 a SHA not in the clone", "cell 16 an option"],
 )

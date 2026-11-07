@@ -1,7 +1,9 @@
 """The one owner of what quality prints, of the step summary and of the step output; argparse's `--version` is the
 writer that remains outside it."""
 
+import io
 import os
+import re
 import secrets
 import sys
 import unicodedata
@@ -10,7 +12,7 @@ from contextlib import AbstractContextManager, contextmanager, nullcontext
 from dataclasses import dataclass
 from enum import StrEnum
 from functools import partial
-from typing import TextIO
+from typing import BinaryIO, TextIO
 
 from quality.report import (
     Choice,
@@ -35,6 +37,8 @@ SONAR_OUTPUT = "sonar"
 SONAR_OFF = "off"
 STEP_OUTPUT_VARIABLE = "GITHUB_OUTPUT"
 STEP_SUMMARY_VARIABLE = "GITHUB_STEP_SUMMARY"
+BACKTICK_RUN = re.compile("`+")
+MINIMUM_FENCE = 3
 
 
 def emit(*lines: str, file: TextIO | None = None) -> None:
@@ -50,11 +54,29 @@ def emit_finding(finding: Finding) -> None:
 
 
 def append_step_summary(lines: Sequence[str], environment: Mapping[str, str]) -> None:
-    """In a GitHub Actions step, the run summary gets the same escaped lines as the log."""
+    """In a GitHub Actions step, the run summary gets the same escaped lines as the log, starting on a line of their
+    own after whatever an earlier step wrote."""
     summary = environment.get(STEP_SUMMARY_VARIABLE)
     if summary:
-        with open(summary, "a", encoding="utf-8") as handle:
-            handle.write("".join(f"{printable(line)}\n" for line in lines))
+        with open(summary, "a+b") as handle:
+            start = "" if _ends_a_line(handle) else "\n"
+            handle.write((start + "".join(f"{printable(line)}\n" for line in lines)).encode("utf-8"))
+
+
+def _ends_a_line(handle: BinaryIO) -> bool:
+    """Whether the file is empty or its last byte is a line feed."""
+    if handle.seek(0, os.SEEK_END) == 0:
+        return True
+    handle.seek(-1, os.SEEK_END)
+    return handle.read(1) == b"\n"
+
+
+def code_block(lines: Sequence[str]) -> tuple[str, ...]:
+    """Lines markdown shows as written: inside one fence longer than any backtick run in them, which CommonMark lets no
+    line inside close, so no job name or `what` opens a comment, a link or a heading in the step summary."""
+    longest = max((len(run) for line in lines for run in BACKTICK_RUN.findall(line)), default=0)
+    fence = "`" * max(MINIMUM_FENCE, longest + 1)
+    return (fence, *lines, fence)
 
 
 def append_step_output(name: str, value: str) -> None:
@@ -525,6 +547,14 @@ def _next_lines(next_steps: tuple[Step, ...], label: str) -> list[str]:
         (_, first), *rest = lines[0]
         return [f"{label} {printable(first)}", *(f"{INDENT * level}{printable(text)}" for level, text in rest)]
     return [label, *(f"{INDENT * (level + 1)}{printable(text)}" for step in lines for level, text in step)]
+
+
+def rendered(write: Callable[[Channels], None]) -> tuple[str, ...]:
+    """The lines `write` prints, as a pipe shows them: plain, unshortened, stdout's and stderr's in the order written."""
+    record = io.StringIO()
+    channel = Channel(record, False, None)
+    write(Channels(channel, channel))
+    return tuple(record.getvalue().splitlines())
 
 
 def write_help(text: str) -> None:
