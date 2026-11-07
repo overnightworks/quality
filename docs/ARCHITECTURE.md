@@ -69,11 +69,13 @@ only readers of the checked-out files, `web.py` the only HTTP transport.
 ```mermaid
 sequenceDiagram
     participant Door as cli.py
+    participant Pin as pin.py
     participant Check as check.py
     participant Rule as rule module
     participant Files as checkout.py, repository.py
     participant Scanner as scanner via process.py
     participant Output as output.py
+    Door->>Pin: the release that judges here
     Door->>Check: named areas, or all
     loop each selected area, in Area's order
         Check->>Rule: judge the area's rules

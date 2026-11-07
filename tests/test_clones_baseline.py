@@ -444,7 +444,7 @@ def test_a_pair_across_production_and_tests_is_judged_like_any_other(build_repo,
     assert_new_pair(finding, "tests/test_b.py:1", Place("src/a.py", "run"), "check")
 
 
-def test_a_held_pair_whose_side_file_was_deleted_is_red_at_the_first_side_and_its_fix_clears_it(build_repo, capsys, monkeypatch):
+def test_a_held_pair_whose_side_file_was_deleted_is_red_at_the_first_side_and_its_fix_clears_it(build_repo, capsys):
     """#136 E4, cell 3, decision 7: the printed fix is a command of this door."""
     repo, code, output = enforced(capsys, build_repo, {"tests/test_a.py": TWO_FILES["tests/test_a.py"]}, FIRST)
     (finding,) = clone_findings(repo)
@@ -452,8 +452,7 @@ def test_a_held_pair_whose_side_file_was_deleted_is_red_at_the_first_side_and_it
     assert_gone_pair(finding, FIRST_PAIR)
     command = shlex.split(finding.fix)
     assert command[0] == cli.build_parser().prog
-    monkeypatch.chdir(repo)
-    assert cli.main(command[1:]) == 0
+    assert door_in(repo, *command[1:]) == 0
     assert check_output(capsys, repo)[0] == 0
 
 

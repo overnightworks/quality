@@ -77,6 +77,16 @@ class Reason:
     next_steps: tuple[Step, ...] = ()
 
 
+@dataclass(frozen=True)
+class Release:
+    """A quality release a row names, by its tag."""
+
+    tag: str
+
+    def __str__(self) -> str:
+        return self.tag
+
+
 class CannotJudge(Exception):
     """The repository cannot be examined or the invocation is wrong; this is never a clean result."""
 

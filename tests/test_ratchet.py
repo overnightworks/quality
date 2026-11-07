@@ -198,15 +198,14 @@ def test_against_a_baseline_new_grown_and_stale_entries_are_red(build_repo, caps
     assert_row_prints_finding(row, finding)
 
 
-def test_the_fix_of_a_stale_entry_run_in_the_repository_leaves_a_clean_run(build_repo, capsys, monkeypatch):
+def test_the_fix_of_a_stale_entry_run_in_the_repository_leaves_a_clean_run(build_repo, capsys):
     """#46 rule 4, decision 7: the printed fix is a command of this door, and running it lowers the entry."""
     repo = build_repo({"src/a.py": long_function(65), BASELINE_PATH: HELD_70})
     run(capsys, repo)
     (finding,) = rule_findings(repo, Rule.SIZE)
     command = shlex.split(finding.fix)
     assert command[0] == cli.build_parser().prog
-    monkeypatch.chdir(repo)
-    assert cli.main(command[1:]) == 0
+    assert door_in(repo, *command[1:]) == 0
     code, output = run(capsys, repo)
     assert (code, is_clean(output)) == (0, True), output
 
@@ -576,28 +575,25 @@ def test_a_key_with_quotes_or_unicode_matches_itself_exactly():
 
 
 @pytest.fixture
-def repo_with_debt_below_src(build_repo, monkeypatch) -> Path:
-    """A repository whose root baseline holds nothing, with a 900-line file in src, entered at src."""
-    repo = build_repo({BASELINE_PATH: EMPTY_BASELINE, "src/big.py": long_file(900)})
-    monkeypatch.chdir(repo / "src")
-    return repo
+def repo_with_debt_below_src(build_repo) -> Path:
+    """A repository whose root baseline holds nothing, with a 900-line file in src."""
+    return build_repo({BASELINE_PATH: EMPTY_BASELINE, "src/big.py": long_file(900)})
 
 
 def test_check_from_a_subfolder_judges_the_whole_repository_by_its_root_baseline(repo_with_debt_below_src, capsys):
     """#76 rule 1, cells 1-2, 20: the size debt is found from src, named from the top, and no line names the checkout."""
-    code = cli.main([CHECK_WORD])
+    code = door_in(repo_with_debt_below_src / "src", CHECK_WORD)
     output = (captured := capsys.readouterr()).out + captured.err
     assert (code, [row.event for row in finding_rows(output, "src/big.py")], str(repo_with_debt_below_src) in output) == (1, [FindingEvent.NEW_DEBT], False), output
 
 
-def test_a_fix_from_a_subfolder_lowers_the_root_baseline(build_repo, monkeypatch, capsys):
+def test_a_fix_from_a_subfolder_lowers_the_root_baseline(build_repo, capsys):
     """The root file is lowered from a subfolder; a stray src/quality/baseline.toml is neither read nor touched."""
     repo = build_repo({BASELINE_PATH: '[file_lines]\n"src/big.py" = 950\n\n[clones]\n', "src/big.py": long_file(900)})
     stray = repo / "src/quality/baseline.toml"
     stray.parent.mkdir()
     stray.write_text("# stray\n")
-    monkeypatch.chdir(repo / "src")
-    assert cli.main([*FIX_WORDS]) == 0
+    assert door_in(repo / "src", *FIX_WORDS) == 0
     assert (load_baseline((repo / BASELINE_PATH).read_text()).size, stray.read_text()) == ({Key(Metric.FILE_LINES, "src/big.py"): 900}, "# stray\n")
 
 

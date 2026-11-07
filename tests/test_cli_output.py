@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import architecture, check, cli, config, ratchet, report, scanners
+from quality import architecture, check, cli, config, pin, ratchet, report, scanners
 from quality.output import SEPARATOR, Glyph
 from quality.ratchet import BASELINE_PATH
 from quality.report import FindingEvent, NoteEvent, printable
@@ -37,7 +37,7 @@ from tests.support.check import (
     rule_findings,
 )
 from tests.support.clones import function
-from tests.support.door import CHECK_WORD, FIX_WORDS, MODULE_DOOR, check_door, door_environment, door_in
+from tests.support.door import CHECK_WORD, FIX_WORDS, MODULE_DOOR, PinnedJudging, check_door, door_environment, door_in
 from tests.support.merge import ONE_JOB
 from tests.support.processes import process_is_gone
 from tests.support.scanners import fake_scanner, lacking
@@ -393,9 +393,11 @@ ZERO_SECONDS = "<1s"
 
 
 def frame_run(capsys, path: Path, **keywords) -> tuple[int, list[str], list[str]]:
-    code = check_door(path, clock=lambda: 0.0, **keywords)
+    """The exit, the stdout lines after the release row and the stderr lines of the check over `path`."""
+    judging = PinnedJudging()
+    code = check_door(path, clock=lambda: 0.0, **{"judging": judging, **keywords})
     captured = capsys.readouterr()
-    return code, captured.out.splitlines(), captured.err.splitlines()
+    return code, judging.frame(captured.out).splitlines(), captured.err.splitlines()
 
 
 def header(area: Area, glyph: str, event: str, fact: str = "") -> str:
@@ -547,7 +549,7 @@ def test_one_reason_refusing_rules_in_several_areas_stands_once_in_each(build_re
 
 @pytest.mark.integration
 def test_a_folder_outside_any_repository_prints_only_the_location_pair(tmp_path, capsys, own_home):
-    code, out, err = frame_run(capsys, tmp_path)
+    code, out, err = frame_run(capsys, tmp_path, judging=pin.judge_here)
     assert (code, out, err) == (2, [], [f"error: not inside a git work tree · {tmp_path}", "next: run quality check inside a repository"])
 
 
@@ -565,7 +567,7 @@ def test_the_folder_is_spoken_with_the_home_folder_as_a_tilde(own_home, monkeypa
     folder = folder_of(own_home)
     folder.mkdir(exist_ok=True)
     monkeypatch.setenv("HOME", home_spelling.format(home=own_home))
-    code, out, err = frame_run(capsys, folder)
+    code, out, err = frame_run(capsys, folder, judging=pin.judge_here)
     assert (code, out, err) == (2, [], [f"error: not inside a git work tree · {tail_of(folder)}", "next: run quality check inside a repository"])
 
 
@@ -577,7 +579,7 @@ def unknown_user(uid: int):
 def test_an_unknown_home_folder_speaks_the_absolute_folder_and_never_a_traceback(tmp_path, monkeypatch, capsys):
     monkeypatch.delenv("HOME", raising=False)
     monkeypatch.setattr("pwd.getpwuid", unknown_user)
-    code, out, err = frame_run(capsys, tmp_path)
+    code, out, err = frame_run(capsys, tmp_path, judging=pin.judge_here)
     assert (code, out, err) == (2, [], [f"error: not inside a git work tree · {tmp_path}", "next: run quality check inside a repository"])
 
 
@@ -586,7 +588,7 @@ def test_a_bare_repository_and_the_inside_of_git_are_outside_a_work_tree(tmp_pat
     subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
     inside = build_repo(CLEAN_FILES) / ".git"
     for path in (bare, inside):
-        code, out, err = frame_run(capsys, path)
+        code, out, err = frame_run(capsys, path, judging=pin.judge_here)
         assert (code, out, err) == (2, [], [f"error: not inside a git work tree · {path}", "next: run quality check inside a repository"])
 
 
@@ -598,14 +600,14 @@ def test_a_folder_outside_any_repository_is_outside_in_every_locale(tmp_path, fa
         'else echo "fatal: Kein Git-Repository (oder irgendein Elternverzeichnis): .git" >&2; fi; exit 128'
     )
     monkeypatch.setenv("LC_ALL", "de_DE.UTF-8")
-    code, out, err = frame_run(capsys, tmp_path)
+    code, out, err = frame_run(capsys, tmp_path, judging=pin.judge_here)
     assert (code, out, err[0]) == (2, [], f"error: not inside a git work tree · {tmp_path}")
 
 
 def test_a_repository_git_refuses_gets_the_git_step(build_repo, monkeypatch, capsys):
     repo = build_repo(CLEAN_FILES)
     monkeypatch.setenv("GIT_TEST_ASSUME_DIFFERENT_OWNER", "1")
-    code, out, err = frame_run(capsys, repo)
+    code, out, err = frame_run(capsys, repo, judging=pin.judge_here)
     assert (code, out) == (2, [])
     assert err[0].startswith("error: ")
     assert "not inside a git work tree" not in err[0]
@@ -687,7 +689,7 @@ def test_a_refusal_git_did_not_run_for_gets_the_general_instruction(build_repo, 
     nowhere = tmp_path / "empty-bin"
     nowhere.mkdir()
     monkeypatch.setenv("PATH", str(nowhere))
-    code, out, err = frame_run(capsys, repo)
+    code, out, err = frame_run(capsys, repo, judging=pin.judge_here)
     assert (code, out, err[1:]) == (2, [], ["next: fix what the error names, then run quality check again"])
 
 

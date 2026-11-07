@@ -343,7 +343,7 @@ $ quality check debt --fix
 ! 1 finding in 1 area · ceiling lowered by 1 entry · 2s
 ```
 
-Built: every frame, without the release row (C10). `--fix` takes no `--staged` and needs `debt` among the named areas, or none named; `--dry-run` needs `--fix`. Beside the frames: a gone or generated drop names the value it held; the debt row reads `N to lower`, `N to move` or `to record`; the dry run exits 1 while the fix would change the file, 0 when not; `~` is cyan at a terminal.
+Built: every frame. `--fix` takes no `--staged` and needs `debt` among the named areas, or none named; `--dry-run` needs `--fix`. Beside the frames: a gone or generated drop names the value it held; the debt row reads `N to lower`, `N to move` or `to record`; the dry run exits 1 while the fix would change the file, 0 when not; `~` is cyan at a terminal.
 
 No ceiling yet: first a note, then the first recording. Both exit 0. stdout.
 
@@ -405,7 +405,7 @@ $ quality check secrets --staged
 ! 1 finding in 1 area · <1s
 ```
 
-Built: both frames without the release row (C10); `N files` counts the paths the staged diff lists; a refused run is the `✗` row and the pair, its rerun `next:` names this command; no unused row, the history scan keeps it; `-v` stands under the row.
+Built: both frames; `N files` counts the paths the staged diff lists; a refused run is the `✗` row and the pair, its rerun `next:` names this command; no unused row, the history scan keeps it; `-v` stands under the row.
 
 The entry is the four lines a reader takes, whole and never shortened; the person adds `reason` (O31). It holds no `sha256`, a key no reader takes.
 

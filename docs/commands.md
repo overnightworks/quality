@@ -13,6 +13,18 @@ commands: …` for none, `no area <word> · areas: …` for the first word `qual
 parser's own sentence; `--dry-run needs --fix · nothing checked` for `--dry-run` without `--fix` (`next:` names `quality check --fix --dry-run`); `--staged checks only secrets · nothing checked` for `--staged` with other areas or none (`next:` names `quality check secrets --staged`); `next:` otherwise names the help of the command that took the stray word, or of the parser
 that refused.
 
+## Which release judges
+
+`quality check` judges only where the running quality is the commit the repository's gate pins, or quality's own
+checkout run from its code. The running commit is the one its installer recorded (`direct_url.json`), or, for an editable
+directory installation, that directory's HEAD while its work tree is clean and the version's release tag names that
+HEAD. Its first row names the release (`· release  v0.10.0  pinned in .github/workflows/ci.yml`), or `this checkout`
+with the running version in quality's checkout. Every other case is exit `2` with the `error:`/`next:` pair and no row:
+no workflow calling the gate, an unknown pin, a pin comment that misnames its commit, a pin below v0.10.0, another or an
+unknown commit, and in quality's checkout an installation other than the checkout's code. The one exception is the
+commit hook: where no workflow calls the gate, `quality check secrets --staged` judges with the installed release and
+its row says `installed · no gate pins a release here`.
+
 ## `quality check --fix`
 
 `quality check debt --fix` lowers the debt ceiling (`quality/baseline.toml`) where code shrank, or records it where no
