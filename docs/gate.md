@@ -27,7 +27,7 @@ Each line has a reason:
   `quality / check`, `quality / sonar` and `quality / verdict`. Three things look for them by those names: a ruleset
   that requires `quality / verdict` (the fleet's org ruleset does, on the default branch of every repository whose
   custom property `quality_gate` is `true`), `aco land`, which, once the default branch holds `quality/config.toml`,
-  refuses without a green `quality / verdict`, and `quality emergency-merge`, which looks for `quality / sonar` and
+  refuses without a green `quality / verdict`, and `quality merge`, which looks for `quality / sonar` and
   `quality / verdict`.
 - **`needs:` lists the id of every job that a `mandatory_jobs` name belongs to.** The verdict then judges finished jobs,
   and a job GitHub still lists as running is unsettled and never green (READ-1), so the answer is stale: the verdict
@@ -122,9 +122,9 @@ reason = "the operator ruled the requirement shelf machinery out"
   entry is judged.
 - A declared loosening stays red (exit `1`) and says so:
   `loosened (declared, overnightworks/songmaker#1345 of 2026-10-20): mandatory job "…" removed`. When nothing else is
-  red, the last line is `verdict: red - only declared loosenings: only the operator's quality emergency-merge lands this
+  red, the last line is `verdict: red - only declared loosenings: only the operator's quality merge lands this
   pull request`. No entry approves itself: an agent may write one, but the ruleset and `aco land` still need a green
-  `quality / verdict`, and only [the operator's emergency door](commands.md#quality-emergency-merge) merges.
+  `quality / verdict`, and only [the operator's door](commands.md#quality-merge) merges.
 - An advisory allowance (`[[advisories.allow]]`, see the `advisory` rule under `quality check`) declares its own
   loosening with its own `item` and `date`, so it needs no `[[gate.loosened]]` entry. An allowance whose `id` and
   `lock` the base lacks prints `loosened (declared, <item> of <date>): advisory allowance adds <id> in <lock> until <until>`; one

@@ -1,14 +1,17 @@
 import pytest
 
 from tests.support.check import assert_every_line_starts_with_the_door
-from tests.support.merge import ABSENT, SHA, FakeGh, changed_nothing, drive, landing_pair, prompt, pull_row
-
-
-def not_judged_pair():
-    return (
-        "error: could not judge · nothing changed\n"
-        "next: fix what the ✗ row names, then run quality emergency-merge acme/widgets 7 again\n"
-    )
+from tests.support.merge import (
+    ABSENT,
+    SHA,
+    FakeGh,
+    changed_nothing,
+    drive,
+    landing_pair,
+    not_judged_pair,
+    prompt,
+    pull_row,
+)
 
 
 def landing_sentence(count="no"):

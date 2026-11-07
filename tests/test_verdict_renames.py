@@ -12,7 +12,16 @@ from quality import merge
 from quality.ratchet import BASELINE_PATH, Baseline, Key, Metric, Renames, renames_of, render_baseline
 from quality.report import CannotJudge
 from tests.support.git_repositories import head_commit, put
-from tests.support.merge import GATE_CONFIG, ONE_JOB, SONAR_GREEN, changed_nothing, closing_line, declaring, drive
+from tests.support.merge import (
+    GATE_CONFIG,
+    ONE_JOB,
+    SONAR_GREEN,
+    changed_nothing,
+    closing_line,
+    declaring,
+    drive,
+    not_judged_pair,
+)
 from tests.support.processes import process_is_gone
 from tests.support.verdict import verdict_of, verdict_streams
 from tests.support.verdict_renames import MOVABLE_FILE, OLD_ENTRY, commit_all, entry, moved_in_head, pulled
@@ -296,13 +305,6 @@ def loosenings_not_judged(fact):
         "  · #7            open           head aaaaaaa · into main\n"
         "  ✓ checks        ok             only quality / sonar and quality / verdict are red\n"
         f"  ✗ loosenings    not judged     {fact}\n"
-    )
-
-
-def not_judged_pair():
-    return (
-        "error: could not judge · nothing changed\n"
-        "next: fix what the ✗ row names, then run quality emergency-merge acme/widgets 7 again\n"
     )
 
 

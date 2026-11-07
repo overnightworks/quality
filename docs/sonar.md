@@ -152,7 +152,7 @@ SONARIAC-3096). A pull-request analysis does not see an unchanged `.github/depen
 - **The rule:** `quality sonar properties` tests whether `.github/dependabot.yml` exists. Its content is never read, so
   an empty or broken file counts as existing; a link to a file counts and a link to nowhere does not; a directory named
   `.github/dependabot.yml` counts too, unlike Sonar, which needs a file. `.github/dependabot.yaml` is not looked at.
-- **What counts:** `quality sonar findings` and `quality emergency-merge` count every open finding and read no
+- **What counts:** `quality sonar findings` and `quality merge` count every open finding and read no
   `dependabot.yml`. A `docker:S8431` finding that an analysis raises anyway (no `.github/dependabot.yml`, only
   `.github/dependabot.yaml`, or an analysis that predates the exclusion) is an ordinary finding: it prints with its
   `Fix:` line, counts in `new` and in the legacy number, and fails the run.

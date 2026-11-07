@@ -68,7 +68,7 @@ def test_the_help_stands_in_the_pictures_frame(capsys):
         "Commands:\n"
         "  check [AREA ...] [--staged] [--fix] [--dry-run]\n"
         "      Check this repository against the fleet's rules.\n"
-        "  emergency-merge OWNER/REPO PR\n"
+        "  merge OWNER/REPO#N [--dry-run]\n"
         "      Operator only: merge one pull request whose gate is red only for\n"
         "      legacy findings or loosenings he ruled, after he types yes.\n"
         "  scoreboard [PATH]\n"
@@ -89,6 +89,37 @@ def test_the_help_stands_in_the_pictures_frame(capsys):
         "\n"
         "Exit codes: 0 yes, 1 no, 2 could not answer, 130 interrupted.\n"
     )
+
+
+def test_the_merge_help_stands_in_its_frame(capsys):
+    assert help_of(capsys, ["merge"]) == (
+        "usage: quality merge OWNER/REPO#N [--dry-run] [-v]\n"
+        "\n"
+        "Operator only: merge one pull request whose gate is red only for legacy\n"
+        "findings or loosenings he ruled, after he types yes.\n"
+        "\n"
+        "Options:\n"
+        "  --dry-run   show the rows, then stop before the question: nothing changes,\n"
+        "              exit 0 where the door would merge\n"
+        "  -v          show the raw scanner output; the door runs no scanner\n"
+        "  -h, --help  show this help\n"
+        "\n"
+        "Exit codes: 0 merged, 1 refused, 2 could not check or do, 130 interrupted.\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("words", "dry_run", "verbose"),
+    [
+        pytest.param(["acme/widgets#7"], False, False, id="name alone"),
+        pytest.param(["acme/widgets#7", "--dry-run"], True, False, id="dry run after"),
+        pytest.param(["--dry-run", "acme/widgets#7"], True, False, id="dry run before"),
+        pytest.param(["-v", "acme/widgets#7", "--dry-run"], True, True, id="every flag"),
+    ],
+)
+def test_the_merge_invocation_names_the_pull_request_and_how(words, dry_run, verbose):
+    arguments = cli.read_invocation(["merge", *words])
+    assert (arguments.pull_request, arguments.dry_run, arguments.verbose) == (cli.PullRequestName("acme/widgets", 7), dry_run, verbose)
 
 
 def test_the_check_help_stands_in_the_pictures_frame(capsys):
@@ -154,7 +185,7 @@ def test_verdict_and_sonar_stand_apart_under_run_by_the_gate(capsys):
         pytest.param(["sonar"], id="sonar"),
         pytest.param(["sonar", "properties"], id="sonar properties"),
         pytest.param(["sonar", "findings"], id="sonar findings"),
-        pytest.param(["emergency-merge"], id="emergency-merge"),
+        pytest.param(["merge"], id="merge"),
         pytest.param(["scoreboard"], id="scoreboard"),
     ],
 )
@@ -239,6 +270,19 @@ def test_a_closed_stdout_takes_no_help_and_exit_is_0(tmp_path):
         pytest.param(["check", "docs", "--staged"], (), "no area docs{sep}areas: {areas}", "quality check", id="a wrong area beside the staged flag"),
         pytest.param(["sonar", "properties", "x"], (), "unknown argument{sep}x", "quality sonar", id="stray argument of sonar"),
         pytest.param(["--nonsense", "scoreboard"], (), "unknown argument{sep}--nonsense", "quality scoreboard", id="stray option before a command"),
+        pytest.param(["merge"], (), "no pull request{sep}a pull request reads OWNER/REPO#N", "quality merge", id="no pull request"),
+        pytest.param(["merge", "acme/widgets", "7"], (), "no pull request acme/widgets{sep}a pull request reads OWNER/REPO#N", "quality merge", id="the old two words"),
+        pytest.param(["merge", "acme/widgets"], (), "no pull request acme/widgets{sep}a pull request reads OWNER/REPO#N", "quality merge", id="no number"),
+        pytest.param(["merge", "acme/widgets#0"], (), "no pull request acme/widgets#0{sep}a pull request reads OWNER/REPO#N", "quality merge", id="number 0"),
+        pytest.param(["merge", "acme/widgets#7x"], (), "no pull request acme/widgets#7x{sep}a pull request reads OWNER/REPO#N", "quality merge", id="letters after the number"),
+        pytest.param(["merge", "widgets#7"], (), "no pull request widgets#7{sep}a pull request reads OWNER/REPO#N", "quality merge", id="no owner"),
+        pytest.param(
+            ["merge", "acme/widg\u0435ts#7"], (), "no pull request acme/widg\u0435ts#7{sep}a pull request reads OWNER/REPO#N", "quality merge", id="a lookalike name"
+        ),
+        pytest.param(["merge", "acme/widgets#7", "acme/widgets#8"], (), "unknown argument{sep}acme/widgets#8", "quality merge", id="two pull requests"),
+        pytest.param(["merge", "acme/widgets#7", "--dry"], (), "unknown argument{sep}--dry", "quality merge", id="an abbreviated dry run"),
+        pytest.param(["merge", "acme/widgets#7", "--verbose"], (), "unknown argument{sep}--verbose", "quality merge", id="the long form of the merge flag"),
+        pytest.param(["emergency-merge", "acme/widgets", "7"], (), "no command emergency-merge{sep}commands: {commands}", "quality", id="the command word that left"),
     ],
 )
 def test_a_wrong_invocation_is_the_pair_on_stderr_and_exit_2(capsys, argv, group, fact, help_owner):
@@ -254,8 +298,6 @@ def test_a_wrong_invocation_is_the_pair_on_stderr_and_exit_2(capsys, argv, group
         pytest.param(["--nonsense"], "quality", id="missing command behind an option"),
         pytest.param(["--nonsense", "nonsense"], "quality", id="unknown command behind an option"),
         pytest.param(["sonar", "--nonsense"], "quality sonar", id="missing sonar command"),
-        pytest.param(["emergency-merge"], "quality emergency-merge", id="missing arguments"),
-        pytest.param(["emergency-merge", "o/r", "x"], "quality emergency-merge", id="pull request is no number"),
     ],
 )
 def test_what_only_the_parser_can_word_stands_in_the_pair(capsys, argv, help_owner):

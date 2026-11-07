@@ -22,12 +22,12 @@ from tests.support.merge import (
     closing_line,
     comment_line,
     declaring,
-    drive,
     frozen_now,
     no_network,
     not_confirmed_pair,
     prompt,
     restore_line,
+    run,
     sonar,
 )
 from tests.support.terminal import screen
@@ -83,38 +83,32 @@ def refused_pair():
 def not_judged_pair():
     return frame(
         "error: could not judge · nothing changed",
-        "next: fix what the ✗ row names, then run quality emergency-merge acme/widgets 7 again",
+        "next: fix what the ✗ row names, then run quality merge acme/widgets#7 again",
     )
 
 
-def run(gh, capsys, **arguments):
-    code, answers = drive(gh, **arguments)
-    streams = capsys.readouterr()
-    return code, streams.out, streams.err, answers
-
-
 @pytest.mark.parametrize(
-    ("terminal", "repository", "pair"),
+    ("terminal", "repository", "code", "pair"),
     [
-        (False, REPO, frame(
+        (False, REPO, 1, frame(
             "error: not merged · the operator's merge needs a terminal on stdin · nothing changed",
             "next: the operator runs it in his own terminal",
         )),
-        (True, "not-a-repo", frame(
-            "error: not merged · 'not-a-repo' is not <owner>/<repo> · nothing changed",
-            "next: name the repository as <owner>/<repo>",
+        (True, "not-a-repo", 2, frame(
+            "error: no pull request not-a-repo#7 · a pull request reads OWNER/REPO#N",
+            "next: quality merge --help",
         )),
-        (False, "not-a-repo", frame(
-            "error: not merged · 'not-a-repo' is not <owner>/<repo> · nothing changed",
-            "next: name the repository as <owner>/<repo>",
+        (False, "not-a-repo", 2, frame(
+            "error: no pull request not-a-repo#7 · a pull request reads OWNER/REPO#N",
+            "next: quality merge --help",
         )),
     ],
     ids=["no terminal", "a malformed name", "a malformed name and no terminal"],
 )
-def test_a_refusal_before_any_read_is_the_pair_alone(terminal, repository, pair, capsys):
+def test_a_refusal_before_any_read_is_the_pair_alone(terminal, repository, code, pair, capsys):
     gh = FakeGh()
-    code, out, err, _ = run(gh, capsys, terminal=terminal, repo=repository)
-    assert (code, out, err, gh.calls) == (1, "", pair, [])
+    refused, out, err, _ = run(gh, capsys, terminal=terminal, repo=repository)
+    assert (refused, out, err, gh.calls) == (code, "", pair, [])
 
 
 @pytest.mark.parametrize(
@@ -309,7 +303,7 @@ def at_a_terminal(gh, window, columns, transport=None, typed="no\n"):
     errors = io.StringIO()
     with contextlib.redirect_stdout(terminal.stream), contextlib.redirect_stderr(errors):
         code = cli.main(
-            ["emergency-merge", REPO, "7"], gh=gh, transport=transport or sonar(), terminal=cli.Terminal(lambda: typed, lambda: True),
+            ["merge", f"{REPO}#7"], gh=gh, transport=transport or sonar(), terminal=cli.Terminal(lambda: typed, lambda: True),
             remote_for=no_network, environment={"TERM": "xterm"}, now=frozen_now,
         )
     return code, screen(terminal.read()).splitlines(), errors.getvalue()
@@ -387,7 +381,7 @@ def test_a_refused_or_cross_fact_ends_at_the_window(gh_kwargs, code, lines, err,
         (
             {"fail_on": ["gate"]},
             ["  ✗ quality_gate  off failed     gate b…", "  ✓ quality_gate  on", "  ✓ log comment   posted         on #7"],
-            ["error: quality_gate on again · #7 is not merged", "next: quality emergency-merge acme/widgets 7"],
+            ["error: quality_gate on again · #7 is not merged", "next: quality merge acme/widgets#7"],
         ),
         (
             {"fail_on": ["merge"]},
@@ -395,7 +389,7 @@ def test_a_refused_or_cross_fact_ends_at_the_window(gh_kwargs, code, lines, err,
                 "  ✓ quality_gate  off            acme/widgets", "  ✓ quality_gate  on",
                 "  ✗ #7            not merged     merge …", "  ✓ log comment   posted         on #7",
             ],
-            ["error: quality_gate on again · #7 is not merged", "next: quality emergency-merge acme/widgets 7"],
+            ["error: quality_gate on again · #7 is not merged", "next: quality merge acme/widgets#7"],
         ),
         (
             {"fail_on": ["restore"]},

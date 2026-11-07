@@ -7,7 +7,7 @@ detail and are linked, never repeated.
 ## 1. Context and Scope
 
 The engineer and the agent run `quality check` locally and in the commit hook. The operator uses his door
-(`quality emergency-merge`) to merge past a red gate. Every gated repository's CI calls the reusable `gate.yml`, which
+(`quality merge`) to merge past a red gate. Every gated repository's CI calls the reusable `gate.yml`, which
 runs the check, the SonarCloud job and the verdict. Outside quality lie GitHub (its API and Actions), SonarCloud, the
 OSV advisory archives, mise with the three scanners it installs, and PyPI, which uv installs quality's own dependencies
 from.
@@ -15,7 +15,7 @@ from.
 ```mermaid
 flowchart LR
     engineer["Engineer / agent<br/>quality check, commit hook"]
-    operator["Operator<br/>quality emergency-merge"]
+    operator["Operator<br/>quality merge"]
     ci["Gated repository's CI<br/>gate.yml"]
     quality(["quality"])
     github["GitHub API and Actions"]
