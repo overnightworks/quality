@@ -54,7 +54,7 @@ IMPORT_CONFIG = "import-linter config"
 GREEN_LINE = "verdict: green"
 RED_LINE = "verdict: red"
 ONLY_DECLARED_LINE = (
-    "verdict: red - only declared loosenings: only the operator's quality emergency-merge lands this pull request"
+    "verdict: red - only declared loosenings: only the operator's quality merge lands this pull request"
 )
 
 

@@ -1,4 +1,4 @@
-"""The operator's emergency door: switch a repository's gate off, merge one pull request, switch it on again."""
+"""The operator's door, `quality merge`: switch a repository's gate off, merge one pull request, switch it on again."""
 
 import json
 import shlex
@@ -12,9 +12,10 @@ from pathlib import Path
 from urllib.parse import quote
 
 from quality import architecture, process
-from quality.config import CONFIG_PATH, REPOSITORY_NAME, Declaration, GateSettings, LegacyMode
+from quality.config import CONFIG_PATH, Declaration, GateSettings, LegacyMode
 from quality.landing import Landing, LandingKind, LandingRefused, landing_of
 from quality.output import (
+    DRY_RUN,
     SEPARATOR,
     Channels,
     DoorStream,
@@ -42,7 +43,7 @@ from quality.sonar import (
 )
 from quality.verdict import SUCCESS, Job, Side, Verdict, compares_baselines, judge, read_renames, side_of
 
-EXIT_MERGED = 0
+EXIT_YES = 0
 EXIT_REFUSED = 1
 EXIT_COULD_NOT_DO = 2
 
@@ -523,7 +524,7 @@ def log_comment(login: str, moment: datetime, door: Door, attempt: Attempt) -> s
     restored = "on" if attempt.restore_error is None else "NOT restored, it may still be off"
     switched = "not switched off" if attempt.outcome is Outcome.NOT_STARTED else "off"
     return printable(
-        f"Emergency door used by @{login} at {moment.isoformat(timespec='seconds')}: {'; '.join(door.reasons())}; {door.merge_method.description}; "
+        f"quality merge run by @{login} at {moment.isoformat(timespec='seconds')}: {'; '.join(door.reasons())}; {door.merge_method.description}; "
         f"{GATE_PROPERTY} {switched} → {attempt.outcome.value} → {restored}."
     )
 
@@ -535,7 +536,7 @@ def confirmed(ask: Ask, pull_request: int) -> bool:
 
 
 def rerun_command(repository: str, pull_request: int) -> str:
-    return f"quality emergency-merge {repository} {pull_request}"
+    return f"quality merge {repository}#{pull_request}"
 
 
 def gh_command(repository: str, pull_request: int, word: str) -> Command:
@@ -747,10 +748,11 @@ def shown_before_asking(rows: tuple[Row, ...], out: DoorStream) -> None:
         raise Unshown
 
 
-def run_emergency_merge(
+def run_merge(
     repository: str,
     pull_request: int,
     *,
+    dry_run: bool,
     gh: GhRunner,
     transport: Transport,
     ask: Ask,
@@ -762,9 +764,6 @@ def run_emergency_merge(
     remote_for: RemoteFor = github_remote,
 ) -> int:
     """Every line leaves through `channels`, escaped: rows and the closing line on stdout, the prompt and the pair on stderr."""
-    if not REPOSITORY_NAME.fullmatch(repository):
-        write_pair(not_merged(f"{repository!r} is not <owner>/<repo>"), (Instruction("name the repository as <owner>/<repo>"),), channels.err)
-        return EXIT_REFUSED
     if not is_terminal:
         write_pair(not_merged("the operator's merge needs a terminal on stdin"), (Instruction("the operator runs it in his own terminal"),), channels.err)
         return EXIT_REFUSED
@@ -781,6 +780,9 @@ def run_emergency_merge(
         again = Instruction(f"send stdout where it can be written, then run {rerun_command(repository, pull_request)} again")
         write_pair(f"stdout refused a row{SEPARATOR}{NOTHING_CHANGED}", (again,), channels.err)
         return EXIT_COULD_NOT_DO
+    if dry_run:
+        write_closing_line(Glyph.WILL_CHANGE, (DRY_RUN, f"would switch {GATE_PROPERTY} off, merge #{pull_request}, switch it on", NOTHING_CHANGED), channels.out)
+        return EXIT_YES
     if not confirmed(ask, pull_request):
         write_pair(f"not confirmed{SEPARATOR}{NOTHING_CHANGED}", (Command(rerun_command(repository, pull_request)),), channels.err)
         return EXIT_REFUSED
@@ -790,6 +792,6 @@ def run_emergency_merge(
     posted = post_log_comment(gh, door, comment, out)
     if attempt.outcome is Outcome.MERGED and attempt.restore_error is None and posted:
         write_closing_line(Glyph.CLEAN, (f"merged #{pull_request}", f"{GATE_PROPERTY} on again", format_duration(clock() - started)), channels.out)
-        return EXIT_MERGED
+        return EXIT_YES
     write_pair(*unfinished_pair(door, attempt, None if posted else comment), channels.err)
     return EXIT_COULD_NOT_DO

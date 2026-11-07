@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import re
 import sys
 import textwrap
 import time
@@ -39,8 +40,8 @@ from quality.check import (
     judge_staged_change,
 )
 from quality.checkout import OutsideWorkTree
-from quality.config import CONFIG_PATH, ConfigError, read_gate_settings, runs_sonar
-from quality.merge import GhRunner, RemoteFor, github_remote, run_emergency_merge, run_gh
+from quality.config import CONFIG_PATH, REPOSITORY_NAME, ConfigError, read_gate_settings, runs_sonar
+from quality.merge import GhRunner, RemoteFor, github_remote, run_gh, run_merge
 from quality.output import (
     SCANNER_ARGUMENTS_OUTPUT,
     SEPARATOR,
@@ -150,10 +151,11 @@ def main(
         write_pair(refusal.reason.fact, refusal.reason.next_steps, channels.err)
         return EXIT_CANNOT_JUDGE
 
-    if arguments.command == "emergency-merge":
-        return run_emergency_merge(
-            arguments.repository,
-            arguments.pull_request,
+    if arguments.command == "merge":
+        return run_merge(
+            arguments.pull_request.repository,
+            arguments.pull_request.number,
+            dry_run=arguments.dry_run,
             gh=gh,
             transport=transport,
             ask=partial(ask, channel=channels.err, read_line=standard_input.read_line),
@@ -192,7 +194,7 @@ usage: quality COMMAND
 Commands:
   check [AREA ...] [--staged] [--fix] [--dry-run]
       Check this repository against the fleet's rules.
-  emergency-merge OWNER/REPO PR
+  merge OWNER/REPO#N [--dry-run]
       Operator only: merge one pull request whose gate is red only for
       legacy findings or loosenings he ruled, after he types yes.
   scoreboard [PATH]
@@ -244,6 +246,21 @@ Options:
 Exit codes: 0 clean, 1 findings, 2 could not check, 130 interrupted.
 """
 
+MERGE_HELP = """\
+usage: quality merge OWNER/REPO#N [--dry-run] [-v]
+
+Operator only: merge one pull request whose gate is red only for legacy
+findings or loosenings he ruled, after he types yes.
+
+Options:
+  --dry-run   show the rows, then stop before the question: nothing changes,
+              exit 0 where the door would merge
+  -v          show the raw scanner output; the door runs no scanner
+  -h, --help  show this help
+
+Exit codes: 0 merged, 1 refused, 2 could not check or do, 130 interrupted.
+"""
+
 
 class DoorParser(argparse.ArgumentParser):
     """argparse reads the words and prints only `--version`: a wrong invocation leaves as the refusal `main` writes, and
@@ -289,6 +306,27 @@ def named_area(word: str) -> Area:
         raise CannotJudge(f"no area {word}{SEPARATOR}areas: {', '.join(Area)}", help_step("quality check")) from error
 
 
+MERGE_COMMAND = "quality merge"
+PULL_REQUEST_NAME = re.compile(rf"(?P<repository>{REPOSITORY_NAME.pattern})#(?P<number>[1-9][0-9]*)")
+PULL_REQUEST_SHAPE = "a pull request reads OWNER/REPO#N"
+
+
+@dataclass(frozen=True)
+class PullRequestName:
+    """The pull request `quality merge` names: its repository as `<owner>/<repo>` and its number."""
+
+    repository: str
+    number: int
+
+
+def named_pull_request(word: str) -> PullRequestName:
+    """The pull request `word` names as OWNER/REPO#N; any other word is the refusal `main` writes."""
+    named = PULL_REQUEST_NAME.fullmatch(word)
+    if named is None:
+        raise CannotJudge(f"no pull request {word}{SEPARATOR}{PULL_REQUEST_SHAPE}", help_step(MERGE_COMMAND))
+    return PullRequestName(named["repository"], int(named["number"]))
+
+
 def read_invocation(argv: list[str] | None) -> argparse.Namespace:
     """The parsed invocation; whatever the command does not take is a refusal, which names that command's help."""
     parser = build_parser()
@@ -297,6 +335,8 @@ def read_invocation(argv: list[str] | None) -> argparse.Namespace:
         raise CannotJudge(f"unknown argument{SEPARATOR}{' '.join(stray)}", help_step(f"{parser.prog} {arguments.command}"))
     if arguments.command == "check":
         _refuse_what_check_does_not_take(arguments)
+    if arguments.command == "merge" and arguments.pull_request is None:
+        raise CannotJudge(f"no pull request{SEPARATOR}{PULL_REQUEST_SHAPE}", help_step(MERGE_COMMAND))
     return arguments
 
 
@@ -343,9 +383,11 @@ def build_parser() -> DoorParser:
             "needs quality/config.toml with [gate] mandatory_jobs, else exit 2"
         ),
     )
-    emergency = commands.add_parser("emergency-merge")
-    emergency.add_argument("repository", help="<owner>/<repo>")
-    emergency.add_argument("pull_request", type=int)
+    merge_parser = commands.add_parser("merge", allow_abbrev=False)
+    merge_parser.pictured_help = MERGE_HELP
+    merge_parser.add_argument("pull_request", nargs="?", type=named_pull_request, metavar="OWNER/REPO#N")
+    merge_parser.add_argument(DRY_RUN_WORD, dest="dry_run", action="store_true")
+    merge_parser.add_argument("-v", dest="verbose", action="store_true")
     scoreboard = commands.add_parser("scoreboard")
     scoreboard.add_argument("path", nargs="?", type=Path, default=Path("."))
     return parser

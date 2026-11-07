@@ -1,15 +1,15 @@
 # Commands
 
 Reference for the engineer or operator who runs `quality check --fix`, `quality check secrets --staged`, `quality scoreboard`, installs the scanners,
-runs `quality emergency-merge`, or reads `quality --help` or a wrong invocation's pair.
+runs `quality merge`, or reads `quality --help` or a wrong invocation's pair.
 
 ## Help and wrong invocations
 
 `quality --help` and `quality check --help` stand in the frame of [the output picture](output.md), case 11, with what is
-true today; every other `quality <command> --help` prints that command's arguments; `--version` prints the installed version. Help goes to
+true today, and `quality merge --help` in a frame of its own; every other `quality <command> --help` prints that command's arguments; `--version` prints the installed version. Help goes to
 stdout with exit `0`, plain and whole in every stream. A wrong invocation runs nothing, prints the `error:`/`next:` pair
 on stderr and exits `2`: `no command <word> · commands: …` for a first word that names no command, `no command ·
-commands: …` for none, `no area <word> · areas: …` for the first word `quality check` does not know as an area, `unknown argument · <what is left over>` for what the command does not take, and otherwise the
+commands: …` for none, `no area <word> · areas: …` for the first word `quality check` does not know as an area, `no pull request <word> · a pull request reads OWNER/REPO#N` for a `quality merge` argument of another form (`no pull request · …` for none, `next:` naming `quality merge --help`), `unknown argument · <what is left over>` for what the command does not take, and otherwise the
 parser's own sentence; `--dry-run needs --fix · nothing checked` for `--dry-run` without `--fix` (`next:` names `quality check --fix --dry-run`); `--staged checks only secrets · nothing checked` for `--staged` with other areas or none (`next:` names `quality check secrets --staged`); `next:` otherwise names the help of the command, of its group for a command inside one, or of the parser
 that refused.
 
@@ -135,11 +135,11 @@ Ruled by the operator: quality builds the logic and the process itself and never
 linters and test runners, gitleaks, osv-scanner, mutation tools); the scanners it uses run pinned underneath the one
 door.
 
-## `quality emergency-merge`
+## `quality merge`
 
-`quality emergency-merge <owner/repo> <pr>` is the operator's door past a red gate: it merges a pull request that the
+`quality merge <owner/repo>#<pr> [--dry-run] [-v]` is the operator's door past a red gate: it merges a pull request that the
 gate keeps red only for legacy Sonar findings or for [declared loosenings](gate.md#declared-loosenings). The steps to
-take are in [the runbook](runbook-emergency-merge.md); this is what the command does.
+take are in [the runbook](runbooks/merge.md); this is what the command does.
 
 - **Operator only.** It runs under the operator's own `gh` login, which needs admin permission on the repository (checked
   first: exit `2`, nothing changed, the missing right named). Agents never run it; it refuses when stdin is not a
@@ -172,7 +172,8 @@ take are in [the runbook](runbook-emergency-merge.md); this is what the command 
   the project needs one: without it the door reads a public project anonymously, with no Authorization header, and an
   anonymous read that SonarCloud refuses (a private project answers 404) is exit `2`, naming `SONAR_TOKEN`; with a token, a 401 or 403
   says the token was rejected.
-- **It shows, then asks:** on stdout a row as each step passes: the pull request (`open`, head, base), the checks, the declared loosenings, each whole with its `item` and `date` and its `reason` on the line below, the legacy count where Sonar failed, the merge method, and last the `landing` row naming the line the merge commit ends with (`work item` and `#<n>`, or `no item` and its kind); then, on stderr, `Switch quality_gate off, merge #<pr>, switch it on? Type yes: `. Only `yes` in lower case, ended with Enter, merges (whitespace around it counts for nothing; `Yes` or `y` change nothing); any other line, or the end of input (Ctrl-D) before Enter, prints `error: not confirmed · nothing changed` and `next:` naming the command again (exit `1`); Ctrl-C at the question ends the run interrupted (exit `130`); nothing has changed in either case. With stderr closed the question and the pairs print nowhere; nothing moves to stdout. A refusal is its `!` row and the `error:`/`next:` pair on stderr (exit `1`), each blocking line of the verdict whole below the `loosenings` row; a step that cannot be judged is its `✗` row and the pair (exit `2`); no terminal on stdin or a malformed name is the pair alone (exit `1`). Every line it prints is escaped as the other doors' lines are, so a `reason` cannot hide anything before `yes` or forge a line.
+- **It shows, then asks:** on stdout a row as each step passes: the pull request (`open`, head, base), the checks, the declared loosenings, each whole with its `item` and `date` and its `reason` on the line below, the legacy count where Sonar failed, the merge method, and last the `landing` row naming the line the merge commit ends with (`work item` and `#<n>`, or `no item` and its kind); then, on stderr, `Switch quality_gate off, merge #<pr>, switch it on? Type yes: `. Only `yes` in lower case, ended with Enter, merges (whitespace around it counts for nothing; `Yes` or `y` change nothing); any other line, or the end of input (Ctrl-D) before Enter, prints `error: not confirmed · nothing changed` and `next:` naming the command again (exit `1`); Ctrl-C at the question ends the run interrupted (exit `130`); nothing has changed in either case. With stderr closed the question and the pairs print nowhere; nothing moves to stdout. A refusal is its `!` row and the `error:`/`next:` pair on stderr (exit `1`), each blocking line of the verdict whole below the `loosenings` row; a step that cannot be judged is its `✗` row and the pair (exit `2`); no terminal on stdin is the pair alone (exit `1`); a name not of the form `<owner>/<repo>#<pr>` is a wrong invocation (exit `2`). Every line it prints is escaped as the other doors' lines are, so a `reason` cannot hide anything before `yes` or forge a line.
+- **Dry run:** `--dry-run` reads and shows every row the door shows, refuses where it refuses, and in place of the question ends with `~ dry run · would switch quality_gate off, merge #<pr>, switch it on · nothing changed` on stdout (exit `0`); it reads no answer and sends no request that changes anything (no `gh api -X`, no `gh pr merge`), and it needs a terminal on stdin like the door. `-v` is taken and adds nothing: the door runs no scanner.
 - **Off, merge, on:** it sets the repository's `quality_gate` property to `false` (this takes the fleet's ruleset off it),
   runs `gh pr merge <pr> --merge --match-head-commit <sha> --body-file -`, the message on its stdin (`--squash` where the repository settings or a rule on the
   pull request's base branch exclude a merge commit but allow a squash; when neither is allowed, or the settings or rules
@@ -187,6 +188,6 @@ take are in [the runbook](runbook-emergency-merge.md); this is what the command 
   read back after the gate is on; if that does not settle it, the row is `state unknown` and the pair says `#<pr> may be merged`
   with `gh pr view`. Before the question a stdout that refuses a row stops the door (exit `2`, nothing changed); after `yes` the
   run keeps its exit.
-- **Logged:** one comment on the pull request (who, when, the legacy count and each declaration,
+- **Logged:** one comment on the pull request, opening `quality merge run by @<login>` (who, when, the legacy count and each declaration,
   `quality_gate off → <outcome> → on`, or `quality_gate not switched off → no merge → on` when switching off failed),
   also when the restore failed. A comment not posted is its `✗` row, its command under `next:`.

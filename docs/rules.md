@@ -438,7 +438,7 @@ It applies these rules:
   its new path of leftovers; a rename to a path that is not UTF-8 is not read. The allowance moves rather than being copied: while the
   head baseline still names the old path, nothing moves and the new path's entries are adds. A pair whose files moved
   is the same pair, and a renamed function is a new entry. Renames are read only when the base and the head both hold a baseline: without a base, or without a baseline on
-  either side, nothing is read. `emergency-merge` fetches the same two commits and reads the same renames. `check` names entries and pairs by their current path; `check --fix` follows the renames since the ceiling's last commit.
+  either side, nothing is read. `merge` fetches the same two commits and reads the same renames. `check` names entries and pairs by their current path; `check --fix` follows the renames since the ceiling's last commit.
 
   A lowered, equal or removed entry or pair is green, and so is adopting a baseline (the base has none) or having none
   on either side. A `[clones]` table the base lacks is an adoption too: its pairs are not compared, while the size
