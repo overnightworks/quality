@@ -433,6 +433,10 @@ def unreadable(workflow: str) -> checkout.UnknownGatePin:
             ),
             id="an alias beside its anchor names its own release",
         ),
+        pytest.param(
+            {"ci.yml": "{block_aliased}"}, (), (), (), lambda commit: checkout.GatePin(commit, "v0.9.2", (".github/workflows/ci.yml",)),
+            id="an alias of a block scalar names its own release",
+        ),
     ],
 )
 def test_the_gate_pin_of_a_checkout_is_one_state(build_repo, files, remotes, settings, deleted, expected):
@@ -445,6 +449,7 @@ def test_the_gate_pin_of_a_checkout_is_one_state(build_repo, files, remotes, set
         "pinned": jobs(f"{gate_uses(commit)} # v0.10.0"),
         "upper_pinned": jobs(f"{gate_uses(commit.upper())} # v0.10.0"),
         "aliased": jobs(f"&pin {gate_uses(commit)} # v0.10.0", "*pin # v0.9.2"),
+        "block_aliased": f"on: push\nx-pin: &pin |-\n  {gate_uses(commit)}\njobs:\n  job0:\n    uses: *pin # v0.9.2\n",
         "older": jobs(f"{gate_uses(older)} # v0.9.2"),
         "branch": jobs(f"{gate_uses('main')} # v0.10.0"),
         "bare": jobs(gate_uses(commit)),

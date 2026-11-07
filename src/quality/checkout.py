@@ -238,7 +238,7 @@ class _AliasMarkingLoader(yaml.BaseLoader):
         alias = self.peek_event() if self.check_event(yaml.AliasEvent) else None
         node = super().compose_node(parent, index)
         if alias is not None and isinstance(node, yaml.ScalarNode):
-            return yaml.ScalarNode(node.tag, node.value, alias.start_mark, alias.end_mark, node.style)
+            return yaml.ScalarNode(node.tag, node.value, alias.start_mark, alias.end_mark, style="")
         return node
 
 
