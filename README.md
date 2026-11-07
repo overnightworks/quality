@@ -31,7 +31,7 @@ and lock inside quality's installation; a scanner that is missing exits `2` and 
 A repository adopts the gate with one caller job of `gate.yml` and a `quality/config.toml` that names the mandatory
 jobs; [docs/gate.md](docs/gate.md#gateyml) has the snippet and the reason for each line. The gate's `sonar` job also
 needs a SonarCloud project with automatic analysis off, a root `sonar-project.properties` and the `SONAR_TOKEN` secret
-(a missing token is red); see [docs/sonar.md](docs/sonar.md#quality-sonar-findings).
+(a missing token is red), unless `quality/config.toml` sets `[gate] sonar = false`; see [docs/sonar.md](docs/sonar.md#quality-sonar-findings).
 
 Locally, `quality check` runs every rule the gate runs, the secret, workflow and advisory scans included; `quality check <area>` runs only that area.
 

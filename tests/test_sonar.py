@@ -698,3 +698,80 @@ def test_a_repository_without_a_config_is_refused_before_any_request(monkeypatch
     code, _, err, _ = run_cli(monkeypatch, capsys, fake, config_text=None)
     assert (code, fake.requests) == (2, [])
     assert "quality/config.toml is missing" in err
+
+
+def sonar_off_files():
+    return {"quality/config.toml": '[gate]\nmandatory_jobs = ["check"]\nsonar = false\n'}
+
+
+def environment_without_token():
+    return {name: value for name, value in PULL_REQUEST_ENVIRONMENT.items() if name != "SONAR_TOKEN"}
+
+
+def test_properties_with_sonar_off_reads_no_token_and_writes_off(monkeypatch, capsys, build_repo, tmp_path):
+    """With [gate] sonar = false the door needs no properties file and no token, hands the job sonar=off and exits 0."""
+    step_output = tmp_path / "github_output"
+    code, out, err = run_properties(
+        monkeypatch, capsys, build_repo, properties=None, environment=environment_without_token(), extra_files=sonar_off_files(),
+        step_output=step_output,
+    )
+    off_line = "sonar: off - quality/config.toml sets [gate] sonar = false, so nothing reaches SonarCloud\n"
+    assert (code, out, err, step_output.read_text()) == (0, off_line, "", "sonar=off\n")
+
+
+@pytest.mark.parametrize(
+    ("properties", "token_set", "fact"),
+    [
+        (CLEAN_PROPERTIES, False, "sonar-project.properties exists while quality/config.toml sets [gate] sonar = false"),
+        (None, True, "SONAR_TOKEN is set while quality/config.toml sets [gate] sonar = false"),
+    ],
+    ids=["a properties file", "a token"],
+)
+def test_properties_with_sonar_off_refuses_the_wiring_of_a_scan(monkeypatch, capsys, build_repo, tmp_path, properties, token_set, fact):
+    """While SonarCloud is off, a properties file or a passed token is exit 2 and nothing is handed to the job."""
+    step_output = tmp_path / "github_output"
+    code, out, err = run_properties(
+        monkeypatch, capsys, build_repo, properties=properties,
+        environment=PULL_REQUEST_ENVIRONMENT if token_set else environment_without_token(), extra_files=sonar_off_files(),
+        step_output=step_output,
+    )
+    assert (code, out, err, step_output.exists()) == (2, "", f"sonar: cannot judge - {fact}\n", False)
+
+
+def test_properties_without_the_key_still_refuses_an_empty_token(monkeypatch, capsys, build_repo, tmp_path):
+    """A config without the key runs SonarCloud, so an empty token stays exit 2 and nothing is written."""
+    step_output = tmp_path / "github_output"
+    files = {"quality/config.toml": '[gate]\nmandatory_jobs = ["check"]\n'}
+    code, _, err = run_properties(
+        monkeypatch, capsys, build_repo, environment={**PULL_REQUEST_ENVIRONMENT, "SONAR_TOKEN": ""}, extra_files=files,
+        step_output=step_output,
+    )
+    assert (code, "SONAR_TOKEN is empty" in err, step_output.exists()) == (2, True, False)
+
+
+def test_properties_without_a_config_still_refuses_an_empty_token(monkeypatch, capsys, build_repo, tmp_path):
+    """A repository without quality/config.toml runs SonarCloud, so a missing token is exit 2 and nothing is written."""
+    step_output = tmp_path / "github_output"
+    code, _, err = run_properties(
+        monkeypatch, capsys, build_repo, properties=None, environment=environment_without_token(), step_output=step_output,
+        arrange=lambda root: (root / "quality" / "config.toml").unlink(),
+    )
+    assert (code, "SONAR_TOKEN is empty" in err, step_output.exists()) == (2, True, False)
+
+
+def test_properties_with_sonar_off_and_an_unwritable_output_cannot_judge(monkeypatch, capsys, build_repo, tmp_path):
+    """The off path fails loud when the job cannot be handed its output."""
+    code, _, err = run_properties(
+        monkeypatch, capsys, build_repo, properties=None, environment=environment_without_token(), extra_files=sonar_off_files(),
+        step_output=tmp_path,
+    )
+    assert (code, "GITHUB_OUTPUT is not writable" in err) == (2, True)
+
+
+def test_properties_refuses_a_malformed_sonar_key(monkeypatch, capsys, build_repo):
+    """A sonar value that is not a boolean is exit 2 naming the key, never a traceback."""
+    files = {"quality/config.toml": '[gate]\nmandatory_jobs = ["check"]\nsonar = "no"\n'}
+    code, _, err = run_properties(monkeypatch, capsys, build_repo, extra_files=files)
+    assert (code, err) == (
+        2, "sonar: cannot judge - quality/config.toml [gate] sonar must be true or false, like:\\x0a[gate]\\x0asonar = false\n",
+    )

@@ -128,6 +128,7 @@ quality itself.
 - Callers pin quality's workflows by commit with the tag in a comment, and Dependabot bumps them; quality's own action
   pins move the same way. One release then reaches every caller through a pull request it judges itself, with no token
   that writes to every repository.
+- A repository turns SonarCloud off only in `quality/config.toml`: the verdict holds the config against the base, so switching it off is a loosening only the operator's door merges, which a workflow input would not be.
 - One reusable CodeQL workflow serves the fleet and uploads under the Default Setup's category, so alerts carry over when
   a repository switches.
 
@@ -137,6 +138,7 @@ quality itself.
   SonarCloud backdates an issue raised on an unchanged line, so it cannot fail on one, and at the pinned scanner a
   properties file can still reach the token. Reopens when the hosted gate fails on such a finding and the pinned scanner
   no longer lets a properties file reach the token.
+- Skipping the `sonar` job, by a job `if:` or by repository visibility: a job `if:` cannot read the config, so every scan would wait for its check and the verdict and the door would need a second meaning of `skipped`; visibility is no scanning intent and bypasses the config comparison. Reopens when a job `if:` can read the caller's files.
 - A copier template or a token that writes to every repository: callers pin a tag that Dependabot bumps. Reopens when a
   caller needs a file that a reusable workflow cannot give it.
 - One Sonar exception per exact `FROM` line, or a per-image entry: Sonar's own exception for `docker:S8431` checks only

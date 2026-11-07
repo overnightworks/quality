@@ -19,7 +19,7 @@ DATE_NEED = "date as a TOML date without a time"
 ONE_LINE_NEED = "a non-empty one-line reason"
 FILE_PATH_NEED = "path as the exact tracked path of one file: no folder, pattern, .. or absolute path"
 KNOWN_KEYS = (
-    "only [gate] mandatory_jobs, [gate] legacy, [[gate.loosened]], [secrets] allow, [[advisories.allow]], "
+    "only [gate] mandatory_jobs, [gate] legacy, [gate] sonar, [[gate.loosened]], [secrets] allow, [[advisories.allow]], "
     "[[root.allow]], [[layout.allow]], [[python.allow]], [[compose.allow]] and [[size.generated]] exist"
 )
 
@@ -228,7 +228,18 @@ def _document_refusals() -> list[Refusal]:
         Refusal("not valid TOML, staged", broken, f"{CONFIG} is not valid TOML ({parser_message(broken)})", config.ALLOWANCE_EXAMPLE, ("staged",)),
         Refusal("config missing", None, f"{CONFIG} is missing", config.EXAMPLE, ("gate",)),
         Refusal("mandatory_jobs", "[gate]\nmandatory_jobs = 3\n", f"{CONFIG} needs [gate] mandatory_jobs as a non-empty list of job names", config.EXAMPLE, ("gate",)),
+        Refusal(
+            "mandatory_jobs before legacy", '[gate]\nmandatory_jobs = 3\nlegacy = "x"\n',
+            f"{CONFIG} needs [gate] mandatory_jobs as a non-empty list of job names", config.EXAMPLE, ("gate",),
+        ),
         Refusal("legacy", GATE + 'legacy = "x"\n', f'{CONFIG} [gate] legacy must be "report" or "fail"', config.LEGACY_EXAMPLE, ("gate",)),
+        *(Refusal(f"sonar {kind}", GATE + f"sonar = {value}\n", f"{CONFIG} [gate] sonar must be true or false", config.SONAR_EXAMPLE, ("gate",))
+          for kind, value in (("string", '"false"'), ("integer", "0"), ("array", "[]"))),
+        Refusal(
+            "sonar off beside legacy fail", GATE + 'legacy = "fail"\nsonar = false\n',
+            f'{CONFIG} [gate] legacy = "fail" judges SonarCloud findings, which [gate] sonar = false turns off',
+            config.SONAR_EXAMPLE, ("gate",),
+        ),
         Refusal("config is a directory", None, f"{CONFIG} is not a file", None, directory=True),
         *(Refusal(f"{table} as a value", f"{table} = 1\n", f"{CONFIG} has [{table}] as a value, not a table", example,
                   WHOLE_AND_STAGED if table == "secrets" else WHOLE) for table, example in TABLE_VALUES),

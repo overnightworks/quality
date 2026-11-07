@@ -51,7 +51,7 @@ Each line has a reason:
   nothing; its CI needs network access to GitHub release assets. The step sets `MISE_CEILING_PATHS`, so a `mise.toml` in
   the caller's checkout takes no part.
 - **The `check` job runs the whole `quality check`.** `gate.yml` has no input for an area, and a test pins the step's words. A job that names areas says so in its verdict (`✓ clean · 1 area`); a selected-area job is not evidence of a whole check.
-- **`secrets: SONAR_TOKEN`** and the optional **`with: coverage-artifact`** are described under
+- **`secrets: SONAR_TOKEN`** (needed while SonarCloud runs; a repository with `[gate] sonar = false` passes none) and the optional **`with: coverage-artifact`** are described under
   [`quality sonar findings`](sonar.md#quality-sonar-findings) and [Coverage on new code](sonar.md#coverage-on-new-code).
 - **`uses:` pins a commit** (`@<commit sha> # v<tag>`), and Dependabot bumps it where the repository's `.github/dependabot.yml` enables the `github-actions` ecosystem. There is no copier and no own token that writes to all repositories: quality
   carries plain version tags and Dependabot opens the bump pull requests, and quality's own action pins move the same way, so a caller receives current actions with each quality tag.
@@ -73,6 +73,7 @@ mandatory_jobs = ["checks"]
 - On a pull request, removing a job the base config holds is `loosened (undeclared): mandatory job "x" removed`, and the
   base's job is still judged; a declared removal (below) is no longer judged.
 - The gate's own jobs are judged through `needs` (`gate job "sonar" result failure`) and need no entry.
+- `[gate] sonar = false` turns SonarCloud off: the `sonar` job's properties step hands it `sonar=off`, prints `sonar: off - …`, and `gate.yml` skips the scan and the findings step, so the job is green and sends nothing. While off, a `sonar-project.properties` or a passed `SONAR_TOKEN` is exit `2`, so a later gate without the switch also stops before its scan. Absent or `true`, Sonar runs. Any other value, and `false` beside `legacy = "fail"`, is exit `2`. On a pull request, a head that turns Sonar off under a base that runs it is `loosened (undeclared): sonar true → false`; an adoption (a base without `quality/config.toml`) may start with Sonar off.
 - `[gate] legacy` is described under [New and legacy findings](sonar.md#new-and-legacy-findings).
 
 The verdict prints `verdict: green` (exit `0`); each problem, then `verdict: red` (exit `1`); or

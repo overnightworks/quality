@@ -11,7 +11,7 @@ from quality import repository
 from quality.rules import Rule
 
 CONFIG_PATH = "quality/config.toml"
-GATE_KEYS = {"mandatory_jobs", "legacy", "loosened"}
+GATE_KEYS = {"mandatory_jobs", "legacy", "sonar", "loosened"}
 SECRETS_KEYS = {"allow"}
 SECRETS_ALLOW = "[secrets] allow"
 ADVISORIES_KEYS = {"allow"}
@@ -39,6 +39,7 @@ ITEM_REFERENCE = re.compile(rf"(?:{REPOSITORY_NAME.pattern})?#[1-9][0-9]*")
 ONE_LINE_REASON = "a non-empty one-line reason"
 BARE_KEY = re.compile(r"[A-Za-z0-9_-]+")
 type ExampleLines = tuple[str, *tuple[str, ...]]
+GATE_HEADING = "[gate]"
 LOOSENED_HEADING = "[[gate.loosened]]"
 SECRETS_ALLOWANCE_HEADING = "[[secrets.allow]]"
 ADVISORY_ALLOWANCE_HEADING = "[[advisories.allow]]"
@@ -47,8 +48,9 @@ LAYOUT_ALLOWANCE_HEADING = "[[layout.allow]]"
 PYTHON_ALLOWANCE_HEADING = "[[python.allow]]"
 COMPOSE_ALLOWANCE_HEADING = "[[compose.allow]]"
 GENERATED_FILE_HEADING = "[[size.generated]]"
-EXAMPLE: ExampleLines = ("[gate]", 'mandatory_jobs = ["checks"]')
-LEGACY_EXAMPLE: ExampleLines = ("[gate]", 'legacy = "fail"')
+EXAMPLE: ExampleLines = (GATE_HEADING, 'mandatory_jobs = ["checks"]')
+LEGACY_EXAMPLE: ExampleLines = (GATE_HEADING, 'legacy = "fail"')
+SONAR_EXAMPLE: ExampleLines = (GATE_HEADING, "sonar = false")
 ALLOWANCE_EXAMPLE: ExampleLines = (
     SECRETS_ALLOWANCE_HEADING,
     'rule = "aws-access-token"',
@@ -196,13 +198,14 @@ class GeneratedFile:
 @dataclass(frozen=True)
 class GateSettings:
     """What the gate reads from quality/config.toml: the settings a pull request must not loosen, the loosenings
-    it declares, and the advisories it allows."""
+    it declares, and the advisories it allows; `sonar` is whether the gate's `sonar` job scans."""
 
     mandatory_jobs: tuple[str, ...]
     legacy: LegacyMode
     loosened: tuple[Declaration, ...] = ()
     advisory_allowances: tuple[AdvisoryAllowance, ...] = ()
     generated_files: tuple[GeneratedFile, ...] = ()
+    sonar: bool = True
 
 
 class Allowance(NamedTuple):
@@ -345,7 +348,7 @@ def _refuse_unknown_keys(
         ):
             example = table_example if set(table) - keys else example
         raise ConfigError(
-            f"{CONFIG_PATH} has {_unknown_keys(unknown)} - only [gate] mandatory_jobs, [gate] legacy, "
+            f"{CONFIG_PATH} has {_unknown_keys(unknown)} - only [gate] mandatory_jobs, [gate] legacy, [gate] sonar, "
             "[[gate.loosened]], [secrets] allow, [[advisories.allow]], [[root.allow]], [[layout.allow]], "
             "[[python.allow]], [[compose.allow]] and [[size.generated]] exist",
             example,
@@ -635,14 +638,29 @@ def _read_generated_file(entry: object, position: int, mandatory_jobs: tuple[str
     return GeneratedFile(path, job, item, date, reason)
 
 
+def _sonar(gate: dict, legacy: LegacyMode) -> bool:
+    """A missing `sonar` key scans; legacy findings judged by SonarCloud need it on."""
+    value = gate.get("sonar", True)
+    if not isinstance(value, bool):
+        raise ConfigError(f"{CONFIG_PATH} [gate] sonar must be true or false", SONAR_EXAMPLE)
+    if not value and legacy is LegacyMode.FAIL:
+        raise ConfigError(
+            f'{CONFIG_PATH} [gate] legacy = "fail" judges SonarCloud findings, which [gate] sonar = false turns off',
+            SONAR_EXAMPLE,
+        )
+    return value
+
+
 def load_gate_settings(text: str | None) -> GateSettings:
     """mandatory_jobs is judged before legacy, so a config wrong in both is refused for mandatory_jobs."""
     if text is None:
         raise ConfigError(f"{CONFIG_PATH} is missing", EXAMPLE)
     document = _validated_document(text)
+    jobs = _mandatory_jobs(document.gate)
+    legacy = _legacy_mode(document.gate)
     return GateSettings(
-        _mandatory_jobs(document.gate), _legacy_mode(document.gate), document.declarations,
-        document.allow_lists.advisories, document.allow_lists.generated,
+        jobs, legacy, document.declarations,
+        document.allow_lists.advisories, document.allow_lists.generated, _sonar(document.gate, legacy),
     )
 
 
@@ -656,6 +674,12 @@ def _read_config_text(repo: Path) -> str | None:
 
 def read_gate_settings(repo: Path) -> GateSettings:
     return load_gate_settings(_read_config_text(repo))
+
+
+def runs_sonar(repo: Path) -> bool:
+    """A repository without the config scans, and the findings step refuses the missing file."""
+    text = _read_config_text(repo)
+    return True if text is None else load_gate_settings(text).sonar
 
 
 def load_allow_lists(text: str | None) -> AllowLists:

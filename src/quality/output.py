@@ -30,6 +30,9 @@ from quality.report import (
 
 # The name gate.yml reads as `steps.<id>.outputs.scanner-arguments` from the properties step.
 SCANNER_ARGUMENTS_OUTPUT = "scanner-arguments"
+# The name and value `gate.yml` reads as `steps.preflight.outputs.sonar` to skip the scan and the findings.
+SONAR_OUTPUT = "sonar"
+SONAR_OFF = "off"
 STEP_OUTPUT_VARIABLE = "GITHUB_OUTPUT"
 STEP_SUMMARY_VARIABLE = "GITHUB_STEP_SUMMARY"
 

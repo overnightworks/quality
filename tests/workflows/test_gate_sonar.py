@@ -5,6 +5,7 @@ import pytest
 import yaml
 
 from quality import output, sonar
+from tests.support.sonar import run_properties
 
 ROOT = Path(__file__).parents[2]
 WORKFLOWS = ROOT / ".github" / "workflows"
@@ -82,9 +83,8 @@ def test_the_token_reaches_only_properties_scan_and_findings(gate):
     assert {job for job, _ in holders} == {"sonar"}
 
 
-def test_the_secret_is_required_and_the_verdict_needs_the_sonar_job(gate):
-    """#26 rule 1: SONAR_TOKEN is a required workflow_call secret and verdict.needs contains sonar"""
-    assert gate[True]["workflow_call"]["secrets"] == {"SONAR_TOKEN": {"required": True}}
+def test_the_verdict_needs_the_sonar_job(gate):
+    """verdict.needs contains sonar"""
     assert "sonar" in gate["jobs"]["verdict"]["needs"]
 
 
@@ -102,11 +102,25 @@ def test_only_the_findings_step_binds_the_pull_request_number(gate):
     assert "PULL_REQUEST_NUMBER" not in gate["jobs"]["sonar"].get("env", {})
 
 
-def test_nothing_skips_the_scan_for_any_actor(gate):
-    """#26 rule 2: no if: on the sonar job or its token steps, so a Dependabot or fork run is red, never skipped"""
-    job = gate["jobs"]["sonar"]
-    assert "if" not in job
-    assert not any("if" in step for step in job["steps"] if "env" in step)
+def test_the_sonar_job_and_its_properties_step_run_for_every_actor(gate, sonar_steps):
+    """No if: on the sonar job or its properties step, so a Dependabot or fork run is never skipped"""
+    assert "if" not in gate["jobs"]["sonar"]
+    assert "if" not in step_named(sonar_steps, "Refuse a token")
+
+
+def test_the_scan_and_findings_skip_on_exactly_the_output_the_door_writes(monkeypatch, capsys, build_repo, tmp_path, sonar_steps):
+    """Every token-holding step after the properties step skips only on the output and value the real door writes, and
+    only through `!=`, so a missing output runs the scan."""
+    step_output = tmp_path / "github_output"
+    run_properties(
+        monkeypatch, capsys, build_repo, properties=None, environment={}, step_output=step_output,
+        extra_files={"quality/config.toml": '[gate]\nmandatory_jobs = ["check"]\nsonar = false\n'},
+    )
+    name, value = step_output.read_text().strip().split("=")
+    preflight_id = step_named(sonar_steps, "Refuse a token")["id"]
+    after = [step for step in sonar_steps if TOKEN_REFERENCE in str(step.get("env", {})) and step["name"] != step_named(sonar_steps, "Refuse a token")["name"]]
+    assert [step["name"] for step in after] == [step_named(sonar_steps, "Scan")["name"], step_named(sonar_steps, "Findings")["name"]]
+    assert [step.get("if") for step in after] == [f"steps.{preflight_id}.outputs.{name} != '{value}'"] * 2
 
 
 def test_quality_wires_the_secret_by_name_into_the_gate():
