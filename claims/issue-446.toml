@@ -1,0 +1,8 @@
+claim_id = "fc80ee9351eb413c9f54e6fe1654f900"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "def561b633927fc1363fef86376ff5afda6b2236"
+branch = "claude/issue-446-merge-at-target-pin"
+scope = ["AGENTS.md", "docs/ARCHITECTURE.md", "docs/commands.md", "docs/output.md", "docs/runbooks/merge.md", "pyproject.toml", "src/quality/checkout.py", "src/quality/cli.py", "src/quality/gh.py", "src/quality/merge.py", "src/quality/pin.py", "src/quality/verdict.py", "tests/support/door.py", "tests/support/door_process.py", "tests/support/merge.py", "tests/support/verdict.py", "tests/test_checkout.py", "tests/test_merge.py", "tests/test_merge_attempt.py", "tests/test_merge_dry_run.py", "tests/test_merge_landing.py", "tests/test_merge_prompt.py", "tests/test_merge_release.py", "tests/test_merge_rows.py", "tests/test_sonar_exception.py", "tests/test_verdict_config.py", "tests/test_verdict_door.py", "tests/test_verdict_frame.py", "tests/test_verdict_reread.py"]
+opened_commit = "ceecf76d2b9d8a3e8181ed2f9bc8d189af3d2dbf"
+whole_reason = "About +140 new production lines in six files and a 26-line move: the door's pin read needs the shared parse in checkout.py, the shared release decision in pin.py, the room in gh.py and the wiring in cli.py at once, and the verdict's five-line row is the same picture rule."
