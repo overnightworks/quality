@@ -1,0 +1,8 @@
+claim_id = "f82f0040a096436a92dc85973ffac974"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "df6195fcc31b89472236bc1076eb951bbc5cf1b9"
+branch = "claude/issue-434-rules-reference-ids"
+scope = ["docs/ARCHITECTURE.md", "docs/rules.md", "tests/test_advisories.py", "tests/test_advisories_locks.py", "tests/test_architecture.py", "tests/test_clones.py", "tests/test_config.py", "tests/test_verdict_reread.py"]
+opened_commit = "26b8d4fbdca223016154c31e6cde811cda77b3e5"
+whole_reason = "A renamed spec ID changes in the document and in every citing test in one commit, or a rule and the test that cites it disagree; the ruled blocks, the English block and the ARCHITECTURE line move the same sentences, so they land with it."
