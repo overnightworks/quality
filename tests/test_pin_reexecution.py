@@ -10,12 +10,15 @@ import shutil
 import signal
 import subprocess
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
-from quality import output, pin
+from quality import output, pin, process
+from quality.report import CannotJudge, Release
 from tests.support.door import LAUNCH_DRIVER, door_environment
 from tests.support.git_repositories import git, head_commit, make_repo
 
@@ -35,9 +38,10 @@ scenario = json.loads(Path({scenario!r}).read_text())
 records = Path(scenario["records"])
 held = len(list(records.iterdir())) if records.is_dir() else 0
 with open(scenario["log"], "a") as log:
-    log.write(json.dumps({{"argv": sys.argv[1:], "records": held}}) + "\\n")
+    log.write(json.dumps({{"argv": sys.argv[1:], "records": held, "repository": [name for name in ("GIT_INDEX_FILE", "GIT_DIR") if name in os.environ]}}) + "\\n")
 answer = scenario["offline" if "--offline" in sys.argv else "online"]
 if answer.get("block"):
+    Path(scenario["uv_group"]).write_text(str(os.getpid()))
     holder = os.open(scenario["held"], os.O_WRONLY)
     subprocess.Popen([sys.executable, "-c", "import time; time.sleep(3600)"], pass_fds=(holder,))
     Path(scenario["ready"]).write_text("ready")
@@ -94,7 +98,7 @@ class Scene:
     def answer(self, offline: dict | None = None, online: dict | None = None) -> None:
         valid = {"print": str(self.scripts())}
         scenario = {
-            "records": str(self.records), "log": str(self.root / "uv.log"), "held": str(self.root / "held"), "ready": str(self.root / "ready"),
+            "records": str(self.records), "log": str(self.root / "uv.log"), "held": str(self.root / "held"), "uv_group": str(self.root / "uv_group"), "ready": str(self.root / "ready"),
             "offline": valid if offline is None else offline, "online": valid if online is None else online,
         }
         (self.root / "scenario.json").write_text(json.dumps(scenario))
@@ -225,7 +229,9 @@ def test_the_child_sees_the_commit_s_own_index(scene):
         env=scene.environment(), capture_output=True, text=True, check=False,
     )
     child = scene.child()
-    assert (committed.returncode, child["staged"], child["index"] is not None) == (0, ["a.txt"], True)
+    assert (committed.returncode, child["staged"], child["index"] is not None, [call["repository"] for call in scene.uv_calls()]) == (
+        0, ["a.txt"], True, [[]],
+    )
 
 
 def test_the_child_is_the_process(scene):
@@ -333,23 +339,51 @@ def test_a_vanished_environment_is_the_pair(scene):
     )
 
 
-def wait_for_ready(path: Path) -> None:
-    os.mkfifo(path)
-    ready = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
-    readable, _, _ = select.select([ready], [], [], 60)
-    assert readable and os.read(ready, 10) == b"ready"
+@contextmanager
+def launched(scene: Scene, command: list[str]) -> Iterator[subprocess.Popen]:
+    """`command` started once its readiness FIFO exists, yielded after it wrote `ready`; every process it left, uv's
+    group included, is killed on the way out."""
+    os.mkfifo(scene.root / "ready")
+    ready = os.open(scene.root / "ready", os.O_RDONLY | os.O_NONBLOCK)
+    try:
+        with subprocess.Popen(
+            command, cwd=scene.judged, env=scene.environment(), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True
+        ) as started:
+            try:
+                readable, _, _ = select.select([ready], [], [], 60)
+                assert readable
+                assert os.read(ready, 10) == b"ready"
+                yield started
+            finally:
+                with suppress(OSError, ValueError):
+                    os.killpg(int((scene.root / "uv_group").read_text()), signal.SIGKILL)
+                with suppress(OSError):
+                    os.killpg(started.pid, signal.SIGKILL)
+    finally:
+        os.close(ready)
 
 
-def test_an_interrupt_during_preparation_ends_the_run_and_its_processes(scene):
+@contextmanager
+def watching_descendants(scene: Scene) -> Iterator[int]:
+    """A descriptor that reads end of file once no process holds the `held` FIFO's write end."""
     os.mkfifo(scene.root / "held")
     held = os.open(scene.root / "held", os.O_RDONLY | os.O_NONBLOCK)
+    try:
+        yield held
+    finally:
+        os.close(held)
+
+
+@pytest.mark.parametrize(
+    ("stop", "ends_as"), [pytest.param(signal.SIGINT, -signal.SIGINT, id="Ctrl-C"), pytest.param(signal.SIGTERM, 128 + signal.SIGTERM, id="SIGTERM")]
+)
+def test_a_stop_during_preparation_ends_the_run_and_its_processes(scene, stop, ends_as):
     scene.answer(online={"block": True})
-    started = subprocess.Popen(scene.parent("check", "files"), cwd=scene.judged, env=scene.environment(), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    wait_for_ready(scene.root / "ready")
-    started.send_signal(signal.SIGINT)
-    _, stderr = started.communicate(timeout=60)
-    readable, _, _ = select.select([held], [], [], 60)
-    assert (started.returncode, bool(readable) and os.read(held, 10), "Traceback" in stderr) == (-signal.SIGINT, b"", False)
+    with watching_descendants(scene) as held, launched(scene, scene.parent("check", "files")) as started:
+        started.send_signal(stop)
+        _, stderr = started.communicate(timeout=60)
+        readable, _, _ = select.select([held], [], [], 60)
+        assert (started.returncode, bool(readable) and os.read(held, 10), "Traceback" in stderr) == (ends_as, b"", False)
 
 
 def commit_python_file(scene: Scene) -> None:
@@ -361,18 +395,15 @@ def commit_python_file(scene: Scene) -> None:
 def test_an_interrupt_after_the_reexecution_ends_as_the_child_s(scene):
     scene.composed_child("--running", f"0.10.1:vcs:{scene.commit}", "--block-ruff", str(scene.root / "ready"))
     commit_python_file(scene)
-    started = subprocess.Popen(scene.parent("check", "code"), cwd=scene.judged, env=scene.environment(), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    wait_for_ready(scene.root / "ready")
-    started.send_signal(signal.SIGINT)
-    _, stderr = started.communicate(timeout=60)
-    assert (started.returncode, "Traceback" in stderr) == (-signal.SIGINT, False)
+    with launched(scene, scene.parent("check", "code")) as started:
+        started.send_signal(signal.SIGINT)
+        _, stderr = started.communicate(timeout=60)
+        assert (started.returncode, "Traceback" in stderr) == (-signal.SIGINT, False)
 
 
 @pytest.mark.parametrize("moment", ["during preparation", "after the reexecution"])
 def test_a_calling_shell_loop_stops(scene, moment):
     if moment == "during preparation":
-        os.mkfifo(scene.root / "held")
-        os.open(scene.root / "held", os.O_RDONLY | os.O_NONBLOCK)
         scene.answer(online={"block": True})
         words = ("check", "files")
     else:
@@ -380,11 +411,10 @@ def test_a_calling_shell_loop_stops(scene, moment):
         commit_python_file(scene)
         words = ("check", "code")
     loop = ["bash", "-c", 'for i in 1 2; do "$@"; echo next; done', "_", *scene.parent(*words)]
-    started = subprocess.Popen(loop, cwd=scene.judged, env=scene.environment(), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
-    wait_for_ready(scene.root / "ready")
-    os.killpg(started.pid, signal.SIGINT)
-    stdout, _ = started.communicate(timeout=60)
-    assert (started.returncode, "next" in stdout) == (-signal.SIGINT, False)
+    with watching_descendants(scene), launched(scene, loop) as started:
+        os.killpg(started.pid, signal.SIGINT)
+        stdout, _ = started.communicate(timeout=60)
+        assert (started.returncode, "next" in stdout) == (-signal.SIGINT, False)
 
 
 def own_gate_ci() -> dict[str, str]:
@@ -477,3 +507,21 @@ def test_the_streams_flush_before_the_handover(tmp_path, monkeypatch, arrange):
     monkeypatch.setattr(sys, "stderr", None)
     output.flush_streams()
     assert holds()
+
+
+def test_the_tag_query_counts_on_the_live_line(tmp_path, monkeypatch):
+    shown = []
+
+    @contextmanager
+    def live(_name, _fact):
+        yield shown.append
+
+    def hears_a_second(command, _timeout, _environment, cwd=None, every_second=None):
+        if every_second is not None:
+            every_second(1)
+        raise process.ProcessError(f"{command[0]} did not answer")
+
+    monkeypatch.setattr(process, "run_bounded_in_own_group", hears_a_second)
+    with pytest.raises(CannotJudge):
+        pin.reexecute(pin.ReleaseAtPin(Release(RELEASE), "5e" * 20), "quality check", ["check"], {"XDG_CACHE_HOME": str(tmp_path)}, live)
+    assert shown == [f"{RELEASE} · 0s"]

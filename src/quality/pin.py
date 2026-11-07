@@ -4,10 +4,11 @@ prepared through uv, which this process then becomes, once."""
 
 import os
 import shlex
+import time
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
-from enum import Enum, StrEnum
+from enum import Enum, StrEnum, auto
 from importlib.metadata import distribution
 from pathlib import Path
 from typing import NoReturn
@@ -22,7 +23,7 @@ RUN_AT_PIN_VARIABLE = "QUALITY_RUN_AT_PIN"
 PREPARE_TIMEOUT_SECONDS = 600
 TAGS_TIMEOUT_SECONDS = 60
 SCRIPTS_QUESTION = ("python", "-I", "-c", 'import sysconfig; print(sysconfig.get_path("scripts"))')
-# Variables that point git at a repository: a commit hook's name the judged one, which uv's git must never touch.
+# Variables that point git at a repository: a commit hook's point at the judged repository, which uv's git must never touch.
 REPOSITORY_VARIABLES = frozenset({"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_COMMON_DIR", "GIT_PREFIX"})
 COMMENT_STEP = Instruction("make the pin's comment name its commit's own tag, as docs/gate.md shows")
 
@@ -243,14 +244,14 @@ def prepared_quality(stdout: str) -> Path | None:
 
 
 class Failure(Enum):
+    TAG_ELSEWHERE = auto()
+    CANNOT_START = auto()
     UNREACHABLE = "github.com did not answer"
-    TAG_ELSEWHERE = "the tag names another commit"
     UV_MISSING = "uv is not installed"
     UV_CANNOT_RUN = "cannot run uv"
     UV_EXITED = "uv exited"
     UV_TIMED_OUT = f"uv did not finish within {PREPARE_TIMEOUT_SECONDS} seconds"
     NO_EXECUTABLE = "uv's environment holds no quality executable"
-    CANNOT_START = "cannot start"
 
 
 @dataclass
@@ -325,13 +326,16 @@ def _prepare(command: list[str], environment: Mapping[str, str], every_second: C
     return executable
 
 
-def _check_release(pin: ReleaseAtPin, environment: Mapping[str, str], records: Path | None) -> None:
+def _check_release(
+    pin: ReleaseAtPin, environment: Mapping[str, str], records: Path | None, every_second: Callable[[int], None] | None = None
+) -> None:
     """quality's remote must show the comment's tag at the pinned commit before uv builds or runs any of it."""
     query = ["git", "ls-remote", "--tags", "--", checkout.GATE_URL]
     with process.scratch_directory() as scratch:
         try:
             listed = process.run_bounded_in_own_group(
-                query, TAGS_TIMEOUT_SECONDS, {**_preparation_environment(environment), "GIT_TERMINAL_PROMPT": "0"}, cwd=scratch
+                query, TAGS_TIMEOUT_SECONDS, {**_preparation_environment(environment), "GIT_TERMINAL_PROMPT": "0"}, cwd=scratch,
+                every_second=every_second,
             )
         except process.ProcessError:
             raise Failed(Failure.UNREACHABLE) from None
@@ -358,9 +362,14 @@ def _prepared_offline(reexecution: Reexecution, environment: Mapping[str, str], 
 def _prepared_online(reexecution: Reexecution, environment: Mapping[str, str], records: Path | None, live: output.LiveLine) -> Path:
     shown = reexecution.release.tag if isinstance(reexecution, ReleaseAtPin) else "this checkout"
     with live("release", "syncing" if isinstance(reexecution, ThisCheckout) else "fetching") as show:
+        started = time.monotonic()
+
+        def show_elapsed(_seconds: int) -> None:
+            show(f"{shown} · {round(time.monotonic() - started)}s")
+
         if isinstance(reexecution, ReleaseAtPin):
-            _check_release(reexecution, environment, records)
-        return _prepare(preparation_command(reexecution, "--quiet"), environment, lambda seconds: show(f"{shown} · {seconds}s"))
+            _check_release(reexecution, environment, records, show_elapsed)
+        return _prepare(preparation_command(reexecution, "--quiet"), environment, show_elapsed)
 
 
 def reexecute(reexecution: Reexecution, command: str, words: Sequence[str], environment: Mapping[str, str], live: output.LiveLine) -> NoReturn:
