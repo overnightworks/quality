@@ -19,8 +19,8 @@ from quality import (
     installation,
     process,
     ratchet,
-    repository,
     scanners,
+    sonar,
     staged,
 )
 from quality.check import (
@@ -39,25 +39,18 @@ from quality.check import (
     judge_staged_change,
 )
 from quality.checkout import OutsideWorkTree
-from quality.config import CONFIG_PATH, REPOSITORY_NAME, ConfigError, read_gate_settings, runs_sonar
+from quality.config import REPOSITORY_NAME
 from quality.merge import GhRunner, RemoteFor, github_remote, run_gh, run_merge
 from quality.output import (
-    SCANNER_ARGUMENTS_OUTPUT,
     SEPARATOR,
-    SONAR_OFF,
-    SONAR_OUTPUT,
-    STEP_OUTPUT_VARIABLE,
     Channel,
     Channels,
     Glyph,
     Row,
     SubLine,
     Verdict,
-    append_step_output,
     ask,
     counted,
-    emit,
-    emit_finding,
     live_line,
     open_channels,
     set_up_streams,
@@ -70,18 +63,7 @@ from quality.output import (
 )
 from quality.report import CannotJudge, Command, Extent, Instruction, NoteEvent, StagedExtent, Step
 from quality.rules import Area, Rule
-from quality.sonar import (
-    DEPENDABOT_CONFIG,
-    PROPERTIES_FILE,
-    TASK_FILE,
-    TOKEN_VARIABLE,
-    Transport,
-    analyse,
-    check_properties,
-    excluded_rules,
-    fetch_json,
-    scanner_exclusions,
-)
+from quality.sonar import Transport, fetch_json
 from quality.verdict import MERGE_COMMAND, PageFetcher, github_fetcher, run_verdict
 from quality.web import Sleep
 
@@ -158,8 +140,8 @@ def main(
         return fleet.run_report(release_tags, clock, now().date(), channels, environment)
     if arguments.command == "sonar":
         if arguments.sonar_command == "properties":
-            return run_sonar_properties()
-        return run_sonar_findings(transport, sleep)
+            return sonar.run_properties(environment, clock, channels)
+        return sonar.run_findings(environment, transport, sleep, clock, channels)
     if arguments.staged:
         staged_run = partial(judge_staged_change, Path("."), staged.scan_change, verbose=arguments.verbose)
         return run_check(staged_run, staged.COMMAND, clock, channels)
@@ -175,7 +157,7 @@ def _fix_mode(arguments: argparse.Namespace) -> Fix | None:
 
 
 QUALITY_HELP = """\
-usage: quality COMMAND
+usage: quality COMMAND [-v]
 
 Commands:
   check [AREA ...] [--staged] [--fix] [--dry-run]
@@ -199,6 +181,7 @@ Options:
   --version   the installed version
   -h, --help  show this help
 
+Every command takes -v: the raw scanner output, never a secret.
 Exit codes: 0 yes, 1 no, 2 could not answer, 130 interrupted.
 """
 
@@ -276,6 +259,56 @@ Options:
 Exit codes: 0 green, 1 red, 2 could not judge, 130 interrupted.
 """
 
+SONAR_HELP = """\
+usage: quality sonar COMMAND [-v]
+
+Run by the gate, not by people: the two steps of gate.yml's sonar job.
+
+Commands:
+  properties
+      Refuse a properties file, token or coverage report the scan must not
+      start with, then hand the scan its arguments.
+  findings
+      Wait for this run's analysis, then judge its open findings and its
+      quality gate.
+
+Options:
+  -h, --help  show this help
+
+Exit codes: 0 clean, 1 findings, 2 could not judge, 130 interrupted.
+"""
+
+SONAR_PROPERTIES_HELP = """\
+usage: quality sonar properties [-v]
+
+Run by the gate before the scan: refuse a sonar-project.properties, token,
+coverage report or tracked .scannerwork/ the scan must not start with, then
+hand the scan its arguments in the step output. With [gate] sonar = false in
+quality/config.toml it refuses a properties file or a passed token instead.
+
+Options:
+  -v          show the raw scanner output; the step runs no scanner
+  -h, --help  show this help
+
+Exit codes: 0 clean, 2 could not judge, 130 interrupted.
+"""
+
+SONAR_FINDINGS_HELP = f"""\
+usage: quality sonar findings [-v]
+
+Run by the gate after the scan: wait for this run's own analysis
+({sonar.TASK_FILE}), then judge its open findings, the default
+branch's legacy count and, on a pull request, SonarCloud's quality gate. It
+needs quality/config.toml with [gate] mandatory_jobs.
+
+Options:
+  -v          show the raw scanner output; the step runs no scanner
+  -h, --help  show this help
+
+Exit codes: 0 clean or report only, 1 findings, 2 could not judge,
+130 interrupted.
+"""
+
 
 class DoorParser(argparse.ArgumentParser):
     """argparse reads the words and prints only `--version`: a wrong invocation leaves as the refusal `main` writes, and
@@ -346,7 +379,8 @@ def read_invocation(argv: list[str] | None) -> argparse.Namespace:
     parser = build_parser()
     arguments, stray = parser.parse_known_args(argv)
     if stray:
-        raise CannotJudge(f"unknown argument{SEPARATOR}{' '.join(stray)}", help_step(f"{parser.prog} {arguments.command}"))
+        command = " ".join(filter(None, (parser.prog, arguments.command, getattr(arguments, "sonar_command", None))))
+        raise CannotJudge(f"unknown argument{SEPARATOR}{' '.join(stray)}", help_step(command))
     if arguments.command == "check":
         _refuse_what_check_does_not_take(arguments)
     if arguments.command == "merge" and arguments.pull_request is None:
@@ -383,21 +417,13 @@ def build_parser() -> DoorParser:
     verdict_parser = commands.add_parser("verdict", allow_abbrev=False)
     verdict_parser.pictured_help = VERDICT_HELP
     verdict_parser.add_argument("-v", dest="verbose", action="store_true")
-    sonar = commands.add_parser("sonar").add_subparsers(dest="sonar_command")
-    sonar.add_parser(
-        "properties",
-        help=(
-            "run by the gate before the scan: refuse a sonar-project.properties, token, coverage report"
-            " or tracked .scannerwork/ the scan must not start with"
-        ),
-    )
-    sonar.add_parser(
-        "findings",
-        help=(
-            f"wait for this run's analysis ({TASK_FILE}), then count its open findings; "
-            "needs quality/config.toml with [gate] mandatory_jobs, else exit 2"
-        ),
-    )
+    sonar_parser = commands.add_parser("sonar", allow_abbrev=False)
+    sonar_parser.pictured_help = SONAR_HELP
+    sonar_commands = sonar_parser.add_subparsers(dest="sonar_command")
+    for word, pictured_help in (("properties", SONAR_PROPERTIES_HELP), ("findings", SONAR_FINDINGS_HELP)):
+        step_parser = sonar_commands.add_parser(word, allow_abbrev=False)
+        step_parser.pictured_help = pictured_help
+        step_parser.add_argument("-v", dest="verbose", action="store_true")
     merge_parser = commands.add_parser("merge", allow_abbrev=False)
     merge_parser.pictured_help = MERGE_HELP
     merge_parser.add_argument("pull_request", nargs="?", type=named_pull_request, metavar="OWNER/REPO#N")
@@ -669,63 +695,6 @@ def run_check(judged: Callable[[AreaReport, Running], CheckResult], command: str
         channels.out,
     )
     return exit_code
-
-
-def refuse_scan_wiring(environment: Mapping[str, str]) -> None:
-    """With SonarCloud off, a properties file or a passed token would let an older gate scan."""
-    if repository.is_on_disk(Path("."), PROPERTIES_FILE):
-        raise CannotJudge(f"{PROPERTIES_FILE} exists while {CONFIG_PATH} sets [gate] sonar = false")
-    if environment.get(TOKEN_VARIABLE):
-        raise CannotJudge(f"{TOKEN_VARIABLE} is set while {CONFIG_PATH} sets [gate] sonar = false")
-
-
-def step_output_written(name: str, value: str) -> bool:
-    try:
-        append_step_output(name, value)
-    except OSError as error:
-        emit(f"sonar: cannot judge - {STEP_OUTPUT_VARIABLE} is not writable: {error}", file=sys.stderr)
-        return False
-    return True
-
-
-def run_sonar_properties() -> int:
-    try:
-        scans = runs_sonar(Path("."))
-        if scans:
-            check_properties(Path("."), os.environ)
-            excluded = excluded_rules(repository.is_on_disk(Path("."), DEPENDABOT_CONFIG))
-        else:
-            refuse_scan_wiring(os.environ)
-    except (CannotJudge, ConfigError, repository.RepositoryFileError) as error:
-        emit(f"sonar: cannot judge - {error}", file=sys.stderr)
-        return EXIT_CANNOT_JUDGE
-    if not scans:
-        if not step_output_written(SONAR_OUTPUT, SONAR_OFF):
-            return EXIT_CANNOT_JUDGE
-        emit(f"sonar: off - {CONFIG_PATH} sets [gate] sonar = false, so nothing reaches SonarCloud")
-        return EXIT_CLEAN
-    if not step_output_written(SCANNER_ARGUMENTS_OUTPUT, scanner_exclusions(excluded)):
-        return EXIT_CANNOT_JUDGE
-    emit("sonar: properties clean")
-    if excluded:
-        emit(f"sonar: the scan excludes {', '.join(sorted(excluded))} ({DEPENDABOT_CONFIG} exists)")
-    return EXIT_CLEAN
-
-
-def run_sonar_findings(transport: Transport, sleep: Sleep) -> int:
-    try:
-        legacy_mode = read_gate_settings(Path(".")).legacy
-        result = analyse(os.environ, legacy_mode, transport, sleep)
-    except (CannotJudge, ConfigError) as error:
-        emit(f"sonar: cannot judge - {error}", file=sys.stderr)
-        return EXIT_CANNOT_JUDGE
-    for finding in result.findings.listed:
-        emit_finding(finding)
-    failed_conditions, disclosure = result.gate_lines()
-    emit(*failed_conditions, file=sys.stderr)
-    emit(*disclosure)
-    emit(result.summary(), file=sys.stderr if result.fails_the_run else sys.stdout)
-    return EXIT_FINDINGS if result.fails_the_run else EXIT_CLEAN
 
 
 def run(

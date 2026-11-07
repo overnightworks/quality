@@ -41,7 +41,7 @@ def test_a_failed_gate_with_no_findings_exits_one_and_names_each_failed_conditio
     )
     code, out, err, _ = run_cli(monkeypatch, capsys, sonar_answering(gate=gate))
     assert code == 1
-    assert (out.splitlines()[3:], err) == (["  ! quality gate  failed         2 conditions", COVERAGE_LINE, "    ! new_duplicated_lines_density is 5.5, the gate needs at most 3"], "")
+    assert (out.splitlines()[3:-1], err) == (["  ! quality gate  failed         2 conditions", COVERAGE_LINE, "    ! new_duplicated_lines_density is 5.5, the gate needs at most 3"], "")
     assert out.endswith("\n! red · new 0 · legacy 0 · quality gate failed · <1s\n")
     assert "new_bugs" not in out + err
 

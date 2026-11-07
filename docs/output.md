@@ -678,6 +678,8 @@ Exit codes: 0 clean, 1 findings, 2 could not check, 130 interrupted.
 
 Built: `usage: quality check [AREA ...] [--staged] [--fix] [--dry-run] [-v]`, the `Areas` block from `Area` (`rules.py`) and the options that exist; `--staged`, `--fix` and `--dry-run` are built.
 
+Built: `usage: quality COMMAND [-v]` and the `-v` line; under 'Run by the gate, not by people' the help also lists `sonar properties` and `sonar findings`.
+
 Wrong invocation: the pair instead of argparse text. Exit 2. stderr.
 
 ```text

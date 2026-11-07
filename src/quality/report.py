@@ -64,6 +64,9 @@ class Example:
 type Step = Command | Instruction | OneOf | Example
 
 CONFIG_EXAMPLE_LABEL = f"write it in {CONFIG_PATH} like this"
+# A gate run's own steps: a fix in the checkout reaches the gate through a push, any other through a re-run.
+FIX_THEN_RERUN = Instruction("fix what the error names, then re-run this run's failed jobs")
+PUSH_THE_FIX = Instruction("push the fix; the gate judges the new commit")
 
 
 @dataclass(frozen=True)
@@ -150,6 +153,7 @@ class NoteEvent(StrEnum):
     MOVE = "move"
     MOVED = "moved"
     NOT_MEASURED = "not measured"
+    OPEN = "open"
     RECORD = "record"
     RECORDED = "recorded"
     UNUSED = "unused"
@@ -258,11 +262,3 @@ class RuleResult:
     extent: Extent
     measured_only: bool
     notes: tuple[Note, ...] = ()
-
-
-def headline(finding: Finding) -> str:
-    return f"{finding.rule} {finding.location} - {printable(finding.fact)}"
-
-
-def render(finding: Finding) -> str:
-    return f"{headline(finding)}\n  Fix: {printable(finding.fix)}"
