@@ -5,20 +5,26 @@ runs `quality merge`, or reads `quality --help` or a wrong invocation's pair.
 
 ## Help and wrong invocations
 
-`quality --help` and `quality check --help` stand in the frame of [the output picture](output.md), case 11, with what is
-true today, and every other command's help, `quality sonar --help` and its two commands' included, in a frame of its own; `quality --version` prints the installed version and what this repository's gate pins: its release, read from the tag comment of the pin (`@<commit sha> # v<tag>`), or why none is known; exit `0`. A call of a repository's own `gate.yml` counts only in quality's checkout, told by a git remote that names `overnightworks/quality`. Help goes to
+`quality --help` shows the command tree wrapped at 80 columns, with `verdict` apart under "run by the gate", and `quality check --help` explains each area in one line and says which rules an area holds; every other command's help, `quality sonar --help` and its two commands' included, stands in a frame of its own; `quality --version` prints the installed version and what this repository's gate pins: its release, read from the tag comment of the pin (`@<commit sha> # v<tag>`), or why none is known; exit `0`. A call of a repository's own `gate.yml` counts only in quality's checkout, told by a git remote that names `overnightworks/quality`. Help goes to
 stdout with exit `0`, plain and whole in every stream. A wrong invocation runs nothing, prints the `error:`/`next:` pair
 on stderr and exits `2`: `no command <word> · commands: …` for a first word that names no command, `no command ·
-commands: …` for none, `no area <word> · areas: …` for the first word `quality check` does not know as an area, `no pull request <word> · a pull request reads OWNER/REPO#N` for a `quality merge` argument of another form (`no pull request · …` for none, `next:` naming `quality merge --help`), `unknown argument · <what is left over>` for what the command does not take, and otherwise the
+commands: …` for none, `no area <word> · areas: …` for the first word `quality check` does not know as an area (an option may stand between areas), `no pull request <word> · a pull request reads OWNER/REPO#N` for a `quality merge` argument of another form (`no pull request · …` for none, `next:` naming `quality merge --help`), `unknown argument · <what is left over>` for what the command does not take, and otherwise the
 parser's own sentence; `--dry-run needs --fix · nothing checked` for `--dry-run` without `--fix` (`next:` names `quality check --fix --dry-run`); `--staged checks only secrets · nothing checked` for `--staged` with other areas or none (`next:` names `quality check secrets --staged`); `next:` otherwise names the help of the command that took the stray word, or of the parser
 that refused.
+
+Ruled by the operator:
+
+- Seven areas, `files`, `debt`, `imports`, `secrets`, `workflows`, `dependencies` and `code`; the `code` line of `quality check --help`, `code  Python source: security findings and print calls`; and the `secrets` line `secrets in the committed history`.
+- The areas replace the rule names in the verdict; `quality check --help` says which rules an area holds. `code` holds `python-security` and `python-print`.
+
+A run that names areas judges and prints only those, in the order of [the rows](output.md#rows), each once.
 
 ## Which release judges
 
 `quality check` judges only where the running quality is the commit the repository's gate pins, or quality's own
 checkout run from its code. The running commit is the one its installer recorded (`direct_url.json`), or, for an editable
 directory installation, that directory's HEAD while its work tree is clean and the version's release tag names that
-HEAD. Its first row names the release (`· release  v0.10.0  pinned in .github/workflows/ci.yml`), or `this checkout`
+HEAD. Its first row names the release (`· release  v0.10.0  pinned in .github/workflows/ci.yml`, with `fetched now · ` before `pinned in` when the run fetched it), or `this checkout`
 with the running version in quality's checkout. Where no workflow calls the gate, the pin is unknown, its comment
 misnames its commit or it is below v0.10.0, the run is exit `2` with the `error:`/`next:` pair and no row. The one
 exception is the commit hook: where no workflow calls the gate, `quality check secrets --staged` judges with the
@@ -29,9 +35,7 @@ environment and terminal and its exit; `QUALITY_RUN_AT_PIN` marks that run, whic
 sure the pinned commit is the release the pin's comment names: the first time on a machine by asking quality's remote,
 which then leaves an empty record per commit and release in the user's cache directory (`$XDG_CACHE_HOME`, else
 `~/.cache`, under `overnightworks-quality/releases`); removing it costs one more question per release. Then uv prepares
-exactly that commit, from its cache offline where a record stands, else fetched. Offline, a release this machine has
-not checked is exit `2` with `next: <command>, once online`, even when uv holds it; a release uv cannot prepare is exit
-`2` with the uv command that shows why. In quality's checkout an installation runs the checkout's code, prepared
+exactly that commit, from its cache offline where a record stands, else fetched. Offline, the pair `error: cannot fetch quality v0.10.0, which the gate pins · github.com did not answer` with `next: quality check, once online` (exit `2`) stands for every release this machine cannot run without github.com: one it has not yet checked on quality's remote, even one uv holds, and a checked one whose environment uv no longer holds. Where github.com answered but uv could not prepare the release, it is exit `2` with `error: cannot prepare quality v0.9.0, which the gate pins · uv exited 1` and two steps under a bare `next:`, the uv command that shows why, then the run again. While quality fetches or prepares the release, a terminal's stderr shows the live line ([output](output.md#colour-and-the-live-line)). In quality's checkout an installation runs the checkout's code, prepared
 through `uv run`.
 
 `quality merge` judges at the release its target's gate pins at the pull request's merge commit, read through `gh`
@@ -41,6 +45,12 @@ draft) stops at its row before the pin is read. No merge commit, no gate, an unk
 preparation that fails are the pair alone, nothing changed. For quality itself the installed quality judges, never the
 pull request's own code: `· release  installed  <version> · quality's gate pins no release`.
 
+Ruled by the operator:
+
+- The release row always, also in the commit hook, as a grey note: proof that locally the same release judges as in the gate.
+- The release is missing: quality fetches exactly the pin through uv and says so in the release row; offline is exit 2.
+- No pin, old pin, quality itself: no workflow calls `gate.yml` is exit 2, except for `check secrets --staged`, which judges with the installed release; a pin older than the release with `check` is exit 2 with "raise the gate pin"; in quality itself the checkout judges.
+
 ## `quality check --fix`
 
 `quality check debt --fix` lowers the debt ceiling (`quality/baseline.toml`) where code shrank, or records it where no
@@ -49,7 +59,12 @@ never raises an entry and never adds one: what grew or is new stays a finding, a
 loosening. A file git renamed into the index since the ceiling's last commit takes its entries with it (`docs/rules.md`). An entry whose path the index no longer tracks, whose Python function is gone or whose file is declared generated goes; one only missing from disk stands; a held pair the tree lost goes. A ceiling or `[clones]` table git
 holds and the tree lacks refuses with the restore step, and a shallow clone that cannot prove a first recording names
 `git fetch --unshallow`. It takes no `--staged` and needs `debt` among the named areas, or no area named; either refusal keeps a `--dry-run` in its `next:`. `quality check --fix --dry-run` makes, judges and renders the same ceiling, refuses where the fix refuses before its write, writes nothing, and exits `1` while the fix would change the file, `0` when not; a refusal only the write meets shows at the fix alone. Exit `0` clean, `1` findings, `2` could not fix. No workflow runs `--fix` or its dry run.
-The rows and rules are in `docs/rules.md`, the frames in `docs/output.md`.
+The rows and rules are in `docs/rules.md`, the rows' form in [output](output.md).
+
+Ruled by the operator:
+
+- A fall below a metric's threshold drops the entry (`dropped  file 805 → 790 lines · debt from 800 lines`).
+- A ceiling that can fall stays a finding: `!` and exit 1. The dry run `--fix --dry-run` exits 1 while anything can be lowered. Without a ceiling file debt is a grey note with exit 0.
 
 ## `quality check secrets --staged`
 
@@ -58,6 +73,8 @@ repository it runs in, compared with `HEAD`, with no path argument. It is meant 
 work-tree top or below it. A relative `GIT_INDEX_FILE` is resolved against the working directory, as git does, so `git commit -a`,
 `git commit <path>` and a linked worktree scan the index git is committing. `--staged` takes exactly the area `secrets`;
 any other set of areas, or none, is `--staged checks only secrets · nothing checked` and exit `2`.
+
+Ruled by the operator: `--staged` only with `secrets`: any other area with `--staged` is exit 2 with `next: quality check secrets --staged`.
 
 The index is written as a tree (`git write-tree`, only tree objects a commit writes anyway) and read into a scratch
 repository inside a 0700 scratch directory. The scratch repository borrows the objects (`objects/info/alternates`),
@@ -160,6 +177,10 @@ scanner on `PATH` is never used. mise reads only the manifest directory and the 
 directory under `MISE_CEILING_PATHS` set to the directory above it, so a `mise.toml` or `.miserc.toml` in the scanned
 repository (or in the checkout the gate holds the manifest in) takes no part in which binary runs.
 
+Ruled by the operator:
+
+- The command that installs a scanner: `mise --cd <quality's installation>/quality/mise install --locked`, the release's own manifest and lock; the path is quality's installation, shown as the example shows it.
+
 `check` and `check secrets --staged` exit `2` for a scanner mise cannot locate, that is at another version, or whose
 answer names no executable, and for a machine without mise, which names mise's install page and the command; only the
 rule that needs the scanner cannot judge. A repository with no workflow needs no actionlint and one with no lock file
@@ -180,6 +201,11 @@ door.
 `quality merge <owner/repo>#<pr> [--dry-run] [-v]` is the operator's door past a red gate: it merges a pull request that the
 gate keeps red only for legacy Sonar findings or for [declared loosenings](gate.md#declared-loosenings). The steps to
 take are in [the runbook](runbooks/merge.md); this is what the command does.
+
+Ruled by the operator:
+
+- A body the door refuses for its line stops at `! landing  refused` under the pull request's row instead, the same row as the last one before the question.
+- `merge` names no aco step; that step belongs in the head's instructions.
 
 - **Operator only.** It runs under the operator's own `gh` login, which needs admin permission on the repository (checked
   first: exit `2`, nothing changed, the missing right named). Agents never run it; it refuses when stdin is not a
@@ -212,7 +238,7 @@ take are in [the runbook](runbooks/merge.md); this is what the command does.
   the project needs one: without it the door reads a public project anonymously, with no Authorization header, and an
   anonymous read that SonarCloud refuses (a private project answers 404) is exit `2`, naming `SONAR_TOKEN`; with a token, a 401 or 403
   says the token was rejected.
-- **It shows, then asks:** on stdout the [release](#which-release-judges) that judges first, then a row as each step passes: the pull request (`open`, head, base), the checks, the declared loosenings, each whole with its `item` and `date` and its `reason` on the line below, the legacy count where Sonar failed, the merge method, and last the `landing` row naming the line the merge commit ends with (`work item` and `#<n>`, or `no item` and its kind); then, on stderr, `Switch quality_gate off, merge #<pr>, switch it on? Type yes: `. Only `yes` in lower case, ended with Enter, merges (whitespace around it counts for nothing; `Yes` or `y` change nothing); any other line, or the end of input (Ctrl-D) before Enter, prints `error: not confirmed · nothing changed` and `next:` naming the command again (exit `1`); Ctrl-C at the question ends the run interrupted (exit `130`); nothing has changed in either case. With stderr closed the question and the pairs print nowhere; nothing moves to stdout. A refusal is its `!` row and the `error:`/`next:` pair on stderr (exit `1`), each blocking line of the verdict whole below the `loosenings` row; a step that cannot be judged is its `✗` row and the pair (exit `2`); a `quality/config.toml` it cannot read at the base or at the merge commit is the `✗ loosenings` row with the config's fact, and under `next:` the example to copy where the fact has one, then the step for that commit: `fix it on <base branch> first` for the base, which is read first, or `push the fix to the pull request's branch, then run quality merge <owner/repo>#<pr> again` for the merge commit; no terminal on stdin is the pair alone (exit `1`); a name not of the form `<owner>/<repo>#<pr>` is a wrong invocation (exit `2`). Every line it prints is escaped as the other doors' lines are, so a `reason` cannot hide anything before `yes` or forge a line.
+- **It shows, then asks:** on stdout the [release](#which-release-judges) that judges first, then a row as each step passes: the pull request (`open`, head, base), the checks, the declared loosenings, each whole with its `item` and `date` and its `reason` on the line below, the legacy count where Sonar failed, the merge method (`allowed on <base>`), and last the `landing` row naming the line the merge commit ends with (`work item` and `#<n>`, or `no item` and its kind); then, on stderr, `Switch quality_gate off, merge #<pr>, switch it on? Type yes: `. Only `yes` in lower case, ended with Enter, merges (whitespace around it counts for nothing; `Yes` or `y` change nothing); any other line, or the end of input (Ctrl-D) before Enter, prints `error: not confirmed · nothing changed` and `next:` naming the command again (exit `1`); Ctrl-C at the question ends the run interrupted (exit `130`); nothing has changed in either case. With stderr closed the question and the pairs print nowhere; nothing moves to stdout. A refusal is its `!` row and the `error:`/`next:` pair on stderr (exit `1`), each blocking line of the verdict whole below the `loosenings` row; a step that cannot be judged is its `✗` row and the pair (exit `2`); a `quality/config.toml` it cannot read at the base or at the merge commit is the `✗ loosenings` row with the config's fact, and under `next:` the example to copy where the fact has one, then the step for that commit: `fix it on <base branch> first` for the base, which is read first, or `push the fix to the pull request's branch, then run quality merge <owner/repo>#<pr> again` for the merge commit; no terminal on stdin is the pair alone (exit `1`); a name not of the form `<owner>/<repo>#<pr>` is a wrong invocation (exit `2`). Every line it prints is escaped as the other doors' lines are, so a `reason` cannot hide anything before `yes` or forge a line.
 - **Dry run:** `--dry-run` reads and shows every row the door shows, refuses where it refuses, and in place of the question ends with `~ dry run · would switch quality_gate off, merge #<pr>, switch it on · nothing changed` on stdout (exit `0`); it reads no answer and sends no request that changes anything (no `gh api -X`, no `gh pr merge`), and it needs a terminal on stdin like the door. `-v` is taken and adds nothing: the door runs no scanner.
 - **Off, merge, on:** it sets the repository's `quality_gate` property to `false` (this takes the fleet's ruleset off it),
   runs `gh pr merge <pr> --merge --match-head-commit <sha> --body-file -`, the message on its stdin (`--squash` where the repository settings or a rule on the

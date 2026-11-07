@@ -80,9 +80,10 @@ mandatory_jobs = ["checks"]
 `gate.yml`'s verdict step runs `quality verdict`, which takes no path and judges the checkout it runs in. It prints rows
 on stdout, all sharing one subject column:
 
+- the release that judges, first in every frame, a refusal's included: `· release  <tag>  this gate run`, and in quality's own run `· release  this checkout  <version> · quality judges itself`;
 - the base, `· base  compared  <branch> <base sha> · head <head sha>` with the pull request's head, or
   `· base  none  a push or merge group: no loosening judged`;
-- the jobs, as one `✓ jobs  success  N mandatory jobs · M gate jobs` row when all are green, else one row each;
+- the jobs, as one `✓ jobs  success  N mandatory jobs · M gate jobs` row when all are green, else one row each, a conclusion GitHub adds later as `concluded <word>`;
 - on a pull request the loosenings, `✓ loosenings  none` or `! loosenings` with each loosening below it;
 - `! declarations  N unmatched` where a new entry (below) matches nothing.
 

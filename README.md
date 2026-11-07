@@ -39,8 +39,8 @@ Locally, `quality check` runs every rule the gate runs, the secret, workflow and
 
 - [docs/VISION.md](docs/VISION.md): what quality is, who uses it and what it deliberately does not do.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): the parts, who talks to whom, the trust boundaries and the reasons behind the constraints.
-- [docs/rules.md](docs/rules.md): the `check` rules, the secret and advisory scans, the output contract.
-- [docs/output.md](docs/output.md): the picture of what the commands print; `check` prints its frame today.
+- [docs/rules.md](docs/rules.md): the `check` rules, the secret and advisory scans.
+- [docs/output.md](docs/output.md): the output contract: what every command prints and why it may.
 - [docs/commands.md](docs/commands.md): `check secrets --staged`, the scanners, `report` and `merge`.
 - [docs/gate.md](docs/gate.md): the `gate.yml` caller contract, the verdict, declared loosenings, startup failures.
 - [docs/codeql.md](docs/codeql.md): the `codeql.yml` caller contract.
