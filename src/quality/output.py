@@ -23,6 +23,7 @@ from quality.report import (
     Note,
     NoteEvent,
     OneOf,
+    Release,
     ScannerRun,
     Step,
     printable,
@@ -119,11 +120,12 @@ class SubLine:
 
 @dataclass(frozen=True)
 class Row:
-    """`glyph subject event fact`, the event a member of an enum the caller owns; with a `count` it reads `3 findings`."""
+    """`glyph subject event fact`, the event a member of an enum the caller owns or a release; with a `count` it reads
+    `3 findings`."""
 
     glyph: Glyph
     subject: str
-    event: StrEnum
+    event: StrEnum | Release
     fact: str = ""
     count: int | None = None
     sub_lines: tuple[SubLine, ...] = ()

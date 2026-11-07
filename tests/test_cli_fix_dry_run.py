@@ -9,7 +9,7 @@ import pytest
 from quality.config import CONFIG_PATH
 from quality.ratchet import BASELINE_PATH
 from tests.support.clones import function as clone_function
-from tests.support.door import DRY_RUN_WORDS, FIX_WORDS, door_in, fixed, restore_step, tree_of
+from tests.support.door import DRY_RUN_WORDS, FIX_WORDS, door_in, fixed, judging_at_the_pin, restore_step, tree_of
 from tests.support.generated_files import gate_declaring
 from tests.support.git_repositories import git, head_commit, put, shallow_clone
 from tests.support.source_code import branchy_function, long_file, long_function
@@ -445,7 +445,7 @@ def painted(repo: Path) -> tuple[int, str]:
 
 def test_at_a_terminal_a_dry_run_keeps_the_plain_words(build_repo, capsys):
     repo = held_above(build_repo)
-    piped = fixed(capsys, repo, *DRY_RUN_WORDS)
+    piped = fixed(capsys, repo, *DRY_RUN_WORDS, judging=judging_at_the_pin)
     code, frame = painted(repo)
     painted_run = (code, without_sgr(frame), capsys.readouterr().err)
     assert painted_run == piped
@@ -496,6 +496,7 @@ def test_a_dry_run_that_would_change_the_file_exits_one_beside_an_area_that_only
 def test_at_a_terminal_a_dry_run_paints_each_glyph_and_the_verdict_in_one_colour_and_the_rest_in_others(build_repo):
     code, frame = painted(held_above(build_repo))
     printed = (
+        "{other}  · release       v0.10.0        pinned in .github/workflows/ci.yml{reset}\n"
         "  {glyph}~{reset} debt          1 to lower     {other}quality/baseline.toml{reset}\n"
         "    {glyph}~{reset} src/a.py:1  lower  {other}function long_one 80 → 62 lines{reset}\n"
         "{verdict}~ dry run{reset} · {other}1 ceiling entry would fall{reset} · {other}nothing written{reset} · {other}<1s{reset}\n"

@@ -15,6 +15,9 @@
   workflows pin, and whether the checkout is quality's own (by its git remote), owns the full-commit form and turns a
   refused read into cannot judge. quality reads the checkout's own files through `repository.py`, which keeps each read inside the repository
   and names the file repository-relative in every error; only `architecture.py` opens a source itself, for grimp.
+- `pin.py` decides which quality judges a `check` from the checkout's gate pin and the commit the running
+  installation is (its installer's record, or an editable directory's clean HEAD at its release tag); a run it refuses
+  prints only the pair.
 - A scanner's stderr reaches a fact or `-v` only through `scanners`' vet (`gitleaks stdin` under `gitleaks.toml`) and
   is withheld whole when gitleaks does not clear it. `check.py` keeps `report.ScannerRun`s only under `-v`,
   `output.py` prints them, and a scanner's report never enters.

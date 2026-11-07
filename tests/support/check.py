@@ -15,7 +15,7 @@ from quality.output import Glyph
 from quality.ratchet import BASELINE_PATH, load_baseline
 from quality.report import Example, Finding, FindingEvent, Note, NoteEvent, printable
 from quality.rules import Rule
-from tests.support.door import FIX_WORDS, check_door, door_in
+from tests.support.door import FIX_WORDS, PinnedJudging, check_door, door_in
 
 installed_ruff = cli.INSTALLED_RUFF
 
@@ -400,10 +400,11 @@ def env_row_stands(printed: str) -> bool:
 def check_streams(
     capsys: pytest.CaptureFixture[str], path: Path, locate_ruff: Callable[[], str] = installed_ruff
 ) -> tuple[int, str, str]:
-    """The exit code, stdout and stderr of the check over `path`, through the real door."""
-    code = check_door(path, locate_ruff=locate_ruff, clock=lambda: 0.0)
+    """The exit code, stdout after the release row and stderr of the check over `path`, through the real door."""
+    judging = PinnedJudging()
+    code = check_door(path, locate_ruff=locate_ruff, clock=lambda: 0.0, judging=judging)
     captured = capsys.readouterr()
-    return code, captured.out, captured.err
+    return code, judging.frame(captured.out), captured.err
 
 
 def check_output(

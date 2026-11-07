@@ -2,22 +2,20 @@
 
 import pytest
 
-from quality import check, checkout, cli, ratchet, scanners
+from quality import check, checkout, cli, pin, ratchet, scanners
 from quality.output import Glyph
 from quality.report import NoteEvent
 from quality.rules import Area
 from tests.support.advisories import uv_lock
 from tests.support.check import NoteLine, area_block, area_fact, area_row, scanner_rows
-from tests.support.door import CHECK_WORD, door_in
+from tests.support.door import CHECK_WORD, fixed
 from tests.support.python_lint import fake_ruff
 from tests.support.scanners import CLEAN_SCANS, fake_gitleaks, fake_scanner, fake_zizmor, flagging, vetting
 from tests.support.secrets import FAKE_KEY
 
 
 def run_check_of(repo, capsys, *words, **keywords) -> tuple[int, str, str]:
-    code = door_in(repo, CHECK_WORD, *words, clock=lambda: 0.0, **keywords)
-    captured = capsys.readouterr()
-    return code, captured.out, captured.err
+    return fixed(capsys, repo, CHECK_WORD, *words, **keywords)
 
 
 def rows_of(out: str) -> list[str]:
@@ -193,6 +191,6 @@ def test_under_v_a_named_area_shows_only_its_scanners(build_repo, served_scanner
 
 @pytest.mark.integration
 def test_a_named_area_outside_a_repository_is_the_start_failure(elsewhere, capsys):
-    named = run_check_of(elsewhere, capsys, "secrets")
-    whole = run_check_of(elsewhere, capsys)
+    named = run_check_of(elsewhere, capsys, "secrets", judging=pin.judge_here)
+    whole = run_check_of(elsewhere, capsys, judging=pin.judge_here)
     assert (named[:2], named[2] == whole[2], "not inside a git work tree" in named[2]) == ((2, ""), True, True)

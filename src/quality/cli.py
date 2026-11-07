@@ -17,6 +17,7 @@ from quality import (
     __version__,
     fleet,
     installation,
+    pin,
     process,
     ratchet,
     scanners,
@@ -96,6 +97,15 @@ class Terminal:
         return cls(lambda: sys.stdin.readline(), lambda: sys.stdin is not None and sys.stdin.isatty())
 
 
+@dataclass(frozen=True)
+class CheckPorts:
+    """What the check door judges with: the installed scanners' locators and the release that judges."""
+
+    locate_ruff: Callable[[], str] = INSTALLED_RUFF
+    locate_zizmor: Callable[[], str] = INSTALLED_ZIZMOR
+    judging: Callable[[Path, str, bool], pin.JudgingRelease] = pin.judge_here
+
+
 def main(
     argv: list[str] | None = None,
     fetcher_for: Callable[[str], PageFetcher] = github_fetcher,
@@ -105,8 +115,7 @@ def main(
     gh: GhRunner = run_gh,
     remote_for: RemoteFor = github_remote,
     terminal: Terminal | None = None,
-    locate_ruff: Callable[[], str] = INSTALLED_RUFF,
-    locate_zizmor: Callable[[], str] = INSTALLED_ZIZMOR,
+    check_ports: CheckPorts | None = None,
     clock: Callable[[], float] = time.monotonic,
     now: Callable[[], datetime] = lambda: datetime.now(UTC),
     environment: Mapping[str, str] = os.environ,
@@ -145,12 +154,14 @@ def main(
         if arguments.sonar_command == "properties":
             return sonar.run_properties(environment, clock, channels)
         return sonar.run_findings(environment, transport, sleep, clock, channels)
+    ports = check_ports or CheckPorts()
     if arguments.staged:
         staged_run = partial(judge_staged_change, Path("."), staged.scan_change, verbose=arguments.verbose)
-        return run_check(staged_run, staged.COMMAND, clock, channels)
+        return run_check(partial(ports.judging, Path("."), staged.COMMAND, True), staged_run, staged.COMMAND, clock, channels)
     fix = _fix_mode(arguments)
-    repository_run = partial(judge_repository, Path("."), locate_ruff, locate_zizmor, verbose=arguments.verbose, named=arguments.areas, fix=fix)
-    return run_check(repository_run, RERUN_COMMAND[fix], clock, channels)
+    repository_run = partial(judge_repository, Path("."), ports.locate_ruff, ports.locate_zizmor, verbose=arguments.verbose, named=arguments.areas, fix=fix)
+    command = RERUN_COMMAND[fix]
+    return run_check(partial(ports.judging, Path("."), command, False), repository_run, command, clock, channels)
 
 
 def _fix_mode(arguments: argparse.Namespace) -> Fix | None:
@@ -164,7 +175,8 @@ usage: quality COMMAND [-v]
 
 Commands:
   check [AREA ...] [--staged] [--fix] [--dry-run]
-      Check this repository against the fleet's rules.
+      Check this repository against the fleet's rules, with the quality
+      release its gate pins.
   merge OWNER/REPO#N [--dry-run]
       Operator only: merge one pull request whose gate is red only for
       legacy findings or loosenings he ruled, after he types yes.
@@ -201,7 +213,8 @@ AREA_ENTRIES = "\n".join(map(_area_entry, Area))
 CHECK_HELP = f"""\
 usage: quality check [AREA ...] [--staged] [--fix] [--dry-run] [-v]
 
-Check this repository against the fleet's rules.
+Check this repository against the fleet's rules, with the quality release
+its gate pins.
 
 Areas (default: all):
 {AREA_ENTRIES}
@@ -702,11 +715,16 @@ def _spoken_folder(folder: Path) -> str:
     return str(Path("~", folder.relative_to(home))) if folder.is_relative_to(home) else str(folder)
 
 
-def run_check(judged: Callable[[AreaReport, Running], CheckResult], command: str, clock: Callable[[], float], channels: Channels) -> int:
-    """Runs `judged`, the repository's judging or the staged change's, and writes its rows, its verdict and its pair;
-    `command` is what a person runs to ask again."""
+def run_check(
+    judging: Callable[[], pin.JudgingRelease], judged: Callable[[AreaReport, Running], CheckResult], command: str, clock: Callable[[], float],
+    channels: Channels,
+) -> int:
+    """Runs `judged`, the repository's judging or the staged change's, after `judging` names the release that judges,
+    and writes the release row, its rows, its verdict and its pair; `command` is what a person runs to ask again."""
     started = clock()
     try:
+        release = judging()
+        write_rows((Row(Glyph.NOTE, "release", release.event, release.fact),), channels.out)
         result = judged(partial(write_area, channels.out), live_line(channels.err))
     except OutsideWorkTree as error:
         write_pair(f"not inside a git work tree · {_spoken_folder(error.path.absolute())}", (Instruction(f"run {command} inside a repository"),), channels.err)

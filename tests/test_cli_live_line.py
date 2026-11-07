@@ -11,7 +11,7 @@ import pytest
 
 from quality import check, cli, scanners
 from tests.support.advisories import uv_lock
-from tests.support.door import check_door, staged_door
+from tests.support.door import RELEASE_ROW, check_door, staged_door
 from tests.support.git_repositories import stage
 from tests.support.python_lint import fake_ruff
 from tests.support.scanners import CLEAN_SCANS, OUTPUTS, fake_gitleaks, fake_scanner, fake_zizmor, lacking
@@ -175,7 +175,7 @@ def test_the_staged_door_shows_its_scanner_and_takes_the_line_down_before_its_an
     terminal.stream.reconfigure(line_buffering=False)
     monkeypatch.setenv("LIVE_TERMINAL", os.ttyname(terminal.stream.fileno()))
     code = staged_door_on(repo, terminal.stream, terminal.stream, xterm)
-    answer = plain_out.getvalue() + plain_err.getvalue()
+    answer = plain_out.getvalue().removeprefix(RELEASE_ROW) + plain_err.getvalue()
     expected = {"clean": cli.EXIT_CLEAN, "finding": cli.EXIT_FINDINGS, "refused": cli.EXIT_CANNOT_JUDGE}[outcome]
     assert (plain_code, code) == (expected, expected)
-    assert without_sgr(terminal.read()) == f"  ⠋ secrets       gitleaks\r{marker}\r\x1b[K{answer}"
+    assert without_sgr(terminal.read()) == f"{RELEASE_ROW}  ⠋ secrets       gitleaks\r{marker}\r\x1b[K{answer}"

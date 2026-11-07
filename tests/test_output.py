@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import cli, output, sonar
+from quality import cli, output, pin, sonar
 from quality.output import Glyph, Row, SubLine, Verdict
 from quality.report import (
     Choice,
@@ -35,7 +35,7 @@ from tests.support.check import (
     note_rows,
     refusal_pair,
 )
-from tests.support.door import CHECK_WORD, MODULE_DOOR, door_in
+from tests.support.door import CHECK_WORD, MODULE_DOOR, QUALITY_MODULE_DOOR, door_in
 from tests.support.terminal import Terminal, by_role, without_sgr
 
 
@@ -523,14 +523,20 @@ def env_and_broken_compose(build_repo) -> Path:
     return build_repo({".env": "A=1\n", "compose.yaml": "services: [\n"})
 
 
-@pytest.mark.parametrize("door", [MODULE_DOOR, CONSOLE_SCRIPT_DOOR], ids=["module", "console script"])
-def test_a_merged_pipe_shows_the_check_lines_in_run_order(env_and_broken_compose, door):
-    """#86 rule 3, cells 10 and 12a: the area rows with their findings (`.env` as env-file's and root-layout's rows, each with its fix), then the pair."""
-    done = quality_door(
-        CHECK_WORD, cwd=env_and_broken_compose, door=door, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+@pytest.mark.parametrize("door", [QUALITY_MODULE_DOOR, CONSOLE_SCRIPT_DOOR], ids=["module", "console script"])
+def test_a_merged_pipe_of_the_real_entry_points_keeps_the_pair_in_order(env_and_broken_compose, door):
+    """Both entry points write the pair in its order; a fixture without a gate pin is refused before any row."""
+    done = quality_door(CHECK_WORD, cwd=env_and_broken_compose, door=door, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    assert (done.returncode, done.stdout) == (
+        2, "error: no workflow here calls quality's gate.yml, so no release is pinned\nnext: add the gate as quality's docs/gate.md describes\n",
     )
+
+
+def test_a_merged_pipe_shows_the_check_lines_in_run_order(env_and_broken_compose):
+    """The release row, the area rows with their findings (`.env` as env-file's and root-layout's rows, each with its fix), then the pair."""
+    done = quality_door(CHECK_WORD, cwd=env_and_broken_compose, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     prefixes = [
-        "  ✗ files", ENV_ROW, FIX_LINE, ENV_ROW, FIX_LINE,
+        "  · release", "  ✗ files", ENV_ROW, FIX_LINE, ENV_ROW, FIX_LINE,
         "  · debt", FIX_LINE, "  · imports", "  ✓ secrets", "  ✓ workflows", "  ✓ dependencies", "  ✓ code", "error: ", "next: ",
     ]
     lines = done.stdout.splitlines()
@@ -595,7 +601,7 @@ def test_a_closed_stdout_object_still_prints_the_pair_on_stderr(tmp_path, capsys
     closed = io.TextIOWrapper(io.BytesIO())
     closed.close()
     with contextlib.redirect_stdout(closed):
-        code = door_in(tmp_path, CHECK_WORD)
+        code = door_in(tmp_path, CHECK_WORD, judging=pin.judge_here)
     assert (code, capsys.readouterr().err) == (2, f"error: not inside a git work tree · {tmp_path}\nnext: run quality check inside a repository\n")
 
 

@@ -1,25 +1,66 @@
 """How a test starts the door: in this process, where it injects what the door takes, or as a process from `MODULE_DOOR`."""
 
 import contextlib
+import dataclasses
 import hashlib
 import os
 import sys
 from pathlib import Path
 
 from quality import cli
+from quality.pin import JudgingRelease
 from quality.ratchet import BASELINE_PATH
+from quality.report import Release
 
 CHECK_WORD = "check"
-MODULE_DOOR = [sys.executable, "-m", "quality.cli"]
+ROOT = Path(__file__).parents[2]
+# The driver runs from the fixture repository, so the root that holds `tests` is put on its path here, not by PYTHONPATH.
+LAUNCH_DRIVER = f"import runpy, sys; sys.path.insert(0, {str(ROOT)!r}); runpy.run_module('tests.support.door_process', run_name='__main__')"
+MODULE_DOOR = [sys.executable, "-c", LAUNCH_DRIVER]
+# The real entry point, which judges with the running installation at the fixture's own gate pin.
+QUALITY_MODULE_DOOR = [sys.executable, "-m", "quality.cli"]
 STAGED_WORDS = (CHECK_WORD, "secrets", "--staged")
 FIX_WORDS = (CHECK_WORD, "debt", "--fix")
 DRY_RUN_WORDS = (*FIX_WORDS, "--dry-run")
 
 
+def pinned_release() -> JudgingRelease:
+    """The release every test door judges at, unless a test passes its own `judging`."""
+    return JudgingRelease(Release("v0.10.0"), "pinned in .github/workflows/ci.yml")
+
+
+def judging_at_the_pin(_root: Path, _command: str, _staged: bool) -> JudgingRelease:
+    return pinned_release()
+
+
+RELEASE_ROW = "  · release       v0.10.0        pinned in .github/workflows/ci.yml\n"
+
+
+class PinnedJudging:
+    """The door's `judging` at `pinned_release`, which keeps whether a check asked it."""
+
+    def __init__(self) -> None:
+        self.asked = False
+
+    def __call__(self, root: Path, command: str, staged: bool) -> JudgingRelease:
+        self.asked = True
+        return judging_at_the_pin(root, command, staged)
+
+    def frame(self, out: str) -> str:
+        """`out` after its first line, which is the release row wherever a check asked."""
+        if not self.asked:
+            return out
+        assert out.startswith(RELEASE_ROW), out
+        return out.removeprefix(RELEASE_ROW)
+
+
 def door_in(folder: Path, *words: str, **keywords) -> int:
-    """The exit of `quality <words>` started in `folder`: the door reads the folder it starts in, and the test's own folder comes back."""
+    """The exit of `quality <words>` started in `folder`, judged at `pinned_release` unless `judging` is passed: the door
+    reads the folder it starts in, and the test's own folder comes back."""
+    port_names = {field.name for field in dataclasses.fields(cli.CheckPorts)}
+    ports = {name: keywords.pop(name) for name in port_names & keywords.keys()}
     with contextlib.chdir(folder):
-        return cli.main(list(words), **keywords)
+        return cli.main(list(words), check_ports=cli.CheckPorts(**{"judging": judging_at_the_pin, **ports}), **keywords)
 
 
 def check_door(repository: Path, **keywords) -> int:
@@ -38,11 +79,13 @@ def door_environment(**extra: str) -> dict[str, str]:
     return kept | extra
 
 
-def fixed(capsys, repo: Path, *words: str) -> tuple[int, str, str]:
-    """The exit, stdout and stderr of `quality <words>` started in `repo`."""
-    code = door_in(repo, *words, clock=lambda: 0.0)
+def fixed(capsys, repo: Path, *words: str, judging=None, **keywords) -> tuple[int, str, str]:
+    """The exit, stdout and stderr of `quality <words>` started in `repo`; judged at `pinned_release`, its stdout comes
+    after the release row, and a passed `judging` keeps the whole stdout."""
+    pinned = PinnedJudging()
+    code = door_in(repo, *words, clock=lambda: 0.0, judging=judging or pinned, **keywords)
     printed = capsys.readouterr()
-    return code, printed.out, printed.err
+    return code, pinned.frame(printed.out), printed.err
 
 
 def digest(repo: Path) -> str:

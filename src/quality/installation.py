@@ -1,14 +1,18 @@
-"""What quality's own installation holds: the exact version its metadata requires of a dependency, and the executable
-an installed distribution recorded."""
+"""What quality's own installation holds: the exact version its metadata requires of a dependency, the executable an
+installed distribution recorded, and where its installer got it."""
 
+import json
 from collections.abc import Iterable
-from importlib.metadata import PackageNotFoundError, distribution, requires
+from dataclasses import dataclass
+from importlib.metadata import Distribution, PackageNotFoundError, distribution, requires
 from os.path import normpath
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 
+import quality
 from quality import DISTRIBUTION
 
 
@@ -48,3 +52,39 @@ def installed_executable(distribution_name: str) -> str:
     if not Path(executable).is_file():
         raise FileNotFoundError(f"{executable} is not a file")
     return executable
+
+
+@dataclass(frozen=True)
+class VcsOrigin:
+    """The installer fetched this installation from git at `commit`."""
+
+    commit: str
+
+
+@dataclass(frozen=True)
+class DirectoryOrigin:
+    """The installer built this installation from a local directory, editable or not."""
+
+    directory: Path
+
+
+def origin(installed: Distribution) -> VcsOrigin | DirectoryOrigin | None:
+    """Where the installer got `installed`, as its `direct_url.json` records it (PEP 610); None for no record, a record
+    of another kind, or one that does not parse: such an installation never judges at a pin."""
+    try:
+        record = json.loads(installed.read_text("direct_url.json") or "")
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(record, dict):
+        return None
+    vcs_info, url = record.get("vcs_info"), record.get("url")
+    if isinstance(vcs_info, dict) and vcs_info.get("vcs") == "git" and isinstance(vcs_info.get("commit_id"), str):
+        return VcsOrigin(vcs_info["commit_id"])
+    if isinstance(record.get("dir_info"), dict) and isinstance(url, str) and urlsplit(url).scheme == "file":
+        return DirectoryOrigin(Path(unquote(urlsplit(url).path)))
+    return None
+
+
+def package_directory() -> Path:
+    """The directory this installation's code was imported from."""
+    return Path(quality.__file__).parent

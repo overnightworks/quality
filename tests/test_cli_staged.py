@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from quality import config, scanners
+from quality import config, pin, scanners
 from quality.report import printable
 from quality.rules import Area
 from tests.support.check import refusal_row, scanner_rows
 from tests.support.config_refusals import CONFIG, all_refusals
-from tests.support.door import CHECK_WORD, MODULE_DOOR, STAGED_WORDS, door_environment, door_in, staged_door
+from tests.support.door import CHECK_WORD, MODULE_DOOR, STAGED_WORDS, door_environment, fixed, staged_door
 from tests.support.git_repositories import git, stage
 from tests.support.scanners import OUTPUTS, fake_gitleaks, flagging, lacking, vetting
 from tests.support.secrets import FAKE_KEY, allow_config
@@ -40,19 +40,16 @@ def a_finding_scan() -> str:
 def test_a_clean_staged_change_stands_in_the_pictures_frame(build_repo, capsys):
     repo = build_repo({"README.md": "x\n"})
     stage(repo, {"docs/b.md": "b\n", "docs/c.md": "c\n"})
-    code = staged_door(repo, clock=lambda: 0.0)
-    printed = capsys.readouterr()
-    assert (code, printed.out, printed.err) == (0, clean_row("2 files"), "")
+    assert fixed(capsys, repo, *STAGED_WORDS) == (0, clean_row("2 files"), "")
 
 
 def test_a_staged_finding_stands_in_the_pictures_frame(build_repo, served_scanners, capsys):
     repo = build_repo({"README.md": "x\n"})
     stage(repo, {"docs/b.md": "b\n"})
     fake_gitleaks(served_scanners, on_scan=a_finding_scan())
-    code = staged_door(repo, clock=lambda: 0.0)
-    printed = capsys.readouterr()
-    lines = printed.out.splitlines()
-    assert (code, lines[0], lines[-1], printed.err) == (
+    code, out, err = fixed(capsys, repo, *STAGED_WORDS)
+    lines = out.splitlines()
+    assert (code, lines[0], lines[-1], err) == (
         1, "  ! secrets       1 finding      staged change · 1 file", "! 1 finding in 1 area · <1s", "",
     )
 
@@ -75,15 +72,13 @@ def test_a_staged_run_counts_what_the_next_commit_changes(build_repo, tmp_path, 
         git(tmp_path, "init", "-q")
     repo = tmp_path if committed is None else build_repo(committed)
     change(repo)
-    assert staged_door(repo, clock=lambda: 0.0) == 0
-    assert capsys.readouterr().out == clean_row(counted)
+    assert fixed(capsys, repo, *STAGED_WORDS)[:2] == (0, clean_row(counted))
 
 
 def test_a_staged_run_prints_no_unused_row(build_repo, capsys):
     repo = build_repo({config.CONFIG_PATH: allow_config(("aws-access-token", "docs/gone.txt", FAKE_KEY, "a stale entry"))})
     stage(repo, {"docs/b.md": "b\n"})
-    assert staged_door(repo, clock=lambda: 0.0) == 0
-    assert capsys.readouterr().out == clean_row("1 file")
+    assert fixed(capsys, repo, *STAGED_WORDS)[:2] == (0, clean_row("1 file"))
 
 
 def merge_conflict(repo: Path) -> None:
@@ -132,10 +127,9 @@ def stage_a_config_link(repo: Path) -> None:
 def test_every_refused_staged_run_is_its_row_and_the_pair(build_repo, served_scanners, use_mise, fake_git, capsys, arrange, fact, pair):
     repo = build_repo({"f.txt": "base\n"})
     arrange(repo, served_scanners, use_mise, fake_git)
-    code = staged_door(repo, clock=lambda: 0.0)
-    printed = capsys.readouterr()
-    (row,) = printed.out.splitlines()
-    assert (code, row.startswith(refusal_row("secrets")), fact in row, str(repo) in row, printed.err) == (2, True, True, False, pair)
+    code, out, err = fixed(capsys, repo, *STAGED_WORDS)
+    (row,) = out.splitlines()
+    assert (code, row.startswith(refusal_row("secrets")), fact in row, str(repo) in row, err) == (2, True, True, False, pair)
 
 
 STAGED_EXAMPLE_REFUSALS = [refusal for refusal in all_refusals() if "staged" in refusal.loaders and refusal.text is not None]
@@ -145,10 +139,9 @@ STAGED_EXAMPLE_REFUSALS = [refusal for refusal in all_refusals() if "staged" in 
 def test_a_staged_config_refusal_keeps_its_fact_and_its_example_apart(build_repo, capsys, refusal):
     repo = build_repo({"README.md": "x\n"})
     stage(repo, {CONFIG: refusal.text})
-    code = staged_door(repo, clock=lambda: 0.0)
-    printed = capsys.readouterr()
-    lines = printed.err.splitlines()
-    assert (code, printed.out, lines[0]) == (2, f"{refusal_row('secrets')}{printable(refusal.fact)}\n", "error: 1 of 1 area could not check")
+    code, out, err = fixed(capsys, repo, *STAGED_WORDS)
+    lines = err.splitlines()
+    assert (code, out, lines[0]) == (2, f"{refusal_row('secrets')}{printable(refusal.fact)}\n", "error: 1 of 1 area could not check")
     if refusal.example is None:
         assert lines[1:] == [f"next: {stage_line()}"]
     else:
@@ -168,7 +161,7 @@ def test_a_staged_config_is_read_from_the_tree_the_commit_records(build_repo, ca
 
 @pytest.mark.integration
 def test_a_staged_run_outside_a_repository_is_the_start_failure(elsewhere, capsys):
-    code = staged_door(elsewhere)
+    code = staged_door(elsewhere, judging=pin.judge_here)
     printed = capsys.readouterr()
     assert (code, printed.out) == (2, "")
     first, second = printed.err.splitlines()
@@ -178,8 +171,7 @@ def test_a_staged_run_outside_a_repository_is_the_start_failure(elsewhere, capsy
 @pytest.mark.parametrize("words", [("--staged", "secrets"), ("secrets", "--staged"), ("secrets", "secrets", "--staged")], ids=["first", "last", "repeated"])
 def test_the_staged_flag_may_stand_before_or_after_its_area(build_repo, capsys, words):
     repo = build_repo({"README.md": "x\n"})
-    code = door_in(repo, CHECK_WORD, *words, clock=lambda: 0.0)
-    assert (code, capsys.readouterr().out) == (0, clean_row("0 files"))
+    assert fixed(capsys, repo, CHECK_WORD, *words)[:2] == (0, clean_row("0 files"))
 
 
 @pytest.mark.parametrize("verbose", [True, False], ids=["with -v", "without -v"])

@@ -41,7 +41,7 @@ from tests.support.check import (
     check_result,
     extent_counts,
 )
-from tests.support.door import check_door
+from tests.support.door import PinnedJudging, check_door
 from tests.support.scanners import OUTPUTS, fake_scanner, lacking
 
 FINDING_REPORT = OUTPUTS / "osv-scanner-finding.json"
@@ -78,9 +78,10 @@ def drive_advisories(build_repo, served_scanners, capsys):
     def drive(files: dict[str, str] | Path, report: Path = FINDING_REPORT, code: int = 1, stderr: str = "") -> AdvisoryRun:
         repo = files if isinstance(files, Path) else build_repo(files)
         fake_scanner(served_scanners, OSV, reporting(report, code, stderr))
-        exit_code = check_door(repo, clock=lambda: 0.0)
+        judging = PinnedJudging()
+        exit_code = check_door(repo, clock=lambda: 0.0, judging=judging)
         captured = capsys.readouterr()
-        return AdvisoryRun(repo, exit_code, captured.out, captured.err)
+        return AdvisoryRun(repo, exit_code, judging.frame(captured.out), captured.err)
 
     return drive
 
@@ -552,13 +553,13 @@ def test_an_allowance_that_ran_out_leaves_no_note(drive_advisories):
 
 
 def test_an_allowed_advisory_leaves_no_line_before_the_area_rows(drive_advisories):
-    """The first line of the output is the first area's row."""
+    """After the release row, the first line of the output is the first area's row."""
     run = drive_advisories({"uv.lock": uv_lock(), "quality/config.toml": entry()})
     assert (run.out.splitlines()[0].split()[1], run.err) == (next(iter(Area)), "")
 
 
 def test_an_owner_and_an_allowed_advisory_stand_under_their_own_rows(drive_advisories):
-    """The output owner stands under the code row and the allowed advisory under its own, and no line stands before the rows."""
+    """The output owner stands under the code row and the allowed advisory under its own, and no line but the release row stands before the rows."""
     owner = "# ruff: noqa: T201 - the command line owns its output\nprint(1)\n"
     run = drive_advisories({"src/door.py": owner, "uv.lock": uv_lock(), "quality/config.toml": entry()})
     (code_notes,) = [verdict.notes for verdict in run.areas if verdict.area is Area.CODE]
