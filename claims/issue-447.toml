@@ -1,8 +1,0 @@
-claim_id = "a3810421a04e416caa60f816a751aa8b"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "5d1096c4b68a832eb47e3efcbf9b99eb9d4d60c1"
-branch = "claude/issue-447-sides-move"
-scope = ["docs/ARCHITECTURE.md", "pyproject.toml", "src/quality/merge.py", "src/quality/sides.py", "src/quality/verdict.py", "tests/test_verdict.py", "tests/test_verdict_generated.py", "tests/test_verdict_renames.py", "tests/test_verdict_reread.py"]
-opened_commit = "9420b20ef045581a6863d3906a8869bb4e378273"
-whole_reason = "One byte-equal move of the sides read out of verdict.py: the new module, the two source files that import it, the one layers line that places it, the architecture box that names it and the four test modules whose import lines follow it are one boundary that does not hold half-moved."
