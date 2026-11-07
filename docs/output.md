@@ -591,12 +591,21 @@ error: no workflow here calls quality's gate.yml, so no release is pinned
 next: add the gate as quality's docs/gate.md describes
 ```
 
+No workflow pins the gate, in the commit hook. The installed release judges. Exit as usual. stdout.
+
+```text
+$ quality check secrets --staged
+  · release       v0.10.0        installed · no gate pins a release here
+  ✓ secrets       clean          staged change · 1 file
+  …
+```
+
 The pin is older than `check`. Exit 2. stderr.
 
 ```text
 $ quality check
 error: the gate pins quality v0.8.0, which has no quality check
-next: raise the gate pin to v0.9.0 or later
+next: raise the gate pin to v0.10.0 or later
 ```
 
 In quality itself the checkout judges itself. stdout.
@@ -725,7 +734,7 @@ Ruled by the operator:
 6. Exit 2 beats 1: exit 2 with the pair; the findings of the other areas stand anyway (case 4).
 7. A ceiling that can fall stays a finding: `!` and exit 1, like today's "stale". The dry run `--fix --dry-run` exits 1 while anything can be lowered. Without a ceiling file debt is a grey note with exit 0, like today's "report only".
 8. The release is missing: A, quality fetches exactly the pin through uv and says so in the release row; offline is exit 2. Not B (exit 2 with a `uvx --from git+…` command).
-9. No pin, old pin, quality itself: no workflow calls `gate.yml` is exit 2; a pin older than the release with `check` is exit 2 with "raise the gate pin"; in quality itself the checkout judges.
+9. No pin, old pin, quality itself: no workflow calls `gate.yml` is exit 2, except for `check secrets --staged`, which judges with the installed release; a pin older than the release with `check` is exit 2 with "raise the gate pin"; in quality itself the checkout judges.
 10. `--staged` only with `secrets`: any other area with `--staged` is exit 2 with `next: quality check secrets --staged`.
 11. The command that installs a scanner: `mise --cd <quality's installation>/quality/mise install --locked`, the release's own manifest and lock; the path is quality's installation, shown as the example shows it.
 12. Rule names only in an allowance fix: a `fix:` line that asks for an `[[….allow]]` entry names the rule, because the entry needs it. A config refusal's fact may name the values a config key takes, rule ids included, and the example under `next:` may hold the entry's rule line, because the entry needs it.
