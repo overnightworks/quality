@@ -1,7 +1,0 @@
-claim_id = "0f89c17ab08b4756a8bd046aa1d8611b"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "def561b633927fc1363fef86376ff5afda6b2236"
-branch = "claude/issue-413-notes-start-tag"
-scope = [".github/workflows/release-tag.yml", "docs/release.md", "tests/workflows/test_release_tag.py"]
-opened_commit = "0c8ba165eb42e5d530ef074e767ec2db213fb36b"
