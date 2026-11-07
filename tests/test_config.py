@@ -572,7 +572,7 @@ def test_a_config_refusal_carries_its_whole_fact_and_its_example_apart(refusal, 
 
 
 def test_the_refusals_use_every_example_and_every_refusal_without_one():
-    """#279 acceptance 1: the rows hold every example constant and the refusals the trace gives none."""
+    """the rows hold every example constant and the refusals the trace gives none."""
     assert {refusal.example for refusal in REFUSALS} == {
         None, config.EXAMPLE, config.LEGACY_EXAMPLE, config.SONAR_EXAMPLE, config.ALLOWANCE_EXAMPLE, config.LOOSENED_EXAMPLE,
         config.ADVISORY_ALLOWANCE_EXAMPLE, config.ROOT_ALLOWANCE_EXAMPLE, config.LAYOUT_ALLOWANCE_EXAMPLE,
