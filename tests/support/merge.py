@@ -318,6 +318,13 @@ def drive(gh, transport=None, typed="yes\n", terminal=True, repo=REPO, when_aske
     return code, answers
 
 
+def run(gh, capsys, **arguments):
+    """The door's exit, stdout, stderr and the answers it read, on a run through `drive`."""
+    code, answers = drive(gh, **arguments)
+    streams = capsys.readouterr()
+    return code, streams.out, streams.err, answers
+
+
 def changed_nothing(gh):
     assert gh.gate_values == []
     assert gh.merge_calls == []

@@ -22,12 +22,12 @@ from tests.support.merge import (
     closing_line,
     comment_line,
     declaring,
-    drive,
     frozen_now,
     no_network,
     not_confirmed_pair,
     prompt,
     restore_line,
+    run,
     sonar,
 )
 from tests.support.terminal import screen
@@ -85,12 +85,6 @@ def not_judged_pair():
         "error: could not judge · nothing changed",
         "next: fix what the ✗ row names, then run quality merge acme/widgets#7 again",
     )
-
-
-def run(gh, capsys, **arguments):
-    code, answers = drive(gh, **arguments)
-    streams = capsys.readouterr()
-    return code, streams.out, streams.err, answers
 
 
 @pytest.mark.parametrize(

@@ -13,18 +13,13 @@ from tests.support.merge import (
     FakeGh,
     declaring,
     drive,
+    run,
     terminal_pair,
 )
 
 
 def declared_loosening():
     return {"checks": SONAR_GREEN, "base_config": TWO_JOBS, "head_config": ONE_JOB + declaring(B_REMOVED)}
-
-
-def run(capsys, gh, **arguments):
-    code, answers = drive(gh, **arguments)
-    streams = capsys.readouterr()
-    return code, streams.out, streams.err, answers
 
 
 def asked_after(capsys, gh_kwargs, **arguments):
@@ -48,7 +43,7 @@ def writes(gh):
 def test_a_dry_run_shows_the_rows_and_its_line_and_changes_nothing(gh_kwargs, capsys):
     rows, requests_before_the_question = asked_after(capsys, gh_kwargs)
     gh = FakeGh(**gh_kwargs)
-    assert run(capsys, gh, words=["--dry-run"]) + (gh.sequence,) == (
+    assert run(gh, capsys, words=["--dry-run"]) + (gh.sequence,) == (
         0, rows + "~ dry run · would switch quality_gate off, merge #7, switch it on · nothing changed\n", "", [], [],
     )
     assert (writes(gh), gh.requests) == ([], requests_before_the_question)
@@ -56,7 +51,7 @@ def test_a_dry_run_shows_the_rows_and_its_line_and_changes_nothing(gh_kwargs, ca
 
 def test_a_dry_run_reads_the_pull_request_asked_for(capsys):
     gh = FakeGh(**declared_loosening())
-    code, out, _, _ = run(capsys, gh, repo="acme/gadgets", pull_request="12", words=["--dry-run"])
+    code, out, _, _ = run(gh, capsys, repo="acme/gadgets", pull_request="12", words=["--dry-run"])
     login = ("api", "user", "--jq", ".login")
     named = [[word for word in argv if word.startswith("repos/")] for argv in gh.calls if argv != login]
     assert (code, out.splitlines()[-1]) == (0, "~ dry run · would switch quality_gate off, merge #12, switch it on · nothing changed")
@@ -78,16 +73,16 @@ def test_a_dry_run_reads_the_pull_request_asked_for(capsys):
     ids=["another check red", "a draft", "gh down", "a refused landing line"],
 )
 def test_a_dry_run_refuses_where_the_door_refuses(gh_kwargs, code, capsys):
-    door = run(capsys, FakeGh(**gh_kwargs))
+    door = run(FakeGh(**gh_kwargs), capsys)
     dry_gh = FakeGh(**gh_kwargs)
-    dry_run = run(capsys, dry_gh, words=["--dry-run"])
+    dry_run = run(dry_gh, capsys, words=["--dry-run"])
     assert dry_run == door
     assert (dry_run[0], dry_run[3], writes(dry_gh)) == (code, [], [])
 
 
 def test_a_dry_run_needs_a_terminal_like_the_door(capsys):
     gh = FakeGh()
-    assert run(capsys, gh, terminal=False, words=["--dry-run"]) + (gh.calls,) == (1, "", terminal_pair(), [], [])
+    assert run(gh, capsys, terminal=False, words=["--dry-run"]) + (gh.calls,) == (1, "", terminal_pair(), [], [])
 
 
 @pytest.mark.parametrize(
@@ -95,8 +90,8 @@ def test_a_dry_run_needs_a_terminal_like_the_door(capsys):
 )
 def test_v_adds_nothing_to_the_door(words, typed, capsys):
     plain_gh, verbose_gh = FakeGh(), FakeGh()
-    plain = run(capsys, plain_gh, typed=typed, words=words)
-    verbose = run(capsys, verbose_gh, typed=typed, words=[*words, "-v"])
+    plain = run(plain_gh, capsys, typed=typed, words=words)
+    verbose = run(verbose_gh, capsys, typed=typed, words=[*words, "-v"])
     assert verbose[:3] + (verbose_gh.requests,) == plain[:3] + (plain_gh.requests,)
 
 
@@ -115,7 +110,7 @@ def test_v_adds_nothing_to_the_door(words, typed, capsys):
 )
 def test_a_next_step_that_names_the_door_again_names_the_pull_request_asked_for(gh_kwargs, typed, pattern, capsys):
     gh = FakeGh(**{**declared_loosening(), **gh_kwargs})
-    _, _, err, _ = run(capsys, gh, repo="acme/gadgets", pull_request="12", typed=typed)
+    _, _, err, _ = run(gh, capsys, repo="acme/gadgets", pull_request="12", typed=typed)
     (step,) = [line for line in err.splitlines() if line.startswith("next: ")]
     command = shlex.split(re.fullmatch(pattern, step)[1])
     arguments = cli.read_invocation(command[1:])
