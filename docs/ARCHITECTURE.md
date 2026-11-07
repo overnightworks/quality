@@ -99,7 +99,7 @@ A person installs quality with `uv tool install` from a tag ([README](../README.
 reusable `gate.yml` at the tag it pins; its caller contract stands in [gate](gate.md), and that workflow checks out
 quality and installs the three mise scanners from `src/quality/mise/`. `codeql.yml` is the reusable CodeQL workflow,
 with its caller contract in [codeql](codeql.md), and `code-scanning.yml` quality's own caller of it. quality's CI runs
-its suite with coverage and calls its local `gate.yml`. `scoreboard.yml` runs the fleet report weekly and writes to no
+its suite with coverage and calls its local `gate.yml`. `report.yml` runs the fleet report weekly and writes to no
 repository. `release.yml`, dispatched with a version, calls the reusable `release-gate.yml`, then builds and runs
 `scripts/verify_release.py`; its tag job calls `release-tag.yml` and is the only job that writes
 ([release](release.md)). `image.yml` is the reusable image build an app's release calls; it pushes to GHCR and attests

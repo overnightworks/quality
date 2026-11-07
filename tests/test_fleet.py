@@ -533,7 +533,7 @@ def test_the_fleet_lives_once_in_the_fleet_file():
     """#270 rule 5 and #63 rule 5: the real fleet file parses into owner/names and the workflow carries no URL."""
     fleet = read_fleet(Path(__file__).parent.parent)
     assert fleet.repositories
-    assert "github.com/overnightworks" not in (WORKFLOWS / "scoreboard.yml").read_text()
+    assert "github.com/overnightworks" not in (WORKFLOWS / "report.yml").read_text()
 
 
 def workflow(name: str) -> dict:
@@ -546,8 +546,8 @@ def pinned_actions(document: dict) -> set[str]:
 
 def test_the_workflow_reads_only_and_pins_what_ci_pins():
     """Cell 23, rule 7: contents: read, no secrets, no persisted credentials, ci.yml's SHAs, a timeout, concurrency."""
-    report_workflow = workflow("scoreboard.yml")
-    text = (WORKFLOWS / "scoreboard.yml").read_text()
+    report_workflow = workflow("report.yml")
+    text = (WORKFLOWS / "report.yml").read_text()
     (job,) = report_workflow["jobs"].values()
     triggers = report_workflow[True]  # YAML 1.1 reads the key `on` as True
     assert set(triggers) == {"workflow_dispatch", "schedule"}

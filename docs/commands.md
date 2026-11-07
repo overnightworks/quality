@@ -67,7 +67,7 @@ The run ends on stderr with `✓ N of N repositories measured · <time>` (exit `
 `K of N repositories not measured`, `J partly read` and `the release tags not read`, then `the tables say so`, and
 `next: quality report` (exit `2`); an unwritable summary is `error: GITHUB_STEP_SUMMARY is not writable · <reason>`
 (exit `2`). `-v` adds nothing: the report runs no scanner. The fleet list lives once, in `quality/fleet.toml`;
-`.github/workflows/scoreboard.yml` runs it every Monday at 05:17 UTC and on dispatch; the tables stand in that run's
+`.github/workflows/report.yml` runs it every Monday at 05:17 UTC and on dispatch; the tables stand in that run's
 summary. The run only reports: it writes to no repository and needs no secret. A missing, unreadable (a directory, a
 dangling link, not UTF-8), malformed, duplicating (also across case) or non-`owner/name` `quality/fleet.toml` is the
 pair, exit `2`, before any clone: `error: ` and what is wrong with `quality/fleet.toml`, named repository-relative, and
