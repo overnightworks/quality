@@ -68,6 +68,7 @@ layers = [
     "merge",
     "landing",
     "verdict",
+    "sides",
     "sonar | fleet",
     "check | staged",
     "advisories",

@@ -5,7 +5,8 @@ import datetime
 import pytest
 
 from quality.ratchet import NO_RENAMES
-from quality.verdict import judge, side_of
+from quality.sides import side_of
+from quality.verdict import judge
 from tests.support.generated_files import TYPES_FILE, generated_config
 from tests.support.verdict import ONLY_DECLARED, declaration, gate_config, job
 

@@ -27,6 +27,7 @@ from quality.output import (
 )
 from quality.ratchet import BASELINE_PATH, NO_RENAMES, Renames
 from quality.report import CannotJudge, Command, Instruction, Reason, Step, config_refusal, headline, printable
+from quality.sides import Side, UnusableConfig, compares_baselines, read_renames_of_pull, side_of
 from quality.sonar import (
     Analysis,
     Scope,
@@ -43,13 +44,8 @@ from quality.sonar import (
 from quality.verdict import (
     SUCCESS,
     Job,
-    Side,
-    UnusableConfig,
     Verdict,
-    compares_baselines,
     judge,
-    read_renames_of_pull,
-    side_of,
 )
 
 EXIT_YES = 0
