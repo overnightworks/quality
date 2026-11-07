@@ -22,9 +22,10 @@ def running_as(word: str) -> RunningQuality:
 
 
 def blocked_ruff(fifo: Path) -> str:
+    """Python loses a signal that arrives just before a wait blocks, so the wait is bounded and repeated."""
     fifo.write_text("ready")
-    threading.Event().wait()
-    raise AssertionError("an interrupt ends the wait")
+    while True:
+        threading.Event().wait(0.1)
 
 
 def ports_and_words(words: list[str]) -> tuple[cli.CheckPorts, list[str]]:
