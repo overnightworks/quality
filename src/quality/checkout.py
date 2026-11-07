@@ -23,7 +23,9 @@ INDEX_MODE = re.compile(r"[0-7]{6}")
 # git's sentence when the search up from the path finds no repository, read in the C locale; a git that words it
 # differently leaves the refusal general, which stays true.
 NO_REPOSITORY_SENTENCE = b"fatal: not a git repository (or any"
+GITHUB = "https://github.com/"
 GATE_REPOSITORY = "overnightworks/quality"
+GATE_URL = f"{GITHUB}{GATE_REPOSITORY}"
 GATE_FILE = "gate.yml"
 CODEQL_FILE = "codeql.yml"
 LOCAL_PREFIXES = ("./", "$/")
@@ -165,6 +167,21 @@ def is_workflow(path: PurePosixPath) -> bool:
 
 def is_action(path: PurePosixPath) -> bool:
     return path.name in ACTION_FILES
+
+
+ReleaseTags = dict[str, str]
+
+
+def release_tags_listed(listing: str) -> ReleaseTags:
+    """A peeled line (`refs/tags/v1.0.0^{}`) names the commit and wins over the tag object's own line."""
+    tags: ReleaseTags = {}
+    peeled: ReleaseTags = {}
+    for line in listing.splitlines():
+        commit, _, reference = line.partition("\t")
+        tag = reference.removeprefix("refs/tags/")
+        target = peeled if tag.endswith("^{}") else tags
+        target[tag.removesuffix("^{}")] = commit
+    return {tag: commit for tag, commit in {**tags, **peeled}.items() if RELEASE_TAG.fullmatch(tag)}
 
 
 def release_order(tag: str) -> tuple[int, ...]:

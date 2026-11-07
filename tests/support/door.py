@@ -5,6 +5,7 @@ import dataclasses
 import hashlib
 import os
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 
 from quality import cli
@@ -29,7 +30,7 @@ def pinned_release() -> JudgingRelease:
     return JudgingRelease(Release("v0.10.0"), "pinned in .github/workflows/ci.yml")
 
 
-def judging_at_the_pin(_root: Path, _command: str, _staged: bool) -> JudgingRelease:
+def judging_at_the_pin(_root: Path, _command: str, _staged: bool, _environment: Mapping[str, str]) -> JudgingRelease:
     return pinned_release()
 
 
@@ -42,9 +43,9 @@ class PinnedJudging:
     def __init__(self) -> None:
         self.asked = False
 
-    def __call__(self, root: Path, command: str, staged: bool) -> JudgingRelease:
+    def __call__(self, root: Path, command: str, staged: bool, environment: Mapping[str, str]) -> JudgingRelease:
         self.asked = True
-        return judging_at_the_pin(root, command, staged)
+        return judging_at_the_pin(root, command, staged, environment)
 
     def frame(self, out: str) -> str:
         """`out` after its first line, which is the release row wherever a check asked."""

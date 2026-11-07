@@ -19,11 +19,20 @@ that refused.
 checkout run from its code. The running commit is the one its installer recorded (`direct_url.json`), or, for an editable
 directory installation, that directory's HEAD while its work tree is clean and the version's release tag names that
 HEAD. Its first row names the release (`· release  v0.10.0  pinned in .github/workflows/ci.yml`), or `this checkout`
-with the running version in quality's checkout. Every other case is exit `2` with the `error:`/`next:` pair and no row:
-no workflow calling the gate, an unknown pin, a pin comment that misnames its commit, a pin below v0.10.0, another or an
-unknown commit, and in quality's checkout an installation other than the checkout's code. The one exception is the
-commit hook: where no workflow calls the gate, `quality check secrets --staged` judges with the installed release and
-its row says `installed · no gate pins a release here`.
+with the running version in quality's checkout. Where no workflow calls the gate, the pin is unknown, its comment
+misnames its commit or it is below v0.10.0, the run is exit `2` with the `error:`/`next:` pair and no row. The one
+exception is the commit hook: where no workflow calls the gate, `quality check secrets --staged` judges with the
+installed release and its row says `installed · no gate pins a release here`.
+
+Where the gate pins another commit, `check` runs as that release: the same process with the same words, folder,
+environment and terminal and its exit; `QUALITY_RUN_AT_PIN` marks that run, which never runs another. It first makes
+sure the pinned commit is the release the pin's comment names: the first time on a machine by asking quality's remote,
+which then leaves an empty record per commit and release in the user's cache directory (`$XDG_CACHE_HOME`, else
+`~/.cache`, under `overnightworks-quality/releases`); removing it costs one more question per release. Then uv prepares
+exactly that commit, from its cache offline where a record stands, else fetched. Offline, a release this machine has
+not checked is exit `2` with `next: <command>, once online`, even when uv holds it; a release uv cannot prepare is exit
+`2` with the uv command that shows why. In quality's checkout an installation runs the checkout's code, prepared
+through `uv run`.
 
 ## `quality check --fix`
 

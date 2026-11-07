@@ -342,6 +342,19 @@ def _print_lines(lines: list[str], channel: Channel) -> None:
         _discard_further_writes(stream)
 
 
+def flush_streams() -> None:
+    """What the door wrote leaves now, before the process becomes another program and Python's flush at exit never
+    runs. A missing or closed stream holds nothing to flush; one that refuses the flush (a reader that left, a full disk)
+    leads to the null device, so the next program writes where this one's further lines would have gone."""
+    for stream in (sys.stdout, sys.stderr):
+        if stream is None or stream.closed:
+            continue
+        try:
+            stream.flush()
+        except OSError:
+            _discard_further_writes(stream)
+
+
 def _discard_further_writes(stream: TextIO) -> None:
     """The reader of `stream` left: its descriptor now leads to the null device, so the rest of the run's lines and the
     flush at exit succeed and the run ends with its own exit."""
@@ -399,22 +412,36 @@ def _put(channel: Channel, text: str) -> None:
 
 
 @contextmanager
-def _line_up(channel: Channel, subject: str, scanner: str) -> Iterator[None]:
-    """One line on `channel` while the block runs, gone on every way out Python still runs. It keeps the window's last
-    column free and parks the cursor at the first, so from three columns up neither it nor a key's echo wraps and
-    outlives the erase."""
-    line = _fitted(f"  {LIVE_MARK} {_padded(subject, SUBJECT_WIDTH)}  {scanner}", " ", channel.width)
+def _line_up(channel: Channel, subject: str, scanner: str) -> Iterator[Callable[[str], None]]:
+    """One line on `channel` while the block runs, gone on every way out Python still runs; the `show` it yields
+    redraws it with a fact after its event column. It keeps the window's last column free and parks the cursor at the
+    first, so from three columns up neither it nor a key's echo wraps and outlives the erase."""
+    start = f"  {LIVE_MARK} {_padded(subject, SUBJECT_WIDTH)}  "
+
+    def drawn(text: str) -> str:
+        return f"{_paint(_fitted(start + text, ' ', channel.width), DIM, channel.styled)}\r"
+
+    def show(fact: str) -> None:
+        _put(channel, CLEAR_LINE + drawn(f"{_padded(scanner, EVENT_WIDTH)} {fact}"))
+
     try:
-        _put(channel, f"{_paint(line, DIM, channel.styled)}\r")
-        yield
+        _put(channel, drawn(scanner))
+        yield show
     finally:
         _put(channel, CLEAR_LINE)
 
 
-def live_line(channel: Channel) -> Callable[[str, str], AbstractContextManager[None]]:
+def _show_nothing(_fact: str) -> None:
+    """The `show` of a line that is never drawn."""
+
+
+type LiveLine = Callable[[str, str], AbstractContextManager[Callable[[str], None]]]
+
+
+def live_line(channel: Channel) -> LiveLine:
     """The line of a stream that knows its window; a line that may wrap could not be erased, so any other stream gets none."""
     if channel.width is None:
-        return lambda _subject, _scanner: nullcontext()
+        return lambda _subject, _scanner: nullcontext(_show_nothing)
     return partial(_line_up, channel)
 
 

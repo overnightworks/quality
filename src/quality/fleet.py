@@ -34,11 +34,9 @@ from quality import (
 from quality.report import CannotJudge, Command, Example, Instruction
 from quality.rules import Rule, RuleRelease, Switch
 
-GITHUB = "https://github.com/"
-
 
 def repository_url(name: str) -> str:
-    return f"{GITHUB}{name}"
+    return f"{checkout.GITHUB}{name}"
 
 
 FLEET_PATH = "quality/fleet.toml"
@@ -49,7 +47,6 @@ CLONE_TIMEOUT_SECONDS = 300
 LS_REMOTE_TIMEOUT_SECONDS = 60
 SHORT_COMMIT = 7
 DASH = "—"
-GATE_URL = repository_url(checkout.GATE_REPOSITORY)
 SELF = "self"
 CALLER_SEPARATOR = " · "
 ANONYMOUS_GIT = ("git", "-c", "credential.helper=", "-c", "core.askPass=")
@@ -111,8 +108,7 @@ SWITCHED_RULES = tuple(rule for rule in RELEASES if rule not in EVERY_RELEASE_EN
 MATRIX_COLUMNS = (*FIXED_MATRIX_COLUMNS, *(rule.rule for rule in SWITCHED_RULES))
 
 
-ReleaseTags = dict[str, str]
-TagReader = Callable[[], ReleaseTags]
+TagReader = Callable[[], checkout.ReleaseTags]
 
 
 class ReleaseTagsError(Exception):
@@ -232,36 +228,24 @@ def anonymous_environment(scratch: Path) -> dict[str, str]:
     return {**{name: value for name, value in isolated.items() if name != "SSH_ASKPASS"}, "GIT_TERMINAL_PROMPT": "0"}
 
 
-def release_tags_or_none(tags: ReleaseTags | ReleaseTagsError) -> ReleaseTags | None:
+def release_tags_or_none(tags: checkout.ReleaseTags | ReleaseTagsError) -> checkout.ReleaseTags | None:
     return None if isinstance(tags, ReleaseTagsError) else tags
 
 
-def read_release_tags() -> ReleaseTags:
+def read_release_tags() -> checkout.ReleaseTags:
     """Release tag -> commit of the gate repository, the annotated ones peeled, by one anonymous `git ls-remote`."""
     with process.scratch_directory() as scratch:
         try:
-            listed = git(["ls-remote", "--tags", "--", GATE_URL], scratch, anonymous_environment(scratch),
+            listed = git(["ls-remote", "--tags", "--", checkout.GATE_URL], scratch, anonymous_environment(scratch),
                          LS_REMOTE_TIMEOUT_SECONDS)
         except process.ProcessError as error:
             raise ReleaseTagsError(str(error)) from error
     if listed.returncode != 0:
         raise ReleaseTagsError(f"git exited {listed.returncode}")
-    tags = release_tags_listed(listed.stdout)
+    tags = checkout.release_tags_listed(listed.stdout)
     if not tags:
         raise ReleaseTagsError("no release tag")
     return tags
-
-
-def release_tags_listed(listing: str) -> ReleaseTags:
-    """A peeled line (`refs/tags/v1.0.0^{}`) names the commit and wins over the tag object's own line."""
-    tags: ReleaseTags = {}
-    peeled: ReleaseTags = {}
-    for line in listing.splitlines():
-        commit, _, reference = line.partition("\t")
-        tag = reference.removeprefix("refs/tags/")
-        target = peeled if tag.endswith("^{}") else tags
-        target[tag.removesuffix("^{}")] = commit
-    return {tag: commit for tag, commit in {**tags, **peeled}.items() if checkout.RELEASE_TAG.fullmatch(tag)}
 
 
 def measure_repository(name: str) -> Row:
@@ -328,7 +312,7 @@ def git(
     return process.run([*ANONYMOUS_GIT, *arguments], cwd=scratch, env=environment, timeout=timeout)
 
 
-def render(rows: list[Row], today: date, tags: ReleaseTags | ReleaseTagsError) -> tuple[str, ...]:
+def render(rows: list[Row], today: date, tags: checkout.ReleaseTags | ReleaseTagsError) -> tuple[str, ...]:
     heading = f"**Fleet report, {today.isoformat()}, quality {__version__} — {FUNCTION_SCOPE}**"
     table = [table_line(COLUMNS), "|---" * len(COLUMNS) + "|", *(table_line(cells(row)) for row in rows)]
     pins = release_tags_or_none(tags)
@@ -381,7 +365,7 @@ def run_report(
     return EXIT_MEASURED
 
 
-def _read_tags(release_tags: TagReader, show: Callable[[tuple[output.Row, ...]], None]) -> ReleaseTags | ReleaseTagsError:
+def _read_tags(release_tags: TagReader, show: Callable[[tuple[output.Row, ...]], None]) -> checkout.ReleaseTags | ReleaseTagsError:
     """The gate's release tags, read before any clone so each row's glyph is final when it prints; a failed read is its row."""
     try:
         return release_tags()
@@ -390,13 +374,13 @@ def _read_tags(release_tags: TagReader, show: Callable[[tuple[output.Row, ...]],
         return error
 
 
-def unread_files(row: Measured, pins: ReleaseTags | None) -> tuple[str, ...]:
+def unread_files(row: Measured, pins: checkout.ReleaseTags | None) -> tuple[str, ...]:
     """The files the row's matrix cells could not read, each once, in cell order."""
     cells = matrix_cells(row, pins)
     return tuple(dict.fromkeys(file for cell in cells if isinstance(cell, CannotRead) for file in cell.files))
 
 
-def report_row(row: Row, pins: ReleaseTags | None, seconds: float) -> output.Row:
+def report_row(row: Row, pins: checkout.ReleaseTags | None, seconds: float) -> output.Row:
     if isinstance(row, Unjudged):
         return output.Row(output.Glyph.COULD_NOT_CHECK, row.name, FleetEvent.NOT_MEASURED, row.reason, descriptive=True)
     unread = unread_files(row, pins)
@@ -405,7 +389,7 @@ def report_row(row: Row, pins: ReleaseTags | None, seconds: float) -> output.Row
     return output.Row(output.Glyph.CLEAN, row.name, FleetEvent.MEASURED, f"{row.commit}{output.SEPARATOR}{output.format_duration(seconds)}")
 
 
-def report_problems(rows: list[Row], pins: ReleaseTags | None, tags: ReleaseTags | ReleaseTagsError) -> list[str]:
+def report_problems(rows: list[Row], pins: checkout.ReleaseTags | None, tags: checkout.ReleaseTags | ReleaseTagsError) -> list[str]:
     """What keeps the report from being whole, in the pair's order; empty when every repository was measured."""
     not_measured = sum(isinstance(row, Unjudged) for row in rows)
     partly_read = sum(isinstance(row, Measured) and bool(unread_files(row, pins)) for row in rows)
@@ -423,17 +407,17 @@ def words_joined(words: list[str]) -> str:
     return f"{', '.join(words[:-1])} and {words[-1]}" if len(words) > 1 else "".join(words)
 
 
-def newest_release_words(tags: ReleaseTags | ReleaseTagsError) -> str:
+def newest_release_words(tags: checkout.ReleaseTags | ReleaseTagsError) -> str:
     if isinstance(tags, ReleaseTagsError):
         return f"newest release unreadable ({tags}), pins shown as commits"
     return f"newest release {newest_release(tags)}"
 
 
-def newest_release(tags: ReleaseTags) -> str:
+def newest_release(tags: checkout.ReleaseTags) -> str:
     return max(tags, key=checkout.release_order)
 
 
-def matrix_cells(row: Row, tags: ReleaseTags | None) -> tuple[Cell, ...]:
+def matrix_cells(row: Row, tags: checkout.ReleaseTags | None) -> tuple[Cell, ...]:
     if not isinstance(row, Measured):
         return (row.name, status_label(row), *("",) * (len(MATRIX_COLUMNS) - 2))
     if row.workflows.unreadable:
@@ -459,7 +443,7 @@ def settings_cells(declared: Declared, release: Gate | str) -> tuple[Cell, Cell]
     return (str(len(declared.settings.mandatory_jobs)), declared.settings.legacy.value)
 
 
-def gate_release(calls: tuple[checkout.Call, ...], is_gate_repository: bool, tags: ReleaseTags | None) -> Gate | str:
+def gate_release(calls: tuple[checkout.Call, ...], is_gate_repository: bool, tags: checkout.ReleaseTags | None) -> Gate | str:
     """The oldest release the gate calls are: a tag, main for the gate's own file, else why there is none."""
     pins = [
         pin_release(call.ref, tags) if call.ref is not None else Gate.MAIN
@@ -474,7 +458,7 @@ def gate_release(calls: tuple[checkout.Call, ...], is_gate_repository: bool, tag
     return min(tagged, key=checkout.release_order) if tagged else Gate.MAIN
 
 
-def pin_release(ref: str, tags: ReleaseTags | None) -> Gate | str:
+def pin_release(ref: str, tags: checkout.ReleaseTags | None) -> Gate | str:
     commit = checkout.commit_of(ref)
     if tags is None or commit is None:
         return Gate.UNKNOWN
@@ -526,14 +510,14 @@ def switch_words(switch: Switch, declared: Declared) -> Cell:
     return ENFORCED if present else REPORT_ONLY
 
 
-def pin_cell(calls: tuple[checkout.Call, ...], absent: str, is_gate_repository: bool, tags: ReleaseTags | None) -> str:
+def pin_cell(calls: tuple[checkout.Call, ...], absent: str, is_gate_repository: bool, tags: checkout.ReleaseTags | None) -> str:
     """The repository's own file counts only in the gate's repository; a remote ref is named by its release tag."""
     own = [SELF for call in calls if call.ref is None and is_gate_repository]
     pins = [pin_words(call.ref, tags) for call in calls if call.ref is not None]
     return CALLER_SEPARATOR.join(sorted({*own, *pins})) or absent
 
 
-def pin_words(ref: str, tags: ReleaseTags | None) -> str:
+def pin_words(ref: str, tags: checkout.ReleaseTags | None) -> str:
     commit = checkout.commit_of(ref)
     if commit is None:
         return f"{ref} (not a commit)"
@@ -546,7 +530,7 @@ def pin_words(ref: str, tags: ReleaseTags | None) -> str:
     return tag if tag == newest_release(tags) else f"{tag} (behind)"
 
 
-def released_tag(commit: str, tags: ReleaseTags) -> str | None:
+def released_tag(commit: str, tags: checkout.ReleaseTags) -> str | None:
     """The newest release tag that points at the commit."""
     return max((tag for tag, tagged in tags.items() if tagged == commit), key=checkout.release_order, default=None)
 
