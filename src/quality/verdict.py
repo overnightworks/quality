@@ -3,12 +3,14 @@ import re
 import urllib.error
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 from types import MappingProxyType
 
-from quality import architecture, checkout, process, repository, web
+from quality import architecture, checkout, output, process, repository, web
 from quality.config import (
     CONFIG_PATH,
+    REPOSITORY_NAME,
     ConfigError,
     Declaration,
     GateSettings,
@@ -16,8 +18,10 @@ from quality.config import (
     load_gate_settings,
     read_gate_settings,
 )
+from quality.fleet import COMMIT_SHA
 from quality.ratchet import (
     BASELINE_PATH,
+    NO_RENAMES,
     Baseline,
     Renames,
     SizeError,
@@ -30,7 +34,7 @@ from quality.ratchet import (
     read_baseline,
     renames_of,
 )
-from quality.report import CannotJudge
+from quality.report import CannotJudge, Instruction, Reason, Step, config_refusal
 
 JOBS_URL = "https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs?filter=all&per_page=100"
 MAX_PAGES = 10
@@ -42,8 +46,14 @@ COMPLETED = "completed"
 PROGRESS_OF_STATUS = MappingProxyType({"in_progress": 1, COMPLETED: 2})
 FIRST_SERVER_ERROR = 500
 PERMISSION_REFUSALS = frozenset({403, 404})
-PERMISSION_HINT = "(does the caller grant actions: read?)"
-NEEDS_HINT = " (a mandatory job missing from the caller's needs: must join it)"
+RERUN = Instruction("re-run this run's failed jobs")
+FIX_THEN_RERUN = Instruction("fix what the error names, then re-run this run's failed jobs")
+PUSH_THE_FIX = Instruction("push the fix; the gate judges the new commit")
+NEEDS_STEP = Instruction("a mandatory job missing from the caller job's needs: add it there")
+PERMISSION_STEP = Instruction("grant actions: read in the caller job's permissions")
+SET_BY_THE_GATE = Instruction("quality verdict runs as gate.yml's verdict step, which sets it")
+WHOLE_NUMBER = re.compile(r"[1-9]\d{0,17}", re.ASCII)
+EXIT_GREEN, EXIT_RED, EXIT_CANNOT_JUDGE = 0, 1, 2
 CREDENTIAL_HELPER = "!gh auth git-credential"
 FETCH_TIMEOUT_SECONDS = 120
 
@@ -307,13 +317,13 @@ def unreadable_jobs(url: str, error: Exception) -> CannotJudge:
     if isinstance(error, urllib.error.HTTPError):
         if error.code >= FIRST_SERVER_ERROR:
             return GitHubServerError(error.code, error.reason, url)
-        hint = f" {PERMISSION_HINT}" if error.code in PERMISSION_REFUSALS else ""
-        return CannotJudge(f"cannot read {url}: {error}{hint}")
+        steps = (PERMISSION_STEP, RERUN) if error.code in PERMISSION_REFUSALS else ()
+        return CannotJudge(f"cannot read {url}: {error}", steps)
     if isinstance(error, OSError):
         if web.timed_out(error):
             seconds = web.REQUEST_TIMEOUT_SECONDS
-            return CannotJudge(f"GitHub did not answer {url} within {seconds}s; re-run the verdict")
-        return CannotJudge(f"could not reach GitHub at {url}: {error}; re-run the verdict")
+            return CannotJudge(f"GitHub did not answer {url} within {seconds}s", (RERUN,))
+        return CannotJudge(f"could not reach GitHub at {url}: {error}", (RERUN,))
     return CannotJudge(f"cannot read {url}: {error}")
 
 
@@ -347,8 +357,8 @@ class Settled:
 class UnsettledRun(CannotJudge):
     """The re-read could not judge the run; it prints its note and the last judged read's blocking lines first."""
 
-    def __init__(self, reason: str, note: str | None, blocking: tuple[str, ...]) -> None:
-        super().__init__(reason)
+    def __init__(self, reason: Reason, note: str | None, blocking: tuple[str, ...]) -> None:
+        super().__init__(reason.fact, reason.next_steps)
         self.preceding_lines = (*_noted(note), *blocking)
 
 
@@ -368,14 +378,14 @@ def read_settled(read: Callable[[], list[Job]], judgement: Judgement, sleep: web
             view = merged_view(view, read())
             verdict = judgement(list(view.values()))
         except GitHubServerError as error:
-            said, reason = error.answered, _server_error_line(error, reads)
+            said, reason = error.answered, _server_error(error, reads)
         except CannotJudge as error:
-            raise _unsettled_run(str(error), reads, first, last) from error
+            raise _unsettled_run(error.reason, reads, first, last) from error
         else:
             if not verdict.unsettled:
                 return Settled(verdict, _reread_note(reads, first))
             last = verdict
-            said, reason = "listed " + _listed(verdict.unsettled), _stale_line(verdict.unsettled, reads)
+            said, reason = "listed " + _listed(verdict.unsettled), _stale(verdict.unsettled, reads)
         first = first or said
     raise _unsettled_run(reason, reads, first, last)
 
@@ -408,19 +418,127 @@ def _reread_note(reads: int, first: str | None) -> str | None:
     return None if reads == 1 else f"verdict: read the run's jobs {reads} times - GitHub first {first}"
 
 
-def _unsettled_run(reason: str, reads: int, first: str | None, last: Verdict | None) -> UnsettledRun:
+def _unsettled_run(reason: Reason, reads: int, first: str | None, last: Verdict | None) -> UnsettledRun:
     return UnsettledRun(reason, _reread_note(reads, first), () if last is None else last.blocking)
 
 
-def _server_error_line(error: GitHubServerError, reads: int) -> str:
-    return f"{error} after {reads} reads; this is GitHub's fault, not the caller's: re-run the verdict"
+def _server_error(error: GitHubServerError, reads: int) -> Reason:
+    return Reason(f"{error.reason.fact} after {reads} reads{output.SEPARATOR}GitHub's fault, not the caller's", (RERUN,))
 
 
-def _stale_line(unsettled: tuple[Unsettled, ...], reads: int) -> str:
-    return (
-        f"GitHub still lists {_listed(unsettled)} after {reads} reads; the gate starts after every mandatory job, so "
-        f"this answer is stale: re-run the verdict{NEEDS_HINT}"
-    )
+def _stale(unsettled: tuple[Unsettled, ...], reads: int) -> Reason:
+    stale = "the gate starts after every mandatory job, so this answer is stale"
+    return Reason(f"GitHub still lists {_listed(unsettled)} after {reads} reads{output.SEPARATOR}{stale}", (RERUN, NEEDS_STEP))
+
+
+@dataclass(frozen=True)
+class Base:
+    """The pull request's base: the branch it merges into and the commit the gate compares against."""
+
+    ref: str
+    sha: str
+
+
+@dataclass(frozen=True)
+class GateRun:
+    """What gate.yml's verdict step hands the verdict: the run to read and the base to compare, None outside a pull
+    request."""
+
+    repository: str
+    run_id: str
+    attempt: int
+    token: str
+    gate_results: Mapping[str, str]
+    base: Base | None
+
+
+def read_gate_run(environment: Mapping[str, str]) -> GateRun:
+    """The step's variables, each in its accepted form; a missing or malformed one is the refusal that names it, never
+    its value."""
+    repository_name = _variable(environment, "GITHUB_REPOSITORY", REPOSITORY_NAME.fullmatch, "an owner/name")
+    run_id = _variable(environment, "GITHUB_RUN_ID", WHOLE_NUMBER.fullmatch, "a run id")
+    attempt = int(_variable(environment, "GITHUB_RUN_ATTEMPT", WHOLE_NUMBER.fullmatch, "a run attempt"))
+    token = _variable(environment, "GITHUB_TOKEN")
+    gate_results = _gate_results(_variable(environment, "GATE_NEEDS"))
+    base = None
+    if environment.get("GATE_BASE_SHA"):
+        sha = _variable(environment, "GATE_BASE_SHA", COMMIT_SHA.fullmatch, "a commit sha")
+        base = Base(_variable(environment, "GITHUB_BASE_REF", _is_git_ref_name, "a branch name"), sha)
+    return GateRun(repository_name, run_id, attempt, token, gate_results, base)
+
+
+def _variable(environment: Mapping[str, str], name: str, accepted: Callable[[str], object] = bool, form: str = "") -> str:
+    value = environment.get(name, "")
+    if not value:
+        raise CannotJudge(f"{name} is not set", (SET_BY_THE_GATE,))
+    if not accepted(value):
+        raise CannotJudge(f"{name} is not {form}", (SET_BY_THE_GATE,))
+    return value
+
+
+def _gate_results(needs_text: str) -> Mapping[str, str]:
+    """Each need's result; anything but an object of objects with a string `result` is no needs of the verdict job."""
+    try:
+        needs = json.loads(needs_text)
+    except (ValueError, RecursionError):
+        needs = None
+    if not isinstance(needs, dict) or not all(isinstance(need, dict) and isinstance(need.get("result"), str) for need in needs.values()):
+        raise CannotJudge("GATE_NEEDS is not the needs of gate.yml's verdict job", (SET_BY_THE_GATE,))
+    return MappingProxyType({name: need["result"] for name, need in needs.items()})
+
+
+def read_sides(run: GateRun) -> tuple[Side | None, Side]:
+    """The base, read first so that a refusal the pull request inherits is named at the base, then the head; a config
+    either cannot read is its fact and example with that side's step."""
+    base = None
+    if run.base is not None:
+        ref = run.base.ref
+        fix = Instruction(f"fix it on {ref} first, then update the pull request's branch with {ref}")
+        base = _side(partial(read_base, Path("."), run.base.sha), fix)
+    return base, _side(partial(read_head, Path(".")), PUSH_THE_FIX)
+
+
+def _side(read: Callable[[], Side], fix: Step) -> Side:
+    try:
+        return read()
+    except UnusableConfig as unusable:
+        raise config_refusal(unusable.error, fix) from unusable
+
+
+def run_verdict(fetcher_for: Callable[[str], PageFetcher], sleep: web.Sleep, channels: output.Channels, environment: Mapping[str, str]) -> int:
+    """Judges the run gate.yml's verdict step names, in the checkout it runs in: the verdict's lines on stdout, a
+    refusal as the pair on stderr after the lines it judged, and the same lines in the step summary as a code block."""
+    try:
+        run = read_gate_run(environment)
+        base, head = read_sides(run)
+        renames = read_renames(Path("."), run.base.sha, "HEAD") if compares_baselines(base, head) else NO_RENAMES
+        fetch = fetcher_for(run.token)
+        settled = read_settled(
+            lambda: read_jobs(run.repository, run.run_id, fetch),
+            lambda jobs: judge(head, base, jobs, run.gate_results, run.attempt, renames),
+            sleep,
+        )
+    except CannotJudge as refusal:
+        judged = refusal.preceding_lines if isinstance(refusal, UnsettledRun) else ()
+        show = partial(_shown, judged, refusal.reason.fact, refusal.reason.next_steps or (FIX_THEN_RERUN,))
+        code = EXIT_CANNOT_JUDGE
+    else:
+        show = partial(_shown, settled.lines(), None, ())
+        code = EXIT_GREEN if settled.verdict.green else EXIT_RED
+    show(channels)
+    try:
+        output.append_step_summary(output.code_block(output.rendered(show)), environment)
+    except OSError as error:
+        unwritable = f"{output.STEP_SUMMARY_VARIABLE} is not writable{output.SEPARATOR}{error}"
+        output.write_pair(unwritable, (FIX_THEN_RERUN,), channels.err)
+        return EXIT_CANNOT_JUDGE
+    return code
+
+
+def _shown(lines: tuple[str, ...], error: str | None, next_steps: tuple[Step, ...], channels: output.Channels) -> None:
+    output.write_lines(lines, channels.out)
+    if error is not None:
+        output.write_pair(error, next_steps, channels.err)
 
 
 FORBIDDEN_REF_CHARACTERS = re.compile(r"[\x00-\x20\x7f~^:?*\[\\]")
@@ -445,7 +563,7 @@ def _require_safe_ref(ref: str, role: str) -> None:
 
 class UnusableConfig(CannotJudge):
     """A side's config that cannot be read: `where` names the side and `error` keeps the config's fact and example
-    apart; the fact is the line the verdict prints for it."""
+    apart; the callers print `error` as the refusal pair."""
 
     def __init__(self, where: str, error: ConfigError) -> None:
         super().__init__(f"{CONFIG_PATH} at {where}: {error}")
@@ -464,9 +582,9 @@ def read_head(repo: Path) -> Side:
     try:
         baseline = read_baseline(repo)
     except SizeError as error:
-        raise _unusable(BASELINE_PATH, HEAD, f"{error}; {head_step(error).text}") from error
+        raise _unusable(BASELINE_PATH, HEAD, error, (head_step(error),)) from error
     except CannotJudge as error:
-        raise _unusable(BASELINE_PATH, HEAD, error) from error
+        raise _unusable(BASELINE_PATH, HEAD, error.reason.fact, error.reason.next_steps) from error
     try:
         import_configs = {name: repository.read_text(repo, name) for name in architecture.CONFIG_FILES}
     except repository.RepositoryFileError as error:
@@ -583,5 +701,5 @@ def _contracts_at(texts: Mapping[str, str | None], where: str) -> architecture.S
         raise _unusable(IMPORT_CONFIG, where, error) from error
 
 
-def _unusable(name: str, where: str, reason: object) -> CannotJudge:
-    return CannotJudge(f"{name} at {where}: {reason}")
+def _unusable(name: str, where: str, reason: object, next_steps: tuple[Step, ...] = ()) -> CannotJudge:
+    return CannotJudge(f"{name} at {where}: {reason}", next_steps)

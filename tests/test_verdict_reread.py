@@ -8,7 +8,7 @@ import pytest
 from quality import architecture, cli, verdict
 from quality.config import CONFIG_PATH, LegacyMode
 from quality.ratchet import NO_RENAMES
-from quality.report import CannotJudge
+from quality.report import CannotJudge, Instruction
 from quality.verdict import GateSettings, Side, judge
 from tests.support.architecture import FORBIDDEN, contracts_ini, contracts_toml, ini_section
 from tests.support.git_repositories import put
@@ -37,38 +37,48 @@ def http_error(status, reason):
     return urllib.error.HTTPError("u", status, reason, {}, None)
 
 
+RERUN = Instruction("re-run this run's failed jobs")
+GRANT_READ = Instruction("grant actions: read in the caller job's permissions")
+NEXT_LINES = {
+    (): ["next: fix what the error names, then re-run this run's failed jobs"],
+    (RERUN,): ["next: re-run this run's failed jobs"],
+    (GRANT_READ, RERUN): ["next:", "    grant actions: read in the caller job's permissions", "    re-run this run's failed jobs"],
+}
+STALE_STEPS = ["next:", "    re-run this run's failed jobs", "    a mandatory job missing from the caller job's needs: add it there"]
+
+
 def failed_reads():
-    """Each way a jobs read can fail, the type it becomes and its line."""
+    """Each way a jobs read can fail, the type it becomes, its fact and its steps."""
     return [
         pytest.param(http_error(502, "Bad Gateway"), verdict.GitHubServerError,
-                     "GitHub answered HTTP 502 Bad Gateway for u", id="502"),
+                     "GitHub answered HTTP 502 Bad Gateway for u", (), id="502"),
         pytest.param(http_error(500, "Internal Server Error"), verdict.GitHubServerError,
-                     "GitHub answered HTTP 500 Internal Server Error for u", id="500"),
+                     "GitHub answered HTTP 500 Internal Server Error for u", (), id="500"),
         pytest.param(http_error(403, "Forbidden"), CannotJudge,
-                     "cannot read u: HTTP Error 403: Forbidden (does the caller grant actions: read?)", id="403"),
+                     "cannot read u: HTTP Error 403: Forbidden", (GRANT_READ, RERUN), id="403"),
         pytest.param(http_error(404, "Not Found"), CannotJudge,
-                     "cannot read u: HTTP Error 404: Not Found (does the caller grant actions: read?)", id="404"),
+                     "cannot read u: HTTP Error 404: Not Found", (GRANT_READ, RERUN), id="404"),
         pytest.param(http_error(401, "Unauthorized"), CannotJudge,
-                     "cannot read u: HTTP Error 401: Unauthorized", id="401"),
-        pytest.param(http_error(302, "Found"), CannotJudge, "cannot read u: HTTP Error 302: Found", id="302"),
+                     "cannot read u: HTTP Error 401: Unauthorized", (), id="401"),
+        pytest.param(http_error(302, "Found"), CannotJudge, "cannot read u: HTTP Error 302: Found", (), id="302"),
         pytest.param(http.client.IncompleteRead(b"abcd", 96), CannotJudge,
-                     "cannot read u: IncompleteRead(4 bytes read, 96 more expected)", id="truncated"),
+                     "cannot read u: IncompleteRead(4 bytes read, 96 more expected)", (), id="truncated"),
         pytest.param(TimeoutError(), CannotJudge,
-                     "GitHub did not answer u within 30s; re-run the verdict", id="read timeout"),
+                     "GitHub did not answer u within 30s", (RERUN,), id="read timeout"),
         pytest.param(urllib.error.URLError(TimeoutError()), CannotJudge,
-                     "GitHub did not answer u within 30s; re-run the verdict", id="connect timeout"),
+                     "GitHub did not answer u within 30s", (RERUN,), id="connect timeout"),
         pytest.param(urllib.error.URLError(ConnectionRefusedError(111, "refused")), CannotJudge,
-                     "could not reach GitHub at u: <urlopen error [Errno 111] refused>; re-run the verdict",
+                     "could not reach GitHub at u: <urlopen error [Errno 111] refused>", (RERUN,),
                      id="refused"),
     ]
 
 
-@pytest.mark.parametrize(("error", "kind", "line"), failed_reads())
-def test_a_failed_jobs_read_names_its_cause(error, kind, line):
-    """READ-5 and READ-6: a 5xx is GitHub's, only 403 and 404 carry the actions hint, a timeout says
+@pytest.mark.parametrize(("error", "kind", "fact", "steps"), failed_reads())
+def test_a_failed_jobs_read_names_its_cause(error, kind, fact, steps):
+    """READ-5 and READ-6: a 5xx is GitHub's, only 403 and 404 carry the actions step, a timeout says
     re-run."""
     classified = verdict.unreadable_jobs("u", error)
-    assert (type(classified), str(classified)) == (kind, line)
+    assert (type(classified), classified.reason.fact, classified.reason.next_steps) == (kind, fact, steps)
 
 
 def test_a_502_jobs_page_is_named_as_githubs(stub_server):
@@ -113,9 +123,10 @@ def reread(capsys, monkeypatch, run_env, pull_request):
                 raise answer
             return answer(url) if callable(answer) else answer
 
-        code = cli.main(["verdict", str(repo)], fetcher_for=lambda token: fetch, sleep=slept.append)
+        code = cli.main(["verdict"], fetcher_for=lambda token: fetch, sleep=slept.append)
         out, err = capsys.readouterr()
-        assert (next(script, None), (out if code == 2 else err), summary.read_text()) == (None, "", out + err)
+        stderr = "the pair" if err.startswith("error: ") else err
+        assert (next(script, None), stderr, summary.read_text()) == (None, "the pair" if code == 2 else "", f"```\n{out}{err}```\n")
         return code, (out + err).splitlines(), sum(slept)
 
     return run
@@ -279,9 +290,8 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             {},
             2,
             ['verdict: read the run\'s jobs 13 times - GitHub first listed "checks" (attempt 1) as in_progress',
-             ('verdict: cannot judge - GitHub still lists "checks" (attempt 1) as in_progress after 13 reads; the gate '
-             "starts after every mandatory job, so this answer is stale: re-run the verdict (a mandatory job missing "
-             "from the caller's needs: must join it)")],
+             ('error: GitHub still lists "checks" (attempt 1) as in_progress after 13 reads · the gate starts after every '
+              "mandatory job, so this answer is stale"), *STALE_STEPS],
             120,
             id="cell 5",
         ),
@@ -290,8 +300,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             {},
             2,
             ["verdict: read the run's jobs 13 times - GitHub first answered HTTP 502 Bad Gateway",
-             ("verdict: cannot judge - GitHub answered HTTP 502 Bad Gateway for u after 13 reads; this is GitHub's "
-             "fault, not the caller's: re-run the verdict")],
+             "error: GitHub answered HTTP 502 Bad Gateway for u after 13 reads · GitHub's fault, not the caller's", *NEXT_LINES[(RERUN,)]],
             120,
             id="cell 13",
         ),
@@ -301,9 +310,8 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             2,
             ['verdict: read the run\'s jobs 13 times - GitHub first listed "checks" (attempt 1) as in_progress',
              'gate job "sonar" result failure',
-             ('verdict: cannot judge - GitHub still lists "checks" (attempt 1) as in_progress after 13 reads; the gate '
-             "starts after every mandatory job, so this answer is stale: re-run the verdict (a mandatory job missing "
-             "from the caller's needs: must join it)")],
+             ('error: GitHub still lists "checks" (attempt 1) as in_progress after 13 reads · the gate starts after every '
+              "mandatory job, so this answer is stale"), *STALE_STEPS],
             120,
             id="cell 21",
         ),
@@ -312,8 +320,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             {},
             2,
             ['verdict: read the run\'s jobs 13 times - GitHub first listed "checks" (attempt 1) as in_progress',
-             ("verdict: cannot judge - GitHub answered HTTP 502 Bad Gateway for u after 13 reads; this is GitHub's "
-             "fault, not the caller's: re-run the verdict")],
+             "error: GitHub answered HTTP 502 Bad Gateway for u after 13 reads · GitHub's fault, not the caller's", *NEXT_LINES[(RERUN,)]],
             120,
             id="cell 22",
         ),
@@ -323,8 +330,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             2,
             ['verdict: read the run\'s jobs 13 times - GitHub first listed "checks" (attempt 1) as in_progress',
              'gate job "sonar" result failure',
-             ("verdict: cannot judge - GitHub answered HTTP 502 Bad Gateway for u after 13 reads; this is GitHub's "
-             "fault, not the caller's: re-run the verdict")],
+             "error: GitHub answered HTTP 502 Bad Gateway for u after 13 reads · GitHub's fault, not the caller's", *NEXT_LINES[(RERUN,)]],
             120,
             id="cell 22 with sonar red",
         ),
@@ -333,9 +339,8 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             {"attempt": 2},
             2,
             ['verdict: read the run\'s jobs 13 times - GitHub first listed "checks" (attempt 2) as in_progress',
-             ('verdict: cannot judge - GitHub still lists "checks" (attempt 2) as in_progress after 13 reads; the gate '
-             "starts after every mandatory job, so this answer is stale: re-run the verdict (a mandatory job missing "
-             "from the caller's needs: must join it)")],
+             ('error: GitHub still lists "checks" (attempt 2) as in_progress after 13 reads · the gate starts after every '
+              "mandatory job, so this answer is stale"), *STALE_STEPS],
             120,
             id="cell 20 run out",
         ),
@@ -345,21 +350,20 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             2,
             ['verdict: read the run\'s jobs 13 times - GitHub first listed "X" (attempt 1) as in_progress',
              'mandatory job "checks" (attempt 1) has 2 entries, not all success',
-             ('verdict: cannot judge - GitHub still lists "X" (attempt 1) as in_progress after 13 reads; the gate '
-             "starts after every mandatory job, so this answer is stale: re-run the verdict (a mandatory job missing "
-             "from the caller's needs: must join it)")],
+             ('error: GitHub still lists "X" (attempt 1) as in_progress after 13 reads · the gate starts after every '
+              "mandatory job, so this answer is stale"), *STALE_STEPS],
             120,
             id="cell 26 run out",
         ),
         pytest.param(
             (
                 page(running()),
-                CannotJudge("cannot read u: HTTP Error 403: Forbidden (does the caller grant actions: read?)"),
+                CannotJudge("cannot read u: HTTP Error 403: Forbidden"),
             ),
             {},
             2,
             ['verdict: read the run\'s jobs 2 times - GitHub first listed "checks" (attempt 1) as in_progress',
-             "verdict: cannot judge - cannot read u: HTTP Error 403: Forbidden (does the caller grant actions: read?)"],
+             "error: cannot read u: HTTP Error 403: Forbidden", *NEXT_LINES[()]],
             10,
             id="cell 23",
         ),
@@ -368,8 +372,8 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             {},
             2,
             ['verdict: read the run\'s jobs 2 times - GitHub first listed "checks" (attempt 1) as in_progress',
-             ("verdict: cannot judge - https://api.github.com/repos/o/r/actions/runs/1/jobs?filter=all&per_page=100 "
-             "did not return the expected jobs page: KeyError('total_count')")],
+             ("error: https://api.github.com/repos/o/r/actions/runs/1/jobs?filter=all&per_page=100 "
+             "did not return the expected jobs page: KeyError('total_count')"), *NEXT_LINES[()]],
             10,
             id="cell 17",
         ),
@@ -378,7 +382,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             {},
             2,
             ['verdict: read the run\'s jobs 2 times - GitHub first listed "checks" (attempt 1) as in_progress',
-             "verdict: cannot judge - read 1 jobs but the run has 2"],
+             "error: read 1 jobs but the run has 2", *NEXT_LINES[()]],
             10,
             id="cell 24",
         ),
@@ -394,17 +398,17 @@ def test_the_verdict_judges_the_first_settled_read_and_never_lets_a_red_reason_g
 
 
 @pytest.mark.parametrize(
-    ("error", "line"),
+    ("error", "fact", "steps"),
     [
-        pytest.param(error, line, id=read.id)
+        pytest.param(error, fact, steps, id=read.id)
         for read in failed_reads()
-        for error, kind, line in [read.values]
+        for error, kind, fact, steps in [read.values]
         if kind is CannotJudge
     ],
 )
-def test_a_failed_read_that_is_not_githubs_server_error_ends_the_verdict_at_once(reread, error, line):
+def test_a_failed_read_that_is_not_githubs_server_error_ends_the_verdict_at_once(reread, error, fact, steps):
     """READ-5 and READ-6: only a server error is read again; any other failure exits 2 at once."""
-    assert reread(verdict.unreadable_jobs("u", error)) == (2, [f"verdict: cannot judge - {line}"], 0)
+    assert reread(verdict.unreadable_jobs("u", error)) == (2, [f"error: {fact}", *NEXT_LINES[steps]], 0)
 
 
 def test_a_body_that_is_not_utf_8_after_a_stale_read_keeps_the_note(reread, stub_server):
@@ -414,8 +418,8 @@ def test_a_body_that_is_not_utf_8_after_a_stale_read_keeps_the_note(reread, stub
     assert reread(page(running()), lambda url: read_page(origin + "/jobs")) == (
         2,
         ['verdict: read the run\'s jobs 2 times - GitHub first listed "checks" (attempt 1) as in_progress',
-         (f"verdict: cannot judge - cannot read {origin}/jobs: 'utf-8' codec can't decode byte 0xff in position 0: "
-         "invalid start byte")],
+         (f"error: cannot read {origin}/jobs: 'utf-8' codec can't decode byte 0xff in position 0: "
+         "invalid start byte"), *NEXT_LINES[()]],
         10,
     )
 
@@ -434,7 +438,7 @@ def judged_contracts(capsys, pull_request):
             put(repo / name, head_files.get(name))
         put(repo / CONFIG_PATH, gate_config("A", declared=tuple(declaration(what) for what in declared)))
         page = json.dumps({"total_count": 1, "jobs": [{"id": 1, "name": "A", "run_attempt": 1, "status": "completed", "conclusion": "success"}]})
-        code = cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (page, None))
+        code = cli.main(["verdict"], fetcher_for=lambda token: lambda url: (page, None))
         captured = capsys.readouterr()
         return code, (captured.out + captured.err).splitlines()
 
@@ -572,7 +576,7 @@ def test_import_contracts_that_cannot_be_told_apart_cannot_be_judged_naming_the_
     code, lines = judged_contracts(files if side == "base" else {}, files if side == "head" else {})
     assert code == 2
     place = "the head" if side == "head" else "the base commit [0-9a-f]{40}"
-    assert re.fullmatch(f"verdict: cannot judge - import-linter config at {place}: {re.escape(message)}", lines[0]), lines
+    assert re.fullmatch(f"error: import-linter config at {place}: {re.escape(message)}", lines[0]), lines
 
 
 def test_a_head_import_config_that_links_out_of_the_repository_cannot_be_judged_naming_the_head(build_repo, elsewhere):

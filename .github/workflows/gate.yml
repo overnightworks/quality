@@ -175,4 +175,4 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           GATE_NEEDS: ${{ toJSON(needs) }}
           GATE_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
-        run: uv run --locked --project "$TOOL_DIR" quality verdict .
+        run: uv run --locked --project "$TOOL_DIR" quality verdict

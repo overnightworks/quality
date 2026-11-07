@@ -370,12 +370,12 @@ def test_a_malformed_advisory_allowance_cannot_be_judged_where_the_whole_config_
     capsys, run_env, entry, named
 ):
     """#116 cell 12: a malformed [advisories] entry is exit 2 in the verdict and in the secret and advisory rules of
-    the check, one line each naming the entry."""
+    the check, each naming the entry on its first line."""
     repo, _ = run_env
     (repo / CONFIG_PATH).write_text(entry + '[gate]\nmandatory_jobs = ["checks"]\n')
-    assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: ("{}", None)) == 2
+    assert cli.main(["verdict"], fetcher_for=lambda token: lambda url: ("{}", None)) == 2
     verdict = capsys.readouterr().err.splitlines()
-    assert (len(verdict), named in verdict[0]) == (1, True), verdict
+    assert (verdict[0].startswith("error: "), named in verdict[0]) == (True, True), verdict
     assert check_door(repo) == 2
     capsys.readouterr()
     assert {rule for rule, reason in refusals(repo).items() if named in reason} == {
@@ -397,7 +397,7 @@ def test_the_verdict_refuses_a_malformed_secret_allowance_as_check_does(capsys, 
     malformed [secrets] entry too."""
     repo, _ = run_env
     (repo / CONFIG_PATH).write_text('[gate]\nmandatory_jobs = ["checks"]\n' + MALFORMED_SECRET)
-    assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: ("{}", None)) == 2
+    assert cli.main(["verdict"], fetcher_for=lambda token: lambda url: ("{}", None)) == 2
     assert "[secrets] allow entry" in capsys.readouterr().err
 
 
@@ -531,9 +531,9 @@ def test_the_verdict_refuses_a_malformed_generated_file_naming_the_side(capsys, 
     """#174 sentence 3: the verdict at the head is exit 2."""
     repo, _ = run_env
     (repo / CONFIG_PATH).write_text(GATE_WITH_CHECKS + generated_config(job="other"))
-    assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: ("{}", None)) == 2
+    assert cli.main(["verdict"], fetcher_for=lambda token: lambda url: ("{}", None)) == 2
     err = capsys.readouterr().err
-    assert "quality/config.toml at the head" in err
+    assert "push the fix; the gate judges the new commit" in err
     assert "[[size.generated]]" in err
 
 

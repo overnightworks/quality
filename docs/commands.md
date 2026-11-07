@@ -6,7 +6,7 @@ runs `quality merge`, or reads `quality --help` or a wrong invocation's pair.
 ## Help and wrong invocations
 
 `quality --help` and `quality check --help` stand in the frame of [the output picture](output.md), case 11, with what is
-true today, and `quality merge --help` and `quality report --help` each in a frame of its own; every other `quality <command> --help` prints that command's arguments; `--version` prints the installed version. Help goes to
+true today, and `quality merge --help`, `quality report --help` and `quality verdict --help` each in a frame of its own; every other `quality <command> --help` prints that command's arguments; `--version` prints the installed version. Help goes to
 stdout with exit `0`, plain and whole in every stream. A wrong invocation runs nothing, prints the `error:`/`next:` pair
 on stderr and exits `2`: `no command <word> · commands: …` for a first word that names no command, `no command ·
 commands: …` for none, `no area <word> · areas: …` for the first word `quality check` does not know as an area, `no pull request <word> · a pull request reads OWNER/REPO#N` for a `quality merge` argument of another form (`no pull request · …` for none, `next:` naming `quality merge --help`), `unknown argument · <what is left over>` for what the command does not take, and otherwise the

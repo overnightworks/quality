@@ -1,8 +1,9 @@
 import json
 from pathlib import Path
 
-from quality import cli, verdict
+from quality import verdict
 from quality.verdict import Job
+from tests.support.door import door_in
 
 GREEN_GATE = {"check": "success"}
 
@@ -17,8 +18,22 @@ CHECKS_GREEN = json.dumps(
 )
 
 
+def set_gate_variables(monkeypatch) -> None:
+    """The variables gate.yml's verdict step hands the verdict, outside a pull request: no base commit."""
+    for name, value in {
+        "GITHUB_REPOSITORY": "o/r",
+        "GITHUB_RUN_ID": "1",
+        "GITHUB_RUN_ATTEMPT": "1",
+        "GITHUB_TOKEN": "t",
+        "GATE_NEEDS": json.dumps({"check": {"result": "success"}}),
+        "GITHUB_BASE_REF": "main",
+    }.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.delenv("GATE_BASE_SHA", raising=False)
+
+
 def verdict_streams(repo: Path, capsys) -> tuple[int, str, str]:
-    code = cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (CHECKS_GREEN, None))
+    code = door_in(repo, "verdict", fetcher_for=lambda token: lambda url: (CHECKS_GREEN, None))
     captured = capsys.readouterr()
     return code, captured.out, captured.err
 

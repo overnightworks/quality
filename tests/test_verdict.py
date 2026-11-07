@@ -11,7 +11,7 @@ import pytest
 from quality import __version__, cli
 from quality.config import CONFIG_PATH, LOOSENED_EXAMPLE, LegacyMode
 from quality.ratchet import BASELINE_PATH, NO_RENAMES
-from quality.report import CannotJudge, printable
+from quality.report import CannotJudge, Instruction, printable
 from quality.verdict import NO_BASE_SETTINGS, GateSettings, Side, judge, read_base, read_jobs
 from tests.support.advisories import allowance_config
 from tests.support.check import assert_every_line_starts_with_the_door
@@ -186,16 +186,16 @@ def test_a_base_without_the_config_contributes_nothing(build_repo):
 @pytest.mark.parametrize(("conclusion", "code"), [("success", 0), ("failure", 1)])
 def test_verdict_exit_code_and_summary_follow_the_run(capsys, run_env, conclusion, code):
     """#6 rule 4: exit code and step summary follow the run."""
-    repo, summary = run_env
+    _, summary = run_env
     page = json.dumps(
         {
             "total_count": 1,
             "jobs": [{"id": 1, "name": "checks", "run_attempt": 1, "status": "completed", "conclusion": conclusion}],
         }
     )
-    assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (page, None)) == code
-    assert capsys.readouterr().out.strip().endswith("green" if code == 0 else "red")
-    assert summary.read_text().strip().endswith("green" if code == 0 else "red")
+    assert cli.main(["verdict"], fetcher_for=lambda token: lambda url: (page, None)) == code
+    printed = capsys.readouterr().out
+    assert (printed.strip().endswith("green" if code == 0 else "red"), summary.read_text()) == (True, f"```\n{printed}```\n")
 
 
 @pytest.mark.parametrize(
@@ -211,12 +211,12 @@ def test_a_job_name_with_a_line_feed_or_format_character_prints_as_one_escaped_p
     page = json.dumps(
         {"total_count": 1, "jobs": [{"id": 1, "name": "checks", "run_attempt": 1, "status": "completed", "conclusion": "success"}]}
     )
-    assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (page, None)) == 1
+    assert cli.main(["verdict"], fetcher_for=lambda token: lambda url: (page, None)) == 1
     lines = capsys.readouterr().out.split("\n")
     assert [line for line in lines if printed in line] != []
     assert lines[-2:] == ["verdict: red", ""]
     assert_every_line_starts_with_the_door(lines)
-    assert summary.read_text().split("\n") == lines
+    assert summary.read_text().split("\n") == ["```", *lines[:-1], "```", ""]
 
 
 @UNKNOWN_KEY_CONFIGS
@@ -224,7 +224,7 @@ def test_verdict_refuses_a_config_with_unknown_keys(capsys, run_env, config):
     """#40 rule 2: the verdict keeps refusing unknown keys of quality/config.toml."""
     repo, _ = run_env
     (repo / "quality/config.toml").write_text(config)
-    assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: ({"jobs": []}, None)) == 2
+    assert cli.main(["verdict"], fetcher_for=lambda token: lambda url: ({"jobs": []}, None)) == 2
     assert "unknown key" in capsys.readouterr().err
 
 
@@ -232,18 +232,17 @@ def test_a_head_without_a_config_is_missing_at_the_head(capsys, run_env):
     """#6 rule 1 and #52 rules 3 and 4, cell 10: an absent head config is still "missing", now named at the head."""
     repo, _ = run_env
     (repo / CONFIG_PATH).unlink()
-    assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: ({"jobs": []}, None)) == 2
-    assert f"verdict: cannot judge - {CONFIG_PATH} at the head: {CONFIG_PATH} is missing" in capsys.readouterr().err
+    assert cli.main(["verdict"], fetcher_for=lambda token: lambda url: ({"jobs": []}, None)) == 2
+    assert f"error: {CONFIG_PATH} is missing" in capsys.readouterr().err
 
 
 def test_verdict_that_cannot_read_the_run_exits_two(capsys, run_env):
     """#6 rule 2: a page error exits 2 with the reason."""
-    repo, _ = run_env
 
     def refuse(url):
         raise CannotJudge("403 (does the caller grant actions: read?)")
 
-    assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: refuse) == 2
+    assert cli.main(["verdict"], fetcher_for=lambda token: refuse) == 2
     assert "actions: read" in capsys.readouterr().err
 
 
@@ -279,11 +278,11 @@ def test_a_malformed_base_config_names_the_base_commit(build_repo):
 
 def test_a_non_numeric_run_attempt_exits_two(monkeypatch, capsys, run_env):
     """defect:#6 finding 3: a non-numeric GITHUB_RUN_ATTEMPT exits 2 and reaches the step summary."""
-    repo, summary = run_env
+    _, summary = run_env
     monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "first")
     page = json.dumps({"total_count": 0, "jobs": []})
-    assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (page, None)) == 2
-    assert "cannot judge" in summary.read_text()
+    assert cli.main(["verdict"], fetcher_for=lambda token: lambda url: (page, None)) == 2
+    assert "error: GITHUB_RUN_ATTEMPT is not a run attempt" in summary.read_text()
 
 
 @pytest.mark.parametrize(
@@ -320,7 +319,7 @@ def test_a_pull_request_that_turns_sonar_off_is_red_in_the_verdict(monkeypatch, 
     page = json.dumps(
         {"total_count": 1, "jobs": [{"id": 1, "name": "checks", "run_attempt": 1, "status": "completed", "conclusion": "success"}]}
     )
-    assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (page, None)) == 1
+    assert cli.main(["verdict"], fetcher_for=lambda token: lambda url: (page, None)) == 1
     printed = capsys.readouterr().out
     assert ("loosened (undeclared): sonar true → false" in printed, "verdict: red" in printed) == (True, True)
 
@@ -337,7 +336,7 @@ def test_a_pull_request_that_removes_legacy_fail_is_red_in_the_verdict(monkeypat
     page = json.dumps(
         {"total_count": 1, "jobs": [{"id": 1, "name": "checks", "run_attempt": 1, "status": "completed", "conclusion": "success"}]}
     )
-    assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (page, None)) == 1
+    assert cli.main(["verdict"], fetcher_for=lambda token: lambda url: (page, None)) == 1
     assert "loosened (undeclared): legacy fail → report" in capsys.readouterr().out
 
 
@@ -361,11 +360,11 @@ def main_lines(count: int) -> str:
         (main_lines(82) + NEW_CCN_KEY, main_lines(82), 0, "verdict: green"),
         (None, None, 0, "verdict: green"),
         ("[ccn", main_lines(82), 2, f"{BASELINE_PATH} at the base commit {{base}}: {BASELINE_PATH} is not valid TOML"),
-        (main_lines(82), "[ccn", 2, f"cannot judge - {BASELINE_PATH} at the head: {BASELINE_PATH} is not valid TOML"),
-        (main_lines(82), f"[ccn]\na = {'9' * 5000}\n", 2, f"cannot judge - {BASELINE_PATH} at the head: {BASELINE_PATH} is not valid TOML"),
-        (main_lines(82), f"a = {'[' * 5000}{']' * 5000}\n", 2, f"cannot judge - {BASELINE_PATH} at the head: {BASELINE_PATH} is not valid TOML"),
+        (main_lines(82), "[ccn", 2, f"error: {BASELINE_PATH} at the head: {BASELINE_PATH} is not valid TOML"),
+        (main_lines(82), f"[ccn]\na = {'9' * 5000}\n", 2, f"error: {BASELINE_PATH} at the head: {BASELINE_PATH} is not valid TOML"),
+        (main_lines(82), f"a = {'[' * 5000}{']' * 5000}\n", 2, f"error: {BASELINE_PATH} at the head: {BASELINE_PATH} is not valid TOML"),
         (b"\xff", main_lines(82), 2, f"cannot read {BASELINE_PATH} at the base commit {{base}}: 'utf-8' codec"),
-        (main_lines(82), b"\xff", 2, f"cannot judge - {BASELINE_PATH} at the head: {BASELINE_PATH} is not valid UTF-8 ("),
+        (main_lines(82), b"\xff", 2, f"error: {BASELINE_PATH} at the head: {BASELINE_PATH} is not valid UTF-8 ("),
     ],
     ids=[
         "cell 1 growth", "cell 2 lowering", "cell 3 equal", "cell 4 adoption", "cell 5 base file deleted",
@@ -466,7 +465,7 @@ def test_a_head_baseline_that_links_out_of_the_repository_cannot_be_judged(capsy
     (repo / BASELINE_PATH).unlink()
     (repo / BASELINE_PATH).symlink_to(outside)
     code, output = verdict_of(repo, capsys)
-    expected = f"cannot judge - {BASELINE_PATH} at the head: {BASELINE_PATH} resolves outside the repository"
+    expected = f"error: {BASELINE_PATH} at the head: {BASELINE_PATH} resolves outside the repository"
     assert (code, expected in output, "Traceback" in output) == (2, True, False)
 
 
@@ -485,9 +484,9 @@ def test_without_a_base_the_base_is_never_read(capsys, monkeypatch, pull_request
 @pytest.mark.parametrize(
     ("base_sha", "expected"),
     [
-        ("HEAD~1", "'HEAD~1' is not a ref name or a SHA"),
+        ("HEAD~1", "error: GATE_BASE_SHA is not a commit sha"),
         ("f" * 40, f"cannot read the base commit {'f' * 40}"),
-        ("-x", "'-x' is not a ref name or a SHA"),
+        ("-x", "error: GATE_BASE_SHA is not a commit sha"),
     ],
     ids=["cell 14 a revision expression", "cell 15 a SHA not in the clone", "cell 16 an option"],
 )
@@ -523,7 +522,7 @@ def test_a_verdict_without_git_on_the_path_cannot_judge(capsys, monkeypatch, pul
     commit_base(main_lines(82))
     monkeypatch.setenv("PATH", str(elsewhere))
     code, output = verdict_of(repo, capsys)
-    assert (code, "verdict: cannot judge - cannot run git" in output, "Traceback" in output) == (2, True, False)
+    assert (code, "error: cannot run git" in output, "Traceback" in output) == (2, True, False)
 
 
 def test_the_github_fetcher_sends_the_token_and_reads_the_jobs_page(stub_server):
@@ -553,8 +552,8 @@ def test_a_refused_jobs_page_keeps_the_verdicts_wording(stub_server):
     origin, _ = stub_server(reply(403, b""))
     with pytest.raises(CannotJudge) as refused:
         fetch_jobs(origin)
-    assert str(refused.value) == (
-        f"cannot read {origin}/jobs: HTTP Error 403: Forbidden (does the caller grant actions: read?)"
+    assert (refused.value.reason.fact, refused.value.reason.next_steps) == (
+        f"cannot read {origin}/jobs: HTTP Error 403: Forbidden", (Instruction("grant actions: read in the caller job's permissions"), Instruction("re-run this run's failed jobs"))
     )
 
 
@@ -593,7 +592,7 @@ def judged(capsys, monkeypatch, pull_request):
             for number, (name, state) in enumerate(jobs.items())
         ]
         page = json.dumps({"total_count": len(listed), "jobs": listed})
-        code = cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (page, None))
+        code = cli.main(["verdict"], fetcher_for=lambda token: lambda url: (page, None))
         captured = capsys.readouterr()
         return code, (captured.out + captured.err).splitlines()
 
@@ -772,14 +771,13 @@ LOOSENED_REASON = f"{LOOSENED} entry 1 needs a non-empty one-line reason"
     ],
 )
 def test_a_malformed_declaration_cannot_be_judged(capsys, run_env, entry, named):
-    """#103 rule 1, cell 11 (E1): a malformed declaration is exit 2, one line: the fact, `, like:` and the example's
-    lines joined by an escaped line feed."""
+    """#103 rule 1, cell 11 (E1): a malformed declaration is exit 2, the pair: the fact, then the example's lines whole
+    below `next:` and the head's step."""
     repo, _ = run_env
     (repo / CONFIG_PATH).write_text('[gate]\nmandatory_jobs = ["checks"]\n' + entry)
-    assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (CHECKS_GREEN, None)) == 2
-    lines = capsys.readouterr().err.splitlines()
-    assert len(lines) == 1
-    assert lines[0].endswith(f"{named}, like:\\x0a" + "\\x0a".join(LOOSENED_EXAMPLE))
+    assert cli.main(["verdict"], fetcher_for=lambda token: lambda url: (CHECKS_GREEN, None)) == 2
+    example = [f"        {line}" for line in LOOSENED_EXAMPLE]
+    assert capsys.readouterr().err.splitlines() == [f"error: {named}", "next:", f"    write it in {CONFIG_PATH} like this:", *example, "    push the fix; the gate judges the new commit"]
 
 
 @pytest.mark.parametrize(
@@ -789,10 +787,9 @@ def test_a_malformed_declaration_cannot_be_judged(capsys, run_env, entry, named)
     ids=["run_attempt as text", "name null", "id as text"],
 )
 def test_a_job_field_of_the_wrong_type_cannot_be_judged(capsys, run_env, job_entry):
-    """#103 rule 6, cell 25 (#5 finding 14): a jobs page with a field of the wrong type is exit 2, one line."""
-    repo, _ = run_env
+    """#103 rule 6, cell 25 (#5 finding 14): a jobs page with a field of the wrong type is exit 2, the pair."""
     page = json.dumps({"total_count": 1, "jobs": [{"status": "completed", "conclusion": "success", **job_entry}]})
-    assert cli.main(["verdict", str(repo)], fetcher_for=lambda token: lambda url: (page, None)) == 2
+    assert cli.main(["verdict"], fetcher_for=lambda token: lambda url: (page, None)) == 2
     captured = capsys.readouterr()
-    assert captured.err.startswith("verdict: cannot judge - "), captured
-    assert captured.err.count("\n") == 1, captured
+    assert captured.err.startswith("error: "), captured
+    assert captured.err.count("\n") == 2, captured

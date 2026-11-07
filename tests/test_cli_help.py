@@ -75,7 +75,7 @@ def test_the_help_stands_in_the_pictures_frame(capsys):
         "      Measure every fleet repository: size, debt, the gate release it pins.\n"
         "\n"
         "Run by the gate, not by people:\n"
-        "  verdict [PATH]\n"
+        "  verdict\n"
         "      Decide whether this pull request may merge.\n"
         "  sonar properties\n"
         "      Refuse a properties file, token or coverage report the scan must not\n"
@@ -184,6 +184,22 @@ def test_the_check_entry_names_its_areas_in_the_top_level_help(capsys):
     assert "  check [AREA ...] [--staged] [--fix] [--dry-run]" in entries_under(lines, "Commands:")
 
 
+def test_the_verdict_help_stands_in_its_frame(capsys):
+    assert help_of(capsys, ["verdict"]) == (
+        "usage: quality verdict [-v]\n"
+        "\n"
+        "Run by the gate, not by people: decide whether this pull request may merge,\n"
+        "from the jobs of the running workflow and the loosenings of this checkout\n"
+        "against the pull request's base.\n"
+        "\n"
+        "Options:\n"
+        "  -v          show the raw scanner output; the verdict runs no scanner\n"
+        "  -h, --help  show this help\n"
+        "\n"
+        "Exit codes: 0 green, 1 red, 2 could not judge, 130 interrupted.\n"
+    )
+
+
 def test_every_command_path_stands_in_the_help_once_and_every_entry_is_one(capsys):
     lines = help_of(capsys, []).splitlines()
     shown = [path_of(entry) for heading in headings(lines)[:2] for entry in entries_under(lines, heading)]
@@ -284,6 +300,9 @@ def test_a_closed_stdout_takes_no_help_and_exit_is_0(tmp_path):
         pytest.param(["check", "--verbose"], (), "unknown argument{sep}--verbose", "quality check", id="the long form of the flag"),
         pytest.param(["-v", "check"], (), "unknown argument{sep}-v", "quality check", id="the flag before the command"),
         pytest.param(["verdict", "--nonsense"], (), "unknown argument{sep}--nonsense", "quality verdict", id="stray option"),
+        pytest.param(["verdict", "."], (), "unknown argument{sep}.", "quality verdict", id="a path of the old form"),
+        pytest.param(["verdict", "--verbose"], (), "unknown argument{sep}--verbose", "quality verdict", id="the long form of the verdict flag"),
+        pytest.param(["verdict", "--he"], (), "unknown argument{sep}--he", "quality verdict", id="an abbreviated help of the verdict"),
         pytest.param(["scan-staged"], (), "no command scan-staged{sep}commands: {commands}", "quality", id="the word that left"),
         pytest.param(["scan-staged", "--engines", "x"], (), "no command scan-staged{sep}commands: {commands}", "quality", id="the word that left, with its option"),
         pytest.param(["check", "--stag"], (), "unknown argument{sep}--stag", "quality check", id="check --stag"),
