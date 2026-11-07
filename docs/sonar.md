@@ -9,7 +9,7 @@ findings itself and keeps the properties check stands in [ARCHITECTURE](ARCHITEC
 an action, because quality publishes none. A caller passes the Actions secret by name
 (`secrets: SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}`), has automatic analysis off in SonarCloud, and commits a root
 `sonar-project.properties`. A missing or empty token is red (`sonar: cannot judge - SONAR_TOKEN is empty`), never
-skipped; Dependabot runs resolve the Dependabot secret of the same name.
+skipped while SonarCloud runs; `[gate] sonar = false` turns it off ([the gate](gate.md#gateyml)). Dependabot runs resolve the Dependabot secret of the same name.
 
 ### Coverage on new code
 
@@ -47,7 +47,8 @@ workflow, which holds the token itself.
 After its checks pass, the properties check also hands the scan its issue exclusion: it appends `scanner-arguments=<value>` to the
 file named by `$GITHUB_OUTPUT` (nothing outside a workflow step) and prints which rule the scan excludes. `gate.yml`
 appends that step output to the scan's `args`. The value is empty unless `.github/dependabot.yml` exists, and the keys it
-sets are all `sonar.issue.ignore.multicriteria` keys (see the Dependabot exception below).
+sets are all `sonar.issue.ignore.multicriteria` keys (see the Dependabot exception below). With `[gate] sonar = false` the
+properties check refuses a properties file and a passed token and appends `sonar=off` instead of the scan's arguments.
 
 The scanner's transport, verified at sonar-scanner-java-library 4.1.1.1633 (the library of sonar-scanner-cli
 8.1.0.6389, which `gate.yml` pins through `scannerVersion`):
@@ -62,7 +63,7 @@ The scanner's transport, verified at sonar-scanner-java-library 4.1.1.1633 (the 
 
 `quality sonar findings` is the SonarCloud zero-findings rule: every open finding counts. Where `.github/dependabot.yml` exists the scan itself excludes one rule, see the [Dependabot exception](#a-dependabot-exception-for-dockers8431). It reads the scanner's `.scannerwork/report-task.txt` relative to the working directory (no other path can be given); a missing or unreadable file is exit 2.
 
-Ruled by the operator: every open finding counts, in every repository; SonarCloud belongs to every repository's minimum gate.
+Ruled by the operator: every open finding counts, in every repository that runs SonarCloud; SonarCloud belongs to every repository's minimum gate, except a repository whose files the operator rules must not reach it, which sets `[gate] sonar = false`.
 
 The project is the caller's repository: `GITHUB_REPOSITORY` gives the key `<owner>_<repo>` and the organization
 `<owner>`. The task file must name that `projectKey`, `organization=<owner>` and `serverUrl=https://sonarcloud.io`; the URLs inside it are never
@@ -95,6 +96,7 @@ legacy = "fail"
 - Any other value is a config error (exit `2`), read before the first SonarCloud request.
 - A pull request whose base config says `legacy = "fail"` and whose head config says anything else is red in the verdict
   (`loosened (undeclared): legacy fail → report`; an absent key counts as `report`), like a removed mandatory job.
+- `legacy = "fail"` beside `[gate] sonar = false` is a config error (exit `2`).
 
 On pull requests and default-branch runs `quality sonar findings` reads `api/project_branches/list` once before the counts.
 - The default branch has no entry, or one without `analysisDate` (a repository's first adoption pull request): the summary
