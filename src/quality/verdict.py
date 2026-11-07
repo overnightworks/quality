@@ -48,7 +48,7 @@ NEEDS_HINT = " (a mandatory job missing from the caller's needs: must join it)"
 PageFetcher = Callable[[str], tuple[str, str | None]]
 
 
-NO_BASE_SETTINGS = GateSettings((), LegacyMode.REPORT)
+NO_BASE_SETTINGS = GateSettings((), LegacyMode.REPORT, sonar=False)
 HEAD = "the head"
 IMPORT_CONFIG = "import-linter config"
 GREEN_LINE = "verdict: green"
@@ -171,6 +171,8 @@ def _loosenings(head: Side, base: Side, renames: Renames) -> tuple[tuple[Looseni
     whats = [_removal(name) for name in base.settings.mandatory_jobs if name not in head.settings.mandatory_jobs]
     if base.settings.legacy is LegacyMode.FAIL and head.settings.legacy is not LegacyMode.FAIL:
         whats.append(f"legacy {base.settings.legacy.value} → {head.settings.legacy.value}")
+    if base.settings.sonar and not head.settings.sonar:
+        whats.append("sonar true → false")
     whats += _baseline_loosenings(base.baseline, head.baseline, renames)
     whats += architecture.contract_loosenings(base.contracts, head.contracts)
     new = {

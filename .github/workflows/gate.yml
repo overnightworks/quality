@@ -1,6 +1,7 @@
 # Caller contract: the caller job's id is `quality`, with `needs:` naming the jobs of `quality/config.toml`
 # `[gate] mandatory_jobs`, `if: always()`, `permissions: contents: read, actions: read` (without `actions: read` the run
-# fails at startup and no verdict exists) and `secrets: SONAR_TOKEN`. See docs/gate.md.
+# fails at startup and no verdict exists) and, unless `quality/config.toml` sets `[gate] sonar = false`,
+# `secrets: SONAR_TOKEN`. See docs/gate.md.
 # SonarCloud scan transport (SonarSource/sonarqube-scan-action v8.2.1 with sonar-scanner-cli 8.1.0.6389, which
 # bundles sonar-scanner-java-library 4.1.1.1633). What is verified and what is trusted:
 #  - The bootstrap's authenticated requests reach only sonarcloud.io and api.sonarcloud.io. That holds only with the
@@ -28,7 +29,7 @@ on:
         default: ''
     secrets:
       SONAR_TOKEN:
-        required: true
+        required: false
 
 permissions:
   contents: read
@@ -122,6 +123,7 @@ jobs:
         run: uv run --locked --project "$TOOL_DIR" quality sonar properties
 
       - name: Scan
+        if: steps.preflight.outputs.sonar != 'off'
         uses: SonarSource/sonarqube-scan-action@4d1dc0c91ee400dcf8a6dddf2f705ac36542e304 # v8.4.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -130,6 +132,7 @@ jobs:
           args: -Dsonar.host.url=https://sonarcloud.io -Dsonar.qualitygate.wait=false ${{ steps.preflight.outputs.scanner-arguments }}
 
       - name: Findings of this run's own analysis
+        if: steps.preflight.outputs.sonar != 'off'
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
