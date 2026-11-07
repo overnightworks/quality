@@ -7,14 +7,12 @@ import subprocess
 import pytest
 
 from quality import ratchet
+from quality.checkout import GATE_REPOSITORY, Call
 from quality.fleet import (
     COLUMNS,
-    GATE_REPOSITORY,
     MATRIX_COLUMNS,
-    Call,
     Declared,
     ReleaseTagsError,
-    calls_of,
     gate_release,
     pin_cell,
     read_release_tags,
@@ -78,18 +76,6 @@ def test_the_repositorys_own_workflow_file_is_self_only_in_the_gates_repository(
     own = (Call(None),)
     assert pin_cell(own, "no gate", True, RELEASES) == "self"
     assert pin_cell(own, "no gate", False, RELEASES) == "no gate"
-
-
-@pytest.mark.parametrize("workflow_file", ["gate.yml", "codeql.yml"])
-@pytest.mark.parametrize("prefix", ["./", "$/"])
-def test_a_local_reference_to_the_gates_own_file_is_a_call_without_a_ref(prefix, workflow_file):
-    """#123 E3, cell 6: `./` and `$/` both name the repository's own copy."""
-    assert calls_of(f"{prefix}.github/workflows/{workflow_file}", workflow_file) == [Call(None)]
-
-
-def test_the_gates_owner_and_repository_names_are_read_whatever_their_case():
-    """GitHub reads `uses:` owner and repository case-insensitively."""
-    assert calls_of("OvernightWorks/Quality/.github/workflows/gate.yml@v1", "gate.yml") == [Call("v1")]
 
 
 def test_a_commit_in_upper_case_is_a_commit(fleet_report, public):

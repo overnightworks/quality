@@ -9,13 +9,13 @@ from pathlib import Path
 from types import MappingProxyType
 
 from quality import architecture, output, web
+from quality.checkout import COMMIT_SHA
 from quality.config import (
     REPOSITORY_NAME,
     Declaration,
     GateSettings,
     LegacyMode,
 )
-from quality.fleet import COMMIT_SHA
 from quality.output import SEPARATOR, Glyph, Row, SubLine, counted, format_duration
 from quality.ratchet import (
     BASELINE_PATH,

@@ -262,3 +262,15 @@ def test_the_renames_since_a_commit_are_what_the_index_would_record(build_repo, 
     repo = build_repo({"old.txt": "".join(f"row {number} of a file git can match to its move\n" for number in range(30))})
     move(repo)
     assert checkout.renamed_since(repo, head_commit(repo)) == listed
+
+
+@pytest.mark.parametrize("workflow_file", ["gate.yml", "codeql.yml"])
+@pytest.mark.parametrize("prefix", ["./", "$/"])
+def test_a_local_reference_to_the_gates_own_file_is_a_call_without_a_ref(prefix, workflow_file):
+    """#123 E3, cell 6: `./` and `$/` both name the repository's own copy."""
+    assert checkout.calls_of(f"{prefix}.github/workflows/{workflow_file}", workflow_file) == [checkout.Call(None)]
+
+
+def test_the_gates_owner_and_repository_names_are_read_whatever_their_case():
+    """GitHub reads `uses:` owner and repository case-insensitively."""
+    assert checkout.calls_of("OvernightWorks/Quality/.github/workflows/gate.yml@v1", "gate.yml") == [checkout.Call("v1")]

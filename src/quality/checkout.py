@@ -4,9 +4,11 @@ them, which of them are workflow files, and the turning of a refused read into `
 import os
 import re
 import subprocess
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+
+import yaml
 
 from quality import process, repository
 from quality.report import CannotJudge, Command, Step, shell_word
@@ -20,6 +22,12 @@ INDEX_MODE = re.compile(r"[0-7]{6}")
 # git's sentence when the search up from the path finds no repository, read in the C locale; a git that words it
 # differently leaves the refusal general, which stays true.
 NO_REPOSITORY_SENTENCE = b"fatal: not a git repository (or any"
+GATE_REPOSITORY = "overnightworks/quality"
+GATE_FILE = "gate.yml"
+CODEQL_FILE = "codeql.yml"
+LOCAL_PREFIXES = ("./", "$/")
+RELEASE_TAG = re.compile(r"v(\d+)\.(\d+)\.(\d+)")
+COMMIT_SHA = re.compile(r"[0-9a-f]{40}")
 
 
 class OutsideWorkTree(CannotJudge):
@@ -151,3 +159,75 @@ def is_workflow(path: PurePosixPath) -> bool:
 
 def is_action(path: PurePosixPath) -> bool:
     return path.name in ACTION_FILES
+
+
+def release_order(tag: str) -> tuple[int, ...]:
+    match = RELEASE_TAG.fullmatch(tag)
+    return tuple(int(number) for number in match.groups()) if match else ()
+
+
+@dataclass(frozen=True)
+class Call:
+    """One job-level `uses:` of a reusable workflow: the ref after `@`, None for the repository's own file."""
+
+    ref: str | None
+
+
+@dataclass(frozen=True)
+class Workflows:
+    """What a clone's workflow files say about the gate and CodeQL, read as data."""
+
+    gate: tuple[Call, ...]
+    codeql: tuple[Call, ...]
+    unreadable: tuple[str, ...]
+
+
+def commit_of(ref: str) -> str | None:
+    """The ref lowercased when it has the shape of a full commit, else None."""
+    commit = ref.lower()
+    return commit if COMMIT_SHA.fullmatch(commit) else None
+
+
+def read_workflows(clone: Path, tracked: list[str]) -> Workflows:
+    """Parses each tracked workflow file as data, never running anything, and keeps its job-level reusable calls."""
+    gate: list[Call] = []
+    codeql: list[Call] = []
+    unreadable: list[str] = []
+    for name in tracked:
+        path = PurePosixPath(name)
+        if not is_workflow(path):
+            continue
+        try:
+            text = repository.read_text(clone, name)
+        except repository.RepositoryFileError:
+            unreadable.append(name)
+            continue
+        try:
+            # BaseLoader keeps scalars strings, so no conversion can fail; ValueError is the scanner's chr() on a \U escape past U+10FFFF
+            document = yaml.load(text, Loader=yaml.BaseLoader) if text is not None else None  # noqa: S506 - BaseLoader builds only strings and lists and mappings
+        except (yaml.YAMLError, RecursionError, ValueError):
+            unreadable.append(name)
+            continue
+        for uses in job_calls(document):
+            gate.extend(calls_of(uses, GATE_FILE))
+            codeql.extend(calls_of(uses, CODEQL_FILE))
+    return Workflows(tuple(gate), tuple(codeql), tuple(unreadable))
+
+
+def job_calls(document: object) -> Iterator[str]:
+    jobs = document.get("jobs") if isinstance(document, dict) else None
+    for job in jobs.values() if isinstance(jobs, dict) else ():
+        uses = job.get("uses") if isinstance(job, dict) else None
+        if isinstance(uses, str):
+            yield uses
+
+
+def calls_of(uses: str, workflow_file: str) -> list[Call]:
+    path = f"{WORKFLOW_DIRECTORY}/{workflow_file}"
+    if uses in (f"{prefix}{path}" for prefix in LOCAL_PREFIXES):
+        return [Call(None)]
+    file, _, ref = uses.partition("@")
+    owner_and_repository, _, workflow = file.partition(f"/{WORKFLOW_DIRECTORY}/")
+    matches = owner_and_repository.lower() == GATE_REPOSITORY and workflow == workflow_file
+    return [Call(ref)] if matches and ref else []
+
