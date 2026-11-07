@@ -5,7 +5,7 @@ on:
   workflow_call:
     inputs:
       version:
-        description: The gated version, X.Y.Z
+        description: The gated version, X.Y.Z or YYYY.MM.DD.N
         type: string
         required: true
       commit:
