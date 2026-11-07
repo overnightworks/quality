@@ -39,6 +39,7 @@ ITEM_REFERENCE = re.compile(rf"(?:{REPOSITORY_NAME.pattern})?#[1-9][0-9]*")
 ONE_LINE_REASON = "a non-empty one-line reason"
 BARE_KEY = re.compile(r"[A-Za-z0-9_-]+")
 type ExampleLines = tuple[str, *tuple[str, ...]]
+GATE_HEADING = "[gate]"
 LOOSENED_HEADING = "[[gate.loosened]]"
 SECRETS_ALLOWANCE_HEADING = "[[secrets.allow]]"
 ADVISORY_ALLOWANCE_HEADING = "[[advisories.allow]]"
@@ -47,9 +48,9 @@ LAYOUT_ALLOWANCE_HEADING = "[[layout.allow]]"
 PYTHON_ALLOWANCE_HEADING = "[[python.allow]]"
 COMPOSE_ALLOWANCE_HEADING = "[[compose.allow]]"
 GENERATED_FILE_HEADING = "[[size.generated]]"
-EXAMPLE: ExampleLines = ("[gate]", 'mandatory_jobs = ["checks"]')
-LEGACY_EXAMPLE: ExampleLines = ("[gate]", 'legacy = "fail"')
-SONAR_EXAMPLE: ExampleLines = ("[gate]", "sonar = false")
+EXAMPLE: ExampleLines = (GATE_HEADING, 'mandatory_jobs = ["checks"]')
+LEGACY_EXAMPLE: ExampleLines = (GATE_HEADING, 'legacy = "fail"')
+SONAR_EXAMPLE: ExampleLines = (GATE_HEADING, "sonar = false")
 ALLOWANCE_EXAMPLE: ExampleLines = (
     SECRETS_ALLOWANCE_HEADING,
     'rule = "aws-access-token"',
