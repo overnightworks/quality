@@ -9,12 +9,19 @@ from quality.pin import RunningQuality
 from tests.support.door import DRY_RUN_WORDS, STAGED_WORDS, door_in
 from tests.support.git_repositories import stage
 
-PINNED, OTHER = "5e" * 20, "4d" * 20
 PINNED_ROW = "  · release       v0.10.0        pinned in .github/workflows/ci.yml"
 
 
+def pinned_commit() -> str:
+    return "5e" * 20
+
+
+def other_commit() -> str:
+    return "4d" * 20
+
+
 def gate_call(release: str) -> dict[str, str]:
-    uses = f"{checkout.GATE_REPOSITORY}/.github/workflows/gate.yml@{PINNED} # {release}"
+    uses = f"{checkout.GATE_REPOSITORY}/.github/workflows/gate.yml@{pinned_commit()} # {release}"
     return {".github/workflows/ci.yml": f"on: push\njobs:\n  gate:\n    uses: {uses}\n"}
 
 
@@ -27,12 +34,12 @@ def running(version: str, commit: str):
     ("files", "version", "commit", "words", "expected"),
     [
         pytest.param(
-            gate_call("v0.10.0"), "0.10.0", PINNED, ("check", "files"),
+            gate_call("v0.10.0"), "0.10.0", pinned_commit(), ("check", "files"),
             (0, [PINNED_ROW, "  ✓ files         clean          10 rules · 2 files", "✓ clean · 1 area · <1s"], []),
             id="check at the pin",
         ),
         pytest.param(
-            gate_call("v0.10.0"), "0.10.0", PINNED, DRY_RUN_WORDS,
+            gate_call("v0.10.0"), "0.10.0", pinned_commit(), DRY_RUN_WORDS,
             (
                 1,
                 [
@@ -44,17 +51,17 @@ def running(version: str, commit: str):
             id="the dry run at the pin",
         ),
         pytest.param(
-            gate_call("v0.9.2"), "0.10.0", OTHER, ("check", "files"),
+            gate_call("v0.9.2"), "0.10.0", other_commit(), ("check", "files"),
             (2, [], ["error: the gate pins quality v0.9.2, which has no quality check", "next: raise the gate pin to v0.10.0 or later"]),
             id="an old pin",
         ),
         pytest.param(
-            {"README.md": "no gate\n"}, "0.10.0", PINNED, ("check", "files"),
+            {"README.md": "no gate\n"}, "0.10.0", pinned_commit(), ("check", "files"),
             (2, [], ["error: no workflow here calls quality's gate.yml, so no release is pinned", "next: add the gate as quality's docs/gate.md describes"]),
             id="no pin",
         ),
         pytest.param(
-            gate_call("v0.10.0"), "0.10.1", PINNED, ("check", "files"),
+            gate_call("v0.10.0"), "0.10.1", pinned_commit(), ("check", "files"),
             (
                 2, [],
                 [
@@ -65,12 +72,12 @@ def running(version: str, commit: str):
             id="a misnamed comment",
         ),
         pytest.param(
-            gate_call("v0.10.0"), "0.10.0", PINNED, STAGED_WORDS,
+            gate_call("v0.10.0"), "0.10.0", pinned_commit(), STAGED_WORDS,
             (0, [PINNED_ROW, "  ✓ secrets       clean          staged change · 1 file", "✓ clean · 1 area · <1s"], []),
             id="the commit hook at the pin", marks=pytest.mark.scanner,
         ),
         pytest.param(
-            {"README.md": "no gate\n"}, "0.10.0", PINNED, STAGED_WORDS,
+            {"README.md": "no gate\n"}, "0.10.0", pinned_commit(), STAGED_WORDS,
             (
                 0,
                 ["  · release       v0.10.0        installed · no gate pins a release here", "  ✓ secrets       clean          staged change · 1 file", "✓ clean · 1 area · <1s"],
@@ -90,7 +97,7 @@ def test_check_names_the_release_that_judges_first_or_refuses_with_its_pair(buil
 
 @pytest.mark.integration
 def test_outside_a_work_tree_the_check_prints_only_case_3_s_pair(elsewhere, capsys):
-    code = door_in(elsewhere, "check", "files", judging=running("0.10.0", PINNED), clock=lambda: 0.0)
+    code = door_in(elsewhere, "check", "files", judging=running("0.10.0", pinned_commit()), clock=lambda: 0.0)
     printed = capsys.readouterr()
     assert (code, printed.out, printed.err.startswith("error: not inside a git work tree · ")) == (2, "", True)
     assert printed.err.endswith("next: run quality check inside a repository\n")
