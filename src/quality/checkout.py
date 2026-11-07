@@ -5,8 +5,9 @@ the turning of a refused read into `cannot judge`."""
 import os
 import re
 import subprocess
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
+from enum import Enum, auto
 from pathlib import Path, PurePosixPath
 
 import yaml
@@ -215,24 +216,41 @@ def commit_of(ref: str) -> str | None:
     return commit if COMMIT_SHA.fullmatch(commit) else None
 
 
-def read_workflows(clone: Path, tracked: list[str]) -> Workflows:
-    """Parses each tracked workflow file as data, never running anything, and keeps its job-level reusable calls with
-    the release each call's line names."""
-    gate: list[Call] = []
-    codeql: list[Call] = []
-    unreadable: list[str] = []
-    absent: list[str] = []
+class Unread(Enum):
+    """Why a listed workflow has no text: gone from the tree since it was listed, or refused by the reader."""
+
+    ABSENT = auto()
+    REFUSED = auto()
+
+
+def workflow_texts(clone: Path, tracked: list[str]) -> dict[str, str | Unread]:
+    """Each tracked workflow file's text, in the listing's order."""
+    texts: dict[str, str | Unread] = {}
     for name in tracked:
-        path = PurePosixPath(name)
-        if not is_workflow(path):
+        if not is_workflow(PurePosixPath(name)):
             continue
         try:
             text = repository.read_text(clone, name)
         except repository.RepositoryFileError:
-            unreadable.append(name)
+            texts[name] = Unread.REFUSED
             continue
-        if text is None:
+        texts[name] = Unread.ABSENT if text is None else text
+    return texts
+
+
+def workflows_of(texts: Mapping[str, str | Unread]) -> Workflows:
+    """Parses each workflow text as data, never running anything, and keeps its job-level reusable calls with the
+    release each call's line names."""
+    gate: list[Call] = []
+    codeql: list[Call] = []
+    unreadable: list[str] = []
+    absent: list[str] = []
+    for name, text in texts.items():
+        if text is Unread.ABSENT:
             absent.append(name)
+            continue
+        if text is Unread.REFUSED:
+            unreadable.append(name)
             continue
         try:
             # BaseLoader keeps scalars strings, so no conversion can fail; ValueError is the scanner's chr() on a \U escape past U+10FFFF
@@ -245,6 +263,10 @@ def read_workflows(clone: Path, tracked: list[str]) -> Workflows:
             gate.extend(calls_of(uses.value, GATE_FILE, name, release))
             codeql.extend(calls_of(uses.value, CODEQL_FILE, name, release))
     return Workflows(tuple(gate), tuple(codeql), tuple(unreadable), tuple(absent))
+
+
+def read_workflows(clone: Path, tracked: list[str]) -> Workflows:
+    return workflows_of(workflow_texts(clone, tracked))
 
 
 class _AliasMarkingLoader(yaml.BaseLoader):
@@ -346,14 +368,23 @@ class UnknownGatePin:
     reason: Reason
 
 
-def gate_pin(root: Path) -> NoGatePin | OwnGate | GatePin | UnknownGatePin:
+GateState = NoGatePin | OwnGate | GatePin | UnknownGatePin
+
+
+def gate_pin(root: Path) -> GateState:
     """What the tracked workflows of the checkout at `root` pin of quality's gate."""
     top = work_tree_top(root)
-    workflows = read_workflows(top, tracked_files(top))
+    return gate_pin_of(workflow_texts(top, tracked_files(top)), is_quality_checkout(top))
+
+
+def gate_pin_of(texts: Mapping[str, str | Unread], is_quality: bool) -> GateState:
+    """What these workflow texts pin of quality's gate; a call of the repository's own gate.yml counts only in quality's
+    repository, which `is_quality` says this is."""
+    workflows = workflows_of(texts)
     if workflows.unreadable or workflows.absent:
         name = (*workflows.unreadable, *workflows.absent)[0]
         return UnknownGatePin(Reason(f"cannot read {name}, so the gate pin is unknown", (Instruction(f"fix {name}"),)))
-    if any(call.ref is None for call in workflows.gate) and is_quality_checkout(top):
+    if is_quality and any(call.ref is None for call in workflows.gate):
         return OwnGate()
     pins: dict[tuple[str, str], list[str]] = {}
     for call in workflows.gate:

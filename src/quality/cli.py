@@ -41,7 +41,8 @@ from quality.check import (
 )
 from quality.checkout import GatePin, NoGatePin, OutsideWorkTree, OwnGate, UnknownGatePin, gate_pin
 from quality.config import REPOSITORY_NAME
-from quality.merge import GhRunner, RemoteFor, github_remote, run_gh, run_merge
+from quality.gh import GhRunner, run_gh
+from quality.merge import RemoteFor, github_remote, run_merge
 from quality.output import (
     SEPARATOR,
     Channel,
@@ -98,8 +99,8 @@ class Terminal:
 
 
 @dataclass(frozen=True)
-class CheckPorts:
-    """What the check door judges with: the installed scanners' locators and the release that judges."""
+class DoorPorts:
+    """What the doors judge with: the installed scanners' locators and the release that judges."""
 
     locate_ruff: Callable[[], str] = INSTALLED_RUFF
     locate_zizmor: Callable[[], str] = INSTALLED_ZIZMOR
@@ -115,7 +116,7 @@ def main(
     gh: GhRunner = run_gh,
     remote_for: RemoteFor = github_remote,
     terminal: Terminal | None = None,
-    check_ports: CheckPorts | None = None,
+    ports: DoorPorts | None = None,
     clock: Callable[[], float] = time.monotonic,
     now: Callable[[], datetime] = lambda: datetime.now(UTC),
     environment: Mapping[str, str] = os.environ,
@@ -154,7 +155,7 @@ def main(
         if arguments.sonar_command == "properties":
             return sonar.run_properties(environment, clock, channels)
         return sonar.run_findings(environment, transport, sleep, clock, channels)
-    ports = check_ports or CheckPorts()
+    ports = ports or DoorPorts()
     words = sys.argv[1:] if argv is None else argv
     reexecute = partial(pin.reexecute, words=words, environment=environment, live=live_line(channels.err))
     if arguments.staged:

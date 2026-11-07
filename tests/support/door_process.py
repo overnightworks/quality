@@ -28,15 +28,15 @@ def blocked_ruff(fifo: Path) -> str:
         threading.Event().wait(0.1)
 
 
-def ports_and_words(words: list[str]) -> tuple[cli.CheckPorts, list[str]]:
+def ports_and_words(words: list[str]) -> tuple[cli.DoorPorts, list[str]]:
     if words[:1] != ["--running"]:
-        return cli.CheckPorts(judging=judging_at_the_pin), words
+        return cli.DoorPorts(judging=judging_at_the_pin), words
     judging = partial(pin.judging_release, running=running_as(words[1]))
     if words[2:3] == ["--block-ruff"]:
-        return cli.CheckPorts(judging=judging, locate_ruff=partial(blocked_ruff, Path(words[3]))), words[4:]
-    return cli.CheckPorts(judging=judging), words[2:]
+        return cli.DoorPorts(judging=judging, locate_ruff=partial(blocked_ruff, Path(words[3]))), words[4:]
+    return cli.DoorPorts(judging=judging), words[2:]
 
 
 if __name__ == "__main__":
     ports, words = ports_and_words(sys.argv[1:])
-    cli.run(partial(cli.main, words, check_ports=ports))
+    cli.run(partial(cli.main, words, ports=ports))

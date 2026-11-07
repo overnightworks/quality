@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 
 from quality import cli
 from quality.config import CONFIG_PATH
-from quality.merge import GhFailed
+from quality.gh import GhFailed
 from quality.ratchet import BASELINE_PATH
 from quality.report import CannotJudge
 

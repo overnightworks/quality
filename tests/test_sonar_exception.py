@@ -7,7 +7,7 @@ import pytest
 
 from quality import output, sonar
 from quality.config import CONFIG_PATH
-from quality.merge import GhFailed
+from quality.gh import GhFailed
 from quality.report import FindingEvent
 from quality.sonar import finding_from_issue
 from tests.support.merge import (

@@ -462,3 +462,29 @@ def test_the_gate_pin_of_a_checkout_is_one_state(build_repo, files, remotes, set
     for name in deleted:
         (repo / ".github/workflows" / name).unlink()
     assert checkout.gate_pin(repo) == expected(commit)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("remote", "is_quality"), [(f"https://github.com/{checkout.GATE_REPOSITORY}", True), ("https://github.com/acme/shop", False)],
+    ids=["quality", "another repository"],
+)
+@pytest.mark.parametrize(
+    "uses_lines",
+    [
+        pytest.param(("./.github/workflows/gate.yml",), id="its own gate.yml"),
+        pytest.param(("$/.github/workflows/gate.yml", f"{gate_uses('5e' * 20)} # v0.10.0"), id="its own gate.yml beside a pin"),
+        pytest.param((f"{gate_uses('5e' * 20)} # v0.10.0",), id="a pin"),
+    ],
+)
+def test_the_gate_pin_of_workflow_texts_is_the_gate_pin_of_the_same_files(build_repo, remote, is_quality, uses_lines):
+    texts = {".github/workflows/ci.yml": jobs(*uses_lines)}
+    repo = build_repo(texts)
+    git(repo, "remote", "add", "origin", remote)
+    assert checkout.gate_pin_of(texts, is_quality) == checkout.gate_pin(repo)
+
+
+@pytest.mark.parametrize("unread", list(checkout.Unread))
+def test_a_workflow_without_a_text_is_the_unknown_pin(unread):
+    texts = {".github/workflows/ci.yml": jobs(f"{gate_uses('5e' * 20)} # v0.10.0"), ".github/workflows/nightly.yml": unread}
+    assert checkout.gate_pin_of(texts, False) == unreadable(".github/workflows/nightly.yml")

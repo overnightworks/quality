@@ -2,7 +2,6 @@
 
 import json
 import shlex
-import subprocess
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -12,6 +11,7 @@ from urllib.parse import quote
 
 from quality import architecture
 from quality.config import CONFIG_PATH, Declaration, GateSettings, LegacyMode
+from quality.gh import GhFailed, GhRunner, file_at
 from quality.landing import Landing, LandingKind, LandingRefused, landing_of
 from quality.output import (
     DRY_RUN,
@@ -65,15 +65,9 @@ LEGACY_CHECKS = (SONAR_CHECK, VERDICT_CHECK)
 RED = "failure"
 COMPLETED = "completed"
 PENDING_STATUS = "pending"
-NOT_FOUND = "404"
 
-GhRunner = Callable[[Sequence[str], str | None], str]
 Ask = Callable[[str], str | None]
 RemoteFor = Callable[[str], str]
-
-
-class GhFailed(Exception):
-    pass
 
 
 class Refused(Exception):
@@ -182,16 +176,6 @@ class Attempt:
     restore_error: str | None
 
 
-def run_gh(arguments: Sequence[str], stdin: str | None = None) -> str:
-    try:
-        done = subprocess.run(["gh", *arguments], input=stdin, capture_output=True, text=True, check=False)  # noqa: S603, S607 - argv is the fixed gh executable plus arguments and never a shell
-    except OSError as error:
-        raise GhFailed(f"cannot run gh: {error}") from error
-    if done.returncode != 0:
-        raise GhFailed(f"gh {' '.join(arguments[:3])} failed: {done.stderr.strip()}")
-    return done.stdout
-
-
 @dataclass(frozen=True)
 class Check:
     name: str
@@ -276,22 +260,13 @@ def read_statuses(gh: GhRunner, repository: str, head_sha: str) -> list[Check]:
 def read_side_at(gh: GhRunner, repository: str, sha: str, fix: Step) -> Side:
     """The gate's settings, baseline and import-linter configs at one commit, as the verdict reads them; a 404 reads as absent,
     a config quality cannot read is its refusal with `fix`, the step that repairs it at this commit."""
-    config = _read_file_at(gh, repository, CONFIG_PATH, sha)
-    baseline = _read_file_at(gh, repository, BASELINE_PATH, sha)
-    import_configs = {name: _read_file_at(gh, repository, name, sha) for name in architecture.CONFIG_FILES}
+    config = file_at(gh, repository, CONFIG_PATH, sha)
+    baseline = file_at(gh, repository, BASELINE_PATH, sha)
+    import_configs = {name: file_at(gh, repository, name, sha) for name in architecture.CONFIG_FILES}
     try:
         return side_of(config, baseline, sha, import_configs)
     except UnusableConfig as unusable:
         raise config_refusal(unusable.error, fix) from unusable
-
-
-def _read_file_at(gh: GhRunner, repository: str, path: str, sha: str) -> str | None:
-    try:
-        return gh(["api", "-H", "Accept: application/vnd.github.raw", f"repos/{repository}/contents/{path}?ref={sha}"], None)
-    except GhFailed as error:
-        if NOT_FOUND in str(error):
-            return None
-        raise
 
 
 def require_admin_permission(repository_facts: Mapping[str, object], repository: str) -> None:
