@@ -291,8 +291,9 @@ def test_a_reexecution_names_the_commit_through_uv(reexecution, flags, expected)
 
 
 def test_a_guard_quality_never_sets_is_refused(tmp_path):
+    running = vcs("0.10.0", pinned_commit())(None)
     with pytest.raises(CannotJudge) as refused:
-        pin.judging_release(tmp_path, CHECK, False, {pin.RUN_AT_PIN_VARIABLE: "yes"}, running=vcs("0.10.0", pinned_commit())(None))
+        pin.judging_release(tmp_path, CHECK, False, {pin.RUN_AT_PIN_VARIABLE: "yes"}, running=running)
     assert (refused.value.reason.fact, refused.value.reason.next_steps) == (
         f"{pin.RUN_AT_PIN_VARIABLE} holds yes, which quality never sets", (Instruction(f"unset {pin.RUN_AT_PIN_VARIABLE}, then run {CHECK} again"),),
     )
@@ -305,10 +306,19 @@ def child_refusal(version: str, at: str) -> tuple[str, tuple]:
 
 @pytest.mark.integration
 @pytest.mark.parametrize("fetch", list(pin.Fetch))
+def test_the_child_judges_at_the_pins_commit_and_release(build_repo, fetch):
+    judged = build_repo(gate_call(pinned_commit(), "v0.10.1"))
+    running = vcs("0.10.1", pinned_commit())(None)
+    fetched = "fetched now · " if fetch is pin.Fetch.FETCHED else ""
+    judging = pin.judging_release(judged, CHECK, False, {pin.RUN_AT_PIN_VARIABLE: fetch.value}, running=running)
+    assert judging == JudgingRelease(Release("v0.10.1"), f"{fetched}pinned in .github/workflows/ci.yml")
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("fetch", list(pin.Fetch))
 @pytest.mark.parametrize(
     ("running", "expected"),
     [
-        pytest.param(vcs("0.10.1", pinned_commit()), "judges", id="the pin's commit and release"),
         pytest.param(vcs("0.10.1", other_commit()), child_refusal("0.10.1", "4d4d4d4"), id="another commit"),
         pytest.param(
             lambda scene: RunningQuality("0.10.1", Path(pin.__file__).parent, None), child_refusal("0.10.1", "an unknown commit"), id="no recorded commit",
@@ -326,13 +336,9 @@ def child_refusal(version: str, at: str) -> tuple[str, tuple]:
 def test_the_child_never_reexecutes(build_repo, fetch, running, expected):
     judged = build_repo(gate_call(pinned_commit(), "v0.10.1"))
     guard = {pin.RUN_AT_PIN_VARIABLE: fetch.value}
-    if expected == "judges":
-        fetched = "fetched now · " if fetch is pin.Fetch.FETCHED else ""
-        judging = pin.judging_release(judged, CHECK, False, guard, running=running(None))
-        assert judging == JudgingRelease(Release("v0.10.1"), f"{fetched}pinned in .github/workflows/ci.yml")
-        return
+    running_quality = running(None)
     with pytest.raises(CannotJudge) as refused:
-        pin.judging_release(judged, CHECK, False, guard, running=running(None))
+        pin.judging_release(judged, CHECK, False, guard, running=running_quality)
     assert (refused.value.reason.fact, refused.value.reason.next_steps) == expected
 
 
