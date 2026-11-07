@@ -655,9 +655,10 @@ def load_gate_settings(text: str | None) -> GateSettings:
     if text is None:
         raise ConfigError(f"{CONFIG_PATH} is missing", EXAMPLE)
     document = _validated_document(text)
+    jobs = _mandatory_jobs(document.gate)
     legacy = _legacy_mode(document.gate)
     return GateSettings(
-        _mandatory_jobs(document.gate), legacy, document.declarations,
+        jobs, legacy, document.declarations,
         document.allow_lists.advisories, document.allow_lists.generated, _sonar(document.gate, legacy),
     )
 

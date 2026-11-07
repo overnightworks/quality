@@ -621,6 +621,15 @@ def refuse_scan_wiring(environment: Mapping[str, str]) -> None:
         raise CannotJudge(f"{TOKEN_VARIABLE} is set while {CONFIG_PATH} sets [gate] sonar = false")
 
 
+def step_output_written(name: str, value: str) -> bool:
+    try:
+        append_step_output(name, value)
+    except OSError as error:
+        emit(f"sonar: cannot judge - {STEP_OUTPUT_VARIABLE} is not writable: {error}", file=sys.stderr)
+        return False
+    return True
+
+
 def run_sonar_properties() -> int:
     try:
         scans = runs_sonar(Path("."))
@@ -632,14 +641,13 @@ def run_sonar_properties() -> int:
     except (CannotJudge, ConfigError, repository.RepositoryFileError) as error:
         emit(f"sonar: cannot judge - {error}", file=sys.stderr)
         return EXIT_CANNOT_JUDGE
-    try:
-        append_step_output(*((SCANNER_ARGUMENTS_OUTPUT, scanner_exclusions(excluded)) if scans else (SONAR_OUTPUT, SONAR_OFF)))
-    except OSError as error:
-        emit(f"sonar: cannot judge - {STEP_OUTPUT_VARIABLE} is not writable: {error}", file=sys.stderr)
-        return EXIT_CANNOT_JUDGE
     if not scans:
+        if not step_output_written(SONAR_OUTPUT, SONAR_OFF):
+            return EXIT_CANNOT_JUDGE
         emit(f"sonar: off - {CONFIG_PATH} sets [gate] sonar = false, so nothing reaches SonarCloud")
         return EXIT_CLEAN
+    if not step_output_written(SCANNER_ARGUMENTS_OUTPUT, scanner_exclusions(excluded)):
+        return EXIT_CANNOT_JUDGE
     emit("sonar: properties clean")
     if excluded:
         emit(f"sonar: the scan excludes {', '.join(sorted(excluded))} ({DEPENDABOT_CONFIG} exists)")

@@ -84,7 +84,7 @@ def test_the_token_reaches_only_properties_scan_and_findings(gate):
 
 
 def test_the_verdict_needs_the_sonar_job(gate):
-    """#26 rule 1: verdict.needs contains sonar"""
+    """verdict.needs contains sonar"""
     assert "sonar" in gate["jobs"]["verdict"]["needs"]
 
 
@@ -103,7 +103,7 @@ def test_only_the_findings_step_binds_the_pull_request_number(gate):
 
 
 def test_the_sonar_job_and_its_properties_step_run_for_every_actor(gate, sonar_steps):
-    """#26 rule 2: no if: on the sonar job or its properties step, so a Dependabot or fork run is never skipped"""
+    """No if: on the sonar job or its properties step, so a Dependabot or fork run is never skipped"""
     assert "if" not in gate["jobs"]["sonar"]
     assert "if" not in step_named(sonar_steps, "Refuse a token")
 

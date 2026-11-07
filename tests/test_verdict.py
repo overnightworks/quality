@@ -664,7 +664,7 @@ MAIN_RAISED = "size baseline raises function_lines src/quality/cli.py main 82 ->
         "cell 1 undeclared removal", "cell 2 declared removal", "cell 3 declared removal, B still runs and fails",
         "cell 4 declared next to undeclared", "cell 5 declared next to A failed", "cell 6 a typo in what",
         "cell 7 inherited declaration", "cell 7 inherited declaration deleted", "cell 8 inherited declaration",
-        "cell 8 a new item and date", "cell 10 baseline raise", "cell 10 baseline removal", "cell 10 legacy", "cell 10 sonar off declared",
+        "cell 8 a new item and date", "cell 10 baseline raise", "cell 10 baseline removal", "cell 10 legacy", "sonar off declared",
         "cell 13 a line feed declared as the TOML escape", "cell 13 the printed form copied", "#228 rule 7 a format character declared as its TOML escape",
         "#228 rule 7 the printed form of a format character copied", "#228 rule 7 a name holding the escape text itself",
         "#228 rule 7 the escape text declared as a format character", "cell 26 adoption",
