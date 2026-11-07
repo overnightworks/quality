@@ -71,7 +71,7 @@ def test_the_help_stands_in_the_pictures_frame(capsys):
         "  merge OWNER/REPO#N [--dry-run]\n"
         "      Operator only: merge one pull request whose gate is red only for\n"
         "      legacy findings or loosenings he ruled, after he types yes.\n"
-        "  scoreboard [PATH]\n"
+        "  report\n"
         "      Measure every fleet repository: size, debt, the gate release it pins.\n"
         "\n"
         "Run by the gate, not by people:\n"
@@ -106,6 +106,27 @@ def test_the_merge_help_stands_in_its_frame(capsys):
         "\n"
         "Exit codes: 0 merged, 1 refused, 2 could not check or do, 130 interrupted.\n"
     )
+
+
+def test_the_report_help_stands_in_its_frame(capsys):
+    help_text = help_of(capsys, ["report"])
+    assert help_text == (
+        "usage: quality report [-v]\n"
+        "\n"
+        "Measure every fleet repository quality/fleet.toml lists: size, debt, the gate\n"
+        "release it pins. A row per repository goes to stderr, the two markdown tables\n"
+        "to stdout and to the step summary.\n"
+        "\n"
+        "Options:\n"
+        "  -v          show the raw scanner output; the report runs no scanner\n"
+        "  -h, --help  show this help\n"
+        "\n"
+        "Exit codes: 0 every repository measured, 2 could not answer, 130 interrupted.\n"
+    )
+    with pytest.raises(SystemExit) as stopped:
+        cli.main(["report", "-h"])
+    printed = capsys.readouterr()
+    assert (stopped.value.code, printed.out, printed.err) == (0, help_text, "")
 
 
 @pytest.mark.parametrize(
@@ -186,7 +207,7 @@ def test_verdict_and_sonar_stand_apart_under_run_by_the_gate(capsys):
         pytest.param(["sonar", "properties"], id="sonar properties"),
         pytest.param(["sonar", "findings"], id="sonar findings"),
         pytest.param(["merge"], id="merge"),
-        pytest.param(["scoreboard"], id="scoreboard"),
+        pytest.param(["report"], id="report"),
     ],
 )
 def test_each_doors_help_goes_to_stdout_alone_and_exits_0(capsys, words):
@@ -269,7 +290,11 @@ def test_a_closed_stdout_takes_no_help_and_exit_is_0(tmp_path):
         pytest.param(["check", "secrets", "--staged", "--nonsense"], (), "unknown argument{sep}--nonsense", "quality check", id="a stray option beside the staged flag"),
         pytest.param(["check", "docs", "--staged"], (), "no area docs{sep}areas: {areas}", "quality check", id="a wrong area beside the staged flag"),
         pytest.param(["sonar", "properties", "x"], (), "unknown argument{sep}x", "quality sonar", id="stray argument of sonar"),
-        pytest.param(["--nonsense", "scoreboard"], (), "unknown argument{sep}--nonsense", "quality scoreboard", id="stray option before a command"),
+        pytest.param(["--nonsense", "report"], (), "unknown argument{sep}--nonsense", "quality report", id="stray option before a command"),
+        pytest.param(["scoreboard"], (), "no command scoreboard{sep}commands: {commands}", "quality", id="the report's word that left"),
+        pytest.param(["scoreboard", "."], (), "no command scoreboard{sep}commands: {commands}", "quality", id="the report's old path"),
+        pytest.param(["report", "--verbose"], (), "unknown argument{sep}--verbose", "quality report", id="a stray option of the report"),
+        pytest.param(["report", "--he"], (), "unknown argument{sep}--he", "quality report", id="an abbreviated help of the report"),
         pytest.param(["merge"], (), "no pull request{sep}a pull request reads OWNER/REPO#N", "quality merge", id="no pull request"),
         pytest.param(["merge", "acme/widgets", "7"], (), "no pull request acme/widgets{sep}a pull request reads OWNER/REPO#N", "quality merge", id="the old two words"),
         pytest.param(["merge", "acme/widgets"], (), "no pull request acme/widgets{sep}a pull request reads OWNER/REPO#N", "quality merge", id="no number"),

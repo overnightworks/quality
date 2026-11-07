@@ -166,7 +166,7 @@ def local_door(monkeypatch):
 
 @pytest.fixture
 def summary(tmp_path, monkeypatch) -> Path:
-    """The step summary path `verdict` and `scoreboard` would write; `check` writes none, so it stays absent after a check."""
+    """The step summary path `verdict` and `report` would write; `check` writes none, so it stays absent after a check."""
     path = tmp_path / "summary.md"
     monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(path))
     return path
@@ -336,12 +336,12 @@ PublicRepo = Callable[..., str]
 
 
 @pytest.fixture
-def scoreboard(capsys, tmp_path, public) -> Callable[..., tuple[int, str]]:
-    """Runs `quality scoreboard` on a fleet file listing the given `owner/name`s (#63 rule 1)."""
+def fleet_report(capsys, tmp_path, public, monkeypatch) -> Callable[..., tuple[int, str]]:
+    """Runs `quality report` in a folder whose fleet file lists the given `owner/name`s (#63 rule 1)."""
 
     def run(*repositories: str, tags: fleet_module.TagReader = lambda: RELEASES) -> tuple[int, str]:
-        fleet = write_fleet(tmp_path / "fleet", repositories)
-        code = cli.main(["scoreboard", str(fleet)], release_tags=tags)
+        monkeypatch.chdir(write_fleet(tmp_path / "fleet", repositories))
+        code = cli.main(["report"], release_tags=tags)
         return code, capsys.readouterr().out
 
     return run
@@ -370,7 +370,7 @@ def github_base(remotes, monkeypatch) -> None:
 
 @pytest.fixture
 def public(remotes, scratch, fake_git, github_base) -> PublicRepo:
-    """Serves a repository as `https://github.com/<owner>/<name>`, which the scoreboard clones as it clones a public one
+    """Serves a repository as `https://github.com/<owner>/<name>`, which the report clones as it clones a public one
     (rule 3). A repository nobody served fails with git exit 128 and never reaches the network."""
     fake_git(GITHUB_REDIRECT)
 

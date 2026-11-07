@@ -13,7 +13,7 @@ QUALITY_ITSELF = Path(__file__).parents[1]
 
 
 def pairs_by_area(files: dict[str, str]) -> dict[Area, int]:
-    """The cross-file pairs among `files`, counted the way the scoreboard counts them."""
+    """The cross-file pairs among `files`, counted the way the report counts them."""
     return clones.summarise_pairs(clones.find_pairs({path: text.encode() for path, text in files.items()}).pairs)
 
 
