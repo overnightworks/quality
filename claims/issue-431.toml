@@ -1,0 +1,8 @@
+claim_id = "c3039ad4c11b48c69562f061ced24c9e"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "9446e989019eab6f641c5a3ab277867b3a033569"
+branch = "claude/issue-431-report-workflow"
+scope = [".github/workflows/report.yml", ".github/workflows/scoreboard.yml", "docs/ARCHITECTURE.md", "docs/commands.md", "tests/test_fleet.py"]
+opened_commit = "c9f04d9e88e886db9607447edea1389f6ab3275e"
+whole_reason = "A file rename and the references that name its path move together, or a reference dangles."
