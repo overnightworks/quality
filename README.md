@@ -8,7 +8,7 @@ repository and for the operator who merges past it.
     quality sonar properties
     quality sonar findings
     quality verdict [PATH]
-    quality scoreboard [PATH]
+    quality report
     quality merge OWNER/REPO#N [--dry-run]
 
 Exit codes: `0` clean, `1` findings, `2` cannot judge (never clean), `130` interrupted (Ctrl-C).
@@ -41,7 +41,7 @@ Locally, `quality check` runs every rule the gate runs, the secret, workflow and
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): the parts, who talks to whom, the trust boundaries and the reasons behind the constraints.
 - [docs/rules.md](docs/rules.md): the `check` rules, the secret and advisory scans, the output contract.
 - [docs/output.md](docs/output.md): the picture of what the commands print; `check` prints its frame today.
-- [docs/commands.md](docs/commands.md): `check secrets --staged`, the scanners, `scoreboard` and `merge`.
+- [docs/commands.md](docs/commands.md): `check secrets --staged`, the scanners, `report` and `merge`.
 - [docs/gate.md](docs/gate.md): the `gate.yml` caller contract, the verdict, declared loosenings, startup failures.
 - [docs/codeql.md](docs/codeql.md): the `codeql.yml` caller contract.
 - [docs/release.md](docs/release.md): the release path (`release-gate.yml`, `release-tag.yml`, `image.yml`), its caller contract, how quality releases itself and the standard.

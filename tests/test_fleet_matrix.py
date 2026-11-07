@@ -1,4 +1,4 @@
-"""`quality scoreboard` release matrix (#123): cells name the item's scenario matrix, rules its numbered rules."""
+"""`quality report` release matrix (#123): cells name the item's scenario matrix, rules its numbered rules."""
 
 import os
 import re
@@ -59,17 +59,17 @@ def caller(uses: str) -> dict[str, str]:
     ],
     ids=["newest tag", "older tag", "no tag", "branch", "tag name"],
 )
-def test_the_gate_cell_names_the_release_the_pinned_commit_is(scoreboard, public, ref, cell):
+def test_the_gate_cell_names_the_release_the_pinned_commit_is(fleet_report, public, ref, cell):
     """#123 E3, cells 1 to 4: the tag the SHA points at, `(behind)` when not the newest; the `# v` comment is not read."""
-    code, output = scoreboard(public("pinned", caller(f"{GATE}@{ref} # v0.3.1")))
+    code, output = fleet_report(public("pinned", caller(f"{GATE}@{ref} # v0.3.1")))
     assert code == 0, output
     assert matrix_row(output, "o/pinned")[1:3] == [cell, "none"]
 
 
-def test_without_a_caller_there_is_no_gate_and_a_step_level_uses_is_no_caller(scoreboard, public):
+def test_without_a_caller_there_is_no_gate_and_a_step_level_uses_is_no_caller(fleet_report, public):
     """#123 E3, cell 5: only a job-level `uses:` is a call."""
     steps = {".github/workflows/ci.yml": f"jobs:\n  build:\n    steps:\n      - uses: {GATE}@{NEWEST}\n"}
-    _, output = scoreboard(public("bare", {}), public("stepped", steps))
+    _, output = fleet_report(public("bare", {}), public("stepped", steps))
     assert matrix_row(output, "o/bare")[1:3] == matrix_row(output, "o/stepped")[1:3] == ["no gate", "none"]
 
 
@@ -92,18 +92,18 @@ def test_the_gates_owner_and_repository_names_are_read_whatever_their_case():
     assert calls_of("OvernightWorks/Quality/.github/workflows/gate.yml@v1", "gate.yml") == [Call("v1")]
 
 
-def test_a_commit_in_upper_case_is_a_commit(scoreboard, public):
-    _, output = scoreboard(public("shouting", caller(f"{GATE}@{NEWEST.upper()}")))
+def test_a_commit_in_upper_case_is_a_commit(fleet_report, public):
+    _, output = fleet_report(public("shouting", caller(f"{GATE}@{NEWEST.upper()}")))
     assert matrix_row(output, "o/shouting")[1] == "v0.10.0"
 
 
-def test_two_callers_with_two_pins_are_both_named_sorted_and_joined(scoreboard, public):
+def test_two_callers_with_two_pins_are_both_named_sorted_and_joined(fleet_report, public):
     """#123 E3, cell 7."""
     files = {
         ".github/workflows/a.yml": f"jobs:\n  one:\n    uses: {GATE}@{NEWEST}\n",
         ".github/workflows/b.yaml": f"jobs:\n  two:\n    uses: {GATE}@{OLDER}\n",
     }
-    _, output = scoreboard(public("both", files))
+    _, output = fleet_report(public("both", files))
     assert matrix_row(output, "o/both")[1] == "v0.10.0 · v0.9.0 (behind)"
 
 
@@ -117,10 +117,10 @@ def test_two_callers_with_two_pins_are_both_named_sorted_and_joined(scoreboard, 
     ],
     ids=["not YAML", "nesting past the recursion limit", "an unhashable key", "a unicode escape past the last code point"],
 )
-def test_a_workflow_that_is_not_yaml_is_named_in_its_cells_and_the_other_rows_stand(scoreboard, public, content):
+def test_a_workflow_that_is_not_yaml_is_named_in_its_cells_and_the_other_rows_stand(fleet_report, public, content):
     """#123 E11, cell 8: `cannot read <file>`, exit 2, and nothing about the broken file is run or guessed."""
     broken = {".github/workflows/x.yml": content}
-    code, output = scoreboard(public("broken", broken), public("fine", caller(f"{GATE}@{NEWEST}")))
+    code, output = fleet_report(public("broken", broken), public("fine", caller(f"{GATE}@{NEWEST}")))
     assert code == 2, output
     assert matrix_row(output, "o/broken")[1:] == ["cannot read .github/workflows/x.yml"] * (len(MATRIX_COLUMNS) - 1)
     assert matrix_row(output, "o/fine")[1] == "v0.10.0"
@@ -137,51 +137,51 @@ def test_a_workflow_that_is_not_yaml_is_named_in_its_cells_and_the_other_rows_st
     ],
     ids=["an impossible date", "a timestamp tag on a non-timestamp", "an empty integer", "an unknown boolean", "a sexagesimal float too large for a float"],
 )
-def test_a_scalar_that_is_no_valid_value_parses_as_text_and_the_workflow_shows_its_pin(scoreboard, public, scalar):
+def test_a_scalar_that_is_no_valid_value_parses_as_text_and_the_workflow_shows_its_pin(fleet_report, public, scalar):
     """#123 E11, cell 8: only the `uses` strings are read, so a scalar no type accepts does not make the file unreadable."""
     content = f"env:\n  {scalar}\njobs:\n  gate:\n    uses: {GATE}@{NEWEST}\n"
-    code, output = scoreboard(public("odd", {".github/workflows/x.yml": content}))
+    code, output = fleet_report(public("odd", {".github/workflows/x.yml": content}))
     assert code == 0, output
     assert matrix_row(output, "o/odd")[1] == "v0.10.0"
 
 
-def test_unreadable_release_tags_say_so_and_show_pins_as_commits(scoreboard, public):
+def test_unreadable_release_tags_say_so_and_show_pins_as_commits(fleet_report, public):
     """#123 E4, cell 9."""
 
     def unreadable() -> dict[str, str]:
         raise ReleaseTagsError("git exited 128")
 
-    code, output = scoreboard(public("pinned", caller(f"{GATE}@{NEWEST}")), tags=unreadable)
+    code, output = fleet_report(public("pinned", caller(f"{GATE}@{NEWEST}")), tags=unreadable)
     assert code == 2, output
     assert "**Repo × rule, newest release unreadable (git exited 128), pins shown as commits**" in output
     assert matrix_row(output, "o/pinned")[1] == "bbbbbbb"
 
 
-def test_the_codeql_cell_reads_its_own_pin_or_says_none(scoreboard, public):
+def test_the_codeql_cell_reads_its_own_pin_or_says_none(fleet_report, public):
     """#123 E5, cell 10."""
     gate = caller(f"{GATE}@{NEWEST}")
     scan = {".github/workflows/code.yml": f"jobs:\n  scan:\n    uses: {CODEQL}@{OLDER}\n", **gate}
-    _, output = scoreboard(public("scanned", scan), public("unscanned", gate))
+    _, output = fleet_report(public("scanned", scan), public("unscanned", gate))
     assert matrix_row(output, "o/scanned")[1:3] == ["v0.10.0", "v0.9.0 (behind)"]
     assert matrix_row(output, "o/unscanned")[1:3] == ["v0.10.0", "none"]
 
 
 @pytest.mark.integration
-def test_a_pipe_in_a_label_is_escaped_and_the_row_keeps_its_columns(scoreboard, public, remotes):
+def test_a_pipe_in_a_label_is_escaped_and_the_row_keeps_its_columns(fleet_report, public, remotes):
     """#123 E2, cell 12: a tracked file named `a|b.py` that cannot be read puts a `|` into a reason."""
     name = public("pipe", {"docs/a.md": "text\n"})
     os.symlink("docs", remotes / name / "a|b.py")
     subprocess.run(["git", "-C", str(remotes / name), "add", "a|b.py"], check=True)
     subprocess.run(["git", "-C", str(remotes / name), *GIT_IDENTITY, "commit", "-q", "-m", "link"], check=True)
-    _, output = scoreboard(name)
+    _, output = fleet_report(name)
     lines = [line for line in output.splitlines() if line.startswith("| o/pipe |")]
     assert [r"a\|b.py" in line for line in lines] == [True, True]
     assert [len(re.split(r"(?<!\\)\|", line.strip("|"))) for line in lines] == [len(COLUMNS), len(MATRIX_COLUMNS)]
 
 
-def test_a_cannot_judge_row_keeps_its_label_in_the_matrix(scoreboard, public, missing):
+def test_a_cannot_judge_row_keeps_its_label_in_the_matrix(fleet_report, public, missing):
     """#123 E10, cell 13."""
-    code, output = scoreboard(missing, public("open", {}))
+    code, output = fleet_report(missing, public("open", {}))
     assert code == 2, output
     label = "cannot judge: cannot clone (git exited 128)"
     assert matrix_row(output, "o/gone")[1:] == [label] + [""] * (len(MATRIX_COLUMNS) - 2)
@@ -207,8 +207,8 @@ def test_release_tags_are_the_peeled_commits_of_annotated_and_lightweight_tags(g
     ],
     ids=["owner and repository match in any case", "the workflow path matches exactly"],
 )
-def test_only_the_owner_and_repository_of_a_reusable_call_ignore_case(scoreboard, public, uses, cell):
-    _, output = scoreboard(public("cased", caller(uses)))
+def test_only_the_owner_and_repository_of_a_reusable_call_ignore_case(fleet_report, public, uses, cell):
+    _, output = fleet_report(public("cased", caller(uses)))
     assert matrix_row(output, "o/cased")[1] == cell
 
 
@@ -229,9 +229,9 @@ def unreadable_tags() -> dict[str, str]:
     [({ratchet.BASELINE_PATH: ratchet.render_baseline(ratchet.Baseline({}, None))}, "enforced"), ({}, "report-only")],
     ids=["a baseline", "no baseline"],
 )
-def test_the_size_cell_is_enforced_with_a_baseline_and_report_only_without(scoreboard, public, files, size):
+def test_the_size_cell_is_enforced_with_a_baseline_and_report_only_without(fleet_report, public, files, size):
     """#125 cell 16, E7."""
-    _, output = scoreboard(public("sized", {**caller(f"{GATE}@{NEWEST}"), **files}), tags=first_releases())
+    _, output = fleet_report(public("sized", {**caller(f"{GATE}@{NEWEST}"), **files}), tags=first_releases())
     assert cell(output, "o/sized", "size") == size
 
 
@@ -248,10 +248,10 @@ def test_the_size_cell_is_enforced_with_a_baseline_and_report_only_without(score
     ids=["older than the rule", "two pins, the oldest decides", "a commit without a tag", "a branch", "a tag name",
          "unreadable tags"],
 )
-def test_a_cell_never_claims_more_than_the_oldest_pinned_release(scoreboard, public, refs, tags, code, size):
+def test_a_cell_never_claims_more_than_the_oldest_pinned_release(fleet_report, public, refs, tags, code, size):
     """#125 cell 17, E16, E17, E12: only an unreadable tag list makes the run red."""
     files = {f".github/workflows/{n}.yml": f"jobs:\n  gate:\n    uses: {GATE}@{ref}\n" for n, ref in enumerate(refs)}
-    result, output = scoreboard(public("pinned", files), tags=tags)
+    result, output = fleet_report(public("pinned", files), tags=tags)
     assert result == code, output
     assert cell(output, "o/pinned", "size") == size
 
@@ -368,16 +368,16 @@ def test_a_pinned_gate_has_a_rule_from_the_tag_that_first_ships_it(rule_id, befo
     ids=["a project with a package", "a frontend project", "a package.json only in tests", "a project without src",
          "a package without a project", "a package only in tests"],
 )
-def test_the_scoreboard_cell_for_test_layout_is_read_from_the_clone(scoreboard, gate_clone, files, words):
+def test_the_report_cell_for_test_layout_is_read_from_the_clone(fleet_report, gate_clone, files, words):
     """#196 sentence 9, E3: the clone's tracked files decide the cell, on the gate's own repository."""
-    result, output = scoreboard(gate_clone({**caller("./.github/workflows/gate.yml"), **files}), tags=first_releases())
+    result, output = fleet_report(gate_clone({**caller("./.github/workflows/gate.yml"), **files}), tags=first_releases())
     assert (result, cell(output, GATE_REPOSITORY, "test-layout")) == (0, words), output
 
 
-def test_a_malformed_baseline_makes_the_gates_own_clone_cell_unreadable_and_the_run_red(scoreboard, gate_clone):
+def test_a_malformed_baseline_makes_the_gates_own_clone_cell_unreadable_and_the_run_red(fleet_report, gate_clone):
     """#137 test 3: the cell owns the failure, as #125 cell 22 rules."""
     broken = {**caller("./.github/workflows/gate.yml"), ratchet.BASELINE_PATH: "[file_lines\n"}
-    result, output = scoreboard(gate_clone(broken), tags=first_releases())
+    result, output = fleet_report(gate_clone(broken), tags=first_releases())
     assert result == 2, output
     assert cell(output, GATE_REPOSITORY, "clone") == "cannot read quality/baseline.toml"
 
@@ -410,19 +410,19 @@ def test_a_rule_without_a_release_is_not_released_on_a_pinned_gate():
     ids=["a config", "no config", "two configs", "two configs, no gate", "two configs, older pin",
          "two configs, no release"],
 )
-def test_the_import_contract_cell_follows_the_import_linter_config(scoreboard, public, files, pin, code, cell_words):
+def test_the_import_contract_cell_follows_the_import_linter_config(fleet_report, public, files, pin, code, cell_words):
     """#125 cell 19, E7, E19: two configs leave it open which one the gate runs, but only where the cell shows it."""
-    result, output = scoreboard(public("layered", {**pinned_gate(pin), **files}), tags=first_releases())
+    result, output = fleet_report(public("layered", {**pinned_gate(pin), **files}), tags=first_releases())
     assert result == code, output
     assert cell(output, "o/layered", "import-contract") == cell_words
 
 
 def test_without_a_gate_every_cell_that_needs_one_is_a_dash_and_an_unreadable_workflow_makes_each_unreadable(
-    scoreboard, public
+    fleet_report, public
 ):
     """#125 cell 20, E18."""
     broken = {".github/workflows/x.yml": "jobs: [unclosed\n"}
-    code, output = scoreboard(public("bare", {CONFIG: TWO_JOBS}), public("broken", broken), tags=first_releases())
+    code, output = fleet_report(public("bare", {CONFIG: TWO_JOBS}), public("broken", broken), tags=first_releases())
     assert code == 2, output
     assert matrix_row(output, "o/bare")[3:] == ["—"] * (len(MATRIX_COLUMNS) - 3)
     assert matrix_row(output, "o/broken")[1:] == ["cannot read .github/workflows/x.yml"] * (len(MATRIX_COLUMNS) - 1)
@@ -439,9 +439,9 @@ def test_without_a_gate_every_cell_that_needs_one_is_a_dash_and_an_unreadable_wo
     ],
     ids=["jobs counted", "legacy fail", "no config", "malformed config", "malformed config, no gate"],
 )
-def test_the_jobs_cell_counts_and_the_legacy_cell_names_the_mode(scoreboard, public, files, pin, code, jobs, legacy):
+def test_the_jobs_cell_counts_and_the_legacy_cell_names_the_mode(fleet_report, public, files, pin, code, jobs, legacy):
     """#125 cell 21, E6, E9, E11: an unreadable config counts only where a cell shows it."""
-    result, output = scoreboard(public("gated", {**pinned_gate(pin), **files}), tags=first_releases())
+    result, output = fleet_report(public("gated", {**pinned_gate(pin), **files}), tags=first_releases())
     assert result == code, output
     assert (cell(output, "o/gated", "Mandatory jobs"), cell(output, "o/gated", "Sonar legacy")) == (jobs, legacy)
 
@@ -457,17 +457,17 @@ def test_the_jobs_cell_counts_and_the_legacy_cell_names_the_mode(scoreboard, pub
     ids=["newest pin", "no gate", "older pin", "no release"],
 )
 def test_a_malformed_size_baseline_is_named_in_the_size_cell_only_where_the_cell_shows_it(
-    scoreboard, public, pin, code, size
+    fleet_report, public, pin, code, size
 ):
     """#125 cell 22, E11."""
     broken = {**pinned_gate(pin), ratchet.BASELINE_PATH: "[file_lines\n"}
-    result, output = scoreboard(public("sized", broken), tags=first_releases())
+    result, output = fleet_report(public("sized", broken), tags=first_releases())
     assert result == code, output
     assert cell(output, "o/sized", "size") == size
 
 
-def test_the_heading_sentence_names_the_rules_the_oldest_release_always_enforces(scoreboard, public):
+def test_the_heading_sentence_names_the_rules_the_oldest_release_always_enforces(fleet_report, public):
     """#125 cell 24, E8: the five rules get a sentence, not five columns."""
-    _, output = scoreboard(public("any", {}), tags=first_releases())
+    _, output = fleet_report(public("any", {}), tags=first_releases())
     assert "Every gate release enforces env-file, compose-port, secret, workflow-lint and workflow-security." in output
     assert MATRIX_COLUMNS[5:] == ("size", "clone", "import-contract", "claude-md", "root-layout", "file-suffix", "script-name", "script-header", "test-layout", "test-import", "python-floor", "python-security", "python-print", "advisory")

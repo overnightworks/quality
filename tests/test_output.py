@@ -36,7 +36,6 @@ from tests.support.check import (
     refusal_pair,
 )
 from tests.support.door import CHECK_WORD, MODULE_DOOR, door_in
-from tests.support.fleet import RELEASES, write_fleet
 from tests.support.terminal import Terminal, by_role, without_sgr
 from tests.support.verdict import CHECKS_GREEN
 
@@ -640,18 +639,26 @@ def test_a_verdict_whose_step_summary_cannot_be_written_is_exit_2_with_the_fact_
     assert output.STEP_SUMMARY_VARIABLE in stderr
 
 
-@pytest.mark.integration
-def test_a_scoreboard_whose_step_summary_cannot_be_written_is_exit_2_with_the_fact_and_no_traceback(monkeypatch, capsys, public, tmp_path):
-    fleet = write_fleet(tmp_path / "fleet", [public("healthy", {"a.md": "text\n"})])
-    unwritable = tmp_path / "a-directory"
-    unwritable.mkdir()
-    monkeypatch.setenv(output.STEP_SUMMARY_VARIABLE, str(unwritable))
-    door = "scoreboard"
-    code = cli.main([door, str(fleet)], release_tags=lambda: RELEASES)
-    assert code == 2
-    stderr = capsys.readouterr().err
-    assert stderr.startswith(f"{door}: ")
-    assert output.STEP_SUMMARY_VARIABLE in stderr
+def test_rows_share_the_subject_column_they_are_given():
+    rows = (Row(Glyph.CLEAN, "o/a", Event.CLEAN, "first"), Row(Glyph.CLEAN, "o/a-longer-name", Event.FINDING, "second"))
+    shown = written(io.StringIO, lambda channel: output.write_rows(rows, channel, subject_width=20))
+    assert shown == (
+        "  ✓ o/a                   clean          first\n"
+        "  ✓ o/a-longer-name       finding        second\n"
+    )
+
+
+def test_lines_of_an_artifact_stand_escaped_and_unpainted():
+    shown = written(Terminal, lambda channel: output.write_lines(("| a\x1b[31mb |", ""), channel))
+    assert shown == "| a\\x1b[31mb |\n\n"
+
+
+def test_the_step_summary_is_the_one_the_given_environment_names(tmp_path, monkeypatch):
+    named, elsewhere = tmp_path / "named.md", tmp_path / "elsewhere.md"
+    monkeypatch.setenv(output.STEP_SUMMARY_VARIABLE, str(elsewhere))
+    output.append_step_summary(("| a |",), {output.STEP_SUMMARY_VARIABLE: str(named)})
+    output.append_step_summary(("| b |",), {})
+    assert (named.read_text(), elsewhere.exists()) == ("| a |\n", False)
 
 
 @pytest.mark.parametrize(

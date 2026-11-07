@@ -1,12 +1,12 @@
 # Commands
 
-Reference for the engineer or operator who runs `quality check --fix`, `quality check secrets --staged`, `quality scoreboard`, installs the scanners,
+Reference for the engineer or operator who runs `quality check --fix`, `quality check secrets --staged`, `quality report`, installs the scanners,
 runs `quality merge`, or reads `quality --help` or a wrong invocation's pair.
 
 ## Help and wrong invocations
 
 `quality --help` and `quality check --help` stand in the frame of [the output picture](output.md), case 11, with what is
-true today, and `quality merge --help` in a frame of its own; every other `quality <command> --help` prints that command's arguments; `--version` prints the installed version. Help goes to
+true today, and `quality merge --help` and `quality report --help` each in a frame of its own; every other `quality <command> --help` prints that command's arguments; `--version` prints the installed version. Help goes to
 stdout with exit `0`, plain and whole in every stream. A wrong invocation runs nothing, prints the `error:`/`next:` pair
 on stderr and exits `2`: `no command <word> · commands: …` for a first word that names no command, `no command ·
 commands: …` for none, `no area <word> · areas: …` for the first word `quality check` does not know as an area, `no pull request <word> · a pull request reads OWNER/REPO#N` for a `quality merge` argument of another form (`no pull request · …` for none, `next:` naming `quality merge --help`), `unknown argument · <what is left over>` for what the command does not take, and otherwise the
@@ -52,15 +52,27 @@ its line, and then needs its allowance, as in CI. A key only in the work tree or
 clean): a scanner missing or at another version, with the command that installs it, git older than 2.41, an unreadable allow list, an index with unmerged
 entries, a folder that is not a repository, or a gitleaks run without a report.
 
-## `quality scoreboard`
+## `quality report`
 
-`quality scoreboard [PATH]` prints two markdown tables, the size of every repository `quality/fleet.toml` lists
-(`repositories = [...]`, GitHub `owner/name`s, each listed once), under a heading with the date, the
-quality version and that functions and CCN are measured for Python only, then the same rows as a repo × rule matrix. With `GITHUB_STEP_SUMMARY` set, the same text is
-appended there. The fleet list lives once, in `quality/fleet.toml`; `.github/workflows/scoreboard.yml` runs it every
-Monday at 05:17 UTC and on dispatch; the tables stand in that run's summary. The run only reports: it writes to no repository and needs no secret. A missing, malformed, duplicating
-(also across case) or non-`owner/name` `quality/fleet.toml` is `cannot judge`, exit `2`, before any clone; each bad entry is named by
-its place (`repositories[3]`), never by its text.
+`quality report` reads `quality/fleet.toml` in the folder it runs in (`repositories = [...]`, GitHub `owner/name`s, each
+listed once) and takes no path. On stderr it prints `· fleet  N listed  quality/fleet.toml`, then a row per repository as
+it is measured, sorted by name, case-insensitively: `✓ <owner/name>  measured  <commit> · <time>`, `✗ …  not measured
+<reason>` or `✗ …  partly read  cannot read <files>`; a failed read of the release tags adds `✗ release tags  not read
+<reason>` under the fleet line. The subjects share one column. On stdout it prints the two markdown tables and nothing
+else, so `quality report > fleet.md` writes only them: the size of every repository under a heading with the date, the
+quality version and that functions and CCN are measured for Python only, then the same rows as a repo × rule matrix.
+With `GITHUB_STEP_SUMMARY` set, the tables are appended there. Every cell puts a backslash before `` \ ` * _ ~ [ ] < > &
+| ``, so repository text opens no HTML comment, link or new cell; a bare URL still renders as a link to its own address.
+The run ends on stderr with `✓ N of N repositories measured · <time>` (exit `0`) or with `error: ` and what applies of
+`K of N repositories not measured`, `J partly read` and `the release tags not read`, then `the tables say so`, and
+`next: quality report` (exit `2`); an unwritable summary is `error: GITHUB_STEP_SUMMARY is not writable · <reason>`
+(exit `2`). `-v` adds nothing: the report runs no scanner. The fleet list lives once, in `quality/fleet.toml`;
+`.github/workflows/scoreboard.yml` runs it every Monday at 05:17 UTC and on dispatch; the tables stand in that run's
+summary. The run only reports: it writes to no repository and needs no secret. A missing, unreadable (a directory, a
+dangling link, not UTF-8), malformed, duplicating (also across case) or non-`owner/name` `quality/fleet.toml` is the
+pair, exit `2`, before any clone: `error: ` and what is wrong with `quality/fleet.toml`, named repository-relative, and
+`next: write it in quality/fleet.toml like this:` with the file's shape below; each bad entry is named by its place
+(`repositories[3]`), never by its text.
 
 - Each repository is cloned from `https://github.com/<owner>/<name>` with `git -c credential.helper= clone --depth 1 --no-tags`, `GIT_TERMINAL_PROMPT=0` and no
   askpass, into a temporary directory that is removed on every exit, and its default branch tip is measured.

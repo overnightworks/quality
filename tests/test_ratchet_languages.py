@@ -31,7 +31,7 @@ MIXED_TREE = {
     ],
 )
 def test_the_measured_languages_are_listed_largest_first_and_by_name_on_a_tie(files, languages):
-    """#119 E5: the scoreboard's reading of a tree names each measured language."""
+    """#119 E5: the report's reading of a tree names each measured language."""
     assert list(language_lines(measure({path: text.encode() for path, text in files.items()}))) == languages
 
 

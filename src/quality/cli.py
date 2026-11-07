@@ -168,8 +168,8 @@ def main(
         )
     if arguments.command == "verdict":
         return run_verdict(arguments.path, fetcher_for, sleep)
-    if arguments.command == "scoreboard":
-        return run_scoreboard(arguments.path, release_tags)
+    if arguments.command == "report":
+        return fleet.run_report(release_tags, clock, now().date(), channels, environment)
     if arguments.command == "sonar":
         if arguments.sonar_command == "properties":
             return run_sonar_properties()
@@ -197,7 +197,7 @@ Commands:
   merge OWNER/REPO#N [--dry-run]
       Operator only: merge one pull request whose gate is red only for
       legacy findings or loosenings he ruled, after he types yes.
-  scoreboard [PATH]
+  report
       Measure every fleet repository: size, debt, the gate release it pins.
 
 Run by the gate, not by people:
@@ -259,6 +259,20 @@ Options:
   -h, --help  show this help
 
 Exit codes: 0 merged, 1 refused, 2 could not check or do, 130 interrupted.
+"""
+
+REPORT_HELP = f"""\
+usage: quality report [-v]
+
+Measure every fleet repository {fleet.FLEET_PATH} lists: size, debt, the gate
+release it pins. A row per repository goes to stderr, the two markdown tables
+to stdout and to the step summary.
+
+Options:
+  -v          show the raw scanner output; the report runs no scanner
+  -h, --help  show this help
+
+Exit codes: 0 every repository measured, 2 could not answer, 130 interrupted.
 """
 
 
@@ -388,8 +402,9 @@ def build_parser() -> DoorParser:
     merge_parser.add_argument("pull_request", nargs="?", type=named_pull_request, metavar="OWNER/REPO#N")
     merge_parser.add_argument(DRY_RUN_WORD, dest="dry_run", action="store_true")
     merge_parser.add_argument("-v", dest="verbose", action="store_true")
-    scoreboard = commands.add_parser("scoreboard")
-    scoreboard.add_argument("path", nargs="?", type=Path, default=Path("."))
+    report_parser = commands.add_parser("report", allow_abbrev=False)
+    report_parser.pictured_help = REPORT_HELP
+    report_parser.add_argument("-v", dest="verbose", action="store_true")
     return parser
 
 
@@ -715,7 +730,7 @@ def run_sonar_findings(transport: Transport, sleep: Sleep) -> int:
 def summarised(door: str, report: tuple[str, ...]) -> bool:
     """Whether the run summary took the report; an unwritable summary is a fact on stderr, not a traceback."""
     try:
-        append_step_summary(report)
+        append_step_summary(report, os.environ)
     except OSError as error:
         emit(f"{door}: cannot judge - {STEP_SUMMARY_VARIABLE} is not writable: {error}", file=sys.stderr)
         return False
@@ -746,24 +761,6 @@ def run_verdict(path: Path, fetcher_for: Callable[[str], PageFetcher], sleep: Sl
         code = EXIT_CLEAN if settled.verdict.green else EXIT_FINDINGS
     emit(*report, file=sys.stderr if code == EXIT_CANNOT_JUDGE else sys.stdout)
     return code if summarised("verdict", report) else EXIT_CANNOT_JUDGE
-
-
-def run_scoreboard(path: Path, release_tags: fleet.TagReader) -> int:
-    try:
-        listed = fleet.read_fleet(path)
-    except fleet.FleetError as error:
-        emit(f"scoreboard: cannot judge - {error}", file=sys.stderr)
-        return EXIT_CANNOT_JUDGE
-    rows = fleet.measure_fleet(listed)
-    try:
-        tags = release_tags()
-    except fleet.ReleaseTagsError as error:
-        tags = error
-    report = fleet.render(rows, datetime.now(UTC).date(), tags)
-    emit(*report)
-    if not summarised("scoreboard", report) or fleet.cannot_judge(rows, tags):
-        return EXIT_CANNOT_JUDGE
-    return EXIT_CLEAN
 
 
 def run(

@@ -1,5 +1,6 @@
-"""`quality scoreboard`: every fleet repository's size in one markdown table, and under it the release matrix: the
-gate and CodeQL release each repository's workflows call.
+"""`quality report`: every fleet repository's size in one markdown table, and under it the release matrix: the
+gate and CodeQL release each repository's workflows call. The door prints the fleet line and a row per repository on
+stderr as each is measured, then the tables alone on stdout and in the step summary, then the closing line or the pair.
 
 Lines and the production/test split are the `size` rule's own (`ratchet.summarise`), measured on a shallow clone of
 the default branch tip. Only `https://github.com/<owner>/<name>` is cloned, built from the fleet entry, and git runs
@@ -10,10 +11,11 @@ anonymously readable is not measured: the table is published in a public run sum
 
 import re
 import subprocess
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from datetime import date
-from enum import Enum
+from enum import Enum, StrEnum
+from functools import partial
 from pathlib import Path, PurePosixPath
 
 import yaml
@@ -25,11 +27,13 @@ from quality import (
     clones,
     config,
     layout,
+    output,
     process,
     ratchet,
     report,
     repository,
 )
+from quality.report import CannotJudge, Command, Example, Instruction
 from quality.rules import Rule, RuleRelease, Switch
 
 GITHUB = "https://github.com/"
@@ -79,6 +83,31 @@ NO_JUDGED_PROJECT = "no judged project"
 RELEASE_UNKNOWN = "release unknown"
 NOT_RELEASED = "not released"
 IMPORT_LINTER_CONFIG = "import-linter config"
+REPORT_COMMAND = "quality report"
+FLEET_SUBJECT = "fleet"
+RELEASE_TAGS_SUBJECT = "release tags"
+EXIT_MEASURED = 0
+EXIT_NOT_MEASURED = 2
+# The characters CommonMark and GFM tables read as syntax inside a line: escapes, code, emphasis, strikethrough, links
+# and images, HTML and entities, cell borders.
+MARKDOWN_SYNTAX = frozenset("\\`*_~[]<>&|")
+FIX_THEN_RERUN = Instruction(f"fix what the error names, then run {REPORT_COMMAND} again")
+FLEET_SHAPE = Example(f"write it in {FLEET_PATH} like this", (FLEET_EXAMPLE,))
+
+
+class FleetEvent(StrEnum):
+    """What a row of the report says."""
+
+    LISTED = "listed"
+    MEASURED = "measured"
+    PARTLY_READ = "partly read"
+    NOT_MEASURED = "not measured"
+    NOT_READ = "not read"
+
+
+def fleet_refusal(fact: str) -> CannotJudge:
+    """A fleet file that cannot be used: the fact, and under `next:` the file's shape to copy."""
+    return CannotJudge(fact, (FLEET_SHAPE,))
 
 
 def release_order(tag: str) -> tuple[int, ...]:
@@ -181,17 +210,13 @@ class Fleet:
     repositories: tuple[str, ...]
 
 
-class FleetError(Exception):
-    """The fleet file cannot be used; the message names it and shows the right shape."""
-
-
 def read_fleet(root: Path) -> Fleet:
     try:
         text = repository.read_text(root, FLEET_PATH)
     except repository.RepositoryFileError as error:
-        raise FleetError(str(error)) from error
+        raise fleet_refusal(str(error)) from error
     if text is None:
-        raise FleetError(f"{FLEET_PATH} is missing - create it with:\n{FLEET_EXAMPLE}")
+        raise fleet_refusal(f"{FLEET_PATH} is missing")
     return parse_fleet(text)
 
 
@@ -199,18 +224,18 @@ def parse_fleet(text: str) -> Fleet:
     try:
         document = repository.parse_toml(text)
     except repository.TomlError as error:
-        raise FleetError(f"{FLEET_PATH} is not valid TOML ({error}) - write it like:\n{FLEET_EXAMPLE}") from error
+        raise fleet_refusal(f"{FLEET_PATH} is not valid TOML ({error})") from error
     unknown = sorted(set(document) - {"repositories"})
     if unknown:
-        raise FleetError(f"{FLEET_PATH} has unknown key(s) {unknown} - only repositories exists, like:\n{FLEET_EXAMPLE}")
+        raise fleet_refusal(f"{FLEET_PATH} has a key other than repositories: {', '.join(unknown)}")
     entries = document.get("repositories")
     if not isinstance(entries, list) or not all(isinstance(entry, str) for entry in entries):
-        raise FleetError(f"{FLEET_PATH} needs repositories as a list of strings, like:\n{FLEET_EXAMPLE}")
+        raise fleet_refusal(f"{FLEET_PATH} needs repositories as a list of strings")
     if not entries:
-        raise FleetError(f"{FLEET_PATH} lists no repository - list at least one, like:\n{FLEET_EXAMPLE}")
+        raise fleet_refusal(f"{FLEET_PATH} lists no repository")
     problems = _entry_problems(entries)
     if problems:
-        raise FleetError(f"{FLEET_PATH}: {'; '.join(problems)} - write each as owner/name, once, like:\n{FLEET_EXAMPLE}")
+        raise fleet_refusal(f"{FLEET_PATH} {output.SEPARATOR.join(problems)}")
     return Fleet(tuple(sorted(entries, key=str.lower)))
 
 
@@ -228,28 +253,12 @@ def _entry_problems(entries: list[str]) -> list[str]:
     return problems
 
 
-def measure_fleet(fleet: Fleet) -> list[Row]:
-    """One row per repository in the fleet's order; one row that fails never stops the others."""
-    return [measure_repository(name) for name in fleet.repositories]
-
-
 def anonymous_environment(scratch: Path) -> dict[str, str]:
     """No configuration git could authenticate from: the process boundary's isolation drops every GIT_* variable and the system
     and global config, and points HOME at an empty directory, so no ~/.netrc either."""
     isolated = process.attribute_free_git_environment(scratch / "home")
     # git falls back to SSH_ASKPASS for an http password too.
     return {**{name: value for name, value in isolated.items() if name != "SSH_ASKPASS"}, "GIT_TERMINAL_PROMPT": "0"}
-
-
-def cannot_judge(rows: list[Row], tags: ReleaseTags | ReleaseTagsError) -> bool:
-    pins = release_tags_or_none(tags)
-    unreadable = any(
-        isinstance(cell, CannotRead)
-        for row in rows
-        if isinstance(row, Measured)
-        for cell in matrix_cells(row, pins)
-    )
-    return isinstance(tags, ReleaseTagsError) or unreadable or any(isinstance(row, Unjudged) for row in rows)
 
 
 def release_tags_or_none(tags: ReleaseTags | ReleaseTagsError) -> ReleaseTags | None:
@@ -393,7 +402,7 @@ def git(
 
 
 def render(rows: list[Row], today: date, tags: ReleaseTags | ReleaseTagsError) -> tuple[str, ...]:
-    heading = f"**Fleet scoreboard, {today.isoformat()}, quality {__version__} — {FUNCTION_SCOPE}**"
+    heading = f"**Fleet report, {today.isoformat()}, quality {__version__} — {FUNCTION_SCOPE}**"
     table = [table_line(COLUMNS), "|---" * len(COLUMNS) + "|", *(table_line(cells(row)) for row in rows)]
     pins = release_tags_or_none(tags)
     matrix_heading = f"**Repo × rule, {newest_release_words(tags)}**"
@@ -404,6 +413,83 @@ def render(rows: list[Row], today: date, tags: ReleaseTags | ReleaseTagsError) -
         *(table_line(matrix_cells(row, pins)) for row in rows),
     ]
     return (heading, "", *table, "", matrix_heading, "", every_release, "", *matrix)
+
+
+def run_report(
+    release_tags: TagReader, clock: Callable[[], float], today: date, channels: output.Channels, environment: Mapping[str, str]
+) -> int:
+    """Measures the fleet `quality/fleet.toml` lists where the door runs: the fleet line and a row on stderr as each
+    repository is measured, then the tables on stdout and in the step summary, then the closing line or the pair."""
+    started = clock()
+    try:
+        listed = read_fleet(Path("."))
+    except CannotJudge as refusal:
+        output.write_pair(refusal.reason.fact, refusal.reason.next_steps, channels.err)
+        return EXIT_NOT_MEASURED
+    width = max(output.SUBJECT_WIDTH, *map(len, listed.repositories))
+    show = partial(output.write_rows, channel=channels.err, subject_width=width)
+    count = len(listed.repositories)
+    show((output.Row(output.Glyph.NOTE, FLEET_SUBJECT, FleetEvent.LISTED, FLEET_PATH, count=count, counts_plural=False),))
+    tags = _read_tags(release_tags, show)
+    pins = release_tags_or_none(tags)
+    rows: list[Row] = []
+    for name in listed.repositories:
+        began = clock()
+        measured = measure_repository(name)
+        show((report_row(measured, pins, clock() - began),))
+        rows.append(measured)
+    tables = render(rows, today, tags)
+    output.write_lines(tables, channels.out)
+    try:
+        output.append_step_summary(tables, environment)
+    except OSError as error:
+        output.write_pair(f"{output.STEP_SUMMARY_VARIABLE} is not writable{output.SEPARATOR}{error}", (FIX_THEN_RERUN,), channels.err)
+        return EXIT_NOT_MEASURED
+    problems = report_problems(rows, pins, tags)
+    if problems:
+        output.write_pair(output.SEPARATOR.join((*problems, "the tables say so")), (Command(REPORT_COMMAND),), channels.err)
+        return EXIT_NOT_MEASURED
+    whole = f"{len(rows)} of {output.counted(len(rows), 'repository', 'repositories')} measured"
+    output.write_closing_line(output.Glyph.CLEAN, (whole, output.format_duration(clock() - started)), channels.err)
+    return EXIT_MEASURED
+
+
+def _read_tags(release_tags: TagReader, show: Callable[[tuple[output.Row, ...]], None]) -> ReleaseTags | ReleaseTagsError:
+    """The gate's release tags, read before any clone so each row's glyph is final when it prints; a failed read is its row."""
+    try:
+        return release_tags()
+    except ReleaseTagsError as error:
+        show((output.Row(output.Glyph.COULD_NOT_CHECK, RELEASE_TAGS_SUBJECT, FleetEvent.NOT_READ, str(error), descriptive=True),))
+        return error
+
+
+def unread_files(row: Measured, pins: ReleaseTags | None) -> tuple[str, ...]:
+    """The files the row's matrix cells could not read, each once, in cell order."""
+    cells = matrix_cells(row, pins)
+    return tuple(dict.fromkeys(file for cell in cells if isinstance(cell, CannotRead) for file in cell.files))
+
+
+def report_row(row: Row, pins: ReleaseTags | None, seconds: float) -> output.Row:
+    if isinstance(row, Unjudged):
+        return output.Row(output.Glyph.COULD_NOT_CHECK, row.name, FleetEvent.NOT_MEASURED, row.reason, descriptive=True)
+    unread = unread_files(row, pins)
+    if unread:
+        return output.Row(output.Glyph.COULD_NOT_CHECK, row.name, FleetEvent.PARTLY_READ, str(CannotRead(unread)), descriptive=True)
+    return output.Row(output.Glyph.CLEAN, row.name, FleetEvent.MEASURED, f"{row.commit}{output.SEPARATOR}{output.format_duration(seconds)}")
+
+
+def report_problems(rows: list[Row], pins: ReleaseTags | None, tags: ReleaseTags | ReleaseTagsError) -> list[str]:
+    """What keeps the report from being whole, in the pair's order; empty when every repository was measured."""
+    not_measured = sum(isinstance(row, Unjudged) for row in rows)
+    partly_read = sum(isinstance(row, Measured) and bool(unread_files(row, pins)) for row in rows)
+    problems = []
+    if not_measured:
+        problems.append(f"{not_measured} of {output.counted(len(rows), 'repository', 'repositories')} not measured")
+    if partly_read:
+        problems.append(f"{partly_read} partly read")
+    if isinstance(tags, ReleaseTagsError):
+        problems.append("the release tags not read")
+    return problems
 
 
 def words_joined(words: list[str]) -> str:
@@ -545,7 +631,13 @@ def released_tag(commit: str, tags: ReleaseTags) -> str | None:
 
 
 def table_line(values: tuple[Cell, ...]) -> str:
-    return "| " + " | ".join(str(value).replace("|", "\\|") for value in values) + " |"
+    return "| " + " | ".join(markdown_text(str(value)) for value in values) + " |"
+
+
+def markdown_text(text: str) -> str:
+    """Text a cell shows as written: a backslash before each character markdown reads as syntax, so repository text
+    opens no HTML comment, link, emphasis or new cell in the published summary."""
+    return "".join(f"\\{character}" if character in MARKDOWN_SYNTAX else character for character in text)
 
 
 def cells(row: Row) -> tuple[str, ...]:

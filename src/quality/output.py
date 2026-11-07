@@ -49,12 +49,12 @@ def emit_finding(finding: Finding) -> None:
     emit(*render(finding).split("\n"))
 
 
-def append_step_summary(report: tuple[str, ...]) -> None:
+def append_step_summary(lines: Sequence[str], environment: Mapping[str, str]) -> None:
     """In a GitHub Actions step, the run summary gets the same escaped lines as the log."""
-    summary = os.environ.get(STEP_SUMMARY_VARIABLE)
+    summary = environment.get(STEP_SUMMARY_VARIABLE)
     if summary:
         with open(summary, "a", encoding="utf-8") as handle:
-            handle.write("".join(f"{printable(line)}\n" for line in report))
+            handle.write("".join(f"{printable(line)}\n" for line in lines))
 
 
 def append_step_output(name: str, value: str) -> None:
@@ -234,7 +234,7 @@ def open_channel(stream: TextIO | None, environment: Mapping[str, str]) -> Chann
 
 def open_channels(environment: Mapping[str, str]) -> Channels:
     """Each stream's style, decided once for the run from the environment the door is given; `output.py` reads the
-    process environment only for the step summary."""
+    process environment only for the step output."""
     return Channels(open_channel(sys.stdout, environment), open_channel(sys.stderr, environment))
 
 
@@ -285,10 +285,10 @@ def _event_text(row: Row) -> str:
     return counted(row.count, event, None if row.counts_plural else event)
 
 
-def _row_lines(row: Row, channel: Channel) -> list[str]:
+def _row_lines(row: Row, channel: Channel, subject_width: int = SUBJECT_WIDTH) -> list[str]:
     """Each field is escaped and padded before it is painted, so the columns hold at a terminal as they do in a pipe."""
     styled = channel.styled
-    subject = _padded(printable(row.subject), SUBJECT_WIDTH)
+    subject = _padded(printable(row.subject), subject_width)
     middle = f"{subject}  {_padded(_event_text(row), EVENT_WIDTH)} " if row.fact else f"{subject}  {_event_text(row)}"
     prefix = f"  {row.glyph} {middle}"
     fact = _fitted(row.fact, prefix, channel.width if row.descriptive else None)
@@ -339,8 +339,8 @@ def _discard_further_writes(stream: TextIO) -> None:
         os.dup2(null_device.fileno(), stream.fileno())
 
 
-def write_rows(rows: tuple[Row, ...], channel: Channel) -> None:
-    _print_lines([line for row in rows for line in _row_lines(row, channel)], channel)
+def write_rows(rows: tuple[Row, ...], channel: Channel, subject_width: int = SUBJECT_WIDTH) -> None:
+    _print_lines([line for row in rows for line in _row_lines(row, channel, subject_width)], channel)
 
 
 @dataclass(frozen=True)
@@ -486,6 +486,11 @@ def write_closing_line(glyph: Glyph, parts: Sequence[str], channel: Channel) -> 
     styled = channel.styled
     painted = [_paint(f"{glyph} {parts[0]}", VERDICT_STYLE[glyph], styled), *(_paint(part, DIM, styled) for part in parts[1:])]
     _print_lines([SEPARATOR.join(painted)], channel)
+
+
+def write_lines(lines: Sequence[str], channel: Channel) -> None:
+    """Lines that are an artifact, the report's tables: each escaped, never shortened and never painted."""
+    _print_lines([printable(line) for line in lines], channel)
 
 
 def write_verdict(verdict: Verdict, channel: Channel) -> None:
