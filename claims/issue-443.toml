@@ -1,0 +1,8 @@
+claim_id = "d6267ee1dad849b5ae48f4f600ec1e80"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "05e51be178364c1646688448212094d856b5a4da"
+branch = "claude/issue-443-gate-pin"
+scope = ["AGENTS.md", "docs/commands.md", "docs/gate.md", "src/quality/checkout.py", "src/quality/cli.py", "src/quality/fleet.py", "src/quality/output.py", "src/quality/verdict.py", "tests/conftest.py", "tests/test_checkout.py", "tests/test_cli_help.py", "tests/test_cli_workflow_invocations.py", "tests/test_fleet_matrix.py"]
+opened_commit = "7ad68f030c12c0d3b687c9518fe84212bf8419e9"
+whole_reason = "About +151/-67 in four production files, of which about 55 lines and one import are moved: the move without the release read has no second caller, the release read without quality's identity would make any repository's own gate.yml quality's, and the release read without --version would be code ahead of its caller, so the four are one honest slice."
