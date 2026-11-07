@@ -47,7 +47,7 @@ def test_a_failed_gate_with_no_findings_exits_one_and_names_each_failed_conditio
 
 
 def test_a_passed_gate_leaves_the_summary_and_exit_unchanged(monkeypatch, capsys):
-    """#193 sentence 1, cell 2: OK prints no gate line"""
+    """#193 sentence 1, cell 2: OK prints the passed quality-gate row"""
     code, out, err, _ = run_cli(monkeypatch, capsys, sonar_answering(gate=GATE_OK))
     assert (code, out, err) == (0, f"  · analysis      pull request   #7 · {KEY}\n  ✓ new           none\n  · legacy        0 open         on main\n  ✓ quality gate  passed\n✓ clean · new 0 · legacy 0 · <1s\n", "")
 
