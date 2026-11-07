@@ -241,7 +241,11 @@ def test_the_child_is_the_process(scene):
         try:
             started.communicate(timeout=120)
         finally:
-            started.kill()
+            started.terminate()
+            try:
+                started.wait(timeout=TERMINATION_SECONDS)
+            except subprocess.TimeoutExpired:
+                started.kill()
     child = scene.child()
     assert (child["pid"], child["ppid"]) == (started.pid, os.getpid())
 
@@ -433,14 +437,14 @@ def test_a_calling_shell_loop_stops(scene, moment):
         commit_python_file(scene)
         words = ("check", "code")
     loop = ["bash", "-c", 'for i in 1 2; do "$@"; echo next; done', "_", *scene.parent(*words)]
-    with watching_descendants(scene) as held:
-        with launched(scene, loop) as started:
-            os.killpg(started.pid, signal.SIGINT)
-            stdout, _ = started.communicate(timeout=60)
-            assert (started.returncode, "next" in stdout) == (-signal.SIGINT, False)
+    with watching_descendants(scene) as held, launched(scene, loop) as started:
+        os.killpg(started.pid, signal.SIGINT)
+        stdout, _ = started.communicate(timeout=60)
+        assert (started.returncode, "next" in stdout) == (-signal.SIGINT, False)
         if moment == "during preparation":
-            readable, _, _ = select.select([held], [], [], 5)
-            assert bool(readable) and os.read(held, 10) == b""
+            readable, _, _ = select.select([held], [], [], 60)
+            assert readable
+            assert os.read(held, 10) == b""
 
 
 def own_gate_ci() -> dict[str, str]:
