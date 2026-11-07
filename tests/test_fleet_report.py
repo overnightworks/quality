@@ -79,7 +79,7 @@ def test_a_measured_fleet_prints_its_rows_on_stderr_and_only_the_tables_on_stdou
         ["o/alpha", "no gate", "none"],
         ["o/beta-repository", "no gate", "none"],
     ]
-    assert (len(lines), [line.split(" |")[0] for line in lines[-2:]]) == (16, ["| o/alpha", "| o/beta-repository"])
+    assert (len(lines), [line.split(" |")[0] for line in lines[-2:]]) == (15, ["| o/alpha", "| o/beta-repository"])
 
 
 def test_a_repository_that_cannot_be_cloned_is_its_row_and_the_pair_after_the_tables(capsys, monkeypatch, tmp_path, public, missing, remotes):
@@ -154,7 +154,7 @@ def test_markdown_in_repository_text_stays_text_in_the_tables(capsys, monkeypatc
     hostile = public("hostile", gate_caller(ref))
     summary = tmp_path / "summary.md"
     printed = report_in(
-        write_fleet(tmp_path / "fleet", [hostile]), capsys, monkeypatch, ticks(0, 1, 2), environment={"GITHUB_STEP_SUMMARY": str(summary)}
+        write_fleet(tmp_path / "fleet", [hostile]), capsys, monkeypatch, ticks(0, 1, 2, 3), environment={"GITHUB_STEP_SUMMARY": str(summary)}
     )
     assert (row(printed.out, hostile, 1)[1], row(summary.read_text(), hostile, 1)[1]) == (cell, cell)
 

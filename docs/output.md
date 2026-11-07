@@ -524,10 +524,10 @@ All measured. Exit 0. Tables: stdout; every other line: stderr.
 
 ```text
 $ quality report
-  · fleet         14 listed      quality/fleet.toml
-  ✓ quality       measured       8c8121b · 3s
-  ✓ aco           measured       2f4e9a0 · 5s
-  ✓ songmaker     measured       71c3d8e · 11s
+  · fleet                         15 listed      quality/fleet.toml
+  ✓ overnightworks/aco            measured       2f4e9a0 · 5s
+  ✓ overnightworks/agent-runtime  measured       8c8121b · 11s
+  ✓ overnightworks/hopin          measured       71c3d8e · 3s
   …
 **Fleet report, 2026-10-28, quality v0.9.0 — functions and CCN: Python only**
 
@@ -537,22 +537,25 @@ $ quality report
 
 **Repo × rule, newest release v0.9.0**
 | …
-✓ 14 of 14 repositories measured · 1m12s
+✓ 15 of 15 repositories measured · 1m12s
 ```
 
-(`…` after the third repository stands for eleven more rows.)
+(`…` after the third repository stands for twelve more rows.)
 
 Into a file, a repository not measurable. Exit 2. All lines shown: stderr.
 
 ```text
 $ quality report > fleet.md
-  · fleet         14 listed      quality/fleet.toml
-  ✓ quality       measured       8c8121b · 3s
-  ✗ hopin         not measured   clone timed out after 300s
+  · fleet                         15 listed      quality/fleet.toml
+  ✓ overnightworks/aco            measured       2f4e9a0 · 5s
+  ✓ overnightworks/agent-runtime  measured       8c8121b · 11s
+  ✗ overnightworks/hopin          not measured   cannot clone (git exited 128)
   …
-error: 1 of 14 repositories not measured · its row says so in fleet.md
+error: 1 of 15 repositories not measured · the tables say so
 next: quality report
 ```
+
+Built: the frames above; rows sort by `owner/name` and share a subject column as wide as the longest; a failed read of the release tags is `✗ release tags  not read` under the fleet line; `✗ …  partly read  cannot read <files>` where a cell could not read a file; a fleet file that cannot be used, the filesystem's refusals included, is the pair with the file to copy; the step summary gets the tables, every cell's markdown escaped.
 
 ### 10. The pinned release is not there yet
 
