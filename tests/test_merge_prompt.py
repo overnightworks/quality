@@ -18,6 +18,7 @@ from tests.support.merge import (
     FakeGh,
     changed_nothing,
     declaring,
+    door_ports,
     drive,
     landing_pair,
     no_network,
@@ -97,8 +98,8 @@ def test_ctrl_c_at_the_prompt_ends_the_run_interrupted_and_changes_nothing(capsy
     assert gh.sequence == []
 
 
-def door(gh, **ports):
-    return cli.main(["merge", f"{REPO}#7"], gh=gh, transport=sonar(), remote_for=no_network, **ports)
+def door(gh, **keywords):
+    return cli.main(["merge", f"{REPO}#7"], gh=gh, transport=sonar(), remote_for=no_network, ports=door_ports(), **keywords)
 
 
 def test_the_door_reads_one_line_of_stdin(monkeypatch):

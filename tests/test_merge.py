@@ -9,6 +9,7 @@ from quality.ratchet import BASELINE_PATH
 from quality.sonar import SonarHttpError, basic_authorization
 from tests.support.advisories import allowance_config
 from tests.support.check import assert_every_line_starts_with_the_door
+from tests.support.door import RELEASE_ROW
 from tests.support.git_repositories import git_pull
 from tests.support.merge import (
     ALL_METHODS_ALLOWED,
@@ -25,6 +26,7 @@ from tests.support.merge import (
     changed_nothing,
     closing_line,
     declaring,
+    door_ports,
     drive,
     landing_row,
     not_judged_pair,
@@ -265,11 +267,11 @@ def test_cannot_judge_when_sonar_is_unreachable_under_legacy_fail(capsys):
 
 
 def test_cannot_judge_without_the_merge_commit_the_jobs_ran_on(capsys):
-    """#37 rule 2: the config the jobs ran on is unknown, so exit 2 and nothing changed."""
+    """#37 rule 2: the release and the config the jobs ran on are unknown, so exit 2 and nothing changed."""
     gh = FakeGh(merge_sha=None)
     code, answers = drive(gh, sonar())
     assert code == 2
-    assert "not judged" in capsys.readouterr().out
+    assert capsys.readouterr().out == ""
     changed_nothing(gh)
     assert answers == []
 
@@ -368,10 +370,10 @@ def test_a_declared_loosening_merges_through_the_door_without_sonar(
         shown.append(capsys.readouterr())
         return "yes\n"
 
-    code = cli.main(["merge", f"{REPO}#7"], gh=gh, transport=transport, terminal=cli.Terminal(read_line, lambda: True))
+    code = cli.main(["merge", f"{REPO}#7"], gh=gh, transport=transport, terminal=cli.Terminal(read_line, lambda: True), ports=door_ports())
     assert (code, transport.sent, gh.sequence) == (0, [], ["gate false", "merge", "gate true", "comment"])
     assert (shown[0].out, shown[0].err) == (
-        pull_row() + checks_row("quality / verdict is") + rows + merge_row() + landing_row("#9"),
+        RELEASE_ROW + pull_row() + checks_row("quality / verdict is") + rows + merge_row() + landing_row("#9"),
         prompt(),
     )
     assert gh.merge_calls == [("pr", "merge", "7", "--repo", REPO, "--merge", "--match-head-commit", SHA, "--body-file", "-")]
@@ -399,7 +401,7 @@ def test_legacy_findings_and_a_declared_loosening_merge_in_one_run(capsys):
     shown = []
     assert drive(gh, when_asked=lambda: shown.append(capsys.readouterr()))[0] == 0
     assert (shown[0].out, shown[0].err) == (
-        pull_row() + checks_row() + declared_row(1) + removed_b_lines() + legacy_row() + merge_row()
+        RELEASE_ROW + pull_row() + checks_row() + declared_row(1) + removed_b_lines() + legacy_row() + merge_row()
         + landing_row(),
         prompt(),
     )
@@ -448,7 +450,7 @@ def test_the_operator_reads_the_method_before_the_question_and_the_log_comment_n
     gh, shown = FakeGh(**gh_kwargs), []
     drive(gh, when_asked=lambda: shown.append(capsys.readouterr()))
     assert (shown[0].out, shown[0].err) == (
-        pull_row() + checks_row() + loosenings_none() + legacy_row() + merge_row(event) + landing_row(),
+        RELEASE_ROW + pull_row() + checks_row() + loosenings_none() + legacy_row() + merge_row(event) + landing_row(),
         prompt(),
     )
     assert f"; {sentence}; " in gh.comments[0]
@@ -542,7 +544,7 @@ def test_the_door_refuses_before_the_gate_when_no_method_is_usable(gh_kwargs, li
     streams = capsys.readouterr()
     assert (code, streams.out, streams.err, answers) == (
         2,
-        pull_row() + checks_row() + loosenings_none() + legacy_row() + f"  ✗ merge         not judged     {line}\n",
+        RELEASE_ROW + pull_row() + checks_row() + loosenings_none() + legacy_row() + f"  ✗ merge         not judged     {line}\n",
         not_judged_pair(),
         [],
     )

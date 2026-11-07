@@ -286,3 +286,23 @@ def test_a_malformed_pull_request_variable_is_its_pair(frame, run_env, monkeypat
     pair = lines(f"error: {fact}", SET_BY_THE_GATE)
     code, out, err, summary = frame()
     assert ((code, out, err, summary), token in out + err + summary) == ((2, "", pair, block(pair)), False)
+
+
+@pytest.mark.parametrize(
+    ("version", "row"),
+    [
+        pytest.param("0.10.0", "  · release       v0.10.0        this gate run", id="at a release"),
+        pytest.param("0.10.1.dev3+g5d1e0b7", "  · release       this checkout  0.10.1.dev3+g5d1e0b7 · quality judges itself", id="in quality's own run"),
+    ],
+)
+def test_the_first_row_names_the_release_of_the_gate_run(frame, based, monkeypatch, version, row):
+    monkeypatch.setattr("quality.verdict.__version__", version)
+    based(gate_config("checks"))
+    assert frame()[1].splitlines()[0] == row
+
+
+def test_a_refusal_frame_opens_with_the_release_row(frame, monkeypatch):
+    monkeypatch.setattr("quality.verdict.__version__", "0.10.0")
+    monkeypatch.delenv("GATE_NEEDS")
+    code, out, err, _ = frame()
+    assert (code, out, err.startswith("error: ")) == (2, "  · release  v0.10.0  this gate run\n", True)

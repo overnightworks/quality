@@ -1,6 +1,7 @@
 import pytest
 
 from tests.support.check import assert_every_line_starts_with_the_door
+from tests.support.door import RELEASE_ROW
 from tests.support.merge import (
     ABSENT,
     SHA,
@@ -112,7 +113,7 @@ def test_a_body_without_one_valid_line_keeps_the_door_shut(body, line, capsys):
     gh = FakeGh(body=body)
     code, answers = drive(gh)
     output = capsys.readouterr()
-    assert (code, output.out, output.err, answers) == (1, f"{pull_row()}  ! landing       refused        {line}\n", landing_pair(), [])
+    assert (code, output.out, output.err, answers) == (1, f"{RELEASE_ROW}{pull_row()}  ! landing       refused        {line}\n", landing_pair(), [])
     assert_every_line_starts_with_the_door(output.out.splitlines())
     changed_nothing(gh)
 
@@ -126,7 +127,7 @@ def test_a_body_that_is_no_text_cannot_be_judged(body, capsys):
     gh = FakeGh(body=body)
     code, answers = drive(gh)
     output = capsys.readouterr()
-    assert (code, output.out, output.err, answers) == (2, f"{pull_row()}  ✗ landing       not judged     {no_body_text()}\n", not_judged_pair(), [])
+    assert (code, output.out, output.err, answers) == (2, f"{RELEASE_ROW}{pull_row()}  ✗ landing       not judged     {no_body_text()}\n", not_judged_pair(), [])
     changed_nothing(gh)
 
 
@@ -135,7 +136,7 @@ def test_a_pull_answer_without_a_body_field_cannot_be_judged(capsys):
     code, answers = drive(gh)
     output = capsys.readouterr()
     assert (code, output.out, output.err, answers) == (
-        2, f"{pull_row()}  ✗ landing       not judged     GitHub's answer holds no 'body'\n", not_judged_pair(), []
+        2, f"{RELEASE_ROW}{pull_row()}  ✗ landing       not judged     GitHub's answer holds no 'body'\n", not_judged_pair(), []
     )
     changed_nothing(gh)
 
@@ -154,7 +155,7 @@ def test_the_last_row_before_the_question_is_what_the_merge_commit_ends_with(bod
     shown = []
     drive(FakeGh(body=body), when_asked=lambda: shown.append(capsys.readouterr()))
     assert (shown[0].out, shown[0].err) == (
-        (f"{pull_row()}  ✓ checks        ok             only quality / sonar and quality / verdict are red\n"
+        (f"{RELEASE_ROW}{pull_row()}  ✓ checks        ok             only quality / sonar and quality / verdict are red\n"
         f"  ✓ loosenings    none\n  ! sonar         4 legacy findings on main\n  · merge         merge commit   allowed on main\n  · landing       {row}\n"),
         prompt(),
     )
