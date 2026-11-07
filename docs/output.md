@@ -454,7 +454,7 @@ next: quality merge overnightworks/shop#232
 
 An undeclared loosening looks the same, with `1 undeclared` as the event, `! red · 1 undeclared loosening · 4s` as the closing line and no `next:`: the door is closed then.
 
-Built: subjects share a column as wide as the longest; the gate's own jobs stand as `quality / check` and `quality / sonar`; a conclusion GitHub adds later is `concluded <word>`; each loosening stands below its row as its `what`, a declared one with its ruling and reason as the door shows it; a declaration that matches nothing is `! declarations  N unmatched`; every closing line ends with its duration; without a base the base row says so.
+Built: subjects share a column as wide as the longest; the gate's own jobs stand as `quality / check` and `quality / sonar`; a conclusion GitHub adds later is `concluded <word>`; each loosening stands below its row as its `what`, a declared one with its ruling and reason as the door shows it; a declaration that matches nothing is `! declarations  N unmatched`; every closing line ends with its duration; without a base the base row says so. The release row opens every frame, a refusal's included, `this checkout  <version> · quality judges itself` in quality's own run.
 
 ### 8. `quality merge owner/repo#n`: the operator's door
 
@@ -516,7 +516,7 @@ next:
     echo '{"properties":[{"property_name":"quality_gate","value":"true"}]}' | gh api -X PATCH repos/overnightworks/shop/properties/values --input -
 ```
 
-Built (C8a1): the rows before the prompt and the refused frame, without the release row (C10). A declaration reads `what · item of date` with `reason:` below until C9's typed loosenings; a red Sonar adds `! sonar  N legacy findings  on <branch>` and the error names declared loosenings and legacy findings (decision 4); the method row reads `allowed on <base>`; a draft is `! #N  draft` with `next: gh pr ready N --repo R`. Built (C8a2): the landing row last and the prompt on stderr with the picture's words. Anything but `yes` ended with Enter, the end of input included, is `error: not confirmed · nothing changed` with `next: quality merge <owner/repo>#<n>`, exit 1; Ctrl-C at the prompt writes nothing, the shell ends the line, exit 130; a closed stderr takes the prompt and the pairs, and nothing moves to stdout.
+Built (C8a1): the rows before the prompt and the refused frame. Built: the release row is read at the merge commit; a pull request refused from its own read stops before it; a refused release is the pair alone, as in case 10; quality itself is `· release  installed  <version> · quality's gate pins no release`. A declaration reads `what · item of date` with `reason:` below until C9's typed loosenings; a red Sonar adds `! sonar  N legacy findings  on <branch>` and the error names declared loosenings and legacy findings (decision 4); the method row reads `allowed on <base>`; a draft is `! #N  draft` with `next: gh pr ready N --repo R`. Built (C8a2): the landing row last and the prompt on stderr with the picture's words. Anything but `yes` ended with Enter, the end of input included, is `error: not confirmed · nothing changed` with `next: quality merge <owner/repo>#<n>`, exit 1; Ctrl-C at the prompt writes nothing, the shell ends the line, exit 130; a closed stderr takes the prompt and the pairs, and nothing moves to stdout.
 
 Built (C8b): after `yes` the rows, the closing line and the broken pair are drawn as above, the restore command read from the request the door sent. The merged row names the method, never a sha; the broken case also shows the `log comment` row the door posts; a merge whose answer was lost stands after `quality_gate  on`, once read back; after Ctrl-C the next row starts on a line of its own; the duration runs from the answer. Before the question a stdout that refuses a row stops the door: `error: stdout refused a row · nothing changed`, exit 2.
 
@@ -645,13 +645,18 @@ Commands:
       release its gate pins.
   merge OWNER/REPO#N [--dry-run]
       Operator only: merge one pull request whose gate is red only for
-      loosenings he ruled, after he types yes.
+      legacy findings or loosenings he ruled, after he types yes.
   report
       Measure every fleet repository: size, debt, the gate release it pins.
 
 Run by the gate, not by people:
   verdict
       Decide whether this pull request may merge.
+  sonar properties
+      Refuse a properties file, token or coverage report the scan must not
+      start with.
+  sonar findings
+      Wait for this run's analysis, then count its open findings.
 
 Options:
   --version   the installed version and the release this repository's gate pins
@@ -693,7 +698,7 @@ Exit codes: 0 clean, 1 findings, 2 could not check, 130 interrupted.
 
 Built: `usage: quality check [AREA ...] [--staged] [--fix] [--dry-run] [-v]`, the `Areas` block from `Area` (`rules.py`) and the options that exist; `--staged`, `--fix` and `--dry-run` are built.
 
-Built: `usage: quality COMMAND [-v]` and the `-v` line; under 'Run by the gate, not by people' the help also lists `sonar properties` and `sonar findings`.
+Built: `usage: quality COMMAND [-v]` and the `-v` line.
 
 Wrong invocation: the pair instead of argparse text. Exit 2. stderr.
 

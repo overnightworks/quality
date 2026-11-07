@@ -8,7 +8,7 @@ from functools import partial
 from pathlib import Path
 from types import MappingProxyType
 
-from quality import architecture, output, web
+from quality import __version__, architecture, output, pin, web
 from quality.checkout import COMMIT_SHA
 from quality.config import (
     REPOSITORY_NAME,
@@ -563,6 +563,7 @@ def run_verdict(
     stdout and `next:` on stderr, a refusal as the pair on stderr after the rows it judged, and the same lines in the
     step summary as a code block."""
     started = clock()
+    release = pin.gate_run_release(__version__).row()
     try:
         run = read_gate_run(environment)
         base, head = read_sides(run)
@@ -574,13 +575,13 @@ def run_verdict(
             sleep,
         )
     except UnsettledRun as unsettled:
-        show = partial(_refused, verdict_rows(unsettled.last, run, unsettled.reads, unsettled.first), unsettled.reason)
+        show = partial(_refused, (release, *verdict_rows(unsettled.last, run, unsettled.reads, unsettled.first)), unsettled.reason)
         code = EXIT_CANNOT_JUDGE
     except CannotJudge as refusal:
-        show = partial(_refused, (), refusal.reason)
+        show = partial(_refused, (release,), refusal.reason)
         code = EXIT_CANNOT_JUDGE
     else:
-        rows = verdict_rows(settled.verdict, run, settled.reads, settled.first)
+        rows = (release, *verdict_rows(settled.verdict, run, settled.reads, settled.first))
         show = partial(_shown, rows, *closing(settled.verdict, run, clock() - started))
         code = EXIT_GREEN if settled.verdict.green else EXIT_RED
     show(channels)

@@ -4,7 +4,7 @@ import pytest
 
 from quality import cli
 from quality.config import CONFIG_PATH
-from tests.support.verdict import CHECKS_GREEN
+from tests.support.verdict import CHECKS_GREEN, without_release_row
 
 READABLE = '[gate]\nmandatory_jobs = ["checks"]\n'
 SONAR_STRING = (
@@ -53,7 +53,7 @@ def test_a_config_the_verdict_cannot_read_is_its_fact_with_the_example_and_the_s
     pair = pair.format(step=refuse(repo, commit_base, text))
     code = cli.main(["verdict"], fetcher_for=lambda token: lambda url: (CHECKS_GREEN, None))
     printed = capsys.readouterr()
-    assert (code, printed.out, printed.err, summary.read_text()) == (2, "", pair, f"```\n{pair}```\n")
+    assert (code, without_release_row(printed.out), printed.err, without_release_row(summary.read_text())) == (2, "", pair, f"```\n{pair}```\n")
 
 
 @pytest.mark.integration

@@ -13,8 +13,9 @@ from pathlib import Path
 from typing import NoReturn
 
 from quality import DISTRIBUTION, __version__, checkout, installation, output, process
-from quality.checkout import GatePin, NoGatePin, OwnGate, UnknownGatePin
+from quality.checkout import GatePin, GateState, NoGatePin, OwnGate, UnknownGatePin
 from quality.installation import DirectoryOrigin, VcsOrigin
+from quality.output import Glyph, Row
 from quality.report import CannotJudge, Command, Instruction, Release, Step
 
 FIRST_RELEASE_WITH_CHECK = "v0.10.0"
@@ -42,6 +43,7 @@ class Fetch(StrEnum):
 
 class ReleaseEvent(StrEnum):
     THIS_CHECKOUT = "this checkout"
+    INSTALLED = "installed"
 
 
 @dataclass(frozen=True)
@@ -59,6 +61,9 @@ class JudgingRelease:
 
     event: Release | ReleaseEvent
     fact: str
+
+    def row(self) -> Row:
+        return Row(Glyph.NOTE, "release", self.event, self.fact)
 
 
 @dataclass(frozen=True)
@@ -143,7 +148,7 @@ def _installed_release(running: RunningQuality) -> JudgingRelease:
     return JudgingRelease(Release(shown), "installed · no gate pins a release here")
 
 
-def _at_the_pin(pin: GatePin, running: RunningQuality, command: str, fetch: Fetch | None) -> JudgingRelease | ReleaseAtPin:
+def _at_the_pin(pin: GatePin, running: RunningQuality, command: str, fetch: Fetch | None, door: str) -> JudgingRelease | ReleaseAtPin:
     commit = running_commit(running)
     if commit == pin.commit and pin.release == f"v{running.version}":
         fetched = "fetched now · " if fetch is Fetch.FETCHED else ""
@@ -152,7 +157,7 @@ def _at_the_pin(pin: GatePin, running: RunningQuality, command: str, fetch: Fetc
         fact = f"the gate pins {pin.commit[:7]} as {pin.release}, but that commit is quality {running.version}"
         raise CannotJudge(fact, (COMMENT_STEP,))
     if checkout.release_order(pin.release) < checkout.release_order(FIRST_RELEASE_WITH_CHECK):
-        fact = f"the gate pins quality {pin.release}, which has no quality check"
+        fact = f"the gate pins quality {pin.release}, which has no {door}"
         raise CannotJudge(fact, (Instruction(f"raise the gate pin to {FIRST_RELEASE_WITH_CHECK} or later"),))
     if fetch is None:
         return ReleaseAtPin(Release(pin.release), pin.commit)
@@ -196,7 +201,41 @@ def judging_release(
         case OwnGate():
             raise CannotJudge(f"this is quality {running.version}, not this checkout's code", (Command(f"uv run {command}"),))
         case GatePin() as pin:
-            return _at_the_pin(pin, running, command, fetch)
+            return _at_the_pin(pin, running, command, fetch, "quality check")
+
+
+def judging_of(
+    state: GateState, repository: str, command: str, environment: Mapping[str, str], *, door: str, running: RunningQuality,
+    reexecute: Callable[[ReleaseAtPin, str], NoReturn],
+) -> JudgingRelease:
+    """The release that judges `door` for `repository` from its gate's pin `state`, read elsewhere than a checkout, or
+    the refusal that names why none may; a pinned release `running` is not, it becomes through `reexecute`. quality's own
+    gate pins no release, so the installed quality judges it, never the code of the pull request."""
+    fetch = _run_at_pin(environment, command)
+    match state:
+        case NoGatePin():
+            fact = f"no workflow of {repository} at the pull request's merge commit calls quality's gate.yml, so no release is pinned"
+            raise CannotJudge(fact, (Instruction("add the gate as quality's docs/gate.md describes"),))
+        case UnknownGatePin(reason):
+            raise CannotJudge(reason.fact, reason.next_steps)
+        case OwnGate() if fetch is None:
+            return JudgingRelease(ReleaseEvent.INSTALLED, f"{running.version} · quality's gate pins no release")
+        case OwnGate():
+            fact = f"the gate of {repository} pins no release, but this is quality {running.version} prepared by uv"
+            raise CannotJudge(fact, (Instruction(f"run {command} again"),))
+        case GatePin() as pin:
+            release = _at_the_pin(pin, running, command, fetch, door)
+            if isinstance(release, ReleaseAtPin):
+                reexecute(release, command)
+            return release
+
+
+def gate_run_release(version: str) -> JudgingRelease:
+    """The release a gate run judges at: the tool the gate checked out, a release, or quality's own checkout."""
+    tag = f"v{version}"
+    if checkout.RELEASE_TAG.fullmatch(tag):
+        return JudgingRelease(Release(tag), "this gate run")
+    return JudgingRelease(ReleaseEvent.THIS_CHECKOUT, f"{version} · quality judges itself")
 
 
 def judge_here(root: Path, command: str, staged: bool, environment: Mapping[str, str]) -> JudgingRelease | Reexecution:

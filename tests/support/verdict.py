@@ -44,10 +44,19 @@ def set_gate_variables(monkeypatch) -> None:
     monkeypatch.delenv("GATE_BASE_SHA", raising=False)
 
 
+def without_release_row(text: str) -> str:
+    """`text` without the release row every verdict frame opens with, which must stand first among its rows."""
+    lines = text.splitlines(keepends=True)
+    at = next(index for index, line in enumerate(lines) if line.startswith("  "))
+    assert lines[at].split()[:2] == ["·", "release"], text
+    return "".join(lines[:at] + lines[at + 1 :])
+
+
 def verdict_streams(repo: Path, capsys) -> tuple[int, str, str]:
+    """The verdict's exit and streams, its stdout after the release row."""
     code = door_in(repo, "verdict", fetcher_for=lambda token: lambda url: (CHECKS_GREEN, None), clock=lambda: 0.0)
     captured = capsys.readouterr()
-    return code, captured.out, captured.err
+    return code, without_release_row(captured.out), captured.err
 
 
 def verdict_of(repo: Path, capsys) -> tuple[int, str]:

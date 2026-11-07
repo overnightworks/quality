@@ -180,21 +180,8 @@ class FakeGh:
             )
         if step == "statuses":
             return "\n".join(json.dumps({"context": context, "state": state}) for context, state in self.statuses.items())
-        if step == "listing":
-            return self.listing_answer(self.file_of(arguments)[1])
-        if step == "workflow":
-            path, sha = self.file_of(arguments)
-            content = self.workflows.get(sha, {}).get(unquote(path).removeprefix(".github/workflows/"))
-            if content is None:
-                raise GhFailed("gh api failed: HTTP 404")
-            return content
-        if step == "config":
-            content = self.files.get(self.file_of(arguments))
-            if isinstance(content, GhFailed):
-                raise content
-            if content is None:
-                raise GhFailed("gh api failed: HTTP 404")
-            return content
+        if step in ("listing", "workflow", "config"):
+            return self.contents_answer(step, *self.file_of(arguments))
         if step == "repository":
             return json.dumps({"default_branch": "main", "permissions": {"admin": self.admin}, **self.settings})
         if step == "rules":
@@ -211,6 +198,20 @@ class FakeGh:
         if step in ("checks", "statuses") and f"/commits/{SHA}/" not in " ".join(arguments):
             return ""
         return None
+
+    def contents_answer(self, step, path, sha):
+        """A file at a commit, or the merge commit's workflow listing; what the fake does not hold answers 404."""
+        if step == "listing":
+            return self.listing_answer(sha)
+        if step == "workflow":
+            content = self.workflows.get(sha, {}).get(unquote(path).removeprefix(".github/workflows/"))
+        else:
+            content = self.files.get((path, sha))
+        if isinstance(content, GhFailed):
+            raise content
+        if content is None:
+            raise GhFailed("gh api failed: HTTP 404")
+        return content
 
     def listing_answer(self, sha):
         if self.listing is not None:

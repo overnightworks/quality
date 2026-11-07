@@ -23,6 +23,7 @@ from tests.support.verdict import (
     gate_config,
     job,
     verdict_view,
+    without_release_row,
 )
 
 
@@ -142,7 +143,8 @@ def reread(capsys, monkeypatch, run_env, pull_request):
 
         code = cli.main(["verdict"], fetcher_for=lambda token: fetch, sleep=slept.append, clock=lambda: 0.0)
         out, err = capsys.readouterr()
-        assert (next(script, None), err.startswith("error: "), summary.read_text()) == (None, code == 2, f"```\n{out}{err}```\n")
+        out, written = without_release_row(out), without_release_row(summary.read_text())
+        assert (next(script, None), err.startswith("error: "), written) == (None, code == 2, f"```\n{out}{err}```\n")
         return code, [*shown(out), *err.splitlines()], sum(slept)
 
     return run
@@ -462,6 +464,7 @@ def judged_contracts(capsys, pull_request):
         page = json.dumps({"total_count": 1, "jobs": [{"id": 1, "name": "A", "run_attempt": 1, "status": "completed", "conclusion": "success"}]})
         code = cli.main(["verdict"], fetcher_for=lambda token: lambda url: (page, None), clock=lambda: 0.0)
         out, err = capsys.readouterr()
+        out = without_release_row(out)
         return code, verdict_view(out) if out else err.splitlines()
 
     return run

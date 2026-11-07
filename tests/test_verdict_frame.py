@@ -10,7 +10,7 @@ import pytest
 from quality import cli
 from quality.config import CONFIG_PATH
 from tests.support.git_repositories import GIT_IDENTITY, head_commit, put
-from tests.support.verdict import CHECKS_GREEN, declaration, gate_config, jobs_page
+from tests.support.verdict import CHECKS_GREEN, declaration, gate_config, jobs_page, without_release_row
 
 pytestmark = pytest.mark.integration
 
@@ -42,7 +42,7 @@ def frame(capsys, run_env):
         clock = clock or ticks(0, 0)
         code = cli.main(["verdict"], fetcher_for=lambda token: lambda url: (page, None), sleep=lambda seconds: None, clock=clock)
         printed = capsys.readouterr()
-        return code, printed.out, printed.err, summary.read_text() if summary.is_file() else None
+        return code, without_release_row(printed.out), printed.err, without_release_row(summary.read_text()) if summary.is_file() else None
 
     return run
 
@@ -288,6 +288,18 @@ def test_a_malformed_pull_request_variable_is_its_pair(frame, run_env, monkeypat
     assert ((code, out, err, summary), token in out + err + summary) == ((2, "", pair, block(pair)), False)
 
 
+@pytest.fixture
+def raw_frame(capsys, run_env):
+    """`quality verdict`'s exit and whole stdout and stderr, its release row included."""
+
+    def run():
+        code = cli.main(["verdict"], fetcher_for=lambda token: lambda url: (CHECKS_GREEN, None), sleep=lambda seconds: None, clock=ticks(0, 0))
+        printed = capsys.readouterr()
+        return code, printed.out, printed.err
+
+    return run
+
+
 @pytest.mark.parametrize(
     ("version", "row"),
     [
@@ -295,14 +307,14 @@ def test_a_malformed_pull_request_variable_is_its_pair(frame, run_env, monkeypat
         pytest.param("0.10.1.dev3+g5d1e0b7", "  · release       this checkout  0.10.1.dev3+g5d1e0b7 · quality judges itself", id="in quality's own run"),
     ],
 )
-def test_the_first_row_names_the_release_of_the_gate_run(frame, based, monkeypatch, version, row):
+def test_the_first_row_names_the_release_of_the_gate_run(raw_frame, based, monkeypatch, version, row):
     monkeypatch.setattr("quality.verdict.__version__", version)
     based(gate_config("checks"))
-    assert frame()[1].splitlines()[0] == row
+    assert raw_frame()[1].splitlines()[0] == row
 
 
-def test_a_refusal_frame_opens_with_the_release_row(frame, monkeypatch):
+def test_a_refusal_frame_opens_with_the_release_row(raw_frame, monkeypatch):
     monkeypatch.setattr("quality.verdict.__version__", "0.10.0")
     monkeypatch.delenv("GATE_NEEDS")
-    code, out, err, _ = frame()
-    assert (code, out, err.startswith("error: ")) == (2, "  · release  v0.10.0  this gate run\n", True)
+    code, out, err = raw_frame()
+    assert (code, out, err.startswith("error: ")) == (2, "  · release       v0.10.0        this gate run\n", True)
