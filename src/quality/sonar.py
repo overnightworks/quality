@@ -520,27 +520,27 @@ def _findings_row(result: SonarResult) -> output.Row:
     return output.Row(output.Glyph.NEEDS_YOU, subject, SonarEvent.FINDING, count=count)
 
 
-def _legacy_rows(result: SonarResult) -> tuple[output.Row, ...]:
+def _legacy_rows(result: SonarResult) -> list[output.Row]:
     default_branch = result.analysis.default_branch
     if result.legacy_unknown:
-        return (output.Row(output.Glyph.NOTE, "legacy", SonarEvent.UNKNOWN, f"{default_branch} not analysed yet"),)
+        return [output.Row(output.Glyph.NOTE, "legacy", SonarEvent.UNKNOWN, f"{default_branch} not analysed yet")]
     if result.legacy is None:
-        return ()
+        return []
     fails = result.legacy_mode is LegacyMode.FAIL and result.legacy > 0
     setting = f'{output.SEPARATOR}[gate] legacy = "{LegacyMode.FAIL.value}"' if fails else ""
     glyph = output.Glyph.NEEDS_YOU if fails else output.Glyph.NOTE
-    return (output.Row(glyph, "legacy", SonarEvent.OPEN, f"on {default_branch}{setting}", count=result.legacy, counts_plural=False),)
+    return [output.Row(glyph, "legacy", SonarEvent.OPEN, f"on {default_branch}{setting}", count=result.legacy, counts_plural=False)]
 
 
-def _gate_rows(gate: GateStatus | None) -> tuple[output.Row, ...]:
+def _gate_rows(gate: GateStatus | None) -> list[output.Row]:
     if gate is None:
-        return ()
+        return []
     ignored = (IGNORED_CONDITIONS,) if gate.conditions_ignored else ()
     if gate.passed:
-        return (output.Row(output.Glyph.CLEAN, "quality gate", SonarEvent.PASSED, output.SEPARATOR.join(ignored)),)
+        return [output.Row(output.Glyph.CLEAN, "quality gate", SonarEvent.PASSED, output.SEPARATOR.join(ignored))]
     conditions = tuple(output.SubLine(output.Glyph.NEEDS_YOU, condition.sentence, whole=True) for condition in gate.failed)
     fact = output.SEPARATOR.join((output.counted(len(gate.failed), "condition"), *ignored))
-    return (output.Row(output.Glyph.NEEDS_YOU, "quality gate", SonarEvent.FAILED, fact, sub_lines=conditions),)
+    return [output.Row(output.Glyph.NEEDS_YOU, "quality gate", SonarEvent.FAILED, fact, sub_lines=conditions)]
 
 
 def closing(result: SonarResult) -> tuple[output.Glyph, tuple[str, ...]]:
