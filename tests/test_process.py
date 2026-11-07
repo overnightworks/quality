@@ -134,3 +134,36 @@ def test_output_that_is_not_utf8_is_named_without_the_decoders_words():
     with pytest.raises(ProcessError) as raised:
         process.run(["sh", "-c", "printf '\\377'"])
     assert str(raised.value) == "sh printed output that is not UTF-8"
+
+
+@pytest.mark.integration
+def test_replace_process_becomes_the_command():
+    program = (
+        "import os, sys; from pathlib import Path; from quality import process; print(os.getpid(), flush=True); "
+        "process.replace_process(Path('/bin/sh'), ['-c', 'echo $$ \"$FOO\"'], {'FOO': 'bar'})"
+    )
+    done = subprocess.run([sys.executable, "-c", program], capture_output=True, text=True, check=True)
+    before, after = done.stdout.splitlines()
+    assert after == f"{before} bar"
+
+
+@pytest.mark.integration
+def test_a_command_that_cannot_start_is_a_process_error(tmp_path):
+    with pytest.raises(ProcessError):
+        process.replace_process(tmp_path / "missing", [], {})
+
+
+@pytest.mark.integration
+def test_the_bounded_run_reports_each_second(tmp_path):
+    fifo = tmp_path / "go"
+    os.mkfifo(fifo)
+    seconds = []
+
+    def release(passed: int) -> None:
+        seconds.append(passed)
+        if passed == 1:
+            fifo.write_text("go\n")
+
+    with process.scratch_directory():
+        done = process.run_bounded_in_own_group(["cat", str(fifo)], 30, every_second=release)
+    assert (done.returncode, done.stdout, seconds) == (0, "go\n", [1])

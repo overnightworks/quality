@@ -793,3 +793,72 @@ def test_a_closing_line_paints_its_first_part_in_its_glyphs_verdict_style(glyph)
     reset = output.RESET.removeprefix("\x1b[").removesuffix("m")
     assert re.findall(r"\x1b\[([0-9;]*)m", styled) == [output.VERDICT_STYLE[glyph], reset, output.DIM, reset]
     assert without_sgr(styled) == f"{glyph} first · then\n"
+
+
+def test_the_live_line_shows_its_fact():
+    stream = io.StringIO()
+    with output.live_line(output.Channel(stream, False, 60))("release", "fetching") as show:
+        show("v0.10.1 · 4s")
+    assert stream.getvalue() == (
+        "  ⠋ release       fetching\r" "\r\x1b[K  ⠋ release       fetching       v0.10.1 · 4s\r" "\r\x1b[K"
+    )
+
+
+def test_a_stream_without_a_window_shows_no_fact():
+    stream = io.StringIO()
+    with output.live_line(output.Channel(stream, False, None))("release", "fetching") as show:
+        show("v0.10.1 · 4s")
+    assert stream.getvalue() == ""
+
+
+def leads_to_the_null_device(descriptor: int) -> bool:
+    return os.fstat(descriptor).st_rdev == os.stat(os.devnull).st_rdev
+
+
+def _missing(_tmp_path: Path):
+    return None, lambda: True
+
+
+def _closed_object(_tmp_path: Path):
+    stream = io.TextIOWrapper(io.BytesIO())
+    stream.close()
+    return stream, lambda: True
+
+
+def _reader_that_left(_tmp_path: Path):
+    read_end, write_end = os.pipe()
+    os.close(read_end)
+    stream = open(write_end, "w")  # noqa: SIM115 - the test owns the stream past this function
+    stream.write("a line\n")
+    return stream, lambda: leads_to_the_null_device(write_end)
+
+
+def _full_disk(_tmp_path: Path):
+    stream = open("/dev/full", "w")  # noqa: SIM115 - the test owns the stream past this function
+    stream.write("a line\n")
+    return stream, lambda: leads_to_the_null_device(stream.fileno())
+
+
+def _open_pipe(_tmp_path: Path):
+    read_end, write_end = os.pipe()
+    stream = open(write_end, "w")  # noqa: SIM115 - the test owns the stream past this function
+    stream.write("a line\n")
+    return stream, lambda: os.read(read_end, 100) == b"a line\n"
+
+
+@pytest.mark.parametrize(
+    "arrange",
+    [
+        pytest.param(_missing, id="missing"),
+        pytest.param(_closed_object, id="a closed object"),
+        pytest.param(_reader_that_left, id="a reader that left"),
+        pytest.param(_full_disk, id="a full disk"),
+        pytest.param(_open_pipe, id="a stream that takes the line"),
+    ],
+)
+def test_the_streams_flush_before_the_handover(tmp_path, monkeypatch, arrange):
+    stream, holds = arrange(tmp_path)
+    monkeypatch.setattr(sys, "stdout", stream)
+    monkeypatch.setattr(sys, "stderr", None)
+    output.flush_streams()
+    assert holds()
