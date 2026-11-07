@@ -105,8 +105,12 @@ def test_v_adds_nothing_to_the_door(words, typed, capsys):
             {"body": "a body without the line"}, "yes\n",
             r"next: give the pull request body exactly one Work-Item: or No-Item: line outside code blocks, then run (.+) again",
         ),
+        (
+            {"merge_config": "[secrets]\nignore = []\n"}, "yes\n",
+            r"next: push the fix to the pull request's branch, then run (.+) again",
+        ),
     ],
-    ids=["not confirmed", "not merged", "not judged", "a refused landing line"],
+    ids=["not confirmed", "not merged", "not judged", "a refused landing line", "a config refused at the merge commit"],
 )
 def test_a_next_step_that_names_the_door_again_names_the_pull_request_asked_for(gh_kwargs, typed, pattern, capsys):
     gh = FakeGh(**{**declared_loosening(), **gh_kwargs})

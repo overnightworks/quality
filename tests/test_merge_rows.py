@@ -6,11 +6,14 @@ import io
 import pytest
 
 from quality import cli
+from quality.report import printable
+from tests.support.config_refusals import all_refusals
 from tests.support.merge import (
     ABSENT,
     B_REMOVED,
     GATE_CONFIG,
     LEGACY_RED,
+    MERGE_SHA,
     ONE_JOB,
     REPO,
     SHA,
@@ -277,6 +280,91 @@ def test_a_step_that_cannot_be_judged_is_its_cross_row_and_the_pair(gh_kwargs, s
     changed_nothing(gh)
 
 
+def sonar_string_config():
+    return '[gate]\nmandatory_jobs = ["checks"]\nsonar = "false"\n'
+
+
+def unknown_key_config():
+    return "[secrets]\nignore = []\n"
+
+
+def push_step():
+    return "push the fix to the pull request's branch, then run quality merge acme/widgets#7 again"
+
+
+@pytest.mark.parametrize(
+    "refusal", [refusal for refusal in all_refusals() if "gate" in refusal.loaders and refusal.text is not None], ids=lambda refusal: refusal.id
+)
+def test_every_config_refused_at_the_merge_commit_is_its_fact_on_the_row_and_its_example_under_next(refusal, capsys):
+    gh = FakeGh(merge_config=refusal.text)
+    code, out, err, answers = run(gh, capsys)
+    lines = err.splitlines()
+    row = f"  ✗ loosenings    not judged     {printable(refusal.fact)}"
+    assert (code, out, lines[0], answers) == (2, frame(pull_row(), checks_row(), row), "error: could not judge · nothing changed", [])
+    if refusal.example is None:
+        assert lines[1:] == [f"next: {push_step()}"]
+    else:
+        steps = [line.strip() for line in lines[2:]]
+        assert (lines[1], steps) == ("next:", ["write it in quality/config.toml like this:", *map(printable, refusal.example), push_step()])
+    changed_nothing(gh)
+
+
+@pytest.mark.parametrize(
+    ("gh_kwargs", "into", "fact", "pair_end"),
+    [
+        (
+            {"merge_config": sonar_string_config()}, "main", "quality/config.toml [gate] sonar must be true or false",
+            ["next:", "    write it in quality/config.toml like this:", "        [gate]", "        sonar = false", f"    {push_step()}"],
+        ),
+        (
+            {"merge_config": unknown_key_config()}, "main",
+            "quality/config.toml has unknown key ignore in [secrets] - only allow exists", [f"next: {push_step()}"],
+        ),
+        (
+            {"base_config": sonar_string_config(), "base_ref": "release/v0.9"}, "release/v0.9",
+            "quality/config.toml [gate] sonar must be true or false",
+            ["next:", "    write it in quality/config.toml like this:", "        [gate]", "        sonar = false", "    fix it on release/v0.9 first"],
+        ),
+        (
+            {"base_config": unknown_key_config(), "base_ref": "release/v0.9"}, "release/v0.9",
+            "quality/config.toml has unknown key ignore in [secrets] - only allow exists", ["next: fix it on release/v0.9 first"],
+        ),
+        (
+            {"base_config": unknown_key_config(), "base_ref": "release/\u202eevil"}, "release/\\u202eevil",
+            "quality/config.toml has unknown key ignore in [secrets] - only allow exists", ["next: fix it on release/\\u202eevil first"],
+        ),
+    ],
+    ids=[
+        "the merge commit, with an example", "the merge commit, without an example", "the base, with an example",
+        "the base, without an example", "a base branch with a bidi override",
+    ],
+)
+def test_a_config_refusal_at_the_door_reads_as_drawn(gh_kwargs, into, fact, pair_end, capsys):
+    gh = FakeGh(**gh_kwargs)
+    assert run(gh, capsys) == (
+        2,
+        frame(
+            f"  · #7            open           head aaaaaaa · into {into}",
+            checks_row(),
+            f"  ✗ loosenings    not judged     {fact}",
+        ),
+        frame("error: could not judge · nothing changed", *pair_end),
+        [],
+    )
+    changed_nothing(gh)
+
+
+def test_a_config_refused_at_both_commits_is_fixed_on_the_base_first(capsys):
+    gh = FakeGh(base_config=sonar_string_config(), merge_config=unknown_key_config(), base_ref="release/v0.9")
+    code, out, err, _ = run(gh, capsys)
+    assert (code, out.splitlines()[-1], err.splitlines()[1:]) == (
+        2,
+        "  ✗ loosenings    not judged     quality/config.toml [gate] sonar must be true or false",
+        ["next:", "    write it in quality/config.toml like this:", "        [gate]", "        sonar = false", "    fix it on release/v0.9 first"],
+    )
+    assert [call for call in gh.calls if any(f"?ref={MERGE_SHA}" in argument for argument in call)] == []
+
+
 def test_the_rows_name_the_pull_requests_base_not_the_default_branch(capsys):
     gh = FakeGh(base_ref="release/1")
     shown = run(gh, capsys)
@@ -368,8 +456,15 @@ def test_what_the_operator_must_read_stands_whole_at_a_terminal(gh_kwargs, sonar
             {"checks": {**LEGACY_RED, "a_long_red_check": "failure"}}, 1,
             [pull_row(), "  ! checks        red            a_long…"], refused_pair(),
         ),
+        (
+            {"merge_config": sonar_string_config()}, 2, [pull_row(), checks_row(), "  ✗ loosenings    not judged     qualit…"],
+            frame(
+                "error: could not judge · nothing changed", "next:", "    write it in quality/config.toml like this:",
+                "        [gate]", "        sonar = false", f"    {push_step()}",
+            ),
+        ),
     ],
-    ids=["a refused fact", "a cross fact", "a running check", "a red check"],
+    ids=["a refused fact", "a cross fact", "a running check", "a red check", "a config refusal"],
 )
 def test_a_refused_or_cross_fact_ends_at_the_window(gh_kwargs, code, lines, err, window):
     assert at_a_terminal(FakeGh(**gh_kwargs), window, 40) == (code, lines, err)
