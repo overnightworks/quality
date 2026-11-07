@@ -1,6 +1,6 @@
 # The gate
 
-Reference for the engineer who calls the reusable `gate.yml` or `codeql.yml` workflow, or reads its verdict. The reasons behind its constraints stand in [ARCHITECTURE](ARCHITECTURE.md).
+Reference for the engineer who calls the reusable `gate.yml` workflow or reads its verdict. The reasons behind its constraints stand in [ARCHITECTURE](ARCHITECTURE.md).
 
 ## `gate.yml`
 
@@ -154,58 +154,11 @@ Ruled by the operator:
 
 The reason and the residual risk stand in [ARCHITECTURE](ARCHITECTURE.md), sections 6 and 8.
 
-## `codeql.yml`
-
-Ruled by the operator: a reusable workflow that runs CodeQL for the languages a caller names, one for the fleet instead
-of a copy per repository, with `build-mode: none` and CodeQL's default query suite and threat model. It uploads under the
-category `/language:<language>`, the Default Setup's category, so alerts carry over when a repository switches.
-
-A private repository needs GitHub Code Security for code scanning (`code-scanning/default-setup` answers 403 without it); quality's fleet does not pay for it, so private repositories run no CodeQL ([ARCHITECTURE](ARCHITECTURE.md)).
-
-A caller (`.github/workflows/code-scanning.yml`, workflow `name: CodeQL`):
-
-```yaml
-name: CodeQL
-
-on:
-  pull_request:
-    branches: [main]
-  push:
-    branches: [main]
-  schedule:
-    - cron: '23 4 * * 1'
-
-permissions:
-  contents: read
-
-jobs:
-  codeql:
-    permissions:
-      security-events: write
-      contents: read
-      actions: read
-    uses: overnightworks/quality/.github/workflows/codeql.yml@<tag>
-    with:
-      languages: '["actions", "python"]'
-```
-
-- **`languages`:** the one input, required, a string holding a JSON list; `'python'` or `'[]'` fails the run. List
-  every category the repository already analyses (aco also has `javascript-typescript`, which the
-  template would drop).
-- **Permissions:** the caller grants `security-events: write`, `contents: read` and `actions: read`, and the workflow
-  asks for no more. A caller without `security-events: write` is refused at startup.
-- **Updates:** pin `<tag>` to a release; Dependabot's `github-actions` ecosystem bumps it.
-- **Caller path:** a reusable call records the `analysis_key` `<caller file>:analyze`, so keep
-  the existing caller file's path and the key carries over.
-- **Switch PR:** a caller that fails at startup adds no check to its PR, so the switch PR must show its
-  `codeql / Analyze (…)` checks.
-- **Switching a repository:** the Default Setup goes off first.
-
-### Startup failures
+## Startup failures
 
 A reusable-workflow call that GitHub refuses at startup (a caller job that grants less than the called workflow asks for,
 such as `security-events: write` or `actions: read`) ends its run without a check run for that job, so a ruleset or
-`aco land` waiting for the check never sees it. Measured for CodeQL callers: such a run ends `startup_failure` and the commit has no
+`aco land` waiting for the check never sees it. Measured for [CodeQL callers](codeql.md): such a run ends `startup_failure` and the commit has no
 `codeql / Analyze (…)` check run. It is measured for CodeQL
 callers; for `gate.yml` callers the same behaviour is expected and not measured
 here. To re-measure, break a caller's `permissions:` on a scratch pull request and read

@@ -42,7 +42,8 @@ Locally, `quality check` runs every rule the gate runs, the secret, workflow and
 - [docs/rules.md](docs/rules.md): the `check` rules, the secret and advisory scans, the output contract.
 - [docs/output.md](docs/output.md): the picture of what the commands print; `check` prints its frame today.
 - [docs/commands.md](docs/commands.md): `check secrets --staged`, the scanners, `scoreboard` and `merge`.
-- [docs/gate.md](docs/gate.md): the `gate.yml` caller contract, the verdict, declared loosenings, `codeql.yml`.
+- [docs/gate.md](docs/gate.md): the `gate.yml` caller contract, the verdict, declared loosenings, startup failures.
+- [docs/codeql.md](docs/codeql.md): the `codeql.yml` caller contract.
 - [docs/release.md](docs/release.md): the release path (`release-gate.yml`, `release-tag.yml`, `image.yml`), its caller contract, how quality releases itself and the standard.
 - [docs/sonar.md](docs/sonar.md): `sonar findings`, coverage on new code, new and legacy findings, the quality gate, the Dependabot exception.
 - [docs/runbooks/merge.md](docs/runbooks/merge.md): the operator's door past a red gate.
