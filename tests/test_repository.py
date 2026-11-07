@@ -422,7 +422,7 @@ PREFIXES = {
     CHECK_WORD: f"{refusal_row('secrets')}",
     "check debt --fix": f"{refusal_row('debt')}",
     "verdict": "error: ",
-    "sonar findings": "sonar: cannot judge - ",
+    "sonar findings": "error: ",
 }
 
 
@@ -449,7 +449,7 @@ def test_an_unusable_config_is_exit_2_with_one_reason_in_every_command(
         (CHECK_WORD, f"{refusal_row('debt')}cannot read quality/baseline.toml: [Errno 13] Permission denied"),
         ("check debt --fix", f"{refusal_row('debt')}cannot read quality/baseline.toml: [Errno 13] Permission denied"),
         ("verdict", f"error: {DENIED}"),
-        ("sonar findings", f"sonar: cannot judge - {DENIED}"),
+        ("sonar findings", f"error: {DENIED}"),
     ],
     ids=["cell 12 check", "cell 13 check debt --fix", "cell 4 verdict", "sonar findings"],
 )
@@ -483,7 +483,7 @@ def point_git_dir_at_a_file(repo: Path, monkeypatch) -> None:
     [
         ([CHECK_WORD], "error: "),
         (["check", "debt", "--fix"], "error: "),
-        (["sonar", "properties"], "sonar: cannot judge - "),
+        (["sonar", "properties"], "error: "),
     ],
     ids=["check", "check debt --fix", "sonar properties"],
 )

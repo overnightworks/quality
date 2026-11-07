@@ -63,7 +63,7 @@ def commands_of(*group: str) -> str:
 
 def test_the_help_stands_in_the_pictures_frame(capsys):
     assert help_of(capsys, []) == (
-        "usage: quality COMMAND\n"
+        "usage: quality COMMAND [-v]\n"
         "\n"
         "Commands:\n"
         "  check [AREA ...] [--staged] [--fix] [--dry-run]\n"
@@ -87,6 +87,7 @@ def test_the_help_stands_in_the_pictures_frame(capsys):
         "  --version   the installed version\n"
         "  -h, --help  show this help\n"
         "\n"
+        "Every command takes -v: the raw scanner output, never a secret.\n"
         "Exit codes: 0 yes, 1 no, 2 could not answer, 130 interrupted.\n"
     )
 
@@ -200,6 +201,72 @@ def test_the_verdict_help_stands_in_its_frame(capsys):
     )
 
 
+@pytest.mark.parametrize(
+    ("words", "frame"),
+    [
+        pytest.param(
+            ["sonar"],
+            "usage: quality sonar COMMAND [-v]\n"
+            "\n"
+            "Run by the gate, not by people: the two steps of gate.yml's sonar job.\n"
+            "\n"
+            "Commands:\n"
+            "  properties\n"
+            "      Refuse a properties file, token or coverage report the scan must not\n"
+            "      start with, then hand the scan its arguments.\n"
+            "  findings\n"
+            "      Wait for this run's analysis, then judge its open findings and its\n"
+            "      quality gate.\n"
+            "\n"
+            "Options:\n"
+            "  -h, --help  show this help\n"
+            "\n"
+            "Exit codes: 0 clean, 1 findings, 2 could not judge, 130 interrupted.\n",
+            id="sonar",
+        ),
+        pytest.param(
+            ["sonar", "properties"],
+            "usage: quality sonar properties [-v]\n"
+            "\n"
+            "Run by the gate before the scan: refuse a sonar-project.properties, token,\n"
+            "coverage report or tracked .scannerwork/ the scan must not start with, then\n"
+            "hand the scan its arguments in the step output. With [gate] sonar = false in\n"
+            "quality/config.toml it refuses a properties file or a passed token instead.\n"
+            "\n"
+            "Options:\n"
+            "  -v          show the raw scanner output; the step runs no scanner\n"
+            "  -h, --help  show this help\n"
+            "\n"
+            "Exit codes: 0 clean, 2 could not judge, 130 interrupted.\n",
+            id="sonar properties",
+        ),
+        pytest.param(
+            ["sonar", "findings"],
+            "usage: quality sonar findings [-v]\n"
+            "\n"
+            "Run by the gate after the scan: wait for this run's own analysis\n"
+            "(.scannerwork/report-task.txt), then judge its open findings, the default\n"
+            "branch's legacy count and, on a pull request, SonarCloud's quality gate. It\n"
+            "needs quality/config.toml with [gate] mandatory_jobs.\n"
+            "\n"
+            "Options:\n"
+            "  -v          show the raw scanner output; the step runs no scanner\n"
+            "  -h, --help  show this help\n"
+            "\n"
+            "Exit codes: 0 clean or report only, 1 findings, 2 could not judge,\n"
+            "130 interrupted.\n",
+            id="sonar findings",
+        ),
+    ],
+)
+def test_the_sonar_helps_stand_in_their_frames(capsys, words, frame):
+    assert help_of(capsys, words) == frame
+    with pytest.raises(SystemExit) as stopped:
+        cli.main([*words, "-h"])
+    printed = capsys.readouterr()
+    assert (stopped.value.code, printed.out, printed.err) == (0, frame, "")
+
+
 def test_every_command_path_stands_in_the_help_once_and_every_entry_is_one(capsys):
     lines = help_of(capsys, []).splitlines()
     shown = [path_of(entry) for heading in headings(lines)[:2] for entry in entries_under(lines, heading)]
@@ -308,7 +375,10 @@ def test_a_closed_stdout_takes_no_help_and_exit_is_0(tmp_path):
         pytest.param(["check", "--stag"], (), "unknown argument{sep}--stag", "quality check", id="check --stag"),
         pytest.param(["check", "secrets", "--staged", "--nonsense"], (), "unknown argument{sep}--nonsense", "quality check", id="a stray option beside the staged flag"),
         pytest.param(["check", "docs", "--staged"], (), "no area docs{sep}areas: {areas}", "quality check", id="a wrong area beside the staged flag"),
-        pytest.param(["sonar", "properties", "x"], (), "unknown argument{sep}x", "quality sonar", id="stray argument of sonar"),
+        pytest.param(["sonar", "properties", "x"], (), "unknown argument{sep}x", "quality sonar properties", id="stray argument of sonar"),
+        pytest.param(["sonar", "properties", "--verbose"], (), "unknown argument{sep}--verbose", "quality sonar properties", id="a stray option of sonar properties"),
+        pytest.param(["sonar", "findings", "--he"], (), "unknown argument{sep}--he", "quality sonar findings", id="an abbreviated help of sonar findings"),
+        pytest.param(["sonar", "findings", "x"], (), "unknown argument{sep}x", "quality sonar findings", id="a stray argument of sonar findings"),
         pytest.param(["--nonsense", "report"], (), "unknown argument{sep}--nonsense", "quality report", id="stray option before a command"),
         pytest.param(["scoreboard"], (), "no command scoreboard{sep}commands: {commands}", "quality", id="the report's word that left"),
         pytest.param(["scoreboard", "."], (), "no command scoreboard{sep}commands: {commands}", "quality", id="the report's old path"),

@@ -8,7 +8,7 @@ import pytest
 
 from quality import check, cli
 from quality.output import Glyph
-from quality.report import FindingEvent, NoteEvent, headline
+from quality.report import FindingEvent, NoteEvent
 from quality.rules import Area, Rule
 from tests.support.check import (
     area_block,
@@ -103,7 +103,6 @@ def test_a_code_finding_ends_in_no_full_stop_and_names_no_rule_id(drive_code):
     assert {finding.event for finding in findings} == {FindingEvent.INSECURE, FindingEvent.PRINT_CALL, FindingEvent.UNUSED}
     for finding in findings:
         assert_finding_vocabulary(finding)
-        assert headline(finding) not in run.out
     printed = run.out + run.err
     assert (Rule.PYTHON_SECURITY in printed, Rule.PYTHON_PRINT in printed) == (False, False)
     assert run.err == ""

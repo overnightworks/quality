@@ -208,7 +208,7 @@ def test_a_draft_flag_that_is_no_boolean_cannot_be_judged(draft, capsys):
             {}, {"new": 1},
             [
                 pull_row(), checks_row(), loosenings_none(), "  ! sonar         refused        the pull request adds findings:",
-                "    ! sonar a.py:3 - s1: bad",
+                "    ! a.py:3 · s1: bad",
             ],
         ),
         (
@@ -432,7 +432,7 @@ def at_a_terminal(gh, window, columns, transport=None, typed="no\n"):
             {"added": [{"component": "k:a.py", "line": 3, "rule": "s1", "message": "a message that runs on past the window"}]}, 1,
             [
                 pull_row(), checks_row(), loosenings_none(), "  ! sonar         refused        the pu…",
-                "    ! sonar a.py:3 - s1: a message that runs on past the window",
+                "    ! a.py:3 · s1: a message that runs on past the window",
             ],
             refused_pair(),
         ),

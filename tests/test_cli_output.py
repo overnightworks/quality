@@ -321,28 +321,6 @@ def test_an_unused_allowance_with_a_control_character_prints_escaped(build_repo,
     assert_every_line_starts_with_the_door(lines)
 
 
-@pytest.mark.parametrize(
-    ("config_text", "fact", "example"),
-    [
-        (None, "quality/config.toml is missing", config.EXAMPLE),
-        ("[gate]\nmandatory_jobs = 3\n", "quality/config.toml needs [gate] mandatory_jobs as a non-empty list of job names", config.EXAMPLE),
-        ('[gate]\nmandatory_jobs = ["checks"]\nlegacy = "x"\n', 'quality/config.toml [gate] legacy must be "report" or "fail"', config.LEGACY_EXAMPLE),
-    ],
-    ids=["missing config", "malformed jobs", "malformed legacy"],
-)
-def test_a_door_outside_the_picture_prints_a_config_refusal_as_its_fact_then_the_example_in_one_stderr_line(
-    build_repo, monkeypatch, capsys, config_text, fact, example
-):
-    """#279 acceptance 7: `sonar findings` keeps its one-line form: the fact, `, like:` and the example joined with `\\x0a`."""
-    monkeypatch.chdir(build_repo({} if config_text is None else {"quality/config.toml": config_text}))
-    code, lines = door_lines(capsys, "sonar", "findings")
-    lines_of_example = "\\x0a".join(example)
-    assert (code, [line for line in lines if line.startswith("sonar: cannot judge - ")]) == (
-        2, [f"sonar: cannot judge - {fact}, like:\\x0a{lines_of_example}"],
-    )
-    assert_every_line_starts_with_the_door(lines)
-
-
 def test_a_lowered_entry_for_a_file_with_a_control_character_prints_escaped(build_repo, capsys):
     """The lowered row names the file escaped."""
     held = '[file_lines]\n"src/esc\\u001bape.py" = 900\n\n[clones]\n'
