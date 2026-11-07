@@ -1,0 +1,8 @@
+claim_id = "09555063fbc3436592151ebe657dc353"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "61664c32cec1886ce5315b3b71b001d1179cac96"
+branch = "claude/issue-424-agents-md-owners"
+scope = ["AGENTS.md", "docs/ARCHITECTURE.md", "docs/commands.md", "docs/output.md"]
+opened_commit = "1da0ecc58b935f48b8160ffe61d081034d33f861"
+whole_reason = "The sentences AGENTS.md drops land in or are already held by the other three files, so the move and its owners must land together to leave no fact without an owner."
