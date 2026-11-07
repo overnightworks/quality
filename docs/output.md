@@ -452,7 +452,7 @@ Run quality verdict
 next: quality merge overnightworks/shop#232
 ```
 
-An undeclared loosening looks the same, with `undeclared` as the fact and without `next:`: the door is closed then.
+An undeclared loosening looks the same, with `1 undeclared` as the event, `! red · 1 undeclared loosening · 4s` as the closing line and no `next:`: the door is closed then.
 
 Built: subjects share a column as wide as the longest; the gate's own jobs stand as `quality / check` and `quality / sonar`; a conclusion GitHub adds later is `concluded <word>`; each loosening stands below its row as its `what`, a declared one with its ruling and reason as the door shows it; a declaration that matches nothing is `! declarations  N unmatched`; every closing line ends with its duration; without a base the base row says so.
 

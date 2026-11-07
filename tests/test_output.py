@@ -634,7 +634,6 @@ def test_rows_share_the_subject_column_they_are_given():
     )
 
 
-
 @pytest.mark.parametrize(
     ("subjects", "width"),
     [
@@ -650,6 +649,7 @@ def test_the_subject_width_is_the_widest_escaped_subject(subjects, width):
 
 def test_next_alone_stands_on_its_channel():
     assert written(io.StringIO, lambda channel: output.write_next((Command("quality merge o/r#7"),), channel)) == "next: quality merge o/r#7\n"
+
 
 def test_lines_of_an_artifact_stand_escaped_and_unpainted():
     shown = written(Terminal, lambda channel: output.write_lines(("| a\x1b[31mb |", ""), channel))

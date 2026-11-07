@@ -88,9 +88,9 @@ def test_a_malformed_variable_is_its_pair_and_never_its_value(monkeypatch, run_e
     monkeypatch.setenv("GITHUB_TOKEN", token)
     monkeypatch.setenv("GATE_BASE_SHA", head_commit(repo))
     monkeypatch.setenv(name, value)
-    code, out, err, summary = door()
-    assert (code, out, err, summary) == refused(f"error: {fact}\n{SET_BY_THE_GATE}\n")
-    assert token not in out + err + summary
+    result = door()
+    assert result == refused(f"error: {fact}\n{SET_BY_THE_GATE}\n")
+    assert token not in "".join(result[1:])
 
 
 def test_a_base_branch_in_a_step_prints_escaped(monkeypatch, pull_request, door):
