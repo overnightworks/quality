@@ -52,7 +52,7 @@ PUSH_THE_FIX = Instruction("push the fix; the gate judges the new commit")
 NEEDS_STEP = Instruction("a mandatory job missing from the caller job's needs: add it there")
 PERMISSION_STEP = Instruction("grant actions: read in the caller job's permissions")
 SET_BY_THE_GATE = Instruction("quality verdict runs as gate.yml's verdict step, which sets it")
-WHOLE_NUMBER = re.compile(r"[1-9][0-9]*")
+WHOLE_NUMBER = re.compile(r"[1-9][0-9]{0,17}")
 EXIT_GREEN, EXIT_RED, EXIT_CANNOT_JUDGE = 0, 1, 2
 CREDENTIAL_HELPER = "!gh auth git-credential"
 FETCH_TIMEOUT_SECONDS = 120
@@ -563,7 +563,7 @@ def _require_safe_ref(ref: str, role: str) -> None:
 
 class UnusableConfig(CannotJudge):
     """A side's config that cannot be read: `where` names the side and `error` keeps the config's fact and example
-    apart; the fact is the line the verdict prints for it."""
+    apart; the callers print `error` as the refusal pair."""
 
     def __init__(self, where: str, error: ConfigError) -> None:
         super().__init__(f"{CONFIG_PATH} at {where}: {error}")
