@@ -20,7 +20,7 @@ ceiling lies on disk, in the index or in any commit `HEAD` reaches, and then jud
 never raises an entry and never adds one: what grew or is new stays a finding, and a raise is a hand edit with a declared
 loosening. A file git renamed into the index since the ceiling's last commit takes its entries with it (`docs/rules.md`). An entry whose path the index no longer tracks, whose Python function is gone or whose file is declared generated goes; one only missing from disk stands; a held pair the tree lost goes. A ceiling or `[clones]` table git
 holds and the tree lacks refuses with the restore step, and a shallow clone that cannot prove a first recording names
-`git fetch --unshallow`. It takes no `--staged` and needs `debt` among the named areas, or no area named; either refusal keeps a `--dry-run` in its `next:`. `quality check --fix --dry-run` makes, judges and renders the same ceiling, refuses where the fix refuses before its write, writes nothing, and exits `1` while the fix would change the file, `0` when not; a refusal only the write meets shows at the fix alone. Exit `0` clean, `1` findings, `2` could not fix.
+`git fetch --unshallow`. It takes no `--staged` and needs `debt` among the named areas, or no area named; either refusal keeps a `--dry-run` in its `next:`. `quality check --fix --dry-run` makes, judges and renders the same ceiling, refuses where the fix refuses before its write, writes nothing, and exits `1` while the fix would change the file, `0` when not; a refusal only the write meets shows at the fix alone. Exit `0` clean, `1` findings, `2` could not fix. No workflow runs `--fix` or its dry run.
 The rows and rules are in `docs/rules.md`, the frames in `docs/output.md`.
 
 ## `quality check secrets --staged`
@@ -131,9 +131,9 @@ runs the executable its own installation recorded, never one on `PATH`. A missin
 version, makes its rules `cannot judge` (exit `2`) with the two commands that reinstall quality, one in its checkout and one for a tool install, as alternatives under `next:`; a scanner quality's own
 metadata does not pin exactly makes them `cannot judge` as a defect in quality's release.
 
-quality builds the logic and the process itself and never a specialist scanner (language linters and test runners,
-gitleaks, osv-scanner, mutation tools); the scanners it uses run pinned underneath the one door (operator ruling
-15.10.2026: „ja! ich agree => ein fleet quality“).
+Ruled by the operator: quality builds the logic and the process itself and never a specialist scanner (language
+linters and test runners, gitleaks, osv-scanner, mutation tools); the scanners it uses run pinned underneath the one
+door.
 
 ## `quality emergency-merge`
 

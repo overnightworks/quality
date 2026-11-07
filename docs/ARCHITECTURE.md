@@ -96,8 +96,8 @@ manifest's version. ruff and zizmor are dependencies of quality's package, found
 ## 4. Deployment View
 
 A person installs quality with `uv tool install` from a tag ([README](../README.md#install)). A caller's CI runs the
-reusable `gate.yml` at the tag it pins; that workflow checks out quality and installs the three mise scanners from
-`src/quality/mise/`. `codeql.yml` is the reusable CodeQL workflow and `code-scanning.yml` quality's own caller of it.
+reusable `gate.yml` at the tag it pins; its caller contract stands in [gate](gate.md), and that workflow checks out
+quality and installs the three mise scanners from `src/quality/mise/`. `codeql.yml` is the reusable CodeQL workflow and `code-scanning.yml` quality's own caller of it.
 quality's CI runs its suite with coverage and calls its local `gate.yml`. `scoreboard.yml` runs the fleet report weekly
 and writes to no repository. `release.yml`, dispatched with a version, calls the reusable `release-gate.yml`, then
 builds and runs `scripts/verify_release.py`; its tag job calls `release-tag.yml` and is the only job that writes
