@@ -11,6 +11,7 @@ import pytest
 from quality import sides
 from quality.ratchet import BASELINE_PATH, Baseline, Key, Metric, Renames, renames_of, render_baseline
 from quality.report import CannotJudge
+from tests.support.door import RELEASE_ROW
 from tests.support.git_repositories import head_commit, put
 from tests.support.merge import (
     GATE_CONFIG,
@@ -302,7 +303,8 @@ def test_the_door_reads_a_move_as_the_verdict_does(capsys, tmp_path, base, head,
 
 def loosenings_not_judged(fact):
     return (
-        "  · #7            open           head aaaaaaa · into main\n"
+        RELEASE_ROW
+        + "  · #7            open           head aaaaaaa · into main\n"
         "  ✓ checks        ok             only quality / sonar and quality / verdict are red\n"
         f"  ✗ loosenings    not judged     {fact}\n"
     )

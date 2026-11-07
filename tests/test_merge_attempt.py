@@ -8,6 +8,7 @@ import pytest
 
 from tests.support.merge import (
     B_REMOVED,
+    MERGE_SHA,
     ONE_JOB,
     REPO,
     SHA,
@@ -379,6 +380,14 @@ def test_the_gate_row_stands_before_any_further_request(gh_kwargs, capsys):
     assert all(not_restored in text for _, text in later)
 
 
+def workflow_reads():
+    """The release's reads, which a pull request refused from its own read never makes."""
+    return [
+        ("api", f"repos/acme/widgets/contents/.github/workflows?ref={MERGE_SHA}"),
+        ("api", "-H", "Accept: application/vnd.github.raw", f"repos/acme/widgets/contents/.github/workflows/ci.yml?ref={MERGE_SHA}"),
+    ]
+
+
 @pytest.mark.parametrize("draft", [False, True], ids=["at the first row", "at a stopped row"])
 def test_a_stdout_that_refuses_a_row_stops_the_door_before_the_question(draft, capsys, monkeypatch):
     gh = FakeGh(draft=draft)
@@ -392,7 +401,7 @@ def test_a_stdout_that_refuses_a_row_stops_the_door_before_the_question(draft, c
             "next: send stdout where it can be written, then run quality merge acme/widgets#7 again\n"
         ),
         [],
-        [("api", "repos/acme/widgets"), ("api", "repos/acme/widgets/pulls/7")],
+        [("api", "repos/acme/widgets"), ("api", "repos/acme/widgets/pulls/7"), *([] if draft else workflow_reads())],
     )
 
 

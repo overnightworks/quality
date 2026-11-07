@@ -61,7 +61,7 @@ flowchart TB
 ```
 
 Rules return findings and never print; `output.py` owns every printed line. `checkout.py` and `repository.py` are the
-only readers of the checked-out files, `web.py` the only HTTP transport.
+only readers of the checked-out files, `web.py` the only HTTP transport, and `gh.py` runs every `gh` command the door sends.
 
 ## 3. Runtime View
 
@@ -111,7 +111,7 @@ its suite with coverage and calls its local `gate.yml`. `report.yml` runs the fl
 repository. `release.yml`, dispatched with a version, calls the reusable `release-gate.yml`, then builds and runs
 `scripts/verify_release.py`; its tag job calls `release-tag.yml` and is the only job that writes
 ([release](release.md)). `image.yml` is the reusable image build an app's release calls; it pushes to GHCR and attests
-([release](release.md)). Locally, `check` runs at the repository's pinned release, which uv prepares into its cache;
+([release](release.md)). Locally, `check` runs at the repository's pinned release and `merge` at its target's pin, which uv prepares into its cache;
 quality then becomes that release's process. quality keeps one empty record per checked release under the user's cache
 directory.
 
@@ -122,7 +122,9 @@ input: output masks them and stops workflow commands ([rules](rules.md), the out
 repository (`repository.py`). A scanner's stderr is shown only once gitleaks clears it. The GitHub transport follows no
 redirect. A workflow's pin selects which code runs locally. quality builds or runs a pinned commit only after quality's
 remote showed the comment's release tag at that commit: asked before every fetch, and remembered per machine by a record
-that only a matched answer writes. The Sonar token's boundary stands in [sonar](sonar.md#quality-sonar-findings). The advisory archive is an
+that only a matched answer writes. The door reads that pin through `gh` at the pull request's merge commit and checks
+every listed name before it shapes a request; for quality itself it runs the installed quality, never the pull
+request's own code. The Sonar token's boundary stands in [sonar](sonar.md#quality-sonar-findings). The advisory archive is an
 unsigned zip over TLS and is never cached ([rules](rules.md)). Agents are cooperative and share the operator's `gh`
 login, so the door is the agreed path, not a lock; a real lock (a token without admin rights) belongs to the machine's
 setup, not to quality.

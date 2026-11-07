@@ -2,7 +2,6 @@
 
 import json
 import shlex
-import subprocess
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -10,8 +9,9 @@ from enum import Enum, StrEnum
 from functools import partial
 from urllib.parse import quote
 
-from quality import architecture
+from quality import architecture, checkout
 from quality.config import CONFIG_PATH, Declaration, GateSettings, LegacyMode
+from quality.gh import GhFailed, GhRunner, file_at, workflow_texts_at
 from quality.landing import Landing, LandingKind, LandingRefused, landing_of
 from quality.output import (
     DRY_RUN,
@@ -25,6 +25,7 @@ from quality.output import (
     write_closing_line,
     write_pair,
 )
+from quality.pin import JudgingRelease
 from quality.ratchet import BASELINE_PATH, NO_RENAMES, Renames
 from quality.report import CannotJudge, Command, Instruction, Reason, Step, config_refusal, printable
 from quality.sides import Side, UnusableConfig, compares_baselines, read_renames_of_pull, side_of
@@ -65,15 +66,10 @@ LEGACY_CHECKS = (SONAR_CHECK, VERDICT_CHECK)
 RED = "failure"
 COMPLETED = "completed"
 PENDING_STATUS = "pending"
-NOT_FOUND = "404"
 
-GhRunner = Callable[[Sequence[str], str | None], str]
 Ask = Callable[[str], str | None]
+Judging = Callable[[checkout.GateState, str, str], JudgingRelease]
 RemoteFor = Callable[[str], str]
-
-
-class GhFailed(Exception):
-    pass
 
 
 class Refused(Exception):
@@ -182,16 +178,6 @@ class Attempt:
     restore_error: str | None
 
 
-def run_gh(arguments: Sequence[str], stdin: str | None = None) -> str:
-    try:
-        done = subprocess.run(["gh", *arguments], input=stdin, capture_output=True, text=True, check=False)  # noqa: S603, S607 - argv is the fixed gh executable plus arguments and never a shell
-    except OSError as error:
-        raise GhFailed(f"cannot run gh: {error}") from error
-    if done.returncode != 0:
-        raise GhFailed(f"gh {' '.join(arguments[:3])} failed: {done.stderr.strip()}")
-    return done.stdout
-
-
 @dataclass(frozen=True)
 class Check:
     name: str
@@ -276,22 +262,13 @@ def read_statuses(gh: GhRunner, repository: str, head_sha: str) -> list[Check]:
 def read_side_at(gh: GhRunner, repository: str, sha: str, fix: Step) -> Side:
     """The gate's settings, baseline and import-linter configs at one commit, as the verdict reads them; a 404 reads as absent,
     a config quality cannot read is its refusal with `fix`, the step that repairs it at this commit."""
-    config = _read_file_at(gh, repository, CONFIG_PATH, sha)
-    baseline = _read_file_at(gh, repository, BASELINE_PATH, sha)
-    import_configs = {name: _read_file_at(gh, repository, name, sha) for name in architecture.CONFIG_FILES}
+    config = file_at(gh, repository, CONFIG_PATH, sha)
+    baseline = file_at(gh, repository, BASELINE_PATH, sha)
+    import_configs = {name: file_at(gh, repository, name, sha) for name in architecture.CONFIG_FILES}
     try:
         return side_of(config, baseline, sha, import_configs)
     except UnusableConfig as unusable:
         raise config_refusal(unusable.error, fix) from unusable
-
-
-def _read_file_at(gh: GhRunner, repository: str, path: str, sha: str) -> str | None:
-    try:
-        return gh(["api", "-H", "Accept: application/vnd.github.raw", f"repos/{repository}/contents/{path}?ref={sha}"], None)
-    except GhFailed as error:
-        if NOT_FOUND in str(error):
-            return None
-        raise
 
 
 def require_admin_permission(repository_facts: Mapping[str, object], repository: str) -> None:
@@ -606,13 +583,22 @@ def read_loosenings(
 ) -> Judged[tuple[Verdict, GateSettings]]:
     """The base is read first: a config refused there is not repaired on the pull request's branch."""
     merge_commit_sha, base_sha = pull["merge_commit_sha"], pull["base"]["sha"]
-    if not merge_commit_sha:
-        raise CannotJudge("GitHub has no merge commit for the pull request yet, so the config the jobs ran on is unknown")
     base = read_side_at(gh, repository, base_sha, Instruction(f"fix it on {pull['base']['ref']} first"))
     head = read_side_at(gh, repository, merge_commit_sha, Instruction(f"push the fix to the pull request's branch, then run {rerun} again"))
     renames = read_renames_of_pull(remote_for(repository), base_sha, merge_commit_sha, environment) if compares_baselines(base, head) else NO_RENAMES
     verdict = rederived_verdict(head, base, check_runs, renames)
     return (verdict, head.settings), (loosenings_row(verdict, sonar_red, refused),)
+
+
+def read_release(gh: GhRunner, repository: str, pull: Mapping[str, object], rerun: str, judging: Judging) -> JudgingRelease:
+    """The release that judges, from the target's gate pin at the merge commit, the pull request's own `pull` already read."""
+    sha = pull.get("merge_commit_sha")
+    if not sha:
+        raise CannotJudge("GitHub has no merge commit for the pull request yet, so the release its gate ran at is unknown")
+    if not isinstance(sha, str) or not checkout.COMMIT_SHA.fullmatch(sha):
+        raise CannotJudge("the merge commit gh names is not a commit sha")
+    state = checkout.gate_pin_of(workflow_texts_at(gh, repository, sha), repository.lower() == checkout.GATE_REPOSITORY)
+    return judging(state, repository, rerun)
 
 
 def read_legacy(count: Callable[[], int], settings: GateSettings, default_branch: str) -> Judged[int]:
@@ -634,6 +620,7 @@ def judge_pull_request(
     environment: Mapping[str, str],
     remote_for: RemoteFor,
     show: Show,
+    judging: Judging,
 ) -> tuple[Door, str]:
     """Each step in the door's order, its rows shown as it passes and the landing's row last, right before the question;
     the first step that does not pass stops the door."""
@@ -645,7 +632,9 @@ def judge_pull_request(
         (Instruction(f"give the pull request body exactly one {item_line} outside code blocks, then run {rerun} again"),),
     )
     step = partial(judged, again=Instruction(f"fix what the ✗ row names, then run {rerun} again"), show=show)
-    facts, pull = step(f"#{pull_request}", lambda: read_pull_request(gh, repository, pull_request), refused)
+    held: list[Row] = []
+    facts, pull = step(f"#{pull_request}", lambda: read_pull_request(gh, repository, pull_request), refused, show=held.extend)
+    show((read_release(gh, repository, pull, rerun, judging).row(), *held))
     landing = step(LANDING, lambda: read_landing(pull["body"], repository), landing_refused)
     check_runs, sonar_red = step("checks", lambda: read_checks(gh, repository, pull["head"]["sha"], refused), refused)
     verdict, settings = step("loosenings", lambda: read_loosenings(gh, repository, pull, check_runs, sonar_red, environment, remote_for, refused, rerun), refused)
@@ -721,9 +710,11 @@ def run_merge(
     clock: Callable[[], float],
     environment: Mapping[str, str],
     channels: Channels,
+    judging: Judging,
     remote_for: RemoteFor = github_remote,
 ) -> int:
-    """Every line leaves through `channels`, escaped: rows and the closing line on stdout, the prompt and the pair on stderr."""
+    """Every line leaves through `channels`, escaped: rows and the closing line on stdout, the prompt and the pair on stderr;
+    a release that cannot judge is its pair alone."""
     if not is_terminal:
         write_pair(not_merged("the operator's merge needs a terminal on stdin"), (Instruction("the operator runs it in his own terminal"),), channels.err)
         return EXIT_REFUSED
@@ -731,11 +722,15 @@ def run_merge(
     show = partial(shown_before_asking, out=out)
     try:
         try:
-            door, login = judge_pull_request(repository, pull_request, gh, transport, environment, remote_for, show)
+            door, login = judge_pull_request(repository, pull_request, gh, transport, environment, remote_for, show, judging)
         except Stopped as stop:
             show((stop.row,))
             write_pair(stop.error, stop.next_steps, channels.err)
             return stop.exit_code
+        except CannotJudge as refusal:
+            again = Instruction(f"fix what the error names, then run {merge_command(repository, pull_request)} again")
+            write_pair(refusal.reason.fact, refusal.reason.next_steps or (again,), channels.err)
+            return EXIT_COULD_NOT_DO
     except Unshown:
         again = Instruction(f"send stdout where it can be written, then run {merge_command(repository, pull_request)} again")
         write_pair(f"stdout refused a row{SEPARATOR}{NOTHING_CHANGED}", (again,), channels.err)

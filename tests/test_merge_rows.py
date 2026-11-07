@@ -8,6 +8,7 @@ import pytest
 from quality import cli
 from quality.report import printable
 from tests.support.config_refusals import all_refusals
+from tests.support.door import RELEASE_ROW
 from tests.support.merge import (
     ABSENT,
     B_REMOVED,
@@ -25,6 +26,7 @@ from tests.support.merge import (
     closing_line,
     comment_line,
     declaring,
+    door_ports,
     frozen_now,
     no_network,
     not_confirmed_pair,
@@ -38,6 +40,10 @@ from tests.support.terminal import screen
 
 def frame(*lines):
     return "".join(f"{line}\n" for line in lines)
+
+
+def release_row():
+    return RELEASE_ROW.removesuffix("\n")
 
 
 def pull_row():
@@ -69,7 +75,7 @@ def merge_and_landing_rows(work_item="#3"):
 
 
 def rows_before_the_attempt():
-    return [pull_row(), checks_row(), loosenings_none(), legacy_row(), *merge_and_landing_rows()]
+    return [release_row(), pull_row(), checks_row(), loosenings_none(), legacy_row(), *merge_and_landing_rows()]
 
 
 def verdict_only_checks_row():
@@ -143,9 +149,11 @@ def test_a_draft_stops_the_door_before_its_body_or_any_check_is_read(gh_kwargs, 
 def test_the_door_asks_for_the_head_commits_checks_and_statuses_and_the_login_by_these_requests(capsys):
     gh = FakeGh()
     assert run(gh, capsys)[0] == 0
-    assert gh.requests[:4] == [
+    assert gh.requests[:6] == [
         (("api", f"repos/{REPO}"), None),
         (("api", f"repos/{REPO}/pulls/7"), None),
+        (("api", f"repos/{REPO}/contents/.github/workflows?ref={MERGE_SHA}"), None),
+        (("api", "-H", "Accept: application/vnd.github.raw", f"repos/{REPO}/contents/.github/workflows/ci.yml?ref={MERGE_SHA}"), None),
         (("api", "--paginate", f"repos/{REPO}/commits/{SHA}/check-runs?per_page=100", "--jq", ".check_runs[]"), None),
         (("api", "--paginate", f"repos/{REPO}/commits/{SHA}/status?per_page=100", "--jq", ".statuses[]"), None),
     ]
@@ -165,56 +173,56 @@ def test_a_draft_flag_that_is_no_boolean_cannot_be_judged(draft, capsys):
 @pytest.mark.parametrize(
     ("gh_kwargs", "sonar_kwargs", "rows"),
     [
-        ({"checks": {**LEGACY_RED, "tests": "failure"}}, {}, [pull_row(), "  ! checks        red            tests (failure) beside quality / verdict"]),
-        ({"checks": {**LEGACY_RED, "tests": None}}, {}, [pull_row(), "  ! checks        running        tests"]),
-        ({"checks": {**LEGACY_RED, "tests": None, "lint": None}}, {}, [pull_row(), "  ! checks        running        tests, lint"]),
+        ({"checks": {**LEGACY_RED, "tests": "failure"}}, {}, [release_row(), pull_row(), "  ! checks        red            tests (failure) beside quality / verdict"]),
+        ({"checks": {**LEGACY_RED, "tests": None}}, {}, [release_row(), pull_row(), "  ! checks        running        tests"]),
+        ({"checks": {**LEGACY_RED, "tests": None, "lint": None}}, {}, [release_row(), pull_row(), "  ! checks        running        tests, lint"]),
         (
             {"checks": {**LEGACY_RED, "tests": None}, "statuses": {"external-ci": "pending"}}, {},
-            [pull_row(), "  ! checks        running        tests, external-ci"],
+            [release_row(), pull_row(), "  ! checks        running        tests, external-ci"],
         ),
         (
             {"checks": {**LEGACY_RED, "tests": "failure", "lint": "failure"}}, {},
-            [pull_row(), "  ! checks        red            tests (failure), lint (failure) beside quality / verdict"],
+            [release_row(), pull_row(), "  ! checks        red            tests (failure), lint (failure) beside quality / verdict"],
         ),
         (
             {"checks": {**LEGACY_RED, "tests": None, "lint": "failure"}}, {},
-            [pull_row(), "  ! checks        running        tests"],
+            [release_row(), pull_row(), "  ! checks        running        tests"],
         ),
-        ({"statuses": {"external-ci": "pending"}}, {}, [pull_row(), "  ! checks        running        external-ci"]),
+        ({"statuses": {"external-ci": "pending"}}, {}, [release_row(), pull_row(), "  ! checks        running        external-ci"]),
         (
             {"checks": {"quality / verdict": "failure"}}, {},
-            [pull_row(), "  ! checks        refused        quality / sonar did not run: the door needs it green or failed"],
+            [release_row(), pull_row(), "  ! checks        refused        quality / sonar did not run: the door needs it green or failed"],
         ),
         (
             {"checks": {"quality / sonar": "success", "quality / verdict": "success"}}, {},
-            [pull_row(), "  ! checks        refused        no check is red: the door is not the only way, land the pull request normally"],
+            [release_row(), pull_row(), "  ! checks        refused        no check is red: the door is not the only way, land the pull request normally"],
         ),
         (
             {"checks": {"quality / sonar": "failure"}}, {},
-            [pull_row(), "  ! checks        refused        quality / verdict must have failed for the door to be the only way"],
+            [release_row(), pull_row(), "  ! checks        refused        quality / verdict must have failed for the door to be the only way"],
         ),
         (
             {"checks": SONAR_GREEN}, {},
             [
-                pull_row(), verdict_only_checks_row(),
+                release_row(), pull_row(), verdict_only_checks_row(),
                 "  ! loosenings    refused        quality / verdict is red, but judged again at the merge commit it finds nothing: re-run the verdict",
             ],
         ),
         (
             {"checks": SONAR_GREEN, "base_config": TWO_JOBS, "head_config": ONE_JOB}, {},
-            [pull_row(), verdict_only_checks_row(), "  ! loosenings    red", f"    ! {B_REMOVED}", '    ! B missing · not in the run'],
+            [release_row(), pull_row(), verdict_only_checks_row(), "  ! loosenings    red", f"    ! {B_REMOVED}", '    ! B missing · not in the run'],
         ),
         (
             {}, {"new": 1},
             [
-                pull_row(), checks_row(), loosenings_none(), "  ! sonar         refused        the pull request adds findings:",
+                release_row(), pull_row(), checks_row(), loosenings_none(), "  ! sonar         refused        the pull request adds findings:",
                 "    ! a.py:3 · s1: bad",
             ],
         ),
         (
             {"base_config": GATE_CONFIG, "head_config": '[gate]\nmandatory_jobs = ["checks"]\nlegacy = "report"\n' + declaring("legacy fail → report")}, {},
             [
-                pull_row(), checks_row(), "  ! loosenings    1 declared",
+                release_row(), pull_row(), checks_row(), "  ! loosenings    1 declared",
                 "    ! legacy fail → report · overnightworks/songmaker#1345 of 2026-10-20", "        reason: ruled",
                 ("  ! sonar         refused        legacy = report at the pull request's current merge commit: "
                  "quality / sonar cannot be red on legacy findings"),
@@ -244,31 +252,24 @@ def test_each_refusal_is_its_row_and_the_pair(gh_kwargs, sonar_kwargs, rows, cap
         ),
         ({"fail_on": ["pull"]}, {}, ["  ✗ #7            not judged     pull broke"]),
         (
-            {"merge_sha": None}, {},
-            [
-                pull_row(), checks_row(),
-                "  ✗ loosenings    not judged     GitHub has no merge commit for the pull request yet, so the config the jobs ran on is unknown",
-            ],
-        ),
-        (
             {}, {"unreachable": True},
-            [pull_row(), checks_row(), loosenings_none(), "  ✗ sonar         not judged     SonarCloud is down"],
+            [release_row(), pull_row(), checks_row(), loosenings_none(), "  ✗ sonar         not judged     SonarCloud is down"],
         ),
         (
             {"settings": {"allow_merge_commit": False, "allow_squash_merge": False, "allow_rebase_merge": True}}, {},
             [
-                pull_row(), checks_row(), loosenings_none(), legacy_row(),
+                release_row(), pull_row(), checks_row(), loosenings_none(), legacy_row(),
                 "  ✗ merge         not judged     the repository and its branch rules allow no merge method the door uses (a merge commit or a squash)",
             ],
         ),
-        ({"body": ABSENT}, {}, [pull_row(), "  ✗ landing       not judged     GitHub's answer holds no 'body'"]),
+        ({"body": ABSENT}, {}, [release_row(), pull_row(), "  ✗ landing       not judged     GitHub's answer holds no 'body'"]),
         (not_json_answer("repository"), {}, [not_json_row("#7")]),
         (not_json_answer("pull"), {}, [not_json_row("#7")]),
-        (not_json_answer("checks"), {}, [pull_row(), not_json_row("checks")]),
-        (not_json_answer("statuses"), {}, [pull_row(), not_json_row("checks")]),
+        (not_json_answer("checks"), {}, [release_row(), pull_row(), not_json_row("checks")]),
+        (not_json_answer("statuses"), {}, [release_row(), pull_row(), not_json_row("checks")]),
     ],
     ids=[
-        "no admin right", "gh fails on the pull request", "no merge commit", "sonar unreachable", "no method the door uses",
+        "no admin right", "gh fails on the pull request", "sonar unreachable", "no method the door uses",
         "a pull answer without a body", "a repository answer that is no JSON", "a pull answer that is no JSON",
         "a check-run answer that is no JSON", "a status answer that is no JSON",
     ],
@@ -300,7 +301,7 @@ def test_every_config_refused_at_the_merge_commit_is_its_fact_on_the_row_and_its
     code, out, err, answers = run(gh, capsys)
     lines = err.splitlines()
     row = f"  ✗ loosenings    not judged     {printable(refusal.fact)}"
-    assert (code, out, lines[0], answers) == (2, frame(pull_row(), checks_row(), row), "error: could not judge · nothing changed", [])
+    assert (code, out, lines[0], answers) == (2, frame(release_row(), pull_row(), checks_row(), row), "error: could not judge · nothing changed", [])
     if refusal.example is None:
         assert lines[1:] == [f"next: {push_step()}"]
     else:
@@ -344,7 +345,7 @@ def test_a_config_refusal_at_the_door_reads_as_drawn(gh_kwargs, into, fact, pair
     assert run(gh, capsys) == (
         2,
         frame(
-            f"  · #7            open           head aaaaaaa · into {into}",
+            release_row(), f"  · #7            open           head aaaaaaa · into {into}",
             checks_row(),
             f"  ✗ loosenings    not judged     {fact}",
         ),
@@ -362,7 +363,7 @@ def test_a_config_refused_at_both_commits_is_fixed_on_the_base_first(capsys):
         "  ✗ loosenings    not judged     quality/config.toml [gate] sonar must be true or false",
         ["next:", "    write it in quality/config.toml like this:", "        [gate]", "        sonar = false", "    fix it on release/v0.9 first"],
     )
-    assert [call for call in gh.calls if any(f"?ref={MERGE_SHA}" in argument for argument in call)] == []
+    assert [call for call in gh.calls if any(f"?ref={MERGE_SHA}" in argument and "/.github/workflows" not in argument for argument in call)] == []
 
 
 def test_the_rows_name_the_pull_requests_base_not_the_default_branch(capsys):
@@ -371,7 +372,7 @@ def test_the_rows_name_the_pull_requests_base_not_the_default_branch(capsys):
     assert shown == (
         0,
         frame(
-            "  · #7            open           head aaaaaaa · into release/1",
+            release_row(), "  · #7            open           head aaaaaaa · into release/1",
             checks_row(),
             loosenings_none(),
             legacy_row(),
@@ -392,7 +393,7 @@ def at_a_terminal(gh, window, columns, transport=None, typed="no\n"):
     with contextlib.redirect_stdout(terminal.stream), contextlib.redirect_stderr(errors):
         code = cli.main(
             ["merge", f"{REPO}#7"], gh=gh, transport=transport or sonar(), terminal=cli.Terminal(lambda: typed, lambda: True),
-            remote_for=no_network, environment={"TERM": "xterm"}, now=frozen_now,
+            remote_for=no_network, environment={"TERM": "xterm"}, now=frozen_now, ports=door_ports(),
         )
     return code, screen(terminal.read()).splitlines(), errors.getvalue()
 
@@ -404,7 +405,7 @@ def at_a_terminal(gh, window, columns, transport=None, typed="no\n"):
             {"checks": SONAR_GREEN, "base_config": TWO_JOBS, "head_config": ONE_JOB + declaring(B_REMOVED, reason="a reason that runs on past the window")},
             {}, 1,
             [
-                pull_row(), verdict_only_checks_row(), "  ! loosenings    1 declared",
+                release_row(), pull_row(), verdict_only_checks_row(), "  ! loosenings    1 declared",
                 f'    ! {B_REMOVED} · overnightworks/songmaker#1345 of 2026-10-20',
                 "        reason: a reason that runs on past the window",
                 *merge_and_landing_rows(),
@@ -414,7 +415,7 @@ def at_a_terminal(gh, window, columns, transport=None, typed="no\n"):
         (
             {"body": "Work-Item: #123456789"}, {}, 1,
             [
-                pull_row(), checks_row(), loosenings_none(), legacy_row(), *merge_and_landing_rows("#123456789"),
+                release_row(), pull_row(), checks_row(), loosenings_none(), legacy_row(), *merge_and_landing_rows("#123456789"),
             ],
             prompt() + not_confirmed_pair(),
         ),
@@ -422,7 +423,7 @@ def at_a_terminal(gh, window, columns, transport=None, typed="no\n"):
             {"checks": SONAR_GREEN, "base_config": TWO_JOBS, "head_config": ONE_JOB},
             {}, 1,
             [
-                pull_row(), verdict_only_checks_row(), "  ! loosenings    red", f"    ! {B_REMOVED}",
+                release_row(), pull_row(), verdict_only_checks_row(), "  ! loosenings    red", f"    ! {B_REMOVED}",
                 '    ! B missing · not in the run',
             ],
             refused_pair(),
@@ -431,7 +432,7 @@ def at_a_terminal(gh, window, columns, transport=None, typed="no\n"):
             {},
             {"added": [{"component": "k:a.py", "line": 3, "rule": "s1", "message": "a message that runs on past the window"}]}, 1,
             [
-                pull_row(), checks_row(), loosenings_none(), "  ! sonar         refused        the pu…",
+                release_row(), pull_row(), checks_row(), loosenings_none(), "  ! sonar         refused        the pu…",
                 "    ! a.py:3 · s1: a message that runs on past the window",
             ],
             refused_pair(),
@@ -446,18 +447,18 @@ def test_what_the_operator_must_read_stands_whole_at_a_terminal(gh_kwargs, sonar
 @pytest.mark.parametrize(
     ("gh_kwargs", "code", "lines", "err"),
     [
-        ({"checks": {"quality / verdict": "failure"}}, 1, [pull_row(), "  ! checks        refused        qualit…"], refused_pair()),
+        ({"checks": {"quality / verdict": "failure"}}, 1, [release_row(), pull_row(), "  ! checks        refused        qualit…"], refused_pair()),
         ({"admin": False}, 2, ["  ✗ #7            not judged     the gh…"], not_judged_pair()),
         (
             {"checks": {**LEGACY_RED, "a_long_running_check": None}}, 1,
-            [pull_row(), "  ! checks        running        a_long…"], refused_pair(),
+            [release_row(), pull_row(), "  ! checks        running        a_long…"], refused_pair(),
         ),
         (
             {"checks": {**LEGACY_RED, "a_long_red_check": "failure"}}, 1,
-            [pull_row(), "  ! checks        red            a_long…"], refused_pair(),
+            [release_row(), pull_row(), "  ! checks        red            a_long…"], refused_pair(),
         ),
         (
-            {"merge_config": sonar_string_config()}, 2, [pull_row(), checks_row(), "  ✗ loosenings    not judged     qualit…"],
+            {"merge_config": sonar_string_config()}, 2, [release_row(), pull_row(), checks_row(), "  ✗ loosenings    not judged     qualit…"],
             frame(
                 "error: could not judge · nothing changed", "next:", "    write it in quality/config.toml like this:",
                 "        [gate]", "        sonar = false", f"    {push_step()}",

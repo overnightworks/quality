@@ -41,12 +41,14 @@ from quality.check import (
 )
 from quality.checkout import GatePin, NoGatePin, OutsideWorkTree, OwnGate, UnknownGatePin, gate_pin
 from quality.config import REPOSITORY_NAME
-from quality.merge import GhRunner, RemoteFor, github_remote, run_gh, run_merge
+from quality.gh import GhRunner, run_gh
+from quality.merge import RemoteFor, github_remote, run_merge
 from quality.output import (
     SEPARATOR,
     Channel,
     Channels,
     Glyph,
+    LiveLine,
     Row,
     SubLine,
     Verdict,
@@ -98,12 +100,15 @@ class Terminal:
 
 
 @dataclass(frozen=True)
-class CheckPorts:
-    """What the check door judges with: the installed scanners' locators and the release that judges."""
+class DoorPorts:
+    """What the doors judge with: the installed scanners' locators, check's release that judges, the running
+    installation the merge door judges as, and the re-execution into another release."""
 
     locate_ruff: Callable[[], str] = INSTALLED_RUFF
     locate_zizmor: Callable[[], str] = INSTALLED_ZIZMOR
     judging: Callable[[Path, str, bool, Mapping[str, str]], pin.JudgingRelease | pin.Reexecution] = pin.judge_here
+    running: Callable[[], pin.RunningQuality] = pin.this_installation
+    reexecute: Callable[[pin.Reexecution, str, Sequence[str], Mapping[str, str], LiveLine], NoReturn] = pin.reexecute
 
 
 def main(
@@ -115,7 +120,7 @@ def main(
     gh: GhRunner = run_gh,
     remote_for: RemoteFor = github_remote,
     terminal: Terminal | None = None,
-    check_ports: CheckPorts | None = None,
+    ports: DoorPorts | None = None,
     clock: Callable[[], float] = time.monotonic,
     now: Callable[[], datetime] = lambda: datetime.now(UTC),
     environment: Mapping[str, str] = os.environ,
@@ -131,6 +136,9 @@ def main(
         write_pair(refusal.reason.fact, refusal.reason.next_steps, channels.err)
         return EXIT_CANNOT_JUDGE
 
+    ports = ports or DoorPorts()
+    words = sys.argv[1:] if argv is None else argv
+    reexecute = partial(ports.reexecute, words=words, environment=environment, live=live_line(channels.err))
     if arguments.command == "merge":
         return run_merge(
             arguments.pull_request.repository,
@@ -144,6 +152,7 @@ def main(
             environment=environment,
             clock=clock,
             channels=channels,
+            judging=partial(pin.judging_of, door=MERGE_COMMAND, environment=environment, running=ports.running(), reexecute=reexecute),
             remote_for=remote_for,
         )
     if arguments.command == "verdict":
@@ -154,9 +163,6 @@ def main(
         if arguments.sonar_command == "properties":
             return sonar.run_properties(environment, clock, channels)
         return sonar.run_findings(environment, transport, sleep, clock, channels)
-    ports = check_ports or CheckPorts()
-    words = sys.argv[1:] if argv is None else argv
-    reexecute = partial(pin.reexecute, words=words, environment=environment, live=live_line(channels.err))
     if arguments.staged:
         staged_run = partial(judge_staged_change, Path("."), staged.scan_change, verbose=arguments.verbose)
         return run_check(partial(ports.judging, Path("."), staged.COMMAND, True, environment), staged_run, partial(reexecute, command=staged.COMMAND), staged.COMMAND, clock, channels)
@@ -729,7 +735,7 @@ def run_check(
         release = judging()
         if not isinstance(release, pin.JudgingRelease):
             reexecute(release)
-        write_rows((Row(Glyph.NOTE, "release", release.event, release.fact),), channels.out)
+        write_rows((release.row(),), channels.out)
         result = judged(partial(write_area, channels.out), live_line(channels.err))
     except OutsideWorkTree as error:
         write_pair(f"not inside a git work tree · {_spoken_folder(error.path.absolute())}", (Instruction(f"run {command} inside a repository"),), channels.err)

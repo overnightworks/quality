@@ -1,11 +1,16 @@
 import json
 from datetime import UTC, datetime
+from pathlib import Path
+from urllib.parse import unquote
 
-from quality import cli
+from quality import checkout, cli, pin
 from quality.config import CONFIG_PATH
-from quality.merge import GhFailed
+from quality.gh import GhFailed
+from quality.installation import VcsOrigin
+from quality.pin import RunningQuality
 from quality.ratchet import BASELINE_PATH
 from quality.report import CannotJudge
+from tests.support.door import RELEASE_ROW
 
 REPO = "acme/widgets"
 
@@ -20,6 +25,43 @@ BASE_SHA = "b" * 40
 
 
 MERGE_SHA = "d" * 40
+
+
+PINNED_COMMIT = "5e" * 20
+
+
+def gate_workflow(release="v0.10.0", commit=PINNED_COMMIT, uses=None):
+    """A workflow whose one job calls quality's gate at `commit`, its line naming `release`, or calls `uses` as written."""
+    line = uses or f"{checkout.GATE_REPOSITORY}/.github/workflows/gate.yml@{commit} # {release}"
+    return f"on: pull_request\njobs:\n  quality:\n    uses: {line}\n"
+
+
+def running_at(version="0.10.0", commit=PINNED_COMMIT):
+    """The running installation, built from `commit` as `version`."""
+    return RunningQuality(version, Path(pin.__file__).parent, VcsOrigin(commit))
+
+
+class Reexecuted(Exception):
+    """The re-execution port was asked: the door would now become another quality."""
+
+
+class ReexecutionPort:
+    """Holds what the door would re-execute into and with which command and words."""
+
+    def __init__(self):
+        self.asked = []
+
+    def __call__(self, reexecution, command, words, environment, live):
+        self.asked.append((reexecution, command, list(words)))
+        raise Reexecuted
+
+
+def never_reexecuted(reexecution, command, words, environment, live):
+    raise AssertionError(f"the door re-executed into {reexecution}")
+
+
+def door_ports(running=None, reexecute=never_reexecuted):
+    return cli.DoorPorts(running=lambda: running or running_at(), reexecute=reexecute)
 
 
 GATE_CONFIG = '[gate]\nmandatory_jobs = ["checks"]\nlegacy = "fail"\n'
@@ -56,7 +98,7 @@ class FakeGh:
         self, admin=True, checks=None, statuses=None, state="open", fail_on=(), interrupt_on=(), merge_lands=False,
         head_config=GATE_CONFIG, base_config=GATE_CONFIG, merge_config=None, merge_sha=MERGE_SHA,
         base_baseline=None, merge_baseline=None, base_sha=BASE_SHA, remote=None, extra_runs=(), settings=None, rules=((),), base_ref="main", rules_error=None, rules_raw=None,
-        body="Work-Item: #3\n\nCloses #3", later_body=None, draft=False, raw_answers=None,
+        body="Work-Item: #3\n\nCloses #3", later_body=None, draft=False, raw_answers=None, workflows=None, listing=None,
     ):
         self.admin, self.state, self.fail_on, self.merge_lands = admin, state, set(fail_on), merge_lands
         self.interrupt_on = list(interrupt_on)
@@ -76,6 +118,9 @@ class FakeGh:
         self.body, self.later_body, self.draft, self.pulls_read = body, later_body, draft, 0
         self.merged = False
         self.raw_answers = raw_answers or {}
+        # the workflow files by commit and name; `listing` stands for the merge commit's listing as GitHub answers it
+        self.workflows = {merge_sha: {"ci.yml": gate_workflow()}} if workflows is None else workflows
+        self.listing = listing
         self.requests: list[tuple[tuple[str, ...], str | None]] = []
         self.sequence: list[str] = []
         self.gate_values: list[str] = []
@@ -106,6 +151,8 @@ class FakeGh:
     @staticmethod
     def step_of(arguments):
         text = " ".join(arguments)
+        if "/contents/.github/workflows" in text:
+            return "listing" if "/contents/.github/workflows?" in text else "workflow"
         for marker, step in (
             ("check-runs", "checks"), ("/status", "statuses"), ("contents/", "config"), ("/pulls/", "pull"),
             ("/rules/branches/", "rules"), ("properties/values", "gate"), ("pr merge", "merge"), ("/comments", "comment"),
@@ -133,13 +180,8 @@ class FakeGh:
             )
         if step == "statuses":
             return "\n".join(json.dumps({"context": context, "state": state}) for context, state in self.statuses.items())
-        if step == "config":
-            content = self.files.get(self.file_of(arguments))
-            if isinstance(content, GhFailed):
-                raise content
-            if content is None:
-                raise GhFailed("gh api failed: HTTP 404")
-            return content
+        if step in ("listing", "workflow", "config"):
+            return self.contents_answer(step, *self.file_of(arguments))
         if step == "repository":
             return json.dumps({"default_branch": "main", "permissions": {"admin": self.admin}, **self.settings})
         if step == "rules":
@@ -156,6 +198,27 @@ class FakeGh:
         if step in ("checks", "statuses") and f"/commits/{SHA}/" not in " ".join(arguments):
             return ""
         return None
+
+    def contents_answer(self, step, path, sha):
+        """A file at a commit, or the merge commit's workflow listing; what the fake does not hold answers 404."""
+        if step == "listing":
+            return self.listing_answer(sha)
+        if step == "workflow":
+            content = self.workflows.get(sha, {}).get(unquote(path).removeprefix(".github/workflows/"))
+        else:
+            content = self.files.get((path, sha))
+        if isinstance(content, GhFailed):
+            raise content
+        if content is None:
+            raise GhFailed("gh api failed: HTTP 404", not_found=True)
+        return content
+
+    def listing_answer(self, sha):
+        if self.listing is not None:
+            return json.dumps(self.listing)
+        if sha not in self.workflows:
+            raise GhFailed("gh api failed: HTTP 404", not_found=True)
+        return json.dumps([{"name": name, "type": "file"} for name in self.workflows[sha]])
 
     def pull_answer(self):
         body = self.later_body if self.pulls_read and self.later_body is not None else self.body
@@ -228,7 +291,8 @@ def landing_row(item="#3"):
 def rows_before_the_prompt():
     """What the default `FakeGh` shows the operator, the landing row last."""
     return (
-        pull_row()
+        RELEASE_ROW
+        + pull_row()
         + "  ✓ checks        ok             only quality / sonar and quality / verdict are red\n"
         + "  ✓ loosenings    none\n"
         + "  ! sonar         4 legacy findings on main\n"
@@ -299,7 +363,10 @@ def comment_line(**arguments):
     return f"    gh api -X POST repos/acme/widgets/issues/7/comments -f '{log_body(**arguments)}'\n"
 
 
-def drive(gh, transport=None, typed="yes\n", terminal=True, repo=REPO, when_asked=lambda: None, pull_request="7", clock=lambda: 0.0, words=()):
+def drive(
+    gh, transport=None, typed="yes\n", terminal=True, repo=REPO, when_asked=lambda: None, pull_request="7", clock=lambda: 0.0, words=(), ports=None,
+    environment=None,
+):
     """The `typed` argument is the line the terminal answers, its line end included (`""` the end of input); an exception is raised."""
     answers = []
 
@@ -313,7 +380,7 @@ def drive(gh, transport=None, typed="yes\n", terminal=True, repo=REPO, when_aske
     remote = getattr(gh, "remote", None)
     code = cli.main(
         ["merge", f"{repo}#{pull_request}", *words], gh=gh, transport=transport or sonar(), terminal=cli.Terminal(read_line, lambda: terminal), remote_for=no_network if remote is None else lambda repository: remote,
-        clock=clock, now=frozen_now,
+        clock=clock, now=frozen_now, ports=ports or door_ports(), **({} if environment is None else {"environment": environment}),
     )
     return code, answers
 

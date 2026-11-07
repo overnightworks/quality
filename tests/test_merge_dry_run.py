@@ -4,15 +4,21 @@ import shlex
 import pytest
 
 from quality import cli
+from tests.support.door import RELEASE_ROW
 from tests.support.merge import (
     B_REMOVED,
     LEGACY_RED,
+    MERGE_SHA,
     ONE_JOB,
     SONAR_GREEN,
     TWO_JOBS,
     FakeGh,
+    Reexecuted,
+    ReexecutionPort,
     declaring,
+    door_ports,
     drive,
+    gate_workflow,
     run,
     terminal_pair,
 )
@@ -47,6 +53,20 @@ def test_a_dry_run_shows_the_rows_and_its_line_and_changes_nothing(gh_kwargs, ca
         0, rows + "~ dry run · would switch quality_gate off, merge #7, switch it on · nothing changed\n", "", [], [],
     )
     assert (writes(gh), gh.requests) == ([], requests_before_the_question)
+
+
+def test_a_dry_run_shows_the_release_row_first(capsys):
+    _, out, _, _ = run(FakeGh(), capsys, words=["--dry-run"])
+    assert out.startswith(RELEASE_ROW)
+
+
+def test_a_dry_run_re_executes_with_its_dry_run_word(capsys):
+    port = ReexecutionPort()
+    gh = FakeGh(workflows={MERGE_SHA: {"ci.yml": gate_workflow("v0.10.1", "7f" * 20)}})
+    ports = door_ports(reexecute=port)
+    with pytest.raises(Reexecuted):
+        drive(gh, words=["--dry-run"], ports=ports)
+    assert [words for _, _, words in port.asked] == [["merge", "acme/widgets#7", "--dry-run"]]
 
 
 def test_a_dry_run_reads_the_pull_request_asked_for(capsys):

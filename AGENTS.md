@@ -15,13 +15,16 @@
   workflows pin, and whether the checkout is quality's own (by its git remote), owns the full-commit form and turns a
   refused read into cannot judge. quality reads the checkout's own files through `repository.py`, which keeps each read inside the repository
   and names the file repository-relative in every error; only `architecture.py` opens a source itself, for grimp.
-- `pin.py` decides which quality judges a `check` from the checkout's gate pin and the commit the running
+- `pin.py` decides which quality judges a `check` from the checkout's gate pin, a `merge` from its target's gate pin at
+  the pull request's merge commit, and the verdict's release row, from the commit the running
   installation is (its installer's record, or an editable directory's clean HEAD at its release tag), or, once quality's
   remote showed the pinned commit is the comment's release, prepares it through uv and becomes its process, once; a run
   it refuses prints only the pair.
 - A scanner's stderr reaches a fact or `-v` only through `scanners`' vet (`gitleaks stdin` under `gitleaks.toml`) and
   is withheld whole when gitleaks does not clear it. `check.py` keeps `report.ScannerRun`s only under `-v`,
   `output.py` prints them, and a scanner's report never enters.
+- The door's `gh` commands run through `gh.py`, which also reads a repository's files and workflow listing at a commit;
+  the door injects the runner, so tests need no network.
 - HTTP goes through `web.py`, which follows no redirect and bounds every wait; the door injects the transport, the
   GitHub fetcher and the poll sleep, so tests need no network.
 - The line a merge commit ends with is `landing.py`'s.
