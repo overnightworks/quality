@@ -69,8 +69,6 @@ def fetch_jobs(origin: str) -> str:
 SONGMAKER = "overnightworks/songmaker#1345"
 
 
-GREEN = "✓ green"
-RED = "! red"
 ONLY_DECLARED = "! red · only declared loosenings · only the operator merges it"
 
 

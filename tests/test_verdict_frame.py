@@ -286,4 +286,3 @@ def test_a_malformed_pull_request_variable_is_its_pair(frame, run_env, monkeypat
     pair = lines(f"error: {fact}", SET_BY_THE_GATE)
     code, out, err, summary = frame()
     assert ((code, out, err, summary), token in out + err + summary) == ((2, "", pair, block(pair)), False)
-
