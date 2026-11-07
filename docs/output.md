@@ -1,6 +1,6 @@
 # Output picture
 
-This is the target picture of quality's command-line output that the slices of #228 build; each landing aligns it with what was built, and until then `docs/commands.md` describes what runs today. Reader: the builder of those slices. Paths, repositories and ids in the examples are invented. All terminal lines are English.
+This is the target picture of quality's command-line output; each landing that builds part of it aligns it with what was built, and until then `docs/commands.md` describes what runs today. Reader: the builder of those landings. Paths, repositories and ids in the examples are invented. All terminal lines are English.
 
 ## Principle
 
@@ -61,7 +61,11 @@ Exit codes: 0 yes, 1 no, 2 could not answer, 130 interrupted. Each block names i
 
 ### 1. `quality check`, all clean
 
-The first row names the release the gate pins. Every area gets a row, also when clean. Exit 0. Rows and verdict: stdout. The workflows row counts the workflow files the tree holds and says that only offline audits ran, in the row itself and in no note of its own (operator ruling of 1.11.2026, „In der Zeile selbst (Recommended)“). The dependencies row counts the tracked lockfiles and the packages osv-scanner lists for them, `0 lockfiles · 0 packages` with none (head proposals O47, O48 and O50 of 2.11.2026). The code row counts the area's rules and the Python files ruff judged, `0 Python files` with none (head proposal O56 of 2.11.2026). The secrets row counts the commits gitleaks reads, not the tree: gitleaks reads committed history only, so „tree“ claimed more than was checked (head correction O30 of 1.11.2026, under the operator's instruction of 28.10.2026 to decide small wording questions alone).
+The first row names the release the gate pins. Every area gets a row, also when clean. Exit 0. Rows and verdict: stdout.
+
+Ruled by the operator: the workflows row counts the workflow files the tree holds and says that only offline audits ran, in the row itself and in no note of its own.
+
+The dependencies row counts the tracked lockfiles and the packages osv-scanner lists for them, `0 lockfiles · 0 packages` with none (O48). The code row counts the area's rules and the Python files ruff judged, `0 Python files` with none. The secrets row counts the commits gitleaks reads, not the tree, because gitleaks reads committed history only (O30).
 
 ```text
 $ quality check
@@ -83,7 +87,7 @@ An allowed advisory stands as a `·` row under the dependencies row, after the a
     · uv.lock  allowed  jinja2 3.1.4 · GHSA-q8x2-4m7c-9v3p · fixed in 3.1.6 · until 2027-01-31 (#412) · no template input
 ```
 
-An honoured output owner stands as a `·` row under the code row, after the area's findings, and the clean row counts it (head proposals O15, O57):
+An honoured output owner stands as a `·` row under the code row, after the area's findings, and the clean row counts it (O15):
 
 ```text
   ✓ code          clean          2 rules · 41 Python files · 1 allowed
@@ -96,7 +100,7 @@ Live line while the secrets scan runs (stderr, terminal only, replaced by the ro
   ⠋ secrets       gitleaks       412 commits · 3s
 ```
 
-Built: one line per scanner, this frame, the area and the scanner, dim, leaving the window's last column free (a window of one or two columns, or a terminal that draws `…` two cells wide, is not served), on a terminal whose window is known; each is erased before the next line prints, so the area's row takes its place. The moving frame and the fact (`412 commits · 3s`) stay the target (#5).
+Built: one line per scanner, this frame, the area and the scanner, dim, leaving the window's last column free (a window of one or two columns, or a terminal that draws `…` two cells wide, is not served), on a terminal whose window is known; each is erased before the next line prints, so the area's row takes its place. The moving frame and the fact (`412 commits · 3s`) stay the target.
 
 With `-v`, under each area that ran a scanner, after its findings and notes: one `·` row per scanner run with its exit, and that scanner's stderr behind the marker, dim and never cut. A text gitleaks does not clear stands as the count of its lines; a failing gitleaks' lines are counted unread. A scanner's report never stands there.
 
@@ -132,7 +136,7 @@ A scanner that refused, with a stderr gitleaks does not clear:
 
 ### 2. `quality check`, findings in several areas
 
-Exit 1. stdout. Two findings in a row with the same fix: the fix stands once, under the last. The findings of an area stand in run order (head proposal O14 of 30.10.2026).
+Exit 1. stdout. Two findings in a row with the same fix: the fix stands once, under the last. The findings of an area stand in run order (O14).
 
 ```text
 $ quality check
@@ -156,7 +160,7 @@ $ quality check
 ! 5 findings in 3 areas · 4 areas clean · 14s
 ```
 
-No rule name stands in a row (`compose-port`, `env-file`); the event says it in words. The rule name appears only in a `fix:` line that asks for an `[[….allow]]` entry. No `next:` follows this verdict: the `fix:` lines carry the way. The events, facts and fixes of the `files` rows are head proposals O12 to O16, O18 and O19 of 30.10.2026, those of the `debt` rows O20 to O22 of 31.10.2026, those of the `imports` rows O23 to O27 of 31.10.2026, those of the `secrets` rows O28, O29 and O32 to O35 of 1.11.2026, those of the `workflows` rows O36 to O40 of 2.11.2026, those of the `dependencies` rows O41 to O46 of 2.11.2026, those of the `code` rows O51 and O52 of 2.11.2026, their recommendations applied: one event word per kind of finding, shared across rules (`report.FindingEvent`); the env fix names the file for `.gitignore` only where it is its own shell word, else `it`; and the findings of an area in run order. Paths and events align per area by display width, in every stream: an East Asian wide character takes two cells and a combining mark none; spacing marks, Hangul conjoining letters, skin-tone modifiers and emoji sequences are not measured (#5).
+No rule name stands in a row (`compose-port`, `env-file`); the event says it in words. The rule name appears only in a `fix:` line that asks for an `[[….allow]]` entry. No `next:` follows this verdict: the `fix:` lines carry the way. The events, facts and fixes of the rows are O12, O14, O15, O16, O18 and O19 for `files`, O21 and O22 for `debt`, O23 and O25 for `imports`, O28, O29, O32 and O33 for `secrets`, O36, O37, O38 and O39 for `workflows` and O41, O42, O43, O44, O45 and O46 for `dependencies`: one event word per kind of finding, shared across rules (`report.FindingEvent`); the env fix names the file for `.gitignore` only where it is its own shell word, else `it`; and the findings of an area in run order. Paths and events align per area by display width, in every stream: an East Asian wide character takes two cells and a combining mark none; spacing marks, Hangul conjoining letters, skin-tone modifiers and emoji sequences are not measured.
 
 The fix of a security finding names the line its noqa must stand on, so each stands under its row, and a code and ruff's message are the fact:
 
@@ -210,7 +214,7 @@ Built: a scanner's stderr reaches a fact only once gitleaks has cleared all of i
   ✗ workflows     not checked    actionlint exited 3, neither 'clean' nor 'findings' · 2 stderr lines withheld · not cleared by gitleaks
 ```
 
-Several areas can fail, and an area can fail for more than one reason. Head proposals of 30.10.2026 (O1 to O3), built unless the operator rules otherwise. A reason that several rules of one area share stands once; distinct reasons make the row name their count and stand on `✗` lines below it, and findings of an area that also cannot check stay under its `✗` row and are counted in the error line. `next:` names each distinct step of the run's refusals once, in row order (head proposals O6 to O9 of 30.10.2026): one step stands on the `next:` line, several each below a bare `next:` (O7), and the general instruction is the last line when a refusal carries no step and the only one when none does. A fact of a few words says what is missing (`mise could not locate gitleaks 8.30.1`, true for every non-zero answer of mise, O8). Without mise the first step is `install mise: <page>` and the second the install command (O6). Alternative commands stand under a label ending `, one of:`, each choice's label on a line and its command one level deeper (O9).
+Several areas can fail, and an area can fail for more than one reason. A reason that several rules of one area share stands once; distinct reasons make the row name their count and stand on `✗` lines below it, and findings of an area that also cannot check stay under its `✗` row and are counted in the error line. `next:` names each distinct step of the run's refusals once, in row order: one step stands on the `next:` line, several each below a bare `next:`, and the general instruction is the last line when a refusal carries no step and the only one when none does. A fact of a few words says what is missing (`mise could not locate gitleaks 8.30.1`, true for every non-zero answer of mise). Without mise the first step is `install mise: <page>` and the second the install command. Alternative commands stand under a label ending `, one of:`, each choice's label on a line and its command one level deeper.
 
 ```text
   ✗ workflows     not checked    quality's installation holds no zizmor
@@ -232,7 +236,7 @@ error: 1 of 7 areas could not check · 1 finding, 1 of them in those areas
 next: fix what the ✗ rows name, then run quality check again
 ```
 
-A config refusal names its fact on each `✗` row it reaches and shows the example to copy once under `next:` (head proposal O10 of 30.10.2026, its recommendation applied): the label `write it in quality/config.toml like this:` and the example's lines one level deeper, each whole on its own line and never shortened, so the lines copied as printed are valid TOML. The fact names an entry by its table and 1-based position, a repeated value as a TOML string, never as a Python repr (head proposal O11 of 30.10.2026, its recommendation applied).
+A config refusal names its fact on each `✗` row it reaches and shows the example to copy once under `next:` (O10): the label `write it in quality/config.toml like this:` and the example's lines one level deeper, each whole on its own line and never shortened, so the lines copied as printed are valid TOML. The fact names an entry by its table and 1-based position, a repeated value as a TOML string, never as a Python repr (O11).
 
 ```text
   ✗ files         not checked    quality/config.toml [[size.generated]] entry 1 needs job as one of [gate] mandatory_jobs, the job whose generator check proves the file
@@ -313,7 +317,9 @@ $ quality check --fix
 ✓ clean · ceiling lowered by 3 entries · 7 areas · 12s
 ```
 
-A fall below a metric's threshold drops the entry (`dropped  file 805 → 790 lines · debt from 800 lines`); operator ruling of 3.11.2026 („Eintrag fällt weg“). That is why the examples fall to 812 lines and CCN 17, above their thresholds.
+Ruled by the operator: a fall below a metric's threshold drops the entry (`dropped  file 805 → 790 lines · debt from 800 lines`).
+
+That is why the examples fall to 812 lines and CCN 17, above their thresholds.
 
 A file git renamed into the index since the ceiling's last commit takes its entries and pairs with it (`moved`); what the ceiling held under the new path before the move goes (`dropped`, `left from before the move`), and what grew stays a finding. Exit 0 when nothing else is open, stdout.
 
@@ -337,7 +343,7 @@ $ quality check debt --fix
 ! 1 finding in 1 area · ceiling lowered by 1 entry · 2s
 ```
 
-Built: every frame, without the release row (C10). `--fix` takes no `--staged` and needs `debt` among the named areas, or none named; `--dry-run` needs `--fix`. Head proposals O244 to O246 of 4.11.2026 beside the frames: a gone or generated drop names the value it held; the debt row reads `N to lower`, `N to move` or `to record`; the dry run exits 1 while the fix would change the file, 0 when not; `~` is cyan at a terminal.
+Built: every frame, without the release row (C10). `--fix` takes no `--staged` and needs `debt` among the named areas, or none named; `--dry-run` needs `--fix`. Beside the frames: a gone or generated drop names the value it held; the debt row reads `N to lower`, `N to move` or `to record`; the dry run exits 1 while the fix would change the file, 0 when not; `~` is cyan at a terminal.
 
 No ceiling yet: first a note, then the first recording. Both exit 0. stdout.
 
@@ -353,7 +359,7 @@ $ quality check debt --fix
 ✓ clean · ceiling recorded · 1 area · 2s
 ```
 
-A ceiling file without a `[clones]` table is the partly recorded form. Head proposal of 30.10.2026 (O4), revised by O21 of 31.10.2026 (the row names the pairs a recording would add), built unless the operator rules otherwise.
+A ceiling file without a `[clones]` table is the partly recorded form. The row names the pairs a recording would add (O21).
 
 ```text
   · debt          not recorded   2 clone pairs · partly measured only
@@ -361,7 +367,9 @@ A ceiling file without a `[clones]` table is the partly recorded form. Head prop
 ✓ clean · 7 areas · debt partly measured, not enforced · 2s
 ```
 
-Without an import-linter config the imports row is a grey note, not counted among the clean areas, and the verdict names it before the duration, after debt's note when both stand (operator ruling 31.10.2026 on #293: „B“; the order is head proposal O27).
+Ruled by the operator: without an import-linter config the imports row is a grey note, not counted among the clean areas, and the verdict names it.
+
+The verdict names it before the duration, after debt's note when both stand.
 
 ```text
   · imports       not set up     no import-linter config
@@ -399,7 +407,7 @@ $ quality check secrets --staged
 
 Built: both frames without the release row (C10); `N files` counts the paths the staged diff lists; a refused run is the `✗` row and the pair, its rerun `next:` names this command; no unused row, the history scan keeps it; `-v` stands under the row.
 
-The entry is the four lines a reader takes, whole and never shortened; the person adds `reason` (head correction O31 of 1.11.2026, under the operator's instruction of 28.10.2026 to decide small wording questions alone: the earlier picture's `sha256` is a key no reader takes, the allowance contract is unchanged).
+The entry is the four lines a reader takes, whole and never shortened; the person adds `reason` (O31). It holds no `sha256`, a key no reader takes.
 
 `--staged` with another area. Exit 2. stderr.
 
@@ -446,7 +454,9 @@ An undeclared loosening looks the same, with `undeclared` as the fact and withou
 
 ### 8. `quality merge owner/repo#n`: the operator's door
 
-First everything you approve, then the prompt (stderr), then the three steps as rows. At the end the gate is on again, or the run says loudly that it is not. The prompt names the number; the word is `yes`, in lower case. The last row before the prompt is the line the merge commit ends with, `work item` and its number or `no item` and its kind; a body the door refuses for its line stops at `! landing  refused` under the pull request's row instead (operator ruling of 6.11.2026 on Q2, „2 ok“: the same row as the last one before the question).
+First everything you approve, then the prompt (stderr), then the three steps as rows. At the end the gate is on again, or the run says loudly that it is not. The prompt names the number; the word is `yes`, in lower case. The last row before the prompt is the line the merge commit ends with, `work item` and its number or `no item` and its kind.
+
+Ruled by the operator: a body the door refuses for its line stops at `! landing  refused` under the pull request's row instead, the same row as the last one before the question.
 
 Approved and merged. Exit 0. Rows: stdout; the prompt line: stderr.
 
@@ -546,7 +556,7 @@ next: quality report
 
 ### 10. The pinned release is not there yet
 
-`check` and `merge` run with the release the gate pins (#172).
+`check` and `merge` run with the release the gate pins.
 
 Fetched now (decision 8 A): quality fetches the release through uv and says so in the release row; exit as usual. The first line is live only (stderr, terminal), the rest is stdout.
 
@@ -601,7 +611,7 @@ quality 0.9.0 · not inside a repository
 
 ### 11. `quality --help` and `quality check --help`
 
-The tree from #228, wrapped at 80 columns; `verdict` stands apart under "run by the gate". The line per area in `check --help` is part of the picture. Both: stdout, exit 0.
+The command tree, wrapped at 80 columns; `verdict` stands apart under "run by the gate". The line per area in `check --help` is part of the picture. Both: stdout, exit 0.
 
 ```text
 $ quality --help
@@ -684,32 +694,34 @@ error: unknown argument · --nonsense
 next: quality check --help
 ```
 
-Adopted O88 and O89 of 2.11.2026: a first word that names no command, none at all, and what a command does not take; what only the parser can word stands in the pair as its own sentence.
+The pair stands for a first word that names no command, for none at all and for what a command does not take; what only the parser can word stands in the pair as its own sentence.
 
-Built: the first word that names no area stands in the pair (O123); an option may stand between areas (O124); `--dry-run` without `--fix` is the pair drawn above, and a refused `--fix` beside `--dry-run` keeps it in `next:` (O240).
+Built: the first word that names no area stands in the pair; an option may stand between areas; `--dry-run` without `--fix` is the pair drawn above, and a refused `--fix` beside `--dry-run` keeps it in `next:`.
 
 ## Areas
 
-Seven, as ruled: `files`, `debt`, `imports`, `secrets`, `workflows`, `dependencies`, `code`. The areas replace the rule names in the verdict; `quality check --help` says which rules an area holds. `code` holds `python-security` and `python-print`. A run that names areas judges and prints only those, in this order, each once (O119, O120). The `code` line is the operator's (O130, 2.11.2026); the `secrets` line reads `secrets in the committed history` by his ruling O131 of 2.11.2026.
+Ruled by the operator: seven areas, `files`, `debt`, `imports`, `secrets`, `workflows`, `dependencies` and `code`; the `code` line of `quality check --help` as case 11 draws it; and the `secrets` line `secrets in the committed history`.
+
+The areas replace the rule names in the verdict; `quality check --help` says which rules an area holds. `code` holds `python-security` and `python-print`. A run that names areas judges and prints only those, in this order, each once.
 
 ## Decisions
 
-Ruled by the operator on 28.10.2026 („ok“). Those marked * add to or change a rule of #228.
+Ruled by the operator:
 
 1. Clean areas: one row per area, six fixed rows (now seven), so you see what was checked and its extent.
 2. The release row always, also in the commit hook, as a grey note: proof that locally the same release judges as in the gate.
-3. * Length of a fact (adds to rule 7): at the terminal shortened to the window width with `…`, never in a pipe, file or CI log. Commands, sha256 and entries to copy stand on their own line, never shortened. Each kind of finding has a fixed event word and a fact of a few words.
-4. * Findings under their area with a `fix:` line (adds to rule 7): indented under the area row, columns aligned per area; `fix:` under the last of consecutive findings with the same fix. A finding without a line shows only the path.
-5. * `next:` after a red verdict (changes rule 7): a `!` verdict may carry a `next:` only when exactly one command is the answer. For `check` findings the `fix:` lines carry the way.
-6. * Exit 2 beats 1 (adds to rule 2): exit 2 with the pair; the findings of the other areas stand anyway (case 4).
+3. Length of a fact: at the terminal shortened to the window width with `…`, never in a pipe, file or CI log. Commands, sha256 and entries to copy stand on their own line, never shortened. Each kind of finding has a fixed event word and a fact of a few words.
+4. Findings under their area with a `fix:` line: indented under the area row, columns aligned per area; `fix:` under the last of consecutive findings with the same fix. A finding without a line shows only the path.
+5. `next:` after a red verdict: a `!` verdict may carry a `next:` only when exactly one command is the answer. For `check` findings the `fix:` lines carry the way.
+6. Exit 2 beats 1: exit 2 with the pair; the findings of the other areas stand anyway (case 4).
 7. A ceiling that can fall stays a finding: `!` and exit 1, like today's "stale". The dry run `--fix --dry-run` exits 1 while anything can be lowered. Without a ceiling file debt is a grey note with exit 0, like today's "report only".
-8. * The release is missing (changes rule 6): A, quality fetches exactly the pin through uv and says so in the release row; offline is exit 2. Not B (exit 2 with a `uvx --from git+…` command).
+8. The release is missing: A, quality fetches exactly the pin through uv and says so in the release row; offline is exit 2. Not B (exit 2 with a `uvx --from git+…` command).
 9. No pin, old pin, quality itself: no workflow calls `gate.yml` is exit 2; a pin older than the release with `check` is exit 2 with "raise the gate pin"; in quality itself the checkout judges.
 10. `--staged` only with `secrets`: any other area with `--staged` is exit 2 with `next: quality check secrets --staged`.
-11. * The command that installs a scanner (rule 4): `mise --cd <quality's installation>/quality/mise install --locked`, the release's own manifest and lock; the path is quality's installation, shown as the example shows it.
-12. Rule names only in an allowance fix: a `fix:` line that asks for an `[[….allow]]` entry names the rule, because the entry needs it. Operator ruling 30.10.2026 (O17, „A: Namen bleiben“): a config refusal's fact may name the values a config key takes, rule ids included, and the example under `next:` may hold the entry's rule line, because the entry needs it.
+11. The command that installs a scanner: `mise --cd <quality's installation>/quality/mise install --locked`, the release's own manifest and lock; the path is quality's installation, shown as the example shows it.
+12. Rule names only in an allowance fix: a `fix:` line that asks for an `[[….allow]]` entry names the rule, because the entry needs it. A config refusal's fact may name the values a config key takes, rule ids included, and the example under `next:` may hold the entry's rule line, because the entry needs it.
 13. The CI log stays without colour: no special rule beyond "no TTY, no colour".
 14. `merge` no longer names aco: the "For the head: aco release …" ending goes; that step belongs in the head's instructions.
 15. `report`: rows and verdict on stderr; the tables are an artifact on stdout, so `quality report > fleet.md` writes only the tables.
-16. * `✗` means "could not check or do" (adds to rule 7): a finding is always `!` with exit 1; `✗` is always exit 2.
+16. `✗` means "could not check or do": a finding is always `!` with exit 1; `✗` is always exit 2.
 17. Duration in the verdict (`12s`, `1m12s`, `<1s`); `check --help` explains each area in one line.
