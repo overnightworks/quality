@@ -1,8 +1,0 @@
-claim_id = "82b980ba2af44aa39cc8d26af4ea2754"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "60d29d3e9698496aca5f91f4337917ad7e2384ec"
-branch = "claude/issue-437-verdict-door-refusal-pairs"
-scope = [".github/workflows/gate.yml", "README.md", "docs/commands.md", "docs/gate.md", "src/quality/cli.py", "src/quality/output.py", "src/quality/verdict.py", "tests/conftest.py", "tests/support/verdict.py", "tests/test_cli_help.py", "tests/test_clones_baseline.py", "tests/test_config.py", "tests/test_output.py", "tests/test_repository.py", "tests/test_verdict.py", "tests/test_verdict_config.py", "tests/test_verdict_door.py", "tests/test_verdict_renames.py", "tests/test_verdict_reread.py"]
-opened_commit = "85eb83644e24a6e3dc2a1ee2768ed790e3e7a18e"
-whole_reason = "The verdict's invocation and its refusals are one contract across verdict.py, cli.py's parser, output.py's summary and gate.yml's one line; the test modules change only the path, the cannot-judge prefix, the gate's variables, the summary's fence and the typed steps."
