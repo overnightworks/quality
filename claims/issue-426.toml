@@ -1,8 +1,0 @@
-claim_id = "b751c46a7170419991a610c13f3c0206"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "cf23fc06e8ddea6bcb02792dba311bef3b89e25e"
-branch = "claude/issue-426-quality-merge"
-scope = ["README.md", "docs/ARCHITECTURE.md", "docs/commands.md", "docs/gate.md", "docs/output.md", "docs/rules.md", "docs/runbook-emergency-merge.md", "docs/runbooks/merge.md", "docs/sonar.md", "src/quality/cli.py", "src/quality/merge.py", "src/quality/verdict.py", "tests/support/merge.py", "tests/support/verdict.py", "tests/test_cli_help.py", "tests/test_merge.py", "tests/test_merge_attempt.py", "tests/test_merge_dry_run.py", "tests/test_merge_landing.py", "tests/test_merge_prompt.py", "tests/test_merge_rows.py", "tests/test_sonar_exception.py", "tests/test_verdict_renames.py", "tests/test_verdict_reread.py"]
-opened_commit = "a44d914b92fc15bc05e74c0f42356abe797d8811"
-whole_reason = "Three production files inside the corridor; the scope is wide because the leaving word stands in eight documents and twelve test modules, and invariant 7 makes it leave in the slice that brings its replacement."
