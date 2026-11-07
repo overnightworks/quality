@@ -53,7 +53,7 @@ Each line has a reason:
 - **The `check` job runs the whole `quality check`.** `gate.yml` has no input for an area, and a test pins the step's words. A job that names areas says so in its verdict (`✓ clean · 1 area`); a selected-area job is not evidence of a whole check.
 - **`secrets: SONAR_TOKEN`** (needed while SonarCloud runs; a repository with `[gate] sonar = false` passes none) and the optional **`with: coverage-artifact`** are described under
   [`quality sonar findings`](sonar.md#quality-sonar-findings) and [Coverage on new code](sonar.md#coverage-on-new-code).
-- **`uses:` pins a commit** (`@<commit sha> # v<tag>`), and Dependabot bumps it where the repository's `.github/dependabot.yml` enables the `github-actions` ecosystem. There is no copier and no own token that writes to all repositories: quality
+- **`uses:` pins a commit** (`@<commit sha> # v<tag>`). The comment is load-bearing: a local `quality` reads the release from it, so it names the commit's own tag. Dependabot bumps it where the repository's `.github/dependabot.yml` enables the `github-actions` ecosystem. There is no copier and no own token that writes to all repositories: quality
   carries plain version tags and Dependabot opens the bump pull requests, and quality's own action pins move the same way, so a caller receives current actions with each quality tag.
 
 The verdict judges the jobs named in `quality/config.toml`:

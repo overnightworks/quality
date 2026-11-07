@@ -319,6 +319,7 @@ def test_a_gate_call_is_its_ref_its_file_and_the_release_its_line_names(build_re
         pytest.param("on: push\njobs:\n  gate:\n    uses: {uses} # pinned at v0.10.0\n", id="after other words"),
         pytest.param("on: push\njobs:\n  gate:\n    uses: {uses} # v0.10.0 (old)\n", id="words after the tag"),
         pytest.param("on: push\njobs:\n  gate:\n    uses: {uses} # v1.2\n", id="no release tag"),
+        pytest.param("on: push\njobs:\n  gate:\n    uses: |\n      {uses}\n    # v0.10.0\n", id="the line after a block scalar"),
     ],
 )
 def test_a_comment_elsewhere_names_no_release(build_repo, text):
