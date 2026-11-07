@@ -69,11 +69,15 @@ def _tagged_commit(directory: Path, tag: str) -> str | None:
     return words[-1] if words else None
 
 
+def _runs_from(running: RunningQuality, directory: Path) -> bool:
+    return running.package.resolve() == (directory / "src" / "quality").resolve()
+
+
 def _directory_commit(running: RunningQuality, directory: Path) -> str | None:
     """The commit a directory installation runs: its HEAD, only while its package runs from the directory's own
     `src/quality`, its work tree is clean and the version's release tag names that HEAD."""
     tag = f"v{running.version}"
-    if not checkout.RELEASE_TAG.fullmatch(tag) or running.package.resolve() != (directory / "src" / "quality").resolve():
+    if not checkout.RELEASE_TAG.fullmatch(tag) or not _runs_from(running, directory):
         return None
     head = _clean_head(directory)
     return head if head is not None and _tagged_commit(directory, tag) == head else None
@@ -123,7 +127,7 @@ def judging_release(root: Path, command: str, staged: bool, *, running: RunningQ
             raise CannotJudge(fact, (Instruction("add the gate as quality's docs/gate.md describes"),))
         case UnknownGatePin(reason):
             raise CannotJudge(reason.fact, reason.next_steps)
-        case OwnGate() if running.package.resolve() == (top / "src" / "quality").resolve():
+        case OwnGate() if _runs_from(running, top):
             return JudgingRelease(ReleaseEvent.THIS_CHECKOUT, f"{running.version} · quality judges itself")
         case OwnGate():
             raise CannotJudge(f"this is quality {running.version}, not this checkout's code", (Command(f"uv run {command}"),))

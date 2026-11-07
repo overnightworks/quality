@@ -533,7 +533,7 @@ def test_a_merged_pipe_of_the_real_entry_points_keeps_the_pair_in_order(env_and_
 
 
 def test_a_merged_pipe_shows_the_check_lines_in_run_order(env_and_broken_compose):
-    """#86 rule 3, cell 10: the release row, the area rows with their findings (`.env` as env-file's and root-layout's rows, each with its fix), then the pair."""
+    """The release row, the area rows with their findings (`.env` as env-file's and root-layout's rows, each with its fix), then the pair."""
     done = quality_door(CHECK_WORD, cwd=env_and_broken_compose, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     prefixes = [
         "  · release", "  ✗ files", ENV_ROW, FIX_LINE, ENV_ROW, FIX_LINE,

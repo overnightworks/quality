@@ -79,7 +79,7 @@ class Reason:
 
 @dataclass(frozen=True)
 class Release:
-    """A quality release a row names, by its tag."""
+    """A quality release a row names: its tag, or the version of an installation that is no tagged release."""
 
     tag: str
 
