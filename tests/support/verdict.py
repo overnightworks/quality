@@ -18,8 +18,18 @@ CHECKS_GREEN = json.dumps(
 )
 
 
+def jobs_page(*jobs: tuple[str, str, str | None]) -> str:
+    """One page of a run's jobs, each `(name, status, conclusion)` in attempt 1."""
+    listed = [
+        {"id": number, "name": name, "run_attempt": 1, "status": status, "conclusion": conclusion}
+        for number, (name, status, conclusion) in enumerate(jobs, start=1)
+    ]
+    return json.dumps({"total_count": len(listed), "jobs": listed})
+
+
 def set_gate_variables(monkeypatch) -> None:
-    """The variables gate.yml's verdict step hands the verdict, outside a pull request: no base commit."""
+    """The variables gate.yml's verdict step hands the verdict, outside a pull request: no base commit. The pull
+    request's head is a sha of its own, never a commit of the fixture."""
     for name, value in {
         "GITHUB_REPOSITORY": "o/r",
         "GITHUB_RUN_ID": "1",
@@ -27,13 +37,15 @@ def set_gate_variables(monkeypatch) -> None:
         "GITHUB_TOKEN": "t",
         "GATE_NEEDS": json.dumps({"check": {"result": "success"}}),
         "GITHUB_BASE_REF": "main",
+        "GATE_PULL_REQUEST": "7",
+        "GATE_HEAD_SHA": "5d1e0b7" + "c" * 33,
     }.items():
         monkeypatch.setenv(name, value)
     monkeypatch.delenv("GATE_BASE_SHA", raising=False)
 
 
 def verdict_streams(repo: Path, capsys) -> tuple[int, str, str]:
-    code = door_in(repo, "verdict", fetcher_for=lambda token: lambda url: (CHECKS_GREEN, None))
+    code = door_in(repo, "verdict", fetcher_for=lambda token: lambda url: (CHECKS_GREEN, None), clock=lambda: 0.0)
     captured = capsys.readouterr()
     return code, captured.out, captured.err
 

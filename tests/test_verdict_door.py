@@ -10,7 +10,7 @@ from quality import cli
 from quality.config import CONFIG_PATH
 from quality.ratchet import BASELINE_PATH
 from tests.support.git_repositories import head_commit
-from tests.support.verdict import CHECKS_GREEN
+from tests.support.verdict import CHECKS_GREEN, jobs_page
 
 pytestmark = pytest.mark.integration
 
@@ -23,14 +23,6 @@ STALE_PAIR = (
     "    re-run this run's failed jobs\n"
     "    a mandatory job missing from the caller job's needs: add it there\n"
 )
-
-
-def jobs_page(*jobs: tuple[str, str, str | None]) -> str:
-    listed = [
-        {"id": number, "name": name, "run_attempt": 1, "status": status, "conclusion": conclusion}
-        for number, (name, status, conclusion) in enumerate(jobs, start=1)
-    ]
-    return json.dumps({"total_count": len(listed), "jobs": listed})
 
 
 @pytest.fixture
