@@ -82,7 +82,7 @@ from quality.sonar import (
     fetch_json,
     scanner_exclusions,
 )
-from quality.verdict import PageFetcher, github_fetcher, run_verdict
+from quality.verdict import MERGE_COMMAND, PageFetcher, github_fetcher, run_verdict
 from quality.web import Sleep
 
 EXIT_CLEAN = 0
@@ -153,7 +153,7 @@ def main(
             remote_for=remote_for,
         )
     if arguments.command == "verdict":
-        return run_verdict(fetcher_for, sleep, channels, environment)
+        return run_verdict(fetcher_for, sleep, clock, channels, environment)
     if arguments.command == "report":
         return fleet.run_report(release_tags, clock, now().date(), channels, environment)
     if arguments.command == "sonar":
@@ -321,7 +321,6 @@ def named_area(word: str) -> Area:
         raise CannotJudge(f"no area {word}{SEPARATOR}areas: {', '.join(Area)}", help_step("quality check")) from error
 
 
-MERGE_COMMAND = "quality merge"
 PULL_REQUEST_NAME = re.compile(rf"(?P<repository>{REPOSITORY_NAME.pattern})#(?P<number>[1-9][0-9]*)")
 PULL_REQUEST_SHAPE = "a pull request reads OWNER/REPO#N"
 

@@ -672,7 +672,7 @@ PLAIN_FILE = "[metadata]\nname = shop\n"
     ],
 )
 def test_the_contract_diff_names_each_loosening_on_its_own_line(base, head, expected):
-    """#148 C1-C7, I1, I2, I5, S1, S2, X1: the lines the verdict prints after `loosened (undeclared): `."""
+    """#148 C1-C7, I1, I2, I5, S1, S2, X1: the texts the verdict judges as the import contract's loosenings."""
     assert loosened(base, head) == expected
 
 
@@ -726,7 +726,7 @@ def test_the_door_refuses_an_undeclared_import_contract_loosening_next_to_legacy
     refuses an undeclared loosening of them, even when it was opened for Sonar's legacy findings."""
     gh = GhWithImportConfigs(**gh_kwargs)
     assert drive(gh)[0] == 1
-    assert f"loosened (undeclared): {line}" in capsys.readouterr().out
+    assert f"    ! {line}\n" in capsys.readouterr().out
     changed_nothing(gh)
 
 

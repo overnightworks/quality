@@ -670,4 +670,4 @@ def test_a_fix_passes_the_verdict(pull_request, capsys, sources, base, head, exi
     written = (repo / BASELINE_PATH).read_text()
     assert (written.endswith(head), "src/gone.py" in written) == (True, False)
     code, out, err = verdict_streams(repo, capsys)
-    assert (code, "verdict: green" in out, err) == (0, True, ""), out
+    assert (code, "✓ green" in out, err) == (0, True, ""), out

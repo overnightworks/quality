@@ -190,7 +190,7 @@ def test_a_fixed_move_passes_check_and_the_verdict(pull_request, capsys, arrange
     assert checked(capsys, repo)[0] == 0
     commit_all(repo, "fixed")
     verdict_code, verdict_out, verdict_err = verdict_streams(repo, capsys)
-    assert (verdict_code, "verdict: green" in verdict_out, verdict_err) == (0, True, ""), verdict_out
+    assert (verdict_code, "✓ green" in verdict_out, verdict_err) == (0, True, ""), verdict_out
 
 
 def test_a_moved_entry_stands_in_the_pictures_frame(pull_request, capsys):
@@ -268,7 +268,7 @@ def test_the_stale_target_case(pull_request, capsys, lines, fix_out, check_out, 
     assert checked(capsys, repo) == check_out
     commit_all(repo, "fixed")
     verdict_code, verdict_out, verdict_err = verdict_streams(repo, capsys)
-    assert (verdict_code, "verdict: green" in verdict_out, verdict_err) == (0, True, ""), verdict_out
+    assert (verdict_code, "✓ green" in verdict_out, verdict_err) == (0, True, ""), verdict_out
 
 
 @pytest.mark.parametrize(

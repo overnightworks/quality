@@ -7,8 +7,8 @@ Symptom: `quality / verdict` is red on a pull request and no change to the pull 
 - every pull request is red, the fixing one included, because the default branch gained a legacy Sonar finding without a
   pull request introducing it (`[gate] legacy = "fail"`; a taint finding on an unchanged line, a SonarCloud rule-profile
   update);
-- the pull request loosens the gate as you ruled, and the verdict's only red lines are `loosened (declared, …)` ending in
-  `verdict: red - only declared loosenings`.
+- the pull request loosens the gate as you ruled, and the verdict's only red row is `! loosenings  N declared`, its
+  closing line `! red · only declared loosenings · only the operator merges it` and `next:` names this command.
 
 Impact: the pull request cannot merge through `aco land` or the ruleset.
 
@@ -16,7 +16,7 @@ Impact: the pull request cannot merge through `aco land` or the ruleset.
 
 1. `gh pr checks <pr> --repo <owner/repo>`: every check other than `quality / sonar` and `quality / verdict` is green and
    none is running.
-2. Read the verdict's lines in the failed `quality / verdict` job. In the second case each declared loosening is the one
+2. Read the verdict's rows in the failed `quality / verdict` job. In the second case each declared loosening is the one
    you ruled; if it is not, send the pull request back instead.
 3. The pull request body carries its one `Work-Item:` or `No-Item:` line outside a code block; the command refuses otherwise.
 4. The pull request is no draft; the command refuses a draft.

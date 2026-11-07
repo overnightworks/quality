@@ -95,7 +95,7 @@ legacy = "fail"
 - `"fail"`: a pull request fails while the default branch has any open finding, even when it adds none.
 - Any other value is a config error (exit `2`), read before the first SonarCloud request.
 - A pull request whose base config says `legacy = "fail"` and whose head config says anything else is red in the verdict
-  (`loosened (undeclared): legacy fail → report`; an absent key counts as `report`), like a removed mandatory job.
+  (the loosening `legacy fail → report`; an absent key counts as `report`), like a removed mandatory job.
 - `legacy = "fail"` beside `[gate] sonar = false` is a config error (exit `2`).
 
 On pull requests and default-branch runs `quality sonar findings` reads `api/project_branches/list` once before the counts.
@@ -120,7 +120,7 @@ to another gate changes the verdict with no change here. Default-branch and othe
 | the task has no `analysisId`, HTTP 401, 403, 404 or 5xx, a timeout | `2` | `sonar: cannot judge`, before the findings are read |
 
 A failed gate fails the `sonar` job whatever the findings count says, and `legacy = "fail"` still fails it on its own;
-the verdict then prints `gate job "sonar" result failure`. `-Dsonar.qualitygate.wait=false` stays in `gate.yml`: the
+the verdict then prints the row `! quality / sonar  failure`. `-Dsonar.qualitygate.wait=false` stays in `gate.yml`: the
 scanner does not wait for the gate, this command reads it.
 
 - **What the gates check.** The gate set in SonarCloud for the repository; the organization's default is the built-in

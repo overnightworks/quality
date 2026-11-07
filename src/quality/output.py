@@ -365,6 +365,11 @@ def write_rows(rows: tuple[Row, ...], channel: Channel, subject_width: int = SUB
     _print_lines([line for row in rows for line in _row_lines(row, channel, subject_width)], channel)
 
 
+def subject_width(rows: Sequence[Row]) -> int:
+    """The subject column rows share: as wide as the widest escaped subject, at least `SUBJECT_WIDTH`."""
+    return max([SUBJECT_WIDTH, *(_display_width(printable(row.subject)) for row in rows)])
+
+
 @dataclass(frozen=True)
 class DoorStream:
     """The operator's door's stdout, its one writer. A line it refuses (a full disk) leads it to the null device, so
@@ -560,6 +565,11 @@ def rendered(write: Callable[[Channels], None]) -> tuple[str, ...]:
 def write_help(text: str) -> None:
     """Help reads the same in every stream: plain, whole, on stdout; a closed stdout takes nothing."""
     _print_lines(text.splitlines(), Channel(sys.stdout, False, None))
+
+
+def write_next(next_steps: tuple[Step, ...], channel: Channel) -> None:
+    """`next:` alone, after a closing line whose one command is the answer."""
+    _print_lines(_next_lines(next_steps, _paint("next:", CYAN, channel.styled)), channel)
 
 
 def write_pair(error: str, next_steps: tuple[Step, ...], channel: Channel) -> None:

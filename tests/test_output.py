@@ -634,6 +634,23 @@ def test_rows_share_the_subject_column_they_are_given():
     )
 
 
+@pytest.mark.parametrize(
+    ("subjects", "width"),
+    [
+        pytest.param(("a", "b"), 12, id="narrow subjects keep the default"),
+        pytest.param(("a", "a\nb" * 4), 24, id="an escaped subject counts as printed"),
+        pytest.param(("a", "表" * 7), 14, id="a wide character counts two columns"),
+    ],
+)
+def test_the_subject_width_is_the_widest_escaped_subject(subjects, width):
+    rows = tuple(Row(Glyph.CLEAN, subject, Event.CLEAN) for subject in subjects)
+    assert output.subject_width(rows) == width
+
+
+def test_next_alone_stands_on_its_channel():
+    assert written(io.StringIO, lambda channel: output.write_next((Command("quality merge o/r#7"),), channel)) == "next: quality merge o/r#7\n"
+
+
 def test_lines_of_an_artifact_stand_escaped_and_unpainted():
     shown = written(Terminal, lambda channel: output.write_lines(("| a\x1b[31mb |", ""), channel))
     assert shown == "| a\\x1b[31mb |\n\n"

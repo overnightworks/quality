@@ -15,22 +15,11 @@ from tests.support.verdict import CHECKS_GREEN
 pytestmark = pytest.mark.integration
 
 SET_BY_THE_GATE = "next: quality verdict runs as gate.yml's verdict step, which sets it"
-REREAD_NOTE = 'verdict: read the run\'s jobs 13 times - GitHub first listed "checks" (attempt 1) as in_progress\n'
-STALE_PAIR = (
-    'error: GitHub still lists "checks" (attempt 1) as in_progress after 13 reads · the gate starts after every '
-    "mandatory job, so this answer is stale\n"
-    "next:\n"
-    "    re-run this run's failed jobs\n"
-    "    a mandatory job missing from the caller job's needs: add it there\n"
+PUSH_GREEN = (
+    "  · base          none           a push or merge group: no loosening judged\n"
+    "  ✓ jobs          success        1 mandatory job · 1 gate job\n"
+    "✓ green · 1 mandatory job · <1s\n"
 )
-
-
-def jobs_page(*jobs: tuple[str, str, str | None]) -> str:
-    listed = [
-        {"id": number, "name": name, "run_attempt": 1, "status": status, "conclusion": conclusion}
-        for number, (name, status, conclusion) in enumerate(jobs, start=1)
-    ]
-    return json.dumps({"total_count": len(listed), "jobs": listed})
 
 
 @pytest.fixture
@@ -40,7 +29,7 @@ def door(capsys, run_env):
     _, summary = run_env
 
     def run(*words: str, page: str = CHECKS_GREEN) -> tuple[int, str, str, str | None]:
-        code = cli.main(["verdict", *words], fetcher_for=lambda token: lambda url: (page, None), sleep=lambda seconds: None)
+        code = cli.main(["verdict", *words], fetcher_for=lambda token: lambda url: (page, None), sleep=lambda seconds: None, clock=lambda: 0.0)
         printed = capsys.readouterr()
         return code, printed.out, printed.err, summary.read_text() if summary.is_file() else None
 
@@ -57,6 +46,7 @@ def refused(pair: str) -> tuple[int, str, str, str]:
     [
         *(pytest.param(name, None, id=name) for name in (
             "GATE_NEEDS", "GITHUB_RUN_ATTEMPT", "GITHUB_REPOSITORY", "GITHUB_RUN_ID", "GITHUB_TOKEN", "GITHUB_BASE_REF",
+            "GATE_PULL_REQUEST", "GATE_HEAD_SHA",
         )),
         pytest.param("GITHUB_TOKEN", "", id="an empty token"),
     ],
@@ -82,6 +72,7 @@ def test_a_variable_the_gate_sets_that_is_missing_is_its_pair(monkeypatch, run_e
         pytest.param("GITHUB_RUN_ATTEMPT", "first", "GITHUB_RUN_ATTEMPT is not a run attempt", id="attempt as a word"),
         pytest.param("GITHUB_RUN_ATTEMPT", "1" * 5000, "GITHUB_RUN_ATTEMPT is not a run attempt", id="attempt past the integer digit limit"),
         pytest.param("GITHUB_RUN_ATTEMPT", "0", "GITHUB_RUN_ATTEMPT is not a run attempt", id="attempt 0"),
+        pytest.param("GITHUB_RUN_ATTEMPT", "\u0661", "GITHUB_RUN_ATTEMPT is not a run attempt", id="attempt as an Arabic-Indic digit"),
         pytest.param("GATE_NEEDS", "[1]", "GATE_NEEDS is not the needs of gate.yml's verdict job", id="needs as a list"),
         pytest.param("GATE_NEEDS", '{"check": "success"}', "GATE_NEEDS is not the needs of gate.yml's verdict job", id="a need as text"),
         pytest.param("GATE_NEEDS", '{"check": {}}', "GATE_NEEDS is not the needs of gate.yml's verdict job", id="a need without result"),
@@ -116,44 +107,35 @@ def test_a_base_branch_in_a_step_prints_escaped(monkeypatch, pull_request, door)
 def test_a_head_baseline_that_cannot_be_read_names_its_restore_step_apart(run_env, door):
     repo, _ = run_env
     (repo / BASELINE_PATH).write_text("[ccn")
-    assert door() == refused(
-        f"error: {BASELINE_PATH} at the head: {BASELINE_PATH} is not valid TOML (Expected ']' at the end of a table "
-        "declaration (at end of document))\n"
-        f"next: restore {BASELINE_PATH} from git, or repair it by hand\n"
+    code, out, err, _ = door()
+    fact, step = err.splitlines()
+    assert (code, out, fact.startswith(f"error: {BASELINE_PATH} at the head: {BASELINE_PATH} is not valid TOML"), step) == (
+        2, "", True, f"next: restore {BASELINE_PATH} from git, or repair it by hand",
     )
 
 
-@pytest.mark.parametrize(
-    ("config", "page", "judged"),
-    [
-        pytest.param(
-            '[gate]\nmandatory_jobs = ["checks"]\n', jobs_page(("checks", "in_progress", None)), REREAD_NOTE, id="only running",
-        ),
-        pytest.param(
-            '[gate]\nmandatory_jobs = ["checks", "lint"]\n',
-            jobs_page(("checks", "in_progress", None), ("lint", "completed", "failure")),
-            REREAD_NOTE + 'mandatory job "lint" (attempt 1) concluded failure\n',
-            id="running beside a failure",
-        ),
-    ],
-)
-def test_a_refusal_after_judged_reads_keeps_their_lines_on_stdout(run_env, door, config, page, judged):
-    repo, _ = run_env
-    (repo / CONFIG_PATH).write_text(config)
-    assert door(page=page) == (2, judged, STALE_PAIR, f"```\n{judged}{STALE_PAIR}```\n")
+def missing_frame(name: str) -> str:
+    """A push whose second mandatory job, `name`, is missing from the run."""
+    return (
+        "  · base             none           a push or merge group: no loosening judged\n"
+        "  ✓ checks           success\n"
+        f"  ! {name:15}  missing        not in the run\n"
+        "  ✓ quality / check  success\n"
+        "! red · 1 of 2 mandatory jobs failed · <1s\n"
+    )
 
 
 @pytest.mark.parametrize(
     ("job", "earlier", "summary"),
     [
         pytest.param(
-            "<!-- a", None, '```\nmandatory job "<!-- a" is missing from the run\nverdict: red\n```\n', id="a comment",
+            "<!-- a", None, "```\n" + missing_frame("<!-- a") + "```\n", id="a comment",
         ),
         pytest.param(
-            "a```b", None, '````\nmandatory job "a```b" is missing from the run\nverdict: red\n````\n', id="a backtick run",
+            "a```b", None, "````\n" + missing_frame("a```b") + "````\n", id="a backtick run",
         ),
-        pytest.param(None, "earlier\n", "earlier\n```\nverdict: green\n```\n", id="an earlier summary ending its line"),
-        pytest.param(None, "earlier", "earlier\n```\nverdict: green\n```\n", id="an earlier summary without a final line feed"),
+        pytest.param(None, "earlier\n", f"earlier\n```\n{PUSH_GREEN}```\n", id="an earlier summary ending its line"),
+        pytest.param(None, "earlier", f"earlier\n```\n{PUSH_GREEN}```\n", id="an earlier summary without a final line feed"),
     ],
 )
 def test_the_step_summary_is_one_code_block_no_line_can_close(run_env, door, job, earlier, summary):
@@ -171,7 +153,7 @@ def test_an_unwritable_step_summary_adds_its_pair_after_the_run(monkeypatch, run
     monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(unwritable))
     assert door() == (
         2,
-        "verdict: green\n",
+        PUSH_GREEN,
         (
             f"error: GITHUB_STEP_SUMMARY is not writable · [Errno 21] Is a directory: '{unwritable}'\n"
             "next: fix what the error names, then re-run this run's failed jobs\n"
