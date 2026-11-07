@@ -15,8 +15,6 @@ from tests.support.verdict import CHECKS_GREEN
 pytestmark = pytest.mark.integration
 
 SET_BY_THE_GATE = "next: quality verdict runs as gate.yml's verdict step, which sets it"
-TOKEN = "hunter2-token"
-SONAR_STRING_CONFIG = '[gate]\nmandatory_jobs = ["checks"]\nsonar = "false"\n'
 REREAD_NOTE = 'verdict: read the run\'s jobs 13 times - GitHub first listed "checks" (attempt 1) as in_progress\n'
 STALE_PAIR = (
     'error: GitHub still lists "checks" (attempt 1) as in_progress after 13 reads · the gate starts after every '
@@ -82,6 +80,7 @@ def test_a_variable_the_gate_sets_that_is_missing_is_its_pair(monkeypatch, run_e
         pytest.param("GITHUB_RUN_ID", "first", "GITHUB_RUN_ID is not a run id", id="run id as a word"),
         pytest.param("GITHUB_RUN_ID", "0", "GITHUB_RUN_ID is not a run id", id="run id 0"),
         pytest.param("GITHUB_RUN_ATTEMPT", "first", "GITHUB_RUN_ATTEMPT is not a run attempt", id="attempt as a word"),
+        pytest.param("GITHUB_RUN_ATTEMPT", "1" * 5000, "GITHUB_RUN_ATTEMPT is not a run attempt", id="attempt past the integer digit limit"),
         pytest.param("GITHUB_RUN_ATTEMPT", "0", "GITHUB_RUN_ATTEMPT is not a run attempt", id="attempt 0"),
         pytest.param("GATE_NEEDS", "[1]", "GATE_NEEDS is not the needs of gate.yml's verdict job", id="needs as a list"),
         pytest.param("GATE_NEEDS", '{"check": "success"}', "GATE_NEEDS is not the needs of gate.yml's verdict job", id="a need as text"),
@@ -94,17 +93,18 @@ def test_a_variable_the_gate_sets_that_is_missing_is_its_pair(monkeypatch, run_e
 )
 def test_a_malformed_variable_is_its_pair_and_never_its_value(monkeypatch, run_env, door, name, value, fact):
     repo, _ = run_env
-    monkeypatch.setenv("GITHUB_TOKEN", TOKEN)
+    token = "hunter2-token"
+    monkeypatch.setenv("GITHUB_TOKEN", token)
     monkeypatch.setenv("GATE_BASE_SHA", head_commit(repo))
     monkeypatch.setenv(name, value)
     code, out, err, summary = door()
     assert (code, out, err, summary) == refused(f"error: {fact}\n{SET_BY_THE_GATE}\n")
-    assert TOKEN not in out + err + summary
+    assert token not in out + err + summary
 
 
 def test_a_base_branch_in_a_step_prints_escaped(monkeypatch, pull_request, door):
     repo, commit_base = pull_request
-    commit_base(None, SONAR_STRING_CONFIG)
+    commit_base(None, '[gate]\nmandatory_jobs = ["checks"]\nsonar = "false"\n')
     (repo / CONFIG_PATH).write_text('[gate]\nmandatory_jobs = ["checks"]\n')
     monkeypatch.setenv("GITHUB_BASE_REF", "ma\u202ein")
     _, out, err, _ = door()

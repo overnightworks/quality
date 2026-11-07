@@ -358,12 +358,12 @@ def reread(capsys, monkeypatch, run_env, pull_request):
         pytest.param(
             (
                 page(running()),
-                CannotJudge("cannot read u: HTTP Error 403: Forbidden (does the caller grant actions: read?)"),
+                CannotJudge("cannot read u: HTTP Error 403: Forbidden"),
             ),
             {},
             2,
             ['verdict: read the run\'s jobs 2 times - GitHub first listed "checks" (attempt 1) as in_progress',
-             "error: cannot read u: HTTP Error 403: Forbidden (does the caller grant actions: read?)", *NEXT_LINES[()]],
+             "error: cannot read u: HTTP Error 403: Forbidden", *NEXT_LINES[()]],
             10,
             id="cell 23",
         ),
