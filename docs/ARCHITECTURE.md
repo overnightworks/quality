@@ -42,7 +42,7 @@ the blocks, and `quality check` enforces it: a module imports only from the laye
 flowchart TB
     cli["cli.py: the one door; arguments, exit code"]
     door["merge.py: the operator's door"]
-    verdict["verdict.py: the pull request's verdict"]
+    verdict["verdict.py, sides.py: the pull request's verdict and the two sides it compares"]
     reports["sonar.py, fleet.py: SonarCloud findings, fleet report"]
     check["check.py, staged.py: areas in order, the commit hook"]
     rules["rule modules: one decision each"]

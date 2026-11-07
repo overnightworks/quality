@@ -12,7 +12,8 @@ from quality import __version__, cli
 from quality.config import CONFIG_PATH, LOOSENED_EXAMPLE, LegacyMode
 from quality.ratchet import BASELINE_PATH, NO_RENAMES
 from quality.report import CannotJudge, Instruction, printable
-from quality.verdict import NO_BASE_SETTINGS, GateSettings, Side, judge, read_base, read_jobs
+from quality.sides import NO_BASE_SETTINGS, Side, read_base
+from quality.verdict import GateSettings, judge, read_jobs
 from tests.support.advisories import allowance_config
 from tests.support.check import assert_every_line_starts_with_the_door
 from tests.support.git_repositories import GIT_IDENTITY, head_commit, put

@@ -5,11 +5,12 @@ import urllib.error
 
 import pytest
 
-from quality import architecture, cli, verdict
+from quality import architecture, cli, sides, verdict
 from quality.config import CONFIG_PATH, LegacyMode
 from quality.ratchet import NO_RENAMES
 from quality.report import CannotJudge, Instruction
-from quality.verdict import GateSettings, Side, judge
+from quality.sides import Side
+from quality.verdict import GateSettings, judge
 from tests.support.architecture import FORBIDDEN, contracts_ini, contracts_toml, ini_section
 from tests.support.git_repositories import put
 from tests.support.sonar import reply
@@ -585,4 +586,4 @@ def test_a_head_import_config_that_links_out_of_the_repository_cannot_be_judged_
     (elsewhere / "outside").write_text("[importlinter]\n")
     (repo / ".importlinter").symlink_to(elsewhere / "outside")
     with pytest.raises(CannotJudge, match="^import-linter config at the head: .importlinter resolves outside the repository$"):
-        verdict.read_head(repo)
+        sides.read_head(repo)
