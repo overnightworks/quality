@@ -8,10 +8,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum, StrEnum
 from functools import partial
-from pathlib import Path
 from urllib.parse import quote
 
-from quality import architecture, process
+from quality import architecture
 from quality.config import CONFIG_PATH, Declaration, GateSettings, LegacyMode
 from quality.landing import Landing, LandingKind, LandingRefused, landing_of
 from quality.output import (
@@ -27,7 +26,7 @@ from quality.output import (
     write_pair,
 )
 from quality.ratchet import BASELINE_PATH, NO_RENAMES, Renames
-from quality.report import CannotJudge, Command, Instruction, Step, headline, printable
+from quality.report import CannotJudge, Command, Instruction, Reason, Step, config_refusal, headline, printable
 from quality.sonar import (
     Analysis,
     Scope,
@@ -41,7 +40,17 @@ from quality.sonar import (
     project_of,
     require_resolved,
 )
-from quality.verdict import SUCCESS, Job, Side, Verdict, compares_baselines, judge, read_renames, side_of
+from quality.verdict import (
+    SUCCESS,
+    Job,
+    Side,
+    UnusableConfig,
+    Verdict,
+    compares_baselines,
+    judge,
+    read_renames_of_pull,
+    side_of,
+)
 
 EXIT_YES = 0
 EXIT_REFUSED = 1
@@ -56,8 +65,6 @@ RED = "failure"
 COMPLETED = "completed"
 PENDING_STATUS = "pending"
 NOT_FOUND = "404"
-CREDENTIAL_HELPER = "!gh auth git-credential"
-FETCH_TIMEOUT_SECONDS = 120
 
 GhRunner = Callable[[Sequence[str], str | None], str]
 Ask = Callable[[str], str | None]
@@ -240,52 +247,6 @@ def github_remote(repository: str) -> str:
     return f"https://github.com/{repository}.git"
 
 
-def gh_configuration_directory(environment: Mapping[str, str]) -> str:
-    """Where gh looks for its login: `GH_CONFIG_DIR`, else `$XDG_CONFIG_HOME/gh`, else `~/.config/gh`."""
-    if environment.get("GH_CONFIG_DIR"):
-        return environment["GH_CONFIG_DIR"]
-    if environment.get("XDG_CONFIG_HOME"):
-        return str(Path(environment["XDG_CONFIG_HOME"]) / "gh")
-    return str(Path(environment.get("HOME", "~")).expanduser() / ".config" / "gh")
-
-
-def fetch_environment(environment: Mapping[str, str], empty_home: Path) -> dict[str, str]:
-    """The environment of git around the fetch: no inherited git routing or configuration, an empty home so that
-    `.netrc` and every other file git reads there is absent, and no way to prompt for a password. gh is the only source
-    of credentials, and it keeps its login by being told where the real configuration directory is."""
-    isolated = process.attribute_free_git_environment(empty_home)
-    kept = {name: value for name, value in isolated.items() if name != "SSH_ASKPASS"}
-    return kept | {"GIT_TERMINAL_PROMPT": "0", "GH_CONFIG_DIR": gh_configuration_directory(environment)}
-
-
-def read_renames_of_pull(remote: str, base_sha: str, merge_sha: str, environment: Mapping[str, str]) -> Renames:
-    """The renames the verdict reads at the checkout, from the pull request's two commits fetched into a bare repository
-    that is removed afterwards. Credentials stay in gh's credential protocol; git's own words never reach the operator."""
-    with process.scratch_directory() as scratch:
-        isolated = fetch_environment(environment, scratch / "home")
-        repository = scratch / "repository"
-        commands = (
-            ["git", "init", "--bare", "--quiet", str(repository)],
-            [
-                "git", "-c", "credential.helper=", "-c", f"credential.helper={CREDENTIAL_HELPER}", "-c", "core.askPass=",
-                "-C", str(repository), "fetch", "--quiet", "--depth=1", "--no-tags", "--", remote, base_sha, merge_sha,
-            ],
-        )
-        for command in commands:
-            try:
-                done = process.run_bounded_in_own_group(command, FETCH_TIMEOUT_SECONDS, isolated)
-            except process.ProcessError as error:
-                raise CannotJudge(f"cannot fetch the pull request's commits to compare renamed files ({error})") from None
-            if done.returncode != 0:
-                raise CannotJudge(
-                    f"cannot fetch the pull request's commits to compare renamed files (git exited {done.returncode})"
-                )
-        try:
-            return read_renames(repository, base_sha, merge_sha, isolated, bound=FETCH_TIMEOUT_SECONDS)
-        except CannotJudge:
-            raise CannotJudge("cannot list the files git renamed between the pull request's commits") from None
-
-
 def rederived_verdict(head: Side, base: Side, check_runs: Sequence[Check], renames: Renames) -> Verdict:
     """The verdict's own decider at the merge commit, with the Sonar job taken as green: the door judges Sonar itself."""
     jobs = [Job(run.name, 1, run.status, SUCCESS if run.name == SONAR_CHECK else run.conclusion) for run in check_runs]
@@ -311,12 +272,16 @@ def read_statuses(gh: GhRunner, repository: str, head_sha: str) -> list[Check]:
     return [Check(status["context"], "queued" if status["state"] == PENDING_STATUS else COMPLETED, status["state"]) for status in statuses]
 
 
-def read_side_at(gh: GhRunner, repository: str, sha: str) -> Side:
-    """The gate's settings, baseline and import-linter configs at one commit, as the verdict reads them; a 404 reads as absent."""
+def read_side_at(gh: GhRunner, repository: str, sha: str, fix: Step) -> Side:
+    """The gate's settings, baseline and import-linter configs at one commit, as the verdict reads them; a 404 reads as absent,
+    a config quality cannot read is its refusal with `fix`, the step that repairs it at this commit."""
     config = _read_file_at(gh, repository, CONFIG_PATH, sha)
     baseline = _read_file_at(gh, repository, BASELINE_PATH, sha)
     import_configs = {name: _read_file_at(gh, repository, name, sha) for name in architecture.CONFIG_FILES}
-    return side_of(config, baseline, sha, import_configs)
+    try:
+        return side_of(config, baseline, sha, import_configs)
+    except UnusableConfig as unusable:
+        raise config_refusal(unusable.error, fix) from unusable
 
 
 def _read_file_at(gh: GhRunner, repository: str, path: str, sha: str) -> str | None:
@@ -559,7 +524,8 @@ def read_landing(body: object, repository: str) -> Judged[Landing]:
 
 
 def judged[T](subject: str, step: Callable[[], Judged[T]], refusal: Pair, again: Step, show: Show) -> T:
-    """What `step` answers, its rows shown; a refusal stops the door at `subject`'s `!` row, a read not judged at its `✗` row."""
+    """What `step` answers, its rows shown; a refusal stops the door at `subject`'s `!` row, a read not judged at its `✗` row,
+    with the steps its reason names, else `again`."""
     try:
         value, rows = step()
     except Refused as refused:
@@ -567,8 +533,8 @@ def judged[T](subject: str, step: Callable[[], Judged[T]], refusal: Pair, again:
         below = tuple(SubLine(Glyph.NEEDS_YOU, line, whole=True) for line in lines)
         raise Stopped(Row(Glyph.NEEDS_YOU, subject, DoorEvent.REFUSED, fact, sub_lines=below, descriptive=True), *refusal) from None
     except (CannotJudge, GhFailed, KeyError, ValueError) as error:
-        fact = str(error) if isinstance(error, CannotJudge) else unanswered(error)
-        raise Stopped(Row(Glyph.COULD_NOT_CHECK, subject, DoorEvent.NOT_JUDGED, fact, descriptive=True), NOT_JUDGED_ERROR, (again,)) from error
+        reason = error.reason if isinstance(error, CannotJudge) else Reason(unanswered(error))
+        raise Stopped(Row(Glyph.COULD_NOT_CHECK, subject, DoorEvent.NOT_JUDGED, reason.fact, descriptive=True), NOT_JUDGED_ERROR, reason.next_steps or (again,)) from error
     show(rows)
     return value
 
@@ -644,12 +610,14 @@ def loosenings_row(verdict: Verdict, sonar_red: bool, refused: Pair) -> Row:
 
 def read_loosenings(
     gh: GhRunner, repository: str, pull: Mapping[str, object], check_runs: Sequence[Check], sonar_red: bool,
-    environment: Mapping[str, str], remote_for: RemoteFor, refused: Pair,
+    environment: Mapping[str, str], remote_for: RemoteFor, refused: Pair, rerun: str,
 ) -> Judged[tuple[Verdict, GateSettings]]:
+    """The base is read first: a config refused there is not repaired on the pull request's branch."""
     merge_commit_sha, base_sha = pull["merge_commit_sha"], pull["base"]["sha"]
     if not merge_commit_sha:
         raise CannotJudge("GitHub has no merge commit for the pull request yet, so the config the jobs ran on is unknown")
-    head, base = read_side_at(gh, repository, merge_commit_sha), read_side_at(gh, repository, base_sha)
+    base = read_side_at(gh, repository, base_sha, Instruction(f"fix it on {pull['base']['ref']} first"))
+    head = read_side_at(gh, repository, merge_commit_sha, Instruction(f"push the fix to the pull request's branch, then run {rerun} again"))
     renames = read_renames_of_pull(remote_for(repository), base_sha, merge_commit_sha, environment) if compares_baselines(base, head) else NO_RENAMES
     verdict = rederived_verdict(head, base, check_runs, renames)
     return (verdict, head.settings), (loosenings_row(verdict, sonar_red, refused),)
@@ -688,7 +656,7 @@ def judge_pull_request(
     facts, pull = step(f"#{pull_request}", lambda: read_pull_request(gh, repository, pull_request), refused)
     landing = step(LANDING, lambda: read_landing(pull["body"], repository), landing_refused)
     check_runs, sonar_red = step("checks", lambda: read_checks(gh, repository, pull["head"]["sha"], refused), refused)
-    verdict, settings = step("loosenings", lambda: read_loosenings(gh, repository, pull, check_runs, sonar_red, environment, remote_for, refused), refused)
+    verdict, settings = step("loosenings", lambda: read_loosenings(gh, repository, pull, check_runs, sonar_red, environment, remote_for, refused, rerun), refused)
     legacy = None
     if sonar_red:
         token = environment.get("SONAR_TOKEN", "")
