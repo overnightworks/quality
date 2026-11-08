@@ -209,13 +209,13 @@ def test_a_repository_without_the_file_allows_nothing(tmp_path):
     ids=["key absent", "report", "fail"],
 )
 def test_legacy_findings_only_fail_when_the_repository_switched_them_on(text, expected):
-    """#33 sentence 3: [gate] legacy is "report" unless the config says "fail"."""
+    """SONAR-40: [gate] legacy is "report" unless the config says "fail"."""
     assert load_gate_settings(text).legacy is expected
 
 
 @pytest.mark.parametrize("value", ['"warn"', '"FAIL"', '""', "true", "1"])
 def test_any_other_legacy_value_is_a_config_error(value):
-    """#33 sentence 3: any value but "report" or "fail" is refused, naming the fix."""
+    """SONAR-42: any value but "report" or "fail" is refused, naming the fix."""
     with pytest.raises(ConfigError, match='legacy.*"report" or "fail"'):
         load_gate_settings(f'[gate]\nmandatory_jobs = ["checks"]\nlegacy = {value}')
 
@@ -235,7 +235,7 @@ def test_the_sonar_key_turns_sonar_off_and_defaults_to_on(text, expected):
 
 
 def test_one_read_of_the_config_gives_the_mandatory_jobs_and_the_legacy_mode(tmp_path):
-    """#33 sentence 3: the gate settings of a repository come from its quality/config.toml in one read."""
+    """SONAR-39: the gate settings of a repository come from its quality/config.toml in one read."""
     (tmp_path / "quality").mkdir()
     (tmp_path / "quality" / "config.toml").write_text('[gate]\nmandatory_jobs = ["checks"]\nlegacy = "fail"\n')
     settings = read_gate_settings(tmp_path)

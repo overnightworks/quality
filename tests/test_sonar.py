@@ -171,7 +171,7 @@ def test_does_not_read_findings_when_the_scope_does_not_resolve(monkeypatch, cap
 def test_a_task_file_naming_something_foreign_is_refused_before_any_request(
     monkeypatch, capsys, edit, reason
 ):
-    """SONAR-73, SONAR-75: a task file naming a foreign server, project, organization or none is exit 2 before any request"""
+    """SONAR-72, SONAR-73, SONAR-75: a task file naming a foreign server, project, organization or none is exit 2 before any request"""
     fake = sonar_answering()
     text = TASK_FIXTURE.read_text().replace(*edit)
     code, _, err, _ = run_cli(monkeypatch, capsys, fake, task_text=text)
@@ -256,21 +256,22 @@ def test_waits_for_its_own_task_before_reading_findings(monkeypatch, capsys, sta
 
 
 @pytest.mark.parametrize(
-    "task",
+    ("environment", "task"),
     [
-        FINISHED_FOR_PR_7 | {"pullRequest": "6"},
-        FINISHED_FOR_PR_7 | {"pullRequest": None},
-        FINISHED_FOR_PR_7 | {"componentKey": "other_project"},
-        FINISHED_FOR_PR_7 | {"organization": "someone-else"},
-        {key: value for key, value in FINISHED_FOR_PR_7.items() if key != "organization"},
-        FINISHED_FOR_PR_7 | {"pullRequest": None, "branch": "7"},
+        (PULL_REQUEST_ENVIRONMENT, FINISHED_FOR_PR_7 | {"pullRequest": "6"}),
+        (PULL_REQUEST_ENVIRONMENT, FINISHED_FOR_PR_7 | {"pullRequest": None}),
+        (PULL_REQUEST_ENVIRONMENT, FINISHED_FOR_PR_7 | {"componentKey": "other_project"}),
+        (PULL_REQUEST_ENVIRONMENT, FINISHED_FOR_PR_7 | {"organization": "someone-else"}),
+        (PULL_REQUEST_ENVIRONMENT, {key: value for key, value in FINISHED_FOR_PR_7.items() if key != "organization"}),
+        (PULL_REQUEST_ENVIRONMENT, FINISHED_FOR_PR_7 | {"pullRequest": None, "branch": "7"}),
+        (FEATURE_ENVIRONMENT, FINISHED_FOR_FEATURE | {"branch": "other"}),
     ],
-    ids=["other pull request", "no pull request", "other component", "other organization", "no organization", "branch only"],
+    ids=["other pull request", "no pull request", "other component", "other organization", "no organization", "branch only", "other branch"],
 )
-def test_a_finished_task_that_is_not_this_runs_is_refused(monkeypatch, capsys, task):
-    """SONAR-77, SONAR-79: a finished task of another pull request, component or organization is exit 2"""
+def test_a_finished_task_that_is_not_this_runs_is_refused(monkeypatch, capsys, environment, task):
+    """SONAR-72, SONAR-77, SONAR-79: a finished task of another pull request, component or organization is exit 2"""
     fake = sonar_answering(task=task)
-    code, _, err, _ = run_cli(monkeypatch, capsys, fake)
+    code, _, err, _ = run_cli(monkeypatch, capsys, fake, environment)
     assert (code, fake.urls_to("issues/search")) == (2, [])
     assert "another analysis" in err
 
@@ -758,7 +759,7 @@ def test_properties_without_a_config_still_refuses_an_empty_token(monkeypatch, c
 
 
 def test_properties_with_sonar_off_and_an_unwritable_output_cannot_judge(monkeypatch, capsys, build_repo, tmp_path):
-    """The off path fails loud when the job cannot be handed its output."""
+    """SONAR-103: With [gate] sonar = false an output file the job cannot be handed is exit 2 naming GITHUB_OUTPUT"""
     code, _, err = run_properties(
         monkeypatch, capsys, build_repo, properties=None, environment=environment_without_token(), extra_files=sonar_off_files(),
         step_output=tmp_path,

@@ -103,6 +103,7 @@ def findings_checkout(monkeypatch, tmp_path):
     ],
 )
 def test_clean_properties_print_their_row_and_the_closing_line(capsys, properties_checkout, elsewhere, files, row, arguments):
+    """SONAR-14, SONAR-16, SONAR-100."""
     properties_checkout({"sonar-project.properties": CLEAN_PROPERTIES, **files})
     step_output = elsewhere / "github_output"
     result = drive(capsys, ["properties"], {**PULL_REQUEST_ENVIRONMENT, "GITHUB_OUTPUT": str(step_output)})
@@ -114,6 +115,7 @@ def test_clean_properties_print_their_row_and_the_closing_line(capsys, propertie
 
 
 def test_sonar_off_prints_its_row_and_writes_off(capsys, properties_checkout, elsewhere):
+    """SONAR-66."""
     properties_checkout({"quality/config.toml": sonar_off_config()})
     step_output = elsewhere / "github_output"
     result = drive(capsys, ["properties"], {**without_token(), "GITHUB_OUTPUT": str(step_output)})
@@ -163,6 +165,7 @@ def test_sonar_off_prints_its_row_and_writes_off(capsys, properties_checkout, el
 def test_a_refused_properties_file_is_the_pair_with_the_push_step_and_writes_nothing(
     capsys, properties_checkout, elsewhere, files, token, fact
 ):
+    """SONAR-13, SONAR-101, SONAR-105."""
     properties_checkout(files)
     step_output = elsewhere / "github_output"
     environment = PULL_REQUEST_ENVIRONMENT if token else without_token()
@@ -172,6 +175,7 @@ def test_a_refused_properties_file_is_the_pair_with_the_push_step_and_writes_not
 
 @pytest.mark.parametrize("step", ["properties", "findings"])
 def test_an_empty_token_is_the_pair_with_its_own_step(capsys, properties_checkout, findings_checkout, elsewhere, step):
+    """SONAR-61, SONAR-68."""
     if step == "properties":
         properties_checkout({"sonar-project.properties": CLEAN_PROPERTIES})
     else:
@@ -190,6 +194,7 @@ def test_an_empty_token_is_the_pair_with_its_own_step(capsys, properties_checkou
     "refusal", [refusal for refusal in all_refusals() if "gate" in refusal.loaders and refusal.text is not None], ids=lambda refusal: refusal.id
 )
 def test_every_config_sonar_cannot_read_is_its_fact_and_example_with_the_push_step(capsys, findings_checkout, refusal):
+    """O10, SONAR-39, SONAR-42, SONAR-102, SONAR-109, VERDICT-17."""
     findings_checkout(refusal.text)
     fake = sonar_answering()
     code, out, err = drive(capsys, ["findings"], PULL_REQUEST_ENVIRONMENT, fake)
@@ -206,6 +211,7 @@ def test_every_config_sonar_cannot_read_is_its_fact_and_example_with_the_push_st
 
 @pytest.mark.parametrize("step", ["properties", "findings"])
 def test_a_config_reads_alike_in_both_steps(capsys, properties_checkout, findings_checkout, step):
+    """O10, SONAR-102, VERDICT-17."""
     if step == "properties":
         properties_checkout({"quality/config.toml": sonar_string_config(), "sonar-project.properties": CLEAN_PROPERTIES})
     else:
@@ -229,12 +235,14 @@ def test_a_config_reads_alike_in_both_steps(capsys, properties_checkout, finding
     ],
 )
 def test_an_unwritable_step_output_is_the_pair_and_claims_nothing(capsys, properties_checkout, elsewhere, files, environment):
+    """SONAR-103."""
     properties_checkout(files)
     result = drive(capsys, ["properties"], {**environment, "GITHUB_OUTPUT": str(elsewhere)})
     assert result == (2, "", rerun_pair(f"GITHUB_OUTPUT is not writable · [Errno 21] Is a directory: '{elsewhere}'"))
 
 
 def test_a_clean_pull_request_prints_its_analysis_new_legacy_and_gate_rows(capsys, findings_checkout):
+    """SONAR-36, SONAR-107."""
     findings_checkout()
     assert drive(capsys, ["findings"], PULL_REQUEST_ENVIRONMENT, sonar_answering(legacy=17)) == (
         0,
@@ -248,6 +256,7 @@ def test_a_clean_pull_request_prints_its_analysis_new_legacy_and_gate_rows(capsy
 
 
 def test_new_findings_stand_under_the_new_row_with_one_fix(capsys, findings_checkout):
+    """SONAR-35, SONAR-36."""
     findings_checkout()
     assert drive(capsys, ["findings"], PULL_REQUEST_ENVIRONMENT, sonar_answering(issues=issues_page(2, 1, 2))) == (
         1,
@@ -264,6 +273,7 @@ def test_new_findings_stand_under_the_new_row_with_one_fix(capsys, findings_chec
 
 
 def test_a_failed_quality_gate_names_each_condition_below_its_row(capsys, findings_checkout):
+    """SONAR-6."""
     findings_checkout()
     gate = gate_error(
         failed_condition(),
@@ -302,6 +312,7 @@ def test_a_failed_quality_gate_names_each_condition_below_its_row(capsys, findin
     ],
 )
 def test_ignored_conditions_are_the_gate_rows_fact(capsys, findings_checkout, gate, code, rows, closing):
+    """SONAR-12."""
     findings_checkout()
     assert drive(capsys, ["findings"], PULL_REQUEST_ENVIRONMENT, sonar_answering(gate=gate)) == (
         code,
@@ -342,6 +353,7 @@ def test_an_unanalysed_default_branch_reads_legacy_unknown(capsys, findings_chec
 
 
 def test_legacy_that_fails_the_run_is_its_needs_you_row(capsys, findings_checkout):
+    """SONAR-41."""
     findings_checkout(legacy_config("fail"))
     assert drive(capsys, ["findings"], PULL_REQUEST_ENVIRONMENT, sonar_answering(legacy=1)) == (
         1,
@@ -369,6 +381,7 @@ def test_legacy_that_fails_the_run_is_its_needs_you_row(capsys, findings_checkou
     ],
 )
 def test_the_default_branch_prints_its_open_findings(capsys, findings_checkout, issues, code, listing, closing):
+    """SONAR-37, SONAR-108."""
     findings_checkout()
     fake = sonar_answering(task=FINISHED_FOR_MAIN, issues=issues)
     result = drive(capsys, ["findings"], PUSH_ENVIRONMENT, fake)
@@ -376,6 +389,7 @@ def test_the_default_branch_prints_its_open_findings(capsys, findings_checkout, 
 
 
 def test_another_branch_lists_its_findings_as_notes_and_exits_0(capsys, findings_checkout):
+    """SONAR-38, SONAR-108."""
     findings_checkout()
     fake = sonar_answering(task=FINISHED_FOR_FEATURE, issues=issues_page(2, 1, 2))
     assert drive(capsys, ["findings"], FEATURE_ENVIRONMENT, fake) == (
@@ -415,6 +429,7 @@ def a_warning_gate() -> FakeSonar:
     ],
 )
 def test_a_findings_refusal_is_the_pair_with_the_rerun_step(capsys, findings_checkout, answering, fact):
+    """SONAR-7, SONAR-29, SONAR-79, SONAR-101, SONAR-105."""
     findings_checkout()
     assert drive(capsys, ["findings"], PULL_REQUEST_ENVIRONMENT, answering()) == (2, "", rerun_pair(fact))
 
@@ -445,6 +460,7 @@ def test_a_branch_name_prints_escaped_in_its_analysis_row_and_closing_line(capsy
 
 @pytest.mark.parametrize("step", ["properties", "findings"])
 def test_both_steps_take_v_and_print_the_same(capsys, properties_checkout, findings_checkout, elsewhere, step):
+    """SONAR-106."""
     if step == "properties":
         properties_checkout({"sonar-project.properties": CLEAN_PROPERTIES})
     else:
