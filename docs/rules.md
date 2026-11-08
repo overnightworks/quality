@@ -395,21 +395,23 @@ It applies these rules:
   `requires-python` to `>=3.14` (FLOOR-14) and move CI, `.python-version`, Dockerfiles and ruff's `target-version` with
   it, or declare the file.
   A `[[python.allow]]` entry with exactly a `path` (the exact tracked path of the `pyproject.toml`, no folder, pattern
-  or `..`) and a one-line `reason`, one per path, makes that file clean; its own table, because the exception is meant
-  to end. Each allowed file stands as a `· <path>  allowed  <fact> · <reason>` row under the files row, after the area's
-  findings. An entry whose path is no judged file (untracked, gone, without `[project]`) or whose file is already at the
-  floor says `unused`; its fix is to delete the entry. A malformed entry refuses
-  every rule that reads the config, and a config reader older than the rule refuses `[python]` as an unknown key, so
-  declare only after the bump. A candidate that is not UTF-8 TOML, or whose `requires-python` is no string, makes the
-  `files` row `✗ not checked` (exit 2) with its own reason. A `requires-python` that is no PEP 440 specifier set or
-  holds a `===` clause with a version that is not PEP 440 (`===foobar`) makes it `✗ not checked` with
-  `<path> has a requires-python quality cannot read` (exit 2); that reason holds no part of the value. No configuration switches the rule off, and a declaration asks
-  `quality verdict` for no `[[gate.loosened]]` entry. Only `requires-python` is read, because uv and
-  pip refuse an interpreter outside it, so a leftover setter cannot install the project on old Python. Not read, and
-  waiting for usage evidence: workflows, `.python-version`, Dockerfiles, ruff's `target-version`, `setup.py`,
-  `setup.cfg` and Poetry's `[tool.poetry]`; `!=` as a floor (`>=3.13,!=3.13.*` is red although it admits only 3.14 and
-  up); a job that never installs the project, which runs old Python unnoticed; `uv sync` behind an older
-  setup-python, which fetches 3.14 and leaves a stale setter; and a Python project without a `pyproject.toml`.
+  or `..` (FLOOR-15)) and a one-line `reason` (FLOOR-16), one per path (FLOOR-17), makes that file clean (FLOOR-18); its
+  own table, because the exception is meant to end. Each allowed file stands as a `· <path>  allowed  <fact> · <reason>`
+  [row](output.md#notes) under the files row, after the area's findings (FLOOR-19). An entry whose path is no judged
+  file (untracked, gone, without `[project]`) or whose file is already at the floor says `unused` (FLOOR-20); its fix is
+  to delete the entry (FLOOR-21). A malformed entry refuses every rule that reads the config, and a config reader older
+  than the rule refuses `[python]` as an unknown key, so declare only after the bump. A candidate that is not UTF-8
+  TOML, or whose `requires-python` is no string, makes the `files` row [`✗ not checked`](output.md#refusals) (exit 2)
+  with its own reason (FLOOR-22). A `requires-python` that is no PEP 440 specifier set or holds a `===` clause with a
+  version that is not PEP 440 (`===foobar`) makes it `✗ not checked` with
+  `<path> has a requires-python quality cannot read` (exit 2) (FLOOR-23); that reason holds no part of the value
+  (FLOOR-24). No configuration switches the rule off, and a declaration asks `quality verdict` for no
+  `[[gate.loosened]]` entry. Only `requires-python` is read, because uv and pip refuse an interpreter outside it, so a
+  leftover setter cannot install the project on old Python. Not read, and waiting for usage evidence: workflows,
+  `.python-version`, Dockerfiles, ruff's `target-version`, `setup.py`, `setup.cfg` and Poetry's `[tool.poetry]`; `!=` as
+  a floor (`>=3.13,!=3.13.*` is red although it admits only 3.14 and up); a job that never installs the project, which
+  runs old Python unnoticed; `uv sync` behind an older setup-python, which fetches 3.14 and leaves a stale setter; and a
+  Python project without a `pyproject.toml`.
 
   Ruled by the operator: every tracked `pyproject.toml` that `test-layout` finds as a project is judged, the root and
   each member alike.

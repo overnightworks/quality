@@ -148,7 +148,7 @@ def test_every_file_below_the_floor_is_a_finding_sorted_by_path(build_repo, caps
 
 
 def test_an_allowed_file_is_clean_and_the_gate_shows_its_value_and_reason(build_repo, capsys):
-    """F6, sentences 4 and 5: an allowed file is clean and the gate shows its value and reason."""
+    """FLOOR-18, FLOOR-19: an allowed file is clean and the gate shows its value and reason."""
     tracked = {
         "pyproject.toml": project(),
         "src/speech/pyproject.toml": project(">=3.12,<3.13"),
@@ -175,7 +175,7 @@ def test_an_allowed_file_is_clean_and_the_gate_shows_its_value_and_reason(build_
     ids=["untracked path", "no project table", "already at the floor"],
 )
 def test_an_allowance_for_a_file_that_needs_none_is_a_finding(build_repo, capsys, tracked):
-    """F7, sentence 6: an allowance for a file that needs none is a finding."""
+    """FLOOR-20: an allowance for a file that needs none is a finding."""
     repo = build_repo({**tracked, CONFIG_PATH: allow("src/m/pyproject.toml")})
     code, output = run(capsys, repo)
     assert (code, floor_paths(repo)) == (1, ["src/m/pyproject.toml"]), output
@@ -205,8 +205,8 @@ PYTHON_PATH_NEED = f"{PYTHON} entry 1 needs path as the exact tracked path of on
     ids=["duplicate", "folder", "folder without slash", "pattern", "dotdot", "empty reason", "multi-line reason", "unknown key"],
 )
 def test_a_malformed_python_allowance_cannot_be_judged_by_any_rule_that_reads_the_config(build_repo, capsys, config, fact):
-    """F8, sentence 4: a malformed allowance is cannot-judge in every rule that reads the config; its example stands
-    once under next:."""
+    """FLOOR-15, FLOOR-16, FLOOR-17, O10: a malformed allowance refuses python-floor and root-layout alike, and its
+    example stands once under next:."""
     repo = build_repo({"src/a/pyproject.toml": project(), CONFIG_PATH: config})
     code, output = run(capsys, repo)
     refusing = refusals(repo)
@@ -230,7 +230,7 @@ def test_a_malformed_python_allowance_cannot_be_judged_by_any_rule_that_reads_th
     ids=["invalid toml", "not a string", "not a specifier", "identity clause not a version", "identity wildcard", "oversized version", "oversized number", "not utf-8", "nested too deep"],
 )
 def test_an_unreadable_pyproject_is_unparsable_and_leaves_the_other_rules_judged(build_repo, capsys, content):
-    """F9, sentence 7: an unreadable pyproject.toml is unparsable and every other rule is still judged."""
+    """FLOOR-22, FLOOR-23, CHECK-4: an unreadable pyproject.toml is unparsable and every other rule is still judged."""
     repo = build_repo({"pyproject.toml": ""})
     (repo / "pyproject.toml").write_bytes(content if isinstance(content, bytes) else content.encode())
     (repo / ".env").write_text("A=1\n")
@@ -242,7 +242,7 @@ def test_an_unreadable_pyproject_is_unparsable_and_leaves_the_other_rules_judged
 
 
 def test_a_pyproject_that_links_out_of_the_repository_cannot_be_judged(build_repo, capsys, elsewhere):
-    """F10, sentence 7: a pyproject.toml linking out of the repository cannot be judged."""
+    """A pyproject.toml that links out of the repository cannot be judged."""
     outside = Path(elsewhere) / "pyproject.toml"
     outside.write_text(project())
     repo = build_repo({"README.md": "x\n"})
@@ -271,7 +271,7 @@ def test_a_gitlink_is_never_entered(build_repo, capsys, elsewhere, gitlink_path)
 
 
 def test_the_entry_the_fix_asks_for_leaves_no_finding_and_one_allowed_note(build_repo, elsewhere):
-    """Decision 12: the allowance the fix names clears the finding and stands as one note."""
+    """FLOOR-18, FLOOR-19: the allowance the fix names clears the finding and stands as one allowed note."""
     tracked = {"pyproject.toml": project(">=3.12")}
     assert floor_paths(make_repo(tmp_path_dir(elsewhere, "before"), tracked)) == ["pyproject.toml"]
     repo = build_repo({**tracked, CONFIG_PATH: allow("pyproject.toml")})
@@ -279,7 +279,7 @@ def test_the_entry_the_fix_asks_for_leaves_no_finding_and_one_allowed_note(build
 
 
 def test_deleting_the_entry_a_stale_finding_names_leaves_no_finding(build_repo, elsewhere):
-    """Decision 12: the stale allowance's fix, applied, clears it."""
+    """FLOOR-21: deleting the entry the finding names leaves no finding."""
     tracked = {"pyproject.toml": project()}
     assert floor_paths(build_repo({**tracked, CONFIG_PATH: allow("src/m/pyproject.toml")})) == ["src/m/pyproject.toml"]
     assert floor_paths(make_repo(tmp_path_dir(elsewhere, "after"), tracked)) == []
@@ -293,7 +293,7 @@ def test_raising_the_requirement_to_the_floor_the_fix_names_leaves_no_finding(bu
 
 
 def test_a_refusal_for_an_oversized_requires_python_holds_the_path_and_not_the_value(build_repo):
-    """208d: the refusal names the file and none of its value."""
+    """FLOOR-23, FLOOR-24: the refusal for an oversized requires-python holds the path and not the value."""
     repo = build_repo({"pyproject.toml": project(">=" + "9" * 5000)})
     refusal = refusals(repo)[Rule.PYTHON_FLOOR]
     assert ("pyproject.toml" in refusal, "9" * 5000 in refusal) == (True, False)
@@ -309,7 +309,8 @@ def files_row_and_rows_below(printed: str) -> tuple[str, list[str]]:
 
 
 def test_an_allowed_file_stands_as_a_note_row_under_the_files_row_and_no_line_before_the_area_rows_names_the_rule(build_repo, capsys):
-    """O15, #207 sentence 5."""
+    """FLOOR-19, O15: an allowed file stands as a note row under the files row, and no line before the area rows
+    names the rule."""
     tracked = {"pyproject.toml": project(), "src/s/pyproject.toml": project(">=3.12"), CONFIG_PATH: allow("src/s/pyproject.toml")}
     repo = build_repo(tracked)
     _, output = run(capsys, repo)
@@ -321,7 +322,7 @@ def test_an_allowed_file_stands_as_a_note_row_under_the_files_row_and_no_line_be
 
 
 def test_a_clean_files_row_counts_its_rules_its_tracked_paths_and_its_allowed_files(build_repo, capsys):
-    """O16, case 1: the clean files row ends in the rule count, the tracked-path count and the allowed files."""
+    """O15, O16: the clean files row ends in the rule count, the tracked-path count and the allowed files."""
     tracked = {"pyproject.toml": project(), "src/s/pyproject.toml": project(">=3.12"), CONFIG_PATH: allow("src/s/pyproject.toml")}
     _, output = run(capsys, build_repo(tracked))
     row, _ = files_row_and_rows_below(output)
@@ -332,7 +333,7 @@ def test_a_clean_files_row_counts_its_rules_its_tracked_paths_and_its_allowed_fi
 
 
 def test_a_tracked_env_file_and_an_allowed_file_give_a_files_row_without_a_fact_and_the_note_after_the_fix(build_repo, capsys):
-    """O15, decision 4: the area with findings keeps its row without a fact; the note follows the last fix."""
+    """FLOOR-19, O15: the area with findings keeps its row without a fact; the note follows the last fix."""
     tracked = {".env": "A=1\n", "pyproject.toml": project(">=3.12"), CONFIG_PATH: allow("pyproject.toml")}
     repo = build_repo(tracked)
     _, output = run(capsys, repo)
