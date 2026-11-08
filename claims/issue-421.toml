@@ -1,0 +1,8 @@
+claim_id = "2625d5fb73b746e891d2d9aa7ebff1c8"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "8b056365727e269df102bb0bcd1930df1c2cb403"
+branch = "claude/issue-421-sonar-artifact-refusal"
+scope = [".github/workflows/gate.yml", "docs/ARCHITECTURE.md", "docs/sonar.md", "src/quality/checkout.py", "src/quality/config.py", "src/quality/sonar.py", "tests/support/config_refusals.py", "tests/test_config.py", "tests/test_sonar.py", "tests/workflows/test_gate_sonar.py"]
+opened_commit = "d987b26da46a93e595dd347a8c17e55ced80d127"
+whole_reason = "One refusal in the properties step, the git listing it asks for in checkout.py, the legacy-combination example in config.py, their pins, the two references that state the artifact's contract and, if the lane's uv evidence asks for it, the sonar job's UV_NO_CONFIG land together; apart, a doc would promise a refusal no code makes."
