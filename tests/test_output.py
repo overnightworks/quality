@@ -387,7 +387,7 @@ def test_at_a_terminal_the_fix_and_its_lines_to_copy_stay_plain_and_the_words_eq
 
 
 def test_a_finding_with_a_line_shows_its_location():
-    """ROW-2: a finding with a line shows `path:line` as its location, one without shows the path."""
+    """ROW-2: a finding's row stands at its `location`, which differs from its path when the finding has a line."""
     findings = [finding("a.env", FindingEvent.TRACKED, line=7), finding("b.env", FindingEvent.TRACKED)]
     assert [finding_rows(findings_written(findings), candidate.location) != [] for candidate in findings] == [True, True]
     assert findings[0].location != findings[0].path
@@ -452,6 +452,7 @@ def test_no_findings_and_no_notes_print_nothing():
     ids=["event shorter than a note's", "event longer than a note's"],
 )
 def test_findings_and_notes_share_one_location_column_and_one_event_column(event, longer_than_a_notes):
+    """ROW-15: findings and notes share one location column and one event column."""
     assert (len(event.value) > len(NoteEvent.ALLOWED.value)) == longer_than_a_notes
     findings = [finding("a.env", event, "first fact")]
     notes = [note("deploy/longer.toml", "second fact")]
@@ -482,6 +483,7 @@ def test_an_event_prints_escaped_and_its_column_holds(on_a_note):
 
 
 def test_a_note_row_follows_the_last_fix_and_has_no_fix_of_its_own():
+    """O15, ROW-16: a note row follows the last `fix:` and has no `fix:` of its own."""
     printed = findings_written([finding("a.env", FindingEvent.TRACKED)], notes=[note("b.toml"), note("c.toml")])
     lines = printed.splitlines()
     note_numbers = [number for number, line in enumerate(lines) if line.lstrip().startswith(Glyph.NOTE)]
@@ -491,6 +493,7 @@ def test_a_note_row_follows_the_last_fix_and_has_no_fix_of_its_own():
 
 
 def test_notes_alone_print_their_rows_without_a_fix():
+    """ROW-16: notes alone print their rows and no `fix:`."""
     printed = findings_written([], notes=[note("b.toml")])
     assert (len(printed.splitlines()), output.FIX_LABEL in printed) == (1, False)
 
