@@ -145,6 +145,7 @@ def test_the_report_help_stands_in_its_frame(capsys):
     ],
 )
 def test_the_merge_invocation_names_the_pull_request_and_how(words, dry_run, verbose):
+    """MERGE-53: the door takes a pull request name, with --dry-run before or after it, and -v."""
     arguments = cli.read_invocation(["merge", *words])
     assert (arguments.pull_request, arguments.dry_run, arguments.verbose) == (cli.PullRequestName("acme/widgets", 7), dry_run, verbose)
 
