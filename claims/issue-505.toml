@@ -1,7 +1,0 @@
-claim_id = "6122a05ec837400ba69581466a26212e"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "a3071277e88992ec71ce321adff25ff4e74c2663"
-branch = "claude/issue-505-d7-sonar-wiring-ids"
-scope = ["docs/sonar.md", "tests/workflows/test_gate_sonar.py"]
-opened_commit = "dc731a601faddb051389f028c73bfe34cd16e5c2"
