@@ -80,6 +80,8 @@ def without_scanner_rows(printed: str) -> str:
 
 
 def test_each_scanner_stands_under_its_area_with_its_exit_and_its_stderr(build_repo, served_scanners, elsewhere, capsys):
+    """VERBOSE-1, VERBOSE-2, VERBOSE-3: under each area that ran a scanner, a row per scanner with its exit and its
+    stderr lines."""
     said = {name: f"{name} wrote this" for name in scanners.VERSION_ARGUMENTS}
     keywords = installing(served_scanners, elsewhere, {name: writing(name, line) for name, line in said.items()})
     _, out, _ = streams(scanning_repository(build_repo), capsys, "-v", **keywords)
@@ -92,6 +94,7 @@ def test_each_scanner_stands_under_its_area_with_its_exit_and_its_stderr(build_r
 
 
 def test_a_run_without_v_prints_no_scanner_row(build_repo, served_scanners, elsewhere, capsys):
+    """VERBOSE-11: a run without -v prints no scanner row and keeps nothing a scanner wrote to stderr."""
     said = "this stays unprinted"
     keywords = installing(served_scanners, elsewhere, {name: writing(name, said) for name in scanners.VERSION_ARGUMENTS if name != scanners.GITLEAKS})
     _, out, err = streams(scanning_repository(build_repo), capsys, **keywords)
@@ -108,6 +111,7 @@ def test_a_run_without_v_prints_no_scanner_row(build_repo, served_scanners, else
     ],
 )
 def test_v_adds_only_its_lines_and_changes_no_exit(build_repo, served_scanners, elsewhere, capsys, files, refusing, code):
+    """VERBOSE-10: -v adds only its scanner rows; the exit, the verdict and stderr stay as a run without it."""
     keywords = installing(served_scanners, elsewhere, {scanners.ACTIONLINT: writing(scanners.ACTIONLINT, "it refuses", 3)} if refusing else {})
     repo = build_repo(files)
     plain = streams(repo, capsys, **keywords)
@@ -117,6 +121,7 @@ def test_v_adds_only_its_lines_and_changes_no_exit(build_repo, served_scanners, 
 
 
 def test_a_report_never_stands_under_v(build_repo, served_scanners, elsewhere, edited_report, capsys):
+    """VERBOSE-9, VERBOSE-14: a scanner's report never stands under -v, and a value planted in it never prints."""
     repo = build_repo({".github/workflows/a.yml": "on: push\n", ".github/workflows/w.yml": "on: push\n", "src/a.py": "x = 1\n"})
 
     def planted_in_the_source(entries: list) -> None:
@@ -143,6 +148,8 @@ def test_a_report_never_stands_under_v(build_repo, served_scanners, elsewhere, e
     [(scanners.ACTIONLINT, Area.WORKFLOWS), (scanners.ZIZMOR, Area.WORKFLOWS), (scanners.OSV_SCANNER, Area.DEPENDENCIES), (scanners.RUFF, Area.CODE)],
 )
 def test_a_successful_scans_warning_is_vetted_too(build_repo, served_scanners, elsewhere, capsys, summary, name, area):
+    """VERBOSE-8, VERBOSE-10, VERBOSE-13, VERBOSE-14: a successful scan's warning is withheld and counted under -v,
+    with the exit, the summary and the value as they are."""
     fake_gitleaks(served_scanners, on_scan=vetting(flagging(FAKE_KEY)))
     keywords = installing(served_scanners, elsewhere, {name: writing(name, f"aws_access_key_id = {FAKE_KEY}")})
     repo = scanning_repository(build_repo)
@@ -164,6 +171,8 @@ def test_a_successful_scans_warning_is_vetted_too(build_repo, served_scanners, e
     ],
 )
 def test_a_value_above_the_last_five_lines_withholds_every_line(build_repo, served_scanners, elsewhere, capsys, summary, name, area, exit_code):
+    """VERBOSE-8, VERBOSE-13, VERBOSE-14: a value above a scanner's last five lines withholds every line, and the row
+    counts them."""
     fake_gitleaks(served_scanners, on_scan=vetting(flagging(FAKE_KEY)))
     lines = [f"aws_access_key_id = {FAKE_KEY}", *(f"line {number}" for number in range(2, 9))]
     keywords = installing(served_scanners, elsewhere, {name: writing(name, "\n".join(lines), exit_code)})
@@ -183,6 +192,7 @@ def test_a_value_above_the_last_five_lines_withholds_every_line(build_repo, serv
     ],
 )
 def test_a_vet_that_cannot_answer_withholds_the_lines_under_v(build_repo, served_scanners, use_mise, elsewhere, capsys, on_vet, gitleaks_lacking, code):
+    """VERBOSE-8, VERBOSE-10: a vet that cannot answer withholds the lines under -v and moves no exit."""
     if gitleaks_lacking:
         use_mise(lacking(served_scanners, scanners.GITLEAKS))
     else:
@@ -198,6 +208,7 @@ def test_a_vet_that_cannot_answer_withholds_the_lines_under_v(build_repo, served
 
 @pytest.mark.parametrize("opening", [r"\033[31m", r"\302\204"], ids=["ESC", "C1"])
 def test_a_terminal_code_is_withheld_under_v(build_repo, served_scanners, elsewhere, capsys, summary, opening):
+    """VERBOSE-8, VERBOSE-13: a terminal code withholds the text whole under -v, and no summary is written."""
     fake_gitleaks(served_scanners, on_scan=vetting(flagging(FAKE_KEY)))
     keywords = installing(served_scanners, elsewhere, {scanners.ACTIONLINT: f"{CLEAN_SCANS[scanners.ACTIONLINT]}\nprintf '{opening}red\\nplain\\n' >&2"})
     code, out, err = streams(build_repo({".github/workflows/w.yml": "on: push\n"}), capsys, "-v", **keywords)
@@ -209,6 +220,7 @@ def test_a_terminal_code_is_withheld_under_v(build_repo, served_scanners, elsewh
 
 
 def test_v_leaves_a_scanner_areas_findings_and_notes_as_they_are(build_repo, served_scanners, elsewhere, capsys):
+    """VERBOSE-10: -v leaves a scanner area's findings, notes and exit as they are."""
     fake_gitleaks(served_scanners, on_scan=f'cp {OUTPUTS / "gitleaks-finding.json"} "$report"; exit {scanners.GITLEAKS_LEAKS_FOUND}')
     keywords = installing(served_scanners, elsewhere, {scanners.ACTIONLINT: printing(OUTPUTS / "actionlint-finding.json", scanners.ACTIONLINT_FINDINGS)})
     repo = build_repo(
@@ -226,6 +238,8 @@ def test_v_leaves_a_scanner_areas_findings_and_notes_as_they_are(build_repo, ser
 
 
 def test_a_raw_line_stands_escaped_behind_the_marker(build_repo, served_scanners, elsewhere, capsys):
+    """VERBOSE-3, VERBOSE-6, MASK-6, MASK-7: a scanner's lines stand escaped behind the marker, split on line feeds and
+    carriage returns alone."""
     raw = (
         r"::warning::forged\nred\342\200\256\nbefore\342\200\250after\342\200\251last\013part\na\034b"
         r"\nfirst\nsecond\n\none\rtwo\n"
@@ -247,6 +261,7 @@ def test_a_raw_line_stands_escaped_behind_the_marker(build_repo, served_scanners
 
 
 def test_at_a_terminal_a_raw_line_is_dim_and_whole(build_repo, served_scanners, elsewhere, window):
+    """VERBOSE-4, VERBOSE-5: at a terminal a scanner's line is dim and stands whole."""
     line = "x" * 70
     keywords = installing(served_scanners, elsewhere, {scanners.ACTIONLINT: writing(scanners.ACTIONLINT, line)})
     terminal = window(40)
@@ -259,6 +274,7 @@ def test_at_a_terminal_a_raw_line_is_dim_and_whole(build_repo, served_scanners, 
 
 
 def test_a_scanners_rows_stand_after_the_areas_findings_and_notes(build_repo, served_scanners, capsys):
+    """VERBOSE-1, VERBOSE-2: a scanner's row stands after the area's findings, with its exit."""
     fake_gitleaks(served_scanners, on_scan=f'cp {OUTPUTS / "gitleaks-finding.json"} "$report"; exit 7')
     _, out, _ = streams(build_repo({"README.md": "x\n"}), capsys, "-v")
     block = area_block(out, Area.SECRETS)
@@ -266,6 +282,8 @@ def test_a_scanners_rows_stand_after_the_areas_findings_and_notes(build_repo, se
 
 
 def test_osv_scanners_lines_name_paths_as_the_refusal_does(build_repo, served_scanners, elsewhere, capsys):
+    """VERBOSE-3, VERBOSE-7: osv-scanner's lines under -v name a lock by its tracked name and the scratch directory
+    as <scratch>."""
     repo = build_repo({"uv.lock": uv_lock()})
     lock = os.path.realpath(repo / "uv.lock")
     body = f'echo "read {lock} in $PWD" >&2\n{reporting(OUTPUTS / "osv-scanner-clean.json", 0)}'
@@ -279,12 +297,14 @@ def test_osv_scanners_lines_name_paths_as_the_refusal_does(build_repo, served_sc
 
 
 def test_a_scanner_that_never_ran_has_no_row(build_repo, capsys):
+    """VERBOSE-1: a scanner that never ran has no row."""
     _, out, _ = streams(build_repo({"README.md": "x\n"}), capsys, "-v")
     exits = [line.location for line in decode_block(out.splitlines()) if isinstance(line, NoteLine) and line.row.event is NoteEvent.EXITED]
     assert exits == [scanners.GITLEAKS]
 
 
 def test_the_raw_lines_stand_below_the_row_the_live_line_gave_way_to(build_repo, window):
+    """VERBOSE-1: a scanner's row stands below the area's row, where the live line stood."""
     terminal = window(80)
     with contextlib.redirect_stdout(terminal.stream), contextlib.redirect_stderr(terminal.stream):
         door_in(build_repo({"README.md": "x\n"}), CHECK_WORD, "-v", clock=lambda: 0.0, environment={"TERM": "xterm"})

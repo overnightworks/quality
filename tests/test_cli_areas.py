@@ -141,17 +141,40 @@ def test_a_named_area_starts_no_shared_read_it_does_not_need(build_repo, served_
 
 
 @pytest.mark.parametrize(
-    ("words", "exit_of_actionlint", "stderr_line", "vet_answer", "code", "shown"),
+    ("words", "exit_of_actionlint", "stderr_line", "vet_answer", "code", "shown", "rows", "row"),
     [
-        pytest.param(["workflows", "-v"], 0, "a harmless note", 'echo "[]" > "$report"; exit 0', 0, "a harmless note", id="cleared"),
-        pytest.param(["workflows", "-v"], 0, f"aws_access_key_id = {FAKE_KEY}", flagging(FAKE_KEY), 0, scanners.NOT_CLEARED, id="not cleared"),
-        pytest.param(["workflows"], 3, "a harmless note", 'echo "[]" > "$report"; exit 0', 2, "a harmless note", id="refused cleared"),
-        pytest.param(["workflows"], 3, f"aws_access_key_id = {FAKE_KEY}", flagging(FAKE_KEY), 2, scanners.NOT_CLEARED, id="refused not cleared"),
+        pytest.param(
+            ["workflows", "-v"], 0, "a harmless note", 'echo "[]" > "$report"; exit 0', 0, "a harmless note",
+            [(scanners.ACTIONLINT, "0", ("a harmless note",)), (scanners.ZIZMOR, "0", ())], (Glyph.CLEAN, False),
+            id="cleared",
+        ),
+        pytest.param(
+            ["workflows", "-v"], 0, f"aws_access_key_id = {FAKE_KEY}", flagging(FAKE_KEY), 0, scanners.NOT_CLEARED,
+            [
+                (scanners.ACTIONLINT, f"0 · 1 stderr line withheld · {scanners.NOT_CLEARED}", ()),
+                (scanners.ZIZMOR, "0", ()),
+            ],
+            (Glyph.CLEAN, False),
+            id="not cleared",
+        ),
+        pytest.param(
+            ["workflows"], 3, "a harmless note", 'echo "[]" > "$report"; exit 0', 2, "a harmless note",
+            [], (Glyph.COULD_NOT_CHECK, True),
+            id="refused cleared",
+        ),
+        pytest.param(
+            ["workflows"], 3, f"aws_access_key_id = {FAKE_KEY}", flagging(FAKE_KEY), 2, scanners.NOT_CLEARED,
+            [], (Glyph.COULD_NOT_CHECK, True),
+            id="refused not cleared",
+        ),
     ],
 )
 def test_a_selected_scanner_vets_its_stderr_without_judging_another_area(
-    build_repo, served_scanners, elsewhere, capsys, words, exit_of_actionlint, stderr_line, vet_answer, code, shown
+    build_repo, served_scanners, elsewhere, capsys,
+    words, exit_of_actionlint, stderr_line, vet_answer, code, shown, rows, row,
 ):
+    """VERBOSE-3, VERBOSE-8, VERBOSE-12, CHECK-6: a named area's scanner shows its cleared stderr, counts an uncleared
+    one and starts one vet for a refusal, and no other area runs."""
     calls = elsewhere / "calls"
     fake_gitleaks(
         served_scanners,
@@ -160,7 +183,6 @@ def test_a_selected_scanner_vets_its_stderr_without_judging_another_area(
     fake_scanner(served_scanners, scanners.ACTIONLINT, f"echo '[]'\necho '{stderr_line}' >&2\nexit {exit_of_actionlint}")
     keywords = {"locate_zizmor": fake_zizmor(elsewhere / "zizmor", "echo '[]'")}
     done, out, err = run_check_of(scanned_repo(build_repo), capsys, *words, **keywords)
-    verbose = "-v" in words
     assert (done, rows_of(out), calls_of(calls), shown in err, FAKE_KEY in out + err) == (
         code,
         [Area.WORKFLOWS],
@@ -168,14 +190,8 @@ def test_a_selected_scanner_vets_its_stderr_without_judging_another_area(
         False,
         False,
     )
-    rows = scanner_rows(out, Area.WORKFLOWS)
-    if not verbose:
-        assert (rows, area_row(out, Area.WORKFLOWS).glyph, shown in area_fact(out, Area.WORKFLOWS)) == ([], Glyph.COULD_NOT_CHECK, True)
-    elif shown == scanners.NOT_CLEARED:
-        actionlint, zizmor = rows
-        assert (actionlint[0], scanners.NOT_CLEARED in actionlint[1], actionlint[2], zizmor) == (scanners.ACTIONLINT, True, (), (scanners.ZIZMOR, "0", ()))
-    else:
-        assert rows == [(scanners.ACTIONLINT, "0", (shown,)), (scanners.ZIZMOR, "0", ())]
+    glyph = area_row(out, Area.WORKFLOWS).glyph
+    assert (scanner_rows(out, Area.WORKFLOWS), glyph, shown in area_fact(out, Area.WORKFLOWS)) == (rows, *row)
 
 
 @pytest.mark.parametrize(
@@ -186,6 +202,7 @@ def test_a_selected_scanner_vets_its_stderr_without_judging_another_area(
     ],
 )
 def test_under_v_a_named_area_shows_only_its_scanners(build_repo, served_scanners, elsewhere, capsys, area, started):
+    """VERBOSE-1, CHECK-6: under -v a named area shows only the rows of its own scanners."""
     keywords, _ = recording_scanners(served_scanners, elsewhere)
     _, out, _ = run_check_of(scanned_repo(build_repo), capsys, area, "-v", **keywords)
     shown = [line.location for line in area_block(out, area) if isinstance(line, NoteLine) and line.row.event is NoteEvent.EXITED]
