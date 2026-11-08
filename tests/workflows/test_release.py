@@ -14,8 +14,8 @@ from tests.support.workflow_steps import (
     FakeGh,
     run_step,
     step,
-    step_names,
     step_environment,
+    step_names,
     step_script,
     workflow,
     write_executable,
@@ -154,7 +154,7 @@ def test_a_checkout_that_is_not_the_gated_commit_is_refused(release, tmp_path, s
         make_repo(checkout, {"README": "the checkout\n"})
         head = head_commit(checkout)
         gated = head if scenario == "the gated commit" else gated
-    environment = step_environment(release, "build", REFUSE_STEP, COMMIT=gated)
+    environment = step_environment(release, "build", REFUSE_STEP, VERSION="0.21.0", COMMIT=gated)
     result = run_step(step_script(release, "build", REFUSE_STEP), checkout, environment, tmp_path / "tools")
     if returncode == 0:
         assert (result.returncode, result.stdout, result.stderr) == (0, "", "")
