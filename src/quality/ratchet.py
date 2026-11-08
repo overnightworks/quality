@@ -492,10 +492,11 @@ class CeilingFix:
     ceiling: Baseline
     changes: tuple[Note, ...]
     first: bool = False
+    text_differs: bool = False  # the file's bytes are not the ceiling's rendering although no entry changed
 
     @property
     def changed(self) -> bool:
-        return self.first or bool(self.changes)
+        return self.first or bool(self.changes) or self.text_differs
 
     @property
     def fell(self) -> int:

@@ -9,6 +9,7 @@ from quality import report
 from quality.config import CONFIG_PATH
 from quality.ratchet import BASELINE_PATH, Key, Metric, load_baseline
 from tests.support.architecture import FORBIDDEN, SHOP, contracts_ini
+from tests.support.baselines import rendered
 from tests.support.check import copy_block, refusal_row
 from tests.support.clones import function as clone_function
 from tests.support.config_refusals import check_refusals
@@ -20,7 +21,7 @@ from tests.support.verdict import verdict_streams
 
 
 def held_ceiling(value: int = 62, clones: bool = True) -> str:
-    return f'[function_lines."src/a.py"]\nlong_one = {value}\n' + ("\n[clones]\n" if clones else "")
+    return rendered(f'[function_lines."src/a.py"]\nlong_one = {value}\n' + ("\n[clones]\n" if clones else ""))
 
 
 def test_a_lowered_ceiling_stands_in_the_pictures_frame(build_repo, capsys):
@@ -72,7 +73,7 @@ def test_adopting_the_clones_table_says_the_ceiling_was_recorded(build_repo, cap
     [
         pytest.param(
             {"src/a.py": long_function(71)},
-            '[function_lines."src/a.py"]\nlong_one = 64\n\n[clones]\n',
+            rendered('[function_lines."src/a.py"]\nlong_one = 64\n\n[clones]\n'),
             "  ! debt          1 finding      nothing lowered\n"
             "    ! src/a.py:1  grew  function long_one has 71 lines · ceiling 64\n"
             "      fix: bring it back to 64 lines or below; a raise is a hand edit and a declared loosening\n"
@@ -100,8 +101,8 @@ def test_what_grew_stays_a_finding_and_what_fell_is_the_only_change(build_repo, 
     assert (repo / BASELINE_PATH).read_text().endswith(before if written is None else written)
 
 
-def test_nothing_to_lower_leaves_the_files_bytes(build_repo, capsys):
-    repo = build_repo({"src/a.py": long_function(62), BASELINE_PATH: "# a comment\n" + held_ceiling()})
+def test_a_ceiling_that_renders_byte_for_byte_keeps_its_bytes(build_repo, capsys):
+    repo = build_repo({"src/a.py": long_function(62), BASELINE_PATH: held_ceiling()})
     before = (repo / BASELINE_PATH).read_bytes()
     code, out, _ = fixed(capsys, repo, *FIX_WORDS)
     assert (code, out.splitlines()[-1], (repo / BASELINE_PATH).read_bytes()) == (0, "✓ clean · nothing to lower · 1 area · <1s", before)

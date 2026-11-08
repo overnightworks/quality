@@ -374,7 +374,7 @@ class DoorParser(argparse.ArgumentParser):
     line leave through `output.py`."""
 
     commands: Mapping[str, argparse.ArgumentParser] = {}
-    pictured_help: str | None = None
+    ruled_help: str | None = None
     intermixed: bool = False
 
     def add_subparsers(self, **options: str) -> argparse._SubParsersAction:
@@ -398,7 +398,7 @@ class DoorParser(argparse.ArgumentParser):
         raise CannotJudge(message, help_step(self.prog))
 
     def print_help(self, file: TextIO | None = None) -> None:
-        write_help(self.pictured_help or self.format_help())
+        write_help(self.ruled_help or self.format_help())
 
 
 def help_step(prog: str) -> tuple[Step, ...]:
@@ -462,11 +462,11 @@ def _refuse_what_check_does_not_take(arguments: argparse.Namespace) -> None:
 
 def build_parser() -> DoorParser:
     parser = DoorParser(prog="quality", color=False)
-    parser.pictured_help = QUALITY_HELP
+    parser.ruled_help = QUALITY_HELP
     parser.add_argument("--version", action=VersionAction)
     commands = parser.add_subparsers(dest="command")
     check_parser = commands.add_parser("check", allow_abbrev=False)
-    check_parser.pictured_help = CHECK_HELP
+    check_parser.ruled_help = CHECK_HELP
     check_parser.intermixed = True
     check_parser.add_argument("areas", nargs="*", type=named_area, metavar="AREA")
     check_parser.add_argument("--staged", action="store_true")
@@ -474,22 +474,22 @@ def build_parser() -> DoorParser:
     check_parser.add_argument(DRY_RUN_WORD, dest="dry_run", action="store_true")
     check_parser.add_argument("-v", dest="verbose", action="store_true")
     merge_parser = commands.add_parser("merge", allow_abbrev=False)
-    merge_parser.pictured_help = MERGE_HELP
+    merge_parser.ruled_help = MERGE_HELP
     merge_parser.add_argument("pull_request", nargs="?", type=named_pull_request, metavar="OWNER/REPO#N")
     merge_parser.add_argument(DRY_RUN_WORD, dest="dry_run", action="store_true")
     merge_parser.add_argument("-v", dest="verbose", action="store_true")
     report_parser = commands.add_parser("report", allow_abbrev=False)
-    report_parser.pictured_help = REPORT_HELP
+    report_parser.ruled_help = REPORT_HELP
     report_parser.add_argument("-v", dest="verbose", action="store_true")
     verdict_parser = commands.add_parser("verdict", allow_abbrev=False)
-    verdict_parser.pictured_help = VERDICT_HELP
+    verdict_parser.ruled_help = VERDICT_HELP
     verdict_parser.add_argument("-v", dest="verbose", action="store_true")
     sonar_parser = commands.add_parser("sonar", allow_abbrev=False)
-    sonar_parser.pictured_help = SONAR_HELP
+    sonar_parser.ruled_help = SONAR_HELP
     sonar_commands = sonar_parser.add_subparsers(dest="sonar_command")
-    for word, pictured_help in (("properties", SONAR_PROPERTIES_HELP), ("findings", SONAR_FINDINGS_HELP)):
+    for word, ruled_help in (("properties", SONAR_PROPERTIES_HELP), ("findings", SONAR_FINDINGS_HELP)):
         step_parser = sonar_commands.add_parser(word, allow_abbrev=False)
-        step_parser.pictured_help = pictured_help
+        step_parser.ruled_help = ruled_help
         step_parser.add_argument("-v", dest="verbose", action="store_true")
     return parser
 
@@ -506,9 +506,11 @@ class AreaEvent(StrEnum):
     NOT_RECORDED = "not recorded"
     NOT_SET_UP = "not set up"
     RECORDED = "recorded"
+    REWRITTEN = "rewritten"
     TO_LOWER = "to lower"
     TO_MOVE = "to move"
     TO_RECORD = "to record"
+    TO_REWRITE = "to rewrite"
 
 
 CEILING_HELD = "ceiling held"
@@ -543,6 +545,8 @@ def _lowered_fact(ceiling: ratchet.CeilingFix | DryRun) -> str:
         return _in_file(f"{fix.fell} to lower" if planned else f"{counted(fix.fell, 'entry', 'entries')} lowered")
     if fix.moved:
         return _in_file(f"{fix.moved} to move" if planned else f"{counted(fix.moved, 'entry', 'entries')} moved")
+    if fix.text_differs:
+        return _in_file("to rewrite" if planned else "rewritten")
     return "nothing to lower" if planned else "nothing lowered"
 
 
@@ -558,6 +562,8 @@ def _planned_row(area: Area, fix: ratchet.CeilingFix) -> Row | None:
     if fix.first:
         new = SEPARATOR.join((_recorded_extent(fix), f"{ratchet.BASELINE_PATH} would be new"))
         return Row(Glyph.WILL_CHANGE, area, AreaEvent.TO_RECORD, new)
+    if fix.text_differs:
+        return Row(Glyph.WILL_CHANGE, area, AreaEvent.TO_REWRITE, SEPARATOR.join(("text differs", ratchet.BASELINE_PATH)))
     pairs = _in_file(counted(len(fix.ceiling.clones), CLONE_PAIR))
     return Row(Glyph.WILL_CHANGE, area, AreaEvent.TO_RECORD, pairs) if fix.recorded else None
 
@@ -573,6 +579,8 @@ def _ceiling_row(area: Area, ceiling: ratchet.CeilingFix | DryRun) -> Row | None
         return Row(Glyph.CLEAN, area, AreaEvent.LOWERED, _in_file(counted(fix.fell, "entry", "entries")))
     if fix.moved:
         return Row(Glyph.CLEAN, area, AreaEvent.MOVED, _in_file(counted(fix.moved, "entry", "entries")))
+    if fix.text_differs:
+        return Row(Glyph.CLEAN, area, AreaEvent.REWRITTEN, ratchet.BASELINE_PATH)
     return Row(Glyph.CLEAN, area, AreaEvent.RECORDED, _in_file(pairs)) if fix.recorded else None
 
 
@@ -585,6 +593,8 @@ def _ceiling_words(ceiling: ratchet.CeilingFix | DryRun | None, findings: int) -
         return f"{counted(fix.fell, 'ceiling entry', 'ceiling entries')} would fall" if planned else f"ceiling lowered by {counted(fix.fell, 'entry', 'entries')}"
     if fix.moved:
         return f"{counted(fix.moved, 'ceiling entry', 'ceiling entries')} would move" if planned else f"ceiling moved {counted(fix.moved, 'entry', 'entries')}"
+    if fix.text_differs:
+        return "ceiling would be rewritten" if planned else "ceiling rewritten"
     if fix.changed:
         return "ceiling would be recorded" if planned else "ceiling recorded"
     return "" if findings else "nothing to lower"
