@@ -63,7 +63,8 @@ def caller(uses: str) -> dict[str, str]:
     ids=["newest tag", "older tag", "no tag", "branch", "tag name"],
 )
 def test_the_gate_cell_names_the_release_the_pinned_commit_is(fleet_report, public, ref, cell):
-    """FLEET-4, FLEET-5, FLEET-6, FLEET-10, FLEET-27: the tag the SHA points at, `(behind)` when not the newest; the `# v` comment is not read."""
+    """FLEET-4, FLEET-5, FLEET-6, FLEET-10, FLEET-27: the tag the SHA points at, `(behind)` when not the newest;
+    the `# v` comment is not read."""
     code, output = fleet_report(public("pinned", caller(f"{GATE}@{ref} # v0.3.1")))
     assert code == 0, output
     assert matrix_row(output, "o/pinned")[1:3] == [cell, "none"]
@@ -404,7 +405,8 @@ def test_a_rule_without_a_release_is_not_released_on_a_pinned_gate():
          "two configs, no release"],
 )
 def test_the_import_contract_cell_follows_the_import_linter_config(fleet_report, public, files, pin, code, cell_words):
-    """FLEET-16, FLEET-18, FLEET-21, FLEET-22, FLEET-24, FLEET-27: two configs leave it open which one the gate runs, but only where the cell shows it."""
+    """FLEET-16, FLEET-18, FLEET-21, FLEET-22, FLEET-24, FLEET-26, FLEET-27: two configs leave it open which one the
+    gate runs, but only where the cell shows it."""
     result, output = fleet_report(public("layered", {**pinned_gate(pin), **files}), tags=first_releases())
     assert result == code, output
     assert cell(output, "o/layered", "import-contract") == cell_words
@@ -413,7 +415,7 @@ def test_the_import_contract_cell_follows_the_import_linter_config(fleet_report,
 def test_without_a_gate_every_cell_that_needs_one_is_a_dash_and_an_unreadable_workflow_makes_each_unreadable(
     fleet_report, public
 ):
-    """FLEET-21, FLEET-23."""
+    """FLEET-21, FLEET-23, FLEET-26."""
     broken = {".github/workflows/x.yml": "jobs: [unclosed\n"}
     code, output = fleet_report(public("bare", {CONFIG: TWO_JOBS}), public("broken", broken), tags=first_releases())
     assert code == 2, output
@@ -433,7 +435,7 @@ def test_without_a_gate_every_cell_that_needs_one_is_a_dash_and_an_unreadable_wo
     ids=["jobs counted", "legacy fail", "no config", "malformed config", "malformed config, no gate"],
 )
 def test_the_jobs_cell_counts_and_the_legacy_cell_names_the_mode(fleet_report, public, files, pin, code, jobs, legacy):
-    """FLEET-12, FLEET-21, FLEET-24: an unreadable config counts only where a cell shows it."""
+    """FLEET-12, FLEET-21, FLEET-24, FLEET-26: an unreadable config counts only where a cell shows it."""
     result, output = fleet_report(public("gated", {**pinned_gate(pin), **files}), tags=first_releases())
     assert result == code, output
     assert (cell(output, "o/gated", "Mandatory jobs"), cell(output, "o/gated", "Sonar legacy")) == (jobs, legacy)
@@ -452,7 +454,7 @@ def test_the_jobs_cell_counts_and_the_legacy_cell_names_the_mode(fleet_report, p
 def test_a_malformed_size_baseline_is_named_in_the_size_cell_only_where_the_cell_shows_it(
     fleet_report, public, pin, code, size
 ):
-    """FLEET-18, FLEET-21, FLEET-22, FLEET-24."""
+    """FLEET-18, FLEET-21, FLEET-22, FLEET-24, FLEET-26."""
     broken = {**pinned_gate(pin), ratchet.BASELINE_PATH: "[file_lines\n"}
     result, output = fleet_report(public("sized", broken), tags=first_releases())
     assert result == code, output

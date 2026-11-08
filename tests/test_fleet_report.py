@@ -149,7 +149,7 @@ def test_a_measured_fleet_prints_its_rows_on_stderr_and_only_the_tables_on_stdou
 
 
 def test_a_repository_that_cannot_be_cloned_is_its_row_and_the_pair_after_the_tables(capsys, monkeypatch, tmp_path, public, missing, remotes):
-    """FLEET-36, FLEET-46: a repository that cannot be cloned is its row, and the closing pair counts it."""
+    """FLEET-26, FLEET-36, FLEET-46: a repository that cannot be cloned is its row, and the closing pair counts it."""
     alpha = public("alpha", {"a.py": "a = 1\n"})
     printed = report_in(write_fleet(tmp_path / "fleet", [alpha, missing]), capsys, monkeypatch, ticks(0, 1, 2, 3, 4))
     assert (printed.code, printed.err) == (
@@ -255,6 +255,8 @@ def test_an_organizations_public_repositories_are_measured_and_nothing_else(caps
 
 
 def test_a_private_entry_of_the_listing_is_in_no_line(capsys, monkeypatch, tmp_path, public):
+    """FLEET-32, FLEET-72: a private entry of the listing is measured nowhere and named in no line, the step summary
+    included."""
     public("alpha", {"a.py": "a = 1\n"})
     summary = tmp_path / "summary.md"
     listing = Listing({"o": listed(("o/alpha",), ("o/hidden-name", "private"))})
@@ -267,6 +269,7 @@ def test_a_private_entry_of_the_listing_is_in_no_line(capsys, monkeypatch, tmp_p
 
 
 def test_a_private_repository_named_in_the_file_never_reads_as_found(capsys, monkeypatch, tmp_path, public, missing):
+    """FLEET-67: a private repository the listing names does not make a `repositories` entry already listed."""
     listing = Listing({"o": listed(("o/gone", "private"))})
     printed = report_in(
         write_organizations(tmp_path / "fleet", ["o"], [missing]), capsys, monkeypatch, ticks(0, 1, 2, 3), fetch_listing=listing
@@ -281,7 +284,8 @@ def test_a_private_repository_named_in_the_file_never_reads_as_found(capsys, mon
     ids=["token", "no token", "empty token"],
 )
 def test_the_listing_carries_the_job_token_only_when_there_is_one(capsys, monkeypatch, tmp_path, public, environment, authorization):
-    """FLEET-50: the listing carries the job token as a bearer header only when there is one, and no output holds it."""
+    """FLEET-50, FLEET-60: the listing is asked once and carries the job token as a bearer header only when there is
+    one, and no output holds it."""
     public("alpha", {"a.py": "a = 1\n"})
     listing = Listing({"o": listed(("o/alpha",))})
     printed = report_in(
@@ -312,6 +316,9 @@ def test_the_listing_carries_the_job_token_only_when_there_is_one(capsys, monkey
     ids=["404", "503", "more pages", "timeout", "unreachable", "not JSON", "deeply nested", "not a list", "option", "dots", "flag not boolean"],
 )
 def test_a_listing_that_cannot_be_used_is_exit_2_before_any_clone(capsys, monkeypatch, tmp_path, public, answer, fact, steps):
+    """FLEET-60, FLEET-61, FLEET-62, FLEET-63, FLEET-64, FLEET-65, FLEET-70, FLEET-71: a listing that cannot be used is
+    one pair with nothing measured, the rerun under `next:` unless the file is at fault, and no text of the answer in
+    it."""
     printed = report_in(
         write_organizations(tmp_path / "fleet", ["o"]), capsys, monkeypatch, ticks(0), fetch_listing=Listing({"o": answer})
     )
@@ -321,6 +328,8 @@ def test_a_listing_that_cannot_be_used_is_exit_2_before_any_clone(capsys, monkey
 
 
 def test_every_organization_problem_stands_in_one_pair_with_the_shape_before_the_rerun(capsys, monkeypatch, tmp_path, public):
+    """FLEET-61, FLEET-62, FLEET-63, FLEET-70: the problems of two organizations stand in one pair, the shape before the
+    rerun."""
     listing = Listing({"a": http_error(404), "b": http_error(503)})
     printed = report_in(write_organizations(tmp_path / "fleet", ["a", "b"]), capsys, monkeypatch, ticks(0), fetch_listing=listing)
     assert (printed.code, printed.out, printed.err) == (
@@ -336,6 +345,7 @@ def test_every_organization_problem_stands_in_one_pair_with_the_shape_before_the
 
 
 def test_an_organization_name_that_is_no_name_sends_no_request(capsys, monkeypatch, tmp_path, public):
+    """FLEET-56, FLEET-57, FLEET-59: an organization name that is no name is named by its place and sends no request."""
     listing = Listing({})
     printed = report_in(write_organizations(tmp_path / "fleet", ["a/b"]), capsys, monkeypatch, ticks(0), fetch_listing=listing)
     assert (printed.code, listing.requests) == (2, [])
@@ -347,6 +357,7 @@ def test_an_organization_name_that_is_no_name_sends_no_request(capsys, monkeypat
 
 
 def test_a_named_repository_that_the_organization_already_lists_is_refused_by_its_place(capsys, monkeypatch, tmp_path, public):
+    """FLEET-67: a named repository the organization already lists, in any case, is refused by its place."""
     listing = Listing({"o": listed(("o/alpha",))})
     printed = report_in(write_organizations(tmp_path / "fleet", ["o"], ["O/Alpha"]), capsys, monkeypatch, ticks(0), fetch_listing=listing)
     assert (printed.code, printed.out) == (2, "")
@@ -371,6 +382,7 @@ def test_a_fork_named_in_the_file_is_measured(capsys, monkeypatch, tmp_path, pub
     ids=["all archived", "all excluded"],
 )
 def test_organizations_that_select_nothing_are_refused(capsys, monkeypatch, tmp_path, public, answer, exclude):
+    """FLEET-66: organizations whose listing leaves nothing to measure are refused after the listing."""
     listing = Listing({"o": answer})
     printed = report_in(write_organizations(tmp_path / "fleet", ["o"], exclude=exclude), capsys, monkeypatch, ticks(0), fetch_listing=listing)
     assert (printed.code, printed.out) == (2, "")
@@ -378,7 +390,8 @@ def test_organizations_that_select_nothing_are_refused(capsys, monkeypatch, tmp_
 
 
 def test_an_excluded_repository_is_left_out_and_the_fleet_line_counts_the_rest(capsys, monkeypatch, tmp_path, public):
-    """FLEET-31, FLEET-33: an excluded repository is left out, and the fleet line counts the rest."""
+    """FLEET-31, FLEET-33, FLEET-45: an excluded repository is left out, the fleet line counts the rest, and a fleet of
+    one closes on `1 of 1 repository`."""
     public("alpha", {"a.py": "a = 1\n"})
     listing = Listing({"o": listed(("o/alpha",), ("o/Beta",))})
     printed = report_in(
@@ -387,6 +400,7 @@ def test_an_excluded_repository_is_left_out_and_the_fleet_line_counts_the_rest(c
     assert printed.code == 0, printed.err
     assert "  · fleet         1 found        o · quality/fleet.toml\n" in printed.err
     assert "Beta" not in printed.err + printed.out
+    assert printed.err.endswith("✓ 1 of 1 repository measured · 3s\n")
 
 
 @pytest.mark.parametrize(
@@ -401,6 +415,8 @@ def test_an_excluded_repository_is_left_out_and_the_fleet_line_counts_the_rest(c
     ids=["not listed", "private", "archived", "fork", "another owner"],
 )
 def test_an_exclude_entry_that_matches_no_found_repository_is_one_pair_whatever_github_holds(capsys, monkeypatch, tmp_path, public, answers):
+    """FLEET-68: an `exclude` entry that matches no found repository is one pair, whether GitHub does not list it or it
+    is private, archived or a fork."""
     organizations = ["o", "p"] if "p" in answers else ["o"]
     printed = report_in(
         write_organizations(tmp_path / "fleet", organizations, exclude=["p/hidden-name"]), capsys, monkeypatch, ticks(0),
@@ -416,6 +432,8 @@ def test_an_exclude_entry_that_matches_no_found_repository_is_one_pair_whatever_
     ids=["in repositories too", "twice in exclude"],
 )
 def test_an_exclude_entry_that_repeats_is_refused_by_its_place_before_any_request(capsys, monkeypatch, tmp_path, public, repositories, exclude, fact):
+    """FLEET-54, FLEET-57, FLEET-59: an entry that repeats another, in any case or across the two lists, is refused by
+    its place before any request."""
     listing = Listing({})
     printed = report_in(
         write_organizations(tmp_path / "fleet", ["o"], repositories, exclude), capsys, monkeypatch, ticks(0), fetch_listing=listing
@@ -425,6 +443,8 @@ def test_an_exclude_entry_that_repeats_is_refused_by_its_place_before_any_reques
 
 
 def test_an_exclude_entry_of_an_organization_github_did_not_list_waits_for_the_rerun(capsys, monkeypatch, tmp_path, public):
+    """FLEET-69, FLEET-70: an `exclude` entry of an organization whose listing failed waits for the rerun, which the
+    pair adds after the shape."""
     listing = Listing({"a": listed(("a/x",)), "b": http_error(503)})
     printed = report_in(
         write_organizations(tmp_path / "fleet", ["a", "b"], exclude=["b/y", "a/z"]), capsys, monkeypatch, ticks(0), fetch_listing=listing
