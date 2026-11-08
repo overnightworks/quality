@@ -1,0 +1,8 @@
+claim_id = "9a212ee484cc4a22bbb7b1217aefdc43"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "5e6dec0c190d8856e283962b783ba874305b6374"
+branch = "claude/issue-569-d7-merge-prompt-ids"
+scope = ["docs/commands.md", "tests/test_merge.py", "tests/test_merge_prompt.py", "tests/test_merge_rows.py"]
+opened_commit = "27e3742cf23090b3e25311dec631143afd8dd3bf"
+whole_reason = "docs/commands.md quality merge shows-then-asks clauses up to the closed stderr and the tests that prove them, linked by MERGE IDs, with the attribution of their docstrings removed and the bullet rewrapped."
