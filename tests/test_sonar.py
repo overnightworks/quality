@@ -702,7 +702,6 @@ def test_a_repository_without_a_config_is_refused_before_any_request(monkeypatch
     assert "quality/config.toml is missing" in err
 
 
-
 def test_properties_with_sonar_off_reads_no_token_and_writes_off(monkeypatch, capsys, build_repo, tmp_path):
     """With [gate] sonar = false the door needs no properties file and no token, hands the job sonar=off and exits 0."""
     step_output = tmp_path / "github_output"
