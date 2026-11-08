@@ -35,8 +35,10 @@ jobs:
         run: uv sync --locked
 
       # exec 2>&1 sends stderr into stdout's pipe, so the log keeps the order the report writes; the door writes the step summary itself.
-      # The fleet list lives in quality/fleet.toml. A repository that is not anonymously readable is not measured: this run is public.
+      # quality/fleet.toml names the organizations; the job's read-only token lists their public repositories and git clones them anonymously. A repository that is not anonymously readable is not measured: this run is public.
       - name: Measure the fleet
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           exec 2>&1
           uv run --locked quality report

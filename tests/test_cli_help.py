@@ -116,7 +116,7 @@ def test_the_report_help_stands_in_its_frame(capsys):
     assert help_text == (
         "usage: quality report [-v]\n"
         "\n"
-        "Measure every fleet repository quality/fleet.toml lists: size, debt, the gate\n"
+        "Measure every fleet repository quality/fleet.toml selects: size, debt, the gate\n"
         "release it pins. A row per repository goes to stderr, the two markdown tables\n"
         "to stdout and to the step summary.\n"
         "\n"

@@ -99,8 +99,10 @@ entries, a folder that is not a repository, or a gitleaks run without a report.
 
 ## `quality report`
 
-`quality report` reads `quality/fleet.toml` in the folder it runs in (`repositories = [...]`, GitHub `owner/name`s, each
-listed once) and takes no path. On stderr it prints `· fleet  N listed  quality/fleet.toml`, then a row per repository as
+`quality report` reads `quality/fleet.toml` in the folder it runs in and takes no path. The file has two optional keys,
+`organizations = [...]` (GitHub organization names) and `repositories = [...]` (single `owner/name`s, a fork too); the
+fleet is every public, non-archived, non-fork repository GitHub lists for each organization plus the named ones. On
+stderr it prints `· fleet  N found  <organizations> · quality/fleet.toml`, then a row per repository as
 it is measured, sorted by name, case-insensitively: `✓ <owner/name>  measured  <commit> · <time>`, `✗ …  not measured
 <reason>` or `✗ …  partly read  cannot read <files>`; a failed read of the release tags adds `✗ release tags  not read
 <reason>` under the fleet line. The subjects share one column. On stdout it prints the two markdown tables and nothing
@@ -111,13 +113,21 @@ With `GITHUB_STEP_SUMMARY` set, the tables are appended there. Every cell puts a
 The run ends on stderr with `✓ N of N repositories measured · <time>` (exit `0`) or with `error: ` and what applies of
 `K of N repositories not measured`, `J partly read` and `the release tags not read`, then `the tables say so`, and
 `next: quality report` (exit `2`); an unwritable summary is `error: GITHUB_STEP_SUMMARY is not writable · <reason>`
-(exit `2`). `-v` adds nothing: the report runs no scanner. The fleet list lives once, in `quality/fleet.toml`;
+(exit `2`). `-v` adds nothing: the report runs no scanner. The fleet's selection lives once, in `quality/fleet.toml`;
 `.github/workflows/report.yml` runs it every Monday at 05:17 UTC and on dispatch; the tables stand in that run's
-summary. The run only reports: it writes to no repository and needs no secret. A missing, unreadable (a directory, a
-dangling link, not UTF-8), malformed, duplicating (also across case) or non-`owner/name` `quality/fleet.toml` is the
-pair, exit `2`, before any clone: `error: ` and what is wrong with `quality/fleet.toml`, named repository-relative, and
-`next: write it in quality/fleet.toml like this:` with the file's shape below; each bad entry is named by its place
-(`repositories[3]`), never by its text.
+summary. The run only reports: it writes to no repository and lists with its own read-only job token (`GITHUB_TOKEN`,
+sent to `api.github.com` only, never to git); a local run lists anonymously. A missing, unreadable (a directory, a
+dangling link, not UTF-8), malformed, duplicating (also across case), empty (`selects no repository`) or badly named
+`quality/fleet.toml` is the pair, exit `2`, before any request or clone: `error: ` and what is wrong with
+`quality/fleet.toml`, named repository-relative, and `next: write it in quality/fleet.toml like this:` with the file's
+shape below; each bad entry is named by its place (`repositories[3]`, `organizations[0]`), never by its text. The listing is
+read once per organization, before any clone, and a problem of any organization is one pair that ends
+`· nothing measured`: an organization GitHub does not know (`organizations[0] is no GitHub organization`), a listing
+GitHub did not give (`GitHub did not list <organization> · HTTP <status>`, a timeout, an unreachable host), more than 100
+public repositories (quality reads one page), an answer that is not a list of repositories, or a `repositories` entry the
+organization already lists (`repositories[0] is already in <organization>`). A failure of GitHub adds `fix what the error
+names, then run quality report again` under `next:`, after the shape when the file is also at fault. No listed text is
+printed, and a private repository a token can list is dropped without a trace.
 
 - Each repository is cloned from `https://github.com/<owner>/<name>` with `git -c credential.helper= clone --depth 1 --no-tags`, `GIT_TERMINAL_PROMPT=0` and no
   askpass, into a temporary directory that is removed on every exit, and its default branch tip is measured.
@@ -156,9 +166,9 @@ pair, exit `2`, before any clone: `error: ` and what is wrong with `quality/flee
   show `cannot read <file>` (`import-linter config`) in each cell that reads the file, while a cell that does not keeps its value
   (every cell under no gate, a rule cell under a pin before the rule or `release unknown`), unreadable release tags say so in the heading and
   show pins as commits, and each makes the exit `2`. No value, `behind`, `no gate` or `report-only` included, makes the run red.
-- Rows are named by the entry as written
-  and sorted by it, case-insensitively. A private repository is not measured, because the tables are published and it is not
-  anonymously readable: it shows as a `cannot judge` row like any repository that cannot be cloned.
+- Found rows are named by GitHub's own `owner/name`, named rows by the entry as written; all are sorted by it,
+  case-insensitively. A private repository is not measured, because the tables are published and it is not
+  anonymously readable: one named in `repositories` shows as a `cannot judge` row like any repository that cannot be cloned.
 - A repository that cannot be cloned or measured shows `cannot judge: <reason>` (for example `cannot clone (git exited
   128)`), with no local path; every other row still shows, and the exit is `2`. Otherwise the exit is `0`.
 
