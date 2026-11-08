@@ -1,0 +1,8 @@
+claim_id = "1bedf3c840474e07ab6e7d74f1492663"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "1e79828cbe96100446fa1c770eec85801bd41cc5"
+branch = "claude/issue-511-d7-gate-loosening-ids"
+scope = ["docs/gate.md", "docs/sonar.md", "tests/test_config.py", "tests/test_verdict.py", "tests/test_verdict_frame.py", "tests/test_verdict_generated.py", "tests/test_verdict_loosenings.py"]
+opened_commit = "6e574bff65785a2a08a9e3616ab02acf603a3a35"
+whole_reason = "docs/gate.md loosening and declaring rules and the tests that prove them, linked by VERDICT IDs, with the loosening legacy fail to report stated once in the gate."
