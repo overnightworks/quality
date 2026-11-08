@@ -453,17 +453,18 @@ It applies these rules:
 
   Ruled by the operator: the rules are red from the release that ships them, with no report-only phase; `assert` (S101)
   is exempt in tests; a rule-specific noqa with a reason is green.
-- `python-print` judges `T201` (`print`) and `T203` (`pprint`) from `python-security`'s run, over the same files,
-  with the same deafness to the repository's ruff settings and the same refusals: a run quality cannot trust or a file
-  ruff cannot parse leaves both rules `cannot judge` or `unparsable`. Each finding stands as a row
-  (``! scripts/sync_agents.py:12  print call  T201 `print` found``), a print to `sys.stderr` included, and tests get no
-  exemption. A reasoned `# noqa: T201 - <reason>` at `noqa_row` clears one line, as for `python-security`. A program's
-  one output owner declares itself with a file-level
-  `# ruff: noqa: T201[, T203] - <reason>` on a line of its own, the form ruff honours too, clears the codes it names in
-  its own file only; its reason holds a letter and no comma, and the comment holds no second `#`. A bare
-  `# ruff: noqa`, one without a reason, a comma in the reason, one naming an S code
-  (`# ruff: noqa: S603, T201 - reason`), one behind code on its line and `# flake8: noqa` clear nothing, and no file
-  directive clears an S code. The owner line is a tool directive, so it does not satisfy `script-header`: a script
+- `python-print` judges `T201` (`print`) and `T203` (`pprint`) (PRINT-1) from `python-security`'s run, over the same
+  files (PRINT-2), with the same deafness to the repository's ruff settings and the same refusals: a run quality cannot
+  trust or a file ruff cannot parse leaves both rules `cannot judge` or `unparsable`. Each finding stands as a
+  [row](output.md#rows) (``! scripts/sync_agents.py:12  print call  T201 `print` found``) (PRINT-3), a print to
+  `sys.stderr` included (PRINT-4), and tests get no exemption (PRINT-5). A reasoned `# noqa: T201 - <reason>` at
+  `noqa_row` clears one line (PRINT-6), as for `python-security`. A program's one output owner declares itself with a
+  file-level `# ruff: noqa: T201[, T203] - <reason>` on a line of its own (PRINT-7), the form ruff honours too
+  (PRINT-8), clears the codes it names in its own file only (PRINT-9); its reason holds a letter and no comma
+  (PRINT-10), and the comment holds no second `#` (PRINT-11). A bare `# ruff: noqa`, one without a reason, a comma in
+  the reason, one naming an S code (`# ruff: noqa: S603, T201 - reason`), one behind code on its line and
+  `# flake8: noqa` clear nothing (PRINT-12), and no file directive clears an S code (PRINT-13).
+  The owner line is a tool directive, so it does not satisfy `script-header`: a script
   keeps its comment or docstring first and the owner below it, as `scripts/verify_release.py` does. Each honoured
   owner stands as a row under the `code` row, after its findings, `· scripts/verify_release.py:14  allowed  output
   owner · <reason>`, and a clean row counts it (`· 1 allowed`); an owner that names no code found in
