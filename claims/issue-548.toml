@@ -1,7 +1,0 @@
-claim_id = "20fc53e02b2047d5a6ea6c06adb0edd7"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "8acb6bf3743119aa37c1b27dd22a24fe02a4fcd9"
-branch = "claude/issue-548-d7-area-selection-ids"
-scope = ["docs/rules.md", "tests/test_cli_areas.py"]
-opened_commit = "a21d88b697b9882dca525e65a7ec85dd3ed9b993"
