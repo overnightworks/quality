@@ -70,7 +70,7 @@ def flagged_paths(repo: Path, rule: Rule = Rule.PYTHON_SECURITY) -> list[str]:
 
 @pytest.mark.parametrize("line", GREEN_NOQA_LINES)
 def test_a_reasoned_noqa_naming_the_code_at_noqa_row_is_green(line):
-    """Sentence 5, cell 10: the canonical form names the code, and its reason holds a letter and no comma."""
+    """SECURITY-13, SECURITY-14: the canonical form names the code, and its reason holds a letter and no comma."""
     assert judged(f"{line}\n", record()) == []
 
 
@@ -97,8 +97,9 @@ def test_a_reasoned_noqa_naming_the_code_at_noqa_row_is_green(line):
          "code in second reasoned directive", "second reasoned directive", "inside a string"],
 )
 def test_every_other_noqa_form_is_red(line):
-    """Sentence 5, cells 11 and 12: only the canonical form is green; ruff reads only a line's first directive, so a
-    second one, bare or reasoned, is not hidden."""
+    """SECURITY-8, SECURITY-13, SECURITY-14, SECURITY-15, SECURITY-16: only the canonical form is green and a red
+    finding's fact is ruff's code and message; ruff reads only a line's first directive, so a second one, bare or
+    reasoned, is not hidden."""
     assert judged(f"{line}\n", record()) == ["src/p/a.py:1 S603 `subprocess` call: check for execution of untrusted input"]
 
 
@@ -108,7 +109,8 @@ def test_every_other_noqa_form_is_red(line):
     ids=["noqa on another line", "file-level noqa"],
 )
 def test_a_noqa_away_from_noqa_row_is_red(text, line):
-    """Sentence 5, cell 11: only the line at ruff's noqa_row can carry the noqa."""
+    """SECURITY-13, SECURITY-15: a noqa on another line, or a file-level directive, clears nothing; only the line at
+    ruff's noqa_row can carry it."""
     assert judged(text, record(line=line, noqa_line=line)) != []
 
 
@@ -121,14 +123,14 @@ def test_a_noqa_away_from_noqa_row_is_red(text, line):
     ids=["noqa at noqa_row", "noqa at the finding's own line"],
 )
 def test_a_finding_spanning_lines_is_judged_at_noqa_row(text, is_red):
-    """Sentence 5, cell 13: a finding inside a multi-line call is judged at noqa_row, not its own line."""
+    """SECURITY-13: a finding inside a multi-line call is judged at noqa_row, not at its own line."""
     assert bool(judged(text, record(line=1, noqa_line=3))) is is_red
 
 
 @pytest.mark.parametrize("code", ["S101", "S105", "S106", "S107", "S603", "S607"])
 @pytest.mark.parametrize(("in_tests", "is_red"), [(True, False), (False, True)], ids=["test file", "other file"])
 def test_the_exempt_codes_are_green_only_in_a_test_file(code, in_tests, is_red):
-    """Sentence 4, cells 7 and 8: S101, S105-S107, S603 and S607 are exempt in the files test-import judges alone."""
+    """SECURITY-10: S101, S105 to S107, S603 and S607 are exempt in the files test-import judges alone."""
     finding = record(code=code, path="tests/test_a.py")
     test_files = frozenset({finding.path}) if in_tests else frozenset()
     assert bool(judged("x\n", finding, test_files)) is is_red
@@ -136,7 +138,7 @@ def test_the_exempt_codes_are_green_only_in_a_test_file(code, in_tests, is_red):
 
 @pytest.mark.parametrize("code", ["S108", "S310"])
 def test_a_shared_path_or_an_url_open_stays_red_in_a_test_file(code):
-    """Sentence 4, cell 9: S108 and S310 are not exempt in tests."""
+    """SECURITY-11: S108 and S310 are not exempt in tests."""
     finding = record(code=code, path="tests/test_a.py")
     assert judged("x\n", finding, frozenset({finding.path})) != []
 
@@ -211,6 +213,7 @@ def test_an_owner_that_clears_no_finding_is_a_finding_on_its_line(text, records)
 
 
 def test_a_fix_names_the_code_found_and_the_line_its_noqa_must_stand_on():
+    """SECURITY-9: a fix names the code found and the line its noqa must stand on."""
     flagged_line, noqa_line = 7, 9
     text = "run(argv)\n" * noqa_line
     (secured,) = python_lint.judge_security(
@@ -266,14 +269,15 @@ def test_a_syntax_error_is_unparsable_naming_the_file():
     ],
 )
 def test_every_tracked_regular_python_file_is_judged(build_repo, path):
-    """Sentence 1, cell 1: any directory, a space, a leading `-` or a byte that is not UTF-8 in the name."""
+    """SECURITY-1, SECURITY-11: any directory, a space, a leading `-` or a byte that is not UTF-8 in the name; an eval
+    in a test file stays red."""
     files = {"inner/pyproject.toml": "[project]\nname = 'x'\n", path: EVAL}
     assert flagged_paths(build_repo(files)) == [path]
 
 
 @pytest.mark.integration
 def test_untracked_linked_submodule_notebook_stub_and_suffixless_files_are_not_judged(build_repo):
-    """Sentence 1, cells 2 and 3: none of these is judged, and the rule is clean."""
+    """SECURITY-6: none of these is judged, and the rule is clean."""
     repo = build_repo({"a.ipynb": EVAL, "a.pyi": EVAL, "scripts/run_it": EVAL, "real.txt": EVAL})
     (repo / "untracked.py").write_text(EVAL)
     (repo / "linked.py").symlink_to("real.txt")
@@ -289,7 +293,8 @@ def test_untracked_linked_submodule_notebook_stub_and_suffixless_files_are_not_j
 def test_a_repository_without_tracked_python_is_clean_even_when_quality_holds_no_ruff_and_an_untracked_file_stays_unjudged(
     build_repo, capsys
 ):
-    """Sentence 1, cell 3: with no tracked `.py` file nothing is judged and ruff is not asked for, the untracked file included."""
+    """SECURITY-5, SECURITY-6: with no tracked `.py` file nothing is judged and ruff is not asked for, the untracked
+    file included."""
     repo = build_repo({"README.md": "x\n"})
     (repo / "untracked.py").write_text(EVAL)
     code, output = run(capsys, repo, nothing_installed)
@@ -316,7 +321,7 @@ def test_a_tracked_python_file_the_checkout_does_not_hold_cannot_be_judged(build
 
 @pytest.mark.integration
 def test_more_files_than_one_run_holds_are_all_judged(build_repo, monkeypatch):
-    """Sentence 1, cell 4: the file list is batched, and every batch is judged."""
+    """SECURITY-3: the file list is batched, and every batch is judged."""
     monkeypatch.setattr(python_lint, "ARGUMENT_BYTES_PER_RUN", 1)
     assert flagged_paths(build_repo({f"src/p/m{index}.py": EVAL for index in range(3)})) == [
         "src/p/m0.py", "src/p/m1.py", "src/p/m2.py",
@@ -339,7 +344,7 @@ def test_more_files_than_one_run_holds_are_all_judged(build_repo, monkeypatch):
     ("rule", "source"), [(Rule.PYTHON_SECURITY, EVAL), (Rule.PYTHON_PRINT, f"{PRINT}\n")], ids=["security", "print"]
 )
 def test_the_repositorys_own_ruff_settings_have_no_effect(build_repo, config, rule, source):
-    """Sentence 3, cell 6, and #225 cell 3: the gate runs its own ruff, isolated from every config."""
+    """SECURITY-7: the gate runs its own ruff, isolated from every config."""
     assert flagged_paths(build_repo({**config, "src/p/a.py": source}), rule) == ["src/p/a.py"]
 
 
@@ -350,15 +355,16 @@ def test_the_repositorys_own_ruff_settings_have_no_effect(build_repo, config, ru
     ids=["test file", "fixture", "source"],
 )
 def test_an_assert_is_exempt_only_in_the_test_files_test_import_judges(build_repo, path, is_red):
-    """Sentence 4, cells 7 and 8: the boundary is test-import's, so `tests/fixtures/` stays red."""
+    """SECURITY-10, SECURITY-12, TESTIMPORT-2, TESTIMPORT-4: the boundary is test-import's, so `tests/fixtures/` stays
+    red."""
     files = {"pyproject.toml": "[project]\nname = 'x'\n", path: "assert True\n"}
     assert bool(flagged_paths(build_repo(files))) is is_red
 
 
 @pytest.mark.integration
 def test_the_pinned_ruff_itself_honours_every_green_noqa_form_and_not_a_code_in_a_second_directive(tmp_path):
-    """Sentence 5, cell 14: the canonical form is a subset of ruff's own grammar, and ruff reads only a line's first
-    directive, so the gate keeps a code named only in the second one red."""
+    """SECURITY-16, SECURITY-17: the canonical form is a subset of ruff's own grammar, and ruff reads only a line's
+    first directive, so the gate keeps a code named only in the second one red."""
     names = []
     for index, line in enumerate([*GREEN_NOQA_LINES, CODE_IN_SECOND_DIRECTIVE]):
         names.append(f"m{index}.py")
@@ -488,7 +494,7 @@ def test_code_a_cookie_hides_from_ruff_cannot_be_judged(build_repo, capsys):
 
 @pytest.mark.integration
 def test_the_run_writes_nothing_and_never_uses_a_ruff_on_path(build_repo, monkeypatch, elsewhere):
-    """Invariant, cell 21: no `.ruff_cache` in the checkout, and a ruff on PATH never runs."""
+    """SECURITY-2, SECURITY-4: no `.ruff_cache` in the checkout, and a ruff on PATH never runs."""
     repo = build_repo({"src/p/a.py": EVAL})
     marker = elsewhere / "ran"
     fake_ruff(elsewhere, f"touch {marker}")
