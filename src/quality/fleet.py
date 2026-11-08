@@ -51,7 +51,7 @@ ENTRY = re.compile(rf"{OWNER}/(?!\.+\Z)[A-Za-z0-9._-]+")
 ORGANIZATION = re.compile(OWNER)
 LISTING_URL = "https://api.github.com/orgs/{organization}/repos?type=public&per_page=100"
 NEXT_PAGE = re.compile(r'rel="next"')
-TOKEN_VARIABLE = "GITHUB_TOKEN"
+LISTING_CREDENTIAL_VARIABLE = "GITHUB_TOKEN"
 NOTHING_MEASURED = "nothing measured"
 FUNCTION_SCOPE = "functions and CCN: Python only"
 CLONE_TIMEOUT_SECONDS = 300
@@ -321,7 +321,7 @@ def anonymous_environment(scratch: Path) -> dict[str, str]:
     isolated = process.attribute_free_git_environment(scratch / "home")
     # git falls back to SSH_ASKPASS for an http password too.
     # The job's token is for GitHub's API alone; no git that reaches the network may inherit it.
-    return {**{name: value for name, value in isolated.items() if name not in {"SSH_ASKPASS", TOKEN_VARIABLE}}, "GIT_TERMINAL_PROMPT": "0"}
+    return {**{name: value for name, value in isolated.items() if name not in {"SSH_ASKPASS", LISTING_CREDENTIAL_VARIABLE}}, "GIT_TERMINAL_PROMPT": "0"}
 
 
 def release_tags_or_none(tags: checkout.ReleaseTags | ReleaseTagsError) -> checkout.ReleaseTags | None:
@@ -430,7 +430,7 @@ def run_report(
     started = clock()
     try:
         fleet = read_fleet(Path("."))
-        names = select_repositories(fleet, environment.get(TOKEN_VARIABLE, ""), fetch_listing)
+        names = select_repositories(fleet, environment.get(LISTING_CREDENTIAL_VARIABLE, ""), fetch_listing)
     except CannotJudge as refusal:
         output.write_pair(refusal.reason.fact, refusal.reason.next_steps, channels.err)
         return EXIT_NOT_MEASURED

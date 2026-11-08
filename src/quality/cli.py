@@ -115,8 +115,7 @@ class DoorPorts:
 def main(
     argv: list[str] | None = None,
     fetcher_for: Callable[[str], PageFetcher] = github_fetcher,
-    release_tags: fleet.TagReader = fleet.read_release_tags,
-    fetch_listing: fleet.ListingFetch = web.fetch,
+    release_tags: fleet.TagReader = fleet.read_release_tags, fetch_listing: fleet.ListingFetch = web.fetch,
     transport: Transport = fetch_json,
     sleep: Sleep = time.sleep,
     gh: GhRunner = run_gh,
