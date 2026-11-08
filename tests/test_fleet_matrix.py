@@ -1,4 +1,4 @@
-"""`quality report` release matrix (#123): cells name the item's scenario matrix, rules its numbered rules."""
+"""The `quality report` release matrix."""
 
 import os
 import re
@@ -63,7 +63,7 @@ def caller(uses: str) -> dict[str, str]:
     ids=["newest tag", "older tag", "no tag", "branch", "tag name"],
 )
 def test_the_gate_cell_names_the_release_the_pinned_commit_is(fleet_report, public, ref, cell):
-    """FLEET-4, FLEET-5, FLEET-6, FLEET-10: the tag the SHA points at, `(behind)` when not the newest; the `# v` comment is not read."""
+    """FLEET-4, FLEET-5, FLEET-6, FLEET-10, FLEET-27: the tag the SHA points at, `(behind)` when not the newest; the `# v` comment is not read."""
     code, output = fleet_report(public("pinned", caller(f"{GATE}@{ref} # v0.3.1")))
     assert code == 0, output
     assert matrix_row(output, "o/pinned")[1:3] == [cell, "none"]
@@ -110,7 +110,7 @@ def test_two_callers_with_two_pins_are_both_named_and_joined(fleet_report, publi
     ids=["not YAML", "nesting past the recursion limit", "an unhashable key", "a unicode escape past the last code point"],
 )
 def test_a_workflow_that_is_not_yaml_is_named_in_its_cells_and_the_other_rows_stand(fleet_report, public, content):
-    """#123 E11, cell 8: `cannot read <file>`, exit 2, and nothing about the broken file is run or guessed."""
+    """FLEET-23, FLEET-26: `cannot read <file>`, exit 2, and nothing about the broken file is run or guessed."""
     broken = {".github/workflows/x.yml": content}
     code, output = fleet_report(public("broken", broken), public("fine", caller(f"{GATE}@{NEWEST}")))
     assert code == 2, output
@@ -138,7 +138,7 @@ def test_a_scalar_that_is_no_valid_value_parses_as_text_and_the_workflow_shows_i
 
 
 def test_unreadable_release_tags_say_so_and_show_pins_as_commits(fleet_report, public):
-    """#123 E4, cell 9."""
+    """FLEET-25, FLEET-26."""
 
     def unreadable() -> dict[str, str]:
         raise ReleaseTagsError("git exited 128")
@@ -223,7 +223,7 @@ def unreadable_tags() -> dict[str, str]:
     ids=["a baseline", "no baseline"],
 )
 def test_the_size_cell_is_enforced_with_a_baseline_and_report_only_without(fleet_report, public, files, size):
-    """#125 cell 16, E7."""
+    """FLEET-15."""
     _, output = fleet_report(public("sized", {**caller(f"{GATE}@{NEWEST}"), **files}), tags=first_releases())
     assert cell(output, "o/sized", "size") == size
 
@@ -242,7 +242,7 @@ def test_the_size_cell_is_enforced_with_a_baseline_and_report_only_without(fleet
          "unreadable tags"],
 )
 def test_a_cell_never_claims_more_than_the_oldest_pinned_release(fleet_report, public, refs, tags, code, size):
-    """#125 cell 17, E16, E17, E12: only an unreadable tag list makes the run red."""
+    """FLEET-18, FLEET-22, FLEET-26, FLEET-27: only an unreadable tag list makes the run red."""
     files = {f".github/workflows/{n}.yml": f"jobs:\n  gate:\n    uses: {GATE}@{ref}\n" for n, ref in enumerate(refs)}
     result, output = fleet_report(public("pinned", files), tags=tags)
     assert result == code, output
@@ -273,7 +273,7 @@ CLONE = Rule.CLONE.release
     ids=["a pin at the clone release", "an older tag"],
 )
 def test_a_pinned_gate_reports_clones_whatever_the_clone_table_says(pin, words, has_clone_table):
-    """#137 tests 1 and 4: no tag before the clone-table release enforces clone."""
+    """FLEET-17, FLEET-18: no tag before the clone-table release enforces clone."""
     release = gate_release((gate_call(pin),), False, CLONE_RELEASES)
     assert rule_cell(CLONE, release, declared(has_clone_table=has_clone_table)) == words
 
@@ -282,7 +282,7 @@ def test_a_pinned_gate_reports_clones_whatever_the_clone_table_says(pin, words, 
     ("has_clone_table", "words"), [(True, "enforced"), (False, "report-only")], ids=["a clone table", "no clone table"]
 )
 def test_a_gate_pinned_at_the_clone_table_release_enforces_clones_with_a_clone_table(has_clone_table, words):
-    """#162: v0.5.0 is the first tag that enforces the clone table."""
+    """FLEET-17: v0.5.0 is the first tag that enforces the clone table."""
     release = gate_release((gate_call(CLONE_TABLE_PIN),), False, CLONE_RELEASES)
     assert rule_cell(CLONE, release, declared(has_clone_table=has_clone_table)) == words
 
@@ -291,7 +291,7 @@ def test_a_gate_pinned_at_the_clone_table_release_enforces_clones_with_a_clone_t
     ("has_clone_table", "words"), [(True, "enforced"), (False, "report-only")], ids=["a clone table", "no clone table"]
 )
 def test_the_gates_own_repository_enforces_clones_with_a_clone_table(has_clone_table, words):
-    """#137 test 2."""
+    """FLEET-17."""
     release = gate_release((gate_call(None),), True, CLONE_RELEASES)
     assert rule_cell(CLONE, release, declared(has_clone_table=has_clone_table)) == words
 
@@ -303,7 +303,7 @@ TEST_LAYOUT = Rule.TEST_LAYOUT.release
     ("has_judged_project", "words"), [(True, "enforced"), (False, "no judged project")], ids=["a judged project", "none"]
 )
 def test_main_enforces_test_layout_only_where_a_project_is_judged(has_judged_project, words):
-    """#196 sentence 9: where the gate knows the rule, the cell says whether any project in the clone is judged."""
+    """FLEET-20: where the gate knows the rule, the cell says whether any project in the clone is judged."""
     release = gate_release((gate_call(None),), True, CLONE_RELEASES)
     assert rule_cell(TEST_LAYOUT, release, declared(has_judged_project=has_judged_project)) == words
 
@@ -314,7 +314,7 @@ def test_main_enforces_test_layout_only_where_a_project_is_judged(has_judged_pro
     ids=["before the first release", "a judged project", "none"],
 )
 def test_a_pinned_gate_judges_test_layout_from_the_tag_that_first_ships_it(pin, has_judged_project, words):
-    """docs/commands.md rule cells, #249: v0.7.0 is the first tag that wires test-layout, for a judged project."""
+    """FLEET-18, FLEET-20: v0.7.0 is the first tag that wires test-layout, for a judged project."""
     tags = {"v0.6.1": "e" * 40, "v0.7.0": "f" * 40}
     release = gate_release((gate_call(tags[pin]),), False, tags)
     assert rule_cell(TEST_LAYOUT, release, declared(has_judged_project=has_judged_project)) == words
@@ -322,7 +322,7 @@ def test_a_pinned_gate_judges_test_layout_from_the_tag_that_first_ships_it(pin, 
 
 @pytest.mark.parametrize("rule_id", ["test-import", "python-floor", "python-security", "python-print"])
 def test_a_rule_judging_every_python_project_needs_no_applicability_cell(rule_id):
-    """docs/commands.md rule cells: the rule judges every Python project, so main enforces it with no applicability cell."""
+    """FLEET-20: the rule judges every Python project, so main enforces it with no applicability cell."""
     release = gate_release((gate_call(None),), True, CLONE_RELEASES)
     assert rule_cell(Rule(rule_id).release, release, declared()) == "enforced"
 
@@ -341,7 +341,7 @@ def test_a_rule_judging_every_python_project_needs_no_applicability_cell(rule_id
     ],
 )
 def test_a_pinned_gate_has_a_rule_from_the_tag_that_first_ships_it(rule_id, before, first):
-    """#249: the tags' check wires each rule from its first tag on, unconditionally."""
+    """FLEET-18: the tags' check wires each rule from its first tag on, unconditionally."""
     tags = {before: "a" * 40, first: "b" * 40}
     rule = Rule(rule_id).release
     assert rule_cell(rule, gate_release((gate_call("a" * 40),), False, tags), declared()) == f"not in {before}"
@@ -362,13 +362,13 @@ def test_a_pinned_gate_has_a_rule_from_the_tag_that_first_ships_it(rule_id, befo
          "a package without a project", "a package only in tests"],
 )
 def test_the_report_cell_for_test_layout_is_read_from_the_clone(fleet_report, gate_clone, files, words):
-    """#196 sentence 9, E3: the clone's tracked files decide the cell, on the gate's own repository."""
+    """FLEET-20: the clone's tracked files decide the cell, on the gate's own repository."""
     result, output = fleet_report(gate_clone({**caller("./.github/workflows/gate.yml"), **files}), tags=first_releases())
     assert (result, cell(output, GATE_REPOSITORY, "test-layout")) == (0, words), output
 
 
 def test_a_malformed_baseline_makes_the_gates_own_clone_cell_unreadable_and_the_run_red(fleet_report, gate_clone):
-    """#137 test 3: the cell owns the failure, as #125 cell 22 rules."""
+    """FLEET-24, FLEET-26: the cell owns the failure."""
     broken = {**caller("./.github/workflows/gate.yml"), ratchet.BASELINE_PATH: "[file_lines\n"}
     result, output = fleet_report(gate_clone(broken), tags=first_releases())
     assert result == 2, output
@@ -377,14 +377,14 @@ def test_a_malformed_baseline_makes_the_gates_own_clone_cell_unreadable_and_the_
 
 @pytest.mark.parametrize(("pin", "words"), [("v0.5.0", "enforced"), ("v0.4.0", "report-only")], ids=["the switch", "older"])
 def test_a_later_switch_applies_from_the_tag_that_names_it(pin, words):
-    """#137 test 5."""
+    """FLEET-17."""
     rule = RuleRelease("future", "v0.1.0", Switch.REPORT_ONLY, SwitchChange("v0.5.0", Switch.CLONE_TABLE))
     release = gate_release((gate_call("e" * 40),), False, {**FIRST_RELEASES, pin: "e" * 40})
     assert rule_cell(rule, release, declared(has_clone_table=True)) == words
 
 
 def test_a_rule_without_a_release_is_not_released_on_a_pinned_gate():
-    """#125 cell 18, E7."""
+    """FLEET-19."""
     unreleased = RuleRelease("future", None, Switch.REPORT_ONLY)
     release = gate_release((gate_call(NEWEST),), False, FIRST_RELEASES)
     assert rule_cell(unreleased, release, declared()) == "not released"
@@ -404,7 +404,7 @@ def test_a_rule_without_a_release_is_not_released_on_a_pinned_gate():
          "two configs, no release"],
 )
 def test_the_import_contract_cell_follows_the_import_linter_config(fleet_report, public, files, pin, code, cell_words):
-    """#125 cell 19, E7, E19: two configs leave it open which one the gate runs, but only where the cell shows it."""
+    """FLEET-16, FLEET-18, FLEET-21, FLEET-22, FLEET-24, FLEET-27: two configs leave it open which one the gate runs, but only where the cell shows it."""
     result, output = fleet_report(public("layered", {**pinned_gate(pin), **files}), tags=first_releases())
     assert result == code, output
     assert cell(output, "o/layered", "import-contract") == cell_words
@@ -413,7 +413,7 @@ def test_the_import_contract_cell_follows_the_import_linter_config(fleet_report,
 def test_without_a_gate_every_cell_that_needs_one_is_a_dash_and_an_unreadable_workflow_makes_each_unreadable(
     fleet_report, public
 ):
-    """#125 cell 20, E18."""
+    """FLEET-21, FLEET-23."""
     broken = {".github/workflows/x.yml": "jobs: [unclosed\n"}
     code, output = fleet_report(public("bare", {CONFIG: TWO_JOBS}), public("broken", broken), tags=first_releases())
     assert code == 2, output
@@ -433,7 +433,7 @@ def test_without_a_gate_every_cell_that_needs_one_is_a_dash_and_an_unreadable_wo
     ids=["jobs counted", "legacy fail", "no config", "malformed config", "malformed config, no gate"],
 )
 def test_the_jobs_cell_counts_and_the_legacy_cell_names_the_mode(fleet_report, public, files, pin, code, jobs, legacy):
-    """#125 cell 21, E6, E9, E11: an unreadable config counts only where a cell shows it."""
+    """FLEET-12, FLEET-21, FLEET-24: an unreadable config counts only where a cell shows it."""
     result, output = fleet_report(public("gated", {**pinned_gate(pin), **files}), tags=first_releases())
     assert result == code, output
     assert (cell(output, "o/gated", "Mandatory jobs"), cell(output, "o/gated", "Sonar legacy")) == (jobs, legacy)
@@ -452,7 +452,7 @@ def test_the_jobs_cell_counts_and_the_legacy_cell_names_the_mode(fleet_report, p
 def test_a_malformed_size_baseline_is_named_in_the_size_cell_only_where_the_cell_shows_it(
     fleet_report, public, pin, code, size
 ):
-    """#125 cell 22, E11."""
+    """FLEET-18, FLEET-21, FLEET-22, FLEET-24."""
     broken = {**pinned_gate(pin), ratchet.BASELINE_PATH: "[file_lines\n"}
     result, output = fleet_report(public("sized", broken), tags=first_releases())
     assert result == code, output
@@ -460,7 +460,7 @@ def test_a_malformed_size_baseline_is_named_in_the_size_cell_only_where_the_cell
 
 
 def test_the_heading_sentence_names_the_rules_the_oldest_release_always_enforces(fleet_report, public):
-    """#125 cell 24, E8: the five rules get a sentence, not five columns."""
+    """FLEET-13, FLEET-14: the five rules get a sentence, not five columns."""
     _, output = fleet_report(public("any", {}), tags=first_releases())
     assert "Every gate release enforces env-file, compose-port, secret, workflow-lint and workflow-security." in output
     assert MATRIX_COLUMNS[5:] == ("size", "clone", "import-contract", "claude-md", "root-layout", "file-suffix", "script-name", "script-header", "test-layout", "test-import", "python-floor", "python-security", "python-print", "advisory")
