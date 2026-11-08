@@ -1,8 +1,0 @@
-claim_id = "23d8ee0689a7449091e0dedec3de0662"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "0be42839e8d5ded0027fdf5b67ef6e2a0959dbe4"
-branch = "claude/issue-517-d7-mask-escape-ids"
-scope = ["docs/gate.md", "docs/output.md", "tests/test_cli_output.py", "tests/test_cli_stream.py", "tests/test_output.py", "tests/test_report.py"]
-opened_commit = "5d104075ebed3a00b5cf6f4769a6ba675d66217b"
-whole_reason = "docs/output.md escape clauses and the tests that prove them, linked by MASK IDs, with the verdict's restatement of the escape made a link."
