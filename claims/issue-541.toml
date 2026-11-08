@@ -1,0 +1,7 @@
+claim_id = "323db48384834f878a43b5e6a7cfc8bf"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "43f2225b407864d6c3c81428a00ee32e75f5d3f4"
+branch = "claude/issue-541-d7-script-rule-ids"
+scope = ["docs/rules.md", "tests/test_layout.py"]
+opened_commit = "038c7febf05e3a1c08b19ee6d16795d368f89dbc"
