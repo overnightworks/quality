@@ -109,6 +109,7 @@ def test_a_row_with_a_fix_ends_in_its_fix_line():
 
 
 def test_repository_text_in_a_row_is_escaped_before_it_is_padded():
+    """MASK-1, MASK-6, MASK-9."""
     row = Row(Glyph.CLEAN, "fi\nles", Event.CLEAN, "a\x1b[35mb")
     text = plain((row,))
     assert text == "  ✓ fi\\x0ales     clean          a\\x1b[35mb\n"
@@ -223,6 +224,7 @@ def test_a_styled_verdict_and_pair_hold_exactly_the_plain_words():
 
 
 def test_repository_text_reaches_a_terminal_only_as_escaped_text():
+    """MASK-1, MASK-6, MASK-7."""
     row = Row(Glyph.COULD_NOT_CHECK, "files", Event.CLEAN, "\x1b[35m\u202e")
     styled = written(Terminal, lambda channel: output.write_rows((row,), channel))
     remaining = without_sgr(styled)
@@ -390,6 +392,7 @@ def test_a_finding_with_a_line_shows_its_location():
 
 
 def test_repository_text_is_escaped_before_it_is_padded():
+    """MASK-2, MASK-6, MASK-7, MASK-9."""
     hostile = "x\nesc\x1b[31m\u202eend\u2028"
     findings = [finding(f"{hostile}.env", FindingEvent.TRACKED, hostile, hostile), finding("short", FindingEvent.TRACKED, "plain", hostile)]
     printed = findings_written(findings)
@@ -458,6 +461,7 @@ def test_findings_and_notes_share_one_location_column_and_one_event_column(event
 
 @pytest.mark.parametrize("on_a_note", [False, True], ids=["finding", "note"])
 def test_an_event_prints_escaped_and_its_column_holds(on_a_note):
+    """MASK-6, MASK-9."""
     class Hostile(StrEnum):
         ESCAPES = "\x1b\x1b"
 
@@ -496,6 +500,7 @@ def test_a_note_row_is_painted_dim_as_a_whole_as_an_area_note_row_is():
 
 
 def test_a_notes_location_and_fact_are_escaped_before_they_are_padded():
+    """MASK-4, MASK-6, MASK-7, MASK-9."""
     hostile = "x\nesc\x1b[31m\u202eend\u2028"
     printed = findings_written([], notes=[note(hostile, hostile), note("short")])
     (row,) = note_rows(printed, printable(hostile))

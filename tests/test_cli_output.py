@@ -235,7 +235,7 @@ ENV_NAME_CASES = [
 
 @pytest.mark.parametrize(("name", "escaped"), ENV_NAME_CASES, ids=[escaped for _, escaped in ENV_NAME_CASES])
 def test_an_env_name_with_a_control_format_or_separator_character_prints_as_one_escaped_line(build_repo, capsys, name, escaped):
-    """#97 rule 2, cell 7 (E4) and #228 rule 7: one row with the name escaped, equal to the rule runner's finding."""
+    """MASK-2, MASK-6, MASK-7: one row with the name escaped, equal to the rule runner's finding."""
     repo = build_repo({name: "A=1\n"})
     code, lines = door_lines(capsys, CHECK_WORD, cwd=repo)
     (finding,) = rule_findings(repo, Rule.ENV_FILE)
@@ -257,7 +257,7 @@ FILE_AND_RAISE = "web\n  File \"a.py\", line 1, in b\n  raise E('forged')\nx"
     ids=["service name", "port text", "File and raise lines"],
 )
 def test_a_compose_finding_with_a_control_character_is_one_escaped_row(build_repo, capsys, services, escaped_text):
-    """#97 rule 2, cell 8 (E4): the service and the port text print escaped in the finding's own row."""
+    """MASK-2, MASK-6: the service and the port text print escaped in the finding's own row."""
     repo = build_repo(compose_services(*services))
     code, lines = door_lines(capsys, CHECK_WORD, cwd=repo)
     (finding,) = rule_findings(repo, Rule.COMPOSE_PORT)
@@ -280,7 +280,7 @@ def test_a_compose_finding_with_a_control_character_is_one_escaped_row(build_rep
     ids=["compose file name", "importlinter section header that echoes"],
 )
 def test_a_refusal_is_one_escaped_line(build_repo, capsys, files, refusal_start):
-    """#97 rule 2, cell 9 (E5): a refusal naming repository text is one line and exit 2."""
+    """MASK-3, MASK-6, MASK-10: a refusal naming repository text is one line and exit 2."""
     code, lines = door_lines(capsys, CHECK_WORD, cwd=build_repo(files))
     refusals = [line for line in lines if line.startswith(refusal_start)]
     assert (code, len(refusals)) == (2, 1), lines
@@ -291,7 +291,7 @@ def test_a_refusal_is_one_escaped_line(build_repo, capsys, files, refusal_start)
 
 
 def test_a_source_name_that_is_not_utf8_is_still_refused_as_one_line(build_repo, capsys):
-    """#97 rule 2, cell 12: invalid UTF-8 in a tracked source name is refused before import-linter renders it."""
+    """MASK-3, MASK-10: invalid UTF-8 in a tracked source name is refused before import-linter renders it."""
     files = {**SHOP_DB_IMPORTS_WEB, "src/shop/lat\udce9.py": "import shop.web\n", "pyproject.toml": toml(FORBIDDEN)}
     code, lines = door_lines(capsys, CHECK_WORD, cwd=build_repo(files))
     refusals = [line for line in lines if line.startswith("  ✗ imports       not checked    ")]
@@ -300,7 +300,7 @@ def test_a_source_name_that_is_not_utf8_is_still_refused_as_one_line(build_repo,
 
 
 def test_a_scanner_stderr_with_several_lines_prints_as_one_escaped_line(build_repo, served_scanners, capsys):
-    """#97 rule 2, cell 14 (E5): the stderr tail of a failing scanner joins on `\\x0a`, never a line of its own."""
+    """MASK-3, MASK-6, MASK-10: the stderr tail of a failing scanner joins on `\\x0a`, never a line of its own."""
     fake_scanner(served_scanners, "actionlint", on_scan="echo first >&2; echo '::error::second' >&2; exit 2")
     repo = build_repo({"README.md": "x\n", ".github/workflows/w.yml": "on: push\n"})
     code, lines = door_lines(capsys, CHECK_WORD, cwd=repo)
@@ -311,7 +311,7 @@ def test_a_scanner_stderr_with_several_lines_prints_as_one_escaped_line(build_re
 
 
 def test_an_unused_allowance_with_a_control_character_prints_escaped(build_repo, capsys):
-    """#97 rule 2, cell 13 (E4): the unused allowance line names its file escaped."""
+    """MASK-4, MASK-6: the unused allowance line names its file escaped."""
     config = allow_config(("aws-access-token", "no\\u001bthere.txt", FAKE_KEY, "stale entry"))
     repo = build_repo({"quality/config.toml": config})
     code, lines = door_lines(capsys, CHECK_WORD, cwd=repo)
@@ -322,7 +322,7 @@ def test_an_unused_allowance_with_a_control_character_prints_escaped(build_repo,
 
 
 def test_a_lowered_entry_for_a_file_with_a_control_character_prints_escaped(build_repo, capsys):
-    """The lowered row names the file escaped."""
+    """MASK-2, MASK-6: the lowered row names the file escaped."""
     held = '[file_lines]\n"src/esc\\u001bape.py" = 900\n\n[clones]\n'
     repo = build_repo({"src/esc\x1bape.py": "x = 1\n" * 810, BASELINE_PATH: held})
     code, lines = door_lines(capsys, *FIX_WORDS, cwd=repo)
@@ -332,7 +332,7 @@ def test_a_lowered_entry_for_a_file_with_a_control_character_prints_escaped(buil
 
 
 def test_a_fix_refusal_for_a_file_that_is_not_utf8_prints_its_surrogate_escaped(build_repo, capsys):
-    """The invalid-UTF-8 branch is one escaped refusal row, exit 2."""
+    """MASK-3, MASK-5, MASK-10: the invalid-UTF-8 branch is one escaped refusal row, exit 2."""
     repo = build_repo({"src/lat\udce9.py": "x = 1\n" * 810})
     code, lines = door_lines(capsys, *FIX_WORDS, cwd=repo)
     assert code == 2

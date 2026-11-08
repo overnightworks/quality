@@ -30,7 +30,7 @@ def test_a_finding_without_an_event_cannot_be_built():
      "nbsp\u00a0.env", "e\u0301.env", "smile\U0001f600.env", "\u540d\u524d.env", "\u05e9\u05dd.env", "back\\u202e.env"],
 )
 def test_a_name_printable_unchanged_is_a_shell_word_and_printable_is_idempotent(name):
-    """#97 rule 1, cell 17: a word exactly when `printable(x) == x`."""
+    """MASK-8: text the escape leaves alone prints as itself, and such a name is a shell word."""
     assert printable(name) == name
     assert shell_word(name) is not None
 
@@ -41,7 +41,7 @@ def test_a_name_printable_unchanged_is_a_shell_word_and_printable_is_idempotent(
      "ps\u2029", "tag\U000e0041", "langtag\U000e0001"]
 )
 def test_a_name_printable_changes_has_no_shell_word_and_printing_it_twice_changes_nothing(name):
-    """#97 rule 1, cell 17: no word where `printable(x) != x`; the escape is idempotent."""
+    """MASK-6, MASK-7, MASK-8: a name the escape changes has no shell word, and escaping it twice changes nothing."""
     assert printable(name) != name
     assert shell_word(name) is None
     assert printable(printable(name)) == printable(name)
@@ -56,7 +56,7 @@ def test_a_name_printable_changes_has_no_shell_word_and_printing_it_twice_change
     ],
 )
 def test_a_format_or_separator_character_prints_as_its_code_point(character, printed):
-    """#228 rule 7: a format character, U+2028 and U+2029 print as `\\uNNNN` (`\\UNNNNNNNN` above U+FFFF), by category."""
+    """MASK-7: a format character, U+2028 and U+2029 print as `\\uNNNN` (`\\UNNNNNNNN` above U+FFFF), by category."""
     assert printable(character) == printed
 
 

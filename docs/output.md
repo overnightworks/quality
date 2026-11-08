@@ -208,13 +208,13 @@ Ruled by the operator:
 
 - Repository text is masked: control characters as `\xNN`, and U+2028, U+2029 and format characters as `\uNNNN` (`\UNNNNNNNN` above U+FFFF).
 
-Repository text (a file name, a service, a port, a contract or job name, a configuration entry) prints escaped in the door's own fields: a finding's location, fact and fix, refusals and notes. Invalid UTF-8 prints as `\udcNN`; every control character (line feed, carriage return, ESC, tab, DEL, C1) as `\xNN`; U+2028, U+2029 and every format character (Unicode category Cf: bidi overrides, isolates and marks, zero-width characters, the soft hyphen, the byte order mark, tag characters) as `\uNNNN` (`\UNNNNNNNN` above U+FFFF).
+Repository text (a file name, a service, a port, a contract or job name, a configuration entry) prints escaped in the door's own fields: a row's subject and fact (MASK-1), a finding's location, fact, detail lines and fix (MASK-2), refusals (MASK-3) and notes (MASK-4). Invalid UTF-8 prints as `\udcNN` (MASK-5); every control character (line feed, carriage return, ESC, tab, DEL, C1) as `\xNN` (MASK-6); U+2028, U+2029 and every format character (Unicode category Cf: bidi overrides, isolates and marks, zero-width characters, the soft hyphen, the byte order mark, tag characters) as `\uNNNN` (`\UNNNNNNNN` above U+FFFF) (MASK-7). Every other character, a backslash included, prints as itself, so escaping text that is already escaped changes nothing (MASK-8). Each field is escaped before it is padded, so the columns hold whatever the text holds (MASK-9).
 
 ```text
-    ! deploy/‮EDGE_SHA  tracked  a file without a suffix that is no executable
+    ! deploy/\u202eEDGE_SHA  tracked  a file without a suffix that is no executable
 ```
 
-A refusal's fact is one line; the lines the door means to print (an import chain, the verdict's problems, the report's tables) stay lines. A line taken from another tool's rendering prints behind `| `: actionlint's message stays one escaped line, while rich may drop a carriage return, expand a tab, or start a new marked line at a line feed in import-linter's lines.
+A refusal's fact is one line (MASK-10); the lines the door means to print (an import chain, the verdict's problems, the report's tables) stay lines. A line taken from another tool's rendering prints behind `| `: actionlint's message stays one escaped line, while rich may drop a carriage return, expand a tab, or start a new marked line at a line feed in import-linter's lines.
 
 Ruled by the operator: in GitHub Actions the door both stops workflow commands and escapes repository text.
 
