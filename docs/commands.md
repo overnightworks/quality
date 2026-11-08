@@ -45,11 +45,14 @@ misnames its commit (PIN-10) or it is below v0.10.0 (PIN-11), the run is exit `2
 row. The one exception is the commit hook: where no workflow calls the gate, `quality check secrets --staged` judges
 with the installed release and its row says `installed · no gate pins a release here` (PIN-12).
 
-Where the gate pins another commit, `check` runs as that release: the same process with the same words, folder,
-environment and terminal and its exit; `QUALITY_RUN_AT_PIN` marks that run, which never runs another. It first makes
-sure the pinned commit is the release the pin's comment names: the first time on a machine by asking quality's remote,
-which then leaves an empty record per commit and release in the user's cache directory (`$XDG_CACHE_HOME`, else
-`~/.cache`, under `overnightworks-quality/releases`); removing it costs one more question per release. Then uv prepares
+Where the gate pins another commit, `check` runs as that release (PIN-13): the same process (PIN-14) with the same
+words, folder, environment and terminal (PIN-15) and its exit (PIN-16); `QUALITY_RUN_AT_PIN` marks that run (PIN-17),
+which never runs another (PIN-18), and a value of it that quality never sets is refused with the pair that names the
+value and asks to unset the variable and run the command again (PIN-19). It first makes sure the pinned commit is the
+release the pin's comment names (PIN-20): the first time on a machine by asking quality's remote (PIN-21), which then
+leaves an empty record per commit and release (PIN-22) in the user's cache directory (`$XDG_CACHE_HOME` where it is an
+absolute path, else `~/.cache`, under `overnightworks-quality/releases`) (PIN-23); removing it costs one more question
+per release. Then uv prepares
 exactly that commit, from its cache offline where a record stands, else fetched. Offline, the pair `error: cannot fetch quality v0.10.0, which the gate pins · github.com did not answer` with `next: quality check, once online` (exit `2`) stands for every release this machine cannot run without github.com: one it has not yet checked on quality's remote, even one uv holds, and a checked one whose environment uv no longer holds. Where github.com answered but uv could not prepare the release, it is exit `2` with `error: cannot prepare quality v0.9.0, which the gate pins · uv exited 1` and two steps under a bare `next:`, the uv command that shows why, then the run again. While quality fetches or prepares the release, a terminal's stderr shows the live line ([output](output.md#colour-and-the-live-line)). In quality's checkout an installation runs the checkout's code, prepared
 through `uv run`.
 

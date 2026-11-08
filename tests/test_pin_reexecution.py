@@ -176,6 +176,8 @@ def release_row(fact: str) -> str:
 
 
 def test_the_child_judges_at_the_pin_and_names_its_fetch(scene):
+    """PIN-5, PIN-6, PIN-13, PIN-17, PIN-22: a run that re-executes judges as the pinned release, names the fetch in its
+    row on the first run and the cached release on the second, which finds the record the first left."""
     scene.composed_child("--running", f"0.10.1:vcs:{scene.commit}")
     fetched = scene.run("check", "files")
     cached = scene.run("check", "files")
@@ -201,12 +203,16 @@ def test_the_child_judges_at_the_pin_and_names_its_fetch(scene):
     ],
 )
 def test_a_child_that_is_not_the_pin_refuses(scene, running, error, step):
+    """PIN-10, PIN-18: a re-executed run that is not the pin refuses with the pair, whether its commit or its release
+    differs."""
     scene.composed_child("--running", running.format(commit=scene.commit))
     done = scene.run("check", "files")
     assert (done.returncode, done.stdout, done.stderr.splitlines()[0], step in done.stderr) == (2, "", error.format(short=scene.commit[:7]), True)
 
 
 def test_the_child_gets_the_same_words_folder_environment_and_terminal(scene):
+    """PIN-15, PIN-17: the re-executed run gets the words, the folder, the environment and the terminal it was started
+    with, and the mark."""
     folder = scene.judged / "sub"
     folder.mkdir()
     words = ("check", "debt", "--fix", "--dry-run", "-v")
@@ -219,6 +225,7 @@ def test_the_child_gets_the_same_words_folder_environment_and_terminal(scene):
 
 
 def test_the_commit_s_own_index_reaches_the_child_and_never_uv(scene):
+    """PIN-15: the commit hook's own index reaches the re-executed run."""
     for name in ("a.txt", "b.txt"):
         (scene.judged / name).write_text(f"{name}\n")
     git(scene.judged, "add", "a.txt", "b.txt")
@@ -237,6 +244,7 @@ def test_the_commit_s_own_index_reaches_the_child_and_never_uv(scene):
 
 
 def test_the_child_is_the_process(scene):
+    """PIN-14: the re-executed run is the process that was started: its pid and its parent are the same."""
     with subprocess.Popen(scene.parent("check", "files"), cwd=scene.judged, env=scene.environment(), stdout=subprocess.PIPE, stderr=subprocess.PIPE) as started:
         try:
             started.communicate(timeout=120)
@@ -252,6 +260,7 @@ def test_the_child_is_the_process(scene):
 
 @pytest.mark.parametrize(("exit_as", "expected"), [("0", 0), ("1", 1), ("2", 2), ("SIGINT", -signal.SIGINT)])
 def test_the_exit_is_the_childs(scene, exit_as, expected):
+    """PIN-16: the exit of the re-executed run, a code or a signal, is the exit."""
     assert scene.run("check", "files", FAKE_EXIT=exit_as).returncode == expected
 
 
@@ -259,6 +268,7 @@ def test_the_exit_is_the_childs(scene, exit_as, expected):
     ("closing", "expected"), [pytest.param(">&-", (False, True), id="stdout closed"), pytest.param("2>&-", (True, False), id="stderr closed")]
 )
 def test_a_closed_stream_passes_to_the_child(scene, closing, expected):
+    """PIN-15: a closed standard stream stays closed in the re-executed run, with no traceback."""
     done = scene.run("check", "files", wrap=("sh", "-c", f'exec "$@" {closing}', "_"), FAKE_EXIT="1")
     child = scene.child()
     assert (done.returncode, (child["out_open"], child["err_open"]), "Traceback" in done.stdout + done.stderr) == (1, expected, False)
@@ -281,6 +291,8 @@ def keep_another_release(scene: Scene) -> None:
     ],
 )
 def test_the_release_check_comes_before_any_uv_call(scene, arrange, calls, queried, guard):
+    """PIN-17, PIN-21, PIN-22: quality's remote is asked where no record of the commit and release stands, the answer
+    leaves the record, and the mark names whether the release was fetched."""
     arrange(scene)
     done = scene.run("check", "files")
     seen = [("--offline" in call["argv"], call["records"]) for call in scene.uv_calls()]
@@ -297,6 +309,8 @@ def test_an_unreachable_github_is_the_offline_pair(scene, cached):
 
 
 def test_a_comment_that_misnames_its_commit_runs_nothing(scene):
+    """PIN-10, PIN-20, PIN-22: a comment that misnames its commit on quality's remote is the pair, with no uv call and
+    no record."""
     git(scene.tags, "commit", "-q", "--allow-empty", "-m", "later")
     git(scene.tags, "tag", "-f", RELEASE)
     other = head_commit(scene.tags)
@@ -308,6 +322,7 @@ def test_a_comment_that_misnames_its_commit_runs_nothing(scene):
 
 
 def test_an_unwritable_record_directory_still_judges(scene):
+    """PIN-13: a record directory that refuses the record leaves the run judging as the pinned release."""
     (scene.root / "cache").mkdir(mode=0o500)
     first = scene.run("check", "files")
     guard = scene.child()["guard"]
@@ -318,6 +333,8 @@ def test_an_unwritable_record_directory_still_judges(scene):
 
 
 def test_an_editable_installation_judges_at_the_pin_only_while_clean(scene):
+    """PIN-1, PIN-4, PIN-5, PIN-13, PIN-17: an editable installation judges at the pin while its work tree is clean and
+    re-executes once a tracked file changed."""
     tool = scene.root / "tool"
     git(scene.tags, "worktree", "add", "-q", "--detach", str(tool), RELEASE)
     clean = scene.run("check", "files", running=f"0.10.1:dir:{tool}")

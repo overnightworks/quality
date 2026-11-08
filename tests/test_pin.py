@@ -247,7 +247,7 @@ def tool(tmp_path_factory) -> tuple[Path, str, str]:
 @pytest.mark.integration
 @pytest.mark.parametrize(("files", "remotes", "running", "arrange", "staged", "expected"), CASES)
 def test_the_release_that_judges_here_is_decided_from_the_gate_pin(build_repo, tool, monkeypatch, files, remotes, running, arrange, staged, expected):
-    """PIN-1, PIN-2, PIN-3, PIN-4, PIN-5, PIN-7, PIN-8, PIN-9, PIN-10, PIN-11, PIN-12: the gate pin, the running
+    """PIN-1, PIN-2, PIN-3, PIN-4, PIN-5, PIN-7, PIN-8, PIN-9, PIN-10, PIN-11, PIN-12, PIN-13: the gate pin, the running
     commit and the checkout decide which release judges, the release to re-execute into, or the refusal and its next
     step."""
     directory, tagged, later = tool
@@ -294,6 +294,7 @@ def test_a_reexecution_names_the_commit_through_uv(reexecution, flags, expected)
 
 
 def test_a_guard_quality_never_sets_is_refused(tmp_path):
+    """PIN-19: a guard value quality never sets is refused, naming the value and asking to unset it."""
     running = vcs("0.10.0", pinned_commit())(None)
     with pytest.raises(CannotJudge) as refused:
         pin.judging_release(tmp_path, CHECK, False, {pin.RUN_AT_PIN_VARIABLE: "yes"}, running=running)
@@ -310,8 +311,8 @@ def child_refusal(version: str, at: str) -> tuple[str, tuple]:
 @pytest.mark.integration
 @pytest.mark.parametrize("fetch", list(pin.Fetch))
 def test_the_child_judges_at_the_pins_commit_and_release(build_repo, fetch):
-    """PIN-1, PIN-5, PIN-6: a run that is the pinned commit judges at its release, and its row says `fetched now · `
-    where the run fetched it."""
+    """PIN-1, PIN-5, PIN-6, PIN-17: a run marked as re-executed that is the pinned commit judges at its release, and its
+    row says `fetched now · ` where the run fetched it."""
     judged = build_repo(gate_call(pinned_commit(), "v0.10.1"))
     running = vcs("0.10.1", pinned_commit())(None)
     fetched = "fetched now · " if fetch is pin.Fetch.FETCHED else ""
@@ -339,6 +340,8 @@ def test_the_child_judges_at_the_pins_commit_and_release(build_repo, fetch):
     ],
 )
 def test_the_child_never_reexecutes(build_repo, fetch, running, expected):
+    """PIN-10, PIN-18: a run the guard marks never re-executes: another commit and no recorded commit are each its
+    refusal, and so is the pin's commit at another release."""
     judged = build_repo(gate_call(pinned_commit(), "v0.10.1"))
     guard = {pin.RUN_AT_PIN_VARIABLE: fetch.value}
     running_quality = running(None)
@@ -460,10 +463,13 @@ def test_a_failed_preparation_is_its_pair(failed, reexecution, expected):
     ],
 )
 def test_the_record_directory_follows_the_cache_variables(environment, expected):
+    """PIN-23: the record directory is `$XDG_CACHE_HOME` where it is an absolute path, else `~/.cache`, under
+    `overnightworks-quality/releases`."""
     assert pin.release_records(environment) == expected
 
 
 def test_a_record_names_one_commit_and_one_release(tmp_path):
+    """PIN-22: a record names one commit and one release, and a directory that refuses it keeps none."""
     records = tmp_path / "records"
     pin.keep_record(records, pinned_commit(), "v0.10.1")
     locked = tmp_path / "locked"
