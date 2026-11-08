@@ -1,0 +1,7 @@
+claim_id = "eb62fe5211da464d8f8e9520f559ce89"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "ba066483a80b6a71d35441c0fa6026f55473e442"
+branch = "claude/issue-521-d7-compose-port-ids"
+scope = ["docs/rules.md", "tests/test_compose.py", "tests/test_compose_container_host.py"]
+opened_commit = "3079eca0a1c325709681102945ab1c9997157234"
