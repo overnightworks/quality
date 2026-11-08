@@ -501,7 +501,7 @@ def test_the_real_transport_reports_an_unreachable_server():
 
 
 def test_properties_passes_the_callers_own_clean_properties(monkeypatch, capsys, build_repo):
-    """#26 rule 3: the caller's own organization, key and allowlisted settings pass"""
+    """SONAR-56, SONAR-57, SONAR-59: the caller's own organization, key and allowlisted settings pass"""
     assert run_properties(monkeypatch, capsys, build_repo)[0] == 0
 
 
@@ -533,7 +533,7 @@ LCOV_REPORT_KEY = "sonar.javascript.lcov.reportPaths"
     ],
 )
 def test_properties_requires_every_named_coverage_report_to_exist(monkeypatch, capsys, build_repo, key, value, files, code, named):
-    """#34 rule 2: each entry of a coverage report key is judged on its own; a missing report is exit 2 naming key and entry"""
+    """SONAR-50, SONAR-51, SONAR-52, SONAR-53, SONAR-54, SONAR-55: each entry of a coverage report key is judged on its own; a missing report is exit 2 naming key and entry"""
     properties = CLEAN_PROPERTIES + f"{key}={value}\n"
     result = run_properties(monkeypatch, capsys, build_repo, properties, extra_files={name: "<coverage/>" for name in files})
     assert result[0] == code
@@ -577,26 +577,26 @@ def test_properties_requires_every_named_coverage_report_to_exist(monkeypatch, c
     ],
 )
 def test_properties_refuses_what_could_steer_the_token_naming_it(monkeypatch, capsys, build_repo, properties, named):
-    """#26 rule 3: a foreign key, endpoint family or ${...} substitution in any decoded value is exit 2, naming the key"""
+    """SONAR-57, SONAR-58, SONAR-59, SONAR-62: a foreign key, endpoint family or ${...} substitution in any decoded value is exit 2, naming the key"""
     code, _, err = run_properties(monkeypatch, capsys, build_repo, CLEAN_PROPERTIES + properties + "\n")
     assert code == 2
     assert named in err
 
 
 def test_properties_drops_a_final_unpaired_backslash_like_java_properties(monkeypatch, capsys, build_repo):
-    """#26 rule 3: a last line ending in a backslash without a newline is read as java.util.Properties reads it"""
+    """SONAR-62: a last line ending in a backslash without a newline is read as java.util.Properties reads it"""
     properties = "sonar.projectKey=overnightworks_quality\nsonar.organization=overnightworks\\"
     assert run_properties(monkeypatch, capsys, build_repo, properties)[0] == 0
 
 
 def test_properties_refuses_a_properties_file_without_the_callers_key(monkeypatch, capsys, build_repo):
-    """#26 rule 3: a file that does not name the caller's project key is exit 2"""
+    """SONAR-59: a file that does not name the caller's project key is exit 2"""
     code, _, err = run_properties(monkeypatch, capsys, build_repo, "sonar.organization=overnightworks\n")
     assert (code, "sonar.projectKey" in err) == (2, True)
 
 
 def test_properties_lets_a_lone_dollar_a_brace_and_comments_pass(monkeypatch, capsys, build_repo):
-    """#26 rule 3: a lone dollar or a brace without a dollar is not a substitution; comments are skipped"""
+    """SONAR-58, SONAR-62: a lone dollar or a brace without a dollar is not a substitution; comments are skipped"""
     properties = CLEAN_PROPERTIES + "# sonar.host.url=https://evil.example\n! sonar.region=us\nsonar.projectName=cost $ {x}\n"
     assert run_properties(monkeypatch, capsys, build_repo, properties)[0] == 0
 
@@ -607,20 +607,20 @@ def test_properties_lets_a_lone_dollar_a_brace_and_comments_pass(monkeypatch, ca
     ids=["empty token", "unset token"],
 )
 def test_properties_refuses_a_missing_token_and_never_skips(monkeypatch, capsys, build_repo, environment):
-    """#26 rule 2: an empty or unset token is exit 2 naming SONAR_TOKEN"""
+    """SONAR-61: an empty or unset token is exit 2 naming SONAR_TOKEN"""
     code, _, err = run_properties(monkeypatch, capsys, build_repo, environment=environment)
     assert (code, "SONAR_TOKEN is empty" in err) == (2, True)
 
 
 def test_properties_refuses_a_tracked_scanner_work_directory(monkeypatch, capsys, build_repo):
-    """#26 rule 3: a committed .scannerwork/report-task.txt is exit 2"""
+    """SONAR-60: a committed .scannerwork/report-task.txt is exit 2"""
     files = {".scannerwork/report-task.txt": "ceTaskId=x\n"}
     code, _, err = run_properties(monkeypatch, capsys, build_repo, extra_files=files)
     assert (code, ".scannerwork" in err) == (2, True)
 
 
 def test_properties_refuses_a_repository_without_properties(monkeypatch, capsys, build_repo):
-    """#26 rule 3: no sonar-project.properties is exit 2"""
+    """SONAR-47: no sonar-project.properties is exit 2"""
     code, _, err = run_properties(monkeypatch, capsys, build_repo, properties=None)
     assert (code, "sonar-project.properties" in err) == (2, True)
 
@@ -675,7 +675,7 @@ def properties_link_inside(repo: Path, elsewhere: Path) -> None:
 def test_a_properties_file_quality_cannot_use_is_exit_2_naming_it_repository_relative(
     monkeypatch, capsys, build_repo, elsewhere, arrange, code, said
 ):
-    """#254 / AGENTS.md: sonar-project.properties is read inside the checkout and named repository-relative"""
+    """SONAR-47, SONAR-63, SONAR-64: sonar-project.properties is read inside the checkout and named repository-relative"""
     set_environment(monkeypatch, PULL_REQUEST_ENVIRONMENT)
     repo = build_repo({"README.md": "x\n"})
     arrange(repo, elsewhere)
@@ -703,7 +703,7 @@ def test_a_repository_without_a_config_is_refused_before_any_request(monkeypatch
 
 
 def test_properties_with_sonar_off_reads_no_token_and_writes_off(monkeypatch, capsys, build_repo, tmp_path):
-    """With [gate] sonar = false the door needs no properties file and no token, hands the job sonar=off and exits 0."""
+    """SONAR-66: With [gate] sonar = false the door needs no properties file and no token, hands the job sonar=off and exits 0."""
     step_output = tmp_path / "github_output"
     code, out, err = run_properties(
         monkeypatch, capsys, build_repo, properties=None, environment=environment_without_token(), extra_files=sonar_off_files(),
@@ -722,7 +722,7 @@ def test_properties_with_sonar_off_reads_no_token_and_writes_off(monkeypatch, ca
     ids=["a properties file", "a token"],
 )
 def test_properties_with_sonar_off_refuses_the_wiring_of_a_scan(monkeypatch, capsys, build_repo, tmp_path, properties, token_set, fact):
-    """While SonarCloud is off, a properties file or a passed token is exit 2 and nothing is handed to the job."""
+    """SONAR-65: While SonarCloud is off, a properties file or a passed token is exit 2 and nothing is handed to the job."""
     step_output = tmp_path / "github_output"
     code, out, err = run_properties(
         monkeypatch, capsys, build_repo, properties=properties,
@@ -733,7 +733,7 @@ def test_properties_with_sonar_off_refuses_the_wiring_of_a_scan(monkeypatch, cap
 
 
 def test_properties_without_the_key_still_refuses_an_empty_token(monkeypatch, capsys, build_repo, tmp_path):
-    """A config without the key runs SonarCloud, so an empty token stays exit 2 and nothing is written."""
+    """SONAR-13, SONAR-61: A config without the key runs SonarCloud, so an empty token stays exit 2 and nothing is written."""
     step_output = tmp_path / "github_output"
     files = {"quality/config.toml": '[gate]\nmandatory_jobs = ["check"]\n'}
     code, _, err = run_properties(
@@ -744,7 +744,7 @@ def test_properties_without_the_key_still_refuses_an_empty_token(monkeypatch, ca
 
 
 def test_properties_without_a_config_still_refuses_an_empty_token(monkeypatch, capsys, build_repo, tmp_path):
-    """A repository without quality/config.toml runs SonarCloud, so a missing token is exit 2 and nothing is written."""
+    """SONAR-13, SONAR-61: A repository without quality/config.toml runs SonarCloud, so a missing token is exit 2 and nothing is written."""
     step_output = tmp_path / "github_output"
     (tmp_path / "quality" / "config.toml").unlink()
     code, _, err = run_properties(
