@@ -1,7 +1,0 @@
-claim_id = "b64546e988f64032afeb112c90ffd902"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "fe2f1f45c5dde7ccf2adfbb29c4233060bdebc06"
-branch = "claude/issue-559-d7-report-measure-ids"
-scope = ["docs/commands.md", "tests/test_fleet.py", "tests/test_ratchet_languages.py"]
-opened_commit = "2dbdf232f02432a25411e05310aa60a30978d8eb"
