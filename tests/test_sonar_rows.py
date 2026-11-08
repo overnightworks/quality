@@ -335,6 +335,7 @@ def test_ignored_conditions_are_the_gate_rows_fact(capsys, findings_checkout, ga
     ],
 )
 def test_an_unanalysed_default_branch_reads_legacy_unknown(capsys, findings_checkout, environment, task, out):
+    """SONAR-45, SONAR-67."""
     findings_checkout()
     fake = sonar_answering(branches=()) if task is None else sonar_answering(task=task, branches=())
     assert (drive(capsys, ["findings"], environment, fake), fake.urls_to(LEGACY_COUNT)) == ((0, out, ""), [])
