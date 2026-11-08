@@ -11,7 +11,16 @@ Ruled by the operator:
 - Every row reads `glyph · subject · event · fact`. A finding sits indented under its area row with `path:line` right after the glyph; one `fix:` line follows the last of consecutive findings that share the fix.
 - Findings under their area with a `fix:` line: indented under the area row, columns aligned per area; `fix:` under the last of consecutive findings with the same fix. A finding without a line shows only the path.
 
-The columns are the glyph (state at a glance), the subject (the area, or `path:line` of the finding), the event (one typed word: what is the case), the fact (values, a few words) and then `fix:` (what you do). A finding is `! <path[:line]>  <event>  <fact>`. Path and event align per area by display width, in every stream: an East Asian wide character takes two cells and a combining mark none; spacing marks, Hangul conjoining letters, skin-tone modifiers and emoji sequences are not measured. The findings of an area stand in run order (O14). A finding's lines from another tool's rendering (import-linter's broken contract chain and guidance, actionlint's message) stand under its row behind the marker `| `, six spaces deep, before the run's `fix:`; a fix that asks for an entry ends with `:` and the entry's lines stand under it, two spaces deeper, whole and never shortened. A security finding's fix names the line its `# noqa` must stand on, and a code and ruff's message are the fact.
+The columns are the glyph (state at a glance), the subject (the area, or `path:line` of the finding), the event (one
+typed word: what is the case), the fact (values, a few words) and then `fix:` (what you do) (ROW-1). A finding is
+`! <path[:line]>  <event>  <fact>`, indented under its area row (ROW-2). One `fix:` line follows the last of
+consecutive findings that share the fix (ROW-3). Path and event align per area by display width, in every stream: an
+East Asian wide character takes two cells and a combining mark none (ROW-4); spacing marks, Hangul conjoining letters,
+skin-tone modifiers and emoji sequences are not measured. The findings of an area stand in run order (O14). A
+finding's lines from another tool's rendering (import-linter's broken contract chain and guidance, actionlint's
+message) stand under its row behind the marker `| `, six spaces deep, before the run's `fix:` (ROW-5); a fix that asks
+for an entry ends with `:` and the entry's lines stand under it, two spaces deeper, whole and never shortened (ROW-6).
+A security finding's fix names the line its `# noqa` must stand on, and a code and ruff's message are the fact.
 
 Areas run in the order `files`, `debt`, `imports`, `secrets`, `workflows`, `dependencies`, `code`. The first row of a run names the release that judges ([commands](commands.md#which-release-judges)).
 
@@ -36,6 +45,14 @@ Areas run in the order `files`, `debt`, `imports`, `secrets`, `workflows`, `depe
 ! 5 findings in 3 areas · 4 areas clean · 14s
 ```
 
+Two other release rows ([commands](commands.md#which-release-judges)), for quality's own checkout and for the commit
+hook where no gate pins a release:
+
+```text
+  · release       this checkout  0.10.1.dev3+g5d1e0b7 · quality judges itself
+  · release       v0.10.0        installed · no gate pins a release here
+```
+
 One event word stands per kind of finding, shared across rules (`report.FindingEvent`). The events, facts and fixes of the rows are O12, O14, O15, O16, O18 and O19 for `files`, O21 and O22 for `debt`, O23 and O25 for `imports`, O28, O29, O32 and O33 for `secrets`, O36, O37, O38 and O39 for `workflows` and O41, O42, O43, O44, O45 and O46 for `dependencies`. The env fix names the file for `.gitignore` only where it is its own shell word, else `it`.
 
 ### Rule names
@@ -45,7 +62,9 @@ Ruled by the operator:
 - Rule names only in an allowance fix: a `fix:` line that asks for an `[[….allow]]` entry names the rule, because the entry needs it.
 - A config refusal's fact may name the values a config key takes, rule ids included, and the example to copy may hold the entry's rule line; this is the one exception to the rule that no rule name stands outside an allowance's `fix:`.
 
-No rule name stands in a row (`compose-port`, `env-file`); the event says it in words. The areas replace the rule names in the verdict, and `quality check --help` says which rules an area holds.
+No rule name stands in a row (`compose-port`, `env-file`); the event says it in words (ROW-7). The areas replace the
+rule names in the verdict, and [`quality check --help`](commands.md#help-and-wrong-invocations) says which rules an
+area holds.
 
 ### Area rows
 

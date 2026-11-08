@@ -72,7 +72,8 @@ def verdict_line(**counts) -> str:
     ],
     ids=["fact", "empty fact is stripped", "one", "several", "note", "a count that takes no plural"],
 )
-def test_a_row_stands_in_the_pictures_columns(row, expected):
+def test_a_row_prints_its_glyph_subject_event_and_fact_in_columns(row, expected):
+    """ROW-1: a row prints its glyph, subject, event and fact in columns."""
     assert plain((row,)) == expected
 
 
@@ -97,6 +98,7 @@ def test_a_line_below_a_sub_line_is_painted_as_a_rows_fact_is(whole):
 
 
 def test_a_row_with_a_fix_ends_in_its_fix_line():
+    """ROW-1: a row with a fix ends in its `fix:` line."""
     row = Row(Glyph.NOTE, "debt", Event.CLEAN, "not recorded", fix="run it like this")
     assert plain((row,)).splitlines() == ["  · debt          clean          not recorded", "      fix: run it like this"]
 
@@ -286,12 +288,14 @@ def area_row_indent() -> int:
 
 
 def test_a_finding_prints_its_row_then_its_fix_deeper_than_an_area_row():
+    """ROW-2: a finding stands under its area row, deeper than it, and its fix stands deeper still."""
     (row,) = finding_rows(findings_written([finding("a.env", FindingEvent.TRACKED, "the fact", "the fix")]), "a.env")
     assert (row.event, row.fact, row.fix, row.fix_follows) == (FindingEvent.TRACKED, "the fact", "the fix", True)
     assert area_row_indent() < row.indent < row.fix_indent
 
 
 def test_the_event_and_the_fact_start_at_one_column_after_the_longest_location_and_event():
+    """ROW-4: the findings of an area start their event and their fact at one column each, after the longest entry."""
     findings = [
         finding("a.env", FindingEvent.TRACKED, "first fact", "one"),
         finding("deploy/longer.env", FindingEvent.PUBLISHED_PORT, "second fact", "two"),
@@ -317,6 +321,7 @@ def test_the_event_and_the_fact_start_at_one_column_after_the_longest_location_a
     ids=["equal pair", "alternating", "two runs"],
 )
 def test_one_fix_follows_the_last_finding_of_each_run_of_equal_fixes(fixes, fix_follows):
+    """ROW-3: one fix follows the last finding of each run of equal fixes."""
     findings = [finding(f"{number}.env", FindingEvent.TRACKED, fix=f"fix {fix}") for number, fix in enumerate(fixes)]
     printed = findings_written(findings)
     rows = [row for number in range(len(fixes)) for row in finding_rows(printed, f"{number}.env")]
@@ -326,6 +331,7 @@ def test_one_fix_follows_the_last_finding_of_each_run_of_equal_fixes(fixes, fix_
 
 
 def test_an_event_findings_detail_prints_escaped_under_its_row_before_the_fix():
+    """MASK-2, ROW-5: a finding's detail lines stand escaped behind the marker under its row, before its fix."""
     detail = ("one\n::error::d", "", "  two\x1b")
     found = Finding("some-rule", "a.env", None, "a fact", "a fix", detail=detail, event=FindingEvent.BROKEN)
     printed = findings_written([found])
@@ -350,6 +356,7 @@ ENTRY = Example("copy this", ("[[table]]", 'key = "esc\x1b"'))
 
 
 def test_a_fix_with_lines_to_copy_prints_its_label_then_each_line_deeper_and_escaped():
+    """MASK-2, ROW-6: a fix with lines to copy ends its label with a colon and stands each line deeper and escaped."""
     found = finding("a.env", FindingEvent.SECRET, fix=ENTRY)
     block = decode_block(findings_written([found]).splitlines())
     (row,) = [line for line in block if isinstance(line, FindingLine)]
@@ -362,6 +369,7 @@ def test_a_fix_with_lines_to_copy_prints_its_label_then_each_line_deeper_and_esc
 
 
 def test_two_findings_with_equal_lines_to_copy_print_them_once():
+    """ROW-3, ROW-6: two findings that share lines to copy print the fix and the lines once."""
     printed = findings_written([finding(f"{number}.env", FindingEvent.SECRET, fix=ENTRY) for number in range(2)])
     block = decode_block(printed.splitlines())
     assert (sum(isinstance(line, FixLine) for line in block), sum(isinstance(line, CopyLine) for line in block)) == (1, len(ENTRY.lines))
@@ -379,6 +387,7 @@ def test_at_a_terminal_the_fix_and_its_lines_to_copy_stay_plain_and_the_words_eq
 
 
 def test_a_finding_with_a_line_shows_its_location():
+    """ROW-2: a finding with a line shows `path:line` as its location, one without shows the path."""
     findings = [finding("a.env", FindingEvent.TRACKED, line=7), finding("b.env", FindingEvent.TRACKED)]
     assert [finding_rows(findings_written(findings), candidate.location) != [] for candidate in findings] == [True, True]
     assert findings[0].location != findings[0].path

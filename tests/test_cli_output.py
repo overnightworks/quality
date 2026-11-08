@@ -9,6 +9,7 @@ import subprocess
 import sys
 import unicodedata
 from pathlib import Path
+from typing import NoReturn
 
 import pytest
 
@@ -453,6 +454,7 @@ def test_a_baseline_without_clones_is_partly_measured_only(build_repo, capsys):
 
 
 def test_findings_in_two_areas_follow_their_rows_and_end_in_the_counted_verdict(build_repo, capsys):
+    """ROW-2: each area's findings stand under its row, the subject `path:line` right after the glyph."""
     code, out, err = frame_run(capsys, build_repo({**CLONES_BASELINE, **KEPT_CONTRACT, **PRINTING, ".env": "A=1\n"}))
     files_row, code_row = out.index(header(Area.FILES, "!", "2 findings")), out.index(header(Area.CODE, "!", "1 finding"))
     assert (code, err) == (1, [])
@@ -467,7 +469,8 @@ ROOT_ALLOWS_ENV = {"quality/config.toml": ONE_JOB + '[[root.allow]]\nentry = ".e
 
 
 def test_the_files_block_lists_the_event_rows_in_run_order_with_one_fix_per_run(build_repo, capsys):
-    """#281 case 2: three rows under the files row, the compose pair sharing the fix that follows its last row."""
+    """O14, ROW-2, ROW-3: three rows stand under the files row in run order, the compose pair sharing the fix that
+    follows its last row."""
     repo = build_repo({**CASE_TWO, **ROOT_ALLOWS_ENV})
     code, out, err = frame_run(capsys, repo)
     env_finding, *compose_findings = rule_findings(repo, Rule.ENV_FILE) + rule_findings(repo, Rule.COMPOSE_PORT)
@@ -571,7 +574,7 @@ def test_the_folder_is_spoken_with_the_home_folder_as_a_tilde(own_home, monkeypa
     assert (code, out, err) == (2, [], [f"error: not inside a git work tree · {tail_of(folder)}", "next: run quality check inside a repository"])
 
 
-def unknown_user(uid: int):
+def unknown_user(uid: int) -> NoReturn:
     raise KeyError(uid)
 
 

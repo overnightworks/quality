@@ -307,9 +307,9 @@ def _assert_line_in_place(block: Sequence[BlockLine], index: int) -> None:
 
 
 def assert_block_order(block: Sequence[BlockLine]) -> None:
-    """O25: a finding's detail lines stand contiguously directly under its row, each run's `fix:` follows
-    the last detail line of the run's last row and equals that row's fix, its lines to copy stand directly under it, and
-    every note follows the block's final `fix:` or line to copy."""
+    """ROW-3, ROW-5, ROW-6: a finding's detail lines stand contiguously directly under its row, each run's `fix:`
+    follows the last detail line of the run's last row and equals that row's fix, its lines to copy stand directly
+    under it, and every note follows the block's final `fix:` or line to copy."""
     for index in range(len(block)):
         _assert_line_in_place(block, index)
     last_fix = max((line.position for line in block if isinstance(line, FixLine | CopyLine)), default=-1)
@@ -382,9 +382,9 @@ def _words(text: str) -> set[str]:
 
 
 def assert_finding_vocabulary(finding: Finding) -> None:
-    """O29: neither fact nor the fix's sentence or label ends in a full stop, and no word of the fact or
-    the label is a rule id that is an identifier by its shape (it holds `-`). The one-word ids are also ordinary words
-    and are judged by review; the lines to copy hold repository values and are never judged."""
+    """O29 and ROW-7: neither fact nor the fix's sentence or label ends in a full stop (O29), and no word of the fact or
+    the label is a rule id that is an identifier by its shape (it holds `-`) (ROW-7). The one-word ids are also ordinary
+    words and are judged by review; the lines to copy hold repository values and are never judged."""
     label, _ = fix_label_and_lines(finding)
     assert not finding.fact.endswith(".")
     assert not label.endswith(".")
