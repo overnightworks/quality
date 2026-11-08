@@ -7,7 +7,7 @@ Reference for the engineer who calls the reusable `codeql.yml` workflow. The rea
 
 Ruled by the operator: a reusable workflow that runs CodeQL for the languages a caller names, one for the fleet instead
 of a copy per repository, with `build-mode: none` and CodeQL's default query suite and threat model. It uploads under the
-category `/language:<language>`, the Default Setup's category, so alerts carry over when a repository switches.
+category `/language:<language>`, the Default Setup's category, so alerts carry over when a repository switches (CODEQL-2).
 
 A private repository needs GitHub Code Security for code scanning (`code-scanning/default-setup` answers 403 without it); quality's fleet does not pay for it, so private repositories run no CodeQL ([ARCHITECTURE](ARCHITECTURE.md)).
 
@@ -38,7 +38,7 @@ jobs:
       languages: '["actions", "python"]'
 ```
 
-- **`languages`:** the one input, required, a string holding a JSON list; `'python'` or `'[]'` fails the run. List every
+- **`languages`:** the one input, required, a string (CODEQL-1) holding a JSON list; `'python'` or `'[]'` fails the run. List every
   category the repository already analyses (aco also has `javascript-typescript`, which a list copied from the example
   above would drop).
 - **Permissions:** the caller grants `security-events: write`, `contents: read` and `actions: read`, and the workflow
