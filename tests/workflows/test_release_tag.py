@@ -120,6 +120,7 @@ def release_call(
 
 
 def test_the_tag_takes_version_commit_artifact_and_notes(release_tag):
+    """TAG-5, TAG-6."""
     inputs = release_tag[True]["workflow_call"]["inputs"]
     assert set(inputs) == {"version", "commit", "artifact", "notes"}
     assert {
@@ -134,6 +135,7 @@ def test_the_tag_takes_version_commit_artifact_and_notes(release_tag):
 
 
 def test_the_tag_job_reads_its_inputs_and_names_this_repository(release_tag):
+    """TAG-16."""
     assert release_tag["jobs"]["tag"]["env"] == {
         "GH_TOKEN": "${{ github.token }}",
         "GH_REPO": "${{ github.repository }}",
@@ -145,16 +147,19 @@ def test_the_tag_job_reads_its_inputs_and_names_this_repository(release_tag):
 
 
 def test_the_files_are_fetched_only_for_a_named_artifact(release_tag):
+    """TAG-3, TAG-5."""
     fetch = step(release_tag, "tag", FETCH_STEP)
     assert fetch["if"] == "inputs.artifact != ''"
     assert fetch["with"] == {"name": "${{ inputs.artifact }}", "path": "release-files"}
 
 
 def test_the_steps_check_the_files_then_tag_then_publish(release_tag):
+    """TAG-1, TAG-2, TAG-8."""
     assert step_names(release_tag, "tag") == [FETCH_STEP, CHECK_STEP, TAG_STEP, PUBLISH_STEP]
 
 
 def test_no_tag_job_or_step_is_skippable(release_tag):
+    """TAG-17."""
     job = release_tag["jobs"]["tag"]
     assert "if" not in job
     assert "continue-on-error" not in job
@@ -163,12 +168,14 @@ def test_no_tag_job_or_step_is_skippable(release_tag):
 
 
 def test_only_contents_write_is_granted(release_tag):
+    """TAG-15."""
     assert release_tag["permissions"] == {}
     assert release_tag["jobs"]["tag"]["permissions"] == {"contents": "write"}
 
 
 @pytest.mark.parametrize("name", ["a#b", "#a", "a#"])
 def test_a_file_name_with_a_hash_is_refused(release_tag, tag_call, tmp_path, name):
+    """TAG-8, TAG-12."""
     planted(tmp_path / "work" / files_directory(release_tag), name, "b")
     result = run_tag_step(release_tag, tag_call, CHECK_STEP, tmp_path, {})
     assert result.returncode == 1
@@ -181,6 +188,7 @@ def test_a_file_name_with_a_hash_is_refused(release_tag, tag_call, tmp_path, nam
 
 @pytest.mark.parametrize("planting", ["no directory", "an empty directory"])
 def test_a_named_artifact_that_brought_no_file_is_refused(release_tag, tag_call, tmp_path, planting):
+    """TAG-8, TAG-10."""
     if planting == "an empty directory":
         planted(tmp_path / "work" / files_directory(release_tag))
     result = run_tag_step(release_tag, tag_call, CHECK_STEP, tmp_path, {})
@@ -190,6 +198,7 @@ def test_a_named_artifact_that_brought_no_file_is_refused(release_tag, tag_call,
 
 
 def test_files_without_a_named_artifact_are_refused(release_tag, tag_call, tmp_path):
+    """TAG-8, TAG-9."""
     planted(tmp_path / "work" / files_directory(release_tag), "a")
     result = run_tag_step(release_tag, tag_call, CHECK_STEP, tmp_path, {}, ARTIFACT="")
     assert result.returncode == 1
@@ -201,6 +210,7 @@ def test_files_without_a_named_artifact_are_refused(release_tag, tag_call, tmp_p
     "entry", ["wheels", "link", "\n"], ids=["a subdirectory", "a symbolic link", "a directory named by line feeds"]
 )
 def test_an_entry_that_is_not_a_regular_top_level_file_is_refused(release_tag, tag_call, tmp_path, entry):
+    """TAG-8, TAG-11."""
     directory = tmp_path / "work" / files_directory(release_tag)
     planted(directory, "b")
     if entry == "link":
@@ -214,6 +224,7 @@ def test_an_entry_that_is_not_a_regular_top_level_file_is_refused(release_tag, t
 
 
 def test_the_files_land_where_the_steps_read_them(release_tag, tag_call, tmp_path):
+    """TAG-4."""
     directory = files_directory(release_tag)
     planted(tmp_path / "work" / directory, "a")
     checked = run_tag_step(release_tag, tag_call, CHECK_STEP, tmp_path, {})
@@ -239,6 +250,7 @@ def test_the_files_land_where_the_steps_read_them(release_tag, tag_call, tmp_pat
 
 
 def test_the_tag_is_created_at_the_gated_commit(release_tag, tag_call, tmp_path):
+    """TAG-1."""
     answers = {tag_call.matching_refs: Answer(body=[]), tag_call.create_ref: Answer(body={})}
     result = run_tag_step(release_tag, tag_call, TAG_STEP, tmp_path, answers)
     assert result.returncode == 0
@@ -258,6 +270,7 @@ def test_the_tag_is_created_at_the_gated_commit(release_tag, tag_call, tmp_path)
 
 
 def test_a_rerun_keeps_the_tag_that_already_points_at_the_commit(release_tag, tag_call, tmp_path):
+    """TAG-14."""
     answers = {tag_call.matching_refs: Answer(body=ref_at(tag_call.version, tag_call.commit))}
     result = run_tag_step(release_tag, tag_call, TAG_STEP, tmp_path, answers)
     assert result.returncode == 0
@@ -265,6 +278,7 @@ def test_a_rerun_keeps_the_tag_that_already_points_at_the_commit(release_tag, ta
 
 
 def test_a_tag_at_another_commit_fails_without_creating_anything(release_tag, tag_call, tmp_path):
+    """TAG-8, TAG-13."""
     other = "d4" * 20
     answers = {tag_call.matching_refs: Answer(body=ref_at(tag_call.version, other))}
     result = run_tag_step(release_tag, tag_call, TAG_STEP, tmp_path, answers)
@@ -274,6 +288,7 @@ def test_a_tag_at_another_commit_fails_without_creating_anything(release_tag, ta
 
 
 def test_a_longer_tag_name_is_not_this_tag(release_tag, tag_call, tmp_path):
+    """TAG-1, TAG-13."""
     answers = {
         tag_call.matching_refs: Answer(body=ref_at("1.2.30", "d4" * 20)),
         tag_call.create_ref: Answer(body={}),
@@ -293,6 +308,7 @@ def test_a_longer_tag_name_is_not_this_tag(release_tag, tag_call, tmp_path):
 
 
 def test_the_release_carries_exactly_the_files_the_build_made(release_tag, tag_call, tmp_path):
+    """TAG-2, TAG-4, TAG-6."""
     directory = files_directory(release_tag)
     planted(tmp_path / "work" / directory, "b", "a", ".c")
     argv = release_call(tag_call, [f"{directory}/.c", f"{directory}/a", f"{directory}/b"], notes="Highlights")
@@ -318,6 +334,7 @@ def test_the_release_carries_exactly_the_files_the_build_made(release_tag, tag_c
 
 
 def test_a_release_without_an_artifact_carries_no_file(release_tag, tag_call, tmp_path):
+    """TAG-2, TAG-5."""
     argv = release_call(tag_call, [])
     result = run_tag_step(release_tag, tag_call, PUBLISH_STEP, tmp_path, {argv: Answer()}, ARTIFACT="")
     assert result.returncode == 0
@@ -328,6 +345,7 @@ def test_a_release_without_an_artifact_carries_no_file(release_tag, tag_call, tm
 
 
 def test_notes_reach_the_release_as_one_argument(release_tag, tag_call, tmp_path):
+    """TAG-6, TAG-16."""
     notes = "$(touch planted) `touch planted`\nsecond line"
     argv = release_call(tag_call, [], notes=notes)
     result = run_tag_step(release_tag, tag_call, PUBLISH_STEP, tmp_path, {argv: Answer()}, ARTIFACT="", NOTES=notes)
@@ -342,6 +360,7 @@ def test_notes_reach_the_release_as_one_argument(release_tag, tag_call, tmp_path
 def test_the_tag_is_created_before_the_release_and_a_failed_publication_is_retried_on_it(
     release_tag, tag_call, tmp_path
 ):
+    """TAG-1, TAG-2, TAG-14."""
     directory = files_directory(release_tag)
     planted(tmp_path / "work" / directory, "a")
     argv = release_call(tag_call, [f"{directory}/a"])
@@ -418,6 +437,7 @@ def test_the_tag_is_created_before_the_release_and_a_failed_publication_is_retri
 def test_the_notes_start_at_the_previous_tag_of_the_versions_own_form(
     release_tag, tag_call, tmp_path, version, existing, start_tag
 ):
+    """TAG-7."""
     call = TagCall(repository=tag_call.repository, commit=tag_call.commit, version=version)
     argv = release_call(call, [], start_tag=start_tag)
     result = run_tag_step(

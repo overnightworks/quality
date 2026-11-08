@@ -6,7 +6,7 @@ Reference for the engineer who adds a repository's `release.yml` or reads a refu
 
 A release is dispatched on `main` with the version alone. `release-gate.yml` (quality's reusable workflow) only reads and
 refuses before any tag exists; the caller's own build then proves its source carries the version; `release-tag.yml`
-(quality's reusable workflow) then creates the tag at the gated commit and publishes the release.
+(quality's reusable workflow) then creates the tag at the gated commit (TAG-1) and publishes the release (TAG-2).
 
 ## A caller's `release.yml`
 
@@ -86,13 +86,16 @@ Each line has a reason:
 - `needs: [gate, build]` makes the tag wait for both; `contents: write` is granted to the tag job only, so no other job
   can write, and nothing dispatches the tag job apart from the release run.
 - `commit` is the gate's output, the commit it judged.
-- `artifact` names an artifact of the same run. Its regular top-level files, dotfiles included, are the release's files and
-  nothing else is uploaded; a file name carries no `#`, which gh reads as the start of an asset label. A build that makes
-  release files turns its caches off. Omit it for a release without files.
-- `notes` is optional; GitHub's generated notes follow it. A build that writes notes computes each hash from the very
+- `artifact` names an artifact of the same run (TAG-3). Its regular top-level files, dotfiles included, are the release's files and
+  nothing else is uploaded (TAG-4); a file name carries no `#`, which gh reads as the start of an asset label. A build that makes
+  release files turns its caches off. Omit it for a release without files (TAG-5).
+- `notes` is optional; GitHub's generated notes follow it (TAG-6). A build that writes notes computes each hash from the very
   file it uploads. The generated notes start at the highest earlier tag of the version's own form (three numbers or
   four), so a repository with two forms gets no notes against the other form's release, and at GitHub's default when
-  none exists. A head may edit the notes after publishing: an immutable release still accepts edited notes.
+  none exists (TAG-7). A head may edit the notes after publishing: an immutable release still accepts edited notes.
+- `release-tag.yml` grants nothing at workflow level and only `contents: write` to its job (TAG-15), passes its inputs to
+  the shell only through `env` (TAG-16), and has no step that can be skipped apart from the fetch, which runs only for a
+  named artifact (TAG-17).
 - `quality`'s own release uses GitHub's same-repository form, `uses: $/.github/workflows/release-gate.yml` and
   `release-tag.yml`, so it calls the workflows of its own commit. Every other repository pins the commit sha of a quality tag and names the tag in a comment.
 - quality's build also tags the gated commit in its own checkout (the tag never leaves the runner) and runs
@@ -182,18 +185,18 @@ Each refusal of the gate prints one line on stderr and fails the gate; no tag ex
 The check name `quality / verdict` and the CI file name `ci.yml` are fleet contracts: the caller job of
 [`gate.yml`](gate.md) is named `quality`.
 
-These refusals stop the attempt before publishing; none creates or changes a tag or release:
+These refusals stop the attempt before publishing; none creates or changes a tag or release (TAG-8):
 
 | Line | What to do |
 |---|---|
-| `Refused: files were fetched, but no artifact was named.` | Name the artifact, or fetch nothing. |
-| `Refused: the artifact <name> brought no file.` | The build uploaded nothing under that name; fix the build. |
-| `Refused: the artifact <name> holds <entry>, which is not a regular top-level file.` | Upload regular top-level files only. |
-| `Refused: the file <name> has a # in its name, which gh reads as the start of an asset label.` | Rename the file in the build. |
-| `Refused: the tag v<version> exists at <sha>, not at the gated commit <sha>.` | Choose the next version; a tag is never moved. |
+| `Refused: files were fetched, but no artifact was named.` (TAG-9) | Name the artifact, or fetch nothing. |
+| `Refused: the artifact <name> brought no file.` (TAG-10) | The build uploaded nothing under that name; fix the build. |
+| `Refused: the artifact <name> holds <entry>, which is not a regular top-level file.` (TAG-11) | Upload regular top-level files only. |
+| `Refused: the file <name> has a # in its name, which gh reads as the start of an asset label.` (TAG-12) | Rename the file in the build. |
+| `Refused: the tag v<version> exists at <sha>, not at the gated commit <sha>.` (TAG-13) | Choose the next version; a tag is never moved. |
 
 Re-run the failed jobs after a failed publish: the tag job runs whole again, keeps the tag at the commit and completes the
-release. "Re-run all jobs" runs the gate again, which refuses the existing tag. A tag left without a release by a defective
+release (TAG-14). "Re-run all jobs" runs the gate again, which refuses the existing tag. A tag left without a release by a defective
 publish step is completed by hand with `gh release create v<version> <files> --verify-tag`.
 
 ## Concurrency
