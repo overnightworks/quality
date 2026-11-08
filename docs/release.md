@@ -80,7 +80,7 @@ Each line has a reason:
 - `version` is the only input and reaches a step only through `env`, never inside a `run` script.
 - `needs: gate` makes the build wait for the gate; without it the build runs even when the gate refuses.
 - The build checks out the dispatch's own commit (no `ref:` or `repository:`) and its next step refuses unless
-  `git rev-parse HEAD` is `needs.gate.outputs.commit`, the commit the gate judged. The gate refuses unless main's head is
+  the checkout's head is `needs.gate.outputs.commit`, the commit the gate judged. The gate refuses unless main's head is
   still that commit, so the two are equal; a `ref:` naming the output raises CodeQL's
   `actions/cache-poisoning/poisonable-step` alert at the checkout, so no caller writes one.
 - `needs: [gate, build]` makes the tag wait for both; `contents: write` is granted to the tag job only, so no other job
