@@ -574,7 +574,8 @@ def test_a_config_refusal_carries_its_whole_fact_and_its_example_apart(refusal, 
 def test_the_refusals_use_every_example_and_every_refusal_without_one():
     """the rows hold every example constant and the refusals the trace gives none."""
     assert {refusal.example for refusal in REFUSALS} == {
-        None, config.EXAMPLE, config.LEGACY_EXAMPLE, config.SONAR_EXAMPLE, config.ALLOWANCE_EXAMPLE, config.LOOSENED_EXAMPLE,
+        None, config.EXAMPLE, config.LEGACY_EXAMPLE, config.SONAR_EXAMPLE, config.SONAR_OFF_EXAMPLE, config.ALLOWANCE_EXAMPLE,
+        config.LOOSENED_EXAMPLE,
         config.ADVISORY_ALLOWANCE_EXAMPLE, config.ROOT_ALLOWANCE_EXAMPLE, config.LAYOUT_ALLOWANCE_EXAMPLE,
         config.PYTHON_ALLOWANCE_EXAMPLE, config.COMPOSE_ALLOWANCE_EXAMPLE, config.GENERATED_FILE_EXAMPLE,
     }
@@ -587,7 +588,7 @@ def test_the_one_line_form_of_a_refusal_is_its_fact_then_like_and_the_example_li
 
 
 EXAMPLES = {
-    "gate": config.EXAMPLE, "legacy": config.LEGACY_EXAMPLE, "sonar": config.SONAR_EXAMPLE, "secrets": config.ALLOWANCE_EXAMPLE,
+    "gate": config.EXAMPLE, "legacy": config.LEGACY_EXAMPLE, "sonar": config.SONAR_EXAMPLE, "sonar off": config.SONAR_OFF_EXAMPLE, "secrets": config.ALLOWANCE_EXAMPLE,
     **{table.name: table.example for table in ARRAY_TABLES},
 }
 

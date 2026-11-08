@@ -238,7 +238,7 @@ def _document_refusals() -> list[Refusal]:
         Refusal(
             "sonar off beside legacy fail", GATE + 'legacy = "fail"\nsonar = false\n',
             f'{CONFIG} [gate] legacy = "fail" judges SonarCloud findings, which [gate] sonar = false turns off',
-            config.SONAR_EXAMPLE, ("gate",),
+            config.SONAR_OFF_EXAMPLE, ("gate",),
         ),
         Refusal("config is a directory", None, f"{CONFIG} is not a file", None, directory=True),
         *(Refusal(f"{table} as a value", f"{table} = 1\n", f"{CONFIG} has [{table}] as a value, not a table", example,
