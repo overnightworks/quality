@@ -1,7 +1,0 @@
-claim_id = "405d777876614b789f57f1c4b7d9794b"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "4ac2639614d3a3b9b3d3e0a4ce86a0488b6e3bcc"
-branch = "claude/issue-581-d7-python-print-ids"
-scope = ["docs/rules.md", "tests/test_python_lint.py", "tests/test_python_lint_rows.py"]
-opened_commit = "eb4981b74caca75dc548f13d47e44523dba97317"
