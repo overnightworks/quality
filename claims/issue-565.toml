@@ -1,7 +1,0 @@
-claim_id = "66541ec2edad484c8f9be64418789ed4"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "3a28d2026399a9af4ee17e0015b1620b8f6c7396"
-branch = "claude/issue-565-d7-test-import-ids"
-scope = ["docs/rules.md", "tests/test_layout_imports.py"]
-opened_commit = "d7dfe81a21f2505bbe18798fbffb499aa74fe5f7"
