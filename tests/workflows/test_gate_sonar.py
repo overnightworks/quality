@@ -138,8 +138,7 @@ def test_quality_binds_its_own_scan_to_its_own_project(build_repo):
 
 def test_a_missing_coverage_artifact_fails_the_download_the_job_and_so_the_verdict(gate):
     """SONAR-94: no step or job may continue on error, so a named artifact the run does not have fails the download, the sonar job and the verdict"""
-    download = next(s for s in gate["jobs"]["sonar"]["steps"] if s.get("uses", "").startswith("actions/download-artifact"))
-    assert "continue-on-error" not in download
+    assert not any("continue-on-error" in step for step in gate["jobs"]["sonar"]["steps"])
     assert "continue-on-error" not in gate["jobs"]["sonar"]
 
 
