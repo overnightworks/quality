@@ -35,65 +35,73 @@ def frontend(*paths: str, manifest: str = "package.json") -> dict[str, str]:
 @pytest.mark.parametrize(
     ("files", "expected"),
     [
-        case("H1 a root project", frontend("src/a.ts", "src/a.test.ts"), []),
-        case("H1 a member project", frontend("frontend/package.json", "frontend/x.ts", "frontend/x.test.ts", "frontend/y.test.ts"),
+        case("a root project", frontend("src/a.ts", "src/a.test.ts"), []),
+        case("a member project",
+             frontend("frontend/package.json", "frontend/x.ts", "frontend/x.test.ts", "frontend/y.test.ts"),
              ["frontend/y.test.ts"]),
-        case("H2 no package.json", {**GUIDANCE, **empty_files("tests/x.test.mjs", "src/y.test.ts")}, []),
-        case("H3 a package.json in the fixtures of a Python project",
+        case("no package.json", {**GUIDANCE, **empty_files("tests/x.test.mjs", "src/y.test.ts")}, []),
+        case("a package.json in the fixtures of a Python project",
              {**GUIDANCE, **PYTHON_PROJECT, **empty_files("tests/fixtures/app/package.json", "tests/fixtures/app/z.test.ts")}, []),
-        case("H3 a pyproject.toml in the tests of a frontend project",
+        case("a pyproject.toml in the tests of a frontend project",
              frontend("frontend/package.json", "frontend/tests/fixtures/pyproject.toml", "frontend/tests/fixtures/src/p/x.py",
                       "frontend/tests/fixtures/tests/stray.txt"), []),
-        case("H4 a spec in a member's e2e", frontend("packages/ui/package.json", "packages/ui/e2e/f.spec.ts", "e2e/f.spec.ts"), []),
-        case("H4 a spec outside a member's e2e", frontend("packages/ui/package.json", "packages/ui/src/f.spec.ts"),
+        case("a spec in a member's e2e",
+             frontend("packages/ui/package.json", "packages/ui/e2e/f.spec.ts", "e2e/f.spec.ts"), []),
+        case("a spec outside a member's e2e", frontend("packages/ui/package.json", "packages/ui/src/f.spec.ts"),
              ["packages/ui/src/f.spec.ts"]),
-        case("H5 the aspects of a test",
+        case("the aspects of a test",
              frontend("src/a.svelte.ts", "src/a.svelte.test.ts", "src/App.svelte", "src/App.test.ts", "src/x.ts",
                       "src/x.browser.test.ts", "src/x.test-d.ts", "src/x.spec-d.ts", "src/m.mjs", "src/m.test.mjs"), []),
-        case("H6 a route test beside its page", frontend("src/page.test.ts", "src/+page.svelte"), []),
-        case("H6 a route test beside only a page server", frontend("src/page.test.ts", "src/+page.server.ts"), []),
-        case("H6 the other route files",
+        case("a route test beside its page", frontend("src/page.test.ts", "src/+page.svelte"), []),
+        case("a route test beside only a page server", frontend("src/page.test.ts", "src/+page.server.ts"), []),
+        case("the other route files",
              frontend("src/layout.test.ts", "src/+layout.svelte", "src/error.test.ts", "src/+error.svelte",
                       "src/server.test.ts", "src/+server.ts", "src/hooks.server.test.ts", "src/hooks.server.ts"), []),
-        case("H6 a route test alone", frontend("src/page.test.ts"), ["src/page.test.ts"]),
-        case("H7 a prefix at a word boundary",
+        case("a route test alone", frontend("src/page.test.ts"), ["src/page.test.ts"]),
+        case("a prefix at a word boundary",
              frontend("src/AlbumCoverEditor.svelte", "src/AlbumCoverEditorLeaving.test.ts", "src/AlbumCoverEditor.leaving.test.ts",
                       "src/editor.ts", "src/editorUnloadGuard.test.ts", "src/detail.ts", "src/detail-back.test.ts",
                       "src/share.ts", "src/share_import.test.ts"), []),
-        case("H7 no sibling for a prefix", frontend("src/detail-back.test.ts"), ["src/detail-back.test.ts"]),
-        case("H7 a prefix that is no key", frontend("src/optionCard.ts", "src/optionDecision.test.ts"), ["src/optionDecision.test.ts"]),
-        case("H8 no word boundary", frontend("src/editor.ts", "src/editorx.test.ts"), ["src/editorx.test.ts"]),
-        case("H8 another case", frontend("src/editor.ts", "src/Editor.test.ts"), ["src/Editor.test.ts"]),
-        case("H8 an empty base", frontend("src/editor.ts", "src/.test.ts"), ["src/.test.ts"]),
-        case("H8 a leading underscore stays in the key", frontend("src/_helpers.ts", "src/_helpers.test.ts"), []),
-        case("H9 a type test is no subject", frontend("src/a.test.ts", "src/a.test-d.ts"), ["src/a.test-d.ts", "src/a.test.ts"]),
-        case("H9 a test component is no subject", frontend("src/Card.test.ts", "src/Card.test.svelte"), ["src/Card.test.ts"]),
-        case("H9 a folder is no subject", frontend("src/a.test.ts", "src/a/b.ts"), ["src/a.test.ts"]),
-        case("H9 data is a subject", frontend("src/schema.test.ts", "src/schema.json"), []),
-        case("H10 specs at any depth of e2e", frontend("e2e/f.spec.ts", "e2e/sub/f.spec.ts"), []),
-        case("H10 specs elsewhere", frontend("src/x.spec.ts", "tests/e2e/x.spec.ts", "src/a.spec.mjs"),
+        case("no sibling for a prefix", frontend("src/detail-back.test.ts"), ["src/detail-back.test.ts"]),
+        case("a prefix that is no key", frontend("src/optionCard.ts", "src/optionDecision.test.ts"),
+             ["src/optionDecision.test.ts"]),
+        case("no word boundary", frontend("src/editor.ts", "src/editorx.test.ts"), ["src/editorx.test.ts"]),
+        case("another case", frontend("src/editor.ts", "src/Editor.test.ts"), ["src/Editor.test.ts"]),
+        case("an empty base", frontend("src/editor.ts", "src/.test.ts"), ["src/.test.ts"]),
+        case("a leading underscore stays in the key", frontend("src/_helpers.ts", "src/_helpers.test.ts"), []),
+        case("a type test is no subject", frontend("src/a.test.ts", "src/a.test-d.ts"),
+             ["src/a.test-d.ts", "src/a.test.ts"]),
+        case("a test component is no subject", frontend("src/Card.test.ts", "src/Card.test.svelte"),
+             ["src/Card.test.ts"]),
+        case("a folder is no subject", frontend("src/a.test.ts", "src/a/b.ts"), ["src/a.test.ts"]),
+        case("data is a subject", frontend("src/schema.test.ts", "src/schema.json"), []),
+        case("specs at any depth of e2e", frontend("e2e/f.spec.ts", "e2e/sub/f.spec.ts"), []),
+        case("specs elsewhere", frontend("src/x.spec.ts", "tests/e2e/x.spec.ts", "src/a.spec.mjs"),
              ["src/a.spec.mjs", "src/x.spec.ts", "tests/e2e/x.spec.ts"]),
-        case("H11 a test in e2e beside its subject", frontend("e2e/helpers.ts", "e2e/helpers.test.ts"), []),
-        case("H11 a test in e2e alone", frontend("e2e/flow.test.ts"), ["e2e/flow.test.ts"]),
-        case("H12 files no rule judges",
+        case("a test in e2e beside its subject", frontend("e2e/helpers.ts", "e2e/helpers.test.ts"), []),
+        case("a test in e2e alone", frontend("e2e/flow.test.ts"), ["e2e/flow.test.ts"]),
+        case("files no rule judges",
              frontend("e2e/helpers.ts", "src/lib/test-utils/x.ts", "src/tests/setup.ts", "src/__tests__/x.ts", "src/Card.test.svelte"), []),
-        case("H13 one owner under a judged Python tests",
+        case("one owner under a judged Python tests",
              {**frontend("tests/foo.test.ts", "tests/e2e/flow.spec.ts", "tests/support/x.test.ts", "tests/fixtures/a.test.ts",
                          "e2e/flow.spec.ts"), **PYTHON_PROJECT}, ["tests/foo.test.ts"]),
-        case("H14 a Python project without a package leaves its tests to the frontend",
+        case("a Python project without a package leaves its tests to the frontend",
              frontend("tests/foo.test.ts", manifest="pyproject.toml") | PACKAGE_JSON, ["tests/foo.test.ts"]),
-        case("H18 a Cargo tree gives no finding", frontend("crates/a/Cargo.toml", "crates/a/tests/y.rs"), []),
-        case("H18 a package.json in a Cargo tree is a project",
+        case("a Cargo tree gives no finding", frontend("crates/a/Cargo.toml", "crates/a/tests/y.rs"), []),
+        case("a package.json in a Cargo tree is a project",
              {**GUIDANCE, **empty_files("Cargo.toml", "tools/package.json", "tools/a.test.mjs")}, ["tools/a.test.mjs"]),
     ],
 )
 def test_the_sibling_and_the_e2e_folder_are_judged_per_frontend_project(build_repo, files, expected):
-    """H1 to H14 and H18: only a judged test file in a frontend project is red, once, by its name."""
+    """LAYOUT-2, LAYOUT-5, LAYOUT-32, LAYOUT-33, LAYOUT-34, LAYOUT-35, LAYOUT-36, LAYOUT-38, LAYOUT-39, LAYOUT-40,
+    LAYOUT-41, LAYOUT-42, LAYOUT-43, LAYOUT-44, LAYOUT-45, LAYOUT-46: only a judged test file in a frontend project is
+    red, once, by its name."""
     assert red(build_repo(files), RULE) == expected
 
 
 def test_a_symlink_is_judged_by_its_name_and_a_gitlink_is_never_judged_or_a_subject(build_repo):
-    """H9 and H16: a link is never followed; a symlink is a subject by its own name, a gitlink is a folder."""
+    """LAYOUT-37, LAYOUT-42: a symlinked test is judged by its name, a gitlinked test is never judged and a gitlink is
+    no subject."""
     repo = build_repo(frontend("src/real.ts", "src/b.test.ts", "src/c.test.ts", "src/d.test.ts"))
     (repo / "src" / "a.ts").symlink_to("real.ts")
     (repo / "src" / "x.test.ts").symlink_to("real.ts")
@@ -104,7 +112,7 @@ def test_a_symlink_is_judged_by_its_name_and_a_gitlink_is_never_judged_or_a_subj
 
 
 def test_a_symlinked_subject_maps_a_test(build_repo):
-    """H9: `a.test.ts` beside a symlink `a.ts` is clean."""
+    """LAYOUT-42: `a.test.ts` beside a symlink `a.ts` is clean."""
     repo = build_repo(frontend("src/real.ts", "src/a.test.ts"))
     (repo / "src" / "a.ts").symlink_to("real.ts")
     in_index(repo, "add", "--", "src/a.ts")
@@ -121,14 +129,15 @@ def test_a_symlinked_subject_maps_a_test(build_repo):
     ],
     ids=["a declared test", "a declared spec", "declared under another rule", "a stale declaration"],
 )
-def test_a_declaration_exempts_a_frontend_test_from_rules_six_and_seven(build_repo, tracked, declarations, expected):
-    """H15: one declaration covers its own rule only, and a stale one is one finding."""
+def test_a_declaration_exempts_a_frontend_test_from_every_case(build_repo, tracked, declarations, expected):
+    """LAYOUT-47, SUFFIX-10, SUFFIX-12: one declaration covers its own rule only, and a stale one is one finding."""
     config = ONE_JOB + "".join(declaring(path, rule=rule) for path, rule in declarations)
     assert red(build_repo({**frontend(*tracked), CONFIG: config}), RULE) == expected
 
 
 def test_every_finding_prints_sorted_by_path_with_its_own_kind_fact_and_fix(build_repo, capsys):
-    """H17, #283 O12: both frontend cases and a Python stray in one run, one per file, each its own row and fix line."""
+    """LAYOUT-7, LAYOUT-28, LAYOUT-48, ROW-7, ROW-14: both frontend cases and a Python stray in one run, one per file,
+    each its own row and fix line."""
     files = {
         **frontend("packages/ui/package.json", "packages/ui/src/z.svelte.test.ts", "packages/ui/src/spec.spec.ts", "tests/helpers.py"),
         **PYTHON_PROJECT,
@@ -144,19 +153,19 @@ def test_every_finding_prints_sorted_by_path_with_its_own_kind_fact_and_fix(buil
 
 
 def test_an_empty_base_is_not_described_as_a_name_with_nothing_in_it(build_repo, capsys):
-    """H8."""
+    """LAYOUT-28, LAYOUT-44, LAYOUT-48, ROW-7, ROW-14: an empty base has a fact of its own."""
     repo = build_repo(frontend("src/.test.ts", "src/zz.test.ts"))
     assert_empty_name_has_its_own_fact(capsys, repo, RULE, "src/.test.ts", "src/zz.test.ts", "zz")
 
 
 def test_a_root_spec_names_the_root_e2e_folder(build_repo, capsys):
-    """H4: the root project's folder is `e2e/`."""
+    """LAYOUT-28, LAYOUT-48, ROW-7, ROW-14: the fact of a root spec names the root project's `e2e/` folder."""
     finding = assert_prints_as_kind(capsys, build_repo(frontend("src/a.spec.ts")), RULE, FindingEvent.MISPLACED, f"{layout.END_TO_END_DIRECTORY}/")
     assert finding.path == "src/a.spec.ts"
 
 
 def test_a_test_with_no_subject_in_the_root_folder_does_not_name_the_folder_as_a_dot(build_repo, capsys):
-    """#5 206a: the root folder is told apart from `src`, which a test there names as it is."""
+    """LAYOUT-48, LAYOUT-49, ROW-7, ROW-14: a test in the root folder is told apart from one in `src`."""
     repo = build_repo(frontend("x.test.ts", "src/x.test.ts"))
     output = check_output(capsys, repo)[1]
     found = {finding.path: finding for finding in rule_findings(repo, RULE)}

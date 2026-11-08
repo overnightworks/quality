@@ -332,24 +332,27 @@ It applies these rules:
   Ruled by the operator: `tests/` mirrors `src/<package>/` by path, unit and integration tests are told apart by a
   pytest marker, and only `e2e` has its own folder.
 
-  Frontend tests. A frontend project is the directory of any tracked `package.json`, the root or a
-  member at any depth; its content (`workspaces` included) is never read, a `package.json` inside the `tests/` of a
-  project of either kind makes no project, and a test file belongs to its nearest enclosing frontend project. A
-  repository without one is not judged by these rules. Judged files are tracked TypeScript and JavaScript files (the
-  suffixes `size` counts, `.mjs`, `.js` and `.tsx` included) with a word between the first and the last `.` that is
-  `test`, `spec`, `test-d` or `spec-d`; only the name decides, no `tests/` or `__tests__/` folder does, a link is
-  judged by its name and a gitlink is a folder and never judged. A path under the `tests/` of a Python project with a
-  package is judged by the Python cases only. Sibling: a judged file with no word `spec` is a test, and its base,
-  its name up to the first `.`, or a non-empty prefix of the base that ends before a `-` or `_` or between a lower-case
-  letter or digit and an upper-case letter, must equal the key of a subject in the same folder. A subject is any
-  tracked file there that is no gitlink and carries no test word, whatever its suffix (a symlink counts by its name, a
-  folder never); its key is its base without a leading `+`, so `page.test.ts` maps to `+page.svelte`. An empty base
-  never matches, and `.test.ts` is red. Spec: a judged file with the word `spec` lies under its project's top-level
-  `e2e/` folder at any depth; other files there are not judged as specs, and a `.test.*` there needs its sibling. A
-  declaration exempts its path from every case. Each case has its own reason and fix: a test with no sibling
-  (move it beside the file it tests and name it `<subject>[<Aspect>]` plus its own tail) and a spec outside `e2e/`
-  (move it into the project's `e2e/`, or name a Vitest test `<subject>.test.<suffix>`); every fix ends with declaring
-  the path; both say `misplaced`, and a test in the repository root names it as the repository root, and one in a nested project's root folder names that folder. `test-layout` judges no `.rs` file and reads no `Cargo.toml`, and Cargo's own layout stands (other rules
+  Frontend tests. A frontend project is the directory of any tracked `package.json`, the root or a member at any depth
+  (LAYOUT-32); its content (`workspaces` included) is never read, a `package.json` inside the `tests/` of a project of
+  either kind makes no project, and a test file belongs to its nearest enclosing frontend project (LAYOUT-33). A
+  repository without one is not judged by these rules (LAYOUT-34). Judged files are tracked TypeScript and JavaScript
+  files (the suffixes `size` counts, `.mjs`, `.js` and `.tsx` included) (LAYOUT-35) with a word between the first and
+  the last `.` that is `test`, `spec`, `test-d` or `spec-d` (LAYOUT-36); only the name decides, no `tests/` or
+  `__tests__/` folder does, a link is judged by its name and a gitlink is a folder and never judged (LAYOUT-37). A path
+  under the `tests/` of a Python project with a package is judged by the Python cases only (LAYOUT-38). Sibling: a
+  judged file with no word `spec` is a test, and its base, its name up to the first `.` (LAYOUT-39), or a non-empty
+  prefix of the base that ends before a `-` or `_` or between a lower-case letter or digit and an upper-case letter
+  (LAYOUT-40), must equal the key of a subject in the same folder (LAYOUT-41). A subject is any tracked file there that
+  is no gitlink and carries no test word, whatever its suffix (a symlink counts by its name, a folder never)
+  (LAYOUT-42); its key is its base without a leading `+`, so `page.test.ts` maps to `+page.svelte` (LAYOUT-43). An
+  empty base never matches, and `.test.ts` is red (LAYOUT-44). Spec: a judged file with the word `spec` lies under its
+  project's top-level `e2e/` folder at any depth (LAYOUT-45); other files there are not judged as specs, and a
+  `.test.*` there needs its sibling (LAYOUT-46). A declaration exempts its path from every case (LAYOUT-47). Each case
+  has its own fact and fix: a test with no sibling (move it beside the file it tests and name it `<subject>[<Aspect>]`
+  plus its own tail) and a spec outside `e2e/` (move it into the project's `e2e/`, or name a Vitest test
+  `<subject>.test.<suffix>`); every fix ends with declaring the path; both say `misplaced` (LAYOUT-48), and a test in
+  the repository root names it as the repository root, and one in a nested project's root folder names that folder
+  (LAYOUT-49). `test-layout` judges no `.rs` file and reads no `Cargo.toml`, and Cargo's own layout stands (other rules
   still read tracked files for a shebang); a `package.json` or `pyproject.toml` inside a Cargo tree makes a project
   like any other. Named gaps, waiting for usage evidence: a subject that is a
   folder, an acronym run read as one word (`HTMLParser.test.ts` beside `HTML.ts` is red), a name holding both `test`
