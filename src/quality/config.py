@@ -51,6 +51,7 @@ GENERATED_FILE_HEADING = "[[size.generated]]"
 EXAMPLE: ExampleLines = (GATE_HEADING, 'mandatory_jobs = ["checks"]')
 LEGACY_EXAMPLE: ExampleLines = (GATE_HEADING, 'legacy = "fail"')
 SONAR_EXAMPLE: ExampleLines = (GATE_HEADING, "sonar = false")
+SONAR_OFF_EXAMPLE: ExampleLines = (GATE_HEADING, 'legacy = "report"', "sonar = false")
 ALLOWANCE_EXAMPLE: ExampleLines = (
     SECRETS_ALLOWANCE_HEADING,
     'rule = "aws-access-token"',
@@ -646,7 +647,7 @@ def _sonar(gate: dict, legacy: LegacyMode) -> bool:
     if not value and legacy is LegacyMode.FAIL:
         raise ConfigError(
             f'{CONFIG_PATH} [gate] legacy = "fail" judges SonarCloud findings, which [gate] sonar = false turns off',
-            SONAR_EXAMPLE,
+            SONAR_OFF_EXAMPLE,
         )
     return value
 
