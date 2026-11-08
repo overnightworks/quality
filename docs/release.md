@@ -4,9 +4,9 @@ Reference for the engineer who adds a repository's `release.yml` or reads a refu
 
 ## The path
 
-A release is dispatched on `main` with the version alone. `release-gate.yml` (quality's reusable workflow) only reads and
-refuses before any tag exists; the caller's own build then proves its source carries the version; `release-tag.yml`
-(quality's reusable workflow) then creates the tag at the gated commit (TAG-1) and publishes the release (TAG-2).
+A release is dispatched on `main` with the version alone. `release-gate.yml` (quality's reusable workflow) only reads (GATE-1)
+and refuses before any tag exists; the caller's own build then proves its source carries the version;
+`release-tag.yml` (quality's reusable workflow) then creates the tag at the gated commit (TAG-1) and publishes the release (TAG-2).
 
 ## A caller's `release.yml`
 
@@ -85,7 +85,7 @@ Each line has a reason:
   `actions/cache-poisoning/poisonable-step` alert at the checkout, so no caller writes one.
 - `needs: [gate, build]` makes the tag wait for both; `contents: write` is granted to the tag job only, so no other job
   can write, and nothing dispatches the tag job apart from the release run.
-- `commit` is the gate's output, the commit it judged.
+- `commit` is the gate's output, the commit it judged (GATE-2).
 - `artifact` names an artifact of the same run (TAG-3). Its regular top-level files, dotfiles included, are the release's files and
   nothing else is uploaded (TAG-4); a file name carries no `#`, which gh reads as the start of an asset label. A build that makes
   release files turns its caches off. Omit it for a release without files (TAG-5).
@@ -96,6 +96,9 @@ Each line has a reason:
 - `release-tag.yml` grants nothing at workflow level and only `contents: write` to its job (TAG-15), passes its inputs to
   the shell only through `env` (TAG-16), and has no step that can be skipped apart from the fetch, which runs only for a
   named artifact (TAG-17).
+- `release-gate.yml` has no step that can be skipped (GATE-3), passes the version, form, commit and ref to the shell only
+  through `env` (GATE-4), writes its grammars with no character range, whose meaning would follow the locale (GATE-5),
+  and judges the form before any step reads the repository (GATE-6).
 - `quality`'s own release uses GitHub's same-repository form, `uses: $/.github/workflows/release-gate.yml` and
   `release-tag.yml`, so it calls the workflows of its own commit. Every other repository pins the commit sha of a quality tag and names the tag in a comment.
 - quality's build also tags the gated commit in its own checkout (the tag never leaves the runner) and runs
@@ -104,11 +107,11 @@ Each line has a reason:
 
 ## The version
 
-A library or tool releases `X.Y.Z`, each part a number without leading zeros, tagged `vX.Y.Z`. An app releases
+A library or tool releases `X.Y.Z`, each part a number without leading zeros (GATE-7), tagged `vX.Y.Z`. An app releases
 `YYYY.MM.DD.N`, tagged `vYYYY.MM.DD.N`: a four-digit year, month `01` to `12`, day `01` to `31`, and `N` counting the day's
-releases from 1 without leading zeros. An app's call of the gate passes `form: YYYY.MM.DD.N` beside the version; without
-`form` the gate judges `X.Y.Z`. The gate counts only tags of the caller's form as release tags, so a tag of the other form
-on the commit never refuses it. The image takes the version as a Docker tag.
+releases from 1 without leading zeros (GATE-8). An app's call of the gate passes `form: YYYY.MM.DD.N` beside the version; without
+`form` the gate judges `X.Y.Z` (GATE-9). The gate counts only tags of the caller's form as release tags, so a tag of the other form
+on the commit never refuses it (GATE-10). The image takes the version as a Docker tag.
 
 ## An app's image
 
@@ -164,26 +167,29 @@ The secret's name is illustrative.
 
 ## Refusals
 
-Each refusal of the gate prints one line on stderr and fails the gate; no tag exists yet.
+Each refusal of the gate prints one line on stderr and fails the gate (GATE-11); no tag exists yet.
 
 | Line | What to do |
 |---|---|
-| `Refused: dispatched from <ref>, a release is dispatched from main.` | Dispatch with `--ref main` (the default). |
-| `Refused: the version is not X.Y.Z, each part a number without leading zeros.` | Give `1.2.3`, not `v1.2.3`, `1.2` or `01.2.3`; an app's call passes `form: YYYY.MM.DD.N`. |
-| `Refused: the form <form> is neither X.Y.Z nor YYYY.MM.DD.N.` | Fix the `form` the caller's `release.yml` passes. |
-| `Refused: the version is not YYYY.MM.DD.N, month 01 to 12, day 01 to 31, N a number from 1 without leading zeros.` | Give `2026.11.06.1`, not `v2026.11.06.1`, `2026.11.6.1`, `2026.13.06.1` or `2026.11.06.0`. |
-| `Refused: main moved from <sha> to <sha> after the dispatch.` | Dispatch again; the release is of main's head at the dispatch. |
-| `Refused: the tag v<version> exists.` | Choose the next version; a tag is never moved. |
-| `Refused: <sha> already carries the release tag <tag>.` | The commit is released; release a later commit. |
-| `Refused: CI has no push run on <sha>.` | Wait for CI's push run on main, or find why none ran. |
-| `Refused: CI's push run <id> is <status>.` | Wait until it completes. |
-| `Refused: CI's push run <id> concluded <conclusion>.` | Fix main; release the next green commit. |
-| `Refused: the quality / verdict of CI's push run <id> is <conclusion>.` | The gate's verdict job did not succeed; fix it on main. |
-| `Refused: no single pull request merged <sha> into main.` | Every main commit comes from exactly one merged pull request; release a commit that does. |
-| `Refused: pull request #<n> merged with quality / verdict <conclusion>; release the next commit merged with a green verdict.` | The commit was merged past a red or missing verdict (an emergency merge). Only that commit is refused; its content ships with the next commit merged green. A later re-run does not lift this: only check runs finished by the merge count. |
+| `Refused: dispatched from <ref>, a release is dispatched from main.` (GATE-12) | Dispatch with `--ref main` (the default). |
+| `Refused: the version is not X.Y.Z, each part a number without leading zeros.` (GATE-13) | Give `1.2.3`, not `v1.2.3`, `1.2` or `01.2.3`; an app's call passes `form: YYYY.MM.DD.N`. |
+| `Refused: the form <form> is neither X.Y.Z nor YYYY.MM.DD.N.` (GATE-14) | Fix the `form` the caller's `release.yml` passes. |
+| `Refused: the version is not YYYY.MM.DD.N, month 01 to 12, day 01 to 31, N a number from 1 without leading zeros.` (GATE-15) | Give `2026.11.06.1`, not `v2026.11.06.1`, `2026.11.6.1`, `2026.13.06.1` or `2026.11.06.0`. |
+| `Refused: main moved from <sha> to <sha> after the dispatch.` (GATE-16) | Dispatch again; the release is of main's head at the dispatch. |
+| `Refused: the tag v<version> exists.` (GATE-17) | Choose the next version; a tag is never moved. |
+| `Refused: <sha> already carries the release tag <tag>.` (GATE-18) | The commit is released; release a later commit. |
+| `Refused: CI has no push run on <sha>.` (GATE-19) | Wait for CI's push run on main, or find why none ran. |
+| `Refused: CI's push run <id> is <status>.` (GATE-20) | Wait until it completes. |
+| `Refused: CI's push run <id> concluded <conclusion>.` (GATE-21) | Fix main; release the next green commit. |
+| `Refused: the quality / verdict of CI's push run <id> is <conclusion>.` (GATE-22) | The gate's verdict job did not succeed; fix it on main. |
+| `Refused: no single pull request merged <sha> into main.` (GATE-23) | Every main commit comes from exactly one merged pull request; release a commit that does. |
+| `Refused: pull request #<n> merged with quality / verdict <conclusion>; release the next commit merged with a green verdict.` (GATE-24) | The commit was merged past a red or missing verdict (an emergency merge). Only that commit is refused; its content ships with the next commit merged green. A later re-run does not lift this: only check runs finished by the merge count (GATE-25). |
 
 The check name `quality / verdict` and the CI file name `ci.yml` are fleet contracts: the caller job of
-[`gate.yml`](gate.md) is named `quality`.
+[`gate.yml`](gate.md) is named `quality` (GATE-26).
+
+Of several runs, the one with the highest id decides, for CI's push run and for the merged pull request's verdict check run
+alike (GATE-27).
 
 These refusals stop the attempt before publishing; none creates or changes a tag or release (TAG-8):
 
