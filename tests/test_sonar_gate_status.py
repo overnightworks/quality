@@ -33,7 +33,7 @@ COVERAGE_LINE = "    ! new_coverage is 70.0, the gate needs at least 80"
 
 
 def test_a_failed_gate_with_no_findings_exits_one_and_names_each_failed_condition(monkeypatch, capsys):
-    """#193 sentence 1, cells 1, 13: ERROR prints one line per failed condition with its demand; a passed condition is not named"""
+    """SONAR-6, SONAR-10: ERROR prints one line per failed condition with its demand; a passed condition is not named"""
     gate = gate_error(
         failed_condition(),
         {"status": "OK", "metricKey": "new_bugs", "comparator": "GT", "actualValue": "0", "errorThreshold": "0"},
@@ -47,13 +47,13 @@ def test_a_failed_gate_with_no_findings_exits_one_and_names_each_failed_conditio
 
 
 def test_a_passed_gate_leaves_the_summary_and_exit_unchanged(monkeypatch, capsys):
-    """#193 sentence 1, cell 2: OK prints the passed quality-gate row"""
+    """SONAR-5: OK prints the passed quality-gate row"""
     code, out, err, _ = run_cli(monkeypatch, capsys, sonar_answering(gate=GATE_OK))
     assert (code, out, err) == (0, f"  · analysis      pull request   #7 · {KEY}\n  ✓ new           none\n  · legacy        0 open         on main\n  ✓ quality gate  passed\n✓ clean · new 0 · legacy 0 · <1s\n", "")
 
 
 def test_a_failed_gate_and_new_findings_print_both(monkeypatch, capsys):
-    """#193 cell 3"""
+    """SONAR-6, SONAR-10."""
     code, out, err, _ = run_cli(monkeypatch, capsys, sonar_answering(issues=issues_page(1, 1), gate=gate_error(failed_condition())))
     assert code == 1
     assert ("    ! src/a1.py:1" in out, err) == (True, "")
@@ -78,14 +78,14 @@ def test_a_failed_gate_and_new_findings_print_both(monkeypatch, capsys):
          "conditions not a list", "error without a failed condition", "unknown comparator", "condition without a value"],
 )
 def test_a_gate_answer_that_is_not_ok_or_a_readable_error_is_exit_two(monkeypatch, capsys, gate):
-    """#193 sentence 1, cells 4, 5, 6: anything but OK and a readable ERROR is cannot-judge"""
+    """SONAR-7: anything but OK and a readable ERROR is cannot-judge"""
     code, _, err, _ = run_cli(monkeypatch, capsys, sonar_answering(gate=gate))
     assert code == 2
     assert err.startswith("error: ")
 
 
 def test_the_gate_is_read_by_the_tasks_analysis_id_and_not_by_project_and_pull_request(monkeypatch, capsys):
-    """#193 cell 7"""
+    """SONAR-2."""
     fake = sonar_answering()
     run_cli(monkeypatch, capsys, fake)
     (url,) = fake.urls_to("qualitygates/project_status")
@@ -94,7 +94,7 @@ def test_the_gate_is_read_by_the_tasks_analysis_id_and_not_by_project_and_pull_r
 
 @pytest.mark.parametrize("analysis_id", [None, "", 7], ids=["absent", "empty", "not text"])
 def test_a_finished_task_without_an_analysis_id_is_exit_two_before_the_gate_read(monkeypatch, capsys, analysis_id):
-    """#193 cell 8"""
+    """SONAR-8."""
     fake = sonar_answering(task=FINISHED_FOR_PR_7 | {"analysisId": analysis_id})
     code, _, err, _ = run_cli(monkeypatch, capsys, fake)
     assert (code, fake.urls_to("qualitygates/project_status")) == (2, [])
@@ -104,7 +104,7 @@ def test_a_finished_task_without_an_analysis_id_is_exit_two_before_the_gate_read
 @pytest.mark.parametrize("failure", [sonar.SonarHttpError(status, "u") for status in (401, 403, 404, 500)] + [CannotJudge("SonarCloud did not answer")],
                          ids=["401", "403", "404", "500", "timeout"])
 def test_a_gate_read_that_fails_is_exit_two_naming_sonarcloud(monkeypatch, capsys, failure):
-    """#193 cell 9"""
+    """SONAR-9."""
     fake = sonar_answering()
     fake.answers["qualitygates/project_status"] = [failure]
     code, _, err, _ = run_cli(monkeypatch, capsys, fake)
@@ -113,7 +113,7 @@ def test_a_gate_read_that_fails_is_exit_two_naming_sonarcloud(monkeypatch, capsy
 
 
 def test_the_gate_read_carries_the_token_in_the_header_only(monkeypatch, capsys):
-    """#193 sentence 5, cell 10"""
+    """SONAR-3."""
     fake = sonar_answering()
     run_cli(monkeypatch, capsys, fake)
     (url,) = fake.urls_to("qualitygates/project_status")
@@ -126,7 +126,7 @@ def test_the_gate_read_carries_the_token_in_the_header_only(monkeypatch, capsys)
     ids=["default branch", "other branch"],
 )
 def test_a_branch_run_makes_no_gate_request_and_ignores_a_failing_gate(monkeypatch, capsys, environment, task):
-    """#193 sentence 4, cell 11"""
+    """SONAR-4."""
     fake = sonar_answering(task=task, gate=gate_error(failed_condition()))
     code, *_ = run_cli(monkeypatch, capsys, fake, environment)
     assert (code, fake.urls_to("qualitygates/project_status")) == (0, [])
@@ -142,7 +142,7 @@ def test_a_branch_run_makes_no_gate_request_and_ignores_a_failing_gate(monkeypat
     ids=["legacy fail with OK", "ERROR with no legacy", "legacy report with OK"],
 )
 def test_legacy_and_the_gate_each_fail_a_pull_request_on_their_own(monkeypatch, capsys, config_text, legacy, gate, code):
-    """#193 sentence 6, cell 12"""
+    """SONAR-10, SONAR-11."""
     result = run_cli(monkeypatch, capsys, sonar_answering(legacy=legacy, gate=gate), config_text=config_text)
     assert result[0] == code
 
@@ -158,7 +158,7 @@ def test_legacy_and_the_gate_each_fail_a_pull_request_on_their_own(monkeypatch, 
     ids=["OK ignored", "ERROR ignored", "OK not ignored", "ERROR not ignored"],
 )
 def test_ignored_conditions_are_disclosed_on_stdout_without_changing_the_exit(monkeypatch, capsys, gate, code, in_stdout):
-    """#193 sentence 3, cells 14, 15"""
+    """SONAR-12."""
     result = run_cli(monkeypatch, capsys, sonar_answering(gate=gate))
     assert result[0] == code
     gate_row = next(line for line in result[1].splitlines() if line.startswith("  ") and "quality gate" in line)
@@ -167,7 +167,7 @@ def test_ignored_conditions_are_disclosed_on_stdout_without_changing_the_exit(mo
 
 
 def test_an_adoption_pull_request_with_an_unanalysed_default_branch_is_judged_by_the_gate(monkeypatch, capsys):
-    """#193 sentence 4, cell 16"""
+    """SONAR-1."""
     fake = sonar_answering(branches=(), gate=gate_error(failed_condition()))
     code, out, _, _ = run_cli(monkeypatch, capsys, fake)
     assert code == 1

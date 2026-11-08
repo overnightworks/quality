@@ -143,20 +143,21 @@ On pull requests and default-branch runs `quality sonar findings` reads `api/pro
 
 ### The quality gate
 
-On a pull request `quality sonar findings` also reads SonarCloud's quality gate for this run's own analysis
-(`api/qualitygates/project_status?analysisId=…`, the id of the finished task it waited for; the token travels in the
-header only). `quality` names no gate and holds no threshold: the repository's gate in SonarCloud decides, and a move
-to another gate changes the verdict with no change here. Default-branch and other-branch runs make no gate request.
+On a pull request `quality sonar findings` also reads SonarCloud's quality gate for this run's own analysis (SONAR-1),
+by `api/qualitygates/project_status?analysisId=…` with the id of the finished task it waited for (SONAR-2); the token
+travels in the header only (SONAR-3). `quality` names no gate and holds no threshold: the repository's gate in
+SonarCloud decides, and a move to another gate changes the verdict with no change here. Default-branch and other-branch
+runs make no gate request (SONAR-4).
 
 | SonarCloud answers | Exit | Output |
 | --- | --- | --- |
-| `OK` | by the findings, as before | `✓ quality gate  passed` |
-| `ERROR` | `1` | `! quality gate  failed  N conditions`, each failed condition below it: `! new_coverage is 70.0, the gate needs at least 80` (`LT` reads "at least", `GT` "at most") |
-| `NONE`, `WARN`, any other word, no `projectStatus`, an unreadable body | `2` | `error:` and `next:` |
-| the task has no `analysisId`, HTTP 401, 403, 404 or 5xx, a timeout | `2` | `error:` and `next:`, before the findings are read |
+| `OK` (SONAR-5) | by the findings, as before | `✓ quality gate  passed` |
+| `ERROR` (SONAR-6) | `1` | `! quality gate  failed  N conditions`, each failed condition below it: `! new_coverage is 70.0, the gate needs at least 80` (`LT` reads "at least", `GT` "at most") |
+| `NONE`, `WARN`, any other word, no `projectStatus`, an unreadable body, an `ERROR` that names no failed condition or a comparator other than `LT` and `GT` (SONAR-7) | `2` | `error:` and `next:` |
+| the task has no `analysisId` (SONAR-8), HTTP 401, 403, 404 or 5xx, a timeout (SONAR-9) | `2` | `error:` and `next:`, before the findings are read |
 
-A failed gate fails the `sonar` job whatever the findings count says, and `legacy = "fail"` still fails it on its own;
-the verdict then prints the row `! quality / sonar  failure`. `-Dsonar.qualitygate.wait=false` stays in `gate.yml`: the
+A failed gate fails the `sonar` job whatever the findings count says (SONAR-10), and `legacy = "fail"` still fails it on its own
+(SONAR-11); the verdict then prints the row `! quality / sonar  failure`. `-Dsonar.qualitygate.wait=false` stays in `gate.yml`: the
 scanner does not wait for the gate, this command reads it.
 
 - **What the gates check.** The gate set in SonarCloud for the repository; the organization's default is the built-in
@@ -165,7 +166,8 @@ scanner does not wait for the gate, this command reads it.
   finding, it is not fixed in code.
 - **A small change.** SonarCloud skips the coverage and duplication conditions for a change of fewer than 20 new lines.
   When its answer says so (`ignoredConditions`), the quality gate row's fact reads `coverage and duplication not judged:
-  fewer than 20 new lines`, with `passed` and with `failed`; the exit is unchanged. Branch coverage of a small change is therefore not judged.
+  fewer than 20 new lines`, with `passed` and with `failed`; the exit is unchanged (SONAR-12). Branch coverage of a small change is therefore not
+  judged.
 - **Joined coverage.** The gate judges the coverage SonarCloud holds, so it measures the 100 % branch rule only for a
   repository whose report joins every test layer and carries branches. For a repository that has not joined its layers
   yet, the coverage gap is SonarCloud's figure.
