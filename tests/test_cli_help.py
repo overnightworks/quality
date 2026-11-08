@@ -617,7 +617,7 @@ def test_a_wrong_area_stands_escaped_in_the_pair(capsys):
     ],
 )
 def test_options_may_stand_between_the_named_areas(words):
-    """HELP-17: an option stands before, between or after the named areas, or after --."""
+    """HELP-17: an option stands before, between or after the named areas, or before --."""
     arguments = cli.read_invocation(["check", *words])
     assert (arguments.areas, arguments.verbose) == ([Area.DEBT, Area.SECRETS], True)
 
@@ -698,7 +698,7 @@ def test_a_dry_run_without_the_fix_is_the_pair_and_runs_nothing(capsys, words):
 
 
 def test_the_dry_run_words_are_the_commands_words():
-    """HELP-22, HELP-27: the dry run's command in the pair is the command's own words."""
+    """HELP-22: the dry run's command in the pair is the command's own words."""
     assert cli.DRY_RUN_COMMAND.replace(CHECK_WORD, " ".join(DRY_RUN_WORDS[:2])) == f"quality {' '.join(DRY_RUN_WORDS)}"
 
 
