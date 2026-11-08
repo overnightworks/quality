@@ -173,8 +173,8 @@ def test_a_selected_scanner_vets_its_stderr_without_judging_another_area(
     build_repo, served_scanners, elsewhere, capsys,
     words, exit_of_actionlint, stderr_line, vet_answer, code, shown, rows, row,
 ):
-    """VERBOSE-3, VERBOSE-8, VERBOSE-12, CHECK-6: a named area's scanner shows its cleared stderr, counts an uncleared
-    one and starts one vet for a refusal, and no other area runs."""
+    """VERBOSE-3, VERBOSE-8, VERBOSE-12, VERBOSE-20, VERBOSE-21, CHECK-6: a named area's scanner shows its cleared
+    stderr, counts an uncleared one, starts one vet per finished scan and refusal, and no other area runs."""
     calls = elsewhere / "calls"
     fake_gitleaks(
         served_scanners,
