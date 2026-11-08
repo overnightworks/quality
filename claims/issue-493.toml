@@ -1,8 +1,0 @@
-claim_id = "2f3ea9b569bb49cdb5456b123070e59d"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "ebb95607a739a6ab2d1e94e80054d32337566c77"
-branch = "claude/issue-493-d7-sonar-2c"
-scope = ["docs/sonar.md", "tests/test_sonar.py", "tests/test_sonar_exception.py", "tests/workflows/test_gate_sonar.py"]
-opened_commit = "b1b4765640cce04d4902ab763eeb858633183fd4"
-whole_reason = "One document section and the test functions that prove it, cut by function in three shared modules and one docstring in a fourth; apart, a test would cite an ID its document does not hold."
