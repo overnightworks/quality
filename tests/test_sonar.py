@@ -24,6 +24,7 @@ from tests.support.sonar import (
     TOKEN,
     FakeSonar,
     Responder,
+    environment_without_token,
     issue,
     issues_page,
     legacy_config,
@@ -33,6 +34,7 @@ from tests.support.sonar import (
     run_properties,
     set_environment,
     sonar_answering,
+    sonar_off_files,
 )
 
 
@@ -700,14 +702,6 @@ def test_a_repository_without_a_config_is_refused_before_any_request(monkeypatch
     assert "quality/config.toml is missing" in err
 
 
-def sonar_off_files():
-    return {"quality/config.toml": '[gate]\nmandatory_jobs = ["check"]\nsonar = false\n'}
-
-
-def environment_without_token():
-    return {name: value for name, value in PULL_REQUEST_ENVIRONMENT.items() if name != "SONAR_TOKEN"}
-
-
 def test_properties_with_sonar_off_reads_no_token_and_writes_off(monkeypatch, capsys, build_repo, tmp_path):
     """With [gate] sonar = false the door needs no properties file and no token, hands the job sonar=off and exits 0."""
     step_output = tmp_path / "github_output"
@@ -752,9 +746,9 @@ def test_properties_without_the_key_still_refuses_an_empty_token(monkeypatch, ca
 def test_properties_without_a_config_still_refuses_an_empty_token(monkeypatch, capsys, build_repo, tmp_path):
     """A repository without quality/config.toml runs SonarCloud, so a missing token is exit 2 and nothing is written."""
     step_output = tmp_path / "github_output"
+    (tmp_path / "quality" / "config.toml").unlink()
     code, _, err = run_properties(
         monkeypatch, capsys, build_repo, properties=None, environment=environment_without_token(), step_output=step_output,
-        arrange=lambda root: (root / "quality" / "config.toml").unlink(),
     )
     assert (code, "SONAR_TOKEN is empty" in err, step_output.exists()) == (2, True, False)
 

@@ -12,7 +12,7 @@ from enum import StrEnum
 from pathlib import Path
 
 from quality import output, repository
-from quality.checkout import tracked_files
+from quality.checkout import require_unchanged_tracked_files, tracked_files
 from quality.config import CONFIG_PATH, ConfigError, LegacyMode, read_gate_settings, runs_sonar
 from quality.report import (
     FIX_THEN_RERUN,
@@ -65,6 +65,7 @@ ALL_FILES_PATTERN = "**/*"
 PULL_REQUEST_EVENT = "pull_request"
 TOKEN_VARIABLE = "SONAR_TOKEN"  # noqa: S105 - the name of an environment variable and not a secret
 TOKEN_STEP = Instruction(f"set the {TOKEN_VARIABLE} secret and pass it to gate.yml, then run the gate again")
+ADD_ONLY_STEP = Instruction("let the coverage artifact add report files only, never change a file the commit tracks")
 # gate.yml passes github.event.repository.default_branch; an absent expression renders as an empty string.
 DEFAULT_BRANCH_VARIABLE = "DEFAULT_BRANCH"
 
@@ -460,6 +461,7 @@ class JudgedProperties:
 def _judged_properties(environment: Mapping[str, str]) -> JudgedProperties:
     root = Path(".")
     try:
+        require_unchanged_tracked_files(root, ADD_ONLY_STEP)
         if not runs_sonar(root):
             refuse_scan_wiring(environment)
             off = output.Row(output.Glyph.NOTE, "sonar", SonarEvent.OFF, f"{CONFIG_PATH} sets [gate] sonar = false")

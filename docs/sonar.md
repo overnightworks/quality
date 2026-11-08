@@ -18,7 +18,7 @@ SonarCloud · <time>`, `✓ clean · new 0 · legacy N · <time>`, `! red · …
 (exit `2`) they print the `error:`/`next:` pair on stderr instead. A refusal that knows its own step names it: a
 `quality/config.toml` it cannot read shows its example to copy and `push the fix; the gate judges the new commit`; an
 empty `SONAR_TOKEN` the step to set the secret and pass it to `gate.yml`; an unwritable `GITHUB_OUTPUT` `fix what the
-error names, then re-run this run's failed jobs`. Every other refusal falls back to its step's general step:
+error names, then re-run this run's failed jobs`; a changed tracked file the step to let the artifact add reports only. Every other refusal falls back to its step's general step:
 `properties` the push step, `findings` the re-run step. `-v` adds nothing: neither step runs a scanner.
 
 ```text
@@ -53,10 +53,13 @@ caller hands over the report its checks job wrote, in four steps:
    (or `sonar.javascript.lcov.reportPaths`). The path is relative to the upload's common directory, which is where the
    download puts it.
 
-The sonar job downloads the artifact right after the caller checkout and before the gate's own tool checkout, so a
-`.gate-tool/` path inside the artifact does not stand in for the pinned tool: the tool checkout re-creates it at the
-pinned ref. This is defence in depth, not a guarantee. An artifact that plants `.gate-tool/.git/` still reaches git
-through the checkout, and the caller's own checks job is arbitrary code anyway.
+Before anything reads the checkout, the properties check refuses (exit `2`) a checkout whose tracked files differ from
+the checked-out commit, naming the first. The artifact may add a report but never change a file the commit tracks: not
+`quality/config.toml`, whose `[gate] legacy` the findings step reads and the verdict holds at the commit, not
+`sonar-project.properties`, not a source the scan reads. The download comes before the tool checkout, so a `.gate-tool/`
+path in the artifact does not stand in for the pinned tool. A planted `.git/` still reaches git; upload-artifact leaves
+hidden paths out unless the caller's own workflow sets `include-hidden-files`, which the caller's workflow could do
+anyway.
 
 The properties check exits `2` naming the key and the entry when a listed report does not exist: each comma-separated entry is
 judged on its own, a glob (`*`, `?`, `**`) must match at least one file and `**` must be a whole path segment, a plain
@@ -68,8 +71,8 @@ caller that names no coverage key and passes no input scans as before.
 allowlist (`sonar.organization`, `sonar.projectKey`, `sonar.projectName`, `sonar.sources`, `sonar.tests`, the
 inclusion/exclusion keys, `sonar.sourceEncoding`, `sonar.python.version` and the two coverage report path keys), any
 value containing a `${...}` substitution after decoding (the scanner would expand `${env.SONAR_TOKEN}`), a
-`sonar.organization` or `sonar.projectKey` other than `<owner>` and `<owner>_<repo>`, a tracked `.scannerwork/`, and
-an empty token. The file is read with the `java.util.Properties` grammar (`=`, `:` or whitespace separators, `\`
+`sonar.organization` or `sonar.projectKey` other than `<owner>` and `<owner>_<repo>`, a tracked `.scannerwork/`, a tracked file that
+differs from the checked-out commit, and an empty token. The file is read with the `java.util.Properties` grammar (`=`, `:` or whitespace separators, `\`
 continuation, `\uXXXX` and `\` escapes). The file is read inside the checkout; a link leading out of it is refused,
 and every refusal names the file repository-relative. The check does not stop a pull request that edits the caller's
 workflow, which holds the token itself.
