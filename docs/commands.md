@@ -325,14 +325,19 @@ Ruled by the operator:
   the shown text and the log comment name the method (MERGE-33)), and sets the property back to `true`
   in every case: merged, merge failed, Ctrl-C (MERGE-34). After `yes` each step is a row on stdout as GitHub answers it
   (`quality_gate  off`, `#<pr>  merged` with the method, `quality_gate  on`, `log comment  posted`) (MERGE-35), ending
-  `✓ merged #<pr> · quality_gate on again · <duration>` (the seconds since `yes`) (exit `0`) (MERGE-36). A step
-  not done is a `✗` row (`off failed`, `not merged`, `state unknown`, `not restored`, `not posted`) and one pair on stderr, exit `2`,
-  the gate first (`quality_gate MAY STILL BE OFF on <owner/repo>` where it is not on), `next:` the commands that finish it, the
-  gate's first, alone on its line and never shortened. A gate not switched on is its row before any further request. After
-  Ctrl-C the next line starts on a line of its own. A merge whose outcome GitHub does not confirm (Ctrl-C, a lost answer) is
-  read back after the gate is on; if that does not settle it, the row is `state unknown` and the pair says `#<pr> may be merged`
-  with `gh pr view`. Before the question a stdout that refuses a row stops the door (exit `2`, nothing changed); after `yes` the
-  run keeps its exit.
-- **Logged:** one comment on the pull request, opening `quality merge run by @<login>` (who, when, the legacy count and each declaration,
-  `quality_gate off → <outcome> → on`, or `quality_gate not switched off → no merge → on` when switching off failed),
-  also when the restore failed. A comment not posted is its `✗` row, its command under `next:`.
+  `✓ merged #<pr> · quality_gate on again · <duration>` (counted from `yes`) (exit `0`) (MERGE-36). A step
+  not done is a `✗` row (`off failed`, `not merged`, `state unknown`, `not restored`, `not posted`) and one pair on
+  stderr, exit `2` (MERGE-37), the gate first (`quality_gate MAY STILL BE OFF on <owner/repo>` where it is not on)
+  (MERGE-38), `next:` the commands that finish it, the gate's first, alone on its line and
+  [never shortened](output.md#length) (MERGE-39). A gate not switched on is its row before any further request
+  (MERGE-40). After Ctrl-C the next line starts on a line of its own (MERGE-41). A merge whose outcome GitHub does not
+  confirm (Ctrl-C, a lost answer) is read back after the gate is on, its row below the gate's (MERGE-42); if that does
+  not settle it, the row is `state unknown` and the pair says `#<pr> may be merged` with `gh pr view` (MERGE-43). Before
+  the question a stdout that refuses a row stops the door (exit `2`, nothing changed) (MERGE-44); after `yes` such a
+  stdout takes no further row and no closing line, and the run does every step and keeps its exit (MERGE-45).
+- **Logged:** one comment on the pull request, opening `quality merge run by @<login>` (MERGE-46) (who, when
+  (MERGE-47), the legacy count (MERGE-48) and each declaration (MERGE-49), `quality_gate off → <outcome> → on`
+  (`<outcome>` is `merge`, `merge failed` or `merge state unknown`) (MERGE-50), or
+  `quality_gate not switched off → no merge → on` when switching off failed (MERGE-51)), also when the restore failed,
+  the comment then ending `NOT restored, it may still be off` in place of `on` (MERGE-52). A comment not posted is its
+  `✗` row, its command under `next:`.

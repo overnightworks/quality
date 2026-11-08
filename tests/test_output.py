@@ -675,6 +675,7 @@ def test_a_closed_stream_takes_the_rows_of_the_door():
 
 
 def test_a_command_on_its_own_line_stands_below_a_bare_next():
+    """MERGE-39: a command on its own line stands below a bare `next:`, alone or after another step."""
     pair = written(io.StringIO, lambda channel: output.write_pair("e", (Command("c", own_line=True),), channel))
     assert pair == "error: e\nnext:\n    c\n"
     two = written(io.StringIO, lambda channel: output.write_pair("e", (Command("a"), Command("b", own_line=True)), channel))
