@@ -18,7 +18,7 @@ from tests.support.terminal import Terminal, by_role, without_sgr
 
 
 def ceiling(table: str) -> str:
-    return table + "\n[clones]\n"
+    return rendered(table + "\n[clones]\n")
 
 
 def untouched(repo: Path) -> tuple[dict[str, bytes | str | None], list[tuple[int, int] | None]]:
@@ -509,7 +509,7 @@ def test_at_a_terminal_a_dry_run_paints_each_glyph_and_the_verdict_in_one_colour
 ENTRIES = '[function_lines."src/a.py"]\n"long_one" = 62\n\n[file_lines]\n"src/b.py" = 850\n'
 OLD_HEADER = "# Measured by `quality baseline write`.\n"
 TWO_TABLES_APART = '[function_lines."src/a.py"]\n"long_one" = 62\n\n\n[file_lines]\n"src/b.py" = 850\n'
-TABLES_OUT_OF_ORDER = '[file_lines]\n"src/b.py" = 850\n\n[function_lines."src/a.py"]\n"long_one" = 62\n\n[clones]\n'
+TABLES_OUT_OF_ORDER = '[function_lines."src/a.py"]\n"long_one" = 62\n\n[file_lines]\n"src/b.py" = 850\n\n[clones]\n'
 
 
 def stale_ceiling(build_repo, held: str) -> Path:
@@ -552,7 +552,7 @@ def test_a_ceiling_that_renders_byte_for_byte_is_left_alone(build_repo, capsys, 
 @pytest.mark.parametrize(
     ("words", "fact", "closing"),
     [
-        pytest.param(DRY_RUN_WORDS, "to rewrite · quality/baseline.toml", "! 1 finding in 1 area · ceiling would be rewritten · <1s", id="dry run"),
+        pytest.param(DRY_RUN_WORDS, "to rewrite · quality/baseline.toml", "! 1 finding in 1 area · ceiling would be rewritten · nothing written · <1s", id="dry run"),
         pytest.param(FIX_WORDS, "rewritten · quality/baseline.toml", "! 1 finding in 1 area · ceiling rewritten · <1s", id="fix"),
     ],
 )

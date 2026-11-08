@@ -54,7 +54,7 @@ Ruled by the operator:
 ## `quality check --fix`
 
 `quality check debt --fix` lowers the debt ceiling (`quality/baseline.toml`) where code shrank, or records it where no
-ceiling lies on disk, in the index or in any commit `HEAD` reaches, and then judges the tree against the new file. It
+ceiling lies on disk, in the index or in any commit `HEAD` reaches, and then judges the tree against the new file. It writes the file when an entry changes and when its bytes are not what the fix would render, an older header included; one that renders byte for byte stays untouched. It
 never raises an entry and never adds one: what grew or is new stays a finding, and a raise is a hand edit with a declared
 loosening. A file git renamed into the index since the ceiling's last commit takes its entries with it (`docs/rules.md`). An entry whose path the index no longer tracks, whose Python function is gone or whose file is declared generated goes; one only missing from disk stands; a held pair the tree lost goes. A ceiling or `[clones]` table git
 holds and the tree lacks refuses with the restore step, and a shallow clone that cannot prove a first recording names

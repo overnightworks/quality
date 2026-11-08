@@ -7,6 +7,7 @@ import pytest
 
 from quality.config import CONFIG_PATH, GeneratedFile
 from quality.ratchet import BASELINE_PATH, Key, Measured, Metric, gone_entries, load_baseline
+from tests.support.baselines import rendered
 from tests.support.door import CHECK_WORD, FIX_WORDS, digest, fixed
 from tests.support.generated_files import MANDATORY_JOB, gate_declaring, generated_config
 from tests.support.git_repositories import git, put
@@ -25,7 +26,7 @@ def declared(*paths: str) -> list[GeneratedFile]:
 
 
 def ceiling(table: str) -> str:
-    return table + "\n[clones]\n"
+    return rendered(table + "\n[clones]\n")
 
 
 def checked(capsys, repo: Path) -> tuple[int, str, str]:

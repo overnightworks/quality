@@ -427,14 +427,16 @@ def _require_no_clones_table_in_git(inputs: RunInputs) -> None:
 
 
 def _written(inputs: RunInputs, fix: ratchet.CeilingFix) -> ratchet.CeilingFix | DryRun:
-    """A changed ceiling rendered, so one no file can hold refuses a dry run too; written only by the fix."""
-    if fix.changed:
-        try:
-            text = ratchet.render_baseline(fix.ceiling)
-            if inputs.fix is Fix.WRITE:
-                repository.write_text(inputs.root, ratchet.BASELINE_PATH, text)
-        except (repository.RepositoryFileError, ratchet.SizeError) as error:
-            raise CannotJudge(str(error)) from error
+    """The ceiling rendered, so one no file can hold refuses a dry run too; written, when it changed or its text
+    is not the file's, only by the fix."""
+    try:
+        text = ratchet.render_baseline(fix.ceiling)
+        if not fix.changed:
+            fix = replace(fix, text_differs=repository.read_text(inputs.root, ratchet.BASELINE_PATH) != text)
+        if fix.changed and inputs.fix is Fix.WRITE:
+            repository.write_text(inputs.root, ratchet.BASELINE_PATH, text)
+    except (repository.RepositoryFileError, ratchet.SizeError) as error:
+        raise CannotJudge(str(error)) from error
     return DryRun(fix) if inputs.fix is Fix.DRY_RUN else fix
 
 

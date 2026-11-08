@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from quality.ratchet import BASELINE_PATH
+from tests.support.baselines import rendered
 from tests.support.clones import function as clone_function
 from tests.support.door import CHECK_WORD, FIX_WORDS, digest, door_in, fixed, restore_step
 from tests.support.git_repositories import git, head_commit, put, shallow_clone
@@ -16,7 +17,7 @@ from tests.support.verdict_renames import commit_all
 def ceiling(*entries: tuple[str, int]) -> str:
     """A ceiling holding `long_one` of each (path, value) and no clone pair."""
     tables = "".join(f'[function_lines."{path}"]\nlong_one = {value}\n\n' for path, value in entries)
-    return f"{tables}[clones]\n"
+    return rendered(f"{tables}[clones]\n")
 
 
 def checked(capsys, repo: Path) -> tuple[int, str]:
