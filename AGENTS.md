@@ -52,10 +52,4 @@ Run from the repository root:
 ## Release
 
 The version comes from git tags (hatch-vcs), so a checkout that installs quality needs its tags (`fetch-depth: 0`).
-A release is dispatched as [docs/release.md](docs/release.md#qualitys-own-release) says. A patch `vX.Y.Z` while main
-takes no tag is tagged by hand on `release/vX.Y`, cut from the last `vX.Y` tag: tag its merge commit locally, run
-`uv sync --reinstall-package overnightworks-quality` (a checkout dirty at its last sync otherwise keeps a
-`.dYYYYMMDD` version) and `uv run python scripts/verify_release.py`, and push the tag only when it exits 0; tags are
-immutable on the remote. Its pull requests target that branch, pass the same gate and merge with
-`gh pr merge --merge --match-head-commit <sha>` once `quality / verdict` is green (`aco land` lands only into main);
-after the tag the branch is merged into main and deleted.
+A release is dispatched as [docs/release.md](docs/release.md#qualitys-own-release) says.
