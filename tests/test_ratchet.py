@@ -188,7 +188,8 @@ HELD_70 = '[function_lines."src/a.py"]\nlong_one = 70\n'
     ids=["new-file-from-800-lines", "new-function-from-60-lines", "new-ccn-above-15", "grown-entry", "stale-entry"],
 )
 def test_against_a_baseline_new_grown_and_stale_entries_are_red(build_repo, capsys, files, baseline, path, line, event, values):
-    """#46 rule 4: a new violation, a grown entry and a stale entry each name path, symbol, value and fix."""
+    """CEILING-4, CEILING-5, CEILING-6, SIZE-3, SIZE-5, ROW-7, ROW-14: against a baseline a new violation, a grown entry
+    and an entry above its measured value are one finding each, exit 1, with the symbol and the values."""
     repo = build_repo({**files, BASELINE_PATH: baseline})
     code, output = run(capsys, repo)
     (finding,) = rule_findings(repo, Rule.SIZE)
@@ -203,7 +204,7 @@ def test_against_a_baseline_new_grown_and_stale_entries_are_red(build_repo, caps
 
 
 def test_the_fix_of_a_stale_entry_run_in_the_repository_leaves_a_clean_run(build_repo, capsys):
-    """#46 rule 4, decision 7: the printed fix is a command of this door, and running it lowers the entry."""
+    """CEILING-6: the fix a `can fall` row prints is a command of this door, and running it lowers the entry."""
     repo = build_repo({"src/a.py": long_function(65), BASELINE_PATH: HELD_70})
     run(capsys, repo)
     (finding,) = rule_findings(repo, Rule.SIZE)
@@ -215,7 +216,7 @@ def test_the_fix_of_a_stale_entry_run_in_the_repository_leaves_a_clean_run(build
 
 
 def test_bringing_a_grown_function_back_to_its_held_value_clears_the_finding(build_repo, capsys):
-    """#46 rule 4: the value a grown entry's fix names is the value that holds."""
+    """CEILING-5: a grown function written back to its held value leaves a clean run."""
     repo = build_repo({"src/a.py": long_function(71), BASELINE_PATH: HELD_70})
     run(capsys, repo)
     assert [finding.event for finding in rule_findings(repo, Rule.SIZE)] == [FindingEvent.GREW]
@@ -233,19 +234,19 @@ def test_bringing_a_grown_function_back_to_its_held_value_clears_the_finding(bui
     ids=["file-just-below-800-lines", "functions-just-below-60-lines-and-ccn-15"],
 )
 def test_below_the_thresholds_is_clean(build_repo, capsys, files):
-    """Values below the thresholds are no debt."""
+    """SIZE-3: a file of 799 lines, a function of 59 lines and a CCN of 15 are no debt."""
     code, output = run(capsys, build_repo({**files, BASELINE_PATH: ""}))
     assert code == 0, output
     assert is_clean(output)
 
 
-@pytest.fixture(params=["deleted", "dangling", "cell 18 dangling out of the repository"])
+@pytest.fixture(params=["deleted", "dangling", "dangling out of the repository"])
 def remove(request, elsewhere) -> Callable[[Path], None]:
     """Takes a tracked file off the disk: deleted, or replaced by a link to nowhere inside or outside the repository."""
     link_target = {
         "deleted": None,
         "dangling": Path("missing.py"),
-        "cell 18 dangling out of the repository": elsewhere / "missing.py",
+        "dangling out of the repository": elsewhere / "missing.py",
     }[request.param]
 
     def take_off_the_disk(path: Path) -> None:
@@ -264,8 +265,9 @@ def remove(request, elsewhere) -> Callable[[Path], None]:
 def test_a_tracked_file_missing_from_disk_is_unmeasured_for_the_size_rule_and_only_the_python_rules_refuse_it(
     build_repo, capsys, remove, baseline
 ):
-    """The size rule judges the tree on disk; a tracked file absent from it is unmeasured, its entry stands, wherever a
-    dangling link points. python-security and python-print must read every tracked `.py` file, so they alone refuse the run."""
+    """CEILING-1, SECURITY-19, SECURITY-28: the size rule judges the tree on disk; a tracked file absent from it is
+    unmeasured and its entry stands, wherever a dangling link points. python-security and python-print must read every
+    tracked `.py` file, so they alone refuse the run."""
     files = {"src/a.py": "x = 1\n", "src/b.py": long_function(62)}
     repo = build_repo(files if baseline is None else {**files, BASELINE_PATH: baseline})
     remove(repo / "src/b.py")
@@ -314,7 +316,8 @@ def test_a_tracked_file_the_filesystem_refuses_to_reach_cannot_be_judged(build_r
     ids=["oversized integer", "nested too deep"],
 )
 def test_a_size_baseline_the_toml_reader_gives_up_on_cannot_be_judged(build_repo, capsys, content):
-    """#218 sentence 1: an integer or a nesting tomllib refuses is exit 2 with the ruled message, not a traceback."""
+    """CEILING-9: an integer or a nesting the TOML reader refuses is exit 2 naming the baseline as not valid TOML, not a
+    traceback."""
     repo = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: content})
     assert check_door(repo) == 2
     assert f"{BASELINE_PATH} is not valid TOML" in capsys.readouterr().out
@@ -342,7 +345,8 @@ def test_two_functions_sharing_a_qualified_name_count_as_two(build_repo, capsys,
 
 
 def test_the_shorter_of_two_same_named_functions_cannot_grow_under_the_baseline(build_repo, capsys):
-    """#46 rule 4: each function keeps its own entry, so the shorter twin growing is red, not hidden by the longer."""
+    """CEILING-5, SIZE-5: each of two functions of one name keeps its own entry, so the shorter growing is a finding,
+    not hidden by the longer."""
     repo = build_repo({"src/a.py": long_function(62) + long_function(70)})
     assert door_in(repo, *FIX_WORDS) == 0
     (repo / "src/a.py").write_text(long_function(65) + long_function(70))
@@ -391,8 +395,8 @@ def test_fixing_twice_yields_the_same_file(build_repo):
     ids=["not-toml", "not-a-count"],
 )
 def test_an_unreadable_baseline_cannot_be_judged(build_repo, capsys, baseline):
-    """#46 rule 4 and #52 rule 7, cell 14: a baseline the rule cannot read is exit 2, never clean, and names the
-    rewrite once per rule that reads it (size and clone, #136)."""
+    """CEILING-9: a baseline the rule cannot read is exit 2 for the size and clone rules, never clean, and the run names
+    the restore step once."""
     repo = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: baseline})
     code, output = run(capsys, repo)
     assert code == 2
@@ -402,7 +406,8 @@ def test_an_unreadable_baseline_cannot_be_judged(build_repo, capsys, baseline):
 
 
 def test_an_unknown_baseline_table_states_the_fact_and_sends_the_head_to_its_pinned_release(build_repo, capsys):
-    """#153 cell 14: the fact and the tool version, not the command that may have written the table."""
+    """CEILING-3: an unknown table is refused with the fact and the tables this quality knows, and the head is sent to
+    the release its gate pins."""
     repo = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: "[future]\n"})
     code, output = run(capsys, repo)
     assert (code, list(refusals(repo))) == (2, [Rule.SIZE, Rule.CLONE])
@@ -614,8 +619,9 @@ def not_utf8_baseline_repo(build_repo) -> Path:
     return repo
 
 
-def test_a_baseline_that_is_not_utf8_is_malformed_and_names_the_rewrite_once_per_rule(build_repo, capsys):
-    """#76 rule 6, cell 18: the size and clone rules each name the invalid encoding and the rewrite once."""
+def test_a_baseline_that_is_not_utf8_is_malformed_and_names_the_restore_step_once(build_repo, capsys):
+    """CEILING-2: a baseline that is not UTF-8 is exit 2 for the size and clone rules, naming the invalid encoding, and
+    the run names the restore step once."""
     repo = not_utf8_baseline_repo(build_repo)
     code, output = run(capsys, repo)
     assert (code, list(refusals(repo))) == (2, [Rule.SIZE, Rule.CLONE])
@@ -625,7 +631,7 @@ def test_a_baseline_that_is_not_utf8_is_malformed_and_names_the_rewrite_once_per
 
 @pytest.mark.parametrize("suffix", ["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs", "svelte", "vue"])
 def test_a_file_of_every_table_language_is_new_debt_from_800_lines_against_a_baseline(build_repo, capsys, suffix):
-    """SIZE-1, SIZE-3: against a baseline a file of any measured language from 800 lines is new debt, 799 is not."""
+    """SIZE-1, SIZE-3: against a baseline a file of any measured language is new debt at 1210 lines, not at 799."""
     path = f"frontend/src/lib/api/types.{suffix}"
     repo = build_repo({"src/a.py": "x = 1\n", path: typescript_file(1210), "frontend/small." + suffix: typescript_file(799), BASELINE_PATH: EMPTY_BASELINE})
     code, output = run(capsys, repo)
