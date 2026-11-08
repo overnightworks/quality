@@ -1,4 +1,4 @@
-"""#188: a host-networked compose service is a compose-port finding unless `[[compose.allow]]` declares it."""
+"""A host-networked compose service is a compose-port finding unless `[[compose.allow]]` declares it."""
 
 from pathlib import Path
 
@@ -32,7 +32,7 @@ def judged(capsys, build_repo, files: dict[str, str], declarations: str = "") ->
 
 
 def test_a_host_networked_service_is_red(build_repo, capsys):
-    """#188 sentence 1: a service with `network_mode: host` is a compose-port finding."""
+    """COMPOSE-13: a service with `network_mode: host` is a compose-port finding."""
     code, findings = judged(capsys, build_repo, {"compose.yaml": service_file("host")})
     assert code == 1
     assert [(finding.path, finding.event) for finding in findings] == [("compose.yaml", FindingEvent.HOST_NETWORK)]
@@ -41,13 +41,13 @@ def test_a_host_networked_service_is_red(build_repo, capsys):
 
 @pytest.mark.parametrize("network_mode", ["none", "service:db", "bridge"])
 def test_another_network_mode_is_clean(build_repo, capsys, network_mode):
-    """#188 sentence 1: a `network_mode` other than `host` is green."""
+    """COMPOSE-15: a `network_mode` other than `host` is green."""
     assert judged(capsys, build_repo, {"compose.yaml": service_file(network_mode)}) == (0, [])
 
 
 @pytest.mark.parametrize("network_mode", ["${NETWORK_MODE}", "${NETWORK_MODE:-none}", "'ho${REST}'"])
 def test_an_interpolated_network_mode_is_red(build_repo, capsys, network_mode):
-    """#188 sentence 2: a `network_mode` holding an interpolation may resolve to host, so it is a finding."""
+    """COMPOSE-14: a `network_mode` holding an interpolation may resolve to host, so it is a finding."""
     code, findings = judged(capsys, build_repo, {"compose.yaml": service_file(network_mode)})
     assert code == 1
     assert [finding.event for finding in findings] == [FindingEvent.HOST_NETWORK]
@@ -55,13 +55,13 @@ def test_an_interpolated_network_mode_is_red(build_repo, capsys, network_mode):
 
 @pytest.mark.parametrize("network_mode", ["host", "${NETWORK_MODE}"])
 def test_a_declared_service_passes_the_host_check(build_repo, capsys, network_mode):
-    """#188 sentence 3: a declared service is clean, host-networked or interpolated."""
+    """COMPOSE-17: a declared service is clean, host-networked or interpolated."""
     files = {"compose.yaml": service_file(network_mode)}
     assert judged(capsys, build_repo, files, declaring()) == (0, [])
 
 
 def test_a_declaration_covers_its_file_and_service_only(build_repo, capsys):
-    """#188 sentence 3: another service, or the same service in another file, stays red."""
+    """COMPOSE-16: another service, or the same service in another file, stays red."""
     files = {
         "compose.yaml": service_file("host") + "  other:\n    image: x\n    network_mode: host\n",
         "deploy/compose.prod.yaml": service_file("host"),
@@ -73,14 +73,14 @@ def test_a_declaration_covers_its_file_and_service_only(build_repo, capsys):
 
 
 def test_a_declared_service_still_has_its_ports_judged(build_repo, capsys):
-    """#188 sentence 3: the declaration passes the host check only, not a port beyond loopback."""
+    """COMPOSE-17: the declaration passes the host check only, not a port beyond loopback."""
     text = service_file("host") + '    ports:\n      - "8080:80"\n'
     code, findings = judged(capsys, build_repo, {"compose.yaml": text}, declaring())
     assert (code, [finding.event for finding in findings]) == (1, [FindingEvent.PUBLISHED_PORT])
 
 
 def test_edge_stack_is_clean_once_its_traefik_is_declared(build_repo, capsys):
-    """#188 sentence 3: edge's real file has one host-networked service; the others use `none`."""
+    """COMPOSE-17: edge's real file has one host-networked service; the others use `none`."""
     files = {"compose.yaml": EDGE_STACK}
     code, findings = judged(capsys, build_repo, files)
     assert (code, [finding.event for finding in findings], "traefik" in findings[0].fact) == (1, [FindingEvent.HOST_NETWORK], True)
@@ -99,7 +99,7 @@ def test_edge_stack_is_clean_once_its_traefik_is_declared(build_repo, capsys):
     ids=["not host-networked", "service missing", "file not tracked", "not a compose file", "tracked file absent"],
 )
 def test_a_declaration_that_matches_nothing_is_red(build_repo, capsys, files, declaration):
-    """#188 sentence 4: a declaration matching no host-networked or interpolated service is a finding on its file."""
+    """COMPOSE-18: a declaration matching no host-networked or interpolated service is a finding on its file."""
     code, findings = judged(capsys, build_repo, files, declaration)
     assert code == 1
     assert [finding.path for finding in findings if finding.event is FindingEvent.UNUSED] == [declaration.split('"')[1]]
@@ -140,7 +140,7 @@ COMPOSE_KEYS = f"{COMPOSE} entry 1 needs exactly a file, a service and a reason"
     ],
 )
 def test_a_malformed_compose_table_cannot_be_judged(build_repo, capsys, config, fact):
-    """#188 sentence 3: each malformed entry is exit 2, names its fact on the files row and shows the example once."""
+    """COMPOSE-19, O10: each malformed entry is exit 2, names its fact on the files row and shows the example once."""
     code, output = check_output(capsys, build_repo({"compose.yaml": service_file("host"), CONFIG: ONE_JOB + config}))
     assert code == 2
     assert refused(output, "files")
@@ -149,7 +149,7 @@ def test_a_malformed_compose_table_cannot_be_judged(build_repo, capsys, config, 
 
 
 def test_the_unknown_table_message_lists_the_compose_table(build_repo, capsys):
-    """#188 sentence 3: an unknown table names `[[compose.allow]]` among the tables that exist."""
+    """An unknown table names `[[compose.allow]]` among the tables that exist."""
     code, output = check_output(capsys, build_repo({CONFIG: ONE_JOB + "[nope]\nx = 1\n"}))
     assert code == 2
     assert "[[compose.allow]]" in output
@@ -157,7 +157,7 @@ def test_the_unknown_table_message_lists_the_compose_table(build_repo, capsys):
 
 @pytest.mark.parametrize("name", ["on", "yes", "off", "no"])
 def test_a_service_named_like_a_yaml_one_one_boolean_is_matched_by_its_name(build_repo, capsys, name):
-    """#188 sentences 3-4: the declared service passes by the name written in the file, and a declaration of its coerced spelling is stale."""
+    """COMPOSE-7, COMPOSE-17, COMPOSE-18: the declared service passes by the name written in the file, and a declaration of its coerced spelling is stale."""
     files = {"compose.yaml": service_file("host", service=name)}
     assert judged(capsys, build_repo, files, declaring(service=name)) == (0, [])
     code, findings = judged(capsys, build_repo, files, declaring(service=name) + declaring(service="True"))

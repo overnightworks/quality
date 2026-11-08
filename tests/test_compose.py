@@ -23,7 +23,7 @@ from tests.support.merge import ONE_JOB
 
 
 def test_compose_specific_tags_are_judged_not_refused(build_repo, capsys):
-    """#3 rule 1/4: valid Compose YAML tags are read, and their ports still checked."""
+    """COMPOSE-8: valid Compose YAML tags are read, and their ports still checked."""
     body = 'services:\n  web:\n    image: x\n    ports: !override\n      - "127.0.0.1:80:80"\n    profiles: !reset []\n'
     code, output = run(capsys, build_repo({"compose.yaml": body}))
     assert (code, is_clean(output)) == (0, True)
@@ -31,13 +31,13 @@ def test_compose_specific_tags_are_judged_not_refused(build_repo, capsys):
 
 @pytest.mark.parametrize("tagged", ["!reset null", "!reset []"], ids=["null", "empty-list"])
 def test_reset_clears_ports_and_is_clean(build_repo, capsys, tagged):
-    """#3 rule 1/4: `ports: !reset null` is valid Compose that clears the ports, so it is clean."""
+    """COMPOSE-8: `ports: !reset null` is valid Compose that clears the ports, so it is clean."""
     code, _ = run(capsys, build_repo({"compose.yaml": f"services:\n  web:\n    image: x\n    ports: {tagged}\n"}))
     assert code == 0
 
 
 def test_unknown_yaml_tag_cannot_be_judged(build_repo, capsys):
-    """#3 rule 1: a tag Compose does not define is not read as a plain value."""
+    """COMPOSE-9: a tag Compose does not define is not read as a plain value."""
     code, output = run(capsys, build_repo({"compose.yaml": "services:\n  web:\n    image: !foo x\n"}))
     assert code == 2
     assert refused(output, "files")
@@ -68,7 +68,7 @@ def test_unknown_yaml_tag_cannot_be_judged(build_repo, capsys):
     ],
 )
 def test_compose_ports_must_bind_loopback(build_repo, capsys, files, refused_path):
-    """#3 rule 2/4: a compose port beyond loopback is a finding at its file, printed once; edge's real file is judged in test_compose_container_host (#78 cell 15)."""
+    """COMPOSE-1, COMPOSE-12: a compose port beyond loopback is a finding at its file, printed once; edge's real file is judged in test_compose_container_host."""
     repo = build_repo(files)
     code, output = run(capsys, repo)
     findings = rule_findings(repo, Rule.COMPOSE_PORT)
@@ -80,7 +80,7 @@ def test_compose_ports_must_bind_loopback(build_repo, capsys, files, refused_pat
 
 
 def test_quoted_tagged_port_is_read_as_the_string_it_wraps(build_repo, capsys):
-    """#3 rule 4: `!override "22:22"` is the string 22:22, not a sexagesimal number."""
+    """COMPOSE-7, COMPOSE-8: `!override "22:22"` is the string 22:22, not a sexagesimal number."""
     repo = build_repo(compose('- !override "22:22"'))
     code, _ = run(capsys, repo)
     (finding,) = rule_findings(repo, Rule.COMPOSE_PORT)
@@ -97,10 +97,10 @@ def test_quoted_tagged_port_is_read_as_the_string_it_wraps(build_repo, capsys):
         ("- 22:22.5", "22:22.5"),
         ('- "8080:80"', "8080:80"),
     ],
-    ids=["cell 1", "cell 2 plain", "cell 2 override", "cell 3 bare", "rule 2 base-60 float", "cell 3 quoted"],
+    ids=["pair read as text", "plain pair", "pair under override", "bare port", "base-60 float", "quoted pair"],
 )
 def test_a_port_is_described_as_compose_reads_it(build_repo, capsys, port_line, described):
-    """#78 rule 2, cells 1-3: `22:22` is text, not the base-60 number 1342."""
+    """COMPOSE-7: `22:22` is text, not the base-60 number 1342."""
     repo = build_repo(compose(port_line))
     code, output = run(capsys, repo)
     (finding,) = rule_findings(repo, Rule.COMPOSE_PORT)
@@ -109,7 +109,7 @@ def test_a_port_is_described_as_compose_reads_it(build_repo, capsys, port_line, 
 
 
 def test_a_loopback_port_with_an_ip_is_clean(build_repo, capsys):
-    """#78 cell 3: `127.0.0.1:22:22` stays clean."""
+    """COMPOSE-1: `127.0.0.1:22:22` stays clean."""
     assert run(capsys, build_repo(compose("- 127.0.0.1:22:22")))[0] == 0
 
 
@@ -129,7 +129,7 @@ OPEN_PORT = compose('- "0.0.0.0:1:1"')["compose.yaml"]
     ],
 )
 def test_a_compose_name_is_judged(build_repo, capsys, name):
-    """#78 rule 1, cell 4: the word `compose` between `.`, `-` or `_` makes a file a compose file."""
+    """COMPOSE-2: the word `compose` between `.`, `-` or `_` makes a file a compose file."""
     repo = build_repo({name: OPEN_PORT})
     code, output = run(capsys, repo)
     assert (code, [finding.path for finding in rule_findings(repo, Rule.COMPOSE_PORT)]) == (1, [name])
@@ -143,7 +143,7 @@ def test_a_compose_name_is_judged(build_repo, capsys, name):
      "edge_stack.yml"],
 )
 def test_a_name_without_the_compose_word_is_not_judged(build_repo, capsys, name):
-    """#78 rule 1, cell 5: a near miss is not a compose file."""
+    """COMPOSE-2: a near miss is not a compose file."""
     assert run(capsys, build_repo({f"docs/{name}": OPEN_PORT}))[0] == 0
 
 
@@ -167,13 +167,13 @@ UNREADABLE_YAML = [
 @pytest.mark.parametrize(
     ("text", "reason"),
     UNREADABLE_YAML,
-    ids=["cell 6 open bracket", "cell 7 bad indent", "cell 8 alias", "cell 8 two documents", "cell 9 control character",
-         "cell 10 unknown tag", "rule 3 bad int", "rule 3 bad float",
-         "rule 3 bad timestamp tag", "rule 3 bad bool", "rule 3 empty int", "rule 3 bad implicit timestamp",
-         "cell 11 deep nesting"],
+    ids=["open bracket", "bad indent", "alias", "two documents", "control character",
+         "unknown tag", "bad int", "bad float",
+         "bad timestamp tag", "bad bool", "empty int", "bad implicit timestamp",
+         "deep nesting"],
 )
 def test_a_yaml_error_is_one_short_line(build_repo, capsys, text, reason):
-    """#78 rule 3, cells 6-11 and 18: exit 2, one line, no caret, source line, stream name or traceback."""
+    """COMPOSE-9, COMPOSE-10: exit 2, one line, no caret, source line, stream name or traceback."""
     repo = build_repo({"compose.yaml": text})
     code, output = run(capsys, repo)
     line = next(line for line in output.splitlines() if "cannot read compose.yaml" in line)
@@ -191,7 +191,7 @@ ALIAS_BOMB = "a0: &a0 [x, x, x]\n" + "".join(f"a{n}: &a{n} [*a{n - 1}, *a{n - 1}
     ids=["short syntax", "long syntax"],
 )
 def test_a_port_that_is_a_container_is_one_short_finding(build_repo, capsys, service):
-    """#78 rule 4, cell 12: an aliased container is never printed."""
+    """COMPOSE-11: an aliased container is never printed."""
     repo = build_repo({"compose.yaml": f"x-bomb:\n  {ALIAS_BOMB.replace(chr(10), chr(10) + '  ')}\nservices:\n  web:\n{service}"})
     code, output = run(capsys, repo)
     (finding,) = rule_findings(repo, Rule.COMPOSE_PORT)
@@ -201,7 +201,7 @@ def test_a_port_that_is_a_container_is_one_short_finding(build_repo, capsys, ser
 
 
 def test_an_untracked_compose_file_is_not_judged_until_it_is_added(build_repo, capsys):
-    """#78 cells 13-14: only what git tracks counts, and a staged file is tracked."""
+    """COMPOSE-3: only what git tracks counts, and a staged file is tracked."""
     repo = build_repo({"README.md": "x\n"})
     (repo / "compose.yaml").write_text(OPEN_PORT)
     untracked = run(capsys, repo)[0]
@@ -210,14 +210,13 @@ def test_an_untracked_compose_file_is_not_judged_until_it_is_added(build_repo, c
 
 
 def test_webauth_suite_compose_is_clean(build_repo, capsys):
-    """#78 cell 16: a short-syntax `127.0.0.1::8080` port (empty host port) binds loopback."""
+    """COMPOSE-1: a short-syntax `127.0.0.1::8080` port (empty host port) binds loopback."""
     files = {"docs/oidc/suite-compose.yaml": compose('- "127.0.0.1::8080"')["compose.yaml"]}
     assert run(capsys, build_repo(files))[0] == 0
 
 
 def test_a_tracked_compose_symlink_leaving_the_repository_is_exit_2(build_repo, elsewhere, capsys):
-    """#31 rule 1 (S8705) and #52 rule 5, cell 19: a tracked compose file that resolves outside the repository is
-    exit 2, never read, and the refusal names no absolute path."""
+    """A tracked compose file that resolves outside the repository is exit 2, never read, and the refusal names no absolute path."""
     repo = build_repo({})
     outside = elsewhere / "compose.yml"
     outside.write_text("services:\n  web:\n    image: x\n    ports:\n      - '8080:80'\n")
@@ -244,11 +243,10 @@ def link_to_itself(repo: Path, elsewhere: Path) -> None:
 @pytest.mark.parametrize(
     "link",
     [link_to_nowhere_inside, link_to_nowhere_outside, link_to_itself],
-    ids=["#76 cell 6 inside", "#76 cell 6 outside", "#76 cell 7 loop (flips #52 cell 19)"],
+    ids=["inside", "outside", "loop"],
 )
 def test_a_tracked_compose_linked_to_nowhere_is_gone_not_unjudgeable(build_repo, elsewhere, capsys, link):
-    """#76 rule 3: a tracked compose file that leads to nothing is skipped like a missing .py, never a traceback,
-    and nothing prints the checkout."""
+    """COMPOSE-5: a tracked compose file that leads to nothing is skipped like a missing .py, never a traceback, and nothing prints the checkout."""
     repo = build_repo({"compose.yaml": "services: [\n"})
     (repo / "compose.yaml").unlink()
     link(repo, elsewhere)
@@ -258,7 +256,7 @@ def test_a_tracked_compose_linked_to_nowhere_is_gone_not_unjudgeable(build_repo,
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-0 file, so no permission is refused")
 def test_a_tracked_compose_the_filesystem_refuses_to_read_is_exit_2(build_repo, capsys):
-    """#76 rule 3, cell 9 (E10): a compose file without read permission is never gone."""
+    """COMPOSE-6: a compose file without read permission is never gone."""
     repo = build_repo(compose('- "127.0.0.1:8080:80"'))
     (repo / "compose.yaml").chmod(0)
     code, output = run(capsys, repo)
@@ -267,7 +265,7 @@ def test_a_tracked_compose_the_filesystem_refuses_to_read_is_exit_2(build_repo, 
 
 @pytest.mark.integration
 def test_compose_files_are_read_and_parsed_one_at_a_time(tmp_path, capsys):
-    """#76 E6, rule 1, cell 4: the first file's YAML error is reported although a later file cannot be decoded."""
+    """The first file's YAML error is reported although a later file cannot be decoded."""
     repo = make_repo(tmp_path, {"docs/compose-a.yaml": "a: [\n", "docs/compose-b.yaml": "x"})
     (repo / "docs/compose-b.yaml").write_bytes(b"\xff")
     code, output = run(capsys, repo)
@@ -295,7 +293,7 @@ KINDS = [
     ids=["port beyond loopback", "unreadable port", "ports no list", "host network", "interpolated network", "stale declaration"],
 )
 def test_each_kind_of_finding_has_its_event_a_short_fact_and_a_fix_the_door_prints(build_repo, capsys, files, declaration, event):
-    """#281 O12: one event per kind, a fact naming the service, neither fact nor fix ending in a period, the row equal to the finding."""
+    """COMPOSE-4, O12: one event per kind, a fact naming the service, neither fact nor fix ending in a period, the row equal to the finding."""
     config = {"quality/config.toml": ONE_JOB + declaration} if declaration else {}
     repo = build_repo({**files, **config})
     _, output = run(capsys, repo)
@@ -312,7 +310,7 @@ LOOPBACK_EXAMPLE = re.compile(r'"([^"]+)"')
 
 
 def test_the_loopback_fix_example_bound_to_the_services_own_ports_clears_the_finding(build_repo, capsys):
-    """#281 O12: the printed example, its address kept and bound to the scenario's own ports, is what the rule accepts."""
+    """COMPOSE-1, O12: the printed example, its address kept and bound to the scenario's own ports, is what the rule accepts."""
     repo = build_repo(compose('- "8080:80"'))
     output = run(capsys, repo)[1]
     (finding,) = rule_findings(repo, Rule.COMPOSE_PORT)
