@@ -184,8 +184,7 @@ legacy = "fail"
   (SONAR-40).
 - `"fail"`: a pull request fails while the default branch has any open finding, even when it adds none (SONAR-41).
 - Any other value is a config error (exit `2`), read before the first SonarCloud request (SONAR-42).
-- A pull request whose base config says `legacy = "fail"` and whose head config says anything else is red in the verdict
-  (the loosening `legacy fail → report`; an absent key counts as `report`), like a removed mandatory job
+- A pull request whose head config drops `legacy = "fail"` is a loosening the verdict judges
   ([the gate](gate.md#gateyml)).
 - `legacy = "fail"` beside `[gate] sonar = false` is a config error, exit `2` (SONAR-109).
 

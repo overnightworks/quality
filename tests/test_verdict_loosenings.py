@@ -114,14 +114,15 @@ PRINTED = {
 
 @pytest.mark.parametrize(("base_config", "head_config", "baselines", "imports"), UNDECLARED_KINDS + SELF_DECLARED_KINDS)
 def test_each_loosening_stands_under_its_row_as_its_what(request, base_config, head_config, baselines, imports):
+    """VERDICT-53."""
     lines = printed(judged(base_config, head_config, baselines, imports))
     assert lines == PRINTED[request.node.callspec.id]
 
 
 @pytest.mark.parametrize(("base_config", "head_config", "baselines", "imports"), UNDECLARED_KINDS)
 def test_the_text_to_copy_declares_its_loosening(base_config, head_config, baselines, imports):
-    """The copy text is everything after `! ` on an undeclared line; written into a new entry it declares that
-    loosening and nothing stays unmatched."""
+    """VERDICT-53, LOOSE-1: The copy text is everything after `! ` on an undeclared line; written into a new entry it
+    declares that loosening and nothing stays unmatched."""
     (line,) = printed(judged(base_config, head_config, baselines, imports))
     copied = head_config + declaration(line.removeprefix("    ! "))
     again = judged(base_config, copied, baselines, imports)
@@ -130,7 +131,8 @@ def test_the_text_to_copy_declares_its_loosening(base_config, head_config, basel
 
 @pytest.mark.parametrize(("base_config", "head_config", "baselines", "imports"), SELF_DECLARED_KINDS)
 def test_an_allowance_or_generated_text_copied_into_a_declaration_matches_nothing(base_config, head_config, baselines, imports):
-    """An advisory allowance and a generated file declare themselves: their text copied into an entry binds nothing."""
+    """VERDICT-67, VERDICT-70: An advisory allowance and a generated file declare themselves: their text copied into an
+    entry binds nothing."""
     first = printed(judged(base_config, head_config, baselines, imports))[0]
     what = first.removeprefix("    ! ").rsplit(output.SEPARATOR, 1)[0]
     again = judged(base_config, head_config + declaration(what), baselines, imports)

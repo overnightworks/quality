@@ -274,7 +274,7 @@ SONGMAKER_DECLARATION = (
 
 
 def test_a_declared_loosening_is_read_with_its_ruling(tmp_path):
-    """#103 rule 1 (E1): each [[gate.loosened]] entry is one declaration with its what, item, date and reason."""
+    """VERDICT-52: each [[gate.loosened]] entry is one declaration with its what, item, date and reason."""
     (tmp_path / "quality").mkdir()
     (tmp_path / CONFIG_PATH).write_text(SONGMAKER_DECLARATION)
     assert read_gate_settings(tmp_path).loosened == (
@@ -288,7 +288,7 @@ def test_a_declared_loosening_is_read_with_its_ruling(tmp_path):
 
 
 def test_a_config_without_declarations_declares_nothing():
-    """#103 rule 1: a config with no [[gate.loosened]] entry declares no loosening."""
+    """VERDICT-52: a config with no [[gate.loosened]] entry declares no loosening."""
     assert load_gate_settings('[gate]\nmandatory_jobs = ["checks"]').loosened == ()
 
 
@@ -309,14 +309,14 @@ TEXT_DATE_DECLARATION = SONGMAKER_DECLARATION.replace("2026-10-20", '"20.10.2026
     ],
     ids=[
         "check", "staged", "check, text date", "staged, text date",
-        "#116 cell 13 staged, an allowance", "#116 cell 13 staged, a malformed allowance",
+        "staged, an allowance", "staged, a malformed allowance",
     ],
 )
 def test_check_judges_a_declaration_as_the_verdict_does_and_the_commit_hook_reads_only_secrets(
     build_repo, capsys, command, config, code, line
 ):
-    """#103 rule 1, cells 11 and 12: a [[gate.loosened]] entry is no unknown key for the check or the commit hook; a
-    malformed one is exit 2 under the check, as in the verdict, and the commit hook never reads it."""
+    """VERDICT-57, VERDICT-58: a [[gate.loosened]] entry is no unknown key for the check or the commit hook; a malformed
+    one is exit 2 under the check, as in the verdict, and the commit hook never reads it."""
     repo = build_repo({CONFIG_PATH: config})
     assert door_in(repo, *command) == code
     captured = capsys.readouterr()
