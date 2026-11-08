@@ -3,17 +3,21 @@ gate and CodeQL release each repository's workflows call. The door prints the fl
 stderr as each is measured, then the tables alone on stdout and in the step summary, then the closing line or the pair.
 
 Lines and the production/test split are the `size` rule's own (`ratchet.summarise`), measured on a shallow clone of
-the default branch tip. Only `https://github.com/<owner>/<name>` is cloned, built from the fleet entry, and git runs
+the default branch tip. The fleet is every public, non-archived, non-fork repository GitHub lists for the organizations
+`quality/fleet.toml` names, plus the single `owner/name`s it adds. Only `https://github.com/<owner>/<name>` is cloned, and git runs
 anonymously: no credential helper, no askpass, no terminal prompt, no system, global or environment config and an
 empty HOME, from a temporary directory, so no checkout's own config reaches it either. A repository that is not
 anonymously readable is not measured: the table is published in a public run summary.
 """
 
+import json
 import re
 import subprocess
+import urllib.error
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import date
+from email.message import Message
 from enum import Enum, StrEnum
 from functools import partial
 from pathlib import Path
@@ -30,8 +34,9 @@ from quality import (
     ratchet,
     report,
     repository,
+    web,
 )
-from quality.report import CannotJudge, Command, Example, Instruction
+from quality.report import CannotJudge, Command, Example, Instruction, Step
 from quality.rules import Rule, RuleRelease, Switch
 
 
@@ -40,8 +45,14 @@ def repository_url(name: str) -> str:
 
 
 FLEET_PATH = "quality/fleet.toml"
-FLEET_EXAMPLE = 'repositories = ["overnightworks/quality"]'
-ENTRY = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*/(?!\.+\Z)[A-Za-z0-9._-]+")
+FLEET_EXAMPLE = 'organizations = ["overnightworks"]'
+OWNER = "[A-Za-z0-9][A-Za-z0-9-]*"
+ENTRY = re.compile(rf"{OWNER}/(?!\.+\Z)[A-Za-z0-9._-]+")
+ORGANIZATION = re.compile(OWNER)
+LISTING_URL = "https://api.github.com/orgs/{organization}/repos?type=public&per_page=100"
+NEXT_PAGE = re.compile(r'rel="next"')
+LISTING_CREDENTIAL_VARIABLE = "GITHUB_TOKEN"
+NOTHING_MEASURED = "nothing measured"
 FUNCTION_SCOPE = "functions and CCN: Python only"
 CLONE_TIMEOUT_SECONDS = 300
 LS_REMOTE_TIMEOUT_SECONDS = 60
@@ -87,16 +98,29 @@ FLEET_SHAPE = Example(f"write it in {FLEET_PATH} like this", (FLEET_EXAMPLE,))
 class FleetEvent(StrEnum):
     """What a row of the report says."""
 
-    LISTED = "listed"
+    FOUND = "found"
     MEASURED = "measured"
     PARTLY_READ = "partly read"
     NOT_MEASURED = "not measured"
     NOT_READ = "not read"
 
 
-def fleet_refusal(fact: str) -> CannotJudge:
-    """A fleet file that cannot be used: the fact, and under `next:` the file's shape to copy."""
-    return CannotJudge(fact, (FLEET_SHAPE,))
+ListingFetch = Callable[[str, Mapping[str, str], Callable[[Exception], CannotJudge]], tuple[bytes, Message]]
+
+
+def fleet_refusal(fact: str, *, shape: bool = True, rerun: bool = False) -> CannotJudge:
+    """A fleet that cannot be used: the fact, and under `next:` the file's shape to copy when the file or an entry is
+    at fault, then the rerun when GitHub failed."""
+    steps: tuple[Step, ...] = ((FLEET_SHAPE,) if shape else ()) + ((FIX_THEN_RERUN,) if rerun else ())
+    return CannotJudge(fact, steps)
+
+
+class ListingFault(CannotJudge):
+    """GitHub's listing of an organization cannot be used; `in_file` when the fault is the file's entry, not GitHub's."""
+
+    def __init__(self, fact: str, in_file: bool = False) -> None:
+        super().__init__(fact)
+        self.in_file = in_file
 
 
 RELEASES = tuple(rule.release for rule in Rule)
@@ -172,8 +196,9 @@ Row = Measured | Unjudged
 
 @dataclass(frozen=True)
 class Fleet:
-    """The repositories to report: GitHub `owner/name`s sorted by lower-cased name, each listed once."""
+    """What `quality/fleet.toml` selects: organizations and single `owner/name`s, each in file order."""
 
+    organizations: tuple[str, ...]
     repositories: tuple[str, ...]
 
 
@@ -192,32 +217,102 @@ def parse_fleet(text: str) -> Fleet:
         document = repository.parse_toml(text)
     except repository.TomlError as error:
         raise fleet_refusal(f"{FLEET_PATH} is not valid TOML ({error})") from error
-    unknown = sorted(set(document) - {"repositories"})
+    unknown = sorted(set(document) - {"organizations", "repositories"})
     if unknown:
-        raise fleet_refusal(f"{FLEET_PATH} has a key other than repositories: {', '.join(unknown)}")
-    entries = document.get("repositories")
-    if not isinstance(entries, list) or not all(isinstance(entry, str) for entry in entries):
-        raise fleet_refusal(f"{FLEET_PATH} needs repositories as a list of strings")
-    if not entries:
-        raise fleet_refusal(f"{FLEET_PATH} lists no repository")
-    problems = _entry_problems(entries)
+        raise fleet_refusal(f"{FLEET_PATH} has a key other than organizations and repositories: {', '.join(unknown)}")
+    lists = {key: document.get(key, []) for key in ("organizations", "repositories")}
+    for key, entries in lists.items():
+        if not isinstance(entries, list) or not all(isinstance(entry, str) for entry in entries):
+            raise fleet_refusal(f"{FLEET_PATH} needs {key} as a list of strings")
+    organizations, repositories = lists["organizations"], lists["repositories"]
+    if not organizations and not repositories:
+        raise fleet_refusal(f"{FLEET_PATH} selects no repository")
+    problems = [
+        *_entry_problems("organizations", organizations, ORGANIZATION, "organization name"),
+        *_entry_problems("repositories", repositories, ENTRY, "owner/name"),
+    ]
     if problems:
         raise fleet_refusal(f"{FLEET_PATH} {output.SEPARATOR.join(problems)}")
-    return Fleet(tuple(sorted(entries, key=str.lower)))
+    return Fleet(tuple(organizations), tuple(repositories))
 
 
-def _entry_problems(entries: list[str]) -> list[str]:
+def _entry_problems(key: str, entries: list[str], valid: re.Pattern[str], name: str) -> list[str]:
     """Each problem named by its place, never its text: an entry may be a pasted URL with a password."""
     first_place: dict[str, int] = {}
     problems = []
     for index, entry in enumerate(entries):
-        if not ENTRY.fullmatch(entry):
-            problems.append(f"repositories[{index}] is no owner/name")
+        if not valid.fullmatch(entry):
+            problems.append(f"{key}[{index}] is no {name}")
         elif entry.lower() in first_place:
-            problems.append(f"repositories[{index}] repeats repositories[{first_place[entry.lower()]}]")
+            problems.append(f"{key}[{index}] repeats {key}[{first_place[entry.lower()]}]")
         else:
             first_place[entry.lower()] = index
     return problems
+
+
+def listing_failure(index: int, organization: str, error: Exception) -> ListingFault:
+    """What went wrong reaching GitHub's listing, in words that carry no text of the exception."""
+    if isinstance(error, urllib.error.HTTPError):
+        if error.code == 404:
+            return ListingFault(f"{FLEET_PATH} organizations[{index}] is no GitHub organization", in_file=True)
+        return ListingFault(f"GitHub did not list {organization}{output.SEPARATOR}HTTP {error.code}")
+    if isinstance(error, OSError) and web.timed_out(error):
+        return ListingFault(f"GitHub did not answer the listing of {organization} within {web.REQUEST_TIMEOUT_SECONDS}s")
+    return ListingFault(f"GitHub could not be reached for the listing of {organization}")
+
+
+def list_organization(index: int, organization: str, token: str, fetch_listing: ListingFetch) -> tuple[str, ...]:
+    """The public, non-archived, non-fork repositories GitHub lists for the organization, as `owner/name`, from one
+    page. The token goes to GitHub's API only, never to git; a local run lists anonymously."""
+    headers = {"Accept": "application/vnd.github+json", **({"Authorization": f"Bearer {token}"} if token else {})}
+    body, answer = fetch_listing(LISTING_URL.format(organization=organization), headers, partial(listing_failure, index, organization))
+    if NEXT_PAGE.search(answer.get("Link", "")):
+        raise ListingFault(f"{organization} has more than 100 public repositories{output.SEPARATOR}quality reads one page")
+    malformed = ListingFault(f"GitHub's listing of {organization} is not a list of repositories")
+    try:
+        listed = json.loads(body)
+    except (ValueError, RecursionError) as error:
+        raise malformed from error
+    if not isinstance(listed, list) or not all(_is_listed_repository(entry) for entry in listed):
+        raise malformed
+    return tuple(entry["full_name"] for entry in listed if not (entry["private"] or entry["archived"] or entry["fork"]))
+
+
+def _is_listed_repository(entry: object) -> bool:
+    return (
+        isinstance(entry, dict)
+        and isinstance(entry.get("full_name"), str)
+        and ENTRY.fullmatch(entry["full_name"]) is not None
+        and all(isinstance(entry.get(flag), bool) for flag in ("private", "archived", "fork"))
+    )
+
+
+def select_repositories(fleet: Fleet, token: str, fetch_listing: ListingFetch) -> tuple[str, ...]:
+    """The found repositories of every organization plus the named ones, sorted by lower-cased name; every problem of
+    every organization stands in one refusal before any clone."""
+    found: dict[str, tuple[str, str]] = {}
+    facts: list[str] = []
+    shape_wrong = github_failed = False
+    for index, organization in enumerate(fleet.organizations):
+        try:
+            names = list_organization(index, organization, token, fetch_listing)
+        except ListingFault as fault:
+            github_failed |= not fault.in_file
+            shape_wrong |= fault.in_file
+            facts.append(str(fault))
+        else:
+            found.update({name.lower(): (organization, name) for name in names})
+    for index, entry in enumerate(fleet.repositories):
+        if entry.lower() in found:
+            facts.append(f"{FLEET_PATH} repositories[{index}] is already in {found[entry.lower()][0]}")
+            shape_wrong = True
+    selected = {**{key: name for key, (_, name) in found.items()}, **{entry.lower(): entry for entry in fleet.repositories}}
+    if not facts and not selected:
+        facts.append(f"{FLEET_PATH} selects no repository")
+        shape_wrong = True
+    if facts:
+        raise fleet_refusal(output.SEPARATOR.join((*facts, NOTHING_MEASURED)), shape=shape_wrong, rerun=github_failed)
+    return tuple(selected[key] for key in sorted(selected))
 
 
 def anonymous_environment(scratch: Path) -> dict[str, str]:
@@ -225,7 +320,8 @@ def anonymous_environment(scratch: Path) -> dict[str, str]:
     and global config, and points HOME at an empty directory, so no ~/.netrc either."""
     isolated = process.attribute_free_git_environment(scratch / "home")
     # git falls back to SSH_ASKPASS for an http password too.
-    return {**{name: value for name, value in isolated.items() if name != "SSH_ASKPASS"}, "GIT_TERMINAL_PROMPT": "0"}
+    # The job's token is for GitHub's API alone; no git that reaches the network may inherit it.
+    return {**{name: value for name, value in isolated.items() if name not in {"SSH_ASKPASS", LISTING_CREDENTIAL_VARIABLE}}, "GIT_TERMINAL_PROMPT": "0"}
 
 
 def release_tags_or_none(tags: checkout.ReleaseTags | ReleaseTagsError) -> checkout.ReleaseTags | None:
@@ -327,24 +423,25 @@ def render(rows: list[Row], today: date, tags: checkout.ReleaseTags | ReleaseTag
 
 
 def run_report(
-    release_tags: TagReader, clock: Callable[[], float], today: date, channels: output.Channels, environment: Mapping[str, str]
+    release_tags: TagReader, fetch_listing: ListingFetch, clock: Callable[[], float], today: date, channels: output.Channels, environment: Mapping[str, str]
 ) -> int:
-    """Measures the fleet `quality/fleet.toml` lists where the door runs: the fleet line and a row on stderr as each
+    """Measures the fleet `quality/fleet.toml` selects where the door runs: the fleet line and a row on stderr as each
     repository is measured, then the tables on stdout and in the step summary, then the closing line or the pair."""
     started = clock()
     try:
-        listed = read_fleet(Path("."))
+        fleet = read_fleet(Path("."))
+        names = select_repositories(fleet, environment.get(LISTING_CREDENTIAL_VARIABLE, ""), fetch_listing)
     except CannotJudge as refusal:
         output.write_pair(refusal.reason.fact, refusal.reason.next_steps, channels.err)
         return EXIT_NOT_MEASURED
-    width = max(output.SUBJECT_WIDTH, *map(len, listed.repositories))
+    width = max(output.SUBJECT_WIDTH, *map(len, names))
     show = partial(output.write_rows, channel=channels.err, subject_width=width)
-    count = len(listed.repositories)
-    show((output.Row(output.Glyph.NOTE, FLEET_SUBJECT, FleetEvent.LISTED, FLEET_PATH, count=count, counts_plural=False),))
+    sources = output.SEPARATOR.join((*fleet.organizations, FLEET_PATH))
+    show((output.Row(output.Glyph.NOTE, FLEET_SUBJECT, FleetEvent.FOUND, sources, count=len(names), counts_plural=False),))
     tags = _read_tags(release_tags, show)
     pins = release_tags_or_none(tags)
     rows: list[Row] = []
-    for name in listed.repositories:
+    for name in names:
         began = clock()
         measured = measure_repository(name)
         show((report_row(measured, pins, clock() - began),))

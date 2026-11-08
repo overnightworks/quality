@@ -1,14 +1,1 @@
-repositories = [
-    "overnightworks/aco",
-    "overnightworks/agent-runtime",
-    "overnightworks/appkit",
-    "overnightworks/hal",
-    "overnightworks/hopin",
-    "overnightworks/marketplace",
-    "overnightworks/platform",
-    "overnightworks/presentator",
-    "overnightworks/quality",
-    "overnightworks/songmaker",
-    "overnightworks/speech-runtime",
-    "overnightworks/webauth",
-]
+organizations = ["overnightworks"]

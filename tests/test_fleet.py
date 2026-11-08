@@ -18,7 +18,7 @@ import pytest
 import yaml
 
 from quality import __version__, cli
-from quality.fleet import parse_fleet, read_fleet
+from quality.fleet import anonymous_environment, parse_fleet, read_fleet
 from quality.output import SEPARATOR
 from quality.report import CannotJudge
 from tests.support.clones import function as clone_function
@@ -310,6 +310,12 @@ def test_no_configured_credential_reaches_a_host_that_asks_for_one(fleet_report,
     assert sorted(path.name for path in tmp_path.iterdir() if path.name.startswith("asked")) == []
 
 
+def test_the_git_environment_never_holds_the_listing_token(tmp_path, monkeypatch):
+    """The job's token is for GitHub's API alone: clone and ls-remote run in an environment without it."""
+    monkeypatch.setenv("GITHUB_TOKEN", "dummy-token")
+    assert "GITHUB_TOKEN" not in anonymous_environment(tmp_path)
+
+
 def test_only_the_default_branch_tip_is_measured(fleet_report, public, remotes):
     """Cell 15, rule 3: a shallow clone of the default branch; another branch's files do not count."""
     name = public("branches", {"a.py": "a = 1\n"})
@@ -388,7 +394,7 @@ def test_the_table_goes_to_stdout_and_identically_to_the_step_summary(fleet_repo
     _, output = fleet_report(public("summed", {"a.py": "a = 1\n"}))
     assert MATRIX_HEADING in output
     assert summary.read_text() == "earlier step\n" + output
-    assert "listed" not in summary.read_text()
+    assert not any(line.lstrip().startswith("· fleet") for line in summary.read_text().splitlines())
 
 
 def test_without_a_step_summary_nothing_is_written(fleet_report, public, tmp_path, monkeypatch):
@@ -464,16 +470,18 @@ def toml_error(prefix: str) -> str:
         (written('repositories = ["o/a"'), toml_error("quality/fleet.toml is not valid TOML")),
         (written(f"repositories = {'9' * 5000}"), toml_error("quality/fleet.toml is not valid TOML")),
         (written(f"repositories = {'[' * 5000}{']' * 5000}"), toml_error("quality/fleet.toml is not valid TOML")),
-        (written('public = ["o/a"]\n'), re.escape("quality/fleet.toml has a key other than repositories: public")),
-        (written('repositories = ["o/a"]\nprivate = []\n'), re.escape("quality/fleet.toml has a key other than repositories: private")),
-        (written('repositories = ["o/a"]\nextra = 1\n'), re.escape("quality/fleet.toml has a key other than repositories: extra")),
-        (written(""), re.escape("quality/fleet.toml needs repositories as a list of strings")),
+        (written('public = ["o/a"]\n'), re.escape("quality/fleet.toml has a key other than organizations and repositories: public")),
+        (written('repositories = ["o/a"]\nprivate = []\n'), re.escape("quality/fleet.toml has a key other than organizations and repositories: private")),
+        (written('repositories = ["o/a"]\nextra = 1\n'), re.escape("quality/fleet.toml has a key other than organizations and repositories: extra")),
+        (written(""), re.escape("quality/fleet.toml selects no repository")),
         (written('repositories = "o/a"\n'), re.escape("quality/fleet.toml needs repositories as a list of strings")),
         (written("repositories = [1]\n"), re.escape("quality/fleet.toml needs repositories as a list of strings")),
-        (written("repositories = []\n"), re.escape("quality/fleet.toml lists no repository")),
+        (written("repositories = []\n"), re.escape("quality/fleet.toml selects no repository")),
+        (written("organizations = [1]\n"), re.escape("quality/fleet.toml needs organizations as a list of strings")),
     ],
     ids=["missing file", "a directory", "a dangling link", "not UTF-8", "invalid TOML", "oversized integer", "nested too deep",
-         "public", "private", "unknown key", "no repositories", "not a list", "not a string", "empty list"],
+         "public", "private", "unknown key", "no selection", "not a list", "not a string", "empty list",
+         "organization not a string"],
 )
 @pytest.mark.usefixtures("public")
 def test_a_fleet_file_that_cannot_be_used_is_the_pair_with_the_shape_to_copy(capsys, tmp_path, monkeypatch, arrange, fact):
@@ -484,7 +492,7 @@ def test_a_fleet_file_that_cannot_be_used_is_the_pair_with_the_shape_to_copy(cap
     code = cli.main(["report"])
     printed = capsys.readouterr()
     assert (code, printed.out) == (2, ""), printed.err
-    shape = '\nnext: write it in quality/fleet.toml like this:\n    repositories = ["overnightworks/quality"]\n'
+    shape = '\nnext: write it in quality/fleet.toml like this:\n    organizations = ["overnightworks"]\n'
     assert re.fullmatch(f"error: {fact}{re.escape(shape)}", printed.err), printed.err
 
 
@@ -525,14 +533,14 @@ def test_every_entry_problem_of_a_fleet_file_is_named_in_one_exit_2_message(caps
         ("error: quality/fleet.toml repositories[1] is no owner/name · repositories[2] repeats repositories[0]"
         " · repositories[3] is no owner/name\n"
         "next: write it in quality/fleet.toml like this:\n"
-        '    repositories = ["overnightworks/quality"]\n'),
+        '    organizations = ["overnightworks"]\n'),
     )
 
 
 def test_the_fleet_lives_once_in_the_fleet_file():
     """#270 rule 5 and #63 rule 5: the real fleet file parses into owner/names and the workflow carries no URL."""
     fleet = read_fleet(Path(__file__).parent.parent)
-    assert fleet.repositories
+    assert fleet.organizations
     assert "github.com/overnightworks" not in (WORKFLOWS / "report.yml").read_text()
 
 
@@ -554,6 +562,8 @@ def test_the_workflow_reads_only_and_pins_what_ci_pins():
     assert triggers["schedule"] == [{"cron": "17 5 * * 1"}]
     assert report_workflow["permissions"] == {"contents": "read"}
     assert "secrets." not in text
+    carriers = [step["name"] for step in job["steps"] if "GITHUB_TOKEN" in step.get("env", {})]
+    assert carriers == ["Measure the fleet"]
     assert job["timeout-minutes"] == 15
     assert "concurrency" in report_workflow
     checkout = next(step for step in job["steps"] if step.get("uses", "").startswith("actions/checkout@"))

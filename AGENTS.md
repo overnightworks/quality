@@ -26,7 +26,7 @@
 - The door's `gh` commands run through `gh.py`, which also reads a repository's files and workflow listing at a commit;
   the door injects the runner, so tests need no network.
 - HTTP goes through `web.py`, which follows no redirect and bounds every wait; the door injects the transport, the
-  GitHub fetcher and the poll sleep, so tests need no network.
+  GitHub fetcher, the fleet's listing fetch and the poll sleep, so tests need no network.
 - The line a merge commit ends with is `landing.py`'s.
 
 The references in `docs/` own what each command does; `docs/ARCHITECTURE.md` owns the parts and their reasons.

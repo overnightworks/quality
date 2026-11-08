@@ -23,6 +23,7 @@ from quality import (
     scanners,
     sonar,
     staged,
+    web,
 )
 from quality.check import (
     DRY_RUN_COMMAND,
@@ -115,6 +116,7 @@ def main(
     argv: list[str] | None = None,
     fetcher_for: Callable[[str], PageFetcher] = github_fetcher,
     release_tags: fleet.TagReader = fleet.read_release_tags,
+    fetch_listing: fleet.ListingFetch = web.fetch,
     transport: Transport = fetch_json,
     sleep: Sleep = time.sleep,
     gh: GhRunner = run_gh,
@@ -158,11 +160,18 @@ def main(
     if arguments.command == "verdict":
         return run_verdict(fetcher_for, sleep, clock, channels, environment)
     if arguments.command == "report":
-        return fleet.run_report(release_tags, clock, now().date(), channels, environment)
+        return fleet.run_report(release_tags, fetch_listing, clock, now().date(), channels, environment)
     if arguments.command == "sonar":
         if arguments.sonar_command == "properties":
             return sonar.run_properties(environment, clock, channels)
         return sonar.run_findings(environment, transport, sleep, clock, channels)
+    return _run_check_door(arguments, ports, reexecute, environment, clock, channels)
+
+
+def _run_check_door(
+    arguments: argparse.Namespace, ports: DoorPorts, reexecute: Callable[..., NoReturn], environment: Mapping[str, str],
+    clock: Callable[[], float], channels: Channels,
+) -> int:
     if arguments.staged:
         staged_run = partial(judge_staged_change, Path("."), staged.scan_change, verbose=arguments.verbose)
         return run_check(partial(ports.judging, Path("."), staged.COMMAND, True, environment), staged_run, partial(reexecute, command=staged.COMMAND), staged.COMMAND, clock, channels)
@@ -257,7 +266,7 @@ Exit codes: 0 merged, 1 refused, 2 could not check or do, 130 interrupted.
 REPORT_HELP = f"""\
 usage: quality report [-v]
 
-Measure every fleet repository {fleet.FLEET_PATH} lists: size, debt, the gate
+Measure every fleet repository {fleet.FLEET_PATH} selects: size, debt, the gate
 release it pins. A row per repository goes to stderr, the two markdown tables
 to stdout and to the step summary.
 

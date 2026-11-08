@@ -1,15 +1,19 @@
 """`quality report`'s streams: the fleet line, a row per repository and the closing line or the pair on stderr, the
 tables alone on stdout and in the step summary."""
 
+import json
+import urllib.error
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from email.message import Message
 from pathlib import Path
 
 import pytest
 
-from quality import __version__, cli
-from quality.fleet import ReleaseTagsError, TagReader
+from quality import __version__, cli, web
+from quality.fleet import ListingFetch, ReleaseTagsError, TagReader
+from quality.report import CannotJudge
 from tests.support.fleet import NEWEST, RELEASES, row, write_fleet
 from tests.support.git_repositories import head_commit
 
@@ -34,17 +38,69 @@ def report_in(
     words: tuple[str, ...] = (),
     tags: TagReader = lambda: RELEASES,
     environment: Mapping[str, str] | None = None,
+    fetch_listing: ListingFetch | None = None,
 ) -> Printed:
     monkeypatch.chdir(folder)
     code = cli.main(
         ["report", *words],
         release_tags=tags,
+        fetch_listing=fetch_listing or Listing({}),
         clock=clock,
         now=lambda: datetime(2026, 11, 6, 12, tzinfo=UTC),
         environment=environment or {},
     )
     printed = capsys.readouterr()
     return Printed(code, printed.out, printed.err)
+
+
+@dataclass(frozen=True)
+class Answer:
+    """What the fake GitHub says to one organization's listing: a body and a Link header, or a failure of the request."""
+
+    body: bytes = b"[]"
+    link: str | None = None
+    failure: Exception | None = None
+
+
+@dataclass
+class Listing:
+    """A fake listing fetch: one answer per organization, and the url and headers of every request it got."""
+
+    answers: dict[str, Answer]
+    requests: list[tuple[str, dict[str, str]]] = field(default_factory=list)
+
+    def __call__(self, url: str, headers: Mapping[str, str], unreadable: Callable[[Exception], CannotJudge]) -> tuple[bytes, Message]:
+        self.requests.append((url, dict(headers)))
+        answer = self.answers[url.split("/orgs/")[1].split("/")[0]]
+        if answer.failure is not None:
+            raise unreadable(answer.failure)
+        headers_answered = Message()
+        if answer.link is not None:
+            headers_answered["Link"] = answer.link
+        return answer.body, headers_answered
+
+
+def listed(*entries: tuple[str, ...]) -> Answer:
+    """The listing of `entries` as GitHub answers it; each entry is `(full_name, *flags set)`."""
+    return Answer(json.dumps([
+        {"full_name": name, "private": "private" in set_flags, "archived": "archived" in set_flags, "fork": "fork" in set_flags}
+        for name, *set_flags in entries
+    ]).encode())
+
+
+def http_error(status: int) -> Answer:
+    return Answer(failure=urllib.error.HTTPError("https://api.github.com", status, "", Message(), None))
+
+
+SHAPE_NEXT = 'next: write it in quality/fleet.toml like this:\n    organizations = ["overnightworks"]\n'
+RERUN_NEXT = "next: fix what the error names, then run quality report again\n"
+
+
+def write_organizations(directory: Path, organizations: list[str], repositories: list[str] | None = None) -> Path:
+    (directory / "quality").mkdir(parents=True)
+    lines = [f"organizations = {json.dumps(organizations)}", *([f"repositories = {json.dumps(repositories)}"] if repositories else [])]
+    (directory / "quality" / "fleet.toml").write_text("\n".join(lines) + "\n")
+    return directory
 
 
 def gate_caller(ref: str) -> dict[str, str]:
@@ -59,7 +115,7 @@ def test_a_measured_fleet_prints_its_rows_on_stderr_and_only_the_tables_on_stdou
     alpha_commit, beta_commit = head_commit(remotes / alpha)[:7], head_commit(remotes / beta)[:7]
     assert (printed.code, printed.err) == (
         0,
-        ("  · fleet              2 listed       quality/fleet.toml\n"
+        ("  · fleet              2 found        quality/fleet.toml\n"
         f"  ✓ o/alpha            measured       {alpha_commit} · 3s\n"
         f"  ✓ o/beta-repository  measured       {beta_commit} · 5s\n"
         "✓ 2 of 2 repositories measured · 1m12s\n"),
@@ -87,7 +143,7 @@ def test_a_repository_that_cannot_be_cloned_is_its_row_and_the_pair_after_the_ta
     printed = report_in(write_fleet(tmp_path / "fleet", [alpha, missing]), capsys, monkeypatch, ticks(0, 1, 2, 3, 4))
     assert (printed.code, printed.err) == (
         2,
-        ("  · fleet         2 listed       quality/fleet.toml\n"
+        ("  · fleet         2 found        quality/fleet.toml\n"
         f"  ✓ o/alpha       measured       {head_commit(remotes / alpha)[:7]} · 1s\n"
         "  ✗ o/gone        not measured   cannot clone (git exited 128)\n"
         "error: 1 of 2 repositories not measured · the tables say so\n"
@@ -105,7 +161,7 @@ def test_unread_release_tags_stand_under_the_fleet_line_and_in_the_pair(capsys, 
     printed = report_in(write_fleet(tmp_path / "fleet", [alpha]), capsys, monkeypatch, ticks(0, 1, 2), tags=unreadable)
     assert (printed.code, printed.err) == (
         2,
-        ("  · fleet         1 listed       quality/fleet.toml\n"
+        ("  · fleet         1 found        quality/fleet.toml\n"
         "  ✗ release tags  not read       git exited 128\n"
         f"  ✓ o/alpha       measured       {head_commit(remotes / alpha)[:7]} · 1s\n"
         "error: the release tags not read · the tables say so\n"
@@ -118,7 +174,7 @@ def test_a_cell_that_cannot_read_a_file_makes_the_row_partly_read(capsys, monkey
     printed = report_in(write_fleet(tmp_path / "fleet", [alpha]), capsys, monkeypatch, ticks(0, 1, 2))
     assert (printed.code, printed.err) == (
         2,
-        ("  · fleet         1 listed       quality/fleet.toml\n"
+        ("  · fleet         1 found        quality/fleet.toml\n"
         "  ✗ o/alpha       partly read    cannot read quality/config.toml\n"
         "error: 1 partly read · the tables say so\n"
         "next: quality report\n"),
@@ -164,3 +220,133 @@ def test_report_takes_v_and_prints_the_same(capsys, monkeypatch, tmp_path, publi
     plain = report_in(folder, capsys, monkeypatch, ticks(0, 1, 2, 3))
     verbose = report_in(folder, capsys, monkeypatch, ticks(0, 1, 2, 3), words=("-v",))
     assert verbose == plain
+
+
+def test_an_organizations_public_repositories_are_measured_and_nothing_else(capsys, monkeypatch, tmp_path, public):
+    public("alpha", {"a.py": "a = 1\n"})
+    public("Beta", {"b.py": "b = 1\n"})
+    listing = Listing({"o": listed(("o/Beta",), ("o/alpha",), ("o/old", "archived"), ("o/copy", "fork"))})
+    printed = report_in(
+        write_organizations(tmp_path / "fleet", ["o"]), capsys, monkeypatch, ticks(0, 1, 2, 3, 4, 5), fetch_listing=listing
+    )
+    assert printed.code == 0, printed.err
+    assert printed.err.splitlines()[0].split() == ["·", "fleet", "2", "found", "o", "·", "quality/fleet.toml"]
+    assert [line.split()[1] for line in printed.err.splitlines()[1:3]] == ["o/alpha", "o/Beta"]
+    assert "o/old" not in printed.err + printed.out
+    assert "o/copy" not in printed.err + printed.out
+
+
+def test_a_private_entry_of_the_listing_is_in_no_line(capsys, monkeypatch, tmp_path, public):
+    public("alpha", {"a.py": "a = 1\n"})
+    summary = tmp_path / "summary.md"
+    listing = Listing({"o": listed(("o/alpha",), ("o/hidden-name", "private"))})
+    printed = report_in(
+        write_organizations(tmp_path / "fleet", ["o"]), capsys, monkeypatch, ticks(0, 1, 2, 3),
+        environment={"GITHUB_STEP_SUMMARY": str(summary)}, fetch_listing=listing,
+    )
+    assert printed.code == 0, printed.err
+    assert "hidden-name" not in printed.err + printed.out + summary.read_text()
+
+
+def test_a_private_repository_named_in_the_file_never_reads_as_found(capsys, monkeypatch, tmp_path, public, missing):
+    listing = Listing({"o": listed(("o/gone", "private"))})
+    printed = report_in(
+        write_organizations(tmp_path / "fleet", ["o"], [missing]), capsys, monkeypatch, ticks(0, 1, 2, 3), fetch_listing=listing
+    )
+    assert printed.code == 2
+    assert "already in" not in printed.err
+
+
+@pytest.mark.parametrize(
+    ("environment", "authorization"),
+    [({"GITHUB_TOKEN": "dummy-token"}, "Bearer dummy-token"), ({}, None), ({"GITHUB_TOKEN": ""}, None)],
+    ids=["token", "no token", "empty token"],
+)
+def test_the_listing_carries_the_job_token_only_when_there_is_one(capsys, monkeypatch, tmp_path, public, environment, authorization):
+    public("alpha", {"a.py": "a = 1\n"})
+    listing = Listing({"o": listed(("o/alpha",))})
+    printed = report_in(
+        write_organizations(tmp_path / "fleet", ["o"]), capsys, monkeypatch, ticks(0, 1, 2, 3),
+        environment=environment, fetch_listing=listing,
+    )
+    ((url, headers),) = listing.requests
+    assert (url, headers.get("Authorization")) == ("https://api.github.com/orgs/o/repos?type=public&per_page=100", authorization)
+    assert "dummy-token" not in printed.err + printed.out
+
+
+@pytest.mark.parametrize(
+    ("answer", "fact", "steps"),
+    [
+        (http_error(404), "quality/fleet.toml organizations[0] is no GitHub organization", SHAPE_NEXT),
+        (http_error(503), "GitHub did not list o · HTTP 503", RERUN_NEXT),
+        (Answer(link='<https://api.github.com/next>; rel="next"'), "o has more than 100 public repositories · quality reads one page", RERUN_NEXT),
+        (Answer(failure=TimeoutError()), f"GitHub did not answer the listing of o within {web.REQUEST_TIMEOUT_SECONDS}s", RERUN_NEXT),
+        (Answer(failure=urllib.error.URLError(ConnectionRefusedError("secret-host"))), "GitHub could not be reached for the listing of o", RERUN_NEXT),
+        (Answer(body=b"not json"), "GitHub's listing of o is not a list of repositories", RERUN_NEXT),
+        (Answer(body=b"[" * 100_000 + b"]" * 100_000), "GitHub's listing of o is not a list of repositories", RERUN_NEXT),
+        (Answer(body=b'{"full_name": "o/a"}'), "GitHub's listing of o is not a list of repositories", RERUN_NEXT),
+        (listed(("--upload-pack=x/y",)), "GitHub's listing of o is not a list of repositories", RERUN_NEXT),
+        (listed(("o/..",)), "GitHub's listing of o is not a list of repositories", RERUN_NEXT),
+        (Answer(body=b'[{"full_name": "o/a", "private": "no", "archived": false, "fork": false}]'),
+         "GitHub's listing of o is not a list of repositories", RERUN_NEXT),
+    ],
+    ids=["404", "503", "more pages", "timeout", "unreachable", "not JSON", "deeply nested", "not a list", "option", "dots", "flag not boolean"],
+)
+def test_a_listing_that_cannot_be_used_is_exit_2_before_any_clone(capsys, monkeypatch, tmp_path, public, answer, fact, steps):
+    printed = report_in(
+        write_organizations(tmp_path / "fleet", ["o"]), capsys, monkeypatch, ticks(0), fetch_listing=Listing({"o": answer})
+    )
+    assert (printed.code, printed.out) == (2, "")
+    assert printed.err == f"error: {fact} · nothing measured\n{steps}"
+    assert not any(word in printed.err for word in ("upload-pack", "secret-host", "fleet  "))
+
+
+def test_every_organization_problem_stands_in_one_pair_with_the_shape_before_the_rerun(capsys, monkeypatch, tmp_path, public):
+    listing = Listing({"a": http_error(404), "b": http_error(503)})
+    printed = report_in(write_organizations(tmp_path / "fleet", ["a", "b"]), capsys, monkeypatch, ticks(0), fetch_listing=listing)
+    assert (printed.code, printed.out, printed.err) == (
+        2,
+        "",
+        ("error: quality/fleet.toml organizations[0] is no GitHub organization · GitHub did not list b · HTTP 503"
+        " · nothing measured\n"
+        "next:\n"
+        "    write it in quality/fleet.toml like this:\n"
+        '        organizations = ["overnightworks"]\n'
+        "    fix what the error names, then run quality report again\n"),
+    )
+
+
+def test_an_organization_name_that_is_no_name_sends_no_request(capsys, monkeypatch, tmp_path, public):
+    listing = Listing({})
+    printed = report_in(write_organizations(tmp_path / "fleet", ["a/b"]), capsys, monkeypatch, ticks(0), fetch_listing=listing)
+    assert (printed.code, listing.requests) == (2, [])
+    assert printed.err == (
+        "error: quality/fleet.toml organizations[0] is no organization name\n"
+        "next: write it in quality/fleet.toml like this:\n"
+        '    organizations = ["overnightworks"]\n'
+    )
+
+
+def test_a_named_repository_that_the_organization_already_lists_is_refused_by_its_place(capsys, monkeypatch, tmp_path, public):
+    listing = Listing({"o": listed(("o/alpha",))})
+    printed = report_in(write_organizations(tmp_path / "fleet", ["o"], ["O/Alpha"]), capsys, monkeypatch, ticks(0), fetch_listing=listing)
+    assert (printed.code, printed.out) == (2, "")
+    assert printed.err == f"error: quality/fleet.toml repositories[0] is already in o · nothing measured\n{SHAPE_NEXT}"
+
+
+def test_a_fork_named_in_the_file_is_measured(capsys, monkeypatch, tmp_path, public):
+    public("alpha", {"a.py": "a = 1\n"})
+    public("copy", {"c.py": "c = 1\n"})
+    listing = Listing({"o": listed(("o/alpha",), ("o/copy", "fork"))})
+    printed = report_in(
+        write_organizations(tmp_path / "fleet", ["o"], ["o/copy"]), capsys, monkeypatch, ticks(0, 1, 2, 3, 4, 5), fetch_listing=listing
+    )
+    assert printed.code == 0, printed.err
+    assert [cells[0] for cells in (row(printed.out, "o/alpha", 1), row(printed.out, "o/copy", 1))] == ["o/alpha", "o/copy"]
+
+
+def test_organizations_that_select_nothing_are_refused(capsys, monkeypatch, tmp_path, public):
+    listing = Listing({"o": listed(("o/old", "archived"))})
+    printed = report_in(write_organizations(tmp_path / "fleet", ["o"]), capsys, monkeypatch, ticks(0), fetch_listing=listing)
+    assert (printed.code, printed.out) == (2, "")
+    assert printed.err == f"error: quality/fleet.toml selects no repository · nothing measured\n{SHAPE_NEXT}"
