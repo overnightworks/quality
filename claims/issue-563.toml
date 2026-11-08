@@ -1,8 +1,0 @@
-claim_id = "33c29d26ca004e4e91a9ed9dbf73fe39"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "3a28d2026399a9af4ee17e0015b1620b8f6c7396"
-branch = "claude/issue-563-d7-report-row-ids"
-scope = ["docs/commands.md", "tests/test_fleet.py", "tests/test_fleet_matrix.py", "tests/test_fleet_report.py"]
-opened_commit = "c0093071ac70db60c237ecdfb7cb6bf0a5b2b23d"
-whole_reason = "docs/commands.md report found and named rows, private repository, cannot judge row and exit clauses and the tests that prove them, linked by FLEET IDs, with the attribution of their docstrings removed, the false exit sentence deleted and the repeats linked to their owners."
