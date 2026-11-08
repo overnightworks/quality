@@ -1,7 +1,0 @@
-claim_id = "29f2dd96275044bcb889cc19aecb5fec"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "6bf341e3fd89fdd510ad36dd8cc3f7bbca1bdcbe"
-branch = "claude/issue-503-d7-gate-frame-ids"
-scope = ["docs/gate.md", "tests/test_verdict_frame.py"]
-opened_commit = "8439cdaf97e956b72054b3d68f53034dc0dd083a"
