@@ -2,7 +2,7 @@
 
 Reference for the engineer, operator or agent who reads or matches what a quality command prints, and for the test that proves it. What each command does stands in [commands](commands.md), `check`'s rules in [rules](rules.md), the verdict in [gate](gate.md), the two sonar steps in [sonar](sonar.md). Paths, repositories and ids in the examples are invented. All terminal lines are English.
 
-One output owner prints; rules return findings and never print. A line the door prints starts with its own text, so a matcher anchored at the line start, such as setup-uv's python matcher, cannot match repository text.
+One output owner prints; rules return findings and never print. A line the door prints starts with its own text, so a matcher anchored at the line start, such as setup-uv's python matcher, cannot match repository text (MASK-11).
 
 ## Rows
 
@@ -214,11 +214,13 @@ Repository text (a file name, a service, a port, a contract or job name, a confi
     ! deploy/\u202eEDGE_SHA  tracked  a file without a suffix that is no executable
 ```
 
-A refusal's fact is one line (MASK-10); the lines the door means to print (an import chain, the verdict's problems, the report's tables) stay lines. A line taken from another tool's rendering prints behind `| `: actionlint's message stays one escaped line, while rich may drop a carriage return, expand a tab, or start a new marked line at a line feed in import-linter's lines.
+A refusal's fact is one line (MASK-10); the lines the door means to print (an import chain, the verdict's problems, the report's tables) stay lines (MASK-12). A line taken from another tool's rendering prints behind `| ` ([Rows](#rows)): actionlint's message stays one escaped line (O37), while rich may drop a carriage return, expand a tab, or start a new marked line at a line feed in import-linter's lines (MASK-13).
 
-Ruled by the operator: in GitHub Actions the door both stops workflow commands and escapes repository text.
+Ruled by the operator:
 
-In GitHub Actions (`GITHUB_ACTIONS=true`) the door first prints `::stop-commands::<token>` on stderr and on stdout, a new random token per run, so no workflow command in repository text runs: no `::warning::` or `##[warning]` annotation, no `add-mask`, no `add-matcher`. The stop lasts for the rest of the step, and the door never prints the line that lifts it. Problem matchers registered in the job still read the log, because the stop does not reach them. The gate's jobs register only setup-uv's python matcher, which is anchored at the line start and so cannot match repository text; a matcher another step registers may still match a door line that holds repository text, and the door cannot prevent that.
+- In GitHub Actions the door both stops workflow commands and escapes repository text.
+
+In GitHub Actions (`GITHUB_ACTIONS=true`) the door first prints `::stop-commands::<token>` on stderr and on stdout (MASK-14), a new random token per run (MASK-15), so no workflow command in repository text runs: no `::warning::` or `##[warning]` annotation, no `add-mask`, no `add-matcher`. The stop lasts for the rest of the step, and the door never prints the line that lifts it (MASK-16). Problem matchers registered in the job still read the log, because the stop does not reach them. The gate's jobs register only setup-uv's python matcher, which is anchored at the line start and so cannot match repository text ([the line start](#output)); a matcher another step registers may still match a door line that holds repository text, and the door cannot prevent that.
 
 ## Exit codes
 

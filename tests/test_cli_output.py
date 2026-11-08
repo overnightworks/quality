@@ -75,7 +75,7 @@ def stop_token(stream: str) -> str:
 
 
 def test_both_streams_start_with_the_same_stop_and_nothing_resumes_it(clean_repo):
-    """#89 rule 1, cell 1."""
+    """MASK-14, MASK-16: both streams start with the same stop, the rest equals a run outside Actions, and no line lifts it."""
     local = run_door(CHECK_WORD, cwd=clean_repo, actions=None)
     actions = run_door(CHECK_WORD, cwd=clean_repo)
     token = stop_token(actions.stdout)
@@ -91,20 +91,20 @@ def test_both_streams_start_with_the_same_stop_and_nothing_resumes_it(clean_repo
 
 
 def test_every_run_draws_a_new_token(clean_repo):
-    """#89 rule 1, cell 2 (E8)."""
+    """MASK-15: every run draws a new token."""
     tokens = {stop_token(run_door(CHECK_WORD, cwd=clean_repo).stdout) for _ in range(2)}
     assert len(tokens) == 2
 
 
 @pytest.mark.parametrize("actions", [None, "false", "TRUE", ""], ids=["unset", "false", "upper case", "empty"])
 def test_outside_actions_the_door_prints_no_stop(clean_repo, actions):
-    """#89 rule 1, cell 3 (E2)."""
+    """MASK-14: unless GITHUB_ACTIONS is exactly true (unset, false, upper case, empty) the door prints no stop."""
     done = run_door(CHECK_WORD, cwd=clean_repo, actions=actions)
     assert "stop-commands" not in done.stdout + done.stderr
 
 
 def test_main_alone_prints_no_stop(clean_repo, monkeypatch, capsys):
-    """#89 rule 1, cell 4: the stop belongs to the process entry."""
+    """The stop belongs to the process entry: main alone prints none."""
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
     check_door(clean_repo)
     captured = capsys.readouterr()
@@ -112,14 +112,14 @@ def test_main_alone_prints_no_stop(clean_repo, monkeypatch, capsys):
 
 
 def test_a_closed_stdout_leaves_the_stop_and_the_verdict_on_stderr(broken_compose_repo):
-    """#89 rule 1, cell 5: fd 1 closed."""
+    """MASK-14: with stdout closed the stop and the pair stand on stderr."""
     done = run_door(CHECK_WORD, cwd=broken_compose_repo, shell=CLOSED_STDOUT)
     stop_token(done.stderr)
     assert (done.returncode, "error: 1 of 7 areas could not check" in done.stderr) == (2, True)
 
 
 def test_a_closed_stderr_keeps_the_stop_on_stdout_and_the_exit(broken_compose_repo):
-    """#89 rule 1, cell 5: fd 2 closed."""
+    """MASK-14: with stderr closed the stop stays on stdout and the exit is the run's own."""
     local = run_door(CHECK_WORD, cwd=broken_compose_repo, actions=None, shell=CLOSED_STDERR)
     done = run_door(CHECK_WORD, cwd=broken_compose_repo, shell=CLOSED_STDERR)
     stop_token(done.stdout)
@@ -133,7 +133,7 @@ def test_a_closed_stderr_keeps_the_stop_on_stdout_and_the_exit(broken_compose_re
     ids=["sonar properties"],
 )
 def test_other_doors_start_with_the_stop_too(clean_repo, arguments):
-    """#89 rule 1, cell 6."""
+    """MASK-14: the other doors start with the stop too."""
     done = run_door(*arguments, cwd=clean_repo)
     assert stop_token(done.stdout) == stop_token(done.stderr)
 
@@ -145,7 +145,7 @@ def run_in_process(environment: dict[str, str], exit_code: int = 3) -> int:
 
 
 def test_run_stops_the_commands_on_both_streams_and_keeps_the_door_exit(capsys):
-    """#89 rule 1: in Actions, in process."""
+    """MASK-14: in Actions run stops the commands on both streams and keeps the door's exit."""
     assert run_in_process({"GITHUB_ACTIONS": "true"}) == 3
     captured = capsys.readouterr()
     assert stop_token(captured.out) == stop_token(captured.err)
@@ -153,14 +153,14 @@ def test_run_stops_the_commands_on_both_streams_and_keeps_the_door_exit(capsys):
 
 
 def test_run_prints_nothing_outside_actions_and_keeps_the_door_exit(capsys):
-    """#89 rule 1: not in Actions, in process."""
+    """MASK-14: outside Actions run prints nothing and keeps the door's exit."""
     assert run_in_process({}) == 3
     captured = capsys.readouterr()
     assert (captured.out, captured.err) == ("", "")
 
 
 def test_run_skips_a_closed_stream_in_process(capsys, monkeypatch):
-    """#89 rule 1: a stream that is None is skipped."""
+    """MASK-14: a stream that is None is skipped."""
     monkeypatch.setattr(sys, "stderr", None)
     assert run_in_process({"GITHUB_ACTIONS": "true"}) == 3
     stdout = capsys.readouterr().out
@@ -185,7 +185,7 @@ class SharedLogStream(io.StringIO):
 
 
 def test_run_writes_and_flushes_the_stop_on_stderr_then_stdout_before_the_door_is_entered(monkeypatch):
-    """#89 rule 1: the order of the stops."""
+    """MASK-14: the stop goes to stderr, then to stdout, each flushed before the door is entered."""
     log: list[tuple[str, str]] = []
     monkeypatch.setattr(sys, "stderr", SharedLogStream("stderr", log))
     monkeypatch.setattr(sys, "stdout", SharedLogStream("stdout", log))

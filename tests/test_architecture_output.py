@@ -66,7 +66,7 @@ def test_a_broken_contract_named_like_a_command_keeps_its_chain_under_its_row(bu
 
 
 def test_a_long_module_name_import_linter_would_wrap_cannot_forge_a_matcher_pair(build_repo, capsys):
-    """#97 rule 2, cell 18 (Opus D1): rich's soft wrap would put `File "ab", ...` and `raise ...` at the line start."""
+    """MASK-11, MASK-12: a long module name stays one detail line and forges no matcher pair at the line start."""
     files = {**SHOP, f"src/shop/{WRAPPED_MODULE_NAME}.py": "", "pyproject.toml": toml(EXHAUSTIVE_LAYERS)}
     _, block, _ = broken_block(capsys, files, build_repo)
     assert f"- shop.{WRAPPED_MODULE_NAME}" in only_finding(block).row.detail
@@ -88,7 +88,7 @@ def test_contract_guidance_with_several_lines_is_judged_and_printed_under_the_ro
 def test_a_module_name_with_a_line_feed_is_judged_and_its_second_line_stays_a_detail_line(
     build_repo, capsys, name, text_after_the_line_feed
 ):
-    """#97 rule 2, cell 18 and cell 12: a tracked source name no longer stops the judgement, and forges no line."""
+    """MASK-11, MASK-13: a tracked source name with a line feed is judged, its second line stays a detail line, and it forges no line."""
     files = {**SHOP_DB_IMPORTS_WEB, f"src/shop/{name}.py": "import shop.web\n",
              "pyproject.toml": toml({**FORBIDDEN, "source_modules": ["shop.*"]})}
     _, block, _ = broken_block(capsys, files, build_repo)
@@ -96,14 +96,14 @@ def test_a_module_name_with_a_line_feed_is_judged_and_its_second_line_stays_a_de
 
 
 def test_a_source_directory_with_a_line_feed_is_judged_without_a_forged_line(build_repo, capsys):
-    """#97 rule 2, cell 18: a package directory name is judged like a file name."""
+    """A package directory name with a line feed is judged like a file name."""
     files = {**SHOP_DB_IMPORTS_WEB, "src/shop/a\n::error::x/__init__.py": "", "pyproject.toml": toml(FORBIDDEN)}
     broken_block(capsys, files, build_repo)
 
 
 @pytest.mark.parametrize("name", ["guarded\n::error::c", "guarded\x1b[31m", "guarded\u202e"], ids=["line feed", "escape", "format character"])
 def test_a_contract_name_with_a_control_or_format_character_is_judged_and_prints_escaped_in_the_fact(build_repo, capsys, name):
-    """#97 rule 2, cell 10a: the name prints escaped in the row's fact; the format character prints as the visible `\\u202e`."""
+    """MASK-2, MASK-6, MASK-7: the name prints escaped in the row's fact; the format character prints as the visible `\\u202e`."""
     lines, block, _ = broken_block(capsys, {**SHOP_DB_IMPORTS_WEB, "pyproject.toml": toml({**FORBIDDEN, "name": name})}, build_repo)
     assert printable(name) in only_finding(block).row.fact
     assert printable(name) != name
@@ -111,7 +111,7 @@ def test_a_contract_name_with_a_control_or_format_character_is_judged_and_prints
 
 
 def test_a_module_name_with_a_format_character_prints_escaped_in_the_detail(build_repo, capsys):
-    """Acceptance 10: the module name prints as the visible `\\u202e`, equal to `printable` of the scenario's value."""
+    """MASK-2, MASK-7: the module name prints as the visible `\\u202e` in the detail."""
     files = {**SHOP_DB_IMPORTS_WEB, "src/shop/m\u202e.py": "import shop.web\n", "pyproject.toml": toml({**FORBIDDEN, "source_modules": ["shop.*"]})}
     _, block, _ = broken_block(capsys, files, build_repo)
     assert any(printable("shop.m\u202e") in detail for detail in only_finding(block).row.detail)
