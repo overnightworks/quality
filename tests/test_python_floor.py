@@ -59,7 +59,7 @@ def assert_findings_print_as_rows(repo: Path, printed: str) -> None:
 
 @pytest.mark.parametrize("requires_python", [">=3.14", ">=3.14,<3.15", "~=3.14", "~=3.14.1", "==3.14.*", ">=3.15"])
 def test_a_floor_of_python_3_14_or_higher_is_clean(build_repo, capsys, requires_python):
-    """F1, sentence 2: a floor of 3.14 or higher is clean."""
+    """FLOOR-4, FLOOR-5, FLOOR-8: a floor of 3.14 or higher is clean."""
     code, output = run(capsys, build_repo({"pyproject.toml": project(requires_python)}))
     assert (code, is_clean(output)) == (0, True), output
 
@@ -77,7 +77,8 @@ def test_a_floor_of_python_3_14_or_higher_is_clean(build_repo, capsys, requires_
     ],
 )
 def test_a_floor_below_python_3_14_names_the_value_and_the_floor(build_repo, capsys, requires_python, floor):
-    """F2, sentence 3: a floor below 3.14 is red and the reason names the value and the floor."""
+    """FLOOR-4, FLOOR-5, FLOOR-6, FLOOR-7, FLOOR-9, FLOOR-11, FLOOR-12, ROW-7, ROW-14: a floor below 3.14 is one red
+    finding at its path whose fact names the value and the floor."""
     repo = build_repo({"pyproject.toml": project(requires_python)})
     code, output = run(capsys, repo)
     findings = rule_findings(repo, Rule.PYTHON_FLOOR)
@@ -88,7 +89,7 @@ def test_a_floor_below_python_3_14_names_the_value_and_the_floor(build_repo, cap
 
 
 def test_a_no_floor_finding_names_the_value_it_found(build_repo):
-    """F3, sentence 3: the fact of a project that sets no lower bound names the value it found."""
+    """FLOOR-6, FLOOR-13: the fact of a project that sets no lower bound names the value it found."""
     repo = build_repo({"pyproject.toml": project("<3.15")})
     (finding,) = rule_findings(repo, Rule.PYTHON_FLOOR)
     assert (finding.event, "<3.15" in finding.fact) == (FindingEvent.NO_FLOOR, True)
@@ -100,7 +101,8 @@ def test_a_no_floor_finding_names_the_value_it_found(build_repo):
     ids=["an upper bound only", "empty", "absent", "dynamic"],
 )
 def test_a_project_without_a_floor_admits_every_python(build_repo, capsys, text):
-    """F3, sentence 2: a project that sets no lower bound is red as naming no floor."""
+    """FLOOR-6, FLOOR-9, FLOOR-10, FLOOR-11, FLOOR-13, ROW-7, ROW-14: a project that sets no lower bound is red as
+    naming no floor."""
     repo = build_repo({"pyproject.toml": text})
     code, output = run(capsys, repo)
     assert (code, floor_paths(repo)) == (1, ["pyproject.toml"]), output
@@ -120,21 +122,21 @@ def test_a_project_without_a_floor_admits_every_python(build_repo, capsys, text)
     ids=["empty", "tool table only", "inside tests", "project is no table", "no pyproject"],
 )
 def test_a_file_without_a_project_table_is_not_judged(build_repo, capsys, tracked):
-    """F4, sentence 1: a file without a [project] table, or inside tests, is not judged."""
+    """FLOOR-2, LAYOUT-2: a file without a [project] table, or inside tests, is not judged."""
     repo = build_repo(tracked)
     code, output = run(capsys, repo)
     assert (code, floor_paths(repo)) == (0, []), output
 
 
 def test_a_member_below_the_floor_is_the_only_finding_beside_a_root_at_the_floor(build_repo, capsys):
-    """F5, sentence 1: a member below the floor is the only finding beside a root at the floor."""
+    """FLOOR-1, LAYOUT-1: a member below the floor is the only finding beside a root at the floor."""
     repo = build_repo({"pyproject.toml": project(), "src/speech/pyproject.toml": project(">=3.12")})
     code, output = run(capsys, repo)
     assert (code, floor_paths(repo)) == (1, ["src/speech/pyproject.toml"]), output
 
 
 def test_every_file_below_the_floor_is_a_finding_sorted_by_path(build_repo, capsys):
-    """F11, sentence 3: every file below the floor is one finding with reason and fix, sorted by path."""
+    """FLOOR-11, ROW-3: every file below the floor is one finding with fact and fix; a shared fix prints once."""
     tracked = {"pyproject.toml": project(">=3.12"), "src/b/pyproject.toml": project(">=3.13"), "src/a/pyproject.toml": project(None)}
     repo = build_repo(tracked)
     code, output = run(capsys, repo)
@@ -253,7 +255,7 @@ def test_a_pyproject_that_links_out_of_the_repository_cannot_be_judged(build_rep
 
 @pytest.mark.parametrize("gitlink_path", ["src/acestep", "src/acestep/pyproject.toml"], ids=["vendor directory", "at a pyproject.toml path"])
 def test_a_gitlink_is_never_entered(build_repo, capsys, elsewhere, gitlink_path):
-    """F12, sentence 1: a gitlink is never entered."""
+    """FLOOR-3: a gitlink is never entered."""
     inner = build_repo({"pyproject.toml": project(">=3.12")})
     repo = Path(elsewhere) / "outer"
     repo.mkdir()
@@ -284,7 +286,7 @@ def test_deleting_the_entry_a_stale_finding_names_leaves_no_finding(build_repo, 
 
 
 def test_raising_the_requirement_to_the_floor_the_fix_names_leaves_no_finding(build_repo, elsewhere):
-    """Decision 12: the requirement the fix names clears the finding."""
+    """FLOOR-14: raising requires-python to the floor the fix names leaves no finding."""
     assert floor_paths(build_repo({"pyproject.toml": project(">=3.12")})) == ["pyproject.toml"]
     raised = project(">=" + str(python_floor.PYTHON_TARGET))
     assert floor_paths(make_repo(tmp_path_dir(elsewhere, "raised"), {"pyproject.toml": raised})) == []
