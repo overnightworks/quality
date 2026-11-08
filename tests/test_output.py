@@ -89,6 +89,8 @@ def test_the_lines_below_a_sub_line_stand_deeper_and_escaped():
 
 @pytest.mark.parametrize("whole", [False, True], ids=["fitted", "whole"])
 def test_a_line_below_a_sub_line_is_painted_as_a_rows_fact_is(whole):
+    """COLOUR-1, COLOUR-2: a sub-line's glyph and a line below it are painted as a row's glyph and fact are, whole or
+    fitted."""
     fact_row = Row(Glyph.NEEDS_YOU, "loosenings", Event.CLEAN, "reason")
     below_row = Row(Glyph.NEEDS_YOU, "loosenings", Event.CLEAN, sub_lines=(SubLine(Glyph.NEEDS_YOU, "what", whole=whole, below=("reason",)),))
     fact_channel = written(Terminal, lambda channel: output.write_rows((fact_row,), channel))
@@ -193,6 +195,8 @@ def test_the_pair_labels_and_escapes_each_text():
 @pytest.mark.parametrize("no_color", [None, "", "1"], ids=["unset", "empty", "set"])
 @pytest.mark.parametrize("term", ["xterm", "dumb"])
 def test_only_a_terminal_without_no_color_and_not_dumb_is_styled(terminal, no_color, term, closed):
+    """COLOUR-5, COLOUR-6: a stream is styled only when it is an open terminal, `TERM` is not `dumb` and `NO_COLOR` is
+    unset or empty."""
     stream = Terminal() if terminal else io.StringIO()
     if closed:
         stream.close()
@@ -206,6 +210,7 @@ def test_a_missing_stream_is_plain():
 
 
 def test_styled_rows_hold_exactly_the_plain_words():
+    """COLOUR-1, COLOUR-6: rows painted at a terminal hold exactly the words they print in a pipe."""
     rows = (
         Row(Glyph.CLEAN, "files", Event.CLEAN, "ok"),
         Row(Glyph.NEEDS_YOU, "code", Event.FINDING, count=2, sub_lines=(SubLine(Glyph.COULD_NOT_CHECK, "why"),)),
@@ -217,6 +222,8 @@ def test_styled_rows_hold_exactly_the_plain_words():
 
 
 def test_a_styled_verdict_and_pair_hold_exactly_the_plain_words():
+    """COLOUR-1, COLOUR-6: the pair is painted at a terminal, and the verdict and the pair hold the words they print in
+    a pipe."""
     verdict = Verdict(1, 1, 6, 7, ("debt measured, not enforced",), 3)
     assert without_sgr(written(Terminal, lambda channel: output.write_verdict(verdict, channel))) == verdict_line(
         findings=1, areas_with_findings=1, clean_areas=6, notes=("debt measured, not enforced",), seconds=3
@@ -236,6 +243,7 @@ def test_repository_text_reaches_a_terminal_only_as_escaped_text():
 
 @pytest.mark.parametrize(("stream_kind", "environment"), [(Terminal, {"NO_COLOR": "1"}), (io.StringIO, {})], ids=["no color", "pipe"])
 def test_plain_output_holds_no_escape_byte(stream_kind, environment):
+    """COLOUR-6: rows and the pair print no escape byte in a pipe or under `NO_COLOR`."""
     stream = stream_kind()
     channel = on(stream, **environment)
     output.write_rows((Row(Glyph.CLEAN, "files", Event.CLEAN),), channel)
@@ -274,11 +282,13 @@ def test_each_word_a_dry_run_says_is_a_will_change_row(planned, printed):
 
 
 def test_a_will_change_row_at_a_terminal_paints_its_glyph_and_its_fact():
+    """COLOUR-1, COLOUR-2: at a terminal a `~` row paints its glyph, and its fact in another style."""
     printed = findings_written([], Terminal, notes=[Note("src/a.py", NoteEvent.LOWER, "a fact")])
     assert by_role(printed, Glyph.WILL_CHANGE) == "    {glyph}~{reset} src/a.py  lower  {other}a fact{reset}\n"
 
 
 def test_a_dry_runs_glyph_has_a_colour_of_its_own():
+    """COLOUR-1: the `~` glyph has a base foreground colour no other glyph has."""
     others = {style for glyph, style in output.GLYPH_STYLE.items() if glyph is not Glyph.WILL_CHANGE}
     foreground_colours = range(30, 38)
     assert output.GLYPH_STYLE[Glyph.WILL_CHANGE] not in others
@@ -286,6 +296,7 @@ def test_a_dry_runs_glyph_has_a_colour_of_its_own():
 
 
 def test_a_dry_runs_verdict_is_painted_in_its_glyphs_colour():
+    """COLOUR-1: a dry run's verdict is painted in its glyph's colour."""
     assert output.VERDICT_STYLE[Glyph.WILL_CHANGE].endswith(output.GLYPH_STYLE[Glyph.WILL_CHANGE])
 
 
@@ -352,6 +363,7 @@ def test_an_event_findings_detail_prints_escaped_under_its_row_before_the_fix():
 
 
 def test_at_a_terminal_each_detail_line_is_painted_as_an_area_rows_fact_is(painted_like_an_area_row):
+    """COLOUR-2: at a terminal each detail line under a finding is painted as an area row's fact is."""
     _, _, fact_start, fact_end = painted_like_an_area_row
     found = Finding("some-rule", "a.env", None, "a fact", "a fix", detail=("one", "two"), event=FindingEvent.BROKEN)
     styled = findings_written([found], Terminal).splitlines()
@@ -383,6 +395,8 @@ def test_two_findings_with_equal_lines_to_copy_print_them_once():
 
 
 def test_at_a_terminal_the_fix_and_its_lines_to_copy_stay_plain_and_the_words_equal_the_plain_ones():
+    """COLOUR-4, COLOUR-6: at a terminal the `fix:` line and its lines to copy stay unpainted, and the words equal a
+    pipe's."""
     findings = [finding("a.env", FindingEvent.SECRET, fix=ENTRY)]
     styled = findings_written(findings, Terminal)
 
@@ -431,6 +445,8 @@ def painted_like_an_area_row() -> tuple[str, str, str, str]:
 
 
 def test_at_a_terminal_the_glyph_and_the_fact_are_painted_as_an_area_row_paints_them(painted_like_an_area_row):
+    """COLOUR-1, COLOUR-2, COLOUR-4: at a terminal a finding row's glyph and fact are painted as an area row's are, and
+    its fix line stays plain."""
     glyph_start, glyph_end, fact_start, fact_end = painted_like_an_area_row
     findings = [finding("a.env", FindingEvent.TRACKED, "FACT", "the fix")]
     styled = findings_written(findings, Terminal)
@@ -445,6 +461,7 @@ def test_at_a_terminal_the_glyph_and_the_fact_are_painted_as_an_area_row_paints_
 
 @pytest.mark.parametrize(("term", "no_color"), [("xterm", "1"), ("dumb", None)], ids=["NO_COLOR", "dumb"])
 def test_a_terminal_that_asks_for_no_style_prints_no_escape_byte(term, no_color):
+    """COLOUR-6: `NO_COLOR` and `TERM=dumb` print no escape byte on a terminal."""
     environment = {"TERM": term} | ({"NO_COLOR": no_color} if no_color else {})
     assert "\x1b" not in findings_written([finding("a.env", FindingEvent.TRACKED)], Terminal, **environment)
 
@@ -507,6 +524,7 @@ def test_notes_alone_print_their_rows_without_a_fix():
 
 
 def test_a_note_row_is_painted_dim_as_a_whole_as_an_area_note_row_is():
+    """COLOUR-2: a note row is painted dim as a whole, as an area's note row is."""
     area = written(Terminal, lambda channel: output.write_rows((Row(Glyph.NOTE, "debt", Event.CLEAN, "FACT"),), channel))
     opening, closing = re.fullmatch(r"(\x1b\[[\d;]*m).*(\x1b\[[\d;]*m)\n", area).groups()
     plain_line = findings_written([], notes=[note("b.toml", "FACT")]).rstrip("\n")
@@ -539,6 +557,8 @@ def test_an_example_line_prints_whole_however_long_and_escaped():
 
 @pytest.mark.parametrize(("term", "no_color"), [("xterm", None), ("xterm", "1"), ("dumb", None)], ids=["terminal", "NO_COLOR", "dumb"])
 def test_an_example_is_painted_by_its_label_only_at_a_terminal(term, no_color):
+    """COLOUR-1, COLOUR-4, COLOUR-6: at a terminal the pair is painted and an example's lines never are; `NO_COLOR` and
+    `TERM=dumb` paint nothing."""
     environment = {"TERM": term} | ({"NO_COLOR": no_color} if no_color else {})
     styled = written(Terminal, lambda channel: output.write_pair("e", (COPY,), channel), **environment)
     assert without_sgr(styled) == "error: e\nnext: write it in a.toml like this:\n    [[table]]\n    key = \"value\"\n    other = 1\n"
@@ -710,6 +730,8 @@ def test_the_step_output_is_the_one_the_given_environment_names(tmp_path, monkey
 
 @pytest.mark.parametrize("glyph", list(output.VERDICT_STYLE), ids=[str(glyph) for glyph in output.VERDICT_STYLE])
 def test_a_closing_line_paints_its_first_part_in_its_glyphs_verdict_style(glyph):
+    """COLOUR-1, COLOUR-2: a closing line paints its glyph and first part in the glyph's verdict style and each further
+    part dim."""
     styled = written(Terminal, lambda channel: output.write_closing_line(glyph, ("first", "then"), channel))
     reset = output.RESET.removeprefix("\x1b[").removesuffix("m")
     assert re.findall(r"\x1b\[([0-9;]*)m", styled) == [output.VERDICT_STYLE[glyph], reset, output.DIM, reset]

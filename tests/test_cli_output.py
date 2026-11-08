@@ -387,7 +387,7 @@ def test_ctrl_c_during_a_scan_ends_the_run_as_interrupted_without_a_traceback(cl
     assert list(scratch_parent.iterdir()) == []
 
 
-# Decision 16 and the frame: one header row per area, the findings under it, the verdict line or the error and next pair.
+# The frame: one header row per area, the findings under it, the verdict line or the error and next pair.
 
 CLEAN_FILES = {"README.md": "x\n"}
 CLONES_BASELINE = {BASELINE_PATH: "[clones]\n"}
@@ -682,6 +682,8 @@ def terminal_streams(monkeypatch) -> tuple[Terminal, Terminal]:
 
 
 def test_at_a_terminal_a_refusal_from_repository_text_prints_as_escaped_text_between_quality_sgr_only(build_repo, monkeypatch):
+    """COLOUR-1, MASK-3, MASK-6, MASK-7: at a terminal a refusal from repository text prints escaped, between quality's
+    own SGR only."""
     repo = build_repo({"a\x1b[35m\n\u202e.compose.yaml": "services: [\n"})
     stdout, stderr = terminal_streams(monkeypatch)
     code = check_door(repo, clock=lambda: 0.0, environment={"TERM": "xterm"})
@@ -695,6 +697,7 @@ def test_at_a_terminal_a_refusal_from_repository_text_prints_as_escaped_text_bet
 @pytest.mark.integration
 @pytest.mark.parametrize(("environment", "coloured"), [({"TERM": "xterm"}, True), ({"TERM": "xterm", "NO_COLOR": "1"}, False)], ids=["terminal", "NO_COLOR"])
 def test_the_real_door_colours_a_pseudo_terminal_only_without_no_color(clean_repo, environment, coloured):
+    """COLOUR-1, COLOUR-6: the real door paints a pseudo-terminal, and prints it plain under `NO_COLOR`."""
     parent, child = pty.openpty()
     base = {key: value for key, value in os.environ.items() if key not in ("NO_COLOR", "GITHUB_ACTIONS")}
     done = subprocess.run([*MODULE_DOOR, CHECK_WORD], cwd=clean_repo, env={**base, **environment}, stdout=child, stderr=subprocess.PIPE, check=False)
@@ -705,7 +708,7 @@ def test_the_real_door_colours_a_pseudo_terminal_only_without_no_color(clean_rep
 @pytest.mark.integration
 @pytest.mark.parametrize("environment", [{"TERM": "xterm"}, {"TERM": "xterm", "NO_COLOR": "1"}, {"TERM": "dumb"}, None], ids=["terminal", "NO_COLOR", "dumb", "pipe"])
 def test_the_real_door_paints_the_files_block_only_at_a_terminal_and_prints_the_same_words(build_repo, environment):
-    """#281 acceptance 6: SGR only in the first form; stripped of it, the lines equal the piped ones."""
+    """COLOUR-1, COLOUR-6: SGR only in the first form; stripped of it, the lines equal the piped ones."""
     repo = build_repo({**CASE_TWO, **ROOT_ALLOWS_ENV})
     base = door_environment()
     piped = subprocess.run([*MODULE_DOOR, CHECK_WORD], cwd=repo, env=base, capture_output=True, text=True, check=False)
@@ -751,8 +754,8 @@ REFUSED_CONFIG = {"quality/config.toml": '[gate]\nmandatory_jobs = ["checks"]\n[
     ids=["terminal", "NO_COLOR", "dumb", "pipe"],
 )
 def test_the_real_door_prints_every_config_example_line_whole_in_each_stderr_form(build_repo, environment, coloured):
-    """O10, REFUSAL-15, REFUSAL-16, REFUSAL-17: after removing quality's SGR, the label and each example line stand
-    whole on their own lines, one level deeper, in all four forms; colour only at a terminal."""
+    """COLOUR-1, COLOUR-6, O10, REFUSAL-15, REFUSAL-16, REFUSAL-17: after removing quality's SGR, the label and each
+    example line stand whole on their own lines, one level deeper, in all four forms; colour only at a terminal."""
     repo = build_repo(REFUSED_CONFIG)
     base = door_environment()
     parent, child = pty.openpty() if environment else (None, subprocess.PIPE)

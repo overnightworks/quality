@@ -286,7 +286,11 @@ Ruled by the operator:
 - With no TTY, with `NO_COLOR` or with `TERM=dumb` the same words print without colour, without the live line and never shortened.
 - The CI log stays without colour: no special rule beyond "no TTY, no colour".
 
-On a terminal the glyphs, the verdict and the `error:`/`next:` labels are coloured with the 16 base colours and facts and notes are dim, each stream on its own; `~` is cyan. `NO_COLOR` counts only when set and not empty. A pipe, a file (a runner step's log is two pipes), the CI log, `NO_COLOR` and `TERM=dumb` print the same words plain and whole.
+On a terminal the glyphs, the verdict and the `error:`/`next:` labels are coloured (COLOUR-1) with the 16 base colours
+and facts and notes are dim (COLOUR-2), each stream on its own (COLOUR-3); `~` is cyan. The `fix:` line and the lines
+to copy are never painted (COLOUR-4). `NO_COLOR` counts only when set and not empty (COLOUR-5). A pipe, a file (a
+runner step's log is two pipes), the CI log, `NO_COLOR` and `TERM=dumb` print the same words plain and [whole](#length)
+(COLOUR-6).
 
 While a scanner runs, a stderr that is a terminal with a known window shows one dim line per scanner, the area and the scanner, leaving the window's last column free, and erases it before the next line prints, so the area's row takes its place. Ctrl-C, a refusal and an exception erase it too, and so does SIGTERM while gitleaks or osv-scanner runs; a SIGTERM during any other scanner ends quality on the spot and leaves the line standing. A window of under three columns and a terminal that draws `…` two cells wide are not served: there the line may wrap. A pty a step opens for itself is a terminal and shows it.
 
