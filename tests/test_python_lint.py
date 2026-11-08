@@ -123,8 +123,25 @@ def test_a_noqa_away_from_noqa_row_is_red(text, line):
     ids=["noqa at noqa_row", "noqa at the finding's own line"],
 )
 def test_a_finding_spanning_lines_is_judged_at_noqa_row(text, is_red):
-    """SECURITY-13: a finding inside a multi-line call is judged at noqa_row, not at its own line."""
+    """SECURITY-13: a finding whose noqa_row is not its own line is judged at noqa_row, not at its own line."""
     assert bool(judged(text, record(line=1, noqa_line=3))) is is_red
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("source", "noqa_rows"),
+    [
+        ('password = """\nhunter2\n"""  # noqa: S105 - a fixture value\n', []),
+        ('password = """\nhunter2\n"""\n', ["3"]),
+        ('x = eval(\n    "1"\n)  # noqa: S307 - a fixture value\n', ["1"]),
+    ],
+    ids=["noqa at a string's last line", "no noqa on a string", "noqa at a call's last line"],
+)
+def test_ruff_reports_noqa_row_at_the_last_line_of_a_multi_line_string_and_not_of_a_call(build_repo, source, noqa_rows):
+    """SECURITY-13: ruff reports noqa_row at the last line of a multi-line string, not at the last line of a call."""
+    verdict = rule_verdict(build_repo({"src/p/a.py": source}))
+    assert verdict.refusal is None, verdict.refusal
+    assert [re.search(r"end line (\d+)", finding.fix)[1] for finding in verdict.findings] == noqa_rows
 
 
 @pytest.mark.parametrize("code", ["S101", "S105", "S106", "S107", "S603", "S607"])
@@ -149,8 +166,8 @@ def test_a_shared_path_or_an_url_open_stays_red_in_a_test_file(code):
     ids=["security finding", "print finding"],
 )
 def test_a_file_tokenize_cannot_read_refuses_only_the_rule_whose_finding_lies_in_it(code, refusing, judging):
-    """Sentence 5, cell 16, and #225 cell 12: a file ruff parsed but tokenize cannot is `cannot judge`, naming the
-    file, for the rule whose finding lies in it; the other rule never reads its comments."""
+    """SECURITY-26, SECURITY-28: a file ruff parsed but tokenize cannot is `cannot judge`, naming the file, for the rule
+    whose finding lies in it; the other rule never reads its comments and still judges."""
     lint = linted([record(code=code)], {"src/p/a.py": "print(argv)\nx = '''open\n"})
     with pytest.raises(LintError, match="src/p/a.py"):
         refusing(lint)
@@ -248,13 +265,13 @@ def test_an_owner_clears_only_its_own_files_prints_and_never_a_security_finding(
     ids=["not json", "not a list", "no record", "code not text", "no row", "unknown file", "no noqa_row", "code not selected"],
 )
 def test_a_report_quality_cannot_read_cannot_be_judged(report):
-    """Sentence 8, cell 16: unreadable JSON is `cannot judge`, never clean."""
+    """SECURITY-24: a report quality cannot read (no JSON, no list, an unusable record) is `cannot judge`."""
     with pytest.raises(LintError):
         python_lint.read_report(report, {"/r/src/a.py": "src/a.py"})
 
 
 def test_a_syntax_error_is_unparsable_naming_the_file():
-    """Sentence 8, cell 15: `invalid-syntax` names the file ruff cannot parse."""
+    """SECURITY-18, SECURITY-27: `invalid-syntax` names the file; the run is unparsable though another has a finding."""
     report = json.dumps([ruff_entry(), ruff_entry(code="invalid-syntax", filename="/r/src/b.py", noqa_row=None)])
     with pytest.raises(UnparsablePython, match="src/b.py"):
         python_lint.read_report(report, {"/r/src/a.py": "src/a.py", "/r/src/b.py": "src/b.py"})
@@ -309,8 +326,8 @@ def test_a_repository_without_tracked_python_is_clean_even_when_quality_holds_no
     ids=["deleted", "sparse checkout"],
 )
 def test_a_tracked_python_file_the_checkout_does_not_hold_cannot_be_judged(build_repo, capsys, leave_out):
-    """Sentence 1: every tracked `.py` file is read before ruff runs, so one the checkout lacks is refused, never
-    certified clean by leaving it out; the other rules are still judged."""
+    """SECURITY-19, CHECK-4: a tracked `.py` file the checkout lacks is `cannot judge`, never certified clean by leaving
+    it out; the other rules are still judged."""
     repo = build_repo({".env": "A=1\n", "src/p/a.py": EVAL})
     leave_out(repo)
     code, output = run(capsys, repo)
@@ -364,7 +381,7 @@ def test_an_assert_is_exempt_only_in_the_test_files_test_import_judges(build_rep
 @pytest.mark.integration
 def test_the_pinned_ruff_itself_honours_every_green_noqa_form_and_not_a_code_in_a_second_directive(tmp_path):
     """SECURITY-16, SECURITY-17: the canonical form is a subset of ruff's own grammar, and ruff reads only a line's
-    first directive, so the gate keeps a code named only in the second one red."""
+    first directive, so ruff still reports a code named only in the second one."""
     names = []
     for index, line in enumerate([*GREEN_NOQA_LINES, CODE_IN_SECOND_DIRECTIVE]):
         names.append(f"m{index}.py")
@@ -396,11 +413,13 @@ def test_the_pinned_ruff_itself_honours_the_owner_form(tmp_path):
 
 @pytest.mark.integration
 def test_a_syntax_error_is_unparsable_and_the_other_rules_are_still_judged(build_repo, capsys):
-    """Sentence 8, cell 15, and #225 cell 10: both rules are unparsable, naming the file, exit 2."""
-    code, output = run(capsys, build_repo({".env": "A=1\n", "src/p/bad.py": "def broken(:\n"}))
+    """SECURITY-18, SECURITY-28, CHECK-4: a file ruff cannot parse makes both rules unparsable, naming the file,
+    exit 2, and the other rules are still judged."""
+    repo = build_repo({".env": "A=1\n", "src/p/bad.py": "def broken(:\n"})
+    code, output = run(capsys, repo)
     assert code == 2
     assert f"{refusal_row('code')}ruff cannot parse src/p/bad.py" in output
-    assert f"{refusal_row('code')}ruff cannot parse src/p/bad.py" in output
+    assert list(refusals(repo)) == [Rule.PYTHON_SECURITY, Rule.PYTHON_PRINT]
     assert env_row_stands(output)
 
 
@@ -416,7 +435,9 @@ def test_a_syntax_error_is_unparsable_and_the_other_rules_are_still_judged(build
     ids=["exit 2", "unreadable JSON", "failed to lint", "timeout"],
 )
 def test_a_ruff_run_quality_cannot_trust_cannot_be_judged(build_repo, capsys, monkeypatch, elsewhere, on_check, says):
-    """Sentence 8, cell 16, and #225 cell 11: both rules cannot judge, exit 2, and the other rules are still judged."""
+    """SECURITY-22, SECURITY-23, SECURITY-24, SECURITY-25, SECURITY-28, CHECK-4: a ruff exit other than 0 or 1,
+    a `Failed to lint` warning, a report quality cannot read and a time-out make both rules `cannot judge`, exit 2, and
+    the other rules are still judged."""
     repo = build_repo({".env": "A=1\n", "src/p/a.py": "x = 1\n"})
     binary = fake_ruff(elsewhere, on_check)
     monkeypatch.setattr(python_lint, "RUN_TIMEOUT_SECONDS", 0.5)
@@ -475,7 +496,7 @@ def test_a_print_in_a_file_tokenize_cannot_read_refuses_only_python_print(build_
 
 @pytest.mark.integration
 def test_a_python_file_that_is_not_utf8_cannot_be_judged(build_repo, capsys):
-    """Sentence 8, cell 16: ruff would skip it with a warning, so quality reads it first."""
+    """SECURITY-20: a file Python cannot decode is `cannot judge`, naming the file; quality reads it before ruff."""
     repo = build_repo({"src/p/a.py": "x = 1\n"})
     (repo / "src" / "p" / "a.py").write_bytes(b"x = '\xff'\n")
     code, output = run(capsys, repo)
@@ -484,8 +505,8 @@ def test_a_python_file_that_is_not_utf8_cannot_be_judged(build_repo, capsys):
 
 @pytest.mark.integration
 def test_code_a_cookie_hides_from_ruff_cannot_be_judged(build_repo, capsys):
-    """Sentence 8, cell 16: Python decodes this UTF-8-valid file with its utf-7 cookie to a second line holding an
-    `eval`, ruff reads a comment; judging it clean would fail open."""
+    """SECURITY-21: Python reads this UTF-8-valid file with its utf-7 cookie as a second line holding an `eval` where
+    ruff reads a comment, so it is `cannot judge`; judging it clean would fail open."""
     repo = build_repo({"src/p/a.py": "x = 1\n"})
     (repo / "src" / "p" / "a.py").write_bytes(b'# coding: utf-7\nx = 1 # +AAo-y = eval("1")\n')
     code, output = run(capsys, repo)

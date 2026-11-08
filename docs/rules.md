@@ -427,7 +427,7 @@ It applies these rules:
   a Python project's `tests/`, outside `fixtures/`) S101, S105 to S107, S603 and S607 are exempt (SECURITY-10); S108 (a
   shared path breaks test isolation), S310 and every other code stay red there (SECURITY-11), and `tests/fixtures/` and
   `src/` get no exemption (SECURITY-12). A finding is green only when the line at ruff's `noqa_row` (the last line of a
-  multi-line string or call) carries `# noqa: <CODE>[, <CODE>...] - <reason>` naming its code (SECURITY-13); the reason
+  multi-line string) carries `# noqa: <CODE>[, <CODE>...] - <reason>` naming its code (SECURITY-13); the reason
   is the text after ` - ` up to the next `#` or the end of the line, holds a letter and no comma (SECURITY-14) (Sonar's
   noqa grammar splits on commas, so a comma raises python:S7632 for every caller that runs Sonar). Every other form is
   red: no reason, a blanket `# noqa`, another directive as the reason (`# type: ignore[x]  # noqa: S607`,
@@ -438,18 +438,19 @@ It applies these rules:
   `lint.external`, which keeps its RUF100 from calling the gate's noqa unused; a caller whose ruff selects a family (for
   example `select = ["ALL"]`) leaves it out, because its ruff honours each noqa itself and ignores a file-level
   `# ruff: noqa` for a code listed in `external`.
-  A file ruff cannot parse makes the `code` row `✗ not checked` with `ruff cannot parse
-  <path>` (exit 2); a tracked `.py` file the checkout does not hold (deleted, left out by a sparse checkout, or a link
-  to nowhere), a file Python cannot decode, or reads as other text than ruff reads as UTF-8 (a PEP 263 cookie such as
-  utf-7), a missing or mismatched ruff, ruff exiting other than 0 or 1, a `Failed to lint` warning, a report quality
-  cannot read, a time-out or a file with a finding whose comments Python's tokenizer cannot read is `cannot judge`
-  (exit 2). One such file makes the whole rule `cannot judge` or `unparsable`, so the S findings of the other files
-  are not printed in that run; everything here but the tokenizer refuses the shared run, so `python-print` refuses
-  with it. The other rules are judged either way. A deliberately invalid Python fixture takes another suffix, since a
-  `.py` file is Python. No configuration switches the rule off, and a reasoned noqa asks `quality verdict` for no
-  `[[gate.loosened]]` entry. Not judged, and waiting for usage evidence: notebooks, `.pyi` files and suffixless
-  Python; judging a non-UTF-8 source (a latin-1 file with non-ASCII bytes stays `cannot judge`), since ruff reads
-  UTF-8 only; a stale reasoned noqa, which ruff's RUF100 finds.
+  A file ruff cannot parse makes the `code` row [`✗ not checked`](output.md#refusals) with `ruff cannot parse <path>`
+  (exit 2) (SECURITY-18); a tracked `.py` file the checkout does not hold (deleted, left out by a sparse checkout, or a
+  link to nowhere) (SECURITY-19), a file Python cannot decode (SECURITY-20), or reads as other text than ruff reads as
+  UTF-8 (a PEP 263 cookie such as utf-7) (SECURITY-21), a missing or mismatched ruff, ruff exiting other than 0 or 1
+  (SECURITY-22), a `Failed to lint` warning (SECURITY-23), a report quality cannot read (SECURITY-24), a time-out
+  (SECURITY-25) or a file with a finding whose comments Python's tokenizer cannot read (SECURITY-26) is `cannot judge`
+  (exit 2). One such file makes the whole rule `cannot judge` or `unparsable`, so the S findings of the other files are
+  not printed in that run (SECURITY-27); everything here but the tokenizer refuses the shared run, so `python-print`
+  refuses with it (SECURITY-28). The other rules are judged either way. A deliberately invalid Python fixture takes
+  another suffix, since a `.py` file is Python. No configuration switches the rule off, and a reasoned noqa asks
+  `quality verdict` for no `[[gate.loosened]]` entry. Not judged, and waiting for usage evidence: notebooks, `.pyi`
+  files and suffixless Python; judging a non-UTF-8 source (a latin-1 file with non-ASCII bytes stays `cannot judge`),
+  since ruff reads UTF-8 only; a stale reasoned noqa, which ruff's RUF100 finds.
 
   Ruled by the operator: the rules are red from the release that ships them, with no report-only phase; `assert` (S101)
   is exempt in tests; a rule-specific noqa with a reason is green.
