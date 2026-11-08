@@ -1,8 +1,0 @@
-claim_id = "56dbb011bd904b3cbf4b93bdaa52a557"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "446154dd1d29f1f62152a26a386b2d5ea5884954"
-branch = "claude/issue-537-d7-area-rows-ids"
-scope = ["docs/output.md", "tests/test_check.py", "tests/test_cli_area_row.py", "tests/test_cli_output.py", "tests/test_output.py"]
-opened_commit = "7ce301d3c434f766441ed81a75197b12d6497113"
-whole_reason = "docs/output.md area order, area row and extents and the tests that prove them, linked by ROW and O IDs."
