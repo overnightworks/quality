@@ -15,6 +15,7 @@ from tests.support.workflow_steps import (
     run_step,
     step,
     step_environment,
+    step_names,
     step_script,
     workflow,
     write_executable,
@@ -23,7 +24,8 @@ from tests.support.workflow_steps import (
 pytestmark = pytest.mark.integration
 
 VERIFY_STEP = "Refuse unless the commit, tagged here, is the release its version names"
-CHECKOUT_STEP = "Check out the gated commit with its history and tags"
+CHECKOUT_STEP = "Check out the dispatched commit with its history and tags"
+REFUSE_STEP = "Refuse unless the checkout is the commit the gate judged"
 
 
 @pytest.fixture(scope="module")
@@ -123,16 +125,46 @@ def test_the_tag_call_is_this_repository_s_own_and_gets_the_gated_commit(release
     assert "commit" in workflow("release-gate.yml")[True]["workflow_call"]["outputs"]
 
 
-def test_the_build_checks_out_and_verifies_the_gated_commit(release):
+def test_the_build_checks_out_the_dispatched_commit_without_a_ref(release):
     assert release["jobs"]["build"]["env"] == {
         "VERSION": "${{ inputs.version }}",
         "COMMIT": "${{ needs.gate.outputs.commit }}",
     }
-    assert step(release, "build", CHECKOUT_STEP)["with"] == {
-        "ref": "${{ needs.gate.outputs.commit }}",
-        "fetch-depth": 0,
-        "persist-credentials": False,
-    }
+    checkout = step(release, "build", CHECKOUT_STEP)
+    assert checkout["uses"].startswith("actions/checkout@")
+    assert "ref" not in checkout["with"]
+    assert "repository" not in checkout["with"]
+    assert checkout["with"]["persist-credentials"] is False
+
+
+def test_nothing_runs_between_the_checkout_and_the_refusal(release):
+    names = step_names(release, "build")
+    assert names[:2] == [CHECKOUT_STEP, REFUSE_STEP]
+
+
+@pytest.mark.parametrize(
+    ("scenario", "returncode"),
+    [("the gated commit", 0), ("another commit", 1), ("no checkout", None)],
+)
+def test_a_checkout_that_is_not_the_gated_commit_is_refused(release, tmp_path, scenario, returncode):
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    gated = "b2" * 20
+    if scenario != "no checkout":
+        make_repo(checkout, {"README": "the checkout\n"})
+        head = head_commit(checkout)
+        gated = head if scenario == "the gated commit" else gated
+    environment = step_environment(release, "build", REFUSE_STEP, VERSION="0.21.0", COMMIT=gated)
+    result = run_step(step_script(release, "build", REFUSE_STEP), checkout, environment, tmp_path / "tools")
+    if returncode == 0:
+        assert (result.returncode, result.stdout, result.stderr) == (0, "", "")
+    elif returncode == 1:
+        assert result.returncode == 1
+        assert result.stderr.startswith("Refused:")
+        assert head in result.stderr
+        assert gated in result.stderr
+    else:
+        assert result.returncode != 0
 
 
 def test_the_build_tags_the_gated_commit_in_its_own_checkout_then_verifies_it(release, tmp_path):

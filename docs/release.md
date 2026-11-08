@@ -49,8 +49,14 @@ jobs:
     steps:
       - uses: actions/checkout@<commit sha> # v<tag>
         with:
-          ref: ${{ needs.gate.outputs.commit }}
           persist-credentials: false
+      - name: Refuse unless the checkout is the commit the gate judged
+        run: |
+          head=$(git rev-parse HEAD)
+          if [ "$head" != "$COMMIT" ]; then
+            echo "Refused: the checkout is $head, not the gated commit $COMMIT." >&2
+            exit 1
+          fi
       # the caller's own proof that the source carries "$VERSION"
       # a build that makes release files uploads them with actions/upload-artifact
 
@@ -73,10 +79,13 @@ Each line has a reason:
   merged the commit (`pull-requests`); a call that grants less fails.
 - `version` is the only input and reaches a step only through `env`, never inside a `run` script.
 - `needs: gate` makes the build wait for the gate; without it the build runs even when the gate refuses.
-- The build checks out `needs.gate.outputs.commit`, the commit the gate judged, never `main`, which may have moved.
+- The build checks out the dispatch's own commit (no `ref:` or `repository:`) and its next step refuses unless
+  the checkout's head is `needs.gate.outputs.commit`, the commit the gate judged. The gate refuses unless main's head is
+  still that commit, so the two are equal; a `ref:` naming the output raises CodeQL's
+  `actions/cache-poisoning/poisonable-step` alert at the checkout, so no caller writes one.
 - `needs: [gate, build]` makes the tag wait for both; `contents: write` is granted to the tag job only, so no other job
   can write, and nothing dispatches the tag job apart from the release run.
-- `commit` is the gate's output, never `github.sha`, which may have moved.
+- `commit` is the gate's output, the commit it judged.
 - `artifact` names an artifact of the same run. Its regular top-level files, dotfiles included, are the release's files and
   nothing else is uploaded; a file name carries no `#`, which gh reads as the start of an asset label. A build that makes
   release files turns its caches off. Omit it for a release without files.
