@@ -155,6 +155,11 @@ quality itself.
   properties file can still reach the token. Reopens when the hosted gate fails on such a finding and the pinned scanner
   no longer lets a properties file reach the token.
 - Skipping the `sonar` job, by a job `if:` or by repository visibility: a job `if:` cannot read the config, so every scan would wait for its check and the verdict and the door would need a second meaning of `skipped`; visibility is no scanning intent and bypasses the config comparison. Reopens when a job `if:` can read the caller's files.
+- Downloading the coverage artifact outside the checkout, or reading the config from git in the `sonar` job: the scanner
+  reads each report at the checkout-relative path the properties file names, so quality would have to copy reports in, and
+  reading the config from git guards one key but not a planted source or properties file. The properties check refuses a
+  checkout whose tracked files differ from the commit instead. Reopens when a report path outside the checkout reads the
+  same on every runner.
 - A copier template or a token that writes to every repository: callers pin a tag that Dependabot bumps. Reopens when a
   caller needs a file that a reusable workflow cannot give it.
 - One Sonar exception per exact `FROM` line, or a per-image entry: Sonar's own exception for `docker:S8431` checks only
