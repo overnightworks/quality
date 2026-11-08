@@ -5,8 +5,15 @@ runs `quality merge`, or reads `quality --help` or a wrong invocation's pair.
 
 ## Help and wrong invocations
 
-`quality --help` shows the command tree wrapped at 80 columns, with `verdict` apart under "run by the gate", and `quality check --help` explains each area in one line and says which rules an area holds; every other command's help, `quality sonar --help` and its two commands' included, stands in a frame of its own; `quality --version` prints the installed version and what this repository's gate pins: its release, read from the tag comment of the pin (`@<commit sha> # v<tag>`), or why none is known; exit `0`. A call of a repository's own `gate.yml` counts only in quality's checkout, told by a git remote that names `overnightworks/quality`. Help goes to
-stdout with exit `0`, plain and whole in every stream. A wrong invocation runs nothing, prints the `error:`/`next:` pair
+`quality --help` shows the command tree wrapped at 80 columns (HELP-1), with `verdict` and `sonar` apart under "run by
+the gate" (HELP-2), and `quality check --help` explains each area in one entry and says which rules an area holds
+(HELP-3); every other command's help, `quality sonar --help` and its two commands' included, stands in a frame of its
+own (HELP-4); `quality --version` prints the installed version and what this repository's gate pins: its release, read
+from the tag comment of the pin (`@<commit sha> # v<tag>`), or why none is known (HELP-5); exit `0` (HELP-6). A call of
+a repository's own `gate.yml` counts only in quality's checkout, told by a git remote that names
+`overnightworks/quality` (HELP-7). Help goes to stdout with exit `0` (HELP-8), plain (HELP-9) and whole (HELP-10) in
+every stream. `-h` prints the same help as `--help` (HELP-11).
+A wrong invocation runs nothing, prints the `error:`/`next:` pair
 on stderr and exits `2`: `no command <word> · commands: …` for a first word that names no command, `no command ·
 commands: …` for none, `no area <word> · areas: …` for the first word `quality check` does not know as an area (an option may stand between areas), `no pull request <word> · a pull request reads OWNER/REPO#N` for a `quality merge` argument of another form (`no pull request · …` for none, `next:` naming `quality merge --help`), `unknown argument · <what is left over>` for what the command does not take, and otherwise the
 parser's own sentence; `--dry-run needs --fix · nothing checked` for `--dry-run` without `--fix` (`next:` names `quality check --fix --dry-run`); `--staged checks only secrets · nothing checked` for `--staged` with other areas or none (`next:` names `quality check secrets --staged`); `next:` otherwise names the help of the command that took the stray word, or of the parser

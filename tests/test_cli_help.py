@@ -62,7 +62,8 @@ def commands_of(*group: str) -> str:
     return ", ".join(parser.commands)
 
 
-def test_the_help_stands_in_the_pictures_frame(capsys):
+def test_the_help_stands_in_its_frame(capsys):
+    """HELP-1, HELP-2: the command tree stands in its frame, with verdict and sonar apart under the gate's heading."""
     assert help_of(capsys, []) == (
         "usage: quality COMMAND [-v]\n"
         "\n"
@@ -95,6 +96,7 @@ def test_the_help_stands_in_the_pictures_frame(capsys):
 
 
 def test_the_merge_help_stands_in_its_frame(capsys):
+    """HELP-4: the merge help stands in a frame of its own."""
     assert help_of(capsys, ["merge"]) == (
         "usage: quality merge OWNER/REPO#N [--dry-run] [-v]\n"
         "\n"
@@ -112,6 +114,7 @@ def test_the_merge_help_stands_in_its_frame(capsys):
 
 
 def test_the_report_help_stands_in_its_frame(capsys):
+    """HELP-4, HELP-11: the report help stands in a frame of its own, and -h prints the same."""
     help_text = help_of(capsys, ["report"])
     assert help_text == (
         "usage: quality report [-v]\n"
@@ -146,7 +149,8 @@ def test_the_merge_invocation_names_the_pull_request_and_how(words, dry_run, ver
     assert (arguments.pull_request, arguments.dry_run, arguments.verbose) == (cli.PullRequestName("acme/widgets", 7), dry_run, verbose)
 
 
-def test_the_check_help_stands_in_the_pictures_frame(capsys):
+def test_the_check_help_stands_in_its_frame(capsys):
+    """HELP-3: the check help explains each area in one entry."""
     assert help_of(capsys, ["check"]) == (
         "usage: quality check [AREA ...] [--staged] [--fix] [--dry-run] [-v]\n"
         "\n"
@@ -178,17 +182,20 @@ def test_the_check_help_stands_in_the_pictures_frame(capsys):
 
 
 def test_each_area_has_one_entry_in_the_check_help(capsys):
+    """HELP-3: the check help has one entry per area, in the areas' order."""
     lines = help_of(capsys, ["check"]).splitlines()
     entries = entries_under(lines, "Areas (default: all):")
     assert [entry.split()[0] for entry in entries if not entry.startswith("   ")] == list(Area)
 
 
 def test_the_check_entry_names_its_areas_in_the_top_level_help(capsys):
+    """HELP-1: the top-level help lists check with its areas."""
     lines = help_of(capsys, []).splitlines()
     assert "  check [AREA ...] [--staged] [--fix] [--dry-run]" in entries_under(lines, "Commands:")
 
 
 def test_the_verdict_help_stands_in_its_frame(capsys):
+    """HELP-4: the verdict help stands in a frame of its own."""
     assert help_of(capsys, ["verdict"]) == (
         "usage: quality verdict [-v]\n"
         "\n"
@@ -263,6 +270,7 @@ def test_the_verdict_help_stands_in_its_frame(capsys):
     ],
 )
 def test_the_sonar_helps_stand_in_their_frames(capsys, words, frame):
+    """HELP-4, HELP-11: each sonar help stands in a frame of its own, and -h prints the same."""
     assert help_of(capsys, words) == frame
     with pytest.raises(SystemExit) as stopped:
         cli.main([*words, "-h"])
@@ -271,12 +279,14 @@ def test_the_sonar_helps_stand_in_their_frames(capsys, words, frame):
 
 
 def test_every_command_path_stands_in_the_help_once_in_the_parsers_order_and_every_entry_is_one(capsys):
+    """HELP-1: every command path stands in the help once, in the parser's order."""
     lines = help_of(capsys, []).splitlines()
     shown = [path_of(entry) for heading in headings(lines)[:2] for entry in entries_under(lines, heading)]
     assert shown == leaf_paths(cli.build_parser())
 
 
 def test_verdict_and_sonar_stand_apart_under_run_by_the_gate(capsys):
+    """HELP-2: verdict and sonar stand apart from the commands people run."""
     lines = help_of(capsys, []).splitlines()
     by_people = {path_of(entry)[0] for entry in entries_under(lines, "Commands:")}
     by_the_gate = {path_of(entry)[0] for entry in entries_under(lines, "Run by the gate, not by people:")}
@@ -297,6 +307,7 @@ def test_verdict_and_sonar_stand_apart_under_run_by_the_gate(capsys):
     ],
 )
 def test_each_doors_help_goes_to_stdout_alone_and_exits_0(capsys, words):
+    """HELP-8: the help of every command goes to stdout alone and exits 0."""
     first = help_of(capsys, words).splitlines()[0]
     expected = ["quality", *words] if words else ["quality", "COMMAND"]
     assert first.split()[1:][: len(expected)] == expected
@@ -304,6 +315,7 @@ def test_each_doors_help_goes_to_stdout_alone_and_exits_0(capsys, words):
 
 @pytest.mark.parametrize("words", [[], ["check"], ["sonar", "properties"]], ids=["quality", "check", "sonar properties"])
 def test_short_help_equals_long_help(capsys, words):
+    """HELP-11: -h prints what --help prints."""
     long = help_of(capsys, words)
     with pytest.raises(SystemExit) as stopped:
         cli.main([*words, "-h"])
@@ -314,6 +326,7 @@ def test_short_help_equals_long_help(capsys, words):
 @pytest.mark.integration
 @pytest.mark.parametrize("words", [["--help"], ["verdict", "--help"], ["sonar", "properties", "--help"]], ids=["--help", "verdict --help", "sonar properties --help"])
 def test_no_door_paints_its_help_where_python_would(tmp_path, words):
+    """HELP-9: the help carries no escape sequence, whatever the colour variables say."""
     forced = run_door(words, tmp_path, FORCE_COLOR="1", TERM="xterm")
     refused = run_door(words, tmp_path, NO_COLOR="1", TERM="xterm")
     assert (forced.stdout == refused.stdout, "\x1b" in forced.stdout, forced.returncode) == (True, False, 0)
@@ -322,6 +335,7 @@ def test_no_door_paints_its_help_where_python_would(tmp_path, words):
 @pytest.mark.integration
 @pytest.mark.parametrize(("words", "columns"), [(["--help"], 40), (["verdict", "--help"], 200)], ids=["quality --help", "verdict --help"])
 def test_a_help_at_a_terminal_carries_no_escape_and_stands_whole(tmp_path, window, words, columns):
+    """HELP-9, HELP-10: at a terminal the help carries no escape sequence and stands as it does in a pipe."""
     terminal = window(columns)
     done = subprocess.run(
         [*MODULE_DOOR, *words], cwd=tmp_path, env=door_environment(TERM="xterm"), stdout=terminal.stream, stderr=terminal.stream, timeout=60, check=False
@@ -334,6 +348,7 @@ def test_a_help_at_a_terminal_carries_no_escape_and_stands_whole(tmp_path, windo
 
 @pytest.mark.integration
 def test_a_reader_that_left_before_the_help_keeps_exit_0_and_stderr_empty(tmp_path):
+    """HELP-8: a reader that left before the help keeps exit 0 and an empty stderr."""
     read_end, write_end = os.pipe()
     os.close(read_end)
     try:
@@ -345,6 +360,7 @@ def test_a_reader_that_left_before_the_help_keeps_exit_0_and_stderr_empty(tmp_pa
 
 @pytest.mark.integration
 def test_a_closed_stdout_takes_no_help_and_exit_is_0(tmp_path):
+    """HELP-8: a closed stdout takes no help, and the exit is 0 with an empty stderr."""
     done = subprocess.run(
         ["sh", "-c", 'exec "$@" >&-', "sh", *MODULE_DOOR, "--help"],
         cwd=tmp_path, env=door_environment(), stderr=subprocess.PIPE, text=True, timeout=60, check=False,
@@ -488,6 +504,7 @@ def a_pin_without_its_release(build_repo, elsewhere: Path) -> Path:
     ],
 )
 def test_the_version_line_names_the_installed_version_and_what_the_gate_pins(build_repo, elsewhere, monkeypatch, capsys, arrange, words):
+    """HELP-5, HELP-6, HELP-7: the version line names the installed version, then the pin or why none is known."""
     monkeypatch.chdir(arrange(build_repo, elsewhere))
     code = cli.main(["--version"])
     printed = capsys.readouterr()
@@ -495,6 +512,7 @@ def test_the_version_line_names_the_installed_version_and_what_the_gate_pins(bui
 
 
 def test_the_version_line_escapes_a_workflow_name(build_repo, monkeypatch, capsys):
+    """HELP-5, HELP-6, MASK-7: an unreadable workflow's name stands escaped in the reason the pin is unknown."""
     monkeypatch.chdir(build_repo({f".github/workflows/ci{chr(0x202E)}.yml": "jobs: [\n"}))
     code = cli.main(["--version"])
     printed = capsys.readouterr()
@@ -503,6 +521,7 @@ def test_the_version_line_escapes_a_workflow_name(build_repo, monkeypatch, capsy
 
 
 def test_the_version_line_in_a_folder_that_was_removed_names_the_folder_git_cannot_read(tmp_path, monkeypatch, capsys):
+    """HELP-5, HELP-6: a working directory that was removed is why the pin is unknown."""
     gone = tmp_path / "gone"
     gone.mkdir()
     monkeypatch.chdir(gone)
@@ -515,6 +534,7 @@ def test_the_version_line_in_a_folder_that_was_removed_names_the_folder_git_cann
 
 @pytest.mark.integration
 def test_a_closed_stdout_takes_no_version_line_and_exit_is_0(tmp_path):
+    """HELP-6: a closed stdout takes no version line, and the exit is 0 with an empty stderr."""
     done = subprocess.run(
         ["sh", "-c", 'exec "$@" >&-', "sh", *MODULE_DOOR, "--version"],
         cwd=tmp_path, env=door_environment(), stderr=subprocess.PIPE, text=True, timeout=60, check=False,
