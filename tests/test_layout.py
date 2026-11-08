@@ -400,7 +400,8 @@ def test_a_path_declared_under_two_rules_and_untracked_is_one_equal_stale_row_pe
 
 
 def test_script_name_is_misnamed_where_the_shape_breaks_and_misplaced_where_only_the_place_does(build_repo, capsys):
-    """O19, ROW-3, SCRIPT-9: both broken is `misnamed` and holds the place-only fact; all three share one fix, printed once."""
+    """O19, ROW-3, SCRIPT-9: both broken is `misnamed` and holds the place-only fact;
+    all three share one fix, printed once."""
     paths = ["scripts/check.sh", "tools/Entry.sh", "tools/entry_point.sh"]
     repo = build_repo({**GUIDANCE, **dict.fromkeys(paths, SHELL_HEADER)})
     for path in paths[1:]:
