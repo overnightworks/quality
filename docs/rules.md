@@ -357,24 +357,28 @@ It applies these rules:
   fixtures lie, a test whose subject lies outside its project (declare it), an `e2e/` folder that is its own
   workspace package (its specs are red), a `package.json` under a `fixtures/` folder outside any `tests/` (a project)
   and a judged file in a frontend `fixtures/` folder (it needs a sibling).
-- `test-import` judges every Python project, with or without a package, as `test-layout` finds projects. The importers
-  are the tracked `.py` files under its `tests/` that are no link and lie in no `fixtures/` folder, `support/` modules
-  and `e2e/` drivers included. The targets are the tracked `test_*.py` and `conftest.py` files there (a link is a target
-  by its name), including a member's or the root's own. Every `import` and `from ... import` statement is read, inside
-  a function or under `if TYPE_CHECKING:` too. An absolute name is red when its components equal the trailing components
-  of a target's path without `.py`, which covers every `pythonpath` spelling without reading pytest's configuration
-  (`import conftest`, `from tests.test_x import y`, `from e2e.conftest import z`); a `from M import a` checks `M` and
-  `M.a`, so `from tests import conftest` is red and `from tests.support.x import test_helper` is not. A relative name
-  resolves against the importer's folder and must equal a target's path. A plain `e2e/` driver may import another.
-  One finding per statement, at `path:line`, says `test import` and names each target it imports; the fix is a `support/` module or a
-  fixture in `conftest.py`, or a `[[layout.allow]]` entry with the rule `test-import` on the importer's path, which
-  exempts all its imports (an untracked declared path is a finding; a `test-layout` declaration does not cover it).
-  Importers are decoded as Python 3.14 reads source and parsed: a file that does not parse
-  (`<path> is not valid Python (...)`) or cannot be read makes the `files` row `✗ not checked` with the reason (exit 2); no other file is read. All findings print sorted by path and
-  line and no configuration switches the rule off. Not read, and waiting for usage evidence: string imports
-  (`importlib.import_module`, `__import__`, `pytest.importorskip`), `pytest_plugins`, `sys.path` edits, `runpy`,
-  source passed to a subprocess with `-c`, and `*_test.py` as a target. An import whose name matches a tracked test
-  module is reported even when it means a third-party module; rename the test module or declare the importer.
+- `test-import` judges every Python project, with or without a package, as `test-layout` finds projects (TESTIMPORT-1).
+  The importers are the tracked `.py` files under its `tests/` (TESTIMPORT-2) that are no link (TESTIMPORT-3) and lie in
+  no `fixtures/` folder (TESTIMPORT-4), `support/` modules and `e2e/` drivers included. The targets are the tracked
+  `test_*.py` and `conftest.py` files there, outside `fixtures/` (TESTIMPORT-5) (a link is a target by its name
+  (TESTIMPORT-6)), including a member's or the root's own (TESTIMPORT-7). Every `import` and `from ... import` statement
+  is read, inside a function or under `if TYPE_CHECKING:` too (TESTIMPORT-8). An absolute name is red when its
+  components equal the trailing components of a target's path without `.py`, which covers every `pythonpath` spelling
+  without reading pytest's configuration (`import conftest`, `from tests.test_x import y`, `from e2e.conftest import z`)
+  (TESTIMPORT-9); a `from M import a` checks `M` and `M.a`, so `from tests import conftest` is red and
+  `from tests.support.x import test_helper` is not (TESTIMPORT-10). A relative name resolves against the importer's
+  folder and must equal a target's path (TESTIMPORT-11). A plain `e2e/` driver may import another (TESTIMPORT-12). One
+  finding per statement, at `path:line` (TESTIMPORT-13), says `test import` and names each target it imports
+  (TESTIMPORT-14); the fix is a `support/` module or a fixture in `conftest.py`, or a `[[layout.allow]]` entry with the
+  rule `test-import` on the importer's path, which exempts all its imports (TESTIMPORT-15) (an untracked declared path
+  is a finding; a `test-layout` declaration does not cover it). Importers are decoded as Python 3.14 reads source and
+  parsed (TESTIMPORT-16): a file that does not parse (`<path> is not valid Python (...)`) (TESTIMPORT-17) or cannot be
+  read (TESTIMPORT-18) makes the `files` row `✗ not checked` with the reason (exit 2); no other file is read
+  (TESTIMPORT-19). All findings print sorted by path and line (TESTIMPORT-20) and no configuration switches the rule
+  off. Not read, and waiting for usage evidence: string imports (`importlib.import_module`, `__import__`,
+  `pytest.importorskip`), `pytest_plugins`, `sys.path` edits, `runpy`, source passed to a subprocess with `-c`, and
+  `*_test.py` as a target. An import whose name matches a tracked test module is reported even when it means a
+  third-party module; rename the test module or declare the importer.
 - `python-floor` judges every tracked `pyproject.toml` that `test-layout` finds as a project (the root or a member at
   any depth, none inside another project's `tests/`) and that holds a `[project]` table; one with only `[tool.*]`
   tables, or with `project` as a value, is not judged, and a gitlink is never entered. The floor is the highest lower
