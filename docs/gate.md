@@ -25,10 +25,11 @@ Each line has a reason:
 
 - **The caller job is `quality`,** by its id or, if it sets one, by its `name:`. The gate's checks then read
   `quality / check`, `quality / sonar` and `quality / verdict`. Three things look for them by those names: a ruleset
-  that requires `quality / verdict` (the fleet's org ruleset does, on the default branch of every repository whose
-  custom property `quality_gate` is `true`), `aco land`, which, once the default branch holds `quality/config.toml`,
-  refuses without a green `quality / verdict`, and `quality merge`, which looks for `quality / sonar` and
-  `quality / verdict`.
+  that requires `quality / verdict` (`src/opentofu/github/organization/main.tf` in the overnightworks/platform
+  repository defines the fleet's organisation ruleset), `aco land`, which, once the default branch holds
+  `quality/config.toml`, refuses without a green `quality / verdict`, and `quality merge`, which looks for
+  `quality / sonar` and `quality / verdict`. That definition pins the name `quality / verdict` and GitHub Actions as
+  its producer, so renaming the check or moving its producer to another App is asked of platform's head first.
 - **`needs:` lists the id of every job that a `mandatory_jobs` name belongs to.** The verdict then judges finished jobs,
   and a job GitHub still lists as running is unsettled and never green (READ-1), so the answer is stale: the verdict
   reads the run's jobs again, every 10 seconds (READ-2) and at most 12 times (READ-3): two minutes of waiting plus the
