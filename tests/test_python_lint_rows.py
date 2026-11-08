@@ -75,6 +75,8 @@ def test_a_security_finding_stands_as_a_row_with_its_fix_under_the_code_row(driv
     ids=["print in src", "pprint in scripts", "print to stderr", "print in a test file"],
 )
 def test_a_print_stands_as_a_row_with_its_fix_under_the_code_row(drive_code, path, source, location, reason):
+    """PRINT-1, PRINT-3, PRINT-4, PRINT-5: T201 and T203 stand as `print call` rows with ruff's message, a print to
+    stderr and one in a test file included."""
     run = drive_code({"pyproject.toml": "[project]\nname = 'x'\n", path: source})
     (finding,) = run.area.findings
     assert (run.code, run.err) == (1, "")
@@ -130,6 +132,7 @@ def test_a_code_finding_ends_in_no_full_stop_and_names_no_rule_id(drive_code):
     ],
 )
 def test_equal_fixes_in_the_code_area_print_once(drive_code, files, fix_follows):
+    """ROW-3: equal fixes of consecutive findings in the code area print once."""
     run = drive_code(files)
     assert [row.fix_follows for _, row in area_finding_rows(run.out, Area.CODE)] == fix_follows
     assert run.err == ""
@@ -148,6 +151,7 @@ def test_equal_fixes_in_the_code_area_print_once(drive_code, files, fix_follows)
     ids=["one file", "two files"],
 )
 def test_the_security_rows_stand_before_the_print_rows(drive_code, files, rows):
+    """O14: an area's findings stand in the rule runner's order, the security rows before the print rows."""
     run = drive_code(files)
     assert [(location, row.event) for location, row in area_finding_rows(run.out, Area.CODE)] == rows
     assert run.err == ""
@@ -174,6 +178,7 @@ def test_an_honoured_owner_stands_after_the_findings_and_its_file_keeps_its_secu
     ids=["no python file", "two python files", "a test file counts"],
 )
 def test_a_clean_code_row_counts_its_rules_and_every_python_file_ruff_judged(drive_code, files, python_files):
+    """PRINT-2, ROW-12: a clean code row counts its rules and every Python file ruff judged, for both rules."""
     run = drive_code(files)
     row = area_row(run.out, Area.CODE)
     rules = sum(rule.area is Area.CODE for rule in Rule)
@@ -257,6 +262,8 @@ def test_an_owner_note_stands_under_a_refused_row_only_where_its_rule_judged(dri
     ids=["path", "message"],
 )
 def test_a_row_prints_a_path_and_a_ruff_message_escaped(drive_code, build_repo, elsewhere, path, message, original, escaped):
+    """MASK-2, MASK-6, MASK-7, MASK-11: a finding's path and ruff's message print escaped, and no printed line starts
+    with repository text."""
     if message is None:
         run = drive_code({path: f"{PRINT}\n"})
     else:

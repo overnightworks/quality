@@ -53,7 +53,7 @@ def judged(text: str, finding: RuffFinding, test_files: frozenset[str] = frozens
 
 
 def judged_prints(text: str, records: list[RuffFinding]) -> tuple[list[str], tuple[Note, ...]]:
-    """The python-print findings as `<location> <reason>`, and the notes."""
+    """The python-print findings as `<location> <fact>`, and the notes."""
     result = python_lint.judge_print(linted(records, {"src/p/a.py": text}))
     return [f"{item.location} {item.fact}" for item in result.findings], result.notes
 
@@ -182,8 +182,8 @@ def test_a_file_tokenize_cannot_read_refuses_only_the_rule_whose_finding_lies_in
          "second directive", "flake8 form", "inside a string"],
 )
 def test_only_an_own_line_reasoned_owner_naming_the_code_or_a_reasoned_line_noqa_clears_a_print(text, is_red):
-    """#225 cells 4, 5 and 6: the owner is `# ruff: noqa: <T20 code>[, ...] - <reason>` on its own line, naming the
-    code, with a letter and no comma in its reason; every other file directive leaves the print red."""
+    """PRINT-6, PRINT-7, PRINT-9, PRINT-10, PRINT-11, PRINT-12: a reasoned line noqa, or an owner on a line of its own
+    naming the code, clears a print; every other file directive leaves it red."""
     findings, _ = judged_prints(text, [print_record(text)])
     assert any(PRINT_REASON in finding for finding in findings) is is_red, findings
 
@@ -228,7 +228,7 @@ def test_a_fix_names_the_code_found_and_the_line_its_noqa_must_stand_on():
 
 
 def test_an_owner_clears_only_its_own_files_prints_and_never_a_security_finding():
-    """#225 cell 5: the owner's file is green for T201, another file stays red, and the owner's S findings are judged."""
+    """PRINT-9, PRINT-13: the owner clears the prints of its own file only and never an S finding."""
     owner_text, other_text = f"{OWNER}\n{PRINT}\nrun(argv)\n", f"{PRINT}\n"
     owner_print, other_print = print_record(owner_text, "src/p/door.py"), print_record(other_text, "src/p/other.py")
     lint = linted(
@@ -382,7 +382,7 @@ def test_the_pinned_ruff_itself_honours_every_green_noqa_form_and_not_a_code_in_
 
 @pytest.mark.integration
 def test_the_pinned_ruff_itself_honours_the_owner_form(tmp_path):
-    """#225 cell 5: ruff reads the owner directive below a docstring as a file-level exemption of the code it names."""
+    """PRINT-8: ruff reads the owner directive below a docstring as a file-level exemption of the code it names."""
     (tmp_path / "door.py").write_text(f'"""Runs it."""\n\n{OWNER}\n{PRINT}\n')
 
     def ruff(*options: str) -> subprocess.CompletedProcess:
