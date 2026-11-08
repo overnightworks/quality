@@ -166,7 +166,8 @@ def test_every_rule_is_judged_and_the_exit_is_the_worst(
 
 
 def test_a_python_file_with_a_non_utf8_name_the_size_rule_cannot_parse_is_one_escaped_note(build_repo, capsys):
-    """#290 O22: the note row stands at the escaped path, with the note's own event and fact."""
+    """O22, ROW-16, MASK-4: a Python file the size rule cannot parse is one note row at its escaped path, with the
+    note's own event and fact."""
     repo = build_repo({"src/\udcff.py": "def broken(:\n"})
     _, output = run(capsys, repo)
     (note,) = rule_notes(repo, Rule.SIZE)

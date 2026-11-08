@@ -54,7 +54,29 @@ hook where no gate pins a release:
   · release       v0.10.0        installed · no gate pins a release here
 ```
 
-One event word stands per kind of finding, shared across rules (`report.FindingEvent`). The events, facts and fixes of the rows are O12, O14, O15, O16, O18 and O19 for `files`, O21 and O22 for `debt`, O23 and O25 for `imports`, O28, O29, O32 and O33 for `secrets`, O36, O37, O38 and O39 for `workflows` and O41, O42, O43, O44, O45 and O46 for `dependencies`. The env fix names the file for `.gitignore` only where it is its own shell word, else `it`.
+One event word stands per kind of finding, shared across rules (`report.FindingEvent`). Neither a fact nor a fix ends
+in a full stop: a fix is a sentence, or the label of the entry to copy (ROW-14). The events, facts and fixes of the
+rows, by area:
+
+- `files`: a fact never restates the path its row shows (O12); a path allowed under two rules and no longer tracked is
+  one `unused` row per rule, each fix deleting every entry of the path (O18); `script-name` says `misnamed` where the
+  shape breaks, its fact then holding the place too, and `misplaced` where only the place does (O19).
+- `imports`: a broken contract is a `broken` finding; an unmatched ignore is an `unused` finding at `error` and an
+  `unused` note at `warn`; a grimp or import-linter warning is a `warning` note (O23); a `broken` finding's detail
+  lines are import-linter's own rendering of the contract (O25).
+- `secrets`: a key is a `secret` finding whose fact names gitleaks' rule and, in history, the commit's first eight
+  characters, never the value (O28); a staged key names no commit (O32); its fix is lines to copy (O33).
+- `workflows`: actionlint's finding is `invalid` and zizmor's `insecure`, zizmor's fact naming its audit and its fix
+  holding the audit's URL (O36); an actionlint finding names the scanner and holds its message whole as its one detail
+  line (O37); a row with a finding or a refusal does not say `offline audits only` (O39).
+- `dependencies`: an advisory is an `affected` row, its fact the package and version, the group's id and where it
+  lists them the versions that fix it, its fix per lock kind (O41); the id is the group's first, never an alias (O42);
+  a nested lock's fix names its folder (O43); the fix of a pnpm or requirements lock is the same hint for every
+  package, so rows of one folder share one `fix:` (O44); an allowance that ran out leaves the row `affected` and says
+  so (O45); two allowances on one group are a `conflict` finding at the config, an allowance no advisory matches an
+  `unused` finding there (O46).
+
+The `env-file` fix's own wording stands in [rules](rules.md).
 
 ### Rule names
 
@@ -99,7 +121,11 @@ that cannot check is `✗ <area>  not checked  <reason>` ([Refusals](#refusals))
 
 ### Notes
 
-A note is a `·` row under its area, after the area's findings, aligned with them: `· <path[:line]>  <event>  <fact>`. Its events are `allowed` (file rules, dependencies, secrets and python-print), `not measured` (a Python file the size rule cannot parse, without a ceiling file), `unused` and `warning` (import-contract) and `unused` (secret). An allowed advisory and an honoured output owner stand as notes, and the clean row counts them (O15, O49):
+A note is a `·` row under its area, after the area's findings, aligned with them (ROW-15):
+`· <path[:line]>  <event>  <fact>`, with no `fix:` of its own (ROW-16). Its events are `allowed` (file rules,
+dependencies, secrets and python-print), `not measured` (a Python file the size rule cannot parse, without a ceiling
+file; O22), `unused` and `warning` (import-contract) and `unused` (secret). An allowed advisory and an honoured output
+owner stand as notes, and the clean row counts them (O15, O49):
 
 ```text
   ✓ dependencies  clean          1 lockfile · 63 packages · 1 allowed
@@ -244,7 +270,10 @@ Repository text (a file name, a service, a port, a contract or job name, a confi
     ! deploy/\u202eEDGE_SHA  tracked  a file without a suffix that is no executable
 ```
 
-A refusal's fact is one line (MASK-10); the lines the door means to print (an import chain, the verdict's problems, the report's tables) stay lines (MASK-12). A line taken from another tool's rendering prints behind `| ` ([Rows](#rows)): actionlint's message stays one escaped line (O37), while rich may drop a carriage return, expand a tab, or start a new marked line at a line feed in import-linter's lines (MASK-13).
+A refusal's fact is one line (MASK-10); the lines the door means to print (an import chain, the verdict's problems, the
+report's tables) stay lines (MASK-12). A line taken from another tool's rendering prints behind `| ` ([Rows](#rows)):
+actionlint's message stays one escaped line, while rich may drop a carriage return, expand a tab, or start a new marked
+line at a line feed in import-linter's lines (MASK-13).
 
 Ruled by the operator:
 
