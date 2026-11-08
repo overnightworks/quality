@@ -61,7 +61,7 @@ def only_the_yaml_spelling() -> None:
 
 @pytest.mark.parametrize("arrange", [write_bot_config, lambda: None, only_the_yaml_spelling], ids=["bot config", "no .github", "only dependabot.yaml"])
 def test_a_dependabot_rule_finding_counts_like_any_other(monkeypatch, capsys, arrange):
-    """An analysis that raises the rule's finding anyway has it fail the run, with or without the config."""
+    """SONAR-23: an analysis that raises the rule's finding anyway has it fail the run, with or without the config."""
     arrange()
     code, out, err, _ = run_cli(monkeypatch, capsys, findings_of(bot_issue()))
     analysis, legacy, gate = f"  · analysis      pull request   #7 · {KEY}\n", "  · legacy        0 open         on main\n", "  ✓ quality gate  passed\n"
@@ -81,7 +81,7 @@ def test_a_dependabot_rule_finding_counts_like_any_other(monkeypatch, capsys, ar
     ids=["default branch", "another branch"],
 )
 def test_every_run_kind_counts_the_dependabot_rule_finding(monkeypatch, capsys, environment, task, code, listing, summary):
-    """The default branch and another branch list the finding as an ordinary one."""
+    """SONAR-27: the default branch and another branch list the finding as an ordinary one."""
     write_bot_config()
     result = run_cli(monkeypatch, capsys, findings_of(bot_issue(), task=task), environment)
     assert (result[0], listing in result[1], result[1].endswith(summary), result[2]) == (code, True, True, "")
@@ -90,7 +90,7 @@ def test_every_run_kind_counts_the_dependabot_rule_finding(monkeypatch, capsys, 
 @pytest.mark.parametrize("has_bot_config", [True, False], ids=["bot config", "no bot config"])
 @pytest.mark.parametrize(("mode", "code", "verdict"), [("fail", 1, "! red"), ("report", 0, "✓ clean")])
 def test_the_legacy_number_is_the_default_branchs_whole_total(monkeypatch, capsys, has_bot_config, mode, code, verdict):
-    """The fake answers the same total to every count request, so a rule-filtered count would lower the number."""
+    """SONAR-24: the fake answers the same total to every count request, so a rule-filtered count would lower the number."""
     if has_bot_config:
         write_bot_config()
     fake = findings_of(legacy=5)
@@ -99,6 +99,7 @@ def test_the_legacy_number_is_the_default_branchs_whole_total(monkeypatch, capsy
 
 
 def test_no_count_request_names_a_rule(monkeypatch, capsys):
+    """SONAR-24."""
     write_bot_config()
     fake = findings_of(legacy=5)
     run_cli(monkeypatch, capsys, fake)
@@ -109,6 +110,7 @@ def test_no_count_request_names_a_rule(monkeypatch, capsys):
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-0 path, so no permission is refused")
 def test_the_findings_door_never_reads_the_bot_config(monkeypatch, capsys):
+    """SONAR-26."""
     write_bot_config()
     Path(".github").chmod(0)
     try:
@@ -140,6 +142,7 @@ def serve_config_at_merge_commit(gh: FakeGh) -> None:
 
 @pytest.mark.parametrize("served", [True, False], ids=["file at the merge commit", "not served"])
 def test_the_merge_door_names_every_added_finding_where_the_bot_config_exists(served, capsys):
+    """SONAR-25."""
     gh = FakeGh()
     if served:
         serve_config_at_merge_commit(gh)
@@ -162,6 +165,7 @@ def test_the_merge_door_cannot_judge_when_a_config_read_fails_other_than_not_fou
 
 
 def test_the_merge_door_shows_main_whole_and_reads_no_bot_config(capsys):
+    """SONAR-24, SONAR-26."""
     gh = FakeGh(merge_lands=True)
     serve_config_at_merge_commit(gh)
     shown_before_asking = []
@@ -214,6 +218,7 @@ def scanner_properties(value: str) -> dict[str, str]:
 
 @pytest.mark.parametrize(("arrange", "excluded"), ARRANGEMENTS)
 def test_properties_hands_the_scan_one_exclusion_exactly_when_the_bot_config_exists(monkeypatch, capsys, build_repo, elsewhere, arrange, excluded):
+    """SONAR-17, SONAR-18, SONAR-19, SONAR-20, SONAR-21, SONAR-28."""
     step_output = elsewhere / "output"
     code, out, _ = run_properties(monkeypatch, capsys, build_repo, arrange=arrange, step_output=step_output)
     (value,) = written_arguments(step_output)
@@ -231,6 +236,7 @@ def test_properties_hands_the_scan_one_exclusion_exactly_when_the_bot_config_exi
 
 
 def test_every_key_properties_writes_is_a_multicriteria_exclusion_key(monkeypatch, capsys, build_repo, elsewhere):
+    """SONAR-16."""
     step_output = elsewhere / "output"
     run_properties(monkeypatch, capsys, build_repo, arrange=put_bot_config, step_output=step_output)
     (value,) = written_arguments(step_output)
@@ -239,6 +245,7 @@ def test_every_key_properties_writes_is_a_multicriteria_exclusion_key(monkeypatc
 
 
 def test_properties_keeps_the_lines_the_output_file_already_holds(monkeypatch, capsys, build_repo, elsewhere):
+    """SONAR-14."""
     step_output = elsewhere / "output"
     step_output.write_text("earlier=1\n")
     run_properties(monkeypatch, capsys, build_repo, arrange=put_bot_config, step_output=step_output)
@@ -248,12 +255,14 @@ def test_properties_keeps_the_lines_the_output_file_already_holds(monkeypatch, c
 
 
 def test_properties_outside_a_workflow_step_prints_and_exits_clean(monkeypatch, capsys, build_repo):
+    """SONAR-15."""
     code, out, _ = run_properties(monkeypatch, capsys, build_repo, arrange=put_bot_config)
     assert (code, sonar.DEPENDABOT_EXCEPTION_RULE in out) == (0, True)
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-0 path, so no permission is refused")
 def test_properties_with_an_unreachable_bot_config_is_exit_2_and_writes_nothing(monkeypatch, capsys, build_repo, elsewhere):
+    """SONAR-22."""
     step_output = elsewhere / "output"
     step_output.write_text("earlier=1\n")
 
@@ -278,6 +287,7 @@ def test_properties_with_an_unreachable_bot_config_is_exit_2_and_writes_nothing(
     ids=["a property that widens the exclusion", "a foreign project"],
 )
 def test_a_refused_properties_file_is_exit_2_and_writes_nothing_even_with_a_bot_config(monkeypatch, capsys, build_repo, elsewhere, properties):
+    """SONAR-13."""
     step_output = elsewhere / "output"
     step_output.write_text("earlier=1\n")
     code, _, _ = run_properties(monkeypatch, capsys, build_repo, properties, arrange=put_bot_config, step_output=step_output)
