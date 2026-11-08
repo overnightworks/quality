@@ -15,12 +15,13 @@ IGNORED_NAMES = ["docs/.env.example", "docs/docker/.env.docker.example", "docs/e
 
 
 def test_the_rule_finds_the_tracked_env_files_and_no_template(build_repo):
-    """#3 rule 2/3: a tracked env file is found as `tracked`; templates pass."""
+    """ENV-1: a tracked env file is found as `tracked`; templates pass."""
     findings = rule_findings(build_repo({name: "A=1\n" for name in [*TRACKED_NAMES, *IGNORED_NAMES]}), Rule.ENV_FILE)
     assert [(finding.path, finding.event) for finding in findings] == [(name, FindingEvent.TRACKED) for name in sorted(TRACKED_NAMES)]
 
 
 def test_the_door_prints_each_tracked_env_file_once_as_the_rule_found_it(build_repo, capsys):
+    """ENV-1."""
     repo = build_repo({name: "A=1\n" for name in [*TRACKED_NAMES, *IGNORED_NAMES]})
     code, output = run(capsys, repo)
     assert code == 1
@@ -30,18 +31,19 @@ def test_the_door_prints_each_tracked_env_file_once_as_the_rule_found_it(build_r
 
 
 def test_a_repository_without_a_tracked_env_file_passes(build_repo, capsys):
+    """ENV-1."""
     assert run(capsys, build_repo({name: "A=1\n" for name in IGNORED_NAMES}))[0] == 0
 
 
 def test_untracked_ignored_env_file_is_not_a_finding(build_repo, capsys):
-    """#3 rule 2/3: an untracked, ignored env file is not a finding."""
+    """ENV-1: an untracked, ignored env file is not a finding."""
     repo = build_repo({".gitignore": ".env\n"})
     (repo / ".env").write_text("A=1\n")
     assert run(capsys, repo)[0] == 0
 
 
 def test_a_tracked_env_file_deleted_from_disk_is_still_a_finding(build_repo, capsys):
-    """#76 rule 5, cell 14 (E5): the rule judges the index's names, so only `git rm --cached` clears it."""
+    """ENV-1: the rule judges the index's names, so only `git rm --cached` clears it."""
     repo = build_repo({".env": "A=1\n"})
     (repo / ".env").unlink()
     code, output = run(capsys, repo)
@@ -88,16 +90,16 @@ def tracked_names(repo: Path) -> set[bytes]:
         ("=x.env", [], "'=x.env'"),
     ],
     ids=[
-        "#86 cell 1 bare name", "#86 cell 1 nested name", "#86 cell 2 space", "#86 cell 2 space in directory",
-        "#86 cell 2 apostrophe", "#86 cell 2 umlaut", "#86 cell 3 leading dash", "#86 cell 4 colon beside the plain name",
-        "#86 cell 4 star beside a.env", "#86 cell 4 brackets beside x.env", "#86 cell 5 percent", "#86 cell 5 backslash",
-        "#86 cell 6 leading equals",
+        "bare name", "nested name", "space", "space in directory",
+        "apostrophe", "umlaut", "leading dash", "colon beside the plain name",
+        "star beside a.env", "brackets beside x.env", "percent", "backslash",
+        "leading equals",
     ],
 )
 def test_the_printed_env_fix_untracks_exactly_the_named_file_in_every_shell(
     build_repo, capsys, shell, target, neighbours, printed_word
 ):
-    """#86 rule 2, E1-E3 and E5: the command as printed, run from the top, untracks that file and leaves it on disk."""
+    """ENV-2, ENV-3: the command as printed, run from the top, untracks that file and leaves it on disk."""
     shell_path = shutil.which(shell)
     if shell_path is None:
         pytest.skip(f"{shell} is not installed")
@@ -125,7 +127,7 @@ def test_the_printed_env_fix_untracks_exactly_the_named_file_in_every_shell(
 
 
 def test_an_unprintable_env_name_gets_a_hint_and_never_a_command(build_repo, capsys):
-    """#86 rule 2, E4: the same hint for every such name, with no command; #97 rule 2 prints the name escaped."""
+    """ENV-4: the same hint for every such name, with no command; the name prints escaped."""
     names = ["lat\udce9.env", "line\nfeed.env", "esc\x1bape.env", "c1\x85.env", "del\x7f.env", "rlo\u202e.env", "zwsp\u200b.env"]
     repo = build_repo({name: "A=1\n" for name in names})
     _, output = run(capsys, repo)
