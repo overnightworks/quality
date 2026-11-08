@@ -1,0 +1,7 @@
+claim_id = "9442095f524a4f6492edf74281f515d5"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "1b6ddb28cb33fae5f5193284721da5994567da24"
+branch = "claude/issue-527-d7-help-version-ids"
+scope = ["docs/commands.md", "tests/test_cli_help.py"]
+opened_commit = "c8aaa3e8f470651ed21f8cfe30f630b47a19be31"
