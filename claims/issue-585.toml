@@ -1,0 +1,8 @@
+claim_id = "91795bdc1fab44748c90a64692ee1df3"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "4ca52e892b82d581c26a3dd60bc0b0d2e9f353ed"
+branch = "claude/issue-585-d7-closing-line-ids"
+scope = ["docs/output.md", "tests/test_check.py", "tests/test_cli_area_row.py", "tests/test_cli_areas.py", "tests/test_cli_output.py", "tests/test_output.py"]
+opened_commit = "75f78d4801bd112587eedd8b22d3460ee425245f"
+whole_reason = "docs/output.md glyph table and closing line (the verdict at exit 0 and 1, the error line at exit 2) and the tests that prove them, linked by CLOSING IDs, with 460a folded."
