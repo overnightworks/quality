@@ -4,16 +4,18 @@ import os
 import select
 import signal
 import subprocess
+import sys
+import textwrap
 from pathlib import Path
 
 import pytest
 
-from quality import check, ratchet, scanners
+from quality import check, cli, output, pin, ratchet, scanners, sonar
 from quality.output import Glyph
 from quality.rules import Area
 from tests.support.advisories import uv_lock
 from tests.support.check import area_row, refusal_pair
-from tests.support.door import CHECK_WORD, MODULE_DOOR, QUALITY_MODULE_DOOR, check_door, door_environment
+from tests.support.door import CHECK_WORD, MODULE_DOOR, QUALITY_MODULE_DOOR, check_door, door_environment, door_in
 from tests.support.processes import process_is_gone
 from tests.support.python_lint import fake_ruff
 from tests.support.scanners import CLEAN_SCANS, fake_scanner, fake_zizmor
@@ -234,3 +236,110 @@ def test_a_start_failure_with_stderr_closed_prints_nothing_on_stdout(elsewhere, 
     with open(tmp_path / "stdout", "w", encoding="utf-8") as stdout:
         done = subprocess.run(command, cwd=elsewhere, env=door_environment(), stdout=stdout, timeout=60, check=False)
     assert (done.returncode, (tmp_path / "stdout").read_text(encoding="utf-8")) == (2, "")
+
+
+ENV_ROW = f"{Glyph.NEEDS_YOU} .env "
+FIX_LINE = f"{output.FIX_LABEL} "
+CONSOLE_SCRIPT_DOOR = [str(Path(sys.executable).parent / "quality")]
+
+
+def quality_door(*arguments: str, cwd: Path, door: list[str] = MODULE_DOOR, **streams) -> subprocess.CompletedProcess[str]:
+    return subprocess.run([*door, *arguments], cwd=cwd, text=True, check=False, **streams)
+
+
+@pytest.fixture
+def env_and_broken_compose(build_repo) -> Path:
+    return build_repo({".env": "A=1\n", "compose.yaml": "services: [\n"})
+
+
+@pytest.mark.parametrize("door", [QUALITY_MODULE_DOOR, CONSOLE_SCRIPT_DOOR], ids=["module", "console script"])
+def test_a_merged_pipe_of_the_real_entry_points_keeps_the_pair_in_order(env_and_broken_compose, door):
+    """Both entry points write the pair in its order; a fixture without a gate pin is refused before any row."""
+    done = quality_door(CHECK_WORD, cwd=env_and_broken_compose, door=door, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    assert (done.returncode, done.stdout) == (
+        2, "error: no workflow here calls quality's gate.yml, so no release is pinned\nnext: add the gate as quality's docs/gate.md describes\n",
+    )
+
+
+def test_a_merged_pipe_shows_the_check_lines_in_run_order(env_and_broken_compose):
+    """The release row, the area rows with their findings (`.env` as env-file's and root-layout's rows, each with its fix), then the pair."""
+    done = quality_door(CHECK_WORD, cwd=env_and_broken_compose, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    prefixes = [
+        "  · release", "  ✗ files", ENV_ROW, FIX_LINE, ENV_ROW, FIX_LINE,
+        "  · debt", FIX_LINE, "  · imports", "  ✓ secrets", "  ✓ workflows", "  ✓ dependencies", "  ✓ code", "error: ", "next: ",
+    ]
+    lines = done.stdout.splitlines()
+    indented = (ENV_ROW, FIX_LINE)
+    assert all((line.lstrip() if prefix in indented else line).startswith(prefix) for line, prefix in zip(lines, prefixes, strict=True)), done.stdout
+
+
+def test_discarding_stderr_hides_exactly_the_pair(env_and_broken_compose):
+    """#86 rule 3, cell 11: no line changes its stream; the exit stays 2."""
+    merged = quality_door(CHECK_WORD, cwd=env_and_broken_compose, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    done = quality_door(CHECK_WORD, cwd=env_and_broken_compose, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    assert (done.returncode, merged.stdout.startswith(done.stdout), merged.stdout[len(done.stdout):]) == (2, True, refusal_pair(env_and_broken_compose))
+
+
+def test_discarding_stdout_leaves_exactly_the_pair(env_and_broken_compose):
+    """#86 rule 3: the rows are results and the pair is not."""
+    done = quality_door(CHECK_WORD, cwd=env_and_broken_compose, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    assert (done.returncode, done.stderr) == (2, refusal_pair(env_and_broken_compose))
+
+
+SONAR_FINDINGS_SCRIPT = """
+import sys
+sys.path.insert(0, {repository_root!r})
+from tests.support.sonar import issues_page, sonar_answering
+from quality import cli
+cli.run(lambda: cli.main(["sonar", "findings"], transport=sonar_answering(issues=issues_page(2, 1, 2)), sleep=lambda seconds: None))
+"""
+
+
+@pytest.mark.integration
+def test_a_merged_pipe_lists_the_sonar_findings_before_the_closing_line(tmp_path):
+    """#86 rule 3, cell 12: the findings precede the closing line through `2>&1`."""
+    from tests.support.sonar import PULL_REQUEST_ENVIRONMENT, TASK_FIXTURE, legacy_config_absent
+
+    (tmp_path / "quality").mkdir()
+    (tmp_path / "quality" / "config.toml").write_text(legacy_config_absent)
+    (tmp_path / sonar.TASK_FILE).parent.mkdir()
+    (tmp_path / sonar.TASK_FILE).write_text(TASK_FIXTURE.read_text())
+    script = tmp_path / "findings.py"
+    script.write_text(textwrap.dedent(SONAR_FINDINGS_SCRIPT).format(repository_root=str(Path(__file__).parents[1])))
+    done = subprocess.run(
+        [sys.executable, str(script)], cwd=tmp_path, text=True, check=False, env={**os.environ, **PULL_REQUEST_ENVIRONMENT},
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+    )
+    prefixes = ["  · analysis", "  ! new", "    ! src/a1.py:1", "    ! src/a2.py:2", "      fix:", "  · legacy", "  ✓ quality gate", "! red"]
+    lines = done.stdout.splitlines()
+    assert (done.returncode, all(line.startswith(prefix) for line, prefix in zip(lines, prefixes, strict=True))) == (1, True), done.stdout
+
+
+def test_a_replaced_stdout_still_prints_the_help():
+    """#86 rule 3: `main` leaves the process's streams alone, so a captured stdout works."""
+    captured = io.StringIO()
+    with contextlib.redirect_stdout(captured), pytest.raises(SystemExit) as stopped:
+        cli.main(["--help"])
+    assert (stopped.value.code, "check" in captured.getvalue()) == (0, True)
+
+
+@pytest.mark.integration
+def test_a_closed_stdout_object_still_prints_the_pair_on_stderr(tmp_path, capsys, monkeypatch, own_home):
+    """#86 rule 3: a closed stdout object never crashes `main`; the diagnostic reaches stderr."""
+    monkeypatch.setenv("NO_COLOR", "1")  # Python 3.14's argparse otherwise probes the closed stdout for colour
+    closed = io.TextIOWrapper(io.BytesIO())
+    closed.close()
+    with contextlib.redirect_stdout(closed):
+        code = door_in(tmp_path, CHECK_WORD, judging=pin.judge_here)
+    assert (code, capsys.readouterr().err) == (2, f"error: not inside a git work tree · {tmp_path}\nnext: run quality check inside a repository\n")
+
+
+@pytest.mark.integration
+def test_a_closed_stdout_fd_still_prints_the_pair_and_never_crashes(tmp_path, own_home):
+    """#86 rule 3: with fd 1 closed the door still exits 2 with its cannot-judge line."""
+    done = subprocess.run(
+        ["bash", "-c", '"$PY" -m quality.cli check >&-'],
+        env={**os.environ, "PY": sys.executable},
+        cwd=tmp_path, text=True, check=False, stderr=subprocess.PIPE, timeout=60,
+    )
+    assert (done.returncode, done.stderr) == (2, f"error: not inside a git work tree · {tmp_path}\nnext: run quality check inside a repository\n")
