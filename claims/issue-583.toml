@@ -1,0 +1,8 @@
+claim_id = "d9224575cf2d4ce284516b3e82e70783"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "4ac2639614d3a3b9b3d3e0a4ce86a0488b6e3bcc"
+branch = "claude/issue-583-d7-merge-success-path-ids"
+scope = ["docs/commands.md", "tests/test_merge.py", "tests/test_merge_attempt.py", "tests/test_merge_rows.py"]
+opened_commit = "3c15e7bd17bfcd5bfb474d5ac3e419c34a9e99f2"
+whole_reason = "docs/commands.md quality merge Off, merge, on clauses from the gate switched off to the closing line and the tests that prove them, linked by MERGE IDs, with the attribution and cell words of their docstrings and parameter ids removed and the lines they stand on rewrapped."
