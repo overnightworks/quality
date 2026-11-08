@@ -1,4 +1,4 @@
-"""#199: the test-layout rule maps every test module to the module it tests."""
+"""The test-layout rule: every test module lies in the folder that mirrors the module it tests."""
 
 import pytest
 
@@ -33,102 +33,106 @@ def case(identifier: str, paths: list[str], expected: list[str]):
 @pytest.mark.parametrize(
     ("paths", "expected"),
     [
-        case("B1 prefix at a word boundary", ["src/p/verdict.py", "tests/test_verdict_reread.py"], []),
-        case("B1 no prefix across a word", ["src/p/verdict.py", "tests/test_verdicts.py"], ["tests/test_verdicts.py"]),
-        case("B2 a longer word run without its first word", ["src/p/limiter.py", "tests/test_redis_rate_limiter.py"],
+        case("prefix at a word boundary", ["src/p/verdict.py", "tests/test_verdict_reread.py"], []),
+        case("no prefix across a word", ["src/p/verdict.py", "tests/test_verdicts.py"], ["tests/test_verdicts.py"]),
+        case("a longer word run without its first word", ["src/p/limiter.py", "tests/test_redis_rate_limiter.py"],
              ["tests/test_redis_rate_limiter.py"]),
-        case("B3 exact case", ["src/p/verdict.py", "tests/test_Verdict.py"], ["tests/test_Verdict.py"]),
-        case("B4 a package folder", ["src/p/config/x.py", "tests/test_config.py"], []),
-        case("B5 one underscore dropped from a module", ["src/p/_x.py", "tests/test_x.py"], []),
-        case("B5 one underscore dropped from a package", ["src/p/_x/y.py", "tests/test_x.py"], []),
-        case("B5 the test keeps no underscore", ["src/p/_x.py", "src/p/_.py", "tests/test__x.py"], ["tests/test__x.py"]),
-        case("B6 main", ["src/p/__main__.py", "tests/test_main.py"], []),
-        case("B6 init", ["src/p/__init__.py", "tests/test_init.py", "tests/test_init_exports.py"], []),
-        case("B6 about", ["src/p/__about__.py", "tests/test_about.py"], []),
-        case("B7 an empty name", ["src/p/x.py", "src/p/_.py", "tests/test_.py"], ["tests/test_.py"]),
-        case("B8 the package's own name", ["src/webauth/x.py", "tests/test_webauth_public_api.py"], []),
-        case("B9 a mirrored folder", ["src/p/api/routes.py", "tests/api/test_routes.py"], []),
-        case("B9 a module is no folder", ["src/p/check.py", "tests/check/test_x.py"], ["tests/check/test_x.py"]),
-        case("B10 a folder only above a package", ["src/p/api/v1/routes.py", "tests/test_api.py", "tests/api/v1/test_routes.py"], []),
-        case("B10 a folder with no python", ["src/p/x.py", "src/p/static/logo.svg", "tests/test_static.py"],
+        case("exact case", ["src/p/verdict.py", "tests/test_Verdict.py"], ["tests/test_Verdict.py"]),
+        case("a package folder", ["src/p/config/x.py", "tests/test_config.py"], []),
+        case("one underscore dropped from a module", ["src/p/_x.py", "tests/test_x.py"], []),
+        case("one underscore dropped from a package", ["src/p/_x/y.py", "tests/test_x.py"], []),
+        case("the test keeps no underscore", ["src/p/_x.py", "src/p/_.py", "tests/test__x.py"], ["tests/test__x.py"]),
+        case("main", ["src/p/__main__.py", "tests/test_main.py"], []),
+        case("init", ["src/p/__init__.py", "tests/test_init.py", "tests/test_init_exports.py"], []),
+        case("about", ["src/p/__about__.py", "tests/test_about.py"], []),
+        case("an empty name", ["src/p/x.py", "src/p/_.py", "tests/test_.py"], ["tests/test_.py"]),
+        case("the package's own name", ["src/webauth/x.py", "tests/test_webauth_public_api.py"], []),
+        case("a mirrored folder", ["src/p/api/routes.py", "tests/api/test_routes.py"], []),
+        case("a module is no folder", ["src/p/check.py", "tests/check/test_x.py"], ["tests/check/test_x.py"]),
+        case("a folder only above a package",
+             ["src/p/api/v1/routes.py", "tests/test_api.py", "tests/api/v1/test_routes.py"], []),
+        case("a folder with no python", ["src/p/x.py", "src/p/static/logo.svg", "tests/test_static.py"],
              ["tests/test_static.py"]),
     ],
 )
 def test_a_test_is_named_after_a_module_its_folder_mirrors(build_repo, paths, expected):
-    """#199 sentences 1, 3 and 4."""
+    """LAYOUT-9, LAYOUT-12, LAYOUT-14, LAYOUT-19, LAYOUT-20, LAYOUT-23, LAYOUT-24, LAYOUT-25: a test lies in a folder
+    that mirrors a package folder and is named after a module of it."""
     assert red(build_repo(project(*paths)), RULE) == expected
 
 
 @pytest.mark.parametrize(
     ("paths", "expected"),
     [
-        case("B8 the own name of one of several packages", ["src/a/x.py", "src/b/y.py", "tests/a/test_a_api.py"], []),
-        case("B11 under its package", ["src/a/x.py", "src/b/y.py", "tests/a/test_x.py"], []),
-        case("B11 not under a package", ["src/a/x.py", "src/b/y.py", "tests/test_x.py", "tests/other/test_x.py"],
+        case("the own name of one of several packages", ["src/a/x.py", "src/b/y.py", "tests/a/test_a_api.py"], []),
+        case("under its package", ["src/a/x.py", "src/b/y.py", "tests/a/test_x.py"], []),
+        case("not under a package", ["src/a/x.py", "src/b/y.py", "tests/test_x.py", "tests/other/test_x.py"],
              ["tests/other/test_x.py", "tests/test_x.py"]),
-        case("B12 scripts come first", ["src/a/x.py", "src/b/y.py", "scripts/x.py", "tests/scripts/test_x.py"], []),
+        case("scripts come first", ["src/a/x.py", "src/b/y.py", "scripts/x.py", "tests/scripts/test_x.py"], []),
     ],
 )
 def test_with_several_packages_each_test_lies_under_its_package(build_repo, paths, expected):
-    """#199 sentences 1 and 2."""
+    """LAYOUT-13, LAYOUT-18, LAYOUT-23: with several packages a test lies under its package, but scripts come first."""
     assert red(build_repo(project(*paths)), RULE) == expected
 
 
 @pytest.mark.parametrize(
     ("paths", "expected"),
     [
-        case("B13 a script", ["scripts/verify_release.py", "tests/scripts/test_verify_release.py"], []),
-        case("B13 no such script", ["tests/scripts/test_verify_release.py"], ["tests/scripts/test_verify_release.py"]),
-        case("B13 a script in a folder", ["scripts/deploy/push.sh", "tests/scripts/deploy/test_push.py"], []),
-        case("B15a no scripts folder", ["tests/scripts/deploy/test_x.py"], ["tests/scripts/deploy/test_x.py"]),
-        case("B14 a workflow", [".github/workflows/gate.yml", "tests/workflows/test_gate_sonar.py"], []),
-        case("B14 a hyphen reads as an underscore", [".github/workflows/code-scanning.yml",
+        case("a script", ["scripts/verify_release.py", "tests/scripts/test_verify_release.py"], []),
+        case("no such script", ["tests/scripts/test_verify_release.py"], ["tests/scripts/test_verify_release.py"]),
+        case("a script in a folder", ["scripts/deploy/push.sh", "tests/scripts/deploy/test_push.py"], []),
+        case("no scripts folder", ["tests/scripts/deploy/test_x.py"], ["tests/scripts/deploy/test_x.py"]),
+        case("a workflow", [".github/workflows/gate.yml", "tests/workflows/test_gate_sonar.py"], []),
+        case("a hyphen reads as an underscore", [".github/workflows/code-scanning.yml",
                                                      "tests/workflows/test_code_scanning.py"], []),
-        case("B14 a yaml suffix", [".github/workflows/x.yaml", "tests/workflows/test_x.py"], []),
-        case("B15a no workflows folder", ["tests/workflows/test_x.py"], ["tests/workflows/test_x.py"]),
+        case("a yaml suffix", [".github/workflows/x.yaml", "tests/workflows/test_x.py"], []),
+        case("no workflows folder", ["tests/workflows/test_x.py"], ["tests/workflows/test_x.py"]),
     ],
 )
 def test_script_and_workflow_tests_mirror_their_own_folders(build_repo, paths, expected):
-    """#199 sentences 2 and 3."""
+    """LAYOUT-15, LAYOUT-16, LAYOUT-21, LAYOUT-22: script and workflow tests mirror their own folders."""
     assert red(build_repo(project("src/p/x.py", *paths)), RULE) == expected
 
 
 @pytest.mark.parametrize(
     ("paths", "expected"),
     [
-        case("B17 support", ["tests/support/test_x.py", "tests/api/support/test_x.py"],
+        case("support", ["tests/support/test_x.py", "tests/api/support/test_x.py"],
              ["tests/api/support/test_x.py", "tests/support/test_x.py"]),
-        case("B18 e2e and fixtures", ["tests/e2e/test_flow.py", "tests/fixtures/test_x.py"], []),
+        case("e2e and fixtures", ["tests/e2e/test_flow.py", "tests/fixtures/test_x.py"], []),
     ],
 )
 def test_support_is_judged_while_e2e_and_fixtures_are_not(build_repo, paths, expected):
-    """#199 sentence 5."""
+    """LAYOUT-11, LAYOUT-26: a test module in support/ is judged, one in fixtures/ or the top-level e2e/ is not."""
     assert red(build_repo(project("src/p/x.py", *paths)), RULE) == expected
 
 
 @pytest.mark.parametrize(
     ("files", "expected"),
     [
-        case("B19 a member's own src", ["m/pyproject.toml", "m/src/q/x.py", "m/tests/test_x.py"], []),
-        case("B19 not the root's module", ["src/p/y.py", "m/pyproject.toml", "m/src/q/x.py", "m/tests/test_y.py"],
+        case("a member's own src", ["m/pyproject.toml", "m/src/q/x.py", "m/tests/test_x.py"], []),
+        case("not the root's module", ["src/p/y.py", "m/pyproject.toml", "m/src/q/x.py", "m/tests/test_y.py"],
              ["m/tests/test_y.py"]),
-        case("B16 a workflow test in a member", ["m/pyproject.toml", "m/src/q/x.py", ".github/workflows/ci.yml",
+        case("a workflow test in a member", ["m/pyproject.toml", "m/src/q/x.py", ".github/workflows/ci.yml",
                                                  "m/tests/workflows/test_ci.py"], ["m/tests/workflows/test_ci.py"]),
-        case("B13 a member's own script", ["m/pyproject.toml", "m/src/q/y.py", "m/scripts/x.py", "m/tests/scripts/test_x.py"], []),
-        case("B13 not the root's script", ["scripts/x.py", "m/pyproject.toml", "m/src/q/y.py", "m/tests/scripts/test_x.py"],
+        case("a member's own script",
+             ["m/pyproject.toml", "m/src/q/y.py", "m/scripts/x.py", "m/tests/scripts/test_x.py"], []),
+        case("not the root's script", ["scripts/x.py", "m/pyproject.toml", "m/src/q/y.py", "m/tests/scripts/test_x.py"],
              ["m/tests/scripts/test_x.py"]),
-        case("B20 nested members", ["speech/pyproject.toml", "speech/src/s/x.py", "speech/tests/test_x.py",
+        case("nested members", ["speech/pyproject.toml", "speech/src/s/x.py", "speech/tests/test_x.py",
                                     "speech/providers/qwen/pyproject.toml", "speech/providers/qwen/src/q/y.py",
                                     "speech/providers/qwen/tests/test_y.py"], []),
     ],
 )
 def test_a_member_maps_only_into_its_own_project(build_repo, files, expected):
-    """#199 sentence 7."""
+    """LAYOUT-17, LAYOUT-27: a member maps only into its own src/ and scripts/, a workflow test lies in the root."""
     assert red(build_repo(project(*files)), RULE) == expected
 
 
 def test_each_failing_case_is_a_misplaced_finding_naming_its_own_values(build_repo, capsys):
-    """#199 sentence 6 and E1, #283 O12: every case prints, sorted by path, and the fact names the folder or name at fault."""
+    """LAYOUT-26, LAYOUT-28, LAYOUT-30, ROW-7, ROW-14: every failing case is a misplaced finding whose fact names its
+    own folder or name."""
     repo = build_repo(project(
         "src/p/api/v1/routes.py", "tests/support/test_a.py", "tests/check/test_b.py", "tests/test_c.py",
         "tests/workflows/test_d.py",
@@ -149,7 +153,7 @@ def test_each_failing_case_is_a_misplaced_finding_naming_its_own_values(build_re
 
 
 def test_a_project_with_several_packages_is_a_misplaced_finding(build_repo, capsys):
-    """#199 sentence 6: the placement case."""
+    """LAYOUT-13, LAYOUT-30, ROW-7, ROW-14: a test under no package of a project with several packages is misplaced."""
     assert_prints_as_kind(capsys, build_repo(project("src/a/x.py", "src/b/y.py", "tests/test_x.py")), RULE, FindingEvent.MISPLACED)
 
 
@@ -157,8 +161,8 @@ WORKFLOW_TEST = "tests/workflows/ci/test_lint.py"
 
 
 def test_two_failures_on_one_file_give_one_finding_joining_the_single_failures(build_repo, capsys):
-    """#199 sentences 2 and 6, B15: the two-failure fact starts with the one-failure fact of the same folder problem, the
-    fixes join by `, or ` (and the two-failure fix does not contain the one-failure fix), each naming the allowance once."""
+    """LAYOUT-17, LAYOUT-28, LAYOUT-29, LAYOUT-30, LAYOUT-31, ROW-7, ROW-14: two failures on one file give one finding
+    whose fact starts with the single failure's fact, and each fix names the allowance once."""
     both = build_repo(project("src/p/x.py", WORKFLOW_TEST))
     (two,) = rule_findings(both, RULE)
     assert_prints_as_kind(capsys, both, RULE, FindingEvent.MISPLACED)
@@ -171,19 +175,19 @@ def test_two_failures_on_one_file_give_one_finding_joining_the_single_failures(b
 
 
 def test_a_workflow_test_in_a_member_is_a_misplaced_finding(build_repo, capsys):
-    """#199 sentences 2 and 6, B16."""
+    """LAYOUT-30, ROW-7, ROW-14: a workflow test in a member is a misplaced finding."""
     repo = build_repo(project("src/p/x.py", "m/pyproject.toml", "m/src/q/x.py", "m/tests/workflows/test_lint.py"))
     assert_prints_as_kind(capsys, repo, RULE, FindingEvent.MISPLACED)
 
 
 def test_a_declared_test_module_is_not_judged(build_repo):
-    """#199 sentence 8, B22."""
+    """SUFFIX-10: a declaration of test-layout covers a test module that mirrors nothing."""
     repo = build_repo({**project("src/p/x.py", "tests/test_y.py"), CONFIG: ONE_JOB + declaring("tests/test_y.py", rule=RULE)})
     assert red(repo, RULE) == []
 
 
 def test_a_link_counts_by_its_name_and_is_never_followed(build_repo):
-    """#199 sentence 8, B21: a linked test is judged by its name, a linked module maps a test."""
+    """LAYOUT-8: a linked test is judged by its name, and a linked module maps a test."""
     repo = build_repo(project("src/p/x.py", "tests/support/helper.py", "tests/test_y.py"))
     (repo / "tests" / "test_z.py").symlink_to("support/helper.py")
     (repo / "src" / "p" / "y.py").symlink_to("x.py")
@@ -192,6 +196,6 @@ def test_a_link_counts_by_its_name_and_is_never_followed(build_repo):
 
 
 def test_an_empty_test_name_is_not_described_as_a_name_with_nothing_in_it(build_repo, capsys):
-    """#201 folded follow-up 1 (#199 sentence 6)."""
+    """LAYOUT-28, LAYOUT-30, ROW-7, ROW-14: an empty test name has a fact of its own."""
     repo = build_repo(project("src/p/x.py", "tests/test_.py", "tests/test_zz.py"))
     assert_empty_name_has_its_own_fact(capsys, repo, RULE, "tests/test_.py", "tests/test_zz.py", "zz")
