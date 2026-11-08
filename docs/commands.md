@@ -205,11 +205,13 @@ repository a token can list is dropped without a trace (FLEET-72).
   not keeps its value (every cell under no gate, a rule cell under a pin before the rule or `release unknown`)
   (FLEET-24), unreadable release tags say so in the heading and show pins as commits (FLEET-25), and each makes the exit
   `2` (FLEET-26). No value, `behind`, `no gate` or `report-only` included, makes the run red (FLEET-27).
-- Found rows are named by GitHub's own `owner/name`, named rows by the entry as written; all are sorted by it,
-  case-insensitively. A private repository is not measured, because the tables are published and it is not
-  anonymously readable: one named in `repositories` shows as a `cannot judge` row like any repository that cannot be cloned.
+- Found rows are named by GitHub's own `owner/name` (FLEET-92), named rows by the entry as written (FLEET-93); all are
+  [sorted by it, case-insensitively](#quality-report). A private repository is not measured, because the tables are
+  published and it is not anonymously readable: one named in `repositories` shows as a `cannot judge` row like any
+  repository that cannot be cloned (FLEET-94).
 - A repository that cannot be cloned or measured shows `cannot judge: <reason>` (for example `cannot clone (git exited
-  128)`), with no local path; every other row still shows, and the exit is `2`. Otherwise the exit is `0`.
+  128)`) (FLEET-95), with no local path (FLEET-96); every other row still shows (FLEET-97), and
+  [the exit](#quality-report) is `2`.
 
 ## Scanners
 
