@@ -314,7 +314,17 @@ Ruled by the operator:
 
 - `-v` shows each scanner's exit and its stderr once gitleaks has cleared it; a text it does not clear is withheld and counted; the machine reports stay out. It never shows a secret.
 
-`quality check -v` and `quality check secrets --staged -v` add, under each area that ran a scanner, after its findings and notes, one `·` row per scanner run, `· <scanner>  exited  <n>`, and that scanner's stderr line by line behind the marker `| `, dim, escaped and never shortened, split on line feeds alone. A text gitleaks does not clear is withheld whole and the row counts its lines; a failing gitleaks' lines are counted unread. A scanner that did not finish or printed no UTF-8 has no row. A scanner's report never stands there: it is what the rows are read from, and it can quote repository lines. `-v` changes no exit, no verdict and no scanner's arguments; a run without it keeps no stderr and adds no vet to a refusal's; `check` writes no step summary. A secret's value never appears, also not with `-v`.
+`quality check -v` and `quality check secrets --staged -v` add, under each area that ran a scanner, after its findings
+and notes (VERBOSE-1), one `·` row per scanner run, `· <scanner>  exited  <n>` (VERBOSE-2), and that scanner's stderr
+line by line behind the marker `| ` ([Rows](#rows)) (VERBOSE-3), dim (VERBOSE-4), [escaped](#masking) and never
+shortened (VERBOSE-5), split on line feeds, a carriage return counting as one, and on no other separator (VERBOSE-6).
+osv-scanner's lines name each lock by its tracked name and the checkout, the scanner's directory and the scratch
+directory as `<repository>`, `<scanner>` and `<scratch>` (VERBOSE-7). A text gitleaks does not clear is withheld whole
+and the row counts its lines (VERBOSE-8); a failing gitleaks' lines are counted unread. A scanner that did not finish or
+printed no UTF-8 has no row. A scanner's report never stands there: it is what the rows are read from, and it can quote
+repository lines (VERBOSE-9). `-v` changes no exit, no verdict and no scanner's arguments (VERBOSE-10); a run without it
+keeps no stderr (VERBOSE-11) and adds no vet to a refusal's (VERBOSE-12); `check` writes no step summary (VERBOSE-13). A
+secret's value never appears, also not with `-v` (VERBOSE-14).
 
 ```text
   ✓ secrets       clean          2 commits
