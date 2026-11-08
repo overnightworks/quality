@@ -206,16 +206,17 @@ It applies these rules:
 
   Ruled by the operator: `CLAUDE.md` and `AGENTS.md` never diverge. A finding names only the file, and its fix is a
   sentence, never a command.
-- `root-layout`: every entry directly in the root of the tracked tree is on quality's base list or declared. An entry is
-  a file or a directory (written `frontend/`); a directory with many files is one entry. Names compare in exact case, and
-  the finding for a name that differs only in case names the base-list spelling. A file and a directory of one name are
-  two entries, and a root symlink counts by its own name. Only tracked files count; a stray left on disk is not judged.
-  The base list: `README.md AGENTS.md CLAUDE.md HEART.md LICENSE .gitignore .gitattributes .gitmodules pyproject.toml
-  uv.lock .python-version package.json pnpm-lock.yaml package-lock.json Cargo.toml Cargo.lock rust-toolchain.toml
-  Dockerfile .dockerignore compose.yaml compose.yml docker-compose.yaml docker-compose.yml sonar-project.properties
-  .importlinter .pre-commit-config.yaml` and the directories `.github/ .aco/ quality/ src/ tests/ docs/ scripts/`. It
-  belongs to quality and changes with a quality version; a repository extends it, never shortens it. Each other entry
-  is declared in `quality/config.toml`, one entry and one one-line reason, no pattern and no deeper path:
+- `root-layout`: every entry directly in the root of the tracked tree is on quality's base list or declared (ROOT-1). An
+  entry is a file or a directory (written `frontend/`); a directory with many files is one entry (ROOT-2). Names
+  compare in exact case, and the finding for a name that differs only in case names the base-list spelling (ROOT-3). A
+  file and a directory of one name are two entries (ROOT-4), and a root symlink counts by its own name (ROOT-5). Only
+  tracked files count; a stray left on disk is not judged (ROOT-6). The base list: `README.md AGENTS.md CLAUDE.md
+  HEART.md LICENSE .gitignore .gitattributes .gitmodules pyproject.toml uv.lock .python-version package.json
+  pnpm-lock.yaml package-lock.json Cargo.toml Cargo.lock rust-toolchain.toml Dockerfile .dockerignore compose.yaml
+  compose.yml docker-compose.yaml docker-compose.yml sonar-project.properties .importlinter .pre-commit-config.yaml` and
+  the directories `.github/ .aco/ quality/ src/ tests/ docs/ scripts/` (ROOT-7). It belongs to quality and changes with
+  a quality version; a repository extends it, never shortens it. Each other entry is declared in `quality/config.toml`,
+  one entry and one one-line reason, no pattern and no deeper path (ROOT-8):
 
   ```toml
   [[root.allow]]
@@ -223,23 +224,25 @@ It applies these rules:
   reason = "the web client, built apart from the Python package"
   ```
 
-  A declaration that matches no tracked root entry is a finding; a declaration of a base-list entry that is tracked is
-  clean. A finding's row names the entry and says `unlisted` (its fact adds the base list's spelling for a name that
-  differs only in case) with both ways out in the fix, move it to its owner's directory or declare it with a reason, in
-  prose with no command and no local path; a declaration that matches no tracked root entry says `unused` (its fact
-  adds the tracked directory for an entry written without its slash). Findings are sorted by entry and all printed. An invalid declaration (a `/`
-  inside the entry, `.`, `..`, `.git`, an empty entry, a multi-line reason, an unknown key, or one entry declared
-  twice) makes the `files` row `✗ not checked` with the reason, and `next:` shows a `[[root.allow]]` example. Any other malformed table or
-  allowance elsewhere in `quality/config.toml`, which plain `quality check` reads for this rule, refuses it too,
-  with that table's own message; the values of `[gate]` stay the verdict's to judge.
+  A declaration that matches no tracked root entry is a finding (ROOT-9); a declaration of a base-list entry that is
+  tracked is clean (ROOT-10). A finding's row names the entry and says `unlisted` (its fact adds the base list's
+  spelling for a name that differs only in case) (ROOT-11) with both ways out in the fix, move it to its owner's
+  directory or declare it with a reason, in prose with no command and no local path (ROOT-12); a declaration that
+  matches no tracked root entry says `unused` (its fact adds the tracked directory for an entry written without its
+  slash) (ROOT-13). Findings are sorted by entry and all printed (ROOT-14). An invalid declaration (a `/` inside the
+  entry, `.`, `..`, `.git`, an empty entry, a multi-line reason, an unknown key, a missing key, an entry that is not
+  text, a `[root]` key other than `allow`, `allow` that is not an array of tables, or one entry declared twice) makes
+  the `files` row `✗ not checked` with the reason, and `next:` shows a `[[root.allow]]` example (ROOT-15). Any other
+  malformed table or allowance elsewhere in `quality/config.toml`, which plain `quality check` reads for this rule,
+  refuses it too, with that table's own message; the values of `[gate]` stay the verdict's to judge.
 
   Ruled by the operator: any pull request may add a declaration with a reason; the review judges whether the reason
   holds. A declaration is no loosening, so `quality verdict` asks for no `[[gate.loosened]]` entry.
 
-  The rule reads names, never content, and writes nothing. No configuration switches it off. A config reader older than
-  the rule refuses `[root]` as an unknown key, so a declaration lands in the pull request that moves the repository to
-  a quality version that knows it. Named gaps: a submodule in the root counts as a file entry and no case of it is
-  tested; marketplace's refusal of every symlink in the tree stays that repository's own check.
+  The rule reads names, never content, and writes nothing (ROOT-16). No configuration switches it off (ROOT-17). A
+  config reader older than the rule refuses `[root]` as an unknown key, so a declaration lands in the pull request that
+  moves the repository to a quality version that knows it. Named gaps: a submodule in the root counts as a file entry
+  and no case of it is tested; marketplace's refusal of every symlink in the tree stays that repository's own check.
 - `file-suffix`: a tracked file whose basename has no suffix is a finding, unless it is executable (index mode
   100755), a symlink (120000) or a gitlink (160000), its basename is a dotfile, its basename is on quality's list of
   tool-mandated names (`LICENSE Dockerfile Makefile CODEOWNERS`), or it is declared. The index (`git ls-files -s`) is
