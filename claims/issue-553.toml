@@ -1,0 +1,7 @@
+claim_id = "13a2566ca4d64ac8a35ac8de90142507"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "ffebc5d2ff2a7c0f81a5832db994dd567e5244cd"
+branch = "claude/issue-553-d7-length-ids"
+scope = ["docs/output.md", "tests/test_output.py", "tests/test_output_shortening.py"]
+opened_commit = "07938ad88c708b5a802da8e9b1cbf096d3648b0a"
