@@ -454,7 +454,7 @@ def test_findings_and_notes_share_one_location_column_and_one_event_column(event
 
 @pytest.mark.parametrize("on_a_note", [False, True], ids=["finding", "note"])
 def test_an_event_prints_escaped_and_its_column_holds(on_a_note):
-    """MASK-6, MASK-9."""
+    """MASK-9."""
     class Hostile(StrEnum):
         ESCAPES = "\x1b\x1b"
 

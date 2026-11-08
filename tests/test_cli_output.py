@@ -311,7 +311,7 @@ def test_a_scanner_stderr_with_several_lines_prints_as_one_escaped_line(build_re
 
 
 def test_an_unused_allowance_with_a_control_character_prints_escaped(build_repo, capsys):
-    """MASK-4, MASK-6: the unused allowance line names its file escaped."""
+    """MASK-4: the unused allowance line names its file escaped."""
     config = allow_config(("aws-access-token", "no\\u001bthere.txt", FAKE_KEY, "stale entry"))
     repo = build_repo({"quality/config.toml": config})
     code, lines = door_lines(capsys, CHECK_WORD, cwd=repo)
@@ -322,7 +322,7 @@ def test_an_unused_allowance_with_a_control_character_prints_escaped(build_repo,
 
 
 def test_a_lowered_entry_for_a_file_with_a_control_character_prints_escaped(build_repo, capsys):
-    """MASK-2, MASK-6: the lowered row names the file escaped."""
+    """MASK-4, MASK-6: the lowered row names the file escaped."""
     held = '[file_lines]\n"src/esc\\u001bape.py" = 900\n\n[clones]\n'
     repo = build_repo({"src/esc\x1bape.py": "x = 1\n" * 810, BASELINE_PATH: held})
     code, lines = door_lines(capsys, *FIX_WORDS, cwd=repo)
