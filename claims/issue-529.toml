@@ -1,8 +1,0 @@
-claim_id = "b554cda96aa74f9fad57ae7fbfddebb2"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "bf7bf7c0a552c4d1ce057d2e55d03ec29cbd44be"
-branch = "claude/issue-529-d7-output-rows-ids"
-scope = ["docs/ARCHITECTURE.md", "docs/output.md", "tests/support/check.py", "tests/test_cli_output.py", "tests/test_output.py"]
-opened_commit = "064344f4a8a4bc7f3826d2cad6966783428eb5a1"
-whole_reason = "docs/output.md rows, columns, findings and rule-name clauses and the tests that prove them, linked by ROW IDs, with the frames of the two release rows and the two ARCHITECTURE edits of #5."
