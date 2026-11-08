@@ -1,7 +1,0 @@
-claim_id = "da807b87753240c08f312e466d394439"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "96e48ac1d0d10a12a2b924a4995cca72cbbae55b"
-branch = "claude/issue-609-d7-size-ceiling-ids"
-scope = ["docs/rules.md", "tests/test_ratchet.py", "tests/test_ratchet_gone.py"]
-opened_commit = "11a252ad91fcd5406b42f60054d0346ee32fb57c"
