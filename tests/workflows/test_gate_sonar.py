@@ -165,7 +165,7 @@ def test_the_coverage_the_tests_upload_is_the_report_the_scan_reads():
 
 
 def test_only_the_findings_step_binds_the_default_branch_from_the_event(gate):
-    """#33 sentence 7: the findings step reads the default branch name from the event, never assumes main, and no other step sees it"""
+    """SONAR-30, SONAR-31: the findings step reads the default branch name from the event, never assumes main, and no other step sees it"""
     binders = [
         (job_name, step["name"])
         for job_name, job in gate["jobs"].items()
