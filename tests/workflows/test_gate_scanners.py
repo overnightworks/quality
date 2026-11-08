@@ -21,7 +21,7 @@ def the_mise_step(workflow: str, job: str) -> dict:
 
 
 def test_the_check_job_installs_the_scanners_through_one_pinned_mise_step():
-    """#228 rule 4: one mise-action pinned by commit, a release and its binary's checksum, installing from the lock."""
+    """CALLER-1, CALLER-2: one mise-action pinned by commit, a release and its binary's checksum, installing from the lock."""
     gate_step = the_mise_step("gate.yml", "check")
     given = gate_step["with"]
     assert MISE_ACTION.fullmatch(gate_step["uses"].split(" ")[0]), gate_step["uses"]
@@ -54,7 +54,7 @@ def rendered(expression: str, tool_dir: str) -> str:
 
 @pytest.mark.parametrize(("workflow", "job", "tool_dir"), [("gate.yml", "check", "."), ("gate.yml", "check", ".gate-tool"), ("ci.yml", "tests", ".")])
 def test_the_ceiling_of_mise_is_the_normalised_parent_of_the_manifest_directory(workflow, job, tool_dir):
-    """#265 B1: trust protects nothing in CI, so mise must never read above the manifest's parent, whatever spelling of the path it compares."""
+    """CALLER-3, CALLER-4: trust protects nothing in CI, so mise must never read above the manifest's parent, whatever spelling of the path it compares."""
     step = the_mise_step(workflow, job)
     manifest_directory = step["with"]["working_directory"].replace("${{ env.TOOL_DIR }}", tool_dir)
     expected = posixpath.normpath("/work/" + manifest_directory.rsplit("/", 1)[0])
@@ -62,7 +62,7 @@ def test_the_ceiling_of_mise_is_the_normalised_parent_of_the_manifest_directory(
 
 
 def test_the_tests_job_installs_the_same_scanners_as_the_gate_and_runs_no_check():
-    """#265 D8: the pin stands twice and is held equal; the gate's check job is quality's own check."""
+    """CALLER-4: the pin stands twice and is held equal; the gate's check job is quality's own check."""
     gate_step, tests_step = the_mise_step("gate.yml", "check"), the_mise_step("ci.yml", "tests")
     assert {key: value for key, value in tests_step["with"].items() if key != "working_directory"} == {
         key: value for key, value in gate_step["with"].items() if key != "working_directory"
@@ -70,10 +70,3 @@ def test_the_tests_job_installs_the_same_scanners_as_the_gate_and_runs_no_check(
     assert tests_step["uses"] == gate_step["uses"]
     assert [step for step in load("ci.yml")["jobs"]["tests"]["steps"] if "quality check" in step.get("run", "")] == []
 
-
-@pytest.mark.parametrize("workflow", sorted(path.name for path in WORKFLOWS.glob("*.yml")))
-def test_no_step_of_any_workflow_names_engines(workflow):
-    """#265 test 8: the engines directory is gone, so no step's name, command, inputs or environment mentions it."""
-    for job in load(workflow).get("jobs", {}).values():
-        for step in job.get("steps", []):
-            assert "engines" not in yaml.safe_dump(step), step

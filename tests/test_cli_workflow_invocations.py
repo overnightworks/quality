@@ -32,7 +32,7 @@ def test_every_quality_invocation_in_a_workflow_parses_with_the_current_parser(w
 
 
 def test_the_gate_runs_the_whole_check():
-    """An extractor that matches nothing would pass every case above, and a gate that names an area is no whole check."""
+    """CALLER-5: an extractor that matches nothing would pass every case above, and a gate that names an area is no whole check."""
     assert [argv for workflow, _, _, argv in quality_invocations() if workflow == "gate.yml" and argv[:1] == ["check"]] == [["check"]]
 
 
