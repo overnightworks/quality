@@ -74,17 +74,17 @@ jobs:
 
 Each line has a reason:
 
-- `permissions: {}` on the workflow and one block per job: a job holds only what it reads. The gate reads CI's run
+- `permissions: {}` on the workflow (RELEASE-1) and one block per job: a job holds only what it reads. The gate reads CI's run
   (`actions`), the merged pull request's check runs (`checks`), the head and tags (`contents`) and which pull request
-  merged the commit (`pull-requests`); a call that grants less fails.
-- `version` is the only input and reaches a step only through `env`, never inside a `run` script.
-- `needs: gate` makes the build wait for the gate; without it the build runs even when the gate refuses.
-- The build checks out the dispatch's own commit (no `ref:` or `repository:`) and its next step refuses unless
-  the checkout's head is `needs.gate.outputs.commit`, the commit the gate judged. The gate refuses unless main's head is
+  merged the commit (`pull-requests`) (RELEASE-2); a call that grants less fails.
+- `version` is the only input (RELEASE-3) and reaches a step only through `env`, never inside a `run` script (RELEASE-4).
+- `needs: gate` makes the build wait for the gate (RELEASE-5); without it the build runs even when the gate refuses.
+- The build checks out the dispatch's own commit (no `ref:` or `repository:`) (RELEASE-6) and its next step refuses unless
+  the checkout's head is `needs.gate.outputs.commit`, the commit the gate judged (RELEASE-7). The gate refuses unless main's head is
   still that commit, so the two are equal; a `ref:` naming the output raises CodeQL's
   `actions/cache-poisoning/poisonable-step` alert at the checkout, so no caller writes one.
-- `needs: [gate, build]` makes the tag wait for both; `contents: write` is granted to the tag job only, so no other job
-  can write, and nothing dispatches the tag job apart from the release run.
+- `needs: [gate, build]` makes the tag wait for both (RELEASE-8); `contents: write` is granted to the tag job only, so no other job
+  can write (RELEASE-9), and nothing dispatches the tag job apart from the release run (RELEASE-10).
 - `commit` is the gate's output, the commit it judged (GATE-2).
 - `artifact` names an artifact of the same run (TAG-3). Its regular top-level files, dotfiles included, are the release's files and
   nothing else is uploaded (TAG-4); a file name carries no `#`, which gh reads as the start of an asset label. A build that makes
@@ -100,10 +100,13 @@ Each line has a reason:
   through `env` (GATE-4), writes its grammars with no character range, whose meaning would follow the locale (GATE-5),
   and judges the form before any step reads the repository (GATE-6).
 - `quality`'s own release uses GitHub's same-repository form, `uses: $/.github/workflows/release-gate.yml` and
-  `release-tag.yml`, so it calls the workflows of its own commit. Every other repository pins the commit sha of a quality tag and names the tag in a comment.
+  `release-tag.yml`, so it calls the workflows of its own commit (RELEASE-11). Every other repository pins the commit sha of a quality tag and names the tag in a comment.
 - quality's build also tags the gated commit in its own checkout (the tag never leaves the runner) and runs
-  `scripts/verify_release.py`, which proves one release tag is at the commit, the installed version equals it, the
-  gate's tool refs pin it and every rule's release facts name a release.
+  `scripts/verify_release.py` (RELEASE-12), which proves one release tag is at the commit (RELEASE-13), the installed
+  version equals it (RELEASE-14), the gate's tool refs pin it (RELEASE-15) and every rule's release facts name a
+  release (RELEASE-16).
+- quality's `release.yml` has no job or step that can be skipped (RELEASE-17), its checkout persists no credentials
+  (RELEASE-18), and its build sets up a Python that `pyproject.toml`'s `requires-python` admits (RELEASE-19).
 
 ## The version
 
@@ -207,7 +210,7 @@ publish step is completed by hand with `gh release create v<version> <files> --v
 
 ## Concurrency
 
-One group, `cancel-in-progress: false`: a release never cancels a running release. GitHub keeps at most one pending run
+One group, `cancel-in-progress: false`: a release never cancels a running release (RELEASE-20). GitHub keeps at most one pending run
 per group, and a newer pending dispatch cancels the older.
 
 ## Residual
@@ -226,7 +229,7 @@ completed publish; both are completed or deleted by hand.
 ## quality's own release
 
 A dispatch of quality's `release.yml` gates, builds, tags and publishes a release without files, with GitHub's generated
-notes. The operator dispatches with:
+notes (RELEASE-21). The operator dispatches with:
 
 ```sh
 gh workflow run release.yml -R overnightworks/quality -f version=X.Y.Z
