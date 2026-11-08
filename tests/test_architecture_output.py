@@ -96,7 +96,7 @@ def test_a_module_name_with_a_line_feed_is_judged_and_its_second_line_stays_a_de
 
 
 def test_a_source_directory_with_a_line_feed_is_judged_without_a_forged_line(build_repo, capsys):
-    """MASK-11, MASK-13: a package directory name is judged like a file name."""
+    """A package directory name with a line feed is judged like a file name."""
     files = {**SHOP_DB_IMPORTS_WEB, "src/shop/a\n::error::x/__init__.py": "", "pyproject.toml": toml(FORBIDDEN)}
     broken_block(capsys, files, build_repo)
 
