@@ -65,11 +65,11 @@ It applies these rules:
   Ruled by the operator: a service with `network_mode: host`, or one whose `network_mode` holds a Compose interpolation,
   is a finding unless `quality/config.toml` declares its file and service.
 - `size`: every tracked file of Python, TypeScript (`.ts` `.tsx` `.mts` `.cts`), JavaScript (`.js` `.jsx` `.mjs`
-  `.cjs`), Svelte or Vue is measured by its lines, and every tracked `*.py` file also with
-  [lizard](https://github.com/terryyin/lizard): a file from 800 lines, a Python function from 60 lines and a Python
-  function with a CCN above 15 are debt, counted apart for production and tests (a path under `test/` or `tests/`;
-  Python also `conftest.py`, `test_*.py`, `*_test.py`; TypeScript and JavaScript also `__tests__/`, `*.test.*`,
-  `*.spec.*`, `*.test-d.*` and `*.spec-d.*`).
+  `.cjs`), Svelte or Vue is measured by its lines (SIZE-1), and no other file is (SIZE-2), and every tracked `*.py`
+  file also with [lizard](https://github.com/terryyin/lizard): a file from 800 lines, a Python function from 60 lines
+  and a Python function with a CCN above 15 are debt (SIZE-3), [counted apart](commands.md#quality-report) for
+  production and tests (a path under `test/` or `tests/`; Python also `conftest.py`, `test_*.py`, `*_test.py`;
+  TypeScript and JavaScript also `__tests__/`, `*.test.*`, `*.spec.*`, `*.test-d.*` and `*.spec-d.*`).
 
   Ruled by the operator: a file that `quality/config.toml` declares generated is left out of the `size` rule; a minified
   or generated file the repository does not declare is counted by its lines like any other:
@@ -98,22 +98,25 @@ It applies these rules:
   `clone` and the report still read it. quality cannot see what the declared job runs; the operator checks it once, at
   the door.
 
-  Functions of the other languages are not measured: lizard misplaces their boundaries
+  Functions of the other languages are not measured (SIZE-4): lizard misplaces their boundaries
   ([lizard's issue tracker](https://github.com/terryyin/lizard/issues/521)). Functions are named by their qualified
-  symbol (`Class.method`); a second one of the same name, such as a property setter, is `Class.method#2`. Without
-  `quality/baseline.toml` the debt row is `· debt  not recorded  N entries over the thresholds · measured only`, N the
-  size entries over the thresholds that quality measured (a declared file left out); it equals what a first
-  `quality check --fix` records only when every Python file parses, otherwise that fix refuses. The size debt
-  leaves the exit unchanged. The per-class and language counts leave `check`; the report keeps them.
-  A `.py` file is read the way Python reads source (a PEP 263 coding cookie or a UTF-8 BOM decides the encoding). One
-  Python 3.14 cannot decode or parse is named as not valid Python: without a baseline it stands as a note row under the debt row
-  (`· bad.py  not measured  not valid Python`) and the size verdict is unchanged, while `python-security` judges
-  the file unparsable or cannot judge it (exit `2`); with a baseline the `debt` row is `✗ not checked` with
-  `bad.py is not valid Python (...)`, and `quality check --fix` refuses the same way, writing nothing; both exit `2`.
-  Only where no baseline is held does `--fix` refuse with `✗ not fixed`, since only recording the first ceiling is refused. A tracked file the operating system refuses to read makes the
-  `debt` row `✗ not checked` with or without a baseline, and `quality check --fix` refuses likewise, writing nothing; both exit `2`.
-  The reason names the case: a file without read permission is `cannot read locked.py: [Errno 13] ...`, a file behind
-  a directory without permission is `cannot reach pkg/m.py: [Errno 13] ...`. A tracked file missing from disk
+  symbol (`Class.method`); a second one of the same name, such as a property setter, is `Class.method#2` (SIZE-5).
+  Without `quality/baseline.toml` the [debt row](output.md#area-rows) is
+  `· debt  not recorded  N entries over the thresholds · measured only`, N the size entries over the thresholds that
+  quality measured (a declared file left out); it equals what a first `quality check --fix` records only when every
+  Python file parses, otherwise that fix refuses (SIZE-6). The size debt leaves the exit unchanged (SIZE-7). The
+  per-class and language counts leave `check`; the report keeps them.
+  A `.py` file is read the way Python reads source (a PEP 263 coding cookie or a UTF-8 BOM decides the encoding)
+  (SIZE-8). One Python 3.14 cannot decode or parse is named as not valid Python: without a baseline it stands as a
+  [note row](output.md#notes) under the debt row (`· bad.py  not measured  not valid Python`) and the size verdict is
+  unchanged (SIZE-9), while `python-security` judges the file unparsable or cannot judge it (exit `2`); with a baseline
+  the `debt` row is `✗ not checked` with `bad.py is not valid Python (...)` (SIZE-10), and `quality check --fix`
+  refuses the same way, writing nothing; both exit `2`. Only where no baseline is held does `--fix` refuse with
+  `✗ not fixed`, since only recording the first ceiling is refused (SIZE-11). A tracked file the operating system
+  refuses to read makes the `debt` row `✗ not checked` with or without a baseline, and `quality check --fix` refuses
+  likewise, writing nothing; both exit `2` (SIZE-12). The reason names the case: a file without read permission is
+  `cannot read locked.py: [Errno 13] ...`, a file behind a directory without permission is
+  `cannot reach pkg/m.py: [Errno 13] ...` (SIZE-13). A tracked file missing from disk
   (deleted but not staged, left out by a sparse checkout, or a dangling symlink) is skipped, and its entries stand,
   unjudged, while the index tracks it. A `quality/baseline.toml` that is not UTF-8 is malformed like invalid
   TOML and says to restore it from git or repair it by hand. A baseline with a table this quality does not know

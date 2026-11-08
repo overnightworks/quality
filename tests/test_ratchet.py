@@ -62,7 +62,8 @@ def method(lines: int) -> str:
 
 
 def test_without_a_baseline_the_debt_row_counts_the_entries_a_first_recording_writes(build_repo, capsys):
-    """#46 rule 3, O21: no baseline, the extent is the entries over the thresholds, the exit unchanged."""
+    """O21, SIZE-3, SIZE-6, SIZE-7: with no baseline the debt row counts the entries over the thresholds, a first
+    recording writes as many, and the exit is unchanged."""
     repo = build_repo({"src/big.py": long_file(800) + long_function(60) + branchy_function(16), "tests/test_big.py": long_file(900)})
     code, output = run(capsys, repo)
     assert code == 0, output
@@ -100,7 +101,8 @@ SOURCE_NAME = "src/source.py"
     ],
 )
 def test_a_file_python_can_read_is_measured_in_its_declared_encoding(build_repo, capsys, source, python_security_cannot_judge):
-    """#46 rule 1: the size rule measures every tracked Python file Python itself reads; ruff reads UTF-8 only (#219)."""
+    """SIZE-8, SECURITY-28: the size rule measures a Python file as Python reads it; where ruff, which reads UTF-8 only,
+    cannot read it, python-security and python-print both cannot judge."""
     repo = build_repo_with_source(build_repo, {}, SOURCE_NAME, source)
     code, output = run(capsys, repo)
     assert (Rule.PYTHON_SECURITY in refusals(repo)) == python_security_cannot_judge, output
@@ -138,8 +140,8 @@ NOT_PYTHON = pytest.mark.parametrize(
 def test_without_a_baseline_the_size_rule_notes_a_file_python_cannot_read_and_python_security_decides_the_exit(
     build_repo, capsys, source
 ):
-    """#46 rule 3: the size rule reports the file without refusing; python-security (#219) and python-print (#225)
-    alone turn the run to exit 2."""
+    """SIZE-9, SECURITY-20, SECURITY-28: with no baseline the size rule notes a file Python cannot read and refuses
+    nothing; python-security and python-print alone turn the run to exit 2."""
     repo = build_repo_with_source(build_repo, {"src/ok.py": "x = 1\n"}, SOURCE_NAME, source)
     code, output = run(capsys, repo)
     assert code == 2, output
@@ -152,7 +154,8 @@ def test_without_a_baseline_the_size_rule_notes_a_file_python_cannot_read_and_py
 
 @NOT_PYTHON
 def test_against_a_baseline_a_file_python_cannot_read_is_unparsable(build_repo, capsys, source):
-    """#46 rule 4: a baseline is held against every function, so an unmeasurable file is unparsable, exit 2."""
+    """SIZE-10: with a baseline a file Python cannot read makes the debt row `✗ not checked`, naming it as not valid
+    Python, with no note, exit 2."""
     repo = build_repo_with_source(build_repo, {BASELINE_PATH: EMPTY_BASELINE}, SOURCE_NAME, source)
     code, output = run(capsys, repo)
     assert code == 2
@@ -162,7 +165,8 @@ def test_against_a_baseline_a_file_python_cannot_read_is_unparsable(build_repo, 
 
 @NOT_PYTHON
 def test_a_fix_refuses_a_file_python_cannot_read(build_repo, capsys, source):
-    """A baseline holds every function, so one recorded with a file unmeasured would hide its debt."""
+    """SIZE-11: a first recording refuses a file Python cannot read with `✗ not fixed`, exit 2, writing no baseline,
+    since a baseline holds every function and one recorded with a file unmeasured would hide its debt."""
     repo = build_repo_with_source(build_repo, {}, SOURCE_NAME, source)
     assert door_in(repo, *FIX_WORDS) == 2
     assert f"{refusal_row('debt', 'not fixed')}{SOURCE_NAME} is not valid Python" in capsys.readouterr().out
@@ -281,13 +285,15 @@ def test_a_tracked_file_missing_from_disk_is_unmeasured_for_the_size_rule_and_on
         ("locked", "cannot reach {file}: [Errno 13] Permission denied"),
         ("{file}", "cannot read {file}: [Errno 13] Permission denied"),
     ],
-    ids=["directory", "cell 17 file"],
+    ids=["directory", "file"],
 )
-@pytest.mark.parametrize("file", ["locked/b.py", "locked/b.ts", "locked/b.svelte"], ids=["Python", "#119 cell 21 TypeScript", "#119 cell 21 Svelte"])
+@pytest.mark.parametrize(
+    "file", ["locked/b.py", "locked/b.ts", "locked/b.svelte"], ids=["Python", "TypeScript", "Svelte"]
+)
 @pytest.mark.parametrize("command", [CHECK_WORD, "check debt --fix"])
 def test_a_tracked_file_the_filesystem_refuses_to_reach_cannot_be_judged(build_repo, capsys, command, file, locked, reason):
-    """#46 rule 3/5 and #52 rule 5, cell 17: a tracked file the rule may not reach or read is exit 2, never gone,
-    never a traceback, and its reason names no checkout path. #119 cell 21: a file of any table language likewise."""
+    """SIZE-1, SIZE-12, SIZE-13: a tracked file of any measured language that the filesystem refuses to reach or read
+    is exit 2 with its reason, never gone, never a traceback, and the reason names no checkout path."""
     repo = build_repo({"src/a.py": "x = 1\n", file: long_function(62)})
     locked, reason = locked.format(file=file), reason.format(file=file)
     (repo / locked).chmod(0)
@@ -327,7 +333,8 @@ def property_pair(lines: int) -> str:
     ids=["redefined-function", "property-getter-and-setter"],
 )
 def test_two_functions_sharing_a_qualified_name_count_as_two(build_repo, capsys, source):
-    """#46 rule 3: the counts per class count every function, also two that share one qualified symbol."""
+    """SIZE-5, SIZE-6: two functions of one qualified symbol are two entries, in the debt row and in a first
+    recording."""
     repo = build_repo({"src/a.py": source})
     _, output = run(capsys, repo)
     assert leading_count(area_fact(output, "debt")) == 2
@@ -581,7 +588,8 @@ def repo_with_debt_below_src(build_repo) -> Path:
 
 
 def test_check_from_a_subfolder_judges_the_whole_repository_by_its_root_baseline(repo_with_debt_below_src, capsys):
-    """#76 rule 1, cells 1-2, 20: the size debt is found from src, named from the top, and no line names the checkout."""
+    """CHECK-1: a run from a subfolder finds the size debt by the root baseline, names the file from the top, and no
+    line names the checkout."""
     code = door_in(repo_with_debt_below_src / "src", CHECK_WORD)
     output = (captured := capsys.readouterr()).out + captured.err
     assert (code, [row.event for row in finding_rows(output, "src/big.py")], str(repo_with_debt_below_src) in output) == (1, [FindingEvent.NEW_DEBT], False), output
@@ -617,7 +625,7 @@ def test_a_baseline_that_is_not_utf8_is_malformed_and_names_the_rewrite_once_per
 
 @pytest.mark.parametrize("suffix", ["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs", "svelte", "vue"])
 def test_a_file_of_every_table_language_is_new_debt_from_800_lines_against_a_baseline(build_repo, capsys, suffix):
-    """#119 E6, cell 13: against a baseline, a file of any table language from 800 lines is new debt, 799 is not."""
+    """SIZE-1, SIZE-3: against a baseline a file of any measured language from 800 lines is new debt, 799 is not."""
     path = f"frontend/src/lib/api/types.{suffix}"
     repo = build_repo({"src/a.py": "x = 1\n", path: typescript_file(1210), "frontend/small." + suffix: typescript_file(799), BASELINE_PATH: EMPTY_BASELINE})
     code, output = run(capsys, repo)
@@ -628,14 +636,14 @@ def test_a_file_of_every_table_language_is_new_debt_from_800_lines_against_a_bas
 
 @pytest.mark.parametrize("name", ["tool.rs", "run.sh", "app.css", "index.html", "notes.md"])
 def test_a_file_of_a_language_the_table_lacks_is_never_debt(build_repo, capsys, name):
-    """#119 O3: Rust, shell, CSS and HTML stay unmeasured."""
+    """SIZE-2: a file of no measured language is never debt, however long."""
     repo = build_repo({f"src/{name}": "line\n" * 2000, BASELINE_PATH: EMPTY_BASELINE})
     code, output = run(capsys, repo)
     assert (code, rule_findings(repo, Rule.SIZE)) == (0, []), output
 
 
 def test_a_function_of_120_lines_in_typescript_is_no_finding_and_the_file_is_not_unparsable(build_repo, capsys):
-    """#119 E6, cells 14 and 15: lines only, so a held baseline over a .ts that is not Python stays clean."""
+    """SIZE-4: a 120-line TypeScript function is no finding and its file is not unparsable under a held baseline."""
     repo = build_repo({"src/a.py": "x = 1\n", "src/api.ts": typescript_function(120), BASELINE_PATH: EMPTY_BASELINE})
     code, output = run(capsys, repo)
     assert (code, rule_notes(repo, Rule.SIZE), rule_findings(repo, Rule.SIZE)) == (0, [], []), output
@@ -644,17 +652,18 @@ def test_a_function_of_120_lines_in_typescript_is_no_finding_and_the_file_is_not
 @pytest.mark.parametrize(
     ("bundle", "expected_code", "expected_named"),
     [(minified_bundle(), 0, 0), ("var a=1;\n" * 800, 1, 1)],
-    ids=["#119 cell 16 a one-line bundle is no finding", "#119 cell 16 an 800-line minified file is new debt"],
+    ids=["a one-line bundle is no finding", "an 800-line minified file is new debt"],
 )
 def test_a_minified_file_is_counted_by_its_lines_like_any_other(build_repo, capsys, bundle, expected_code, expected_named):
-    """#119 O4: nothing is skipped; the one-line bundle has one line."""
+    """SIZE-1, SIZE-3: a minified file is counted by its lines like any other: a one-line bundle has one line, an
+    800-line one is new debt."""
     repo = build_repo({"src/dist/index.js": bundle, BASELINE_PATH: EMPTY_BASELINE})
     result, output = run(capsys, repo)
     assert (result, [finding.path for finding in rule_findings(repo, Rule.SIZE)]) == (expected_code, ["src/dist/index.js"] * expected_named), output
 
 
 def test_a_first_recording_holds_a_file_of_another_language_as_an_ordinary_entry(build_repo):
-    """The entry of a file of another language is an ordinary [file_lines] one."""
+    """SIZE-1: a first recording holds a TypeScript file from 800 lines as an ordinary `[file_lines]` entry."""
     path = "frontend/src/lib/api/types.ts"
     repo = build_repo({"src/a.py": long_function(70), path: typescript_file(1210)})
     assert door_in(repo, *FIX_WORDS) == 0
@@ -663,7 +672,7 @@ def test_a_first_recording_holds_a_file_of_another_language_as_an_ordinary_entry
 
 @pytest.mark.integration
 def test_a_tree_with_typescript_holds_the_same_python_baseline(tmp_path):
-    """#119 E7, cells 19 and 20: a file of another language adds no Python entry and moves none."""
+    """SIZE-4: a file of another language adds no Python entry and moves none."""
     python_only = {"src/b.py": long_file(810) + method(61), "src/a.py": branchy_function(17) + long_function(62)}
     mixed = {**python_only, "src/ui.ts": typescript_file(100), "src/Card.svelte": typescript_file(30)}
     written = []
