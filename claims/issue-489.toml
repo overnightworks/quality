@@ -1,0 +1,8 @@
+claim_id = "8b1b1b1c9940464e85daa991874ae643"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "ebb95607a739a6ab2d1e94e80054d32337566c77"
+branch = "claude/issue-489-f2b-exclude"
+scope = ["docs/commands.md", "src/quality/fleet.py", "tests/test_fleet.py", "tests/test_fleet_report.py"]
+opened_commit = "5c7c2f2006889f7072b290f5f0acb10896101c77"
+whole_reason = "The key, its refusals (fleet.py), their proof (both test modules) and the reference that names them (docs/commands.md) are one capability; apart, the file would take a key its reference does not name."
