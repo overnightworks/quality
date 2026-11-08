@@ -410,10 +410,11 @@ def headers(lines: list[str]) -> list[str]:
 
 
 def test_a_clean_run_has_seven_clean_rows_in_area_order_and_the_verdict(build_repo, capsys):
-    """ROW-8, ROW-9, ROW-11, ROW-12, O16, O21, O30, O38, O48: a clean run has one clean row per area in area order,
-    each with its extent: the files row its rules and distinct tracked paths, the debt row the entries and pairs of the
-    ceiling file, the imports row its contracts, the secrets row its commits, the workflows row its workflow files and
-    the offline audits, the dependencies row its lockfiles and packages, the code row its rules and Python files."""
+    """ROW-8, ROW-9, ROW-11, ROW-12, CLOSING-4, CLOSING-5, O16, O21, O30, O38, O48: a clean run has one clean row per
+    area in area order, each with its extent: the files row its rules and distinct tracked paths, the debt row the
+    entries and pairs of the ceiling file, the imports row its contracts, the secrets row its commits, the workflows
+    row its workflow files and the offline audits, the dependencies row its lockfiles and packages, the code row its
+    rules and Python files; the run ends in one verdict line on stdout."""
     tracked = {**CLEAN_FILES, **KEPT_CONTRACT, "src/big.py": "x = 1\n" * 800, BASELINE_PATH: '[file_lines]\n"src/big.py" = 800\n\n[clones]\n'}
     repo = build_repo(tracked)
     code, out, err = frame_run(capsys, repo)
@@ -435,8 +436,8 @@ def test_a_clean_run_has_seven_clean_rows_in_area_order_and_the_verdict(build_re
 
 
 def test_a_run_without_a_baseline_notes_the_debt_as_not_recorded_and_says_it_is_not_enforced(build_repo, capsys):
-    """O21: with no ceiling file the debt row counts the entries over the thresholds and ends in the mode
-    measured only."""
+    """O21, CLOSING-8: with no ceiling file the debt row counts the entries over the thresholds and ends in the mode
+    measured only, and the verdict says `debt measured, not enforced`."""
     repo = build_repo({**CLEAN_FILES, **KEPT_CONTRACT, "src/big.py": "x = 1\n" * 800})
     code, out, err = frame_run(capsys, repo)
     fact = area_fact("\n".join(out), Area.DEBT)
@@ -446,7 +447,8 @@ def test_a_run_without_a_baseline_notes_the_debt_as_not_recorded_and_says_it_is_
 
 
 def test_a_baseline_without_clones_is_partly_measured_only(build_repo, capsys):
-    """O21: a ceiling file with no clones table makes the debt row count the clone pairs and end in the partly mode."""
+    """O21, CLOSING-9: a ceiling file with no clones table makes the debt row count the clone pairs and end in the
+    partly mode, and the verdict says `debt partly measured, not enforced`."""
     repo = build_repo({**CLEAN_FILES, **KEPT_CONTRACT, BASELINE_PATH: "", "src/a.py": function("first", "a", "b"), "src/b.py": function("second", "c", "d")})
     code, out, err = frame_run(capsys, repo)
     fact = area_fact("\n".join(out), Area.DEBT)
@@ -460,7 +462,8 @@ def test_a_baseline_without_clones_is_partly_measured_only(build_repo, capsys):
 
 
 def test_findings_in_two_areas_follow_their_rows_and_end_in_the_counted_verdict(build_repo, capsys):
-    """ROW-2: each area's findings stand under its row, the subject `path:line` right after the glyph."""
+    """ROW-2, CLOSING-6, CLOSING-11: each area's findings stand under its row, the subject `path:line` right after the
+    glyph, and the findings verdict is followed by no `next:`."""
     code, out, err = frame_run(capsys, build_repo({**CLONES_BASELINE, **KEPT_CONTRACT, **PRINTING, ".env": "A=1\n"}))
     files_row, code_row = out.index(header(Area.FILES, "!", "2 findings")), out.index(header(Area.CODE, "!", "1 finding"))
     assert (code, err) == (1, [])
@@ -515,8 +518,8 @@ def test_the_files_block_lists_every_finding_in_run_order_python_floor_last_then
 
 
 def test_an_area_that_cannot_check_ends_the_run_with_the_pair_and_no_verdict(build_repo, use_mise, served_scanners, capsys):
-    """REFUSAL-1, REFUSAL-3, REFUSAL-10: a missing scanner is the `✗` row with its reason and a one-step `next:`, and
-    the other areas' rows stand."""
+    """REFUSAL-1, REFUSAL-3, REFUSAL-10, CLOSING-15: a missing scanner is the `✗` row with its reason and a one-step
+    `next:`, the other areas' rows stand, and no verdict line follows."""
     use_mise(lacking(served_scanners, scanners.GITLEAKS))
     repo = build_repo({**CLONES_BASELINE, **PRINTING})
     code, out, err = frame_run(capsys, repo)
@@ -649,6 +652,7 @@ def exits_and_rows(build_repo, capsys, use_mise, served_scanners, case: str):
 def test_a_refusal_row_appears_exactly_when_the_exit_is_two_and_a_findings_row_when_an_area_has_findings(
     case, build_repo, capsys, use_mise, served_scanners
 ):
+    """CLOSING-1, ROW-10: a `✗` row stands exactly when the exit is 2, and a `!` row when an area has findings."""
     code, out, _ = exits_and_rows(build_repo, capsys, use_mise, served_scanners, case)
     rows = headers(out)
     assert any(row.startswith("  ✗") for row in rows) is (code == 2)

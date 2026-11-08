@@ -139,21 +139,21 @@ def files(tracked: dict[str, str]):
           f"{refusal_row('code')}ruff cannot parse src/\\udcff.py"], []),
     ],
     ids=[
-        "cell 1 unparsable size hides no env-file finding",
-        "cell 2 secret cannot judge hides no env-file finding",
-        "cell 3 unreadable compose hides no size finding",
-        "cell 4 findings in two rules",
-        "cell 7 non-utf8 compose name",
-        "cell 8 non-utf8 python name",
-        "rule 4 non-utf8 python name in the size report",
+        "an unparsable size rule hides no env-file finding",
+        "a secret rule that cannot judge hides no env-file finding",
+        "an unreadable compose file hides no size finding",
+        "findings in two rules",
+        "a non-utf8 compose name",
+        "a non-utf8 python name",
+        "a non-utf8 python name in the size report",
     ],
 )
 def test_every_rule_is_judged_and_the_exit_is_the_worst(
     build_repo, elsewhere, capsys, arrange, expected_code, expected_lines, rows
 ):
-    """CHECK-4: #55 rules 1-4, cells 1-8 (cell 9 is the exit-code table's non-utf8 env case): each rule prints its own
-    verdict, one rule's refusal hides no other rule's, the exit is the worst verdict's, the clean line names the
-    rules, and every path prints backslash-escaped."""
+    """CHECK-4, CLOSING-12, CLOSING-13, CLOSING-14: each rule prints its own verdict, one rule's refusal hides no other
+    rule's, the exit is the worst verdict's, the error line counts the refused areas and the findings, and every path
+    prints backslash-escaped."""
     repo = arrange(build_repo, elsewhere)
     code = check_door(repo, clock=lambda: 0.0)
     captured = capsys.readouterr()
