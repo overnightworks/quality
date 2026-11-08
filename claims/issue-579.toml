@@ -1,0 +1,8 @@
+claim_id = "c4322c63c8b743b4b601227924e3c1f4"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "d77de5aeaff3620fc06ff2d307ba326b250ea5d3"
+branch = "claude/issue-579-d7-merge-refusal-dry-run-ids"
+scope = ["docs/commands.md", "tests/test_merge_dry_run.py", "tests/test_merge_prompt.py", "tests/test_merge_rows.py"]
+opened_commit = "04360c1421ffe3f0109d7367f75ac0f6564698d3"
+whole_reason = "docs/commands.md quality merge refusal, cannot-judge, config refusal, terminal, escaping and dry run clauses and the tests that prove them, linked by MERGE IDs, with the pull_row copy folded into the support helper."
