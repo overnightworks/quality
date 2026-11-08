@@ -80,7 +80,7 @@ def test_exit_code_tells_clean_from_cannot_judge(build_repo, tmp_path, capsys, a
 
 @pytest.mark.integration
 def test_quality_tracks_no_env_or_compose_file():
-    """CLOSING-29: The quality repository passes its own check and tracks no env or compose file."""
+    """CLOSING-29: the quality repository passes its own check and tracks no env or compose file."""
     root = Path(__file__).resolve().parents[1]
     tracked = subprocess.run(["git", "-C", str(root), "ls-files"], capture_output=True, text=True, check=True).stdout
     assert check_door(root) == 0
@@ -194,8 +194,8 @@ def test_a_finding_under_a_rule_its_check_does_not_judge_fails_loud(build_repo, 
 
 
 def test_a_refusing_workflow_scanner_stops_no_other_workflow_rule(build_repo, served_scanners, elsewhere, capsys):
-    """When actionlint cannot judge, zizmor still runs and its finding prints under its own rule; stderr holds the refusal
-    pair alone, its counts the scenario's one refused area and one finding in it."""
+    """CLOSING-12, CLOSING-14: when actionlint cannot judge, zizmor still runs and its finding prints under its own
+    rule; stderr holds the refusal pair alone, its counts the scenario's one refused area and one finding in it."""
     zizmor_report = Path(__file__).parent / "fixtures" / "scanner-outputs" / "zizmor-finding.json"
     fake_scanner(served_scanners, scanners.ACTIONLINT, "echo boom >&2; exit 3")
     locate_zizmor = fake_zizmor(elsewhere, on_scan=f"cat '{zizmor_report}'; exit 12")
@@ -406,7 +406,7 @@ def test_the_run_holds_the_line_up_only_around_a_named_areas_scanners(build_repo
 
 
 def test_every_rule_a_malformed_config_refuses_carries_its_fact_and_its_example_as_fields(build_repo):
-    """#279 acceptance 3: the adapter turns a ConfigError into a refusal whose reason holds the error's fact and an
+    """O10, REFUSAL-20: the adapter turns a ConfigError into a refusal whose reason holds the error's fact and an
     Example step; the refusals of one run are all the same reason."""
     repo = build_repo({"quality/config.toml": GATE + generated_config(job="other")})
     reasons = {verdict.refusal.reason for area in check_result(repo, installed_ruff, never_located).areas for verdict in area.verdicts if verdict.refusal}
@@ -415,7 +415,7 @@ def test_every_rule_a_malformed_config_refuses_carries_its_fact_and_its_example_
 
 
 def test_a_config_refusal_without_an_example_carries_no_step(build_repo):
-    """#279 acceptance 3: an error without an example becomes a refusal without a step."""
+    """REFUSAL-19: an error without an example becomes a refusal without a step."""
     repo = build_repo({"quality/config.toml": "[secrets]\nignore = []\n"})
     reasons = {verdict.refusal.reason for area in check_result(repo, installed_ruff, never_located).areas for verdict in area.verdicts if verdict.refusal}
     assert reasons == {Reason(f"{config.CONFIG_PATH} has unknown key ignore in [secrets] - only allow exists")}
@@ -435,8 +435,9 @@ def check_over(build_repo, capsys, refusal: Refusal) -> tuple[int, list[str], li
 
 @pytest.mark.parametrize("refusal", check_refusals(), ids=lambda refusal: refusal.id)
 def test_check_names_a_config_refusal_on_its_rows_and_shows_the_example_once_under_next(build_repo, capsys, refusal):
-    """#279 O10, acceptance 4: each refused area's row ends in the fact; the example's label and lines stand once on
-    stderr, four spaces deep; a refusal without one gets the general instruction and no label."""
+    """O10, REFUSAL-8, REFUSAL-15, REFUSAL-16, REFUSAL-17, REFUSAL-19, REFUSAL-20: each refused area's row ends in the
+    fact; the example's label and lines stand once on stderr, four spaces deep, each line whole; a refusal without one
+    gets the general instruction and no label."""
     code, out, err = check_over(build_repo, capsys, refusal)
     assert code == 2
     assert [f"{refusal_row(area)}{refusal.fact}" in out for area in CONFIG_AREAS] == [True] * 4, out

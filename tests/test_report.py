@@ -96,6 +96,8 @@ def test_a_note_locates_itself_by_its_escaped_path_and_its_line_where_it_has_one
 
 
 def test_a_config_refusal_keeps_its_fact_and_its_example_apart():
+    """O10, REFUSAL-15: a config refusal holds the error's fact and its example as a step labelled for the config file,
+    the fact kept as the error holds it."""
     error = ConfigError("a fact, like:\nwith a second line", ("[secrets]", "allow = []"))
     refusal = config_refusal(error, Instruction("then this"))
     assert (refusal.reason.fact, refusal.reason.next_steps) == (
@@ -105,5 +107,6 @@ def test_a_config_refusal_keeps_its_fact_and_its_example_apart():
 
 
 def test_a_config_refusal_without_an_example_is_its_steps_alone():
+    """REFUSAL-19: a config refusal without an example is its steps alone."""
     refusal = config_refusal(ConfigError("a fact"), Instruction("then this"))
     assert (refusal.reason.fact, refusal.reason.next_steps) == ("a fact", (Instruction("then this"),))
