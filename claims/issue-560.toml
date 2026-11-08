@@ -1,7 +1,0 @@
-claim_id = "9f3286645cee4ed6ba2b568f5772d16d"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "fe2f1f45c5dde7ccf2adfbb29c4233060bdebc06"
-branch = "claude/issue-560-d7-verbose-ids"
-scope = ["docs/output.md", "tests/test_cli_areas.py", "tests/test_cli_raw_output.py"]
-opened_commit = "e8868e9ad9b4b43be8f3f76dea5e6e32d711625b"
