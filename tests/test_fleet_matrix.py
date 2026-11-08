@@ -63,33 +63,34 @@ def caller(uses: str) -> dict[str, str]:
     ids=["newest tag", "older tag", "no tag", "branch", "tag name"],
 )
 def test_the_gate_cell_names_the_release_the_pinned_commit_is(fleet_report, public, ref, cell):
-    """#123 E3, cells 1 to 4: the tag the SHA points at, `(behind)` when not the newest; the `# v` comment is not read."""
+    """FLEET-4, FLEET-5, FLEET-6, FLEET-10: the tag the SHA points at, `(behind)` when not the newest; the `# v` comment is not read."""
     code, output = fleet_report(public("pinned", caller(f"{GATE}@{ref} # v0.3.1")))
     assert code == 0, output
     assert matrix_row(output, "o/pinned")[1:3] == [cell, "none"]
 
 
 def test_without_a_caller_there_is_no_gate_and_a_step_level_uses_is_no_caller(fleet_report, public):
-    """#123 E3, cell 5: only a job-level `uses:` is a call."""
+    """FLEET-3, FLEET-7: only a job-level `uses:` is a call."""
     steps = {".github/workflows/ci.yml": f"jobs:\n  build:\n    steps:\n      - uses: {GATE}@{NEWEST}\n"}
     _, output = fleet_report(public("bare", {}), public("stepped", steps))
     assert matrix_row(output, "o/bare")[1:3] == matrix_row(output, "o/stepped")[1:3] == ["no gate", "none"]
 
 
 def test_the_repositorys_own_workflow_file_is_self_only_in_the_gates_repository():
-    """#123 E3, cell 6: `./` and `$/` name the gate's own file only where the repository is the gate's."""
+    """FLEET-8: `./` and `$/` name the gate's own file only where the repository is the gate's."""
     own = (gate_call(None),)
     assert pin_cell(own, "no gate", True, RELEASES) == "self"
     assert pin_cell(own, "no gate", False, RELEASES) == "no gate"
 
 
 def test_a_commit_in_upper_case_is_a_commit(fleet_report, public):
+    """FLEET-4."""
     _, output = fleet_report(public("shouting", caller(f"{GATE}@{NEWEST.upper()}")))
     assert matrix_row(output, "o/shouting")[1] == "v0.10.0"
 
 
-def test_two_callers_with_two_pins_are_both_named_sorted_and_joined(fleet_report, public):
-    """#123 E3, cell 7."""
+def test_two_callers_with_two_pins_are_both_named_and_joined(fleet_report, public):
+    """FLEET-9."""
     files = {
         ".github/workflows/a.yml": f"jobs:\n  one:\n    uses: {GATE}@{NEWEST}\n",
         ".github/workflows/b.yaml": f"jobs:\n  two:\n    uses: {GATE}@{OLDER}\n",
@@ -129,7 +130,7 @@ def test_a_workflow_that_is_not_yaml_is_named_in_its_cells_and_the_other_rows_st
     ids=["an impossible date", "a timestamp tag on a non-timestamp", "an empty integer", "an unknown boolean", "a sexagesimal float too large for a float"],
 )
 def test_a_scalar_that_is_no_valid_value_parses_as_text_and_the_workflow_shows_its_pin(fleet_report, public, scalar):
-    """#123 E11, cell 8: only the `uses` strings are read, so a scalar no type accepts does not make the file unreadable."""
+    """FLEET-3: only the `uses` strings are read, so a scalar no type accepts does not make the file unreadable."""
     content = f"env:\n  {scalar}\njobs:\n  gate:\n    uses: {GATE}@{NEWEST}\n"
     code, output = fleet_report(public("odd", {".github/workflows/x.yml": content}))
     assert code == 0, output
@@ -149,7 +150,7 @@ def test_unreadable_release_tags_say_so_and_show_pins_as_commits(fleet_report, p
 
 
 def test_the_codeql_cell_reads_its_own_pin_or_says_none(fleet_report, public):
-    """#123 E5, cell 10."""
+    """FLEET-2, FLEET-7."""
     gate = caller(f"{GATE}@{NEWEST}")
     scan = {".github/workflows/code.yml": f"jobs:\n  scan:\n    uses: {CODEQL}@{OLDER}\n", **gate}
     _, output = fleet_report(public("scanned", scan), public("unscanned", gate))
@@ -179,7 +180,7 @@ def test_a_cannot_judge_row_keeps_its_label_in_the_matrix(fleet_report, public, 
 
 
 def test_release_tags_are_the_peeled_commits_of_annotated_and_lightweight_tags(gate_clone, remotes):
-    """#123 E4, cell 15: `ls-remote` lists an annotated tag twice; the commit is the peeled line. No tag is unreadable."""
+    """FLEET-1: `ls-remote` lists an annotated tag twice; the commit is the peeled line. No tag is unreadable."""
     directory = remotes / gate_clone({"a": "1\n"})
     with pytest.raises(ReleaseTagsError):
         read_release_tags()
@@ -199,6 +200,7 @@ def test_release_tags_are_the_peeled_commits_of_annotated_and_lightweight_tags(g
     ids=["owner and repository match in any case", "the workflow path matches exactly"],
 )
 def test_only_the_owner_and_repository_of_a_reusable_call_ignore_case(fleet_report, public, uses, cell):
+    """FLEET-11."""
     _, output = fleet_report(public("cased", caller(uses)))
     assert matrix_row(output, "o/cased")[1] == cell
 
