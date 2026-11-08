@@ -77,11 +77,12 @@ continuation, `\uXXXX` and `\` escapes). The file is read inside the checkout; a
 and every refusal names the file repository-relative. The check does not stop a pull request that edits the caller's
 workflow, which holds the token itself.
 
-After its checks pass, the properties check also hands the scan its issue exclusion: it appends `scanner-arguments=<value>` to the
-file named by `$GITHUB_OUTPUT` (nothing outside a workflow step) and prints the
-`· scan  excludes  docker:S8431 · .github/dependabot.yml exists` row. `gate.yml`
-appends that step output to the scan's `args`. The value is empty unless `.github/dependabot.yml` exists, and the keys it
-sets are all `sonar.issue.ignore.multicriteria` keys (see the Dependabot exception below). With `[gate] sonar = false` the
+After its checks pass (SONAR-13), the properties check also hands the scan its issue exclusion: it appends
+`scanner-arguments=<value>` to the file named by `$GITHUB_OUTPUT`, keeping the lines the file holds (SONAR-14); outside
+a workflow step it appends nothing, prints the `· scan  excludes  docker:S8431 · .github/dependabot.yml exists` row and
+exits `0` (SONAR-15). `gate.yml` appends that step output to the scan's `args`. The value is empty unless
+`.github/dependabot.yml` exists, and the keys it sets are all `sonar.issue.ignore.multicriteria` keys (SONAR-16; see the
+Dependabot exception below). With `[gate] sonar = false` the
 properties check refuses a properties file and a passed token, prints
 `· sonar  off  quality/config.toml sets [gate] sonar = false` instead and appends `sonar=off`.
 
@@ -185,19 +186,23 @@ indexed a Dependabot config
 SONARIAC-3096). A pull-request analysis does not see an unchanged `.github/dependabot.yml`, and a repository whose
 `sonar.sources` leaves `.github` out keeps the finding on its default branch too. The gate therefore keeps the rule out of the analysis:
 
-- **In the analysis:** where `.github/dependabot.yml` exists, the properties check hands the scan a multi-criteria issue exclusion
-  for `docker:S8431` over every file, so no analysis, pull request or branch, raises the finding. A finding an earlier analysis raised is closed by the next analysis of its branch. The exclusion replaces a multi-criteria exclusion set in SonarCloud's interface
-  on such a repository, because a value given to the scanner takes precedence over the interface's.
+- **In the analysis:** where `.github/dependabot.yml` exists, the properties check hands the scan a multi-criteria
+  issue exclusion for `docker:S8431` over every file, so no analysis, pull request or branch, raises the finding; where
+  it does not exist it hands nothing (SONAR-17). A finding an earlier analysis raised is closed by the next analysis of
+  its branch. The exclusion replaces a multi-criteria exclusion set in SonarCloud's interface on such a repository,
+  because a value given to the scanner takes precedence over the interface's.
 - **The rule:** `quality sonar properties` tests whether `.github/dependabot.yml` exists. Its content is never read, so
-  an empty or broken file counts as existing; a link to a file counts and a link to nowhere does not; a directory named
-  `.github/dependabot.yml` counts too, unlike Sonar, which needs a file. `.github/dependabot.yaml` is not looked at.
-- **What counts:** `quality sonar findings` and `quality merge` count every open finding and read no
-  `dependabot.yml`. A `docker:S8431` finding that an analysis raises anyway (no `.github/dependabot.yml`, only
+  an empty or broken file counts as existing (SONAR-18); a link to a file counts and a link to nowhere does not
+  (SONAR-19); a directory named `.github/dependabot.yml` counts too, unlike Sonar, which needs a file (SONAR-20).
+  `.github/dependabot.yaml` is not looked at (SONAR-21).
+- **What counts:** `quality sonar findings` and `quality merge` count every open finding (SONAR-25 at
+  merge) and read no `dependabot.yml` (SONAR-26). A `docker:S8431` finding that an analysis raises anyway (no `.github/dependabot.yml`, only
   `.github/dependabot.yaml`, or an analysis that predates the exclusion) is an ordinary finding: it prints as its row
-  with its `fix:` line, counts in `new` and in the legacy number, and fails the run.
+  with its `fix:` line, counts in `new` and in the legacy number (SONAR-24), and fails the run (SONAR-23). On the default branch and on another
+  branch it is as ordinary as on a pull request: listed, counted, and judged by the branch's own rule (SONAR-27).
 - **An unreachable file:** a `.github` the filesystem refuses access to is exit `2` from `quality sonar properties`
-  with a line naming the file, before it writes the step output.
-- **Only this rule** has the exception, because only it has the premise (Sonar's own exception that its pull-request
+  with a line naming the file, before it writes the step output (SONAR-22).
+- **Only this rule** has the exception (SONAR-28), because only it has the premise (Sonar's own exception that its pull-request
   analysis misses); every other finding and rule counts as before. There is no per-image entry in `quality/config.toml`
   and no reading of `dependabot.yml`: Sonar itself checks existence only, and a pull request is judged the way the default
   branch is. The Docker rule is no reason to move the zero rule to the hosted gate, because the scan's own exclusion keeps
