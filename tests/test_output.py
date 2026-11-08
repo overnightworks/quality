@@ -406,6 +406,7 @@ def test_repository_text_is_escaped_before_it_is_padded():
 
 
 def test_wide_and_combining_characters_print_whole():
+    """MASK-8: wide and combining characters print as themselves in a finding's location, fact and fix."""
     paths = ["漢字.env", "e\u0301.env", "plain.env"]
     findings = [finding(path, FindingEvent.TRACKED, f"fact of {path}", f"fix of {path}") for path in paths]
     printed = findings_written(findings)
