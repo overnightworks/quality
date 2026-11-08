@@ -178,10 +178,19 @@ The line of `quality check debt --fix --dry-run` when nothing is left to lower (
 Exit `2` ends instead with `error: K of N areas could not check` (`1 of 1 area` for one), N the areas judged
 (CLOSING-12), followed by ` · N findings in the others` (CLOSING-13) or, when findings stand under a `✗` row,
 ` · N findings, M of them in those areas` (CLOSING-14), and `next:` [on stderr](#streams); it prints no verdict line
-(CLOSING-15). A rule that cannot judge [refuses only itself](rules.md): the other rules' findings, those of its own
-area included, [still print](#refusals), and a note stands under a `✗` row where its rule judged.
+(CLOSING-15), and the error line ends after the count of areas where no finding stands (CLOSING-16). A rule that cannot
+judge [refuses only itself](rules.md): the other rules' findings, those of its own area included,
+[still print](#refusals), and a note stands under a `✗` row where its rule judged.
 
-A run that cannot start prints only the pair and exits `2` before any rule runs, and no release row stands: `error: not inside a git work tree · <the folder, ~ for the home folder>` with `next: run quality check inside a repository` when git, asked in the C locale, says the folder lies outside any work tree (a folder outside any repository, a bare repository, the inside of `.git`), and otherwise (a folder without permission, a repository git refuses) `error: . is not a readable git repository: ...` with `next: git -C . status`, and with `next: fix what the error names, then run quality check again` where git did not run or the folder is gone.
+A run that cannot start prints only the pair and exits `2` before any rule runs, and no release row stands (CLOSING-17):
+`error: not inside a git work tree · <the folder, ~ for the home folder>` (CLOSING-18) with
+`next: run quality check inside a repository` (CLOSING-19) when git, asked in the C locale (CLOSING-20), says the folder
+lies outside any work tree (a folder outside any repository, a bare repository, the inside of `.git`) (CLOSING-21), and
+otherwise (a folder without permission, a repository git refuses) `error: . is not a readable git repository: ...`
+(CLOSING-22) with `next: git -C . status` (CLOSING-23), and with
+`next: fix what the error names, then run quality check again` where git did not run or the folder is gone (CLOSING-24).
+A folder outside the home folder, or any folder where no home folder is known, stands as its absolute path (CLOSING-25).
+No run that cannot start ends in a traceback (CLOSING-26).
 
 ## Refusals
 
@@ -333,7 +342,10 @@ Ruled by the operator:
 
 - Exit codes: 0 yes, 1 no, 2 could not answer, 130 interrupted.
 
-The exit of `check` is the worst verdict's: `2` if any rule is unparsable or cannot judge (never clean), otherwise `1` if any rule has findings, otherwise `0`; a rule that only measured is `0`. `✗` is always exit `2` ([Glyphs](#glyphs)).
+The exit of `check` is the worst verdict's: `2` if any rule is unparsable or cannot judge (never clean) (CLOSING-27),
+otherwise `1` if any rule has findings (CLOSING-28), otherwise `0` (CLOSING-29); a rule that only measured is `0`
+(CLOSING-30). `✗` is always exit `2` ([Glyphs](#glyphs)). Ctrl-C ends a `check` run as an unhandled interrupt does:
+the process dies by SIGINT, which a shell reads as `130` (CLOSING-31), with no traceback (CLOSING-32).
 
 ## Verbose runs
 

@@ -29,7 +29,7 @@ def git_directory(build_repo, tmp_path):
     ids=["bare repository", "inside .git"],
 )
 def test_a_folder_git_cannot_read_names_the_folder_and_never_a_traceback(build_repo, tmp_path, capsys, arrange):
-    """Git's refusal, whichever its cause, is exit 2 naming the folder the door started in."""
+    """CLOSING-26: a bare repository and the inside of `.git` end in exit 2 that names the folder, never a traceback."""
     path = arrange(build_repo, tmp_path)
     code = door_in(path, CHECK_WORD)
     err = capsys.readouterr().err
@@ -37,7 +37,8 @@ def test_a_folder_git_cannot_read_names_the_folder_and_never_a_traceback(build_r
 
 
 def test_a_working_directory_that_was_removed_is_cannot_judge_not_a_traceback(tmp_path, monkeypatch, capsys):
-    """#76 E8, rule 2: a relative PATH cannot be resolved without a working directory."""
+    """CLOSING-22, CLOSING-26: a working directory that was removed ends `check` and `check --fix` in exit 2 with the
+    error, never a traceback."""
     gone = tmp_path / "gone"
     gone.mkdir()
     monkeypatch.chdir(gone)
@@ -48,7 +49,8 @@ def test_a_working_directory_that_was_removed_is_cannot_judge_not_a_traceback(tm
 
 @pytest.mark.integration
 def test_a_machine_without_git_is_cannot_judge_not_a_traceback(tmp_path, monkeypatch, capsys):
-    """#76 rule 2: git missing from the PATH names that git did not run."""
+    """CLOSING-22, CLOSING-26: git missing from the PATH ends in exit 2 that names that git did not run, never a
+    traceback."""
     repo = make_repo(tmp_path, {"src/a.py": "x = 1\n"})
     nowhere = tmp_path / "empty-bin"
     nowhere.mkdir()
