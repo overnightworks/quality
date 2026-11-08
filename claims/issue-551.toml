@@ -1,8 +1,0 @@
-claim_id = "0c1dc88150ec408aa3156559fd54bca0"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "8acb6bf3743119aa37c1b27dd22a24fe02a4fcd9"
-branch = "claude/issue-551-d7-report-refusal-ids"
-scope = ["docs/commands.md", "tests/test_fleet.py", "tests/test_fleet_matrix.py", "tests/test_fleet_report.py"]
-opened_commit = "5fca9ea5a8be08d525a2f1bd7442224def25b78b"
-whole_reason = "docs/commands.md quality report refusals of the fleet file and of the listing and the tests that prove them, linked by FLEET IDs, with the attribution of their docstrings removed."
