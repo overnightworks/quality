@@ -1,0 +1,8 @@
+claim_id = "528ad2370e5b4734b495e8011441ea07"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "fbf580d7431034e90e21f6ed3338d85dfa60a913"
+branch = "claude/issue-509-d7-sonar-rows-ids"
+scope = ["docs/sonar.md", "tests/test_config.py", "tests/test_sonar.py", "tests/test_sonar_checkout.py", "tests/test_sonar_rows.py"]
+opened_commit = "bf1f804292a22b23788050a78dd823fee2c44435"
+whole_reason = "docs/sonar.md's two steps print section, its ruled sentences and the tests that prove them, linked by SONAR IDs."
