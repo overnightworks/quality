@@ -52,6 +52,7 @@ def refused(pair: str) -> tuple[int, str, str, str]:
     ],
 )
 def test_a_variable_the_gate_sets_that_is_missing_is_its_pair(monkeypatch, run_env, door, name, value):
+    """CALLER-10, VERDICT-43."""
     repo, _ = run_env
     monkeypatch.setenv("GATE_BASE_SHA", head_commit(repo))
     if value is None:
@@ -83,6 +84,7 @@ def test_a_variable_the_gate_sets_that_is_missing_is_its_pair(monkeypatch, run_e
     ],
 )
 def test_a_malformed_variable_is_its_pair_and_never_its_value(monkeypatch, run_env, door, name, value, fact):
+    """VERDICT-44, VERDICT-45."""
     repo, _ = run_env
     token = "hunter2-token"
     monkeypatch.setenv("GITHUB_TOKEN", token)
@@ -94,6 +96,7 @@ def test_a_malformed_variable_is_its_pair_and_never_its_value(monkeypatch, run_e
 
 
 def test_a_base_branch_in_a_step_prints_escaped(monkeypatch, pull_request, door):
+    """VERDICT-41."""
     repo, commit_base = pull_request
     commit_base(None, '[gate]\nmandatory_jobs = ["checks"]\nsonar = "false"\n')
     (repo / CONFIG_PATH).write_text('[gate]\nmandatory_jobs = ["checks"]\n')
@@ -105,6 +108,7 @@ def test_a_base_branch_in_a_step_prints_escaped(monkeypatch, pull_request, door)
 
 
 def test_a_head_baseline_that_cannot_be_read_names_its_restore_step_apart(run_env, door):
+    """VERDICT-38."""
     repo, _ = run_env
     (repo / BASELINE_PATH).write_text("[ccn")
     code, out, err, _ = door()
@@ -139,6 +143,7 @@ def missing_frame(name: str) -> str:
     ],
 )
 def test_the_step_summary_is_one_code_block_no_line_can_close(run_env, door, job, earlier, summary):
+    """VERDICT-35, VERDICT-48."""
     repo, written = run_env
     if job is not None:
         (repo / CONFIG_PATH).write_text(f"[gate]\nmandatory_jobs = {json.dumps(['checks', job])}\n")
@@ -148,6 +153,7 @@ def test_the_step_summary_is_one_code_block_no_line_can_close(run_env, door, job
 
 
 def test_an_unwritable_step_summary_adds_its_pair_after_the_run(monkeypatch, run_env, door, tmp_path):
+    """VERDICT-38, VERDICT-49."""
     unwritable = tmp_path / "a-directory"
     unwritable.mkdir()
     monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(unwritable))
@@ -163,6 +169,7 @@ def test_an_unwritable_step_summary_adds_its_pair_after_the_run(monkeypatch, run
 
 
 def test_the_verdict_takes_v_and_prints_the_same(run_env, door):
+    """VERDICT-50."""
     _, summary = run_env
     plain = door()
     summary.unlink()
@@ -170,6 +177,7 @@ def test_the_verdict_takes_v_and_prints_the_same(run_env, door):
 
 
 def test_a_closed_stderr_moves_no_refusal_to_stdout(monkeypatch, door):
+    """VERDICT-38."""
     monkeypatch.delenv("GATE_NEEDS")
     monkeypatch.setattr(sys, "stderr", None)
     assert door()[:2] == (2, "")

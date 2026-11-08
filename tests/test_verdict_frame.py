@@ -290,6 +290,7 @@ def test_the_duration_runs_from_the_door_start(frame):
     ],
 )
 def test_a_malformed_pull_request_variable_is_its_pair(frame, run_env, monkeypatch, name, value, fact):
+    """VERDICT-44, VERDICT-45."""
     repo, _ = run_env
     token = "hunter2-token"
     monkeypatch.setenv("GITHUB_TOKEN", token)

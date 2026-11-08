@@ -595,14 +595,14 @@ EXAMPLES = {
 
 @pytest.mark.parametrize("lines", EXAMPLES.values(), ids=EXAMPLES.keys())
 def test_an_example_as_printed_with_its_indent_is_toml(lines):
-    """#279 acceptance 5: the lines a person copies, four spaces deep as `next:` prints them, parse as TOML."""
+    """O10: the lines a person copies, four spaces deep as `next:` prints them, parse as TOML."""
     assert isinstance(lines, tuple)
     tomllib.loads("\n".join(f"    {line}" for line in lines))
 
 
 @pytest.mark.parametrize("table", ARRAY_TABLES, ids=[table.name for table in ARRAY_TABLES])
 def test_an_example_entry_is_accepted_beside_a_gate_that_lists_its_job(table):
-    """#279 acceptance 5: each array table's example is a config the reader accepts."""
+    """O10: each array table's example is a config the reader accepts."""
     lines = table.example
     document = tomllib.loads("\n".join(lines))
     job = document.get("size", {}).get("generated", [{}])[0].get("job", "checks")
@@ -613,7 +613,7 @@ def test_an_example_entry_is_accepted_beside_a_gate_that_lists_its_job(table):
 
 
 def test_the_gate_example_is_accepted():
-    """#279 acceptance 5: the example of a missing or malformed [gate] is a valid gate."""
+    """O10, VERDICT-4: the example of a missing or malformed [gate] is a valid gate."""
     text = "\n".join(config.EXAMPLE)
     assert load_gate_settings(text).mandatory_jobs == tuple(tomllib.loads(text)["gate"]["mandatory_jobs"])
 

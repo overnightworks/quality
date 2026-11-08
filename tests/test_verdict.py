@@ -198,7 +198,7 @@ def test_a_base_without_the_config_contributes_nothing(build_repo):
 
 @pytest.mark.parametrize(("conclusion", "code"), [("success", 0), ("failure", 1)])
 def test_verdict_exit_code_and_summary_follow_the_run(capsys, run_env, conclusion, code):
-    """#6 rule 4: exit code and step summary follow the run."""
+    """VERDICT-32, VERDICT-33, VERDICT-35: exit code and step summary follow the run."""
     _, summary = run_env
     page = json.dumps(
         {
@@ -234,7 +234,7 @@ def test_a_job_name_with_a_line_feed_or_format_character_prints_as_one_escaped_p
 
 @UNKNOWN_KEY_CONFIGS
 def test_verdict_refuses_a_config_with_unknown_keys(capsys, run_env, config):
-    """#40 rule 2: the verdict keeps refusing unknown keys of quality/config.toml."""
+    """VERDICT-39: the verdict keeps refusing unknown keys of quality/config.toml."""
     repo, _ = run_env
     (repo / "quality/config.toml").write_text(config)
     assert cli.main(["verdict"], fetcher_for=lambda token: lambda url: ({"jobs": []}, None)) == 2
@@ -242,7 +242,7 @@ def test_verdict_refuses_a_config_with_unknown_keys(capsys, run_env, config):
 
 
 def test_a_head_without_a_config_is_missing_at_the_head(capsys, run_env):
-    """#6 rule 1 and #52 rules 3 and 4, cell 10: an absent head config is still "missing", now named at the head."""
+    """VERDICT-4: an absent head config is exit 2, its fact `is missing`."""
     repo, _ = run_env
     (repo / CONFIG_PATH).unlink()
     assert cli.main(["verdict"], fetcher_for=lambda token: lambda url: ({"jobs": []}, None)) == 2
@@ -250,7 +250,7 @@ def test_a_head_without_a_config_is_missing_at_the_head(capsys, run_env):
 
 
 def test_verdict_that_cannot_read_the_run_exits_two(capsys, run_env):
-    """#6 rule 2: a page error exits 2 with the reason."""
+    """READ-6, VERDICT-38: a page error exits 2 with the reason and its step."""
 
     def refuse(url):
         raise verdict.unreadable_jobs(url, urllib.error.HTTPError(url, 403, "Forbidden", {}, None))
@@ -265,7 +265,7 @@ def test_verdict_that_cannot_read_the_run_exits_two(capsys, run_env):
     ids=["not-json", "not-an-object", "job-not-an-object", "no-total-count"],
 )
 def test_a_page_of_the_wrong_shape_cannot_be_judged(body):
-    """defect:#6 finding 3: decoding and shape errors of a page are cannot-judge, not a traceback."""
+    """VERDICT-46: decoding and shape errors of a page are cannot judge, not a traceback."""
     with pytest.raises(CannotJudge, match="expected jobs page"):
         read_jobs("o/r", "1", lambda url: (body, None))
 
@@ -290,7 +290,7 @@ def test_a_malformed_base_config_names_the_base_commit(build_repo):
 
 
 def test_a_non_numeric_run_attempt_exits_two(monkeypatch, capsys, run_env):
-    """defect:#6 finding 3: a non-numeric GITHUB_RUN_ATTEMPT exits 2 and reaches the step summary."""
+    """VERDICT-35, VERDICT-44: exit 2, and the refusal reaches the step summary."""
     _, summary = run_env
     monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "first")
     page = json.dumps({"total_count": 0, "jobs": []})
@@ -529,20 +529,20 @@ def test_a_verdict_without_git_on_the_path_cannot_judge(capsys, monkeypatch, pul
 
 
 def test_the_github_fetcher_sends_the_token_and_reads_the_jobs_page(stub_server):
-    """#58 cell 4 (#5 finding 95): the real fetcher sends the token and returns the jobs page unchanged."""
+    """VERDICT-36: the real fetcher sends the token and returns the jobs page unchanged."""
     origin, heard = stub_server(reply(200, CHECKS_GREEN.encode()))
     assert (fetch_jobs(origin), heard[0]["Authorization"]) == (CHECKS_GREEN, "Bearer t")
 
 
 def test_a_truncated_jobs_page_cannot_be_judged(stub_server):
-    """#58 cell 2 (#5 finding 92): an IncompleteRead is cannot judge, which the verdict reports as exit 2."""
+    """VERDICT-20: a body cut short is cannot judge, which the verdict reports as exit 2."""
     origin, _ = stub_server(reply(200, b"abcd", Content_Length="100"))
     with pytest.raises(CannotJudge):
         fetch_jobs(origin)
 
 
 def test_the_github_token_never_follows_a_redirect(stub_server):
-    """#58 cell 3 (#5 finding 93): a 302 to another host is refused, and that host never sees the token."""
+    """VERDICT-37: a 302 to another host is refused, and that host never sees the token."""
     other_origin, other_heard = stub_server(reply(200, CHECKS_GREEN.encode()))
     origin, _ = stub_server(reply(302, b"", Location=other_origin.replace("127.0.0.1", "localhost") + "/stolen"))
     with pytest.raises(CannotJudge, match="HTTP Error 302"):
@@ -551,7 +551,7 @@ def test_the_github_token_never_follows_a_redirect(stub_server):
 
 
 def test_a_refused_jobs_page_keeps_the_verdicts_wording(stub_server):
-    """#58 rule 4: a GitHub that refuses reads as before, the URL asked and urllib's words, with the actions hint."""
+    """READ-6, VERDICT-47: a GitHub that refuses reads as the URL asked and urllib's words, with both steps."""
     origin, _ = stub_server(reply(403, b""))
     with pytest.raises(CannotJudge) as refused:
         fetch_jobs(origin)
@@ -561,7 +561,7 @@ def test_a_refused_jobs_page_keeps_the_verdicts_wording(stub_server):
 
 
 def test_git_output_is_decoded_as_utf_8_whatever_the_locale(build_repo):
-    """#58 cell 8 (#5 finding 94): under LANG=C a commit subject in UTF-8 still reads, it does not fail to decode."""
+    """under LANG=C a commit subject in UTF-8 still reads, it does not fail to decode."""
     repo = build_repo({})
     subprocess.run(["git", "-C", str(repo), *GIT_IDENTITY, "commit", "-q", "--allow-empty", "-m", "Grüße"], check=True)
     program = (
@@ -790,7 +790,7 @@ def test_a_malformed_declaration_cannot_be_judged(capsys, run_env, entry, named)
     ids=["run_attempt as text", "name null", "id as text"],
 )
 def test_a_job_field_of_the_wrong_type_cannot_be_judged(capsys, run_env, job_entry):
-    """#103 rule 6, cell 25 (#5 finding 14): a jobs page with a field of the wrong type is exit 2, the pair."""
+    """VERDICT-46: a jobs page with a field of the wrong type is exit 2, the pair."""
     page = json.dumps({"total_count": 1, "jobs": [{"status": "completed", "conclusion": "success", **job_entry}]})
     assert cli.main(["verdict"], fetcher_for=lambda token: lambda url: (page, None)) == 2
     captured = capsys.readouterr()

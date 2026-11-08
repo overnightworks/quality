@@ -86,7 +86,7 @@ def failed_reads():
 
 @pytest.mark.parametrize(("error", "kind", "fact", "steps"), failed_reads())
 def test_a_failed_jobs_read_names_its_cause(error, kind, fact, steps):
-    """READ-5 and READ-6: a 5xx is GitHub's, only 403 and 404 carry the actions step, a timeout says
+    """READ-5, READ-6, VERDICT-47: a 5xx is GitHub's, only 403 and 404 carry the actions step, a timeout says
     re-run."""
     classified = verdict.unreadable_jobs("u", error)
     assert (type(classified), classified.reason.fact, classified.reason.next_steps) == (kind, fact, steps)
