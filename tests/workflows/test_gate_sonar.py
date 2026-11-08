@@ -109,7 +109,7 @@ def test_the_sonar_job_and_its_properties_step_run_for_every_actor(gate, sonar_s
 
 
 def test_the_scan_and_findings_skip_on_exactly_the_output_the_door_writes(monkeypatch, capsys, build_repo, tmp_path, sonar_steps):
-    """Every token-holding step after the properties step skips only on the output and value the real door writes, and
+    """CALLER-9: every token-holding step after the properties step skips only on the output and value the real door writes, and
     only through `!=`, so a missing output runs the scan."""
     step_output = tmp_path / "github_output"
     run_properties(
@@ -200,7 +200,7 @@ def test_the_verdict_sees_a_base_only_on_a_pull_request(gate, event, expected):
 
 @pytest.mark.parametrize("variable", ["GATE_PULL_REQUEST", "GATE_HEAD_SHA"])
 def test_the_pull_requests_number_and_head_share_the_base_shas_guard(gate, variable):
-    """The verdict reads the pull request's number and head only beside a base, so each is guarded by the same event
+    """CALLER-10: the verdict reads the pull request's number and head only beside a base, so each is guarded by the same event
     as GATE_BASE_SHA and names a field of that pull request."""
     env = step_named(gate["jobs"]["verdict"]["steps"], "Verdict")["env"]
     base, guarded = BASE_SHA_EXPRESSION.fullmatch(env["GATE_BASE_SHA"]), BASE_SHA_EXPRESSION.fullmatch(env[variable])
