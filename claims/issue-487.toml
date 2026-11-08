@@ -1,7 +1,0 @@
-claim_id = "e31d1166c87c44779c7639a92221aad4"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "b5e68cbf420e96dd3b09717aa4565e3c03181bdf"
-branch = "claude/issue-487-d7-sonar-exception-ids"
-scope = ["docs/sonar.md", "tests/test_sonar_exception.py"]
-opened_commit = "2379741aa53c05ecaa6ea7565a3e90ba1ff51187"
