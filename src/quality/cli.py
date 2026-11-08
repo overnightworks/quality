@@ -142,9 +142,20 @@ def main(
     words = sys.argv[1:] if argv is None else argv
     reexecute = partial(ports.reexecute, words=words, environment=environment, live=live_line(channels.err))
     if arguments.command == "merge":
-        return _run_merge_door(
-            arguments, ports, reexecute, channels, standard_input,
-            gh=gh, transport=transport, remote_for=remote_for, clock=clock, now=now, environment=environment,
+        return run_merge(
+            arguments.pull_request.repository,
+            arguments.pull_request.number,
+            dry_run=arguments.dry_run,
+            gh=gh,
+            transport=transport,
+            ask=partial(ask, channel=channels.err, read_line=standard_input.read_line),
+            is_terminal=standard_input.is_terminal(),
+            now=now,
+            environment=environment,
+            clock=clock,
+            channels=channels,
+            judging=partial(pin.judging_of, door=MERGE_COMMAND, environment=environment, running=ports.running(), reexecute=reexecute),
+            remote_for=remote_for,
         )
     if arguments.command == "verdict":
         return run_verdict(fetcher_for, sleep, clock, channels, environment)
@@ -154,6 +165,13 @@ def main(
         if arguments.sonar_command == "properties":
             return sonar.run_properties(environment, clock, channels)
         return sonar.run_findings(environment, transport, sleep, clock, channels)
+    return _run_check_door(arguments, ports, reexecute, environment, clock, channels)
+
+
+def _run_check_door(
+    arguments: argparse.Namespace, ports: DoorPorts, reexecute: Callable[..., NoReturn], environment: Mapping[str, str],
+    clock: Callable[[], float], channels: Channels,
+) -> int:
     if arguments.staged:
         staged_run = partial(judge_staged_change, Path("."), staged.scan_change, verbose=arguments.verbose)
         return run_check(partial(ports.judging, Path("."), staged.COMMAND, True, environment), staged_run, partial(reexecute, command=staged.COMMAND), staged.COMMAND, clock, channels)
@@ -161,37 +179,6 @@ def main(
     repository_run = partial(judge_repository, Path("."), ports.locate_ruff, ports.locate_zizmor, verbose=arguments.verbose, named=arguments.areas, fix=fix)
     command = RERUN_COMMAND[fix]
     return run_check(partial(ports.judging, Path("."), command, False, environment), repository_run, partial(reexecute, command=command), command, clock, channels)
-
-
-def _run_merge_door(
-    arguments: argparse.Namespace,
-    ports: DoorPorts,
-    reexecute: Callable[..., NoReturn],
-    channels: Channels,
-    standard_input: Terminal,
-    *,
-    gh: GhRunner,
-    transport: Transport,
-    remote_for: RemoteFor,
-    clock: Callable[[], float],
-    now: Callable[[], datetime],
-    environment: Mapping[str, str],
-) -> int:
-    return run_merge(
-        arguments.pull_request.repository,
-        arguments.pull_request.number,
-        dry_run=arguments.dry_run,
-        gh=gh,
-        transport=transport,
-        ask=partial(ask, channel=channels.err, read_line=standard_input.read_line),
-        is_terminal=standard_input.is_terminal(),
-        now=now,
-        environment=environment,
-        clock=clock,
-        channels=channels,
-        judging=partial(pin.judging_of, door=MERGE_COMMAND, environment=environment, running=ports.running(), reexecute=reexecute),
-        remote_for=remote_for,
-    )
 
 
 def _fix_mode(arguments: argparse.Namespace) -> Fix | None:
