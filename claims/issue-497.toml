@@ -1,0 +1,8 @@
+claim_id = "70dfc62498074f1b9afa41255974479a"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "27e71c06caf2d6ace0dca4c40b659b766d492fd4"
+branch = "claude/issue-497-d7-gate-4a"
+scope = ["docs/gate.md", "tests/test_cli_workflow_invocations.py", "tests/workflows/test_gate_release_pin.py", "tests/workflows/test_gate_scanners.py", "tests/workflows/test_gate_sonar.py", "tests/workflows/test_gate_tool_isolation.py"]
+opened_commit = "f6bb4f126297bc56dda413822fea05a659fb53c2"
+whole_reason = "docs/gate.md's gate.yml wiring and the workflow tests that prove it, linked by CALLER IDs, with D6 of the three workflow modules this pair owns whole."
