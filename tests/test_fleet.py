@@ -51,7 +51,7 @@ CLONE = clone_function("copied", "value", "local")
 
 
 def test_a_public_repo_is_one_row_of_commit_lines_ratio_and_debt(fleet_report, public, remotes):
-    """Cell 1, rule 2: commit, physical lines prod / test, test:prod with two decimals and the debt counts."""
+    """FLEET-78, FLEET-80, FLEET-84: a repository is one row of lines, languages and test:prod ratio."""
     name = public("alpha", {"src/app.py": "a = 1\nb = 2\nc = 3\n", "tests/test_app.py": "x = 1\n" * 5})
     code, output = fleet_report(name)
     assert code == 0, output
@@ -61,7 +61,7 @@ def test_a_public_repo_is_one_row_of_commit_lines_ratio_and_debt(fleet_report, p
 
 
 def test_debt_is_counted_from_the_size_rules_thresholds(fleet_report, public):
-    """Cell 2, rule 2: 800 file lines, 60 function lines and CCN 16 are debt; 799, 59 and CCN 15 are not."""
+    """FLEET-86: files of 800 lines, functions of 60 and CCN 16 are debt; one less is not."""
     name = public(
         "edges",
         {
@@ -104,7 +104,7 @@ def test_debt_is_counted_from_the_size_rules_thresholds(fleet_report, public):
     ],
 )
 def test_the_file_name_decides_production_or_test(fleet_report, public, path, lines):
-    """Cell 3, rule 2: production versus test is ratchet.area_of's name rule; #119 E3, cell 8, per language."""
+    """FLEET-83: a file's name decides production or test by the size rule's name rule, per language."""
     code, output = fleet_report(public("named", {path: "x = 1\n"}))
     assert code == 0, output
     assert row(output, "o/named")[3] == lines
@@ -114,14 +114,14 @@ def test_the_file_name_decides_production_or_test(fleet_report, public, path, li
     "source", ["a = 1\n\n# note\n", "a = 1\r\n\r\n# note\r\n", "a = 1\r\r# note\r"], ids=["LF", "CRLF", "CR"]
 )
 def test_blank_and_comment_lines_count_whatever_the_line_ending(fleet_report, public, source):
-    """Cell 4, rule 2: physical lines, as the 800-line rule counts them."""
+    """FLEET-78: physical lines, blank and comment lines included, whatever the line ending."""
     code, output = fleet_report(public("endings", {"src/a.py": source}))
     assert code == 0, output
     assert row(output, "o/endings")[3] == "3 / 0"
 
 
 def test_untracked_files_are_not_counted(fleet_report, public, remotes):
-    """Cell 5, rule 2: only tracked Python files count."""
+    """A file only the source's working tree holds is not in the measured clone."""
     name = public("tracked", {"src/a.py": "a = 1\n", ".gitignore": "ignored.py\n"})
     directory = remotes / name
     (directory / "untracked.py").write_text("u = 1\n" * 10)
@@ -140,7 +140,7 @@ def test_untracked_files_are_not_counted(fleet_report, public, remotes):
     ids=["tests only", "no Python"],
 )
 def test_without_production_lines_the_ratio_is_a_dash(fleet_report, public, files, cells):
-    """Cells 6 and 7, rule 2: no production lines gives "—"; a repository without measured files is a row of zeros."""
+    """FLEET-77, FLEET-85: a file of no size-rule language adds no line, and no production lines gives a dash."""
     code, output = fleet_report(public("sparse", files))
     assert code == 0, output
     assert row(output, "o/sparse")[3:8] == cells
@@ -170,22 +170,22 @@ PYTHON_100 = {"src/app.py": long_file(100), "tests/test_app.py": long_file(20)}
         ({"README.md": "# nothing measured\n", "run.sh": "echo hi\n"}, "—"),
     ],
     ids=[
-        "#119 cell 1 a Python-only repository",
-        "#119 cell 2 each language with production and tests together, largest first, no shell, CSS or HTML",
-        "#119 cell 2 equal lines are ordered by name",
-        "#119 cell 3 no measured file",
+        "a Python-only repository",
+        "each language with production and tests together, largest first, no shell, CSS or HTML",
+        "equal lines are ordered by name",
+        "no measured file",
     ],
 )
 def test_the_languages_cell_lists_each_measured_language_largest_first(fleet_report, public, files, cell):
-    """#119 E1: production and tests together; a language the table lacks appears nowhere."""
+    """FLEET-77, FLEET-80, FLEET-81, FLEET-82: each size-rule language with its lines, largest first, ties by name."""
     code, output = fleet_report(public("polyglot", files))
     assert code == 0, output
     assert row(output, "o/polyglot")[LANGUAGES_CELL] == cell
 
 
 def test_the_lines_columns_count_every_language_and_the_function_columns_only_python(fleet_report, public):
-    """#119 E2, cells 5 and 6: a 1,210-line .ts is a production file of 800 lines or more; its 1,208-line function
-    is neither a function of 60 lines nor a CCN debt."""
+    """FLEET-77, FLEET-84, FLEET-86: a 1,210-line .ts is a production file from 800 lines, and its 1,208-line
+    function is no function debt."""
     files = {"src/api.ts": typescript_function(1208) + typescript_file(2), "tests/api.spec.ts": typescript_file(10)}
     code, output = fleet_report(public("typed", files))
     assert code == 0, output
@@ -193,7 +193,7 @@ def test_the_lines_columns_count_every_language_and_the_function_columns_only_py
 
 
 def test_a_minified_bundle_counts_its_one_line_and_nothing_is_said_to_be_skipped(fleet_report, public):
-    """#119 O4, cell 7: counted by lines like any file; the Note stays empty."""
+    """FLEET-78, FLEET-80, FLEET-86: a minified bundle counts its one line, so it is no file from 800 lines."""
     code, output = fleet_report(public("bundled", {"dist/index.js": minified_bundle()}))
     assert code == 0, output
     cells = row(output, "o/bundled")
@@ -202,7 +202,7 @@ def test_a_minified_bundle_counts_its_one_line_and_nothing_is_said_to_be_skipped
 
 
 def test_a_file_of_another_language_is_never_not_valid_python(fleet_report, public):
-    """#119 cell 23: only an unparsable .py is counted in the Note."""
+    """FLEET-90: only an unparsable .py is counted in the note."""
     files = {"src/broken.py": "def (:\n", "src/api.ts": typescript_file(3), "src/Card.svelte": "<p>{</p>\n"}
     code, output = fleet_report(public("mixed", files))
     assert code == 0, output
@@ -210,7 +210,7 @@ def test_a_file_of_another_language_is_never_not_valid_python(fleet_report, publ
 
 
 def test_an_unparsable_file_is_counted_but_never_named(fleet_report, public):
-    """Cell 8, rule 6: its lines count, the row says how many files are not valid Python, the name stays out."""
+    """FLEET-89, FLEET-90, FLEET-91: an unparsable .py keeps its lines, and the note counts it without naming it."""
     code, output = fleet_report(public("broken", {"src/secret_name.py": "def (:\n", "src/ok.py": "a = 1\n"}))
     assert code == 0, output
     assert row(output, "o/broken")[3] == "2 / 0"
@@ -219,7 +219,7 @@ def test_an_unparsable_file_is_counted_but_never_named(fleet_report, public):
 
 
 def test_a_file_name_that_is_not_utf8_is_measured(fleet_report, public):
-    """Cell 9: a tracked .py whose name is not UTF-8 does not crash the row."""
+    """FLEET-79: a tracked .py whose name is not UTF-8 is measured."""
     code, output = fleet_report(public("bytes", {"caf\udce9.py": "a = 1\n"}))
     assert code == 0, output
     assert row(output, "o/bytes")[3] == "1 / 0"
@@ -280,9 +280,8 @@ def private_host(monkeypatch) -> Iterator[None]:
 
 
 def test_no_configured_credential_reaches_a_host_that_asks_for_one(fleet_report, public, private_host, tmp_path, monkeypatch):
-    """Cell 14, rules 3 and 4, and the only URL asked for: a helper, an askpass and an Authorization header in system,
-    global or environment config are never used, the repository stays unmeasured and the host sees only that
-    repository's paths."""
+    """FLEET-73, FLEET-76: a helper, an askpass and an Authorization header in system, global or environment config are
+    never used, the host sees only the repository's paths, and the repository stays unmeasured."""
     home = tmp_path / "home"
     home.mkdir()
     asked = tmp_path / "asked"
@@ -317,7 +316,7 @@ def test_the_git_environment_never_holds_the_listing_token(tmp_path, monkeypatch
 
 
 def test_only_the_default_branch_tip_is_measured(fleet_report, public, remotes):
-    """Cell 15, rule 3: a shallow clone of the default branch; another branch's files do not count."""
+    """FLEET-75: the default branch tip is measured; another branch's files do not count."""
     name = public("branches", {"a.py": "a = 1\n"})
     directory = remotes / name
     tip = head_commit(directory)
@@ -359,14 +358,14 @@ def report_signalled(fleet: Path, scratch: Path, fake_git: Path) -> int:
 
 @pytest.mark.parametrize("outcome", ["measured", "cannot judge"])
 def test_no_temporary_clone_outlives_the_run(fleet_report, public, missing, scratch, outcome):
-    """Cell 16, rule 3: the temporary directory goes after success and after cannot judge."""
+    """FLEET-74: the temporary directory goes after a measured repository and after one that cannot be judged."""
     fleet_report(missing if outcome == "cannot judge" else public("cleaned", {"a.py": "a = 1\n"}))
     assert list(scratch.iterdir()) == []
 
 
 @pytest.mark.parametrize("stop", [signal.SIGINT, signal.SIGTERM], ids=["Ctrl-C", "SIGTERM"])
 def test_no_temporary_clone_outlives_a_stopped_run(public, scratch, tmp_path, stop):
-    """Cell 16, rule 3: the temporary directory goes when Ctrl-C, a cancelled job or `timeout` stops the run."""
+    """FLEET-74: the temporary directory goes when Ctrl-C, a cancelled job or `timeout` stops the run."""
     name = public("cleaned", {"a.py": "a = 1\n"})
     fleet = write_fleet(tmp_path / "fleet", [name])
     status = report_signalled(fleet, scratch, git_that_signals(tmp_path / "bin", stop.name.removeprefix("SIG")))
@@ -590,7 +589,7 @@ def test_the_workflow_reads_only_and_pins_what_ci_pins():
     ids=["two production files", "two test files", "a test copying production"],
 )
 def test_the_clone_pairs_cell_counts_a_pair_as_test_only_when_both_sides_are_tests(fleet_report, public, files, pairs):
-    """#117 E7, rule 3: a function copied between two files is one pair, prod / test."""
+    """FLEET-87, FLEET-88: a function copied between two files is one pair; it is a test pair if both are tests."""
     code, output = fleet_report(public("twins", files))
     assert code == 0, output
     assert row(output, "o/twins")[8] == pairs
