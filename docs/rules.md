@@ -312,19 +312,22 @@ It applies these rules:
   `2`). Names compare in exact case (LAYOUT-9), all findings print sorted by path (LAYOUT-10) and no configuration
   switches the rule off. Named gaps, waiting for usage evidence: a `tests/` folder elsewhere (`src/p/tests/`), a project
   with only `setup.py`, a project whose `src/` holds only modules, and a package named `support` or `fixtures`.
-  Every `test_*.py` outside `fixtures/` and the top-level `e2e/` mirrors the module it tests, one direction. Its
-  folder mirrors a folder of `src/<package>/` (`tests/api/` is `src/<package>/api/`; with several packages
-  `tests/<package>/api/` is `src/<package>/api/`), and that folder holds a tracked `.py` at any depth. `tests/scripts/`
-  mirrors `<project>/scripts/` and `tests/workflows/` mirrors the root's `.github/workflows/`, directly and only in the
-  root project; both come before any package name. Each candidate of the mirrored folder has a key: `__x__` reads as
-  `x`, otherwise one leading `_` is dropped; candidates are the `.py` files and the subfolders that hold a `.py` (in
-  `scripts/` any file and subfolder, in `.github/workflows/` the `.yml` and `.yaml` stems with `-` read as `_`), and in
-  the top folder of a package also its own name. The test's name, `test_<name>.py`, splits at `_` into words and its
-  longest word prefix, ending at a word boundary, must equal a key exactly; the rest is the aspect, and a name
-  whose first word is empty (`test_.py`, `test__x.py`) has no prefix. A `test_*.py` in a `support/` folder is red.
-  A member's tests map only into the member's own `src/` and `scripts/`. Each case has its own reason and fix, a
-  file that breaks the folder and the name condition together gets one finding with both reasons, and every fix ends
-  with declaring the path. A test module that mirrors nothing says `misplaced`, its fact joining the reasons by `; `.
+  Every `test_*.py` outside `fixtures/` and the top-level `e2e/` mirrors the module it tests, one direction
+  (LAYOUT-11). Its folder mirrors a folder of `src/<package>/` (`tests/api/` is `src/<package>/api/` (LAYOUT-12); with
+  several packages `tests/<package>/api/` is `src/<package>/api/` (LAYOUT-13)), and that folder holds a tracked `.py`
+  at any depth (LAYOUT-14). `tests/scripts/` mirrors `<project>/scripts/` (LAYOUT-15) and `tests/workflows/` mirrors
+  the root's `.github/workflows/` (LAYOUT-16), directly and only in the root project (LAYOUT-17); both come before any
+  package name (LAYOUT-18). Each candidate of the mirrored folder has a key: `__x__` reads as `x`, otherwise one
+  leading `_` is dropped (LAYOUT-19); candidates are the `.py` files and the subfolders that hold a `.py` (LAYOUT-20)
+  (in `scripts/` any file and subfolder (LAYOUT-21), in `.github/workflows/` the `.yml` and `.yaml` stems with `-`
+  read as `_` (LAYOUT-22)), and in the top folder of a package also its own name (LAYOUT-23). The test's name,
+  `test_<name>.py`, splits at `_` into words and a word prefix of it, ending at a word boundary, must equal a key
+  exactly (LAYOUT-24); the rest is the aspect, and a name whose first word is empty (`test_.py`, `test__x.py`) has no
+  prefix (LAYOUT-25). A `test_*.py` in a `support/` folder is red (LAYOUT-26). A member's tests map only into the
+  member's own `src/` and `scripts/` (LAYOUT-27). Each case has its own fact and fix (LAYOUT-28), a file that breaks
+  the folder and the name condition together gets one finding with both facts (LAYOUT-29), and every fix ends with
+  declaring the path. A test module that mirrors nothing says `misplaced` (LAYOUT-30), its fact joining the facts by
+  `; ` (LAYOUT-31).
 
   Ruled by the operator: `tests/` mirrors `src/<package>/` by path, unit and integration tests are told apart by a
   pytest marker, and only `e2e` has its own folder.
