@@ -36,9 +36,9 @@ It applies these rules:
   line with its line and column (or its position for a character YAML refuses, `nested too deeply`, `a value does not
   fit its tag`, or `not valid YAML`) (COMPOSE-10).
   A port that is neither text, a number nor a mapping whose `published` (or, without one, `target`) is text or a number
-  is a finding (COMPOSE-11). A `ports` that is no list is a finding too (COMPOSE-12). A service with
-  `network_mode: host` publishes whatever its process binds, so it is a finding too (COMPOSE-13), and so is a
-  `network_mode` that holds a Compose interpolation (`${...}`), which may resolve to `host` (COMPOSE-14); `none`,
+  is a finding (COMPOSE-11). A `ports` that is neither a list nor empty, `0` or `false` is a finding too (COMPOSE-12). A
+  service with `network_mode: host` publishes whatever its process binds, so it is a finding too (COMPOSE-13), and so is
+  a `network_mode` that holds a Compose interpolation (`${...}`), which may resolve to `host` (COMPOSE-14); `none`,
   `service:x` and any other literal are clean (COMPOSE-15). A service is declared in `quality/config.toml`, a table of
   its own beside `[[layout.allow]]`, with the exact tracked path of its compose file, the service name and a one-line
   reason (COMPOSE-16):
