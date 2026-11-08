@@ -12,6 +12,12 @@ root `sonar-project.properties` (SONAR-47). A missing or empty token is red (`er
 step to set and pass the secret), never skipped while SonarCloud runs (SONAR-68); `[gate] sonar = false` turns it off
 ([the gate](gate.md#gateyml)). Dependabot runs resolve the Dependabot secret of the same name.
 
+Ruled by the operator:
+
+- The secret is passed by name. Dependabot uses its own token under the same name, which is a separate org Dependabot
+  secret.
+- The CI scanner analyses, and automatic analysis is off.
+
 The `sonar` job checks out the caller with its full history and without stored credentials, holds `contents: read` alone
 and is bounded by a timeout (SONAR-85). `SONAR_TOKEN` reaches only the properties check, the scan and the findings step,
 each through its own `env`, never through a workflow's or a job's (SONAR-86). The pull request's number reaches the
@@ -19,13 +25,15 @@ findings step alone, as `PULL_REQUEST_NUMBER` (SONAR-87).
 
 ### What the two steps print
 
-Both commands print rows on stdout and end with one closing line: `✓ clean · <time>`, `✓ off · nothing reaches
-SonarCloud · <time>`, `✓ clean · new 0 · legacy N · <time>`, `! red · …` or `✓ report only · …`. When they cannot judge
-(exit `2`) they print the `error:`/`next:` pair on stderr instead. A refusal that knows its own step names it: a
-`quality/config.toml` it cannot read shows its example to copy and `push the fix; the gate judges the new commit`; an
-empty `SONAR_TOKEN` the step to set the secret and pass it to `gate.yml`; an unwritable `GITHUB_OUTPUT` `fix what the
-error names, then re-run this run's failed jobs`; a changed tracked file the step to let the artifact add reports only. Every other refusal falls back to its step's general step:
-`properties` the push step, `findings` the re-run step. `-v` adds nothing: neither step runs a scanner.
+Both commands print rows on stdout and end with one closing line: `✓ clean · <time>` when the properties check passes
+(SONAR-100), `✓ off · nothing reaches SonarCloud · <time>`, `✓ clean · new 0 · legacy N · <time>`, `! red · …` or
+`✓ report only · …`. When they cannot judge (exit `2`) they print the `error:`/`next:` pair on stderr instead
+(SONAR-101). A refusal that knows its own step names it: a `quality/config.toml` it cannot read shows
+[its example to copy](output.md#refusals) and `push the fix; the gate judges the new commit` (SONAR-102); an empty
+`SONAR_TOKEN` the step to set the secret and pass it to `gate.yml`; an unwritable `GITHUB_OUTPUT`
+`fix what the error names, then re-run this run's failed jobs` (SONAR-103); a changed tracked file the step to let the
+artifact add reports only (SONAR-104). Every other refusal falls back to its step's general step: `properties` the push
+step, `findings` the re-run step (SONAR-105). `-v` adds nothing: neither step runs a scanner (SONAR-106).
 
 ```text
 $ quality sonar properties
@@ -133,19 +141,34 @@ an unreachable host is exit `2` too (SONAR-82).
 
 ### New and legacy findings
 
+Ruled by the operator:
+
+- Every pull request prints both counts. "Legacy" means the open findings of the repository's default branch. They come
+  from the same `issues/search` with the same open statuses. Legacy findings are only counted (`ps=1`, the answer's
+  total), never listed. New findings are listed.
+- A run whose scope is the repository's default branch fails on any open finding. It lists them. A run on any other
+  branch stays report-only and exits 0.
+- With `legacy = "fail"` under `[gate]` in `quality/config.toml`, a pull request fails while the default branch has any
+  open finding, even when the pull request adds none. Any other value is a config error, exit 2. The config is read and
+  validated before the first SonarCloud request.
+
 `gate.yml` passes the repository's default branch (`github.event.repository.default_branch`) as `DEFAULT_BRANCH` to
 the findings step alone (SONAR-30); it is never assumed to be `main` (SONAR-31), and a missing or empty value is exit
 `2` before any request (SONAR-32). "Legacy" means the open findings of that branch, counted by the same
 `issues/search` with the same open statuses, and only counted, never listed (SONAR-33). `quality sonar findings`
 counts them on a pull request only (SONAR-34).
-- **Pull request:** the rows `· analysis  pull request  #<n> · <key>`, `new`, `legacy` and `quality gate`; new
-  findings are listed below `! new  N findings` and make the run exit `1` (SONAR-35). Both counts always stand in the
-  closing line, for example `✓ clean · new 0 · legacy 17 · 3s` (SONAR-36), the legacy count as `legacy unknown` while
-  the default branch is not analysed yet (SONAR-67).
+- **Pull request:** the rows `· analysis  pull request  #<n> · <key>`, `new`, `legacy` and `quality gate` (SONAR-107);
+  new findings are listed below `! new  N findings` and make the run exit `1` (SONAR-35). Both counts always stand in
+  the closing line, for example `✓ clean · new 0 · legacy 17 · 3s` (SONAR-36), the legacy count as `legacy unknown`
+  while the default branch is not analysed yet (SONAR-67).
 - **Default branch:** a run on the default branch exits `1` on any open finding and lists them below
   `! open  N findings` (SONAR-37).
 - **Any other branch:** report only, exit `0`: `· open  N findings  report only`, each finding a `·` note below it
   (SONAR-38).
+
+A run on the default branch or on another branch starts with `· analysis  default branch  <default> · <key>` or
+`· analysis  other branch  <branch> · <key>` and ends with `✓ clean · 0 open on <default> · <time>`,
+`! red · N open on <default> · <time>` or `✓ report only · N open on <branch> · <time>` (SONAR-108).
 
 `[gate] legacy` in `quality/config.toml` decides whether legacy findings fail a pull request. `quality sonar findings`
 reads that file like the verdict does: a missing file, or one without `[gate] mandatory_jobs`, is exit `2` before any
@@ -162,8 +185,9 @@ legacy = "fail"
 - `"fail"`: a pull request fails while the default branch has any open finding, even when it adds none (SONAR-41).
 - Any other value is a config error (exit `2`), read before the first SonarCloud request (SONAR-42).
 - A pull request whose base config says `legacy = "fail"` and whose head config says anything else is red in the verdict
-  (the loosening `legacy fail → report`; an absent key counts as `report`), like a removed mandatory job.
-- `legacy = "fail"` beside `[gate] sonar = false` is a config error (exit `2`).
+  (the loosening `legacy fail → report`; an absent key counts as `report`), like a removed mandatory job
+  ([the gate](gate.md#gateyml)).
+- `legacy = "fail"` beside `[gate] sonar = false` is a config error (exit `2`) (SONAR-109).
 
 On pull requests and default-branch runs `quality sonar findings` reads `api/project_branches/list` once before the
 counts (SONAR-43). A run on any other branch does not read it (SONAR-44).

@@ -77,7 +77,7 @@ def rewrite_all(*changes):
 def test_properties_refuses_a_checkout_whose_tracked_files_differ_from_the_commit(
     monkeypatch, capsys, build_repo, tmp_path, committed, environment, arrange, fact
 ):
-    """SONAR-13, SONAR-48, SONAR-49: An artifact that changes a tracked file is exit 2 before any config read, and nothing is handed to the job."""
+    """SONAR-13, SONAR-48, SONAR-49, SONAR-104: An artifact that changes a tracked file is exit 2 before any config read, and nothing is handed to the job."""
     step_output = tmp_path / "github_output"
     code, out, err = run_properties(
         monkeypatch,
