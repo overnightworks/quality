@@ -159,18 +159,23 @@ the rerun (FLEET-69)). A failure of GitHub adds `fix what the error names, then 
 after the shape when the file is also at fault (FLEET-70). No listed text is printed (FLEET-71), and a private
 repository a token can list is dropped without a trace (FLEET-72).
 
-- Each repository is cloned from `https://github.com/<owner>/<name>` with `git -c credential.helper= clone --depth 1 --no-tags`, `GIT_TERMINAL_PROMPT=0` and no
-  askpass, into a temporary directory that is removed on every exit, and its default branch tip is measured.
+- Each repository is cloned from `https://github.com/<owner>/<name>` (FLEET-73) with `git -c credential.helper= clone
+  --depth 1 --no-tags`, `GIT_TERMINAL_PROMPT=0` and no askpass, into a temporary directory that is removed on every
+  exit (FLEET-74), and its default branch tip is measured (FLEET-75).
 - git runs anonymously: without system, global or `GIT_CONFIG_*` config and with an empty `HOME`, so no configured
-  header, helper or `~/.netrc` reaches the host.
-- Lines are the physical lines of the tracked files of the `size` rule's languages, the count its 800-line limit uses
-  (blank and comment lines included); `Languages` lists each with its lines, production and tests together, largest
-  first, ties by name, and `—` for a row with no measured file. Production versus test is the `size` rule's file-name rule, so `scripts/test_inventory.py` counts as test.
-  `test:prod` is test lines divided by production lines with two decimals, `—` without production lines.
-  The debt columns count files from 800 lines, and Python's functions from 60 lines and with a CCN above 15.
+  header, helper or `~/.netrc` reaches the host (FLEET-76).
+- Lines are the physical lines of the tracked files of the `size` rule's languages (FLEET-77), the count its 800-line
+  limit uses (blank and comment lines included) (FLEET-78), and a tracked file whose name is not UTF-8 counts like any
+  other (FLEET-79); `Languages` lists each with its lines, production and tests together (FLEET-80), largest first,
+  ties by name (FLEET-81), and `—` for a row with no measured file (FLEET-82). Production versus test is the `size`
+  rule's file-name rule, so `scripts/test_inventory.py` counts as test (FLEET-83). `test:prod` is test lines divided by
+  production lines with two decimals (FLEET-84), `—` without production lines (FLEET-85). The debt columns count files
+  from 800 lines, and Python's functions from 60 lines and with a CCN above 15, [`size`](rules.md)'s debt (FLEET-86).
 - `Clone pairs prod / test` counts the `clone` rule's pairs (two near-identical functions in two files, at 40 tokens and
-  90 %); a pair counts as test only when both sides are tests, so a test that copies production code counts as prod.
-- A `.py` file Python cannot parse still has its lines counted; the row's note says how many such files there are, never which.
+  90 %) (FLEET-87); a pair counts as test only when both sides are tests, so a test that copies production code counts
+  as prod (FLEET-88).
+- A `.py` file Python cannot parse still has its lines counted (FLEET-89); the row's note says how many such files there
+  are (FLEET-90), never which (FLEET-91).
 - The matrix stands under a heading naming the newest release tag of `overnightworks/quality` by version, read by an
   anonymous `git ls-remote --tags` and never from the running code's version; an annotated tag counts at the commit it
   points to, a name that is no release tag is ignored, and a listing without a release tag is unreadable (FLEET-1). It

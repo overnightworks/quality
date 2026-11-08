@@ -1,4 +1,4 @@
-"""#119: the languages the size rule measures and the area a file belongs to."""
+"""The languages the size rule measures and the area a file belongs to."""
 
 import pytest
 
@@ -24,14 +24,14 @@ MIXED_TREE = {
         ({"src/a.py": long_file(3), "src/dist/index.js": minified_bundle()}, [Language.PYTHON, Language.JAVASCRIPT]),
     ],
     ids=[
-        "#119 cell 10 a Python-only tree names Python",
-        "#119 cell 11 a mixed tree lists its languages largest first, shell and CSS absent",
-        "#119 cell 11 equal lines are ordered by name",
-        "#119 cell 12 a minified bundle's language is listed",
+        "a Python-only tree names Python",
+        "a mixed tree lists its languages largest first, shell and CSS absent",
+        "equal lines are ordered by name",
+        "a minified bundle's language is listed",
     ],
 )
 def test_the_measured_languages_are_listed_largest_first_and_by_name_on_a_tie(files, languages):
-    """#119 E5: the report's reading of a tree names each measured language."""
+    """FLEET-77, FLEET-81: the report's reading of a tree names each measured language, largest first, ties by name."""
     assert list(language_lines(measure({path: text.encode() for path, text in files.items()}))) == languages
 
 
@@ -39,8 +39,8 @@ def test_the_measured_languages_are_listed_largest_first_and_by_name_on_a_tie(fi
     ("path", "area"),
     [
         ("src/a.test.ts", Area.TESTS),
-        pytest.param("src/a.test-d.ts", Area.TESTS, id="H21 test-d"),
-        pytest.param("src/a.spec-d.ts", Area.TESTS, id="H21 spec-d"),
+        pytest.param("src/a.test-d.ts", Area.TESTS, id="test-d"),
+        pytest.param("src/a.spec-d.ts", Area.TESTS, id="spec-d"),
         ("e2e/login.spec.ts", Area.TESTS),
         ("src/decision.svelte.test.ts", Area.TESTS),
         ("src/__tests__/x.ts", Area.TESTS),
@@ -53,5 +53,5 @@ def test_the_measured_languages_are_listed_largest_first_and_by_name_on_a_tie(fi
     ],
 )
 def test_the_name_rule_of_a_typescript_or_javascript_file_is_the_runners_defaults(path, area):
-    """#119 E3, cell 9: `*.test.*`, `*.spec.*` and `__tests__/` for TS and JS; Svelte and Vue by directory only."""
+    """FLEET-83: `*.test.*`, `*.spec.*` and `__tests__/` for TS and JS; Svelte and Vue by directory only."""
     assert area_of(f"src/{path}") is area
