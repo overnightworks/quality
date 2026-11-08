@@ -1,4 +1,4 @@
-"""#174 sentence 2: a [[size.generated]] declaration is a loosening that declares itself."""
+"""A [[size.generated]] declaration is a loosening that declares itself."""
 
 import datetime
 
@@ -51,18 +51,18 @@ def declared(path=TYPES_FILE, item="#174"):
     ],
 )
 def test_adding_or_re_pathing_a_declaration_is_a_self_declared_loosening(base, head, expected):
-    """#174 sentence 2, acceptance 5: only a head path the base does not declare loosens, bound to the head
-    declaration's own item and date; inherited, removed and other-key changes are green."""
+    """VERDICT-68, VERDICT-69: only a head path the base does not declare loosens, bound to the head declaration's own
+    item and date; inherited, removed and other-key changes are green."""
     assert judged(base, head) == expected
 
 
 def test_a_run_without_a_base_judges_no_generated_file():
-    """#174 sentence 2: a push judges no loosening, so a declaration leaves it green."""
+    """VERDICT-61: a push judges no loosening, so a declaration leaves it green."""
     assert judged(gate_config("checks"), WITH_TYPES, with_base=False) == green()
 
 
 def test_a_gate_loosened_entry_with_the_generated_text_matches_nothing():
-    """#174 sentence 2: the declaration declares itself, so a [[gate.loosened]] entry naming it binds nothing."""
+    """VERDICT-70: the declaration declares itself, so a [[gate.loosened]] entry naming it binds nothing."""
     what = f"size leaves out generated file {TYPES_FILE}"
     head = gate_config("checks", declared=(declaration(what),)) + generated_config()
     assert judged(gate_config("checks"), head) == (((what, "#174 of 2026-10-30"),), (what,), True, False)

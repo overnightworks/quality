@@ -139,7 +139,7 @@ def test_base_config_is_read_from_the_base_commit(build_repo):
 
 
 def test_the_legacy_mode_is_read_from_the_base_commit(build_repo):
-    """#33 sentence 4: the base config's legacy mode is read from the base commit."""
+    """VERDICT-51: the base config's legacy mode is read from the base commit."""
     repo = build_repo({"quality/config.toml": '[gate]\nmandatory_jobs = ["tests"]\nlegacy = "fail"\n'})
     assert read_base(repo, head_commit(repo)).settings == GateSettings(("tests",), LegacyMode.FAIL)
 
@@ -155,7 +155,7 @@ def test_the_legacy_mode_is_read_from_the_base_commit(build_repo):
     ids=["fail to report", "fail kept", "report to fail", "report kept"],
 )
 def test_switching_legacy_back_from_fail_is_a_loosening(base_legacy, legacy, expected):
-    """#33 sentence 4: a head config that is not "fail" under a base config that is shows as loosened and is red"""
+    """VERDICT-51: a head config that is not "fail" under a base config that is shows as loosened and is red"""
     head, base = Side(GateSettings(("checks",), legacy), None), Side(GateSettings(("checks",), base_legacy), None)
     result = judge(head, base, [job()], GREEN_GATE, 1, NO_RENAMES)
     assert (result.undeclared, result.green) == (expected, not expected)
@@ -198,7 +198,7 @@ def test_a_base_without_the_config_contributes_nothing(build_repo):
 
 @pytest.mark.parametrize(("conclusion", "code"), [("success", 0), ("failure", 1)])
 def test_verdict_exit_code_and_summary_follow_the_run(capsys, run_env, conclusion, code):
-    """VERDICT-32, VERDICT-33, VERDICT-35: exit code and step summary follow the run."""
+    """VERDICT-32, VERDICT-35: exit code and step summary follow the run."""
     _, summary = run_env
     page = json.dumps(
         {
@@ -218,7 +218,7 @@ def test_verdict_exit_code_and_summary_follow_the_run(capsys, run_env, conclusio
 def test_a_job_name_with_a_line_feed_or_format_character_prints_as_one_escaped_problem_line_in_log_and_summary(
     capsys, run_env, job_name_in_toml, printed
 ):
-    """#97 rule 2, cell 15 (E6) and #228 rule 7: the job's row is escaped, the same in the step summary, and the closing line stays a line."""
+    """VERDICT-54: the job's row is escaped, the same in the step summary, and the closing line stays a line."""
     repo, summary = run_env
     (repo / "quality/config.toml").write_text(f'[gate]\nmandatory_jobs = ["checks", "{job_name_in_toml}"]\n')
     page = json.dumps(
@@ -290,7 +290,7 @@ def test_a_malformed_base_config_names_the_base_commit(build_repo):
 
 
 def test_a_non_numeric_run_attempt_exits_two(monkeypatch, capsys, run_env):
-    """VERDICT-35, VERDICT-44: exit 2, and the refusal reaches the step summary."""
+    """VERDICT-44: exit 2, and the refusal reaches the step summary."""
     _, summary = run_env
     monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "first")
     page = json.dumps({"total_count": 0, "jobs": []})
@@ -328,7 +328,7 @@ def test_a_pull_request_that_turns_sonar_off_is_red_in_the_verdict(monkeypatch, 
 
 
 def test_a_pull_request_that_removes_legacy_fail_is_red_in_the_verdict(monkeypatch, capsys, run_env):
-    """#33 sentence 4: at the real entry, a head config without legacy under a base that fails is red, naming the loosening."""
+    """VERDICT-51: at the real entry, a head config without legacy under a base that fails is red, naming the loosening."""
     repo, _ = run_env
     config = repo / "quality" / "config.toml"
     config.write_text('[gate]\nmandatory_jobs = ["checks"]\nlegacy = "fail"\n')
@@ -664,19 +664,20 @@ MAIN_RAISED = "size baseline raises function_lines src/quality/cli.py main 82 ->
         "cell 4 declared next to undeclared", "cell 5 declared next to A failed", "cell 6 a typo in what",
         "cell 7 inherited declaration", "cell 7 inherited declaration deleted", "cell 8 inherited declaration",
         "cell 8 a new item and date", "cell 10 baseline raise", "cell 10 baseline removal", "cell 10 legacy", "sonar off declared",
-        "cell 13 a line feed declared as the TOML escape", "cell 13 the printed form copied", "#228 rule 7 a format character declared as its TOML escape",
-        "#228 rule 7 the printed form of a format character copied", "#228 rule 7 a name holding the escape text itself",
-        "#228 rule 7 the escape text declared as a format character", "cell 26 adoption",
+        "cell 13 a line feed declared as the TOML escape", "cell 13 the printed form copied", "a format character declared as its TOML escape",
+        "the printed form of a format character copied", "a name holding the escape text itself",
+        "the escape text declared as a format character", "cell 26 adoption",
     ],
 )
 def test_a_declared_loosening_stays_red_and_says_so(judged, base, head, jobs, baselines, expected):
-    """#103 rules 2 and 3 (E2-E5): each loosening line says whether it is declared, and only declarations the head
-    adds, matching exactly, declare; a declared job removal is no longer judged."""
+    """VERDICT-13, VERDICT-52, VERDICT-53, VERDICT-54, VERDICT-55, VERDICT-56, VERDICT-59, VERDICT-60, VERDICT-62:
+    each loosening line says whether it is declared, and only declarations the head adds, matching exactly, declare;
+    a declared job removal is no longer judged."""
     assert judged(base, head, jobs, baselines) == (0 if expected == ["✓ green"] else 1, expected)
 
 
 def test_a_run_without_a_base_judges_no_declaration(judged):
-    """#103 rule 2, cell 9: a push run judges no loosening and no declaration, so its declarations leave it green."""
+    """VERDICT-61: a push run judges no loosening and no declaration, so its declarations leave it green."""
     head = gate_config("A", declared=(declaration(B_REMOVED),))
     assert judged(gate_config("A", "B"), head, A_RAN, with_base=False) == (0, ["✓ green"])
 
@@ -732,14 +733,14 @@ ADDS_QWEN = "advisory allowance adds GHSA-462x-pgg6-55fp in " + QWEN + " until 2
     ],
 )
 def test_an_advisory_allowance_declares_its_own_loosening(judged, base, head, expected):
-    """#116 R2, E6, E7, E8: an allowance the base lacks, or whose until the head moves later, is a loosening declared
-    with the allowance's own item and date; nothing else about an allowance loosens, and a [[gate.loosened]] entry
-    naming one matches nothing."""
+    """VERDICT-64, VERDICT-65, VERDICT-66, VERDICT-67, #116 R2, #116 E8: an allowance the base lacks, or whose until the
+    head moves later, is a loosening declared with the allowance's own item and date; nothing else about an
+    allowance loosens, and a [[gate.loosened]] entry naming one matches nothing."""
     assert judged(base, head, A_RAN) == (0 if expected == ["✓ green"] else 1, expected)
 
 
 def test_a_run_without_a_base_judges_no_advisory_allowance(judged):
-    """#116 cell 19: a push or merge group judges no loosening, so a new allowance leaves it green."""
+    """VERDICT-61: a push or merge group judges no loosening, so a new allowance leaves it green."""
     assert judged(gate_config("A"), gate_config("A") + allowance_config(), A_RAN, with_base=False) == (0, ["✓ green"])
 
 
@@ -774,8 +775,8 @@ LOOSENED_REASON = f"{LOOSENED} entry 1 needs a non-empty one-line reason"
     ],
 )
 def test_a_malformed_declaration_cannot_be_judged(capsys, run_env, entry, named):
-    """#103 rule 1, cell 11 (E1): a malformed declaration is exit 2, the pair: the fact, then the example's lines whole
-    below `next:` and the head's step."""
+    """O10, VERDICT-39, VERDICT-40, VERDICT-57: a malformed declaration is exit 2, the pair: the fact, then the
+    example's lines whole below `next:` and the head's step."""
     repo, _ = run_env
     (repo / CONFIG_PATH).write_text('[gate]\nmandatory_jobs = ["checks"]\n' + entry)
     assert cli.main(["verdict"], fetcher_for=lambda token: lambda url: (CHECKS_GREEN, None)) == 2

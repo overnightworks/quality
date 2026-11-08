@@ -148,6 +148,7 @@ def test_a_push_has_no_base_and_no_loosenings_row(frame, monkeypatch):
 
 
 def test_an_only_declared_red_names_the_door_on_stderr(frame, based, monkeypatch):
+    """VERDICT-30, VERDICT-62, VERDICT-63."""
     monkeypatch.setenv("GITHUB_REPOSITORY", "acme/widgets")
     base_row = based(gate_config("checks", "B"), gate_config("checks", declared=(declaration('mandatory job "B" removed'),)))
     out = lines(base_row, GREEN_JOBS, "  ! loosenings    1 declared", *DECLARED_B, ONLY_DECLARED)
@@ -156,6 +157,7 @@ def test_an_only_declared_red_names_the_door_on_stderr(frame, based, monkeypatch
 
 
 def test_the_next_command_parses_back_to_the_pull_request_the_run_names(frame, based, monkeypatch):
+    """VERDICT-63."""
     monkeypatch.setenv("GITHUB_REPOSITORY", "acme/gadgets")
     monkeypatch.setenv("GATE_PULL_REQUEST", "12")
     based(gate_config("checks", "B"), gate_config("checks", declared=(declaration('mandatory job "B" removed'),)))
@@ -250,6 +252,7 @@ def test_rows_share_the_widest_subject(frame, pull_request):
 
 
 def test_a_job_name_with_a_line_feed_prints_as_one_escaped_row_in_log_and_summary(frame, run_env):
+    """VERDICT-54."""
     repo, _ = run_env
     put(repo / CONFIG_PATH, gate_config("checks", "a\n::error::b"))
     out = lines(

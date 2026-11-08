@@ -92,7 +92,13 @@ mandatory_jobs = ["checks"]
   `2` (VERDICT-17). On a pull request, a head that turns Sonar off under a base that runs it is the loosening
   `sonar true → false` (VERDICT-18); an adoption (a base without `quality/config.toml`) may start with Sonar off
   (VERDICT-19).
-- `[gate] legacy` is described under [New and legacy findings](sonar.md#new-and-legacy-findings).
+- `[gate] legacy` is described under [New and legacy findings](sonar.md#new-and-legacy-findings). On a pull request, a
+  head whose `legacy` is not `fail` under a base whose `legacy` is `fail` is the loosening `legacy fail → report`; an
+  absent key counts as `report` (VERDICT-51).
+
+  Ruled by the operator: switching back needs the operator. A pull request whose base config says `legacy = "fail"` and
+  whose head config says anything else is red in the verdict. An absent key counts as `report`. This is the same
+  mechanism as a removed mandatory job.
 
 `gate.yml`'s verdict step runs `quality verdict`, which takes no path and judges the checkout it runs in. It prints rows
 on stdout, all sharing one subject column (VERDICT-22):
@@ -148,7 +154,7 @@ again (READ-5), and adds the permission hint only after a 403 or 404 (READ-6).
 ### Declared loosenings
 
 A pull request that loosens the gate as the operator ruled declares each loosening in its `quality/config.toml`, one
-entry per loosening:
+entry per loosening (VERDICT-52):
 
 ```toml
 [[gate.loosened]]
@@ -159,42 +165,46 @@ reason = "the operator ruled the requirement shelf machinery out"
 ```
 
 - `what` is exactly the text the verdict prints after `! ` for an undeclared loosening under its `loosenings` row,
-  unescaped; a declared line is never copied, since its ` · <item> of <date>` is no part of the `what`. The verdict prints a line feed in a
-  job name as `\x0a` and a format character as `\u202e` (`\U000e0041` above U+FFFF), and never escapes a backslash, so a
-  printed backslash is either such an escape or one the name holds itself; the head's files show which. In a
-  double-quoted TOML string, each escape the verdict added is written as its TOML escape (`\x0a` as `\n`; `\u202e` and
-  `\U000e0041` are TOML escapes already) and each backslash the name holds itself as `\\`. A single-quoted literal
-  string, as in the example, fits only a `what` the verdict printed without an escape. Any other text, another number
-  included, declares nothing.
+  unescaped; a declared line is never copied, since its ` · <item> of <date>` is no part of the `what` (VERDICT-53). The
+  verdict prints a line feed in a job name as `\x0a` and a format character as `\u202e` (`\U000e0041` above U+FFFF), and
+  never escapes a backslash, so a printed backslash is either such an escape or one the name holds itself; the head's
+  files show which (VERDICT-54). In a double-quoted TOML string, each escape the verdict added is written as its TOML
+  escape (`\x0a` as `\n`; `\u202e` and `\U000e0041` are TOML escapes already) and each backslash the name holds itself
+  as `\\` (VERDICT-55). A single-quoted literal string, as in the example, fits only a `what` the verdict printed
+  without an escape. Any other text, another number included, declares nothing (VERDICT-56).
 - `item` is `#<n>` or `<owner>/<repo>#<n>` (ASCII letters, digits, `_`, `.` and `-`), `date` a TOML date without a
   time, `reason` one non-empty line. A missing or extra key, a text date, two entries with one `what` or any other
-  malformed entry is exit `2` in `verdict` and in `check` (the `secret` and `advisory` rules), naming the
-  entry and showing this example; `check secrets --staged` reads only `[secrets]`.
+  malformed entry is exit `2` in `verdict` and in `check` (the `secret` and `advisory` rules), naming the entry and
+  showing this example (VERDICT-57); `check secrets --staged` reads only `[secrets]` (VERDICT-58).
 - Only new entries declare: those the head holds and the base does not, compared as a whole entry. An inherited entry
   is never red and declares nothing, so a later pull request that loosens the same way again needs its own entry with
-  its own `item` and `date`; deleting an inherited entry is no loosening. A new entry that matches no loosening of the
-  pull request is red: it stands under `! declarations  1 unmatched` as the door shows it. A base without `quality/config.toml` (the
-  adoption) holds no entry, so every entry there is new and matches nothing. Without a base (push, `merge_group`) no
-  entry is judged.
+  its own `item` and `date`; deleting an inherited entry is no loosening (VERDICT-59). A new entry that matches no
+  loosening of the pull request is red: it stands under `! declarations  1 unmatched` as the door shows it. A base
+  without `quality/config.toml` (the adoption) holds no entry, so every entry there is new and matches nothing
+  (VERDICT-60). Without a base (push, `merge_group`) no entry, allowance or generated-file declaration is judged
+  (VERDICT-61).
 - A declared loosening stays red (exit `1`) and says so: below its row it stands as
-  `! mandatory job "…" removed · overnightworks/songmaker#1345 of 2026-10-20`, with `reason: …` beneath. When nothing
-  else is red, the closing line is `! red · only declared loosenings · only the operator merges it · 4s`, and stderr
-  names the one command: `next: quality merge <owner>/<repo>#<n>`. No entry approves itself: an agent may write one, but the ruleset and `aco land` still need a green
-  `quality / verdict`, and only [the operator's door](commands.md#quality-merge) merges.
+  `! mandatory job "…" removed · overnightworks/songmaker#1345 of 2026-10-20`, with `reason: …` beneath (VERDICT-62).
+  When nothing else is red, the closing line is `! red · only declared loosenings · only the operator merges it · 4s`,
+  and stderr names the one command: `next: quality merge <owner>/<repo>#<n>` (VERDICT-63). No entry approves itself:
+  an agent may write one, but the ruleset and `aco land` still need a green `quality / verdict`, and only
+  [the operator's door](commands.md#quality-merge) merges.
 - An advisory allowance (`[[advisories.allow]]`, see the `advisory` rule under `quality check`) declares its own
   loosening with its own `item` and `date`, so it needs no `[[gate.loosened]]` entry. An allowance whose `id` and
-  `lock` the base lacks prints `advisory allowance adds <id> in <lock> until <until> · <item> of <date>`; one
-  whose `until` the head moves later prints `… advisory allowance extends <id> in <lock> to <until>`. An earlier
+  `lock` the base lacks prints `advisory allowance adds <id> in <lock> until <until> · <item> of <date>`; one whose
+  `until` the head moves later prints `… advisory allowance extends <id> in <lock> to <until>` (VERDICT-64). An earlier
   `until`, a changed `reason`, `item` or `date`, and a deleted allowance loosen nothing; a changed `id` or `lock` is a
-  new allowance. A base without `quality/config.toml` holds no allowance, so every allowance of the adoption is new. A
-  `[[gate.loosened]]` entry whose `what` is such a text matches nothing and is red. The verdict and the door read the
-  whole config, so a malformed `[secrets]` or `[advisories]` entry is exit `2` there too.
+  new allowance (VERDICT-65). A base without `quality/config.toml` holds no allowance, so every allowance of the
+  adoption is new (VERDICT-66). A `[[gate.loosened]]` entry whose `what` is such a text matches nothing and is red
+  (VERDICT-67). The verdict and the door read the whole config, so a malformed `[secrets]` or `[advisories]` entry is
+  exit `2` there too.
 - A generated-file declaration (`[[size.generated]]`, see the `size` rule under `quality check`) declares its own
   loosening with its own `item` and `date`, like an allowance. A head `path` the base does not declare prints
-  `size leaves out generated file <path> · <item> of <date>`, so a changed `path` and every
-  declaration of an adoption (a base without `quality/config.toml`) are new. An inherited or deleted declaration and a
-  changed `job`, `reason`, `item` or `date` loosen nothing. A `[[gate.loosened]]` entry whose `what` is such a text
-  matches nothing and is red. A malformed `[size]` entry is exit `2` in the verdict and the door, naming the side.
+  `size leaves out generated file <path> · <item> of <date>`, so a changed `path` and every declaration of an adoption
+  (a base without `quality/config.toml`) are new (VERDICT-68). An inherited or deleted declaration and a changed `job`,
+  `reason`, `item` or `date` loosen nothing (VERDICT-69). A `[[gate.loosened]]` entry whose `what` is such a text
+  matches nothing and is red (VERDICT-70). A malformed `[size]` entry is exit `2` in the verdict and the door, naming
+  the side.
 - Ruled by the operator: removing, softening or bypassing an import-linter contract declares the same way, with one of these texts as `what`
   (the rule is in [rules](rules.md), "The import contracts only tighten"): `import contract "<name>" removed`,
   `import-linter config in <file> removed`, `import contract "<name>" ignores <expression>`,
