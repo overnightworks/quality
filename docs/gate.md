@@ -37,8 +37,9 @@ Each line has a reason:
   `re-run this run's failed jobs` and `a mandatory job missing from the caller job's needs: add it there` (VERDICT-1).
 - **`if: always()` runs the gate when a needed job failed,** so the verdict names the failure. Without it, a failed needed
   job skips the gate and no verdict judges the run.
-- **`permissions:` grants `contents: read` and `actions: read`.** The verdict reads the run's jobs through the API, and
-  only GitHub's 403 or 404 adds `grant actions: read in the caller job's permissions` under `next:`. A job in
+- **`permissions:` grants `contents: read` and `actions: read`.** The verdict reads the run's jobs through the API with
+  the step's `GITHUB_TOKEN` (VERDICT-36) and never follows a redirect, so the token reaches no other host (VERDICT-37).
+  Only GitHub's 403 or 404 adds `grant actions: read in the caller job's permissions` under `next:`. A job in
   a reusable workflow gets no more than its caller job grants (see
   [GitHub's reusable-workflow documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations)),
   so without `actions: read` the run is expected to fail at startup and add no `quality / verdict` check (see
@@ -113,25 +114,30 @@ One closing line follows, ending with the run's duration (its form: [the closing
 `N undeclared loosenings`, `N declarations unmatched` and `N declared loosenings` (VERDICT-33). When only declared
 loosenings are red, the line says so ([Declared loosenings](#declared-loosenings)). The duration counts from the door's
 start (VERDICT-34). When it cannot judge (exit `2`), it prints the `error:`/`next:` pair on stderr, with the steps apart
-from the fact:
+from the fact, or `fix what the error names, then re-run this run's failed jobs` where it has none (VERDICT-38):
 
-- a `quality/config.toml` it cannot read shows the example to copy, then `push the fix; the gate judges the new commit`
-  at the head, or `fix it on <base branch> first, then update the pull request's branch with <base branch>` at the
-  base, which is read first;
-- a variable the step sets that the run lacks, or holds in another form, is `<NAME> is not set` or `<NAME> is not …`,
-  its value never printed; beside a base the step also sets the pull request's number and head (CALLER-10);
-- a GitHub answer a re-run may clear names `re-run this run's failed jobs`.
+- a `quality/config.toml` it cannot read (a key this quality does not know included) shows its fact and, where its rule
+  has one, [the example to copy](output.md#refusals) (VERDICT-39), then `push the fix; the gate judges the new commit`
+  at the head (VERDICT-40), or `fix it on <base branch> first, then update the pull request's branch with <base branch>`
+  at the base (VERDICT-41), which is read first (VERDICT-42);
+- a variable the step sets that the run lacks (unset or empty) is `<NAME> is not set` (VERDICT-43), or holds in another
+  form `<NAME> is not …` (VERDICT-44), each with the step
+  `quality verdict runs as gate.yml's verdict step, which sets it` and its value never printed (VERDICT-45); beside a
+  base the step also sets the pull request's number and head (CALLER-10);
+- a jobs page that is not GitHub's jobs answer (not JSON, no `total_count`, a job whose `id`, `name` or `run_attempt`
+  has the wrong type) cannot be judged (VERDICT-46);
+- a GitHub answer a re-run may clear names `re-run this run's failed jobs` (VERDICT-47).
 
 When it read the jobs more than once, a first row says so:
 `· run  2 reads  GitHub first listed "checks" (attempt 1) as in_progress`. A GitHub server error
 (5xx) is read again within the same budget, and if it lasts, the fact names it as GitHub's:
 `GitHub answered HTTP 502 Bad Gateway for … after 13 reads · GitHub's fault, not the caller's`. Any other failure, such
-as a 403, a timeout or an unreachable GitHub, is not read again (VERDICT-20). A cannot-judge after a re-read still
-prints the rows of the last judged read first, on stdout (VERDICT-21). The run's step summary gets the same lines,
-stdout's and then the pair, in one fenced code block on a line of its own (VERDICT-35), whose fence is longer than every
-backtick run in them, so no job name or `what` renders as markdown. A summary that cannot be written adds
-`error: GITHUB_STEP_SUMMARY is not writable · <reason>` after them (exit `2`).
-`-v` adds nothing: the verdict runs no scanner.
+as a 403, a timeout, a body cut short or an unreachable GitHub, is not read again (VERDICT-20). A cannot-judge after a
+re-read still prints the rows of the last judged read first, on stdout (VERDICT-21). The run's step summary gets the
+same lines, stdout's and then the pair, in one fenced code block on a line of its own (VERDICT-35), whose fence is
+longer than every backtick run in them, so no job name or `what` renders as markdown (VERDICT-48). A summary that
+cannot be written adds `error: GITHUB_STEP_SUMMARY is not writable · <reason>` after them (exit `2`, VERDICT-49).
+`-v` adds nothing: the verdict runs no scanner (VERDICT-50).
 
 Ruled by the operator: the verdict reads the run's jobs again for at most two minutes, because GitHub's jobs listing
 answers late per job; a job still listed as running after the last read is exit `2`.
