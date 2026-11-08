@@ -99,9 +99,10 @@ entries, a folder that is not a repository, or a gitleaks run without a report.
 
 ## `quality report`
 
-`quality report` reads `quality/fleet.toml` in the folder it runs in and takes no path. The file has two optional keys,
-`organizations = [...]` (GitHub organization names) and `repositories = [...]` (single `owner/name`s, a fork too); the
-fleet is every public, non-archived, non-fork repository GitHub lists for each organization plus the named ones. On
+`quality report` reads `quality/fleet.toml` in the folder it runs in and takes no path. The file has three optional keys,
+`organizations = [...]` (GitHub organization names), `repositories = [...]` (single `owner/name`s, a fork too) and
+`exclude = [...]` (single `owner/name`s left out of what the organizations list); the fleet is every public,
+non-archived, non-fork repository GitHub lists for each organization, less the excluded ones, plus the named ones. On
 stderr it prints `· fleet  N found  <organizations> · quality/fleet.toml`, then a row per repository as
 it is measured, sorted by name, case-insensitively: `✓ <owner/name>  measured  <commit> · <time>`, `✗ …  not measured
 <reason>` or `✗ …  partly read  cannot read <files>`; a failed read of the release tags adds `✗ release tags  not read
@@ -117,15 +118,17 @@ The run ends on stderr with `✓ N of N repositories measured · <time>` (exit `
 `.github/workflows/report.yml` runs it every Monday at 05:17 UTC and on dispatch; the tables stand in that run's
 summary. The run only reports: it writes to no repository and lists with its own read-only job token (`GITHUB_TOKEN`,
 sent to `api.github.com` only, never to git); a local run lists anonymously. A missing, unreadable (a directory, a
-dangling link, not UTF-8), malformed, duplicating (also across case), empty (`selects no repository`) or badly named
+dangling link, not UTF-8), malformed, duplicating (also across case, and across `repositories` and `exclude`: `exclude[0] repeats repositories[1]`), empty (`selects no repository`) or badly named
 `quality/fleet.toml` is the pair, exit `2`, before any request or clone: `error: ` and what is wrong with
 `quality/fleet.toml`, named repository-relative, and `next: write it in quality/fleet.toml like this:` with the file's
-shape below; each bad entry is named by its place (`repositories[3]`, `organizations[0]`), never by its text. The listing is
+shape below; each bad entry is named by its place (`repositories[3]`, `exclude[1]`, `organizations[0]`), never by its text. The listing is
 read once per organization, before any clone, and a problem of any organization is one pair that ends
 `· nothing measured`: an organization GitHub does not know (`organizations[0] is no GitHub organization`), a listing
 GitHub did not give (`GitHub did not list <organization> · HTTP <status>`, a timeout, an unreachable host), more than 100
 public repositories (quality reads one page), an answer that is not a list of repositories, or a `repositories` entry the
-organization already lists (`repositories[0] is already in <organization>`). A failure of GitHub adds `fix what the error
+organization already lists (`repositories[0] is already in <organization>`), or an `exclude` entry that matches no repository
+found (`exclude[0] matches no repository found`: the same for a name GitHub does not list and for one that is private,
+archived or a fork; an entry of an organization whose listing failed is judged on the rerun). A failure of GitHub adds `fix what the error
 names, then run quality report again` under `next:`, after the shape when the file is also at fault. No listed text is
 printed, and a private repository a token can list is dropped without a trace.
 

@@ -96,9 +96,15 @@ SHAPE_NEXT = 'next: write it in quality/fleet.toml like this:\n    organizations
 RERUN_NEXT = "next: fix what the error names, then run quality report again\n"
 
 
-def write_organizations(directory: Path, organizations: list[str], repositories: list[str] | None = None) -> Path:
+def write_organizations(
+    directory: Path, organizations: list[str], repositories: list[str] | None = None, exclude: list[str] | None = None
+) -> Path:
     (directory / "quality").mkdir(parents=True)
-    lines = [f"organizations = {json.dumps(organizations)}", *([f"repositories = {json.dumps(repositories)}"] if repositories else [])]
+    lines = [
+        f"organizations = {json.dumps(organizations)}",
+        *([f"repositories = {json.dumps(repositories)}"] if repositories else []),
+        *([f"exclude = {json.dumps(exclude)}"] if exclude else []),
+    ]
     (directory / "quality" / "fleet.toml").write_text("\n".join(lines) + "\n")
     return directory
 
@@ -345,8 +351,74 @@ def test_a_fork_named_in_the_file_is_measured(capsys, monkeypatch, tmp_path, pub
     assert [cells[0] for cells in (row(printed.out, "o/alpha", 1), row(printed.out, "o/copy", 1))] == ["o/alpha", "o/copy"]
 
 
-def test_organizations_that_select_nothing_are_refused(capsys, monkeypatch, tmp_path, public):
-    listing = Listing({"o": listed(("o/old", "archived"))})
-    printed = report_in(write_organizations(tmp_path / "fleet", ["o"]), capsys, monkeypatch, ticks(0), fetch_listing=listing)
+@pytest.mark.parametrize(
+    ("answer", "exclude"),
+    [(listed(("o/old", "archived")), []), (listed(("o/alpha",)), ["o/alpha"])],
+    ids=["all archived", "all excluded"],
+)
+def test_organizations_that_select_nothing_are_refused(capsys, monkeypatch, tmp_path, public, answer, exclude):
+    listing = Listing({"o": answer})
+    printed = report_in(write_organizations(tmp_path / "fleet", ["o"], exclude=exclude), capsys, monkeypatch, ticks(0), fetch_listing=listing)
     assert (printed.code, printed.out) == (2, "")
     assert printed.err == f"error: quality/fleet.toml selects no repository · nothing measured\n{SHAPE_NEXT}"
+
+
+def test_an_excluded_repository_is_left_out_and_the_fleet_line_counts_the_rest(capsys, monkeypatch, tmp_path, public):
+    public("alpha", {"a.py": "a = 1\n"})
+    listing = Listing({"o": listed(("o/alpha",), ("o/Beta",))})
+    printed = report_in(
+        write_organizations(tmp_path / "fleet", ["o"], exclude=["o/beta"]), capsys, monkeypatch, ticks(0, 1, 2, 3), fetch_listing=listing
+    )
+    assert printed.code == 0, printed.err
+    assert "  · fleet         1 found        o · quality/fleet.toml\n" in printed.err
+    assert "Beta" not in printed.err + printed.out
+
+
+@pytest.mark.parametrize(
+    "answers",
+    [
+        {"o": listed(("o/alpha",)), "p": listed(("p/other",))},
+        {"o": listed(("o/alpha",)), "p": listed(("p/hidden-name", "private"))},
+        {"o": listed(("o/alpha",)), "p": listed(("p/hidden-name", "archived"))},
+        {"o": listed(("o/alpha",)), "p": listed(("p/hidden-name", "fork"))},
+        {"o": listed(("o/alpha",)), "p": listed(("o/other",))},
+    ],
+    ids=["not listed", "private", "archived", "fork", "another owner"],
+)
+def test_an_exclude_entry_that_matches_no_found_repository_is_one_pair_whatever_github_holds(capsys, monkeypatch, tmp_path, public, answers):
+    organizations = ["o", "p"] if "p" in answers else ["o"]
+    printed = report_in(
+        write_organizations(tmp_path / "fleet", organizations, exclude=["p/hidden-name"]), capsys, monkeypatch, ticks(0),
+        fetch_listing=Listing(answers),
+    )
+    assert (printed.code, printed.out) == (2, "")
+    assert printed.err == f"error: quality/fleet.toml exclude[0] matches no repository found · nothing measured\n{SHAPE_NEXT}"
+
+
+@pytest.mark.parametrize(
+    ("repositories", "exclude", "fact"),
+    [(["o/a", "o/b"], ["O/B"], "exclude[0] repeats repositories[1]"), (None, ["o/b", "O/B"], "exclude[1] repeats exclude[0]")],
+    ids=["in repositories too", "twice in exclude"],
+)
+def test_an_exclude_entry_that_repeats_is_refused_by_its_place_before_any_request(capsys, monkeypatch, tmp_path, public, repositories, exclude, fact):
+    listing = Listing({})
+    printed = report_in(
+        write_organizations(tmp_path / "fleet", ["o"], repositories, exclude), capsys, monkeypatch, ticks(0), fetch_listing=listing
+    )
+    assert (printed.code, printed.out, listing.requests) == (2, "", [])
+    assert printed.err == f"error: quality/fleet.toml {fact}\nnext: write it in quality/fleet.toml like this:\n    organizations = [\"overnightworks\"]\n"
+
+
+def test_an_exclude_entry_of_an_organization_github_did_not_list_waits_for_the_rerun(capsys, monkeypatch, tmp_path, public):
+    listing = Listing({"a": listed(("a/x",)), "b": http_error(503)})
+    printed = report_in(
+        write_organizations(tmp_path / "fleet", ["a", "b"], exclude=["b/y", "a/z"]), capsys, monkeypatch, ticks(0), fetch_listing=listing
+    )
+    assert (printed.code, printed.out) == (2, "")
+    assert printed.err == (
+        "error: GitHub did not list b · HTTP 503 · quality/fleet.toml exclude[1] matches no repository found · nothing measured\n"
+        "next:\n"
+        "    write it in quality/fleet.toml like this:\n"
+        '        organizations = ["overnightworks"]\n'
+        "    fix what the error names, then run quality report again\n"
+    )

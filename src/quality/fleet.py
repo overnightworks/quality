@@ -4,7 +4,7 @@ stderr as each is measured, then the tables alone on stdout and in the step summ
 
 Lines and the production/test split are the `size` rule's own (`ratchet.summarise`), measured on a shallow clone of
 the default branch tip. The fleet is every public, non-archived, non-fork repository GitHub lists for the organizations
-`quality/fleet.toml` names, plus the single `owner/name`s it adds. Only `https://github.com/<owner>/<name>` is cloned, and git runs
+`quality/fleet.toml` names, less the single `owner/name`s it excludes, plus the single `owner/name`s it adds. Only `https://github.com/<owner>/<name>` is cloned, and git runs
 anonymously: no credential helper, no askpass, no terminal prompt, no system, global or environment config and an
 empty HOME, from a temporary directory, so no checkout's own config reaches it either. A repository that is not
 anonymously readable is not measured: the table is published in a public run summary.
@@ -49,6 +49,20 @@ FLEET_EXAMPLE = 'organizations = ["overnightworks"]'
 OWNER = "[A-Za-z0-9][A-Za-z0-9-]*"
 ENTRY = re.compile(rf"{OWNER}/(?!\.+\Z)[A-Za-z0-9._-]+")
 ORGANIZATION = re.compile(OWNER)
+
+
+@dataclass(frozen=True)
+class FleetKey:
+    name: str
+    valid: re.Pattern[str]
+    noun: str
+
+
+FLEET_KEYS = (
+    FleetKey("organizations", ORGANIZATION, "organization name"),
+    FleetKey("repositories", ENTRY, "owner/name"),
+    FleetKey("exclude", ENTRY, "owner/name"),
+)
 LISTING_URL = "https://api.github.com/orgs/{organization}/repos?type=public&per_page=100"
 NEXT_PAGE = re.compile(r'rel="next"')
 LISTING_CREDENTIAL_VARIABLE = "GITHUB_TOKEN"
@@ -196,10 +210,12 @@ Row = Measured | Unjudged
 
 @dataclass(frozen=True)
 class Fleet:
-    """What `quality/fleet.toml` selects: organizations and single `owner/name`s, each in file order."""
+    """What `quality/fleet.toml` selects: organizations, single `owner/name`s added and single `owner/name`s left out of
+    what the organizations list, each in file order."""
 
     organizations: tuple[str, ...]
     repositories: tuple[str, ...]
+    exclude: tuple[str, ...]
 
 
 def read_fleet(root: Path) -> Fleet:
@@ -217,36 +233,35 @@ def parse_fleet(text: str) -> Fleet:
         document = repository.parse_toml(text)
     except repository.TomlError as error:
         raise fleet_refusal(f"{FLEET_PATH} is not valid TOML ({error})") from error
-    unknown = sorted(set(document) - {"organizations", "repositories"})
+    unknown = sorted(set(document) - {key.name for key in FLEET_KEYS})
     if unknown:
-        raise fleet_refusal(f"{FLEET_PATH} has a key other than organizations and repositories: {', '.join(unknown)}")
-    lists = {key: document.get(key, []) for key in ("organizations", "repositories")}
+        keys = words_joined([key.name for key in FLEET_KEYS])
+        raise fleet_refusal(f"{FLEET_PATH} has a key other than {keys}: {', '.join(unknown)}")
+    lists = {key.name: document.get(key.name, []) for key in FLEET_KEYS}
     for key, entries in lists.items():
         if not isinstance(entries, list) or not all(isinstance(entry, str) for entry in entries):
             raise fleet_refusal(f"{FLEET_PATH} needs {key} as a list of strings")
-    organizations, repositories = lists["organizations"], lists["repositories"]
-    if not organizations and not repositories:
+    if not lists["organizations"] and not lists["repositories"]:
         raise fleet_refusal(f"{FLEET_PATH} selects no repository")
-    problems = [
-        *_entry_problems("organizations", organizations, ORGANIZATION, "organization name"),
-        *_entry_problems("repositories", repositories, ENTRY, "owner/name"),
-    ]
+    problems = _entry_problems(lists)
     if problems:
         raise fleet_refusal(f"{FLEET_PATH} {output.SEPARATOR.join(problems)}")
-    return Fleet(tuple(organizations), tuple(repositories))
+    return Fleet(*(tuple(lists[key.name]) for key in FLEET_KEYS))
 
 
-def _entry_problems(key: str, entries: list[str], valid: re.Pattern[str], name: str) -> list[str]:
+def _entry_problems(lists: Mapping[str, list[str]]) -> list[str]:
     """Each problem named by its place, never its text: an entry may be a pasted URL with a password."""
-    first_place: dict[str, int] = {}
+    first_place: dict[str, str] = {}
     problems = []
-    for index, entry in enumerate(entries):
-        if not valid.fullmatch(entry):
-            problems.append(f"{key}[{index}] is no {name}")
-        elif entry.lower() in first_place:
-            problems.append(f"{key}[{index}] repeats {key}[{first_place[entry.lower()]}]")
-        else:
-            first_place[entry.lower()] = index
+    for key in FLEET_KEYS:
+        for index, entry in enumerate(lists[key.name]):
+            place = f"{key.name}[{index}]"
+            if not key.valid.fullmatch(entry):
+                problems.append(f"{place} is no {key.noun}")
+            elif entry.lower() in first_place:
+                problems.append(f"{place} repeats {first_place[entry.lower()]}")
+            else:
+                first_place[entry.lower()] = place
     return problems
 
 
@@ -287,16 +302,32 @@ def _is_listed_repository(entry: object) -> bool:
     )
 
 
+def exclude_found(found: Mapping[str, str], exclude: tuple[str, ...], unlisted: set[str]) -> tuple[dict[str, str], list[str]]:
+    """The found names (by lower-cased name) less the excluded ones, and a fact per `exclude` entry that matches none of
+    them, named by its place. `found` holds only what `list_organization` kept, so an entry naming a private repository
+    reads exactly as a name GitHub does not list, and no fact repeats an entry. An entry whose organization's listing
+    failed waits for the rerun."""
+    facts = [
+        f"{FLEET_PATH} exclude[{index}] matches no repository found"
+        for index, entry in enumerate(exclude)
+        if entry.lower() not in found and entry.partition("/")[0].lower() not in unlisted
+    ]
+    excluded = {entry.lower() for entry in exclude}
+    return {key: name for key, name in found.items() if key not in excluded}, facts
+
+
 def select_repositories(fleet: Fleet, token: str, fetch_listing: ListingFetch) -> tuple[str, ...]:
-    """The found repositories of every organization plus the named ones, sorted by lower-cased name; every problem of
-    every organization stands in one refusal before any clone."""
+    """The found repositories of every organization less the excluded ones, plus the named ones, sorted by lower-cased
+    name; every problem of every organization stands in one refusal before any clone."""
     found: dict[str, tuple[str, str]] = {}
+    unlisted: set[str] = set()
     facts: list[str] = []
     shape_wrong = github_failed = False
     for index, organization in enumerate(fleet.organizations):
         try:
             names = list_organization(index, organization, token, fetch_listing)
         except ListingFault as fault:
+            unlisted.add(organization.lower())
             github_failed |= not fault.in_file
             shape_wrong |= fault.in_file
             facts.append(str(fault))
@@ -306,7 +337,10 @@ def select_repositories(fleet: Fleet, token: str, fetch_listing: ListingFetch) -
         if entry.lower() in found:
             facts.append(f"{FLEET_PATH} repositories[{index}] is already in {found[entry.lower()][0]}")
             shape_wrong = True
-    selected = {**{key: name for key, (_, name) in found.items()}, **{entry.lower(): entry for entry in fleet.repositories}}
+    kept, exclude_facts = exclude_found({key: name for key, (_, name) in found.items()}, fleet.exclude, unlisted)
+    shape_wrong |= bool(exclude_facts)
+    facts.extend(exclude_facts)
+    selected = {**kept, **{entry.lower(): entry for entry in fleet.repositories}}
     if not facts and not selected:
         facts.append(f"{FLEET_PATH} selects no repository")
         shape_wrong = True

@@ -470,18 +470,20 @@ def toml_error(prefix: str) -> str:
         (written('repositories = ["o/a"'), toml_error("quality/fleet.toml is not valid TOML")),
         (written(f"repositories = {'9' * 5000}"), toml_error("quality/fleet.toml is not valid TOML")),
         (written(f"repositories = {'[' * 5000}{']' * 5000}"), toml_error("quality/fleet.toml is not valid TOML")),
-        (written('public = ["o/a"]\n'), re.escape("quality/fleet.toml has a key other than organizations and repositories: public")),
-        (written('repositories = ["o/a"]\nprivate = []\n'), re.escape("quality/fleet.toml has a key other than organizations and repositories: private")),
-        (written('repositories = ["o/a"]\nextra = 1\n'), re.escape("quality/fleet.toml has a key other than organizations and repositories: extra")),
+        (written('public = ["o/a"]\n'), re.escape("quality/fleet.toml has a key other than organizations, repositories and exclude: public")),
+        (written('repositories = ["o/a"]\nprivate = []\n'), re.escape("quality/fleet.toml has a key other than organizations, repositories and exclude: private")),
+        (written('repositories = ["o/a"]\nextra = 1\n'), re.escape("quality/fleet.toml has a key other than organizations, repositories and exclude: extra")),
         (written(""), re.escape("quality/fleet.toml selects no repository")),
         (written('repositories = "o/a"\n'), re.escape("quality/fleet.toml needs repositories as a list of strings")),
         (written("repositories = [1]\n"), re.escape("quality/fleet.toml needs repositories as a list of strings")),
         (written("repositories = []\n"), re.escape("quality/fleet.toml selects no repository")),
         (written("organizations = [1]\n"), re.escape("quality/fleet.toml needs organizations as a list of strings")),
+        (written('organizations = ["o"]\nexclude = "o/a"\n'), re.escape("quality/fleet.toml needs exclude as a list of strings")),
+        (written('exclude = ["o/a"]\n'), re.escape("quality/fleet.toml selects no repository")),
     ],
     ids=["missing file", "a directory", "a dangling link", "not UTF-8", "invalid TOML", "oversized integer", "nested too deep",
          "public", "private", "unknown key", "no selection", "not a list", "not a string", "empty list",
-         "organization not a string"],
+         "organization not a string", "exclude not a list", "exclude alone"],
 )
 @pytest.mark.usefixtures("public")
 def test_a_fleet_file_that_cannot_be_used_is_the_pair_with_the_shape_to_copy(capsys, tmp_path, monkeypatch, arrange, fact):
@@ -511,12 +513,13 @@ def test_an_owner_slash_name_is_a_fleet_entry(entry):
     ids=["no slash", "two slashes", "empty owner", "empty name", "URL with a password", "scp-like", "ssh", "option",
          "dots only", "single dot", "leading hyphen", "trailing line break", "space"],
 )
-def test_an_entry_that_is_no_owner_slash_name_is_named_by_its_place_never_its_text(entry):
+@pytest.mark.parametrize("key", ["repositories", "exclude"])
+def test_an_entry_that_is_no_owner_slash_name_is_named_by_its_place_never_its_text(key, entry):
     """#270 target: a pasted URL with a password is reported as `repositories[1]`."""
     with pytest.raises(CannotJudge) as refused:
-        parse_fleet(f'repositories = ["o/fine", "{entry}"]')
+        parse_fleet(f'organizations = ["o"]\n{key} = ["o/fine", "{entry}"]')
     fact = refused.value.reason.fact
-    assert "repositories[1] is no owner/name" in fact
+    assert f"{key}[1] is no owner/name" in fact
     assert entry not in fact
     assert "hunter2" not in fact
 
