@@ -1,0 +1,7 @@
+claim_id = "d17b4329d3344b17b5272b6014dc6982"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "bf7bf7c0a552c4d1ce057d2e55d03ec29cbd44be"
+branch = "claude/issue-531-d7-claude-md-ids"
+scope = ["docs/rules.md", "tests/test_claude_md.py"]
+opened_commit = "039d714fb2b672b04dede932dc18856c804dac6e"
