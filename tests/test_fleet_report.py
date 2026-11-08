@@ -239,8 +239,8 @@ def test_report_takes_v_and_prints_the_same(capsys, monkeypatch, tmp_path, publi
 
 
 def test_an_organizations_public_repositories_are_measured_and_nothing_else(capsys, monkeypatch, tmp_path, public):
-    """FLEET-32, FLEET-33, FLEET-34: an organization's public, non-archived, non-fork repositories are measured in
-    name order, and nothing else."""
+    """FLEET-32, FLEET-33, FLEET-34, FLEET-92: an organization's public, non-archived, non-fork repositories are
+    measured in name order, named as GitHub names them, and nothing else."""
     public("alpha", {"a.py": "a = 1\n"})
     public("Beta", {"b.py": "b = 1\n"})
     listing = Listing({"o": listed(("o/Beta",), ("o/alpha",), ("o/old", "archived"), ("o/copy", "fork"))})
@@ -269,13 +269,16 @@ def test_a_private_entry_of_the_listing_is_in_no_line(capsys, monkeypatch, tmp_p
 
 
 def test_a_private_repository_named_in_the_file_never_reads_as_found(capsys, monkeypatch, tmp_path, public, missing):
-    """FLEET-67: a private repository the listing names does not make a `repositories` entry already listed."""
+    """FLEET-36, FLEET-67, FLEET-94: a private repository the listing names does not make a `repositories` entry
+    already listed; the entry is measured and, as nobody serves it, is a row that cannot be cloned."""
     listing = Listing({"o": listed(("o/gone", "private"))})
     printed = report_in(
         write_organizations(tmp_path / "fleet", ["o"], [missing]), capsys, monkeypatch, ticks(0, 1, 2, 3), fetch_listing=listing
     )
     assert printed.code == 2
-    assert "already in" not in printed.err
+    assert [line.split() for line in printed.err.splitlines() if "o/gone" in line] == [
+        ["✗", "o/gone", "not", "measured", "cannot", "clone", "(git", "exited", "128)"]
+    ]
 
 
 @pytest.mark.parametrize(

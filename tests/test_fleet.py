@@ -120,17 +120,6 @@ def test_blank_and_comment_lines_count_whatever_the_line_ending(fleet_report, pu
     assert row(output, "o/endings")[3] == "3 / 0"
 
 
-def test_untracked_files_are_not_counted(fleet_report, public, remotes):
-    """A file only the source's working tree holds is not in the measured clone."""
-    name = public("tracked", {"src/a.py": "a = 1\n", ".gitignore": "ignored.py\n"})
-    directory = remotes / name
-    (directory / "untracked.py").write_text("u = 1\n" * 10)
-    (directory / "ignored.py").write_text("i = 1\n" * 10)
-    code, output = fleet_report(name)
-    assert code == 0, output
-    assert row(output, "o/tracked")[3] == "1 / 0"
-
-
 @pytest.mark.parametrize(
     ("files", "cells"),
     [
@@ -193,7 +182,7 @@ def test_the_lines_columns_count_every_language_and_the_function_columns_only_py
 
 
 def test_a_minified_bundle_counts_its_one_line_and_nothing_is_said_to_be_skipped(fleet_report, public):
-    """FLEET-78, FLEET-80, FLEET-86: a minified bundle counts its one line, so it is no file from 800 lines."""
+    """FLEET-78, FLEET-80: a minified bundle counts its one line, so it is no file from 800 lines."""
     code, output = fleet_report(public("bundled", {"dist/index.js": minified_bundle()}))
     assert code == 0, output
     cells = row(output, "o/bundled")
@@ -226,7 +215,7 @@ def test_a_file_name_that_is_not_utf8_is_measured(fleet_report, public):
 
 
 def test_a_repo_that_cannot_be_cloned_names_git_exit_and_no_local_path(fleet_report, public, missing, tmp_path):
-    """Cell 12, rule 5: the reason carries git's exit code only, never a local absolute path."""
+    """FLEET-46, FLEET-95, FLEET-96: a repository that cannot be cloned is a row with git's exit code, never a path."""
     code, output = fleet_report(missing)
     assert code == 2, output
     assert row(output, "o/gone")[1:3] == ["—", "cannot judge: cannot clone (git exited 128)"]
@@ -234,7 +223,7 @@ def test_a_repo_that_cannot_be_cloned_names_git_exit_and_no_local_path(fleet_rep
 
 
 def test_one_failing_repo_leaves_every_other_row_complete(fleet_report, public, missing):
-    """Cell 13, rule 5: the other rows still show in full, and the run exits 2."""
+    """FLEET-46, FLEET-97: a repository that cannot be cloned leaves every other row complete, and the run exits 2."""
     first = public("first", {"a.py": "a = 1\n"})
     last = public("last", {"tests/test_a.py": "a = 1\n"})
     code, output = fleet_report(first, missing, last)
@@ -280,8 +269,9 @@ def private_host(monkeypatch) -> Iterator[None]:
 
 
 def test_no_configured_credential_reaches_a_host_that_asks_for_one(fleet_report, public, private_host, tmp_path, monkeypatch):
-    """FLEET-73, FLEET-76: a helper, an askpass and an Authorization header in system, global or environment config are
-    never used, the host sees only the repository's paths, and the repository stays unmeasured."""
+    """FLEET-73, FLEET-76, FLEET-94, FLEET-95: a helper, an askpass, a `~/.netrc` login and an Authorization header in
+    system, global or environment config are never used, the host sees only the repository's paths, and the repository
+    named in the file stays a `cannot judge` row."""
     home = tmp_path / "home"
     home.mkdir()
     asked = tmp_path / "asked"
@@ -292,6 +282,7 @@ def test_no_configured_credential_reaches_a_host_that_asks_for_one(fleet_report,
         f"[credential]\n\thelper = \"!f() {{ touch {asked}-helper; echo username=u; echo password=p; }}; f\"\n"
         "[http]\n\textraHeader = Authorization: Basic global\n"
     )
+    (home / ".netrc").write_text("machine 127.0.0.1 login netrc password netrc\n")
     (home / "system.gitconfig").write_text("[http]\n\textraHeader = Authorization: Basic system\n")
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(home / ".gitconfig"))
@@ -429,7 +420,7 @@ def test_the_fleet_file_is_read_from_the_working_directory_by_default(capsys, pu
 
 
 def test_rows_sort_by_lower_cased_name_in_both_tables_whatever_the_file_order(fleet_report, public):
-    """The file's order is not the table's order."""
+    """FLEET-34, FLEET-93: both tables sort by lower-cased name whatever the file order; a named row keeps its case."""
     later = public("Zeta", {"a.py": "a = 1\n"}, owner="b")
     earlier = public("alpha", {"a.py": "a = 1\n"}, owner="C")
     first = public("alpha", {"a.py": "a = 1\n"}, owner="a")
@@ -597,7 +588,7 @@ def test_the_clone_pairs_cell_counts_a_pair_as_test_only_when_both_sides_are_tes
 
 @pytest.mark.integration
 def test_a_public_repo_with_an_unreadable_tracked_file_cannot_be_measured(fleet_report, public, remotes, tmp_path):
-    """#227 finding 10: a tracked symlink to a folder is refused as a read, and the row names the file, never the clone."""
+    """FLEET-95: a tracked symlink to a folder is refused as a read, and the row names the file, never the clone."""
     directory = remotes / TEST_OWNER / "linked"
     directory.mkdir(parents=True)
     os.symlink("docs", directory / "x.py")

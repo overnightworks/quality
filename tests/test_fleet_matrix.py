@@ -161,7 +161,8 @@ def test_the_codeql_cell_reads_its_own_pin_or_says_none(fleet_report, public):
 
 @pytest.mark.integration
 def test_a_pipe_in_a_label_is_escaped_and_the_row_keeps_its_columns(fleet_report, public, remotes):
-    """#123 E2, cell 12: a tracked file named `a|b.py` that cannot be read puts a `|` into a reason."""
+    """FLEET-44, FLEET-95: a tracked file named `a|b.py` that cannot be read puts a `|` into a reason, which both tables
+    show with the `|` escaped."""
     name = public("pipe", {"docs/a.md": "text\n"})
     os.symlink("docs", remotes / name / "a|b.py")
     subprocess.run(["git", "-C", str(remotes / name), "add", "a|b.py"], check=True)
@@ -173,7 +174,7 @@ def test_a_pipe_in_a_label_is_escaped_and_the_row_keeps_its_columns(fleet_report
 
 
 def test_a_cannot_judge_row_keeps_its_label_in_the_matrix(fleet_report, public, missing):
-    """#123 E10, cell 13."""
+    """FLEET-95: the matrix row of a repository that cannot be judged is its label and every other cell is empty."""
     code, output = fleet_report(missing, public("open", {}))
     assert code == 2, output
     label = "cannot judge: cannot clone (git exited 128)"
