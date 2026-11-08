@@ -7,7 +7,10 @@ the same files and the same `quality/baseline.toml` as one at the top, and names
 src/big.py`) (CHECK-1). There is no path argument; in a submodule or a linked worktree a run judges that work tree's own
 top (CHECK-2).
 
-`quality check [AREA ...]` judges only the areas it names, each whole, in the order of `quality check --help` and each once, however they are named; with none it judges all seven (CHECK-3). An area not named starts nothing and has no row; the verdict counts only the named areas (`✓ clean · 1 area`) and the exit is the worst of theirs, so a named run says nothing of the rest. The gate runs all seven.
+`quality check [AREA ...]` judges only the areas it names, each whole, in the order of `quality check --help` and each
+once, however they are named; with none it judges all seven (CHECK-3). An area not named starts nothing and has no
+row (CHECK-6); the verdict counts only the named areas (`✓ clean · 1 area`) (CHECK-7) and the exit is the worst of
+theirs (CHECK-8), so a named run says nothing of the rest. The gate runs all seven ([gate](gate.md#gateyml)).
 
 It applies these rules:
 

@@ -54,7 +54,7 @@ def calls_of(calls) -> list[str]:
     ],
 )
 def test_a_named_area_starts_only_its_scanners_and_prints_only_its_row(build_repo, served_scanners, elsewhere, capsys, area, started):
-    """CHECK-3: a named area starts only its own scanners and prints only its own row."""
+    """CHECK-3, CHECK-6: a named area starts only its own scanners and prints only its own row."""
     keywords, calls = recording_scanners(served_scanners, elsewhere)
     _, out, _ = run_check_of(scanned_repo(build_repo), capsys, area, **keywords)
     assert (rows_of(out), calls_of(calls)) == ([area], started)
@@ -69,7 +69,8 @@ def test_a_named_area_starts_only_its_scanners_and_prints_only_its_row(build_rep
     ],
 )
 def test_a_run_of_named_areas_equals_the_same_request_spelt_otherwise(build_repo, served_scanners, elsewhere, capsys, words, other, rows):
-    """CHECK-3: areas named in any order, repeated or all at once judge each area once, in the order of the rows."""
+    """CHECK-3, ROW-8: areas named in any order, repeated or all at once judge each area once, in the order of the
+    rows, which the cell `every area named` spells out as the seven names."""
     keywords, _ = recording_scanners(served_scanners, elsewhere)
     repo = scanned_repo(build_repo)
     _, named_out, _ = run_check_of(repo, capsys, *words, **keywords)
@@ -89,6 +90,7 @@ def test_a_run_of_named_areas_equals_the_same_request_spelt_otherwise(build_repo
     ],
 )
 def test_a_selected_run_counts_what_it_judged_and_nothing_else(build_repo, capsys, words, code, last_line):
+    """CHECK-7, CHECK-8: the verdict counts the named areas only and the exit is the worst of theirs."""
     done, out, _ = run_check_of(build_repo({".env": "A=1\n"}), capsys, *words)
     assert (done, out.splitlines()[-1]) == (code, last_line)
 
@@ -108,6 +110,7 @@ def refused_stderr(areas_refused: str) -> str:
     ],
 )
 def test_a_refusal_outside_the_named_areas_changes_nothing(build_repo, capsys, files, words, code, has_refused_row, stderr):
+    """CHECK-6, CHECK-7, CHECK-8: a refusal outside the named areas changes no row, count or exit."""
     done, out, err = run_check_of(build_repo(files), capsys, *words)
     assert (done, "✗" in out, err) == (code, has_refused_row, stderr)
 
@@ -125,6 +128,7 @@ def test_a_refusal_outside_the_named_areas_changes_nothing(build_repo, capsys, f
     ],
 )
 def test_a_named_area_starts_no_shared_read_it_does_not_need(build_repo, served_scanners, elsewhere, capsys, monkeypatch, area, unneeded):
+    """CHECK-6: a named area starts none of the shared reads that only an area not named needs."""
     def never_read(*_arguments, **_keywords):
         pytest.fail("a read this area does not need was started")
 
