@@ -1,0 +1,7 @@
+claim_id = "8c89bd569346440d9354274bd0806078"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "08938238afaa31e410a3199fc0a2ea168e14ba3d"
+branch = "claude/issue-573-d7-layout-frontend-ids"
+scope = ["docs/rules.md", "tests/test_layout_frontend.py"]
+opened_commit = "c7f03ee56a8ca8e8d2402e06c928e2b70c6199dd"
