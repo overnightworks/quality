@@ -1,8 +1,0 @@
-claim_id = "0f86768844d3419a9795c88ca4e0eaf0"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "43f2225b407864d6c3c81428a00ee32e75f5d3f4"
-branch = "claude/issue-538-d7-row-vocabulary-ids"
-scope = ["docs/output.md", "tests/support/check.py", "tests/test_check.py", "tests/test_cli_output.py", "tests/test_output.py"]
-opened_commit = "d3dfbb144e764b0b57cd58cd9d3ca90a1676fdb9"
-whole_reason = "docs/output.md full stop, per-area vocabulary and note rows and the tests that prove them, linked by ROW and O IDs, with #5's 529a."
