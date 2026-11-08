@@ -159,13 +159,14 @@ It applies these rules:
   `--fix` follows renames as the verdict carries them: from the ceiling's last commit it reads what git renamed into the index (`git diff --cached -M50% -l1000`), moves a renamed file's entries and pairs to the new path at their values (`moved`) and drops what the ceiling held under that path before the move (`dropped ... left from before the move`); a ceiling it already moved stays, an entry it cannot place refuses with the restore step, a shallow clone whose ceiling's last commit is its edge, which is every depth-1 clone that holds a ceiling, refuses `--fix` with `git fetch --unshallow`, and a move the index does not record is not followed. Renames are followed before anything is judged gone, so a renamed file's entries move and never fall; with no committed ceiling a moved file's entries are gone. `check` reads no history: after a staged move it names the new path `new debt` and the old one `can fall … is gone`, and one `--fix` clears both.
 - `clone`: a pair is two functions (methods and nested functions too) in two different tracked `*.py` files, each of at
   least 40 tokens without its docstring, whose structure is at least 90 % the same once every name and literal is
-  renamed (CLONE-1); tests count like code, and a copy inside one file is no pair. A pair is named by the path and qualified
-  symbol of both sides, as `size` names a function (CLONE-2); a pair counts as tests only when both files are tests (CLONE-3). Without a
-  `[clones]` table in `quality/baseline.toml` the rule only measures: the pairs stand in the partly row
+  renamed (CLONE-1); tests count like code (CLONE-4), and a copy inside one file is no pair. A pair is named by the
+  path and qualified symbol of both sides, as `size` names a function (CLONE-2); a pair counts as tests only when both
+  files are tests (CLONE-3). Without a `[clones]` table in `quality/baseline.toml` the rule only measures (CLONE-5):
+  where the file exists, the pairs stand in the [partly row](output.md#area-rows)
   (`· debt  not recorded  2 clone pairs · partly measured only`). With one, even an empty one, a new pair is a
   `near copy` row at its second side (`function check and tests/test_a.py run`, fix: give the shared body one owner and
-  call it, or make the cases one parametrized test) and so is a held pair the tree lost, even when a side was deleted
-  (`can fall` at its first side: `pair tests/test_a.py run <-> tests/test_b.py check is gone`, fix:
+  call it, or make the cases one parametrized test) (CLONE-6) and so is a held pair the tree lost, even when a side
+  was deleted (`can fall` at its first side: `pair tests/test_a.py run <-> tests/test_b.py check is gone`, fix:
   `quality check --fix`). A Python file that cannot be parsed may hide a pair, so with a `[clones]` table the `debt` row is `✗ not checked`
   (exit `2`), as for `size`. The baseline is read once for both rules: one that cannot be read leaves both
   unjudged (the `debt` row names the reason once, exit `2`), also when it has no `[clones]` table, since the mode is then unknown.

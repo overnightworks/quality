@@ -248,7 +248,7 @@ MALFORMED_IDS = ["not a table", "a path that is not a table", "a symbol that is 
 
 @pytest.mark.parametrize("text", MALFORMED, ids=MALFORMED_IDS)
 def test_a_malformed_clone_table_cannot_be_judged_by_check(build_repo, capsys, text):
-    """#130 cell 16: check."""
+    """CEILING-9: a baseline with a malformed `[clones]` table is exit 2 naming the file, not a traceback."""
     code, output = check_output(capsys, build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: text}))
     assert (code, BASELINE_PATH in output, "Traceback" in output) == (2, True, False), output
 
@@ -274,7 +274,7 @@ def test_a_malformed_clone_table_at_the_base_names_the_base_commit_without_a_rew
 
 
 def test_an_unknown_table_names_the_tool_version_and_every_known_table_with_clones():
-    """#130 cell 17, #153 cell 14."""
+    """CEILING-3: an unknown table is named with the tool's version and every table it knows, `clones` among them."""
     with pytest.raises(SizeError, match=rf"unknown table \[future\]; quality {re.escape(__version__)} knows ccn, .*, clones$"):
         load_baseline("[future]\n")
 
@@ -284,8 +284,8 @@ def judged_rules(repo: Path) -> dict[Rule, RuleVerdict]:
 
 
 def assert_the_debt_block_is_the_findings_in_run_order(repo: Path, output: str) -> None:
-    """Decision 4, rule 7: the debt block decoded once in printed order (several findings at one location included)
-    is exactly the size findings then the clone findings the rule runner returned."""
+    """O14: the debt block decoded once in printed order (several findings at one location included) is exactly the
+    size findings then the clone findings the rule runner returned."""
     findings = [finding for rule, verdict in judged_rules(repo).items() if rule.area is Area.DEBT for finding in verdict.findings]
     decoded = [(location, row.event, row.fact, row.fix) for location, row in area_finding_rows(output, Area.DEBT)]
     assert decoded == [(finding.location, finding.event, printable(finding.fact), printable(finding.fix)) for finding in findings]
@@ -293,7 +293,8 @@ def assert_the_debt_block_is_the_findings_in_run_order(repo: Path, output: str) 
 
 
 def test_check_without_a_clone_table_holds_the_size_and_leaves_the_clone_rule_report_only(build_repo, capsys):
-    """#136 cell 6 (E3, report half): size tables alone leave the clone rule counting."""
+    """CLONE-5: a baseline of size tables alone leaves the clone rule measuring: no finding, and the pairs it found as
+    its extent."""
     repo = build_repo({"src/a.py": long_function(71), **TWO_FILES, BASELINE_PATH: LONG_ONE})
     code, output = check_output(capsys, repo)
     rules = judged_rules(repo)
@@ -304,7 +305,8 @@ def test_check_without_a_clone_table_holds_the_size_and_leaves_the_clone_rule_re
 
 
 def test_check_with_a_clone_table_holds_the_size_and_the_pairs_without_a_report_line(build_repo, capsys):
-    """#136 E3, cell 2: a held pair that the tree has is clean, and the clone rule is enforced, not measured only, its extent the ceiling file's pairs."""
+    """CLONE-6: with a `[clones]` table the clone rule judges: a held pair the tree has is no finding, and its extent is
+    the ceiling file's pairs."""
     repo = build_repo({"src/a.py": long_function(71), **TWO_FILES, BASELINE_PATH: LONG_ONE + FIRST})
     code, output = check_output(capsys, repo)
     clone = judged_rules(repo)[Rule.CLONE]
@@ -426,7 +428,7 @@ def assert_gone_pair(finding: Finding, pair: ClonePair) -> None:
 
 
 def test_an_empty_clone_table_makes_a_new_cross_file_pair_red_at_its_second_side(build_repo, capsys):
-    """#136 E3, E4, cell 1."""
+    """CLONE-6: an empty `[clones]` table makes a new pair across two files a `near copy` finding at its second side."""
     repo, code, output = enforced(capsys, build_repo, TWO_FILES)
     (finding,) = clone_findings(repo)
     assert code == 1, output
@@ -436,7 +438,7 @@ def test_an_empty_clone_table_makes_a_new_cross_file_pair_red_at_its_second_side
 
 
 def test_a_pair_across_production_and_tests_is_judged_like_any_other(build_repo, capsys):
-    """#136 cell 13."""
+    """CLONE-4, CLONE-6: a pair between production and a test file is a `near copy` finding like any other."""
     files = {"src/a.py": clone_function("run", "a", "b"), "tests/test_b.py": clone_function("check", "c", "d")}
     repo, code, output = enforced(capsys, build_repo, files)
     (finding,) = clone_findings(repo)
@@ -489,7 +491,7 @@ def test_a_copy_fixed_in_place_leaves_the_held_pair_stale(build_repo, capsys):
 
 
 def test_a_second_side_moved_down_is_named_at_its_new_line(build_repo, capsys):
-    """#136 cell 18."""
+    """CLONE-6: a new pair is named at the line its second side stands on."""
     files = {**TWO_FILES, "tests/test_b.py": "import os\n\n\n" + TWO_FILES["tests/test_b.py"]}
     repo, code, output = enforced(capsys, build_repo, files)
     (finding,) = clone_findings(repo)
@@ -498,7 +500,8 @@ def test_a_second_side_moved_down_is_named_at_its_new_line(build_repo, capsys):
 
 
 def test_new_pairs_print_in_sorted_order_across_locations_and_at_one_location(build_repo, capsys):
-    """#136 cell 10: the block decoded once in printed order, with two rows at test_c.py:1."""
+    """CLONE-6, O14: three new pairs are three findings, in sorted order across locations and at one location, printed
+    in that order."""
     repo, code, output = enforced(capsys, build_repo, THREE_FILES)
     assert code == 1, output
     findings = clone_findings(repo)
@@ -569,7 +572,8 @@ def test_the_write_and_the_rule_agree(build_repo, capsys):
 
 
 def test_a_control_character_and_undecodable_bytes_in_a_new_pair_print_escaped(build_repo, capsys):
-    """#136 cell 17: a new pair can carry both."""
+    """CLONE-6, MASK-2, MASK-5: a new pair whose paths hold a control character and undecodable bytes prints them
+    escaped."""
     new = {"src/a\x01.py": clone_function("run", "a", "b"), "src/b\udcff.py": clone_function("check", "c", "d")}
     repo, code, output = enforced(capsys, build_repo, new)
     (finding,) = clone_findings(repo)

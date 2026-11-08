@@ -36,12 +36,13 @@ def pairs_by_area(files: dict[str, str]) -> dict[Area, int]:
         "CLONE-1 a 40-token copy is one pair",
         "CLONE-3 a copy between two tests counts as tests",
         "CLONE-3 a test that copies production counts as production",
-        "#119 cell 22 a .ts copy of a Python function is no pair",
-        "#119 cell 22 two identical .ts files are no pair",
+        "a .ts copy of a Python function is no pair",
+        "two identical .ts files are no pair",
     ],
 )
 def test_pairs_are_counted_by_area(files, production, tests):
-    """The 39-token function is the 40-token one with one `pass` less (3 + 35 + 1 = 39)."""
+    """CLONE-1, CLONE-3, CLONE-4: pairs are counted by area. The 39-token function is the 40-token one with one `pass`
+    less (3 + 35 + 1 = 39)."""
     assert pairs_by_area(files) == {Area.PRODUCTION: production, Area.TESTS: tests}
 
 
@@ -98,7 +99,8 @@ def test_a_pair_is_named_by_path_and_qualified_symbol_whatever_the_line():
 
 
 def test_methods_and_repeated_names_get_the_size_rules_symbols():
-    """CLONE-2: `Class.method` and the `#2` of a name defined twice, as the size rule names them."""
+    """CLONE-2, SIZE-5: a method is `Class.method` and a second function of a name defined twice is numbered, as the
+    size rule names them."""
     first = "class Holder:\n" + "".join(f"    {line}\n" for line in function("method", "self", "b").splitlines())
     second = function("method", "a", "b") + function("method", "c", "d")
     pairs = clones.find_pairs({"src/a.py": first.encode(), "src/b.py": second.encode()}).pairs
@@ -106,8 +108,8 @@ def test_methods_and_repeated_names_get_the_size_rules_symbols():
 
 
 def test_a_file_python_cannot_parse_has_no_pair_and_leaves_the_clone_rule_clean_while_the_python_rules_exit_2(build_repo, capsys):
-    """#113 rule 3: report-only mode skips the file; `clone` stays judging, python-security (#219) and python-print (#225)
-    make the run exit 2."""
+    """CLONE-5, SECURITY-18: with no baseline the clone rule skips a file Python cannot parse and is not refused, while
+    the `code` row refuses with `ruff cannot parse` and the run exits 2."""
     files = {"src/a.py": function("first", "a", "b"), "src/broken.py": "def broken(:\n"}
     repo = build_repo(files)
     code, output = run(capsys, repo)
@@ -118,7 +120,7 @@ def test_a_file_python_cannot_parse_has_no_pair_and_leaves_the_clone_rule_clean_
 
 @pytest.mark.integration
 def test_quality_holds_its_own_clone_table_and_its_clean_debt_row_counts_the_ceiling_file(capsys):
-    """#136 cell 12: quality enforces its `[clones]`, so a copied helper in its tree turns its own gate red."""
+    """O21: quality's own `[clones]` table is enforced, so its clean `debt` row counts what its ceiling file holds."""
     code, output = run(capsys, QUALITY_ITSELF)
     held = read_baseline(QUALITY_ITSELF)
     assert (code, extent_counts(area_fact(output, "debt"))) == (0, [len(held.size), len(held.clones)]), output
