@@ -1,8 +1,0 @@
-claim_id = "da9ade55495f4fb3b38e78f44eb83867"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "aa2ff84b99fffbadb644e8e8f689ff27975865d7"
-branch = "claude/issue-481-f2a-fleet-from-github"
-scope = [".github/workflows/report.yml", "AGENTS.md", "docs/ARCHITECTURE.md", "docs/commands.md", "quality/fleet.toml", "src/quality/cli.py", "src/quality/fleet.py", "tests/test_cli_help.py", "tests/test_fleet.py", "tests/test_fleet_report.py", "tests/test_web.py"]
-opened_commit = "0177679fc74e223861e8415d03dd22feea2ec1b2"
-whole_reason = "The listing (fleet.py, cli.py, report.yml), the hand list's exit (fleet.toml), the no-redirect proof the token relies on (test_web.py) and the facts naming them (docs, AGENTS.md) prove one capability end to end; apart, the fleet or a fact would lie."
