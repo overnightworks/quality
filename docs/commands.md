@@ -117,25 +117,31 @@ entries, a folder that is not a repository, or a gitleaks run without a report.
 
 ## `quality report`
 
-`quality report` reads `quality/fleet.toml` in the folder it runs in and takes no path. The file has three optional keys,
-`organizations = [...]` (GitHub organization names), `repositories = [...]` (single `owner/name`s, a fork too) and
-`exclude = [...]` (single `owner/name`s left out of what the organizations list); the fleet is every public,
-non-archived, non-fork repository GitHub lists for each organization, less the excluded ones, plus the named ones. On
-stderr it prints `· fleet  N found  <organizations> · quality/fleet.toml`, then a row per repository as
-it is measured, sorted by name, case-insensitively: `✓ <owner/name>  measured  <commit> · <time>`, `✗ …  not measured
-<reason>` or `✗ …  partly read  cannot read <files>`; a failed read of the release tags adds `✗ release tags  not read
-<reason>` under the fleet line. The subjects share one column. On stdout it prints the two markdown tables and nothing
-else, so `quality report > fleet.md` writes only them: the size of every repository under a heading with the date, the
-quality version and that functions and CCN are measured for Python only, then the same rows as a repo × rule matrix.
-With `GITHUB_STEP_SUMMARY` set, the tables are appended there. Every cell puts a backslash before `` \ ` * _ ~ [ ] < > &
-| ``, so repository text opens no HTML comment, link or new cell; a bare URL still renders as a link to its own address.
-The run ends on stderr with `✓ N of N repositories measured · <time>` (exit `0`) or with `error: ` and what applies of
+`quality report` reads `quality/fleet.toml` in the folder it runs in (FLEET-28) and takes no path (FLEET-29). The file
+has three optional keys, `organizations = [...]` (GitHub organization names), `repositories = [...]` (single
+`owner/name`s, a fork too (FLEET-30)) and `exclude = [...]` (single `owner/name`s left out of what the organizations
+list (FLEET-31)); the fleet is every public, non-archived, non-fork repository GitHub lists for each organization
+(FLEET-32), less the excluded ones, plus the named ones. On stderr it prints
+`· fleet  N found  <organizations> · quality/fleet.toml` (without `<organizations> · ` when the file names none)
+(FLEET-33), then a row per repository as it is measured, sorted by name, case-insensitively (FLEET-34):
+`✓ <owner/name>  measured  <commit> · <time>` (FLEET-35), `✗ …  not measured <reason>` (FLEET-36) or
+`✗ …  partly read  cannot read <files>` (FLEET-37); a failed read of the release tags adds
+`✗ release tags  not read <reason>` under the fleet line (FLEET-38). The subjects share one column (FLEET-39). On stdout
+it prints the two markdown tables and nothing else, so `quality report > fleet.md` writes only them (FLEET-40): the size
+of every repository under a heading with the date, the quality version and that functions and CCN are measured for
+Python only (FLEET-41), then the same rows as a repo × rule matrix (FLEET-42). With `GITHUB_STEP_SUMMARY` set, the
+tables are appended there (FLEET-43). Every cell puts a backslash before `` \ ` * _ ~ [ ] < > & | ``, so repository text
+opens no HTML comment, link or new cell (FLEET-44); a bare URL still renders as a link to its own address. The run ends
+on stderr with `✓ N of N repositories measured · <time>` (exit `0`) (FLEET-45) or with `error: ` and what applies of
 `K of N repositories not measured`, `J partly read` and `the release tags not read`, then `the tables say so`, and
-`next: quality report` (exit `2`); an unwritable summary is `error: GITHUB_STEP_SUMMARY is not writable · <reason>`
-(exit `2`). `-v` adds nothing: the report runs no scanner. The fleet's selection lives once, in `quality/fleet.toml`;
+`next: quality report` (exit `2`) (FLEET-46); an unwritable summary is
+`error: GITHUB_STEP_SUMMARY is not writable · <reason>` (exit `2`, with
+`fix what the error names, then run quality report again` under `next:`) (FLEET-47). `-v` adds nothing: the report runs
+no scanner (FLEET-48). The fleet's selection lives once, in `quality/fleet.toml` (FLEET-49);
 `.github/workflows/report.yml` runs it every Monday at 05:17 UTC and on dispatch; the tables stand in that run's
 summary. The run only reports: it writes to no repository and lists with its own read-only job token (`GITHUB_TOKEN`,
-sent to `api.github.com` only, never to git); a local run lists anonymously. A missing, unreadable (a directory, a
+sent to `api.github.com` only, never to git); a local run lists anonymously (FLEET-50).
+A missing, unreadable (a directory, a
 dangling link, not UTF-8), malformed, duplicating (also across case, and across `repositories` and `exclude`: `exclude[0] repeats repositories[1]`), empty (`selects no repository`) or badly named
 `quality/fleet.toml` is the pair, exit `2`, before any request or clone: `error: ` and what is wrong with
 `quality/fleet.toml`, named repository-relative, and `next: write it in quality/fleet.toml like this:` with the file's

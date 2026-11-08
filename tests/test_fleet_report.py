@@ -114,6 +114,8 @@ def gate_caller(ref: str) -> dict[str, str]:
 
 
 def test_a_measured_fleet_prints_its_rows_on_stderr_and_only_the_tables_on_stdout(capsys, monkeypatch, tmp_path, public, remotes):
+    """FLEET-1, FLEET-7, FLEET-33, FLEET-34, FLEET-35, FLEET-39, FLEET-40, FLEET-41, FLEET-42, FLEET-45: the rows stand
+    on stderr, the two tables alone on stdout, and the heading names the newest release by version."""
     alpha = public("alpha", {"a.py": "a = 1\n"})
     beta = public("beta-repository", {"b.py": "b = 1\n"})
     folder = write_fleet(tmp_path / "fleet", [beta, alpha])
@@ -141,10 +143,13 @@ def test_a_measured_fleet_prints_its_rows_on_stderr_and_only_the_tables_on_stdou
         ["o/alpha", "no gate", "none"],
         ["o/beta-repository", "no gate", "none"],
     ]
+    assert lines[9].startswith("Every gate release enforces ")
+    assert lines[11].startswith("| Repo | Gate |")
     assert (len(lines), [line.split(" |")[0] for line in lines[-2:]]) == (15, ["| o/alpha", "| o/beta-repository"])
 
 
 def test_a_repository_that_cannot_be_cloned_is_its_row_and_the_pair_after_the_tables(capsys, monkeypatch, tmp_path, public, missing, remotes):
+    """FLEET-36, FLEET-46: a repository that cannot be cloned is its row, and the closing pair counts it."""
     alpha = public("alpha", {"a.py": "a = 1\n"})
     printed = report_in(write_fleet(tmp_path / "fleet", [alpha, missing]), capsys, monkeypatch, ticks(0, 1, 2, 3, 4))
     assert (printed.code, printed.err) == (
@@ -159,6 +164,7 @@ def test_a_repository_that_cannot_be_cloned_is_its_row_and_the_pair_after_the_ta
 
 
 def test_unread_release_tags_stand_under_the_fleet_line_and_in_the_pair(capsys, monkeypatch, tmp_path, public, remotes):
+    """FLEET-26, FLEET-38, FLEET-46: unread release tags stand under the fleet line and in the closing pair."""
     alpha = public("alpha", {"a.py": "a = 1\n"})
 
     def unreadable() -> dict[str, str]:
@@ -176,6 +182,7 @@ def test_unread_release_tags_stand_under_the_fleet_line_and_in_the_pair(capsys, 
 
 
 def test_a_cell_that_cannot_read_a_file_makes_the_row_partly_read(capsys, monkeypatch, tmp_path, public):
+    """FLEET-26, FLEET-37, FLEET-46: a cell that cannot read a file makes its row partly read."""
     alpha = public("alpha", {**gate_caller(NEWEST), "quality/config.toml": "[gate\n"})
     printed = report_in(write_fleet(tmp_path / "fleet", [alpha]), capsys, monkeypatch, ticks(0, 1, 2))
     assert (printed.code, printed.err) == (
@@ -188,6 +195,7 @@ def test_a_cell_that_cannot_read_a_file_makes_the_row_partly_read(capsys, monkey
 
 
 def test_an_unwritable_step_summary_is_the_pair_after_the_tables(capsys, monkeypatch, tmp_path, public):
+    """FLEET-47: an unwritable step summary is the closing pair, after the tables."""
     alpha = public("alpha", {"a.py": "a = 1\n"})
     summary = tmp_path / "a-directory"
     summary.mkdir()
@@ -213,6 +221,7 @@ def test_an_unwritable_step_summary_is_the_pair_after_the_tables(capsys, monkeyp
     ids=["comment", "link", "backslash", "cell border", "emphasis"],
 )
 def test_markdown_in_repository_text_stays_text_in_the_tables(capsys, monkeypatch, tmp_path, public, ref, cell):
+    """FLEET-43, FLEET-44: repository text stays text in the tables, in stdout and in the step summary."""
     hostile = public("hostile", gate_caller(ref))
     summary = tmp_path / "summary.md"
     printed = report_in(
@@ -222,6 +231,7 @@ def test_markdown_in_repository_text_stays_text_in_the_tables(capsys, monkeypatc
 
 
 def test_report_takes_v_and_prints_the_same(capsys, monkeypatch, tmp_path, public):
+    """FLEET-48: -v prints what the run prints without it."""
     folder = write_fleet(tmp_path / "fleet", [public("alpha", {"a.py": "a = 1\n"})])
     plain = report_in(folder, capsys, monkeypatch, ticks(0, 1, 2, 3))
     verbose = report_in(folder, capsys, monkeypatch, ticks(0, 1, 2, 3), words=("-v",))
@@ -229,6 +239,8 @@ def test_report_takes_v_and_prints_the_same(capsys, monkeypatch, tmp_path, publi
 
 
 def test_an_organizations_public_repositories_are_measured_and_nothing_else(capsys, monkeypatch, tmp_path, public):
+    """FLEET-32, FLEET-33, FLEET-34: an organization's public, non-archived, non-fork repositories are measured in
+    name order, and nothing else."""
     public("alpha", {"a.py": "a = 1\n"})
     public("Beta", {"b.py": "b = 1\n"})
     listing = Listing({"o": listed(("o/Beta",), ("o/alpha",), ("o/old", "archived"), ("o/copy", "fork"))})
@@ -269,6 +281,7 @@ def test_a_private_repository_named_in_the_file_never_reads_as_found(capsys, mon
     ids=["token", "no token", "empty token"],
 )
 def test_the_listing_carries_the_job_token_only_when_there_is_one(capsys, monkeypatch, tmp_path, public, environment, authorization):
+    """FLEET-50: the listing carries the job token as a bearer header only when there is one, and no output holds it."""
     public("alpha", {"a.py": "a = 1\n"})
     listing = Listing({"o": listed(("o/alpha",))})
     printed = report_in(
@@ -341,6 +354,7 @@ def test_a_named_repository_that_the_organization_already_lists_is_refused_by_it
 
 
 def test_a_fork_named_in_the_file_is_measured(capsys, monkeypatch, tmp_path, public):
+    """FLEET-30: a fork named in the file is measured."""
     public("alpha", {"a.py": "a = 1\n"})
     public("copy", {"c.py": "c = 1\n"})
     listing = Listing({"o": listed(("o/alpha",), ("o/copy", "fork"))})
@@ -364,6 +378,7 @@ def test_organizations_that_select_nothing_are_refused(capsys, monkeypatch, tmp_
 
 
 def test_an_excluded_repository_is_left_out_and_the_fleet_line_counts_the_rest(capsys, monkeypatch, tmp_path, public):
+    """FLEET-31, FLEET-33: an excluded repository is left out, and the fleet line counts the rest."""
     public("alpha", {"a.py": "a = 1\n"})
     listing = Listing({"o": listed(("o/alpha",), ("o/Beta",))})
     printed = report_in(

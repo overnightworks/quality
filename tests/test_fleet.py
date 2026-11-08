@@ -1,4 +1,4 @@
-"""`quality report` (#56): cells name the item's scenario matrix, rules its numbered rules."""
+"""`quality report`: the fleet file, the listing, the streams and the tables of the measured fleet."""
 
 import os
 import re
@@ -311,7 +311,7 @@ def test_no_configured_credential_reaches_a_host_that_asks_for_one(fleet_report,
 
 
 def test_the_git_environment_never_holds_the_listing_token(tmp_path, monkeypatch):
-    """The job's token is for GitHub's API alone: clone and ls-remote run in an environment without it."""
+    """FLEET-50: the job's token is for GitHub's API alone: clone and ls-remote run in an environment without it."""
     monkeypatch.setenv("GITHUB_TOKEN", "dummy-token")
     assert "GITHUB_TOKEN" not in anonymous_environment(tmp_path)
 
@@ -375,7 +375,7 @@ def test_no_temporary_clone_outlives_a_stopped_run(public, scratch, tmp_path, st
 
 
 def test_the_heading_names_date_version_and_languages(fleet_report, public):
-    """Cell 17, rule 6: the date of the run, the quality version and what only Python has."""
+    """FLEET-41: the date of the run, the quality version and what only Python has."""
     before = datetime.now(UTC).date()
     _, output = fleet_report(public("dated", {}))
     after = datetime.now(UTC).date()
@@ -387,7 +387,7 @@ def test_the_heading_names_date_version_and_languages(fleet_report, public):
 
 
 def test_the_table_goes_to_stdout_and_identically_to_the_step_summary(fleet_report, public, tmp_path, monkeypatch):
-    """Cell 18, rule 6: with GITHUB_STEP_SUMMARY the same text is appended there."""
+    """FLEET-43: with GITHUB_STEP_SUMMARY the same text is appended there."""
     summary = tmp_path / "summary.md"
     summary.write_text("earlier step\n")
     monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
@@ -398,7 +398,7 @@ def test_the_table_goes_to_stdout_and_identically_to_the_step_summary(fleet_repo
 
 
 def test_without_a_step_summary_nothing_is_written(fleet_report, public, tmp_path, monkeypatch):
-    """Cell 18, rule 6: without GITHUB_STEP_SUMMARY only stdout carries the table."""
+    """FLEET-43: without GITHUB_STEP_SUMMARY only stdout carries the table."""
     monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
     before = sorted(tmp_path.rglob("*"))
     _, output = fleet_report(public("quiet", {}))
@@ -412,7 +412,7 @@ def test_without_a_step_summary_nothing_is_written(fleet_report, public, tmp_pat
     ids=["--private", "a path"],
 )
 def test_a_fleet_given_on_the_command_line_is_a_usage_error(capsys, arguments, stray):
-    """No fleet comes from the command line: a path or `--private` is a wrong invocation, so no URL reaches git."""
+    """FLEET-29, HELP-20: a path or `--private` is a wrong invocation, so no URL reaches git."""
     code = cli.main(["report", *arguments])
     printed = capsys.readouterr()
     assert (code, printed.out, printed.err) == (
@@ -423,14 +423,14 @@ def test_a_fleet_given_on_the_command_line_is_a_usage_error(capsys, arguments, s
 
 
 def test_the_fleet_file_is_read_from_the_working_directory_by_default(capsys, public, tmp_path, monkeypatch):
-    """#63 rule 1: `quality report` reads `./quality/fleet.toml` where it runs."""
+    """FLEET-28: `quality report` reads `./quality/fleet.toml` where it runs."""
     monkeypatch.chdir(write_fleet(tmp_path / "checkout", [public("here", {"a.py": "a = 1\n"})]))
     assert cli.main(["report"], release_tags=lambda: RELEASES) == 0
     assert row(capsys.readouterr().out, "o/here")[3] == "1 / 0"
 
 
 def test_rows_sort_by_lower_cased_name_in_both_tables_whatever_the_file_order(fleet_report, public):
-    """#270 ruling 3: the file's order is not the table's order."""
+    """The file's order is not the table's order."""
     later = public("Zeta", {"a.py": "a = 1\n"}, owner="b")
     earlier = public("alpha", {"a.py": "a = 1\n"}, owner="C")
     first = public("alpha", {"a.py": "a = 1\n"}, owner="a")
@@ -541,7 +541,7 @@ def test_every_entry_problem_of_a_fleet_file_is_named_in_one_exit_2_message(caps
 
 
 def test_the_fleet_lives_once_in_the_fleet_file():
-    """#270 rule 5 and #63 rule 5: the real fleet file parses into owner/names and the workflow carries no URL."""
+    """FLEET-49: the real fleet file parses into owner/names and the workflow carries no URL."""
     fleet = read_fleet(Path(__file__).parent.parent)
     assert fleet.organizations
     assert "github.com/overnightworks" not in (WORKFLOWS / "report.yml").read_text()
@@ -556,7 +556,8 @@ def pinned_actions(document: dict) -> set[str]:
 
 
 def test_the_workflow_reads_only_and_pins_what_ci_pins():
-    """Cell 23, rule 7: contents: read, no secrets, no persisted credentials, ci.yml's SHAs, a timeout, concurrency."""
+    """FLEET-50: contents: read, no secrets, no persisted credentials, the token in the measuring step alone, ci.yml's
+    SHAs, a timeout, concurrency."""
     report_workflow = workflow("report.yml")
     text = (WORKFLOWS / "report.yml").read_text()
     (job,) = report_workflow["jobs"].values()
