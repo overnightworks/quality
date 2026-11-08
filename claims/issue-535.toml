@@ -1,8 +1,0 @@
-claim_id = "6f9cd1d88b0c4f8a90384197a8ae375d"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "446154dd1d29f1f62152a26a386b2d5ea5884954"
-branch = "claude/issue-535-d7-wrong-invocation-ids"
-scope = ["docs/commands.md", "tests/test_cli_areas.py", "tests/test_cli_help.py", "tests/test_cli_workflow_invocations.py", "tests/test_sonar.py"]
-opened_commit = "0edfed1069a8b192d5b1231fae6dc30495f8c56c"
-whole_reason = "docs/commands.md wrong invocations and parser refusals, the --fix refusal sentences and the no-workflow sentence, and the tests that prove them, linked by HELP IDs, with the picture test name and two attributions removed."
