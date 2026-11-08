@@ -1,7 +1,0 @@
-claim_id = "c5e62353a1d2493e9407388df3e1c0ce"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "ebb95607a739a6ab2d1e94e80054d32337566c77"
-branch = "claude/issue-491-d7-release-3d"
-scope = ["docs/release.md", "tests/scripts/test_verify_release.py", "tests/workflows/test_release.py"]
-opened_commit = "81438e79ebabcd866b7ed523931155ceb34065ab"
