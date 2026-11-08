@@ -69,6 +69,7 @@ def block(text):
 
 
 def test_a_green_pull_request_sums_its_jobs_in_one_row(frame, based):
+    """VERDICT-25, VERDICT-27, VERDICT-30, VERDICT-32, VERDICT-35."""
     base_row = based(gate_config("checks"))
     out = lines(base_row, GREEN_JOBS, NO_LOOSENINGS, "✓ green · 1 mandatory job · <1s")
     assert frame() == (0, out, "", block(out))
@@ -91,6 +92,7 @@ def test_a_green_pull_request_sums_its_jobs_in_one_row(frame, based):
     ],
 )
 def test_a_job_that_is_not_green_puts_every_job_on_its_row(frame, pull_request, entries, row):
+    """VERDICT-6, VERDICT-7, VERDICT-8, VERDICT-28, VERDICT-29, VERDICT-33."""
     _, commit_base = pull_request
     sha = commit_base(None, gate_config("checks", "lint"))
     out = lines(
@@ -105,6 +107,7 @@ def test_a_job_that_is_not_green_puts_every_job_on_its_row(frame, pull_request, 
 
 
 def test_a_gate_job_stands_as_its_check_name(frame, pull_request, monkeypatch):
+    """VERDICT-14, VERDICT-28, VERDICT-33."""
     _, commit_base = pull_request
     sha = commit_base(None, gate_config("check"))
     monkeypatch.setenv("GATE_NEEDS", needs(check="success", sonar="failure"))
@@ -120,6 +123,7 @@ def test_a_gate_job_stands_as_its_check_name(frame, pull_request, monkeypatch):
 
 
 def test_the_base_row_names_the_base_and_the_pull_requests_head(frame, pull_request, monkeypatch):
+    """VERDICT-25."""
     repo, commit_base = pull_request
     base = commit_base(None, gate_config("checks"))
     subprocess.run(["git", "-C", str(repo), *GIT_IDENTITY, "commit", "-q", "--allow-empty", "-m", "merge"], check=True)
@@ -132,6 +136,7 @@ def test_the_base_row_names_the_base_and_the_pull_requests_head(frame, pull_requ
 
 
 def test_a_push_has_no_base_and_no_loosenings_row(frame, monkeypatch):
+    """VERDICT-26, VERDICT-27, VERDICT-30, VERDICT-32."""
     monkeypatch.setenv("GATE_PULL_REQUEST", "")
     monkeypatch.setenv("GATE_HEAD_SHA", "")
     out = lines(
@@ -161,6 +166,7 @@ def test_the_next_command_parses_back_to_the_pull_request_the_run_names(frame, b
 
 
 def test_an_undeclared_loosening_is_red_without_next(frame, based):
+    """VERDICT-30, VERDICT-33."""
     base_row = based(gate_config("checks", "B"), gate_config("checks"))
     out = lines(
         base_row,
@@ -173,6 +179,7 @@ def test_an_undeclared_loosening_is_red_without_next(frame, based):
 
 
 def test_undeclared_and_declared_loosenings_share_one_row(frame, based):
+    """VERDICT-30, VERDICT-33."""
     head = gate_config("checks", declared=(declaration("legacy fail → report"),))
     base_row = based(gate_config("checks", "B", legacy="fail"), head)
     out = lines(
@@ -188,6 +195,7 @@ def test_undeclared_and_declared_loosenings_share_one_row(frame, based):
 
 
 def test_a_declaration_that_matches_nothing_is_its_row(frame, based):
+    """VERDICT-31, VERDICT-33."""
     base_row = based(gate_config("checks"), gate_config("checks", declared=(declaration("nothing such"),)))
     out = lines(
         base_row,
@@ -202,6 +210,7 @@ def test_a_declaration_that_matches_nothing_is_its_row(frame, based):
 
 
 def test_a_refusal_after_judged_reads_shows_their_rows_before_the_pair(frame, pull_request):
+    """READ-4, VERDICT-1, VERDICT-21, VERDICT-35."""
     _, commit_base = pull_request
     sha = commit_base(None, gate_config("checks", "lint"))
     out = lines(
@@ -224,6 +233,7 @@ def test_a_refusal_after_judged_reads_shows_their_rows_before_the_pair(frame, pu
 
 
 def test_rows_share_the_widest_subject(frame, pull_request):
+    """VERDICT-22."""
     _, commit_base = pull_request
     long = "Acceptance evidence (integration)"
     sha = commit_base(None, gate_config("checks", long))
@@ -253,6 +263,7 @@ def test_a_job_name_with_a_line_feed_prints_as_one_escaped_row_in_log_and_summar
 
 
 def test_the_closing_line_counts_what_applies(frame, based, monkeypatch):
+    """VERDICT-33."""
     monkeypatch.setenv("GATE_NEEDS", needs(check="success", sonar="failure"))
     head = gate_config("checks", declared=(declaration("legacy fail → report"), declaration("nothing such")))
     based(gate_config("checks", "B", legacy="fail"), head)
@@ -264,6 +275,7 @@ def test_the_closing_line_counts_what_applies(frame, based, monkeypatch):
 
 
 def test_the_duration_runs_from_the_door_start(frame):
+    """VERDICT-32, VERDICT-34."""
     _, out, _, _ = frame(clock=ticks(5, 9))
     assert out.splitlines()[-1] == "✓ green · 1 mandatory job · 4s"
 
@@ -308,12 +320,14 @@ def raw_frame(capsys, run_env):
     ],
 )
 def test_the_first_row_names_the_release_of_the_gate_run(raw_frame, based, monkeypatch, version, row):
+    """VERDICT-23, VERDICT-24."""
     monkeypatch.setattr("quality.verdict.__version__", version)
     based(gate_config("checks"))
     assert raw_frame()[1].splitlines()[0] == row
 
 
 def test_a_refusal_frame_opens_with_the_release_row(raw_frame, monkeypatch):
+    """VERDICT-23."""
     monkeypatch.setattr("quality.verdict.__version__", "0.10.0")
     monkeypatch.delenv("GATE_NEEDS")
     code, out, err = raw_frame()
