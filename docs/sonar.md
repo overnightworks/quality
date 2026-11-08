@@ -166,6 +166,8 @@ scanner does not wait for the gate, this command reads it.
 - **Joined coverage.** The gate judges the coverage SonarCloud holds, so it measures the 100 % branch rule only for a
   repository whose report joins every test layer and carries branches. For a repository that has not joined its layers
   yet, the coverage gap is SonarCloud's figure.
+  SonarCloud indexes no `.svelte` file, so a component's lines and branches stay outside the judge: a component keeps
+  its logic in a module SonarCloud measures, and the end-to-end suites prove its markup.
 
 Ruled by the operator: the verdict takes over the gate status, and the gate's result fails the job.
 
