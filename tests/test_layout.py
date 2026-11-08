@@ -236,7 +236,7 @@ def test_a_snake_case_script_name_is_clean(build_repo, path):
 
 
 def test_a_script_outside_a_scripts_folder_is_red_unless_tool_mandated_or_a_dotfile(build_repo):
-    """SCRIPT-9, SCRIPT-10: an executable docker/entrypoint.sh is red; tool-mandated names and dotfiles are exempt."""
+    """SCRIPT-10: an executable docker/entrypoint.sh is red; tool-mandated names and dotfiles are exempt."""
     names = ["docker/entrypoint.sh", "Dockerfile", "Makefile", "docker/.hook"]
     repo = build_repo({**GUIDANCE, **{name: SHELL_HEADER for name in names}})
     for name in names:
@@ -400,7 +400,7 @@ def test_a_path_declared_under_two_rules_and_untracked_is_one_equal_stale_row_pe
 
 
 def test_script_name_is_misnamed_where_the_shape_breaks_and_misplaced_where_only_the_place_does(build_repo, capsys):
-    """O19, ROW-3: both broken is `misnamed` and holds the place-only fact; all three share one fix, printed once."""
+    """O19, ROW-3, SCRIPT-9: both broken is `misnamed` and holds the place-only fact; all three share one fix, printed once."""
     paths = ["scripts/check.sh", "tools/Entry.sh", "tools/entry_point.sh"]
     repo = build_repo({**GUIDANCE, **dict.fromkeys(paths, SHELL_HEADER)})
     for path in paths[1:]:
