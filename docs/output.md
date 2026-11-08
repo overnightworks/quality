@@ -14,12 +14,13 @@ Ruled by the operator:
 The columns are the glyph (state at a glance), the subject (the area, or `path:line` of the finding), the event (one
 typed word: what is the case), the fact (values, a few words) and then `fix:` (what you do) (ROW-1). A finding is
 `! <path[:line]>  <event>  <fact>`, indented under its area row (ROW-2). One `fix:` line follows the last of
-consecutive findings that share the fix (ROW-3). Path and event align per area by display width, in every stream: an
-East Asian wide character takes two cells and a combining mark none (ROW-4); spacing marks, Hangul conjoining letters,
-skin-tone modifiers and emoji sequences are not measured. The findings of an area stand in run order (O14). A
-finding's lines from another tool's rendering (import-linter's broken contract chain and guidance, actionlint's
-message) stand under its row behind the marker `| `, six spaces deep, before the run's `fix:` (ROW-5); a fix that asks
-for an entry ends with `:` and the entry's lines stand under it, two spaces deeper, whole and never shortened (ROW-6).
+consecutive findings that share the fix (ROW-3). Path and event align per area by display width, in every stream, and a
+row pads its subject and event the same way: an East Asian wide character takes two cells and a combining mark none
+(ROW-4); spacing marks, Hangul conjoining letters, skin-tone modifiers and emoji sequences are not measured. The
+findings of an area stand in run order (O14). A finding's lines from another tool's rendering (import-linter's broken
+contract chain and guidance, actionlint's message) stand under its row behind the marker `| `, six spaces deep, before
+the run's `fix:` (ROW-5); a fix that asks for an entry ends with `:` and the entry's lines stand under it, two spaces
+deeper, whole and never shortened (ROW-6).
 A security finding's fix names the line its `# noqa` must stand on, and a code and ruff's message are the fact.
 
 Areas run in the order `files`, `debt`, `imports`, `secrets`, `workflows`, `dependencies`, `code` (ROW-8). The first
@@ -259,7 +260,16 @@ Ruled by the operator:
 
 - Length of a fact: at the terminal shortened to the window width with `…`, never in a pipe, file or CI log. Commands, sha256 and entries to copy stand on their own line, never shortened. Each kind of finding has a fixed event word and a fact of a few words.
 
-At a terminal the free text of a fact ends at the window with `…`: the reason on a `✗` row or line, and the fact of a finding or a note whose event is free text (a tracked file, a layout reason, a tool's message; `output.py` lists them, and a new event stands whole until it is listed). A count, a measurement or an outcome is never cut (`N findings`, `ceiling 64`, `none allows it`, `value not shown`), nor are the lines under a finding, `fix:`, lines to copy, the verdict, `error:` and `next:`; a long line wraps. The cut is at the end, never inside an escape `printable` creates; in a window at or below the text before the fact it is `…`. The window is what the stream's own terminal answers, read once at the start; `COLUMNS` is not read, and an unknown window shortens nothing. At 60 columns:
+At a terminal the free text of a fact ends at the window with `…`: the reason on a `✗` row or line (LENGTH-1), and the
+fact of a finding or a note whose event is free text (a tracked file, a layout reason, a tool's message) (LENGTH-2);
+`output.py` lists them, and a new event stands whole until it is listed (LENGTH-3). A count, a measurement or an
+outcome is never cut (`N findings`, `ceiling 64`, `none allows it`, `value not shown`) (LENGTH-4), nor are the lines
+under a finding and `fix:` (LENGTH-5), lines to copy ([Rows](#rows)), the verdict, `error:` and `next:` (LENGTH-6); a
+long line wraps. A line under a row that the door marks whole, as it marks a declared loosening and its `reason:` line,
+stands whole at a terminal (LENGTH-7). The cut is at the end, never inside an escape `printable` creates (LENGTH-8); in
+a window at or below the text before the fact it is `…` (LENGTH-9). The cut counts display width, as the columns do
+([Rows](#rows)) (LENGTH-10). The window is what the stream's own terminal answers (LENGTH-11), read once at the start
+(LENGTH-12); `COLUMNS` is not read (LENGTH-13), and an unknown window shortens nothing (LENGTH-14). At 60 columns:
 
 ```text
     ! .env          tracked         an env file carries con…

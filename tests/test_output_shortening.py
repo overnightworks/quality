@@ -106,6 +106,8 @@ def piped(write) -> list[str]:
     ],
 )
 def test_a_findings_fact_fills_what_the_window_leaves(fact, columns, expected_fact):
+    """LENGTH-2, LENGTH-8, LENGTH-9, LENGTH-10: a free-text fact fills what the window leaves, cut at its end and never
+    inside an escape, counted in display width, and `…` alone at or below the text before it."""
     (line, *_) = findings_at(columns, [finding("a.env", FindingEvent.TRACKED, fact)])
     assert line == f"    ! a.env  tracked  {expected_fact}"
 
@@ -141,6 +143,7 @@ def test_a_findings_fact_fills_what_the_window_leaves(fact, columns, expected_fa
     ids=["grew", "conflict", "secret", "allowed", "tracked", "warning"],
 )
 def test_a_fact_of_counts_or_an_outcome_stands_whole_and_free_text_is_cut(entry, line):
+    """LENGTH-2, LENGTH-4: a free-text fact is cut at the window; a count, a measurement and an outcome stand whole."""
     assert findings_at(30, *entry_lists(entry))[0] == line
 
 
@@ -164,11 +167,13 @@ def test_a_fact_of_counts_or_an_outcome_stands_whole_and_free_text_is_cut(entry,
     ids=[f"finding {event.name}" for event in FindingEvent] + [f"note {event.name}" for event in NoteEvent],
 )
 def test_only_the_free_text_events_are_cut_at_a_terminal(entry, is_cut):
+    """LENGTH-3: exactly the listed events are cut at a terminal, and every other event stands whole."""
     (line, *_) = findings_at(40, *entry_lists(entry))
     assert (line.endswith("…"), "x" * 60 in line) == (is_cut, not is_cut)
 
 
 def test_a_descriptive_row_and_its_sub_lines_end_at_the_window():
+    """LENGTH-1: the reason on a `✗` row and a `✗` line under a row end at the window."""
     reason = Row(Glyph.COULD_NOT_CHECK, "files", Event.CLEAN, "a reason of many words", descriptive=True)
     sub_line = Row(Glyph.COULD_NOT_CHECK, "files", Event.CLEAN, sub_lines=(SubLine(Glyph.COULD_NOT_CHECK, "a long reason"),))
     assert rows_at(40, reason) == ["  ✗ files         clean          a reas…"]
@@ -176,11 +181,13 @@ def test_a_descriptive_row_and_its_sub_lines_end_at_the_window():
 
 
 def test_a_whole_sub_line_and_the_lines_below_it_stand_whole_at_a_terminal():
+    """LENGTH-7: a line a row marks whole stands whole at a terminal, and so do the lines below it."""
     whole = Row(Glyph.NEEDS_YOU, "files", Event.CLEAN, sub_lines=(SubLine(Glyph.NEEDS_YOU, "a long reason", whole=True, below=("reason: a long reason",)),))
     assert rows_at(15, whole) == ["  ! files         clean", "    ! a long reason", "        reason: a long reason"]
 
 
 def test_each_row_keeps_what_it_protects():
+    """LENGTH-4: a row's extent and counts stand whole at a terminal."""
     rows = (
         Row(Glyph.CLEAN, "code", Event.CLEAN, "a long extent that goes on"),
         Row(Glyph.NOTE, "debt", Event.CLEAN, "six rules · measured only"),
@@ -207,6 +214,8 @@ def test_each_row_keeps_what_it_protects():
     ids=["a sentence", "lines to copy"],
 )
 def test_detail_fix_and_lines_to_copy_stand_whole(fix, fix_lines):
+    """LENGTH-5, ROW-5, ROW-6: the detail lines behind their marker, the `fix:` line and its lines to copy stand whole,
+    deeper under the finding, at a terminal."""
     detail = ("a detail line from another tool that is far longer than the window",)
     printed = findings_at(30, [finding("a.env", FindingEvent.TRACKED, "a fact", detail, fix)])
     assert printed == [
@@ -217,6 +226,7 @@ def test_detail_fix_and_lines_to_copy_stand_whole(fix, fix_lines):
 
 
 def test_the_verdict_and_the_pair_stand_whole():
+    """LENGTH-6: the verdict, `error:` and `next:` with its commands and lines to copy stand whole at a terminal."""
     verdict = Verdict(2, 1, 3, 4, ("a note that is long",), 0.0)
     steps = (Command("run this long command", "do this"), Example("copy these", ("0" * 64,)))
     printed = lines_at(10, lambda channel: (output.write_verdict(verdict, channel), output.write_pair("an error far longer than the window", steps, channel)))
@@ -232,16 +242,19 @@ def test_the_verdict_and_the_pair_stand_whole():
 
 
 def test_a_wide_location_narrows_the_fact_by_its_cells():
+    """LENGTH-2, LENGTH-10: a wide location narrows the room of a finding's fact by its cells."""
     printed = findings_at(30, [finding("漢字.env", FindingEvent.TRACKED, "a fact that goes on and on")])
     assert printed[0] == "    ! 漢字.env  tracked  a fa…"
 
 
 def test_a_wide_subject_and_event_narrow_a_rows_fact_by_their_cells():
+    """LENGTH-1, LENGTH-10: a wide subject and event narrow the room of a row's reason by their cells."""
     row = Row(Glyph.COULD_NOT_CHECK, "漢字", Event.WIDE, "abcdefghij", descriptive=True)
     assert rows_at(40, row) == ["  ✗ 漢字          漢字漢字       abcdef…"]
 
 
 def test_a_shortened_fact_is_painted_as_one_span():
+    """LENGTH-1, LENGTH-2: a cut fact of a finding, a note and a reason is painted as a whole fact is, `…` inside."""
     styles = Terminal()
     output.write_rows(
         (
@@ -278,12 +291,14 @@ def test_a_shortened_fact_is_painted_as_one_span():
     ids=["wide", "fullwidth", "nonspacing mark", "enclosing mark"],
 )
 def test_a_path_is_padded_by_its_cells(path, padding):
+    """ROW-4: a path is padded by its display width: a wide or fullwidth character takes two cells, a mark none."""
     printed = piped(lambda channel: output.write_findings_and_notes([finding(path, FindingEvent.TRACKED, "x"), finding("plain.env", FindingEvent.TRACKED, "x")], [], channel))
     rows = [line for line in printed if line.lstrip().startswith("!")]
     assert rows == [f"    ! {path}{' ' * (padding + 2)}tracked  x", "    ! plain.env  tracked  x"]
 
 
 def test_the_widest_path_is_measured_in_cells():
+    """ROW-4: the longest path of an area is measured in cells, wide characters included."""
     printed = piped(lambda channel: output.write_findings_and_notes([finding("漢字字.env", FindingEvent.TRACKED, "x"), finding("plain.env", FindingEvent.TRACKED, "x")], [], channel))
     rows = [line for line in printed if line.lstrip().startswith("!")]
     assert rows == ["    ! 漢字字.env  tracked  x", "    ! plain.env   tracked  x"]
@@ -306,11 +321,13 @@ def test_the_widest_path_is_measured_in_cells():
     ids=["finding", "note"],
 )
 def test_an_event_is_padded_by_its_cells(findings, notes, rows):
+    """ROW-4: a finding's and a note's event is padded by its display width."""
     printed = piped(lambda channel: output.write_findings_and_notes(findings, notes, channel))
     assert [line for line in printed if line.lstrip().startswith(("!", "·"))] == rows
 
 
 def test_a_rows_subject_and_event_are_padded_by_their_cells():
+    """ROW-4: a row's subject and event are padded by their display width."""
     subject = Row(Glyph.CLEAN, "漢字", Event.CLEAN, "fact")
     event = Row(Glyph.CLEAN, "files", Event.WIDE, "fact")
     printed = piped(lambda channel: output.write_rows((subject, event), channel))
@@ -323,6 +340,7 @@ def test_a_rows_subject_and_event_are_padded_by_their_cells():
     ids=["no COLUMNS", "COLUMNS injected", "COLUMNS in the process"],
 )
 def test_a_terminal_answers_for_its_window(window, monkeypatch, environment, process_columns):
+    """LENGTH-11, LENGTH-13: a terminal answers for its window, whatever COLUMNS says."""
     if process_columns:
         monkeypatch.setenv("COLUMNS", process_columns)
     channel = output.open_channel(window(60).stream, {"TERM": "xterm"} | environment)
@@ -330,10 +348,12 @@ def test_a_terminal_answers_for_its_window(window, monkeypatch, environment, pro
 
 
 def test_a_window_of_no_columns_is_unknown(window):
+    """LENGTH-14: a terminal that answers no columns has no known window."""
     assert output.open_channel(window(0).stream, {"TERM": "xterm"}).width is None
 
 
 def test_each_stream_reads_its_own_window(window, monkeypatch):
+    """LENGTH-11: each stream reads the window of its own terminal."""
     monkeypatch.setattr(sys, "stdout", window(60).stream)
     monkeypatch.setattr(sys, "stderr", window(100).stream)
     channels = output.open_channels({"TERM": "xterm"})
@@ -346,6 +366,7 @@ def test_each_stream_reads_its_own_window(window, monkeypatch):
     ids=["NO_COLOR", "dumb", "a pipe", "a terminal without a descriptor"],
 )
 def test_a_stream_that_is_not_styled_has_no_width_and_shortens_nothing(window, kind, environment):
+    """LENGTH-14: a stream that is not a styled terminal has no width and shortens nothing."""
     pseudo = window(60) if kind == "window" else None
     stream = pseudo.stream if pseudo else {"string": io.StringIO, "terminal": Terminal}[kind]()
     channel = output.open_channel(stream, {"TERM": "xterm"} | environment)
@@ -363,12 +384,14 @@ class AskedForNoDescriptor(io.StringIO):
 
 @pytest.mark.parametrize("closed", [True, False], ids=["closed", "missing"])
 def test_a_closed_or_missing_stream_is_never_asked_for_a_width(closed):
+    """LENGTH-14: a closed or missing stream is never asked for a width."""
     stream = AskedForNoDescriptor()
     stream.close()
     assert output.open_channel(stream if closed else None, {"TERM": "xterm"}).width is None
 
 
 def test_the_window_read_at_the_start_holds_for_every_row_after_a_resize(window):
+    """LENGTH-12: the window read at the start holds for every row printed after a resize."""
     terminal = window(40)
     channel = output.open_channel(terminal.stream, {"TERM": "xterm"})
     terminal.resize(200)
@@ -416,6 +439,8 @@ def test_the_window_read_at_the_start_holds_for_every_row_after_a_resize(window)
     ids=["a tracked file", "an unlisted file", "one reason", "two reasons", "an allowed print"],
 )
 def test_a_run_cuts_exactly_the_descriptive_facts(build_repo, window, files, columns, cuts, code):
+    """LENGTH-1, LENGTH-2, LENGTH-4, LENGTH-6: a run cuts exactly the free-text facts and nothing else, and prints the
+    pair whole."""
     repo = build_repo(files)
     plain_out, plain_err = io.StringIO(), io.StringIO()
     run_on(repo, plain_out, plain_err, {"TERM": "xterm"})
@@ -434,6 +459,7 @@ def test_a_run_cuts_exactly_the_descriptive_facts(build_repo, window, files, col
     ids=["a pipe on stdout", "NO_COLOR", "dumb"],
 )
 def test_a_door_that_may_not_shorten_prints_the_whole_fact(build_repo, window, out_columns, err_columns, environment):
+    """LENGTH-14: a door whose stream is a pipe, `NO_COLOR` or dumb prints the whole fact."""
     repo = build_repo({"src/.env": "A=1\n"})
     out = window(out_columns) if out_columns else None
     err = window(err_columns)
@@ -448,6 +474,7 @@ def test_a_door_that_may_not_shorten_prints_the_whole_fact(build_repo, window, o
 @pytest.mark.integration
 @pytest.mark.parametrize("extra_environment", [{}, {"COLUMNS": "30"}], ids=["no COLUMNS", "COLUMNS exported"])
 def test_the_real_door_shortens_to_its_pseudo_terminals_window(build_repo, extra_environment):
+    """LENGTH-2, LENGTH-11, LENGTH-13: the real door cuts to its pseudo-terminal's window, whatever COLUMNS says."""
     repo = build_repo({"src/.env": "A=1\n"})
     base = door_environment()
     door = [*MODULE_DOOR, CHECK_WORD]
