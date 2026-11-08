@@ -1,0 +1,8 @@
+claim_id = "14126582073d4a99bfed857497896e16"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "d77de5aeaff3620fc06ff2d307ba326b250ea5d3"
+branch = "claude/issue-575-d7-python-security-ids"
+scope = ["docs/output.md", "docs/rules.md", "tests/test_python_lint.py", "tests/test_python_lint_rows.py"]
+opened_commit = "0a9268a10e361a74565fc88154e8aeba55ba7b54"
+whole_reason = "docs/rules.md python-security rule, first slice: which Python files are judged, how quality's pinned ruff is run, what is exempt in test files and how the noqa grammar reads, and the tests that prove it, linked by SECURITY IDs."
