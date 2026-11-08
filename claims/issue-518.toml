@@ -1,0 +1,8 @@
+claim_id = "ed76fc3439584769a054d8988900caf6"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "0be42839e8d5ded0027fdf5b67ef6e2a0959dbe4"
+branch = "claude/issue-518-d7-check-env-ids"
+scope = ["docs/rules.md", "tests/test_check.py", "tests/test_checkout.py", "tests/test_env_file.py"]
+opened_commit = "e54d5259f9d29a1058c784248b06d73374ca4061"
+whole_reason = "docs/rules.md intro, env-file and the closing clauses, and the tests that prove them, linked by CHECK and ENV IDs."
