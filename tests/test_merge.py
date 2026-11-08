@@ -239,16 +239,17 @@ def test_shows_repository_head_and_legacy_count_before_asking(capsys):
     ],
     ids=[
         "new finding", "other red check", "other skipped check", "pending check", "failing status", "pending status",
-        "cell 18 nothing red", "cell 18 verdict running", "cell 17 sonar green, nothing re-derived", "cell 19 sonar timed out",
-        "cell 19 sonar cancelled", "cell 28 no sonar run", "verdict green", "cell 15 undeclared removal",
-        "cell 16 a stale declaration", "cell 3 the removed job still runs red", "cell 22 only the head sha declares",
+        "nothing red", "verdict running", "sonar green, nothing re-derived", "sonar timed out",
+        "sonar cancelled", "no sonar run", "verdict green", "undeclared removal",
+        "a stale declaration", "the removed job still runs red", "only the head sha declares",
         "#116 cell 24 a gate.loosened entry for an allowance",
         "loosened legacy", "report on both sides", "head fail but merge commit report", "report and Sonar unreachable", "no config at either sha", "report mode and a new finding", "removed mandatory job",
         "closed", "no legacy", "legacy unknown", "stale analysis",
     ],
 )
 def test_refuses_unless_the_door_is_the_only_way(gh_kwargs, sonar_kwargs, message, capsys):
-    """#37 rule 2 and #103 rule 4 (E7): each refusal of the door."""
+    """MERGE-14, MERGE-15, MERGE-56, MERGE-59, MERGE-60, MERGE-61, MERGE-62: each refusal of the door names its reason,
+    changes nothing and asks no question."""
     gh = FakeGh(**gh_kwargs)
     code, answers = drive(gh, sonar(**sonar_kwargs))
     assert code == 1
@@ -288,17 +289,18 @@ def test_names_the_finding_a_pull_request_adds(capsys):
         ({}, False, REPO, 1), ({}, True, "not-a-repo", 2), ({}, True, "acme/widg\u0435ts", 2), ({"admin": False}, True, REPO, 2),
         ({"fail_on": ["pull"]}, True, REPO, 2),
     ],
-    ids=["no terminal", "bad name", "#103 rule 1 lookalike name", "missing admin permission", "gh down"],
+    ids=["no terminal", "bad name", "a lookalike name", "missing admin permission", "gh down"],
 )
 def test_changes_nothing_when_it_cannot_start(gh_kwargs, terminal, repo, code):
-    """#37 rule 1: operator only; the right and gh checked first, nothing changed."""
+    """MERGE-16, MERGE-21, MERGE-54: the door changes nothing when it has no terminal, no admin right or no working gh,
+    or is given a name of another form."""
     gh = FakeGh(**gh_kwargs)
     assert drive(gh, terminal=terminal, repo=repo)[0] == code
     changed_nothing(gh)
 
 
 def test_names_the_missing_right(capsys):
-    """#37 rule 1: the missing right is named."""
+    """MERGE-55: the missing right is named."""
     drive(FakeGh(admin=False))
     assert f"no admin permission on {REPO}" in capsys.readouterr().out
 

@@ -141,7 +141,8 @@ def test_a_refusal_before_any_read_is_the_pair_alone(terminal, repository, code,
     ids=["draft", "a draft without a landing line", "a closed draft", "closed without a landing line"],
 )
 def test_a_draft_stops_the_door_before_its_body_or_any_check_is_read(gh_kwargs, row, pair, capsys):
-    """MERGE-14: a draft or a closed pull request stops the door at its `!` row and the pair."""
+    """MERGE-14, MERGE-56, MERGE-57, MERGE-58: a draft or a closed pull request stops the door at its `!` row and the
+    pair, before its body or any check is read."""
     gh = FakeGh(**gh_kwargs)
     code, out, err, answers = run(gh, capsys)
     assert (code, out, err, answers) == (1, frame(row), pair, [])
@@ -241,8 +242,8 @@ def test_a_draft_flag_that_is_no_boolean_cannot_be_judged(draft, capsys):
     ],
 )
 def test_each_refusal_is_its_row_and_the_pair(gh_kwargs, sonar_kwargs, rows, capsys):
-    """MERGE-14, MERGE-15: each refusal is its `!` row and the pair, and the verdict's blocking lines stand below the
-    `loosenings` row."""
+    """MERGE-14, MERGE-15, MERGE-59, MERGE-60, MERGE-61, MERGE-62: each refusal is its `!` row and the pair, and the
+    verdict's blocking lines stand below the `loosenings` row."""
     gh = FakeGh(**gh_kwargs)
     code, out, err, answers = run(gh, capsys, transport=sonar(**sonar_kwargs))
     assert (code, out, err, answers) == (1, frame(*rows), refused_pair(), [])
@@ -281,7 +282,8 @@ def test_each_refusal_is_its_row_and_the_pair(gh_kwargs, sonar_kwargs, rows, cap
     ],
 )
 def test_a_step_that_cannot_be_judged_is_its_cross_row_and_the_pair(gh_kwargs, sonar_kwargs, rows, capsys):
-    """MERGE-16: a step that cannot be judged is its `✗` row and the pair."""
+    """MERGE-16, MERGE-54, MERGE-55: a step that cannot be judged is its `✗` row and the pair, a missing admin right
+    included."""
     gh = FakeGh(**gh_kwargs)
     code, out, err, answers = run(gh, capsys, transport=sonar(**sonar_kwargs))
     assert (code, out, err, answers) == (2, frame(*rows), not_judged_pair(), [])

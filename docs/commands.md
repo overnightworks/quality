@@ -250,23 +250,28 @@ door.
 
 ## `quality merge`
 
-`quality merge <owner/repo>#<pr> [--dry-run] [-v]` is the operator's door past a red gate: it merges a pull request that the
-gate keeps red only for legacy Sonar findings or for [declared loosenings](gate.md#declared-loosenings). The steps to
-take are in [the runbook](runbooks/merge.md); this is what the command does.
+`quality merge <owner/repo>#<pr> [--dry-run] [-v]` (MERGE-53) is the operator's door past a red gate: it merges a pull
+request that the gate keeps red only for legacy Sonar findings or for
+[declared loosenings](gate.md#declared-loosenings). The steps to take are in [the runbook](runbooks/merge.md); this is
+what the command does.
 
 Ruled by the operator:
 
 - A body the door refuses for its line stops at `! landing  refused` under the pull request's row instead, the same row as the last one before the question.
 - `merge` names no aco step; that step belongs in the head's instructions.
 
-- **Operator only.** It runs under the operator's own `gh` login, which needs admin permission on the repository (checked
-  first: exit `2`, nothing changed, the missing right named). Agents never run it; it refuses when stdin is not a
-  terminal. This is the agent contract, not a lock: agents on the operator's machine share his `gh` login, so to an
-  agent the terminal is a hurdle, and that login could switch `quality_gate` directly. A real lock (agents with a token
-  without admin rights) belongs to the machine's setup, not to quality; it is a known residual risk.
-- **It refuses unless the door is the only way** (exit `1`, nothing changed): the pull request is open and no draft (a draft is refused before its body or any check is read, `next:` naming `gh pr ready`); no check is still running; every check run
-  and commit status other than `quality / sonar` and `quality / verdict` is green; `quality / verdict` has failed; and
-  `quality / sonar` is green or has failed (it did not run, or it ended `timed_out`, `cancelled` or anything else: refused).
+- **Operator only.** It runs under the operator's own `gh` login, which needs admin permission on the repository
+  (checked first: exit `2`, nothing changed (MERGE-54), the missing right named (MERGE-55)). Agents never run it; it
+  refuses when stdin is not a terminal. This is the agent contract, not a lock: agents on the operator's machine share
+  his `gh` login, so to an agent the terminal is a hurdle, and that login could switch `quality_gate` directly. A real
+  lock (agents with a token without admin rights) belongs to the machine's setup, not to quality; it is a known
+  residual risk.
+- **It refuses unless the door is the only way** (exit `1`, nothing changed): the pull request is open (MERGE-56) and
+  no draft (a draft is refused before its body or any check is read (MERGE-57),
+  `next:` naming `gh pr ready` (MERGE-58)); no check is still running (MERGE-59); every check run and commit status
+  other than `quality / sonar` and `quality / verdict` is green (MERGE-60); `quality / verdict` has failed (MERGE-61);
+  and `quality / sonar` is green or has failed (it did not run, or it ended `timed_out`, `cancelled` or anything else:
+  refused) (MERGE-62).
   The verdict is then judged again by its own decider, with the config, baseline and import-linter configs read at the pull request's
   current merge commit and at base and the Sonar job taken as green: an undeclared loosening, a declaration that matches
   nothing, or a missing or red mandatory job is refused, naming the verdict's lines. When both sides hold a baseline,
