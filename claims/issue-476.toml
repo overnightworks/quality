@@ -1,8 +1,0 @@
-claim_id = "a1ba79052485416583d918e1fad56967"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "f9110178677401cd2f39c1748c391017890f3755"
-branch = "claude/issue-476-gate-tool-workspace-root"
-scope = ["docs/ARCHITECTURE.md", "pyproject.toml", "tests/workflows/test_gate_tool_isolation.py", "uv.lock"]
-opened_commit = "8f137faaca1ba7a15bacb819827a345305916ef0"
-whole_reason = "One boundary, the tool as its own uv workspace root: the table, its lock, the trust sentence and the test that proves it change together."
