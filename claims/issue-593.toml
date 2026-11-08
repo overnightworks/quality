@@ -1,8 +1,0 @@
-claim_id = "de0e43549b2d44a5b606b2c9f1d37e39"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "ca607307e719e6419722a462b29bce909363ada0"
-branch = "claude/issue-593-d7-merge-failure-logged-ids"
-scope = ["docs/commands.md", "tests/test_merge.py", "tests/test_merge_attempt.py", "tests/test_merge_rows.py", "tests/test_output.py"]
-opened_commit = "d54facb15a35a9849168ca437a9bd78783904e5a"
-whole_reason = "docs/commands.md quality merge Off, merge, on clauses from a step not done to the end and the Logged bullet, and the tests that prove them, linked by MERGE IDs, with the attribution of their docstrings removed and the lines they stand on rewrapped."
