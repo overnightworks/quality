@@ -270,7 +270,10 @@ Repository text (a file name, a service, a port, a contract or job name, a confi
     ! deploy/\u202eEDGE_SHA  tracked  a file without a suffix that is no executable
 ```
 
-A refusal's fact is one line (MASK-10); the lines the door means to print (an import chain, the verdict's problems, the report's tables) stay lines (MASK-12). A line taken from another tool's rendering prints behind `| ` ([Rows](#rows)): actionlint's message stays one escaped line, while rich may drop a carriage return, expand a tab, or start a new marked line at a line feed in import-linter's lines (MASK-13).
+A refusal's fact is one line (MASK-10); the lines the door means to print (an import chain, the verdict's problems, the
+report's tables) stay lines (MASK-12). A line taken from another tool's rendering prints behind `| ` ([Rows](#rows)):
+actionlint's message stays one escaped line, while rich may drop a carriage return, expand a tab, or start a new marked
+line at a line feed in import-linter's lines (MASK-13).
 
 Ruled by the operator:
 
