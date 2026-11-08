@@ -1,0 +1,7 @@
+claim_id = "7b1cb5f9d58745fbb67f3ea2cde1fab9"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "44abed02d91892ab5bd21c62d5b7da98d69366f4"
+branch = "claude/issue-600-d7-size-measuring-ids"
+scope = ["docs/rules.md", "tests/test_ratchet.py"]
+opened_commit = "796b465f1336d9afe08fb999111736f72b9040f9"
