@@ -1,8 +1,0 @@
-claim_id = "d4deb57d53e54a1fb69221cbe7edfceb"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "ca607307e719e6419722a462b29bce909363ada0"
-branch = "claude/issue-591-d7-exit-codes-cannot-start-ids"
-scope = ["README.md", "docs/ARCHITECTURE.md", "docs/output.md", "tests/test_check.py", "tests/test_checkout.py", "tests/test_cli_areas.py", "tests/test_cli_output.py", "tests/test_cli_release.py"]
-opened_commit = "6785ccd599e46351c6d00ad74318bcc13283aa71"
-whole_reason = "docs/output.md run that cannot start and exit codes with their tests; README and ARCHITECTURE gain one link each, as the item body says"
