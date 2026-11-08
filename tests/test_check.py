@@ -151,7 +151,7 @@ def files(tracked: dict[str, str]):
 def test_every_rule_is_judged_and_the_exit_is_the_worst(
     build_repo, elsewhere, capsys, arrange, expected_code, expected_lines, rows
 ):
-    """#55 rules 1-4, cells 1-8 (cell 9 is the exit-code table's non-utf8 env case): each rule prints its own
+    """CHECK-4: #55 rules 1-4, cells 1-8 (cell 9 is the exit-code table's non-utf8 env case): each rule prints its own
     verdict, one rule's refusal hides no other rule's, the exit is the worst verdict's, the clean line names the
     rules, and every path prints backslash-escaped."""
     repo = arrange(build_repo, elsewhere)
@@ -174,7 +174,7 @@ def test_a_python_file_with_a_non_utf8_name_the_size_rule_cannot_parse_is_one_es
 
 
 def test_a_run_without_flags_judges_every_rule(build_repo, capsys):
-    """#228 rule 4: no scan is ever skipped, so a plain run judges every rule in run order."""
+    """CHECK-3: #228 rule 4: no scan is ever skipped, so a plain run judges every rule in run order."""
     verdicts = check_result(build_repo({}), installed_ruff, never_located).verdicts
     assert ([verdict.rule for verdict in verdicts], [verdict.refusal for verdict in verdicts]) == (
         sorted(Rule, key=lambda rule: list(Area).index(rule.area)),
@@ -299,6 +299,7 @@ def area_of(*verdicts: check.RuleVerdict) -> check.AreaVerdict:
     ids=["clean", "measured only", "a finding beats measured only", "a refusal beats a finding", "the worst refusal"],
 )
 def test_an_area_is_as_bad_as_its_worst_rule(verdicts, expected):
+    """CHECK-5."""
     assert area_of(*verdicts).outcome is expected
 
 
