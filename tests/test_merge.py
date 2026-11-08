@@ -446,7 +446,7 @@ def test_every_line_the_door_prints_is_escaped(capsys, base_config, merge_config
     ids=["a merge commit", "a squash"],
 )
 def test_the_operator_reads_the_method_before_the_question_and_the_log_comment_names_it(gh_kwargs, event, sentence, capsys):
-    """MERGE-4: the method row says what the door lands with on the base branch, and the log comment
+    """MERGE-4, MERGE-33: the method row says what the door lands with on the base branch, and the log comment
     carries the method."""
     gh, shown = FakeGh(**gh_kwargs), []
     drive(gh, when_asked=lambda: shown.append(capsys.readouterr()))
@@ -480,14 +480,15 @@ def merge_call(flag):
         ({"settings": settings_allowing("merge"), "rules": [[pull_request_rule("merge", "rebase")]]}, "--merge"),
     ],
     ids=[
-        "cell 1 both sources allow a merge commit", "cell 2 a rule allows only squash", "cell 3 linear history",
-        "cell 4 settings forbid merge commits", "cell 5 two rules intersect to squash", "cell 8 an unrelated rule only",
-        "cell 8 no rules", "cell 9 allowed_merge_methods absent", "cell 9 no parameters", "cell 9 rules without a parameters key", "cell 10 two pages both count",
-        "cell 12 a non-default base branch", "cell 12 a base branch with a hash", "cell 13 a merge commit where only it and rebase are allowed",
+        "both sources allow a merge commit", "a rule allows only squash", "linear history",
+        "settings forbid merge commits", "two rules intersect to squash", "an unrelated rule only", "no rules",
+        "allowed_merge_methods absent", "no parameters", "rules without a parameters key", "two pages both count",
+        "a non-default base branch", "a base branch with a hash", "a merge commit where only it and rebase are allowed",
     ],
 )
 def test_the_door_merges_with_a_method_the_settings_and_every_rule_allow(gh_kwargs, flag):
-    """#146 rules 1 and 3: the method is the first of merge commit, squash that both sources allow, and the merge pins the head."""
+    """MERGE-30, MERGE-31: the door merges with the first of a merge commit and a squash that the settings and every
+    rule allow, and pins the head."""
     gh = FakeGh(**gh_kwargs)
     assert drive(gh)[0] == 0
     assert gh.merge_calls == [merge_call(flag)]
@@ -527,19 +528,18 @@ def test_the_door_merges_with_a_method_the_settings_and_every_rule_allow(gh_kwar
         ),
     ],
     ids=[
-        "cell 6 sources do not intersect", "cell 7 settings allow only rebase", "cell 7 a rule allows only rebase",
-        "cell 9 allowed_merge_methods empty", "cell 6 settings allow nothing", "cell 11 settings withheld",
-        "cell 11 settings malformed", "cell 11 a rule is no object", "cell 11 parameters malformed",
-        "cell 11 methods malformed", "cell 11 an unknown method", "cell 11 a rule without a type",
-        "cell 11 a rule type that is no string", "cell 11 pull_request parameters null",
-        "cell 11 linear history parameters null", "cell 11 an unrelated rule with parameters that are no object", "cell 11 methods null", "cell 11 a line that is no JSON",
-        "cell 11 the answer is an object", "cell 11 a page is an object", "cell 11 a rule is a JSON string", "cell 11 a rule is a number",
-        "cell 11 generic 403", "cell 11 plan 403",
+        "sources do not intersect", "settings allow only rebase", "a rule allows only rebase",
+        "allowed_merge_methods empty", "settings allow nothing", "settings withheld", "settings malformed",
+        "a rule is no object", "parameters malformed", "methods malformed", "an unknown method",
+        "a rule without a type", "a rule type that is no string", "pull_request parameters null",
+        "linear history parameters null", "an unrelated rule with parameters that are no object", "methods null",
+        "a line that is no JSON", "the answer is an object", "a page is an object", "a rule is a JSON string",
+        "a rule is a number", "generic 403", "plan 403",
     ],
 )
 def test_the_door_refuses_before_the_gate_when_no_method_is_usable(gh_kwargs, line, capsys):
-    """#146 rules 2 and 4: a repository that allows no merge commit or squash, or whose rules cannot be read, is exit 2 with a
-    named line, and neither the gate nor the merge is touched."""
+    """MERGE-16, MERGE-32: a repository that allows no merge commit or squash, or whose rules cannot be read, is exit 2
+    with a named line, and neither the gate nor the merge is touched."""
     gh = FakeGh(**gh_kwargs)
     code, answers = drive(gh)
     streams = capsys.readouterr()
@@ -553,7 +553,8 @@ def test_the_door_refuses_before_the_gate_when_no_method_is_usable(gh_kwargs, li
 
 
 def test_a_method_github_refuses_at_merge_time_leaves_the_gate_on_and_the_pull_request_unmerged(capsys):
-    """#146 cell 14: the selected squash is refused, so the gate is switched on again and the outcome is not merged."""
+    """MERGE-29, MERGE-31, MERGE-34: a squash that GitHub refuses at merge time leaves the gate switched on again and
+    the pull request unmerged."""
     gh = FakeGh(rules=[[pull_request_rule("squash")]], fail_on=["merge"])
     assert drive(gh)[0] == 2
     assert (gh.merge_calls, gh.gate_values) == ([merge_call("--squash")], ["false", "true"])
