@@ -7,7 +7,8 @@ from pathlib import Path
 import pytest
 
 from quality.config import CONFIG_PATH
-from quality.ratchet import BASELINE_PATH
+from quality.ratchet import BASELINE_HEADER, BASELINE_PATH, load_baseline, render_baseline
+from tests.support.baselines import rendered
 from tests.support.clones import function as clone_function
 from tests.support.door import DRY_RUN_WORDS, FIX_WORDS, door_in, fixed, judging_at_the_pin, restore_step, tree_of
 from tests.support.generated_files import gate_declaring
@@ -503,3 +504,61 @@ def test_at_a_terminal_a_dry_run_paints_each_glyph_and_the_verdict_in_one_colour
     )
     roles = by_role(frame, "~")
     assert (code, roles) == (1, printed)
+
+
+ENTRIES = '[function_lines."src/a.py"]\n"long_one" = 62\n\n[file_lines]\n"src/b.py" = 850\n'
+OLD_HEADER = "# Measured by `quality baseline write`.\n"
+TWO_TABLES_APART = '[function_lines."src/a.py"]\n"long_one" = 62\n\n\n[file_lines]\n"src/b.py" = 850\n'
+TABLES_OUT_OF_ORDER = '[file_lines]\n"src/b.py" = 850\n\n[function_lines."src/a.py"]\n"long_one" = 62\n\n[clones]\n'
+
+
+def stale_ceiling(build_repo, held: str) -> Path:
+    return build_repo({"src/a.py": long_function(62), "src/b.py": long_file(850), BASELINE_PATH: held})
+
+
+@pytest.mark.parametrize(
+    "held",
+    [
+        pytest.param(OLD_HEADER + "\n" + ENTRIES + "\n[clones]\n", id="an old header"),
+        pytest.param(ENTRIES + "\n[clones]\n", id="no header"),
+        pytest.param(BASELINE_HEADER + "\n" + TWO_TABLES_APART + "\n[clones]\n", id="blank lines"),
+        pytest.param(BASELINE_HEADER + "\n" + TABLES_OUT_OF_ORDER, id="tables out of order"),
+    ],
+)
+def test_a_ceiling_whose_text_is_not_its_rendering_is_rewritten_by_the_fix_and_planned_by_the_dry_run(build_repo, capsys, held):
+    repo = stale_ceiling(build_repo, held)
+    before = untouched(repo)
+    planned = (
+        "  ~ debt          to rewrite     text differs · quality/baseline.toml\n"
+        "~ dry run · ceiling would be rewritten · nothing written · <1s\n"
+    )
+    done = "  ✓ debt          rewritten      quality/baseline.toml\n✓ clean · ceiling rewritten · 1 area · <1s\n"
+    assert (*fixed(capsys, repo, *DRY_RUN_WORDS), untouched(repo)) == (1, planned, "", before)
+    assert fixed(capsys, repo, *FIX_WORDS) == (0, done, "")
+    assert (repo / BASELINE_PATH).read_text() == render_baseline(load_baseline(held))
+    settled = untouched(repo)
+    clean = "  ✓ debt          clean          ceiling held · 2 entries, 0 clone pairs\n✓ clean · nothing to lower · 1 area · <1s\n"
+    assert (*fixed(capsys, repo, *FIX_WORDS), untouched(repo)) == (0, clean, "", settled)
+
+
+@pytest.mark.parametrize("words", [DRY_RUN_WORDS, FIX_WORDS], ids=["dry run", "fix"])
+def test_a_ceiling_that_renders_byte_for_byte_is_left_alone(build_repo, capsys, words):
+    repo = stale_ceiling(build_repo, rendered(ENTRIES + "\n[clones]\n"))
+    before = untouched(repo)
+    code, out, err = fixed(capsys, repo, *words)
+    assert (code, out.splitlines()[-1], err, untouched(repo)) == (0, "✓ clean · nothing to lower · 1 area · <1s", "", before)
+
+
+@pytest.mark.parametrize(
+    ("words", "fact", "closing"),
+    [
+        pytest.param(DRY_RUN_WORDS, "to rewrite · quality/baseline.toml", "! 1 finding in 1 area · ceiling would be rewritten · <1s", id="dry run"),
+        pytest.param(FIX_WORDS, "rewritten · quality/baseline.toml", "! 1 finding in 1 area · ceiling rewritten · <1s", id="fix"),
+    ],
+)
+def test_a_stale_text_beside_a_grown_entry_is_named_on_the_finding_row(build_repo, capsys, words, fact, closing):
+    held = OLD_HEADER + "\n" + '[function_lines."src/a.py"]\n"long_one" = 50\n\n[clones]\n'
+    repo = build_repo({"src/a.py": long_function(62), BASELINE_PATH: held})
+    code, out, _ = fixed(capsys, repo, *words)
+    lines = out.splitlines()
+    assert (code, lines[0], lines[-1]) == (1, f"  ! debt          1 finding      {fact}", closing)
