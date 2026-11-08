@@ -651,6 +651,7 @@ def a_pipe_whose_reader_left(tmp_path):
     "opened", [a_stream_that_takes_the_rows, a_full_device, a_pipe_whose_reader_left], ids=["a stream that takes them", "a full device", "a reader that left"],
 )
 def test_the_door_says_whether_its_stream_took_its_rows(opened, tmp_path):
+    """STREAM-8: a stream whose reader left takes the door's rows, the first and every later one."""
     stream, took = opened(tmp_path)
     rows = (Row(Glyph.CLEAN, "files", Event.CLEAN),)
     with stream:
@@ -660,6 +661,7 @@ def test_the_door_says_whether_its_stream_took_its_rows(opened, tmp_path):
 
 
 def test_a_closed_stream_takes_the_rows_of_the_door():
+    """STREAM-9: a closed stream takes the door's rows."""
     assert output.DoorStream(output.Channel(None, False, None)).show((Row(Glyph.CLEAN, "files", Event.CLEAN),)) is True
 
 

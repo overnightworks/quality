@@ -35,6 +35,7 @@ def kill_recorded(pid_file: Path) -> None:
 
 
 def test_each_area_starts_after_the_rows_of_every_area_above_it(build_repo, served_scanners, tmp_path, monkeypatch):
+    """STREAM-1, STREAM-6: a judged run prints each area's lines to stdout as its last rule ends, none to stderr."""
     repo = build_repo({".github/workflows/w.yml": "on: push\n", "uv.lock": uv_lock(), "src/.env": "A=1\n", "src/bad.py": "def broken(:\n"})
     rows, seen = tmp_path / "rows", tmp_path / "seen"
     seen.mkdir()
@@ -78,6 +79,7 @@ def test_each_area_starts_after_the_rows_of_every_area_above_it(build_repo, serv
 
 
 def test_a_refused_area_stands_before_the_next_scanner_and_the_pair_stays_on_stderr(build_repo, served_scanners, tmp_path):
+    """STREAM-2, STREAM-6: a refused area's row stands before the next scanner starts and the pair stays on stderr."""
     repo = build_repo({"compose.yaml": "services: [\n"})
     rows, seen = tmp_path / "rows", tmp_path / "seen"
     fake_scanner(served_scanners, scanners.GITLEAKS, f'cp "$ROWS" "{seen}"\n{CLEAN_SCANS[scanners.GITLEAKS]}')
@@ -104,6 +106,8 @@ def interrupting_gitleaks(served_scanners: Path, name: str) -> None:
     ],
 )
 def test_an_interrupt_during_a_scan_leaves_the_rows_of_the_finished_areas_whole(build_repo, served_scanners, tmp_path, sent, under_shell):
+    """STREAM-6, STREAM-7: an interrupt during a scan leaves the finished areas' lines whole, with neither verdict
+    nor pair."""
     repo = build_repo({"README.md": "x\n"})
     complete = subprocess.run([*MODULE_DOOR, CHECK_WORD], cwd=repo, env=door_environment(), capture_output=True, text=True, timeout=60, check=False)
     pid_file, scratch_parent = tmp_path / "scanner.pid", tmp_path / "scratch"
@@ -129,6 +133,8 @@ def test_an_interrupt_during_a_scan_leaves_the_rows_of_the_finished_areas_whole(
     [pytest.param(signal.SIGINT, -signal.SIGINT, id="Ctrl-C"), pytest.param(signal.SIGTERM, 128 + signal.SIGTERM, id="SIGTERM")],
 )
 def test_an_interrupt_at_a_terminal_leaves_whole_lines(build_repo, served_scanners, tmp_path, window, sent, code):
+    """STREAM-6, STREAM-7: an interrupt at a terminal leaves the finished areas' lines whole, with neither verdict
+    nor pair."""
     repo = build_repo({"README.md": "x\n"})
     complete = subprocess.run([*MODULE_DOOR, CHECK_WORD], cwd=repo, env=door_environment(), capture_output=True, text=True, timeout=60, check=False)
     pid_file = tmp_path / "scanner.pid"
@@ -157,6 +163,8 @@ def test_an_interrupt_at_a_terminal_leaves_whole_lines(build_repo, served_scanne
     ],
 )
 def test_a_reader_that_left_after_the_first_line_changes_neither_the_judging_nor_the_exit(build_repo, served_scanners, tmp_path, files, one_pipe):
+    """STREAM-5, STREAM-8: a first line stands in a pipe while the first scanner runs, and a reader that left after it
+    changes neither the judging nor the exit."""
     repo = build_repo(files)
     complete = subprocess.run([*MODULE_DOOR, CHECK_WORD], cwd=repo, env=door_environment(), capture_output=True, text=True, timeout=60, check=False)
     expected_stderr = refusal_pair(repo) if complete.returncode == 2 else ""
@@ -195,6 +203,7 @@ def test_a_reader_that_left_after_the_first_line_changes_neither_the_judging_nor
 
 @pytest.mark.parametrize(("files", "code"), [pytest.param({"README.md": "x\n"}, 0, id="clean"), pytest.param({"src/.env": "A=1\n"}, 1, id="finding")])
 def test_a_terminal_that_hung_up_during_a_scan_leaves_the_run_s_own_exit(build_repo, served_scanners, tmp_path, window, files, code):
+    """STREAM-8: a terminal that hung up during a scan leaves the run's own exit."""
     repo = build_repo(files)
     pid_file, release, up = tmp_path / "scanner.pid", tmp_path / "release", tmp_path / "up"
     os.mkfifo(release)
@@ -224,6 +233,7 @@ def test_a_terminal_that_hung_up_during_a_scan_leaves_the_run_s_own_exit(build_r
 
 
 def test_a_step_s_pipes_carry_the_stop_line_and_no_live_line(build_repo):
+    """MASK-14: a step's stderr holds the stop line and no other line."""
     repo = build_repo({"README.md": "x\n"})
     done = subprocess.run([*MODULE_DOOR, CHECK_WORD], cwd=repo, env=door_environment(TERM="xterm", GITHUB_ACTIONS="true"), capture_output=True, text=True, timeout=60, check=False)
     lines = done.stderr.splitlines()
@@ -232,6 +242,7 @@ def test_a_step_s_pipes_carry_the_stop_line_and_no_live_line(build_repo):
 
 @pytest.mark.integration
 def test_a_start_failure_with_stderr_closed_prints_nothing_on_stdout(elsewhere, tmp_path):
+    """STREAM-9: with stderr closed a run that cannot start prints nothing on stdout."""
     command = ["sh", "-c", 'exec "$@" 2>&-', "sh", *QUALITY_MODULE_DOOR, CHECK_WORD]
     with open(tmp_path / "stdout", "w", encoding="utf-8") as stdout:
         done = subprocess.run(command, cwd=elsewhere, env=door_environment(), stdout=stdout, timeout=60, check=False)
@@ -262,7 +273,8 @@ def test_a_merged_pipe_of_the_real_entry_points_keeps_the_pair_in_order(env_and_
 
 
 def test_a_merged_pipe_shows_the_check_lines_in_run_order(env_and_broken_compose):
-    """The release row, the area rows with their findings (`.env` as env-file's and root-layout's rows, each with its fix), then the pair."""
+    """STREAM-3: a merged pipe holds the release row, the area rows with their findings (`.env` as env-file's and
+    root-layout's rows, each with its fix), then the pair."""
     done = quality_door(CHECK_WORD, cwd=env_and_broken_compose, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     prefixes = [
         "  · release", "  ✗ files", ENV_ROW, FIX_LINE, ENV_ROW, FIX_LINE,
@@ -274,14 +286,15 @@ def test_a_merged_pipe_shows_the_check_lines_in_run_order(env_and_broken_compose
 
 
 def test_discarding_stderr_hides_exactly_the_pair(env_and_broken_compose):
-    """#86 rule 3, cell 11: no line changes its stream; the exit stays 2."""
+    """STREAM-2, STREAM-3, STREAM-4: no line changes its stream: discarding stderr hides exactly the pair, which
+    follows the rows in a merged pipe; the exit stays 2."""
     merged = quality_door(CHECK_WORD, cwd=env_and_broken_compose, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     done = quality_door(CHECK_WORD, cwd=env_and_broken_compose, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     assert (done.returncode, merged.stdout.startswith(done.stdout), merged.stdout[len(done.stdout):]) == (2, True, refusal_pair(env_and_broken_compose))
 
 
 def test_discarding_stdout_leaves_exactly_the_pair(env_and_broken_compose):
-    """#86 rule 3: the rows are results and the pair is not."""
+    """STREAM-1, STREAM-2: the rows are stdout's and the pair is stderr's: discarding stdout leaves exactly the pair."""
     done = quality_door(CHECK_WORD, cwd=env_and_broken_compose, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     assert (done.returncode, done.stderr) == (2, refusal_pair(env_and_broken_compose))
 
@@ -297,7 +310,7 @@ cli.run(lambda: cli.main(["sonar", "findings"], transport=sonar_answering(issues
 
 @pytest.mark.integration
 def test_a_merged_pipe_lists_the_sonar_findings_before_the_closing_line(tmp_path):
-    """#86 rule 3, cell 12: the findings precede the closing line through `2>&1`."""
+    """STREAM-3: the findings precede the closing line through `2>&1`."""
     from tests.support.sonar import PULL_REQUEST_ENVIRONMENT, TASK_FIXTURE, legacy_config_absent
 
     (tmp_path / "quality").mkdir()
@@ -316,7 +329,7 @@ def test_a_merged_pipe_lists_the_sonar_findings_before_the_closing_line(tmp_path
 
 
 def test_a_replaced_stdout_still_prints_the_help():
-    """#86 rule 3: `main` leaves the process's streams alone, so a captured stdout works."""
+    """HELP-8: `main` leaves the process's streams alone, so a captured stdout takes the help."""
     captured = io.StringIO()
     with contextlib.redirect_stdout(captured), pytest.raises(SystemExit) as stopped:
         cli.main(["--help"])
@@ -325,7 +338,7 @@ def test_a_replaced_stdout_still_prints_the_help():
 
 @pytest.mark.integration
 def test_a_closed_stdout_object_still_prints_the_pair_on_stderr(tmp_path, capsys, monkeypatch, own_home):
-    """#86 rule 3: a closed stdout object never crashes `main`; the diagnostic reaches stderr."""
+    """STREAM-2, STREAM-9: a closed stdout object never crashes `main`; the pair reaches stderr."""
     monkeypatch.setenv("NO_COLOR", "1")  # Python 3.14's argparse otherwise probes the closed stdout for colour
     closed = io.TextIOWrapper(io.BytesIO())
     closed.close()
@@ -336,7 +349,7 @@ def test_a_closed_stdout_object_still_prints_the_pair_on_stderr(tmp_path, capsys
 
 @pytest.mark.integration
 def test_a_closed_stdout_fd_still_prints_the_pair_and_never_crashes(tmp_path, own_home):
-    """#86 rule 3: with fd 1 closed the door still exits 2 with its cannot-judge line."""
+    """STREAM-2, STREAM-9: with fd 1 closed the door still exits 2 with its cannot-judge pair on stderr."""
     done = subprocess.run(
         ["bash", "-c", '"$PY" -m quality.cli check >&-'],
         env={**os.environ, "PY": sys.executable},
