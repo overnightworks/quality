@@ -331,7 +331,7 @@ PublicRepo = Callable[..., str]
 
 @pytest.fixture
 def fleet_report(capsys, tmp_path, public, monkeypatch) -> Callable[..., tuple[int, str]]:
-    """Runs `quality report` in a folder whose fleet file lists the given `owner/name`s (#63 rule 1)."""
+    """Runs `quality report` in a folder whose fleet file lists the given `owner/name`s."""
 
     def run(*repositories: str, tags: fleet_module.TagReader = lambda: RELEASES) -> tuple[int, str]:
         monkeypatch.chdir(write_fleet(tmp_path / "fleet", repositories))
