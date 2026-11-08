@@ -1,0 +1,8 @@
+claim_id = "cf06ee0002ef473b9dd6a56089875b43"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "a3071277e88992ec71ce321adff25ff4e74c2663"
+branch = "claude/issue-507-d7-gate-refusal-ids"
+scope = ["docs/gate.md", "tests/test_config.py", "tests/test_verdict.py", "tests/test_verdict_config.py", "tests/test_verdict_door.py", "tests/test_verdict_frame.py", "tests/test_verdict_reread.py"]
+opened_commit = "e03bb1beb7447ebf4317ae830d1abd7ce4ac23e6"
+whole_reason = "docs/gate.md refusal and summary lines and the tests that prove them, linked by VERDICT IDs, with O10 for the config refusal example."
