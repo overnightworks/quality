@@ -655,8 +655,8 @@ def test_a_function_of_120_lines_in_typescript_is_no_finding_and_the_file_is_not
     ids=["a one-line bundle is no finding", "an 800-line minified file is new debt"],
 )
 def test_a_minified_file_is_counted_by_its_lines_like_any_other(build_repo, capsys, bundle, expected_code, expected_named):
-    """SIZE-1: a minified file is counted by its lines like any other: a one-line bundle has one line, an 800-line one
-    is new debt."""
+    """SIZE-1, SIZE-3: a minified file is counted by its lines like any other: a one-line bundle has one line, an
+    800-line one is new debt."""
     repo = build_repo({"src/dist/index.js": bundle, BASELINE_PATH: EMPTY_BASELINE})
     result, output = run(capsys, repo)
     assert (result, [finding.path for finding in rule_findings(repo, Rule.SIZE)]) == (expected_code, ["src/dist/index.js"] * expected_named), output
