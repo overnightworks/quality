@@ -183,7 +183,7 @@ def test_logs_who_and_the_legacy_count_on_the_pull_request():
 
 
 def test_shows_repository_head_and_legacy_count_before_asking(capsys):
-    """#37 rule 3: it shows, then asks."""
+    """MERGE-1, MERGE-3, MERGE-5, MERGE-6: the rows come in order with the landing last, then the question."""
     shown = []
     drive(FakeGh(), when_asked=lambda: shown.append(capsys.readouterr()))
     assert (shown[0].out, shown[0].err) == (
@@ -446,7 +446,8 @@ def test_every_line_the_door_prints_is_escaped(capsys, base_config, merge_config
     ids=["a merge commit", "a squash"],
 )
 def test_the_operator_reads_the_method_before_the_question_and_the_log_comment_names_it(gh_kwargs, event, sentence, capsys):
-    """The method row says what the door lands with on the base branch, and the log comment carries the method."""
+    """MERGE-4: the method row says what the door lands with on the base branch, and the log comment
+    carries the method."""
     gh, shown = FakeGh(**gh_kwargs), []
     drive(gh, when_asked=lambda: shown.append(capsys.readouterr()))
     assert (shown[0].out, shown[0].err) == (

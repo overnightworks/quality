@@ -289,7 +289,25 @@ Ruled by the operator:
   the project needs one: without it the door reads a public project anonymously, with no Authorization header, and an
   anonymous read that SonarCloud refuses (a private project answers 404) is exit `2`, naming `SONAR_TOKEN`; with a token, a 401 or 403
   says the token was rejected.
-- **It shows, then asks:** on stdout the [release](#which-release-judges) that judges first, then a row as each step passes: the pull request (`open`, head, base), the checks, the declared loosenings, each whole with its `item` and `date` and its `reason` on the line below, the legacy count where Sonar failed, the merge method (`allowed on <base>`), and last the `landing` row naming the line the merge commit ends with (`work item` and `#<n>`, or `no item` and its kind); then, on stderr, `Switch quality_gate off, merge #<pr>, switch it on? Type yes: `. Only `yes` in lower case, ended with Enter, merges (whitespace around it counts for nothing; `Yes` or `y` change nothing); any other line, or the end of input (Ctrl-D) before Enter, prints `error: not confirmed · nothing changed` and `next:` naming the command again (exit `1`); Ctrl-C at the question ends the run interrupted (exit `130`); nothing has changed in either case. With stderr closed the question and the pairs print nowhere; nothing moves to stdout. A refusal is its `!` row and the `error:`/`next:` pair on stderr (exit `1`), each blocking line of the verdict whole below the `loosenings` row; a step that cannot be judged is its `✗` row and the pair (exit `2`); a `quality/config.toml` it cannot read at the base or at the merge commit is the `✗ loosenings` row with the config's fact, and under `next:` the example to copy where the fact has one, then the step for that commit: `fix it on <base branch> first` for the base, which is read first, or `push the fix to the pull request's branch, then run quality merge <owner/repo>#<pr> again` for the merge commit; no terminal on stdin is the pair alone (exit `1`); a name not of the form `<owner>/<repo>#<pr>` is a wrong invocation (exit `2`). Every line it prints is escaped as the other doors' lines are, so a `reason` cannot hide anything before `yes` or forge a line.
+- **It shows, then asks:** on stdout the [release](#which-release-judges) that judges first, then a row as each step
+  passes (MERGE-1): the pull request (`open`, head, base), the checks, the declared loosenings, each
+  [whole](output.md#length) with its `item` and `date` and its `reason` on the line below (MERGE-2), the legacy count
+  where Sonar failed (MERGE-3), the merge method (`allowed on <base>`) (MERGE-4), and last the `landing` row naming the
+  line the merge commit ends with (MERGE-5) (`work item` and `#<n>`, or `no item` and its kind); then, on stderr,
+  `Switch quality_gate off, merge #<pr>, switch it on? Type yes: ` (MERGE-6). Only `yes` in lower case, ended with
+  Enter, merges (MERGE-7) (whitespace around it counts for nothing (MERGE-8); `Yes` or `y` change nothing (MERGE-9));
+  any other line, or the end of input (Ctrl-D) before Enter, prints `error: not confirmed · nothing changed` and
+  `next:` naming the command again (exit `1`) (MERGE-10); Ctrl-C at the question ends the run interrupted
+  (exit `130`) (MERGE-11); nothing has changed in either case (MERGE-12). With stderr closed the question and the
+  pairs print nowhere; nothing moves to stdout (MERGE-13). A refusal is its `!` row and the `error:`/`next:` pair on
+  stderr (exit `1`), each blocking line of the verdict whole below the `loosenings` row; a step that cannot be judged
+  is its `✗` row and the pair (exit `2`); a `quality/config.toml` it cannot read at the base or at the merge commit is
+  the `✗ loosenings` row with the config's fact, and under `next:` the example to copy where the fact has one, then
+  the step for that commit: `fix it on <base branch> first` for the base, which is read first, or
+  `push the fix to the pull request's branch, then run quality merge <owner/repo>#<pr> again` for the merge commit; no
+  terminal on stdin is the pair alone (exit `1`); a name not of the form `<owner>/<repo>#<pr>` is a wrong invocation
+  (exit `2`). Every line it prints is escaped as the other doors' lines are, so a `reason` cannot hide anything before
+  `yes` or forge a line.
 - **Dry run:** `--dry-run` reads and shows every row the door shows, refuses where it refuses, and in place of the question ends with `~ dry run · would switch quality_gate off, merge #<pr>, switch it on · nothing changed` on stdout (exit `0`); it reads no answer and sends no request that changes anything (no `gh api -X`, no `gh pr merge`), and it needs a terminal on stdin like the door. `-v` is taken and adds nothing: the door runs no scanner.
 - **Off, merge, on:** it sets the repository's `quality_gate` property to `false` (this takes the fleet's ruleset off it),
   runs `gh pr merge <pr> --merge --match-head-commit <sha> --body-file -`, the message on its stdin (`--squash` where the repository settings or a rule on the
