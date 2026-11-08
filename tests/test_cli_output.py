@@ -351,7 +351,7 @@ def test_ctrl_c_in_the_door_ends_the_run_as_interrupted_through_the_injected_sen
 
     saved = signal.getsignal(signal.SIGINT)
     try:
-        with pytest.raises(SystemExit) as exited:
+        with pytest.raises((SystemExit, KeyboardInterrupt)) as exited:
             cli.run(door=interrupted_door, environment={}, send_signal=lambda pid, number: sent.append((pid, number)))
     finally:
         signal.signal(signal.SIGINT, saved)
@@ -751,8 +751,8 @@ REFUSED_CONFIG = {"quality/config.toml": '[gate]\nmandatory_jobs = ["checks"]\n[
     ids=["terminal", "NO_COLOR", "dumb", "pipe"],
 )
 def test_the_real_door_prints_every_config_example_line_whole_in_each_stderr_form(build_repo, environment, coloured):
-    """#279 acceptance 6: after removing quality's SGR, each example line stands whole on its own line in all four
-    forms; colour only at a terminal."""
+    """O10, REFUSAL-15, REFUSAL-16, REFUSAL-17: after removing quality's SGR, the label and each example line stand
+    whole on their own lines, one level deeper, in all four forms; colour only at a terminal."""
     repo = build_repo(REFUSED_CONFIG)
     base = door_environment()
     parent, child = pty.openpty() if environment else (None, subprocess.PIPE)

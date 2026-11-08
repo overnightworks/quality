@@ -240,7 +240,13 @@ error: 1 of 7 areas could not check · 1 finding, 1 of them in those areas
 next: fix what the ✗ rows name, then run quality check again
 ```
 
-A config refusal names its fact on each `✗` row it reaches and shows the example to copy once under `next:` (O10): the label `write it in quality/config.toml like this:` and the example's lines one level deeper, each whole on its own line and never shortened, so the lines copied as printed are valid TOML. The fact names an entry by its table and 1-based position (`[[size.generated]] entry 1 needs …`) and quotes a repeated value as a TOML string, never as a Python repr (O11), so the printed value, copied into a TOML file, reads back as the value.
+A config refusal names its fact on each `✗` row it reaches and shows the example to copy once under `next:` (O10): the
+label `write it in quality/config.toml like this:` (REFUSAL-15) and the example's lines one level deeper (REFUSAL-16),
+each whole on its own line (REFUSAL-17) and [never shortened](#length), so the lines copied as printed are valid TOML
+(REFUSAL-18). A config refusal that has no example shows no label (REFUSAL-19). The fact names an entry by its table
+and 1-based position (`[[size.generated]] entry 1 needs …`) (REFUSAL-20) and quotes a repeated value as a TOML string,
+never as a Python repr (O11), so the printed value, copied into a TOML file, reads back as the value. An unknown key
+stands bare when it is a non-empty name of ASCII letters, digits, `_` and `-`, else as a TOML string (REFUSAL-21).
 
 ```text
   ✗ files         not checked    quality/config.toml [[size.generated]] entry 1 needs exactly a path, a job, an item, a date and a reason

@@ -177,8 +177,8 @@ COPY = Example("write it in a.toml like this", ("[[table]]", 'key = "value"', "o
     ids=["one step", "two steps", "labelled command", "choice alone", "example alone", "example after a command", "choice after a command"],
 )
 def test_the_pair_prints_a_lone_step_on_the_next_line_and_several_below_it(steps, expected):
-    """REFUSAL-10, REFUSAL-11, REFUSAL-14: a lone step starts on the `next:` line, several stand below a bare `next:`,
-    and alternatives stand under their label."""
+    """REFUSAL-10, REFUSAL-11, REFUSAL-14, REFUSAL-16: a lone step starts on the `next:` line, several stand below a
+    bare `next:`, alternatives stand under their label, and an example's lines stand one level below its label."""
     assert written(io.StringIO, lambda channel: output.write_pair("e", steps, channel)) == f"error: e\n{expected}"
 
 
@@ -530,6 +530,8 @@ def test_counted_gives_the_noun_for_one_and_its_plural_for_any_other_count():
 
 
 def test_an_example_line_prints_whole_however_long_and_escaped():
+    """REFUSAL-16, REFUSAL-17, MASK-3, MASK-6, MASK-7: an example line prints whole on its own line however long, one
+    level deeper, and an escape or a format character in it prints escaped."""
     long_line = 'reason = "' + "x" * 400 + '"'
     pair = written(io.StringIO, lambda channel: output.write_pair("e", (Example("write it", (long_line, "k = \x1b[35m\u202e")),), channel))
     assert pair == f"error: e\nnext: write it:\n    {long_line}\n    k = \\x1b[35m\\u202e\n"

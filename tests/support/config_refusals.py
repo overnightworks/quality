@@ -176,6 +176,10 @@ def _array_table_refusals(table: ArrayTable) -> list[Refusal]:
         Refusal(f"{table.name} not a list", NOT_A_LIST_TEXT[table.name], f"{CONFIG} needs {table.header} as an array of tables", table.example),
         Refusal(f"{table.name} keys", GATE + table.entry(extra=1), f"{where} entry 1 needs {table.keys_need}", table.example),
         Refusal(
+            f"{table.name} entry not a table", NOT_A_LIST_TEXT[table.name].replace('= "x"', "= [1]"),
+            f"{where} entry 1 needs {table.keys_need}", table.example,
+        ),
+        Refusal(
             f"{table.name} duplicate", GATE + table.entry() * 2, f"{where} {table.duplicate}",
             table.example if table.duplicate_example else None,
         ),
