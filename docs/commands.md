@@ -144,14 +144,16 @@ printed, and a private repository a token can list is dropped without a trace.
 - `Clone pairs prod / test` counts the `clone` rule's pairs (two near-identical functions in two files, at 40 tokens and
   90 %); a pair counts as test only when both sides are tests, so a test that copies production code counts as prod.
 - A `.py` file Python cannot parse still has its lines counted; the row's note says how many such files there are, never which.
-- The matrix, under a heading naming the newest release tag of `overnightworks/quality` (read by an anonymous
-  `git ls-remote --tags`, never from the running code's version), has one `Gate` and one `CodeQL` cell per repository.
-  They come from the job-level `uses:` of each tracked `.github/workflows/*.yml|yaml`, parsed as data and never run.
-  A pin to a commit shows the release tag at that commit, with `(behind)` when it is not the newest;
-  `<7 characters> (no release)` when no tag points there, `<ref> (not a commit)` for a branch or tag name, `no gate`
-  or `none` without a caller, and `self` for the repository's own `./` or `$/` file in `overnightworks/quality`. Two
-  callers show both, joined by ` · `. The `# v` comment is never read. The owner and repository of a `uses:` match in any
-  case, the workflow path exactly.
+- The matrix stands under a heading naming the newest release tag of `overnightworks/quality` by version, read by an
+  anonymous `git ls-remote --tags` and never from the running code's version; an annotated tag counts at the commit it
+  points to, a name that is no release tag is ignored, and a listing without a release tag is unreadable (FLEET-1). It
+  has one `Gate` and one `CodeQL` cell per repository (FLEET-2). They come from the job-level `uses:` of each tracked
+  `.github/workflows/*.yml|yaml`, parsed as data and never run (FLEET-3). A pin to a commit (40 hexadecimal digits, in
+  either case) shows the release tag at that commit, with `(behind)` when it is not the newest (FLEET-4);
+  `<7 characters> (no release)` when no tag points there (FLEET-5), `<ref> (not a commit)` for a branch or tag name
+  (FLEET-6), `no gate` or `none` without a caller (FLEET-7), and `self` for the repository's own `./` or `$/` file in
+  `overnightworks/quality` (FLEET-8). Two callers show both, joined by ` · ` (FLEET-9). The `# v` comment is never read
+  (FLEET-10). The owner and repository of a `uses:` match in any case, the workflow path exactly (FLEET-11).
 - After `Gate` and `CodeQL` the matrix has `Mandatory jobs` (the number in `[gate] mandatory_jobs` of `quality/config.toml`,
   `no config` without the file, `—` without a gate), `Sonar legacy` (`report` or `fail` from `[gate] legacy`, `no config`
   without the file, `—` without a gate) and one column per rule whose
