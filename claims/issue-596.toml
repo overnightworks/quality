@@ -1,7 +1,0 @@
-claim_id = "3edebe0a405e48e6bf782837a7d6dfe1"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "26d0cfc7450f9c0b88b60b630970935e62a97b54"
-branch = "claude/issue-596-d7-python-floor-rest-ids"
-scope = ["docs/rules.md", "tests/test_python_floor.py"]
-opened_commit = "81ae8cc90655e3eb9f092d2c92e688ce88be18a7"
