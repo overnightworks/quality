@@ -763,7 +763,7 @@ def test_properties_with_sonar_off_and_an_unwritable_output_cannot_judge(monkeyp
 
 
 def test_properties_refuses_a_malformed_sonar_key(monkeypatch, capsys, build_repo):
-    """A sonar value that is not a boolean is exit 2 naming the key, never a traceback."""
+    """VERDICT-17: A sonar value that is not a boolean is exit 2 naming the key, never a traceback."""
     files = {"quality/config.toml": '[gate]\nmandatory_jobs = ["check"]\nsonar = "no"\n'}
     code, _, err = run_properties(monkeypatch, capsys, build_repo, extra_files=files)
     assert (code, err) == (

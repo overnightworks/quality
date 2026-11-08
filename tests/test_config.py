@@ -41,7 +41,7 @@ from tests.support.generated_files import TYPES_FILE, generated_config
 
 
 def test_reads_the_mandatory_job_names():
-    """#6 rule 1: the mandatory job names come from [gate] mandatory_jobs."""
+    """VERDICT-2, VERDICT-3: the mandatory job names come from [gate] mandatory_jobs."""
     settings = load_gate_settings('[gate]\nmandatory_jobs = ["checks", "checks (3.12)"]')
     assert settings.mandatory_jobs == ("checks", "checks (3.12)")
 
@@ -64,13 +64,13 @@ def test_reads_the_mandatory_job_names():
     ],
 )
 def test_refuses_a_config_that_does_not_name_mandatory_jobs(text):
-    """#6 rule 1: a config without a non-empty mandatory_jobs list is refused with the fix."""
+    """VERDICT-3, VERDICT-4: a config without a non-empty mandatory_jobs list is refused."""
     with pytest.raises(ConfigError, match="mandatory_jobs"):
         load_gate_settings(text)
 
 
 def test_a_repository_without_the_file_is_refused(tmp_path):
-    """#6 rule 1: a repository without quality/config.toml is refused."""
+    """VERDICT-4: a repository without quality/config.toml is refused."""
     with pytest.raises(ConfigError, match="missing"):
         read_gate_settings(tmp_path)
 
@@ -230,7 +230,7 @@ def test_any_other_legacy_value_is_a_config_error(value):
     ids=["absent", "true", "false"],
 )
 def test_the_sonar_key_turns_sonar_off_and_defaults_to_on(text, expected):
-    """[gate] sonar is true unless the config says false."""
+    """VERDICT-15, VERDICT-16: [gate] sonar is true unless the config says false."""
     assert load_gate_settings(text).sonar is expected
 
 

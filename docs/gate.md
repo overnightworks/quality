@@ -32,9 +32,9 @@ Each line has a reason:
 - **`needs:` lists the id of every job that a `mandatory_jobs` name belongs to.** The verdict then judges finished jobs,
   and a job GitHub still lists as running is unsettled and never green (READ-1), so the answer is stale: the verdict
   reads the run's jobs again, every 10 seconds (READ-2) and at most 12 times (READ-3): two minutes of waiting plus the
-  time the reads take. Without `needs:`, a job still
-  running holds the verdict for that long, then it cannot judge:
-  `GitHub still lists "checks" (attempt 1) as in_progress after 13 reads · …`, with `next: re-run this run's failed jobs`.
+  time the reads take. Without `needs:`, a job still running holds the verdict for that long, then it cannot judge:
+  `GitHub still lists "checks" (attempt 1) as in_progress after 13 reads · …`, with two steps under `next:`,
+  `re-run this run's failed jobs` and `a mandatory job missing from the caller job's needs: add it there` (VERDICT-1).
 - **`if: always()` runs the gate when a needed job failed,** so the verdict names the failure. Without it, a failed needed
   job skips the gate and no verdict judges the run.
 - **`permissions:` grants `contents: read` and `actions: read`.** The verdict reads the run's jobs through the API, and
@@ -63,7 +63,7 @@ Each line has a reason:
   (CALLER-7). The tool is its own uv workspace root, so a caller's checkout above it can neither take it in nor
   configure it (CALLER-8).
 
-The verdict judges the jobs named in `quality/config.toml`:
+The verdict judges the jobs named in `quality/config.toml` (VERDICT-2):
 
 ```toml
 [gate]
@@ -71,17 +71,26 @@ mandatory_jobs = ["checks"]
 ```
 
 - `mandatory_jobs` is a non-empty list of job names as the run lists them: the job's `name:`, else its id, and a matrix
-  leg as `check (3.12)`. A missing file or key is exit `2`, and `next:` shows this example.
-- Each job must conclude `success` in its newest attempt up to the verdict's own. A job that is missing from the run is
-  the row `! x  missing  not in the run`; one that failed, was skipped or cancelled is red. One GitHub still lists
-  as running (`queued`, `in_progress`, `waiting`, `requested`, `pending`) is read again; after the last read the
-  verdict cannot judge. Each read judges every entry any answer listed, at the furthest state an answer showed, so an
-  answer that lists an entry late or drops one never hides a failure an earlier answer showed.
-- On a pull request, removing a job the base config holds is the loosening `mandatory job "x" removed`, and the
-  base's job is still judged; a declared removal (below) is no longer judged.
+  leg as `check (3.12)` (VERDICT-3). A missing file or key is exit `2` (VERDICT-4), and `next:` shows this example.
+- Each job must conclude `success` in its newest attempt up to the verdict's own (VERDICT-5). A job the run lists
+  several times in that attempt is green only when every entry succeeded (VERDICT-6). A job that is missing from the run
+  is the row `! x  missing  not in the run` (VERDICT-7); one that failed, was skipped or cancelled is red (VERDICT-8).
+  One GitHub still lists as running (`queued`, `in_progress`, `waiting`, `requested`, `pending`) is read again
+  (VERDICT-9). Each read judges every entry any answer listed, at the furthest state an answer showed, so an answer
+  that lists an entry late or drops one never hides a failure an earlier answer showed (VERDICT-10).
+- The verdict reads every page of the run's jobs (VERDICT-11). A read whose jobs differ in number from the count the
+  listing gives, or that runs past 10 pages, cannot be judged (VERDICT-12).
+- On a pull request, removing a job the base config holds is the loosening `mandatory job "x" removed`, and the base's
+  job is still judged (VERDICT-13); a declared removal (below) is no longer judged.
 - The gate's own jobs are judged through `needs` (the row `! quality / sonar  failure`, the check name GitHub shows)
-  and need no entry.
-- `[gate] sonar = false` turns SonarCloud off: the `sonar` job's properties step hands it `sonar=off`, prints `· sonar  off  …` and `✓ off · nothing reaches SonarCloud`, and `gate.yml` skips the scan and the findings step only on that output (CALLER-9), so the job is green and sends nothing. While off, a `sonar-project.properties` or a passed `SONAR_TOKEN` is exit `2`, so a later gate without the switch also stops before its scan. Absent or `true`, Sonar runs. Any other value, and `false` beside `legacy = "fail"`, is exit `2`. On a pull request, a head that turns Sonar off under a base that runs it is the loosening `sonar true → false`; an adoption (a base without `quality/config.toml`) may start with Sonar off.
+  and need no entry (VERDICT-14).
+- `[gate] sonar = false` turns SonarCloud off (VERDICT-15). The `sonar` job's properties step then hands it `sonar=off`,
+  which [Coverage on new code](sonar.md#coverage-on-new-code) describes, with the refusals that make a later gate
+  without the switch stop before its scan, and `gate.yml` skips the scan and the findings step only on that output
+  (CALLER-9), so the job is green and sends nothing. Absent or `true`, Sonar runs (VERDICT-16). Any other value is exit
+  `2` (VERDICT-17). On a pull request, a head that turns Sonar off under a base that runs it is the loosening
+  `sonar true → false` (VERDICT-18); an adoption (a base without `quality/config.toml`) may start with Sonar off
+  (VERDICT-19).
 - `[gate] legacy` is described under [New and legacy findings](sonar.md#new-and-legacy-findings).
 
 `gate.yml`'s verdict step runs `quality verdict`, which takes no path and judges the checkout it runs in. It prints rows
@@ -108,9 +117,9 @@ with the steps apart from the fact:
 When it read the jobs more than once, a first row says so:
 `· run  2 reads  GitHub first listed "checks" (attempt 1) as in_progress`. A GitHub server error
 (5xx) is read again within the same budget, and if it lasts, the fact names it as GitHub's:
-`GitHub answered HTTP 502 Bad Gateway for … after 13 reads · GitHub's fault, not the caller's`. A timeout or an
-unreachable GitHub is not read again. A cannot-judge after a re-read still prints the rows of the last judged read
-first, on stdout. The run's step summary gets the same lines, stdout's and then the pair, in one fenced code block on a
+`GitHub answered HTTP 502 Bad Gateway for … after 13 reads · GitHub's fault, not the caller's`. Any other failure, such
+as a 403, a timeout or an unreachable GitHub, is not read again (VERDICT-20). A cannot-judge after a re-read still
+prints the rows of the last judged read first, on stdout (VERDICT-21). The run's step summary gets the same lines, stdout's and then the pair, in one fenced code block on a
 line of its own, whose fence is longer than every backtick run in them, so no job name or `what` renders as markdown. A
 summary that cannot be written adds `error: GITHUB_STEP_SUMMARY is not writable · <reason>` after them (exit `2`).
 `-v` adds nothing: the verdict runs no scanner.
