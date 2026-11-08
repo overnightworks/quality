@@ -380,15 +380,17 @@ It applies these rules:
   `*_test.py` as a target. An import whose name matches a tracked test module is reported even when it means a
   third-party module; rename the test module or declare the importer.
 - `python-floor` judges every tracked `pyproject.toml` that `test-layout` finds as a project (the root or a member at
-  any depth, none inside another project's `tests/`) and that holds a `[project]` table; one with only `[tool.*]`
-  tables, or with `project` as a value, is not judged, and a gitlink is never entered. The floor is the highest lower
-  bound among the `requires-python` clauses `>=`, `>`, `~=`, `==` and `===`, read with `packaging`; a trailing `.*` is
-  dropped (`==3.14.*` is 3.14, `==3.*` is 3), `!=`, `<` and `<=` set none, and `>3.13` counts as 3.13. The file is clean
-  from a floor of 3.14: `>=3.14`, `>=3.14,<3.15`, `~=3.14`, `==3.14.*` and `>=3.15` pass; `>=3.12`, `>=3.11,<3.15`,
-  `>3.13`, `>=3.14.0rc1`, `<3.15`, an empty value, `dynamic = ["requires-python"]` and a missing `requires-python` are
-  red (the last four name no floor). One finding per file, at its path, says `below floor` (its fact names the value and the floor) or
-  `no floor` (the value, which sets no lower bound), with the fix: raise `requires-python` to `>=3.14` and move CI,
-  `.python-version`, Dockerfiles and ruff's `target-version` with it, or declare the file.
+  any depth, none inside another project's `tests/`) (FLOOR-1) and that holds a `[project]` table; one with only
+  `[tool.*]` tables, or with `project` as a value, is not judged (FLOOR-2), and a gitlink is never entered (FLOOR-3).
+  The floor is the highest lower bound among the `requires-python` clauses `>=`, `>`, `~=`, `==` and `===`, read with
+  `packaging` (FLOOR-4); a trailing `.*` is dropped (`==3.14.*` is 3.14, `==3.*` is 3) (FLOOR-5), `!=`, `<` and `<=` set
+  none (FLOOR-6), and `>3.13` counts as 3.13 (FLOOR-7). The file is clean from a floor of 3.14: `>=3.14`,
+  `>=3.14,<3.15`, `~=3.14`, `==3.14.*` and `>=3.15` pass (FLOOR-8); `>=3.12`, `>=3.11,<3.15`, `>3.13`, `>=3.14.0rc1`,
+  `<3.15`, an empty value, `dynamic = ["requires-python"]` and a missing `requires-python` are red (FLOOR-9) (the last
+  four name no floor (FLOOR-10)). One finding per file, at its path (FLOOR-11), says `below floor` (its fact names the
+  value and the floor) (FLOOR-12) or `no floor` (the value, which sets no lower bound) (FLOOR-13), with the fix: raise
+  `requires-python` to `>=3.14` (FLOOR-14) and move CI, `.python-version`, Dockerfiles and ruff's `target-version` with
+  it, or declare the file.
   A `[[python.allow]]` entry with exactly a `path` (the exact tracked path of the `pyproject.toml`, no folder, pattern
   or `..`) and a one-line `reason`, one per path, makes that file clean; its own table, because the exception is meant
   to end. Each allowed file stands as a `· <path>  allowed  <fact> · <reason>` row under the files row, after the area's
