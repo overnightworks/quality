@@ -1,4 +1,4 @@
-"""#184: the file-suffix rule, a tracked file without a suffix is executable, a link, a dotfile, tool-mandated or declared."""
+"""The layout rules of the files area: file-suffix, script-name and script-header."""
 
 
 import pytest
@@ -26,27 +26,27 @@ from tests.support.merge import ONE_JOB
 
 
 def test_a_file_without_a_suffix_is_red(build_repo, capsys):
-    """#184 sentence 1: a tracked file without a suffix is a finding."""
+    """SUFFIX-1: a tracked file without a suffix is a finding."""
     repo = build_repo({**GUIDANCE, "EDGE_SHA": "abc\n"})
     code = check_output(capsys, repo)[0]
     assert (code, red(repo)) == (1, ["EDGE_SHA"])
 
 
 def test_the_tool_mandated_names_and_dotfiles_are_clean(build_repo):
-    """#184 sentence 1: tool-mandated names and dotfiles are clean."""
+    """SUFFIX-3, SUFFIX-7: tool-mandated names and dotfiles are clean, in any folder."""
     names = ["LICENSE", "Dockerfile", "Makefile", "CODEOWNERS", ".gitignore", "docs/.keep", "deploy/Dockerfile"]
     repo = build_repo({**GUIDANCE, **{name: "x" for name in names}})
     assert red(repo) == []
 
 
 def test_names_compare_in_exact_case(build_repo):
-    """#184 sentence 4: names compare in exact case."""
+    """SUFFIX-7: names compare in exact case."""
     repo = build_repo({**GUIDANCE, "license": "x", "makefile": "x"})
     assert red(repo) == ["license", "makefile"]
 
 
 def test_an_executable_a_symlink_and_a_gitlink_are_clean(build_repo):
-    """#184 sentence 1: executables, symlinks and gitlinks are clean."""
+    """SUFFIX-2: executables, symlinks and gitlinks are clean."""
     repo = build_repo({**GUIDANCE, "scripts/run": "#!/bin/sh\n", "scripts/stray": "x"})
     in_index(repo, "update-index", "--chmod=+x", "scripts/run")
     (repo / "latest").symlink_to("AGENTS.md")
@@ -56,7 +56,7 @@ def test_an_executable_a_symlink_and_a_gitlink_are_clean(build_repo):
 
 
 def test_a_symlink_is_judged_by_its_own_name_whatever_it_points_at(build_repo):
-    """#184 sentence 2: a link is never dereferenced."""
+    """SUFFIX-5: a link is never dereferenced."""
     repo = build_repo({**GUIDANCE, "target.txt": "x"})
     (repo / "latest").symlink_to("target.txt")
     (repo / "latest.txt").symlink_to("missing")
@@ -65,14 +65,14 @@ def test_a_symlink_is_judged_by_its_own_name_whatever_it_points_at(build_repo):
 
 
 def test_the_mode_comes_from_the_index_not_the_disk(build_repo):
-    """#184 sentence 2: the index is the only source of a path's mode."""
+    """SUFFIX-5: the index is the only source of a path's mode."""
     repo = build_repo({**GUIDANCE, "run": "#!/bin/sh\n"})
     (repo / "run").chmod(0o755)
     assert red(repo) == ["run"]
 
 
 def test_findings_are_all_printed_sorted_by_path_with_both_ways_out(build_repo, capsys):
-    """#184 sentence 4: all findings, sorted by path, naming both ways out."""
+    """SUFFIX-15, SUFFIX-16: all findings, sorted by path, naming both ways out."""
     repo = build_repo({**GUIDANCE, "z/NOTES": "x", "EDGE_SHA": "x", "a/b/TODO": "x"})
     code, output = check_output(capsys, repo)
     found = rule_findings(repo, Rule.FILE_SUFFIX)
@@ -85,14 +85,14 @@ def test_findings_are_all_printed_sorted_by_path_with_both_ways_out(build_repo, 
 
 
 def test_a_declared_file_is_clean_and_a_declaration_for_a_compliant_file_stays_clean(build_repo):
-    """#184 sentence 3: a declared file is clean; a declaration for a compliant file stays clean."""
+    """SUFFIX-4, SUFFIX-13: a declared file is clean; a declaration for a compliant file stays clean."""
     config = ONE_JOB + declaring("docs/EDGE_SHA") + declaring("LICENSE") + declaring("docs/guide.md")
     repo = build_repo({**GUIDANCE, "docs/EDGE_SHA": "x", "LICENSE": "x", "docs/guide.md": "x", CONFIG: config})
     assert red(repo) == []
 
 
 def test_a_declaration_for_an_untracked_path_is_a_finding(build_repo, capsys):
-    """#184 sentence 3: a declared path that is not tracked is a finding."""
+    """SUFFIX-12: a declared path that is not tracked is a finding."""
     repo = build_repo({**GUIDANCE, CONFIG: ONE_JOB + declaring("gone/NOTES")})
     code = check_output(capsys, repo)[0]
     assert (code, red(repo)) == (1, ["gone/NOTES"])
@@ -100,7 +100,7 @@ def test_a_declaration_for_an_untracked_path_is_a_finding(build_repo, capsys):
 
 
 def test_a_declaration_is_exact_so_another_case_is_not_it(build_repo):
-    """#184 sentence 3: a declaration is an exact path."""
+    """SUFFIX-9: a declaration is an exact path."""
     repo = build_repo({**GUIDANCE, "notes": "x", CONFIG: ONE_JOB + declaring("Notes")})
     assert red(repo) == ["Notes", "notes"]
 
@@ -111,7 +111,7 @@ def test_a_declaration_is_exact_so_another_case_is_not_it(build_repo):
     ids=["folder", "star", "glob", "question", "bracket", "parent", "inner parent", "absolute", "empty", "blank", "dot slash", "double slash"],
 )
 def test_an_invalid_declared_path_cannot_be_judged_and_shows_an_example(build_repo, capsys, path):
-    """#184 sentence 3: a folder, pattern, `..` or absolute path is exit 2."""
+    """SUFFIX-18: a folder, pattern, `..` or absolute path is exit 2."""
     code, output = check_output(capsys, build_repo({**GUIDANCE, CONFIG: ONE_JOB + declaring(path)}))
     assert code == 2
     assert "[[layout.allow]]" in output
@@ -146,7 +146,7 @@ def test_an_invalid_declared_path_cannot_be_judged_and_shows_an_example(build_re
     ],
 )
 def test_a_malformed_layout_table_cannot_be_judged(build_repo, capsys, config):
-    """#184 sentence 3: a duplicate, unknown rule or key, or a reason that is not one-line text is exit 2."""
+    """SUFFIX-18, SUFFIX-19: a duplicate, unknown rule or key, or a reason that is not one-line text is exit 2."""
     repo = build_repo({**GUIDANCE, "NOTES": "x", CONFIG: ONE_JOB + config})
     code, output = check_output(capsys, repo)
     assert code == 2
@@ -155,7 +155,7 @@ def test_a_malformed_layout_table_cannot_be_judged(build_repo, capsys, config):
 
 
 def test_the_layout_table_is_separate_from_the_root_table(build_repo):
-    """#184 sentence 3: `[[layout.allow]]` is separate from `[[root.allow]]`."""
+    """SUFFIX-8: `[[layout.allow]]` is separate from `[[root.allow]]`."""
     root = '[[root.allow]]\nentry = "NOTES"\nreason = "r"\n'
     repo = build_repo({**GUIDANCE, "NOTES": "x", CONFIG: ONE_JOB + root})
     assert red(repo) == ["NOTES"]
@@ -163,12 +163,12 @@ def test_the_layout_table_is_separate_from_the_root_table(build_repo):
 
 @pytest.mark.parametrize(("character", "escaped"), CONTROL_CHARACTERS)
 def test_a_path_with_a_control_or_format_character_prints_escaped(build_repo, capsys, character, escaped):
-    """#184 sentence 4: a finding prints the path escaped."""
+    """MASK-2, MASK-6, MASK-7: a finding prints the path escaped."""
     assert_prints_escaped_row(capsys, build_repo, Rule.FILE_SUFFIX, character, escaped)
 
 
 def test_an_index_record_that_cannot_be_read_cannot_be_judged(build_repo, capsys, fake_git):
-    """#184 sentence 2: index data that cannot be read is exit 2."""
+    """SUFFIX-6: index data that cannot be read is exit 2."""
     repo = build_repo(GUIDANCE)
     fake_git(r"""case " $* " in *" -s "*) printf 'not-a-mode abc 0\tAGENTS.md\0'; exit 0;; esac""")
     code, _ = check_output(capsys, repo)
@@ -244,7 +244,7 @@ def test_a_script_outside_a_scripts_folder_is_red_unless_tool_mandated_or_a_dotf
 
 
 def test_one_declaration_covers_the_shape_and_the_location(build_repo):
-    """#190 sentence 3: one script-name entry covers both shape and location for its path."""
+    """SUFFIX-11: one script-name entry covers both shape and location for its path."""
     config = ONE_JOB + declaring("docker/Entry-Point.sh", rule="script-name")
     repo = build_repo({**GUIDANCE, "docker/Entry-Point.sh": SHELL_HEADER, CONFIG: config})
     in_index(repo, "update-index", "--chmod=+x", "docker/Entry-Point.sh")
@@ -307,7 +307,7 @@ def test_the_header_is_judged_for_presence_never_content(build_repo):
 
 
 def test_a_script_header_declaration_covers_only_the_header(build_repo):
-    """#190 sentence 6: script-header is a rule; the declared file is clean of it and the other rule still judges it."""
+    """SUFFIX-10: script-header is a rule; the declared file is clean of it and the other rule still judges it."""
     config = ONE_JOB + declaring("scripts/bad.sh", rule="script-header")
     repo = build_repo({**GUIDANCE, "scripts/bad.sh": "set -e\n", CONFIG: config})
     assert script_findings(repo) == {Rule.SCRIPT_NAME: ["scripts/bad.sh"], Rule.SCRIPT_HEADER: []}
@@ -315,7 +315,7 @@ def test_a_script_header_declaration_covers_only_the_header(build_repo):
 
 @pytest.mark.parametrize("rule", SCRIPT_RULES)
 def test_a_declaration_for_an_untracked_script_names_its_own_rule(build_repo, capsys, rule):
-    """#190 sentence 6: a declared path that is not tracked is a finding naming its own rule."""
+    """SUFFIX-12: a declared path that is not tracked is a finding naming its own rule."""
     repo = build_repo({**GUIDANCE, CONFIG: ONE_JOB + declaring("scripts/gone.sh", rule=rule)})
     code = check_output(capsys, repo)[0]
     assert (code, red(repo, rule), red(repo)) == (1, ["scripts/gone.sh"], [])
@@ -323,7 +323,7 @@ def test_a_declaration_for_an_untracked_script_names_its_own_rule(build_repo, ca
 
 
 def test_a_declaration_for_a_compliant_script_stays_clean(build_repo, capsys):
-    """#190 sentence 6: a declaration for a file that already complies is clean."""
+    """SUFFIX-13: a declaration for a file that already complies is clean."""
     config = ONE_JOB + declaring("scripts/run_it.sh", rule="script-name") + declaring("scripts/run_it.sh", rule="script-header")
     repo = build_repo({**GUIDANCE, "scripts/run_it.sh": SHELL_HEADER, CONFIG: config})
     assert check_output(capsys, repo)[0] == 0
@@ -353,12 +353,12 @@ def test_a_file_under_tests_is_not_read_for_a_shebang(build_repo, capsys):
 
 
 def test_a_suffixless_file_is_a_tracked_finding_the_door_prints_as_its_row(build_repo, capsys):
-    """#283 O12 and picture :48: the kind `tracked`, no trailing period, the row equal to the finding."""
+    """SUFFIX-14, O12: the kind `tracked`, no trailing period, the row equal to the finding."""
     assert_prints_as_kind(capsys, build_repo({**GUIDANCE, "docs/EDGE_SHA": "x"}), Rule.FILE_SUFFIX, FindingEvent.TRACKED)
 
 
 def test_three_suffixless_files_print_three_rows_and_one_fix_after_the_third(build_repo, capsys):
-    """#228 rule 7, decision 4: a fix shared by consecutive findings prints once, under the last."""
+    """ROW-3: a fix shared by consecutive findings prints once, under the last."""
     repo = build_repo({**GUIDANCE, "docs/EDGE_SHA": "x", "docs/b/TODO": "x", "docs/NOTES": "x"})
     output = check_output(capsys, repo)[1]
     found = rule_findings(repo, Rule.FILE_SUFFIX)
@@ -377,7 +377,7 @@ LAYOUT_ALLOWANCE_SCENARIOS = [
 
 @pytest.mark.parametrize(("rule", "files"), LAYOUT_ALLOWANCE_SCENARIOS, ids=[rule.value for rule, _ in LAYOUT_ALLOWANCE_SCENARIOS])
 def test_the_allowance_fix_names_the_findings_own_rule_and_its_entry_clears_the_finding(build_repo, rule, files):
-    """#283 decision 12: the one rule id a fix names is the finding's own, and the entry it asks for is accepted."""
+    """SUFFIX-17: the one rule id a fix names is the finding's own, and the entry it asks for is accepted."""
     repo = build_repo({**GUIDANCE, **files})
     (finding,) = rule_findings(repo, rule)
     assert rule_ids_in(finding.fix) == {rule.value}
@@ -386,7 +386,7 @@ def test_the_allowance_fix_names_the_findings_own_rule_and_its_entry_clears_the_
 
 
 def test_a_path_declared_under_two_rules_and_untracked_is_one_equal_stale_row_per_rule(build_repo, capsys):
-    """#283 O18: the rows read alike and name no rule; deleting every entry of the path clears both."""
+    """SUFFIX-12, O18: the rows read alike and name no rule; deleting every entry of the path clears both."""
     config = ONE_JOB + declaring("scripts/gone.sh", rule=Rule.SCRIPT_NAME) + declaring("scripts/gone.sh", rule=Rule.SCRIPT_HEADER)
     repo = build_repo({**GUIDANCE, CONFIG: config})
     found = [finding for rule in SCRIPT_RULES for finding in rule_findings(repo, rule)]

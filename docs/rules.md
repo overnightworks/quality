@@ -243,13 +243,14 @@ It applies these rules:
   config reader older than the rule refuses `[root]` as an unknown key, so a declaration lands in the pull request that
   moves the repository to a quality version that knows it. Named gaps: a submodule in the root counts as a file entry
   and no case of it is tested; marketplace's refusal of every symlink in the tree stays that repository's own check.
-- `file-suffix`: a tracked file whose basename has no suffix is a finding, unless it is executable (index mode
-  100755), a symlink (120000) or a gitlink (160000), its basename is a dotfile, its basename is on quality's list of
-  tool-mandated names (`LICENSE Dockerfile Makefile CODEOWNERS`), or it is declared. The index (`git ls-files -s`) is
-  the only source of a path's mode and a link is never followed; index data that cannot be read makes
-  the `files` row `✗ not checked` with the reason (exit `2`). Names compare in exact case, in any folder. The list belongs to quality and
-  changes with a quality version. A file is declared in `quality/config.toml`, a table of its own beside
-  `[[root.allow]]`, one exact tracked path, the rule and a one-line reason:
+- `file-suffix`: a tracked file whose basename has no suffix is a finding (SUFFIX-1), unless it is executable (index
+  mode 100755), a symlink (120000) or a gitlink (160000) (SUFFIX-2), its basename is a dotfile, its basename is on
+  quality's list of tool-mandated names (`LICENSE Dockerfile Makefile CODEOWNERS`) (SUFFIX-3), or it is declared
+  (SUFFIX-4). The index (`git ls-files -s`) is the only source of a path's mode and a link is never followed (SUFFIX-5);
+  index data that cannot be read makes the `files` row `✗ not checked` with the reason (exit `2`) (SUFFIX-6). Names
+  compare in exact case, in any folder (SUFFIX-7). The list belongs to quality and changes with a quality version. A
+  file is declared in `quality/config.toml`, a table of its own beside `[[root.allow]]` (SUFFIX-8), one exact tracked
+  path (SUFFIX-9), the rule and a one-line reason:
 
   ```toml
   [[layout.allow]]
@@ -258,18 +259,20 @@ It applies these rules:
   reason = "the deploy script reads it by this name"
   ```
 
-  The rule is `file-suffix`, `script-name`, `script-header`, `test-layout` or `test-import`; a declaration covers only its own rule, and one
-  `script-name` entry covers both the shape and the location of its path. A declared path that is not tracked is a
-  finding of the declared rule, `unused`, whose fix deletes every `[[layout.allow]]` entry of that path (an untracked path
-  makes each of its entries stale; the fix names no rule); a declaration for a file that already complies is clean. A
-  suffixless file says `tracked` with both ways out, give it a suffix or declare it, in prose with no command; findings
-  are sorted by path and all printed. The five rules' fixes that ask for an entry end with one clause naming the
-  finding's own rule. A duplicate `(rule, path)`, a folder (a trailing `/`), a pattern (`*`, `?`, `[`), `..`, a
-  leading `./`, an empty component, an absolute path, an unknown rule, an unknown key or a reason that is not one-line
-  text makes the `files` row `✗ not checked` with the reason, and `next:` shows a `[[layout.allow]]` example; a malformed `[layout]` table is
-  the same, and another malformed table in `quality/config.toml` is forwarded with its validation error. A
-  declaration is no loosening, so `quality verdict` asks for no `[[gate.loosened]]` entry. The rule writes nothing and
-  no configuration switches it off. A config reader older than the rule refuses `[layout]` as an unknown key.
+  The rule is `file-suffix`, `script-name`, `script-header`, `test-layout` or `test-import`; a declaration covers only
+  its own rule (SUFFIX-10), and one `script-name` entry covers both the shape and the location of its path (SUFFIX-11).
+  A declared path that is not tracked is a finding of the declared rule, `unused` (SUFFIX-12), whose fix deletes every
+  `[[layout.allow]]` entry of that path (an untracked path makes each of its entries stale; the fix names no rule); a
+  declaration for a file that already complies is clean (SUFFIX-13). A suffixless file says `tracked` (SUFFIX-14) with
+  both ways out, give it a suffix or declare it, in prose with no command (SUFFIX-15); findings are sorted by path and
+  all printed (SUFFIX-16). The five rules' fixes that ask for an entry end with one clause naming the finding's own rule
+  (SUFFIX-17). A duplicate `(rule, path)`, a folder (a trailing `/`), a pattern (`*`, `?`, `[`), `..`, a leading `./`,
+  an empty component, a blank path, an absolute path, a path that is not text, an unknown rule, an unknown key, a
+  missing key or a reason that is not one-line text makes the `files` row `✗ not checked` with the reason, and `next:`
+  shows a `[[layout.allow]]` example; a malformed `[layout]` table is the same (SUFFIX-18), and another malformed table
+  in `quality/config.toml` is forwarded with its validation error. A declaration is no loosening, so `quality verdict`
+  asks for no `[[gate.loosened]]` entry. The rule writes nothing and no configuration switches it off (SUFFIX-19). A
+  config reader older than the rule refuses `[layout]` as an unknown key.
 
   Ruled by the operator: quality checks in CI where files sit below the root (`tests/`, `scripts/`, file names).
 - `script-name` and `script-header` judge a script: a tracked file with index mode 100755, whose content starts with
