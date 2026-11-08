@@ -1,8 +1,0 @@
-claim_id = "b77c5ba37e2b4e2bbdda2196376d25ca"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "27e71c06caf2d6ace0dca4c40b659b766d492fd4"
-branch = "claude/issue-495-d7-sonar-2d"
-scope = ["docs/sonar.md", "tests/test_sonar.py", "tests/test_sonar_checkout.py", "tests/test_sonar_rows.py"]
-opened_commit = "591a3ac657944a301388ec89f181f940dd715a3e"
-whole_reason = "One document section and the test functions that prove it, cut by function in two shared modules plus the whole checkout module, with the re-wraps #5 assigns to this lane; apart, a test would cite an ID its document does not hold."
