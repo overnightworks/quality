@@ -1,0 +1,8 @@
+claim_id = "f57e0ea5fb4b43cfa916dd1e6731aea5"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "3a28d2026399a9af4ee17e0015b1620b8f6c7396"
+branch = "claude/issue-567-d7-vet-ids"
+scope = ["docs/output.md", "tests/test_cli_areas.py", "tests/test_cli_raw_output.py", "tests/test_scanners_vet.py"]
+opened_commit = "6bb8785bf191bef305364f4749a19987f2da5eea"
+whole_reason = "docs/output.md The vet section and the tests that prove it, linked by VERBOSE IDs, with the vet's list of causes closed and 337c folded."
