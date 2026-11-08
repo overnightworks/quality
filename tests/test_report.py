@@ -41,7 +41,7 @@ def test_a_name_printable_unchanged_is_a_shell_word_and_printable_is_idempotent(
      "ps\u2029", "tag\U000e0041", "langtag\U000e0001"]
 )
 def test_a_name_printable_changes_has_no_shell_word_and_printing_it_twice_changes_nothing(name):
-    """MASK-7, MASK-8: a name the escape changes has no shell word, and escaping it twice changes nothing."""
+    """MASK-8: a name the escape changes has no shell word, and escaping it twice changes nothing."""
     assert printable(name) != name
     assert shell_word(name) is None
     assert printable(printable(name)) == printable(name)
