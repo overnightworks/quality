@@ -22,22 +22,26 @@ It applies these rules:
 
   Ruled by the operator: the command runs exactly as printed, with no home-made encoder for the name.
 - `compose-port`: every published port in a tracked compose file binds loopback, `127.0.0.1` or `::1` (`"[::1]:HOST:CONTAINER"`,
-  `host_ip: ::1`); `[::]` and `0.0.0.0` are findings. For an app repository it checks the rule of
-  [platform's app standard](https://github.com/overnightworks/platform/blob/main/docs/app.md)
-  that published compose ports pass quality's rules. A compose file is a `.yml` or `.yaml` file whose name holds the
-  word `compose` between `.`, `-` or `_`, in any case: `docker-compose.ci.yml` and `keycloak/bootstrap.compose.yaml` are
-  judged, `composer.yml`, `compose2.yaml` and `compose.yaml.example` are not. Only tracked files count: an untracked
-  `compose.yaml` is never judged, one added with `git add` is. Its rows say `published port`, `unreadable port`,
-  `host network` or `unused` (a stale `[[compose.allow]]`). A tracked file missing from disk (deleted, or a symlink
-  to nowhere or in a loop) is skipped; one the filesystem refuses to read makes the `files` row `✗ not checked` with the reason (exit `2`).
-  A file is read as Compose reads it: `- 22:22` is the text `22:22`, and `!override` and `!reset` are read as the
-  value they wrap; any other tag (`!foo`) and any YAML error is `cannot judge`, in one line with its line and column
-  (or its position for a character YAML refuses, `nested too deeply`, `a value does not fit its tag`, or `not valid
-  YAML`). A port that is neither text, a number nor a mapping whose `published` (or, without one, `target`) is text or
-  a number is a finding. A service with `network_mode: host` publishes whatever its process binds, so it is a finding
-  too, and so is a `network_mode` that holds a Compose interpolation (`${...}`), which may resolve to `host`; `none`,
-  `service:x` and any other literal are clean. A service is declared in `quality/config.toml`, a table of its own
-  beside `[[layout.allow]]`, with the exact tracked path of its compose file, the service name and a one-line reason:
+  `host_ip: ::1`); `[::]` and `0.0.0.0` are findings (COMPOSE-1). For an app repository it checks the rule of
+  [platform's app standard](https://github.com/overnightworks/platform/blob/main/docs/app.md) that published compose
+  ports pass quality's rules. A compose file is a `.yml` or `.yaml` file whose name holds the word `compose` between
+  `.`, `-` or `_`, in any case: `docker-compose.ci.yml` and `keycloak/bootstrap.compose.yaml` are judged,
+  `composer.yml`, `compose2.yaml` and `compose.yaml.example` are not (COMPOSE-2). Only tracked files count: an untracked
+  `compose.yaml` is never judged, one added with `git add` is (COMPOSE-3). Its rows say `published port`,
+  `unreadable port`, `host network` or `unused` (a stale `[[compose.allow]]`) (COMPOSE-4). A tracked file missing from
+  disk (deleted, or a symlink to nowhere or in a loop) is skipped (COMPOSE-5); one the filesystem refuses to read makes
+  the `files` row `✗ not checked` with the reason (exit `2`) (COMPOSE-6).
+  A file is read as Compose reads it: `- 22:22` is the text `22:22` (COMPOSE-7), and `!override` and `!reset` are read
+  as the value they wrap (COMPOSE-8); any other tag (`!foo`) and any YAML error is `cannot judge` (COMPOSE-9), in one
+  line with its line and column (or its position for a character YAML refuses, `nested too deeply`, `a value does not
+  fit its tag`, or `not valid YAML`) (COMPOSE-10).
+  A port that is neither text, a number nor a mapping whose `published` (or, without one, `target`) is text or a number
+  is a finding (COMPOSE-11). A `ports` that is neither a list nor empty, `0` or `false` is a finding too (COMPOSE-12). A
+  service with `network_mode: host` publishes whatever its process binds, so it is a finding too (COMPOSE-13), and so is
+  a `network_mode` that holds a Compose interpolation (`${...}`), which may resolve to `host` (COMPOSE-14); `none`,
+  `service:x` and any other literal are clean (COMPOSE-15). A service is declared in `quality/config.toml`, a table of
+  its own beside `[[layout.allow]]`, with the exact tracked path of its compose file, the service name and a one-line
+  reason (COMPOSE-16):
 
   ```toml
   [[compose.allow]]
@@ -46,14 +50,14 @@ It applies these rules:
   reason = "it terminates TLS on the host's own interfaces"
   ```
 
-  A declared service passes the host check only; its ports are still judged. A declaration that matches nothing is a
-  finding on its file: the file is not tracked or not a compose file, it lacks the service, or the service is neither
-  host-networked nor interpolated there; the fix is to delete the entry. A duplicate `(file, service)`, a folder (a
-  trailing `/`), a pattern (`*`, `?`, `[`), `..`, an absolute path, an unknown key, a missing key or a service or reason
-  that is not one-line text makes the `files` row `✗ not checked` with the reason, and `next:` shows a `[[compose.allow]]` example, and a
-  malformed other table in `quality/config.toml` is forwarded with its validation error. A declaration is no loosening,
-  so `quality verdict` asks for no `[[gate.loosened]]` entry. A config reader older than the rule refuses `[compose]`
-  as an unknown key.
+  A declared service passes the host check only; its ports are still judged (COMPOSE-17). A declaration that matches
+  nothing is a finding on its file: the file is not tracked or not a compose file, it lacks the service, or the service
+  is neither host-networked nor interpolated there; the fix is to delete the entry (COMPOSE-18). A duplicate
+  `(file, service)`, a folder (a trailing `/`), a pattern (`*`, `?`, `[`), `..`, an absolute path, an unknown key, a
+  missing key or a service or reason that is not one-line text makes the `files` row `✗ not checked` with the reason,
+  and `next:` shows a `[[compose.allow]]` example (COMPOSE-19), and a malformed other table in `quality/config.toml` is
+  forwarded with its validation error. A declaration is no loosening, so `quality verdict` asks for no
+  `[[gate.loosened]]` entry. A config reader older than the rule refuses `[compose]` as an unknown key.
 
   Ruled by the operator: a service with `network_mode: host`, or one whose `network_mode` holds a Compose interpolation,
   is a finding unless `quality/config.toml` declares its file and service.
