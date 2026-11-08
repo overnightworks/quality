@@ -121,6 +121,7 @@ def test_the_door_reads_one_line_of_stdin(monkeypatch):
     ids=["terminal stdin alone", "terminal stdout alone"],
 )
 def test_only_stdin_decides_whether_the_door_has_a_terminal(stdin_stream, stdout_stream, code, monkeypatch):
+    """MERGE-21: only stdin decides whether the door has a terminal."""
     monkeypatch.setattr("sys.stdin", stdin_stream("yes\n"))
     monkeypatch.setattr("sys.stdout", stdout_stream())
     assert door(FakeGh()) == code
@@ -128,6 +129,7 @@ def test_only_stdin_decides_whether_the_door_has_a_terminal(stdin_stream, stdout
 
 @pytest.mark.parametrize("stdin", [None, io.StringIO("yes\n")], ids=["closed", "no terminal"])
 def test_a_stdin_that_is_no_terminal_is_the_pair_alone(stdin, monkeypatch, capsys):
+    """MERGE-21: a stdin that is closed or no terminal is the pair alone."""
     monkeypatch.setattr("sys.stdin", stdin)
     gh = FakeGh()
     code = door(gh)

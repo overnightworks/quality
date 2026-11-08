@@ -47,6 +47,8 @@ def writes(gh):
 
 @pytest.mark.parametrize("gh_kwargs", [{}, declared_loosening()], ids=["legacy findings", "a declared loosening"])
 def test_a_dry_run_shows_the_rows_and_its_line_and_changes_nothing(gh_kwargs, capsys):
+    """MERGE-23, MERGE-25, MERGE-26, MERGE-27: a dry run shows the rows and its line, reads no answer and sends no
+    request that changes anything."""
     rows, requests_before_the_question = asked_after(capsys, gh_kwargs)
     gh = FakeGh(**gh_kwargs)
     assert run(gh, capsys, words=["--dry-run"]) + (gh.sequence,) == (
@@ -70,6 +72,7 @@ def test_a_dry_run_re_executes_with_its_dry_run_word(capsys):
 
 
 def test_a_dry_run_reads_the_pull_request_asked_for(capsys):
+    """MERGE-25, MERGE-27: a dry run names the pull request asked for and sends no request that changes anything."""
     gh = FakeGh(**declared_loosening())
     code, out, _, _ = run(gh, capsys, repo="acme/gadgets", pull_request="12", words=["--dry-run"])
     login = ("api", "user", "--jq", ".login")
@@ -93,6 +96,7 @@ def test_a_dry_run_reads_the_pull_request_asked_for(capsys):
     ids=["another check red", "a draft", "gh down", "a refused landing line"],
 )
 def test_a_dry_run_refuses_where_the_door_refuses(gh_kwargs, code, capsys):
+    """MERGE-24: a dry run refuses where the door refuses."""
     door = run(FakeGh(**gh_kwargs), capsys)
     dry_gh = FakeGh(**gh_kwargs)
     dry_run = run(dry_gh, capsys, words=["--dry-run"])
@@ -101,6 +105,7 @@ def test_a_dry_run_refuses_where_the_door_refuses(gh_kwargs, code, capsys):
 
 
 def test_a_dry_run_needs_a_terminal_like_the_door(capsys):
+    """MERGE-21: a dry run needs a terminal on stdin like the door."""
     gh = FakeGh()
     assert run(gh, capsys, terminal=False, words=["--dry-run"]) + (gh.calls,) == (1, "", terminal_pair(), [], [])
 
@@ -109,6 +114,7 @@ def test_a_dry_run_needs_a_terminal_like_the_door(capsys):
     ("words", "typed"), [([], "yes\n"), (["--dry-run"], "")], ids=["a merge", "a dry run"],
 )
 def test_v_adds_nothing_to_the_door(words, typed, capsys):
+    """MERGE-28: -v adds nothing to a merge or a dry run."""
     plain_gh, verbose_gh = FakeGh(), FakeGh()
     plain = run(plain_gh, capsys, typed=typed, words=words)
     verbose = run(verbose_gh, capsys, typed=typed, words=[*words, "-v"])
@@ -133,6 +139,7 @@ def test_v_adds_nothing_to_the_door(words, typed, capsys):
     ids=["not confirmed", "not merged", "not judged", "a refused landing line", "a config refused at the merge commit"],
 )
 def test_a_next_step_that_names_the_door_again_names_the_pull_request_asked_for(gh_kwargs, typed, pattern, capsys):
+    """MERGE-10, MERGE-20: a next step that names the door again names the pull request asked for."""
     gh = FakeGh(**{**declared_loosening(), **gh_kwargs})
     _, _, err, _ = run(gh, capsys, repo="acme/gadgets", pull_request="12", typed=typed)
     (step,) = [line for line in err.splitlines() if line.startswith("next: ")]

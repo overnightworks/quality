@@ -35,6 +35,7 @@ from tests.support.merge import (
     run,
     sonar,
 )
+from tests.support.merge import pull_row as pull_row_with_line_end
 from tests.support.terminal import screen
 
 
@@ -47,7 +48,7 @@ def release_row():
 
 
 def pull_row():
-    return "  · #7            open           head aaaaaaa · into main"
+    return pull_row_with_line_end().removesuffix("\n")
 
 
 def not_json_row(subject):
@@ -115,6 +116,7 @@ def not_judged_pair():
     ids=["no terminal", "a malformed name", "a malformed name and no terminal"],
 )
 def test_a_refusal_before_any_read_is_the_pair_alone(terminal, repository, code, pair, capsys):
+    """MERGE-21, HELP-12, HELP-18: no terminal, or a name of another form, is the pair alone and nothing is read."""
     gh = FakeGh()
     refused, out, err, _ = run(gh, capsys, terminal=terminal, repo=repository)
     assert (refused, out, err, gh.calls) == (code, "", pair, [])
@@ -139,6 +141,7 @@ def test_a_refusal_before_any_read_is_the_pair_alone(terminal, repository, code,
     ids=["draft", "a draft without a landing line", "a closed draft", "closed without a landing line"],
 )
 def test_a_draft_stops_the_door_before_its_body_or_any_check_is_read(gh_kwargs, row, pair, capsys):
+    """MERGE-14: a draft or a closed pull request stops the door at its `!` row and the pair."""
     gh = FakeGh(**gh_kwargs)
     code, out, err, answers = run(gh, capsys)
     assert (code, out, err, answers) == (1, frame(row), pair, [])
@@ -162,6 +165,7 @@ def test_the_door_asks_for_the_head_commits_checks_and_statuses_and_the_login_by
 
 @pytest.mark.parametrize("draft", [ABSENT, None, "false"], ids=["missing", "null", "a string"])
 def test_a_draft_flag_that_is_no_boolean_cannot_be_judged(draft, capsys):
+    """MERGE-16: a draft flag that is no boolean is its `✗` row and the pair."""
     gh = FakeGh(draft=draft)
     code, out, err, answers = run(gh, capsys)
     assert (code, out, err, answers) == (
@@ -237,6 +241,8 @@ def test_a_draft_flag_that_is_no_boolean_cannot_be_judged(draft, capsys):
     ],
 )
 def test_each_refusal_is_its_row_and_the_pair(gh_kwargs, sonar_kwargs, rows, capsys):
+    """MERGE-14, MERGE-15: each refusal is its `!` row and the pair, and the verdict's blocking lines stand below the
+    `loosenings` row."""
     gh = FakeGh(**gh_kwargs)
     code, out, err, answers = run(gh, capsys, transport=sonar(**sonar_kwargs))
     assert (code, out, err, answers) == (1, frame(*rows), refused_pair(), [])
@@ -275,6 +281,7 @@ def test_each_refusal_is_its_row_and_the_pair(gh_kwargs, sonar_kwargs, rows, cap
     ],
 )
 def test_a_step_that_cannot_be_judged_is_its_cross_row_and_the_pair(gh_kwargs, sonar_kwargs, rows, capsys):
+    """MERGE-16: a step that cannot be judged is its `✗` row and the pair."""
     gh = FakeGh(**gh_kwargs)
     code, out, err, answers = run(gh, capsys, transport=sonar(**sonar_kwargs))
     assert (code, out, err, answers) == (2, frame(*rows), not_judged_pair(), [])
@@ -297,6 +304,8 @@ def push_step():
     "refusal", [refusal for refusal in all_refusals() if "gate" in refusal.loaders and refusal.text is not None], ids=lambda refusal: refusal.id
 )
 def test_every_config_refused_at_the_merge_commit_is_its_fact_on_the_row_and_its_example_under_next(refusal, capsys):
+    """MERGE-17, MERGE-20, O10: a config refused at the merge commit is its fact on the `✗ loosenings` row, its
+    example under `next:` and the push step."""
     gh = FakeGh(merge_config=refusal.text)
     code, out, err, answers = run(gh, capsys)
     lines = err.splitlines()
@@ -341,6 +350,8 @@ def test_every_config_refused_at_the_merge_commit_is_its_fact_on_the_row_and_its
     ],
 )
 def test_a_config_refusal_at_the_door_reads_as_drawn(gh_kwargs, into, fact, pair_end, capsys):
+    """MERGE-17, MERGE-18, MERGE-20, MERGE-22, O10: a config refused at the base or at the merge commit reads as
+    drawn, with its step and its text escaped."""
     gh = FakeGh(**gh_kwargs)
     assert run(gh, capsys) == (
         2,
@@ -356,6 +367,7 @@ def test_a_config_refusal_at_the_door_reads_as_drawn(gh_kwargs, into, fact, pair
 
 
 def test_a_config_refused_at_both_commits_is_fixed_on_the_base_first(capsys):
+    """MERGE-18, MERGE-19: a config refused at both commits is fixed on the base first."""
     gh = FakeGh(base_config=sonar_string_config(), merge_config=unknown_key_config(), base_ref="release/v0.9")
     code, out, err, _ = run(gh, capsys)
     assert (code, out.splitlines()[-1], err.splitlines()[1:]) == (
