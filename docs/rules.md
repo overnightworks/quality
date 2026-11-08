@@ -192,15 +192,17 @@ It applies these rules:
   graph is a note row `· <config>  warning  <grimp's message>`, before the contracts' notes. No message names an absolute local path.
   On a pull request `quality verdict` and the door also hold the head's import contracts against the base's (see
   "The import contracts only tighten" below).
-- `claude-md`: a tracked `CLAUDE.md`, in any case (`claude.md` is named as it is), holds exactly `@AGENTS.md` with or
-  without a final line feed, so Claude, Codex and Grok read the same guidance, and the repository tracks an `AGENTS.md`
-  beside it. No `CLAUDE.md` is clean, with or without an `AGENTS.md`. A symlink is a finding (a dangling one too), and so
-  is a tracked `.claude/CLAUDE.md`, which Claude Code reads as project memory and Codex and Grok never read. Any other
-  bytes are a finding, a Windows line ending included; a nested `docs/CLAUDE.md` is not judged. A finding's row names the
-  file and says `claude only` (`.claude/CLAUDE.md`), `symlink`, `diverges` or `no AGENTS.md`, with a fixed fact and a fix
-  in prose that never show its content; every fix is prose with no command, and for a file's own text it says to move
-  the lines into `AGENTS.md`. A tracked file missing from disk is skipped; one the filesystem refuses to read
-  makes the `files` row `✗ not checked` with the reason (exit `2`). No configuration switches the rule off.
+- `claude-md`: a tracked `CLAUDE.md`, in any case (`claude.md` is named as it is) (CLAUDE-1), holds exactly `@AGENTS.md`
+  with or without a final line feed (CLAUDE-2), so Claude, Codex and Grok read the same guidance, and the repository
+  tracks an `AGENTS.md` beside it (CLAUDE-3). No `CLAUDE.md` is clean, with or without an `AGENTS.md` (CLAUDE-4). A
+  symlink is a finding (a dangling one too) (CLAUDE-5), and so is a tracked `.claude/CLAUDE.md` (CLAUDE-6), which
+  Claude Code reads as project memory and Codex and Grok never read. Any other bytes are a finding, a Windows line
+  ending included (CLAUDE-7); a nested `docs/CLAUDE.md` is not judged (CLAUDE-8). A finding's row names the file and
+  says `claude only` (`.claude/CLAUDE.md`), `symlink`, `diverges` or `no AGENTS.md` (CLAUDE-9), with a fixed fact and a
+  fix in prose that never show its content (CLAUDE-10); every fix is prose with no command (CLAUDE-11), and for a
+  file's own text it says to move the lines into `AGENTS.md`. A tracked file missing from disk is skipped (CLAUDE-12);
+  one the filesystem refuses to read makes the `files` row `✗ not checked` with the reason (exit `2`) (CLAUDE-13). No
+  configuration switches the rule off.
 
   Ruled by the operator: `CLAUDE.md` and `AGENTS.md` never diverge. A finding names only the file, and its fix is a
   sentence, never a command.
