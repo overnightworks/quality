@@ -1,7 +1,0 @@
-claim_id = "56901b01e8ba4f039f00e1d9c2c50481"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "ac5cf3b7e06257f00fdc06900c9d1289849383a2"
-branch = "claude/issue-473-release-checkout-proof"
-scope = [".github/workflows/release.yml", "docs/release.md", "tests/workflows/test_release.py"]
-opened_commit = "69a66e96fd336c1822e0561898c706c0fb04dd7b"
