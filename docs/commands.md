@@ -288,16 +288,23 @@ Ruled by the operator:
   and each of these git commands runs in its own process group, which is killed with it at that limit or when the
   command is interrupted (every other command stays in quality's own group). git's own output is never printed: a fetch or rename list
   that fails could not be checked, and its `✗ loosenings` row says so in the door's words (exit `2`), never an empty rename list.
-- **The landing line.** The pull request body carries exactly one `Work-Item:` or `No-Item:` line outside a fenced code block, as the fleet's landings read it: `Work-Item: #<n>` or `Work-Item: <owner>/<repo>#<n>` of this repository, or `No-Item: docs`, `fix` or `deps`. Otherwise its `! landing` row names why and `next:` asks for the one line (exit `1`, nothing changed). The merge commit's message is the body without that line, a blank line, then the line as `Work-Item: #<n>` or `No-Item: <kind>`, the last paragraph, the trailer a landing is read from. The body is the one read with the head.
+- **The landing line.** The pull request body carries exactly one `Work-Item:` or `No-Item:` line (MERGE-63) outside a
+  fenced code block (MERGE-64), as the fleet's landings read it: `Work-Item: #<n>` or `Work-Item: <owner>/<repo>#<n>` of
+  this repository (MERGE-65), or `No-Item: docs`, `fix` or `deps` (MERGE-66). Otherwise its `! landing` row names why
+  (MERGE-67) and `next:` asks for the one line (MERGE-68) (exit `1`, nothing changed). The merge commit's message is the
+  body without that line, a blank line, then the line as `Work-Item: #<n>` or `No-Item: <kind>`, the last paragraph (a
+  body that holds only the line gives the line alone) (MERGE-69), the trailer a landing is read from. The body is the
+  one read with the head (MERGE-70).
 - **Sonar green: declared loosenings.** The re-derived verdict must hold at least one declared loosening (otherwise
   `re-run the verdict`). SonarCloud is not asked and `SONAR_TOKEN` is not needed.
-- **Sonar failed: legacy findings,** next to any declared loosening: `[gate] legacy` is `fail` at the merge
-  commit (under `report` the Sonar job cannot be red on legacy findings, and a missing config reads as `report`),
-  SonarCloud's analysis of the pull request is of the head being merged and adds no finding (the findings are named
-  otherwise), and the default branch has legacy findings. `SONAR_TOKEN` is read from the environment when
-  the project needs one: without it the door reads a public project anonymously, with no Authorization header, and an
-  anonymous read that SonarCloud refuses (a private project answers 404) is exit `2`, naming `SONAR_TOKEN`; with a token, a 401 or 403
-  says the token was rejected.
+- **Sonar failed: legacy findings,** next to any declared loosening (MERGE-71): `[gate] legacy` is `fail` at the merge
+  commit (MERGE-72) (under `report` the Sonar job cannot be red on legacy findings, and a missing config reads as
+  `report` (MERGE-73)), SonarCloud's analysis of the pull request is of the head being merged (MERGE-74) and adds no
+  finding (the findings are named otherwise) (MERGE-75), and the default branch has legacy findings (MERGE-76).
+  `SONAR_TOKEN` is read from the environment and sent when set (MERGE-77), never shown in a row (MERGE-78): without it
+  the door reads a public project anonymously, with no Authorization header (MERGE-79), and an anonymous read that
+  SonarCloud refuses (a private project answers 404) is exit `2`, naming `SONAR_TOKEN` (MERGE-80); with a token, a 401
+  (MERGE-81) or 403 says the token was rejected.
 - **It shows, then asks:** on stdout the [release](#which-release-judges) that judges first, then a row as each step
   passes (MERGE-1): the pull request (`open`, head, base), the checks, the declared loosenings, each
   [whole](output.md#length) with its `item` and `date` and its `reason` on the line below (MERGE-2), the legacy count

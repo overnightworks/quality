@@ -67,19 +67,23 @@ def no_body_text():
         "work item first", "own paragraph in the middle", "shared paragraph", "the line alone", "the line ends its paragraph", "the line last after a blank line", "this repository named",
         "key and kind in any case", "a fenced example beside the live line", "a shorter run inside a longer fence",
         "a tilde fence a backtick run does not close", "a closing run with an info string closes nothing",
-        "a fence left open runs to the end", "a longer closing run closes", "a fence opened three spaces in", "a fence closed three spaces in",
+        "a fence never closed runs to the end", "a longer closing run closes", "a fence opened three spaces in",
+        "a fence closed three spaces in",
         "a closing run followed by blanks closes", "a longer tilde run closes", "a two character run opens no fence", "a two character tilde run opens no fence", "a four space run opens no fence", "carriage returns end lines like line feeds",
         "a whitespace-only line before the line counts as blank", "a whitespace-only line after the line counts as blank", "outer spaces of the rest are dropped",
         "a multi-digit item", "a multi-digit item of this repository", "no item docs", "no item deps", "a body ending in a trailer paragraph",
     ],
 )
 def test_the_merge_commit_ends_with_the_bodys_one_classification_line(body, message):
+    """MERGE-64, MERGE-65, MERGE-66, MERGE-69: the merge commit ends with the body's one line outside the fences, in its
+    trailer form, after a blank line."""
     gh = FakeGh(body=body)
     assert (drive(gh)[0], gh.merge_messages) == (0, [message])
     assert gh.merge_calls[0][-2:] == ("--body-file", "-")
 
 
 def test_a_squash_ends_with_the_same_line():
+    """MERGE-69: a squash ends with the same line."""
     gh = FakeGh(body="Work-Item: #9\n\nWhy.", settings={"allow_merge_commit": False, "allow_squash_merge": True, "allow_rebase_merge": False})
     assert (drive(gh)[0], gh.merge_messages) == (0, ["Why.\n\nWork-Item: #9"])
     assert gh.merge_calls[0][5:] == ("--squash", "--match-head-commit", SHA, "--body-file", "-")
@@ -110,6 +114,9 @@ def test_a_squash_ends_with_the_same_line():
     ],
 )
 def test_a_body_without_one_valid_line_keeps_the_door_shut(body, line, capsys):
+    """MERGE-14, MERGE-22, MERGE-63, MERGE-64, MERGE-65, MERGE-66, MERGE-67, MERGE-68: a body without one valid line
+    stops the door at its `! landing  refused` row under the pull request's row, with the reason and the pair, and
+    changes nothing; the line's text cannot forge a line."""
     gh = FakeGh(body=body)
     code, answers = drive(gh)
     output = capsys.readouterr()
@@ -124,6 +131,7 @@ def test_a_body_without_one_valid_line_keeps_the_door_shut(body, line, capsys):
     ids=["a number", "false", "zero", "an empty list", "an empty object"],
 )
 def test_a_body_that_is_no_text_cannot_be_judged(body, capsys):
+    """MERGE-16: a body that is no text is not judged: its `✗ landing` row and the pair, nothing changed."""
     gh = FakeGh(body=body)
     code, answers = drive(gh)
     output = capsys.readouterr()
@@ -132,6 +140,7 @@ def test_a_body_that_is_no_text_cannot_be_judged(body, capsys):
 
 
 def test_a_pull_answer_without_a_body_field_cannot_be_judged(capsys):
+    """MERGE-16: a pull answer without a body field is not judged: its `✗ landing` row and the pair."""
     gh = FakeGh(body=ABSENT)
     code, answers = drive(gh)
     output = capsys.readouterr()
@@ -152,6 +161,7 @@ def test_a_pull_answer_without_a_body_field_cannot_be_judged(capsys):
     ids=["a work item", "no item", "this repository named whole", "a kind in capitals"],
 )
 def test_the_last_row_before_the_question_is_what_the_merge_commit_ends_with(body, row, capsys):
+    """MERGE-5: the last row before the question is what the merge commit ends with."""
     shown = []
     drive(FakeGh(body=body), when_asked=lambda: shown.append(capsys.readouterr()))
     assert (shown[0].out, shown[0].err) == (
@@ -162,6 +172,7 @@ def test_the_last_row_before_the_question_is_what_the_merge_commit_ends_with(bod
 
 
 def test_the_merge_commit_ends_with_the_judged_body_not_a_later_one():
+    """MERGE-70: the merge commit ends with the body read with the head, not a later one."""
     gh = FakeGh(body="Work-Item: #9", later_body="Work-Item: #8")
     drive(gh)
     assert gh.merge_messages == ["Work-Item: #9"]

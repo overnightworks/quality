@@ -457,7 +457,7 @@ def test_the_real_transport_returns_json(loopback):
 
 
 def test_the_real_transport_sends_no_authorization_without_a_credential(loopback):
-    """#73 rule 1: an anonymous request carries no Authorization header at all, not even an empty Basic one"""
+    """MERGE-79: an anonymous request carries no Authorization header at all, not even an empty Basic one."""
     responder, _, url = loopback
     received = []
 
