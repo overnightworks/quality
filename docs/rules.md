@@ -276,22 +276,23 @@ It applies these rules:
 
   Ruled by the operator: quality checks in CI where files sit below the root (`tests/`, `scripts/`, file names).
 - `script-name` and `script-header` judge a script: a tracked file with index mode 100755, whose content starts with
-  `#!`, or that is a `.sh`, `.py` or `.mjs` file under a `scripts/` folder at any depth (`frontend/scripts/` too). A
-  path with a `tests/` component is never a script, nor is a link (120000, 160000), nor data beside a script such as
-  `scripts/BACKUP.md`. The mode comes from the index only; the content is read through the repository reader, and a
-  file that cannot be read makes the `files` row `✗ not checked` with the reason (exit 2). Both rules compare names in exact
-  case, print all findings sorted by path and have no off switch. A row says `misnamed` where the name's shape breaks
-  the rule (its fact adds the place, when that breaks too), `misplaced` where only the place does, and `no header` for
-  a script without a header (its fact names the window it checks). A declaration is a `[[layout.allow]]` entry as for
-  `file-suffix`.
+  `#!`, or that is a `.sh`, `.py` or `.mjs` file under a `scripts/` folder at any depth (`frontend/scripts/` too)
+  (SCRIPT-1). A path with a `tests/` component is never a script (SCRIPT-2), nor is a link (120000, 160000) (SCRIPT-3),
+  nor data beside a script such as `scripts/BACKUP.md` (SCRIPT-4). The mode comes from the index only; the content is
+  read through the repository reader, and a file that cannot be read makes the `files` row `✗ not checked` with the
+  reason (exit 2) (SCRIPT-5). Both rules compare names in exact case, print all findings sorted by path (SCRIPT-6) and
+  have no off switch. A row says `misnamed` where the name's shape breaks the rule (its fact adds the place, when that
+  breaks too), `misplaced` where only the place does, and `no header` for a script without a header (its fact names
+  the window it checks) (SCRIPT-7). A declaration is a `[[layout.allow]]` entry as for `file-suffix`.
   - `script-name`: a script's basename without its extension is snake_case with at least two words
     (`run_static_checks.sh`, `verify_release.py`; `check.sh` and `prove-x.py` are red), lower-case letters and digits
-    only, and the script lies under a `scripts/` folder. Tool-mandated basenames and dotfiles are exempt from both.
-    There is no verb list: whether the verb fits stays a judgement for the structure audit.
-  - `script-header`: a comment or docstring stands within the first three non-blank lines after the shebang and a
-    PEP 723 block; blank lines do not count. Comments are `#`, and `//` or `/*` for `.mjs`. A tool directive
-    (`# shellcheck`, `# -*-`, `# noqa`, `# type:`, `# pyright:`, `# ruff:`, `// eslint`) and code such as
-    `set -euo pipefail` do not count. Presence only, never content.
+    only (SCRIPT-8), and the script lies under a `scripts/` folder (SCRIPT-9). Tool-mandated basenames and dotfiles are
+    exempt from both (SCRIPT-10). There is no verb list: whether the verb fits stays a judgement for the structure
+    audit.
+  - `script-header`: a comment or docstring stands within the first three non-blank lines (SCRIPT-11) after the shebang
+    and a PEP 723 block (SCRIPT-12); blank lines do not count. Comments are `#`, and `//` or `/*` for `.mjs`
+    (SCRIPT-13). A tool directive (`# shellcheck`, `# -*-`, `# noqa`, `# type:`, `# pyright:`, `# ruff:`, `// eslint`)
+    and code such as `set -euo pipefail` do not count (SCRIPT-14). Presence only, never content (SCRIPT-15).
 - `test-layout` judges what may lie under a Python project's `tests/` and where a frontend test lies. A project is the
   directory of any tracked `pyproject.toml`, the root or a member at any depth; the file's content is never read, and
   one inside the `tests/` of another project, of either kind, makes no project. A project is judged when it has a package: a directory directly under
