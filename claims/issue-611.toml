@@ -1,0 +1,8 @@
+claim_id = "39ecf4e2cfe748d2a1e9eb6b620a40bb"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "9c05a135440819efc7860c088cc667c53bac4cf1"
+branch = "claude/issue-611-d7-merge-landing-sonar-ids"
+scope = ["docs/commands.md", "tests/test_merge.py", "tests/test_merge_dry_run.py", "tests/test_merge_landing.py", "tests/test_merge_prompt.py", "tests/test_merge_rows.py", "tests/test_sonar.py"]
+opened_commit = "3de7d70137db75ef6cac011f90bb221b3296ce58"
+whole_reason = "docs/commands.md quality merge landing line and Sonar failed bullets and the tests that prove them, linked by MERGE IDs, with the attribution of their docstrings and the history word of one case id removed, the two bullets rewrapped, and three words corrected or added where tests assert them."
