@@ -1,0 +1,7 @@
+claim_id = "1ab59ba93f7441b3b3146caef40796bd"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "8b12f67fc5f1015068b62d23cbdd5eed18285997"
+branch = "claude/issue-615-d7-preparation-ids"
+scope = ["docs/commands.md", "tests/test_pin.py", "tests/test_pin_reexecution.py"]
+opened_commit = "f0d8507552bb9c79c9d3313aa2dd6afa9dba8621"
