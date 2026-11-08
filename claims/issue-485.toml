@@ -1,7 +1,0 @@
-claim_id = "7bb134363ef1498bb252b29d01f5f8ee"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "b5e68cbf420e96dd3b09717aa4565e3c03181bdf"
-branch = "claude/issue-485-d7-gate-ids"
-scope = ["docs/release.md", "tests/workflows/test_release_gate.py"]
-opened_commit = "3cd17349599891846c4e9caa9ff20d20163eb9c4"
