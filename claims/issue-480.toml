@@ -1,7 +1,0 @@
-claim_id = "a6c8fd145fa748889ec65d2122f90682"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "aa2ff84b99fffbadb644e8e8f689ff27975865d7"
-branch = "claude/issue-480-d7-sonar-gate-ids"
-scope = ["docs/sonar.md", "tests/test_sonar_gate_status.py"]
-opened_commit = "72fa0a17ea4c7058c6a6a4db0e35fb202a4f721c"
