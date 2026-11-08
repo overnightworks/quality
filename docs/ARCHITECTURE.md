@@ -120,7 +120,8 @@ directory.
 **Trust.** The operator and his settings are trusted. A pull request's content and every repository text are untrusted
 input: output masks them and stops workflow commands ([output](output.md#masking)). Reads stay inside the
 repository (`repository.py`). A scanner's stderr is shown only once gitleaks clears it. The GitHub transport follows no
-redirect. A workflow's pin selects which code runs locally. quality builds or runs a pinned commit only after quality's
+redirect. A workflow's pin selects which code runs locally. The gate's tool is its own uv workspace root, so a caller's checkout above it
+cannot take it in or configure it. quality builds or runs a pinned commit only after quality's
 remote showed the comment's release tag at that commit: asked before every fetch, and remembered per machine by a record
 that only a matched answer writes. The door reads that pin through `gh` at the pull request's merge commit and checks
 every listed name before it shapes a request; for quality itself it runs the installed quality, never the pull
