@@ -1,0 +1,8 @@
+claim_id = "1f7af353efd7492a8c5622a5b39b624d"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "44abed02d91892ab5bd21c62d5b7da98d69366f4"
+branch = "claude/issue-599-d7-merge-operator-refusal-ids"
+scope = ["docs/commands.md", "tests/test_cli_help.py", "tests/test_merge.py", "tests/test_merge_rows.py"]
+opened_commit = "7240f449a6ef5fbf5121440823f535e276196b75"
+whole_reason = "docs/commands.md quality merge invocation sentence, Operator only and the refusal conditions, and the tests that prove them, linked by MERGE IDs, with the attribution of their docstrings and ids removed and the lines they stand on rewrapped."
