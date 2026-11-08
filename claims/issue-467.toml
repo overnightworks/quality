@@ -1,0 +1,7 @@
+claim_id = "2724a932ff7a4436a059315a5cc5b60c"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "7d9c7120877a7c9e3faf28ef61e71d9c1a2c9cdf"
+branch = "claude/issue-467-codeql-ids"
+scope = ["docs/codeql.md", "tests/workflows/test_codeql.py"]
+opened_commit = "ffb09806c0344a54139a6b52c686e7134ac844e7"
