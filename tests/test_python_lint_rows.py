@@ -91,6 +91,8 @@ def test_a_print_stands_as_a_row_with_its_fix_under_the_code_row(drive_code, pat
     ids=["one code", "two codes"],
 )
 def test_an_owner_that_clears_no_finding_stands_as_an_unused_row_on_its_line(drive_code, directive, codes):
+    """PRINT-15, PRINT-16: an owner that names no code found stands as an `unused` row on its line naming its codes,
+    in a file with no print."""
     run = drive_code({"src/p/a.py": f"x = 1\n{directive}\n"})
     (finding,) = run.area.findings
     assert (run.code, run.err) == (1, "")
@@ -101,6 +103,7 @@ def test_an_owner_that_clears_no_finding_stands_as_an_unused_row_on_its_line(dri
 
 @pytest.mark.integration
 def test_a_code_finding_ends_in_no_full_stop_and_names_no_rule_id(drive_code):
+    """ROW-7, ROW-14: no code finding ends in a full stop or names a rule id."""
     run = drive_code({"src/p/a.py": f"{PRINT}\n{EVAL}", "src/p/b.py": f"x = 1\n{OWNER}\n", "src/p/c.py": f"{OWNER}\n{PRINT}\n"})
     findings = run.area.findings
     assert {finding.event for finding in findings} == {FindingEvent.INSECURE, FindingEvent.PRINT_CALL, FindingEvent.UNUSED}
@@ -159,6 +162,8 @@ def test_the_security_rows_stand_before_the_print_rows(drive_code, files, rows):
 
 @pytest.mark.integration
 def test_an_honoured_owner_stands_after_the_findings_and_its_file_keeps_its_security_row(drive_code):
+    """PRINT-9, PRINT-13, PRINT-14, ROW-15: an honoured owner stands as a note after the findings, clears no print of
+    another file and no S finding of its own."""
     run = drive_code({"src/p/door.py": f"{OWNER}\n{PRINT}\n{EVAL}", "src/p/other.py": f"{PRINT}\n"})
     rows = [(location, row.event) for location, row in area_finding_rows(run.out, Area.CODE)]
     assert [(note.location, note.event) for note in run.area.notes] == [("src/p/door.py:1", NoteEvent.ALLOWED)]
@@ -202,6 +207,8 @@ def test_a_clean_code_row_counts_its_rules_and_every_python_file_ruff_judged(dri
     ids=["line noqa", "one owner", "two directives in one file", "an owner in each of two files"],
 )
 def test_a_clean_code_row_counts_each_honoured_owner_as_allowed(drive_code, files, python_files, locations):
+    """PRINT-14, O15: each honoured owner stands as an `allowed` note on its own line and a clean row counts it; a
+    reasoned line noqa is no owner."""
     run = drive_code(files)
     row = area_row(run.out, Area.CODE)
     rules = sum(rule.area is Area.CODE for rule in Rule)
@@ -222,6 +229,8 @@ def test_a_clean_code_row_counts_each_honoured_owner_as_allowed(drive_code, file
     ids=["path", "reason"],
 )
 def test_an_owner_note_prints_its_path_and_reason_escaped(drive_code, path, reason, original, escaped):
+    """PRINT-14, MASK-4, MASK-6, MASK-7, MASK-11: an owner note's path and reason print escaped, and no printed line
+    starts with repository text."""
     run = drive_code({path: f"# ruff: noqa: T201 - {reason}\n{PRINT}\n"})
     assert_block_prints(area_block(run.out, Area.CODE), (), run.area.notes)
     assert escaped in run.out
@@ -237,6 +246,8 @@ def test_an_owner_note_prints_its_path_and_reason_escaped(drive_code, path, reas
     ids=["python-security refused", "python-print refused"],
 )
 def test_an_owner_note_stands_under_a_refused_row_only_where_its_rule_judged(drive_code, build_repo, elsewhere, code, locations):
+    """PRINT-14, SECURITY-26, SECURITY-28: an owner note stands under the refused `code` row where python-print judged
+    beside a python-security that could not, and none stands where python-print itself could not judge."""
     repo = build_repo({"src/p/a.py": "x = 1\nx = '''open\n", "src/p/door.py": f"{OWNER}\n{PRINT}\n"})
     entries = [
         ruff_entry(code=code, filename=os.path.realpath(repo / "src" / "p" / "a.py")),
@@ -281,6 +292,8 @@ def test_a_row_prints_a_path_and_a_ruff_message_escaped(drive_code, build_repo, 
 
 @pytest.mark.integration
 def test_a_finding_beside_a_rule_that_refused_stands_under_the_refused_row_with_the_exact_pair(drive_code, build_repo, elsewhere):
+    """REFUSAL-7, SECURITY-26, SECURITY-28: a python-security finding beside a python-print that cannot read a file's
+    comments stands under the `✗` row, and the run exits 2."""
     repo = build_repo({"src/p/a.py": "print(argv)\nx = '''open\n", "src/p/b.py": "x = 1\n"})
     entries = [
         {**ruff_entry(code="T201", filename=os.path.realpath(repo / "src" / "p" / "a.py")), "message": "`print` found"},
