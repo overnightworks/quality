@@ -94,18 +94,26 @@ mandatory_jobs = ["checks"]
 - `[gate] legacy` is described under [New and legacy findings](sonar.md#new-and-legacy-findings).
 
 `gate.yml`'s verdict step runs `quality verdict`, which takes no path and judges the checkout it runs in. It prints rows
-on stdout, all sharing one subject column:
+on stdout, all sharing one subject column (VERDICT-22):
 
-- the release that judges, first in every frame, a refusal's included: `· release  <tag>  this gate run`, and in quality's own run `· release  this checkout  <version> · quality judges itself`;
-- the base, `· base  compared  <branch> <base sha> · head <head sha>` with the pull request's head, or
-  `· base  none  a push or merge group: no loosening judged`;
-- the jobs, as one `✓ jobs  success  N mandatory jobs · M gate jobs` row when all are green, else one row each, a conclusion GitHub adds later as `concluded <word>`;
-- on a pull request the loosenings, `✓ loosenings  none` or `! loosenings` with each loosening below it;
-- `! declarations  N unmatched` where a new entry (below) matches nothing.
+- the release that judges, first in every frame, a refusal's included (VERDICT-23): `· release  <tag>  this gate run`,
+  and in quality's own run `· release  this checkout  <version> · quality judges itself` (VERDICT-24);
+- the base, `· base  compared  <branch> <base sha> · head <head sha>` with the pull request's head (VERDICT-25), or
+  `· base  none  a push or merge group: no loosening judged` (VERDICT-26);
+- the jobs, as one `✓ jobs  success  N mandatory jobs · M gate jobs` row when all are green (VERDICT-27), else one row
+  each, its event the job's conclusion in words (VERDICT-28), a conclusion GitHub adds later as `concluded <word>`
+  (VERDICT-29);
+- on a pull request the loosenings, `✓ loosenings  none` or `! loosenings  N undeclared  M declared` (a count of none
+  left out) with each loosening below it (VERDICT-30);
+- `! declarations  N unmatched` where a new entry (below) matches nothing (VERDICT-31).
 
-One closing line follows, ending with the run's duration: `✓ green · N mandatory jobs · 4s` (exit `0`) or
-`! red · <what failed> · 4s` (exit `1`). When it cannot judge (exit `2`), it prints the `error:`/`next:` pair on stderr,
-with the steps apart from the fact:
+One closing line follows, ending with the run's duration (its form: [the closing line](output.md#the-closing-line)):
+`✓ green · N mandatory jobs · 4s` (exit `0`, VERDICT-32) or `! red · <what failed> · 4s` (exit `1`), where
+`<what failed>` counts what applies, in this order: `N of M mandatory jobs failed`, `N gate jobs failed`,
+`N undeclared loosenings`, `N declarations unmatched` and `N declared loosenings` (VERDICT-33). When only declared
+loosenings are red, the line says so ([Declared loosenings](#declared-loosenings)). The duration counts from the door's
+start (VERDICT-34). When it cannot judge (exit `2`), it prints the `error:`/`next:` pair on stderr, with the steps apart
+from the fact:
 
 - a `quality/config.toml` it cannot read shows the example to copy, then `push the fix; the gate judges the new commit`
   at the head, or `fix it on <base branch> first, then update the pull request's branch with <base branch>` at the
@@ -119,9 +127,10 @@ When it read the jobs more than once, a first row says so:
 (5xx) is read again within the same budget, and if it lasts, the fact names it as GitHub's:
 `GitHub answered HTTP 502 Bad Gateway for … after 13 reads · GitHub's fault, not the caller's`. Any other failure, such
 as a 403, a timeout or an unreachable GitHub, is not read again (VERDICT-20). A cannot-judge after a re-read still
-prints the rows of the last judged read first, on stdout (VERDICT-21). The run's step summary gets the same lines, stdout's and then the pair, in one fenced code block on a
-line of its own, whose fence is longer than every backtick run in them, so no job name or `what` renders as markdown. A
-summary that cannot be written adds `error: GITHUB_STEP_SUMMARY is not writable · <reason>` after them (exit `2`).
+prints the rows of the last judged read first, on stdout (VERDICT-21). The run's step summary gets the same lines,
+stdout's and then the pair, in one fenced code block on a line of its own (VERDICT-35), whose fence is longer than every
+backtick run in them, so no job name or `what` renders as markdown. A summary that cannot be written adds
+`error: GITHUB_STEP_SUMMARY is not writable · <reason>` after them (exit `2`).
 `-v` adds nothing: the verdict runs no scanner.
 
 Ruled by the operator: the verdict reads the run's jobs again for at most two minutes, because GitHub's jobs listing
