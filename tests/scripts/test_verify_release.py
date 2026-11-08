@@ -19,7 +19,7 @@ RELEASE = ReleaseFacts(
 
 
 def test_a_clean_checkout_at_the_tag_with_its_version_and_refs_is_a_release():
-    """#153 cell 12."""
+    """RELEASE-13, RELEASE-14, RELEASE-15, RELEASE-16."""
     verdicts = judge_release(RELEASE)
     assert all(verdict.holds for verdict in verdicts)
     assert len(verdicts) == 4
@@ -37,7 +37,7 @@ def test_a_clean_checkout_at_the_tag_with_its_version_and_refs_is_a_release():
     ids=["other metadata", "other ref", "no refs", "missing ref", "a rule without a release"],
 )
 def test_a_release_is_refused_naming_the_check_that_fails(facts, check):
-    """#153 cell 13: exactly one check fails, and it is named."""
+    """RELEASE-14, RELEASE-15, RELEASE-16: exactly one check fails, and it is named."""
     failed = [verdict.check for verdict in judge_release(facts) if not verdict.holds]
     assert failed == [check]
 
@@ -53,11 +53,13 @@ def test_a_release_is_refused_naming_the_check_that_fails(facts, check):
     ids=["first release missing", "switch release missing", "switch released", "no switch"],
 )
 def test_the_rules_without_a_released_first_release_or_switch_are_named(release, missing):
+    """RELEASE-16."""
     assert rules_without_release([release]) == missing
 
 
 @pytest.mark.parametrize("tags", [(), ("v1.2.3", "v1.2.4")], ids=["none", "two"])
 def test_a_release_without_exactly_one_tag_at_head_fails_every_check_that_needs_the_tag(tags):
+    """RELEASE-13, RELEASE-14, RELEASE-15."""
     failed = [
         verdict.check for verdict in judge_release(replace(RELEASE, release_tags_at_head=tags)) if not verdict.holds
     ]
@@ -66,6 +68,7 @@ def test_a_release_without_exactly_one_tag_at_head_fails_every_check_that_needs_
 
 
 def test_the_gate_tool_refs_are_the_refs_of_the_checkouts_of_this_repository_only():
+    """RELEASE-15."""
     gate = (
         "jobs:\n  a:\n    steps:\n"
         "      - uses: actions/checkout@x\n        with:\n          ref: other\n"
@@ -92,6 +95,7 @@ def tag_head(repo: Path, *tags: str) -> None:
 
 
 def test_the_script_names_the_release_tag_it_judges(release_checkout):
+    """RELEASE-13."""
     tag_head(release_checkout, "v0.0.1")
     done = run_script(release_checkout)
     assert done.stdout.count("\n") == 4
@@ -100,6 +104,7 @@ def test_the_script_names_the_release_tag_it_judges(release_checkout):
 
 
 def test_the_script_ignores_a_tag_that_is_not_of_the_release_form(release_checkout):
+    """RELEASE-13."""
     tag_head(release_checkout, "v0.0.1", "v0.0.2-rc1", "latest")
     done = run_script(release_checkout)
     assert "ok   one release tag at HEAD (found: v0.0.1)" in done.stdout
@@ -111,6 +116,7 @@ def test_the_script_ignores_a_tag_that_is_not_of_the_release_form(release_checko
     ids=["none", "two"],
 )
 def test_the_script_refuses_a_head_without_exactly_one_release_tag(release_checkout, tags, found):
+    """RELEASE-13."""
     tag_head(release_checkout, *tags)
     done = run_script(release_checkout)
     assert done.returncode == 1

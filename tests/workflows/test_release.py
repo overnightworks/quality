@@ -1,3 +1,4 @@
+import subprocess
 import tomllib
 from pathlib import Path
 
@@ -55,6 +56,7 @@ def run_verify_step(release: dict, directory: Path, version: str, failing: str =
 
 
 def test_the_dispatch_takes_only_the_version(release):
+    """RELEASE-3, RELEASE-10."""
     dispatch = release[True]
     assert set(dispatch) == {"workflow_dispatch"}
     assert set(dispatch["workflow_dispatch"]["inputs"]) == {"version"}
@@ -64,10 +66,12 @@ def test_the_dispatch_takes_only_the_version(release):
 
 
 def test_the_build_runs_only_after_the_gate(release):
+    """RELEASE-5."""
     assert release["jobs"]["build"]["needs"] == "gate"
 
 
 def test_no_job_or_step_is_skippable(release):
+    """RELEASE-17."""
     assert all("if" not in job and "continue-on-error" not in job for job in release["jobs"].values())
     assert all(
         "if" not in candidate and "continue-on-error" not in candidate
@@ -76,6 +80,7 @@ def test_no_job_or_step_is_skippable(release):
 
 
 def test_the_build_s_python_satisfies_the_project_s_requires_python(release):
+    """RELEASE-19."""
     requires = tomllib.loads((WORKFLOWS.parents[1] / "pyproject.toml").read_text(encoding="utf-8"))["project"][
         "requires-python"
     ]
@@ -84,16 +89,19 @@ def test_the_build_s_python_satisfies_the_project_s_requires_python(release):
 
 
 def test_the_tag_job_runs_only_after_the_gate_and_the_build(release):
+    """RELEASE-8."""
     assert release["jobs"]["tag"]["needs"] == ["gate", "build"]
 
 
 def test_only_the_tag_job_may_write(release):
+    """RELEASE-1, RELEASE-9."""
     assert release["permissions"] == {}
     assert [name for name, job in release["jobs"].items() if "write" in job.get("permissions", {}).values()] == ["tag"]
     assert release["jobs"]["tag"]["permissions"] == {"contents": "write"}
 
 
 def test_a_release_never_cancels_a_running_release(release):
+    """RELEASE-20."""
     group = release["concurrency"]["group"]
     assert release["concurrency"]["cancel-in-progress"] is False
     assert isinstance(group, str)
@@ -102,6 +110,7 @@ def test_a_release_never_cancels_a_running_release(release):
 
 
 def test_the_gate_call_is_this_repository_s_own_and_gets_the_version(release):
+    """RELEASE-2, RELEASE-7, RELEASE-11, GATE-2."""
     call = release["jobs"]["gate"]
     called = call["uses"].removeprefix("$/")
     assert called != call["uses"]
@@ -115,6 +124,7 @@ def test_the_gate_call_is_this_repository_s_own_and_gets_the_version(release):
 
 
 def test_the_tag_call_is_this_repository_s_own_and_gets_the_gated_commit(release):
+    """RELEASE-11, RELEASE-21, GATE-2."""
     call = release["jobs"]["tag"]
     called = call["uses"].removeprefix("$/")
     assert called != call["uses"]
@@ -126,6 +136,7 @@ def test_the_tag_call_is_this_repository_s_own_and_gets_the_gated_commit(release
 
 
 def test_the_build_checks_out_the_dispatched_commit_without_a_ref(release):
+    """RELEASE-4, RELEASE-6, RELEASE-7, RELEASE-18."""
     assert release["jobs"]["build"]["env"] == {
         "VERSION": "${{ inputs.version }}",
         "COMMIT": "${{ needs.gate.outputs.commit }}",
@@ -138,36 +149,49 @@ def test_the_build_checks_out_the_dispatched_commit_without_a_ref(release):
 
 
 def test_nothing_runs_between_the_checkout_and_the_refusal(release):
+    """RELEASE-7."""
     names = step_names(release, "build")
     assert names[:2] == [CHECKOUT_STEP, REFUSE_STEP]
 
 
-@pytest.mark.parametrize(
-    ("scenario", "returncode"),
-    [("the gated commit", 0), ("another commit", 1), ("no checkout", None)],
-)
-def test_a_checkout_that_is_not_the_gated_commit_is_refused(release, tmp_path, scenario, returncode):
+def run_refusal_step(release: dict, directory: Path, checkout: Path, gated: str) -> subprocess.CompletedProcess[str]:
+    environment = step_environment(release, "build", REFUSE_STEP, VERSION="0.21.0", COMMIT=gated)
+    return run_step(step_script(release, "build", REFUSE_STEP), checkout, environment, directory / "tools")
+
+
+def test_the_checkout_of_the_gated_commit_passes_silently(release, tmp_path):
+    """RELEASE-7."""
     checkout = tmp_path / "checkout"
     checkout.mkdir()
+    make_repo(checkout, {"README": "the checkout\n"})
+    result = run_refusal_step(release, tmp_path, checkout, head_commit(checkout))
+    assert (result.returncode, result.stdout, result.stderr) == (0, "", "")
+
+
+def test_a_checkout_of_another_commit_is_refused_naming_both_commits(release, tmp_path):
+    """RELEASE-7."""
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    make_repo(checkout, {"README": "the checkout\n"})
+    head = head_commit(checkout)
     gated = "b2" * 20
-    if scenario != "no checkout":
-        make_repo(checkout, {"README": "the checkout\n"})
-        head = head_commit(checkout)
-        gated = head if scenario == "the gated commit" else gated
-    environment = step_environment(release, "build", REFUSE_STEP, VERSION="0.21.0", COMMIT=gated)
-    result = run_step(step_script(release, "build", REFUSE_STEP), checkout, environment, tmp_path / "tools")
-    if returncode == 0:
-        assert (result.returncode, result.stdout, result.stderr) == (0, "", "")
-    elif returncode == 1:
-        assert result.returncode == 1
-        assert result.stderr.startswith("Refused:")
-        assert head in result.stderr
-        assert gated in result.stderr
-    else:
-        assert result.returncode != 0
+    result = run_refusal_step(release, tmp_path, checkout, gated)
+    assert result.returncode == 1
+    assert result.stderr.startswith("Refused:")
+    assert head in result.stderr
+    assert gated in result.stderr
+
+
+def test_without_a_checkout_the_refusal_step_fails(release, tmp_path):
+    """RELEASE-7."""
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    result = run_refusal_step(release, tmp_path, checkout, "b2" * 20)
+    assert result.returncode != 0
 
 
 def test_the_build_tags_the_gated_commit_in_its_own_checkout_then_verifies_it(release, tmp_path):
+    """RELEASE-12."""
     result, seen, commit = run_verify_step(release, tmp_path, "0.21.0")
     distribution = tomllib.loads((WORKFLOWS.parents[1] / "pyproject.toml").read_text(encoding="utf-8"))["project"][
         "name"
@@ -181,12 +205,14 @@ def test_the_build_tags_the_gated_commit_in_its_own_checkout_then_verifies_it(re
 
 
 def test_a_failed_verification_fails_the_build(release, tmp_path):
+    """RELEASE-12."""
     result, _, _ = run_verify_step(release, tmp_path, "0.21.0", failing="run")
     assert result.returncode == 1
 
 
 @pytest.mark.parametrize("version", ["0.0.0", "0.21.0", "10.200.3000"])
 def test_a_version_the_gate_accepts_is_a_tag_verify_release_accepts(tmp_path, version):
+    """RELEASE-13, GATE-7."""
     gate = workflow("release-gate.yml")
     form = gate[True]["workflow_call"]["inputs"]["form"]["default"]
     environment = step_environment(
@@ -201,6 +227,7 @@ def test_a_version_the_gate_accepts_is_a_tag_verify_release_accepts(tmp_path, ve
 
 @pytest.mark.parametrize("name", ["release.yml", "release-gate.yml", "release-tag.yml"])
 def test_no_run_value_of_a_release_workflow_interpolates_an_expression(name):
+    """RELEASE-4, GATE-4, TAG-16."""
     scripts = [
         candidate["run"]
         for job in workflow(name)["jobs"].values()
