@@ -30,10 +30,11 @@ It applies these rules:
   `compose.yaml` is never judged, one added with `git add` is (COMPOSE-3). Its rows say `published port`,
   `unreadable port`, `host network` or `unused` (a stale `[[compose.allow]]`) (COMPOSE-4). A tracked file missing from
   disk (deleted, or a symlink to nowhere or in a loop) is skipped (COMPOSE-5); one the filesystem refuses to read makes
-  the `files` row `✗ not checked` with the reason (exit `2`) (COMPOSE-6). A file is read as Compose reads it: `- 22:22`
-  is the text `22:22` (COMPOSE-7), and `!override` and `!reset` are read as the value they wrap (COMPOSE-8); any other
-  tag (`!foo`) and any YAML error is `cannot judge` (COMPOSE-9), in one line with its line and column (or its position
-  for a character YAML refuses, `nested too deeply`, `a value does not fit its tag`, or `not valid YAML`) (COMPOSE-10).
+  the `files` row `✗ not checked` with the reason (exit `2`) (COMPOSE-6).
+  A file is read as Compose reads it: `- 22:22` is the text `22:22` (COMPOSE-7), and `!override` and `!reset` are read
+  as the value they wrap (COMPOSE-8); any other tag (`!foo`) and any YAML error is `cannot judge` (COMPOSE-9), in one
+  line with its line and column (or its position for a character YAML refuses, `nested too deeply`, `a value does not
+  fit its tag`, or `not valid YAML`) (COMPOSE-10).
   A port that is neither text, a number nor a mapping whose `published` (or, without one, `target`) is text or a number
   is a finding (COMPOSE-11). A `ports` that is no list is a finding too (COMPOSE-12). A service with
   `network_mode: host` publishes whatever its process binds, so it is a finding too (COMPOSE-13), and so is a
