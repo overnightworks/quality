@@ -487,7 +487,8 @@ def toml_error(prefix: str) -> str:
 )
 @pytest.mark.usefixtures("public")
 def test_a_fleet_file_that_cannot_be_used_is_the_pair_with_the_shape_to_copy(capsys, tmp_path, monkeypatch, arrange, fact):
-    """#63 rule 2: exit 2 before any clone, the fact naming quality/fleet.toml and under `next:` the file's shape, and no table."""
+    """FLEET-51, FLEET-52, FLEET-53, FLEET-55, FLEET-58: a fleet file that cannot be used is exit 2, the fact naming
+    quality/fleet.toml, the file's shape under `next:` and no table."""
     (tmp_path / "quality").mkdir()
     arrange(tmp_path / "quality" / "fleet.toml")
     monkeypatch.chdir(tmp_path)
@@ -500,7 +501,7 @@ def test_a_fleet_file_that_cannot_be_used_is_the_pair_with_the_shape_to_copy(cap
 
 @pytest.mark.parametrize("entry", ["overnightworks/quality", "O/My.repo_x-1", "a/b", "a-b/...x", "o/.hidden"])
 def test_an_owner_slash_name_is_a_fleet_entry(entry):
-    """#270 target: GitHub's owner and repository name syntax."""
+    """FLEET-56: GitHub's owner and repository name syntax is a fleet entry."""
     assert parse_fleet(f'repositories = ["{entry}"]').repositories == (entry,)
 
 
@@ -515,7 +516,8 @@ def test_an_owner_slash_name_is_a_fleet_entry(entry):
 )
 @pytest.mark.parametrize("key", ["repositories", "exclude"])
 def test_an_entry_that_is_no_owner_slash_name_is_named_by_its_place_never_its_text(key, entry):
-    """#270 target: a pasted URL with a password is reported as `repositories[1]`."""
+    """FLEET-56, FLEET-59: a bad entry, a pasted URL with a password included, is named by its place, never by its
+    text."""
     with pytest.raises(CannotJudge) as refused:
         parse_fleet(f'organizations = ["o"]\n{key} = ["o/fine", "{entry}"]')
     fact = refused.value.reason.fact
@@ -526,7 +528,8 @@ def test_an_entry_that_is_no_owner_slash_name_is_named_by_its_place_never_its_te
 
 @pytest.mark.usefixtures("public")
 def test_every_entry_problem_of_a_fleet_file_is_named_in_one_exit_2_message(capsys, tmp_path, monkeypatch):
-    """#270 target: two malformed entries and a repeat across case are reported together, before any clone."""
+    """FLEET-54, FLEET-56, FLEET-59: two malformed entries and a repeat across case are reported together, by their
+    places."""
     monkeypatch.chdir(write_fleet(tmp_path / "fleet", ["o/a", "nope", "O/A", "https://user:hunter2@github.com/o/r"]))
     code = cli.main(["report"])
     printed = capsys.readouterr()

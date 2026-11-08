@@ -132,29 +132,32 @@ of every repository under a heading with the date, the quality version and that 
 Python only (FLEET-41), then the same rows as a repo × rule matrix (FLEET-42). With `GITHUB_STEP_SUMMARY` set, the
 tables are appended there (FLEET-43). Every cell puts a backslash before `` \ ` * _ ~ [ ] < > & | ``, so repository text
 opens no HTML comment, link or new cell (FLEET-44); a bare URL still renders as a link to its own address. The run ends
-on stderr with `✓ N of N repositories measured · <time>` (exit `0`) (FLEET-45) or with `error: ` and what applies of
-`K of N repositories not measured`, `J partly read` and `the release tags not read`, then `the tables say so`, and
-`next: quality report` (exit `2`) (FLEET-46); an unwritable summary is
+on stderr with `✓ N of N repositories measured · <time>` (`repository` for one, exit `0`) (FLEET-45) or with `error: `
+and what applies of `K of N repositories not measured`, `J partly read` and `the release tags not read`, then `the
+tables say so`, and `next: quality report` (exit `2`) (FLEET-46); an unwritable summary is
 `error: GITHUB_STEP_SUMMARY is not writable · <reason>` (exit `2`, with
 `fix what the error names, then run quality report again` under `next:`) (FLEET-47). `-v` adds nothing: the report runs
 no scanner (FLEET-48). The fleet's selection lives once, in `quality/fleet.toml` (FLEET-49);
 `.github/workflows/report.yml` runs it every Monday at 05:17 UTC and on dispatch; the tables stand in that run's
 summary. The run only reports: it writes to no repository and lists with its own read-only job token (`GITHUB_TOKEN`,
 sent to `api.github.com` only, never to git); a local run lists anonymously (FLEET-50).
-A missing, unreadable (a directory, a
-dangling link, not UTF-8), malformed, duplicating (also across case, and across `repositories` and `exclude`: `exclude[0] repeats repositories[1]`), empty (`selects no repository`) or badly named
-`quality/fleet.toml` is the pair, exit `2`, before any request or clone: `error: ` and what is wrong with
-`quality/fleet.toml`, named repository-relative, and `next: write it in quality/fleet.toml like this:` with the file's
-shape below; each bad entry is named by its place (`repositories[3]`, `exclude[1]`, `organizations[0]`), never by its text. The listing is
-read once per organization, before any clone, and a problem of any organization is one pair that ends
-`· nothing measured`: an organization GitHub does not know (`organizations[0] is no GitHub organization`), a listing
-GitHub did not give (`GitHub did not list <organization> · HTTP <status>`, a timeout, an unreachable host), more than 100
-public repositories (quality reads one page), an answer that is not a list of repositories, or a `repositories` entry the
-organization already lists (`repositories[0] is already in <organization>`), or an `exclude` entry that matches no repository
-found (`exclude[0] matches no repository found`: the same for a name GitHub does not list and for one that is private,
-archived or a fork; an entry of an organization whose listing failed is judged on the rerun). A failure of GitHub adds `fix what the error
-names, then run quality report again` under `next:`, after the shape when the file is also at fault. No listed text is
-printed, and a private repository a token can list is dropped without a trace.
+A missing (FLEET-51), unreadable (a directory, a dangling link, not UTF-8) (FLEET-52), malformed (FLEET-53), duplicating
+(also across case, and across `repositories` and `exclude`: `exclude[0] repeats repositories[1]`) (FLEET-54), empty
+(`selects no repository`) (FLEET-55) or badly named (FLEET-56) `quality/fleet.toml` is the pair, exit `2`, before any
+request or clone (FLEET-57): `error: ` and what is wrong with `quality/fleet.toml`, named repository-relative, and
+`next: write it in quality/fleet.toml like this:` with the file's shape below (FLEET-58); each bad entry is named by its
+place (`repositories[3]`, `exclude[1]`, `organizations[0]`), never by its text (FLEET-59). The listing is read once per
+organization, before any clone (FLEET-60), and a problem of any organization is one pair that ends `· nothing measured`
+(FLEET-61): an organization GitHub does not know (`organizations[0] is no GitHub organization`) (FLEET-62), a listing
+GitHub did not give (`GitHub did not list <organization> · HTTP <status>`, a timeout, an unreachable host) (FLEET-63),
+more than 100 public repositories (quality reads one page) (FLEET-64), an answer that is not a list of repositories
+(FLEET-65), a fleet the listing and `exclude` leave empty (`selects no repository`) (FLEET-66), or a `repositories`
+entry the organization already lists (`repositories[0] is already in <organization>`) (FLEET-67), or an `exclude` entry
+that matches no repository found (`exclude[0] matches no repository found`: the same for a name GitHub does not list and
+for one that is private, archived or a fork (FLEET-68); an entry of an organization whose listing failed is judged on
+the rerun (FLEET-69)). A failure of GitHub adds `fix what the error names, then run quality report again` under `next:`,
+after the shape when the file is also at fault (FLEET-70). No listed text is printed (FLEET-71), and a private
+repository a token can list is dropped without a trace (FLEET-72).
 
 - Each repository is cloned from `https://github.com/<owner>/<name>` with `git -c credential.helper= clone --depth 1 --no-tags`, `GIT_TERMINAL_PROMPT=0` and no
   askpass, into a temporary directory that is removed on every exit, and its default branch tip is measured.
