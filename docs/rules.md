@@ -465,18 +465,18 @@ It applies these rules:
   (PRINT-10), and the comment holds no second `#` (PRINT-11). A bare `# ruff: noqa`, one without a reason, a comma in
   the reason, one naming an S code (`# ruff: noqa: S603, T201 - reason`), one behind code on its line and
   `# flake8: noqa` clear nothing (PRINT-12), and no file directive clears an S code (PRINT-13).
-  The owner line is a tool directive, so it does not satisfy `script-header`: a script
-  keeps its comment or docstring first and the owner below it, as `scripts/verify_release.py` does. Each honoured
-  owner stands as a row under the `code` row, after its findings, `· scripts/verify_release.py:14  allowed  output
-  owner · <reason>`, and a clean row counts it (`· 1 allowed`); an owner that names no code found in
-  its file is an `unused` row on its line, to delete. python-print reads the comments of each file with a print
-  finding or the text `# ruff:`, and one whose comments Python's tokenizer cannot read leaves python-print alone
-  `cannot judge`.
+  The owner line is a tool directive, so it does not satisfy `script-header`: a script keeps its comment or docstring
+  first and the owner below it, as `scripts/verify_release.py` does. Each honoured owner stands as a
+  [row](output.md#notes) under the `code` row, after its findings,
+  `· scripts/verify_release.py:14  allowed  output owner · <reason>` (PRINT-14), and a clean row counts it
+  (`· 1 allowed`); an owner that names no code found in its file is an `unused` row on its line, to delete (PRINT-15).
+  python-print reads the comments of each file with a print finding or the text `# ruff:` (PRINT-16), and one whose
+  comments Python's tokenizer cannot read leaves python-print alone `cannot judge`.
   No configuration switches the rule off, and an owner or noqa asks `quality verdict` for no `[[gate.loosened]]`
   entry. Not judged, and waiting for usage evidence: `sys.stdout.write` and `sys.stderr.write` (ruff's TID251 would
   flag every reference to the streams, `logging.StreamHandler(sys.stderr)` included, for a bypass nobody has used;
   reopened when a landing outside `tests/` replaces a `print` with a direct stream write), and `print(...,
-  file=<variable>)`, which ruff 0.17.1 does not report as T201.
+  file=<variable>)`, which ruff does not report as T201.
 
   Ruled by the operator: a program's one output owner declares itself in its code, never in a path list.
 - The baseline only falls: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the
