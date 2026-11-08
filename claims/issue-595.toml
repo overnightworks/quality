@@ -1,0 +1,8 @@
+claim_id = "3adc3236d93941649674b3d923e6ef18"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "45e8f8b08b298240bb3c658df5d5a5ab2b105ba9"
+branch = "claude/issue-595-d7-which-release-judges-ids"
+scope = ["docs/commands.md", "tests/test_checkout.py", "tests/test_cli_release.py", "tests/test_pin.py"]
+opened_commit = "69b422d2bc1d59e78c941e5212f0933403a724c3"
+whole_reason = "docs/commands.md Which release judges first paragraph clauses and the tests that prove them, linked by PIN IDs, with one case id named as its twin and the lines they stand on rewrapped."
