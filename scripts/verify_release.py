@@ -1,11 +1,11 @@
-"""The release step's check: run it on the tagged merge commit before the tag is pushed, because a pushed tag is immutable.
+"""The build's check: `release.yml`'s build job runs it at the gated commit, tagged in the runner's own checkout, before
+the tag job creates the immutable tag. The gate judges the dispatch; this script judges what only the build can.
 
-    uv sync --reinstall-package overnightworks-quality && uv run python scripts/verify_release.py
+    uv sync --locked --reinstall-package overnightworks-quality && uv run --locked python scripts/verify_release.py
 
-The release tag is read from git: the one tag `vX.Y.Z` that points at HEAD. Exit 0 only when the checkout is clean, exactly
-one release tag is at HEAD, HEAD is on origin/main (a patch tag `vX.Y.Z` with Z above 0 may instead have it on
-origin/release/vX.Y), the installed version is that tag, the gate's tool checkouts pin it and every rule's release facts
-name a release; one line per check says which, and the tag judged is in the first.
+The release tag is read from git: the one tag `vX.Y.Z` that points at HEAD. Exit 0 only when exactly one release tag is at
+HEAD, the installed version is that tag, the gate's tool checkouts pin it and every rule's release facts name a release;
+one line per check says which, and the tag judged is in the first. It reads no remote.
 A rule or switch new since the last release names the tag being cut in `src/quality/rules.py`, set in the release pull
 request that moves gate.yml's tool refs. Exit 2 for an unexpected command-line argument;
 `-h` and `--help` print the usage and exit 0 before any check.
@@ -34,8 +34,6 @@ RELEASE_TAG = re.compile(r"v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)")
 @dataclass(frozen=True)
 class ReleaseFacts:
     release_tags_at_head: tuple[str, ...]
-    work_tree_is_clean: bool
-    branches_holding_head: frozenset[str]
     installed_version: str
     gate_refs: tuple[str | None, ...]
     rules_without_release: tuple[str, ...]
@@ -57,25 +55,12 @@ def gate_tool_refs(gate_text: str) -> list[str | None]:
     return [options.get("ref") for options in steps if options.get("repository") == TOOL_REPOSITORY]
 
 
-def branches_for(tag: str | None) -> list[str]:
-    """The origin branches that may hold the tagged commit: main, and for a patch tag its minor's release branch."""
-    match = tag and RELEASE_TAG.fullmatch(tag)
-    if not match or match["patch"] == "0":
-        return ["main"]
-    return ["main", f"release/v{match['major']}.{match['minor']}"]
-
-
 def judge_release(facts: ReleaseFacts) -> list[Verdict]:
     """Without exactly one release tag at HEAD there is no tag to hold the version and the gate refs to, so those fail too."""
     found = ", ".join(facts.release_tags_at_head) or "none"
     tag = facts.release_tags_at_head[0] if len(facts.release_tags_at_head) == 1 else None
-    accepted = branches_for(tag)
-    holding = next((branch for branch in accepted if branch in facts.branches_holding_head), None)
-    on_branch = f"on origin/{holding}" if holding else "on " + " or ".join(f"origin/{branch}" for branch in accepted)
     return [
         Verdict(f"one release tag at HEAD (found: {found})", tag is not None),
-        Verdict("clean", facts.work_tree_is_clean),
-        Verdict(on_branch, holding is not None),
         Verdict("installed version", tag is not None and facts.installed_version == tag.removeprefix("v")),
         Verdict("gate refs", tag is not None and bool(facts.gate_refs) and set(facts.gate_refs) == {tag}),
         Verdict(
@@ -87,27 +72,6 @@ def judge_release(facts: ReleaseFacts) -> list[Verdict]:
 
 def _git(*arguments: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["git", *arguments], capture_output=True, text=True, check=False)  # noqa: S603, S607 - argv is fixed words and never a shell
-
-
-def fetch_origin_branches() -> bool:
-    """Prunes, so a cached ref of a deleted branch never holds HEAD; tags follow the fetch, so every tag read comes after it."""
-    refspecs = ("+refs/heads/main:refs/remotes/origin/main", "+refs/heads/release/*:refs/remotes/origin/release/*")
-    return _git("fetch", "--quiet", "--prune", "origin", *refspecs).returncode == 0
-
-
-def branches_holding_head(fetched: bool) -> frozenset[str]:
-    """Main and the release branches of origin that contain HEAD; a failed fetch or read holds none."""
-    if not fetched:
-        return frozenset()
-    listed = _git(
-        "for-each-ref",
-        "--contains",
-        "HEAD",
-        "--format=%(refname:lstrip=3)",
-        "refs/remotes/origin/main",
-        "refs/remotes/origin/release/",
-    )
-    return frozenset(listed.stdout.split()) if listed.returncode == 0 else frozenset()
 
 
 def release_tags_at_head() -> tuple[str, ...]:
@@ -126,13 +90,8 @@ def rules_without_release(releases: Iterable[RuleRelease]) -> tuple[str, ...]:
 
 
 def read_facts() -> ReleaseFacts:
-    """The index equals HEAD and the work tree equals the index; the fetch comes first, then every read."""
-    fetched = fetch_origin_branches()
-    clean = _git("diff", "--cached", "--quiet").returncode == 0 and _git("diff", "--quiet").returncode == 0
     return ReleaseFacts(
         release_tags_at_head=release_tags_at_head(),
-        work_tree_is_clean=clean,
-        branches_holding_head=branches_holding_head(fetched),
         installed_version=version("overnightworks-quality"),
         gate_refs=tuple(gate_tool_refs(GATE.read_text(encoding="utf-8"))),
         rules_without_release=rules_without_release(rule.release for rule in Rule),
@@ -140,7 +99,7 @@ def read_facts() -> ReleaseFacts:
 
 
 def main(arguments: list[str]) -> int:
-    argparse.ArgumentParser(description="Check the tagged merge commit at HEAD before its tag is pushed.").parse_args(
+    argparse.ArgumentParser(description="Check the tagged commit at HEAD before its tag is pushed.").parse_args(
         arguments
     )
     verdicts = judge_release(read_facts())
