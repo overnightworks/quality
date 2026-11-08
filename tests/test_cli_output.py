@@ -515,6 +515,8 @@ def test_the_files_block_lists_every_finding_in_run_order_python_floor_last_then
 
 
 def test_an_area_that_cannot_check_ends_the_run_with_the_pair_and_no_verdict(build_repo, use_mise, served_scanners, capsys):
+    """REFUSAL-1, REFUSAL-3, REFUSAL-10: a missing scanner is the `✗` row with its reason and a one-step `next:`, and
+    the other areas' rows stand."""
     use_mise(lacking(served_scanners, scanners.GITLEAKS))
     repo = build_repo({**CLONES_BASELINE, **PRINTING})
     code, out, err = frame_run(capsys, repo)
@@ -528,6 +530,8 @@ def test_an_area_that_cannot_check_ends_the_run_with_the_pair_and_no_verdict(bui
 
 
 def test_findings_in_the_area_that_cannot_check_stay_under_its_row_and_are_counted(build_repo, capsys):
+    """REFUSAL-7: a finding in an area that cannot check stays under its `✗` row, and the error line counts the
+    findings that stand in such areas."""
     code, out, err = frame_run(capsys, repo := build_repo({".env": "A=1\n", "compose.yaml": "services: [\n"}))
     row = next(number for number, line in enumerate(out) if line.startswith("  ✗ files  "))
     assert code == 2
@@ -538,6 +542,8 @@ def test_findings_in_the_area_that_cannot_check_stay_under_its_row_and_are_count
 
 
 def test_two_distinct_reasons_in_one_area_stand_as_sub_lines_in_run_order(build_repo, capsys):
+    """REFUSAL-5, REFUSAL-6: distinct reasons in one area make the row say `2 reasons` and stand as `✗` lines below it,
+    in run order."""
     code, out, _ = frame_run(capsys, build_repo({"compose.yaml": "services: [\n", "pyproject.toml": '[project]\nrequires-python = "banana"\n'}))
     row = next(number for number, line in enumerate(out) if line.startswith("  ✗ files  "))
     assert code == 2
@@ -548,6 +554,7 @@ def test_two_distinct_reasons_in_one_area_stand_as_sub_lines_in_run_order(build_
 
 
 def test_one_reason_refusing_rules_in_several_areas_stands_once_in_each(build_repo, capsys):
+    """REFUSAL-1, REFUSAL-4: a reason that refuses several rules of an area stands once, in each area it refuses."""
     unknown_table = {"quality/config.toml": "[bogus]\nx = 1\n"}
     code, out, err = frame_run(capsys, build_repo({**CLEAN_FILES, **unknown_table}))
     unchecked = [line for line in out if re.match(r"  ✗ ", line)]
@@ -706,6 +713,8 @@ def test_a_refusal_git_did_not_run_for_gets_the_general_instruction(build_repo, 
 def test_a_malformed_baseline_beside_a_missing_scanner_names_the_baseline_step_then_the_install_command(
     build_repo, use_mise, served_scanners, capsys
 ):
+    """REFUSAL-9, REFUSAL-11: the steps of two refusals stand below a bare `next:` in row order, each step alone on its
+    line."""
     use_mise(lacking(served_scanners, scanners.GITLEAKS))
     code, out, err = frame_run(capsys, build_repo({BASELINE_PATH: "x = [\n"}))
     assert code == 2

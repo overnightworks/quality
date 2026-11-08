@@ -82,6 +82,7 @@ def test_alternative_commands_print_their_labels_and_commands_on_one_line():
 
 
 def test_an_example_holds_its_label_and_lines_and_equal_examples_hash_alike():
+    """REFUSAL-8: equal examples are one step, so a step several refusals share is named once."""
     example = Example("write it in a file like this", ("[table]", "key = 1"))
     same = Example("write it in a file like this", ("[table]", "key = 1"))
     assert (example.label, example.lines, example == same, hash(example) == hash(same)) == (
