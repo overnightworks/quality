@@ -270,13 +270,13 @@ def test_the_renames_since_a_commit_are_what_the_index_would_record(build_repo, 
 @pytest.mark.parametrize("workflow_file", ["gate.yml", "codeql.yml"])
 @pytest.mark.parametrize("prefix", ["./", "$/"])
 def test_a_local_reference_to_the_gates_own_file_is_a_call_without_a_ref(prefix, workflow_file):
-    """`./` and `$/` both name the repository's own copy."""
+    """HELP-7, FLEET-8: `./` and `$/` both name the repository's own copy."""
     uses = f"{prefix}.github/workflows/{workflow_file}"
     assert checkout.calls_of(uses, workflow_file, ".github/workflows/ci.yml", None) == [checkout.Call(None, ".github/workflows/ci.yml", None)]
 
 
 def test_the_gates_owner_and_repository_names_are_read_whatever_their_case():
-    """GitHub reads `uses:` owner and repository case-insensitively."""
+    """FLEET-11: GitHub reads `uses:` owner and repository case-insensitively."""
     uses = "OvernightWorks/Quality/.github/workflows/gate.yml@v1"
     assert checkout.calls_of(uses, "gate.yml", ".github/workflows/ci.yml", "v1.0.0") == [checkout.Call("v1", ".github/workflows/ci.yml", "v1.0.0")]
 
@@ -307,6 +307,7 @@ def gate_calls_of(repo: Path, name: str) -> tuple[checkout.Call, ...]:
     ],
 )
 def test_a_gate_call_is_its_ref_its_file_and_the_release_its_line_names(build_repo, line, ref, release):
+    """HELP-5: the release of a gate call is the tag the comment after its `uses:` value names, in each form written."""
     commit = "5e" * 20
     words = {"uses": gate_uses(commit), "upper": gate_uses(commit.upper()), "commit": commit, "upper_commit": commit.upper()}
     repo = build_repo({".github/workflows/ci.yml": jobs(line.format(**words))})
@@ -325,6 +326,7 @@ def test_a_gate_call_is_its_ref_its_file_and_the_release_its_line_names(build_re
     ],
 )
 def test_a_comment_elsewhere_names_no_release(build_repo, text):
+    """HELP-5: a comment anywhere but after the value on its line names no release."""
     repo = build_repo({".github/workflows/ci.yml": text.format(uses=gate_uses("5e" * 20))})
     assert [call.release for call in gate_calls_of(repo, ".github/workflows/ci.yml")] == [None]
 
@@ -346,6 +348,7 @@ def test_a_comment_elsewhere_names_no_release(build_repo, text):
     ],
 )
 def test_a_remote_names_quality_s_repository(url, names):
+    """HELP-7: a remote names quality's repository in git's three URL forms and in any case, and no other repository."""
     owner, name = checkout.GATE_REPOSITORY.split("/")
     words = {"gate": checkout.GATE_REPOSITORY, "upper": f"{owner.upper()}/{name}", "name": name}
     assert checkout.remote_names_quality(url.format(**words)) is names
@@ -442,6 +445,8 @@ def unreadable(workflow: str) -> checkout.UnknownGatePin:
     ],
 )
 def test_the_gate_pin_of_a_checkout_is_one_state(build_repo, files, remotes, settings, deleted, expected):
+    """PIN-8, PIN-9, HELP-5, HELP-7: the tracked workflows pin no gate, quality's own, one release, or an unknown pin
+    with its reason."""
     commit, older = "5e" * 20, "4d" * 20
     words = {
         "gate": checkout.GATE_REPOSITORY,
@@ -488,5 +493,6 @@ def test_the_gate_pin_of_workflow_texts_is_the_gate_pin_of_the_same_files(build_
 
 @pytest.mark.parametrize("unread", list(checkout.Unread))
 def test_a_workflow_without_a_text_is_the_unknown_pin(unread):
+    """PIN-9, HELP-5: a workflow without a text makes the gate pin unknown."""
     texts = {".github/workflows/ci.yml": jobs(f"{gate_uses('5e' * 20)} # v0.10.0"), ".github/workflows/nightly.yml": unread}
     assert checkout.gate_pin_of(texts, False) == unreadable(".github/workflows/nightly.yml")

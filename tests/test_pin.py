@@ -247,6 +247,9 @@ def tool(tmp_path_factory) -> tuple[Path, str, str]:
 @pytest.mark.integration
 @pytest.mark.parametrize(("files", "remotes", "running", "arrange", "staged", "expected"), CASES)
 def test_the_release_that_judges_here_is_decided_from_the_gate_pin(build_repo, tool, monkeypatch, files, remotes, running, arrange, staged, expected):
+    """PIN-1, PIN-2, PIN-3, PIN-4, PIN-5, PIN-7, PIN-8, PIN-9, PIN-10, PIN-11, PIN-12: the gate pin, the running
+    commit and the checkout decide which release judges, the release to re-execute into, or the refusal and its next
+    step."""
     directory, tagged, later = tool
     placeholder = Scene(Path(), directory, tagged, later)
     judged = build_repo(files(placeholder))
@@ -307,6 +310,8 @@ def child_refusal(version: str, at: str) -> tuple[str, tuple]:
 @pytest.mark.integration
 @pytest.mark.parametrize("fetch", list(pin.Fetch))
 def test_the_child_judges_at_the_pins_commit_and_release(build_repo, fetch):
+    """PIN-1, PIN-5, PIN-6: a run that is the pinned commit judges at its release, and its row says `fetched now · `
+    where the run fetched it."""
     judged = build_repo(gate_call(pinned_commit(), "v0.10.1"))
     running = vcs("0.10.1", pinned_commit())(None)
     fetched = "fetched now · " if fetch is pin.Fetch.FETCHED else ""

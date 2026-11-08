@@ -35,14 +35,15 @@ What a run that names areas judges and prints is in [rules](rules.md).
 
 ## Which release judges
 
-`quality check` judges only where the running quality is the commit the repository's gate pins, or quality's own
-checkout run from its code. The running commit is the one its installer recorded (`direct_url.json`), or, for an editable
-directory installation, that directory's HEAD while its work tree is clean and the version's release tag names that
-HEAD. Its first row names the release (`· release  v0.10.0  pinned in .github/workflows/ci.yml`, with `fetched now · ` before `pinned in` when the run fetched it), or `this checkout`
-with the running version in quality's checkout. Where no workflow calls the gate, the pin is unknown, its comment
-misnames its commit or it is below v0.10.0, the run is exit `2` with the `error:`/`next:` pair and no row. The one
-exception is the commit hook: where no workflow calls the gate, `quality check secrets --staged` judges with the
-installed release and its row says `installed · no gate pins a release here`.
+`quality check` judges only where the running quality is the commit the repository's gate pins (PIN-1), or quality's own
+checkout run from its code (PIN-2). The running commit is the one its installer recorded (`direct_url.json`) (PIN-3),
+or, for an editable directory installation, that directory's HEAD while its work tree is clean and the version's release
+tag names that HEAD (PIN-4). Its first row names the release (`· release  v0.10.0  pinned in .github/workflows/ci.yml`
+(PIN-5), with `fetched now · ` before `pinned in` when the run fetched it (PIN-6)), or `this checkout` with the running
+version in quality's checkout (PIN-7). Where no workflow calls the gate (PIN-8), the pin is unknown (PIN-9), its comment
+misnames its commit (PIN-10) or it is below v0.10.0 (PIN-11), the run is exit `2` with the `error:`/`next:` pair and no
+row. The one exception is the commit hook: where no workflow calls the gate, `quality check secrets --staged` judges
+with the installed release and its row says `installed · no gate pins a release here` (PIN-12).
 
 Where the gate pins another commit, `check` runs as that release: the same process with the same words, folder,
 environment and terminal and its exit; `QUALITY_RUN_AT_PIN` marks that run, which never runs another. It first makes
