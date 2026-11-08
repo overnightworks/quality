@@ -526,6 +526,8 @@ def test_a_refused_or_cross_fact_ends_at_the_window(gh_kwargs, code, lines, err,
     ids=["the switch off fails", "the merge fails", "the restore fails", "the comment fails"],
 )
 def test_an_attempts_cross_fact_ends_at_the_window(gh_kwargs, lines, pair_end, window):
+    """LENGTH-1, LENGTH-6, MERGE-37, MERGE-39: at a terminal a `✗` row of the attempt ends at the window, and the pair
+    and its commands stand whole."""
     code, shown, err = at_a_terminal(FakeGh(**gh_kwargs), window, 40, typed="yes\n")
     assert (code, shown, err) == (
         2, rows_before_the_attempt() + lines, prompt() + "".join(f"{line}\n" for line in pair_end),

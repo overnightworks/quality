@@ -174,7 +174,7 @@ def test_the_token_never_appears_when_sonar_refuses_it(monkeypatch, capsys):
 
 
 def test_logs_who_and_the_legacy_count_on_the_pull_request():
-    """#37 rule 5: the comment names who, the legacy count and the sequence."""
+    """MERGE-46, MERGE-48, MERGE-50: the comment names who, the legacy count and the sequence."""
     gh = FakeGh()
     drive(gh)
     assert "@felix" in gh.comments[0]
