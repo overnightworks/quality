@@ -1,0 +1,7 @@
+claim_id = "03a0f894bb8149d2b02e0f8c2b6dc9ab"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "a69e851d4cb7c556b83a773d3936495e1f3905d2"
+branch = "claude/issue-603-d7-reexecution-guard-ids"
+scope = ["docs/commands.md", "tests/test_pin.py", "tests/test_pin_reexecution.py"]
+opened_commit = "66913e17bbdab83087b091f6233cd643eb7154c1"
