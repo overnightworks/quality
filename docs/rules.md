@@ -83,20 +83,25 @@ It applies these rules:
   reason = "written by scripts/generate_types.py, proven by its --check"
   ```
 
-  A declared file's lines, functions and CCN are neither judged, counted in the not-recorded row's count nor recorded by
-  `quality check --fix`. `path` is the exact tracked path of one file, `job` one of `[gate] mandatory_jobs`, the job
-  whose generator check proves the file. A missing or extra key, a folder, a pattern,
-  `..`, an absolute path, a `job` the gate does not list (a config without `mandatory_jobs` included), a malformed `item`
-  or `date`, a reason that is not one line or two entries for one path is exit `2` naming the entry with this
-  example: in `check` as the `debt` row `✗ not checked` with the example under `next:`, in `quality check --fix` as the same row, and in the
-  verdict and the door naming the side; `check secrets --staged` reads only `[secrets]`. A declaration whose path holds no tracked file in
-  a measured language is an `unused` row (`[[size.generated]] matches no tracked file in a measured language`) on that path, fixed by deleting the entry from `quality/config.toml`. Only `quality/config.toml` declares:
-  `.gitattributes`, `linguist-generated` included, plays no part.
+  A declared file's lines, functions and CCN are neither judged (GENERATED-1), counted in the not-recorded row's count
+  (GENERATED-2) nor recorded by `quality check --fix` (GENERATED-3). A declared Python file that Python cannot parse
+  is left out likewise: the `size` rule names no note for it and is not refused by it (GENERATED-4). `path` is the
+  exact tracked path of one file, `job` one of `[gate] mandatory_jobs`, the job whose generator check proves the file
+  (GENERATED-5). A missing or extra key, a folder, a pattern, `..`, an absolute path, a `job` the gate does not list
+  (a config without `mandatory_jobs` included), a malformed `item` or `date`, a reason that is not one line or two
+  entries for one path is exit `2` naming the entry with this example (GENERATED-6): in `check` as the `debt` row
+  `✗ not checked` with the [example under `next:`](output.md#refusals), in `quality check --fix` as the same row
+  (GENERATED-7), and in the verdict (GENERATED-8) and the door naming the side;
+  [`check secrets --staged` reads only `[secrets]`](gate.md#declared-loosenings). A declaration whose path holds no
+  tracked file in a measured language is an `unused` row
+  (`[[size.generated]] matches no tracked file in a measured language`) on that path, fixed by deleting the entry from
+  `quality/config.toml` (GENERATED-9). Only `quality/config.toml` declares: `.gitattributes`, `linguist-generated`
+  included, plays no part.
 
-  A baseline entry left under a declared file's path can fall (`file is left out as generated · ceiling 850 lines`) until
-  `quality check --fix` drops it (`dropped  file is left out as generated`). Only the `size` rule leaves the file out:
-  `clone` and the report still read it. quality cannot see what the declared job runs; the operator checks it once, at
-  the door.
+  A baseline entry left under a declared file's path can fall (`file is left out as generated · ceiling 850 lines`)
+  until `quality check --fix` drops it (`dropped  file is left out as generated`) (GENERATED-10). Only the `size`
+  rule leaves the file out: `clone` and the report still read it. quality cannot see what the declared job runs; the
+  operator checks it once, at the door.
 
   Functions of the other languages are not measured (SIZE-4): lizard misplaces their boundaries
   ([lizard's issue tracker](https://github.com/terryyin/lizard/issues/521)). Functions are named by their qualified
@@ -151,11 +156,11 @@ It applies these rules:
   stays refused on a read-only file and needs a writable folder; a symlink on its way is never written through. A fix
   writes only when an entry changes or the file's bytes are not its rendering; a file that renders byte for byte stays
   untouched. A `check` without `--fix` says nothing of the text. It promises nothing against a power loss.
-  A config or baseline the check cannot read, or a file Python cannot parse (a declared file included, because the clone
-  pairs of the whole tree must be measured), refuses it (CEILING-9): the `debt` row is `✗ not checked` or
-  `✗ not fixed`, exit `2`, and nothing is written. A refused fix leaves each rule the verdict it reached against the
-  unchanged file. Another area's refusal does not undo a finished fix: the file is written, the `✓` row stands, the
-  exit is `2`.
+  A config or baseline the check cannot read, or a file Python cannot parse (a declared file included (GENERATED-11),
+  because the clone pairs of the whole tree must be measured), refuses it (CEILING-9): the `debt` row is
+  `✗ not checked` or `✗ not fixed`, exit `2`, and nothing is written. A refused fix leaves each rule the verdict it
+  reached against the unchanged file. Another area's refusal does not undo a finished fix: the file is written, the
+  `✓` row stands, the exit is `2`.
   `--fix` follows renames as the verdict carries them: from the ceiling's last commit it reads what git renamed into the index (`git diff --cached -M50% -l1000`), moves a renamed file's entries and pairs to the new path at their values (`moved`) and drops what the ceiling held under that path before the move (`dropped ... left from before the move`); a ceiling it already moved stays, an entry it cannot place refuses with the restore step, a shallow clone whose ceiling's last commit is its edge, which is every depth-1 clone that holds a ceiling, refuses `--fix` with `git fetch --unshallow`, and a move the index does not record is not followed. Renames are followed before anything is judged gone, so a renamed file's entries move and never fall; with no committed ceiling a moved file's entries are gone. `check` reads no history: after a staged move it names the new path `new debt` and the old one `can fall … is gone`, and one `--fix` clears both.
 - `clone`: a pair is two functions (methods and nested functions too) in two different tracked `*.py` files, each of at
   least 40 tokens without its docstring, whose structure is at least 90 % the same once every name and literal is

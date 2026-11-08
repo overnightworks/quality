@@ -204,8 +204,8 @@ reason = "the operator ruled the requirement shelf machinery out"
   `size leaves out generated file <path> · <item> of <date>`, so a changed `path` and every declaration of an adoption
   (a base without `quality/config.toml`) are new (VERDICT-68). An inherited or deleted declaration and a changed `job`,
   `reason`, `item` or `date` loosen nothing (VERDICT-69). A `[[gate.loosened]]` entry whose `what` is such a text
-  matches nothing and is red (VERDICT-70). A malformed `[size]` entry is exit `2` in the verdict and the door, naming
-  the side.
+  matches nothing and is red (VERDICT-70). A [malformed `[size]` entry](rules.md) is exit `2` in the verdict and the
+  door, naming the side.
 - Ruled by the operator: removing, softening or bypassing an import-linter contract declares the same way, with one of these texts as `what`
   (the rule is in [rules](rules.md), "The import contracts only tighten"): `import contract "<name>" removed`,
   `import-linter config in <file> removed`, `import contract "<name>" ignores <expression>`,

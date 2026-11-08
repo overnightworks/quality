@@ -91,9 +91,9 @@ def checked(capsys, repo: Path) -> tuple[int, str, str]:
     ],
 )
 def test_a_held_entry_without_a_measurement_is_gone_left_out_or_stands_by_the_index_and_the_declarations(held, measured, tracked, generated, expected):
-    """CEILING-1, CEILING-7, CEILING-8: an entry whose path the index no longer tracks, or whose Python file lost the
-    function, is gone; a tracked file off the disk and an entry under no measured function stand; a declared file's
-    entry is left out as generated."""
+    """CEILING-1, CEILING-7, CEILING-8, GENERATED-10: an entry whose path the index no longer tracks, or whose Python
+    file lost the function, is gone; a tracked file off the disk and an entry under no measured function stand; a
+    declared file's entry is left out as generated."""
     measurements = {key: Measured(90, 1) for key in measured}
     gone = gone_entries({held: 900}, measurements, frozenset(tracked), generated)
     assert gone == ({} if expected is None else {held: expected})
@@ -165,8 +165,8 @@ def test_a_held_entry_without_a_measurement_is_gone_left_out_or_stands_by_the_in
     ],
 )
 def test_a_gone_entry_can_fall_and_the_fix_drops_it(build_repo, capsys, files, held, checking, fixing):
-    """CEILING-7, O21: a gone entry is a `can fall` row with no line and the fix `quality check --fix`; once the fix
-    drops it, the clean row counts no entry."""
+    """CEILING-7, GENERATED-10, O21: the entry of a gone path or of a declared file is a `can fall` row with no line and
+    the fix `quality check --fix`; once the fix drops it, the clean row counts no entry."""
     repo = build_repo({**files, BASELINE_PATH: ceiling(held)})
     assert checked(capsys, repo) == (1, checking, "")
     assert fixed(capsys, repo, *FIX_WORDS) == (0, fixing, "")
@@ -296,6 +296,8 @@ def test_an_unparsable_file_refuses_before_anything_is_gone(build_repo, capsys):
 
 
 def test_a_dropped_generated_entry_beside_its_new_declaration_prints_only_the_declaration(pull_request, capsys):
+    """GENERATED-10, VERDICT-68: declaring a file and dropping its entry with the fix in one change shows only the
+    declaration under the verdict; the dropped entry loosens nothing."""
     repo, commit_base = pull_request
     put(repo / "gen/api.py", long_function(70))
     commit_base(ceiling('[function_lines."gen/api.py"]\nlong_one = 70\n'))
