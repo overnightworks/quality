@@ -43,9 +43,12 @@ from tests.support.terminal import Terminal
         ("y\n", not_confirmed_pair()),
         ("yes yes\n", not_confirmed_pair()),
     ],
-    ids=["end of input", "an unended yes", "Enter alone", "the old word", "a capital", "capitals", "the first letter", "twice"],
+    ids=["end of input", "an unended yes", "Enter alone", "another language", "a capital", "capitals",
+    "the first letter", "twice"],
 )
 def test_anything_but_yes_changes_nothing_and_says_so(typed, pair, capsys):
+    """MERGE-7, MERGE-9, MERGE-10, MERGE-12: any answer but a lower-case yes ended with Enter changes nothing
+    and says so."""
     gh, at_the_read = FakeGh(), []
     code, answers = drive(gh, typed=typed, when_asked=lambda: at_the_read.append(list(gh.requests)))
     streams = capsys.readouterr()
@@ -64,6 +67,7 @@ def test_anything_but_yes_changes_nothing_and_says_so(typed, pair, capsys):
     ids=["not confirmed", "a refused landing line"],
 )
 def test_the_prompt_and_the_pair_name_the_pull_request_asked_for(repository, gh_kwargs, typed, start, pair, capsys):
+    """MERGE-6, MERGE-10: the question and the pair name the pull request asked for."""
     err = start + pair(12, repository)
     gh = FakeGh(checks=SONAR_GREEN, base_config=TWO_JOBS, head_config=ONE_JOB + declaring(B_REMOVED), **gh_kwargs)
     code, _ = drive(gh, repo=repository, pull_request="12", typed=typed)
@@ -74,6 +78,7 @@ def test_the_prompt_and_the_pair_name_the_pull_request_asked_for(repository, gh_
 
 @pytest.mark.parametrize("typed", ["yes\n", " yes \n", "\tyes\t\n", "\u00a0yes\u00a0\n"], ids=["yes", "spaces around", "tabs around", "non-breaking spaces around"])
 def test_yes_merges_with_or_without_whitespace_around_it(typed, capsys):
+    """MERGE-7, MERGE-8: yes merges with or without whitespace around it."""
     gh = FakeGh()
     assert drive(gh, typed=typed)[0] == 0
     assert gh.sequence == ["gate false", "merge", "gate true", "comment"]
@@ -81,6 +86,7 @@ def test_yes_merges_with_or_without_whitespace_around_it(typed, capsys):
 
 
 def test_ctrl_c_at_the_prompt_ends_the_run_interrupted_and_changes_nothing(capsys):
+    """MERGE-11, MERGE-12: Ctrl-C at the question ends the run interrupted and changes nothing."""
     gh, sent, at_the_read = FakeGh(), [], []
     saved = signal.getsignal(signal.SIGINT)
     try:
@@ -130,6 +136,7 @@ def test_a_stdin_that_is_no_terminal_is_the_pair_alone(stdin, monkeypatch, capsy
 
 
 def test_a_closed_stderr_takes_the_prompt_and_the_pair(capsys, monkeypatch):
+    """MERGE-13: a closed stderr takes the question and the pair, and stdout holds only the rows."""
     monkeypatch.setattr("sys.stderr", None)
     code, _ = drive(FakeGh(), typed="no\n")
     shown = capsys.readouterr().out
