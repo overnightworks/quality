@@ -147,6 +147,8 @@ def requests_of_the_attempt(gh, repository=REPO):
     ids=["a merge commit", "a squash"],
 )
 def test_a_merge_that_goes_through_is_four_rows_and_the_closing_line(settings, flag, method, capsys):
+    """MERGE-29, MERGE-30, MERGE-31, MERGE-33, MERGE-34, MERGE-35, MERGE-36: a merge that goes through switches the
+    gate off, merges, switches it on and logs, as four rows and the closing line."""
     gh = FakeGh(settings=settings or None)
     streams = after_the_question(gh, capsys)
     assert (*streams, requests_of_the_attempt(gh)) == (
@@ -210,6 +212,8 @@ def gadgets_requests(outcome, restored, *between_restore_and_comment):
     ids=["merged", "the restore, the merge and the comment fail"],
 )
 def test_the_attempt_names_the_pull_request_asked_for(gh_kwargs, code, out, err, requests, capsys):
+    """MERGE-29, MERGE-30, MERGE-35, MERGE-36: the attempt names the pull request asked for in its requests, rows and
+    closing line."""
     gh = FakeGh(checks=SONAR_GREEN, base_config=TWO_JOBS, head_config=ONE_JOB + declaring(B_REMOVED), **gh_kwargs)
     actual = after_the_question(gh, capsys, repo="acme/gadgets", pull_request="12")
     assert actual == (code, out, err)
@@ -217,6 +221,7 @@ def test_the_attempt_names_the_pull_request_asked_for(gh_kwargs, code, out, err,
 
 
 def test_the_closing_line_counts_the_seconds_from_the_answer(capsys):
+    """MERGE-36: the closing line counts the seconds from the answer."""
     gh = FakeGh()
     seconds = [0.0]
 
@@ -315,6 +320,8 @@ def test_the_closing_line_counts_the_seconds_from_the_answer(capsys):
     ],
 )
 def test_each_way_the_attempt_ends_is_its_rows_and_the_pair(gh_kwargs, code, out, err, sequence, comment, capsys):
+    """MERGE-34, MERGE-35, MERGE-36: whichever way the attempt ends, the door sets the gate back to true and shows
+    each step as a row, and a merge that landed ends with the closing line."""
     gh = FakeGh(**gh_kwargs)
     assert after_the_question(gh, capsys) == (code, out, err)
     assert (gh.sequence, gh.comments) == (sequence, [comment])

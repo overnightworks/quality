@@ -316,13 +316,16 @@ Ruled by the operator:
   (MERGE-25); it reads no answer (MERGE-26) and sends no request that changes anything (no `gh api -X`, no
   `gh pr merge`) (MERGE-27), and it needs a terminal on stdin like the door. `-v` is taken and adds nothing (MERGE-28):
   the door runs no scanner.
-- **Off, merge, on:** it sets the repository's `quality_gate` property to `false` (this takes the fleet's ruleset off it),
-  runs `gh pr merge <pr> --merge --match-head-commit <sha> --body-file -`, the message on its stdin (`--squash` where the repository settings or a rule on the
-  pull request's base branch exclude a merge commit but allow a squash; when neither is allowed, or the settings or rules
-  cannot be read or are malformed (an answer or a page that is no array, a rule that is no object, or whose `parameters` are present but no object), its `✗ merge` row ends the run before the gate is touched (exit `2`); the shown text and the log comment name the
-  method), and sets the property back to `true` in every case: merged,
-  merge failed, Ctrl-C. After `yes` each step is a row on stdout as GitHub answers it (`quality_gate  off`, `#<pr>  merged` with the method,
-  `quality_gate  on`, `log comment  posted`), ending `✓ merged #<pr> · quality_gate on again · <duration>` (exit `0`). A step
+- **Off, merge, on:** it sets the repository's `quality_gate` property to `false` (this takes the fleet's ruleset off
+  it) (MERGE-29), runs `gh pr merge <pr> --repo <owner/repo> --merge --match-head-commit <sha> --body-file -`, the
+  message on its stdin (MERGE-30) (`--squash` where the repository settings or a rule on the pull request's base branch
+  exclude a merge commit but allow a squash (MERGE-31); when neither is allowed, or the settings or rules cannot be read
+  or are malformed (an answer or a page that is no array, a rule that is no object, or whose `parameters` are present
+  but no object), its `✗ merge` row ends the run before the gate is touched (exit `2`) (MERGE-32);
+  the shown text and the log comment name the method (MERGE-33)), and sets the property back to `true`
+  in every case: merged, merge failed, Ctrl-C (MERGE-34). After `yes` each step is a row on stdout as GitHub answers it
+  (`quality_gate  off`, `#<pr>  merged` with the method, `quality_gate  on`, `log comment  posted`) (MERGE-35), ending
+  `✓ merged #<pr> · quality_gate on again · <duration>` (the seconds since `yes`) (exit `0`) (MERGE-36). A step
   not done is a `✗` row (`off failed`, `not merged`, `state unknown`, `not restored`, `not posted`) and one pair on stderr, exit `2`,
   the gate first (`quality_gate MAY STILL BE OFF on <owner/repo>` where it is not on), `next:` the commands that finish it, the
   gate's first, alone on its line and never shortened. A gate not switched on is its row before any further request. After
