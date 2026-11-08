@@ -71,7 +71,7 @@ def non_utf8_filename_repo(build_repo, tmp_path):
     ],
 )
 def test_exit_code_tells_clean_from_cannot_judge(build_repo, tmp_path, capsys, arrange, expected_code, expected_text):
-    """COMPOSE-5, CLOSING-27, CLOSING-28, CLOSING-29: exit 0 is clean, 1 findings and 2 cannot judge, and a tracked
+    """COMPOSE-5, CLOSING-27, CLOSING-28, CLOSING-30: exit 0 is clean, 1 findings and 2 cannot judge, and a tracked
     compose file missing from disk is skipped."""
     code, output = run(capsys, arrange(build_repo, tmp_path))
     assert code == expected_code
@@ -80,7 +80,7 @@ def test_exit_code_tells_clean_from_cannot_judge(build_repo, tmp_path, capsys, a
 
 @pytest.mark.integration
 def test_quality_tracks_no_env_or_compose_file():
-    """The quality repository passes its own check and tracks no env or compose file."""
+    """CLOSING-29: The quality repository passes its own check and tracks no env or compose file."""
     root = Path(__file__).resolve().parents[1]
     tracked = subprocess.run(["git", "-C", str(root), "ls-files"], capture_output=True, text=True, check=True).stdout
     assert check_door(root) == 0
