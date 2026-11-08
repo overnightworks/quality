@@ -181,6 +181,7 @@ def outcome(result: StepRun) -> tuple[int, str, str]:
 
 
 def test_no_gate_job_or_step_is_skippable(gate):
+    """GATE-3."""
     assert "if" not in gate["jobs"]["gate"]
     assert all(
         "if" not in candidate and "continue-on-error" not in candidate for candidate in gate["jobs"]["gate"]["steps"]
@@ -211,6 +212,7 @@ def refused(line: str) -> str:
     ],
 )
 def test_only_a_dispatch_from_main_passes_the_ref_gate(gate, dispatch, tmp_path, reference, passes):
+    """GATE-11, GATE-12."""
     result = run_gate_step(gate, REF_STEP, dispatch, tmp_path, DISPATCH_REF=reference)
     expected = (
         (0, "", "") if passes else (1, refused(f"dispatched from {reference}, a release is dispatched from main."), "")
@@ -262,6 +264,7 @@ def test_only_a_dispatch_from_main_passes_the_ref_gate(gate, dispatch, tmp_path,
     ],
 )
 def test_a_malformed_version_is_refused(gate, dispatch, tmp_path, version):
+    """GATE-4, GATE-7, GATE-11, GATE-13."""
     result = run_gate_step(gate, FORMAT_STEP, dispatch, tmp_path, VERSION=version)
     assert outcome(result) == (1, refused("the version is not X.Y.Z, each part a number without leading zeros."), "")
     assert not (tmp_path / "work" / "planted").exists()
@@ -269,6 +272,7 @@ def test_a_malformed_version_is_refused(gate, dispatch, tmp_path, version):
 
 @pytest.mark.parametrize("version", ["0.0.0", "0.21.0", "10.200.3000"])
 def test_a_full_version_passes_the_format_gate(gate, dispatch, tmp_path, version):
+    """GATE-7."""
     result = run_gate_step(gate, FORMAT_STEP, dispatch, tmp_path / "run", VERSION=version)
     assert outcome(result) == (0, "", f"grammar={grammar_for(gate, dispatch, tmp_path, 'X.Y.Z')}\n")
 
@@ -283,12 +287,14 @@ def versions_with_every_digit() -> list[str]:
 
 @pytest.mark.parametrize("version", versions_with_every_digit())
 def test_every_digit_is_accepted_in_every_part_of_the_version(gate, dispatch, tmp_path, version):
+    """GATE-7."""
     result = run_gate_step(gate, FORMAT_STEP, dispatch, tmp_path / "run", VERSION=version)
     assert outcome(result) == (0, "", f"grammar={grammar_for(gate, dispatch, tmp_path, 'X.Y.Z')}\n")
 
 
 @pytest.mark.parametrize("version", versions_with_every_digit())
 def test_a_release_tag_with_every_digit_in_every_part_is_recognised(gate, dispatch, tmp_path, version):
+    """GATE-10, GATE-11, GATE-18."""
     answers = green_answers(dispatch, tags=tags((f"v{version}", dispatch.commit)))
     result = run_gate_step(gate, TAGGED_STEP, dispatch, tmp_path, answers)
     assert outcome(result) == (1, refused(f"{dispatch.commit} already carries the release tag v{version}."), "")
@@ -296,6 +302,7 @@ def test_a_release_tag_with_every_digit_in_every_part_is_recognised(gate, dispat
 
 @pytest.mark.parametrize("version", ["2026.11.06.1", "2026.12.31.12", "2026.01.01.10", "2026.10.20.1", "2026.11.30.1"])
 def test_a_dated_version_passes_the_format_gate(gate, dispatch, tmp_path, version):
+    """GATE-8."""
     result = run_gate_step(gate, FORMAT_STEP, dispatch, tmp_path / "run", VERSION=version, FORM="YYYY.MM.DD.N")
     assert outcome(result) == (0, "", f"grammar={grammar_for(gate, dispatch, tmp_path, 'YYYY.MM.DD.N')}\n")
 
@@ -342,6 +349,7 @@ def test_a_dated_version_passes_the_format_gate(gate, dispatch, tmp_path, versio
     ],
 )
 def test_a_malformed_dated_version_is_refused(gate, dispatch, tmp_path, version):
+    """GATE-4, GATE-8, GATE-11, GATE-15."""
     result = run_gate_step(gate, FORMAT_STEP, dispatch, tmp_path, VERSION=version, FORM="YYYY.MM.DD.N")
     assert outcome(result) == (
         1,
@@ -354,18 +362,21 @@ def test_a_malformed_dated_version_is_refused(gate, dispatch, tmp_path, version)
 
 
 def test_a_dated_version_is_refused_under_the_default_form(gate, dispatch, tmp_path):
+    """GATE-9, GATE-11, GATE-13."""
     result = run_gate_step(gate, FORMAT_STEP, dispatch, tmp_path, VERSION="2026.11.06.1")
     assert outcome(result) == (1, refused("the version is not X.Y.Z, each part a number without leading zeros."), "")
 
 
 @pytest.mark.parametrize("form", ["x.y.z", "", "^.*$"], ids=["lower case", "empty", "a regex"])
 def test_an_unknown_form_is_refused(gate, dispatch, tmp_path, form):
+    """GATE-6, GATE-11, GATE-14."""
     result = run_gate_step(gate, FORMAT_STEP, dispatch, tmp_path, FORM=form)
     assert outcome(result) == (1, refused(f"the form {form} is neither X.Y.Z nor YYYY.MM.DD.N."), "")
     assert result.calls == []
 
 
 def test_the_form_is_judged_before_any_step_reads_the_repository(gate):
+    """GATE-6."""
     names = step_names(gate, "gate")
     reading = [name for name in names if "gh " in step_script(gate, "gate", name)]
     assert reading
@@ -383,12 +394,14 @@ def dated_versions_with_every_digit() -> list[str]:
 
 @pytest.mark.parametrize("version", dated_versions_with_every_digit())
 def test_every_digit_is_accepted_in_every_free_part_of_a_dated_version(gate, dispatch, tmp_path, version):
+    """GATE-8."""
     result = run_gate_step(gate, FORMAT_STEP, dispatch, tmp_path / "run", VERSION=version, FORM="YYYY.MM.DD.N")
     assert outcome(result) == (0, "", f"grammar={grammar_for(gate, dispatch, tmp_path, 'YYYY.MM.DD.N')}\n")
 
 
 @pytest.mark.parametrize("case", ["pass", "main moved", "another repository's main"])
 def test_the_commit_must_still_be_main_s_head(gate, dispatch, tmp_path, case):
+    """GATE-11, GATE-16."""
     moved_to = "d4" * 20
     answers = {
         "pass": green_answers(dispatch),
@@ -411,6 +424,7 @@ def test_the_commit_must_still_be_main_s_head(gate, dispatch, tmp_path, case):
     ids=["no tag", "a longer tag name", "the tag exists"],
 )
 def test_a_version_whose_tag_exists_is_refused(gate, dispatch, tmp_path, existing, passes):
+    """GATE-11, GATE-17."""
     result = run_gate_step(
         gate, TAG_STEP, dispatch, tmp_path, green_answers(dispatch, refs=[{"ref": ref} for ref in existing])
     )
@@ -448,6 +462,7 @@ def test_a_version_whose_tag_exists_is_refused(gate, dispatch, tmp_path, existin
     ],
 )
 def test_a_commit_that_already_carries_a_release_tag_is_refused(gate, dispatch, tmp_path, form, listed, refused_tag):
+    """GATE-10, GATE-11, GATE-18."""
     answers = green_answers(
         dispatch, tags=tags(*((name, dispatch.commit if at_commit else "c3" * 20) for name, at_commit in listed))
     )
@@ -503,6 +518,7 @@ def ci_scenarios(verdict: str) -> dict[str, tuple[dict, str | None]]:
 
 @pytest.mark.parametrize("case", list(ci_scenarios("")))
 def test_the_newest_push_run_must_be_green_with_a_green_verdict(gate, dispatch, tmp_path, case):
+    """GATE-11, GATE-19, GATE-20, GATE-21, GATE-22, GATE-27."""
     replaced, refusal = ci_scenarios(verdict_check_name())[case]
     result = run_gate_step(gate, CI_STEP, dispatch, tmp_path, green_answers(dispatch, **replaced))
     expected = (1, refused(refusal.format(commit=dispatch.commit)), "") if refusal else (0, "", "")
@@ -511,6 +527,7 @@ def test_the_newest_push_run_must_be_green_with_a_green_verdict(gate, dispatch, 
 
 @pytest.mark.parametrize("ignored_run", ["another commit's run", "a pull request run"])
 def test_a_run_of_another_commit_or_event_is_no_push_run_on_the_commit(gate, dispatch, tmp_path, ignored_run):
+    """GATE-11, GATE-19."""
     requests = requests_of(dispatch)
     other_query = {
         "another commit's run": requests["runs"][1].replace(dispatch.commit, "e5" * 20),
@@ -602,6 +619,7 @@ def merge_scenarios() -> dict[str, tuple[dict, str | None]]:
 
 @pytest.mark.parametrize("case", list(merge_scenarios() | newest_run_scenarios()))
 def test_a_commit_its_pull_request_merged_red_is_never_released(gate, dispatch, tmp_path, case):
+    """GATE-2, GATE-11, GATE-23, GATE-24, GATE-25, GATE-27."""
     replaced, refusal = (merge_scenarios() | newest_run_scenarios())[case]
     result = run_gate_step(gate, MERGED_STEP, dispatch, tmp_path, green_answers(dispatch, **replaced))
     if refusal:
@@ -611,12 +629,14 @@ def test_a_commit_its_pull_request_merged_red_is_never_released(gate, dispatch, 
 
 
 def test_the_gate_asks_for_the_check_the_gate_s_caller_contract_names(gate, dispatch, tmp_path):
+    """GATE-26."""
     only_that_name = {7: run_jobs((verdict_check_name(), "success"))}
     result = run_gate_step(gate, CI_STEP, dispatch, tmp_path, green_answers(dispatch, jobs=only_that_name))
     assert outcome(result) == (0, "", "")
 
 
 def test_the_gate_takes_the_version_and_hands_on_the_commit(gate):
+    """GATE-2, GATE-9."""
     call = gate[True]["workflow_call"]
     assert set(call["inputs"]) == {"version", "form"}
     assert {key: value for key, value in call["inputs"]["version"].items() if key != "description"} == {
@@ -641,6 +661,7 @@ def test_the_gate_takes_the_version_and_hands_on_the_commit(gate):
 
 
 def test_the_gate_judges_the_dispatched_commit_and_version(gate):
+    """GATE-4."""
     assert gate["jobs"]["gate"]["env"] == {
         "GH_TOKEN": "${{ github.token }}",
         "VERSION": "${{ inputs.version }}",
@@ -659,6 +680,7 @@ def test_the_gate_judges_the_dispatched_commit_and_version(gate):
 
 
 def test_the_version_grammar_holds_no_range_whose_meaning_follows_the_locale(gate):
+    """GATE-5."""
     grammars = step(gate, "gate", FORMAT_STEP)["env"]
     assert set(grammars) == {"X_Y_Z", "YYYY_MM_DD_N"}
     brackets = [bracket for grammar in grammars.values() for bracket in re.findall(r"\[[^\]]*\]", grammar)]
@@ -667,9 +689,11 @@ def test_the_version_grammar_holds_no_range_whose_meaning_follows_the_locale(gat
 
 
 def test_the_ref_gate_reads_the_dispatch_ref(gate):
+    """GATE-4."""
     assert step(gate, "gate", REF_STEP)["env"] == {"DISPATCH_REF": "${{ github.ref }}"}
 
 
 def test_the_gate_holds_only_read_permissions(gate):
+    """GATE-1."""
     assert gate["permissions"] == {}
     assert {level for job in gate["jobs"].values() for level in job["permissions"].values()} == {"read"}
