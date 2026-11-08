@@ -211,7 +211,8 @@ def test_only_an_own_line_reasoned_owner_naming_the_code_or_a_reasoned_line_noqa
     ids=["plain reason", "spaces around the reason"],
 )
 def test_an_honoured_owner_is_a_note_on_its_line_with_its_reason(directive):
-    """The owner is no finding: it is an allowed note on its own line whose fact ends in its stripped reason."""
+    """PRINT-14: an honoured owner is no finding but an `allowed` note on its own line whose fact ends in its stripped
+    reason."""
     text = f"x = 1\n{directive}\n{PRINT}\n"
     findings, (note,) = judged_prints(text, [print_record(text)])
     assert (findings, note.location, note.event) == ([], "src/p/a.py:2", NoteEvent.ALLOWED)
@@ -224,7 +225,8 @@ def test_an_honoured_owner_is_a_note_on_its_line_with_its_reason(directive):
     ids=["no print", "only another code"],
 )
 def test_an_owner_that_clears_no_finding_is_a_finding_on_its_line(text, records):
-    """#225 cell 9: a directive kept where nothing it names is found is a finding; delete it."""
+    """PRINT-15, PRINT-16: an owner that names no code found is a finding on its own line, and a file with an owner and
+    no print is still read."""
     findings, notes = judged_prints(text, records)
     assert (any(finding.startswith("src/p/a.py:2 ") for finding in findings), notes) == (True, ()), findings
 
@@ -484,7 +486,8 @@ def test_a_ruff_quality_cannot_find_or_trust_names_the_reinstall_command(build_r
 
 @pytest.mark.integration
 def test_a_print_in_a_file_tokenize_cannot_read_refuses_only_python_print(build_repo, capsys, elsewhere):
-    """#225 cell 12: ruff reports a print where the tokenizer fails; python-print cannot judge, python-security is judged."""
+    """PRINT-16, SECURITY-26, SECURITY-28: a print finding in a file whose comments tokenize cannot read makes
+    python-print `cannot judge`, naming the file, while python-security is still judged."""
     repo = build_repo({"src/p/a.py": "print(argv)\nx = '''open\n"})
     entry = {**ruff_entry(code="T201", filename=os.path.realpath(repo / "src" / "p" / "a.py")), "message": "`print` found"}
     (elsewhere / "report.json").write_text(json.dumps([entry]))
@@ -492,6 +495,14 @@ def test_a_print_in_a_file_tokenize_cannot_read_refuses_only_python_print(build_
     code, output = run(capsys, repo, lambda: str(binary))
     assert (code, f"{refusal_row('code')}cannot read the comments of src/p/a.py" in output) == (2, True), output
     assert list(refusals(repo, lambda: str(binary))) == [Rule.PYTHON_PRINT], output
+
+
+@pytest.mark.integration
+def test_a_finding_in_a_file_nested_past_the_tokenizers_limit_cannot_be_judged(build_repo):
+    """SECURITY-26: ruff reads a file nested deeper than Python's tokenizer allows, so its finding is `cannot judge`."""
+    nested = "(" * 250 + "'1'" + ")" * 250
+    verdict = rule_verdict(build_repo({"src/p/a.py": f"x = eval({nested})\n"}))
+    assert "src/p/a.py" in str(verdict.refusal)
 
 
 @pytest.mark.integration
