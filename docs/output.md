@@ -22,7 +22,8 @@ message) stand under its row behind the marker `| `, six spaces deep, before the
 for an entry ends with `:` and the entry's lines stand under it, two spaces deeper, whole and never shortened (ROW-6).
 A security finding's fix names the line its `# noqa` must stand on, and a code and ruff's message are the fact.
 
-Areas run in the order `files`, `debt`, `imports`, `secrets`, `workflows`, `dependencies`, `code`. The first row of a run names the release that judges ([commands](commands.md#which-release-judges)).
+Areas run in the order `files`, `debt`, `imports`, `secrets`, `workflows`, `dependencies`, `code` (ROW-8). The first
+row of a run names the release that judges ([commands](commands.md#which-release-judges)).
 
 ```text
   · release       v0.10.0        pinned in .github/workflows/ci.yml
@@ -72,19 +73,29 @@ Ruled by the operator:
 
 - Clean areas: one row per area, so you see what was checked and its extent.
 
-An area row is `✓ <area>  clean  <extent>`, also when nothing was found, and `! <area>  N findings` with findings:
+An area row is `✓ <area>  clean  <extent>`, also when nothing was found (ROW-9), and `! <area>  N findings` with
+findings (ROW-10); the extent of a clean row is:
 
-| Area | Extent |
-|---|---|
-| `files` | `N rules · M files`, M the distinct paths git tracks |
-| `debt` | `ceiling held · N entries, M clone pairs`, what the ceiling file holds |
-| `imports` | `N contracts` |
-| `secrets` | `N commits` (O30), because gitleaks reads committed history only; `staged change · N files` for a staged run |
-| `workflows` | `N workflows · offline audits only`, the workflow files the tree holds, said in the row and in no note of its own |
-| `dependencies` | `N lockfiles · M packages`, `0 lockfiles · 0 packages` with none (O48) |
-| `code` | `2 rules · N Python files`, the tracked regular `.py` files ruff judged, `0 Python files` with none |
+- `files`: `N rules · M files`, M the distinct paths git tracks (O16).
+- `debt`: `ceiling held · N entries, M clone pairs`, what the ceiling file holds (O21).
+- `imports`: `N contracts` (ROW-11).
+- `secrets`: `N commits` (O30), because gitleaks reads committed history only; `staged change · N files` for a staged
+  run.
+- `workflows`: `N workflows · offline audits only`, the workflow files the tree holds, said in the row and in no note
+  of its own (O38).
+- `dependencies`: `N lockfiles · M packages`, `0 lockfiles · 0 packages` with none (O48).
+- `code`: `2 rules · N Python files`, the tracked regular `.py` files ruff judged, `0 Python files` with none (ROW-12).
 
-With ` · K allowed` appended where files were allowed, leaks were allowed (secrets), advisories were allowed (dependencies) or output owners were honoured (code). Without a ceiling file the debt row is `· debt  not recorded  N entries over the thresholds · measured only` (`M clone pairs · partly measured only` when the ceiling file has no `[clones]` table, O21), with `fix: quality check --fix` under it. Under `quality check debt --fix` it is `✓ debt  lowered  N entries · quality/baseline.toml` with a `✓` row per lowered or dropped entry, `✓ debt  recorded  N entries, M clone pairs · quality/baseline.toml is new`, `✓ debt  rewritten  quality/baseline.toml` (entries equal, text not), `! debt  N findings  nothing lowered` or `✗ debt  not fixed  <reason>`; under `--dry-run` it is `~ debt  N to lower` (`N to move`, `to record`, `to rewrite  text differs · quality/baseline.toml`) with a `~` row per entry. Without an import-linter config the imports row is `· imports  not set up  no import-linter config`. An area that cannot check is `✗ <area>  not checked  <reason>` ([Refusals](#refusals)).
+With ` · K allowed` appended where files were allowed, leaks were allowed (secrets), advisories were allowed
+(dependencies) or output owners were honoured (code). Without a ceiling file the debt row is `· debt  not recorded  N
+entries over the thresholds · measured only` (`M clone pairs · partly measured only` when the ceiling file has no
+`[clones]` table, O21), with `fix: quality check --fix` under it. Under `quality check debt --fix` it is `✓
+debt  lowered  N entries · quality/baseline.toml` with a `✓` row per lowered or dropped entry, `✓ debt  recorded  N
+entries, M clone pairs · quality/baseline.toml is new`, `✓ debt  rewritten  quality/baseline.toml` (entries equal,
+text not), `! debt  N findings  nothing lowered` or `✗ debt  not fixed  <reason>`; under `--dry-run` it is `~ debt  N
+to lower` (`N to move`, `to record`, `to rewrite  text differs · quality/baseline.toml`) with a `~` row per entry.
+Without an import-linter config the imports row is `· imports  not set up  no import-linter config` (ROW-13). An area
+that cannot check is `✗ <area>  not checked  <reason>` ([Refusals](#refusals)).
 
 ### Notes
 

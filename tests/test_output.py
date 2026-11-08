@@ -73,7 +73,7 @@ def verdict_line(**counts) -> str:
     ids=["fact", "empty fact is stripped", "one", "several", "note", "a count that takes no plural"],
 )
 def test_a_row_prints_its_glyph_subject_event_and_fact_in_columns(row, expected):
-    """ROW-1: a row prints its glyph, subject, event and fact in columns."""
+    """ROW-1, ROW-9, ROW-10: a row prints its glyph, subject, event and fact in columns, with or without a count."""
     assert plain((row,)) == expected
 
 
@@ -442,6 +442,7 @@ def test_a_terminal_that_asks_for_no_style_prints_no_escape_byte(term, no_color)
 
 
 def test_no_findings_and_no_notes_print_nothing():
+    """ROW-9: an area with no finding and no note has nothing under its row."""
     assert findings_written([]) == ""
 
 
@@ -513,6 +514,7 @@ def test_a_notes_location_and_fact_are_escaped_before_they_are_padded():
 
 
 def test_counted_gives_the_noun_for_one_and_its_plural_for_any_other_count():
+    """ROW-10: a count reads in the singular for one and in the plural for any other count."""
     assert [output.counted(count, "entry", "entries") for count in (1, 2)] == ["1 entry", "2 entries"]
 
 
