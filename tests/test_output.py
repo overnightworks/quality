@@ -115,6 +115,8 @@ def test_repository_text_in_a_row_is_escaped_before_it_is_padded():
     [(0, "<1s"), (0.99, "<1s"), (1, "1s"), (59.9, "59s"), (60, "1m00s"), (72, "1m12s")],
 )
 def test_a_duration_is_whole_seconds_rounded_down(seconds, expected):
+    """CLOSING-7: a duration is whole seconds rounded down, `<1s` below one, and minutes with two-digit seconds from 60
+    seconds on."""
     assert output.format_duration(seconds) == expected
 
 
@@ -147,6 +149,8 @@ def test_a_duration_is_whole_seconds_rounded_down(seconds, expected):
     ids=["clean", "one finding", "several", "no clean area is left out", "measured only", "partly measured with findings", "a lowered ceiling", "a lowered ceiling beside a finding", "a dry run", "a dry run beside a finding"],
 )
 def test_the_verdict_line_counts_and_ends_with_the_duration(counts, expected):
+    """CLOSING-4, CLOSING-5, CLOSING-6: the verdict line is one line, `✓ clean` with the areas judged or the findings
+    with the areas that hold them and the clean areas, a clean count left out where no area is clean."""
     assert verdict_line(**counts) == expected
 
 
@@ -563,6 +567,7 @@ def test_the_subject_width_is_the_widest_escaped_subject(subjects, width):
 
 
 def test_next_alone_stands_on_its_channel():
+    """VERDICT-63: one command stands as `next: <command>`, alone on its channel."""
     assert written(io.StringIO, lambda channel: output.write_next((Command("quality merge o/r#7"),), channel)) == "next: quality merge o/r#7\n"
 
 
@@ -677,6 +682,7 @@ def test_a_command_on_its_own_line_stands_below_a_bare_next():
 
 
 def test_the_closing_line_is_its_glyph_and_parts_joined():
+    """CLOSING-2: a closing line is its glyph and its parts joined by ` · `."""
     line = written(io.StringIO, lambda channel: output.write_closing_line(Glyph.CLEAN, ("merged #7", "quality_gate on again", "3s"), channel))
     assert line == "✓ merged #7 · quality_gate on again · 3s\n"
 
@@ -687,6 +693,7 @@ def test_the_closing_line_is_its_glyph_and_parts_joined():
     ids=["the first part", "a further part"],
 )
 def test_a_closing_line_prints_each_part_escaped(parts, expected):
+    """CLOSING-3: each part of a closing line prints escaped, the first and a further one."""
     assert written(io.StringIO, lambda channel: output.write_closing_line(Glyph.CLEAN, parts, channel)) == expected
 
 

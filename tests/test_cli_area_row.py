@@ -131,6 +131,7 @@ def test_an_imports_area_that_could_not_check_has_no_extent():
 
 @pytest.mark.parametrize("size_measured_only", [True, False], ids=["measured debt", "partly measured debt"])
 def test_each_area_that_only_measured_has_its_own_note_in_area_order(size_measured_only):
+    """CLOSING-10: the notes of the areas that only measured follow the order of the areas."""
     areas = (debt_area(size_measured_only=size_measured_only), imports_area(extent=0, measured_only=True))
     debt_note, imports_note = cli.measured_notes(areas)
     assert (debt_note.startswith(Area.DEBT), imports_note.startswith(Area.IMPORTS), debt_note != imports_note) == (True, True, True)
@@ -197,4 +198,5 @@ def test_a_judged_code_area_counts_its_rules_and_its_python_files(rules, extent)
     ],
 )
 def test_the_refusal_counts_the_areas_the_run_judged(judged, expected):
+    """CLOSING-12: the error line counts the areas the run judged, `1 area` for one."""
     assert cli.refusal_error(areas_refusing((CannotJudge("a"),), *[()] * (judged - 1))) == expected

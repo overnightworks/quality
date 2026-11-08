@@ -146,7 +146,7 @@ Ruled by the operator:
 |---|---|
 | `✓` | clean, or done |
 | `!` | needs you: a finding, a red verdict |
-| `✗` | could not check or do; always exit 2 |
+| `✗` | could not check or do; always exit 2 (CLOSING-1) |
 | `·` | note: release, allowed finding, not measured |
 | `~` | will change: the dry run of `--fix` and `merge` |
 | `⠋` | live: no glyph column of its own, terminal only, stderr, disappears |
@@ -160,16 +160,33 @@ Ruled by the operator:
 - Exit 2 beats 1: exit 2 with the pair; the findings of the other areas stand anyway.
 - Duration in the verdict (`12s`, `1m12s`, `<1s`).
 
-Exit `0` or `1` ends with one verdict line on stdout: `✓ clean · 7 areas · <1s` or `! 5 findings in 3 areas · 4 areas clean · 14s`. Before the duration stands `debt measured, not enforced` (`partly measured, not enforced`) when no ceiling file holds the debt, then `imports not enforced` when the repository has no import-linter config. No `next:` follows a findings verdict.
+A closing line is its glyph and its parts joined by ` · ` (CLOSING-2), each part escaped (CLOSING-3). Exit `0` or `1`
+ends with one verdict line on stdout (CLOSING-4): `✓ clean · 7 areas · <1s` (CLOSING-5) or
+`! 5 findings in 3 areas · 4 areas clean · 14s`, where the clean count is left out if no area is clean (CLOSING-6). The
+duration is whole seconds rounded down, `<1s` below one; from 60 seconds on it reads minutes and two-digit seconds,
+`1m00s` (CLOSING-7). Before the duration stands `debt measured, not enforced` when no ceiling file holds the debt
+(CLOSING-8), `debt partly measured, not enforced` when the ceiling file has no `[clones]` table (CLOSING-9), then
+`imports not enforced` when the repository has no import-linter config (CLOSING-10). No `next:` follows a findings
+verdict (CLOSING-11).
 
-Exit `2` ends instead with `error: K of N areas could not check` (`1 of 1 area` for one), N the areas judged, followed by ` · N findings in the others` or, when findings stand under a `✗` row, ` · N findings, M of them in those areas`, and `next:` on stderr; it prints no verdict line. A rule that cannot judge refuses only itself: the other rules' findings, those of its own area included, still print, and a note stands under a `✗` row where its rule judged.
+The line of `quality check debt --fix --dry-run` when nothing is left to lower ([the fix](rules.md)):
+
+```text
+✓ clean · nothing to lower · 1 area · 4s
+```
+
+Exit `2` ends instead with `error: K of N areas could not check` (`1 of 1 area` for one), N the areas judged
+(CLOSING-12), followed by ` · N findings in the others` (CLOSING-13) or, when findings stand under a `✗` row,
+` · N findings, M of them in those areas` (CLOSING-14), and `next:` [on stderr](#streams); it prints no verdict line
+(CLOSING-15). A rule that cannot judge [refuses only itself](rules.md): the other rules' findings, those of its own
+area included, [still print](#refusals), and a note stands under a `✗` row where its rule judged.
 
 A run that cannot start prints only the pair and exits `2` before any rule runs, and no release row stands: `error: not inside a git work tree · <the folder, ~ for the home folder>` with `next: run quality check inside a repository` when git, asked in the C locale, says the folder lies outside any work tree (a folder outside any repository, a bare repository, the inside of `.git`), and otherwise (a folder without permission, a repository git refuses) `error: . is not a readable git repository: ...` with `next: git -C . status`, and with `next: fix what the error names, then run quality check again` where git did not run or the folder is gone.
 
 ## Refusals
 
 A refused area is its `✗` row (REFUSAL-1), which carries no extent (REFUSAL-2), and a [pair on stderr](#streams),
-exit 2; the other areas' rows stand (REFUSAL-3):
+[exit 2](#glyphs); the other areas' rows stand (REFUSAL-3):
 
 ```text
   ✗ secrets       not checked    mise is not installed
@@ -185,7 +202,7 @@ next:
 A fact of a few words says what is missing (`mise could not locate gitleaks 8.30.1`, true for every non-zero answer of
 mise). A reason that several rules of one area share stands once (REFUSAL-4); distinct reasons make the row say
 `N reasons` (REFUSAL-5) and stand on `✗` lines below it (REFUSAL-6), and a reason counts once. Findings of an area
-that also cannot check stay under its `✗` row (REFUSAL-7) and are counted in the error line.
+that also cannot check stay under its `✗` row (REFUSAL-7) and are counted in [the error line](#the-closing-line).
 
 `next:` names each distinct step of the run's refusals once (REFUSAL-8), in row order (REFUSAL-9): one step on the
 `next:` line (REFUSAL-10), several each below a bare `next:` (a command alone on its line, one level of four spaces

@@ -90,7 +90,8 @@ def test_a_run_of_named_areas_equals_the_same_request_spelt_otherwise(build_repo
     ],
 )
 def test_a_selected_run_counts_what_it_judged_and_nothing_else(build_repo, capsys, words, code, last_line):
-    """CHECK-7, CHECK-8: the verdict counts the named areas only and the exit is the worst of theirs."""
+    """CHECK-7, CHECK-8, CLOSING-8, CLOSING-10: the verdict counts the named areas only, says what those areas only
+    measured, and the exit is the worst of theirs."""
     done, out, _ = run_check_of(build_repo({".env": "A=1\n"}), capsys, *words)
     assert (done, out.splitlines()[-1]) == (code, last_line)
 
