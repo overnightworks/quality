@@ -120,29 +120,35 @@ An app's build calls `image.yml` once per image, after the gate, and pushes it t
 
 The secret's name is illustrative.
 
-- The caller job grants all four permissions, even with `push: false`; GitHub refuses a call that grants less.
+- The caller job grants all four permissions, even with `push: false`; GitHub refuses a call that grants less (IMAGE-1).
 - The image is `ghcr.io/<owner>/<repository>`, lowercased; `image` adds a sub-name for a repository with several images
-  (`worker` gives `ghcr.io/<owner>/<repository>/worker`).
-- `version` is the image tag as given; only a valid Docker tag passes.
+  (`worker` gives `ghcr.io/<owner>/<repository>/worker`) (IMAGE-2). An `image` that is not lowercase path
+  components is refused before anything is built: `Refused: the image <image> is not lowercase path components.`
+  (IMAGE-3).
+- `version` is the image tag as given; only a valid Docker tag passes, else `Refused: the version <version> is not a
+  valid Docker tag.` (IMAGE-4).
+- `image` and `version` reach a step only through the job's `env`, never inside a `run` script (IMAGE-15).
 - The tag job names each image job in its `needs` (for example `needs: [gate, build, image]`), so the tag and the
   release follow only pushed images.
 - `context` (default `.`), `file` (default the context's `Dockerfile`) and `target` (default the last stage) select the
-  build.
+  build (IMAGE-5).
 - `build-args` holds `NAME=value` lines. The provenance records them, so a secret goes into `build-secrets` as
-  `id=value` lines and is read with `RUN --mount=type=secret,id=<id>`. Pass `build-secrets` by name; never
+  `id=value` lines and is read with `RUN --mount=type=secret,id=<id>` (IMAGE-6). Pass `build-secrets` by name; never
   `secrets: inherit`.
-- The image is built for `linux/amd64` on a GitHub-hosted runner, from the dispatched commit, the one the gate judged.
-- BuildKit adds its provenance (`mode=max`) and an SBOM to the image; with `push`, `actions/attest` adds a signed SLSA
-  build provenance, signed by `image.yml`. A consumer verifies it with `gh attestation verify oci://<ref> --repo
+- The image is built for `linux/amd64` on a GitHub-hosted runner (IMAGE-7), from the dispatched commit
+  (IMAGE-8), the one the gate judged.
+- BuildKit adds its provenance (`mode=max`) and an SBOM to the image (IMAGE-9); with `push`, `actions/attest` adds a signed
+  SLSA build provenance, signed by `image.yml` (IMAGE-10). A consumer verifies it with `gh attestation verify oci://<ref> --repo
   <owner>/<repository> --signer-workflow overnightworks/quality/.github/workflows/image.yml --source-ref refs/heads/main
   --predicate-type https://slsa.dev/provenance/v1`.
-- `cache: true` reads and writes the GitHub Actions build cache; it stays off for a release.
+- `cache: true` reads and writes the GitHub Actions build cache; it stays off for a release (IMAGE-11).
 - `submodules: true` checks out the commit's git submodules, one level. The job's token fetches them from github.com and
-  is not persisted after the checkout, so a submodule that token cannot read fails there. The commit pins each one.
+  is not persisted after the checkout (IMAGE-12), so a submodule that token cannot read fails there. The commit pins
+  each one.
 - The outputs, set only with `push`: `digest` (`sha256:<hex>`) and `ref`
-  (`ghcr.io/<owner>/<repository>[/<image>]:<version>@<digest>`).
-- The package takes the access of the caller's repository; a deployment that pulls it needs read access set on the
-  package.
+  (`ghcr.io/<owner>/<repository>[/<image>]:<version>@<digest>`) (IMAGE-13).
+- The package takes the access of the caller's repository (IMAGE-14); a deployment that pulls it needs read access set
+  on the package.
 
 ## Refusals
 
