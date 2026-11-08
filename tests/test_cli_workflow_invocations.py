@@ -27,7 +27,7 @@ def quality_invocations() -> list[tuple[str, str, str, list[str]]]:
     [pytest.param(*invocation, id=f"{invocation[0]}:{invocation[1]}") for invocation in quality_invocations()],
 )
 def test_every_quality_invocation_in_a_workflow_parses_with_the_current_parser(workflow, step, line, argv):
-    """#228 invariant 4: a workflow never calls quality with arguments the parser refuses."""
+    """A workflow never calls quality with arguments the parser refuses."""
     cli.build_parser().parse_args(argv)
 
 
@@ -37,5 +37,6 @@ def test_the_gate_runs_the_whole_check():
 
 
 def test_no_workflow_runs_the_fix():
-    """The gate judges and never rewrites the ceiling; a workflow that ran `--fix` would lower or record it unseen."""
+    """HELP-28: the gate judges and never rewrites the ceiling; a workflow that ran `--fix` would lower or record it
+    unseen."""
     assert [line for _, _, line, argv in quality_invocations() if "--fix" in argv] == []
