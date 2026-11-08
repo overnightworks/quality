@@ -1,0 +1,8 @@
+claim_id = "85d1cc5d996d4fe79e35ffe4d7ac4cbd"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "d77de5aeaff3620fc06ff2d307ba326b250ea5d3"
+branch = "claude/issue-576-d7-refusal-ids"
+scope = ["docs/output.md", "tests/test_cli_area_row.py", "tests/test_cli_output.py", "tests/test_cli_raw_output.py", "tests/test_output.py", "tests/test_report.py"]
+opened_commit = "75fe0a266f8d0d8f9525629929512f222e932b81"
+whole_reason = "docs/output.md Refusals section (the pair, the steps, the reasons) and the tests that prove it, linked by REFUSAL IDs, with 517a and 567a folded."
