@@ -87,7 +87,8 @@ Each line has a reason:
 - `quality`'s own release uses GitHub's same-repository form, `uses: $/.github/workflows/release-gate.yml` and
   `release-tag.yml`, so it calls the workflows of its own commit. Every other repository pins the commit sha of a quality tag and names the tag in a comment.
 - quality's build also tags the gated commit in its own checkout (the tag never leaves the runner) and runs
-  `scripts/verify_release.py`, which proves the installed version equals the tag.
+  `scripts/verify_release.py`, which proves one release tag is at the commit, the installed version equals it, the
+  gate's tool refs pin it and every rule's release facts name a release.
 
 ## The version
 
@@ -201,7 +202,7 @@ completed publish; both are completed or deleted by hand.
 ## quality's own release
 
 A dispatch of quality's `release.yml` gates, builds, tags and publishes a release without files, with GitHub's generated
-notes. A patch on a release branch is still tagged by hand (see `AGENTS.md`). The operator dispatches with:
+notes. The operator dispatches with:
 
 ```sh
 gh workflow run release.yml -R overnightworks/quality -f version=X.Y.Z
