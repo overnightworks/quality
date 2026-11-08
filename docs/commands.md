@@ -154,23 +154,25 @@ printed, and a private repository a token can list is dropped without a trace.
   (FLEET-6), `no gate` or `none` without a caller (FLEET-7), and `self` for the repository's own `./` or `$/` file in
   `overnightworks/quality` (FLEET-8). Two callers show both, joined by ` · ` (FLEET-9). The `# v` comment is never read
   (FLEET-10). The owner and repository of a `uses:` match in any case, the workflow path exactly (FLEET-11).
-- After `Gate` and `CodeQL` the matrix has `Mandatory jobs` (the number in `[gate] mandatory_jobs` of `quality/config.toml`,
-  `no config` without the file, `—` without a gate), `Sonar legacy` (`report` or `fail` from `[gate] legacy`, `no config`
-  without the file, `—` without a gate) and one column per rule whose
-  enforcement depends on the release or the repository. The rules every release enforces stand once in the sentence under
-  the heading. A rule cell says what the pinned gate does with the rule, never whether the repository passes it:
-  `enforced`, `report-only` (`size` without `quality/baseline.toml`, `import-contract` without an import-linter config,
-  `clone` on v0.4.0 and, from v0.5.0 on, without a `[clones]` table in
-  `quality/baseline.toml`), `not in <tag>` when the pinned release predates the rule, `not released` when only main has
-  the rule,
-  `no judged project` (`test-layout`, from v0.7.0 on, when the clone has no Python project with a package under `src/` and no frontend project (a `package.json` outside every project's `tests/`)),
-  and `—` without a gate. Two pins give the oldest release; a pin that is no release (a commit without a tag, a branch or
-  tag name, or unreadable release tags) gives `release unknown`. The table of first releases lives in `rules.py`.
-- A workflow file that cannot be read shows `cannot read <file>` in every cell that needs the pin, a malformed
-  `quality/config.toml` or `quality/baseline.toml` and an import-linter config that cannot be read or that two files hold
-  show `cannot read <file>` (`import-linter config`) in each cell that reads the file, while a cell that does not keeps its value
-  (every cell under no gate, a rule cell under a pin before the rule or `release unknown`), unreadable release tags say so in the heading and
-  show pins as commits, and each makes the exit `2`. No value, `behind`, `no gate` or `report-only` included, makes the run red.
+- After `Gate` and `CodeQL` the matrix has `Mandatory jobs` (the number in `[gate] mandatory_jobs` of
+  `quality/config.toml`, `no config` without the file, `—` without a gate), `Sonar legacy` (`report` or `fail` from
+  `[gate] legacy`, `no config` without the file, `—` without a gate) (FLEET-12) and one column per rule whose
+  enforcement depends on the release or the repository (FLEET-13). The rules every release enforces stand once in the
+  sentence under the heading (FLEET-14). A rule cell says what the pinned gate does with the rule, never whether the
+  repository passes it: `enforced`, `report-only` (`size` without `quality/baseline.toml` (FLEET-15), `import-contract`
+  without an import-linter config (FLEET-16), `clone` on v0.4.0 and, from v0.5.0 on, without a `[clones]` table in
+  `quality/baseline.toml` (FLEET-17)), `not in <tag>` when the pinned release predates the rule (FLEET-18),
+  `not released` when only main has the rule (FLEET-19), `no judged project` (`test-layout`, from v0.7.0 on, when the
+  clone has no Python project with a package under `src/` and no frontend project (a `package.json` outside every
+  project's `tests/`)) (FLEET-20), and `—` without a gate (FLEET-21). Two pins give the oldest release; a pin that is
+  no release (a commit without a tag, a branch or tag name, or unreadable release tags) gives `release unknown`
+  (FLEET-22). The table of first releases lives in `rules.py`.
+- A workflow file that cannot be read shows `cannot read <file>` in every cell that needs the pin (FLEET-23), a
+  malformed `quality/config.toml` or `quality/baseline.toml` and an import-linter config that cannot be read or that two
+  files hold show `cannot read <file>` (`import-linter config`) in each cell that reads the file, while a cell that does
+  not keeps its value (every cell under no gate, a rule cell under a pin before the rule or `release unknown`)
+  (FLEET-24), unreadable release tags say so in the heading and show pins as commits (FLEET-25), and each makes the exit
+  `2` (FLEET-26). No value, `behind`, `no gate` or `report-only` included, makes the run red (FLEET-27).
 - Found rows are named by GitHub's own `owner/name`, named rows by the entry as written; all are sorted by it,
   case-insensitively. A private repository is not measured, because the tables are published and it is not
   anonymously readable: one named in `repositories` shows as a `cannot judge` row like any repository that cannot be cloned.
