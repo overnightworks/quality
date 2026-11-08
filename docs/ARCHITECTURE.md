@@ -121,15 +121,15 @@ directory.
 input: output masks them and stops workflow commands ([output](output.md#masking)). Reads stay inside the
 repository (`repository.py`). A scanner's stderr is shown only once gitleaks clears it. The GitHub transport follows no
 redirect. The fleet report's listing is public repositories only (a private one an operator's token can list is dropped
-before any line), and its token goes to `api.github.com` only, never to git. A workflow's pin selects which code runs locally. The gate's tool is its own uv workspace root, so a caller's checkout above it
-cannot take it in or configure it. quality builds or runs a pinned commit only after quality's
-remote showed the comment's release tag at that commit: asked before every fetch, and remembered per machine by a record
-that only a matched answer writes. The door reads that pin through `gh` at the pull request's merge commit and checks
-every listed name before it shapes a request; for quality itself it runs the installed quality, never the pull
-request's own code. The Sonar token's boundary stands in [sonar](sonar.md#quality-sonar-findings). The advisory archive is an
-unsigned zip over TLS and is never cached ([rules](rules.md)). Agents are cooperative and share the operator's `gh`
-login, so the door is the agreed path, not a lock; a real lock (a token without admin rights) belongs to the machine's
-setup, not to quality.
+before any line), and its token goes to `api.github.com` only, never to git. A workflow's pin selects which code runs
+locally. The gate's tool is its own uv workspace root, so a caller's checkout above it cannot take it in or configure
+it. quality builds or runs a pinned commit only after quality's remote showed the comment's release tag at that commit:
+asked before every fetch, and remembered per machine by a record that only a matched answer writes. The door reads that
+pin through `gh` at the pull request's merge commit and checks every listed name before it shapes a request; for
+quality itself it runs the installed quality, never the pull request's own code. The Sonar token's boundary stands in
+[sonar](sonar.md#quality-sonar-findings). The advisory archive is an unsigned zip over TLS and is never cached
+([rules](rules.md)). Agents are cooperative and share the operator's `gh` login, so the door is the agreed path, not a
+lock; a real lock (a token without admin rights) belongs to the machine's setup, not to quality.
 
 **Proof strategy.** A test's kind, `unit` or `integration`, follows from the markers in `pyproject.toml`, and
 `tests/conftest.py` fails a unit test that starts a process or opens a socket. A fake `mise` serves the scanners unless a
@@ -172,12 +172,10 @@ quality itself.
   and leaves tests out, and lizard's duplicate mode returned import lists; quality's own detector names a pair by the path
   and qualified symbol of both sides, which survives unrelated changes. Reopens when a tool names a pair that way and
   judges tests.
-
 - A validated hand list of fleet repositories: it still forgets a new repository. Reopens when the fleet spans owners no
   organization holds.
 - Selecting the fleet by a custom property or topic: `quality_gate` means the ruleset applies and the emergency door switches it off, and a
   topic is one more hand step per repository. Reopens when the report should measure exactly the gated repositories.
-
 - A check that exits 2 with the `uvx --from git+…` command for the pinned release instead of fetching it. Reopens when the operator rules it.
 
 ## 8. Risks and Technical Debt
