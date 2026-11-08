@@ -1,8 +1,0 @@
-claim_id = "3fc19297537a42fa886b937ef870d1fc"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "f847401d9ff37853735aba1fda30af04d428bd4b"
-branch = "claude/issue-520-d7-mask-lines-actions-ids"
-scope = ["docs/output.md", "tests/support/check.py", "tests/test_architecture_output.py", "tests/test_cli_output.py"]
-opened_commit = "300f02121146fd8f849de1b9873a3f976124a244"
-whole_reason = "docs/output.md line-start, lines and Actions clauses and the tests that prove them, linked by MASK IDs, with the Actions ruled sentence in the form of the file's other ruled blocks."
