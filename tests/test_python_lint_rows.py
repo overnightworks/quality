@@ -55,6 +55,7 @@ def drive_code(build_repo, capsys):
 
 @pytest.mark.integration
 def test_a_security_finding_stands_as_a_row_with_its_fix_under_the_code_row(drive_code):
+    """SECURITY-8: a security finding stands as an `insecure` row at its line, ruff's code and message its fact."""
     run = drive_code({"src/p/a.py": f"x = 1\n{EVAL}"})
     (finding,) = run.area.findings
     assert (run.code, run.err) == (1, "")

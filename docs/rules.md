@@ -414,29 +414,31 @@ It applies these rules:
   Ruled by the operator: every tracked `pyproject.toml` that `test-layout` finds as a project is judged, the root and
   each member alike.
 - `python-security` judges every tracked regular `.py` file in any directory with the `S` codes of quality's own ruff
-  (`ruff==0.17.1`, an exact pin in quality's `pyproject.toml` that serves its own lint too): the ruff binary of
-  quality's installation, never one on `PATH`, at the pinned version, runs `ruff check --isolated --no-cache
+  (SECURITY-1) (an exact pin in quality's `pyproject.toml` that serves its own lint too): the ruff binary of quality's
+  installation, never one on `PATH` (SECURITY-2), at the pinned version, runs `ruff check --isolated --no-cache
   --ignore-noqa --select S,T20 --target-version py314 --output-format json -- <files>`, in batches below the argument
-  limit, and writes nothing into the checkout. That one run serves `python-print` too. With no tracked `.py` file ruff
-  is not started. A clean `code` row counts what ruff judged: `✓ code  clean  2 rules · 41 Python files`, `0 Python
-  files` with none. Not judged: untracked files, a link, anything inside a gitlink, notebooks,
-  `.pyi` files and suffixless scripts. The repository's own ruff `select`, `ignore`, `per-file-ignores`, `exclude`,
-  `extend` and noqa have no effect. Each finding stands as a row under the `code` row, `! src/a.py:12  insecure  S307
-  Use of possibly insecure function; ...`, and its `fix:` names the line its noqa must stand on, ruff's `noqa_row`. In the files `test-import` judges (every `.py` under a Python project's `tests/`, outside
-  `fixtures/`)
-  S101, S105 to S107, S603 and S607 are exempt; S108 (a shared path breaks test isolation), S310 and every other code
-  stay red there, and `tests/fixtures/` and `src/` get no exemption. A finding is green only when the line at ruff's
-  `noqa_row` (the last line of a multi-line string or call) carries `# noqa: <CODE>[, <CODE>...] - <reason>` naming
-  its code; the reason is the text after ` - ` up to the next `#` or the end of the line, holds a letter and no comma
-  (Sonar's noqa grammar splits on commas, so a comma raises python:S7632 for every caller that runs Sonar). Every
-  other form is red: no reason, a blanket `# noqa`, another directive as the reason (`# type: ignore[x]  # noqa:
-  S607`, `# noqa: S607  # pragma: no cover`), `# noqa: S607: reason`, a wrong code, another line, a file-level `#
-  ruff: noqa`, and a second directive behind a reasoned one, bare or reasoned (`# noqa: S603 - why  # noqa: E501`),
-  since ruff reads only a line's first directive. ruff itself honours the reasoned form, so a caller's own ruff stays
-  quiet. A caller whose ruff selects none of a family (S or T20) lists exactly that family in `lint.external`, which
-  keeps its RUF100 from calling the gate's noqa unused; a caller whose ruff selects a family (for example `select =
-  ["ALL"]`) leaves it out, because its ruff honours each noqa itself and ignores a file-level `# ruff: noqa` for a
-  code listed in `external`. A file ruff cannot parse makes the `code` row `✗ not checked` with `ruff cannot parse
+  limit (SECURITY-3), and writes nothing into the checkout (SECURITY-4). That one run serves `python-print` too. With no
+  tracked `.py` file ruff is not started (SECURITY-5). A clean `code` row counts what ruff judged
+  ([area rows](output.md#area-rows)). Not judged: untracked files, a link, anything inside a gitlink, notebooks, `.pyi`
+  files and suffixless scripts (SECURITY-6). The repository's own ruff `select`, `ignore`, `per-file-ignores`,
+  `exclude`, `extend` and noqa have no effect (SECURITY-7). Each finding stands as a [row](output.md#rows) under the
+  `code` row, `! src/a.py:12  insecure  S307 Use of possibly insecure function; ...` (SECURITY-8), and its `fix:` names
+  the line its noqa must stand on, ruff's `noqa_row` (SECURITY-9). In the files `test-import` judges (every `.py` under
+  a Python project's `tests/`, outside `fixtures/`) S101, S105 to S107, S603 and S607 are exempt (SECURITY-10); S108 (a
+  shared path breaks test isolation), S310 and every other code stay red there (SECURITY-11), and `tests/fixtures/` and
+  `src/` get no exemption (SECURITY-12). A finding is green only when the line at ruff's `noqa_row` (the last line of a
+  multi-line string or call) carries `# noqa: <CODE>[, <CODE>...] - <reason>` naming its code (SECURITY-13); the reason
+  is the text after ` - ` up to the next `#` or the end of the line, holds a letter and no comma (SECURITY-14) (Sonar's
+  noqa grammar splits on commas, so a comma raises python:S7632 for every caller that runs Sonar). Every other form is
+  red: no reason, a blanket `# noqa`, another directive as the reason (`# type: ignore[x]  # noqa: S607`,
+  `# noqa: S607  # pragma: no cover`), `# noqa: S607: reason`, a wrong code, another line, a file-level `# ruff: noqa`
+  (SECURITY-15), and a second directive behind a reasoned one, bare or reasoned (`# noqa: S603 - why  # noqa: E501`),
+  since ruff reads only a line's first directive (SECURITY-16). ruff itself honours the reasoned form, so a caller's own
+  ruff stays quiet (SECURITY-17). A caller whose ruff selects none of a family (S or T20) lists exactly that family in
+  `lint.external`, which keeps its RUF100 from calling the gate's noqa unused; a caller whose ruff selects a family (for
+  example `select = ["ALL"]`) leaves it out, because its ruff honours each noqa itself and ignores a file-level
+  `# ruff: noqa` for a code listed in `external`.
+  A file ruff cannot parse makes the `code` row `✗ not checked` with `ruff cannot parse
   <path>` (exit 2); a tracked `.py` file the checkout does not hold (deleted, left out by a sparse checkout, or a link
   to nowhere), a file Python cannot decode, or reads as other text than ruff reads as UTF-8 (a PEP 263 cookie such as
   utf-7), a missing or mismatched ruff, ruff exiting other than 0 or 1, a `Failed to lint` warning, a report quality

@@ -21,7 +21,8 @@ findings of an area stand in run order (O14). A finding's lines from another too
 contract chain and guidance, actionlint's message) stand under its row behind the marker `| `, six spaces deep, before
 the run's `fix:` (ROW-5); a fix that asks for an entry ends with `:` and the entry's lines stand under it, two spaces
 deeper, whole and never shortened (ROW-6).
-A security finding's fix names the line its `# noqa` must stand on, and a code and ruff's message are the fact.
+A security finding's fix names the line its `# noqa` must stand on, and a code and ruff's message are the fact
+([rules](rules.md)).
 
 Areas run in the order `files`, `debt`, `imports`, `secrets`, `workflows`, `dependencies`, `code` (ROW-8). The first
 row of a run names the release that judges ([commands](commands.md#which-release-judges)).
