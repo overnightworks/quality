@@ -26,11 +26,11 @@ findings step alone, as `PULL_REQUEST_NUMBER` (SONAR-87).
 ### What the two steps print
 
 Both commands print rows on stdout and end with one closing line: `✓ clean · <time>` when the properties check passes
-(SONAR-100), `✓ off · nothing reaches SonarCloud · <time>`, `✓ clean · new 0 · legacy N · <time>`, `! red · …` or
-`✓ report only · …`. When they cannot judge (exit `2`) they print the `error:`/`next:` pair on stderr instead
-(SONAR-101). A refusal that knows its own step names it: a `quality/config.toml` it cannot read shows
-[its example to copy](output.md#refusals) and `push the fix; the gate judges the new commit` (SONAR-102); an empty
-`SONAR_TOKEN` the step to set the secret and pass it to `gate.yml`; an unwritable `GITHUB_OUTPUT`
+(SONAR-100), `✓ off · nothing reaches SonarCloud · <time>`, `✓ clean · new 0 · legacy N · <time>`,
+`! red · …` or `✓ report only · …`. When they cannot judge (exit `2`) they print the `error:`/`next:` pair on
+stderr instead (SONAR-101). A refusal that knows its own step names it: a `quality/config.toml` it cannot read shows
+[its example to copy](output.md#refusals), where the refusal has one, and `push the fix; the gate judges the new commit`
+(SONAR-102); an empty `SONAR_TOKEN` the step to set the secret and pass it to `gate.yml`; an unwritable `GITHUB_OUTPUT`
 `fix what the error names, then re-run this run's failed jobs` (SONAR-103); a changed tracked file the step to let the
 artifact add reports only (SONAR-104). Every other refusal falls back to its step's general step: `properties` the push
 step, `findings` the re-run step (SONAR-105). `-v` adds nothing: neither step runs a scanner (SONAR-106).
@@ -187,7 +187,7 @@ legacy = "fail"
 - A pull request whose base config says `legacy = "fail"` and whose head config says anything else is red in the verdict
   (the loosening `legacy fail → report`; an absent key counts as `report`), like a removed mandatory job
   ([the gate](gate.md#gateyml)).
-- `legacy = "fail"` beside `[gate] sonar = false` is a config error (exit `2`) (SONAR-109).
+- `legacy = "fail"` beside `[gate] sonar = false` is a config error, exit `2` (SONAR-109).
 
 On pull requests and default-branch runs `quality sonar findings` reads `api/project_branches/list` once before the
 counts (SONAR-43). A run on any other branch does not read it (SONAR-44).
