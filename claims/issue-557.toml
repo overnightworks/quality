@@ -1,0 +1,7 @@
+claim_id = "f8d7544332a64c45bc371201c303cb10"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "fe2f1f45c5dde7ccf2adfbb29c4233060bdebc06"
+branch = "claude/issue-557-d7-layout-mapping-ids"
+scope = ["docs/rules.md", "tests/test_layout_mapping.py"]
+opened_commit = "86b1c95adcf7b804513f0cfd3e984c3765ef0875"
