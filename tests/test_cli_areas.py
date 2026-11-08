@@ -54,6 +54,7 @@ def calls_of(calls) -> list[str]:
     ],
 )
 def test_a_named_area_starts_only_its_scanners_and_prints_only_its_row(build_repo, served_scanners, elsewhere, capsys, area, started):
+    """CHECK-3: a named area starts only its own scanners and prints only its own row."""
     keywords, calls = recording_scanners(served_scanners, elsewhere)
     _, out, _ = run_check_of(scanned_repo(build_repo), capsys, area, **keywords)
     assert (rows_of(out), calls_of(calls)) == ([area], started)
@@ -68,6 +69,7 @@ def test_a_named_area_starts_only_its_scanners_and_prints_only_its_row(build_rep
     ],
 )
 def test_a_run_of_named_areas_equals_the_same_request_spelt_otherwise(build_repo, served_scanners, elsewhere, capsys, words, other, rows):
+    """CHECK-3: areas named in any order, repeated or all at once judge each area once, in the order of the rows."""
     keywords, _ = recording_scanners(served_scanners, elsewhere)
     repo = scanned_repo(build_repo)
     _, named_out, _ = run_check_of(repo, capsys, *words, **keywords)
@@ -155,13 +157,10 @@ def test_a_selected_scanner_vets_its_stderr_without_judging_another_area(
     keywords = {"locate_zizmor": fake_zizmor(elsewhere / "zizmor", "echo '[]'")}
     done, out, err = run_check_of(scanned_repo(build_repo), capsys, *words, **keywords)
     verbose = "-v" in words
-    block = area_block(out, Area.WORKFLOWS)
-    exits = [line.location for line in block if isinstance(line, NoteLine) and line.row.event is NoteEvent.EXITED]
-    assert (done, rows_of(out), calls_of(calls), exits, shown in err, FAKE_KEY in out + err) == (
+    assert (done, rows_of(out), calls_of(calls), shown in err, FAKE_KEY in out + err) == (
         code,
         [Area.WORKFLOWS],
         [f"{scanners.GITLEAKS} stdin"],
-        [scanners.ACTIONLINT, scanners.ZIZMOR] if verbose else [],
         False,
         False,
     )

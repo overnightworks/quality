@@ -630,16 +630,16 @@ def test_properties_refuses_a_repository_without_properties(monkeypatch, capsys,
     assert (code, "sonar-project.properties" in err) == (2, True)
 
 
-def test_the_former_sonar_command_is_refused_as_a_usage_error(capsys):
-    """#228 rule 3: the old command name is not kept as an alias"""
-    former = "pre" + "flight"
+def test_a_word_naming_no_sonar_command_is_refused_as_a_usage_error(capsys):
+    """HELP-15: a word that names no sonar command is refused as a usage error, its help named."""
+    word = "pre" + "flight"
     commands = ", ".join(cli.build_parser().commands["sonar"].commands)
-    code = cli.main(["sonar", former])
+    code = cli.main(["sonar", word])
     printed = capsys.readouterr()
     assert (code, printed.out, printed.err) == (
         2,
         "",
-        f"error: no command {former}{SEPARATOR}commands: {commands}\nnext: quality sonar --help\n",
+        f"error: no command {word}{SEPARATOR}commands: {commands}\nnext: quality sonar --help\n",
     )
 
 

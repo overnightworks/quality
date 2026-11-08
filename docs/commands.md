@@ -13,18 +13,25 @@ from the tag comment of the pin (`@<commit sha> # v<tag>`), or why none is known
 a repository's own `gate.yml` counts only in quality's checkout, told by a git remote that names
 `overnightworks/quality` (HELP-7). Help goes to stdout with exit `0` (HELP-8), plain (HELP-9) and whole (HELP-10) in
 every stream. `-h` prints the same help as `--help` (HELP-11).
-A wrong invocation runs nothing, prints the `error:`/`next:` pair
-on stderr and exits `2`: `no command <word> · commands: …` for a first word that names no command, `no command ·
-commands: …` for none, `no area <word> · areas: …` for the first word `quality check` does not know as an area (an option may stand between areas), `no pull request <word> · a pull request reads OWNER/REPO#N` for a `quality merge` argument of another form (`no pull request · …` for none, `next:` naming `quality merge --help`), `unknown argument · <what is left over>` for what the command does not take, and otherwise the
-parser's own sentence; `--dry-run needs --fix · nothing checked` for `--dry-run` without `--fix` (`next:` names `quality check --fix --dry-run`); `--staged checks only secrets · nothing checked` for `--staged` with other areas or none (`next:` names `quality check secrets --staged`); `next:` otherwise names the help of the command that took the stray word, or of the parser
-that refused.
+A wrong invocation runs nothing, prints the `error:`/`next:` pair on stderr and exits `2` (HELP-12):
+`no command <word> · commands: …` for a first word that names no command (HELP-13), `no command · commands: …` for
+none (HELP-14), `quality sonar` refuses a word that names none of its commands, or none, the same way, with `next:`
+naming `quality sonar --help` (HELP-15), `no area <word> · areas: …` for the first word `quality check` does not know
+as an area (HELP-16) (an option may stand between areas) (HELP-17),
+`no pull request <word> · a pull request reads OWNER/REPO#N` for a `quality merge` argument of another form (HELP-18)
+(`no pull request · …` for none, `next:` naming `quality merge --help`) (HELP-19),
+`unknown argument · <what is left over>` for what the command does not take (HELP-20), and otherwise the parser's own
+sentence (HELP-21); `--dry-run needs --fix · nothing checked` for `--dry-run` without `--fix` (`next:` names
+`quality check --fix --dry-run`) (HELP-22); `--staged checks only secrets · nothing checked` for `--staged` with other
+areas or none (`next:` names `quality check secrets --staged`) (HELP-23); `next:` otherwise names the help of the
+command that took the stray word, or of the parser that refused (HELP-24).
 
 Ruled by the operator:
 
 - Seven areas, `files`, `debt`, `imports`, `secrets`, `workflows`, `dependencies` and `code`; the `code` line of `quality check --help`, `code  Python source: security findings and print calls`; and the `secrets` line `secrets in the committed history`.
 - The areas replace the rule names in the verdict; `quality check --help` says which rules an area holds. `code` holds `python-security` and `python-print`.
 
-A run that names areas judges and prints only those, in the order of [the rows](output.md#rows), each once.
+What a run that names areas judges and prints is in [rules](rules.md).
 
 ## Which release judges
 
@@ -65,7 +72,11 @@ ceiling lies on disk, in the index or in any commit `HEAD` reaches, and then jud
 never raises an entry and never adds one: what grew or is new stays a finding, and a raise is a hand edit with a declared
 loosening. A file git renamed into the index since the ceiling's last commit takes its entries with it (`docs/rules.md`). An entry whose path the index no longer tracks, whose Python function is gone or whose file is declared generated goes; one only missing from disk stands; a held pair the tree lost goes. A ceiling or `[clones]` table git
 holds and the tree lacks refuses with the restore step, and a shallow clone that cannot prove a first recording names
-`git fetch --unshallow`. It takes no `--staged` and needs `debt` among the named areas, or no area named; either refusal keeps a `--dry-run` in its `next:`. `quality check --fix --dry-run` makes, judges and renders the same ceiling, refuses where the fix refuses before its write, writes nothing, and exits `1` while the fix would change the file, `0` when not; a refusal only the write meets shows at the fix alone. Exit `0` clean, `1` findings, `2` could not fix. No workflow runs `--fix` or its dry run.
+`git fetch --unshallow`. It takes no `--staged` (HELP-25) and needs `debt` among the named areas (HELP-26), or no
+area named; either refusal keeps a `--dry-run` in its `next:` (HELP-27). `quality check --fix --dry-run` makes, judges
+and renders the same ceiling, refuses where the fix refuses before its write, writes nothing, and exits `1` while the
+fix would change the file, `0` when not; a refusal only the write meets shows at the fix alone. Exit `0` clean, `1`
+findings, `2` could not fix. No workflow runs `--fix` or its dry run (HELP-28).
 The rows and rules are in `docs/rules.md`, the rows' form in [output](output.md).
 
 Ruled by the operator:
@@ -79,7 +90,7 @@ Ruled by the operator:
 repository it runs in, compared with `HEAD`, with no path argument. It is meant for a pre-commit hook, which runs it in the
 work-tree top or below it. A relative `GIT_INDEX_FILE` is resolved against the working directory, as git does, so `git commit -a`,
 `git commit <path>` and a linked worktree scan the index git is committing. `--staged` takes exactly the area `secrets`;
-any other set of areas, or none, is `--staged checks only secrets · nothing checked` and exit `2`.
+any other set of areas, or none, is a [wrong invocation](#help-and-wrong-invocations).
 
 Ruled by the operator: `--staged` only with `secrets`: any other area with `--staged` is exit 2 with `next: quality check secrets --staged`.
 

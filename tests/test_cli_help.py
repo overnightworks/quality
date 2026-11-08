@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 import quality
-from quality import checkout, cli, ratchet, report, staged
+from quality import checkout, cli, ratchet, staged
 from quality.output import SEPARATOR
 from quality.rules import Area
 from tests.support.door import CHECK_WORD, DRY_RUN_WORDS, FIX_WORDS, MODULE_DOOR, STAGED_WORDS, door_environment
@@ -376,7 +376,13 @@ def test_a_closed_stdout_takes_no_help_and_exit_is_0(tmp_path):
         pytest.param(["sonar"], ("sonar",), "no command{sep}commands: {commands}", "quality sonar", id="no sonar command"),
         pytest.param(["sonar", "nonsense"], ("sonar",), "no command nonsense{sep}commands: {commands}", "quality sonar", id="unknown sonar command"),
         pytest.param(["check", "a", "b"], (), "no area a{sep}areas: {areas}", "quality check", id="the first of two words"),
-        pytest.param(["check", "."], (), "no area .{sep}areas: {areas}", "quality check", id="a path of the old form"),
+        pytest.param(
+            ["check", "."],
+            (),
+            "no area .{sep}areas: {areas}",
+            "quality check",
+            id="a path where an area goes",
+        ),
         pytest.param(["check", "src"], (), "no area src{sep}areas: {areas}", "quality check", id="a folder name"),
         pytest.param(["check", "-v", "."], (), "no area .{sep}areas: {areas}", "quality check", id="a path after the flag"),
         pytest.param(["check", "files", "docs"], (), "no area docs{sep}areas: {areas}", "quality check", id="a wrong area after a right one"),
@@ -386,11 +392,23 @@ def test_a_closed_stdout_takes_no_help_and_exit_is_0(tmp_path):
         pytest.param(["check", "--verbose"], (), "unknown argument{sep}--verbose", "quality check", id="the long form of the flag"),
         pytest.param(["-v", "check"], (), "unknown argument{sep}-v", "quality check", id="the flag before the command"),
         pytest.param(["verdict", "--nonsense"], (), "unknown argument{sep}--nonsense", "quality verdict", id="stray option"),
-        pytest.param(["verdict", "."], (), "unknown argument{sep}.", "quality verdict", id="a path of the old form"),
+        pytest.param(["verdict", "."], (), "unknown argument{sep}.", "quality verdict", id="a path to verdict"),
         pytest.param(["verdict", "--verbose"], (), "unknown argument{sep}--verbose", "quality verdict", id="the long form of the verdict flag"),
         pytest.param(["verdict", "--he"], (), "unknown argument{sep}--he", "quality verdict", id="an abbreviated help of the verdict"),
-        pytest.param(["scan-staged"], (), "no command scan-staged{sep}commands: {commands}", "quality", id="the word that left"),
-        pytest.param(["scan-staged", "--engines", "x"], (), "no command scan-staged{sep}commands: {commands}", "quality", id="the word that left, with its option"),
+        pytest.param(
+            ["scan-staged"],
+            (),
+            "no command scan-staged{sep}commands: {commands}",
+            "quality",
+            id="the word scan-staged",
+        ),
+        pytest.param(
+            ["scan-staged", "--engines", "x"],
+            (),
+            "no command scan-staged{sep}commands: {commands}",
+            "quality",
+            id="the word scan-staged with an option",
+        ),
         pytest.param(["check", "--stag"], (), "unknown argument{sep}--stag", "quality check", id="check --stag"),
         pytest.param(["check", "secrets", "--staged", "--nonsense"], (), "unknown argument{sep}--nonsense", "quality check", id="a stray option beside the staged flag"),
         pytest.param(["check", "docs", "--staged"], (), "no area docs{sep}areas: {areas}", "quality check", id="a wrong area beside the staged flag"),
@@ -399,12 +417,30 @@ def test_a_closed_stdout_takes_no_help_and_exit_is_0(tmp_path):
         pytest.param(["sonar", "findings", "--he"], (), "unknown argument{sep}--he", "quality sonar findings", id="an abbreviated help of sonar findings"),
         pytest.param(["sonar", "findings", "x"], (), "unknown argument{sep}x", "quality sonar findings", id="a stray argument of sonar findings"),
         pytest.param(["--nonsense", "report"], (), "unknown argument{sep}--nonsense", "quality report", id="stray option before a command"),
-        pytest.param(["scoreboard"], (), "no command scoreboard{sep}commands: {commands}", "quality", id="the report's word that left"),
-        pytest.param(["scoreboard", "."], (), "no command scoreboard{sep}commands: {commands}", "quality", id="the report's old path"),
+        pytest.param(
+            ["scoreboard"],
+            (),
+            "no command scoreboard{sep}commands: {commands}",
+            "quality",
+            id="the word scoreboard",
+        ),
+        pytest.param(
+            ["scoreboard", "."],
+            (),
+            "no command scoreboard{sep}commands: {commands}",
+            "quality",
+            id="the word scoreboard with a path",
+        ),
         pytest.param(["report", "--verbose"], (), "unknown argument{sep}--verbose", "quality report", id="a stray option of the report"),
         pytest.param(["report", "--he"], (), "unknown argument{sep}--he", "quality report", id="an abbreviated help of the report"),
         pytest.param(["merge"], (), "no pull request{sep}a pull request reads OWNER/REPO#N", "quality merge", id="no pull request"),
-        pytest.param(["merge", "acme/widgets", "7"], (), "no pull request acme/widgets{sep}a pull request reads OWNER/REPO#N", "quality merge", id="the old two words"),
+        pytest.param(
+            ["merge", "acme/widgets", "7"],
+            (),
+            "no pull request acme/widgets{sep}a pull request reads OWNER/REPO#N",
+            "quality merge",
+            id="owner and number as two words",
+        ),
         pytest.param(["merge", "acme/widgets"], (), "no pull request acme/widgets{sep}a pull request reads OWNER/REPO#N", "quality merge", id="no number"),
         pytest.param(["merge", "acme/widgets#0"], (), "no pull request acme/widgets#0{sep}a pull request reads OWNER/REPO#N", "quality merge", id="number 0"),
         pytest.param(["merge", "acme/widgets#7x"], (), "no pull request acme/widgets#7x{sep}a pull request reads OWNER/REPO#N", "quality merge", id="letters after the number"),
@@ -415,10 +451,18 @@ def test_a_closed_stdout_takes_no_help_and_exit_is_0(tmp_path):
         pytest.param(["merge", "acme/widgets#7", "acme/widgets#8"], (), "unknown argument{sep}acme/widgets#8", "quality merge", id="two pull requests"),
         pytest.param(["merge", "acme/widgets#7", "--dry"], (), "unknown argument{sep}--dry", "quality merge", id="an abbreviated dry run"),
         pytest.param(["merge", "acme/widgets#7", "--verbose"], (), "unknown argument{sep}--verbose", "quality merge", id="the long form of the merge flag"),
-        pytest.param(["emergency-merge", "acme/widgets", "7"], (), "no command emergency-merge{sep}commands: {commands}", "quality", id="the command word that left"),
+        pytest.param(
+            ["emergency-merge", "acme/widgets", "7"],
+            (),
+            "no command emergency-merge{sep}commands: {commands}",
+            "quality",
+            id="the word emergency-merge",
+        ),
     ],
 )
 def test_a_wrong_invocation_is_the_pair_on_stderr_and_exit_2(capsys, argv, group, fact, help_owner):
+    """HELP-12, HELP-13, HELP-14, HELP-15, HELP-16, HELP-18, HELP-19, HELP-20, HELP-24: each wrong invocation is the
+    pair in its own words on stderr with exit 2, and nothing is printed on stdout."""
     wording = fact.format(sep=SEPARATOR, commands=commands_of(*group), areas=", ".join(Area))
     code = cli.main(argv, environment={})
     printed = capsys.readouterr()
@@ -434,7 +478,8 @@ def test_a_wrong_invocation_is_the_pair_on_stderr_and_exit_2(capsys, argv, group
     ],
 )
 def test_what_only_the_parser_can_word_stands_in_the_pair(capsys, argv, help_owner):
-    """The sentence after `error:` is the standard library's and changes with Python, so only its place is pinned."""
+    """HELP-12, HELP-21, HELP-24: the sentence after `error:` is the standard library's and changes with Python, so only
+    its place is pinned."""
     code = cli.main(argv, environment={})
     printed = capsys.readouterr()
     lines = printed.err.splitlines()
@@ -442,10 +487,11 @@ def test_what_only_the_parser_can_word_stands_in_the_pair(capsys, argv, help_own
 
 
 def test_a_wrong_word_stands_escaped_in_the_pair(capsys):
+    """MASK-6, MASK-7: a wrong first word prints escaped in the pair, ESC and a format character included."""
     word = f"{chr(0x1B)}[31m{chr(0x202E)}letters"
     code = cli.main([word], environment={})
     err = capsys.readouterr().err
-    expected = f"error: no command {report.printable(word)}{SEPARATOR}commands: {commands_of()}\nnext: quality --help\n"
+    expected = f"error: no command \\x1b[31m\\u202eletters{SEPARATOR}commands: {commands_of()}\nnext: quality --help\n"
     assert (code, err, "\x1b" in err) == (2, expected, False)
 
 
@@ -542,7 +588,8 @@ def test_a_closed_stdout_takes_no_version_line_and_exit_is_0(tmp_path):
     assert (done.returncode, done.stderr) == (0, "")
 
 
-def test_the_unknown_area_pair_stands_as_the_picture_draws_it(capsys):
+def test_an_unknown_area_pair_names_the_areas(capsys):
+    """HELP-16, HELP-24: an unknown area is the pair that names the areas and the help of quality check."""
     code = cli.main(["check", "docs"], environment={})
     printed = capsys.readouterr()
     assert (code, printed.out, printed.err) == (
@@ -553,6 +600,7 @@ def test_the_unknown_area_pair_stands_as_the_picture_draws_it(capsys):
 
 
 def test_a_wrong_area_stands_escaped_in_the_pair(capsys):
+    """MASK-6, MASK-7: a wrong area prints escaped in the pair, ESC and a format character included."""
     word = f"{chr(0x1B)}[31m{chr(0x202E)}letters"
     cli.main(["check", word], environment={})
     err = capsys.readouterr().err
@@ -569,11 +617,13 @@ def test_a_wrong_area_stands_escaped_in_the_pair(capsys):
     ],
 )
 def test_options_may_stand_between_the_named_areas(words):
+    """HELP-17: an option stands before, between or after the named areas, or before --."""
     arguments = cli.read_invocation(["check", *words])
     assert (arguments.areas, arguments.verbose) == ([Area.DEBT, Area.SECRETS], True)
 
 
 def test_no_area_named_leaves_the_invocation_empty():
+    """CHECK-3: no area named leaves the invocation's areas empty."""
     assert cli.read_invocation(["check"]).areas == []
 
 
@@ -588,6 +638,7 @@ def test_no_area_named_leaves_the_invocation_empty():
     ],
 )
 def test_staged_outside_secrets_is_the_pair_and_runs_nothing(capsys, words):
+    """HELP-12, HELP-23: --staged beside any area but secrets, or beside none, is the pair, and nothing runs."""
     code = cli.main(["check", *words], environment={})
     printed = capsys.readouterr()
     assert (code, printed.out, printed.err) == (2, "", "error: --staged checks only secrets · nothing checked\nnext: quality check secrets --staged\n")
@@ -606,6 +657,8 @@ def test_staged_outside_secrets_is_the_pair_and_runs_nothing(capsys, words):
     ],
 )
 def test_a_fix_beside_what_it_cannot_change_is_the_pair_and_runs_nothing(capsys, words, fact, step):
+    """HELP-12, HELP-25, HELP-26, HELP-27: --fix beside --staged or an area but debt is the pair that names the run to
+    make instead, and a dry run stays a dry run in it."""
     code = cli.main(["check", *words], environment={})
     printed = capsys.readouterr()
     assert (code, printed.out, printed.err) == (2, "", f"error: {fact} · nothing checked\nnext: {step}\n")
@@ -614,10 +667,15 @@ def test_a_fix_beside_what_it_cannot_change_is_the_pair_and_runs_nothing(capsys,
 @pytest.mark.parametrize(
     ("words", "pair"),
     [
-        pytest.param(["baseline", "write", "."], "error: no command baseline · commands: {commands}\nnext: quality --help\n", id="the word that left"),
+        pytest.param(
+            ["baseline", "write", "."],
+            "error: no command baseline · commands: {commands}\nnext: quality --help\n",
+            id="the word baseline",
+        ),
     ],
 )
 def test_the_words_that_are_not_the_fix_are_refused(capsys, words, pair):
+    """HELP-13: baseline is no command, so its words are refused as any unknown command."""
     code = cli.main(words, environment={})
     printed = capsys.readouterr()
     assert (code, printed.out, printed.err) == (2, "", pair.format(commands=commands_of()))
@@ -633,18 +691,22 @@ def test_the_words_that_are_not_the_fix_are_refused(capsys, words, pair):
     ],
 )
 def test_a_dry_run_without_the_fix_is_the_pair_and_runs_nothing(capsys, words):
+    """HELP-12, HELP-22: --dry-run without --fix is the pair, and nothing runs."""
     code = cli.main(["check", *words], environment={})
     printed = capsys.readouterr()
     assert (code, printed.out, printed.err) == (2, "", "error: --dry-run needs --fix · nothing checked\nnext: quality check --fix --dry-run\n")
 
 
 def test_the_dry_run_words_are_the_commands_words():
+    """HELP-22: the dry run's command in the pair is the command's own words."""
     assert cli.DRY_RUN_COMMAND.replace(CHECK_WORD, " ".join(DRY_RUN_WORDS[:2])) == f"quality {' '.join(DRY_RUN_WORDS)}"
 
 
 def test_the_fix_words_are_the_commands_words():
+    """HELP-25: the fix's command in the pair is the command's own words."""
     assert ratchet.FIX_COMMAND.replace(CHECK_WORD, " ".join(FIX_WORDS[:2])) == f"quality {' '.join(FIX_WORDS)}"
 
 
 def test_the_staged_words_are_the_commands_words():
+    """HELP-23: the staged scan's command in the pair is the command's own words."""
     assert staged.COMMAND == f"quality {' '.join(STAGED_WORDS)}"
