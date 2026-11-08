@@ -1,0 +1,7 @@
+claim_id = "c988fb92ac39411d8b6d390217e3f528"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "96e48ac1d0d10a12a2b924a4995cca72cbbae55b"
+branch = "claude/issue-605-gate-ruleset-definition"
+scope = ["docs/gate.md"]
+opened_commit = "a151fe7132412525c4eed4e9ba12ce79e59d6d58"
