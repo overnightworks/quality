@@ -139,7 +139,7 @@ def test_v_adds_nothing_to_the_door(words, typed, capsys):
     ids=["not confirmed", "not merged", "not judged", "a refused landing line", "a config refused at the merge commit"],
 )
 def test_a_next_step_that_names_the_door_again_names_the_pull_request_asked_for(gh_kwargs, typed, pattern, capsys):
-    """MERGE-10, MERGE-20: a next step that names the door again names the pull request asked for."""
+    """MERGE-10, MERGE-20, MERGE-68: a next step that names the door again names the pull request asked for."""
     gh = FakeGh(**{**declared_loosening(), **gh_kwargs})
     _, _, err, _ = run(gh, capsys, repo="acme/gadgets", pull_request="12", typed=typed)
     (step,) = [line for line in err.splitlines() if line.startswith("next: ")]

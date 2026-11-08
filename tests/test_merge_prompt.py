@@ -67,7 +67,7 @@ def test_anything_but_yes_changes_nothing_and_says_so(typed, pair, capsys):
     ids=["not confirmed", "a refused landing line"],
 )
 def test_the_prompt_and_the_pair_name_the_pull_request_asked_for(repository, gh_kwargs, typed, start, pair, capsys):
-    """MERGE-6, MERGE-10: the question and the pair name the pull request asked for."""
+    """MERGE-6, MERGE-10, MERGE-68: the question and the pair name the pull request asked for."""
     err = start + pair(12, repository)
     gh = FakeGh(checks=SONAR_GREEN, base_config=TWO_JOBS, head_config=ONE_JOB + declaring(B_REMOVED), **gh_kwargs)
     code, _ = drive(gh, repo=repository, pull_request="12", typed=typed)

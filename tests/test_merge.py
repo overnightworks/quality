@@ -124,7 +124,7 @@ def refusing_anonymous_read(status):
 
 @pytest.mark.parametrize("unset", [True, False], ids=["unset", "empty"])
 def test_an_empty_token_reads_sonar_anonymously(unset, monkeypatch):
-    """#73 rule 1: no token means the transport is asked for no Authorization at all."""
+    """MERGE-79: an unset or empty token means the transport is asked for no Authorization at all."""
     if unset:
         monkeypatch.delenv("SONAR_TOKEN", raising=False)
     else:
@@ -136,7 +136,7 @@ def test_an_empty_token_reads_sonar_anonymously(unset, monkeypatch):
 
 
 def test_a_set_token_still_sends_basic_authorization(monkeypatch, capsys):
-    """#73 rule 5: a set token is sent as Basic auth and never printed."""
+    """MERGE-77, MERGE-78: a set token is sent as Basic authorization and never shown in a row."""
     monkeypatch.setenv("SONAR_TOKEN", "s3cret-token")
     transport = recording(sonar())
     assert drive(FakeGh(), transport)[0] == 0
@@ -148,7 +148,7 @@ def test_a_set_token_still_sends_basic_authorization(monkeypatch, capsys):
 
 @pytest.mark.parametrize("status", [401, 403, 404])
 def test_a_refused_anonymous_read_is_cannot_judge_naming_the_token(status, monkeypatch, capsys):
-    """#73 rule 2: an anonymous refusal names the missing SONAR_TOKEN and changes nothing."""
+    """MERGE-80: an anonymous refusal names the missing SONAR_TOKEN and changes nothing."""
     monkeypatch.setenv("SONAR_TOKEN", "")
     gh = FakeGh()
     assert drive(gh, refusing_anonymous_read(status))[0] == 2
@@ -158,7 +158,8 @@ def test_a_refused_anonymous_read_is_cannot_judge_naming_the_token(status, monke
 
 
 def test_the_token_never_appears_when_sonar_refuses_it(monkeypatch, capsys):
-    """#73 rule 2, rule 3: a rejected token is said so, and a refused credentialed read does not echo the token or its base64 form."""
+    """MERGE-78, MERGE-81: a rejected token is said so, and a refused read with a token does not echo the token or its
+    base64 form."""
     monkeypatch.setenv("SONAR_TOKEN", "s3cret-token")
 
     def rejecting(url, authorization):
@@ -248,8 +249,8 @@ def test_shows_repository_head_and_legacy_count_before_asking(capsys):
     ],
 )
 def test_refuses_unless_the_door_is_the_only_way(gh_kwargs, sonar_kwargs, message, capsys):
-    """MERGE-14, MERGE-15, MERGE-56, MERGE-59, MERGE-60, MERGE-61, MERGE-62: each refusal of the door names its reason,
-    changes nothing and asks no question."""
+    """MERGE-14, MERGE-15, MERGE-56, MERGE-59, MERGE-60, MERGE-61, MERGE-62, MERGE-72, MERGE-73, MERGE-74, MERGE-75,
+    MERGE-76: each refusal of the door names its reason, changes nothing and asks no question."""
     gh = FakeGh(**gh_kwargs)
     code, answers = drive(gh, sonar(**sonar_kwargs))
     assert code == 1
@@ -259,7 +260,7 @@ def test_refuses_unless_the_door_is_the_only_way(gh_kwargs, sonar_kwargs, messag
 
 
 def test_cannot_judge_when_sonar_is_unreachable_under_legacy_fail(capsys):
-    """#37 rule 2."""
+    """MERGE-16: a SonarCloud that cannot be reached under legacy fail is not judged: exit 2, nothing changed."""
     gh = FakeGh()
     code, _ = drive(gh, sonar(unreachable=True))
     assert code == 2
@@ -278,7 +279,7 @@ def test_cannot_judge_without_the_merge_commit_the_jobs_ran_on(capsys):
 
 
 def test_names_the_finding_a_pull_request_adds(capsys):
-    """#37 rule 2: a pull request that adds a finding is refused, naming it."""
+    """MERGE-75: a pull request that adds a finding is refused, naming it."""
     drive(FakeGh(), sonar(new=1))
     assert "a.py:3" in capsys.readouterr().out
 
@@ -397,8 +398,8 @@ def test_the_door_names_each_of_79_allowances_within_one_comment(capsys):
 
 
 def test_legacy_findings_and_a_declared_loosening_merge_in_one_run(capsys):
-    """#103 rule 4 (E8, ruled 21.10.2026), cell 21: a red Sonar on legacy findings next to a declared loosening merges
-    under every legacy condition, showing both."""
+    """MERGE-48, MERGE-49, MERGE-71: a red Sonar on legacy findings next to a declared loosening merges under every
+    legacy condition, showing both, and the log comment names the legacy count and the declaration."""
     gh = FakeGh(base_config=GATE_CONFIG.replace('["checks"]', '["checks", "B"]'), head_config=GATE_CONFIG + declaring(B_REMOVED))
     shown = []
     assert drive(gh, when_asked=lambda: shown.append(capsys.readouterr()))[0] == 0
@@ -411,7 +412,7 @@ def test_legacy_findings_and_a_declared_loosening_merge_in_one_run(capsys):
 
 
 def test_a_red_sonar_run_next_to_a_green_one_takes_the_legacy_path(capsys):
-    """#103 rule 4, cell 28: Sonar is green only when every run is green, so one red run is judged for legacy findings."""
+    """MERGE-62: Sonar is green only when every run is green, so one red run is judged for legacy findings."""
     assert drive(FakeGh(extra_runs=[("quality / sonar", "success")]))[0] == 0
     assert legacy_row() in capsys.readouterr().out
 
