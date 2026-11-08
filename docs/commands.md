@@ -300,15 +300,22 @@ Ruled by the operator:
   `next:` naming the command again (exit `1`) (MERGE-10); Ctrl-C at the question ends the run interrupted
   (exit `130`) (MERGE-11); nothing has changed in either case (MERGE-12). With stderr closed the question and the
   pairs print nowhere; nothing moves to stdout (MERGE-13). A refusal is its `!` row and the `error:`/`next:` pair on
-  stderr (exit `1`), each blocking line of the verdict whole below the `loosenings` row; a step that cannot be judged
-  is its `✗` row and the pair (exit `2`); a `quality/config.toml` it cannot read at the base or at the merge commit is
-  the `✗ loosenings` row with the config's fact, and under `next:` the example to copy where the fact has one, then
-  the step for that commit: `fix it on <base branch> first` for the base, which is read first, or
-  `push the fix to the pull request's branch, then run quality merge <owner/repo>#<pr> again` for the merge commit; no
-  terminal on stdin is the pair alone (exit `1`); a name not of the form `<owner>/<repo>#<pr>` is a wrong invocation
-  (exit `2`). Every line it prints is escaped as the other doors' lines are, so a `reason` cannot hide anything before
-  `yes` or forge a line.
-- **Dry run:** `--dry-run` reads and shows every row the door shows, refuses where it refuses, and in place of the question ends with `~ dry run · would switch quality_gate off, merge #<pr>, switch it on · nothing changed` on stdout (exit `0`); it reads no answer and sends no request that changes anything (no `gh api -X`, no `gh pr merge`), and it needs a terminal on stdin like the door. `-v` is taken and adds nothing: the door runs no scanner.
+  stderr (exit `1`) (MERGE-14), each blocking line of the verdict [whole](output.md#length) below the `loosenings`
+  row (MERGE-15); a step that cannot be judged is its `✗` row and the pair (exit `2`) (MERGE-16); a
+  `quality/config.toml` it cannot read at the base or at the merge commit is the `✗ loosenings` row with the config's
+  fact, and under `next:` [the example to copy](output.md#refusals) where the fact has one (MERGE-17), then the step
+  for that commit: `fix it on <base branch> first` for the base (MERGE-18), which is read first (MERGE-19), or
+  `push the fix to the pull request's branch, then run quality merge <owner/repo>#<pr> again` for the merge commit
+  (MERGE-20); no terminal on stdin is the pair alone (exit `1`) (MERGE-21); a name not of the form
+  `<owner>/<repo>#<pr>` is [a wrong invocation](#help-and-wrong-invocations) (exit `2`). Every line it prints is
+  escaped as [the other doors' lines are](output.md#masking), so a `reason` cannot hide anything before `yes` or forge
+  a line (MERGE-22).
+- **Dry run:** `--dry-run` reads and shows every row the door shows (MERGE-23), refuses where it refuses (MERGE-24),
+  and in place of the question ends with
+  `~ dry run · would switch quality_gate off, merge #<pr>, switch it on · nothing changed` on stdout (exit `0`)
+  (MERGE-25); it reads no answer (MERGE-26) and sends no request that changes anything (no `gh api -X`, no
+  `gh pr merge`) (MERGE-27), and it needs a terminal on stdin like the door. `-v` is taken and adds nothing (MERGE-28):
+  the door runs no scanner.
 - **Off, merge, on:** it sets the repository's `quality_gate` property to `false` (this takes the fleet's ruleset off it),
   runs `gh pr merge <pr> --merge --match-head-commit <sha> --body-file -`, the message on its stdin (`--squash` where the repository settings or a rule on the
   pull request's base branch exclude a merge commit but allow a squash; when neither is allowed, or the settings or rules
