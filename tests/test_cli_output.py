@@ -342,7 +342,8 @@ def test_a_fix_refusal_for_a_file_that_is_not_utf8_prints_its_surrogate_escaped(
 
 
 def test_ctrl_c_in_the_door_ends_the_run_as_interrupted_through_the_injected_sender(capsys):
-    """#228 rule 2: an interrupt ends the run with 130 and prints nothing."""
+    """CLOSING-31, CLOSING-32: an interrupt ends the run by SIGINT sent to its own process, with exit 130 where that
+    signal does not end it, and prints nothing."""
     sent = []
 
     def interrupted_door() -> int:
@@ -363,7 +364,8 @@ def test_ctrl_c_in_the_door_ends_the_run_as_interrupted_through_the_injected_sen
 @pytest.mark.integration
 @pytest.mark.parametrize("under_shell", [True, False], ids=["under a shell", "direct"])
 def test_ctrl_c_during_a_scan_ends_the_run_as_interrupted_without_a_traceback(clean_repo, served_scanners, tmp_path, under_shell):
-    """#228 rule 2: a shell reads 130 (the process dies by SIGINT), the scanner is gone and the scratch directory removed."""
+    """CLOSING-31, CLOSING-32: an interrupt during a scan dies by SIGINT, which a shell reads as 130, prints no
+    traceback, leaves no scanner running and removes the scratch directory."""
     scanner_pid = tmp_path / "scanner.pid"
     scratch_parent = tmp_path / "scratch"
     scratch_parent.mkdir()
@@ -436,8 +438,8 @@ def test_a_clean_run_has_seven_clean_rows_in_area_order_and_the_verdict(build_re
 
 
 def test_a_run_without_a_baseline_notes_the_debt_as_not_recorded_and_says_it_is_not_enforced(build_repo, capsys):
-    """O21, CLOSING-8: with no ceiling file the debt row counts the entries over the thresholds and ends in the mode
-    measured only, and the verdict says `debt measured, not enforced`."""
+    """O21, CLOSING-8, CLOSING-30: with no ceiling file the debt row counts the entries over the thresholds and ends in
+    the mode measured only, the verdict says `debt measured, not enforced` and the exit is 0."""
     repo = build_repo({**CLEAN_FILES, **KEPT_CONTRACT, "src/big.py": "x = 1\n" * 800})
     code, out, err = frame_run(capsys, repo)
     fact = area_fact("\n".join(out), Area.DEBT)
@@ -462,8 +464,8 @@ def test_a_baseline_without_clones_is_partly_measured_only(build_repo, capsys):
 
 
 def test_findings_in_two_areas_follow_their_rows_and_end_in_the_counted_verdict(build_repo, capsys):
-    """ROW-2, CLOSING-6, CLOSING-11: each area's findings stand under its row, the subject `path:line` right after the
-    glyph, and the findings verdict is followed by no `next:`."""
+    """ROW-2, ROW-10, CLOSING-6, CLOSING-11: each area's findings stand under its row, which counts them, the subject
+    `path:line` right after the glyph, and the findings verdict is followed by no `next:`."""
     code, out, err = frame_run(capsys, build_repo({**CLONES_BASELINE, **KEPT_CONTRACT, **PRINTING, ".env": "A=1\n"}))
     files_row, code_row = out.index(header(Area.FILES, "!", "2 findings")), out.index(header(Area.CODE, "!", "1 finding"))
     assert (code, err) == (1, [])
@@ -524,7 +526,8 @@ def test_an_area_that_cannot_check_ends_the_run_with_the_pair_and_no_verdict(bui
     repo = build_repo({**CLONES_BASELINE, **PRINTING})
     code, out, err = frame_run(capsys, repo)
     unchecked = [line for line in out if line.startswith("  ✗ secrets  ")]
-    assert (code, len(unchecked), [line for line in out if "areas clean" in line or " · 7 areas" in line]) == (2, 1, [])
+    verdicts = [line for line in out if line.startswith((Glyph.CLEAN, Glyph.NEEDS_YOU))]
+    assert (code, len(unchecked), verdicts) == (2, 1, [])
     assert unchecked[0].endswith(f"not checked    mise could not locate {scanners.GITLEAKS} {scanners.pinned_tool(scanners.GITLEAKS).version}")
     assert header(Area.CODE, "!", "1 finding") in out
     assert [location for location, _ in area_finding_rows("\n".join(out), Area.CODE)] == ["src/a.py:1"]
@@ -557,7 +560,8 @@ def test_two_distinct_reasons_in_one_area_stand_as_sub_lines_in_run_order(build_
 
 
 def test_one_reason_refusing_rules_in_several_areas_stands_once_in_each(build_repo, capsys):
-    """REFUSAL-1, REFUSAL-4: a reason that refuses several rules of an area stands once, in each area it refuses."""
+    """REFUSAL-1, REFUSAL-4, CLOSING-16: a reason that refuses several rules of an area stands once, in each area it
+    refuses, and the error line has no finding count where none stands."""
     unknown_table = {"quality/config.toml": "[bogus]\nx = 1\n"}
     code, out, err = frame_run(capsys, build_repo({**CLEAN_FILES, **unknown_table}))
     unchecked = [line for line in out if re.match(r"  ✗ ", line)]
@@ -569,6 +573,8 @@ def test_one_reason_refusing_rules_in_several_areas_stands_once_in_each(build_re
 
 @pytest.mark.integration
 def test_a_folder_outside_any_repository_prints_only_the_location_pair(tmp_path, capsys, own_home):
+    """CLOSING-17, CLOSING-18, CLOSING-19, CLOSING-21: a folder outside any repository prints only the location pair and
+    exits 2."""
     code, out, err = frame_run(capsys, tmp_path, judging=pin.judge_here)
     assert (code, out, err) == (2, [], [f"error: not inside a git work tree · {tmp_path}", "next: run quality check inside a repository"])
 
@@ -584,6 +590,7 @@ def test_a_folder_outside_any_repository_prints_only_the_location_pair(tmp_path,
     ],
 )
 def test_the_folder_is_spoken_with_the_home_folder_as_a_tilde(own_home, monkeypatch, capsys, home_spelling, folder_of, tail_of):
+    """CLOSING-18, CLOSING-25: the folder is spoken with the home folder as `~`, and as its absolute path outside it."""
     folder = folder_of(own_home)
     folder.mkdir(exist_ok=True)
     monkeypatch.setenv("HOME", home_spelling.format(home=own_home))
@@ -597,6 +604,8 @@ def unknown_user(uid: int) -> NoReturn:
 
 @pytest.mark.integration
 def test_an_unknown_home_folder_speaks_the_absolute_folder_and_never_a_traceback(tmp_path, monkeypatch, capsys):
+    """CLOSING-25, CLOSING-26: where no home folder is known the folder stands as its absolute path, and no traceback
+    follows."""
     monkeypatch.delenv("HOME", raising=False)
     monkeypatch.setattr("pwd.getpwuid", unknown_user)
     code, out, err = frame_run(capsys, tmp_path, judging=pin.judge_here)
@@ -604,6 +613,7 @@ def test_an_unknown_home_folder_speaks_the_absolute_folder_and_never_a_traceback
 
 
 def test_a_bare_repository_and_the_inside_of_git_are_outside_a_work_tree(tmp_path, build_repo, capsys, own_home):
+    """CLOSING-21: a bare repository and the inside of `.git` are outside a work tree."""
     bare = tmp_path / "bare.git"
     subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
     inside = build_repo(CLEAN_FILES) / ".git"
@@ -614,7 +624,8 @@ def test_a_bare_repository_and_the_inside_of_git_are_outside_a_work_tree(tmp_pat
 
 @pytest.mark.integration
 def test_a_folder_outside_any_repository_is_outside_in_every_locale(tmp_path, fake_git, monkeypatch, capsys, own_home):
-    """A git that speaks German unless it is asked in the C locale, so the test needs no installed catalogue."""
+    """CLOSING-20: git is asked in the C locale, whatever the machine speaks: the test's git words its refusal in German
+    unless it is asked there, so the test needs no installed catalogue."""
     fake_git(
         'if [ "$LC_ALL" = C ]; then echo "fatal: not a git repository (or any of the parent directories): .git" >&2; '
         'else echo "fatal: Kein Git-Repository (oder irgendein Elternverzeichnis): .git" >&2; fi; exit 128'
@@ -625,6 +636,8 @@ def test_a_folder_outside_any_repository_is_outside_in_every_locale(tmp_path, fa
 
 
 def test_a_repository_git_refuses_gets_the_git_step(build_repo, monkeypatch, capsys):
+    """CLOSING-17, CLOSING-22, CLOSING-23: a repository git refuses is the pair of its own, not the work-tree pair, with
+    a `git -C .` step on `next:`."""
     repo = build_repo(CLEAN_FILES)
     monkeypatch.setenv("GIT_TEST_ASSUME_DIFFERENT_OWNER", "1")
     code, out, err = frame_run(capsys, repo, judging=pin.judge_here)
@@ -706,6 +719,7 @@ def test_the_real_door_paints_the_files_block_only_at_a_terminal_and_prints_the_
 
 
 def test_a_refusal_git_did_not_run_for_gets_the_general_instruction(build_repo, tmp_path, monkeypatch, capsys):
+    """CLOSING-17, CLOSING-24: where git did not run the pair ends in the general instruction."""
     repo = build_repo(CLEAN_FILES)
     nowhere = tmp_path / "empty-bin"
     nowhere.mkdir()

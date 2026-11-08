@@ -212,6 +212,7 @@ def test_under_v_a_named_area_shows_only_its_scanners(build_repo, served_scanner
 
 @pytest.mark.integration
 def test_a_named_area_outside_a_repository_is_the_start_failure(elsewhere, capsys):
+    """CLOSING-17: a named area outside a repository is the same start failure as the whole run's."""
     named = run_check_of(elsewhere, capsys, "secrets", judging=pin.judge_here)
     whole = run_check_of(elsewhere, capsys, judging=pin.judge_here)
     assert (named[:2], named[2] == whole[2], "not inside a git work tree" in named[2]) == ((2, ""), True, True)

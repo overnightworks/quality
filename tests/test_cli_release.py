@@ -96,7 +96,9 @@ def test_check_names_the_release_that_judges_first_or_refuses_with_its_pair(buil
 
 
 @pytest.mark.integration
-def test_outside_a_work_tree_the_check_prints_only_case_3_s_pair(elsewhere, capsys):
+def test_outside_a_work_tree_the_check_prints_only_the_location_pair(elsewhere, capsys):
+    """CLOSING-17, CLOSING-18, CLOSING-19: outside a work tree the check prints only the location pair, with no release
+    row."""
     code = door_in(elsewhere, "check", "files", judging=running("0.10.0", pinned_commit()), clock=lambda: 0.0)
     printed = capsys.readouterr()
     assert (code, printed.out, printed.err.startswith("error: not inside a git work tree · ")) == (2, "", True)

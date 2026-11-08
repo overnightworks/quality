@@ -136,7 +136,8 @@ lock; a real lock (a token without admin rights) belongs to the machine's setup,
 test is marked `scanner`. Workflow tests sit in `tests/workflows/`. CI runs the whole suite with coverage and the gate on
 quality itself.
 
-**Errors.** The exit contract is 0 clean, 1 findings, 2 cannot judge, 130 interrupted. Cannot judge is never clean, and a rule that cannot judge refuses only itself.
+**Errors.** The [exit contract](output.md#exit-codes) is 0 clean, 1 findings, 2 cannot judge, 130 interrupted.
+Cannot judge is never clean, and a rule that cannot judge refuses only itself.
 
 ## 6. Constraints and reasons
 

@@ -65,13 +65,14 @@ def non_utf8_filename_repo(build_repo, tmp_path):
         "non-utf8-filename",
         "not-a-git-repository",
         "tracked-env-file",
-        "cell 9 and #86 cell 7 non-utf8-env-filename-rendered-safely",
-        "#76 cell 5 compose deleted from disk is gone",
+        "non-utf8-env-filename-rendered-safely",
+        "compose-deleted-from-disk-is-gone",
         "malformed-compose-yaml",
     ],
 )
 def test_exit_code_tells_clean_from_cannot_judge(build_repo, tmp_path, capsys, arrange, expected_code, expected_text):
-    """#3 rule 1: exit 0 clean, 1 findings, 2 cannot judge."""
+    """COMPOSE-5, CLOSING-27, CLOSING-28, CLOSING-30: exit 0 is clean, 1 findings and 2 cannot judge, and a tracked
+    compose file missing from disk is skipped."""
     code, output = run(capsys, arrange(build_repo, tmp_path))
     assert code == expected_code
     assert expected_text in output
@@ -79,7 +80,7 @@ def test_exit_code_tells_clean_from_cannot_judge(build_repo, tmp_path, capsys, a
 
 @pytest.mark.integration
 def test_quality_tracks_no_env_or_compose_file():
-    """#3 rule 5: the quality repository passes its own check and tracks no env or compose file."""
+    """CLOSING-29: The quality repository passes its own check and tracks no env or compose file."""
     root = Path(__file__).resolve().parents[1]
     tracked = subprocess.run(["git", "-C", str(root), "ls-files"], capture_output=True, text=True, check=True).stdout
     assert check_door(root) == 0
@@ -151,9 +152,9 @@ def files(tracked: dict[str, str]):
 def test_every_rule_is_judged_and_the_exit_is_the_worst(
     build_repo, elsewhere, capsys, arrange, expected_code, expected_lines, rows
 ):
-    """CHECK-4, CLOSING-12, CLOSING-13, CLOSING-14: each rule prints its own verdict, one rule's refusal hides no other
-    rule's, the exit is the worst verdict's, the error line counts the refused areas and the findings, and every path
-    prints backslash-escaped."""
+    """CHECK-4, CLOSING-12, CLOSING-13, CLOSING-14, CLOSING-27, CLOSING-28: each rule prints its own verdict, one rule's
+    refusal hides no other rule's, the exit is the worst verdict's, the error line counts the refused areas and the
+    findings, and every path prints backslash-escaped."""
     repo = arrange(build_repo, elsewhere)
     code = check_door(repo, clock=lambda: 0.0)
     captured = capsys.readouterr()
@@ -175,7 +176,7 @@ def test_a_python_file_with_a_non_utf8_name_the_size_rule_cannot_parse_is_one_es
 
 
 def test_a_run_without_flags_judges_every_rule(build_repo, capsys):
-    """CHECK-3: #228 rule 4: no scan is ever skipped, so a plain run judges every rule in run order."""
+    """CHECK-3: no scan is ever skipped, so a plain run judges every rule in run order."""
     verdicts = check_result(build_repo({}), installed_ruff, never_located).verdicts
     assert ([verdict.rule for verdict in verdicts], [verdict.refusal for verdict in verdicts]) == (
         sorted(Rule, key=lambda rule: list(Area).index(rule.area)),
@@ -184,7 +185,7 @@ def test_a_run_without_flags_judges_every_rule(build_repo, capsys):
 
 
 def test_a_finding_under_a_rule_its_check_does_not_judge_fails_loud(build_repo, monkeypatch):
-    """#55 rule 2: a finding under a rule the check was not given is never dropped into a clean exit."""
+    """A finding under a rule the check was not given is never dropped into a clean exit."""
     foreign = Finding("workflow-other", ".env", None, "an unlisted rule", "none", event=FindingEvent.TRACKED)
     monkeypatch.setattr(env_file, "check_env_files", lambda tracked: [foreign])
     repo = build_repo({})
