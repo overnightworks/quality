@@ -4,20 +4,21 @@ Reference for the engineer or operator who needs the exact behaviour of `quality
 
 `quality check` reads git's view of the repository it is started in, from its top level, so a run from `src` judges
 the same files and the same `quality/baseline.toml` as one at the top, and names every file relative to the top (`size
-src/big.py`). There is no path argument; in a submodule or a linked worktree a run judges that work tree's own top.
+src/big.py`) (CHECK-1). There is no path argument; in a submodule or a linked worktree a run judges that work tree's own
+top (CHECK-2).
 
-`quality check [AREA ...]` judges only the areas it names, each whole, in the order of `quality check --help` and each once, however they are named; with none it judges all seven. An area not named starts nothing and has no row; the verdict counts only the named areas (`✓ clean · 1 area`) and the exit is the worst of theirs, so a named run says nothing of the rest. The gate runs all seven.
+`quality check [AREA ...]` judges only the areas it names, each whole, in the order of `quality check --help` and each once, however they are named; with none it judges all seven (CHECK-3). An area not named starts nothing and has no row; the verdict counts only the named areas (`✓ clean · 1 area`) and the exit is the worst of theirs, so a named run says nothing of the rest. The gate runs all seven.
 
 It applies these rules:
 
-- `env-file`: no tracked `.env`, `.env.*` or `*.env` file (names ending in `.example` are templates and pass).
+- `env-file`: no tracked `.env`, `.env.*` or `*.env` file (names ending in `.example` are templates and pass) (ENV-1).
   The fix is `git --literal-pathspecs rm --cached -- <name>, then add <name> to .gitignore`, the first name quoted for
-  the shell, so a copy untracks exactly that file; the second stands only where the name needs no quoting, else it
-  reads `it`. A name without a slash, such as `.env`, also matches that name in every folder (`gitignore(5)`). A name
-  that is not printable UTF-8 gets the hint to remove it by its bytes (`git ls-files -z` shows them) instead of a
-  command. For an app repository it checks the rule of
-  [platform's app standard](https://github.com/overnightworks/platform/blob/main/docs/app.md)
-  that env files pass quality's rules.
+  the shell, so a copy untracks exactly that file (ENV-2); the second stands only where the name needs no quoting, else
+  it reads `it` (ENV-3). A name without a slash, such as `.env`, also matches that name in every folder
+  (`gitignore(5)`). A name that is not printable UTF-8 gets the hint to remove it by its bytes (`git ls-files -z` shows
+  them) instead of a command (ENV-4). For an app repository it checks the rule of
+  [platform's app standard](https://github.com/overnightworks/platform/blob/main/docs/app.md) that env files pass
+  quality's rules.
 
   Ruled by the operator: the command runs exactly as printed, with no home-made encoder for the name.
 - `compose-port`: every published port in a tracked compose file binds loopback, `127.0.0.1` or `::1` (`"[::1]:HOST:CONTAINER"`,
@@ -704,5 +705,6 @@ When a repository's frontend and its lock are gone, the npm database is no longe
 entry for it is a finding until it is deleted. A repository that falls back to an older quality leaves such an entry
 unmatched and red likewise. The predecessor `pnpm audit --prod` steps are retired by each repository's own head.
 
-Every rule is judged, even when another cannot be, and gives one verdict: clean, findings, unparsable, or cannot judge.
-Each finding names the file, a fact and a fix. What `quality check` prints, its frame, the masking, `-v` and the vet, is [the output contract](output.md).
+Every rule is judged, even when another cannot be (CHECK-4), and gives one verdict: clean, findings, unparsable, or
+cannot judge (CHECK-5). Each finding names the file, a fact and a fix. What `quality check` prints, its frame, the
+masking, `-v` and the vet, is [the output contract](output.md).

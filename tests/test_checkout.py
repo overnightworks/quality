@@ -96,7 +96,7 @@ def make_linked_worktree_path(tmp_path: Path) -> tuple[Path, Path]:
 @pytest.mark.integration
 @pytest.mark.parametrize("make", [make_submodule_path, make_linked_worktree_path], ids=["submodule", "linked worktree"])
 def test_a_path_in_a_submodule_or_linked_worktree_means_its_own_top(tmp_path, capsys, make):
-    """#76 rule 1, cell 19 (E7): the write lands in the work tree the PATH lies in, not in the superproject or main checkout."""
+    """CHECK-1, CHECK-2: the write lands in the work tree the PATH lies in, not in the superproject or main checkout."""
     superproject, own_top = make(tmp_path)
     assert door_in(own_top / "src", *FIX_WORDS) == 0
     capsys.readouterr()
