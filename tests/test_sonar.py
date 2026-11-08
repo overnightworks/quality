@@ -51,13 +51,13 @@ def scratch_working_directory(monkeypatch, tmp_path):
 
 
 def test_known_pass_fixture_is_clean_and_prints_the_proof(monkeypatch, capsys):
-    """#22 kept row: known-pass fixture is clean and prints the proof line"""
+    """SONAR-5, SONAR-36: known-pass fixture is clean and prints the proof line"""
     code, out, _, _ = run_cli(monkeypatch, capsys, sonar_answering())
     assert (code, out) == (0, "  · analysis      pull request   #7 · overnightworks_quality\n  ✓ new           none\n  · legacy        0 open         on main\n  ✓ quality gate  passed\n✓ clean · new 0 · legacy 0 · <1s\n")
 
 
 def test_known_fail_fixture_lists_every_open_finding_and_exits_one(monkeypatch, capsys):
-    """#22 kept row: known-fail fixture lists every open finding and exits 1"""
+    """SONAR-35, SONAR-36, SONAR-69: known-fail fixture lists every open finding and exits 1"""
     code, out, err, _ = run_cli(monkeypatch, capsys, sonar_answering(issues=issues_page(2, 1, 2)))
     assert code == 1
     assert "    ! src/a1.py:1  open  python:S1: m\n    ! src/a2.py:2  open  python:S1: m\n" in out
@@ -76,7 +76,7 @@ def test_known_fail_fixture_lists_every_open_finding_and_exits_one(monkeypatch, 
     ids=["every page read", "empty page ends paging", "listed beats a zero total", "page limit bounds paging"],
 )
 def test_counts_findings_across_pages(monkeypatch, capsys, pages, expected_count, expected_requests):
-    """#22 kept row: findings are counted across pages, bounded by the search limit and never by the claimed total"""
+    """SONAR-69: findings are counted across pages, bounded by the search limit and never by the claimed total"""
     fake = sonar_answering()
     fake.answers["issues/search"] = pages
     code, out, _, _ = run_cli(monkeypatch, capsys, fake)
@@ -85,7 +85,7 @@ def test_counts_findings_across_pages(monkeypatch, capsys, pages, expected_count
 
 
 def test_asks_for_statuses_a_person_may_have_accepted_and_encodes_the_scope(monkeypatch, capsys):
-    """#22 kept row: asks for issueStatuses a person may have accepted and url-encodes the scope"""
+    """SONAR-69, SONAR-72: asks for issueStatuses a person may have accepted and url-encodes the scope"""
     fake = sonar_answering(
         task={**FINISHED_FOR_PR_7, "pullRequest": None, "branch": "feat/a&b#c%d"}, issues=issues_page(0)
     )
@@ -100,7 +100,7 @@ def test_asks_for_statuses_a_person_may_have_accepted_and_encodes_the_scope(monk
 
 
 def test_sends_the_token_in_the_header_only(monkeypatch, capsys):
-    """#22 kept row: the token travels as Basic '<token>:' in the header, never in a URL"""
+    """SONAR-78: the token travels as Basic '<token>:' in the header, never in a URL"""
     fake = sonar_answering()
     run_cli(monkeypatch, capsys, fake)
     sent = {authorization for _, authorization in fake.requests}
@@ -128,7 +128,7 @@ def test_sends_the_token_in_the_header_only(monkeypatch, capsys):
     ],
 )
 def test_an_unreadable_answer_is_exit_two_and_never_clean(monkeypatch, capsys, fake):
-    """#22: anything unreadable is exit 2 with no findings printed, never a clean zero"""
+    """SONAR-29, SONAR-80, SONAR-82: anything unreadable is exit 2 with no findings printed, never a clean zero"""
     code, out, err, _ = run_cli(monkeypatch, capsys, fake)
     assert (code, out) == (2, "")
     assert err.startswith("error: ")
@@ -143,14 +143,14 @@ def test_an_unreadable_answer_is_exit_two_and_never_clean(monkeypatch, capsys, f
     ids=["issues not a list", "component not a string"],
 )
 def test_a_malformed_issues_answer_names_what_is_wrong(monkeypatch, capsys, issues, reason):
-    """defect:#5 finding 40: the issues check and finding_from_issue refuse with CannotJudge, naming the shape"""
+    """SONAR-29: the issues check and finding_from_issue refuse with CannotJudge, naming the shape"""
     code, _, err, _ = run_cli(monkeypatch, capsys, sonar_answering(issues=issues))
     assert code == 2
     assert reason in err
 
 
 def test_does_not_read_findings_when_the_scope_does_not_resolve(monkeypatch, capsys):
-    """#22 kept row: an unresolved scope is exit 2 before findings are read"""
+    """SONAR-80: an unresolved scope is exit 2 before findings are read"""
     fake = sonar_answering()
     fake.answers["measures/component"] = [sonar.SonarHttpError(404, "u")]
     code, *_ = run_cli(monkeypatch, capsys, fake)
@@ -171,7 +171,7 @@ def test_does_not_read_findings_when_the_scope_does_not_resolve(monkeypatch, cap
 def test_a_task_file_naming_something_foreign_is_refused_before_any_request(
     monkeypatch, capsys, edit, reason
 ):
-    """#22: a task file naming a foreign server, project, organization or none is exit 2 before any request"""
+    """SONAR-73, SONAR-75: a task file naming a foreign server, project, organization or none is exit 2 before any request"""
     fake = sonar_answering()
     text = TASK_FIXTURE.read_text().replace(*edit)
     code, _, err, _ = run_cli(monkeypatch, capsys, fake, task_text=text)
@@ -180,7 +180,7 @@ def test_a_task_file_naming_something_foreign_is_refused_before_any_request(
 
 
 def test_findings_reads_only_the_literal_scannerwork_report_task_file(monkeypatch, capsys):
-    """#26 rule: findings reads only .scannerwork/report-task.txt"""
+    """SONAR-70: findings reads only .scannerwork/report-task.txt"""
     set_environment(monkeypatch, PULL_REQUEST_ENVIRONMENT)
     Path(".scannerwork").mkdir()
     Path(".scannerwork/report-task.txt").write_text(TASK_FIXTURE.read_text())
@@ -191,7 +191,7 @@ def test_findings_reads_only_the_literal_scannerwork_report_task_file(monkeypatc
 
 @pytest.mark.parametrize("breakage", ["absent", "symlink loop"])
 def test_a_task_file_that_cannot_be_read_is_refused_before_any_request(monkeypatch, capsys, breakage):
-    """#22 kept row: an unreadable task file is exit 2 before any request"""
+    """SONAR-71, SONAR-75: an unreadable task file is exit 2 before any request"""
     fake = sonar_answering()
     set_environment(monkeypatch, PULL_REQUEST_ENVIRONMENT)
     if breakage == "symlink loop":
@@ -203,7 +203,7 @@ def test_a_task_file_that_cannot_be_read_is_refused_before_any_request(monkeypat
 
 
 def test_never_requests_the_urls_the_task_file_names(monkeypatch, capsys):
-    """#22 kept row: only sonarcloud.io is requested, whatever URLs the task file names"""
+    """SONAR-74: only sonarcloud.io is requested, whatever URLs the task file names"""
     fake = sonar_answering()
     text = TASK_FIXTURE.read_text().replace("https://sonarcloud.io/api/ce", "https://evil.example/api/ce")
     run_cli(monkeypatch, capsys, fake, task_text=text)
@@ -211,7 +211,7 @@ def test_never_requests_the_urls_the_task_file_names(monkeypatch, capsys):
 
 
 def test_a_task_id_with_an_ampersand_stays_one_query_value(monkeypatch, capsys):
-    """#22 kept row: a task id with an ampersand stays one query value"""
+    """SONAR-76: a task id with an ampersand stays one query value"""
     fake = sonar_answering()
     text = TASK_FIXTURE.read_text().replace("ceTaskId=AXtask-1", "ceTaskId=a&b=c")
     run_cli(monkeypatch, capsys, fake, task_text=text)
@@ -229,7 +229,7 @@ def test_a_task_id_with_an_ampersand_stays_one_query_value(monkeypatch, capsys):
     ids=["empty token", "unset token", "bad repository", "no pull request number"],
 )
 def test_an_unusable_environment_is_refused_before_any_request(monkeypatch, capsys, environment):
-    """#22 kept row, #73 rule 1: a missing or empty token (the gate never goes anonymous), bad repository or missing pull request number is exit 2 before any request"""
+    """SONAR-68, SONAR-75: a missing or empty token (the gate never goes anonymous), bad repository or missing pull request number is exit 2 before any request"""
     fake = sonar_answering()
     code, *_ = run_cli(monkeypatch, capsys, fake, environment)
     assert (code, fake.requests) == (2, [])
@@ -246,7 +246,7 @@ def test_an_unusable_environment_is_refused_before_any_request(monkeypatch, caps
     ids=["waits until success", "failed", "canceled", "pending past the limit"],
 )
 def test_waits_for_its_own_task_before_reading_findings(monkeypatch, capsys, statuses, code, polls, sleeps):
-    """#22 kept row: waits for the analysis task, bounded polling, no findings read unless it succeeded"""
+    """SONAR-76, SONAR-79: waits for the analysis task, bounded polling, no findings read unless it succeeded"""
     fake = sonar_answering()
     fake.answers["ce/task"] = [{"task": FINISHED_FOR_PR_7 | {"status": status}} for status in statuses]
     result = run_cli(monkeypatch, capsys, fake)
@@ -268,7 +268,7 @@ def test_waits_for_its_own_task_before_reading_findings(monkeypatch, capsys, sta
     ids=["other pull request", "no pull request", "other component", "other organization", "no organization", "branch only"],
 )
 def test_a_finished_task_that_is_not_this_runs_is_refused(monkeypatch, capsys, task):
-    """#22 kept row: a finished task of another pull request, component or organization is exit 2"""
+    """SONAR-77, SONAR-79: a finished task of another pull request, component or organization is exit 2"""
     fake = sonar_answering(task=task)
     code, _, err, _ = run_cli(monkeypatch, capsys, fake)
     assert (code, fake.urls_to("issues/search")) == (2, [])
@@ -344,10 +344,14 @@ def test_another_branch_never_reads_the_branch_list(monkeypatch, capsys):
     assert fake.urls_to("project_branches/list") == []
 
 
-def test_a_pull_request_reads_the_branch_list_once_before_any_count(monkeypatch, capsys):
-    """SONAR-43: one branch read, ahead of the new and the legacy counts"""
-    fake = sonar_answering()
-    run_cli(monkeypatch, capsys, fake)
+@pytest.mark.parametrize("environment", [PULL_REQUEST_ENVIRONMENT, PUSH_ENVIRONMENT], ids=["pull request", "default branch"])
+def test_pull_requests_and_default_branch_runs_read_the_branch_list_once_before_any_count(
+    monkeypatch, capsys, environment
+):
+    """SONAR-43: one branch read, ahead of every count, on a pull request and on the default branch"""
+    task = FINISHED_FOR_MAIN if environment is PUSH_ENVIRONMENT else FINISHED_FOR_PR_7
+    fake = sonar_answering(task=task)
+    run_cli(monkeypatch, capsys, fake, environment)
     endpoints = [fake.endpoint_of(url) for url, _ in fake.requests]
     assert endpoints.count("project_branches/list") == 1
     assert endpoints.index("project_branches/list") < endpoints.index("issues/search")
@@ -445,7 +449,7 @@ def loopback():
 
 
 def test_the_real_transport_returns_json(loopback):
-    """#22 kept row: the real transport returns the JSON body"""
+    """The real transport returns the JSON body."""
     responder, _, url = loopback
     responder.append(reply(200, b'{"a": 1}'))
     assert sonar.fetch_json(url, "Basic x") == {"a": 1}
@@ -478,7 +482,7 @@ def test_the_real_transport_sends_no_authorization_without_a_credential(loopback
     ids=["non-JSON", "redirect refused", "http error", "non-UTF-8 body", "truncated body"],
 )
 def test_the_real_transport_refuses_what_it_cannot_trust(loopback, responder, message):
-    """#22, #73 rule 3: the real transport maps non-JSON, redirect (a credentialed request is not forwarded), HTTP error, non-UTF-8 and truncated bodies to cannot judge"""
+    """SONAR-29, SONAR-81, SONAR-82: the real transport maps non-JSON, redirect (a credentialed request is not forwarded), HTTP error, non-UTF-8 and truncated bodies to cannot judge"""
     set_responder, _, url = loopback
     set_responder.append(responder)
     with pytest.raises(CannotJudge, match=message):
@@ -486,7 +490,7 @@ def test_the_real_transport_refuses_what_it_cannot_trust(loopback, responder, me
 
 
 def test_the_real_transport_gives_up_on_a_server_that_never_answers(loopback):
-    """#22 kept row: a server that never answers is cannot judge after the timeout"""
+    """SONAR-82: a server that never answers is cannot judge after the timeout"""
     responder, release, url = loopback
     responder.append(lambda handler: release.wait(30))
     with pytest.raises(CannotJudge, match="did not answer"):
@@ -495,7 +499,7 @@ def test_the_real_transport_gives_up_on_a_server_that_never_answers(loopback):
 
 @pytest.mark.integration
 def test_the_real_transport_reports_an_unreachable_server():
-    """#22 kept row: an unreachable server is cannot judge"""
+    """SONAR-82: an unreachable server is cannot judge"""
     with pytest.raises(CannotJudge, match="could not be reached"):
         sonar.fetch_json("http://127.0.0.1:1/x", "Basic x")
 
@@ -607,7 +611,7 @@ def test_properties_lets_a_lone_dollar_a_brace_and_comments_pass(monkeypatch, ca
     ids=["empty token", "unset token"],
 )
 def test_properties_refuses_a_missing_token_and_never_skips(monkeypatch, capsys, build_repo, environment):
-    """SONAR-61: an empty or unset token is exit 2 naming SONAR_TOKEN"""
+    """SONAR-61, SONAR-68: an empty or unset token is exit 2 naming SONAR_TOKEN"""
     code, _, err = run_properties(monkeypatch, capsys, build_repo, environment=environment)
     assert (code, "SONAR_TOKEN is empty" in err) == (2, True)
 
@@ -733,7 +737,7 @@ def test_properties_with_sonar_off_refuses_the_wiring_of_a_scan(monkeypatch, cap
 
 
 def test_properties_without_the_key_still_refuses_an_empty_token(monkeypatch, capsys, build_repo, tmp_path):
-    """SONAR-13, SONAR-61: A config without the key runs SonarCloud, so an empty token stays exit 2 and nothing is written."""
+    """SONAR-13, SONAR-61, SONAR-68: A config without the key runs SonarCloud, so an empty token stays exit 2 and nothing is written."""
     step_output = tmp_path / "github_output"
     files = {"quality/config.toml": '[gate]\nmandatory_jobs = ["check"]\n'}
     code, _, err = run_properties(
@@ -744,7 +748,7 @@ def test_properties_without_the_key_still_refuses_an_empty_token(monkeypatch, ca
 
 
 def test_properties_without_a_config_still_refuses_an_empty_token(monkeypatch, capsys, build_repo, tmp_path):
-    """SONAR-13, SONAR-61: A repository without quality/config.toml runs SonarCloud, so a missing token is exit 2 and nothing is written."""
+    """SONAR-13, SONAR-61, SONAR-68: A repository without quality/config.toml runs SonarCloud, so a missing token is exit 2 and nothing is written."""
     step_output = tmp_path / "github_output"
     (tmp_path / "quality" / "config.toml").unlink()
     code, _, err = run_properties(

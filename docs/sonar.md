@@ -9,7 +9,7 @@ judges the findings itself and keeps the properties check stands in [ARCHITECTUR
 an action, because quality publishes none. A caller passes the Actions secret by name
 (`secrets: SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}`), has automatic analysis off in SonarCloud, and commits a root
 `sonar-project.properties` (SONAR-47). A missing or empty token is red (`error: SONAR_TOKEN is empty: …`, with the step
-to set and pass the secret), never skipped while SonarCloud runs; `[gate] sonar = false` turns it off
+to set and pass the secret), never skipped while SonarCloud runs (SONAR-68); `[gate] sonar = false` turns it off
 ([the gate](gate.md#gateyml)). Dependabot runs resolve the Dependabot secret of the same name.
 
 ### What the two steps print
@@ -99,15 +99,25 @@ The scanner's transport, verified at sonar-scanner-java-library 4.1.1.1633 (the 
 - Re-verify all of this on any bump of the scan action or `scannerVersion`.
 - Sources at 4.1.1.1633: [HttpClientFactory.java:72](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/http/HttpClientFactory.java#L72), [ScannerHttpClient.java:162-170](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/http/ScannerHttpClient.java#L162-L170), [ScannerHttpClient.java:231-233](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/http/ScannerHttpClient.java#L231-L233), [ScannerEndpointResolver.java:40](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/endpoint/ScannerEndpointResolver.java#L40), [ScannerEngineLauncherFactory.java](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/facade/forked/ScannerEngineLauncherFactory.java).
 
-`quality sonar findings` is the SonarCloud zero-findings rule: every open finding counts. Where `.github/dependabot.yml` exists the scan itself excludes one rule, see the [Dependabot exception](#a-dependabot-exception-for-dockers8431). It reads the scanner's `.scannerwork/report-task.txt` relative to the working directory (no other path can be given); a missing or unreadable file is exit 2.
+`quality sonar findings` is the SonarCloud zero-findings rule: every open finding counts (SONAR-69). Where
+`.github/dependabot.yml` exists the scan itself excludes one rule, see the
+[Dependabot exception](#a-dependabot-exception-for-dockers8431). It reads the scanner's `.scannerwork/report-task.txt`
+relative to the working directory (no other path can be given) (SONAR-70); a missing or unreadable file is exit 2
+(SONAR-71).
 
 Ruled by the operator: every open finding counts, in every repository that runs SonarCloud; SonarCloud belongs to every repository's minimum gate, except a repository whose files the operator rules must not reach it, which sets `[gate] sonar = false`.
 
 The project is the caller's repository: `GITHUB_REPOSITORY` gives the key `<owner>_<repo>` and the organization
-`<owner>`. The task file must name that `projectKey`, `organization=<owner>` and `serverUrl=https://sonarcloud.io`; the URLs inside it are never
-requested. The command polls `api/ce/task` until its own analysis is `SUCCESS` and bound to this component, organization
-and pull request (or branch), then reads the open findings with `SONAR_TOKEN` (header only, never printed). Anything
-unreadable is exit `2` (SONAR-29).
+`<owner>` (SONAR-72). The task file must name that `projectKey`, `organization=<owner>` and
+`serverUrl=https://sonarcloud.io` (SONAR-73); the URLs inside it are never requested (SONAR-74). The task file and the
+environment are judged before the first request: anything there the command cannot use is exit `2` (SONAR-75). The
+command polls `api/ce/task` until its own analysis is `SUCCESS` (SONAR-76) and bound to this component, organization and
+pull request (or branch) (SONAR-77), then reads the open findings with `SONAR_TOKEN` (header only, never printed)
+(SONAR-78). A task that ends `FAILED` or `CANCELED`, that is still pending after a bounded number of polls, or that
+belongs to another analysis is exit `2` (SONAR-79). A scope SonarCloud does not resolve is exit `2` before the findings
+are read (SONAR-80): its issue search would answer zero findings. Anything unreadable is exit `2` (SONAR-29). The
+command follows no redirect (SONAR-81), so the token reaches SonarCloud alone; an HTTP error, a redirect, a timeout or
+an unreachable host is exit `2` too (SONAR-82).
 
 ### New and legacy findings
 
