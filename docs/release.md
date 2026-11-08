@@ -103,8 +103,8 @@ Each line has a reason:
   `release-tag.yml`, so it calls the workflows of its own commit (RELEASE-11). Every other repository pins the commit sha of a quality tag and names the tag in a comment.
 - quality's build also tags the gated commit in its own checkout (the tag never leaves the runner) and runs
   `scripts/verify_release.py` (RELEASE-12), which proves one release tag is at the commit (RELEASE-13), the installed
-  version equals it (RELEASE-14), the gate's tool refs pin it (RELEASE-15) and every rule's release facts name a release
-  (RELEASE-16).
+  version equals it (RELEASE-14), the gate's tool refs pin it (RELEASE-15) and every rule's release facts name a
+  release (RELEASE-16).
 - quality's `release.yml` has no job or step that can be skipped (RELEASE-17), its checkout persists no credentials
   (RELEASE-18), and its build sets up a Python that `pyproject.toml`'s `requires-python` admits (RELEASE-19).
 
