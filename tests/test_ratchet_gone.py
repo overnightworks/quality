@@ -91,6 +91,9 @@ def checked(capsys, repo: Path) -> tuple[int, str, str]:
     ],
 )
 def test_a_held_entry_without_a_measurement_is_gone_left_out_or_stands_by_the_index_and_the_declarations(held, measured, tracked, generated, expected):
+    """CEILING-1, CEILING-7, CEILING-8: an entry whose path the index no longer tracks, or whose Python file lost the
+    function, is gone; a tracked file off the disk and an entry under no measured function stand; a declared file's
+    entry is left out as generated."""
     measurements = {key: Measured(90, 1) for key in measured}
     gone = gone_entries({held: 900}, measurements, frozenset(tracked), generated)
     assert gone == ({} if expected is None else {held: expected})
@@ -162,6 +165,8 @@ def test_a_held_entry_without_a_measurement_is_gone_left_out_or_stands_by_the_in
     ],
 )
 def test_a_gone_entry_can_fall_and_the_fix_drops_it(build_repo, capsys, files, held, checking, fixing):
+    """CEILING-7, O21: a gone entry is a `can fall` row with no line and the fix `quality check --fix`; once the fix
+    drops it, the clean row counts no entry."""
     repo = build_repo({**files, BASELINE_PATH: ceiling(held)})
     assert checked(capsys, repo) == (1, checking, "")
     assert fixed(capsys, repo, *FIX_WORDS) == (0, fixing, "")
@@ -169,7 +174,9 @@ def test_a_gone_entry_can_fall_and_the_fix_drops_it(build_repo, capsys, files, h
     assert checked(capsys, repo) == (0, "  ✓ debt          clean          ceiling held · 0 entries, 0 clone pairs\n✓ clean · 1 area · <1s\n", "")
 
 
-def test_the_pictures_gone_rows(build_repo, capsys):
+def test_a_gone_entry_row_follows_the_measured_can_fall_rows(build_repo, capsys):
+    """CEILING-6, CEILING-7: the rows of entries the tree measures lower stand first, the row of a gone entry after
+    them with no line."""
     held = '[ccn."src/cart.py"]\nbranchy = 19\n\n[file_lines]\n"src/orders.py" = 826\n"src/legacy.py" = 802\n'
     repo = build_repo({"src/cart.py": branchy_function(17), "src/orders.py": long_file(812), BASELINE_PATH: ceiling(held)})
     checking = (
@@ -199,6 +206,8 @@ def moved_with_git(pull_request) -> Path:
 
 
 def test_a_staged_move_is_gone_beside_new_debt(pull_request, capsys):
+    """CEILING-4, CEILING-7: after a staged move the new path is new debt and the old path is a gone entry that can
+    fall."""
     repo = moved_with_git(pull_request)
     git(repo, "mv", "src/old.py", "src/new.py")
     checking = (
@@ -216,6 +225,8 @@ def test_a_staged_move_is_gone_beside_new_debt(pull_request, capsys):
 
 
 def test_an_untracked_move_destination_keeps_the_entry(pull_request, capsys):
+    """CEILING-1, CEILING-4: a moved file the index does not yet track leaves its old entry standing; the tracked new
+    path is new debt."""
     repo = moved_with_git(pull_request)
     (repo / "src/old.py").rename(repo / "src/new.py")
     before = digest(repo)
@@ -231,6 +242,8 @@ def test_an_untracked_move_destination_keeps_the_entry(pull_request, capsys):
 
 
 def test_a_staged_deletion_with_an_untracked_destination_drops_the_entry_until_the_file_is_tracked(pull_request, capsys):
+    """CEILING-4, CEILING-7: an entry whose path a staged deletion leaves the index is gone while the file stands
+    untracked elsewhere; tracking the new path makes it new debt."""
     repo = moved_with_git(pull_request)
     (repo / "src/old.py").rename(repo / "src/new.py")
     git(repo, "rm", "-q", "--cached", "src/old.py")
@@ -246,6 +259,7 @@ def test_a_staged_deletion_with_an_untracked_destination_drops_the_entry_until_t
 
 
 def test_a_sparse_checkout_keeps_the_entries_it_does_not_hold(build_repo, capsys):
+    """CEILING-1: a sparse checkout leaves the entries of the files it does not hold standing, unchanged by the fix."""
     held = ceiling('[function_lines."src/out/b.py"]\nlong_one = 70\n')
     repo = build_repo({"src/in/a.py": "x = 1\n", "src/out/b.py": long_function(70), BASELINE_PATH: held})
     git(repo, "sparse-checkout", "set", "src/in", "quality")
@@ -257,6 +271,7 @@ def test_a_sparse_checkout_keeps_the_entries_it_does_not_hold(build_repo, capsys
 
 
 def test_a_deletion_on_disk_only_stands_until_it_is_staged(build_repo, capsys):
+    """CEILING-1, CEILING-7: a file deleted on disk only stands until the deletion is staged, then its entry is gone."""
     repo = build_repo({"src/a.py": long_function(70), BASELINE_PATH: ceiling('[function_lines."src/a.py"]\nlong_one = 70\n')})
     (repo / "src/a.py").unlink()
     before = digest(repo)
@@ -270,6 +285,8 @@ def test_a_deletion_on_disk_only_stands_until_it_is_staged(build_repo, capsys):
 
 
 def test_an_unparsable_file_refuses_before_anything_is_gone(build_repo, capsys):
+    """SIZE-10, SIZE-11: a file Python cannot parse refuses the check and the fix before any entry is judged gone, and
+    the fix writes nothing."""
     held = ceiling('[file_lines]\n"src/legacy.py" = 802\n')
     repo = build_repo({"src/bad.py": "def broken(:\n", BASELINE_PATH: held})
     before = digest(repo)
