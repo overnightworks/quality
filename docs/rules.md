@@ -297,20 +297,21 @@ It applies these rules:
     (SCRIPT-13). A tool directive (`# shellcheck`, `# -*-`, `# noqa`, `# type:`, `# pyright:`, `# ruff:`, `// eslint`)
     and code such as `set -euo pipefail` do not count (SCRIPT-14). Presence only, never content (SCRIPT-15).
 - `test-layout` judges what may lie under a Python project's `tests/` and where a frontend test lies. A project is the
-  directory of any tracked `pyproject.toml`, the root or a member at any depth; the file's content is never read, and
-  one inside the `tests/` of another project, of either kind, makes no project. A project is judged when it has a package: a directory directly under
-  `<project>/src/` that holds a tracked `.py` at any depth, with or without `__init__.py`. A project without one, and
-  a `tests/` folder that belongs to no project, are not judged. Under a judged `<project>/tests/` every tracked path
-  is a `test_*.py` (placed and named by the mapping below), a `conftest.py` at any depth, a file in a `support/`
-  or `fixtures/` folder at any depth, or a file in the top-level `tests/e2e/`. An `__init__.py` under `tests/` is
-  red anywhere, `support/` and `e2e/` included, and is data only inside a `fixtures/` folder. A finding names its
-  case, as a `stray` row: an `__init__.py` (delete it, or declare it) or any other file (move it to a `support/` helper folder or a
-  `fixtures/` data folder, or declare it). A declaration is a `[[layout.allow]]` entry with the rule `test-layout` on
-  an exact tracked path. Paths come from the index and nothing is read from disk; a link or gitlink is judged by its
-  own name and never followed; an index record that cannot be read makes the `files` row `✗ not checked` (exit
-  `2`). Names compare in exact case, all findings print sorted by path and no configuration switches the rule off.
-  Named gaps, waiting for usage evidence: a `tests/` folder elsewhere (`src/p/tests/`), a project with only
-  `setup.py`, a project whose `src/` holds only modules, and a package named `support` or `fixtures`.
+  directory of any tracked `pyproject.toml`, the root or a member at any depth (LAYOUT-1); the file's content is never
+  read, and one inside the `tests/` of another project, of either kind, makes no project (LAYOUT-2). A project is judged
+  when it has a package: a directory directly under `<project>/src/` that holds a tracked `.py` at any depth, with or
+  without `__init__.py` (LAYOUT-3). A project without one, and a `tests/` folder that belongs to no project, are not
+  judged (LAYOUT-4). Under a judged `<project>/tests/` every tracked path is a `test_*.py` (placed and named by the
+  mapping below), a `conftest.py` at any depth, a file in a `support/` or `fixtures/` folder at any depth, or a file in
+  the top-level `tests/e2e/` (LAYOUT-5). An `__init__.py` under `tests/` is red anywhere, `support/` and `e2e/`
+  included, and is data only inside a `fixtures/` folder (LAYOUT-6). A finding names its case, as a `stray` row: an
+  `__init__.py` (delete it, or declare it) or any other file (move it to a `support/` helper folder or a `fixtures/`
+  data folder, or declare it) (LAYOUT-7). A declaration is a `[[layout.allow]]` entry with the rule `test-layout` on an
+  exact tracked path. Paths come from the index and nothing is read from disk; a link or gitlink is judged by its own
+  name and never followed (LAYOUT-8); an index record that cannot be read makes the `files` row `✗ not checked` (exit
+  `2`). Names compare in exact case (LAYOUT-9), all findings print sorted by path (LAYOUT-10) and no configuration
+  switches the rule off. Named gaps, waiting for usage evidence: a `tests/` folder elsewhere (`src/p/tests/`), a project
+  with only `setup.py`, a project whose `src/` holds only modules, and a package named `support` or `fixtures`.
   Every `test_*.py` outside `fixtures/` and the top-level `e2e/` mirrors the module it tests, one direction. Its
   folder mirrors a folder of `src/<package>/` (`tests/api/` is `src/<package>/api/`; with several packages
   `tests/<package>/api/` is `src/<package>/api/`), and that folder holds a tracked `.py` at any depth. `tests/scripts/`

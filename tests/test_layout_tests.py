@@ -1,4 +1,4 @@
-"""#196: the test-layout rule, what may lie under a Python project's `tests/`."""
+"""The test-layout rule: what may lie under a Python project's `tests/`."""
 
 import pytest
 
@@ -28,8 +28,8 @@ ROOT_PROJECT = {**GUIDANCE, "pyproject.toml": "", "src/p/cli.py": "x = 1\n"}
     ids=["clean", "helper beside tests", "data folder", "e2e only at the top", "conftest at any depth",
          "other languages", "a test file", "exact case"],
 )
-def test_rule_four_judges_every_path_under_tests(build_repo, files, expected):
-    """#196 sentences 3 and 5: a test file, a conftest, support/fixtures at any depth and top-level e2e pass."""
+def test_only_tests_conftests_helpers_and_top_level_e2e_may_lie_under_tests(build_repo, files, expected):
+    """LAYOUT-5, LAYOUT-9: tests, conftests, support/fixtures at any depth and top-level e2e pass; case counts."""
     assert red(build_repo({**ROOT_PROJECT, **files}), RULE) == expected
 
 
@@ -43,14 +43,15 @@ def test_rule_four_judges_every_path_under_tests(build_repo, files, expected):
     ids=["red anywhere", "data inside fixtures"],
 )
 def test_an_init_file_under_tests_is_red_unless_it_is_fixture_data(build_repo, init_files, expected):
-    """#196 sentence 4."""
+    """LAYOUT-6, LAYOUT-7: an __init__.py under tests/ is a stray finding, except as fixture data."""
     repo = build_repo({**ROOT_PROJECT, **dict.fromkeys(init_files, "")})
     assert red(repo, RULE) == expected
     assert {finding.event for finding in rule_findings(repo, RULE)} == ({FindingEvent.STRAY} if expected else set())
 
 
 def test_an_init_file_and_a_stray_helper_are_strays_with_a_fix_line_each(build_repo, capsys):
-    """#196 sentence 6, E1 and #283 O12: all printed, sorted by path, both ways out in each fix; unequal fixes print apiece."""
+    """LAYOUT-7, LAYOUT-10, ROW-3, ROW-7, ROW-14: an __init__.py and a stray helper are two stray rows, each with its
+    own fix line."""
     repo = build_repo({**ROOT_PROJECT, "tests/__init__.py": "", "tests/helpers.py": ""})
     code, output = check_output(capsys, repo)
     init, helper = rule_findings(repo, RULE)
@@ -81,12 +82,13 @@ def test_an_init_file_and_a_stray_helper_are_strays_with_a_fix_line_each(build_r
          "tests elsewhere", "pyproject inside tests makes no project", "pyproject directly in tests", "src holding only a module"],
 )
 def test_only_a_project_with_a_package_is_judged(build_repo, files, expected):
-    """#196 sentences 1 and 2, cells A2 to A10."""
+    """LAYOUT-1, LAYOUT-2, LAYOUT-3, LAYOUT-4: only a project with a package is judged, and a manifest inside another
+    project's tests/ makes no project."""
     assert red(build_repo({**GUIDANCE, **files}), RULE) == expected
 
 
 def test_nested_projects_each_judge_their_own_tests(build_repo):
-    """#196 sentence 1, A8: `speech/tests` belongs to speech, `speech/providers/qwen/tests` to qwen."""
+    """LAYOUT-1: `speech/tests` belongs to speech, `speech/providers/qwen/tests` to qwen."""
     files = {
         "speech/pyproject.toml": "", "speech/src/s/x.py": "", "speech/tests/support/x.py": "",
         "speech/providers/qwen/pyproject.toml": "", "speech/providers/qwen/src/q/x.py": "",
@@ -96,7 +98,7 @@ def test_nested_projects_each_judge_their_own_tests(build_repo):
 
 
 def test_a_symlink_and_a_gitlink_under_tests_are_judged_by_their_own_name(build_repo):
-    """#196 sentence 8, D1 and D2: never followed."""
+    """LAYOUT-8: a symlink and a gitlink under tests/ are judged by their own names, never followed."""
     repo = build_repo({**ROOT_PROJECT, "tests/support/x.py": ""})
     (repo / "tests" / "helper.py").symlink_to("support/x.py")
     in_index(repo, "add", "--", "tests/helper.py")
@@ -115,14 +117,15 @@ def test_a_symlink_and_a_gitlink_under_tests_are_judged_by_their_own_name(build_
     ids=["declared", "declared under another rule", "not tracked", "already complying"],
 )
 def test_a_declaration_covers_only_its_own_rule_and_a_stale_one_is_a_finding(build_repo, tracked, declarations, expected):
-    """#196 sentence 7, D3 to D5."""
+    """SUFFIX-10, SUFFIX-12, SUFFIX-13: a declaration covers only its own rule, a stale one is a finding, and a
+    compliant path stays clean."""
     config = ONE_JOB + "".join(declaring(path, rule=rule) for path, rule in declarations)
     repo = build_repo({**ROOT_PROJECT, **dict.fromkeys(tracked, ""), CONFIG: config})
     assert red(repo, RULE) == expected
 
 
 def test_a_malformed_layout_table_cannot_be_judged_for_test_layout(build_repo, capsys):
-    """#196 sentence 7, D6."""
+    """SUFFIX-18: a malformed [layout] table (a duplicate entry) cannot be judged for test-layout."""
     duplicate = declaring("tests/helpers.py", rule=RULE) * 2
     repo = build_repo({**ROOT_PROJECT, "tests/helpers.py": "", CONFIG: ONE_JOB + duplicate})
     code, _ = check_output(capsys, repo)
@@ -130,7 +133,7 @@ def test_a_malformed_layout_table_cannot_be_judged_for_test_layout(build_repo, c
 
 
 def test_an_index_record_that_cannot_be_read_cannot_be_judged(build_repo, capsys, fake_git):
-    """#196 sentence 8, D7."""
+    """SUFFIX-6: an index record that cannot be read cannot be judged."""
     repo = build_repo(GUIDANCE)
     fake_git(r"""case " $* " in *" -s "*) printf 'not-a-mode abc 0\tAGENTS.md\0'; exit 0;; esac""")
     code, _ = check_output(capsys, repo)
