@@ -1,8 +1,0 @@
-claim_id = "44e0e2d8615f474385bf9d2086423c82"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "96e48ac1d0d10a12a2b924a4995cca72cbbae55b"
-branch = "claude/issue-607-d7-config-refusal-ids"
-scope = ["docs/output.md", "tests/support/config_refusals.py", "tests/test_check.py", "tests/test_cli_output.py", "tests/test_config.py", "tests/test_output.py", "tests/test_report.py"]
-opened_commit = "61d3cc74b74bf5ba7350158fc6ec4b4810c6664e"
-whole_reason = "docs/output.md config refusals and their example (the label, the indented whole lines, valid TOML, no label without an example, the entry position, the quoted value and key) and the tests that prove them, linked by REFUSAL IDs, with 532a, 591a and 591b folded."
