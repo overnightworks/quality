@@ -379,7 +379,8 @@ def test_a_config_refused_at_both_commits_is_fixed_on_the_base_first(capsys):
 
 
 def test_the_rows_name_the_pull_requests_base_not_the_default_branch(capsys):
-    """MERGE-1, MERGE-4: the rows name the pull request's base, not the default branch."""
+    """MERGE-1, MERGE-4, MERGE-35, MERGE-36: the rows name the pull request's base, not the default branch, before
+    and after yes."""
     gh = FakeGh(base_ref="release/1")
     shown = run(gh, capsys)
     assert shown == (
