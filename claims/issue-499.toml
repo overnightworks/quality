@@ -1,0 +1,8 @@
+claim_id = "f961f6fe80ef4eb4820e768d3c664b2e"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "ab03f7d0d3745fd8cfb0bb4953e02b3db7b01abf"
+branch = "claude/issue-499-d7-gate-verdict-ids"
+scope = ["docs/gate.md", "docs/sonar.md", "tests/test_config.py", "tests/test_sonar.py", "tests/test_verdict.py", "tests/test_verdict_reread.py"]
+opened_commit = "39faed11221224f0857d5d7feb8dde727926d157"
+whole_reason = "docs/gate.md verdict config, judgement and re-read lines and the tests that prove them, linked by VERDICT IDs, with D6 of their 13 attributions."
