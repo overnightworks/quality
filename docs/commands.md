@@ -52,9 +52,24 @@ value and asks to unset the variable and run the command again (PIN-19). It firs
 release the pin's comment names (PIN-20): the first time on a machine by asking quality's remote (PIN-21), which then
 leaves an empty record per commit and release (PIN-22) in the user's cache directory (`$XDG_CACHE_HOME` where it is an
 absolute path, else `~/.cache`, under `overnightworks-quality/releases`) (PIN-23); removing it costs one more question
-per release. Then uv prepares
-exactly that commit, from its cache offline where a record stands, else fetched. Offline, the pair `error: cannot fetch quality v0.10.0, which the gate pins · github.com did not answer` with `next: quality check, once online` (exit `2`) stands for every release this machine cannot run without github.com: one it has not yet checked on quality's remote, even one uv holds, and a checked one whose environment uv no longer holds. Where github.com answered but uv could not prepare the release, it is exit `2` with `error: cannot prepare quality v0.9.0, which the gate pins · uv exited 1` and two steps under a bare `next:`, the uv command that shows why, then the run again. While quality fetches or prepares the release, a terminal's stderr shows the live line ([output](output.md#colour-and-the-live-line)). In quality's checkout an installation runs the checkout's code, prepared
-through `uv run`.
+per release. Then uv prepares exactly that commit (PIN-24), from its cache offline where a record stands (PIN-25), else
+fetched (PIN-26). Offline, the pair
+`error: cannot fetch quality v0.10.0, which the gate pins · github.com did not answer` with
+`next: quality check, once online` (exit `2`) (PIN-27) stands for every release this machine cannot run without
+github.com: one it has not yet checked on quality's remote, even one uv holds (PIN-28), and a checked one whose
+environment uv no longer holds. Where github.com answered but uv could not prepare the release (it exited, did not
+finish in its time limit or left no `quality` executable in its environment), it is exit `2`
+([Exit codes](output.md#exit-codes)) with `error: cannot prepare quality v0.10.1, which the gate pins · uv exited 1` and
+two steps under a bare `next:` ([Refusals](output.md#refusals)), the uv command that shows why, then the run again
+(PIN-29). Where uv is not installed the pair is
+`error: cannot fetch quality v0.10.1, which the gate pins · uv is not installed` with
+`next: install uv, then run quality check again` (PIN-30); where it cannot start, the pair names the cause after
+`cannot run uv:` and its one step is the uv command (PIN-31); where the prepared quality cannot start, the pair is
+`error: cannot start quality v0.10.1 · <cause>` with `next: quality check again` (PIN-32). While quality fetches or
+prepares the release, a terminal's stderr shows the live line ([output](output.md#colour-and-the-live-line)). Ctrl-C or
+SIGTERM while uv prepares ends quality, uv and every process uv started (PIN-33). In quality's checkout an installation
+runs the checkout's code, prepared through `uv run` (PIN-34); a preparation that fails there is
+`error: cannot prepare this checkout · uv exited 2` with `next: uv run quality check` (PIN-35).
 
 `quality merge` judges at the release its target's gate pins at the pull request's merge commit, read through `gh`
 before its first row (each listed workflow's name checked before it shapes a request, every read at that commit) and

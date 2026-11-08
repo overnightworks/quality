@@ -247,9 +247,9 @@ def tool(tmp_path_factory) -> tuple[Path, str, str]:
 @pytest.mark.integration
 @pytest.mark.parametrize(("files", "remotes", "running", "arrange", "staged", "expected"), CASES)
 def test_the_release_that_judges_here_is_decided_from_the_gate_pin(build_repo, tool, monkeypatch, files, remotes, running, arrange, staged, expected):
-    """PIN-1, PIN-2, PIN-3, PIN-4, PIN-5, PIN-7, PIN-8, PIN-9, PIN-10, PIN-11, PIN-12, PIN-13: the gate pin, the running
-    commit and the checkout decide which release judges, the release to re-execute into, or the refusal and its next
-    step."""
+    """PIN-1, PIN-2, PIN-3, PIN-4, PIN-5, PIN-7, PIN-8, PIN-9, PIN-10, PIN-11, PIN-12, PIN-13, PIN-34: the gate pin, the
+    running commit and the checkout decide which release judges, the release to re-execute into, or the refusal and its
+    next step."""
     directory, tagged, later = tool
     placeholder = Scene(Path(), directory, tagged, later)
     judged = build_repo(files(placeholder))
@@ -289,6 +289,8 @@ def release_source(commit: str) -> str:
     ],
 )
 def test_a_reexecution_names_the_commit_through_uv(reexecution, flags, expected):
+    """PIN-24, PIN-34: uv prepares the pinned commit as the release's source, and quality's checkout through `uv run`
+    with its project."""
     command = pin.preparation_command(reexecution, *flags)
     assert (command[: len(expected)], command[len(expected) : len(expected) + 3]) == (expected, ["python", "-I", "-c"])
 
@@ -369,6 +371,7 @@ def scripts_with_quality(tmp_path: Path, mode: int = 0o755) -> Path:
     ],
 )
 def test_the_prepared_environment_s_answer_is_checked(tmp_path, answer, valid):
+    """PIN-29: the prepared environment's answer is one absolute scripts directory holding an executable `quality`."""
     prepared = pin.prepared_quality(answer(tmp_path))
     assert prepared == (tmp_path / "bin" / "quality" if valid else None)
 
@@ -449,6 +452,8 @@ AT_PIN = ReleaseAtPin(Release("v0.10.1"), pinned_commit())
     ],
 )
 def test_a_failed_preparation_is_its_pair(failed, reexecution, expected):
+    """PIN-10, PIN-27, PIN-29, PIN-30, PIN-31, PIN-32, PIN-35: each way the preparation fails is the pair that says what
+    happened and names the step that answers it."""
     refusal = pin.preparation_refusal(failed, reexecution, CHECK)
     assert (refusal.reason.fact, refusal.reason.next_steps) == expected
 
