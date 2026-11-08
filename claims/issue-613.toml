@@ -1,0 +1,7 @@
+claim_id = "94b6c91ededb4dc8ba424eb9ccf71758"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "8b12f67fc5f1015068b62d23cbdd5eed18285997"
+branch = "claude/issue-613-d7-clone-first-ids"
+scope = ["docs/rules.md", "tests/test_clones.py", "tests/test_clones_baseline.py"]
+opened_commit = "7bff72b02d23de552131a48123fcb460505b6d54"
