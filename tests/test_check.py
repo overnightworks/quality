@@ -346,12 +346,14 @@ def test_an_area_tells_whether_all_or_some_of_its_judging_rules_only_measured(ve
 
 
 def test_a_run_holds_one_area_verdict_per_area_in_area_order(build_repo):
+    """ROW-8: a run holds one area verdict per area, in the order the rows stand."""
     result = check_result(build_repo({}), installed_ruff, never_located)
     assert [verdict.area for verdict in result.areas] == list(Area)
     assert [rule for area in result.areas for rule in (v.rule for v in area.verdicts)] == sorted(Rule, key=lambda rule: list(Area).index(rule.area))
 
 
 def test_the_run_hands_each_area_to_its_reporter_once_in_row_order(build_repo):
+    """ROW-8: a run hands each area to its reporter once, in the order the rows stand."""
     reported = []
     result = check.judge_repository(build_repo({}), installed_ruff, never_located, lambda verdict, tracked_paths: reported.append((verdict, tracked_paths)), lambda _area, _scanner: nullcontext())
     assert [verdict.area for verdict, _ in reported] == list(Area)
