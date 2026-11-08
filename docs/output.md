@@ -167,7 +167,8 @@ A run that cannot start prints only the pair and exits `2` before any rule runs,
 
 ## Refusals
 
-A refused area is its `✗` row and a pair on stderr, exit 2; the other areas' rows stand:
+A refused area is its `✗` row (REFUSAL-1), which carries no extent (REFUSAL-2), and a [pair on stderr](#streams),
+exit 2; the other areas' rows stand (REFUSAL-3):
 
 ```text
   ✗ secrets       not checked    mise is not installed
@@ -180,9 +181,17 @@ next:
     mise --cd ~/.local/share/uv/tools/overnightworks-quality/lib/python3.14/site-packages/quality/mise install --locked
 ```
 
-A fact of a few words says what is missing (`mise could not locate gitleaks 8.30.1`, true for every non-zero answer of mise). A reason that several rules of one area share stands once; distinct reasons make the row say `N reasons` and stand on `✗` lines below it, and a reason counts once. Findings of an area that also cannot check stay under its `✗` row and are counted in the error line.
+A fact of a few words says what is missing (`mise could not locate gitleaks 8.30.1`, true for every non-zero answer of
+mise). A reason that several rules of one area share stands once (REFUSAL-4); distinct reasons make the row say
+`N reasons` (REFUSAL-5) and stand on `✗` lines below it (REFUSAL-6), and a reason counts once. Findings of an area
+that also cannot check stay under its `✗` row (REFUSAL-7) and are counted in the error line.
 
-`next:` names each distinct step of the run's refusals once, in row order: one step on the `next:` line, several each below a bare `next:` (a command alone on its line, one level of four spaces deeper per level). The general instruction `fix what the ✗ rows name, then run quality check again` is the last line when a refusal carries no step, and the only one when none does. Alternative commands stand under a label ending `, one of:`, each choice's label on a line and its command one level deeper:
+`next:` names each distinct step of the run's refusals once (REFUSAL-8), in row order (REFUSAL-9): one step on the
+`next:` line (REFUSAL-10), several each below a bare `next:` (a command alone on its line, one level of four spaces
+deeper per level) (REFUSAL-11). The general instruction `fix what the ✗ rows name, then run quality check again`
+is the last line when a refusal carries no step (REFUSAL-12), and the only one when none does (REFUSAL-13).
+Alternative commands stand under a label ending `, one of:`, each choice's label on a line and its command one level
+deeper (REFUSAL-14):
 
 ```text
   ✗ workflows     not checked    quality's installation holds no zizmor

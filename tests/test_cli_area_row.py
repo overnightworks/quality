@@ -30,10 +30,13 @@ ONE, TWO = Command("one"), Command("two")
     ids=["none carries a step", "one step shared", "one step beside a refusal without one", "two steps in row order", "one reason with two steps"],
 )
 def test_next_names_each_distinct_step_once_in_row_order_and_the_general_instruction_last_where_a_refusal_has_none(areas, expected):
+    """REFUSAL-8, REFUSAL-9, REFUSAL-12, REFUSAL-13: `next:` names each distinct step once in row order, the general
+    instruction last where a refusal has none and alone where none has one."""
     assert cli.next_steps(areas_refusing(*areas)) == expected
 
 
 def test_an_area_names_one_fact_once_for_two_reasons_that_differ_only_in_steps():
+    """REFUSAL-4: two reasons that differ only in their steps make one fact on the row, not a list of reasons."""
     area = areas_refusing((CannotJudge("same", (ONE,)), CannotJudge("same", (TWO,))))[0]
     row = cli.area_row(area, "")
     assert (row.fact, row.sub_lines) == ("same", ())
@@ -116,10 +119,12 @@ def test_a_judged_secrets_area_opens_its_extent_with_the_verdicts_extent(extent)
 
 
 def test_a_secrets_area_that_could_not_check_has_no_extent():
+    """REFUSAL-2: a secrets area that could not check has no extent."""
     assert cli.area_extent(secrets_area(None, CannotJudge("why")), 0) == ""
 
 
 def test_an_imports_area_that_could_not_check_has_no_extent():
+    """REFUSAL-2: an imports area that could not check has no extent."""
     area = check.AreaVerdict(Area.IMPORTS, (check.RuleVerdict(Rule.IMPORT_CONTRACT, refusal=CannotJudge("why")),))
     assert cli.area_extent(area, 0) == ""
 
@@ -153,6 +158,7 @@ def test_a_judged_workflows_area_opens_its_extent_with_the_verdicts_extent_and_e
 )
 @pytest.mark.parametrize(("one", "other"), [(None, 5), (5, None), (None, None)], ids=["first refuses", "second refuses", "both refuse"])
 def test_an_area_with_one_refusing_rule_has_no_extent_whatever_the_other_carries(area, first, second, one, other):
+    """REFUSAL-2: an area with one refusing rule has no extent, whatever the other rule carries."""
     verdict = check.AreaVerdict(area, (judging(first, one), judging(second, other)))
     assert cli.area_extent(verdict, 0) == ""
 
@@ -168,6 +174,7 @@ def test_a_judged_dependencies_area_counts_its_lockfiles_and_packages(extent):
 
 
 def test_a_dependencies_area_that_could_not_check_has_no_extent():
+    """REFUSAL-2: a dependencies area that could not check has no extent."""
     assert cli.area_extent(dependencies_area(None, CannotJudge("why")), 0) == ""
 
 

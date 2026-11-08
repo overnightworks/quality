@@ -148,7 +148,7 @@ def test_a_report_never_stands_under_v(build_repo, served_scanners, elsewhere, e
     [(scanners.ACTIONLINT, Area.WORKFLOWS), (scanners.ZIZMOR, Area.WORKFLOWS), (scanners.OSV_SCANNER, Area.DEPENDENCIES), (scanners.RUFF, Area.CODE)],
 )
 def test_a_successful_scans_warning_is_vetted_too(build_repo, served_scanners, elsewhere, capsys, summary, name, area):
-    """VERBOSE-8, VERBOSE-10, VERBOSE-13, VERBOSE-14, VERBOSE-20: a successful scan's warning is vetted, withheld and
+    """VERBOSE-8, VERBOSE-10, VERBOSE-13, VERBOSE-14: a successful scan's warning is vetted, withheld and
     counted under -v, with the exit, the summary and the value as they are."""
     fake_gitleaks(served_scanners, on_scan=vetting(flagging(FAKE_KEY)))
     keywords = installing(served_scanners, elsewhere, {name: writing(name, f"aws_access_key_id = {FAKE_KEY}")})
@@ -284,7 +284,7 @@ def test_a_scanners_rows_stand_after_the_areas_findings_and_notes(build_repo, se
 
 def test_osv_scanners_lines_name_paths_as_the_refusal_does(build_repo, served_scanners, elsewhere, capsys):
     """VERBOSE-3, VERBOSE-7, VERBOSE-20: osv-scanner's lines under -v name a lock, the checkout, the scanner's directory
-    and the scratch directory as the gate names them, and the vet reads them so."""
+    and the scratch directory as the gate names them, and the vet reads the first of them so."""
     repo = build_repo({"uv.lock": uv_lock()})
     lock = os.path.realpath(repo / "uv.lock")
     checkout = os.path.realpath(repo)

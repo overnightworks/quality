@@ -173,10 +173,13 @@ COPY = Example("write it in a.toml like this", ("[[table]]", 'key = "value"', "o
     ids=["one step", "two steps", "labelled command", "choice alone", "example alone", "example after a command", "choice after a command"],
 )
 def test_the_pair_prints_a_lone_step_on_the_next_line_and_several_below_it(steps, expected):
+    """REFUSAL-10, REFUSAL-11, REFUSAL-14: a lone step starts on the `next:` line, several stand below a bare `next:`,
+    and alternatives stand under their label."""
     assert written(io.StringIO, lambda channel: output.write_pair("e", steps, channel)) == f"error: e\n{expected}"
 
 
 def test_the_pair_labels_and_escapes_each_text():
+    """MASK-3, MASK-6: the pair escapes the text of its error and of each step."""
     pair = written(io.StringIO, lambda channel: output.write_pair("a\x1b[35mb", (Command("c\nd"), Instruction("e\x1b")), channel))
     assert pair == "error: a\\x1b[35mb\nnext:\n    c\\x0ad\n    e\\x1b\n"
 
