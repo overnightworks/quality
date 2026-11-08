@@ -126,6 +126,7 @@ def test_the_findings_door_never_reads_the_bot_config(monkeypatch, capsys):
     ids=["no total", "not a number", "list", "null", "boolean", "fraction", "negative", "numeral string"],
 )
 def test_an_unreadable_legacy_count_is_exit_2(monkeypatch, capsys, answer):
+    """SONAR-29."""
     fake = findings_of()
     fake.answers[LEGACY_COUNT] = [answer]
     code, out, err, _ = run_cli(monkeypatch, capsys, fake, config_text=legacy_config("report"))

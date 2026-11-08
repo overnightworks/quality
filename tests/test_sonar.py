@@ -287,7 +287,7 @@ def test_a_finished_task_that_is_not_this_runs_is_refused(monkeypatch, capsys, t
     ids=["pull request with a finding", "default branch with findings", "clean default branch", "push ignores a pull request number", "other branch with findings"],
 )
 def test_findings_fail_a_pull_request_and_the_default_branch_but_only_report_on_another_branch(monkeypatch, capsys, environment, task, findings, code, line, asks_legacy):
-    """#33 sentence 2: any open finding fails a pull request and the default branch, lists it, and counts legacy only on a pull request; another branch only reports"""
+    """SONAR-34, SONAR-35, SONAR-36, SONAR-37, SONAR-38: any open finding fails a pull request and the default branch, lists it, and counts legacy only on a pull request; another branch only reports"""
     fake = sonar_answering(task=task)
     fake.answers["issues/search"] = [issues_page(findings, *range(1, min(findings, 100) + 1)), issues_page(findings)]
     result = run_cli(monkeypatch, capsys, fake, environment)
@@ -310,7 +310,7 @@ def test_findings_fail_a_pull_request_and_the_default_branch_but_only_report_on_
 def test_legacy_findings_are_counted_and_fail_a_pull_request_only_when_switched_on(
     monkeypatch, capsys, config_text, legacy, code, line
 ):
-    """#33 sentences 1 and 3: both counts print on a pull request; legacy = "fail" turns legacy findings red"""
+    """SONAR-36, SONAR-40, SONAR-41: both counts print on a pull request; legacy = "fail" turns legacy findings red"""
     fake = sonar_answering(legacy=legacy)
     result = run_cli(monkeypatch, capsys, fake, config_text=config_text)
     assert result[0] == code
@@ -318,7 +318,7 @@ def test_legacy_findings_are_counted_and_fail_a_pull_request_only_when_switched_
 
 
 def test_legacy_findings_are_counted_with_the_default_branch_and_never_listed(monkeypatch, capsys):
-    """#33 sentence 1: legacy is one count-only search of the default branch, with the same open statuses"""
+    """SONAR-33: legacy is one count-only search of the default branch, with the same open statuses"""
     fake = sonar_answering(legacy=3)
     run_cli(monkeypatch, capsys, fake)
     counted = parse_qs(urlparse(fake.urls_to(LEGACY_COUNT)[0]).query)
@@ -330,7 +330,7 @@ def test_legacy_findings_are_counted_with_the_default_branch_and_never_listed(mo
 
 @pytest.mark.parametrize("value", ["warn", "FAIL", ""])
 def test_a_legacy_value_other_than_report_or_fail_is_exit_two_before_any_request(monkeypatch, capsys, value):
-    """#33 sentence 3: any other legacy value is a config error, read before the first SonarCloud request"""
+    """SONAR-42: any other legacy value is a config error, read before the first SonarCloud request"""
     fake = sonar_answering()
     code, _, err, _ = run_cli(monkeypatch, capsys, fake, config_text=legacy_config(value))
     assert (code, fake.requests) == (2, [])
@@ -338,14 +338,14 @@ def test_a_legacy_value_other_than_report_or_fail_is_exit_two_before_any_request
 
 
 def test_another_branch_never_reads_the_branch_list(monkeypatch, capsys):
-    """#33 sentence 6: only pull requests and default-branch runs read project_branches/list"""
+    """SONAR-44: only pull requests and default-branch runs read project_branches/list"""
     fake = sonar_answering(task=FINISHED_FOR_FEATURE)
     run_cli(monkeypatch, capsys, fake, FEATURE_ENVIRONMENT)
     assert fake.urls_to("project_branches/list") == []
 
 
 def test_a_pull_request_reads_the_branch_list_once_before_any_count(monkeypatch, capsys):
-    """#33 sentence 6: one branch read, ahead of the new and the legacy counts"""
+    """SONAR-43: one branch read, ahead of the new and the legacy counts"""
     fake = sonar_answering()
     run_cli(monkeypatch, capsys, fake)
     endpoints = [fake.endpoint_of(url) for url, _ in fake.requests]
@@ -363,7 +363,7 @@ def test_a_pull_request_reads_the_branch_list_once_before_any_count(monkeypatch,
 )
 @pytest.mark.parametrize("environment", [PULL_REQUEST_ENVIRONMENT, PUSH_ENVIRONMENT], ids=["pull request", "default branch"])
 def test_a_default_branch_never_analysed_leaves_legacy_unknown(monkeypatch, capsys, environment, branches, config_text, code):
-    """#33 sentence 6: report prints legacy unknown and exits 0; fail cannot judge and exits 2, on pull requests and the default branch"""
+    """SONAR-43, SONAR-45: report prints legacy unknown and exits 0; fail cannot judge and exits 2, on pull requests and the default branch"""
     task = FINISHED_FOR_MAIN if environment is PUSH_ENVIRONMENT else FINISHED_FOR_PR_7
     fake = sonar_answering(task=task, branches=branches)
     result = run_cli(monkeypatch, capsys, fake, environment, config_text=config_text)
@@ -383,7 +383,7 @@ def test_a_default_branch_never_analysed_leaves_legacy_unknown(monkeypatch, caps
     ids=["not main", "no isMain and no analysis date"],
 )
 def test_a_default_branch_that_is_not_sonarclouds_main_is_exit_two(monkeypatch, capsys, environment, config_text, unmarked):
-    """#33 sentence 6: a default branch without isMain counts only changed code, so it is refused with the fix"""
+    """SONAR-46: a default branch without isMain counts only changed code, so it is refused with the fix"""
     task = FINISHED_FOR_MAIN if environment is PUSH_ENVIRONMENT else FINISHED_FOR_PR_7
     fake = sonar_answering(task=task, branches=(unmarked,))
     code, out, err, _ = run_cli(monkeypatch, capsys, fake, environment, config_text=config_text)
@@ -393,7 +393,7 @@ def test_a_default_branch_that_is_not_sonarclouds_main_is_exit_two(monkeypatch, 
 
 @pytest.mark.parametrize("answer", [{}, {"branches": "main"}, {"branches": [{}]}, ["main"]], ids=["no key", "not a list", "no name", "wrong shape"])
 def test_an_unreadable_branch_list_is_exit_two(monkeypatch, capsys, answer):
-    """#33 sentence 6: a branch list that cannot be read is never taken for an unanalysed default branch"""
+    """SONAR-29: a branch list that cannot be read is never taken for an unanalysed default branch"""
     fake = sonar_answering()
     fake.answers["project_branches/list"] = [answer]
     code, _, err, _ = run_cli(monkeypatch, capsys, fake)
@@ -403,7 +403,7 @@ def test_an_unreadable_branch_list_is_exit_two(monkeypatch, capsys, answer):
 
 @pytest.mark.parametrize("default_branch", [None, ""], ids=["unset", "empty"])
 def test_a_missing_default_branch_name_is_exit_two_before_any_request(monkeypatch, capsys, default_branch):
-    """#33 sentence 7: the default branch is never assumed to be main; an absent or empty name is exit 2"""
+    """SONAR-31, SONAR-32: the default branch is never assumed to be main; an absent or empty name is exit 2"""
     environment = {key: value for key, value in PULL_REQUEST_ENVIRONMENT.items() if key != "DEFAULT_BRANCH"}
     if default_branch is not None:
         environment["DEFAULT_BRANCH"] = default_branch
@@ -414,7 +414,7 @@ def test_a_missing_default_branch_name_is_exit_two_before_any_request(monkeypatc
 
 
 def test_the_default_branch_comes_from_the_environment_not_from_the_name_main(monkeypatch, capsys):
-    """#33 sentence 7: a repository whose default branch is trunk gets its legacy count from trunk"""
+    """SONAR-31, SONAR-33: a repository whose default branch is trunk gets its legacy count from trunk"""
     trunk = {**ANALYSED_MAIN, "name": "trunk"}
     fake = sonar_answering(legacy=4, branches=(trunk,))
     code, out, _, _ = run_cli(monkeypatch, capsys, fake, {**PULL_REQUEST_ENVIRONMENT, "DEFAULT_BRANCH": "trunk"})
@@ -687,7 +687,7 @@ def test_a_properties_file_quality_cannot_use_is_exit_2_naming_it_repository_rel
 
 
 def test_quality_with_its_own_config_fails_a_pull_request_on_legacy_findings(monkeypatch, capsys):
-    """#33 sentence 5: quality's shipped config turns one legacy finding into exit 1 for a pull request with none"""
+    """SONAR-41: quality's shipped config turns one legacy finding into exit 1 for a pull request with none"""
     shipped = (Path(__file__).parent.parent / "quality" / "config.toml").read_text(encoding="utf-8")
     code, out, err, _ = run_cli(monkeypatch, capsys, sonar_answering(legacy=1), config_text=shipped)
     assert code == 1
@@ -695,7 +695,7 @@ def test_quality_with_its_own_config_fails_a_pull_request_on_legacy_findings(mon
 
 
 def test_a_repository_without_a_config_is_refused_before_any_request(monkeypatch, capsys):
-    """#33 sentence 3: the config is read and validated before the first SonarCloud request"""
+    """SONAR-39: the config is read and validated before the first SonarCloud request"""
     fake = sonar_answering()
     code, _, err, _ = run_cli(monkeypatch, capsys, fake, config_text=None)
     assert (code, fake.requests) == (2, [])

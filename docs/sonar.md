@@ -105,22 +105,26 @@ The project is the caller's repository: `GITHUB_REPOSITORY` gives the key `<owne
 `<owner>`. The task file must name that `projectKey`, `organization=<owner>` and `serverUrl=https://sonarcloud.io`; the URLs inside it are never
 requested. The command polls `api/ce/task` until its own analysis is `SUCCESS` and bound to this component, organization
 and pull request (or branch), then reads the open findings with `SONAR_TOKEN` (header only, never printed). Anything
-unreadable is exit `2`.
+unreadable is exit `2` (SONAR-29).
 
 ### New and legacy findings
 
-`gate.yml` passes the repository's default branch (`github.event.repository.default_branch`) as `DEFAULT_BRANCH`; it is
-never assumed to be `main`, and a missing or empty value is exit `2`. "Legacy" means the open findings of that branch,
-counted by the same `issues/search` with the same open statuses, and only counted, never listed.
+`gate.yml` passes the repository's default branch (`github.event.repository.default_branch`) as `DEFAULT_BRANCH` to
+the findings step alone (SONAR-30); it is never assumed to be `main` (SONAR-31), and a missing or empty value is exit
+`2` before any request (SONAR-32). "Legacy" means the open findings of that branch, counted by the same
+`issues/search` with the same open statuses, and only counted, never listed (SONAR-33). `quality sonar findings`
+counts them on a pull request only (SONAR-34).
 - **Pull request:** the rows `· analysis  pull request  #<n> · <key>`, `new`, `legacy` and `quality gate`; new
-  findings are listed below `! new  N findings` and make the run exit `1`. Both counts always stand in the closing
-  line, for example `✓ clean · new 0 · legacy 17 · 3s`.
+  findings are listed below `! new  N findings` and make the run exit `1` (SONAR-35). Both counts always stand in the
+  closing line, for example `✓ clean · new 0 · legacy 17 · 3s` (SONAR-36).
 - **Default branch:** a run on the default branch exits `1` on any open finding and lists them below
-  `! open  N findings`.
-- **Any other branch:** report only, exit `0`: `· open  N findings  report only`, each finding a `·` note below it.
+  `! open  N findings` (SONAR-37).
+- **Any other branch:** report only, exit `0`: `· open  N findings  report only`, each finding a `·` note below it
+  (SONAR-38).
 
 `[gate] legacy` in `quality/config.toml` decides whether legacy findings fail a pull request. `quality sonar findings`
-reads that file like the verdict does: a missing file, or one without `[gate] mandatory_jobs`, is exit `2` before any request.
+reads that file like the verdict does: a missing file, or one without `[gate] mandatory_jobs`, is exit `2` before any
+request (SONAR-39).
 
 ```toml
 [gate]
@@ -128,19 +132,22 @@ mandatory_jobs = ["quality"]
 legacy = "fail"
 ```
 
-- `"report"` (the default when the key is absent): legacy findings are printed and never fail a pull request.
-- `"fail"`: a pull request fails while the default branch has any open finding, even when it adds none.
-- Any other value is a config error (exit `2`), read before the first SonarCloud request.
+- `"report"` (the default when the key is absent): legacy findings are printed and never fail a pull request
+  (SONAR-40).
+- `"fail"`: a pull request fails while the default branch has any open finding, even when it adds none (SONAR-41).
+- Any other value is a config error (exit `2`), read before the first SonarCloud request (SONAR-42).
 - A pull request whose base config says `legacy = "fail"` and whose head config says anything else is red in the verdict
   (the loosening `legacy fail → report`; an absent key counts as `report`), like a removed mandatory job.
 - `legacy = "fail"` beside `[gate] sonar = false` is a config error (exit `2`).
 
-On pull requests and default-branch runs `quality sonar findings` reads `api/project_branches/list` once before the counts.
+On pull requests and default-branch runs `quality sonar findings` reads `api/project_branches/list` once before the
+counts (SONAR-43). A run on any other branch does not read it (SONAR-44).
 - The default branch has no entry, or one without `analysisDate` (a repository's first adoption pull request): the run
-  prints `· legacy  unknown  <default> not analysed yet`. With `"report"` the run exits `0`; with `"fail"` it is exit `2`
-  (`error: legacy unknown (<default> not analysed yet)`).
-- The default branch is not SonarCloud's main branch: exit `2` in both modes, with the fix `set SonarCloud's main branch
-  to <default>`. A non-main SonarCloud branch counts only changed code, so the legacy count would be too low.
+  prints `· legacy  unknown  <default> not analysed yet`. With `"report"` the run exits `0`; with `"fail"` it is exit
+  `2` (`error: legacy unknown (<default> not analysed yet)`) (SONAR-45).
+- The default branch is not SonarCloud's main branch, analysed or not: exit `2` in both modes, with the fix
+  `set SonarCloud's main branch to <default>` (SONAR-46). A non-main SonarCloud branch counts only changed code, so the
+  legacy count would be too low.
 
 ### The quality gate
 
