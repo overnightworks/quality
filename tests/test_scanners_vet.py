@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from quality import scanners
-from tests.support.advisories import reporting, uv_lock
+from tests.support.advisories import uv_lock
 from tests.support.check import area_fact
 from tests.support.door import check_door
 from tests.support.python_lint import fake_ruff
@@ -53,6 +53,8 @@ def judged_repository(build_repo) -> Path:
     ids=["actionlint", "zizmor", "osv-scanner", "ruff", "ruff's lint failure", "zizmor's version"],
 )
 def test_a_refused_scanners_value_is_withheld(build_repo, served_scanners, elsewhere, summary, capsys, who, area, fact):
+    """VERBOSE-14, VERBOSE-15, VERBOSE-17, VERBOSE-18: a value in a refused scanner's stderr goes through gitleaks, is
+    withheld and counted in the fact."""
     fake_gitleaks(served_scanners, on_scan=vetting(flagging(FAKE_KEY)))
     said = shouting([f"aws_access_key_id = {FAKE_KEY}"])
     refusing = f"{said}; exit 3"
@@ -85,6 +87,7 @@ def test_a_refused_scanners_value_is_withheld(build_repo, served_scanners, elsew
 
 
 def test_a_gitleaks_version_refusal_quotes_nothing(build_repo, served_scanners, capsys):
+    """VERBOSE-23: a gitleaks version refusal quotes nothing and starts no vet."""
     fake_gitleaks(served_scanners, on_scan=vetting(flagging(FAKE_KEY)), on_version=f"{shouting([FAKE_KEY])}; exit 3")
     code, out, err = refused(build_repo({"docs/a.md": "x\n"}), capsys)
     assert code == 2
@@ -94,6 +97,8 @@ def test_a_gitleaks_version_refusal_quotes_nothing(build_repo, served_scanners, 
 
 
 def test_the_whole_stderr_is_vetted_before_anything_is_cut(build_repo, served_scanners, elsewhere, capsys):
+    """VERBOSE-15, VERBOSE-17, VERBOSE-18: the whole stderr is vetted before a tail is cut, and every line is withheld
+    and counted."""
     fake_gitleaks(served_scanners, on_scan=vetting(flagging(FAKE_KEY)))
     lines = [f"aws_access_key_id = {FAKE_KEY}", *(f"line {number}" for number in range(2, 9))]
     ruff = fake_ruff(elsewhere, f"{shouting(lines)}; exit 2")
@@ -105,6 +110,7 @@ def test_the_whole_stderr_is_vetted_before_anything_is_cut(build_repo, served_sc
 
 
 def test_a_cleared_stderr_stands_as_a_tail(build_repo, served_scanners, elsewhere, capsys):
+    """VERBOSE-16, VERBOSE-21, MASK-10: a stderr cleared by exit 0 and an empty report stands as one fact line."""
     fake_gitleaks(served_scanners, on_scan=vetting(flagging(FAKE_KEY)))
     ruff = fake_ruff(elsewhere, f"{shouting(['first', 'second'])}; exit 2")
     code, out, _ = refused(build_repo({"src/a.py": "x = 1\n"}), capsys, locate_ruff=lambda: str(ruff))
@@ -130,6 +136,8 @@ def test_a_cleared_stderr_stands_as_a_tail(build_repo, served_scanners, elsewher
     ],
 )
 def test_anything_but_a_clean_answer_withholds_the_text(build_repo, served_scanners, elsewhere, use_mise, capsys, on_vet):
+    """VERBOSE-16, VERBOSE-17: any answer but exit 0 with an empty report withholds the text, a missing or unreadable
+    one too."""
     fake_gitleaks(served_scanners, on_scan=vetting(on_vet or "exit 0"))
     if on_vet is None:
         use_mise(lacking(served_scanners, scanners.GITLEAKS))
@@ -141,6 +149,7 @@ def test_anything_but_a_clean_answer_withholds_the_text(build_repo, served_scann
 
 
 def test_a_stalled_vet_withholds_the_text(build_repo, served_scanners, elsewhere, monkeypatch, capsys):
+    """VERBOSE-17: a vet that outlasts its time limit withholds the text."""
     fake_gitleaks(served_scanners, on_scan=vetting('echo "[]" > "$report"; exec sleep 30'))
     monkeypatch.setattr(scanners, "VET_TIMEOUT_SECONDS", 0.2)
     ruff = fake_ruff(elsewhere, f"{shouting(['boom'])}; exit 2")
@@ -161,9 +170,13 @@ def test_a_stalled_vet_withholds_the_text(build_repo, served_scanners, elsewhere
         f"\x9f1m{FAKE_KEY}\n",
         "\x1b[31mboom\x1b[0m\n",
     ],
-    ids=["colour around a key", "a cursor code before a key", "a charset selection", "an 8-bit control", "the first 8-bit control", "the last 8-bit control", "a clean coloured line"],
+    ids=[
+        "colour around a key", "a cursor code before a key", "a charset selection", "an 8-bit control",
+        "the first 8-bit control", "the last 8-bit control", "a clean coloured line",
+    ],
 )
 def test_a_text_holding_a_terminal_code_is_withheld_without_a_vet(build_repo, served_scanners, elsewhere, capsys, stderr):
+    """VERBOSE-14, VERBOSE-24: a text holding ESC or a C1 control is withheld whole and starts no vet."""
     fake_gitleaks(served_scanners, on_scan=vetting('echo "[]" > "$report"; exit 0'))
     ruff = fake_ruff(elsewhere, f"printf '%s' {shlex.quote(stderr)} >&2; exit 2")
     code, out, err = refused(build_repo({"src/a.py": "x = 1\n"}), capsys, locate_ruff=lambda: str(ruff))
@@ -176,15 +189,15 @@ def test_a_text_holding_a_terminal_code_is_withheld_without_a_vet(build_repo, se
 
 @pytest.mark.integration
 def test_no_scratch_directory_withholds_the_text(tmp_path, monkeypatch):
+    """VERBOSE-17: a vet that cannot make its scratch directory withholds the text."""
     monkeypatch.setattr(tempfile, "tempdir", str(tmp_path / "missing"))
     assert scanners.vetted_tail("boom\n") == " · 1 stderr line withheld · not cleared by gitleaks"
 
 
 def test_a_clean_run_starts_no_vet(build_repo, served_scanners, elsewhere, capsys):
+    """VERBOSE-19: a run without -v whose scanners refuse nothing starts no vet, whatever they wrote to stderr."""
     fake_gitleaks(served_scanners, on_scan=vetting(flagging(FAKE_KEY)))
-    fake_scanner(served_scanners, scanners.ACTIONLINT, "echo '[]'")
     noting_on_every_call(served_scanners / scanners.ACTIONLINT)
-    fake_scanner(served_scanners, scanners.OSV_SCANNER, reporting(OUTPUTS / "osv-scanner-clean.json", 0))
     noting_on_every_call(served_scanners / scanners.OSV_SCANNER)
     ruff = noting_on_every_call(fake_ruff(elsewhere, "echo '[]'"))
     zizmor = fake_zizmor(elsewhere / "zizmor", "echo '[]'")
@@ -195,6 +208,7 @@ def test_a_clean_run_starts_no_vet(build_repo, served_scanners, elsewhere, capsy
 
 
 def test_a_refusal_without_stderr_starts_no_vet(build_repo, served_scanners, elsewhere, capsys):
+    """VERBOSE-22: a refusal that wrote no stderr starts no vet."""
     fake_gitleaks(served_scanners, on_scan=vetting(flagging(FAKE_KEY)))
     ruff = fake_ruff(elsewhere, "exit 2")
     code, out, _ = refused(build_repo({"src/a.py": "x = 1\n"}), capsys, locate_ruff=lambda: str(ruff))
@@ -204,6 +218,8 @@ def test_a_refusal_without_stderr_starts_no_vet(build_repo, served_scanners, els
 
 
 def test_the_vet_judges_as_the_secret_scan_judges(build_repo, served_scanners, elsewhere, tmp_path, monkeypatch, capsys):
+    """VERBOSE-15, VERBOSE-25, VERBOSE-28, VERBOSE-29: the vet reads stdin under quality's config, ignores
+    gitleaks:allow, redacts its report and leaves no scratch directory."""
     fake_gitleaks(served_scanners, on_scan=vetting("exit 1"))
     scratch_root = tmp_path / "scratch-root"
     scratch_root.mkdir()
@@ -242,6 +258,8 @@ def test_the_vet_judges_as_the_secret_scan_judges(build_repo, served_scanners, e
     ],
 )
 def test_the_real_gitleaks_vets_a_refused_scanners_stderr(build_repo, installed_scanners, elsewhere, capsys, text, withheld, ignored):
+    """VERBOSE-14, VERBOSE-15, VERBOSE-16, VERBOSE-17, VERBOSE-18, VERBOSE-25, VERBOSE-26, VERBOSE-27: real gitleaks
+    clears a clean text and withholds a key, whole and counted, whatever the text holds around it."""
     repo = build_repo({"src/a.py": "x = 1\n"})
     if ignored:
         (repo / ".gitleaksignore").write_text("".join(f":aws-access-token:{number}\n" for number in (1, 2, 3)))

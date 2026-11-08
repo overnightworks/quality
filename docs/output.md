@@ -339,16 +339,38 @@ secret's value never appears, also not with `-v` (VERBOSE-14).
 
 ## The vet
 
-A secret's value never appears, and zizmor's schema refusal and osv-scanner's file error quote what they read, so a key in a workflow or a lock file could otherwise stand in a `✗` row and a CI log, on a run without `-v`. Before a fact quotes any of a scanner's stderr, the whole text goes through `gitleaks stdin` under quality's own `gitleaks.toml`, the definition of a secret that `quality check` judges with. Only exit `0` and an empty report clear it. A flagged text and a vet that cannot answer (gitleaks missing, a timeout, any other exit, a missing or unreadable report, a report that disagrees with the exit) withhold it whole, never partly, and the fact says how many lines: `· N stderr lines withheld · not cleared by gitleaks`. The exit and the verdict never move.
+[A secret's value never appears](#verbose-runs), and zizmor's schema refusal and osv-scanner's file error quote what
+they read, so a key in a workflow or a lock file could otherwise stand in a `✗` row and a CI log, on a run without `-v`.
+Before a fact quotes any of a scanner's stderr, the whole text goes through `gitleaks stdin` under quality's own
+`gitleaks.toml`, the definition of a secret that `quality check` judges with (VERBOSE-15). Only exit `0` and an empty
+report clear it (VERBOSE-16). A flagged text and a vet that cannot answer (gitleaks missing, a timeout, any other exit,
+a missing or unreadable report, a report that disagrees with the exit, no scratch directory) withhold it whole, never
+partly (VERBOSE-17), and the fact says how many lines: `· N stderr lines withheld · not cleared by gitleaks`
+(VERBOSE-18). [The exit and the verdict never move](#verbose-runs).
 
 ```text
   ✗ workflows     not checked    zizmor exited 1, neither 'clean' nor 'findings' · 8 stderr lines withheld · not cleared by gitleaks
     · zizmor  exited  1 · 8 stderr lines withheld · not cleared by gitleaks
 ```
 
-Without `-v`, a run whose scanners refuse nothing starts no vet; under `-v`, a finished scan that wrote stderr starts one, as does a refusal that wrote any, and a refusal with no stderr starts none, so a refusal costs two gitleaks starts. No refusal quotes gitleaks' own stderr, because the vet cannot vet the tool that failed; `-v` counts a failing gitleaks (any exit but `0` and `7`) unread, `· N stderr lines withheld · a failing gitleaks is never quoted`, because that stream relays git's stderr line by line, where a value cut across two lines passes the vet. Report text in rows is not stderr and is not vetted.
+Without `-v`, a run whose scanners refuse nothing starts no vet (VERBOSE-19); under `-v`, a finished scan that wrote
+stderr starts one (VERBOSE-20), as does a refusal that wrote any (VERBOSE-21), and a refusal with no stderr starts none
+(VERBOSE-22), so a refusal costs two gitleaks starts. No refusal quotes gitleaks' own stderr, because the vet cannot vet
+the tool that failed (VERBOSE-23); `-v` counts a failing gitleaks (any exit but `0` and `7`) unread,
+`· N stderr lines withheld · a failing gitleaks is never quoted`, because that stream relays git's stderr line by line,
+where a value cut across two lines passes the vet. Report text in rows is not stderr and is not vetted.
 
-- A text holding ESC or a C1 control (U+0080 to U+009F) has no clean answer, because a terminal code can stand against a value without the word boundary gitleaks' rules need and the printed text escapes only the code: it is withheld whole and no vet starts. A scanner writes terminal codes on stderr only under forced colour (`FORCE_COLOR`, `CLICOLOR_FORCE`); then its refusal's reason is withheld, clean text too. Giving the scanners a plain environment would lift that if it hurts a dependent. A normalised text is not vetted instead: stripping a code joins two words or eats the first letter of a key, and quality would own a terminal parser.
-- The vet judges as the secret scan judges: `--ignore-gitleaks-allow` and the scan's own config and exit code come from one list that feeds both calls, so a key beside `gitleaks:allow` is a finding; gitleaks runs in the vet's scratch directory, because with no source it reads `.gitleaksignore` from the folder it stands in and a repository could list the fingerprint of a stdin finding; the text opens with a fixed line, because gitleaks answers clean for a text whose first bytes read as a binary type; `--redact`, so the report holds no value, and it lives in a 0700 directory removed on every exit.
+- A text holding ESC or a C1 control (U+0080 to U+009F) has no clean answer, because a terminal code can stand against a
+  value without the word boundary gitleaks' rules need and the printed text escapes only the code: it is withheld whole
+  and no vet starts (VERBOSE-24). A scanner writes terminal codes on stderr only under forced colour (`FORCE_COLOR`,
+  `CLICOLOR_FORCE`); then its refusal's reason is withheld, clean text too. Giving the scanners a plain environment
+  would lift that if it hurts a dependent. A normalised text is not vetted instead: stripping a code joins two words or
+  eats the first letter of a key, and quality would own a terminal parser.
+- The vet judges as the secret scan judges: `--ignore-gitleaks-allow` and the scan's own config and exit code come from
+  one list that feeds both calls, so a key beside `gitleaks:allow` is a finding (VERBOSE-25); gitleaks runs in the vet's
+  scratch directory, because with no source it reads `.gitleaksignore` from the folder it stands in and a repository
+  could list the fingerprint of a stdin finding (VERBOSE-26); the text opens with a fixed line, because gitleaks answers
+  clean for a text whose first bytes read as a binary type (VERBOSE-27); `--redact`, so the report holds no value
+  (VERBOSE-28), and it lives in a 0700 directory removed on every exit (VERBOSE-29).
 - What passes: a value gitleaks does not recognise, which `quality check` does not recognise either; a value gitleaks recognises only by its context (`generic-api-key` needs its `api_key = `) when a scanner quotes the bare value; a value a scanner cut or spliced across lines; a binary type's mark at a fixed offset behind the first line (`ustar` at byte 257), which needs a text built for it.
 - quality does not replace every refusal's stderr with a fixed text, because every person would lose the reason; it does not show an uncleared text and name the risk, because a secret's value never appears, and it is not limited to a list of known lines per scanner (five lists that decay at each scanner bump).
