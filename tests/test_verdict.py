@@ -81,24 +81,26 @@ def failed(event, fact="", name="checks", kind=JobKind.MANDATORY):
     ],
 )
 def test_judges_the_effective_result_of_each_mandatory_job(jobs, attempt, expected):
-    """#6 rule 2: the newest attempt up to the current one decides each mandatory job."""
+    """VERDICT-2, VERDICT-3, VERDICT-5, VERDICT-6, VERDICT-7, VERDICT-8: the newest attempt up to the current one
+    decides each mandatory job; several entries, a missing job and a failed, skipped or cancelled one are red; other
+    jobs and other names do not count."""
     assert problems(jobs, attempt=attempt) == expected
 
 
 def test_a_gate_job_that_did_not_succeed_is_red():
-    """#6 rule 4: a gate job that did not succeed makes the verdict red."""
+    """VERDICT-14: a gate job that did not succeed makes the verdict red, with no mandatory entry."""
     assert problems([job()], gate={"check": "failure"}) == (failed(JobEvent.FAILURE, name="check", kind=JobKind.GATE),)
 
 
 def test_a_job_dropped_against_the_base_is_loosened_and_red():
-    """#6 rule 3: a mandatory job dropped against the base is loosened and red."""
+    """VERDICT-13: a mandatory job dropped against the base is loosened and red."""
     found = problems([job("tests-lite")], mandatory=("tests-lite",), base=("tests",))
     assert 'mandatory job "tests" removed' in found
     assert failed(JobEvent.MISSING, "not in the run", "tests") in found
 
 
 def test_a_base_job_kept_by_the_head_is_green():
-    """#6 rule 3: a base job the head keeps is not loosened."""
+    """VERDICT-13: a base job the head keeps is not loosened."""
     assert problems([job()], mandatory=("checks",), base=("checks",)) == ()
 
 
@@ -110,28 +112,28 @@ def fetch_from_fixtures(*names):
 
 
 def test_reads_the_mandatory_job_that_only_sits_on_page_two():
-    """#6 rule 2: jobs on later pages are read from recorded responses."""
+    """VERDICT-11: jobs on later pages are read from recorded responses."""
     jobs = read_jobs("o/r", "1", fetch_from_fixtures("jobs-page1.json", "jobs-page2.json"))
     assert problems(jobs, mandatory=("quality / verdict",)) == ()
     assert problems(jobs, mandatory=("checks",)) == (failed(JobEvent.MISSING, "not in the run"),)
 
 
 def test_a_missing_second_page_cannot_be_judged():
-    """#6 rule 2: jobs read disagreeing with total_count cannot be judged."""
+    """VERDICT-12: jobs read disagreeing with total_count cannot be judged."""
     fetch = fetch_from_fixtures("jobs-page1.json")
     with pytest.raises(CannotJudge, match="read 2 jobs but the run has 3"):
         read_jobs("o/r", "1", fetch)
 
 
 def test_more_pages_than_the_cap_cannot_be_judged():
-    """#6 rule 2: past the page cap the run cannot be judged."""
+    """VERDICT-12: past the page cap the run cannot be judged."""
     page = (FIXTURES / "jobs-page1.json").read_text(encoding="utf-8")
     with pytest.raises(CannotJudge, match="more than 10 pages"):
         read_jobs("o/r", "1", lambda url: (page, '<https://api.example/next>; rel="next"'))
 
 
 def test_base_config_is_read_from_the_base_commit(build_repo):
-    """#6 rule 3: the base config is read from the base commit."""
+    """VERDICT-13: the base config is read from the base commit."""
     repo = build_repo({"quality/config.toml": '[gate]\nmandatory_jobs = ["tests"]\n'})
     assert read_base(repo, head_commit(repo)).settings == GateSettings(("tests",), LegacyMode.REPORT)
 
@@ -170,7 +172,8 @@ def test_switching_legacy_back_from_fail_is_a_loosening(base_legacy, legacy, exp
     ids=["on to off", "on kept", "off to on", "off kept"],
 )
 def test_turning_sonar_off_is_a_loosening(base_sonar, sonar, expected):
-    """A head config that turns SonarCloud off under a base config that runs it shows as loosened and is red."""
+    """VERDICT-18: A head config that turns SonarCloud off under a base config that runs it shows as loosened and is
+    red."""
     head = Side(GateSettings(("checks",), LegacyMode.REPORT, sonar=sonar), None)
     base = Side(GateSettings(("checks",), LegacyMode.REPORT, sonar=base_sonar), None)
     result = judge(head, base, [job()], GREEN_GATE, 1, NO_RENAMES)
@@ -178,7 +181,8 @@ def test_turning_sonar_off_is_a_loosening(base_sonar, sonar, expected):
 
 
 def test_an_adoption_may_start_with_sonar_off(build_repo):
-    """A base commit without the config holds no gate, so a head that adopts the gate with sonar off is green."""
+    """VERDICT-19: A base commit without the config holds no gate, so a head that adopts the gate with sonar off is
+    green."""
     repo = build_repo({"README.md": "x"})
     base = read_base(repo, head_commit(repo))
     head = Side(GateSettings(("checks",), LegacyMode.REPORT, sonar=False), None)
@@ -187,7 +191,7 @@ def test_an_adoption_may_start_with_sonar_off(build_repo):
 
 
 def test_a_base_without_the_config_contributes_nothing(build_repo):
-    """#6 rule 3: a base without the config adds no mandatory jobs."""
+    """VERDICT-19: a base without the config adds no mandatory jobs."""
     repo = build_repo({"README.md": "x"})
     assert read_base(repo, head_commit(repo)) == Side(NO_BASE_SETTINGS, None)
 
@@ -310,7 +314,8 @@ def test_a_valid_ref_name_is_still_a_readable_base(build_repo, ref, full_ref):
 
 
 def test_a_pull_request_that_turns_sonar_off_is_red_in_the_verdict(monkeypatch, capsys, run_env):
-    """At the real entry, a head config with sonar = false under a base that scans is red, naming the loosening."""
+    """VERDICT-18: At the real entry, a head config with sonar = false under a base that scans is red, naming the
+    loosening."""
     repo, _ = run_env
     monkeypatch.setenv("GATE_BASE_SHA", head_commit(repo))
     (repo / "quality" / "config.toml").write_text('[gate]\nmandatory_jobs = ["checks"]\nsonar = false\n')

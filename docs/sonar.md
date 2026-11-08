@@ -85,8 +85,8 @@ a workflow step it appends nothing, prints the `· scan  excludes  docker:S8431 
 exits `0` (SONAR-15). `gate.yml` appends that step output to the scan's `args`. The value is empty unless
 `.github/dependabot.yml` exists, and the keys it sets are all `sonar.issue.ignore.multicriteria` keys (SONAR-16; see the
 Dependabot exception below). With `[gate] sonar = false` the properties check refuses a properties file and a passed
-token (SONAR-65), prints `· sonar  off  quality/config.toml sets [gate] sonar = false` instead and appends `sonar=off`
-(SONAR-66).
+token (SONAR-65), prints `· sonar  off  quality/config.toml sets [gate] sonar = false` instead and appends `sonar=off`,
+and ends with `✓ off · nothing reaches SonarCloud` (SONAR-66).
 
 The scanner's transport, verified at sonar-scanner-java-library 4.1.1.1633 (the library of sonar-scanner-cli
 8.1.0.6389, which `gate.yml` pins through `scannerVersion`):
