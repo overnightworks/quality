@@ -1,0 +1,8 @@
+claim_id = "1da7643c7ccf4aeb8bd8c5d3f911b6cc"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "8b056365727e269df102bb0bcd1930df1c2cb403"
+branch = "claude/issue-469-fix-rewrites-header"
+scope = ["docs/commands.md", "docs/output.md", "docs/rules.md", "src/quality/check.py", "src/quality/cli.py", "src/quality/ratchet.py", "tests/support/baselines.py", "tests/test_cli_fix.py", "tests/test_cli_fix_dry_run.py", "tests/test_cli_fix_renames.py", "tests/test_cli_output.py", "tests/test_cli_release.py", "tests/test_clones_baseline.py", "tests/test_ratchet.py", "tests/test_ratchet_generated.py", "tests/test_ratchet_gone.py"]
+opened_commit = "1e7f518be7d50b6b90381c47031e16c625083ea6"
+whole_reason = "The write decision, its rows and its docs are one behaviour; the headerless fixtures of every module that runs --fix flip with it (the last five are claimed because they run --fix and may flip; an unchanged one stays untouched), and 459a is a local rename in cli.py."
