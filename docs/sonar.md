@@ -5,12 +5,17 @@ judges the findings itself and keeps the properties check stands in [ARCHITECTUR
 
 ## `quality sonar findings`
 
-`gate.yml` runs SonarCloud's scanner in its `sonar` job and judges it through `verdict`; callers use `gate.yml`, never
-an action, because quality publishes none. A caller passes the Actions secret by name
-(`secrets: SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}`), has automatic analysis off in SonarCloud, and commits a root
-`sonar-project.properties` (SONAR-47). A missing or empty token is red (`error: SONAR_TOKEN is empty: …`, with the step
-to set and pass the secret), never skipped while SonarCloud runs (SONAR-68); `[gate] sonar = false` turns it off
+`gate.yml` runs SonarCloud's scanner in its `sonar` job and judges it through `verdict`; callers use `gate.yml`
+(SONAR-83), never an action, because quality publishes none. A caller passes the Actions secret by name
+(`secrets: SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}`) (SONAR-84), has automatic analysis off in SonarCloud, and commits a
+root `sonar-project.properties` (SONAR-47). A missing or empty token is red (`error: SONAR_TOKEN is empty: …`, with the
+step to set and pass the secret), never skipped while SonarCloud runs (SONAR-68); `[gate] sonar = false` turns it off
 ([the gate](gate.md#gateyml)). Dependabot runs resolve the Dependabot secret of the same name.
+
+The `sonar` job checks out the caller with its full history and without stored credentials, holds `contents: read` alone
+and is bounded by a timeout (SONAR-85). `SONAR_TOKEN` reaches only the properties check, the scan and the findings step,
+each through its own `env`, never through a workflow's or a job's (SONAR-86). The pull request's number reaches the
+findings step alone, as `PULL_REQUEST_NUMBER` (SONAR-87).
 
 ### What the two steps print
 
@@ -47,20 +52,22 @@ $ quality sonar findings        # a pull request
 The scan only sees a coverage report that is in the checkout when it starts. `gate.yml` never runs a caller's tests; the
 caller hands over the report its checks job wrote, in four steps:
 
-1. Upload the report from the checks job: `actions/upload-artifact` with `name: coverage` and `path: coverage.xml`.
-2. Give the gate job `needs: [checks]` (the checks job's id), so the artifact exists when the gate downloads it.
-3. Pass the artifact's name to the gate: `with: coverage-artifact: coverage`.
+1. Upload the report from the checks job: `actions/upload-artifact` with `name: coverage` and `path: coverage.xml`
+   (SONAR-88).
+2. Give the gate job `needs: [checks]` (the checks job's id), so the artifact exists when the gate downloads it
+   (SONAR-89).
+3. Pass the artifact's name to the gate: `with: coverage-artifact: coverage` (SONAR-90).
 4. Name the report in `sonar-project.properties`, for example `sonar.python.coverage.reportPaths=coverage.xml` (or
-   `sonar.javascript.lcov.reportPaths` for JavaScript and TypeScript). The path is relative to the upload's common
-   directory, which is where the download puts it.
+   `sonar.javascript.lcov.reportPaths` for JavaScript and TypeScript) (SONAR-91). The path is relative to the upload's
+   common directory, which is where the download puts it.
 
 Before anything reads the checkout, the properties check refuses (exit `2`) a checkout whose tracked files differ from
 the checked-out commit, naming the first (SONAR-48). The artifact may add a report but never change a file the commit
 tracks: not `quality/config.toml`, whose `[gate] legacy` the findings step reads and the verdict holds at the commit,
-not `sonar-project.properties`, not a source the scan reads (SONAR-49). The download comes before the tool checkout, so
-a `.gate-tool/` path in the artifact does not stand in for the pinned tool. A planted `.git/` still reaches git;
-upload-artifact leaves hidden paths out unless the caller's own workflow sets `include-hidden-files`, which the caller's
-workflow could do anyway.
+not `sonar-project.properties`, not a source the scan reads (SONAR-49). The download comes before the tool checkout
+(SONAR-92), so a `.gate-tool/` path in the artifact does not stand in for the pinned tool. A planted `.git/` still
+reaches git; upload-artifact leaves hidden paths out unless the caller's own workflow sets `include-hidden-files`, which
+the caller's workflow could do anyway.
 
 The properties check exits `2` naming the key and the entry when a listed report does not exist (SONAR-50): each
 comma-separated entry is judged on its own (SONAR-51), a glob (`*`, `?`, `**`) must match at least one file (SONAR-52)
@@ -68,11 +75,15 @@ and `**` must be a whole path segment (SONAR-53), a plain entry must be a file (
 with `..` is refused (SONAR-55). So a key whose report is missing, for instance because no `coverage-artifact` was
 passed, is red, not a silent `0.0%`. A caller that names no coverage key and passes no input scans as before (SONAR-56).
 
-`quality sonar properties` runs before the scan and refuses (exit `2`, naming the key) any property outside an allowlist
-(`sonar.organization`, `sonar.projectKey`, `sonar.projectName`, `sonar.sources`, `sonar.tests`, the inclusion/exclusion
-keys, `sonar.sourceEncoding`, `sonar.python.version` and the two coverage report path keys) (SONAR-57), any value
-containing a `${...}` substitution after decoding (the scanner would expand `${env.SONAR_TOKEN}`) (SONAR-58), a
-`sonar.organization` or `sonar.projectKey` other than `<owner>` and `<owner>_<repo>` (SONAR-59), a tracked
+The gate downloads the named artifact the same way for every repository, reading its name through `with:` and never in a
+shell (SONAR-93). No step or job of the `sonar` job continues on error, so an artifact the run does not have fails the
+download, the job and the verdict (SONAR-94).
+
+`quality sonar properties` runs before the scan (SONAR-95) and refuses (exit `2`, naming the key) any property outside
+an allowlist (`sonar.organization`, `sonar.projectKey`, `sonar.projectName`, `sonar.sources`, `sonar.tests`, the
+inclusion/exclusion keys, `sonar.sourceEncoding`, `sonar.python.version` and the two coverage report path keys)
+(SONAR-57), any value containing a `${...}` substitution after decoding (the scanner would expand `${env.SONAR_TOKEN}`)
+(SONAR-58), a `sonar.organization` or `sonar.projectKey` other than `<owner>` and `<owner>_<repo>` (SONAR-59), a tracked
 `.scannerwork/` (SONAR-60), a tracked file that differs from the checked-out commit, and an empty token (SONAR-61). The
 file is read with the `java.util.Properties` grammar (`=`, `:` or whitespace separators, `\` continuation, `\uXXXX` and
 `\` escapes) (SONAR-62). The file is read inside the checkout; a link leading out of it is refused (SONAR-63), and every
@@ -82,17 +93,18 @@ workflow, which holds the token itself.
 After its checks pass (SONAR-13), the properties check also hands the scan its issue exclusion: it appends
 `scanner-arguments=<value>` to the file named by `$GITHUB_OUTPUT`, keeping the lines the file holds (SONAR-14); outside
 a workflow step it appends nothing, prints the `· scan  excludes  docker:S8431 · .github/dependabot.yml exists` row and
-exits `0` (SONAR-15). `gate.yml` appends that step output to the scan's `args`. The value is empty unless
+exits `0` (SONAR-15). `gate.yml` appends that step output to the scan's `args` (SONAR-96). The value is empty unless
 `.github/dependabot.yml` exists, and the keys it sets are all `sonar.issue.ignore.multicriteria` keys (SONAR-16; see the
 Dependabot exception below). With `[gate] sonar = false` the properties check refuses a properties file and a passed
 token (SONAR-65), prints `· sonar  off  quality/config.toml sets [gate] sonar = false` instead and appends `sonar=off`,
 and ends with `✓ off · nothing reaches SonarCloud` (SONAR-66).
 
 The scanner's transport, verified at sonar-scanner-java-library 4.1.1.1633 (the library of sonar-scanner-cli
-8.1.0.6389, which `gate.yml` pins through `scannerVersion`):
+8.1.0.6389, which `gate.yml` pins through `scannerVersion`; SONAR-97):
 
 - The bootstrap's authenticated requests reach only `sonarcloud.io` and `api.sonarcloud.io`. This holds only with the
-  pinned `-Dsonar.host.url=https://sonarcloud.io` argument and a properties file that passed the properties check.
+  pinned `-Dsonar.host.url=https://sonarcloud.io` argument (SONAR-98) and a properties file that passed the properties
+  check.
 - Residual limit: a redirect issued by SonarCloud itself carries the token to the host it names.
 - The engine is downloaded from SonarCloud and is not pinned by the CLI pin. SonarSource's server-side code is an
   accepted trust boundary: the token's only purpose is to authenticate to SonarCloud.
@@ -178,8 +190,9 @@ runs make no gate request (SONAR-4).
 | the task has no `analysisId` (SONAR-8), HTTP 401, 403, 404 or 5xx, a timeout (SONAR-9) | `2` | `error:` and `next:`, before the findings are read |
 
 A failed gate fails the `sonar` job whatever the findings count says (SONAR-10), and `legacy = "fail"` still fails it on
-its own (SONAR-11); the verdict then prints the row `! quality / sonar  failure`. `-Dsonar.qualitygate.wait=false` stays
-in `gate.yml`: the scanner does not wait for the gate, this command reads it.
+its own (SONAR-11); the verdict then prints the row `! quality / sonar  failure` ([the gate](gate.md#gateyml)).
+`-Dsonar.qualitygate.wait=false` stays in `gate.yml` (SONAR-99): the scanner does not wait for the gate, this command
+reads it.
 
 - **What the gates check.** The gate set in SonarCloud for the repository; the organization's default is the built-in
   "Sonar way". It judges new code (coverage, duplication, ratings, reviewed security hotspots).
