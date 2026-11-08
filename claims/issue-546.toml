@@ -1,0 +1,8 @@
+claim_id = "0185d10bcd9d47ea86c6fd38677ffa15"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "8acb6bf3743119aa37c1b27dd22a24fe02a4fcd9"
+branch = "claude/issue-546-d7-stream-ids"
+scope = ["docs/output.md", "tests/test_cli_stream.py", "tests/test_output.py", "tests/test_verdict_door.py"]
+opened_commit = "add8b23e86427c254736587b7da2285e2efcb570"
+whole_reason = "docs/output.md Streams section and the tests that prove it, linked by STREAM IDs."
