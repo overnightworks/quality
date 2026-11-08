@@ -116,11 +116,11 @@ def fleet_refusal(fact: str, *, shape: bool = True, rerun: bool = False) -> Cann
 
 
 class ListingFault(CannotJudge):
-    """GitHub's listing of an organization cannot be used; `no_organization` when GitHub knows no such organization."""
+    """GitHub's listing of an organization cannot be used; `in_file` when the fault is the file's entry, not GitHub's."""
 
-    def __init__(self, fact: str, no_organization: bool = False) -> None:
+    def __init__(self, fact: str, in_file: bool = False) -> None:
         super().__init__(fact)
-        self.no_organization = no_organization
+        self.in_file = in_file
 
 
 RELEASES = tuple(rule.release for rule in Rule)
@@ -250,28 +250,28 @@ def _entry_problems(key: str, entries: list[str], valid: re.Pattern[str], name: 
     return problems
 
 
-def listing_failure(organization: str, error: Exception) -> ListingFault:
+def listing_failure(index: int, organization: str, error: Exception) -> ListingFault:
     """What went wrong reaching GitHub's listing, in words that carry no text of the exception."""
     if isinstance(error, urllib.error.HTTPError):
         if error.code == 404:
-            return ListingFault("", no_organization=True)
+            return ListingFault(f"{FLEET_PATH} organizations[{index}] is no GitHub organization", in_file=True)
         return ListingFault(f"GitHub did not list {organization}{output.SEPARATOR}HTTP {error.code}")
     if isinstance(error, OSError) and web.timed_out(error):
         return ListingFault(f"GitHub did not answer the listing of {organization} within {web.REQUEST_TIMEOUT_SECONDS}s")
     return ListingFault(f"GitHub could not be reached for the listing of {organization}")
 
 
-def list_organization(organization: str, token: str, fetch_listing: ListingFetch) -> tuple[str, ...]:
+def list_organization(index: int, organization: str, token: str, fetch_listing: ListingFetch) -> tuple[str, ...]:
     """The public, non-archived, non-fork repositories GitHub lists for the organization, as `owner/name`, from one
     page. The token goes to GitHub's API only, never to git; a local run lists anonymously."""
     headers = {"Accept": "application/vnd.github+json", **({"Authorization": f"Bearer {token}"} if token else {})}
-    body, answer = fetch_listing(LISTING_URL.format(organization=organization), headers, partial(listing_failure, organization))
+    body, answer = fetch_listing(LISTING_URL.format(organization=organization), headers, partial(listing_failure, index, organization))
     if NEXT_PAGE.search(answer.get("Link", "")):
         raise ListingFault(f"{organization} has more than 100 public repositories{output.SEPARATOR}quality reads one page")
     malformed = ListingFault(f"GitHub's listing of {organization} is not a list of repositories")
     try:
         listed = json.loads(body)
-    except ValueError as error:
+    except (ValueError, RecursionError) as error:
         raise malformed from error
     if not isinstance(listed, list) or not all(_is_listed_repository(entry) for entry in listed):
         raise malformed
@@ -295,11 +295,11 @@ def select_repositories(fleet: Fleet, token: str, fetch_listing: ListingFetch) -
     shape_wrong = github_failed = False
     for index, organization in enumerate(fleet.organizations):
         try:
-            names = list_organization(organization, token, fetch_listing)
+            names = list_organization(index, organization, token, fetch_listing)
         except ListingFault as fault:
-            github_failed |= not fault.no_organization
-            shape_wrong |= fault.no_organization
-            facts.append(f"{FLEET_PATH} organizations[{index}] is no GitHub organization" if fault.no_organization else str(fault))
+            github_failed |= not fault.in_file
+            shape_wrong |= fault.in_file
+            facts.append(str(fault))
         else:
             found.update({name.lower(): (organization, name) for name in names})
     for index, entry in enumerate(fleet.repositories):

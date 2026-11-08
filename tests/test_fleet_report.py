@@ -44,7 +44,7 @@ def report_in(
     code = cli.main(
         ["report", *words],
         release_tags=tags,
-        **({} if fetch_listing is None else {"fetch_listing": fetch_listing}),
+        fetch_listing=fetch_listing or Listing({}),
         clock=clock,
         now=lambda: datetime(2026, 11, 6, 12, tzinfo=UTC),
         environment=environment or {},
@@ -90,6 +90,10 @@ def listed(*entries: tuple[str, ...]) -> Answer:
 
 def http_error(status: int) -> Answer:
     return Answer(failure=urllib.error.HTTPError("https://api.github.com", status, "", Message(), None))
+
+
+SHAPE_NEXT = 'next: write it in quality/fleet.toml like this:\n    organizations = ["overnightworks"]\n'
+RERUN_NEXT = "next: fix what the error names, then run quality report again\n"
 
 
 def write_organizations(directory: Path, organizations: list[str], repositories: list[str] | None = None) -> Path:
@@ -271,28 +275,29 @@ def test_the_listing_carries_the_job_token_only_when_there_is_one(capsys, monkey
 
 
 @pytest.mark.parametrize(
-    ("answer", "fact"),
+    ("answer", "fact", "steps"),
     [
-        (http_error(404), "quality/fleet.toml organizations[0] is no GitHub organization"),
-        (http_error(503), "GitHub did not list o · HTTP 503"),
-        (Answer(link='<https://api.github.com/next>; rel="next"'), "o has more than 100 public repositories · quality reads one page"),
-        (Answer(failure=TimeoutError()), f"GitHub did not answer the listing of o within {web.REQUEST_TIMEOUT_SECONDS}s"),
-        (Answer(failure=urllib.error.URLError(ConnectionRefusedError("secret-host"))), "GitHub could not be reached for the listing of o"),
-        (Answer(body=b"not json"), "GitHub's listing of o is not a list of repositories"),
-        (Answer(body=b'{"full_name": "o/a"}'), "GitHub's listing of o is not a list of repositories"),
-        (listed(("--upload-pack=x/y",)), "GitHub's listing of o is not a list of repositories"),
-        (listed(("o/..",)), "GitHub's listing of o is not a list of repositories"),
+        (http_error(404), "quality/fleet.toml organizations[0] is no GitHub organization", SHAPE_NEXT),
+        (http_error(503), "GitHub did not list o · HTTP 503", RERUN_NEXT),
+        (Answer(link='<https://api.github.com/next>; rel="next"'), "o has more than 100 public repositories · quality reads one page", RERUN_NEXT),
+        (Answer(failure=TimeoutError()), f"GitHub did not answer the listing of o within {web.REQUEST_TIMEOUT_SECONDS}s", RERUN_NEXT),
+        (Answer(failure=urllib.error.URLError(ConnectionRefusedError("secret-host"))), "GitHub could not be reached for the listing of o", RERUN_NEXT),
+        (Answer(body=b"not json"), "GitHub's listing of o is not a list of repositories", RERUN_NEXT),
+        (Answer(body=b"[" * 100_000 + b"]" * 100_000), "GitHub's listing of o is not a list of repositories", RERUN_NEXT),
+        (Answer(body=b'{"full_name": "o/a"}'), "GitHub's listing of o is not a list of repositories", RERUN_NEXT),
+        (listed(("--upload-pack=x/y",)), "GitHub's listing of o is not a list of repositories", RERUN_NEXT),
+        (listed(("o/..",)), "GitHub's listing of o is not a list of repositories", RERUN_NEXT),
         (Answer(body=b'[{"full_name": "o/a", "private": "no", "archived": false, "fork": false}]'),
-         "GitHub's listing of o is not a list of repositories"),
+         "GitHub's listing of o is not a list of repositories", RERUN_NEXT),
     ],
-    ids=["404", "503", "more pages", "timeout", "unreachable", "not JSON", "not a list", "option", "dots", "flag not boolean"],
+    ids=["404", "503", "more pages", "timeout", "unreachable", "not JSON", "deeply nested", "not a list", "option", "dots", "flag not boolean"],
 )
-def test_a_listing_that_cannot_be_used_is_exit_2_before_any_clone(capsys, monkeypatch, tmp_path, public, answer, fact):
+def test_a_listing_that_cannot_be_used_is_exit_2_before_any_clone(capsys, monkeypatch, tmp_path, public, answer, fact, steps):
     printed = report_in(
         write_organizations(tmp_path / "fleet", ["o"]), capsys, monkeypatch, ticks(0), fetch_listing=Listing({"o": answer})
     )
     assert (printed.code, printed.out) == (2, "")
-    assert printed.err.splitlines()[0] == f"error: {fact} · nothing measured"
+    assert printed.err == f"error: {fact} · nothing measured\n{steps}"
     assert not any(word in printed.err for word in ("upload-pack", "secret-host", "fleet  "))
 
 
@@ -326,7 +331,7 @@ def test_a_named_repository_that_the_organization_already_lists_is_refused_by_it
     listing = Listing({"o": listed(("o/alpha",))})
     printed = report_in(write_organizations(tmp_path / "fleet", ["o"], ["O/Alpha"]), capsys, monkeypatch, ticks(0), fetch_listing=listing)
     assert (printed.code, printed.out) == (2, "")
-    assert printed.err.splitlines()[0] == "error: quality/fleet.toml repositories[0] is already in o · nothing measured"
+    assert printed.err == f"error: quality/fleet.toml repositories[0] is already in o · nothing measured\n{SHAPE_NEXT}"
 
 
 def test_a_fork_named_in_the_file_is_measured(capsys, monkeypatch, tmp_path, public):
@@ -344,4 +349,4 @@ def test_organizations_that_select_nothing_are_refused(capsys, monkeypatch, tmp_
     listing = Listing({"o": listed(("o/old", "archived"))})
     printed = report_in(write_organizations(tmp_path / "fleet", ["o"]), capsys, monkeypatch, ticks(0), fetch_listing=listing)
     assert (printed.code, printed.out) == (2, "")
-    assert printed.err.splitlines()[0] == "error: quality/fleet.toml selects no repository · nothing measured"
+    assert printed.err == f"error: quality/fleet.toml selects no repository · nothing measured\n{SHAPE_NEXT}"
