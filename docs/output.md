@@ -225,7 +225,16 @@ Ruled by the operator:
 - stdout carries rows and the verdict. stderr carries the live line, the input prompt and `error:`/`next:`. So `quality check | less` shows every finding and an error stays visible.
 - `report`: rows and verdict on stderr; the tables are an artifact on stdout, so `quality report > fleet.md` writes only the tables.
 
-The lines come in run order, also through a pipe that merges stdout and stderr (`2>&1 | tee log`); each stays on its own stream. `output.set_up_streams`, which `cli.run` calls, makes stdout line-buffered. A run judges the areas in the rows' order and prints each area's lines as its last rule ends, in a pipe as at a terminal, so they stand while the next area runs. After Ctrl-C or SIGTERM during a scan the finished areas' lines stay, with neither verdict nor pair. A reader that left (`| head`, a closed `less`) ends nothing: the run is judged to the end, that stream prints nothing more, and the exit is the run's own. A stream closed before the run (`2>&-`) takes nothing; its lines never move to the other stream.
+Rows and the verdict go to stdout (STREAM-1); the live line, the input prompt and `error:`/`next:` go to stderr
+(STREAM-2). `quality report` has [its own split](commands.md#quality-report).
+
+The lines come in run order, also through a pipe that merges stdout and stderr (`2>&1 | tee log`) (STREAM-3); each stays
+on its own stream (STREAM-4). `output.set_up_streams`, which `cli.run` calls, makes stdout line-buffered (STREAM-5). A
+run judges the areas in [the rows' order](#rows) and prints each area's lines as its last rule ends, in a pipe as at a
+terminal, so they stand while the next area runs (STREAM-6). After Ctrl-C or SIGTERM during a scan the finished areas'
+lines stay, with neither verdict nor pair (STREAM-7). A reader that left (`| head`, a closed `less`) ends nothing: the
+run is judged to the end, that stream prints nothing more, and the exit is the run's own (STREAM-8). A stream closed
+before the run (`2>&-`) takes nothing; its lines never move to the other stream (STREAM-9).
 
 ## Colour and the live line
 

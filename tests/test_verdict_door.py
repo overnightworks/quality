@@ -177,7 +177,7 @@ def test_the_verdict_takes_v_and_prints_the_same(run_env, door):
 
 
 def test_a_closed_stderr_moves_no_refusal_to_stdout(monkeypatch, door):
-    """VERDICT-38."""
+    """STREAM-9: a closed stderr takes the refusal and none of it moves to stdout."""
     monkeypatch.delenv("GATE_NEEDS")
     monkeypatch.setattr(sys, "stderr", None)
     assert door()[:2] == (2, "")
