@@ -1,7 +1,0 @@
-claim_id = "d89f3f1b296e480f8bf7fdcfcec89b37"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "4ca52e892b82d581c26a3dd60bc0b0d2e9f353ed"
-branch = "claude/issue-586-d7-python-security-refusal-ids"
-scope = ["docs/rules.md", "tests/test_python_lint.py"]
-opened_commit = "44206ce9235622f66c7c760a4329cb5afa6e2e52"
