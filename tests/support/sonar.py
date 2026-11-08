@@ -149,6 +149,14 @@ def run_properties(
     return code, captured.out, captured.err
 
 
+def sonar_off_files():
+    return {"quality/config.toml": '[gate]\nmandatory_jobs = ["check"]\nsonar = false\n'}
+
+
+def environment_without_token():
+    return {name: value for name, value in PULL_REQUEST_ENVIRONMENT.items() if name != "SONAR_TOKEN"}
+
+
 legacy_config_absent = '[gate]\nmandatory_jobs = ["quality"]\n'
 
 
