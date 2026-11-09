@@ -1,8 +1,0 @@
-claim_id = "00559238957c4bbc9179c3f3655cdf14"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "14573a480aaeab796dc955fc1dccfd7b0c4144c2"
-branch = "claude/issue-683-d7-advisory-locks-ids"
-scope = ["docs/rules.md", "tests/test_advisories_locks.py", "tests/test_pip_requirements.py", "tests/test_verdict.py"]
-opened_commit = "1cdd6be2099e2009627fda53f1504b0beb0b22ca"
-whole_reason = "docs/rules.md advisory rule sentences only the locks and requirements tests prove, linked by ADVISORY IDs."
