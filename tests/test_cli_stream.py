@@ -133,8 +133,8 @@ def test_an_interrupt_during_a_scan_leaves_the_rows_of_the_finished_areas_whole(
     [pytest.param(signal.SIGINT, -signal.SIGINT, id="Ctrl-C"), pytest.param(signal.SIGTERM, 128 + signal.SIGTERM, id="SIGTERM")],
 )
 def test_an_interrupt_at_a_terminal_leaves_whole_lines(build_repo, served_scanners, tmp_path, window, sent, code):
-    """STREAM-6, STREAM-7: an interrupt at a terminal leaves the finished areas' lines whole, with neither verdict
-    nor pair."""
+    """COLOUR-11, COLOUR-12, STREAM-6, STREAM-7: an interrupt at a terminal, Ctrl-C or SIGTERM, erases the live line
+    and leaves the finished areas' lines whole, with neither verdict nor pair."""
     repo = build_repo({"README.md": "x\n"})
     complete = subprocess.run([*MODULE_DOOR, CHECK_WORD], cwd=repo, env=door_environment(), capture_output=True, text=True, timeout=60, check=False)
     pid_file = tmp_path / "scanner.pid"
@@ -233,7 +233,7 @@ def test_a_terminal_that_hung_up_during_a_scan_leaves_the_run_s_own_exit(build_r
 
 
 def test_a_step_s_pipes_carry_the_stop_line_and_no_live_line(build_repo):
-    """MASK-14: a step's stderr holds the stop line and no other line."""
+    """COLOUR-7, MASK-14: a step's stderr holds the stop line and no other line, the live line included."""
     repo = build_repo({"README.md": "x\n"})
     done = subprocess.run([*MODULE_DOOR, CHECK_WORD], cwd=repo, env=door_environment(TERM="xterm", GITHUB_ACTIONS="true"), capture_output=True, text=True, timeout=60, check=False)
     lines = done.stderr.splitlines()
@@ -356,3 +356,11 @@ def test_a_closed_stdout_fd_still_prints_the_pair_and_never_crashes(tmp_path, ow
         cwd=tmp_path, text=True, check=False, stderr=subprocess.PIPE, timeout=60,
     )
     assert (done.returncode, done.stderr) == (2, f"error: not inside a git work tree · {tmp_path}\nnext: run quality check inside a repository\n")
+
+
+def test_a_closed_stdout_takes_the_rows_and_leaves_the_pair_on_stderr(env_and_broken_compose, served_scanners):
+    """STREAM-2, STREAM-9: with no stdout the rows go nowhere and never to stderr, which holds the pair alone."""
+    err = io.StringIO()
+    with contextlib.redirect_stdout(None), contextlib.redirect_stderr(err):
+        code = check_door(env_and_broken_compose, clock=lambda: 0.0)
+    assert (code, err.getvalue()) == (2, refusal_pair(env_and_broken_compose))

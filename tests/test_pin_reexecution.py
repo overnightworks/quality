@@ -503,6 +503,7 @@ def test_an_unrelated_checkout_never_runs_its_code(scene):
 
 
 def test_the_live_line_shows_its_fact():
+    """COLOUR-13: the line redraws with a fact after its event column and is erased at the end."""
     stream = io.StringIO()
     with output.live_line(output.Channel(stream, False, 60))("release", "fetching") as show:
         show("v0.10.1 · 4s")
@@ -512,6 +513,7 @@ def test_the_live_line_shows_its_fact():
 
 
 def test_a_stream_without_a_window_shows_no_fact():
+    """COLOUR-7: a stream with no window shows no fact."""
     stream = io.StringIO()
     with output.live_line(output.Channel(stream, False, None))("release", "fetching") as show:
         show("v0.10.1 · 4s")
@@ -572,6 +574,7 @@ def test_the_streams_flush_before_the_handover(tmp_path, monkeypatch, arrange):
 
 
 def test_the_live_line_counts_on_through_both_preparation_steps(tmp_path, monkeypatch):
+    """COLOUR-13: the line counts the seconds on through the release check and uv's preparation, behind the tag."""
     shown = []
     commit = "5e" * 20
 
