@@ -1,7 +1,0 @@
-claim_id = "a781091489a140619c296a80c9282b4d"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "d174e50fd98c2edaa2d37fa276b9e60b133b985a"
-branch = "claude/issue-512-vision-names-lane-relay"
-scope = ["docs/VISION.md"]
-opened_commit = "d402458135c4a4f53d6d9cd365fe725e2b524fee"
