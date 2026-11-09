@@ -1,0 +1,8 @@
+claim_id = "d06957ff14e54aeca391352d353ee65c"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "cb197ad4952876189fedf4e3c759b04346326a13"
+branch = "claude/issue-622-d7-fix-first-ids"
+scope = ["docs/rules.md", "tests/test_cli_fix.py", "tests/test_clones_baseline.py", "tests/test_ratchet.py", "tests/test_ratchet_fix.py", "tests/test_ratchet_gone.py"]
+opened_commit = "2396513e3730f1fb3f88982b063f5f6917e29a57"
+whole_reason = "docs/rules.md --fix paragraph, first slice: what the fix makes of a held ceiling (write, judge, lower, drop, keep what grew and what is new, drop a gone entry and a lost pair), and the tests that prove it, linked by FIX IDs."
