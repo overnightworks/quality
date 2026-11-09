@@ -1,0 +1,8 @@
+claim_id = "868e3302cd7542529fb20cb0f03cdf23"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "fa0effe868020b23328583eaf100075be18ac9cb"
+branch = "claude/issue-710-output-first-row-ids"
+scope = ["docs/output.md", "tests/test_cli_release.py", "tests/test_python_lint_rows.py", "tests/test_scanners.py"]
+opened_commit = "aed0e9fb8d5bcb8ae92a40d561697eb64184774a"
+whole_reason = "docs/output.md unnumbered sentences the tests prove (ROW-17, CLOSING-33) and the code area events in the by-area list, with the citing docstrings; the event-word sentence stays a named gap."
