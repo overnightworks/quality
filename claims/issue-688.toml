@@ -1,7 +1,0 @@
-claim_id = "2ee8f3f747414331a13aa000c5449191"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "dff27974a6a1a0c2a93232f8e0394d6c4d889d9a"
-branch = "claude/issue-688-d7-allowance-rows-ids"
-scope = ["docs/rules.md", "tests/test_advisories_rows.py", "tests/test_config.py"]
-opened_commit = "9fdb5331c9bcf6774b91402502ccc7ef37f8a413"
