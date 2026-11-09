@@ -501,6 +501,7 @@ def test_the_real_door_shortens_to_its_pseudo_terminals_window(build_repo, extra
     ids=["31 whole", "30 whole", "29", "20", "3"],
 )
 def test_the_live_line_keeps_the_last_column_of_its_window_free(columns, line):
+    """COLOUR-9: the line ends one column before the window's last and is cut with `…` where it does not fit."""
     terminal, channel = at_window(columns)
     with output.live_line(channel)("dependencies", "osv-scanner"):
         up = without_sgr(terminal.getvalue())
@@ -508,6 +509,7 @@ def test_the_live_line_keeps_the_last_column_of_its_window_free(columns, line):
 
 
 def test_the_live_line_is_one_dim_span():
+    """COLOUR-8: the line is one dim span, painted as a note row is."""
     row_terminal, row_channel = at_window(80)
     output.write_rows((Row(Glyph.NOTE, "debt", Event.CLEAN),), row_channel)
     painted_row = row_terminal.getvalue().splitlines()[0]
@@ -519,6 +521,7 @@ def test_the_live_line_is_one_dim_span():
 
 
 def test_a_channel_with_no_width_gets_no_line():
+    """COLOUR-7: a channel that knows no window gets no line."""
     terminal = Terminal()
     with output.live_line(output.Channel(terminal, True, None))("secrets", "gitleaks"):
         pass
@@ -526,6 +529,7 @@ def test_a_channel_with_no_width_gets_no_line():
 
 
 def test_a_failed_erase_leaves_the_interrupt_in_flight(window):
+    """STREAM-8: a terminal that hung up while the line stood leaves the run's interrupt in flight."""
     terminal = window(80)
     channel = output.Channel(terminal.stream, True, 80)
     with pytest.raises(KeyboardInterrupt), output.live_line(channel)("secrets", "gitleaks"):
@@ -534,6 +538,7 @@ def test_a_failed_erase_leaves_the_interrupt_in_flight(window):
 
 
 def test_an_interrupt_during_the_draw_still_erases_the_part_drawn():
+    """COLOUR-11: an interrupt during the draw still erases the part drawn."""
     class Interrupted(Terminal):
         def write(self, text: str) -> int:
             written = super().write(text)

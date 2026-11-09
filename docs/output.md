@@ -292,13 +292,20 @@ to copy are never painted (COLOUR-4). `NO_COLOR` counts only when set and not em
 runner step's log is two pipes), the CI log, `NO_COLOR` and `TERM=dumb` print the same words plain and [whole](#length)
 (COLOUR-6).
 
-While a scanner runs, a stderr that is a terminal with a known window shows one dim line per scanner, the area and the scanner, leaving the window's last column free, and erases it before the next line prints, so the area's row takes its place. Ctrl-C, a refusal and an exception erase it too, and so does SIGTERM while gitleaks or osv-scanner runs; a SIGTERM during any other scanner ends quality on the spot and leaves the line standing. A window of under three columns and a terminal that draws `…` two cells wide are not served: there the line may wrap. A pty a step opens for itself is a terminal and shows it.
+While a scanner runs, a stderr that is a terminal with a known window and colour on (COLOUR-7) shows one dim line per
+scanner, the area and the scanner (COLOUR-8), leaving the window's last column free (COLOUR-9), and erases it before the
+next line prints, so the area's row takes its place (COLOUR-10). Ctrl-C, a refusal and an exception erase it too
+(COLOUR-11), and so does SIGTERM while gitleaks or osv-scanner runs (COLOUR-12); a SIGTERM during any other scanner ends
+quality on the spot and leaves the line standing. A window of under three columns and a terminal that draws `…` two
+cells wide are not served: there the line may wrap. A pty a step opens for itself is a terminal and shows it.
 
 ```text
   ⠋ secrets       gitleaks
 ```
 
-While quality fetches or prepares the release that judges, the same line counts the seconds, `⠋ release  fetching  <tag> · <seconds>s` (`syncing` for quality's own checkout).
+While quality fetches or prepares the release that judges ([commands](commands.md#which-release-judges)), the same
+line counts the seconds, `⠋ release  fetching  <tag> · <seconds>s` (for quality's own checkout, `syncing` and
+`this checkout` stand for `fetching` and `<tag>`) (COLOUR-13).
 
 ## Length
 

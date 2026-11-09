@@ -34,6 +34,8 @@ def staged_door_on(repo: Path, stdout: TextIO, stderr: TextIO, environment: dict
 
 
 def test_each_scanner_runs_under_its_own_live_line(build_repo, served_scanners, window, tmp_path, monkeypatch, xterm):
+    """COLOUR-8, COLOUR-10: each scanner runs under a line of its own, the area and the scanner, erased before the next
+    one is drawn."""
     repo = build_repo({".github/workflows/w.yml": "on: push\n", "uv.lock": uv_lock(), "src/a.py": "x = 1\n"})
     terminal = window(80)
     terminal.stream.reconfigure(line_buffering=False)
@@ -63,6 +65,8 @@ def test_each_scanner_runs_under_its_own_live_line(build_repo, served_scanners, 
     ],
 )
 def test_each_row_stands_where_its_live_line_stood_on_one_terminal(build_repo, served_scanners, window, files, scanner_body, xterm):
+    """COLOUR-10: with both streams on one terminal each row stands where its live line stood, whether the run is clean
+    or refused."""
     repo = build_repo(files)
     if scanner_body:
         fake_scanner(served_scanners, scanners.GITLEAKS, scanner_body)
@@ -82,6 +86,7 @@ def test_each_row_stands_where_its_live_line_stood_on_one_terminal(build_repo, s
     ],
 )
 def test_stdout_is_byte_equal_with_and_without_a_terminal_on_stderr(build_repo, window, files, code, xterm):
+    """COLOUR-3: stdout holds the same bytes whether stderr is a terminal or not."""
     repo = build_repo(files)
     terminal = window(80)
     shown = io.StringIO()
@@ -130,6 +135,7 @@ def a_file(_window: Callable[[int], PseudoTerminal], tmp_path: Path, stack: cont
     ],
 )
 def test_a_stream_that_may_not_show_the_line_gets_no_byte(build_repo, window, tmp_path, environment, open_stream, xterm):
+    """COLOUR-7: a stream with no window, no descriptor, no terminal at all or colour off gets no byte of the line."""
     repo = build_repo({"README.md": "x\n"})
     with contextlib.ExitStack() as stack:
         stream, written = open_stream(window, tmp_path, stack)
@@ -138,6 +144,7 @@ def test_a_stream_that_may_not_show_the_line_gets_no_byte(build_repo, window, tm
 
 
 def test_an_exception_in_a_check_takes_the_line_down(build_repo, window, monkeypatch, xterm):
+    """COLOUR-11: an exception in a check takes the line down before it propagates."""
     class Broken(Exception):
         pass
 
@@ -160,6 +167,8 @@ def test_an_exception_in_a_check_takes_the_line_down(build_repo, window, monkeyp
 def test_the_staged_door_shows_its_scanner_and_takes_the_line_down_before_its_answer(
     build_repo, served_scanners, use_mise, window, monkeypatch, xterm, outcome, marker
 ):
+    """COLOUR-8, COLOUR-10, COLOUR-11: the staged door shows its scanner under a line that is down before its answer,
+    whether clean, a finding or a refusal."""
     repo = build_repo({"README.md": "x\n"})
     stage(repo, {"staged.txt": "x\n"})
     if outcome == "finding":
