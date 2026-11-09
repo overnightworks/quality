@@ -1,8 +1,0 @@
-claim_id = "79428bd66d5443a0a5209abf795f5739"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "f9faba8b0e53bec81da9181622d31d9019276a28"
-branch = "claude/issue-626-d7-merge-release-ids"
-scope = ["docs/commands.md", "tests/test_merge_attempt.py", "tests/test_merge_dry_run.py", "tests/test_merge_release.py", "tests/test_merge_rows.py"]
-opened_commit = "2de04abb08deb4923133da2a6f8baad8fa94d311"
-whole_reason = "docs/commands.md Which release judges, the merge paragraph, and the tests that prove it, linked by PIN IDs from PIN-36, with the lines they stand on rewrapped."
