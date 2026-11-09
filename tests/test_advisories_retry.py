@@ -72,7 +72,7 @@ def scripted_server(monkeypatch):
 
 @pytest.fixture
 def flaky_network(monkeypatch):
-    """Makes the first `flaky://` open raise `unreachable` as urllib reports it, and every later one serve the database."""
+    """Makes the first `flaky://` open raise `unreachable` as urllib reports it; every later one serves the database."""
     opened = SimpleNamespace(count=0)
 
     class Flaky(urllib.request.BaseHandler):
@@ -119,14 +119,18 @@ def test_a_gateway_timeout_is_tried_again_after_three_seconds_and_then_used(scan
 
 
 @pytest.mark.parametrize("status", [GATEWAY_TIMEOUT, 429])
-def test_a_database_that_never_arrives_is_refused_after_four_attempts_with_growing_delays(scan, scripted_server, status):
+def test_a_database_that_never_arrives_is_refused_after_four_attempts_with_growing_delays(
+    scan, scripted_server, status
+):
     """ADVISORY-9, ADVISORY-42: 429 and 5xx are transient; four attempts wait 3, 9 and 27 seconds, then the refusal
     names the database, the last error and the attempts."""
     scripted_server.script = [status]
     scripted_server.open()
     refusal = scan()
     assert isinstance(refusal, ScannerError)
-    assert (str(refusal).startswith("cannot download the PyPI advisory database from "), str(refusal).endswith(" after 4 attempts")) == (True, True)
+    message = str(refusal)
+    observed = (message.startswith("cannot download the PyPI advisory database from "), message.endswith(" after 4 attempts"))
+    assert observed == (True, True)
     assert (len(scripted_server.requested), scan.state.slept) == (4, [3, 9, 27])
 
 
@@ -135,7 +139,9 @@ def test_a_missing_database_is_not_tried_again(scan, scripted_server):
     scripted_server.script = [404]
     scripted_server.open()
     refusal = scan()
-    assert (isinstance(refusal, ScannerError), "cannot download the PyPI advisory database" in str(refusal), "attempts" in str(refusal)) == (True, True, False)
+    message = str(refusal)
+    observed = (isinstance(refusal, ScannerError), "cannot download the PyPI advisory database" in message)
+    assert (*observed, "attempts" in message) == (True, True, False)
     assert (len(scripted_server.requested), scan.state.slept) == (1, [])
 
 
@@ -143,14 +149,17 @@ def test_a_database_missing_from_a_local_root_is_not_tried_again(scan, database_
     """ADVISORY-42: a missing file is permanent."""
     (database_root / "PyPI" / "all.zip").unlink()
     refusal = scan()
-    assert (isinstance(refusal, ScannerError), "cannot download the PyPI advisory database" in str(refusal), scan.state.slept) == (True, True, [])
+    message = str(refusal)
+    observed = (isinstance(refusal, ScannerError), "cannot download the PyPI advisory database" in message)
+    assert (*observed, scan.state.slept) == (True, True, [])
 
 
 def test_a_refused_connection_is_tried_again_until_the_server_listens(scan, scripted_server):
     """ADVISORY-9: a refused connection is transient."""
     scan.state.on_sleep = scripted_server.open
     result = scan()
-    assert (isinstance(result, ScannerError), scripted_server.requested, scan.state.slept) == (False, ["/PyPI/all.zip"], [3])
+    observed = (isinstance(result, ScannerError), scripted_server.requested, scan.state.slept)
+    assert observed == (False, ["/PyPI/all.zip"], [3])
 
 
 def test_an_unreachable_network_is_tried_again_and_then_used(scan, flaky_network):

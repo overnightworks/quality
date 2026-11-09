@@ -314,7 +314,8 @@ def test_a_server_that_goes_silent_is_a_timeout_not_the_total_deadline(serve_sta
     monkeypatch.setattr(advisories, "RETRY_DELAYS_SECONDS", (0, 0, 0))
     monkeypatch.setattr(advisories, "DATABASE_DOWNLOAD_DEADLINE_SECONDS", 10)
     code, output, elapsed = timed_gate()
-    assert (code, "timed out" in output, "after 4 attempts" in output, "exceeded" in output, elapsed < 3) == (2, True, True, False, True), output
+    observed = (code, "timed out" in output, "after 4 attempts" in output, "exceeded" in output, elapsed < 3)
+    assert observed == (2, True, True, False, True), output
 
 
 @pytest.fixture

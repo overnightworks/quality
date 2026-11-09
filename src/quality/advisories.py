@@ -297,7 +297,9 @@ def _is_transient(error: BaseException) -> bool:
         return error.code == TOO_MANY_REQUESTS or 500 <= error.code <= 599
     if isinstance(error, urllib.error.URLError):
         return isinstance(error.reason, BaseException) and _is_transient(error.reason)
-    return isinstance(error, TRANSIENT_CONNECTION_ERRORS) or (isinstance(error, OSError) and error.errno in TRANSIENT_ERRNOS)
+    return isinstance(error, TRANSIENT_CONNECTION_ERRORS) or (
+        isinstance(error, OSError) and error.errno in TRANSIENT_ERRNOS
+    )
 
 
 def _cannot_download(ecosystem: str, url: str, error: BaseException, after: str) -> ScannerError:
@@ -310,8 +312,8 @@ def _download_once(url: str, ecosystem: str, deadline: float, monotonic: Callabl
 
     A daemon worker, because a server that stalls in its headers cannot be interrupted and must not keep the process alive.
     The caller judges by the worker's lifetime: still running at the deadline is the deadline; ended without an outcome
-    means an unexpected error (its traceback is on stderr); a download failure, a socket timeout included, is the worker's outcome,
-    raised as it is."""
+    means an unexpected error (its traceback is on stderr); a download failure, a socket timeout included, is the
+    worker's outcome, raised as it is."""
     download: Future[bytes] = Future()
     remaining = deadline - monotonic()
     if remaining <= 0:

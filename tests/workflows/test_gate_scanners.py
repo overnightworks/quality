@@ -71,9 +71,9 @@ def test_the_tests_job_installs_the_same_scanners_as_the_gate_and_runs_no_check(
     assert [step for step in load("ci.yml")["jobs"]["tests"]["steps"] if "quality check" in step.get("run", "")] == []
 
 
-
 def test_both_install_steps_let_mise_retry_a_download_the_same_whole_number_of_times():
     """CALLER-11: the gate's and quality's own install step carry one `MISE_HTTP_RETRIES`, a count of at least 1."""
-    retries = [the_mise_step(workflow, job)["env"]["MISE_HTTP_RETRIES"] for workflow, job in (("gate.yml", "check"), ("ci.yml", "tests"))]
+    steps = (the_mise_step(workflow, job) for workflow, job in (("gate.yml", "check"), ("ci.yml", "tests")))
+    retries = [step["env"]["MISE_HTTP_RETRIES"] for step in steps]
     assert retries[0] == retries[1]
     assert int(retries[0]) >= 1
