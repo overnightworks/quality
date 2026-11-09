@@ -1,8 +1,0 @@
-claim_id = "67a00099e7e3461faf95b026797a6b52"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "ddfbbdd6bb548c0919ab2685fc4f14709c3eb7e3"
-branch = "claude/issue-619-d7-generated-ids"
-scope = ["docs/gate.md", "docs/rules.md", "tests/test_config.py", "tests/test_ratchet_generated.py", "tests/test_ratchet_gone.py"]
-opened_commit = "fc5996fff7ce503217f699699602314aa68c7431"
-whole_reason = "docs/rules.md size rule, third slice: what a declared generated file leaves out, how a declaration is shaped, refused and found stale, and what the baseline and the fix do under its path, and the tests that prove it, linked by GENERATED IDs."
