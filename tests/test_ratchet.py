@@ -101,8 +101,8 @@ SOURCE_NAME = "src/source.py"
     ],
 )
 def test_a_file_python_can_read_is_measured_in_its_declared_encoding(build_repo, capsys, source, python_security_cannot_judge):
-    """SIZE-8, SECURITY-28: the size rule measures a Python file as Python reads it; where ruff, which reads UTF-8 only,
-    cannot read it, python-security and python-print both cannot judge."""
+    """SIZE-8, SECURITY-28, SECURITY-29: the size rule measures a Python file as Python reads it; where ruff, which
+    reads UTF-8 only, cannot read it, python-security and python-print both cannot judge."""
     repo = build_repo_with_source(build_repo, {}, SOURCE_NAME, source)
     code, output = run(capsys, repo)
     assert (Rule.PYTHON_SECURITY in refusals(repo)) == python_security_cannot_judge, output

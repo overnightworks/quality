@@ -96,7 +96,7 @@ def test_claude_md_finding_never_prints_the_files_content(build_repo, capsys):
 
 
 def test_claude_md_two_wrong_files_are_two_findings(build_repo, capsys):
-    """CLAUDE-9: one finding per wrong file."""
+    """One finding per wrong file."""
     repo = build_repo({**GUIDANCE, "CLAUDE.md": "own\n", ".claude/CLAUDE.md": "own\n"})
     code, output = run(capsys, repo)
     findings = rule_findings(repo, Rule.CLAUDE_MD)
