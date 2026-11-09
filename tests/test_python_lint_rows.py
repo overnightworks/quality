@@ -246,8 +246,9 @@ def test_an_owner_note_prints_its_path_and_reason_escaped(drive_code, path, reas
     ids=["python-security refused", "python-print refused"],
 )
 def test_an_owner_note_stands_under_a_refused_row_only_where_its_rule_judged(drive_code, build_repo, elsewhere, code, locations):
-    """PRINT-14, SECURITY-26, SECURITY-28: an owner note stands under the refused `code` row where python-print judged
-    beside a python-security that could not, and none stands where python-print itself could not judge."""
+    """PRINT-14, SECURITY-26, SECURITY-28, CLOSING-33: an owner note stands under the refused `code` row where
+    python-print judged beside a python-security that could not, and none stands where python-print itself could not
+    judge."""
     repo = build_repo({"src/p/a.py": "x = 1\nx = '''open\n", "src/p/door.py": f"{OWNER}\n{PRINT}\n"})
     entries = [
         ruff_entry(code=code, filename=os.path.realpath(repo / "src" / "p" / "a.py")),
