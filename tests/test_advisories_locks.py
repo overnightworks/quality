@@ -286,8 +286,9 @@ def test_a_repository_with_both_kinds_downloads_each_database_once_and_judges_bo
 
 
 def test_one_deadline_spans_every_database_download(build_repo, publish_database, served_databases):
-    """ADVISORY-9: the first download (PyPI) spends the whole budget, so the second (npm) is not even requested and the
-    run is `cannot judge`, not a hung job. The clock is injected and moves by the PyPI request alone."""
+    """ADVISORY-9, ADVISORY-31: the first download (PyPI) spends the whole budget, so the second (npm) is not even
+    requested and the run is `cannot judge`, not a hung job. The clock is injected and moves by the PyPI request
+    alone."""
     publish_database([LODASH_ADVISORY], ecosystem="npm")
     publish_database()
     now = 0.0
@@ -315,7 +316,7 @@ def test_an_npm_database_that_cannot_be_downloaded_is_cannot_judge_and_named(bui
 
 
 def test_without_a_pnpm_lock_the_npm_database_is_not_downloaded(build_repo, served_scanners, run_gate, database_root):
-    """ADVISORY-32: a repository with only a uv.lock is judged although no npm database is published."""
+    """ADVISORY-31, ADVISORY-32: a repository with only a uv.lock is judged although no npm database is published."""
     (database_root / "npm" / "all.zip").unlink()
     fake_scanner(served_scanners, OSV, reporting(OUTPUTS / "osv-scanner-clean.json", 0))
     code, output = run_gate(build_repo({"uv.lock": uv_lock(SAFE)}))
