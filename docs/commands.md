@@ -128,18 +128,21 @@ only the `[secrets]` table of that config and ignores other tables and keys ([ga
 while `check` (when a selected area needs the config, validating the whole of it) and `verdict` stay strict, so schema
 growth never blocks a commit (STAGED-8).
 
-The output is `check`'s frame: the `secrets` row with `staged change · N files` (the paths the staged diff lists, each added,
-changed, deleted or renamed path one file), the finding rows and the allowed notes under it, and the verdict. It prints no unused
-allowance: one change cannot tell a stale entry from one the history still needs, so `quality check secrets` reports them.
-`-v` is `check`'s: it shows the raw scanner output under the row, never a secret. At a terminal stderr shows `check`'s
-live line while gitleaks runs (`docs/rules.md`). A refused staged config names the fact on the row and the example under `next:`,
-followed by `stage the fix, then run quality check secrets --staged again`: the refused file is the staged one, so an
-edit alone changes nothing.
+The output is [`check`'s frame](output.md#rows): the `secrets` row with `staged change · N files` (the paths the staged
+diff lists, each added, changed, deleted or renamed path one file) (STAGED-9), the finding rows and the allowed notes
+under it, and the verdict. It prints no unused allowance: one change cannot tell a stale entry from one the history
+still needs (STAGED-10), so `quality check secrets` reports them. [`-v`](output.md#verbose-runs) is `check`'s: it shows
+the raw scanner output under the row, never a secret. At a terminal stderr shows `check`'s live line while gitleaks runs
+([output](output.md#colour-and-the-live-line)). A refused staged config names the fact on the row and the example under
+`next:` ([refusals](output.md#refusals)), followed by `stage the fix, then run quality check secrets --staged again`
+(STAGED-11): the refused file is the staged one, so an edit alone changes nothing.
 
 gitleaks' staged mode sees only added and changed lines, so a known false positive blocks only the commits that touch
-its line, and then needs its allowance, as in CI. A key only in the work tree or only in `HEAD` is clean. Exit `2` (never
-clean): a scanner missing or at another version, with the command that installs it, git older than 2.41, an unreadable allow list, an index with unmerged
-entries, a folder that is not a repository, or a gitleaks run without a report.
+its line, and then needs its allowance, as in CI (STAGED-12). A key only in the work tree or only in `HEAD` is clean.
+Exit `2` (never clean): a scanner missing or at another version, with the command that installs it
+([scanners](#scanners)), git older than 2.41 ([rules](rules.md)), an unreadable allow list (STAGED-13), an index with
+unmerged entries (STAGED-14), a [folder that is not a repository](output.md#the-closing-line), or a gitleaks run without
+a report (STAGED-15).
 
 ## `quality report`
 

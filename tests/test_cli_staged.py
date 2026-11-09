@@ -37,13 +37,15 @@ def a_finding_scan() -> str:
     return f'cp "{OUTPUTS / "gitleaks-finding.json"}" "$report"; exit 7'
 
 
-def test_a_clean_staged_change_stands_in_the_pictures_frame(build_repo, capsys):
+def test_a_clean_staged_change_prints_its_extent_row_and_the_clean_verdict(build_repo, capsys):
+    """STAGED-9: a clean staged change is the secrets row with its file count, then the verdict."""
     repo = build_repo({"README.md": "x\n"})
     stage(repo, {"docs/b.md": "b\n", "docs/c.md": "c\n"})
     assert fixed(capsys, repo, *STAGED_WORDS) == (0, clean_row("2 files"), "")
 
 
-def test_a_staged_finding_stands_in_the_pictures_frame(build_repo, served_scanners, capsys):
+def test_a_staged_finding_prints_its_extent_row_and_the_findings_verdict(build_repo, served_scanners, capsys):
+    """STAGED-9: a staged finding is the secrets row with its finding count and file count, then the verdict."""
     repo = build_repo({"README.md": "x\n"})
     stage(repo, {"docs/b.md": "b\n"})
     fake_gitleaks(served_scanners, on_scan=a_finding_scan())
@@ -68,6 +70,7 @@ def test_a_staged_finding_stands_in_the_pictures_frame(build_repo, served_scanne
     ],
 )
 def test_a_staged_run_counts_what_the_next_commit_changes(build_repo, tmp_path, capsys, committed, change, counted):
+    """STAGED-9: the count is the paths the staged diff lists, so an addition, edit, deletion or rename is one file."""
     if committed is None:
         git(tmp_path, "init", "-q")
     repo = tmp_path if committed is None else build_repo(committed)
@@ -76,6 +79,7 @@ def test_a_staged_run_counts_what_the_next_commit_changes(build_repo, tmp_path, 
 
 
 def test_a_staged_run_prints_no_unused_row(build_repo, capsys):
+    """STAGED-10: a staged run prints no unused row for an entry that matches nothing."""
     repo = build_repo({config.CONFIG_PATH: allow_config(("aws-access-token", "docs/gone.txt", FAKE_KEY, "a stale entry"))})
     stage(repo, {"docs/b.md": "b\n"})
     assert fixed(capsys, repo, *STAGED_WORDS)[:2] == (0, clean_row("1 file"))
@@ -125,6 +129,7 @@ def stage_a_config_link(repo: Path) -> None:
     ],
 )
 def test_every_refused_staged_run_is_its_row_and_the_pair(build_repo, served_scanners, use_mise, fake_git, capsys, arrange, fact, pair):
+    """SCANNER-9, STAGED-13, STAGED-14, STAGED-15: a refused staged run is its refusal row and the pair."""
     repo = build_repo({"f.txt": "base\n"})
     arrange(repo, served_scanners, use_mise, fake_git)
     code, out, err = fixed(capsys, repo, *STAGED_WORDS)
@@ -137,6 +142,7 @@ STAGED_EXAMPLE_REFUSALS = [refusal for refusal in all_refusals() if "staged" in 
 
 @pytest.mark.parametrize("refusal", STAGED_EXAMPLE_REFUSALS, ids=[refusal.id for refusal in STAGED_EXAMPLE_REFUSALS])
 def test_a_staged_config_refusal_keeps_its_fact_and_its_example_apart(build_repo, capsys, refusal):
+    """O10, STAGED-11: a staged config refusal names its fact on the row, its example apart, then the stage step."""
     repo = build_repo({"README.md": "x\n"})
     stage(repo, {CONFIG: refusal.text})
     code, out, err = fixed(capsys, repo, *STAGED_WORDS)
@@ -150,6 +156,7 @@ def test_a_staged_config_refusal_keeps_its_fact_and_its_example_apart(build_repo
 
 
 def test_a_staged_config_is_read_from_the_tree_the_commit_records(build_repo, capsys):
+    """STAGED-7: the config a staged run reads is the staged one, so an edit that is not staged changes nothing."""
     repo = build_repo({"README.md": "x\n"})
     stage(repo, {config.CONFIG_PATH: "[secrets]\nallow = [{ rule = \"r\" }]\n"})
     (repo / config.CONFIG_PATH).write_text(allow_config())
@@ -161,6 +168,7 @@ def test_a_staged_config_is_read_from_the_tree_the_commit_records(build_repo, ca
 
 @pytest.mark.integration
 def test_a_staged_run_outside_a_repository_is_the_start_failure(elsewhere, capsys):
+    """CLOSING-17, CLOSING-18: outside a repository the staged run prints only the location pair and exits 2."""
     code = staged_door(elsewhere, judging=pin.judge_here)
     printed = capsys.readouterr()
     assert (code, printed.out) == (2, "")
@@ -177,6 +185,7 @@ def test_the_staged_flag_may_stand_before_or_after_its_area(build_repo, capsys, 
 
 @pytest.mark.parametrize("verbose", [True, False], ids=["with -v", "without -v"])
 def test_under_v_gitleaks_stands_under_the_staged_row(build_repo, served_scanners, capsys, verbose):
+    """VERBOSE-2, VERBOSE-3: under -v the staged row is followed by gitleaks exit and its cleared stderr lines."""
     repo = build_repo({"README.md": "x\n"})
     stage(repo, {"docs/b.md": "b\n"})
     fake_gitleaks(served_scanners, on_scan='echo "one line" >&2\n' + vetting(flagging(FAKE_KEY)))
@@ -189,6 +198,7 @@ def test_under_v_gitleaks_stands_under_the_staged_row(build_repo, served_scanner
 @pytest.mark.integration
 @pytest.mark.parametrize("outcome", ["clean", "finding", "refused", "refused, stderr left"])
 def test_a_staged_run_keeps_the_exit_when_its_reader_left(build_repo, served_scanners, use_mise, tmp_path, outcome):
+    """STREAM-8: a reader that left, on stdout or on stderr, changes no exit of a staged run."""
     repo = build_repo({"README.md": "x\n"})
     stage(repo, {"docs/b.md": "b\n"})
     if outcome == "finding":

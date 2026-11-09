@@ -35,6 +35,7 @@ def unborn_repo(tmp_path) -> Path:
 @pytest.mark.scanner
 @pytest.mark.parametrize(("stream_kind", "painted"), [(Terminal, True), (io.StringIO, False)])
 def test_a_staged_row_is_painted_only_on_a_terminal(build_repo, installed_scanners, capsys, monkeypatch, stream_kind, painted):
+    """COLOUR-1, COLOUR-6: the staged row is painted on a terminal and plain in a pipe, with the same words."""
     repo = build_repo({"README": "hello\n"})
     stage(repo, {"src/a.py": KEY_LINE})
     stream = stream_kind()
@@ -47,6 +48,7 @@ def test_a_staged_row_is_painted_only_on_a_terminal(build_repo, installed_scanne
 
 @pytest.mark.scanner
 def test_a_staged_door_prints_its_finding_row_and_verdict_whole_at_a_narrow_terminal(build_repo, installed_scanners, window, capsys, monkeypatch):
+    """LENGTH-3, LENGTH-6: a staged finding row and the verdict stand whole in a window of 20 columns."""
     repo = build_repo({"README": "hello\n"})
     stage(repo, {"src/a.py": KEY_LINE})
     terminal = window(20)
@@ -60,7 +62,7 @@ def test_a_staged_door_prints_its_finding_row_and_verdict_whole_at_a_narrow_term
 
 @pytest.mark.scanner
 def test_a_staged_key_is_one_secret_row_with_its_entry_and_its_value_is_not_printed(build_repo, installed_scanners, capsys):
-    """#25 rule 1, O32: the staged change is judged; the row names no commit, the entry follows, the value is never printed."""
+    """O32: a staged key is one secret row that names no commit, and its value is never printed."""
     repo = build_repo({"README": "hello\n"})
     stage(repo, {"src/a.py": KEY_LINE})
     assert staged_door(repo) == 1
@@ -70,6 +72,7 @@ def test_a_staged_key_is_one_secret_row_with_its_entry_and_its_value_is_not_prin
     (finding,) = result.findings
     assert (finding.location, finding.event) == ("src/a.py:1", FindingEvent.SECRET)
     assert head_commit(repo)[:8] not in finding.fact
+    assert "commit" not in finding.fact
     assert_finding_vocabulary(finding)
     assert FAKE_KEY not in printed
 
@@ -162,7 +165,7 @@ def test_the_allow_list_is_the_one_of_the_staged_tree(build_repo, installed_scan
 def test_an_allowance_follows_the_value_in_the_staged_scan(
     build_repo, installed_scanners, capsys, staged_change, exit_code, expected_line
 ):
-    """#25 rule 1.4, #24 rule 1: the staged diff matches by rule, file and value hash, not by line."""
+    """STAGED-12: an allowance follows its value to another line of the file, and another key stays red."""
     config = allow_config(("aws-access-token", "config.txt", FAKE_KEY, "test key"))
     repo = build_repo({"config.txt": KEY_LINE, "quality/config.toml": config})
     stage(repo, {"config.txt": staged_change})
@@ -243,7 +246,7 @@ def test_a_staged_run_leaves_the_repository_as_it_found_it(build_repo, installed
 
 @pytest.mark.scanner
 def test_an_unmerged_index_is_exit_2(build_repo, installed_scanners, capsys):
-    """#25 rule 4: an index with unmerged entries is exit 2, never clean."""
+    """STAGED-14: an index with unmerged entries is exit 2, never clean, and the message names git write-tree."""
     repo = build_repo({"f.txt": "base\n"})
     git(repo, "checkout", "-q", "-b", "other")
     stage(repo, {"f.txt": "other\n"})
@@ -275,7 +278,7 @@ def test_the_staged_scan_reads_only_the_secrets_table(build_repo, installed_scan
 
 @pytest.mark.scanner
 def test_an_unreadable_allow_list_is_exit_2(build_repo, installed_scanners, capsys):
-    """#25 rule 4: a staged allow list that cannot be read is exit 2."""
+    """STAGED-13: a staged allow list that cannot be parsed is exit 2 and the message names quality/config.toml."""
     repo = build_repo({"README": "hello\n"})
     stage(repo, {"quality/config.toml": "not [valid toml"})
     assert staged_door(repo) == 2
@@ -293,7 +296,7 @@ def test_an_unreadable_allow_list_is_exit_2(build_repo, installed_scanners, caps
 def test_git_failing_on_the_staged_allow_list_is_exit_2_in_its_words(
     build_repo, installed_scanners, fake_git, capsys, failing, expected
 ):
-    """#25 rule 4: git that cannot read the staged allow list is exit 2, and the message says which read failed."""
+    """STAGED-13: git that cannot read the staged allow list is exit 2, and the message says which read failed."""
     repo = build_repo({"README": "hello\n"})
     stage(repo, {"quality/config.toml": "[secrets]\n"})
     fake_git(f'case " $* " in *" {failing} "*) echo "{failing} broke" >&2; exit 1;; esac')
@@ -312,7 +315,7 @@ def test_a_repository_folder_that_starts_with_a_dash_is_scanned_as_a_folder(tmp_
 @pytest.mark.scanner
 @pytest.mark.parametrize("name", ["src/a.py", HOSTILE_FILE], ids=["plain-path", "esc-quote-and-bidi-path"])
 def test_the_printed_entry_with_a_reason_allows_the_staged_key_with_head_unchanged(build_repo, installed_scanners, capsys, name):
-    """The printed lines with a reason, staged beside the key, allow exactly it; nothing is committed."""
+    """STAGED-12: the printed lines with a reason, staged beside the key, allow exactly it, and nothing is committed."""
     repo = build_repo({"README": "hello\n"})
     stage(repo, {name: KEY_LINE})
     before = head_commit(repo)
@@ -353,7 +356,7 @@ def test_a_staged_run_in_a_subfolder_judges_the_index_the_environment_names(buil
 @pytest.mark.scanner
 @pytest.mark.parametrize("change", ["another file", "the allowed line removed"])
 def test_a_commit_that_touches_no_allowed_line_prints_no_unused_row(build_repo, installed_scanners, capsys, change):
-    """One change cannot tell a stale entry from one the history still needs, so only the whole-history scan reports it."""
+    """STAGED-10: one change cannot tell a stale entry from a needed one, so only the whole-history scan reports it."""
     entry = ("aws-access-token", "docs/key.txt", FAKE_KEY, "a test key")
     repo = build_repo({"docs/key.txt": KEY_LINE, config.CONFIG_PATH: allow_config(entry)})
     stage(repo, {"docs/key.txt": "removed\n"} if change == "the allowed line removed" else {"docs/other.md": "text\n"})
