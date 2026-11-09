@@ -1,0 +1,8 @@
+claim_id = "f4ec1e4b089a4578b9b640187639f8f4"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "4b7e11582ccd4d6befa2eb4de6e13b0320a16ef5"
+branch = "claude/issue-662-d7-secret-scan-ids"
+scope = ["docs/rules.md", "tests/test_config.py", "tests/test_scanners.py", "tests/test_scanners_secrets.py", "tests/test_staged.py"]
+opened_commit = "a5355afec151f9eead99bb3d48f0649cb8148d9c"
+whole_reason = "docs/rules.md secret rule: the scan scope, quality own gitleaks config, the missing, unreadable, unparsable and linked config, gitleaks without redact, the deleted scratch directory and the value reaching no sink, and the tests that prove them, linked by SECRET IDs; the allowances, the rows and the counts are 7t, the attributes paragraph is 7s-ii."
