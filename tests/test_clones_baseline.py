@@ -330,7 +330,7 @@ def test_a_fix_over_a_file_without_a_clone_table_records_the_pairs_and_keeps_the
 
 
 def test_a_pair_the_tree_lost_leaves_the_ceiling_and_no_new_pair_enters(build_repo, capsys):
-    """A held pair the tree lost goes, and a pair the tree gained stays a finding instead of coming in."""
+    """FIX-9, FIX-10: a held pair the tree lost goes, and a pair the tree gained stays a finding, not in the ceiling."""
     repo = build_repo({**THREE_FILES, BASELINE_PATH: FIRST + SECOND})
     assert written(capsys, repo)[0] == 1
     assert load_baseline(baseline_text(repo)) == Baseline({}, frozenset({FIRST_PAIR}))

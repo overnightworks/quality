@@ -24,7 +24,8 @@ def held_ceiling(value: int = 62, clones: bool = True) -> str:
     return rendered(f'[function_lines."src/a.py"]\nlong_one = {value}\n' + ("\n[clones]\n" if clones else ""))
 
 
-def test_a_lowered_ceiling_stands_in_the_pictures_frame(build_repo, capsys):
+def test_a_fix_lowers_each_entry_and_judges_the_tree_against_the_lowered_file(build_repo, capsys):
+    """FIX-2, FIX-3: each entry falls to its measured value and the tree is judged clean against the lowered file."""
     held = '[ccn."src/cart.py"]\nbranchy = 19\n\n[file_lines]\n"src/orders.py" = 826\n\n[clones]\n'
     repo = build_repo({"src/cart.py": branchy_function(17), "src/orders.py": long_file(812), BASELINE_PATH: held})
     printed = (
@@ -95,6 +96,8 @@ def test_adopting_the_clones_table_says_the_ceiling_was_recorded(build_repo, cap
     ],
 )
 def test_what_grew_stays_a_finding_and_what_fell_is_the_only_change(build_repo, capsys, files, held, printed, written):
+    """FIX-5, FIX-7, CEILING-5: what grew stays a finding whose fix adds that a raise is a hand edit, and the rest still
+    falls."""
     repo = build_repo({**files, BASELINE_PATH: held})
     before = (repo / BASELINE_PATH).read_text()
     assert fixed(capsys, repo, *FIX_WORDS) == (1, printed, "")
@@ -109,6 +112,7 @@ def test_a_ceiling_that_renders_byte_for_byte_keeps_its_bytes(build_repo, capsys
 
 
 def test_a_new_entry_is_never_added_to_a_held_ceiling(build_repo, capsys):
+    """FIX-6: a file that is new debt stays a finding and never enters the held ceiling."""
     repo = build_repo({"src/a.py": long_function(62), "src/b.py": long_file(850), BASELINE_PATH: held_ceiling()})
     code, out, _ = fixed(capsys, repo, *FIX_WORDS)
     assert (code, "src/b.py" in out, "new debt" in out) == (1, True, True)
@@ -116,6 +120,7 @@ def test_a_new_entry_is_never_added_to_a_held_ceiling(build_repo, capsys):
 
 
 def test_the_fixed_ceiling_is_what_the_check_then_holds(build_repo, capsys):
+    """FIX-2, FIX-3: the fix judges the tree against the file it wrote, and a later check finds nothing to lower."""
     repo = build_repo({"src/a.py": long_function(62), BASELINE_PATH: '[function_lines."src/a.py"]\nlong_one = 80\n\n[clones]\n'})
     assert fixed(capsys, repo, *FIX_WORDS)[0] == 0
     code, out, _ = fixed(capsys, repo, "check", "debt")
@@ -123,6 +128,7 @@ def test_the_fixed_ceiling_is_what_the_check_then_holds(build_repo, capsys):
 
 
 def test_a_held_pair_the_tree_lost_is_dropped(build_repo, capsys):
+    """FIX-9: a held pair the tree lost is dropped and the ceiling holds no pair."""
     held = '[clones."src/a.py"]\nrun = [["src/gone.py", "run"]]\n'
     repo = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: held})
     code, out, _ = fixed(capsys, repo, *FIX_WORDS)

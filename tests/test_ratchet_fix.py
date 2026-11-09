@@ -46,6 +46,8 @@ def fixed(held: dict[Key, int], measured: dict[Key, int | None], pairs=frozenset
     ],
 )
 def test_each_held_entry_falls_goes_or_stays(key, held, measured, expected):
+    """FIX-3, FIX-4, FIX-5, CEILING-8: an entry falls to its measured value, goes below its threshold, stays where it
+    grew and stands where nothing measures it."""
     entries = fixed({key: held}, {key: measured}, held_pairs=frozenset()).ceiling.size
     assert entries == ({} if expected is None else {key: expected})
 
@@ -60,18 +62,22 @@ def test_each_held_entry_falls_goes_or_stays(key, held, measured, expected):
 )
 @pytest.mark.parametrize(("offset", "written_offset"), [(-1, -1), (0, 0), (1, 0)], ids=["one below", "at it", "one above"])
 def test_no_entry_ever_rises(key, held, offset, written_offset):
+    """FIX-3, FIX-5: an entry measured one below its held value is written one below, at it stays, and above it stays at
+    its held value, in the ceiling and in the TOML it renders."""
     fix = fixed({key: held}, {key: held + offset})
     expected = {key: held + written_offset}
     assert (fix.ceiling.size, load_baseline(render_baseline(fix.ceiling)).size) == (expected, expected)
 
 
 def test_a_gone_entry_is_dropped_and_noted_with_its_reason():
+    """FIX-8: an entry `check` calls gone goes, noted `dropped` with the reason `check` gave."""
     file = size_key(Metric.FILE_LINES)
     fix = fixed({file: 826}, {}, gone={file: "file is gone"})
     assert (fix.ceiling.size, fix.changes) == ({}, (Note("src/a.py", NoteEvent.DROPPED, "file is gone"),))
 
 
 def test_a_dropped_note_follows_the_lowered_ones_and_precedes_the_pairs():
+    """FIX-3, FIX-8, FIX-9: a lowered entry, a gone entry and a gone pair each leave a note, in that order."""
     file, function = size_key(Metric.FILE_LINES), size_key(Metric.FUNCTION_LINES, "work")
     fix = fixed({file: 826, function: 90}, {function: 62}, held_pairs=frozenset({pair("work", "b")}), gone={file: "file is gone"})
     assert [(note.event, note.fact) for note in fix.changes] == [
@@ -82,11 +88,13 @@ def test_a_dropped_note_follows_the_lowered_ones_and_precedes_the_pairs():
 
 
 def test_a_new_key_never_enters():
+    """FIX-6: an entry the ceiling does not hold stays out of it, however far past its threshold."""
     file, function = size_key(Metric.FILE_LINES), size_key(Metric.FUNCTION_LINES, "work")
     assert fixed({file: 826}, {file: 812, function: 90}).ceiling.size == {file: 812}
 
 
 def test_a_pair_the_tree_lost_goes_and_a_new_one_stays_out():
+    """FIX-9, FIX-10: a held pair the tree lost goes with a note, and a pair the tree gained stays out."""
     fix = fixed({}, {}, pairs=frozenset({pair("rest", "c")}), held_pairs=frozenset({pair("work", "b")}))
     assert fix.ceiling.clones == frozenset()
     assert Note("src/a.py", NoteEvent.DROPPED, "pair src/a.py work <-> src/b.py work is gone") in fix.changes
@@ -99,6 +107,7 @@ def test_a_file_without_clones_records_its_pairs():
 
 
 def test_a_lowered_entry_is_noted_with_its_fall_and_a_dropped_one_with_its_threshold():
+    """FIX-3, FIX-4: a lowered entry is noted with its fall and a dropped one with its fall and its threshold."""
     file, complexity = size_key(Metric.FILE_LINES), size_key(Metric.CCN, "work")
     fix = fixed({file: 826, complexity: 19}, {file: 790, complexity: 17}, held_pairs=frozenset())
     assert [(note.event, note.fact) for note in fix.changes] == [

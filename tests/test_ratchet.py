@@ -204,7 +204,7 @@ def test_against_a_baseline_new_grown_and_stale_entries_are_red(build_repo, caps
 
 
 def test_the_fix_of_a_stale_entry_run_in_the_repository_leaves_a_clean_run(build_repo, capsys):
-    """CEILING-6: the fix a `can fall` row prints is a command of this door, and running it lowers the entry."""
+    """CEILING-6, FIX-3: the fix a `can fall` row prints is a command of this door, and running it lowers the entry."""
     repo = build_repo({"src/a.py": long_function(65), BASELINE_PATH: HELD_70})
     run(capsys, repo)
     (finding,) = rule_findings(repo, Rule.SIZE)
@@ -601,7 +601,8 @@ def test_check_from_a_subfolder_judges_the_whole_repository_by_its_root_baseline
 
 
 def test_a_fix_from_a_subfolder_lowers_the_root_baseline(build_repo, capsys):
-    """The root file is lowered from a subfolder; a stray src/quality/baseline.toml is neither read nor touched."""
+    """FIX-1: the fix started in a subfolder lowers the root baseline; a stray src/quality/baseline.toml is neither
+    read nor touched."""
     repo = build_repo({BASELINE_PATH: '[file_lines]\n"src/big.py" = 950\n\n[clones]\n', "src/big.py": long_file(900)})
     stray = repo / "src/quality/baseline.toml"
     stray.parent.mkdir()
