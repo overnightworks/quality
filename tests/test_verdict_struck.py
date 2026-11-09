@@ -14,6 +14,7 @@ from tests.support.merge import (
     drive,
     not_judged_pair,
 )
+from tests.support.processes import process_is_gone
 from tests.support.verdict import declaration, gate_config, verdict_of, verdict_streams, viewed
 from tests.support.verdict_renames import MOVABLE_FILE, commit_all, pulled
 
@@ -81,15 +82,43 @@ def test_a_declaration_for_a_strike_the_files_make_green_matches_nothing(capsys,
     assert (code, "unmatched" in output) == (1, True)
 
 
+@pytest.mark.parametrize(
+    ("stalls", "fact"),
+    [
+        ("ls-tree -r", "cannot list the files git holds at the pull request's commits"),
+        ("diff", "cannot list the files git renamed between the pull request's commits"),
+    ],
+    ids=["the file listing", "the rename listing"],
+)
+def test_the_door_cannot_judge_a_strike_whose_listing_outlasts_the_limit_and_leaves_no_child(
+    capsys, tmp_path, monkeypatch, fake_git, stalls, fact
+):
+    """LOOSE-24: a tree read that outlasts the door's one limit is exit 2 in the door's words, and its process group dies."""
+    monkeypatch.setattr("quality.sides.FETCH_TIMEOUT_SECONDS", 0.5)
+    child = tmp_path / "child-pid"
+    gh = struck_pull(tmp_path, STRUCK, DELETED, **DECLARED_JOB_REMOVAL)
+    fake_git(f'case "$*" in *" {stalls} "*) sleep 300 & echo $! > "{child}"; wait;; esac')
+    code, _ = drive(gh)
+    streams = capsys.readouterr()
+    assert (code, fact in streams.out, streams.err) == (2, True, not_judged_pair())
+    assert process_is_gone(int(child.read_text()))
+    changed_nothing(gh)
+
+
 @pytest.mark.integration
-def test_a_tree_git_cannot_list_cannot_be_judged_and_a_verdict_without_a_strike_asks_for_none(capsys, pull_request, fake_git):
-    """LOOSE-24: a refused listing is exit 2 naming the commit; with no module struck no listing is asked."""
+def test_a_tree_git_cannot_list_cannot_be_judged_once_a_module_is_struck(capsys, pull_request, fake_git):
+    """LOOSE-24: a refused listing is exit 2 naming the commit."""
     repo = committed(pull_request, DEAD, STRUCK, DELETED)
     fake_git('case "$*" in *" ls-tree -r "*) exit 1;; esac')
     code, output = verdict_of(repo, capsys)
     assert (code, "error: cannot list the files tracked at " in output) == (2, True)
-    put(repo / "pyproject.toml", contracts_toml({"guarded": DEAD}))
-    commit_all(repo, "head restores the contract")
+
+
+@pytest.mark.integration
+def test_a_verdict_without_a_struck_module_asks_git_for_no_listing(capsys, pull_request, fake_git):
+    """LOOSE-24: with no module struck no listing is asked."""
+    repo = committed(pull_request, DEAD, DEAD, DELETED)
+    fake_git('case "$*" in *" ls-tree -r "*) exit 1;; esac')
     assert viewed(repo, capsys) == (0, GREEN)
 
 
