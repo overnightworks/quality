@@ -1,8 +1,0 @@
-claim_id = "f9c83ac5871d4ac0957d2fb95e906c99"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "5e3c6ea4a0c652abb3dc3b20e1dd7bc1fbad87a1"
-branch = "claude/issue-691-sweep-test-polish"
-scope = ["tests/test_advisories_locks.py", "tests/test_scanners.py", "tests/test_scanners_secrets.py", "tests/test_verdict_reread.py"]
-opened_commit = "c52636b28113019e053643322e7f8e7cf7ccdad7"
-whole_reason = "the #5 test-polish entries of the sweep: SECRET-26 over-citations, the cell N parameter ids, the ROW-7 order words and the ADVISORY-31 citations of the uv.lock functions."
