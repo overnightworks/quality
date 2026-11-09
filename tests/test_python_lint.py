@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import check, installation, python_lint, scanners
+from quality import check, deadline, installation, python_lint, scanners
 from quality.output import SEPARATOR
 from quality.python_lint import LintError, RuffFinding, UnparsablePython
 from quality.report import Note, NoteEvent
@@ -442,7 +442,7 @@ def test_a_ruff_run_quality_cannot_trust_cannot_be_judged(build_repo, capsys, mo
     the other rules are still judged."""
     repo = build_repo({".env": "A=1\n", "src/p/a.py": "x = 1\n"})
     binary = fake_ruff(elsewhere, on_check)
-    monkeypatch.setattr(python_lint, "RUN_TIMEOUT_SECONDS", 0.5)
+    monkeypatch.setattr(deadline, "RUN_DEADLINE_SECONDS", 2)
     code, output = run(capsys, repo, lambda: str(binary))
     rules = [Rule.PYTHON_SECURITY, Rule.PYTHON_PRINT]
     assert (code, list(refusals(repo, lambda: str(binary))), says in output) == (2, rules, True), output
