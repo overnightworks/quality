@@ -250,7 +250,8 @@ def test_shows_repository_head_and_legacy_count_before_asking(capsys):
 )
 def test_refuses_unless_the_door_is_the_only_way(gh_kwargs, sonar_kwargs, message, capsys):
     """MERGE-14, MERGE-15, MERGE-56, MERGE-59, MERGE-60, MERGE-61, MERGE-62, MERGE-72, MERGE-73, MERGE-74, MERGE-75,
-    MERGE-76: each refusal of the door names its reason, changes nothing and asks no question."""
+    MERGE-76, MERGE-82, MERGE-84, MERGE-85, MERGE-87: each refusal of the door names its reason, changes nothing and
+    asks no question."""
     gh = FakeGh(**gh_kwargs)
     code, answers = drive(gh, sonar(**sonar_kwargs))
     assert code == 1
@@ -315,10 +316,15 @@ def test_names_the_missing_right(capsys):
         (BASELINE_82, None, 1, "    ! quality/baseline.toml removed"),
         (None, None, 0, closing_line()),
     ],
-    ids=["cell 20 raised", "cell 21 equal", "cell 22 removed at the merge commit", "cell 23 absent at both"],
+    ids=[
+        "a raised baseline", "an equal baseline", "a baseline removed at the merge commit",
+        "no baseline on either side",
+    ],
 )
 def test_the_door_refuses_a_baseline_loosening_next_to_legacy_red(base_baseline, merge_baseline, code, message, capsys, tmp_path):
-    """#48 rule 6, cells 20-23: the door judges the baseline at the merge commit against base, as the verdict does."""
+    """MERGE-15, MERGE-82, MERGE-83, MERGE-84: the door judges the baseline at the merge commit against base as the
+    verdict does, with Sonar taken as green: a raised or a removed baseline is refused, an equal or an absent one
+    merges."""
     remote, base_sha, merge_sha = git_pull(tmp_path, base_baseline, merge_baseline)
     gh = FakeGh(base_baseline=base_baseline, merge_baseline=merge_baseline, base_sha=base_sha, merge_sha=merge_sha, remote=remote)
     assert drive(gh)[0] == code
@@ -327,7 +333,8 @@ def test_the_door_refuses_a_baseline_loosening_next_to_legacy_red(base_baseline,
 
 
 def test_a_malformed_baseline_at_the_merge_commit_cannot_be_judged(capsys):
-    """#48 rule 4: the door names the commit whose baseline it cannot read, and changes nothing."""
+    """MERGE-16, MERGE-82: a baseline the door cannot read at the merge commit is not judged: exit 2, the file and the
+    commit named, nothing changed."""
     gh = FakeGh(base_baseline=BASELINE_82, merge_baseline="[ccn")
     assert drive(gh)[0] == 2
     assert f"{BASELINE_PATH} at {MERGE_SHA}" in capsys.readouterr().out
@@ -356,16 +363,16 @@ def test_a_malformed_baseline_at_the_merge_commit_cannot_be_judged(capsys):
         ),
     ],
     ids=[
-        "cell 14 songmaker's removed job", "cell 27 a declared legacy fail → report", "#116 cell 23 an allowance",
+        "a declared removed job", "a declared legacy fail → report", "#116 cell 23 an allowance",
         "#116 cell 28 an allowance next to a declared removal",
     ],
 )
 def test_a_declared_loosening_merges_through_the_door_without_sonar(
     capsys, monkeypatch, base_config, merge_config, declared, rows
 ):
-    """#103 rule 4 (E6, E7), cells 14 and 27, and #116 R2, E7: with Sonar green and only declared loosenings at the
-    merge commit, an allowance's own among them, the door shows each declaration whole with its reason below, then
-    asks, merges with the head pinned, and logs it, with no SonarCloud request."""
+    """MERGE-2, MERGE-33, MERGE-49, MERGE-50, MERGE-88: with Sonar green and only declared loosenings at the merge
+    commit, an allowance's own among them (#116 R2, E7), the door shows each declaration whole with its reason below,
+    then asks, merges with the head pinned, and logs it, with no SonarCloud request."""
     monkeypatch.delenv("SONAR_TOKEN", raising=False)
     gh, transport, shown = FakeGh(checks=SONAR_GREEN, base_config=base_config, merge_config=merge_config, body="Work-Item: #9"), recording(sonar()), []
 
@@ -385,7 +392,7 @@ def test_a_declared_loosening_merges_through_the_door_without_sonar(
 
 
 def test_the_door_names_each_of_79_allowances_within_one_comment(capsys):
-    """#116 cell 29: presentator#372's 79 allowances are 79 door lines, and the log comment stays within GitHub's
+    """The 79 allowances of one pull request are 79 lines of the door, and the log comment stays within GitHub's
     65,536 characters."""
     allowances = "".join(
         allowance_config(f"GHSA-{number:04d}-pgg6-55fp", f"speech/providers/provider-{number}/uv.lock", reason="x" * 60)
@@ -434,7 +441,8 @@ def test_a_red_sonar_run_next_to_a_green_one_takes_the_legacy_path(capsys):
     ],
 )
 def test_every_line_the_door_prints_is_escaped(capsys, base_config, merge_config, code, expected):
-    """#103 rule 4 (E9), cell 23: no repository text in a declaration or a refusal can hide, split or forge a line."""
+    """MERGE-22, MERGE-86: no repository text in a declaration or a refusal can hide, split or forge a line, and a
+    refused job's name prints escaped."""
     gh = FakeGh(checks=SONAR_GREEN, base_config=base_config, merge_config=merge_config)
     assert drive(gh)[0] == code
     streams = capsys.readouterr()
