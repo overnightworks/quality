@@ -22,6 +22,7 @@ from quality import (
     ratchet,
     scanners,
     sonar,
+    sonar_properties,
     staged,
     web,
 )
@@ -163,7 +164,7 @@ def main(
         return fleet.run_report(release_tags, fetch_listing, clock, now().date(), channels, environment)
     if arguments.command == "sonar":
         if arguments.sonar_command == "properties":
-            return sonar.run_properties(environment, clock, channels)
+            return sonar_properties.run_properties(environment, clock, channels)
         return sonar.run_findings(environment, transport, sleep, clock, channels)
     return _run_check_door(arguments, ports, reexecute, environment, clock, channels)
 
