@@ -190,7 +190,7 @@ BASE_SHA_EXPRESSION = re.compile(r"\$\{\{ github\.event_name == '(?P<event>\w+)'
     ],
 )
 def test_the_verdict_sees_a_base_only_on_a_pull_request(gate, event, expected):
-    """#48 rule 5, cell 13 (#5 finding 13): GATE_BASE_SHA yields '' outside pull_request, so the base is never read."""
+    """BASELINE-27: GATE_BASE_SHA yields '' outside pull_request, so gate.yml passes no base."""
     verdict_step = step_named(gate["jobs"]["verdict"]["steps"], "Verdict")
     expression = BASE_SHA_EXPRESSION.fullmatch(verdict_step["env"]["GATE_BASE_SHA"])
     assert expression is not None
