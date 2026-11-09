@@ -163,12 +163,15 @@ def follow_cases():
 
 @follow_cases()
 def test_follow_renames(held, committed, renames, expected, events):
+    """FIX-36, FIX-37, FIX-38: an entry or a pair moves with its file at its held value, what the target held goes, and
+    an entry already moved stays."""
     followed = follow_renames(held, committed, renames, tracked_after(held, committed, renames))
     assert (followed.ceiling, [change.event for change in followed.changes]) == (expected, events)
 
 
 @follow_cases()
 def test_the_verdict_names_nothing_the_fix_carried(held, committed, renames, expected, events):
+    """FIX-34: the verdict, reading the committed ceiling as renamed, names nothing the fix carried."""
     result = follow_renames(held, committed, renames, tracked_after(held, committed, renames)).ceiling
     carried = carried_base(committed, renames, named_paths(result))
     assert raised_entries(carried.size, result.size) == []
@@ -201,6 +204,8 @@ def test_the_verdict_names_nothing_the_fix_carried(held, committed, renames, exp
     ],
 )
 def test_an_entry_without_lineage_refuses(held, committed, tracked, path):
+    """FIX-39: an entry that neither the committed ceiling nor the tracked paths explain refuses, naming its path and
+    the restore step."""
     renames, still_tracked = renamed({"a.py": "b.py"}), frozenset(tracked)
     with pytest.raises(CannotJudge) as refusal:
         follow_renames(held, committed, renames, still_tracked)

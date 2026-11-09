@@ -173,7 +173,16 @@ It applies these rules:
   `✗ not checked` or `✗ not fixed`, exit `2`, and nothing is written. A refused fix leaves each rule the verdict it
   reached against the unchanged file (FIX-32). Another area's refusal does not undo a finished fix: the file is written,
   the `✓` row stands, the exit is `2` (FIX-33).
-  `--fix` follows renames as the verdict carries them: from the ceiling's last commit it reads what git renamed into the index (`git diff --cached -M50% -l1000`), moves a renamed file's entries and pairs to the new path at their values (`moved`) and drops what the ceiling held under that path before the move (`dropped ... left from before the move`); a ceiling it already moved stays, an entry it cannot place refuses with the restore step, a shallow clone whose ceiling's last commit is its edge, which is every depth-1 clone that holds a ceiling, refuses `--fix` with `git fetch --unshallow`, and a move the index does not record is not followed. Renames are followed before anything is judged gone, so a renamed file's entries move and never fall; with no committed ceiling a moved file's entries are gone. `check` reads no history: after a staged move it names the new path `new debt` and the old one `can fall … is gone`, and one `--fix` clears both.
+  `--fix` follows renames as the verdict carries them (FIX-34): from the ceiling's last commit it reads what git
+  renamed into the index (`git diff --cached -M50% -l1000`) (FIX-35), moves a renamed file's entries and pairs to the
+  new path at their values (`moved`) (FIX-36) and drops what the ceiling held under that path before the move
+  (`dropped ... left from before the move`) (FIX-37); a ceiling it already moved stays (FIX-38), an entry it cannot
+  place refuses with the restore step (FIX-39), a shallow clone whose ceiling's last commit is its edge, which is
+  every depth-1 clone that holds a ceiling, refuses `--fix` with `git fetch --unshallow` (FIX-40), and a move the
+  index does not record is not followed (FIX-41). Renames are followed before anything is judged gone, so a renamed
+  file's entries move and never fall (FIX-42); with no committed ceiling a moved file's entries are gone (FIX-43).
+  `check` reads no history: after a staged move it names the new path `new debt` and the old one
+  `can fall … is gone`, and one `--fix` clears both (FIX-44).
 - `clone`: a pair is two functions (methods and nested functions too) in two different tracked `*.py` files, each of at
   least 40 tokens without its docstring, whose structure is at least 90 % the same once every name and literal is
   renamed (CLONE-1); tests count like code (CLONE-4), and a copy inside one file is no pair. A pair is named by the

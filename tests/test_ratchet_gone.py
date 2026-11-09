@@ -207,8 +207,8 @@ def moved_with_git(pull_request) -> Path:
 
 
 def test_a_staged_move_is_gone_beside_new_debt(pull_request, capsys):
-    """CEILING-4, CEILING-7: after a staged move the new path is new debt and the old path is a gone entry that can
-    fall."""
+    """CEILING-4, CEILING-7, FIX-42, FIX-44: after a staged move `check` reads no history: the new path is new debt and
+    the old path is a gone entry that can fall; one fix moves the entry and clears both."""
     repo = moved_with_git(pull_request)
     git(repo, "mv", "src/old.py", "src/new.py")
     checking = (
@@ -226,8 +226,8 @@ def test_a_staged_move_is_gone_beside_new_debt(pull_request, capsys):
 
 
 def test_an_untracked_move_destination_keeps_the_entry(pull_request, capsys):
-    """CEILING-1, CEILING-4: a moved file the index does not yet track leaves its old entry standing; the tracked new
-    path is new debt."""
+    """CEILING-1, CEILING-4, FIX-41, FIX-42: a moved file the index does not yet track leaves its old entry standing;
+    the tracked new path is new debt, and once the move is staged the fix moves the entry."""
     repo = moved_with_git(pull_request)
     (repo / "src/old.py").rename(repo / "src/new.py")
     before = digest(repo)
@@ -243,8 +243,9 @@ def test_an_untracked_move_destination_keeps_the_entry(pull_request, capsys):
 
 
 def test_a_staged_deletion_with_an_untracked_destination_drops_the_entry_until_the_file_is_tracked(pull_request, capsys):
-    """FIX-8, CEILING-4, CEILING-7: an entry whose path a staged deletion leaves the index is gone while the file stands
-    untracked elsewhere and the fix drops it; tracking the new path makes it new debt."""
+    """FIX-8, CEILING-4, CEILING-7, FIX-42: an entry whose path a staged deletion leaves the index is gone while the
+    file stands untracked elsewhere and the fix drops it; tracking the new path makes it new debt, and with the
+    committed ceiling restored the fix moves the entry instead."""
     repo = moved_with_git(pull_request)
     (repo / "src/old.py").rename(repo / "src/new.py")
     git(repo, "rm", "-q", "--cached", "src/old.py")
