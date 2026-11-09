@@ -137,8 +137,8 @@ pull request (or branch) (SONAR-77), then reads the open findings with `SONAR_TO
 which count only once they reach the analysis's own count (SONAR-78, SONAR-110). A task that ends `FAILED` or
 `CANCELED`, that is still pending after a bounded number of polls, or that belongs to another analysis is exit `2`
 (SONAR-79). A scope SonarCloud does not resolve is exit `2` before the findings
-are read (SONAR-80): its issue search would answer zero findings. The request that proves the scope resolves asks for
-the `violations` measure and hands its answer on. Anything unreadable is exit `2` (SONAR-29). The command follows no
+are read: its issue search would answer zero findings. The request that proves the scope resolves asks for
+the `violations` measure and hands its answer on (SONAR-80). Anything unreadable is exit `2` (SONAR-29). The command follows no
 redirect (SONAR-81), so the token reaches SonarCloud alone; an HTTP error, a redirect, a timeout or an unreachable
 host is exit `2` too (SONAR-82).
 

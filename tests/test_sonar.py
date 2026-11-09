@@ -145,6 +145,12 @@ def test_a_malformed_issues_answer_names_what_is_wrong(monkeypatch, capsys, issu
     assert reason in err
 
 
+def test_the_scope_is_proven_by_asking_for_the_violations_measure(monkeypatch, capsys):
+    """SONAR-80: the request that proves the scope resolves asks for the violations measure"""
+    code, *_ = run_cli(monkeypatch, capsys, sonar_answering())
+    assert code == 0
+
+
 def test_does_not_read_findings_when_the_scope_does_not_resolve(monkeypatch, capsys):
     """SONAR-80: an unresolved scope is exit 2 before findings are read"""
     fake = sonar_answering()
@@ -295,9 +301,9 @@ def test_a_search_that_never_reaches_the_measure_is_exit_two_with_a_rerun_step(m
     code, out, err, sleeps = run_cli(monkeypatch, capsys, fake, environment)
     assert (code, out) == (2, "")
     assert "counts 1 open findings" in err
-    assert "lists 0 after 12 reads" in err
+    assert f"lists 0 after {sonar.FINDINGS_READ_ATTEMPTS} reads" in err
     assert err.endswith("next: re-run this run's failed jobs\n")
-    assert (len(fake.urls_to("issues/search")), len(sleeps)) == (12, 11)
+    assert (len(fake.urls_to("issues/search")), len(sleeps)) == (sonar.FINDINGS_READ_ATTEMPTS, sonar.FINDINGS_READ_ATTEMPTS - 1)
 
 
 @pytest.mark.parametrize(

@@ -449,15 +449,15 @@ def require_resolved(analysis: Analysis, transport: Transport) -> object:
 
 def own_count(resolved: object, analysis: Analysis) -> int:
     """The unresolved issues the analysis itself wrote for the scope, from the measures answer."""
-    url = api_url("measures/component", component=analysis.project.key)
+    endpoint = f"{SONAR_API_ROOT}/measures/component"
     try:
-        measures = answer_object(resolved, "component", url)["measures"]
+        measures = answer_object(resolved, "component", endpoint)["measures"]
         value = next(measure["value"] for measure in measures if measure["metric"] == "violations")
         if isinstance(value, str) and value.isascii() and value.isdigit():
             return int(value)
     except (KeyError, TypeError, StopIteration):
         pass
-    raise CannotJudge(f"SonarCloud answered {url.partition('?')[0]} without a readable violations measure")
+    raise CannotJudge(f"SonarCloud answered {endpoint} without a readable violations measure")
 
 
 def findings_reaching_the_measure(analysis: Analysis, resolved: object, transport: Transport, sleep: Sleep) -> OpenFindings:
