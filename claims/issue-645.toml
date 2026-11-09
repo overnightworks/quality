@@ -1,7 +1,0 @@
-claim_id = "d631b3bba79f4367b0b85455d755e194"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "e9e07b138f7ad50a4406bcf5fc9addad0155f9fd"
-branch = "claude/issue-645-d7-fix-dry-run-ids"
-scope = ["docs/rules.md", "tests/test_cli_fix_dry_run.py", "tests/test_output.py"]
-opened_commit = "c26be009916923763c48e5f04b17d90159d3bde3"
