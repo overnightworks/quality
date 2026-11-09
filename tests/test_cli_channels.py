@@ -21,6 +21,8 @@ class TurnsPlain(Terminal):
 
 @pytest.mark.parametrize(("stdout_kind", "stderr_kind"), list(itertools.product((Terminal, io.StringIO), repeat=2)))
 def test_each_stream_is_styled_on_its_own(build_repo, stdout_kind, stderr_kind):
+    """COLOUR-1, COLOUR-3, COLOUR-6: each stream is painted at a terminal and plain in a pipe, whatever the other one
+    is."""
     repo = build_repo({"compose.yaml": "services: [\n"})
     escape = "\x1b"
     stdout, stderr = stdout_kind(), stderr_kind()
@@ -47,6 +49,8 @@ def test_each_stream_is_styled_on_its_own(build_repo, stdout_kind, stderr_kind):
     ],
 )
 def test_the_door_decides_style_from_the_environment_it_is_given(build_repo, monkeypatch, injected, process_no_color, styled):
+    """COLOUR-5, COLOUR-6: the door styles from the environment it is given: a set `NO_COLOR` and `TERM=dumb` print
+    plain, an empty `NO_COLOR` counts as unset."""
     repo = build_repo({"compose.yaml": "services: [\n"})
     monkeypatch.setenv("TERM", "xterm")
     if process_no_color is None:
@@ -72,6 +76,7 @@ def test_a_streams_style_holds_for_the_whole_run(build_repo, monkeypatch):
 
 
 def test_the_pairs_style_holds_for_both_its_lines(build_repo):
+    """COLOUR-1: at a terminal both labels of the pair, `error:` and `next:`, are painted."""
     repo = build_repo({"compose.yaml": "services: [\n"})
     escape = "\x1b"
     stdout, stderr = io.StringIO(), TurnsPlain()

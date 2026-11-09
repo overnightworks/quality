@@ -254,7 +254,8 @@ def test_a_wide_subject_and_event_narrow_a_rows_fact_by_their_cells():
 
 
 def test_a_shortened_fact_is_painted_as_one_span():
-    """LENGTH-1, LENGTH-2: a cut fact of a finding, a note and a reason is painted as a whole fact is, `…` inside."""
+    """COLOUR-1, COLOUR-2, LENGTH-1, LENGTH-2: a cut fact of a finding, a note and a reason is painted as a whole fact
+    is, `…` inside."""
     styles = Terminal()
     output.write_rows(
         (
