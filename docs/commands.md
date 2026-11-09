@@ -91,16 +91,21 @@ Ruled by the operator:
 ## `quality check --fix`
 
 `quality check debt --fix` lowers the debt ceiling (`quality/baseline.toml`) where code shrank, or records it where no
-ceiling lies on disk, in the index or in any commit `HEAD` reaches, and then judges the tree against the new file. It writes the file when an entry changes and when its bytes are not what the fix would render, an older header included; one that renders byte for byte stays untouched. It
-never raises an entry and never adds one: what grew or is new stays a finding, and a raise is a hand edit with a declared
-loosening. A file git renamed into the index since the ceiling's last commit takes its entries with it (`docs/rules.md`). An entry whose path the index no longer tracks, whose Python function is gone or whose file is declared generated goes; one only missing from disk stands; a held pair the tree lost goes. A ceiling or `[clones]` table git
-holds and the tree lacks refuses with the restore step, and a shallow clone that cannot prove a first recording names
-`git fetch --unshallow`. It takes no `--staged` (HELP-25) and needs `debt` among the named areas (HELP-26), or no
-area named; either refusal keeps a `--dry-run` in its `next:` (HELP-27). `quality check --fix --dry-run` makes, judges
-and renders the same ceiling, refuses where the fix refuses before its write, writes nothing, and exits `1` while the
-fix would change the file, `0` when not; a refusal only the write meets shows at the fix alone. Exit `0` clean, `1`
-findings, `2` could not fix. No workflow runs `--fix` or its dry run (HELP-28).
-The rows and rules are in `docs/rules.md`, the rows' form in [output](output.md).
+ceiling lies on disk, in the index or in any commit `HEAD` reaches, and then judges the tree against the new file. It
+writes the file when an entry changes and when its bytes are not what the fix would render, an older header included;
+one that renders byte for byte stays untouched. It never raises an entry and never adds one: what grew or is new stays
+a finding, and a raise is a hand edit with a declared loosening ([rules](rules.md)). A file git renamed into the index
+since the ceiling's last commit takes its entries with it ([rules](rules.md)). An entry whose path the index no longer
+tracks, whose Python function is gone or whose file is declared generated goes; one only missing from disk stands; a
+held pair the tree lost goes. A ceiling or `[clones]` table git holds and the tree lacks refuses with the restore step,
+and a shallow clone that cannot prove a first recording names `git fetch --unshallow` ([rules](rules.md)). It takes no
+`--staged` (HELP-25) and needs `debt` among the named areas (HELP-26), or no area named; either refusal keeps a
+`--dry-run` in its `next:` (HELP-27). `quality check --fix --dry-run` makes, judges and renders the same ceiling,
+refuses where the fix refuses before its write (FIXCMD-1), writes nothing, and exits `1` while the fix would change the
+file, `0` when not ([rules](rules.md)); a refusal only the write meets shows at the fix alone (FIXCMD-2). Exit `0`
+clean, `1` findings, `2` could not fix ([exit codes](output.md#exit-codes)). No workflow runs `--fix` or
+its dry run (HELP-28).
+The rows and rules are in [rules](rules.md), the rows' form in [output](output.md).
 
 Ruled by the operator:
 

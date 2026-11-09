@@ -316,7 +316,7 @@ def test_each_doors_help_goes_to_stdout_alone_and_exits_0(capsys, words):
 
 @pytest.mark.parametrize("words", [[], ["check"], ["sonar", "properties"]], ids=["quality", "check", "sonar properties"])
 def test_short_help_equals_long_help(capsys, words):
-    """HELP-11: -h prints what --help prints."""
+    """HELP-8, HELP-11: -h prints what --help prints, to stdout alone, and exits 0."""
     long = help_of(capsys, words)
     with pytest.raises(SystemExit) as stopped:
         cli.main([*words, "-h"])

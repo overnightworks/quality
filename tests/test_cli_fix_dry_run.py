@@ -376,9 +376,9 @@ def shallow_new_row() -> str:
     ],
 )
 def test_a_dry_run_refuses_where_the_fix_refuses_before_writing(build_repo, elsewhere, capsys, arrange, out, err):
-    """FIX-12, FIX-14, FIX-40, CEILING-9: a dry run refuses where the fix refuses (a ceiling or `[clones]` table git
-    holds and the tree lacks, a shallow clone, a baseline, a file or a config the check cannot read), prints the same
-    rows and writes nothing."""
+    """FIXCMD-1, FIX-12, FIX-14, FIX-40, CEILING-9: a dry run refuses where the fix refuses (a ceiling or `[clones]`
+    table git holds and the tree lacks, a shallow clone, a baseline, a file or a config the check cannot read), prints
+    the same rows and writes nothing."""
     repo = arrange(build_repo, elsewhere)
     before = untouched(repo)
     expected_out = out.replace("{commit}", head_commit(repo))
@@ -421,7 +421,8 @@ def test_a_dry_run_refuses_where_the_fix_refuses_before_writing(build_repo, else
     ],
 )
 def test_a_dry_run_attempts_no_write(build_repo, capsys, request, arrange, printed, refused):
-    """FIX-19: a dry run never attempts the write, so a ceiling or folder the fix cannot write is no refusal for it."""
+    """FIXCMD-2, FIX-19, FIX-22, FIX-23: a dry run never attempts the write, so a ceiling or folder the fix cannot write
+    is no refusal for it: it prints its `~` rows and verdict and exits 1, where the fix alone is refused with exit 2."""
     repo = arrange(build_repo)
     if (repo / BASELINE_PATH).exists():
         (repo / BASELINE_PATH).chmod(0o444)
@@ -542,8 +543,8 @@ def stale_ceiling(build_repo, held: str) -> Path:
     ],
 )
 def test_a_ceiling_whose_text_is_not_its_rendering_is_rewritten_by_the_fix_and_planned_by_the_dry_run(build_repo, capsys, held):
-    """FIX-16, FIX-18, FIX-21, FIX-22: a ceiling whose text is not its rendering is planned by the dry run and rewritten
-    by the fix, and then renders byte for byte."""
+    """FIX-16, FIX-18, FIX-19, FIX-21, FIX-22, FIX-23: a ceiling whose text is not its rendering is planned by the dry
+    run, which exits 1 and writes nothing, and rewritten by the fix, and then renders byte for byte."""
     repo = stale_ceiling(build_repo, held)
     before = untouched(repo)
     planned = (
