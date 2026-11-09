@@ -12,10 +12,11 @@ once, however they are named; with none it judges all seven (CHECK-3). An area n
 row (CHECK-6); the verdict counts only the named areas (`✓ clean · 1 area`) (CHECK-7) and the exit is the worst of
 theirs (CHECK-8), so a named run says nothing of the rest. The gate runs all seven ([gate](gate.md#gateyml)).
 
-Three statements hold for every declaration table of `quality/config.toml` (`[[compose.allow]]`, `[[root.allow]]`,
-`[[layout.allow]]`, `[[python.allow]]`) and the rule that reads it. A malformed table other than the rule's own is
-forwarded with its validation error. A declaration is no loosening, so `quality verdict` asks for no `[[gate.loosened]]`
-entry. A config reader older than the rule refuses its table as an unknown key.
+Three statements hold for each of four declaration tables of `quality/config.toml` and the rule that reads it:
+`[[compose.allow]]`, `[[root.allow]]`, `[[layout.allow]]` and `[[python.allow]]`. A malformed table other than the
+rule's own is forwarded with its validation error; the values of `[gate]` stay the verdict's to judge. A declaration is
+no loosening, so `quality verdict` asks for no `[[gate.loosened]]` entry. A config reader older than the rule refuses
+its table as an unknown key.
 
 It applies these rules:
 
@@ -188,6 +189,8 @@ It applies these rules:
   file's entries move and never fall (FIX-42); with no committed ceiling a moved file's entries are gone (FIX-43).
   `check` reads no history: after a staged move it names the new path `new debt` and the old one
   `can fall … is gone`, and one `--fix` clears both (FIX-44).
+  A fix that moves entries and lowers none counts them in the [debt row](output.md#area-rows) and adds
+  `ceiling moved N entries` to the verdict line (FIX-45).
 - `clone`: a pair is two functions (methods and nested functions too) in two different tracked `*.py` files, each of at
   least 40 tokens without its docstring, whose structure is at least 90 % the same once every name and literal is
   renamed (CLONE-1); tests count like code (CLONE-4), and a copy inside one file is no pair. A pair is named by the
@@ -289,8 +292,7 @@ It applies these rules:
   slash) (ROOT-13). Findings are sorted by entry and all printed (ROOT-14). An invalid declaration (a `/` inside the
   entry, `.`, `..`, `.git`, an empty entry, a multi-line reason, an unknown key, a missing key, an entry that is not
   text, a `[root]` key other than `allow`, `allow` that is not an array of tables, or one entry declared twice) makes
-  the `files` row `✗ not checked` with the reason, and `next:` shows a `[[root.allow]]` example (ROOT-15). The values of
-  `[gate]` stay the verdict's to judge.
+  the `files` row `✗ not checked` with the reason, and `next:` shows a `[[root.allow]]` example (ROOT-15).
 
   Ruled by the operator: any pull request may add a declaration with a reason (ROOT-8); the review judges whether the
   reason holds. A declaration is no loosening, so `quality verdict` asks for no `[[gate.loosened]]` entry.
