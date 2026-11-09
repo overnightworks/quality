@@ -28,7 +28,15 @@ from quality.output import (
 from quality.pin import JudgingRelease
 from quality.ratchet import BASELINE_PATH, NO_RENAMES, Renames
 from quality.report import CannotJudge, Command, Instruction, Reason, Step, config_refusal, printable
-from quality.sides import Side, UnusableConfig, compares_baselines, read_renames_of_pull, side_of
+from quality.sides import (
+    Side,
+    UnusableConfig,
+    compares_baselines,
+    read_pull_tree_of_pull,
+    read_renames_of_pull,
+    reads_tree,
+    side_of,
+)
 from quality.sonar import (
     Analysis,
     Scope,
@@ -234,10 +242,12 @@ def github_remote(repository: str) -> str:
     return f"https://github.com/{repository}.git"
 
 
-def rederived_verdict(head: Side, base: Side, check_runs: Sequence[Check], renames: Renames) -> Verdict:
+def rederived_verdict(
+    head: Side, base: Side, check_runs: Sequence[Check], renames: Renames, pull_tree: architecture.PullTree | None = None
+) -> Verdict:
     """The verdict's own decider at the merge commit, with the Sonar job taken as green: the door judges Sonar itself."""
     jobs = [Job(run.name, 1, run.status, SUCCESS if run.name == SONAR_CHECK else run.conclusion) for run in check_runs]
-    return judge(head, base, jobs, {"sonar": SUCCESS}, 1, renames)
+    return judge(head, base, jobs, {"sonar": SUCCESS}, 1, renames, pull_tree=pull_tree)
 
 
 def refusal_of_legacy_mode(settings: GateSettings) -> str | None:
@@ -577,6 +587,18 @@ def loosenings_row(verdict: Verdict, sonar_red: bool, refused: Pair) -> Row:
     return Row(Glyph.NEEDS_YOU, "loosenings", DoorEvent.DECLARED, count=len(lines), counts_plural=False, sub_lines=lines)
 
 
+def read_pull_files(
+    remote_for: RemoteFor, repository: str, base: Side, head: Side, commits: tuple[str, str], environment: Mapping[str, str],
+) -> tuple[architecture.PullTree | None, Renames]:
+    """What the pull request's two commits add to the judgement, fetched once: the tree when a module is struck (its
+    renames serve the baselines), else the renames when two baselines are compared, else nothing."""
+    if reads_tree(base, head):
+        return read_pull_tree_of_pull(remote_for(repository), *commits, environment), NO_RENAMES
+    if compares_baselines(base, head):
+        return None, read_renames_of_pull(remote_for(repository), *commits, environment)
+    return None, NO_RENAMES
+
+
 def read_loosenings(
     gh: GhRunner, repository: str, pull: Mapping[str, object], check_runs: Sequence[Check], sonar_red: bool,
     environment: Mapping[str, str], remote_for: RemoteFor, refused: Pair, rerun: str,
@@ -585,8 +607,8 @@ def read_loosenings(
     merge_commit_sha, base_sha = pull["merge_commit_sha"], pull["base"]["sha"]
     base = read_side_at(gh, repository, base_sha, Instruction(f"fix it on {pull['base']['ref']} first"))
     head = read_side_at(gh, repository, merge_commit_sha, Instruction(f"push the fix to the pull request's branch, then run {rerun} again"))
-    renames = read_renames_of_pull(remote_for(repository), base_sha, merge_commit_sha, environment) if compares_baselines(base, head) else NO_RENAMES
-    verdict = rederived_verdict(head, base, check_runs, renames)
+    pull_tree, renames = read_pull_files(remote_for, repository, base, head, (base_sha, merge_commit_sha), environment)
+    verdict = rederived_verdict(head, base, check_runs, renames, pull_tree)
     return (verdict, head.settings), (loosenings_row(verdict, sonar_red, refused),)
 
 

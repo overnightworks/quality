@@ -46,15 +46,18 @@ def put(path: Path, content: str | bytes | None) -> None:
         path.write_bytes(content if isinstance(content, bytes) else content.encode())
 
 
-def git_pull(directory, base_baseline, merge_baseline, moves=()):
+def git_pull(directory, base_baseline, merge_baseline, moves=(), *, base_files=None, merge_files=None):
     """A bare repository holding a base commit and a merge commit that moves each (old, new) file and holds the
-    given baselines; returns its path and the two shas."""
+    given baselines; `base_files` and `merge_files` add (or, for None, delete) files in either commit, the merge
+    commit's after the moves; returns its path and the two shas."""
     work = directory / "work"
     git = ["git", "-C", str(work), *GIT_IDENTITY]
     subprocess.run(["git", "init", "-q", str(work)], check=True)
     for old, _ in moves:
         name = old.encode("ascii", "backslashreplace").decode()
         put(work / old, "".join(f"{name} row {number} that no other file shares\n" for number in range(30)))
+    for name, content in (base_files or {}).items():
+        put(work / name, content)
     put(work / BASELINE_PATH, base_baseline)
     subprocess.run([*git, "add", "-A"], check=True)
     subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "base"], check=True)
@@ -62,6 +65,8 @@ def git_pull(directory, base_baseline, merge_baseline, moves=()):
     for old, new in moves:
         (work / new).parent.mkdir(parents=True, exist_ok=True)
         subprocess.run([*git, "mv", old, new], check=True)
+    for name, content in (merge_files or {}).items():
+        put(work / name, content)
     put(work / BASELINE_PATH, merge_baseline)
     subprocess.run([*git, "add", "-A"], check=True)
     subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "merge"], check=True)

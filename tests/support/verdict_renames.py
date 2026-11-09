@@ -54,9 +54,12 @@ def moves_in_head(pull_request, base, head, moves):
     commit_all(repo, "head moves the files")
 
 
-def pulled(directory, base_baseline, merge_baseline, moves=(), **options):
-    """A FakeGh whose pull request has real base and merge commits in a local remote."""
-    remote, base_sha, merge_sha = git_pull(directory, base_baseline, merge_baseline, moves)
+def pulled(directory, base_baseline, merge_baseline, moves=(), *, base_files=None, merge_files=None, **options):
+    """A FakeGh whose pull request has real base and merge commits in a local remote, `base_files` and `merge_files`
+    added to either commit."""
+    remote, base_sha, merge_sha = git_pull(
+        directory, base_baseline, merge_baseline, moves, base_files=base_files, merge_files=merge_files
+    )
     return FakeGh(
         base_baseline=base_baseline, merge_baseline=merge_baseline, base_sha=base_sha, merge_sha=merge_sha, remote=remote,
         **options,
