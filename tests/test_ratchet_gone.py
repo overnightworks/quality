@@ -165,8 +165,8 @@ def test_a_held_entry_without_a_measurement_is_gone_left_out_or_stands_by_the_in
     ],
 )
 def test_a_gone_entry_can_fall_and_the_fix_drops_it(build_repo, capsys, files, held, checking, fixing):
-    """FIX-8, CEILING-7, GENERATED-10, O21: the entry of a gone path or of a declared file is a `can fall` row with no
-    line and the fix `quality check --fix`; once the fix drops it, counted among the lowered, the clean row counts no
+    """FIX-8, CEILING-7, GENERATED-10, ROW-18: the entry of a gone path or of a declared file is a `can fall` row with
+    no line and the fix `quality check --fix`; once the fix drops it, counted among the lowered, the clean row counts no
     entry."""
     repo = build_repo({**files, BASELINE_PATH: ceiling(held)})
     assert checked(capsys, repo) == (1, checking, "")

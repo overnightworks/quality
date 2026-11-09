@@ -8,8 +8,10 @@ One output owner prints; rules return findings and never print. A line the door 
 
 Ruled by the operator:
 
-- Every row reads `glyph · subject · event · fact`. A finding sits indented under its area row with `path:line` right after the glyph; one `fix:` line follows the last of consecutive findings that share the fix.
-- Findings under their area with a `fix:` line: indented under the area row, columns aligned per area; `fix:` under the last of consecutive findings with the same fix. A finding without a line shows only the path.
+- Every row reads `glyph · subject · event · fact` (ROW-1). A finding sits indented under its area row with `path:line`
+  right after the glyph (ROW-2); one `fix:` line follows the last of consecutive findings that share the fix (ROW-3).
+- Findings under their area with a `fix:` line: indented under the area row, columns aligned per area (ROW-4); `fix:`
+  under the last of consecutive findings with the same fix. A finding without a line shows only the path.
 
 The columns are the glyph (state at a glance), the subject (the area, or `path:line` of the finding), the event (one
 typed word: what is the case), the fact (values, a few words) and then `fix:` (what you do) (ROW-1). A finding is
@@ -84,8 +86,11 @@ The `env-file` fix's own wording stands in [rules](rules.md).
 
 Ruled by the operator:
 
-- Rule names only in an allowance fix: a `fix:` line that asks for an `[[….allow]]` entry names the rule, because the entry needs it.
-- A config refusal's fact may name the values a config key takes, rule ids included, and the example to copy may hold the entry's rule line; this is the one exception to the rule that no rule name stands outside an allowance's `fix:`.
+- Rule names only in an allowance fix (ROW-7): a `fix:` line that asks for an `[[….allow]]` entry names the rule
+  (SUFFIX-17), because the entry needs it.
+- A config refusal's fact may name the values a config key takes, rule ids included, and the example to copy may hold
+  the entry's rule line (REFUSAL-15); this is the one exception to the rule that no rule name stands outside an
+  allowance's `fix:`.
 
 No rule name stands in a row (`compose-port`, `env-file`); the event says it in words (ROW-7). The areas replace the
 rule names in the verdict, and [`quality check --help`](commands.md#help-and-wrong-invocations) says which rules an
@@ -95,13 +100,13 @@ area holds.
 
 Ruled by the operator:
 
-- Clean areas: one row per area, so you see what was checked and its extent.
+- Clean areas: one row per area, so you see what was checked and its extent (ROW-9).
 
 An area row is `✓ <area>  clean  <extent>`, also when nothing was found (ROW-9), and `! <area>  N findings` with
 findings (ROW-10); the extent of a clean row is:
 
 - `files`: `N rules · M files`, M the distinct paths git tracks (O16).
-- `debt`: `ceiling held · N entries, M clone pairs`, what the ceiling file holds (O21).
+- `debt`: `ceiling held · N entries, M clone pairs`, what the ceiling file holds (ROW-18).
 - `imports`: `N contracts` (ROW-11).
 - `secrets`: `N commits` (O30), because gitleaks reads committed history only; `staged change · N files` for a staged
   run.
@@ -140,7 +145,7 @@ owner stand as notes, and the clean row counts them (O15, O49):
 
 Ruled by the operator:
 
-- `✗` means "could not check or do": a finding is always `!` with exit 1; `✗` is always exit 2.
+- `✗` means "could not check or do": a finding is always `!` with exit 1; `✗` is always exit 2 (CLOSING-1).
 
 | Glyph | Meaning |
 |---|---|
@@ -155,10 +160,12 @@ Ruled by the operator:
 
 Ruled by the operator:
 
-- Every run ends with exactly one closing verdict line, or with an `error:`/`next:` pair when it could not answer.
-- `next:` after a red verdict: a `!` verdict may carry a `next:` only when exactly one command is the answer. For `check` findings the `fix:` lines carry the way.
-- Exit 2 beats 1: exit 2 with the pair; the findings of the other areas stand anyway.
-- Duration in the verdict (`12s`, `1m12s`, `<1s`).
+- Every run ends with exactly one closing verdict line (CLOSING-4), or with an `error:`/`next:` pair when it could not
+  answer (CLOSING-15).
+- `next:` after a red verdict: a `!` verdict may carry a `next:` only when exactly one command is the answer. For
+  `check` findings the `fix:` lines carry the way (CLOSING-11).
+- Exit 2 beats 1 (CLOSING-27): exit 2 with the pair; the findings of the other areas stand anyway (CLOSING-13).
+- Duration in the verdict (`12s`, `1m12s`, `<1s`) (CLOSING-7).
 
 A closing line is its glyph and its parts joined by ` · ` (CLOSING-2), each part escaped (CLOSING-3). Exit `0` or `1`
 ends with one verdict line on stdout (CLOSING-4): `✓ clean · 7 areas · <1s` (CLOSING-5) or

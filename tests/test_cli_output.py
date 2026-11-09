@@ -412,7 +412,7 @@ def headers(lines: list[str]) -> list[str]:
 
 
 def test_a_clean_run_has_seven_clean_rows_in_area_order_and_the_verdict(build_repo, capsys):
-    """ROW-8, ROW-9, ROW-11, ROW-12, CLOSING-4, CLOSING-5, O16, O21, O30, O38, O48: a clean run has one clean row per
+    """ROW-8, ROW-9, ROW-11, ROW-12, CLOSING-4, CLOSING-5, O16, ROW-18, O30, O38, O48: a clean run has one clean row per
     area in area order, each with its extent: the files row its rules and distinct tracked paths, the debt row the
     entries and pairs of the ceiling file, the imports row its contracts, the secrets row its commits, the workflows
     row its workflow files and the offline audits, the dependencies row its lockfiles and packages, the code row its
