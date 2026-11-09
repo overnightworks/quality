@@ -1,0 +1,8 @@
+claim_id = "c5b2468f7c9c4e71a7d5eb1870a3c9e6"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "205b15fd29cb506036c810bc04d7e973379a1ddb"
+branch = "claude/issue-636-d7-import-ids"
+scope = ["docs/output.md", "docs/rules.md", "tests/test_architecture.py", "tests/test_architecture_output.py"]
+opened_commit = "b9283b5e51121650fe2fab0dd5bc357195d435f4"
+whole_reason = "docs/rules.md import-contract bullet, first half: the contracts must be kept, the config files, a deleted or unreadable name, what a run writes, the unmatched-ignore alerting and the root package, and the tests that prove them, linked by IMPORT IDs; the refusal sentence is the second slice."
