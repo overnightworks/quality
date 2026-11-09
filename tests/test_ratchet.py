@@ -539,7 +539,8 @@ def paired(first, second):
          "leftovers under every target are dropped before the sources move"],
 )
 def test_the_base_allowance_moves_to_a_rename_target_and_leftovers_there_do_not_count(renames, base, head, expected):
-    """BASELINE-12, BASELINE-13: the old entry leaves its path; an entry under the target never counts."""
+    """BASELINE-12, BASELINE-13, BASELINE-16: the old entry leaves its path unless the head still names it; an entry
+    under the target never counts."""
     assert carried_base(Baseline(base, None), renamed(renames), named_paths(Baseline(head, None))).size == expected
 
 
@@ -556,8 +557,8 @@ def test_the_base_allowance_moves_to_a_rename_target_and_leftovers_there_do_not_
          "nothing moves while the head holds the old path"],
 )
 def test_a_clone_pair_moves_with_its_files_by_the_same_rules(renames, base, head, expected):
-    """BASELINE-12, BASELINE-13: a pair whose sides only moved is the same pair; the sides re-sort through
-    ClonePair.of."""
+    """BASELINE-12, BASELINE-13, BASELINE-16, BASELINE-17: a pair whose sides only moved is the same pair, the sides
+    re-sort through ClonePair.of, and a side the head still names does not move."""
     carried = carried_base(Baseline({}, frozenset(base)), renamed(renames), named_paths(Baseline({}, frozenset(head))))
     assert carried.clones == frozenset(expected)
 
@@ -570,13 +571,14 @@ def test_a_target_whose_source_cannot_be_named_is_cleared_and_nothing_moves_to_i
 
 
 def test_a_head_pair_keeps_the_old_path_occupied_for_size_entries_too():
-    """#149 rule 1: the head holds the old path through a size entry or a pair side, either blocks the move."""
+    """BASELINE-16: the head holds the old path through a size entry or a pair side, either blocks the move."""
     base = Baseline({sized("a.py"): 16}, frozenset({paired("a.py", "z.py")}))
     head = Baseline({sized("b.py"): 16}, frozenset({paired("a.py", "z.py"), paired("b.py", "z.py")}))
     assert carried_base(base, renamed({"a.py": "b.py"}), named_paths(head)) == Baseline({sized("a.py"): 16}, frozenset({paired("a.py", "z.py")}))
 
 
 def test_a_base_without_a_clone_table_stays_without_one():
+    """BASELINE-9: a base without a clone table is still without one after its renames are carried."""
     assert carried_base(Baseline({sized("a.py"): 16}, None), renamed({"a.py": "b.py"}), named_paths(Baseline({sized("b.py"): 16}, None))).clones is None
 
 

@@ -121,7 +121,8 @@ def test_the_clone_baseline_only_falls_against_the_base(pull_request, capsys, ba
     ids=["a pair whose side only moved is the same pair", "a moved side with a renamed function is a new pair"],
 )
 def test_a_pair_is_held_under_the_path_its_file_was_renamed_from(pull_request, capsys, moved_symbol, expected):
-    """BASELINE-12: the moved side keeps its symbol, so only a renamed function makes a new pair."""
+    """BASELINE-4, BASELINE-12, BASELINE-17: the moved side keeps its symbol, so only a renamed function makes a new
+    pair."""
     head = render_baseline(Baseline({}, frozenset({ClonePair.of(Place("tests/test_e.py", moved_symbol), Place("tests/test_b.py", "check"))})))
     moved_in_head(pull_request, FIRST, head, old="tests/test_a.py", new="tests/test_e.py")
     _, output = verdict_of(pull_request[0], capsys)
@@ -153,13 +154,14 @@ BOTH_MOVES = [("tests/test_a.py", "tests/test_z.py"), ("tests/test_b.py", "tests
          "a new pair beside a move is an add", "the head keeps the old pair so the moved one is an add"],
 )
 def test_a_pair_moves_with_its_files_by_the_rules_of_the_size_entries(pull_request, capsys, base, head, moves, expected):
-    """BASELINE-12, BASELINE-13: a pair moves with its files by the rules of the size entries."""
+    """BASELINE-12, BASELINE-13, BASELINE-16, BASELINE-17: a pair moves with its files by the rules of the size
+    entries."""
     moves_in_head(pull_request, base, head, moves)
     assert expected in verdict_of(pull_request[0], capsys)[1]
 
 
 def test_a_moved_pair_is_not_copied_into_a_later_pull_request(pull_request, capsys, monkeypatch):
-    """#149 cell 14 for clone pairs: after the move the base holds no pair under the old path."""
+    """BASELINE-4: after the move the base holds no pair under the old path, so recreating the old file adds it."""
     repo, _ = pull_request
     moves_in_head(pull_request, FIRST, pairs_text(MOVED_PAIR), [("tests/test_a.py", "tests/test_e.py")])
     monkeypatch.setenv("GATE_BASE_SHA", head_commit(repo))
@@ -184,7 +186,8 @@ MOVED_RAISE = "size baseline raises function_lines src/new.py f 70 -> 90"
     ids=["the baseline adopted", "the clone table adopted", "the clone table removed"],
 )
 def test_adopting_or_dropping_a_table_next_to_a_move_judges_as_without_one(pull_request, capsys, base, head, expected):
-    """#149 cells 18-20."""
+    """BASELINE-5, BASELINE-8, BASELINE-9: next to a move, adopting a baseline or a clone table is green and dropping
+    the clone table is red."""
     moved_in_head(pull_request, base, head)
     assert expected in verdict_of(pull_request[0], capsys)[1]
 
@@ -613,8 +616,8 @@ def test_a_control_character_in_a_held_pair_prints_escaped(build_repo, capsys):
     ids=["undeclared is refused", "declared goes on", "a declaration of another pair is refused"],
 )
 def test_the_door_judges_a_new_pair_beside_a_move_as_the_verdict_does(capsys, tmp_path, merge_config, code, expected):
-    """BASELINE-12, MERGE-84, MERGE-85, MERGE-87: the door judges a moved pair as the verdict does: the moved pair
-    is the same pair, the new one needs its own declaration."""
+    """BASELINE-12, BASELINE-17, BASELINE-19, MERGE-84, MERGE-85, MERGE-87: the door judges a moved pair as the verdict
+    does: the moved pair is the same pair, the new one needs its own declaration."""
     gh = pulled(
         tmp_path, FIRST, pairs_text(MOVED_PAIR, SECOND_PAIR), ONE_MOVE, checks=SONAR_GREEN, base_config=ONE_JOB,
         merge_config=merge_config,
