@@ -1,0 +1,8 @@
+claim_id = "9c7aa706c34c483381b6523b08c7b81f"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "2a6b6c3e5210bc0dd465ca645692a8e6062484f4"
+branch = "claude/issue-649-d7-fix-rename-ids"
+scope = ["docs/rules.md", "tests/test_cli_fix_dry_run.py", "tests/test_cli_fix_renames.py", "tests/test_ratchet_follow.py", "tests/test_ratchet_gone.py"]
+opened_commit = "a85caf4d8963fd814fefb764f028f2e37a786e8a"
+whole_reason = "docs/rules.md --fix paragraph, rename half: the fix follows renames as the verdict carries them, reads them from the ceiling last commit through the index, moves entries and pairs, drops the target leftovers, keeps a ceiling it already moved, refuses an unplaced entry and a shallow edge, leaves an unrecorded move, follows before anything is judged gone, follows nothing without a committed ceiling, and check reads no history; and the tests that prove them, linked by FIX IDs."
