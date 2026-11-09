@@ -1,7 +1,0 @@
-claim_id = "71f7284ea5c640d5b9d7281498d23669"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "896030aea4ce154c182efe698024abd4ee183b05"
-branch = "claude/issue-721-ci-pytest-xdist"
-scope = [".github/workflows/ci.yml", "pyproject.toml", "uv.lock"]
-opened_commit = "6a411fa2d8e9401d3d96c285fe43f9684dc1a990"
