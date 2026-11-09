@@ -242,8 +242,9 @@ def test_a_draft_flag_that_is_no_boolean_cannot_be_judged(draft, capsys):
     ],
 )
 def test_each_refusal_is_its_row_and_the_pair(gh_kwargs, sonar_kwargs, rows, capsys):
-    """MERGE-14, MERGE-15, MERGE-59, MERGE-60, MERGE-61, MERGE-62, MERGE-71, MERGE-72, MERGE-75: each refusal is its `!`
-    row and the pair, and the verdict's blocking lines stand below the `loosenings` row."""
+    """MERGE-14, MERGE-15, MERGE-59, MERGE-60, MERGE-61, MERGE-62, MERGE-71, MERGE-72, MERGE-75, MERGE-84, MERGE-86,
+    MERGE-87: each refusal is its `!` row and the pair, and the verdict's blocking lines stand below the `loosenings`
+    row."""
     gh = FakeGh(**gh_kwargs)
     code, out, err, answers = run(gh, capsys, transport=sonar(**sonar_kwargs))
     assert (code, out, err, answers) == (1, frame(*rows), refused_pair(), [])

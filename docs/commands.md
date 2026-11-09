@@ -290,9 +290,10 @@ Ruled by the operator:
   other than `quality / sonar` and `quality / verdict` is green (MERGE-60); `quality / verdict` has failed (MERGE-61);
   and `quality / sonar` is green or has failed (it did not run, or it ended `timed_out`, `cancelled` or anything else:
   refused) (MERGE-62).
-  The verdict is then judged again by its own decider, with the config, baseline and import-linter configs read at the pull request's
-  current merge commit and at base and the Sonar job taken as green: an undeclared loosening, a declaration that matches
-  nothing, or a missing or red mandatory job is refused, naming the verdict's lines. When both sides hold a baseline,
+  The verdict is then judged again by its own decider, with the config, baseline and import-linter configs read at the
+  pull request's current merge commit and at base (MERGE-82) and the Sonar job taken as green (MERGE-83): an
+  undeclared loosening (MERGE-84), a declaration that matches nothing (MERGE-85), or a missing (MERGE-86) or red
+  mandatory job is refused, naming the verdict's lines. When both sides hold a baseline,
   the files git renamed between the two commits count as they do in the verdict, so the door fetches the pull request's
   base commit and merge commit (`git fetch --depth=1` from `https://github.com/<owner>/<repo>.git`) into a temporary bare
   repository that is removed afterwards, also when the command is interrupted. This needs `git` and `gh` on the path.
@@ -311,9 +312,9 @@ Ruled by the operator:
   body that holds only the line gives the line alone) (MERGE-69), the trailer a landing is read from. The body is the
   one read with the head (MERGE-70).
 - **Sonar green: declared loosenings.** The re-derived verdict must hold at least one declared loosening (otherwise
-  `re-run the verdict`). SonarCloud is not asked and `SONAR_TOKEN` is not needed.
-- **Sonar failed: legacy findings,** next to any declared loosening (MERGE-71): `[gate] legacy` is `fail` at the merge
-  commit (MERGE-72) (under `report` the Sonar job cannot be red on legacy findings, and a missing config reads as
+  `re-run the verdict`) (MERGE-87). SonarCloud is not asked and `SONAR_TOKEN` is not needed (MERGE-88).
+- **Sonar failed: legacy findings,** with or without a declared loosening (MERGE-71): `[gate] legacy` is `fail` at the
+  merge commit (MERGE-72) (under `report` the Sonar job cannot be red on legacy findings, and a missing config reads as
   `report` (MERGE-73)), SonarCloud's analysis of the pull request is of the head being merged (MERGE-74) and adds no
   finding (the findings are named otherwise) (MERGE-75), and the default branch has legacy findings (MERGE-76).
   `SONAR_TOKEN` is read from the environment and sent when set (MERGE-77), never shown in a row (MERGE-78): without it
