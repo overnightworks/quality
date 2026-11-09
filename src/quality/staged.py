@@ -34,7 +34,9 @@ def scan_change(path: Path, deadline: RunDeadline, log: scanners.ScannerLog = sc
             f"{CONFIG_PATH} cannot be read from the staged tree", git_environment,
         )
         allowances = _staged_allowances(staged_config)
-        scan = scanners.run_gitleaks(binary, scratch, git_environment, source, ["--pre-commit", "--staged"], allowances, deadline, log)
+        scan = scanners.run_gitleaks(
+            binary, scratch, git_environment, source, ["--pre-commit", "--staged"], allowances, deadline, log
+        )
         return RuleResult(scan.findings, StagedExtent(_changed_files(source, git_environment)), False, scan.notes)
 
 

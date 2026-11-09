@@ -155,7 +155,9 @@ def prepare_gitleaks() -> Path:
     return binary
 
 
-def scan_secrets(root: Path, allowances: dict[Allowance, str], deadline: RunDeadline, log: ScannerLog = no_log) -> RuleResult:
+def scan_secrets(
+    root: Path, allowances: dict[Allowance, str], deadline: RunDeadline, log: ScannerLog = no_log
+) -> RuleResult:
     deadline.ensure_time_left()
     binary = prepare_gitleaks()
     with process.scratch_directory() as scratch:

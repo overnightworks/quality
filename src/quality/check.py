@@ -113,7 +113,9 @@ def _judge_lint(lint: python_lint.Lint | CannotJudge, judge: Callable[[python_li
         return CannotJudge(str(error))
 
 
-def check_secrets(root: Path, allow_lists: AllowLists | CannotJudge, deadline: RunDeadline, log: scanners.ScannerLog) -> RuleResult:
+def check_secrets(
+    root: Path, allow_lists: AllowLists | CannotJudge, deadline: RunDeadline, log: scanners.ScannerLog
+) -> RuleResult:
     try:
         return scanners.scan_secrets(root, _required(allow_lists).secrets, deadline, log)
     except process.ProcessError as error:
@@ -129,7 +131,9 @@ def check_workflows(
     if rule is Rule.WORKFLOW_SECURITY:
         judged = [*workflows, *checkout.on_disk(root, [name for name in tracked if checkout.is_action(PurePosixPath(name))])]
     try:
-        return RuleResult(scanners.scan_workflows(root, rule, judged, locate_zizmor, deadline, log), len(workflows), False)
+        return RuleResult(
+            scanners.scan_workflows(root, rule, judged, locate_zizmor, deadline, log), len(workflows), False
+        )
     except process.ProcessError as error:
         raise CannotJudge(str(error)) from error
 
@@ -530,14 +534,24 @@ def _judge_imports(inputs: RunInputs) -> AreaVerdict:
 
 def _judge_secrets(inputs: RunInputs) -> AreaVerdict:
     runs, log = _run_log(inputs.verbose)
-    leak = _scanned(inputs.running, Area.SECRETS, scanners.GITLEAKS, lambda: check_secrets(inputs.root, inputs.allow_lists, inputs.deadline, log))
+    leak = _scanned(
+        inputs.running,
+        Area.SECRETS,
+        scanners.GITLEAKS,
+        lambda: check_secrets(inputs.root, inputs.allow_lists, inputs.deadline, log),
+    )
     return _area_verdict(Area.SECRETS, {Rule.LEAK: leak}, runs)
 
 
 def _judge_workflows(inputs: RunInputs) -> AreaVerdict:
     runs, log = _run_log(inputs.verbose)
     judged = {
-        rule: _scanned(inputs.running, Area.WORKFLOWS, scanner.name, partial(check_workflows, inputs.root, rule, inputs.tracked, inputs.locate_zizmor, inputs.deadline, log))
+        rule: _scanned(
+            inputs.running,
+            Area.WORKFLOWS,
+            scanner.name,
+            partial(check_workflows, inputs.root, rule, inputs.tracked, inputs.locate_zizmor, inputs.deadline, log),
+        )
         for rule, scanner in scanners.WORKFLOW_SCANNERS.items()
     }
     return _area_verdict(Area.WORKFLOWS, judged, runs)
@@ -588,7 +602,9 @@ def judge_repository(
     root = checkout.work_tree_top(root)
     tracked = checkout.tracked_files(root)
     tracked_paths = len(set(tracked))
-    inputs = RunInputs(root, tracked, locate_ruff, locate_zizmor, running, verbose, fix, RunDeadline.starting(monotonic))
+    inputs = RunInputs(
+        root, tracked, locate_ruff, locate_zizmor, running, verbose, fix, RunDeadline.starting(monotonic)
+    )
     areas: list[AreaVerdict] = []
     for area in _judged_areas(inputs, frozenset(named) or frozenset(Area)):
         report_area(area, tracked_paths)

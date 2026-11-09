@@ -49,7 +49,9 @@ def test_a_process_failure_at_the_end_becomes_the_cut_wording(tmp_path):
     with pytest.raises(CannotJudge) as refusal:
         run_deadline.run([str(tmp_path / "zizmor")])
     assert not isinstance(refusal.value, process.ProcessError)
-    assert refusal.value.reason.fact == f"zizmor did not finish within the run's {deadline.RUN_DEADLINE_SECONDS} seconds"
+    assert refusal.value.reason.fact == (
+        f"zizmor did not finish within the run's {deadline.RUN_DEADLINE_SECONDS} seconds"
+    )
     assert refusal.value.reason.next_steps == ()
 
 
@@ -61,7 +63,10 @@ def test_no_time_left_starts_nothing(tmp_path, starting):
     clock = Clock()
     run_deadline = deadline.RunDeadline.starting(clock)
     clock.now = deadline.RUN_DEADLINE_SECONDS
-    start = {"run": lambda: run_deadline.run(command), "run_in_own_group": lambda: run_deadline.run_in_own_group(command, {})}[starting]
+    start = {
+        "run": lambda: run_deadline.run(command),
+        "run_in_own_group": lambda: run_deadline.run_in_own_group(command, {}),
+    }[starting]
     with pytest.raises(CannotJudge) as refusal:
         start()
     assert not marker.exists()

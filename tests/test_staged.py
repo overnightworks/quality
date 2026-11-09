@@ -390,7 +390,11 @@ def test_a_staged_run_with_no_time_left_starts_no_gitleaks_and_cannot_judge(buil
     repo = build_repo({"README": "hello\n"})
     stage(repo, {"src/a.py": KEY_LINE})
     result = check.judge_staged_change(
-        repo, staged.scan_change, lambda _verdict, _tracked_paths: None, lambda _area, _scanner: nullcontext(), monotonic=clock_past_the_deadline()
+        repo,
+        staged.scan_change,
+        lambda _verdict, _tracked_paths: None,
+        lambda _area, _scanner: nullcontext(),
+        monotonic=clock_past_the_deadline(),
     )
     (verdict,) = result.verdicts
     assert str(verdict.refusal) == f"the run's {deadline.RUN_DEADLINE_SECONDS} seconds are spent"

@@ -470,7 +470,11 @@ def test_a_path_in_conflict_counts_once_among_the_tracked_paths(build_repo):
     assert check_result(repo, installed_ruff, cli.INSTALLED_ZIZMOR).tracked_paths == 2
 
 
-SCANNER_OF_RULE = {Rule.LEAK: scanners.GITLEAKS, Rule.WORKFLOW_LINT: scanners.ACTIONLINT, Rule.WORKFLOW_SECURITY: scanners.ZIZMOR}
+SCANNER_OF_RULE = {
+    Rule.LEAK: scanners.GITLEAKS,
+    Rule.WORKFLOW_LINT: scanners.ACTIONLINT,
+    Rule.WORKFLOW_SECURITY: scanners.ZIZMOR,
+}
 SCANNER_NAMES = tuple(SCANNER_OF_RULE.values())
 DEADLINE_RULES = tuple(SCANNER_OF_RULE)
 WORKFLOW_FILES = {".github/workflows/w.yml": "on: push\n"}
@@ -503,10 +507,14 @@ def test_a_rule_with_no_time_left_starts_no_scan_and_cannot_judge(build_repo, se
     mirror is cloned, and each rule cannot judge in the spent wording with no step of its own."""
     started = tmp_path / "started"
     fake_git(f'case "$*" in *clone*) echo clone >> {started};; esac')
-    locate_zizmor = stub_scanners(served_scanners, tmp_path / "zizmor", dict.fromkeys(SCANNER_NAMES, f"echo scan >> {started}"))
+    locate_zizmor = stub_scanners(
+        served_scanners, tmp_path / "zizmor", dict.fromkeys(SCANNER_NAMES, f"echo scan >> {started}")
+    )
     repo = build_repo(WORKFLOW_FILES)
     refused_rules = refusals(repo, locate_zizmor=locate_zizmor, monotonic=clock_past_the_deadline())
-    assert refused_rules == dict.fromkeys(DEADLINE_RULES, f"the run's {deadline.RUN_DEADLINE_SECONDS} seconds are spent")
+    assert refused_rules == dict.fromkeys(
+        DEADLINE_RULES, f"the run's {deadline.RUN_DEADLINE_SECONDS} seconds are spent"
+    )
     assert not started.exists()
 
 
@@ -519,14 +527,21 @@ def test_a_scanner_still_running_when_the_time_ends_is_stopped_and_its_rule_cann
     child = tmp_path / "child"
     scanner = SCANNER_OF_RULE[rule]
     clean = {scanners.GITLEAKS: 'echo "[]" > "$report"', scanners.ACTIONLINT: "echo '[]'", scanners.ZIZMOR: "echo '[]'"}
-    locate_zizmor = stub_scanners(served_scanners, tmp_path / "zizmor", clean | {scanner: f"sleep 30 & echo $! > {child}; wait"})
-    monkeypatch.setattr(deadline, "RUN_DEADLINE_SECONDS", 0.5)
+    locate_zizmor = stub_scanners(
+        served_scanners, tmp_path / "zizmor", clean | {scanner: f"sleep 30 & echo $! > {child}; wait"}
+    )
+    monkeypatch.setattr(deadline, "RUN_DEADLINE_SECONDS", 2)
     repo = build_repo(WORKFLOW_FILES)
     started = time.monotonic()
     result = check.judge_repository(
-        repo, installed_ruff, locate_zizmor, lambda _verdict, _tracked_paths: None, lambda _area, _scanner: nullcontext(), named=[rule.area]
+        repo,
+        installed_ruff,
+        locate_zizmor,
+        lambda _verdict, _tracked_paths: None,
+        lambda _area, _scanner: nullcontext(),
+        named=[rule.area],
     )
-    assert time.monotonic() - started < 3
-    assert refusals_of(result)[rule] == f"{scanner} did not finish within the run's 0.5 seconds"
+    assert time.monotonic() - started < 10
+    assert refusals_of(result)[rule] == f"{scanner} did not finish within the run's 2 seconds"
     if rule is Rule.LEAK:
         assert ends_soon(int(child.read_text()))

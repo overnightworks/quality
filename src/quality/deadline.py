@@ -10,7 +10,8 @@ RUN_DEADLINE_SECONDS = 540
 
 
 class RunDeadlineSpent(CannotJudge):
-    """The run's time is spent or ran out in a scanner; it brings no step, because nothing a person installs changes it."""
+    """The run's time is spent or ran out in a scanner; it brings no step, because nothing a person
+    installs changes it."""
 
     @classmethod
     def not_started(cls) -> RunDeadlineSpent:
@@ -39,14 +40,19 @@ class RunDeadline:
         if self.left() <= 0:
             raise RunDeadlineSpent.not_started()
 
-    def run(self, command: list[str], cwd: Path | None = None, env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+    def run(
+        self, command: list[str], cwd: Path | None = None, env: dict[str, str] | None = None
+    ) -> subprocess.CompletedProcess:
         return self._within_time(command, lambda left: process.run(command, cwd=cwd, env=env, timeout=left))
 
     def run_in_own_group(self, command: list[str], env: Mapping[str, str] | None) -> subprocess.CompletedProcess:
-        """For gitleaks alone: its `git` children die with it, which needs `process.scratch_directory` around the call."""
+        """For gitleaks alone: its `git` children die with it, which needs `process.scratch_directory` around
+        the call."""
         return self._within_time(command, lambda left: process.run_bounded_in_own_group(command, left, env))
 
-    def _within_time(self, command: list[str], start: Callable[[float], subprocess.CompletedProcess]) -> subprocess.CompletedProcess:
+    def _within_time(
+        self, command: list[str], start: Callable[[float], subprocess.CompletedProcess]
+    ) -> subprocess.CompletedProcess:
         self.ensure_time_left()
         try:
             return start(self.left())
