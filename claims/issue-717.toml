@@ -1,0 +1,7 @@
+claim_id = "2ff839b3f5c64811aaadf2a0b345b99d"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "8f50c72c0d32b461cfa6a4a0a2fd51f25c3e8ead"
+branch = "claude/issue-717-design-name"
+scope = ["docs/release.md"]
+opened_commit = "bc15531b49390df14d7e4e03d969989be43eeb46"
