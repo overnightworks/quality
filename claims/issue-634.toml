@@ -1,0 +1,7 @@
+claim_id = "2d611f5eaf6d479cbce2dc1727377a2f"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "88e82d0d0d52b59b8822c9ee61637fabab885221"
+branch = "claude/issue-634-d7-merge-fetch-ids"
+scope = ["docs/commands.md", "tests/test_verdict_renames.py"]
+opened_commit = "9a42d23646e8f2d8b36910bf4da22d4898c00c9a"
