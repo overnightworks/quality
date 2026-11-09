@@ -86,8 +86,7 @@ PANIC_MODULE = "pyo3_runtime"
 MAX_ECHOED_SOURCE = 200
 # Probed on grimp 3.17, whose Rust reader (not readable from Python) takes the raw lower-cased spelling of a coding
 # cookie: Python's own aliases such as utf_8, U8, cp65001 or utf-8-sig make it panic.
-GRIMP_ACCEPTED_COOKIES = frozenset({"utf-8", "utf8", "unicode-1-1-utf-8", "unicode11utf8", "x-unicode20utf8",
-                                    "ascii", "us-ascii", "ansi_x3.4-1968"})
+GRIMP_ACCEPTED_COOKIES = frozenset({"utf-8", "utf8", "ascii", "us-ascii", "ansi_x3.4-1968"})
 NUL_IN_SOURCE = "source code cannot contain null bytes"
 CODING_COOKIE = re.compile(r"^[ \t\f]*#.*?coding[:=][ \t]*([-\w.]+)", re.ASCII)  # PEP 263
 
@@ -453,7 +452,7 @@ def _refuse_foreign_location(repository: str, package: str, directory: str) -> N
 
 def _place(found: str | None, repository: str) -> str:
     """Where Python found a root package: inside, repository-relative; outside, from the sys.path entry it lies under,
-    so the place is named without an absolute local path (rule 4)."""
+    so the place is named without an absolute local path."""
     if found is None:
         return "without a source file"
     if Path(found).is_relative_to(repository):
