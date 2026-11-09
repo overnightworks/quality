@@ -45,8 +45,8 @@ def contracts_toml(contracts: dict[str, dict], roots: tuple[str, ...] = ("shop",
 KEPT_CONTRACT = {**SHOP, ".importlinter": contracts_ini({"guarded": FORBIDDEN})}
 
 
-def loosened(base: dict[str, str], head: dict[str, str]) -> list[str]:
-    return architecture.contract_loosenings(architecture.contracts_of(base), architecture.contracts_of(head))
+def loosened(base: dict[str, str], head: dict[str, str], tree: architecture.PullTree | None = None) -> list[str]:
+    return architecture.contract_loosenings(architecture.contracts_of(base), architecture.contracts_of(head), tree)
 
 
 def one(options: dict) -> dict[str, dict]:
