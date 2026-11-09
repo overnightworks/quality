@@ -1,7 +1,0 @@
-claim_id = "8a469319628d45ccb6bd67a63729708c"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "5e3c6ea4a0c652abb3dc3b20e1dd7bc1fbad87a1"
-branch = "claude/issue-692-sweep-commands-ruled-marks"
-scope = ["docs/commands.md"]
-opened_commit = "d0248eb512f735e9c27ab580f6af61d6731b63f6"
