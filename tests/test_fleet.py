@@ -455,7 +455,7 @@ def toml_error(prefix: str) -> str:
     [
         (nothing, re.escape("quality/fleet.toml is missing")),
         (a_directory, re.escape("quality/fleet.toml is not a file")),
-        (a_dangling_link, re.escape("cannot read quality/fleet.toml: [Errno 2] No such file or directory")),
+        (a_dangling_link, re.escape("cannot read quality/fleet.toml: it leads to nothing")),
         (written(b"\xff"), re.escape("cannot read quality/fleet.toml: 'utf-8' codec can't decode byte 0xff in position 0: invalid start byte")),
         (written('repositories = ["o/a"'), toml_error("quality/fleet.toml is not valid TOML")),
         (written(f"repositories = {'9' * 5000}"), toml_error("quality/fleet.toml is not valid TOML")),
