@@ -109,21 +109,24 @@ Ruled by the operator:
 
 ## `quality check secrets --staged`
 
-`quality check secrets --staged` scans exactly what the next commit records: the effective index of the
-repository it runs in, compared with `HEAD`, with no path argument. It is meant for a pre-commit hook, which runs it in the
-work-tree top or below it. A relative `GIT_INDEX_FILE` is resolved against the working directory, as git does, so `git commit -a`,
-`git commit <path>` and a linked worktree scan the index git is committing. `--staged` takes exactly the area `secrets`;
-any other set of areas, or none, is a [wrong invocation](#help-and-wrong-invocations).
+`quality check secrets --staged` scans exactly what the next commit records: the effective index of the repository it
+runs in, compared with `HEAD` (STAGED-1), or taken whole before the first commit (STAGED-2), with no path argument. It
+is meant for a pre-commit hook, which runs it in the work-tree top or below it (STAGED-3). A relative `GIT_INDEX_FILE`
+is resolved against the working directory, as git does (STAGED-4), so `git commit -a`, `git commit <path>` and a linked
+worktree scan the index git is committing (STAGED-5). `--staged` takes exactly the area `secrets`; any other set of
+areas, or none, is a [wrong invocation](#help-and-wrong-invocations).
 
 Ruled by the operator: `--staged` only with `secrets`: any other area with `--staged` is exit 2 with `next: quality check secrets --staged`.
 
 The index is written as a tree (`git write-tree`, only tree objects a commit writes anyway) and read into a scratch
-repository inside a 0700 scratch directory. The scratch repository borrows the objects (`objects/info/alternates`),
-has an empty work tree and none of the live repository's config or `info/attributes`, so a staged `.gitleaksignore`,
-`.gitleaks.toml`, `.gitattributes` with `-diff`, or a `gitleaks:allow` comment changes nothing. gitleaks runs in the same
-attribute-free environment as `check`, with quality's config. The allow list is the staged tree's own
-`quality/config.toml` (none staged: no allowances). The staged run validates only the `[secrets]` table of that config and ignores other tables
-and keys, while `check` (when a selected area needs the config, validating the whole of it) and `verdict` stay strict, so schema growth never blocks a commit.
+repository inside a 0700 scratch directory. The scratch repository borrows the objects
+(`objects/info/alternates`), has an empty work tree and none of the live repository's config or `info/attributes`, so a
+staged `.gitleaksignore`, `.gitleaks.toml`, `.gitattributes` with `-diff`, or a `gitleaks:allow` comment changes
+nothing (STAGED-6). gitleaks runs in the same attribute-free environment as `check`, with quality's config. The allow
+list is the staged tree's own `quality/config.toml` (none staged: no allowances) (STAGED-7). The staged run validates
+only the `[secrets]` table of that config and ignores other tables and keys ([gate](gate.md#declared-loosenings)),
+while `check` (when a selected area needs the config, validating the whole of it) and `verdict` stay strict, so schema
+growth never blocks a commit (STAGED-8).
 
 The output is `check`'s frame: the `secrets` row with `staged change · N files` (the paths the staged diff lists, each added,
 changed, deleted or renamed path one file), the finding rows and the allowed notes under it, and the verdict. It prints no unused

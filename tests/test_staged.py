@@ -77,7 +77,7 @@ def test_a_staged_key_is_one_secret_row_with_its_entry_and_its_value_is_not_prin
 @pytest.mark.scanner
 @pytest.mark.parametrize("where", ["unstaged edit", "untracked file", "only in HEAD", "removed from HEAD"])
 def test_a_key_that_is_not_in_the_staged_change_is_green(build_repo, installed_scanners, where):
-    """#25 rule 1: a key only in the work tree, or only in HEAD, is not what the next commit adds."""
+    """STAGED-1: a key only in the work tree, or only in HEAD, is not part of the change the next commit records."""
     repo = build_repo({"kept.txt": KEY_LINE} if where.endswith("HEAD") else {"kept.txt": "clean\n"})
     if where == "unstaged edit":
         (repo / "kept.txt").write_text(KEY_LINE)
@@ -90,7 +90,7 @@ def test_a_key_that_is_not_in_the_staged_change_is_green(build_repo, installed_s
 
 @pytest.mark.scanner
 def test_a_repository_without_head_is_scanned(unborn_repo, installed_scanners):
-    """#25 rule 1: no HEAD is an empty parent, so the whole index is the change."""
+    """STAGED-2: with no HEAD the whole index is the change."""
     stage(unborn_repo, {"clean.txt": "ok\n"})
     assert staged_door(unborn_repo) == 0
     stage(unborn_repo, {"config.txt": KEY_LINE})
@@ -107,7 +107,7 @@ def test_a_repository_without_head_is_scanned(unborn_repo, installed_scanners):
     ],
 )
 def test_a_staged_ignore_attribute_or_config_file_changes_nothing(build_repo, installed_scanners, name, content):
-    """#25 rule 1: the scratch work tree is empty, so no file of the scanned repository steers gitleaks or git."""
+    """STAGED-6: the scratch work tree is empty, so no staged ignore, attributes or config file steers the scan."""
     repo = build_repo({"README": "hello\n"})
     stage(repo, {name: content, "config.txt": KEY_LINE})
     assert staged_door(repo) == 1
@@ -115,7 +115,7 @@ def test_a_staged_ignore_attribute_or_config_file_changes_nothing(build_repo, in
 
 @pytest.mark.scanner
 def test_a_gitleaks_allow_comment_changes_nothing(build_repo, installed_scanners):
-    """#25 rule 1: an inline gitleaks:allow comment is ignored, the staged key is still red."""
+    """STAGED-6: an inline gitleaks:allow comment is ignored, so the staged key is still red."""
     repo = build_repo({"README": "hello\n"})
     stage(repo, {"config.txt": f"aws_access_key_id = {FAKE_KEY}  # gitleaks:allow\n"})
     assert staged_door(repo) == 1
@@ -123,7 +123,7 @@ def test_a_gitleaks_allow_comment_changes_nothing(build_repo, installed_scanners
 
 @pytest.mark.scanner
 def test_the_live_repositorys_info_attributes_cannot_hide_a_staged_key(build_repo, installed_scanners):
-    """#25 rule 1 (quality#21 follow-up): git reads $GIT_DIR/info/attributes whatever the environment says; the scratch repository has none."""
+    """STAGED-6: the live repository's info/attributes cannot hide a staged key: the scratch repository has none."""
     repo = build_repo({"README": "hello\n"})
     (repo / ".git" / "info").mkdir(exist_ok=True)
     (repo / ".git" / "info" / "attributes").write_text("k.txt -diff\n")
@@ -134,7 +134,7 @@ def test_the_live_repositorys_info_attributes_cannot_hide_a_staged_key(build_rep
 @pytest.mark.scanner
 @pytest.mark.parametrize("staged_config", [True, False], ids=["allowance staged", "allowance only in work tree"])
 def test_the_allow_list_is_the_one_of_the_staged_tree(build_repo, installed_scanners, staged_config):
-    """#25 rule 1.4: an allowed value is green when the staged tree allows it; a work-tree-only file allows nothing."""
+    """STAGED-7: an allowed value is green when the staged tree allows it; a work-tree-only file allows nothing."""
     repo = build_repo({"README": "hello\n"})
     config = allow_config(("aws-access-token", "config.txt", FAKE_KEY, "test key"))
     stage(repo, {"config.txt": KEY_LINE})
@@ -205,7 +205,7 @@ def secret_rows_of(attempt: subprocess.CompletedProcess[str]) -> list[tuple[str,
 @pytest.mark.scanner
 @pytest.mark.parametrize("how", ["plain", "commit -a", "commit <path>"])
 def test_a_real_commit_is_refused_through_the_hook(refusing_hook, how):
-    """#25 rule 1: git's own index for the commit (relative or absolute GIT_INDEX_FILE) is the one scanned."""
+    """STAGED-3, STAGED-5: a hook refuses the real commit, plain, with -a or with a path, and HEAD stays put."""
     before = git(refusing_hook, "rev-parse", "HEAD").stdout
     attempt = commit_attempt(refusing_hook, how)
     assert attempt.returncode != 0
@@ -215,7 +215,7 @@ def test_a_real_commit_is_refused_through_the_hook(refusing_hook, how):
 
 @pytest.mark.scanner
 def test_a_commit_from_a_linked_worktree_is_refused_through_the_hook(refusing_hook, tmp_path):
-    """#25 rule 1: a linked worktree commits with GIT_DIR and an absolute GIT_INDEX_FILE set."""
+    """STAGED-5: a linked worktree, which commits with GIT_DIR and an absolute GIT_INDEX_FILE, refuses its key."""
     linked = tmp_path / "linked"
     git(refusing_hook, "worktree", "add", "-q", "-b", "side", str(linked))
     stage(linked, {"tracked.txt": KEY_LINE})
@@ -226,14 +226,14 @@ def test_a_commit_from_a_linked_worktree_is_refused_through_the_hook(refusing_ho
 
 @pytest.mark.scanner
 def test_a_clean_commit_goes_through_the_hook(refusing_hook):
-    """#25 rule 1: a commit with nothing to find passes the hook."""
+    """STAGED-3: a commit with nothing to find passes the hook."""
     stage(refusing_hook, {"tracked.txt": "still clean\n"})
     assert git(refusing_hook, "commit", "-q", "-m", "x", check=False).returncode == 0
 
 
 @pytest.mark.scanner
 def test_a_staged_run_leaves_the_repository_as_it_found_it(build_repo, installed_scanners):
-    """#25 rule 1.1: write-tree only writes tree objects, so status is unchanged by the scan."""
+    """A staged scan leaves the repository's status as it found it."""
     repo = build_repo({"README": "hello\n"})
     stage(repo, {"config.txt": KEY_LINE})
     before = git(repo, "status", "--porcelain=v2", "--branch").stdout
@@ -266,7 +266,8 @@ def test_an_unmerged_index_is_exit_2(build_repo, installed_scanners, capsys):
     ids=["unknown gate keys and tables are ignored", "a malformed allowance is still refused"],
 )
 def test_the_staged_scan_reads_only_the_secrets_table(build_repo, installed_scanners, staged_config, exit_code):
-    """#40 rule 1: only [secrets] of the staged config is validated."""
+    """VERDICT-58: only [secrets] of the staged config is validated: other tables and keys are ignored, a malformed
+    allowance is still refused."""
     repo = build_repo({"README": "hello\n"})
     stage(repo, {"quality/config.toml": staged_config})
     assert staged_door(repo) == exit_code
@@ -331,7 +332,8 @@ def test_the_printed_entry_with_a_reason_allows_the_staged_key_with_head_unchang
 
 @pytest.mark.scanner
 def test_a_staged_run_in_a_subfolder_judges_the_index_the_environment_names(build_repo, installed_scanners, monkeypatch, capsys):
-    """The hook stands in a subfolder with a relative git directory, an explicit work tree and an alternate index."""
+    """STAGED-3, STAGED-4: a hook below the work-tree top, with a relative git directory, an explicit work tree and a
+    relative alternate index, judges that index."""
     repo = build_repo({"docs/README": "hello\n"})
     (repo / "docs" / "key.txt").write_text(KEY_LINE)
     alternate_index = repo / ".git" / "alternate-index"
