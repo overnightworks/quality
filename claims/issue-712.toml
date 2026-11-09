@@ -1,0 +1,7 @@
+claim_id = "13838f9bcaae49e9acec16d2bf0f57b9"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "6f56cd5b1d39f17894fdbbd1247fbecb972aa161"
+branch = "claude/issue-712-fix-moved-id"
+scope = ["docs/output.md", "docs/rules.md", "tests/test_cli_fix_renames.py"]
+opened_commit = "67d6a10c3184c0d0a10921a0c5535f2a183296c5"
