@@ -1,7 +1,0 @@
-claim_id = "617206f6f3c946c8ba6877ec8c281aad"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "ebc8a4dfd76447f3564190d5b27fd49b0da191db"
-branch = "claude/issue-703-output-streams-verbose-marks"
-scope = ["docs/output.md"]
-opened_commit = "2fefa5d42f6cf17845b0d66b4d9951f4c1b52e3a"
