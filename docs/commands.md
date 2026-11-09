@@ -71,12 +71,16 @@ SIGTERM while uv prepares ends quality, uv and every process uv started (PIN-33)
 runs the checkout's code, prepared through `uv run` (PIN-34); a preparation that fails there is
 `error: cannot prepare this checkout · uv exited 2` with `next: uv run quality check` (PIN-35).
 
-`quality merge` judges at the release its target's gate pins at the pull request's merge commit, read through `gh`
-before its first row (each listed workflow's name checked before it shapes a request, every read at that commit) and
-prepared as `check`'s is; its first row names it. A pull request refused from its own read (no admin right, closed, a
-draft) stops at its row before the pin is read. No merge commit, no gate, an unknown pin, a pin below v0.10.0 and a
-preparation that fails are the pair alone, nothing changed. For quality itself the installed quality judges, never the
-pull request's own code: `· release  installed  <version> · quality's gate pins no release`.
+`quality merge` judges at the release its target's gate pins at the pull request's merge commit (PIN-36), read through
+`gh` before its first row (PIN-37) (each listed workflow's name checked before it shapes a request (PIN-38) and sent
+percent-encoded (PIN-39), every read at that commit (PIN-40)) and prepared as `check`'s is (PIN-41); its first row
+names it (PIN-42). A pull request refused from its own read (no admin right, closed, a draft: see
+[the door's refusals](#quality-merge)) stops at its row before the pin is read (PIN-43). No merge commit (PIN-44), no
+gate (PIN-45), an unknown pin (PIN-46), a pin below v0.10.0 (PIN-47) and a preparation that fails are the pair alone,
+nothing changed; so are a merge commit `gh` names that is no commit sha (PIN-48), a workflow listing or file `gh`
+cannot read, a listing that is no list of files and a workflow that is a symlink (PIN-49). For quality itself, where
+its gate calls its own `gate.yml`, the installed quality judges, never the pull request's own code:
+`· release  installed  <version> · quality's gate pins no release` (PIN-50).
 
 Ruled by the operator:
 

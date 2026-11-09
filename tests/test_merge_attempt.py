@@ -404,7 +404,8 @@ def workflow_reads():
 
 @pytest.mark.parametrize("draft", [False, True], ids=["at the first row", "at a stopped row"])
 def test_a_stdout_that_refuses_a_row_stops_the_door_before_the_question(draft, capsys, monkeypatch):
-    """MERGE-44: a stdout that refuses a row before the question stops the door with exit 2, the pair and no change."""
+    """MERGE-44, PIN-37, PIN-40, PIN-43: a stdout that refuses a row before the question stops the door with exit 2, the
+    pair and no change, after the release was read at the merge commit; a stopped pull request reads none."""
     gh = FakeGh(draft=draft)
     with open("/dev/full", "w", buffering=1) as full:
         monkeypatch.setattr(sys, "stdout", full)
