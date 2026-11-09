@@ -1,0 +1,7 @@
+claim_id = "c430e0a660ba4fc9a7a2bc55bdc5ce9d"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "10a5cbd471162ab050dcb792decd650f1104903e"
+branch = "claude/issue-643-d7-advisory-ids"
+scope = ["docs/rules.md", "tests/test_advisories.py"]
+opened_commit = "4ca8d387993ba97046ef0275bbcf36e10aaa8bd5"
