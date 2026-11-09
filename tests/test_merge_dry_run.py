@@ -58,11 +58,13 @@ def test_a_dry_run_shows_the_rows_and_its_line_and_changes_nothing(gh_kwargs, ca
 
 
 def test_a_dry_run_shows_the_release_row_first(capsys):
+    """PIN-42: a dry run shows the release row first."""
     _, out, _, _ = run(FakeGh(), capsys, words=["--dry-run"])
     assert out.startswith(RELEASE_ROW)
 
 
 def test_a_dry_run_re_executes_with_its_dry_run_word(capsys):
+    """PIN-41: a dry run re-executes into the pinned release with its own words."""
     port = ReexecutionPort()
     gh = FakeGh(workflows={MERGE_SHA: {"ci.yml": gate_workflow("v0.10.1", "7f" * 20)}})
     ports = door_ports(reexecute=port)

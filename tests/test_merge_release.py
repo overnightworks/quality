@@ -54,6 +54,7 @@ def workflow_reads(gh):
 
 
 def test_the_first_row_names_the_release_the_targets_gate_pins_at_the_merge_commit(capsys):
+    """PIN-36, PIN-42: the first row names the release the target's gate pins at the merge commit."""
     code, out, _ = door(capsys, FakeGh())
     assert (code, out.startswith(RELEASE_ROW + pull_row())) == (1, True)
 
@@ -106,6 +107,8 @@ def test_the_first_row_names_the_release_the_targets_gate_pins_at_the_merge_comm
     ],
 )
 def test_a_release_the_door_cannot_take_is_the_pair_alone_and_nothing_changed(gh_kwargs, err, capsys):
+    """PIN-37, PIN-38, PIN-44, PIN-45, PIN-46, PIN-47, PIN-48, PIN-49: each release the door cannot take is the pair
+    alone, with nothing on stdout and nothing changed."""
     gh = FakeGh(**gh_kwargs)
     assert door(capsys, gh) == (2, "", err)
     changed_nothing(gh)
@@ -125,6 +128,8 @@ def gh_failing_with(tmp_path, monkeypatch):
 @pytest.mark.integration
 @pytest.mark.parametrize(("repository", "sha"), [("acme/app404", "d" * 40), ("acme/widgets", "a404" + "d" * 36)], ids=["a name with 404", "a sha with 404"])
 def test_a_listing_failure_that_is_no_404_is_cannot_read_even_when_its_request_names_404(repository, sha, gh_failing_with):
+    """PIN-49: a listing that fails for another reason than a missing directory is `cannot read the workflows`, even
+    where its request names 404."""
     gh_failing_with("HTTP 403: Forbidden")
     with pytest.raises(CannotJudge, match="cannot read the workflows of"):
         workflow_texts_at(run_gh, repository, sha)
@@ -132,12 +137,14 @@ def test_a_listing_failure_that_is_no_404_is_cannot_read_even_when_its_request_n
 
 @pytest.mark.integration
 def test_a_listing_that_gh_answers_with_404_is_no_workflow_directory(gh_failing_with):
+    """PIN-45: a listing that gh answers with 404 is no workflow directory, so no workflow pins a gate."""
     gh_failing_with("gh: Not Found (HTTP 404)")
     assert workflow_texts_at(run_gh, "acme/widgets", "d" * 40) == {}
 
 
 @pytest.mark.parametrize("merge_sha", ["main", None], ids=["a merge sha that is no commit", "no merge commit"])
 def test_no_listing_is_read_without_a_merge_commit(merge_sha, capsys):
+    """PIN-44, PIN-48: with no merge commit, or one that is no commit sha, no workflow listing is read."""
     gh = FakeGh(merge_sha=merge_sha)
     door(capsys, gh)
     assert workflow_reads(gh) == []
@@ -151,6 +158,7 @@ def test_no_listing_is_read_without_a_merge_commit(merge_sha, capsys):
     ],
 )
 def test_an_entry_that_is_no_workflow_file_is_skipped_and_never_read(listing, skipped, capsys):
+    """PIN-38: an entry that is no workflow file is no listed workflow: its name is not checked and it is never read."""
     gh = FakeGh(listing=listing)
     code, out, _ = door(capsys, gh)
     assert (code, out.startswith(RELEASE_ROW)) == (1, True)
@@ -158,6 +166,7 @@ def test_an_entry_that_is_no_workflow_file_is_skipped_and_never_read(listing, sk
 
 
 def test_a_workflow_name_is_read_percent_encoded_at_the_merge_commit(capsys):
+    """PIN-39, PIN-40: a workflow name is sent percent-encoded and read at the merge commit."""
     gh = FakeGh(workflows=at_merge(**{"ci gate.yml": gate_workflow()}))
     _, out, _ = door(capsys, gh)
     assert out.startswith("  · release       v0.10.0        pinned in .github/workflows/ci gate.yml\n")
@@ -178,6 +187,8 @@ def test_a_workflow_name_is_read_percent_encoded_at_the_merge_commit(capsys):
     ],
 )
 def test_a_pin_at_another_release_re_executes_into_it_before_any_row(gh_kwargs, repo, capsys):
+    """PIN-36, PIN-37, PIN-41, PIN-50: a gate pin at another release, read at the merge commit and not at the base, is
+    re-executed into before any row, also in quality's own repository where its gate pins a release."""
     port = ReexecutionPort()
     gh = FakeGh(**gh_kwargs)
     ports = door_ports(reexecute=port)
@@ -189,12 +200,14 @@ def test_a_pin_at_another_release_re_executes_into_it_before_any_row(gh_kwargs, 
 
 
 def test_the_child_at_its_pin_names_the_release_first(capsys):
+    """PIN-36, PIN-42: the re-executed run at its pin names that release in its first row."""
     gh = FakeGh(workflows=at_merge(**{"ci.yml": gate_workflow("v0.10.1", OTHER_COMMIT)}))
     _, out, _ = door(capsys, gh, ports=door_ports(running_at("0.10.1", OTHER_COMMIT)), environment={RUN_AT_PIN_VARIABLE: "cached"})
     assert out.startswith("  · release       v0.10.1        pinned in .github/workflows/ci.yml\n" + pull_row())
 
 
 def test_the_child_at_another_commit_is_the_pair_alone(capsys):
+    """PIN-18: a run the guard marks never re-executes: at another commit than the pin it is the pair alone."""
     gh = FakeGh(workflows=at_merge(**{"ci.yml": gate_workflow("v0.10.1", OTHER_COMMIT)}))
     assert door(capsys, gh, environment={RUN_AT_PIN_VARIABLE: "cached"}) == (
         2,
@@ -208,6 +221,7 @@ def test_the_child_at_another_commit_is_the_pair_alone(capsys):
 
 
 def test_quality_itself_is_judged_by_the_installed_quality(capsys):
+    """PIN-42, PIN-50: the installed quality judges quality's own gate and says so in its first row."""
     gh = FakeGh(workflows=at_merge(**{"ci.yml": gate_workflow(uses=OWN_GATE)}))
     code, out, _ = door(capsys, gh, repo=checkout.GATE_REPOSITORY)
     assert (code, out.startswith("  · release       installed      0.10.0 · quality's gate pins no release\n" + pull_row())) == (1, True)

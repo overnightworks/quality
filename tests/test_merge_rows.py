@@ -141,8 +141,8 @@ def test_a_refusal_before_any_read_is_the_pair_alone(terminal, repository, code,
     ids=["draft", "a draft without a landing line", "a closed draft", "closed without a landing line"],
 )
 def test_a_draft_stops_the_door_before_its_body_or_any_check_is_read(gh_kwargs, row, pair, capsys):
-    """MERGE-14, MERGE-56, MERGE-57, MERGE-58: a draft or a closed pull request stops the door at its `!` row and the
-    pair, before its body or any check is read."""
+    """MERGE-14, MERGE-56, MERGE-57, MERGE-58, PIN-43: a draft or a closed pull request stops the door at its `!` row
+    and the pair, before its body, any check or the pin is read."""
     gh = FakeGh(**gh_kwargs)
     code, out, err, answers = run(gh, capsys)
     assert (code, out, err, answers) == (1, frame(row), pair, [])
