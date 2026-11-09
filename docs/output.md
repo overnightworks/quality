@@ -29,7 +29,7 @@ A security finding's fix names the line its `# noqa` must stand on, and a code a
 ([rules](rules.md)).
 
 Areas run in the order `files`, `debt`, `imports`, `secrets`, `workflows`, `dependencies`, `code` (ROW-8). The first
-row of a run names the release that judges ([commands](commands.md#which-release-judges)).
+row of a run names the release that judges ([commands](commands.md#which-release-judges)) (ROW-17).
 
 ```text
   · release       v0.10.0        pinned in .github/workflows/ci.yml
@@ -81,6 +81,8 @@ rows, by area:
   package, so rows of one folder share one `fix:` (O44); an allowance that ran out leaves the row `affected` and says
   so (O45); two allowances on one group are a `conflict` finding at the config, an allowance no advisory matches an
   `unused` finding there (O46).
+- `code`: a security finding is `insecure`, a `print` or `pprint` is a `print call`, and an owner that names no code
+  found in its file is `unused` ([rules](rules.md)).
 
 The `env-file` fix's own wording stands in [rules](rules.md).
 
@@ -189,7 +191,7 @@ Exit `2` ends instead with `error: K of N areas could not check` (`1 of 1 area` 
 ` · N findings, M of them in those areas` (CLOSING-14), and `next:` [on stderr](#streams); it prints no verdict line
 (CLOSING-15), and the error line ends after the count of areas where no finding stands (CLOSING-16). A rule that cannot
 judge [refuses only itself](rules.md): the other rules' findings, those of its own area included,
-[still print](#refusals), and a note stands under a `✗` row where its rule judged.
+[still print](#refusals), and a note stands under a `✗` row where its rule judged (CLOSING-33).
 
 A run that cannot start prints only the pair and exits `2` before any rule runs, and no release row stands (CLOSING-17):
 `error: not inside a git work tree · <the folder, ~ for the home folder>` (CLOSING-18) with
