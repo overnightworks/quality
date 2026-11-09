@@ -656,13 +656,14 @@ workflow that only an online audit would flag is not read as fully audited:
 
 The `advisory` rule judges every tracked `uv.lock`, `pnpm-lock.yaml` and `requirements*.txt` (a name that starts
 with `requirements` and ends in `.txt`; `requirements.in` and `dev-requirements.txt` are not), root
-and nested, with osv-scanner against the OSV advisory database (dev dependencies count). `uv.lock` and the
+and nested, with osv-scanner against the OSV advisory database (dev dependencies count) (ADVISORY-1). `uv.lock` and the
 requirements files are judged against the PyPI database, `pnpm-lock.yaml` against the npm database. A
 `package-lock.json`, `yarn.lock` or `bun.lock` is not judged yet.
-A repository with no tracked lock needs no
-osv-scanner (and none is located); a database is downloaded only for an ecosystem with a tracked lock, once per run however many locks it has.
-A lock that is tracked but missing on disk is skipped;
-one that links out of the repository, is not a regular file or is empty (zero bytes) is exit `2`. A lock listed in `.gitignore` is still judged.
+A repository with no tracked lock [needs no osv-scanner](commands.md#scanners) (and none is located); a database is
+downloaded only for an ecosystem with a tracked lock, once per run however many locks it has.
+A lock that is tracked but missing on disk is skipped (ADVISORY-2); one that links out of the repository (ADVISORY-3),
+is not a regular file (ADVISORY-4) or is empty (zero bytes) (ADVISORY-5) is exit `2`. A lock listed in `.gitignore` is
+still judged (ADVISORY-6).
 The clean row counts the lock files it judged and the packages osv-scanner lists for them: `✓ dependencies  clean  1 lockfile · 63 packages`, and `0 lockfiles · 0 packages` with none.
 A package counts once per tracked file, by its ecosystem, its name as the ecosystem compares it (Python's rule for PyPI, exact for npm, so `lodash.merge` and `lodash-merge` are two) and its version, so a requirements file's pin and the wheel line for the same package are one; every tracked name counts, so a lock reached by two names counts for each.
 A finding is one per advisory group, package and lock file, named by the tracked relative path:
@@ -677,10 +678,10 @@ parent when it is transitive, or set a pnpm override in `package.json`; for a `r
 listed package's pin, and to compile the file again when it is generated. A package name that needs quoting prints quoted
 in the command; one that no shell word can hold (a control or format character) gets `fix: see <url>`, or
 `in <dir>/: see <url>` for a nested lock, so no command is printed that would not work. npm names match as written (`lodash.merge` is not
-`lodash-merge`); Python's name rule applies to PyPI only. A repository's own `osv-scanner.toml` (ignored advisories,
-package overrides), its `package.json` `pnpm.auditConfig`, its `.npmrc` and its `.gitignore` change nothing: the gate
-passes its own empty `src/quality/osv-scanner.toml` and each tracked lock explicitly, so only a real fix in the lock
-(an upgrade or an override) turns a finding green.
+`lodash-merge`); Python's name rule applies to PyPI only (ADVISORY-7). A repository's own `osv-scanner.toml` (ignored
+advisories, package overrides), its `package.json` `pnpm.auditConfig`, its `.npmrc` and its `.gitignore` change
+nothing: the gate passes its own empty `src/quality/osv-scanner.toml` and each tracked lock explicitly, so only a real
+fix in the lock (an upgrade or an override) turns a finding green.
 
 An advisory the repository cannot fix is allowed in its own `quality/config.toml`, one entry per advisory and lock (ALLOW-1):
 
@@ -732,15 +733,18 @@ Ruled by the operator:
 quality downloads each needed database itself on every run (PyPI about 37 MB, npm about 219 MB;
 `https://osv-vulnerabilities.storage.googleapis.com/<ecosystem>/all.zip`)
 into the scan's own 0700 scratch directory and runs osv-scanner `--offline` on it, so osv-scanner makes no network call
-and reads no cache of its own. A database that cannot be downloaded within 300 seconds in total for all downloads together (connect, headers and body, however the
-server drags them out), cannot be placed in the scratch directory, is not a valid zip, or holds
-no advisory is exit `2`, never clean, naming the database; so are an osv-scanner that is missing, at another version, exits other than `0`
-or `1`, runs past its time limit, or writes a report that is not the expected JSON, disagrees with its exit, or names
-a lock file quality did not pass. Trust boundary: the database is an unsigned zip fetched over TLS from the same source
+and reads no cache of its own (ADVISORY-8). A database that cannot be downloaded within 300 seconds in total for all
+downloads together (connect, headers and body, however the server drags them out) (ADVISORY-9), cannot be placed in
+the scratch directory (ADVISORY-10), is not a valid zip (ADVISORY-11), or holds no advisory (ADVISORY-12) is exit `2`,
+never clean, naming the database; so are an osv-scanner [that is missing, at another version](commands.md#scanners),
+exits other than `0` or `1` (ADVISORY-13), runs past its time limit (ADVISORY-14), or writes a report that is not the
+expected JSON (ADVISORY-15), disagrees with its exit (ADVISORY-16), or names a lock file quality did not pass
+(ADVISORY-17). Trust boundary: the database is an unsigned zip fetched over TLS from the same source
 osv-scanner itself uses; there is deliberately no cache, because a doctored cached database would silence every pull
 request. Records the pinned osv-scanner cannot read are dropped by it silently; the live-database test for
-`pyyaml 5.3.1` on every quality pull request is the canary. osv-scanner judges the lock as written; the caller's own
-`uv sync --locked` guards against a hand-edited lock. osv-scanner exits `127` on a `uv.lock` or `pnpm-lock.yaml` it cannot parse, which is `cannot judge`, never clean.
+`pyyaml 5.3.1` on every quality pull request is the canary (ADVISORY-18). osv-scanner judges the lock as written; the
+caller's own `uv sync --locked` guards against a hand-edited lock. osv-scanner exits `127` on a `uv.lock` or
+`pnpm-lock.yaml` it cannot parse, which is `cannot judge`, never clean.
 
 The check job in `gate.yml` stops at 25 minutes: the 300-second download deadline and the 600-second scan limit take
 15, and setup and the other rules get the remaining 10, so quality's own `cannot judge` shows before GitHub cancels the job.
@@ -760,7 +764,8 @@ the wheel lines, which it skips, reach it as a scratch file of `name==version` l
 finding on a wheel is named by the tracked file and an allowance's `lock` is that file's path. The packages osv-scanner lists for
 each file must equal the pins quality read: a pin it did not list is exit `2` (`osv-scanner did not read line 4 of <file>`), and so is
 a package it lists that quality did not read. The grammar is an allowlist; `-r`, `-c`, `--index-url`, `-e`, git and sdist URLs and ranges
-wait for a caller that needs them. An advisory database zip with an entry that is not valid JSON is exit `2` too.
+wait for a caller that needs them.
+An advisory database zip with an entry that is not valid JSON is exit `2` too (ADVISORY-19).
 
 Ruled by the operator:
 

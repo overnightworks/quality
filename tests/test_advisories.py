@@ -76,7 +76,8 @@ def test_the_fix_follows_what_osv_lists(build_repo, publish_database, installed_
 def test_a_record_naming_a_pypi_package_in_other_spelling_still_supplies_the_fix(
     build_repo, served_scanners, run_gate, publish_database, edited_report
 ):
-    """#145 I2: Python's name rule applies to PyPI, so a record naming `PyYAML` fixes the lock's `pyyaml`."""
+    """ADVISORY-7: a record naming a PyPI package in another spelling (`PyYAML`) still supplies the fix of the lock's
+    `pyyaml`."""
     publish_database()
     report = edited_report(
         "osv-scanner-finding.json",
@@ -101,7 +102,8 @@ def test_two_advisories_that_alias_each_other_are_one_finding(build_repo, publis
 
 @pytest.mark.scanner
 def test_every_tracked_lock_is_judged_with_its_relative_name(build_repo, publish_database, installed_scanners, run_gate):
-    """#53 rule 1, rule 2, cells 7, 8, 22, 30: nested, odd-named and gitignored locks are scanned, an untracked one is not."""
+    """ADVISORY-1, ADVISORY-6, ADVISORY-8: nested, odd-named and gitignored locks are judged against the downloaded
+    database, an untracked one is not."""
     repo = build_repo({
         "uv.lock": uv_lock(), "speech/uv.lock": uv_lock(), "a:b/uv.lock": uv_lock(), "-dash/uv.lock": uv_lock(),
         ".gitignore": "uv.lock\n",
@@ -121,7 +123,7 @@ def test_every_tracked_lock_is_judged_with_its_relative_name(build_repo, publish
 @pytest.mark.parametrize(
     "repository_config",
     ['[[IgnoredVulns]]\nid = "GHSA-aaaa-bbbb-cccc"\n', '[[PackageOverrides]]\nname = "pyyaml"\necosystem = "PyPI"\nignore = true\n'],
-    ids=["cell 11 IgnoredVulns", "cell 12 PackageOverrides ignore"],
+    ids=["IgnoredVulns", "PackageOverrides ignore"],
 )
 @pytest.mark.parametrize(
     ("name", "text"), [("uv.lock", uv_lock()), ("tests/requirements.txt", "pyyaml==5.3.1\n")], ids=["uv.lock", "requirements.txt"]
@@ -129,7 +131,8 @@ def test_every_tracked_lock_is_judged_with_its_relative_name(build_repo, publish
 def test_a_repository_osv_scanner_config_changes_nothing(
     build_repo, publish_database, installed_scanners, run_gate, repository_config, name, text
 ):
-    """#53 head decision: the caller's osv-scanner.toml is never honoured; #176 R2 for a requirements file."""
+    """ADVISORY-1, NPM-2: a repository's osv-scanner.toml never silences an advisory, in a uv.lock or a requirements
+    file."""
     publish_database()
     repo = build_repo({name: text, "osv-scanner.toml": repository_config})
     code, output = run_gate(repo)
@@ -139,10 +142,10 @@ def test_a_repository_osv_scanner_config_changes_nothing(
 
 @pytest.mark.scanner
 @pytest.mark.parametrize(
-    "lock", [uv_lock(SAFE), VIRTUAL_ROOT_ONLY], ids=["cell 2 a clean lock", "cell 29 only a virtual root"]
+    "lock", [uv_lock(SAFE), VIRTUAL_ROOT_ONLY], ids=["a clean lock", "only a virtual root"]
 )
 def test_a_lock_no_advisory_affects_is_clean(build_repo, publish_database, installed_scanners, run_gate, lock):
-    """#53 rule 3: clean is exit 0, a lock without registry packages included."""
+    """A lock no advisory affects, or one without registry packages, is clean: exit 0 and a clean dependencies row."""
     publish_database()
     code, output = run_gate(tracked_lock_repo(build_repo, lock))
     assert code == 0, output
@@ -157,7 +160,8 @@ def test_a_lock_no_advisory_affects_is_clean(build_repo, publish_database, insta
     ids=["uv.lock", "tests/requirements.txt"],
 )
 def test_the_live_database_condemns_pyyaml_5_3_1(build_repo, installed_scanners, live_database, run_gate, name, text, folder):
-    """#53 cell 4 and #176 canary: the real world, over the network."""
+    """ADVISORY-8, ADVISORY-18: the live database condemns pyyaml 5.3.1 in a uv.lock and in a requirements file,
+    fixed in 5.4."""
     code, output = run_gate(build_repo({name: text}))
     assert code == 1, output
     hint = upgrade_fix(name)
@@ -175,7 +179,7 @@ def test_the_live_database_condemns_pyyaml_5_3_1(build_repo, installed_scanners,
 def test_without_a_tracked_lock_nothing_is_downloaded_and_no_osv_binary_is_needed(
     build_repo, served_scanners, use_mise, run_gate, monkeypatch
 ):
-    """#53 rule 1, cell 1."""
+    """SCANNER-13: a repository with no tracked lock needs no osv-scanner and downloads no database."""
     use_mise(lacking(served_scanners, OSV))
     monkeypatch.setattr(advisories, "DATABASE_ROOT", "file:///no/such/root")
     code, output = run_gate(build_repo({"README.md": "x\n"}))
@@ -187,7 +191,8 @@ def test_without_a_tracked_lock_nothing_is_downloaded_and_no_osv_binary_is_neede
 def test_a_lock_the_tree_cannot_hand_over_is_skipped_or_refused(
     build_repo, served_scanners, run_gate, publish_database, tmp_path, tracked_only, name
 ):
-    """#53 rule 1, cells 9, 10 and 31; #176 C2 for a requirements file."""
+    """ADVISORY-2, ADVISORY-3, ADVISORY-4: a tracked lock the tree no longer holds is skipped; one that links out of the
+    repository or to a directory is exit 2 and names why."""
     publish_database()
     repo = build_repo({name: uv_lock(), "docs/x.txt": "x\n"})
     (repo / name).unlink()
@@ -215,12 +220,13 @@ def test_a_lock_the_tree_cannot_hand_over_is_skipped_or_refused(
         (zipped({"readme.txt": "x"}), "holds no advisory"),
         (zipped({"a.json": "{}", "b.json": "{not json"}), "holds an entry that is not valid JSON"),
     ],
-    ids=["cell 13 unreachable", "cell 14 not a zip", "cell 14 truncated", "cell 28 no json entry", "#5 127 an invalid json entry"],
+    ids=["unreachable", "not a zip", "truncated zip", "no json entry", "an invalid json entry"],
 )
 def test_a_database_that_cannot_be_used_is_cannot_judge(
     build_repo, served_scanners, run_gate, database_root, publish_database, archive, expected
 ):
-    """#53 rule 3: never clean, never a fallback."""
+    """ADVISORY-9, ADVISORY-11, ADVISORY-12, ADVISORY-19: a database that is unreachable, not a valid zip, without an
+    advisory or with an entry that is not valid JSON is exit 2 naming it, never clean and never a fallback."""
     if archive is None:  # nothing is published at the root
         (database_root / "PyPI" / "all.zip").unlink()
     else:
@@ -291,7 +297,7 @@ BODY_BEGUN = b"HTTP/1.1 200 OK\r\nContent-Length: 100000\r\n\r\n"
     ids=["body trickles", "header trickles"],
 )
 def test_a_server_that_trickles_bytes_hits_the_download_deadline(serve_stalling, timed_gate, monkeypatch, opening, trickles):
-    """#53 rule 3: the download has a total time limit, whatever part of the response the server drags out."""
+    """ADVISORY-9: the download has a total time limit, whatever part of the response the server drags out."""
     serve_stalling(opening, trickles=trickles)
     monkeypatch.setattr(advisories, "DATABASE_DOWNLOAD_DEADLINE_SECONDS", 0.5)
     code, output, elapsed = timed_gate()
@@ -299,7 +305,8 @@ def test_a_server_that_trickles_bytes_hits_the_download_deadline(serve_stalling,
 
 
 def test_a_server_that_goes_silent_is_a_timeout_not_the_total_deadline(serve_stalling, timed_gate, monkeypatch):
-    """#53 rule 3: a stalled receive is named a timeout; the total deadline is named only when it is the cause."""
+    """ADVISORY-9: a server that stops sending is a refusal naming a timeout; the total deadline is named only when
+    it is the cause."""
     serve_stalling(BODY_BEGUN + b"xx", trickles=False)
     monkeypatch.setattr(advisories, "DOWNLOAD_TIMEOUT_SECONDS", 0.3)
     monkeypatch.setattr(advisories, "DATABASE_DOWNLOAD_DEADLINE_SECONDS", 10)
@@ -320,7 +327,8 @@ def failing_opener():
 
 
 def test_an_unexpected_download_error_is_cannot_judge_at_once(failing_opener, timed_gate, monkeypatch):
-    """#53 rule 3: an error nobody anticipated is a refusal that names its cause, not a wait for the total deadline."""
+    """An error nobody anticipated while downloading is a refusal naming its cause at once, not a wait for the total
+    deadline."""
     monkeypatch.setattr(advisories, "DATABASE_ROOT", failing_opener)
     monkeypatch.setattr(advisories, "DATABASE_DOWNLOAD_DEADLINE_SECONDS", 10)
     with monkeypatch.context() as production_hook:  # pytest replaces the hook that prints the worker's traceback
@@ -331,7 +339,7 @@ def test_an_unexpected_download_error_is_cannot_judge_at_once(failing_opener, ti
 
 
 def test_a_scratch_directory_that_cannot_be_written_is_cannot_judge(build_repo, served_scanners, run_gate, publish_database, monkeypatch):
-    """#53 rule 3: a full or read-only scratch is a refusal, not a traceback."""
+    """ADVISORY-10: a full or read-only scratch directory is a refusal naming the database, not a traceback."""
     publish_database()
     scratch_directory = process.scratch_directory
 
@@ -348,7 +356,8 @@ def test_a_scratch_directory_that_cannot_be_written_is_cannot_judge(build_repo, 
 
 
 def test_a_wheel_pin_file_that_cannot_be_written_is_cannot_judge(build_repo, served_scanners, run_gate, publish_database, monkeypatch):
-    """#176 fail-closed: a full or read-only scratch while the wheel pins are written is a refusal naming the tracked file, not a traceback."""
+    """A scratch directory that cannot take the wheel pins of a requirements file is a refusal naming that file, not a
+    traceback."""
     publish_database()
     scratch_directory = process.scratch_directory
 
@@ -377,7 +386,7 @@ def test_a_wheel_pin_file_that_cannot_be_written_is_cannot_judge(build_repo, ser
 def test_a_lock_osv_cannot_parse_is_cannot_judge_and_names_neither_form_of_its_path(
     build_repo, publish_database, installed_scanners, run_gate, name, text
 ):
-    """#53 rule 3, cell 21 and #145 S5: osv prints the lock's path without its leading slash; a broken lock is never green."""
+    """ADVISORY-13: an osv-scanner that exits 127 on a lock it cannot parse is exit 2 naming the lock, never green."""
     publish_database()
     publish_database(ecosystem="npm")
     code, output = run_gate(build_repo({name: text}))
@@ -403,7 +412,7 @@ def test_two_tracked_names_for_one_lock_are_each_judged_by_the_real_osv(build_re
 
 
 def test_an_osv_binary_at_the_wrong_version_names_both_versions(build_repo, served_scanners, capsys, publish_database):
-    """#53 rule 3, cell 16."""
+    """SCANNER-10: an osv-scanner at another version is exit 2 naming both versions."""
     publish_database()
     (served_scanners / OSV).write_text('#!/bin/sh\necho "osv-scanner version: 9.9.9"\n')
     (served_scanners / OSV).chmod(0o755)
@@ -417,7 +426,8 @@ def test_an_osv_binary_at_the_wrong_version_names_both_versions(build_repo, serv
 def test_an_unexpected_osv_exit_is_cannot_judge_with_the_code_and_stderr(
     build_repo, served_scanners, run_gate, publish_database, exit_code
 ):
-    """#53 rule 3, cell 17 (127 is the missing database, cell 27)."""
+    """ADVISORY-13: an osv-scanner exit other than 0 or 1, 127 (a missing database) included, is exit 2 naming the
+    code and quoting stderr."""
     publish_database()
     fake_scanner(served_scanners, OSV, f'echo "boom reason" >&2\nexit {exit_code}')
     code, output = run_gate(tracked_lock_repo(build_repo))
@@ -460,17 +470,18 @@ def test_an_unexpected_osv_exit_is_cannot_judge_with_the_code_and_stderr(
          lambda report: package_of(report)["vulnerabilities"][0]["affected"][0]["ranges"][0]["events"][1].update(fixed=5), 1,
          "cannot read the osv-scanner report"),
     ],
-    ids=["cell 18 exit 0 with vulnerabilities", "cell 18 exit 1 without", "cell 19 not JSON", "cell 19 wrong shape",
-         "rule 3 results is an empty object", "rule 3 results is an empty string", "rule 3 packages is an object",
-         "rule 3 groups is a string", "cell 20 a source quality did not pass", "rule 3 version is an object",
-         "rule 3 ecosystem is a number", "rule 3 an id is a number", "rule 3 vulnerabilities without groups",
-         "rule 3 groups without vulnerabilities", "rule 3 affected is a string", "rule 3 ranges is an object", "rule 3 events is a string",
-         "rule 3 fixed is a number"],
+    ids=["exit 0 with vulnerabilities", "exit 1 without", "not JSON", "wrong shape",
+         "results is an empty object", "results is an empty string", "packages is an object",
+         "groups is a string", "a source quality did not pass", "version is an object",
+         "ecosystem is a number", "an id is a number", "vulnerabilities without groups",
+         "groups without vulnerabilities", "affected is a string", "ranges is an object", "events is a string",
+         "fixed is a number"],
 )
 def test_a_report_that_disagrees_with_the_exit_is_cannot_judge(
     build_repo, served_scanners, run_gate, publish_database, edited_report, fixture, edit, exit_code, expected
 ):
-    """#53 rule 3."""
+    """ADVISORY-15, ADVISORY-16, ADVISORY-17: a report that is not the expected JSON, that disagrees with the exit or
+    that names a lock quality did not pass is exit 2, never clean."""
     publish_database()
     if fixture.endswith("garbled.json"):
         report = OUTPUTS / fixture
@@ -483,7 +494,7 @@ def test_a_report_that_disagrees_with_the_exit_is_cannot_judge(
 
 @pytest.mark.parametrize("name", ["uv.lock", "src/frontend/pnpm-lock.yaml", "tests/requirements.txt"])
 def test_a_tracked_file_of_zero_bytes_is_cannot_judge(build_repo, served_scanners, run_gate, publish_database, name):
-    """#5 145: osv-scanner finds no package source in an empty file and exits 0, which is not a judgement."""
+    """ADVISORY-5: a tracked file of zero bytes is exit 2, since osv-scanner exits 0 on it without judging."""
     publish_database()
     publish_database(ecosystem="npm")
     fake_scanner(served_scanners, OSV, reporting(OUTPUTS / "osv-scanner-clean.json", 0))
@@ -511,7 +522,7 @@ def test_a_package_osv_cannot_match_to_the_advisory_gets_only_the_advisory_link(
 def test_a_hanging_osv_is_cannot_judge_within_its_time_limit(
     build_repo, served_scanners, run_gate, publish_database, monkeypatch
 ):
-    """#53 rule 3, cell 32."""
+    """ADVISORY-14: an osv-scanner that runs past its time limit is exit 2 naming the limit."""
     publish_database()
     monkeypatch.setattr(advisories, "ADVISORY_SCAN_TIMEOUT_SECONDS", 0.5)
     fake_scanner(served_scanners, OSV, "exec sleep 30")
@@ -520,7 +531,7 @@ def test_a_hanging_osv_is_cannot_judge_within_its_time_limit(
 
 
 def test_a_fake_osv_clean_report_for_a_tracked_lock_is_clean(build_repo, served_scanners, run_gate, publish_database):
-    """#53 cell 2 without the real binary."""
+    """A clean osv-scanner report for a tracked lock is clean."""
     publish_database()
     fake_scanner(served_scanners, OSV, reporting(OUTPUTS / "osv-scanner-clean.json", 0))
     code, output = run_gate(tracked_lock_repo(build_repo, uv_lock(SAFE)))
