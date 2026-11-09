@@ -611,7 +611,9 @@ It applies these rules:
   in a `layers` contract: the head's `layers` are compared with every module
   name the base's `layers` do not name stripped, and a layer left empty dropped. Base layers `a`, `b` against head
   `a`, `new`, `b` is green. A layer left with one module has no sibling, so its independence says nothing: base `(game)`
-  against head `(game) : (agent)` is green, and base `a | b` against head `a : b : new` stays a loosening. Everything else stays a loosening: a removed, renamed or replaced expression (`shop.web`
+  against head `(game) : (agent)` is green, and base `a | b` against head `a : b : new` stays a loosening.
+  Everything else stays a loosening, except a struck module the head no longer has and git does not read as renamed
+  (below): a removed, renamed or replaced expression (`shop.web`
   turned into `shop.*` included), an expression added and another removed in
   one field, `allow_indirect_imports` turned from false to true, `as_packages`,
   `unmatched_ignore_imports_alerting`, `containers`, `exhaustive`, `exhaustive_ignores` and every `protected` or
