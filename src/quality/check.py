@@ -9,9 +9,9 @@ from pathlib import Path, PurePosixPath
 
 from quality import (
     advisories,
+    agent_guidance,
     architecture,
     checkout,
-    claude_md,
     clones,
     compose,
     env_file,
@@ -398,7 +398,7 @@ def _judge_files(inputs: RunInputs) -> AreaVerdict:
         {
             Rule.ENV_FILE: env_file.check_env_files(tracked),
             Rule.COMPOSE_PORT: _attempt(lambda: compose.check_compose_ports(root, tracked, _required(allow_lists).compose)),
-            Rule.CLAUDE_MD: _attempt(lambda: claude_md.check_claude_md(root, tracked)),
+            Rule.CLAUDE_MD: _attempt(lambda: agent_guidance.check_claude_md(root, tracked)),
             Rule.ROOT_LAYOUT: _attempt(lambda: root_layout.check_root_layout(tracked, _required(allow_lists).root)),
             Rule.FILE_SUFFIX: _attempt(lambda: layout.check_file_suffix(_required(modes), _required(allow_lists).layout)),
             Rule.SCRIPT_NAME: _content_findings(root, modes, allow_lists, layout.script_candidates, layout.check_script_name),
