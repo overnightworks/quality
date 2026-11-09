@@ -104,7 +104,7 @@ def read_base(repo: Path, base_sha: str) -> Side:
     return side_of(texts[CONFIG_PATH], texts[BASELINE_PATH], where, {name: texts[name] for name in architecture.CONFIG_FILES})
 
 
-def reads_tree(base: Side | None, head: Side) -> bool:
+def _reads_tree(base: Side | None, head: Side) -> bool:
     """Whether the files of the two commits can change the judgement: only a module a contract list lost needs them."""
     return base is not None and bool(architecture.struck_modules(base.contracts, head.contracts))
 
@@ -114,7 +114,7 @@ def pull_files(
 ) -> tuple[architecture.PullTree | None, Renames]:
     """What the pull request's two commits add to the judgement, read by the caller's readers: the tree when a module is
     struck (its renames serve the baselines), else the renames when two baselines are compared, else nothing."""
-    if reads_tree(base, head):
+    if _reads_tree(base, head):
         return read_tree(), NO_RENAMES
     if compares_baselines(base, head):
         return None, read_renames_listing()

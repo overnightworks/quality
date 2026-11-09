@@ -279,7 +279,7 @@ def _without(base: ContractFields, head: ContractFields, gone: frozenset[str]) -
     """The base without the modules it lists that the head's same list lacks and `gone` names."""
     dead = {option: names & gone for option, names in _struck(base, head).items()}
     fields = {option: _stripped(base, option, dead[option]) if dead.get(option) else value for option, value in base.fields.items()}
-    return replace(base, fields=fields)
+    return ContractFields(base.type, base.ignores, fields)
 
 
 def _stripped(contract: ContractFields, option: str, dead: frozenset[str]) -> object:

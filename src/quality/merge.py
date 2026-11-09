@@ -589,8 +589,7 @@ def loosenings_row(verdict: Verdict, sonar_red: bool, refused: Pair) -> Row:
 def read_pull_files(
     remote_for: RemoteFor, repository: str, base: Side, head: Side, commits: tuple[str, str], environment: Mapping[str, str],
 ) -> tuple[architecture.PullTree | None, Renames]:
-    """What the pull request's two commits add to the judgement, fetched once: the tree when a module is struck (its
-    renames serve the baselines), else the renames when two baselines are compared, else nothing."""
+    """`sides.pull_files` with the readers that fetch the pull request's two commits from its repository's remote."""
     return pull_files(
         base, head,
         lambda: read_pull_tree_of_pull(remote_for(repository), *commits, environment),
