@@ -81,12 +81,14 @@ def _section_problems(body: list[str]) -> Iterator[AgentsProblem]:
     fence = ""
     seen: list[str] = []
     text_reported = False
+    past_heading = False
     for number, line in enumerate(body, start=2):
         in_fence = bool(fence)
         fence = _fence_after(fence, line)
         heading = None if in_fence or fence else _heading(line)
+        past_heading = past_heading or heading is not None
         if heading is None:
-            if line.strip() and not (text_reported or seen or line.startswith("# ")):
+            if line.strip() and not (text_reported or past_heading):
                 text_reported = True
                 yield _section(number, "text before the first section", "move it under a section or delete it")
         elif heading not in AGENTS_SECTIONS:

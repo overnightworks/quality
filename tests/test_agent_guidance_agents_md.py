@@ -85,10 +85,14 @@ def test_text_before_the_first_section_is_one_section_finding_at_its_first_line(
         ("# guidance\n## Documents\n## Commands\n", 3, OUT_OF_ORDER),
         (HEAD + "# second\n", 3, NOT_A_SECTION),
         ("# guidance\n# second\n", 2, NOT_A_SECTION),
+        ("# guidance\n## Setup\ntext\nmore\n", 2, NOT_A_SECTION),
+        ("# guidance\n## Commands \ntext\n", 2, NOT_A_SECTION),
+        ("# guidance\n# second\ntext\n", 2, NOT_A_SECTION),
     ],
     ids=[
         "another name", "another case", "trailing space", "repeat of the last", "repeat after another", "out of order",
         "first after last", "second title", "second title before any section",
+        "text under an unknown first heading", "text under a misspelled first heading", "text under a second title",
     ],
 )
 def test_a_wrong_heading_is_one_section_finding_at_its_line(build_repo, content, line, fact):
