@@ -1,0 +1,8 @@
+claim_id = "e04a08cc3763431eb7c83d710e96071f"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "1d6db23cf196d352acefecd99542807c43f98e69"
+branch = "claude/issue-655-d7-import-path-ids"
+scope = ["docs/rules.md", "src/quality/architecture.py", "tests/test_architecture.py", "tests/test_architecture_output.py"]
+opened_commit = "89b91c1efd7ba93d8756d3a9695c020088841104"
+whole_reason = "docs/rules.md import-contract bullet, its last paragraph: the unparsable module, the grimp warning note and its order, the absolute-path guarantee, and the tests that prove them, linked by IMPORT IDs; the pointer to the verdict sentence is 7r's."
