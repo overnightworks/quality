@@ -1,8 +1,0 @@
-claim_id = "d1522b4558224cb3b61f323636d081f9"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "fa0effe868020b23328583eaf100075be18ac9cb"
-branch = "claude/issue-708-declarations-once"
-scope = ["docs/rules.md", "tests/test_claude_md.py", "tests/test_python_floor.py", "tests/test_ratchet.py"]
-opened_commit = "5fb36d0299b0631403de83642ff1754419fce838"
-whole_reason = "docs/rules.md wording and the declaration statements stand once; the citations of the three tests answer 600c, 698a and 698b; the same sweep continues in slice 8-10 (649a), and the import-contract and tightenings blocks wait for 681 and 396."
