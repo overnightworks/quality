@@ -1,7 +1,0 @@
-claim_id = "ead0ae194b104dab9a23af9976c2ebbd"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "1b378a6d758284e62a67b52efede99ff27b7cd06"
-branch = "claude/issue-620-d7-rejudged-verdict-ids"
-scope = ["docs/commands.md", "tests/test_merge.py", "tests/test_merge_rows.py"]
-opened_commit = "e26f433f9ea1341666efdff9857c00ea5838e101"
