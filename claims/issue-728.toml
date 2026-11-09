@@ -3,6 +3,6 @@ agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
 role = "builder"
 base = "94af1635df811d3627ace9f31725f698d6b22af6"
 branch = "claude/issue-728-agents-md-text"
-scope = ["docs/rules.md", "pyproject.toml", "src/quality/agent_guidance.py", "src/quality/check.py", "src/quality/claude_md.py", "src/quality/report.py", "src/quality/rules.py", "tests/test_agents_md.py", "tests/test_fleet_matrix.py"]
+scope = ["docs/rules.md", "pyproject.toml", "src/quality/agent_guidance.py", "src/quality/check.py", "src/quality/claude_md.py", "src/quality/report.py", "src/quality/rules.py", "tests/test_agent_guidance_agents_md.py", "tests/test_agent_guidance_claude_md.py", "tests/test_claude_md.py", "tests/test_fleet_matrix.py"]
 opened_commit = "9c94758c8146d2a48137155aad149039352487b3"
 whole_reason = "A rule member without its check and wiring is dead code, and the three event words have no producer without the check; the rename and the layers line must land with the first caller of the new module name, or the import contract breaks."
