@@ -184,6 +184,8 @@ def moved_note(target: str, source: str) -> str:
     ],
 )
 def test_a_fixed_move_passes_check_and_the_verdict(pull_request, capsys, arrange, written, note):
+    """FIX-34, FIX-35, FIX-36: a rename the index records since the ceiling's last commit is followed, and the followed
+    ceiling passes `check` and the verdict."""
     repo = arrange(pull_request)
     capsys.readouterr()
     code, fix_out, _ = fixed(capsys, repo, *FIX_WORDS)
@@ -194,7 +196,9 @@ def test_a_fixed_move_passes_check_and_the_verdict(pull_request, capsys, arrange
     assert (verdict_code, "✓ green" in verdict_out, verdict_err) == (0, True, ""), verdict_out
 
 
-def test_a_moved_entry_stands_in_the_pictures_frame(pull_request, capsys):
+def test_a_moved_entry_is_named_by_the_fix_and_counted_in_its_rows(pull_request, capsys):
+    """FIX-36, FIX-42: a moved entry is named by a `moved` row and counted in the debt row and the verdict, and none
+    falls."""
     repo = moved_with_git(pull_request)
     printed = (
         "  ✓ debt          moved          1 entry · quality/baseline.toml\n"
@@ -263,6 +267,8 @@ def stale_target_repo(pull_request, lines: int) -> Path:
     ],
 )
 def test_the_stale_target_case(pull_request, capsys, lines, fix_out, check_out, written):
+    """FIX-34, FIX-37, FIX-42: a rename onto a path the ceiling holds moves the entry there and drops what the target
+    held; nothing falls, and the verdict passes."""
     repo = stale_target_repo(pull_request, lines)
     code, out, err = fixed(capsys, repo, *FIX_WORDS)
     assert ((code, out), err, (repo / BASELINE_PATH).read_text().endswith(written)) == (fix_out, "", True)
@@ -278,6 +284,7 @@ def test_the_stale_target_case(pull_request, capsys, lines, fix_out, check_out, 
     ids=["after a move", "after the stale-target case"],
 )
 def test_a_second_fix_changes_nothing(pull_request, capsys, arrange):
+    """FIX-38: a second fix after a followed move changes nothing: the ceiling it already moved stays."""
     repo = arrange(pull_request)
     first = fixed(capsys, repo, *FIX_WORDS)
     written = digest(repo)
@@ -310,6 +317,8 @@ def raised_by_hand_under_a_renamed_file(pull_request) -> Path:
     ],
 )
 def test_an_entry_git_cannot_place_refuses_and_a_restored_ceiling_is_followed(pull_request, capsys, arrange, left_over):
+    """FIX-36, FIX-39: an entry git cannot place refuses with the restore step and writes nothing; once the ceiling is
+    restored the move is followed."""
     repo = arrange(pull_request)
     capsys.readouterr()
     before = digest(repo)
@@ -322,6 +331,7 @@ def test_an_entry_git_cannot_place_refuses_and_a_restored_ceiling_is_followed(pu
 
 
 def test_a_stale_committed_entry_for_a_deleted_file_does_not_stop_a_move_from_being_followed(pull_request, capsys):
+    """FIX-36: a committed entry for a deleted file does not stop a move from being followed."""
     repo = based(pull_request, {"src/old.py": long_function(70)}, ceiling(("src/gone.py", 90), ("src/old.py", 70)))
     git(repo, "mv", "src/old.py", "src/new.py")
     code, out, _ = fixed(capsys, repo, *FIX_WORDS)
@@ -332,6 +342,7 @@ def test_a_stale_committed_entry_for_a_deleted_file_does_not_stop_a_move_from_be
 
 
 def test_a_ceiling_committed_in_the_root_commit_of_a_whole_repository_is_followed(build_repo, capsys):
+    """FIX-40: a ceiling committed in the root commit of a repository that is not shallow is followed."""
     repo = build_repo({"src/old.py": long_function(70), BASELINE_PATH: ceiling(("src/old.py", 70))})
     git(repo, "mv", "src/old.py", "src/new.py")
     code, out, _ = fixed(capsys, repo, *FIX_WORDS)
@@ -343,6 +354,8 @@ def test_a_ceiling_committed_in_the_root_commit_of_a_whole_repository_is_followe
     [pytest.param(1, 0, True, id="depth 1"), pytest.param(3, 1, False, id="deep enough")],
 )
 def test_a_shallow_clone_cannot_show_the_ceilings_last_commit(build_repo, elsewhere, capsys, depth, fillers, refused):
+    """FIX-40: a shallow clone whose ceiling's last commit is its edge refuses with `git fetch --unshallow` and writes
+    nothing; a clone deep enough to show that commit follows the move."""
     origin = build_repo({"src/old.py": long_function(70)})
     for number in range(fillers):
         put(origin / f"filler{number}.txt", f"{number}\n")
@@ -374,6 +387,8 @@ def test_a_shallow_clone_cannot_show_the_ceilings_last_commit(build_repo, elsewh
     ],
 )
 def test_a_move_the_index_does_not_record_is_not_followed(pull_request, capsys, move, expected):
+    """FIX-41: a move the index does not record is not followed, whether the file is only moved or only its new path is
+    added."""
     repo = old_file_held(pull_request)
     move(repo)
     before = digest(repo)
@@ -382,6 +397,8 @@ def test_a_move_the_index_does_not_record_is_not_followed(pull_request, capsys, 
 
 
 def test_no_committed_ceiling_follows_nothing(pull_request, capsys):
+    """FIX-43: with no committed ceiling a move is not followed: the entries of the moved file are gone and its new path
+    is new debt."""
     repo, _ = pull_request
     put(repo / "src/old.py", long_function(70))
     commit_all(repo, "files")
@@ -396,6 +413,8 @@ def test_no_committed_ceiling_follows_nothing(pull_request, capsys):
 
 
 def test_a_ceiling_whose_last_commit_does_not_parse_refuses(pull_request, capsys):
+    """CEILING-9: a ceiling that does not parse at its last commit refuses with exit 2, names that commit and writes
+    nothing."""
     repo = based(pull_request, {"src/old.py": long_function(70)}, "[function_lines\n")
     put(repo / BASELINE_PATH, ceiling(("src/old.py", 70)))
     before = digest(repo)
@@ -438,6 +457,7 @@ def moved_beside_a_grown_file(pull_request) -> Path:
 
 
 def test_a_move_beside_a_finding_is_named_in_the_debt_row(pull_request, capsys):
+    """FIX-36: a move beside a finding is still followed, and the debt row counts it."""
     code, out, err = fixed(capsys, moved_beside_a_grown_file(pull_request), *FIX_WORDS)
     assert (code, err) == (1, "")
     assert "  ! debt          1 finding      1 entry moved · quality/baseline.toml\n" in out

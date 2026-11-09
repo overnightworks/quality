@@ -190,9 +190,9 @@ def a_move_beside_a_grown_entry(build_repo) -> Path:
     ],
 )
 def test_a_dry_run_names_each_change_and_writes_nothing(build_repo, capsys, arrange, printed):
-    """FIX-19, FIX-20, FIX-21, FIX-22, FIX-23, CEILING-5: a dry run makes and judges the ceiling the fix would write,
-    shows each change as a `~` row, the `~` debt row and the verdict, exits 1 and writes nothing, as the fix after it
-    does."""
+    """FIX-19, FIX-20, FIX-21, FIX-22, FIX-23, FIX-36, FIX-37, FIX-42, CEILING-5: a dry run makes and judges the ceiling
+    the fix would write, shows each change as a `~` row, the `~` debt row and the verdict, exits 1 and writes nothing,
+    as the fix after it does."""
     repo = arrange(build_repo)
     before = untouched(repo)
     assert (*fixed(capsys, repo, *DRY_RUN_WORDS), untouched(repo)) == (1, printed, "", before)
@@ -376,9 +376,9 @@ def shallow_new_row() -> str:
     ],
 )
 def test_a_dry_run_refuses_where_the_fix_refuses_before_writing(build_repo, elsewhere, capsys, arrange, out, err):
-    """FIX-12, FIX-14, CEILING-9: a dry run refuses where the fix refuses (a ceiling or `[clones]` table git holds and
-    the tree lacks, a shallow clone, a baseline, a file or a config the check cannot read), prints the same rows and
-    writes nothing."""
+    """FIX-12, FIX-14, FIX-40, CEILING-9: a dry run refuses where the fix refuses (a ceiling or `[clones]` table git
+    holds and the tree lacks, a shallow clone, a baseline, a file or a config the check cannot read), prints the same
+    rows and writes nothing."""
     repo = arrange(build_repo, elsewhere)
     before = untouched(repo)
     expected_out = out.replace("{commit}", head_commit(repo))
