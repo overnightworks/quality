@@ -1,7 +1,0 @@
-claim_id = "3c3d26cde63b4b24b16b06a248f2fd9a"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "e99b14951c635a322cec1d61764590edc347a62e"
-branch = "claude/issue-679-d7-workflow-ids"
-scope = ["docs/rules.md", "tests/test_scanners.py", "tests/test_scanners_local_actions.py"]
-opened_commit = "ee8fd0278b728877386ba139031fef7ba99d90ab"
