@@ -88,7 +88,7 @@ def test_a_file_split_off_beside_a_move_has_its_entries_as_adds(capsys, pull_req
 
 
 def test_a_commit_that_renames_the_baseline_file_removes_it(capsys, pull_request):
-    """#149 cell 19: moved to another name, the baseline is gone from its path, as when deleted."""
+    """BASELINE-6: a baseline moved to another name is gone from its path, as when deleted."""
     repo, commit_base = pull_request
     commit_base(OLD_ENTRY)
     subprocess.run(["git", "-C", str(repo), "mv", BASELINE_PATH, "quality/baseline-moved.toml"], check=True)
@@ -114,8 +114,9 @@ NEW_ENTRY = OLD_ENTRY.replace("old", "new")
          "the head keeps the old path so the target is an add", "an unrelated add beside a move is the only red"],
 )
 def test_a_leftover_does_not_count_and_the_allowance_moves_rather_than_copies(capsys, pull_request, base, head, code, expected):
-    """BASELINE-12, BASELINE-13: an entry the base holds under the target never counts: a move is held against the
-    predecessor's entry, a lower leftover does not block it and a leftover is no allowance for a raise."""
+    """BASELINE-12, BASELINE-13, BASELINE-16: an entry the base holds under the target never counts: a move is held
+    against the predecessor's entry, a lower leftover does not block it, a leftover is no allowance for a raise, and a
+    head that keeps the old path moves nothing."""
     moved_in_head(pull_request, base, head)
     actual_code, out, err = verdict_streams(pull_request[0], capsys)
     assert (actual_code, expected in out, out.count("\n    ! "), err) == (code, True, 0 if code == 0 else 1, "")
@@ -135,8 +136,8 @@ def test_a_rename_from_a_path_that_is_not_utf8_still_clears_its_target(capsys, p
 
 @pytest.mark.integration
 def test_the_door_refuses_a_rename_from_a_path_that_is_not_utf8_as_the_verdict_does(capsys, tmp_path):
-    """BASELINE-14, MERGE-84: the door refuses the raise at the target of a rename from a path that is not UTF-8, as
-    the verdict does."""
+    """BASELINE-14, BASELINE-19, MERGE-84: the door refuses the raise at the target of a rename from a path that is not
+    UTF-8, as the verdict does."""
     gh = pulled(
         tmp_path, STALE_LEFTOVER, RAISED_LEFTOVER, [(UNNAMEABLE_SOURCE, "src/new.py")],
         base_config=GATE_CONFIG, merge_config=GATE_CONFIG,
@@ -147,7 +148,7 @@ def test_the_door_refuses_a_rename_from_a_path_that_is_not_utf8_as_the_verdict_d
 
 
 def test_a_moved_allowance_is_not_copied_into_a_later_pull_request(capsys, pull_request, monkeypatch):
-    """#149 cell 14: after the move the base holds no `old` entry, so recreating `old` adds it."""
+    """BASELINE-3: after the move the base holds no entry under the old path, so recreating it adds it."""
     repo, _ = pull_request
     moved_in_head(pull_request, OLD_ENTRY, NEW_ENTRY)
     monkeypatch.setenv("GATE_BASE_SHA", head_commit(repo))
@@ -224,7 +225,7 @@ def test_a_user_git_config_does_not_change_the_rename_map(
 
 
 def test_without_a_base_commit_no_renames_are_read(capsys, pull_request, monkeypatch, fake_git, tmp_path):
-    """#149 cell 29: a push has no GATE_BASE_SHA; git is never asked for a diff."""
+    """BASELINE-18: a push has no GATE_BASE_SHA, so git is never asked for a diff."""
     moved_in_head(pull_request, OLD_ENTRY, NEW_ENTRY)
     monkeypatch.delenv("GATE_BASE_SHA")
     calls = tmp_path / "git-calls"
@@ -299,8 +300,8 @@ def new_entry(size, path="src/new.py"):
     ids=["a pure move", "a raise", "a leftover is no allowance", "a lower leftover", "a declared raise"],
 )
 def test_the_door_reads_a_move_as_the_verdict_does(capsys, tmp_path, base, head, options, code, expected):
-    """BASELINE-12, BASELINE-13, MERGE-84, MERGE-87: the door judges a move as the verdict does, from the pull
-    request's own two commits: a pure move merges, a raise is refused, a declared raise merges."""
+    """BASELINE-12, BASELINE-13, BASELINE-19, MERGE-84, MERGE-87: the door judges a move as the verdict does, from the
+    pull request's own two commits: a pure move merges, a raise is refused, a declared raise merges."""
     gh = pulled(tmp_path, base, head, MOVE, **{"base_config": GATE_CONFIG, "merge_config": GATE_CONFIG, **options})
     assert drive(gh)[0] == code
     assert expected in capsys.readouterr().out
@@ -535,7 +536,7 @@ def test_an_edited_path_that_is_not_utf8_is_never_decoded(capsys, pull_request, 
     ("base", "head"), [(None, OLD_ENTRY), (OLD_ENTRY, None)], ids=["no base baseline", "no head baseline"]
 )
 def test_the_diff_is_asked_for_only_when_both_sides_hold_a_baseline(capsys, pull_request, fake_git, tmp_path, base, head):
-    """#149: one decider for both callers; any other pair is judged without renames."""
+    """BASELINE-18: git is asked for the renames only when both sides hold a baseline."""
     repo, commit_base = pull_request
     put(repo / "src/old.py", MOVABLE_FILE)
     commit_base(base)

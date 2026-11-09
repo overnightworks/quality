@@ -555,10 +555,12 @@ It applies these rules:
   the base holds under the new path is a leftover and does not count (BASELINE-13). A rename from a path that is not
   UTF-8 moves nothing, since no baseline key can name it, but still clears its new path of leftovers (BASELINE-14); a
   rename to a path that is not UTF-8 is not read (BASELINE-15).
-  The allowance moves rather than being copied: while the
-  head baseline still names the old path, nothing moves and the new path's entries are adds. A pair whose files moved
-  is the same pair, and a renamed function is a new entry. Renames are read only when the base and the head both hold a baseline: without a base, or without a baseline on
-  either side, nothing is read. `merge` fetches the same two commits and reads the same renames. `check` names entries and pairs by their current path; `check --fix` follows the renames since the ceiling's last commit.
+  The allowance moves rather than being copied: while the head baseline still names the old path, nothing moves and
+  the new path's entries are adds (BASELINE-16). A pair whose files moved is the same pair (BASELINE-17), and a renamed
+  function is a new entry. Renames are read only when the base and the head both hold a baseline: without a base, or
+  without a baseline on either side, nothing is read (BASELINE-18). `merge` fetches the same two commits; it reads the
+  same renames (BASELINE-19). How `check` and `check --fix` treat the renames is told in the `size` rule's `--fix`
+  paragraph above.
 
   A lowered, equal or removed entry or pair is green (BASELINE-7), and so is adopting a baseline (the base has none) or
   neither side having one (BASELINE-8). A `[clones]` table the base lacks is an adoption too: its pairs are not
