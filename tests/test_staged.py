@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import config, staged
+from quality import config, scanners, staged
 from quality.report import FindingEvent, NoteEvent
 from quality.rules import Area
 from tests.support.check import (
@@ -19,6 +19,7 @@ from tests.support.check import (
 )
 from tests.support.door import CHECK_WORD, STAGED_WORDS, door_in, staged_door
 from tests.support.git_repositories import GIT_IDENTITY, git, head_commit, stage
+from tests.support.scanners import fake_gitleaks
 from tests.support.secrets import FAKE_KEY, HOSTILE_FILE, OTHER_KEY, allow_config
 from tests.support.terminal import Terminal, without_sgr
 
@@ -122,6 +123,16 @@ def test_a_gitleaks_allow_comment_changes_nothing(build_repo, installed_scanners
     repo = build_repo({"README": "hello\n"})
     stage(repo, {"config.txt": f"aws_access_key_id = {FAKE_KEY}  # gitleaks:allow\n"})
     assert staged_door(repo) == 1
+
+
+def test_the_staged_scan_passes_the_gates_own_config(build_repo, served_scanners):
+    """SECRET-3: gitleaks is told to use quality's config on a staged change too, not the repository's."""
+    fake_gitleaks(served_scanners, on_scan='echo "[]" > "$report"; exit 0')
+    repo = build_repo({"README": "hello\n"})
+    stage(repo, {".gitleaks.toml": "[allowlist]\n", "docs/a.md": "a\n"})
+    assert staged_door(repo) == 0
+    given = (served_scanners / "gitleaks.arguments").read_text().split()
+    assert given[given.index("--config") + 1] == str(scanners.GITLEAKS_CONFIG)
 
 
 @pytest.mark.scanner
