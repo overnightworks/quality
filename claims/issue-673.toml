@@ -1,8 +1,0 @@
-claim_id = "ebf91346943b47c2bea0e58ff9c7ed17"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "9a5692b074e95b6126948df77ddc028e23834a70"
-branch = "claude/issue-673-d7-import-loosening-ids"
-scope = ["docs/rules.md", "tests/test_architecture.py", "tests/test_architecture_layers.py", "tests/test_verdict_reread.py"]
-opened_commit = "4d178139f023df2faa18c8cd5d93f2bbdf933727"
-whole_reason = "docs/rules.md import contracts only tighten bullet outside its two ruled blocks, and the tests that prove it, linked by LOOSE IDs; the ruled tightenings block is numbered after #396, on the operator's yes."
