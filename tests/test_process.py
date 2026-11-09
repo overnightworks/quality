@@ -89,7 +89,7 @@ def test_a_sigterm_to_the_process_group_leaves_no_scanner_running(tmp_path):
 
 
 def test_the_git_environment_cuts_off_every_attributes_source(tmp_path, monkeypatch):
-    """#21 rule 1: the git environment excludes the system file, forces an empty attributes file, drops other GIT_*."""
+    """SECRET-15: the git environment excludes the system file, forces an empty attributes file, drops other GIT_*."""
     monkeypatch.setenv("GIT_DIR", "/elsewhere")
     monkeypatch.setenv("GIT_CONFIG_COUNT", "5")
     environment = process.attribute_free_git_environment(tmp_path / "home")

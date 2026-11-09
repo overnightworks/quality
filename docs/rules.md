@@ -653,10 +653,10 @@ history already shows the content, and a real secret must be rotated anyway. git
 values, so it is shown only as the vet allows ([the vet](output.md#the-vet)); the missing-report and unexpected-exit
 [refusals](output.md#the-vet) keep their exit code without those diagnostics.
 
-The scan runs git without any attributes (not the repository's `.gitattributes`, not `info/attributes`, not the
-system or global file), so a `-diff` or `binary` line cannot hide a key. That needs git 2.41 or newer; an older git
-is exit `2`. The system file is excluded by `GIT_ATTR_NOSYSTEM`, git's documented switch; that is pinned as an
-environment contract, not by a root-only real-file test.
+The scan runs git without any attributes (not the repository's `.gitattributes` (SECRET-11), not `info/attributes`
+(SECRET-12), not the system or global file (SECRET-13)), so a `-diff` or `binary` line cannot hide a key. That needs
+git 2.41 or newer; an older git is exit `2` (SECRET-14). The system file is excluded by `GIT_ATTR_NOSYSTEM`, git's
+documented switch; that is pinned as an environment contract, not by a root-only real-file test (SECRET-15).
 
 Every allowed finding is a row `· <path:line>  allowed  <rule> · <reason>`, and the clean row counts them
 (`· 1 allowed`). An allowance that matched nothing is a row too, so a stale entry can be deleted:
