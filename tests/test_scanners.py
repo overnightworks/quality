@@ -124,7 +124,7 @@ def test_unreadable_or_inconsistent_gitleaks_result_cannot_be_judged(report, exi
 @pytest.mark.scanner
 @UNKNOWN_KEY_CONFIGS
 def test_check_refuses_a_config_with_unknown_keys(build_repo, installed_scanners, capsys, config):
-    """#40 rule 2: the check keeps refusing unknown keys of quality/config.toml."""
+    """STAGED-8: the check keeps refusing unknown keys of quality/config.toml, the whole file being validated."""
     assert scan(build_repo({"quality/config.toml": config})) == 2
     assert "unknown key" in heard(capsys)
 

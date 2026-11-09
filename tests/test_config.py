@@ -188,7 +188,7 @@ def test_the_old_fingerprint_form_is_refused_with_the_new_form_shown():
     ids=["gate-key", "other-gate-key", "unknown-table", "top-level-key"],
 )
 def test_the_staged_allow_list_ignores_everything_outside_secrets(extra):
-    """#40 rule 1: a newer gate schema cannot stop the staged scan of an older quality."""
+    """VERDICT-58: a newer gate schema cannot stop the staged scan of an older quality."""
     assert load_staged_secret_allowances(f"{extra}\n[secrets]\nallow = [{ENTRY}]") == load_allow_lists(
         f"[secrets]\nallow = [{ENTRY}]"
     ).secrets
@@ -531,7 +531,7 @@ def test_a_malformed_generated_file_stops_the_size_rule_and_the_fix(build_repo, 
 
 
 def test_the_verdict_refuses_a_malformed_generated_file_naming_the_side(capsys, run_env):
-    """GENERATED-8, VERDICT-40: the verdict refuses a malformed declaration at the head, exit 2, naming the entry and
+    """GENERATED-8, VERDICT-40: the verdict refuses a malformed declaration at the head, exit 2, naming its table and
     sending the author to push the fix."""
     repo, _ = run_env
     (repo / CONFIG_PATH).write_text(GATE_WITH_CHECKS + generated_config(job="other"))
@@ -542,7 +542,7 @@ def test_the_verdict_refuses_a_malformed_generated_file_naming_the_side(capsys, 
 
 
 def test_the_commit_hook_ignores_a_malformed_size_table():
-    """#174 sentence 3: only [secrets] is read by the commit hook."""
+    """VERDICT-58: the commit hook ignores a malformed [size] table."""
     assert load_staged_secret_allowances(generated_config(job="other") + "[size]\nextra = 1\n") == {}
 
 

@@ -170,6 +170,7 @@ def test_a_staged_run_outside_a_repository_is_the_start_failure(elsewhere, capsy
 
 @pytest.mark.parametrize("words", [("--staged", "secrets"), ("secrets", "--staged"), ("secrets", "secrets", "--staged")], ids=["first", "last", "repeated"])
 def test_the_staged_flag_may_stand_before_or_after_its_area(build_repo, capsys, words):
+    """HELP-17, HELP-23: --staged stands before or after its area, and a repeated `secrets` is still the one area."""
     repo = build_repo({"README.md": "x\n"})
     assert fixed(capsys, repo, CHECK_WORD, *words)[:2] == (0, clean_row("0 files"))
 
