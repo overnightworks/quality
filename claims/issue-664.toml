@@ -1,8 +1,0 @@
-claim_id = "4e23ad9cbc2546bb9717c529a55ddb08"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "4a7767250d5c058dd0c607fa22e867e352a2ea5e"
-branch = "claude/issue-664-d7-baseline-rename-ids"
-scope = ["docs/rules.md", "tests/test_clones_baseline.py", "tests/test_ratchet.py", "tests/test_verdict_renames.py"]
-opened_commit = "eeae7678f0b0984bfb9457320f46dee014e0e63d"
-whole_reason = "docs/rules.md baseline bullet, the first three sentences of its renames paragraph, and the tests that prove them, linked by BASELINE IDs; the rest of the renames paragraph is 7q-ii and the sentences from the refusals of reading the sides on are 7q-iii."
