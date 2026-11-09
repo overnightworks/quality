@@ -1,0 +1,7 @@
+claim_id = "3075f38ba35b46b689274f5345d725c1"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "10a5cbd471162ab050dcb792decd650f1104903e"
+branch = "claude/issue-641-d7-staged-ids-ii"
+scope = ["docs/commands.md", "tests/test_cli_staged.py", "tests/test_staged.py"]
+opened_commit = "665b9b9283e265f693961a47f4fb82ca801773b2"
