@@ -788,8 +788,12 @@ Ruled by the operator:
 quality downloads each needed database itself on every run (PyPI about 37 MB, npm about 219 MB;
 `https://osv-vulnerabilities.storage.googleapis.com/<ecosystem>/all.zip`)
 into the scan's own 0700 scratch directory and runs osv-scanner `--offline` on it, so osv-scanner makes no network call
-and reads no cache of its own (ADVISORY-8). A database that cannot be downloaded within 300 seconds in total for all
-downloads together (connect, headers and body, however the server drags them out) (ADVISORY-9), cannot be placed in
+and reads no cache of its own (ADVISORY-8). A download that fails transiently (HTTP 500 to 599 or 429, a refused or
+reset connection, a timeout, a DNS failure, an unreachable network or host, a body cut short) is tried again after 3,
+9 and 27 seconds, each wait cut to the time left. A database that cannot be downloaded within 300 seconds in total for
+all downloads together (the retries and their waits included; connect, headers and body, however the server drags them
+out), or still not after the fourth attempt (`cannot download the <ecosystem> advisory database from <url>: <error>
+after 4 attempts`) (ADVISORY-9), cannot be placed in
 the scratch directory (ADVISORY-10), is not a valid zip (ADVISORY-11), or holds no advisory (ADVISORY-12) is exit `2`,
 never clean, naming the database; so are an osv-scanner [that is missing, at another version](commands.md#scanners),
 exits other than `0` or `1` (ADVISORY-13), runs past its time limit (ADVISORY-14), or writes a report that is not the
@@ -803,7 +807,7 @@ caller's own `uv sync --locked` guards against a hand-edited lock. osv-scanner e
 
 The check job in `gate.yml` stops at 25 minutes: the 300-second download deadline and the 600-second scan limit take
 15, and setup and the other rules get the remaining 10, so quality's own `cannot judge` shows before GitHub cancels
-the job (ADVISORY-34).
+the job; the retries spend the 300 seconds and add none (ADVISORY-34).
 Measured with osv-scanner 2.7.0 on 12 cores (the download at load 17 to 20): the npm archive is 219,026,863 bytes (230,735 files), the PyPI archive 37,064,024 bytes
 (26,612 files); downloading npm took 34 s; a whole `check` run over a repository with one `pnpm-lock.yaml` and one hashed
 `requirements.txt` (one pin) under `--all-packages`, both databases included, took 63 s and 69 s wall and 640 MB resident (load 3 to 5).
@@ -824,6 +828,9 @@ exit `2` (`osv-scanner did not read line 4 of <file>`) (ADVISORY-40), and so is 
 not read (ADVISORY-41). The grammar is an allowlist; `-r`, `-c`, `--index-url`, `-e`, git and sdist URLs and ranges
 wait for a caller that needs them.
 An advisory database zip with an entry that is not valid JSON is exit `2` too (ADVISORY-19).
+Every other download failure is exit `2` at once, without a retry: another 4xx (a missing database is permanent), a
+missing file, an error no list above names, and every error after the body is whole (a bad zip, no advisory, not JSON,
+a scratch write) (ADVISORY-42).
 
 Ruled by the operator:
 
