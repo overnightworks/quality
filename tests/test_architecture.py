@@ -101,9 +101,10 @@ FINDING_CELLS = [
     ],
 )
 def test_a_contract_that_does_not_hold_is_one_finding_at_its_config(build_repo, capsys, files, location, named, chain):
-    """IMPORT-1, IMPORT-2, IMPORT-6, IMPORT-7: a broken contract in any of the three config files, and an unmatched
-    ignore at the default `error`, is exit 1 and one finding at the config naming the contract or the entry, its chain
-    within the lines import-linter rendered; the root packages may stand in different directories."""
+    """IMPORT-1, IMPORT-2, IMPORT-6, IMPORT-7, IMPORT-26: a broken contract in any of the three config files, and an
+    unmatched ignore at the default `error`, is exit 1 and one finding at the config naming the contract or the entry,
+    its chain within the lines import-linter rendered, and no absolute path; the root packages may stand in different
+    directories."""
     repo = build_repo(files)
     code, output = run(capsys, repo)
     (finding,) = rule_findings(repo, Rule.IMPORT_CONTRACT)
@@ -147,9 +148,10 @@ def test_a_contract_that_does_not_hold_is_one_finding_at_its_config(build_repo, 
     ],
 )
 def test_the_import_contract_rule_judges_the_contracts(build_repo, capsys, files, expected_code, expected_lines):
-    """IMPORT-1, IMPORT-7, IMPORT-9, IMPORT-11, IMPORT-12: kept contracts are clean; a root package needs exactly one
-    tracked production directory and a copy under the tests does not count; two configs, a contract type that is not
-    built in and invalid contract options are exit 2 naming why; every printed path is repository-relative."""
+    """IMPORT-1, IMPORT-7, IMPORT-9, IMPORT-11, IMPORT-12, IMPORT-26: kept contracts are clean; a root package needs
+    exactly one tracked production directory and a copy under the tests does not count; two configs, a contract type
+    that is not built in and invalid contract options are exit 2 naming why; every printed path is
+    repository-relative."""
     repo = build_repo(files)
     code, output = run(capsys, repo)
     assert code == expected_code, output
@@ -179,8 +181,9 @@ def collision(name: str, directory: str, other_place: str) -> str:
 )
 def test_a_root_package_python_finds_elsewhere_names_both_places_without_a_local_path(
         build_repo, capsys, files, untracked, expected):
-    """IMPORT-15, IMPORT-16: a root package Python finds in another place is exit 2 naming the tracked place and the
-    other place repository-relative, the latter from its sys.path entry when it lies outside, never by a local path."""
+    """IMPORT-15, IMPORT-16, IMPORT-26: a root package Python finds in another place is exit 2 naming the tracked place
+    and the other place repository-relative, the latter from its sys.path entry when it lies outside, never by a local
+    path."""
     repo = build_repo(files)
     if untracked:
         (repo / untracked).parent.mkdir(parents=True, exist_ok=True)
@@ -220,8 +223,8 @@ def test_each_kind_of_import_contract_result_carries_its_event_at_the_config(
 
 
 def test_an_unmatched_ignore_names_its_expression_and_a_grimp_warning_the_skipped_module_without_a_local_path(build_repo):
-    """IMPORT-6: an unmatched ignore at `warn` is a note naming the ignored expression, and a grimp warning names the
-    skipped module repository-relative."""
+    """IMPORT-6, IMPORT-26: an unmatched ignore at `warn` is a note naming the ignored expression, and a grimp warning
+    names the skipped module repository-relative."""
     ignoring = build_repo({**SHOP, ".importlinter": ini({**STALE_IGNORE, "unmatched_ignore_imports_alerting": "warn"})})
     (unused,) = rule_notes(ignoring, Rule.IMPORT_CONTRACT)
     skipping = build_repo({**SHOP, "src/shop/some.module.py": "", ".importlinter": ini(FORBIDDEN)})
@@ -297,7 +300,8 @@ def test_a_plugin_contract_type_is_never_imported(build_repo, tmp_path, capsys, 
 
 
 def test_a_syntax_error_is_unparsable_and_hides_no_other_rule(build_repo, capsys):
-    """#61 rule 6, cell 17 (#55): grimp cannot parse a module, so the rule is unparsable; env-file still judges."""
+    """IMPORT-24, IMPORT-26, REFUSAL-3: a module grimp cannot parse is exit 2 with its reason, naming no absolute path;
+    the env-file rule still judges."""
     repo = build_repo({**SHOP, "src/shop/bad.py": "def broken(:\n", ".env": "A=1\n", ".importlinter": ini(FORBIDDEN)})
     code, output = run(capsys, repo)
     assert code == 2, output
@@ -307,8 +311,8 @@ def test_a_syntax_error_is_unparsable_and_hides_no_other_rule(build_repo, capsys
 
 
 def test_a_config_linked_out_of_the_repository_cannot_be_judged(build_repo, elsewhere, capsys):
-    """IMPORT-8: a config that is a link out of the repository cannot be judged, and the row never names the outside
-    place."""
+    """IMPORT-8, IMPORT-26: a config that is a link out of the repository cannot be judged, and the row never names the
+    outside place."""
     repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
     (elsewhere / "outside.ini").write_text(ini(FORBIDDEN))
     (repo / ".importlinter").unlink()
@@ -327,8 +331,9 @@ def test_a_config_linked_out_of_the_repository_cannot_be_judged(build_repo, else
 )
 def test_a_symlink_out_of_a_root_package_is_refused_before_grimp_reads(build_repo, elsewhere, capsys, monkeypatch,
                                                                        link, target, refused):
-    """IMPORT-8, IMPORT-17: grimp follows symlinks, so a link leaving the repository, directly or through a link that
-    stays inside, is refused and no graph is built; the outside module would break the contract if read."""
+    """IMPORT-8, IMPORT-17, IMPORT-26: grimp follows symlinks, so a link leaving the repository, directly or through a
+    link that stays inside, is refused and no graph is built; the outside module would break the contract if read, and
+    the outside place is never named."""
     (elsewhere / "__init__.py").write_text("")
     (elsewhere / "leak.py").write_text("import shop.web\n")
     repo = build_repo({**SHOP, "vendor/__init__.py": "",
@@ -350,8 +355,8 @@ def test_a_symlink_out_of_a_root_package_is_refused_before_grimp_reads(build_rep
     ids=["a directory loop", "a file loop"],
 )
 def test_a_symlink_loop_under_a_root_package_cannot_be_judged(build_repo, capsys, link, target, expected):
-    """IMPORT-18: grimp would walk a symlink loop without end, so a loop of directories or of one file is refused, named
-    repository-relative."""
+    """IMPORT-18, IMPORT-26: grimp would walk a symlink loop without end, so a loop of directories or of one file is
+    refused, named repository-relative."""
     repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
     (repo / "src" / "shop" / link).symlink_to(target)
     code, output = run(capsys, repo)
@@ -361,7 +366,8 @@ def test_a_symlink_loop_under_a_root_package_cannot_be_judged(build_repo, capsys
 
 
 def test_a_file_link_into_a_loop_outside_the_repository_is_refused_as_leaving_it(build_repo, elsewhere, capsys):
-    """IMPORT-17: a link that leaves the repository is named as such, even where the place it reaches loops."""
+    """IMPORT-17, IMPORT-26: a link that leaves the repository is named as such, repository-relative, even where the
+    place it reaches loops."""
     repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
     (elsewhere / "p").symlink_to("q")
     (elsewhere / "q").symlink_to("p")
@@ -373,7 +379,8 @@ def test_a_file_link_into_a_loop_outside_the_repository_is_refused_as_leaving_it
 
 
 def test_a_dangling_file_link_under_a_root_package_is_named_not_blamed_on_the_config(build_repo, capsys):
-    """IMPORT-19: a dangling link is named as such; no message blames the config for a file."""
+    """IMPORT-19, IMPORT-26: a dangling link is named as such, repository-relative; no message blames the config for
+    a file."""
     repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
     (repo / "src" / "shop" / "dangling.py").symlink_to("missing.py")
     code, output = run(capsys, repo)
@@ -405,7 +412,7 @@ def _empty_unreadable_directory(root):
 
 
 def assert_no_native_or_local_noise(output: str, repo: Path) -> None:
-    """No repository path, Rust panic text or config blame on either descriptor."""
+    """IMPORT-26: no repository path, Rust panic text or config blame on either descriptor."""
     for noise in (str(repo), "panicked", "RUST_BACKTRACE", "the config", "PermissionError"):
         assert noise not in output
 
@@ -414,8 +421,8 @@ def assert_no_native_or_local_noise(output: str, repo: Path) -> None:
 @pytest.mark.parametrize("arrange", [_unreadable_file, _unreadable_python_file, _unreadable_directory_with_a_file,
                                      _empty_unreadable_directory])
 def test_a_place_that_cannot_be_examined_is_cannot_judge_naming_it(build_repo, capfd, arrange):
-    """IMPORT-23: a read failure other than a loop or a dangling link, of a .py file or of a directory, is exit 2 naming
-    the place, not the config."""
+    """IMPORT-23, IMPORT-26: a read failure other than a loop or a dangling link, of a .py file or of a directory, is
+    exit 2 naming the place repository-relative, not the config."""
     repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
     sealed, mode, named = arrange(repo / "src" / "shop")
     sealed.chmod(mode)
@@ -503,8 +510,9 @@ def _non_utf8_file_name(package):
                                      *map(_python_alias_of_utf8, ["utf_8", "UTF_8", "utf-8-sig", "U8", "cp65001",
                                                                   "UTF-8-unix"])])
 def test_a_source_grimp_cannot_take_is_refused_before_grimp_can_panic(build_repo, capfd, bounded, arrange):
-    """IMPORT-20, IMPORT-21, IMPORT-22: a .py file that is no regular file, has a name or content grimp cannot decode,
-    or declares an encoding other than UTF-8 is exit 2 naming it, with no Rust panic text, no absolute path, no hang."""
+    """IMPORT-20, IMPORT-21, IMPORT-22, IMPORT-26: a .py file that is no regular file, has a name or content grimp
+    cannot decode, or declares an encoding other than UTF-8 is exit 2 naming it, with no Rust panic text, no absolute
+    path, no hang."""
     repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
     named, reason = arrange(repo / "src" / "shop")
     code, output = run(capfd, repo)
@@ -529,7 +537,8 @@ def test_a_coding_cookie_grimp_reads_is_judged_normally(build_repo, capfd, cooki
 @pytest.mark.parametrize("source, echoed", [("x = 1\0y = 2\n", "x = 1\\x00y = 2"),
                                             ("x = 1 +" + "+" * 400 + "(\n", "…")])
 def test_the_source_text_a_syntax_error_echoes_is_escaped_and_cut(build_repo, capfd, source, echoed):
-    """#61 rule 4 and #97 rule 2, cell 18: a control character in the echoed source is escaped, a long line is cut."""
+    """IMPORT-24, MASK-3, MASK-6: the reason of a module grimp cannot parse echoes its source text: a control character
+    is escaped and a long line is cut."""
     repo = build_repo({**SHOP, "src/shop/bad.py": source, ".importlinter": ini(FORBIDDEN)})
     code, output = run(capfd, repo)
     assert code == 2, output

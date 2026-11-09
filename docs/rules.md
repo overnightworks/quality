@@ -229,17 +229,19 @@ It applies these rules:
   before any caller code runs or any file outside is read) (IMPORT-8) two configs that each hold a section (IMPORT-9),
   a `contract_types` option (plugins would be imported) (IMPORT-10), a type other than forbidden, layers, independence,
   protected and acyclic_siblings (IMPORT-11), invalid contract options (IMPORT-12), a config value of the wrong type or
-  any other error of import-linter or grimp (`... in pyproject.toml cannot be judged: ...`) (IMPORT-13), a dotted root
+  any other error of import-linter or grimp (`contract <name> in pyproject.toml cannot be judged: ...` or
+  `the config pyproject.toml cannot be judged: ...`) (IMPORT-13), a dotted root
   package (IMPORT-14), a root package with no or several such directories, one Python finds in another place (IMPORT-15)
   (`root package yaml is src/yaml/__init__.py, but Python finds it outside the repository at
   site-packages/yaml/__init__.py`, a place outside named from the `sys.path` entry it lies under; a place inside is
   named repository-relative) (IMPORT-16), a symlink under a root package that leaves the repository, directly or through
   a link that stays inside (IMPORT-17), and a symlink loop (IMPORT-18), a dangling link (IMPORT-19), and a `.py` file
   that "cannot be examined" (no regular file (IMPORT-20), a name or content that is not valid UTF-8 (IMPORT-21), a
-  coding cookie in any spelling but utf-8, utf8, unicode-1-1-utf-8, unicode11utf8, x-unicode20utf8, ascii, us-ascii or
-  ansi_x3.4-1968 (accepted in any letter case) (IMPORT-22), or one the system will not let it read (IMPORT-23)). A
-  module grimp cannot parse makes the `imports` row `✗ not checked` with the reason (exit `2`); a warning grimp gives while building the
-  graph is a note row `· <config>  warning  <grimp's message>`, before the contracts' notes. No message names an absolute local path.
+  coding cookie in any spelling but utf-8, utf8, ascii, us-ascii or ansi_x3.4-1968 (accepted in any letter case)
+  (IMPORT-22), or one the system will not let it read (IMPORT-23)). A module grimp cannot parse makes the `imports`
+  row `✗ not checked` with the reason (exit `2`) (IMPORT-24); a warning grimp gives while building the graph is a
+  [note row](output.md#notes) `· <config>  warning  <grimp's message>`, before the contracts' notes (IMPORT-25). No
+  message names an absolute local path (IMPORT-26).
   On a pull request `quality verdict` and the door also hold the head's import contracts against the base's (see
   "The import contracts only tighten" below).
 - `claude-md`: a tracked `CLAUDE.md`, in any case (`claude.md` is named as it is) (CLAUDE-1), holds exactly `@AGENTS.md`

@@ -146,7 +146,8 @@ def test_a_broken_and_an_unused_finding_keep_their_own_fixes(build_repo, capsys)
 
 
 def test_the_notes_follow_the_final_fix_in_the_shared_columns_grimp_first(build_repo, capsys):
-    """O15 and acceptance 4: grimp's warning, then each contract's `warn` note in config order, after the block's last `fix:`."""
+    """O23, IMPORT-25, ROW-15, O15: grimp's warning, then each contract's `warn` note in config order, after the block's
+    last `fix:` and in the findings' columns."""
     warned = {"unmatched_ignore_imports_alerting": "warn"}
     contracts = {"broken": FORBIDDEN, "first": {**STALE, **warned}, "second": {**STALE, **warned}}
     files = {**SHOP_DB_IMPORTS_WEB, "src/shop/some.module.py": "", ".importlinter": contracts_ini(contracts)}
@@ -161,6 +162,8 @@ def test_the_notes_follow_the_final_fix_in_the_shared_columns_grimp_first(build_
 
 
 def test_warnings_stand_in_order_when_every_contract_is_kept(build_repo, capsys):
+    """O23, IMPORT-25: with every contract kept, a grimp warning is still a note and stands before the unmatched-ignore
+    notes in config order; the exit stays 0."""
     warned = {"unmatched_ignore_imports_alerting": "warn"}
     files = {**SHOP, "src/shop/some.module.py": "",
              ".importlinter": contracts_ini({"first": {**STALE, **warned}, "second": {**STALE, **warned}})}
