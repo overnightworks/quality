@@ -370,13 +370,13 @@ def main_lines(count: int) -> str:
         (main_lines(82), b"\xff", 2, f"error: {BASELINE_PATH} at the head: {BASELINE_PATH} is not valid UTF-8 ("),
     ],
     ids=[
-        "cell 1 growth", "cell 2 lowering", "cell 3 equal", "cell 4 adoption", "cell 5 base file deleted",
-        "cell 6 new key", "cell 7 key dropped", "cell 8 both absent", "cell 9 base malformed", "cell 10 head malformed",
-        "head oversized integer", "head nested too deep", "cell 9 base not UTF-8", "#76 cell 18 head not UTF-8",
+        "growth", "lowering", "equal", "adoption", "base file deleted", "new key", "key dropped", "both absent",
+        "base malformed", "head malformed", "head oversized integer", "head nested too deep", "base not UTF-8",
+        "head not UTF-8",
     ],
 )
 def test_the_size_baseline_only_falls_against_the_base(capsys, pull_request, base, head, code, expected):
-    """#48 rules 2 and 3, cells 1-10: growth, a new key and a deleted base file are red in the ruled literal."""
+    """BASELINE-1, BASELINE-2, BASELINE-3, BASELINE-6, BASELINE-7, BASELINE-8, BASELINE-10: the baseline only falls."""
     repo, commit_base = pull_request
     base_sha = commit_base(base)
     put(repo / BASELINE_PATH, head)
@@ -508,7 +508,7 @@ def test_a_base_that_is_no_ref_name_or_sha_in_the_clone_cannot_be_judged(
 
 
 def test_a_raised_baseline_and_a_dropped_legacy_fail_are_both_listed(capsys, pull_request):
-    """#48 rule 1, cell 17: the baseline loosening stands next to the legacy loosening, and the verdict is red."""
+    """BASELINE-1, BASELINE-2, VERDICT-30, VERDICT-51: a raised entry stands beside the loosened legacy mode, red."""
     repo, commit_base = pull_request
     commit_base(main_lines(82), config=LEGACY_FAIL_CONFIG)
     put(repo / "quality" / "config.toml", '[gate]\nmandatory_jobs = ["checks"]\n')
