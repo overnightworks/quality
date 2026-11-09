@@ -1,0 +1,8 @@
+claim_id = "90a01aaf07d14e798f3227e8229a1e43"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "88e82d0d0d52b59b8822c9ee61637fabab885221"
+branch = "claude/issue-633-d7-fix-ids-ii"
+scope = ["docs/rules.md", "tests/test_cli_fix.py", "tests/test_clones_baseline.py", "tests/test_ratchet_fix.py"]
+opened_commit = "c379b250a5817af1e2c0c523b9a21b2c633af0d0"
+whole_reason = "docs/rules.md --fix paragraph, second slice: what the fix records where no ceiling lies on disk and refuses where git holds one (a ceiling, a clones table, a version no parser reads, a shallow clone, a file without a clones table), and the tests that prove it, linked by FIX IDs."
