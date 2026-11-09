@@ -1,7 +1,0 @@
-claim_id = "a9aec2b07f9945ca8d64e9f389f3625d"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "4a7767250d5c058dd0c607fa22e867e352a2ea5e"
-branch = "claude/issue-666-d7-secret-attributes-ids"
-scope = ["docs/rules.md", "tests/test_process.py", "tests/test_scanners.py"]
-opened_commit = "95546bb9fc058d89013351589e0204e6c15518bf"
