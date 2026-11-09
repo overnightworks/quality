@@ -74,7 +74,8 @@ def allowed_locations(repo: Path) -> list[str]:
     ],
 )
 def test_a_secret_finding_is_allowed_only_by_rule_file_and_value(build_repo, served_scanners, capsys, config_text, code, found, allowed):
-    """#24 rule 1: a finding is allowed only when rule, file and the hash of its value match one entry."""
+    """SECRET-4, SECRET-16, SECRET-19, SECRET-20, SECRET-26: a finding is allowed only when rule, file and the hash of
+    its value match one entry; no config, another value, another file or another rule leaves it red."""
     repo = recorded_leak_repo(build_repo, served_scanners, config_text)
     exit_code = check_door(repo)
     assert exit_code == code
@@ -84,7 +85,7 @@ def test_a_secret_finding_is_allowed_only_by_rule_file_and_value(build_repo, ser
 
 
 def test_a_recorded_leak_is_one_secret_finding_naming_its_rule_and_commit_and_never_its_value(build_repo, served_scanners):
-    """#24 rule 4, O28: the finding carries the secret event, a fact with the rule and the commit's first eight characters."""
+    """O28: the finding carries the secret event, a fact with the rule and the commit's first eight characters."""
     (finding,) = rule_findings(recorded_leak_repo(build_repo, served_scanners, None), Rule.LEAK)
     assert finding.event is FindingEvent.SECRET
     assert (RECORDED_RULE in finding.fact, RECORDED_COMMIT[:8] in finding.fact) == (True, True)
@@ -102,7 +103,7 @@ def test_the_entry_to_copy_is_lines_that_read_as_one_allowance_once_a_reason_is_
 
 @pytest.mark.scanner
 def test_one_value_on_two_lines_is_two_rows_and_one_fix(build_repo, installed_scanners, capsys):
-    """Rule 7: one value on two lines of one file is two rows under one `fix:` and one entry."""
+    """ROW-3: one value on two lines of one file is two rows under one `fix:` and one entry."""
     repo = build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}\nsecond = {FAKE_KEY}\n"})
     assert check_door(repo) == 1
     block = area_block(capsys.readouterr().out, "secrets")
@@ -115,10 +116,11 @@ def test_one_value_on_two_lines_is_two_rows_and_one_fix(build_repo, installed_sc
 
 @pytest.mark.parametrize(
     "entry", ['""', "{ fingerprint = \"x\" }", '{ fingerprint = "x", reason = "reason" }', '"x"'],
-    ids=["empty", "no-reason", "old-fingerprint-form", "bare-string"],
+    ids=["empty", "no-reason", "fingerprint-form", "bare-string"],
 )
 def test_an_invalid_allow_entry_is_exit_2(build_repo, capsys, entry):
-    """#24 rule 2: an allow entry that is not rule, file, hash and reason cannot be judged."""
+    """SECRET-24: an allow entry in the fingerprint form is exit 2, and so is any entry that is not a rule, file, hash
+    and reason."""
     config = f'[gate]\nmandatory_jobs = ["checks"]\n[secrets]\nallow = [{entry}]\n'
     assert "[secrets] allow entry" in check_exit_2(build_repo({"quality/config.toml": config}), capsys)
 
@@ -130,7 +132,7 @@ def test_an_invalid_allow_entry_is_exit_2(build_repo, capsys, entry):
     ids=["no-secret", "secret-not-a-string"],
 )
 def test_a_report_entry_without_a_string_secret_is_exit_2(build_repo, served_scanners, capsys, report):
-    """#24 rule 5: a finding whose value cannot be hashed is never clean."""
+    """A leak report entry whose Secret is missing or not a string is exit 2, never clean."""
     fake_gitleaks(served_scanners, on_scan=f"echo '{report}' > \"$report\"; exit 7")
     check_exit_2(build_repo({}), capsys)
 
@@ -166,8 +168,8 @@ def allow_fake_key(repo: Path, file: str = "config.txt") -> None:
 
 @pytest.mark.scanner
 def test_an_allowed_value_stays_green_at_a_shifted_line_and_across_commits(build_repo, installed_scanners, capsys):
-    """SECRET-8: an entry holding the hash of the key allows it at line 1, at a later line and in every commit that
-    holds it."""
+    """SECRET-8, SECRET-18, SECRET-26: an entry holding the hash of the key allows it at line 1, at a later line and in
+    every commit that holds it, each as an allowed row."""
     repo = build_repo({"docs/config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
     (repo / "docs/config.txt").write_text("removed\n")
     commit(repo, "remove the key")
@@ -191,7 +193,7 @@ def test_an_allowed_value_stays_green_at_a_shifted_line_and_across_commits(build
     ids=["another-value-at-the-same-place", "the-value-in-another-file"],
 )
 def test_an_allowance_never_spreads_to_another_value_or_file(build_repo, installed_scanners, capsys, write, placed):
-    """#24 rule 1: the allowed value stays allowed only in its file; any other value or file is red."""
+    """SECRET-19, SECRET-20: the allowed value stays allowed only in its file; another value in its place is red."""
     repo = build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
     allow_fake_key(repo)
     write(repo)
@@ -203,7 +205,7 @@ def test_an_allowance_never_spreads_to_another_value_or_file(build_repo, install
 
 @pytest.mark.scanner
 def test_a_key_on_an_allowance_line_of_the_config_stays_red(build_repo, installed_scanners, capsys):
-    """#24 rule 1: only the hash of an allowance is exempt; a real key on the same line is still found."""
+    """A real key on the same line as an allowance in quality/config.toml is still found: that file has no exemption."""
     line = f'# {FAKE_KEY} secret_sha256 = "{sha256_of(FAKE_KEY)}"\n'
     repo = build_repo({"quality/config.toml": allow_config() + line})
     assert scan(repo) == 1
@@ -293,7 +295,7 @@ STALE_FILE = "no\x1bthere.txt"
 
 @pytest.mark.scanner
 def test_an_allowance_no_finding_used_is_one_unused_note_at_the_config(build_repo, installed_scanners, capsys):
-    """An entry that matches nothing is named, not silent, by the whole-history scan."""
+    """SECRET-27: an entry that matches nothing is one unused row at the config, naming its rule and file."""
     repo = build_repo({"quality/config.toml": allow_config(("aws-access-token", "no\\u001bthere.txt", FAKE_KEY, "stale entry"))})
     code = door_in(repo, CHECK_WORD)
     streams = capsys.readouterr()
@@ -311,7 +313,8 @@ def test_an_allowance_no_finding_used_is_one_unused_note_at_the_config(build_rep
 @pytest.mark.scanner
 @pytest.mark.parametrize("name", ["docs/config.txt", f"docs/{HOSTILE_FILE}"], ids=["plain-path", "esc-quote-and-bidi-path"])
 def test_the_printed_entry_with_a_reason_allows_exactly_that_finding(build_repo, installed_scanners, capsys, name):
-    """O31, acceptance 3: the lines under `fix:`, with a reason added and committed, turn the finding into one allowed note."""
+    """O31, SECRET-26: the lines under `fix:`, with a reason added and committed, turn the finding into one allowed
+    row."""
     repo = build_repo({name: f"aws_access_key_id = {FAKE_KEY}\n", config.CONFIG_PATH: GATE_ONLY})
     assert scan(repo) == 1
     first = capsys.readouterr()
@@ -335,7 +338,8 @@ def test_the_clean_secrets_row_counts_the_commits_the_scenario_made(build_repo, 
 
 @pytest.mark.scanner
 def test_the_clean_secrets_row_counts_every_commit_and_every_allowed_leak(build_repo, installed_scanners, capsys):
-    """O30, acceptance 5: three commits with a key removed in the second; the row ends with the allowed notes."""
+    """O15, O30: three commits with a key removed in the second; the clean row counts them and ends with the allowed
+    count."""
     repo = build_repo({"docs/config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
     (repo / "docs/config.txt").write_text("removed\n")
     commit(repo, "remove the key")
@@ -347,7 +351,8 @@ def test_the_clean_secrets_row_counts_every_commit_and_every_allowed_leak(build_
 
 @pytest.mark.scanner
 def test_nothing_about_secrets_prints_before_the_area_rows(build_repo, installed_scanners, capsys):
-    """O15: an allowed key, an unused entry and a red key print as rows under the secrets row, none before the first area row."""
+    """O15, SECRET-26, SECRET-27: an allowed row with its rule and reason, an unused row and a red key print as rows
+    under the secrets row, none before the first area row."""
     entries = (("aws-access-token", "config.txt", FAKE_KEY, "test key"), ("aws-access-token", "nothere.txt", FAKE_KEY, "stale entry"))
     repo = build_repo({
         "config.txt": f"aws_access_key_id = {FAKE_KEY}\n", "other.txt": f"aws_access_key_id = {OTHER_KEY}\n",
@@ -371,7 +376,7 @@ def test_nothing_about_secrets_prints_before_the_area_rows(build_repo, installed
     "answer", ["echo 'fatal: refused' >&2; exit 1", "echo many; exit 0"], ids=["git-fails", "git-prints-no-number"]
 )
 def test_a_commit_count_git_cannot_give_refuses_the_secret_rule_alone(build_repo, served_scanners, fake_git, capsys, answer):
-    """O30: the extent of a clean row is never guessed; the secret rule cannot judge, the other rows stand."""
+    """SECRET-25: a commit count git cannot give refuses the secret rule alone and the other rows stand."""
     repo = build_repo({".env": "KEY=1\n"})
     fake_git(f'case "$*" in *rev-list*--count*) {answer};; esac')
     out = check_exit_2(repo, capsys)

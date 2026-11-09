@@ -93,7 +93,7 @@ def test_a_scanner_that_crashes_or_leaves_no_usable_report_is_exit_2(served_scan
     [("gitleaks-clean.json", 0, []), ("gitleaks-finding.json", 7, ["secret deploy/config.txt:3"])],
 )
 def test_report_becomes_findings(report, exit_code, expected):
-    """#13 rule 3: each leak in a recorded report becomes a secret finding at file:line."""
+    """ROW-2: each leak in a recorded report becomes a secret finding at file:line."""
     findings = scanners.scanner_findings(scanners.GITLEAKS_SCANNER, recorded(report), exit_code, "")
     assert [f"{f.rule} {f.location}" for f in findings] == expected
 
@@ -132,13 +132,13 @@ def test_check_refuses_a_config_with_unknown_keys(build_repo, installed_scanners
 
 @pytest.mark.scanner
 def test_clean_history_passes(build_repo, installed_scanners):
-    """#13 rule 4: a repository without a secret passes."""
+    """A history without a key is clean."""
     assert scan(build_repo({"docs/notes.txt": "nothing here\n"})) == 0
 
 
 @pytest.mark.scanner
 def test_committed_secret_fails(build_repo, installed_scanners, capsys):
-    """#13 rule 4: a committed key fails, reported at file:line with the secret redacted."""
+    """ROW-2, O28: a committed key is one secret row at its file:line and the key is not printed."""
     repo = build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
     assert_key_found(repo, capsys)
 

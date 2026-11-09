@@ -623,7 +623,7 @@ The `secret` rule scans the whole history reachable from `HEAD` with gitleaks (a
 no effect (SECRET-3).
 A known false positive is allowed by the value, not the place: the repository's
 `quality/config.toml` names the gitleaks rule, the file and the SHA-256 of the finding's secret (UTF-8, lowercase hex)
-with a reason:
+with a reason (SECRET-16):
 
     [[secrets.allow]]
     rule = "aws-access-token"
@@ -631,17 +631,19 @@ with a reason:
     secret_sha256 = "<64 hex>"
     reason = "fixture value"
 
-A file that lists `allow = [...]` inline reads the same and takes a new entry as one more inline table, because TOML
-refuses a `[[secrets.allow]]` block after an inline list.
+A file that lists `allow = [...]` inline reads the same (SECRET-17) and takes a new entry as one more inline table,
+because TOML refuses a `[[secrets.allow]]` block after an inline list.
 
-One entry allows that value in that file at any line and in every commit that holds it. Another value in the same
-place is red, and the same value in another file is red. A red finding is the row
-`! <path:line>  secret  gitleaks rule <rule> · commit <sha8> · value not shown` (in the staged change without the
-commit). Under it stands `fix: rotate it; if it is no secret, allow it in quality/config.toml with a reason:` and the
-entry's lines, the sha256 whole on its line, so the entry is copied from the output with a reason added. An entry
-without a reason, a hash that is not 64 lowercase hex, a duplicate `(rule, file, secret_sha256)` and the old
-`fingerprint` form are exit `2`. The clean row counts the commits reachable from `HEAD` that gitleaks scans
-(`✓ secrets  clean  412 commits`); a count git cannot give is exit `2`.
+One entry allows that value in that file at any line and in every commit that holds it (SECRET-18). Another value in
+the same place is red (SECRET-19), and the same value in another file is red (SECRET-20). A red finding is
+[the row](output.md#rows) `! <path:line>  secret  gitleaks rule <rule> · commit <sha8> · value not shown` (in the
+staged change without the commit). Under it stands
+`fix: rotate it; if it is no secret, allow it in quality/config.toml with a reason:` and the entry's lines,
+[the sha256 whole on its line](output.md#length), so the entry is copied from the output with a reason added. An entry
+without a reason (SECRET-21), a hash that is not 64 lowercase hex (SECRET-22), a duplicate `(rule, file, secret_sha256)`
+(SECRET-23) and the old `fingerprint` form (SECRET-24) are exit `2`. [The clean row](output.md#area-rows) counts the
+commits reachable from `HEAD` that gitleaks scans (`✓ secrets  clean  412 commits`); a count git cannot give is exit
+`2` (SECRET-25).
 
 A missing `quality/config.toml` means no allowances: the scan still runs and its findings are red (SECRET-4). Only a
 file that exists and cannot be read or parsed (SECRET-5), or links out of the repository (SECRET-6), is exit `2`; a link
@@ -662,10 +664,12 @@ The scan runs git without any attributes (not the repository's `.gitattributes` 
 git 2.41 or newer; an older git is exit `2` (SECRET-14). The system file is excluded by `GIT_ATTR_NOSYSTEM`, git's
 documented switch; that is pinned as an environment contract, not by a root-only real-file test (SECRET-15).
 
-Every allowed finding is a row `· <path:line>  allowed  <rule> · <reason>`, and the clean row counts them
-(`· 1 allowed`). An allowance that matched nothing is a row too, so a stale entry can be deleted:
-`· quality/config.toml  unused  [secrets] allow entry <n> matches no secret · <rule> in <file>`. `quality check secrets --staged` prints the allowed rows and no unused row: one change cannot tell a stale entry from one the
-history still needs.
+Every allowed finding is a row `· <path:line>  allowed  <rule> · <reason>` (SECRET-26), and
+[the clean row](output.md#notes) counts them (`· 1 allowed`). An allowance that matched nothing is a row too, so a
+stale entry can be deleted:
+`· quality/config.toml  unused  [secrets] allow entry <n> matches no secret · <rule> in <file>` (SECRET-27).
+[`quality check secrets --staged`](commands.md#quality-check-secrets---staged) prints the allowed rows and no unused
+row: one change cannot tell a stale entry from one the history still needs.
 
 The `workflow-lint` rule (actionlint) and the `workflow-security` rule (zizmor, `--offline`) judge every tracked `.yml` and
 `.yaml` file directly under `.github/workflows/` that the tree holds, with quality's own configs: a repository's scanner
