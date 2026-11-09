@@ -1,8 +1,0 @@
-claim_id = "0c1c22a4fca8466e8c3c703a645e3e85"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "e9e07b138f7ad50a4406bcf5fc9addad0155f9fd"
-branch = "claude/issue-647-d7-import-refusal-ids"
-scope = ["docs/rules.md", "src/quality/repository.py", "tests/test_architecture.py", "tests/test_fleet.py", "tests/test_repository.py"]
-opened_commit = "21c71e231c4aefccfc8a7b8c0f6e6981971c2a75"
-whole_reason = "docs/rules.md import-contract bullet, the refusal list: the guarantee, the configs, the contract types and options, the root packages, the symlinks, the py files that cannot be examined, and the tests that prove them, linked by IMPORT IDs; the grimp sentences and the absolute-path rule are the third slice."
