@@ -88,13 +88,13 @@ NOT_A_FILE = f"{NAME} is not a file"
 NOT_UTF8 = f"cannot read {NAME}: 'utf-8' codec can't decode byte 0xff"
 
 UNUSABLE_CONFIGS = [
-    pytest.param(link_out_of_the_repository, OUTSIDE, id="cells 1-3 link out of the repository"),
+    pytest.param(link_out_of_the_repository, OUTSIDE, id="link out of the repository"),
     pytest.param(dangling_link_out_of_the_repository, OUTSIDE, id="link out of the repository to nothing"),
-    pytest.param(file_without_permission, DENIED, id="cell 5 file mode 0", marks=NEEDS_PERMISSIONS),
-    pytest.param(self_loop, LOOP, id="cell 6 self-loop"),
-    pytest.param(dangling_link_inside, DANGLING, id="cell 7 dangling link inside"),
-    pytest.param(a_directory, NOT_A_FILE, id="cell 8 a directory"),
-    pytest.param(not_utf8, NOT_UTF8, id="cell 9 not UTF-8"),
+    pytest.param(file_without_permission, DENIED, id="file mode 0", marks=NEEDS_PERMISSIONS),
+    pytest.param(self_loop, LOOP, id="self-loop"),
+    pytest.param(dangling_link_inside, DANGLING, id="dangling link inside"),
+    pytest.param(a_directory, NOT_A_FILE, id="a directory"),
+    pytest.param(not_utf8, NOT_UTF8, id="not UTF-8"),
 ]
 
 
@@ -126,13 +126,13 @@ def arranged(repo: Path, elsewhere: Path):
     "arrange", [regular_file, link_inside_the_repository], ids=["regular file", "link inside the repository"]
 )
 def test_a_file_inside_the_repository_is_read(arranged, arrange):
-    """#52 rule 1: a regular file, or a link that stays inside the repository, is read."""
+    """A regular file, or a link that stays inside the repository, is read."""
     assert repository.read_text(arranged(arrange), NAME) == VALID_CONFIG
 
 
 @pytest.mark.parametrize("arrange", [nothing, parent_is_a_file], ids=["ENOENT", "ENOTDIR"])
 def test_a_name_the_tree_does_not_hold_reads_as_absent(arranged, arrange):
-    """#52 rules 1 and 3: only a name with nothing at it is absent."""
+    """Only a name with nothing at it is absent: nothing there, or a file where its directory should be."""
     assert repository.read_text(arranged(arrange), NAME) is None
 
 
@@ -144,7 +144,7 @@ def test_a_name_the_tree_does_not_hold_reads_as_absent(arranged, arrange):
     ],
 )
 def test_an_unusable_file_is_one_repository_relative_error(arranged, repo, elsewhere, arrange, reason):
-    """#52 rules 1, 3 and 5: an unusable name is an error that names it as given, never a resolved path."""
+    """An unusable name is an error that names it as given, never a resolved path."""
     repo_with_the_file = arranged(arrange)
     with pytest.raises(RepositoryFileError) as raised:
         repository.read_text(repo_with_the_file, NAME)
@@ -153,7 +153,7 @@ def test_an_unusable_file_is_one_repository_relative_error(arranged, repo, elsew
 
 
 def test_resolve_file_gives_the_file_inside_the_repository(arranged):
-    """#52 rule 1: resolve_file is the one containment helper and yields the real path of a regular file."""
+    """resolve_file yields the real path of a regular file inside the repository."""
     repo = arranged(link_inside_the_repository)
     assert repository.resolve_file(repo, NAME) == Path(os.path.realpath(repo / "real.toml"))
 
@@ -170,13 +170,13 @@ def test_resolve_file_gives_the_file_inside_the_repository(arranged):
     ids=["file", "absent", "dangling link", "self-loop", "parent is a file"],
 )
 def test_a_name_that_leads_nowhere_is_not_on_disk(arranged, arrange, on_disk):
-    """#52 rule 1: is_on_disk follows links; ENOENT, ENOTDIR and ELOOP mean gone."""
+    """is_on_disk follows links; ENOENT, ENOTDIR and ELOOP mean gone."""
     assert repository.is_on_disk(arranged(arrange), NAME) is on_disk
 
 
 @NEEDS_PERMISSIONS
 def test_a_name_the_filesystem_refuses_to_reach_is_an_error(arranged, repo):
-    """#52 rules 1 and 5: a name behind a directory without permission cannot be reached, named without a path."""
+    """A name behind a directory without permission cannot be reached, named without a path."""
     locked_repo = arranged(directory_without_permission)
     with pytest.raises(RepositoryFileError) as raised:
         repository.is_on_disk(locked_repo, NAME)
@@ -438,7 +438,7 @@ PREFIXES = {
 def test_an_unusable_config_is_exit_2_with_one_reason_in_every_command(
     git_repo, monkeypatch, capsys, command, arrange, reason
 ):
-    """#52 rules 2-5, cells 1-9: every command that reads the config refuses it with the same reason after its own
+    """Every command that reads the config refuses it with the same reason after its own
     prefix, names no checkout path, and sonar sends no request; the check reads it before any scanner runs."""
     repo, scratch = git_repo
     arrange(repo, scratch)
@@ -458,12 +458,12 @@ def test_an_unusable_config_is_exit_2_with_one_reason_in_every_command(
         ("verdict", f"error: {DENIED}"),
         ("sonar findings", f"error: {DENIED}"),
     ],
-    ids=["cell 12 check", "cell 13 check debt --fix", "cell 4 verdict", "sonar findings"],
+    ids=["check", "check debt --fix", "verdict", "sonar findings"],
 )
 def test_a_quality_directory_without_search_permission_is_exit_2_in_every_command(
     git_repo, monkeypatch, capsys, command, refusal
 ):
-    """#52 rules 2 and 5, cells 4, 12 and 13: a quality/ directory git cannot enter is exit 2 with the reason, no
+    """A quality/ directory git cannot enter is exit 2 with the reason, no
     traceback and no checkout path, never a baseline taken for absent."""
     repo, scratch = git_repo
     directory_without_permission(repo, scratch)
@@ -497,7 +497,7 @@ def point_git_dir_at_a_file(repo: Path, monkeypatch) -> None:
 def test_a_git_refusal_names_the_path_as_given_and_never_the_checkout(
     git_repo, monkeypatch, capsys, git_refusal, argv, prefix
 ):
-    """#52 rule 5: when git refuses to list the files, every command that asks it says so with the PATH as given;
+    """When git refuses to list the files, every command that asks it says so with the PATH as given;
     git's own words, which carry the resolved checkout path, are not printed."""
     repo, _ = git_repo
     monkeypatch.setenv("SONAR_TOKEN", "a-token")
