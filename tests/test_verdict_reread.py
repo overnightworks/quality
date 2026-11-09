@@ -509,15 +509,15 @@ def exhaustive_layers(*layers: str) -> dict:
          (), ["✓ green"]),
     ],
     ids=[
-        "cell 1 undeclared removal", "cell 2 declared removal in pyproject.toml", "cell 5 the file removed",
-        "cell 7 the file removed and declared", "cell 6 setup.cfg loses its section", "cell 8 a new ignore",
-        "cell 15 root_packages", "cell 18 INI to TOML", "cell 22 adoption", "cell 26 a declaration that matches nothing",
-        "cell 27 several lines, one each", "a module inserted into an exhaustive layers contract",
+        "undeclared removal", "declared removal in pyproject.toml", "the file removed",
+        "the file removed and declared", "setup.cfg loses its section", "a new ignore",
+        "root_packages", "INI to TOML", "adoption", "a declaration that matches nothing",
+        "several lines, one each", "a module inserted into an exhaustive layers contract",
     ],
 )
 def test_an_import_contract_loosening_is_a_loosening_the_verdict_names(judged_contracts, base, head, declared, expected):
-    """LOOSE-1 (ruled yes 26.10.2026): each import-contract loosening is red, declarable with its exact text, and
-    lands only through the door; moves and adoption stay green; a removed ignore and a new contract are no loosening."""
+    """LOOSE-1, LOOSE-3, LOOSE-6: each import-contract loosening is red and declarable with its exact text, several
+    stand one line each under the row; a moved or adopted config stays green."""
     assert judged_contracts(base, head, declared) == (0 if expected == ["✓ green"] else 1, expected)
 
 
@@ -571,12 +571,12 @@ GREEN = ["✓ green"]
          [declared('import contract "a" changes source_modules'), "! red"]),
     ],
     ids=[
-        "row 1 indirect imports forbidden", "row 2 the indirect line dropped in INI", "row 3 source module added",
-        "row 4 forbidden module added", "row 5 wildcard added", "row 6 independence module added", "row 7 three tightenings in one contract",
-        "row 8 forbidden module removed", "row 9 independence module removed", "row 10 source module renamed",
-        "row 11 one added and one removed", "row 12 expression replaced by a wider one", "row 13 indirect imports allowed again",
-        "row 14 exhaustive switched on", "row 14 protected module added", "row 14 as_packages switched",
-        "row 15 a declaration of a tightening",
+        "indirect imports forbidden", "the indirect line dropped in INI", "source module added",
+        "forbidden module added", "wildcard added", "independence module added", "three tightenings in one contract",
+        "forbidden module removed", "independence module removed", "source module renamed",
+        "one added and one removed", "expression replaced by a wider one", "indirect imports allowed again",
+        "exhaustive switched on", "protected module added", "as_packages switched",
+        "a declaration of a tightening",
     ],
 )
 def test_a_change_that_only_forbids_more_is_no_loosening_and_every_other_change_is(judged_contracts, base, head, declared, expected):
@@ -594,10 +594,10 @@ def test_a_change_that_only_forbids_more_is_no_loosening_and_every_other_change_
         ({".importlinter": DUPLICATE_A},
          "base", 'import contract "a" is declared twice in .importlinter'),
     ],
-    ids=["cell 21 a duplicate name at the head", "cell 25 two configs at the head", "cell 21 a duplicate name at the base"],
+    ids=["a duplicate name at the head", "two configs at the head", "a duplicate name at the base"],
 )
 def test_import_contracts_that_cannot_be_told_apart_cannot_be_judged_naming_the_side(judged_contracts, files, side, message):
-    """#148 I4, S3, S4: an ambiguous side is cannot judge, and the line names the head or the base commit."""
+    """LOOSE-16, LOOSE-17: an ambiguous side is cannot judge, and the line names the head or the base commit."""
     code, lines = judged_contracts(files if side == "base" else {}, files if side == "head" else {})
     assert code == 2
     place = "the head" if side == "head" else "the base commit [0-9a-f]{40}"
@@ -605,7 +605,7 @@ def test_import_contracts_that_cannot_be_told_apart_cannot_be_judged_naming_the_
 
 
 def test_a_head_import_config_that_links_out_of_the_repository_cannot_be_judged_naming_the_head(build_repo, elsewhere):
-    """#148 S4: a config the head's tree cannot hand over is named, not read through the link."""
+    """LOOSE-18: a config the head's tree cannot hand over is named, not read through the link."""
     repo = build_repo({"quality/config.toml": gate_config("A")})
     (elsewhere / "outside").write_text("[importlinter]\n")
     (repo / ".importlinter").symlink_to(elsewhere / "outside")

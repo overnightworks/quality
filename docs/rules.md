@@ -576,20 +576,20 @@ It applies these rules:
   operator's door merges it.
 - The import contracts only tighten: on a pull request `quality verdict` and the door compare the contracts of the
   three config places at the head with the base's, as import-linter parses them (never the raw options, so moving a
-  config between `.importlinter`, `setup.cfg` and `pyproject.toml` changes nothing), without building an import graph.
-  A contract is the same on both sides when it has the same `name`; a rename is a removal plus a new contract.
-  Each loosening is one line under the verdict's `loosenings` row, sorted:
-  - a contract the base holds and the head lacks: `import contract "layers" removed`;
+  config between `.importlinter`, `setup.cfg` and `pyproject.toml` changes nothing (LOOSE-4)), without building an
+  import graph. A contract is the same on both sides when it has the same `name`; a rename is a removal plus a new
+  contract (LOOSE-5). Each loosening is one line under the verdict's `loosenings` row, sorted (LOOSE-6):
+  - a contract the base holds and the head lacks: `import contract "layers" removed` (LOOSE-7);
   - the base's config gone, whatever it held, or only its section gone from a file that stays, once:
-    `import-linter config in .importlinter removed`;
+    `import-linter config in .importlinter removed` (LOOSE-8);
   - an `ignore_imports` expression the base does not hold, one line each, compared as parsed (spacing around `->`
     does not count, a wildcard is a new expression):
-    `import contract "domain" ignores app.domain -> app.web.*`;
+    `import contract "domain" ignores app.domain -> app.web.*` (LOOSE-9);
   - any other field of a contract that differs, `broken_contract_guidance` excepted, unless the change only forbids
-    more (below): `import contract "layers" changes allow_indirect_imports` (a changed `type`
-    reads `changes type`; a module dropped from a list reads as that list's field);
+    more (below): `import contract "layers" changes allow_indirect_imports` (LOOSE-10) (a changed `type`
+    reads `changes type` (LOOSE-11); a module dropped from a list reads as that list's field);
   - `root_packages` (as a set of names), `include_external_packages` or `exclude_type_checking_imports` changed:
-    `import-linter changes root_packages`.
+    `import-linter changes root_packages` (LOOSE-12).
 
   Ruled by the operator:
 
@@ -612,10 +612,12 @@ It applies these rules:
   `acyclic_siblings` field in either direction, a reorder, a merge into `a | b`, a module moved to another layer,
   `a | b` turned into `a : b`, a required `a` made optional `(a)`, and the session options. No import graph is built.
 
-  A new contract, a removed `ignore_imports` entry, a reworded `broken_contract_guidance` and adopting import
-  contracts (the base has no config) are green. Two contracts of one name on a side, two config places holding a
-  section, or a config that cannot be read are exit `2`, naming the side (`import-linter config at the base commit
-  <sha>: ...`, `import-linter config at the head: ...`).
+  A new contract (LOOSE-13), a removed `ignore_imports` entry (LOOSE-14), a reworded `broken_contract_guidance` and
+  adopting import contracts (the base has no config) (LOOSE-15) are green. Two contracts of one name on a side
+  (LOOSE-16), two config places holding a section (LOOSE-17), or a config that cannot be read (LOOSE-18) are exit `2`,
+  naming the side: the verdict says `import-linter config at the base commit <sha>: ...` or
+  `import-linter config at the head: ...`, the door names the base commit by its SHA alone,
+  `import-linter config at <sha>: ...`.
 
 The `secret` rule scans the whole history reachable from `HEAD` with gitleaks (a key removed later is still found
 (SECRET-1); other branches the checkout fetched are not scanned (SECRET-2)), always with quality's own config

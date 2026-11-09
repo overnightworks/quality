@@ -1,7 +1,4 @@
-"""#61 (Q1b-6a): the import-contract rule judges a repository's import-linter contracts.
-
-Every cell runs through `check_door`; the cell numbers are the item's scenario matrix.
-"""
+"""The import-contract rule judges import-linter contracts, and the diff of two sides names each loosening."""
 
 import os
 import signal
@@ -682,19 +679,20 @@ PLAIN_FILE = "[metadata]\nname = shop\n"
           'import contract "b" removed', "import-linter changes root_packages"]),
     ],
     ids=[
-        "cell 1 a removed contract in INI", "cell 2 a removed contract in TOML", "cell 5 the file deleted is one line",
-        "cell 6 setup.cfg loses its section", "cell 6 pyproject.toml loses its table", "cell 23 no contract is left",
-        "cell 8 a new ignore", "cell 8 two new ignores", "cell 9 a wildcard is a new expression",
-        "cell 10 other spacing around the arrow", "cell 16 a removed ignore", "cell 12 allow_indirect_imports",
-        "cell 13 alerting", "cell 13 type", "cell 14 a module off source_modules", "cell 14 layers in another order",
-        "cell 15 root_packages", "cell 15 include_external_packages", "cell 15 exclude_type_checking_imports",
-        "cell 15 root order and duplicates", "cell 16 a new contract and a removed ignore", "cell 17 reworded guidance",
-        "cell 18 INI to TOML", "cell 19 setup.cfg to .importlinter", "cell 20 a rename", "cell 22 adoption",
-        "no config at either side", "cell 27 several changes, one line each, sorted",
+        "a removed contract in INI", "a removed contract in TOML", "the file deleted is one line",
+        "setup.cfg loses its section", "pyproject.toml loses its table", "a config that holds no contract",
+        "a new ignore", "two new ignores", "a wildcard is a new expression",
+        "other spacing around the arrow", "a removed ignore", "allow_indirect_imports",
+        "alerting", "type", "a module off source_modules", "layers in another order",
+        "root_packages", "include_external_packages", "exclude_type_checking_imports",
+        "root order and duplicates", "a new contract and a removed ignore", "reworded guidance",
+        "INI to TOML", "setup.cfg to .importlinter", "a rename", "adoption",
+        "no config at either side", "several changes, one line each, sorted",
     ],
 )
 def test_the_contract_diff_names_each_loosening_on_its_own_line(base, head, expected):
-    """#148 C1-C7, I1, I2, I5, S1, S2, X1: the texts the verdict judges as the import contract's loosenings."""
+    """LOOSE-4, LOOSE-5, LOOSE-6, LOOSE-7, LOOSE-8, LOOSE-9, LOOSE-10, LOOSE-11, LOOSE-12, LOOSE-13, LOOSE-14,
+    LOOSE-15: the contracts of two sides differ by the lines the rule names, one each and sorted, and by no other."""
     assert loosened(base, head) == expected
 
 
@@ -710,10 +708,11 @@ def test_the_contract_diff_names_each_loosening_on_its_own_line(base, head, expe
         ({"pyproject.toml": contracts_toml({"a": FORBIDDEN}, roots=(["shop"],))},
          "the config pyproject.toml cannot be judged: "),
     ],
-    ids=["cell 21 a duplicate name in INI", "cell 21 a duplicate name in TOML", "cell 25 two configs", "cell 25 a root package that is a list"],
+    ids=["a duplicate name in INI", "a duplicate name in TOML", "two configs", "a root package that is a list"],
 )
 def test_a_side_that_names_a_contract_twice_or_holds_two_configs_cannot_be_judged(files, message):
-    """#148 I4, S3, S4: a side whose contracts are ambiguous raises, so the verdict can name that side."""
+    """LOOSE-16, LOOSE-17, LOOSE-18: a side whose contracts are ambiguous or whose config cannot be read raises, so
+    the verdict can name that side."""
     with pytest.raises(architecture.ContractError, match=message):
         architecture.contracts_of(files)
 
@@ -741,11 +740,11 @@ class GhWithImportConfigs(FakeGh):
         ({"base_files": {"pyproject.toml": contracts_toml({"a": FORBIDDEN})},
           "merge_files": {"pyproject.toml": contracts_toml({"a": IGNORING})}}, 'import contract "a" ignores shop.db -> shop.web'),
     ],
-    ids=["cell 3 a removed contract", "cell 7 the config removed", "cell 11 a new ignore"],
+    ids=["a removed contract", "the config removed", "a new ignore"],
 )
 def test_the_door_refuses_an_undeclared_import_contract_loosening_next_to_legacy_red(gh_kwargs, line, capsys):
-    """LOOSE-2 (ruled yes 26.10.2026): the door reads the import-linter configs at the base and the merge commit and
-    refuses an undeclared loosening of them, even when it was opened for Sonar's legacy findings."""
+    """LOOSE-2: the door reads the import-linter configs at the base and the merge commit and refuses an undeclared
+    loosening of them, even when it was opened for Sonar's legacy findings."""
     gh = GhWithImportConfigs(**gh_kwargs)
     assert drive(gh)[0] == 1
     assert f"    ! {line}\n" in capsys.readouterr().out
@@ -755,11 +754,11 @@ def test_the_door_refuses_an_undeclared_import_contract_loosening_next_to_legacy
 @pytest.mark.parametrize(
     ("gh_kwargs", "what"),
     [(REMOVES_B, B_CONTRACT_REMOVED), ({"base_files": REMOVES_B["base_files"]}, FILE_REMOVED)],
-    ids=["cell 4 a removed contract", "cell 7 the config removed"],
+    ids=["a removed contract", "the config removed"],
 )
 def test_a_declared_import_contract_loosening_merges_through_the_door(gh_kwargs, what, capsys):
-    """LOOSE-1, LOOSE-3 (ruled yes 26.10.2026): with Sonar green, only the declared loosening of an import contract
-    is left, and the door shows the declaration and merges."""
+    """LOOSE-1, LOOSE-3: with Sonar green, only the declared loosening of an import contract is left, and the door
+    shows the declaration and merges."""
     gh = GhWithImportConfigs(checks=SONAR_GREEN, base_config=ONE_JOB, merge_config=ONE_JOB + declaring(what), **gh_kwargs)
     assert drive(gh)[0] == 0
     assert f"    ! {what} · overnightworks/songmaker#1345 of 2026-10-20\n        reason: ruled\n" in capsys.readouterr().out
@@ -767,7 +766,7 @@ def test_a_declared_import_contract_loosening_merges_through_the_door(gh_kwargs,
 
 
 def test_import_contracts_at_the_base_that_cannot_be_told_apart_cannot_be_judged_and_change_nothing(capsys):
-    """#148 S3: the door names the commit whose import contracts it cannot read, and changes nothing."""
+    """LOOSE-16: the door names the commit whose import contracts it cannot read, and changes nothing."""
     twice = contracts_ini({"a": FORBIDDEN}) + ini_section("importlinter:contract:again", {"name": "a", **FORBIDDEN})
     gh = GhWithImportConfigs(base_files={".importlinter": twice})
     assert drive(gh)[0] == 2
