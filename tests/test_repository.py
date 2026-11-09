@@ -184,13 +184,13 @@ def test_a_name_the_filesystem_refuses_to_reach_is_an_error(arranged, repo):
 
 
 def test_write_text_creates_the_file_and_its_directory(repo):
-    """#52 rule 1: write_text writes the repository's own file."""
+    """write_text writes the repository's own file and creates its directory."""
     repository.write_text(repo, NAME, VALID_CONFIG)
     assert (repo / NAME).read_text() == VALID_CONFIG
 
 
 def test_a_write_through_a_symlink_is_refused_without_naming_its_target(repo, elsewhere):
-    """#52 rule 5, cell 20: a write a link would redirect is refused, names no resolved path, and the target stays."""
+    """FIX-30: a write a link would redirect is refused, names no resolved path, and the target stays."""
     (elsewhere / "victim.toml").write_text("kept\n")
     config_at(repo).symlink_to(elsewhere / "victim.toml")
     with pytest.raises(RepositoryFileError) as raised:
@@ -240,7 +240,7 @@ def set_umask():
     ids=["sync fails", "replace fails", "interrupted at the sync", "interrupted before the replacement"],
 )
 def test_a_failed_write_keeps_the_old_file(repo, monkeypatch, call, error, surfaces_as):
-    """A failure or an interrupt before the replacement leaves the old bytes and no sibling."""
+    """FIX-24: a failure or an interrupt before the replacement leaves the old bytes and no sibling."""
     config_at(repo).write_text("old\n")
     monkeypatch.setattr(repository.os, call, raises(error))
     with pytest.raises(surfaces_as):
@@ -249,6 +249,7 @@ def test_a_failed_write_keeps_the_old_file(repo, monkeypatch, call, error, surfa
 
 
 def test_an_interrupt_as_the_file_is_created_leaves_no_sibling(repo, monkeypatch):
+    """FIX-24: an interrupt as the sibling is created leaves the old bytes and no sibling."""
     config_at(repo).write_text("old\n")
     real_open = os.open
 
@@ -265,6 +266,7 @@ def test_an_interrupt_as_the_file_is_created_leaves_no_sibling(repo, monkeypatch
 
 
 def test_an_interrupt_after_the_replacement_leaves_the_new_file(repo, monkeypatch):
+    """FIX-25: an interrupt just after the replacement leaves the new file and no sibling."""
     config_at(repo).write_text("old\n")
     real_replace = os.replace
 
@@ -297,6 +299,7 @@ def test_a_foreign_file_under_the_scratch_name_stays(repo, monkeypatch):
 
 @pytest.mark.parametrize("mode", [0o600, 0o640, 0o664, 0o755])
 def test_a_write_keeps_the_files_mode(repo, mode):
+    """FIX-27: a write keeps the mode of the file it replaces."""
     config_at(repo).write_text("old\n")
     config_at(repo).chmod(mode)
     repository.write_text(repo, NAME, "new\n")
@@ -332,6 +335,8 @@ def test_a_new_file_takes_the_umasks_mode(repo, set_umask, umask, mode):
 @NEEDS_PERMISSIONS
 @pytest.mark.parametrize("how", [read_only_file, read_only_folder], ids=["file", "folder"])
 def test_a_read_only_target_refuses_the_write(arranged, how):
+    """FIX-28, FIX-29: a read-only file and a read-only folder each refuse the write and leave the old bytes and no
+    sibling."""
     repo = arranged(how)
     with pytest.raises(RepositoryFileError, match=r"\[Errno 13\]"):
         repository.write_text(repo, NAME, "new\n")
@@ -365,6 +370,8 @@ def test_a_write_syncs_the_whole_content_before_it_replaces(repo, monkeypatch):
     ids=["before", "after"],
 )
 def test_a_killed_write_leaves_one_whole_file(repo, moment, bytes_left, siblings_left):
+    """FIX-24, FIX-25, FIX-26: a process killed before the replacement leaves the old file and a hidden sibling that
+    holds the new text; one killed after it leaves the new file and no sibling."""
     config_at(repo).write_text("old\n")
     child = """
 import os, signal, sys

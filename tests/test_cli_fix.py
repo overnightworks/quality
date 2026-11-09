@@ -42,8 +42,8 @@ def test_a_fix_lowers_each_entry_and_judges_the_tree_against_the_lowered_file(bu
 
 
 def test_a_first_recording_counts_the_entries_it_records_and_runs_clean(build_repo, capsys):
-    """FIX-11: a repository with no ceiling gets one recorded, its row counts the entries and the pairs, and the run
-    is clean."""
+    """FIX-11, FIX-18: a repository with no ceiling gets one recorded, its row counts the entries and the pairs, and
+    the run is clean."""
     repo = build_repo({"src/a.py": long_function(62)})
     printed = (
         "  ✓ debt          recorded       1 entry, 0 clone pairs · quality/baseline.toml is new\n"
@@ -53,7 +53,7 @@ def test_a_first_recording_counts_the_entries_it_records_and_runs_clean(build_re
 
 
 def test_a_first_recording_counts_the_clone_pairs_it_records(build_repo, capsys):
-    """FIX-11: the row of a first recording counts the clone pairs it records beside the entries."""
+    """FIX-11, FIX-18: the row of a first recording counts the clone pairs it records beside the entries."""
     repo = build_repo({"src/a.py": long_function(62), "tests/test_a.py": clone_function("run", "a", "b"), "tests/test_b.py": clone_function("check", "c", "d")})
     printed = (
         "  ✓ debt          recorded       1 entry, 1 clone pair · quality/baseline.toml is new\n"
@@ -63,7 +63,7 @@ def test_a_first_recording_counts_the_clone_pairs_it_records(build_repo, capsys)
 
 
 def test_adopting_the_clones_table_says_the_ceiling_was_recorded(build_repo, capsys):
-    """FIX-15: a ceiling without a `[clones]` table takes the pairs, and the row says `recorded` with the pairs
+    """FIX-15, FIX-18: a ceiling without a `[clones]` table takes the pairs, and the row says `recorded` with the pairs
     counted."""
     repo = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: "[file_lines]\n", "tests/test_a.py": clone_function("run", "a", "b"), "tests/test_b.py": clone_function("check", "c", "d")})
     printed = (
@@ -110,6 +110,7 @@ def test_what_grew_stays_a_finding_and_what_fell_is_the_only_change(build_repo, 
 
 
 def test_a_ceiling_that_renders_byte_for_byte_keeps_its_bytes(build_repo, capsys):
+    """FIX-31: a ceiling that renders byte for byte keeps its bytes, and the fix says there is nothing to lower."""
     repo = build_repo({"src/a.py": long_function(62), BASELINE_PATH: held_ceiling()})
     before = (repo / BASELINE_PATH).read_bytes()
     code, out, _ = fixed(capsys, repo, *FIX_WORDS)
@@ -573,6 +574,9 @@ def a_shallow_clone_and_a_grown_entry(build_repo, elsewhere) -> Path:
     ],
 )
 def test_a_refused_fix_keeps_what_each_rule_judged(build_repo, elsewhere, capsys, arrange, rows):
+    """FIX-28, FIX-32, CLONE-6, SIZE-10: a refused fix keeps what each rule judged: a near copy, a file Python cannot
+    parse beside a grown entry, an entry that can fall beside a read-only ceiling, a grown entry beside a shallow
+    clone."""
     repo = arrange(build_repo, elsewhere)
     before = tree_of(repo)
     code, out, _ = fixed(capsys, repo, *FIX_WORDS)
@@ -616,6 +620,7 @@ def an_import_contract_config_linked_out(build_repo, elsewhere) -> Path:
     ids=["files", "imports"],
 )
 def test_another_areas_refusal_leaves_the_fix_standing(build_repo, elsewhere, capsys, areas, arrange):
+    """FIX-33: another area's refusal leaves the fix standing: the ceiling is written, its row stays, the exit is 2."""
     repo = arrange(build_repo, elsewhere)
     code, out, _ = fixed(capsys, repo, "check", *areas, "--fix")
     assert code == 2
@@ -626,6 +631,7 @@ def test_another_areas_refusal_leaves_the_fix_standing(build_repo, elsewhere, ca
 @pytest.mark.parametrize("when", ["before", "after"])
 @pytest.mark.parametrize("verbosity", [(), ("-v",)], ids=["quiet", "-v"])
 def test_an_interrupted_fix_leaves_the_old_file_or_the_new_one(build_repo, monkeypatch, capsys, when, verbosity):
+    """FIX-24, FIX-25: an interrupt before the replacement leaves the old ceiling, one after it leaves the new one."""
     repo = build_repo({"src/a.py": long_function(62), BASELINE_PATH: held_ceiling(value=80)})
     before = (repo / BASELINE_PATH).read_bytes()
     real_replace = os.replace
@@ -645,6 +651,7 @@ def test_an_interrupted_fix_leaves_the_old_file_or_the_new_one(build_repo, monke
 
 @pytest.mark.parametrize("verbosity", [(), ("-v",)], ids=["quiet", "-v"])
 def test_under_v_a_fix_keeps_its_write_and_exit(build_repo, capsys, verbosity):
+    """VERBOSE-10: under -v a fix keeps its write, its row and its exit."""
     repo = build_repo({"src/a.py": long_function(62), BASELINE_PATH: held_ceiling(value=80)})
     code, out, _ = fixed(capsys, repo, *FIX_WORDS, *verbosity)
     assert (code, "  ✓ debt          lowered        1 entry · quality/baseline.toml\n" in out) == (0, True)

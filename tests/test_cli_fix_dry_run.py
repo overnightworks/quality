@@ -433,7 +433,7 @@ def test_a_dry_run_attempts_no_write(build_repo, capsys, request, arrange, print
 
 
 def test_another_areas_refusal_leaves_the_dry_run_standing(build_repo, capsys):
-    """FIX-19: the refusal of another area leaves the dry run's `~` rows standing, and the exit is 2."""
+    """FIX-19, FIX-33: the refusal of another area leaves the dry run's `~` rows standing, and the exit is 2."""
     repo = held_above(build_repo)
     put(repo / "compose.yaml", "services: [\n")
     git(repo, "add", "compose.yaml")
@@ -561,6 +561,7 @@ def test_a_ceiling_whose_text_is_not_its_rendering_is_rewritten_by_the_fix_and_p
 
 @pytest.mark.parametrize("words", [DRY_RUN_WORDS, FIX_WORDS], ids=["dry run", "fix"])
 def test_a_ceiling_that_renders_byte_for_byte_is_left_alone(build_repo, capsys, words):
+    """FIX-31: a ceiling that renders byte for byte is not written by the dry run or the fix, and the run is clean."""
     repo = stale_ceiling(build_repo, rendered(ENTRIES + "\n[clones]\n"))
     before = untouched(repo)
     code, out, err = fixed(capsys, repo, *words)
