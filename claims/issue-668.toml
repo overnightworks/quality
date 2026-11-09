@@ -1,0 +1,8 @@
+claim_id = "f7bc298be11a47c8a855fab43df16c2b"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "896030aea4ce154c182efe698024abd4ee183b05"
+branch = "claude/issue-668-transient-downloads"
+scope = [".github/workflows/ci.yml", ".github/workflows/gate.yml", "docs/gate.md", "docs/rules.md", "src/quality/advisories.py", "tests/test_advisories.py", "tests/test_advisories_locks.py", "tests/test_advisories_retry.py", "tests/workflows/test_gate_scanners.py"]
+opened_commit = "34385b45aef7bc4923dcd98e847539a722c0565a"
+whole_reason = "One retry design for the gate's downloads: the advisory rule's retry, mise's retry in both install steps, their two spec clauses and the tests that pin them land together, because each alone would leave a documented clause without its code or a code path without its clause."
