@@ -364,8 +364,8 @@ def github_base(remotes, monkeypatch) -> None:
 
 @pytest.fixture
 def public(remotes, scratch, fake_git, github_base) -> PublicRepo:
-    """Serves a repository as `https://github.com/<owner>/<name>`, which the report clones as it clones a public one
-    (rule 3). A repository nobody served fails with git exit 128 and never reaches the network."""
+    """Serves a repository as `https://github.com/<owner>/<name>`, which the report clones as it clones a public one.
+    A repository nobody served fails with git exit 128 and never reaches the network."""
     fake_git(GITHUB_REDIRECT)
 
     def build(name: str, files: dict[str, str], owner: str = TEST_OWNER) -> str:
@@ -405,7 +405,8 @@ def publish_database(database_root):
 
 @pytest.fixture
 def run_gate(capsys, served_scanners):
-    """Runs the gate over a repository and returns (exit code, all output); no output names the checkout or the scanner directory (#53 cell 21)."""
+    """Runs the gate over a repository and returns (exit code, all output); no output names the checkout or the scanner
+    directory."""
     def run(repo: Path) -> tuple[int, str]:
         code = check_door(repo)
         captured = capsys.readouterr()

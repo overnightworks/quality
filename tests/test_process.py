@@ -125,7 +125,7 @@ def test_the_git_environment_cuts_off_every_attributes_source(tmp_path, monkeypa
     ],
 )
 def test_the_git_version_is_the_first_dotted_number_in_the_output(version_output, expected):
-    """#31 rule 2 (S8786): the version is found as the old pattern found it, in any word, and on any digit length."""
+    """The version is found in any word of the output and on any digit length; output with no dotted number has none."""
     assert process.parse_git_version(version_output) == expected
 
 
