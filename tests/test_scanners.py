@@ -180,7 +180,7 @@ def test_a_relative_repository_path_starting_with_a_dash_is_scanned_as_that_repo
 @pytest.mark.scanner
 @pytest.mark.parametrize("attribute_line", ["config.txt -diff", "config.txt binary", "* -diff -text"])
 def test_a_committed_attribute_line_cannot_hide_a_key(build_repo, installed_scanners, attribute_line, capsys):
-    """#21 rule 1: a .gitattributes in the repository that makes git print "Binary files differ" is still red."""
+    """SECRET-11: a .gitattributes in the repository that makes git print "Binary files differ" is still red."""
     repo = build_repo({".gitattributes": f"{attribute_line}\n", "config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
     assert_key_found(repo, capsys)
 
@@ -195,7 +195,7 @@ def hiding_attributes(tmp_path) -> Path:
 
 @pytest.mark.scanner
 def test_a_global_attributes_file_cannot_hide_a_key(keyed_repo, installed_scanners, tmp_path, monkeypatch, capsys):
-    """#21 rule 1: attributes from the user's global file are not read either."""
+    """SECRET-13: attributes from the user's global file are not read."""
     config_home = tmp_path / "config-home"
     (config_home / "git").mkdir(parents=True)
     (config_home / "git" / "attributes").write_text("config.txt -diff\n")
@@ -208,7 +208,7 @@ def test_a_global_attributes_file_cannot_hide_a_key(keyed_repo, installed_scanne
 def test_a_configured_core_attributes_file_cannot_hide_a_key(
     keyed_repo, installed_scanners, tmp_path, monkeypatch, hiding_attributes, capsys
 ):
-    """#21 rule 1: a core.attributesFile in the user's own git config is not read."""
+    """SECRET-13: a core.attributesFile in the user's own git config is not read."""
     home = tmp_path / "home"
     home.mkdir()
     (home / ".gitconfig").write_text(f"[core]\n\tattributesFile = {hiding_attributes}\n")
@@ -220,7 +220,7 @@ def test_a_configured_core_attributes_file_cannot_hide_a_key(
 def test_an_inherited_git_config_variable_cannot_bring_an_attributes_file_back(
     keyed_repo, installed_scanners, monkeypatch, hiding_attributes, capsys
 ):
-    """#21 rule 1: every other inherited GIT_* variable is removed, GIT_CONFIG_COUNT included."""
+    """SECRET-13: a core.attributesFile set through inherited GIT_CONFIG_* variables is not read."""
     monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
     monkeypatch.setenv("GIT_CONFIG_KEY_0", "core.attributesFile")
     monkeypatch.setenv("GIT_CONFIG_VALUE_0", str(hiding_attributes))
@@ -229,7 +229,7 @@ def test_an_inherited_git_config_variable_cannot_bring_an_attributes_file_back(
 
 @pytest.mark.scanner
 def test_a_diff_driver_marked_binary_cannot_hide_a_key(build_repo, installed_scanners, tmp_path, monkeypatch, capsys):
-    """#21 rule 1: a diff=<driver> attribute whose configured driver is binary does not hide the key."""
+    """SECRET-11: a diff=<driver> attribute whose configured driver is binary does not hide the key."""
     home = tmp_path / "home"
     home.mkdir()
     (home / ".gitconfig").write_text('[diff "hidden"]\n\tbinary = true\n')
@@ -242,14 +242,14 @@ def test_a_diff_driver_marked_binary_cannot_hide_a_key(build_repo, installed_sca
 def test_a_core_attributes_file_in_the_repository_config_cannot_hide_a_key(
     keyed_repo, installed_scanners, hiding_attributes, capsys
 ):
-    """#21 rule 1: a core.attributesFile in the scanned repository's own config does not reach the mirror."""
+    """SECRET-13: a core.attributesFile in the scanned repository's own config does not reach the mirror."""
     subprocess.run(["git", "-C", str(keyed_repo), "config", "core.attributesFile", str(hiding_attributes)], check=True)
     assert_key_found(keyed_repo, capsys)
 
 
 @pytest.mark.scanner
 def test_the_repositorys_info_attributes_cannot_hide_a_key(keyed_repo, installed_scanners, capsys):
-    """#21 rule 1: the scanned repository's .git/info/attributes is not read."""
+    """SECRET-12: the scanned repository's .git/info/attributes is not read."""
     (keyed_repo / ".git" / "info").mkdir(exist_ok=True)
     (keyed_repo / ".git" / "info" / "attributes").write_text("config.txt -diff\n")
     assert_key_found(keyed_repo, capsys)
@@ -259,7 +259,7 @@ def test_the_repositorys_info_attributes_cannot_hide_a_key(keyed_repo, installed
 def test_a_template_directory_cannot_put_attributes_into_the_mirror(
     keyed_repo, installed_scanners, tmp_path, fake_git, capsys
 ):
-    """#21 rule 1: attributes shipped by git's default template directory do not reach the mirror."""
+    """SECRET-12: attributes shipped by git's default template directory do not reach the mirror."""
     template = tmp_path / "template" / "info"
     template.mkdir(parents=True)
     (template / "attributes").write_text("* -diff\n")
@@ -273,7 +273,7 @@ def test_a_template_directory_cannot_put_attributes_into_the_mirror(
 def test_a_git_older_than_2_41_is_exit_2_naming_the_version(
     installed_scanners, build_repo, fake_git, capsys, git_version, words
 ):
-    """#21 rule 2, #25 rule 4: below the floor the scan cannot hide attributes, so it is exit 2 with one line.
+    """SECRET-14: below the floor the scan is exit 2 and the refusal row names the git version.
 
     The git floor is checked right after gitleaks' version and before any scan, so the fake git alone decides this test.
     """
