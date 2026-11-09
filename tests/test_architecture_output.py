@@ -1,5 +1,5 @@
-"""What the door prints for the imports area: findings with import-linter's lines under their row (#97 rule 2, #61), the notes
-after them, the clean row's count and, without a config, the grey row the operator ruled (#293, ruling B)."""
+"""What the door prints for the imports area: findings with import-linter's lines under their row, the notes after
+them, the clean row's count and, without a config, the grey row."""
 
 import pty
 import re
@@ -55,7 +55,8 @@ def only_finding(block: list[BlockLine]) -> FindingLine:
 
 
 def test_a_broken_contract_named_like_a_command_keeps_its_chain_under_its_row(build_repo, capsys):
-    """#97 rule 2, cell 10 (E6): the name is printed in the row's fact, the import chain stays a detail line of its own."""
+    """ROW-5, MASK-2, MASK-12: a contract named like a workflow command prints its name in the row's fact, and the
+    import chain stays a detail line of its own."""
     name = "guarded ::error::c"
     _, block, repo = broken_block(capsys, {**SHOP_DB_IMPORTS_WEB, "pyproject.toml": toml({**FORBIDDEN, "name": name})}, build_repo)
     (finding,) = rule_findings(repo, Rule.IMPORT_CONTRACT)
@@ -74,7 +75,8 @@ def test_a_long_module_name_import_linter_would_wrap_cannot_forge_a_matcher_pair
 
 @pytest.mark.parametrize("guidance", [FORGED_MATCHER_PAIR, "\n".join(FORGED_MATCHER_PAIR)], ids=["list", "multi-line text"])
 def test_contract_guidance_with_several_lines_is_judged_and_printed_under_the_row(build_repo, capsys, guidance):
-    """#97 rule 2, cell 18 (Codex F1, Opus D2): legitimate multi-line guidance is judged as before: exit 1."""
+    """ROW-5, MASK-13: a contract's guidance of several lines, as a list or as text with line feeds, is judged and each
+    of its lines stands as a detail line under the row."""
     contract = {**INDEPENDENT_SHOP, "broken_contract_guidance": guidance}
     _, block, _ = broken_block(capsys, {**SHOP_DB_IMPORTS_WEB, "pyproject.toml": toml(contract)}, build_repo)
     assert all(line in only_finding(block).row.detail for line in FORGED_MATCHER_PAIR)
@@ -118,7 +120,8 @@ def test_a_module_name_with_a_format_character_prints_escaped_in_the_detail(buil
 
 
 def test_two_broken_contracts_stand_in_config_order_with_their_lines_and_one_fix(build_repo, capsys):
-    """Decision 4 and O25: each row has its import-linter lines directly under it; the shared fix follows the second row's lines."""
+    """O14, ROW-3, ROW-5: two broken contracts stand in config order, each row with its import-linter lines directly
+    under it, and the shared fix follows the second row's lines."""
     files = {**SHOP_DB_IMPORTS_WEB, ".importlinter": contracts_ini({"first": FORBIDDEN, "second": INDEPENDENT_SHOP})}
     _, block, repo = broken_block(capsys, files, build_repo)
     findings = rule_findings(repo, Rule.IMPORT_CONTRACT)
@@ -131,6 +134,8 @@ def test_two_broken_contracts_stand_in_config_order_with_their_lines_and_one_fix
 
 
 def test_a_broken_and_an_unused_finding_keep_their_own_fixes(build_repo, capsys):
+    """ROW-3, ROW-5: a broken and an unused finding with different fixes keep a `fix:` line each, and only the broken
+    one has import-linter lines."""
     files = {**SHOP_DB_IMPORTS_WEB, ".importlinter": contracts_ini({"broken": FORBIDDEN, "stale": STALE})}
     _, block, repo = broken_block(capsys, files, build_repo)
     assert_block_prints(block, rule_findings(repo, Rule.IMPORT_CONTRACT), [])
@@ -201,7 +206,9 @@ def unlink_config(repo: Path) -> None:
     ids=["no config", "a tracked config deleted from disk"],
 )
 def test_without_an_import_linter_config_the_row_is_a_grey_note_and_the_verdict_names_it(build_repo, capsys, files, arrange):
-    """Ruling B: measured only, exit 0, nothing found or noted; the verdict line names the imports note before the duration."""
+    """IMPORT-3, ROW-13, CLOSING-10, CLOSING-30: without a config, or with a tracked one deleted from disk, the rule
+    only measures: the row is a grey note, nothing is found or noted, the exit is 0 and the verdict line names the
+    imports note before the duration."""
     repo = build_repo(files)
     if arrange:
         arrange(repo)
@@ -218,7 +225,8 @@ def test_without_an_import_linter_config_the_row_is_a_grey_note_and_the_verdict_
 
 
 def test_a_kept_contract_adds_one_clean_area_and_removes_exactly_the_imports_note(build_repo, capsys):
-    """Ruling B: with an unrelated finding, both runs find the same and exit 1; only the clean count and the imports note differ."""
+    """CLOSING-6, CLOSING-10: with an unrelated finding, a run with a kept contract and one without a config find the
+    same and exit 1; only the clean count and the imports note differ."""
     runs = []
     for tracked in ({**SHOP, ".env": "A=1\n"}, {**KEPT_CONTRACT, ".env": "A=1\n"}):
         repo = build_repo(tracked)
@@ -240,6 +248,7 @@ def test_a_kept_contract_adds_one_clean_area_and_removes_exactly_the_imports_not
     ids=["terminal", "NO_COLOR", "dumb"],
 )
 def test_the_real_door_paints_the_not_set_up_row_as_one_dim_span_only_at_a_terminal(build_repo, environment, painted):
+    """COLOUR-2: the not-set-up row is one dim span at a terminal and plain under `NO_COLOR` and `TERM=dumb`."""
     repo = build_repo(SHOP)
     base = door_environment()
     parent, child = pty.openpty()

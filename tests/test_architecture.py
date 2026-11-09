@@ -90,19 +90,20 @@ FINDING_CELLS = [
     ("files", "location", "named", "chain"),
     FINDING_CELLS,
     ids=[
-        "cell 3 a broken forbidden contract names the chain",
-        "cell 4 a broken layers contract in pyproject.toml",
-        "cell 5 a broken protected contract in setup.cfg",
-        "cell 6 independence broken",
-        "cell 6 acyclic_siblings broken",
-        "cell 11 a chain across three source roots",
-        "cell 16 a stale ignore_imports entry",
-        "cell 21 an external forbidden module that is not installed",
+        "a broken forbidden contract names the chain",
+        "a broken layers contract in pyproject.toml",
+        "a broken protected contract in setup.cfg",
+        "independence broken",
+        "acyclic_siblings broken",
+        "a chain across three source roots",
+        "a stale ignore_imports entry",
+        "an external forbidden module that is not installed",
     ],
 )
 def test_a_contract_that_does_not_hold_is_one_finding_at_its_config(build_repo, capsys, files, location, named, chain):
-    """#61 rules 2-8: a broken contract or a stale ignore is exit 1, one finding at the config naming the contract or the
-    entry, its chain within the lines import-linter rendered, and every printed path is repository-relative."""
+    """IMPORT-1, IMPORT-2, IMPORT-6, IMPORT-7: a broken contract in any of the three config files, and an unmatched
+    ignore at the default `error`, is exit 1 and one finding at the config naming the contract or the entry, its chain
+    within the lines import-linter rendered; the root packages may stand in different directories."""
     repo = build_repo(files)
     code, output = run(capsys, repo)
     (finding,) = rule_findings(repo, Rule.IMPORT_CONTRACT)
@@ -134,20 +135,21 @@ def test_a_contract_that_does_not_hold_is_one_finding_at_its_config(build_repo, 
          [f"{REFUSED}contract guarded in .importlinter has invalid options (forbidden_modules: This is a required field.)"]),
     ],
     ids=[
-        "cell 2 a kept forbidden contract",
-        "cell 6 independence kept",
-        "cell 6 acyclic_siblings kept",
-        "cell 7 two configs",
-        "cell 8 a root package without a tracked __init__",
-        "cell 9 a root package in two production directories",
-        "cell 10 a root package also under tests",
-        "cell 14 an unknown contract type",
-        "cell 15 a required field missing",
+        "a kept forbidden contract",
+        "independence kept",
+        "acyclic_siblings kept",
+        "two configs",
+        "a root package without a tracked __init__",
+        "a root package in two production directories",
+        "a root package also under tests",
+        "an unknown contract type",
+        "a required field missing",
     ],
 )
 def test_the_import_contract_rule_judges_the_contracts(build_repo, capsys, files, expected_code, expected_lines):
-    """#61 rules 2-8: kept is clean, a config the rule cannot judge is exit 2 naming why, and every printed path is
-    repository-relative."""
+    """IMPORT-1, IMPORT-7: kept contracts are clean, a root package needs exactly one tracked production directory and
+    a copy under the tests does not count; a config the rule cannot judge is exit 2 naming why, and every printed path
+    is repository-relative."""
     repo = build_repo(files)
     code, output = run(capsys, repo)
     assert code == expected_code, output
@@ -206,9 +208,9 @@ KIND_CELLS = [
 def test_each_kind_of_import_contract_result_carries_its_event_at_the_config(
     build_repo, files, finding_events, note_events
 ):
-    """#61 rule 7, cell 16b and O23: a broken contract and an unmatched ignore at `error` are findings of their own
-    event, one at `warn` or a grimp warning is a note of its own, `none` is nothing; location, fact and fix carry no rule
-    id and no full stop."""
+    """O23, IMPORT-1, IMPORT-6, ROW-7, ROW-14: a broken contract and an unmatched ignore at `error` are findings of
+    their own event, one at `warn` or a grimp warning is a note of its own, `none` is nothing; a finding's location is
+    the config, and its fact and fix carry no rule id and no full stop."""
     repo = build_repo(files)
     findings, notes = rule_findings(repo, Rule.IMPORT_CONTRACT), rule_notes(repo, Rule.IMPORT_CONTRACT)
     assert ([finding.event for finding in findings], [note.event for note in notes]) == (finding_events, note_events)
@@ -218,6 +220,8 @@ def test_each_kind_of_import_contract_result_carries_its_event_at_the_config(
 
 
 def test_an_unmatched_ignore_names_its_expression_and_a_grimp_warning_the_skipped_module_without_a_local_path(build_repo):
+    """IMPORT-6: an unmatched ignore at `warn` is a note naming the ignored expression, and a grimp warning names the
+    skipped module repository-relative."""
     ignoring = build_repo({**SHOP, ".importlinter": ini({**STALE_IGNORE, "unmatched_ignore_imports_alerting": "warn"})})
     (unused,) = rule_notes(ignoring, Rule.IMPORT_CONTRACT)
     skipping = build_repo({**SHOP, "src/shop/some.module.py": "", ".importlinter": ini(FORBIDDEN)})
@@ -231,7 +235,8 @@ def test_an_unmatched_ignore_names_its_expression_and_a_grimp_warning_the_skippe
     ({**SHOP_DB_IMPORTS_WEB, ".importlinter": ini(FORBIDDEN)}, FindingEvent.BROKEN, ("src/shop/db.py", "x = 1\n")),
 ], ids=["an unmatched ignore", "an offending import"])
 def test_removing_the_unmatched_ignore_or_the_offending_import_clears_its_finding(build_repo, files, event, remedy):
-    """O23: the finding is there first; the fix it asks for, done, leaves the rule clean."""
+    """O23, IMPORT-1, IMPORT-6: the finding is there first; removing the unmatched ignore, or the offending import,
+    leaves the rule clean."""
     repo = build_repo(files)
     before = [finding.event for finding in rule_findings(repo, Rule.IMPORT_CONTRACT)]
     (repo / remedy[0]).write_text(remedy[1])
@@ -255,7 +260,8 @@ TWO_KEPT = {"guarded": FORBIDDEN, "apart": {"type": "independence", "modules": [
     ids=["no contract", "one contract", "two contracts", "setup.cfg", "pyproject.toml without a contract", "pyproject.toml"],
 )
 def test_the_imports_row_counts_the_contracts_the_config_declares_and_the_judgement_stays_clean(build_repo, capsys, configs):
-    """O23 and decision 1: the extent is read from both owners; a config without contracts is clean with extent 0."""
+    """IMPORT-1, IMPORT-2, ROW-11: each config file declares contracts, the judgement stays clean and the row counts
+    the contracts the config declares, `0 contracts` for a config without one."""
     repo = build_repo({**SHOP, **configs})
     _, output = run(capsys, repo)
     (verdict,) = [found for found in check_result(repo).verdicts if found.rule is Rule.IMPORT_CONTRACT]
@@ -299,7 +305,7 @@ def test_a_syntax_error_is_unparsable_and_hides_no_other_rule(build_repo, capsys
 
 
 def test_a_config_linked_out_of_the_repository_cannot_be_judged(build_repo, elsewhere, capsys):
-    """#61 rule 3, cell 18: the config is read through repository.read_text, which keeps it inside."""
+    """A config that is a link out of the repository cannot be judged, and the row never names the outside place."""
     repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
     (elsewhere / "outside.ini").write_text(ini(FORBIDDEN))
     (repo / ".importlinter").unlink()
@@ -527,7 +533,7 @@ def test_the_source_text_a_syntax_error_echoes_is_escaped_and_cut(build_repo, ca
 
 
 def test_a_config_linked_to_nowhere_cannot_be_judged(build_repo, capsys):
-    """#76 rule 4, cell 12: a name that exists but leads nowhere is a file git has and the rule cannot read."""
+    """IMPORT-4: a config that is a link to nowhere is a name the tree holds and the rule cannot read: exit 2."""
     repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
     (repo / ".importlinter").unlink()
     (repo / ".importlinter").symlink_to("missing.ini")
@@ -572,7 +578,8 @@ def test_a_malformed_config_value_cannot_be_judged_without_a_traceback(build_rep
 
 @pytest.mark.parametrize("files", [SHOP, SHOP_DB_IMPORTS_WEB], ids=["kept", "broken"])
 def test_a_run_writes_nothing_and_restores_sys_path(build_repo, capsys, files):
-    """#61 rules 1 and 6, cell 22: no cache, no change to the checkout, and sys.path as it was."""
+    """IMPORT-5: a run, kept or broken, writes no cache, changes nothing in the checkout and leaves sys.path
+    as it was."""
     repo = build_repo({**files, ".importlinter": ini(FORBIDDEN)})
     path_before = list(sys.path)
     run(capsys, repo)
@@ -583,7 +590,7 @@ def test_a_run_writes_nothing_and_restores_sys_path(build_repo, capsys, files):
 
 @pytest.mark.integration
 def test_qualitys_own_tree_holds_its_layers(capsys):
-    """#61 rule 8, cell 23: quality's own layers contract is enforced and kept."""
+    """IMPORT-1, ROW-11: quality's own layers contract is kept, and the clean row counts its contracts."""
     code, output = run(capsys, QUALITY_ROOT)
     declared = architecture.contracts_of({"pyproject.toml": (QUALITY_ROOT / "pyproject.toml").read_text()}).contracts
     assert (code, is_clean(output), leading_count(area_fact(output, Area.IMPORTS))) == (0, True, len(declared)), output

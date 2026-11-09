@@ -65,7 +65,7 @@ rows, by area:
   shape breaks, its fact then holding the place too, and `misplaced` where only the place does (O19).
 - `imports`: a broken contract is a `broken` finding; an unmatched ignore is an `unused` finding at `error` and an
   `unused` note at `warn`; a grimp or import-linter warning is a `warning` note (O23); a `broken` finding's detail
-  lines are import-linter's own rendering of the contract (O25).
+  lines are import-linter's own rendering of the contract ([Rows](#rows)).
 - `secrets`: a key is a `secret` finding whose fact names gitleaks' rule and, in history, the commit's first eight
   characters, never the value (O28); a staged key names no commit (O32); its fix is lines to copy (O33).
 - `workflows`: actionlint's finding is `invalid` and zizmor's `insecure`, zizmor's fact naming its audit and its fix

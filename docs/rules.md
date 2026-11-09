@@ -196,18 +196,26 @@ It applies these rules:
   comparison with the base and `check --fix` treat a pair whose files git renamed as the same pair (see the baseline
   paragraph below).
 - `import-contract`: the repository's [import-linter](https://github.com/seddonym/import-linter) contracts must be
-  kept. The config is the tracked `.importlinter` or `setup.cfg` (`[importlinter]`) or `pyproject.toml`
-  (`[tool.importlinter]`), counted once its name exists in the tree: a tracked one deleted from disk is none, a symlink to
-  nowhere cannot be read (exit `2`).
+  kept (IMPORT-1). The config is the tracked `.importlinter` or `setup.cfg` (`[importlinter]`) or `pyproject.toml`
+  (`[tool.importlinter]`) (IMPORT-2), counted once its name exists in the tree: a tracked one deleted from disk is none
+  (IMPORT-3), a symlink to nowhere cannot be read (exit `2`) (IMPORT-4).
 
   Ruled by the operator: without one the rule only measures; the `imports` row is a grey note, the area is not counted
   among the clean areas, and the verdict names it.
 
-  The `imports` row reads `· imports  not set up  no import-linter config`, dim at a terminal, the exit stays `0`, and the verdict line says `imports not enforced`
-  before the duration, after debt's note. A config with contracts that are kept is `✓ imports  clean  N contracts` (a config without a contract: `0 contracts`). import-linter 2.15 runs inside quality as a library, never its CLI, and writes nothing to
-  the checkout (no `.import_linter_cache`). A broken contract is one finding `! <config>  broken  contract <name>`, with the lines import-linter renders for it (the chain, `shop.db -> shop.web (l.1)`, and the contract's guidance) under the row behind `| `, fix `change the import or the contract`, exit `1`. An `ignore_imports` entry no
-  import matches follows the contract's `unmatched_ignore_imports_alerting`: `error` (the default) is a finding `unused  contract <name> ignores a -> b`, fix `delete it from the contract's ignore_imports`, `warn` a note row `· <config>  unused  contract <name> ignores a -> b`, `none` nothing. Each root
-  package is the one tracked `<dir>/<name>/__init__.py` outside the tests. The rule cannot judge (exit `2`, before any
+  The [`imports` row](output.md#area-rows) reads `· imports  not set up  no import-linter config`, dim at a terminal,
+  the exit stays `0`, and the [verdict line](output.md#the-closing-line) says `imports not enforced` before the
+  duration, after debt's note. A config with contracts that are kept is
+  [`✓ imports  clean  N contracts`](output.md#area-rows) (a config without a contract: `0 contracts`). import-linter
+  2.15 runs inside quality as a library, never its CLI, and writes nothing to the checkout (no `.import_linter_cache`)
+  (IMPORT-5). A broken contract is one finding `! <config>  broken  contract <name>`, with the lines import-linter
+  renders for it (the chain, `shop.db -> shop.web (l.1)`, and the contract's guidance) under the [row](output.md#rows)
+  behind `| `, fix `change the import or the contract`, exit `1`. An `ignore_imports` entry no import matches follows
+  the contract's `unmatched_ignore_imports_alerting`: `error` (the default) is a finding
+  `unused  contract <name> ignores a -> b`, fix `delete it from the contract's ignore_imports`, `warn` a
+  [note row](output.md#notes) `· <config>  unused  contract <name> ignores a -> b`, `none` nothing (IMPORT-6). Each root
+  package is the one tracked `<dir>/<name>/__init__.py` outside the tests (IMPORT-7). The rule cannot judge (exit `2`,
+  before any
   caller code runs or any file outside is read) two configs that each hold a section, a `contract_types` option
   (plugins would be imported), a type other than forbidden, layers, independence, protected and acyclic_siblings,
   invalid contract options, a config value of the wrong type (`... in pyproject.toml cannot be judged: ...`), a
