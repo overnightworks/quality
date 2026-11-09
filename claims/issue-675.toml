@@ -1,8 +1,0 @@
-claim_id = "d4f2779cd2bd4b9abb78a9219a90b96c"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "3e276f6dc3635f8a8065b8002733836695721ac5"
-branch = "claude/issue-675-d7-baseline-side-ids"
-scope = ["docs/rules.md", "tests/test_clones_baseline.py", "tests/test_verdict.py", "tests/test_verdict_renames.py", "tests/workflows/test_gate_sonar.py"]
-opened_commit = "5aad63caf933bfe63e9b686c0de892db13c932ec"
-whole_reason = "docs/rules.md baseline bullet from A malformed baseline on either side to its end, and the tests that prove it, linked by BASELINE IDs; the bullet before is 7p, 7q-i and 7q-ii."
