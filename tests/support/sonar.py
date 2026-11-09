@@ -78,7 +78,8 @@ class FakeSonar:
     @staticmethod
     def measures_asked_for(url: str, answer: object) -> object:
         """SonarCloud answers a measures request with the metrics it names, so another metric leaves the measure out."""
-        if urlparse(url).path.removeprefix("/api/") == "measures/component" and parse_qs(urlparse(url).query).get("metricKeys") != ["violations"]:
+        asked_metrics = parse_qs(urlparse(url).query).get("metricKeys")
+        if FakeSonar.endpoint_of(url) == "measures/component" and asked_metrics != ["violations"]:
             return {"component": {"measures": []}}
         return answer
 

@@ -303,7 +303,10 @@ def test_a_search_that_never_reaches_the_measure_is_exit_two_with_a_rerun_step(m
     assert "counts 1 open findings" in err
     assert f"lists 0 after {sonar.FINDINGS_READ_ATTEMPTS} reads" in err
     assert err.endswith("next: re-run this run's failed jobs\n")
-    assert (len(fake.urls_to("issues/search")), len(sleeps)) == (sonar.FINDINGS_READ_ATTEMPTS, sonar.FINDINGS_READ_ATTEMPTS - 1)
+    assert (len(fake.urls_to("issues/search")), len(sleeps)) == (
+        sonar.FINDINGS_READ_ATTEMPTS,
+        sonar.FINDINGS_READ_ATTEMPTS - 1,
+    )
 
 
 @pytest.mark.parametrize(
@@ -321,7 +324,19 @@ def test_a_search_that_never_reaches_the_measure_is_exit_two_with_a_rerun_step(m
         {"component": "x"},
         ["not", "an", "object"],
     ],
-    ids=["no measures key", "no measure", "other measure", "word", "negative", "fraction", "padded", "number", "measures not a list", "component not an object", "wrong shape"],
+    ids=[
+        "no measures key",
+        "no measure",
+        "other measure",
+        "word",
+        "negative",
+        "fraction",
+        "padded",
+        "number",
+        "measures not a list",
+        "component not an object",
+        "wrong shape",
+    ],
 )
 def test_an_unreadable_measure_is_exit_two_before_any_finding_is_read(monkeypatch, capsys, measures):
     """SONAR-113: a missing or malformed violations measure is exit 2 before the first issues/search request"""

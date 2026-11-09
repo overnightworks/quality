@@ -138,9 +138,9 @@ which count only once they reach the analysis's own count (SONAR-78, SONAR-110).
 `CANCELED`, that is still pending after a bounded number of polls, or that belongs to another analysis is exit `2`
 (SONAR-79). A scope SonarCloud does not resolve is exit `2` before the findings
 are read: its issue search would answer zero findings. The request that proves the scope resolves asks for
-the `violations` measure and hands its answer on (SONAR-80). Anything unreadable is exit `2` (SONAR-29). The command follows no
-redirect (SONAR-81), so the token reaches SonarCloud alone; an HTTP error, a redirect, a timeout or an unreachable
-host is exit `2` too (SONAR-82).
+the `violations` measure and hands its answer on (SONAR-80). Anything unreadable is exit `2` (SONAR-29). The command
+follows no redirect (SONAR-81), so the token reaches SonarCloud alone; an HTTP error, a redirect, a timeout or an
+unreachable host is exit `2` too (SONAR-82).
 
 The `violations` measure is the analysis's own count of unresolved issues in the scope, the same for a pull request, the
 default branch and any other branch. The issue search is a separate index that can trail the analysis, so a read of

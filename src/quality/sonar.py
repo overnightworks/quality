@@ -433,7 +433,9 @@ def require_resolved(analysis: Analysis, transport: Transport) -> object:
     # An unauthenticated, misspelled or never-analysed scope answers the issue search with zero
     # findings and no error, so read the measures of this exact scope first: it is 404 when the
     # credential, the key or the scope does not resolve.
-    url = api_url("measures/component", component=analysis.project.key, metricKeys="violations", **scope_query(analysis.scope))
+    url = api_url(
+        "measures/component", component=analysis.project.key, metricKeys="violations", **scope_query(analysis.scope)
+    )
     try:
         return transport(url, analysis.authorization)
     except SonarHttpError as error:
@@ -460,8 +462,13 @@ def own_count(resolved: object, analysis: Analysis) -> int:
     raise CannotJudge(f"SonarCloud answered {endpoint} without a readable violations measure")
 
 
-def findings_reaching_the_measure(analysis: Analysis, resolved: object, transport: Transport, sleep: Sleep) -> OpenFindings:
-    """The open findings once the issue search holds at least the analysis's own count; the first round reuses `resolved`."""
+def findings_reaching_the_measure(
+    analysis: Analysis, resolved: object, transport: Transport, sleep: Sleep
+) -> OpenFindings:
+    """The open findings once the issue search holds at least the analysis's own count.
+
+    The first round reuses `resolved`.
+    """
     for read in range(1, FINDINGS_READ_ATTEMPTS + 1):
         if read > 1:
             sleep(TASK_POLL_INTERVAL_SECONDS)
