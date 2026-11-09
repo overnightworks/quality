@@ -175,17 +175,19 @@ It applies these rules:
   `near copy` row at its second side (`function check and tests/test_a.py run`, fix: give the shared body one owner and
   call it, or make the cases one parametrized test) (CLONE-6) and so is a held pair the tree lost, even when a side
   was deleted (`can fall` at its first side: `pair tests/test_a.py run <-> tests/test_b.py check is gone`, fix:
-  `quality check --fix`). A Python file that cannot be parsed may hide a pair, so with a `[clones]` table the `debt` row is `✗ not checked`
-  (exit `2`), as for `size`. The baseline is read once for both rules: one that cannot be read leaves both
-  unjudged (the `debt` row names the reason once, exit `2`), also when it has no `[clones]` table, since the mode is then unknown.
+  `quality check --fix`) (CLONE-7). A Python file that cannot be parsed may hide a pair, so with a `[clones]` table the
+  `debt` row is `✗ not checked` (exit `2`), as for `size` (CLONE-8). The baseline is read once for both rules: one that
+  cannot be read leaves both unjudged (the `debt` row [names the reason once](output.md#refusals), exit `2`), also when
+  it has no `[clones]` table, since the mode is then unknown (CLONE-9).
 
   Ruled by the operator: quality owns this detector instead of calling jscpd or lizard; it is the detector taken over
   from aco.
 
-  The detector compares the functions' name-folded token streams and judges Python only. The threshold, what makes a
-  pair, how it is named, that tests count, the report-only mode and the printed lines are defaults the operator never
-  answered. A renamed file or function orphans the held pair and names a new one. Only the verdict's comparison with the
-  base treats a pair whose files git renamed as the same pair (see the baseline paragraph below).
+  The detector compares the functions' name-folded token streams and judges Python only (CLONE-10). The threshold, what
+  makes a pair, how it is named, that tests count, the report-only mode and the printed lines are defaults the operator
+  never answered. A renamed file or function orphans the held pair and names a new one (CLONE-11). Only the verdict's
+  comparison with the base and `check --fix` treat a pair whose files git renamed as the same pair (see the baseline
+  paragraph below).
 - `import-contract`: the repository's [import-linter](https://github.com/seddonym/import-linter) contracts must be
   kept. The config is the tracked `.importlinter` or `setup.cfg` (`[importlinter]`) or `pyproject.toml`
   (`[tool.importlinter]`), counted once its name exists in the tree: a tracked one deleted from disk is none, a symlink to

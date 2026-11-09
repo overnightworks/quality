@@ -36,13 +36,13 @@ def pairs_by_area(files: dict[str, str]) -> dict[Area, int]:
         "CLONE-1 a 40-token copy is one pair",
         "CLONE-3 a copy between two tests counts as tests",
         "CLONE-3 a test that copies production counts as production",
-        "a .ts copy of a Python function is no pair",
-        "two identical .ts files are no pair",
+        "CLONE-10 a .ts copy of a Python function is no pair",
+        "CLONE-10 two identical .ts files are no pair",
     ],
 )
 def test_pairs_are_counted_by_area(files, production, tests):
-    """CLONE-1, CLONE-3, CLONE-4: pairs are counted by area. The 39-token function is the 40-token one with one `pass`
-    less (3 + 35 + 1 = 39)."""
+    """CLONE-1, CLONE-3, CLONE-4, CLONE-10: pairs are counted by area. The 39-token function is the 40-token one with
+    one `pass` less (3 + 35 + 1 = 39)."""
     assert pairs_by_area(files) == {Area.PRODUCTION: production, Area.TESTS: tests}
 
 

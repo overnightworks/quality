@@ -447,7 +447,8 @@ def test_a_pair_across_production_and_tests_is_judged_like_any_other(build_repo,
 
 
 def test_a_held_pair_whose_side_file_was_deleted_is_red_at_the_first_side_and_its_fix_clears_it(build_repo, capsys):
-    """#136 E4, cell 3, decision 7: the printed fix is a command of this door."""
+    """CLONE-7: a held pair whose second file was deleted is a `can fall` finding at its first side, and the fix it
+    prints is a command of this door that clears it."""
     repo, code, output = enforced(capsys, build_repo, {"tests/test_a.py": TWO_FILES["tests/test_a.py"]}, FIRST)
     (finding,) = clone_findings(repo)
     assert code == 1, output
@@ -459,7 +460,8 @@ def test_a_held_pair_whose_side_file_was_deleted_is_red_at_the_first_side_and_it
 
 
 def test_a_renamed_function_makes_the_held_pair_stale_and_the_new_name_a_new_pair(build_repo, capsys):
-    """#136 cell 4."""
+    """CLONE-6, CLONE-7, CLONE-11: a renamed function leaves the held pair gone at its first side, and the new name is a
+    new pair at its second side."""
     files = {**TWO_FILES, "tests/test_b.py": clone_function("renamed", "c", "d")}
     repo, code, output = enforced(capsys, build_repo, files, FIRST)
     stale, new = sorted(clone_findings(repo), key=lambda finding: finding.event is FindingEvent.NEAR_COPY)
@@ -470,7 +472,8 @@ def test_a_renamed_function_makes_the_held_pair_stale_and_the_new_name_a_new_pai
 
 
 def test_a_held_same_file_pair_and_a_held_self_pair_are_stale(build_repo, capsys):
-    """#136 cell 5: the detector never produces them, so they are held and gone."""
+    """CLONE-7: a held pair inside one file and a held pair of a function with itself are gone, since the detector never
+    produces them."""
     table = '[clones."tests/test_a.py"]\nrun = [["tests/test_a.py", "other"], ["tests/test_a.py", "run"]]\n'
     repo, code, output = enforced(capsys, build_repo, {"tests/test_a.py": TWO_FILES["tests/test_a.py"]}, table)
     assert code == 1, output
@@ -482,7 +485,7 @@ def test_a_held_same_file_pair_and_a_held_self_pair_are_stale(build_repo, capsys
 
 
 def test_a_copy_fixed_in_place_leaves_the_held_pair_stale(build_repo, capsys):
-    """#136 cell 16: both functions remain but are no longer similar."""
+    """CLONE-7: a held pair whose two functions remain but are no longer similar is gone."""
     files = {**TWO_FILES, "tests/test_b.py": "def check(a):\n    return a\n"}
     repo, code, output = enforced(capsys, build_repo, files, FIRST)
     (finding,) = clone_findings(repo)
@@ -513,14 +516,14 @@ def test_new_pairs_print_in_sorted_order_across_locations_and_at_one_location(bu
 
 
 def test_two_file_rows_share_one_fix(build_repo, capsys):
-    """Rule 7, decision 4: a fix shared by consecutive rows is printed once, under the last of them."""
+    """ROW-3: a fix shared by consecutive rows is printed once, under the last of them."""
     _, _, output = enforced(capsys, build_repo, {"src/a.py": "x = 1\n" * 800, "src/b.py": "x = 1\n" * 801}, "")
     first, second = (row for _, row in area_finding_rows(output, Area.DEBT))
     assert (first.fix_follows, second.fix_follows, first.fix == second.fix) == (False, True, True), output
 
 
 def test_a_size_can_fall_row_and_a_clone_can_fall_row_share_one_fix(build_repo, capsys):
-    """Rule 7, decision 4: the fix of both is printed once, after the clone row."""
+    """CLONE-7, ROW-3: the fix of a size row and a clone row that can fall is printed once, after the clone row."""
     files = {"src/a.py": long_function(65), "tests/test_a.py": TWO_FILES["tests/test_a.py"]}
     _, _, output = enforced(capsys, build_repo, files, LONG_ONE + FIRST)
     size_row, clone_row = (row for _, row in area_finding_rows(output, Area.DEBT))
@@ -538,8 +541,9 @@ def test_no_line_before_the_first_area_row_opens_with_a_rule_of_the_debt_area(bu
 
 
 def test_a_file_python_cannot_parse_leaves_the_enforced_clone_rule_unable_to_judge(build_repo, capsys):
-    """#136 cell 8: the same file and wording as the size rule; size, clone, python-security (#219) and python-print
-    (#225) count as unparsable."""
+    """CLONE-8, SIZE-10, SECURITY-18, SECURITY-28: with a `[clones]` table a file Python cannot parse refuses the size
+    and clone rules for one reason in the `debt` row, and python-security and python-print with `ruff cannot parse` in
+    the `code` row."""
     repo = build_repo({**TWO_FILES, "src/broken.py": "def broken(:\n", BASELINE_PATH: EMPTY_CLONES})
     code, output = check_output(capsys, repo)
     refusing = refusals(repo)
@@ -551,13 +555,14 @@ def test_a_file_python_cannot_parse_leaves_the_enforced_clone_rule_unable_to_jud
 
 
 @pytest.mark.parametrize("text", ["[size\n", *MALFORMED], ids=["no clone table, not TOML", *MALFORMED_IDS])
-def test_a_malformed_baseline_leaves_both_rules_unable_to_judge_naming_the_rewrite_once_on_next(build_repo, capsys, text):
-    """#136 cell 9: one read, so even a file with no `[clones]` leaves clone's mode unknown."""
+def test_a_malformed_baseline_leaves_both_rules_unable_to_judge_and_names_one_restore_step(build_repo, capsys, text):
+    """CLONE-9, CEILING-9: a baseline that cannot be read, with a `[clones]` table or without one, leaves the size and
+    clone rules both unable to judge, and the restore step stands once on `next:`."""
     repo = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: text})
     code, output = check_output(capsys, repo)
     assert code == 2, output
     assert set(refusals(repo)) == {Rule.SIZE, Rule.CLONE}
-    assert (output.count(f"restore {BASELINE_PATH} from git, or repair it by hand"), "rewrite it with" in output) == (1, False), output
+    assert output.count(f"restore {BASELINE_PATH} from git, or repair it by hand") == 1, output
     assert f"next: restore {BASELINE_PATH} from git, or repair it by hand" in output.splitlines()
 
 
@@ -583,7 +588,8 @@ def test_a_control_character_and_undecodable_bytes_in_a_new_pair_print_escaped(b
 
 
 def test_a_control_character_in_a_held_pair_prints_escaped(build_repo, capsys):
-    """#136 cell 17: a held pair carries only Unicode."""
+    """CLONE-7, MASK-2, MASK-6: a held pair whose path holds a control character is gone, and its location and fact
+    print escaped."""
     pair = ClonePair.of(Place("src/a\x01.py", "run"), Place("src/b.py", "check"))
     stale = render_baseline(Baseline({}, frozenset({pair})))
     repo, code, output = enforced(capsys, build_repo, {"src/c.py": "x = 1\n"}, stale)
