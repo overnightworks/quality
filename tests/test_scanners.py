@@ -45,6 +45,7 @@ from tests.support.scanners import (
     fake_zizmor,
     lacking,
     recording,
+    run_deadline,
     scan,
     serving,
 )
@@ -173,7 +174,7 @@ def test_a_relative_repository_path_starting_with_a_dash_is_scanned_as_that_repo
     workdir.mkdir()
     subprocess.run(["git", "clone", "-q", str(repo), "--", str(workdir / "-repo")], check=True)
     monkeypatch.chdir(workdir)
-    findings = scanners.scan_secrets(Path("-repo"), {}).findings
+    findings = scanners.scan_secrets(Path("-repo"), {}, run_deadline()).findings
     assert [(finding.path, finding.line) for finding in findings] == [("config.txt", 1)]
 
 
@@ -285,7 +286,7 @@ def test_a_git_older_than_2_41_is_exit_2_naming_the_version(
 @pytest.mark.scanner
 def test_installed_binary_reports_the_pinned_version(build_repo, installed_scanners):
     """SCANNER-5: the gitleaks mise installed reports the pinned version, so it runs."""
-    assert scanners.scan_secrets(build_repo({}), {}).findings == []
+    assert scanners.scan_secrets(build_repo({}), {}, run_deadline()).findings == []
 
 
 @pytest.mark.scanner

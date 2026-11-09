@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import config, scanners
+from quality import config, deadline, scanners
 from quality.report import Example, FindingEvent, NoteEvent, printable
 from quality.rules import Area, Rule
 from tests.support.check import (
@@ -33,7 +33,17 @@ from tests.support.check import (
 )
 from tests.support.door import CHECK_WORD, MODULE_DOOR, STAGED_WORDS, check_door, door_in
 from tests.support.git_repositories import stage
-from tests.support.scanners import OUTPUTS, check_exit_2, commit, fake_gitleaks, flagging, scan, serving, vetting
+from tests.support.scanners import (
+    OUTPUTS,
+    check_exit_2,
+    commit,
+    fake_gitleaks,
+    flagging,
+    run_deadline,
+    scan,
+    serving,
+    vetting,
+)
 from tests.support.secrets import FAKE_KEY, HOSTILE_FILE, OTHER_KEY, allow_config, assert_key_found, sha256_of
 
 RECORDED_SECRET = "PLACEHOLDER-SECRET-VALUE"  # the Secret in the recorded gitleaks-finding.json
@@ -141,7 +151,7 @@ def test_the_scan_passes_the_gates_own_config(build_repo, served_scanners):
     """SECRET-3: gitleaks is told to use quality's config, not the repository's."""
     fake_gitleaks(served_scanners, on_scan='echo "[]" > "$report"; exit 0')
     repo = build_repo({".gitleaks.toml": "[allowlist]\n"})
-    scanners.scan_secrets(repo, {})
+    scanners.scan_secrets(repo, {}, run_deadline())
     given = (served_scanners / "gitleaks.arguments").read_text().split()
     assert given[given.index("--config") + 1] == str(scanners.GITLEAKS_CONFIG)
 
@@ -255,7 +265,7 @@ def test_the_key_reaches_no_output_and_no_file_and_the_scratch_directory_is_gone
     scratch_parent.mkdir()
     monkeypatch.setattr(tempfile, "tempdir", str(scratch_parent))
     if failure == "gitleaks-stalls":
-        monkeypatch.setattr(scanners, "SECRET_SCAN_TIMEOUT_SECONDS", 1)
+        monkeypatch.setattr(deadline, "RUN_DEADLINE_SECONDS", 1)
     if failure != "none":
         failing = tmp_path / "failing"
         failing.mkdir()

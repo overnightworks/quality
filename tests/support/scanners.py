@@ -1,12 +1,13 @@
 import shlex
 import subprocess
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import NoReturn
 
 import pytest
 
-from quality import installation, scanners
+from quality import deadline, installation, scanners
 from tests.support.advisories import reporting
 from tests.support.check import heard
 from tests.support.door import check_door
@@ -124,6 +125,11 @@ def flagging(value: str) -> str:
         f'if grep -q -F -e {shlex.quote(value)} "$0.vetted"; then cp {OUTPUTS / "gitleaks-finding.json"} "$report"; exit 7; fi\n'
         'echo "[]" > "$report"; exit 0'
     )
+
+
+def run_deadline() -> deadline.RunDeadline:
+    """A deadline of the real length that started now, on the real clock."""
+    return deadline.RunDeadline.starting(time.monotonic)
 
 
 def check_exit_2(repo: Path, capsys, locate_zizmor=never_located) -> str:

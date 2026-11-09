@@ -138,6 +138,8 @@ quality itself.
 
 **Errors.** The [exit contract](output.md#exit-codes) is 0 clean, 1 findings, 2 cannot judge, 130 interrupted.
 Cannot judge is never clean, and a rule that cannot judge refuses only itself.
+One `check` run has one time budget, so a scanner that hangs leaves the rules after it without time, and each of them
+cannot judge.
 
 ## 6. Constraints and reasons
 

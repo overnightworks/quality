@@ -1,12 +1,14 @@
 import re
 import subprocess
+import time
 from collections import Counter
+from collections.abc import Callable
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
 
 import pytest
 
-from quality import check, cli, config, env_file, installation, report, scanners
+from quality import check, cli, config, deadline, env_file, installation, report, scanners
 from quality.compose import is_compose_file
 from quality.report import CannotJudge, Command, Example, Finding, FindingEvent, Reason, Unparsable, printable
 from quality.rules import Area, Rule
@@ -16,6 +18,7 @@ from tests.support.check import (
     CLEAN_VERDICT,
     area_finding_rows,
     check_result,
+    clock_past_the_deadline,
     compose,
     env_row_stands,
     installed_ruff,
@@ -23,6 +26,8 @@ from tests.support.check import (
     loosen_requirement,
     note_rows,
     refusal_row,
+    refusals,
+    refusals_of,
     refused,
     rows_of,
     rule_findings,
@@ -32,7 +37,7 @@ from tests.support.check import check_output as run
 from tests.support.config_refusals import GATE, Refusal, check_refusals
 from tests.support.door import check_door
 from tests.support.generated_files import generated_config
-from tests.support.scanners import fake_scanner, fake_zizmor, lacking, never_located, nothing_installed
+from tests.support.scanners import fake_gitleaks, fake_scanner, fake_zizmor, lacking, never_located, nothing_installed
 
 
 def deleted_compose_repo(build_repo, tmp_path):
@@ -463,3 +468,65 @@ def test_a_path_in_conflict_counts_once_among_the_tracked_paths(build_repo):
     stages = "".join(f"100644 {blob} {stage}\ta.txt\n" for stage in (1, 2, 3))
     subprocess.run(["git", "-C", str(repo), "update-index", "--index-info"], input=f"0 {'0' * 40}\ta.txt\n{stages}", text=True, check=True)
     assert check_result(repo, installed_ruff, cli.INSTALLED_ZIZMOR).tracked_paths == 2
+
+
+SCANNER_OF_RULE = {Rule.LEAK: scanners.GITLEAKS, Rule.WORKFLOW_LINT: scanners.ACTIONLINT, Rule.WORKFLOW_SECURITY: scanners.ZIZMOR}
+SCANNER_NAMES = tuple(SCANNER_OF_RULE.values())
+DEADLINE_RULES = tuple(SCANNER_OF_RULE)
+WORKFLOW_FILES = {".github/workflows/w.yml": "on: push\n"}
+
+
+def ends_soon(pid: int) -> bool:
+    """Whether `pid`, killed a moment ago, is gone within a few seconds: the kill lands asynchronously, and a process
+    that waits to be reaped counts as gone."""
+    limit = time.monotonic() + 5
+    while time.monotonic() < limit:
+        try:
+            if Path(f"/proc/{pid}/stat").read_text().rsplit(") ", 1)[1][0] == "Z":
+                return True
+        except FileNotFoundError:
+            return True
+        time.sleep(0.01)
+    return False
+
+
+def stub_scanners(served_scanners, zizmor_directory, on_scan: dict[str, str]) -> Callable[[], str]:
+    """Replaces gitleaks, actionlint and zizmor by stubs that run their `on_scan` (shell) for a scan, and returns the
+    zizmor locator."""
+    fake_gitleaks(served_scanners, on_scan=on_scan[scanners.GITLEAKS])
+    fake_scanner(served_scanners, scanners.ACTIONLINT, on_scan[scanners.ACTIONLINT])
+    return fake_zizmor(zizmor_directory, on_scan[scanners.ZIZMOR])
+
+
+def test_a_rule_with_no_time_left_starts_no_scan_and_cannot_judge(build_repo, served_scanners, tmp_path, fake_git):
+    """SCANNER-20, REFUSAL-22, REFUSAL-12: with the run's time spent gitleaks, actionlint and zizmor start nothing, no
+    mirror is cloned, and each rule cannot judge in the spent wording with no step of its own."""
+    started = tmp_path / "started"
+    fake_git(f'case "$*" in *clone*) echo clone >> {started};; esac')
+    locate_zizmor = stub_scanners(served_scanners, tmp_path / "zizmor", dict.fromkeys(SCANNER_NAMES, f"echo scan >> {started}"))
+    repo = build_repo(WORKFLOW_FILES)
+    refused_rules = refusals(repo, locate_zizmor=locate_zizmor, monotonic=clock_past_the_deadline())
+    assert refused_rules == dict.fromkeys(DEADLINE_RULES, f"the run's {deadline.RUN_DEADLINE_SECONDS} seconds are spent")
+    assert not started.exists()
+
+
+@pytest.mark.parametrize("rule", DEADLINE_RULES, ids=lambda rule: rule.value)
+def test_a_scanner_still_running_when_the_time_ends_is_stopped_and_its_rule_cannot_judge(
+    build_repo, served_scanners, tmp_path, monkeypatch, rule
+):
+    """SCANNER-19, SCANNER-20, REFUSAL-22: a scanner that outlives the run's deadline is stopped, with its child, and
+    its rule cannot judge in the cut wording."""
+    child = tmp_path / "child"
+    scanner = SCANNER_OF_RULE[rule]
+    clean = {scanners.GITLEAKS: 'echo "[]" > "$report"', scanners.ACTIONLINT: "echo '[]'", scanners.ZIZMOR: "echo '[]'"}
+    locate_zizmor = stub_scanners(served_scanners, tmp_path / "zizmor", clean | {scanner: f"sleep 30 & echo $! > {child}; wait"})
+    monkeypatch.setattr(deadline, "RUN_DEADLINE_SECONDS", 0.5)
+    repo = build_repo(WORKFLOW_FILES)
+    started = time.monotonic()
+    result = check.judge_repository(
+        repo, installed_ruff, locate_zizmor, lambda _verdict, _tracked_paths: None, lambda _area, _scanner: nullcontext(), named=[rule.area]
+    )
+    assert time.monotonic() - started < 3
+    assert refusals_of(result)[rule] == f"{scanner} did not finish within the run's 0.5 seconds"
+    if rule is Rule.LEAK:
+        assert ends_soon(int(child.read_text()))
