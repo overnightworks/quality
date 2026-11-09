@@ -694,12 +694,13 @@ workflow that only an online audit would flag is not read as fully audited:
 `✓ workflows  clean  5 workflows · offline audits only`.
 
 The `advisory` rule judges every tracked `uv.lock`, `pnpm-lock.yaml` and `requirements*.txt` (a name that starts
-with `requirements` and ends in `.txt`; `requirements.in` and `dev-requirements.txt` are not), root
+with `requirements` and ends in `.txt`; `requirements.in` and `dev-requirements.txt` are not (ADVISORY-30)), root
 and nested, with osv-scanner against the OSV advisory database (dev dependencies count) (ADVISORY-1). `uv.lock` and the
-requirements files are judged against the PyPI database, `pnpm-lock.yaml` against the npm database. A
+requirements files are judged against the PyPI database, `pnpm-lock.yaml` against the npm database (ADVISORY-31). A
 `package-lock.json`, `yarn.lock` or `bun.lock` is not judged yet.
 A repository with no tracked lock [needs no osv-scanner](commands.md#scanners) (and none is located); a database is
-downloaded only for an ecosystem with a tracked lock, once per run however many locks it has.
+downloaded only for an ecosystem with a tracked lock (ADVISORY-32), once per run
+however many locks it has (ADVISORY-33).
 A lock that is tracked but missing on disk is skipped (ADVISORY-2); one that links out of the repository (ADVISORY-3),
 is not a regular file (ADVISORY-4) or is empty (zero bytes) (ADVISORY-5) is exit `2`. A lock listed in `.gitignore` is
 still judged (ADVISORY-6).
@@ -793,23 +794,26 @@ caller's own `uv sync --locked` guards against a hand-edited lock. osv-scanner e
 `pnpm-lock.yaml` it cannot parse, which is `cannot judge`, never clean.
 
 The check job in `gate.yml` stops at 25 minutes: the 300-second download deadline and the 600-second scan limit take
-15, and setup and the other rules get the remaining 10, so quality's own `cannot judge` shows before GitHub cancels the job.
+15, and setup and the other rules get the remaining 10, so quality's own `cannot judge` shows before GitHub cancels
+the job (ADVISORY-34).
 Measured with osv-scanner 2.7.0 on 12 cores (the download at load 17 to 20): the npm archive is 219,026,863 bytes (230,735 files), the PyPI archive 37,064,024 bytes
 (26,612 files); downloading npm took 34 s; a whole `check` run over a repository with one `pnpm-lock.yaml` and one hashed
 `requirements.txt` (one pin) under `--all-packages`, both databases included, took 63 s and 69 s wall and 640 MB resident (load 3 to 5).
 A `uv.lock` is judged against the same PyPI database; that setup was not measured.
 
-A requirements file is read by quality itself (`pip_requirements.py`), because osv-scanner skips a line it cannot parse and
-still reports clean. Exactly two logical forms are accepted, after comments are dropped and `\` continuations joined:
-`name[extras]==version`, with an optional `; marker` and `--hash=` tokens, and `name[extras] @ https://.../<name>-<version>-....whl`
-with at least one `--hash`, where the wheel's distribution name equals `name` (PEP 503). Any other line (`-e`, `>=`, `~=`, a bare
-name, `-r`, `-c`, `--index-url`, any other option, a git or sdist URL, a wheel without a hash or named for another package) is exit `2`,
-naming the file and the line (`.github/requirements-build.txt: line 4 is neither ...`); a minimum version is refused because pip
-installs the newest one, so judging the lowest could hide a hole. osv-scanner reads the file as written under `--all-packages`;
-the wheel lines, which it skips, reach it as a scratch file of `name==version` lines judged under the same tracked name, so a
-finding on a wheel is named by the tracked file and an allowance's `lock` is that file's path. The packages osv-scanner lists for
-each file must equal the pins quality read: a pin it did not list is exit `2` (`osv-scanner did not read line 4 of <file>`), and so is
-a package it lists that quality did not read. The grammar is an allowlist; `-r`, `-c`, `--index-url`, `-e`, git and sdist URLs and ranges
+A requirements file is read by quality itself (`pip_requirements.py`), because osv-scanner skips a line it cannot parse
+and still reports clean. Exactly two logical forms are accepted, after comments are dropped and `\` continuations
+joined (ADVISORY-35): `name[extras]==version`, with an optional `; marker` and `--hash=` tokens (ADVISORY-36), and
+`name[extras] @ https://.../<name>-<version>-....whl` with at least one `--hash`, where the wheel's distribution name
+equals `name` (PEP 503) (ADVISORY-37). Any other line (`-e`, `>=`, `~=`, a bare name, `-r`, `-c`, `--index-url`, any
+other option, a git or sdist URL, a wheel without a hash or named for another package) is exit `2`, naming the file and
+the line (`.github/requirements-build.txt: line 4 is neither ...`) (ADVISORY-38); a minimum version is refused because
+pip installs the newest one, so judging the lowest could hide a hole. osv-scanner reads the file as written under
+`--all-packages`; the wheel lines, which it skips, reach it as a scratch file of `name==version` lines judged under the
+same tracked name, so a finding on a wheel is named by the tracked file and an allowance's `lock` is that file's path
+(ADVISORY-39). The packages osv-scanner lists for each file must equal the pins quality read: a pin it did not list is
+exit `2` (`osv-scanner did not read line 4 of <file>`) (ADVISORY-40), and so is a package it lists that quality did
+not read (ADVISORY-41). The grammar is an allowlist; `-r`, `-c`, `--index-url`, `-e`, git and sdist URLs and ranges
 wait for a caller that needs them.
 An advisory database zip with an entry that is not valid JSON is exit `2` too (ADVISORY-19).
 

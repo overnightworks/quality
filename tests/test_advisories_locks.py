@@ -52,8 +52,8 @@ def pnpm_lock(packages=(("lodash", "4.17.15"),), transitive=()) -> str:
 def test_a_pnpm_lock_is_judged_with_its_development_packages_and_names_the_folder(
     build_repo, publish_database, installed_scanners, run_gate
 ):
-    """#145 C1, C6, I1: a nested pnpm-lock.yaml is red with the fixed version and its folder, the fix saying how a
-    transitive package is fixed and printing no command that would not work."""
+    """ADVISORY-1, ADVISORY-31, O41, O43: a development package of a nested pnpm-lock.yaml is judged against the
+    npm database and is red with its fixed version and the pnpm fix naming the folder."""
     publish_database([LODASH_ADVISORY], ecosystem="npm")
     code, output = run_gate(build_repo({FRONTEND_LOCK: pnpm_lock()}))
     assert code == 1, output
@@ -66,7 +66,7 @@ def test_a_pnpm_lock_is_judged_with_its_development_packages_and_names_the_folde
 def test_two_vulnerable_versions_of_one_package_in_a_pnpm_lock_are_two_findings(
     build_repo, publish_database, installed_scanners, run_gate
 ):
-    """#145 I1: the version is part of a finding's identity, so one package at two versions is red twice."""
+    """ADVISORY-23: the version is part of a finding's identity, so one package at two versions is red twice."""
     publish_database([advisory(LODASH, fixed=("4.17.21",), package="lodash", ecosystem="npm")], ecosystem="npm")
     lock = pnpm_lock(transitive=[("lodash", "4.17.19")])
     code, output = run_gate(build_repo({FRONTEND_LOCK: lock}))
@@ -78,7 +78,7 @@ def test_two_vulnerable_versions_of_one_package_in_a_pnpm_lock_are_two_findings(
 
 @pytest.mark.scanner
 def test_several_fixed_versions_keep_the_guidance_of_the_pnpm_lock(build_repo, publish_database, installed_scanners, run_gate):
-    """#145 C6: a transitive npm package is fixed by its parent or an override, whether osv lists one fixed version or several."""
+    """ADVISORY-25, O41: several fixed versions of an npm package are all listed, and the fix stays the pnpm hint."""
     publish_database([advisory(LODASH, fixed=("4.17.21", "5.0.0"), package="lodash", ecosystem="npm")], ecosystem="npm")
     code, output = run_gate(build_repo({FRONTEND_LOCK: pnpm_lock()}))
     assert code == 1, output
@@ -102,8 +102,9 @@ def agent_runtime_requirements() -> str:
 def test_a_requirements_file_shaped_like_agent_runtimes_is_judged_26_of_26(
     build_repo, publish_database, installed_scanners, run_gate
 ):
-    """#176 acceptance and W1: a clean database leaves exit 0 only when osv-scanner read all 26 lines (S5), the wheel included;
-    a vulnerable wheel version is found as the PyPI package at the version in the wheel's name."""
+    """ADVISORY-20, ADVISORY-35, ADVISORY-37, ADVISORY-39: a clean database leaves exit 0 only when osv-scanner read all
+    26 lines, the wheel included, and the run counts 26 packages; a vulnerable wheel version is found as the PyPI
+    package at the version in the wheel's name, at the tracked file."""
     repo = build_repo({"tests/keycloak/requirements.txt": agent_runtime_requirements()})
     publish_database()
     code, output = run_gate(repo)
@@ -120,7 +121,8 @@ def test_a_requirements_file_shaped_like_agent_runtimes_is_judged_26_of_26(
 @pytest.mark.scanner
 @pytest.mark.parametrize("name", [BUILD_REQUIREMENTS, "tests/requirements.txt", "docs/requirements-dev.txt"])
 def test_every_tracked_requirements_file_is_judged_against_pypi(build_repo, publish_database, installed_scanners, run_gate, name):
-    """#176 C2."""
+    """ADVISORY-30, ADVISORY-31: a tracked file whose name starts with requirements and ends in .txt is judged against
+    the PyPI database."""
     publish_database()
     code, output = run_gate(build_repo({name: "pyyaml==5.3.1\n"}))
     assert (code, [(location, ADVISORY_ID in row.fact) for location, row in area_finding_rows(output, Area.DEPENDENCIES)]) == (1, [(name, True)]), output
@@ -131,7 +133,8 @@ def test_every_tracked_requirements_file_is_judged_against_pypi(build_repo, publ
 def test_a_file_that_is_no_requirements_txt_is_not_judged_and_downloads_no_database(
     build_repo, publish_database, served_databases, installed_scanners, run_gate, name
 ):
-    """#176 C2, counter-example."""
+    """ADVISORY-30: requirements.in, dev-requirements.txt and requirements.txt.orig are no requirements file: not
+    judged, and no database is downloaded."""
     publish_database()
     code, output = run_gate(build_repo({name: "pyyaml==5.3\n"}))
     assert (code, served_databases.requested) == (0, []), output
@@ -147,7 +150,8 @@ def test_a_file_that_is_no_requirements_txt_is_not_judged_and_downloads_no_datab
 def test_a_requirements_line_in_neither_accepted_form_is_cannot_judge_with_its_line_number(
     build_repo, publish_database, installed_scanners, run_gate, line
 ):
-    """#176 S5, S6, W1, W2: never clean, and the line is named; the file is refused before any database is fetched."""
+    """ADVISORY-38: a line in neither accepted form is never clean: the run is cannot judge and names the file and
+    the line."""
     text = f"# header\na==1\n\n{line}\nb==2\n"
     code, output = run_gate(build_repo({BUILD_REQUIREMENTS: text}))
     assert (code, f"{BUILD_REQUIREMENTS}: line 4 is neither" in output) == (2, True), output
@@ -160,12 +164,13 @@ def test_a_requirements_line_in_neither_accepted_form_is_cannot_judge_with_its_l
         ([("a", "1"), ("b", "3")], "osv-scanner did not read line 2 of tests/requirements.txt"),
         ([("a", "1"), ("b", "2"), ("c", "1")], "osv-scanner reported a package of tests/requirements.txt that quality did not read"),
     ],
-    ids=["a package left out", "another version", "an extra package"],
+    ids=["a package the report omits", "another version", "an extra package"],
 )
 def test_a_package_osv_did_not_read_as_quality_did_is_cannot_judge(
     build_repo, served_scanners, run_gate, publish_database, edited_report, packages, expected
 ):
-    """#176 S5: the cross-check against osv-scanner's own package list."""
+    """ADVISORY-40, ADVISORY-41: a pin osv-scanner did not list, or a package it listed that quality did not read, is
+    cannot judge."""
     publish_database()
     source = {"path": "@LOCK@", "type": "lockfile"}
     listed = [{"package": {"name": name, "version": version, "ecosystem": "PyPI"}} for name, version in packages]
@@ -180,7 +185,7 @@ def test_a_package_osv_did_not_read_as_quality_did_is_cannot_judge(
 def test_an_allowance_for_a_wheel_line_uses_the_tracked_requirements_path(
     build_repo, publish_database, installed_scanners, run_gate
 ):
-    """#176 R1 and W1: a finding on a wheel line is matched by the allowance for the tracked file, not a scratch path."""
+    """ADVISORY-39: a finding on a wheel line is matched by the allowance for the tracked file, not a scratch path."""
     publish_database([advisory(fixed=("0.21.0",), aliases=(), package=WEBAUTH)])
     config = allowance_config(**UV_LOCK_ALLOWANCE | {"lock": BUILD_REQUIREMENTS}, until=datetime.date(2999, 12, 31))
     code, output = run_gate(build_repo({BUILD_REQUIREMENTS: WEBAUTH_WHEEL + "\n", "quality/config.toml": config}))
@@ -207,7 +212,7 @@ def test_nothing_a_repository_writes_silences_an_npm_advisory(build_repo, publis
 
 @pytest.mark.scanner
 def test_a_big_frontend_shows_every_finding_without_a_cap(build_repo, publish_database, installed_scanners, run_gate):
-    """#145 X3."""
+    """Twenty-five npm advisories are twenty-five findings; none is capped."""
     names = [f"package-{number}" for number in range(25)]
     records = [advisory(f"GHSA-npm{number:02d}-aaaa-bbbb", package=name, ecosystem="npm") for number, name in enumerate(names)]
     publish_database(records, ecosystem="npm")
@@ -220,7 +225,7 @@ def test_a_big_frontend_shows_every_finding_without_a_cap(build_repo, publish_da
 def test_a_package_listed_as_malicious_is_red_and_the_fix_is_to_remove_or_replace_it(
     build_repo, publish_database, installed_scanners, run_gate
 ):
-    """#145 I3."""
+    """ADVISORY-26: a package listed as malicious is red and the fix is to remove or replace it."""
     malicious = advisory("MAL-2026-1", fixed=(), aliases=(), package="evil-package", ecosystem="npm")
     publish_database([malicious], ecosystem="npm")
     code, output = run_gate(build_repo({FRONTEND_LOCK: pnpm_lock([("evil-package", "1.0.0")])}))
@@ -267,7 +272,8 @@ def served_databases(publish_database, monkeypatch):
 def test_a_repository_with_both_kinds_downloads_each_database_once_and_judges_both(
     build_repo, publish_database, served_databases, installed_scanners, run_gate
 ):
-    """#145 X1: two pnpm locks, a uv.lock and a requirements file cost one npm and one PyPI download."""
+    """ADVISORY-33: two pnpm locks, a uv.lock and a requirements file cost one npm and one
+    PyPI download."""
     publish_database([LODASH_ADVISORY], ecosystem="npm")
     publish_database()
     repo = build_repo({FRONTEND_LOCK: pnpm_lock(), "src/admin/pnpm-lock.yaml": pnpm_lock(), "uv.lock": uv_lock(), "tests/requirements.txt": "pyyaml==5.3.1\n"})
@@ -280,8 +286,8 @@ def test_a_repository_with_both_kinds_downloads_each_database_once_and_judges_bo
 
 
 def test_one_deadline_spans_every_database_download(build_repo, publish_database, served_databases):
-    """#145 S4: the first download (PyPI) spends the whole budget, so the second (npm) is not even requested and the run
-    is `cannot judge`, not a hung job. The clock is injected and moves by the PyPI request alone."""
+    """ADVISORY-9: the first download (PyPI) spends the whole budget, so the second (npm) is not even requested and the
+    run is `cannot judge`, not a hung job. The clock is injected and moves by the PyPI request alone."""
     publish_database([LODASH_ADVISORY], ecosystem="npm")
     publish_database()
     now = 0.0
@@ -300,7 +306,7 @@ def test_one_deadline_spans_every_database_download(build_repo, publish_database
 
 
 def test_an_npm_database_that_cannot_be_downloaded_is_cannot_judge_and_named(build_repo, served_scanners, run_gate, database_root):
-    """#145 S3: the npm database missing makes the whole rule `cannot judge`, though the PyPI one is there."""
+    """ADVISORY-9: the npm database missing makes the whole rule `cannot judge`, though the PyPI one is there."""
     (database_root / "npm" / "all.zip").unlink()
     repo = build_repo({FRONTEND_LOCK: pnpm_lock(), "uv.lock": uv_lock()})
     fake_scanner(served_scanners, OSV, "exit 99")
@@ -309,7 +315,7 @@ def test_an_npm_database_that_cannot_be_downloaded_is_cannot_judge_and_named(bui
 
 
 def test_without_a_pnpm_lock_the_npm_database_is_not_downloaded(build_repo, served_scanners, run_gate, database_root):
-    """#145 S1: a repository with only a uv.lock is judged although no npm database is published."""
+    """ADVISORY-32: a repository with only a uv.lock is judged although no npm database is published."""
     (database_root / "npm" / "all.zip").unlink()
     fake_scanner(served_scanners, OSV, reporting(OUTPUTS / "osv-scanner-clean.json", 0))
     code, output = run_gate(build_repo({"uv.lock": uv_lock(SAFE)}))
@@ -324,7 +330,7 @@ def test_without_a_pnpm_lock_the_npm_database_is_not_downloaded(build_repo, serv
 def test_npm_names_match_exactly_as_written(
     build_repo, served_scanners, run_gate, publish_database, edited_report, affected_name, upgrades
 ):
-    """#145 I2: `lodash.merge` is not `lodash-merge`."""
+    """ADVISORY-7: npm names match as written, so `lodash.merge` is not `lodash-merge`."""
     publish_database(ecosystem="npm")
     report = edited_report("osv-scanner-finding.json", npm_report("lodash.merge", affected_name))
     fake_scanner(served_scanners, OSV, reporting(report, 1))
@@ -340,8 +346,8 @@ PNPM_ALLOWANCE = UV_LOCK_ALLOWANCE | {"lock": FRONTEND_LOCK}
 def test_an_allowance_in_a_pnpm_lock_allows_its_advisory_until_its_date(
     build_repo, served_scanners, publish_database, edited_report, capsys
 ):
-    """NPM-1: the same [[advisories.allow]] entry, with the lock's path, allows an npm advisory; once the lock is
-    fixed the entry matches nothing and is red until it is deleted (U1)."""
+    """NPM-1, ALLOW-5: the same [[advisories.allow]] entry, with the lock's path, allows an npm advisory; once the lock
+    is fixed the entry matches nothing and is red until it is deleted."""
     publish_database(ecosystem="npm")
     config = allowance_config(**PNPM_ALLOWANCE, until=datetime.date(2999, 12, 31))
     repo = build_repo({FRONTEND_LOCK: pnpm_lock(), "quality/config.toml": config})
@@ -368,7 +374,7 @@ SETUP_AND_OTHER_RULES_MINUTES = 10
 
 
 def test_the_check_job_outlasts_the_downloads_and_the_scan_so_cannot_judge_is_what_the_run_shows():
-    """#145 S4: GitHub cancelling the job would show nothing; quality's own limits must expire first."""
+    """ADVISORY-34: GitHub cancelling the job would show nothing; quality's own limits must expire first."""
     gate = yaml.safe_load((Path(__file__).parent.parent / ".github/workflows/gate.yml").read_text(encoding="utf-8"))
     limits_minutes = (advisories.DATABASE_DOWNLOAD_DEADLINE_SECONDS + advisories.ADVISORY_SCAN_TIMEOUT_SECONDS) / 60
     assert gate["jobs"]["check"]["timeout-minutes"] >= limits_minutes + SETUP_AND_OTHER_RULES_MINUTES
