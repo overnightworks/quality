@@ -1,0 +1,8 @@
+claim_id = "37c96be3ddda40d7950108318334f9a9"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "b356e41b2c17e9491c609fed556c66f954fe26e0"
+branch = "claude/issue-631-d7-live-line-ids"
+scope = ["docs/output.md", "tests/test_cli_live_line.py", "tests/test_cli_raw_output.py", "tests/test_cli_stream.py", "tests/test_output_shortening.py", "tests/test_pin_reexecution.py"]
+opened_commit = "b3e670ccfe12216756cd9e14235d239d8c957929"
+whole_reason = "docs/output.md live-line paragraph, its fence and the release line (the condition, one dim line per scanner, the free last column, the erase and its ways out, SIGTERM, the counting release line) and the tests that prove them, linked by COLOUR IDs, with 546a folded; the colour paragraph was the first slice."
