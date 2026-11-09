@@ -197,8 +197,8 @@ def test_a_fixed_move_passes_check_and_the_verdict(pull_request, capsys, arrange
 
 
 def test_a_moved_entry_is_named_by_the_fix_and_counted_in_its_rows(pull_request, capsys):
-    """FIX-36, FIX-42: a moved entry is named by a `moved` row and counted in the debt row and the verdict, and none
-    falls."""
+    """FIX-36, FIX-42, FIX-45: a moved entry is named by a `moved` row and counted in the debt row and the verdict, and
+    none falls."""
     repo = moved_with_git(pull_request)
     printed = (
         "  ✓ debt          moved          1 entry · quality/baseline.toml\n"

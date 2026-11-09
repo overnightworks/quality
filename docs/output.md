@@ -123,10 +123,11 @@ With ` · K allowed` appended where files were allowed, leaks were allowed (secr
 (dependencies) or output owners were honoured (code). Without a ceiling file the debt row is `· debt  not recorded  N
 entries over the thresholds · measured only` (`M clone pairs · partly measured only` when the ceiling file has no
 `[clones]` table, O21), with `fix: quality check --fix` under it. Under `quality check debt --fix` it is `✓
-debt  lowered  N entries · quality/baseline.toml` with a `✓` row per lowered or dropped entry, `✓ debt  recorded  N
-entries, M clone pairs · quality/baseline.toml is new`, `✓ debt  rewritten  quality/baseline.toml` (entries equal,
-text not), `! debt  N findings  nothing lowered` or `✗ debt  not fixed  <reason>`; under `--dry-run` it is `~ debt  N
-to lower` (`N to move`, `to record`, `to rewrite  text differs · quality/baseline.toml`) with a `~` row per entry.
+debt  lowered  N entries · quality/baseline.toml` with a `✓` row per lowered or dropped entry, `✓ debt  moved  N entries
+· quality/baseline.toml` where it moves entries and lowers none, `✓ debt  recorded  N entries, M clone pairs ·
+quality/baseline.toml is new`, `✓ debt  rewritten  quality/baseline.toml` (entries equal, text not), `! debt  N findings
+nothing lowered` or `✗ debt  not fixed  <reason>`; under `--dry-run` it is `~ debt  N to lower` (`N to move`, `to
+record`, `to rewrite  text differs · quality/baseline.toml`) with a `~` row per entry.
 Without an import-linter config the imports row is `· imports  not set up  no import-linter config` (ROW-13). An area
 that cannot check is `✗ <area>  not checked  <reason>` ([Refusals](#refusals)).
 
