@@ -30,7 +30,7 @@ def workflow_rows(capsys) -> list[tuple[str, FindingEvent]]:
 
 @pytest.mark.scanner
 def test_a_local_action_in_the_dollar_slash_form_passes_both_scanners(build_repo, installed_scanners):
-    """A step in GitHub's `uses: $/…` form of a local action passes, the action file clean."""
+    """WORKFLOW-4: a step in GitHub's `uses: $/…` form of a local action passes both scanners, the action file clean."""
     workflow = ".github/workflows/w.yml"
     action = ".github/actions/x/action.yml"
     assert check_door(build_repo({workflow: workflow_using("$/.github/actions/x"), action: clean_action()})) == 0
@@ -47,7 +47,7 @@ def test_an_action_without_a_ref_stays_a_finding(build_repo, installed_scanners,
 @pytest.mark.scanner
 @pytest.mark.parametrize("name", ["action.yml", "action.yaml"])
 def test_an_action_file_is_judged_by_zizmor(build_repo, installed_scanners, capsys, name):
-    """An unpinned `uses:` in an action file is a finding at that file and line."""
+    """WORKFLOW-6: an unpinned `uses:` in an action file is a finding at that file and line."""
     workflow = ".github/workflows/w.yml"
     path = f".github/actions/x/{name}"
     repo = build_repo({workflow: workflow_using("$/.github/actions/x"), path: action_using("actions/checkout@v4")})
@@ -57,7 +57,7 @@ def test_an_action_file_is_judged_by_zizmor(build_repo, installed_scanners, caps
 
 @pytest.mark.scanner
 def test_an_action_file_beside_no_workflow_is_judged(build_repo, installed_scanners, capsys):
-    """A repository whose only file for the scanners is an action file is still judged."""
+    """WORKFLOW-6: a repository whose only file for the scanners is an action file is still judged."""
     action = ".github/actions/x/action.yml"
     assert check_door(build_repo({action: action_using("actions/checkout@v4")})) == 1
     assert (f"{action}:6", FindingEvent.INSECURE) in workflow_rows(capsys)
@@ -65,7 +65,7 @@ def test_an_action_file_beside_no_workflow_is_judged(build_repo, installed_scann
 
 @pytest.mark.scanner
 def test_a_clean_action_file_changes_no_row(build_repo, installed_scanners, capsys):
-    """The workflows row of a repository with a clean action file equals the same repository's without it."""
+    """WORKFLOW-8: the workflows row of a repository with a clean action file equals that of the same one without it."""
     workflow = ".github/workflows/w.yml"
     action = ".github/actions/x/action.yml"
     steps = {workflow: workflow_using("$/.github/actions/x")}
@@ -80,11 +80,12 @@ def test_a_clean_action_file_changes_no_row(build_repo, installed_scanners, caps
     [("action.yml", True), ("a/b/action.yaml", True), ("action.json", False), ("my-action.yml", False)],
 )
 def test_only_an_action_file_counts_as_an_action(name, is_action):
+    """WORKFLOW-6: a file is an action file by its exact name, in any folder."""
     assert checkout.is_action(PurePosixPath(name)) is is_action
 
 
 def test_actionlint_is_never_handed_an_action_file(build_repo, served_scanners, tmp_path):
-    """The recorded call of actionlint names the workflow alone."""
+    """WORKFLOW-7: the recorded call of actionlint names the workflow alone."""
     workflow = ".github/workflows/w.yml"
     action = ".github/actions/x/action.yml"
     record = tmp_path / "actionlint-calls"
@@ -97,7 +98,7 @@ def test_actionlint_is_never_handed_an_action_file(build_repo, served_scanners, 
 
 @pytest.mark.scanner
 def test_an_action_file_under_a_name_like_an_option_is_judged(build_repo, installed_scanners, capsys):
-    """A tracked name that begins like an option reaches zizmor as a file, so its finding is not lost."""
+    """WORKFLOW-6: a tracked name that begins like an option reaches zizmor as a file, so its finding is not lost."""
     action = "--gh-token=x/action.yml"
     declared = '[[root.allow]]\nentry = "--gh-token=x/"\nreason = "a name zizmor must not read as an option"\n'
     repo = build_repo({action: action_using("actions/checkout@v4"), "quality/config.toml": declared})
