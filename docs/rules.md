@@ -669,20 +669,27 @@ downloaded only for an ecosystem with a tracked lock, once per run however many 
 A lock that is tracked but missing on disk is skipped (ADVISORY-2); one that links out of the repository (ADVISORY-3),
 is not a regular file (ADVISORY-4) or is empty (zero bytes) (ADVISORY-5) is exit `2`. A lock listed in `.gitignore` is
 still judged (ADVISORY-6).
-The clean row counts the lock files it judged and the packages osv-scanner lists for them: `✓ dependencies  clean  1 lockfile · 63 packages`, and `0 lockfiles · 0 packages` with none.
-A package counts once per tracked file, by its ecosystem, its name as the ecosystem compares it (Python's rule for PyPI, exact for npm, so `lodash.merge` and `lodash-merge` are two) and its version, so a requirements file's pin and the wheel line for the same package are one; every tracked name counts, so a lock reached by two names counts for each.
-A finding is one per advisory group, package and lock file, named by the tracked relative path:
-`! uv.lock  affected  pyyaml 5.3.1 · GHSA-8q59-q68h-6hv4 · fixed in 5.4` with `fix: uv lock --upgrade-package pyyaml`.
-The row names the group's first id; an allowance matches every id and alias of the group.
-For a nested lock the fix names its directory (`in speech/: uv lock --upgrade-package ...`). Several fixed versions are
-listed as osv lists them. An advisory with no listed fixed version, a package listed as malicious included, says
-`no fixed version listed` with `fix: remove or replace <package>; see https://osv.dev/vulnerability/<id>`. Where osv's
-record names no such package the row says nothing of a fix, with `fix: see <url>`.
-The fix prints a command only where it works as printed: for `pnpm-lock.yaml` it says to upgrade each listed package, or its
-parent when it is transitive, or set a pnpm override in `package.json`; for a `requirements.txt` it says to raise each
-listed package's pin, and to compile the file again when it is generated. A package name that needs quoting prints quoted
-in the command; one that no shell word can hold (a control or format character) gets `fix: see <url>`, or
-`in <dir>/: see <url>` for a nested lock, so no command is printed that would not work. npm names match as written (`lodash.merge` is not
+The [clean row](output.md#area-rows) counts the lock files it judged and the packages osv-scanner lists for them:
+`✓ dependencies  clean  1 lockfile · 63 packages`, and `0 lockfiles · 0 packages` with none.
+A package counts once per tracked file, by its ecosystem, its name as the ecosystem compares it (Python's rule for PyPI,
+exact for npm, so `lodash.merge` and `lodash-merge` are two) and its version (ADVISORY-20), so a requirements file's pin
+and the wheel line for the same package are one (ADVISORY-21); every tracked name counts, so a lock reached by two names
+counts for each (ADVISORY-22).
+A finding is one per advisory group, package and lock file (ADVISORY-23), named by the tracked relative path
+(ADVISORY-24): `! uv.lock  affected  pyyaml 5.3.1 · GHSA-8q59-q68h-6hv4 · fixed in 5.4` with
+`fix: uv lock --upgrade-package pyyaml`.
+[The row](output.md#rows) names the group's first id; an allowance matches every id and alias of the group.
+For a nested lock the [fix](output.md#rows) names its directory (`in speech/: uv lock --upgrade-package ...`). Several
+fixed versions are listed as osv lists them (ADVISORY-25). An advisory with no listed fixed version, a package listed as
+malicious included, says `no fixed version listed` with
+`fix: remove or replace <package>; see https://osv.dev/vulnerability/<id>` (ADVISORY-26). Where osv's record names no
+such package the row says nothing of a fix, with `fix: see <url>` (ADVISORY-27).
+The fix prints a command only where it works as printed: for `pnpm-lock.yaml` it says to upgrade each listed package,
+or its parent when it is transitive, or set a pnpm override in `package.json`; for a `requirements.txt` it says to raise
+each listed package's pin, and to compile the file again when it is generated. A package name that needs quoting prints
+quoted in the command (ADVISORY-28); one that no shell word can hold (a control or format character) gets
+`fix: see <url>`, or `in <dir>/: see <url>` for a nested lock (ADVISORY-29), so no command is printed that would not
+work. npm names match as written (`lodash.merge` is not
 `lodash-merge`); Python's name rule applies to PyPI only (ADVISORY-7). A repository's own `osv-scanner.toml` (ignored
 advisories, package overrides), its `package.json` `pnpm.auditConfig`, its `.npmrc` and its `.gitignore` change
 nothing: the gate passes its own empty `src/quality/osv-scanner.toml` and each tracked lock explicitly, so only a real

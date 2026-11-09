@@ -43,7 +43,8 @@ from tests.support.scanners import OUTPUTS, fake_scanner, lacking
 
 @pytest.mark.scanner
 def test_an_affected_lock_is_red_and_names_the_advisory_and_the_fix(build_repo, publish_database, installed_scanners, run_gate):
-    """#53 rule 2, rule 3, cells 3 and 21."""
+    """ADVISORY-8, ADVISORY-24, O41: an affected lock is red, its row at the tracked path names the package and the
+    advisory, and its fix is the lock kind's hint."""
     publish_database()
     code, output = run_gate(tracked_lock_repo(build_repo))
     assert code == 1, output
@@ -62,10 +63,11 @@ def test_an_affected_lock_is_red_and_names_the_advisory_and_the_fix(build_repo, 
             ("5.4",), lambda fix: fix == upgrade_fix(),
         ),
     ],
-    ids=["rule 2 several fixed versions", "cell 5 no fixed event", "cell 26 an unknown ecosystem beside PyPI"],
+    ids=["several fixed versions", "no fixed event", "an unknown ecosystem beside PyPI"],
 )
 def test_the_fix_follows_what_osv_lists(build_repo, publish_database, installed_scanners, run_gate, records, in_fact, fix_is):
-    """The row and its fix are built from the affected entries osv lists for the package."""
+    """ADVISORY-8, ADVISORY-25, ADVISORY-26, O41: the row and its fix are built from the affected entries osv lists for
+    the package."""
     publish_database(records)
     code, output = run_gate(tracked_lock_repo(build_repo))
     assert code == 1, output
@@ -76,8 +78,8 @@ def test_the_fix_follows_what_osv_lists(build_repo, publish_database, installed_
 def test_a_record_naming_a_pypi_package_in_other_spelling_still_supplies_the_fix(
     build_repo, served_scanners, run_gate, publish_database, edited_report
 ):
-    """ADVISORY-7: a record naming a PyPI package in another spelling (`PyYAML`) still supplies the fix of the lock's
-    `pyyaml`."""
+    """ADVISORY-7, O41: a record naming a PyPI package in another spelling (`PyYAML`) still supplies the fix of the
+    lock's `pyyaml`."""
     publish_database()
     report = edited_report(
         "osv-scanner-finding.json",
@@ -91,7 +93,7 @@ def test_a_record_naming_a_pypi_package_in_other_spelling_still_supplies_the_fix
 
 @pytest.mark.scanner
 def test_two_advisories_that_alias_each_other_are_one_finding(build_repo, publish_database, installed_scanners, run_gate):
-    """#53 rule 2, cell 6: one finding per alias group, the other ids named as aliases."""
+    """ADVISORY-8, ADVISORY-23: one finding per alias group, naming one of its ids."""
     publish_database([advisory("GHSA-aaaa-bbbb-cccc", aliases=("PYSEC-1",)), advisory("PYSEC-1", aliases=("GHSA-aaaa-bbbb-cccc",))])
     code, output = run_gate(tracked_lock_repo(build_repo))
     assert code == 1
@@ -102,8 +104,8 @@ def test_two_advisories_that_alias_each_other_are_one_finding(build_repo, publis
 
 @pytest.mark.scanner
 def test_every_tracked_lock_is_judged_with_its_relative_name(build_repo, publish_database, installed_scanners, run_gate):
-    """ADVISORY-1, ADVISORY-6, ADVISORY-8: nested, odd-named and gitignored locks are judged against the downloaded
-    database, an untracked one is not."""
+    """ADVISORY-1, ADVISORY-6, ADVISORY-8, ADVISORY-24, O43: nested, odd-named and gitignored locks are judged against
+    the downloaded database, an untracked one is not."""
     repo = build_repo({
         "uv.lock": uv_lock(), "speech/uv.lock": uv_lock(), "a:b/uv.lock": uv_lock(), "-dash/uv.lock": uv_lock(),
         ".gitignore": "uv.lock\n",
@@ -160,7 +162,7 @@ def test_a_lock_no_advisory_affects_is_clean(build_repo, publish_database, insta
     ids=["uv.lock", "tests/requirements.txt"],
 )
 def test_the_live_database_condemns_pyyaml_5_3_1(build_repo, installed_scanners, live_database, run_gate, name, text, folder):
-    """ADVISORY-8, ADVISORY-18: the live database condemns pyyaml 5.3.1 in a uv.lock and in a requirements file,
+    """ADVISORY-8, ADVISORY-18, O41: the live database condemns pyyaml 5.3.1 in a uv.lock and in a requirements file,
     fixed in 5.4."""
     code, output = run_gate(build_repo({name: text}))
     assert code == 1, output
@@ -394,7 +396,7 @@ def test_a_lock_osv_cannot_parse_is_cannot_judge_and_names_neither_form_of_its_p
 
 
 def test_two_tracked_names_for_one_lock_are_each_judged(build_repo, served_scanners, run_gate, publish_database):
-    """#53 rule 2: a finding for every tracked name, not only the last one that resolves to the file."""
+    """ADVISORY-23, ADVISORY-24: a finding for every tracked name, not only the last one that resolves to the file."""
     publish_database()
     fake_scanner(served_scanners, OSV, reporting(OUTPUTS / "osv-scanner-finding.json", 1))
     code, output = run_gate(linked_lock_repo(build_repo))
@@ -404,7 +406,8 @@ def test_two_tracked_names_for_one_lock_are_each_judged(build_repo, served_scann
 
 @pytest.mark.scanner
 def test_two_tracked_names_for_one_lock_are_each_judged_by_the_real_osv(build_repo, publish_database, installed_scanners, run_gate):
-    """#53 rule 2: the same, with the real osv-scanner reporting however it reports a repeated lock."""
+    """ADVISORY-8, ADVISORY-23, ADVISORY-24: the same, with the real osv-scanner reporting however it reports a repeated
+    lock."""
     publish_database()
     code, output = run_gate(linked_lock_repo(build_repo))
     assert code == 1, output
@@ -505,7 +508,7 @@ def test_a_tracked_file_of_zero_bytes_is_cannot_judge(build_repo, served_scanner
 def test_a_package_osv_cannot_match_to_the_advisory_gets_only_the_advisory_link(
     build_repo, served_scanners, run_gate, publish_database, edited_report
 ):
-    """#53 rule 2: with no `affected` entry for the package, quality never claims that no fix exists."""
+    """ADVISORY-27: with no `affected` entry for the package, quality never claims that no fix exists."""
     publish_database()
     def rename_affected(report):
         for vulnerability in report["results"][0]["packages"][0]["vulnerabilities"]:

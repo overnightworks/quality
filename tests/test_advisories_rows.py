@@ -220,7 +220,8 @@ def rows_and_fixes_of(block: list[BlockLine]) -> tuple[int, int]:
     ids=["one fixed version", "several", "none listed", "no affected entry for the package", "a shell metacharacter", "an escape character"],
 )
 def test_each_kind_of_advisory_finding_carries_its_event_fact_and_fix(drive_advisories, edited_report, edit, name, fixed, fix_is):
-    """Decision 3, O41: the event, the fact from the report's own values and the fix per kind."""
+    """ADVISORY-25, ADVISORY-26, ADVISORY-27, ADVISORY-28, ADVISORY-29, O41: the event, the fact from the report's own
+    values and the fix per kind."""
     run = drive_advisories({"uv.lock": uv_lock()}, edited_report("osv-scanner-finding.json", edit))
     (finding,) = run.area.findings
     package, identifier, *state = finding.fact.split(SEPARATOR)
@@ -272,7 +273,7 @@ PNPM_PACKAGE = npm_report("lodash", "lodash")
     ids=["two groups of one uv package", "two uv packages", "two pnpm packages", "two requirements pins"],
 )
 def test_equal_fixes_share_one_fix_line_and_different_ones_do_not(drive_advisories, edited_report, files, edit, rows_and_fixes):
-    """Rule 7: one `fix:` per run of equal fixes, and a uv fix names its package."""
+    """ADVISORY-23, O44: one `fix:` per run of equal fixes, and a uv fix names its package."""
     run = drive_advisories(files, edited_report("osv-scanner-finding.json", edit))
     block = area_block(run.out, Area.DEPENDENCIES)
     assert_block_prints(block, run.area.findings, ())
@@ -290,7 +291,7 @@ def test_equal_fixes_share_one_fix_line_and_different_ones_do_not(drive_advisori
     ids=["uv.lock", "a nested uv.lock", "a nested pnpm lock", "a requirements file"],
 )
 def test_the_fix_of_each_lock_kind_holds_its_hint_and_its_folder(drive_advisories, edited_report, lock, files, edit, package):
-    """O43, O44: the root lock's fix is the hint, a nested lock's ends with it and names its directory."""
+    """ADVISORY-24, O43, O44: the root lock's fix is the hint, a nested lock's ends with it and names its directory."""
     run = drive_advisories(files, edited_report("osv-scanner-finding.json", edit))
     (finding,) = run.area.findings
     directory = str(PurePosixPath(lock).parent)
@@ -301,7 +302,7 @@ def test_the_fix_of_each_lock_kind_holds_its_hint_and_its_folder(drive_advisorie
 
 
 def test_a_nested_lock_keeps_its_folder_when_the_package_has_no_shell_word(drive_advisories, edited_report):
-    """O41, O43: the link replaces the command, and the folder stays."""
+    """ADVISORY-29, O41, O43: the link replaces the command, and the folder stays."""
     name, lock = "py\x1byaml", "src/speech/uv.lock"
     run = drive_advisories({lock: uv_lock()}, edited_report("osv-scanner-finding.json", then(rename_package(name), add_fixed_version("6.0"))))
     (finding,) = run.area.findings
@@ -311,7 +312,7 @@ def test_a_nested_lock_keeps_its_folder_when_the_package_has_no_shell_word(drive
 
 
 def test_two_tracked_names_of_one_lock_print_one_row_each_and_align(drive_advisories, build_repo):
-    """Decision 4: one row per tracked name, the events at one column."""
+    """ADVISORY-23, ADVISORY-24: one row per tracked name, the events at one column."""
     run = drive_advisories(linked_lock_repo(build_repo))
     rows = [line for line in area_block(run.out, Area.DEPENDENCIES) if isinstance(line, FindingLine)]
     columns = {line.text.index(line.row.event.value, line.text.index(line.location) + len(line.location)) for line in rows}
@@ -413,7 +414,8 @@ def test_a_refused_area_leaves_the_note_row_and_the_exact_pair(drive_advisories,
     ],
 )
 def test_a_clean_row_counts_the_lockfiles_and_the_packages_the_report_lists(drive_advisories, build_repo, files, edit, counts):
-    """O48: a package counts once per tracked file, by ecosystem, name as the ecosystem compares it and version."""
+    """ADVISORY-20, O48: a package counts once per tracked file, by ecosystem, name as the ecosystem compares it and
+    version."""
     repo = build_repo(files)
     run = drive_advisories(repo, report_naming(repo, next(iter(files)), edit), code=0)
     assert (area_row(run.out, Area.DEPENDENCIES).glyph, extent_counts(area_fact(run.out, Area.DEPENDENCIES))) == (Glyph.CLEAN, counts)
@@ -442,7 +444,7 @@ def test_a_report_with_two_malformed_packages_refuses_with_the_fact_of_the_first
 
 
 def test_the_packages_of_two_lock_files_add_up(drive_advisories, build_repo):
-    """O48: each tracked lock counts the packages the report lists for it."""
+    """ADVISORY-20, O48: each tracked lock counts the packages the report lists for it."""
     other = "src/speech/uv.lock"
     repo = build_repo({"uv.lock": uv_lock(), other: uv_lock()})
 
@@ -459,7 +461,7 @@ def test_the_packages_of_two_lock_files_add_up(drive_advisories, build_repo):
 
 @pytest.mark.integration
 def test_a_lock_reached_by_two_tracked_names_counts_for_each(drive_advisories, build_repo, edited_report):
-    """O48: one resolved file under two tracked names is two lock files with a package each."""
+    """ADVISORY-22, O48: one resolved file under two tracked names is two lock files with a package each."""
     repo = build_repo({"uv.lock": uv_lock()})
     (repo / "src/speech").mkdir(parents=True)
     (repo / "src/speech/uv.lock").symlink_to("../../uv.lock")
@@ -470,7 +472,7 @@ def test_a_lock_reached_by_two_tracked_names_counts_for_each(drive_advisories, b
 
 
 def test_a_package_a_requirements_file_lists_as_a_pin_and_as_a_wheel_counts_once(drive_advisories, build_repo):
-    """O48: the pin and the wheel line of one package are read from two files under one tracked name."""
+    """ADVISORY-21, O48: the pin and the wheel line of one package are read from two files under one tracked name."""
     wheel = f"{PACKAGE_NAME} @ https://example.invalid/{PACKAGE_NAME}-6.0.2-py3-none-any.whl --hash=sha256:{'ab' * 32}"
     name = "docs/requirements.txt"
     repo = build_repo({name: f"{PACKAGE_NAME}==6.0.2\n{wheel}\n"})
@@ -485,7 +487,8 @@ def test_a_package_a_requirements_file_lists_as_a_pin_and_as_a_wheel_counts_once
 
 
 def test_two_packages_that_differ_only_in_their_ecosystem_stay_two_findings(drive_advisories, edited_report):
-    """The finding's identity is its lock, ecosystem, ids, fact and fix: equal facts in two ecosystems are two findings."""
+    """ADVISORY-23: the finding's identity is its lock, ecosystem, ids, fact and fix: equal facts in two ecosystems are
+    two findings."""
     edit = then(copy_listed_as(ecosystem="npm"), without_vulnerability_records)
     run = drive_advisories({"uv.lock": uv_lock()}, edited_report("osv-scanner-finding.json", edit))
     rows = [line for line in area_block(run.out, Area.DEPENDENCIES) if isinstance(line, FindingLine)]
