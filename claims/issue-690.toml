@@ -1,0 +1,8 @@
+claim_id = "161bbf6c2742478b9a3ce2739c09f5c7"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "5e3c6ea4a0c652abb3dc3b20e1dd7bc1fbad87a1"
+branch = "claude/issue-690-sweep-d6-unproven-modules"
+scope = ["tests/conftest.py", "tests/test_process.py", "tests/test_repository.py", "tests/test_web.py"]
+opened_commit = "d214085116521322b6f1b265eb40c1832c285cc5"
+whole_reason = "The attribution in the docstrings, comments and parameter ids of the four test modules that prove no reference rule; the write tests of tests/test_repository.py keep their FIX IDs and their old and new bytes."
