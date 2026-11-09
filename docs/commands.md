@@ -28,8 +28,11 @@ command that took the stray word, or of the parser that refused (HELP-24).
 
 Ruled by the operator:
 
-- Seven areas, `files`, `debt`, `imports`, `secrets`, `workflows`, `dependencies` and `code`; the `code` line of `quality check --help`, `code  Python source: security findings and print calls`; and the `secrets` line `secrets in the committed history`.
-- The areas replace the rule names in the verdict; `quality check --help` says which rules an area holds. `code` holds `python-security` and `python-print`.
+- Seven areas, `files`, `debt`, `imports`, `secrets`, `workflows`, `dependencies` and `code`; the `code` line of
+  `quality check --help`, `code  Python source: security findings and print calls`; and the `secrets` line
+  `secrets in the committed history` (HELP-3).
+- The areas replace the rule names in the verdict (CLOSING-6); `quality check --help` says which rules an area holds.
+  `code` holds `python-security` and `python-print`.
 
 What a run that names areas judges and prints is in [rules](rules.md).
 
@@ -84,9 +87,13 @@ its gate calls its own `gate.yml`, the installed quality judges, never the pull 
 
 Ruled by the operator:
 
-- The release row always, also in the commit hook, as a grey note: proof that locally the same release judges as in the gate.
-- The release is missing: quality fetches exactly the pin through uv and says so in the release row; offline is exit 2.
-- No pin, old pin, quality itself: no workflow calls `gate.yml` is exit 2, except for `check secrets --staged`, which judges with the installed release; a pin older than the release with `check` is exit 2 with "raise the gate pin"; in quality itself the checkout judges.
+- The release row always (PIN-5), also in the commit hook, as a grey note: proof that locally the same release judges as
+  in the gate.
+- The release is missing: quality fetches exactly the pin through uv (PIN-24) and says so in the release row (PIN-6);
+  offline is exit 2 (PIN-27).
+- No pin, old pin, quality itself: no workflow calls `gate.yml` is exit 2 (PIN-8), except for `check secrets --staged`,
+  which judges with the installed release (PIN-12); a pin older than the release with `check` is exit 2 with "raise the
+  gate pin" (PIN-11); in quality itself the checkout judges (PIN-2).
 
 ## `quality check --fix`
 
@@ -109,8 +116,9 @@ The rows and rules are in [rules](rules.md), the rows' form in [output](output.m
 
 Ruled by the operator:
 
-- A fall below a metric's threshold drops the entry (`dropped  file 805 → 790 lines · debt from 800 lines`).
-- A ceiling that can fall stays a finding: `!` and exit 1. The dry run `--fix --dry-run` exits 1 while anything can be lowered. Without a ceiling file debt is a grey note with exit 0.
+- A fall below a metric's threshold drops the entry (`dropped  file 805 → 790 lines · debt from 800 lines`) (FIX-4).
+- A ceiling that can fall stays a finding: `!` and exit 1 (CEILING-6). The dry run `--fix --dry-run` exits 1 while
+  anything can be lowered (FIX-23). Without a ceiling file debt is a grey note with exit 0 (O21).
 
 ## `quality check secrets --staged`
 
@@ -121,7 +129,8 @@ is resolved against the working directory, as git does (STAGED-4), so `git commi
 worktree scan the index git is committing (STAGED-5). `--staged` takes exactly the area `secrets`; any other set of
 areas, or none, is a [wrong invocation](#help-and-wrong-invocations).
 
-Ruled by the operator: `--staged` only with `secrets`: any other area with `--staged` is exit 2 with `next: quality check secrets --staged`.
+Ruled by the operator: `--staged` only with `secrets`: any other area with `--staged` is exit 2 with
+`next: quality check secrets --staged` (HELP-23).
 
 The index is written as a tree (`git write-tree`, only tree objects a commit writes anyway) and read into a scratch
 repository inside a 0700 scratch directory. The scratch repository borrows the objects
@@ -267,7 +276,8 @@ gate holds the manifest in) takes no part in which binary runs (SCANNER-8).
 
 Ruled by the operator:
 
-- The command that installs a scanner: `mise --cd <quality's installation>/quality/mise install --locked`, the release's own manifest and lock; the path is quality's installation, shown as the example shows it.
+- The command that installs a scanner: `mise --cd <quality's installation>/quality/mise install --locked` (SCANNER-2),
+  the release's own manifest and lock; the path is quality's installation, shown as the example shows it.
 
 `check` and `check secrets --staged` exit `2` for a scanner mise cannot locate (SCANNER-9), that is at another version
 or cannot report one (SCANNER-10), or whose answer names no executable (SCANNER-11), and for a machine without mise,
@@ -285,7 +295,7 @@ dependencies of quality's package (`pyproject.toml`, hashed in `uv.lock`), so in
 
 Ruled by the operator: quality builds the logic and the process itself and never a specialist scanner (language
 linters and test runners, gitleaks, osv-scanner, mutation tools); the scanners it uses run pinned underneath the one
-door.
+door (SCANNER-5).
 
 ## `quality merge`
 
@@ -296,7 +306,8 @@ what the command does.
 
 Ruled by the operator:
 
-- A body the door refuses for its line stops at `! landing  refused` under the pull request's row instead, the same row as the last one before the question.
+- A body the door refuses for its line (MERGE-67) stops at `! landing  refused` under the pull request's row instead,
+  the same row as the last one before the question (MERGE-5).
 - `merge` names no aco step; that step belongs in the head's instructions.
 
 - **Operator only.** It runs under the operator's own `gh` login, which needs admin permission on the repository
