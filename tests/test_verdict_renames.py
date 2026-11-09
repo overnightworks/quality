@@ -1,4 +1,4 @@
-"""#149: a pure rename is no loosening. The verdict and the door read the files git renamed between the base and the head."""
+"""A pure rename is no loosening: the verdict and the door read the files git renamed between the base and the head."""
 
 import os
 import signal
@@ -266,13 +266,13 @@ def test_the_rename_list_reads_only_complete_renames(listing, renames):
          "a source renamed twice, one target not UTF-8", "a source that is not UTF-8 renamed twice"],
 )
 def test_a_rename_list_git_did_not_finish_cannot_be_judged(listing):
-    """#149 cell 20: fail closed, never an empty map."""
+    """A rename list git did not finish is refused, never read as an empty map."""
     with pytest.raises(CannotJudge):
         renames_of(listing)
 
 
 def test_a_rename_map_git_cannot_list_cannot_be_judged(capsys, pull_request, fake_git):
-    """#149 R4: fail-closed, the verdict never guesses that nothing was renamed."""
+    """The verdict never guesses that nothing was renamed when git cannot list the renames."""
     moved_in_head(pull_request, OLD_ENTRY, OLD_ENTRY.replace("old", "new"))
     fake_git('case "$*" in *" diff "*) echo boom >&2; exit 1;; esac')
     code, output = verdict_of(pull_request[0], capsys)
@@ -560,7 +560,7 @@ def listing_script(printed):
 
 @pytest.mark.parametrize(("printed", "cause"), UNFINISHED_LISTS, ids=["cut off", "a source renamed twice"])
 def test_a_rename_list_git_did_not_finish_is_exit_two_at_the_verdict(capsys, pull_request, fake_git, printed, cause):
-    """#149 cell 20: the adapter turns the parser's refusal into exit 2."""
+    """The adapter turns the parser's refusal into exit 2."""
     moved_in_head(pull_request, OLD_ENTRY, NEW_ENTRY)
     fake_git(listing_script(printed))
     code, output = verdict_of(pull_request[0], capsys)

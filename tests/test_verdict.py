@@ -271,21 +271,13 @@ def test_a_page_of_the_wrong_shape_cannot_be_judged(body):
 
 
 def test_a_base_config_that_git_cannot_show_cannot_be_judged(build_repo):
-    """defect:#6 finding 3: the base config is listed but git cannot show it - cannot-judge, not a traceback."""
+    """BASELINE-23: a base file git lists but cannot show is cannot judge, not a traceback."""
     repo = build_repo({"quality/config.toml": '[gate]\nmandatory_jobs = ["tests"]\n'})
     git = ["git", "-C", str(repo)]
     blob = subprocess.run([*git, "rev-parse", "HEAD:quality/config.toml"], capture_output=True, text=True, check=True)
     (repo / ".git" / "objects" / blob.stdout[:2] / blob.stdout.strip()[2:]).unlink()
     base = subprocess.run([*git, "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
-    with pytest.raises(CannotJudge, match="at the base commit"):
-        read_base(repo, base)
-
-
-def test_a_malformed_base_config_names_the_base_commit(build_repo):
-    """#48 rule 4: the verdict names the side of a malformed config.toml, as the door does."""
-    repo = build_repo({CONFIG_PATH: "[gate"})
-    base = head_commit(repo)
-    with pytest.raises(CannotJudge, match=f"^{CONFIG_PATH} at the base commit {base}: {CONFIG_PATH} is not valid TOML"):
+    with pytest.raises(CannotJudge, match=rf"^cannot read {CONFIG_PATH} at the base commit {base}: git exited [1-9]"):
         read_base(repo, base)
 
 
@@ -296,21 +288,6 @@ def test_a_non_numeric_run_attempt_exits_two(monkeypatch, capsys, run_env):
     page = json.dumps({"total_count": 0, "jobs": []})
     assert cli.main(["verdict"], fetcher_for=lambda token: lambda url: (page, None)) == 2
     assert "error: GITHUB_RUN_ATTEMPT is not a run attempt" in summary.read_text()
-
-
-@pytest.mark.parametrize(
-    ("ref", "full_ref"),
-    [
-        ("main", "refs/heads/main"),
-        ("release+hotfix", "refs/heads/release+hotfix"),
-        ("origin/main", "refs/remotes/origin/main"),
-    ],
-)
-def test_a_valid_ref_name_is_still_a_readable_base(build_repo, ref, full_ref):
-    """#31 rule 1 (S8705): valid ref names, with a slash or a plus, still work."""
-    repo = build_repo({"quality/config.toml": '[gate]\nmandatory_jobs = ["tests"]\n'})
-    subprocess.run(["git", "-C", str(repo), "update-ref", full_ref, head_commit(repo)], check=True)
-    assert read_base(repo, ref).settings == GateSettings(("tests",), LegacyMode.REPORT)
 
 
 def test_a_pull_request_that_turns_sonar_off_is_red_in_the_verdict(monkeypatch, capsys, run_env):
@@ -376,7 +353,8 @@ def main_lines(count: int) -> str:
     ],
 )
 def test_the_size_baseline_only_falls_against_the_base(capsys, pull_request, base, head, code, expected):
-    """BASELINE-1, BASELINE-2, BASELINE-3, BASELINE-6, BASELINE-7, BASELINE-8, BASELINE-10: the baseline only falls."""
+    """BASELINE-1, BASELINE-2, BASELINE-3, BASELINE-6, BASELINE-7, BASELINE-8, BASELINE-10, BASELINE-20: the
+    baseline only falls, and a malformed one on either side cannot be judged."""
     repo, commit_base = pull_request
     base_sha = commit_base(base)
     put(repo / BASELINE_PATH, head)
@@ -387,10 +365,10 @@ def test_the_size_baseline_only_falls_against_the_base(capsys, pull_request, bas
 @pytest.mark.parametrize(
     ("base", "head", "hints"),
     [("[ccn", main_lines(82), 0), (main_lines(82), "[ccn", 1), (b"\xff", main_lines(82), 0), (main_lines(82), b"\xff", 1)],
-    ids=["cell 16 base malformed", "cell 16 head malformed", "#76 cell 18 base not UTF-8", "#76 cell 18 head not UTF-8"],
+    ids=["base malformed", "head malformed", "base not UTF-8", "head not UTF-8"],
 )
 def test_only_the_head_baseline_is_told_to_rewrite_itself(capsys, pull_request, base, head, hints):
-    """#52 rule 7, cell 16: a pull request cannot rewrite its base, so only a malformed head baseline gets the hint."""
+    """BASELINE-25: a pull request cannot rewrite its base, so only a malformed head baseline gets the restore hint."""
     repo, commit_base = pull_request
     commit_base(base)
     put(repo / BASELINE_PATH, head)
@@ -404,10 +382,10 @@ UNKNOWN_TABLE_FACT = f"has an unknown table [future]; quality {__version__} know
 @pytest.mark.parametrize(
     ("base", "head", "advice"),
     [(main_lines(82), "[future]\n", 1), ("[future]\n", main_lines(82), 0)],
-    ids=["cell 14 head", "cell 15 base"],
+    ids=["head", "base"],
 )
 def test_an_unknown_baseline_table_states_its_fact_and_advises_only_the_head(capsys, pull_request, base, head, advice):
-    """#153 cells 14 and 15: the head is sent to the release its gate pins; the base keeps its wrapper and no advice."""
+    """BASELINE-25, CEILING-3: the head is sent to the release its gate pins; the base gets no advice."""
     repo, commit_base = pull_request
     commit_base(base)
     put(repo / BASELINE_PATH, head)
@@ -415,7 +393,7 @@ def test_an_unknown_baseline_table_states_its_fact_and_advises_only_the_head(cap
     assert code == 2
     assert UNKNOWN_TABLE_FACT in output
     assert output.count("run the quality release your gate pins") == advice, output
-    assert "rewrite it" not in output
+    assert f"restore {BASELINE_PATH}" not in output
 
 
 def make_baseline_a_directory(repo: Path) -> None:
@@ -430,7 +408,7 @@ def make_baseline_a_symlink(repo: Path) -> None:
 
 @pytest.mark.parametrize("make_non_file", [make_baseline_a_directory, make_baseline_a_symlink], ids=["a directory", "a symlink"])
 def test_a_base_baseline_that_is_no_regular_file_is_named_so_and_never_parsed(capsys, monkeypatch, pull_request, make_non_file):
-    """#142 rule 2 (#5 finding 80): a directory or symlink at the base commit is exit 2, `not a regular file`, no TOML."""
+    """BASELINE-22: a directory or symlink at the base commit is exit 2, `not a regular file`, and is never parsed."""
     repo, commit_base = pull_request
     commit_base(main_lines(82))
     make_non_file(repo)
@@ -451,7 +429,7 @@ def test_a_base_baseline_that_is_no_regular_file_is_named_so_and_never_parsed(ca
 
 
 def test_a_base_git_refuses_to_read_is_worded_without_git_stderr_or_the_checkout_path(capsys, monkeypatch, pull_request):
-    """#142 rule 3 (#5 finding 85): git's exit code is named, its stderr and the checkout's path are not printed."""
+    """BASELINE-23, BASELINE-24: git's exit code is named and git's own words are not printed."""
     repo, commit_base = pull_request
     commit_base(main_lines(82))
     monkeypatch.setenv("GATE_BASE_SHA", "f" * 40)
@@ -460,7 +438,7 @@ def test_a_base_git_refuses_to_read_is_worded_without_git_stderr_or_the_checkout
 
 
 def test_a_head_baseline_that_links_out_of_the_repository_cannot_be_judged(capsys, pull_request, elsewhere):
-    """#48 rule 4, cell 11: a head baseline symlinked out of the repository is exit 2, no traceback."""
+    """BASELINE-21: a head baseline symlinked out of the repository is exit 2, no traceback."""
     repo, commit_base = pull_request
     commit_base(main_lines(82))
     outside = elsewhere / "baseline.toml"
@@ -473,7 +451,7 @@ def test_a_head_baseline_that_links_out_of_the_repository_cannot_be_judged(capsy
 
 
 def test_without_a_base_the_base_is_never_read(capsys, monkeypatch, pull_request, fake_git, elsewhere):
-    """#48 rule 5, cell 12: on push GATE_BASE_SHA is empty, a raise against the previous commit stays green, git unread."""
+    """BASELINE-28: on a push GATE_BASE_SHA is empty, so a raise against the previous commit stays green, git unread."""
     repo, commit_base = pull_request
     commit_base(main_lines(82))
     monkeypatch.setenv("GATE_BASE_SHA", "")
@@ -491,12 +469,12 @@ def test_without_a_base_the_base_is_never_read(capsys, monkeypatch, pull_request
         ("f" * 40, f"cannot read the base commit {'f' * 40}"),
         ("-x", "error: GATE_BASE_SHA is not a commit sha"),
     ],
-    ids=["cell 14 a revision expression", "cell 15 a SHA not in the clone", "cell 16 an option"],
+    ids=["a revision expression", "a sha missing from the clone", "an option"],
 )
-def test_a_base_that_is_no_ref_name_or_sha_in_the_clone_cannot_be_judged(
+def test_a_base_that_is_no_commit_sha_or_is_missing_from_the_clone_cannot_be_judged(
     capsys, monkeypatch, pull_request, fake_git, elsewhere, base_sha, expected
 ):
-    """#48 rule 4, cells 14-16 (#5 finding 57): exit 2 naming the base; a ref git would read as an option never reaches git."""
+    """BASELINE-23, BASELINE-26, VERDICT-44: exit 2 naming the base; a base that is no commit sha never reaches git."""
     repo, commit_base = pull_request
     commit_base(main_lines(82))
     monkeypatch.setenv("GATE_BASE_SHA", base_sha)
@@ -520,7 +498,7 @@ def test_a_raised_baseline_and_a_dropped_legacy_fail_are_both_listed(capsys, pul
 
 
 def test_a_verdict_without_git_on_the_path_cannot_judge(capsys, monkeypatch, pull_request, elsewhere):
-    """#58 cell 1 (#5 finding 92): with no git to read the base commit the verdict is exit 2, never a traceback."""
+    """With no git to read the base commit the verdict is exit 2, never a traceback."""
     repo, commit_base = pull_request
     commit_base(main_lines(82))
     monkeypatch.setenv("PATH", str(elsewhere))

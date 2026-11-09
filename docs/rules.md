@@ -565,14 +565,19 @@ It applies these rules:
   A lowered, equal or removed entry or pair is green (BASELINE-7), and so is adopting a baseline (the base has none) or
   neither side having one (BASELINE-8). A `[clones]` table the base lacks is an adoption too: its pairs are not
   compared (BASELINE-9), while the size entries are still held against the base's (BASELINE-10).
-  A malformed baseline on either side, a head config or baseline that cannot be read or links out of the
-  repository, a base file that is not a regular file (`... : not a regular file`), a base git refuses to read (`... : git exited <n>`, git's own words never printed), or a base commit the clone lacks is exit `2`, naming the side (`quality/baseline.toml at the base commit
-  <sha>: ...`, `quality/config.toml at the head: ...`). Only the head's malformed baseline adds `restore quality/baseline.toml from git, or repair it by hand`
-  (an unknown table adds `run the quality release your gate pins` instead): a pull request cannot rewrite its base. The base must be a ref
-  name or a SHA: `HEAD~1` or `-x` is exit `2` (`... is not a ref name or a SHA`) before git runs. Outside a pull
-  request (push, `merge_group`, `workflow_dispatch`) `gate.yml` passes no base, so the base is never read and only
-  `check` holds the tree. A lizard update that measures a function higher therefore turns the pull request that
-  takes it red; a ruled raise is declared (see [Declared loosenings](gate.md#declared-loosenings)) and stays red until the
+  A malformed baseline on either side is exit `2`, naming the side (`quality/baseline.toml at the base commit <sha>:
+  ...`, `quality/baseline.toml at the head: ...`) (BASELINE-20). So is a head baseline that links out of the repository
+  (BASELINE-21), a base file that is not a regular file (`... : not a regular file`) (BASELINE-22), and a base that git
+  refuses to read, a base commit the clone lacks included (`... : git exited <n>`) (BASELINE-23), git's own words never
+  printed (BASELINE-24). A `quality/config.toml` the verdict cannot read is told in [gate](gate.md): the side shows in
+  its step, not in its fact.
+  Only the head's malformed baseline adds `restore quality/baseline.toml from git, or repair it by hand` (an unknown
+  table adds `run the quality release your gate pins` instead) (BASELINE-25): a pull request cannot rewrite its base.
+  The base is a commit sha, as [gate](gate.md) tells of the verdict's variables: `HEAD~1` or `-x` is exit `2`
+  (`GATE_BASE_SHA is not a commit sha`) before git runs (BASELINE-26). Outside a pull request (push, `merge_group`,
+  `workflow_dispatch`) `gate.yml` passes no base (BASELINE-27), so the base is never read (BASELINE-28) and only
+  `check` holds the tree. A lizard update that measures a function higher therefore turns the pull request that takes
+  it red; a ruled raise is declared (see [Declared loosenings](gate.md#declared-loosenings)) and stays red until the
   operator's door merges it.
 - The import contracts only tighten: on a pull request `quality verdict` and the door compare the contracts of the
   three config places at the head with the base's, as import-linter parses them (never the raw options, so moving a

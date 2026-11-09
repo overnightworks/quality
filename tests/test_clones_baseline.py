@@ -263,7 +263,7 @@ def test_a_malformed_clone_table_cannot_be_judged_by_check(build_repo, capsys, t
 
 @pytest.mark.parametrize("text", MALFORMED, ids=MALFORMED_IDS)
 def test_a_malformed_clone_table_cannot_be_judged_by_the_verdict(pull_request, capsys, text):
-    """#130 cell 16: the verdict names the head's file and carries the rewrite hint (cell 25, head)."""
+    """BASELINE-20, BASELINE-25: the verdict names the head's file and gives the restore hint."""
     code, output = judged(pull_request, capsys, FIRST, text)
     assert code == 2
     assert f"error: {BASELINE_PATH} at the head: " in output
@@ -271,14 +271,14 @@ def test_a_malformed_clone_table_cannot_be_judged_by_the_verdict(pull_request, c
 
 
 def test_a_malformed_clone_table_at_the_base_names_the_base_commit_without_a_rewrite_hint(pull_request, capsys):
-    """#130 cell 25, base."""
+    """BASELINE-20, BASELINE-25: a malformed table at the base names the base commit and gives no restore hint."""
     repo, commit_base = pull_request
     base_sha = commit_base(MALFORMED[3], ONE_JOB)
     put(repo / BASELINE_PATH, FIRST)
     code, output = verdict_of(repo, capsys)
     assert code == 2
     assert f"{BASELINE_PATH} at the base commit {base_sha}" in output
-    assert "rewrite it" not in output
+    assert f"restore {BASELINE_PATH}" not in output
 
 
 def test_an_unknown_table_names_the_tool_version_and_every_known_table_with_clones():
