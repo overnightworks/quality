@@ -153,13 +153,14 @@ It applies these rules:
   parser reads refuses likewise) (FIX-13), and a shallow clone that cannot prove it names
   `git fetch --unshallow` (FIX-14). A file without `[clones]` that git never held it in records the pairs and keeps its
   entries (FIX-15). It also rewrites a file whose text is not what it would render (an older header, other blank lines
-  or order, a comment), though no entry changes: `rewritten`, `quality/baseline.toml`, or beside a finding
-  `rewritten · quality/baseline.toml`. The verdict line adds `ceiling lowered by N entries`, `ceiling recorded`,
-  `ceiling rewritten` or `nothing to lower`. Under `--dry-run` the same ceiling is made, judged and rendered and nothing
-  is written: each change is a `~` row worded as what the fix would do, the `~` debt row (`N to lower`, `N to move`,
-  `to record` or `to rewrite`, `text differs · quality/baseline.toml`) and the verdict
-  (`~ dry run · N ceiling entries would fall`, `N ceiling entries would move`, `ceiling would be recorded` or
-  `ceiling would be rewritten`, then `· nothing written`), the exit `1` while the fix would change the file.
+  or order, a comment), though no entry changes: `rewritten`, `quality/baseline.toml` (FIX-16), or beside a finding
+  `rewritten · quality/baseline.toml` (FIX-17). The verdict line adds `ceiling lowered by N entries`,
+  `ceiling recorded`, `ceiling rewritten` or `nothing to lower` (FIX-18). Under `--dry-run` the same ceiling is made,
+  judged and rendered and nothing is written (FIX-19): each change is a `~` row worded as what the fix would do
+  (FIX-20), the `~` debt row (`N to lower`, `N to move`, `to record` or `to rewrite`,
+  `text differs · quality/baseline.toml`) (FIX-21) and the verdict (`~ dry run · N ceiling entries would fall`,
+  `N ceiling entries would move`, `ceiling would be recorded` or `ceiling would be rewritten`, then `· nothing written`)
+  (FIX-22), the exit `1` while the fix would change the file (FIX-23).
   The file is written whole or not at all: a hidden sibling takes the text and replaces the file in one step, so whatever
   stops the process leaves the complete old file or the complete new one, the replacement being the commit point, so a
   Ctrl-C just after it keeps the new file, and a killed process can leave that sibling. It keeps the file's mode,
