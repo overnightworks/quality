@@ -539,7 +539,7 @@ def paired(first, second):
          "leftovers under every target are dropped before the sources move"],
 )
 def test_the_base_allowance_moves_to_a_rename_target_and_leftovers_there_do_not_count(renames, base, head, expected):
-    """#149 R1, rules 1 and 2: the old entry leaves its path; an entry under the target never counts."""
+    """BASELINE-12, BASELINE-13: the old entry leaves its path; an entry under the target never counts."""
     assert carried_base(Baseline(base, None), renamed(renames), named_paths(Baseline(head, None))).size == expected
 
 
@@ -556,13 +556,14 @@ def test_the_base_allowance_moves_to_a_rename_target_and_leftovers_there_do_not_
          "nothing moves while the head holds the old path"],
 )
 def test_a_clone_pair_moves_with_its_files_by_the_same_rules(renames, base, head, expected):
-    """#149 R3: a pair whose sides only moved is the same pair; the sides re-sort through ClonePair.of."""
+    """BASELINE-12, BASELINE-13: a pair whose sides only moved is the same pair; the sides re-sort through
+    ClonePair.of."""
     carried = carried_base(Baseline({}, frozenset(base)), renamed(renames), named_paths(Baseline({}, frozenset(head))))
     assert carried.clones == frozenset(expected)
 
 
 def test_a_target_whose_source_cannot_be_named_is_cleared_and_nothing_moves_to_it():
-    """#149 rule 2: a rename from a path that is not UTF-8 still drops the leftovers under its target."""
+    """BASELINE-14: a rename from a path that is not UTF-8 still drops the leftovers under its target."""
     base = Baseline({sized("new.py"): 200}, frozenset({paired("new.py", "z.py")}))
     carried = carried_base(base, renamed({}, unnamed_sources=["new.py"]), named_paths(Baseline({sized("new.py"): 150}, frozenset())))
     assert carried == Baseline({}, frozenset())
