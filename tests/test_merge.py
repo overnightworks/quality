@@ -243,7 +243,7 @@ def test_shows_repository_head_and_legacy_count_before_asking(capsys):
         "nothing red", "verdict running", "sonar green, nothing re-derived", "sonar timed out",
         "sonar cancelled", "no sonar run", "verdict green", "undeclared removal",
         "a stale declaration", "the removed job still runs red", "only the head sha declares",
-        "#116 cell 24 a gate.loosened entry for an allowance",
+        "a gate.loosened entry for an allowance",
         "loosened legacy", "report on both sides", "head fail but merge commit report", "report and Sonar unreachable", "no config at either sha", "report mode and a new finding", "removed mandatory job",
         "closed", "no legacy", "legacy unknown", "stale analysis",
     ],
@@ -363,15 +363,15 @@ def test_a_malformed_baseline_at_the_merge_commit_cannot_be_judged(capsys):
         ),
     ],
     ids=[
-        "a declared removed job", "a declared legacy fail → report", "#116 cell 23 an allowance",
-        "#116 cell 28 an allowance next to a declared removal",
+        "a declared removed job", "a declared legacy fail → report", "an allowance",
+        "an allowance next to a declared removal",
     ],
 )
 def test_a_declared_loosening_merges_through_the_door_without_sonar(
     capsys, monkeypatch, base_config, merge_config, declared, rows
 ):
     """MERGE-2, MERGE-33, MERGE-49, MERGE-50, MERGE-88: with Sonar green and only declared loosenings at the merge
-    commit, an allowance's own among them (#116 R2, E7), the door shows each declaration whole with its reason below,
+    commit, an allowance's own among them, the door shows each declaration whole with its reason below,
     then asks, merges with the head pinned, and logs it, with no SonarCloud request."""
     monkeypatch.delenv("SONAR_TOKEN", raising=False)
     gh, transport, shown = FakeGh(checks=SONAR_GREEN, base_config=base_config, merge_config=merge_config, body="Work-Item: #9"), recording(sonar()), []
@@ -437,7 +437,7 @@ def test_a_red_sonar_run_next_to_a_green_one_takes_the_legacy_path(capsys):
     ],
     ids=[
         "ESC in the reason", "bidi override in the reason", "carriage return in the reason", "line feed in the reason", "line feed in a refused job",
-        "#116 cell 25 control characters in an allowance's id, lock and reason",
+        "control characters in an allowance's id, lock and reason",
     ],
 )
 def test_every_line_the_door_prints_is_escaped(capsys, base_config, merge_config, code, expected):

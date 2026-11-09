@@ -373,8 +373,8 @@ ADVISORY_KEYS = f"{ADVISORY} entry 1 needs exactly an id, a lock, an until, a da
 def test_a_malformed_advisory_allowance_cannot_be_judged_where_the_whole_config_is_read(
     capsys, run_env, entry, named
 ):
-    """#116 cell 12: a malformed [advisories] entry is exit 2 in the verdict and in the secret and advisory rules of
-    the check, each naming the entry on its first line."""
+    """ALLOW-12, ALLOW-13, ALLOW-14, ALLOW-15, ALLOW-16, ALLOW-17, ALLOW-18: a malformed [advisories] entry is exit 2 in
+    the verdict and in the secret and advisory rules of the check, each naming the entry on its first line."""
     repo, _ = run_env
     (repo / CONFIG_PATH).write_text(entry + '[gate]\nmandatory_jobs = ["checks"]\n')
     assert cli.main(["verdict"], fetcher_for=lambda token: lambda url: ("{}", None)) == 2
@@ -390,15 +390,14 @@ def test_a_malformed_advisory_allowance_cannot_be_judged_where_the_whole_config_
 
 @pytest.mark.parametrize("entry", [allowance_config(reason=None), allowance_config(until="2027-01-31")])
 def test_a_malformed_advisory_allowance_shows_the_example(entry):
-    """#116 cell 12: the refusal of an [[advisories.allow]] entry carries the example of how to write one."""
+    """O10: the refusal of an [[advisories.allow]] entry carries the example of how to write one."""
     with pytest.raises(ConfigError) as refused:
         load_allow_lists(entry)
     assert refused.value.example == config.ADVISORY_ALLOWANCE_EXAMPLE
 
 
 def test_the_verdict_refuses_a_malformed_secret_allowance_as_check_does(capsys, run_env):
-    """#116 cell 12 (the plan review's consequence): one validator reads the whole config, so the verdict refuses a
-    malformed [secrets] entry too."""
+    """ALLOW-18: one validator reads the whole config, so the verdict refuses a malformed [secrets] entry too."""
     repo, _ = run_env
     (repo / CONFIG_PATH).write_text('[gate]\nmandatory_jobs = ["checks"]\n' + MALFORMED_SECRET)
     assert cli.main(["verdict"], fetcher_for=lambda token: lambda url: ("{}", None)) == 2
