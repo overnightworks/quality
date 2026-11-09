@@ -367,7 +367,8 @@ def test_a_staged_run_in_a_subfolder_judges_the_index_the_environment_names(buil
 @pytest.mark.scanner
 @pytest.mark.parametrize("change", ["another file", "the allowed line removed"])
 def test_a_commit_that_touches_no_allowed_line_prints_no_unused_row(build_repo, installed_scanners, capsys, change):
-    """STAGED-10: one change cannot tell a stale entry from a needed one, so only the whole-history scan reports it."""
+    """STAGED-10: a commit that touches no allowed line prints no unused row, and the entry stays used by the
+    history."""
     entry = ("aws-access-token", "docs/key.txt", FAKE_KEY, "a test key")
     repo = build_repo({"docs/key.txt": KEY_LINE, config.CONFIG_PATH: allow_config(entry)})
     stage(repo, {"docs/key.txt": "removed\n"} if change == "the allowed line removed" else {"docs/other.md": "text\n"})

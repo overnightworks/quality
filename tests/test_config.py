@@ -1,5 +1,6 @@
 import datetime
 import json
+import os
 import re
 import tomllib
 
@@ -96,6 +97,7 @@ def test_a_config_the_toml_reader_gives_up_on_cannot_be_judged_by_any_rule_that_
     assert {Rule.PYTHON_FLOOR, Rule.ROOT_LAYOUT} <= {rule for rule, reason in refusals(repo).items() if "is not valid TOML" in reason}
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root enters a mode-0 folder, so no permission is refused")
 def test_a_config_directory_that_cannot_be_entered_is_refused(tmp_path):
     """SECRET-5: permission denied while looking for the config is a ConfigError, not a traceback."""
     config_dir = tmp_path / "quality"
@@ -131,7 +133,7 @@ ENTRY = secret_entry()
 
 
 def test_reads_every_allowed_value_with_its_reason():
-    """#24 rule 1: [secrets] allow maps each rule, file and value hash to its reason, beside the gate keys."""
+    """SECRET-16: [secrets] allow maps each rule, file and value hash to its reason, beside the gate keys."""
     text = f'[gate]\nmandatory_jobs = ["checks"]\n[secrets]\nallow = [{ENTRY}]'
     assert load_allow_lists(text).secrets == {Allowance("aws-access-token", "tests/fixture.py", HASH): "fixture value"}
     assert load_gate_settings(text).mandatory_jobs == ("checks",)
@@ -139,7 +141,7 @@ def test_reads_every_allowed_value_with_its_reason():
 
 @pytest.mark.parametrize("text", [None, '[gate]\nmandatory_jobs = ["checks"]'])
 def test_a_config_without_allowances_allows_nothing(text):
-    """#24 rule 3: an absent allow list allows nothing."""
+    """SECRET-4: an absent config, or one without an allow list, allows nothing."""
     assert load_allow_lists(text).secrets == {}
 
 
@@ -147,7 +149,7 @@ def test_a_config_without_allowances_allows_nothing(text):
     "text",
     [
         f"[secrets]\nallow = [\"{HASH}\"]",
-        '[secrets]\nallow = [{ fingerprint = "a:b:c:1", reason = "old form" }]',
+        '[secrets]\nallow = [{ fingerprint = "a:b:c:1", reason = "a reason" }]',
         f"[secrets]\nallow = [{secret_entry(reason='')}]",
         f"[secrets]\nallow = [{secret_entry(reason='  ')}]",
         f"[secrets]\nallow = [{secret_entry(reason='two\nlines')}]",
@@ -171,15 +173,17 @@ def test_a_config_without_allowances_allows_nothing(text):
     ],
 )
 def test_refuses_an_allowance_that_is_not_a_rule_file_hash_and_reason(text):
-    """#24 rule 2: an invalid allow entry cannot be judged."""
+    """SECRET-21, SECRET-22, SECRET-23, SECRET-24: an allow entry without a reason, with a hash that is not 64 lowercase
+    hex, a duplicate of another entry or in the fingerprint form is refused; so is any other entry that is not rule,
+    file, hash and reason."""
     with pytest.raises(ConfigError, match="quality/config.toml"):
         load_allow_lists(text)
 
 
-def test_the_old_fingerprint_form_is_refused_with_the_new_form_shown():
-    """#24 rule 2: the message of a fingerprint entry shows the content-bound form."""
+def test_a_fingerprint_entry_is_refused_naming_secret_sha256():
+    """SECRET-24: the message of a fingerprint entry names secret_sha256."""
     with pytest.raises(ConfigError, match="secret_sha256"):
-        load_allow_lists('[secrets]\nallow = [{ fingerprint = "a:b:c:1", reason = "old form" }]')
+        load_allow_lists('[secrets]\nallow = [{ fingerprint = "a:b:c:1", reason = "a reason" }]')
 
 
 @pytest.mark.parametrize(
@@ -632,7 +636,7 @@ def test_the_secrets_example_holds_a_placeholder_hash_a_person_fills():
 
 
 def test_the_array_of_tables_form_and_the_inline_form_of_the_same_entries_read_equal_allowances():
-    """O31: quality prints the block form; a file that holds the inline list reads the same."""
+    """O31, SECRET-17: quality prints the block form; a file that holds the inline list reads the same."""
     fields = [("aws-access-token", "a.py", "first"), ("generic-api-key", "b.py", "second")]
     inline = secrets_text(*(secret_entry(rule=rule, file=file, reason=reason) for rule, file, reason in fields))
     blocks = "".join(
