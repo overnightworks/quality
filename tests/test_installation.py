@@ -73,7 +73,7 @@ def install_distribution(site: Path, record: str, name: str = "scanner") -> None
     ids=["not installed", "no RECORD", "RECORD without the executable", "recorded file gone"],
 )
 def test_an_executable_the_installation_does_not_hold_is_not_found(tmp_path, monkeypatch, record):
-    """SCANNER-16: an executable the installation does not hold, or records and no longer has, is not found."""
+    """SCANNER-16: an executable the installation does not hold, or does not record, is not found."""
     site = tmp_path / "site"
     if record is not None:
         install_distribution(site, record)
