@@ -262,7 +262,7 @@ def test_a_raw_line_stands_escaped_behind_the_marker(build_repo, served_scanners
 
 
 def test_at_a_terminal_a_raw_line_is_dim_and_whole(build_repo, served_scanners, elsewhere, window):
-    """VERBOSE-4, VERBOSE-5: at a terminal a scanner's line is dim and stands whole."""
+    """COLOUR-2, VERBOSE-4, VERBOSE-5: at a terminal a scanner's line is dim and stands whole."""
     line = "x" * 70
     keywords = installing(served_scanners, elsewhere, {scanners.ACTIONLINT: writing(scanners.ACTIONLINT, line)})
     terminal = window(40)
@@ -307,7 +307,7 @@ def test_a_scanner_that_never_ran_has_no_row(build_repo, capsys):
 
 
 def test_the_raw_lines_stand_below_the_row_the_live_line_gave_way_to(build_repo, window):
-    """VERBOSE-1: a scanner's row stands below the area's row, where the live line stood."""
+    """COLOUR-10, VERBOSE-1: a scanner's row stands below the area's row, where the live line stood."""
     terminal = window(80)
     with contextlib.redirect_stdout(terminal.stream), contextlib.redirect_stderr(terminal.stream):
         door_in(build_repo({"README.md": "x\n"}), CHECK_WORD, "-v", clock=lambda: 0.0, environment={"TERM": "xterm"})
