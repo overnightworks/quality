@@ -41,7 +41,9 @@ def test_a_fix_lowers_each_entry_and_judges_the_tree_against_the_lowered_file(bu
     }
 
 
-def test_a_first_recording_stands_in_the_pictures_frame(build_repo, capsys):
+def test_a_first_recording_counts_the_entries_it_records_and_runs_clean(build_repo, capsys):
+    """FIX-11: a repository with no ceiling gets one recorded, its row counts the entries and the pairs, and the run
+    is clean."""
     repo = build_repo({"src/a.py": long_function(62)})
     printed = (
         "  ✓ debt          recorded       1 entry, 0 clone pairs · quality/baseline.toml is new\n"
@@ -51,6 +53,7 @@ def test_a_first_recording_stands_in_the_pictures_frame(build_repo, capsys):
 
 
 def test_a_first_recording_counts_the_clone_pairs_it_records(build_repo, capsys):
+    """FIX-11: the row of a first recording counts the clone pairs it records beside the entries."""
     repo = build_repo({"src/a.py": long_function(62), "tests/test_a.py": clone_function("run", "a", "b"), "tests/test_b.py": clone_function("check", "c", "d")})
     printed = (
         "  ✓ debt          recorded       1 entry, 1 clone pair · quality/baseline.toml is new\n"
@@ -60,6 +63,8 @@ def test_a_first_recording_counts_the_clone_pairs_it_records(build_repo, capsys)
 
 
 def test_adopting_the_clones_table_says_the_ceiling_was_recorded(build_repo, capsys):
+    """FIX-15: a ceiling without a `[clones]` table takes the pairs, and the row says `recorded` with the pairs
+    counted."""
     repo = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: "[file_lines]\n", "tests/test_a.py": clone_function("run", "a", "b"), "tests/test_b.py": clone_function("check", "c", "d")})
     printed = (
         "  ✓ debt          recorded       1 clone pair · quality/baseline.toml\n"
@@ -258,6 +263,8 @@ def refused_pair(next_step: str, found: str = "") -> str:
          "a merge that alone introduced it", "the root commit, then removed"],
 )
 def test_a_ceiling_git_holds_is_no_first_recording(build_repo, capsys, arrange):
+    """FIX-11, FIX-12: a ceiling in the index or in any commit `HEAD` reaches is no first recording: the fix refuses
+    with the restore step and writes nothing."""
     repo = arrange(build_repo)
     git(repo, "config", "log.showRoot", "false")
     code, out, err = fixed(capsys, repo, *FIX_WORDS)
@@ -306,6 +313,8 @@ def held_by_the_root_commit(build_repo) -> Path:
     ids=["by hand", "committed", "in the index only", "a table only a merge held", "the root commit, then removed"],
 )
 def test_a_clones_table_git_holds_is_not_recorded_again(build_repo, capsys, arrange):
+    """FIX-12: a `[clones]` table git holds and the tree lacks refuses the fix with the restore step and writes
+    nothing."""
     repo = arrange(build_repo)
     git(repo, "config", "log.showRoot", "false")
     before = digest(repo)
@@ -317,6 +326,8 @@ def test_a_clones_table_git_holds_is_not_recorded_again(build_repo, capsys, arra
 
 @pytest.mark.parametrize("held", [None, held_ceiling(value=80, clones=False)], ids=["no ceiling", "no table"])
 def test_a_shallow_clone_cannot_prove_a_first_recording(build_repo, elsewhere, capsys, held):
+    """FIX-14: a shallow clone that cannot show the ceiling is new refuses and names `git fetch --unshallow`, after
+    which the fix runs."""
     origin = build_repo({"src/a.py": long_function(62), **({} if held is None else {BASELINE_PATH: held})})
     commit_file(origin, "second", "2\n")
     clone = shallow_clone(origin, elsewhere)
@@ -330,6 +341,7 @@ def test_a_shallow_clone_cannot_prove_a_first_recording(build_repo, elsewhere, c
 
 
 def test_a_shallow_clone_lowers_a_ceiling_that_holds_its_table(build_repo, elsewhere, capsys):
+    """FIX-3: a shallow clone whose ceiling holds its `[clones]` table lowers it, with no need for the whole history."""
     origin = build_repo({"src/a.py": long_function(62)})
     commit_file(origin, "second", "2\n")
     commit_file(origin, BASELINE_PATH, held_ceiling(value=80))
@@ -368,6 +380,7 @@ def test_a_failing_git_quotes_nothing(build_repo, fake_git, capsys, arrange):
 
 
 def test_a_restored_ceiling_lowers_and_keeps_what_grew(build_repo, capsys):
+    """FIX-3, FIX-5: a ceiling restored from git is lowered where the tree shrank and keeps the entry that grew."""
     held = '[function_lines."src/a.py"]\nlong_one = 80\n\n[function_lines."src/b.py"]\nlong_one = 64\n\n[clones]\n'
     repo = build_repo({"src/a.py": long_function(62), "src/b.py": long_function(71), BASELINE_PATH: held})
     (repo / BASELINE_PATH).unlink()
@@ -382,6 +395,7 @@ def test_a_restored_ceiling_lowers_and_keeps_what_grew(build_repo, capsys):
 
 @pytest.mark.integration
 def test_a_repository_without_a_commit_takes_a_first_recording(tmp_path, capsys):
+    """FIX-11: a repository with no commit has no ceiling in any commit, so the fix records one."""
     repo = tmp_path / "fresh"
     repo.mkdir()
     git(repo, "init", "-q")
@@ -417,6 +431,8 @@ def a_version_in_the_index(build_repo) -> Path:
     ids=["in history", "not UTF-8", "in the index"],
 )
 def test_a_version_no_parser_reads_refuses_and_a_clones_table_by_hand_runs_the_fix(build_repo, capsys, arrange):
+    """FIX-13: a version of the ceiling in git that no parser reads refuses the fix with the restore step and writes
+    nothing; a hand-written `[clones]` table lets it run."""
     repo = arrange(build_repo)
     put(repo / BASELINE_PATH, held_ceiling(clones=False))
     before = digest(repo)
@@ -493,6 +509,8 @@ def a_path_that_is_no_utf8(build_repo, elsewhere) -> Path:
     ],
 )
 def test_every_refused_fix_writes_nothing_and_names_its_next_step(build_repo, elsewhere, capsys, arrange, refusal):
+    """CEILING-9, GENERATED-11: a config or baseline that cannot be read, or a file Python cannot parse (a declared
+    one included), refuses the fix with exit `2` and its next step, and writes nothing."""
     repo = arrange(build_repo, elsewhere)
     before = (tree_of(repo), tree_of(elsewhere))
     code, out, err = fixed(capsys, repo, *FIX_WORDS)
@@ -669,6 +687,8 @@ def test_under_v_a_fix_keeps_its_write_and_exit(build_repo, capsys, verbosity):
     ],
 )
 def test_a_fix_passes_the_verdict(pull_request, capsys, sources, base, head, exit_code):
+    """FIX-3, FIX-5, FIX-7, FIX-8, FIX-9, FIX-11, FIX-15: each ceiling the fix writes (lowered, grown beside a
+    fall, first recording, clones recorded, pair dropped, gone entry dropped) passes the verdict of a pull request."""
     repo, commit_base = pull_request
     for name, text in sources.items():
         put(repo / name, text)

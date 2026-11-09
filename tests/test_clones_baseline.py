@@ -316,14 +316,14 @@ def test_check_with_a_clone_table_holds_the_size_and_the_pairs_without_a_report_
 
 
 def test_a_first_recording_writes_both(build_repo, capsys):
-    """With no ceiling yet, the fix records the size entries and the pairs."""
+    """FIX-11: with no ceiling yet, the fix records the size entries and the pairs."""
     repo = build_repo({"src/a.py": long_function(70), **TWO_FILES})
     assert written(capsys, repo)[0] == 0
     assert baseline_text(repo).endswith(LONG_ONE + "\n" + FIRST)
 
 
 def test_a_fix_over_a_file_without_a_clone_table_records_the_pairs_and_keeps_the_entries(build_repo, capsys):
-    """A ceiling git never held a `[clones]` table in takes the pairs and no new entry."""
+    """FIX-15: a ceiling git never held a `[clones]` table in takes the pairs and no new entry."""
     repo = build_repo({"src/a.py": long_function(70), **TWO_FILES, BASELINE_PATH: LONG_ONE})
     assert written(capsys, repo)[0] == 0
     assert load_baseline(baseline_text(repo)) == Baseline({Key(Metric.FUNCTION_LINES, "src/a.py", "long_one"): 70}, frozenset({FIRST_PAIR}))
@@ -337,7 +337,8 @@ def test_a_pair_the_tree_lost_leaves_the_ceiling_and_no_new_pair_enters(build_re
 
 
 def test_the_written_file_loads_back_with_each_pair_once_under_its_first_side_sorted(build_repo, capsys):
-    """#130 E6, cell 14: the form, and the same file again on a second write."""
+    """The file the fix writes lists each pair once under its first side, sorted, and loads back as the same
+    baseline; a second write leaves it unchanged."""
     repo = build_repo(THREE_FILES)
     assert written(capsys, repo)[0] == 0
     first = baseline_text(repo)
@@ -353,7 +354,7 @@ def test_the_written_file_loads_back_with_each_pair_once_under_its_first_side_so
 
 
 def test_a_reversed_or_repeated_hand_written_pair_loads_as_its_one_identity():
-    """#130 E2, cell 15."""
+    """A hand-written pair listed reversed or twice loads as the one pair."""
     repeated = REVERSED + '[clones."tests/test_a.py"]\nrun = [["tests/test_b.py", "check"], ["tests/test_b.py", "check"]]\n'
     assert load_baseline(REVERSED) == Baseline({}, frozenset({FIRST_PAIR}))
     assert load_baseline(repeated) == Baseline({}, frozenset({FIRST_PAIR}))
@@ -361,7 +362,8 @@ def test_a_reversed_or_repeated_hand_written_pair_loads_as_its_one_identity():
 
 
 def test_an_empty_clone_table_is_the_empty_set_and_renders_back_as_the_table(build_repo, capsys):
-    """#130 E3, cell 18: an empty table is not an absent one."""
+    """An empty `[clones]` table loads as the empty set, not as an absent one, and a first recording of a tree with
+    no pair renders it back."""
     assert load_baseline(EMPTY_CLONES) == Baseline({}, frozenset())
     assert load_baseline("") == Baseline({}, None)
     assert render_baseline(Baseline({}, frozenset())).endswith("\n" + EMPTY_CLONES)
@@ -372,7 +374,8 @@ def test_an_empty_clone_table_is_the_empty_set_and_renders_back_as_the_table(bui
 
 @pytest.mark.parametrize("class_path, functions_path", [('tests/a"q.py', 'tests/b"r.py'), ('tests/b"r.py', 'tests/a"q.py')])
 def test_symbols_and_paths_that_need_quotes_round_trip_through_the_write(build_repo, capsys, class_path, functions_path):
-    """#130 cell 20: `Class.method`, `f#2`, a `"` in a path and a non-ASCII symbol, each on the key side and the list side."""
+    """A method, a repeated function name, a `"` in a path and a non-ASCII symbol round-trip through the write, on
+    the key side and the list side."""
     method = textwrap.indent(clone_function("méthode", "a", "b"), "    ")
     repo = build_repo({
         class_path: "class Holder:\n" + method,
@@ -392,7 +395,7 @@ def test_symbols_and_paths_that_need_quotes_round_trip_through_the_write(build_r
 
 
 def test_a_pair_across_production_and_tests_round_trips(build_repo, capsys):
-    """#130 cell 23."""
+    """A pair across production and tests is written and loads back."""
     repo = build_repo({"src/shop.py": clone_function("price", "a", "b"), "tests/test_shop.py": clone_function("cost", "c", "d")})
     assert written(capsys, repo)[0] == 0
     pair = ClonePair.of(Place("src/shop.py", "price"), Place("tests/test_shop.py", "cost"))
@@ -515,13 +518,6 @@ def test_new_pairs_print_in_sorted_order_across_locations_and_at_one_location(bu
     assert_the_debt_block_is_the_findings_in_run_order(repo, output)
 
 
-def test_two_file_rows_share_one_fix(build_repo, capsys):
-    """ROW-3: a fix shared by consecutive rows is printed once, under the last of them."""
-    _, _, output = enforced(capsys, build_repo, {"src/a.py": "x = 1\n" * 800, "src/b.py": "x = 1\n" * 801}, "")
-    first, second = (row for _, row in area_finding_rows(output, Area.DEBT))
-    assert (first.fix_follows, second.fix_follows, first.fix == second.fix) == (False, True, True), output
-
-
 def test_a_size_can_fall_row_and_a_clone_can_fall_row_share_one_fix(build_repo, capsys):
     """CLONE-7, ROW-3: the fix of a size row and a clone row that can fall is printed once, after the clone row."""
     files = {"src/a.py": long_function(65), "tests/test_a.py": TWO_FILES["tests/test_a.py"]}
@@ -567,7 +563,8 @@ def test_a_malformed_baseline_leaves_both_rules_unable_to_judge_and_names_one_re
 
 
 def test_the_write_and_the_rule_agree(build_repo, capsys):
-    """#136 cell 11: after the write the clone rule finds nothing and the debt row counts what the write wrote."""
+    """FIX-11: after a first recording the clone rule finds nothing and the debt row counts the entries and the pairs
+    written."""
     repo = build_repo(THREE_FILES)
     assert written(capsys, repo)[0] == 0
     code, output = check_output(capsys, repo)

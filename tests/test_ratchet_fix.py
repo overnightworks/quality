@@ -101,6 +101,7 @@ def test_a_pair_the_tree_lost_goes_and_a_new_one_stays_out():
 
 
 def test_a_file_without_clones_records_its_pairs():
+    """FIX-15: a file without `[clones]` records its pairs and notes the recording."""
     fix = lower_ceiling(Baseline({}, None), {}, frozenset({pair("work", "b")}), {})
     assert fix.ceiling.clones == frozenset({pair("work", "b")})
     assert [change.event for change in fix.changes] == [NoteEvent.RECORDED]
@@ -128,10 +129,14 @@ def test_a_lowered_entry_is_noted_with_its_fall_and_a_dropped_one_with_its_thres
     ],
 )
 def test_a_version_holds_clones_if_it_parses_so(version, held):
+    """FIX-12: a version of the ceiling holds a clones table where it parses as one, in any spelling, and not where a
+    function or file is merely named `clones`."""
     assert holds_clones_table(version) is held
 
 
 @pytest.mark.parametrize("version", [b"[clones", b"\xff\xfe"], ids=["[clones", "not UTF-8"])
 def test_a_version_no_parser_reads_shows_nothing(version):
+    """FIX-13: a version of the ceiling in git that no parser reads raises the error that names it, instead of
+    reading as a table held or absent."""
     with pytest.raises(SizeError, match="a version of quality/baseline.toml in git cannot be read"):
         holds_clones_table(version)

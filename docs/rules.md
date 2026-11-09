@@ -147,12 +147,19 @@ It applies these rules:
   and the rest still falls (FIX-7). An entry `check` calls gone or left out as generated goes (`dropped  file is gone`),
   counted among the lowered (FIX-8); a held pair the tree lost goes (`dropped`, `pair ... is gone`) (FIX-9), and a new
   pair stays a finding (FIX-10). It
-  records a ceiling (`recorded`, `N entries, M clone pairs · quality/baseline.toml is new`) only where none lies on disk,
-  in the index or in any commit `HEAD` reaches; a ceiling or a `[clones]` table git holds and the tree lacks is `✗ not
-  fixed` with `restore quality/baseline.toml from git, or repair it by hand` (a version no TOML parser reads refuses
-  likewise), and a shallow clone that cannot prove it names `git fetch --unshallow`. A file without `[clones]` that git
-  never held it in records the pairs and keeps its entries. It also rewrites a file whose text is not what it would render (an older header, other blank lines or order, a comment), though no entry changes: `rewritten`, `quality/baseline.toml`, or beside a finding `rewritten · quality/baseline.toml`. The verdict line adds `ceiling lowered by N entries`,
-  `ceiling recorded`, `ceiling rewritten` or `nothing to lower`. Under `--dry-run` the same ceiling is made, judged and rendered and nothing is written: each change is a `~` row worded as what the fix would do, the `~` debt row (`N to lower`, `N to move`, `to record` or `to rewrite`, `text differs · quality/baseline.toml`) and the verdict (`~ dry run · N ceiling entries would fall`, `N ceiling entries would move`, `ceiling would be recorded` or `ceiling would be rewritten`, then `· nothing written`), the exit `1` while the fix would change the file.
+  records a ceiling (`recorded`, `N entries, M clone pairs · quality/baseline.toml is new`) only where none lies on
+  disk, in the index or in any commit `HEAD` reaches (FIX-11); a ceiling or a `[clones]` table git holds and the tree
+  lacks is `✗ not fixed` with `restore quality/baseline.toml from git, or repair it by hand` (FIX-12) (a version no TOML
+  parser reads refuses likewise) (FIX-13), and a shallow clone that cannot prove it names
+  `git fetch --unshallow` (FIX-14). A file without `[clones]` that git never held it in records the pairs and keeps its
+  entries (FIX-15). It also rewrites a file whose text is not what it would render (an older header, other blank lines
+  or order, a comment), though no entry changes: `rewritten`, `quality/baseline.toml`, or beside a finding
+  `rewritten · quality/baseline.toml`. The verdict line adds `ceiling lowered by N entries`, `ceiling recorded`,
+  `ceiling rewritten` or `nothing to lower`. Under `--dry-run` the same ceiling is made, judged and rendered and nothing
+  is written: each change is a `~` row worded as what the fix would do, the `~` debt row (`N to lower`, `N to move`,
+  `to record` or `to rewrite`, `text differs · quality/baseline.toml`) and the verdict
+  (`~ dry run · N ceiling entries would fall`, `N ceiling entries would move`, `ceiling would be recorded` or
+  `ceiling would be rewritten`, then `· nothing written`), the exit `1` while the fix would change the file.
   The file is written whole or not at all: a hidden sibling takes the text and replaces the file in one step, so whatever
   stops the process leaves the complete old file or the complete new one, the replacement being the commit point, so a
   Ctrl-C just after it keeps the new file, and a killed process can leave that sibling. It keeps the file's mode,
