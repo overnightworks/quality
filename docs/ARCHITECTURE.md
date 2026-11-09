@@ -61,7 +61,7 @@ flowchart TB
 ```
 
 Rules return findings and never print; `output.py` owns every printed line. `checkout.py` and `repository.py` are the
-only readers of the checked-out files, `web.py` the only HTTP transport, and `gh.py` runs every `gh` command the door sends.
+only readers of the checked-out files (`architecture.py` opens the sources itself, for grimp), `web.py` the only HTTP transport that sends a credential, and `gh.py` runs every `gh` command the door sends.
 
 ## 3. Runtime View
 
