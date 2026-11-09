@@ -1,8 +1,0 @@
-claim_id = "dc7bc2908af846d79ccd49a230f40365"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "7028efa813b8e46f45d543b0a8a8ea359c4b4fff"
-branch = "claude/issue-696-sweep-output-ruled-marks"
-scope = ["docs/output.md", "tests/test_cli_output.py", "tests/test_clones.py", "tests/test_ratchet_gone.py"]
-opened_commit = "a236c0162056dd92e479fa3ab79ce7f8d9900bf1"
-whole_reason = "docs/output.md ruled blocks Rows to the closing line, marked by existing IDs their tests cite, and O21 on one line; the marking of the blocks from Streams on follows in slice 8-5."
