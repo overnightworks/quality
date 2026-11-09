@@ -316,7 +316,8 @@ def failing_fetch(tmp_path):
 
 @pytest.mark.integration
 def test_a_fetch_that_fails_cannot_be_judged_before_anything_is_touched(capsys, tmp_path):
-    """#149 cell 24: no empty rename map is substituted, so a move is never read as an add by guess."""
+    """MERGE-100, MERGE-101, MERGE-102: a fetch that fails is never read as an empty rename list: the door says in its
+    own words that it could not check (exit 2), shows none of git's, and changes nothing."""
     gh = failing_fetch(tmp_path)
     gh.remote = str(tmp_path / "missing.git")
     code, _ = drive(gh)
@@ -330,13 +331,7 @@ def test_a_fetch_that_fails_cannot_be_judged_before_anything_is_touched(capsys, 
 
 
 def test_a_fetch_that_needs_a_password_never_asks_for_one(capsys, tmp_path, monkeypatch, stub_server):
-    """#149 cell 24: with no usable credentials git refuses; an askpass helper in the environment is never run."""
-
-    def unauthorized(handler):
-        handler.send_response(401)
-        handler.send_header("WWW-Authenticate", 'Basic realm="x"')
-        handler.end_headers()
-
+    """MERGE-97: without credentials git refuses the fetch, and an askpass program in the environment is never run."""
     origin, heard = stub_server(unauthorized)
     asked = tmp_path / "asked"
     askpass = tmp_path / "askpass"
@@ -360,7 +355,8 @@ def test_a_fetch_that_needs_a_password_never_asks_for_one(capsys, tmp_path, monk
 
 
 def test_the_door_fetches_exactly_the_pull_requests_base_and_merge_commits(tmp_path, fake_git):
-    """#149 cell 25, and the credentials come from gh's protocol only."""
+    """MERGE-89, MERGE-96: the door fetches exactly the pull request's base and merge commits, through gh's credential
+    helper."""
     gh = failing_fetch(tmp_path)
     calls = tmp_path / "git-calls"
     fake_git(f'echo "$@" >> "{calls}"')
@@ -373,6 +369,7 @@ def test_the_door_fetches_exactly_the_pull_requests_base_and_merge_commits(tmp_p
 @pytest.mark.integration
 @pytest.mark.parametrize("fails", [False, True], ids=["after a judgement", "after a failed fetch"])
 def test_the_fetched_repository_is_removed(tmp_path, monkeypatch, fails):
+    """MERGE-90: the temporary repository is removed after a judgement and after a failed fetch."""
     scratch = tmp_path / "scratch"
     scratch.mkdir()
     monkeypatch.setattr("tempfile.tempdir", str(scratch))
@@ -393,7 +390,8 @@ def test_the_fetched_repository_is_removed(tmp_path, monkeypatch, fails):
 def test_a_step_that_does_not_finish_in_time_cannot_be_judged_and_leaves_no_child(
     capsys, tmp_path, monkeypatch, fake_git, stalls, refusal
 ):
-    """#149 fetch boundary: the fetch and the diff share the bound, and the whole process group dies with it."""
+    """MERGE-98, MERGE-99, MERGE-101: a fetch or a rename list that outlasts the one limit cannot be judged, and the
+    process group of the stalled command dies with it."""
     monkeypatch.setattr("quality.sides.FETCH_TIMEOUT_SECONDS", 0.5)
     child = tmp_path / "child-pid"
     gh = failing_fetch(tmp_path)
@@ -406,7 +404,7 @@ def test_a_step_that_does_not_finish_in_time_cannot_be_judged_and_leaves_no_chil
 
 
 def test_git_output_of_a_failed_rename_list_never_reaches_the_operator(capsys, tmp_path, fake_git):
-    """#149 fetch boundary: the door says it could not judge in its own words."""
+    """MERGE-100, MERGE-101: the door says in its own words that the rename list failed and prints none of git's."""
     gh = failing_fetch(tmp_path)
     fake_git('case "$*" in *" diff "*) echo STDERR_SENTINEL >&2; exit 1;; esac')
     assert drive(gh)[0] == 2
@@ -417,7 +415,8 @@ def test_git_output_of_a_failed_rename_list_never_reaches_the_operator(capsys, t
 
 @pytest.mark.integration
 def test_inherited_git_routing_and_configuration_do_not_reach_the_diff(capsys, tmp_path, monkeypatch):
-    """#149 fetch boundary: the diff runs in the isolated environment of the fetch."""
+    """MERGE-93: inherited git routing and configuration variables do not reach the diff, which runs in the isolated
+    environment of the fetch."""
     gh = failing_fetch(tmp_path)
     for name, value in {
         "GIT_DIR": str(tmp_path / "elsewhere"), "GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "diff.orderFile",
@@ -438,6 +437,8 @@ def test_inherited_git_routing_and_configuration_do_not_reach_the_diff(capsys, t
     ids=["GH_CONFIG_DIR", "XDG_CONFIG_HOME", "home"],
 )
 def test_gh_keeps_the_login_it_would_use_without_the_changed_home(environment, expected):
+    """MERGE-95: gh keeps the login it would use without the changed home: GH_CONFIG_DIR, else XDG_CONFIG_HOME/gh, else
+    the home's."""
     assert sides.gh_configuration_directory(environment) == expected
 
 
@@ -450,7 +451,8 @@ def unauthorized(handler):
 def test_a_netrc_in_the_home_is_never_sent_and_gh_finds_its_login_from_the_empty_home(
     capsys, tmp_path, monkeypatch, stub_server
 ):
-    """#149 fetch boundary: gh is the only credential source, and its helper still sees the real configuration."""
+    """MERGE-92, MERGE-94, MERGE-95, MERGE-96: git runs with an empty home, so a .netrc login is never sent; gh's helper
+    is asked and still finds its login directory."""
     origin, heard = stub_server(unauthorized)
     home = tmp_path / "home"
     home.mkdir()
@@ -488,7 +490,7 @@ sides.read_renames_of_pull(
 
 @pytest.mark.integration
 def test_a_sigterm_during_the_fetch_leaves_no_repository_behind(tmp_path):
-    """#149 fetch boundary: the repository is removed on interruption too, through the scratch directory scanners use."""
+    """MERGE-91: the temporary repository is removed when the command is terminated during the fetch."""
     scratch_parent = tmp_path / "scratch-parent"
     scratch_parent.mkdir()
     door = subprocess.Popen(
@@ -560,7 +562,8 @@ def test_a_rename_list_git_did_not_finish_is_exit_two_at_the_verdict(capsys, pul
 
 @pytest.mark.parametrize(("printed", "cause"), UNFINISHED_LISTS, ids=["cut off", "a source renamed twice"])
 def test_a_rename_list_git_did_not_finish_cannot_be_judged_at_the_door(capsys, tmp_path, fake_git, printed, cause):
-    """#149 cell 20: the door never substitutes an empty map."""
+    """MERGE-101, MERGE-102: a rename list git did not finish is not judged and never replaced by an empty map: exit 2,
+    the door's own words, nothing changed."""
     gh = pulled(tmp_path, OLD_ENTRY, NEW_ENTRY, MOVE)
     fake_git(listing_script(printed))
     code, _ = drive(gh)
