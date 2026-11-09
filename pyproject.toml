@@ -73,6 +73,7 @@ layers = [
     "landing",
     "verdict",
     "sides | gh",
+    "sonar_properties",
     "sonar | fleet",
     "check | staged",
     "pin",
