@@ -1,8 +1,0 @@
-claim_id = "355f5e3d49f14926b5e9130726ccd2ff"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "9a5692b074e95b6126948df77ddc028e23834a70"
-branch = "claude/issue-671-d7-secret-allowance-row-ids"
-scope = ["docs/rules.md", "tests/test_config.py", "tests/test_scanners.py", "tests/test_scanners_secrets.py", "tests/test_staged.py"]
-opened_commit = "25bfc4f9fe3832908e59cf442b37de51af5c7823"
-whole_reason = "docs/rules.md secret rule: the allowance by rule, file and value hash, the inline list, the entry refusals, the commit count refusal, the allowed row and the unused row, and the tests that prove them, linked by SECRET IDs; the scan, the config and the handling are 7s-i, the attributes paragraph is 7s-ii."
