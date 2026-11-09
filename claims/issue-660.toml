@@ -1,8 +1,0 @@
-claim_id = "d86345f6834f41f3b42e30c1b9e691f6"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "327ab3bad00eaef656773c23a0d3c841b1039956"
-branch = "claude/issue-660-d7-baseline-loosening-ids"
-scope = ["docs/rules.md", "tests/test_clones_baseline.py", "tests/test_ratchet.py", "tests/test_verdict.py"]
-opened_commit = "7d0bf58a96bbb5f062be396735bac3f29258f22a"
-whole_reason = "docs/rules.md baseline bullet, its loosening lines and the green and adoption sentences, and the tests that prove them, linked by BASELINE IDs; the renames paragraph and the sentences from the refusals of reading the sides on are 7q."
