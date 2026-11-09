@@ -1,8 +1,0 @@
-claim_id = "72f018a2dad240bea9d33299117ee59e"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "b356e41b2c17e9491c609fed556c66f954fe26e0"
-branch = "claude/issue-623-d7-scanner-ids"
-scope = ["docs/commands.md", "docs/rules.md", "tests/test_check.py", "tests/test_installation.py", "tests/test_python_lint.py", "tests/test_scanners.py"]
-opened_commit = "cd8de9c2ab30dcedcdf0c13731475c29808163b7"
-whole_reason = "docs/commands.md Scanners section and the tests that prove it, linked by SCANNER IDs from SCANNER-1, with the lines they stand on rewrapped and the two rules.md phrases that name its rules linked."
