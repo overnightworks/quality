@@ -744,28 +744,33 @@ reason = "gradio caps pillow<13; no image input"
 
 - `id` is any id of the advisory group, GHSA, PYSEC or CVE alike (ALLOW-2). `lock` is the tracked relative path; the entry
   allows the advisory on every package it affects in that lock and in no other, so a lock reached by two tracked names
-  needs an entry per name (ALLOW-7). Two entries matching one group in one lock (its GHSA and its CVE id) are a finding at
-  `quality/config.toml` naming both, and the group is allowed by neither:
+  needs an entry per name (ALLOW-7). Two entries matching one group in one lock (its GHSA and its CVE id) are a finding
+  at `quality/config.toml` naming both, and the group is allowed by neither (ALLOW-9):
   `! quality/config.toml  conflict  <id> and <id> in <lock> match one advisory · none allows it`.
 - `until` is the re-check date and `date` the day of the ruling, both TOML dates without a time (ALLOW-3); `item` and `reason`
   are as in a [declared loosening](gate.md#declared-loosenings). The allowance holds through `until` (in UTC) and the advisory
-  is red again from the next day: its row ends in `· allowance ran out on <until> (<item>)` (ALLOW-4). quality sets no latest `until`, and an advisory with no fixed
-  version is allowed like any other.
+  is red again from the next day: its row ends in `· allowance ran out on <until> (<item>)` (ALLOW-4). quality sets no
+  latest `until` (ALLOW-10), and an advisory with no fixed version is allowed like any other.
 - Each allowed advisory stands as a row under the dependencies row, after the area's findings and their `fix:`, and the rule stays clean (ALLOW-6):
-  `· <lock>  allowed  <package> <version> · <id> · fixed in <versions> · until <until> (<item>) · <reason>`. The fact says what the `affected` row says of a fix. A clean row counts them (`· 1 allowed`).
+  `· <lock>  allowed  <package> <version> · <id> · fixed in <versions> · until <until> (<item>) · <reason>`. The fact
+  says what the `affected` row says of a fix. [A clean row](output.md#notes) counts them (`· 1 allowed`).
 - An entry no reported advisory matches is a finding (ALLOW-5): `! quality/config.toml  unused  <id> in <lock> matches no
-  advisory`. Deleting it is no loosening. With no tracked lock every entry matches nothing.
-- A malformed entry (a missing or extra key, an empty or multi-line `id`, `lock` or `reason`, an `item` that is not
-  `#<n>` or `<owner>/<repo>#<n>`, an `until` or `date` that is text or carries a time, two entries for one `id` and
-  `lock`, or an unknown key in `[advisories]`) is exit `2` in the `advisory` and `secret` rules and in `verdict`,
-  naming the entry by its position (`[[advisories.allow]] entry 2`); `check secrets --staged` reads only `[secrets]`.
+  advisory`. [Deleting it is no loosening](gate.md#declared-loosenings). With no tracked lock every entry matches
+  nothing (ALLOW-11).
+- A malformed entry (a missing or extra key (ALLOW-12), an empty or multi-line `id`, `lock` or `reason` (ALLOW-13), an
+  `item` that is not `#<n>` or `<owner>/<repo>#<n>` (ALLOW-14), an `until` or `date` that is text or carries a time
+  (ALLOW-15), two entries for one `id` and `lock` (ALLOW-16), or an unknown key in `[advisories]` (ALLOW-17)) is exit
+  `2` in the `advisory` and `secret` rules and in `verdict` (ALLOW-18),
+  [naming the entry by its position](output.md#refusals) (`[[advisories.allow]] entry 2`), except the last two, which
+  name the `id` and `lock` and the key; [`check secrets --staged` reads only `[secrets]`](gate.md#declared-loosenings).
 - A new allowance, and one whose `until` moves later, is a [declared loosening](gate.md#declared-loosenings) the allowance
   makes itself, so only the operator's door merges it. The pull request writes the allowance, so its item, date and
   reason prove nothing alone: the verdict's red and the door are the gate. An `id` that is an alias covers every
   group carrying it in that lock, while the door names the `id` and the lock, not the packages.
   Why only the operator's door merges it stands in [gate.md](gate.md#declared-loosenings). The entry's keys, the alias,
-  the date format, the expiry line, the unmatched allowance, the adoption (#116 E8), no latest `until`, the printed
-  lines, an advisory without a fixed version and the reach of an allowance are defaults the operator never answered.
+  the date format, the expiry line, the unmatched allowance, [the adoption](gate.md#declared-loosenings), no latest
+  `until`, the printed lines, an advisory without a fixed version and the reach of an allowance are defaults the
+  operator never answered.
 
 Ruled by the operator:
 
