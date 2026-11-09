@@ -357,7 +357,7 @@ def test_the_shorter_of_two_same_named_functions_cannot_grow_under_the_baseline(
 
 
 def test_a_first_recording_writes_the_measured_debt_sorted_and_check_then_holds_it(build_repo, capsys):
-    """The first `quality check debt --fix` writes sorted TOML keyed by path and qualified symbol."""
+    """FIX-11: the first `quality check debt --fix` writes sorted TOML keyed by path and qualified symbol."""
     repo = build_repo(
         {
             "src/b.py": long_file(810) + method(61),
@@ -431,7 +431,7 @@ def link_the_quality_directory_elsewhere(repo: Path, elsewhere: Path) -> None:
     ids=["baseline-symlink", "quality-directory-symlink"],
 )
 def test_a_fix_to_a_destination_it_cannot_own_cannot_be_judged(build_repo, capsys, arrange, row):
-    """The baseline is written to the repository's own quality/baseline.toml, never through a symlink."""
+    """FIX-30: the baseline is written to the repository's own quality/baseline.toml, never through a symlink."""
     repo = build_repo({"src/a.py": long_function(62)})
     elsewhere = repo / "untracked-elsewhere"
     elsewhere.mkdir()
@@ -451,7 +451,7 @@ def test_a_fix_to_a_destination_it_cannot_own_cannot_be_judged(build_repo, capsy
     ids=["quality-is-a-file", "baseline-is-a-directory"],
 )
 def test_a_fix_the_filesystem_refuses_cannot_be_judged(build_repo, capsys, blocker, fact):
-    """Exit 2, not a traceback: a baseline that cannot be written is never a clean result."""
+    """CEILING-9: exit 2, not a traceback: a baseline that cannot be written is never a clean result."""
     repo = build_repo({"src/a.py": long_function(62), **blocker})
     assert door_in(repo, *FIX_WORDS) == 2
     assert fact in capsys.readouterr().out
@@ -463,7 +463,7 @@ def test_a_fix_the_filesystem_refuses_cannot_be_judged(build_repo, capsys, block
     ids=["outside-the-bmp", "accented", "del-character", "quote-and-backslash"],
 )
 def test_a_written_baseline_holds_any_utf8_path(build_repo, capsys, path):
-    """#46 rule 5: whatever the path, the written baseline is TOML that the check then holds."""
+    """Whatever the path, the written baseline is TOML that the check then holds."""
     repo = build_repo({path: long_file(810) + long_function(62)})
     assert door_in(repo, *FIX_WORDS) == 0
     assert tomllib.loads((repo / BASELINE_PATH).read_text(encoding="utf-8")) == {
@@ -477,7 +477,7 @@ def test_a_written_baseline_holds_any_utf8_path(build_repo, capsys, path):
 
 
 def test_a_path_that_is_not_utf8_cannot_be_written_into_the_baseline(build_repo, capsys):
-    """#46 rule 5: TOML holds only Unicode, so a non-UTF-8 file name is exit 2, never a baseline the check cannot read."""
+    """TOML holds only Unicode, so a non-UTF-8 file name is exit 2, never a baseline the check cannot read."""
     repo = build_repo({"src/latin\udce9.py": long_file(810)})
     assert door_in(repo, *FIX_WORDS) == 2
     assert "src/latin\\udce9.py is not valid UTF-8" in capsys.readouterr().out

@@ -161,17 +161,18 @@ It applies these rules:
   `text differs · quality/baseline.toml`) (FIX-21) and the verdict (`~ dry run · N ceiling entries would fall`,
   `N ceiling entries would move`, `ceiling would be recorded` or `ceiling would be rewritten`, then `· nothing written`)
   (FIX-22), the exit `1` while the fix would change the file (FIX-23).
-  The file is written whole or not at all: a hidden sibling takes the text and replaces the file in one step, so whatever
-  stops the process leaves the complete old file or the complete new one, the replacement being the commit point, so a
-  Ctrl-C just after it keeps the new file, and a killed process can leave that sibling. It keeps the file's mode,
-  stays refused on a read-only file and needs a writable folder; a symlink on its way is never written through. A fix
-  writes only when an entry changes or the file's bytes are not its rendering; a file that renders byte for byte stays
-  untouched. A `check` without `--fix` says nothing of the text. It promises nothing against a power loss.
+  The file is written whole or not at all: a hidden sibling takes the text and replaces the file in one step, so
+  whatever stops the process leaves the complete old file or the complete new one (FIX-24), the replacement being the
+  commit point, so a Ctrl-C just after it keeps the new file (FIX-25), and a killed process can leave that
+  sibling (FIX-26). It keeps the file's mode (FIX-27), stays refused on a read-only file (FIX-28) and needs a writable
+  folder (FIX-29); a symlink on its way is never written through (FIX-30). A fix writes only when an entry changes or
+  the file's bytes are not its rendering; a file that renders byte for byte stays untouched (FIX-31). A `check` without
+  `--fix` says nothing of the text. It promises nothing against a power loss.
   A config or baseline the check cannot read, or a file Python cannot parse (a declared file included (GENERATED-11),
   because the clone pairs of the whole tree must be measured), refuses it (CEILING-9): the `debt` row is
   `✗ not checked` or `✗ not fixed`, exit `2`, and nothing is written. A refused fix leaves each rule the verdict it
-  reached against the unchanged file. Another area's refusal does not undo a finished fix: the file is written, the
-  `✓` row stands, the exit is `2`.
+  reached against the unchanged file (FIX-32). Another area's refusal does not undo a finished fix: the file is written,
+  the `✓` row stands, the exit is `2` (FIX-33).
   `--fix` follows renames as the verdict carries them: from the ceiling's last commit it reads what git renamed into the index (`git diff --cached -M50% -l1000`), moves a renamed file's entries and pairs to the new path at their values (`moved`) and drops what the ceiling held under that path before the move (`dropped ... left from before the move`); a ceiling it already moved stays, an entry it cannot place refuses with the restore step, a shallow clone whose ceiling's last commit is its edge, which is every depth-1 clone that holds a ceiling, refuses `--fix` with `git fetch --unshallow`, and a move the index does not record is not followed. Renames are followed before anything is judged gone, so a renamed file's entries move and never fall; with no committed ceiling a moved file's entries are gone. `check` reads no history: after a staged move it names the new path `new debt` and the old one `can fall … is gone`, and one `--fix` clears both.
 - `clone`: a pair is two functions (methods and nested functions too) in two different tracked `*.py` files, each of at
   least 40 tokens without its docstring, whose structure is at least 90 % the same once every name and literal is
