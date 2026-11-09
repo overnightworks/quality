@@ -754,9 +754,10 @@ reason = "gradio caps pillow<13; no image input"
 - Each allowed advisory stands as a row under the dependencies row, after the area's findings and their `fix:`, and the rule stays clean (ALLOW-6):
   `· <lock>  allowed  <package> <version> · <id> · fixed in <versions> · until <until> (<item>) · <reason>`. The fact
   says what the `affected` row says of a fix. [A clean row](output.md#notes) counts them (`· 1 allowed`).
-- An entry no reported advisory matches is a finding (ALLOW-5): `! quality/config.toml  unused  <id> in <lock> matches no
-  advisory`. [Deleting it is no loosening](gate.md#declared-loosenings). With no tracked lock every entry matches
-  nothing (ALLOW-11).
+- An entry no reported advisory matches is a finding (ALLOW-5):
+  `! quality/config.toml  unused  <id> in <lock> matches no advisory`.
+  [Deleting it is no loosening](gate.md#declared-loosenings). With no tracked lock every entry matches nothing
+  (ALLOW-11).
 - A malformed entry (a missing or extra key (ALLOW-12), an empty or multi-line `id`, `lock` or `reason` (ALLOW-13), an
   `item` that is not `#<n>` or `<owner>/<repo>#<n>` (ALLOW-14), an `until` or `date` that is text or carries a time
   (ALLOW-15), two entries for one `id` and `lock` (ALLOW-16), or an unknown key in `[advisories]` (ALLOW-17)) is exit
