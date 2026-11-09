@@ -613,9 +613,11 @@ It applies these rules:
   section, or a config that cannot be read are exit `2`, naming the side (`import-linter config at the base commit
   <sha>: ...`, `import-linter config at the head: ...`).
 
-The `secret` rule scans the whole history reachable from `HEAD` with gitleaks (a key removed later is still found; other branches the checkout fetched are not scanned), always with quality's own config
-(`src/quality/gitleaks.toml`): the repository's `.gitleaks.toml`, `.gitleaksignore` and `gitleaks:allow`
-comments have no effect. A known false positive is allowed by the value, not the place: the repository's
+The `secret` rule scans the whole history reachable from `HEAD` with gitleaks (a key removed later is still found
+(SECRET-1); other branches the checkout fetched are not scanned (SECRET-2)), always with quality's own config
+(`src/quality/gitleaks.toml`): the repository's `.gitleaks.toml`, `.gitleaksignore` and `gitleaks:allow` comments have
+no effect (SECRET-3).
+A known false positive is allowed by the value, not the place: the repository's
 `quality/config.toml` names the gitleaks rule, the file and the SHA-256 of the finding's secret (UTF-8, lowercase hex)
 with a reason:
 
@@ -637,17 +639,19 @@ without a reason, a hash that is not 64 lowercase hex, a duplicate `(rule, file,
 `fingerprint` form are exit `2`. The clean row counts the commits reachable from `HEAD` that gitleaks scans
 (`✓ secrets  clean  412 commits`); a count git cannot give is exit `2`.
 
-A missing `quality/config.toml` means no allowances: the scan still runs and its findings are red. Only a file that
-exists and cannot be read or parsed, or links out of the repository, is exit `2`; a link that leads nowhere or loops
-exists, so it is exit `2` too.
+A missing `quality/config.toml` means no allowances: the scan still runs and its findings are red (SECRET-4). Only a
+file that exists and cannot be read or parsed (SECRET-5), or links out of the repository (SECRET-6), is exit `2`; a link
+that leads nowhere or loops exists, so it is exit `2` too (SECRET-7).
 
-Secret handling: the secret scan runs gitleaks without `--redact` so the report carries each `Secret` to be hashed. gitleaks
-writes that report to a `tempfile` scratch directory (mode 0700); quality reads it, keeps only the hash, and deletes
-the directory on every exit path (success, gitleaks failure, parse error). The value reaches no stdout,
-stderr, log, exception text or retained file; gitleaks itself runs without its `-v`. While the scan runs, the value exists in
-that report file and in quality's process memory. The boundary is the deletion and the absence of any other sink,
-not memory-only handling. The hash is safe to print: it appears only where the history already shows the content,
-and a real secret must be rotated anyway. gitleaks' scan stderr may echo scanned values, so it is shown only as the vet allows ([the vet](output.md#the-vet)); the missing-report and unexpected-exit refusals keep their exit code without those diagnostics.
+Secret handling: the secret scan runs gitleaks without `--redact` so the report carries each `Secret` to be hashed
+(SECRET-8). gitleaks writes that report to a `tempfile` scratch directory (mode 0700); quality reads it, keeps only the
+hash, and deletes the directory on every exit path (success, gitleaks failure, parse error) (SECRET-9). The value
+reaches no stdout, stderr, log, exception text or retained file (SECRET-10); gitleaks itself runs without its `-v`.
+While the scan runs, the value exists in that report file and in quality's process memory. The boundary is the deletion
+and the absence of any other sink, not memory-only handling. The hash is safe to print: it appears only where the
+history already shows the content, and a real secret must be rotated anyway. gitleaks' scan stderr may echo scanned
+values, so it is shown only as the vet allows ([the vet](output.md#the-vet)); the missing-report and unexpected-exit
+[refusals](output.md#the-vet) keep their exit code without those diagnostics.
 
 The scan runs git without any attributes (not the repository's `.gitattributes`, not `info/attributes`, not the
 system or global file), so a `-diff` or `binary` line cannot hide a key. That needs git 2.41 or newer; an older git

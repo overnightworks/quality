@@ -79,7 +79,7 @@ def test_a_version_command_that_fails_hangs_or_reports_no_version_is_exit_2(serv
     ids=["crash-without-report", "exit-0-without-report", "unexpected-exit-with-report", "report-not-utf8"],
 )
 def test_a_scanner_that_crashes_or_leaves_no_usable_report_is_exit_2(served_scanners, build_repo, capsys, on_scan):
-    """#13 rule 3: a missing, undecodable or exit-code-inconsistent report is exit 2 for the secret rule alone, and
+    """VERBOSE-23: a missing, undecodable or exit-code-inconsistent report is exit 2 for the secret rule alone, and
     gitleaks' stderr reaches no printed line."""
     fake_gitleaks(served_scanners, on_scan=on_scan)
     repo = build_repo({})
@@ -114,7 +114,7 @@ def test_report_becomes_findings(report, exit_code, expected):
     ],
 )
 def test_unreadable_or_inconsistent_gitleaks_result_cannot_be_judged(report, exit_code):
-    """#13 rule 3: a garbled, mis-shaped or inconsistent result is an ScannerError, never clean."""
+    """A garbled, mis-shaped or inconsistent gitleaks result is a ScannerError, never clean."""
     text = recorded(report) if report.endswith(".json") else report
     with pytest.raises(ScannerError):
         scanners.scanner_findings(scanners.GITLEAKS_SCANNER, text, exit_code, "")
@@ -145,7 +145,7 @@ def test_committed_secret_fails(build_repo, installed_scanners, capsys):
 
 @pytest.mark.scanner
 def test_secret_removed_in_a_later_commit_still_fails(build_repo, installed_scanners, capsys):
-    """#13 rules 4 and 5: a key removed in a later commit still fails because it lives in history."""
+    """SECRET-1: a key removed in a later commit still fails because it lives in history."""
     repo = build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
     (repo / "config.txt").write_text("aws_access_key_id = removed\n")
     commit(repo, "remove the key")
@@ -154,7 +154,7 @@ def test_secret_removed_in_a_later_commit_still_fails(build_repo, installed_scan
 
 @pytest.mark.scanner
 def test_secret_reachable_only_from_another_branch_is_not_this_verdicts(build_repo, installed_scanners):
-    """#24 head ruling: the verdict judges the history reachable from HEAD, not every branch the checkout fetched."""
+    """SECRET-2: the verdict judges the history reachable from HEAD, not every branch the checkout fetched."""
     repo = build_repo({"docs/notes.txt": "nothing here\n"})
     (repo / "config.txt").write_text(f"aws_access_key_id = {FAKE_KEY}\n")
     commit(repo, "commit the key")
@@ -167,7 +167,7 @@ def test_secret_reachable_only_from_another_branch_is_not_this_verdicts(build_re
 def test_a_relative_repository_path_starting_with_a_dash_is_scanned_as_that_repository(
     build_repo, installed_scanners, tmp_path, monkeypatch
 ):
-    """#13 rule 4: a repository path beginning with '-' is a path, never an option to gitleaks."""
+    """A repository path beginning with '-' is a path, never an option to gitleaks."""
     repo = build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
     workdir = tmp_path / "cwd"
     workdir.mkdir()

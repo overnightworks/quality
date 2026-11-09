@@ -76,7 +76,7 @@ def test_a_repository_without_the_file_is_refused(tmp_path):
 
 
 def test_a_config_file_that_cannot_be_decoded_is_refused(tmp_path):
-    """defect:#6 finding 5: an unreadable config file is a ConfigError, not a traceback."""
+    """SECRET-5: an undecodable config file is a ConfigError, not a traceback."""
     (tmp_path / "quality").mkdir()
     (tmp_path / "quality" / "config.toml").write_bytes(b"\xff\xfe")
     with pytest.raises(ConfigError, match="^cannot read quality/config.toml: 'utf-8' codec"):
@@ -89,7 +89,7 @@ def test_a_config_file_that_cannot_be_decoded_is_refused(tmp_path):
     ids=["nested too deep", "oversized integer"],
 )
 def test_a_config_the_toml_reader_gives_up_on_cannot_be_judged_by_any_rule_that_reads_it(build_repo, capsys, content):
-    """sentence 4: a config the TOML reader gives up on is cannot-judge, not a traceback."""
+    """SECRET-5: a config the TOML reader gives up on is cannot-judge, not a traceback."""
     repo = build_repo({CONFIG_PATH: content})
     assert check_door(repo) == 2
     capsys.readouterr()
@@ -97,7 +97,7 @@ def test_a_config_the_toml_reader_gives_up_on_cannot_be_judged_by_any_rule_that_
 
 
 def test_a_config_directory_that_cannot_be_entered_is_refused(tmp_path):
-    """defect:#6 finding 5: permission denied while looking for the config is a ConfigError, not a traceback."""
+    """SECRET-5: permission denied while looking for the config is a ConfigError, not a traceback."""
     config_dir = tmp_path / "quality"
     config_dir.mkdir()
     config_dir.chmod(0)
@@ -109,7 +109,7 @@ def test_a_config_directory_that_cannot_be_entered_is_refused(tmp_path):
 
 
 def test_a_config_symlink_leaving_the_repository_is_refused(tmp_path):
-    """#33 S8707: a config file that resolves outside the repository is a ConfigError, never read."""
+    """SECRET-6: a config file that resolves outside the repository is a ConfigError, never read."""
     repo = tmp_path / "repo"
     (repo / "quality").mkdir(parents=True)
     outside = tmp_path / "outside.toml"
@@ -120,7 +120,7 @@ def test_a_config_symlink_leaving_the_repository_is_refused(tmp_path):
 
 
 def test_a_config_symlink_loop_is_refused(tmp_path):
-    """defect:#33 review: a self-referencing config symlink is a ConfigError (exit 2), not a RuntimeError traceback."""
+    """SECRET-7: a self-referencing config symlink is a ConfigError (exit 2), not a RuntimeError traceback."""
     (tmp_path / "quality").mkdir()
     (tmp_path / "quality" / "config.toml").symlink_to("config.toml")
     with pytest.raises(ConfigError, match="^cannot read quality/config.toml: \\[Errno 40\\]"):
@@ -195,7 +195,7 @@ def test_the_staged_allow_list_ignores_everything_outside_secrets(extra):
 
 
 def test_a_repository_without_the_file_allows_nothing(tmp_path):
-    """#24 rule 3: a missing quality/config.toml allows nothing."""
+    """SECRET-4: a missing quality/config.toml allows nothing."""
     assert read_allow_lists(tmp_path).secrets == {}
 
 

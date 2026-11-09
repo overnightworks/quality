@@ -136,7 +136,7 @@ def test_a_report_entry_without_a_string_secret_is_exit_2(build_repo, served_sca
 
 
 def test_the_scan_passes_the_gates_own_config(build_repo, served_scanners):
-    """#16: gitleaks is told to use quality's config, not the repository's."""
+    """SECRET-3: gitleaks is told to use quality's config, not the repository's."""
     fake_gitleaks(served_scanners, on_scan='echo "[]" > "$report"; exit 0')
     repo = build_repo({".gitleaks.toml": "[allowlist]\n"})
     scanners.scan_secrets(repo, {})
@@ -146,8 +146,8 @@ def test_the_scan_passes_the_gates_own_config(build_repo, served_scanners):
 
 @pytest.mark.scanner
 def test_a_repository_config_and_ignore_file_do_not_silence_the_scan(build_repo, installed_scanners, capsys):
-    """#16: a committed .gitleaks.toml, a .gitleaksignore holding the real fingerprint and gitleaks:allow
-    have no effect."""
+    """SECRET-3: a committed .gitleaks.toml, a .gitleaksignore holding the real fingerprint and gitleaks:allow have no
+    effect."""
     repo = build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}  # gitleaks:allow\n"})
     first_commit = subprocess.run(
         ["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True, check=True
@@ -166,7 +166,8 @@ def allow_fake_key(repo: Path, file: str = "config.txt") -> None:
 
 @pytest.mark.scanner
 def test_an_allowed_value_stays_green_at_a_shifted_line_and_across_commits(build_repo, installed_scanners, capsys):
-    """#24 rule 1: one entry covers the value at line 1, at a later line and in every commit that holds it."""
+    """SECRET-8: an entry holding the hash of the key allows it at line 1, at a later line and in every commit that
+    holds it."""
     repo = build_repo({"docs/config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
     (repo / "docs/config.txt").write_text("removed\n")
     commit(repo, "remove the key")
@@ -212,7 +213,7 @@ def test_a_key_on_an_allowance_line_of_the_config_stays_red(build_repo, installe
 
 @pytest.mark.scanner
 def test_a_repository_without_quality_config_is_scanned_and_its_key_is_red(build_repo, installed_scanners, capsys):
-    """#24 rule 3: no quality/config.toml means no allowances, and the scan still judges."""
+    """SECRET-4: no quality/config.toml means no allowances, and the scan still judges."""
     repo = build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
     assert not (repo / "quality").exists()
     assert scan(repo) == 1
@@ -246,7 +247,8 @@ SECRET_COMMANDS = [pytest.param((CHECK_WORD,), id="check"), pytest.param(STAGED_
 def test_the_key_reaches_no_output_and_no_file_and_the_scratch_directory_is_gone(
     keyed_repo, installed_scanners, use_mise, tmp_path, monkeypatch, capsys, failure, words
 ):
-    """#24 rule 4, #25 rule 1: after a normal run, a gitleaks failure, a stall and a parse error nothing holds the key."""
+    """SECRET-9, SECRET-10: after a normal run, a gitleaks failure, a stall and a parse error nothing holds the key and
+    the scratch directory is gone."""
     scratch_parent = tmp_path / "scratch-parent"
     scratch_parent.mkdir()
     monkeypatch.setattr(tempfile, "tempdir", str(scratch_parent))
@@ -267,7 +269,7 @@ def test_the_key_reaches_no_output_and_no_file_and_the_scratch_directory_is_gone
 @pytest.mark.integration
 @pytest.mark.parametrize("words", SECRET_COMMANDS)
 def test_a_sigterm_mid_scan_leaves_no_scratch_directory(keyed_repo, served_scanners, tmp_path, words):
-    """#25 rule 1, quality#5 finding 44: a SIGTERM while gitleaks holds the unredacted report deletes the scratch directory."""
+    """SECRET-9: a SIGTERM while gitleaks holds the unredacted report deletes the scratch directory."""
     scratch_parent = tmp_path / "scratch-parent"
     scratch_parent.mkdir()
     fake_gitleaks(served_scanners, on_scan=FAILING_REPORTS["gitleaks-stalls"])
