@@ -129,7 +129,8 @@ def test_a_database_that_never_arrives_is_refused_after_four_attempts_with_growi
     refusal = scan()
     assert isinstance(refusal, ScannerError)
     message = str(refusal)
-    observed = (message.startswith("cannot download the PyPI advisory database from "), message.endswith(" after 4 attempts"))
+    prefix = "cannot download the PyPI advisory database from "
+    observed = (message.startswith(prefix), message.endswith(" after 4 attempts"))
     assert observed == (True, True)
     assert (len(scripted_server.requested), scan.state.slept) == (4, [3, 9, 27])
 
