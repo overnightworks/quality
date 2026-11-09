@@ -374,7 +374,7 @@ def test_a_malformed_advisory_allowance_cannot_be_judged_where_the_whole_config_
     capsys, run_env, entry, named
 ):
     """ALLOW-12, ALLOW-13, ALLOW-14, ALLOW-15, ALLOW-16, ALLOW-17, ALLOW-18: a malformed [advisories] entry is exit 2 in
-    the verdict and in the secret and advisory rules of the check, each naming the entry on its first line."""
+    the verdict and in every rule of the check that reads the config, each naming the entry on its first line."""
     repo, _ = run_env
     (repo / CONFIG_PATH).write_text(entry + '[gate]\nmandatory_jobs = ["checks"]\n')
     assert cli.main(["verdict"], fetcher_for=lambda token: lambda url: ("{}", None)) == 2

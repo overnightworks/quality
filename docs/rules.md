@@ -750,10 +750,10 @@ reason = "gradio caps pillow<13; no image input"
 - `until` is the re-check date and `date` the day of the ruling, both TOML dates without a time (ALLOW-3); `item` and `reason`
   are as in a [declared loosening](gate.md#declared-loosenings). The allowance holds through `until` (in UTC) and the advisory
   is red again from the next day: its row ends in `· allowance ran out on <until> (<item>)` (ALLOW-4). quality sets no
-  latest `until` (ALLOW-10), and an advisory with no fixed version is allowed like any other.
+  latest `until` (ALLOW-10), and an advisory with no fixed version is allowed like any other (ALLOW-19).
 - Each allowed advisory stands as a row under the dependencies row, after the area's findings and their `fix:`, and the rule stays clean (ALLOW-6):
   `· <lock>  allowed  <package> <version> · <id> · fixed in <versions> · until <until> (<item>) · <reason>`. The fact
-  says what the `affected` row says of a fix. [A clean row](output.md#notes) counts them (`· 1 allowed`).
+  says what the `affected` row says of a fix (ALLOW-20). [A clean row](output.md#notes) counts them (`· 1 allowed`).
 - An entry no reported advisory matches is a finding (ALLOW-5):
   `! quality/config.toml  unused  <id> in <lock> matches no advisory`.
   [Deleting it is no loosening](gate.md#declared-loosenings). With no tracked lock every entry matches nothing
@@ -761,7 +761,7 @@ reason = "gradio caps pillow<13; no image input"
 - A malformed entry (a missing or extra key (ALLOW-12), an empty or multi-line `id`, `lock` or `reason` (ALLOW-13), an
   `item` that is not `#<n>` or `<owner>/<repo>#<n>` (ALLOW-14), an `until` or `date` that is text or carries a time
   (ALLOW-15), two entries for one `id` and `lock` (ALLOW-16), or an unknown key in `[advisories]` (ALLOW-17)) is exit
-  `2` in the `advisory` and `secret` rules and in `verdict` (ALLOW-18),
+  `2` in every rule that reads the config and in `verdict` (ALLOW-18),
   [naming the entry by its position](output.md#refusals) (`[[advisories.allow]] entry 2`), except the last two, which
   name the `id` and `lock` and the key; [`check secrets --staged` reads only `[secrets]`](gate.md#declared-loosenings).
 - A new allowance, and one whose `until` moves later, is a [declared loosening](gate.md#declared-loosenings) the allowance
