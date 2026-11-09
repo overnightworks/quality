@@ -1,7 +1,0 @@
-claim_id = "ba9b1eae683b4d00a078098199fa8a53"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "fea2ad9c97e41886c9ff7df109376cfcc2002a13"
-branch = "claude/issue-657-d7-fix-command-ids"
-scope = ["docs/commands.md", "tests/test_cli_fix_dry_run.py", "tests/test_cli_help.py"]
-opened_commit = "3936ce66b21bd694370676abb9f2a1d70ac3a2e3"
