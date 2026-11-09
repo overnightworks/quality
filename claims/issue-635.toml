@@ -1,0 +1,8 @@
+claim_id = "fd9b488ed2f444ae8fc80bd4970831cb"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "76ca15d7f8c6ca304e52f7eae495d60064b9e3ce"
+branch = "claude/issue-635-d7-staged-ids"
+scope = ["docs/commands.md", "tests/test_cli_staged.py", "tests/test_config.py", "tests/test_scanners.py", "tests/test_staged.py"]
+opened_commit = "bd974025d17a7385faeb630772302be64cfffb46"
+whole_reason = "docs/commands.md check secrets --staged, from the heading to the end of the second paragraph (the hook and the index, the scratch repository, the allow list, strictness) and the tests that prove them, linked by STAGED IDs, with 619a folded; the output and the exits are the second slice."
