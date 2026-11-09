@@ -14,6 +14,9 @@ no tool does. Its commands say in plain words what they do, and it asks for litt
 - Engineers, who check their repository before they push.
 - The operator, who decides the rare exceptions.
 - Every repository of the fleet, whose changes and releases it judges.
+- overnightworks/marketplace's lane relay, which matches the verdict's closing line
+  `only declared loosenings · only the operator merges it` and its `next: quality merge <owner>/<repo>#<n>` line
+  word for word, so a change to either is asked of marketplace before it lands.
 
 ## Deliberate non-goals
 
