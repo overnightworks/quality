@@ -586,7 +586,7 @@ def test_the_whole_recorded_message_stands_on_one_detail_line_under_the_lint_row
 
 
 def test_a_red_workflows_run_prints_no_prelude_and_no_line_starts_with_a_rule_id(red_workflows):
-    """ROW-7: the release row comes first, the first area row next, and quality adds no rule-id label."""
+    """ROW-7: no printed line starts with a workflow rule id."""
     lines = red_workflows.out.splitlines()
     assert (lines[0].split()[1], lines[1].split()[1], red_workflows.err) == ("release", next(iter(Area)), "")
     assert not any(line.lstrip().startswith((Rule.WORKFLOW_LINT, Rule.WORKFLOW_SECURITY)) for line in lines)
