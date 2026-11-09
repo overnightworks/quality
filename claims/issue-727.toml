@@ -1,0 +1,8 @@
+claim_id = "a9c070858c59490ba3db1167a034593c"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "94af1635df811d3627ace9f31725f698d6b22af6"
+branch = "claude/issue-727-deadline-advisories-ruff"
+scope = ["docs/commands.md", "docs/output.md", "docs/rules.md", "src/quality/advisories.py", "src/quality/check.py", "src/quality/python_lint.py", "tests/support/check.py", "tests/support/scanners.py", "tests/test_advisories.py", "tests/test_advisories_locks.py", "tests/test_advisories_retry.py", "tests/test_check.py", "tests/test_python_lint.py"]
+opened_commit = "f567ed08cf3fa2142037e6aeb7797dbf02e2613d"
+whole_reason = "Slices 3b and 3c are one slice: both extend the same two parametrized tests and both touch check.py in the same area, so two parallel lanes would collide in those lines and two serial lanes would cost a second review round for about 12 lines."
