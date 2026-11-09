@@ -1,8 +1,0 @@
-claim_id = "e598ebb1212442069e7a6bc0bb7a0223"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "db7c7325023c6f7e7fb285fdfb0eef70a1b834ce"
-branch = "claude/issue-725-run-deadline"
-scope = ["docs/ARCHITECTURE.md", "docs/commands.md", "docs/output.md", "pyproject.toml", "src/quality/check.py", "src/quality/deadline.py", "src/quality/scanners.py", "src/quality/staged.py", "tests/support/check.py", "tests/support/scanners.py", "tests/test_check.py", "tests/test_deadline.py", "tests/test_scanners.py", "tests/test_scanners_secrets.py", "tests/test_staged.py"]
-opened_commit = "ea6996cfb5de47edf137cca997687119ceb5102f"
-whole_reason = "One run deadline is one design: its owner, the door that builds it, gitleaks' two doors and the two workflow scanners land together with their spec clauses and tests, because the owner alone would have no caller and a signature threaded halfway would leave one door unbounded."
