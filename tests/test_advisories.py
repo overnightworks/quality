@@ -308,12 +308,14 @@ def test_a_server_that_trickles_bytes_hits_the_download_deadline(serve_stalling,
 
 def test_a_server_that_goes_silent_is_a_timeout_not_the_total_deadline(serve_stalling, timed_gate, monkeypatch):
     """ADVISORY-9: a server that stops sending is a refusal naming a timeout; the total deadline is named only when
-    it is the cause."""
+    it is the cause. Every attempt times out, so the refusal comes after the last one."""
     serve_stalling(BODY_BEGUN + b"xx", trickles=False)
     monkeypatch.setattr(advisories, "DOWNLOAD_TIMEOUT_SECONDS", 0.3)
+    monkeypatch.setattr(advisories, "RETRY_DELAYS_SECONDS", (0, 0, 0))
     monkeypatch.setattr(advisories, "DATABASE_DOWNLOAD_DEADLINE_SECONDS", 10)
     code, output, elapsed = timed_gate()
-    assert (code, "timed out" in output, "exceeded" in output, elapsed < 3) == (2, True, False, True), output
+    observed = (code, "timed out" in output, "after 4 attempts" in output, "exceeded" in output, elapsed < 3)
+    assert observed == (2, True, True, False, True), output
 
 
 @pytest.fixture

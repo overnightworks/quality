@@ -44,6 +44,7 @@ jobs:
           export_path: false
           add_shims_to_path: false
         env:
+          MISE_HTTP_RETRIES: 4
           MISE_CEILING_PATHS: ${{ github.workspace }}/src/quality
 
       - name: Pytest

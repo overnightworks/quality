@@ -1,8 +1,11 @@
+import errno
 import http.client
 import io
 import json
+import socket
 import threading
 import time
+import urllib.error
 import urllib.request
 import zipfile
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -29,8 +32,20 @@ OSV_CONFIG = Path(__file__).with_name("osv-scanner.toml")
 OSV_FINDINGS_FOUND = 1
 RANGE_TYPES_WITH_VERSIONS = ("ECOSYSTEM", "SEMVER")  # a GIT range's `fixed` is a commit, not a version
 DOWNLOAD_FAILURES = (OSError, ValueError, http.client.HTTPException)
+RETRY_DELAYS_SECONDS = (3, 9, 27)  # after each transient failure; the waits spend the download deadline and add none
+TRANSIENT_ERRNOS = frozenset({errno.ENETUNREACH, errno.EHOSTUNREACH})
+TRANSIENT_CONNECTION_ERRORS = (
+    ConnectionRefusedError, ConnectionResetError, TimeoutError, socket.gaierror, http.client.IncompleteRead,
+)
+TOO_MANY_REQUESTS = 429
 OSV_URL = "https://osv.dev/vulnerability/"
 NO_FIXED_VERSION = "no fixed version listed"  # what osv lists, not a claim that no fix exists
+
+
+@dataclass(frozen=True)
+class Clock:
+    monotonic: Callable[[], float]
+    sleep: Callable[[float], None]
 
 
 @dataclass(frozen=True)
@@ -107,6 +122,7 @@ def lock_kind(name: str) -> LockKind:
 def scan(
     locks: Mapping[str, Path], root: Path, allowances: Sequence[AdvisoryAllowance], today: date,
     monotonic: Callable[[], float] = time.monotonic, log: scanners.ScannerLog = scanners.no_log,
+    *, sleep: Callable[[float], None] = time.sleep,
 ) -> RuleResult:
     """The advisories that affect the lock files `locks` (tracked name -> absolute path), with the repository's
     allowances applied; no lock needs no scanner, and leaves every allowance matching nothing."""
@@ -119,7 +135,7 @@ def scan(
         try:
             handovers = _handovers(root, locks, scratch, names_by_path)
             ecosystems = sorted({lock_kind(name).ecosystem for name in locks})
-            report = _scan(binary, ecosystems, handovers, scratch, names_by_path, monotonic, known, log)
+            report = _scan(binary, ecosystems, handovers, scratch, names_by_path, Clock(monotonic, sleep), known, log)
         except process.ProcessError as error:
             raise ScannerError(_without_paths(str(error), names_by_path, known)) from None
     return apply_allowances(report.affected, allowances, today, LockExtent(len(locks), report.packages))
@@ -207,9 +223,9 @@ def _read_requirements(root: Path, name: str) -> tuple[Requirement, ...]:
 
 def _scan(
     binary: Path, ecosystems: Sequence[str], handovers: Sequence[Handover], scratch: Path,
-    names_by_path: dict[str, list[str]], monotonic: Callable[[], float], known: list[tuple[Path, str]], log: scanners.ScannerLog,
+    names_by_path: dict[str, list[str]], clock: Clock, known: list[tuple[Path, str]], log: scanners.ScannerLog,
 ) -> OsvReport:
-    _place_databases(scratch, ecosystems, monotonic)
+    _place_databases(scratch, ecosystems, clock)
     # cwd is the scratch directory so that nothing in the scanned repository is read by accident.
     command = [
         str(binary), "scan", "source", "--offline", f"--local-db-path={scratch}", f"--config={OSV_CONFIG}",
@@ -230,15 +246,15 @@ def _names_by_path(locks: Mapping[str, Path]) -> dict[str, list[str]]:
     return names_by_path
 
 
-def _place_databases(scratch: Path, ecosystems: Sequence[str], monotonic: Callable[[], float]) -> None:
+def _place_databases(scratch: Path, ecosystems: Sequence[str], clock: Clock) -> None:
     """Each ecosystem's advisory database where osv-scanner looks for it with --local-db-path; one deadline spans them all."""
-    deadline = monotonic() + DATABASE_DOWNLOAD_DEADLINE_SECONDS
+    deadline = clock.monotonic() + DATABASE_DOWNLOAD_DEADLINE_SECONDS
     for ecosystem in ecosystems:
-        _place_database(scratch, ecosystem, deadline, monotonic)
+        _place_database(scratch, ecosystem, deadline, clock)
 
 
-def _place_database(scratch: Path, ecosystem: str, deadline: float, monotonic: Callable[[], float]) -> None:
-    archive = _download_database(f"{DATABASE_ROOT}/{ecosystem}/{DATABASE_ARCHIVE}", ecosystem, deadline, monotonic)
+def _place_database(scratch: Path, ecosystem: str, deadline: float, clock: Clock) -> None:
+    archive = _download_database(f"{DATABASE_ROOT}/{ecosystem}/{DATABASE_ARCHIVE}", ecosystem, deadline, clock)
     try:
         with zipfile.ZipFile(io.BytesIO(archive)) as database:
             entries = [entry for entry in database.namelist() if entry.endswith(".json")]
@@ -258,13 +274,46 @@ def _place_database(scratch: Path, ecosystem: str, deadline: float, monotonic: C
         raise ScannerError(f"cannot place the {ecosystem} advisory database in the scratch directory: {error}") from error
 
 
-def _download_database(url: str, ecosystem: str, deadline: float, monotonic: Callable[[], float]) -> bytes:
+def _download_database(url: str, ecosystem: str, deadline: float, clock: Clock) -> bytes:
+    """The archive at `url`, tried again after each transient failure (after `RETRY_DELAYS_SECONDS`) while `deadline`
+    (a `clock.monotonic()` value) allows; a permanent failure or the last transient one is the refusal."""
+    delays = iter(RETRY_DELAYS_SECONDS)
+    attempts = 0
+    while True:
+        attempts += 1
+        try:
+            return _download_once(url, ecosystem, deadline, clock.monotonic)
+        except DOWNLOAD_FAILURES as error:
+            if not _is_transient(error):
+                raise _cannot_download(ecosystem, url, error, "") from error
+            delay = next(delays, None)
+            if delay is None:
+                raise _cannot_download(ecosystem, url, error, f" after {attempts} attempts") from error
+            clock.sleep(max(0.0, min(delay, deadline - clock.monotonic())))
+
+
+def _is_transient(error: BaseException) -> bool:
+    if isinstance(error, urllib.error.HTTPError):
+        return error.code == TOO_MANY_REQUESTS or 500 <= error.code <= 599
+    if isinstance(error, urllib.error.URLError):
+        return isinstance(error.reason, BaseException) and _is_transient(error.reason)
+    return isinstance(error, TRANSIENT_CONNECTION_ERRORS) or (
+        isinstance(error, OSError) and error.errno in TRANSIENT_ERRNOS
+    )
+
+
+def _cannot_download(ecosystem: str, url: str, error: BaseException, after: str) -> ScannerError:
+    return ScannerError(f"cannot download the {ecosystem} advisory database from {url}: {error}{after}")
+
+
+def _download_once(url: str, ecosystem: str, deadline: float, monotonic: Callable[[], float]) -> bytes:
     """The archive at `url` if it arrives before `deadline` (a `monotonic()` value); a worker does the download so
     that the deadline holds whatever the server sends or withholds.
 
     A daemon worker, because a server that stalls in its headers cannot be interrupted and must not keep the process alive.
     The caller judges by the worker's lifetime: still running at the deadline is the deadline; ended without an outcome
-    means an unexpected error (its traceback is on stderr); a download failure, a socket timeout included, is the worker's outcome."""
+    means an unexpected error (its traceback is on stderr); a download failure, a socket timeout included, is the
+    worker's outcome, raised as it is."""
     download: Future[bytes] = Future()
     remaining = deadline - monotonic()
     if remaining <= 0:
@@ -284,10 +333,7 @@ def _download_database(url: str, ecosystem: str, deadline: float, monotonic: Cal
         raise _deadline_exceeded(ecosystem)
     if not download.done():
         raise ScannerError(f"the {ecosystem} advisory database download stopped on an unexpected error")
-    try:
-        return download.result()
-    except DOWNLOAD_FAILURES as error:
-        raise ScannerError(f"cannot download the {ecosystem} advisory database from {url}: {error}") from error
+    return download.result()
 
 
 def _deadline_exceeded(ecosystem: str) -> ScannerError:
