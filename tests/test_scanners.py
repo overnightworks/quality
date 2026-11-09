@@ -315,7 +315,7 @@ def workflow_findings(scanner: str, report_text: str, exit_code: int) -> list:
     ],
 )
 def test_workflow_scanner_reports_become_findings(scanner, expected):
-    """#15 rule 2: a recorded clean report is no finding; a recorded finding is one at file:line."""
+    """A recorded clean report is no finding; a recorded finding is one at file:line."""
     assert workflow_findings(scanner, recorded(f"{scanner}-clean.json"), 0) == []
     findings = workflow_findings(scanner, recorded(f"{scanner}-finding.json"), FINDING_EXIT[scanner])
     assert [f"{f.rule} {f.location}" for f in findings] == [expected]
@@ -327,7 +327,7 @@ def recorded_entry(scanner: str) -> dict:
 
 @pytest.mark.parametrize(("scanner", "event"), [("actionlint", "INVALID"), ("zizmor", "INSECURE")])
 def test_a_workflow_finding_carries_the_event_of_its_kind_and_the_vocabulary(scanner, event):
-    """O36: one event word per kind, a fact and a fix that end in no full stop and name no rule id."""
+    """O36, ROW-7, ROW-14: one event word per kind, a fact and a fix that end in no full stop and name no rule id."""
     (found,) = workflow_findings(scanner, recorded(f"{scanner}-finding.json"), FINDING_EXIT[scanner])
     assert found.event is FindingEvent[event]
     assert_finding_vocabulary(found)
@@ -363,7 +363,7 @@ def test_a_zizmor_finding_names_its_audit_and_description_and_its_fix_holds_the_
     ],
 )
 def test_unreadable_or_inconsistent_workflow_result_cannot_be_judged(scanner, report, exit_code):
-    """#15 rule 2: a garbled, cut-off, mis-shaped or inconsistent result is an ScannerError, never clean."""
+    """A garbled, cut-off, mis-shaped or inconsistent result is a ScannerError, never clean."""
     text = recorded(f"{scanner}-{report}.json") if report in ("garbled", "clean", "finding") else report
     code = FINDING_EXIT[scanner] if exit_code == "finding" else exit_code
     with pytest.raises(ScannerError):
@@ -387,7 +387,7 @@ def fake_workflow_scanners(served: Path, elsewhere: Path, on_scan: str) -> Locat
     ids=["exit-0-without-report", "error-exit", "cut-off-report", "undecodable-report"],
 )
 def test_a_workflow_scanner_without_a_usable_report_is_exit_2(served_scanners, tmp_path, build_repo, capsys, on_scan, expected):
-    """#15 rule 2: a scanner that exits 0 with no report, or errors out, is exit 2 and never clean."""
+    """A scanner that exits 0 with no report, or errors out, is exit 2 and never clean."""
     repo = build_repo({".github/workflows/w.yml": "on: push\n"})
     locate_zizmor = fake_workflow_scanners(served_scanners, tmp_path / "zizmor", on_scan)
     assert expected in check_exit_2(repo, capsys, locate_zizmor)
@@ -435,14 +435,14 @@ def workflow_rows(capsys) -> list[tuple[str, FindingEvent, str]]:
     ids=["unpinned-action-without-permissions", "invalid-runs-on-expression", "local-reusable-call-with-dot-slash"],
 )
 def test_a_known_bad_workflow_fails(workflow_repo, installed_scanners, capsys, workflow, location, event):
-    """The real scanners fail a known bad workflow at file:line, as a row of its kind."""
+    """WORKFLOW-1: the real scanners fail a known bad workflow at file:line, as a row of its kind."""
     assert scan(workflow_repo(workflow)) == 1
     assert (location, FindingEvent[event]) in [(found, kind) for found, kind, _ in workflow_rows(capsys)]
 
 
 @pytest.mark.scanner
 def test_quality_own_workflows_pass_both_scanners(build_repo, installed_scanners):
-    """#15 rules 3 and 4: quality's own workflows pass actionlint and zizmor unchanged."""
+    """Quality's own workflows pass actionlint and zizmor unchanged."""
     own = Path(__file__).parent.parent / ".github" / "workflows"
     repo = build_repo({f".github/workflows/{file.name}": file.read_text() for file in own.glob("*.yml")})
     assert scan(repo) == 0
@@ -450,14 +450,14 @@ def test_quality_own_workflows_pass_both_scanners(build_repo, installed_scanners
 
 @pytest.mark.scanner
 def test_a_local_reusable_call_in_the_dollar_slash_form_passes_both_scanners(workflow_repo, installed_scanners):
-    """#15 rule 4: `uses: $/…` satisfies zizmor's self-repository audit and actionlint's false error is ignored."""
+    """WORKFLOW-5: a reusable workflow called as `uses: $/…` passes zizmor, and actionlint's false error is ignored."""
     assert scan(workflow_repo(local_reusable_call("$"))) == 0
 
 
 @pytest.mark.scanner
 @pytest.mark.parametrize(("label", "exit_code"), [("ubuntu-26.04", 0), ("ubuntu-26.04-arm", 0), ("ubuntu-26.4", 1)])
 def test_a_runner_label_github_hosts_passes_and_a_misspelt_one_stays_a_finding(workflow_repo, installed_scanners, capsys, label, exit_code):
-    """GitHub's ubuntu-26.04 images are accepted although actionlint does not know them; a misspelt label is still `invalid`."""
+    """WORKFLOW-3: ubuntu-26.04 and ubuntu-26.04-arm pass, unknown to actionlint; a misspelt label stays `invalid`."""
     assert scan(workflow_repo(runs_on(label))) == exit_code
     assert ((".github/workflows/w.yml:5", FindingEvent.INVALID) in [(found, kind) for found, kind, _ in workflow_rows(capsys)]) == bool(exit_code)
 
@@ -471,7 +471,7 @@ ONLY_AN_ONLINE_AUDIT_FLAGS_THIS = (
 
 @pytest.mark.scanner
 def test_a_clean_row_says_a_workflow_only_an_online_audit_would_flag_was_audited_offline_only(workflow_repo, installed_scanners, capsys):
-    """A workflow only zizmor's online audit (impostor-commit) would flag passes, and its row says offline audits only."""
+    """O38: the clean row of a workflow only an online audit would flag (impostor-commit) says offline audits only."""
     assert scan(workflow_repo(ONLY_AN_ONLINE_AUDIT_FLAGS_THIS)) == 0
     assert area_fact(capsys.readouterr().out, Area.WORKFLOWS).endswith(cli.OFFLINE_AUDITS)
 
@@ -498,7 +498,7 @@ INLINE_IGNORE = UNPINNED_WITHOUT_PERMISSIONS.replace(
 def test_what_the_scanned_repository_says_never_silences_a_workflow_finding(
     build_repo, installed_scanners, capsys, workflow, caller_files, location, event, fact
 ):
-    """A caller's scanner config or ignore comment cannot turn a failing workflow green, and the row
+    """WORKFLOW-2: a caller's scanner config or ignore comment cannot turn a failing workflow green, and the row
     of the scenario's own audit stands, so another audit's row cannot stand in for a suppressed one."""
     repo = build_repo({".github/workflows/w.yml": workflow, **caller_files})
     assert scan(repo) == 1
@@ -507,7 +507,7 @@ def test_what_the_scanned_repository_says_never_silences_a_workflow_finding(
 
 @pytest.mark.scanner
 def test_a_shellcheck_on_path_never_runs_during_workflow_lint(build_repo, installed_scanners, tmp_path, monkeypatch):
-    """#15 rule 1: actionlint judges without whichever shellcheck PATH offers."""
+    """actionlint judges without whichever shellcheck PATH offers."""
     planted = tmp_path / "planted"
     planted.mkdir()
     marker = tmp_path / "shellcheck-ran"
@@ -586,7 +586,7 @@ def test_the_whole_recorded_message_stands_on_one_detail_line_under_the_lint_row
 
 
 def test_a_red_workflows_run_prints_no_prelude_and_no_line_starts_with_a_rule_id(red_workflows):
-    """The release row comes first, the first area row next, and quality adds no rule-id label."""
+    """ROW-7: the release row comes first, the first area row next, and quality adds no rule-id label."""
     lines = red_workflows.out.splitlines()
     assert (lines[0].split()[1], lines[1].split()[1], red_workflows.err) == ("release", next(iter(Area)), "")
     assert not any(line.lstrip().startswith((Rule.WORKFLOW_LINT, Rule.WORKFLOW_SECURITY)) for line in lines)
@@ -601,7 +601,7 @@ def test_a_red_workflows_run_prints_no_prelude_and_no_line_starts_with_a_rule_id
     ids=["the same audit twice", "two audits"],
 )
 def test_equal_zizmor_fixes_share_one_fix_line_and_different_ones_do_not(drive_workflows, workflow_pair, edited_report, edit, fixes):
-    """One `fix:` per run of equal fixes, after the run's last row."""
+    """ROW-3: one `fix:` per run of equal fixes, after the run's last row."""
 
     def twice(report: list) -> None:
         report.append(copy.deepcopy(report[0]))
@@ -644,7 +644,7 @@ def test_a_workflows_row_that_could_not_check_carries_no_extent(drive_workflows,
 
 
 def test_a_path_and_a_message_with_control_characters_print_escaped_and_forge_no_line(drive_workflows, workflow_pair, edited_report):
-    """The row's path and the detail line pass through `printable`."""
+    """MASK-2, MASK-6, MASK-7, MASK-11, MASK-13: the row's path and detail line print escaped and forge no line."""
     path, message = ".github/workflows/a\x1b\u202eb.yml", "::error::\x1b[31mforged"
     report = edited_report("actionlint-finding.json", lambda entries: entries[0].update(filepath=path, message=message))
     run = drive_workflows(workflow_pair, lint=prints(report, FINDING_EXIT["actionlint"]))
