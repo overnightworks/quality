@@ -1,8 +1,0 @@
-claim_id = "558e487602ca406dbddc6e791c340f6e"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "e4bf94c3241522a5ad94441b2cdb7a57e227dd4c"
-branch = "claude/issue-646-d7-fix-write-ids"
-scope = ["docs/rules.md", "tests/test_cli_fix.py", "tests/test_cli_fix_dry_run.py", "tests/test_ratchet.py", "tests/test_repository.py"]
-opened_commit = "6dcc24dae53df86c22f028bfb5c1c162a767719c"
-whole_reason = "docs/rules.md --fix paragraph, write half: the file written whole or not at all, its mode, a read-only file, a writable folder, a symlink, a file that renders byte for byte left untouched, a refused fix that leaves each rule its verdict and another area's refusal that does not undo a finished fix, and the tests that prove them, linked by FIX IDs."
