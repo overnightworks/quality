@@ -137,13 +137,16 @@ It applies these rules:
   (CEILING-7); an entry with no measurement otherwise (a tracked file missing from disk, a function entry under a file
   of another language) stands (CEILING-8) and counts in the [clean row](output.md#area-rows)'s
   `ceiling held · N entries, M clone pairs`.
-  `quality check debt --fix` (`--fix` takes no `--staged` and needs `debt` among the named areas, or none named; `--dry-run` needs `--fix`; no workflow runs either)
-  changes `quality/baseline.toml` at the top of the repository it is started in (a stray `src/quality/baseline.toml` is
-  neither read nor removed) and then judges the tree against the new file. It only lowers: each held entry falls to its
-  measured value (`lowered`, `function total CCN 19 → 17`) and goes where the measured value is no longer debt (`dropped`,
-  `file 805 → 790 lines · debt from 800 lines`); an entry that grew stays a finding, its `fix:` adding `a raise is
-  a hand edit and a declared loosening`, a new one stays a finding with its usual `fix:`, and the rest still falls. An entry `check` calls gone or left out as generated goes
-  (`dropped  file is gone`), counted among the lowered; a held pair the tree lost goes (`dropped`, `pair ... is gone`). It
+  [`quality check debt --fix`](commands.md#quality-check---fix) (`--fix` takes no `--staged` and needs `debt` among the
+  named areas, or none named; `--dry-run` needs `--fix`; no workflow runs either) changes `quality/baseline.toml` at the
+  top of the repository it is started in (a stray `src/quality/baseline.toml` is neither read nor removed) (FIX-1) and
+  then judges the tree against the new file (FIX-2). It only lowers: each held entry falls to its measured value
+  (`lowered`, `function total CCN 19 → 17`) (FIX-3) and goes where the measured value is no longer debt (`dropped`,
+  `file 805 → 790 lines · debt from 800 lines`) (FIX-4); an entry that grew stays a finding, its `fix:` adding
+  `a raise is a hand edit and a declared loosening` (FIX-5), a new one stays a finding (FIX-6) with its usual `fix:`,
+  and the rest still falls (FIX-7). An entry `check` calls gone or left out as generated goes (`dropped  file is gone`),
+  counted among the lowered (FIX-8); a held pair the tree lost goes (`dropped`, `pair ... is gone`) (FIX-9), and a new
+  pair stays a finding (FIX-10). It
   records a ceiling (`recorded`, `N entries, M clone pairs · quality/baseline.toml is new`) only where none lies on disk,
   in the index or in any commit `HEAD` reaches; a ceiling or a `[clones]` table git holds and the tree lacks is `✗ not
   fixed` with `restore quality/baseline.toml from git, or repair it by hand` (a version no TOML parser reads refuses
