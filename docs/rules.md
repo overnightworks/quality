@@ -777,13 +777,13 @@ reason = "gradio caps pillow<13; no image input"
 
 Ruled by the operator:
 
-- An exception stands per advisory in `quality/config.toml`, with a reason, an item and a date.
-- #116 R2: a new exception is a loosening: the pull request stays red until the operator's door merges it.
+- An exception stands per advisory in `quality/config.toml`, with a reason, an item and a date (ALLOW-1).
+- A new exception is a loosening: the pull request stays red until the operator's door merges it (VERDICT-64).
 - From the merge on, the advisory is green until the date and red again after it (ALLOW-8).
 - No agent can silence an advisory alone.
 - A pull request cannot move the re-check date later without the operator: a later `until` for an existing exception is
   a loosening like a new one.
-- A new exception declares itself: it needs no separate `[[gate.loosened]]` entry.
+- A new exception declares itself: it needs no separate `[[gate.loosened]]` entry (VERDICT-67).
 
 quality downloads each needed database itself on every run (PyPI about 37 MB, npm about 219 MB;
 `https://osv-vulnerabilities.storage.googleapis.com/<ecosystem>/all.zip`)
@@ -832,7 +832,7 @@ Ruled by the operator:
   door like any other (NPM-1).
 - Nothing in the repository's own files silences an advisory; only a real fix in the lock, an upgrade or an override,
   counts (NPM-2).
-- #145 R3: open npm advisories keep the bump pull request red.
+- Open npm advisories keep the bump pull request red (ADVISORY-31).
 
 When a repository's frontend and its lock are gone, the npm database is no longer downloaded and an
 entry for it is a finding until it is deleted. A repository that falls back to an older quality leaves such an entry
