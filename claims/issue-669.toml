@@ -1,0 +1,8 @@
+claim_id = "6c7bf73c9466405d858094ca40e47adb"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "1fcb6e95488d709d57512fdf51eb374a72c836ce"
+branch = "claude/issue-669-d7-baseline-rename-rest-ids"
+scope = ["docs/rules.md", "tests/test_clones_baseline.py", "tests/test_ratchet.py", "tests/test_verdict_renames.py"]
+opened_commit = "f605dcf97411244ed723167c2d6ccf7d8e7a59ad"
+whole_reason = "docs/rules.md baseline bullet, the rest of its renames paragraph up to the refusals of reading the sides, and the tests that prove it, linked by BASELINE IDs; the sentences from A malformed baseline on either side on are 7q-iii."
