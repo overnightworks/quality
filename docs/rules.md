@@ -435,7 +435,8 @@ It applies these rules:
   each member alike.
 - `python-security` judges every tracked regular `.py` file in any directory with the `S` codes of quality's own ruff
   (SECURITY-1) (an exact pin in quality's `pyproject.toml` that serves its own lint too): the ruff binary of quality's
-  installation, never one on `PATH` (SECURITY-2), at the pinned version, runs `ruff check --isolated --no-cache
+  installation, never one on `PATH` (SECURITY-2), at [the pinned version](commands.md#scanners), runs `ruff check
+  --isolated --no-cache
   --ignore-noqa --select S,T20 --target-version py314 --output-format json -- <files>`, in batches below the argument
   limit (SECURITY-3), and writes nothing into the checkout (SECURITY-4). That one run serves `python-print` too. With no
   tracked `.py` file ruff is not started (SECURITY-5). A clean `code` row counts what ruff judged
@@ -461,7 +462,8 @@ It applies these rules:
   A file ruff cannot parse makes the `code` row [`✗ not checked`](output.md#refusals) with `ruff cannot parse <path>`
   (exit 2) (SECURITY-18); a tracked `.py` file the checkout does not hold (deleted, left out by a sparse checkout, or a
   link to nowhere) (SECURITY-19), a file Python cannot decode (SECURITY-20), or reads as other text than ruff reads as
-  UTF-8 (a PEP 263 cookie such as utf-7) (SECURITY-21), a missing or mismatched ruff, ruff exiting other than 0 or 1
+  UTF-8 (a PEP 263 cookie such as utf-7) (SECURITY-21), [a missing or mismatched ruff](commands.md#scanners),
+  ruff exiting other than 0 or 1
   (SECURITY-22), a `Failed to lint` warning (SECURITY-23), a report quality cannot read (SECURITY-24), a time-out
   (SECURITY-25) or a file with a finding whose comments Python's tokenizer cannot read (SECURITY-26) is `cannot judge`
   (exit 2). One such file makes the whole rule `cannot judge` or `unparsable`, so the S findings of the other files are
