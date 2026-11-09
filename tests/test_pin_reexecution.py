@@ -176,8 +176,9 @@ def release_row(fact: str) -> str:
 
 
 def test_the_child_judges_at_the_pin_and_names_its_fetch(scene):
-    """PIN-5, PIN-6, PIN-13, PIN-17, PIN-22: a run that re-executes judges as the pinned release, names the fetch in its
-    row on the first run and the cached release on the second, which finds the record the first left."""
+    """PIN-5, PIN-6, PIN-13, PIN-17, PIN-22, PIN-25, PIN-26: a run that re-executes judges as the pinned release; the
+    first time it fetches the release and names the fetch in its row, the second prepares offline from the record the
+    first kept and names the cached release."""
     scene.composed_child("--running", f"0.10.1:vcs:{scene.commit}")
     fetched = scene.run("check", "files")
     cached = scene.run("check", "files")
@@ -291,8 +292,9 @@ def keep_another_release(scene: Scene) -> None:
     ],
 )
 def test_the_release_check_comes_before_any_uv_call(scene, arrange, calls, queried, guard):
-    """PIN-17, PIN-21, PIN-22: quality's remote is asked where no record of the commit and release stands, the answer
-    leaves the record, and the mark names whether the release was fetched."""
+    """PIN-17, PIN-21, PIN-22, PIN-25, PIN-26: quality's remote is asked where no record of the commit and release
+    stands, the answer leaves the record, the mark names whether the release was fetched, and uv prepares offline only
+    where a record of this release stands."""
     arrange(scene)
     done = scene.run("check", "files")
     seen = [("--offline" in call["argv"], call["records"]) for call in scene.uv_calls()]
@@ -303,6 +305,8 @@ def test_the_release_check_comes_before_any_uv_call(scene, arrange, calls, queri
 
 @pytest.mark.parametrize("cached", [pytest.param(False, id="nothing cached"), pytest.param(True, id="uv's cache warm, no record")])
 def test_an_unreachable_github_is_the_offline_pair(scene, cached):
+    """PIN-27, PIN-28: with no answer from github.com, a release not yet checked on quality's remote is the offline pair
+    with no uv call, even where uv's cache holds it."""
     scene.answer(offline={"print": str(scene.scripts())} if cached else {"exit": 1})
     done = scene.run("check", "files", GIT_CONFIG_KEY_0=f"url.{scene.root / 'absent'}.insteadOf")
     assert (done.returncode, done.stdout, done.stderr.splitlines(), scene.uv_calls()) == (2, "", OFFLINE_PAIR, [])
@@ -348,6 +352,7 @@ def test_an_editable_installation_judges_at_the_pin_only_while_clean(scene):
 
 
 def test_uv_missing_is_the_pair(scene):
+    """PIN-30: a uv that is not installed is the pair that asks to install it."""
     bin_directory = scene.root / "uv-free-bin"
     bin_directory.mkdir()
     for tool in ("git", "sh"):
@@ -359,6 +364,7 @@ def test_uv_missing_is_the_pair(scene):
 
 
 def test_a_vanished_environment_is_the_pair(scene):
+    """PIN-32: a prepared quality that cannot start is the pair that names the cause and asks to run again."""
     scene._write_quality("#!/vanished/python\n")
     done = scene.run("check", "files")
     assert (done.returncode, done.stderr.splitlines()) == (
@@ -421,6 +427,8 @@ def watching_descendants(scene: Scene) -> Iterator[int]:
     ("stop", "ends_as"), [pytest.param(signal.SIGINT, -signal.SIGINT, id="Ctrl-C"), pytest.param(signal.SIGTERM, 128 + signal.SIGTERM, id="SIGTERM")]
 )
 def test_a_stop_during_preparation_ends_the_run_and_its_processes(scene, stop, ends_as):
+    """PIN-33, CLOSING-31, CLOSING-32: a stop during the preparation ends quality and every process uv started, and
+    Ctrl-C ends it by SIGINT with no traceback."""
     scene.answer(online={"block": True})
     with watching_descendants(scene) as held, launched(scene, scene.parent("check", "files")) as started:
         started.send_signal(stop)
@@ -436,6 +444,7 @@ def commit_python_file(scene: Scene) -> None:
 
 
 def test_an_interrupt_after_the_reexecution_ends_as_the_child_s(scene):
+    """CLOSING-31, CLOSING-32: an interrupt after the re-execution ends the run by SIGINT with no traceback."""
     scene.composed_child("--running", f"0.10.1:vcs:{scene.commit}", "--block-ruff", str(scene.root / "ready"))
     commit_python_file(scene)
     with launched(scene, scene.parent("check", "code")) as started:
@@ -446,6 +455,8 @@ def test_an_interrupt_after_the_reexecution_ends_as_the_child_s(scene):
 
 @pytest.mark.parametrize("moment", ["during preparation", "after the reexecution"])
 def test_a_calling_shell_loop_stops(scene, moment):
+    """PIN-33, CLOSING-31: a Ctrl-C that reaches a calling shell loop ends quality by SIGINT, so the loop stops, and
+    during the preparation it ends every process uv started."""
     if moment == "during preparation":
         scene.answer(online={"block": True})
         words = ("check", "files")
@@ -469,6 +480,8 @@ def own_gate_ci() -> dict[str, str]:
 
 
 def test_quality_s_checkout_reexecutes_through_uv_run(scene):
+    """PIN-34: quality's checkout is prepared through `uv run`, and an installation run there re-executes into the
+    checkout's code."""
     checkout = new_repo(scene.root / "quality", own_gate_ci())
     git(checkout, "remote", "add", "origin", QUALITY_URL)
     done = scene.run("check", "files", cwd=checkout)
@@ -479,6 +492,8 @@ def test_quality_s_checkout_reexecutes_through_uv_run(scene):
 
 
 def test_an_unrelated_checkout_never_runs_its_code(scene):
+    """PIN-8: a repository that is not quality's and calls its own gate.yml pins no gate, so the run refuses and
+    prepares nothing."""
     unrelated = new_repo(scene.root / "acme", own_gate_ci())
     git(unrelated, "remote", "add", "origin", "https://github.com/acme/shop")
     done = scene.run("check", "files", cwd=unrelated)
