@@ -238,33 +238,39 @@ repository a token can list is dropped without a trace (FLEET-72).
 
 ## Scanners
 
-gitleaks, actionlint and osv-scanner are not quality's to install: they come through [mise](https://mise.jdx.dev/installing-mise.html)
-from the manifest and lock inside quality's installation. `quality/mise/mise.toml` holds the one version of each
-scanner, `quality/mise/mise.lock` the sha256 of its release asset (linux x64 only, written by `mise lock --platform
-linux-x64`, never by hand). The command that installs them from the lock is
+gitleaks, actionlint and osv-scanner are not quality's to install: they come through
+[mise](https://mise.jdx.dev/installing-mise.html) from the manifest and lock inside quality's installation.
+`quality/mise/mise.toml` holds the one version of each scanner (SCANNER-1), `quality/mise/mise.lock` the sha256 of its
+release asset (linux x64 only, written by `mise lock --platform linux-x64`, never by hand). The command that installs
+them from the lock (SCANNER-2) is
 
     mise --cd <quality's installation>/quality/mise install --locked
 
-and `check` names it once, on its own line after `next:`, however many rules lack a scanner, the path filled in. A scan finds a scanner by asking
-`mise which` in that directory, for exactly the manifest's version, and runs it only when it reports that version. A
-scanner on `PATH` is never used. mise reads only the manifest directory and the operator's own user and system configuration: it starts in that
-directory under `MISE_CEILING_PATHS` set to the directory above it, so a `mise.toml` or `.miserc.toml` in the scanned
-repository (or in the checkout the gate holds the manifest in) takes no part in which binary runs.
+and `check` names it once in its `next:` step, however many rules lack a scanner ([Refusals](output.md#refusals)), the
+path filled in. A path with a control character is shown escaped, on one line (SCANNER-3). A scan finds a scanner by
+asking `mise which` in that directory, for exactly the manifest's version (SCANNER-4), and runs it only when it reports
+that version (SCANNER-5). A scanner on `PATH` is never used (SCANNER-6). mise reads only the manifest directory and the
+operator's own user and system configuration: it starts in that directory under `MISE_CEILING_PATHS` set to the
+directory above it (SCANNER-7), so a `mise.toml` or `.miserc.toml` in the scanned repository (or in the checkout the
+gate holds the manifest in) takes no part in which binary runs (SCANNER-8).
 
 Ruled by the operator:
 
 - The command that installs a scanner: `mise --cd <quality's installation>/quality/mise install --locked`, the release's own manifest and lock; the path is quality's installation, shown as the example shows it.
 
-`check` and `check secrets --staged` exit `2` for a scanner mise cannot locate, that is at another version, or whose
-answer names no executable, and for a machine without mise, which names mise's install page and the command; only the
-rule that needs the scanner cannot judge. A repository with no workflow needs no actionlint and one with no lock file
-no osv-scanner.
+`check` and `check secrets --staged` exit `2` for a scanner mise cannot locate (SCANNER-9), that is at another version
+or cannot report one (SCANNER-10), or whose answer names no executable (SCANNER-11), and for a machine without mise,
+which names mise's install page and the command (SCANNER-12); only the rule that needs the scanner cannot judge
+([rules](rules.md)). A repository with no workflow needs no actionlint and one with no lock file no osv-scanner
+(SCANNER-13).
 
 zizmor (the `workflow-security` rule) and ruff (`python-security`, `python-print`) are not mise's. They are pinned
-dependencies of quality's package (`pyproject.toml`, hashed in `uv.lock`), so installing quality installs them. quality
-runs the executable its own installation recorded, never one on `PATH`. A missing one, or one at another
-version, makes its rules `cannot judge` (exit `2`) with the two commands that reinstall quality, one in its checkout and one for a tool install, as alternatives under `next:`; a scanner quality's own
-metadata does not pin exactly makes them `cannot judge` as a defect in quality's release.
+dependencies of quality's package (`pyproject.toml`, hashed in `uv.lock`), so installing quality installs them
+(SCANNER-14). quality runs the executable its own installation recorded, never one on `PATH` (SCANNER-15). A missing one
+(SCANNER-16), or one at another version or that cannot report one (SCANNER-17), makes its rules `cannot judge` (exit
+`2`) with the two commands that reinstall quality, one in its checkout and one for a tool install, as alternatives under
+`next:` ([Refusals](output.md#refusals)); a scanner quality's own metadata does not pin exactly makes them
+`cannot judge` as a defect in quality's release (SCANNER-18).
 
 Ruled by the operator: quality builds the logic and the process itself and never a specialist scanner (language
 linters and test runners, gitleaks, osv-scanner, mutation tools); the scanners it uses run pinned underneath the one

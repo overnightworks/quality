@@ -62,7 +62,7 @@ def recorded(name: str) -> str:
     ids=["fails-after-printing-the-pin", "does-not-finish", "prints-nothing"],
 )
 def test_a_version_command_that_fails_hangs_or_reports_no_version_is_exit_2(served_scanners, build_repo, monkeypatch, capsys, version, on_version, expected):
-    """#13 rule 2, #134 rule 1: a scanner whose version command exits non-zero, hangs or reports no version is not trusted."""
+    """SCANNER-10: a scanner whose version command exits non-zero, does not finish or prints no version is exit 2."""
     monkeypatch.setattr(process, "VERSION_TIMEOUT_SECONDS", 0.2)
     fake_gitleaks(served_scanners, version, on_version=on_version)
     assert expected in check_exit_2(build_repo({}), capsys)
@@ -284,13 +284,13 @@ def test_a_git_older_than_2_41_is_exit_2_naming_the_version(
 
 @pytest.mark.scanner
 def test_installed_binary_reports_the_pinned_version(build_repo, installed_scanners):
-    """#13 rule 2: the gitleaks mise installed passes the version check against the manifest."""
+    """SCANNER-5: the gitleaks mise installed reports the pinned version, so it runs."""
     assert scanners.scan_secrets(build_repo({}), {}).findings == []
 
 
 @pytest.mark.scanner
 def test_a_mise_config_above_the_manifests_parent_never_takes_part(installed_scanners, tmp_path, monkeypatch):
-    """#265 D4: a checkout whose mise.toml and .miserc.toml do not parse; a found scanner proves mise reads neither."""
+    """SCANNER-8: a checkout whose mise.toml and .miserc.toml do not parse takes no part: mise still finds gitleaks."""
     checkout = tmp_path / "checkout"
     manifest_copy = checkout / "src" / "quality" / "mise"
     shutil.copytree(scanners.MANIFEST_DIRECTORY, manifest_copy)
@@ -654,7 +654,7 @@ def test_a_path_and_a_message_with_control_characters_print_escaped_and_forge_no
     assert run.err == ""
 
 
-# ---- mise finds the scanners (#228 rule 4) ----
+# ---- mise finds the scanners ----
 
 WORKFLOW_AND_LOCK = {".github/workflows/w.yml": "on: push\n", "uv.lock": uv_lock()}
 SCANNER_COMMANDS = [
@@ -669,7 +669,8 @@ SCANNER_COMMANDS = [
 def test_a_scanner_mise_has_not_installed_cannot_judge_and_names_the_install_command(
     build_repo, use_mise, served_scanners, elsewhere, capsys, words, name, rule
 ):
-    """#228 rule 4: a missing scanner is exit 2 with the command that installs it, and no other rule is refused."""
+    """SCANNER-9, CHECK-4: a scanner mise has not installed is exit 2 naming the install command, and no other rule
+    is refused."""
     use_mise(lacking(served_scanners, name))
     repo, locate_zizmor = build_repo(WORKFLOW_AND_LOCK), fake_zizmor(elsewhere, "echo '[]'")
     code, captured = door_in(repo, *words, locate_zizmor=locate_zizmor), capsys.readouterr()
@@ -683,7 +684,8 @@ def test_a_scanner_mise_has_not_installed_cannot_judge_and_names_the_install_com
 
 
 def test_without_mise_the_scanner_rules_cannot_judge_and_every_other_rule_still_judges(build_repo, path_without_mise, elsewhere, capsys):
-    """#228 rule 4: no mise on PATH is exit 2 naming mise's install page and the command; the other rules still print."""
+    """SCANNER-12, CHECK-4, REFUSAL-8, REFUSAL-11: with no mise the scanner rules cannot judge and the others still do;
+    stderr names mise's install page and the command once, each on a line below a bare `next:`."""
     repo = build_repo({**WORKFLOW_AND_LOCK, ".env": "A=1\n"})
     code = check_door(repo, locate_zizmor=fake_zizmor(elsewhere, "echo '[]'"))
     captured = capsys.readouterr()
@@ -697,7 +699,8 @@ def test_without_mise_the_scanner_rules_cannot_judge_and_every_other_rule_still_
 def test_a_scanner_that_reports_another_version_than_the_manifest_is_never_run(
     build_repo, served_scanners, tmp_path, capsys, words
 ):
-    """#228 invariant 10: the exact pinned version runs; a binary at another version is exit 2 naming both versions."""
+    """SCANNER-5, SCANNER-10: a scanner that reports another version than the manifest's is exit 2 naming both
+    versions and never runs."""
     marker = tmp_path / "scanned"
     fake_scanner(served_scanners, scanners.GITLEAKS, f"touch {marker}", version="9.9.9")
     code = door_in(build_repo({}), *words)
@@ -708,7 +711,7 @@ def test_a_scanner_that_reports_another_version_than_the_manifest_is_never_run(
 
 @pytest.mark.parametrize("words", [(CHECK_WORD,), STAGED_WORDS], ids=["check", "staged"])
 def test_a_gitleaks_on_path_never_runs(build_repo, use_mise, tmp_path, monkeypatch, capsys, words):
-    """#228 invariant 10: when mise cannot locate gitleaks, one that PATH offers is never used in its place."""
+    """SCANNER-6: where mise cannot locate gitleaks, one that PATH offers never runs in its place."""
     use_mise(NOT_INSTALLED)
     planted = tmp_path / "planted"
     planted.mkdir()
@@ -720,7 +723,9 @@ def test_a_gitleaks_on_path_never_runs(build_repo, use_mise, tmp_path, monkeypat
 
 
 def test_mise_is_asked_in_the_manifest_directory_under_its_ceiling(build_repo, use_mise, served_scanners, tmp_path, elsewhere, monkeypatch):
-    """#265 D4: mise reads only the manifest directory under the real path of its parent (mise matches canonical paths)."""
+    """SCANNER-4, SCANNER-7, SCANNER-8: mise is asked for each scanner at the manifest's exact version, from the
+    manifest directory, under a ceiling at the real path of its parent, though the scanned repository holds a
+    mise.toml."""
     record = tmp_path / "asked"
     (elsewhere / "link").symlink_to(scanners.MANIFEST_DIRECTORY.parent)
     monkeypatch.setattr(scanners, "MANIFEST_DIRECTORY", elsewhere / "link" / scanners.MANIFEST_DIRECTORY.name)
@@ -737,7 +742,8 @@ def test_mise_is_asked_in_the_manifest_directory_under_its_ceiling(build_repo, u
 
 @pytest.mark.parametrize(("body", "reason"), [(f"echo {answer}", "mise which printed no gitleaks executable") for answer in ("''", "relative/gitleaks", "/nowhere/gitleaks")] + [("printf '\\377'", "mise printed output that is not UTF-8"), ('if [ "$1" = version ]; then printf \'\\377\'; else echo "$0"; fi', "printed output that is not UTF-8"), ('echo "mise ERROR error parsing config file" >&2; exit 1', f"mise could not locate gitleaks {PINNED}")], ids=["nothing", "relative-path", "no-file", "unreadable-mise-output", "unreadable-scanner-version", "config error"])
 def test_a_mise_answer_that_is_no_usable_scanner_names_the_install_command(build_repo, use_mise, capsys, body, reason):
-    """#228 rule 4, #265: external output that yields no pinned executable, a process error included, is exit 2 and the install command."""
+    """SCANNER-9, SCANNER-10, SCANNER-11: an answer of mise that yields no pinned executable (an error, no executable,
+    unreadable output) or a scanner whose version cannot be read is exit 2 and names the install command."""
     use_mise(body)
     exit_code, captured = check_door(build_repo({})), capsys.readouterr()
     row = next(line for line in captured.out.splitlines() if line.startswith("  ✗ secrets"))
@@ -746,27 +752,28 @@ def test_a_mise_answer_that_is_no_usable_scanner_names_the_install_command(build
 
 
 def test_a_repository_with_no_workflow_and_no_lock_needs_only_gitleaks(build_repo, path_without_mise, capsys):
-    """#265 F1: nothing to scan needs no scanner, so without mise only the secret rule cannot judge."""
+    """SCANNER-13: with no workflow and no lock file only the secret rule needs a scanner, so without mise only it
+    cannot judge."""
     repo = build_repo({})
     assert check_door(repo) == 2
     assert list(refusals(repo)) == [Rule.LEAK], heard(capsys)
 
 
 def test_the_manifest_pins_each_scanner_once():
-    """#228 invariant 10: one version source, three scanners, each once."""
+    """SCANNER-1: the manifest holds each of the three scanners once."""
     with (scanners.MANIFEST_DIRECTORY / "mise.toml").open("rb") as handle:
         tools = tomllib.load(handle)["tools"]
     assert sorted(key.rsplit("/", 1)[-1] for key in tools) == [scanners.ACTIONLINT, scanners.GITLEAKS, scanners.OSV_SCANNER]
 
 
 def test_the_install_command_names_the_manifest_directory_as_one_shell_word(tmp_path, monkeypatch):
-    """#265 F4: a path with a space stays one word of the command a person copies."""
+    """SCANNER-2: the install command names the manifest directory as one shell word."""
     monkeypatch.setattr(scanners, "MANIFEST_DIRECTORY", tmp_path / "with space")
     assert shlex.split(scanners.install_command()) == ["mise", "--cd", str(tmp_path / "with space"), "install", "--locked"]
 
 
 def test_the_install_command_shows_a_path_no_shell_word_can_hold_escaped(tmp_path, monkeypatch):
-    """#265 F4: a path with a control character is printed escaped on one line, never as a command to copy."""
+    """SCANNER-3: a manifest path with a control character is printed escaped on one line."""
     monkeypatch.setattr(scanners, "MANIFEST_DIRECTORY", tmp_path / "a\nb")
     command = scanners.install_command()
     assert "\n" not in command

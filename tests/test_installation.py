@@ -11,7 +11,7 @@ from quality.installation import UnpinnedDependency
 
 @pytest.mark.parametrize("name", ["ruff", "zizmor"])
 def test_the_version_quality_requires_is_the_version_its_environment_installed(name):
-    """#248 rule 4: one source for the pin, and `uv sync --locked` installs exactly it."""
+    """SCANNER-14: the version quality's metadata requires of ruff and zizmor is the version installed with it."""
     assert installation.required_version(name) == importlib.metadata.version(name)
 
 
@@ -25,6 +25,7 @@ def test_the_version_quality_requires_is_the_version_its_environment_installed(n
     ids=["exact", "canonicalised name", "among other requirements"],
 )
 def test_an_exact_requirement_gives_its_version(asked, lines, version):
+    """SCANNER-14: an exact `==` requirement gives its version, among others and under any spelling of the name."""
     assert installation.exact_version(lines, asked) == version
 
 
@@ -34,17 +35,20 @@ def test_an_exact_requirement_gives_its_version(asked, lines, version):
     ids=["lower bound", "two specifiers", "wildcard", "arbitrary equality", "another name", "no requirement"],
 )
 def test_a_requirement_that_is_not_one_exact_version_is_a_packaging_defect(lines):
+    """SCANNER-18: a requirement that is not one exact version is a packaging defect."""
     with pytest.raises(UnpinnedDependency, match=re.escape("pin scanner ")):
         installation.exact_version(lines, "scanner")
 
 
 def test_a_dependency_quality_does_not_require_is_a_packaging_defect():
+    """SCANNER-18: a dependency quality does not require is a packaging defect."""
     with pytest.raises(UnpinnedDependency, match="not-required"):
         installation.required_version("not-required")
 
 
 @pytest.mark.parametrize("name", ["ruff", "zizmor"])
 def test_the_executable_is_the_one_the_installation_recorded_never_one_on_path(tmp_path, monkeypatch, name):
+    """SCANNER-15: the executable is the one the installation recorded, never one on PATH."""
     planted = tmp_path / name
     planted.write_text("#!/bin/sh\n")
     planted.chmod(0o755)
@@ -69,6 +73,7 @@ def install_distribution(site: Path, record: str, name: str = "scanner") -> None
     ids=["not installed", "no RECORD", "RECORD without the executable", "recorded file gone"],
 )
 def test_an_executable_the_installation_does_not_hold_is_not_found(tmp_path, monkeypatch, record):
+    """SCANNER-16: an executable the installation does not hold, or does not record, is not found."""
     site = tmp_path / "site"
     if record is not None:
         install_distribution(site, record)
@@ -107,4 +112,5 @@ def recorded(tmp_path: Path, record: str | None) -> importlib.metadata.Distribut
     ],
 )
 def test_the_origin_is_what_the_installer_recorded(tmp_path, record, expected):
+    """PIN-3: a git installation's commit is the one its installer recorded."""
     assert installation.origin(recorded(tmp_path, record)) == expected

@@ -452,8 +452,9 @@ def test_a_ruff_run_quality_cannot_trust_cannot_be_judged(build_repo, capsys, mo
 @pytest.mark.integration
 @pytest.mark.parametrize("case", ["not installed", "recorded file deleted", "another version", "failing version", "unpinned"])
 def test_a_ruff_quality_cannot_find_or_trust_names_the_reinstall_command(build_repo, capsys, monkeypatch, elsewhere, case):
-    """#248 rule 4: a ruff that is missing, at another version or unable to report one makes both python rules cannot
-    judge and names the reinstall command; a pin quality's own metadata lacks names the defect and no command."""
+    """SCANNER-16, SCANNER-17, SCANNER-18, SECURITY-28, CHECK-4: a ruff that is missing, at another version or unable
+    to report one makes both python rules cannot judge and names the reinstall command; a pin quality's own metadata
+    lacks names the defect and no command."""
     repo = build_repo({".env": "A=1\n", "src/p/a.py": "x = 1\n"})
     (elsewhere / "failing").mkdir()
     failing_version = elsewhere / "failing" / "ruff"

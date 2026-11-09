@@ -89,7 +89,7 @@ def test_quality_tracks_no_env_or_compose_file():
 
 
 def test_a_tracked_workflow_missing_from_disk_is_never_handed_to_a_scanner(build_repo, use_mise, served_scanners, capsys):
-    """#76 rule 3, cell 10: no workflow scanner is installed, so any name passed on would be cannot judge."""
+    """SCANNER-13: a tracked workflow the checkout does not hold is no workflow, so no actionlint is needed."""
     use_mise(lacking(served_scanners, scanners.ACTIONLINT))
     repo = build_repo({".github/workflows/w.yml": "on: push\n"})
     (repo / ".github/workflows/w.yml").unlink()
@@ -226,8 +226,9 @@ def test_a_refusing_workflow_scanner_stops_no_other_workflow_rule(build_repo, se
 def test_a_zizmor_quality_cannot_find_or_trust_refuses_only_workflow_security(
     build_repo, served_scanners, elsewhere, monkeypatch, capsys, case, reinstall_shown, fragment
 ):
-    """#248 rule 4: a zizmor that is missing, at another version or unable to report one cannot judge and names the
-    reinstall command; a pin quality's own metadata lacks names the defect and no command; no other rule refuses."""
+    """SCANNER-16, SCANNER-17, SCANNER-18, CHECK-4: a zizmor that is missing, at another version or unable to report
+    one cannot judge and names the reinstall command; a pin quality's own metadata lacks names the defect and no
+    command; no other rule refuses."""
     repo = build_repo({".env": "A=1\n", ".github/workflows/w.yml": "on: push\n"})
     for name in ("another", "failing", "pinned"):
         (elsewhere / name).mkdir()
@@ -259,7 +260,7 @@ def test_a_zizmor_quality_cannot_find_or_trust_refuses_only_workflow_security(
 
 
 def test_a_zizmor_planted_in_the_scanner_directory_is_never_run(build_repo, served_scanners, elsewhere, capsys):
-    """#248 rule 4, no bridge: the verdict comes from quality's installation, not from the directory mise serves."""
+    """SCANNER-15: the verdict comes from quality's installation, not from the directory mise serves."""
     marker = elsewhere / "ran"
     planted = served_scanners / "zizmor"
     planted.write_text(f"#!/bin/sh\ntouch {marker}\n")
