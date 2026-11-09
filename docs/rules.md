@@ -12,6 +12,11 @@ once, however they are named; with none it judges all seven (CHECK-3). An area n
 row (CHECK-6); the verdict counts only the named areas (`✓ clean · 1 area`) (CHECK-7) and the exit is the worst of
 theirs (CHECK-8), so a named run says nothing of the rest. The gate runs all seven ([gate](gate.md#gateyml)).
 
+Three statements hold for every declaration table of `quality/config.toml` (`[[compose.allow]]`, `[[root.allow]]`,
+`[[layout.allow]]`, `[[python.allow]]`) and the rule that reads it. A malformed table other than the rule's own is
+forwarded with its validation error. A declaration is no loosening, so `quality verdict` asks for no `[[gate.loosened]]`
+entry. A config reader older than the rule refuses its table as an unknown key.
+
 It applies these rules:
 
 - `env-file`: no tracked `.env`, `.env.*` or `*.env` file (names ending in `.example` are templates and pass) (ENV-1).
@@ -58,9 +63,7 @@ It applies these rules:
   is neither host-networked nor interpolated there; the fix is to delete the entry (COMPOSE-18). A duplicate
   `(file, service)`, a folder (a trailing `/`), a pattern (`*`, `?`, `[`), `..`, an absolute path, an unknown key, a
   missing key or a service or reason that is not one-line text makes the `files` row `✗ not checked` with the reason,
-  and `next:` shows a `[[compose.allow]]` example (COMPOSE-19), and a malformed other table in `quality/config.toml` is
-  forwarded with its validation error. A declaration is no loosening, so `quality verdict` asks for no
-  `[[gate.loosened]]` entry. A config reader older than the rule refuses `[compose]` as an unknown key.
+  and `next:` shows a `[[compose.allow]]` example (COMPOSE-19).
 
   Ruled by the operator: a service with `network_mode: host` (COMPOSE-13), or one whose `network_mode` holds a Compose
   interpolation (COMPOSE-14), is a finding unless `quality/config.toml` declares its file and service
@@ -89,12 +92,12 @@ It applies these rules:
   (GENERATED-2) nor recorded by `quality check --fix` (GENERATED-3). A declared Python file that Python cannot parse
   is left out likewise: the `size` rule names no note for it and is not refused by it (GENERATED-4). `path` is the
   exact tracked path of one file, `job` one of `[gate] mandatory_jobs`, the job whose generator check proves the file
-  (GENERATED-5). A missing or extra key, a folder, a pattern, `..`, an absolute path, a `job` the gate does not list
-  (a config without `mandatory_jobs` included), a malformed `item` or `date`, a reason that is not one line or two
-  entries for one path is exit `2` naming the entry with this example (GENERATED-6): in `check` as the `debt` row
-  `✗ not checked` with the [example under `next:`](output.md#refusals), in `quality check --fix` as the same row
-  (GENERATED-7), and in the verdict (GENERATED-8) and the door naming the side;
-  [`check secrets --staged` reads only `[secrets]`](gate.md#declared-loosenings). A declaration whose path holds no
+  (GENERATED-5). A missing or extra key, a folder (a trailing `/`), a pattern, `..`, an absolute path, a `job` the gate
+  does not list (a config without `mandatory_jobs` included), a malformed `item` or `date`, a reason that is not one
+  line or two entries for one path is exit `2` naming the entry with this example (GENERATED-6): in `check` as the
+  `debt` row `✗ not checked` with the [example under `next:`](output.md#refusals), in `quality check --fix` as the same
+  row (GENERATED-7), and in the verdict (GENERATED-8) and the door naming the side; [`check secrets --staged` reads only
+  `[secrets]`](gate.md#declared-loosenings). A declaration whose path holds no
   tracked file in a measured language is an `unused` row
   (`[[size.generated]] matches no tracked file in a measured language`) on that path, fixed by deleting the entry from
   `quality/config.toml` (GENERATED-9). Only `quality/config.toml` declares: `.gitattributes`, `linguist-generated`
@@ -121,8 +124,8 @@ It applies these rules:
   refuses the same way, writing nothing; both exit `2`. Only where no baseline is held does `--fix` refuse with
   `✗ not fixed`, since only recording the first ceiling is refused (SIZE-11). A tracked file the operating system
   refuses to read makes the `debt` row `✗ not checked` with or without a baseline, and `quality check --fix` refuses
-  likewise, writing nothing; both exit `2` (SIZE-12). The reason names the case: a file without read permission is
-  `cannot read locked.py: [Errno 13] ...`, a file behind a directory without permission is
+  likewise with the same `debt` row, writing nothing; both exit `2` (SIZE-12). The reason names the case: a file without
+  read permission is `cannot read locked.py: [Errno 13] ...`, a file behind a directory without permission is
   `cannot reach pkg/m.py: [Errno 13] ...` (SIZE-13). A tracked file missing from disk
   (deleted but not staged, left out by a sparse checkout, or a dangling symlink) is skipped, and its entries stand,
   unjudged, while the index tracks it (CEILING-1). A `quality/baseline.toml` that is not UTF-8 is malformed like invalid
@@ -286,16 +289,14 @@ It applies these rules:
   slash) (ROOT-13). Findings are sorted by entry and all printed (ROOT-14). An invalid declaration (a `/` inside the
   entry, `.`, `..`, `.git`, an empty entry, a multi-line reason, an unknown key, a missing key, an entry that is not
   text, a `[root]` key other than `allow`, `allow` that is not an array of tables, or one entry declared twice) makes
-  the `files` row `✗ not checked` with the reason, and `next:` shows a `[[root.allow]]` example (ROOT-15). Any other
-  malformed table or allowance elsewhere in `quality/config.toml`, which plain `quality check` reads for this rule,
-  refuses it too, with that table's own message; the values of `[gate]` stay the verdict's to judge.
+  the `files` row `✗ not checked` with the reason, and `next:` shows a `[[root.allow]]` example (ROOT-15). The values of
+  `[gate]` stay the verdict's to judge.
 
   Ruled by the operator: any pull request may add a declaration with a reason (ROOT-8); the review judges whether the
   reason holds. A declaration is no loosening, so `quality verdict` asks for no `[[gate.loosened]]` entry.
 
-  The rule reads names, never content, and writes nothing (ROOT-16). No configuration switches it off (ROOT-17). A
-  config reader older than the rule refuses `[root]` as an unknown key, so a declaration lands in the pull request that
-  moves the repository to a quality version that knows it. Named gaps: a submodule in the root counts as a file entry
+  The rule reads names, never content, and writes nothing (ROOT-16). No configuration switches it off (ROOT-17).
+  Named gaps: a submodule in the root counts as a file entry
   and no case of it is tested; marketplace's refusal of every symlink in the tree stays that repository's own check.
 - `file-suffix`: a tracked file whose basename has no suffix is a finding (SUFFIX-1), unless it is executable (index
   mode 100755), a symlink (120000) or a gitlink (160000) (SUFFIX-2), its basename is a dotfile, its basename is on
@@ -323,10 +324,8 @@ It applies these rules:
   (SUFFIX-17). A duplicate `(rule, path)`, a folder (a trailing `/`), a pattern (`*`, `?`, `[`), `..`, a leading `./`,
   an empty component, a blank path, an absolute path, a path that is not text, an unknown rule, an unknown key, a
   missing key or a reason that is not one-line text makes the `files` row `✗ not checked` with the reason, and `next:`
-  shows a `[[layout.allow]]` example; a malformed `[layout]` table is the same (SUFFIX-18), and another malformed table
-  in `quality/config.toml` is forwarded with its validation error. A declaration is no loosening, so `quality verdict`
-  asks for no `[[gate.loosened]]` entry. The rule writes nothing and no configuration switches it off (SUFFIX-19). A
-  config reader older than the rule refuses `[layout]` as an unknown key.
+  shows a `[[layout.allow]]` example; a malformed `[layout]` table is the same (SUFFIX-18). The rule writes nothing and
+  no configuration switches it off (SUFFIX-19).
 
   Ruled by the operator: quality checks in CI where files sit below the root (`tests/`, `scripts/`, file names).
 - `script-name` and `script-header` judge a script: a tracked file with index mode 100755, whose content starts with
@@ -450,14 +449,13 @@ It applies these rules:
   own table, because the exception is meant to end. Each allowed file stands as a `· <path>  allowed  <fact> · <reason>`
   [row](output.md#notes) under the files row, after the area's findings (FLOOR-19). An entry whose path is no judged
   file (untracked, gone, without `[project]`) or whose file is already at the floor says `unused` (FLOOR-20); its fix is
-  to delete the entry (FLOOR-21). A malformed entry refuses every rule that reads the config, and a config reader older
-  than the rule refuses `[python]` as an unknown key, so declare only after the bump. A candidate that is not UTF-8
+  to delete the entry (FLOOR-21). A candidate that is not UTF-8
   TOML, or whose `requires-python` is no string, makes the `files` row [`✗ not checked`](output.md#refusals) (exit 2)
   with its own reason (FLOOR-22). A `requires-python` that is no PEP 440 specifier set or holds a `===` clause with a
   version that is not PEP 440 (`===foobar`) makes it `✗ not checked` with
   `<path> has a requires-python quality cannot read` (exit 2) (FLOOR-23); that reason holds no part of the value
-  (FLOOR-24). No configuration switches the rule off, and a declaration asks `quality verdict` for no
-  `[[gate.loosened]]` entry. Only `requires-python` is read, because uv and pip refuse an interpreter outside it, so a
+  (FLOOR-24). No configuration switches the rule off. Only `requires-python` is read, because uv and pip refuse an
+  interpreter outside it, so a
   leftover setter cannot install the project on old Python. Not read, and waiting for usage evidence: workflows,
   `.python-version`, Dockerfiles, ruff's `target-version`, `setup.py`, `setup.cfg` and Poetry's `[tool.poetry]`; `!=` as
   a floor (`>=3.13,!=3.13.*` is red although it admits only 3.14 and up); a job that never installs the project, which
@@ -494,8 +492,8 @@ It applies these rules:
   `# ruff: noqa` for a code listed in `external`.
   A file ruff cannot parse makes the `code` row [`✗ not checked`](output.md#refusals) with `ruff cannot parse <path>`
   (exit 2) (SECURITY-18); a tracked `.py` file the checkout does not hold (deleted, left out by a sparse checkout, or a
-  link to nowhere) (SECURITY-19), a file Python cannot decode (SECURITY-20), or reads as other text than ruff reads as
-  UTF-8 (a PEP 263 cookie such as utf-7) (SECURITY-21), [a missing or mismatched ruff](commands.md#scanners),
+  link to nowhere) (SECURITY-19), a file Python cannot decode (SECURITY-20), or that reads as other text than ruff reads
+  as UTF-8 (a PEP 263 cookie such as utf-7) (SECURITY-21), [a missing or mismatched ruff](commands.md#scanners),
   ruff exiting other than 0 or 1
   (SECURITY-22), a `Failed to lint` warning (SECURITY-23), a report quality cannot read (SECURITY-24), a time-out
   (SECURITY-25) or a file with a finding whose comments Python's tokenizer cannot read (SECURITY-26) is `cannot judge`
@@ -504,8 +502,8 @@ It applies these rules:
   refuses with it (SECURITY-28). The other rules are judged either way. A deliberately invalid Python fixture takes
   another suffix, since a `.py` file is Python. No configuration switches the rule off, and a reasoned noqa asks
   `quality verdict` for no `[[gate.loosened]]` entry. Not judged, and waiting for usage evidence: notebooks, `.pyi`
-  files and suffixless Python; judging a non-UTF-8 source (a latin-1 file with non-ASCII bytes stays `cannot judge`),
-  since ruff reads UTF-8 only; a stale reasoned noqa, which ruff's RUF100 finds.
+  files and suffixless Python; judging a non-UTF-8 source (a latin-1 file with non-ASCII bytes stays `cannot judge`)
+  (SECURITY-29), since ruff reads UTF-8 only; a stale reasoned noqa, which ruff's RUF100 finds.
 
   Ruled by the operator: the rules are red from the release that ships them, with no report-only phase; `assert` (S101)
   is exempt in tests (SECURITY-10); a rule-specific noqa with a reason is green (SECURITY-13).
