@@ -43,7 +43,7 @@ def metric_label(metric, path):
     ("change", "code"), [(0, 0), (-1, 0), (1, 1)], ids=["equal", "lower", "raised"],
 )
 def test_a_moved_entry_is_held_against_its_predecessor_for_every_metric(capsys, pull_request, metric, change, code):
-    """#149 cells 1-3, R1: equal and lower are green, a raise names the head path and the base's number."""
+    """BASELINE-12: equal and lower are green, a raise names the head path and the base's number."""
     size = {"file_lines": 900, "function_lines": 70, "ccn": 20}[metric]
     moved_in_head(
         pull_request, metric_baseline(metric, "src/old.py", size), metric_baseline(metric, "src/new.py", size + change)
@@ -65,20 +65,22 @@ def test_a_moved_entry_is_held_against_its_predecessor_for_every_metric(capsys, 
     ids=["moved and renamed symbol", "an existing moved symbol gaining a metric", "moved past git's threshold"],
 )
 def test_a_new_symbol_or_metric_or_an_undetected_rename_is_an_add(capsys, pull_request, head, new_text, expected):
-    """#149 cells 5, 6, 10, R2, R4: git pairs the files, but only the base's own symbols and metrics carry."""
+    """BASELINE-3: git pairs the files, but only the base's own symbols and metrics carry; every other
+    entry is an add."""
     moved_in_head(pull_request, OLD_ENTRY, head, new_text)
     code, output = verdict_of(pull_request[0], capsys)
     assert (code, expected in output) == (1, True)
 
 
 def test_a_moved_file_edited_within_the_threshold_still_meets_its_predecessor(capsys, pull_request):
-    """#149 cell 9, R4."""
+    """BASELINE-11, BASELINE-12: a moved file edited within git's similarity threshold still meets its
+    predecessor."""
     moved_in_head(pull_request, OLD_ENTRY, OLD_ENTRY.replace("old", "new"), MOVABLE_FILE + "an edit\n")
     assert viewed(pull_request[0], capsys) == (0, ["✓ green"])
 
 
 def test_a_file_split_off_beside_a_move_has_its_entries_as_adds(capsys, pull_request):
-    """#149 cell 8: git pairs the moved half with its predecessor; the split-off file is new."""
+    """BASELINE-3, BASELINE-12: git pairs the moved half with its predecessor; the split-off file is new."""
     head = OLD_ENTRY.replace("old", "new") + '[ccn."src/split.py"]\n"h" = 16\n'
     moved_in_head(pull_request, OLD_ENTRY, head, head_files={"src/split.py": OTHER_FILE})
     code, output = verdict_of(pull_request[0], capsys)
@@ -112,7 +114,8 @@ NEW_ENTRY = OLD_ENTRY.replace("old", "new")
          "the head keeps the old path so the target is an add", "an unrelated add beside a move is the only red"],
 )
 def test_a_leftover_does_not_count_and_the_allowance_moves_rather_than_copies(capsys, pull_request, base, head, code, expected):
-    """#149 cells 7, 12, 13: rule 2 and rule 1."""
+    """BASELINE-12, BASELINE-13: an entry the base holds under the target never counts: a move is held against the
+    predecessor's entry, a lower leftover does not block it and a leftover is no allowance for a raise."""
     moved_in_head(pull_request, base, head)
     actual_code, out, err = verdict_streams(pull_request[0], capsys)
     assert (actual_code, expected in out, out.count("\n    ! "), err) == (code, True, 0 if code == 0 else 1, "")
@@ -124,7 +127,7 @@ RAISED_LEFTOVER = entry("src/new.py", 150)
 
 
 def test_a_rename_from_a_path_that_is_not_utf8_still_clears_its_target(capsys, pull_request):
-    """#149 rule 2, gate B1: no baseline key names the source, but the stale entry at the target never counts."""
+    """BASELINE-14: no baseline key names the source, but the stale entry at the target never counts."""
     moved_in_head(pull_request, STALE_LEFTOVER, RAISED_LEFTOVER, old=UNNAMEABLE_SOURCE)
     code, output = verdict_of(pull_request[0], capsys)
     assert (code, "size baseline adds function_lines src/new.py f 150" in output) == (1, True)
@@ -132,7 +135,8 @@ def test_a_rename_from_a_path_that_is_not_utf8_still_clears_its_target(capsys, p
 
 @pytest.mark.integration
 def test_the_door_refuses_a_rename_from_a_path_that_is_not_utf8_as_the_verdict_does(capsys, tmp_path):
-    """#149 rule 2, gate B1: the door reads the same pair of commits."""
+    """BASELINE-14, MERGE-84: the door refuses the raise at the target of a rename from a path that is not UTF-8, as
+    the verdict does."""
     gh = pulled(
         tmp_path, STALE_LEFTOVER, RAISED_LEFTOVER, [(UNNAMEABLE_SOURCE, "src/new.py")],
         base_config=GATE_CONFIG, merge_config=GATE_CONFIG,
@@ -155,14 +159,14 @@ def test_a_moved_allowance_is_not_copied_into_a_later_pull_request(capsys, pull_
 
 
 def test_a_move_whose_old_path_is_recreated_in_the_same_pull_request_is_an_add(capsys, pull_request):
-    """#149 cell 14b: git reports an edit and an addition, no rename, so the target's entries are adds."""
+    """BASELINE-3: git reports an edit and an addition, no rename, so the target's entries are adds."""
     moved_in_head(pull_request, OLD_ENTRY, NEW_ENTRY, head_files={"src/old.py": OTHER_FILE})
     code, output = verdict_of(pull_request[0], capsys)
     assert (code, "size baseline adds function_lines src/new.py f 70" in output) == (1, True)
 
 
 def test_a_swap_in_place_is_two_edits_under_their_own_paths(capsys, pull_request):
-    """#149 cell 11: git reports no rename, so only the file that grew is raised."""
+    """BASELINE-2: git reports no rename, so only the file that grew is raised."""
     repo, commit_base = pull_request
     put(repo / "src/one.py", MOVABLE_FILE)
     put(repo / "src/two.py", OTHER_FILE)
@@ -176,7 +180,7 @@ def test_a_swap_in_place_is_two_edits_under_their_own_paths(capsys, pull_request
 
 
 def test_a_path_with_a_carriage_return_and_one_with_a_newline_each_meet_their_own_predecessor(capsys, pull_request):
-    """#149 cell 28: the rename list keeps bytes, so a carriage return is never read as a newline."""
+    """BASELINE-12: the rename list keeps bytes, so a carriage return is never read as a newline."""
     repo, commit_base = pull_request
     put(repo / "src/o\rld.py", MOVABLE_FILE)
     put(repo / "src/o\nld.py", OTHER_FILE)
@@ -201,7 +205,7 @@ STRIP_THE_LIMIT = (
 def test_a_user_git_config_does_not_change_the_rename_map(
     capsys, pull_request, monkeypatch, fake_git, setting, limit_flag_kept, code
 ):
-    """#149 cell 26 (R4): the explicit flags give git's default map; the control shows the config would otherwise bite."""
+    """BASELINE-11: the explicit flags give git's default map; the control shows the config would otherwise bite."""
     key, value = setting.split("=")
     for name, text in {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": f"diff.{key}", "GIT_CONFIG_VALUE_0": value}.items():
         monkeypatch.setenv(name, text)
@@ -244,7 +248,8 @@ def test_without_a_base_commit_no_renames_are_read(capsys, pull_request, monkeyp
          "an edit, an addition and a deletion are never decoded", "a source that is not UTF-8 still names its target; a target that is not UTF-8 is skipped"],
 )
 def test_the_rename_list_reads_only_complete_renames(listing, renames):
-    """#149 cell 20: the parser."""
+    """BASELINE-11, BASELINE-14, BASELINE-15: only a rename counts and its paths stay bytes; a source that is not
+    UTF-8 still names its target, a target that is not UTF-8 is skipped."""
     assert renames_of(listing) == renames
 
 
@@ -291,10 +296,11 @@ def new_entry(size, path="src/new.py"):
         (new_entry(100, "src/old.py") + new_entry(80), new_entry(100), {}, 0, closing_line()),
         (OLD_ENTRY, new_entry(90), {"checks": SONAR_GREEN, "base_config": ONE_JOB, "merge_config": ONE_JOB + declaring("size baseline raises function_lines src/new.py f 70 -> 90")}, 0, closing_line()),
     ],
-    ids=["cell 1 a pure move", "cell 3 a raise", "cell 12 a leftover is no allowance", "cell 12 a lower leftover", "cell 22 a declared raise"],
+    ids=["a pure move", "a raise", "a leftover is no allowance", "a lower leftover", "a declared raise"],
 )
 def test_the_door_reads_a_move_as_the_verdict_does(capsys, tmp_path, base, head, options, code, expected):
-    """#149 cell 23: the same findings and declaration matches, from the pull request's own two commits."""
+    """BASELINE-12, BASELINE-13, MERGE-84, MERGE-87: the door judges a move as the verdict does, from the pull
+    request's own two commits: a pure move merges, a raise is refused, a declared raise merges."""
     gh = pulled(tmp_path, base, head, MOVE, **{"base_config": GATE_CONFIG, "merge_config": GATE_CONFIG, **options})
     assert drive(gh)[0] == code
     assert expected in capsys.readouterr().out
@@ -515,8 +521,8 @@ NON_UTF8_PATH = os.fsdecode(b"assets/caf\xe9.txt")
 
 
 @pytest.mark.parametrize("baseline", [None, OLD_ENTRY], ids=["without baselines", "with baselines"])
-def test_a_pull_request_that_edits_a_path_that_is_not_utf8_is_judged_as_before(capsys, pull_request, baseline):
-    """#149 R4: a file git does not pair counts as new; the rename list never decodes an edit's path."""
+def test_an_edited_path_that_is_not_utf8_is_never_decoded(capsys, pull_request, baseline):
+    """A file git does not pair counts as new; the rename list never decodes an edit's path."""
     repo, commit_base = pull_request
     put(repo / NON_UTF8_PATH, "one\n")
     commit_base(baseline)
