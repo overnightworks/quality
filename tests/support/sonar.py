@@ -96,12 +96,16 @@ def failed_condition(metric="new_coverage", comparator="LT", actual="70.0", thre
     return {"status": "ERROR", "metricKey": metric, "comparator": comparator, "actualValue": actual, "errorThreshold": threshold}
 
 
+def violations(value: str) -> dict:
+    return {"component": {"measures": [{"metric": "violations", "value": value, "bestValue": value == "0"}]}}
+
+
 def sonar_answering(task=FINISHED_FOR_PR_7, issues=None, measures=None, legacy=0, branches=(ANALYSED_MAIN,), gate=GATE_OK) -> FakeSonar:
     return FakeSonar(
         {
             "ce/task": [{"task": task}],
             "qualitygates/project_status": [gate],
-            "measures/component": [measures or {"component": {}}],
+            "measures/component": [measures or violations("0")],
             "project_branches/list": [{"branches": list(branches)}],
             "issues/search": [issues or issues_page(0)],
             LEGACY_COUNT: [{"total": legacy, "issues": []}],

@@ -35,6 +35,7 @@ from tests.support.sonar import (
     set_environment,
     sonar_answering,
     sonar_off_files,
+    violations,
 )
 
 
@@ -253,6 +254,107 @@ def test_waits_for_its_own_task_before_reading_findings(monkeypatch, capsys, sta
     assert (result[0], len(fake.urls_to("ce/task")), len(result[3])) == (code, polls, sleeps)
     assert set(result[3]) <= {sonar.TASK_POLL_INTERVAL_SECONDS}
     assert bool(fake.urls_to("issues/search")) == (code == 0)
+
+
+RUN_KINDS = [
+    (PULL_REQUEST_ENVIRONMENT, FINISHED_FOR_PR_7),
+    (PUSH_ENVIRONMENT, FINISHED_FOR_MAIN),
+    (FEATURE_ENVIRONMENT, FINISHED_FOR_FEATURE),
+]
+
+
+def lagging(task, measure: str, *searches: dict) -> FakeSonar:
+    fake = sonar_answering(task=task, measures=violations(measure))
+    fake.answers["issues/search"] = list(searches)
+    return fake
+
+
+def test_a_search_behind_the_measure_waits_and_then_lists_the_finding(monkeypatch, capsys):
+    """SONAR-110, SONAR-111: the incident, measure 1 with an empty search first, is never new none"""
+    fake = lagging(FINISHED_FOR_PR_7, "1", issues_page(0), issues_page(1, 1))
+    code, out, _, sleeps = run_cli(monkeypatch, capsys, fake)
+    assert (code, sleeps) == (1, [sonar.TASK_POLL_INTERVAL_SECONDS])
+    assert "src/a1.py:1" in out
+    assert "none" not in out
+
+
+def test_a_search_that_agrees_with_the_measure_costs_no_wait_and_no_extra_request(monkeypatch, capsys):
+    """SONAR-111: measure 0 and an empty search are one read of each, no sleep"""
+    fake = lagging(FINISHED_FOR_PR_7, "0", issues_page(0))
+    code, out, _, sleeps = run_cli(monkeypatch, capsys, fake)
+    assert (code, sleeps, len(fake.urls_to("measures/component")), len(fake.urls_to("issues/search"))) == (0, [], 1, 1)
+    assert "✓ new           none" in out
+
+
+def test_a_search_above_the_measure_is_used_as_it_stands(monkeypatch, capsys):
+    """SONAR-111: an accepted issue makes the search larger than the measure, which is no disagreement"""
+    fake = lagging(FINISHED_FOR_PR_7, "2", issues_page(3, 1, 2, 3))
+    code, _, _, sleeps = run_cli(monkeypatch, capsys, fake)
+    assert (code, sleeps, len(fake.urls_to("issues/search"))) == (1, [], 1)
+
+
+@pytest.mark.parametrize(("environment", "task"), RUN_KINDS, ids=["pull request", "default branch", "other branch"])
+def test_a_search_that_never_reaches_the_measure_is_exit_two_with_a_rerun_step(monkeypatch, capsys, environment, task):
+    """SONAR-112: never agreeing is the fact and the step re-run this run's failed jobs, nothing on stdout"""
+    fake = lagging(task, "1", issues_page(0))
+    code, out, err, sleeps = run_cli(monkeypatch, capsys, fake, environment)
+    assert (code, out) == (2, "")
+    assert "counts 1 open findings" in err
+    assert "lists 0 after 12 reads" in err
+    assert err.endswith("next: re-run this run's failed jobs\n")
+    assert (len(fake.urls_to("issues/search")), len(sleeps)) == (12, 11)
+
+
+@pytest.mark.parametrize(
+    "measures",
+    [
+        {"component": {}},
+        {"component": {"measures": []}},
+        {"component": {"measures": [{"metric": "ncloc", "value": "5"}]}},
+        violations("x"),
+        violations("-1"),
+        violations("1.5"),
+        violations(" 1"),
+        {"component": {"measures": [{"metric": "violations", "value": 1}]}},
+        {"component": {"measures": "violations"}},
+        {"component": "x"},
+        ["not", "an", "object"],
+    ],
+    ids=["no measures key", "no measure", "other measure", "word", "negative", "fraction", "padded", "number", "measures not a list", "component not an object", "wrong shape"],
+)
+def test_an_unreadable_measure_is_exit_two_before_any_finding_is_read(monkeypatch, capsys, measures):
+    """SONAR-113: a missing or malformed violations measure is exit 2 before the first issues/search request"""
+    fake = sonar_answering(measures=measures)
+    code, out, err, _ = run_cli(monkeypatch, capsys, fake)
+    assert (code, out, fake.urls_to("issues/search")) == (2, "", [])
+    assert err.startswith("error: ")
+
+
+@pytest.mark.parametrize("endpoint", ["measures/component", "issues/search"])
+def test_an_http_error_on_a_re_read_is_exit_two(monkeypatch, capsys, endpoint):
+    """SONAR-82, SONAR-111: a failed re-read of the measure or of the search is exit 2, never a clean zero"""
+    fake = lagging(FINISHED_FOR_PR_7, "1", issues_page(0))
+    fake.answers[endpoint] = [fake.answers[endpoint][0], sonar.SonarHttpError(500, "u")]
+    code, out, err, _ = run_cli(monkeypatch, capsys, fake)
+    assert (code, out) == (2, "")
+    assert "HTTP 500" in err
+
+
+def test_every_wait_is_the_poll_interval_and_their_number_is_bounded(monkeypatch, capsys):
+    """SONAR-111: a search that lags for good sleeps only the poll interval, once fewer than the reads"""
+    fake = lagging(FINISHED_FOR_PR_7, "1", issues_page(0))
+    _, _, _, sleeps = run_cli(monkeypatch, capsys, fake)
+    assert set(sleeps) == {sonar.TASK_POLL_INTERVAL_SECONDS}
+    assert len(sleeps) == sonar.FINDINGS_READ_ATTEMPTS - 1
+
+
+def test_a_measure_that_lags_high_is_read_again_and_ends_clean(monkeypatch, capsys):
+    """SONAR-111: measure 1 then 0 with an empty search waits once and judges the second measure"""
+    fake = lagging(FINISHED_FOR_PR_7, "1", issues_page(0))
+    fake.answers["measures/component"] = [violations("1"), violations("0")]
+    code, out, _, sleeps = run_cli(monkeypatch, capsys, fake)
+    assert (code, sleeps) == (0, [sonar.TASK_POLL_INTERVAL_SECONDS])
+    assert "✓ new           none" in out
 
 
 @pytest.mark.parametrize(
