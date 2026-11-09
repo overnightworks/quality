@@ -1,7 +1,0 @@
-claim_id = "b02a02ad89454ac0bc82054715f2dd0b"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "ebc8a4dfd76447f3564190d5b27fd49b0da191db"
-branch = "claude/issue-700-allowance-npm-marks"
-scope = ["docs/rules.md"]
-opened_commit = "cfc4128d4505f544a654adf5460293bf5103ea63"
