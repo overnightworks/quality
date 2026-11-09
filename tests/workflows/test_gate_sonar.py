@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from quality import output, sonar
+from quality import output, sonar, sonar_properties
 from tests.support.sonar import run_properties
 
 ROOT = Path(__file__).parents[2]
@@ -132,8 +132,8 @@ def test_quality_wires_the_secret_by_name_into_the_gate():
 
 def test_quality_binds_its_own_scan_to_its_own_project(build_repo):
     """SONAR-59, SONAR-91: quality's own sonar-project.properties passes its own properties check once the tests job's report is there"""
-    checkout = build_repo({sonar.PROPERTIES_FILE: (ROOT / sonar.PROPERTIES_FILE).read_text(encoding="utf-8"), "coverage.xml": "<coverage/>"})
-    sonar.check_properties(checkout, {"GITHUB_REPOSITORY": "overnightworks/quality", sonar.TOKEN_VARIABLE: "t"})
+    checkout = build_repo({sonar_properties.PROPERTIES_FILE: (ROOT / sonar_properties.PROPERTIES_FILE).read_text(encoding="utf-8"), "coverage.xml": "<coverage/>"})
+    sonar_properties.check_properties(checkout, {"GITHUB_REPOSITORY": "overnightworks/quality", sonar.TOKEN_VARIABLE: "t"})
 
 
 def test_a_missing_coverage_artifact_fails_the_download_the_job_and_so_the_verdict(gate):

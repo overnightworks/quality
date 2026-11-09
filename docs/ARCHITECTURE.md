@@ -43,7 +43,7 @@ flowchart TB
     cli["cli.py: the one door; arguments, exit code"]
     door["merge.py: the operator's door"]
     verdict["verdict.py, sides.py: the pull request's verdict and the two sides it compares"]
-    reports["sonar.py, fleet.py: SonarCloud findings, fleet report"]
+    reports["sonar_properties.py, sonar.py, fleet.py: SonarCloud scan wiring and findings, fleet report"]
     check["check.py, staged.py: areas in order, the commit hook"]
     pin["pin.py: the release the gate pins"]
     rules["rule modules: one decision each"]

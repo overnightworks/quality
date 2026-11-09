@@ -5,7 +5,7 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from quality import output, sonar
+from quality import output, sonar_properties
 from quality.config import CONFIG_PATH
 from quality.gh import GhFailed
 from quality.report import FindingEvent
@@ -35,7 +35,7 @@ FIX = "fix it in the code; an accepted or false-positive mark in SonarCloud stil
 COUNTED_LINE = f"  ! new           1 finding\n    ! Dockerfile:3  open  docker:S8431: {MESSAGE}\n      fix: {FIX}\n"
 
 
-def bot_issue(rule: str = sonar.DEPENDABOT_EXCEPTION_RULE) -> dict:
+def bot_issue(rule: str = sonar_properties.DEPENDABOT_EXCEPTION_RULE) -> dict:
     return {"rule": rule, "component": f"{KEY}:Dockerfile", "line": 3, "textRange": {"startLine": 3}, "message": MESSAGE}
 
 
@@ -138,7 +138,7 @@ def test_a_sonar_finding_carries_the_open_event():
 
 
 def serve_config_at_merge_commit(gh: FakeGh) -> None:
-    gh.files[(sonar.DEPENDABOT_CONFIG, MERGE_SHA)] = "version: 2\n"
+    gh.files[(sonar_properties.DEPENDABOT_CONFIG, MERGE_SHA)] = "version: 2\n"
 
 
 @pytest.mark.parametrize("served", [True, False], ids=["file at the merge commit", "not served"])
@@ -150,7 +150,7 @@ def test_the_merge_door_names_every_added_finding_where_the_bot_config_exists(se
     code, answers = drive(gh, merge_sonar(added=[bot_issue(), bot_issue("python:S1")]))
     refusal = capsys.readouterr().out
     assert code == 1
-    assert (sonar.DEPENDABOT_EXCEPTION_RULE in refusal, "python:S1" in refusal) == (True, True)
+    assert (sonar_properties.DEPENDABOT_EXCEPTION_RULE in refusal, "python:S1" in refusal) == (True, True)
     changed_nothing(gh)
     assert answers == []
 
@@ -176,7 +176,7 @@ def test_the_merge_door_shows_main_whole_and_reads_no_bot_config(capsys):
     (shown,) = shown_before_asking
     assert code == 0
     assert "  ! sonar         12 legacy findings on main\n" in shown
-    assert [call for call in gh.calls if sonar.DEPENDABOT_CONFIG in " ".join(call)] == []
+    assert [call for call in gh.calls if sonar_properties.DEPENDABOT_CONFIG in " ".join(call)] == []
 
 
 def put_bot_config(root: Path, name: str = "dependabot.yml", content: str = "version: 2\n") -> None:
@@ -225,13 +225,13 @@ def test_properties_hands_the_scan_one_exclusion_exactly_when_the_bot_config_exi
     (value,) = written_arguments(step_output)
     declared = scanner_properties(value)
     assert code == 0
-    assert (sonar.DEPENDABOT_EXCEPTION_RULE in out) == excluded
+    assert (sonar_properties.DEPENDABOT_EXCEPTION_RULE in out) == excluded
     if not excluded:
         assert declared == {}
         return
-    (criterion,) = declared[sonar.IGNORE_CRITERIA_KEY].split(",")
-    pattern = declared[f"{sonar.IGNORE_CRITERIA_KEY}.{criterion}.resourceKey"]
-    assert declared[f"{sonar.IGNORE_CRITERIA_KEY}.{criterion}.ruleKey"] == sonar.DEPENDABOT_EXCEPTION_RULE
+    (criterion,) = declared[sonar_properties.IGNORE_CRITERIA_KEY].split(",")
+    pattern = declared[f"{sonar_properties.IGNORE_CRITERIA_KEY}.{criterion}.resourceKey"]
+    assert declared[f"{sonar_properties.IGNORE_CRITERIA_KEY}.{criterion}.ruleKey"] == sonar_properties.DEPENDABOT_EXCEPTION_RULE
     assert all(PurePath(path).full_match(pattern) for path in ("Dockerfile", "src/probe/Dockerfile", "a/b/c/Dockerfile.dev"))
     assert len(declared) == 3
 
@@ -241,7 +241,7 @@ def test_every_key_properties_writes_is_a_multicriteria_exclusion_key(monkeypatc
     step_output = elsewhere / "output"
     run_properties(monkeypatch, capsys, build_repo, arrange=put_bot_config, step_output=step_output)
     (value,) = written_arguments(step_output)
-    assert all(key.startswith(sonar.IGNORE_CRITERIA_KEY) for key in scanner_properties(value))
+    assert all(key.startswith(sonar_properties.IGNORE_CRITERIA_KEY) for key in scanner_properties(value))
     assert all(argument.startswith("-Dsonar.issue.ignore.") for argument in shlex.split(value))
 
 
@@ -258,7 +258,7 @@ def test_properties_keeps_the_lines_the_output_file_already_holds(monkeypatch, c
 def test_properties_outside_a_workflow_step_prints_and_exits_clean(monkeypatch, capsys, build_repo):
     """SONAR-15."""
     code, out, _ = run_properties(monkeypatch, capsys, build_repo, arrange=put_bot_config)
-    assert (code, sonar.DEPENDABOT_EXCEPTION_RULE in out) == (0, True)
+    assert (code, sonar_properties.DEPENDABOT_EXCEPTION_RULE in out) == (0, True)
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-0 path, so no permission is refused")
