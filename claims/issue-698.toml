@@ -1,7 +1,0 @@
-claim_id = "9f9aa068d5ec454199816ddc5570f6b6"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "7028efa813b8e46f45d543b0a8a8ea359c4b4fff"
-branch = "claude/issue-698-sweep-rules-ruled-marks"
-scope = ["docs/rules.md"]
-opened_commit = "a8562438f9bdef0b423cc6ba89975c7f0027d250"
