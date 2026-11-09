@@ -1,8 +1,0 @@
-claim_id = "43648c2437134b5697325af67c602a3c"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "8b12f67fc5f1015068b62d23cbdd5eed18285997"
-branch = "claude/issue-616-d7-colour-ids"
-scope = ["docs/output.md", "tests/test_cli_channels.py", "tests/test_cli_output.py", "tests/test_output.py", "tests/test_output_shortening.py"]
-opened_commit = "69d910cc9261620649b692b89968e2e87d4b4f2b"
-whole_reason = "docs/output.md colour paragraph (the painted glyphs, verdict and labels, dim facts and notes, each stream on its own, the unpainted fix and copy lines, NO_COLOR, plain output in a pipe) and the tests that prove it, linked by COLOUR IDs, with 326c and the first part of 553a folded; the live line is the next slice."
