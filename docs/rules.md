@@ -23,7 +23,7 @@ It applies these rules:
   [platform's app standard](https://github.com/overnightworks/platform/blob/main/docs/app.md) that env files pass
   quality's rules.
 
-  Ruled by the operator: the command runs exactly as printed, with no home-made encoder for the name.
+  Ruled by the operator: the command runs exactly as printed, with no home-made encoder for the name (ENV-2).
 - `compose-port`: every published port in a tracked compose file binds loopback, `127.0.0.1` or `::1` (`"[::1]:HOST:CONTAINER"`,
   `host_ip: ::1`); `[::]` and `0.0.0.0` are findings (COMPOSE-1). For an app repository it checks the rule of
   [platform's app standard](https://github.com/overnightworks/platform/blob/main/docs/app.md) that published compose
@@ -62,8 +62,9 @@ It applies these rules:
   forwarded with its validation error. A declaration is no loosening, so `quality verdict` asks for no
   `[[gate.loosened]]` entry. A config reader older than the rule refuses `[compose]` as an unknown key.
 
-  Ruled by the operator: a service with `network_mode: host`, or one whose `network_mode` holds a Compose interpolation,
-  is a finding unless `quality/config.toml` declares its file and service.
+  Ruled by the operator: a service with `network_mode: host` (COMPOSE-13), or one whose `network_mode` holds a Compose
+  interpolation (COMPOSE-14), is a finding unless `quality/config.toml` declares its file and service
+  (COMPOSE-16, COMPOSE-17).
 - `size`: every tracked file of Python, TypeScript (`.ts` `.tsx` `.mts` `.cts`), JavaScript (`.js` `.jsx` `.mjs`
   `.cjs`), Svelte or Vue is measured by its lines (SIZE-1), and no other file is (SIZE-2), and every tracked `*.py`
   file also with [lizard](https://github.com/terryyin/lizard): a file from 800 lines, a Python function from 60 lines
@@ -71,8 +72,9 @@ It applies these rules:
   production and tests (a path under `test/` or `tests/`; Python also `conftest.py`, `test_*.py`, `*_test.py`;
   TypeScript and JavaScript also `__tests__/`, `*.test.*`, `*.spec.*`, `*.test-d.*` and `*.spec-d.*`).
 
-  Ruled by the operator: a file that `quality/config.toml` declares generated is left out of the `size` rule; a minified
-  or generated file the repository does not declare is counted by its lines like any other:
+  Ruled by the operator: a file that `quality/config.toml` declares generated is left out of the `size` rule
+  (GENERATED-1); a minified or generated file the repository does not declare is counted by its lines like any other
+  (SIZE-1):
 
   ```toml
   [[size.generated]]
@@ -256,8 +258,8 @@ It applies these rules:
   one the filesystem refuses to read makes the `files` row `✗ not checked` with the reason (exit `2`) (CLAUDE-13). No
   configuration switches the rule off.
 
-  Ruled by the operator: `CLAUDE.md` and `AGENTS.md` never diverge. A finding names only the file, and its fix is a
-  sentence, never a command.
+  Ruled by the operator: `CLAUDE.md` and `AGENTS.md` never diverge (CLAUDE-7). A finding names only the file
+  (CLAUDE-9, CLAUDE-10), and its fix is a sentence, never a command (CLAUDE-11).
 - `root-layout`: every entry directly in the root of the tracked tree is on quality's base list or declared (ROOT-1). An
   entry is a file or a directory (written `frontend/`); a directory with many files is one entry (ROOT-2). Names
   compare in exact case, and the finding for a name that differs only in case names the base-list spelling (ROOT-3). A
@@ -288,8 +290,8 @@ It applies these rules:
   malformed table or allowance elsewhere in `quality/config.toml`, which plain `quality check` reads for this rule,
   refuses it too, with that table's own message; the values of `[gate]` stay the verdict's to judge.
 
-  Ruled by the operator: any pull request may add a declaration with a reason; the review judges whether the reason
-  holds. A declaration is no loosening, so `quality verdict` asks for no `[[gate.loosened]]` entry.
+  Ruled by the operator: any pull request may add a declaration with a reason (ROOT-8); the review judges whether the
+  reason holds. A declaration is no loosening, so `quality verdict` asks for no `[[gate.loosened]]` entry.
 
   The rule reads names, never content, and writes nothing (ROOT-16). No configuration switches it off (ROOT-17). A
   config reader older than the rule refuses `[root]` as an unknown key, so a declaration lands in the pull request that
@@ -378,8 +380,8 @@ It applies these rules:
   declaring the path. A test module that mirrors nothing says `misplaced` (LAYOUT-30), its fact joining the facts by
   `; ` (LAYOUT-31).
 
-  Ruled by the operator: `tests/` mirrors `src/<package>/` by path, unit and integration tests are told apart by a
-  pytest marker, and only `e2e` has its own folder.
+  Ruled by the operator: `tests/` mirrors `src/<package>/` by path (LAYOUT-12, LAYOUT-24), unit and integration tests
+  are told apart by a pytest marker, and only `e2e` has its own folder (LAYOUT-5).
 
   Frontend tests. A frontend project is the directory of any tracked `package.json`, the root or a member at any depth
   (LAYOUT-32); its content (`workspaces` included) is never read, a `package.json` inside the `tests/` of a project of
@@ -463,7 +465,7 @@ It applies these rules:
   Python project without a `pyproject.toml`.
 
   Ruled by the operator: every tracked `pyproject.toml` that `test-layout` finds as a project is judged, the root and
-  each member alike.
+  each member alike (FLOOR-1).
 - `python-security` judges every tracked regular `.py` file in any directory with the `S` codes of quality's own ruff
   (SECURITY-1) (an exact pin in quality's `pyproject.toml` that serves its own lint too): the ruff binary of quality's
   installation, never one on `PATH` (SECURITY-2), at [the pinned version](commands.md#scanners), runs `ruff check
@@ -506,7 +508,7 @@ It applies these rules:
   since ruff reads UTF-8 only; a stale reasoned noqa, which ruff's RUF100 finds.
 
   Ruled by the operator: the rules are red from the release that ships them, with no report-only phase; `assert` (S101)
-  is exempt in tests; a rule-specific noqa with a reason is green.
+  is exempt in tests (SECURITY-10); a rule-specific noqa with a reason is green (SECURITY-13).
 - `python-print` judges `T201` (`print`) and `T203` (`pprint`) (PRINT-1) from `python-security`'s run, over the same
   files (PRINT-2), with the same deafness to the repository's ruff settings and the same refusals: a run quality cannot
   trust or a file ruff cannot parse leaves both rules `cannot judge` or `unparsable`. Each finding stands as a
@@ -531,7 +533,7 @@ It applies these rules:
   reopened when a landing outside `tests/` replaces a `print` with a direct stream write), and `print(...,
   file=<variable>)`, which ruff does not report as T201.
 
-  Ruled by the operator: a program's one output owner declares itself in its code, never in a path list.
+  Ruled by the operator: a program's one output owner declares itself in its code (PRINT-7), never in a path list.
 - The baseline only falls: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the
   base commit's, so growing a function and rewriting the baseline stays red (BASELINE-1). Each loosening is one line
   under the verdict's `loosenings` row, named with the baseline's own metric, path and symbol (a file entry has no
@@ -545,8 +547,8 @@ It applies these rules:
   - the base's file deleted: `quality/baseline.toml removed` (BASELINE-6);
   - a `[[size.generated]]` declaration is judged as in [gate](gate.md), "Declared loosenings".
 
-  Ruled by the operator: a file git recognises as renamed, a directory move included, is no loosening when its numbers do
-  not rise.
+  Ruled by the operator: a file git recognises as renamed (BASELINE-11), a directory move included, is no loosening when
+  its numbers do not rise (BASELINE-12).
 
   The verdict reads the renames between the base and the head commit with `git diff -M50% -l1000`, git's default
   similarity, whatever the repository's git configuration says (BASELINE-11); a file git does not pair is new as
@@ -689,8 +691,8 @@ A lint finding is `! <path:line>  invalid  actionlint`, the message under it beh
 `fix: correct the workflow as the message says`. A security finding is
 `! <path:line>  insecure  zizmor <audit> · <description>` with `fix: see <url>` ([rows](output.md#rows)).
 
-Ruled by the operator: the clean row counts those files and says in the row itself, and in no note of its own, that only offline audits ran, so a
-workflow that only an online audit would flag is not read as fully audited:
+Ruled by the operator: the clean row counts those files and says in the row itself, and in no note of its own, that only
+offline audits ran (O38), so a workflow that only an online audit would flag is not read as fully audited:
 `✓ workflows  clean  5 workflows · offline audits only`.
 
 The `advisory` rule judges every tracked `uv.lock`, `pnpm-lock.yaml` and `requirements*.txt` (a name that starts
