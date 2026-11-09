@@ -71,6 +71,27 @@ def test_a_tree_that_was_not_read_counts_nothing_as_missing(option):
     assert lines(base, head, None) == changes(option)
 
 
+INI = ".importlinter"
+BASE_INI = {INI: contracts_ini({"guarded": FORBIDDEN_DEAD})}
+HEAD_INI = {INI: contracts_ini({"guarded": {**FORBIDDEN_DEAD, "source_modules": ["shop.db"]}})}
+
+
+@pytest.mark.parametrize(
+    ("base", "head"),
+    [
+        (BASE_INI, HEAD_INI),
+        ({PYPROJECT: toml(FORBIDDEN_DEAD)}, HEAD_INI),
+        (BASE_INI, {PYPROJECT: toml({**FORBIDDEN_DEAD, "source_modules": ["shop.db"]})}),
+    ],
+    ids=["INI to INI", "TOML to INI", "INI to TOML"],
+)
+@pytest.mark.parametrize(("tree", "expected"), [(tree_of(), []), (tree_of(head_paths=BASE_PATHS), changes("source_modules"))],
+                         ids=["a dead strike", "a kept strike"])
+def test_a_strike_is_judged_by_the_files_whichever_file_holds_each_side_contracts(base, head, tree, expected):
+    """LOOSE-19, LOOSE-20: the config file format of either side does not change what a strike is judged by."""
+    assert loosened(base, head, tree) == expected
+
+
 TOP = frozenset({"shop/__init__.py", "shop/web.py", "shop/dead.py"})
 
 

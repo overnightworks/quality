@@ -20,7 +20,6 @@ from quality.config import (
 from quality.output import SEPARATOR, Glyph, Row, SubLine, counted, format_duration
 from quality.ratchet import (
     BASELINE_PATH,
-    NO_RENAMES,
     Baseline,
     Renames,
     added_pairs,
@@ -32,13 +31,12 @@ from quality.report import FIX_THEN_RERUN, PUSH_THE_FIX, CannotJudge, Command, I
 from quality.sides import (
     Side,
     UnusableConfig,
-    compares_baselines,
     is_git_ref_name,
+    pull_files,
     read_base,
     read_head,
     read_pull_tree,
     read_renames,
-    reads_tree,
 )
 
 JOBS_URL = "https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs?filter=all&per_page=100"
@@ -583,8 +581,11 @@ def run_verdict(
     try:
         run = read_gate_run(environment)
         base, head = read_sides(run)
-        pull_tree = read_pull_tree(Path("."), run.pull_request.base_sha, "HEAD") if reads_tree(base, head) else None
-        renames = read_renames(Path("."), run.pull_request.base_sha, "HEAD") if pull_tree is None and compares_baselines(base, head) else NO_RENAMES
+        pull_tree, renames = pull_files(
+            base, head,
+            lambda: read_pull_tree(Path("."), run.pull_request.base_sha, "HEAD"),
+            lambda: read_renames(Path("."), run.pull_request.base_sha, "HEAD"),
+        )
         fetch = fetcher_for(run.token)
         settled = read_settled(
             lambda: read_jobs(run.repository, run.run_id, fetch),

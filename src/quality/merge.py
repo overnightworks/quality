@@ -26,15 +26,14 @@ from quality.output import (
     write_pair,
 )
 from quality.pin import JudgingRelease
-from quality.ratchet import BASELINE_PATH, NO_RENAMES, Renames
+from quality.ratchet import BASELINE_PATH, Renames
 from quality.report import CannotJudge, Command, Instruction, Reason, Step, config_refusal, printable
 from quality.sides import (
     Side,
     UnusableConfig,
-    compares_baselines,
+    pull_files,
     read_pull_tree_of_pull,
     read_renames_of_pull,
-    reads_tree,
     side_of,
 )
 from quality.sonar import (
@@ -592,11 +591,11 @@ def read_pull_files(
 ) -> tuple[architecture.PullTree | None, Renames]:
     """What the pull request's two commits add to the judgement, fetched once: the tree when a module is struck (its
     renames serve the baselines), else the renames when two baselines are compared, else nothing."""
-    if reads_tree(base, head):
-        return read_pull_tree_of_pull(remote_for(repository), *commits, environment), NO_RENAMES
-    if compares_baselines(base, head):
-        return None, read_renames_of_pull(remote_for(repository), *commits, environment)
-    return None, NO_RENAMES
+    return pull_files(
+        base, head,
+        lambda: read_pull_tree_of_pull(remote_for(repository), *commits, environment),
+        lambda: read_renames_of_pull(remote_for(repository), *commits, environment),
+    )
 
 
 def read_loosenings(

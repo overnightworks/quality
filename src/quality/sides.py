@@ -2,7 +2,8 @@
 and the files git renamed between the two."""
 
 import re
-from collections.abc import Iterator, Mapping
+import subprocess
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -12,6 +13,7 @@ from quality import architecture, checkout, process, repository
 from quality.config import CONFIG_PATH, ConfigError, GateSettings, LegacyMode, load_gate_settings, read_gate_settings
 from quality.ratchet import (
     BASELINE_PATH,
+    NO_RENAMES,
     Baseline,
     Renames,
     SizeError,
@@ -107,6 +109,18 @@ def reads_tree(base: Side | None, head: Side) -> bool:
     return base is not None and bool(architecture.struck_modules(base.contracts, head.contracts))
 
 
+def pull_files(
+    base: Side | None, head: Side, read_tree: Callable[[], architecture.PullTree], read_renames_listing: Callable[[], Renames]
+) -> tuple[architecture.PullTree | None, Renames]:
+    """What the pull request's two commits add to the judgement, read by the caller's readers: the tree when a module is
+    struck (its renames serve the baselines), else the renames when two baselines are compared, else nothing."""
+    if reads_tree(base, head):
+        return read_tree(), NO_RENAMES
+    if compares_baselines(base, head):
+        return None, read_renames_listing()
+    return None, NO_RENAMES
+
+
 def compares_baselines(base: Side | None, head: Side) -> bool:
     """Whether the renames can change the judgement: only a comparison of two baselines reads them. Any other pair is
     judged without them, so a pull request that renames nothing the baselines name is never held up by the diff."""
@@ -199,7 +213,7 @@ def _tracked_at(
     return frozenset(paths), frozenset(empty)
 
 
-def _run_git(command: list[str], env: dict[str, str] | None, bound: float | None, failure: str):
+def _run_git(command: list[str], env: dict[str, str] | None, bound: float | None, failure: str) -> subprocess.CompletedProcess:
     """A git run that finished with exit 0, its standard error kept; a run that fails is `failure`, git's words never."""
     try:
         done = process.run(command, env=env, encoding=None) if bound is None else process.run_bounded_in_own_group(command, bound, env, None)
