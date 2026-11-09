@@ -1,8 +1,0 @@
-claim_id = "3a32d40901a74362a7190fa71ee537a5"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "6b865c93938db4af7590c8e373a949585a373629"
-branch = "claude/issue-686-d7-allowance-ids"
-scope = ["docs/gate.md", "docs/rules.md", "tests/test_advisories.py", "tests/test_config.py", "tests/test_merge.py", "tests/test_verdict.py"]
-opened_commit = "c11f6b31770b419fb1671f8ef188788621141b66"
-whole_reason = "docs/rules.md advisory rule: the allowance bullets (conflict, expiry, unused, malformed, declared loosening) and the tests that prove them, linked by ALLOW IDs, with the docs/gate.md copy of the malformed-config rule turned into a link in the same commit; the row sentences, the npm and requirements sentences and the other-owner tests of the rows module are other pairs."
