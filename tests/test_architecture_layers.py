@@ -39,7 +39,7 @@ def exhaustive(*layers: str, **options) -> dict:
     ],
 )
 def test_a_layers_contract_is_compared_without_the_modules_the_base_does_not_name(base, head, expected):
-    """#217 (ruled 28.10.2026): the head's layers lose every module the base does not name, then compare as before."""
+    """The head's layers lose every module the base does not name, then compare as before."""
     assert loosened({"pyproject.toml": contracts_toml(one(base))}, {"pyproject.toml": contracts_toml(one(head))}) == expected
 
 
