@@ -43,7 +43,8 @@ def resolve_file(root: Path, name: str) -> Path:
             raise RepositoryFileError(f"{name} resolves outside the repository")
         mode = os.stat(target).st_mode
     except OSError as error:
-        raise RepositoryFileError(f"cannot read {name}: {os_error_reason(error)}") from error
+        reason = "it leads to nothing" if error.errno == errno.ENOENT else os_error_reason(error)
+        raise RepositoryFileError(f"cannot read {name}: {reason}") from error
     if not stat.S_ISREG(mode):
         raise RepositoryFileError(f"{name} is not a file")
     return target

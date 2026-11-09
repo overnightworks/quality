@@ -147,9 +147,9 @@ def test_a_contract_that_does_not_hold_is_one_finding_at_its_config(build_repo, 
     ],
 )
 def test_the_import_contract_rule_judges_the_contracts(build_repo, capsys, files, expected_code, expected_lines):
-    """IMPORT-1, IMPORT-7: kept contracts are clean, a root package needs exactly one tracked production directory and
-    a copy under the tests does not count; a config the rule cannot judge is exit 2 naming why, and every printed path
-    is repository-relative."""
+    """IMPORT-1, IMPORT-7, IMPORT-9, IMPORT-11, IMPORT-12: kept contracts are clean; a root package needs exactly one
+    tracked production directory and a copy under the tests does not count; two configs, a contract type that is not
+    built in and invalid contract options are exit 2 naming why; every printed path is repository-relative."""
     repo = build_repo(files)
     code, output = run(capsys, repo)
     assert code == expected_code, output
@@ -174,13 +174,13 @@ def collision(name: str, directory: str, other_place: str) -> str:
           ".importlinter": ini({"type": "independence", "modules": ["a", "b"]}, roots=("a", "b"))},
          "src/b/__init__.py", collision("b", "", "at src/b/__init__.py")),
     ],
-    ids=["cell 20 a root package quality already imported", "cell 20 quality from a second checkout",
-         "cell 20 an untracked copy inside the repository found first"],
+    ids=["a root package quality already imported", "quality from a second checkout",
+         "an untracked copy inside the repository found first"],
 )
 def test_a_root_package_python_finds_elsewhere_names_both_places_without_a_local_path(
         build_repo, capsys, files, untracked, expected):
-    """#61 rules 4 and 6, cell 20: the collision names the tracked place repository-relative and the other place
-    repository-relative inside or from its sys.path entry outside, never by a local path, and builds no graph."""
+    """IMPORT-15, IMPORT-16: a root package Python finds in another place is exit 2 naming the tracked place and the
+    other place repository-relative, the latter from its sys.path entry when it lies outside, never by a local path."""
     repo = build_repo(files)
     if untracked:
         (repo / untracked).parent.mkdir(parents=True, exist_ok=True)
@@ -271,7 +271,8 @@ def test_the_imports_row_counts_the_contracts_the_config_declares_and_the_judgem
 
 
 def test_a_dotted_root_package_never_runs_its_parent(build_repo, tmp_path, capsys, monkeypatch):
-    """#61 rule 4, cell 12: finding a dotted root package would import its parent, so nothing is looked up."""
+    """IMPORT-8, IMPORT-14: finding a dotted root package would import its parent, so the rule refuses it and the
+    parent's code never runs."""
     marker = tmp_path.parent / f"{tmp_path.name}-parent-ran"
     repo = build_repo({**SHOP, "src/shop/__init__.py": f"open({str(marker)!r}, 'w').close()\n",
                        ".importlinter": ini(INDEPENDENCE, roots=("shop.web",))})
@@ -283,7 +284,8 @@ def test_a_dotted_root_package_never_runs_its_parent(build_repo, tmp_path, capsy
 
 
 def test_a_plugin_contract_type_is_never_imported(build_repo, tmp_path, capsys, monkeypatch):
-    """#61 rule 4, cell 13: a `contract_types` session option names modules import-linter would import."""
+    """IMPORT-8, IMPORT-10: a `contract_types` session option names modules import-linter would import, so the rule
+    refuses it and the plugin's code never runs."""
     marker = tmp_path.parent / f"{tmp_path.name}-plugin-ran"
     repo = build_repo({**SHOP, "plugin.py": f"open({str(marker)!r}, 'w').close()\n",
                        ".importlinter": ini(INDEPENDENCE, contract_types=["custom: plugin.Custom"])})
@@ -305,7 +307,8 @@ def test_a_syntax_error_is_unparsable_and_hides_no_other_rule(build_repo, capsys
 
 
 def test_a_config_linked_out_of_the_repository_cannot_be_judged(build_repo, elsewhere, capsys):
-    """A config that is a link out of the repository cannot be judged, and the row never names the outside place."""
+    """IMPORT-8: a config that is a link out of the repository cannot be judged, and the row never names the outside
+    place."""
     repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
     (elsewhere / "outside.ini").write_text(ini(FORBIDDEN))
     (repo / ".importlinter").unlink()
@@ -324,8 +327,8 @@ def test_a_config_linked_out_of_the_repository_cannot_be_judged(build_repo, else
 )
 def test_a_symlink_out_of_a_root_package_is_refused_before_grimp_reads(build_repo, elsewhere, capsys, monkeypatch,
                                                                        link, target, refused):
-    """#61 rule 4, cell 18b: grimp follows symlinks, so a link leaving the repository, directly or through a link
-    that stays inside, is refused and no graph is built; the outside module would break the contract if read."""
+    """IMPORT-8, IMPORT-17: grimp follows symlinks, so a link leaving the repository, directly or through a link that
+    stays inside, is refused and no graph is built; the outside module would break the contract if read."""
     (elsewhere / "__init__.py").write_text("")
     (elsewhere / "leak.py").write_text("import shop.web\n")
     repo = build_repo({**SHOP, "vendor/__init__.py": "",
@@ -347,7 +350,8 @@ def test_a_symlink_out_of_a_root_package_is_refused_before_grimp_reads(build_rep
     ids=["a directory loop", "a file loop"],
 )
 def test_a_symlink_loop_under_a_root_package_cannot_be_judged(build_repo, capsys, link, target, expected):
-    """#61 rule 4: grimp would walk a symlink loop without end, so the loop is refused, named repository-relative."""
+    """IMPORT-18: grimp would walk a symlink loop without end, so a loop of directories or of one file is refused, named
+    repository-relative."""
     repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
     (repo / "src" / "shop" / link).symlink_to(target)
     code, output = run(capsys, repo)
@@ -357,7 +361,7 @@ def test_a_symlink_loop_under_a_root_package_cannot_be_judged(build_repo, capsys
 
 
 def test_a_file_link_into_a_loop_outside_the_repository_is_refused_as_leaving_it(build_repo, elsewhere, capsys):
-    """#61 rule 4, cell 18b: a link that leaves the repository is named as such, even where the place it reaches loops."""
+    """IMPORT-17: a link that leaves the repository is named as such, even where the place it reaches loops."""
     repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
     (elsewhere / "p").symlink_to("q")
     (elsewhere / "q").symlink_to("p")
@@ -369,7 +373,7 @@ def test_a_file_link_into_a_loop_outside_the_repository_is_refused_as_leaving_it
 
 
 def test_a_dangling_file_link_under_a_root_package_is_named_not_blamed_on_the_config(build_repo, capsys):
-    """#61 rule 4: a dangling link is named as such; no message blames the config for a file."""
+    """IMPORT-19: a dangling link is named as such; no message blames the config for a file."""
     repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
     (repo / "src" / "shop" / "dangling.py").symlink_to("missing.py")
     code, output = run(capsys, repo)
@@ -401,7 +405,7 @@ def _empty_unreadable_directory(root):
 
 
 def assert_no_native_or_local_noise(output: str, repo: Path) -> None:
-    """#61 rule 4: no repository path, Rust panic text or config blame on either descriptor."""
+    """No repository path, Rust panic text or config blame on either descriptor."""
     for noise in (str(repo), "panicked", "RUST_BACKTRACE", "the config", "PermissionError"):
         assert noise not in output
 
@@ -410,7 +414,8 @@ def assert_no_native_or_local_noise(output: str, repo: Path) -> None:
 @pytest.mark.parametrize("arrange", [_unreadable_file, _unreadable_python_file, _unreadable_directory_with_a_file,
                                      _empty_unreadable_directory])
 def test_a_place_that_cannot_be_examined_is_cannot_judge_naming_it(build_repo, capfd, arrange):
-    """#61 rule 4: a read failure other than a loop or a dangling link is exit 2 naming the place, not the config."""
+    """IMPORT-23: a read failure other than a loop or a dangling link, of a .py file or of a directory, is exit 2 naming
+    the place, not the config."""
     repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
     sealed, mode, named = arrange(repo / "src" / "shop")
     sealed.chmod(mode)
@@ -498,8 +503,8 @@ def _non_utf8_file_name(package):
                                      *map(_python_alias_of_utf8, ["utf_8", "UTF_8", "utf-8-sig", "U8", "cp65001",
                                                                   "UTF-8-unix"])])
 def test_a_source_grimp_cannot_take_is_refused_before_grimp_can_panic(build_repo, capfd, bounded, arrange):
-    """#61 rule 4: a .py file that is no regular file, has a name or content grimp cannot decode, or declares an
-    encoding other than UTF-8 is exit 2 naming it, with no Rust panic text, no absolute path and no hang."""
+    """IMPORT-20, IMPORT-21, IMPORT-22: a .py file that is no regular file, has a name or content grimp cannot decode,
+    or declares an encoding other than UTF-8 is exit 2 naming it, with no Rust panic text, no absolute path, no hang."""
     repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
     named, reason = arrange(repo / "src" / "shop")
     code, output = run(capfd, repo)
@@ -512,7 +517,8 @@ def test_a_source_grimp_cannot_take_is_refused_before_grimp_can_panic(build_repo
                                                       ["utf-8", "utf8", "UTF8", "Utf-8", "ascii", "US-ASCII"]]
                          + [("x = 1\n# coding: utf-8\n", 3)])
 def test_a_coding_cookie_grimp_reads_is_judged_normally(build_repo, capfd, cookie_line, import_line):
-    """#61 rule 4: a cookie spelling grimp accepts does not stop the judgement of the forbidden import."""
+    """IMPORT-22: a cookie spelling grimp accepts, in any letter case, does not stop the judgement of the forbidden
+    import."""
     repo = build_repo({**SHOP_DB_IMPORTS_WEB, "src/shop/db.py": f"{cookie_line}import shop.web\n",
                        ".importlinter": ini(FORBIDDEN)})
     code, output = run(capfd, repo)
@@ -538,11 +544,11 @@ def test_a_config_linked_to_nowhere_cannot_be_judged(build_repo, capsys):
     (repo / ".importlinter").unlink()
     (repo / ".importlinter").symlink_to("missing.ini")
     code, output = run(capsys, repo)
-    assert (code, f"{REFUSED}cannot read .importlinter" in output) == (2, True), output
+    assert (code, f"{REFUSED}cannot read .importlinter: it leads to nothing" in output) == (2, True), output
 
 
 def test_a_tracked_package_init_deleted_from_disk_cannot_be_judged_without_a_traceback(build_repo, capsys):
-    """#76 cell 13: architecture.py is untouched, and the tree it cannot build is exit 2."""
+    """A tracked __init__.py of a root package that is gone from disk is exit 2, never a traceback."""
     repo = build_repo({**SHOP_DB_IMPORTS_WEB, ".importlinter": ini(FORBIDDEN)})
     (repo / "src/shop/__init__.py").unlink()
     code, output = run(capsys, repo)
@@ -550,7 +556,7 @@ def test_a_tracked_package_init_deleted_from_disk_cannot_be_judged_without_a_tra
 
 
 def test_an_error_inside_a_contract_check_names_the_contract_without_a_traceback(build_repo, capsys, monkeypatch):
-    """#61 rule 7, cell 20b: any other import-linter or grimp error is cannot judge, never a traceback."""
+    """IMPORT-13: any other error import-linter or grimp raises is exit 2 naming the contract, never a traceback."""
     def raising_check(contract, graph, verbose):
         raise RuntimeError("boom")
 
@@ -569,7 +575,7 @@ def test_an_error_inside_a_contract_check_names_the_contract_without_a_traceback
     ids=["a type that is a list", "a boolean option that is a number", "a root package that is a number"],
 )
 def test_a_malformed_config_value_cannot_be_judged_without_a_traceback(build_repo, capsys, config, subject):
-    """#61 rule 7: a value of the wrong type is cannot judge naming the contract or the config, never a traceback."""
+    """IMPORT-13: a config value of the wrong type is exit 2 naming the contract or the config, never a traceback."""
     code, output = run(capsys, build_repo({**SHOP, "pyproject.toml": config}))
     assert code == 2, output
     assert f"{REFUSED}{subject} cannot be judged: " in output

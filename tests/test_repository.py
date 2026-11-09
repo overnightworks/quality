@@ -83,7 +83,7 @@ def parent_is_a_file(repo: Path, elsewhere: Path) -> None:
 OUTSIDE = f"{NAME} resolves outside the repository"
 DENIED = f"cannot read {NAME}: [Errno 13] Permission denied"
 LOOP = f"cannot read {NAME}: [Errno 40] Too many levels of symbolic links"
-DANGLING = f"cannot read {NAME}: [Errno 2] No such file or directory"
+DANGLING = f"cannot read {NAME}: it leads to nothing"
 NOT_A_FILE = f"{NAME} is not a file"
 NOT_UTF8 = f"cannot read {NAME}: 'utf-8' codec can't decode byte 0xff"
 
