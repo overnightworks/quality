@@ -3,6 +3,7 @@ from pathlib import Path
 
 from quality import process, scanners
 from quality.config import CONFIG_PATH, Allowance, ConfigError, load_staged_secret_allowances
+from quality.deadline import RunDeadline
 from quality.report import Instruction, RuleResult, StagedExtent, config_refusal
 
 INDEX_VARIABLE = "GIT_INDEX_FILE"
@@ -10,7 +11,7 @@ COMMAND = "quality check secrets --staged"
 STAGE_THE_FIX = Instruction(f"stage the fix, then run {COMMAND} again")
 
 
-def scan_change(path: Path, log: scanners.ScannerLog = scanners.no_log) -> RuleResult:
+def scan_change(path: Path, deadline: RunDeadline, log: scanners.ScannerLog = scanners.no_log) -> RuleResult:
     """Scan exactly what the next commit records: the effective index of the repository at `path`, against HEAD.
 
     gitleaks never sees the live repository. It scans a scratch repository that borrows only the objects, so
@@ -18,6 +19,7 @@ def scan_change(path: Path, log: scanners.ScannerLog = scanners.no_log) -> RuleR
     caller's environment points at) can change what is found. It reports the allowed values and no unused entry: one
     change cannot tell a stale entry from one the history still needs.
     """
+    deadline.ensure_time_left()
     binary = scanners.prepare_gitleaks()
     path = path.resolve()  # absolute, so a path that starts with `-` can never read as a git option
     staged_tree = _git_output(path, "write-tree")
@@ -32,7 +34,9 @@ def scan_change(path: Path, log: scanners.ScannerLog = scanners.no_log) -> RuleR
             f"{CONFIG_PATH} cannot be read from the staged tree", git_environment,
         )
         allowances = _staged_allowances(staged_config)
-        scan = scanners.run_gitleaks(binary, scratch, git_environment, source, ["--pre-commit", "--staged"], allowances, log)
+        scan = scanners.run_gitleaks(
+            binary, scratch, git_environment, source, ["--pre-commit", "--staged"], allowances, deadline, log
+        )
         return RuleResult(scan.findings, StagedExtent(_changed_files(source, git_environment)), False, scan.notes)
 
 

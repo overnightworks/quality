@@ -273,6 +273,12 @@ next: write it in quality/config.toml like this:
     reason = "written by scripts/generate_types.py, proven by its --check"
 ```
 
+A rule that runs out of the run's time refuses in one of two fixed wordings, each carrying the run's 540 seconds and
+bringing no step (REFUSAL-22): `the run's 540 seconds are spent` for a rule that would start a scanner with no time
+left, which names no scanner and so stands once for the rules of an area that share it (REFUSAL-4), and
+`<scanner> did not finish within the run's 540 seconds` for a scanner stopped while it ran, `<scanner>` being the
+executable's file name.
+
 ## Streams
 
 Ruled by the operator:
