@@ -436,8 +436,8 @@ TYPES_DECLARATION = GeneratedFile(
 
 
 def test_a_generated_file_is_read_by_every_loader_that_reads_the_whole_config(tmp_path):
-    """#174 sentence 1: each [[size.generated]] entry is one declaration with its path, job, item, date and reason,
-    read alike by the gate and by the check."""
+    """GENERATED-5: a declaration with the exact path of one file and a job the gate lists is read as written, with its
+    item, date and reason, by the gate and by the check."""
     text = GATE_WITH_CHECKS + generated_config()
     (tmp_path / "quality").mkdir()
     (tmp_path / CONFIG_PATH).write_text(text)
@@ -447,7 +447,8 @@ def test_a_generated_file_is_read_by_every_loader_that_reads_the_whole_config(tm
 
 @pytest.mark.parametrize("text", [None, GATE_WITH_CHECKS], ids=["no config", "no declaration"])
 def test_a_config_without_generated_files_declares_none(text):
-    """#174 sentence 1: no config or no [[size.generated]] entry leaves nothing out of the size rule."""
+    """A config without the file, or without a `[[size.generated]]` entry, declares no file: nothing is left out of the
+    size rule."""
     assert load_allow_lists(text).generated == ()
 
 
@@ -481,7 +482,7 @@ MALFORMED_GENERATED_IDS = [
 
 @pytest.mark.parametrize(("entry", "named"), MALFORMED_GENERATED, ids=MALFORMED_GENERATED_IDS)
 def test_a_malformed_generated_file_is_refused_with_the_entry_and_the_example(entry, named):
-    """#174 sentence 3: each malformed case is refused by both loaders, names the entry and carries how to write one."""
+    """GENERATED-6: each malformed declaration is refused by both loaders, naming the entry and carrying the example."""
     text = entry + GATE_WITH_CHECKS
     for load in (load_allow_lists, load_gate_settings):
         with pytest.raises(ConfigError) as refused:
@@ -490,7 +491,7 @@ def test_a_malformed_generated_file_is_refused_with_the_entry_and_the_example(en
 
 
 def test_a_generated_file_naming_a_job_needs_the_config_to_list_mandatory_jobs():
-    """#174 sentence 3: a config without [gate] mandatory_jobs cannot hold a job, so a declaration is refused."""
+    """GENERATED-6: a config without `[gate] mandatory_jobs` lists no job, so a declaration is refused."""
     text = generated_config()
     with pytest.raises(ConfigError, match="job as one of") as refused:
         load_allow_lists(text)
@@ -503,7 +504,8 @@ def test_a_generated_file_naming_a_job_needs_the_config_to_list_mandatory_jobs()
     ids=["number", "empty name", "not a list"],
 )
 def test_a_generated_file_needs_mandatory_jobs_that_are_non_empty_names(jobs, job):
-    """#174 sentence 3: a job is compared only with valid job names, in every loader that reads the declaration."""
+    """GENERATED-6: a job is compared only with valid job names, so an unusable `mandatory_jobs` refuses a declaration
+    in every loader."""
     text = f"[gate]\nmandatory_jobs = {jobs}\n" + generated_config(job=None) + f"job = {job}\n"
     for load in (load_allow_lists, load_gate_settings):
         with pytest.raises(ConfigError, match="job as one of") as refused:
@@ -517,7 +519,8 @@ def test_a_generated_file_needs_mandatory_jobs_that_are_non_empty_names(jobs, jo
     ids=["check", "check debt --fix"],
 )
 def test_a_malformed_generated_file_stops_the_size_rule_and_the_fix(build_repo, capsys, command, refusal):
-    """The check cannot judge size and the fix writes nothing."""
+    """GENERATED-7: a malformed declaration makes `check` and `check debt --fix` refuse on the `debt` row, exit 2, and
+    write nothing."""
     repo = build_repo({CONFIG_PATH: GATE_WITH_CHECKS + generated_config(job="other")})
     assert door_in(repo, *command) == 2
     captured = capsys.readouterr()
@@ -528,7 +531,8 @@ def test_a_malformed_generated_file_stops_the_size_rule_and_the_fix(build_repo, 
 
 
 def test_the_verdict_refuses_a_malformed_generated_file_naming_the_side(capsys, run_env):
-    """#174 sentence 3: the verdict at the head is exit 2."""
+    """GENERATED-8, VERDICT-40: the verdict refuses a malformed declaration at the head, exit 2, naming the entry and
+    sending the author to push the fix."""
     repo, _ = run_env
     (repo / CONFIG_PATH).write_text(GATE_WITH_CHECKS + generated_config(job="other"))
     assert cli.main(["verdict"], fetcher_for=lambda token: lambda url: ("{}", None)) == 2

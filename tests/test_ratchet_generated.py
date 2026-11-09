@@ -38,7 +38,8 @@ GATE = f'[gate]\nmandatory_jobs = ["{MANDATORY_JOB}"]\n'
     ids=["a declared TypeScript file", "the same file undeclared", "grown past its leftover entry", "a declared Python function", "undeclared Python function"],
 )
 def test_a_declared_file_is_clean_at_any_size_and_the_same_file_undeclared_is_debt(build_repo, capsys, files, declared, baseline, expected):
-    """#174 sentence 1, acceptance 1: lines, functions and a leftover baseline entry of a declared file are not judged."""
+    """GENERATED-1, GENERATED-10: lines, functions and the held entry of a declared file are not judged, where the same
+    file undeclared is debt; an entry the declared file has grown past can fall and never grew."""
     path = next(iter(files))
     config = GATE + (generated_config(path=path) if declared else "")
     repo = build_repo({**files, CONFIG_PATH: config, BASELINE_PATH: baseline})
@@ -49,7 +50,8 @@ def test_a_declared_file_is_clean_at_any_size_and_the_same_file_undeclared_is_de
 
 @pytest.mark.parametrize("declared", [True, False], ids=["declared", "undeclared"])
 def test_the_not_recorded_count_leaves_a_declared_file_out(build_repo, capsys, declared):
-    """#174 sentence 1: without a baseline the counted entries are those the size rule judges, and a recording writes."""
+    """GENERATED-2, GENERATED-3, SIZE-6: without a baseline the not-recorded count leaves a declared file out and equals
+    the entries a first fix records."""
     config = GATE + (generated_config() if declared else "")
     repo = build_repo({TYPES_FILE: typescript_file(900), CONFIG_PATH: config})
     _, output = run(capsys, repo)
@@ -67,7 +69,8 @@ def test_the_not_recorded_count_leaves_a_declared_file_out(build_repo, capsys, d
     ids=["absent", "tracked in no measured language", "deleted from disk"],
 )
 def test_a_declaration_without_a_measured_file_is_one_size_finding_with_the_delete_fix(build_repo, capsys, files, arrange, baseline):
-    """#174 sentence 4, acceptance 4: a stale declaration is a size finding on its path, in both report modes."""
+    """GENERATED-9, ROW-7, ROW-14: a declaration whose path holds no tracked file in a measured language is one `unused`
+    finding on that path, with and without a baseline, and deleting the entry clears it."""
     declared = TYPES_FILE.replace(".ts", ".txt") if arrange == "tracked, no measured language" else TYPES_FILE
     repo = build_repo({**files, CONFIG_PATH: GATE + generated_config(path=declared), **baseline})
     if arrange == "deleted from disk":
@@ -83,7 +86,8 @@ def test_a_declaration_without_a_measured_file_is_one_size_finding_with_the_dele
 
 
 def test_a_declared_python_file_python_cannot_parse_leaves_the_size_rule_judgeable_but_not_the_fix(build_repo, capsys):
-    """The size rule leaves a declared file's unparsable entry out; the fix still refuses a tree whose clones it could not measure."""
+    """GENERATED-4, GENERATED-11, SIZE-10: a declared Python file Python cannot parse leaves the size rule with no
+    finding and no refusal, but the fix refuses it, exit 2, and writes nothing."""
     seeded = '[clones."src/a.py"]\nlong_one = [["src/b.py", "long_one"]]\n'
     repo = build_repo({"gen/api.py": "def broken(:\n", CONFIG_PATH: GATE + generated_config(path="gen/api.py"), BASELINE_PATH: seeded})
     seeded_bytes = (repo / BASELINE_PATH).read_bytes()
@@ -98,13 +102,14 @@ def test_a_declared_python_file_python_cannot_parse_leaves_the_size_rule_judgeab
 
 
 def test_a_declared_file_python_cannot_parse_is_no_note_without_a_baseline(build_repo):
-    """#290 O22 (b): the size rule leaves a declared file's unparsable entry out, so no note names it."""
+    """GENERATED-4: without a baseline a declared file Python cannot parse is named by no note."""
     repo = build_repo({"gen/api.py": "def broken(:\n", CONFIG_PATH: GATE + generated_config(path="gen/api.py")})
     assert rule_notes(repo, Rule.SIZE) == []
 
 
 def test_a_fix_drops_the_entry_of_a_declared_file(build_repo, capsys):
-    """A declared file is left out of the measurement, so its held entry can fall and the fix drops it."""
+    """GENERATED-3, GENERATED-10: the fix leaves a declared file out of its measurement and drops the entries held under
+    its path."""
     files = {TYPES_FILE: typescript_file(900), "gen/api.py": long_function(70), CONFIG_PATH: GATE + generated_config(path="gen/api.py") + generated_config(path=TYPES_FILE)}
     repo = build_repo({**files, BASELINE_PATH: f'[file_lines]\n"{TYPES_FILE}" = 850\n'})
     assert door_in(repo, *FIX_WORDS) == 0
