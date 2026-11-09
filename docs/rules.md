@@ -533,15 +533,16 @@ It applies these rules:
 
   Ruled by the operator: a program's one output owner declares itself in its code, never in a path list.
 - The baseline only falls: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the
-  base commit's, so growing a function and rewriting the baseline stays red. Each loosening is one line under the
-  verdict's `loosenings` row, named with the baseline's own metric, path and symbol (a file entry has no symbol):
-  - an entry raised: `size baseline raises function_lines src/quality/cli.py main 82 -> 90`;
-  - an entry the base does not hold (a function or class under another name included; a moved file is judged as below):
-    `size baseline adds ccn src/a.py f 16`;
+  base commit's, so growing a function and rewriting the baseline stays red (BASELINE-1). Each loosening is one line
+  under the verdict's `loosenings` row, named with the baseline's own metric, path and symbol (a file entry has no
+  symbol):
+  - an entry raised: `size baseline raises function_lines src/quality/cli.py main 82 -> 90` (BASELINE-2);
+  - an entry the base does not hold (a function or class under another name included; a moved file is judged as
+    below): `size baseline adds ccn src/a.py f 16` (BASELINE-3);
   - a clone pair the base does not hold, when the base has a `[clones]` table:
-    `clone baseline adds tests/test_a.py run <-> tests/test_b.py check`;
-  - the base's `[clones]` table gone from a head that still has the file: `clone baseline removed`;
-  - the base's file deleted: `quality/baseline.toml removed`.
+    `clone baseline adds tests/test_a.py run <-> tests/test_b.py check` (BASELINE-4);
+  - the base's `[clones]` table gone from a head that still has the file: `clone baseline removed` (BASELINE-5);
+  - the base's file deleted: `quality/baseline.toml removed` (BASELINE-6);
   - a `[[size.generated]]` declaration is judged as in [gate](gate.md), "Declared loosenings".
 
   Ruled by the operator: a file git recognises as renamed, a directory move included, is no loosening when its numbers do
@@ -557,9 +558,10 @@ It applies these rules:
   is the same pair, and a renamed function is a new entry. Renames are read only when the base and the head both hold a baseline: without a base, or without a baseline on
   either side, nothing is read. `merge` fetches the same two commits and reads the same renames. `check` names entries and pairs by their current path; `check --fix` follows the renames since the ceiling's last commit.
 
-  A lowered, equal or removed entry or pair is green, and so is adopting a baseline (the base has none) or having none
-  on either side. A `[clones]` table the base lacks is an adoption too: its pairs are not compared, while the size
-  entries are still held against the base's. A malformed baseline on either side, a head config or baseline that cannot be read or links out of the
+  A lowered, equal or removed entry or pair is green (BASELINE-7), and so is adopting a baseline (the base has none) or
+  neither side having one (BASELINE-8). A `[clones]` table the base lacks is an adoption too: its pairs are not
+  compared (BASELINE-9), while the size entries are still held against the base's (BASELINE-10).
+  A malformed baseline on either side, a head config or baseline that cannot be read or links out of the
   repository, a base file that is not a regular file (`... : not a regular file`), a base git refuses to read (`... : git exited <n>`, git's own words never printed), or a base commit the clone lacks is exit `2`, naming the side (`quality/baseline.toml at the base commit
   <sha>: ...`, `quality/config.toml at the head: ...`). Only the head's malformed baseline adds `restore quality/baseline.toml from git, or repair it by hand`
   (an unknown table adds `run the quality release your gate pins` instead): a pull request cannot rewrite its base. The base must be a ref

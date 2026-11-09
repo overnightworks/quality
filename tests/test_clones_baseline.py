@@ -100,13 +100,15 @@ def baseline_text(repo: Path) -> str:
         (REVERSED, FIRST, 0, "✓ green"),
     ],
     ids=[
-        "cell 1 an added pair", "cell 2 a removed pair", "cell 3 adoption", "cell 4 the table removed",
-        "cell 5 the file removed", "cell 6 no base file", "cell 7 a renamed function is an add",
-        "an emptied table is green", "cell 24 a reversed base pair against the canonical head",
+        "an added pair", "a removed pair", "adoption of the table", "the table removed", "the file removed",
+        "no base file", "a renamed function is an add", "an emptied table is green",
+        "a reversed base pair against the canonical head",
     ],
 )
 def test_the_clone_baseline_only_falls_against_the_base(pull_request, capsys, base, head, code, expected):
-    """#130 E2, E3, E5, cells 1-7 and 24."""
+    """BASELINE-4, BASELINE-5, BASELINE-6, BASELINE-7, BASELINE-8, BASELINE-9: an added pair (a renamed function
+    included), a dropped clone table and a deleted file are red, each in its own line; a removed pair, an emptied
+    table, a reversed spelling, an adopted table and no base file are green."""
     actual_code, output = judged(pull_request, capsys, base, head)
     assert (actual_code, expected in output) == (code, True), output
     if expected == UNDECLARED + f"{BASELINE_PATH} removed":
@@ -194,7 +196,8 @@ def test_a_raise_in_a_moved_file_is_declared_under_its_head_path(pull_request, c
 
 
 def test_a_size_raise_and_a_clone_add_are_both_named_size_first(pull_request, capsys):
-    """#130 E5, cell 10."""
+    """BASELINE-2, BASELINE-4: a raised size entry and an added pair both stand under the loosenings row, the size line
+    first."""
     _, output = judged(pull_request, capsys, SIZE + FIRST, SIZE_RAISED + FIRST + SECOND)
     lines = output.splitlines()
     raised = lines.index(UNDECLARED + "size baseline raises function_lines src/quality/cli.py main 82 -> 90")
@@ -202,7 +205,7 @@ def test_a_size_raise_and_a_clone_add_are_both_named_size_first(pull_request, ca
 
 
 def test_two_added_pairs_are_named_in_sorted_order_whatever_the_file_order(pull_request, capsys):
-    """#130 E5, cell 22: the verdict."""
+    """BASELINE-4: added pairs stand in sorted order, whatever order the file names them."""
     _, output = judged(pull_request, capsys, EMPTY_CLONES, SECOND + FIRST)
     lines = output.splitlines()
     first = lines.index(UNDECLARED + f"clone baseline adds {FIRST_LABEL}")
@@ -210,7 +213,8 @@ def test_two_added_pairs_are_named_in_sorted_order_whatever_the_file_order(pull_
 
 
 def test_a_declared_clone_add_is_declared_in_the_verdict(pull_request, capsys):
-    """#130 E5, cell 8: `what` is the text after `! ` on an undeclared line."""
+    """BASELINE-4, VERDICT-53, VERDICT-62, VERDICT-63: the text after `! ` on an added pair's line, written as a
+    declaration, declares it: the line no longer stands undeclared and the run is red for declared loosenings only."""
     what = f"clone baseline adds {SECOND_LABEL}"
     code, output = judged(pull_request, capsys, FIRST, FIRST + SECOND, ONE_JOB + declaration(what))
     assert (code, ONLY_DECLARED in output, f"{UNDECLARED}{what}\n" in output) == (1, True, False), output
@@ -218,7 +222,8 @@ def test_a_declared_clone_add_is_declared_in_the_verdict(pull_request, capsys):
 
 @pytest.mark.integration
 def test_a_declared_clone_add_merges_through_the_door(capsys, tmp_path):
-    """#130 E5, cell 8: the door re-derives the same line from the merge commit and merges."""
+    """BASELINE-4, VERDICT-53, MERGE-82, MERGE-87: the door re-derives an added pair's line from the merge commit, finds
+    it declared and merges."""
     what = f"clone baseline adds {SECOND_LABEL}"
     gh = pulled(
         tmp_path, FIRST, FIRST + SECOND, checks=SONAR_GREEN, base_config=ONE_JOB, merge_config=ONE_JOB + declaring(what)
@@ -229,7 +234,7 @@ def test_a_declared_clone_add_merges_through_the_door(capsys, tmp_path):
 
 
 def test_a_declaration_for_a_pair_the_head_does_not_add_matches_nothing(pull_request, capsys):
-    """#130 E5, cell 9."""
+    """VERDICT-31: a declaration for a pair the head does not add matches nothing, and the run is red."""
     what = f"clone baseline adds {SECOND_LABEL}"
     code, output = judged(pull_request, capsys, FIRST, FIRST, ONE_JOB + declaration(what))
     assert (code, declared(what) in output) == (1, True), output

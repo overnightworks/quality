@@ -507,7 +507,8 @@ QUOTED_PATH = 'src/straße "q".py'
     ids=["ccn raised while lines fell", "equal", "entry removed", "entry added", "entry moved"],
 )
 def test_only_a_raised_or_added_entry_loosens_the_baseline(base, head, expected):
-    """#48 rule 2, cell 18: growth and a new (moved) key loosen; lowering, equality and a removed key do not."""
+    """BASELINE-2, BASELINE-3, BASELINE-7: a raised entry and an entry the base lacks (moved to another path included)
+    loosen; a lowered, equal or removed entry does not."""
     assert raised_entries(base, head) == expected
 
 
@@ -579,7 +580,8 @@ def test_a_base_without_a_clone_table_stays_without_one():
 
 
 def test_a_key_with_quotes_or_unicode_matches_itself_exactly():
-    """#48 cell 19: the same quoted or unicode key on both sides is no raise, and a raise on it is found."""
+    """BASELINE-2, BASELINE-7: a key with quotes or unicode is the same entry on both sides, so equal is no raise and a
+    raise on it is found."""
     key = Key(Metric.CCN, QUOTED_PATH, 'Holder."méthode"')
     base = load_baseline(render_baseline(Baseline({key: 16}, None))).size
     assert raised_entries(base, load_baseline(render_baseline(Baseline({key: 16}, None))).size) == []
