@@ -278,6 +278,7 @@ def test_a_moved_note_row_is_a_clean_row():
     ],
 )
 def test_each_word_a_dry_run_says_is_a_will_change_row(planned, printed):
+    """FIX-20: each word a dry run says, lower, drop, move and record, prints as a `~` row."""
     assert findings_written([], notes=[Note("src/a.py", planned, "a fact")]) == printed
 
 

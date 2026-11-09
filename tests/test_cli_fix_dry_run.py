@@ -190,6 +190,9 @@ def a_move_beside_a_grown_entry(build_repo) -> Path:
     ],
 )
 def test_a_dry_run_names_each_change_and_writes_nothing(build_repo, capsys, arrange, printed):
+    """FIX-19, FIX-20, FIX-21, FIX-22, FIX-23, CEILING-5: a dry run makes and judges the ceiling the fix would write,
+    shows each change as a `~` row, the `~` debt row and the verdict, exits 1 and writes nothing, as the fix after it
+    does."""
     repo = arrange(build_repo)
     before = untouched(repo)
     assert (*fixed(capsys, repo, *DRY_RUN_WORDS), untouched(repo)) == (1, printed, "", before)
@@ -197,14 +200,15 @@ def test_a_dry_run_names_each_change_and_writes_nothing(build_repo, capsys, arra
     assert untouched(repo) != before
 
 
-def the_pictures_state(build_repo) -> Path:
+def three_entries_that_can_fall(build_repo) -> Path:
     """A function that shrank, a file that shrank and a file that is gone."""
     held = ceiling('[ccn."src/cart.py"]\nbranchy = 19\n\n[file_lines]\n"src/orders.py" = 826\n"src/legacy.py" = 802\n')
     return build_repo({"src/cart.py": branchy_function(17), "src/orders.py": long_file(812), BASELINE_PATH: held})
 
 
-def test_a_dry_run_stands_in_the_pictures_frame_and_the_fix_after_it_lowers(build_repo, capsys):
-    repo = the_pictures_state(build_repo)
+def test_a_dry_run_plans_the_entries_the_fix_then_lowers(build_repo, capsys):
+    """FIX-18, FIX-19: a dry run plans the entries the fix then lowers, and the fix's verdict counts them."""
+    repo = three_entries_that_can_fall(build_repo)
     planned = (
         "  ~ debt          3 to lower     quality/baseline.toml\n"
         "    ~ src/cart.py:1  lower  function branchy CCN 19 → 17\n"
@@ -225,6 +229,8 @@ def test_a_dry_run_stands_in_the_pictures_frame_and_the_fix_after_it_lowers(buil
 
 @pytest.mark.parametrize("words", [DRY_RUN_WORDS, FIX_WORDS], ids=["dry run", "fix"])
 def test_a_dry_run_with_nothing_to_change_is_clean(build_repo, capsys, words):
+    """FIX-18, FIX-23: with nothing to change a dry run and the fix end clean with exit 0, and the verdict says there is
+    nothing to lower."""
     repo = build_repo({"src/a.py": long_function(62), BASELINE_PATH: ceiling('[function_lines."src/a.py"]\nlong_one = 62\n')})
     before = untouched(repo)
     clean = "  ✓ debt          clean          ceiling held · 1 entry, 0 clone pairs\n✓ clean · nothing to lower · 1 area · <1s\n"
@@ -370,6 +376,9 @@ def shallow_new_row() -> str:
     ],
 )
 def test_a_dry_run_refuses_where_the_fix_refuses_before_writing(build_repo, elsewhere, capsys, arrange, out, err):
+    """FIX-12, FIX-14, CEILING-9: a dry run refuses where the fix refuses (a ceiling or `[clones]` table git holds and
+    the tree lacks, a shallow clone, a baseline, a file or a config the check cannot read), prints the same rows and
+    writes nothing."""
     repo = arrange(build_repo, elsewhere)
     before = untouched(repo)
     expected_out = out.replace("{commit}", head_commit(repo))
@@ -412,6 +421,7 @@ def test_a_dry_run_refuses_where_the_fix_refuses_before_writing(build_repo, else
     ],
 )
 def test_a_dry_run_attempts_no_write(build_repo, capsys, request, arrange, printed, refused):
+    """FIX-19: a dry run never attempts the write, so a ceiling or folder the fix cannot write is no refusal for it."""
     repo = arrange(build_repo)
     if (repo / BASELINE_PATH).exists():
         (repo / BASELINE_PATH).chmod(0o444)
@@ -423,6 +433,7 @@ def test_a_dry_run_attempts_no_write(build_repo, capsys, request, arrange, print
 
 
 def test_another_areas_refusal_leaves_the_dry_run_standing(build_repo, capsys):
+    """FIX-19: the refusal of another area leaves the dry run's `~` rows standing, and the exit is 2."""
     repo = held_above(build_repo)
     put(repo / "compose.yaml", "services: [\n")
     git(repo, "add", "compose.yaml")
@@ -453,6 +464,8 @@ def test_at_a_terminal_a_dry_run_keeps_the_plain_words(build_repo, capsys):
 
 
 def test_a_dry_run_beside_a_grown_entry_with_nothing_to_change_says_so_and_writes_nothing(build_repo, capsys):
+    """FIX-5, FIX-19, CEILING-5: an entry that grew stays a finding in a dry run, its fix saying that a raise is a hand
+    edit, and nothing is written."""
     repo = build_repo({"src/a.py": long_function(150), BASELINE_PATH: ceiling('[function_lines."src/a.py"]\nlong_one = 100\n')})
     before = untouched(repo)
     printed = (
@@ -465,6 +478,7 @@ def test_a_dry_run_beside_a_grown_entry_with_nothing_to_change_says_so_and_write
 
 
 def test_a_debt_row_that_would_change_is_not_counted_among_the_clean_areas(build_repo, capsys):
+    """FIX-22: beside the findings of another area the dry run's verdict names the ceiling entries that would fall."""
     repo = held_above(build_repo)
     put(repo / ".env", "SECRET=1\n")
     git(repo, "add", ".env")
@@ -483,6 +497,8 @@ def test_a_debt_row_that_would_change_is_not_counted_among_the_clean_areas(build
 
 
 def test_a_dry_run_that_would_change_the_file_exits_one_beside_an_area_that_only_measures(build_repo, capsys):
+    """FIX-22, FIX-23: a dry run that would change the file exits 1 and says so in its verdict, beside an area that only
+    measures."""
     repo = held_above(build_repo)
     printed = (
         "  ~ debt          1 to lower     quality/baseline.toml\n"
@@ -526,6 +542,8 @@ def stale_ceiling(build_repo, held: str) -> Path:
     ],
 )
 def test_a_ceiling_whose_text_is_not_its_rendering_is_rewritten_by_the_fix_and_planned_by_the_dry_run(build_repo, capsys, held):
+    """FIX-16, FIX-18, FIX-21, FIX-22: a ceiling whose text is not its rendering is planned by the dry run and rewritten
+    by the fix, and then renders byte for byte."""
     repo = stale_ceiling(build_repo, held)
     before = untouched(repo)
     planned = (
@@ -557,6 +575,8 @@ def test_a_ceiling_that_renders_byte_for_byte_is_left_alone(build_repo, capsys, 
     ],
 )
 def test_a_stale_text_beside_a_grown_entry_is_named_on_the_finding_row(build_repo, capsys, words, fact, closing):
+    """FIX-17: beside a finding the rewrite is named on the finding row, as `to rewrite` in a dry run and `rewritten` in
+    the fix."""
     held = OLD_HEADER + "\n" + '[function_lines."src/a.py"]\n"long_one" = 50\n\n[clones]\n'
     repo = build_repo({"src/a.py": long_function(62), BASELINE_PATH: held})
     code, out, _ = fixed(capsys, repo, *words)
