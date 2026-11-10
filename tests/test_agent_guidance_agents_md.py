@@ -307,7 +307,7 @@ def test_a_path_outside_the_repository_is_missing_and_opens_nothing(build_repo, 
         ("- `docs/a.md`\n- `x/y.md`\n\n- `z.md`\n", not_tracked("x/y.md", 4) + not_tracked("z.md", 6)),
         ("- one ` backtick only\n", []),
     ],
-    ids=["later spans", "no first span at the start", "bad first span", "good first span", "several lines", "lone backtick"],
+    ids=["later spans", "span not first word", "bad first span", "good first span", "several lines", "lone backtick"],
 )
 def test_only_the_first_span_of_a_line_is_judged(build_repo, content, expected):
     """AGENTS-8."""
