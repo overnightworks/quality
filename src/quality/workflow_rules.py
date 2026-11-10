@@ -421,7 +421,7 @@ def _workers_problem(arguments: list[str]) -> Problem | None:
     if count in AUTOMATIC_COUNTS:
         return None
     if count is not None and WHOLE_NUMBER.fullmatch(count):
-        return None if int(count) > 0 else (FindingEvent.SERIAL, ZERO_WORKERS_FACT)
+        return None if count.strip("0") else (FindingEvent.SERIAL, ZERO_WORKERS_FACT)
     return FindingEvent.INVALID, BAD_COUNT_FACT
 
 

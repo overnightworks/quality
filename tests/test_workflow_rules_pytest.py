@@ -82,6 +82,7 @@ GREEN = [
     "pytest --numprocesses 3",
     "poetry run pytest -n auto",
     "uvx pytest -n auto",
+    "pytest -n " + "9" * 5000,
 ]
 
 
