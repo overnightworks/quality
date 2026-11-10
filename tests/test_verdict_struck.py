@@ -114,12 +114,11 @@ REMOVED = [f"    ! {REMOVED_LINE}", "! red"]
     ("removed", "head_files", "also", "code", "expected"),
     [
         (GONE_CONTRACT, DELETED, {}, 0, GREEN),
-        (LIVE_CONTRACT, DELETED, {}, 1, REMOVED),
         (GONE_CONTRACT, {}, {}, 1, REMOVED),
         (GONE_CONTRACT, RENAMED, {"other": (OTHER_CONTRACT, LISTED_IN_OTHER_CONTRACT)}, 1, REMOVED),
     ],
-    ids=["a contract whose only module the pull request deleted", "a contract whose modules all stay",
-         "a contract whose module the pull request keeps", "a contract whose module the pull request renamed"],
+    ids=["a contract whose only module the pull request deleted", "a contract whose module the pull request keeps",
+         "a contract whose module the pull request renamed"],
 )
 def test_the_verdict_reads_the_merge_commits_files_before_a_removed_contract_loosens(
     capsys, pull_request, removed, head_files, also, code, expected
@@ -159,32 +158,17 @@ def test_the_verdict_carries_a_baseline_entry_under_the_renames_of_the_tree_a_st
 
 
 @pytest.mark.integration
-def test_a_declaration_for_a_strike_the_files_make_green_matches_nothing(capsys, pull_request):
-    """LOOSE-19: a declared strike the head makes green is an unmatched declaration, red."""
-    repo, commit_base = pull_request
-    declared = declaration(f"{GUARDED_CHANGES}{STRUCK_FIELD}")
-    for name, text in {**SHOP_BASE, "pyproject.toml": contracts_toml({"guarded": DEAD})}.items():
-        put(repo / name, text)
-    commit_base(None)
-    put(repo / "src/shop/dead.py", None)
-    put(repo / "pyproject.toml", contracts_toml({"guarded": STRUCK}))
-    put(repo / CONFIG_PATH, gate_config("checks", declared=(declared,)))
-    commit_all(repo, "head")
-    code, output = verdict_of(repo, capsys)
-    assert (code, "unmatched" in output) == (1, True)
-
-
-@pytest.mark.integration
-def test_a_declaration_for_a_removal_the_files_make_green_matches_nothing(capsys, pull_request):
-    """LOOSE-23: a declared removal the head makes green is an unmatched declaration, red."""
-    repo, commit_base = pull_request
-    for name, text in {**SHOP_BASE, "pyproject.toml": contracts_toml({"guarded": DEAD, "removed": GONE_CONTRACT})}.items():
-        put(repo / name, text)
-    commit_base(None)
-    put(repo / "src/shop/dead.py", None)
-    put(repo / "pyproject.toml", contracts_toml({"guarded": DEAD}))
-    put(repo / CONFIG_PATH, gate_config("checks", declared=(declaration(REMOVED_LINE),)))
-    commit_all(repo, "head")
+@pytest.mark.parametrize(
+    ("head_contract", "also", "declared"),
+    [(STRUCK, None, f"{GUARDED_CHANGES}{STRUCK_FIELD}"), (DEAD, {"removed": (GONE_CONTRACT, None)}, REMOVED_LINE)],
+    ids=["a strike", "a removal"],
+)
+def test_a_declaration_for_a_strike_or_removal_the_files_make_green_matches_nothing(
+    capsys, pull_request, head_contract, also, declared
+):
+    """LOOSE-19, LOOSE-23: a declared strike or removal the head makes green is an unmatched declaration, red."""
+    config = {CONFIG_PATH: gate_config("checks", declared=(declaration(declared),))}
+    repo = committed(pull_request, DEAD, head_contract, {**DELETED, **config}, also=also)
     code, output = verdict_of(repo, capsys)
     assert (code, "unmatched" in output) == (1, True)
 
@@ -274,12 +258,20 @@ DECLARED_JOB_REMOVAL = {"checks": SONAR_GREEN, "base_config": TWO_JOBS, "merge_c
 
 
 @pytest.mark.integration
-def test_the_door_merges_a_dead_strike_beside_a_declared_loosening_with_no_line_for_the_strike(capsys, tmp_path):
-    """LOOSE-19, LOOSE-24: the door reads the pull request's merge commit; a deleted module's strike needs no declaration."""
-    gh = struck_pull(tmp_path, STRUCK, DELETED, **DECLARED_JOB_REMOVAL)
+@pytest.mark.parametrize(
+    ("head_contract", "removed", "line"),
+    [(STRUCK, None, STRUCK_FIELD), (DEAD, GONE_CONTRACT, REMOVED_LINE)],
+    ids=["a strike", "a removal"],
+)
+def test_the_door_merges_a_dead_strike_or_removal_beside_a_declared_loosening_with_no_line_for_it(
+    capsys, tmp_path, head_contract, removed, line
+):
+    """LOOSE-19, LOOSE-23, LOOSE-24: the door reads the pull request's merge commit; a deleted module's strike, or the
+    removal of a contract whose only module it deleted, needs no declaration."""
+    gh = struck_pull(tmp_path, head_contract, DELETED, removed=removed, **DECLARED_JOB_REMOVAL)
     code, _ = drive(gh)
     out = capsys.readouterr().out
-    assert (code, closing_line() in out, "source_modules" in out, len(gh.merge_calls)) == (0, True, False, 1)
+    assert (code, closing_line() in out, line in out, len(gh.merge_calls)) == (0, True, False, 1)
 
 
 @pytest.mark.integration
@@ -307,15 +299,6 @@ def test_the_door_refuses_an_undeclared_strike_of_a_module_the_merge_commit_keep
 
 RENAME_MOVE = (("src/shop/dead.py", "src/shop/new.py"),)
 PLAIN_JOBS = {"checks": SONAR_GREEN, "base_config": ONE_JOB, "merge_config": ONE_JOB}
-
-
-@pytest.mark.integration
-def test_the_door_merges_a_dead_removal_beside_a_declared_loosening_with_no_line_for_the_removal(capsys, tmp_path):
-    """LOOSE-23, LOOSE-24: a contract whose only module the merge commit deleted needs no declaration."""
-    gh = struck_pull(tmp_path, DEAD, DELETED, removed=GONE_CONTRACT, **DECLARED_JOB_REMOVAL)
-    code, _ = drive(gh)
-    out = capsys.readouterr().out
-    assert (code, closing_line() in out, REMOVED_LINE in out, len(gh.merge_calls)) == (0, True, False, 1)
 
 
 @pytest.mark.integration

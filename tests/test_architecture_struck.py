@@ -602,7 +602,7 @@ METRICS_LAYERS = {"type": "layers", "containers": ["shop"], "layers": ["metrics 
     [(METRICS_BASE - {"src/shop/metrics.py"}, []), (METRICS_BASE, ['import contract "Layers" changes layers', *REMOVED])],
     ids=["metrics deleted", "metrics kept"],
 )
-def test_a_deleted_layer_member_and_the_contract_that_only_guarded_it_leave_together(head_paths, expected):
+def test_a_deleted_layer_member_and_the_contract_that_only_guarded_it_leave_together_only_when_the_module_is_deleted(head_paths, expected):
     """LOOSE-23, LOOSE-19: the strike and the removal of one deleted module read the same files."""
     layers = {"Layers": METRICS_LAYERS}
     gone = forbidden(["shop.items"], ["shop.metrics"])
