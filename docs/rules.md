@@ -855,9 +855,9 @@ request. Records the pinned osv-scanner cannot read are dropped by it silently; 
 caller's own `uv sync --locked` guards against a hand-edited lock. osv-scanner exits `127` on a `uv.lock` or
 `pnpm-lock.yaml` it cannot parse, which is `cannot judge`, never clean.
 
-The check job in `gate.yml` stops later than the run's deadline plus setup and the steps outside the clock, so
-quality's own `cannot judge` shows before GitHub cancels the job; the retries spend the 300 seconds and add none
-(ADVISORY-34).
+The check job in `gate.yml` stops at a limit that setup, the scanner install step's limit, the run's deadline and a
+margin add up to, so quality's own `cannot judge` shows before GitHub cancels the job; the retries spend the 300
+seconds and add none. A test adds them up from the workflow and the constants (ADVISORY-34).
 Measured with osv-scanner 2.7.0 on 12 cores (the download at load 17 to 20): the npm archive is 219,026,863 bytes (230,735 files), the PyPI archive 37,064,024 bytes
 (26,612 files); downloading npm took 34 s; a whole `check` run over a repository with one `pnpm-lock.yaml` and one hashed
 `requirements.txt` (one pin) under `--all-packages`, both databases included, took 63 s and 69 s wall and 640 MB resident (load 3 to 5).

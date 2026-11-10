@@ -33,9 +33,9 @@ SONAR_API_ROOT = f"{SONAR_ORIGIN}/api"
 RULE = "sonar"
 EXIT_CLEAN, EXIT_FINDINGS, EXIT_CANNOT_JUDGE = 0, 1, 2
 
-# 5 s x 120 stays below the job timeout the workflow gives this step.
+# The sonar job's timeout covers these polls and the findings wait below.
 TASK_POLL_INTERVAL_SECONDS = 5
-TASK_POLL_ATTEMPTS = 120
+TASK_POLL_ATTEMPTS = 70
 # 12 reads at the poll interval wait at most 55 s for the issue search to hold the analysis's findings.
 FINDINGS_READ_ATTEMPTS = 12
 FINISHED_TASK_STATUS = "SUCCESS"

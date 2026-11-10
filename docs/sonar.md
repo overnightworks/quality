@@ -19,7 +19,7 @@ Ruled by the operator:
 - The CI scanner analyses, and automatic analysis is off.
 
 The `sonar` job checks out the caller with its full history and without stored credentials, holds `contents: read` alone
-and is bounded by a timeout (SONAR-85). `SONAR_TOKEN` reaches only the properties check, the scan and the findings step,
+and the job and its scan step are each bounded by a timeout, the job's covering the scan, the task wait and the findings wait (SONAR-85). `SONAR_TOKEN` reaches only the properties check, the scan and the findings step,
 each through its own `env`, never through a workflow's or a job's (SONAR-86). The pull request's number reaches the
 findings step alone, as `PULL_REQUEST_NUMBER` (SONAR-87).
 
