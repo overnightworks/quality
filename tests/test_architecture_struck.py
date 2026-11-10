@@ -480,3 +480,169 @@ STRUCK_CASES = [
 def test_the_struck_modules_are_the_names_the_head_lacks_in_each_list(base, head, names):
     """LOOSE-19, LOOSE-20: the names that decide whether the files are read, never a wildcard."""
     assert architecture.struck_modules(architecture.contracts_of(base), architecture.contracts_of(head)) == names
+
+
+KEPT = {"type": "forbidden", "source_modules": ["shop.db"], "forbidden_modules": ["shop.web"]}
+REMOVED = ['import contract "gone" removed']
+
+
+def removal(gone, tree="deleted", roots=("shop",), kept=None, head_kept=None):
+    """The loosenings of a head that drops the contract `gone`, keeps `kept` and changes it to `head_kept`."""
+    tree = tree_of() if tree == "deleted" else tree
+    kept = {"kept": KEPT, **(kept or {})}
+    base = {PYPROJECT: contracts_toml({**kept, "gone": gone}, roots)}
+    head = {PYPROJECT: contracts_toml({**kept, **(head_kept or {})}, roots)}
+    return loosened(base, head, tree)
+
+
+def forbidden(source, forbidden_modules):
+    return {"type": "forbidden", "source_modules": source, "forbidden_modules": forbidden_modules}
+
+
+GONE_SOURCE = forbidden(["shop.dead"], ["shop.web"])
+REMOVAL_FIELD_CELLS = {
+    "source_modules": GONE_SOURCE,
+    "forbidden_modules": forbidden(["shop.db"], ["shop.dead"]),
+    "modules": {"type": "independence", "modules": ["shop.dead"]},
+    "protected_modules": {"type": "protected", "protected_modules": ["shop.dead"], "allowed_importers": ["shop.api"]},
+    "containers": {"type": "layers", "containers": ["shop.dead"], "layers": ["web : api"]},
+    "layers": {"type": "layers", "containers": ["shop"], "layers": ["dead"]},
+}
+
+
+@pytest.mark.parametrize("option", REMOVAL_FIELD_CELLS)
+def test_a_contract_removed_with_one_list_of_only_deleted_modules_is_no_loosening(option):
+    """LOOSE-23: each of the six lists, as the only dead list of a removed contract, lets the removal go."""
+    assert removal(REMOVAL_FIELD_CELLS[option]) == []
+
+
+@pytest.mark.parametrize("gone", [GONE_SOURCE, forbidden(["shop.db"], ["shop.web"])], ids=["a dead contract", "a live contract"])
+def test_a_contract_removal_stays_a_loosening_when_no_tree_was_read(gone):
+    """LOOSE-23, LOOSE-20: without a tree nothing counts as missing."""
+    assert removal(gone, None) == REMOVED
+
+
+@pytest.mark.parametrize(
+    ("gone", "expected"),
+    [
+        (forbidden(["shop.db"], ["shop.web"]), REMOVED),
+        (forbidden(["shop.dead", "shop.db"], ["shop.web"]), REMOVED),
+        (forbidden([], ["shop.web"]), REMOVED),
+        ({"type": "independence", "modules": []}, REMOVED),
+        (forbidden(["shop.*"], ["shop.web"]), REMOVED),
+        (forbidden(["shop.dead", "shop.*"], ["shop.web"]), REMOVED),
+        (forbidden(["shop.dead", "shop.*"], ["shop.dead"]), []),
+        (forbidden(["requests"], ["shop.web"]), REMOVED),
+        (forbidden(["shop.dead"], ["shop.db"]), []),
+    ],
+    ids=["every list live", "one list mixing dead and live", "a list empty beside a live one", "every list empty",
+         "a list of one wildcard", "a dead name beside a wildcard", "a dead name beside a wildcard, another list dead",
+         "an external name only", "one dead list beside a live one"],
+)
+def test_a_contract_removal_is_no_loosening_only_when_one_list_names_deleted_modules_and_nothing_else(gone, expected):
+    """LOOSE-23, LOOSE-20: a live, mixed, empty, wildcard or external list does not let the removal go."""
+    assert removal(gone) == expected
+
+
+MOVED_SITE = {"src/shop/web/views.py": "src/shop/site/views.py", "src/shop/web/__init__.py": "src/shop/other/__init__.py"}
+SITE_HEAD = (WEB_PACKAGE_BASE - {"src/shop/web/__init__.py", "src/shop/web/views.py", "src/shop/web.py", "src/shop/dead.py"}
+             | {"src/shop/site/views.py", "src/shop/other/__init__.py"})
+RENAMED_HEAD = HEAD_PATHS | {"src/shop/new.py"}
+
+
+@pytest.mark.parametrize(
+    ("gone", "tree", "head_kept"),
+    [
+        (GONE_SOURCE, tree_of(moves=MOVED, head_paths=RENAMED_HEAD), None),
+        (GONE_SOURCE, tree_of(moves=MOVED, head_paths=RENAMED_HEAD), {"kept": {**KEPT, "source_modules": ["shop.db", "shop.new"]}}),
+        (forbidden(["shop.web"], ["shop.api"]), tree_of(WEB_PACKAGE_BASE, SITE_HEAD, MOVED_SITE), None),
+    ],
+    ids=["a renamed module", "a renamed module, its new name listed in a kept contract", "a package whose files moved to two folders"],
+)
+def test_a_contract_removal_stays_a_loosening_when_git_reads_its_module_as_renamed(gone, tree, head_kept):
+    """LOOSE-23, LOOSE-21: a renamed module counts as live, a removal has no head list to name its new module."""
+    assert removal(gone, tree, head_kept=head_kept) == REMOVED
+
+
+@pytest.mark.parametrize(
+    ("base_paths", "head_paths"),
+    [(BASE_PATHS, HEAD_PATHS - {"src/shop/__init__.py"}), (BASE_PATHS - {"src/shop/__init__.py"}, HEAD_PATHS)],
+    ids=["a root package the head cannot place", "a root package the base cannot place"],
+)
+def test_a_contract_removal_stays_a_loosening_when_a_root_package_cannot_be_placed(base_paths, head_paths):
+    """LOOSE-23, LOOSE-20: a name of a root package the files cannot place counts as present."""
+    assert removal(GONE_SOURCE, tree_of(base_paths, head_paths)) == REMOVED
+
+
+OTHER_PACKAGE = {"src/other/__init__.py", "src/other/web.py"}
+TAIL_ELSEWHERE = OTHER_PACKAGE | {"src/other/dead.py"}
+
+
+@pytest.mark.parametrize(
+    ("other", "expected"), [(OTHER_PACKAGE, []), (TAIL_ELSEWHERE, REMOVED)],
+    ids=["a tail dead in every container", "a tail dead in one container and present in another"],
+)
+def test_a_removed_layers_contract_needs_its_tail_dead_in_every_container(other, expected):
+    """LOOSE-23, LOOSE-20: a layers tail counts once per base container."""
+    gone = {"type": "layers", "containers": ["shop", "other"], "layers": ["dead"]}
+    assert removal(gone, tree_of(BASE_PATHS | other, HEAD_PATHS | other), ("shop", "other")) == expected
+
+
+def test_a_removed_layers_contract_without_containers_stays_a_loosening():
+    """LOOSE-23, LOOSE-20: a tail with no container is a package name the files cannot place."""
+    assert removal({"type": "layers", "layers": ["dead"]}) == REMOVED
+
+
+METRICS_BASE = {"src/shop/__init__.py", "src/shop/items.py", "src/shop/grammar.py", "src/shop/metrics.py"}
+METRICS_LAYERS = {"type": "layers", "containers": ["shop"], "layers": ["metrics | grammar"]}
+
+
+@pytest.mark.parametrize(
+    ("head_paths", "expected"),
+    [(METRICS_BASE - {"src/shop/metrics.py"}, []), (METRICS_BASE, ['import contract "Layers" changes layers', *REMOVED])],
+    ids=["metrics deleted", "metrics kept"],
+)
+def test_a_deleted_layer_member_and_the_contract_that_only_guarded_it_leave_together(head_paths, expected):
+    """LOOSE-23, LOOSE-19: the strike and the removal of one deleted module read the same files."""
+    layers = {"Layers": METRICS_LAYERS}
+    gone = forbidden(["shop.items"], ["shop.metrics"])
+    assert removal(gone, tree_of(METRICS_BASE, head_paths), kept=layers, head_kept={"Layers": {**METRICS_LAYERS, "layers": ["grammar"]}}) == expected
+
+
+def test_only_the_live_removal_of_two_leaves_a_line():
+    """LOOSE-23: each removed contract is judged on its own lists."""
+    base = {PYPROJECT: contracts_toml({"kept": KEPT, "gone": GONE_SOURCE, "live": KEPT})}
+    head = {PYPROJECT: contracts_toml({"kept": KEPT})}
+    assert loosened(base, head, tree_of()) == ['import contract "live" removed']
+
+
+def test_a_dead_removal_beside_a_live_strike_leaves_only_the_strike():
+    """LOOSE-23, LOOSE-20: the removal's dead list does not clear a strike of a name the files hold."""
+    base = {PYPROJECT: contracts_toml({"guarded": LIVE, "gone": GONE_SOURCE})}
+    head = {PYPROJECT: contracts_toml({"guarded": source_modules_of(["shop.db", "shop.dead"])})}
+    assert loosened(base, head, tree_of()) == changes("source_modules")
+
+
+def test_the_whole_config_removed_stays_one_line_whatever_the_removed_contracts_hold():
+    """LOOSE-23, LOOSE-8: no head config reads no tree."""
+    base = {PYPROJECT: contracts_toml({"kept": KEPT, "gone": GONE_SOURCE})}
+    assert loosened(base, {}, tree_of()) == [f"import-linter config in {PYPROJECT} removed"]
+
+
+REMOVED_CASES = [
+    ({PYPROJECT: contracts_toml({"kept": KEPT, "gone": GONE_SOURCE})}, {PYPROJECT: contracts_toml({"kept": KEPT})}, {"shop.dead", "shop.web"}),
+    ({PYPROJECT: contracts_toml({"kept": KEPT, "gone": forbidden(["shop.dead", "shop.*"], ["shop.web"])})},
+     {PYPROJECT: contracts_toml({"kept": KEPT})}, {"shop.dead", "shop.web"}),
+    ({PYPROJECT: contracts_toml({"kept": KEPT, "gone": {**LAYERS, "containers": ["shop", "other"]}})},
+     {PYPROJECT: contracts_toml({"kept": KEPT})}, {"shop", "other", "shop.web", "shop.dead", "other.web", "other.dead"}),
+    ({PYPROJECT: contracts_toml({"kept": KEPT, "gone": GONE_SOURCE})}, {}, set()),
+]
+
+
+@pytest.mark.parametrize(
+    ("base", "head", "names"), REMOVED_CASES,
+    ids=["a removed contract", "a removed contract with a wildcard", "a removed layers contract per container", "no config at the head"],
+)
+def test_the_struck_modules_hold_the_wildcard_free_names_of_a_removed_contract(base, head, names):
+    """LOOSE-23, LOOSE-24: a removed contract's names decide that the files are read."""
+    assert architecture.struck_modules(architecture.contracts_of(base), architecture.contracts_of(head)) == names

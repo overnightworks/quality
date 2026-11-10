@@ -33,14 +33,14 @@ GREEN = ["✓ green"]
 def committed(pull_request, base_contract, head_contract, head_files, baselines=(None, None), base_files=None, also=None):
     """The base commit holds the shop, `base_files`, the base contract and the first of `baselines`; the head commit
     changes the files and the contract and holds the second; `also` maps the name of a second contract to its base and
-    head options."""
+    head options, a missing option removing the contract at the head."""
     also = also or {}
     repo, commit_base = pull_request
     base_baseline, head_baseline = baselines
-    for name, text in {**SHOP_BASE, **(base_files or {}), "pyproject.toml": contracts_toml({"guarded": base_contract, **{name: before for name, (before, _) in also.items()}})}.items():
+    for name, text in {**SHOP_BASE, **(base_files or {}), "pyproject.toml": contracts_toml({"guarded": base_contract, **{name: before for name, (before, _) in also.items() if before}})}.items():
         put(repo / name, text)
     commit_base(base_baseline)
-    for name, text in {**head_files, "pyproject.toml": contracts_toml({"guarded": head_contract, **{name: after for name, (_, after) in also.items()}}),
+    for name, text in {**head_files, "pyproject.toml": contracts_toml({"guarded": head_contract, **{name: after for name, (_, after) in also.items() if after}}),
                        BASELINE_PATH: head_baseline}.items():
         put(repo / name, text)
     commit_all(repo, "head")
@@ -100,6 +100,32 @@ def test_the_verdict_clears_a_renamed_strike_only_for_the_pairing_git_makes_and_
     """LOOSE-21, LOOSE-22: git pairs a moved module above its similarity threshold, so only the same list naming its new
     name clears the strike; a module rewritten below it reads as deleted and added, whatever the head lists."""
     repo = committed(pull_request, DEAD, head_contract, head_files, also=also)
+    assert viewed(repo, capsys) == (code, expected)
+
+
+GONE_CONTRACT = {"type": "forbidden", "source_modules": ["shop.dead"], "forbidden_modules": ["shop.web"]}
+LIVE_CONTRACT = {"type": "forbidden", "source_modules": ["shop.db"], "forbidden_modules": ["shop.web"]}
+REMOVED = ['    ! import contract "removed" removed', "! red"]
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("removed", "head_files", "also", "code", "expected"),
+    [
+        (GONE_CONTRACT, DELETED, {}, 0, GREEN),
+        (LIVE_CONTRACT, DELETED, {}, 1, REMOVED),
+        (GONE_CONTRACT, {}, {}, 1, REMOVED),
+        (GONE_CONTRACT, RENAMED, {"other": (OTHER_CONTRACT, LISTED_IN_OTHER_CONTRACT)}, 1, REMOVED),
+    ],
+    ids=["a contract whose only module the pull request deleted", "a contract whose modules all stay",
+         "a contract whose module the pull request keeps", "a contract whose module the pull request renamed"],
+)
+def test_the_verdict_reads_the_merge_commits_files_before_a_removed_contract_loosens(
+    capsys, pull_request, removed, head_files, also, code, expected
+):
+    """LOOSE-23, LOOSE-20, LOOSE-21, LOOSE-24: a contract removed whose list names only modules the merge commit no
+    longer has is green; one whose modules stay or were renamed is `removed`."""
+    repo = committed(pull_request, DEAD, DEAD, head_files, also={"removed": (removed, None), **also})
     assert viewed(repo, capsys) == (code, expected)
 
 
