@@ -247,6 +247,7 @@ def test_only_the_workflows_a_pull_request_triggers_are_found_and_each_is_named(
 
 
 ANCHORS = f"defaults: &defaults\n  group: {GROUP}\n  cancel-in-progress: {FLAG}\ngroup: &group {GROUP}\nflag: &flag '{FLAG}'\non_: &on pull_request\n"
+ALIASED_KEY = "key: &key concurrency\n"
 
 
 @pytest.mark.parametrize(
@@ -266,11 +267,16 @@ ANCHORS = f"defaults: &defaults\n  group: {GROUP}\n  cancel-in-progress: {FLAG}\
         f"{ANCHORS}{ON_PULL_REQUEST}concurrency:\n  <<: *defaults\n",
         f"{ANCHORS}{ON_PULL_REQUEST}concurrency:\n  group: *group\n  cancel-in-progress: {FLAG}\n",
         f"{ANCHORS}{ON_PULL_REQUEST}concurrency:\n  group: {GROUP}\n  cancel-in-progress: *flag\n",
+        f"{ALIASED_KEY}{ON_PULL_REQUEST}*key :\n  group: {GROUP}\n  cancel-in-progress: {FLAG}\n",
+        f"{ALIASED_KEY}on:\n  pull_request:\n  *key :\n",
+        f"{ALIASED_KEY}{ON_PULL_REQUEST}concurrency:\n  group: {GROUP}\n  *key : {FLAG}\n",
+        f"name: w\n{ON_PULL_REQUEST}concurrency: &c\n  group: {GROUP}\n  cancel-in-progress: {FLAG}\n  again: *c\n",
     ],
     ids=[
         "yaml error", "group list", "group mapping", "flag list", "flag mapping", "concurrency list", "merge key at the top",
         "alias as on", "alias in the on list", "merge key at on", "alias as concurrency", "merge key at concurrency",
-        "alias as group", "alias as flag",
+        "alias as group", "alias as flag", "alias as the key at the top", "alias as the key in on", "alias as the key in concurrency",
+        "alias of its own mapping",
     ],
 )
 def test_a_workflow_the_rule_cannot_read_is_cannot_judge_naming_the_file_while_other_rules_still_judge(build_repo, capsys, text):
