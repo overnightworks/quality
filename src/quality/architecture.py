@@ -200,17 +200,17 @@ def contracts_of(configs: Mapping[str, str]) -> SideContracts:
 def contract_loosenings(base: SideContracts, head: SideContracts, tree: PullTree | None = None) -> list[str]:
     """What the head loosens against the base, one sorted line each; adding a config or a contract, and removing an ignore, are none.
 
-    A module a list lost is no loosening when `tree` shows the head no longer has it and git does not read it as renamed;
-    without a tree nothing counts as missing."""
+    A module a list lost is no loosening when `tree` shows the head no longer has it and git does not read it as renamed,
+    or reads it as renamed to a module the same list at the head names; without a tree nothing counts as missing."""
     if base.config is None:
         return []
     if head.config is None:
         return [f"import-linter config in {base.config} removed"]
     lines = [f"import-linter changes {option}" for option in SESSION_OPTIONS if base.session[option] != head.session[option]]
-    gone = frozenset() if tree is None else _gone(struck_modules(base, head), head, tree)
+    gone = {} if tree is None else _gone(struck_modules(base, head), head, tree)
     for name, contract in base.contracts.items():
         kept = head.contracts.get(name)
-        lines += [f'import contract "{name}" removed'] if kept is None else _contract_loosenings(name, _without(contract, kept, gone), kept)
+        lines += [f'import contract "{name}" removed'] if kept is None else _contract_loosenings(name, *_aligned(contract, kept, gone))
     return sorted(lines)
 
 
@@ -245,11 +245,29 @@ def _tail_names(contract: ContractFields, tail: str) -> list[str]:
     return [f"{container}.{tail}" for container in containers] or [tail]
 
 
-def _gone(struck: frozenset[str], head: SideContracts, tree: PullTree) -> frozenset[str]:
-    """The struck names the head's files no longer hold and git does not read as renamed (a name outside the head's
-    placed root packages is present)."""
-    places = {package: (_directory_of(tree.head_paths, package), _directory_of(tree.base_paths, package)) for package in head.session["root_packages"]}
-    return frozenset(name for name in struck if _is_gone(name, places.get(name.partition(".")[0], (None, None)), tree))
+def _gone(struck: frozenset[str], head: SideContracts, tree: PullTree) -> Mapping[str, str | None]:
+    """The struck names the head's files no longer hold, each with the module git renamed it to, None when it was
+    deleted; a name outside the placed root packages is present, and a renamed name with no one renamed module is left out."""
+    heads = _placed_roots(tree.head_paths, head)
+    bases = _placed_roots(tree.base_paths, head)
+    gone: dict[str, str | None] = {}
+    for name in struck:
+        package = name.partition(".")[0]
+        if package not in heads or package not in bases or _has_file(tree.head_paths, _module_place(heads[package], name)):
+            continue
+        place = _module_place(bases[package], name)
+        moves = [(source, target) for source, target in tree.renames.moves.items()
+                 if (source == f"{place}.py" or source.startswith(f"{place}/")) and target not in tree.head_empty]
+        if not moves:
+            gone[name] = None
+        elif (module := _renamed_module(place, moves, heads)) is not None:
+            gone[name] = module
+    return gone
+
+
+def _placed_roots(paths: frozenset[str], head: SideContracts) -> dict[str, str]:
+    placed = {package: _directory_of(paths, package) for package in head.session["root_packages"]}
+    return {package: directory for package, directory in placed.items() if directory is not None}
 
 
 def _directory_of(paths: frozenset[str], package: str) -> str | None:
@@ -259,27 +277,65 @@ def _directory_of(paths: frozenset[str], package: str) -> str | None:
         return None
 
 
-def _is_gone(name: str, directories: tuple[str | None, str | None], tree: PullTree) -> bool:
-    if None in directories:
-        return False
-    head_place, base_place = (str(PurePosixPath(directory, *name.split("."))) for directory in directories)
-    return not _has_file(tree.head_paths, head_place) and not _renamed(tree, base_place)
+def _module_place(directory: str, name: str) -> str:
+    return str(PurePosixPath(directory, *name.split(".")))
 
 
 def _has_file(paths: frozenset[str], place: str) -> bool:
     return f"{place}.py" in paths or any(path.startswith(f"{place}/") for path in paths)
 
 
-def _renamed(tree: PullTree, place: str) -> bool:
-    return any((source == f"{place}.py" or source.startswith(f"{place}/")) and target not in tree.head_empty
-               for source, target in tree.renames.moves.items())
+def _renamed_module(place: str, moves: Sequence[tuple[str, str]], heads: Mapping[str, str]) -> str | None:
+    """The one module every rename source of the module at `place` names, None when a source names none or they differ."""
+    candidates = {_candidate(place, source, target, heads) for source, target in moves}
+    return candidates.pop() if len(candidates) == 1 else None
 
 
-def _without(base: ContractFields, head: ContractFields, gone: frozenset[str]) -> ContractFields:
-    """The base without the modules it lists that the head's same list lacks and `gone` names."""
-    dead = {option: names & gone for option, names in _struck(base, head).items()}
-    fields = {option: _stripped(base, option, dead[option]) if dead.get(option) else value for option, value in base.fields.items()}
-    return ContractFields(base.type, base.ignores, fields)
+def _candidate(place: str, source: str, target: str, heads: Mapping[str, str]) -> str | None:
+    """The module a rename target names: its own file or package for the module's own files, the folder holding the
+    source's trailing parts for a file below the module's folder; the target must lie below a placed root package's
+    directory at the head."""
+    parts = PurePosixPath(target).parts
+    depth = _root_depth(parts, heads)
+    if depth is None:
+        return None
+    if source in (f"{place}.py", f"{place}/__init__.py"):
+        if parts[-1] == "__init__.py":
+            module = parts[:-1]
+        elif parts[-1].endswith(".py"):
+            module = (*parts[:-1], parts[-1].removesuffix(".py"))
+        else:
+            return None
+    else:
+        below = PurePosixPath(source).relative_to(place).parts
+        if parts[-len(below):] != below:
+            return None
+        module = parts[:-len(below)]
+    return ".".join(module[depth:]) if len(module) > depth else None
+
+
+def _root_depth(parts: tuple[str, ...], heads: Mapping[str, str]) -> int | None:
+    """The number of parts of the directory holding the placed root package a path lies strictly below."""
+    for package, directory in heads.items():
+        root = PurePosixPath(directory).parts
+        if parts[:len(root) + 1] == (*root, package) and len(parts) > len(root) + 1:
+            return len(root)
+    return None
+
+
+def _aligned(base: ContractFields, head: ContractFields, gone: Mapping[str, str | None]) -> tuple[ContractFields, ContractFields]:
+    """Both sides without the modules the comparison accounts for: the base without the modules it lists that the head's
+    same list lacks and `gone` names, the head without the renamed module of each such name that it lists there."""
+    cleared = {option: {name: gone[name] for name in names if name in gone and gone[name] in {None, *_names(head, option)}}
+               for option, names in _struck(base, head).items()}
+    base_dead = {option: frozenset(names) for option, names in cleared.items()}
+    head_dead = {option: frozenset(module for module in names.values() if module is not None) for option, names in cleared.items()}
+    return _stripping(base, base_dead), _stripping(head, head_dead)
+
+
+def _stripping(contract: ContractFields, dead: Mapping[str, frozenset[str]]) -> ContractFields:
+    fields = {option: _stripped(contract, option, dead[option]) if dead.get(option) else value for option, value in contract.fields.items()}
+    return ContractFields(contract.type, contract.ignores, fields)
 
 
 def _stripped(contract: ContractFields, option: str, dead: frozenset[str]) -> object:

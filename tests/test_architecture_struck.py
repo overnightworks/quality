@@ -3,7 +3,7 @@ import pytest
 from quality import architecture
 from quality.architecture import PullTree
 from quality.ratchet import Renames
-from tests.support.architecture import GUARDED_CHANGES, contracts_ini, loosened, toml
+from tests.support.architecture import GUARDED_CHANGES, contracts_ini, contracts_toml, loosened, toml
 
 PYPROJECT = "pyproject.toml"
 SHOP_FILES = ("__init__.py", "web.py", "api.py", "db.py")
@@ -217,11 +217,157 @@ def test_a_module_git_reads_as_renamed_stays_a_loosening(cell):
     assert lines(base, head, tree_of(moves=moves, head_paths=head_paths)) == changes("source_modules")
 
 
-def test_a_renamed_module_stays_a_loosening_even_when_the_head_lists_its_new_name():
-    """LOOSE-21: the new name in the same field does not clear the strike."""
-    head = source_modules_of(["shop.db", "shop.new"])
-    tree = tree_of(moves=MOVED, head_paths=HEAD_PATHS | {"src/shop/new.py"})
-    assert lines(FORBIDDEN_DEAD, head, tree) == changes("source_modules")
+NEW_LISTED = {
+    "source_modules": {**FORBIDDEN_DEAD, "source_modules": ["shop.db", "shop.new"]},
+    "forbidden_modules": {**FORBIDDEN_DEAD, "source_modules": ["shop.db"], "forbidden_modules": ["shop.web", "shop.new"]},
+    "modules": {"type": "independence", "modules": ["shop.web", "shop.api", "shop.new"]},
+    "protected_modules": {"type": "protected", "protected_modules": ["shop.db", "shop.new"], "allowed_importers": ["shop.api"]},
+    "containers": {"type": "layers", "containers": ["shop", "shop.new"], "layers": ["web : api"]},
+    "layers": {**LAYERS, "layers": ["web : new"]},
+}
+RENAMED_TO_NEW = tree_of(moves=MOVED, head_paths=HEAD_PATHS | {"src/shop/new.py"})
+
+
+@pytest.mark.parametrize("option", NEW_LISTED)
+def test_a_renamed_module_is_no_loosening_when_the_same_list_names_its_new_module(option):
+    """LOOSE-22: the renamed module in the same field of the same contract clears the strike, in each of the six lists."""
+    assert lines(FIELD_CELLS[option][0], NEW_LISTED[option], RENAMED_TO_NEW) == []
+
+
+def test_a_renamed_module_in_a_layers_contract_without_containers_is_named_by_its_tail_alone():
+    """LOOSE-22: a tail without a container is the whole dotted name."""
+    base, head = {"type": "layers", "layers": ["web : shop.dead"]}, {"type": "layers", "layers": ["web : shop.new"]}
+    assert lines(base, head, RENAMED_TO_NEW) == []
+
+
+def test_a_renamed_module_listed_in_another_list_of_the_same_contract_stays_a_loosening():
+    """LOOSE-22, LOOSE-21: only the same field clears the strike."""
+    head = {**FORBIDDEN_DEAD, "source_modules": ["shop.db"], "forbidden_modules": ["shop.web", "shop.new"]}
+    assert lines(FORBIDDEN_DEAD, head, RENAMED_TO_NEW) == changes("source_modules")
+
+
+def test_a_renamed_module_listed_in_another_contract_stays_a_loosening():
+    """LOOSE-22, LOOSE-21: only the same contract clears the strike."""
+    other = {"type": "forbidden", "source_modules": ["shop.api"], "forbidden_modules": ["shop.web"]}
+    base = {"guarded": FORBIDDEN_DEAD, "other": other}
+    head = {"guarded": source_modules_of(["shop.db"]), "other": {**other, "source_modules": ["shop.api", "shop.new"]}}
+    found = architecture.contract_loosenings(architecture.contracts_of({PYPROJECT: contracts_toml(base)}),
+                                             architecture.contracts_of({PYPROJECT: contracts_toml(head)}), RENAMED_TO_NEW)
+    assert found == changes("source_modules")
+
+
+def test_a_renamed_module_stays_a_loosening_without_a_tree_whatever_the_head_lists():
+    """LOOSE-22, LOOSE-20: without a tree the new name clears nothing."""
+    assert lines(FORBIDDEN_DEAD, NEW_LISTED["source_modules"], None) == changes("source_modules")
+
+
+FILE_BASE = BASE_PATHS
+PACKAGE_BASE = HEAD_PATHS | {"src/shop/dead/__init__.py"}
+
+
+@pytest.mark.parametrize("listed", [True, False], ids=["listed", "unlisted"])
+@pytest.mark.parametrize(
+    ("base_paths", "source", "target", "candidate"),
+    [
+        (FILE_BASE, "src/shop/dead.py", "src/shop/new.py", "shop.new"),
+        (FILE_BASE, "src/shop/dead.py", "src/shop/new/__init__.py", "shop.new"),
+        (PACKAGE_BASE, "src/shop/dead/__init__.py", "src/shop/new/__init__.py", "shop.new"),
+        (PACKAGE_BASE, "src/shop/dead/__init__.py", "src/shop/new.py", "shop.new"),
+    ],
+    ids=["file to file", "file to package", "package to package", "package to file"],
+)
+def test_a_module_moved_as_a_file_or_a_package_is_cleared_by_exactly_its_new_name(base_paths, source, target, candidate, listed):
+    """LOOSE-22, LOOSE-21: `<x>.py` and `<x>/__init__.py` both name `x`; unlisted the strike stays red."""
+    head_paths = (base_paths - {source}) | {target}
+    head = source_modules_of(["shop.db", candidate] if listed else ["shop.db"])
+    assert lines(FORBIDDEN_DEAD, head, tree_of(base_paths, head_paths, {source: target})) == ([] if listed else changes("source_modules"))
+
+
+FOLDER_BASE = HEAD_PATHS | {"src/shop/pages/views.py", "src/shop/pages/forms.py"}
+PAGES = {**FORBIDDEN_DEAD, "source_modules": ["shop.db", "shop.pages"]}
+SITE_MOVES = {"src/shop/pages/views.py": "src/shop/site/views.py", "src/shop/pages/forms.py": "src/shop/site/forms.py"}
+
+
+def web_tree(moves):
+    head_paths = (FOLDER_BASE - set(moves)) | set(moves.values())
+    return tree_of(FOLDER_BASE, head_paths, moves)
+
+
+@pytest.mark.parametrize(
+    ("moves", "listed", "expected"),
+    [
+        (SITE_MOVES, ["shop.site"], []),
+        (SITE_MOVES, ["shop.site.views"], changes("source_modules")),
+        ({"src/shop/pages/views.py": "src/shop/xviews.py", "src/shop/pages/forms.py": "src/shop/xforms.py"}, ["shop.x"],
+         changes("source_modules")),
+        ({**SITE_MOVES, "src/shop/pages/forms.py": "src/shop/other/forms.py"}, ["shop.site", "shop.other"], changes("source_modules")),
+        ({"src/shop/pages/views.py": "src/shop/site/views.py", "src/shop/pages/forms.py": "scripts/forms.py"}, ["shop.site"],
+         changes("source_modules")),
+    ],
+    ids=["a folder renamed", "only a module below the new folder listed", "a file renamed on the way (no candidate)",
+         "files moved to two folders, both listed", "one file moved outside every root"],
+)
+def test_a_folder_is_cleared_by_the_folder_its_files_moved_to_and_by_no_other_name(moves, listed, expected):
+    """LOOSE-22, LOOSE-21: the source's parts below the folder equal the target's last parts, the rest names the module."""
+    assert lines(PAGES, source_modules_of(["shop.db", *listed]), web_tree(moves)) == expected
+
+
+def test_two_files_moved_to_one_folder_name_one_candidate():
+    """LOOSE-22: sources that name the same candidate leave it the renamed module."""
+    assert lines(PAGES, source_modules_of(["shop.db", "shop.site"]), web_tree(SITE_MOVES)) == []
+
+
+@pytest.mark.parametrize(
+    ("target", "listed"),
+    [("src/shop/data.txt", "shop.data"), ("scripts/x.py", "scripts.x"), ("src/shop.py", "shop")],
+    ids=["a data file", "outside every placed root", "beside the root package"],
+)
+def test_a_target_that_is_no_module_below_a_placed_root_names_no_candidate(target, listed):
+    """LOOSE-22, LOOSE-21: a data file, a file outside the roots and a file beside the root package stay red when listed."""
+    tree = tree_of(moves={"src/shop/dead.py": target}, head_paths=HEAD_PATHS | {target})
+    assert lines(FORBIDDEN_DEAD, source_modules_of(["shop.db", listed]), tree) == changes("source_modules")
+
+
+def test_a_wildcard_listed_at_the_head_does_not_name_the_renamed_module():
+    """LOOSE-22, LOOSE-21: only the exact dotted name of the renamed module counts."""
+    assert lines(FORBIDDEN_DEAD, source_modules_of(["shop.db", "shop.*"]), RENAMED_TO_NEW) == changes("source_modules")
+
+
+EMPTY_BASE = {"src/shop/__init__.py", "src/shop/db.py", "src/shop/dead/__init__.py", "src/shop/dead/logic.py"}
+EMPTY_MOVES = {"src/shop/dead/__init__.py": "src/shop/py.typed", "src/shop/dead/logic.py": "src/shop/other/logic.py"}
+
+
+def test_an_empty_target_neither_names_a_candidate_nor_blocks_one():
+    """LOOSE-22, LOOSE-21: an empty `__init__.py` paired with a new empty file leaves the module's other file to name it."""
+    head_paths = {"src/shop/__init__.py", "src/shop/db.py", "src/shop/py.typed", "src/shop/other/logic.py"}
+    tree = tree_of(EMPTY_BASE, head_paths, EMPTY_MOVES, {"src/shop/py.typed"})
+    dead = {**FORBIDDEN_DEAD, "source_modules": ["shop.db", "shop.dead"]}
+    assert lines(dead, source_modules_of(["shop.db", "shop.other"]), tree) == []
+    assert lines(dead, source_modules_of(["shop.db"]), tree) == changes("source_modules")
+
+
+def test_a_root_package_at_the_top_of_the_repository_names_its_renamed_module_without_a_directory():
+    """LOOSE-22: a module moved inside a package at the repository top is read back from the top."""
+    base, head = {*TOP}, {"shop/__init__.py", "shop/web.py", "shop/new.py"}
+    tree = tree_of(base, head, {"shop/dead.py": "shop/new.py"})
+    assert lines(FORBIDDEN_DEAD, source_modules_of(["shop.db", "shop.new"]), tree) == []
+
+
+@pytest.mark.parametrize(("listed", "expected"), [(["shop.site"], []), ([], changes("source_modules"))],
+                         ids=["listed", "unlisted"])
+def test_a_rename_matched_at_the_base_directory_names_its_module_at_the_head_directory(listed, expected):
+    """LOOSE-22, LOOSE-21: `shop/` moved to `src/shop/` with `web.py` renamed to `site.py` is read as `shop.site`."""
+    base_paths = {"shop/__init__.py", "shop/web.py", "shop/db.py"}
+    head_paths = {"src/shop/__init__.py", "src/shop/site.py", "src/shop/db.py"}
+    moves = {"shop/__init__.py": "src/shop/__init__.py", "shop/web.py": "src/shop/site.py", "shop/db.py": "src/shop/db.py"}
+    web = {**WEB, "source_modules": ["shop.db", "shop.web"]}
+    assert lines(web, source_modules_of(["shop.db", *listed]), tree_of(base_paths, head_paths, moves)) == expected
+
+
+def test_a_renamed_module_of_a_root_package_the_base_cannot_place_stays_a_loosening_when_listed():
+    """LOOSE-22, LOOSE-20: the base cannot place `shop`, so the strike is present however the head lists it."""
+    tree = tree_of(BASE_PATHS - {"src/shop/__init__.py"}, HEAD_PATHS | {"src/shop/new.py"}, MOVED)
+    assert lines(FORBIDDEN_DEAD, NEW_LISTED["source_modules"], tree) == changes("source_modules")
 
 
 WEB_PACKAGE_BASE = BASE_PATHS | {"src/shop/web/__init__.py", "src/shop/web/views.py"}
