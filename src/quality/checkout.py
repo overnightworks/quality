@@ -317,6 +317,13 @@ class Document:
         return node.start_mark.index in self.alias_starts
 
 
+def _construct(loader: yaml.BaseLoader) -> None:
+    try:
+        loader.get_single_data()
+    finally:
+        loader.dispose()
+
+
 class UnreadableWorkflow(Exception):
     """The loader refuses a workflow's text."""
 
@@ -326,7 +333,7 @@ def composed_document(text: str) -> Document:
     never read through the copies the alias marking makes."""
     try:
         # BaseLoader keeps scalars strings, so no conversion can fail; ValueError is the scanner's chr() on a \U escape past U+10FFFF
-        yaml.load(text, Loader=yaml.BaseLoader)
+        _construct(yaml.BaseLoader(text))
         loader = _AliasMarkingLoader(text)
         try:
             return Document(loader.get_single_node(), frozenset(loader.alias_starts))
