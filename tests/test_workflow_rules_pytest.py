@@ -132,12 +132,33 @@ SERIAL_WITHOUT_N = [
     "uv run --python 3.14 pytest",
     "x=`pytest -q`",
     "echo `pytest -q` done",
+    "py.test -q",
+    "time pytest -q",
+    "exec pytest -q",
+    "command pytest -q",
+    "nohup pytest -q &",
+    "if pytest -q; then",
+    "elif pytest -q; then",
+    "else pytest -q",
+    "do pytest -q",
+    "while pytest -q; do",
+    "until pytest -q; do",
+    "! pytest -q",
+    "{ pytest -q; }",
+    "pypy3 -m pytest -q",
+    "python3.14 -m pytest -q",
+    "pipenv run pytest -q",
+    "pdm run pytest -q",
+    "hatch run pytest -q",
+    "coverage run -m pytest -q",
+    "uvx pytest -q",
+    "env -i A=b pytest -q",
 ]
 
 
 @pytest.mark.parametrize("command", SERIAL_WITHOUT_N)
 def test_a_pytest_call_without_a_readable_flag_is_serial(build_repo, scalar, command):
-    """PYTEST-5, PYTEST-8: a missing, abbreviated or glued flag counts as no flag."""
+    """PYTEST-3, PYTEST-5, PYTEST-8: every spelling of a call is read, and a missing, abbreviated or glued flag counts as no flag."""
     build, line = scalar
     assert shape(judged(build_repo, build(command))) == [(SERIAL, line, WITHOUT_N)]
 
