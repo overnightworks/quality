@@ -56,6 +56,7 @@ Each line has a reason:
   (CALLER-3). quality's own `ci.yml` installs the scanners in its `tests` job through the same pinned step under the
   same ceiling and runs no `quality check` there (CALLER-4). Both steps set `MISE_HTTP_RETRIES` to the same count, so
   mise retries a failed scanner download for about 20 seconds instead of about one (CALLER-11).
+- **The install step and the scan step are timed.** Each declares a `timeout-minutes` of its own, so a slow download or scan ends before the job does (CALLER-12). The `verdict` job's limit covers its git fetches, its re-reads of the jobs and one request (CALLER-13).
 - **The `check` job runs the whole `quality check`.** `gate.yml` has no input for an area, and a test pins the step's words (CALLER-5). A job that names areas says so in its verdict (`✓ clean · 1 area`); a selected-area job is not evidence of a whole check.
 - **`secrets: SONAR_TOKEN`** (needed while SonarCloud runs; a repository with `[gate] sonar = false` passes none) and the optional **`with: coverage-artifact`** are described under
   [`quality sonar findings`](sonar.md#quality-sonar-findings) and [Coverage on new code](sonar.md#coverage-on-new-code).

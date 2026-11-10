@@ -8,7 +8,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-import yaml
 
 from quality import advisories, deadline
 from quality.config import CONFIG_PATH
@@ -395,12 +394,3 @@ def test_an_allowance_in_a_pnpm_lock_allows_its_advisory_until_its_date(
     ((location, row),) = area_finding_rows(out, Area.DEPENDENCIES)
     assert (code, err, location, row.event, ADVISORY_ID in row.fact, FRONTEND_LOCK in row.fact) == (1, "", CONFIG_PATH, FindingEvent.UNUSED, True, True), out
 
-
-SETUP_AND_STEPS_OUTSIDE_THE_CLOCK_SECONDS = 600
-
-
-def test_the_check_job_outlasts_the_run_deadline_so_cannot_judge_is_what_the_run_shows():
-    """ADVISORY-34: GitHub cancelling the job would show nothing; the run's own deadline must expire first."""
-    gate = yaml.safe_load((Path(__file__).parent.parent / ".github/workflows/gate.yml").read_text(encoding="utf-8"))
-    limit_seconds = gate["jobs"]["check"]["timeout-minutes"] * 60
-    assert limit_seconds >= deadline.RUN_DEADLINE_SECONDS + SETUP_AND_STEPS_OUTSIDE_THE_CLOCK_SECONDS
