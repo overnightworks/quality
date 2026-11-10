@@ -571,8 +571,8 @@ def test_a_rule_with_no_time_left_starts_no_scan_and_cannot_judge(
 def test_a_scanner_still_running_when_the_time_ends_is_stopped_and_its_rule_cannot_judge(
     build_repo, served_scanners, tmp_path, monkeypatch, rule
 ):
-    """SCANNER-19, SCANNER-20, REFUSAL-22: a scanner that outlives the run's deadline is stopped, with its child, and
-    its rule cannot judge in the cut wording."""
+    """SCANNER-19, SCANNER-20, REFUSAL-22, ADVISORY-14: a scanner that outlives the run's deadline is stopped, with its
+    child, and its rule cannot judge in the cut wording."""
     child = tmp_path / "child"
     scanner = SCANNER_OF_RULE[rule]
     clean = CLEAN_SCANS | {scanners.ZIZMOR: "echo '[]'", scanners.RUFF: "echo '[]'"}
