@@ -803,14 +803,15 @@ quality downloads each needed database itself on every run (PyPI about 37 MB, np
 into the scan's own 0700 scratch directory and runs osv-scanner `--offline` on it, so osv-scanner makes no network call
 and reads no cache of its own (ADVISORY-8). A download that fails transiently (HTTP 500 to 599 or 429, a refused or
 reset connection, a timeout, a DNS failure, an unreachable network or host, a body cut short) is tried again after 3,
-9 and 27 seconds, each wait cut to the time left. A database that cannot be downloaded within 300 seconds in total for
-all downloads together (the retries and their waits included; connect, headers and body, however the server drags them
-out), or still not after the fourth attempt (`cannot download the <ecosystem> advisory database from <url>: <error>
-after 4 attempts`) (ADVISORY-9), cannot be placed in
+9 and 27 seconds, each wait cut to the time left. A download that waits 30 seconds without a byte is cut and tried
+again (ADVISORY-42). A database that cannot be downloaded within 300 seconds in total for all downloads together
+(the retries and their waits included; connect, headers and body, however the server drags them out; the run's end
+caps the 300 seconds), or still not after the fourth attempt (`cannot download the <ecosystem> advisory
+database from <url>: <error> after 4 attempts`) (ADVISORY-9), cannot be placed in
 the scratch directory (ADVISORY-10), is not a valid zip (ADVISORY-11), or holds no advisory (ADVISORY-12) is exit `2`,
 never clean, naming the database; so are an osv-scanner [that is missing, at another version](commands.md#scanners),
-exits other than `0` or `1` (ADVISORY-13), runs past its time limit (ADVISORY-14), or writes a report that is not the
-expected JSON (ADVISORY-15), disagrees with its exit (ADVISORY-16), or names a lock file quality did not pass
+exits other than `0` or `1` (ADVISORY-13), runs past the run's deadline (ADVISORY-14), or writes a report that is
+not the expected JSON (ADVISORY-15), disagrees with its exit (ADVISORY-16), or names a lock file quality did not pass
 (ADVISORY-17). Trust boundary: the database is an unsigned zip fetched over TLS from the same source
 osv-scanner itself uses; there is deliberately no cache, because a doctored cached database would silence every pull
 request. Records the pinned osv-scanner cannot read are dropped by it silently; the live-database test for
@@ -818,9 +819,9 @@ request. Records the pinned osv-scanner cannot read are dropped by it silently; 
 caller's own `uv sync --locked` guards against a hand-edited lock. osv-scanner exits `127` on a `uv.lock` or
 `pnpm-lock.yaml` it cannot parse, which is `cannot judge`, never clean.
 
-The check job in `gate.yml` stops at 25 minutes: the 300-second download deadline and the 600-second scan limit take
-15, and setup and the other rules get the remaining 10, so quality's own `cannot judge` shows before GitHub cancels
-the job; the retries spend the 300 seconds and add none (ADVISORY-34).
+The check job in `gate.yml` stops later than the run's deadline plus setup and the steps outside the clock, so
+quality's own `cannot judge` shows before GitHub cancels the job; the retries spend the 300 seconds and add none
+(ADVISORY-34).
 Measured with osv-scanner 2.7.0 on 12 cores (the download at load 17 to 20): the npm archive is 219,026,863 bytes (230,735 files), the PyPI archive 37,064,024 bytes
 (26,612 files); downloading npm took 34 s; a whole `check` run over a repository with one `pnpm-lock.yaml` and one hashed
 `requirements.txt` (one pin) under `--all-packages`, both databases included, took 63 s and 69 s wall and 640 MB resident (load 3 to 5).
