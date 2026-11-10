@@ -233,7 +233,8 @@ def test_a_job_level_concurrency_does_not_count(build_repo):
 def test_every_finding_shows_the_canonical_block_with_the_group_of_the_triggers_as_its_fix(build_repo, on, concurrency, group):
     """CONCURRENCY-4, CONCURRENCY-5: the group by event name for a workflow that combines pull-request triggers."""
     findings = judged(build_repo, workflow(on, concurrency))
-    assert findings and [finding.fix for finding in findings] == [Example(FIX_LABEL, fix_lines(group))] * len(findings)
+    assert findings
+    assert [finding.fix for finding in findings] == [Example(FIX_LABEL, fix_lines(group))] * len(findings)
 
 
 def test_only_the_workflows_a_pull_request_triggers_are_found_and_each_is_named(build_repo):

@@ -15,7 +15,7 @@ from quality.report import CannotJudge, Example, Finding, FindingEvent, Instruct
 from quality.rules import Rule
 
 EXPRESSION = re.compile(r"\$\{\{(.*?)\}\}", re.DOTALL)
-OPERATORS = re.compile(r"\s*(\|\||==|!=)\s*")
+OPERATORS = re.compile(r" ?(\|\||==|!=) ?")
 FALLBACK = re.compile(r"github\.(?:sha|ref_name|head_ref|ref)(?!\w)")
 MERGE_KEY = "<<"
 GROUP_KEY = "group"
