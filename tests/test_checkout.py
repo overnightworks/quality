@@ -518,6 +518,16 @@ def pull_request_events(text: str) -> frozenset[checkout.PullRequestEvent]:
 
 
 @pytest.mark.parametrize(
+    "text",
+    ["x: &a [*a]\n", "concurrency: &c\n  group: g\n  again: *c\n", "jobs: [\n", 'name: "\\U00110000"\n'],
+    ids=["a sequence that aliases itself", "a mapping that aliases itself", "a flow sequence left open", "an escape past the last code point"],
+)
+def test_a_workflow_text_the_loader_refuses_is_listed_as_unreadable(text):
+    """PIN-8: a text the loader refuses, a recursive alias among them, is unreadable and never read through a partial copy."""
+    assert checkout.workflows_of({".github/workflows/w.yml": text}).unreadable == (".github/workflows/w.yml",)
+
+
+@pytest.mark.parametrize(
     ("on", "events"),
     [
         ("on: pull_request\n", {PULL_REQUEST}),

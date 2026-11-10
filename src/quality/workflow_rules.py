@@ -69,7 +69,7 @@ def _document(name: str, text: str) -> Document:
     """The parsed workflow; one whose top mapping or `on:` an alias or a merge key could hide the keys of cannot be judged."""
     try:
         document = checkout.composed_document(text)
-    except (yaml.YAMLError, RecursionError, ValueError) as error:
+    except checkout.UnreadableWorkflow as error:
         raise _unreadable(name, "it is no YAML quality can read") from error
     top = checkout.mapping_entries(document.root)
     triggers = top.get("on")

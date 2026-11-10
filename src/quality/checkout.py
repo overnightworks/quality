@@ -267,9 +267,8 @@ def workflows_of(texts: Mapping[str, str | Unread]) -> Workflows:
             unreadable.append(name)
             continue
         try:
-            # BaseLoader keeps scalars strings, so no conversion can fail; ValueError is the scanner's chr() on a \U escape past U+10FFFF
             document = composed_document(text).root
-        except (yaml.YAMLError, RecursionError, ValueError):
+        except UnreadableWorkflow:
             unreadable.append(name)
             continue
         for uses in job_calls(document):
@@ -318,16 +317,23 @@ class Document:
         return node.start_mark.index in self.alias_starts
 
 
+class UnreadableWorkflow(Exception):
+    """The loader refuses a workflow's text."""
+
+
 def composed_document(text: str) -> Document:
-    """The document's node tree, constructed once so a document the loader refuses is refused here too."""
-    loader = _AliasMarkingLoader(text)
+    """The document's node tree, once the loader has accepted the text, so a text it refuses is refused here too and
+    never read through the copies the alias marking makes."""
     try:
-        node = loader.get_single_node()
-        if node is not None:
-            loader.construct_document(node)
-        return Document(node, frozenset(loader.alias_starts))
-    finally:
-        loader.dispose()
+        # BaseLoader keeps scalars strings, so no conversion can fail; ValueError is the scanner's chr() on a \U escape past U+10FFFF
+        yaml.load(text, Loader=yaml.BaseLoader)
+        loader = _AliasMarkingLoader(text)
+        try:
+            return Document(loader.get_single_node(), frozenset(loader.alias_starts))
+        finally:
+            loader.dispose()
+    except (yaml.YAMLError, RecursionError, ValueError) as error:
+        raise UnreadableWorkflow(str(error)) from error
 
 
 def mapping_entries(node: object) -> dict[str, tuple[yaml.ScalarNode, yaml.Node]]:
