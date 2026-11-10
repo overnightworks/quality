@@ -105,7 +105,8 @@ def test_the_verdict_clears_a_renamed_strike_only_for_the_pairing_git_makes_and_
 
 GONE_CONTRACT = {"type": "forbidden", "source_modules": ["shop.dead"], "forbidden_modules": ["shop.web"]}
 LIVE_CONTRACT = {"type": "forbidden", "source_modules": ["shop.db"], "forbidden_modules": ["shop.web"]}
-REMOVED = ['    ! import contract "removed" removed', "! red"]
+REMOVED_LINE = 'import contract "removed" removed'
+REMOVED = [f"    ! {REMOVED_LINE}", "! red"]
 
 
 @pytest.mark.integration
@@ -173,6 +174,21 @@ def test_a_declaration_for_a_strike_the_files_make_green_matches_nothing(capsys,
     assert (code, "unmatched" in output) == (1, True)
 
 
+@pytest.mark.integration
+def test_a_declaration_for_a_removal_the_files_make_green_matches_nothing(capsys, pull_request):
+    """LOOSE-23: a declared removal the head makes green is an unmatched declaration, red."""
+    repo, commit_base = pull_request
+    for name, text in {**SHOP_BASE, "pyproject.toml": contracts_toml({"guarded": DEAD, "removed": GONE_CONTRACT})}.items():
+        put(repo / name, text)
+    commit_base(None)
+    put(repo / "src/shop/dead.py", None)
+    put(repo / "pyproject.toml", contracts_toml({"guarded": DEAD}))
+    put(repo / CONFIG_PATH, gate_config("checks", declared=(declaration(REMOVED_LINE),)))
+    commit_all(repo, "head")
+    code, output = verdict_of(repo, capsys)
+    assert (code, "unmatched" in output) == (1, True)
+
+
 @pytest.mark.parametrize(
     ("stalls", "fact"),
     [
@@ -196,10 +212,18 @@ def test_the_door_cannot_judge_a_strike_whose_listing_outlasts_the_limit_and_lea
     changed_nothing(gh)
 
 
+STRIKE_OR_REMOVAL = pytest.mark.parametrize(
+    ("head_contract", "also"), [(STRUCK, None), (DEAD, {"removed": (GONE_CONTRACT, None)})], ids=["a strike", "a removal"]
+)
+
+
 @pytest.mark.integration
-def test_a_tree_git_cannot_list_cannot_be_judged_once_a_module_is_struck(capsys, pull_request, fake_git):
-    """LOOSE-24: a refused listing is exit 2 naming the commit."""
-    repo = committed(pull_request, DEAD, STRUCK, DELETED)
+@STRIKE_OR_REMOVAL
+def test_a_tree_git_cannot_list_cannot_be_judged_once_a_module_is_struck_or_a_contract_removed(
+    capsys, pull_request, fake_git, head_contract, also
+):
+    """LOOSE-23, LOOSE-24: a refused listing is exit 2 naming the commit."""
+    repo = committed(pull_request, DEAD, head_contract, DELETED, also=also)
     fake_git('case "$*" in *" ls-tree -r "*) exit 1;; esac')
     code, output = verdict_of(repo, capsys)
     assert (code, "error: cannot list the files tracked at " in output) == (2, True)
@@ -214,28 +238,34 @@ def test_a_verdict_without_a_struck_module_asks_git_for_no_listing(capsys, pull_
 
 
 @pytest.mark.integration
-def test_a_rename_list_that_came_with_a_warning_cannot_be_judged_once_a_module_is_struck(capsys, pull_request, fake_git):
-    """LOOSE-24: git prints a warning when it skips its rename search; the strike is exit 2, never green."""
-    repo = committed(pull_request, DEAD, STRUCK, DELETED)
+@STRIKE_OR_REMOVAL
+def test_a_rename_list_that_came_with_a_warning_cannot_be_judged_once_a_module_is_struck_or_a_contract_removed(
+    capsys, pull_request, fake_git, head_contract, also
+):
+    """LOOSE-23, LOOSE-24: git prints a warning when it skips its rename search; the strike or removal is exit 2, never green."""
+    repo = committed(pull_request, DEAD, head_contract, DELETED, also=also)
     fake_git('case "$*" in *" diff "*) echo "warning: exhaustive rename detection was skipped" >&2;; esac')
     code, output = verdict_of(repo, capsys)
     assert (code, "may miss renames" in output, "exhaustive" in output) == (2, True, False)
 
 
 @pytest.mark.integration
-def test_a_rename_list_git_cannot_produce_cannot_be_judged_once_a_module_is_struck_without_baselines(capsys, pull_request, fake_git):
-    """LOOSE-24: a failed rename read is exit 2 although no baseline is compared."""
-    repo = committed(pull_request, DEAD, STRUCK, DELETED)
+@STRIKE_OR_REMOVAL
+def test_a_rename_list_git_cannot_produce_cannot_be_judged_once_a_module_is_struck_or_a_contract_removed_without_baselines(
+    capsys, pull_request, fake_git, head_contract, also
+):
+    """LOOSE-23, LOOSE-24: a failed rename read is exit 2 although no baseline is compared."""
+    repo = committed(pull_request, DEAD, head_contract, DELETED, also=also)
     fake_git('case "$*" in *" diff "*) exit 1;; esac')
     code, _, err = verdict_streams(repo, capsys)
     assert (code, "cannot list the files renamed between" in err) == (2, True)
 
 
-def struck_pull(tmp_path, head_contract, merge_files, moves=(), baselines=(None, None), **options):
-    """A door run whose base holds the shop, the dead contract and the first of `baselines` and whose merge commit holds
-    `head_contract` and the second."""
+def struck_pull(tmp_path, head_contract, merge_files, moves=(), baselines=(None, None), removed=None, **options):
+    """A door run whose base holds the shop, the dead contract, the contract `removed` when given and the first of
+    `baselines` and whose merge commit holds `head_contract` and the second."""
     gh = pulled(tmp_path, *baselines, moves, base_files=SHOP_BASE, merge_files=merge_files, **options)
-    gh.files[("pyproject.toml", gh.base_sha)] = contracts_toml({"guarded": DEAD})
+    gh.files[("pyproject.toml", gh.base_sha)] = contracts_toml({"guarded": DEAD, **({"removed": removed} if removed else {})})
     gh.files[("pyproject.toml", gh.merge_sha)] = contracts_toml({"guarded": head_contract})
     return gh
 
@@ -276,6 +306,34 @@ def test_the_door_refuses_an_undeclared_strike_of_a_module_the_merge_commit_keep
 
 
 RENAME_MOVE = (("src/shop/dead.py", "src/shop/new.py"),)
+PLAIN_JOBS = {"checks": SONAR_GREEN, "base_config": ONE_JOB, "merge_config": ONE_JOB}
+
+
+@pytest.mark.integration
+def test_the_door_merges_a_dead_removal_beside_a_declared_loosening_with_no_line_for_the_removal(capsys, tmp_path):
+    """LOOSE-23, LOOSE-24: a contract whose only module the merge commit deleted needs no declaration."""
+    gh = struck_pull(tmp_path, DEAD, DELETED, removed=GONE_CONTRACT, **DECLARED_JOB_REMOVAL)
+    code, _ = drive(gh)
+    out = capsys.readouterr().out
+    assert (code, closing_line() in out, REMOVED_LINE in out, len(gh.merge_calls)) == (0, True, False, 1)
+
+
+@pytest.mark.integration
+def test_the_door_refuses_an_undeclared_removal_of_a_contract_whose_modules_stay(capsys, tmp_path):
+    """LOOSE-2, LOOSE-23: the door says `removed` and merges nothing."""
+    gh = struck_pull(tmp_path, DEAD, DELETED, removed=LIVE_CONTRACT, **PLAIN_JOBS)
+    assert drive(gh)[0] == 1
+    assert f"    ! {REMOVED_LINE}\n" in capsys.readouterr().out
+    changed_nothing(gh)
+
+
+@pytest.mark.integration
+def test_a_declared_removal_of_a_contract_whose_modules_stay_merges_through_the_door(capsys, tmp_path):
+    """LOOSE-1, LOOSE-23: the declared removal is shown and the door merges."""
+    gh = struck_pull(tmp_path, DEAD, DELETED, removed=LIVE_CONTRACT, **{**PLAIN_JOBS, "merge_config": ONE_JOB + declaring(REMOVED_LINE)})
+    assert drive(gh)[0] == 0
+    assert f"    ! {REMOVED_LINE} · overnightworks/songmaker#1345 of 2026-10-20\n        reason: ruled\n" in capsys.readouterr().out
+    assert gh.sequence == ["gate false", "merge", "gate true", "comment"]
 
 
 @pytest.mark.integration
@@ -288,27 +346,35 @@ def test_the_door_merges_a_renamed_strike_whose_new_name_the_merge_commit_lists_
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize("head_contract", [STRUCK_WITH_NEW, STRUCK], ids=["listed", "unlisted"])
+@pytest.mark.parametrize(
+    ("head_contract", "removed", "moves", "merge_files", "red"),
+    [
+        (STRUCK_WITH_NEW, None, RENAME_MOVE, {}, False),
+        (STRUCK, None, RENAME_MOVE, {}, True),
+        (DEAD, GONE_CONTRACT, (), DELETED, False),
+        (DEAD, LIVE_CONTRACT, (), DELETED, True),
+    ],
+    ids=["a strike listed again", "a strike unlisted", "a removal of a deleted module", "a removal of a module that stays"],
+)
 def test_the_verdict_and_the_door_print_the_same_loosening_lines_for_the_same_two_commits(
-    capsys, tmp_path, run_env, monkeypatch, head_contract
+    capsys, tmp_path, run_env, monkeypatch, head_contract, removed, moves, merge_files, red
 ):
-    """LOOSE-22, LOOSE-24: one `git_pull` builds the base and merge commits once; the verdict reads its working
+    """LOOSE-22, LOOSE-23, LOOSE-24: one `git_pull` builds the base and merge commits once; the verdict reads its working
     repository, the door its remote, and both name the same loosenings."""
     files = {"quality/config.toml": '[gate]\nmandatory_jobs = ["checks"]\n'}
-    gh = pulled(tmp_path, None, None, RENAME_MOVE, base_files={**SHOP_BASE, **files, "pyproject.toml": contracts_toml({"guarded": DEAD})},
-                merge_files={"pyproject.toml": contracts_toml({"guarded": head_contract})}, **DECLARED_JOB_REMOVAL)
-    gh.files[("pyproject.toml", gh.base_sha)] = contracts_toml({"guarded": DEAD})
+    base = contracts_toml({"guarded": DEAD, **({"removed": removed} if removed else {})})
+    gh = pulled(tmp_path, None, None, moves, base_files={**SHOP_BASE, **files, "pyproject.toml": base},
+                merge_files={**merge_files, "pyproject.toml": contracts_toml({"guarded": head_contract})}, **DECLARED_JOB_REMOVAL)
+    gh.files[("pyproject.toml", gh.base_sha)] = base
     gh.files[("pyproject.toml", gh.merge_sha)] = contracts_toml({"guarded": head_contract})
     monkeypatch.setenv("GATE_BASE_SHA", gh.base_sha)
     verdict_code, verdict_out = verdict_of(tmp_path / "work", capsys)
     door_code, _ = drive(gh)
     door_out = capsys.readouterr().out
-    named = [line.strip() for line in verdict_out.splitlines() if GUARDED_CHANGES in line]
-    assert named == [line.strip() for line in door_out.splitlines() if GUARDED_CHANGES in line]
-    assert bool(named) == (head_contract is STRUCK)
-    expected_code = 1 if head_contract is STRUCK else 0
-    assert verdict_code == expected_code
-    assert door_code == expected_code
+    named = [line.strip() for line in verdict_out.splitlines() if 'import contract "' in line]
+    assert named == [line.strip() for line in door_out.splitlines() if 'import contract "' in line]
+    assert bool(named) == red
+    assert verdict_code == door_code == int(red)
 
 
 @pytest.mark.integration
@@ -337,9 +403,14 @@ def test_the_door_asks_for_no_remote_without_a_strike_and_without_baselines(tmp_
     ],
     ids=["the fetch", "the file listing", "the rename listing", "a warning on the rename listing"],
 )
-def test_the_door_cannot_judge_a_strike_whose_files_it_cannot_read(capsys, tmp_path, fake_git, fact, break_it):
-    """LOOSE-24: a failed fetch, listing or rename list, or one with a warning, is exit 2 in the door's words."""
-    gh = struck_pull(tmp_path, STRUCK, DELETED, **DECLARED_JOB_REMOVAL)
+@pytest.mark.parametrize(
+    ("head_contract", "removed"), [(STRUCK, None), (DEAD, GONE_CONTRACT)], ids=["a strike", "a removal"]
+)
+def test_the_door_cannot_judge_a_strike_or_a_removal_whose_files_it_cannot_read(
+    capsys, tmp_path, fake_git, fact, break_it, head_contract, removed
+):
+    """LOOSE-23, LOOSE-24: a failed fetch, listing or rename list, or one with a warning, is exit 2 in the door's words."""
+    gh = struck_pull(tmp_path, head_contract, DELETED, removed=removed, **DECLARED_JOB_REMOVAL)
     break_it(gh, tmp_path, fake_git)
     code, _ = drive(gh)
     streams = capsys.readouterr()

@@ -718,8 +718,7 @@ def test_a_side_that_names_a_contract_twice_or_holds_two_configs_cannot_be_judge
 
 
 A_AND_B = {"a": FORBIDDEN, "b": FORBIDDEN}
-REMOVES_B = {"base_files": {".importlinter": contracts_ini(A_AND_B)}, "merge_files": {".importlinter": contracts_ini({"a": FORBIDDEN})}}
-B_CONTRACT_REMOVED = 'import contract "b" removed'
+CONFIG_AT_BASE = {"base_files": {".importlinter": contracts_ini(A_AND_B)}}
 FILE_REMOVED = "import-linter config in .importlinter removed"
 
 
@@ -735,12 +734,11 @@ class GhWithImportConfigs(FakeGh):
 @pytest.mark.parametrize(
     ("gh_kwargs", "line"),
     [
-        (REMOVES_B, B_CONTRACT_REMOVED),
-        ({"base_files": {".importlinter": contracts_ini(A_AND_B)}}, FILE_REMOVED),
+        (CONFIG_AT_BASE, FILE_REMOVED),
         ({"base_files": {"pyproject.toml": contracts_toml({"a": FORBIDDEN})},
           "merge_files": {"pyproject.toml": contracts_toml({"a": IGNORING})}}, 'import contract "a" ignores shop.db -> shop.web'),
     ],
-    ids=["a removed contract", "the config removed", "a new ignore"],
+    ids=["the config removed", "a new ignore"],
 )
 def test_the_door_refuses_an_undeclared_import_contract_loosening_next_to_legacy_red(gh_kwargs, line, capsys):
     """LOOSE-2: the door reads the import-linter configs at the base and the merge commit and refuses an undeclared
@@ -751,17 +749,12 @@ def test_the_door_refuses_an_undeclared_import_contract_loosening_next_to_legacy
     changed_nothing(gh)
 
 
-@pytest.mark.parametrize(
-    ("gh_kwargs", "what"),
-    [(REMOVES_B, B_CONTRACT_REMOVED), ({"base_files": REMOVES_B["base_files"]}, FILE_REMOVED)],
-    ids=["a removed contract", "the config removed"],
-)
-def test_a_declared_import_contract_loosening_merges_through_the_door(gh_kwargs, what, capsys):
+def test_a_declared_import_contract_config_removal_merges_through_the_door(capsys):
     """LOOSE-1, LOOSE-3: with Sonar green, only the declared loosening of an import contract is left, and the door
     shows the declaration and merges."""
-    gh = GhWithImportConfigs(checks=SONAR_GREEN, base_config=ONE_JOB, merge_config=ONE_JOB + declaring(what), **gh_kwargs)
+    gh = GhWithImportConfigs(checks=SONAR_GREEN, base_config=ONE_JOB, merge_config=ONE_JOB + declaring(FILE_REMOVED), **CONFIG_AT_BASE)
     assert drive(gh)[0] == 0
-    assert f"    ! {what} · overnightworks/songmaker#1345 of 2026-10-20\n        reason: ruled\n" in capsys.readouterr().out
+    assert f"    ! {FILE_REMOVED} · overnightworks/songmaker#1345 of 2026-10-20\n        reason: ruled\n" in capsys.readouterr().out
     assert gh.sequence == ["gate false", "merge", "gate true", "comment"]
 
 
