@@ -33,16 +33,18 @@ def test_a_process_failure_before_the_end_passes_unchanged(tmp_path):
     assert not isinstance(failure.value, CannotJudge)
 
 
-def test_a_process_failure_at_the_end_becomes_the_cut_wording(tmp_path, monkeypatch):
+@pytest.mark.integration
+def test_a_process_failure_at_the_end_becomes_the_cut_wording(tmp_path):
     """SCANNER-20, REFUSAL-22: a scanner that fails once the time is up cannot judge, with no step."""
-    clock = Clock()
+    run_ended = tmp_path / "run-ended"
+    scanner = tmp_path / "zizmor"
+    scanner.write_text(f"#!/bin/sh\ntouch '{run_ended}'\nprintf '\\377'\n")
+    scanner.chmod(0o755)
+
+    def clock() -> float:
+        return float(deadline.RUN_DEADLINE_SECONDS) if run_ended.exists() else 0.0
+
     run_deadline = deadline.RunDeadline.starting(clock)
-
-    def ending_the_run(command, **_):
-        clock.now = float(deadline.RUN_DEADLINE_SECONDS)
-        raise process.ProcessError(f"{command[0]} did not finish")
-
-    monkeypatch.setattr(process, "run", ending_the_run)
     with pytest.raises(CannotJudge) as refusal:
         run_deadline.run([str(tmp_path / "zizmor")])
     assert not isinstance(refusal.value, process.ProcessError)
