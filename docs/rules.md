@@ -771,7 +771,7 @@ however equivalent (CONCURRENCY-3):
 | G1 | `${{ github.workflow }}-${{ github.event.pull_request.number \|\| github.run_id }}` | always |
 | G2 | `${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number \|\| github.run_id }}` | always |
 | F1 | `${{ github.event.pull_request.number != null }}` | always |
-| F2 | `${{ github.event_name == 'pull_request' }}` | only with no `pull_request_target` and no `pull_request_review` trigger, which it leaves uncancelled |
+| F2 | `${{ github.event_name == 'pull_request' }}` | only without a target or review trigger |
 
 A pull-request run is grouped by its number and cancels; any other run gets its run id and does not, so a run on main
 always finishes. A group that falls back to the ref or the commit is shared by runs on main, and GitHub drops a pending
@@ -790,8 +790,9 @@ A finding is `missing` (no `concurrency`, or none with a `cancel-in-progress`; a
 `github.ref_name` where it holds one) or `cancels main` (the `cancel-in-progress` is not a listed form), each with the
 block as its fix (CONCURRENCY-5). A workflow whose YAML or file cannot be read, a `group` or `cancel-in-progress` that
 is no string, and an alias or a merge key where it can hide the top mapping, `on:`, the `concurrency` or either value
-are exit `2` naming the file (CONCURRENCY-6). The clean row of `workflows` keeps its words (CONCURRENCY-7). quality's own
-checkout carries the block in `ci.yml` and `code-scanning.yml` (CONCURRENCY-8). No configuration switches the rule off.
+are exit `2` naming the file (CONCURRENCY-6). The clean row of `workflows` keeps its words (CONCURRENCY-7).
+quality's own checkout carries the block in `ci.yml` and `code-scanning.yml` (CONCURRENCY-8). No configuration
+switches the rule off.
 It is on `main` only until the release that carries it, so a dependent meets it at its first bump to that release
 (CONCURRENCY-9).
 
