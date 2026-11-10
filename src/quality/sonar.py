@@ -449,7 +449,7 @@ def require_resolved(analysis: Analysis, transport: Transport) -> object:
         raise CannotJudge(f"SonarCloud did not resolve {where} (HTTP {error.status})") from error
 
 
-def own_count(resolved: object, analysis: Analysis) -> int:
+def own_count(resolved: object) -> int:
     """The unresolved issues the analysis itself wrote for the scope, from the measures answer."""
     endpoint = f"{SONAR_API_ROOT}/measures/component"
     try:
@@ -473,7 +473,7 @@ def findings_reaching_the_measure(
         if read > 1:
             sleep(TASK_POLL_INTERVAL_SECONDS)
             resolved = require_resolved(analysis, transport)
-        floor = own_count(resolved, analysis)
+        floor = own_count(resolved)
         findings = open_findings(analysis, transport)
         if findings.count >= floor:
             return findings
