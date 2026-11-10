@@ -135,7 +135,7 @@ def _document_lines(body: list[str]) -> Iterator[tuple[int, str]]:
 
 
 def _is_tracked_path(path: str, names: set[str], directories: set[str]) -> bool:
-    """A tracked file or a directory with a tracked file below it, spelled in exact case, one trailing `/` optional on a directory."""
+    """A tracked file, or a directory with a tracked file below it, in exact case; a directory may end in `/`."""
     return path in names or path.removesuffix("/") in directories
 
 

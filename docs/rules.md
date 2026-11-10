@@ -283,9 +283,10 @@ It applies these rules:
   backticks are never judged. The section runs to the next `# ` or `## ` heading or the end of the file; a line in a
   fence is no document line; a second `## Documents` heading starts another run (AGENTS-8). A path passes if it is a
   tracked file, or a directory with at least one tracked file below it, spelled in exact case; one trailing `/` of a
-  directory is optional and nothing else is normalised. A tracked file missing from disk passes (AGENTS-9). Any other path is a
-  `missing` finding at its line, whatever its form (absolute, `~`, `..`, a scheme, an `@` span, an anchor, an untracked
-  file, a wrong case): fact `<path> is not tracked`, fix "point at a tracked document or delete the line" (AGENTS-10).
+  directory is optional and nothing else is normalised. A tracked file missing from disk passes (AGENTS-9). Any other
+  path is a `missing` finding at its line, whatever its form (absolute, `~`, `..`, a scheme, an `@` span, an anchor,
+  an untracked file, a wrong case): fact `<path> is not tracked`, fix "point at a tracked document or delete the line"
+  (AGENTS-10).
   The check compares text with the tracked listing alone, so no filesystem probe follows text from the file and
   nothing outside the repository is opened. It accepts any tracked directory; whether that is a directory of the
   document set whose files are named by their task or contract stays the reviewer's call (AGENTS-11). No configuration
