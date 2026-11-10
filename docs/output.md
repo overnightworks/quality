@@ -75,7 +75,10 @@ rows, by area:
 - `workflows`: actionlint's finding is `invalid` and zizmor's `insecure`, zizmor's fact naming its audit and its fix
   holding the audit's URL (O36); a `pr-concurrency` finding is `missing` (`no concurrency`, `no cancel-in-progress`),
   `shared group` (`group is not a listed form`, adding `(falls back to <token>)` where the group holds the commit or a
-  ref) or `cancels main` (`cancel-in-progress is not a listed form`), its fix the block to copy ([rules](rules.md));
+  ref; `no group` for a `concurrency` without one) or `cancels main` (`cancel-in-progress is not a listed form`), its
+  fix the block to copy ([rules](rules.md)); a `pytest-workers` finding is `serial` (`pytest runs without -n`,
+  `pytest runs with -n 0`) or `invalid` (`-n count is not a number above zero or auto`, `command cannot be read to its
+  end`, `command is built at run time, pytest -n cannot be read`), its fix naming the flag and the marker;
   an actionlint finding names the scanner and holds its message whole as its one detail line (O37); a row with a
   finding or a refusal does not say `offline audits only` (O39).
 - `dependencies`: an advisory is an `affected` row, its fact the package and version, the group's id and where it
