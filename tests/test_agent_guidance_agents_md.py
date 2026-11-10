@@ -478,3 +478,155 @@ def test_a_finding_names_the_valid_remote_beside_one_with_credentials_and_prints
     code, output = run(capsys, repo)
     assert title_findings(repo) == [(TITLE, 1, NOT_THE_NAME, "make line 1 `# guidance`")]
     assert (code, TOKEN in output, "://" in output) == (1, False, False), output
+
+
+ONE_JOB = '[gate]\nmandatory_jobs = ["checks"]\n'
+CONFIG = "quality/config.toml"
+ROOT = {"AGENTS.md": "# guidance\n"}
+MISPLACED_FACT = "guidance outside the root file"
+MISPLACED_FIX = (
+    "move what an agent needs into the root AGENTS.md or delete it, or declare it in quality/config.toml with "
+    "[[layout.allow]], its path, the rule agents-md and a reason"
+)
+MISNAMED_FACT = "the document set's path is exact"
+MISNAMED_FIX = "rename it to AGENTS.md"
+UNUSED_FACT = "[[layout.allow]] matches no tracked file"
+UNUSED_FIX = "delete every [[layout.allow]] entry for it from quality/config.toml"
+MISPLACED, MISNAMED, UNUSED = FindingEvent.MISPLACED, FindingEvent.MISNAMED, FindingEvent.UNUSED
+
+
+def declaring(path: str, rule: str = "agents-md") -> str:
+    return f'[[layout.allow]]\npath = "{path}"\nrule = "{rule}"\nreason = "the tool reads it"\n'
+
+
+def placed(repo: Path, rule: Rule = Rule.AGENTS_MD) -> list[tuple[str, FindingEvent, str, str]]:
+    """The path, event, fact and fix of each `rule` finding over `repo`."""
+    return [(finding.path, finding.event, finding.fact, finding.fix) for finding in rule_findings(repo, rule)]
+
+
+def misplaced(*paths: str) -> list[tuple[str, FindingEvent, str, str]]:
+    return [(path, MISPLACED, MISPLACED_FACT, MISPLACED_FIX) for path in paths]
+
+
+@pytest.mark.parametrize(
+    "paths",
+    [["docs/AGENTS.md"], ["a/b/agents.md"], ["docs/Agents.md"], ["z/AGENTS.md", "a/agents.md"]],
+    ids=["nested", "deeper, lower case", "mixed case", "two, sorted by path"],
+)
+def test_a_nested_agents_md_in_any_case_is_one_misplaced_finding_at_its_path(build_repo, paths):
+    """AGENTS-15."""
+    repo = with_github_remote(build_repo({**ROOT, **dict.fromkeys(paths, "x\n")}))
+    assert placed(repo) == misplaced(*sorted(paths))
+
+
+def link_nested(repo: Path) -> None:
+    (repo / "docs").mkdir()
+    (repo / "docs/AGENTS.md").symlink_to("../AGENTS.md")
+    git(repo, "add", "--", "docs/AGENTS.md")
+
+
+def remove_nested(repo: Path) -> None:
+    (repo / "docs/AGENTS.md").unlink()
+
+
+def break_encoding(repo: Path) -> None:
+    (repo / "docs/AGENTS.md").write_bytes(b"\xff\xfe\n")
+
+
+@pytest.mark.parametrize("change", [None, link_nested, remove_nested, break_encoding],
+                         ids=["a plain file", "a symlink", "gone from disk", "not UTF-8"])
+@pytest.mark.parametrize("root", [ROOT, {}], ids=["root file", "no root file"])
+def test_placement_needs_no_read_and_no_root_file(build_repo, capsys, change, root):
+    """AGENTS-15, AGENTS-19: a nested file is misplaced whatever it holds and with no root file or remote to judge."""
+    tracked = {**root, "docs/AGENTS.md": "x\n"} if change is not link_nested else root
+    repo = build_repo(tracked)
+    if root:
+        repo = with_github_remote(repo)
+    if change:
+        change(repo)
+    code, output = run(capsys, repo)
+    assert (code, placed(repo)) == (1, misplaced("docs/AGENTS.md")), output
+
+
+def test_a_root_agents_md_without_a_remote_refuses_the_whole_rule_nested_findings_included(build_repo, capsys):
+    """AGENTS-19, AGENTS-13: the refusal is raised before any finding."""
+    repo = build_repo({**ROOT, "docs/AGENTS.md": "x\n"})
+    code, output = run(capsys, repo)
+    assert (code, placed(repo), NO_REMOTE in output) == (2, [], True), output
+
+
+@pytest.mark.parametrize("rule", ["agents-md", "file-suffix"])
+def test_only_a_declaration_for_agents_md_clears_the_nested_path(build_repo, rule):
+    """AGENTS-17: an entry with the rule `agents-md` and the exact path; the same path under another rule does not."""
+    config = ONE_JOB + declaring("docs/AGENTS.md", rule)
+    repo = with_github_remote(build_repo({**ROOT, "docs/AGENTS.md": "x\n", CONFIG: config}))
+    expected = [] if rule == "agents-md" else misplaced("docs/AGENTS.md")
+    assert placed(repo) == expected
+
+
+def test_a_declaration_leaves_the_other_nested_file_reported(build_repo):
+    """AGENTS-17."""
+    config = ONE_JOB + declaring("docs/AGENTS.md")
+    repo = with_github_remote(build_repo({**ROOT, "docs/AGENTS.md": "x\n", "a/AGENTS.md": "x\n", CONFIG: config}))
+    assert placed(repo) == misplaced("a/AGENTS.md")
+
+
+def test_the_fix_s_clause_entered_as_written_clears_the_finding(build_repo):
+    """AGENTS-17, AGENTS-15: the entry the fix asks for is accepted."""
+    repo = with_github_remote(build_repo({**ROOT, "docs/AGENTS.md": "x\n"}))
+    assert placed(repo) == misplaced("docs/AGENTS.md")
+    (repo / CONFIG).parent.mkdir(exist_ok=True)
+    (repo / CONFIG).write_text(ONE_JOB + declaring("docs/AGENTS.md"))
+    assert placed(repo) == []
+
+
+def test_a_declared_root_agents_md_is_no_finding_and_its_shape_is_still_judged(build_repo):
+    """AGENTS-17."""
+    repo = with_github_remote(build_repo({"AGENTS.md": "# other\n", CONFIG: ONE_JOB + declaring("AGENTS.md")}))
+    assert [event for _, event, _, _ in placed(repo)] == [TITLE]
+
+
+def test_a_declared_root_agents_md_in_another_case_stays_misnamed(build_repo):
+    """AGENTS-17, AGENTS-16."""
+    repo = build_repo({"agents.md": "x\n", CONFIG: ONE_JOB + declaring("agents.md")})
+    assert placed(repo) == [("agents.md", MISNAMED, MISNAMED_FACT, MISNAMED_FIX)]
+
+
+@pytest.mark.parametrize("name", ["agents.md", "Agents.md"])
+def test_a_root_agents_md_in_another_case_is_misnamed_and_its_content_is_never_judged(build_repo, capsys, name):
+    """AGENTS-16."""
+    repo = build_repo({name: "not a title, token = hunter2\n"})
+    code, output = run(capsys, repo)
+    expected = [(name, MISNAMED, MISNAMED_FACT, MISNAMED_FIX)]
+    assert (code, placed(repo), "hunter2" in output) == (1, expected, False), output
+
+
+def test_a_declaration_no_tracked_file_has_is_one_unused_finding_and_deleting_it_clears_it(build_repo):
+    """AGENTS-18."""
+    repo = with_github_remote(build_repo({**ROOT, CONFIG: ONE_JOB + declaring("docs/AGENTS.md")}))
+    assert placed(repo) == [("docs/AGENTS.md", UNUSED, UNUSED_FACT, UNUSED_FIX)]
+    (repo / CONFIG).write_text(ONE_JOB)
+    assert placed(repo) == []
+
+
+def test_a_path_declared_untracked_under_two_rules_is_one_unused_finding_per_rule(build_repo):
+    """AGENTS-18."""
+    config = ONE_JOB + declaring("docs/AGENTS.md") + declaring("docs/AGENTS.md", "file-suffix")
+    repo = with_github_remote(build_repo({**ROOT, CONFIG: config}))
+    assert [placed(repo, rule) for rule in (Rule.AGENTS_MD, Rule.FILE_SUFFIX)] == [
+        [("docs/AGENTS.md", UNUSED, UNUSED_FACT, UNUSED_FIX)]
+    ] * 2
+
+
+def test_a_declaration_of_a_tracked_complying_file_is_clean(build_repo, capsys):
+    """AGENTS-18."""
+    repo = with_github_remote(build_repo({**ROOT, "README.md": "x\n", CONFIG: ONE_JOB + declaring("README.md")}))
+    code, output = run(capsys, repo)
+    assert (code, placed(repo)) == (0, []), output
+
+
+def test_a_misplaced_finding_prints_the_path_and_nothing_of_the_file(build_repo, capsys):
+    """AGENTS-6, AGENTS-15."""
+    repo = with_github_remote(build_repo({**ROOT, "docs/AGENTS.md": "# secret title hunter2\n"}))
+    code, output = run(capsys, repo)
+    assert (code, "docs/AGENTS.md" in output, "hunter2" in output) == (1, True, False), output

@@ -2,11 +2,12 @@
 `agents-md` rule, the title, sections and size of the root `AGENTS.md`."""
 
 import re
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from pathlib import Path, PurePosixPath
 
 from quality import checkout, repository
-from quality.report import CannotJudge, Finding, FindingEvent, Instruction
+from quality.config import LayoutAllowance, declared_paths
+from quality.report import CannotJudge, Finding, FindingEvent, Instruction, allowance_clause, stale_declaration
 from quality.rules import Rule
 
 CLAUDE_NESTED_NAME = ".claude/claude.md"
@@ -66,20 +67,49 @@ def _claude_md_problem(root: Path, name: str, agents_tracked: bool) -> tuple[Fin
     return None
 
 
-def check_agents_md(root: Path, tracked: list[str], repositories: list[str]) -> list[Finding]:
-    """The root AGENTS.md has a title that is the name of one of the GitHub `repositories` (`owner/name`), then only
+def check_agents_md(
+    root: Path, tracked: list[str], repositories: list[str], allowances: Sequence[LayoutAllowance]
+) -> list[Finding]:
+    """A tracked AGENTS.md sits at the root only, in exact case, unless `allowances` declare a nested path against
+    this rule; a declaration of an untracked path is a finding too.
+
+    The root AGENTS.md has a title that is the name of one of the GitHub `repositories` (`owner/name`), then only
     the sections of the document set once and in order, within its size.
 
     Each line of its Documents section names a tracked file or a directory holding one.
     No repository means no judgment at all, once the file is there to judge.
-    The findings carry fixed texts, line numbers, counts, the path of a document line and the name of a repository,
-    never other content.
+    The findings carry fixed texts, line numbers, counts, a path and the name of a repository, never other content.
     """
     text = checkout.judged(repository.read_text, root, AGENTS_FILE) if AGENTS_FILE in tracked else None
-    if text is None:
-        return []
-    if not repositories:
+    if text is not None and not repositories:
         raise CannotJudge(NO_REMOTE_FACT, (NO_REMOTE_STEP,))
+    placement = _placement_findings(tracked, declared_paths(allowances, Rule.AGENTS_MD))
+    return [*placement, *([] if text is None else _shape_findings(text, tracked, repositories))]
+
+
+def _placement_findings(tracked: list[str], declared: set[str]) -> list[Finding]:
+    """The `misplaced` and `misnamed` findings of the tracked AGENTS.md files and the `unused` ones of the `declared`
+    paths no tracked file has, sorted by path."""
+    found = [_placement_finding(path, declared) for path in tracked if path != AGENTS_FILE]
+    stale = [stale_declaration(path, Rule.AGENTS_MD) for path in declared - set(tracked)]
+    return sorted([*(finding for finding in found if finding), *stale], key=lambda finding: finding.path)
+
+
+def _placement_finding(path: str, declared: set[str]) -> Finding | None:
+    if PurePosixPath(path).name.casefold() != AGENTS_FILE.casefold():
+        return None
+    if path.casefold() == AGENTS_FILE.casefold():
+        fact, fix, event = "the document set's path is exact", f"rename it to {AGENTS_FILE}", FindingEvent.MISNAMED
+    elif path in declared:
+        return None
+    else:
+        fix = (f"move what an agent needs into the root {AGENTS_FILE} or delete it, "
+               f"or {allowance_clause(Rule.AGENTS_MD)}")
+        fact, event = "guidance outside the root file", FindingEvent.MISPLACED
+    return Finding(Rule.AGENTS_MD, path, None, fact, fix, event=event)
+
+
+def _shape_findings(text: str, tracked: list[str], repositories: list[str]) -> list[Finding]:
     lines = text.removesuffix("\n").split("\n") if text else []
     problems = [
         *_title_problems(lines, [name.partition("/")[2] for name in repositories]),
