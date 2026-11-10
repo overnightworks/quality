@@ -16,6 +16,7 @@ from quality.config import ConfigError, LegacyMode, read_gate_settings
 from quality.report import (
     FIX_THEN_RERUN,
     PUSH_THE_FIX,
+    RERUN,
     CannotJudge,
     Finding,
     FindingEvent,
@@ -35,6 +36,8 @@ EXIT_CLEAN, EXIT_FINDINGS, EXIT_CANNOT_JUDGE = 0, 1, 2
 # 5 s x 120 stays below the job timeout the workflow gives this step.
 TASK_POLL_INTERVAL_SECONDS = 5
 TASK_POLL_ATTEMPTS = 120
+# 12 reads at the poll interval wait at most 55 s for the issue search to hold the analysis's findings.
+FINDINGS_READ_ATTEMPTS = 12
 FINISHED_TASK_STATUS = "SUCCESS"
 ABANDONED_TASK_STATUSES = ("FAILED", "CANCELED")
 GATE_PASSED = "OK"
@@ -233,14 +236,14 @@ def analyse(
     """The local configuration and destination checks run before the token is sent anywhere."""
     analysis = read_analysis(environment)
     analysis_id = wait_for_own_task(analysis, transport, sleep)
-    require_resolved(analysis, transport)
+    resolved = require_resolved(analysis, transport)
     kind = analysis.kind
     gate = quality_gate_status(analysis, analysis_id, transport) if kind is RunKind.PULL_REQUEST else None
     default_analysed = kind.judges_legacy and default_branch_analysed(analysis, transport)
     unknown = kind.judges_legacy and not default_analysed
     if unknown and legacy_mode is LegacyMode.FAIL:
         raise CannotJudge(legacy_unknown(analysis.default_branch))
-    findings = open_findings(analysis, transport)
+    findings = findings_reaching_the_measure(analysis, resolved, transport, sleep)
     legacy = None
     if kind is RunKind.PULL_REQUEST and default_analysed:
         legacy = legacy_count(analysis, transport)
@@ -426,13 +429,15 @@ def require_task_binds(task: dict, analysis: Analysis) -> None:
             raise CannotJudge(f"SonarCloud task belongs to another analysis: {field} is {actual!r}, expected {expected!r}")
 
 
-def require_resolved(analysis: Analysis, transport: Transport) -> None:
+def require_resolved(analysis: Analysis, transport: Transport) -> object:
     # An unauthenticated, misspelled or never-analysed scope answers the issue search with zero
     # findings and no error, so read the measures of this exact scope first: it is 404 when the
     # credential, the key or the scope does not resolve.
-    url = api_url("measures/component", component=analysis.project.key, metricKeys="ncloc", **scope_query(analysis.scope))
+    url = api_url(
+        "measures/component", component=analysis.project.key, metricKeys="violations", **scope_query(analysis.scope)
+    )
     try:
-        transport(url, analysis.authorization)
+        return transport(url, analysis.authorization)
     except SonarHttpError as error:
         where = f"{analysis.project.key} in {analysis.scope.label}"
         if analysis.authorization is None:
@@ -442,6 +447,41 @@ def require_resolved(analysis: Analysis, transport: Transport) -> None:
         if error.status in TOKEN_REFUSALS:
             raise CannotJudge(f"SonarCloud rejected the token for {where} (HTTP {error.status})") from error
         raise CannotJudge(f"SonarCloud did not resolve {where} (HTTP {error.status})") from error
+
+
+def own_count(resolved: object) -> int:
+    """The unresolved issues the analysis itself wrote for the scope, from the measures answer."""
+    endpoint = f"{SONAR_API_ROOT}/measures/component"
+    try:
+        measures = answer_object(resolved, "component", endpoint)["measures"]
+        value = next(measure["value"] for measure in measures if measure["metric"] == "violations")
+        if isinstance(value, str) and value.isascii() and value.isdigit():
+            return int(value)
+    except (KeyError, TypeError, StopIteration):
+        pass
+    raise CannotJudge(f"SonarCloud answered {endpoint} without a readable violations measure")
+
+
+def findings_reaching_the_measure(
+    analysis: Analysis, resolved: object, transport: Transport, sleep: Sleep
+) -> OpenFindings:
+    """The open findings once the issue search holds at least the analysis's own count.
+
+    The first round reuses `resolved`.
+    """
+    for read in range(1, FINDINGS_READ_ATTEMPTS + 1):
+        if read > 1:
+            sleep(TASK_POLL_INTERVAL_SECONDS)
+            resolved = require_resolved(analysis, transport)
+        floor = own_count(resolved)
+        findings = open_findings(analysis, transport)
+        if findings.count >= floor:
+            return findings
+    raise CannotJudge(
+        f"SonarCloud counts {floor} open findings for {analysis.scope.label}"
+        f" but its issue search lists {findings.count} after {FINDINGS_READ_ATTEMPTS} reads",
+        (RERUN,),
+    )
 
 
 def scope_query(scope: Scope) -> dict[str, str]:

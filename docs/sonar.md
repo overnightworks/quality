@@ -32,8 +32,9 @@ stderr instead (SONAR-101). A refusal that knows its own step names it: a `quali
 [its example to copy](output.md#refusals), where the refusal has one, and `push the fix; the gate judges the new commit`
 (SONAR-102); an empty `SONAR_TOKEN` the step to set the secret and pass it to `gate.yml`; an unwritable `GITHUB_OUTPUT`
 `fix what the error names, then re-run this run's failed jobs` (SONAR-103); a changed tracked file the step to let the
-artifact add reports only (SONAR-104). Every other refusal falls back to its step's general step: `properties` the push
-step, `findings` the re-run step (SONAR-105). `-v` adds nothing: neither step runs a scanner (SONAR-106).
+artifact add reports only (SONAR-104); an issue search that never reaches the analysis's own count
+`re-run this run's failed jobs` (SONAR-112). Every other refusal falls back to its step's general step: `properties`
+the push step, `findings` the re-run step (SONAR-105). `-v` adds nothing: neither step runs a scanner (SONAR-106).
 
 ```text
 $ quality sonar properties
@@ -132,12 +133,25 @@ The project is the caller's repository: `GITHUB_REPOSITORY` gives the key `<owne
 `serverUrl=https://sonarcloud.io` (SONAR-73); the URLs inside it are never requested (SONAR-74). The task file and the
 environment are judged before the first request: anything there the command cannot use is exit `2` (SONAR-75). The
 command polls `api/ce/task` until its own analysis is `SUCCESS` (SONAR-76) and bound to this component, organization and
-pull request (or branch) (SONAR-77), then reads the open findings with `SONAR_TOKEN` (header only, never printed)
-(SONAR-78). A task that ends `FAILED` or `CANCELED`, that is still pending after a bounded number of polls, or that
-belongs to another analysis is exit `2` (SONAR-79). A scope SonarCloud does not resolve is exit `2` before the findings
-are read (SONAR-80): its issue search would answer zero findings. Anything unreadable is exit `2` (SONAR-29). The
-command follows no redirect (SONAR-81), so the token reaches SonarCloud alone; an HTTP error, a redirect, a timeout or
-an unreachable host is exit `2` too (SONAR-82).
+pull request (or branch) (SONAR-77), then reads the open findings with `SONAR_TOKEN` (header only, never printed),
+which count only once they reach the analysis's own count (SONAR-78, SONAR-110). A task that ends `FAILED` or
+`CANCELED`, that is still pending after a bounded number of polls, or that belongs to another analysis is exit `2`
+(SONAR-79). A scope SonarCloud does not resolve is exit `2` before the findings
+are read: its issue search would answer zero findings. The request that proves the scope resolves asks for
+the `violations` measure and hands its answer on (SONAR-80). Anything unreadable is exit `2` (SONAR-29). The command
+follows no redirect (SONAR-81), so the token reaches SonarCloud alone; an HTTP error, a redirect, a timeout or an
+unreachable host is exit `2` too (SONAR-82).
+
+The `violations` measure is the analysis's own count of unresolved issues in the scope, the same for a pull request, the
+default branch and any other branch. The issue search is a separate index that can trail the analysis, so a read of
+the open findings is trusted only when its count is at least the measure (SONAR-110). A count above the measure is
+normal, because the search also lists accepted and false-positive issues. A read below the measure waits 5 seconds, then
+reads the measure and the findings again, up to 12 reads and 55 seconds of waiting, and prints nothing meanwhile; a
+read that agrees costs no wait and no extra request (SONAR-111). If the two never agree the run is exit `2`: `error:
+SonarCloud counts <n> open findings for <scope> but its issue search lists <m> after <k> reads`, then `next: re-run this
+run's failed jobs`, and nothing on stdout, never `new none` (SONAR-112). A missing or unreadable measure (not a
+non-negative integer, or an unexpected shape) is exit `2` before any finding is read (SONAR-113). `quality merge` keeps
+a single read of the findings.
 
 ### New and legacy findings
 

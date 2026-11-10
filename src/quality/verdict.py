@@ -27,7 +27,17 @@ from quality.ratchet import (
     named_paths,
     raised_entries,
 )
-from quality.report import FIX_THEN_RERUN, PUSH_THE_FIX, CannotJudge, Command, Instruction, Reason, Step, config_refusal
+from quality.report import (
+    FIX_THEN_RERUN,
+    PUSH_THE_FIX,
+    RERUN,
+    CannotJudge,
+    Command,
+    Instruction,
+    Reason,
+    Step,
+    config_refusal,
+)
 from quality.sides import (
     Side,
     UnusableConfig,
@@ -49,7 +59,6 @@ COMPLETED = "completed"
 PROGRESS_OF_STATUS = MappingProxyType({"in_progress": 1, COMPLETED: 2})
 FIRST_SERVER_ERROR = 500
 PERMISSION_REFUSALS = frozenset({403, 404})
-RERUN = Instruction("re-run this run's failed jobs")
 NEEDS_STEP = Instruction("a mandatory job missing from the caller job's needs: add it there")
 PERMISSION_STEP = Instruction("grant actions: read in the caller job's permissions")
 SET_BY_THE_GATE = Instruction("quality verdict runs as gate.yml's verdict step, which sets it")
