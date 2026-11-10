@@ -1,0 +1,8 @@
+claim_id = "72128fcd8c764253b9649a915d1e387d"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "2736b82ccff8a8efc2a1415143569f4283444591"
+branch = "claude/issue-752-pytest-workers"
+scope = ["docs/output.md", "docs/rules.md", "src/quality/check.py", "src/quality/report.py", "src/quality/rules.py", "src/quality/workflow_rules.py", "tests/test_cli_help.py", "tests/test_fleet_matrix.py", "tests/test_workflow_rules.py", "tests/test_workflow_rules_pytest.py"]
+opened_commit = "906c99480ca7151e310f5094c852d5cdf720ebba"
+whole_reason = "The rule is its reader: a Rule member without the reading is dead code, the reading without its wiring in check.py never runs, the cannot-read class and the marker are what keep it from passing a call silently, and the 748a edits sit in the same module and document; four production files and about 155 lines are one flow that no smaller cut keeps honest."
