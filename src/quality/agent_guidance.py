@@ -21,7 +21,9 @@ SECTION_FIX = f"name it {', '.join(AGENTS_SECTIONS)}, or make it a level 3 headi
 
 
 def check_claude_md(root: Path, tracked: list[str]) -> list[Finding]:
-    """A tracked CLAUDE.md, in any case, is exactly `@AGENTS.md` beside a tracked AGENTS.md; `.claude/CLAUDE.md` is none.
+    """A tracked CLAUDE.md, in any case, is exactly `@AGENTS.md` beside a tracked AGENTS.md.
+
+    `.claude/CLAUDE.md` is none.
 
     The findings carry fixed texts, never the file's content.
     """
@@ -35,7 +37,7 @@ def check_claude_md(root: Path, tracked: list[str]) -> list[Finding]:
 
 
 def _claude_md_problem(root: Path, name: str, agents_tracked: bool) -> tuple[FindingEvent, str, str] | None:
-    """The event, the fact and the fix for a CLAUDE.md that is not clean; None when it is clean or gone from the tree."""
+    """The event, the fact and the fix for a CLAUDE.md that is not clean; None when clean or gone from the tree."""
     is_link = checkout.judged(repository.is_symlink, root, name)
     if name.casefold() == CLAUDE_NESTED_NAME:
         if not (is_link or checkout.judged(repository.is_on_disk, root, name)):

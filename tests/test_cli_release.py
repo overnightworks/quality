@@ -36,7 +36,15 @@ def running(version: str, commit: str):
     [
         pytest.param(
             gate_call("v0.10.0"), "0.10.0", pinned_commit(), ("check", "files"),
-            (0, [PINNED_ROW, f"  ✓ files         clean          {len(FILES_RULE_IDS)} rules · 2 files", "✓ clean · 1 area · <1s"], []),
+            (
+                0,
+                [
+                    PINNED_ROW,
+                    f"  ✓ files         clean          {len(FILES_RULE_IDS)} rules · 2 files",
+                    "✓ clean · 1 area · <1s",
+                ],
+                [],
+            ),
             id="check at the pin",
         ),
         pytest.param(

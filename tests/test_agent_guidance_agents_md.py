@@ -51,7 +51,10 @@ def test_conforming_agents_md_is_clean(build_repo, capsys, content):
 @pytest.mark.parametrize(
     "content",
     ["## guidance\n", "#guidance\n", "\n## Commands\n", "﻿# guidance\n", "guidance\n", "", "# \n", "#  \t\n"],
-    ids=["level 2", "no space", "blank first line", "byte order mark", "text", "empty file", "nothing after the hash", "blanks only"],
+    ids=[
+        "level 2", "no space", "blank first line", "byte order mark", "text", "empty file", "nothing after the hash",
+        "blanks only",
+    ],
 )
 def test_a_first_line_that_is_no_title_is_one_title_finding_at_line_1(build_repo, content):
     """AGENTS-1."""
@@ -109,7 +112,9 @@ def test_a_wrong_heading_is_one_section_finding_at_its_line(build_repo, content,
         HEAD + "### Setup\n#### Deeper\n",
         HEAD + "```\n## Commands\n```\n## Rules\n",
     ],
-    ids=["backtick fence", "tilde fence", "longer fence holds a shorter one", "level 3 and 4 headings", "fenced repeat"],
+    ids=[
+        "backtick fence", "tilde fence", "longer fence holds a shorter one", "level 3 and 4 headings", "fenced repeat",
+    ],
 )
 def test_headings_in_a_fence_and_below_level_2_are_no_sections(build_repo, content):
     """AGENTS-3."""
@@ -168,6 +173,8 @@ def test_no_finding_prints_the_title_or_a_heading(build_repo, capsys):
     repo = build_repo({"AGENTS.md": content + "x\n" * 100})
     code, output = run(capsys, repo)
     assert (code, len(rule_findings(repo, Rule.AGENTS_MD)), marker in output) == (1, 6, False), output
+    fixes = [finding.fix for finding in rule_findings(repo, Rule.AGENTS_MD)]
+    assert [fix for fix in fixes if "`" in fix or "quality" in fix] == []
 
 
 def refuse_by_mode(repo: Path, _elsewhere: Path) -> None:
@@ -180,6 +187,15 @@ def refuse_by_link(repo: Path, elsewhere: Path) -> None:
     (repo / "AGENTS.md").symlink_to(elsewhere / "outside.md")
 
 
+def refuse_by_dangling_link(repo: Path, _elsewhere: Path) -> None:
+    (repo / "AGENTS.md").unlink()
+    (repo / "AGENTS.md").symlink_to(repo / "missing.md")
+
+
+def refuse_by_encoding(repo: Path, _elsewhere: Path) -> None:
+    (repo / "AGENTS.md").write_bytes(b"# guidance\n\xff\xfe\n")
+
+
 @pytest.mark.parametrize(
     "refuse",
     [
@@ -187,9 +203,13 @@ def refuse_by_link(repo: Path, elsewhere: Path) -> None:
             refuse_by_mode, id="mode 0", marks=pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-0 file")
         ),
         pytest.param(refuse_by_link, id="link out of the repository"),
+        pytest.param(refuse_by_dangling_link, id="dangling link"),
+        pytest.param(refuse_by_encoding, id="text that is not UTF-8"),
     ],
 )
-def test_agents_md_the_reader_refuses_cannot_be_judged_and_other_rules_still_judge(build_repo, capsys, elsewhere, refuse):
+def test_agents_md_the_reader_refuses_cannot_be_judged_and_other_rules_still_judge(
+    build_repo, capsys, elsewhere, refuse
+):
     """AGENTS-7: exit 2 naming the file; the env-file rule still judges."""
     repo = build_repo({"AGENTS.md": HEAD, ".env": "A=1\n"})
     refuse(repo, elsewhere)
