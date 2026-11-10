@@ -241,10 +241,13 @@ def test_a_tracked_document_gone_from_disk_passes(build_repo):
 
 @pytest.mark.parametrize(
     "path",
-    ["docs/none.md", "Docs/a.md", "docs/A.md", "docs/b//", "./docs/a.md", "docs//a.md", "empty/", "docs/a"],
+    [
+        "docs/none.md", "Docs/a.md", "docs/A.md", "docs/b//", "./docs/a.md", "docs//a.md", "empty/", "docs/a",
+        "docs/a.md/", "AGENTS.md/",
+    ],
     ids=[
         "untracked", "wrong case directory", "wrong case file", "two slashes", "dot slash", "double slash",
-        "directory without a tracked file", "prefix of a file",
+        "directory without a tracked file", "prefix of a file", "nested file with a slash", "top file with a slash",
     ],
 )
 def test_a_path_no_tracked_file_backs_is_one_missing_finding_at_its_line(build_repo, path):
