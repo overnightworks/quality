@@ -2,7 +2,9 @@
 and the files git renamed between the two."""
 
 import re
-from collections.abc import Mapping
+import subprocess
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
@@ -11,6 +13,7 @@ from quality import architecture, checkout, process, repository
 from quality.config import CONFIG_PATH, ConfigError, GateSettings, LegacyMode, load_gate_settings, read_gate_settings
 from quality.ratchet import (
     BASELINE_PATH,
+    NO_RENAMES,
     Baseline,
     Renames,
     SizeError,
@@ -101,6 +104,23 @@ def read_base(repo: Path, base_sha: str) -> Side:
     return side_of(texts[CONFIG_PATH], texts[BASELINE_PATH], where, {name: texts[name] for name in architecture.CONFIG_FILES})
 
 
+def _reads_tree(base: Side | None, head: Side) -> bool:
+    """Whether the files of the two commits can change the judgement: only a module a contract list lost needs them."""
+    return base is not None and bool(architecture.struck_modules(base.contracts, head.contracts))
+
+
+def pull_files(
+    base: Side | None, head: Side, read_tree: Callable[[], architecture.PullTree], read_renames_listing: Callable[[], Renames]
+) -> tuple[architecture.PullTree | None, Renames]:
+    """What the pull request's two commits add to the judgement, read by the caller's readers: the tree when a module is
+    struck (its renames serve the baselines), else the renames when two baselines are compared, else nothing."""
+    if _reads_tree(base, head):
+        return read_tree(), NO_RENAMES
+    if compares_baselines(base, head):
+        return None, read_renames_listing()
+    return None, NO_RENAMES
+
+
 def compares_baselines(base: Side | None, head: Side) -> bool:
     """Whether the renames can change the judgement: only a comparison of two baselines reads them. Any other pair is
     judged without them, so a pull request that renames nothing the baselines name is never held up by the diff."""
@@ -128,6 +148,82 @@ def read_renames(
     return renames_of(listed)
 
 
+@dataclass(frozen=True)
+class TreeWords:
+    """How a refusal to read the pull request's tree is worded; `{commit}`, `{base}` and `{head}` fill in."""
+
+    unlisted: str
+    unrenamed: str
+    warned: str
+
+
+CHECKOUT_WORDS = TreeWords(
+    "cannot list the files tracked at {commit}",
+    "cannot list the files renamed between {base} and {head}",
+    "git's list of renamed files between {base} and {head} came with a warning, so it may miss renames",
+)
+DOOR_WORDS = TreeWords(
+    "cannot list the files git holds at the pull request's commits",
+    "cannot list the files git renamed between the pull request's commits",
+    "git's list of renamed files between the pull request's commits came with a warning, so it may miss renames",
+)
+
+
+def read_pull_tree(
+    repo: Path, base: str, head: str, env: dict[str, str] | None = None, bound: float | None = None,
+    words: TreeWords = CHECKOUT_WORDS,
+) -> architecture.PullTree:
+    """The files git tracks at two commits, the head's empty ones, and the renames between them; the verdict and the
+    door read the same. A rename list git finished with anything on its standard error may miss renames (past `-l1000`
+    git skips its search and only warns), so it cannot be judged. Only names and sizes are read."""
+    _require_safe_ref(base, "base")
+    _require_safe_ref(head, "head")
+    in_repository = ["git", "-C", str(repo.resolve())]
+    base_paths, _ = _tracked_at(in_repository, base, env, bound, words)
+    head_paths, head_empty = _tracked_at(in_repository, head, env, bound, words)
+    words_of = {"base": base, "head": head}
+    listed = _run_git([*in_repository, "diff", *checkout.RENAME_LISTING, "--end-of-options", base, head, "--"], env, bound,
+                      words.unrenamed.format(**words_of))
+    if listed.stderr:
+        raise CannotJudge(words.warned.format(**words_of))
+    try:
+        renames = renames_of(listed.stdout)
+    except CannotJudge:
+        raise CannotJudge(words.unrenamed.format(**words_of)) from None
+    return architecture.PullTree(base_paths, head_paths, head_empty, renames)
+
+
+def _tracked_at(
+    in_repository: list[str], commit: str, env: dict[str, str] | None, bound: float | None, words: TreeWords
+) -> tuple[frozenset[str], frozenset[str]]:
+    """The blob paths of a commit and those of size 0, decoded as `renames_of` decodes, made total."""
+    listed = _run_git([*in_repository, "ls-tree", "-r", "-l", "-z", "--full-tree", "--end-of-options", commit], env, bound,
+                      words.unlisted.format(commit=commit))
+    paths: set[str] = set()
+    empty: set[str] = set()
+    for record in listed.stdout.split(b"\0")[:-1]:
+        meta, _, raw_path = record.partition(b"\t")
+        _, kind, _, size = meta.split()
+        if kind != b"blob":
+            continue
+        path = raw_path.decode("utf-8", errors="surrogateescape")
+        paths.add(path)
+        if size == b"0":
+            empty.add(path)
+    return frozenset(paths), frozenset(empty)
+
+
+def _run_git(command: list[str], env: dict[str, str] | None, bound: float | None, failure: str) -> subprocess.CompletedProcess:
+    """A git run that finished with exit 0, its standard error kept; a run that fails is `failure`, git's words never."""
+    try:
+        done = process.run(command, env=env, encoding=None) if bound is None else process.run_bounded_in_own_group(command, bound, env, None)
+    except process.ProcessError:
+        raise CannotJudge(failure) from None
+    if done.returncode != 0:
+        raise CannotJudge(failure)
+    return done
+
+
 def gh_configuration_directory(environment: Mapping[str, str]) -> str:
     """Where gh looks for its login: `GH_CONFIG_DIR`, else `$XDG_CONFIG_HOME/gh`, else `~/.config/gh`."""
     if environment.get("GH_CONFIG_DIR"):
@@ -146,9 +242,10 @@ def fetch_environment(environment: Mapping[str, str], empty_home: Path) -> dict[
     return kept | {"GIT_TERMINAL_PROMPT": "0", "GH_CONFIG_DIR": gh_configuration_directory(environment)}
 
 
-def read_renames_of_pull(remote: str, base_sha: str, merge_sha: str, environment: Mapping[str, str]) -> Renames:
-    """The renames the verdict reads at the checkout, from the pull request's two commits fetched into a bare repository
-    that is removed afterwards. Credentials stay in gh's credential protocol; git's own words never reach the operator."""
+@contextmanager
+def _fetched_pull(remote: str, base_sha: str, merge_sha: str, environment: Mapping[str, str]) -> Iterator[tuple[Path, dict[str, str]]]:
+    """A bare repository holding the pull request's two commits, and the isolated environment git runs in, removed
+    afterwards. Credentials stay in gh's credential protocol; git's own words never reach the operator."""
     with process.scratch_directory() as scratch:
         isolated = fetch_environment(environment, scratch / "home")
         repository = scratch / "repository"
@@ -168,10 +265,22 @@ def read_renames_of_pull(remote: str, base_sha: str, merge_sha: str, environment
                 raise CannotJudge(
                     f"cannot fetch the pull request's commits to compare renamed files (git exited {done.returncode})"
                 )
+        yield repository, isolated
+
+
+def read_renames_of_pull(remote: str, base_sha: str, merge_sha: str, environment: Mapping[str, str]) -> Renames:
+    """The renames the verdict reads at the checkout, from the pull request's two commits fetched into a bare repository."""
+    with _fetched_pull(remote, base_sha, merge_sha, environment) as (repository, isolated):
         try:
             return read_renames(repository, base_sha, merge_sha, isolated, bound=FETCH_TIMEOUT_SECONDS)
         except CannotJudge:
-            raise CannotJudge("cannot list the files git renamed between the pull request's commits") from None
+            raise CannotJudge(DOOR_WORDS.unrenamed) from None
+
+
+def read_pull_tree_of_pull(remote: str, base_sha: str, merge_sha: str, environment: Mapping[str, str]) -> architecture.PullTree:
+    """The tree the verdict reads at the checkout, from the same fetched commits, in the door's words."""
+    with _fetched_pull(remote, base_sha, merge_sha, environment) as (repository, isolated):
+        return read_pull_tree(repository, base_sha, merge_sha, isolated, FETCH_TIMEOUT_SECONDS, DOOR_WORDS)
 
 
 def side_of(config: str | None, baseline: str | None, where: str, import_configs: Mapping[str, str | None] = MappingProxyType({})) -> Side:

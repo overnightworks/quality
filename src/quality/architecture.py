@@ -20,7 +20,7 @@ import stat
 import sys
 import tempfile
 import tokenize
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from enum import Enum, auto
@@ -75,6 +75,7 @@ _TIGHTENING_HOLDS: Mapping[Tightening, Callable[[object, object], bool]] = Mappi
     Tightening.INDIRECT_IMPORTS_FORBIDDEN: lambda before, after: before is True and after is False,
     Tightening.MODULES_PLACED_IN_LAYERS: lambda before, after: _without_modules_unknown_to(before, after) == before,
 })
+STRUCK_FIELDS = ("layers", "containers", "source_modules", "forbidden_modules", "modules", "protected_modules")
 UNCOMPARED_FIELDS = frozenset({"ignore_imports", "broken_contract_guidance"})
 SESSION_OPTIONS = ("root_packages", "include_external_packages", "exclude_type_checking_imports")
 UNMATCHED_IGNORE = re.compile(r"No matches for ignored import (?P<expression>.+)\.")
@@ -122,6 +123,17 @@ class SideContracts:
     config: str | None = None
     session: Mapping[str, object] = field(default_factory=dict)
     contracts: Mapping[str, ContractFields] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class PullTree:
+    """What git holds at the two commits of a pull request and what it renamed between them: the tracked paths of each
+    commit, the head's paths of size 0, and the renames. One record, so that a listing never comes without its renames."""
+
+    base_paths: frozenset[str]
+    head_paths: frozenset[str]
+    head_empty: frozenset[str]
+    renames: ratchet.Renames
 
 
 def check_contracts(root: Path, tracked: Sequence[str], configs: Mapping[str, str]) -> RuleResult:
@@ -185,17 +197,98 @@ def contracts_of(configs: Mapping[str, str]) -> SideContracts:
         return SideContracts(config.name, _session_of(config.options), contracts)
 
 
-def contract_loosenings(base: SideContracts, head: SideContracts) -> list[str]:
-    """What the head loosens against the base, one sorted line each; adding a config or a contract, and removing an ignore, are none."""
+def contract_loosenings(base: SideContracts, head: SideContracts, tree: PullTree | None = None) -> list[str]:
+    """What the head loosens against the base, one sorted line each; adding a config or a contract, and removing an ignore, are none.
+
+    A module a list lost is no loosening when `tree` shows the head no longer has it and git does not read it as renamed;
+    without a tree nothing counts as missing."""
     if base.config is None:
         return []
     if head.config is None:
         return [f"import-linter config in {base.config} removed"]
     lines = [f"import-linter changes {option}" for option in SESSION_OPTIONS if base.session[option] != head.session[option]]
+    gone = frozenset() if tree is None else _gone(struck_modules(base, head), head, tree)
     for name, contract in base.contracts.items():
         kept = head.contracts.get(name)
-        lines += [f'import contract "{name}" removed'] if kept is None else _contract_loosenings(name, contract, kept)
+        lines += [f'import contract "{name}" removed'] if kept is None else _contract_loosenings(name, _without(contract, kept, gone), kept)
     return sorted(lines)
+
+
+def struck_modules(base: SideContracts, head: SideContracts) -> frozenset[str]:
+    """The module names a contract held by both sides lists at the base and the head's same list lacks; a wildcard is none."""
+    if base.config is None or head.config is None:
+        return frozenset()
+    return frozenset(
+        name for contract_name, contract in base.contracts.items() if (kept := head.contracts.get(contract_name)) is not None
+        for names in _struck(contract, kept).values() for name in names
+    )
+
+
+def _struck(base: ContractFields, head: ContractFields) -> dict[str, frozenset[str]]:
+    if base.type != head.type:
+        return {}
+    struck = {option: frozenset(name for name in _names(base, option) - _names(head, option) if "*" not in name)
+              for option in STRUCK_FIELDS if option in base.fields}
+    return {option: names for option, names in struck.items() if names}
+
+
+def _names(contract: ContractFields, option: str) -> frozenset[str]:
+    """The dotted names one list holds; a layers tail is named once per container."""
+    value = contract.fields[option] or ()
+    if option != "layers":
+        return frozenset(expression.expression for expression in value)
+    return frozenset(name for layer in value for tail in layer.module_tails for name in _tail_names(contract, tail.name))
+
+
+def _tail_names(contract: ContractFields, tail: str) -> list[str]:
+    containers = [container.expression for container in contract.fields["containers"] or ()]
+    return [f"{container}.{tail}" for container in containers] or [tail]
+
+
+def _gone(struck: frozenset[str], head: SideContracts, tree: PullTree) -> frozenset[str]:
+    """The struck names the head's files no longer hold and git does not read as renamed (a name outside the head's
+    placed root packages is present)."""
+    places = {package: (_directory_of(tree.head_paths, package), _directory_of(tree.base_paths, package)) for package in head.session["root_packages"]}
+    return frozenset(name for name in struck if _is_gone(name, places.get(name.partition(".")[0], (None, None)), tree))
+
+
+def _directory_of(paths: frozenset[str], package: str) -> str | None:
+    try:
+        return _source_root(paths, package)
+    except ContractError:
+        return None
+
+
+def _is_gone(name: str, directories: tuple[str | None, str | None], tree: PullTree) -> bool:
+    if None in directories:
+        return False
+    head_place, base_place = (str(PurePosixPath(directory, *name.split("."))) for directory in directories)
+    return not _has_file(tree.head_paths, head_place) and not _renamed(tree, base_place)
+
+
+def _has_file(paths: frozenset[str], place: str) -> bool:
+    return f"{place}.py" in paths or any(path.startswith(f"{place}/") for path in paths)
+
+
+def _renamed(tree: PullTree, place: str) -> bool:
+    return any((source == f"{place}.py" or source.startswith(f"{place}/")) and target not in tree.head_empty
+               for source, target in tree.renames.moves.items())
+
+
+def _without(base: ContractFields, head: ContractFields, gone: frozenset[str]) -> ContractFields:
+    """The base without the modules it lists that the head's same list lacks and `gone` names."""
+    dead = {option: names & gone for option, names in _struck(base, head).items()}
+    fields = {option: _stripped(base, option, dead[option]) if dead.get(option) else value for option, value in base.fields.items()}
+    return ContractFields(base.type, base.ignores, fields)
+
+
+def _stripped(contract: ContractFields, option: str, dead: frozenset[str]) -> object:
+    value = contract.fields[option]
+    if option != "layers":
+        return type(value)(expression for expression in value if expression.expression not in dead)
+    layers = [_known_part(layer, frozenset(tail.name for tail in layer.module_tails
+                                           if not set(_tail_names(contract, tail.name)) <= dead)) for layer in value]
+    return [layer for layer in layers if layer.module_tails]
 
 
 def _contract_loosenings(name: str, base: ContractFields, head: ContractFields) -> list[str]:
@@ -263,7 +356,7 @@ def _contract(config: Config, index: int, options: dict) -> Contract:
             raise ContractError(f"contract {name} in {config.name} has invalid options ({fields})") from error
 
 
-def _source_root(tracked: Sequence[str], package: str) -> str:
+def _source_root(tracked: Iterable[str], package: str) -> str:
     """The one production directory holding the package's tracked __init__.py, repository-relative ("" at the top)."""
     if "." in package:
         raise ContractError(f"root package {package} is dotted; finding it would import {package.rpartition('.')[0]}")

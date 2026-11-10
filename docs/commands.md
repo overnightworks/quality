@@ -338,19 +338,20 @@ Ruled by the operator:
   The verdict is then judged again by its own decider, with the config, baseline and import-linter configs read at the
   pull request's current merge commit and at base (MERGE-82) and the Sonar job taken as green (MERGE-83): an
   undeclared loosening (MERGE-84), a declaration that matches nothing (MERGE-85), or a missing (MERGE-86) or red
-  mandatory job is refused, naming the verdict's lines. When both sides hold a baseline,
-  the files git renamed between the two commits count as they do in the verdict, so the door fetches the pull request's
+  mandatory job is refused, naming the verdict's lines. When both sides hold a baseline, or a contract list
+  drops a module, the files git renamed between the two commits count as they do in the verdict and the files each
+  commit holds are listed as the verdict lists them, so the door fetches the pull request's
   base commit and merge commit (MERGE-89) (`git fetch --depth=1` from `https://github.com/<owner>/<repo>.git`) into a
   temporary bare repository that is removed afterwards (MERGE-90), also when the command is interrupted (MERGE-91). This
   needs `git` and `gh` on the path. git runs with an empty home (MERGE-92) and no inherited `GIT_*` variable (MERGE-93),
   so `.netrc` and git's own configuration count for nothing; `gh` is the only credential source (MERGE-94), told where
   its login lives (`GH_CONFIG_DIR`, else `$XDG_CONFIG_HOME/gh`, else `~/.config/gh`) (MERGE-95), and reaches a private
   repository through git's credential helper (MERGE-96). git never prompts and an askpass program is never run
-  (MERGE-97). The fetch and the rename list share one limit of 120 seconds each (MERGE-98), and each of these git
-  commands runs in its own process group, which is killed with it at that limit (MERGE-99) or when the command is
-  interrupted. git's own output is never printed (MERGE-100): a fetch or rename list that fails could not be checked,
-  and its `✗ loosenings` row says so in the door's words (exit `2`) (MERGE-101), never an empty rename list
-  (MERGE-102).
+  (MERGE-97). The fetch, the file listing and the rename list share one limit of 120 seconds each (MERGE-98), and
+  each of these git commands runs in its own process group, which is killed with it at that limit (MERGE-99) or when
+  the command is interrupted. git's own output is never printed (MERGE-100): a fetch, file listing or rename list
+  that fails, or a rename list that came with a warning, could not be checked, and its `✗ loosenings` row says so in
+  the door's words (exit `2`) (MERGE-101), never an empty file or rename list (MERGE-102).
 - **The landing line.** The pull request body carries exactly one `Work-Item:` or `No-Item:` line (MERGE-63) outside a
   fenced code block (MERGE-64), as the fleet's landings read it: `Work-Item: #<n>` or `Work-Item: <owner>/<repo>#<n>` of
   this repository (MERGE-65), or `No-Item: docs`, `fix` or `deps` (MERGE-66). Otherwise its `! landing` row names why

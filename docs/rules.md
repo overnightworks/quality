@@ -643,7 +643,8 @@ It applies these rules:
     `import contract "domain" ignores app.domain -> app.web.*` (LOOSE-9);
   - any other field of a contract that differs, `broken_contract_guidance` excepted, unless the change only forbids
     more (below): `import contract "layers" changes allow_indirect_imports` (LOOSE-10) (a changed `type`
-    reads `changes type` (LOOSE-11); a module dropped from a list reads as that list's field);
+    reads `changes type` (LOOSE-11); a module dropped from a list reads as that list's field, unless the head no longer
+    has it and git does not read it as renamed (below));
   - `root_packages` (as a set of names), `include_external_packages` or `exclude_type_checking_imports` changed:
     `import-linter changes root_packages` (LOOSE-12).
 
@@ -661,8 +662,10 @@ It applies these rules:
   in a `layers` contract: the head's `layers` are compared with every module
   name the base's `layers` do not name stripped, and a layer left empty dropped. Base layers `a`, `b` against head
   `a`, `new`, `b` is green. A layer left with one module has no sibling, so its independence says nothing: base `(game)`
-  against head `(game) : (agent)` is green, and base `a | b` against head `a : b : new` stays a loosening. Everything else stays a loosening: a removed, renamed or replaced expression (`shop.web`
-  turned into `shop.*` included), a module dropped because it was deleted, an expression added and another removed in
+  against head `(game) : (agent)` is green, and base `a | b` against head `a : b : new` stays a loosening.
+  Everything else stays a loosening, except a struck module the head no longer has and git does not read as renamed
+  (below): a removed, renamed or replaced expression (`shop.web`
+  turned into `shop.*` included), an expression added and another removed in
   one field, `allow_indirect_imports` turned from false to true, `as_packages`,
   `unmatched_ignore_imports_alerting`, `containers`, `exhaustive`, `exhaustive_ignores` and every `protected` or
   `acyclic_siblings` field in either direction, a reorder, a merge into `a | b`, a module moved to another layer,
@@ -674,6 +677,16 @@ It applies these rules:
   naming the side: the verdict says `import-linter config at the base commit <sha>: ...` or
   `import-linter config at the head: ...`, the door names the base commit by its SHA alone,
   `import-linter config at <sha>: ...`.
+
+  A module a pull request strikes from a list of a contract (`layers`, `containers`, `source_modules`,
+  `forbidden_modules`, `modules`, `protected_modules`) is no loosening when the head no longer has it: no tracked
+  `<path>.py`, no `<path>/__init__.py` and no file under `<path>/`, below the directory of its root package (LOOSE-19).
+  Every other strike stays `changes <field>`: a module still present, a wildcard expression, a name outside the root
+  packages, a root package the head's files cannot place (LOOSE-20). A module whose file, or a file under whose folder,
+  git reads as renamed between the base and the merge commit, to a file that is not empty, is no deletion: striking it
+  stays a loosening (LOOSE-21). Only file names and sizes are read, at the checked-out merge commit by the verdict
+  and at the pull request's merge commit by the door, and only when a module is struck; a read that fails, or a rename
+  list that came with a warning, is exit `2` (LOOSE-24).
 
 The `secret` rule scans the whole history reachable from `HEAD` with gitleaks (a key removed later is still found
 (SECRET-1); other branches the checkout fetched are not scanned (SECRET-2)), always with quality's own config

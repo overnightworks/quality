@@ -9,6 +9,7 @@ from pathlib import Path
 from types import MappingProxyType
 
 from quality import __version__, architecture, output, pin, web
+from quality.architecture import PullTree
 from quality.checkout import COMMIT_SHA
 from quality.config import (
     REPOSITORY_NAME,
@@ -19,7 +20,6 @@ from quality.config import (
 from quality.output import SEPARATOR, Glyph, Row, SubLine, counted, format_duration
 from quality.ratchet import (
     BASELINE_PATH,
-    NO_RENAMES,
     Baseline,
     Renames,
     added_pairs,
@@ -38,7 +38,16 @@ from quality.report import (
     Step,
     config_refusal,
 )
-from quality.sides import Side, UnusableConfig, compares_baselines, is_git_ref_name, read_base, read_head, read_renames
+from quality.sides import (
+    Side,
+    UnusableConfig,
+    is_git_ref_name,
+    pull_files,
+    read_base,
+    read_head,
+    read_pull_tree,
+    read_renames,
+)
 
 JOBS_URL = "https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs?filter=all&per_page=100"
 MAX_PAGES = 10
@@ -228,10 +237,13 @@ def judge(
     gate_results: Mapping[str, str],
     current_attempt: int,
     renames: Renames,
+    *,
+    pull_tree: PullTree | None = None,
 ) -> Verdict:
     """Without a base (a push, a merge group) no loosening and no declaration is judged; a declared removal of a
-    mandatory job leaves that job unjudged. `renames` are the files git renamed from the base to the head."""
-    loosenings, stale = ((), ()) if base is None else _loosenings(head, base, renames)
+    mandatory job leaves that job unjudged. `renames` are the files git renamed from the base to the head; a
+    `pull_tree` brings its own and replaces them."""
+    loosenings, stale = ((), ()) if base is None else _loosenings(head, base, renames, pull_tree)
     declared = {loosening.what for loosening in loosenings if loosening.declaration is not None}
     base_jobs = () if base is None else base.settings.mandatory_jobs
     unsettled: list[Unsettled] = []
@@ -247,7 +259,9 @@ def judge(
     return Verdict(loosenings, stale, tuple(outcomes), tuple(unsettled))
 
 
-def _loosenings(head: Side, base: Side, renames: Renames) -> tuple[tuple[Loosening, ...], tuple[Declaration, ...]]:
+def _loosenings(
+    head: Side, base: Side, renames: Renames, pull_tree: PullTree | None
+) -> tuple[tuple[Loosening, ...], tuple[Declaration, ...]]:
     """Each loosening, bound to the head's new declaration of it; a declaration the base holds already binds nothing.
     An advisory allowance and a generated file declare their own loosening, so no [[gate.loosened]] entry binds one."""
     whats = [_removal(name) for name in base.settings.mandatory_jobs if name not in head.settings.mandatory_jobs]
@@ -255,8 +269,8 @@ def _loosenings(head: Side, base: Side, renames: Renames) -> tuple[tuple[Looseni
         whats.append(f"legacy {base.settings.legacy.value} → {head.settings.legacy.value}")
     if base.settings.sonar and not head.settings.sonar:
         whats.append("sonar true → false")
-    whats += _baseline_loosenings(base.baseline, head.baseline, renames)
-    whats += architecture.contract_loosenings(base.contracts, head.contracts)
+    whats += _baseline_loosenings(base.baseline, head.baseline, renames if pull_tree is None else pull_tree.renames)
+    whats += architecture.contract_loosenings(base.contracts, head.contracts, pull_tree)
     new = {
         declaration.what: declaration
         for declaration in head.settings.loosened
@@ -576,11 +590,15 @@ def run_verdict(
     try:
         run = read_gate_run(environment)
         base, head = read_sides(run)
-        renames = read_renames(Path("."), run.pull_request.base_sha, "HEAD") if compares_baselines(base, head) else NO_RENAMES
+        pull_tree, renames = pull_files(
+            base, head,
+            lambda: read_pull_tree(Path("."), run.pull_request.base_sha, "HEAD"),
+            lambda: read_renames(Path("."), run.pull_request.base_sha, "HEAD"),
+        )
         fetch = fetcher_for(run.token)
         settled = read_settled(
             lambda: read_jobs(run.repository, run.run_id, fetch),
-            lambda jobs: judge(head, base, jobs, run.gate_results, run.attempt, renames),
+            lambda jobs: judge(head, base, jobs, run.gate_results, run.attempt, renames, pull_tree=pull_tree),
             sleep,
         )
     except UnsettledRun as unsettled:
