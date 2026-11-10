@@ -85,6 +85,7 @@ STALE_IGNORE_FIX = "delete it from the contract's ignore_imports"
 GRIMP_WARNING_PREFIX = "Warning: "
 PANIC_MODULE = "pyo3_runtime"
 MAX_ECHOED_SOURCE = 200
+PACKAGE_INIT = "__init__.py"
 # Probed on grimp 3.17, whose Rust reader (not readable from Python) takes the raw lower-cased spelling of a coding
 # cookie: Python's own aliases such as utf_8, U8, cp65001 or utf-8-sig make it panic.
 GRIMP_ACCEPTED_COOKIES = frozenset({"utf-8", "utf8", "ascii", "us-ascii", "ansi_x3.4-1968"})
@@ -299,8 +300,8 @@ def _candidate(place: str, source: str, target: str, heads: Mapping[str, str]) -
     depth = _root_depth(parts, heads)
     if depth is None:
         return None
-    if source in (f"{place}.py", f"{place}/__init__.py"):
-        if parts[-1] == "__init__.py":
+    if source in (f"{place}.py", f"{place}/{PACKAGE_INIT}"):
+        if parts[-1] == PACKAGE_INIT:
             module = parts[:-1]
         elif parts[-1].endswith(".py"):
             module = (*parts[:-1], parts[-1].removesuffix(".py"))
@@ -416,7 +417,7 @@ def _source_root(tracked: Iterable[str], package: str) -> str:
     """The one production directory holding the package's tracked __init__.py, repository-relative ("" at the top)."""
     if "." in package:
         raise ContractError(f"root package {package} is dotted; finding it would import {package.rpartition('.')[0]}")
-    init = PurePosixPath(package, "__init__.py")
+    init = PurePosixPath(package, PACKAGE_INIT)
     directories = sorted({
         str(PurePosixPath(name).parent.parent) for name in tracked
         if PurePosixPath(name).parts[-2:] == init.parts and ratchet.area_of(name) is ratchet.Area.PRODUCTION
@@ -591,7 +592,7 @@ def _refuse_foreign_location(repository: str, package: str, directory: str) -> N
 
     The collision is named rather than worked around: there is no custom finder, and sys.modules stays as it is.
     """
-    expected = os.path.join(directory, package, "__init__.py")
+    expected = os.path.join(directory, package, PACKAGE_INIT)
     spec = importlib.util.find_spec(package)
     found = os.path.realpath(spec.origin) if spec is not None and spec.origin and os.path.isabs(spec.origin) else None
     if found != os.path.join(repository, expected):
