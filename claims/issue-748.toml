@@ -1,8 +1,0 @@
-claim_id = "ba7924416dab4ee9957236d2c3e210f5"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "1d5e8f8a380fc1e35a84f4de26db0a2200649ed7"
-branch = "claude/issue-748-pr-concurrency"
-scope = [".github/workflows/ci.yml", ".github/workflows/code-scanning.yml", "docs/codeql.md", "docs/output.md", "docs/rules.md", "pyproject.toml", "src/quality/check.py", "src/quality/checkout.py", "src/quality/report.py", "src/quality/rules.py", "src/quality/workflow_rules.py", "tests/test_checkout.py", "tests/test_cli_help.py", "tests/test_fleet_matrix.py", "tests/test_workflow_rules.py"]
-opened_commit = "b1d23bb0afa81d09a04220ec5427608761b0216c"
-whole_reason = "The thinnest honest end-to-end proof needs the trigger reading, the rule, its Rule member, its two event words and its wiring together: a rule member without its check is dead code, the check without its wiring never runs, and quality's own two workflows must carry the block in the same change or its gate turns red on itself."
