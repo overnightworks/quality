@@ -259,12 +259,13 @@ def test_the_verdict_and_the_door_print_the_same_loosening_lines_for_the_same_tw
     gh.files[("pyproject.toml", gh.base_sha)] = contracts_toml({"guarded": DEAD})
     gh.files[("pyproject.toml", gh.merge_sha)] = contracts_toml({"guarded": head_contract})
     monkeypatch.setenv("GATE_BASE_SHA", gh.base_sha)
-    _, verdict_out = verdict_of(tmp_path / "work", capsys)
-    drive(gh)
+    verdict_code, verdict_out = verdict_of(tmp_path / "work", capsys)
+    door_code, _ = drive(gh)
     door_out = capsys.readouterr().out
     named = [line.strip() for line in verdict_out.splitlines() if GUARDED_CHANGES in line]
     assert named == [line.strip() for line in door_out.splitlines() if GUARDED_CHANGES in line]
     assert bool(named) == (head_contract is STRUCK)
+    assert (verdict_code, door_code) == ((1, 1) if head_contract is STRUCK else (0, 0))
 
 
 @pytest.mark.integration
