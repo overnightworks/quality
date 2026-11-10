@@ -339,8 +339,8 @@ Ruled by the operator:
   pull request's current merge commit and at base (MERGE-82) and the Sonar job taken as green (MERGE-83): an
   undeclared loosening (MERGE-84), a declaration that matches nothing (MERGE-85), or a missing (MERGE-86) or red
   mandatory job is refused, naming the verdict's lines. When both sides hold a baseline, or a contract list
-  drops a module, the files git renamed between the two commits count as they do in the verdict and the files each
-  commit holds are listed as the verdict lists them, so the door fetches the pull request's
+  drops a module or a contract is removed, the files git renamed between the two commits count as they do in the
+  verdict and the files each commit holds are listed as the verdict lists them, so the door fetches the pull request's
   base commit and merge commit (MERGE-89) (`git fetch --depth=1` from `https://github.com/<owner>/<repo>.git`) into a
   temporary bare repository that is removed afterwards (MERGE-90), also when the command is interrupted (MERGE-91). This
   needs `git` and `gh` on the path. git runs with an empty home (MERGE-92) and no inherited `GIT_*` variable (MERGE-93),
