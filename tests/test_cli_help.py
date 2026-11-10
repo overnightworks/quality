@@ -165,7 +165,7 @@ def test_the_check_help_stands_in_its_frame(capsys):
         "                (quality/baseline.toml)\n"
         "  imports       the import contracts\n"
         "  secrets       secrets in the committed history\n"
-        "  workflows     GitHub workflows: lint and security\n"
+        "  workflows     GitHub workflows: lint, security and concurrency\n"
         "  dependencies  known advisories in the lockfiles\n"
         "  code          Python source: security findings and print calls\n"
         "\n"

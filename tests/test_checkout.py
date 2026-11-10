@@ -508,3 +508,59 @@ def test_a_workflow_without_a_text_is_the_unknown_pin(unread):
     """PIN-9, HELP-5: a workflow without a text makes the gate pin unknown."""
     texts = {".github/workflows/ci.yml": jobs(f"{gate_uses('5e' * 20)} # v0.10.0"), ".github/workflows/nightly.yml": unread}
     assert checkout.gate_pin_of(texts, False) == unreadable(".github/workflows/nightly.yml")
+
+
+PULL_REQUEST, TARGET, REVIEW = checkout.PullRequestEvent
+
+
+def pull_request_events(text: str) -> frozenset[checkout.PullRequestEvent]:
+    return checkout.pull_request_events(checkout.composed_document(text))
+
+
+@pytest.mark.parametrize(
+    ("on", "events"),
+    [
+        ("on: pull_request\n", {PULL_REQUEST}),
+        ("on: pull_request_target\n", {TARGET}),
+        ("on: pull_request_review\n", {REVIEW}),
+        ("on: [push, pull_request]\n", {PULL_REQUEST}),
+        ("on:\n  - push\n  - pull_request_review\n", {REVIEW}),
+        ("on:\n  pull_request:\n    branches: ['releases/**', '!old']\n", {PULL_REQUEST}),
+        ("on:\n  pull_request_target:\n    types: [opened]\n", {TARGET}),
+        ("on:\n  push:\n  pull_request:\n  pull_request_review:\n", {PULL_REQUEST, REVIEW}),
+        ("on:\n  pull_request:\n  pull_request_target:\n  pull_request_review:\n", {PULL_REQUEST, TARGET, REVIEW}),
+    ],
+    ids=[
+        "string", "string target", "string review", "list", "list review", "mapping with branch globs",
+        "mapping with types", "mapping of two", "mapping of three",
+    ],
+)
+def test_a_workflow_is_a_pull_request_root_for_each_of_the_three_events_in_any_shape_of_on(on, events):
+    """CONCURRENCY-1: the event as the string, in a list or as a key of the mapping; the mapping's values are not read."""
+    assert pull_request_events(f"name: w\n{on}jobs: {{}}\n") == events
+
+
+@pytest.mark.parametrize(
+    "on",
+    [
+        "",
+        "on: push\n",
+        "on:\n  push:\n    branches: [main]\n",
+        "on:\n  push:\n    branches-ignore: [main]\n",
+        "on:\n  push:\n    tags: ['v*']\n",
+        "on:\n  schedule:\n    - cron: '1 1 * * *'\n",
+        "on: workflow_dispatch\n",
+        "on: merge_group\n",
+        "on: workflow_call\n",
+        "on:\n  workflow_call:\n    inputs: {}\n",
+        "on:\n  push:\n    branches: [pull_request]\n",
+        "on: pull_requests\n",
+    ],
+    ids=[
+        "no on", "push", "push to main", "push ignoring main", "tags only", "schedule", "dispatch", "merge group",
+        "call", "call with inputs", "event name only as a value", "another word",
+    ],
+)
+def test_a_workflow_without_one_of_the_three_events_is_no_pull_request_root(on):
+    """CONCURRENCY-1."""
+    assert pull_request_events(f"name: w\n{on}jobs: {{}}\n") == frozenset()

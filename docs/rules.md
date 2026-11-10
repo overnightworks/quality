@@ -757,6 +757,44 @@ Ruled by the operator: the clean row counts those files and says in the row itse
 offline audits ran (O38), so a workflow that only an online audit would flag is not read as fully audited:
 `✓ workflows  clean  5 workflows · offline audits only`.
 
+The `pr-concurrency` rule judges every tracked workflow that a pull request triggers: its `on:` is the string
+`pull_request`, `pull_request_target` or `pull_request_review`, a list that holds one of them, or a mapping with one as
+a key; the mapping's values are not read (CONCURRENCY-1). A workflow with none of them (`push` alone, `schedule`,
+`workflow_dispatch`, `merge_group`, `workflow_call` alone) is outside; a `workflow_call` file is no root, because its
+caller's `concurrency` governs. Only the top-level `concurrency` counts, never a job's (CONCURRENCY-2). The rule reads
+no expression: after trimming and collapsing the whitespace inside each `${{ }}` and setting `||`, `==` and `!=` off by
+one space, the `group` and `cancel-in-progress` values are compared with a closed list; a form outside it is a finding,
+however equivalent (CONCURRENCY-3):
+
+| | Form | Passes |
+|---|---|---|
+| G1 | `${{ github.workflow }}-${{ github.event.pull_request.number \|\| github.run_id }}` | always |
+| G2 | `${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number \|\| github.run_id }}` | always |
+| F1 | `${{ github.event.pull_request.number != null }}` | always |
+| F2 | `${{ github.event_name == 'pull_request' }}` | only with no `pull_request_target` and no `pull_request_review` trigger, which it leaves uncancelled |
+
+A pull-request run is grouped by its number and cancels; any other run gets its run id and does not, so a run on main
+always finishes. A group that falls back to the ref or the commit is shared by runs on main, and GitHub drops a pending
+run when a newer one queues in the same group, whatever `cancel-in-progress` says. G1 puts the runs of a workflow that
+combines `pull_request` with another pull-request trigger in one group, so one can cancel the other; G1 passes there
+and the fix names G2. The block every finding shows as its fix, and a repository copies (CONCURRENCY-4):
+
+```yaml
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event.pull_request.number != null }}
+```
+
+A finding is `missing` (no `concurrency`, or none with a `cancel-in-progress`; a group alone, a string included),
+`shared group` (the `group` is not a listed form, naming `github.sha`, `github.ref`, `github.head_ref` or
+`github.ref_name` where it holds one) or `cancels main` (the `cancel-in-progress` is not a listed form), each with the
+block as its fix (CONCURRENCY-5). A workflow whose YAML or file cannot be read, a `group` or `cancel-in-progress` that
+is no string, and an alias or a merge key where it can hide the top mapping, `on:`, the `concurrency` or either value
+are exit `2` naming the file (CONCURRENCY-6). The clean row of `workflows` keeps its words (CONCURRENCY-7). quality's own
+checkout carries the block in `ci.yml` and `code-scanning.yml` (CONCURRENCY-8). No configuration switches the rule off.
+It is on `main` only until the release that carries it, so a dependent meets it at its first bump to that release
+(CONCURRENCY-9).
+
 The `advisory` rule judges every tracked `uv.lock`, `pnpm-lock.yaml` and `requirements*.txt` (a name that starts
 with `requirements` and ends in `.txt`; `requirements.in` and `dev-requirements.txt` are not (ADVISORY-30)), root
 and nested, with osv-scanner against the OSV advisory database (dev dependencies count) (ADVISORY-1). `uv.lock` and the

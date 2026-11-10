@@ -73,8 +73,10 @@ rows, by area:
 - `secrets`: a key is a `secret` finding whose fact names gitleaks' rule and, in history, the commit's first eight
   characters, never the value (O28); a staged key names no commit (O32); its fix is lines to copy (O33).
 - `workflows`: actionlint's finding is `invalid` and zizmor's `insecure`, zizmor's fact naming its audit and its fix
-  holding the audit's URL (O36); an actionlint finding names the scanner and holds its message whole as its one detail
-  line (O37); a row with a finding or a refusal does not say `offline audits only` (O39).
+  holding the audit's URL (O36); a `pr-concurrency` finding is `missing` (`no concurrency`, `no cancel-in-progress`),
+  `shared group` (`group is not a listed form`, adding `(falls back to <token>)` where the group holds the commit or a
+  ref) or `cancels main` (`cancel-in-progress is not a listed form`), its fix the block to copy ([rules](rules.md)); an actionlint finding names the scanner and holds its message whole as
+  its one detail line (O37); a row with a finding or a refusal does not say `offline audits only` (O39).
 - `dependencies`: an advisory is an `affected` row, its fact the package and version, the group's id and where it
   lists them the versions that fix it, its fix per lock kind (O41); the id is the group's first, never an alias (O42);
   a nested lock's fix names its folder (O43); the fix of a pnpm or requirements lock is the same hint for every
