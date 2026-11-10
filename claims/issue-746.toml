@@ -1,8 +1,0 @@
-claim_id = "1e04edde87cf4857968b7bade4615866"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "1d5e8f8a380fc1e35a84f4de26db0a2200649ed7"
-branch = "claude/issue-746-renamed-strike-listed"
-scope = ["docs/rules.md", "src/quality/architecture.py", "tests/test_architecture_struck.py", "tests/test_verdict_struck.py"]
-opened_commit = "822096c3338278a7e950991490022b330c418d44"
-whole_reason = "The unless clause and the candidate rule are one decision in one decider, so they land in one change together with their docs sentence and the two pins that turn green; the production change is one file, and the other three paths are its docs and its tests."
