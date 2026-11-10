@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from quality import advisories
+from quality import advisories, deadline
 from quality.scanners import ScannerError
 from tests.support.advisories import uv_lock, zipped
 
@@ -102,8 +102,11 @@ def scan(build_repo):
 
     def run():
         try:
-            return advisories.scan({"uv.lock": repo / "uv.lock"}, repo, [], TODAY, lambda: state.now, sleep=sleep)
-        except ScannerError as refusal:
+            return advisories.scan(
+                {"uv.lock": repo / "uv.lock"}, repo, [], TODAY, deadline.RunDeadline.starting(lambda: state.now),
+                sleep=sleep,
+            )
+        except (ScannerError, deadline.RunDeadlineSpent) as refusal:
             return refusal
 
     run.state = state
@@ -195,3 +198,26 @@ def test_the_last_wait_is_cut_to_the_time_left_and_the_deadline_is_the_refusal(s
     assert isinstance(refusal, ScannerError)
     assert (str(refusal), scan.state.slept, len(scripted_server.requested)) == (
         "the PyPI advisory database download exceeded 300 seconds", [1], 1)
+
+
+def test_the_attempts_of_one_database_and_their_waits_fit_the_download_deadline():
+    """ADVISORY-9, ADVISORY-42: a download that stalls on every attempt is retried until its last attempt, because
+    the attempts and the waits between them add up to no more than the downloads' deadline."""
+    attempts = len(advisories.RETRY_DELAYS_SECONDS) + 1
+    spent = attempts * advisories.DOWNLOAD_TIMEOUT_SECONDS + sum(advisories.RETRY_DELAYS_SECONDS)
+    assert spent <= advisories.DATABASE_DOWNLOAD_DEADLINE_SECONDS
+
+
+def test_a_run_that_ends_during_a_failed_attempt_cuts_the_wait_and_sends_no_further_request(
+    scan, scripted_server, monkeypatch
+):
+    """SCANNER-20, ADVISORY-9: the retry wait is cut to the time left, and an attempt that would start after the run's
+    end sends no request and cannot judge in the run's words."""
+    monkeypatch.setattr(deadline, "RUN_DEADLINE_SECONDS", 100)
+    scripted_server.script = [GATEWAY_TIMEOUT]
+    scripted_server.on_request = lambda: setattr(scan.state, "now", deadline.RUN_DEADLINE_SECONDS)
+    scripted_server.open()
+    refusal = scan()
+    assert isinstance(refusal, deadline.RunDeadlineSpent)
+    assert (str(refusal), scan.state.slept, len(scripted_server.requested)) == (
+        "the run's 100 seconds are spent", [0], 1)

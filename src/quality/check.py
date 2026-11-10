@@ -92,11 +92,12 @@ def check_import_contract(root: Path, tracked: list[str]) -> RuleResult:
 
 
 def lint_python(
-    root: Path, modes: dict[str, str] | CannotJudge, locate_ruff: Callable[[], str], log: scanners.ScannerLog
+    root: Path, modes: dict[str, str] | CannotJudge, locate_ruff: Callable[[], str], deadline: RunDeadline,
+    log: scanners.ScannerLog,
 ) -> python_lint.Lint:
     """ruff's one run over every tracked regular `.py` file, which python-security and python-print both judge."""
     try:
-        return python_lint.lint(root, _required(modes), python_floor.PYTHON_TARGET, locate_ruff, log)
+        return python_lint.lint(root, _required(modes), python_floor.PYTHON_TARGET, locate_ruff, deadline, log)
     except python_lint.UnparsablePython as error:
         raise Unparsable(str(error)) from error
     except python_lint.LintError as error:
@@ -138,12 +139,15 @@ def check_workflows(
         raise CannotJudge(str(error)) from error
 
 
-def check_advisories(root: Path, tracked: list[str], allow_lists: AllowLists | CannotJudge, log: scanners.ScannerLog) -> RuleResult:
+def check_advisories(
+    root: Path, tracked: list[str], allow_lists: AllowLists | CannotJudge, deadline: RunDeadline,
+    log: scanners.ScannerLog,
+) -> RuleResult:
     """The allowances' `until` is judged against today's date in UTC, read here, once."""
     allowances = _required(allow_lists).advisories
     locks = {name: checkout.judged(repository.resolve_file, root, name) for name in checkout.on_disk(root, [n for n in tracked if advisories.is_lock(n)])}
     try:
-        return advisories.scan(locks, root, allowances, datetime.now(UTC).date(), log=log)
+        return advisories.scan(locks, root, allowances, datetime.now(UTC).date(), deadline, log)
     except process.ProcessError as error:
         raise CannotJudge(str(error)) from error
 
@@ -560,14 +564,18 @@ def _judge_workflows(inputs: RunInputs) -> AreaVerdict:
 def _judge_dependencies(inputs: RunInputs) -> AreaVerdict:
     runs, log = _run_log(inputs.verbose)
     advisory = _scanned(
-        inputs.running, Area.DEPENDENCIES, scanners.OSV_SCANNER, partial(check_advisories, inputs.root, inputs.tracked, inputs.allow_lists, log)
+        inputs.running, Area.DEPENDENCIES, scanners.OSV_SCANNER,
+        partial(check_advisories, inputs.root, inputs.tracked, inputs.allow_lists, inputs.deadline, log),
     )
     return _area_verdict(Area.DEPENDENCIES, {Rule.ADVISORY: advisory}, runs)
 
 
 def _judge_code(inputs: RunInputs) -> AreaVerdict:
     runs, log = _run_log(inputs.verbose)
-    lint = _scanned(inputs.running, Area.CODE, scanners.RUFF, lambda: lint_python(inputs.root, inputs.modes, inputs.locate_ruff, log))
+    lint = _scanned(
+        inputs.running, Area.CODE, scanners.RUFF,
+        lambda: lint_python(inputs.root, inputs.modes, inputs.locate_ruff, inputs.deadline, log),
+    )
     judged = {Rule.PYTHON_SECURITY: _judge_lint(lint, python_lint.judge_security), Rule.PYTHON_PRINT: _judge_lint(lint, python_lint.judge_print)}
     return _area_verdict(Area.CODE, judged, runs)
 

@@ -294,11 +294,13 @@ dependencies of quality's package (`pyproject.toml`, hashed in `uv.lock`), so in
 `cannot judge` as a defect in quality's release (SCANNER-18).
 
 One `check` run and one `check secrets --staged` run each have one deadline of 540 seconds, started when the run's
-inputs are built, after the release row (SCANNER-19). gitleaks (in both), zizmor and actionlint have it as their only
-time bound (SCANNER-19). A rule that would start one of them with no time left starts nothing, and a scanner still
-running when the time ends is stopped, gitleaks with its whole process group so the `git` it starts dies too, and
-its scratch directory and mirror are deleted. Both make the rule `cannot judge` (exit `2`), worded as in
-[Refusals](output.md#refusals), with no step of their own and the other rules' rows standing (SCANNER-20).
+inputs are built, after the release row (SCANNER-19). gitleaks (in both), zizmor, actionlint, osv-scanner and ruff
+have it as their only time bound (SCANNER-19), and the advisory database downloads end at the earlier of their own
+deadline and the run's. A rule that would start one of them, or a download, with no time left starts nothing, and a
+scanner or download still running when the time ends is stopped, gitleaks with its whole process group so the `git`
+it starts dies too, and its scratch directory and mirror are deleted. Both make the rule `cannot judge` (exit `2`),
+worded as in [Refusals](output.md#refusals), with no step of their own and the other rules' rows standing
+(SCANNER-20).
 
 Ruled by the operator: quality builds the logic and the process itself and never a specialist scanner (language
 linters and test runners, gitleaks, osv-scanner, mutation tools); the scanners it uses run pinned underneath the one

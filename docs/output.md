@@ -275,9 +275,10 @@ next: write it in quality/config.toml like this:
 
 A rule that runs out of the run's time refuses in one of two fixed wordings, each carrying the run's 540 seconds and
 bringing no step (REFUSAL-22): `the run's 540 seconds are spent` for a rule that would start a scanner with no time
-left, which names no scanner and so stands once for the rules of an area that share it (REFUSAL-4), and
-`<scanner> did not finish within the run's 540 seconds` for a scanner stopped while it ran, `<scanner>` being the
-executable's file name.
+left, or a download that would start after the end, which names no scanner and so stands once for the rules of an
+area that share it (REFUSAL-4), and `<scanner> did not finish within the run's 540 seconds` for a scanner stopped
+while it ran, `<scanner>` being the executable's file name. A download stopped while it ran names itself in the
+same wording: `the PyPI advisory database download did not finish within the run's 540 seconds`.
 
 ## Streams
 

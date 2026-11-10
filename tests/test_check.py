@@ -1,14 +1,17 @@
 import re
 import subprocess
+import threading
 import time
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager, nullcontext
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import NamedTuple
 
 import pytest
 
-from quality import check, cli, config, deadline, env_file, installation, report, scanners
+from quality import advisories, check, cli, config, deadline, env_file, installation, report, scanners
 from quality.compose import is_compose_file
 from quality.report import CannotJudge, Command, Example, Finding, FindingEvent, Reason, Unparsable, printable
 from quality.rules import Area, Rule
@@ -37,7 +40,16 @@ from tests.support.check import check_output as run
 from tests.support.config_refusals import GATE, Refusal, check_refusals
 from tests.support.door import check_door
 from tests.support.generated_files import generated_config
-from tests.support.scanners import fake_gitleaks, fake_scanner, fake_zizmor, lacking, never_located, nothing_installed
+from tests.support.python_lint import fake_ruff
+from tests.support.scanners import (
+    CLEAN_SCANS,
+    fake_gitleaks,
+    fake_scanner,
+    fake_zizmor,
+    lacking,
+    never_located,
+    nothing_installed,
+)
 
 
 def deleted_compose_repo(build_repo, tmp_path):
@@ -474,10 +486,13 @@ SCANNER_OF_RULE = {
     Rule.LEAK: scanners.GITLEAKS,
     Rule.WORKFLOW_LINT: scanners.ACTIONLINT,
     Rule.WORKFLOW_SECURITY: scanners.ZIZMOR,
+    Rule.ADVISORY: scanners.OSV_SCANNER,
+    Rule.PYTHON_SECURITY: scanners.RUFF,
+    Rule.PYTHON_PRINT: scanners.RUFF,
 }
-SCANNER_NAMES = tuple(SCANNER_OF_RULE.values())
+SCANNER_NAMES = tuple(dict.fromkeys(SCANNER_OF_RULE.values()))
 DEADLINE_RULES = tuple(SCANNER_OF_RULE)
-WORKFLOW_FILES = {".github/workflows/w.yml": "on: push\n"}
+DEADLINE_FILES = {".github/workflows/w.yml": "on: push\n", "uv.lock": uv_lock(), "src/p/a.py": "x = 1\n"}
 
 
 def ends_soon(pid: int) -> bool:
@@ -494,49 +509,83 @@ def ends_soon(pid: int) -> bool:
     return False
 
 
-def stub_scanners(served_scanners, zizmor_directory, on_scan: dict[str, str]) -> Callable[[], str]:
-    """Replaces gitleaks, actionlint and zizmor by stubs that run their `on_scan` (shell) for a scan, and returns the
-    zizmor locator."""
+class Locators(NamedTuple):
+    zizmor: Callable[[], str]
+    ruff: Callable[[], str]
+
+
+def stub_scanners(served_scanners, directory, on_scan: dict[str, str]) -> Locators:
+    """Replaces every scanner of a run by a stub that runs its `on_scan` (shell) for a scan, and returns the zizmor
+    and ruff locators."""
     fake_gitleaks(served_scanners, on_scan=on_scan[scanners.GITLEAKS])
     fake_scanner(served_scanners, scanners.ACTIONLINT, on_scan[scanners.ACTIONLINT])
-    return fake_zizmor(zizmor_directory, on_scan[scanners.ZIZMOR])
+    fake_scanner(served_scanners, scanners.OSV_SCANNER, on_scan[scanners.OSV_SCANNER])
+    directory.mkdir()
+    ruff = str(fake_ruff(directory, on_scan[scanners.RUFF]))
+    return Locators(fake_zizmor(directory / "zizmor", on_scan[scanners.ZIZMOR]), lambda: ruff)
 
 
-def test_a_rule_with_no_time_left_starts_no_scan_and_cannot_judge(build_repo, served_scanners, tmp_path, fake_git):
-    """SCANNER-20, REFUSAL-22, REFUSAL-12: with the run's time spent gitleaks, actionlint and zizmor start nothing, no
-    mirror is cloned, and each rule cannot judge in the spent wording with no step of its own."""
+@pytest.fixture
+def database_requests(monkeypatch) -> Iterator[list[str]]:
+    """The paths a local advisory database server was asked for; the gate's database root points at it."""
+    paths: list[str] = []
+
+    class Recording(BaseHTTPRequestHandler):
+        def do_GET(self):
+            paths.append(self.path)
+            self.send_error(404)
+
+        def log_message(self, *_):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Recording)
+    serving = threading.Thread(target=server.serve_forever)
+    serving.start()
+    monkeypatch.setattr(advisories, "DATABASE_ROOT", f"http://127.0.0.1:{server.server_address[1]}")
+    yield paths
+    server.shutdown()
+    serving.join()
+    server.server_close()
+
+
+def test_a_rule_with_no_time_left_starts_no_scan_and_cannot_judge(
+    build_repo, served_scanners, tmp_path, fake_git, database_requests
+):
+    """SCANNER-20, REFUSAL-22, REFUSAL-12, REFUSAL-4: with the run's time spent gitleaks, actionlint, zizmor,
+    osv-scanner and ruff start nothing, no mirror is cloned, no database is requested, and each rule cannot judge in
+    the spent wording with no step of its own; python-security and python-print share one fact."""
     started = tmp_path / "started"
     fake_git(f'case "$*" in *clone*) echo clone >> {started};; esac')
-    locate_zizmor = stub_scanners(
-        served_scanners, tmp_path / "zizmor", dict.fromkeys(SCANNER_NAMES, f"echo scan >> {started}")
-    )
-    repo = build_repo(WORKFLOW_FILES)
-    refused_rules = refusals(repo, locate_zizmor=locate_zizmor, monotonic=clock_past_the_deadline())
+    stubs = dict.fromkeys(SCANNER_NAMES, f"echo scan >> {started}")
+    locators = stub_scanners(served_scanners, tmp_path / "stubs", stubs)
+    repo = build_repo(DEADLINE_FILES)
+    refused_rules = refusals(repo, locators.ruff, locators.zizmor, clock_past_the_deadline())
     assert refused_rules == dict.fromkeys(
         DEADLINE_RULES, f"the run's {deadline.RUN_DEADLINE_SECONDS} seconds are spent"
     )
     assert not started.exists()
+    assert database_requests == []
 
 
 @pytest.mark.parametrize("rule", DEADLINE_RULES, ids=lambda rule: rule.value)
 def test_a_scanner_still_running_when_the_time_ends_is_stopped_and_its_rule_cannot_judge(
     build_repo, served_scanners, tmp_path, monkeypatch, rule
 ):
-    """SCANNER-19, SCANNER-20, REFUSAL-22: a scanner that outlives the run's deadline is stopped, with its child, and
-    its rule cannot judge in the cut wording."""
+    """SCANNER-19, SCANNER-20, REFUSAL-22, ADVISORY-14: a scanner that outlives the run's deadline is stopped, with its
+    child, and its rule cannot judge in the cut wording."""
     child = tmp_path / "child"
     scanner = SCANNER_OF_RULE[rule]
-    clean = {scanners.GITLEAKS: 'echo "[]" > "$report"', scanners.ACTIONLINT: "echo '[]'", scanners.ZIZMOR: "echo '[]'"}
-    locate_zizmor = stub_scanners(
-        served_scanners, tmp_path / "zizmor", clean | {scanner: f"sleep 30 & echo $! > {child}; wait"}
+    clean = CLEAN_SCANS | {scanners.ZIZMOR: "echo '[]'", scanners.RUFF: "echo '[]'"}
+    locators = stub_scanners(
+        served_scanners, tmp_path / "stubs", clean | {scanner: f"sleep 30 & echo $! > {child}; wait"}
     )
     monkeypatch.setattr(deadline, "RUN_DEADLINE_SECONDS", 2)
-    repo = build_repo(WORKFLOW_FILES)
+    repo = build_repo(DEADLINE_FILES)
     started = time.monotonic()
     result = check.judge_repository(
         repo,
-        installed_ruff,
-        locate_zizmor,
+        locators.ruff,
+        locators.zizmor,
         lambda _verdict, _tracked_paths: None,
         lambda _area, _scanner: nullcontext(),
         named=[rule.area],
