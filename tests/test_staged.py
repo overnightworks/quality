@@ -2,6 +2,7 @@ import io
 import os
 import subprocess
 import sys
+import time
 from contextlib import nullcontext
 from pathlib import Path
 
@@ -18,10 +19,11 @@ from tests.support.check import (
     assert_finding_vocabulary,
     clock_past_the_deadline,
     decode_block,
+    heard,
 )
 from tests.support.door import CHECK_WORD, STAGED_WORDS, door_in, staged_door
 from tests.support.git_repositories import GIT_IDENTITY, git, head_commit, stage
-from tests.support.scanners import fake_gitleaks, run_deadline
+from tests.support.scanners import fake_gitleaks, run_deadline, serving
 from tests.support.secrets import FAKE_KEY, HOSTILE_FILE, OTHER_KEY, allow_config
 from tests.support.terminal import Terminal, without_sgr
 
@@ -382,11 +384,14 @@ def test_a_commit_that_touches_no_allowed_line_prints_no_unused_row(build_repo, 
     assert ("unused" in staged_out, "unused" in whole_out, "1 allowed" in whole_out) == (False, False, True)
 
 
-def test_a_staged_run_with_no_time_left_starts_no_gitleaks_and_cannot_judge(build_repo, served_scanners, tmp_path):
-    """SCANNER-20, REFUSAL-22: with the run's time spent the staged door starts no gitleaks and its rule cannot judge in
-    the spent wording."""
+def test_a_staged_run_with_no_time_left_starts_no_mise_or_gitleaks_and_cannot_judge(
+    build_repo, served_scanners, use_mise, tmp_path
+):
+    """SCANNER-20, REFUSAL-22: with the run's time spent the staged door starts no mise, no gitleaks version call and
+    no gitleaks scan, and its rule cannot judge in the spent wording."""
     started = tmp_path / "started"
-    fake_gitleaks(served_scanners, on_scan=f"echo scan >> {started}")
+    fake_gitleaks(served_scanners, on_scan=f"echo scan >> {started}", on_version=f"echo version >> {started}")
+    use_mise(f"echo which >> {started}\n{serving(served_scanners)}")
     repo = build_repo({"README": "hello\n"})
     stage(repo, {"src/a.py": KEY_LINE})
     result = check.judge_staged_change(
@@ -399,3 +404,20 @@ def test_a_staged_run_with_no_time_left_starts_no_gitleaks_and_cannot_judge(buil
     (verdict,) = result.verdicts
     assert str(verdict.refusal) == f"the run's {deadline.RUN_DEADLINE_SECONDS} seconds are spent"
     assert not started.exists()
+
+
+def test_a_mise_still_running_when_the_time_ends_is_stopped_and_the_staged_scan_cannot_judge(
+    build_repo, use_mise, served_scanners, monkeypatch, capsys
+):
+    """SCANNER-19, SCANNER-20, REFUSAL-22: a `mise which` that outlives the run's deadline is stopped and the staged
+    scan cannot judge in the cut wording."""
+    use_mise("exec sleep 30")
+    monkeypatch.setattr(deadline, "RUN_DEADLINE_SECONDS", 2)
+    repo = build_repo({"README": "hello\n"})
+    stage(repo, {"a.txt": "a\n"})
+    started = time.monotonic()
+    assert staged_door(repo) == 2
+    assert time.monotonic() - started < 10
+    output = heard(capsys)
+    assert "mise did not finish within the run's 2 seconds" in output
+    assert "install" not in output

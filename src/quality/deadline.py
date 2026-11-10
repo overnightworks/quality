@@ -41,9 +41,15 @@ class RunDeadline:
             raise RunDeadlineSpent.not_started()
 
     def run(
-        self, command: list[str], cwd: Path | None = None, env: dict[str, str] | None = None
+        self, command: list[str], cwd: Path | None = None, env: dict[str, str] | None = None,
+        timeout: float | None = None,
     ) -> subprocess.CompletedProcess:
-        return self._within_time(command, lambda left: process.run(command, cwd=cwd, env=env, timeout=left))
+        """`process.run` bounded by the time left or, when `timeout` is smaller, by `timeout`."""
+        def start(left: float) -> subprocess.CompletedProcess:
+            bound = left if timeout is None else min(timeout, left)
+            return process.run(command, cwd=cwd, env=env, timeout=bound)
+
+        return self._within_time(command, start)
 
     def run_in_own_group(self, command: list[str], env: Mapping[str, str] | None) -> subprocess.CompletedProcess:
         """For gitleaks alone: its `git` children die with it, which needs `process.scratch_directory` around

@@ -7,7 +7,7 @@ import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from pathlib import Path
-from typing import NoReturn, overload
+from typing import NoReturn, Protocol, overload
 
 VERSION_TIMEOUT_SECONDS = 30
 STDERR_TAIL_LINES = 5
@@ -170,6 +170,15 @@ def run(
             )
         except subprocess.TimeoutExpired:
             raise ProcessError(f"{command[0]} did not finish within {timeout} seconds") from None
+
+
+class Run(Protocol):
+    """The call that starts a process: `run`, or the run's deadline wrapped around it."""
+
+    def __call__(
+        self, command: list[str], cwd: Path | None = None, env: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> subprocess.CompletedProcess: ...
 
 
 def run_bounded_in_own_group(

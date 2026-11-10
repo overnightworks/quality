@@ -49,6 +49,7 @@ from tests.support.scanners import (
     lacking,
     never_located,
     nothing_installed,
+    serving,
 )
 
 
@@ -514,15 +515,19 @@ class Locators(NamedTuple):
     ruff: Callable[[], str]
 
 
-def stub_scanners(served_scanners, directory, on_scan: dict[str, str]) -> Locators:
-    """Replaces every scanner of a run by a stub that runs its `on_scan` (shell) for a scan, and returns the zizmor
-    and ruff locators."""
-    fake_gitleaks(served_scanners, on_scan=on_scan[scanners.GITLEAKS])
-    fake_scanner(served_scanners, scanners.ACTIONLINT, on_scan[scanners.ACTIONLINT])
-    fake_scanner(served_scanners, scanners.OSV_SCANNER, on_scan[scanners.OSV_SCANNER])
+def stub_scanners(
+    served_scanners, directory, on_scan: dict[str, str], on_version: dict[str, str] | None = None
+) -> Locators:
+    """Replaces every scanner of a run by a stub that runs its `on_scan` (shell) for a scan and its `on_version` (shell,
+    nothing by default) after it printed its version, and returns the zizmor and ruff locators."""
+    after_version = {name: "exit 0" for name in SCANNER_NAMES} | (on_version or {})
+    fake_gitleaks(served_scanners, on_scan=on_scan[scanners.GITLEAKS], on_version=after_version[scanners.GITLEAKS])
+    for name in (scanners.ACTIONLINT, scanners.OSV_SCANNER):
+        fake_scanner(served_scanners, name, on_scan[name], on_version=after_version[name])
     directory.mkdir()
-    ruff = str(fake_ruff(directory, on_scan[scanners.RUFF]))
-    return Locators(fake_zizmor(directory / "zizmor", on_scan[scanners.ZIZMOR]), lambda: ruff)
+    ruff = str(fake_ruff(directory, on_scan[scanners.RUFF], on_version=after_version[scanners.RUFF]))
+    zizmor = fake_zizmor(directory / "zizmor", on_scan[scanners.ZIZMOR], on_version=after_version[scanners.ZIZMOR])
+    return Locators(zizmor, lambda: ruff)
 
 
 @pytest.fixture
@@ -549,15 +554,18 @@ def database_requests(monkeypatch) -> Iterator[list[str]]:
 
 
 def test_a_rule_with_no_time_left_starts_no_scan_and_cannot_judge(
-    build_repo, served_scanners, tmp_path, fake_git, database_requests
+    build_repo, served_scanners, use_mise, tmp_path, fake_git, database_requests
 ):
-    """SCANNER-20, REFUSAL-22, REFUSAL-12, REFUSAL-4: with the run's time spent gitleaks, actionlint, zizmor,
-    osv-scanner and ruff start nothing, no mirror is cloned, no database is requested, and each rule cannot judge in
-    the spent wording with no step of its own; python-security and python-print share one fact."""
+    """SCANNER-20, REFUSAL-22, REFUSAL-12, REFUSAL-4: with the run's time spent mise, gitleaks, actionlint, zizmor,
+    osv-scanner and ruff start nothing (no locate call, no version call, no scan), no mirror is cloned, no database is
+    requested, and each rule cannot judge in the spent wording with no step of its own; python-security and
+    python-print share one fact."""
     started = tmp_path / "started"
     fake_git(f'case "$*" in *clone*) echo clone >> {started};; esac')
     stubs = dict.fromkeys(SCANNER_NAMES, f"echo scan >> {started}")
-    locators = stub_scanners(served_scanners, tmp_path / "stubs", stubs)
+    versions = dict.fromkeys(SCANNER_NAMES, f"echo version >> {started}")
+    locators = stub_scanners(served_scanners, tmp_path / "stubs", stubs, versions)
+    use_mise(f"echo which >> {started}\n{serving(served_scanners)}")
     repo = build_repo(DEADLINE_FILES)
     refused_rules = refusals(repo, locators.ruff, locators.zizmor, clock_past_the_deadline())
     assert refused_rules == dict.fromkeys(
@@ -594,3 +602,35 @@ def test_a_scanner_still_running_when_the_time_ends_is_stopped_and_its_rule_cann
     assert refusals_of(result)[rule] == f"{scanner} did not finish within the run's 2 seconds"
     if rule is Rule.LEAK:
         assert ends_soon(int(child.read_text()))
+
+
+LOCATED_BY_MISE = (scanners.GITLEAKS, scanners.ACTIONLINT, scanners.OSV_SCANNER)
+
+
+@pytest.mark.parametrize("rule", DEADLINE_RULES, ids=lambda rule: rule.value)
+def test_a_locate_or_version_call_still_running_when_the_time_ends_is_stopped_and_brings_no_step(
+    build_repo, served_scanners, use_mise, tmp_path, monkeypatch, rule
+):
+    """SCANNER-19, SCANNER-20, REFUSAL-22: a `mise which` (for gitleaks, actionlint, osv-scanner) or a `--version` call
+    (for zizmor and ruff) that outlives the run's deadline is stopped, and its rule cannot judge in the cut wording
+    with mise or the scanner as subject and no install or reinstall step."""
+    scanner = SCANNER_OF_RULE[rule]
+    hanging = "exec sleep 30"
+    clean = CLEAN_SCANS | {scanners.ZIZMOR: "echo '[]'", scanners.RUFF: "echo '[]'"}
+    locators = stub_scanners(served_scanners, tmp_path / "stubs", clean, {scanner: hanging})
+    located_by_mise = scanner in LOCATED_BY_MISE
+    if located_by_mise:
+        use_mise(f'case "$4" in {scanner}) {hanging};; esac\n{serving(served_scanners)}')
+    monkeypatch.setattr(deadline, "RUN_DEADLINE_SECONDS", 2)
+    repo = build_repo(DEADLINE_FILES)
+    started = time.monotonic()
+    result = check.judge_repository(
+        repo, locators.ruff, locators.zizmor, lambda _verdict, _tracked_paths: None,
+        lambda _area, _scanner: nullcontext(), named=[rule.area, Area.FILES],
+    )
+    assert time.monotonic() - started < 10
+    files_row = next(area for area in result.areas if area.area is Area.FILES)
+    assert files_row.verdicts
+    assert all(verdict.refusal is None for verdict in files_row.verdicts)
+    subject = "mise" if located_by_mise else scanner
+    assert refusals_of(result)[rule] == f"{subject} did not finish within the run's 2 seconds"
