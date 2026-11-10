@@ -76,6 +76,7 @@ jobs:
           export_path: false
           add_shims_to_path: false
         env:
+          MISE_HTTP_RETRIES: 4
           MISE_CEILING_PATHS: ${{ github.workspace }}${{ env.TOOL_DIR != '.' && format('/{0}', env.TOOL_DIR) || '' }}/src/quality
 
       - name: Check

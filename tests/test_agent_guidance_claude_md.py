@@ -8,6 +8,7 @@ from quality.report import FindingEvent
 from quality.rules import Rule
 from tests.support.check import check_output as run
 from tests.support.check import env_row_stands, is_clean, refusal_row, refusals, rows_of, rule_findings
+from tests.support.github_remote import with_github_remote
 from tests.support.layout import assert_prints_as_kind, rule_ids_in
 
 GUIDANCE = {"AGENTS.md": "# guidance\n"}
@@ -16,7 +17,7 @@ IMPORT = "@AGENTS.md\n"
 
 def claude_repo(build_repo, tracked: dict[str, str], links: dict[str, str] | None = None) -> Path:
     """A repository tracking `tracked` and, as symbolic links, `links` (name to target)."""
-    repo = build_repo(tracked)
+    repo = with_github_remote(build_repo(tracked))
     for name, target in (links or {}).items():
         (repo / name).parent.mkdir(exist_ok=True)
         (repo / name).symlink_to(target)
@@ -88,7 +89,7 @@ def test_claude_md_that_is_not_the_import_is_one_finding_of_its_kind_at_the_file
 
 def test_claude_md_finding_never_prints_the_files_content(build_repo, capsys):
     """CLAUDE-10: a token-like string or bytes that are not UTF-8 stay out of the output."""
-    repo = build_repo({**GUIDANCE, "CLAUDE.md": "token = hunter2-secret-value\n"})
+    repo = with_github_remote(build_repo({**GUIDANCE, "CLAUDE.md": "token = hunter2-secret-value\n"}))
     (repo / "claude.md").write_bytes(b"\xff\xfe secret-bytes\n")
     subprocess.run(["git", "-C", str(repo), "add", "--", "claude.md"], check=True)
     code, output = run(capsys, repo)
@@ -96,8 +97,8 @@ def test_claude_md_finding_never_prints_the_files_content(build_repo, capsys):
 
 
 def test_claude_md_two_wrong_files_are_two_findings(build_repo, capsys):
-    """CLAUDE-9: one finding per wrong file."""
-    repo = build_repo({**GUIDANCE, "CLAUDE.md": "own\n", ".claude/CLAUDE.md": "own\n"})
+    """One finding per wrong file."""
+    repo = with_github_remote(build_repo({**GUIDANCE, "CLAUDE.md": "own\n", ".claude/CLAUDE.md": "own\n"}))
     code, output = run(capsys, repo)
     findings = rule_findings(repo, Rule.CLAUDE_MD)
     assert (code, [len(rows_of(output, finding)) for finding in findings]) == (1, [1, 1]), output
@@ -105,7 +106,7 @@ def test_claude_md_two_wrong_files_are_two_findings(build_repo, capsys):
 
 def test_claude_md_counts_only_once_tracked_and_only_while_on_disk(build_repo, capsys):
     """CLAUDE-1, CLAUDE-12: an untracked file is not judged until `git add`; a tracked one gone from disk is skipped."""
-    repo = build_repo(GUIDANCE)
+    repo = with_github_remote(build_repo(GUIDANCE))
     (repo / "CLAUDE.md").write_text("own rules\n")
     untracked = run(capsys, repo)
     subprocess.run(["git", "-C", str(repo), "add", "--", "CLAUDE.md"], check=True)
@@ -121,7 +122,7 @@ def test_claude_md_counts_only_once_tracked_and_only_while_on_disk(build_repo, c
 @pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-0 file, so no permission is refused")
 def test_unreadable_claude_md_cannot_be_judged_and_other_rules_still_judge(build_repo, capsys):
     """CLAUDE-13, CHECK-4: exit 2 naming the file; the env-file rule still judges."""
-    repo = build_repo({**GUIDANCE, "CLAUDE.md": IMPORT, ".env": "A=1\n"})
+    repo = with_github_remote(build_repo({**GUIDANCE, "CLAUDE.md": IMPORT, ".env": "A=1\n"}))
     (repo / "CLAUDE.md").chmod(0)
     code, output = run(capsys, repo)
     assert code == 2, output
@@ -149,7 +150,7 @@ def test_claude_md_link_to_an_unreachable_target_is_the_link_finding(build_repo,
 
 def test_claude_md_from_a_subdirectory_is_judged_as_from_the_top(build_repo, capsys):
     """CHECK-1: the verdict does not depend on where the run starts."""
-    repo = build_repo({**GUIDANCE, "CLAUDE.md": "own\n", "src/a.py": ""})
+    repo = with_github_remote(build_repo({**GUIDANCE, "CLAUDE.md": "own\n", "src/a.py": ""}))
     from_subdirectory = run(capsys, repo / "src")
     assert from_subdirectory == run(capsys, repo)
     (finding,) = rule_findings(repo, Rule.CLAUDE_MD)

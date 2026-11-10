@@ -1,55 +1,34 @@
 # quality
 
+## Commands
+
+- `uv sync --locked`: install the locked dependencies; needs uv.
+- `uv run ruff check`: lint; run after `uv sync --locked`.
+- `uv run pytest tests/test_<module>.py`: the tests of the module you changed; run after `uv sync --locked`.
+- `mise --cd src/quality/mise install --locked`: install the scanners `src/quality/mise/mise.toml` pins; needs mise; run on a fresh machine and after each change of that file.
+- `uv run quality check`: quality's own gate on this checkout; needs those scanners and network, since every run downloads the advisory databases.
+- `quality merge <owner/repo>#<pr>`: the operator's door past a red gate; an agent never runs it.
+- `gh workflow run release.yml -R overnightworks/quality -f version=X.Y.Z`: dispatch quality's release; the operator's, an agent runs it only on his explicit yes for that version.
+
+## Rules
+
+- A finding's event is a `report.FindingEvent` member and a note's a `report.NoteEvent` member, never defined in `output.py`.
+- A checkout that installs quality needs its git tags (CI uses `fetch-depth: 0`), because the version comes from them.
+- quality has no total line budget; its size baseline only falls.
+
 ## Owners
 
-- One door, `quality` (`src/quality/cli.py`). Every line it prints, the step summary and the step output leave
-  through `output.py`.
-- Rules return `Finding`s (`report.py`) and never print. A finding's event is a `report.FindingEvent` member, a note's
-  a `report.NoteEvent` member, never defined in `output.py`.
-- A `CannotJudge` carries a few-word fact and, apart from it, the next steps its mechanism knows as typed values
-  (`report.Reason`). A `ConfigError` carries its fact and its TOML example apart; `report.config_refusal` turns it
-  into a refusal.
-- Each rule's id, area, place among its area's rules and facts are one member of `Rule` (`rules.py`). Areas run and
-  print in `Area`'s order, and an area's help sentence is its member of `Area`.
-- `checkout.py` lists the checkout through git, decides what a workflow file is, which release the gate calls of the
-  workflows pin, and whether the checkout is quality's own (by its git remote), owns the full-commit form and turns a
-  refused read into cannot judge. quality reads the checkout's own files through `repository.py`, which keeps each read inside the repository
-  and names the file repository-relative in every error; only `architecture.py` opens a source itself, for grimp.
-- `pin.py` decides which quality judges a `check` from the checkout's gate pin, a `merge` from its target's gate pin at
-  the pull request's merge commit, and the verdict's release row, from the commit the running
-  installation is (its installer's record, or an editable directory's clean HEAD at its release tag), or, once quality's
-  remote showed the pinned commit is the comment's release, prepares it through uv and becomes its process, once; a run
-  it refuses prints only the pair.
-- A scanner's stderr reaches a fact or `-v` only through `scanners`' vet (`gitleaks stdin` under `gitleaks.toml`) and
-  is withheld whole when gitleaks does not clear it. `check.py` keeps `report.ScannerRun`s only under `-v`,
-  `output.py` prints them, and a scanner's report never enters.
-- The door's `gh` commands run through `gh.py`, which also reads a repository's files and workflow listing at a commit;
-  the door injects the runner, so tests need no network.
-- HTTP goes through `web.py`, which follows no redirect and bounds every wait; the door injects the transport, the
-  GitHub fetcher, the fleet's listing fetch and the poll sleep, so tests need no network.
-- The line a merge commit ends with is `landing.py`'s.
+- The operator decides every merge past a red gate and every release.
 
-The references in `docs/` own what each command does; `docs/ARCHITECTURE.md` owns the parts and their reasons.
+## Documents
 
-quality has no total line budget; its size baseline only falls.
-
-## Checks
-
-Run from the repository root:
-
-- `uv sync --locked`
-- `uv run ruff check`
-- `uv run pytest tests/test_<module>.py`, the module you changed
-- `mise --cd src/quality/mise install --locked`, once per scanner bump
-- `uv run quality check` (needs mise, its three scanners and network: every run downloads the advisory databases)
-
-## Tests
-
-- Helpers several test modules use live in `tests/support/`, imported from the root
-  (`from tests.support.git_repositories import make_repo`).
-- A test that starts a process or opens a socket outside the fixtures that do carries `@pytest.mark.integration`.
-
-## Release
-
-The version comes from git tags (hatch-vcs), so a checkout that installs quality needs its tags (`fetch-depth: 0`).
-A release is dispatched as [docs/release.md](docs/release.md#qualitys-own-release) says.
+- `docs/ARCHITECTURE.md`: read when you change a module's job, a boundary or a trust decision.
+- `docs/VISION.md`: read when you judge whether a feature belongs in quality.
+- `docs/rules.md`: read when you change a `check` rule, the secret scan or the advisory scan.
+- `docs/commands.md`: read when you change `check secrets --staged`, the scanner handling, `report` or `merge`.
+- `docs/output.md`: read when you change a printed line, an event word or an exit code.
+- `docs/gate.md`: read when you change `gate.yml`, the verdict or a declared loosening.
+- `docs/codeql.md`: read when you change `codeql.yml` or its caller contract.
+- `docs/release.md`: read when you change a release workflow, the image build or how quality releases itself.
+- `docs/sonar.md`: read when you change `sonar findings`, coverage on new code or the Sonar gate.
+- `docs/runbooks/`: read when the operator's door is the question, a pull request red that no change can turn green; the files are named by their task.

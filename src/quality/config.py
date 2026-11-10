@@ -1,7 +1,7 @@
 import datetime
 import re
 import unicodedata
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path, PurePosixPath
@@ -163,7 +163,9 @@ class PythonAllowance:
     reason: str
 
 
-LAYOUT_RULES = (Rule.FILE_SUFFIX, Rule.SCRIPT_NAME, Rule.SCRIPT_HEADER, Rule.TEST_LAYOUT, Rule.TEST_IMPORT)
+LAYOUT_RULES = (
+    Rule.AGENTS_MD, Rule.FILE_SUFFIX, Rule.SCRIPT_NAME, Rule.SCRIPT_HEADER, Rule.TEST_LAYOUT, Rule.TEST_IMPORT
+)
 
 
 @dataclass(frozen=True)
@@ -173,6 +175,10 @@ class LayoutAllowance:
     path: str
     rule: Rule
     reason: str
+
+
+def declared_paths(allowances: Sequence[LayoutAllowance], rule: Rule) -> set[str]:
+    return {allowance.path for allowance in allowances if allowance.rule is rule}
 
 
 @dataclass(frozen=True)

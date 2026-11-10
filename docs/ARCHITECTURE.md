@@ -43,7 +43,7 @@ flowchart TB
     cli["cli.py: the one door; arguments, exit code"]
     door["merge.py: the operator's door"]
     verdict["verdict.py, sides.py: the pull request's verdict and the two sides it compares"]
-    reports["sonar.py, fleet.py: SonarCloud findings, fleet report"]
+    reports["sonar_properties.py, sonar.py, fleet.py: SonarCloud scan wiring and findings, fleet report"]
     check["check.py, staged.py: areas in order, the commit hook"]
     pin["pin.py: the release the gate pins"]
     rules["rule modules: one decision each"]
@@ -61,7 +61,7 @@ flowchart TB
 ```
 
 Rules return findings and never print; `output.py` owns every printed line. `checkout.py` and `repository.py` are the
-only readers of the checked-out files, `web.py` the only HTTP transport, and `gh.py` runs every `gh` command the door sends.
+only readers of the checked-out files (`architecture.py` opens the sources itself, for grimp), `web.py` the only HTTP transport that sends a credential, and `gh.py` runs every `gh` command the door sends.
 
 ## 3. Runtime View
 
@@ -138,6 +138,8 @@ quality itself.
 
 **Errors.** The [exit contract](output.md#exit-codes) is 0 clean, 1 findings, 2 cannot judge, 130 interrupted.
 Cannot judge is never clean, and a rule that cannot judge refuses only itself.
+One `check` run has one time budget, so a scanner that hangs leaves the rules after it without time, and each of them
+cannot judge.
 
 ## 6. Constraints and reasons
 

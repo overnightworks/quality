@@ -35,7 +35,8 @@ WEBAUTH_WHEEL = "overnightworks-webauth @ https://github.com/o/w/releases/downlo
     ],
 )
 def test_the_two_accepted_forms_are_read_with_their_line(text, expected):
-    """#176 C2, S5, W1."""
+    """ADVISORY-35, ADVISORY-36, ADVISORY-37: the two accepted forms are read with the line where each starts, after
+    comments are dropped and continuations joined."""
     assert list(read(text)) == expected
 
 
@@ -73,12 +74,13 @@ def test_the_two_accepted_forms_are_read_with_their_line(text, expected):
     ],
 )
 def test_any_other_line_is_refused_with_its_number(text, line):
-    """#176 S5, S6, W1, W2: an allowlist, so what is not one of the two forms is refused."""
+    """ADVISORY-35, ADVISORY-37, ADVISORY-38: an allowlist, so what is not one of the two forms is refused with its line
+    number."""
     with pytest.raises(RequirementsError, match=f"^line {line} is neither"):
         read(text)
 
 
 @pytest.mark.parametrize("name", ["Overnightworks_Webauth", "overnightworks.webauth", "OVERNIGHTWORKS--webauth"])
 def test_names_compare_by_pep_503(name):
-    """#176 W1: the wheel's distribution name matches the package by PEP 503."""
+    """ADVISORY-37: the wheel's distribution name matches the package by PEP 503."""
     assert normalised_name(name) == "overnightworks-webauth"

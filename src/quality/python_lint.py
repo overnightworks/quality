@@ -15,6 +15,7 @@ from pathlib import Path
 from packaging.version import Version
 
 from quality import layout, process, ratchet, repository, scanners
+from quality.deadline import RunDeadline
 from quality.output import SEPARATOR
 from quality.report import Finding, FindingEvent, Note, NoteEvent, RuleResult
 from quality.rules import Rule
@@ -25,7 +26,6 @@ SELECTED_CODES = f"{SECURITY_FAMILY},{PRINT_FAMILY}"
 # Exempt in a test: an assert is how a test checks, a password there is a fake, and a test fixes its own argv.
 TEST_EXEMPT_CODES = frozenset({"S101", "S105", "S106", "S107", "S603", "S607"})
 PYTHON_SUFFIX = ".py"
-RUN_TIMEOUT_SECONDS = 600
 ARGUMENT_BYTES_PER_RUN = 100_000  # far below Linux's ARG_MAX, which the argument list shares with the environment
 JUDGED_EXIT_CODES = frozenset({0, 1})
 SYNTAX_ERROR = "invalid-syntax"
@@ -121,7 +121,8 @@ def source_text(name: str, content: bytes) -> str:
 
 
 def lint(
-    root: Path, modes: Mapping[str, str], target: Version, locate_ruff: Callable[[], str], log: scanners.ScannerLog = scanners.no_log
+    root: Path, modes: Mapping[str, str], target: Version, locate_ruff: Callable[[], str],
+    deadline: RunDeadline, log: scanners.ScannerLog = scanners.no_log,
 ) -> Lint:
     """ruff's one run over every candidate, which both rules judge."""
     files = read_files(root, modes)
@@ -129,7 +130,8 @@ def lint(
     test_files = frozenset(layout.test_import_candidates(modes))
     if not files:
         return Lint((), texts, test_files)  # nothing to lint: skip locating ruff and its version check
-    return Lint(tuple(_run_ruff(root, {name: file.path for name, file in files.items()}, target, locate_ruff, log)), texts, test_files)
+    paths = {name: file.path for name, file in files.items()}
+    return Lint(tuple(_run_ruff(root, paths, target, locate_ruff, deadline, log)), texts, test_files)
 
 
 def judge_security(lint: Lint) -> RuleResult:
@@ -260,15 +262,16 @@ def _stale_owner(name: str, owner: OutputOwner) -> Finding:
 
 
 def _run_ruff(
-    root: Path, paths: Mapping[str, Path], target: Version, locate_ruff: Callable[[], str], log: scanners.ScannerLog
+    root: Path, paths: Mapping[str, Path], target: Version, locate_ruff: Callable[[], str], deadline: RunDeadline,
+    log: scanners.ScannerLog,
 ) -> list[RuffFinding]:
     """ruff's findings in `paths` (name to resolved path), in batches the argument list holds."""
-    binary = str(scanners.pinned_installed(scanners.RUFF, locate_ruff))
+    binary = str(scanners.pinned_installed(scanners.RUFF, locate_ruff, deadline.run))
     names = _report_names(paths)
     return [
         record
         for batch in _batches(sorted(paths), ARGUMENT_BYTES_PER_RUN)
-        for record in read_report(_ruff_report(binary, root, batch, target, log), names)
+        for record in read_report(_ruff_report(binary, root, batch, target, deadline, log), names)
     ]
 
 
@@ -298,14 +301,16 @@ def _batches(names: Sequence[str], limit: int) -> Iterator[list[str]]:
         yield batch
 
 
-def _ruff_report(binary: str, root: Path, names: Sequence[str], target: Version, log: scanners.ScannerLog) -> str:
+def _ruff_report(
+    binary: str, root: Path, names: Sequence[str], target: Version, deadline: RunDeadline, log: scanners.ScannerLog
+) -> str:
     """ruff's JSON report on `names`, run from the repository's resolved top so every warning names a file as the
     repository does; any file ruff fails to lint makes the run untrustworthy, since ruff then reports nothing for it."""
     arguments = [
         "check", "--isolated", "--no-cache", "--ignore-noqa", "--select", SELECTED_CODES,
         "--target-version", f"py{target.major}{target.minor}", "--output-format", "json", "--", *names,
     ]
-    done = _ruff(binary, arguments, Path(os.path.realpath(root)), RUN_TIMEOUT_SECONDS)
+    done = _ruff(binary, arguments, Path(os.path.realpath(root)), deadline)
     log(scanners.RUFF, done.returncode, done.stderr)
     if done.returncode not in JUDGED_EXIT_CODES:
         raise LintError(f"ruff exited {done.returncode}{scanners.vetted_tail(done.stderr)}")
@@ -315,9 +320,11 @@ def _ruff_report(binary: str, root: Path, names: Sequence[str], target: Version,
     return done.stdout
 
 
-def _ruff(binary: str, arguments: list[str], cwd: Path | None, timeout: float) -> subprocess.CompletedProcess[str]:
+def _ruff(
+    binary: str, arguments: list[str], cwd: Path | None, deadline: RunDeadline
+) -> subprocess.CompletedProcess[str]:
     try:
-        return process.run([binary, *arguments], cwd=cwd, timeout=timeout)
+        return deadline.run([binary, *arguments], cwd=cwd)
     except process.ProcessError as error:
         raise LintError(str(error)) from error
 

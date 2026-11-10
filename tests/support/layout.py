@@ -17,7 +17,7 @@ from tests.support.check import (
 )
 
 CONFIG = "quality/config.toml"
-GUIDANCE = {"AGENTS.md": "# guidance\n"}
+GUIDANCE = {"HEART.md": "# guidance\n"}
 EXAMPLE_SHA = "1" * 40
 CONTROL_CHARACTERS = [
     pytest.param("\x01", "\\x01", id="control"),

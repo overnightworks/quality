@@ -220,8 +220,8 @@ def rows_and_fixes_of(block: list[BlockLine]) -> tuple[int, int]:
     ids=["one fixed version", "several", "none listed", "no affected entry for the package", "a shell metacharacter", "an escape character"],
 )
 def test_each_kind_of_advisory_finding_carries_its_event_fact_and_fix(drive_advisories, edited_report, edit, name, fixed, fix_is):
-    """ADVISORY-25, ADVISORY-26, ADVISORY-27, ADVISORY-28, ADVISORY-29, O41: the event, the fact from the report's own
-    values and the fix per kind."""
+    """ADVISORY-25, ADVISORY-26, ADVISORY-27, ADVISORY-28, ADVISORY-29, ROW-7, ROW-14, O41: the event, the fact
+    from the report's own values and the fix per kind, and no fact or fix names a rule id or ends in a full stop."""
     run = drive_advisories({"uv.lock": uv_lock()}, edited_report("osv-scanner-finding.json", edit))
     (finding,) = run.area.findings
     package, identifier, *state = finding.fact.split(SEPARATOR)
@@ -245,7 +245,7 @@ def test_the_row_names_one_id_of_a_group_with_aliases(drive_advisories):
 
 
 def test_the_dependencies_block_prints_what_the_rule_returned(drive_advisories):
-    """Decision 4: the rows and the fix equal the rule's findings."""
+    """ROW-2: the rows and the fix equal the rule's findings."""
     run = drive_advisories({"uv.lock": uv_lock()})
     assert_block_prints(area_block(run.out, Area.DEPENDENCIES), run.area.findings, ())
     assert (run.out.splitlines()[0].split()[1], run.code, run.err) == (next(iter(Area)), 1, "")
@@ -253,7 +253,7 @@ def test_the_dependencies_block_prints_what_the_rule_returned(drive_advisories):
 
 @pytest.mark.parametrize(("config", "code"), [(None, 1), (entry(), 0)], ids=["no allowance", "an allowance"])
 def test_no_printed_line_starts_with_the_rule_id(drive_advisories, config, code):
-    """Decision 12: quality adds no rule-id label to a finding or a note."""
+    """ROW-7: no printed line starts with the rule id, whether a finding or a note stands."""
     run = drive_advisories({"uv.lock": uv_lock(), **({"quality/config.toml": config} if config else {})})
     assert not any(line.lstrip().startswith(Rule.ADVISORY) for line in (run.out + run.err).splitlines())
     assert (run.code, run.err) == (code, "")
@@ -336,7 +336,8 @@ def test_two_tracked_names_of_one_lock_print_one_row_each_and_align(drive_adviso
     ids=["an allowance that ran out", "two allowances on one group", "an allowance no advisory matches", "an allowance with no lock"],
 )
 def test_each_allowance_finding_stands_as_a_row(drive_advisories, with_lock, config, expected, words):
-    """O45, O46: a ran-out allowance stays an affected row, a conflict and an unused entry stand at the config."""
+    """ALLOW-4, ALLOW-5, ALLOW-9, ALLOW-11, O45, O46, ROW-7, ROW-14: a ran-out allowance stays an affected row,
+    a conflict and an unused entry stand at the config, and no fact or fix names a rule id or ends in a full stop."""
     files = {"quality/config.toml": config, **({"uv.lock": uv_lock()} if with_lock else {})}
     run = drive_advisories(files)
     findings = run.area.findings
@@ -350,7 +351,8 @@ def test_each_allowance_finding_stands_as_a_row(drive_advisories, with_lock, con
 
 
 def test_a_lock_path_and_an_allowance_with_control_characters_print_escaped_and_forge_no_line(drive_advisories, build_repo, tmp_path):
-    """The location, the fix's folder and an allowance's fact pass through `printable`."""
+    """MASK-2, MASK-6, MASK-7: the location, the fix's folder and an allowance's fact print escaped and forge no
+    line."""
     name = "src/a\x1b\u202eb/uv.lock"
     repo = build_repo({name: uv_lock(), "quality/config.toml": entry("GHSA-\x1b[8m", "a\u202eb/uv.lock")})
     report = json.loads(FINDING_REPORT.read_text(encoding="utf-8"))
@@ -366,7 +368,7 @@ def test_a_lock_path_and_an_allowance_with_control_characters_print_escaped_and_
 
 
 def test_a_refused_area_leaves_the_dependencies_rows_and_the_pair_names_them_in_the_others(drive_advisories, use_mise, served_scanners):
-    """Decision 6: another area's refusal prints the dependencies rows and counts them in the error line."""
+    """REFUSAL-3, REFUSAL-10: another area's refusal leaves the dependencies rows standing and names its one step."""
     use_mise(lacking(served_scanners, scanners.GITLEAKS))
     run = drive_advisories({"quality/config.toml": entry()})
     assert_block_prints(area_block(run.out, Area.DEPENDENCIES), run.area.findings, ())
@@ -374,7 +376,8 @@ def test_a_refused_area_leaves_the_dependencies_rows_and_the_pair_names_them_in_
 
 
 def test_a_refusing_osv_scanner_prints_no_note_and_no_extent_and_the_exact_pair(drive_advisories):
-    """A rule that cannot judge refuses only itself: its row names the reason, and neither an extent, a note nor a line of its own stands for it."""
+    """ADVISORY-13, REFUSAL-1, REFUSAL-2, REFUSAL-13: an osv-scanner that cannot judge refuses only itself: its row
+    names the reason with no extent, and neither a note nor a line of its own stands for it."""
     run = drive_advisories({"uv.lock": uv_lock(), "quality/config.toml": entry()}, code=3, stderr="boom")
     row = area_row(run.out, Area.DEPENDENCIES)
     assert (row.event, row.fact.endswith("boom"), extent_counts(row.fact), area_block(run.out, Area.DEPENDENCIES)) == (cli.AreaEvent.NOT_CHECKED, True, [3], [])
@@ -383,7 +386,7 @@ def test_a_refusing_osv_scanner_prints_no_note_and_no_extent_and_the_exact_pair(
 
 
 def test_a_refused_area_leaves_the_note_row_and_the_exact_pair(drive_advisories, use_mise, served_scanners):
-    """Decision 6: another area's refusal leaves the dependencies note standing and counts the refused area in the error line."""
+    """REFUSAL-3, REFUSAL-10: another area's refusal leaves the dependencies note standing and names its one step."""
     use_mise(lacking(served_scanners, scanners.GITLEAKS))
     run = drive_advisories({"uv.lock": uv_lock(), "quality/config.toml": entry()})
     assert_block_prints(area_block(run.out, Area.DEPENDENCIES), (), run.area.notes)
@@ -423,7 +426,8 @@ def test_a_clean_row_counts_the_lockfiles_and_the_packages_the_report_lists(driv
 
 
 def test_a_report_with_two_malformed_packages_refuses_with_the_fact_of_the_first(drive_advisories, build_repo):
-    """The packages are read in order: the first malformed one names the refusal, whatever a later one lacks."""
+    """ADVISORY-15: the packages are read in order: the first malformed one names the refusal, whatever a later one
+    lacks."""
     repo = build_repo({"uv.lock": uv_lock()})
 
     def lists_vulnerabilities_without_groups(report: dict) -> None:
@@ -513,7 +517,9 @@ def second_group_id(report_file: Path) -> str:
 )
 @pytest.mark.parametrize("named", [FIRST_ID, ALIAS], ids=["the group's first id", "an alias"])
 def test_an_allowed_advisory_stands_as_a_note_row_under_the_clean_row(drive_advisories, edited_report, lock, files, edit, package, version, named):
-    """O15, O49: the allowance is matched by any id of the group, and its note holds the package, the group's first id, the date, the item and the reason."""
+    """ALLOW-2, ALLOW-6, ALLOW-19, ALLOW-20, O15, O49: an allowance matched by any id of the group, with or without
+    a fixed version, stands as a note under the clean row holding the package, the group's first id, the date, the
+    item and the reason, and its fact starts with the affected row's."""
     run = drive_advisories({"quality/config.toml": entry(named, lock), **files}, edited_report("osv-scanner-finding.json", edit))
     (note,) = run.area.notes
     assert (note.location, note.event) == (lock, NoteEvent.ALLOWED)
@@ -528,7 +534,7 @@ def test_an_allowed_advisory_stands_as_a_note_row_under_the_clean_row(drive_advi
 
 
 def test_two_allowed_advisories_stand_as_two_note_rows_and_the_row_counts_them(drive_advisories, edited_report):
-    """O15: one note per allowed group, in the order of the groups, and the row counts them."""
+    """ALLOW-6, O15, O49: one note per allowed group, in the order of the groups, and the row counts them."""
     report = edited_report("osv-scanner-finding.json", add_second_group)
     second = second_group_id(report)
     run = drive_advisories({"uv.lock": uv_lock(), "quality/config.toml": entry() + entry(second)}, report)
@@ -540,7 +546,8 @@ def test_two_allowed_advisories_stand_as_two_note_rows_and_the_row_counts_them(d
 
 
 def test_an_allowed_advisory_stands_after_the_findings_and_their_fix(drive_advisories, edited_report):
-    """O15: the note follows the last `fix:`, and an area with a finding keeps its row without an extent."""
+    """ALLOW-6, O15, ROW-10: the note follows the last `fix:`, and an area with a finding keeps its row without an
+    extent."""
     run = drive_advisories({"uv.lock": uv_lock(), "quality/config.toml": entry()}, edited_report("osv-scanner-finding.json", add_second_group))
     row_line = next(line for line in run.out.splitlines() if line.split()[1:2] == [Area.DEPENDENCIES])
     assert_block_prints(area_block(run.out, Area.DEPENDENCIES), run.area.findings, run.area.notes)
@@ -549,7 +556,7 @@ def test_an_allowed_advisory_stands_after_the_findings_and_their_fix(drive_advis
 
 
 def test_an_allowance_that_ran_out_leaves_no_note(drive_advisories):
-    """An allowance past its date is an affected row, and no note stands for it."""
+    """ALLOW-4, O45: an allowance past its date is an affected row, and no note stands for it."""
     run = drive_advisories({"uv.lock": uv_lock(), "quality/config.toml": entry(until=datetime.date(2000, 1, 1))})
     rows = [line for line in area_block(run.out, Area.DEPENDENCIES) if isinstance(line, FindingLine)]
     assert (run.area.notes, [row.row.event for row in rows], run.err) == ((), [FindingEvent.AFFECTED], "")
@@ -562,7 +569,7 @@ def test_an_allowed_advisory_leaves_no_line_before_the_area_rows(drive_advisorie
 
 
 def test_an_owner_and_an_allowed_advisory_stand_under_their_own_rows(drive_advisories):
-    """The output owner stands under the code row and the allowed advisory under its own, and no line but the release row stands before the rows."""
+    """O15: the output owner stands under the code row and the allowed advisory under its own."""
     owner = "# ruff: noqa: T201 - the command line owns its output\nprint(1)\n"
     run = drive_advisories({"src/door.py": owner, "uv.lock": uv_lock(), "quality/config.toml": entry()})
     (code_notes,) = [verdict.notes for verdict in run.areas if verdict.area is Area.CODE]
@@ -581,7 +588,7 @@ def test_an_owner_and_an_allowed_advisory_stand_under_their_own_rows(drive_advis
     ids=["a lock path", "an id", "a reason"],
 )
 def test_an_allowed_advisory_with_control_characters_prints_escaped_and_forges_no_line(drive_advisories, build_repo, name, identifier, reason):
-    """The location and the fact of a note pass through `printable`."""
+    """MASK-4, MASK-6, MASK-7: the location and the fact of a note print escaped and forge no line."""
     repo = build_repo({name: uv_lock(), "quality/config.toml": entry(identifier, name, reason=reason)})
 
     def rename_group(report: dict) -> None:

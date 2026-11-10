@@ -1,3 +1,4 @@
+import time
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, replace
@@ -8,9 +9,9 @@ from pathlib import Path, PurePosixPath
 
 from quality import (
     advisories,
+    agent_guidance,
     architecture,
     checkout,
-    claude_md,
     clones,
     compose,
     env_file,
@@ -28,6 +29,7 @@ from quality.config import (
     ConfigError,
     read_allow_lists,
 )
+from quality.deadline import RunDeadline
 from quality.output import SEPARATOR
 from quality.report import (
     CannotJudge,
@@ -90,11 +92,12 @@ def check_import_contract(root: Path, tracked: list[str]) -> RuleResult:
 
 
 def lint_python(
-    root: Path, modes: dict[str, str] | CannotJudge, locate_ruff: Callable[[], str], log: scanners.ScannerLog
+    root: Path, modes: dict[str, str] | CannotJudge, locate_ruff: Callable[[], str], deadline: RunDeadline,
+    log: scanners.ScannerLog,
 ) -> python_lint.Lint:
     """ruff's one run over every tracked regular `.py` file, which python-security and python-print both judge."""
     try:
-        return python_lint.lint(root, _required(modes), python_floor.PYTHON_TARGET, locate_ruff, log)
+        return python_lint.lint(root, _required(modes), python_floor.PYTHON_TARGET, locate_ruff, deadline, log)
     except python_lint.UnparsablePython as error:
         raise Unparsable(str(error)) from error
     except python_lint.LintError as error:
@@ -111,32 +114,40 @@ def _judge_lint(lint: python_lint.Lint | CannotJudge, judge: Callable[[python_li
         return CannotJudge(str(error))
 
 
-def check_secrets(root: Path, allow_lists: AllowLists | CannotJudge, log: scanners.ScannerLog) -> RuleResult:
+def check_secrets(
+    root: Path, allow_lists: AllowLists | CannotJudge, deadline: RunDeadline, log: scanners.ScannerLog
+) -> RuleResult:
     try:
-        return scanners.scan_secrets(root, _required(allow_lists).secrets, log)
+        return scanners.scan_secrets(root, _required(allow_lists).secrets, deadline, log)
     except process.ProcessError as error:
         raise CannotJudge(str(error)) from error
 
 
 def check_workflows(
-    root: Path, rule: Rule, tracked: list[str], locate_zizmor: Callable[[], str], log: scanners.ScannerLog
+    root: Path, rule: Rule, tracked: list[str], locate_zizmor: Callable[[], str],
+    deadline: RunDeadline, log: scanners.ScannerLog,
 ) -> RuleResult:
     workflows = checkout.on_disk(root, [name for name in tracked if checkout.is_workflow(PurePosixPath(name))])
     judged = workflows
     if rule is Rule.WORKFLOW_SECURITY:
         judged = [*workflows, *checkout.on_disk(root, [name for name in tracked if checkout.is_action(PurePosixPath(name))])]
     try:
-        return RuleResult(scanners.scan_workflows(root, rule, judged, locate_zizmor, log), len(workflows), False)
+        return RuleResult(
+            scanners.scan_workflows(root, rule, judged, locate_zizmor, deadline, log), len(workflows), False
+        )
     except process.ProcessError as error:
         raise CannotJudge(str(error)) from error
 
 
-def check_advisories(root: Path, tracked: list[str], allow_lists: AllowLists | CannotJudge, log: scanners.ScannerLog) -> RuleResult:
+def check_advisories(
+    root: Path, tracked: list[str], allow_lists: AllowLists | CannotJudge, deadline: RunDeadline,
+    log: scanners.ScannerLog,
+) -> RuleResult:
     """The allowances' `until` is judged against today's date in UTC, read here, once."""
     allowances = _required(allow_lists).advisories
     locks = {name: checkout.judged(repository.resolve_file, root, name) for name in checkout.on_disk(root, [n for n in tracked if advisories.is_lock(n)])}
     try:
-        return advisories.scan(locks, root, allowances, datetime.now(UTC).date(), log=log)
+        return advisories.scan(locks, root, allowances, datetime.now(UTC).date(), deadline, log)
     except process.ProcessError as error:
         raise CannotJudge(str(error)) from error
 
@@ -373,6 +384,7 @@ class RunInputs:
     running: Running
     verbose: bool
     fix: Fix | None
+    deadline: RunDeadline
 
     @cached_property
     def allow_lists(self) -> AllowLists | CannotJudge:
@@ -390,7 +402,12 @@ def _judge_files(inputs: RunInputs) -> AreaVerdict:
         {
             Rule.ENV_FILE: env_file.check_env_files(tracked),
             Rule.COMPOSE_PORT: _attempt(lambda: compose.check_compose_ports(root, tracked, _required(allow_lists).compose)),
-            Rule.CLAUDE_MD: _attempt(lambda: claude_md.check_claude_md(root, tracked)),
+            Rule.CLAUDE_MD: _attempt(lambda: agent_guidance.check_claude_md(root, tracked)),
+            Rule.AGENTS_MD: _attempt(
+                lambda: agent_guidance.check_agents_md(
+                    root, tracked, checkout.github_repositories(root), _required(allow_lists).layout
+                )
+            ),
             Rule.ROOT_LAYOUT: _attempt(lambda: root_layout.check_root_layout(tracked, _required(allow_lists).root)),
             Rule.FILE_SUFFIX: _attempt(lambda: layout.check_file_suffix(_required(modes), _required(allow_lists).layout)),
             Rule.SCRIPT_NAME: _content_findings(root, modes, allow_lists, layout.script_candidates, layout.check_script_name),
@@ -526,14 +543,24 @@ def _judge_imports(inputs: RunInputs) -> AreaVerdict:
 
 def _judge_secrets(inputs: RunInputs) -> AreaVerdict:
     runs, log = _run_log(inputs.verbose)
-    leak = _scanned(inputs.running, Area.SECRETS, scanners.GITLEAKS, lambda: check_secrets(inputs.root, inputs.allow_lists, log))
+    leak = _scanned(
+        inputs.running,
+        Area.SECRETS,
+        scanners.GITLEAKS,
+        lambda: check_secrets(inputs.root, inputs.allow_lists, inputs.deadline, log),
+    )
     return _area_verdict(Area.SECRETS, {Rule.LEAK: leak}, runs)
 
 
 def _judge_workflows(inputs: RunInputs) -> AreaVerdict:
     runs, log = _run_log(inputs.verbose)
     judged = {
-        rule: _scanned(inputs.running, Area.WORKFLOWS, scanner.name, partial(check_workflows, inputs.root, rule, inputs.tracked, inputs.locate_zizmor, log))
+        rule: _scanned(
+            inputs.running,
+            Area.WORKFLOWS,
+            scanner.name,
+            partial(check_workflows, inputs.root, rule, inputs.tracked, inputs.locate_zizmor, inputs.deadline, log),
+        )
         for rule, scanner in scanners.WORKFLOW_SCANNERS.items()
     }
     return _area_verdict(Area.WORKFLOWS, judged, runs)
@@ -542,14 +569,18 @@ def _judge_workflows(inputs: RunInputs) -> AreaVerdict:
 def _judge_dependencies(inputs: RunInputs) -> AreaVerdict:
     runs, log = _run_log(inputs.verbose)
     advisory = _scanned(
-        inputs.running, Area.DEPENDENCIES, scanners.OSV_SCANNER, partial(check_advisories, inputs.root, inputs.tracked, inputs.allow_lists, log)
+        inputs.running, Area.DEPENDENCIES, scanners.OSV_SCANNER,
+        partial(check_advisories, inputs.root, inputs.tracked, inputs.allow_lists, inputs.deadline, log),
     )
     return _area_verdict(Area.DEPENDENCIES, {Rule.ADVISORY: advisory}, runs)
 
 
 def _judge_code(inputs: RunInputs) -> AreaVerdict:
     runs, log = _run_log(inputs.verbose)
-    lint = _scanned(inputs.running, Area.CODE, scanners.RUFF, lambda: lint_python(inputs.root, inputs.modes, inputs.locate_ruff, log))
+    lint = _scanned(
+        inputs.running, Area.CODE, scanners.RUFF,
+        lambda: lint_python(inputs.root, inputs.modes, inputs.locate_ruff, inputs.deadline, log),
+    )
     judged = {Rule.PYTHON_SECURITY: _judge_lint(lint, python_lint.judge_security), Rule.PYTHON_PRINT: _judge_lint(lint, python_lint.judge_print)}
     return _area_verdict(Area.CODE, judged, runs)
 
@@ -575,6 +606,7 @@ def judge_repository(
     verbose: bool = False,
     named: Iterable[Area] = (),
     fix: Fix | None = None,
+    monotonic: Callable[[], float] = time.monotonic,
 ) -> CheckResult:
     """Judges every active rule of the areas `named`, of all of them where none is, over the repository `root` lies
     in, area by area in row order, and hands each finished area and the count of tracked paths to `report_area`;
@@ -583,7 +615,9 @@ def judge_repository(
     root = checkout.work_tree_top(root)
     tracked = checkout.tracked_files(root)
     tracked_paths = len(set(tracked))
-    inputs = RunInputs(root, tracked, locate_ruff, locate_zizmor, running, verbose, fix)
+    inputs = RunInputs(
+        root, tracked, locate_ruff, locate_zizmor, running, verbose, fix, RunDeadline.starting(monotonic)
+    )
     areas: list[AreaVerdict] = []
     for area in _judged_areas(inputs, frozenset(named) or frozenset(Area)):
         report_area(area, tracked_paths)
@@ -591,24 +625,26 @@ def judge_repository(
     return CheckResult(tuple(areas), tracked_paths)
 
 
-type StagedScan = Callable[[Path, scanners.ScannerLog], RuleResult]
+type StagedScan = Callable[[Path, RunDeadline, scanners.ScannerLog], RuleResult]
 
 
-def _check_staged_change(scan: StagedScan, root: Path, log: scanners.ScannerLog) -> RuleResult:
+def _check_staged_change(scan: StagedScan, root: Path, deadline: RunDeadline, log: scanners.ScannerLog) -> RuleResult:
     try:
-        return scan(root, log)
+        return scan(root, deadline, log)
     except process.ProcessError as error:
         raise CannotJudge(str(error)) from error
 
 
 def judge_staged_change(
-    root: Path, scan: StagedScan, report_area: AreaReport, running: Running, verbose: bool = False
+    root: Path, scan: StagedScan, report_area: AreaReport, running: Running, verbose: bool = False,
+    monotonic: Callable[[], float] = time.monotonic,
 ) -> CheckResult:
     """Judges the secrets of what the next commit records and nothing else: `scan` comes from the door, because `staged`
     lies beside this module. Its one area counts no tracked path, which only `files` prints."""
     checkout.work_tree_top(root)  # the start check alone: a relative GIT_DIR names itself from the folder the hook stands in, so `scan` gets that folder
     runs, log = _run_log(verbose)
-    leak = _scanned(running, Area.SECRETS, scanners.GITLEAKS, lambda: _check_staged_change(scan, root, log))
+    deadline = RunDeadline.starting(monotonic)
+    leak = _scanned(running, Area.SECRETS, scanners.GITLEAKS, lambda: _check_staged_change(scan, root, deadline, log))
     area = _area_verdict(Area.SECRETS, {Rule.LEAK: leak}, runs)
     report_area(area, 0)
     return CheckResult((area,), 0)

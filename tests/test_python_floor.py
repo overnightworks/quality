@@ -136,7 +136,8 @@ def test_a_member_below_the_floor_is_the_only_finding_beside_a_root_at_the_floor
 
 
 def test_every_file_below_the_floor_is_a_finding_sorted_by_path(build_repo, capsys):
-    """FLOOR-11, ROW-3: every file below the floor is one finding with fact and fix; a shared fix prints once."""
+    """FLOOR-1, FLOOR-11, ROW-3: every file below the floor is one finding with fact and fix; a shared fix prints
+    once."""
     tracked = {"pyproject.toml": project(">=3.12"), "src/b/pyproject.toml": project(">=3.13"), "src/a/pyproject.toml": project(None)}
     repo = build_repo(tracked)
     code, output = run(capsys, repo)

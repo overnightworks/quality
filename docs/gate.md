@@ -54,7 +54,8 @@ Each line has a reason:
   binary's checksum, reads and writes no cache, and hands later steps neither mise's environment nor a scanner on
   `PATH` (CALLER-2). The step sets `MISE_CEILING_PATHS`, so a `mise.toml` in the caller's checkout takes no part
   (CALLER-3). quality's own `ci.yml` installs the scanners in its `tests` job through the same pinned step under the
-  same ceiling and runs no `quality check` there (CALLER-4).
+  same ceiling and runs no `quality check` there (CALLER-4). Both steps set `MISE_HTTP_RETRIES` to the same count, so
+  mise retries a failed scanner download for about 20 seconds instead of about one (CALLER-11).
 - **The `check` job runs the whole `quality check`.** `gate.yml` has no input for an area, and a test pins the step's words (CALLER-5). A job that names areas says so in its verdict (`✓ clean · 1 area`); a selected-area job is not evidence of a whole check.
 - **`secrets: SONAR_TOKEN`** (needed while SonarCloud runs; a repository with `[gate] sonar = false` passes none) and the optional **`with: coverage-artifact`** are described under
   [`quality sonar findings`](sonar.md#quality-sonar-findings) and [Coverage on new code](sonar.md#coverage-on-new-code).
@@ -197,8 +198,8 @@ reason = "the operator ruled the requirement shelf machinery out"
   `until`, a changed `reason`, `item` or `date`, and a deleted allowance loosen nothing; a changed `id` or `lock` is a
   new allowance (VERDICT-65). A base without `quality/config.toml` holds no allowance, so every allowance of the
   adoption is new (VERDICT-66). A `[[gate.loosened]]` entry whose `what` is such a text matches nothing and is red
-  (VERDICT-67). The verdict and the door read the whole config, so a malformed `[secrets]` or `[advisories]` entry is
-  exit `2` there too.
+  (VERDICT-67). The verdict and the door read the whole config, so
+  [a malformed `[secrets]` or `[advisories]` entry](rules.md) is exit `2` there too.
 - A generated-file declaration (`[[size.generated]]`, see the `size` rule under `quality check`) declares its own
   loosening with its own `item` and `date`, like an allowance. A head `path` the base does not declare prints
   `size leaves out generated file <path> · <item> of <date>`, so a changed `path` and every declaration of an adoption

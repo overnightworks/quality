@@ -12,6 +12,12 @@ once, however they are named; with none it judges all seven (CHECK-3). An area n
 row (CHECK-6); the verdict counts only the named areas (`✓ clean · 1 area`) (CHECK-7) and the exit is the worst of
 theirs (CHECK-8), so a named run says nothing of the rest. The gate runs all seven ([gate](gate.md#gateyml)).
 
+Three statements hold for each of four declaration tables of `quality/config.toml` and the rule that reads it:
+`[[compose.allow]]`, `[[root.allow]]`, `[[layout.allow]]` and `[[python.allow]]`. A malformed table other than the
+rule's own is forwarded with its validation error; the values of `[gate]` stay the verdict's to judge. A declaration is
+no loosening, so `quality verdict` asks for no `[[gate.loosened]]` entry. A config reader older than the rule refuses
+its table as an unknown key.
+
 It applies these rules:
 
 - `env-file`: no tracked `.env`, `.env.*` or `*.env` file (names ending in `.example` are templates and pass) (ENV-1).
@@ -23,7 +29,7 @@ It applies these rules:
   [platform's app standard](https://github.com/overnightworks/platform/blob/main/docs/app.md) that env files pass
   quality's rules.
 
-  Ruled by the operator: the command runs exactly as printed, with no home-made encoder for the name.
+  Ruled by the operator: the command runs exactly as printed, with no home-made encoder for the name (ENV-2).
 - `compose-port`: every published port in a tracked compose file binds loopback, `127.0.0.1` or `::1` (`"[::1]:HOST:CONTAINER"`,
   `host_ip: ::1`); `[::]` and `0.0.0.0` are findings (COMPOSE-1). For an app repository it checks the rule of
   [platform's app standard](https://github.com/overnightworks/platform/blob/main/docs/app.md) that published compose
@@ -58,12 +64,11 @@ It applies these rules:
   is neither host-networked nor interpolated there; the fix is to delete the entry (COMPOSE-18). A duplicate
   `(file, service)`, a folder (a trailing `/`), a pattern (`*`, `?`, `[`), `..`, an absolute path, an unknown key, a
   missing key or a service or reason that is not one-line text makes the `files` row `✗ not checked` with the reason,
-  and `next:` shows a `[[compose.allow]]` example (COMPOSE-19), and a malformed other table in `quality/config.toml` is
-  forwarded with its validation error. A declaration is no loosening, so `quality verdict` asks for no
-  `[[gate.loosened]]` entry. A config reader older than the rule refuses `[compose]` as an unknown key.
+  and `next:` shows a `[[compose.allow]]` example (COMPOSE-19).
 
-  Ruled by the operator: a service with `network_mode: host`, or one whose `network_mode` holds a Compose interpolation,
-  is a finding unless `quality/config.toml` declares its file and service.
+  Ruled by the operator: a service with `network_mode: host` (COMPOSE-13), or one whose `network_mode` holds a Compose
+  interpolation (COMPOSE-14), is a finding unless `quality/config.toml` declares its file and service
+  (COMPOSE-16, COMPOSE-17).
 - `size`: every tracked file of Python, TypeScript (`.ts` `.tsx` `.mts` `.cts`), JavaScript (`.js` `.jsx` `.mjs`
   `.cjs`), Svelte or Vue is measured by its lines (SIZE-1), and no other file is (SIZE-2), and every tracked `*.py`
   file also with [lizard](https://github.com/terryyin/lizard): a file from 800 lines, a Python function from 60 lines
@@ -71,8 +76,9 @@ It applies these rules:
   production and tests (a path under `test/` or `tests/`; Python also `conftest.py`, `test_*.py`, `*_test.py`;
   TypeScript and JavaScript also `__tests__/`, `*.test.*`, `*.spec.*`, `*.test-d.*` and `*.spec-d.*`).
 
-  Ruled by the operator: a file that `quality/config.toml` declares generated is left out of the `size` rule; a minified
-  or generated file the repository does not declare is counted by its lines like any other:
+  Ruled by the operator: a file that `quality/config.toml` declares generated is left out of the `size` rule
+  (GENERATED-1); a minified or generated file the repository does not declare is counted by its lines like any other
+  (SIZE-1):
 
   ```toml
   [[size.generated]]
@@ -87,12 +93,12 @@ It applies these rules:
   (GENERATED-2) nor recorded by `quality check --fix` (GENERATED-3). A declared Python file that Python cannot parse
   is left out likewise: the `size` rule names no note for it and is not refused by it (GENERATED-4). `path` is the
   exact tracked path of one file, `job` one of `[gate] mandatory_jobs`, the job whose generator check proves the file
-  (GENERATED-5). A missing or extra key, a folder, a pattern, `..`, an absolute path, a `job` the gate does not list
-  (a config without `mandatory_jobs` included), a malformed `item` or `date`, a reason that is not one line or two
-  entries for one path is exit `2` naming the entry with this example (GENERATED-6): in `check` as the `debt` row
-  `✗ not checked` with the [example under `next:`](output.md#refusals), in `quality check --fix` as the same row
-  (GENERATED-7), and in the verdict (GENERATED-8) and the door naming the side;
-  [`check secrets --staged` reads only `[secrets]`](gate.md#declared-loosenings). A declaration whose path holds no
+  (GENERATED-5). A missing or extra key, a folder (a trailing `/`), a pattern, `..`, an absolute path, a `job` the gate
+  does not list (a config without `mandatory_jobs` included), a malformed `item` or `date`, a reason that is not one
+  line or two entries for one path is exit `2` naming the entry with this example (GENERATED-6): in `check` as the
+  `debt` row `✗ not checked` with the [example under `next:`](output.md#refusals), in `quality check --fix` as the same
+  row (GENERATED-7), and in the verdict (GENERATED-8) and the door naming the side; [`check secrets --staged` reads only
+  `[secrets]`](gate.md#declared-loosenings). A declaration whose path holds no
   tracked file in a measured language is an `unused` row
   (`[[size.generated]] matches no tracked file in a measured language`) on that path, fixed by deleting the entry from
   `quality/config.toml` (GENERATED-9). Only `quality/config.toml` declares: `.gitattributes`, `linguist-generated`
@@ -119,8 +125,8 @@ It applies these rules:
   refuses the same way, writing nothing; both exit `2`. Only where no baseline is held does `--fix` refuse with
   `✗ not fixed`, since only recording the first ceiling is refused (SIZE-11). A tracked file the operating system
   refuses to read makes the `debt` row `✗ not checked` with or without a baseline, and `quality check --fix` refuses
-  likewise, writing nothing; both exit `2` (SIZE-12). The reason names the case: a file without read permission is
-  `cannot read locked.py: [Errno 13] ...`, a file behind a directory without permission is
+  likewise with the same `debt` row, writing nothing; both exit `2` (SIZE-12). The reason names the case: a file without
+  read permission is `cannot read locked.py: [Errno 13] ...`, a file behind a directory without permission is
   `cannot reach pkg/m.py: [Errno 13] ...` (SIZE-13). A tracked file missing from disk
   (deleted but not staged, left out by a sparse checkout, or a dangling symlink) is skipped, and its entries stand,
   unjudged, while the index tracks it (CEILING-1). A `quality/baseline.toml` that is not UTF-8 is malformed like invalid
@@ -183,6 +189,8 @@ It applies these rules:
   file's entries move and never fall (FIX-42); with no committed ceiling a moved file's entries are gone (FIX-43).
   `check` reads no history: after a staged move it names the new path `new debt` and the old one
   `can fall … is gone`, and one `--fix` clears both (FIX-44).
+  A fix that moves entries and lowers none counts them in the [debt row](output.md#area-rows) and adds
+  `ceiling moved N entries` to the verdict line (FIX-45).
 - `clone`: a pair is two functions (methods and nested functions too) in two different tracked `*.py` files, each of at
   least 40 tokens without its docstring, whose structure is at least 90 % the same once every name and literal is
   renamed (CLONE-1); tests count like code (CLONE-4), and a copy inside one file is no pair. A pair is named by the
@@ -256,8 +264,56 @@ It applies these rules:
   one the filesystem refuses to read makes the `files` row `✗ not checked` with the reason (exit `2`) (CLAUDE-13). No
   configuration switches the rule off.
 
-  Ruled by the operator: `CLAUDE.md` and `AGENTS.md` never diverge. A finding names only the file, and its fix is a
-  sentence, never a command.
+  Ruled by the operator: `CLAUDE.md` and `AGENTS.md` never diverge (CLAUDE-7). A finding names only the file
+  (CLAUDE-9, CLAUDE-10), and its fix is a sentence, never a command (CLAUDE-11).
+- `agents-md`: the tracked file named exactly `AGENTS.md` at the root has the shape of the document set (write-docs'
+  "Repository document set", which owns it). Line 1 is a title, `# ` and the name of a GitHub repository a configured
+  remote points at; any other first line, an empty file included, is a `title` finding at line 1 (AGENTS-1), and a
+  title that is well formed but equals no such name is one too (AGENTS-12). Between the title and the first
+  `## ` heading only blank lines stand; anything else is a `section` finding at its first line, and a file with a title
+  and no section is clean (AGENTS-2). Every `## ` heading outside a fenced code block (backticks or tildes) is one of
+  `Commands`, `Rules`, `Owners`, `Documents`, exactly spelled, at most once, in that order; another name, a repeat, a
+  heading out of order and a second `# ` heading are `section` findings at their line, and each section may be missing.
+  Headings of level 3 and deeper are no sections (AGENTS-3). The file has at most 100 lines (the last one counts without
+  a line feed; `\n` alone separates lines) and at most 4096 bytes; each limit crossed is a `too long` finding at line 1
+  (AGENTS-4). No root `AGENTS.md` has no shape finding, and a tracked one missing from disk is skipped (AGENTS-5). A
+  finding names fixed words, line numbers, counts, for `missing` the path text of the span, for `title` the repository
+  name a remote gives and, for `misplaced`, `misnamed` and `unused`, the path, never the title or a heading, and its fix
+  is prose with no command (AGENTS-6). A link that leaves the repository, text that is not UTF-8 and a read the
+  filesystem refuses make the `files` row `✗ not checked` with the reason (exit `2`) (AGENTS-7). In `## Documents`, the
+  first backticked span of each line is that document's path; later spans, lines without a span and other sections'
+  backticks are never judged. The section runs to the next `# ` or `## ` heading or the end of the file; a line in a
+  fence is no document line; a second `## Documents` heading starts another run (AGENTS-8). A path passes if it is a
+  tracked file, or a directory with at least one tracked file below it, spelled in exact case; one trailing `/` of a
+  directory is optional and nothing else is normalised. A tracked file missing from disk passes (AGENTS-9). Any other
+  path is a `missing` finding at its line, whatever its form (absolute, `~`, `..`, a scheme, an `@` span, an anchor,
+  an untracked file, a wrong case): fact `<path> is not tracked`, fix "point at a tracked document or delete the line"
+  (AGENTS-10).
+  The check compares text with the tracked listing alone, so no filesystem probe follows text from the file and
+  nothing outside the repository is opened. It accepts any tracked directory; whether that is a directory of the
+  document set whose files are named by their task or contract stays the reviewer's call (AGENTS-11). The title,
+  with blanks around it removed, equals the name part (after `owner/`) of any configured remote's GitHub repository,
+  case ignored; otherwise the `title` finding's fix is "make line 1 `# <name>`" with each such name, joined by "or"
+  (AGENTS-12). A remote counts when its URL, as configured and before any `insteadOf`, is
+  `https://github.com/<owner>/<name>`, `ssh://git@github.com/<owner>/<name>` or `git@github.com:<owner>/<name>`, with
+  at most one trailing `/` and then `.git`, in any case. When `AGENTS.md` is tracked and on disk and no remote counts,
+  the `files` row is `✗ not checked` ("no GitHub remote names this repository", next step "add the repository's GitHub
+  remote", exit `2`) before any finding, so the findings above show once a remote counts; no file, or a tracked one
+  missing from disk, stays clean (AGENTS-13). No printed line holds a remote URL; a URL with credentials counts as no
+  remote (AGENTS-14). The file sits at the root only: a tracked path whose last component is `AGENTS.md` in any case
+  and that is not the root path is a `misplaced` finding at that path, fact "guidance outside the root file", fix "move
+  what an agent needs into the root AGENTS.md or delete it, or declare it in quality/config.toml with
+  [[layout.allow]], its path, the rule agents-md and a reason" (AGENTS-15). A tracked root file named `AGENTS.md` in
+  another case is a `misnamed` finding, fact "the document set's path is exact", fix "rename it to AGENTS.md", and its
+  content is not judged (AGENTS-16). A `[[layout.allow]]` entry with the rule `agents-md` and a nested path stops
+  AGENTS-15 for that path only; an entry for the root `AGENTS.md` is no finding and exempts nothing, and an entry for
+  a root file in another case leaves AGENTS-16 standing (AGENTS-17). An entry with the rule `agents-md` whose path no
+  tracked file has is an `unused` finding as SUFFIX-12 says (AGENTS-18). Placement reads no file and needs no root file
+  or remote: a nested file that is a symlink, gone from disk or not UTF-8 is `misplaced` all the same; when the root
+  file is tracked and on disk and no remote counts, AGENTS-13's refusal covers nested findings too (AGENTS-19). The
+  rule is a layout rule, so its entry is accepted with `rule = "agents-md"`, and a malformed `[layout]` table or entry
+  makes its row `✗ not checked` with the reason and the example, with or without a tracked `AGENTS.md` (AGENTS-20). No
+  configuration switches the rule off.
 - `root-layout`: every entry directly in the root of the tracked tree is on quality's base list or declared (ROOT-1). An
   entry is a file or a directory (written `frontend/`); a directory with many files is one entry (ROOT-2). Names
   compare in exact case, and the finding for a name that differs only in case names the base-list spelling (ROOT-3). A
@@ -284,16 +340,13 @@ It applies these rules:
   slash) (ROOT-13). Findings are sorted by entry and all printed (ROOT-14). An invalid declaration (a `/` inside the
   entry, `.`, `..`, `.git`, an empty entry, a multi-line reason, an unknown key, a missing key, an entry that is not
   text, a `[root]` key other than `allow`, `allow` that is not an array of tables, or one entry declared twice) makes
-  the `files` row `✗ not checked` with the reason, and `next:` shows a `[[root.allow]]` example (ROOT-15). Any other
-  malformed table or allowance elsewhere in `quality/config.toml`, which plain `quality check` reads for this rule,
-  refuses it too, with that table's own message; the values of `[gate]` stay the verdict's to judge.
+  the `files` row `✗ not checked` with the reason, and `next:` shows a `[[root.allow]]` example (ROOT-15).
 
-  Ruled by the operator: any pull request may add a declaration with a reason; the review judges whether the reason
-  holds. A declaration is no loosening, so `quality verdict` asks for no `[[gate.loosened]]` entry.
+  Ruled by the operator: any pull request may add a declaration with a reason (ROOT-8); the review judges whether the
+  reason holds. A declaration is no loosening, so `quality verdict` asks for no `[[gate.loosened]]` entry.
 
-  The rule reads names, never content, and writes nothing (ROOT-16). No configuration switches it off (ROOT-17). A
-  config reader older than the rule refuses `[root]` as an unknown key, so a declaration lands in the pull request that
-  moves the repository to a quality version that knows it. Named gaps: a submodule in the root counts as a file entry
+  The rule reads names, never content, and writes nothing (ROOT-16). No configuration switches it off (ROOT-17).
+  Named gaps: a submodule in the root counts as a file entry
   and no case of it is tested; marketplace's refusal of every symlink in the tree stays that repository's own check.
 - `file-suffix`: a tracked file whose basename has no suffix is a finding (SUFFIX-1), unless it is executable (index
   mode 100755), a symlink (120000) or a gitlink (160000) (SUFFIX-2), its basename is a dotfile, its basename is on
@@ -311,20 +364,19 @@ It applies these rules:
   reason = "the deploy script reads it by this name"
   ```
 
-  The rule is `file-suffix`, `script-name`, `script-header`, `test-layout` or `test-import`; a declaration covers only
-  its own rule (SUFFIX-10), and one `script-name` entry covers both the shape and the location of its path (SUFFIX-11).
+  The rule is `agents-md`, `file-suffix`, `script-name`, `script-header`, `test-layout` or `test-import`; a
+  declaration covers only its own rule (SUFFIX-10), and one `script-name` entry
+  covers both the shape and the location of its path (SUFFIX-11).
   A declared path that is not tracked is a finding of the declared rule, `unused` (SUFFIX-12), whose fix deletes every
   `[[layout.allow]]` entry of that path (an untracked path makes each of its entries stale; the fix names no rule); a
   declaration for a file that already complies is clean (SUFFIX-13). A suffixless file says `tracked` (SUFFIX-14) with
   both ways out, give it a suffix or declare it, in prose with no command (SUFFIX-15); findings are sorted by path and
-  all printed (SUFFIX-16). The five rules' fixes that ask for an entry end with one clause naming the finding's own rule
+  all printed (SUFFIX-16). The six rules' fixes that ask for an entry end with one clause naming the finding's own rule
   (SUFFIX-17). A duplicate `(rule, path)`, a folder (a trailing `/`), a pattern (`*`, `?`, `[`), `..`, a leading `./`,
   an empty component, a blank path, an absolute path, a path that is not text, an unknown rule, an unknown key, a
   missing key or a reason that is not one-line text makes the `files` row `✗ not checked` with the reason, and `next:`
-  shows a `[[layout.allow]]` example; a malformed `[layout]` table is the same (SUFFIX-18), and another malformed table
-  in `quality/config.toml` is forwarded with its validation error. A declaration is no loosening, so `quality verdict`
-  asks for no `[[gate.loosened]]` entry. The rule writes nothing and no configuration switches it off (SUFFIX-19). A
-  config reader older than the rule refuses `[layout]` as an unknown key.
+  shows a `[[layout.allow]]` example; a malformed `[layout]` table is the same (SUFFIX-18). The rule writes nothing and
+  no configuration switches it off (SUFFIX-19).
 
   Ruled by the operator: quality checks in CI where files sit below the root (`tests/`, `scripts/`, file names).
 - `script-name` and `script-header` judge a script: a tracked file with index mode 100755, whose content starts with
@@ -378,8 +430,8 @@ It applies these rules:
   declaring the path. A test module that mirrors nothing says `misplaced` (LAYOUT-30), its fact joining the facts by
   `; ` (LAYOUT-31).
 
-  Ruled by the operator: `tests/` mirrors `src/<package>/` by path, unit and integration tests are told apart by a
-  pytest marker, and only `e2e` has its own folder.
+  Ruled by the operator: `tests/` mirrors `src/<package>/` by path (LAYOUT-12, LAYOUT-24), unit and integration tests
+  are told apart by a pytest marker, and only `e2e` has its own folder (LAYOUT-5).
 
   Frontend tests. A frontend project is the directory of any tracked `package.json`, the root or a member at any depth
   (LAYOUT-32); its content (`workspaces` included) is never read, a `package.json` inside the `tests/` of a project of
@@ -448,14 +500,13 @@ It applies these rules:
   own table, because the exception is meant to end. Each allowed file stands as a `· <path>  allowed  <fact> · <reason>`
   [row](output.md#notes) under the files row, after the area's findings (FLOOR-19). An entry whose path is no judged
   file (untracked, gone, without `[project]`) or whose file is already at the floor says `unused` (FLOOR-20); its fix is
-  to delete the entry (FLOOR-21). A malformed entry refuses every rule that reads the config, and a config reader older
-  than the rule refuses `[python]` as an unknown key, so declare only after the bump. A candidate that is not UTF-8
+  to delete the entry (FLOOR-21). A candidate that is not UTF-8
   TOML, or whose `requires-python` is no string, makes the `files` row [`✗ not checked`](output.md#refusals) (exit 2)
   with its own reason (FLOOR-22). A `requires-python` that is no PEP 440 specifier set or holds a `===` clause with a
   version that is not PEP 440 (`===foobar`) makes it `✗ not checked` with
   `<path> has a requires-python quality cannot read` (exit 2) (FLOOR-23); that reason holds no part of the value
-  (FLOOR-24). No configuration switches the rule off, and a declaration asks `quality verdict` for no
-  `[[gate.loosened]]` entry. Only `requires-python` is read, because uv and pip refuse an interpreter outside it, so a
+  (FLOOR-24). No configuration switches the rule off. Only `requires-python` is read, because uv and pip refuse an
+  interpreter outside it, so a
   leftover setter cannot install the project on old Python. Not read, and waiting for usage evidence: workflows,
   `.python-version`, Dockerfiles, ruff's `target-version`, `setup.py`, `setup.cfg` and Poetry's `[tool.poetry]`; `!=` as
   a floor (`>=3.13,!=3.13.*` is red although it admits only 3.14 and up); a job that never installs the project, which
@@ -463,7 +514,7 @@ It applies these rules:
   Python project without a `pyproject.toml`.
 
   Ruled by the operator: every tracked `pyproject.toml` that `test-layout` finds as a project is judged, the root and
-  each member alike.
+  each member alike (FLOOR-1).
 - `python-security` judges every tracked regular `.py` file in any directory with the `S` codes of quality's own ruff
   (SECURITY-1) (an exact pin in quality's `pyproject.toml` that serves its own lint too): the ruff binary of quality's
   installation, never one on `PATH` (SECURITY-2), at [the pinned version](commands.md#scanners), runs `ruff check
@@ -492,8 +543,8 @@ It applies these rules:
   `# ruff: noqa` for a code listed in `external`.
   A file ruff cannot parse makes the `code` row [`✗ not checked`](output.md#refusals) with `ruff cannot parse <path>`
   (exit 2) (SECURITY-18); a tracked `.py` file the checkout does not hold (deleted, left out by a sparse checkout, or a
-  link to nowhere) (SECURITY-19), a file Python cannot decode (SECURITY-20), or reads as other text than ruff reads as
-  UTF-8 (a PEP 263 cookie such as utf-7) (SECURITY-21), [a missing or mismatched ruff](commands.md#scanners),
+  link to nowhere) (SECURITY-19), a file Python cannot decode (SECURITY-20), or that reads as other text than ruff reads
+  as UTF-8 (a PEP 263 cookie such as utf-7) (SECURITY-21), [a missing or mismatched ruff](commands.md#scanners),
   ruff exiting other than 0 or 1
   (SECURITY-22), a `Failed to lint` warning (SECURITY-23), a report quality cannot read (SECURITY-24), a time-out
   (SECURITY-25) or a file with a finding whose comments Python's tokenizer cannot read (SECURITY-26) is `cannot judge`
@@ -502,11 +553,11 @@ It applies these rules:
   refuses with it (SECURITY-28). The other rules are judged either way. A deliberately invalid Python fixture takes
   another suffix, since a `.py` file is Python. No configuration switches the rule off, and a reasoned noqa asks
   `quality verdict` for no `[[gate.loosened]]` entry. Not judged, and waiting for usage evidence: notebooks, `.pyi`
-  files and suffixless Python; judging a non-UTF-8 source (a latin-1 file with non-ASCII bytes stays `cannot judge`),
-  since ruff reads UTF-8 only; a stale reasoned noqa, which ruff's RUF100 finds.
+  files and suffixless Python; judging a non-UTF-8 source (a latin-1 file with non-ASCII bytes stays `cannot judge`)
+  (SECURITY-29), since ruff reads UTF-8 only; a stale reasoned noqa, which ruff's RUF100 finds.
 
   Ruled by the operator: the rules are red from the release that ships them, with no report-only phase; `assert` (S101)
-  is exempt in tests; a rule-specific noqa with a reason is green.
+  is exempt in tests (SECURITY-10); a rule-specific noqa with a reason is green (SECURITY-13).
 - `python-print` judges `T201` (`print`) and `T203` (`pprint`) (PRINT-1) from `python-security`'s run, over the same
   files (PRINT-2), with the same deafness to the repository's ruff settings and the same refusals: a run quality cannot
   trust or a file ruff cannot parse leaves both rules `cannot judge` or `unparsable`. Each finding stands as a
@@ -531,7 +582,7 @@ It applies these rules:
   reopened when a landing outside `tests/` replaces a `print` with a direct stream write), and `print(...,
   file=<variable>)`, which ruff does not report as T201.
 
-  Ruled by the operator: a program's one output owner declares itself in its code, never in a path list.
+  Ruled by the operator: a program's one output owner declares itself in its code (PRINT-7), never in a path list.
 - The baseline only falls: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the
   base commit's, so growing a function and rewriting the baseline stays red (BASELINE-1). Each loosening is one line
   under the verdict's `loosenings` row, named with the baseline's own metric, path and symbol (a file entry has no
@@ -545,8 +596,8 @@ It applies these rules:
   - the base's file deleted: `quality/baseline.toml removed` (BASELINE-6);
   - a `[[size.generated]]` declaration is judged as in [gate](gate.md), "Declared loosenings".
 
-  Ruled by the operator: a file git recognises as renamed, a directory move included, is no loosening when its numbers do
-  not rise.
+  Ruled by the operator: a file git recognises as renamed (BASELINE-11), a directory move included, is no loosening when
+  its numbers do not rise (BASELINE-12).
 
   The verdict reads the renames between the base and the head commit with `git diff -M50% -l1000`, git's default
   similarity, whatever the repository's git configuration says (BASELINE-11); a file git does not pair is new as
@@ -702,17 +753,18 @@ A lint finding is `! <path:line>  invalid  actionlint`, the message under it beh
 `fix: correct the workflow as the message says`. A security finding is
 `! <path:line>  insecure  zizmor <audit> · <description>` with `fix: see <url>` ([rows](output.md#rows)).
 
-Ruled by the operator: the clean row counts those files and says in the row itself, and in no note of its own, that only offline audits ran, so a
-workflow that only an online audit would flag is not read as fully audited:
+Ruled by the operator: the clean row counts those files and says in the row itself, and in no note of its own, that only
+offline audits ran (O38), so a workflow that only an online audit would flag is not read as fully audited:
 `✓ workflows  clean  5 workflows · offline audits only`.
 
 The `advisory` rule judges every tracked `uv.lock`, `pnpm-lock.yaml` and `requirements*.txt` (a name that starts
-with `requirements` and ends in `.txt`; `requirements.in` and `dev-requirements.txt` are not), root
+with `requirements` and ends in `.txt`; `requirements.in` and `dev-requirements.txt` are not (ADVISORY-30)), root
 and nested, with osv-scanner against the OSV advisory database (dev dependencies count) (ADVISORY-1). `uv.lock` and the
-requirements files are judged against the PyPI database, `pnpm-lock.yaml` against the npm database. A
+requirements files are judged against the PyPI database, `pnpm-lock.yaml` against the npm database (ADVISORY-31). A
 `package-lock.json`, `yarn.lock` or `bun.lock` is not judged yet.
 A repository with no tracked lock [needs no osv-scanner](commands.md#scanners) (and none is located); a database is
-downloaded only for an ecosystem with a tracked lock, once per run however many locks it has.
+downloaded only for an ecosystem with a tracked lock (ADVISORY-32), once per run
+however many locks it has (ADVISORY-33).
 A lock that is tracked but missing on disk is skipped (ADVISORY-2); one that links out of the repository (ADVISORY-3),
 is not a regular file (ADVISORY-4) or is empty (zero bytes) (ADVISORY-5) is exit `2`. A lock listed in `.gitignore` is
 still judged (ADVISORY-6).
@@ -756,48 +808,59 @@ reason = "gradio caps pillow<13; no image input"
 
 - `id` is any id of the advisory group, GHSA, PYSEC or CVE alike (ALLOW-2). `lock` is the tracked relative path; the entry
   allows the advisory on every package it affects in that lock and in no other, so a lock reached by two tracked names
-  needs an entry per name (ALLOW-7). Two entries matching one group in one lock (its GHSA and its CVE id) are a finding at
-  `quality/config.toml` naming both, and the group is allowed by neither:
+  needs an entry per name (ALLOW-7). Two entries matching one group in one lock (its GHSA and its CVE id) are a finding
+  at `quality/config.toml` naming both, and the group is allowed by neither (ALLOW-9):
   `! quality/config.toml  conflict  <id> and <id> in <lock> match one advisory · none allows it`.
 - `until` is the re-check date and `date` the day of the ruling, both TOML dates without a time (ALLOW-3); `item` and `reason`
   are as in a [declared loosening](gate.md#declared-loosenings). The allowance holds through `until` (in UTC) and the advisory
-  is red again from the next day: its row ends in `· allowance ran out on <until> (<item>)` (ALLOW-4). quality sets no latest `until`, and an advisory with no fixed
-  version is allowed like any other.
+  is red again from the next day: its row ends in `· allowance ran out on <until> (<item>)` (ALLOW-4). quality sets no
+  latest `until` (ALLOW-10), and an advisory with no fixed version is allowed like any other (ALLOW-19).
 - Each allowed advisory stands as a row under the dependencies row, after the area's findings and their `fix:`, and the rule stays clean (ALLOW-6):
-  `· <lock>  allowed  <package> <version> · <id> · fixed in <versions> · until <until> (<item>) · <reason>`. The fact says what the `affected` row says of a fix. A clean row counts them (`· 1 allowed`).
-- An entry no reported advisory matches is a finding (ALLOW-5): `! quality/config.toml  unused  <id> in <lock> matches no
-  advisory`. Deleting it is no loosening. With no tracked lock every entry matches nothing.
-- A malformed entry (a missing or extra key, an empty or multi-line `id`, `lock` or `reason`, an `item` that is not
-  `#<n>` or `<owner>/<repo>#<n>`, an `until` or `date` that is text or carries a time, two entries for one `id` and
-  `lock`, or an unknown key in `[advisories]`) is exit `2` in the `advisory` and `secret` rules and in `verdict`,
-  naming the entry by its position (`[[advisories.allow]] entry 2`); `check secrets --staged` reads only `[secrets]`.
+  `· <lock>  allowed  <package> <version> · <id> · fixed in <versions> · until <until> (<item>) · <reason>`. The fact
+  says what the `affected` row says of a fix (ALLOW-20). [A clean row](output.md#notes) counts them (`· 1 allowed`).
+- An entry no reported advisory matches is a finding (ALLOW-5):
+  `! quality/config.toml  unused  <id> in <lock> matches no advisory`.
+  [Deleting it is no loosening](gate.md#declared-loosenings). With no tracked lock every entry matches nothing
+  (ALLOW-11).
+- A malformed entry (a missing or extra key (ALLOW-12), an empty or multi-line `id`, `lock` or `reason` (ALLOW-13), an
+  `item` that is not `#<n>` or `<owner>/<repo>#<n>` (ALLOW-14), an `until` or `date` that is text or carries a time
+  (ALLOW-15), two entries for one `id` and `lock` (ALLOW-16), or an unknown key in `[advisories]` (ALLOW-17)) is exit
+  `2` in every rule that reads the config and in `verdict` (ALLOW-18),
+  [naming the entry by its position](output.md#refusals) (`[[advisories.allow]] entry 2`), except the last two, which
+  name the `id` and `lock` and the key; [`check secrets --staged` reads only `[secrets]`](gate.md#declared-loosenings).
 - A new allowance, and one whose `until` moves later, is a [declared loosening](gate.md#declared-loosenings) the allowance
   makes itself, so only the operator's door merges it. The pull request writes the allowance, so its item, date and
   reason prove nothing alone: the verdict's red and the door are the gate. An `id` that is an alias covers every
   group carrying it in that lock, while the door names the `id` and the lock, not the packages.
   Why only the operator's door merges it stands in [gate.md](gate.md#declared-loosenings). The entry's keys, the alias,
-  the date format, the expiry line, the unmatched allowance, the adoption (#116 E8), no latest `until`, the printed
-  lines, an advisory without a fixed version and the reach of an allowance are defaults the operator never answered.
+  the date format, the expiry line, the unmatched allowance, [the adoption](gate.md#declared-loosenings), no latest
+  `until`, the printed lines, an advisory without a fixed version and the reach of an allowance are defaults the
+  operator never answered.
 
 Ruled by the operator:
 
-- An exception stands per advisory in `quality/config.toml`, with a reason, an item and a date.
-- #116 R2: a new exception is a loosening: the pull request stays red until the operator's door merges it.
+- An exception stands per advisory in `quality/config.toml`, with a reason, an item and a date (ALLOW-1).
+- A new exception is a loosening: the pull request stays red until the operator's door merges it (VERDICT-64).
 - From the merge on, the advisory is green until the date and red again after it (ALLOW-8).
 - No agent can silence an advisory alone.
 - A pull request cannot move the re-check date later without the operator: a later `until` for an existing exception is
   a loosening like a new one.
-- A new exception declares itself: it needs no separate `[[gate.loosened]]` entry.
+- A new exception declares itself: it needs no separate `[[gate.loosened]]` entry (VERDICT-67).
 
 quality downloads each needed database itself on every run (PyPI about 37 MB, npm about 219 MB;
 `https://osv-vulnerabilities.storage.googleapis.com/<ecosystem>/all.zip`)
 into the scan's own 0700 scratch directory and runs osv-scanner `--offline` on it, so osv-scanner makes no network call
-and reads no cache of its own (ADVISORY-8). A database that cannot be downloaded within 300 seconds in total for all
-downloads together (connect, headers and body, however the server drags them out) (ADVISORY-9), cannot be placed in
+and reads no cache of its own (ADVISORY-8). A download that fails transiently (HTTP 500 to 599 or 429, a refused or
+reset connection, a timeout, a DNS failure, an unreachable network or host, a body cut short) is tried again after 3,
+9 and 27 seconds, each wait cut to the time left. A download that waits 30 seconds without a byte is cut and tried
+again (ADVISORY-42). A database that cannot be downloaded within 300 seconds in total for all downloads together
+(the retries and their waits included; connect, headers and body, however the server drags them out; the run's end
+caps the 300 seconds), or still not after the fourth attempt (`cannot download the <ecosystem> advisory
+database from <url>: <error> after 4 attempts`) (ADVISORY-9), cannot be placed in
 the scratch directory (ADVISORY-10), is not a valid zip (ADVISORY-11), or holds no advisory (ADVISORY-12) is exit `2`,
 never clean, naming the database; so are an osv-scanner [that is missing, at another version](commands.md#scanners),
-exits other than `0` or `1` (ADVISORY-13), runs past its time limit (ADVISORY-14), or writes a report that is not the
-expected JSON (ADVISORY-15), disagrees with its exit (ADVISORY-16), or names a lock file quality did not pass
+exits other than `0` or `1` (ADVISORY-13), runs past the run's deadline (ADVISORY-14), or writes a report that is
+not the expected JSON (ADVISORY-15), disagrees with its exit (ADVISORY-16), or names a lock file quality did not pass
 (ADVISORY-17). Trust boundary: the database is an unsigned zip fetched over TLS from the same source
 osv-scanner itself uses; there is deliberately no cache, because a doctored cached database would silence every pull
 request. Records the pinned osv-scanner cannot read are dropped by it silently; the live-database test for
@@ -805,26 +868,32 @@ request. Records the pinned osv-scanner cannot read are dropped by it silently; 
 caller's own `uv sync --locked` guards against a hand-edited lock. osv-scanner exits `127` on a `uv.lock` or
 `pnpm-lock.yaml` it cannot parse, which is `cannot judge`, never clean.
 
-The check job in `gate.yml` stops at 25 minutes: the 300-second download deadline and the 600-second scan limit take
-15, and setup and the other rules get the remaining 10, so quality's own `cannot judge` shows before GitHub cancels the job.
+The check job in `gate.yml` stops later than the run's deadline plus setup and the steps outside the clock, so
+quality's own `cannot judge` shows before GitHub cancels the job; the retries spend the 300 seconds and add none
+(ADVISORY-34).
 Measured with osv-scanner 2.7.0 on 12 cores (the download at load 17 to 20): the npm archive is 219,026,863 bytes (230,735 files), the PyPI archive 37,064,024 bytes
 (26,612 files); downloading npm took 34 s; a whole `check` run over a repository with one `pnpm-lock.yaml` and one hashed
 `requirements.txt` (one pin) under `--all-packages`, both databases included, took 63 s and 69 s wall and 640 MB resident (load 3 to 5).
 A `uv.lock` is judged against the same PyPI database; that setup was not measured.
 
-A requirements file is read by quality itself (`pip_requirements.py`), because osv-scanner skips a line it cannot parse and
-still reports clean. Exactly two logical forms are accepted, after comments are dropped and `\` continuations joined:
-`name[extras]==version`, with an optional `; marker` and `--hash=` tokens, and `name[extras] @ https://.../<name>-<version>-....whl`
-with at least one `--hash`, where the wheel's distribution name equals `name` (PEP 503). Any other line (`-e`, `>=`, `~=`, a bare
-name, `-r`, `-c`, `--index-url`, any other option, a git or sdist URL, a wheel without a hash or named for another package) is exit `2`,
-naming the file and the line (`.github/requirements-build.txt: line 4 is neither ...`); a minimum version is refused because pip
-installs the newest one, so judging the lowest could hide a hole. osv-scanner reads the file as written under `--all-packages`;
-the wheel lines, which it skips, reach it as a scratch file of `name==version` lines judged under the same tracked name, so a
-finding on a wheel is named by the tracked file and an allowance's `lock` is that file's path. The packages osv-scanner lists for
-each file must equal the pins quality read: a pin it did not list is exit `2` (`osv-scanner did not read line 4 of <file>`), and so is
-a package it lists that quality did not read. The grammar is an allowlist; `-r`, `-c`, `--index-url`, `-e`, git and sdist URLs and ranges
+A requirements file is read by quality itself (`pip_requirements.py`), because osv-scanner skips a line it cannot parse
+and still reports clean. Exactly two logical forms are accepted, after comments are dropped and `\` continuations
+joined (ADVISORY-35): `name[extras]==version`, with an optional `; marker` and `--hash=` tokens (ADVISORY-36), and
+`name[extras] @ https://.../<name>-<version>-....whl` with at least one `--hash`, where the wheel's distribution name
+equals `name` (PEP 503) (ADVISORY-37). Any other line (`-e`, `>=`, `~=`, a bare name, `-r`, `-c`, `--index-url`, any
+other option, a git or sdist URL, a wheel without a hash or named for another package) is exit `2`, naming the file and
+the line (`.github/requirements-build.txt: line 4 is neither ...`) (ADVISORY-38); a minimum version is refused because
+pip installs the newest one, so judging the lowest could hide a hole. osv-scanner reads the file as written under
+`--all-packages`; the wheel lines, which it skips, reach it as a scratch file of `name==version` lines judged under the
+same tracked name, so a finding on a wheel is named by the tracked file and an allowance's `lock` is that file's path
+(ADVISORY-39). The packages osv-scanner lists for each file must equal the pins quality read: a pin it did not list is
+exit `2` (`osv-scanner did not read line 4 of <file>`) (ADVISORY-40), and so is a package it lists that quality did
+not read (ADVISORY-41). The grammar is an allowlist; `-r`, `-c`, `--index-url`, `-e`, git and sdist URLs and ranges
 wait for a caller that needs them.
 An advisory database zip with an entry that is not valid JSON is exit `2` too (ADVISORY-19).
+Every other download failure is exit `2` at once, without a retry: another 4xx (a missing database is permanent), a
+missing file, an error no list above names, and every error after the body is whole (a bad zip, no advisory, not JSON,
+a scratch write) (ADVISORY-42).
 
 Ruled by the operator:
 
@@ -833,7 +902,7 @@ Ruled by the operator:
   door like any other (NPM-1).
 - Nothing in the repository's own files silences an advisory; only a real fix in the lock, an upgrade or an override,
   counts (NPM-2).
-- #145 R3: open npm advisories keep the bump pull request red.
+- Open npm advisories keep the bump pull request red (ADVISORY-31).
 
 When a repository's frontend and its lock are gone, the npm database is no longer downloaded and an
 entry for it is a finding until it is deleted. A repository that falls back to an older quality leaves such an entry

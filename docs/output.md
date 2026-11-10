@@ -2,14 +2,18 @@
 
 Reference for the engineer, operator or agent who reads or matches what a quality command prints, and for the test that proves it. What each command does stands in [commands](commands.md), `check`'s rules in [rules](rules.md), the verdict in [gate](gate.md), the two sonar steps in [sonar](sonar.md). Paths, repositories and ids in the examples are invented. All terminal lines are English.
 
+## The output owner
+
 One output owner prints; rules return findings and never print. A line the door prints starts with its own text, so a matcher anchored at the line start, such as setup-uv's python matcher, cannot match repository text (MASK-11).
 
 ## Rows
 
 Ruled by the operator:
 
-- Every row reads `glyph · subject · event · fact`. A finding sits indented under its area row with `path:line` right after the glyph; one `fix:` line follows the last of consecutive findings that share the fix.
-- Findings under their area with a `fix:` line: indented under the area row, columns aligned per area; `fix:` under the last of consecutive findings with the same fix. A finding without a line shows only the path.
+- Every row reads `glyph · subject · event · fact` (ROW-1). A finding sits indented under its area row with `path:line`
+  right after the glyph (ROW-2); one `fix:` line follows the last of consecutive findings that share the fix (ROW-3).
+- Findings under their area with a `fix:` line: indented under the area row, columns aligned per area (ROW-4); `fix:`
+  under the last of consecutive findings with the same fix. A finding without a line shows only the path.
 
 The columns are the glyph (state at a glance), the subject (the area, or `path:line` of the finding), the event (one
 typed word: what is the case), the fact (values, a few words) and then `fix:` (what you do) (ROW-1). A finding is
@@ -25,7 +29,7 @@ A security finding's fix names the line its `# noqa` must stand on, and a code a
 ([rules](rules.md)).
 
 Areas run in the order `files`, `debt`, `imports`, `secrets`, `workflows`, `dependencies`, `code` (ROW-8). The first
-row of a run names the release that judges ([commands](commands.md#which-release-judges)).
+row of a run names the release that judges ([commands](commands.md#which-release-judges)) (ROW-17).
 
 ```text
   · release       v0.10.0        pinned in .github/workflows/ci.yml
@@ -77,6 +81,8 @@ rows, by area:
   package, so rows of one folder share one `fix:` (O44); an allowance that ran out leaves the row `affected` and says
   so (O45); two allowances on one group are a `conflict` finding at the config, an allowance no advisory matches an
   `unused` finding there (O46).
+- `code`: a security finding is `insecure`, a `print` or `pprint` is a `print call`, and an owner that names no code
+  found in its file is `unused` ([rules](rules.md)).
 
 The `env-file` fix's own wording stands in [rules](rules.md).
 
@@ -84,8 +90,11 @@ The `env-file` fix's own wording stands in [rules](rules.md).
 
 Ruled by the operator:
 
-- Rule names only in an allowance fix: a `fix:` line that asks for an `[[….allow]]` entry names the rule, because the entry needs it.
-- A config refusal's fact may name the values a config key takes, rule ids included, and the example to copy may hold the entry's rule line; this is the one exception to the rule that no rule name stands outside an allowance's `fix:`.
+- Rule names only in an allowance fix (ROW-7): a `fix:` line that asks for an `[[….allow]]` entry names the rule
+  (SUFFIX-17), because the entry needs it.
+- A config refusal's fact may name the values a config key takes, rule ids included, and the example to copy may hold
+  the entry's rule line (REFUSAL-15); this is the one exception to the rule that no rule name stands outside an
+  allowance's `fix:`.
 
 No rule name stands in a row (`compose-port`, `env-file`); the event says it in words (ROW-7). The areas replace the
 rule names in the verdict, and [`quality check --help`](commands.md#help-and-wrong-invocations) says which rules an
@@ -95,13 +104,13 @@ area holds.
 
 Ruled by the operator:
 
-- Clean areas: one row per area, so you see what was checked and its extent.
+- Clean areas: one row per area, so you see what was checked and its extent (ROW-9).
 
 An area row is `✓ <area>  clean  <extent>`, also when nothing was found (ROW-9), and `! <area>  N findings` with
 findings (ROW-10); the extent of a clean row is:
 
 - `files`: `N rules · M files`, M the distinct paths git tracks (O16).
-- `debt`: `ceiling held · N entries, M clone pairs`, what the ceiling file holds (O21).
+- `debt`: `ceiling held · N entries, M clone pairs`, what the ceiling file holds (ROW-18).
 - `imports`: `N contracts` (ROW-11).
 - `secrets`: `N commits` (O30), because gitleaks reads committed history only; `staged change · N files` for a staged
   run.
@@ -114,10 +123,11 @@ With ` · K allowed` appended where files were allowed, leaks were allowed (secr
 (dependencies) or output owners were honoured (code). Without a ceiling file the debt row is `· debt  not recorded  N
 entries over the thresholds · measured only` (`M clone pairs · partly measured only` when the ceiling file has no
 `[clones]` table, O21), with `fix: quality check --fix` under it. Under `quality check debt --fix` it is `✓
-debt  lowered  N entries · quality/baseline.toml` with a `✓` row per lowered or dropped entry, `✓ debt  recorded  N
-entries, M clone pairs · quality/baseline.toml is new`, `✓ debt  rewritten  quality/baseline.toml` (entries equal,
-text not), `! debt  N findings  nothing lowered` or `✗ debt  not fixed  <reason>`; under `--dry-run` it is `~ debt  N
-to lower` (`N to move`, `to record`, `to rewrite  text differs · quality/baseline.toml`) with a `~` row per entry.
+debt  lowered  N entries · quality/baseline.toml` with a `✓` row per lowered or dropped entry, `✓ debt  moved  N entries
+· quality/baseline.toml` where it moves entries and lowers none, `✓ debt  recorded  N entries, M clone pairs ·
+quality/baseline.toml is new`, `✓ debt  rewritten  quality/baseline.toml` (entries equal, text not), `! debt  N findings
+nothing lowered` or `✗ debt  not fixed  <reason>`; under `--dry-run` it is `~ debt  N to lower` (`N to move`, `to
+record`, `to rewrite  text differs · quality/baseline.toml`) with a `~` row per entry.
 Without an import-linter config the imports row is `· imports  not set up  no import-linter config` (ROW-13). An area
 that cannot check is `✗ <area>  not checked  <reason>` ([Refusals](#refusals)).
 
@@ -140,7 +150,7 @@ owner stand as notes, and the clean row counts them (O15, O49):
 
 Ruled by the operator:
 
-- `✗` means "could not check or do": a finding is always `!` with exit 1; `✗` is always exit 2.
+- `✗` means "could not check or do": a finding is always `!` with exit 1; `✗` is always exit 2 (CLOSING-1).
 
 | Glyph | Meaning |
 |---|---|
@@ -155,10 +165,12 @@ Ruled by the operator:
 
 Ruled by the operator:
 
-- Every run ends with exactly one closing verdict line, or with an `error:`/`next:` pair when it could not answer.
-- `next:` after a red verdict: a `!` verdict may carry a `next:` only when exactly one command is the answer. For `check` findings the `fix:` lines carry the way.
-- Exit 2 beats 1: exit 2 with the pair; the findings of the other areas stand anyway.
-- Duration in the verdict (`12s`, `1m12s`, `<1s`).
+- Every run ends with exactly one closing verdict line (CLOSING-4), or with an `error:`/`next:` pair when it could not
+  answer (CLOSING-15).
+- `next:` after a red verdict: a `!` verdict may carry a `next:` only when exactly one command is the answer. For
+  `check` findings the `fix:` lines carry the way (CLOSING-11).
+- Exit 2 beats 1 (CLOSING-27): exit 2 with the pair; the findings of the other areas stand anyway (CLOSING-13).
+- Duration in the verdict (`12s`, `1m12s`, `<1s`) (CLOSING-7).
 
 A closing line is its glyph and its parts joined by ` · ` (CLOSING-2), each part escaped (CLOSING-3). Exit `0` or `1`
 ends with one verdict line on stdout (CLOSING-4): `✓ clean · 7 areas · <1s` (CLOSING-5) or
@@ -180,7 +192,7 @@ Exit `2` ends instead with `error: K of N areas could not check` (`1 of 1 area` 
 ` · N findings, M of them in those areas` (CLOSING-14), and `next:` [on stderr](#streams); it prints no verdict line
 (CLOSING-15), and the error line ends after the count of areas where no finding stands (CLOSING-16). A rule that cannot
 judge [refuses only itself](rules.md): the other rules' findings, those of its own area included,
-[still print](#refusals), and a note stands under a `✗` row where its rule judged.
+[still print](#refusals), and a note stands under a `✗` row where its rule judged (CLOSING-33).
 
 A run that cannot start prints only the pair and exits `2` before any rule runs, and no release row stands (CLOSING-17):
 `error: not inside a git work tree · <the folder, ~ for the home folder>` (CLOSING-18) with
@@ -261,12 +273,22 @@ next: write it in quality/config.toml like this:
     reason = "written by scripts/generate_types.py, proven by its --check"
 ```
 
+A rule that runs out of the run's time refuses in one of two fixed wordings, each carrying the run's 540 seconds and
+bringing no step (REFUSAL-22): `the run's 540 seconds are spent` for a rule that would start a scanner with no time
+left, or a download that would start after the end, which names no scanner and so stands once for the rules of an
+area that share it (REFUSAL-4), and `<scanner> did not finish within the run's 540 seconds` for a scanner stopped
+while it ran, `<scanner>` being the executable's file name (`mise` for a call that locates a scanner). A download
+stopped while it ran names itself in the same wording:
+`the PyPI advisory database download did not finish within the run's 540 seconds`.
+
 ## Streams
 
 Ruled by the operator:
 
-- stdout carries rows and the verdict. stderr carries the live line, the input prompt and `error:`/`next:`. So `quality check | less` shows every finding and an error stays visible.
-- `report`: rows and verdict on stderr; the tables are an artifact on stdout, so `quality report > fleet.md` writes only the tables.
+- stdout carries rows and the verdict (STREAM-1). stderr carries the live line, the input prompt and `error:`/`next:`
+  (STREAM-2). So `quality check | less` shows every finding and an error stays visible.
+- `report`: rows (FLEET-33) and verdict (FLEET-45) on stderr; the tables are an artifact on stdout, so
+  `quality report > fleet.md` writes only the tables (FLEET-40).
 
 Rows and the verdict go to stdout (STREAM-1); the live line, the input prompt and `error:`/`next:` go to stderr
 (STREAM-2). `quality report` has [its own split](commands.md#quality-report).
@@ -283,7 +305,8 @@ before the run (`2>&-`) takes nothing; its lines never move to the other stream 
 
 Ruled by the operator:
 
-- With no TTY, with `NO_COLOR` or with `TERM=dumb` the same words print without colour, without the live line and never shortened.
+- With no TTY, with `NO_COLOR` or with `TERM=dumb` the same words print without colour (COLOUR-6), without the live line
+  (COLOUR-7) and never shortened (LENGTH-14).
 - The CI log stays without colour: no special rule beyond "no TTY, no colour".
 
 On a terminal the glyphs, the verdict and the `error:`/`next:` labels are coloured (COLOUR-1) with the 16 base colours
@@ -311,7 +334,9 @@ line counts the seconds, `⠋ release  fetching  <tag> · <seconds>s` (for quali
 
 Ruled by the operator:
 
-- Length of a fact: at the terminal shortened to the window width with `…`, never in a pipe, file or CI log. Commands, sha256 and entries to copy stand on their own line, never shortened. Each kind of finding has a fixed event word and a fact of a few words.
+- Length of a fact: at the terminal shortened to the window width with `…` (LENGTH-1) (LENGTH-2), never in a pipe, file
+  or CI log (LENGTH-14). Commands (LENGTH-6), sha256 and entries to copy (ROW-6) stand on their own line, never
+  shortened. Each kind of finding has a fixed event word and a fact of a few words.
 
 At a terminal the free text of a fact ends at the window with `…`: the reason on a `✗` row or line (LENGTH-1), and the
 fact of a finding or a note whose event is free text (a tracked file, a layout reason, a tool's message) (LENGTH-2);
@@ -334,7 +359,8 @@ A sha256 stands whole on its own line, because you copy it into the entry. The e
 
 Ruled by the operator:
 
-- Repository text is masked: control characters as `\xNN`, and U+2028, U+2029 and format characters as `\uNNNN` (`\UNNNNNNNN` above U+FFFF).
+- Repository text is masked: control characters as `\xNN` (MASK-6), and U+2028, U+2029 and format characters as `\uNNNN`
+  (`\UNNNNNNNN` above U+FFFF) (MASK-7).
 
 Repository text (a file name, a service, a port, a contract or job name, a configuration entry) prints escaped in the door's own fields: a row's subject and fact (MASK-1), a finding's location, fact, detail lines and fix (MASK-2), refusals (MASK-3) and notes (MASK-4). Invalid UTF-8 prints as `\udcNN` (MASK-5); every control character (line feed, carriage return, ESC, tab, DEL, C1) as `\xNN` (MASK-6); U+2028, U+2029 and every format character (Unicode category Cf: bidi overrides, isolates and marks, zero-width characters, the soft hyphen, the byte order mark, tag characters) as `\uNNNN` (`\UNNNNNNNN` above U+FFFF) (MASK-7). Every other character, a backslash included, prints as itself, so escaping text that is already escaped changes nothing (MASK-8). Each field is escaped before it is padded, so the columns hold whatever the text holds (MASK-9).
 
@@ -349,15 +375,15 @@ line at a line feed in import-linter's lines (MASK-13).
 
 Ruled by the operator:
 
-- In GitHub Actions the door both stops workflow commands and escapes repository text.
+- In GitHub Actions the door both stops workflow commands (MASK-14) and escapes repository text.
 
-In GitHub Actions (`GITHUB_ACTIONS=true`) the door first prints `::stop-commands::<token>` on stderr and on stdout (MASK-14), a new random token per run (MASK-15), so no workflow command in repository text runs: no `::warning::` or `##[warning]` annotation, no `add-mask`, no `add-matcher`. The stop lasts for the rest of the step, and the door never prints the line that lifts it (MASK-16). Problem matchers registered in the job still read the log, because the stop does not reach them. The gate's jobs register only setup-uv's python matcher, which is anchored at the line start and so cannot match repository text ([the line start](#output)); a matcher another step registers may still match a door line that holds repository text, and the door cannot prevent that.
+In GitHub Actions (`GITHUB_ACTIONS=true`) the door first prints `::stop-commands::<token>` on stderr and on stdout (MASK-14), a new random token per run (MASK-15), so no workflow command in repository text runs: no `::warning::` or `##[warning]` annotation, no `add-mask`, no `add-matcher`. The stop lasts for the rest of the step, and the door never prints the line that lifts it (MASK-16). Problem matchers registered in the job still read the log, because the stop does not reach them. The gate's jobs register only setup-uv's python matcher, which is anchored at the line start and so cannot match repository text ([the line start](#the-output-owner)); a matcher another step registers may still match a door line that holds repository text, and the door cannot prevent that.
 
 ## Exit codes
 
 Ruled by the operator:
 
-- Exit codes: 0 yes, 1 no, 2 could not answer, 130 interrupted.
+- Exit codes: 0 yes (CLOSING-29), 1 no (CLOSING-28), 2 could not answer (CLOSING-27), 130 interrupted (CLOSING-31).
 
 The exit of `check` is the worst verdict's: `2` if any rule is unparsable or cannot judge (never clean) (CLOSING-27),
 otherwise `1` if any rule has findings (CLOSING-28), otherwise `0` (CLOSING-29); a rule that only measured is `0`
@@ -368,7 +394,9 @@ the process dies by SIGINT, which a shell reads as `130` (CLOSING-31), with no t
 
 Ruled by the operator:
 
-- `-v` shows each scanner's exit and its stderr once gitleaks has cleared it; a text it does not clear is withheld and counted; the machine reports stay out. It never shows a secret.
+- `-v` shows each scanner's exit (VERBOSE-2) and its stderr (VERBOSE-3) once gitleaks has cleared it; a text it does not
+  clear is withheld and counted (VERBOSE-8); the machine reports stay out (VERBOSE-9).
+  It never shows a secret (VERBOSE-14).
 
 `quality check -v` and `quality check secrets --staged -v` add, under each area that ran a scanner, after its findings
 and notes (VERBOSE-1), one `·` row per scanner run, `· <scanner>  exited  <n>` (VERBOSE-2), and that scanner's stderr

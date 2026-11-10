@@ -49,7 +49,7 @@ def test_an_executable_a_symlink_and_a_gitlink_are_clean(build_repo):
     """SUFFIX-2: executables, symlinks and gitlinks are clean."""
     repo = build_repo({**GUIDANCE, "scripts/run": "#!/bin/sh\n", "scripts/stray": "x"})
     in_index(repo, "update-index", "--chmod=+x", "scripts/run")
-    (repo / "latest").symlink_to("AGENTS.md")
+    (repo / "latest").symlink_to("HEART.md")
     in_index(repo, "add", "--", "latest")
     in_index(repo, "update-index", "--add", "--cacheinfo", f"160000,{EXAMPLE_SHA},vendor")
     assert red(repo) == ["scripts/stray"]

@@ -9,6 +9,7 @@ from pathlib import Path
 
 from quality import DISTRIBUTION, installation, process
 from quality.config import CONFIG_PATH, SECRETS_ALLOW, Allowance, entry_name, secret_allowance_entry
+from quality.deadline import RunDeadline
 from quality.output import SEPARATOR, counted
 from quality.report import (
     CannotJudge,
@@ -33,7 +34,6 @@ CLEAN_EXIT = 0
 SECRET_FIX_LABEL = f"rotate it; if it is no secret, allow it in {CONFIG_PATH} with a reason"
 COMMIT_COUNT_FAILURE = "cannot count the commits gitleaks scans"
 GITLEAKS_LEAKS_FOUND = 7  # gitleaks exits 1 on its own errors too, so leaks get a code of their own
-SECRET_SCAN_TIMEOUT_SECONDS = 1800  # bounds the scan so the scratch directory and its mirror are always deleted
 LEAK_FIELDS = ("File", "StartLine", "RuleID", "Commit", "Secret")
 ACTIONLINT = "actionlint"
 ZIZMOR = "zizmor"
@@ -98,7 +98,7 @@ def install_command() -> str:
     return f"mise --cd {shell_word(directory) or printable(directory)} install --locked"
 
 
-def located(name: str) -> Path:
+def located(name: str, run: process.Run) -> Path:
     """The executable of scanner `name` that mise installed from quality's manifest, at exactly the pinned version.
 
     mise is asked in the manifest directory under a ceiling at the real path of its parent (mise matches the ceiling
@@ -110,7 +110,7 @@ def located(name: str) -> Path:
     if shutil.which(MISE) is None:
         raise CannotJudge("mise is not installed", (Instruction(f"install mise: {MISE_INSTALLATION_PAGE}"), install))
     try:
-        asked = process.run(
+        asked = run(
             [MISE, "--cd", str(MANIFEST_DIRECTORY), "which", name, "--tool", f"{tool.key}@{tool.version}"],
             env=os.environ | {MISE_CEILING_VARIABLE: str(MANIFEST_DIRECTORY.resolve().parent)},
             cwd=MANIFEST_DIRECTORY,
@@ -124,7 +124,7 @@ def located(name: str) -> Path:
     if not (answer.is_absolute() and answer.is_file()):
         raise CannotJudge(f"mise which printed no {name} executable", (install,))
     try:
-        verify_version(answer, name, tool.version)
+        verify_version(answer, name, tool.version, run)
     except process.ProcessError as error:
         raise CannotJudge(str(error), (install,)) from error
     return answer
@@ -148,15 +148,18 @@ class SecretScan:
     unused: tuple[Note, ...]
 
 
-def prepare_gitleaks() -> Path:
+def prepare_gitleaks(run: process.Run) -> Path:
     """The pinned gitleaks binary, once it and the git floor are known to hold."""
-    binary = located(GITLEAKS)
+    binary = located(GITLEAKS, run)
     require_git_floor()
     return binary
 
 
-def scan_secrets(root: Path, allowances: dict[Allowance, str], log: ScannerLog = no_log) -> RuleResult:
-    binary = prepare_gitleaks()
+def scan_secrets(
+    root: Path, allowances: dict[Allowance, str], deadline: RunDeadline, log: ScannerLog = no_log
+) -> RuleResult:
+    deadline.ensure_time_left()
+    binary = prepare_gitleaks(deadline.run)
     with process.scratch_directory() as scratch:
         git_environment = process.attribute_free_git_environment(scratch / "home")
         # gitleaks also reads <source>/.gitleaksignore, so it scans a mirror clone (bare), which has no work tree to
@@ -171,7 +174,7 @@ def scan_secrets(root: Path, allowances: dict[Allowance, str], log: ScannerLog =
         commits = process.git(["-C", str(source), "rev-list", "--count", head, "--"], COMMIT_COUNT_FAILURE, git_environment).strip()
         if not (commits.isascii() and commits.isdigit()):
             raise ScannerError(f"{COMMIT_COUNT_FAILURE}: git printed no number")
-        scan = run_gitleaks(binary, scratch, git_environment, source, [f"--log-opts={head}"], allowances, log)
+        scan = run_gitleaks(binary, scratch, git_environment, source, [f"--log-opts={head}"], allowances, deadline, log)
         return RuleResult(scan.findings, int(commits), False, (*scan.notes, *scan.unused))
 
 
@@ -186,12 +189,12 @@ def _judging_arguments(scratch: Path, report: Path) -> list[str]:
 
 def run_gitleaks(
     binary: Path, scratch: Path, git_environment: dict[str, str], source: Path, scope: list[str],
-    allowances: dict[Allowance, str], log: ScannerLog = no_log,
+    allowances: dict[Allowance, str], deadline: RunDeadline, log: ScannerLog = no_log,
 ) -> SecretScan:
     # No --redact: the report must carry Secret to be hashed. It lives only in the 0700 scratch directory.
     report = scratch / "report.json"
     command = [str(binary), "git", "--no-banner", "--no-color", *scope, *_judging_arguments(scratch, report), "--", str(source)]
-    scan = process.run(command, env=git_environment, timeout=SECRET_SCAN_TIMEOUT_SECONDS)
+    scan = deadline.run_in_own_group(command, git_environment)
     log(GITLEAKS, scan.returncode, scan.stderr)
     # gitleaks' stderr may echo what it scanned, so no refusal quotes it.
     if not report.is_file():
@@ -215,7 +218,7 @@ def _cleared_by_gitleaks(text: str) -> bool:
     if not TERMINAL_CODE_OPENERS.isdisjoint(text):
         return False
     try:
-        binary = located(GITLEAKS)
+        binary = located(GITLEAKS, process.run)
         with process.scratch_directory() as scratch:
             report = scratch / "report.json"
             # cwd: gitleaks reads .gitleaksignore from the folder it stands in, whatever --gitleaks-ignore-path names.
@@ -294,8 +297,8 @@ def require_git_floor() -> None:
         )
 
 
-def verify_version(binary: Path, scanner_name: str, pinned: str) -> None:
-    asked = process.run([str(binary), *VERSION_ARGUMENTS[scanner_name]], timeout=process.VERSION_TIMEOUT_SECONDS)
+def verify_version(binary: Path, scanner_name: str, pinned: str, run: process.Run) -> None:
+    asked = run([str(binary), *VERSION_ARGUMENTS[scanner_name]], timeout=process.VERSION_TIMEOUT_SECONDS)
     if asked.returncode != 0:
         # The vet is gitleaks itself, and no refusal quotes gitleaks' stderr.
         said = "" if scanner_name == GITLEAKS else vetted_tail(asked.stderr)
@@ -330,7 +333,7 @@ def _leak_finding(entry: object) -> Finding:
 GITLEAKS_SCANNER = _Scanner(GITLEAKS, (GITLEAKS_LEAKS_FOUND,), _leak_finding)
 
 
-def pinned_installed(name: str, locate: Callable[[], str]) -> Path:
+def pinned_installed(name: str, locate: Callable[[], str], run: process.Run) -> Path:
     """The executable of quality's own installation for `name`, at the version quality's metadata pins."""
     try:
         executable = Path(locate())
@@ -340,21 +343,25 @@ def pinned_installed(name: str, locate: Callable[[], str]) -> Path:
     except installation.UnpinnedDependency as error:
         raise CannotJudge(str(error)) from error
     try:
-        verify_version(executable, name, pinned)
+        verify_version(executable, name, pinned, run)
     except process.ProcessError as error:
         raise CannotJudge(str(error), (REINSTALL,)) from error
     return executable
 
 
 def scan_workflows(
-    root: Path, rule: Rule, workflows: list[str], locate_zizmor: Callable[[], str], log: ScannerLog = no_log
+    root: Path, rule: Rule, workflows: list[str], locate_zizmor: Callable[[], str],
+    deadline: RunDeadline, log: ScannerLog = no_log,
 ) -> list[Finding]:
     """The findings of the one scanner that judges `rule`; nothing to scan needs no scanner."""
     if not workflows:
         return []
     scanner = WORKFLOW_SCANNERS[rule]
-    binary = pinned_installed(ZIZMOR, locate_zizmor) if scanner.name == ZIZMOR else located(scanner.name)
-    scan = process.run([str(binary), *scanner.arguments, *workflows], cwd=root)
+    if scanner.name == ZIZMOR:
+        binary = pinned_installed(ZIZMOR, locate_zizmor, deadline.run)
+    else:
+        binary = located(scanner.name, deadline.run)
+    scan = deadline.run([str(binary), *scanner.arguments, *workflows], cwd=root)
     log(scanner.name, scan.returncode, scan.stderr)
     return scanner_findings(scanner, scan.stdout, scan.returncode, scan.stderr)
 

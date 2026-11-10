@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import config, scanners
+from quality import config, deadline, scanners
 from quality.report import Example, FindingEvent, NoteEvent, printable
 from quality.rules import Area, Rule
 from tests.support.check import (
@@ -33,7 +33,17 @@ from tests.support.check import (
 )
 from tests.support.door import CHECK_WORD, MODULE_DOOR, STAGED_WORDS, check_door, door_in
 from tests.support.git_repositories import stage
-from tests.support.scanners import OUTPUTS, check_exit_2, commit, fake_gitleaks, flagging, scan, serving, vetting
+from tests.support.scanners import (
+    OUTPUTS,
+    check_exit_2,
+    commit,
+    fake_gitleaks,
+    flagging,
+    run_deadline,
+    scan,
+    serving,
+    vetting,
+)
 from tests.support.secrets import FAKE_KEY, HOSTILE_FILE, OTHER_KEY, allow_config, assert_key_found, sha256_of
 
 RECORDED_SECRET = "PLACEHOLDER-SECRET-VALUE"  # the Secret in the recorded gitleaks-finding.json
@@ -74,7 +84,7 @@ def allowed_locations(repo: Path) -> list[str]:
     ],
 )
 def test_a_secret_finding_is_allowed_only_by_rule_file_and_value(build_repo, served_scanners, capsys, config_text, code, found, allowed):
-    """SECRET-4, SECRET-16, SECRET-19, SECRET-20, SECRET-26: a finding is allowed only when rule, file and the hash of
+    """SECRET-4, SECRET-16, SECRET-19, SECRET-20: a finding is allowed only when rule, file and the hash of
     its value match one entry; no config, another value, another file or another rule leaves it red."""
     repo = recorded_leak_repo(build_repo, served_scanners, config_text)
     exit_code = check_door(repo)
@@ -141,7 +151,7 @@ def test_the_scan_passes_the_gates_own_config(build_repo, served_scanners):
     """SECRET-3: gitleaks is told to use quality's config, not the repository's."""
     fake_gitleaks(served_scanners, on_scan='echo "[]" > "$report"; exit 0')
     repo = build_repo({".gitleaks.toml": "[allowlist]\n"})
-    scanners.scan_secrets(repo, {})
+    scanners.scan_secrets(repo, {}, run_deadline())
     given = (served_scanners / "gitleaks.arguments").read_text().split()
     assert given[given.index("--config") + 1] == str(scanners.GITLEAKS_CONFIG)
 
@@ -168,7 +178,7 @@ def allow_fake_key(repo: Path, file: str = "config.txt") -> None:
 
 @pytest.mark.scanner
 def test_an_allowed_value_stays_green_at_a_shifted_line_and_across_commits(build_repo, installed_scanners, capsys):
-    """SECRET-8, SECRET-18, SECRET-26: an entry holding the hash of the key allows it at line 1, at a later line and in
+    """SECRET-8, SECRET-18: an entry holding the hash of the key allows it at line 1, at a later line and in
     every commit that holds it, each as an allowed row."""
     repo = build_repo({"docs/config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
     (repo / "docs/config.txt").write_text("removed\n")
@@ -255,7 +265,7 @@ def test_the_key_reaches_no_output_and_no_file_and_the_scratch_directory_is_gone
     scratch_parent.mkdir()
     monkeypatch.setattr(tempfile, "tempdir", str(scratch_parent))
     if failure == "gitleaks-stalls":
-        monkeypatch.setattr(scanners, "SECRET_SCAN_TIMEOUT_SECONDS", 1)
+        monkeypatch.setattr(deadline, "RUN_DEADLINE_SECONDS", 1)
     if failure != "none":
         failing = tmp_path / "failing"
         failing.mkdir()
@@ -313,7 +323,7 @@ def test_an_allowance_no_finding_used_is_one_unused_note_at_the_config(build_rep
 @pytest.mark.scanner
 @pytest.mark.parametrize("name", ["docs/config.txt", f"docs/{HOSTILE_FILE}"], ids=["plain-path", "esc-quote-and-bidi-path"])
 def test_the_printed_entry_with_a_reason_allows_exactly_that_finding(build_repo, installed_scanners, capsys, name):
-    """O31, SECRET-26: the lines under `fix:`, with a reason added and committed, turn the finding into one allowed
+    """O31: the lines under `fix:`, with a reason added and committed, turn the finding into one allowed
     row."""
     repo = build_repo({name: f"aws_access_key_id = {FAKE_KEY}\n", config.CONFIG_PATH: GATE_ONLY})
     assert scan(repo) == 1

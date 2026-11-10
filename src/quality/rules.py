@@ -71,6 +71,7 @@ class Rule(StrEnum):
     CLONE = "clone", Area.DEBT, "v0.4.0", Switch.REPORT_ONLY, SwitchChange("v0.5.0", Switch.CLONE_TABLE)
     IMPORT_CONTRACT = "import-contract", Area.IMPORTS, RELEASE_0_3, Switch.IMPORT_LINTER_CONFIG
     CLAUDE_MD = "claude-md", Area.FILES, RELEASE_0_3, Switch.ALWAYS
+    AGENTS_MD = "agents-md", Area.FILES, None, Switch.ALWAYS
     ROOT_LAYOUT = "root-layout", Area.FILES, "v0.6.0", Switch.ALWAYS
     FILE_SUFFIX = "file-suffix", Area.FILES, RELEASE_0_7, Switch.ALWAYS
     SCRIPT_NAME = "script-name", Area.FILES, RELEASE_0_7, Switch.ALWAYS

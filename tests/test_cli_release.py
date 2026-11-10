@@ -8,6 +8,7 @@ from quality.installation import VcsOrigin
 from quality.pin import RunningQuality
 from tests.support.door import DRY_RUN_WORDS, STAGED_WORDS, door_in
 from tests.support.git_repositories import stage
+from tests.support.layout import FILES_RULE_IDS
 
 PINNED_ROW = "  · release       v0.10.0        pinned in .github/workflows/ci.yml"
 
@@ -35,7 +36,15 @@ def running(version: str, commit: str):
     [
         pytest.param(
             gate_call("v0.10.0"), "0.10.0", pinned_commit(), ("check", "files"),
-            (0, [PINNED_ROW, "  ✓ files         clean          10 rules · 2 files", "✓ clean · 1 area · <1s"], []),
+            (
+                0,
+                [
+                    PINNED_ROW,
+                    f"  ✓ files         clean          {len(FILES_RULE_IDS)} rules · 2 files",
+                    "✓ clean · 1 area · <1s",
+                ],
+                [],
+            ),
             id="check at the pin",
         ),
         pytest.param(
@@ -88,8 +97,8 @@ def running(version: str, commit: str):
     ],
 )
 def test_check_names_the_release_that_judges_first_or_refuses_with_its_pair(build_repo, capsys, files, version, commit, words, expected):
-    """PIN-1, PIN-5, PIN-8, PIN-10, PIN-11, PIN-12: `check` names the release that judges in its first row, or is exit 2
-    with its pair and no row; the commit hook judges with the installed release where no gate pins one."""
+    """PIN-1, PIN-5, PIN-8, PIN-10, PIN-11, PIN-12, ROW-17: `check` names the release that judges in its first row, or
+    is exit 2 with its pair and no row; the commit hook judges with the installed release where no gate pins one."""
     repo = build_repo(files)
     stage(repo, {"docs/notes.md": "nothing secret\n"})
     code = door_in(repo, *words, judging=running(version, commit), clock=lambda: 0.0)

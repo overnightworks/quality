@@ -11,11 +11,12 @@ PRINT_REASON = "T201 `print` found"
 OWNER = "# ruff: noqa: T201 - the command line owns its output"
 
 
-def fake_ruff(directory: Path, on_check: str, version: str | None = None) -> Path:
-    """A ruff that reports `version` and runs `on_check` (shell) for any other call."""
+def fake_ruff(directory: Path, on_check: str, version: str | None = None, on_version: str = "exit 0") -> Path:
+    """A ruff that reports `version`, then runs `on_version` (shell), and runs `on_check` (shell) for any other call."""
     binary = directory / "ruff"
     reported = version or installation.required_version("ruff")
-    binary.write_text(f'#!/bin/sh\nif [ "$1" = "--version" ]; then echo "ruff {reported}"; exit 0; fi\n{on_check}\n')
+    version_branch = f'if [ "$1" = "--version" ]; then echo "ruff {reported}"; {on_version}; fi'
+    binary.write_text(f"#!/bin/sh\n{version_branch}\n{on_check}\n")
     binary.chmod(0o755)
     return binary
 

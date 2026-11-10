@@ -16,7 +16,7 @@ from quality.report import CannotJudge
     ],
 )
 def test_recognises_which_transport_failures_ran_out_of_time(error, expected):
-    """#22 kept row: a transport failure is told apart as a timeout"""
+    """A timeout is told apart from other transport failures, also when it arrives wrapped in a URLError."""
     assert web.timed_out(error) is expected
 
 

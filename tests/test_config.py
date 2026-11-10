@@ -14,6 +14,7 @@ from quality.config import (
     ConfigError,
     Declaration,
     GeneratedFile,
+    LayoutAllowance,
     LegacyMode,
     load_allow_lists,
     load_gate_settings,
@@ -373,8 +374,8 @@ ADVISORY_KEYS = f"{ADVISORY} entry 1 needs exactly an id, a lock, an until, a da
 def test_a_malformed_advisory_allowance_cannot_be_judged_where_the_whole_config_is_read(
     capsys, run_env, entry, named
 ):
-    """#116 cell 12: a malformed [advisories] entry is exit 2 in the verdict and in the secret and advisory rules of
-    the check, each naming the entry on its first line."""
+    """ALLOW-12, ALLOW-13, ALLOW-14, ALLOW-15, ALLOW-16, ALLOW-17, ALLOW-18: a malformed [advisories] entry is exit 2 in
+    the verdict and in every rule of the check that reads the config, each naming the entry on its first line."""
     repo, _ = run_env
     (repo / CONFIG_PATH).write_text(entry + '[gate]\nmandatory_jobs = ["checks"]\n')
     assert cli.main(["verdict"], fetcher_for=lambda token: lambda url: ("{}", None)) == 2
@@ -383,29 +384,29 @@ def test_a_malformed_advisory_allowance_cannot_be_judged_where_the_whole_config_
     assert check_door(repo) == 2
     capsys.readouterr()
     assert {rule for rule, reason in refusals(repo).items() if named in reason} == {
-        Rule.COMPOSE_PORT, Rule.SIZE, Rule.ROOT_LAYOUT, Rule.FILE_SUFFIX, Rule.SCRIPT_NAME, Rule.SCRIPT_HEADER, Rule.TEST_LAYOUT, Rule.TEST_IMPORT,
+        Rule.COMPOSE_PORT, Rule.SIZE, Rule.ROOT_LAYOUT, Rule.AGENTS_MD, Rule.FILE_SUFFIX, Rule.SCRIPT_NAME,
+        Rule.SCRIPT_HEADER, Rule.TEST_LAYOUT, Rule.TEST_IMPORT,
         Rule.PYTHON_FLOOR, Rule.LEAK, Rule.ADVISORY,
     }
 
 
 @pytest.mark.parametrize("entry", [allowance_config(reason=None), allowance_config(until="2027-01-31")])
 def test_a_malformed_advisory_allowance_shows_the_example(entry):
-    """#116 cell 12: the refusal of an [[advisories.allow]] entry carries the example of how to write one."""
+    """O10: the refusal of an [[advisories.allow]] entry carries the example of how to write one."""
     with pytest.raises(ConfigError) as refused:
         load_allow_lists(entry)
     assert refused.value.example == config.ADVISORY_ALLOWANCE_EXAMPLE
 
 
 def test_the_verdict_refuses_a_malformed_secret_allowance_as_check_does(capsys, run_env):
-    """#116 cell 12 (the plan review's consequence): one validator reads the whole config, so the verdict refuses a
-    malformed [secrets] entry too."""
+    """ALLOW-18: one validator reads the whole config, so the verdict refuses a malformed [secrets] entry too."""
     repo, _ = run_env
     (repo / CONFIG_PATH).write_text('[gate]\nmandatory_jobs = ["checks"]\n' + MALFORMED_SECRET)
     assert cli.main(["verdict"], fetcher_for=lambda token: lambda url: ("{}", None)) == 2
     assert "[secrets] allow entry" in capsys.readouterr().err
 
 
-LAYOUT_RULE_IDS = "file-suffix, script-header, script-name, test-import, test-layout"
+LAYOUT_RULE_IDS = "agents-md, file-suffix, script-header, script-name, test-import, test-layout"
 
 
 @pytest.mark.parametrize(
@@ -431,6 +432,23 @@ def test_a_layout_allowance_refusal_names_the_rules_in_plain_words(entries, mess
     with pytest.raises(ConfigError) as refused:
         load_allow_lists(entries)
     assert refused.value.fact == message
+
+
+def test_a_layout_declaration_for_agents_md_is_read_as_written():
+    """AGENTS-20: `agents-md` is a layout rule, so its entry is accepted by the one reader of `[[layout.allow]]`."""
+    entry = '[[layout.allow]]\npath = "docs/AGENTS.md"\nrule = "agents-md"\nreason = "r"\n'
+    assert load_allow_lists(entry).layout == (LayoutAllowance("docs/AGENTS.md", Rule.AGENTS_MD, "r"),)
+
+
+BAD_LAYOUT_ENTRY = '[[layout.allow]]\npath = "dir/"\nrule = "agents-md"\nreason = "r"\n'
+
+
+@pytest.mark.parametrize("tracked", [{}, {"AGENTS.md": "# guidance\n"}], ids=["no AGENTS.md", "an AGENTS.md"])
+@pytest.mark.parametrize("malformed", ["layout = 1\n", BAD_LAYOUT_ENTRY], ids=["layout not a table", "a bad entry"])
+def test_a_malformed_layout_config_refuses_the_agents_md_row(build_repo, tracked, malformed):
+    """AGENTS-20: the row cannot judge, with or without a tracked AGENTS.md, as for each other layout rule."""
+    repo = build_repo({**tracked, CONFIG_PATH: GATE_WITH_CHECKS + malformed})
+    assert {Rule.AGENTS_MD, Rule.FILE_SUFFIX} <= refusals(repo).keys()
 
 
 GATE_WITH_CHECKS = '[gate]\nmandatory_jobs = ["checks"]\n'

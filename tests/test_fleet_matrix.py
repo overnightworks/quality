@@ -466,4 +466,8 @@ def test_the_heading_sentence_names_the_rules_the_oldest_release_always_enforces
     """FLEET-13, FLEET-14: the five rules get a sentence, not five columns."""
     _, output = fleet_report(public("any", {}), tags=first_releases())
     assert "Every gate release enforces env-file, compose-port, secret, workflow-lint and workflow-security." in output
-    assert MATRIX_COLUMNS[5:] == ("size", "clone", "import-contract", "claude-md", "root-layout", "file-suffix", "script-name", "script-header", "test-layout", "test-import", "python-floor", "python-security", "python-print", "advisory")
+    assert MATRIX_COLUMNS[5:] == (
+        "size", "clone", "import-contract", "claude-md", "agents-md", "root-layout", "file-suffix",
+        "script-name", "script-header", "test-layout", "test-import", "python-floor",
+        "python-security", "python-print", "advisory",
+    )

@@ -160,6 +160,12 @@ def environment_without_token():
 legacy_config_absent = '[gate]\nmandatory_jobs = ["quality"]\n'
 
 
+def work_in_scratch_directory(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "quality").mkdir()
+    (tmp_path / "quality" / "config.toml").write_text(legacy_config_absent)
+
+
 def legacy_config(mode: str) -> str:
     return f'[gate]\nmandatory_jobs = ["quality"]\nlegacy = "{mode}"\n'
 

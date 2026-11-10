@@ -28,8 +28,11 @@ command that took the stray word, or of the parser that refused (HELP-24).
 
 Ruled by the operator:
 
-- Seven areas, `files`, `debt`, `imports`, `secrets`, `workflows`, `dependencies` and `code`; the `code` line of `quality check --help`, `code  Python source: security findings and print calls`; and the `secrets` line `secrets in the committed history`.
-- The areas replace the rule names in the verdict; `quality check --help` says which rules an area holds. `code` holds `python-security` and `python-print`.
+- Seven areas, `files`, `debt`, `imports`, `secrets`, `workflows`, `dependencies` and `code`; the `code` line of
+  `quality check --help`, `code  Python source: security findings and print calls`; and the `secrets` line
+  `secrets in the committed history` (HELP-3).
+- The areas replace the rule names in the verdict (CLOSING-6); `quality check --help` says which rules an area holds.
+  `code` holds `python-security` and `python-print`.
 
 What a run that names areas judges and prints is in [rules](rules.md).
 
@@ -84,9 +87,13 @@ its gate calls its own `gate.yml`, the installed quality judges, never the pull 
 
 Ruled by the operator:
 
-- The release row always, also in the commit hook, as a grey note: proof that locally the same release judges as in the gate.
-- The release is missing: quality fetches exactly the pin through uv and says so in the release row; offline is exit 2.
-- No pin, old pin, quality itself: no workflow calls `gate.yml` is exit 2, except for `check secrets --staged`, which judges with the installed release; a pin older than the release with `check` is exit 2 with "raise the gate pin"; in quality itself the checkout judges.
+- The release row always (PIN-5), also in the commit hook, as a grey note: proof that locally the same release judges as
+  in the gate.
+- The release is missing: quality fetches exactly the pin through uv (PIN-24) and says so in the release row (PIN-6);
+  offline is exit 2 (PIN-27).
+- No pin, old pin, quality itself: no workflow calls `gate.yml` is exit 2 (PIN-8), except for `check secrets --staged`,
+  which judges with the installed release (PIN-12); a pin older than the release with `check` is exit 2 with "raise the
+  gate pin" (PIN-11); in quality itself the checkout judges (PIN-2).
 
 ## `quality check --fix`
 
@@ -109,8 +116,9 @@ The rows and rules are in [rules](rules.md), the rows' form in [output](output.m
 
 Ruled by the operator:
 
-- A fall below a metric's threshold drops the entry (`dropped  file 805 → 790 lines · debt from 800 lines`).
-- A ceiling that can fall stays a finding: `!` and exit 1. The dry run `--fix --dry-run` exits 1 while anything can be lowered. Without a ceiling file debt is a grey note with exit 0.
+- A fall below a metric's threshold drops the entry (`dropped  file 805 → 790 lines · debt from 800 lines`) (FIX-4).
+- A ceiling that can fall stays a finding: `!` and exit 1 (CEILING-6). The dry run `--fix --dry-run` exits 1 while
+  anything can be lowered (FIX-23). Without a ceiling file debt is a grey note with exit 0 (O21).
 
 ## `quality check secrets --staged`
 
@@ -121,7 +129,8 @@ is resolved against the working directory, as git does (STAGED-4), so `git commi
 worktree scan the index git is committing (STAGED-5). `--staged` takes exactly the area `secrets`; any other set of
 areas, or none, is a [wrong invocation](#help-and-wrong-invocations).
 
-Ruled by the operator: `--staged` only with `secrets`: any other area with `--staged` is exit 2 with `next: quality check secrets --staged`.
+Ruled by the operator: `--staged` only with `secrets`: any other area with `--staged` is exit 2 with
+`next: quality check secrets --staged` (HELP-23).
 
 The index is written as a tree (`git write-tree`, only tree objects a commit writes anyway) and read into a scratch
 repository inside a 0700 scratch directory. The scratch repository borrows the objects
@@ -267,7 +276,8 @@ gate holds the manifest in) takes no part in which binary runs (SCANNER-8).
 
 Ruled by the operator:
 
-- The command that installs a scanner: `mise --cd <quality's installation>/quality/mise install --locked`, the release's own manifest and lock; the path is quality's installation, shown as the example shows it.
+- The command that installs a scanner: `mise --cd <quality's installation>/quality/mise install --locked` (SCANNER-2),
+  the release's own manifest and lock; the path is quality's installation, shown as the example shows it.
 
 `check` and `check secrets --staged` exit `2` for a scanner mise cannot locate (SCANNER-9), that is at another version
 or cannot report one (SCANNER-10), or whose answer names no executable (SCANNER-11), and for a machine without mise,
@@ -283,9 +293,22 @@ dependencies of quality's package (`pyproject.toml`, hashed in `uv.lock`), so in
 `next:` ([Refusals](output.md#refusals)); a scanner quality's own metadata does not pin exactly makes them
 `cannot judge` as a defect in quality's release (SCANNER-18).
 
+One `check` run and one `check secrets --staged` run each have one deadline of 540 seconds, started when the run's
+inputs are built, after the release row (SCANNER-19). gitleaks (in both), zizmor, actionlint, osv-scanner and ruff
+have it as their only time bound (SCANNER-19), and the advisory database downloads end at the earlier of their own
+deadline and the run's. A rule that would start one of them, or a download, with no time left starts nothing, and a
+scanner or download still running when the time ends is stopped, gitleaks with its whole process group so the `git`
+it starts dies too, and its scratch directory and mirror are deleted. Both make the rule `cannot judge` (exit `2`),
+worded as in [Refusals](output.md#refusals), with no step of their own and the other rules' rows standing
+(SCANNER-20). The calls that locate a scanner (`mise which`) and ask it for its version run under the same deadline and
+keep their own 30 seconds, taking the smaller of 30 seconds and the time left (SCANNER-19): with no time left they start
+nothing, and one still running when the run ends is stopped and cuts the rule the same way, `mise` or the scanner being
+its subject and no install or reinstall step following (SCANNER-20); with 30 seconds the smaller, the call ends at 30
+seconds with its step (SCANNER-9, SCANNER-10, SCANNER-17). [The vet](output.md#the-vet) stays outside the clock.
+
 Ruled by the operator: quality builds the logic and the process itself and never a specialist scanner (language
 linters and test runners, gitleaks, osv-scanner, mutation tools); the scanners it uses run pinned underneath the one
-door.
+door (SCANNER-5).
 
 ## `quality merge`
 
@@ -296,7 +319,8 @@ what the command does.
 
 Ruled by the operator:
 
-- A body the door refuses for its line stops at `! landing  refused` under the pull request's row instead, the same row as the last one before the question.
+- A body the door refuses for its line (MERGE-67) stops at `! landing  refused` under the pull request's row instead,
+  the same row as the last one before the question (MERGE-5).
 - `merge` names no aco step; that step belongs in the head's instructions.
 
 - **Operator only.** It runs under the operator's own `gh` login, which needs admin permission on the repository

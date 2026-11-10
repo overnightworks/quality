@@ -153,7 +153,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
 @pytest.mark.parametrize(
     ("answers", "options", "code", "expected", "slept"),
     [
-        pytest.param((page(job()),), {}, 0, ["✓ green · 1 mandatory job · <1s"], 0, id="cell 1"),
+        pytest.param((page(job()),), {}, 0, ["✓ green · 1 mandatory job · <1s"], 0, id="green on the first read"),
         pytest.param(
             (page(running()), page(job())),
             {},
@@ -161,7 +161,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             ['· run 2 reads GitHub first listed "checks" (attempt 1) as in_progress',
              "✓ green · 1 mandatory job · <1s"],
             10,
-            id="cell 2",
+            id="in_progress is re-read",
         ),
         pytest.param(
             (page(running("queued")), page(running()), page(job())),
@@ -170,7 +170,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             ['· run 3 reads GitHub first listed "checks" (attempt 1) as queued',
              "✓ green · 1 mandatory job · <1s"],
             20,
-            id="cell 3",
+            id="queued, then in_progress, then green",
         ),
         pytest.param(
             (page(running()), page(job(conclusion="failure"))),
@@ -180,7 +180,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
              '! checks failure attempt 1',
              "! red · 1 of 1 mandatory job failed · <1s"],
             10,
-            id="cell 4",
+            id="in_progress, then a failed job",
         ),
         *(
             pytest.param(
@@ -190,11 +190,14 @@ def reread(capsys, monkeypatch, run_env, pull_request):
                 [f'· run 2 reads GitHub first listed "checks" (attempt 1) as {state}',
                  "✓ green · 1 mandatory job · <1s"],
                 10,
-                id=f"cell 6 {state}",
+                id=f"{state} is re-read",
             )
             for state in ("waiting", "pending", "requested")
         ),
-        pytest.param((page(running(name="quality / verdict"), job()),), {}, 0, ["✓ green · 1 mandatory job · <1s"], 0, id="cell 7"),
+        pytest.param(
+            (page(running(name="quality / verdict"), job()),), {}, 0, ["✓ green · 1 mandatory job · <1s"], 0,
+            id="the verdict job itself is not waited for",
+        ),
         pytest.param(
             (page(job(), running(name="B")),),
             {"base": gate_config("checks", "B"),
@@ -203,7 +206,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             ["! loosenings 1 declared", declared('mandatory job "B" removed'), "        reason: ruled",
              f"{ONLY_DECLARED} · <1s", "next: quality merge o/r#7"],
             0,
-            id="cell 8",
+            id="an unsettled job removed by a declared loosening",
         ),
         pytest.param(
             (page(job(), running("queued", "B")), page(job(), job("B"))),
@@ -211,7 +214,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             0,
             ['· run 2 reads GitHub first listed "B" (attempt 1) as queued', "✓ green · 2 mandatory jobs · <1s"],
             10,
-            id="cell 9",
+            id="a queued second job is re-read",
         ),
         pytest.param(
             (page(job(), running(attempt=2)), page(job(), job(attempt=2), running(attempt=3))),
@@ -220,7 +223,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             ['· run 2 reads GitHub first listed "checks" (attempt 2) as in_progress',
              "✓ green · 1 mandatory job · <1s"],
             10,
-            id="cell 10",
+            id="attempt 2 reads only its own attempt",
         ),
         pytest.param(
             (page(job(), running(leg=2)), page(job(), job(leg=2))),
@@ -229,7 +232,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             ['· run 2 reads GitHub first listed "checks" (attempt 1) as in_progress',
              "✓ green · 1 mandatory job · <1s"],
             10,
-            id="cell 11",
+            id="a second leg in progress is re-read",
         ),
         pytest.param(
             (bad_gateway(), page(job())),
@@ -237,7 +240,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             0,
             ["· run 2 reads GitHub first answered HTTP 502 Bad Gateway", "✓ green · 1 mandatory job · <1s"],
             10,
-            id="cell 12",
+            id="a 502 is re-read",
         ),
         pytest.param(
             (page(running()), page(job())),
@@ -247,7 +250,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
              '! quality / sonar failure',
              "! red · 1 gate job failed · <1s"],
             10,
-            id="cell 18",
+            id="a red sonar job beside an unsettled read",
         ),
         pytest.param(
             (page(job(), running(attempt=2)), page(job()), page(job(), job(attempt=2, conclusion="failure"))),
@@ -257,7 +260,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
              '! checks failure attempt 2',
              "! red · 1 of 1 mandatory job failed · <1s"],
             20,
-            id="cell 20",
+            id="attempt 2 is read three times and fails",
         ),
         pytest.param(
             (
@@ -270,7 +273,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             0,
             ["· run 2 reads GitHub first answered HTTP 502 Bad Gateway", "✓ green · 1 mandatory job · <1s"],
             10,
-            id="cell 25",
+            id="a 502 on the second page starts a new read",
         ),
         pytest.param(
             (page(job(), job(conclusion="failure", leg=2), running(name="X")), page(job(), job("X"))),
@@ -280,7 +283,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
              '! checks several entries 2 entries in attempt 1, not all success',
              "! red · 1 of 2 mandatory jobs failed · <1s"],
             10,
-            id="cell 26",
+            id="several entries, one failed, another job in progress",
         ),
         pytest.param(
             (page(job(conclusion="failure"), running(leg=2)), page(job(leg=2))),
@@ -290,7 +293,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
              '! checks several entries 2 entries in attempt 1, not all success',
              "! red · 1 of 1 mandatory job failed · <1s"],
             10,
-            id="cell 27",
+            id="two legs, one failed, one in progress",
         ),
         pytest.param(
             (page(job(conclusion="failure"), running(name="X")), page(job(leg=2), job("X"))),
@@ -300,7 +303,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
              '! checks several entries 2 entries in attempt 1, not all success',
              "! red · 1 of 2 mandatory jobs failed · <1s"],
             10,
-            id="cell 29",
+            id="a failed leg stays beside a green leg of a later read",
         ),
         pytest.param(
             (page(running()),) * 13,
@@ -311,7 +314,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
              ('error: GitHub still lists "checks" (attempt 1) as in_progress after 13 reads · the gate starts after every '
               "mandatory job, so this answer is stale"), *STALE_STEPS],
             120,
-            id="cell 5",
+            id="in_progress after 13 reads",
         ),
         pytest.param(
             (bad_gateway(),) * 13,
@@ -320,7 +323,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
             ["· run 13 reads GitHub first answered HTTP 502 Bad Gateway",
              "error: GitHub answered HTTP 502 Bad Gateway for u after 13 reads · GitHub's fault, not the caller's", *NEXT_LINES[(RERUN,)]],
             120,
-            id="cell 13",
+            id="a 502 on all 13 reads",
         ),
         pytest.param(
             (page(running()),) * 13,
@@ -331,7 +334,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
              ('error: GitHub still lists "checks" (attempt 1) as in_progress after 13 reads · the gate starts after every '
               "mandatory job, so this answer is stale"), *STALE_STEPS],
             120,
-            id="cell 21",
+            id="in_progress after 13 reads beside a red sonar job",
         ),
         pytest.param(
             (page(running()), *(bad_gateway(),) * 12),
@@ -341,7 +344,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
              '! checks running attempt 1 · in_progress',
              "error: GitHub answered HTTP 502 Bad Gateway for u after 13 reads · GitHub's fault, not the caller's", *NEXT_LINES[(RERUN,)]],
             120,
-            id="cell 22",
+            id="in_progress, then a 502 on the rest",
         ),
         pytest.param(
             (page(running()), *(bad_gateway(),) * 12),
@@ -351,7 +354,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
              '! checks running attempt 1 · in_progress', '! quality / sonar failure',
              "error: GitHub answered HTTP 502 Bad Gateway for u after 13 reads · GitHub's fault, not the caller's", *NEXT_LINES[(RERUN,)]],
             120,
-            id="cell 22 with sonar red",
+            id="in_progress, then a 502 on the rest, beside a red sonar job",
         ),
         pytest.param(
             (page(running(attempt=2)), *(page(),) * 12),
@@ -362,7 +365,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
              ('error: GitHub still lists "checks" (attempt 2) as in_progress after 13 reads · the gate starts after every '
               "mandatory job, so this answer is stale"), *STALE_STEPS],
             120,
-            id="cell 20 run out",
+            id="attempt 2 in_progress after 13 reads",
         ),
         pytest.param(
             (page(job(), job(conclusion="failure", leg=2), running(name="X")), *(page(job()),) * 12),
@@ -373,7 +376,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
              ('error: GitHub still lists "X" (attempt 1) as in_progress after 13 reads · the gate starts after every '
               "mandatory job, so this answer is stale"), *STALE_STEPS],
             120,
-            id="cell 26 run out",
+            id="a failed leg and X in_progress after 13 reads",
         ),
         pytest.param(
             (
@@ -386,7 +389,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
              '! checks running attempt 1 · in_progress',
              "error: cannot read u: HTTP Error 403: Forbidden", *NEXT_LINES[()]],
             10,
-            id="cell 23",
+            id="in_progress, then a read GitHub refuses with 403",
         ),
         pytest.param(
             (page(running()), ('{"jobs": []}', None)),
@@ -397,7 +400,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
              ("error: https://api.github.com/repos/o/r/actions/runs/1/jobs?filter=all&per_page=100 "
              "did not return the expected jobs page: KeyError('total_count')"), *NEXT_LINES[()]],
             10,
-            id="cell 17",
+            id="in_progress, then a page without total_count",
         ),
         pytest.param(
             (page(running()), page(job(), total=2)),
@@ -407,7 +410,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
              '! checks running attempt 1 · in_progress',
              "error: read 1 jobs but the run has 2", *NEXT_LINES[()]],
             10,
-            id="cell 24",
+            id="in_progress, then a listing short of its total",
         ),
     ],
 )
