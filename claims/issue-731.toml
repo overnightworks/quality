@@ -1,8 +1,0 @@
-claim_id = "739a8739972045d9b05d807d0fcfe588"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "ba1d81841a899feed886c9431b0fa03071ec9bf8"
-branch = "claude/issue-731-deadline-locate-version"
-scope = ["docs/commands.md", "docs/output.md", "src/quality/advisories.py", "src/quality/deadline.py", "src/quality/process.py", "src/quality/python_lint.py", "src/quality/scanners.py", "src/quality/staged.py", "tests/support/python_lint.py", "tests/support/scanners.py", "tests/test_check.py", "tests/test_deadline.py", "tests/test_scanners.py", "tests/test_staged.py"]
-opened_commit = "3bac0b1587b76cee3faa8351c1105c790c4ffd59"
-whole_reason = "Every caller of located, verify_version, pinned_installed and prepare_gitleaks must change with the signature or the import breaks, and the same stubs and parametrized cases prove all of them, so a split would leave one half-threaded or run two reviews over the same 25 lines."
