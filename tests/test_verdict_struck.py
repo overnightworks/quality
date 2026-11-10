@@ -1,6 +1,7 @@
 import pytest
 
 from quality.config import CONFIG_PATH
+from quality.ratchet import BASELINE_PATH
 from tests.support.architecture import FORBIDDEN, GUARDED_CHANGES, contracts_toml
 from tests.support.git_repositories import put
 from tests.support.merge import (
@@ -16,7 +17,7 @@ from tests.support.merge import (
 )
 from tests.support.processes import process_is_gone
 from tests.support.verdict import declaration, gate_config, verdict_of, verdict_streams, viewed
-from tests.support.verdict_renames import MOVABLE_FILE, commit_all, pulled
+from tests.support.verdict_renames import MOVABLE_FILE, OLD_ENTRY, commit_all, file_text, pulled
 
 STRUCK_FIELD = "source_modules"
 DEAD = {**FORBIDDEN, "source_modules": ["shop.db", "shop.dead"]}
@@ -29,13 +30,16 @@ CHANGES = f"    ! {GUARDED_CHANGES}{STRUCK_FIELD}"
 GREEN = ["✓ green"]
 
 
-def committed(pull_request, base_contract, head_contract, head_files):
-    """The base commit holds the shop and the base contract; the head commit changes the files and the contract."""
+def committed(pull_request, base_contract, head_contract, head_files, baselines=(None, None), base_files=None):
+    """The base commit holds the shop, `base_files`, the base contract and the first of `baselines`; the head commit
+    changes the files and the contract and holds the second."""
     repo, commit_base = pull_request
-    for name, text in {**SHOP_BASE, "pyproject.toml": contracts_toml({"guarded": base_contract})}.items():
+    base_baseline, head_baseline = baselines
+    for name, text in {**SHOP_BASE, **(base_files or {}), "pyproject.toml": contracts_toml({"guarded": base_contract})}.items():
         put(repo / name, text)
-    commit_base(None)
-    for name, text in {**head_files, "pyproject.toml": contracts_toml({"guarded": head_contract})}.items():
+    commit_base(base_baseline)
+    for name, text in {**head_files, "pyproject.toml": contracts_toml({"guarded": head_contract}),
+                       BASELINE_PATH: head_baseline}.items():
         put(repo / name, text)
     commit_all(repo, "head")
     return repo
@@ -64,6 +68,19 @@ def test_the_verdict_reads_the_merge_commits_files_before_a_strike_loosens(capsy
     one git reads as renamed (listed again or not) and one whose folder still holds a file stay `changes <list>`."""
     repo = committed(pull_request, DEAD, head_contract, head_files)
     assert viewed(repo, capsys) == (code, expected)
+
+
+MOVED_PATHS = ("src/old.py", "src/new.py")
+MOVED_BASELINES = (OLD_ENTRY, OLD_ENTRY.replace(*MOVED_PATHS))
+
+
+@pytest.mark.integration
+def test_the_verdict_carries_a_baseline_entry_under_the_renames_of_the_tree_a_strike_reads(capsys, pull_request):
+    """LOOSE-24: beside a dead strike, a baseline entry whose file the head renames is carried, not read as raised."""
+    old, new = MOVED_PATHS
+    moved = file_text(old)
+    repo = committed(pull_request, DEAD, STRUCK, {**DELETED, old: None, new: moved}, MOVED_BASELINES, {old: moved})
+    assert viewed(repo, capsys) == (0, GREEN)
 
 
 @pytest.mark.integration
@@ -140,9 +157,10 @@ def test_a_rename_list_git_cannot_produce_cannot_be_judged_once_a_module_is_stru
     assert (code, "cannot list the files renamed between" in err) == (2, True)
 
 
-def struck_pull(tmp_path, head_contract, merge_files, moves=(), **options):
-    """A door run whose base holds the shop and the dead contract and whose merge commit holds `head_contract`."""
-    gh = pulled(tmp_path, None, None, moves, base_files=SHOP_BASE, merge_files=merge_files, **options)
+def struck_pull(tmp_path, head_contract, merge_files, moves=(), baselines=(None, None), **options):
+    """A door run whose base holds the shop, the dead contract and the first of `baselines` and whose merge commit holds
+    `head_contract` and the second."""
+    gh = pulled(tmp_path, *baselines, moves, base_files=SHOP_BASE, merge_files=merge_files, **options)
     gh.files[("pyproject.toml", gh.base_sha)] = contracts_toml({"guarded": DEAD})
     gh.files[("pyproject.toml", gh.merge_sha)] = contracts_toml({"guarded": head_contract})
     return gh
@@ -158,6 +176,15 @@ def test_the_door_merges_a_dead_strike_beside_a_declared_loosening_with_no_line_
     code, _ = drive(gh)
     out = capsys.readouterr().out
     assert (code, closing_line() in out, "source_modules" in out, len(gh.merge_calls)) == (0, True, False, 1)
+
+
+@pytest.mark.integration
+def test_the_door_carries_a_baseline_entry_under_the_renames_of_the_tree_a_strike_reads(capsys, tmp_path):
+    """LOOSE-24: beside a dead strike, a baseline entry whose file the merge commit renames is carried and the door merges."""
+    gh = struck_pull(tmp_path, STRUCK, DELETED, [MOVED_PATHS], MOVED_BASELINES, **DECLARED_JOB_REMOVAL)
+    code, _ = drive(gh)
+    out = capsys.readouterr().out
+    assert (code, closing_line() in out, len(gh.merge_calls)) == (0, True, 1)
 
 
 @pytest.mark.integration
