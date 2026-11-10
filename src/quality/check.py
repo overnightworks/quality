@@ -23,6 +23,7 @@ from quality import (
     repository,
     root_layout,
     scanners,
+    workflow_rules,
 )
 from quality.config import (
     AllowLists,
@@ -563,6 +564,7 @@ def _judge_workflows(inputs: RunInputs) -> AreaVerdict:
         )
         for rule, scanner in scanners.WORKFLOW_SCANNERS.items()
     }
+    judged[Rule.PR_CONCURRENCY] = _attempt(lambda: workflow_rules.check_pr_concurrency(inputs.root, inputs.tracked))
     return _area_verdict(Area.WORKFLOWS, judged, runs)
 
 
