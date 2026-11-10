@@ -1,0 +1,7 @@
+claim_id = "36eb6858d52649d78697a51db84b3f5f"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "cac685c1feaf675abee4896b5c21a6a99449a075"
+branch = "claude/issue-740-release-list-figure"
+scope = ["docs/release.md"]
+opened_commit = "f44c9d38a3ba1cdfbf720d5a969cfcf83b70e84b"
