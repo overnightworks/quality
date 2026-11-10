@@ -93,14 +93,21 @@ def _section_problems(body: list[str]) -> Iterator[AgentsProblem]:
             if line.strip() and not (text_reported or past_heading):
                 text_reported = True
                 yield _section(number, "text before the first section", "move it under a section or delete it")
-        elif heading not in AGENTS_SECTIONS:
-            yield _section(number, "not a section of the shape", SECTION_FIX)
-        elif heading in seen:
-            yield _section(number, "appears twice", "keep one section of that name and merge the other into it")
-        else:
-            if seen and AGENTS_SECTIONS.index(heading) < max(AGENTS_SECTIONS.index(earlier) for earlier in seen):
-                yield _section(number, "stands out of order", f"order the sections {', '.join(AGENTS_SECTIONS)}")
-            seen.append(heading)
+        elif problem := _heading_problem(heading, number, seen):
+            yield problem
+
+
+def _heading_problem(heading: str, number: int, seen: list[str]) -> AgentsProblem | None:
+    """The problem of a heading among the section headings `seen` before it; a section of the shape joins `seen`."""
+    if heading not in AGENTS_SECTIONS:
+        return _section(number, "not a section of the shape", SECTION_FIX)
+    if heading in seen:
+        return _section(number, "appears twice", "keep one section of that name and merge the other into it")
+    out_of_order = any(AGENTS_SECTIONS.index(heading) < AGENTS_SECTIONS.index(earlier) for earlier in seen)
+    seen.append(heading)
+    if out_of_order:
+        return _section(number, "stands out of order", f"order the sections {', '.join(AGENTS_SECTIONS)}")
+    return None
 
 
 def _section(number: int, fact: str, fix: str) -> AgentsProblem:
