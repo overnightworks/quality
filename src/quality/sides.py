@@ -274,7 +274,7 @@ def read_renames_of_pull(remote: str, base_sha: str, merge_sha: str, environment
         try:
             return read_renames(repository, base_sha, merge_sha, isolated, bound=FETCH_TIMEOUT_SECONDS)
         except CannotJudge:
-            raise CannotJudge("cannot list the files git renamed between the pull request's commits") from None
+            raise CannotJudge(DOOR_WORDS.unrenamed) from None
 
 
 def read_pull_tree_of_pull(remote: str, base_sha: str, merge_sha: str, environment: Mapping[str, str]) -> architecture.PullTree:
