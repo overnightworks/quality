@@ -7,7 +7,7 @@ import re
 import subprocess
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from enum import Enum, auto
+from enum import Enum, StrEnum, auto
 from pathlib import Path, PurePosixPath
 
 import yaml
@@ -267,9 +267,8 @@ def workflows_of(texts: Mapping[str, str | Unread]) -> Workflows:
             unreadable.append(name)
             continue
         try:
-            # BaseLoader keeps scalars strings, so no conversion can fail; ValueError is the scanner's chr() on a \U escape past U+10FFFF
-            document = _composed(text)
-        except (yaml.YAMLError, RecursionError, ValueError):
+            document = composed_document(text).root
+        except UnreadableWorkflow:
             unreadable.append(name)
             continue
         for uses in job_calls(document):
@@ -284,39 +283,100 @@ def read_workflows(clone: Path, tracked: list[str]) -> Workflows:
 
 
 class _AliasMarkingLoader(yaml.BaseLoader):
-    """A loader whose alias to a scalar is a node of its own, standing where the alias stands, so a comment is read
-    after the alias and never after its anchor."""
+    """A loader whose alias is a node of its own, standing where the alias stands, so a comment is read after the alias
+    and never after its anchor; `alias_starts` holds where each alias stood."""
+
+    def __init__(self, stream: str) -> None:
+        super().__init__(stream)
+        self.alias_starts: set[int] = set()
 
     def compose_node(self, parent: yaml.Node | None, index: object) -> yaml.Node | None:
         alias = self.peek_event() if self.check_event(yaml.AliasEvent) else None
         node = super().compose_node(parent, index)
-        if alias is not None and isinstance(node, yaml.ScalarNode):
-            return yaml.ScalarNode(node.tag, node.value, alias.start_mark, alias.end_mark, style="")
-        return node
+        if alias is None or node is None:
+            return node
+        self.alias_starts.add(alias.start_mark.index)
+        return _standing_at(node, alias)
 
 
-def _composed(text: str) -> yaml.Node | None:
-    """The document's node tree, constructed once so a document the loader refuses is refused here too."""
-    loader = _AliasMarkingLoader(text)
+def _standing_at(node: yaml.Node, alias: yaml.Event) -> yaml.Node:
+    """A node of the anchored node's kind and content, marked as standing where `alias` stands."""
+    if isinstance(node, yaml.ScalarNode):
+        return yaml.ScalarNode(node.tag, node.value, alias.start_mark, alias.end_mark, style="")
+    return type(node)(node.tag, list(node.value), alias.start_mark, alias.end_mark, flow_style=node.flow_style)
+
+
+@dataclass(frozen=True)
+class Document:
+    """A workflow's node tree, and where in its text an alias stood."""
+
+    root: yaml.Node | None
+    alias_starts: frozenset[int]
+
+    def is_alias(self, node: yaml.Node) -> bool:
+        return node.start_mark.index in self.alias_starts
+
+
+def _construct(loader: yaml.BaseLoader) -> None:
     try:
-        node = loader.get_single_node()
-        if node is not None:
-            loader.construct_document(node)
-        return node
+        loader.get_single_data()
     finally:
         loader.dispose()
 
 
-def _mapping(node: object) -> dict[str, yaml.Node]:
-    """A mapping node's values by their scalar keys, the last of a repeated key winning, as the loader's dict keeps it."""
+class UnreadableWorkflow(Exception):
+    """The loader refuses a workflow's text."""
+
+
+def composed_document(text: str) -> Document:
+    """The document's node tree, once the loader has accepted the text, so a text it refuses is refused here too and
+    never read through the copies the alias marking makes."""
+    try:
+        # BaseLoader keeps scalars strings, so no conversion can fail; ValueError is the scanner's chr() on a \U escape past U+10FFFF
+        _construct(yaml.BaseLoader(text))
+        loader = _AliasMarkingLoader(text)
+        try:
+            return Document(loader.get_single_node(), frozenset(loader.alias_starts))
+        finally:
+            loader.dispose()
+    except (yaml.YAMLError, RecursionError, ValueError) as error:
+        raise UnreadableWorkflow(str(error)) from error
+
+
+def mapping_entries(node: object) -> dict[str, tuple[yaml.ScalarNode, yaml.Node]]:
+    """A mapping node's scalar keys with their key node and value, the last of a repeated key winning, as the loader's dict keeps it."""
     if not isinstance(node, yaml.MappingNode):
         return {}
-    return {key.value: value for key, value in node.value if isinstance(key, yaml.ScalarNode)}
+    return {key.value: (key, value) for key, value in node.value if isinstance(key, yaml.ScalarNode)}
+
+
+def mapping_values(node: object) -> dict[str, yaml.Node]:
+    return {name: value for name, (_, value) in mapping_entries(node).items()}
+
+
+class PullRequestEvent(StrEnum):
+    """The events whose runs belong to a pull request."""
+
+    PULL_REQUEST = "pull_request"
+    PULL_REQUEST_TARGET = "pull_request_target"
+    PULL_REQUEST_REVIEW = "pull_request_review"
+
+
+def pull_request_events(document: Document) -> frozenset[PullRequestEvent]:
+    """The pull-request events a workflow's `on:` names, as a string, a list or the keys of a mapping."""
+    triggers = mapping_values(document.root).get("on")
+    if isinstance(triggers, yaml.ScalarNode):
+        names = {triggers.value}
+    elif isinstance(triggers, yaml.SequenceNode):
+        names = {item.value for item in triggers.value if isinstance(item, yaml.ScalarNode)}
+    else:
+        names = set(mapping_values(triggers))
+    return frozenset(event for event in PullRequestEvent if event.value in names)
 
 
 def job_calls(document: object) -> Iterator[yaml.ScalarNode]:
-    for job in _mapping(_mapping(document).get("jobs")).values():
-        uses = _mapping(job).get("uses")
+    for job in mapping_values(mapping_values(document).get("jobs")).values():
+        uses = mapping_values(job).get("uses")
         if isinstance(uses, yaml.ScalarNode):
             yield uses
 

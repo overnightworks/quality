@@ -48,7 +48,7 @@ class Area(StrEnum):
     DEBT = "debt", "size and near copies against the debt ceiling (quality/baseline.toml)"
     IMPORTS = "imports", "the import contracts"
     SECRETS = "secrets", "secrets in the committed history"
-    WORKFLOWS = "workflows", "GitHub workflows: lint and security"
+    WORKFLOWS = "workflows", "GitHub workflows: lint, security and concurrency"
     DEPENDENCIES = "dependencies", "known advisories in the lockfiles"
     CODE = "code", "Python source: security findings and print calls"
 
@@ -84,6 +84,7 @@ class Rule(StrEnum):
     LEAK = "secret", Area.SECRETS, RELEASE_0_1, Switch.ALWAYS
     WORKFLOW_LINT = "workflow-lint", Area.WORKFLOWS, RELEASE_0_1, Switch.ALWAYS
     WORKFLOW_SECURITY = "workflow-security", Area.WORKFLOWS, RELEASE_0_1, Switch.ALWAYS
+    PR_CONCURRENCY = "pr-concurrency", Area.WORKFLOWS, None, Switch.ALWAYS
     ADVISORY = "advisory", Area.DEPENDENCIES, RELEASE_0_3, Switch.ALWAYS
 
     def __new__(
