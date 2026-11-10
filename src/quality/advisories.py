@@ -125,7 +125,7 @@ def scan(
     if not locks:
         return apply_allowances([], allowances, today, LockExtent(0, 0))
     names_by_path = _names_by_path(locks)
-    binary = scanners.located(scanners.OSV_SCANNER)
+    binary = scanners.located(scanners.OSV_SCANNER, deadline.run)
     with process.scratch_directory() as scratch:
         known = [(root.resolve(), "<repository>"), (binary.parent.resolve(), "<scanner>"), (scratch, "<scratch>")]
         try:

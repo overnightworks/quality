@@ -20,7 +20,7 @@ def scan_change(path: Path, deadline: RunDeadline, log: scanners.ScannerLog = sc
     change cannot tell a stale entry from one the history still needs.
     """
     deadline.ensure_time_left()
-    binary = scanners.prepare_gitleaks()
+    binary = scanners.prepare_gitleaks(deadline.run)
     path = path.resolve()  # absolute, so a path that starts with `-` can never read as a git option
     staged_tree = _git_output(path, "write-tree")
     head = process.unborn_aware_head_commit(path, _caller_git_environment())

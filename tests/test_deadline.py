@@ -1,4 +1,6 @@
 import sys
+import time
+from pathlib import Path
 
 import pytest
 
@@ -12,17 +14,6 @@ class Clock:
 
     def __call__(self) -> float:
         return self.now
-
-
-class ClockPastTheEndAfter:
-    """Reads 0 for the first `reads` calls, then the deadline's length."""
-
-    def __init__(self, reads: int) -> None:
-        self.reads_left = reads
-
-    def __call__(self) -> float:
-        self.reads_left -= 1
-        return 0.0 if self.reads_left >= 0 else float(deadline.RUN_DEADLINE_SECONDS)
 
 
 def test_the_time_left_falls_with_the_clock():
@@ -42,10 +33,16 @@ def test_a_process_failure_before_the_end_passes_unchanged(tmp_path):
     assert not isinstance(failure.value, CannotJudge)
 
 
-@pytest.mark.integration
-def test_a_process_failure_at_the_end_becomes_the_cut_wording(tmp_path):
+def test_a_process_failure_at_the_end_becomes_the_cut_wording(tmp_path, monkeypatch):
     """SCANNER-20, REFUSAL-22: a scanner that fails once the time is up cannot judge, with no step."""
-    run_deadline = deadline.RunDeadline.starting(ClockPastTheEndAfter(reads=3))
+    clock = Clock()
+    run_deadline = deadline.RunDeadline.starting(clock)
+
+    def ending_the_run(command, **_):
+        clock.now = float(deadline.RUN_DEADLINE_SECONDS)
+        raise process.ProcessError(f"{command[0]} did not finish")
+
+    monkeypatch.setattr(process, "run", ending_the_run)
     with pytest.raises(CannotJudge) as refusal:
         run_deadline.run([str(tmp_path / "zizmor")])
     assert not isinstance(refusal.value, process.ProcessError)
@@ -53,6 +50,33 @@ def test_a_process_failure_at_the_end_becomes_the_cut_wording(tmp_path):
         f"zizmor did not finish within the run's {deadline.RUN_DEADLINE_SECONDS} seconds"
     )
     assert refusal.value.reason.next_steps == ()
+
+
+HANGING = [sys.executable, "-c", "import time; time.sleep(30)"]
+
+
+@pytest.mark.integration
+def test_a_timeout_smaller_than_the_time_left_is_the_processs_own_failure():
+    """SCANNER-19: a command that outlives its own bound, with time left in the run, fails as a process failure."""
+    run_deadline = deadline.RunDeadline.starting(Clock())
+    with pytest.raises(process.ProcessError, match="did not finish within 0.2 seconds") as failure:
+        run_deadline.run(HANGING, timeout=0.2)
+    assert not isinstance(failure.value, CannotJudge)
+
+
+@pytest.mark.integration
+def test_a_timeout_larger_than_the_time_left_ends_at_the_end_of_the_run_with_the_cut_wording():
+    """SCANNER-19, SCANNER-20, REFUSAL-22: the command's bound is the smaller of its own and the time left, so a
+    command still running when the run ends is cut."""
+    run_deadline = deadline.RunDeadline(time.monotonic() + 0.3, time.monotonic)
+    started = time.monotonic()
+    with pytest.raises(CannotJudge) as refusal:
+        run_deadline.run(HANGING, timeout=30)
+    assert time.monotonic() - started < 10
+    assert not isinstance(refusal.value, process.ProcessError)
+    assert refusal.value.reason.fact == (
+        f"{Path(sys.executable).name} did not finish within the run's {deadline.RUN_DEADLINE_SECONDS} seconds"
+    )
 
 
 @pytest.mark.parametrize("starting", ["run", "run_in_own_group"])

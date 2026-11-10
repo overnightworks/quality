@@ -300,7 +300,11 @@ deadline and the run's. A rule that would start one of them, or a download, with
 scanner or download still running when the time ends is stopped, gitleaks with its whole process group so the `git`
 it starts dies too, and its scratch directory and mirror are deleted. Both make the rule `cannot judge` (exit `2`),
 worded as in [Refusals](output.md#refusals), with no step of their own and the other rules' rows standing
-(SCANNER-20).
+(SCANNER-20). The calls that locate a scanner (`mise which`) and ask it for its version run under the same deadline and
+keep their own 30 seconds, taking the smaller of 30 seconds and the time left (SCANNER-19): with no time left they start
+nothing, and one still running when the run ends is stopped and cuts the rule the same way, `mise` or the scanner being
+its subject and no install or reinstall step following (SCANNER-20); with 30 seconds the smaller, the call ends at 30
+seconds with its step (SCANNER-9, SCANNER-10, SCANNER-17). [The vet](output.md#the-vet) stays outside the clock.
 
 Ruled by the operator: quality builds the logic and the process itself and never a specialist scanner (language
 linters and test runners, gitleaks, osv-scanner, mutation tools); the scanners it uses run pinned underneath the one

@@ -24,13 +24,16 @@ CLEAN_SCANS = {
 }
 
 
-def fake_scanner(directory: Path, name: str, on_scan: str, version: str | None = None) -> Path:
-    """Writes a fake `name` into `directory` that prints `version` (the manifest's by default) and runs `on_scan`
-    (shell) for any other call."""
+def fake_scanner(
+    directory: Path, name: str, on_scan: str, version: str | None = None, on_version: str = "exit 0"
+) -> Path:
+    """Writes a fake `name` into `directory` that prints `version` (the manifest's by default) and runs `on_version`
+    (shell) after it, and runs `on_scan` (shell) for any other call."""
     version_arguments = " ".join(scanners.VERSION_ARGUMENTS[name])
     reported = version or scanners.pinned_tool(name).version
     binary = directory / name
-    binary.write_text(f'#!/bin/sh\nif [ "$*" = "{version_arguments}" ]; then echo {reported}; exit 0; fi\n{on_scan}\n')
+    version_branch = f'if [ "$*" = "{version_arguments}" ]; then echo {reported}; {on_version}; fi'
+    binary.write_text(f"#!/bin/sh\n{version_branch}\n{on_scan}\n")
     binary.chmod(0o755)
     return binary
 
@@ -74,14 +77,15 @@ def recording(record: Path, body: str) -> str:
     return f'printf "%s\\n" "$*|$MISE_CEILING_PATHS|$(pwd -P)" >> {record}\n{body}'
 
 
-def fake_zizmor(directory: Path, on_scan: str, version: str | None = None) -> Locator:
-    """Writes a fake zizmor that reports `version` (quality's pin by default) and runs `on_scan` (shell) for any other
-    call, and returns the locator that names it."""
+def fake_zizmor(directory: Path, on_scan: str, version: str | None = None, on_version: str = "exit 0") -> Locator:
+    """Writes a fake zizmor that reports `version` (quality's pin by default), then runs `on_version` (shell), and runs
+    `on_scan` (shell) for any other call, and returns the locator that names it."""
     reported = version or installation.required_version(scanners.ZIZMOR)
     version_arguments = " ".join(scanners.VERSION_ARGUMENTS[scanners.ZIZMOR])
     directory.mkdir(parents=True, exist_ok=True)
     binary = directory / scanners.ZIZMOR
-    binary.write_text(f'#!/bin/sh\nif [ "$*" = "{version_arguments}" ]; then echo {scanners.ZIZMOR} {reported}; exit 0; fi\n{on_scan}\n')
+    version_branch = f'if [ "$*" = "{version_arguments}" ]; then echo {scanners.ZIZMOR} {reported}; {on_version}; fi'
+    binary.write_text(f"#!/bin/sh\n{version_branch}\n{on_scan}\n")
     binary.chmod(0o755)
     return lambda: str(binary)
 

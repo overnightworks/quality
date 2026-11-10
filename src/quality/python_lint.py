@@ -266,7 +266,7 @@ def _run_ruff(
     log: scanners.ScannerLog,
 ) -> list[RuffFinding]:
     """ruff's findings in `paths` (name to resolved path), in batches the argument list holds."""
-    binary = str(scanners.pinned_installed(scanners.RUFF, locate_ruff))
+    binary = str(scanners.pinned_installed(scanners.RUFF, locate_ruff, deadline.run))
     names = _report_names(paths)
     return [
         record
