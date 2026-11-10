@@ -418,4 +418,6 @@ def test_a_mise_still_running_when_the_time_ends_is_stopped_and_the_staged_scan_
     started = time.monotonic()
     assert staged_door(repo) == 2
     assert time.monotonic() - started < 10
-    assert "mise did not finish within the run's 2 seconds" in heard(capsys)
+    output = heard(capsys)
+    assert "mise did not finish within the run's 2 seconds" in output
+    assert "install" not in output
