@@ -1,5 +1,6 @@
 import re
 import string
+import time
 import unicodedata
 from collections.abc import Callable, Sequence
 from contextlib import nullcontext
@@ -10,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import DISTRIBUTION, check, cli, env_file, output, report
+from quality import DISTRIBUTION, check, cli, deadline, env_file, output, report
 from quality.output import Glyph
 from quality.ratchet import BASELINE_PATH, load_baseline
 from quality.report import Example, Finding, FindingEvent, Note, NoteEvent, printable
@@ -426,9 +427,21 @@ def refusal_row(area: str, event: str = "not checked") -> str:
     return f"  ✗ {area:<12}  {event:<14} "
 
 
-def check_result(repo: Path, locate_ruff: Callable[[], str] = installed_ruff, locate_zizmor: Callable[[], str] | None = None) -> check.CheckResult:
+def check_result(
+    repo: Path, locate_ruff: Callable[[], str] = installed_ruff, locate_zizmor: Callable[[], str] | None = None,
+    monotonic: Callable[[], float] = time.monotonic,
+) -> check.CheckResult:
     """What the rule runner judged over `repo`, before the door prints it."""
-    return check.judge_repository(repo, locate_ruff, locate_zizmor or cli.INSTALLED_ZIZMOR, lambda _verdict, _tracked_paths: None, lambda _area, _scanner: nullcontext())
+    return check.judge_repository(
+        repo, locate_ruff, locate_zizmor or cli.INSTALLED_ZIZMOR, lambda _verdict, _tracked_paths: None,
+        lambda _area, _scanner: nullcontext(), monotonic=monotonic,
+    )
+
+
+def clock_past_the_deadline() -> Callable[[], float]:
+    """A monotonic clock whose first read starts a run's deadline and whose every later read lies past its end."""
+    reads = iter([0.0])
+    return lambda: next(reads, deadline.RUN_DEADLINE_SECONDS + 1.0)
 
 
 def refusal_pair(repo: Path) -> str:
@@ -441,9 +454,12 @@ def refusals_of(result: check.CheckResult) -> dict[Rule, str]:
     return {verdict.rule: str(verdict.refusal) for verdict in result.verdicts if verdict.refusal is not None}
 
 
-def refusals(repo: Path, locate_ruff: Callable[[], str] = installed_ruff, locate_zizmor: Callable[[], str] | None = None) -> dict[Rule, str]:
+def refusals(
+    repo: Path, locate_ruff: Callable[[], str] = installed_ruff, locate_zizmor: Callable[[], str] | None = None,
+    monotonic: Callable[[], float] = time.monotonic,
+) -> dict[Rule, str]:
     """Each rule that cannot judge `repo`, with its reason, as the rule runner reports it."""
-    return refusals_of(check_result(repo, locate_ruff, locate_zizmor))
+    return refusals_of(check_result(repo, locate_ruff, locate_zizmor, monotonic))
 
 
 def copy_block(example: tuple[str, ...]) -> str:

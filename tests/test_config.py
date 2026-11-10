@@ -14,6 +14,7 @@ from quality.config import (
     ConfigError,
     Declaration,
     GeneratedFile,
+    LayoutAllowance,
     LegacyMode,
     load_allow_lists,
     load_gate_settings,
@@ -383,7 +384,8 @@ def test_a_malformed_advisory_allowance_cannot_be_judged_where_the_whole_config_
     assert check_door(repo) == 2
     capsys.readouterr()
     assert {rule for rule, reason in refusals(repo).items() if named in reason} == {
-        Rule.COMPOSE_PORT, Rule.SIZE, Rule.ROOT_LAYOUT, Rule.FILE_SUFFIX, Rule.SCRIPT_NAME, Rule.SCRIPT_HEADER, Rule.TEST_LAYOUT, Rule.TEST_IMPORT,
+        Rule.COMPOSE_PORT, Rule.SIZE, Rule.ROOT_LAYOUT, Rule.AGENTS_MD, Rule.FILE_SUFFIX, Rule.SCRIPT_NAME,
+        Rule.SCRIPT_HEADER, Rule.TEST_LAYOUT, Rule.TEST_IMPORT,
         Rule.PYTHON_FLOOR, Rule.LEAK, Rule.ADVISORY,
     }
 
@@ -404,7 +406,7 @@ def test_the_verdict_refuses_a_malformed_secret_allowance_as_check_does(capsys, 
     assert "[secrets] allow entry" in capsys.readouterr().err
 
 
-LAYOUT_RULE_IDS = "file-suffix, script-header, script-name, test-import, test-layout"
+LAYOUT_RULE_IDS = "agents-md, file-suffix, script-header, script-name, test-import, test-layout"
 
 
 @pytest.mark.parametrize(
@@ -430,6 +432,23 @@ def test_a_layout_allowance_refusal_names_the_rules_in_plain_words(entries, mess
     with pytest.raises(ConfigError) as refused:
         load_allow_lists(entries)
     assert refused.value.fact == message
+
+
+def test_a_layout_declaration_for_agents_md_is_read_as_written():
+    """AGENTS-20: `agents-md` is a layout rule, so its entry is accepted by the one reader of `[[layout.allow]]`."""
+    entry = '[[layout.allow]]\npath = "docs/AGENTS.md"\nrule = "agents-md"\nreason = "r"\n'
+    assert load_allow_lists(entry).layout == (LayoutAllowance("docs/AGENTS.md", Rule.AGENTS_MD, "r"),)
+
+
+BAD_LAYOUT_ENTRY = '[[layout.allow]]\npath = "dir/"\nrule = "agents-md"\nreason = "r"\n'
+
+
+@pytest.mark.parametrize("tracked", [{}, {"AGENTS.md": "# guidance\n"}], ids=["no AGENTS.md", "an AGENTS.md"])
+@pytest.mark.parametrize("malformed", ["layout = 1\n", BAD_LAYOUT_ENTRY], ids=["layout not a table", "a bad entry"])
+def test_a_malformed_layout_config_refuses_the_agents_md_row(build_repo, tracked, malformed):
+    """AGENTS-20: the row cannot judge, with or without a tracked AGENTS.md, as for each other layout rule."""
+    repo = build_repo({**tracked, CONFIG_PATH: GATE_WITH_CHECKS + malformed})
+    assert {Rule.AGENTS_MD, Rule.FILE_SUFFIX} <= refusals(repo).keys()
 
 
 GATE_WITH_CHECKS = '[gate]\nmandatory_jobs = ["checks"]\n'

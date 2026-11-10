@@ -9,6 +9,7 @@ from quality import checkout, cli
 from quality.report import Instruction, Reason
 from tests.support.door import CHECK_WORD, FIX_WORDS, check_door, door_in
 from tests.support.git_repositories import git, head_commit, make_repo
+from tests.support.github_remote import with_github_remote
 
 
 def bare_repository(build_repo, tmp_path):
@@ -331,27 +332,38 @@ def test_a_comment_elsewhere_names_no_release(build_repo, text):
     assert [call.release for call in gate_calls_of(repo, ".github/workflows/ci.yml")] == [None]
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
-    ("url", "names"),
+    ("url", "repositories"),
     [
-        pytest.param("https://github.com/{gate}", True, id="https"),
-        pytest.param("https://github.com/{gate}.git", True, id="https with .git"),
-        pytest.param("https://github.com/{gate}/", True, id="https with a trailing slash"),
-        pytest.param("ssh://git@github.com/{gate}.git", True, id="ssh"),
-        pytest.param("git@github.com:{gate}.git", True, id="scp"),
-        pytest.param("git@github.com:{gate}", True, id="scp without .git"),
-        pytest.param("https://github.com/{upper}", True, id="upper-case owner"),
-        pytest.param("https://github.com/someone/{name}", False, id="a fork"),
-        pytest.param("https://gitlab.com/{gate}", False, id="another host"),
-        pytest.param("https://github.com/{gate}-tools", False, id="another repository of the owner"),
-        pytest.param("/srv/git/{gate}.git", False, id="a local path"),
+        pytest.param("https://github.com/acme/tool", ["acme/tool"], id="https"),
+        pytest.param("https://github.com/acme/tool.git", ["acme/tool"], id="https with .git"),
+        pytest.param("https://github.com/acme/tool/", ["acme/tool"], id="https with a trailing slash"),
+        pytest.param("ssh://git@github.com/acme/tool.git", ["acme/tool"], id="ssh"),
+        pytest.param("git@github.com:acme/tool.git", ["acme/tool"], id="scp"),
+        pytest.param("git@github.com:acme/tool", ["acme/tool"], id="scp without .git"),
+        pytest.param("https://GitHub.com/ACME/Tool", ["ACME/Tool"], id="any case, kept as configured"),
+        pytest.param("https://gitlab.com/acme/tool", [], id="another host"),
+        pytest.param("https://github.com/acme/tool/tree/main", [], id="a path below the repository"),
+        pytest.param("/srv/git/acme/tool.git", [], id="a local path"),
+        pytest.param("https://user:dummy-token@github.com/acme/tool", [], id="a URL with credentials"),
     ],
 )
-def test_a_remote_names_quality_s_repository(url, names):
-    """HELP-7: a remote names quality's repository in git's three URL forms and in any case, and no other repository."""
-    owner, name = checkout.GATE_REPOSITORY.split("/")
-    words = {"gate": checkout.GATE_REPOSITORY, "upper": f"{owner.upper()}/{name}", "name": name}
-    assert checkout.remote_names_quality(url.format(**words)) is names
+def test_a_remote_names_a_github_repository_in_git_s_three_url_forms(tmp_path, url, repositories):
+    """HELP-7, AGENTS-13: the three forms in any case, and no other host, path or URL with credentials."""
+    repo = make_repo(tmp_path, {})
+    git(repo, "remote", "add", "origin", url)
+    assert checkout.github_repositories(repo) == repositories
+
+
+@pytest.mark.integration
+def test_every_configured_remote_names_its_repository_and_none_names_a_repository_without_remotes(tmp_path):
+    """AGENTS-13: a fork beside its upstream, and a repository with no remote."""
+    repo = make_repo(tmp_path, {})
+    assert checkout.github_repositories(repo) == []
+    with_github_remote(repo, "me/tool", remote="fork")
+    with_github_remote(repo, "acme/tool", remote="upstream")
+    assert sorted(checkout.github_repositories(repo)) == ["acme/tool", "me/tool"]
 
 
 def unknown(fact: str, step: str) -> checkout.UnknownGatePin:

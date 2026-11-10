@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from pathlib import PurePosixPath
 
 from quality import checkout, ratchet
-from quality.config import CONFIG_PATH, LAYOUT_ALLOWANCE_HEADING, LayoutAllowance
-from quality.report import Finding, FindingEvent
+from quality.config import LayoutAllowance, declared_paths
+from quality.report import Finding, FindingEvent, allowance_clause, stale_declaration
 from quality.rules import Rule
 
 EXECUTABLE_MODE = "100755"
@@ -53,14 +53,10 @@ def check_file_suffix(modes: Mapping[str, str], allowances: Sequence[LayoutAllow
     """Every tracked file without a suffix is executable, a symlink or gitlink, a dotfile, tool-mandated or declared;
     a declaration of an untracked path is a finding too. `modes` maps each tracked path to its index mode. Findings are
     sorted by path."""
-    declared = _declared_paths(allowances, Rule.FILE_SUFFIX)
+    declared = declared_paths(allowances, Rule.FILE_SUFFIX)
     findings = [_suffixless(path) for path, mode in modes.items() if path not in declared and _lacks_suffix(path, mode)]
-    findings += [_stale_declaration(path, Rule.FILE_SUFFIX) for path in declared - modes.keys()]
+    findings += [stale_declaration(path, Rule.FILE_SUFFIX) for path in declared - modes.keys()]
     return sorted(findings, key=lambda finding: finding.path)
-
-
-def _declared_paths(allowances: Sequence[LayoutAllowance], rule: Rule) -> set[str]:
-    return {allowance.path for allowance in allowances if allowance.rule is rule}
 
 
 def _lacks_suffix(path: str, mode: str) -> bool:
@@ -69,25 +65,12 @@ def _lacks_suffix(path: str, mode: str) -> bool:
     return not exempt and not PurePosixPath(name).suffix
 
 
-def _allowance_clause(rule: Rule) -> str:
-    return f"declare it in {CONFIG_PATH} with {LAYOUT_ALLOWANCE_HEADING}, its path, the rule {rule} and a reason"
-
-
 def _suffixless(path: str) -> Finding:
     return Finding(
         Rule.FILE_SUFFIX, path, None,
         "a file without a suffix that is no executable",
-        f"give it the suffix of its format, or {_allowance_clause(Rule.FILE_SUFFIX)}",
+        f"give it the suffix of its format, or {allowance_clause(Rule.FILE_SUFFIX)}",
         event=FindingEvent.TRACKED,
-    )
-
-
-def _stale_declaration(path: str, rule: Rule) -> Finding:
-    return Finding(
-        rule, path, None,
-        f"{LAYOUT_ALLOWANCE_HEADING} matches no tracked file",
-        f"delete every {LAYOUT_ALLOWANCE_HEADING} entry for it from {CONFIG_PATH}",
-        event=FindingEvent.UNUSED,
     )
 
 
@@ -119,7 +102,7 @@ def _judged_scripts(
     allowances: Sequence[LayoutAllowance],
     problem_of: Callable[[str, bytes], tuple[FindingEvent, str, str] | None],
 ) -> list[Finding]:
-    declared = _declared_paths(allowances, rule)
+    declared = declared_paths(allowances, rule)
     findings = []
     for path, mode in modes.items():
         content = contents.get(path)
@@ -128,7 +111,7 @@ def _judged_scripts(
         if problem := problem_of(path, content):
             event, fact, fix = problem
             findings.append(Finding(rule, path, None, fact, fix, event=event))
-    findings += [_stale_declaration(path, rule) for path in declared - modes.keys()]
+    findings += [stale_declaration(path, rule) for path in declared - modes.keys()]
     return sorted(findings, key=lambda finding: finding.path)
 
 
@@ -155,7 +138,7 @@ def _name_problem(path: str, _content: bytes) -> tuple[FindingEvent, str, str] |
     if not problems:
         return None
     event = FindingEvent.MISNAMED if badly_shaped else FindingEvent.MISPLACED
-    return event, "; ".join(problems), f"rename or move it, or {_allowance_clause(Rule.SCRIPT_NAME)}"
+    return event, "; ".join(problems), f"rename or move it, or {allowance_clause(Rule.SCRIPT_NAME)}"
 
 
 def _header_problem(path: str, content: bytes) -> tuple[FindingEvent, str, str] | None:
@@ -165,7 +148,7 @@ def _header_problem(path: str, content: bytes) -> tuple[FindingEvent, str, str] 
     return (
         FindingEvent.NO_HEADER,
         f"no header comment or docstring in the first {HEADER_LINES} non-blank lines after its shebang and script metadata",
-        f"say what it does in a comment or docstring at the top, or {_allowance_clause(Rule.SCRIPT_HEADER)}",
+        f"say what it does in a comment or docstring at the top, or {allowance_clause(Rule.SCRIPT_HEADER)}",
     )
 
 
@@ -239,7 +222,7 @@ def check_test_layout(modes: Mapping[str, str], allowances: Sequence[LayoutAllow
     `test_<module>[_<aspect>].py`; a declaration of an untracked path is a finding too. A project is judged when it
     has a package. A Vitest test of a frontend project lies beside the file it tests and a Playwright spec in the
     project's top-level `e2e/`."""
-    declared = _declared_paths(allowances, Rule.TEST_LAYOUT)
+    declared = declared_paths(allowances, Rule.TEST_LAYOUT)
     tracked = [PurePosixPath(path) for path in modes]
     mirrors = {
         project.tests_directory: _ProjectMirror.of(project, tracked)
@@ -251,7 +234,7 @@ def check_test_layout(modes: Mapping[str, str], allowances: Sequence[LayoutAllow
         tests = next((tests for tests in mirrors if tests in path.parents), None)
         if tests is not None and str(path) not in declared:
             findings += _test_layout_findings(path, tests, mirrors[tests])
-    findings += [_stale_declaration(path, Rule.TEST_LAYOUT) for path in declared - modes.keys()]
+    findings += [stale_declaration(path, Rule.TEST_LAYOUT) for path in declared - modes.keys()]
     return sorted(findings, key=lambda finding: finding.path)
 
 
@@ -401,7 +384,7 @@ def _mirror_findings(path: PurePosixPath, folders: tuple[str, ...], mirror: _Pro
 
 
 def _test_layout_finding(path: str, event: FindingEvent, fact: str, fix: str) -> Finding:
-    return Finding(Rule.TEST_LAYOUT, path, None, fact, f"{fix}, or {_allowance_clause(Rule.TEST_LAYOUT)}", event=event)
+    return Finding(Rule.TEST_LAYOUT, path, None, fact, f"{fix}, or {allowance_clause(Rule.TEST_LAYOUT)}", event=event)
 
 
 def _mirror_finding(path: PurePosixPath, problems: Sequence[_Problem]) -> Finding:
@@ -505,13 +488,13 @@ def check_test_import(
     components of a target's path, a relative one when it resolves to the target's path; a from-import checks its
     module and each imported name. A declaration exempts its importer; a declaration of an untracked path is a finding.
     `contents` holds the bytes of `test_import_candidates`. Findings are sorted by path and line."""
-    declared = _declared_paths(allowances, Rule.TEST_IMPORT)
+    declared = declared_paths(allowances, Rule.TEST_IMPORT)
     targets = _ImportTargets.of(modes)
     findings = []
     for path, content in contents.items():
         if path not in declared:
             findings += _import_findings(path, _parsed(path, content), targets)
-    findings += [_stale_declaration(path, Rule.TEST_IMPORT) for path in declared - modes.keys()]
+    findings += [stale_declaration(path, Rule.TEST_IMPORT) for path in declared - modes.keys()]
     return sorted(findings, key=lambda finding: (finding.path, finding.line or 0))
 
 
@@ -597,6 +580,6 @@ def _imports_a_test_module(path: str, line: int, names: Sequence[str]) -> Findin
         Rule.TEST_IMPORT, path, line,
         f"imports {', '.join(names)}",
         f"move what it needs to a {SUPPORT_DIRECTORY}/ module, or make it a fixture in {CONFTEST_FILE}, or "
-        f"{_allowance_clause(Rule.TEST_IMPORT)}",
+        f"{allowance_clause(Rule.TEST_IMPORT)}",
         event=FindingEvent.TEST_IMPORT,
     )

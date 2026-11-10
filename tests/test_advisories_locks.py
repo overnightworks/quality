@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
-from quality import advisories
+from quality import advisories, deadline
 from quality.config import CONFIG_PATH
 from quality.report import FindingEvent, NoteEvent
 from quality.rules import Area
@@ -301,8 +301,33 @@ def test_one_deadline_spans_every_database_download(build_repo, publish_database
     repo = build_repo({FRONTEND_LOCK: pnpm_lock(), "uv.lock": uv_lock()})
     locks = {name: repo / name for name in (FRONTEND_LOCK, "uv.lock")}
     today = datetime.date(2026, 10, 21)
+    run_deadline = deadline.RunDeadline.starting(lambda: now)
     with pytest.raises(ScannerError, match="the npm advisory database download exceeded 300 seconds"):
-        advisories.scan(locks, repo, [], today, lambda: now)
+        advisories.scan(locks, repo, [], today, run_deadline)
+    assert served_databases.requested == ["/PyPI/all.zip"]
+
+
+def test_the_run_ending_during_the_first_download_leaves_the_second_unrequested(
+    build_repo, publish_database, served_databases, monkeypatch
+):
+    """SCANNER-20, ADVISORY-9: when the run's end lies before the downloads' own 300 seconds, the first download
+    (PyPI) spends it, so the second (npm) is not requested and the refusal is the run's, not the 300 seconds'."""
+    publish_database([LODASH_ADVISORY], ecosystem="npm")
+    publish_database()
+    monkeypatch.setattr(deadline, "RUN_DEADLINE_SECONDS", 100)
+    now = 0.0
+
+    def spend_the_run_on_the_first_download(path: str) -> None:
+        nonlocal now
+        now = deadline.RUN_DEADLINE_SECONDS
+
+    served_databases.on_request = spend_the_run_on_the_first_download
+    repo = build_repo({FRONTEND_LOCK: pnpm_lock(), "uv.lock": uv_lock()})
+    locks = {name: repo / name for name in (FRONTEND_LOCK, "uv.lock")}
+    today = datetime.date(2026, 10, 21)
+    run_deadline = deadline.RunDeadline.starting(lambda: now)
+    with pytest.raises(deadline.RunDeadlineSpent, match="^the run's 100 seconds are spent$"):
+        advisories.scan(locks, repo, [], today, run_deadline)
     assert served_databases.requested == ["/PyPI/all.zip"]
 
 
@@ -371,11 +396,11 @@ def test_an_allowance_in_a_pnpm_lock_allows_its_advisory_until_its_date(
     assert (code, err, location, row.event, ADVISORY_ID in row.fact, FRONTEND_LOCK in row.fact) == (1, "", CONFIG_PATH, FindingEvent.UNUSED, True, True), out
 
 
-SETUP_AND_OTHER_RULES_MINUTES = 10
+SETUP_AND_STEPS_OUTSIDE_THE_CLOCK_SECONDS = 600
 
 
-def test_the_check_job_outlasts_the_downloads_and_the_scan_so_cannot_judge_is_what_the_run_shows():
-    """ADVISORY-34: GitHub cancelling the job would show nothing; quality's own limits must expire first."""
+def test_the_check_job_outlasts_the_run_deadline_so_cannot_judge_is_what_the_run_shows():
+    """ADVISORY-34: GitHub cancelling the job would show nothing; the run's own deadline must expire first."""
     gate = yaml.safe_load((Path(__file__).parent.parent / ".github/workflows/gate.yml").read_text(encoding="utf-8"))
-    limits_minutes = (advisories.DATABASE_DOWNLOAD_DEADLINE_SECONDS + advisories.ADVISORY_SCAN_TIMEOUT_SECONDS) / 60
-    assert gate["jobs"]["check"]["timeout-minutes"] >= limits_minutes + SETUP_AND_OTHER_RULES_MINUTES
+    limit_seconds = gate["jobs"]["check"]["timeout-minutes"] * 60
+    assert limit_seconds >= deadline.RUN_DEADLINE_SECONDS + SETUP_AND_STEPS_OUTSIDE_THE_CLOCK_SECONDS

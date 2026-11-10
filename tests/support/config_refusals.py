@@ -18,6 +18,7 @@ ITEM_NEED = "item as #<number> or <owner>/<repo>#<number>"
 DATE_NEED = "date as a TOML date without a time"
 ONE_LINE_NEED = "a non-empty one-line reason"
 FILE_PATH_NEED = "path as the exact tracked path of one file: no folder, pattern, .. or absolute path"
+LAYOUT_RULE_NEED = "rule as one of agents-md, file-suffix, script-header, script-name, test-import, test-layout"
 KNOWN_KEYS = (
     "only [gate] mandatory_jobs, [gate] legacy, [gate] sonar, [[gate.loosened]], [secrets] allow, [[advisories.allow]], "
     "[[root.allow]], [[layout.allow]], [[python.allow]], [[compose.allow]] and [[size.generated]] exist"
@@ -103,8 +104,8 @@ ARRAY_TABLES = (
         "layout.allow", config.LAYOUT_ALLOWANCE_EXAMPLE, {"path": "NOTES", "rule": "file-suffix", "reason": "ruled"},
         "exactly a path, a rule and a reason",
         (({"path": "dir/"}, FILE_PATH_NEED),
-         ({"rule": "size"}, "rule as one of file-suffix, script-header, script-name, test-import, test-layout"),
-         ({"rule": [1]}, "rule as one of file-suffix, script-header, script-name, test-import, test-layout"),
+         ({"rule": "size"}, LAYOUT_RULE_NEED),
+         ({"rule": [1]}, LAYOUT_RULE_NEED),
          ({"reason": ""}, ONE_LINE_NEED)),
         'declares path = "NOTES" for rule = "file-suffix" twice; one declaration per rule and path',
     ),

@@ -17,7 +17,7 @@ dependencies = [
 quality = "quality.cli:run"
 
 [dependency-groups]
-dev = ["pytest", "pytest-cov"]
+dev = ["pytest", "pytest-cov", "pytest-xdist"]
 
 [build-system]
 requires = ["hatchling==1.33.0", "hatch-vcs==0.5.0", "setuptools-scm==10.3.4", "vcs-versioning==2.6.0"]
@@ -79,11 +79,12 @@ layers = [
     "pin",
     "advisories",
     "python_lint",
-    "architecture | claude_md | clones | compose | env_file | layout | pip_requirements | python_floor | root_layout | scanners",
+    "agent_guidance | architecture | clones | compose | env_file | layout | pip_requirements | python_floor | root_layout | scanners",
     "ratchet",
     "checkout",
     "output",
     "web",
+    "deadline",
     "report",
     "config",
     "repository",

@@ -2,11 +2,13 @@ import io
 import os
 import subprocess
 import sys
+import time
+from contextlib import nullcontext
 from pathlib import Path
 
 import pytest
 
-from quality import config, scanners, staged
+from quality import check, config, deadline, scanners, staged
 from quality.report import FindingEvent, NoteEvent
 from quality.rules import Area
 from tests.support.check import (
@@ -15,11 +17,13 @@ from tests.support.check import (
     area_block,
     assert_block_prints,
     assert_finding_vocabulary,
+    clock_past_the_deadline,
     decode_block,
+    heard,
 )
 from tests.support.door import CHECK_WORD, STAGED_WORDS, door_in, staged_door
 from tests.support.git_repositories import GIT_IDENTITY, git, head_commit, stage
-from tests.support.scanners import fake_gitleaks
+from tests.support.scanners import fake_gitleaks, run_deadline, serving
 from tests.support.secrets import FAKE_KEY, HOSTILE_FILE, OTHER_KEY, allow_config
 from tests.support.terminal import Terminal, without_sgr
 
@@ -55,7 +59,7 @@ def test_a_staged_door_prints_its_finding_row_and_verdict_whole_at_a_narrow_term
     terminal = window(20)
     monkeypatch.setattr(sys, "stdout", terminal.stream)
     staged_door(repo, environment={"TERM": "xterm"}, clock=lambda: 0.0)
-    (finding,) = staged.scan_change(repo).findings
+    (finding,) = staged.scan_change(repo, run_deadline()).findings
     printed = without_sgr(terminal.read())
     assert f"    ! src/a.py:1  secret  {finding.fact}" in printed.splitlines()
     assert (printed.splitlines()[-1], FAKE_KEY in printed, capsys.readouterr().err) == ("! 1 finding in 1 area · <1s", False, "")
@@ -68,7 +72,7 @@ def test_a_staged_key_is_one_secret_row_with_its_entry_and_its_value_is_not_prin
     stage(repo, {"src/a.py": KEY_LINE})
     assert staged_door(repo) == 1
     printed = capsys.readouterr().out
-    result = staged.scan_change(repo)
+    result = staged.scan_change(repo, run_deadline())
     assert_block_prints(area_block(printed, Area.SECRETS), result.findings, list(result.notes))
     (finding,) = result.findings
     assert (finding.location, finding.event) == ("src/a.py:1", FindingEvent.SECRET)
@@ -182,7 +186,7 @@ def test_an_allowance_follows_the_value_in_the_staged_scan(
     stage(repo, {"config.txt": staged_change})
     assert staged_door(repo) == exit_code
     streams = capsys.readouterr()
-    result = staged.scan_change(repo)
+    result = staged.scan_change(repo, run_deadline())
     allowed = [note for note in result.notes if note.event is NoteEvent.ALLOWED]
     assert [note.location for note in allowed] == ([] if expected_line is None else [expected_line])
     assert all(("aws-access-token" in note.fact, "test key" in note.fact) == (True, True) for note in allowed)
@@ -332,12 +336,12 @@ def test_the_printed_entry_with_a_reason_allows_the_staged_key_with_head_unchang
     before = head_commit(repo)
     assert staged_door(repo) == 1
     first = capsys.readouterr()
-    (finding,) = staged.scan_change(repo).findings
+    (finding,) = staged.scan_change(repo, run_deadline()).findings
     entry = [line.copy for line in area_block(first.out, Area.SECRETS) if isinstance(line, CopyLine)]
     stage(repo, {config.CONFIG_PATH: '[gate]\nmandatory_jobs = ["checks"]\n' + "\n".join(entry) + '\nreason = "scenario reason"\n'})
     assert staged_door(repo) == 0
     second = capsys.readouterr()
-    result = staged.scan_change(repo)
+    result = staged.scan_change(repo, run_deadline())
     assert (head_commit(repo), result.findings, [(note.location, note.event) for note in result.notes]) == (
         before, [], [(finding.location, NoteEvent.ALLOWED)],
     )
@@ -378,3 +382,42 @@ def test_a_commit_that_touches_no_allowed_line_prints_no_unused_row(build_repo, 
     assert door_in(repo, CHECK_WORD, "secrets") == 0
     whole_out = capsys.readouterr().out
     assert ("unused" in staged_out, "unused" in whole_out, "1 allowed" in whole_out) == (False, False, True)
+
+
+def test_a_staged_run_with_no_time_left_starts_no_mise_or_gitleaks_and_cannot_judge(
+    build_repo, served_scanners, use_mise, tmp_path
+):
+    """SCANNER-20, REFUSAL-22: with the run's time spent the staged door starts no mise, no gitleaks version call and
+    no gitleaks scan, and its rule cannot judge in the spent wording."""
+    started = tmp_path / "started"
+    fake_gitleaks(served_scanners, on_scan=f"echo scan >> {started}", on_version=f"echo version >> {started}")
+    use_mise(f"echo which >> {started}\n{serving(served_scanners)}")
+    repo = build_repo({"README": "hello\n"})
+    stage(repo, {"src/a.py": KEY_LINE})
+    result = check.judge_staged_change(
+        repo,
+        staged.scan_change,
+        lambda _verdict, _tracked_paths: None,
+        lambda _area, _scanner: nullcontext(),
+        monotonic=clock_past_the_deadline(),
+    )
+    (verdict,) = result.verdicts
+    assert str(verdict.refusal) == f"the run's {deadline.RUN_DEADLINE_SECONDS} seconds are spent"
+    assert not started.exists()
+
+
+def test_a_mise_still_running_when_the_time_ends_is_stopped_and_the_staged_scan_cannot_judge(
+    build_repo, use_mise, served_scanners, monkeypatch, capsys
+):
+    """SCANNER-19, SCANNER-20, REFUSAL-22: a `mise which` that outlives the run's deadline is stopped and the staged
+    scan cannot judge in the cut wording."""
+    use_mise("exec sleep 30")
+    monkeypatch.setattr(deadline, "RUN_DEADLINE_SECONDS", 2)
+    repo = build_repo({"README": "hello\n"})
+    stage(repo, {"a.txt": "a\n"})
+    started = time.monotonic()
+    assert staged_door(repo) == 2
+    assert time.monotonic() - started < 10
+    output = heard(capsys)
+    assert "mise did not finish within the run's 2 seconds" in output
+    assert "install" not in output

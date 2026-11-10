@@ -266,6 +266,54 @@ It applies these rules:
 
   Ruled by the operator: `CLAUDE.md` and `AGENTS.md` never diverge (CLAUDE-7). A finding names only the file
   (CLAUDE-9, CLAUDE-10), and its fix is a sentence, never a command (CLAUDE-11).
+- `agents-md`: the tracked file named exactly `AGENTS.md` at the root has the shape of the document set (write-docs'
+  "Repository document set", which owns it). Line 1 is a title, `# ` and the name of a GitHub repository a configured
+  remote points at; any other first line, an empty file included, is a `title` finding at line 1 (AGENTS-1), and a
+  title that is well formed but equals no such name is one too (AGENTS-12). Between the title and the first
+  `## ` heading only blank lines stand; anything else is a `section` finding at its first line, and a file with a title
+  and no section is clean (AGENTS-2). Every `## ` heading outside a fenced code block (backticks or tildes) is one of
+  `Commands`, `Rules`, `Owners`, `Documents`, exactly spelled, at most once, in that order; another name, a repeat, a
+  heading out of order and a second `# ` heading are `section` findings at their line, and each section may be missing.
+  Headings of level 3 and deeper are no sections (AGENTS-3). The file has at most 100 lines (the last one counts without
+  a line feed; `\n` alone separates lines) and at most 4096 bytes; each limit crossed is a `too long` finding at line 1
+  (AGENTS-4). No root `AGENTS.md` has no shape finding, and a tracked one missing from disk is skipped (AGENTS-5). A
+  finding names fixed words, line numbers, counts, for `missing` the path text of the span, for `title` the repository
+  name a remote gives and, for `misplaced`, `misnamed` and `unused`, the path, never the title or a heading, and its fix
+  is prose with no command (AGENTS-6). A link that leaves the repository, text that is not UTF-8 and a read the
+  filesystem refuses make the `files` row `✗ not checked` with the reason (exit `2`) (AGENTS-7). In `## Documents`, the
+  first backticked span of each line is that document's path; later spans, lines without a span and other sections'
+  backticks are never judged. The section runs to the next `# ` or `## ` heading or the end of the file; a line in a
+  fence is no document line; a second `## Documents` heading starts another run (AGENTS-8). A path passes if it is a
+  tracked file, or a directory with at least one tracked file below it, spelled in exact case; one trailing `/` of a
+  directory is optional and nothing else is normalised. A tracked file missing from disk passes (AGENTS-9). Any other
+  path is a `missing` finding at its line, whatever its form (absolute, `~`, `..`, a scheme, an `@` span, an anchor,
+  an untracked file, a wrong case): fact `<path> is not tracked`, fix "point at a tracked document or delete the line"
+  (AGENTS-10).
+  The check compares text with the tracked listing alone, so no filesystem probe follows text from the file and
+  nothing outside the repository is opened. It accepts any tracked directory; whether that is a directory of the
+  document set whose files are named by their task or contract stays the reviewer's call (AGENTS-11). The title,
+  with blanks around it removed, equals the name part (after `owner/`) of any configured remote's GitHub repository,
+  case ignored; otherwise the `title` finding's fix is "make line 1 `# <name>`" with each such name, joined by "or"
+  (AGENTS-12). A remote counts when its URL, as configured and before any `insteadOf`, is
+  `https://github.com/<owner>/<name>`, `ssh://git@github.com/<owner>/<name>` or `git@github.com:<owner>/<name>`, with
+  at most one trailing `/` and then `.git`, in any case. When `AGENTS.md` is tracked and on disk and no remote counts,
+  the `files` row is `✗ not checked` ("no GitHub remote names this repository", next step "add the repository's GitHub
+  remote", exit `2`) before any finding, so the findings above show once a remote counts; no file, or a tracked one
+  missing from disk, stays clean (AGENTS-13). No printed line holds a remote URL; a URL with credentials counts as no
+  remote (AGENTS-14). The file sits at the root only: a tracked path whose last component is `AGENTS.md` in any case
+  and that is not the root path is a `misplaced` finding at that path, fact "guidance outside the root file", fix "move
+  what an agent needs into the root AGENTS.md or delete it, or declare it in quality/config.toml with
+  [[layout.allow]], its path, the rule agents-md and a reason" (AGENTS-15). A tracked root file named `AGENTS.md` in
+  another case is a `misnamed` finding, fact "the document set's path is exact", fix "rename it to AGENTS.md", and its
+  content is not judged (AGENTS-16). A `[[layout.allow]]` entry with the rule `agents-md` and a nested path stops
+  AGENTS-15 for that path only; an entry for the root `AGENTS.md` is no finding and exempts nothing, and an entry for
+  a root file in another case leaves AGENTS-16 standing (AGENTS-17). An entry with the rule `agents-md` whose path no
+  tracked file has is an `unused` finding as SUFFIX-12 says (AGENTS-18). Placement reads no file and needs no root file
+  or remote: a nested file that is a symlink, gone from disk or not UTF-8 is `misplaced` all the same; when the root
+  file is tracked and on disk and no remote counts, AGENTS-13's refusal covers nested findings too (AGENTS-19). The
+  rule is a layout rule, so its entry is accepted with `rule = "agents-md"`, and a malformed `[layout]` table or entry
+  makes its row `✗ not checked` with the reason and the example, with or without a tracked `AGENTS.md` (AGENTS-20). No
+  configuration switches the rule off.
 - `root-layout`: every entry directly in the root of the tracked tree is on quality's base list or declared (ROOT-1). An
   entry is a file or a directory (written `frontend/`); a directory with many files is one entry (ROOT-2). Names
   compare in exact case, and the finding for a name that differs only in case names the base-list spelling (ROOT-3). A
@@ -316,13 +364,14 @@ It applies these rules:
   reason = "the deploy script reads it by this name"
   ```
 
-  The rule is `file-suffix`, `script-name`, `script-header`, `test-layout` or `test-import`; a declaration covers only
-  its own rule (SUFFIX-10), and one `script-name` entry covers both the shape and the location of its path (SUFFIX-11).
+  The rule is `agents-md`, `file-suffix`, `script-name`, `script-header`, `test-layout` or `test-import`; a
+  declaration covers only its own rule (SUFFIX-10), and one `script-name` entry
+  covers both the shape and the location of its path (SUFFIX-11).
   A declared path that is not tracked is a finding of the declared rule, `unused` (SUFFIX-12), whose fix deletes every
   `[[layout.allow]]` entry of that path (an untracked path makes each of its entries stale; the fix names no rule); a
   declaration for a file that already complies is clean (SUFFIX-13). A suffixless file says `tracked` (SUFFIX-14) with
   both ways out, give it a suffix or declare it, in prose with no command (SUFFIX-15); findings are sorted by path and
-  all printed (SUFFIX-16). The five rules' fixes that ask for an entry end with one clause naming the finding's own rule
+  all printed (SUFFIX-16). The six rules' fixes that ask for an entry end with one clause naming the finding's own rule
   (SUFFIX-17). A duplicate `(rule, path)`, a folder (a trailing `/`), a pattern (`*`, `?`, `[`), `..`, a leading `./`,
   an empty component, a blank path, an absolute path, a path that is not text, an unknown rule, an unknown key, a
   missing key or a reason that is not one-line text makes the `files` row `✗ not checked` with the reason, and `next:`
@@ -788,12 +837,17 @@ Ruled by the operator:
 quality downloads each needed database itself on every run (PyPI about 37 MB, npm about 219 MB;
 `https://osv-vulnerabilities.storage.googleapis.com/<ecosystem>/all.zip`)
 into the scan's own 0700 scratch directory and runs osv-scanner `--offline` on it, so osv-scanner makes no network call
-and reads no cache of its own (ADVISORY-8). A database that cannot be downloaded within 300 seconds in total for all
-downloads together (connect, headers and body, however the server drags them out) (ADVISORY-9), cannot be placed in
+and reads no cache of its own (ADVISORY-8). A download that fails transiently (HTTP 500 to 599 or 429, a refused or
+reset connection, a timeout, a DNS failure, an unreachable network or host, a body cut short) is tried again after 3,
+9 and 27 seconds, each wait cut to the time left. A download that waits 30 seconds without a byte is cut and tried
+again (ADVISORY-42). A database that cannot be downloaded within 300 seconds in total for all downloads together
+(the retries and their waits included; connect, headers and body, however the server drags them out; the run's end
+caps the 300 seconds), or still not after the fourth attempt (`cannot download the <ecosystem> advisory
+database from <url>: <error> after 4 attempts`) (ADVISORY-9), cannot be placed in
 the scratch directory (ADVISORY-10), is not a valid zip (ADVISORY-11), or holds no advisory (ADVISORY-12) is exit `2`,
 never clean, naming the database; so are an osv-scanner [that is missing, at another version](commands.md#scanners),
-exits other than `0` or `1` (ADVISORY-13), runs past its time limit (ADVISORY-14), or writes a report that is not the
-expected JSON (ADVISORY-15), disagrees with its exit (ADVISORY-16), or names a lock file quality did not pass
+exits other than `0` or `1` (ADVISORY-13), runs past the run's deadline (ADVISORY-14), or writes a report that is
+not the expected JSON (ADVISORY-15), disagrees with its exit (ADVISORY-16), or names a lock file quality did not pass
 (ADVISORY-17). Trust boundary: the database is an unsigned zip fetched over TLS from the same source
 osv-scanner itself uses; there is deliberately no cache, because a doctored cached database would silence every pull
 request. Records the pinned osv-scanner cannot read are dropped by it silently; the live-database test for
@@ -801,9 +855,9 @@ request. Records the pinned osv-scanner cannot read are dropped by it silently; 
 caller's own `uv sync --locked` guards against a hand-edited lock. osv-scanner exits `127` on a `uv.lock` or
 `pnpm-lock.yaml` it cannot parse, which is `cannot judge`, never clean.
 
-The check job in `gate.yml` stops at 25 minutes: the 300-second download deadline and the 600-second scan limit take
-15, and setup and the other rules get the remaining 10, so quality's own `cannot judge` shows before GitHub cancels
-the job (ADVISORY-34).
+The check job in `gate.yml` stops later than the run's deadline plus setup and the steps outside the clock, so
+quality's own `cannot judge` shows before GitHub cancels the job; the retries spend the 300 seconds and add none
+(ADVISORY-34).
 Measured with osv-scanner 2.7.0 on 12 cores (the download at load 17 to 20): the npm archive is 219,026,863 bytes (230,735 files), the PyPI archive 37,064,024 bytes
 (26,612 files); downloading npm took 34 s; a whole `check` run over a repository with one `pnpm-lock.yaml` and one hashed
 `requirements.txt` (one pin) under `--all-packages`, both databases included, took 63 s and 69 s wall and 640 MB resident (load 3 to 5).
@@ -824,6 +878,9 @@ exit `2` (`osv-scanner did not read line 4 of <file>`) (ADVISORY-40), and so is 
 not read (ADVISORY-41). The grammar is an allowlist; `-r`, `-c`, `--index-url`, `-e`, git and sdist URLs and ranges
 wait for a caller that needs them.
 An advisory database zip with an entry that is not valid JSON is exit `2` too (ADVISORY-19).
+Every other download failure is exit `2` at once, without a retry: another 4xx (a missing database is permanent), a
+missing file, an error no list above names, and every error after the body is whole (a bad zip, no advisory, not JSON,
+a scratch write) (ADVISORY-42).
 
 Ruled by the operator:
 

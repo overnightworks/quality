@@ -3,7 +3,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from quality.config import CONFIG_PATH, Allowance, ConfigError
+from quality.config import CONFIG_PATH, LAYOUT_ALLOWANCE_HEADING, Allowance, ConfigError
 
 
 @dataclass(frozen=True)
@@ -64,6 +64,21 @@ class Example:
 type Step = Command | Instruction | OneOf | Example
 
 CONFIG_EXAMPLE_LABEL = f"write it in {CONFIG_PATH} like this"
+
+
+def allowance_clause(rule: str) -> str:
+    return f"declare it in {CONFIG_PATH} with {LAYOUT_ALLOWANCE_HEADING}, its path, the rule {rule} and a reason"
+
+
+def stale_declaration(path: str, rule: str) -> Finding:
+    return Finding(
+        rule, path, None,
+        f"{LAYOUT_ALLOWANCE_HEADING} matches no tracked file",
+        f"delete every {LAYOUT_ALLOWANCE_HEADING} entry for it from {CONFIG_PATH}",
+        event=FindingEvent.UNUSED,
+    )
+
+
 # A gate run's own steps: a fix in the checkout reaches the gate through a push, any other through a re-run.
 FIX_THEN_RERUN = Instruction("fix what the error names, then re-run this run's failed jobs")
 PUSH_THE_FIX = Instruction("push the fix; the gate judges the new commit")
@@ -133,6 +148,10 @@ class FindingEvent(StrEnum):
     NO_AGENTS_FILE = "no AGENTS.md"
     MISNAMED = "misnamed"
     MISPLACED = "misplaced"
+    TITLE = "title"
+    SECTION = "section"
+    TOO_LONG = "too long"
+    MISSING = "missing"
     NO_HEADER = "no header"
     STRAY = "stray"
     TEST_IMPORT = "test import"

@@ -7,7 +7,7 @@ import urllib.request
 
 import pytest
 
-from quality import advisories, process, scanners
+from quality import advisories, deadline, process, scanners
 from quality.config import CONFIG_PATH, AdvisoryAllowance
 from quality.output import SEPARATOR
 from quality.report import FindingEvent, LockExtent, NoteEvent
@@ -306,14 +306,26 @@ def test_a_server_that_trickles_bytes_hits_the_download_deadline(serve_stalling,
     assert (code, "download exceeded" in output, elapsed < 3) == (2, True, True), output
 
 
+def test_a_download_still_running_when_the_run_ends_is_cut_in_the_runs_words(serve_stalling, timed_gate, monkeypatch):
+    """SCANNER-20, ADVISORY-9, REFUSAL-22: a download that outlives the run's deadline ends with it and says so, not
+    that it exceeded its own 300 seconds."""
+    serve_stalling(BODY_BEGUN, trickles=True)
+    monkeypatch.setattr(deadline, "RUN_DEADLINE_SECONDS", 2)
+    code, output, elapsed = timed_gate()
+    cut = "the PyPI advisory database download did not finish within the run's 2 seconds"
+    assert (code, cut in output, "exceeded" in output, elapsed < 10) == (2, True, False, True), output
+
+
 def test_a_server_that_goes_silent_is_a_timeout_not_the_total_deadline(serve_stalling, timed_gate, monkeypatch):
     """ADVISORY-9: a server that stops sending is a refusal naming a timeout; the total deadline is named only when
-    it is the cause."""
+    it is the cause. Every attempt times out, so the refusal comes after the last one."""
     serve_stalling(BODY_BEGUN + b"xx", trickles=False)
     monkeypatch.setattr(advisories, "DOWNLOAD_TIMEOUT_SECONDS", 0.3)
+    monkeypatch.setattr(advisories, "RETRY_DELAYS_SECONDS", (0, 0, 0))
     monkeypatch.setattr(advisories, "DATABASE_DOWNLOAD_DEADLINE_SECONDS", 10)
     code, output, elapsed = timed_gate()
-    assert (code, "timed out" in output, "exceeded" in output, elapsed < 3) == (2, True, False, True), output
+    observed = (code, "timed out" in output, "after 4 attempts" in output, "exceeded" in output, elapsed < 3)
+    assert observed == (2, True, True, False, True), output
 
 
 @pytest.fixture
@@ -520,17 +532,6 @@ def test_a_package_osv_cannot_match_to_the_advisory_gets_only_the_advisory_link(
     ((_, row),) = area_finding_rows(output, Area.DEPENDENCIES)
     assert (row.fix.endswith(ADVISORY_LINK), PACKAGE_NAME in row.fix) == (True, False)
     assert row.fact.count(SEPARATOR) == 1, row.fact
-
-
-def test_a_hanging_osv_is_cannot_judge_within_its_time_limit(
-    build_repo, served_scanners, run_gate, publish_database, monkeypatch
-):
-    """ADVISORY-14: an osv-scanner that runs past its time limit is exit 2 naming the limit."""
-    publish_database()
-    monkeypatch.setattr(advisories, "ADVISORY_SCAN_TIMEOUT_SECONDS", 0.5)
-    fake_scanner(served_scanners, OSV, "exec sleep 30")
-    code, output = run_gate(tracked_lock_repo(build_repo))
-    assert (code, "did not finish within 0.5 seconds" in output) == (2, True), output
 
 
 def test_a_fake_osv_clean_report_for_a_tracked_lock_is_clean(build_repo, served_scanners, run_gate, publish_database):

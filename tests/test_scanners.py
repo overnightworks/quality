@@ -45,6 +45,7 @@ from tests.support.scanners import (
     fake_zizmor,
     lacking,
     recording,
+    run_deadline,
     scan,
     serving,
 )
@@ -66,6 +67,16 @@ def test_a_version_command_that_fails_hangs_or_reports_no_version_is_exit_2(serv
     monkeypatch.setattr(process, "VERSION_TIMEOUT_SECONDS", 0.2)
     fake_gitleaks(served_scanners, version, on_version=on_version)
     assert expected in check_exit_2(build_repo({}), capsys)
+
+
+def test_a_mise_that_does_not_finish_is_exit_2_and_names_the_install_command(build_repo, use_mise, monkeypatch, capsys):
+    """SCANNER-19, SCANNER-9: a `mise which` that outlives the fixed 30-second bound, with time left in the run, is
+    exit 2 in the bound's own wording and brings the install command."""
+    monkeypatch.setattr(process, "VERSION_TIMEOUT_SECONDS", 0.2)
+    use_mise("exec sleep 30")
+    printed = check_exit_2(build_repo({}), capsys)
+    assert "mise did not finish within 0.2 seconds" in printed
+    assert scanners.install_command() in printed
 
 
 @pytest.mark.parametrize(
@@ -173,7 +184,7 @@ def test_a_relative_repository_path_starting_with_a_dash_is_scanned_as_that_repo
     workdir.mkdir()
     subprocess.run(["git", "clone", "-q", str(repo), "--", str(workdir / "-repo")], check=True)
     monkeypatch.chdir(workdir)
-    findings = scanners.scan_secrets(Path("-repo"), {}).findings
+    findings = scanners.scan_secrets(Path("-repo"), {}, run_deadline()).findings
     assert [(finding.path, finding.line) for finding in findings] == [("config.txt", 1)]
 
 
@@ -285,7 +296,7 @@ def test_a_git_older_than_2_41_is_exit_2_naming_the_version(
 @pytest.mark.scanner
 def test_installed_binary_reports_the_pinned_version(build_repo, installed_scanners):
     """SCANNER-5: the gitleaks mise installed reports the pinned version, so it runs."""
-    assert scanners.scan_secrets(build_repo({}), {}).findings == []
+    assert scanners.scan_secrets(build_repo({}), {}, run_deadline()).findings == []
 
 
 @pytest.mark.scanner
@@ -297,7 +308,7 @@ def test_a_mise_config_above_the_manifests_parent_never_takes_part(installed_sca
     for name in ("mise.toml", ".miserc.toml"): (checkout / name).write_text("[tools\nthis does not parse")
     monkeypatch.chdir(checkout)
     monkeypatch.setattr(scanners, "MANIFEST_DIRECTORY", manifest_copy)
-    assert scanners.located(scanners.GITLEAKS).is_file()
+    assert scanners.located(scanners.GITLEAKS, process.run).is_file()
 
 
 FINDING_EXIT = {"actionlint": 1, "zizmor": 12}
