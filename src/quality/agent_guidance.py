@@ -1,8 +1,9 @@
 """The `claude-md` rule, a tracked `CLAUDE.md` that is exactly `@AGENTS.md` beside a tracked `AGENTS.md`, and the
 `agents-md` rule, the title, sections and size of the root `AGENTS.md`."""
 
+import re
 from collections.abc import Iterator
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from quality import checkout, repository
 from quality.report import Finding, FindingEvent
@@ -16,7 +17,9 @@ AGENTS_SECTIONS = ("Commands", "Rules", "Owners", "Documents")
 AGENTS_MAX_LINES = 100
 AGENTS_MAX_BYTES = 4096
 FENCE_MARKERS = ("```", "~~~")
+FIRST_SPAN = re.compile(r"`([^`\n]+)`")
 type AgentsProblem = tuple[FindingEvent, int, str, str]
+MISSING_FIX = "point at a tracked document or delete the line"
 SECTION_FIX = f"name it {', '.join(AGENTS_SECTIONS)}, or make it a level 3 heading"
 
 
@@ -63,13 +66,19 @@ def _claude_md_problem(root: Path, name: str, agents_tracked: bool) -> tuple[Fin
 def check_agents_md(root: Path, tracked: list[str]) -> list[Finding]:
     """The root AGENTS.md has a title, then only the sections of the document set once and in order, within its size.
 
-    The findings carry fixed texts, line numbers and counts, never the file's content.
+    Each line of its Documents section names a tracked file or a directory holding one.
+    The findings carry fixed texts, line numbers, counts and the path of a document line, never other content.
     """
     text = checkout.judged(repository.read_text, root, AGENTS_FILE) if AGENTS_FILE in tracked else None
     if text is None:
         return []
     lines = text.removesuffix("\n").split("\n") if text else []
-    problems = [*_title_problems(lines), *_section_problems(lines[1:]), *_size_problems(len(lines), len(text.encode()))]
+    problems = [
+        *_title_problems(lines),
+        *_section_problems(lines[1:]),
+        *_document_problems(lines[1:], tracked),
+        *_size_problems(len(lines), len(text.encode())),
+    ]
     return [Finding(Rule.AGENTS_MD, AGENTS_FILE, line, fact, fix, event=event) for event, line, fact, fix in problems]
 
 
@@ -80,14 +89,10 @@ def _title_problems(lines: list[str]) -> Iterator[AgentsProblem]:
 
 def _section_problems(body: list[str]) -> Iterator[AgentsProblem]:
     """The section problems of the lines after the title, which is line 1; a heading in a fence is no heading."""
-    fence = ""
     seen: list[str] = []
     text_reported = False
     past_heading = False
-    for number, line in enumerate(body, start=2):
-        in_fence = bool(fence)
-        fence = _fence_after(fence, line)
-        heading = None if in_fence or fence else _heading(line)
+    for number, line, heading, _ in _scan(body):
         past_heading = past_heading or heading is not None
         if heading is None:
             if line.strip() and not (text_reported or past_heading):
@@ -95,6 +100,44 @@ def _section_problems(body: list[str]) -> Iterator[AgentsProblem]:
                 yield _section(number, "text before the first section", "move it under a section or delete it")
         elif problem := _heading_problem(heading, number, seen):
             yield problem
+
+
+def _scan(body: list[str]) -> Iterator[tuple[int, str, str | None, bool]]:
+    """The number (the title is line 1), text, heading and fence flag of each line after the title.
+
+    A line in a fence, its marker lines included, has no heading.
+    """
+    fence = ""
+    for number, line in enumerate(body, start=2):
+        in_fence = bool(fence)
+        fence = _fence_after(fence, line)
+        fenced = in_fence or bool(fence)
+        yield number, line, None if fenced else _heading(line), fenced
+
+
+def _document_problems(body: list[str], tracked: list[str]) -> Iterator[AgentsProblem]:
+    """A `missing` problem for each document line whose first span is no tracked file or directory with one."""
+    names = set(tracked)
+    directories = {str(parent) for name in names for parent in PurePosixPath(name).parents[:-1]}
+    for number, line in _document_lines(body):
+        if (span := FIRST_SPAN.search(line)) and not _is_tracked_path(span[1], names, directories):
+            yield FindingEvent.MISSING, number, f"{span[1]} is not tracked", MISSING_FIX
+
+
+def _document_lines(body: list[str]) -> Iterator[tuple[int, str]]:
+    """The number and text of the lines in a `## Documents` section, outside a fence."""
+    in_documents = False
+    for number, line, heading, fenced in _scan(body):
+        if heading is not None:
+            in_documents = heading == "Documents"
+        elif in_documents and not fenced:
+            yield number, line
+
+
+def _is_tracked_path(path: str, names: set[str], directories: set[str]) -> bool:
+    """A tracked file or a directory with a tracked file below it, spelled in exact case, one trailing `/` optional."""
+    path = path.removesuffix("/")
+    return path in names or path in directories
 
 
 def _heading_problem(heading: str, number: int, seen: list[str]) -> AgentsProblem | None:

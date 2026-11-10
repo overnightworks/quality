@@ -135,6 +135,7 @@ class FindingEvent(StrEnum):
     TITLE = "title"
     SECTION = "section"
     TOO_LONG = "too long"
+    MISSING = "missing"
     NO_HEADER = "no header"
     STRAY = "stray"
     TEST_IMPORT = "test import"
