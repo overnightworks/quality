@@ -103,6 +103,21 @@ def test_the_verdict_clears_a_renamed_strike_only_for_the_pairing_git_makes_and_
     assert viewed(repo, capsys) == (code, expected)
 
 
+LAYERS_WITH_DEAD = {"type": "layers", "containers": ["shop"], "layers": ["web", "db", "dead"]}
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("layers", "code", "expected"),
+    [(["web", "db", "new"], 0, GREEN), (["new", "web", "db"], 1, [f"    ! {GUARDED_CHANGES}layers", "! red"])],
+    ids=["the renamed module in the struck layer", "the renamed module in another layer"],
+)
+def test_the_verdict_keeps_the_place_of_a_renamed_layer(capsys, pull_request, layers, code, expected):
+    """LOOSE-22: a renamed layer listed at another place is `changes layers`; at its own place it is green."""
+    repo = committed(pull_request, LAYERS_WITH_DEAD, {**LAYERS_WITH_DEAD, "layers": layers}, RENAMED)
+    assert viewed(repo, capsys) == (code, expected)
+
+
 MOVED_PATHS = ("src/old.py", "src/new.py")
 MOVED_BASELINES = (OLD_ENTRY, OLD_ENTRY.replace(*MOVED_PATHS))
 

@@ -39,7 +39,7 @@ from importlinter.contracts.layers import Layer, LayersContract
 from importlinter.contracts.protected import ProtectedContract
 from importlinter.domain.contract import Contract, ContractCheck, InvalidContractOptions
 from importlinter.domain.helpers import MissingImport
-from importlinter.domain.imports import ImportExpression
+from importlinter.domain.imports import ImportExpression, ModuleExpression
 
 from quality import ratchet
 from quality.report import Finding, FindingEvent, Note, NoteEvent, RuleResult
@@ -211,7 +211,7 @@ def contract_loosenings(base: SideContracts, head: SideContracts, tree: PullTree
     gone = {} if tree is None else _gone(struck_modules(base, head), head, tree)
     for name, contract in base.contracts.items():
         kept = head.contracts.get(name)
-        lines += [f'import contract "{name}" removed'] if kept is None else _contract_loosenings(name, *_aligned(contract, kept, gone))
+        lines += [f'import contract "{name}" removed'] if kept is None else _contract_loosenings(name, _resolved(contract, kept, gone), kept)
     return sorted(lines)
 
 
@@ -324,28 +324,48 @@ def _root_depth(parts: tuple[str, ...], heads: Mapping[str, str]) -> int | None:
     return None
 
 
-def _aligned(base: ContractFields, head: ContractFields, gone: Mapping[str, str | None]) -> tuple[ContractFields, ContractFields]:
-    """Both sides without the modules the comparison accounts for: the base without the modules it lists that the head's
-    same list lacks and `gone` names, the head without the renamed module of each such name that it lists there."""
-    cleared = {option: {name: gone[name] for name in names if name in gone and gone[name] in {None, *_names(head, option)}}
-               for option, names in _struck(base, head).items()}
-    base_dead = {option: frozenset(names) for option, names in cleared.items()}
-    head_dead = {option: frozenset(module for module in names.values() if module is not None) for option, names in cleared.items()}
-    return _stripping(base, base_dead), _stripping(head, head_dead)
+def _resolved(base: ContractFields, head: ContractFields, gone: Mapping[str, str | None]) -> ContractFields:
+    """The base with each name the head's same list lacks and `gone` accounts for taken out when deleted and put at its
+    place under the module it was renamed to, so that the comparison reads the module's position."""
+    fields = dict(base.fields)
+    for option, names in _struck(base, head).items():
+        accounted = {name: gone[name] for name in names if name in gone}
+        if accounted:
+            fields[option] = _replaced(base, option, accounted)
+    return ContractFields(base.type, base.ignores, fields)
 
 
-def _stripping(contract: ContractFields, dead: Mapping[str, frozenset[str]]) -> ContractFields:
-    fields = {option: _stripped(contract, option, dead[option]) if dead.get(option) else value for option, value in contract.fields.items()}
-    return ContractFields(contract.type, contract.ignores, fields)
-
-
-def _stripped(contract: ContractFields, option: str, dead: frozenset[str]) -> object:
+def _replaced(contract: ContractFields, option: str, accounted: Mapping[str, str | None]) -> object:
     value = contract.fields[option]
     if option != "layers":
-        return type(value)(expression for expression in value if expression.expression not in dead)
-    layers = [_known_part(layer, frozenset(tail.name for tail in layer.module_tails
-                                           if not set(_tail_names(contract, tail.name)) <= dead)) for layer in value]
-    return [layer for layer in layers if layer.module_tails]
+        became = (accounted.get(expression.expression, expression.expression) for expression in value)
+        return type(value)(ModuleExpression(module) for module in became if module is not None)
+    tails = _renamed_tails(contract, accounted)
+    parts = [_with_tails(layer, tails) for layer in value]
+    return [layer for layer in parts if layer.module_tails]
+
+
+def _renamed_tails(contract: ContractFields, accounted: Mapping[str, str | None]) -> dict[str, str | None]:
+    """The layer tails whose name in every container `accounted` covers, each with the one tail it became in all of them,
+    None when it was deleted in all; any other tail is left out."""
+    renamed: dict[str, str | None] = {}
+    for tail in {tail.name for layer in contract.fields["layers"] for tail in layer.module_tails}:
+        names = _tail_names(contract, tail)
+        if not all(name in accounted for name in names):
+            continue
+        module = accounted[names[0]]
+        became = None if module is None else module.removeprefix(names[0].removesuffix(tail))
+        if all(accounted[name] == (None if became is None else name.removesuffix(tail) + became) for name in names):
+            renamed[tail] = became
+    return renamed
+
+
+def _with_tails(layer: Layer, renamed: Mapping[str, str | None]) -> Layer:
+    """A layer with its renamed tails under their new names and its deleted tails gone; one left alone has no sibling,
+    so its independence says nothing."""
+    tails = {replace(tail, name=renamed.get(tail.name, tail.name)) for tail in layer.module_tails
+             if renamed.get(tail.name, tail.name) is not None}
+    return replace(layer, module_tails=tails, is_independent=layer.is_independent or len(tails) == 1)
 
 
 def _contract_loosenings(name: str, base: ContractFields, head: ContractFields) -> list[str]:

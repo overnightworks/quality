@@ -324,6 +324,38 @@ def test_a_target_that_is_no_module_below_a_placed_root_names_no_candidate(targe
     assert lines(FORBIDDEN_DEAD, source_modules_of(["shop.db", listed]), tree) == changes("source_modules")
 
 
+def moved_tree(moves):
+    """The shop package with only the files of `moves` moved, each to its target."""
+    package = {"src/shop/__init__.py"}
+    return tree_of(package | set(moves), package | set(moves.values()), moves)
+
+
+FOLDER_MOVES = {f"src/shop/old/{name}": f"src/shop/new/{name}" for name in ("__init__.py", "p.py", "q.py")}
+LAYER_MOVES = {"src/shop/a.py": "src/shop/na.py"}
+RENAMED_LAYERS = [
+    ({"containers": ["shop.old"], "layers": ["p", "q"]}, {"containers": ["shop.new"], "layers": ["q", "p"]}, FOLDER_MOVES, changes("layers")),
+    ({"layers": ["shop.old.p", "shop.old.q"]}, {"layers": ["shop.new.q", "shop.new.p"]}, FOLDER_MOVES, changes("layers")),
+    ({"containers": ["shop"], "layers": ["web", "db", "a"]}, {"containers": ["shop"], "layers": ["na", "web", "db"]}, LAYER_MOVES,
+     changes("layers")),
+    ({"containers": ["shop"], "layers": ["web | a"]}, {"containers": ["shop"], "layers": ["web : na"]}, LAYER_MOVES, changes("layers")),
+    ({"containers": ["shop.old"], "layers": ["p", "q"]}, {"containers": ["shop.new"], "layers": ["p", "q"]}, FOLDER_MOVES, []),
+    ({"layers": ["shop.old.p", "shop.old.q"]}, {"layers": ["shop.new.p", "shop.new.q"]}, FOLDER_MOVES, []),
+    ({"containers": ["shop"], "layers": ["web", "db", "a"]}, {"containers": ["shop"], "layers": ["web", "db", "na"]}, LAYER_MOVES, []),
+    ({"containers": ["shop"], "layers": ["web | a"]}, {"containers": ["shop"], "layers": ["web | na"]}, LAYER_MOVES, []),
+]
+
+
+@pytest.mark.parametrize(("base", "head", "moves", "expected"), RENAMED_LAYERS,
+                         ids=["a renamed container with its layers reversed", "every module renamed and the layers reversed",
+                              "a renamed layer moved to the top", "a renamed layer moved from `|` to `:`",
+                              "a renamed container", "every module renamed", "a renamed layer kept in its place",
+                              "a renamed sibling kept in its group"])
+def test_a_renamed_module_keeps_the_place_of_the_struck_name_in_a_layers_contract(base, head, moves, expected):
+    """LOOSE-22, LOOSE-20: the head's layers name the module at the struck name's place, or they differ and read
+    `changes layers`."""
+    assert lines({"type": "layers", **base}, {"type": "layers", **head}, moved_tree(moves)) == expected
+
+
 def test_a_wildcard_listed_at_the_head_does_not_name_the_renamed_module():
     """LOOSE-22, LOOSE-21: only the exact dotted name of the renamed module counts."""
     assert lines(FORBIDDEN_DEAD, source_modules_of(["shop.db", "shop.*"]), RENAMED_TO_NEW) == changes("source_modules")
