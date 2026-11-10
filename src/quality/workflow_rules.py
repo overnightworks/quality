@@ -210,7 +210,7 @@ ASSIGNMENT = re.compile(r"\w+=")
 DYNAMIC_COMMAND = re.compile(r"\$[\w{]")
 WORKERS_FLAG = re.compile(r"(?:-n|--numprocesses)(?:=(.*))?|-n(.+)", re.DOTALL)
 WHOLE_NUMBER = re.compile(r"[0-9]+")
-SEPARATOR_CHARACTERS = frozenset("();|&")
+SEPARATOR_CHARACTERS = frozenset("();|&`")
 PREFIX_WORDS = frozenset({"time", "exec", "command", "nohup", "if", "then", "elif", "else", "do", "while", "until", "!", "{"})
 PYTEST_COMMANDS = frozenset({"pytest", "py.test"})
 INTERPRETER = re.compile(r"python(?:3(?:\.\d+)?)?|pypy3")
@@ -335,8 +335,8 @@ def _line_problems(text: str, script_holds_pytest: bool) -> Iterator[Problem]:
 
 
 def _segments(text: str) -> list[list[str]]:
-    """The words of a line, split at `&&`, `||`, `;`, `|`, `&`, `(` and `)`."""
-    lexer = shlex.shlex(text, posix=True, punctuation_chars=True)
+    """The words of a line, split at `&&`, `||`, `;`, `|`, `&`, `(`, `)` and a backtick."""
+    lexer = shlex.shlex(text, posix=True, punctuation_chars="();<>|&`")
     lexer.whitespace_split = True
     lexer.commenters = ""
     segments: list[list[str]] = [[]]

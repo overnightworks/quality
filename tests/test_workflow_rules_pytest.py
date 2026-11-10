@@ -130,6 +130,8 @@ SERIAL_WITHOUT_N = [
     "pytest -qn4",
     "poetry run pytest",
     "uv run --python 3.14 pytest",
+    "x=`pytest -q`",
+    "echo `pytest -q` done",
 ]
 
 
