@@ -1,0 +1,8 @@
+claim_id = "a62f0ad4bb98440182465994e50e0bd5"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "4e0c7e75b37283821006d87f7e822b5193a581c2"
+branch = "claude/issue-744-job-limits-15"
+scope = [".github/workflows/codeql.yml", ".github/workflows/gate.yml", "docs/gate.md", "docs/rules.md", "docs/sonar.md", "src/quality/sonar.py", "tests/test_advisories_locks.py", "tests/workflows/test_gate_job_bounds.py"]
+opened_commit = "45ae2cb67060a331449716136c22e68d1290d2a4"
+whole_reason = "The limits, the poll count they rest on, the test that adds them up and the three spec sentences change together: any part alone lands a limit without its proof or a sum that no longer fits."
