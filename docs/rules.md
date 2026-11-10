@@ -266,6 +266,19 @@ It applies these rules:
 
   Ruled by the operator: `CLAUDE.md` and `AGENTS.md` never diverge (CLAUDE-7). A finding names only the file
   (CLAUDE-9, CLAUDE-10), and its fix is a sentence, never a command (CLAUDE-11).
+- `agents-md`: the tracked file named exactly `AGENTS.md` at the root has the shape of the document set (write-docs'
+  "Repository document set", which owns it). Line 1 is a title, `# ` and at least one character that is not blank; any
+  other first line, an empty file included, is a `title` finding at line 1 (AGENTS-1). Between the title and the first
+  `## ` heading only blank lines stand; anything else is a `section` finding at its first line, and a file with a title
+  and no section is clean (AGENTS-2). Every `## ` heading outside a fenced code block (backticks or tildes) is one of
+  `Commands`, `Rules`, `Owners`, `Documents`, exactly spelled, at most once, in that order; another name, a repeat, a
+  heading out of order and a second `# ` heading are `section` findings at their line, and each section may be missing.
+  Headings of level 3 and deeper are no sections (AGENTS-3). The file has at most 100 lines (the last one counts without
+  a line feed; `\n` alone separates lines) and at most 4096 bytes; each limit crossed is a `too long` finding at line 1
+  (AGENTS-4). No `AGENTS.md` is clean, and a tracked one missing from disk is skipped (AGENTS-5). A finding names fixed
+  words, line numbers and counts, never the title or a heading, and its fix is prose with no command (AGENTS-6). A link
+  that leaves the repository, text that is not UTF-8 and a read the filesystem refuses make the `files` row
+  `✗ not checked` with the reason (exit `2`) (AGENTS-7). No configuration switches the rule off.
 - `root-layout`: every entry directly in the root of the tracked tree is on quality's base list or declared (ROOT-1). An
   entry is a file or a directory (written `frontend/`); a directory with many files is one entry (ROOT-2). Names
   compare in exact case, and the finding for a name that differs only in case names the base-list spelling (ROOT-3). A

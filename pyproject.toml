@@ -79,7 +79,7 @@ layers = [
     "pin",
     "advisories",
     "python_lint",
-    "architecture | claude_md | clones | compose | env_file | layout | pip_requirements | python_floor | root_layout | scanners",
+    "agent_guidance | architecture | clones | compose | env_file | layout | pip_requirements | python_floor | root_layout | scanners",
     "ratchet",
     "checkout",
     "output",

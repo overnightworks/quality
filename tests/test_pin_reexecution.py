@@ -22,6 +22,7 @@ from quality import output, pin, process
 from quality.report import CannotJudge, Release
 from tests.support.door import LAUNCH_DRIVER, door_environment
 from tests.support.git_repositories import git, head_commit, make_repo
+from tests.support.layout import FILES_RULE_IDS
 
 pytestmark = pytest.mark.integration
 
@@ -183,7 +184,12 @@ def test_the_child_judges_at_the_pin_and_names_its_fetch(scene):
     fetched = scene.run("check", "files")
     cached = scene.run("check", "files")
     assert (fetched.returncode, fetched.stdout.splitlines()[:2], fetched.stderr) == (
-        0, [release_row(f"fetched now · {PINNED_IN}"), "  ✓ files         clean          10 rules · 2 files"], "",
+        0,
+        [
+            release_row(f"fetched now · {PINNED_IN}"),
+            f"  ✓ files         clean          {len(FILES_RULE_IDS)} rules · 2 files",
+        ],
+        "",
     )
     assert (cached.returncode, cached.stdout.splitlines()[0], [("--offline" in call["argv"]) for call in scene.uv_calls()]) == (
         0, release_row(PINNED_IN), [False, True],
