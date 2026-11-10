@@ -805,10 +805,11 @@ It is on `main` only until the release that carries it, so a dependent meets it 
 
 The `pytest-workers` rule judges every pytest call in a `run:` step of every tracked workflow, whether or not a pull
 request triggers it; only the `run:` of a step is read, as POSIX shell whatever its `shell:` says, and a composite
-action is not (PYTEST-1). The script is never run. A literal block scalar is read line by line, any other `run:` as one
-line; each `${{ }}` on a line becomes one dynamic word; a line ending in a backslash joins the next; a `#` that starts
-a word outside quotes ends the command text; the words are split by Python's `shlex`, and `&&`, `||`, `;`, `|`, `&`,
-`(` and `)` end a segment (PYTEST-2).
+action is not (PYTEST-1). The script is never run. The value is read line by line, as the shell reads it: a literal
+block scalar at each file line, a folded or quoted one with each line break kept at the scalar's first line; each `${{ }}` on a line
+becomes one dynamic word; a line ending in a backslash joins the next; a `#` that starts a word outside quotes ends the
+command text; the words are split by Python's `shlex`, and `&&`, `||`, `;`, `|`, `&`, `(`, `)` and a backtick end a
+segment (PYTEST-2).
 
 A segment is a pytest call when its command word, after assignments (`VAR=value`), `env` with its flags, `time`,
 `exec`, `command`, `nohup` and the shell keywords `if`, `then`, `elif`, `else`, `do`, `while`, `until`, `!` and `{`, is
