@@ -39,7 +39,7 @@ from importlinter.contracts.layers import Layer, LayersContract
 from importlinter.contracts.protected import ProtectedContract
 from importlinter.domain.contract import Contract, ContractCheck, InvalidContractOptions
 from importlinter.domain.helpers import MissingImport
-from importlinter.domain.imports import ImportExpression
+from importlinter.domain.imports import ImportExpression, ModuleExpression
 
 from quality import ratchet
 from quality.report import Finding, FindingEvent, Note, NoteEvent, RuleResult
@@ -85,6 +85,7 @@ STALE_IGNORE_FIX = "delete it from the contract's ignore_imports"
 GRIMP_WARNING_PREFIX = "Warning: "
 PANIC_MODULE = "pyo3_runtime"
 MAX_ECHOED_SOURCE = 200
+PACKAGE_INIT = "__init__.py"
 # Probed on grimp 3.17, whose Rust reader (not readable from Python) takes the raw lower-cased spelling of a coding
 # cookie: Python's own aliases such as utf_8, U8, cp65001 or utf-8-sig make it panic.
 GRIMP_ACCEPTED_COOKIES = frozenset({"utf-8", "utf8", "ascii", "us-ascii", "ansi_x3.4-1968"})
@@ -200,17 +201,17 @@ def contracts_of(configs: Mapping[str, str]) -> SideContracts:
 def contract_loosenings(base: SideContracts, head: SideContracts, tree: PullTree | None = None) -> list[str]:
     """What the head loosens against the base, one sorted line each; adding a config or a contract, and removing an ignore, are none.
 
-    A module a list lost is no loosening when `tree` shows the head no longer has it and git does not read it as renamed;
-    without a tree nothing counts as missing."""
+    A module a list lost is no loosening when `tree` shows the head no longer has it and git does not read it as renamed,
+    or reads it as renamed to a module the same list at the head names; without a tree nothing counts as missing."""
     if base.config is None:
         return []
     if head.config is None:
         return [f"import-linter config in {base.config} removed"]
     lines = [f"import-linter changes {option}" for option in SESSION_OPTIONS if base.session[option] != head.session[option]]
-    gone = frozenset() if tree is None else _gone(struck_modules(base, head), head, tree)
+    gone = {} if tree is None else _gone(struck_modules(base, head), head, tree)
     for name, contract in base.contracts.items():
         kept = head.contracts.get(name)
-        lines += [f'import contract "{name}" removed'] if kept is None else _contract_loosenings(name, _without(contract, kept, gone), kept)
+        lines += [f'import contract "{name}" removed'] if kept is None else _contract_loosenings(name, _resolved(contract, kept, gone), kept)
     return sorted(lines)
 
 
@@ -245,11 +246,29 @@ def _tail_names(contract: ContractFields, tail: str) -> list[str]:
     return [f"{container}.{tail}" for container in containers] or [tail]
 
 
-def _gone(struck: frozenset[str], head: SideContracts, tree: PullTree) -> frozenset[str]:
-    """The struck names the head's files no longer hold and git does not read as renamed (a name outside the head's
-    placed root packages is present)."""
-    places = {package: (_directory_of(tree.head_paths, package), _directory_of(tree.base_paths, package)) for package in head.session["root_packages"]}
-    return frozenset(name for name in struck if _is_gone(name, places.get(name.partition(".")[0], (None, None)), tree))
+def _gone(struck: frozenset[str], head: SideContracts, tree: PullTree) -> Mapping[str, str | None]:
+    """The struck names the head's files no longer hold, each with the module git renamed it to, None when it was
+    deleted; a name outside the placed root packages is present, and a renamed name with no one renamed module is left out."""
+    heads = _placed_roots(tree.head_paths, head)
+    bases = _placed_roots(tree.base_paths, head)
+    gone: dict[str, str | None] = {}
+    for name in struck:
+        package = name.partition(".")[0]
+        if package not in heads or package not in bases or _has_file(tree.head_paths, _module_place(heads[package], name)):
+            continue
+        place = _module_place(bases[package], name)
+        moves = [(source, target) for source, target in tree.renames.moves.items()
+                 if (source == f"{place}.py" or source.startswith(f"{place}/")) and target not in tree.head_empty]
+        if not moves:
+            gone[name] = None
+        elif (module := _renamed_module(place, moves, heads)) is not None:
+            gone[name] = module
+    return gone
+
+
+def _placed_roots(paths: frozenset[str], head: SideContracts) -> dict[str, str]:
+    placed = {package: _directory_of(paths, package) for package in head.session["root_packages"]}
+    return {package: directory for package, directory in placed.items() if directory is not None}
 
 
 def _directory_of(paths: frozenset[str], package: str) -> str | None:
@@ -259,36 +278,95 @@ def _directory_of(paths: frozenset[str], package: str) -> str | None:
         return None
 
 
-def _is_gone(name: str, directories: tuple[str | None, str | None], tree: PullTree) -> bool:
-    if None in directories:
-        return False
-    head_place, base_place = (str(PurePosixPath(directory, *name.split("."))) for directory in directories)
-    return not _has_file(tree.head_paths, head_place) and not _renamed(tree, base_place)
+def _module_place(directory: str, name: str) -> str:
+    return str(PurePosixPath(directory, *name.split(".")))
 
 
 def _has_file(paths: frozenset[str], place: str) -> bool:
     return f"{place}.py" in paths or any(path.startswith(f"{place}/") for path in paths)
 
 
-def _renamed(tree: PullTree, place: str) -> bool:
-    return any((source == f"{place}.py" or source.startswith(f"{place}/")) and target not in tree.head_empty
-               for source, target in tree.renames.moves.items())
+def _renamed_module(place: str, moves: Sequence[tuple[str, str]], heads: Mapping[str, str]) -> str | None:
+    """The one module every rename source of the module at `place` names, None when a source names none or they differ."""
+    candidates = {_candidate(place, source, target, heads) for source, target in moves}
+    return candidates.pop() if len(candidates) == 1 else None
 
 
-def _without(base: ContractFields, head: ContractFields, gone: frozenset[str]) -> ContractFields:
-    """The base without the modules it lists that the head's same list lacks and `gone` names."""
-    dead = {option: names & gone for option, names in _struck(base, head).items()}
-    fields = {option: _stripped(base, option, dead[option]) if dead.get(option) else value for option, value in base.fields.items()}
+def _candidate(place: str, source: str, target: str, heads: Mapping[str, str]) -> str | None:
+    """The module a rename target names: its own file or package for the module's own files, the folder holding the
+    source's trailing parts for a file below the module's folder; the target must lie below a placed root package's
+    directory at the head and every part of the name must be an identifier."""
+    parts = PurePosixPath(target).parts
+    depth = _root_depth(parts, heads)
+    if depth is None:
+        return None
+    if source in (f"{place}.py", f"{place}/{PACKAGE_INIT}"):
+        if parts[-1] == PACKAGE_INIT:
+            module = parts[:-1]
+        elif parts[-1].endswith(".py"):
+            module = (*parts[:-1], parts[-1].removesuffix(".py"))
+        else:
+            return None
+    else:
+        below = PurePosixPath(source).relative_to(place).parts
+        if parts[-len(below):] != below:
+            return None
+        module = parts[:-len(below)]
+    named = module[depth:]
+    return ".".join(named) if named and all(part.isidentifier() for part in named) else None
+
+
+def _root_depth(parts: tuple[str, ...], heads: Mapping[str, str]) -> int | None:
+    """The number of parts of the directory holding the placed root package a path lies strictly below."""
+    for package, directory in heads.items():
+        root = PurePosixPath(directory).parts
+        if parts[:len(root) + 1] == (*root, package) and len(parts) > len(root) + 1:
+            return len(root)
+    return None
+
+
+def _resolved(base: ContractFields, head: ContractFields, gone: Mapping[str, str | None]) -> ContractFields:
+    """The base with each name the head's same list lacks and `gone` accounts for taken out when deleted and put at its
+    place under the module it was renamed to, so that the comparison reads the module's position."""
+    fields = dict(base.fields)
+    for option, names in _struck(base, head).items():
+        accounted = {name: gone[name] for name in names if name in gone}
+        if accounted:
+            fields[option] = _replaced(base, option, accounted)
     return ContractFields(base.type, base.ignores, fields)
 
 
-def _stripped(contract: ContractFields, option: str, dead: frozenset[str]) -> object:
+def _replaced(contract: ContractFields, option: str, accounted: Mapping[str, str | None]) -> object:
     value = contract.fields[option]
     if option != "layers":
-        return type(value)(expression for expression in value if expression.expression not in dead)
-    layers = [_known_part(layer, frozenset(tail.name for tail in layer.module_tails
-                                           if not set(_tail_names(contract, tail.name)) <= dead)) for layer in value]
-    return [layer for layer in layers if layer.module_tails]
+        became = (accounted.get(expression.expression, expression.expression) for expression in value)
+        return type(value)(ModuleExpression(module) for module in became if module is not None)
+    tails = _renamed_tails(contract, accounted)
+    parts = [_with_tails(layer, tails) for layer in value]
+    return [layer for layer in parts if layer.module_tails]
+
+
+def _renamed_tails(contract: ContractFields, accounted: Mapping[str, str | None]) -> dict[str, str | None]:
+    """The layer tails whose name in every container `accounted` covers, each with the one tail it became in all of them,
+    None when it was deleted in all; any other tail is left out."""
+    renamed: dict[str, str | None] = {}
+    for tail in {tail.name for layer in contract.fields["layers"] for tail in layer.module_tails}:
+        names = _tail_names(contract, tail)
+        if not all(name in accounted for name in names):
+            continue
+        module = accounted[names[0]]
+        became = None if module is None else module.removeprefix(names[0].removesuffix(tail))
+        if all(accounted[name] == (None if became is None else name.removesuffix(tail) + became) for name in names):
+            renamed[tail] = became
+    return renamed
+
+
+def _with_tails(layer: Layer, renamed: Mapping[str, str | None]) -> Layer:
+    """A layer with its renamed tails under their new names and its deleted tails gone; one left alone has no sibling,
+    so its independence says nothing."""
+    tails = {replace(tail, name=renamed.get(tail.name, tail.name)) for tail in layer.module_tails
+             if renamed.get(tail.name, tail.name) is not None}
+    return replace(layer, module_tails=tails, is_independent=layer.is_independent or len(tails) == 1)
 
 
 def _contract_loosenings(name: str, base: ContractFields, head: ContractFields) -> list[str]:
@@ -360,7 +438,7 @@ def _source_root(tracked: Iterable[str], package: str) -> str:
     """The one production directory holding the package's tracked __init__.py, repository-relative ("" at the top)."""
     if "." in package:
         raise ContractError(f"root package {package} is dotted; finding it would import {package.rpartition('.')[0]}")
-    init = PurePosixPath(package, "__init__.py")
+    init = PurePosixPath(package, PACKAGE_INIT)
     directories = sorted({
         str(PurePosixPath(name).parent.parent) for name in tracked
         if PurePosixPath(name).parts[-2:] == init.parts and ratchet.area_of(name) is ratchet.Area.PRODUCTION
@@ -535,7 +613,7 @@ def _refuse_foreign_location(repository: str, package: str, directory: str) -> N
 
     The collision is named rather than worked around: there is no custom finder, and sys.modules stays as it is.
     """
-    expected = os.path.join(directory, package, "__init__.py")
+    expected = os.path.join(directory, package, PACKAGE_INIT)
     spec = importlib.util.find_spec(package)
     found = os.path.realpath(spec.origin) if spec is not None and spec.origin and os.path.isabs(spec.origin) else None
     if found != os.path.join(repository, expected):

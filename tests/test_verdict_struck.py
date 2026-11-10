@@ -30,15 +30,17 @@ CHANGES = f"    ! {GUARDED_CHANGES}{STRUCK_FIELD}"
 GREEN = ["✓ green"]
 
 
-def committed(pull_request, base_contract, head_contract, head_files, baselines=(None, None), base_files=None):
+def committed(pull_request, base_contract, head_contract, head_files, baselines=(None, None), base_files=None, also=None):
     """The base commit holds the shop, `base_files`, the base contract and the first of `baselines`; the head commit
-    changes the files and the contract and holds the second."""
+    changes the files and the contract and holds the second; `also` maps the name of a second contract to its base and
+    head options."""
+    also = also or {}
     repo, commit_base = pull_request
     base_baseline, head_baseline = baselines
-    for name, text in {**SHOP_BASE, **(base_files or {}), "pyproject.toml": contracts_toml({"guarded": base_contract})}.items():
+    for name, text in {**SHOP_BASE, **(base_files or {}), "pyproject.toml": contracts_toml({"guarded": base_contract, **{name: before for name, (before, _) in also.items()}})}.items():
         put(repo / name, text)
     commit_base(base_baseline)
-    for name, text in {**head_files, "pyproject.toml": contracts_toml({"guarded": head_contract}),
+    for name, text in {**head_files, "pyproject.toml": contracts_toml({"guarded": head_contract, **{name: after for name, (_, after) in also.items()}}),
                        BASELINE_PATH: head_baseline}.items():
         put(repo / name, text)
     commit_all(repo, "head")
@@ -47,6 +49,12 @@ def committed(pull_request, base_contract, head_contract, head_files, baselines=
 
 DELETED = {"src/shop/dead.py": None}
 RENAMED = {"src/shop/dead.py": None, "src/shop/new.py": MOVABLE_FILE}
+REWRITTEN = "".join(f"nothing of the old file survives in line {number}\n" for number in range(30))
+EDITED = {"src/shop/dead.py": None, "src/shop/new.py": MOVABLE_FILE.replace("line 3 ", "edited line 3 ").replace("line 4 ", "edited line 4 ")}
+REWRITTEN_AND_MOVED = {"src/shop/dead.py": None, "src/shop/new.py": REWRITTEN}
+LISTED_ELSEWHERE = {**FORBIDDEN, "source_modules": ["shop.db"], "forbidden_modules": ["shop.web", "shop.new"]}
+OTHER_CONTRACT = {"type": "forbidden", "source_modules": ["shop.api"], "forbidden_modules": ["shop.web"]}
+LISTED_IN_OTHER_CONTRACT = {**OTHER_CONTRACT, "source_modules": ["shop.api", "shop.new"]}
 NOT_UTF8_FOLDER = {"src/shop/dead.py": None, "src/shop/dead/__init__.py": None, "src/shop/dead/\udcff.py": "x = 2\n"}
 
 
@@ -57,16 +65,56 @@ NOT_UTF8_FOLDER = {"src/shop/dead.py": None, "src/shop/dead/__init__.py": None, 
         (STRUCK, DELETED, 0, GREEN),
         (STRUCK, {}, 1, [CHANGES, "! red"]),
         (STRUCK, RENAMED, 1, [CHANGES, "! red"]),
-        (STRUCK_WITH_NEW, RENAMED, 1, [CHANGES, "! red"]),
+        (STRUCK_WITH_NEW, RENAMED, 0, GREEN),
         (STRUCK, NOT_UTF8_FOLDER, 1, [CHANGES, "! red"]),
     ],
     ids=["a deleted module", "a kept module", "a renamed module", "a renamed module whose new name is listed",
          "a folder holding a file whose name is not UTF-8"],
 )
 def test_the_verdict_reads_the_merge_commits_files_before_a_strike_loosens(capsys, pull_request, head_contract, head_files, code, expected):
-    """LOOSE-19, LOOSE-20, LOOSE-21, LOOSE-24: a struck module the merge commit no longer has is green; one it keeps,
-    one git reads as renamed (listed again or not) and one whose folder still holds a file stay `changes <list>`."""
+    """LOOSE-19, LOOSE-20, LOOSE-21, LOOSE-22, LOOSE-24: a struck module the merge commit no longer has, or git reads as
+    renamed to a module the same list names, is green; one it keeps, one renamed and not listed again and one whose
+    folder still holds a file stay `changes <list>`."""
     repo = committed(pull_request, DEAD, head_contract, head_files)
+    assert viewed(repo, capsys) == (code, expected)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("head_contract", "head_files", "also", "code", "expected"),
+    [
+        (STRUCK_WITH_NEW, EDITED, None, 0, GREEN),
+        (STRUCK, EDITED, None, 1, [CHANGES, "! red"]),
+        (STRUCK_WITH_NEW, REWRITTEN_AND_MOVED, None, 0, GREEN),
+        (STRUCK, REWRITTEN_AND_MOVED, None, 0, GREEN),
+        (LISTED_ELSEWHERE, RENAMED, None, 1, [CHANGES, "! red"]),
+        (STRUCK, RENAMED, {"other": (OTHER_CONTRACT, LISTED_IN_OTHER_CONTRACT)}, 1, [CHANGES, "! red"]),
+    ],
+    ids=["a module moved with a few lines edited, listed", "a module moved with a few lines edited, unlisted",
+         "a module rewritten below the similarity threshold, listed", "a module rewritten below the similarity threshold, unlisted",
+         "the new name listed in another list of the contract", "the new name listed in another contract"],
+)
+def test_the_verdict_clears_a_renamed_strike_only_for_the_pairing_git_makes_and_the_list_that_names_the_new_module(
+    capsys, pull_request, head_contract, head_files, also, code, expected
+):
+    """LOOSE-21, LOOSE-22: git pairs a moved module above its similarity threshold, so only the same list naming its new
+    name clears the strike; a module rewritten below it reads as deleted and added, whatever the head lists."""
+    repo = committed(pull_request, DEAD, head_contract, head_files, also=also)
+    assert viewed(repo, capsys) == (code, expected)
+
+
+LAYERS_WITH_DEAD = {"type": "layers", "containers": ["shop"], "layers": ["web", "db", "dead"]}
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("layers", "code", "expected"),
+    [(["web", "db", "new"], 0, GREEN), (["new", "web", "db"], 1, [f"    ! {GUARDED_CHANGES}layers", "! red"])],
+    ids=["the renamed module in the struck layer", "the renamed module in another layer"],
+)
+def test_the_verdict_keeps_the_place_of_a_renamed_layer(capsys, pull_request, layers, code, expected):
+    """LOOSE-22: a renamed layer listed at another place is `changes layers`; at its own place it is green."""
+    repo = committed(pull_request, LAYERS_WITH_DEAD, {**LAYERS_WITH_DEAD, "layers": layers}, RENAMED)
     assert viewed(repo, capsys) == (code, expected)
 
 
@@ -199,6 +247,42 @@ def test_the_door_refuses_an_undeclared_strike_of_a_module_the_merge_commit_keep
     code, _ = drive(gh)
     out = capsys.readouterr().out
     assert (code, f"{GUARDED_CHANGES}{STRUCK_FIELD}" in out, gh.merge_calls) == (1, True, [])
+
+
+RENAME_MOVE = (("src/shop/dead.py", "src/shop/new.py"),)
+
+
+@pytest.mark.integration
+def test_the_door_merges_a_renamed_strike_whose_new_name_the_merge_commit_lists_with_no_line_for_the_strike(capsys, tmp_path):
+    """LOOSE-22, LOOSE-24: beside a declared loosening, the renamed module in the same list leaves no line for the strike."""
+    gh = struck_pull(tmp_path, STRUCK_WITH_NEW, {}, RENAME_MOVE, **DECLARED_JOB_REMOVAL)
+    code, _ = drive(gh)
+    out = capsys.readouterr().out
+    assert (code, closing_line() in out, "source_modules" in out, len(gh.merge_calls)) == (0, True, False, 1)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("head_contract", [STRUCK_WITH_NEW, STRUCK], ids=["listed", "unlisted"])
+def test_the_verdict_and_the_door_print_the_same_loosening_lines_for_the_same_two_commits(
+    capsys, tmp_path, run_env, monkeypatch, head_contract
+):
+    """LOOSE-22, LOOSE-24: one `git_pull` builds the base and merge commits once; the verdict reads its working
+    repository, the door its remote, and both name the same loosenings."""
+    files = {"quality/config.toml": '[gate]\nmandatory_jobs = ["checks"]\n'}
+    gh = pulled(tmp_path, None, None, RENAME_MOVE, base_files={**SHOP_BASE, **files, "pyproject.toml": contracts_toml({"guarded": DEAD})},
+                merge_files={"pyproject.toml": contracts_toml({"guarded": head_contract})}, **DECLARED_JOB_REMOVAL)
+    gh.files[("pyproject.toml", gh.base_sha)] = contracts_toml({"guarded": DEAD})
+    gh.files[("pyproject.toml", gh.merge_sha)] = contracts_toml({"guarded": head_contract})
+    monkeypatch.setenv("GATE_BASE_SHA", gh.base_sha)
+    verdict_code, verdict_out = verdict_of(tmp_path / "work", capsys)
+    door_code, _ = drive(gh)
+    door_out = capsys.readouterr().out
+    named = [line.strip() for line in verdict_out.splitlines() if GUARDED_CHANGES in line]
+    assert named == [line.strip() for line in door_out.splitlines() if GUARDED_CHANGES in line]
+    assert bool(named) == (head_contract is STRUCK)
+    expected_code = 1 if head_contract is STRUCK else 0
+    assert verdict_code == expected_code
+    assert door_code == expected_code
 
 
 @pytest.mark.integration
