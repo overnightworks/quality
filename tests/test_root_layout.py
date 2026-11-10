@@ -25,7 +25,7 @@ from tests.support.merge import ONE_JOB
 from tests.support.verdict import verdict_of
 
 CONFIG = "quality/config.toml"
-GUIDANCE = {"AGENTS.md": "# guidance\n"}
+GUIDANCE = {"HEART.md": "# guidance\n"}
 
 
 def declaring(entry: str, reason: str = "built apart from the package") -> str:
@@ -120,7 +120,7 @@ def test_a_file_named_like_an_allowed_directory_is_red(build_repo):
 def test_a_root_symlink_counts_by_its_own_name(build_repo):
     """ROOT-5."""
     repo = build_repo(GUIDANCE)
-    (repo / "latest").symlink_to("AGENTS.md")
+    (repo / "latest").symlink_to("HEART.md")
     subprocess.run(["git", "-C", str(repo), "add", "--", "latest"], check=True)
     assert red(repo, Rule.ROOT_LAYOUT) == ["latest"]
 
@@ -155,7 +155,7 @@ def test_the_rule_is_on_in_a_repository_without_a_config(build_repo, capsys):
 
 def test_a_declared_entry_is_green_and_a_base_list_entry_may_be_declared(build_repo):
     """ROOT-8, ROOT-10."""
-    repo = build_repo({**GUIDANCE, "Makefile": "x", CONFIG: declaring("Makefile") + declaring("AGENTS.md")})
+    repo = build_repo({**GUIDANCE, "Makefile": "x", CONFIG: declaring("Makefile") + declaring("HEART.md")})
     assert red(repo, Rule.ROOT_LAYOUT) == []
 
 

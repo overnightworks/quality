@@ -267,8 +267,9 @@ It applies these rules:
   Ruled by the operator: `CLAUDE.md` and `AGENTS.md` never diverge (CLAUDE-7). A finding names only the file
   (CLAUDE-9, CLAUDE-10), and its fix is a sentence, never a command (CLAUDE-11).
 - `agents-md`: the tracked file named exactly `AGENTS.md` at the root has the shape of the document set (write-docs'
-  "Repository document set", which owns it). Line 1 is a title, `# ` and at least one character that is not blank; any
-  other first line, an empty file included, is a `title` finding at line 1 (AGENTS-1). Between the title and the first
+  "Repository document set", which owns it). Line 1 is a title, `# ` and the name of a GitHub repository a configured
+  remote points at; any other first line, an empty file included, is a `title` finding at line 1 (AGENTS-1), and a
+  title that is well formed but equals no such name is one too (AGENTS-12). Between the title and the first
   `## ` heading only blank lines stand; anything else is a `section` finding at its first line, and a file with a title
   and no section is clean (AGENTS-2). Every `## ` heading outside a fenced code block (backticks or tildes) is one of
   `Commands`, `Rules`, `Owners`, `Documents`, exactly spelled, at most once, in that order; another name, a repeat, a
@@ -276,7 +277,8 @@ It applies these rules:
   Headings of level 3 and deeper are no sections (AGENTS-3). The file has at most 100 lines (the last one counts without
   a line feed; `\n` alone separates lines) and at most 4096 bytes; each limit crossed is a `too long` finding at line 1
   (AGENTS-4). No `AGENTS.md` is clean, and a tracked one missing from disk is skipped (AGENTS-5). A finding names fixed
-  words, line numbers, counts and, for `missing`, the path text of the span, never the title or a heading, and its fix
+  words, line numbers, counts, for `missing` the path text of the span and for `title` the repository name a remote
+  gives, never the title or a heading, and its fix
   is prose with no command (AGENTS-6). A link that leaves the repository, text that is not UTF-8 and a read the
   filesystem refuses make the `files` row `✗ not checked` with the reason (exit `2`) (AGENTS-7). In `## Documents`, the
   first backticked span of each line is that document's path; later spans, lines without a span and other sections'
@@ -289,8 +291,16 @@ It applies these rules:
   (AGENTS-10).
   The check compares text with the tracked listing alone, so no filesystem probe follows text from the file and
   nothing outside the repository is opened. It accepts any tracked directory; whether that is a directory of the
-  document set whose files are named by their task or contract stays the reviewer's call (AGENTS-11). No configuration
-  switches the rule off.
+  document set whose files are named by their task or contract stays the reviewer's call (AGENTS-11). The title,
+  with blanks around it removed, equals the name part (after `owner/`) of any configured remote's GitHub repository,
+  case ignored; otherwise the `title` finding's fix is "make line 1 `# <name>`" with each such name, joined by "or"
+  (AGENTS-12). A remote counts when its URL, as configured and before any `insteadOf`, is
+  `https://github.com/<owner>/<name>`, `ssh://git@github.com/<owner>/<name>` or `git@github.com:<owner>/<name>`, with
+  at most one trailing `/` and then `.git`, in any case. When `AGENTS.md` is tracked and on disk and no remote counts,
+  the `files` row is `✗ not checked` ("no GitHub remote names this repository", next step "add the repository's GitHub
+  remote", exit `2`) before any finding, so the findings above show once a remote counts; no file, or a tracked one
+  missing from disk, stays clean (AGENTS-13). No printed line holds a remote URL; a URL with credentials counts as no
+  remote (AGENTS-14). No configuration switches the rule off.
 - `root-layout`: every entry directly in the root of the tracked tree is on quality's base list or declared (ROOT-1). An
   entry is a file or a directory (written `frontend/`); a directory with many files is one entry (ROOT-2). Names
   compare in exact case, and the finding for a name that differs only in case names the base-list spelling (ROOT-3). A
