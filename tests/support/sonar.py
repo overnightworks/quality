@@ -73,6 +73,14 @@ class FakeSonar:
         answer = queue.pop(0) if len(queue) > 1 else queue[0]
         if isinstance(answer, Exception):
             raise answer
+        return self.measures_asked_for(url, answer)
+
+    @staticmethod
+    def measures_asked_for(url: str, answer: object) -> object:
+        """SonarCloud answers a measures request with the metrics it names, so another metric leaves the measure out."""
+        asked_metrics = parse_qs(urlparse(url).query).get("metricKeys")
+        if FakeSonar.endpoint_of(url) == "measures/component" and asked_metrics != ["violations"]:
+            return {"component": {"measures": []}}
         return answer
 
     @staticmethod
@@ -96,12 +104,16 @@ def failed_condition(metric="new_coverage", comparator="LT", actual="70.0", thre
     return {"status": "ERROR", "metricKey": metric, "comparator": comparator, "actualValue": actual, "errorThreshold": threshold}
 
 
+def violations(value: str) -> dict:
+    return {"component": {"measures": [{"metric": "violations", "value": value, "bestValue": value == "0"}]}}
+
+
 def sonar_answering(task=FINISHED_FOR_PR_7, issues=None, measures=None, legacy=0, branches=(ANALYSED_MAIN,), gate=GATE_OK) -> FakeSonar:
     return FakeSonar(
         {
             "ce/task": [{"task": task}],
             "qualitygates/project_status": [gate],
-            "measures/component": [measures or {"component": {}}],
+            "measures/component": [measures or violations("0")],
             "project_branches/list": [{"branches": list(branches)}],
             "issues/search": [issues or issues_page(0)],
             LEGACY_COUNT: [{"total": legacy, "issues": []}],

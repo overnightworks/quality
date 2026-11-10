@@ -82,6 +82,7 @@ def stale_declaration(path: str, rule: str) -> Finding:
 # A gate run's own steps: a fix in the checkout reaches the gate through a push, any other through a re-run.
 FIX_THEN_RERUN = Instruction("fix what the error names, then re-run this run's failed jobs")
 PUSH_THE_FIX = Instruction("push the fix; the gate judges the new commit")
+RERUN = Instruction("re-run this run's failed jobs")
 
 
 @dataclass(frozen=True)
