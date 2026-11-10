@@ -295,7 +295,7 @@ def _renamed_module(place: str, moves: Sequence[tuple[str, str]], heads: Mapping
 def _candidate(place: str, source: str, target: str, heads: Mapping[str, str]) -> str | None:
     """The module a rename target names: its own file or package for the module's own files, the folder holding the
     source's trailing parts for a file below the module's folder; the target must lie below a placed root package's
-    directory at the head."""
+    directory at the head and every part of the name must be an identifier."""
     parts = PurePosixPath(target).parts
     depth = _root_depth(parts, heads)
     if depth is None:
@@ -312,7 +312,8 @@ def _candidate(place: str, source: str, target: str, heads: Mapping[str, str]) -
         if parts[-len(below):] != below:
             return None
         module = parts[:-len(below)]
-    return ".".join(module[depth:]) if len(module) > depth else None
+    named = module[depth:]
+    return ".".join(named) if named and all(part.isidentifier() for part in named) else None
 
 
 def _root_depth(parts: tuple[str, ...], heads: Mapping[str, str]) -> int | None:

@@ -315,13 +315,28 @@ def test_a_folder_is_cleared_by_the_folder_its_files_moved_to_and_by_no_other_na
 
 @pytest.mark.parametrize(
     ("target", "listed"),
-    [("src/shop/data.txt", "shop.data"), ("scripts/x.py", "scripts.x"), ("src/shop.py", "shop")],
-    ids=["a data file", "outside every placed root", "beside the root package"],
+    [
+        ("src/shop/data.txt", "shop.data"),
+        ("scripts/x.py", "scripts.x"),
+        ("src/shop.py", "shop"),
+        ("src/shop/a.b.py", "shop.a.b"),
+        ("src/shop/new-x.py", "shop.new-x"),
+    ],
+    ids=["a data file", "outside every placed root", "beside the root package", "a dot in the file name", "a dash in the file name"],
 )
 def test_a_target_that_is_no_module_below_a_placed_root_names_no_candidate(target, listed):
-    """LOOSE-22, LOOSE-21: a data file, a file outside the roots and a file beside the root package stay red when listed."""
+    """LOOSE-22, LOOSE-21: a data file, a file outside the roots, a file beside the root package and a file whose name is
+    no importable module name stay red when listed."""
     tree = tree_of(moves={"src/shop/dead.py": target}, head_paths=HEAD_PATHS | {target})
     assert lines(FORBIDDEN_DEAD, source_modules_of(["shop.db", listed]), tree) == changes("source_modules")
+
+
+@pytest.mark.parametrize(("listed", "expected"), [(["shop.db", "shop"], []), (["shop.db"], changes("source_modules"))],
+                         ids=["listed", "unlisted"])
+def test_a_module_moved_onto_the_root_packages_init_file_names_the_root_package(listed, expected):
+    """LOOSE-22, LOOSE-21: the root package's own name is the candidate, cleared only by that name."""
+    tree = tree_of(moves={"src/shop/dead.py": "src/shop/__init__.py"})
+    assert lines(FORBIDDEN_DEAD, source_modules_of(listed), tree) == expected
 
 
 def moved_tree(moves):

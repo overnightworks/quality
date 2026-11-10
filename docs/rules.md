@@ -685,9 +685,11 @@ It applies these rules:
   packages, a root package the head's files, or the base's, cannot place (LOOSE-20). A module whose file, or a file
   under whose folder, git reads as renamed between the base and the merge commit, to a file that is not empty, is no
   deletion: striking it stays a loosening (LOOSE-21). It is no loosening when the same field at the head names the
-  module at its renamed path (LOOSE-22). Only file names and sizes are read, at the checked-out merge commit by the
-  verdict and at the pull request's merge commit by the door, and only when a module is struck; a read that fails, or a
-  rename list that came with a warning, is exit `2` (LOOSE-24).
+  module at its renamed path (LOOSE-22). The name is exact: a renamed folder needs the package's own name, a listed
+  submodule does not count, and several renamed files must agree on one module. In `layers` the module stands where the
+  struck name stood: another layer, a `:` for a `|` or another order is `changes layers`. Only file names and sizes are
+  read, at the checked-out merge commit by the verdict and at the pull request's merge commit by the door, and only
+  when a module is struck; a read that fails, or a rename list that came with a warning, is exit `2` (LOOSE-24).
 
 The `secret` rule scans the whole history reachable from `HEAD` with gitleaks (a key removed later is still found
 (SECRET-1); other branches the checkout fetched are not scanned (SECRET-2)), always with quality's own config
