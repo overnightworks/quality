@@ -404,7 +404,9 @@ def _judge_files(inputs: RunInputs) -> AreaVerdict:
             Rule.COMPOSE_PORT: _attempt(lambda: compose.check_compose_ports(root, tracked, _required(allow_lists).compose)),
             Rule.CLAUDE_MD: _attempt(lambda: agent_guidance.check_claude_md(root, tracked)),
             Rule.AGENTS_MD: _attempt(
-                lambda: agent_guidance.check_agents_md(root, tracked, checkout.github_repositories(root))
+                lambda: agent_guidance.check_agents_md(
+                    root, tracked, checkout.github_repositories(root), _required(allow_lists).layout
+                )
             ),
             Rule.ROOT_LAYOUT: _attempt(lambda: root_layout.check_root_layout(tracked, _required(allow_lists).root)),
             Rule.FILE_SUFFIX: _attempt(lambda: layout.check_file_suffix(_required(modes), _required(allow_lists).layout)),

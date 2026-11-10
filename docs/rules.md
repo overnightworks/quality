@@ -276,9 +276,9 @@ It applies these rules:
   heading out of order and a second `# ` heading are `section` findings at their line, and each section may be missing.
   Headings of level 3 and deeper are no sections (AGENTS-3). The file has at most 100 lines (the last one counts without
   a line feed; `\n` alone separates lines) and at most 4096 bytes; each limit crossed is a `too long` finding at line 1
-  (AGENTS-4). No `AGENTS.md` is clean, and a tracked one missing from disk is skipped (AGENTS-5). A finding names fixed
-  words, line numbers, counts, for `missing` the path text of the span and for `title` the repository name a remote
-  gives, never the title or a heading, and its fix
+  (AGENTS-4). No root `AGENTS.md` has no shape finding, and a tracked one missing from disk is skipped (AGENTS-5). A
+  finding names fixed words, line numbers, counts, for `missing` the path text of the span, for `title` the repository
+  name a remote gives and, for `misplaced`, `misnamed` and `unused`, the path, never the title or a heading, and its fix
   is prose with no command (AGENTS-6). A link that leaves the repository, text that is not UTF-8 and a read the
   filesystem refuses make the `files` row `✗ not checked` with the reason (exit `2`) (AGENTS-7). In `## Documents`, the
   first backticked span of each line is that document's path; later spans, lines without a span and other sections'
@@ -300,7 +300,20 @@ It applies these rules:
   the `files` row is `✗ not checked` ("no GitHub remote names this repository", next step "add the repository's GitHub
   remote", exit `2`) before any finding, so the findings above show once a remote counts; no file, or a tracked one
   missing from disk, stays clean (AGENTS-13). No printed line holds a remote URL; a URL with credentials counts as no
-  remote (AGENTS-14). No configuration switches the rule off.
+  remote (AGENTS-14). The file sits at the root only: a tracked path whose last component is `AGENTS.md` in any case
+  and that is not the root path is a `misplaced` finding at that path, fact "guidance outside the root file", fix "move
+  what an agent needs into the root AGENTS.md or delete it, or declare it in quality/config.toml with
+  [[layout.allow]], its path, the rule agents-md and a reason" (AGENTS-15). A tracked root file named `AGENTS.md` in
+  another case is a `misnamed` finding, fact "the document set's path is exact", fix "rename it to AGENTS.md", and its
+  content is not judged (AGENTS-16). A `[[layout.allow]]` entry with the rule `agents-md` and a nested path stops
+  AGENTS-15 for that path only; an entry for the root `AGENTS.md` is no finding and exempts nothing, and an entry for
+  a root file in another case leaves AGENTS-16 standing (AGENTS-17). An entry with the rule `agents-md` whose path no
+  tracked file has is an `unused` finding as SUFFIX-12 says (AGENTS-18). Placement reads no file and needs no root file
+  or remote: a nested file that is a symlink, gone from disk or not UTF-8 is `misplaced` all the same; when the root
+  file is tracked and on disk and no remote counts, AGENTS-13's refusal covers nested findings too (AGENTS-19). The
+  rule is a layout rule, so its entry is accepted with `rule = "agents-md"`, and a malformed `[layout]` table or entry
+  makes its row `✗ not checked` with the reason and the example, with or without a tracked `AGENTS.md` (AGENTS-20). No
+  configuration switches the rule off.
 - `root-layout`: every entry directly in the root of the tracked tree is on quality's base list or declared (ROOT-1). An
   entry is a file or a directory (written `frontend/`); a directory with many files is one entry (ROOT-2). Names
   compare in exact case, and the finding for a name that differs only in case names the base-list spelling (ROOT-3). A
@@ -351,13 +364,14 @@ It applies these rules:
   reason = "the deploy script reads it by this name"
   ```
 
-  The rule is `file-suffix`, `script-name`, `script-header`, `test-layout` or `test-import`; a declaration covers only
-  its own rule (SUFFIX-10), and one `script-name` entry covers both the shape and the location of its path (SUFFIX-11).
+  The rule is `agents-md`, `file-suffix`, `script-name`, `script-header`, `test-layout` or `test-import`; a
+  declaration covers only its own rule (SUFFIX-10), and one `script-name` entry
+  covers both the shape and the location of its path (SUFFIX-11).
   A declared path that is not tracked is a finding of the declared rule, `unused` (SUFFIX-12), whose fix deletes every
   `[[layout.allow]]` entry of that path (an untracked path makes each of its entries stale; the fix names no rule); a
   declaration for a file that already complies is clean (SUFFIX-13). A suffixless file says `tracked` (SUFFIX-14) with
   both ways out, give it a suffix or declare it, in prose with no command (SUFFIX-15); findings are sorted by path and
-  all printed (SUFFIX-16). The five rules' fixes that ask for an entry end with one clause naming the finding's own rule
+  all printed (SUFFIX-16). The six rules' fixes that ask for an entry end with one clause naming the finding's own rule
   (SUFFIX-17). A duplicate `(rule, path)`, a folder (a trailing `/`), a pattern (`*`, `?`, `[`), `..`, a leading `./`,
   an empty component, a blank path, an absolute path, a path that is not text, an unknown rule, an unknown key, a
   missing key or a reason that is not one-line text makes the `files` row `✗ not checked` with the reason, and `next:`
