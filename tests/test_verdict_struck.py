@@ -265,7 +265,9 @@ def test_the_verdict_and_the_door_print_the_same_loosening_lines_for_the_same_tw
     named = [line.strip() for line in verdict_out.splitlines() if GUARDED_CHANGES in line]
     assert named == [line.strip() for line in door_out.splitlines() if GUARDED_CHANGES in line]
     assert bool(named) == (head_contract is STRUCK)
-    assert (verdict_code, door_code) == ((1, 1) if head_contract is STRUCK else (0, 0))
+    expected_code = 1 if head_contract is STRUCK else 0
+    assert verdict_code == expected_code
+    assert door_code == expected_code
 
 
 @pytest.mark.integration
