@@ -1,8 +1,0 @@
-claim_id = "2a6250dd2f984a23890779a6b64f8a57"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "1ad7f8ebeecdd72e4265c3936294a2be00b2437d"
-branch = "claude/issue-733-agents-md-documents"
-scope = ["docs/rules.md", "src/quality/agent_guidance.py", "src/quality/report.py", "tests/test_agent_guidance_agents_md.py"]
-opened_commit = "6291276ff2cfcf2b29a0744d669da299155bf5fb"
-whole_reason = "The event missing has no producer without the check, and the check has no verdict without the event; the docs block and the tests belong to the same sentences."
