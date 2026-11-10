@@ -1,8 +1,0 @@
-claim_id = "0b14778cdd634a7da449a8545fe95b61"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "24efc2b07a1f96ed1a1c3e9bdf0ab62596493033"
-branch = "claude/issue-681-struck-module-strike"
-scope = ["docs/commands.md", "docs/rules.md", "src/quality/architecture.py", "src/quality/merge.py", "src/quality/sides.py", "src/quality/verdict.py", "tests/support/architecture.py", "tests/support/git_repositories.py", "tests/support/verdict_renames.py", "tests/test_architecture_struck.py", "tests/test_verdict_struck.py"]
-opened_commit = "cb209408e4aac5f2be7403c28158c500de2340d2"
-whole_reason = "R2: the verdict and the door must read the same head tree and renames in one landing; architecture's strike rule, sides' git listing and both callers land together with their docs, because the architecture part alone would have no caller."
