@@ -33,7 +33,11 @@ LOCAL_PREFIXES = ("./", "$/")
 RELEASE_TAG = re.compile(r"v(\d+)\.(\d+)\.(\d+)")
 COMMIT_SHA = re.compile(r"[0-9a-f]{40}")
 RELEASE_COMMENT = re.compile(rf"\s+# ?(?P<release>{RELEASE_TAG.pattern})\s*")
-QUALITY_REMOTE = re.compile(r"(?:https://github\.com/|ssh://git@github\.com/|git@github\.com:)(?P<name>[^/]+/[^/]+)", re.IGNORECASE)
+QUALITY_REMOTE = re.compile(
+    r"(?:https://github\.com/|ssh://git@github\.com/|git@github\.com:)"
+    r"(?P<name>[^/]+/[^/]+?)(?:\.git)?/?",
+    re.IGNORECASE,
+)
 BLOCK_STYLES = frozenset({"|", ">"})
 LINE_BREAKS = re.compile("[\r\n\x85\u2028\u2029]")
 NOT_PINNED_STEP = Instruction("pin the gate as docs/gate.md shows: @<commit sha> # v<tag>")
@@ -338,18 +342,24 @@ def calls_of(uses: str, workflow_file: str, caller: str, release: str | None) ->
     return [Call(ref, caller, release)] if matches and ref else []
 
 
-def remote_names_quality(url: str) -> bool:
-    """Whether a remote URL, as configured, names quality's repository on GitHub in one of git's three forms."""
-    named = QUALITY_REMOTE.fullmatch(url.removesuffix("/").removesuffix(".git"))
-    return named is not None and named["name"].lower() == GATE_REPOSITORY
+def _github_repository(url: str) -> str | None:
+    """The `owner/name` a remote URL, as configured, names on GitHub in one of git's three forms."""
+    named = QUALITY_REMOTE.fullmatch(url)
+    return named["name"] if named else None
 
 
-def is_quality_checkout(root: Path) -> bool:
-    """Whether a configured remote names quality's repository; the URLs read as configured, before any `insteadOf`."""
+def github_repositories(root: Path) -> list[str]:
+    """The `owner/name` of each configured remote that names a GitHub repository; the URLs read as configured, before
+    any `insteadOf`."""
     # exit 1 is git's answer for no matching key: no remote is configured
     listing = _git_listing(root, ["config", "-z", "--get-regexp", r"^remote\..*\.url$"], frozenset({0, 1})).stdout
     urls = (os.fsdecode(record).partition("\n")[2] for record in listing.split(b"\0") if record)
-    return any(map(remote_names_quality, urls))
+    return [repository for url in urls if (repository := _github_repository(url))]
+
+
+def is_quality_checkout(root: Path) -> bool:
+    """Whether a configured remote names quality's repository."""
+    return any(repository.lower() == GATE_REPOSITORY for repository in github_repositories(root))
 
 
 @dataclass(frozen=True)

@@ -6,7 +6,7 @@ from collections.abc import Iterator
 from pathlib import Path, PurePosixPath
 
 from quality import checkout, repository
-from quality.report import Finding, FindingEvent
+from quality.report import CannotJudge, Finding, FindingEvent, Instruction
 from quality.rules import Rule
 
 CLAUDE_NESTED_NAME = ".claude/claude.md"
@@ -19,6 +19,9 @@ AGENTS_MAX_BYTES = 4096
 FENCE_MARKERS = ("```", "~~~")
 FIRST_SPAN = re.compile(r"`([^`\n]+)`")
 type AgentsProblem = tuple[FindingEvent, int, str, str]
+NO_REMOTE_FACT = "no GitHub remote names this repository"
+NO_REMOTE_STEP = Instruction("add the repository's GitHub remote")
+NOT_THE_NAME = "the title is not the repository's name"
 MISSING_FIX = "point at a tracked document or delete the line"
 SECTION_FIX = f"name it {', '.join(AGENTS_SECTIONS)}, or make it a level 3 heading"
 
@@ -63,18 +66,23 @@ def _claude_md_problem(root: Path, name: str, agents_tracked: bool) -> tuple[Fin
     return None
 
 
-def check_agents_md(root: Path, tracked: list[str]) -> list[Finding]:
-    """The root AGENTS.md has a title, then only the sections of the document set once and in order, within its size.
+def check_agents_md(root: Path, tracked: list[str], repositories: list[str]) -> list[Finding]:
+    """The root AGENTS.md has a title that is the name of one of the GitHub `repositories` (`owner/name`), then only
+    the sections of the document set once and in order, within its size.
 
     Each line of its Documents section names a tracked file or a directory holding one.
-    The findings carry fixed texts, line numbers, counts and the path of a document line, never other content.
+    No repository means no judgment at all, once the file is there to judge.
+    The findings carry fixed texts, line numbers, counts, the path of a document line and the name of a repository,
+    never other content.
     """
     text = checkout.judged(repository.read_text, root, AGENTS_FILE) if AGENTS_FILE in tracked else None
     if text is None:
         return []
+    if not repositories:
+        raise CannotJudge(NO_REMOTE_FACT, (NO_REMOTE_STEP,))
     lines = text.removesuffix("\n").split("\n") if text else []
     problems = [
-        *_title_problems(lines),
+        *_title_problems(lines, [name.partition("/")[2] for name in repositories]),
         *_section_problems(lines[1:]),
         *_document_problems(lines[1:], tracked),
         *_size_problems(len(lines), len(text.encode())),
@@ -82,9 +90,13 @@ def check_agents_md(root: Path, tracked: list[str]) -> list[Finding]:
     return [Finding(Rule.AGENTS_MD, AGENTS_FILE, line, fact, fix, event=event) for event, line, fact, fix in problems]
 
 
-def _title_problems(lines: list[str]) -> Iterator[AgentsProblem]:
+def _title_problems(lines: list[str], names: list[str]) -> Iterator[AgentsProblem]:
+    """The `title` problem of a line 1 that is no title, or that is none of the repository `names`, case ignored."""
     if not (lines and lines[0].startswith("# ") and lines[0][2:].strip()):
         yield FindingEvent.TITLE, 1, "line 1 is not a title", "make line 1 `# <repository name>`"
+    elif lines[0][2:].strip().casefold() not in {name.casefold() for name in names}:
+        expected = " or ".join(f"`# {name}`" for name in dict.fromkeys(names))
+        yield FindingEvent.TITLE, 1, NOT_THE_NAME, f"make line 1 {expected}"
 
 
 def _section_problems(body: list[str]) -> Iterator[AgentsProblem]:
