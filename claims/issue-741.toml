@@ -1,0 +1,8 @@
+claim_id = "50890f816a6c4e94b4acfbe934f968c1"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "c150a702df8e9e185b3ddac8316d762589f5e887"
+branch = "claude/issue-741-agents-md-root-only"
+scope = ["docs/rules.md", "src/quality/agent_guidance.py", "src/quality/check.py", "src/quality/config.py", "src/quality/layout.py", "src/quality/report.py", "tests/support/config_refusals.py", "tests/test_agent_guidance_agents_md.py", "tests/test_config.py"]
+opened_commit = "680340462050bcc855cfdc4cb2fb8babf1afb909"
+whole_reason = "The placement check cannot run without the declared paths and the unused finding, and those helpers must move to one owner in the same change or layout.py and agent_guidance.py would hold two copies the clone ratchet flags; the docs block and the three pins belong to the same sentences and fail CI if left."
