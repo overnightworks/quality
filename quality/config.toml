@@ -6,3 +6,9 @@ legacy = "fail"
 allow = [
   { rule = "aws-access-token", file = "tests/test_engines.py", secret_sha256 = "612440a4a059819028f05e7bec70787de73a7ae11d2b872cd9212d180ecfdccf", reason = "fake test key committed literally in 76e3e7d (#24), replaced by a runtime-assembled one in ae15eec" },
 ]
+
+[[gate.loosened]]
+what = "import contract \"quality's layers, top to bottom\" changes layers"
+item = "overnightworks/quality#728"
+date = 2026-11-10
+reason = "claude_md is renamed to agent_guidance so one module owns AGENTS.md for both rules; a rename in the exhaustive layers contract stays a loosening (#707)"
