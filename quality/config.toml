@@ -11,4 +11,4 @@ allow = [
 what = "import contract \"quality's layers, top to bottom\" changes layers"
 item = "overnightworks/quality#728"
 date = 2026-11-10
-reason = "claude_md is renamed to agent_guidance so one module owns AGENTS.md for both rules; a layers rename is a loosening"
+reason = "claude_md becomes agent_guidance so one module owns AGENTS.md for both rules; a layers rename is a loosening"
