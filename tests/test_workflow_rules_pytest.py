@@ -1,0 +1,451 @@
+import json
+import os
+from collections.abc import Callable
+from pathlib import Path
+
+import pytest
+
+from quality.report import FindingEvent
+from quality.rules import Rule
+from tests.support.check import check_output as run
+from tests.support.check import env_row_stands, finding_rows, is_clean, refusal_row, refusals, rule_findings
+
+SERIAL, INVALID = FindingEvent.SERIAL, FindingEvent.INVALID
+WORKFLOW = ".github/workflows/w.yml"
+WITHOUT_N = "pytest runs without -n"
+WITH_ZERO = "pytest runs with -n 0"
+BAD_COUNT = "-n count is not a number above zero or auto"
+UNREADABLE = "command cannot be read to its end"
+BUILT_AT_RUN_TIME = "command is built at run time, pytest -n cannot be read"
+FIX = "pass -n auto, or explain on the line above: # pytest-workers: <reason>"
+MARKER = "# pytest-workers: browser tests share one stack"
+BLOCK_LINE = 10
+QUOTED_LINE = 8
+
+
+def head(on: str = "push") -> str:
+    """A workflow up to its `steps:` key (line 7); the next line is line 8."""
+    return f"name: w\non: {on}\npermissions: {{}}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n"
+
+
+def block_run(*lines: str, on: str = "push") -> str:
+    """One step whose `run: |` is line 9 and whose script starts on line 10."""
+    return head(on) + "      - name: t\n        run: |\n" + "".join(f"          {line}\n" for line in lines)
+
+
+def quoted_run(line: str, on: str = "push") -> str:
+    """One step whose quoted `run:` value is line 8."""
+    return head(on) + f"      - run: {json.dumps(line)}\n"
+
+
+@pytest.fixture(params=[(block_run, BLOCK_LINE), (quoted_run, QUOTED_LINE)], ids=["literal block", "quoted"])
+def scalar(request) -> tuple[Callable[[str], str], int]:
+    """How a one-line script stands in a workflow, and the line of its finding."""
+    return request.param
+
+
+def judged(build_repo, text: str):
+    return rule_findings(build_repo({WORKFLOW: text}), Rule.PYTEST_WORKERS)
+
+
+def shape(findings):
+    return [(finding.event, finding.line, finding.fact) for finding in findings]
+
+
+GREEN = [
+    "pytest -n auto",
+    'pytest -q -n auto -m "not e2e"',
+    "uv run --locked pytest -q -n auto --cov",
+    "uv run --no-sync --frozen --no-build pytest tests/ -n auto",
+    ".venv/bin/pytest tests -q -n auto",
+    "uv run --locked --project providers/qwen pytest -q -n auto x",
+    "python -m pytest -n 4",
+    "python3.14 -m pytest -n=4",
+    "uv run python -m pytest --numprocesses=2",
+    "uv run coverage run -m pytest -n auto",
+    "pytest -nauto",
+    "pytest -n logical",
+    "pytest -n 1",
+    "PYTHONPATH=src pytest -n 2",
+    "env A=b pytest -n 2",
+    "cd x && pytest -n auto",
+    "make lint; pytest -n auto",
+    "x=$(pytest -n auto)",
+    "pytest -n 2 | tee out",
+    "if pytest -n auto; then",
+    "pytest -n 0 -n auto",
+    "pytest --numprocesses 3",
+    "poetry run pytest -n auto",
+    "uvx pytest -n auto",
+]
+
+
+@pytest.mark.parametrize("command", GREEN)
+def test_a_pytest_call_that_passes_workers_is_no_finding(build_repo, scalar, command):
+    """PYTEST-2, PYTEST-3, PYTEST-5."""
+    build, _ = scalar
+    assert judged(build_repo, build(command)) == []
+
+
+NO_CALL = [
+    'echo "run pytest"',
+    "pip install pytest",
+    "uv pip install pytest-xdist",
+    "uv add --dev pytest",
+    "python -m pip install pytest",
+    "cd tests/pytest_helpers",
+    "cat tests/pytest_helpers/a.py",
+    "./scripts/pytest_wrapper.sh",
+    "# pytest",
+    "echo ok # pytest",
+    "make test",
+    "tox -e py",
+    "uv run ruff check",
+    "timeout 600 pytest",
+    "xvfb-run pytest",
+    "docker run img pytest",
+    "pytest-cov",
+]
+
+
+@pytest.mark.parametrize("command", NO_CALL)
+def test_a_word_pytest_that_starts_no_test_run_is_no_call(build_repo, scalar, command):
+    """PYTEST-4."""
+    build, _ = scalar
+    assert judged(build_repo, build(command)) == []
+
+
+SERIAL_WITHOUT_N = [
+    "pytest",
+    "uv run --locked pytest -q",
+    "python -m pytest tests",
+    'PYTEST_ADDOPTS="-n auto" pytest',
+    "a && pytest -q",
+    "pytest --numproc 4",
+    "pytest -qn4",
+    "poetry run pytest",
+    "uv run --python 3.14 pytest",
+]
+
+
+@pytest.mark.parametrize("command", SERIAL_WITHOUT_N)
+def test_a_pytest_call_without_a_readable_flag_is_serial(build_repo, scalar, command):
+    """PYTEST-5, PYTEST-8: a missing, abbreviated or glued flag counts as no flag."""
+    build, line = scalar
+    assert shape(judged(build_repo, build(command))) == [(SERIAL, line, WITHOUT_N)]
+
+
+@pytest.mark.parametrize(
+    "command",
+    ["pytest -n 0", "pytest -n=0", "pytest --numprocesses 0", "pytest -n auto -n 0", "pytest -n 00", "pytest -n0"],
+)
+def test_a_pytest_call_with_zero_workers_is_serial(build_repo, scalar, command):
+    """PYTEST-5: the last of the flags counts."""
+    build, line = scalar
+    assert shape(judged(build_repo, build(command))) == [(SERIAL, line, WITH_ZERO)]
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "pytest -n $WORKERS",
+        "pytest -n ${{ matrix.n }}",
+        "pytest -n $(nproc)",
+        "pytest -n",
+        "pytest -n -1",
+        "pytest -n 2.5",
+        "pytest -n many",
+        "pytest -nmany",
+        "pytest --numprocesses=",
+    ],
+)
+def test_a_worker_count_the_reader_cannot_read_is_invalid(build_repo, scalar, command):
+    """PYTEST-5, PYTEST-8."""
+    build, line = scalar
+    assert shape(judged(build_repo, build(command))) == [(INVALID, line, BAD_COUNT)]
+
+
+def test_a_command_split_over_lines_by_a_backslash_is_one_call_at_its_first_line(build_repo):
+    """PYTEST-2."""
+    findings = judged(build_repo, block_run("echo start", "pytest -q \\", "  tests", "echo done"))
+    assert shape(findings) == [(SERIAL, BLOCK_LINE + 1, WITHOUT_N)]
+
+
+def test_the_workers_flag_on_the_continued_line_counts(build_repo):
+    """PYTEST-2."""
+    assert judged(build_repo, block_run("pytest -q \\", "  -n auto \\", "  tests")) == []
+
+
+def test_a_call_after_a_separator_is_found_at_its_physical_line(build_repo):
+    """PYTEST-2, PYTEST-3."""
+    findings = judged(build_repo, block_run("echo a", "", "make lint && pytest -n 0 | tee out", "echo b"))
+    assert shape(findings) == [(SERIAL, BLOCK_LINE + 2, WITH_ZERO)]
+
+
+def test_two_calls_are_two_findings(build_repo):
+    """PYTEST-8."""
+    findings = judged(build_repo, block_run("pytest -n 0 && pytest tests"))
+    assert shape(findings) == [(SERIAL, BLOCK_LINE, WITH_ZERO), (SERIAL, BLOCK_LINE, WITHOUT_N)]
+
+
+def test_a_hash_inside_quotes_or_a_word_is_no_comment(build_repo):
+    """PYTEST-2: only a `#` that starts a word outside quotes ends the command."""
+    findings = judged(build_repo, block_run('pytest -k "a #b" tests # -n auto', "pytest tests/a#b.py -n 0 # x"))
+    assert shape(findings) == [(SERIAL, BLOCK_LINE, WITHOUT_N), (SERIAL, BLOCK_LINE + 1, WITH_ZERO)]
+
+
+def test_an_expression_becomes_one_dynamic_word(build_repo):
+    """PYTEST-2: `${{ }}` with spaces is one word, so the words after it keep their place."""
+    assert judged(build_repo, block_run("pytest -k ${{ github.ref }} -n auto")) == []
+
+
+@pytest.mark.parametrize(
+    "script",
+    [
+        ('echo "unbalanced pytest -n auto',),
+        ("pytest -k 'unbalanced -n auto",),
+        ("pytest -n auto \\", "  -k 'unbalanced"),
+    ],
+    ids=["double quote", "single quote", "continued"],
+)
+def test_a_line_that_cannot_be_split_and_holds_pytest_is_invalid_at_its_first_line(build_repo, script):
+    """PYTEST-6."""
+    assert shape(judged(build_repo, block_run(*script))) == [(INVALID, BLOCK_LINE, UNREADABLE)]
+
+
+def test_a_line_that_cannot_be_split_and_holds_no_pytest_is_no_finding(build_repo):
+    """PYTEST-6."""
+    assert judged(build_repo, block_run('echo "unbalanced')) == []
+
+
+@pytest.mark.parametrize(
+    "script",
+    [
+        ('PYTEST="uv run pytest"', "$PYTEST -n auto"),
+        ("pytest -n auto", 'eval "$CMD"'),
+        ("pytest -n auto", "${RUNNER} tests"),
+        ("pytest -n auto", "$EXPRESSION tests"),
+        ("pytest -n auto", "FLAG=1 $RUNNER tests"),
+    ],
+    ids=["variable", "eval", "braced variable", "dynamic word", "after an assignment"],
+)
+def test_a_command_built_at_run_time_in_a_run_holding_pytest_is_invalid(build_repo, script):
+    """PYTEST-6."""
+    findings = judged(build_repo, block_run(*script))
+    assert [(finding.event, finding.fact) for finding in findings][-1] == (INVALID, BUILT_AT_RUN_TIME)
+    assert findings[-1].line == BLOCK_LINE + 1
+
+
+def test_a_command_built_at_run_time_with_pytest_only_in_a_comment_is_no_finding(build_repo):
+    """PYTEST-6: the word counts outside comments only."""
+    assert judged(build_repo, block_run("# pytest", "$TOOL -n auto")) == []
+
+
+@pytest.mark.parametrize("script", [("$TOOL -n auto",), ('eval "$CMD"',)])
+def test_a_command_built_at_run_time_in_a_run_without_pytest_is_no_finding(build_repo, script):
+    """PYTEST-6: the named gap."""
+    assert judged(build_repo, block_run(*script)) == []
+
+
+@pytest.mark.parametrize(
+    "script",
+    [
+        ("pytest -n 0 " + MARKER,),
+        (MARKER, "pytest -n 0"),
+        (MARKER, "pytest -n $N"),
+        (MARKER, "pytest -n 0 && pytest tests"),
+        (MARKER, "pytest -q \\", "  tests"),
+        ("pytest -q \\", "  tests " + MARKER),
+        ("echo start", MARKER, "pytest"),
+        (MARKER, 'echo "unbalanced pytest'),
+        ("pytest # pytest-workers:reason", ),
+        ("#pytest-workers:   reason", "pytest"),
+        ("# pytest-workers: ärger", "pytest"),
+    ],
+    ids=[
+        "on its line", "above", "above an invalid count", "above two calls", "above a continued command",
+        "on the last line of a continued command", "above a later line", "above an unreadable line", "no space",
+        "wide spaces", "a letter of any script",
+    ],
+)
+def test_a_marker_with_a_reason_on_or_directly_above_a_line_clears_its_calls(build_repo, script):
+    """PYTEST-7."""
+    assert judged(build_repo, block_run(*script)) == []
+
+
+@pytest.mark.parametrize("on_run_line", [True, False], ids=["after the value", "above the key"])
+def test_a_marker_clears_a_plain_scalar_call_beside_or_above_its_key(build_repo, on_run_line):
+    """PYTEST-7."""
+    step = f"      - run: pytest {MARKER}\n" if on_run_line else f"      {MARKER}\n      - run: pytest\n"
+    assert judged(build_repo, head() + step) == []
+
+
+@pytest.mark.parametrize(
+    "comment",
+    [
+        "# pytest-workers",
+        "# pytest-workers:",
+        "# pytest-workers: -",
+        "# pytest-workers: 123",
+        "# pytest-worker: x",
+        "# noqa: pytest-workers - x",
+    ],
+    ids=["no colon", "no reason", "no letter", "digits only", "another id", "noqa form"],
+)
+def test_a_comment_that_is_no_marker_clears_nothing(build_repo, comment):
+    """PYTEST-7."""
+    assert shape(judged(build_repo, block_run(comment, "pytest"))) == [(SERIAL, BLOCK_LINE + 1, WITHOUT_N)]
+
+
+def test_a_marker_two_lines_above_clears_nothing(build_repo):
+    """PYTEST-7."""
+    findings = judged(build_repo, block_run(MARKER, "echo a", "pytest"))
+    assert shape(findings) == [(SERIAL, BLOCK_LINE + 2, WITHOUT_N)]
+
+
+def test_a_marker_does_not_clear_the_call_of_the_logical_line_below_its_own(build_repo):
+    """PYTEST-7: a marker covers the lines it stands on or above, not the next logical line."""
+    findings = judged(build_repo, block_run(f"pytest {MARKER}", "echo a", "pytest"))
+    assert shape(findings) == [(SERIAL, BLOCK_LINE + 2, WITHOUT_N)]
+
+
+@pytest.mark.parametrize("on", ["push", "schedule", "workflow_call", "pull_request"])
+def test_a_workflow_is_judged_whatever_its_trigger(build_repo, on):
+    """PYTEST-1: no root is needed."""
+    assert shape(judged(build_repo, block_run("pytest", on=on))) == [(SERIAL, BLOCK_LINE, WITHOUT_N)]
+
+
+def test_a_run_is_read_as_shell_whatever_its_shell(build_repo):
+    """PYTEST-1."""
+    text = head() + "      - shell: python\n        run: pytest\n"
+    assert shape(judged(build_repo, text)) == [(SERIAL, QUOTED_LINE + 1, WITHOUT_N)]
+
+
+def test_only_the_run_of_a_step_is_read(build_repo):
+    """PYTEST-1: names, conditions, inputs and environments are not scripts."""
+    step = (
+        "      - name: pytest\n        if: contains(github.ref, 'pytest')\n        env:\n          CMD: pytest\n"
+        "        run: 'true'\n      - uses: a/b@0123456789012345678901234567890123456789\n        with:\n          run: pytest\n"
+        "          args: pytest -n 0\n"
+    )
+    assert judged(build_repo, head() + step) == []
+
+
+def test_every_job_and_step_is_read_and_each_finding_names_its_file(build_repo):
+    """PYTEST-1, PYTEST-8."""
+    text = head() + "      - run: 'true'\n      - run: pytest\n  k:\n    runs-on: ubuntu-latest\n    steps:\n      - run: pytest -n 0\n"
+    repo = build_repo({WORKFLOW: text, ".github/workflows/other.yaml": block_run("pytest")})
+    findings = rule_findings(repo, Rule.PYTEST_WORKERS)
+    assert [(finding.path, finding.line, finding.fact) for finding in findings] == [
+        (".github/workflows/other.yaml", BLOCK_LINE, WITHOUT_N),
+        (WORKFLOW, 9, WITHOUT_N),
+        (WORKFLOW, 13, WITH_ZERO),
+    ]
+
+
+def test_a_composite_action_is_not_read(build_repo):
+    """PYTEST-1: the named gap."""
+    action = "name: a\nruns:\n  using: composite\n  steps:\n    - shell: bash\n      run: pytest\n"
+    repo = build_repo({"action.yml": action, ".github/actions/a/action.yml": action})
+    assert rule_findings(repo, Rule.PYTEST_WORKERS) == []
+
+
+def test_a_step_without_a_run_and_a_workflow_without_jobs_are_skipped(build_repo):
+    """PYTEST-9."""
+    repo = build_repo({WORKFLOW: head() + "      - uses: a/b@v1\n", ".github/workflows/empty.yml": "name: e\non: push\n"})
+    assert (rule_findings(repo, Rule.PYTEST_WORKERS), Rule.PYTEST_WORKERS in refusals(repo)) == ([], False)
+
+
+def test_a_tracked_workflow_gone_from_the_tree_is_skipped(build_repo):
+    """PYTEST-1."""
+    repo = build_repo({WORKFLOW: block_run("pytest")})
+    (repo / WORKFLOW).unlink()
+    assert (rule_findings(repo, Rule.PYTEST_WORKERS), Rule.PYTEST_WORKERS in refusals(repo)) == ([], False)
+
+
+def test_a_finding_prints_its_event_fact_and_the_flag_and_the_marker_as_its_fix(build_repo, capsys):
+    """PYTEST-8."""
+    code, output = run(capsys, build_repo({WORKFLOW: block_run("pytest -n 0", "pytest -n x")}))
+    rows = finding_rows(output, f"{WORKFLOW}:{BLOCK_LINE}") + finding_rows(output, f"{WORKFLOW}:{BLOCK_LINE + 1}")
+    assert code == 1, output
+    assert [(row.event, row.fact, row.fix) for row in rows] == [(SERIAL, WITH_ZERO, FIX), (INVALID, BAD_COUNT, FIX)]
+
+
+def test_a_conforming_repository_is_clean_under_every_rule(build_repo, capsys):
+    """PYTEST-11."""
+    code, output = run(capsys, build_repo({WORKFLOW: block_run("uv run --locked pytest -q -n auto --cov")}))
+    assert (code, is_clean(output)) == (0, True), output
+
+
+def test_a_marker_is_the_way_out_of_a_serial_run_through_the_door(build_repo, capsys):
+    """PYTEST-7, PYTEST-11."""
+    code, output = run(capsys, build_repo({WORKFLOW: block_run(MARKER, "pytest -p no:cacheprovider -m e2e")}))
+    assert (code, is_clean(output)) == (0, True), output
+
+
+ANCHORS = "x-steps: &steps\n  - run: 'true'\nx-job: &job\n  runs-on: ubuntu-latest\nx-run: &run pytest\n"
+JOBS = "jobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "name: w\non: [push\n",
+        head() + "      - run: [pytest]\n",
+        head() + "      - run:\n          cmd: pytest\n",
+        f"{ANCHORS}on: push\njobs: *job\n",
+        f"{ANCHORS}on: push\njobs:\n  <<: *job\n",
+        f"{ANCHORS}on: push\njobs:\n  j: *job\n",
+        f"{ANCHORS}on: push\njobs:\n  j:\n    <<: *job\n    steps: []\n",
+        f"{ANCHORS}on: push\n{JOBS[:-len('    steps:\n')]}    steps: *steps\n",
+        f"{ANCHORS}on: push\n{JOBS}      - *job\n",
+        f"{ANCHORS}on: push\n{JOBS}      - <<: *job\n",
+        f"{ANCHORS}on: push\n{JOBS}      - run: *run\n",
+        f"{ANCHORS}on: push\n{JOBS}      - name: t\n        <<: {{run: pytest}}\n",
+        f"{ANCHORS}<<: {{jobs: {{}}}}\non: push\n",
+    ],
+    ids=[
+        "yaml error", "run list", "run mapping", "alias as jobs", "merge key at jobs", "alias as a job",
+        "merge key at a job", "alias as steps", "alias as a step", "merge key at a step", "alias as run",
+        "merge key at a step beside run", "merge key at the top",
+    ],
+)
+def test_a_workflow_the_rule_cannot_read_is_cannot_judge_naming_the_file_while_other_rules_still_judge(build_repo, capsys, text):
+    """PYTEST-9."""
+    repo = build_repo({WORKFLOW: text, ".env": "A=1\n"})
+    code, output = run(capsys, repo)
+    assert code == 2, output
+    assert refusal_row("workflows") in output
+    assert WORKFLOW in refusals(repo)[Rule.PYTEST_WORKERS]
+    assert env_row_stands(output)
+
+
+def refuse_by_mode(repo: Path, _elsewhere: Path) -> None:
+    (repo / WORKFLOW).chmod(0)
+
+
+def refuse_by_link(repo: Path, elsewhere: Path) -> None:
+    (elsewhere / "outside.yml").write_text(block_run("pytest"))
+    (repo / WORKFLOW).unlink()
+    (repo / WORKFLOW).symlink_to(elsewhere / "outside.yml")
+
+
+def refuse_by_encoding(repo: Path, _elsewhere: Path) -> None:
+    (repo / WORKFLOW).write_bytes(b"on: push\n# \xff\xfe\n")
+
+
+@pytest.mark.parametrize(
+    "refuse",
+    [
+        pytest.param(
+            refuse_by_mode, id="mode 0", marks=pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-0 file")
+        ),
+        pytest.param(refuse_by_link, id="link out of the repository"),
+        pytest.param(refuse_by_encoding, id="text that is not UTF-8"),
+    ],
+)
+def test_a_workflow_the_reader_refuses_is_cannot_judge_naming_the_file(build_repo, elsewhere, refuse):
+    """PYTEST-9."""
+    repo = build_repo({WORKFLOW: block_run("pytest")})
+    refuse(repo, elsewhere)
+    assert WORKFLOW in refusals(repo)[Rule.PYTEST_WORKERS]
