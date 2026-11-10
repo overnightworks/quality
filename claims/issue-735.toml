@@ -1,0 +1,8 @@
+claim_id = "f580c627a9254b2ba3e177c6cf3cd845"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "2d2edb284425b756240f99f875604d43b991bb5f"
+branch = "claude/issue-735-agents-md-title-name"
+scope = ["docs/rules.md", "src/quality/agent_guidance.py", "src/quality/check.py", "src/quality/checkout.py", "tests/support/github_remote.py", "tests/support/layout.py", "tests/test_agent_guidance_agents_md.py", "tests/test_agent_guidance_claude_md.py", "tests/test_checkout.py", "tests/test_layout.py", "tests/test_root_layout.py"]
+opened_commit = "e29c0a5bbdcc8e957d903363a4d789917b46fbcd"
+whole_reason = "The remote reader has no caller without the title check, and the check has no verdict without the reader; is_quality_checkout moves onto the same reader in the same change, or two parsers would stay. The docs block and the fixtures belong to the same sentences, since every fixture that tracks an AGENTS.md exits 2 without its remote."
