@@ -15,11 +15,14 @@ TWICE = "appears twice"
 OUT_OF_ORDER = "stands out of order"
 TEXT_BEFORE = "text before the first section"
 TITLE, SECTION, TOO_LONG = FindingEvent.TITLE, FindingEvent.SECTION, FindingEvent.TOO_LONG
+MISSING = FindingEvent.MISSING
+DOCS = "# guidance\n## Documents\n"
+TRACKED_DOCS = {"docs/a.md": "a\n", "docs/b/c.md": "c\n"}
 
 
-def judged(build_repo, content: str) -> list[tuple[FindingEvent, int | None, str]]:
+def judged(build_repo, content: str, files: dict[str, str] | None = None) -> list[tuple[FindingEvent, int | None, str]]:
     """The event, line and fact of every `agents-md` finding over a repository tracking `content` as its AGENTS.md."""
-    repo = build_repo({"AGENTS.md": content})
+    repo = build_repo({"AGENTS.md": content, **(files or {})})
     return [(finding.event, finding.line, finding.fact) for finding in rule_findings(repo, Rule.AGENTS_MD)]
 
 
@@ -217,3 +220,133 @@ def test_agents_md_the_reader_refuses_cannot_be_judged_and_other_rules_still_jud
     assert code == 2, output
     assert refusal_row("files") in output
     assert env_row_stands(output)
+
+
+def not_tracked(path: str, line: int) -> list[tuple[FindingEvent, int, str]]:
+    return [(MISSING, line, f"{path} is not tracked")]
+
+
+@pytest.mark.parametrize("path", ["docs/a.md", "docs/b/", "docs/b", "docs", "docs/", "AGENTS.md"])
+def test_a_tracked_file_or_a_directory_with_a_tracked_file_passes(build_repo, path):
+    """AGENTS-9: a file, a directory with or without the trailing slash."""
+    assert judged(build_repo, f"{DOCS}- `{path}`: read it\n", TRACKED_DOCS) == []
+
+
+def test_a_tracked_document_gone_from_disk_passes(build_repo):
+    """AGENTS-9: only the tracked listing is used."""
+    repo = build_repo({"AGENTS.md": f"{DOCS}- `docs/a.md`\n", "docs/a.md": "a\n"})
+    (repo / "docs/a.md").unlink()
+    assert rule_findings(repo, Rule.AGENTS_MD) == []
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "docs/none.md", "Docs/a.md", "docs/A.md", "docs/b//", "./docs/a.md", "docs//a.md", "empty/", "docs/a",
+        "docs/a.md/", "AGENTS.md/",
+    ],
+    ids=[
+        "untracked", "wrong case directory", "wrong case file", "two slashes", "dot slash", "double slash",
+        "directory without a tracked file", "prefix of a file", "nested file with a slash", "top file with a slash",
+    ],
+)
+def test_a_path_no_tracked_file_backs_is_one_missing_finding_at_its_line(build_repo, path):
+    """AGENTS-9, AGENTS-10: the path is compared as written, in exact case."""
+    repo = build_repo({"AGENTS.md": f"{DOCS}- `{path}`: read it\n", **TRACKED_DOCS})
+    (repo / "empty").mkdir()
+    found = [(f.event, f.line, f.fact) for f in rule_findings(repo, Rule.AGENTS_MD)]
+    assert found == not_tracked(path, 3)
+
+
+def test_a_document_that_exists_only_on_disk_is_missing(build_repo):
+    """AGENTS-10: an untracked file on disk does not pass."""
+    repo = build_repo({"AGENTS.md": f"{DOCS}- `docs/x.md`\n", "docs/a.md": "a\n"})
+    (repo / "docs/x.md").write_text("x\n")
+    assert [(f.event, f.line, f.fact) for f in rule_findings(repo, Rule.AGENTS_MD)] == not_tracked("docs/x.md", 3)
+
+
+@pytest.mark.parametrize(
+    "path", ["~/x", "../x", "https://example.com/x", "file:///x", "@docs/a.md", "docs/a.md#top"],
+    ids=["home", "parent", "https scheme", "file scheme", "at span", "anchor"],
+)
+def test_every_form_of_a_path_that_is_not_tracked_is_missing(build_repo, path):
+    """AGENTS-10: no form is classified; each one fails the tracked-listing test."""
+    assert judged(build_repo, f"{DOCS}- `{path}`\n", TRACKED_DOCS) == not_tracked(path, 3)
+
+
+def refuse_absolute(repo: Path, elsewhere: Path, _home: Path) -> str:
+    target = elsewhere / "secret.md"
+    target.write_text("x\n")
+    target.chmod(0)
+    return str(target)
+
+
+def refuse_home(_repo: Path, _elsewhere: Path, home: Path) -> str:
+    target = home / "secret.md"
+    target.write_text("x\n")
+    target.chmod(0)
+    return "~/secret.md"
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-0 file")
+@pytest.mark.parametrize("plant", [refuse_absolute, refuse_home], ids=["absolute path", "home path"])
+def test_a_path_outside_the_repository_is_missing_and_opens_nothing(build_repo, capsys, elsewhere, own_home, plant):
+    """AGENTS-10, AGENTS-11: a read of the mode-0 file would end the run with exit 2."""
+    repo = build_repo({"AGENTS.md": HEAD})
+    path = plant(repo, elsewhere, own_home)
+    (repo / "AGENTS.md").write_text(f"{DOCS}- `{path}`\n")
+    code, output = run(capsys, repo)
+    found = [(f.event, f.line, f.fact) for f in rule_findings(repo, Rule.AGENTS_MD)]
+    assert (code, found) == (1, not_tracked(path, 3)), output
+
+
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [
+        ("- `docs/a.md` read when `nothing/here` or `ci.yml` runs\n", []),
+        ("- read when `docs/a.md` changes\n- no span here\n", []),
+        ("- `nope.md` and `docs/a.md`\n", not_tracked("nope.md", 3)),
+        ("- `docs/a.md` and `nope.md`\n", []),
+        ("- `docs/a.md`\n- `x/y.md`\n\n- `z.md`\n", not_tracked("x/y.md", 4) + not_tracked("z.md", 6)),
+        ("- one ` backtick only\n", []),
+    ],
+    ids=["later spans", "span not first word", "bad first span", "good first span", "several lines", "lone backtick"],
+)
+def test_only_the_first_span_of_a_line_is_judged(build_repo, content, expected):
+    """AGENTS-8."""
+    assert judged(build_repo, DOCS + content, TRACKED_DOCS) == expected
+
+
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [
+        ("# guidance\n## Commands\n- `nope`\n## Rules\n- `nope`\n## Owners\n- `nope`\n", []),
+        (DOCS + "```\n`nope.md`\n```\n", []),
+        (DOCS + "~~~\n`nope.md`\n~~~\n`nope.md`\n", not_tracked("nope.md", 6)),
+        (DOCS + "### Sub\n`nope.md`\n", not_tracked("nope.md", 4)),
+        (DOCS + "## Documents\n`nope.md`\n", not_tracked("nope.md", 4)),
+        ("# guidance\n## Documents\n## Owners\n`nope.md`\n", []),
+        ("# guidance\n## Documents\n# Second\n`nope.md`\n", []),
+        ("# guidance\n## Documents\n## Documents\n`nope.md`\n", not_tracked("nope.md", 4)),
+        ("# `nope.md`\n## Commands\n- `nope.md`\n", []),
+        (DOCS, []),
+        ("# guidance\n## Documents\ntext only\n", []),
+        ("# guidance\n", []),
+    ],
+    ids=[
+        "other sections", "fenced span", "span after a fence", "level 3 heading", "second Documents section",
+        "after the next section", "after a second title", "repeated section", "title and commands", "empty section",
+        "no span", "no section",
+    ],
+)
+def test_only_lines_of_a_documents_section_outside_a_fence_are_judged(build_repo, content, expected):
+    """AGENTS-8."""
+    assert [(e, n, f) for e, n, f in judged(build_repo, content, TRACKED_DOCS) if e is MISSING] == expected
+
+
+def test_a_missing_finding_prints_the_path_and_nothing_else_of_the_line(build_repo, capsys):
+    """AGENTS-6: the path text of the span, never the words around it."""
+    marker = "zq7-marker"
+    repo = build_repo({"AGENTS.md": f"{DOCS}- `nope.md`: read {marker} when `{marker}.yml` runs\n"})
+    code, output = run(capsys, repo)
+    assert (code, "nope.md is not tracked" in output, marker in output) == (1, True, False), output

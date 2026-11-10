@@ -276,9 +276,21 @@ It applies these rules:
   Headings of level 3 and deeper are no sections (AGENTS-3). The file has at most 100 lines (the last one counts without
   a line feed; `\n` alone separates lines) and at most 4096 bytes; each limit crossed is a `too long` finding at line 1
   (AGENTS-4). No `AGENTS.md` is clean, and a tracked one missing from disk is skipped (AGENTS-5). A finding names fixed
-  words, line numbers and counts, never the title or a heading, and its fix is prose with no command (AGENTS-6). A link
-  that leaves the repository, text that is not UTF-8 and a read the filesystem refuses make the `files` row
-  `✗ not checked` with the reason (exit `2`) (AGENTS-7). No configuration switches the rule off.
+  words, line numbers, counts and, for `missing`, the path text of the span, never the title or a heading, and its fix
+  is prose with no command (AGENTS-6). A link that leaves the repository, text that is not UTF-8 and a read the
+  filesystem refuses make the `files` row `✗ not checked` with the reason (exit `2`) (AGENTS-7). In `## Documents`, the
+  first backticked span of each line is that document's path; later spans, lines without a span and other sections'
+  backticks are never judged. The section runs to the next `# ` or `## ` heading or the end of the file; a line in a
+  fence is no document line; a second `## Documents` heading starts another run (AGENTS-8). A path passes if it is a
+  tracked file, or a directory with at least one tracked file below it, spelled in exact case; one trailing `/` of a
+  directory is optional and nothing else is normalised. A tracked file missing from disk passes (AGENTS-9). Any other
+  path is a `missing` finding at its line, whatever its form (absolute, `~`, `..`, a scheme, an `@` span, an anchor,
+  an untracked file, a wrong case): fact `<path> is not tracked`, fix "point at a tracked document or delete the line"
+  (AGENTS-10).
+  The check compares text with the tracked listing alone, so no filesystem probe follows text from the file and
+  nothing outside the repository is opened. It accepts any tracked directory; whether that is a directory of the
+  document set whose files are named by their task or contract stays the reviewer's call (AGENTS-11). No configuration
+  switches the rule off.
 - `root-layout`: every entry directly in the root of the tracked tree is on quality's base list or declared (ROOT-1). An
   entry is a file or a directory (written `frontend/`); a directory with many files is one entry (ROOT-2). Names
   compare in exact case, and the finding for a name that differs only in case names the base-list spelling (ROOT-3). A
