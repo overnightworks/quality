@@ -626,8 +626,11 @@ def test_a_locate_or_version_call_still_running_when_the_time_ends_is_stopped_an
     started = time.monotonic()
     result = check.judge_repository(
         repo, locators.ruff, locators.zizmor, lambda _verdict, _tracked_paths: None,
-        lambda _area, _scanner: nullcontext(), named=[rule.area],
+        lambda _area, _scanner: nullcontext(), named=[rule.area, Area.FILES],
     )
     assert time.monotonic() - started < 10
+    files_row = next(area for area in result.areas if area.area is Area.FILES)
+    assert files_row.verdicts
+    assert all(verdict.refusal is None for verdict in files_row.verdicts)
     subject = "mise" if located_by_mise else scanner
     assert refusals_of(result)[rule] == f"{subject} did not finish within the run's 2 seconds"
