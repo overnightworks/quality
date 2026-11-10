@@ -417,6 +417,12 @@ def test_each_form_of_a_github_remote_names_the_repository(build_repo, form):
     assert title_findings(titled(build_repo, "guidance", "acme/guidance", form=form)) == []
 
 
+@pytest.mark.parametrize("suffix", [".git", ".GIT", ".Git", ".git/", "/"])
+def test_a_dot_git_suffix_in_any_case_and_one_trailing_slash_are_no_part_of_the_name(build_repo, suffix):
+    """AGENTS-13."""
+    assert title_findings(titled(build_repo, "guidance", f"acme/guidance{suffix}")) == []
+
+
 @pytest.mark.parametrize(
     "remote",
     [
@@ -471,4 +477,4 @@ def test_a_finding_names_the_valid_remote_beside_one_with_credentials_and_prints
     git(repo, "remote", "add", "extra", CREDENTIAL_URL)
     code, output = run(capsys, repo)
     assert title_findings(repo) == [(TITLE, 1, NOT_THE_NAME, "make line 1 `# guidance`")]
-    assert (code, TOKEN in output, "github.com" in output) == (1, False, False), output
+    assert (code, TOKEN in output, "://" in output) == (1, False, False), output
