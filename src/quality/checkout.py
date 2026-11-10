@@ -33,7 +33,11 @@ LOCAL_PREFIXES = ("./", "$/")
 RELEASE_TAG = re.compile(r"v(\d+)\.(\d+)\.(\d+)")
 COMMIT_SHA = re.compile(r"[0-9a-f]{40}")
 RELEASE_COMMENT = re.compile(rf"\s+# ?(?P<release>{RELEASE_TAG.pattern})\s*")
-QUALITY_REMOTE = re.compile(r"(?:https://github\.com/|ssh://git@github\.com/|git@github\.com:)(?P<name>[^/]+/[^/]+?)(?:\.git)?/?", re.IGNORECASE)
+QUALITY_REMOTE = re.compile(
+    r"(?:https://github\.com/|ssh://git@github\.com/|git@github\.com:)"
+    r"(?P<name>[^/]+/[^/]+?)(?:\.git)?/?",
+    re.IGNORECASE,
+)
 BLOCK_STYLES = frozenset({"|", ">"})
 LINE_BREAKS = re.compile("[\r\n\x85\u2028\u2029]")
 NOT_PINNED_STEP = Instruction("pin the gate as docs/gate.md shows: @<commit sha> # v<tag>")
