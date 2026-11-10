@@ -38,6 +38,11 @@ def quoted_run(line: str, on: str = "push") -> str:
     return head(on) + f"      - run: {json.dumps(line)}\n"
 
 
+def folded_run(*lines: str, on: str = "push") -> str:
+    """One step whose `run: >` is line 9 and whose value starts on line 10."""
+    return head(on) + "      - name: t\n        run: >\n" + "".join(f"          {line}\n" for line in lines)
+
+
 @pytest.fixture(params=[(block_run, BLOCK_LINE), (quoted_run, QUOTED_LINE)], ids=["literal block", "quoted"])
 def scalar(request) -> tuple[Callable[[str], str], int]:
     """How a one-line script stands in a workflow, and the line of its finding."""
@@ -169,6 +174,20 @@ def test_a_command_split_over_lines_by_a_backslash_is_one_call_at_its_first_line
     """PYTEST-2."""
     findings = judged(build_repo, block_run("echo start", "pytest -q \\", "  tests", "echo done"))
     assert shape(findings) == [(SERIAL, BLOCK_LINE + 1, WITHOUT_N)]
+
+
+@pytest.mark.parametrize(
+    "script",
+    [
+        pytest.param(lambda: folded_run("echo hi", "", "pytest -q"), id="folded blank line"),
+        pytest.param(lambda: folded_run("echo hi", "  pytest -q"), id="folded more-indented line"),
+        pytest.param(lambda: quoted_run("echo hi\npytest -q"), id="quoted newline"),
+    ],
+)
+def test_a_line_break_kept_in_a_folded_or_quoted_value_ends_the_command(build_repo, script):
+    """PYTEST-2: the shell reads a kept newline as the end of a command; the finding is at the scalar's first line."""
+    findings = judged(build_repo, script())
+    assert [(finding.event, finding.fact) for finding in findings] == [(SERIAL, WITHOUT_N)]
 
 
 def test_the_workers_flag_on_the_continued_line_counts(build_repo):

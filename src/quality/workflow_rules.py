@@ -270,13 +270,13 @@ def _script(name: str, document: Document, run: yaml.Node) -> yaml.ScalarNode:
 
 
 def _physical_lines(run: yaml.ScalarNode) -> list[tuple[str, int]]:
-    """A literal block scalar line by line, each at its file line; any other style as one line at its first file line."""
+    """The value line by line, as the shell reads it; a literal block scalar keeps each file line, any other style the first."""
+    lines = run.value.split("\n")
     if run.style == "|":
-        lines = run.value.split("\n")
         first = run.start_mark.line + 2
         return [(RUN_EXPRESSION.sub(DYNAMIC_EXPRESSION, line), first + offset) for offset, line in enumerate(lines[: len(lines) - run.value.endswith("\n")])]
     first = run.start_mark.line + (2 if run.style == ">" else 1)
-    return [(RUN_EXPRESSION.sub(DYNAMIC_EXPRESSION, run.value), first)]
+    return [(RUN_EXPRESSION.sub(DYNAMIC_EXPRESSION, line), first) for line in lines]
 
 
 def _logical_lines(physical: list[tuple[str, int]]) -> Iterator[ScriptLine]:
