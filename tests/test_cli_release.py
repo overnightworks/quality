@@ -8,6 +8,7 @@ from quality.installation import VcsOrigin
 from quality.pin import RunningQuality
 from tests.support.door import DRY_RUN_WORDS, STAGED_WORDS, door_in
 from tests.support.git_repositories import stage
+from tests.support.layout import FILES_RULE_IDS
 
 PINNED_ROW = "  · release       v0.10.0        pinned in .github/workflows/ci.yml"
 
@@ -35,7 +36,7 @@ def running(version: str, commit: str):
     [
         pytest.param(
             gate_call("v0.10.0"), "0.10.0", pinned_commit(), ("check", "files"),
-            (0, [PINNED_ROW, "  ✓ files         clean          10 rules · 2 files", "✓ clean · 1 area · <1s"], []),
+            (0, [PINNED_ROW, f"  ✓ files         clean          {len(FILES_RULE_IDS)} rules · 2 files", "✓ clean · 1 area · <1s"], []),
             id="check at the pin",
         ),
         pytest.param(
