@@ -304,17 +304,13 @@ def web_tree(moves):
         ({"src/shop/pages/views.py": "src/shop/site/views.py", "src/shop/pages/forms.py": "scripts/forms.py"}, ["shop.site"],
          changes("source_modules")),
     ],
-    ids=["a folder renamed", "only a module below the new folder listed", "a file renamed on the way (no candidate)",
+    ids=["a folder renamed, two sources naming one candidate", "only a module below the new folder listed", "a file renamed on the way (no candidate)",
          "files moved to two folders, both listed", "one file moved outside every root"],
 )
 def test_a_folder_is_cleared_by_the_folder_its_files_moved_to_and_by_no_other_name(moves, listed, expected):
-    """LOOSE-22, LOOSE-21: the source's parts below the folder equal the target's last parts, the rest names the module."""
+    """LOOSE-22, LOOSE-21: the source's parts below the folder equal the target's last parts, the rest names the module;
+    sources that name the same candidate leave it the renamed module."""
     assert lines(PAGES, source_modules_of(["shop.db", *listed]), web_tree(moves)) == expected
-
-
-def test_two_files_moved_to_one_folder_name_one_candidate():
-    """LOOSE-22: sources that name the same candidate leave it the renamed module."""
-    assert lines(PAGES, source_modules_of(["shop.db", "shop.site"]), web_tree(SITE_MOVES)) == []
 
 
 @pytest.mark.parametrize(
