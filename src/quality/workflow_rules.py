@@ -214,7 +214,9 @@ LEXER_PUNCTUATION = frozenset("();<>|&`")
 SEPARATOR_CHARACTERS = frozenset("();|&`")
 PREFIX_WORDS = frozenset({"time", "exec", "command", "nohup", "if", "then", "elif", "else", "do", "while", "until", "!", "{"})
 PYTEST_COMMANDS = frozenset({"pytest", "py.test"})
-INTERPRETER = re.compile(r"python(?:3(?:\.\d+t?)?)?|pypy(?:3(?:\.\d+)?)?")
+PYTHON_INTERPRETER = re.compile(r"python(?:3(?:\.\d+t?)?)?")
+PYPY_INTERPRETER = re.compile(r"pypy(?:3(?:\.\d+)?)?")
+INTERPRETERS = (PYTHON_INTERPRETER, PYPY_INTERPRETER)
 INTERPRETER_VALUE_FLAGS = frozenset({"-W", "-X", "--check-hash-based-pycs"})
 RUNNERS = frozenset({("uv", "run"), ("poetry", "run"), ("pipenv", "run"), ("pdm", "run"), ("hatch", "run"), ("coverage", "run")})
 AUTOMATIC_COUNTS = frozenset({"auto", "logical"})
@@ -474,7 +476,7 @@ def _pytest_arguments(words: list[str]) -> list[str] | None:
     command = PurePosixPath(words[0]).name
     if command in PYTEST_COMMANDS:
         return words[1:]
-    if INTERPRETER.fullmatch(command):
+    if any(interpreter.fullmatch(command) for interpreter in INTERPRETERS):
         return _module_arguments(words[1:])
     if command == "uvx":
         return _runner_arguments(words[1:])
