@@ -1,0 +1,8 @@
+claim_id = "f2387f10d2f5480ebeee3c5d5de632fc"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "3f7f42602e77d61a9baea3b5eae7d5c91455d42a"
+branch = "claude/issue-777-scanner-bump"
+scope = [".github/workflows/gate.yml", "docs/sonar.md", "src/quality/sonar_scanner.py", "src/quality/sonarsource-scanner-key.asc", "tests/test_sonar_scanner.py"]
+opened_commit = "1a10275bfca1b2a4c14b1dd84f5b1c6d70ed465c"
+whole_reason = "The scanner version, its key file and the trust sentences that describe both change together or the gate verifies one release against another release's key; the folded wording sits in the same three files."
