@@ -1,0 +1,8 @@
+claim_id = "c33e001d044641a9891d6f3d417047d4"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "9e80ef2ff9b19e3ff426613dc67d61b62acb6155"
+branch = "claude/issue-764-release-refs"
+scope = [".github/workflows/gate.yml", "docs/commands.md", "docs/rules.md", "src/quality/rules.py", "tests/test_fleet_matrix.py", "tests/test_rules.py"]
+opened_commit = "4f34fe85468c036446dc33a16627f36c66693297"
+whole_reason = "Six paths, about ten lines: the refs and the release facts must name the same tag in one commit, or the release build fails on whichever is missing."
