@@ -183,7 +183,18 @@ The scanner's transport, verified at sonar-scanner-java-library 4.2.1.1698 (the 
   accepted trust boundary: the token's only purpose is to authenticate to SonarCloud.
 - Re-verify all of this on any bump of the scan action or `SCANNER_VERSION`, and check the scan's log for
   `Using cached Sonar Scanner CLI`.
-- Sources at 4.2.1.1698: [ScannerEndpointResolver.java:39-44](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.2.1.1698/lib/src/main/java/org/sonarsource/scanner/lib/internal/endpoint/ScannerEndpointResolver.java#L39-L44), [ScannerEndpointResolver.java:86-104](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.2.1.1698/lib/src/main/java/org/sonarsource/scanner/lib/internal/endpoint/ScannerEndpointResolver.java#L86-L104), [OfficialSonarQubeCloudInstance.java:33-34](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.2.1.1698/lib/src/main/java/org/sonarsource/scanner/lib/internal/endpoint/OfficialSonarQubeCloudInstance.java#L33-L34), [HttpClientFactory.java:72](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.2.1.1698/lib/src/main/java/org/sonarsource/scanner/lib/internal/http/HttpClientFactory.java#L72), [ScannerHttpClient.java:162-172](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.2.1.1698/lib/src/main/java/org/sonarsource/scanner/lib/internal/http/ScannerHttpClient.java#L162-L172), [ScannerHttpClient.java:227-233](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.2.1.1698/lib/src/main/java/org/sonarsource/scanner/lib/internal/http/ScannerHttpClient.java#L227-L233), [ScannerEngineLauncherFactory.java:81-82](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.2.1.1698/lib/src/main/java/org/sonarsource/scanner/lib/internal/facade/forked/ScannerEngineLauncherFactory.java#L81-L82), [ScannerEngineLauncherFactory.java:99-106](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.2.1.1698/lib/src/main/java/org/sonarsource/scanner/lib/internal/facade/forked/ScannerEngineLauncherFactory.java#L99-L106), [ScannerEngineLauncherFactory.java:123-130](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.2.1.1698/lib/src/main/java/org/sonarsource/scanner/lib/internal/facade/forked/ScannerEngineLauncherFactory.java#L123-L130), [EnvironmentConfig.java:50-76](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.2.1.1698/lib/src/main/java/org/sonarsource/scanner/lib/EnvironmentConfig.java#L50-L76).
+- Sources at 4.2.1.1698, the tag https://github.com/SonarSource/sonar-scanner-java-library/tree/4.2.1.1698,
+  paths under `lib/src/main/java/org/sonarsource/scanner/lib/`:
+  - `internal/endpoint/ScannerEndpointResolver.java` lines 39-44
+  - `internal/endpoint/ScannerEndpointResolver.java` lines 86-104
+  - `internal/endpoint/OfficialSonarQubeCloudInstance.java` lines 33-34
+  - `internal/http/HttpClientFactory.java` line 72
+  - `internal/http/ScannerHttpClient.java` lines 162-172
+  - `internal/http/ScannerHttpClient.java` lines 227-233
+  - `internal/facade/forked/ScannerEngineLauncherFactory.java` lines 81-82
+  - `internal/facade/forked/ScannerEngineLauncherFactory.java` lines 99-106
+  - `internal/facade/forked/ScannerEngineLauncherFactory.java` lines 123-130
+  - `EnvironmentConfig.java` lines 50-76
 
 `quality sonar findings` is the SonarCloud zero-findings rule: every open finding counts (SONAR-69). Where
 `.github/dependabot.yml` exists the scan itself excludes one rule, see the
