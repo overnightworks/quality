@@ -3,6 +3,6 @@ agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
 role = "builder"
 base = "cb7474b3ce07a0e45c5ac4e4027fbdcc50891454"
 branch = "claude/issue-786-last-ids"
-scope = ["docs/rules.md", "tests/test_architecture.py", "tests/test_architecture_layers.py", "tests/test_architecture_output.py", "tests/test_verdict_reread.py"]
+scope = ["docs/rules.md", "tests/test_architecture.py", "tests/test_architecture_output.py", "tests/test_verdict_reread.py"]
 opened_commit = "94b718a98288fc5b48e32b5bf4edae4d2f7160e9"
 whole_reason = "The sweep of 514 ends with this slice: the last two parked blocks carry their IDs, so 514 closes with it; five paths because each ID needs its prose mark and the docstring of the test that proves it."
