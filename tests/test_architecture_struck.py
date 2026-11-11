@@ -589,17 +589,25 @@ def test_a_removed_layers_contract_needs_its_tail_dead_in_every_container(other,
 
 
 SUB_PACKAGE = {"src/shop/sub/__init__.py", "src/shop/sub/dead.py"}
+OTHER_LIVE = {"src/other/__init__.py", "src/other/web.py"}
+SUB_RENAMED = {"src/shop/sub/__init__.py": "src/shop/other/__init__.py"}
 
 
 @pytest.mark.parametrize(
-    ("container", "base_paths", "expected"),
-    [("shop", BASE_PATHS, REMOVED), ("shop.sub", BASE_PATHS | SUB_PACKAGE, [])],
-    ids=["a container with files at the head", "a container with no file at the head"],
+    ("containers", "tree", "expected"),
+    [
+        (["shop"], tree_of(BASE_PATHS, HEAD_PATHS), REMOVED),
+        (["shop.sub"], tree_of(BASE_PATHS | SUB_PACKAGE, HEAD_PATHS), []),
+        (["shop.sub"], tree_of(BASE_PATHS | SUB_PACKAGE, HEAD_PATHS | {"src/shop/other/__init__.py"}, moves=SUB_RENAMED), []),
+        (["shop.sub", "other"], tree_of(BASE_PATHS | SUB_PACKAGE | OTHER_LIVE, HEAD_PATHS | OTHER_LIVE), REMOVED),
+    ],
+    ids=["a container with files at the head", "a container with no file at the head",
+         "a renamed container with no file at the head", "one of two containers with files at the head"],
 )
-def test_a_removed_exhaustive_layers_contract_goes_only_when_none_of_its_containers_has_a_file_at_the_head(container, base_paths, expected):
+def test_a_removed_exhaustive_layers_contract_goes_only_when_none_of_its_containers_has_a_file_at_the_head(containers, tree, expected):
     """LOOSE-23: an exhaustive contract still forbids every undeclared child of a live container."""
-    gone = {"type": "layers", "containers": [container], "layers": ["dead"], "exhaustive": True}
-    assert removal(gone, tree_of(base_paths, HEAD_PATHS)) == expected
+    gone = {"type": "layers", "containers": containers, "layers": ["dead"], "exhaustive": True}
+    assert removal(gone, tree, ("shop", "other")) == expected
 
 
 def test_a_removed_layers_contract_without_containers_stays_a_loosening():
