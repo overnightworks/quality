@@ -6,7 +6,8 @@
 - `uv run ruff check`: lint; run after `uv sync --locked`.
 - `uv run pytest tests/test_<module>.py`: the tests of the module you changed; run after `uv sync --locked`.
 - `mise --cd src/quality/mise install --locked`: install the scanners `src/quality/mise/mise.toml` pins; needs mise; run on a fresh machine and after each change of that file.
-- `uv run quality check`: quality's own gate on this checkout; needs those scanners and network, since every run asks the server about the advisory databases and downloads those that changed.
+- `uv run quality check`: quality's own gate on this checkout; needs those scanners and network, since every run asks
+  the server about the advisory databases.
 - `quality merge <owner/repo>#<pr>`: the operator's door past a red gate; an agent never runs it.
 - `gh workflow run release.yml -R overnightworks/quality -f version=X.Y.Z`: dispatch quality's release; the operator's, an agent runs it only on his explicit yes for that version.
 
