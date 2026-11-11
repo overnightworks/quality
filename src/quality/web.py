@@ -1,6 +1,8 @@
 """HTTP reads that send a credential: never follow a redirect, never wait without bound; and the injected wait between polls."""
 
 import http.client
+import queue
+import threading
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Iterator, Mapping
@@ -11,7 +13,6 @@ from quality.report import CannotJudge
 
 # A server that accepts the connection and then stops answering must not hang the job.
 REQUEST_TIMEOUT_SECONDS = 30
-READ_CHUNK_BYTES = 1 << 20
 Sleep = Callable[[float], None]
 
 
@@ -47,19 +48,30 @@ def fetch_within(
     url: str, unreadable: Callable[[Exception], CannotJudge], expires_at: float, clock: Callable[[], float],
     timeout: float = REQUEST_TIMEOUT_SECONDS,
 ) -> bytes:
-    """The body answered at `url`, read in chunks so that `clock` passing `expires_at` ends the read with
-    `unreadable(TimeoutError)` however slowly the server sends. A request or read waits at most `timeout` and at
-    most what is left of the deadline when the request opens."""
+    """The body answered at `url`, or `unreadable(TimeoutError)` when `clock` (in seconds) reaches `expires_at` first.
+    The request runs on a thread this call stops waiting for at the deadline, so a name lookup, a connect to several
+    addresses, a header, a chunk size or a byte that arrives slowly cannot hold it past `expires_at`; `timeout` and the
+    time left bound each socket operation of that thread, which lets an abandoned one end by itself."""
     left = expires_at - clock()
     if left <= 0:
         raise unreadable(TimeoutError("the deadline is spent"))
-    chunks: list[bytes] = []
-    with _opened(url, {}, unreadable, min(timeout, left)) as response:
-        while chunk := response.read1(READ_CHUNK_BYTES):
-            if clock() >= expires_at:
-                raise unreadable(TimeoutError("the deadline is spent"))
-            chunks.append(chunk)
-    return b"".join(chunks)
+    answers: queue.Queue[bytes | CannotJudge] = queue.Queue(maxsize=1)
+
+    def read() -> None:
+        try:
+            with _opened(url, {}, unreadable, min(timeout, left)) as response:
+                answers.put(response.read())
+        except CannotJudge as refusal:
+            answers.put(refusal)
+
+    threading.Thread(target=read, daemon=True).start()
+    try:
+        answer = answers.get(timeout=left)
+    except queue.Empty:
+        raise unreadable(TimeoutError("the deadline is spent")) from None
+    if isinstance(answer, CannotJudge):
+        raise answer
+    return answer
 
 
 def timed_out(error: OSError) -> bool:

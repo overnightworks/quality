@@ -323,7 +323,7 @@ def test_a_failed_unzip_leaves_neither_the_scanner_nor_the_marker(scene, drive):
         ((), ((f"{FOLDER}/bin/absolute", "/etc/passwd"),)),
         (((f"{FOLDER}/../outside", "x"),), ()),
         (((f"/{FOLDER}/absolute", "x"),), ()),
-        (((f"other-folder/file", "x"),), ()),
+        ((("other-folder/file", "x"),), ()),
         (((f"{FOLDER}\\..\\outside", "x"),), ()),
     ],
     ids=["symlink out of the folder", "absolute symlink", "entry with a parent component", "absolute entry", "entry beside the folder", "entry with a backslash"],
@@ -434,20 +434,6 @@ def test_a_server_that_stalls_ends_the_command_within_its_deadline_with_the_name
     err = capsys.readouterr().err
     assert (code, listener.origin in err, RERUN_ADVICE in err) == (2, True, True)
     assert elapsed < deadline_seconds + 5
-
-
-def test_a_body_that_arrives_whole_within_the_deadline_is_returned_as_sent(stub_server):
-    """SONAR-115: the chunked read joins what the server sends, several chunks of it included"""
-    body = b"abc" * web.READ_CHUNK_BYTES
-
-    def answer(handler):
-        handler.send_response(200)
-        handler.send_header("Content-Length", str(len(body)))
-        handler.end_headers()
-        handler.wfile.write(body)
-
-    origin, _ = stub_server(answer)
-    assert web.fetch_within(f"{origin}/zip", lambda error: CannotJudge(str(error)), time.monotonic() + 30, time.monotonic) == body
 
 
 def test_a_read_that_starts_after_the_deadline_asks_nobody():

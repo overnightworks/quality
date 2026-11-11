@@ -64,7 +64,7 @@ def test_the_verdict_job_outlasts_its_fetches_rereads_and_one_request(jobs):
 
 
 def test_the_scanner_install_step_outlasts_its_one_deadline_and_the_start_up_of_uv_and_python(jobs):
-    """SONAR-120: the command's deadline plus the start-up allowance is smaller than its step's limit, so the command ends with its own line"""
+    """SONAR-120: every download, `gpg` call and `unzip` ends at the deadline, so its worst case is the deadline plus the start-up allowance, smaller than the step's limit: the command ends with its own line"""
     assert sonar_scanner.COMMAND_DEADLINE_SECONDS + START_UP_ALLOWANCE_SECONDS < step_limit_seconds(jobs, "sonar", SONAR_INSTALL_STEP)
 
 

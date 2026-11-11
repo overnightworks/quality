@@ -120,8 +120,9 @@ check over and leaves the key servers out of the trust path (SONAR-121):
   subkeys. `gpg --show-keys` must list exactly one primary key, with that fingerprint and neither expired nor revoked;
   otherwise the command stops before any download with a line that names the file and says to replace it (SONAR-116).
 - It downloads the zip and its `.asc` from `binaries.sonarsource.com`, retrying a failed attempt while the deadline has
-  time left. One deadline of `COMMAND_DEADLINE_SECONDS` covers the whole command; each request, each `gpg` call and
-  `unzip` get the smaller of their own limit and the time left. A failed or stalled download ends with one line naming the
+  time left. One deadline of `COMMAND_DEADLINE_SECONDS` covers the whole command: a download is cut at the deadline
+  however slowly its name lookup, connect, headers or body arrive, and each `gpg` call and `unzip` get the smaller of
+  their own limit and the time left. A failed or stalled download ends with one line naming the
   URL and `re-run this run's failed jobs`; a deadline spent in `gpg` or `unzip` names that program and says the same
   (SONAR-115). The install step's `timeout-minutes` is larger than the deadline plus the start-up of `uv` and Python
   (SONAR-120).
