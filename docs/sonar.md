@@ -38,7 +38,8 @@ it to `gate.yml`; an unwritable `GITHUB_OUTPUT` `fix what the error names, then 
 (SONAR-103); a changed tracked file the step to let the artifact add reports only (SONAR-104); an issue search that
 never reaches the analysis's own count `re-run this run's failed jobs` (SONAR-112). Every other refusal falls back to
 its step's general step: `properties` the push step, `scanner` the push step (its key-file and download lines name
-their own step, SONAR-117, SONAR-115), `findings` the re-run step (SONAR-105). `-v` adds nothing: no step runs a scanner (SONAR-106).
+their own step, SONAR-117, SONAR-115), `findings` the re-run step (SONAR-105).
+`-v` adds nothing: no step runs a scanner (SONAR-106).
 
 ```text
 $ quality sonar properties
@@ -124,8 +125,9 @@ check over and leaves the key servers out of the trust path (SONAR-121):
 - The key file `src/quality/sonarsource-scanner-key.asc` holds SonarSource's public key without its expired and revoked
   subkeys. `gpg --show-keys` must list exactly one primary key, with that fingerprint and neither expired nor revoked;
   otherwise the command stops before any download with a line that names the file and says to replace it (SONAR-116).
-  A file whose primary key differs from the fingerprint says so in that line; replacing the file then helps only after
-  SonarSource has rotated its primary key, see below.
+  A file whose primary key differs from the fingerprint says so in that line. If the file was changed by accident,
+  restore the file that matches `SCANNER_SIGNER_FINGERPRINT`. If SonarSource has rotated its primary key, replace the
+  file and `SCANNER_SIGNER_FINGERPRINT` together, see below.
 - It downloads the zip and its `.asc` from `binaries.sonarsource.com`, retrying a failed attempt while the deadline has
   time left; an answer that no retry changes (a redirect or a 4xx other than 429) ends the download at once with its
   status and the step to set `SCANNER_VERSION` to another release. One deadline of `COMMAND_DEADLINE_SECONDS` covers
@@ -174,8 +176,8 @@ The scanner's transport, verified at sonar-scanner-java-library 4.2.1.1698 (the 
   of the `sonar` job set environment variables, and none of those.
 - The properties check keeps out every key that steers the endpoint or the requests: it allows only listed keys, so
   `sonar.host.url`, `sonar.scanner.apiBaseUrl`, `sonar.scanner.sonarcloudUrl`, `sonar.region`, the proxy keys and
-  `sonar.scanner.httpExtraHeaders` are refused. The last is new in this library version: its headers go on every request,
-  and an `Authorization` header among them replaces the token.
+  `sonar.scanner.httpExtraHeaders` are refused. The last is new in this library version: its headers go on every
+  request, and an `Authorization` header among them replaces the token.
 - Residual limit: a redirect issued by SonarCloud itself carries the token to the host it names.
 - The engine is downloaded from SonarCloud and is not pinned by the CLI pin. SonarSource's server-side code is an
   accepted trust boundary: the token's only purpose is to authenticate to SonarCloud.
