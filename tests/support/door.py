@@ -9,8 +9,8 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from quality import cli
+from quality.baseline_file import BASELINE_PATH
 from quality.pin import JudgingRelease
-from quality.ratchet import BASELINE_PATH
 from quality.report import Release
 
 CHECK_WORD = "check"

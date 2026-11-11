@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from quality.ratchet import BASELINE_PATH
+from quality.baseline_file import BASELINE_PATH
 from tests.support.baselines import rendered
 from tests.support.clones import function as clone_function
 from tests.support.door import CHECK_WORD, FIX_WORDS, digest, door_in, fixed, restore_step

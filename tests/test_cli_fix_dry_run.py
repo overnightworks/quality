@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from quality.baseline_file import BASELINE_HEADER, BASELINE_PATH, load_baseline, render_baseline
 from quality.config import CONFIG_PATH
-from quality.ratchet import BASELINE_HEADER, BASELINE_PATH, load_baseline, render_baseline
 from tests.support.baselines import rendered
 from tests.support.clones import function as clone_function
 from tests.support.door import DRY_RUN_WORDS, FIX_WORDS, door_in, fixed, judging_at_the_pin, restore_step, tree_of

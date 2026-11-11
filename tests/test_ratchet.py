@@ -8,21 +8,8 @@ from pathlib import Path
 import pytest
 
 from quality import __version__, cli
-from quality.ratchet import (
-    BASELINE_PATH,
-    Baseline,
-    ClonePair,
-    Key,
-    Metric,
-    Place,
-    RaisedEntry,
-    Renames,
-    carried_base,
-    load_baseline,
-    named_paths,
-    raised_entries,
-    render_baseline,
-)
+from quality.baseline_file import BASELINE_PATH, Baseline, ClonePair, Key, Metric, Place, load_baseline, render_baseline
+from quality.ratchet import RaisedEntry, Renames, carried_base, debt_from, named_paths, raised_entries
 from quality.report import FindingEvent, NoteEvent
 from quality.rules import Rule
 from tests.support.check import (
@@ -179,9 +166,9 @@ HELD_70 = '[function_lines."src/a.py"]\nlong_one = 70\n'
 @pytest.mark.parametrize(
     ("files", "baseline", "path", "line", "event", "values"),
     [
-        ({"src/big.py": long_file(800)}, EMPTY_BASELINE, "src/big.py", None, FindingEvent.NEW_DEBT, (str(Metric.FILE_LINES.debt_from),)),
-        ({"src/a.py": method(60)}, EMPTY_BASELINE, "src/a.py", 2, FindingEvent.NEW_DEBT, ("Holder.long_one", str(Metric.FUNCTION_LINES.debt_from))),
-        ({"src/a.py": branchy_function(16)}, EMPTY_BASELINE, "src/a.py", 1, FindingEvent.NEW_DEBT, ("branchy", str(Metric.CCN.debt_from))),
+        ({"src/big.py": long_file(800)}, EMPTY_BASELINE, "src/big.py", None, FindingEvent.NEW_DEBT, (str(debt_from(Metric.FILE_LINES)),)),
+        ({"src/a.py": method(60)}, EMPTY_BASELINE, "src/a.py", 2, FindingEvent.NEW_DEBT, ("Holder.long_one", str(debt_from(Metric.FUNCTION_LINES)))),
+        ({"src/a.py": branchy_function(16)}, EMPTY_BASELINE, "src/a.py", 1, FindingEvent.NEW_DEBT, ("branchy", str(debt_from(Metric.CCN)))),
         ({"src/a.py": long_function(71)}, HELD_70, "src/a.py", 1, FindingEvent.GREW, ("long_one", "71", "70")),
         ({"src/a.py": long_function(65)}, HELD_70, "src/a.py", 1, FindingEvent.CAN_FALL, ("long_one", "65", "70")),
     ],

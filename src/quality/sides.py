@@ -10,18 +10,9 @@ from pathlib import Path
 from types import MappingProxyType
 
 from quality import architecture, checkout, process, repository
+from quality.baseline_file import BASELINE_PATH, Baseline, SizeError, load_baseline, read_baseline
 from quality.config import CONFIG_PATH, ConfigError, GateSettings, LegacyMode, load_gate_settings, read_gate_settings
-from quality.ratchet import (
-    BASELINE_PATH,
-    NO_RENAMES,
-    Baseline,
-    Renames,
-    SizeError,
-    head_step,
-    load_baseline,
-    read_baseline,
-    renames_of,
-)
+from quality.ratchet import NO_RENAMES, Renames, head_step, renames_of
 from quality.report import CannotJudge, Step
 
 CREDENTIAL_HELPER = "!gh auth git-credential"

@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 
-from quality import ratchet
+from quality import baseline_file
 from quality.checkout import GATE_REPOSITORY, Call
 from quality.fleet import (
     COLUMNS,
@@ -221,7 +221,7 @@ def unreadable_tags() -> dict[str, str]:
 
 @pytest.mark.parametrize(
     ("files", "size"),
-    [({ratchet.BASELINE_PATH: ratchet.render_baseline(ratchet.Baseline({}, None))}, "enforced"), ({}, "report-only")],
+    [({baseline_file.BASELINE_PATH: baseline_file.render_baseline(baseline_file.Baseline({}, None))}, "enforced"), ({}, "report-only")],
     ids=["a baseline", "no baseline"],
 )
 def test_the_size_cell_is_enforced_with_a_baseline_and_report_only_without(fleet_report, public, files, size):
@@ -371,7 +371,7 @@ def test_the_report_cell_for_test_layout_is_read_from_the_clone(fleet_report, ga
 
 def test_a_malformed_baseline_makes_the_gates_own_clone_cell_unreadable_and_the_run_red(fleet_report, gate_clone):
     """FLEET-24, FLEET-26: the cell owns the failure."""
-    broken = {**caller("./.github/workflows/gate.yml"), ratchet.BASELINE_PATH: "[file_lines\n"}
+    broken = {**caller("./.github/workflows/gate.yml"), baseline_file.BASELINE_PATH: "[file_lines\n"}
     result, output = fleet_report(gate_clone(broken), tags=first_releases())
     assert result == 2, output
     assert cell(output, GATE_REPOSITORY, "clone") == "cannot read quality/baseline.toml"
@@ -456,7 +456,7 @@ def test_a_malformed_size_baseline_is_named_in_the_size_cell_only_where_the_cell
     fleet_report, public, pin, code, size
 ):
     """FLEET-18, FLEET-21, FLEET-22, FLEET-24, FLEET-26."""
-    broken = {**pinned_gate(pin), ratchet.BASELINE_PATH: "[file_lines\n"}
+    broken = {**pinned_gate(pin), baseline_file.BASELINE_PATH: "[file_lines\n"}
     result, output = fleet_report(public("sized", broken), tags=first_releases())
     assert result == code, output
     assert cell(output, "o/sized", "size") == size

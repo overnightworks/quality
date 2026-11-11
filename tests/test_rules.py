@@ -1,4 +1,4 @@
-from quality import ratchet
+from quality import baseline_file
 from quality.rules import Area, Rule
 
 
@@ -11,4 +11,4 @@ def test_every_area_holds_a_rule():
 
 
 def test_the_debt_help_line_explains_the_ceiling_file():
-    assert f"debt ceiling ({ratchet.BASELINE_PATH})" in Area.DEBT.help_line
+    assert f"debt ceiling ({baseline_file.BASELINE_PATH})" in Area.DEBT.help_line

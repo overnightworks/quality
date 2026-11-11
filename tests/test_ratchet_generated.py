@@ -2,8 +2,8 @@
 
 import pytest
 
+from quality.baseline_file import BASELINE_PATH, load_baseline
 from quality.config import CONFIG_PATH
-from quality.ratchet import BASELINE_PATH, load_baseline
 from quality.report import FindingEvent
 from quality.rules import Rule
 from tests.support.check import (

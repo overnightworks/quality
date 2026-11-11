@@ -10,6 +10,7 @@ from types import MappingProxyType
 
 from quality import __version__, architecture, output, pin, web
 from quality.architecture import PullTree
+from quality.baseline_file import BASELINE_PATH, Baseline
 from quality.checkout import COMMIT_SHA
 from quality.config import (
     REPOSITORY_NAME,
@@ -18,15 +19,7 @@ from quality.config import (
     LegacyMode,
 )
 from quality.output import SEPARATOR, Glyph, Row, SubLine, counted, format_duration
-from quality.ratchet import (
-    BASELINE_PATH,
-    Baseline,
-    Renames,
-    added_pairs,
-    carried_base,
-    named_paths,
-    raised_entries,
-)
+from quality.ratchet import Renames, added_pairs, carried_base, named_paths, raised_entries
 from quality.report import (
     FIX_THEN_RERUN,
     PUSH_THE_FIX,

@@ -1,6 +1,6 @@
 """A baseline a test holds as `quality check --fix` would write it."""
 
-from quality.ratchet import load_baseline, render_baseline
+from quality.baseline_file import load_baseline, render_baseline
 
 
 def rendered(tables: str) -> str:

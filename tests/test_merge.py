@@ -5,7 +5,7 @@ from urllib.parse import quote
 import pytest
 
 from quality import cli
-from quality.ratchet import BASELINE_PATH
+from quality.baseline_file import BASELINE_PATH
 from quality.sonar import SonarHttpError, basic_authorization
 from tests.support.advisories import allowance_config
 from tests.support.check import assert_every_line_starts_with_the_door

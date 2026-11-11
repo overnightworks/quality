@@ -4,11 +4,11 @@ from pathlib import Path
 from urllib.parse import unquote
 
 from quality import checkout, cli, pin
+from quality.baseline_file import BASELINE_PATH
 from quality.config import CONFIG_PATH
 from quality.gh import GhFailed
 from quality.installation import VcsOrigin
 from quality.pin import RunningQuality
-from quality.ratchet import BASELINE_PATH
 from quality.report import CannotJudge
 from tests.support.door import RELEASE_ROW
 
