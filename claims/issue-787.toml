@@ -1,0 +1,7 @@
+claim_id = "7a7e00a6d0864394a21e959ada7d1c9a"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "1a0874309962875a18b53618eabc0127afbd6d10"
+branch = "claude/issue-787-loose-25-30"
+scope = ["docs/rules.md", "tests/test_architecture_layers.py", "tests/test_verdict_reread.py"]
+opened_commit = "72b12f536cc096438d826b5f4628c1279712ac8e"
