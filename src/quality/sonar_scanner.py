@@ -30,6 +30,7 @@ MAXIMUM_LINK_FOLLOWS = 40  # the Linux kernel stops at 40 links in one path
 RETRY_PAUSE_SECONDS = 3
 BINARIES_BASE_URL = "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli"
 INSTALL_STEP = "Install the pinned scanner"
+SCANNER_JOB = "sonar"
 VERSION_VARIABLE = "SCANNER_VERSION"
 FINGERPRINT_VARIABLE = "SCANNER_SIGNER_FINGERPRINT"
 TOOL_CACHE_VARIABLE = "RUNNER_TOOL_CACHE"
@@ -82,9 +83,11 @@ class Budget:
         return min(own_limit, left)
 
 
-def _input(environment: Mapping[str, str], variable: str, pattern: re.Pattern[str], expected: str) -> re.Match[str]:
+def _input(
+    environment: Mapping[str, str], variable: str, pattern: re.Pattern[str], expected: str, setter: str
+) -> re.Match[str]:
     value = environment.get(variable)
-    sets_it = f'the step "{INSTALL_STEP}" of gate.yml sets it'
+    sets_it = f"{setter} of gate.yml sets it"
     if value is None:
         raise CannotJudge(f"{variable} is not set; {sets_it}", (PUSH_THE_FIX,))
     match = pattern.fullmatch(value)
@@ -155,11 +158,17 @@ def _will_not_change(error: Exception) -> bool:
 
 
 def _download(url: str, fetch: Fetch, budget: Budget, sleep: web.Sleep) -> bytes:
+    last_failure = ""
+
     def unreadable(error: Exception) -> CannotJudge:
+        nonlocal last_failure
         if _will_not_change(error):
             return _AnswerWillNotChange(f"could not download {url}: {error}", (ANOTHER_RELEASE,))
-        timed_out = isinstance(error, OSError) and web.timed_out(error)
-        return CannotJudge(f"could not download {url}: {'no answer in time' if timed_out else error}", (RERUN,))
+        if isinstance(error, OSError) and web.timed_out(error):
+            before = f"; the failure before it: {last_failure}" if last_failure else ""
+            return CannotJudge(f"could not download {url}: no answer in time{before}", (RERUN,))
+        last_failure = str(error)
+        return CannotJudge(f"could not download {url}: {error}", (RERUN,))
 
     while True:
         try:
@@ -174,7 +183,8 @@ def _download(url: str, fetch: Fetch, budget: Budget, sleep: web.Sleep) -> bytes
 
 def _stays_inside(name: str, folder: str) -> bool:
     """Whether an entry name is its own normal form (no `.`, `..`, empty or backslash component) under `folder`. Such a
-    name only descends, so once every link's route stays inside, every entry does too, through any link."""
+    name only descends, so once every link's route stays inside, every entry does too, through any link, given unique
+    names."""
     path = name.rstrip("/")
     return "\\" not in name and posixpath.normpath(path) == path and f"{path}/".startswith(f"{folder}/")
 
@@ -257,9 +267,15 @@ def _unpacked_into_place(run: process.Run, budget: Budget, archive: Path, folder
 def _install(
     environment: Mapping[str, str], budget: Budget, fetch: Fetch, run: process.Run, sleep: web.Sleep, base_url: str, key_file: Path
 ) -> output.Row:
-    major, minor, patch, build = _input(environment, VERSION_VARIABLE, VERSION_PATTERN, "four dot-separated numbers").groups()
+    major, minor, patch, build = _input(
+        environment, VERSION_VARIABLE, VERSION_PATTERN, "four dot-separated numbers", f'the env of the job "{SCANNER_JOB}"'
+    ).groups()
     version = f"{major}.{minor}.{patch}.{build}"
-    fingerprint = _input(environment, FINGERPRINT_VARIABLE, FINGERPRINT_PATTERN, "40 hexadecimal characters").group().upper()
+    fingerprint = (
+        _input(environment, FINGERPRINT_VARIABLE, FINGERPRINT_PATTERN, "40 hexadecimal characters", f'the step "{INSTALL_STEP}"')
+        .group()
+        .upper()
+    )
     target = _tool_cache(environment) / CACHE_DIRECTORY / f"{major}.{minor}.{patch}-build.{build}" / PLATFORM
     marker = target.with_name(target.name + COMPLETE_SUFFIX)
     if marker.exists():

@@ -23,6 +23,8 @@ FOLDER = f"sonar-scanner-{VERSION}-linux-x64"
 SIGNATURE_BYTES = b"signature bytes"
 KEY_FILE_NAME = "sonarsource-scanner-key.asc"
 RERUN_ADVICE = "re-run this run's failed jobs"
+JOB_SETS_IT = f'the env of the job "{sonar_scanner.SCANNER_JOB}"'
+STEP_SETS_IT = f'the step "{sonar_scanner.INSTALL_STEP}"'
 FIX_ADVICE = "replace src/quality/sonarsource-scanner-key.asc"
 
 
@@ -270,23 +272,23 @@ def test_a_key_file_that_is_not_exactly_the_pinned_key_is_refused_before_any_dow
 
 
 @pytest.mark.parametrize(
-    ("variable", "value", "named"),
+    ("variable", "value", "setter"),
     [
-        (sonar_scanner.VERSION_VARIABLE, None, sonar_scanner.VERSION_VARIABLE),
-        (sonar_scanner.VERSION_VARIABLE, "8.1.0", sonar_scanner.VERSION_VARIABLE),
-        (sonar_scanner.VERSION_VARIABLE, "8.1.0.x", sonar_scanner.VERSION_VARIABLE),
-        (sonar_scanner.FINGERPRINT_VARIABLE, None, sonar_scanner.FINGERPRINT_VARIABLE),
-        (sonar_scanner.FINGERPRINT_VARIABLE, FINGERPRINT[:-1], sonar_scanner.FINGERPRINT_VARIABLE),
-        (sonar_scanner.FINGERPRINT_VARIABLE, "Z" * 40, sonar_scanner.FINGERPRINT_VARIABLE),
-        (sonar_scanner.TOOL_CACHE_VARIABLE, None, sonar_scanner.TOOL_CACHE_VARIABLE),
+        (sonar_scanner.VERSION_VARIABLE, None, JOB_SETS_IT),
+        (sonar_scanner.VERSION_VARIABLE, "8.1.0", JOB_SETS_IT),
+        (sonar_scanner.VERSION_VARIABLE, "8.1.0.x", JOB_SETS_IT),
+        (sonar_scanner.FINGERPRINT_VARIABLE, None, STEP_SETS_IT),
+        (sonar_scanner.FINGERPRINT_VARIABLE, FINGERPRINT[:-1], STEP_SETS_IT),
+        (sonar_scanner.FINGERPRINT_VARIABLE, "Z" * 40, STEP_SETS_IT),
+        (sonar_scanner.TOOL_CACHE_VARIABLE, None, STEP_SETS_IT),
     ],
     ids=["no version", "three-part version", "version with a letter", "no fingerprint", "short fingerprint", "fingerprint that is no hex", "no tool cache"],
 )
-def test_a_missing_or_malformed_input_is_exit_2_naming_the_variable_and_the_step(scene, drive, variable, value, named):
-    """SONAR-123: the line names the variable and the step that sets it; nothing is fetched"""
+def test_a_missing_or_malformed_input_is_exit_2_naming_the_variable_and_the_step(scene, drive, variable, value, setter):
+    """SONAR-123: the line names the variable and the place that sets it, the job env for the version and the install step for the rest; nothing is fetched"""
     code, out, err = drive({variable: value})
     assert (code, out, scene.requested) == (2, "", [])
-    assert (named in err, sonar_scanner.INSTALL_STEP in err) == (True, True)
+    assert (variable in err, setter in err) == (True, True)
 
 
 def test_a_failed_download_is_retried_while_the_deadline_has_time_and_then_ends_naming_the_url(scene, drive):
@@ -299,6 +301,23 @@ def test_a_failed_download_is_retried_while_the_deadline_has_time_and_then_ends_
     assert len(scene.requested) > 1
     assert scene.clock.now - 1000.0 >= sonar_scanner.COMMAND_DEADLINE_SECONDS
     assert not scene.tool_cache.exists()
+
+
+def test_a_download_cut_at_the_deadline_names_the_failure_before_it(scene, drive):
+    """SONAR-115: an attempt cut by the deadline keeps the last real failure of the attempts before it in the line"""
+    zip_url = f"{sonar_scanner.BINARIES_BASE_URL}/sonar-scanner-cli-{VERSION}-linux-x64.zip"
+    answers = iter([OSError("connection refused"), TimeoutError()])
+
+    def refused_then_cut(url, unreadable, expires_at, clock, timeout=15):
+        answer = next(answers)
+        if isinstance(answer, TimeoutError):
+            scene.clock.advance(sonar_scanner.COMMAND_DEADLINE_SECONDS)
+        raise unreadable(answer)
+
+    scene.fetch = refused_then_cut
+    code, out, err = drive()
+    assert (code, out) == (2, "")
+    assert (zip_url in err, "no answer in time" in err, "connection refused" in err) == (True, True, True)
 
 
 def test_a_download_that_fails_once_is_retried_and_installs(scene, drive):
