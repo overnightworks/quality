@@ -1,0 +1,8 @@
+claim_id = "2858d080cbe84628affa6a6b56b3a87f"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "9d56f7c15fe31b2024a39e47a981cb42aa890c95"
+branch = "claude/issue-766-sonar-scanner-key"
+scope = [".github/workflows/gate.yml", "docs/commands.md", "docs/gate.md", "docs/output.md", "docs/sonar.md", "pyproject.toml", "src/quality/cli.py", "src/quality/cli_help.py", "src/quality/sonar.py", "src/quality/sonar_scanner.py", "src/quality/sonarsource-scanner-key.asc", "src/quality/web.py", "tests/test_cli_help.py", "tests/test_sonar.py", "tests/test_sonar_scanner.py", "tests/test_sonar_scanner_gpg.py", "tests/workflows/test_gate_job_bounds.py", "tests/workflows/test_gate_sonar.py"]
+opened_commit = "e87fa08d0af3bb8df56e1b9036a6c75ee09c7846"
+whole_reason = "The command, its key file, the workflow step that calls it and the Scan step's unreachable download address are one change of the trust anchor: any part alone either leaves the key server in the path or ships a scanner nothing verifies, and the documents and workflow tests pin the same step order and limits."
