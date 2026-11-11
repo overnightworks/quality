@@ -583,8 +583,8 @@ GREEN = ["✓ green"]
     ],
 )
 def test_a_change_that_only_forbids_more_is_no_loosening_and_every_other_change_is(judged_contracts, base, head, declared, expected):
-    """LOOSE-25, LOOSE-26, LOOSE-27, LOOSE-28: The listed tightenings are green; every other change of a contract field
-    stays a loosening."""
+    """LOOSE-25, LOOSE-26, LOOSE-27, LOOSE-28, LOOSE-31, LOOSE-32, LOOSE-33: The listed tightenings are green; every
+    other change of a contract field stays a loosening."""
     assert judged_contracts(base, head, declared) == (0 if expected == GREEN else 1, expected)
 
 
