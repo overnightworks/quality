@@ -2,6 +2,7 @@
 
 import http.client
 import queue
+import socket
 import threading
 import urllib.error
 import urllib.request
@@ -14,6 +15,7 @@ from quality.report import CannotJudge
 # A server that accepts the connection and then stops answering must not hang the job.
 REQUEST_TIMEOUT_SECONDS = 30
 READ_CHUNK_BYTES = 1 << 16
+DEADLINE_SPENT = "the deadline is spent"
 Sleep = Callable[[float], None]
 
 
@@ -45,16 +47,30 @@ def fetch(
         return response.read(), response.headers
 
 
+class _SocketWithinDeadline:
+    """A socket whose every receive is armed with the smaller of `timeout` and the time left; a spent deadline is a TimeoutError."""
+
+    def __init__(self, sock: socket.socket, expires_at: float, clock: Callable[[], float], timeout: float) -> None:
+        self._sock, self._expires_at, self._clock, self._timeout = sock, expires_at, clock, timeout
+
+    def recv_into(self, buffer: bytearray | memoryview) -> int:
+        left = self._expires_at - self._clock()
+        if left <= 0:
+            raise TimeoutError(DEADLINE_SPENT)
+        self._sock.settimeout(min(self._timeout, left))
+        return self._sock.recv_into(buffer)
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._sock, name)
+
+
 def _read_within(response: http.client.HTTPResponse, expires_at: float, clock: Callable[[], float], timeout: float) -> bytes:
-    """The rest of `response`; before each read its socket is armed with the smaller of `timeout` and the time left, and a
-    spent deadline is a TimeoutError. `http.client` has no per-read timeout, so the socket is reached through the file."""
-    sock = response.fp.raw._sock  # noqa: SLF001 - the only way to arm the timeout of a read that is already open
+    """The rest of `response`, every socket receive of it (chunk framing included) bounded by `timeout` and the time left.
+    `http.client` has no per-read timeout, so the socket under the response's file is replaced by one that arms itself."""
+    raw = response.fp.raw
+    raw._sock = _SocketWithinDeadline(raw._sock, expires_at, clock, timeout)  # noqa: SLF001 - the only way to bound the reads of a response that is already open
     chunks: list[bytes] = []
     while not response.isclosed():  # the response closes itself with its last byte
-        left = expires_at - clock()
-        if left <= 0:
-            raise TimeoutError("the deadline is spent")
-        sock.settimeout(min(timeout, left))
         chunks.append(response.read1(READ_CHUNK_BYTES))
     if response.length:  # the connection ended before the announced length
         raise http.client.IncompleteRead(b"".join(chunks), response.length)
@@ -68,11 +84,11 @@ def fetch_within(
     """The body answered at `url`, or `unreadable(TimeoutError)` when `clock` (in seconds) reaches `expires_at` first.
     The request runs on a thread this call stops waiting for at the deadline, so a name lookup, a connect to several
     addresses, a header, a chunk size or a byte that arrives slowly cannot hold it past `expires_at`; `timeout` and the
-    time left bound each socket operation of that thread, the reads re-armed one by one, which lets an abandoned one end by
-    itself at the deadline."""
+    time left bound each socket operation of that thread, and each receive of the body is armed again, which lets an
+    abandoned thread end by itself at the deadline once it reads the body."""
     left = expires_at - clock()
     if left <= 0:
-        raise unreadable(TimeoutError("the deadline is spent"))
+        raise unreadable(TimeoutError(DEADLINE_SPENT))
     answers: queue.Queue[bytes | CannotJudge] = queue.Queue(maxsize=1)
 
     def read() -> None:
@@ -86,7 +102,7 @@ def fetch_within(
     try:
         answer = answers.get(timeout=left)
     except queue.Empty:
-        raise unreadable(TimeoutError("the deadline is spent")) from None
+        raise unreadable(TimeoutError(DEADLINE_SPENT)) from None
     if isinstance(answer, CannotJudge):
         raise answer
     return answer

@@ -115,10 +115,24 @@ def drips_forever(handler, release, client_gone) -> None:
         client_gone.set()
 
 
-def test_the_thread_of_a_read_that_ran_past_the_deadline_closes_its_connection_by_itself(stub_server):
+def drips_a_chunk_size(handler, release, client_gone) -> None:
+    handler.send_response(200)
+    handler.send_header("Transfer-Encoding", "chunked")
+    handler.end_headers()
+    try:
+        handler.wfile.write(b"1;")
+        while not release.wait(0.05):
+            handler.wfile.write(b"x")
+            handler.wfile.flush()
+    except OSError:
+        client_gone.set()
+
+
+@pytest.mark.parametrize("respond", [drips_forever, drips_a_chunk_size], ids=["length", "chunked"])
+def test_the_thread_of_a_read_that_ran_past_the_deadline_closes_its_connection_by_itself(stub_server, respond):
     """SONAR-115: every read of the thread is bounded by the time left, so the abandoned thread ends without the caller's help"""
     release, client_gone = threading.Event(), threading.Event()
-    origin, _ = stub_server(lambda handler: drips_forever(handler, release, client_gone))
+    origin, _ = stub_server(lambda handler: respond(handler, release, client_gone))
     expires_at = time.monotonic() + DEADLINE_SECONDS
     try:
         with pytest.raises(CannotJudge):
@@ -139,5 +153,6 @@ def test_a_body_that_ends_short_of_its_length_is_refused(stub_server):
         handler.wfile.write(b"x" * 10)
 
     origin, _ = stub_server(answer)
+    expires_at = time.monotonic() + 30
     with pytest.raises(CannotJudge):
-        web.fetch_within(f"{origin}/zip", lambda error: CannotJudge(str(error)), time.monotonic() + 30, time.monotonic)
+        web.fetch_within(f"{origin}/zip", lambda error: CannotJudge(str(error)), expires_at, time.monotonic)
