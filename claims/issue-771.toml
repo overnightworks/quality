@@ -1,0 +1,7 @@
+claim_id = "c0048eddebfc46ae8ea9bb1119d92ec2"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "f7723bafb716c987013d40b5e0eaba18e58f311c"
+branch = "claude/issue-771-cli-help"
+scope = ["pyproject.toml", "src/quality/cli.py", "src/quality/cli_help.py"]
+opened_commit = "f4dc9151be84ab78b248459b3d242b6466fb321a"
