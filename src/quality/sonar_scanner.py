@@ -158,31 +158,35 @@ def _stays_inside(name: str, folder: str) -> bool:
     return "\\" not in name and f"{posixpath.normpath(name)}/".startswith(f"{folder}/")
 
 
+def _stepped(resolved: tuple[str, ...], part: str, folder: str) -> tuple[str, ...] | None:
+    """`resolved` after one more path component, None when that leaves `folder`."""
+    if part == "..":
+        return resolved[:-1] if len(resolved) > 1 else None
+    stepped = (*resolved, part)
+    return stepped if stepped[0] == folder else None
+
+
 def _leaves_through_links(path: str, links: Mapping[str, str], folder: str) -> bool:
     """Whether following `path` (from the zip's root) through the archive's own symbolic links `links` (name to target)
-    ends outside `folder`, or never ends because the links loop; this is how the filesystem resolves it once unpacked."""
-    resolved: list[str] = []
+    ends outside `folder`, or never ends because the links loop; this is how the filesystem resolves it once unpacked.
+    A link with an absolute target is rooted outside the unpacked directory, whatever its first component."""
+    resolved: tuple[str, ...] = ()
     pending = path.split("/")
     follows = 0
     while pending:
         part = pending.pop(0)
         if part in ("", "."):
             continue
-        if part == "..":
-            if len(resolved) <= 1:
-                return True
-            resolved.pop()
-            continue
-        resolved.append(part)
-        if resolved[0] != folder:
+        if (stepped := _stepped(resolved, part, folder)) is None:
             return True
-        target = links.get("/".join(resolved))
-        if target is not None:
-            follows += 1
-            if target.startswith("/") or follows > MAXIMUM_LINK_FOLLOWS:
-                return True
-            resolved.pop()
-            pending = [*target.split("/"), *pending]
+        resolved = stepped
+        if (target := links.get("/".join(resolved))) is None:
+            continue
+        follows += 1
+        if target.startswith("/") or follows > MAXIMUM_LINK_FOLLOWS:
+            return True
+        resolved = resolved[:-1]
+        pending = [*target.split("/"), *pending]
     return False
 
 
@@ -203,7 +207,7 @@ def _escaping_entry(archive: Path, folder: str) -> str | None:
         if not _stays_inside(entry.filename, folder):
             return entry.filename
         if (target := links.get(posixpath.normpath(entry.filename))) is not None and _leaves_through_links(
-            posixpath.join(posixpath.dirname(entry.filename), target), links, folder
+            posixpath.normpath(entry.filename), links, folder
         ):
             return f"{entry.filename} -> {target}"
     return None
