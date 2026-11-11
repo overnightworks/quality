@@ -37,8 +37,8 @@ it cannot read shows [its example to copy](output.md#refusals), where the refusa
 it to `gate.yml`; an unwritable `GITHUB_OUTPUT` `fix what the error names, then re-run this run's failed jobs`
 (SONAR-103); a changed tracked file the step to let the artifact add reports only (SONAR-104); an issue search that
 never reaches the analysis's own count `re-run this run's failed jobs` (SONAR-112). Every other refusal falls back to
-its step's general step: `properties` the push step, `scanner` the key-file step below, `findings` the re-run step
-(SONAR-105). `-v` adds nothing: no step runs a scanner (SONAR-106).
+its step's general step: `properties` the push step, `scanner` the push step (its key-file lines name their own
+step, SONAR-117), `findings` the re-run step (SONAR-105). `-v` adds nothing: no step runs a scanner (SONAR-106).
 
 ```text
 $ quality sonar properties
