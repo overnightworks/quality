@@ -206,8 +206,9 @@ def _escaping_entry(archive: Path, folder: str) -> str | None:
     for entry in entries:
         if not _stays_inside(entry.filename, folder):
             return entry.filename
-        if (target := links.get(posixpath.normpath(entry.filename))) is not None and _leaves_through_links(
-            posixpath.normpath(entry.filename), links, folder
+        name = posixpath.normpath(entry.filename)
+        if (target := links.get(name)) is not None and (
+            target.startswith("/") or _leaves_through_links(posixpath.join(posixpath.dirname(name), target), links, folder)
         ):
             return f"{entry.filename} -> {target}"
     return None
