@@ -1,11 +1,4 @@
 import datetime
-import functools
-import http.server
-import threading
-import urllib.parse
-import urllib.request
-from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -130,13 +123,13 @@ def test_every_tracked_requirements_file_is_judged_against_pypi(build_repo, publ
 @pytest.mark.scanner
 @pytest.mark.parametrize("name", ["docs/requirements.in", "docs/dev-requirements.txt", "docs/requirements.txt.orig"])
 def test_a_file_that_is_no_requirements_txt_is_not_judged_and_downloads_no_database(
-    build_repo, publish_database, served_databases, installed_scanners, run_gate, name
+    build_repo, publish_database, published_databases, installed_scanners, run_gate, name
 ):
     """ADVISORY-30: requirements.in, dev-requirements.txt and requirements.txt.orig are no requirements file: not
     judged, and no database is downloaded."""
     publish_database()
     code, output = run_gate(build_repo({name: "pyyaml==5.3\n"}))
-    assert (code, served_databases.requested) == (0, []), output
+    assert (code, published_databases.requested) == (0, []), output
 
 
 @pytest.mark.scanner
@@ -236,40 +229,9 @@ def test_a_package_listed_as_malicious_is_red_and_the_fix_is_to_remove_or_replac
     assert row.fix.endswith(f"{advisories.OSV_URL}MAL-2026-1")
 
 
-@pytest.fixture
-def served_databases(publish_database, monkeypatch):
-    """Serves the published databases over HTTP and points the gate at them; each request is recorded as it arrives and
-    `.on_request` is called with each path before it is answered.
-    The server is stopped at teardown."""
-    served = SimpleNamespace(requested=[], on_request=lambda path: None)
-    root = Path(urllib.request.url2pathname(urllib.parse.urlparse(advisories.DATABASE_ROOT).path))
-
-    class Handler(http.server.SimpleHTTPRequestHandler):
-        def do_GET(self):
-            served.requested.append(self.path)
-            served.on_request(self.path)
-            try:
-                super().do_GET()
-            except OSError:
-                pass  # the downloader went away
-
-        def log_message(self, *arguments):
-            pass
-
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(Handler, directory=str(root)))
-    server.daemon_threads = True
-    serving = threading.Thread(target=server.serve_forever)
-    serving.start()
-    monkeypatch.setattr(advisories, "DATABASE_ROOT", f"http://127.0.0.1:{server.server_address[1]}")
-    yield served
-    server.shutdown()
-    serving.join()
-    server.server_close()
-
-
 @pytest.mark.scanner
 def test_a_repository_with_both_kinds_downloads_each_database_once_and_judges_both(
-    build_repo, publish_database, served_databases, installed_scanners, run_gate
+    build_repo, publish_database, published_databases, installed_scanners, run_gate
 ):
     """ADVISORY-33: two pnpm locks, a uv.lock and a requirements file cost one npm and one
     PyPI download."""
@@ -278,13 +240,13 @@ def test_a_repository_with_both_kinds_downloads_each_database_once_and_judges_bo
     repo = build_repo({FRONTEND_LOCK: pnpm_lock(), "src/admin/pnpm-lock.yaml": pnpm_lock(), "uv.lock": uv_lock(), "tests/requirements.txt": "pyyaml==5.3.1\n"})
     code, output = run_gate(repo)
     assert code == 1, output
-    assert sorted(served_databases.requested) == ["/PyPI/all.zip", "/npm/all.zip"]
+    assert sorted(published_databases.requested) == ["/PyPI/all.zip", "/npm/all.zip"]
     assert sorted(location for location, _ in area_finding_rows(output, Area.DEPENDENCIES)) == sorted(
         (FRONTEND_LOCK, "src/admin/pnpm-lock.yaml", "uv.lock", "tests/requirements.txt")
     )
 
 
-def test_one_deadline_spans_every_database_download(build_repo, publish_database, served_databases):
+def test_one_deadline_spans_every_database_download(build_repo, publish_database, published_databases):
     """ADVISORY-9, ADVISORY-31: the first download (PyPI) spends the whole budget, so the second (npm) is not even
     requested and the run is `cannot judge`, not a hung job. The clock is injected and moves by the PyPI request
     alone."""
@@ -296,18 +258,18 @@ def test_one_deadline_spans_every_database_download(build_repo, publish_database
         nonlocal now
         now = advisories.DATABASE_DOWNLOAD_DEADLINE_SECONDS
 
-    served_databases.on_request = spend_budget_on_the_first_download
+    published_databases.on_request = spend_budget_on_the_first_download
     repo = build_repo({FRONTEND_LOCK: pnpm_lock(), "uv.lock": uv_lock()})
     locks = {name: repo / name for name in (FRONTEND_LOCK, "uv.lock")}
     today = datetime.date(2026, 10, 21)
     run_deadline = deadline.RunDeadline.starting(lambda: now)
     with pytest.raises(ScannerError, match="the npm advisory database download exceeded 300 seconds"):
-        advisories.scan(locks, repo, [], today, run_deadline)
-    assert served_databases.requested == ["/PyPI/all.zip"]
+        advisories.scan(locks, repo, [], today, run_deadline, cache=None)
+    assert published_databases.requested == ["/PyPI/all.zip"]
 
 
 def test_the_run_ending_during_the_first_download_leaves_the_second_unrequested(
-    build_repo, publish_database, served_databases, monkeypatch
+    build_repo, publish_database, published_databases, monkeypatch
 ):
     """SCANNER-20, ADVISORY-9: when the run's end lies before the downloads' own 300 seconds, the first download
     (PyPI) spends it, so the second (npm) is not requested and the refusal is the run's, not the 300 seconds'."""
@@ -320,14 +282,14 @@ def test_the_run_ending_during_the_first_download_leaves_the_second_unrequested(
         nonlocal now
         now = deadline.RUN_DEADLINE_SECONDS
 
-    served_databases.on_request = spend_the_run_on_the_first_download
+    published_databases.on_request = spend_the_run_on_the_first_download
     repo = build_repo({FRONTEND_LOCK: pnpm_lock(), "uv.lock": uv_lock()})
     locks = {name: repo / name for name in (FRONTEND_LOCK, "uv.lock")}
     today = datetime.date(2026, 10, 21)
     run_deadline = deadline.RunDeadline.starting(lambda: now)
     with pytest.raises(deadline.RunDeadlineSpent, match="^the run's 100 seconds are spent$"):
-        advisories.scan(locks, repo, [], today, run_deadline)
-    assert served_databases.requested == ["/PyPI/all.zip"]
+        advisories.scan(locks, repo, [], today, run_deadline, cache=None)
+    assert published_databases.requested == ["/PyPI/all.zip"]
 
 
 def test_an_npm_database_that_cannot_be_downloaded_is_cannot_judge_and_named(build_repo, served_scanners, run_gate, database_root):
