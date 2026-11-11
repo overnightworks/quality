@@ -3,6 +3,7 @@ import stat
 import subprocess
 import threading
 import time
+import urllib.error
 import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -168,6 +169,17 @@ def test_a_good_signature_installs_the_scanner_where_the_action_finds_it_and_end
     assert out.splitlines()[-1].startswith("✓ clean")
 
 
+def test_a_marker_without_its_directory_is_no_install_and_the_scanner_is_installed_anew(scene, drive):
+    """SONAR-118: the action needs the directory and the marker, so a marker alone is removed and the scanner installed"""
+    scene.marker.parent.mkdir(parents=True)
+    scene.marker.touch()
+    code, out, err = drive()
+    assert (code, err) == (0, "")
+    assert "cached" not in out
+    assert (scene.installed / "bin" / "sonar-scanner").is_file()
+    assert scene.marker.is_file()
+
+
 def test_a_present_marker_downloads_nothing_and_leaves_the_install_alone(scene, drive):
     """SONAR-118: a scanner already in the cache is reported and nothing is fetched or run"""
     scene.installed.mkdir(parents=True)
@@ -303,6 +315,28 @@ def test_a_download_that_fails_once_is_retried_and_installs(scene, drive):
 
     scene.fetch = flaky
     assert drive()[0] == 0
+
+
+@pytest.mark.parametrize("code", [301, 302, 403, 404])
+def test_an_answer_that_a_retry_cannot_change_ends_the_download_at_once_naming_its_status(scene, drive, code):
+    """SONAR-115: a 4xx other than 429 or a redirect is named with its status and not retried until the deadline"""
+    zip_url = f"{sonar_scanner.BINARIES_BASE_URL}/sonar-scanner-cli-{VERSION}-linux-x64.zip"
+    scene.downloads[zip_url] = urllib.error.HTTPError(zip_url, code, "refused", {}, None)
+    code_exit, out, err = drive()
+    assert (code_exit, out) == (2, "")
+    assert (f"HTTP Error {code}" in err, "no answer in time" in err, len(err.strip().splitlines())) == (True, False, 2)
+    assert (scene.requested, scene.clock.now) == ([zip_url], 1000.0)
+    assert not scene.tool_cache.exists()
+
+
+@pytest.mark.parametrize("code", [429, 503])
+def test_an_answer_that_may_change_is_retried_until_the_deadline(scene, drive, code):
+    """SONAR-115: a 429 or a server error is transient and keeps its retries"""
+    zip_url = f"{sonar_scanner.BINARIES_BASE_URL}/sonar-scanner-cli-{VERSION}-linux-x64.zip"
+    scene.downloads[zip_url] = urllib.error.HTTPError(zip_url, code, "busy", {}, None)
+    assert drive()[0] == 2
+    assert len(scene.requested) > 1
+    assert scene.clock.now - 1000.0 >= sonar_scanner.COMMAND_DEADLINE_SECONDS
 
 
 @pytest.mark.parametrize(

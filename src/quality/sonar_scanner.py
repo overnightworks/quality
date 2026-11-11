@@ -8,6 +8,7 @@ import shutil
 import stat
 import tempfile
 import time
+import urllib.error
 import zipfile
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -57,6 +58,7 @@ REFUSED_STATUSES = {
     "ERRSIG": ("the signature is by a key the file does not hold", REPLACE_THE_KEY),
 }
 EXPIRED_SIGNING_KEY = "EXPKEYSIG"
+TOO_MANY_REQUESTS = 429
 Fetch = Callable[[str, Callable[[Exception], CannotJudge], float, Callable[[], float], float], bytes]
 
 
@@ -140,14 +142,29 @@ def _signature_fault(status: str, fingerprint: str) -> tuple[str, Instruction] |
     return None
 
 
+class _AnswerWillNotChange(CannotJudge):
+    """A download refused in a way a retry cannot mend."""
+
+
+def _will_not_change(error: Exception) -> bool:
+    """An answer the server gives again: a redirect (never followed) or a 4xx other than 429."""
+    return isinstance(error, urllib.error.HTTPError) and (
+        300 <= error.code < 400 or (400 <= error.code < 500 and error.code != TOO_MANY_REQUESTS)
+    )
+
+
 def _download(url: str, fetch: Fetch, budget: Budget, sleep: web.Sleep) -> bytes:
     def unreadable(error: Exception) -> CannotJudge:
+        if _will_not_change(error):
+            return _AnswerWillNotChange(f"could not download {url}: {error}", (ANOTHER_RELEASE,))
         timed_out = isinstance(error, OSError) and web.timed_out(error)
         return CannotJudge(f"could not download {url}: {'no answer in time' if timed_out else error}", (RERUN,))
 
     while True:
         try:
             return fetch(url, unreadable, budget.expires_at, budget.clock, OPERATION_TIMEOUT_SECONDS)
+        except _AnswerWillNotChange:
+            raise
         except CannotJudge:
             if budget.left() <= 0:
                 raise
@@ -241,7 +258,9 @@ def _install(
     target = _tool_cache(environment) / CACHE_DIRECTORY / f"{major}.{minor}.{patch}-build.{build}" / PLATFORM
     marker = target.with_name(target.name + COMPLETE_SUFFIX)
     if marker.exists():
-        return output.Row(output.Glyph.NOTE, "scanner", SonarEvent.CACHED, f"{version} is in the tool cache")
+        if target.is_dir():
+            return output.Row(output.Glyph.NOTE, "scanner", SonarEvent.CACHED, f"{version} is in the tool cache")
+        marker.unlink()  # the action needs the directory too, so a marker alone is no install
     with process.scratch_directory() as scratch:
         home = scratch / "gpg"
         home.mkdir(mode=0o700)
