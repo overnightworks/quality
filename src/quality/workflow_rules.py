@@ -367,15 +367,7 @@ def _lex(text: str, after_substitution: bool, leading: list[str]) -> tuple[list[
     backtick_open = False
     for word in lexer:
         if word and (set(word) <= SEPARATOR_CHARACTERS or ("`" in word and set(word) <= LEXER_PUNCTUATION)):
-            after_substitution = False
-            for character in word:
-                if character == "`":
-                    backtick_open = not backtick_open
-                if character == "(" or (character == "`" and backtick_open):
-                    openers.append(len(segments) - 1)
-                elif character in ")`" and openers:
-                    opener = segments[openers.pop()]
-                    after_substitution = _command_start(opener) < len(opener)
+            backtick_open, after_substitution = _read_separator(word, segments, openers, backtick_open)
             segments.append([])
         elif word == "$" and after_substitution and not segments[-1]:
             after_substitution = False
@@ -386,6 +378,20 @@ def _lex(text: str, after_substitution: bool, leading: list[str]) -> tuple[list[
             segments[-1].append(word)
             after_substitution = False
     return segments, after_substitution
+
+
+def _read_separator(word: str, segments: list[list[str]], openers: list[int], backtick_open: bool) -> tuple[bool, bool]:
+    """The backtick state after the separator `word` and whether it closes a substitution whose opening segment holds a command word; the indexes of the segments that opened a substitution are kept in `openers`."""
+    closes_with_command = False
+    for character in word:
+        if character == "`":
+            backtick_open = not backtick_open
+        if character == "(" or (character == "`" and backtick_open):
+            openers.append(len(segments) - 1)
+        elif character in ")`" and openers:
+            opener = segments[openers.pop()]
+            closes_with_command = _command_start(opener) < len(opener)
+    return backtick_open, closes_with_command
 
 
 def _starts_pytest_call(words: list[str]) -> bool:
