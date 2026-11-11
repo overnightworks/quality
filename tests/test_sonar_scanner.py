@@ -180,8 +180,6 @@ def test_a_present_marker_downloads_nothing_and_leaves_the_install_alone(scene, 
 @pytest.mark.parametrize(
     "status",
     [
-        status_lines("GOODSIG", "VALIDSIG", "EXPKEYSIG"),
-        status_lines("KEYEXPIRED", "GOODSIG", "VALIDSIG"),
         status_lines("GOODSIG", "VALIDSIG", "REVKEYSIG"),
         status_lines("BADSIG"),
         status_lines("ERRSIG"),
@@ -190,7 +188,7 @@ def test_a_present_marker_downloads_nothing_and_leaves_the_install_alone(scene, 
         status_lines("VALIDSIG"),
         "",
     ],
-    ids=["expired signing key", "expired key", "revoked key", "bad signature", "key not in the file", "signature of another primary key", "no VALIDSIG", "no GOODSIG", "no status at all"],
+    ids=["revoked key", "bad signature", "key not in the file", "signature of another primary key", "no VALIDSIG", "no GOODSIG", "no status at all"],
 )
 def test_a_signature_that_does_not_verify_names_the_key_file_and_installs_nothing(scene, drive, status):
     """SONAR-117: each failed verification is one line naming the key file and what to replace, exit 2, nothing in the cache"""
@@ -198,6 +196,22 @@ def test_a_signature_that_does_not_verify_names_the_key_file_and_installs_nothin
     code, out, err = drive()
     assert (code, out) == (2, "")
     assert (KEY_FILE_NAME in err, FIX_ADVICE in err, len(err.strip().splitlines())) == (True, True, 2)
+    assert not scene.tool_cache.exists()
+
+
+def test_a_key_file_with_an_expired_subkey_that_did_not_sign_installs(scene, drive):
+    """SONAR-117: gpg prints KEYEXPIRED for any expired subkey in the file; only the signature's own status decides"""
+    scene.status = status_lines("KEYEXPIRED", "GOODSIG", "VALIDSIG")
+    code, _, err = drive()
+    assert (code, err, scene.marker.is_file()) == (0, "", True)
+
+
+def test_a_signature_by_an_expired_subkey_says_to_name_a_release_signed_by_a_valid_one(scene, drive):
+    """SONAR-117: replacing the key file alone cannot help; the line says to set the version and re-export the file"""
+    scene.status = status_lines("KEYEXPIRED", "EXPKEYSIG", "GOODSIG", "VALIDSIG")
+    code, out, err = drive()
+    assert (code, out) == (2, "")
+    assert (KEY_FILE_NAME in err, sonar_scanner.VERSION_VARIABLE in err, "re-export" in err, FIX_ADVICE in err) == (True, True, True, False)
     assert not scene.tool_cache.exists()
 
 

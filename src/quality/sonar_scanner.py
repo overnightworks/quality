@@ -38,17 +38,18 @@ CACHE_DIRECTORY = "sonar-scanner-cli"
 PLATFORM = "linux-x64"
 COMPLETE_SUFFIX = ".complete"
 STATUS_PREFIX = "[GNUPG:] "
-# gpg prints VALIDSIG and exits 0 for a signature by an expired key too, so the exit status never decides.
+# gpg prints VALIDSIG and exits 0 for a signature by an expired key too, so the exit status never decides. It prints
+# KEYEXPIRED for any expired subkey in the file, also one that did not sign, so only the signature's own status counts.
 REFUSED_STATUSES = {
-    "EXPKEYSIG": "the signing key has expired",
     "REVKEYSIG": "the signing key has been revoked",
-    "KEYEXPIRED": "a key in the file has expired",
     "BADSIG": "the signature does not match the zip",
     "ERRSIG": "the signature is by a key the file does not hold",
 }
-REPLACE_THE_KEY = Instruction(
-    f"replace src/quality/{KEY_FILE_NAME} with SonarSource's current public key, or set {VERSION_VARIABLE} in gate.yml to a "
-    "release SonarSource signed with a key that has not expired"
+EXPIRED_SIGNING_KEY = "EXPKEYSIG"
+REPLACE_THE_KEY = Instruction(f"replace src/quality/{KEY_FILE_NAME} with SonarSource's current public key")
+RELEASE_OF_A_VALID_SUBKEY = Instruction(
+    f"set {VERSION_VARIABLE} in gate.yml to a release signed by a subkey that has not expired, "
+    f"then re-export src/quality/{KEY_FILE_NAME}"
 )
 ANOTHER_RELEASE = Instruction(f"set {VERSION_VARIABLE} in gate.yml to another release of the scanner")
 Fetch = Callable[[str, Callable[[Exception], CannotJudge], float, Callable[[], float], float], bytes]
@@ -117,18 +118,20 @@ def _key_file_fault(listing: str, fingerprint: str) -> str | None:
     return None
 
 
-def _signature_fault(status: str, fingerprint: str) -> str | None:
-    """Why the zip's signature does not verify, from gpg's status lines alone; None when it does."""
+def _signature_fault(status: str, fingerprint: str) -> tuple[str, Instruction] | None:
+    """Why the zip's signature does not verify and what to do about it, from gpg's status lines alone; None when it does."""
     words = [line.removeprefix(STATUS_PREFIX).split() for line in status.splitlines() if line.startswith(STATUS_PREFIX)]
     names = {word[0] for word in words if word}
+    if EXPIRED_SIGNING_KEY in names:
+        return f"gpg reports {EXPIRED_SIGNING_KEY}: the subkey that signed it has expired", RELEASE_OF_A_VALID_SUBKEY
     for refused_status, reason in REFUSED_STATUSES.items():
         if refused_status in names:
-            return f"gpg reports {refused_status}: {reason}"
+            return f"gpg reports {refused_status}: {reason}", REPLACE_THE_KEY
     if "GOODSIG" not in names:
-        return "gpg does not report a good signature"
+        return "gpg does not report a good signature", REPLACE_THE_KEY
     # The first field of VALIDSIG is the signing subkey; the last is the primary key, which is the one pinned.
     if not any(word[0] == "VALIDSIG" and word[-1].upper() == fingerprint for word in words):
-        return f"the signature is not by the primary key {fingerprint}"
+        return f"the signature is not by the primary key {fingerprint}", REPLACE_THE_KEY
     return None
 
 
@@ -204,7 +207,8 @@ def _install(
         _program(run, budget, [*gpg, "--import", str(key_file)], GPG_TIMEOUT_SECONDS)
         status = _program(run, budget, [*gpg, "--status-fd", "1", "--verify", str(signature), str(archive)], GPG_TIMEOUT_SECONDS).stdout
         if fault := _signature_fault(status, fingerprint):
-            raise CannotJudge(f"{KEY_FILE_NAME} does not verify {url}: {fault}", (REPLACE_THE_KEY,))
+            reason, remedy = fault
+            raise CannotJudge(f"{KEY_FILE_NAME} does not verify {url}: {reason}", (remedy,))
         _unpacked_into_place(run, budget, archive, f"sonar-scanner-{version}-{PLATFORM}", target)
     marker.touch()
     return output.Row(output.Glyph.CLEAN, "scanner", SonarEvent.INSTALLED, f"{version} · signature verified by {fingerprint}")

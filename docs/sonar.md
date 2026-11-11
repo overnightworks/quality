@@ -127,11 +127,12 @@ check over and leaves the key servers out of the trust path (SONAR-121):
   (SONAR-115). The install step's `timeout-minutes` is larger than the deadline plus the start-up of `uv` and Python
   (SONAR-120).
 - It installs only when `gpg --status-fd` reports `GOODSIG` and a `VALIDSIG` whose last field, the primary key's
-  fingerprint, is the pinned one, and reports none of `EXPKEYSIG`, `REVKEYSIG`, `KEYEXPIRED`, `BADSIG` or `ERRSIG`; the
-  exit status alone decides nothing, because `gpg` exits `0` for a signature by an expired key. Otherwise the line names
-  the key file and what to replace, exit `2`, and nothing is installed (SONAR-117). Replacing the file does not help when
-  SonarSource signed that scanner release with a subkey that has since expired; `SCANNER_VERSION` then names a newer
-  release.
+  fingerprint, is the pinned one, and reports none of `EXPKEYSIG`, `REVKEYSIG`, `BADSIG` or `ERRSIG`; the exit status
+  alone decides nothing, because `gpg` exits `0` for a signature by an expired key. A `KEYEXPIRED` line alone refuses
+  nothing: `gpg` prints it for any expired subkey in the file, also one that did not sign. Otherwise the line names the
+  key file and what to do, exit `2`, and nothing is installed (SONAR-117). When the signing subkey has expired
+  (`EXPKEYSIG`), replacing the file does not help: the line says to set `SCANNER_VERSION` to a release signed by a
+  subkey that has not expired and to re-export the key file.
 - The scanner is unpacked beside its place in the runner tool cache and moved there whole; the `.complete` marker the
   action looks for is written last (SONAR-118). The action finds the directory and the marker, prints
   `Using cached Sonar Scanner CLI`, and downloads and verifies nothing.
