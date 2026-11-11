@@ -353,6 +353,10 @@ def test_a_failed_unzip_leaves_neither_the_scanner_nor_the_marker(scene, drive):
         ((), ((f"{FOLDER}/a", "d"), (f"{FOLDER}/d/up", ".."), (f"{FOLDER}/bin/deep", "../a/up/../outside"))),
         ((), ((f"{FOLDER}/a", "b"), (f"{FOLDER}/a/escape", "../../../outside"))),
         ((), ((f"{FOLDER}/loop/a", "b"), (f"{FOLDER}/loop/b", "a"))),
+        ((), ((f"{FOLDER}/loop", "loop"),)),
+        ((), ((f"{FOLDER}/a/b/c/shallow", "../../.."), (f"{FOLDER}/a/b/c/esc", "shallow/../../x"))),
+        (((f"{FOLDER}/d/up/../../x", "x"),), ((f"{FOLDER}/d/up", ".."),)),
+        (((f"{FOLDER}/d/./x", "x"),), ()),
         ((), ((f"{FOLDER}/bin/absolute", "/etc/passwd"),)),
         ((), ((f"{FOLDER}/bin/rooted", f"/{FOLDER}/outside"),)),
         (((f"{FOLDER}/../outside", "x"),), ()),
@@ -360,7 +364,7 @@ def test_a_failed_unzip_leaves_neither_the_scanner_nor_the_marker(scene, drive):
         ((("other-folder/file", "x"),), ()),
         (((f"{FOLDER}\\..\\outside", "x"),), ()),
     ],
-    ids=["symlink out of the folder", "symlink out through a link to the parent", "symlink out through two links", "symlink under a linked folder", "links that loop", "absolute symlink", "absolute symlink that starts with the folder name", "entry with a parent component", "absolute entry", "entry beside the folder", "entry with a backslash"],
+    ids=["symlink out of the folder", "symlink out through a link to the parent", "symlink out through two links", "symlink under a linked folder", "links that loop", "link to itself", "chain of two links", "entry through a link to the parent", "entry with a dot component", "absolute symlink", "absolute symlink that starts with the folder name", "entry with a parent component", "absolute entry", "entry beside the folder", "entry with a backslash"],
 )
 def test_an_archive_with_an_entry_that_leaves_its_folder_is_refused_before_unzip_runs(scene, drive, entries, links):
     """SONAR-118: a signed zip may still hold a path or a symbolic link that reaches outside the scanner's folder; nothing is unpacked or installed"""
@@ -381,9 +385,12 @@ def test_an_archive_that_is_no_zip_is_refused_with_one_line(scene, drive):
 
 
 def test_a_symbolic_link_that_stays_inside_the_folder_installs(scene, drive):
-    """SONAR-118: a link between two files of the scanner's own folder is not an escape"""
+    """SONAR-118: a link between two files of the scanner's own folder, also through another link, is not an escape"""
     scene.downloads[f"{sonar_scanner.BINARIES_BASE_URL}/sonar-scanner-cli-{VERSION}-linux-x64.zip"] = scanner_zip(
-        links=((f"{FOLDER}/bin/launcher", "sonar-scanner"), (f"{FOLDER}/lib/current", "../bin/sonar-scanner"))
+        links=(
+            (f"{FOLDER}/bin/launcher", "sonar-scanner"), (f"{FOLDER}/lib/current", "../bin/sonar-scanner"),
+            (f"{FOLDER}/lib/again", "current"), (f"{FOLDER}/bin/deep/up", "../../lib/again"),
+        )
     )
     assert drive()[0] == 0
 

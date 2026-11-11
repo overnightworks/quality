@@ -155,7 +155,10 @@ def _download(url: str, fetch: Fetch, budget: Budget, sleep: web.Sleep) -> bytes
 
 
 def _stays_inside(name: str, folder: str) -> bool:
-    return "\\" not in name and f"{posixpath.normpath(name)}/".startswith(f"{folder}/")
+    """Whether an entry name is its own normal form (no `.`, `..`, empty or backslash component) under `folder`. Such a
+    name only descends, so once every link's route stays inside, every entry does too, through any link."""
+    path = name.rstrip("/")
+    return "\\" not in name and posixpath.normpath(path) == path and f"{path}/".startswith(f"{folder}/")
 
 
 def _stepped(resolved: tuple[str, ...], part: str, folder: str) -> tuple[str, ...] | None:
