@@ -119,15 +119,15 @@ at every run, with no time limit, so a server that does not answer left the job 
 check over and leaves the key servers out of the trust path (SONAR-121):
 
 - `gate.yml` names the version (`SCANNER_VERSION`, the job's `env`, which the scan's `scannerVersion` reads too) and the
-  primary key's fingerprint (`SCANNER_SIGNER_FINGERPRINT`, the install step's `env`) (SONAR-122). A missing or malformed
-  one is exit `2` naming the variable and where gate.yml sets it: the `sonar` job's `env` for the version, the install
-  step's `env` for the fingerprint (SONAR-123).
+  primary key's fingerprint (`SCANNER_SIGNER_FINGERPRINT`, the install step's `env`) (SONAR-122, SONAR-124). A missing
+  or malformed one is exit `2` naming the variable and where gate.yml sets it: the `sonar` job's `env` for the version,
+  the install step's `env` for the fingerprint (SONAR-123).
 - The key file `src/quality/sonarsource-scanner-key.asc` holds SonarSource's public key without its expired and revoked
   subkeys. `gpg --show-keys` must list exactly one primary key, with that fingerprint and neither expired nor revoked;
-  otherwise the command stops before any download with a line that names the file and says to replace it (SONAR-116).
-  A file whose primary key differs from the fingerprint says so in that line. If the file was changed by accident,
-  restore the file that matches `SCANNER_SIGNER_FINGERPRINT`. If SonarSource has rotated its primary key, replace the
-  file and `SCANNER_SIGNER_FINGERPRINT` together, see below.
+  otherwise the command stops before any download with a line that names the file and says to replace it (SONAR-116,
+  SONAR-125). A file whose primary key differs from the fingerprint says so in that line. If the file was changed by
+  accident, restore the file that matches `SCANNER_SIGNER_FINGERPRINT`. If SonarSource has rotated its primary key,
+  replace the file and `SCANNER_SIGNER_FINGERPRINT` together, see below.
 - It downloads the zip and its `.asc` from `binaries.sonarsource.com`, retrying a failed attempt while the deadline has
   time left; an answer that no retry changes (a redirect or a 4xx other than 429) ends the download at once with its
   status and the step to set `SCANNER_VERSION` to another release. One deadline of `COMMAND_DEADLINE_SECONDS` covers
@@ -142,11 +142,12 @@ check over and leaves the key servers out of the trust path (SONAR-121):
   fingerprint, is the pinned one, and reports none of `EXPKEYSIG`, `REVKEYSIG`, `BADSIG` or `ERRSIG`; the exit status
   alone decides nothing, because `gpg` exits `0` for a signature by an expired key. A `KEYEXPIRED` line alone refuses
   nothing: `gpg` prints it for any expired subkey in the file, also one that did not sign. Otherwise the line names the
-  key file and what to do, exit `2`, and nothing is installed (SONAR-117). When the signing subkey has expired
-  (`EXPKEYSIG`) or revoked (`REVKEYSIG`), replacing the file does not help: the line says to set `SCANNER_VERSION` to
-  a release signed by a subkey that has neither expired nor been revoked and to re-export the key file; for a zip that
-  does not match (`BADSIG`) it says to re-run and, when the same line returns, to set `SCANNER_VERSION` to another
-  release.
+  key file and what to do, exit `2`, and nothing is installed (SONAR-117, SONAR-126). When the signing subkey has
+  expired (`EXPKEYSIG`) or revoked (`REVKEYSIG`), replacing the file does not help: the line says to set
+  `SCANNER_VERSION` to a release signed by a subkey that has neither expired nor been revoked and to re-export the key
+  file (SONAR-128); for a signature by a subkey the file does not hold (`ERRSIG`) it says to set `SCANNER_VERSION` to a
+  release whose signing subkey the file holds, or to re-export the file for the pinned release; for a zip that does not
+  match (`BADSIG`) it says to re-run and, when the same line returns, to set `SCANNER_VERSION` to another release.
 - The scanner is unpacked beside its place in the runner tool cache and moved there whole; the `.complete` marker the
   action looks for is written last (SONAR-118). The action finds the directory and the marker, prints
   `Using cached Sonar Scanner CLI`, and downloads and verifies nothing; a marker without its directory is no install
@@ -156,15 +157,17 @@ check over and leaves the key servers out of the trust path (SONAR-121):
 - The scan sets `scannerBinariesUrl` to a host under `.invalid`, which a cache hit never reads: a later action version
   that looks elsewhere fails at the download, before any key fetch, instead of falling back to a key server (SONAR-119).
 
-Re-pinning the key: export SonarSource's key by the fingerprint, drop the expired and revoked subkeys, check it with
-`gpg --show-keys --with-colons` (one `pub` record, that fingerprint, its expiry), and compare the fingerprint with the
-constant in the pinned action's `dist/index.js` and with SonarSource's own key file at `binaries.sonarsource.com`.
-When SonarSource rotates its primary key, the key file and `SCANNER_SIGNER_FINGERPRINT` in the install step change
-together, and the new fingerprint is checked against an independent source first (the pinned action's constant and
-SonarSource's own key file, as above).
+Re-pinning the key: SonarSource's own key file is https://binaries.sonarsource.com/sonarsource-public.key. See which
+subkey signed a release with `gpg --list-packets` on the release's `.asc`, export only that subkey with
+`gpg --export --export-options export-minimal <subkey fingerprint>!` (the exclamation mark keeps gpg from picking
+another subkey), and check the file with `gpg --show-keys --with-colons` (one `pub` record, that fingerprint, its
+expiry). Compare the fingerprint with the constant in the pinned action's `dist/index.js` and with SonarSource's own key
+file. When SonarSource rotates its primary key, the key file and `SCANNER_SIGNER_FINGERPRINT` in the install step change
+together; the pinned action's constant still names the old fingerprint and so cannot confirm the new one, which is
+checked against SonarSource's own key file first.
 
 The scanner's transport, verified at sonar-scanner-java-library 4.2.1.1698 (the library of sonar-scanner-cli
-8.3.1.16491, which `gate.yml` pins through `SCANNER_VERSION`; SONAR-97):
+8.3.1.16491, which `gate.yml` pins through `SCANNER_VERSION`; SONAR-97, SONAR-127):
 
 - The scanner CLI's signature is checked against the key file above; `binaries.sonarsource.com` is trusted for the bytes
   and SonarSource's signing key for the signature. A cache hit is trusted as found: with the directory and its marker
