@@ -145,7 +145,7 @@ check over and leaves the key servers out of the trust path (SONAR-121):
   key file and what to do, exit `2`, and nothing is installed (SONAR-117, SONAR-126). When the signing subkey has
   expired (`EXPKEYSIG`) or revoked (`REVKEYSIG`), replacing the file does not help: the line says to set
   `SCANNER_VERSION` to a release signed by a subkey that has neither expired nor been revoked and to re-export the key
-  file (SONAR-128); for a signature by a subkey the file does not hold (`ERRSIG`) it says to set `SCANNER_VERSION` to a
+  file; for a signature by a subkey the file does not hold (`ERRSIG`, SONAR-128) it says to set `SCANNER_VERSION` to a
   release whose signing subkey the file holds, or to re-export the file for the pinned release; for a zip that does not
   match (`BADSIG`) it says to re-run and, when the same line returns, to set `SCANNER_VERSION` to another release.
 - The scanner is unpacked beside its place in the runner tool cache and moved there whole; the `.complete` marker the
@@ -159,12 +159,14 @@ check over and leaves the key servers out of the trust path (SONAR-121):
 
 Re-pinning the key: SonarSource's own key file is https://binaries.sonarsource.com/sonarsource-public.key. See which
 subkey signed a release with `gpg --list-packets` on the release's `.asc`, export only that subkey with
-`gpg --export --export-options export-minimal <subkey fingerprint>!` (the exclamation mark keeps gpg from picking
-another subkey), and check the file with `gpg --show-keys --with-colons` (one `pub` record, that fingerprint, its
-expiry). Compare the fingerprint with the constant in the pinned action's `dist/index.js` and with SonarSource's own key
-file. When SonarSource rotates its primary key, the key file and `SCANNER_SIGNER_FINGERPRINT` in the install step change
-together; the pinned action's constant still names the old fingerprint and so cannot confirm the new one, which is
-checked against SonarSource's own key file first.
+`gpg --armor --export --export-options export-minimal <subkey fingerprint>!` (the exclamation mark exports only that
+subkey; without it gpg exports every subkey of the key), and check the file with `gpg --show-keys --with-colons` (one
+`pub` record, that fingerprint, its expiry). Compare the fingerprint with the constant in the pinned action's
+`dist/index.js` and with SonarSource's own key file. When SonarSource rotates its primary key, the key file and
+`SCANNER_SIGNER_FINGERPRINT` in the install step change together; the pinned action's constant still names the old
+fingerprint and so cannot confirm the new one. The new fingerprint must match SonarSource's own key file and a source
+that `binaries.sonarsource.com` does not serve, such as the constant in a newer `SonarSource/sonarqube-scan-action`
+release's `dist/index.js` on GitHub or the key as published on keys.openpgp.org.
 
 The scanner's transport, verified at sonar-scanner-java-library 4.2.1.1698 (the library of sonar-scanner-cli
 8.3.1.16491, which `gate.yml` pins through `SCANNER_VERSION`; SONAR-97, SONAR-127):
