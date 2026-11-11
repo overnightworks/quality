@@ -30,6 +30,7 @@ MAXIMUM_LINK_FOLLOWS = 40  # the Linux kernel stops at 40 links in one path
 RETRY_PAUSE_SECONDS = 3
 BINARIES_BASE_URL = "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli"
 INSTALL_STEP = "Install the pinned scanner"
+SCANNER_JOB = "sonar"
 VERSION_VARIABLE = "SCANNER_VERSION"
 FINGERPRINT_VARIABLE = "SCANNER_SIGNER_FINGERPRINT"
 TOOL_CACHE_VARIABLE = "RUNNER_TOOL_CACHE"
@@ -49,6 +50,15 @@ RELEASE_OF_A_VALID_SUBKEY = Instruction(
     f"then re-export src/quality/{KEY_FILE_NAME}"
 )
 REPLACE_THE_KEY = Instruction(f"replace src/quality/{KEY_FILE_NAME} with SonarSource's current public key")
+RESTORE_OR_ROTATE_THE_KEY = Instruction(
+    f"restore src/quality/{KEY_FILE_NAME} to the file that holds the fingerprint the step names; when SonarSource "
+    f'rotated its primary key, change the file and {FINGERPRINT_VARIABLE} in the step "{INSTALL_STEP}" together after '
+    "checking the new fingerprint against an independent source (docs/sonar.md says how)"
+)
+RELEASE_OF_A_HELD_SUBKEY = Instruction(
+    f"set {VERSION_VARIABLE} in gate.yml's job \"{SCANNER_JOB}\" env to a release that a subkey in src/quality/{KEY_FILE_NAME} "
+    f"signs, or re-export src/quality/{KEY_FILE_NAME} for the pinned release"
+)
 # gpg prints VALIDSIG and exits 0 for a signature by an expired key too, so the exit status never decides. It prints
 # KEYEXPIRED for any expired subkey in the file, also one that did not sign, so only the signature's own status counts.
 # Replacing the key file cannot mend a signature a revoked subkey made or one the zip's bytes broke, so those two name the
@@ -56,7 +66,7 @@ REPLACE_THE_KEY = Instruction(f"replace src/quality/{KEY_FILE_NAME} with SonarSo
 REFUSED_STATUSES = {
     "REVKEYSIG": ("the signing key has been revoked", RELEASE_OF_A_VALID_SUBKEY),
     "BADSIG": ("the signature does not match the zip", RERUN_THEN_ANOTHER_RELEASE),
-    "ERRSIG": ("the signature is by a key the file does not hold", REPLACE_THE_KEY),
+    "ERRSIG": ("the signature is by a key the file does not hold", RELEASE_OF_A_HELD_SUBKEY),
 }
 EXPIRED_SIGNING_KEY = "EXPKEYSIG"
 TOO_MANY_REQUESTS = 429
@@ -82,9 +92,11 @@ class Budget:
         return min(own_limit, left)
 
 
-def _input(environment: Mapping[str, str], variable: str, pattern: re.Pattern[str], expected: str) -> re.Match[str]:
+def _input(
+    environment: Mapping[str, str], variable: str, pattern: re.Pattern[str], expected: str, setter: str
+) -> re.Match[str]:
     value = environment.get(variable)
-    sets_it = f'the step "{INSTALL_STEP}" of gate.yml sets it'
+    sets_it = f"{setter} of gate.yml sets it"
     if value is None:
         raise CannotJudge(f"{variable} is not set; {sets_it}", (PUSH_THE_FIX,))
     match = pattern.fullmatch(value)
@@ -108,8 +120,8 @@ def _program(run: process.Run, budget: Budget, command: list[str], own_limit: fl
         raise CannotJudge(str(error), (RERUN,)) from error
 
 
-def _key_file_fault(listing: str, fingerprint: str) -> str | None:
-    """Why the key file is not exactly the pinned key, from `gpg --with-colons --show-keys`; None when it is."""
+def _key_file_fault(listing: str, fingerprint: str) -> tuple[str, Instruction] | None:
+    """Why the key file is not exactly the pinned key and what to do about it, from `gpg --with-colons --show-keys`; None when it is."""
     records = [line.split(":") for line in listing.splitlines()]
     primaries = [
         (record[1], following[9].upper())
@@ -117,12 +129,13 @@ def _key_file_fault(listing: str, fingerprint: str) -> str | None:
         if record[0] == "pub" and following[0] == "fpr" and len(following) > 9
     ]
     if len(primaries) != 1:
-        return f"{KEY_FILE_NAME} holds {len(primaries)} primary keys, not one"
+        return f"{KEY_FILE_NAME} holds {len(primaries)} primary keys, not one", REPLACE_THE_KEY
     validity, actual = primaries[0]
     if actual != fingerprint:
-        return f"{KEY_FILE_NAME} holds the primary key {actual}, not the {fingerprint} that {FINGERPRINT_VARIABLE} names"
+        reason = f"{KEY_FILE_NAME} holds the primary key {actual}, not the {fingerprint} that {FINGERPRINT_VARIABLE} names"
+        return reason, RESTORE_OR_ROTATE_THE_KEY
     if validity in ("e", "r"):
-        return f"the primary key in {KEY_FILE_NAME} has {'expired' if validity == 'e' else 'been revoked'}"
+        return f"the primary key in {KEY_FILE_NAME} has {'expired' if validity == 'e' else 'been revoked'}", REPLACE_THE_KEY
     return None
 
 
@@ -154,12 +167,28 @@ def _will_not_change(error: Exception) -> bool:
     )
 
 
+def _timed_out(error: Exception) -> bool:
+    return isinstance(error, OSError) and web.timed_out(error)
+
+
+def _download_failure(url: str, error: Exception, failure_before: str) -> CannotJudge:
+    """The refusal for one failed attempt; a timeout keeps `failure_before`, the last attempt's real cause, in its line."""
+    if _will_not_change(error):
+        return _AnswerWillNotChange(f"could not download {url}: {error}", (ANOTHER_RELEASE,))
+    if _timed_out(error):
+        before = f"; the failure before it: {failure_before}" if failure_before else ""
+        return CannotJudge(f"could not download {url}: no answer in time{before}", (RERUN,))
+    return CannotJudge(f"could not download {url}: {error}", (RERUN,))
+
+
 def _download(url: str, fetch: Fetch, budget: Budget, sleep: web.Sleep) -> bytes:
+    failure_before = ""
+
     def unreadable(error: Exception) -> CannotJudge:
-        if _will_not_change(error):
-            return _AnswerWillNotChange(f"could not download {url}: {error}", (ANOTHER_RELEASE,))
-        timed_out = isinstance(error, OSError) and web.timed_out(error)
-        return CannotJudge(f"could not download {url}: {'no answer in time' if timed_out else error}", (RERUN,))
+        nonlocal failure_before
+        failure = _download_failure(url, error, failure_before)
+        failure_before = failure_before if _timed_out(error) else str(error)
+        return failure
 
     while True:
         try:
@@ -174,7 +203,8 @@ def _download(url: str, fetch: Fetch, budget: Budget, sleep: web.Sleep) -> bytes
 
 def _stays_inside(name: str, folder: str) -> bool:
     """Whether an entry name is its own normal form (no `.`, `..`, empty or backslash component) under `folder`. Such a
-    name only descends, so once every link's route stays inside, every entry does too, through any link."""
+    name only descends, so once every link's route stays inside, every entry does too, through any link, given unique
+    names."""
     path = name.rstrip("/")
     return "\\" not in name and posixpath.normpath(path) == path and f"{path}/".startswith(f"{folder}/")
 
@@ -257,9 +287,15 @@ def _unpacked_into_place(run: process.Run, budget: Budget, archive: Path, folder
 def _install(
     environment: Mapping[str, str], budget: Budget, fetch: Fetch, run: process.Run, sleep: web.Sleep, base_url: str, key_file: Path
 ) -> output.Row:
-    major, minor, patch, build = _input(environment, VERSION_VARIABLE, VERSION_PATTERN, "four dot-separated numbers").groups()
+    major, minor, patch, build = _input(
+        environment, VERSION_VARIABLE, VERSION_PATTERN, "four dot-separated numbers", f'the env of the job "{SCANNER_JOB}"'
+    ).groups()
     version = f"{major}.{minor}.{patch}.{build}"
-    fingerprint = _input(environment, FINGERPRINT_VARIABLE, FINGERPRINT_PATTERN, "40 hexadecimal characters").group().upper()
+    fingerprint = (
+        _input(environment, FINGERPRINT_VARIABLE, FINGERPRINT_PATTERN, "40 hexadecimal characters", f'the step "{INSTALL_STEP}"')
+        .group()
+        .upper()
+    )
     target = _tool_cache(environment) / CACHE_DIRECTORY / f"{major}.{minor}.{patch}-build.{build}" / PLATFORM
     marker = target.with_name(target.name + COMPLETE_SUFFIX)
     if marker.exists():
@@ -272,7 +308,8 @@ def _install(
         gpg = ["gpg", "--homedir", str(home), "--batch"]
         listing = _program(run, budget, [*gpg, "--with-colons", "--show-keys", str(key_file)], GPG_TIMEOUT_SECONDS).stdout
         if fault := _key_file_fault(listing, fingerprint):
-            raise CannotJudge(fault, (REPLACE_THE_KEY,))
+            reason, remedy = fault
+            raise CannotJudge(reason, (remedy,))
         url = f"{base_url}/sonar-scanner-cli-{version}-{PLATFORM}.zip"
         archive, signature = scratch / "scanner.zip", scratch / "scanner.zip.asc"
         archive.write_bytes(_download(url, fetch, budget, sleep))

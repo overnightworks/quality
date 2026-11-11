@@ -2,27 +2,38 @@
 # `[gate] mandatory_jobs`, `if: always()`, `permissions: contents: read, actions: read` (without `actions: read` the run
 # fails at startup and no verdict exists) and, unless `quality/config.toml` sets `[gate] sonar = false`,
 # `secrets: SONAR_TOKEN`. See docs/gate.md.
-# SonarCloud scan transport (SonarSource/sonarqube-scan-action v8.4.0 with sonar-scanner-cli 8.1.0.6389, which
-# bundles sonar-scanner-java-library 4.1.1.1633). What is verified and what is trusted:
-#  - The scanner CLI is installed by `quality sonar scanner` before the scan: it downloads the zip and its signature from
-#    binaries.sonarsource.com and installs the zip only when the signature, checked by gpg against the key file
+# SonarCloud scan transport (SonarSource/sonarqube-scan-action v8.4.0 with sonar-scanner-cli 8.3.1.16491, which
+# bundles sonar-scanner-java-library 4.2.1.1698). What is verified and what is trusted:
+#  - The scanner CLI is installed by `quality sonar scanner` before the scan: it downloads the zip and its signature
+#    from binaries.sonarsource.com and installs the zip only when the signature, checked by gpg against the key file
 #    src/quality/sonarsource-scanner-key.asc, is by the primary key whose fingerprint the install step names. The action
 #    then finds the scanner in the runner tool cache and fetches no key; its own download address is unreachable, so a
-#    changed cache layout fails the scan at the download instead of falling back to a key server.
+#    changed cache layout fails the scan at the download instead of falling back to a key server. A cache hit is trusted
+#    as found: with the directory and its marker present nothing is verified again, and on a GitHub-hosted runner the
+#    tool cache starts empty.
 #  - The bootstrap's authenticated requests reach only sonarcloud.io and api.sonarcloud.io. That holds only with the
-#    pinned -Dsonar.host.url=https://sonarcloud.io below and a sonar-project.properties that `quality sonar properties`
-#    accepted: its allowlist keeps endpoint, region and proxy keys out, and refuses any ${...} substitution.
+#    pinned -Dsonar.host.url=https://sonarcloud.io below, a sonar-project.properties that `quality sonar properties`
+#    accepted (its allowlist keeps the endpoint, region, proxy, token and sonar.scanner.httpExtraHeaders keys out and
+#    refuses any ${...} substitution) and a job environment that sets none of SONAR_HOST_URL, SONAR_REGION,
+#    SONAR_SCANNER_*, SONAR_SCANNER_JSON_PARAMS and SONARQUBE_SCANNER_PARAMS, which the library reads as properties:
+#    only the steps below set environment variables, and none of those.
 #  - Residual limit: ScannerHttpClient follows redirects by hand with the token attached, so a redirect issued by
 #    SonarCloud itself would carry the token to the host it names. SonarCloud already receives the token.
 #  - The scanner engine is downloaded from SonarCloud and is not pinned by the CLI pin. SonarSource's server-side
 #    code is an accepted trust boundary: the token's only purpose is to authenticate to SonarCloud.
 #  - Re-verify all of this on any bump of the scan action or of SCANNER_VERSION; the scan's log must say
-#    `Using cached Sonar Scanner CLI`. Sources at 4.1.1.1633:
-#      https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/http/HttpClientFactory.java#L72
-#      https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/http/ScannerHttpClient.java#L162-L170
-#      https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/http/ScannerHttpClient.java#L231-L233
-#      https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/endpoint/ScannerEndpointResolver.java#L40
-#      https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/facade/forked/ScannerEngineLauncherFactory.java
+#    `Using cached Sonar Scanner CLI`. Re-pinning and key rotation: docs/sonar.md, "Re-pinning the key". Sources at
+#    4.2.1.1698:
+#      https://github.com/SonarSource/sonar-scanner-java-library/blob/4.2.1.1698/lib/src/main/java/org/sonarsource/scanner/lib/internal/endpoint/ScannerEndpointResolver.java#L39-L44
+#      https://github.com/SonarSource/sonar-scanner-java-library/blob/4.2.1.1698/lib/src/main/java/org/sonarsource/scanner/lib/internal/endpoint/ScannerEndpointResolver.java#L86-L104
+#      https://github.com/SonarSource/sonar-scanner-java-library/blob/4.2.1.1698/lib/src/main/java/org/sonarsource/scanner/lib/internal/endpoint/OfficialSonarQubeCloudInstance.java#L33-L34
+#      https://github.com/SonarSource/sonar-scanner-java-library/blob/4.2.1.1698/lib/src/main/java/org/sonarsource/scanner/lib/internal/http/HttpClientFactory.java#L72
+#      https://github.com/SonarSource/sonar-scanner-java-library/blob/4.2.1.1698/lib/src/main/java/org/sonarsource/scanner/lib/internal/http/ScannerHttpClient.java#L162-L172
+#      https://github.com/SonarSource/sonar-scanner-java-library/blob/4.2.1.1698/lib/src/main/java/org/sonarsource/scanner/lib/internal/http/ScannerHttpClient.java#L227-L233
+#      https://github.com/SonarSource/sonar-scanner-java-library/blob/4.2.1.1698/lib/src/main/java/org/sonarsource/scanner/lib/internal/facade/forked/ScannerEngineLauncherFactory.java#L81-L82
+#      https://github.com/SonarSource/sonar-scanner-java-library/blob/4.2.1.1698/lib/src/main/java/org/sonarsource/scanner/lib/internal/facade/forked/ScannerEngineLauncherFactory.java#L99-L106
+#      https://github.com/SonarSource/sonar-scanner-java-library/blob/4.2.1.1698/lib/src/main/java/org/sonarsource/scanner/lib/internal/facade/forked/ScannerEngineLauncherFactory.java#L123-L130
+#      https://github.com/SonarSource/sonar-scanner-java-library/blob/4.2.1.1698/lib/src/main/java/org/sonarsource/scanner/lib/EnvironmentConfig.java#L50-L76
 name: gate
 
 on:
@@ -96,7 +107,7 @@ jobs:
       contents: read
     env:
       TOOL_DIR: ${{ github.repository == 'overnightworks/quality' && '.' || '.gate-tool' }}
-      SCANNER_VERSION: 8.1.0.6389
+      SCANNER_VERSION: 8.3.1.16491
     steps:
       - name: Check out the caller with its full history for the scan
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

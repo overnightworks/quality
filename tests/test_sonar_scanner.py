@@ -194,13 +194,12 @@ def test_a_present_marker_downloads_nothing_and_leaves_the_install_alone(scene, 
 @pytest.mark.parametrize(
     "status",
     [
-        status_lines("ERRSIG"),
         status_lines("GOODSIG", "VALIDSIG", primary=OTHER_FINGERPRINT),
         status_lines("GOODSIG"),
         status_lines("VALIDSIG"),
         "",
     ],
-    ids=["key not in the file", "signature of another primary key", "no VALIDSIG", "no GOODSIG", "no status at all"],
+    ids=["signature of another primary key", "no VALIDSIG", "no GOODSIG", "no status at all"],
 )
 def test_a_signature_that_does_not_verify_names_the_key_file_and_installs_nothing(scene, drive, status):
     """SONAR-117: each failed verification is one line naming the key file and what to replace, exit 2, nothing in the cache"""
@@ -232,8 +231,9 @@ def test_a_signature_by_an_expired_subkey_says_to_name_a_release_signed_by_a_val
     [
         (status_lines("GOODSIG", "VALIDSIG", "REVKEYSIG"), (f"set {sonar_scanner.VERSION_VARIABLE}", "re-export")),
         (status_lines("BADSIG"), (RERUN_ADVICE, f"set {sonar_scanner.VERSION_VARIABLE}")),
+        (status_lines("ERRSIG"), (f"set {sonar_scanner.VERSION_VARIABLE}", "re-export")),
     ],
-    ids=["revoked subkey", "bad signature"],
+    ids=["revoked subkey", "bad signature", "signing key not in the file"],
 )
 def test_a_signature_that_a_new_key_file_cannot_mend_names_the_steps_that_can(scene, drive, status, steps):
     """SONAR-117: a revoked signing subkey and a zip whose bytes do not match are not cured by replacing the key file alone"""
@@ -254,12 +254,11 @@ def test_a_signature_by_a_signing_subkey_of_the_pinned_primary_key_installs(scen
     "listing",
     [
         key_listing(FINGERPRINT, OTHER_FINGERPRINT),
-        key_listing(OTHER_FINGERPRINT),
         key_listing(FINGERPRINT, validity="e"),
         key_listing(FINGERPRINT, validity="r"),
         "",
     ],
-    ids=["two primary keys", "another fingerprint", "expired key", "revoked key", "no key"],
+    ids=["two primary keys", "expired key", "revoked key", "no key"],
 )
 def test_a_key_file_that_is_not_exactly_the_pinned_key_is_refused_before_any_download(scene, drive, listing):
     """SONAR-116: one line names the key file and says to replace it, exit 2, and no request goes out"""
@@ -269,24 +268,33 @@ def test_a_key_file_that_is_not_exactly_the_pinned_key_is_refused_before_any_dow
     assert (KEY_FILE_NAME in err, FIX_ADVICE in err) == (True, True)
 
 
+def test_a_key_file_of_another_primary_key_names_both_ways_out_before_any_download(scene, drive):
+    """SONAR-116: restoring the file mends an accident, a rotation needs the fingerprint changed with the file"""
+    scene.listing = key_listing(OTHER_FINGERPRINT)
+    code, out, err = drive()
+    assert (code, out, scene.requested) == (2, "", [])
+    assert (OTHER_FINGERPRINT in err, sonar_scanner.FINGERPRINT_VARIABLE in err, FIX_ADVICE in err) == (True, True, False)
+    assert all(step in err for step in ("restore", KEY_FILE_NAME, "rotated", sonar_scanner.INSTALL_STEP))
+
+
 @pytest.mark.parametrize(
-    ("variable", "value", "named"),
+    ("variable", "value", "setter_kind", "setter_name"),
     [
-        (sonar_scanner.VERSION_VARIABLE, None, sonar_scanner.VERSION_VARIABLE),
-        (sonar_scanner.VERSION_VARIABLE, "8.1.0", sonar_scanner.VERSION_VARIABLE),
-        (sonar_scanner.VERSION_VARIABLE, "8.1.0.x", sonar_scanner.VERSION_VARIABLE),
-        (sonar_scanner.FINGERPRINT_VARIABLE, None, sonar_scanner.FINGERPRINT_VARIABLE),
-        (sonar_scanner.FINGERPRINT_VARIABLE, FINGERPRINT[:-1], sonar_scanner.FINGERPRINT_VARIABLE),
-        (sonar_scanner.FINGERPRINT_VARIABLE, "Z" * 40, sonar_scanner.FINGERPRINT_VARIABLE),
-        (sonar_scanner.TOOL_CACHE_VARIABLE, None, sonar_scanner.TOOL_CACHE_VARIABLE),
+        (sonar_scanner.VERSION_VARIABLE, None, "job", sonar_scanner.SCANNER_JOB),
+        (sonar_scanner.VERSION_VARIABLE, "8.1.0", "job", sonar_scanner.SCANNER_JOB),
+        (sonar_scanner.VERSION_VARIABLE, "8.1.0.x", "job", sonar_scanner.SCANNER_JOB),
+        (sonar_scanner.FINGERPRINT_VARIABLE, None, "step", sonar_scanner.INSTALL_STEP),
+        (sonar_scanner.FINGERPRINT_VARIABLE, FINGERPRINT[:-1], "step", sonar_scanner.INSTALL_STEP),
+        (sonar_scanner.FINGERPRINT_VARIABLE, "Z" * 40, "step", sonar_scanner.INSTALL_STEP),
+        (sonar_scanner.TOOL_CACHE_VARIABLE, None, "step", sonar_scanner.INSTALL_STEP),
     ],
     ids=["no version", "three-part version", "version with a letter", "no fingerprint", "short fingerprint", "fingerprint that is no hex", "no tool cache"],
 )
-def test_a_missing_or_malformed_input_is_exit_2_naming_the_variable_and_the_step(scene, drive, variable, value, named):
-    """SONAR-123: the line names the variable and the step that sets it; nothing is fetched"""
+def test_a_missing_or_malformed_input_is_exit_2_naming_the_variable_and_the_step(scene, drive, variable, value, setter_kind, setter_name):
+    """SONAR-123: the line names the variable and the place that sets it, the job env for the version and the install step for the rest; nothing is fetched"""
     code, out, err = drive({variable: value})
     assert (code, out, scene.requested) == (2, "", [])
-    assert (named in err, sonar_scanner.INSTALL_STEP in err) == (True, True)
+    assert (variable in err, f'{setter_kind} "{setter_name}"' in err) == (True, True)
 
 
 def test_a_failed_download_is_retried_while_the_deadline_has_time_and_then_ends_naming_the_url(scene, drive):
@@ -299,6 +307,23 @@ def test_a_failed_download_is_retried_while_the_deadline_has_time_and_then_ends_
     assert len(scene.requested) > 1
     assert scene.clock.now - 1000.0 >= sonar_scanner.COMMAND_DEADLINE_SECONDS
     assert not scene.tool_cache.exists()
+
+
+def test_a_download_cut_at_the_deadline_names_the_failure_before_it(scene, drive):
+    """SONAR-115: an attempt cut by the deadline keeps the last real failure of the attempts before it in the line"""
+    zip_url = f"{sonar_scanner.BINARIES_BASE_URL}/sonar-scanner-cli-{VERSION}-linux-x64.zip"
+    answers = iter([OSError("connection refused"), TimeoutError()])
+
+    def refused_then_cut(url, unreadable, expires_at, clock, timeout=15):
+        answer = next(answers)
+        if isinstance(answer, TimeoutError):
+            scene.clock.advance(sonar_scanner.COMMAND_DEADLINE_SECONDS)
+        raise unreadable(answer)
+
+    scene.fetch = refused_then_cut
+    code, out, err = drive()
+    assert (code, out) == (2, "")
+    assert (zip_url in err, "no answer in time" in err, "connection refused" in err) == (True, True, True)
 
 
 def test_a_download_that_fails_once_is_retried_and_installs(scene, drive):

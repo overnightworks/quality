@@ -37,8 +37,9 @@ it cannot read shows [its example to copy](output.md#refusals), where the refusa
 it to `gate.yml`; an unwritable `GITHUB_OUTPUT` `fix what the error names, then re-run this run's failed jobs`
 (SONAR-103); a changed tracked file the step to let the artifact add reports only (SONAR-104); an issue search that
 never reaches the analysis's own count `re-run this run's failed jobs` (SONAR-112). Every other refusal falls back to
-its step's general step: `properties` the push step, `scanner` the push step (its key-file lines name their own
-step, SONAR-117), `findings` the re-run step (SONAR-105). `-v` adds nothing: no step runs a scanner (SONAR-106).
+its step's general step: `properties` the push step, `scanner` the push step (its key-file and download lines name
+their own step, SONAR-117, SONAR-115), `findings` the re-run step (SONAR-105).
+`-v` adds nothing: no step runs a scanner (SONAR-106).
 
 ```text
 $ quality sonar properties
@@ -118,28 +119,35 @@ at every run, with no time limit, so a server that does not answer left the job 
 check over and leaves the key servers out of the trust path (SONAR-121):
 
 - `gate.yml` names the version (`SCANNER_VERSION`, the job's `env`, which the scan's `scannerVersion` reads too) and the
-  primary key's fingerprint (`SCANNER_SIGNER_FINGERPRINT`, the install step's `env`) (SONAR-122). A missing or malformed
-  one is exit `2` naming the variable and the step that sets it (SONAR-123).
+  primary key's fingerprint (`SCANNER_SIGNER_FINGERPRINT`, the install step's `env`) (SONAR-122, SONAR-124). A missing
+  or malformed one is exit `2` naming the variable and where gate.yml sets it: the `sonar` job's `env` for the version,
+  the install step's `env` for the fingerprint (SONAR-123).
 - The key file `src/quality/sonarsource-scanner-key.asc` holds SonarSource's public key without its expired and revoked
   subkeys. `gpg --show-keys` must list exactly one primary key, with that fingerprint and neither expired nor revoked;
-  otherwise the command stops before any download with a line that names the file and says to replace it (SONAR-116).
+  otherwise the command stops before any download with a line that names the file and says to replace it (SONAR-116,
+  SONAR-125). A file whose primary key differs from the fingerprint says so in that line. If the file was changed by
+  accident, restore the file that matches `SCANNER_SIGNER_FINGERPRINT`. If SonarSource has rotated its primary key,
+  replace the file and `SCANNER_SIGNER_FINGERPRINT` together, see below.
 - It downloads the zip and its `.asc` from `binaries.sonarsource.com`, retrying a failed attempt while the deadline has
   time left; an answer that no retry changes (a redirect or a 4xx other than 429) ends the download at once with its
   status and the step to set `SCANNER_VERSION` to another release. One deadline of `COMMAND_DEADLINE_SECONDS` covers
   the whole command: a download is cut at the deadline however slowly its name lookup, connect, headers or body arrive,
   and each `gpg` call and `unzip` get the smaller of their own limit and the time left. A failed or stalled download
-  ends with one line naming the URL and `re-run this run's failed jobs`; a deadline spent in `gpg` or `unzip` names that
+  ends with one line naming the URL and `re-run this run's failed jobs`, and when an attempt is cut by the deadline the
+  line keeps the last real failure of the attempts before it (a refused connection, a name that does not resolve, a
+  status) beside "no answer in time"; a deadline spent in `gpg` or `unzip` names that
   program and says the same (SONAR-115). The install step's `timeout-minutes` is larger than the deadline plus the
   start-up of `uv` and Python (SONAR-120).
 - It installs only when `gpg --status-fd` reports `GOODSIG` and a `VALIDSIG` whose last field, the primary key's
   fingerprint, is the pinned one, and reports none of `EXPKEYSIG`, `REVKEYSIG`, `BADSIG` or `ERRSIG`; the exit status
   alone decides nothing, because `gpg` exits `0` for a signature by an expired key. A `KEYEXPIRED` line alone refuses
   nothing: `gpg` prints it for any expired subkey in the file, also one that did not sign. Otherwise the line names the
-  key file and what to do, exit `2`, and nothing is installed (SONAR-117). When the signing subkey has expired
-  (`EXPKEYSIG`) or revoked (`REVKEYSIG`), replacing the file does not help: the line says to set `SCANNER_VERSION` to
-  a release signed by a subkey that has neither expired nor been revoked and to re-export the key file; for a zip that
-  does not match (`BADSIG`) it says to re-run and, when the same line returns, to set `SCANNER_VERSION` to another
-  release.
+  key file and what to do, exit `2`, and nothing is installed (SONAR-117, SONAR-126). When the signing subkey has
+  expired (`EXPKEYSIG`) or revoked (`REVKEYSIG`), replacing the file does not help: the line says to set
+  `SCANNER_VERSION` to a release signed by a subkey that has neither expired nor been revoked and to re-export the key
+  file; for a signature by a subkey the file does not hold (`ERRSIG`, SONAR-128) it says to set `SCANNER_VERSION` to a
+  release whose signing subkey the file holds, or to re-export the file for the pinned release; for a zip that does not
+  match (`BADSIG`) it says to re-run and, when the same line returns, to set `SCANNER_VERSION` to another release.
 - The scanner is unpacked beside its place in the runner tool cache and moved there whole; the `.complete` marker the
   action looks for is written last (SONAR-118). The action finds the directory and the marker, prints
   `Using cached Sonar Scanner CLI`, and downloads and verifies nothing; a marker without its directory is no install
@@ -149,24 +157,49 @@ check over and leaves the key servers out of the trust path (SONAR-121):
 - The scan sets `scannerBinariesUrl` to a host under `.invalid`, which a cache hit never reads: a later action version
   that looks elsewhere fails at the download, before any key fetch, instead of falling back to a key server (SONAR-119).
 
-Re-pinning the key: export SonarSource's key by the fingerprint, drop the expired and revoked subkeys, check it with
-`gpg --show-keys --with-colons` (one `pub` record, that fingerprint, its expiry), and compare the fingerprint with the
-constant in the pinned action's `dist/index.js` and with SonarSource's own key file at `binaries.sonarsource.com`.
+Re-pinning the key: SonarSource's own key file is https://binaries.sonarsource.com/sonarsource-public.key. See which
+subkey signed a release with `gpg --list-packets` on the release's `.asc`, export only that subkey with
+`gpg --armor --export --export-options export-minimal <subkey fingerprint>!` (the exclamation mark exports only that
+subkey; without it gpg exports every subkey of the key), and check the file with `gpg --show-keys --with-colons` (one
+`pub` record, that fingerprint, its expiry). Compare the fingerprint with the constant in the pinned action's
+`dist/index.js` and with SonarSource's own key file. When SonarSource rotates its primary key, the key file and
+`SCANNER_SIGNER_FINGERPRINT` in the install step change together; the pinned action's constant still names the old
+fingerprint and so cannot confirm the new one. The new fingerprint must match SonarSource's own key file and a source
+that `binaries.sonarsource.com` does not serve, such as the constant in a newer `SonarSource/sonarqube-scan-action`
+release's `dist/index.js` on GitHub or the key as published on keys.openpgp.org.
 
-The scanner's transport, verified at sonar-scanner-java-library 4.1.1.1633 (the library of sonar-scanner-cli
-8.1.0.6389, which `gate.yml` pins through `SCANNER_VERSION`; SONAR-97):
+The scanner's transport, verified at sonar-scanner-java-library 4.2.1.1698 (the library of sonar-scanner-cli
+8.3.1.16491, which `gate.yml` pins through `SCANNER_VERSION`; SONAR-97, SONAR-127):
 
 - The scanner CLI's signature is checked against the key file above; `binaries.sonarsource.com` is trusted for the bytes
-  and SonarSource's signing key for the signature.
+  and SonarSource's signing key for the signature. A cache hit is trusted as found: with the directory and its marker
+  present the command verifies nothing again, and on a GitHub-hosted runner the tool cache starts empty.
 - The bootstrap's authenticated requests reach only `sonarcloud.io` and `api.sonarcloud.io`. This holds only with the
-  pinned `-Dsonar.host.url=https://sonarcloud.io` argument (SONAR-98) and a properties file that passed the properties
-  check.
+  pinned `-Dsonar.host.url=https://sonarcloud.io` argument (SONAR-98), a properties file that passed the properties
+  check, and a job environment that sets none of `SONAR_HOST_URL`, `SONAR_REGION`, `SONAR_SCANNER_*`,
+  `SONAR_SCANNER_JSON_PARAMS` and `SONARQUBE_SCANNER_PARAMS`, which the library turns into properties: only the steps
+  of the `sonar` job set environment variables, and none of those.
+- The properties check keeps out every key that steers the endpoint or the requests: it allows only listed keys, so
+  `sonar.host.url`, `sonar.scanner.apiBaseUrl`, `sonar.scanner.sonarcloudUrl`, `sonar.region`, the proxy keys and
+  `sonar.scanner.httpExtraHeaders` are refused. The last is new in this library version: its headers go on every
+  request, and an `Authorization` header among them replaces the token.
 - Residual limit: a redirect issued by SonarCloud itself carries the token to the host it names.
 - The engine is downloaded from SonarCloud and is not pinned by the CLI pin. SonarSource's server-side code is an
   accepted trust boundary: the token's only purpose is to authenticate to SonarCloud.
 - Re-verify all of this on any bump of the scan action or `SCANNER_VERSION`, and check the scan's log for
   `Using cached Sonar Scanner CLI`.
-- Sources at 4.1.1.1633: [HttpClientFactory.java:72](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/http/HttpClientFactory.java#L72), [ScannerHttpClient.java:162-170](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/http/ScannerHttpClient.java#L162-L170), [ScannerHttpClient.java:231-233](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/http/ScannerHttpClient.java#L231-L233), [ScannerEndpointResolver.java:40](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/endpoint/ScannerEndpointResolver.java#L40), [ScannerEngineLauncherFactory.java](https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/facade/forked/ScannerEngineLauncherFactory.java).
+- Sources at 4.2.1.1698, the tag https://github.com/SonarSource/sonar-scanner-java-library/tree/4.2.1.1698,
+  paths under `lib/src/main/java/org/sonarsource/scanner/lib/`:
+  - `internal/endpoint/ScannerEndpointResolver.java` lines 39-44
+  - `internal/endpoint/ScannerEndpointResolver.java` lines 86-104
+  - `internal/endpoint/OfficialSonarQubeCloudInstance.java` lines 33-34
+  - `internal/http/HttpClientFactory.java` line 72
+  - `internal/http/ScannerHttpClient.java` lines 162-172
+  - `internal/http/ScannerHttpClient.java` lines 227-233
+  - `internal/facade/forked/ScannerEngineLauncherFactory.java` lines 81-82
+  - `internal/facade/forked/ScannerEngineLauncherFactory.java` lines 99-106
+  - `internal/facade/forked/ScannerEngineLauncherFactory.java` lines 123-130
+  - `EnvironmentConfig.java` lines 50-76
 
 `quality sonar findings` is the SonarCloud zero-findings rule: every open finding counts (SONAR-69). Where
 `.github/dependabot.yml` exists the scan itself excludes one rule, see the
