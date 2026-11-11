@@ -55,7 +55,7 @@ def published_bytes(database_root: Path) -> bytes:
 
 
 def test_an_unchanged_archive_is_not_downloaded_again(run, published_databases, copy_of, database_root):
-    """The server confirms the copy: the second run sends its hash, receives no body and judges as the first."""
+    """ADVISORY-44: the server confirms the copy: the second run sends its hash, receives no body and judges as the first."""
     first, second = run(), run()
     assert (first[0], second[0], is_clean(second[1])) == (0, 0, True)
     assert statuses(published_databases) == [200, 304]
@@ -63,7 +63,7 @@ def test_an_unchanged_archive_is_not_downloaded_again(run, published_databases, 
 
 
 def test_a_changed_archive_is_downloaded_and_replaces_the_copy(run, published_databases, publish_database, copy_of, database_root):
-    """The server states another hash: the archive comes in full, the copy becomes the new bytes and the next run reuses it."""
+    """ADVISORY-44: the server states another hash: the archive comes in full, the copy becomes the new bytes and the next run reuses it."""
     run()
     publish_database([NEW_ADVISORY])
     run()
@@ -79,7 +79,7 @@ def test_a_changed_archive_is_downloaded_and_replaces_the_copy(run, published_da
 def test_a_copy_that_is_not_the_servers_archive_is_never_used(
     run, scanned, published_databases, copy_of, database_root, damage, server_says, last_request_is_plain
 ):
-    """A truncated or altered copy is replaced by the genuine archive, which is what is scanned, whether the server
+    """ADVISORY-44, ADVISORY-45: a truncated or altered copy is replaced by the genuine archive, which is what is scanned, whether the server
     answers with the archive at once or claims `unchanged` with the genuine ETag (then by one plain request)."""
     seen = scanned()
     run()
@@ -106,8 +106,7 @@ def test_a_second_ecosystem_is_judged_on_its_own_hash(build_repo, run_gate, publ
 
 @pytest.mark.parametrize("etag", [MISSING, 'W/"abc"', '"not-hex"', f'"{"0" * 32}"'], ids=["none", "weak", "not hex", "another body's hash"])
 def test_a_download_whose_hash_cannot_be_compared_is_exit_2_and_keeps_nothing(run, published_databases, copy_of, etag):
-    """A body without an md5 ETag cannot be told from a doctored one once a copy exists; with none, a hash that is
-    not the body's is evidence of corruption (see test_a_download_with_no_md5_etag_and_no_copy_is_judged_and_kept_nowhere)."""
+    """ADVISORY-45: once a copy exists, a body whose ETag states no md5 of its own bytes cannot be compared."""
     run()
     genuine = copy_of().read_bytes()
     published_databases.etag = lambda body: None if etag is MISSING else etag
@@ -117,7 +116,7 @@ def test_a_download_whose_hash_cannot_be_compared_is_exit_2_and_keeps_nothing(ru
 
 
 def test_a_body_that_is_not_its_etags_md5_is_exit_2_and_kept_nowhere(run, published_databases, copy_of):
-    """Corruption in transit: nothing is scanned and no copy is written."""
+    """ADVISORY-45: corruption in transit: nothing is scanned and no copy is written."""
     published_databases.etag = lambda body: f'"{"0" * 32}"'
     code, output = run()
     assert (code, "PyPI advisory database" in output, copy_of().exists()) == (2, True, False)
@@ -127,6 +126,7 @@ def test_a_body_that_is_not_its_etags_md5_is_exit_2_and_kept_nowhere(run, publis
 def test_a_download_with_no_md5_etag_and_no_copy_is_judged_and_kept_nowhere(
     run, scanned, published_databases, copy_of, database_root, etag
 ):
+    """ADVISORY-45: with no copy, a body without an md5 ETag is scanned and kept nowhere."""
     published_databases.etag = lambda body: etag
     seen = scanned()
     code, _ = run()
@@ -135,7 +135,7 @@ def test_a_download_with_no_md5_etag_and_no_copy_is_judged_and_kept_nowhere(
 
 @pytest.mark.parametrize("etag", [None, 'W/"abc"'], ids=["without an ETag", "with a weak ETag"])
 def test_a_not_modified_without_an_md5_etag_is_exit_2(run, published_databases, copy_of, etag):
-    """The server confirms nothing the copy could be compared with."""
+    """ADVISORY-45: the server confirms nothing the copy could be compared with."""
     run()
     genuine = copy_of().read_bytes()
     published_databases.etag = lambda body: etag
@@ -145,6 +145,7 @@ def test_a_not_modified_without_an_md5_etag_is_exit_2(run, published_databases, 
 
 
 def test_a_not_modified_answering_a_request_with_no_hash_is_exit_2_and_keeps_nothing(run, published_databases, copy_of):
+    """ADVISORY-45: a 304 to a request that sent no copy confirms nothing."""
     published_databases.not_modified = lambda sent, current: True
     code, output = run()
     assert (code, "PyPI advisory database" in output, copy_of().exists()) == (2, True, False)
@@ -160,6 +161,7 @@ def test_a_server_that_does_not_answer_is_exit_2_even_with_a_valid_copy(run, mon
 
 
 def test_a_cache_directory_that_cannot_be_written_is_a_run_without_a_copy(run, published_databases, cache_home):
+    """ADVISORY-46: a cache directory that cannot be created keeps no copy and changes no verdict."""
     blocker = cache_home / "overnightworks-quality"
     blocker.write_text("not a directory")
     results = [run(), run()]
@@ -169,6 +171,7 @@ def test_a_cache_directory_that_cannot_be_written_is_a_run_without_a_copy(run, p
 
 
 def test_a_copy_that_cannot_be_read_counts_as_none_and_is_replaced(run, published_databases, copy_of, database_root):
+    """ADVISORY-43, ADVISORY-46: a copy that cannot be opened is no copy."""
     copy_of().parent.mkdir(parents=True)
     copy_of().symlink_to(copy_of())  # a link to itself: opening it fails
     code, _ = run()
@@ -177,6 +180,7 @@ def test_a_copy_that_cannot_be_read_counts_as_none_and_is_replaced(run, publishe
 
 @pytest.mark.parametrize("kind", ["directory", "fifo"])
 def test_a_cache_file_that_is_not_a_regular_file_is_no_copy(run, published_databases, copy_of, kind):
+    """ADVISORY-43: a directory or a FIFO in place of the copy is no copy, and the run neither hangs nor fails."""
     copy_of().parent.mkdir(parents=True)
     if kind == "directory":
         copy_of().mkdir()
@@ -187,6 +191,7 @@ def test_a_cache_file_that_is_not_a_regular_file_is_no_copy(run, published_datab
 
 
 def test_without_a_usable_cache_base_every_run_downloads(build_repo, published_databases):
+    """ADVISORY-43: with no absolute `XDG_CACHE_HOME` or `HOME`, no copy is kept and every run downloads."""
     repo = tracked_lock_repo(build_repo)
     codes = [check_door(repo, environment=os.environ | {"XDG_CACHE_HOME": "relative", "HOME": "also/relative"}) for _ in range(2)]
     assert (codes, statuses(published_databases)) == ([0, 0], [200, 200])
@@ -200,12 +205,14 @@ def test_without_a_usable_cache_base_every_run_downloads(build_repo, published_d
     ids=["not a zip", "no advisory", "not json"],
 )
 def test_an_archive_that_cannot_be_used_is_never_kept(run, publish_database, copy_of, archive):
+    """ADVISORY-44: an archive that is not a valid zip with an advisory is exit 2 and kept nowhere."""
     publish_database(archive=archive)
     code, _ = run()
     assert (code, copy_of().exists()) == (2, False)
 
 
 def test_the_scanner_reads_the_verified_bytes_although_the_copy_changes_after_the_check(run, scanned, copy_of, database_root):
+    """ADVISORY-44: osv-scanner reads a private copy of the checked bytes, so a change of the cache file during the scan changes nothing."""
     run()
     seen = scanned(before_reading=f"printf altered > {copy_of()}")
     code, _ = run()
@@ -213,6 +220,7 @@ def test_the_scanner_reads_the_verified_bytes_although_the_copy_changes_after_th
 
 
 def test_no_run_leaves_a_temporary_file_and_a_failed_replacement_keeps_no_copy(run, copy_of, monkeypatch):
+    """ADVISORY-44, ADVISORY-46: the temporary file has its fixed prefix and goes on every exit path."""
     names = []
 
     def refused(source, destination):

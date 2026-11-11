@@ -868,7 +868,7 @@ and nested, with osv-scanner against the OSV advisory database (dev dependencies
 requirements files are judged against the PyPI database, `pnpm-lock.yaml` against the npm database (ADVISORY-31). A
 `package-lock.json`, `yarn.lock` or `bun.lock` is not judged yet.
 A repository with no tracked lock [needs no osv-scanner](commands.md#scanners) (and none is located); a database is
-downloaded only for an ecosystem with a tracked lock (ADVISORY-32), once per run
+fetched only for an ecosystem with a tracked lock (ADVISORY-32), once per run
 however many locks it has (ADVISORY-33).
 A lock that is tracked but missing on disk is skipped (ADVISORY-2); one that links out of the repository (ADVISORY-3),
 is not a regular file (ADVISORY-4) or is empty (zero bytes) (ADVISORY-5) is exit `2`. A lock listed in `.gitignore` is
@@ -952,13 +952,13 @@ Ruled by the operator:
   a loosening like a new one.
 - A new exception declares itself: it needs no separate `[[gate.loosened]]` entry (VERDICT-67).
 
-quality downloads each needed database itself on every run (PyPI about 37 MB, npm about 219 MB;
-`https://osv-vulnerabilities.storage.googleapis.com/<ecosystem>/all.zip`)
-into the scan's own 0700 scratch directory and runs osv-scanner `--offline` on it, so osv-scanner makes no network call
-and reads no cache of its own (ADVISORY-8). A download that fails transiently (HTTP 500 to 599 or 429, a refused or
+quality gets each needed database itself on every run (PyPI about 37 MB, npm about 219 MB;
+`https://osv-vulnerabilities.storage.googleapis.com/<ecosystem>/all.zip`), checks it, places it in the scan's own 0700
+scratch directory and runs osv-scanner `--offline` on it, so osv-scanner makes no network call and reads no cache of
+its own (ADVISORY-8). A request that fails transiently (HTTP 500 to 599 or 429, a refused or
 reset connection, a timeout, a DNS failure, an unreachable network or host, a body cut short) is tried again after 3,
-9 and 27 seconds, each wait cut to the time left. A download that waits 30 seconds without a byte is cut and tried
-again (ADVISORY-42). A database that cannot be downloaded within 300 seconds in total for all downloads together
+9 and 27 seconds, each wait cut to the time left. A request that waits 30 seconds without a byte is cut and tried
+again (ADVISORY-42). A database that cannot be fetched within 300 seconds in total for all databases together
 (the retries and their waits included; connect, headers and body, however the server drags them out; the run's end
 caps the 300 seconds), or still not after the fourth attempt (`cannot download the <ecosystem> advisory
 database from <url>: <error> after 4 attempts`) (ADVISORY-9), cannot be placed in
@@ -966,9 +966,39 @@ the scratch directory (ADVISORY-10), is not a valid zip (ADVISORY-11), or holds 
 never clean, naming the database; so are an osv-scanner [that is missing, at another version](commands.md#scanners),
 exits other than `0` or `1` (ADVISORY-13), runs past the run's deadline (ADVISORY-14), or writes a report that is
 not the expected JSON (ADVISORY-15), disagrees with its exit (ADVISORY-16), or names a lock file quality did not pass
-(ADVISORY-17). Trust boundary: the database is an unsigned zip fetched over TLS from the same source
-osv-scanner itself uses; there is deliberately no cache, because a doctored cached database would silence every pull
-request. Records the pinned osv-scanner cannot read are dropped by it silently; the live-database test for
+(ADVISORY-17).
+
+Trust boundary: the bucket's answer over TLS, its ETag and its unsigned zip, is what quality trusts, from the same
+source osv-scanner itself uses. quality keeps a copy of each archive it fetched, so that a run downloads only what
+changed, and trusts no file in the cache directory, its name, its time stamp or any stored hash:
+
+- The copy of an ecosystem lives at `<cache>/advisories/<ecosystem>/all.zip`, where `<cache>` is
+  `overnightworks-quality` below `$XDG_CACHE_HOME` where that is an absolute path, else below `~/.cache`; with neither
+  there is no copy. The door finds `<cache>` once from the environment it is given. quality creates each missing level
+  with mode 0700. One archive stays per ecosystem a tracked lock names, replaced in place and never pruned. The copy is
+  read once, only as a regular file (a directory, a FIFO or a file that cannot be opened counts as no copy)
+  (ADVISORY-43).
+- With a copy, the request is one conditional GET with the md5 of the copy's own bytes as `If-None-Match`; without one,
+  a plain GET. The copy is used only on a `304` whose ETag is that md5. A `304` that names another md5 costs one of the
+  four attempts and is followed by a plain GET. A `200` is used only when its body's md5 is the md5 its ETag states, and
+  then replaces the copy through a temporary file `all.zip.tmp-*` beside it and an atomic rename; an archive that is not
+  a valid zip with an advisory is kept nowhere. osv-scanner reads a private copy in the scratch directory of the
+  bytes that were checked, never the cache file. Two runs at once need no lock: each reader checks the bytes it read,
+  and a writer renames a whole file (ADVISORY-44).
+- Exit `2`, never clean, naming the database: a `304` without an md5 ETag, a `304` to a request that sent no copy, a
+  `200` whose body is not the md5 of its md5 ETag, a `200` without an md5 ETag (weak, not 32 hex digits or missing)
+  while a copy exists, and a server that does not answer, though a copy exists. A copy that fails the comparison is
+  never scanned. A `200` without an md5 ETag and no copy is scanned and kept nowhere (ADVISORY-45).
+- A cache directory quality cannot create, write or read is a run without a copy: it judges from the verified download
+  and prints nothing (ADVISORY-46).
+- A local green means the server's state at run time. `gate.yml` and `ci.yml` restore no copy, a hosted runner starts
+  without one, and a self-hosted runner keeps a verified copy under its user's cache directory, which `XDG_CACHE_HOME`
+  moves (ADVISORY-47).
+
+A doctored or rolled-back copy is caught by its md5: the server answers a request that names it with the genuine
+archive. md5 is an integrity check against the server's own statement and no signature; the server states no other hash
+that an attacker could not forge, and a collision does not help against an archive the attacker did not produce.
+Records the pinned osv-scanner cannot read are dropped by it silently; the live-database test for
 `pyyaml 5.3.1` on every quality pull request is the canary (ADVISORY-18). osv-scanner judges the lock as written; the
 caller's own `uv sync --locked` guards against a hand-edited lock. osv-scanner exits `127` on a `uv.lock` or
 `pnpm-lock.yaml` it cannot parse, which is `cannot judge`, never clean.
