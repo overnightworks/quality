@@ -210,8 +210,8 @@ ASSIGNMENT = re.compile(r"\w+=")
 DYNAMIC_COMMAND = re.compile(r"\$[\w{]")
 WORKERS_FLAG = re.compile(r"(?:-n|--numprocesses)(?:=(.*))?|-n(.+)", re.DOTALL)
 WHOLE_NUMBER = re.compile(r"\d+", re.ASCII)
-LEXER_PUNCTUATION = frozenset("();<>|&`")
-SEPARATOR_CHARACTERS = frozenset("();|&`")
+LEXER_PUNCTUATION = frozenset("();<>|&")
+SEPARATOR_CHARACTERS = frozenset("();|&")
 PREFIX_WORDS = frozenset({"time", "exec", "command", "nohup", "if", "then", "elif", "else", "do", "while", "until", "!", "{"})
 PYTEST_COMMANDS = frozenset({"pytest", "py.test"})
 PYTHON_INTERPRETER = re.compile(r"python(?:3(?:\.\d+t?)?)?")
@@ -225,7 +225,7 @@ ENV_SPLIT_FLAGS = frozenset({"-S", "--split-string"})
 ENV_SPLIT_PREFIXES = ("-S", "--split-string=")
 SUDO_VALUE_FLAGS = frozenset({"-u", "-g", "-D", "-C", "-h", "-p", "-r", "-t", "-T", "-U", "-R"})
 WRAPPER_VALUE_FLAGS = {"env": ENV_VALUE_FLAGS, "sudo": SUDO_VALUE_FLAGS}
-SUBSTITUTION = re.compile(r"\$\(|`")
+SUBSTITUTION = re.compile(r"\$\(")
 LONE_DOLLAR = ["$"]
 
 Problem = tuple[FindingEvent, str]
@@ -351,12 +351,30 @@ def _line_problems(text: str, script_holds_pytest: bool) -> Iterator[Problem]:
 
 
 def _segments(text: str) -> list[list[str]]:
-    """The words of a line, split at `&&`, `||`, `;`, `|`, `&`, `(`, `)` and a backtick; a word that holds a substitution is split again."""
-    return [words for words in _split(text) if words]
+    """The words of a line, split at `&&`, `||`, `;`, `|`, `&`, `(` and `)`, a backtick substitution read as `$(…)`; a word that holds a substitution is split again."""
+    return [words for words in _lex(_backticks_as_dollar_substitutions(text), False, [])[0] if words]
 
 
-def _split(text: str) -> list[list[str]]:
-    return _lex(text, False, [])[0]
+def _backticks_as_dollar_substitutions(text: str) -> str:
+    """The text with each pair of backticks that no quote or backslash protects written as `$(` and `)`; a backtick left without a partner on the line, the end of a substitution that spans lines, is dropped."""
+    quote = ""
+    escaped = False
+    backticks: list[int] = []
+    for index, character in enumerate(text):
+        if escaped:
+            escaped = False
+        elif character == "\\" and quote != "'":
+            escaped = True
+        elif character == quote:
+            quote = ""
+        elif character == "`" and quote != "'":
+            backticks.append(index)
+        elif not quote and character in "'\"":
+            quote = character
+    replacements = {position: "$(" if number % 2 == 0 else ")" for number, position in enumerate(backticks)}
+    if len(backticks) % 2:
+        replacements[backticks[-1]] = " "
+    return "".join(replacements.get(index, character) for index, character in enumerate(text))
 
 
 def _lex(text: str, after_substitution: bool, leading: list[str]) -> tuple[list[list[str]], bool]:
@@ -366,10 +384,9 @@ def _lex(text: str, after_substitution: bool, leading: list[str]) -> tuple[list[
     lexer.commenters = ""
     segments: list[list[str]] = [list(leading)]
     openers: list[int] = []
-    backtick_open = False
     for word in lexer:
-        if word and (set(word) <= SEPARATOR_CHARACTERS or ("`" in word and set(word) <= LEXER_PUNCTUATION)):
-            backtick_open, after_substitution = _read_separator(word, segments, openers, backtick_open)
+        if word and set(word) <= SEPARATOR_CHARACTERS:
+            after_substitution = _read_separator(word, segments, openers)
             segments.append([])
         elif word == "$" and after_substitution and not segments[-1]:
             after_substitution = False
@@ -382,18 +399,16 @@ def _lex(text: str, after_substitution: bool, leading: list[str]) -> tuple[list[
     return segments, after_substitution
 
 
-def _read_separator(word: str, segments: list[list[str]], openers: list[int], backtick_open: bool) -> tuple[bool, bool]:
-    """The backtick state after the separator `word` and whether it closes a substitution whose opening segment holds a command word; the indexes of the segments that opened a substitution are kept in `openers`."""
+def _read_separator(word: str, segments: list[list[str]], openers: list[int]) -> bool:
+    """Whether the separator `word` closes a substitution whose opening segment holds a command word; the indexes of the segments that opened a substitution are kept in `openers`."""
     closes_with_command = False
     for character in word:
-        if character == "`":
-            backtick_open = not backtick_open
-        if character == "(" or (character == "`" and backtick_open):
+        if character == "(":
             openers.append(len(segments) - 1)
-        elif character in ")`" and openers:
+        elif character == ")" and openers:
             opener = segments[openers.pop()]
             closes_with_command = _command_start(opener) < len(opener)
-    return backtick_open, closes_with_command
+    return closes_with_command
 
 
 def _starts_pytest_call(words: list[str]) -> bool:

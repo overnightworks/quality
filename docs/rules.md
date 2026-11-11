@@ -814,9 +814,10 @@ request triggers it; only the `run:` of a step is read, as POSIX shell whatever 
 action is not (PYTEST-1). The script is never run. The value is read line by line, as the shell reads it: a literal
 block scalar at each file line, a folded or quoted one with each line break kept at the scalar's first line; each `${{
 }}` on a line becomes one dynamic word; a line ending in a backslash joins the next; a `#` that starts a word outside
-quotes ends the command text; the words are split by Python's `shlex`, and `&&`, `||`, `;`, `|`, `&`, `(`, `)` and a
-backtick, also one glued to `<` or `>`, end a segment. A word that holds `$(` or a backtick is split again the same
-way, so `"$(pytest -q)"` reads as `$(pytest -q)` (PYTEST-2).
+quotes ends the command text; a pair of backticks that no quote or backslash protects is read as `$(` and `)`, and a
+backtick left without a partner on the line is dropped; the words are split by Python's `shlex`, and `&&`, `||`, `;`,
+`|`, `&`, `(` and `)`, also one glued to `<` or `>`, end a segment. A word that holds `$(` is split again the same way,
+so `"$(pytest -q)"` reads as `$(pytest -q)` (PYTEST-2).
 
 A segment is a pytest call when its command word, after assignments (`VAR=value`), `env` and `sudo` with their flags,
 `time`, `exec`, `command`, `nohup` and the shell keywords `if`, `then`, `elif`, `else`, `do`, `while`, `until`, `!` and
@@ -835,16 +836,14 @@ The last of `-n N`, `-nN`, `-n=N`, `--numprocesses N` and `--numprocesses=N` cou
 flag (`--numproc 4`) or one glued to other short flags (`-qn4`) is `serial`; any other `N`, a missing one or a dynamic
 one (`$WORKERS`, `$(nproc)`, `${{ matrix.n }}`) is `invalid`. The words after the first `--` are paths for pytest, not
 its flags, so `pytest tests -- -n auto` is `serial` (PYTEST-5). A quoted lone `--` (`pytest -k "--" -n 4`) reads as that
-same word, because the reader does not keep the quote, so it is a false `serial` that the marker clears. Escaped
-backticks in a double-quoted message (an `echo` with Markdown-style code that holds the word `pytest`) read as a
-substitution, so it is a false alarm that the marker clears. `PYTEST_ADDOPTS` and a `-n` in `pyproject.toml` are not
-read. A line `shlex` refuses that holds the word `pytest`, and a command word built at run time (`eval`, or a word
-starting with `$`) in a `run:` that holds the word `pytest` outside comments, are `invalid`, because the rule sees a
-call it cannot read; without the word `pytest` in the `run:` they are no call. A command word that is a substitution
-(`$(which pytest) -q`, `"$(which pytest)" -q`, `if $(which pytest) -q; then`) in such a `run:` is `invalid` with the
-same fact, while `$(pytest -q)` is its pytest call, judged once (PYTEST-6). A second substitution on a command line
-(`cp $(a) $(b) dest`, `echo "$(date)" "$(uname)"`) is no command word; the same `$(…)` after the `)` of a `case`
-pattern is read the same way, a named gap.
+same word, because the reader does not keep the quote, so it is a false `serial` that the marker clears.
+`PYTEST_ADDOPTS` and a `-n` in `pyproject.toml` are not read. A line `shlex` refuses that holds the word `pytest`, and a
+command word built at run time (`eval`, or a word starting with `$`) in a `run:` that holds the word `pytest` outside
+comments, are `invalid`, because the rule sees a call it cannot read; without the word `pytest` in the `run:` they are
+no call. A command word that is a substitution (`$(which pytest) -q`, a backtick pair in its place, `"$(which pytest)"
+-q`, `if $(which pytest) -q; then`) in such a `run:` is `invalid` with the same fact, while `$(pytest -q)` is its pytest
+call, judged once (PYTEST-6). A second substitution on a command line (`cp $(a) $(b) dest`, `echo "$(date)" "$(uname)"`)
+is no command word; the same `$(…)` after the `)` of a `case` pattern is read the same way, a named gap.
 
 A comment `# pytest-workers: <reason>`, with a reason that holds a letter, clears every call of the logical line it
 stands on or directly above: for a plain or quoted value, a YAML comment above `run:` or after its value; for a block
