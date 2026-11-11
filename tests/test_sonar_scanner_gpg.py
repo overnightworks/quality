@@ -1,5 +1,6 @@
 import io
 import shutil
+import stat
 import subprocess
 import tempfile
 import zipfile
@@ -113,6 +114,21 @@ def test_a_zip_signed_by_a_signing_subkey_of_the_pinned_key_installs(make_signer
     payload = scanner_zip()
     code, _, err = run_command(tmp_path, capsys, signer.public_key(), signer.fingerprint, payload, signer.sign(payload, with_key=f"{signer.subkey}!"))
     assert (code, err, installed(tmp_path)) == (0, "", True)
+
+
+def test_a_signed_zip_with_a_symbolic_link_out_of_its_folder_is_refused_and_unpacks_nothing(make_signer, tmp_path, capsys):
+    """SONAR-118: the signature proves who sent the bytes, not that they stay in their folder"""
+    signer = make_signer()
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        link = zipfile.ZipInfo(f"{FOLDER}/bin/sonar-scanner")
+        link.external_attr = (stat.S_IFLNK | 0o777) << 16
+        archive.writestr(link, "/usr/bin/env")
+    payload = buffer.getvalue()
+    code, out, err = run_command(tmp_path, capsys, signer.public_key(), signer.fingerprint, payload, signer.sign(payload))
+    assert (code, out, installed(tmp_path)) == (2, "", False)
+    assert "leaves its folder" in err
+    assert not (tmp_path / "cache").exists()
 
 
 def test_a_zip_changed_after_signing_is_refused_and_installs_nothing(make_signer, tmp_path, capsys):

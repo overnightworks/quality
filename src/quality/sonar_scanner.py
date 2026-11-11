@@ -2,9 +2,12 @@
 checked against the key file quality ships, and it is installed where the scan action finds it, so the action never
 fetches a key. It prints one row and one closing line, or the pair."""
 
+import posixpath
 import re
+import stat
 import tempfile
 import time
+import zipfile
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from itertools import pairwise
@@ -47,6 +50,7 @@ REPLACE_THE_KEY = Instruction(
     f"replace src/quality/{KEY_FILE_NAME} with SonarSource's current public key, or set {VERSION_VARIABLE} in gate.yml to a "
     "release SonarSource signed with a key that has not expired"
 )
+ANOTHER_RELEASE = Instruction(f"set {VERSION_VARIABLE} in gate.yml to another release of the scanner")
 Fetch = Callable[[str, Callable[[Exception], CannotJudge], float, Callable[[], float], float], bytes]
 
 
@@ -142,8 +146,32 @@ def _download(url: str, fetch: Fetch, budget: Budget, sleep: web.Sleep) -> bytes
             sleep(min(RETRY_PAUSE_SECONDS, budget.left()))
 
 
+def _stays_inside(name: str, folder: str) -> bool:
+    return "\\" not in name and f"{posixpath.normpath(name)}/".startswith(f"{folder}/")
+
+
+def _escaping_entry(archive: Path, folder: str) -> str | None:
+    """The first entry of the zip that would land outside `folder`, a symbolic link whose target does included; None when
+    every entry stays inside."""
+    try:
+        with zipfile.ZipFile(archive) as opened:
+            for entry in opened.infolist():
+                if not _stays_inside(entry.filename, folder):
+                    return entry.filename
+                if stat.S_ISLNK(entry.external_attr >> 16):
+                    target = opened.read(entry).decode("utf-8", "replace")
+                    if not _stays_inside(posixpath.join(posixpath.dirname(entry.filename), target), folder):
+                        return f"{entry.filename} -> {target}"
+    except zipfile.BadZipFile as error:
+        raise CannotJudge(f"the scanner zip is not a readable zip: {error}", (ANOTHER_RELEASE,)) from error
+    return None
+
+
 def _unpacked_into_place(run: process.Run, budget: Budget, archive: Path, folder: str, target: Path) -> None:
-    """The scanner appears at `target` whole: unpacked into a directory beside it, then moved."""
+    """The scanner appears at `target` whole: an archive whose entries stay in `folder` is unpacked into a directory beside
+    it, then moved."""
+    if escaping := _escaping_entry(archive, folder):
+        raise CannotJudge(f"the scanner zip holds {escaping}, which leaves its folder {folder}", (ANOTHER_RELEASE,))
     target.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=target.parent) as unpacked:
         unzipped = _program(run, budget, ["unzip", "-q", str(archive), "-d", unpacked], UNZIP_TIMEOUT_SECONDS)

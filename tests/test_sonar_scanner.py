@@ -1,6 +1,9 @@
+import io
+import stat
 import subprocess
 import threading
 import time
+import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -14,7 +17,7 @@ VERSION = "8.1.0.6389"
 FINGERPRINT = "ABCDEF0123456789ABCDEF0123456789ABCDEF01"
 OTHER_FINGERPRINT = "0123456789ABCDEF0123456789ABCDEF01234567"
 SIGNING_SUB_FINGERPRINT = "FEDCBA9876543210FEDCBA9876543210FEDCBA98"
-ZIP_BYTES = b"zip bytes"
+FOLDER = f"sonar-scanner-{VERSION}-linux-x64"
 SIGNATURE_BYTES = b"signature bytes"
 KEY_FILE_NAME = "sonarsource-scanner-key.asc"
 RERUN_ADVICE = "re-run this run's failed jobs"
@@ -42,6 +45,21 @@ def status_lines(*words: str, primary: str = FINGERPRINT, signer: str = SIGNING_
     return "\n".join(lines.get(word, f"[GNUPG:] {word} {signer[-16:]}") for word in words) + "\n"
 
 
+def scanner_zip(*entries: tuple[str, str], links: tuple[tuple[str, str], ...] = ()) -> bytes:
+    """A zip holding the scanner's launcher and `entries` (name, content); each of `links` is a symbolic link (name, target)."""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr(f"{FOLDER}/bin/sonar-scanner", "#!/bin/sh\n")
+        for name, content in entries:
+            archive.writestr(name, content)
+        for name, target in links:
+            link = zipfile.ZipInfo(name)
+            link.external_attr = (stat.S_IFLNK | 0o777) << 16
+            archive.writestr(link, target)
+    return buffer.getvalue()
+
+
+ZIP_BYTES = scanner_zip()
 GOOD_STATUS = status_lines("GOODSIG", "VALIDSIG")
 
 
@@ -92,7 +110,7 @@ class Scene:
         if program == "unzip":
             destination = Path(command[command.index("-d") + 1])
             self.unzipped_inside = destination
-            scanner = destination / f"sonar-scanner-{VERSION}-linux-x64" / "bin" / "sonar-scanner"
+            scanner = destination / f"{FOLDER}" / "bin" / "sonar-scanner"
             scanner.parent.mkdir(parents=True)
             scanner.write_text("#!/bin/sh\n")
         return subprocess.CompletedProcess(command, self.exit_codes.get(program, 0), stdout, "")
@@ -296,6 +314,44 @@ def test_a_failed_unzip_leaves_neither_the_scanner_nor_the_marker(scene, drive):
     drive()
     assert not scene.installed.exists()
     assert not scene.marker.exists()
+
+
+@pytest.mark.parametrize(
+    ("entries", "links"),
+    [
+        ((), ((f"{FOLDER}/bin/escape", "../../../../etc/passwd"),)),
+        ((), ((f"{FOLDER}/bin/absolute", "/etc/passwd"),)),
+        (((f"{FOLDER}/../outside", "x"),), ()),
+        (((f"/{FOLDER}/absolute", "x"),), ()),
+        (((f"other-folder/file", "x"),), ()),
+        (((f"{FOLDER}\\..\\outside", "x"),), ()),
+    ],
+    ids=["symlink out of the folder", "absolute symlink", "entry with a parent component", "absolute entry", "entry beside the folder", "entry with a backslash"],
+)
+def test_an_archive_with_an_entry_that_leaves_its_folder_is_refused_before_unzip_runs(scene, drive, entries, links):
+    """SONAR-118: a signed zip may still hold a path or a symbolic link that reaches outside the scanner's folder; nothing is unpacked or installed"""
+    scene.downloads[f"{sonar_scanner.BINARIES_BASE_URL}/sonar-scanner-cli-{VERSION}-linux-x64.zip"] = scanner_zip(*entries, links=links)
+    code, out, err = drive()
+    assert (code, out) == (2, "")
+    assert ("leaves" in err, len(err.strip().splitlines())) == (True, 2)
+    assert "unzip" not in scene.programs
+    assert not scene.marker.exists()
+
+
+def test_an_archive_that_is_no_zip_is_refused_with_one_line(scene, drive):
+    """SONAR-118: bytes that carry a valid signature but are no zip end in a named line, not a traceback"""
+    scene.downloads[f"{sonar_scanner.BINARIES_BASE_URL}/sonar-scanner-cli-{VERSION}-linux-x64.zip"] = b"not a zip"
+    code, out, err = drive()
+    assert (code, out, len(err.strip().splitlines())) == (2, "", 2)
+    assert "unzip" not in scene.programs
+
+
+def test_a_symbolic_link_that_stays_inside_the_folder_installs(scene, drive):
+    """SONAR-118: a link between two files of the scanner's own folder is not an escape"""
+    scene.downloads[f"{sonar_scanner.BINARIES_BASE_URL}/sonar-scanner-cli-{VERSION}-linux-x64.zip"] = scanner_zip(
+        links=((f"{FOLDER}/bin/launcher", "sonar-scanner"), (f"{FOLDER}/lib/current", "../bin/sonar-scanner"))
+    )
+    assert drive()[0] == 0
 
 
 def test_an_unzip_that_stops_partway_with_an_error_leaves_neither_the_scanner_nor_the_marker(scene, drive):
