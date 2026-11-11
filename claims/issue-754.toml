@@ -1,0 +1,8 @@
+claim_id = "70c7bd6139784565aed1a35ae6951dab"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "691683a111f60cea05dd8a9bca9b6508ce0f14b0"
+branch = "claude/issue-754-baseline-file"
+scope = ["pyproject.toml", "src/quality/baseline_file.py", "src/quality/check.py", "src/quality/cli.py", "src/quality/clones.py", "src/quality/fleet.py", "src/quality/merge.py", "src/quality/ratchet.py", "src/quality/sides.py", "src/quality/verdict.py", "tests/conftest.py", "tests/support/baselines.py", "tests/support/check.py", "tests/support/door.py", "tests/support/git_repositories.py", "tests/support/merge.py", "tests/support/verdict_renames.py", "tests/test_baseline_file.py", "tests/test_cli_fix.py", "tests/test_cli_fix_dry_run.py", "tests/test_cli_fix_renames.py", "tests/test_cli_help.py", "tests/test_cli_output.py", "tests/test_clones.py", "tests/test_clones_baseline.py", "tests/test_fleet_matrix.py", "tests/test_merge.py", "tests/test_ratchet.py", "tests/test_ratchet_fix.py", "tests/test_ratchet_follow.py", "tests/test_ratchet_generated.py", "tests/test_ratchet_gone.py", "tests/test_rules.py", "tests/test_verdict.py", "tests/test_verdict_door.py", "tests/test_verdict_renames.py", "tests/test_verdict_struck.py"]
+opened_commit = "d15c64ef0d836d3c27e6182b23be9e36b6622e7c"
+whole_reason = "A pure move does not split because a half-moved model has two owners: ten production files and about 180 moved lines are one change of owner, and every importer must switch in the same change or the build is red."
