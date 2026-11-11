@@ -354,20 +354,31 @@ def _segments(text: str) -> list[list[str]]:
 
 
 def _split(text: str) -> list[list[str]]:
+    return _lex(text, False)[0]
+
+
+def _lex(text: str, after_substitution: bool) -> tuple[list[list[str]], bool]:
+    """The segments of `text`, and whether it ends on the separator that closes a substitution; a lone `$` right after one opens the next substitution of the same command and is dropped."""
     lexer = shlex.shlex(text, posix=True, punctuation_chars="".join(sorted(LEXER_PUNCTUATION)))
     lexer.whitespace_split = True
     lexer.commenters = ""
     segments: list[list[str]] = [[]]
+    backtick_open = False
     for word in lexer:
         if word and (set(word) <= SEPARATOR_CHARACTERS or ("`" in word and set(word) <= LEXER_PUNCTUATION)):
             segments.append([])
+            backtick_open ^= word.count("`") % 2 == 1
+            after_substitution = ")" in word or ("`" in word and not backtick_open)
+        elif word == "$" and after_substitution and not segments[-1]:
+            after_substitution = False
         elif SUBSTITUTION.search(word):
-            inner = _split(word)
+            inner, after_substitution = _lex(word, after_substitution)
             segments[-1].extend(inner[0])
             segments.extend(inner[1:])
         else:
             segments[-1].append(word)
-    return segments
+            after_substitution = False
+    return segments, after_substitution
 
 
 def _starts_pytest_call(words: list[str]) -> bool:

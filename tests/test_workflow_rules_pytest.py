@@ -362,6 +362,28 @@ def test_a_command_built_at_run_time_in_a_run_without_pytest_is_no_finding(build
 
 
 @pytest.mark.parametrize(
+    "command",
+    [
+        "cp $(a) $(b) dest",
+        'echo "$(date)" "$(uname)"',
+        "echo $(date) $(date)",
+        "echo $(a)$(b)",
+        "echo `a` $(b)",
+        "git diff $(a) $(b) | wc",
+        "echo $(( 1 + 2 )) $(( 3 ))",
+    ],
+)
+def test_a_second_substitution_on_a_command_line_is_no_command_word_in_a_run_holding_pytest(build_repo, command):
+    """PYTEST-6: `echo $(which pytest)` is no command word and no finding."""
+    assert judged(build_repo, block_run(command, "pytest -n auto")) == []
+
+
+def test_a_second_substitution_on_a_passing_calls_line_leaves_the_call_green(build_repo):
+    """PYTEST-6."""
+    assert judged(build_repo, block_run("pytest -n 2 --a=$(x) $(y)")) == []
+
+
+@pytest.mark.parametrize(
     ("script", "fact"),
     [
         ("$(which pytest) -q", BUILT_AT_RUN_TIME),
