@@ -1,5 +1,6 @@
 import datetime
 import os
+import stat
 from pathlib import Path
 
 import pytest
@@ -61,6 +62,7 @@ def test_an_unchanged_archive_is_not_downloaded_again(run, published_databases, 
     assert (first[0], second[0], is_clean(second[1])) == (0, 0, True)
     assert statuses(published_databases) == [200, 304]
     assert copy_of().read_bytes() == published_bytes(database_root)
+    assert [stat.S_IMODE(level.stat().st_mode) for level in (copy_of().parent.parent, copy_of().parent)] == [0o700, 0o700]
 
 
 def test_a_changed_archive_is_downloaded_and_replaces_the_copy(run, published_databases, publish_database, copy_of, database_root):
@@ -233,6 +235,11 @@ def test_no_run_leaves_a_temporary_file_and_a_failed_replacement_keeps_no_copy(r
     code, _ = run()
     assert code == 0
     assert (len(names) == 1 and names[0].startswith(advisories.CACHE_TEMPORARY_PREFIX), list(copy_of().parent.iterdir())) == (True, [])
+
+
+def test_the_hash_of_an_archive_is_its_md5():
+    """ADVISORY-44: the digest is the md5 the server states, whatever the fake server computes with it."""
+    assert advisories.md5_digest(b"abc") == "900150983cd24fb0d6963f7d28e17f72"
 
 
 def test_reading_the_copy_does_not_spend_the_time_of_the_requests(

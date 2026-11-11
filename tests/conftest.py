@@ -37,7 +37,6 @@ PROCESS_OR_SOCKET_FIXTURES = frozenset(
         "installed_scanners",
         "loopback",
         "serve",
-        "served_databases",
         "release_checkout",
     }
 )
