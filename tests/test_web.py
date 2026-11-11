@@ -96,6 +96,7 @@ def test_an_error_answer_ends_the_read_with_the_callers_refusal(stub_server):
     """SONAR-115: a failure of the request is `unreadable(error)`, not an error of the thread that made it"""
     refusal = CannotJudge("refused")
     origin, _ = stub_server(lambda handler: (handler.send_response(404), handler.end_headers()))
+    expires_at = time.monotonic() + 30
     with pytest.raises(CannotJudge) as raised:
-        web.fetch_within(f"{origin}/zip", lambda error: refusal, time.monotonic() + 30, time.monotonic)
+        web.fetch_within(f"{origin}/zip", lambda error: refusal, expires_at, time.monotonic)
     assert raised.value is refusal
