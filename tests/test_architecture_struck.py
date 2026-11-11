@@ -598,13 +598,15 @@ SUB_RENAMED = {"src/shop/sub/__init__.py": "src/shop/other/__init__.py"}
     [
         (["shop"], tree_of(BASE_PATHS, HEAD_PATHS), REMOVED),
         (["shop.sub"], tree_of(BASE_PATHS | SUB_PACKAGE, HEAD_PATHS), []),
-        (["shop.sub"], tree_of(BASE_PATHS | SUB_PACKAGE, HEAD_PATHS | {"src/shop/other/__init__.py"}, moves=SUB_RENAMED), []),
+        (["shop.sub"], tree_of(BASE_PATHS | SUB_PACKAGE, HEAD_PATHS | {"src/shop/other/__init__.py"}, moves=SUB_RENAMED), REMOVED),
+        (["shop.sub"], tree_of(BASE_PATHS | SUB_PACKAGE, HEAD_PATHS | {"src/shop/other/__init__.py"}, moves=SUB_RENAMED,
+                               empty={"src/shop/other/__init__.py"}), []),
         (["shop.sub", "other"], tree_of(BASE_PATHS | SUB_PACKAGE | OTHER_LIVE, HEAD_PATHS | OTHER_LIVE), REMOVED),
     ],
     ids=["a container with files at the head", "a container with no file at the head",
-         "a renamed container with no file at the head", "one of two containers with files at the head"],
+         "a renamed container with no file at the head", "a container renamed to an empty file", "one of two containers with files at the head"],
 )
-def test_a_removed_exhaustive_layers_contract_goes_only_when_none_of_its_containers_has_a_file_at_the_head(containers, tree, expected):
+def test_a_removed_exhaustive_layers_contract_goes_only_when_none_of_its_containers_has_a_file_or_a_rename_at_the_head(containers, tree, expected):
     """LOOSE-23: an exhaustive contract still forbids every undeclared child of a live container."""
     gone = {"type": "layers", "containers": containers, "layers": ["dead"], "exhaustive": True}
     assert removal(gone, tree, ("shop", "other")) == expected
