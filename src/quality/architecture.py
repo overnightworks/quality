@@ -204,7 +204,8 @@ def contract_loosenings(base: SideContracts, head: SideContracts, tree: PullTree
     A module a list lost is no loosening when `tree` shows the head no longer has it and git does not read it as renamed,
     or reads it as renamed to a module the same list at the head names at the struck name's place; a contract the head
     lacks is no loosening when one of its lists names only modules the head no longer has and git does not read as
-    renamed. Without a tree nothing counts as missing."""
+    renamed, except an exhaustive `layers` contract while one of its containers still has a file at the head.
+    Without a tree nothing counts as missing."""
     if base.config is None:
         return []
     if head.config is None:
