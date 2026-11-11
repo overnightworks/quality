@@ -690,7 +690,8 @@ It applies these rules:
   submodule does not count, and several renamed files must agree on one module. In `layers`, `containers` and
   `protected_modules` the module stands where the struck name stood: another layer, a `:` for a `|`, another position
   or another order is `changes <field>`. A contract the head lacks is no loosening when one of its lists names only
-  modules the head no longer has and git does not read as renamed (LOOSE-23). Only file names and sizes are
+  modules the head no longer has and git does not read as renamed, except that `layers` does not count when the
+  contract is `exhaustive` and one of its containers still has a file at the head (LOOSE-23). Only file names and sizes are
   read, at the checked-out merge commit by the verdict and at the pull request's merge commit by the door, and only
   when a module is struck or a contract is removed; a read that fails, or a rename list that came with a warning, is
   exit `2` (LOOSE-24).

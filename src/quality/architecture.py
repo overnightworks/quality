@@ -215,7 +215,7 @@ def contract_loosenings(base: SideContracts, head: SideContracts, tree: PullTree
         kept = head.contracts.get(name)
         if kept is not None:
             lines += _contract_loosenings(name, _resolved(contract, kept, gone), kept)
-        elif not _guards_nothing(contract, gone):
+        elif not _guards_nothing(contract, gone, head, frozenset() if tree is None else tree.head_paths):
             lines.append(f'import contract "{name}" removed')
     return sorted(lines)
 
@@ -244,10 +244,22 @@ def _names_of(contract: ContractFields | None, option: str) -> frozenset[str]:
     return frozenset() if contract is None else _names(contract, option)
 
 
-def _guards_nothing(contract: ContractFields, gone: Mapping[str, str | None]) -> bool:
-    """Whether one list of the contract names modules and every one is deleted, none renamed; a wildcard is never `gone`."""
-    lists = (_names(contract, option) for option in STRUCK_FIELDS if option in contract.fields)
+def _guards_nothing(contract: ContractFields, gone: Mapping[str, str | None], head: SideContracts,
+                    head_paths: frozenset[str]) -> bool:
+    """Whether one list of the contract names modules and every one is deleted, none renamed; a wildcard is never `gone`.
+    The `layers` list does not count for an exhaustive contract while one of its containers still has a file at the head:
+    the contract still forbids every undeclared child of that container."""
+    exhaustive = bool(contract.fields.get("exhaustive")) and _has_live_container(contract, head, head_paths)
+    lists = (_names(contract, option) for option in STRUCK_FIELDS
+             if option in contract.fields and not (exhaustive and option == "layers"))
     return any(names and all(name in gone and gone[name] is None for name in names) for names in lists)
+
+
+def _has_live_container(contract: ContractFields, head: SideContracts, head_paths: frozenset[str]) -> bool:
+    heads = _placed_roots(head_paths, head)
+    return any(_has_file(head_paths, _module_place(heads[package], container.expression))
+               for container in contract.fields["containers"] or ()
+               if (package := container.expression.partition(".")[0]) in heads)
 
 
 def _names(contract: ContractFields, option: str) -> frozenset[str]:

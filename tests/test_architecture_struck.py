@@ -588,6 +588,20 @@ def test_a_removed_layers_contract_needs_its_tail_dead_in_every_container(other,
     assert removal(gone, tree_of(BASE_PATHS | other, HEAD_PATHS | other), ("shop", "other")) == expected
 
 
+SUB_PACKAGE = {"src/shop/sub/__init__.py", "src/shop/sub/dead.py"}
+
+
+@pytest.mark.parametrize(
+    ("container", "base_paths", "expected"),
+    [("shop", BASE_PATHS, REMOVED), ("shop.sub", BASE_PATHS | SUB_PACKAGE, [])],
+    ids=["a container with files at the head", "a container with no file at the head"],
+)
+def test_a_removed_exhaustive_layers_contract_goes_only_when_none_of_its_containers_has_a_file_at_the_head(container, base_paths, expected):
+    """LOOSE-23: an exhaustive contract still forbids every undeclared child of a live container."""
+    gone = {"type": "layers", "containers": [container], "layers": ["dead"], "exhaustive": True}
+    assert removal(gone, tree_of(base_paths, HEAD_PATHS)) == expected
+
+
 def test_a_removed_layers_contract_without_containers_stays_a_loosening():
     """LOOSE-23, LOOSE-20: a tail with no container is a package name the files cannot place."""
     assert removal({"type": "layers", "layers": ["dead"]}) == REMOVED
