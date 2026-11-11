@@ -92,6 +92,7 @@ class Scene:
     programs: list[str] = field(default_factory=list)
     timeouts: dict[str, float] = field(default_factory=dict)
     unzipped_inside: Path | None = None
+    unzip_leaves_the_scanner_folder_out: bool = False
 
     def fetch(self, url, unreadable, expires_at, clock, timeout=15):
         self.requested.append(url)
@@ -109,7 +110,7 @@ class Scene:
         if program in self.broken_programs:
             raise self.broken_programs[program]
         stdout = {"gpg --show-keys": self.listing, "gpg --verify": self.status}.get(program, "")
-        if program == "unzip":
+        if program == "unzip" and not self.unzip_leaves_the_scanner_folder_out:
             destination = Path(command[command.index("-d") + 1])
             self.unzipped_inside = destination
             scanner = destination / f"{FOLDER}" / "bin" / "sonar-scanner"
@@ -439,6 +440,15 @@ def test_an_unzip_that_stops_partway_with_an_error_leaves_neither_the_scanner_no
     code, out, err = drive()
     assert (code, out) == (2, "")
     assert ("unzip" in err, RERUN_ADVICE in err, len(err.strip().splitlines())) == (True, True, 2)
+    assert not scene.installed.exists()
+    assert not scene.marker.exists()
+
+
+def test_an_unzip_that_leaves_no_scanner_folder_to_move_leaves_no_marker(scene, drive):
+    """SONAR-118: the marker is written only after the scanner is in place, so a move that cannot happen leaves none"""
+    scene.unzip_leaves_the_scanner_folder_out = True
+    code, _, _ = drive()
+    assert code == 2
     assert not scene.installed.exists()
     assert not scene.marker.exists()
 
