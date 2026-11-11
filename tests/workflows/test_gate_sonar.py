@@ -1,15 +1,16 @@
 import re
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pytest
 import yaml
 
-from quality import output, sonar, sonar_properties
+from quality import output, sonar, sonar_properties, sonar_scanner
 from tests.support.sonar import run_properties
 
 ROOT = Path(__file__).parents[2]
 WORKFLOWS = ROOT / ".github" / "workflows"
-VERIFIED_SCANNER_VERSION = "8.1.0.6389"
+SCANNER_VERSION_EXPRESSION = f"${{{{ env.{sonar_scanner.VERSION_VARIABLE} }}}}"
 TOKEN_REFERENCE = "${{ secrets.SONAR_TOKEN }}"
 
 
@@ -43,6 +44,7 @@ def test_the_sonar_job_runs_its_steps_in_the_required_order(sonar_steps):
         "actions/checkout",
         "astral-sh/setup-uv",
         "sonar properties",
+        "sonar scanner",
         "SonarSource/sonarqube-scan-action",
         "sonar findings",
     ]
@@ -56,12 +58,14 @@ def test_the_sonar_job_checks_out_the_caller_with_full_history_without_credentia
     assert job["steps"][0]["with"] == {"fetch-depth": 0, "persist-credentials": False}
 
 
-def test_the_scan_pins_the_verified_scanner_and_the_sonarcloud_origin(sonar_steps):
-    """SONAR-96, SONAR-97, SONAR-98, SONAR-99: the scan pins scannerVersion and the SonarCloud host, does not wait for the gate and appends the properties step's output"""
+def test_the_scan_takes_the_scanner_version_the_install_step_installs_and_the_sonarcloud_origin(gate, sonar_steps):
+    """SONAR-96, SONAR-97, SONAR-98, SONAR-99, SONAR-122: the scan reads scannerVersion from the job env variable the install step installs, pins the SonarCloud host, does not wait for the gate and appends the properties step's output"""
     options = step_named(sonar_steps, "Scan")["with"]
+    assert options["scannerVersion"] == SCANNER_VERSION_EXPRESSION
+    assert sonar_scanner.VERSION_VARIABLE in gate["jobs"]["sonar"]["env"]
+    assert sonar_scanner.VERSION_VARIABLE not in step_named(sonar_steps, sonar_scanner.INSTALL_STEP).get("env", {})
     preflight_id = step_named(sonar_steps, "Refuse a token")["id"]
     arguments = f"${{{{ steps.{preflight_id}.outputs.{output.SCANNER_ARGUMENTS_OUTPUT} }}}}"
-    assert options["scannerVersion"] == VERIFIED_SCANNER_VERSION
     assert options["args"].split(" ", 2) == [
         f"-Dsonar.host.url={sonar.SONAR_ORIGIN}",
         "-Dsonar.qualitygate.wait=false",
@@ -79,8 +83,35 @@ def test_the_token_reaches_only_properties_scan_and_findings(gate):
         for step in job["steps"]
         if TOKEN_REFERENCE in str(step.get("env", {}))
     ]
-    assert [name for _, name in holders] == [step["name"] for step in gate["jobs"]["sonar"]["steps"][4:]]
+    sonar_steps = gate["jobs"]["sonar"]["steps"]
+    token_holders = [step_named(sonar_steps, "Refuse a token"), step_named(sonar_steps, "Scan"), step_named(sonar_steps, "Findings")]
+    assert [name for _, name in holders] == [step["name"] for step in token_holders]
     assert {job for job, _ in holders} == {"sonar"}
+
+
+def test_the_install_step_runs_where_the_scan_runs_and_holds_no_token(sonar_steps):
+    """SONAR-114, SONAR-86: the install step has the Scan's `if:` so [gate] sonar = false skips it, and no secret in its environment"""
+    install = step_named(sonar_steps, sonar_scanner.INSTALL_STEP)
+    assert install["if"] == step_named(sonar_steps, "Scan")["if"]
+    assert "secrets." not in str(install)
+
+
+def test_the_scan_cannot_download_a_scanner_of_its_own(sonar_steps):
+    """SONAR-119: scannerBinariesUrl names a host under .invalid, so a cache miss fails at the download and never reaches a key server"""
+    host = urlparse(step_named(sonar_steps, "Scan")["with"]["scannerBinariesUrl"]).hostname
+    assert host.endswith(".invalid")
+
+
+def test_the_install_step_gets_its_values_through_env_and_no_expression_stands_inside_its_script(sonar_steps):
+    """SONAR-122: the fingerprint is named in the step's env, the version comes from the job env, and no ${{ }} is in the script"""
+    install = step_named(sonar_steps, sonar_scanner.INSTALL_STEP)
+    assert re.fullmatch("[0-9A-F]{40}", install["env"][sonar_scanner.FINGERPRINT_VARIABLE])
+    assert "${{" not in install["run"]
+
+
+def test_no_step_of_the_sonar_job_asks_a_key_server(sonar_steps):
+    """SONAR-121: neither a script nor an option of the sonar job names a key server or fetches a key"""
+    assert not [step["name"] for step in sonar_steps if re.search(r"keyserver|recv-keys", str(step), re.IGNORECASE)]
 
 
 def test_the_verdict_needs_the_sonar_job(gate):

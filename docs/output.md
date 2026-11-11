@@ -1,6 +1,9 @@
 # Output
 
-Reference for the engineer, operator or agent who reads or matches what a quality command prints, and for the test that proves it. What each command does stands in [commands](commands.md), `check`'s rules in [rules](rules.md), the verdict in [gate](gate.md), the two sonar steps in [sonar](sonar.md). Paths, repositories and ids in the examples are invented. All terminal lines are English.
+Reference for the engineer, operator or agent who reads or matches what a quality command prints, and for the test that
+proves it. What each command does stands in [commands](commands.md), `check`'s rules in [rules](rules.md), the verdict
+in [gate](gate.md), the three sonar steps in [sonar](sonar.md). Paths, repositories and ids in the examples are
+invented. All terminal lines are English.
 
 ## The output owner
 
