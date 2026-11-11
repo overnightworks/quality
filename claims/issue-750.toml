@@ -1,8 +1,0 @@
-claim_id = "303a1c9261ce4e0ca29c0e52396abcaf"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "0746b06e666414f29a36fadabbfe55a6a90e43f4"
-branch = "claude/issue-750-contract-removal-dead"
-scope = ["docs/commands.md", "docs/rules.md", "src/quality/architecture.py", "tests/test_architecture.py", "tests/test_architecture_struck.py", "tests/test_verdict_struck.py"]
-opened_commit = "a3335d45f160d4807b4c86d09e730faed6cbfb9f"
-whole_reason = "The production change is one file about 20 lines; the other five paths are its two docs sentences, the two door cells that must meet the new read and the new cells, which land with the decider so that a removal never reads the tree without its tests."
