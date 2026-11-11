@@ -951,7 +951,7 @@ Ruled by the operator:
 - From the merge on, the advisory is green until the date and red again after it (ALLOW-8).
 - No agent can silence an advisory alone.
 - A pull request cannot move the re-check date later without the operator: a later `until` for an existing exception is
-  a loosening like a new one.
+  a loosening like a new one (VERDICT-64).
 - A new exception declares itself: it needs no separate `[[gate.loosened]]` entry (VERDICT-67).
 
 quality gets each needed database itself on every run (PyPI about 37 MB, npm about 219 MB;
