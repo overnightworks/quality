@@ -219,8 +219,8 @@ It applies these rules:
   (`[tool.importlinter]`) (IMPORT-2), counted once its name exists in the tree: a tracked one deleted from disk is none
   (IMPORT-3), a symlink to nowhere cannot be read (exit `2`) (IMPORT-4).
 
-  Ruled by the operator: without one the rule only measures; the `imports` row is a grey note, the area is not counted
-  among the clean areas, and the verdict names it.
+  Ruled by the operator: without one the rule only measures (IMPORT-27); the `imports` row is a grey note (ROW-13), the
+  area is not counted among the clean areas (IMPORT-28), and the verdict names it (CLOSING-10).
 
   The [`imports` row](output.md#area-rows) reads `· imports  not set up  no import-linter config`, dim at a terminal,
   the exit stays `0`, and the [verdict line](output.md#the-closing-line) says `imports not enforced` before the
