@@ -38,6 +38,7 @@ def scripted_server(monkeypatch):
                 body = DATABASE if step == SERVED else step.encode()
                 self.send_response(200)
                 self.send_header("Content-Length", str(len(body)))
+                self.send_header("ETag", f'"{advisories.md5_digest(body)}"')
                 self.end_headers()
                 self.wfile.write(body)
             elif step == TRUNCATED:

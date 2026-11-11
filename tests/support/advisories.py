@@ -3,8 +3,15 @@ import io
 import json
 import shlex
 import subprocess
+import urllib.error
+import urllib.request
 import zipfile
+from collections.abc import Callable
+from dataclasses import dataclass
+from email.message import Message
+from http import HTTPStatus
 from pathlib import Path
+from urllib.response import addinfourl
 
 from quality import advisories, scanners
 
@@ -107,3 +114,58 @@ def linked_lock_repo(build_repo) -> Path:
     (repo / "speech/uv.lock").symlink_to("../uv.lock")
     subprocess.run(["git", "-C", str(repo), "add", "speech/uv.lock"], check=True)
     return repo
+
+
+@dataclass(frozen=True)
+class Asked:
+    """One request the published databases received: the file, the `If-None-Match` it sent, and the status it got."""
+
+    path: str
+    if_none_match: str | None
+    status: int
+
+
+class PublishedDatabases(urllib.request.BaseHandler):
+    """The advisory bucket as urllib sees it, in process: the files below `root` served on the `published` scheme with
+    their md5 as `ETag`, a 304 for an `If-None-Match` that names the file's ETag, a 404 for a missing file.
+
+    `etag` and `not_modified` are what a test changes to play a server that contradicts itself."""
+
+    scheme = "published"
+
+    def __init__(self, root: Path) -> None:
+        self.root = root
+        self.asked: list[Asked] = []
+        self.on_request: Callable[[str], None] = lambda path: None
+        self.etag: Callable[[bytes], str | None] = lambda body: f'"{advisories.md5_digest(body)}"'
+        self.not_modified: Callable[[str | None, str | None], bool] = lambda sent, current: sent == current
+
+    @property
+    def requested(self) -> list[str]:
+        return [asked.path for asked in self.asked]
+
+    @property
+    def bodies_served(self) -> int:
+        return sum(asked.status == HTTPStatus.OK for asked in self.asked)
+
+    def published_open(self, request: urllib.request.Request) -> addinfourl:
+        path = request.selector
+        self.on_request(path)
+        sent = request.get_header("If-none-match")
+        file = self.root / path.lstrip("/")
+        if not file.is_file():
+            self._answer(path, sent, HTTPStatus.NOT_FOUND)
+            raise urllib.error.HTTPError(request.full_url, HTTPStatus.NOT_FOUND, "Not Found", Message(), None)
+        body = file.read_bytes()
+        etag = self.etag(body)
+        headers = Message()
+        if etag is not None:
+            headers["ETag"] = etag
+        if sent is not None and self.not_modified(sent, etag):
+            self._answer(path, sent, HTTPStatus.NOT_MODIFIED)
+            raise urllib.error.HTTPError(request.full_url, HTTPStatus.NOT_MODIFIED, "Not Modified", headers, None)
+        self._answer(path, sent, HTTPStatus.OK)
+        return addinfourl(io.BytesIO(body), headers, request.full_url, HTTPStatus.OK)
+
+    def _answer(self, path: str, sent: str | None, status: int) -> None:
+        self.asked.append(Asked(path, sent, status))

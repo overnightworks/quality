@@ -1,4 +1,5 @@
 import errno
+import hashlib
 import http.client
 import io
 import json
@@ -349,6 +350,12 @@ def _download_once(url: str, ecosystem: str, ends_at: float, monotonic: Callable
     if not download.done():
         raise ScannerError(f"the {ecosystem} advisory database download stopped on an unexpected error")
     return download.result()
+
+
+def md5_digest(data: bytes) -> str:
+    """The hex md5 of `data`, the only hash the advisory server states for an archive (its ETag and `x-goog-hash` carry
+    md5 and crc32c), so no other hash can be compared with the server's."""
+    return hashlib.md5(data).hexdigest()  # noqa: S324 - the server states only md5 in its ETag and x-goog-hash so no other hash can be compared
 
 
 def _deadline_exceeded(ecosystem: str) -> ScannerError:

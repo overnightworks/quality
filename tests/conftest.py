@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import urllib.request
 from collections.abc import Callable, Iterator
 from pathlib import Path, PosixPath, PurePosixPath
 
@@ -17,7 +18,7 @@ from quality.baseline_file import BASELINE_PATH
 
 pytest.register_assert_rewrite("tests.support")  # before the first import of a support module, so its asserts are rewritten
 
-from tests.support.advisories import advisory, zipped
+from tests.support.advisories import PublishedDatabases, advisory, zipped
 from tests.support.door import check_door
 from tests.support.fleet import GITHUB_BASE_VARIABLE, GITHUB_REDIRECT, RELEASES, TEST_OWNER, write_fleet
 from tests.support.git_repositories import GIT_IDENTITY, head_commit, make_repo, put
@@ -46,6 +47,7 @@ MISE_DIRECTORIES = (
     ("MISE_CACHE_DIR", "XDG_CACHE_HOME", ".cache"),
     ("MISE_STATE_DIR", "XDG_STATE_HOME", ".local/state"),
 )
+REAL_XDG_VARIABLES = {variable: os.environ.get(variable) for _, variable, _ in MISE_DIRECTORIES}
 KIND_MARKERS = frozenset({"unit", "integration"})
 # The one owner of the audit event names that define `integration`.
 STARTING_EVENTS = frozenset(
@@ -235,6 +237,15 @@ def served_scanners(tmp_path_factory, monkeypatch, publish_database) -> Path:
     return directory
 
 
+@pytest.fixture(autouse=True)
+def cache_home(tmp_path_factory, monkeypatch) -> Path:
+    """The user cache directory of this test, so no run reads or leaves a copy of another; mise's own directories are
+    pinned to the real ones by `installed_scanners`."""
+    directory = tmp_path_factory.mktemp("cache-home")
+    monkeypatch.setenv("XDG_CACHE_HOME", str(directory))
+    return directory
+
+
 @pytest.fixture
 def installed_scanners(served_scanners, monkeypatch) -> None:
     """The real mise and the real scanners it installed from quality's manifest.
@@ -245,7 +256,7 @@ def installed_scanners(served_scanners, monkeypatch) -> None:
     on_path = [entry for entry in os.environ["PATH"].split(os.pathsep) if entry != fake_mise_directory]
     monkeypatch.setenv("PATH", os.pathsep.join(on_path))
     for variable, xdg_variable, fallback in MISE_DIRECTORIES:
-        default = Path(os.environ.get(xdg_variable) or Path.home() / fallback) / "mise"
+        default = Path(REAL_XDG_VARIABLES[xdg_variable] or Path.home() / fallback) / "mise"
         monkeypatch.setenv(variable, os.environ.get(variable, str(default)))
 
 
@@ -383,11 +394,20 @@ def missing(public) -> str:
 
 
 @pytest.fixture
-def database_root(tmp_path_factory, monkeypatch) -> Path:
-    """A file:// advisory database root the gate reads instead of the live one; nothing is published in it."""
-    root = tmp_path_factory.mktemp("osv-database")
-    monkeypatch.setattr(advisories, "DATABASE_ROOT", root.as_uri())
-    return root
+def published_databases(tmp_path_factory, monkeypatch) -> PublishedDatabases:
+    """The advisory database root the gate reads instead of the live one, served in process on the `published` scheme;
+    nothing is published in it."""
+    databases = PublishedDatabases(tmp_path_factory.mktemp("osv-database"))
+    urllib.request.install_opener(urllib.request.build_opener(databases))
+    monkeypatch.setattr(advisories, "DATABASE_ROOT", f"{databases.scheme}://database")
+    yield databases
+    urllib.request.install_opener(None)
+
+
+@pytest.fixture
+def database_root(published_databases) -> Path:
+    """The directory whose files `published_databases` serves."""
+    return published_databases.root
 
 
 @pytest.fixture

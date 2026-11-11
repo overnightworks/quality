@@ -1,11 +1,4 @@
 import datetime
-import functools
-import http.server
-import threading
-import urllib.parse
-import urllib.request
-from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -237,34 +230,10 @@ def test_a_package_listed_as_malicious_is_red_and_the_fix_is_to_remove_or_replac
 
 
 @pytest.fixture
-def served_databases(publish_database, monkeypatch):
-    """Serves the published databases over HTTP and points the gate at them; each request is recorded as it arrives and
-    `.on_request` is called with each path before it is answered.
-    The server is stopped at teardown."""
-    served = SimpleNamespace(requested=[], on_request=lambda path: None)
-    root = Path(urllib.request.url2pathname(urllib.parse.urlparse(advisories.DATABASE_ROOT).path))
-
-    class Handler(http.server.SimpleHTTPRequestHandler):
-        def do_GET(self):
-            served.requested.append(self.path)
-            served.on_request(self.path)
-            try:
-                super().do_GET()
-            except OSError:
-                pass  # the downloader went away
-
-        def log_message(self, *arguments):
-            pass
-
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(Handler, directory=str(root)))
-    server.daemon_threads = True
-    serving = threading.Thread(target=server.serve_forever)
-    serving.start()
-    monkeypatch.setattr(advisories, "DATABASE_ROOT", f"http://127.0.0.1:{server.server_address[1]}")
-    yield served
-    server.shutdown()
-    serving.join()
-    server.server_close()
+def served_databases(publish_database, published_databases):
+    """The published databases, each request recorded as it arrives (`.requested`) and `.on_request` called with each
+    path before it is answered."""
+    return published_databases
 
 
 @pytest.mark.scanner
