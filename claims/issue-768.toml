@@ -1,0 +1,8 @@
+claim_id = "e64f369ac6e041189f7c439e38f2a313"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "3f7f42602e77d61a9baea3b5eae7d5c91455d42a"
+branch = "claude/issue-768-advisory-copy"
+scope = ["AGENTS.md", "docs/ARCHITECTURE.md", "docs/commands.md", "docs/rules.md", "src/quality/advisories.py", "src/quality/check.py", "src/quality/cli.py", "src/quality/pin.py", "src/quality/process.py", "tests/conftest.py", "tests/test_advisories.py", "tests/test_advisories_cache.py", "tests/test_advisories_locks.py", "tests/test_advisories_retry.py", "tests/test_check.py"]
+opened_commit = "ba7ea272cb74cc1c61e012564e9e922aa2405053"
+whole_reason = "A copy without the comparison is the attack the old sentence names, and the comparison without the documents leaves a trust sentence that is no longer true: the cache path, the conditional request, the md5 check and the sentences that describe them are one change."
