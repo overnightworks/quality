@@ -635,7 +635,8 @@ It applies these rules:
   config between `.importlinter`, `setup.cfg` and `pyproject.toml` changes nothing (LOOSE-4)), without building an
   import graph. A contract is the same on both sides when it has the same `name`; a rename is a removal plus a new
   contract (LOOSE-5). Each loosening is one line under the verdict's `loosenings` row, sorted (LOOSE-6):
-  - a contract the base holds and the head lacks: `import contract "layers" removed` (LOOSE-7);
+  - a contract the base holds and the head lacks: `import contract "layers" removed` (LOOSE-7), unless one of its lists
+    names only modules the head no longer has and git does not read as renamed (below);
   - the base's config gone, whatever it held, or only its section gone from a file that stays, once:
     `import-linter config in .importlinter removed` (LOOSE-8);
   - an `ignore_imports` expression the base does not hold, one line each, compared as parsed (spacing around `->`
@@ -686,10 +687,15 @@ It applies these rules:
   under whose folder, git reads as renamed between the base and the merge commit, to a file that is not empty, is no
   deletion: striking it stays a loosening (LOOSE-21). It is no loosening when the same field at the head names the
   module at its renamed path (LOOSE-22). The name is exact: a renamed folder needs the package's own name, a listed
-  submodule does not count, and several renamed files must agree on one module. In `layers` the module stands where the
-  struck name stood: another layer, a `:` for a `|` or another order is `changes layers`. Only file names and sizes are
-  read, at the checked-out merge commit by the verdict and at the pull request's merge commit by the door, and only
-  when a module is struck; a read that fails, or a rename list that came with a warning, is exit `2` (LOOSE-24).
+  submodule does not count, and several renamed files must agree on one module. In `layers`, `containers` and
+  `protected_modules` the module stands where the struck name stood: another layer, a `:` for a `|`, another position
+  or another order is `changes <field>`. A contract the head lacks is no loosening when one of its lists names only
+  modules the head no longer has and git does not read as renamed, except that `layers` does not count when the
+  contract is `exhaustive` and one of its containers still has a file at the head or git reads a file of it as
+  renamed (LOOSE-23). Only file names and sizes
+  are read, at the checked-out merge commit by the verdict and at the pull request's merge commit by the door, and only
+  when a module is struck or a contract is removed; a read that fails, or a rename list that came with a warning, is
+  exit `2` (LOOSE-24).
 
 The `secret` rule scans the whole history reachable from `HEAD` with gitleaks (a key removed later is still found
 (SECRET-1); other branches the checkout fetched are not scanned (SECRET-2)), always with quality's own config

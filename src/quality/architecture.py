@@ -202,7 +202,11 @@ def contract_loosenings(base: SideContracts, head: SideContracts, tree: PullTree
     """What the head loosens against the base, one sorted line each; adding a config or a contract, and removing an ignore, are none.
 
     A module a list lost is no loosening when `tree` shows the head no longer has it and git does not read it as renamed,
-    or reads it as renamed to a module the same list at the head names; without a tree nothing counts as missing."""
+    or reads it as renamed to a module the same list at the head names at the struck name's place; a contract the head
+    lacks is no loosening when one of its lists names only modules the head no longer has and git does not read as
+    renamed, except an exhaustive `layers` contract while one of its containers still has a file at the head or git reads
+    a file of it as renamed.
+    Without a tree nothing counts as missing."""
     if base.config is None:
         return []
     if head.config is None:
@@ -211,26 +215,54 @@ def contract_loosenings(base: SideContracts, head: SideContracts, tree: PullTree
     gone = {} if tree is None else _gone(struck_modules(base, head), head, tree)
     for name, contract in base.contracts.items():
         kept = head.contracts.get(name)
-        lines += [f'import contract "{name}" removed'] if kept is None else _contract_loosenings(name, _resolved(contract, kept, gone), kept)
+        if kept is not None:
+            lines += _contract_loosenings(name, _resolved(contract, kept, gone), kept)
+        elif tree is None or not _guards_nothing(contract, gone, head, tree):
+            lines.append(f'import contract "{name}" removed')
     return sorted(lines)
 
 
 def struck_modules(base: SideContracts, head: SideContracts) -> frozenset[str]:
-    """The module names a contract held by both sides lists at the base and the head's same list lacks; a wildcard is none."""
+    """The module names a contract at the base lists and the head's same list lacks, every name of a contract the head
+    lacks included; a wildcard is none."""
     if base.config is None or head.config is None:
         return frozenset()
     return frozenset(
-        name for contract_name, contract in base.contracts.items() if (kept := head.contracts.get(contract_name)) is not None
-        for names in _struck(contract, kept).values() for name in names
+        name for contract_name, contract in base.contracts.items()
+        for names in _struck(contract, head.contracts.get(contract_name)).values() for name in names
     )
 
 
-def _struck(base: ContractFields, head: ContractFields) -> dict[str, frozenset[str]]:
-    if base.type != head.type:
+def _struck(base: ContractFields, head: ContractFields | None) -> dict[str, frozenset[str]]:
+    """The wildcard-free names each list of `base` holds and the same list of `head` lacks; an absent `head` lists nothing."""
+    if head is not None and base.type != head.type:
         return {}
-    struck = {option: frozenset(name for name in _names(base, option) - _names(head, option) if "*" not in name)
+    struck = {option: frozenset(name for name in _names(base, option) - _names_of(head, option) if "*" not in name)
               for option in STRUCK_FIELDS if option in base.fields}
     return {option: names for option, names in struck.items() if names}
+
+
+def _names_of(contract: ContractFields | None, option: str) -> frozenset[str]:
+    return frozenset() if contract is None else _names(contract, option)
+
+
+def _guards_nothing(contract: ContractFields, gone: Mapping[str, str | None], head: SideContracts, tree: PullTree) -> bool:
+    """Whether one list of the contract names modules and every one is deleted, none renamed; a wildcard is never `gone`.
+    The `layers` list does not count for an exhaustive contract while one of its containers still has a file at the head
+    or git reads a file of it as renamed: the contract still forbids every undeclared child of that container."""
+    exhaustive = bool(contract.fields.get("exhaustive")) and _has_live_container(contract, head, tree)
+    lists = (_names(contract, option) for option in STRUCK_FIELDS
+             if option in contract.fields and not (exhaustive and option == "layers"))
+    return any(names and all(name in gone and gone[name] is None for name in names) for names in lists)
+
+
+def _has_live_container(contract: ContractFields, head: SideContracts, tree: PullTree) -> bool:
+    heads = _placed_roots(tree.head_paths, head)
+    bases = _placed_roots(tree.base_paths, head)
+    return any(_has_file(tree.head_paths, _module_place(heads[package], container.expression))
+               or bool(_renamed_files(tree, _module_place(bases[package], container.expression)))
+               for container in contract.fields["containers"] or ()
+               if (package := container.expression.partition(".")[0]) in heads and package in bases)
 
 
 def _names(contract: ContractFields, option: str) -> frozenset[str]:
@@ -257,13 +289,18 @@ def _gone(struck: frozenset[str], head: SideContracts, tree: PullTree) -> Mappin
         if package not in heads or package not in bases or _has_file(tree.head_paths, _module_place(heads[package], name)):
             continue
         place = _module_place(bases[package], name)
-        moves = [(source, target) for source, target in tree.renames.moves.items()
-                 if (source == f"{place}.py" or source.startswith(f"{place}/")) and target not in tree.head_empty]
+        moves = _renamed_files(tree, place)
         if not moves:
             gone[name] = None
         elif (module := _renamed_module(place, moves, heads)) is not None:
             gone[name] = module
     return gone
+
+
+def _renamed_files(tree: PullTree, place: str) -> list[tuple[str, str]]:
+    """The (source, target) renames of a file of the module at `place` to a file that is not empty."""
+    return [(source, target) for source, target in tree.renames.moves.items()
+            if (source == f"{place}.py" or source.startswith(f"{place}/")) and target not in tree.head_empty]
 
 
 def _placed_roots(paths: frozenset[str], head: SideContracts) -> dict[str, str]:
