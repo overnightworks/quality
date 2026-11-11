@@ -812,40 +812,56 @@ It is on `main` only until the release that carries it, so a dependent meets it 
 The `pytest-workers` rule judges every pytest call in a `run:` step of every tracked workflow, whether or not a pull
 request triggers it; only the `run:` of a step is read, as POSIX shell whatever its `shell:` says, and a composite
 action is not (PYTEST-1). The script is never run. The value is read line by line, as the shell reads it: a literal
-block scalar at each file line, a folded or quoted one with each line break kept at the scalar's first line; each
-`${{ }}` on a line becomes one dynamic word; a line ending in a backslash joins the next; a `#` that starts a word
-outside quotes ends the command text; the words are split by Python's `shlex`, and `&&`, `||`, `;`, `|`, `&`, `(`, `)`
-and a backtick end a segment (PYTEST-2).
+block scalar at each file line, a folded or quoted one with each line break kept at the scalar's first line; each `${{
+}}` on a line becomes one dynamic word; a line ending in a backslash joins the next; a `#` that starts a word outside
+quotes ends the command text; a pair of backticks that no quote or backslash protects is read as `$(` and `)`, and a
+last backtick left without a partner on the line is read as `$(` when a word follows it (a substitution that spans
+lines) and dropped otherwise; the words are split by Python's `shlex`, and `&&`, `||`, `;`, `|`, `&`, `(` and `)`,
+also one glued to `<` or `>`, end a segment. A word that holds `$(` is split again the same way,
+so `"$(pytest -q)"` reads as `$(pytest -q)` (PYTEST-2).
 
-A segment is a pytest call when its command word, after assignments (`VAR=value`), `env` with its flags, `time`,
-`exec`, `command`, `nohup` and the shell keywords `if`, `then`, `elif`, `else`, `do`, `while`, `until`, `!` and `{`, is
-`pytest` or `py.test`; a Python interpreter (`python`, `python3`, `python3.<n>`, `pypy3`) with only flags before
-`-m pytest`; or a runner (`uv run`, `uvx`, `poetry run`, `pipenv run`, `pdm run`, `hatch run`, `coverage run`) that
-starts either, past its flags and their values (PYTEST-3). The word `pytest` anywhere else is no call: `pip install
-pytest`, `echo "run pytest"`, a path, a comment. A script, `make`, `tox`, `nox`, `timeout`, `xvfb-run` or `docker run`
-starting pytest is the rule's named gap and reads as no call (PYTEST-4).
+A segment is a pytest call when its command word, after assignments (`VAR=value`), `env` and `sudo` with their flags,
+`time`, `exec`, `command`, `nohup` and the shell keywords `if`, `then`, `elif`, `else`, `do`, `while`, `until`, `!` and
+`{`, is `pytest` or `py.test`; a Python interpreter (`python`, `python3`, `python3.<n>`, `python3.<n>t`, `pypy`,
+`pypy3`, `pypy3.<n>`) with only flags before `-m pytest`, where `-W`, `-X` and `--check-hash-based-pycs` take a value;
+or a runner (`uv run`, `uvx`, `poetry run`, `pipenv run`, `pdm run`, `hatch run`, `coverage run`) that starts either,
+past its flags and their values (PYTEST-3). The flags that take a value are `env` `-u`, `--unset`, `-C`, `--chdir`, `-a`
+and `--argv0`, and `sudo` `-u`, `-g`, `-D`, `-C`, `-h`, `-p`, `-r`, `-t`, `-T`, `-U` and `-R`, when the value follows as
+its own word; a long `sudo` flag with its value after a space is a named gap. The value of `env -S` (also `-S'…'` and
+`--split-string=…`) is read as the words it splits into, in its place (PYTEST-3). The word `pytest` anywhere else is
+no call: `pip install pytest`, `echo "run pytest"`, a path, a comment. A script, `make`, `tox`, `nox`, `timeout`,
+`xvfb-run` or `docker run` starting pytest is the rule's named gap and reads as no call (PYTEST-4).
 
-The last of `-n N`, `-nN`, `-n=N`, `--numprocesses N` and `--numprocesses=N` counts, as argparse reads repeated
-flags. `N` is `auto`, `logical` or a whole number above zero: the call passes. No such flag, `-n 0` (`00` too), an
-abbreviated flag (`--numproc 4`) or one glued to other short flags (`-qn4`) is `serial`; any other `N`, a missing one
-or a dynamic one (`$WORKERS`, `$(nproc)`, `${{ matrix.n }}`) is `invalid` (PYTEST-5). `PYTEST_ADDOPTS` and a `-n` in
-`pyproject.toml` are not read. A line `shlex` refuses that holds the word `pytest`, and a command word built at run
-time (`eval`, or a word starting with `$`) in a `run:` that holds the word `pytest` outside comments, are `invalid`,
-because the rule sees a call it cannot read; without the word `pytest` in the `run:` they are no call (PYTEST-6).
+The last of `-n N`, `-nN`, `-n=N`, `--numprocesses N` and `--numprocesses=N` counts, as argparse reads repeated flags.
+`N` is `auto`, `logical` or a whole number above zero: the call passes. No such flag, `-n 0` (`00` too), an abbreviated
+flag (`--numproc 4`) or one glued to other short flags (`-qn4`) is `serial`; any other `N`, a missing one or a dynamic
+one (`$WORKERS`, `$(nproc)`, `${{ matrix.n }}`) is `invalid`. The words after the first `--` are paths for pytest, not
+its flags, so `pytest tests -- -n auto` is `serial` (PYTEST-5). A quoted lone `--` (`pytest -k "--" -n 4`) reads as that
+same word, because the reader does not keep the quote, so it is a false `serial` that the marker clears.
+`PYTEST_ADDOPTS` and a `-n` in `pyproject.toml` are not read. A line `shlex` refuses that holds the word `pytest`, and a
+command word built at run time (`eval`, or a word starting with `$`) in a `run:` that holds the word `pytest` outside
+comments, are `invalid`, because the rule sees a call it cannot read; without the word `pytest` in the `run:` they are
+no call. A command word that is a substitution (`$(which pytest) -q`, a backtick pair in its place, `"$(which pytest)"
+-q`, `if $(which pytest) -q; then`) in such a `run:` is `invalid` with the same fact, while `$(pytest -q)` is its pytest
+call, judged once (PYTEST-6). A second substitution on a command line (`cp $(a) $(b) dest`, `echo "$(date)" "$(uname)"`)
+is no command word; the same `$(…)` after the `)` of a `case` pattern is read the same way, a named gap.
 
 A comment `# pytest-workers: <reason>`, with a reason that holds a letter, clears every call of the logical line it
-stands on or directly above: a YAML comment above `run:` or after its value, or a comment above a line of a block
-scalar; for a command joined by backslashes, above its first line or on any of its lines. Without the id, without a
-reason, with a reason of no letter, or two lines above, it clears nothing; a marker that clears no call is not reported
-(PYTEST-7). A finding is at the call's first line, `serial` with the fact `pytest runs without -n` or
-`pytest runs with -n 0`, or `invalid` with the fact `-n count is not a number above zero or auto`, `command cannot be
-read to its end` or `command is built at run time, pytest -n cannot be read`, its fix `pass -n auto, or explain on the
-line above: # pytest-workers: <reason>` (PYTEST-8). A workflow whose YAML or file cannot be read, a `run:` that is no
-string, and an alias or a merge key where it can hide `jobs`, a job, `steps`, a step or a `run:` are exit `2` naming the
-file; a step with no `run:` is skipped (PYTEST-9). The clean row of `workflows` keeps its words, and the rule's extent
-is the count of workflows it read (PYTEST-10). quality's own checkout needs no workflow edit (PYTEST-11). No
-configuration switches the rule off. It is on `main` only until the release that carries it, so a dependent meets it at
-its first bump to that release (PYTEST-12).
+stands on or directly above: for a plain or quoted value, a YAML comment above `run:` or after its value; for a block
+scalar (`|`, `>`), a YAML comment above the `run:` key clears nothing, so the marker goes on the `run: |` line (it
+covers the script's first line) or on a block line directly above the line it clears; for a command joined by
+backslashes, above its first line or on any of its lines. Without the id, without a reason, with a reason of no letter,
+or two lines above, it clears nothing; a marker that clears no call is not reported (PYTEST-7). A pytest line in a
+heredoc body is read as a shell line, since the reader does not parse heredocs: without a readable flag it is `serial`,
+and a marker above it clears it (PYTEST-13). A finding is at the call's first line, `serial` with the fact `pytest runs
+without -n` or `pytest runs with -n 0`, or `invalid` with the fact `-n count is not a number above zero or auto`,
+`command cannot be read to its end` or `command is built at run time, pytest -n cannot be read`, its fix `pass -n auto,
+or explain on the line above: # pytest-workers: <reason>` (PYTEST-8). A workflow whose YAML or file cannot be read, a
+`run:` that is no string, and an alias or a merge key where it can hide `jobs`, a job, `steps`, a step or a `run:` are
+exit `2` naming the file; a step with no `run:` is skipped (PYTEST-9). The clean row of `workflows` keeps its words, and
+the rule's extent is the count of workflows it read (PYTEST-10). quality's own checkout needs no workflow edit
+(PYTEST-11). No configuration switches the rule off. It is on `main` only until the release that carries it, so a
+dependent meets it at its first bump to that release (PYTEST-12).
 
 The `advisory` rule judges every tracked `uv.lock`, `pnpm-lock.yaml` and `requirements*.txt` (a name that starts
 with `requirements` and ends in `.txt`; `requirements.in` and `dev-requirements.txt` are not (ADVISORY-30)), root
