@@ -7,7 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from quality import output, process, sonar_scanner
+from quality import output, process, sonar_scanner, web
+from quality.report import CannotJudge
 
 VERSION = "8.1.0.6389"
 FINGERPRINT = "ABCDEF0123456789ABCDEF0123456789ABCDEF01"
@@ -358,3 +359,25 @@ def test_a_server_that_stalls_ends_the_command_within_its_deadline_with_the_name
     err = capsys.readouterr().err
     assert (code, listener.origin in err, RERUN_ADVICE in err) == (2, True, True)
     assert elapsed < deadline_seconds + 5
+
+
+def test_a_body_that_arrives_whole_within_the_deadline_is_returned_as_sent(stub_server):
+    """SONAR-115: the chunked read joins what the server sends, several chunks of it included"""
+    body = b"abc" * web.READ_CHUNK_BYTES
+
+    def answer(handler):
+        handler.send_response(200)
+        handler.send_header("Content-Length", str(len(body)))
+        handler.end_headers()
+        handler.wfile.write(body)
+
+    origin, _ = stub_server(answer)
+    assert web.fetch_within(f"{origin}/zip", lambda error: CannotJudge(str(error)), time.monotonic() + 30, time.monotonic) == body
+
+
+def test_a_read_that_starts_after_the_deadline_asks_nobody():
+    """SONAR-115: a spent deadline ends the read before a request goes out"""
+    refusal = CannotJudge("spent")
+    with pytest.raises(CannotJudge) as raised:
+        web.fetch_within("http://unreachable.invalid/zip", lambda error: refusal, 10.0, lambda: 10.0)
+    assert raised.value is refusal
